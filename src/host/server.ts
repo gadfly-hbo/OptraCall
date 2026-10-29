@@ -46,6 +46,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     libraryRoot: path.join(dataRoot, 'metric-assets'),
     projectDataDirectory: (projectId: string) => path.join(dataRoot, 'projects', projectId),
     projectExists: async (projectId: string) => { try { await projects.get(projectId); return true; } catch { return false; } },
+    projectOverview: async () => (await projects.list()).map(({ id, name, archivedAt }) => ({ id, name, archivedAt })),
     readProjectFile: (projectId: string, relativePath: string) => projects.readFile(projectId, relativePath),
     readBody: (request: IncomingMessage) => body(request),
   });

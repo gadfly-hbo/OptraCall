@@ -94,6 +94,7 @@ function checkShape(raw: unknown): SapDocument {
   keys(p, ['id', 'version', 'namespace', 'fingerprint'], 'package');
   for (const key of ['id', 'version', 'namespace']) text(p[key], `package.${key}`);
   if (typeof p.fingerprint !== 'string' || (p.fingerprint !== '' && !sha256Pattern.test(p.fingerprint))) fail('SAP_STRUCTURE', 'package.fingerprint');
+  if (!packageIdPattern.test(p.id as string) || !semverPattern.test(p.version as string) || p.namespace !== `mf.${p.id}`) fail('SAP_STRUCTURE', 'package');
 
   const dimensions = strings(root.dimensions, 'dimensions');
   if (!dimensions.length || new Set(dimensions).size !== dimensions.length || dimensions.some(name => !identifierPattern.test(name))) fail('SAP_STRUCTURE', 'dimensions');

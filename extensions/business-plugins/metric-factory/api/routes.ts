@@ -14,6 +14,7 @@ export type MetricFactoryRoutesOptions = {
   libraryRoot: string;
   projectDataDirectory: (projectId: string) => string;
   projectExists: (projectId: string) => Promise<boolean>;
+  projectOverview: () => Promise<readonly { id: string; name: string; archivedAt: string | null }[]>;
   readProjectFile: (projectId: string, relativePath: string) => Promise<{ name: string; bytes: Buffer }>;
   readBody: (request: IncomingMessage) => Promise<Record<string, unknown>>;
 };
@@ -106,6 +107,20 @@ export function createMetricFactoryRoutes(options: MetricFactoryRoutesOptions) {
           try { enablementOf(projectId).disable(packageId); } catch (error) { if (error instanceof EnablementFault && error.code === 'ENABLEMENT_CORRUPT') throw new ApiFault(409, 'enablement_corrupt', '项目启用记录异常，已停止写入；请检查本地数据后重试。'); throw error; }
           return { status: 200, value: { records: enabledRecords(projectId) } };
         }
+      }
+      if (request.method === 'GET' && segments[0] === 'usage' && segments.length === 2 && packageIdPattern.test(segments[1]!)) {
+        const packageId = segments[1]!;
+        const usages = [];
+        for (const project of await options.projectOverview()) {
+          try {
+            const record = createProjectEnablement(options.projectDataDirectory(project.id)).enabled(packageId);
+            if (record) usages.push({ projectId: project.id, projectName: project.name, archived: project.archivedAt !== null, ...record });
+          } catch (error) {
+            if (error instanceof EnablementFault) usages.push({ projectId: project.id, projectName: project.name, archived: project.archivedAt !== null, error: error.code });
+            else throw error;
+          }
+        }
+        return { status: 200, value: { usages } };
       }
       return undefined;
     } catch (error) {

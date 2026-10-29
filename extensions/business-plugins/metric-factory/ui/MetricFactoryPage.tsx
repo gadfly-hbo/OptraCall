@@ -5,22 +5,27 @@ import type { SapDocument } from '../sap/validate.ts';
 
 type LibraryEntry = { id: string; version: string; namespace: string; packageFingerprint: string; contentFingerprint: string; bytesSha256: string; bytes: number; publishedAt: string; publishedBy: string; metricNames: string[]; scenarioIds: string[] };
 type EnablementRecord = { packageId: string; version: string; enabledAt: string; entry?: LibraryEntry };
+type PackageUsage = { projectId: string; projectName: string; archived: boolean; version?: string; enabledAt?: string; error?: string };
 type Tab = 'overview' | 'detail' | 'review' | 'enable';
 
 async function metricRequest<T>(path: string, method: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/metric-factory/${path}`, { method, mode: 'same-origin', credentials: 'omit', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   const value = await response.json();
-  if (!response.ok) throw new HostRequestError(value.message ?? '指标资产请求未完成，请重试。', {}, value.code ?? 'metric_request_failed');
+  if (!response.ok) throw new HostRequestError(value.message ?? '指标资产请求未完成，请重试。', { ...(value.detail ? { detail: value.detail } : {}) }, value.code ?? 'metric_request_failed');
   return value as T;
 }
 
 const shortSha = (value: string) => `${value.slice(0, 11)}…${value.slice(-4)}`;
 const dateOf = (value: string) => value.slice(0, 10);
 const compareVersion = (a: string, b: string) => { const left = a.split('.').map(Number), right = b.split('.').map(Number); return left[0]! - right[0]! || left[1]! - right[1]! || left[2]! - right[2]!; };
-const draftFilesOf = (files: FileNode[]): string[] => (files.find(node => node.name === '020_clean')?.children ?? [])
-  .filter(node => node.kind === 'file' && /\.ya?ml$/.test(node.name))
-  .map(node => `020_clean/${node.name}`)
-  .sort((a, b) => a.localeCompare(b));
+const draftFilesOf = (files: FileNode[]): string[] => {
+  const walk = (nodes: FileNode[], directory: string): string[] => nodes.flatMap(node => {
+    const current = `${directory}/${node.name}`;
+    if (node.kind === 'file') return /\.ya?ml$/.test(node.name) ? [current] : [];
+    return walk(node.children ?? [], current);
+  });
+  return walk(files.find(node => node.name === '020_clean')?.children ?? [], '020_clean').sort((a, b) => a.localeCompare(b));
+};
 
 export const MODELING_GUIDE = `请帮我起草一份分析指标体系（SAP 0.2 语义资产包），沉淀可复用的指标口径与分析方法。
 
@@ -68,6 +73,7 @@ export function MetricFactoryPage({ projects, onOpenTask, onProjectsChanged, onB
   const [notice, setNotice] = useState('');
   const [query, setQuery] = useState('');
   const [detail, setDetail] = useState<{ entry: LibraryEntry; document: SapDocument } | null>(null);
+  const [usage, setUsage] = useState<PackageUsage[]>([]);
   const [modelingOpen, setModelingOpen] = useState(false);
   const [modelingProject, setModelingProject] = useState('');
   const activeProjects = useMemo(() => projects.filter(project => project.archivedAt === null), [projects]);
@@ -91,8 +97,12 @@ export function MetricFactoryPage({ projects, onOpenTask, onProjectsChanged, onB
 
   const openDetail = async (id: string, version: string) => {
     setTab('detail');
-    try { setDetail(await metricRequest<{ entry: LibraryEntry; document: SapDocument }>(`library/${encodeURIComponent(id)}/${encodeURIComponent(version)}`, 'GET')); setError(''); }
-    catch (caught) { setError(caught instanceof HostRequestError ? caught.message : '资产包详情读取失败。'); }
+    setUsage([]);
+    try {
+      setDetail(await metricRequest<{ entry: LibraryEntry; document: SapDocument }>(`library/${encodeURIComponent(id)}/${encodeURIComponent(version)}`, 'GET'));
+      setUsage((await metricRequest<{ usages: PackageUsage[] }>(`usage/${encodeURIComponent(id)}`, 'GET')).usages);
+      setError('');
+    } catch (caught) { setError(caught instanceof HostRequestError ? caught.message : '资产包详情读取失败。'); }
   };
 
   const createModelingTask = async () => {
@@ -171,6 +181,27 @@ export function MetricFactoryPage({ projects, onOpenTask, onProjectsChanged, onB
             <span><b>证据要求</b>{scenario.evidence_requirements}</span>
           </div>
         </article>)}
+        <h3 className="mf-section-title">版本历史</h3>
+        <table className="mf-table">
+          <thead><tr><th>版本</th><th>发布时间</th><th>内容指纹</th><th>说明</th></tr></thead>
+          <tbody>{entries.filter(entry => entry.id === detail.entry.id).sort((a, b) => compareVersion(b.version, a.version)).map(entry => <tr key={entry.version}>
+            <td><code>{entry.version}</code>{entry.version === detail.entry.version ? '（当前查看）' : ''}</td>
+            <td>{dateOf(entry.publishedAt)}</td>
+            <td><code>{shortSha(entry.contentFingerprint)}</code></td>
+            <td>{entry.version === detail.entry.version ? <button className="text-button" disabled>当前</button> : <button className="text-button" onClick={() => void openDetail(entry.id, entry.version)}>查看</button>}</td>
+          </tr>)}</tbody>
+        </table>
+        <p className="mf-note">版本不可变、不可覆盖；内容未变时拒绝重发。启用项目固定精确版本，不自动跟随。</p>
+        <h3 className="mf-section-title">各项目启用状态</h3>
+        {usage.length ? <table className="mf-table">
+          <thead><tr><th>项目</th><th>启用版本</th><th>启用时间</th><th>状态</th></tr></thead>
+          <tbody>{usage.map(item => <tr key={item.projectId}>
+            <td>{item.projectName}{item.archived ? '（已归档）' : ''}</td>
+            <td><code>{item.version ?? '—'}</code></td>
+            <td>{item.enabledAt ? dateOf(item.enabledAt) : '—'}</td>
+            <td>{item.error ? '启用记录异常' : item.archived ? '归档中，恢复后生效' : '启用中'}</td>
+          </tr>)}</tbody>
+        </table> : <p className="mf-sub">尚无项目启用此资产包。</p>}
       </> : <p className="mf-footer">从库总览选择一个资产包查看详情。</p>}
     </section>}
 

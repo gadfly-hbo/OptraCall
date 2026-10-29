@@ -11,7 +11,7 @@ async function json(response: Response, expected = 200): Promise<any> { assert.e
 async function until(ready: () => boolean, message: string) { const deadline = Date.now() + 20_000; while (!ready()) { if (Date.now() > deadline) throw new Error(message); await new Promise(resolve => setTimeout(resolve, 20)); } }
 const fixture = () => readFileSync(path.resolve(import.meta.dirname, '../extensions/business-plugins/metric-factory/fixtures/membership-repurchase@1.0.0.draft.yaml'), 'utf8');
 
-test('MF-05: synthetic end-to-end loop from draft to a model request that cites the asset', { timeout: 90_000 }, async t => {
+test('MF-05: synthetic end-to-end loop from draft to a model request that receives the asset index', { timeout: 90_000 }, async t => {
   const provider = await startSyntheticProvider(); t.after(() => provider.close());
   const host = await startTestHost(); t.after(() => host.close());
   await json(await host.request('/api/configuration', 'PUT', { name: '指标闭环合成配置', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-metric-loop', apiKey: 'synthetic-metric-key' }));

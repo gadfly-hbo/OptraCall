@@ -92,6 +92,13 @@ test('MF-01: invalid encoding and oversize drafts are rejected', () => {
   assert.throws(() => parseSapDraft(padded), error => { assert.equal(fault(error).code, 'SAP_FILE_SIZE'); return true; });
 });
 
+test('MF-01: malformed package identity is rejected at validation time', () => {
+  const badId = edited(text => text.replace('  id: membership-repurchase', '  id: Membership_Repurchase'));
+  assert.throws(() => parseSapDraft(badId), error => { assert.equal(fault(error).code, 'SAP_STRUCTURE'); assert.equal(fault(error).path, 'package'); return true; });
+  const badVersion = edited(text => text.replace('version: 1.0.0', 'version: latest'));
+  assert.throws(() => parseSapDraft(badVersion), error => { assert.equal(fault(error).code, 'SAP_STRUCTURE'); assert.equal(fault(error).path, 'package'); return true; });
+});
+
 test('MF-01: fingerprints match canonical recomputation from the parsed document', () => {
   const publication = preparePublication(draftBytes());
   assert.deepEqual(sapFingerprints(publication.document), { packageFingerprint: publication.packageFingerprint, contentFingerprint: publication.contentFingerprint });

@@ -20,8 +20,9 @@ async function setup(options: { publishFirst?: boolean } = {}) {
   let body: Record<string, unknown> = {};
   const routes = createMetricFactoryRoutes({
     libraryRoot,
-    projectDataDirectory: () => path.join(workspace, 'projects', projectId),
+    projectDataDirectory: id => path.join(workspace, 'projects', id),
     projectExists: id => Promise.resolve(id === projectId),
+    projectOverview: () => Promise.resolve([{ id: projectId, name: '指标项目', archivedAt: null }, { id: '55555555-5555-4555-8555-555555555555', name: '已归档项目', archivedAt: '2026-10-01T00:00:00.000Z' }]),
     readProjectFile: (id, relative) => { assert.equal(id, projectId); return Promise.resolve({ name: path.basename(relative), bytes: readFileSync(path.join(projectDirectory, relative)) }); },
     readBody: () => Promise.resolve(body),
   });
@@ -105,6 +106,15 @@ test('MF-04: enable verifies the library version and pins it for the project', a
   const value = records!.value as { records: { packageId: string; version: string; entry: { metricNames: string[] } }[] };
   assert.equal(value.records.length, 1);
   assert.deepEqual(value.records[0]!.entry.metricNames, ['repurchase_rate', 'repeat_member_count', 'buyer_member_count', 'repurchase_gap_days']);
+  const usage = await call('GET', '/api/metric-factory/usage/membership-repurchase');
+  const usages = (usage!.value as { usages: { projectId: string; projectName: string; archived: boolean; version?: string; error?: string }[] }).usages;
+  assert.equal(usages.length, 1);
+  assert.equal(usages[0]!.projectId, projectId);
+  assert.equal(usages[0]!.projectName, '指标项目');
+  assert.equal(usages[0]!.version, '1.0.0');
+  assert.equal(usages[0]!.archived, false);
+  const none = await call('GET', '/api/metric-factory/usage/unknown-package');
+  assert.deepEqual((none!.value as { usages: unknown[] }).usages, []);
   const disabled = await call('POST', `/api/metric-factory/projects/${projectId}/disable`, { packageId: 'membership-repurchase' });
   assert.deepEqual(((disabled!.value as { records: unknown[] }).records), []);
 });
