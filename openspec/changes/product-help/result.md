@@ -48,8 +48,10 @@
 - 类型检查与合并定向检查44/44通过，见`git-delivery/merge-check.log`。集成完整检查`git-delivery/check-integrated.log`退出0：286/286、无skip，TypeScript/Vite构建通过。独立复核两处文案精度修正后，仅内容/生成MD变化，适用定向2/2仍通过，见`help-final-content-check-2.log`；最终head另由PR CI全量验证。
 - 新隔离Cua验证：帮助→需求梳理导航正确、未保存需求背景保留但未写回；显式附带RAP后再选Case背景，同任务的两种背景和草稿在帮助返回后均保留；13章逐一打开、标题焦点和宽屏无溢出，新需求章390×844深色无溢出；临时主题和视口已恢复，下载与当前MD完全一致。Provider请求0、任务idle且无lastRun。见`git-delivery/browser-result.json`及`qa-readback.json`。
 - 隔离准备曾把创建响应的metadata误作完整实例，读取部分准备状态后只补完剩余操作，没有重复创建。章节循环首次将textContent无空格串当作可访问名称，依据新AX名称纠正；均为工具脚本假定失败，不作产品RED。
-- 正式候选非作者复核记录位于`git-delivery/review/`，最终清单和结论与交付状态以本阶段后续回读为准。本阶段只用临时合成Host/Provider，不重跑真实模型，不更新原服务或其他机器。
+- 正式候选非作者双轴复核PASS，10/10清单匹配，无帮助引入的P1/P2，2个P3已关闭；独立20项SSR/源码检查及16项规范源码检查通过，最终报告为`git-delivery/review/final-report.md`。本轮浏览器为idle任务；运行中保护沿用先前受控证据与本轮不变链路的影响复核，不声称新主线上复跑了活跃模型。最终记录变化另作只读一致性核对。本阶段只用临时合成Host/Provider，不重跑真实模型，不更新原服务或其他机器。
 
 继承上游观察单列：需求插件的目标任务/版本选择、模型配置切换后的会话复用、opening期间关闭及项目归档跨会话归属有待专项修复。来源与复现限定见`git-delivery/review/existing-main-runtime-notes.md`；本PR未改这些既有main源码，帮助复核不代表A路线全审关闭。未发布快照送入、澄清回答编辑等也不冒充已完整可用。后续能力地图与计划须保留这些范围。
 
-Git/CI当前状态：集成候选准备完成，推送/PR/实际head CI/合并与main CI尚待本阶段执行；最终结果由GitHub PR和本地交付回读分别保存，不能把旧244项检查直接当成新候选CI。
+Git交付锚点：[PR #6](https://github.com/gadfly-hbo/OptraCall/pull/6)，分支`codex/product-help`。本记录固定时，已提交并推送`e22fdce`，PR目标基线为`1e7a32e`；实际交付head CI、squash合并及main push CI分别以该PR和Actions回读为准，本地回执保存在`git-delivery/`，不能把旧244项检查当成新候选CI。首次推送因旧凭据助手路径失效而失败；随后使用现有本机GitHub登录的单次命令助手推送成功，未改全局配置、未输出密钥。
+
+本变更实施结束，规格与结果按仓库现有稳定路径归档保留；PR交付不自动升级正在运行的4173 Host或MacBook，不取得新的真实模型或业务动作授权。
