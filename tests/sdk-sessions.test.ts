@@ -1,0 +1,56 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { startTestHost } from './fixtures/host-process.ts';
+import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
+import { sessionEvents } from './fixtures/session-events.ts';
+import { randomUUID } from 'node:crypto';
+const texts = (events: Awaited<ReturnType<typeof sessionEvents>>['events']) => events.flatMap(event => event.type === 'snapshot' ? event.snapshot.messages.filter(message => message.role === 'assistant').map(message => message.content.filter((part: any) => part.type === 'text').map((part: any) => part.text).join('')) : []);
+
+test('RUN-04: real project SDK sessions retain model snapshots and isolated events; stop preserves partial text and credential clear preserves history', async t => {
+  const a = await startSyntheticProvider(), b = await startSyntheticProvider(); a.setMode('slow'); b.setChunks(['独立 B 回复']);
+  t.after(() => a.close()); t.after(() => b.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  await host.request('/api/configuration', 'PUT', { name: 'A', provider: 'openai-compatible', baseUrl: a.baseUrl, model: 'model-a', apiKey: 'synthetic-A-key' });
+  const { project: first } = await (await host.request('/api/projects', 'POST', { name: 'project-a' })).json();
+  const { task: firstTask } = await (await host.request(`/api/projects/${first.id}/tasks`, 'POST', { name: 'task-a' })).json();
+  await host.request('/api/configuration', 'PUT', { name: 'B', provider: 'openai-compatible', baseUrl: b.baseUrl, model: 'model-b', apiKey: 'synthetic-B-key' });
+  const { project: second } = await (await host.request('/api/projects', 'POST', { name: 'project-b' })).json();
+  const { task: secondTask } = await (await host.request(`/api/projects/${second.id}/tasks`, 'POST', { name: 'task-b' })).json();
+  assert.equal(first.configuration.model, 'model-a'); assert.equal(second.configuration.model, 'model-b'); assert.notEqual(first.configuration.id, second.configuration.id);
+  const streamA = await sessionEvents(host, first.id, firstTask.id), streamB = await sessionEvents(host, second.id, secondTask.id);
+  t.after(() => streamA.close()); t.after(() => streamB.close());
+  assert.equal((await host.request(`/api/projects/${first.id}/tasks/${firstTask.id}/messages`, 'POST', { text: 'A 的合成问题', requestId: randomUUID() })).status, 202);
+  await a.waitForRequests(1);
+  assert.equal((await host.request(`/api/projects/${first.id}/tasks/${firstTask.id}/messages`, 'POST', { text: '重复发送', requestId: randomUUID() })).status, 409);
+  assert.equal((await host.request(`/api/projects/${second.id}/tasks/${secondTask.id}/messages`, 'POST', { text: 'B 的合成问题', requestId: randomUUID() })).status, 202);
+  const doneB = await streamB.terminal;
+  assert.equal(doneB.type, 'run.settled'); if (doneB.type === 'run.settled') assert.equal(doneB.outcome, 'completed');
+  assert.ok(texts(streamB.events).includes('独立 B 回复'));
+  assert.equal((await host.request(`/api/projects/${first.id}/tasks/${firstTask.id}/stop`, 'POST', {})).status, 200);
+  const doneA = await streamA.terminal;
+  assert.equal(doneA.type, 'run.settled'); if (doneA.type === 'run.settled') assert.equal(doneA.outcome, 'cancelled');
+  assert.ok(texts(streamA.events).some(text => text.includes('部分合成回复')));
+  assert.ok(!texts(streamA.events).includes('独立 B 回复')); assert.ok(!texts(streamB.events).some(text => text.includes('部分合成回复')));
+  assert.equal(streamA.events.filter(event => event.type === 'run.settled').length, 1); assert.equal(streamB.events.filter(event => event.type === 'run.settled').length, 1);
+  assert.equal(a.requests[0]?.authorization, 'Bearer synthetic-A-key'); assert.equal(b.requests[0]?.authorization, 'Bearer synthetic-B-key');
+  assert.equal(a.requests[0]?.body.model, 'model-a'); assert.equal(b.requests[0]?.body.model, 'model-b');
+  await host.request('/api/configuration', 'DELETE');
+  assert.equal((await host.request(`/api/projects/${first.id}/tasks/${firstTask.id}`)).status, 200); assert.equal((await host.request(`/api/projects/${second.id}/tasks/${secondTask.id}`)).status, 200);
+  assert.equal((await host.request(`/api/projects/${first.id}/tasks/${firstTask.id}/messages`, 'POST', { text: 'missing credentials', requestId: randomUUID() })).status, 409);
+});
+
+test('CFG-04: API key echoed across SDK text chunks is redacted in deltas, authoritative snapshots and terminal response', async t => {
+  const provider = await startSyntheticProvider(); provider.setChunks(['内容 !synthetic-', 'split-secret 尾部']); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  await host.request('/api/configuration', 'PUT', { name: 'redaction', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-model', apiKey: '!synthetic-split-secret' });
+  const { project: session } = await (await host.request('/api/projects', 'POST', { name: 'redaction-project' })).json();
+  const { task } = await (await host.request(`/api/projects/${session.id}/tasks`, 'POST', { name: 'redaction-task' })).json();
+  const stream = await sessionEvents(host, session.id, task.id); t.after(() => stream.close());
+  await host.request(`/api/projects/${session.id}/tasks/${task.id}/messages`, 'POST', { text: 'synthetic only', requestId: randomUUID() });
+  await stream.terminal;
+  assert.ok(!JSON.stringify(stream.events).includes('!synthetic-split-secret'));
+  const deltas = stream.events.filter(event => event.type === 'text.delta').map(event => event.text).join('');
+  assert.equal(deltas, '内容 [密钥已隐藏] 尾部');
+  assert.ok(texts(stream.events).includes('内容 [密钥已隐藏] 尾部'));
+  assert.ok(!JSON.stringify(host.output()).includes('!synthetic-split-secret'));
+});
