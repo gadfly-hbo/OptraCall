@@ -2,7 +2,9 @@
 
 开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.2](docs/OptraCall_产品讨论稿_v0.2.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
 
-当前变更为 [macbook-trial-delivery](openspec/changes/macbook-trial-delivery/spec.md)。用户整体授权先在Mac mini实现三个双击入口，通过本地检查、非作者独立复核、CI并合入main，再浅克隆部署MacBook `/Users/huangbo/Dev/OptraCall`。只在MacBook本机经现有导入／保存流程补齐Pi凭据，保留已有配置、项目和会话。MacBook只单向更新、试用与反馈，不开发、不提交或回推；不复制Mini密钥或业务数据，不自动调用真实模型。说明见[试用文档](docs/macbook-trial.md)，实际结果见[交付记录](openspec/changes/macbook-trial-delivery/result.md)。
+当前变更为 [requirements-elaboration](openspec/changes/requirements-elaboration/spec.md)：把参考仓库 requirements-elaboration 改造为 OptraCall 业务插件「需求梳理」（4-Stage 软门禁、独立插件会话走统一 Runtime、RAP 0.2 契约包、显式送入任务上下文）。会话入口泛化（`project-runtime`／`project-session`／`server.ts` 会话段）按 A 路线由 Qoder 实施、Codex 专项复核。实施结果见[交付记录](openspec/changes/requirements-elaboration/result.md)。
+
+上一变更为 [Case一期](openspec/changes/decision-case/spec.md)（已合并 PR #4）及其后的 [macbook-trial-delivery](openspec/changes/macbook-trial-delivery/spec.md) 单向试用交付；各自的结果与授权范围保留在对应记录中。
 
 [项目多任务变更](openspec/changes/project-tasks-and-archive/result.md)已完成用户验收、PR #1合并及核定测试数据清理。模型过程偏离保留观察，不额外增加Host拦截。原 [first-chat-mvp](openspec/changes/first-chat-mvp/result.md)证据保留；旧四项完成前的Git／CI暂缓期已结束。后续执行核对实际分支、WIP和固定输入，Git／CI、安装和用户验收分别报告，不覆盖证据或自动重放中断任务。
 
