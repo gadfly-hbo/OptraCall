@@ -1,3 +1,4 @@
+import type { CaseContextSelection } from '../case-types.ts';
 import type { BrowserUIResponse, ClientProject, ClientTask, FileNode, ProjectEvent, PublicModelConfiguration, SessionSnapshot, TaskState } from './project-types.ts';
 
 export class HostRequestError extends Error {
@@ -30,7 +31,7 @@ export async function createTask(projectId: string, name: string, configurationI
 export function readTask(projectId: string, taskId: string, signal?: AbortSignal): Promise<TaskState> { return request(taskPath(projectId, taskId), 'GET', undefined, signal); }
 export function openTask(projectId: string, taskId: string): Promise<TaskState> { return request(`${taskPath(projectId, taskId)}/open`, 'POST', {}); }
 export async function saveDraft(projectId: string, taskId: string, text: string): Promise<void> { await request(`${taskPath(projectId, taskId)}/draft`, 'PATCH', { text }); }
-export async function sendMessage(projectId: string, taskId: string, text: string, requestId: string): Promise<void> { await request(`${taskPath(projectId, taskId)}/messages`, 'POST', { text, requestId }); }
+export async function sendMessage(projectId: string, taskId: string, text: string, requestId: string, caseContext?: CaseContextSelection): Promise<void> { await request(`${taskPath(projectId, taskId)}/messages`, 'POST', { text, requestId, ...(caseContext ? { caseContext } : {}) }); }
 export async function stopTask(projectId: string, taskId: string): Promise<void> { await request(`${taskPath(projectId, taskId)}/stop`, 'POST', {}); }
 export function runCommand(projectId: string, taskId: string, text: string, requestId: string = crypto.randomUUID()): Promise<{ result: unknown; snapshot: SessionSnapshot; outcome?: 'completed' | 'failed' | 'cancelled' }> { return request(`${taskPath(projectId, taskId)}/commands`, 'POST', { text, requestId }); }
 export async function answerInteraction(projectId: string, taskId: string, response: BrowserUIResponse): Promise<void> { await request(`${taskPath(projectId, taskId)}/ui-response`, 'POST', response); }

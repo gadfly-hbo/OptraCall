@@ -103,3 +103,22 @@ npm run dev
 原生扩展的选择、确认、输入及编辑对话框在浏览器中响应；通知／状态与输入框草稿同步，原生命令也可停止。终端专用装饰会提示忽略，必须依赖终端组件的交互明确报不支持；不会伪造用户回答。配置中断恢复、请求去重及异常child重建只管理运行环境，不代替Agent分析。
 
 工程浏览器验证必须使用 `node tests/fixtures/browser-environment.ts` 创建的隔离Host／合成Provider和4183 UI，再运行 `tests/browser-project-tasks.js`、`browser-live-projects.js`、`browser-catalog.js`；原生命令／扩展交互使用独立的 `command-browser-environment.ts` 与 `browser-command-ui.js`，两种fixture不能同时占用4183。不要对已配置真实凭据的服务运行会改配置的合成回归。其余旧Demo浏览器脚本及证据保留为历史阶段，当前产品以本项适用脚本和证据为准。
+
+
+## Case 一期（0.1.0-mvp.4）
+
+Case看板位于项目看板上方；具体项目仍列在“项目空间”。两个看板各有方块／列表视图。Case多对多关联现有项目，项目下仍是原任务Session；同一项目的工作状态、范围、承接人、下一步与历史全局共用。结束Case填写原因，重开后才可按该Case继续；项目独立发送仍可使用。
+
+本期仅增加Node内置SQLite，无新增数据库依赖。普通启动不自动建空库：首次在Case看板点击“启用本机Case记录”；若曾启用而记录丢失，应先核对备份，不把它当作首次空白。数据库／身份标记异常会明确提示，原项目JSON、任务、原生JSONL与三目录保留原身份。项目业务字段缺省“未设置”，不从任务是否运行或项目归档猜测进度。
+
+按Case继续任务时先核对背景及修订，实际发送才固定本次背景；旧任务历史可能含其他Case信息，需要独立上下文时在原项目中新建任务。引用记录保存真实项目路径及观察摘要，不复制文件；文件缺失、变化、项目解绑及历史解除分别提示。新建项目后关联部分成功会保留原项目和操作回执，在Case详情“未完成的项目创建”中核对续办，不重复创建。
+
+已启用Case库的升级或代码回退前，先正常停止Host，确认任务和未知运行已核对，再执行显式离线结构备份：
+
+```sh
+node scripts/decision-case-backup.mjs --data-root "$HOME/.optracall" --projects-root "$HOME/OptraCallProjects"
+```
+
+实际使用自定义目录时必须传入原来的两条路径。脚本拒绝活动Host锁、活动库或残留恢复日志，备份写入dataRoot/backups/decision-case/下新的唯一目录；仅含SQLite、标记、匹配项目元数据与既有迁移备份、校验清单，不含凭据，也不是会话／三目录的完整灾备。首次尚无库时此命令会拒绝，不能声称备份了不存在的Case库；首次启用应先清点并保全原项目元数据、JSONL及文件。回退只切兼容代码并保留最新数据，不用旧快照覆盖后续Case、任务、历史或文件。
+
+开发验收使用新建隔离合成根运行 `npm run check`，UI新增脚本为 `tests/fixtures/browser-case-board.js`，须从全新 `browser-environment.ts` fixture开始并串行运行；与其他脚本共享fixture并发执行会污染Provider计数。DuckDB下一项建设，Semantica后置。

@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import { readdir, lstat } from 'node:fs/promises';
@@ -8,6 +8,9 @@ import { SessionManager } from '../agent/sdk.ts';
 import { ProjectAgent, ProjectRuntimeError, type ProjectSnapshot } from '../agent/project-runtime.ts';
 import { ConfigurationStore, ConfigurationStoreError, TARGET_MODELS, type RuntimeModelConfiguration } from './config-store.ts';
 import { ProjectStore, ProjectStoreFault, type ProjectRecord, type TaskRecord } from './project-store.ts';
+import { CaseStore, CaseStoreError } from './case-store.ts';
+import { createCaseRoutes, CaseRouteError } from './case-routes.ts';
+import type { CaseContextSelection } from './case-types.ts';
 import { loadStaticUi } from './static-ui.ts';
 
 class RequestFault extends Error {
@@ -30,10 +33,10 @@ function body(request: IncomingMessage, limit = 65_536): Promise<Record<string, 
 
 export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
-  const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot });
+  const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot });
   let staticUi: Awaited<ReturnType<typeof loadStaticUi>> | undefined;
   const instanceId = options.instanceId ?? randomUUID();
-  const ready = (async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await configuration.init(); })();
+  const ready = (async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); })();
   type LiveEntry = { projectId: string; taskId: string; agent: ProjectAgent; configuration: Readonly<RuntimeModelConfiguration> };
   const agents = new Map<string, LiveEntry>();
   const opening = new Map<string, { task: Promise<ProjectAgent>; projectId: string; taskId: string; agent: ProjectAgent; provider: string }>(), streams = new Map<string, Set<ServerResponse>>();
@@ -53,6 +56,39 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   function assertActive(project: ProjectRecord) {
     if (project.archivedAt !== null) throw new RequestFault(409, 'project_archived');
     if (archiving.has(project.id)) throw new RequestFault(409, 'project_busy');
+  }
+  function decorateProject(project: ProjectRecord) {
+    try { if (cases.getStatus().state === 'ready') return { ...project, work: cases.getProjectWork(project.id), workUnavailable: false }; } catch {}
+    return { ...project, work: null, workUnavailable: true };
+  }
+  const caseRoutes = createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject });
+  // SDK request IDs are task-local. Namespace the SQLite receipt while retaining
+  // the original request ID for the native run and its existing retry ledger.
+  const contextOperationId = (projectId: string, taskId: string, requestId: string) => {
+    const hex = createHash('sha256').update(JSON.stringify(['task_context_prepare', projectId, taskId, requestId])).digest('hex');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+  };
+  async function prepareCasePrompt(projectId: string, taskId: string, input: Record<string, unknown>, accepted = false) {
+    const operationId = contextOperationId(projectId, taskId, input.requestId as string);
+    const existing = cases.getStatus().state === 'ready' ? cases.getOperation(operationId) : null;
+    if (input.caseContext === undefined) {
+      if (existing) throw new CaseStoreError('operation_conflict', 409);
+      return input.text as string;
+    }
+    if (accepted && !existing) throw new CaseStoreError('operation_conflict', 409);
+    if (!input.caseContext || typeof input.caseContext !== 'object' || Array.isArray(input.caseContext)) throw new CaseStoreError('invalid_context');
+    const selection = input.caseContext as CaseContextSelection;
+    if (!Array.isArray(selection.selectedReferenceIds)) throw new CaseStoreError('invalid_context_reference');
+    if (!existing) {
+      const references = cases.getArtifacts(selection.caseId), links = cases.listProjectLinks(selection.caseId);
+      for (const id of selection.selectedReferenceIds) {
+        const ref = references.find(item => item.id === id);
+        if (!ref || ref.unlinkedAt || ref.projectId !== projectId || !links.some(link => link.projectId === ref.projectId)) throw new CaseStoreError('invalid_context_reference', 409);
+        const observed = await projects.observeFile(ref.projectId, ref.relativePath);
+        if (ref.observedSha256 !== null && (ref.observedSha256 !== observed.sha256 || ref.observedBytes !== observed.bytes)) throw new CaseStoreError('context_reference_changed', 409);
+      }
+    }
+    return cases.prepareTaskContext({ operationId, projectId, taskId, userPrompt: input.text as string, selection }).composedPrompt;
   }
   async function pair(projectId: string, taskId: string, writable = false) {
     const project = await projects.get(projectId), task = project.tasks.find(value => value.id === taskId);
@@ -152,7 +188,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     }
     const live = agents.get(key)?.agent ?? opening.get(key)?.agent;
     if (live) snapshot.uiRequests = live.pendingUI.map(event => event.request);
-    return { project, task, snapshot };
+    return { project: decorateProject(project), task, snapshot };
   }
   function assertUsable(project: ProjectRecord, task: TaskRecord, agent: ProjectAgent) {
     assertActive(project);
@@ -217,18 +253,22 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           json(response, 200, { ok: true, revision: ticket.snapshot.revision, reply: result.text.slice(0, 300), message: '已通过统一 Pi SDK 收到固定短句回复。' });
         } finally { if (timer) clearTimeout(timer); response.off('close', cancel); await probe.clear(); testing = false; } return;
       }
+      if (url.pathname.startsWith('/api/cases') || /^\/api\/projects\/[a-f0-9-]+\/work(?:\/|$)/.test(url.pathname)) {
+        const result = await caseRoutes({ pathname: url.pathname, method: request.method ?? 'GET', ...(['POST', 'PATCH', 'DELETE'].includes(request.method ?? '') ? { input: await body(request, 1024 * 1024) } : {}) });
+        if (result) { json(response, result.status ?? 200, result.body); return; }
+      }
       if (url.pathname === '/api/projects') {
-        if (request.method === 'GET') { json(response, 200, { projects: await projects.list() }); return; }
+        if (request.method === 'GET') { json(response, 200, { projects: (await projects.list()).map(decorateProject) }); return; }
         if (request.method === 'POST') {
           const input = await body(request), value = await mutate(async () => { const selected = configuration.read(typeof input.configurationId === 'string' ? input.configurationId : undefined); if (!selected?.hasApiKey) throw new RequestFault(409, 'configuration_required'); return projects.create({ name: String(input.name ?? ''), configuration: selected }); });
-          json(response, 201, { project: value }); return;
+          json(response, 201, { project: decorateProject(value) }); return;
         }
       }
       const match = /^\/api\/projects\/([a-f0-9-]+)(?:\/(.*))?$/.exec(url.pathname);
       if (match) {
         const projectId = match[1]!, action = match[2];
-        if (!action && request.method === 'GET') { json(response, 200, { project: await projects.get(projectId) }); return; }
-        if (!action && request.method === 'PATCH') { const input = await body(request); json(response, 200, { project: await mutate(async () => { assertActive(await projects.get(projectId)); return projects.rename(projectId, String(input.name ?? '')); }) }); return; }
+        if (!action && request.method === 'GET') { json(response, 200, { project: decorateProject(await projects.get(projectId)) }); return; }
+        if (!action && request.method === 'PATCH') { const input = await body(request); json(response, 200, { project: decorateProject(await mutate(async () => { assertActive(await projects.get(projectId)); return projects.rename(projectId, String(input.name ?? '')); })) }); return; }
         if (action === 'archive' && request.method === 'POST') {
           await body(request);
           const project = await mutate(async () => {
@@ -242,9 +282,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               if (projectBusy(projectId) || value.tasks.some(task => task.lastRun?.status === 'running')) throw new RequestFault(409, 'project_busy');
               const archived = await projects.archive(projectId); await closeAgents({ projectId }); return archived;
             } finally { archiving.delete(projectId); }
-          }); json(response, 200, { project }); return;
+          }); json(response, 200, { project: decorateProject(project) }); return;
         }
-        if (action === 'restore' && request.method === 'POST') { await body(request); json(response, 200, { project: await mutate(() => projects.restore(projectId)) }); return; }
+        if (action === 'restore' && request.method === 'POST') { await body(request); json(response, 200, { project: decorateProject(await mutate(() => projects.restore(projectId))) }); return; }
         if (action === 'tasks' && request.method === 'POST') {
           const input = await body(request), task = await mutate(async () => {
             const project = await projects.get(projectId); assertActive(project);
@@ -286,14 +326,23 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const input = await body(request);
             if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
             const initial = await pair(projectId, taskId, true), known = await priorRequest(initial.project, initial.task, input.requestId);
+            // Validate and pin the selected snapshot before opening a runtime.
+            await mutate(() => prepareCasePrompt(projectId, taskId, input, Boolean(known)));
             if (known) { json(response, 202, { requestId: input.requestId, status: known, deduplicated: true }); return; }
             const agent = await agentFor(initial.project, initial.task);
             await mutate(async () => {
               const { project, task } = await pair(projectId, taskId, true), previous = await priorRequest(project, task, input.requestId as string);
               if (previous) { json(response, 202, { requestId: input.requestId, status: previous, deduplicated: true }); return; }
               assertUsable(project, task, agent); if (agent.busy) throw new RequestFault(409, 'session_busy');
+              if (input.caseContext) {
+                const selection = input.caseContext as CaseContextSelection, record = cases.getCase(selection.caseId);
+                if (record.status === 'closed') throw new CaseStoreError('case_closed', 409);
+                if (record.revision !== selection.caseRevision || cases.getProjectWork(projectId).revision !== selection.projectWorkRevision) throw new CaseStoreError('revision_conflict', 409);
+                if (!cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new CaseStoreError('project_not_linked', 409);
+              }
+              const prompt = await prepareCasePrompt(projectId, taskId, input);
               const startedAt = new Date().toISOString(); await projects.markRun(projectId, taskId, { id: input.requestId as string, status: 'running', startedAt });
-              const run = agent.start(input.text as string, input.requestId as string);
+              const run = agent.start(prompt, input.requestId as string);
               void run.completion.then(async (result: any) => { await projects.markRun(projectId, taskId, { id: input.requestId as string, status: result.outcome, startedAt, settledAt: new Date().toISOString() }); }).catch(async () => { await projects.markRun(projectId, taskId, { id: input.requestId as string, status: 'interrupted', startedAt, settledAt: new Date().toISOString() }).catch(() => {}); publish(projectId, taskId, { type: 'run.settled', requestId: input.requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。' }); });
               await run.accepted; json(response, 202, { requestId: input.requestId, status: 'running' });
             }); return;
@@ -338,10 +387,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
-      const code = error instanceof RequestFault || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
-      const status = error instanceof RequestFault ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || code === 'project_archived' ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
-      json(response, status, { code, message: code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}) });
+      const code = error instanceof RequestFault || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
+      const status = error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || code === 'project_archived' ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
+      json(response, status, { code, message: code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }
   })(); });
-  return { server, ready, configuration, projects, close: async () => { closing = true; await gate; await closeAgents(); endStreams(); await projects.close(); if (server.listening) await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }); } };
+  return { server, ready, configuration, projects, cases, close: async () => { closing = true; await gate; await closeAgents(); endStreams(); await cases.close(); await projects.close(); if (server.listening) await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }); } };
 }

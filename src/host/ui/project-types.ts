@@ -1,4 +1,5 @@
 import type { PublicModelConfiguration } from '../config-store.ts';
+import type { ProjectWorkRecord } from '../case-types.ts';
 export type { PublicModelConfiguration };
 export type ProjectConfiguration = Omit<PublicModelConfiguration, 'hasApiKey'>;
 export type ClientTask = {
@@ -9,6 +10,7 @@ export type ClientTask = {
 export type ClientProject = {
   schemaVersion: 2; id: string; name: string; configuration: ProjectConfiguration;
   rootPath: string; createdAt: string; updatedAt: string; archivedAt: string | null; tasks: ClientTask[];
+  work?: ProjectWorkRecord | null; workUnavailable?: boolean;
 };
 export type TaskState = { project: ClientProject; task: ClientTask; snapshot: SessionSnapshot };
 export const taskKey = (projectId: string, taskId: string) => `${projectId}/${taskId}`;

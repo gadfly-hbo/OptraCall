@@ -18,7 +18,7 @@ async (page) => {
   await page.getByLabel(/API Key/).fill('synthetic-browser-command-key');
   await page.getByRole('button', { name: '保存配置', exact: true }).click();
   await page.getByRole('status').filter({ hasText: '配置已保存到本机' }).waitFor();
-  await page.getByRole('button', { name: '返回项目空间', exact: true }).click();
+  await page.getByRole('button', { name: '返回Case看板', exact: true }).click();
   await page.getByRole('button', { name: '新建项目', exact: true }).click();
   const create = page.getByRole('dialog', { name: '新建项目', exact: true }), projectName = '交互运行验收 ' + Date.now();
   await create.getByRole('textbox', { name: '项目名称', exact: true }).fill(projectName);
