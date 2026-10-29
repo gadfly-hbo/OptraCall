@@ -226,3 +226,12 @@ Case新增4项v3来源引用并标明受限结论，旧失败历史保留；主C
 Spec独立复核首次因服务容量失败，恢复后提出两项P2，原REQUEST_CHANGES保留：已有数据库／标记被改成0644仍ready；未知触发器被接受，合成探针证明其能破坏当前值／回执一致性。新增公开CaseStore重开回归先RED，再最小修正：权限不为0600拒绝使用且不改写旧字节；以同一受支持DDL在内存生成完整结构清单，连同SQLite隐式索引比较，拒绝未知触发器／视图／索引。没有新增持久表或改变模式版本，也不自动修复／重建未知库。
 
 权限定向1/1及迁移／存储18/18 GREEN，旧MIG-04 fixture重建标记原先受umask变成0644，已显式恢复合法0600以继续检验未知版本／身份断言，未削弱原断言；首次较广回归的fixture失败日志保留。修正后仍须重新固定候选、完整检查及独立复验，完成后再提交对应head CI。本轮未读取或改写真实Case库，当前运行预览不自动切换到这些源文件修正。
+
+
+### 集成源码候选最终验证及PR记录
+
+修正源码固定于 `19f0f5365952a36fcff4b8b72b96b83f46b1732b`、tree `a05dd665`，工作树干净。基于同一提交的独立验证副本完整 `npm run check` 242/242、类型检查、生产构建通过；依赖锁未较首次237项集成候选改变，审计0漏洞。全新隔离fixture上的Case浏览器和指标体系浏览器均PASS，页面异常／外部请求0；Case背景＋指标体系精确版本索引共存、原Project/Task/工作投影及accepted-request去重的额外合成SDK探针PASS（loopback合成Provider一次，不是真实模型）。验证期间没有重启用户预览或访问真实数据根。
+
+Standards复核当前候选NO_BLOCKING_FINDINGS，README问题关闭；保留1项非阻塞P3：未使用的TaskPreview组件可后续清理。Spec原2项P2经独立8项ready/initializing探针和18/18存储回归关闭，最终NO_BLOCKING_SPEC_FINDINGS；原REQUEST_CHANGES、服务容量失败、作者RED及fixture失败全部保留，不能改写首轮全绿。
+
+分支已通过普通推送交付GitHub，并建立[PR #4](https://github.com/gadfly-hbo/OptraCall/pull/4)。第一次推送因遗留凭据助手路径失效被拒，改用本机已登录gh的仅本次命令助手后成功，未改全局Git配置或导出凭据。本段文档提交仅更新阶段状态与验证记录；对应head的托管CI、合并前base/head核对及最终main回读将保存于 `.local/decision-case/git-delivery/`，以PR实际状态为权威，不在提交前预填合并成功。两项存储修正后尚未重跑真实Provider，前期真实模型结果仅按其当时运行源码解释；统计能力PARTIAL不因Git交付转为PASS。
