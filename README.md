@@ -6,7 +6,7 @@ OptraCall（Optima 最优 + tra 迭代 + call 决策）面向数据驱动决策�
 
 ## 当前状态
 
-2026-10-29：当前候选 `0.1.0-mvp.2` 在持久项目与完整Pi运行时上增加项目多任务、重命名、归档及恢复。每个任务有独立会话／草稿／模型和运行状态，文件按项目共享；原有项目兼容升级为包含首个任务的项目。范围、迁移和实际检查见[已确认方案](docs/project-tasks-and-archive.md)、[规格](openspec/changes/project-tasks-and-archive/spec.md)与[结果记录](openspec/changes/project-tasks-and-archive/result.md)，用户产品审核单独记录。
+2026-10-29：版本 `0.1.0-mvp.2` 已通过用户本轮真实模型多任务验收，在持久项目与完整Pi运行时上增加项目多任务、重命名、归档及恢复。每个任务有独立会话／草稿／模型和运行状态，文件按项目共享；原有项目兼容升级为包含首个任务的项目。范围、迁移和实际检查见[已确认方案](docs/project-tasks-and-archive.md)、[规格](openspec/changes/project-tasks-and-archive/spec.md)与[结果记录](openspec/changes/project-tasks-and-archive/result.md)；本轮用户通过、观察项及合并／测试数据清理分别记录。本机合成验收项目和QA运行数据已按用户授权清除，模型配置及必要交付证据保留。
 
 原 `first-chat-mvp` 四项开发与五模型合成数据验证证据保留，用户修正由当前变更承接。四类能力目录和决策大屏仍为占位；不预装数据分析skill，用户可按Pi原生方式自行安装。
 

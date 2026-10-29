@@ -1,10 +1,10 @@
 # OptraCall 工程规范
 
-版本 v0.6 · 2026-10-29 · 本项目开发流程的统一来源
+版本 v0.7 · 2026-10-29 · 本项目开发流程的统一来源
 
 ## 1. 当前范围与依据
 
-当前变更为[项目多任务、重命名与归档恢复](../openspec/changes/project-tasks-and-archive/spec.md)。用户已整体确认[结构与迁移方案](project-tasks-and-archive.md)D01–D08及现有元数据升级，保留项目、原生会话和文件。先合成迁移演练，真实升级前核对Host空闲与原件清单；本变更使用既有本地／独立／Git／CI流程，以下四项中间Git暂缓例外属于已结束的原批次。实际进度和验收见新变更结果，未授权合并、MacBook操作或真实业务分析。
+当前变更为[项目多任务、重命名与归档恢复](../openspec/changes/project-tasks-and-archive/spec.md)。用户已整体确认[结构与迁移方案](project-tasks-and-archive.md)D01–D08及现有元数据升级，保留项目、原生会话和文件。先合成迁移演练，真实升级前核对Host空闲与原件清单；本变更使用既有本地／独立／Git／CI流程，以下四项中间Git暂缓例外属于已结束的原批次。实际进度和验收见新变更结果。用户已通过本轮真实模型多任务验收，接受模型过程偏离继续观察、不增加Host拦截，并明确授权合并PR #1、安全快进本地main及一次性清除核定测试数据；源码、配置凭据和必要证据保留。本次不授权MacBook操作或真实业务分析。
 
 仓库基线初始化、讨论稿与规范建立、首次提交和推送已完成，原记录及证据保留。上一批次 `first-chat-mvp` 的四项逐项确认与结果如下：
 
@@ -13,7 +13,7 @@
 | 1 | 按 Host + Agent + Extension 建立目录、薄规格与本地检查 | LOCAL_COMPLETE，证据保留 |
 | 2 | WorkBuddy 全面调研，尤其前端 UI / 布局；初步 UI Demo 与 Host–Agent 接缝方案，含 LLM 配置界面 | 用户已审核通过最终项目版候选，原证据保留 |
 | 3 | 核实并锁定最新兼容的 pi-coding-agent SDK 版本，完成统一接入与 LLM 前置准备 | LOCAL_COMPLETE，原[六点方案](stage3-sdk-and-llm.md)内存探针证据保留；当前配置及运行以第4项为准 |
-| 4 | 持久项目、上传、完整Pi原生运行时及合成文档简析 | LOCAL_COMPLETE，按[本项方案](stage4-persistent-projects-and-agent.md)与最新软约束完成，独立复核通过，用户产品验收待进行 |
+| 4 | 持久项目、上传、完整Pi原生运行时及合成文档简析 | LOCAL_COMPLETE，按[本项方案](stage4-persistent-projects-and-agent.md)与最新软约束完成，独立复核通过，最新用户验收范围见当前变更结果 |
 
 具体状态和验收见[批次规格](../openspec/changes/first-chat-mvp/spec.md)及[结果记录](../openspec/changes/first-chat-mvp/result.md)。第 1 至 4 项已分别获得相应确认；第4项以最新持久项目方案及用户软约束调整为准，各项检查与验收分别记录。
 
