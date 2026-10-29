@@ -15,7 +15,7 @@ async (page) => {
   await page.getByLabel(/API Key/).fill('synthetic-tasks-only-key');
   await page.getByRole('button', { name: '保存配置', exact: true }).click();
   await page.getByRole('status').filter({ hasText: '配置已保存到本机' }).waitFor();
-  await page.getByRole('button', { name: '返回项目空间', exact: true }).click();
+  await page.getByRole('button', { name: '返回Case看板', exact: true }).click();
   await page.getByRole('button', { name: '新建项目', exact: true }).click();
   const projectDialog = page.getByRole('dialog', { name: '新建项目', exact: true });
   const projectName = '多任务空间 ' + Date.now();

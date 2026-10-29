@@ -37,7 +37,7 @@ async (page) => {
   await page.locator('.status-badge.connection-ok').waitFor();
   assert((await metrics()).requestCount === before + 1, 'Only the explicit test calls the synthetic model');
   checks.push('Five native choices, manual Pi credential-file import, same configuration save, masking, explicit SDK connection test');
-  await page.getByRole('button', { name: '返回项目空间', exact: true }).click();
+  await page.getByRole('button', { name: '返回Case看板', exact: true }).click();
   await page.getByRole('button', { name: '新建项目', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '新建项目', exact: true });
   await dialog.getByRole('textbox', { name: '项目名称', exact: true }).fill('  ');

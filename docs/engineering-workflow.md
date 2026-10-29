@@ -1,10 +1,14 @@
 # OptraCall 工程规范
 
-版本 v0.8 · 2026-10-29 · 本项目开发流程的统一来源
+版本 v0.9 · 2026-10-29 · 本项目开发流程的统一来源
 
 ## 1. 当前范围与依据
 
-当前变更为[MacBook单向试用交付](../openspec/changes/macbook-trial-delivery/spec.md)。用户已整体授权：先在Mac mini完成三个双击入口、本地检查、固定候选非作者独立复核、CI及合入main，再clone部署MacBook `/Users/huangbo/Dev/OptraCall`。通过既有导入／保存入口配置MacBook本机Pi凭据，保留已有配置、项目和会话；MacBook只单向更新、试用与反馈，不开发、不提交或回推。操作方式和失败处理见[试用说明](macbook-trial.md)，实际结果见[交付记录](../openspec/changes/macbook-trial-delivery/result.md)。本次不增加自动真实模型调用、分析流程、SDK限制或业务资料访问。
+当前增量为[Case一期](../openspec/changes/decision-case/spec.md)：用户已确认D01–D12及最新UI Demo，授权本地实施、兼容迁移验证和非作者独立复核。仅增加SQLite，保留现有项目、任务、会话和文件；本次不自动取得真实模型、实际业务数据启用、Git推送／合并或MacBook更新授权。结果分别记录，不将本地通过等同于托管CI或用户验收。
+
+后续用户已通过本地候选0.1.0-mvp.4，分别授权真实模型合成试跑及本次正式Git／CI交付、合并main；合并前须先集成main刚合入的指标体系插件，再做受影响检查、独立复核及实际提交CI。统计方法与分析产物质量另记，后续可在Extension补齐。本次Git交付不包含MacBook更新、运行服务切换或新的真实经营动作。
+
+上一变更为[MacBook单向试用交付](../openspec/changes/macbook-trial-delivery/spec.md)。用户已整体授权：先在Mac mini完成三个双击入口、本地检查、固定候选非作者独立复核、CI及合入main，再clone部署MacBook `/Users/huangbo/Dev/OptraCall`。通过既有导入／保存入口配置MacBook本机Pi凭据，保留已有配置、项目和会话；MacBook只单向更新、试用与反馈，不开发、不提交或回推。操作方式和失败处理见[试用说明](macbook-trial.md)，实际结果见[交付记录](../openspec/changes/macbook-trial-delivery/result.md)。本次不增加自动真实模型调用、分析流程、SDK限制或业务资料访问。
 
 上一变更[项目多任务、重命名与归档恢复](../openspec/changes/project-tasks-and-archive/spec.md)已完成，用户已通过真实模型多任务验收，PR #1已合并，本地main已安全快进，核定测试数据已清理。模型过程偏离继续观察，不额外增加Host拦截；保留原验收和清理证据。
 

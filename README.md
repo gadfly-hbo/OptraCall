@@ -6,7 +6,9 @@ OptraCall（Optima 最优 + tra 迭代 + call 决策）面向数据驱动决策�
 
 ## 当前状态
 
-2026-10-29：`qoder/ext-metric-factory` 分支候选新增第一个真实业务插件"指标体系 · Metric Factory"：Pi 会话起草 SAP 0.2 指标体系草稿（落 020_clean），资产页人工审核发布到本机全局库 `~/.optracall/metric-assets/`，项目按精确版本启用后分析会话注入指标索引（软引导，Agent 直读库文件并注明版本）。范围、验收与实际结果见[规格](openspec/changes/metric-factory-mvp/spec.md)与[结果记录](openspec/changes/metric-factory-mvp/result.md)；尚未合并 main，真实模型闭环与上下文增益观察待用户验收。
+2026-10-29：本地候选 `0.1.0-mvp.4` 已完成Case一期功能、兼容迁移及独立复核，并获用户通过；当前按授权交付Git／CI并集成最新main，实际状态见[Case交付记录](openspec/changes/decision-case/result.md)。统计方法与模型报告质量单列，不以Case功能通过代替分析质量通过。
+
+2026-10-29：已通过PR #3合入main的第一个真实业务插件"指标体系 · Metric Factory"：Pi 会话起草 SAP 0.2 指标体系草稿（落 020_clean），资产页人工审核发布到本机全局库 `~/.optracall/metric-assets/`，项目按精确版本启用后分析会话注入指标索引（软引导，Agent 直读库文件并注明版本）。范围、验收与实际结果见[规格](openspec/changes/metric-factory-mvp/spec.md)与[结果记录](openspec/changes/metric-factory-mvp/result.md)；实际验收与后续观察分别以该结果记录为准。
 
 2026-10-29：版本 `0.1.0-mvp.3` 增加本地试用的启动、停止和单向更新三个双击入口，构建UI由Host同源提供，实际运行版本可回读。[试用方式](docs/macbook-trial.md)与[交付记录](openspec/changes/macbook-trial-delivery/result.md)分别说明操作和验证状态。前版 `0.1.0-mvp.2` 已通过用户本轮真实模型多任务验收，在持久项目与完整Pi运行时上增加项目多任务、重命名、归档及恢复。每个任务有独立会话／草稿／模型和运行状态，文件按项目共享；原有项目兼容升级为包含首个任务的项目。范围、迁移和实际检查见[已确认方案](docs/project-tasks-and-archive.md)、[规格](openspec/changes/project-tasks-and-archive/spec.md)与[结果记录](openspec/changes/project-tasks-and-archive/result.md)；本轮用户通过、观察项及合并／测试数据清理分别记录。本机合成验收项目和QA运行数据已按用户授权清除，模型配置及必要交付证据保留。
 
@@ -55,7 +57,7 @@ docs/
 
 `src/host/` 承接启动、装配、环境与前端接缝，`ui/` 放对话和配置界面；`src/agent/` 是全产品统一 Pi SDK 接入的代码归属。根目录 `extensions/` 同时容纳代码与声明性资产，三类目录对应产品分类，仍属于同一个产品，不代表独立包、插件市场或第二套 Runtime；`extensions/business-plugins/metric-factory/` 是第一个真实业务插件（自包含模块 + Host 薄挂载），`tests/` 在真实测试出现后再细分，`openspec/changes/` 保存变更规格与结果，`docs/` 保存长期产品与工程资料。
 
-目录职责沿用第 1 项；目前选择浏览器 React / TypeScript / Vite 与 Node Host，实际 Agent 代码已替代空标记。`scripts/` 负责隔离启动与开发进程，不属于产品 Extension；三类 Extension 仍以空标记保留，未预建数据库或插件协议。
+目录职责沿用第 1 项；目前选择浏览器 React / TypeScript / Vite 与 Node Host，实际 Agent 代码已替代空标记。`scripts/` 负责隔离启动与开发进程，不属于产品 Extension；指标体系插件已落地，其余预留目录按后续任务接入，不预建插件市场或平行Runtime。
 
 ## 运行底座
 
@@ -105,3 +107,22 @@ npm run dev
 原生扩展的选择、确认、输入及编辑对话框在浏览器中响应；通知／状态与输入框草稿同步，原生命令也可停止。终端专用装饰会提示忽略，必须依赖终端组件的交互明确报不支持；不会伪造用户回答。配置中断恢复、请求去重及异常child重建只管理运行环境，不代替Agent分析。
 
 工程浏览器验证必须使用 `node tests/fixtures/browser-environment.ts` 创建的隔离Host／合成Provider和4183 UI，再运行 `tests/browser-project-tasks.js`、`browser-live-projects.js`、`browser-catalog.js`、`browser-metric-factory.js`；原生命令／扩展交互使用独立的 `command-browser-environment.ts` 与 `browser-command-ui.js`，两种fixture不能同时占用4183。不要对已配置真实凭据的服务运行会改配置的合成回归。其余旧Demo浏览器脚本及证据保留为历史阶段，当前产品以本项适用脚本和证据为准。
+
+
+## Case 一期（0.1.0-mvp.4）
+
+Case看板位于项目看板上方；具体项目仍列在“项目空间”。两个看板各有方块／列表视图。Case多对多关联现有项目，项目下仍是原任务Session；同一项目的工作状态、范围、承接人、下一步与历史全局共用。结束Case填写原因，重开后才可按该Case继续；项目独立发送仍可使用。
+
+本期仅增加Node内置SQLite，无新增数据库依赖。普通启动不自动建空库：首次在Case看板点击“启用本机Case记录”；若曾启用而记录丢失，应先核对备份，不把它当作首次空白。数据库／身份标记异常会明确提示，原项目JSON、任务、原生JSONL与三目录保留原身份。项目业务字段缺省“未设置”，不从任务是否运行或项目归档猜测进度。
+
+按Case继续任务时先核对背景及修订，实际发送才固定本次背景；旧任务历史可能含其他Case信息，需要独立上下文时在原项目中新建任务。引用记录保存真实项目路径及观察摘要，不复制文件；文件缺失、变化、项目解绑及历史解除分别提示。新建项目后关联部分成功会保留原项目和操作回执，在Case详情“未完成的项目创建”中核对续办，不重复创建。
+
+已启用Case库的升级或代码回退前，先正常停止Host，确认任务和未知运行已核对，再执行显式离线结构备份：
+
+```sh
+node scripts/decision-case-backup.mjs --data-root "$HOME/.optracall" --projects-root "$HOME/OptraCallProjects"
+```
+
+实际使用自定义目录时必须传入原来的两条路径。脚本拒绝活动Host锁、活动库或残留恢复日志，备份写入dataRoot/backups/decision-case/下新的唯一目录；仅含SQLite、标记、匹配项目元数据与既有迁移备份、校验清单，不含凭据，也不是会话／三目录的完整灾备。首次尚无库时此命令会拒绝，不能声称备份了不存在的Case库；首次启用应先清点并保全原项目元数据、JSONL及文件。回退只切兼容代码并保留最新数据，不用旧快照覆盖后续Case、任务、历史或文件。
+
+开发验收使用新建隔离合成根运行 `npm run check`，UI新增脚本为 `tests/fixtures/browser-case-board.js`，须从全新 `browser-environment.ts` fixture开始并串行运行；与其他脚本共享fixture并发执行会污染Provider计数。DuckDB下一项建设，Semantica后置。

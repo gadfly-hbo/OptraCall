@@ -76,6 +76,8 @@ export class ProjectStore {
       await this.#directory(path.join(this.dataRoot, 'projects'));
       await this.#directory(this.projectsRoot, true, false);
       for (const item of await fs.readdir(this.projectsRoot, { withFileTypes: true })) {
+        // Finder writes this metadata beside project directories on macOS.
+        if (item.name === '.DS_Store' && item.isFile() && !item.isSymbolicLink()) continue;
         if (!uuid.test(item.name) || !item.isDirectory() || item.isSymbolicLink()) fail('unrecognized_project_root');
         try { await fs.access(this.#metadataPath(item.name)); } catch { fail('unrecognized_project_root'); }
       }
@@ -180,12 +182,16 @@ export class ProjectStore {
     await fs.chmod(backup, 0o600); await this.#syncDirectory(path.dirname(backup));
     await this.#write(migrated);
   }
-  async create(input: { name: string; configuration: ProjectConfiguration }): Promise<ProjectRecord> {
+  async create(input: { name: string; configuration: ProjectConfiguration; reservedId?: string }): Promise<ProjectRecord> {
     const name = projectName(input.name), configuration = publicConfiguration(input.configuration);
     return this.#mutation(async () => {
-      const id = randomUUID(), now = new Date().toISOString();
-      await this.#directory(path.join(this.dataRoot, 'projects', id)); await this.#directory(this.sessionDirectory(id));
-      await this.#directory(this.projectDirectory(id));
+      const id = input.reservedId === undefined ? randomUUID() : this.#id(input.reservedId), now = new Date().toISOString();
+      // A reserved Case operation must never adopt or overwrite an uncertain directory.
+      for (const directory of [path.join(this.dataRoot, 'projects', id), this.projectDirectory(id)]) {
+        try { await fs.lstat(directory); fail('project_identity_exists'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      }
+      await fs.mkdir(path.join(this.dataRoot, 'projects', id), { mode: 0o700 }); await this.#directory(this.sessionDirectory(id));
+      await fs.mkdir(this.projectDirectory(id), { mode: 0o700 });
       for (const directory of PROJECT_DIRECTORIES) await this.#directory(path.join(this.projectDirectory(id), directory));
       return this.#write({ schemaVersion: 2, id, name, configuration, uploads: [], archivedAt: null, tasks: [], createdAt: now, updatedAt: now });
     });
@@ -329,6 +335,20 @@ export class ProjectStore {
       const actual = await handle.stat();
       if (!actual.isFile() || actual.nlink !== 1 || actual.ino !== before.ino || actual.dev !== before.dev) return fail('unsafe_file_path');
       return { name: path.basename(target), bytes: await handle.readFile() };
+    } finally { await handle.close(); }
+  }
+  async observeFile(projectId: string, relativePath: string): Promise<{ sha256: string; bytes: number; observedAt: string }> {
+    const target = await this.#safePath(projectId, relativePath), before = await fs.lstat(target);
+    if (!before.isFile() || before.nlink !== 1) return fail('unsafe_file_path');
+    const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const initial = await handle.stat();
+      if (!initial.isFile() || initial.nlink !== 1 || initial.ino !== before.ino || initial.dev !== before.dev) return fail('unsafe_file_path');
+      const digest = createHash('sha256'), buffer = Buffer.allocUnsafe(64 * 1024); let bytes = 0;
+      for (;;) { const chunk = await handle.read(buffer, 0, buffer.length, null); if (!chunk.bytesRead) break; bytes += chunk.bytesRead; digest.update(buffer.subarray(0, chunk.bytesRead)); }
+      const final = await handle.stat(), current = await fs.lstat(target);
+      if (bytes !== initial.size || final.size !== initial.size || final.mtimeMs !== initial.mtimeMs || final.ctimeMs !== initial.ctimeMs || current.ino !== initial.ino || current.dev !== initial.dev || current.nlink !== 1 || current.isSymbolicLink()) return fail('file_changed_during_observation');
+      return { sha256: digest.digest('hex'), bytes, observedAt: new Date().toISOString() };
     } finally { await handle.close(); }
   }
   async saveReport(projectId: string, name: string, text: string): Promise<UploadedFile> {
