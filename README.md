@@ -6,9 +6,13 @@ OptraCall（Optima 最优 + tra 迭代 + call 决策）面向数据驱动决策�
 
 ## 当前状态
 
+2026-10-29：本地候选 `0.1.0-mvp.4` 已完成Case一期功能、兼容迁移及独立复核，并获用户通过；当前按授权交付Git／CI并集成最新main，实际状态见[Case交付记录](openspec/changes/decision-case/result.md)。统计方法与模型报告质量单列，不以Case功能通过代替分析质量通过。
+
+2026-10-29：已通过PR #3合入main的第一个真实业务插件"指标体系 · Metric Factory"：Pi 会话起草 SAP 0.2 指标体系草稿（落 020_clean），资产页人工审核发布到本机全局库 `~/.optracall/metric-assets/`，项目按精确版本启用后分析会话注入指标索引（软引导，Agent 直读库文件并注明版本）。范围、验收与实际结果见[规格](openspec/changes/metric-factory-mvp/spec.md)与[结果记录](openspec/changes/metric-factory-mvp/result.md)；实际验收与后续观察分别以该结果记录为准。
+
 2026-10-29：版本 `0.1.0-mvp.3` 增加本地试用的启动、停止和单向更新三个双击入口，构建UI由Host同源提供，实际运行版本可回读。[试用方式](docs/macbook-trial.md)与[交付记录](openspec/changes/macbook-trial-delivery/result.md)分别说明操作和验证状态。前版 `0.1.0-mvp.2` 已通过用户本轮真实模型多任务验收，在持久项目与完整Pi运行时上增加项目多任务、重命名、归档及恢复。每个任务有独立会话／草稿／模型和运行状态，文件按项目共享；原有项目兼容升级为包含首个任务的项目。范围、迁移和实际检查见[已确认方案](docs/project-tasks-and-archive.md)、[规格](openspec/changes/project-tasks-and-archive/spec.md)与[结果记录](openspec/changes/project-tasks-and-archive/result.md)；本轮用户通过、观察项及合并／测试数据清理分别记录。本机合成验收项目和QA运行数据已按用户授权清除，模型配置及必要交付证据保留。
 
-原 `first-chat-mvp` 四项开发与五模型合成数据验证证据保留，用户修正由当前变更承接。四类能力目录和决策大屏仍为占位；不预装数据分析skill，用户可按Pi原生方式自行安装。
+原 `first-chat-mvp` 四项开发与五模型合成数据验证证据保留，用户修正由当前变更承接。四类能力目录和决策大屏仍为占位（侧栏"指标体系"除外，见当前状态）；不预装数据分析skill，用户可按Pi原生方式自行安装。
 
 ## 产品结构
 
@@ -51,9 +55,9 @@ docs/
 .local/                         # 本地证据，忽略且不进入仓库
 ```
 
-`src/host/` 承接启动、装配、环境与前端接缝，`ui/` 放对话和配置界面；`src/agent/` 是全产品统一 Pi SDK 接入的代码归属。根目录 `extensions/` 同时容纳代码与声明性资产，三类目录对应产品分类，仍属于同一个产品，不代表独立包、插件市场或第二套 Runtime。`tests/` 在真实测试出现后再细分，`openspec/changes/` 保存变更规格与结果，`docs/` 保存长期产品与工程资料。
+`src/host/` 承接启动、装配、环境与前端接缝，`ui/` 放对话和配置界面；`src/agent/` 是全产品统一 Pi SDK 接入的代码归属。根目录 `extensions/` 同时容纳代码与声明性资产，三类目录对应产品分类，仍属于同一个产品，不代表独立包、插件市场或第二套 Runtime；`extensions/business-plugins/metric-factory/` 是第一个真实业务插件（自包含模块 + Host 薄挂载），`tests/` 在真实测试出现后再细分，`openspec/changes/` 保存变更规格与结果，`docs/` 保存长期产品与工程资料。
 
-目录职责沿用第 1 项；目前选择浏览器 React / TypeScript / Vite 与 Node Host，实际 Agent 代码已替代空标记。`scripts/` 负责隔离启动与开发进程，不属于产品 Extension；三类 Extension 仍以空标记保留，未预建数据库或插件协议。
+目录职责沿用第 1 项；目前选择浏览器 React / TypeScript / Vite 与 Node Host，实际 Agent 代码已替代空标记。`scripts/` 负责隔离启动与开发进程，不属于产品 Extension；指标体系插件已落地，其余预留目录按后续任务接入，不预建插件市场或平行Runtime。
 
 ## 运行底座
 

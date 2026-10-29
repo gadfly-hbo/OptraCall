@@ -27,6 +27,49 @@ async function inventory(root: string): Promise<Record<string, { mode: number; s
   await visit(''); return result;
 }
 
+test('MIG-04 permissions: reopening refuses widened control files without modifying bytes or identity', async t => {
+  const { store, databasePath, markerPath } = await fixture(t);
+  const initialized = await store.initialize();
+  const record = store.createCase({ operationId: randomUUID(), title: '合成权限回归' });
+  store.close();
+  const original = new Map(await Promise.all([databasePath, markerPath].map(async file => [file, await fs.readFile(file)] as const)));
+  for (const file of [databasePath, markerPath]) {
+    await fs.chmod(file, 0o644);
+    assert.deepEqual(await store.init(), { state: 'unavailable', code: 'unsafe_case_storage' });
+    assert.throws(() => store.getCase(record.id), { message: 'case_store_unavailable' });
+    for (const [name, bytes] of original) assert.deepEqual(await fs.readFile(name), bytes);
+    assert.equal((await fs.stat(file)).mode & 0o777, 0o644, 'Refusal must not silently change existing files');
+    await fs.chmod(file, 0o600);
+    assert.deepEqual(await store.init(), initialized);
+    assert.equal(store.getCase(record.id).title, record.title);
+    store.close();
+  }
+});
+
+test('MIG-04 schema: unknown triggers, views and indexes are refused before Case writes', async t => {
+  for (const [kind, statement] of [
+    ['trigger', "CREATE TRIGGER unexpected_case_write AFTER INSERT ON cases BEGIN UPDATE cases SET judgement='unexpected trigger mutation' WHERE id=NEW.id; END;"],
+    ['view', 'CREATE VIEW unexpected_case_view AS SELECT id,title FROM cases;'],
+    ['index', 'CREATE INDEX unexpected_case_index ON cases(title);'],
+  ] as const) await t.test(kind, async t => {
+    const { store, databasePath, markerPath } = await fixture(t);
+    await store.initialize();
+    const record = store.createCase({ operationId: randomUUID(), title: '合成未知结构回归' });
+    store.close();
+    const external = new DatabaseSync(databasePath);
+    try { external.exec(statement); } finally { external.close(); }
+    const before = { database: await fs.readFile(databasePath), marker: await fs.readFile(markerPath) };
+    assert.deepEqual(await store.init(), { state: 'unavailable', code: 'unsupported_case_schema' });
+    assert.throws(() => store.createCase({ operationId: randomUUID(), title: '不得写入' }), { message: 'case_store_unavailable' });
+    assert.deepEqual(await fs.readFile(databasePath), before.database);
+    assert.deepEqual(await fs.readFile(markerPath), before.marker);
+    const repair = new DatabaseSync(databasePath);
+    try { repair.exec(`DROP ${kind.toUpperCase()} unexpected_case_${kind === 'trigger' ? 'write' : kind};`); } finally { repair.close(); }
+    assert.equal((await store.init()).state, 'ready');
+    assert.deepEqual(store.getCase(record.id), record);
+  });
+});
+
 test('MIG-01/02: enabling SQLite preserves schema2 JSON, independent tasks, native JSONL parent bytes, directories and backups', async t => {
   const { root, dataRoot, store, beforeCleanup } = await fixture(t);
   const projects = new ProjectStore({ dataRoot, projectsRoot: path.join(root, 'workspace') }); await projects.init();
@@ -81,7 +124,8 @@ test('MIG-04: missing marker, unknown schema, mismatched identity and corrupt DB
   await fs.unlink(markerPath);
   assert.equal((await store.init()).state, 'unavailable'); assert.equal((await store.initialize()).state, 'unavailable');
   assert.deepEqual(await fs.readFile(databasePath), original);
-  await fs.writeFile(markerPath, marker);
+  // Restore a valid marker so subsequent assertions exercise schema/identity faults.
+  await fs.writeFile(markerPath, marker, { mode: 0o600 });
   const unknown = new DatabaseSync(databasePath); unknown.exec('PRAGMA user_version=987'); unknown.close();
   const unknownBytes = await fs.readFile(databasePath);
   assert.equal((await store.init()).code, 'unsupported_case_schema'); assert.deepEqual(await fs.readFile(databasePath), unknownBytes);

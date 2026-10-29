@@ -47,7 +47,7 @@ function changes(before: Row, after: Row): WorkEvent['changes'] {
 }
 function exists(file: string): boolean { try { fs.lstatSync(file); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; } }
 function regular(file: string): fs.Stats {
-  const stat = fs.lstatSync(file); if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) fail('unsafe_case_storage', 503); return stat;
+  const stat = fs.lstatSync(file); if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || (stat.mode & 0o777) !== 0o600) fail('unsafe_case_storage', 503); return stat;
 }
 function safeDirectories(directory: string) {
   if (exists(directory)) { const stat = fs.lstatSync(directory); if (!stat.isDirectory() || stat.isSymbolicLink()) fail('unsafe_case_storage', 503); }
@@ -155,17 +155,16 @@ export class CaseStore {
   private validateDatabase(marker: Marker) {
     const db = this.database();
     if (db.prepare('PRAGMA user_version').get()?.user_version !== 1) fail('unsupported_case_schema', 503);
-    const expectedTables = [...SCHEMA.matchAll(/CREATE TABLE (\w+) \([\s\S]*?\);/g)];
-    const actualTables = db.prepare("SELECT name,sql FROM sqlite_master WHERE type='table'").all();
     const normalizeSql = (sql: string) => sql.replace(/;$/, '').replace(/\s+/g, ' ').trim();
-    if (actualTables.length !== expectedTables.length || expectedTables.some(match => !actualTables.some(table => table.name === match[1] && normalizeSql(String(table.sql)) === normalizeSql(match[0])))) fail('unsupported_case_schema', 503);
+    const inventory = (database: DatabaseSync) => database.prepare('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name').all().map(row => ({ ...row, sql: row.sql === null ? null : normalizeSql(String(row.sql)) }));
+    // Derive the complete allowed inventory, including SQLite's implicit indexes,
+    // from the supported schema. Unknown triggers can mutate values behind receipts.
+    const expected = new DatabaseSync(':memory:', { allowExtension: false });
+    try { expected.exec(SCHEMA); if (canonical(inventory(db)) !== canonical(inventory(expected))) fail('unsupported_case_schema', 503); }
+    finally { expected.close(); }
     const metadata = db.prepare('SELECT store_id,initialized_at FROM store_metadata').all();
     if (metadata.length !== 1 || metadata[0]?.store_id !== marker.storeId || metadata[0]?.initialized_at !== marker.createdAt) fail('case_store_identity_mismatch', 503);
     if (db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok' || db.prepare('PRAGMA foreign_key_check').all().length) fail('case_database_integrity_failed', 503);
-    for (const match of SCHEMA.matchAll(/CREATE INDEX (\w+) [\s\S]*?;/g)) {
-      const actual = db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND name=?").get(match[1]!);
-      if (!actual || normalizeSql(String(actual.sql)) !== normalizeSql(match[0])) fail('unsupported_case_schema', 503);
-    }
   }
   async init(): Promise<CaseStorageStatus> {
     this.close();
