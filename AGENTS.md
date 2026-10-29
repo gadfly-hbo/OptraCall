@@ -2,11 +2,9 @@
 
 开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.2](docs/OptraCall_产品讨论稿_v0.2.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
 
-当前变更为 [project-tasks-and-archive](openspec/changes/project-tasks-and-archive/spec.md)，用户已整体确认[结构方案](docs/project-tasks-and-archive.md)D01–D08，并通过本轮真实模型多任务验收。模型过程偏离保留观察，不额外增加Host拦截。最新授权为合并PR #1、安全快进本地main，以及一次性线下清除已核定的测试项目／会话／数据；保留源码、配置凭据及必要验收／交付证据。具体范围和实际结果见[结果记录](openspec/changes/project-tasks-and-archive/result.md)，不扩展真实业务分析或MacBook操作。
+当前变更为 [macbook-trial-delivery](openspec/changes/macbook-trial-delivery/spec.md)。用户整体授权先在Mac mini实现三个双击入口，通过本地检查、非作者独立复核、CI并合入main，再浅克隆部署MacBook `/Users/huangbo/Dev/OptraCall`。只在MacBook本机经现有导入／保存流程补齐Pi凭据，保留已有配置、项目和会话。MacBook只单向更新、试用与反馈，不开发、不提交或回推；不复制Mini密钥或业务数据，不自动调用真实模型。说明见[试用文档](docs/macbook-trial.md)，实际结果见[交付记录](openspec/changes/macbook-trial-delivery/result.md)。
 
-原 [first-chat-mvp](openspec/changes/first-chat-mvp/spec.md)已完成本地／独立检查并推送PR，原证据保留；用户对产品的后续修正由当前变更承接，不改写旧阶段结论。
-
-本批次四项完成前的Git／CI暂缓期已结束，现按用户确认统一交付；一般Git与CI规则见工程规范。后续修改先核对实际分支、WIP和固定输入，不覆盖本地证据或自动重放中断任务。本轮合并按最新用户明确授权执行；安装发布和MacBook同步仍分别处理，不从推送或合并推导授权。
+[项目多任务变更](openspec/changes/project-tasks-and-archive/result.md)已完成用户验收、PR #1合并及核定测试数据清理。模型过程偏离保留观察，不额外增加Host拦截。原 [first-chat-mvp](openspec/changes/first-chat-mvp/result.md)证据保留；旧四项完成前的Git／CI暂缓期已结束。后续执行核对实际分支、WIP和固定输入，Git／CI、安装和用户验收分别报告，不覆盖证据或自动重放中断任务。
 
 第4项允许持久保存五模型配置／凭据、定向读取本机Pi和SSH读取MacBook Pi指定MiMo凭据，经前端同一保存／导入入口配置；允许真实项目、上传、原生SDK多轮及完整macOS工具／bash／Python、用户安装原生扩展／skills／MCP的接入能力。只用合成数据验收，不代装数据分析skill。Host管环境，Agent管分析，不自建推理循环或Host补计算。
 

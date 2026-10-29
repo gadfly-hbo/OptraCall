@@ -32,6 +32,7 @@ secrets.*.json
 /datasets/
 /workspaces/
 /runtime/
+/.runtime/
 /sessions/
 /logs/
 /artifacts/

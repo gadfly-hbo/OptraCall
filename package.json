@@ -1,6 +1,6 @@
 {
   "name": "optracall",
-  "version": "0.1.0-mvp.2",
+  "version": "0.1.0-mvp.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,9 +9,12 @@
     "dev:ui": "vite --host 127.0.0.1 --port 4173 --strictPort",
     "test": "node --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/stamp-build.mjs",
     "check": "npm run test && npm run build",
-    "preview": "vite preview --host 127.0.0.1 --port 4174 --strictPort"
+    "preview": "vite preview --host 127.0.0.1 --port 4174 --strictPort",
+    "start": "node scripts/trial-launcher.mjs start",
+    "stop": "node scripts/trial-launcher.mjs stop",
+    "update:trial": "node scripts/trial-launcher.mjs update"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.4.0",
