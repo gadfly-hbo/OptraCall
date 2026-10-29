@@ -1,4 +1,4 @@
-import type { BrowserUIResponse, ClientProject, FileNode, ProjectEvent, PublicModelConfiguration, SessionSnapshot } from './project-types.ts';
+import type { BrowserUIResponse, ClientProject, ClientTask, FileNode, ProjectEvent, PublicModelConfiguration, SessionSnapshot, TaskState } from './project-types.ts';
 
 export class HostRequestError extends Error {
   readonly fields: Record<string, string>;
@@ -21,12 +21,19 @@ export async function clearConfiguration(provider?: string, signal?: AbortSignal
 export function testConnection(revision: number, signal?: AbortSignal): Promise<{ ok: boolean; revision: number; reply: string; message: string }> { return request('connection-test', 'POST', { revision }, signal); }
 export async function listProjects(signal?: AbortSignal): Promise<ClientProject[]> { return (await request<{ projects: ClientProject[] }>('projects', 'GET', undefined, signal)).projects; }
 export async function createProject(name: string, configurationId: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>('projects', 'POST', { name, configurationId })).project; }
-export function readProject(id: string, signal?: AbortSignal): Promise<{ project: ClientProject; snapshot: SessionSnapshot }> { return request(`projects/${encodeURIComponent(id)}`, 'GET', undefined, signal); }
-export async function saveDraft(id: string, text: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/draft`, 'PATCH', { text }); }
-export async function sendMessage(id: string, text: string, requestId: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/messages`, 'POST', { text, requestId }); }
-export async function stopProject(id: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/stop`, 'POST', {}); }
-export function runCommand(id: string, text: string, requestId: string = crypto.randomUUID()): Promise<{ result: unknown; snapshot: SessionSnapshot; outcome?: 'completed' | 'failed' | 'cancelled' }> { return request(`projects/${encodeURIComponent(id)}/commands`, 'POST', { text, requestId }); }
-export async function answerInteraction(id: string, response: BrowserUIResponse): Promise<void> { await request(`projects/${encodeURIComponent(id)}/ui-response`, 'POST', response); }
+export function readProject(id: string, signal?: AbortSignal): Promise<{ project: ClientProject }> { return request(`projects/${encodeURIComponent(id)}`, 'GET', undefined, signal); }
+export async function renameProject(id: string, name: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}`, 'PATCH', { name })).project; }
+export async function archiveProject(id: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}/archive`, 'POST', {})).project; }
+export async function restoreProject(id: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}/restore`, 'POST', {})).project; }
+const taskPath = (projectId: string, taskId: string) => `projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`;
+export async function createTask(projectId: string, name: string, configurationId?: string): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`projects/${encodeURIComponent(projectId)}/tasks`, 'POST', { name, ...(configurationId ? { configurationId } : {}) })).task; }
+export function readTask(projectId: string, taskId: string, signal?: AbortSignal): Promise<TaskState> { return request(taskPath(projectId, taskId), 'GET', undefined, signal); }
+export function openTask(projectId: string, taskId: string): Promise<TaskState> { return request(`${taskPath(projectId, taskId)}/open`, 'POST', {}); }
+export async function saveDraft(projectId: string, taskId: string, text: string): Promise<void> { await request(`${taskPath(projectId, taskId)}/draft`, 'PATCH', { text }); }
+export async function sendMessage(projectId: string, taskId: string, text: string, requestId: string): Promise<void> { await request(`${taskPath(projectId, taskId)}/messages`, 'POST', { text, requestId }); }
+export async function stopTask(projectId: string, taskId: string): Promise<void> { await request(`${taskPath(projectId, taskId)}/stop`, 'POST', {}); }
+export function runCommand(projectId: string, taskId: string, text: string, requestId: string = crypto.randomUUID()): Promise<{ result: unknown; snapshot: SessionSnapshot; outcome?: 'completed' | 'failed' | 'cancelled' }> { return request(`${taskPath(projectId, taskId)}/commands`, 'POST', { text, requestId }); }
+export async function answerInteraction(projectId: string, taskId: string, response: BrowserUIResponse): Promise<void> { await request(`${taskPath(projectId, taskId)}/ui-response`, 'POST', response); }
 export async function projectFiles(id: string): Promise<FileNode[]> { return (await request<{ files: FileNode[] }>(`projects/${encodeURIComponent(id)}/files`, 'GET')).files; }
 export async function uploadFile(id: string, file: File, directory: '010_draw' | '020_clean'): Promise<void> {
   const bytes = new Uint8Array(await file.arrayBuffer()); let binary = '';
@@ -40,9 +47,9 @@ export async function downloadFile(id: string, file: FileNode): Promise<void> {
   if (!response.ok) throw new HostRequestError('文件暂时无法下载，请刷新文件列表后重试。');
   const url = URL.createObjectURL(await response.blob()); const anchor = document.createElement('a'); anchor.href = url; anchor.download = file.name; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export async function watchProject(id: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal): Promise<void> {
-  const response = await fetch(`/api/projects/${encodeURIComponent(id)}/events`, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal });
-  if (!response.ok || !response.body) throw new HostRequestError('项目事件连接未建立，请重新连接。');
+export async function watchTask(projectId: string, taskId: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal): Promise<void> {
+  const response = await fetch(`/api/${taskPath(projectId, taskId)}/events`, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal });
+  if (!response.ok || !response.body) throw new HostRequestError('任务事件连接未建立，请重新连接。');
   const reader = response.body.getReader(); const decoder = new TextDecoder(); let pending = '';
   try {
     while (!signal.aborted) {
@@ -55,6 +62,6 @@ export async function watchProject(id: string, onEvent: (event: ProjectEvent) =>
         if (data) onEvent(JSON.parse(data) as ProjectEvent);
       }
     }
-    if (!signal.aborted) throw new HostRequestError('项目事件连接已断开；恢复连接只读取状态，不会重复发送消息。');
+    if (!signal.aborted) throw new HostRequestError('任务事件连接已断开；恢复连接只读取状态，不会重复发送消息。');
   } finally { await reader.cancel().catch(() => {}); }
 }

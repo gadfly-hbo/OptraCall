@@ -34,14 +34,17 @@ test('SDK-04 / CFG-04: Host imports pinned SDK, masks persistent config, and cre
   const created = await host.request('/api/projects', 'POST', { name: 'synthetic-project' });
   assert.equal(created.status, 201, await created.clone().text());
   const { project } = await created.json();
-  const read = await host.request(`/api/projects/${project.id}`);
+  assert.deepEqual(project.tasks, []);
+  const taskCreated = await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: 'synthetic-task' }); assert.equal(taskCreated.status, 201);
+  const { task } = await taskCreated.json();
+  const read = await host.request(`/api/projects/${project.id}/tasks/${task.id}/open`, 'POST', {});
   assert.equal(read.status, 200, await read.clone().text());
   const { snapshot } = await read.json();
   for (const tool of ['read', 'bash', 'write', 'edit', 'ls', 'find', 'grep', 'codemode', 'tool_search']) assert.ok(snapshot.tools.includes(tool));
   assert.equal(project.configuration.model, 'synthetic-model');
   assert.equal((await host.request('/api/configuration', 'DELETE')).status, 200);
   assert.equal((await (await host.request('/api/configuration')).json()).configuration.hasApiKey, false);
-  assert.equal((await host.request(`/api/projects/${project.id}`)).status, 200, 'clearing credentials preserves readable saved history');
+  assert.equal((await host.request(`/api/projects/${project.id}/tasks/${task.id}`)).status, 200, 'clearing credentials preserves readable saved history');
   assert.ok(!JSON.stringify(host.output()).includes('!literal-test-key'));
 });
 

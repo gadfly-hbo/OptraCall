@@ -17,6 +17,10 @@ async (page) => {
     await dialog.getByRole('button', { name: '创建项目', exact: true }).click();
     await dialog.waitFor({ state: 'detached' });
     await page.getByRole('heading', { name, exact: true, level: 1 }).waitFor();
+    await page.getByRole('button', { name: '新建第一个任务', exact: true }).click();
+    const taskDialog = page.getByRole('dialog', { name: '新建任务', exact: true });
+    await taskDialog.getByRole('textbox', { name: '任务名称', exact: true }).fill(name + '的任务');
+    await taskDialog.getByRole('button', { name: '创建任务', exact: true }).click(); await taskDialog.waitFor({ state: 'detached' });
   };
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(baseUrl);

@@ -6,9 +6,9 @@ OptraCall（Optima 最优 + tra 迭代 + call 决策）面向数据驱动决策�
 
 ## 当前状态
 
-2026-10-29：`first-chat-mvp` 四项开发已完成本地检查及独立复核，版本 `0.1.0-mvp.1` 提供真实持久项目、文件上传和完整Pi对话／工具运行。五个目标模型已使用合成数据验证；第4项用户产品验收待进行。见[规格](openspec/changes/first-chat-mvp/spec.md)、[第4项方案](docs/stage4-persistent-projects-and-agent.md)和[结果记录](openspec/changes/first-chat-mvp/result.md)。
+2026-10-29：当前候选 `0.1.0-mvp.2` 在持久项目与完整Pi运行时上增加项目多任务、重命名、归档及恢复。每个任务有独立会话／草稿／模型和运行状态，文件按项目共享；原有项目兼容升级为包含首个任务的项目。范围、迁移和实际检查见[已确认方案](docs/project-tasks-and-archive.md)、[规格](openspec/changes/project-tasks-and-archive/spec.md)与[结果记录](openspec/changes/project-tasks-and-archive/result.md)，用户产品审核单独记录。
 
-四项完成后统一Git／CI交付。四类能力目录和决策大屏仍为明确标记的占位；本期不预装数据分析skill，用户可按Pi原生方式自行安装。
+原 `first-chat-mvp` 四项开发与五模型合成数据验证证据保留，用户修正由当前变更承接。四类能力目录和决策大屏仍为占位；不预装数据分析skill，用户可按Pi原生方式自行安装。
 
 ## 产品结构
 
@@ -31,6 +31,7 @@ OptraCall（Optima 最优 + tra 迭代 + call 决策）面向数据驱动决策�
 | [Demo 项目空间与文件栏](docs/demo-project-space.md) | 项目为唯一创建入口、默认三文件夹及虚拟目录范围 |
 | [第 3 项 SDK 与 LLM 准备](docs/stage3-sdk-and-llm.md) | 原内存／空工具连接探针阶段的历史范围 |
 | [第4项持久项目与完整Pi](docs/stage4-persistent-projects-and-agent.md) | 当前确认、目录软约束、持久配置／项目与完整SDK接缝 |
+| [项目多任务与归档方案](docs/project-tasks-and-archive.md) | 已确认的任务边界、归档生命周期、兼容迁移与回退 |
 | [原始讨论稿 v0.1](OptraCall_产品讨论稿_v0.1.md) | 原样保留的历史讨论，不作为当前分工依据 |
 
 ## 目录与职责
@@ -58,7 +59,7 @@ docs/
 
 当前采用 Node.js 25+ / TypeScript、单包与官方 `@earendil-works/pi-coding-agent@1.4.0`。SDK统一经 `src/agent/sdk.ts` 引入，项目运行直接使用官方会话／工具／上下文与harness；Host不补分析计算或自建推理循环。项目进程使用标准Node和清理过的环境变量，不把第3项受限连接探针的权限旗标传入完整SDK。
 
-开发与工程测试集中在 Mac mini，MacBook 用于用户体验和问题反馈；本项另有用户明确授权的只读SSH凭据提取。详细职责及交付以工程规范为准。
+开发与工程测试集中在 Mac mini，MacBook 用于用户体验和问题反馈；前一批次曾按单独授权只读SSH提取凭据，本轮仅在Mac mini实施任务与项目生命周期变更。详细职责及交付以工程规范为准。
 
 ## 公开内容边界
 
@@ -79,18 +80,22 @@ npm run dev
 
 先在模型设置选择预置模型并保存凭据，或通过文件选择导入Pi格式的 `auth.json`。手动保存与导入共用同一入口，密钥保存后清空输入框且不回显；独立文件在 `/Users/bendandebaba/.optracall/`，目录0700／凭据0600，为权限保护的本地明文保存，重启可恢复。保存／导入／读取不自动调用模型，主动连接测试只发固定短句；清除Provider凭据会停止相关运行，但保留项目和历史。
 
-命名创建项目后，在项目内发送问题，不能独立创建聊天。实际项目位于 `/Users/bendandebaba/OptraCallProjects/<项目ID>/`，默认三个文件夹：
+新项目先是空工作空间，点击项目行的“＋新建任务”，填写任务名并选择模型后对话。模型默认继承项目配置，可在创建任务时另选；每个任务保留自己的快照。任务只能在项目内创建，切换任务不会停止后台运行，停止及原生确认框均作用于所属任务。实际项目位于 `/Users/bendandebaba/OptraCallProjects/<项目ID>/`，各任务共享三个文件夹：
 
 - `010_draw`：上传原件归档。当前不提供敏感数据隔离，请勿放入敏感资料。
 - `020_clean`：用户放入或显式复制的分析资料；Agent过程文件默认保存在这里。
 - `060_reports`：Agent最终报告；也可点击回复旁的“保存为最终报告”，由用户明确保存。
 
-系统提示词软约束Agent分析不读取010、使用020资料，并说明过程／报告目录用途；本期没有禁读沙箱或文件工具拦截。上传默认010，可显式选择020；归档文件可点“复制到分析区”。上传、复制、打开项目和刷新不自动发模型请求。
+系统提示词软约束Agent分析不读取010、使用020资料，并说明过程／报告目录用途；没有禁读沙箱或文件工具拦截。上传默认010，可显式选择020；010中的原件可点“复制到分析区”。上传、复制、打开项目和刷新不自动发模型请求。共享目录允许任务并行使用，Agent同名写入仍沿原生工具规则，Host不替Agent划分分析流程或自动搬运产物。
+
+项目行“更多”可重命名或归档：重命名只改显示名，UUID目录不变；归档收纳到“已归档项目”，可查看历史／下载文件并恢复，不能删除。归档后先恢复才能继续编辑、上传或执行任务；有执行／打开／待回应任务时先停止或等待，再归档。
 
 首批支持UTF-8 CSV／JSON／Markdown／TXT，单文件10 MiB、单次最多10个，同名不覆盖。右侧文件栏可展开／收起并下载真实文件；项目、草稿、上传件及SDK原生对话历史刷新／重启可恢复。运行中可停止，失败可显式重试；中断／未知结果保留，不自动重发。
+
+旧schema1项目在Host启动时一次升级为schema2，原对话成为“原有任务”；旧JSONL路径和fork父引用不改变，三目录和文件不搬动。升级前保存0600的 `project.v1.backup.json`，未知／冲突元数据保留并报错。升级后产生新任务或新历史时，不能用v1备份覆盖回退；应保留全部v2数据并使用兼容构建。浏览列表、归档项目及恢复不会批量打开历史任务Runtime，SDK原生fork／branch仍属于原任务。
 
 原生macOS工具read、bash、edit、write、grep、find、ls全部启用，Python通过bash执行；官方codemode、tool_search、MCP和资源加载机制接入。PowerShell上游后端仅支持Windows。独立SDK资源目录为 `.optracall/pi/`，用户自行安装skill／扩展或配置MCP后可重载；没有配置的第三方服务不视为已连接。会话能力面板提供原生工具、统计、树、fork、压缩、重载等入口。
 
 原生扩展的选择、确认、输入及编辑对话框在浏览器中响应；通知／状态与输入框草稿同步，原生命令也可停止。终端专用装饰会提示忽略，必须依赖终端组件的交互明确报不支持；不会伪造用户回答。配置中断恢复、请求去重及异常child重建只管理运行环境，不代替Agent分析。
 
-工程浏览器验证必须使用 `node tests/fixtures/browser-environment.ts` 创建的隔离Host／合成Provider和4183 UI，再运行 `tests/browser-live-projects.js`、`browser-catalog.js`；原生命令／扩展交互使用独立的 `command-browser-environment.ts` 与 `browser-command-ui.js`，两种fixture不能同时占用4183。不要对已配置真实凭据的服务运行会改配置的合成回归。其余旧Demo浏览器脚本及证据保留为历史阶段，当前持久产品以本项适用脚本和证据为准。
+工程浏览器验证必须使用 `node tests/fixtures/browser-environment.ts` 创建的隔离Host／合成Provider和4183 UI，再运行 `tests/browser-project-tasks.js`、`browser-live-projects.js`、`browser-catalog.js`；原生命令／扩展交互使用独立的 `command-browser-environment.ts` 与 `browser-command-ui.js`，两种fixture不能同时占用4183。不要对已配置真实凭据的服务运行会改配置的合成回归。其余旧Demo浏览器脚本及证据保留为历史阶段，当前产品以本项适用脚本和证据为准。

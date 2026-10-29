@@ -115,8 +115,9 @@ test('SDK-04: actual Host configuration and project stores open a UUID custom pr
   const configurations = new ConfigurationStore({ dataRoot }); await configurations.init();
   const saved = await configurations.save({ name: 'UUID自定义合成模型', provider: 'openai-compatible', baseUrl: 'http://127.0.0.1:1/v1', model: 'synthetic-model', apiKey: '!literal-test-key' });
   await projects.init(); const project = await projects.create({ name: 'UUID项目', configuration: saved });
+  const task = await projects.createTask(project.id, { name: 'UUID任务' });
   const configuration = configurations.snapshot(saved.id, saved.revision); assert.ok(configuration);
-  const agent = new ProjectAgent({ projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: project.sessionDirectory, resourceRoot: path.join(dataRoot, 'pi'), codeRoot: process.cwd(), managementPorts: [4173, 4174, 4175], configuration });
+  const agent = new ProjectAgent({ projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, resourceRoot: path.join(dataRoot, 'pi'), codeRoot: process.cwd(), managementPorts: [4173, 4174, 4175], configuration });
   t.after(() => agent.close());
   try { const snapshot = await agent.open(); assert.ok(snapshot.tools.includes('codemode')); }
   catch (error) { assert.fail(`UUID native open failed: ${JSON.stringify((error as Error).cause)}`); }

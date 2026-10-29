@@ -15,6 +15,147 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   return { root, options, store };
 }
 
+test('TASKS-01: an empty project owns independent task drafts, model snapshots and native histories across restart', async t => {
+  const { store, options } = await fixture(t);
+  const project = await store.create({ name: '同一项目两个任务', configuration });
+  assert.equal(project.schemaVersion, 2); assert.deepEqual(project.tasks, []); assert.equal(project.archivedAt, null);
+  assert.equal('draft' in project, false); assert.equal('sessionFile' in project, false); assert.equal('lastRun' in project, false);
+  const a = await store.createTask(project.id, { name: '任务A' });
+  const b = await store.createTask(project.id, { name: '任务B', configuration: { ...configuration, id: 'deepseek-flash', provider: 'deepseek', model: 'deepseek-flash' } });
+  assert.notEqual(a.id, b.id); assert.notEqual(a.sessionDirectory, b.sessionDirectory); assert.equal(a.configuration.model, 'MiniMax-M3'); assert.equal(b.configuration.model, 'deepseek-flash');
+  assert.equal(a.sessionStorage, 'task'); assert.deepEqual(await fs.readdir(a.sessionDirectory), []);
+  await store.saveDraft(project.id, a.id, '任务A未发送草稿');
+  const sessionFile = path.join(a.sessionDirectory, 'native-history.jsonl');
+  await store.setSession(project.id, a.id, sessionFile);
+  const run = { id: randomUUID(), status: 'completed' as const, startedAt: '2026-10-29T00:00:00.000Z', settledAt: '2026-10-29T00:00:01.000Z' };
+  await store.markRun(project.id, a.id, run);
+  assert.equal((await store.getTask(project.id, b.id)).draft, ''); assert.equal((await store.getTask(project.id, b.id)).lastRun, undefined);
+  await store.close(); const reopened = new ProjectStore(options); await reopened.init();
+  try {
+    const saved = await reopened.get(project.id); assert.equal(saved.tasks.length, 2);
+    const recovered = await reopened.getTask(project.id, a.id); assert.equal(recovered.draft, '任务A未发送草稿'); assert.equal(recovered.sessionFile, sessionFile); assert.deepEqual(recovered.lastRun, run);
+    assert.equal((await reopened.getTask(project.id, b.id)).configuration.model, 'deepseek-flash');
+  } finally { await reopened.close(); }
+});
+
+test('ARCHIVE-01: rename keeps identity and paths, archive retains readable contents and blocks every write until restore', async t => {
+  const { store, options } = await fixture(t); const project = await store.create({ name: '原项目名', configuration });
+  const task = await store.createTask(project.id, { name: '保留任务' }); await store.saveDraft(project.id, task.id, '保留草稿');
+  const raw = await store.upload({ projectId: project.id, name: '原件.txt', bytes: Buffer.from('synthetic archive content') });
+  const renamed = await store.rename(project.id, '  新项目名  ');
+  assert.equal(renamed.id, project.id); assert.equal(renamed.rootPath, project.rootPath); assert.equal(renamed.name, '新项目名'); assert.equal(renamed.tasks[0]?.id, task.id);
+  const archived = await store.archive(project.id); assert.ok(archived.archivedAt); assert.equal((await store.archive(project.id)).archivedAt, archived.archivedAt);
+  assert.equal((await store.list()).length, 1); assert.equal((await store.getTask(project.id, task.id)).draft, '保留草稿');
+  assert.equal((await store.readFile(project.id, raw.path)).bytes.toString(), 'synthetic archive content'); assert.equal((await store.tree(project.id))[0]?.children?.length, 1);
+  const metadata = path.join(options.dataRoot, 'projects', project.id, 'project.json'), before = await fs.readFile(metadata);
+  for (const write of [
+    () => store.rename(project.id, '禁止改名'), () => store.createTask(project.id, { name: '禁止新任务' }),
+    () => store.saveDraft(project.id, task.id, '禁止草稿'), () => store.setSession(project.id, task.id, path.join(task.sessionDirectory, 'blocked.jsonl')),
+    () => store.markRun(project.id, task.id, { id: randomUUID(), status: 'running', startedAt: '2026-10-29T00:00:00.000Z' }),
+    () => store.upload({ projectId: project.id, name: '禁止上传.txt', bytes: Buffer.from('blocked') }),
+    () => store.copyToClean(project.id, raw.path), () => store.saveReport(project.id, '禁止报告.md', '# blocked'),
+  ]) { await assert.rejects(write, /project_archived/); assert.deepEqual(await fs.readFile(metadata), before); }
+  assert.deepEqual(await fs.readdir(path.join(project.rootPath, '020_clean')), []); assert.deepEqual(await fs.readdir(path.join(project.rootPath, '060_reports')), []);
+  await store.close(); const restarted = new ProjectStore(options); await restarted.init();
+  try {
+    assert.equal((await restarted.get(project.id)).archivedAt, archived.archivedAt);
+    const restored = await restarted.restore(project.id); assert.equal(restored.archivedAt, null); assert.equal(restored.name, '新项目名'); assert.equal(restored.tasks[0]?.id, task.id);
+    await restarted.saveDraft(project.id, task.id, '恢复后的草稿'); assert.equal((await restarted.getTask(project.id, task.id)).draft, '恢复后的草稿');
+    assert.equal((await restarted.restore(project.id)).archivedAt, null);
+  } finally { await restarted.close(); }
+});
+
+test('TASKS-02: task ownership and native-history directories cannot be crossed even inside one project', async t => {
+  const { store, options, root } = await fixture(t), project = await store.create({ name: '任务归属边界', configuration }), other = await store.create({ name: '其他项目', configuration });
+  const a = await store.createTask(project.id, { name: '同名任务' }), b = await store.createTask(project.id, { name: '同名任务' });
+  await assert.rejects(store.getTask(other.id, a.id), /task_not_found/); await assert.rejects(store.saveDraft(other.id, a.id, '不能串项目'), /task_not_found/);
+  await assert.rejects(store.setSession(project.id, a.id, path.join(b.sessionDirectory, 'other.jsonl')), /invalid_session_file/);
+  await assert.rejects(store.setSession(project.id, a.id, path.join(store.sessionDirectory(project.id), 'legacy.jsonl')), /invalid_session_file/);
+  await Promise.all([store.saveDraft(project.id, a.id, 'A1'), store.saveDraft(project.id, b.id, 'B1'), store.saveDraft(project.id, a.id, 'A2')]);
+  assert.equal((await store.getTask(project.id, a.id)).draft, 'A2'); assert.equal((await store.getTask(project.id, b.id)).draft, 'B1');
+  const outside = path.join(root, 'outside-native.jsonl'); await fs.writeFile(outside, 'synthetic retain');
+  await fs.symlink(outside, path.join(a.sessionDirectory, 'linked.jsonl')); await assert.rejects(store.setSession(project.id, a.id, path.join(a.sessionDirectory, 'linked.jsonl')), /invalid_session_file/);
+  await fs.unlink(path.join(a.sessionDirectory, 'linked.jsonl')); await fs.link(outside, path.join(a.sessionDirectory, 'hard.jsonl'));
+  await assert.rejects(store.setSession(project.id, a.id, path.join(a.sessionDirectory, 'hard.jsonl')), /invalid_session_file/);
+  assert.equal(await fs.readFile(outside, 'utf8'), 'synthetic retain');
+  const metadata = path.join(options.dataRoot, 'projects', project.id, 'project.json'), original = await fs.readFile(metadata), invalid = JSON.parse(original.toString());
+  invalid.tasks[1].id = invalid.tasks[0].id; await fs.writeFile(metadata, JSON.stringify(invalid)); await assert.rejects(store.get(project.id), /invalid_project_metadata/);
+  await fs.writeFile(metadata, original);
+  invalid.tasks = JSON.parse(original.toString()).tasks.map((task: Record<string, unknown>) => ({ ...task, sessionStorage: 'legacy' }));
+  await fs.writeFile(metadata, JSON.stringify(invalid)); await assert.rejects(store.get(project.id), /invalid_project_metadata/); await fs.writeFile(metadata, original);
+});
+
+test('TASKS-03: a task write that exceeds the metadata size cap preserves the complete previously readable project', async t => {
+  const { store, options } = await fixture(t), project = await store.create({ name: '元数据边界', configuration });
+  const task = await store.createTask(project.id, { name: '保留原草稿' }), metadata = path.join(options.dataRoot, 'projects', project.id, 'project.json');
+  const record = JSON.parse(await fs.readFile(metadata, 'utf8')), now = '2026-10-29T00:00:00.000Z';
+  // Seed a valid pre-existing large attachment ledger; no file content is read or
+  // generated. The public draft write must reject rather than publish an unreadable file.
+  const attachments = Array.from({ length: 6000 }, (_, index) => ({ id: randomUUID(), originalName: 'x'.repeat(190) + '.txt', path: `010_draw/file-${index}.txt`, bytes: 0, sha256: '0'.repeat(64), uploadedAt: now, source: { kind: 'upload' } }));
+  let low = 0, high = attachments.length;
+  while (low < high) { const mid = Math.ceil((low + high) / 2); if (Buffer.byteLength(JSON.stringify({ ...record, uploads: attachments.slice(0, mid) }, null, 2) + '\n') < 2 * 1024 * 1024 - 10000) low = mid; else high = mid - 1; }
+  const original = Buffer.from(JSON.stringify({ ...record, uploads: attachments.slice(0, low) }, null, 2) + '\n'); await fs.writeFile(metadata, original);
+  assert.ok(original.length > 2 * 1024 * 1024 - 11000); assert.ok((await store.get(project.id)).uploads.length > 0);
+  await assert.rejects(store.saveDraft(project.id, task.id, 'a'.repeat(20000)), /project_metadata_too_large/);
+  assert.deepEqual(await fs.readFile(metadata), original); assert.equal((await store.getTask(project.id, task.id)).draft, '');
+  const almostFull = JSON.parse(original.toString()); almostFull.tasks[0].draft = 'z'.repeat(2 * 1024 * 1024 - 100 - original.length);
+  const nearCapacity = Buffer.from(JSON.stringify(almostFull, null, 2) + '\n'); assert.equal(nearCapacity.length, 2 * 1024 * 1024 - 100); await fs.writeFile(metadata, nearCapacity);
+  await assert.rejects(store.upload({ projectId: project.id, name: 'x'.repeat(190) + '.txt', bytes: Buffer.from('synthetic') }), /project_metadata_too_large/);
+  assert.deepEqual(await fs.readFile(metadata), nearCapacity); assert.deepEqual(await fs.readdir(path.join(project.rootPath, '010_draw')), [], 'A rejected attachment must not leave an unrecorded uploaded file.');
+});
+
+test('TASKS-04: metadata reads tolerate a legitimate atomic replacement before open or before descriptor validation', async t => {
+  const { store, options } = await fixture(t), project = await store.create({ name: '并发读取前', configuration });
+  await store.createTask(project.id, { name: '保留独立任务' });
+  const metadata = path.join(options.dataRoot, 'projects', project.id, 'project.json');
+  const originalLstat = fs.lstat, originalOpen = fs.open;
+  for (const phase of ['lstat', 'open'] as const) {
+    let armed = true;
+    const original = fs[phase];
+    const hook = phase === 'lstat'
+      ? t.mock.method(fs, 'lstat', async (...args: Parameters<typeof fs.lstat>) => { const entry = await originalLstat(...args); if (armed && String(args[0]) === metadata) { armed = false; await store.rename(project.id, `原子替换后-${phase}`); } return entry; })
+      : t.mock.method(fs, 'open', async (...args: Parameters<typeof fs.open>) => { const handle = await originalOpen(...args); if (armed && String(args[0]) === metadata) { armed = false; await store.rename(project.id, `原子替换后-${phase}`); } return handle; });
+    try { const saved = await store.get(project.id); assert.equal(saved.name, `原子替换后-${phase}`); assert.equal(saved.tasks.length, 1); }
+    finally { hook.mock.restore(); }
+    assert.equal(fs[phase], original);
+  }
+});
+
+test('TASKS-05: metadata symlinks and hardlinks remain rejected without changing their targets', async t => {
+  const { store, options, root } = await fixture(t), project = await store.create({ name: '元数据链接边界', configuration });
+  const metadata = path.join(options.dataRoot, 'projects', project.id, 'project.json'), outside = path.join(root, 'outside-metadata.json'), original = await fs.readFile(metadata);
+  await fs.rename(metadata, outside); await fs.symlink(outside, metadata);
+  await assert.rejects(store.get(project.id), /invalid_project_metadata/); assert.deepEqual(await fs.readFile(outside), original); await fs.unlink(metadata);
+  await fs.link(outside, metadata); await assert.rejects(store.get(project.id), /invalid_project_metadata/); assert.deepEqual(await fs.readFile(outside), original);
+  await fs.unlink(metadata); await fs.rename(outside, metadata); assert.equal((await store.get(project.id)).name, '元数据链接边界');
+});
+
+test('TASKS-06: a metadata read retries a real zero-link inode returned by the initial lstat', async t => {
+  const { store, options } = await fixture(t), project = await store.create({ name: '替换前', configuration });
+  const task = await store.createTask(project.id, { name: '保留任务' });
+  const metadata = path.join(options.dataRoot, 'projects', project.id, 'project.json');
+  const originalLstat = fs.lstat, originalOpen = fs.open;
+  let armed = true, observedZeroLink = false;
+  const hook = t.mock.method(fs, 'lstat', async (...args: Parameters<typeof fs.lstat>) => {
+    if (armed && String(args[0]) === metadata) {
+      armed = false;
+      const oldHandle = await originalOpen(metadata, 'r');
+      try {
+        await store.rename(project.id, '替换后');
+        // Use the real old inode after atomic replacement, matching Darwin's
+        // lstat completing after the resolved inode loses its last link.
+        const unlinked = await oldHandle.stat(); assert.equal(unlinked.nlink, 0); observedZeroLink = true;
+        return unlinked;
+      } finally { await oldHandle.close(); }
+    }
+    return originalLstat(...args);
+  });
+  try {
+    const saved = await store.get(project.id);
+    assert.equal(observedZeroLink, true); assert.equal(saved.name, '替换后'); assert.equal(saved.tasks[0]?.id, task.id);
+  } finally { hook.mock.restore(); }
+});
+
 test('new projects create exactly three real folders and survive Host recreation', async t => {
   const { store, options } = await fixture(t);
   const project = await store.create({ name: '销售合成资料', configuration });
@@ -61,16 +202,18 @@ test('drafts, non-secret configuration snapshots, session references and outcome
   const { store, options } = await fixture(t);
   const project = await store.create({ name: '状态保存', configuration: { ...configuration, apiKey: 'never-store-this-fake-key' } as ProjectConfiguration });
   const other = await store.create({ name: '状态保存', configuration: { ...configuration, id: 'deepseek-flash', provider: 'deepseek', model: 'deepseek-flash' } });
-  const sessionFile = path.join(project.sessionDirectory, 'sdk-history.jsonl');
-  await Promise.all([store.saveDraft(project.id, '未发送的草稿'), store.upload({ projectId: project.id, name: '输入.txt', bytes: new TextEncoder().encode('synthetic'), directory: '020_clean' })]);
-  await store.setSession(project.id, sessionFile);
+  const task = await store.createTask(project.id, { name: '状态保存任务' }), otherTask = await store.createTask(other.id, { name: '另一项目任务' });
+  const sessionFile = path.join(task.sessionDirectory, 'sdk-history.jsonl');
+  await Promise.all([store.saveDraft(project.id, task.id, '未发送的草稿'), store.upload({ projectId: project.id, name: '输入.txt', bytes: new TextEncoder().encode('synthetic'), directory: '020_clean' })]);
+  await store.setSession(project.id, task.id, sessionFile);
   const run = { id: randomUUID(), status: 'completed' as const, startedAt: '2026-10-28T12:00:00.000Z', settledAt: '2026-10-28T12:00:01.000Z' };
-  await store.markRun(project.id, run);
+  await store.markRun(project.id, task.id, run);
   await store.close(); const restarted = new ProjectStore(options); await restarted.init();
   try {
     const saved = await restarted.get(project.id);
-    assert.equal(saved.draft, '未发送的草稿'); assert.equal(saved.uploads.length, 1); assert.equal(saved.sessionFile, sessionFile); assert.deepEqual(saved.lastRun, run);
-    assert.equal((await restarted.get(other.id)).draft, ''); assert.equal((await restarted.get(other.id)).uploads.length, 0);
+    const savedTask = await restarted.getTask(project.id, task.id);
+    assert.equal(savedTask.draft, '未发送的草稿'); assert.equal(saved.uploads.length, 1); assert.equal(savedTask.sessionFile, sessionFile); assert.deepEqual(savedTask.lastRun, run);
+    assert.equal((await restarted.getTask(other.id, otherTask.id)).draft, ''); assert.equal((await restarted.get(other.id)).uploads.length, 0);
     const metadata = await fs.readFile(path.join(options.dataRoot, 'projects', project.id, 'project.json'), 'utf8');
     assert.equal(metadata.includes('never-store-this-fake-key'), false); assert.equal(metadata.includes('rootPath'), false);
     assert.equal((await fs.stat(path.join(options.dataRoot, 'projects', project.id, 'project.json'))).mode & 0o777, 0o600);
@@ -79,6 +222,7 @@ test('drafts, non-secret configuration snapshots, session references and outcome
 
 test('file APIs reject traversal, cross-project paths, symlinks and hard links without reading their targets', async t => {
   const { store, root } = await fixture(t); const a = await store.create({ name: 'A', configuration }), b = await store.create({ name: 'B', configuration });
+  const aTask = await store.createTask(a.id, { name: 'A任务' }), bTask = await store.createTask(b.id, { name: 'B任务' });
   const outside = path.join(root, 'private-credential.txt'); await fs.writeFile(outside, 'private fake sentinel');
   const bFile = await store.upload({ projectId: b.id, name: 'B.txt', bytes: new TextEncoder().encode('other project') });
   for (const input of ['../private-credential.txt', '020_clean/../../private-credential.txt', path.join(b.rootPath, bFile.path), `020_clean/../../${b.id}/${bFile.path}`, '020_clean\\..\\private.txt']) {
@@ -91,17 +235,18 @@ test('file APIs reject traversal, cross-project paths, symlinks and hard links w
   await fs.link(outside, path.join(a.rootPath, '020_clean', 'hard.txt'));
   await assert.rejects(store.readFile(a.id, '020_clean/hard.txt'), /unsafe_file_path/);
   await assert.rejects(store.copyToClean(a.id, '020_clean/hard.txt'), /copy_requires_raw_file/);
-  await assert.rejects(store.setSession(a.id, path.join(b.sessionDirectory, 'session.jsonl')), /invalid_session_file/);
+  await assert.rejects(store.setSession(a.id, aTask.id, path.join(bTask.sessionDirectory, 'session.jsonl')), /invalid_session_file/);
   assert.equal(await fs.readFile(outside, 'utf8'), 'private fake sentinel');
 });
 
 test('invalid uploads, names and outcomes do not create successful attachments or overwrite data', async t => {
   const { store } = await fixture(t); const project = await store.create({ name: '限制检查', configuration });
+  const task = await store.createTask(project.id, { name: '限制任务' });
   for (const name of ['../escape.csv', '/absolute.txt', 'broken.exe', 'a\\b.json', 'a\u0000.txt']) await assert.rejects(async () => store.upload({ projectId: project.id, name, bytes: new Uint8Array() }));
   await assert.rejects(async () => store.upload({ projectId: project.id, name: 'huge.txt', bytes: new Uint8Array(10 * 1024 * 1024 + 1) }), /upload_too_large/);
   await assert.rejects(async () => store.upload({ projectId: project.id, name: 'binary.txt', bytes: new Uint8Array([0xff, 0xfe, 0xff]) }), /upload_requires_utf8/);
   await assert.rejects(store.create({ name: '  ', configuration }), /invalid_project_name/);
-  await assert.rejects(async () => store.markRun(project.id, { id: randomUUID(), status: 'completed', startedAt: '2026-10-28T12:00:00.000Z' }), /invalid_run/);
+  await assert.rejects(async () => store.markRun(project.id, task.id, { id: randomUUID(), status: 'completed', startedAt: '2026-10-28T12:00:00.000Z' }), /invalid_run/);
   assert.equal((await store.get(project.id)).uploads.length, 0);
   assert.deepEqual((await store.tree(project.id)).map(node => node.children), [[], [], []]);
 });

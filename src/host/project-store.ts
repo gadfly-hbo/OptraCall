@@ -8,14 +8,17 @@ export type ProjectDirectory = typeof PROJECT_DIRECTORIES[number];
 export interface ProjectConfiguration { id: string; revision: number; provider: string; model: string; name: string; baseUrl: string; api?: string; thinkingLevel?: string }
 export interface ProjectRun { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string }
 export interface UploadedFile { id: string; originalName: string; path: string; bytes: number; sha256: string; uploadedAt: string; source: { kind: 'upload' | 'copy' | 'user-save-report'; from?: string } }
-export interface ProjectRecord { schemaVersion: 1; id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; sessionFile?: string; lastRun?: ProjectRun; rootPath: string; sessionDirectory: string }
+export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string }
+export interface ProjectRecord { schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
 export class ProjectStoreFault extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
 
-type StoredProject = Omit<ProjectRecord, 'rootPath' | 'sessionDirectory'>;
+type StoredTask = Omit<TaskRecord, 'sessionDirectory'>;
+type StoredProject = Omit<ProjectRecord, 'rootPath' | 'tasks'> & { tasks: StoredTask[] };
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const runStates = new Set(['running', 'completed', 'cancelled', 'failed', 'interrupted']);
 const maxUploadBytes = 10 * 1024 * 1024;
+const maxMetadataBytes = 2 * 1024 * 1024;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const inside = (root: string, candidate: string) => candidate !== root && candidate.startsWith(root + path.sep);
 const fail = (code: string): never => { throw new ProjectStoreFault(code); };
@@ -77,6 +80,11 @@ export class ProjectStore {
         try { await fs.access(this.#metadataPath(item.name)); } catch { fail('unrecognized_project_root'); }
       }
       this.#ready = true;
+      for (const item of await fs.readdir(path.join(this.dataRoot, 'projects'), { withFileTypes: true })) {
+        if (!uuid.test(item.name) || !item.isDirectory() || item.isSymbolicLink()) fail('invalid_project_metadata');
+        const original = await this.#readValue(item.name);
+        if (object(original.value) && original.value.schemaVersion === 1) await this.#migrate(item.name, original.value, original.bytes);
+      }
       await this.list();
       await fs.chmod(this.projectsRoot, 0o700);
     } catch (error) { await this.close(); throw error; }
@@ -86,7 +94,9 @@ export class ProjectStore {
   projectDirectory(id: string): string { return path.join(this.projectsRoot, this.#id(id)); }
   sessionDirectory(id: string): string { return path.join(this.dataRoot, 'projects', this.#id(id), 'sessions'); }
   #metadataPath(id: string): string { return path.join(this.dataRoot, 'projects', this.#id(id), 'project.json'); }
-  #decorate(project: StoredProject): ProjectRecord { return { ...project, rootPath: this.projectDirectory(project.id), sessionDirectory: this.sessionDirectory(project.id) }; }
+  #taskDirectory(projectId: string, task: StoredTask): string { return task.sessionStorage === 'legacy' ? this.sessionDirectory(projectId) : path.join(this.dataRoot, 'projects', this.#id(projectId), 'tasks', this.#id(task.id), 'sessions'); }
+  #decorateTask(projectId: string, task: StoredTask): TaskRecord { return { ...task, sessionDirectory: this.#taskDirectory(projectId, task) }; }
+  #decorate(project: StoredProject): ProjectRecord { return { ...project, rootPath: this.projectDirectory(project.id), tasks: project.tasks.map(task => this.#decorateTask(project.id, task)) }; }
   async #assertDirectory(directory: string): Promise<void> { const entry = await fs.lstat(directory); if (!entry.isDirectory() || entry.isSymbolicLink()) fail('unsafe_directory'); }
   async #assertProject(id: string): Promise<void> {
     this.#requireReady(); this.#id(id);
@@ -101,17 +111,40 @@ export class ProjectStore {
   }
   async #write(project: StoredProject): Promise<ProjectRecord> {
     await this.#assertProject(project.id);
+    const bytes = this.#metadataBytes(project);
     const file = this.#metadataPath(project.id), temporary = `${file}.${randomUUID()}.tmp`;
     const handle = await fs.open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
-    try { await handle.writeFile(JSON.stringify(project, null, 2) + '\n'); await handle.sync(); } finally { await handle.close(); }
-    await fs.rename(temporary, file); return this.#decorate(structuredClone(project));
+    try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+    await fs.rename(temporary, file); await this.#syncDirectory(path.dirname(file)); return this.#decorate(structuredClone(project));
   }
-  async #read(id: string): Promise<StoredProject> {
-    await this.#assertProject(id);
-    const file = this.#metadataPath(id), stat = await fs.lstat(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 2 * 1024 * 1024) return fail('invalid_project_metadata');
-    let value: unknown; try { value = JSON.parse(await fs.readFile(file, 'utf8')); } catch { return fail('invalid_project_metadata'); }
-    if (!object(value) || value.schemaVersion !== 1 || value.id !== id || !isoDate(value.createdAt) || !isoDate(value.updatedAt) || typeof value.draft !== 'string' || value.draft.length > 20000 || !Array.isArray(value.uploads)) return fail('invalid_project_metadata');
+  #metadataBytes(project: StoredProject): Buffer { const bytes = Buffer.from(JSON.stringify(project, null, 2) + '\n'); if (bytes.length > maxMetadataBytes) fail('project_metadata_too_large'); return bytes; }
+  async #syncDirectory(directory: string): Promise<void> { const handle = await fs.open(directory, constants.O_RDONLY); try { await handle.sync(); } finally { await handle.close(); } }
+  async #controlBytes(file: string): Promise<Buffer> {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const stat = await fs.lstat(file);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink > 1 || stat.size > maxMetadataBytes) return fail('invalid_project_metadata');
+      if (stat.nlink === 0) continue;
+      const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const current = await handle.stat();
+        if (!current.isFile() || current.nlink > 1 || current.size > maxMetadataBytes) return fail('invalid_project_metadata');
+        // A valid atomic writer can replace the name after lstat or unlink the
+        // opened old inode before fstat. Re-read that race; never relax actual
+        // symlink/hardlink checks or read an unverified descriptor.
+        if (current.nlink !== 1 || current.ino !== stat.ino || current.dev !== stat.dev) continue;
+        return await handle.readFile();
+      } finally { await handle.close(); }
+    }
+    return fail('project_metadata_changed');
+  }
+  async #readValue(id: string): Promise<{ value: unknown; bytes: Buffer }> {
+    await this.#assertProject(id); const bytes = await this.#controlBytes(this.#metadataPath(id));
+    let value: unknown; try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch { return fail('invalid_project_metadata'); }
+    return { value, bytes };
+  }
+  async #read(id: string): Promise<StoredProject> { return this.#decodeProject(id, (await this.#readValue(id)).value); }
+  async #decodeProject(id: string, value: unknown): Promise<StoredProject> {
+    if (!object(value) || value.schemaVersion !== 2 || value.id !== id || !isoDate(value.createdAt) || !isoDate(value.updatedAt) || !Array.isArray(value.uploads) || !Array.isArray(value.tasks) || (value.archivedAt !== null && !isoDate(value.archivedAt))) return fail('invalid_project_metadata');
     const name = projectName(value.name), configuration = publicConfiguration(value.configuration);
     const uploads: UploadedFile[] = value.uploads.map(item => {
       if (!object(item) || typeof item.id !== 'string' || !uuid.test(item.id) || typeof item.originalName !== 'string' || typeof item.path !== 'string' || !Number.isSafeInteger(item.bytes) || (item.bytes as number) < 0 || typeof item.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(item.sha256) || !isoDate(item.uploadedAt) || !object(item.source) || !['upload', 'copy', 'user-save-report'].includes(item.source.kind as string)) return fail('invalid_project_metadata');
@@ -119,10 +152,33 @@ export class ProjectStore {
       if (item.source.from !== undefined) { if (typeof item.source.from !== 'string') fail('invalid_project_metadata'); this.#relative(item.source.from as string); }
       return { id: item.id, originalName: item.originalName, path: item.path, bytes: item.bytes as number, sha256: item.sha256, uploadedAt: item.uploadedAt, source: { kind: item.source.kind as UploadedFile['source']['kind'], ...(item.source.from === undefined ? {} : { from: item.source.from as string }) } };
     });
-    const project: StoredProject = { schemaVersion: 1, id, name, createdAt: value.createdAt, updatedAt: value.updatedAt, draft: value.draft, configuration, uploads };
-    if (value.sessionFile !== undefined) { if (typeof value.sessionFile !== 'string') fail('invalid_project_metadata'); await this.#validateSession(id, value.sessionFile as string); project.sessionFile = value.sessionFile as string; }
-    if (value.lastRun !== undefined) project.lastRun = validRun(value.lastRun);
-    return project;
+    const tasks: StoredTask[] = [], ids = new Set<string>(); let legacy = 0;
+    for (const input of value.tasks) {
+      if (!object(input) || typeof input.id !== 'string' || !uuid.test(input.id) || ids.has(input.id) || !isoDate(input.createdAt) || !isoDate(input.updatedAt) || typeof input.draft !== 'string' || input.draft.length > 20000 || !['legacy', 'task'].includes(input.sessionStorage as string)) return fail('invalid_project_metadata');
+      ids.add(input.id); if (input.sessionStorage === 'legacy' && ++legacy > 1) fail('invalid_project_metadata');
+      const task: StoredTask = { id: input.id, name: projectName(input.name), createdAt: input.createdAt, updatedAt: input.updatedAt, draft: input.draft, configuration: publicConfiguration(input.configuration), sessionStorage: input.sessionStorage as StoredTask['sessionStorage'] };
+      await this.#assertTaskDirectory(id, task);
+      if (input.sessionFile !== undefined) { if (typeof input.sessionFile !== 'string') fail('invalid_project_metadata'); await this.#validateSession(id, task, input.sessionFile as string); task.sessionFile = input.sessionFile as string; }
+      if (input.lastRun !== undefined) task.lastRun = validRun(input.lastRun);
+      tasks.push(task);
+    }
+    return { schemaVersion: 2, id, name, createdAt: value.createdAt, updatedAt: value.updatedAt, configuration, uploads, archivedAt: value.archivedAt as string | null, tasks };
+  }
+  async #migrate(id: string, legacy: Record<string, unknown>, original: Buffer): Promise<void> {
+    const task = { id: randomUUID(), name: '原有任务', createdAt: legacy.createdAt, updatedAt: legacy.updatedAt, configuration: legacy.configuration, draft: legacy.draft, sessionStorage: 'legacy', ...(legacy.sessionFile === undefined ? {} : { sessionFile: legacy.sessionFile }), ...(legacy.lastRun === undefined ? {} : { lastRun: legacy.lastRun }) };
+    // Validate the complete target before writing a backup or changing the old
+    // metadata. Native JSONL files and their absolute fork lineage stay in place.
+    const migrated = await this.#decodeProject(id, { ...legacy, schemaVersion: 2, archivedAt: null, tasks: [task] });
+    const backup = path.join(this.dataRoot, 'projects', id, 'project.v1.backup.json');
+    let handle;
+    try { handle = await fs.open(backup, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      if (!(await this.#controlBytes(backup)).equals(original)) return fail('migration_backup_conflict');
+    }
+    if (handle) { try { await handle.writeFile(original); await handle.sync(); } finally { await handle.close(); } }
+    await fs.chmod(backup, 0o600); await this.#syncDirectory(path.dirname(backup));
+    await this.#write(migrated);
   }
   async create(input: { name: string; configuration: ProjectConfiguration }): Promise<ProjectRecord> {
     const name = projectName(input.name), configuration = publicConfiguration(input.configuration);
@@ -131,7 +187,7 @@ export class ProjectStore {
       await this.#directory(path.join(this.dataRoot, 'projects', id)); await this.#directory(this.sessionDirectory(id));
       await this.#directory(this.projectDirectory(id));
       for (const directory of PROJECT_DIRECTORIES) await this.#directory(path.join(this.projectDirectory(id), directory));
-      return this.#write({ schemaVersion: 1, id, name, configuration, draft: '', uploads: [], createdAt: now, updatedAt: now });
+      return this.#write({ schemaVersion: 2, id, name, configuration, uploads: [], archivedAt: null, tasks: [], createdAt: now, updatedAt: now });
     });
   }
   async list(): Promise<ProjectRecord[]> {
@@ -143,22 +199,59 @@ export class ProjectStore {
     return projects.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   }
   async get(id: string): Promise<ProjectRecord> { return this.#decorate(await this.#read(id)); }
-  saveDraft(id: string, draft: string): Promise<ProjectRecord> {
-    if (typeof draft !== 'string' || draft.length > 20000) return Promise.reject(new ProjectStoreFault('invalid_draft'));
-    return this.#mutation(async () => this.#write({ ...await this.#read(id), draft, updatedAt: new Date().toISOString() }));
+  #active(project: StoredProject): void { if (project.archivedAt !== null) fail('project_archived'); }
+  rename(id: string, input: string): Promise<ProjectRecord> {
+    const name = projectName(input);
+    return this.#mutation(async () => { const project = await this.#read(id); this.#active(project); return this.#write({ ...project, name, updatedAt: new Date().toISOString() }); });
   }
-  async #validateSession(id: string, file: string): Promise<void> {
-    const relative = path.relative(this.sessionDirectory(id), file);
+  archive(id: string): Promise<ProjectRecord> {
+    return this.#mutation(async () => { const project = await this.#read(id); if (project.archivedAt !== null) return this.#decorate(project); const now = new Date().toISOString(); return this.#write({ ...project, archivedAt: now, updatedAt: now }); });
+  }
+  restore(id: string): Promise<ProjectRecord> {
+    return this.#mutation(async () => { const project = await this.#read(id); if (project.archivedAt === null) return this.#decorate(project); return this.#write({ ...project, archivedAt: null, updatedAt: new Date().toISOString() }); });
+  }
+  async #assertTaskDirectory(projectId: string, task: StoredTask): Promise<void> {
+    if (task.sessionStorage === 'legacy') { await this.#assertDirectory(this.sessionDirectory(projectId)); return; }
+    const tasks = path.join(this.dataRoot, 'projects', this.#id(projectId), 'tasks');
+    await this.#assertDirectory(tasks); await this.#assertDirectory(path.join(tasks, this.#id(task.id))); await this.#assertDirectory(this.#taskDirectory(projectId, task));
+  }
+  #task(project: StoredProject, taskId: string): StoredTask { this.#id(taskId); const task = project.tasks.find(task => task.id === taskId); if (!task) return fail('task_not_found'); return task; }
+  async getTask(projectId: string, taskId: string): Promise<TaskRecord> { return this.#decorateTask(projectId, this.#task(await this.#read(projectId), taskId)); }
+  createTask(projectId: string, input: { name: string; configuration?: ProjectConfiguration }): Promise<TaskRecord> {
+    const name = projectName(input.name);
+    return this.#mutation(async () => {
+      const project = await this.#read(projectId); this.#active(project);
+      const configuration = publicConfiguration(input.configuration ?? project.configuration), id = randomUUID(), now = new Date().toISOString();
+      const task: StoredTask = { id, name, createdAt: now, updatedAt: now, configuration, draft: '', sessionStorage: 'task' };
+      const next = { ...project, tasks: [...project.tasks, task], updatedAt: now }; this.#metadataBytes(next);
+      const tasks = path.join(this.dataRoot, 'projects', projectId, 'tasks');
+      await this.#directory(tasks); await this.#directory(path.join(tasks, id)); await this.#directory(this.#taskDirectory(projectId, task));
+      await this.#write(next); return this.#decorateTask(projectId, task);
+    });
+  }
+  #updateTask(projectId: string, taskId: string, update: (task: StoredTask) => StoredTask | Promise<StoredTask>): Promise<TaskRecord> {
+    return this.#mutation(async () => {
+      const project = await this.#read(projectId); this.#active(project);
+      const previous = this.#task(project, taskId), now = new Date().toISOString(), task = { ...await update(previous), updatedAt: now };
+      await this.#write({ ...project, tasks: project.tasks.map(item => item.id === taskId ? task : item), updatedAt: now }); return this.#decorateTask(projectId, task);
+    });
+  }
+  saveDraft(projectId: string, taskId: string, draft: string): Promise<TaskRecord> {
+    if (typeof draft !== 'string' || draft.length > 20000) return Promise.reject(new ProjectStoreFault('invalid_draft'));
+    return this.#updateTask(projectId, taskId, task => ({ ...task, draft }));
+  }
+  async #validateSession(projectId: string, task: StoredTask, file: string): Promise<void> {
+    const relative = path.relative(this.#taskDirectory(projectId, task), file);
     if (!path.isAbsolute(file) || !relative || relative.includes(path.sep) || relative.startsWith('..') || path.extname(file) !== '.jsonl') fail('invalid_session_file');
     try { const stat = await fs.lstat(file); if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) fail('invalid_session_file'); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
-  setSession(id: string, file: string): Promise<ProjectRecord> {
-    return this.#mutation(async () => { const project = await this.#read(id); await this.#validateSession(id, file); return this.#write({ ...project, sessionFile: file, updatedAt: new Date().toISOString() }); });
+  setSession(projectId: string, taskId: string, file: string): Promise<TaskRecord> {
+    return this.#updateTask(projectId, taskId, async task => { await this.#validateSession(projectId, task, file); return { ...task, sessionFile: file }; });
   }
-  markRun(id: string, run: ProjectRun): Promise<ProjectRecord> {
+  markRun(projectId: string, taskId: string, run: ProjectRun): Promise<TaskRecord> {
     const clean = validRun(run);
-    return this.#mutation(async () => this.#write({ ...await this.#read(id), lastRun: clean, updatedAt: new Date().toISOString() }));
+    return this.#updateTask(projectId, taskId, task => ({ ...task, lastRun: clean }));
   }
   #relative(relative: string): string[] {
     if (typeof relative !== 'string' || relative.length > 2000 || /[\\\u0000-\u001f\u007f]/.test(relative) || path.isAbsolute(relative)) return fail('invalid_file_path');
@@ -186,19 +279,20 @@ export class ProjectStore {
     return { originalName: name, bytes };
   }
   async #upload(id: string, input: { originalName: string; bytes: Buffer }, directory: ProjectDirectory, source: UploadedFile['source']): Promise<UploadedFile> {
-    const project = await this.#read(id); const fileId = randomUUID();
+    const project = await this.#read(id); this.#active(project); const fileId = randomUUID();
     const original = input.originalName.trim(), extension = path.extname(original), stem = original.slice(0, -extension.length);
     let relative = '';
     for (let attempt = 0; attempt < 5; attempt++) {
       const name = attempt === 0 ? original : `${stem}__${randomUUID().slice(0, 8)}${extension}`;
       relative = `${directory}/${name}`;
       const target = await this.#safePath(id, relative, true);
+      const uploaded: UploadedFile = { id: fileId, originalName: input.originalName, path: relative, bytes: input.bytes.length, sha256: createHash('sha256').update(input.bytes).digest('hex'), uploadedAt: new Date().toISOString(), source };
+      const next = { ...project, uploads: [...project.uploads, uploaded], updatedAt: uploaded.uploadedAt }; this.#metadataBytes(next);
       let handle;
       try { handle = await fs.open(target, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600); }
       catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue; throw error; }
       try { await handle.writeFile(input.bytes); await handle.sync(); } finally { await handle.close(); }
-      const uploaded: UploadedFile = { id: fileId, originalName: input.originalName, path: relative, bytes: input.bytes.length, sha256: createHash('sha256').update(input.bytes).digest('hex'), uploadedAt: new Date().toISOString(), source };
-      await this.#write({ ...project, uploads: [...project.uploads, uploaded], updatedAt: uploaded.uploadedAt }); return uploaded;
+      await this.#write(next); return uploaded;
     }
     return fail('upload_name_conflict');
   }
@@ -211,7 +305,7 @@ export class ProjectStore {
     const parts = this.#relative(relativeRawPath);
     if (parts[0] !== '010_draw' || parts.length < 2) return Promise.reject(new ProjectStoreFault('copy_requires_raw_file'));
     return this.#mutation(async () => {
-      const project = await this.#read(projectId), source = await this.readFile(projectId, relativeRawPath);
+      const project = await this.#read(projectId); this.#active(project); const source = await this.readFile(projectId, relativeRawPath);
       const originalName = project.uploads.find(item => item.path === relativeRawPath)?.originalName ?? source.name;
       return this.#upload(projectId, this.#uploadInput(originalName, source.bytes), '020_clean', { kind: 'copy', from: relativeRawPath });
     });

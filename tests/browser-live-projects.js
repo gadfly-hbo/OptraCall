@@ -58,6 +58,10 @@ async (page) => {
   await clean.getByText('synthetic-sales.csv', { exact: true }).waitFor();
   assert((await metrics()).requestCount === before + 1, 'Project creation/upload/copy must not run the model');
   checks.push('Asynchronous real project creation, validation, exact folders, upload original, explicit copy to analysis area without model call');
+  await page.getByRole('button', { name: '新建第一个任务', exact: true }).click();
+  const taskDialog = page.getByRole('dialog', { name: '新建任务', exact: true });
+  await taskDialog.getByRole('textbox', { name: '任务名称', exact: true }).fill('资料简析任务');
+  await taskDialog.getByRole('button', { name: '创建任务', exact: true }).click(); await taskDialog.waitFor({ state: 'detached' });
   const input = page.getByRole('textbox', { name: '消息', exact: true });
   await input.fill('请简要介绍你自己。'); await page.waitForFunction(() => document.querySelector('.send-button')?.disabled === false); await input.press('Enter');
   await page.getByRole('button', { name: '将最新回复保存为最终报告', exact: true }).waitFor();
