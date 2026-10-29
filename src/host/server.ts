@@ -14,6 +14,10 @@ import type { CaseContextSelection } from './case-types.ts';
 import { loadStaticUi } from './static-ui.ts';
 import { createMetricFactoryRoutes } from '../../extensions/business-plugins/metric-factory/api/routes.ts';
 import { metricIndexText } from '../../extensions/business-plugins/metric-factory/project/index-text.ts';
+import { createRequirementRoutes } from '../../extensions/business-plugins/requirements-elaboration/api/routes.ts';
+import { composeRequirementContext } from '../../extensions/business-plugins/requirements-elaboration/api/context.ts';
+import { requirementSessionDirectory, requirementWorkspace } from '../../extensions/business-plugins/requirements-elaboration/session/workspace.ts';
+import { createRequirementSessions } from './requirement-sessions.ts';
 
 class RequestFault extends Error {
   readonly status: number; readonly code: string;
@@ -57,12 +61,29 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
   const endStreams = (id?: string) => { for (const [key, responses] of streams) { if (id && key !== id) continue; for (const response of responses) response.end(); streams.delete(key); } };
   const publish = (projectId: string, taskId: string, event: object) => { for (const response of streams.get(keyOf(projectId, taskId)) ?? []) if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...event, projectId, taskId })}\n\n`); };
+  // requirements-elaboration plugin sessions use the generalized runtime entry with
+  // a workspace instead of a project; this seam is flagged for dedicated Codex review.
+  const requirementStreams = new Map<string, Set<ServerResponse>>();
+  const publishRequirement = (instanceId: string, event: object) => { for (const response of requirementStreams.get(instanceId) ?? []) if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...event, instanceId })}\n\n`); };
+  const requirementSessions = createRequirementSessions({
+    codeRoot: options.cwd,
+    resourceRoot: path.join(dataRoot, 'pi'),
+    managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
+    sessionDirectory: instanceId => requirementSessionDirectory(path.join(dataRoot, 'requirement-instances', instanceId)),
+    workspaceFor: instanceId => requirementWorkspace(path.join(dataRoot, 'requirement-instances', instanceId)),
+    configurationSnapshot: () => configuration.snapshot(),
+    publish: publishRequirement,
+    mutate,
+    isClosing: () => closing,
+  });
+  const requirementPlugin = createRequirementRoutes({ storeRoot: path.join(dataRoot, 'requirement-instances'), readBody: request => body(request), sessions: requirementSessions });
   const closeAgents = async (filter: { provider?: string; projectId?: string } = {}) => {
     const targets = new Map<string, ProjectAgent>();
     for (const [key, entry] of agents) if ((!filter.provider || entry.configuration.provider === filter.provider) && (!filter.projectId || entry.projectId === filter.projectId)) { agents.delete(key); targets.set(key, entry.agent); }
     for (const [key, entry] of opening) if ((!filter.provider || entry.provider === filter.provider) && (!filter.projectId || entry.projectId === filter.projectId)) { opening.delete(key); targets.set(key, entry.agent); }
     await Promise.all([...targets].map(async ([key, agent]) => { await agent.close(); endStreams(key); }));
     if (filter.projectId) for (const key of [...streams.keys()]) if (key.startsWith(filter.projectId + '/')) endStreams(key);
+    await requirementSessions.closeAll({ ...(filter.provider ? { provider: filter.provider } : {}) });
   };
   function assertActive(project: ProjectRecord) {
     if (project.archivedAt !== null) throw new RequestFault(409, 'project_archived');
@@ -79,8 +100,21 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const hex = createHash('sha256').update(JSON.stringify(['task_context_prepare', projectId, taskId, requestId])).digest('hex');
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
   };
-  async function prepareCasePrompt(projectId: string, taskId: string, input: Record<string, unknown>, accepted = false) {
-    const operationId = contextOperationId(projectId, taskId, input.requestId as string);
+  // 送入：requirement contract summary composed at send time; later edits never
+  // flow back into an already-sent message.
+  const requirementPrefix = (input: Record<string, unknown>): string | undefined => {
+    if (input.requirementContext === undefined) return undefined;
+    const selection = input.requirementContext;
+    if (!selection || typeof selection !== 'object' || Array.isArray(selection)) throw new RequestFault(400, 'invalid_requirement_context');
+    const instanceId = String((selection as Record<string, unknown>).instanceId ?? '');
+    const rawVersion = (selection as Record<string, unknown>).version;
+    try { return composeRequirementContext(requirementPlugin.store, instanceId, rawVersion === undefined ? undefined : String(rawVersion)); }
+    catch (error) {
+      const code = (error as { code?: string }).code ?? 'requirement_unavailable';
+      throw new RequestFault(code === 'REQ_STORE_NOT_FOUND' ? 404 : 409, code === 'REQ_STORE_NOT_FOUND' ? 'not_found' : 'requirement_unavailable');
+    }
+  };
+  async function prepareCasePrompt(projectId: string, taskId: string, input: Record<string, unknown>, accepted = false) {    const operationId = contextOperationId(projectId, taskId, input.requestId as string);
     const existing = cases.getStatus().state === 'ready' ? cases.getOperation(operationId) : null;
     if (input.caseContext === undefined) {
       if (existing) throw new CaseStoreError('operation_conflict', 409);
@@ -222,6 +256,17 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
       const metricFactory = await metricFactoryRoutes(request, url);
       if (metricFactory) { json(response, metricFactory.status, metricFactory.value); return; }
+      const requirementEvent = /^\/api\/requirement-instances\/(req-[a-z0-9][a-z0-9-]{0,59})\/events$/.exec(url.pathname);
+      if (requirementEvent && request.method === 'GET') {
+        const instanceId = requirementEvent[1]!;
+        try { requirementPlugin.store.read(instanceId); } catch { throw new RequestFault(404, 'not_found'); }
+        response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.flushHeaders();
+        const responses = requirementStreams.get(instanceId) ?? new Set(); responses.add(response); requirementStreams.set(instanceId, responses); response.write(': requirement connection\n\n');
+        response.once('close', () => { responses.delete(response); if (!responses.size) requirementStreams.delete(instanceId); });
+        return;
+      }
+      const requirement = await requirementPlugin.routes(request, url);
+      if (requirement) { json(response, requirement.status, requirement.value); return; }
       if (url.pathname === '/api/configurations' && request.method === 'GET') { json(response, 200, { configurations: configuration.list(), selectedId: configuration.read()?.id ?? null }); return; }
       if (url.pathname === '/api/configuration/select' && request.method === 'POST') { const input = await body(request); json(response, 200, { configuration: await mutate(() => configuration.select(String(input.id ?? ''))) }); return; }
       if (url.pathname === '/api/configuration/import' && request.method === 'POST') {
@@ -340,7 +385,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
             const initial = await pair(projectId, taskId, true), known = await priorRequest(initial.project, initial.task, input.requestId);
             // Validate and pin the selected snapshot before opening a runtime.
-            await mutate(() => prepareCasePrompt(projectId, taskId, input, Boolean(known)));
+            await mutate(async () => { await prepareCasePrompt(projectId, taskId, input, Boolean(known)); requirementPrefix(input); });
             if (known) { json(response, 202, { requestId: input.requestId, status: known, deduplicated: true }); return; }
             const agent = await agentFor(initial.project, initial.task);
             await mutate(async () => {
@@ -353,7 +398,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                 if (record.revision !== selection.caseRevision || cases.getProjectWork(projectId).revision !== selection.projectWorkRevision) throw new CaseStoreError('revision_conflict', 409);
                 if (!cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new CaseStoreError('project_not_linked', 409);
               }
-              const prompt = await prepareCasePrompt(projectId, taskId, input);
+              const requirement = requirementPrefix(input);
+              const prompt = requirement === undefined ? await prepareCasePrompt(projectId, taskId, input) : `${requirement}\n\n${await prepareCasePrompt(projectId, taskId, input)}`;
               const startedAt = new Date().toISOString(); await projects.markRun(projectId, taskId, { id: input.requestId as string, status: 'running', startedAt });
               const run = agent.start(prompt, input.requestId as string);
               void run.completion.then(async (result: any) => { await projects.markRun(projectId, taskId, { id: input.requestId as string, status: result.outcome, startedAt, settledAt: new Date().toISOString() }); }).catch(async () => { await projects.markRun(projectId, taskId, { id: input.requestId as string, status: 'interrupted', startedAt, settledAt: new Date().toISOString() }).catch(() => {}); publish(projectId, taskId, { type: 'run.settled', requestId: input.requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。' }); });
@@ -405,5 +451,5 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       json(response, status, { code, message: code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }
   })(); });
-  return { server, ready, configuration, projects, cases, close: async () => { closing = true; await gate; await closeAgents(); endStreams(); await cases.close(); await projects.close(); if (server.listening) await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }); } };
+  return { server, ready, configuration, projects, cases, close: async () => { closing = true; await gate; await closeAgents(); await requirementSessions.closeAll(); for (const responses of requirementStreams.values()) for (const response of responses) response.end(); requirementStreams.clear(); endStreams(); await cases.close(); await projects.close(); if (server.listening) await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }); } };
 }

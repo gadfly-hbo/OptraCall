@@ -5,7 +5,9 @@ import { randomUUID } from 'node:crypto';
 import type { RuntimeModelConfiguration } from '../host/config-store.ts';
 import { runtimeEnvironment } from '../../scripts/runtime-process.ts';
 
-export type ProjectAgentOptions = { projectId: string; projectDirectory: string; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string };
+/** Replacement workspace for non-project agent sessions (e.g. business plugins). */
+export type AgentWorkspace = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[] };
+export type ProjectAgentOptions = { projectId: string; projectDirectory?: string; workspace?: AgentWorkspace; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string };
 export type BrowserUIRequest = { id: string; method: 'select' | 'confirm' | 'input' | 'editor'; title: string; message?: string; options?: string[]; placeholder?: string; prefill?: string };
 export type ProjectSnapshot = { sessionId: string; sessionFile?: string; messages: Record<string, any>[]; tools: string[]; status: 'idle' | 'running'; sdkVersion: string; capabilities: Record<string, unknown>; lastRun?: { requestId: string; outcome?: 'completed' | 'cancelled' | 'failed' }; uiRequests?: BrowserUIRequest[] };
 export type ProjectEvent = { type: 'snapshot'; snapshot: ProjectSnapshot } | { type: 'text.delta'; text: string; requestId: string } | { type: 'native'; event: Record<string, any>; requestId?: string } | { type: 'run.settled'; outcome: 'completed' | 'cancelled' | 'failed'; requestId: string; error?: string } | { type: 'run.accepted'; requestId: string; sessionFile?: string } | { type: 'ui.request'; request: BrowserUIRequest; requestId?: string } | { type: 'ui.dismiss'; id: string } | { type: 'ui.notification'; message: string; level?: string } | { type: 'ui.status'; key: string; text?: string } | { type: 'ui.editor'; text: string };
@@ -50,12 +52,14 @@ export class ProjectAgent {
   }
   async #open(): Promise<ProjectSnapshot> {
     const o = this.#options;
+    if (!o.workspace && !o.projectDirectory) throw new ProjectRuntimeError('runtime_workspace_missing');
+    const workspaceRoot = o.workspace?.cwd ?? path.join(o.projectDirectory!, '020_clean');
     await mkdir(o.resourceRoot, { recursive: true, mode: 0o700 });
     await mkdir(o.sessionDirectory, { recursive: true, mode: 0o700 });
-    const temp = path.join(o.projectDirectory, '020_clean', '.tmp');
+    const temp = path.join(workspaceRoot, '.tmp');
     await mkdir(temp, { recursive: true, mode: 0o700 });
     if (this.#closed) throw new ProjectRuntimeError('runtime_closed');
-    const child = spawn(process.execPath, [path.join(o.codeRoot, 'scripts/project-entry.mjs')], { cwd: path.join(o.projectDirectory, '020_clean'), env: { ...runtimeEnvironment(), PI_CODING_AGENT_DIR: o.resourceRoot, TMPDIR: temp }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+    const child = spawn(process.execPath, [path.join(o.codeRoot, 'scripts/project-entry.mjs')], { cwd: workspaceRoot, env: { ...runtimeEnvironment(), PI_CODING_AGENT_DIR: o.resourceRoot, TMPDIR: temp }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
     this.#child = child;
     // Provider and extension output is not a log transport. In particular it
     // cannot bypass secret masking through stderr or stdout.
