@@ -8,6 +8,7 @@ import { SessionManager } from '../agent/sdk.ts';
 import { ProjectAgent, ProjectRuntimeError, type ProjectSnapshot } from '../agent/project-runtime.ts';
 import { ConfigurationStore, ConfigurationStoreError, TARGET_MODELS, type RuntimeModelConfiguration } from './config-store.ts';
 import { ProjectStore, ProjectStoreFault, type ProjectRecord, type TaskRecord } from './project-store.ts';
+import { loadStaticUi } from './static-ui.ts';
 
 class RequestFault extends Error {
   readonly status: number; readonly code: string;
@@ -27,10 +28,12 @@ function body(request: IncomingMessage, limit = 65_536): Promise<Record<string, 
   });
 }
 
-export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string }) {
+export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot });
-  const ready = projects.init().then(() => configuration.init());
+  let staticUi: Awaited<ReturnType<typeof loadStaticUi>> | undefined;
+  const instanceId = options.instanceId ?? randomUUID();
+  const ready = (async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await configuration.init(); })();
   type LiveEntry = { projectId: string; taskId: string; agent: ProjectAgent; configuration: Readonly<RuntimeModelConfiguration> };
   const agents = new Map<string, LiveEntry>();
   const opening = new Map<string, { task: Promise<ProjectAgent>; projectId: string; taskId: string; agent: ProjectAgent; provider: string }>(), streams = new Map<string, Set<ServerResponse>>();
@@ -164,7 +167,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const origin = request.headers.origin, allowed = [...options.uiPorts, address.port].flatMap(port => [`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
       if (origin && !allowed.includes(origin)) throw new RequestFault(403, 'origin_rejected');
       const url = new URL(request.url ?? '/', host);
-      if (url.pathname === '/api/health' && request.method === 'GET') { json(response, 200, { status: 'ready', sdkVersion: SDK_VERSION, transportVersion: options.transportVersion, chatMode: 'live', credentials: 'host-persistent', filePolicy: 'soft-prompt-no-sensitive-data-isolation' }); return; }
+      if (url.pathname === '/api/health' && request.method === 'GET') { json(response, 200, { status: 'ready', sdkVersion: SDK_VERSION, transportVersion: options.transportVersion, chatMode: 'live', credentials: 'host-persistent', filePolicy: 'soft-prompt-no-sensitive-data-isolation', ...(staticUi ? { runtime: { instanceId, pid: process.pid, codeRoot: path.resolve(options.cwd), version: staticUi.build.version, commit: staticUi.build.commit, tree: staticUi.build.tree, builtAt: staticUi.build.builtAt, dirty: staticUi.build.dirty } } : {}) }); return; }
+      if (staticUi && !url.pathname.startsWith('/api/') && url.pathname !== '/api') {
+        if (staticUi.serve(request, response, url)) return;
+        throw new RequestFault(404, 'not_found');
+      }
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
       if (url.pathname === '/api/configurations' && request.method === 'GET') { json(response, 200, { configurations: configuration.list(), selectedId: configuration.read()?.id ?? null }); return; }
       if (url.pathname === '/api/configuration/select' && request.method === 'POST') { const input = await body(request); json(response, 200, { configuration: await mutate(() => configuration.select(String(input.id ?? ''))) }); return; }
