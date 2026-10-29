@@ -23,7 +23,7 @@ Qoder 交付 `extensions/business-plugins/requirements-elaboration/` 自包含�
 
 ## 允许修改
 
-`extensions/business-plugins/requirements-elaboration/`（新建全部）；`src/agent/project-runtime.ts`、`src/agent/project-session.ts`、`src/host/server.ts`（仅限会话入口泛化与路由挂载，A 路线，Codex 复核接缝）；`src/host/ui/`（导航与页面挂载）；`tests/`；`openspec/changes/requirements-elaboration/`；README 与 docs 适用条目。不改 SDK 版本与 lockfile 既有依赖，不动 `project.json` schema2、case-store 与三目录规则，不新增项目目录类型，不建第二个 Runtime、插件调度平台或凭据自主发现。
+`extensions/business-plugins/requirements-elaboration/`（新建全部）；`src/agent/project-runtime.ts`、`src/agent/project-session.ts`、`src/host/server.ts`（仅限会话入口泛化与路由挂载，A 路线，Codex 复核接缝）；`src/host/requirement-sessions.ts`（新建，插件会话生命周期薄层，A 路线接缝组成）；`src/host/ui/`（导航与页面挂载）；`tests/`；`openspec/changes/requirements-elaboration/`；AGENTS.md 与 README/docs 适用条目。不改 SDK 版本与 lockfile 既有依赖，不动 `project.json` schema2、case-store 与三目录规则，不新增项目目录类型，不建第二个 Runtime、插件调度平台或凭据自主发现。
 
 ## 关键边界
 

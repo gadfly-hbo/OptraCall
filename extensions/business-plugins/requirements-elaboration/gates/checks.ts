@@ -28,7 +28,7 @@ export function computeGateReport(instance: RequirementInstance): GateReport {
     { id: 'snapshot-present', level: 'hard', status: instance.snapshot ? 'pass' : 'fail', title: '存在已确认需求快照', detail: instance.snapshot ? `快照 ${instance.snapshot.fingerprint.slice(0, 19)}…，确认人 ${instance.snapshot.confirmedBy}。` : '尚未确认：到 Stage 02 点击「确认成正式需求」。' },
   ];
   const warn: GateItem[] = [
-    { id: 'snapshot-freshness', level: 'warn', status: instance.snapshot && isStale(instance) ? 'warn' : 'pass', title: '快照新鲜度', detail: !instance.snapshot ? '尚无快照；缺失已由结构完整性项提示。' : isStale(instance) ? '上游内容在确认后被修改：建议回 Stage 02 重新确认；可带警告发布，未决项随 open_questions 交付。' : '无 stale 标记。' },
+    { id: 'snapshot-freshness', level: 'warn', status: instance.snapshot && isStale(instance) ? 'warn' : 'pass', title: '快照新鲜度', detail: !instance.snapshot ? '尚无快照；缺失已由结构完整性项提示。' : isStale(instance) ? '上游内容在确认后被修改：建议回 Stage 02 重新确认。发布要求有效快照（RAP 的 confirmation 必须覆盖当前内容），编辑与跳转不受影响。' : '无 stale 标记。' },
   ];
   const pending = pendingMustConfirm(instance);
   const unsettled = instance.hypotheses.filter(item => item.status === 'proposed' || item.status === 'deferred').length;

@@ -28,7 +28,7 @@
 
 ## 检查与试跑
 
-- `npm run check`（`npm run test` 282 项全绿 + `vite build` + stamp）通过，`tsc --noEmit` 0 错误。
+- `npm run check`（`npm run test` 284 项全绿 + `vite build` + stamp）通过，`tsc --noEmit` 0 错误（复核后复跑）。
 - 真实模型 + 合成数据试跑（用户授权，2026-10-30，隔离 dataRoot：真实凭据仅复制入临时目录，未写 `~/.optracall`，日志不含密钥；脚本 `.local/real-model-trial.mts`，证据本地保留）：
   - 模型 MiniMax-M3.1-Flash（minimax-cn，用户已选配置）
   - elicit 18s：澄清 ×9／事实 ×5／假设 ×3，丢弃 0；确认快照 sha256:2c7d73c1bfe1…
@@ -42,13 +42,20 @@
 2. 送入对话框使用 App 传入的陈旧项目列表（新建任务后不刷新）→ 改为挂载即自取最新列表并在新建后刷新
 3. Stage 3 流式区 `<pre>` 嵌套于 `<p>`（无效 HTML，控制台报错）→ 已移出
 
+## 独立复核与 CI
+
+- 独立复核（非作者 Agent，2026-10-30，对固定候选 6108e9f 只读复核）：实际运行 `npm run test`（282 项全绿）与 `npx tsc --noEmit`，抽查快照指纹、发布幂等/冲突、送入注入与允许修改边界。结论 **PASS-with-notes**，发现与处置：
+  1. 【中】stale 门禁文案「可带警告发布」与发布实际要求有效快照矛盾 → 已修正文案（发布要求有效快照，属结构完整性「指纹一致」范畴；编辑与跳转不受影响）
+  2. 【低】`src/host/requirement-sessions.ts` 不在规格允许修改字面清单 → 规格已追认（A 路线接缝组成）
+  3. 【低】测试缺口：模型失败 502、busy 409、requirement SSE 事件 → 已补 `requirement-api.test.ts` 两例与 e2e SSE 断言（总数 282→284）
+  4. 【信息】SSE 路由 id 长度正则与 store 微差 → 已对齐 `{0,60}`
+- 复核未覆盖范围（复核者如实说明）：browser-requirements.js 未以 Playwright 驱动执行；真实模型试跑未复测（作者记录见上）；RequirementPage.tsx 未全文精读。
+- CI：PR 检查（Ubuntu/Node25.9.0 `npm run check` + 依赖审计）通过后合并；实际状态以 PR 与 Git 回读为准。
+- A 路线 Codex 对 `requirement-sessions.ts`／`project-runtime`／`project-session` 接缝的专项复核：待执行（不阻塞本次合并，结果另行记录）。
+
 ## 边界与未验证项
 
 - 真实业务数据未接触；实例内容全为合成。插件会话 `defaultTools: []`（无数据工具）已在真实子进程测试中验证。
 - 提案卡在 UI 中为简化版（采纳/放弃，无逐字段 diff），采纳后进入草稿态仍可编辑——按 D7 确认。
 - 浏览器自动化对 `<select>` 的交互受限（工具限制，非产品缺陷），项目/任务选择经 fill 原生路径验证通过。
 - `tests/browser-requirements.js` 供既有 QA 流程使用，未在本机以 Playwright 驱动执行（本机无驱动；等价路径已由浏览器走查覆盖）。
-
-## 独立复核与 CI
-
-（以下由交付流程回填）

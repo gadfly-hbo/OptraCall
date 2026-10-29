@@ -40,10 +40,17 @@ test('RE-06: synthetic closed loop from one-line request to an injected task con
   await json(await host.request(`/api/requirement-instances/${id}`, 'PATCH', { instance }));
 
   // Stage 01：AI 首轮推断（真实插件会话 + 合成 provider）→ 提案 → 采纳。
+  // SSE 事件流与生成同路：订阅先建立，事件应携带 instanceId。
+  const requirementEvents: any[] = [];
+  const requirementStream = await fetch(`${host.baseUrl}/api/requirement-instances/${id}/events`, { headers: { 'x-optracall-client': '1', origin: `http://127.0.0.1:4183` } });
+  t.after(() => void requirementStream.body?.cancel().catch(() => {}));
+  const streamReader = requirementStream.body!.getReader(); const streamDecoder = new TextDecoder(); let streamPending = '';
+  void (async () => { try { for (;;) { const item = await streamReader.read(); if (item.done) break; streamPending += streamDecoder.decode(item.value, { stream: true }); let boundary; while ((boundary = streamPending.indexOf('\n\n')) >= 0) { const block = streamPending.slice(0, boundary); streamPending = streamPending.slice(boundary + 2); const data = block.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n'); if (data) requirementEvents.push(JSON.parse(data)); } } } catch { /* closed with the run */ } })();
   provider.setChunks([elicitReply]);
   const generated = await json(await host.request(`/api/requirement-instances/${id}/generate`, 'POST', { call: 'elicit' }));
   assert.equal(generated.call, 'elicit');
   assert.equal(generated.proposal.clarifications.length, 3);
+  assert.ok(requirementEvents.some(event => event.instanceId === id && event.type === 'run.settled'), 'Requirement SSE must forward run.settled with the instance id');
   const adopted = await json(await host.request(`/api/requirement-instances/${id}`));
   adopted.instance.clarifications.push(...generated.proposal.clarifications);
   adopted.instance.facts.push(...generated.proposal.facts);

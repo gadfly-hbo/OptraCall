@@ -80,6 +80,26 @@ test('RE-03: generate maps busy, invalid output, failed runs, and invalid calls'
   assert.equal((invalidCall.value as { code: string }).code, 'call_invalid');
 });
 
+test('RE-03: a failed model run surfaces as 502 without a proposal', async () => {
+  const { routes, store, body } = await harness({ outcome: 'failed' });
+  const instance = store.create({ title: '双11复购下滑归因', scene: 'topic' });
+  body({ call: 'elicit' });
+  const failed = await call(routes, 'POST', `/api/requirement-instances/${instance.instance.id}/generate`);
+  assert.equal(failed.status, 502);
+  assert.equal((failed.value as { code: string; outcome: string }).code, 'model_run_failed');
+  assert.equal((failed.value as { outcome: string }).outcome, 'failed');
+  assert.equal((failed.value as { proposal?: unknown }).proposal, undefined);
+});
+
+test('RE-03: busy sessions are rejected without a second run', async () => {
+  const { routes, store, body } = await harness({ busy: true });
+  const instance = store.create({ title: '双11复购下滑归因', scene: 'topic' });
+  body({ call: 'elicit' });
+  const busy = await call(routes, 'POST', `/api/requirement-instances/${instance.instance.id}/generate`);
+  assert.equal(busy.status, 409);
+  assert.equal((busy.value as { code: string }).code, 'session_busy');
+});
+
 test('RE-03: framework generation requires a fresh confirmed snapshot', async () => {
   const { routes, store, body } = await harness();
   const instance = store.create({ title: '双11复购下滑归因', scene: 'topic' });

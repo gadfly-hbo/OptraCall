@@ -256,7 +256,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
       const metricFactory = await metricFactoryRoutes(request, url);
       if (metricFactory) { json(response, metricFactory.status, metricFactory.value); return; }
-      const requirementEvent = /^\/api\/requirement-instances\/(req-[a-z0-9][a-z0-9-]{0,59})\/events$/.exec(url.pathname);
+      const requirementEvent = /^\/api\/requirement-instances\/(req-[a-z0-9][a-z0-9-]{0,60})\/events$/.exec(url.pathname);
       if (requirementEvent && request.method === 'GET') {
         const instanceId = requirementEvent[1]!;
         try { requirementPlugin.store.read(instanceId); } catch { throw new RequestFault(404, 'not_found'); }
