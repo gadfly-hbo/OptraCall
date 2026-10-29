@@ -6,9 +6,11 @@ OptraCall（Optima 最优 + tra 迭代 + call 决策）面向数据驱动决策�
 
 ## 当前状态
 
+2026-10-29：`qoder/ext-metric-factory` 分支候选新增第一个真实业务插件"指标体系 · Metric Factory"：Pi 会话起草 SAP 0.2 指标体系草稿（落 020_clean），资产页人工审核发布到本机全局库 `~/.optracall/metric-assets/`，项目按精确版本启用后分析会话注入指标索引（软引导，Agent 直读库文件并注明版本）。范围、验收与实际结果见[规格](openspec/changes/metric-factory-mvp/spec.md)与[结果记录](openspec/changes/metric-factory-mvp/result.md)；尚未合并 main，真实模型闭环与上下文增益观察待用户验收。
+
 2026-10-29：版本 `0.1.0-mvp.3` 增加本地试用的启动、停止和单向更新三个双击入口，构建UI由Host同源提供，实际运行版本可回读。[试用方式](docs/macbook-trial.md)与[交付记录](openspec/changes/macbook-trial-delivery/result.md)分别说明操作和验证状态。前版 `0.1.0-mvp.2` 已通过用户本轮真实模型多任务验收，在持久项目与完整Pi运行时上增加项目多任务、重命名、归档及恢复。每个任务有独立会话／草稿／模型和运行状态，文件按项目共享；原有项目兼容升级为包含首个任务的项目。范围、迁移和实际检查见[已确认方案](docs/project-tasks-and-archive.md)、[规格](openspec/changes/project-tasks-and-archive/spec.md)与[结果记录](openspec/changes/project-tasks-and-archive/result.md)；本轮用户通过、观察项及合并／测试数据清理分别记录。本机合成验收项目和QA运行数据已按用户授权清除，模型配置及必要交付证据保留。
 
-原 `first-chat-mvp` 四项开发与五模型合成数据验证证据保留，用户修正由当前变更承接。四类能力目录和决策大屏仍为占位；不预装数据分析skill，用户可按Pi原生方式自行安装。
+原 `first-chat-mvp` 四项开发与五模型合成数据验证证据保留，用户修正由当前变更承接。四类能力目录和决策大屏仍为占位（侧栏"指标体系"除外，见当前状态）；不预装数据分析skill，用户可按Pi原生方式自行安装。
 
 ## 产品结构
 
@@ -51,7 +53,7 @@ docs/
 .local/                         # 本地证据，忽略且不进入仓库
 ```
 
-`src/host/` 承接启动、装配、环境与前端接缝，`ui/` 放对话和配置界面；`src/agent/` 是全产品统一 Pi SDK 接入的代码归属。根目录 `extensions/` 同时容纳代码与声明性资产，三类目录对应产品分类，仍属于同一个产品，不代表独立包、插件市场或第二套 Runtime。`tests/` 在真实测试出现后再细分，`openspec/changes/` 保存变更规格与结果，`docs/` 保存长期产品与工程资料。
+`src/host/` 承接启动、装配、环境与前端接缝，`ui/` 放对话和配置界面；`src/agent/` 是全产品统一 Pi SDK 接入的代码归属。根目录 `extensions/` 同时容纳代码与声明性资产，三类目录对应产品分类，仍属于同一个产品，不代表独立包、插件市场或第二套 Runtime；`extensions/business-plugins/metric-factory/` 是第一个真实业务插件（自包含模块 + Host 薄挂载），`tests/` 在真实测试出现后再细分，`openspec/changes/` 保存变更规格与结果，`docs/` 保存长期产品与工程资料。
 
 目录职责沿用第 1 项；目前选择浏览器 React / TypeScript / Vite 与 Node Host，实际 Agent 代码已替代空标记。`scripts/` 负责隔离启动与开发进程，不属于产品 Extension；三类 Extension 仍以空标记保留，未预建数据库或插件协议。
 
@@ -102,4 +104,4 @@ npm run dev
 
 原生扩展的选择、确认、输入及编辑对话框在浏览器中响应；通知／状态与输入框草稿同步，原生命令也可停止。终端专用装饰会提示忽略，必须依赖终端组件的交互明确报不支持；不会伪造用户回答。配置中断恢复、请求去重及异常child重建只管理运行环境，不代替Agent分析。
 
-工程浏览器验证必须使用 `node tests/fixtures/browser-environment.ts` 创建的隔离Host／合成Provider和4183 UI，再运行 `tests/browser-project-tasks.js`、`browser-live-projects.js`、`browser-catalog.js`；原生命令／扩展交互使用独立的 `command-browser-environment.ts` 与 `browser-command-ui.js`，两种fixture不能同时占用4183。不要对已配置真实凭据的服务运行会改配置的合成回归。其余旧Demo浏览器脚本及证据保留为历史阶段，当前产品以本项适用脚本和证据为准。
+工程浏览器验证必须使用 `node tests/fixtures/browser-environment.ts` 创建的隔离Host／合成Provider和4183 UI，再运行 `tests/browser-project-tasks.js`、`browser-live-projects.js`、`browser-catalog.js`、`browser-metric-factory.js`；原生命令／扩展交互使用独立的 `command-browser-environment.ts` 与 `browser-command-ui.js`，两种fixture不能同时占用4183。不要对已配置真实凭据的服务运行会改配置的合成回归。其余旧Demo浏览器脚本及证据保留为历史阶段，当前产品以本项适用脚本和证据为准。

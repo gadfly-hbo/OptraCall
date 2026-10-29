@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>指标体系 · Metric Factory — OptraCall UI 演示</title>
+<style>
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select { font: inherit; }
+button { cursor: pointer; color: inherit; }
+.app { --canvas: #fff; --sidebar: #f7f7f9; --surface: #fff; --subtle: #f5f5f8; --hover: #ececf2; --ink: #24232b; --muted: #6c6b78; --faint: #777580; --line: #e6e5eb; --accent: #6550c9; --accent-soft: #eeebfb; --focus: #a397e0; --warning: #80530c; --warning-bg: #fff7e8; --ok: #1c7a4c; --ok-bg: #edf7f1; --error: #a12b36; --error-bg: #fff4f4; display: flex; min-height: 100dvh; height: 100dvh; overflow: hidden; color: var(--ink); background: var(--canvas); font-size: 14px; line-height: 1.55; }
+.app[data-theme="dark"] { color-scheme: dark; --canvas: #1b1b20; --sidebar: #16161b; --surface: #232329; --subtle: #292930; --hover: #32323a; --ink: #eeeef2; --muted: #b2b0be; --faint: #a7a5b2; --line: #3d3b47; --accent: #b7a7ff; --accent-soft: #30294a; --focus: #c4b7ff; --warning: #edc887; --warning-bg: #372c1b; --ok: #8fd4ad; --ok-bg: #1d2b24; --error: #ffafb8; --error-bg: #39252b; }
+.skip-link { position: fixed; top: -100px; left: 24px; z-index: 5; padding: 10px; color: var(--ink); background: var(--surface); }
+.skip-link:focus { top: 10px; }
+.sidebar { width: 248px; flex: 0 0 248px; display: flex; flex-direction: column; padding: 30px 14px 0; background: var(--sidebar); border-right: 1px solid var(--line); min-height: 0; overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 11px; padding: 0 10px 28px; }
+.brand strong { display: block; font-size: 19px; font-weight: 600; letter-spacing: -.3px; }
+.brand div > span { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
+.brand-mark { width: 29px; height: 29px; display: inline-flex; position: relative; color: var(--accent); flex-shrink: 0; }
+.brand-mark span { position: absolute; inset: 2px; border: 2px solid currentColor; border-radius: 50%; }
+.brand-mark i { position: absolute; width: 11px; height: 11px; right: 0; bottom: 0; border: 2px solid currentColor; border-radius: 50%; background: var(--canvas); }
+.new-chat, .nav-item { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; text-align: left; }
+.new-chat { margin-bottom: 12px; background: var(--surface); border: 1px solid var(--line); font-weight: 500; }
+.nav-item:hover { background: var(--hover); }
+.nav-item.selected { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.capability-nav { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; display: flex; flex-direction: column; }
+.capability-nav .nav-item { height: 36px; font-size: 13px; margin: 2px 0; }
+.nav-tag { margin-left: auto; font-size: 10px; padding: 1px 6px; border-radius: 4px; color: var(--muted); background: var(--subtle); border: 1px solid var(--line); }
+.nav-tag.live { color: var(--accent); background: var(--accent-soft); border-color: transparent; font-weight: 500; }
+.sidebar-bottom { padding: 12px 0 0; margin-top: auto; }
+.local-profile { display: flex; gap: 10px; align-items: center; padding: 19px 10px; margin-top: 10px; border-top: 1px solid var(--line); }
+.avatar { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.local-profile strong { display: block; font-size: 12px; font-weight: 500; }
+.local-profile div span { font-size: 11px; color: var(--muted); }
+.main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; padding: 12px 26px; flex-shrink: 0; }
+.topbar-context, .topbar-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.topbar-title { font-size: 13px; color: var(--muted); }
+.icon-button { height: 34px; width: 34px; display: inline-grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
+.icon-button:hover { background: var(--subtle); color: var(--ink); }
+.workspace-switch { display: inline-flex; align-items: center; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); flex-shrink: 0; }
+.workspace-switch button { border: 0; background: transparent; color: var(--muted); padding: 5px 23px; border-radius: 5px; font-size: 13px; min-height: 30px; }
+.workspace-switch button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px #0000000a; font-weight: 500; }
+.demo-badge { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+.eyebrow { font-size: 12px; color: var(--muted); margin: 0 0 10px; letter-spacing: .4px; }
+.mf-page { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 32px 28px; }
+.mf-banner { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0 18px; padding: 11px 14px; border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--line)); background: var(--warning-bg); color: var(--warning); border-radius: 7px; font-size: 12px; }
+.mf-banner strong { font-weight: 550; }
+.mf-banner p { margin: 2px 0 0; }
+.mf-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 24px; overflow-x: auto; }
+.mf-tabs button { flex-shrink: 0; display: flex; align-items: center; gap: 7px; border: 0; border-bottom: 2px solid transparent; padding: 12px 0 14px; background: transparent; color: var(--muted); font-size: 13px; }
+.mf-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+.page-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.page-heading h1 { font-size: 24px; line-height: 1.4; margin: 0 0 8px; font-weight: 550; }
+.page-heading p:last-child { margin: 0; color: var(--muted); font-size: 13px; max-width: 640px; }
+.mf-label { display: inline-flex; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.primary-button, .secondary-button { display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; min-height: 36px; padding: 7px 14px; font-size: 13px; white-space: nowrap; }
+.primary-button { border: 1px solid var(--accent); background: var(--accent); color: var(--canvas); font-weight: 500; }
+.primary-button:hover { filter: brightness(.93); }
+.primary-button:disabled { background: var(--hover); border-color: var(--line); color: var(--faint); cursor: not-allowed; }
+.secondary-button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.secondary-button:hover { background: var(--hover); }
+.text-button { display: inline-flex; align-items: center; gap: 7px; padding: 5px 0; background: transparent; border: 0; color: var(--accent); font-size: 12px; }
+.text-button:hover { text-decoration: underline; }
+.mf-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0 0 24px; }
+.mf-stats > div { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; background: var(--surface); }
+.mf-stats > div > span { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 12px; }
+.mf-stats small { color: var(--muted); font-size: 10px; font-weight: 400; }
+.mf-stats strong { display: flex; align-items: baseline; gap: 7px; font-size: 28px; font-weight: 550; padding: 8px 0 2px; }
+.mf-stats strong small { font-size: 11px; font-weight: 400; }
+.mf-stats p { font-size: 11px; color: var(--muted); margin: 0; }
+.mf-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+.mf-search { display: flex; align-items: center; gap: 8px; width: min(380px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 0 12px; }
+.mf-search > span { font-size: 18px; color: var(--muted); }
+.mf-search input { width: 100%; min-width: 0; border: 0; background: transparent; color: var(--ink); height: 38px; font-size: 13px; outline: 0; }
+.mf-actions { display: flex; gap: 10px; }
+.mf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.mf-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); display: flex; flex-direction: column; }
+.mf-card:hover { border-color: var(--focus); }
+.mf-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
+.mf-symbol { display: inline-grid; place-items: center; width: 36px; height: 36px; background: var(--accent-soft); color: var(--accent); border-radius: 8px; font-size: 21px; flex-shrink: 0; }
+.mf-card h2 { font-size: 15px; line-height: 1.5; font-weight: 550; margin: 0 0 4px; }
+.mf-card .pkg-id { font-size: 11px; color: var(--faint); margin: 0 0 10px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.mf-card > p { font-size: 12px; line-height: 1.8; color: var(--muted); margin: 0 0 14px; flex: 1; }
+.chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.chips > span { display: inline-block; font-size: 10px; color: var(--muted); padding: 2px 6px; background: var(--subtle); border-radius: 4px; }
+.chips > span.version { color: var(--accent); background: var(--accent-soft); }
+.mf-card-bottom { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--line); }
+.mf-card-bottom > span { color: var(--muted); font-size: 11px; }
+.mf-draft { display: flex; gap: 13px; align-items: flex-start; margin-top: 20px; padding: 15px 18px; border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--line)); background: var(--warning-bg); border-radius: 8px; }
+.mf-draft .reserved-icon { display: grid; place-items: center; color: var(--warning); width: 34px; height: 34px; font-size: 24px; flex-shrink: 0; }
+.mf-draft > div { flex: 1; }
+.mf-draft strong { font-size: 13px; font-weight: 550; }
+.mf-draft p { font-size: 12px; color: var(--muted); margin: 4px 0 10px; }
+.mf-draft code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; }
+.detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 6px; flex-wrap: wrap; }
+.detail-head h1 { font-size: 22px; line-height: 1.4; font-weight: 550; margin: 0 0 6px; }
+.detail-head .pkg-id { font-size: 12px; color: var(--faint); margin: 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 11px; white-space: nowrap; color: var(--ok); background: var(--ok-bg); }
+.status-pill > span { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.mf-meta { margin: 16px 0 22px; padding: 16px 0; border-block: 1px solid var(--line); font-size: 12px; }
+.mf-meta > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px; margin: 6px 0; }
+.mf-meta dt { color: var(--muted); }
+.mf-meta dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; }
+.mf-section { margin: 26px 0; }
+.mf-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.mf-section-heading h2 { font-size: 15px; margin: 0; font-weight: 550; }
+.mf-section-heading > span { color: var(--muted); font-size: 11px; }
+.metric-card { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 16px 18px; margin-bottom: 12px; }
+.metric-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.metric-head strong { font-size: 14px; font-weight: 550; }
+.metric-head code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: var(--accent); }
+.type-badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; color: var(--accent); background: var(--accent-soft); }
+.prov-badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; color: var(--muted); background: var(--subtle); }
+.metric-card .definition { font-size: 13px; line-height: 1.85; margin: 0 0 12px; }
+.metric-props { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px 18px; font-size: 11px; color: var(--muted); }
+.metric-props b { font-weight: 500; color: var(--ink); font-size: 11px; }
+.scenario-card { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 16px 18px; margin-bottom: 12px; }
+.scenario-card h3 { font-size: 14px; font-weight: 550; margin: 0 0 6px; }
+.scenario-card .purpose { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+.role-badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; }
+.role-badge.outcome { color: var(--accent); background: var(--accent-soft); }
+.role-badge.driver { color: var(--ok); background: var(--ok-bg); }
+.mf-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mf-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11px; padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.mf-table td { padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.mf-table code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; }
+.mf-table .text-button { font-size: 11px; padding: 2px 0; }
+.note-block { margin: 14px 0 0; padding: 12px 14px; border-radius: 7px; background: var(--subtle); color: var(--muted); font-size: 12px; line-height: 1.8; }
+.note-block strong { color: var(--ink); font-weight: 550; }
+.verify-panel { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 20px 22px; margin-bottom: 18px; }
+.verify-panel h2 { font-size: 14px; font-weight: 550; margin: 0 0 4px; }
+.verify-panel > p.sub { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
+.verify-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.verify-item:last-child { border-bottom: 0; }
+.verify-mark { flex-shrink: 0; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; font-size: 11px; margin-top: 1px; }
+.verify-mark.pass { color: var(--ok); background: var(--ok-bg); }
+.verify-mark.fail { color: var(--error); background: var(--error-bg); }
+.verify-item strong { font-weight: 550; display: block; }
+.verify-item p { margin: 3px 0 0; color: var(--muted); }
+.verify-item.fail strong { color: var(--error); }
+.verify-item code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; }
+.review-rows { display: grid; gap: 8px; margin: 16px 0; }
+.review-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--canvas); cursor: pointer; }
+.review-row:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.review-row input { margin: 3px 0 0; accent-color: var(--accent); flex-shrink: 0; }
+.review-row div { min-width: 0; }
+.review-row strong { font-size: 12px; font-weight: 500; display: block; }
+.review-row span { font-size: 11px; color: var(--muted); }
+.field { margin: 16px 0; }
+.field label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; margin-bottom: 7px; }
+.field input, .field select { border: 1px solid var(--line); background: var(--canvas); color: var(--ink); border-radius: 6px; width: 100%; min-height: 38px; padding: 8px 12px; font-size: 13px; }
+.field .field-help { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+.code-block { margin: 14px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); overflow-x: auto; }
+.code-block pre { margin: 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.mf-footer { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; text-align: center; }
+[hidden] { display: none !important; }
+@media (max-width: 1150px) { .mf-grid { grid-template-columns: minmax(0, 1fr); } .mf-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  .app { flex-direction: column; height: auto; }
+  .sidebar { width: 100%; flex: 0 0 auto; padding: 16px 14px 8px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .sidebar-bottom { display: none; }
+  .mf-page { padding: 8px 16px 24px; }
+  .page-heading h1 { font-size: 21px; }
+  .mf-toolbar { flex-direction: column; align-items: stretch; }
+  .mf-actions { width: 100%; }
+  .mf-actions .primary-button, .mf-actions .secondary-button { flex: 1; }
+  .mf-meta > div { grid-template-columns: 96px minmax(0, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app" data-theme="light">
+  <a class="skip-link" href="#main-content">跳到主内容</a>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"><span></span><i></i></span><div><strong>OptraCall</strong><span>持续做出更好的决策</span></div></div>
+    <button class="new-chat" type="button">＋ 新建项目</button>
+    <button class="nav-item" type="button">📁 项目工作台</button>
+    <nav class="capability-nav" aria-label="能力目录">
+      <button class="nav-item" type="button">◈ 分析资产<span class="nav-tag">演示</span></button>
+      <button class="nav-item" type="button">◇ 场景组合<span class="nav-tag">演示</span></button>
+      <button class="nav-item" type="button">⌘ 连接器<span class="nav-tag">演示</span></button>
+      <button class="nav-item" type="button">▧ 业务插件<span class="nav-tag">演示</span></button>
+      <button class="nav-item selected" type="button" aria-current="page">◆ 指标体系<span class="nav-tag live">真实</span></button>
+    </nav>
+    <div class="sidebar-bottom">
+      <button class="nav-item" type="button">⚙ 模型设置</button>
+      <div class="local-profile"><span class="avatar">O</span><div><strong>本地工作台</strong><span>项目与 Pi Agent</span></div></div>
+    </div>
+  </aside>
+  <main class="main" id="main-content" tabindex="-1">
+    <header class="topbar">
+      <div class="topbar-context"><span class="topbar-title">指标体系 · Metric Factory</span></div>
+      <div class="workspace-switch" role="group" aria-label="工作区切换"><button type="button" aria-pressed="true">分析</button><button type="button" aria-pressed="false">决策</button></div>
+      <div class="topbar-actions"><span class="demo-badge">Pi Agent</span><button class="icon-button" type="button" id="theme-toggle" aria-label="切换深浅色">◐</button></div>
+    </header>
+    <div class="mf-page">
+      <div class="mf-banner" role="note"><span aria-hidden="true">⚠</span><div><strong>UI 演示 · 静态合成数据</strong><p>本页为 metric-factory 变更的可点击界面候选，视图切换与发布门槛可交互；数据均为演示样例，不代表已实现或已发布能力。</p></div></div>
+
+      <nav class="mf-tabs" role="group" aria-label="指标体系视图">
+        <button type="button" data-tab="overview" class="active">库总览</button>
+        <button type="button" data-tab="detail">包详情</button>
+        <button type="button" data-tab="review">审核发布</button>
+        <button type="button" data-tab="enable">项目启用</button>
+      </nav>
+
+      <section id="tab-overview" class="mf-tab" aria-label="库总览">
+        <div class="page-heading">
+          <div><p class="eyebrow">METRIC ASSET LIBRARY</p><h1>指标体系</h1><p>已发布资产长期保存在本机全局库，跨项目复用；项目按精确版本启用，Agent 分析时引用口径并注明版本。</p></div>
+          <span class="mf-label">全局库 · ~/.optracall/metric-assets/</span>
+        </div>
+        <div class="mf-stats">
+          <div><span>资产包<small>已发布</small></span><strong>2<small>个</small></strong><p>全部为用户显式发布</p></div>
+          <div><span>指标定义<small>含口径开关</small></span><strong>9<small>项</small></strong><p>均为人工审核后入库</p></div>
+          <div><span>分析场景<small>方法组合</small></span><strong>4<small>个</small></strong><p>方法引用为自由文本</p></div>
+          <div><span>待审核草稿<small>020_clean</small></span><strong>1<small>份</small></strong><p>Agent 起草，待人工确认</p></div>
+        </div>
+        <div class="mf-toolbar">
+          <label class="mf-search"><span aria-hidden="true">⌕</span><span class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">搜索资产包</span><input type="text" placeholder="搜索资产包、指标或编号" aria-label="搜索资产包"></label>
+          <div class="mf-actions">
+            <button class="secondary-button" type="button" data-goto="review">导入草稿</button>
+            <button class="primary-button" type="button" title="在项目内创建普通任务并预填建模引导草稿">＋ 发起建模任务</button>
+          </div>
+        </div>
+        <div class="mf-grid">
+          <article class="mf-card">
+            <div class="mf-card-top"><span class="mf-symbol" aria-hidden="true">◆</span><span class="status-pill"><span></span>已发布</span></div>
+            <h2>会员复购体系</h2>
+            <p class="pkg-id">membership-repurchase</p>
+            <p>会员复购核心口径与诊断场景：复购率、复购会员数、购买会员数、复购间隔四项指标，配套复购诊断与会员等级结构两个场景。</p>
+            <div class="chips"><span class="version">1.0.0</span><span>指标 ×4</span><span>场景 ×2</span><span>渠道 / 会员等级</span></div>
+            <div class="mf-card-bottom"><span>发布于 2026-10-28 · 1 个项目启用</span><button class="text-button" type="button" data-goto="detail">查看详情 →</button></div>
+          </article>
+          <article class="mf-card">
+            <div class="mf-card-top"><span class="mf-symbol" aria-hidden="true">◆</span><span class="status-pill"><span></span>已发布</span></div>
+            <h2>电商经营口径</h2>
+            <p class="pkg-id">ecommerce-net-sales</p>
+            <p>净销售与基础经营指标：支付订单数、访客数、下单转化率、客单价、净销售额，含月度经营复盘场景。</p>
+            <div class="chips"><span class="version">1.1.1</span><span class="version" style="color:var(--warning);background:var(--warning-bg)">1.1.2 已发布</span><span>指标 ×5</span><span>场景 ×2</span></div>
+            <div class="mf-card-bottom"><span>发布于 2026-10-24 · 2 个项目启用（仍固定 1.1.1）</span><button class="text-button" type="button" data-goto="enable">管理启用 →</button></div>
+          </article>
+        </div>
+        <div class="mf-draft" role="status">
+          <span class="reserved-icon" aria-hidden="true">✎</span>
+          <div><strong>有 1 份待审核草稿</strong>
+            <p>来源：项目「会员经营诊断」任务「会员体系建模」· <code>020_clean/membership-repurchase-draft.yaml</code> · origin=llm（mimo-v2.6-flash）</p>
+            <button class="secondary-button" type="button" data-goto="review">去审核发布</button>
+          </div>
+        </div>
+        <p class="mf-footer">库总览 · 版本不可覆盖，same-content 拒绝重发 · 更新=发布新版本，项目显式升级</p>
+      </section>
+
+      <section id="tab-detail" class="mf-tab" aria-label="包详情" hidden>
+        <button class="text-button" type="button" data-goto="overview" style="margin-bottom:14px">← 返回库总览</button>
+        <div class="detail-head">
+          <div><p class="eyebrow">PACKAGE · membership-repurchase@1.0.0</p><h1>会员复购体系</h1><p class="pkg-id">namespace: mf.membership-repurchase · SAP 0.2</p></div>
+          <span class="status-pill"><span></span>已发布 · 不可变</span>
+        </div>
+        <dl class="mf-meta">
+          <div><dt>包指纹</dt><dd>sha256:9f3a…c21e</dd></div>
+          <div><dt>内容指纹</dt><dd>sha256:4b81…77d0</dd></div>
+          <div><dt>发布时间 / 审核人</dt><dd>2026-10-28 14:32 · huangbo</dd></div>
+          <div><dt>来源</dt><dd>origin=llm · model=mimo-v2.6-flash · 每项指标已人工确认</dd></div>
+          <div><dt>库文件</dt><dd>~/.optracall/metric-assets/membership-repurchase/1.0.0.sap.yaml</dd></div>
+        </dl>
+
+        <div class="mf-section">
+          <div class="mf-section-heading"><h2>指标定义</h2><span>4 项 · 引用时注明指标名与版本</span></div>
+          <div class="metric-card">
+            <div class="metric-head"><strong>会员复购率</strong><code>repurchase_rate</code><span class="type-badge">ratio</span><span class="prov-badge">LLM 起草 · 已人工审核</span></div>
+            <p class="definition">指定时间窗口内购买 ≥2 次的会员数 ÷ 同期有购买行为的会员总数；窗口为左闭右开 [开始, 结束)，时区与观察截止由任务显式声明。</p>
+            <div class="metric-props">
+              <div><b>计算构成</b><br>numerator: repeat_member_count<br>denominator: buyer_member_count</div>
+              <div><b>口径开关</b><br>count_refund_orders: false（退款订单不计入）</div>
+              <div><b>维度 / 粒度</b><br>channel · 会员等级 / month · quarter</div>
+              <div><b>负责角色</b><br>会员运营负责人</div>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-head"><strong>复购会员数</strong><code>repeat_member_count</code><span class="type-badge">simple</span><span class="prov-badge">LLM 起草 · 已人工审核</span></div>
+            <p class="definition">窗口内去重后购买 ≥2 次的会员数；设备与账号联合去重，剔除内部测试账号。</p>
+            <div class="metric-props">
+              <div><b>度量</b><br>count-distinct 会员身份</div>
+              <div><b>口径开关</b><br>count_refund_orders: false</div>
+              <div><b>维度 / 粒度</b><br>channel / month · quarter</div>
+              <div><b>负责角色</b><br>会员运营负责人</div>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-head"><strong>购买会员数</strong><code>buyer_member_count</code><span class="type-badge">simple</span><span class="prov-badge">LLM 起草 · 已人工审核</span></div>
+            <p class="definition">窗口内至少完成一笔合格成功支付的去重会员数，作为复购率分母；资格与复购率分子保持一致。</p>
+            <div class="metric-props">
+              <div><b>度量</b><br>count-distinct 会员身份</div>
+              <div><b>口径开关</b><br>include_first_order: true</div>
+              <div><b>维度 / 粒度</b><br>channel / month · quarter</div>
+              <div><b>负责角色</b><br>会员运营负责人</div>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-head"><strong>复购间隔</strong><code>repurchase_gap_days</code><span class="type-badge">derived</span><span class="prov-badge">LLM 起草 · 已人工审核</span></div>
+            <p class="definition">会员相邻两次购买的中位间隔天数；仅统计窗口内完整相邻订单对，截断处间隔不纳入。</p>
+            <div class="metric-props">
+              <div><b>表达式</b><br>median(order_time[i+1] − order_time[i])</div>
+              <div><b>口径开关</b><br>count_refund_orders: false</div>
+              <div><b>维度 / 粒度</b><br>会员等级 / month</div>
+              <div><b>负责角色</b><br>会员运营负责人</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mf-section">
+          <div class="mf-section-heading"><h2>分析场景与方法</h2><span>2 个 · 方法引用为自由文本</span></div>
+          <div class="scenario-card">
+            <h3>会员复购诊断 <code style="font-size:11px;color:var(--faint)">repurchase_diagnosis@1.0.0</code></h3>
+            <p class="purpose">决策目的：判断复购变化来自人数、频次还是结构，决定是否需要促复购动作。</p>
+            <div class="metric-props" style="margin-bottom:10px">
+              <div><b>指标用法</b><br><span class="role-badge outcome">outcome</span> repurchase_rate · <span class="role-badge driver">driver</span> repurchase_gap_days</div>
+              <div><b>方法引用</b><br>cohort-analysis · channel-breakdown</div>
+              <div><b>证据要求</b><br>需同期 cohort 对比与渠道拆分支撑结论</div>
+            </div>
+          </div>
+          <div class="scenario-card">
+            <h3>会员等级结构 <code style="font-size:11px;color:var(--faint)">member_tier_structure@1.0.0</code></h3>
+            <p class="purpose">决策目的：识别复购下滑是否集中在特定会员等级。</p>
+            <div class="metric-props">
+              <div><b>指标用法</b><br><span class="role-badge outcome">outcome</span> repurchase_rate（按 member_tier 拆分）</div>
+              <div><b>方法引用</b><br>tier-segmentation</div>
+              <div><b>证据要求</b><br>各等级样本量需足以支撑结论，不足时明示</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mf-section">
+          <div class="mf-section-heading"><h2>版本历史</h2><span>不可变 · same-content 拒绝重发</span></div>
+          <table class="mf-table"><thead><tr><th>版本</th><th>发布时间</th><th>内容指纹</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>1.0.0</code>（当前）</td><td>2026-10-28</td><td><code>sha256:4b81…77d0</code></td><td>首发：四项指标 + 两个场景</td></tr>
+          </tbody></table>
+          <p class="note-block"><strong>更新方式：</strong>修订口径 = 在建模任务中基于现版本起草新草稿 → 人工审核 → 发布新版本（如 1.1.0）；已启用 1.0.0 的项目不自动跟随，在「项目启用」中显式升级。</p>
+        </div>
+
+        <div class="mf-section">
+          <div class="mf-section-heading"><h2>项目启用状态</h2><span>按项目固定精确版本</span></div>
+          <table class="mf-table"><thead><tr><th>项目</th><th>启用版本</th><th>启用时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>会员经营诊断</td><td><code>1.0.0</code>（最新）</td><td>2026-10-28</td><td><button class="text-button" type="button" data-goto="enable">管理</button></td></tr>
+            <tr><td>电商周会</td><td>—</td><td>—</td><td><button class="text-button" type="button" data-goto="enable">启用</button></td></tr>
+          </tbody></table>
+        </div>
+        <p class="mf-footer">包详情 · 本页只读展示，不执行指标计算；计算由 Agent 在分析任务中自行完成</p>
+      </section>
+
+      <section id="tab-review" class="mf-tab" aria-label="审核发布" hidden>
+        <div class="page-heading">
+          <div><p class="eyebrow">DRAFT REVIEW · PUBLISH</p><h1>审核发布</h1><p>草稿来自建模任务的 020_clean；发布是唯一入库动作，须逐项人工确认 Agent 起草的口径。</p></div>
+          <span class="mf-label">发布目标 · 全局库</span>
+        </div>
+
+        <div class="verify-panel">
+          <h2>草稿来源</h2>
+          <p class="sub">从项目 020_clean 选择草稿文件；发布后草稿原样保留，不删除。</p>
+          <div class="field"><label for="draft-project">项目</label><select id="draft-project"><option>会员经营诊断 · 任务「会员体系建模」</option></select></div>
+          <div class="field"><label for="draft-file">草稿文件</label><select id="draft-file"><option>020_clean/membership-repurchase-draft.yaml（2026-10-29 09:41）</option></select></div>
+        </div>
+
+        <div class="verify-panel">
+          <h2>校验结果</h2>
+          <p class="sub">SAP 0.2 结构、指纹与交叉引用校验；失败项阻止发布。</p>
+          <div class="verify-item"><span class="verify-mark pass" aria-hidden="true">✓</span><div><strong>包元数据与命名</strong><p>package.id / version / namespace / 双指纹格式符合 SAP 0.2</p></div></div>
+          <div class="verify-item"><span class="verify-mark pass" aria-hidden="true">✓</span><div><strong>维度引用闭合</strong><p>全部指标 dimensions 均声明于顶层 dimensions</p></div></div>
+          <div class="verify-item"><span class="verify-mark pass" aria-hidden="true">✓</span><div><strong>场景交叉引用</strong><p>metric_usages 引用的 3 项指标均存在</p></div></div>
+          <div class="verify-item fail"><span class="verify-mark fail" aria-hidden="true">✕</span><div><strong>存在 origin=llm 且未经人工确认的指标</strong><p><code>metrics[3] repurchase_gap_days</code> 缺少 reviewed_by——Agent 起草的口径未经人工确认不能入库。请在下方逐项确认。</p></div></div>
+        </div>
+
+        <div class="verify-panel">
+          <h2>人工确认</h2>
+          <p class="sub">逐项确认口径后填写审核人；全部确认前发布不可用。</p>
+          <div class="review-rows" id="review-rows">
+            <label class="review-row"><input type="checkbox" data-review><div><strong>repurchase_rate 会员复购率</strong><span>窗口内购买 ≥2 次会员数 ÷ 购买会员数；退款不计入</span></div></label>
+            <label class="review-row"><input type="checkbox" data-review><div><strong>repeat_member_count 复购会员数</strong><span>窗口内去重购买 ≥2 次会员数；剔除内部测试账号</span></div></label>
+            <label class="review-row"><input type="checkbox" data-review><div><strong>buyer_member_count 购买会员数</strong><span>窗口内至少一笔合格支付的去重会员数</span></div></label>
+            <label class="review-row"><input type="checkbox" data-review><div><strong>repurchase_gap_days 复购间隔</strong><span>相邻两次购买的中位间隔天数；截断处不纳入</span></div></label>
+          </div>
+          <div class="field"><label for="reviewer">审核人（reviewed_by）</label><input id="reviewer" type="text" value="huangbo"><p class="field-help">写入每项指标的 provenance，与包版本一同不可变保存。</p></div>
+          <div class="code-block"><pre id="canonical-preview">sap: "0.2"
+package:
+  id: membership-repurchase
+  version: 1.0.0
+  fingerprint: sha256:9f3a…c21e   # 发布时按 canonical 序列化复算
+metrics:
+  - name: repurchase_rate
+    definition: 指定时间窗口内购买 ≥2 次的会员数 ÷ …
+    provenance: { origin: llm, model: mimo-v2.6-flash, reviewed_by: huangbo }
+…</pre></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px">
+            <span style="font-size:12px;color:var(--muted)" id="publish-hint">待完成 4 项口径确认</span>
+            <div style="display:flex;gap:10px"><button class="secondary-button" type="button">取消</button><button class="primary-button" type="button" id="publish-button" disabled>发布 1.0.0 到全局库</button></div>
+          </div>
+        </div>
+        <p class="mf-footer">发布写入 <code style="font-size:10px">~/.optracall/metric-assets/…</code> 并更新索引 · 内容未变时拒绝重新发版</p>
+      </section>
+
+      <section id="tab-enable" class="mf-tab" aria-label="项目启用" hidden>
+        <div class="page-heading">
+          <div><p class="eyebrow">PROJECT ENABLEMENT</p><h1>项目启用</h1><p>项目固定启用精确版本，不自动跟随新版本；启用后分析会话注入索引，Agent 直读库文件。</p></div>
+          <span class="mf-label">启用记录 · 项目级文件</span>
+        </div>
+
+        <div class="verify-panel">
+          <h2>启用资产到项目</h2>
+          <p class="sub">启用是项目级显式动作；升级版本同样在此显式操作。</p>
+          <div class="field"><label for="enable-project">项目</label><select id="enable-project"><option>会员经营诊断</option><option>电商周会</option></select></div>
+          <div class="field"><label for="enable-pkg">资产包与版本</label><select id="enable-pkg"><option>membership-repurchase @ 1.0.0（最新）</option><option>ecommerce-net-sales @ 1.1.1（有 1.1.2 可升级）</option></select></div>
+          <div style="display:flex;justify-content:flex-end"><button class="primary-button" type="button">启用到项目</button></div>
+        </div>
+
+        <div class="verify-panel">
+          <h2>当前项目的启用资产</h2>
+          <table class="mf-table"><thead><tr><th>资产包</th><th>启用版本</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>membership-repurchase 会员复购体系</td><td><code>1.0.0</code></td><td>启用中 · 2026-10-28</td><td><button class="text-button" type="button">停用</button></td></tr>
+            <tr><td>ecommerce-net-sales 电商经营口径</td><td><code>1.1.1</code></td><td>有新版本 1.1.2 · 未跟随</td><td><button class="text-button" type="button">升级到 1.1.2</button>　<button class="text-button" type="button">停用</button></td></tr>
+          </tbody></table>
+        </div>
+
+        <div class="verify-panel">
+          <h2>系统提示索引预览（启用后注入该项目的分析会话）</h2>
+          <p class="sub">只注入索引，不注入全文本；Agent 用原生 read/grep 按需读取库文件。</p>
+          <div class="code-block"><pre>本项目已启用指标资产；引用口径时注明指标名与版本：
+- membership-repurchase@1.0.0（会员复购体系）：
+  repurchase_rate 会员复购率 · repeat_member_count 复购会员数 ·
+  buyer_member_count 购买会员数 · repurchase_gap_days 复购间隔
+  场景：repurchase_diagnosis 复购诊断 · member_tier_structure 会员等级结构
+- ecommerce-net-sales@1.1.1（电商经营口径）：支付订单数 · 访客数 · 下单转化率 · 客单价 · 净销售额
+完整定义（口径、口径开关、计算构成、证据要求）：
+  ~/.optracall/metric-assets/membership-repurchase/1.0.0.sap.yaml
+  ~/.optracall/metric-assets/ecommerce-net-sales/1.1.1.sap.yaml
+按需用 read/grep 读取；分析结论引用口径时注明所用指标与版本。</pre></div>
+          <p class="note-block"><strong>边界：</strong>索引是软引导，不拦截读取；Agent 对库只读，发布／启用／升级均为用户显式动作；未启用的资产不进入本项目索引。</p>
+        </div>
+        <p class="mf-footer">启用记录写入 <code style="font-size:10px">~/.optracall/projects/&lt;项目ID&gt;/metric-assets.json</code> · 不改动项目三目录</p>
+      </section>
+    </div>
+  </main>
+</div>
+<script>
+  const app = document.getElementById('app');
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    app.dataset.theme = app.dataset.theme === 'light' ? 'dark' : 'light';
+  });
+  const tabs = document.querySelectorAll('.mf-tabs button');
+  const panels = { overview: document.getElementById('tab-overview'), detail: document.getElementById('tab-detail'), review: document.getElementById('tab-review'), enable: document.getElementById('tab-enable') };
+  const activate = name => {
+    tabs.forEach(button => button.classList.toggle('active', button.dataset.tab === name));
+    for (const [key, panel] of Object.entries(panels)) panel.hidden = key !== name;
+    document.querySelector('.mf-page').scrollTop = 0;
+  };
+  tabs.forEach(button => button.addEventListener('click', () => activate(button.dataset.tab)));
+  document.querySelectorAll('[data-goto]').forEach(button => button.addEventListener('click', () => activate(button.dataset.goto)));
+  const reviews = document.querySelectorAll('[data-review]');
+  const publishButton = document.getElementById('publish-button');
+  const publishHint = document.getElementById('publish-hint');
+  const refresh = () => {
+    const done = [...reviews].filter(box => box.checked).length;
+    publishButton.disabled = done < reviews.length;
+    publishHint.textContent = done < reviews.length ? `待完成 ${reviews.length - done} 项口径确认` : '已全部确认，可发布';
+  };
+  reviews.forEach(box => box.addEventListener('change', refresh));
+  refresh();
+</script>
+</body>
+</html>

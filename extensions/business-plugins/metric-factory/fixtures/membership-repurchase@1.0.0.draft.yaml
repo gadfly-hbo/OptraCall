@@ -1,0 +1,106 @@
+sap: "0.2"
+package:
+  id: membership-repurchase
+  version: 1.0.0
+  namespace: mf.membership-repurchase
+  fingerprint: ""
+dimensions:
+  - channel
+  - member_tier
+metrics:
+  - name: repurchase_rate
+    display_name: 会员复购率
+    type: ratio
+    definition: 指定时间窗口内购买 ≥2 次的会员数 ÷ 同期有购买行为的会员总数；窗口为左闭右开 [开始, 结束)，时区与观察截止由任务显式声明。
+    dimensions:
+      - channel
+      - member_tier
+    time_grains:
+      - month
+      - quarter
+    owner_role: 会员运营负责人
+    caliber_switches:
+      count_refund_orders: false
+    type_params:
+      numerator: repeat_member_count
+      denominator: buyer_member_count
+    provenance:
+      origin: llm
+      model: mimo-v2.6-flash
+      reviewed_by: huangbo
+  - name: repeat_member_count
+    display_name: 复购会员数
+    type: simple
+    definition: 窗口内去重后购买 ≥2 次的会员数；设备与账号联合去重，剔除内部测试账号。
+    dimensions:
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 会员运营负责人
+    caliber_switches:
+      count_refund_orders: false
+    type_params:
+      measure: repurchase_rate
+    provenance:
+      origin: llm
+      model: mimo-v2.6-flash
+      reviewed_by: huangbo
+  - name: buyer_member_count
+    display_name: 购买会员数
+    type: simple
+    definition: 窗口内至少完成一笔合格成功支付的去重会员数，作为复购率分母；资格与复购率分子保持一致。
+    dimensions:
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 会员运营负责人
+    caliber_switches:
+      include_first_order: true
+    provenance:
+      origin: llm
+      model: mimo-v2.6-flash
+      reviewed_by: huangbo
+  - name: repurchase_gap_days
+    display_name: 复购间隔
+    type: derived
+    definition: 会员相邻两次购买的中位间隔天数；仅统计窗口内完整相邻订单对，截断处间隔不纳入。
+    dimensions:
+      - member_tier
+    time_grains:
+      - month
+    owner_role: 会员运营负责人
+    caliber_switches:
+      count_refund_orders: false
+    type_params:
+      expr: median(order_time[i+1] - order_time[i])
+    provenance:
+      origin: llm
+      model: mimo-v2.6-flash
+      reviewed_by: huangbo
+scenarios:
+  - id: repurchase_diagnosis
+    version: 1.0.0
+    title: 会员复购诊断
+    decision_purpose: 判断复购变化来自人数、频次还是结构，决定是否需要促复购动作。
+    metric_usages:
+      - metric: repurchase_rate
+        role: outcome
+      - metric: repurchase_gap_days
+        role: driver
+    method_refs:
+      - cohort-analysis
+      - channel-breakdown
+    evidence_requirements: 需同期 cohort 对比与渠道拆分支撑结论。
+  - id: member_tier_structure
+    version: 1.0.0
+    title: 会员等级结构
+    decision_purpose: 识别复购下滑是否集中在特定会员等级。
+    metric_usages:
+      - metric: repurchase_rate
+        role: outcome
+        note: 按会员等级拆分观察
+    method_refs:
+      - tier-segmentation
+    evidence_requirements: 各等级样本量需足以支撑结论，不足时明示。
