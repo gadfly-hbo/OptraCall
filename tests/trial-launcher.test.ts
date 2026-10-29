@@ -35,7 +35,7 @@ process.on('SIGTERM',()=>{fs.writeFileSync(path.join(process.cwd(),'stopped.json
 }
 async function actualHostFixture() {
  const f=await fixture();
- await cp(path.resolve('scripts'),path.join(f.root,'scripts'),{recursive:true});await cp(path.resolve('src'),path.join(f.root,'src'),{recursive:true});await symlink(path.resolve('node_modules'),path.join(f.root,'node_modules'));
+ await cp(path.resolve('scripts'),path.join(f.root,'scripts'),{recursive:true});await cp(path.resolve('src'),path.join(f.root,'src'),{recursive:true});await cp(path.resolve('extensions'),path.join(f.root,'extensions'),{recursive:true});await symlink(path.resolve('node_modules'),path.join(f.root,'node_modules'));
  await commitFixture(f.root);f.build=await stampFixture(f.root);
  const html=await readFile(path.join(f.root,'dist/index.html'));
  await writeFile(path.join(f.root,'dist/optracall-build.json'),JSON.stringify({...f.build,files:[{path:'index.html',bytes:html.length,sha256:createHash('sha256').update(html).digest('hex')}]}));

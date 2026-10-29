@@ -12,6 +12,8 @@ import { CaseStore, CaseStoreError } from './case-store.ts';
 import { createCaseRoutes, CaseRouteError } from './case-routes.ts';
 import type { CaseContextSelection } from './case-types.ts';
 import { loadStaticUi } from './static-ui.ts';
+import { createMetricFactoryRoutes } from '../../extensions/business-plugins/metric-factory/api/routes.ts';
+import { metricIndexText } from '../../extensions/business-plugins/metric-factory/project/index-text.ts';
 
 class RequestFault extends Error {
   readonly status: number; readonly code: string;
@@ -42,6 +44,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const opening = new Map<string, { task: Promise<ProjectAgent>; projectId: string; taskId: string; agent: ProjectAgent; provider: string }>(), streams = new Map<string, Set<ServerResponse>>();
   const epochs = new Map<string, number>(), clearing = new Set<string>(), archiving = new Set<string>();
   let gate = Promise.resolve(), testing = false, closing = false;
+  // metric-factory business plugin: the extension owns handlers, the host owns transport.
+  const metricFactoryRoutes = createMetricFactoryRoutes({
+    libraryRoot: path.join(dataRoot, 'metric-assets'),
+    projectDataDirectory: (projectId: string) => path.join(dataRoot, 'projects', projectId),
+    projectExists: async (projectId: string) => { try { await projects.get(projectId); return true; } catch { return false; } },
+    projectOverview: async () => (await projects.list()).map(({ id, name, archivedAt }) => ({ id, name, archivedAt })),
+    readProjectFile: (projectId: string, relativePath: string) => projects.readFile(projectId, relativePath),
+    readBody: (request: IncomingMessage) => body(request),
+  });
   const keyOf = (projectId: string, taskId: string) => `${projectId}/${taskId}`;
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
   const endStreams = (id?: string) => { for (const [key, responses] of streams) { if (id && key !== id) continue; for (const response of responses) response.end(); streams.delete(key); } };
@@ -134,7 +145,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (existing?.agent.alive && existing.configuration.apiKey === snapshot.apiKey && existing.configuration.api === snapshot.api && existing.configuration.baseUrl === snapshot.baseUrl) return { agent: existing.agent };
       const inFlight = opening.get(key); if (inFlight) return { operation: inFlight.task, key, pendingAgent: inFlight.agent };
       const epoch = epochs.get(snapshot.provider) ?? 0, address = server.address();
-      const agent = new ProjectAgent({ projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), configuration: snapshot, managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175] });
+      const agent = new ProjectAgent({ projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), configuration: snapshot, managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }) });
       agent.subscribe(event => {
         if (event.type !== 'ui.editor') { publish(project.id, task.id, event); return; }
         void projects.saveDraft(project.id, task.id, event.text).then(() => publish(project.id, task.id, event), () => publish(project.id, task.id, { type: 'ui.notification', level: 'error', message: '扩展修改的草稿未能保存，请检查本地存储后重试。' }));
@@ -209,6 +220,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         throw new RequestFault(404, 'not_found');
       }
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
+      const metricFactory = await metricFactoryRoutes(request, url);
+      if (metricFactory) { json(response, metricFactory.status, metricFactory.value); return; }
       if (url.pathname === '/api/configurations' && request.method === 'GET') { json(response, 200, { configurations: configuration.list(), selectedId: configuration.read()?.id ?? null }); return; }
       if (url.pathname === '/api/configuration/select' && request.method === 'POST') { const input = await body(request); json(response, 200, { configuration: await mutate(() => configuration.select(String(input.id ?? ''))) }); return; }
       if (url.pathname === '/api/configuration/import' && request.method === 'POST') {
