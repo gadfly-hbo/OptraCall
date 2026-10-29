@@ -19,7 +19,7 @@
 
 ## 检查与证据
 
-- 单元/集成：`npm run check` 202 项全 GREEN（含 metric-sap 14、metric-library 9、metric-project-enable 6、metric-api 7、metric-index 5、metric-e2e 2）；tsc/build 通过。
+- 单元/集成：`npm run check` 203 项全 GREEN（含 metric-sap 15、metric-library 9、metric-project-enable 6、metric-api 7、metric-index 5、metric-e2e 2）；tsc/build 通过；复核处置提交后同套全绿并经非作者复验确认。
 - TDD 说明：切片 1-4 按先 RED（模块缺失或断言失败）后 GREEN 实施；`metric-index` 测试先于实现编写、首跑即 GREEN，未单独保留 RED 现场（断言源自 MF-04 验收，断言力见测试本体）。
 - 浏览器（4183 隔离 Host + 合成 Provider）：新增 `tests/browser-metric-factory.js` 连续两次 PASS（`.local/metric-factory/browser-metric-factory-run{,2}.txt`）——空库诚实展示、建模任务预填、校验→逐项确认→署名→发布门槛（未确认不可发布）、`SAP_UNREVIEWED` 拒绝示例、包详情、启用/停用、深色+390/320px 无横向溢出、0 外部请求、0 浏览器异常、无存储残留。既有 `browser-catalog`、`browser-project-tasks`、`browser-live-projects` 回归 PASS。
 - 合成端到端（MF-05）：草稿（Agent 写入 020_clean 路径模拟）→ 校验 → 发布 → 项目启用 → 新任务系统提示含索引且不含全文本；未启用项目不注入；草稿发布后原样保留。
@@ -54,6 +54,6 @@
 
 ## Git/CI 与交付状态
 
-- 分支提交：2ab04cf（切片 1-3）、e195a36（切片 4-6）、400768f（文档收尾）、复核处置提交。
-- 独立复核：已完成，结论 PASS with findings，发现已全部处置（见上节）；受影响范围复验结果见下。
+- 分支提交：2ab04cf（切片 1-3）、e195a36（切片 4-6）、400768f（文档收尾）、413b2e0（复核处置）。
+- 独立复核：已完成，结论 PASS with findings，发现已全部处置（见上节）；处置经非作者复验确认有效（2026-10-29，`npm run check` 203 项全绿）。
 - PR/CI/合并：按工程规范第 5 节执行；squash 合并需用户另行授权。
