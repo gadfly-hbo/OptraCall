@@ -25,7 +25,7 @@ test('HELP-01: the existing topbar exposes a semantic help action', async t => {
 test('HELP-02: the portable manual covers the actual trial and keeps private runtime material out', async () => {
   const text = manualMarkdown();
   assert.equal(new Set(manualSections.map(section => section.id)).size, manualSections.length);
-  for (const topic of ['Case', 'Session', '010_draw', '020_clean', '060_reports', '按此 Case 继续', 'reviewed_by', '部分达标', '未接入']) assert.ok(text.includes(topic), topic);
+  for (const topic of ['Case', 'Session', '010_draw', '020_clean', '060_reports', '按此 Case 继续', 'reviewed_by', '部分达标', '未接入', '需求梳理', 'RAP', 'stale', '附带需求契约']) assert.ok(text.includes(topic), topic);
   for (const section of manualSections) {
     assert.ok(section.title && section.summary && section.blocks.length, section.id);
     for (const block of section.blocks) if (block.kind === 'table') for (const row of block.rows) assert.equal(row.length, block.headers.length, section.id);
