@@ -87,7 +87,7 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     if (runtime) throw new Error('session_already_open');
     options = o;
     if (editorText === undefined) editorText = o.draft ?? '';
-    const cwd = path.join(o.projectDirectory, '020_clean');
+    const cwd = o.workspace?.cwd ?? path.join(o.projectDirectory!, '020_clean');
     const credentials = { read: async () => undefined, list: async () => [], modify: async () => { throw new Error('Host owns credentials.'); }, delete: async () => {} };
     const models = await ModelRuntime.create({ credentials, modelsPath: null, allowModelNetwork: false, refreshOnCreate: false });
     const builtin = models.getModel(o.configuration.provider, o.configuration.model);
@@ -99,10 +99,11 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: {
         extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), createMcpExtension(), environmentExtension],
-        appendSystemPrompt: [`You are OptraCall. Workspace conventions: your working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze only materials the user places in 020_clean. 010_draw archives originals and is not automatically attached to model context. This is a soft instruction, not sensitive-data isolation; the full native tools are available without a sandbox or tool interception. Write intermediate/process files to 020_clean by default. Save final reports to ${path.join(o.projectDirectory, '060_reports')} when asked to produce a final report. Determine analysis methods and tools yourself from the user's request. These are directory conventions, not a prescribed analysis procedure.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
+        appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [`You are OptraCall. Workspace conventions: your working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze only materials the user places in 020_clean. 010_draw archives originals and is not automatically attached to model context. This is a soft instruction, not sensitive-data isolation; the full native tools are available without a sandbox or tool interception. Write intermediate/process files to 020_clean by default. Save final reports to ${path.join(o.projectDirectory!, '060_reports')} when asked to produce a final report. Determine analysis methods and tools yourself from the user's request. These are directory conventions, not a prescribed analysis procedure.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } });
-      // Resource reload reads disk settings; add the complete macOS native set afterwards.
-      services.settingsManager.applyOverrides({ defaultTools: ['+grep', '+find', '+ls', '+codemode', '+tool_search'] });
+      // Resource reload reads disk settings; add the workspace's tool selection afterwards.
+      // Plain names replace the inherited selection; an empty array means no tools.
+      services.settingsManager.applyOverrides({ defaultTools: [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search'])] });
       const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
       if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
       return { ...created, services, diagnostics: services.diagnostics };

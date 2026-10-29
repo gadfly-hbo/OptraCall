@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>需求梳理 · Requirement Elaboration — OptraCall UI 演示</title>
+<style>
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; color: inherit; }
+.app { --canvas: #fff; --sidebar: #f7f7f9; --surface: #fff; --subtle: #f5f5f8; --hover: #ececf2; --ink: #24232b; --muted: #6c6b78; --faint: #777580; --line: #e6e5eb; --accent: #6550c9; --accent-soft: #eeebfb; --focus: #a397e0; --warning: #80530c; --warning-bg: #fff7e8; --ok: #1c7a4c; --ok-bg: #edf7f1; --error: #a12b36; --error-bg: #fff4f4; display: flex; min-height: 100dvh; height: 100dvh; overflow: hidden; color: var(--ink); background: var(--canvas); font-size: 14px; line-height: 1.55; }
+.app[data-theme="dark"] { color-scheme: dark; --canvas: #1b1b20; --sidebar: #16161b; --surface: #232329; --subtle: #292930; --hover: #32323a; --ink: #eeeef2; --muted: #b2b0be; --faint: #a7a5b2; --line: #3d3b47; --accent: #b7a7ff; --accent-soft: #30294a; --focus: #c4b7ff; --warning: #edc887; --warning-bg: #372c1b; --ok: #8fd4ad; --ok-bg: #1d2b24; --error: #ffafb8; --error-bg: #39252b; }
+.skip-link { position: fixed; top: -100px; left: 24px; z-index: 5; padding: 10px; color: var(--ink); background: var(--surface); }
+.skip-link:focus { top: 10px; }
+.sidebar { width: 248px; flex: 0 0 248px; display: flex; flex-direction: column; padding: 30px 14px 0; background: var(--sidebar); border-right: 1px solid var(--line); min-height: 0; overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 11px; padding: 0 10px 28px; }
+.brand strong { display: block; font-size: 19px; font-weight: 600; letter-spacing: -.3px; }
+.brand div > span { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
+.brand-mark { width: 29px; height: 29px; display: inline-flex; position: relative; color: var(--accent); flex-shrink: 0; }
+.brand-mark span { position: absolute; inset: 2px; border: 2px solid currentColor; border-radius: 50%; }
+.brand-mark i { position: absolute; width: 11px; height: 11px; right: 0; bottom: 0; border: 2px solid currentColor; border-radius: 50%; background: var(--canvas); }
+.new-chat, .nav-item { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; text-align: left; }
+.new-chat { margin-bottom: 12px; background: var(--surface); border: 1px solid var(--line); font-weight: 500; }
+.nav-item:hover { background: var(--hover); }
+.nav-item.selected { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.capability-nav { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; display: flex; flex-direction: column; }
+.capability-nav .nav-item { height: 36px; font-size: 13px; margin: 2px 0; }
+.nav-tag { margin-left: auto; font-size: 10px; padding: 1px 6px; border-radius: 4px; color: var(--muted); background: var(--subtle); border: 1px solid var(--line); }
+.nav-tag.live { color: var(--accent); background: var(--accent-soft); border-color: transparent; font-weight: 500; }
+.sidebar-bottom { padding: 12px 0 0; margin-top: auto; }
+.local-profile { display: flex; gap: 10px; align-items: center; padding: 19px 10px; margin-top: 10px; border-top: 1px solid var(--line); }
+.avatar { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.local-profile strong { font-size: 12px; font-weight: 500; display: block; }
+.local-profile div span { font-size: 11px; color: var(--muted); }
+.main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; padding: 12px 26px; flex-shrink: 0; }
+.topbar-context, .topbar-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.topbar-title { font-size: 13px; color: var(--muted); }
+.workspace-switch { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); }
+.workspace-switch button { border: 0; border-radius: 5px; padding: 4px 16px; font-size: 12px; background: transparent; color: var(--muted); }
+.workspace-switch button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.demo-badge { font-size: 11px; padding: 3px 10px; border-radius: 99px; color: var(--muted); border: 1px solid var(--line); }
+.icon-button { width: 32px; height: 32px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); }
+.re-page { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 26px 40px; }
+.re-banner { display: flex; gap: 10px; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--warning); background: var(--warning-bg); color: var(--warning); font-size: 12px; margin-bottom: 18px; }
+.re-banner strong { display: block; margin-bottom: 2px; }
+.re-banner p { margin: 0; color: var(--muted); }
+.re-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+.re-tabs button { border: 0; background: transparent; padding: 9px 16px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.re-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 550; }
+.page-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 20px; }
+.eyebrow { font-size: 10px; letter-spacing: 1.6px; color: var(--muted); margin: 0 0 6px; }
+.page-heading h1 { font-size: 24px; font-weight: 600; margin: 0 0 6px; letter-spacing: -.4px; }
+.page-heading p { font-size: 13px; color: var(--muted); margin: 0; max-width: 640px; }
+.re-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.panel { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 18px 20px; margin-bottom: 16px; }
+.panel h2 { font-size: 14px; font-weight: 550; margin: 0 0 4px; }
+.panel > p.sub { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+.primary-button, .secondary-button { border-radius: 7px; min-height: 34px; padding: 6px 16px; font-size: 13px; font-weight: 500; }
+.primary-button { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+.primary-button:disabled { opacity: .45; cursor: not-allowed; }
+.secondary-button { background: var(--surface); border: 1px solid var(--line); }
+.secondary-button:hover { background: var(--hover); }
+.text-button { border: 0; background: none; color: var(--accent); padding: 0; font-size: 12px; }
+.text-button:hover { text-decoration: underline; }
+.field { margin: 12px 0; }
+.field label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+.field input, .field select, .field textarea { border: 1px solid var(--line); background: var(--canvas); color: var(--ink); border-radius: 6px; width: 100%; min-height: 36px; padding: 8px 12px; font-size: 13px; }
+.field textarea { resize: vertical; min-height: 56px; }
+.field .field-help { font-size: 12px; color: var(--muted); margin: 5px 0 0; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+.re-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.re-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11px; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.re-table td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.re-table code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.pill.draft { color: var(--muted); background: var(--subtle); border: 1px solid var(--line); }
+.pill.ok { color: var(--ok); background: var(--ok-bg); }
+.pill.warn { color: var(--warning); background: var(--warning-bg); }
+.pill.accent { color: var(--accent); background: var(--accent-soft); }
+.pill.error { color: var(--error); background: var(--error-bg); }
+.prio { font-size: 10px; padding: 1px 7px; border-radius: 4px; font-weight: 500; }
+.prio.must { color: var(--error); background: var(--error-bg); }
+.prio.should { color: var(--warning); background: var(--warning-bg); }
+.prio.defer { color: var(--muted); background: var(--subtle); border: 1px solid var(--line); }
+.chip { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 5px; background: var(--subtle); color: var(--muted); border: 1px solid var(--line); margin: 2px 4px 2px 0; }
+.chip.accent { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.re-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.re-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 18px; display: flex; flex-direction: column; gap: 8px; }
+.re-card h3 { font-size: 15px; font-weight: 550; margin: 0; }
+.re-card .pkg-id { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: var(--muted); margin: 0; }
+.re-card p.desc { font-size: 12px; color: var(--muted); margin: 0; }
+.re-card-top { display: flex; justify-content: space-between; align-items: center; }
+.re-card-bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; margin-top: auto; font-size: 11px; color: var(--muted); }
+.note-block { margin: 12px 0 0; padding: 11px 14px; border-radius: 7px; background: var(--subtle); color: var(--muted); font-size: 12px; line-height: 1.8; }
+.note-block strong { color: var(--ink); font-weight: 550; }
+.hint-bar { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: 7px; border: 1px solid var(--line); background: var(--subtle); font-size: 12px; margin: 14px 0; color: var(--muted); }
+.hint-bar.warn { border-color: var(--warning); background: var(--warning-bg); color: var(--warning); }
+.hint-bar.ok { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+.code-block { margin: 12px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); overflow-x: auto; }
+.code-block pre { margin: 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.re-footer { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; text-align: center; }
+.re-tag { font-size: 10px; padding: 1px 7px; border-radius: 4px; color: var(--accent); background: var(--accent-soft); font-weight: 500; white-space: nowrap; vertical-align: middle; }
+.stage-stepper { display: flex; gap: 6px; margin-bottom: 18px; }
+.stage-step { flex: 1; text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 10px 14px; }
+.stage-step small { display: block; font-size: 10px; letter-spacing: 1px; color: var(--muted); }
+.stage-step strong { font-size: 13px; font-weight: 550; }
+.stage-step.active { border-color: var(--accent); background: var(--accent-soft); }
+.stage-step.active small { color: var(--accent); }
+.work-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.work-grid.with-proposal { grid-template-columns: minmax(0, 1fr) 300px; }
+.proposal { border: 1px solid var(--accent); border-radius: 10px; background: var(--surface); padding: 16px; position: sticky; top: 8px; }
+.proposal h3 { font-size: 13px; margin: 0 0 6px; color: var(--accent); }
+.proposal .sub { font-size: 11px; color: var(--muted); margin: 0 0 10px; }
+.proposal-body { font-size: 12px; border: 1px dashed var(--line); border-radius: 7px; padding: 10px 12px; background: var(--subtle); margin-bottom: 12px; line-height: 1.8; }
+.proposal-actions { display: flex; gap: 8px; }
+.proposal-note { font-size: 11px; color: var(--muted); margin: 10px 0 0; }
+.clr-row { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: var(--surface); }
+.clr-row-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.clr-row-top .dim { font-size: 11px; color: var(--muted); }
+.clr-q { font-size: 13px; margin: 0 0 6px; }
+.clr-rationale { font-size: 11px; color: var(--muted); margin: 0 0 10px; }
+.clr-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.clr-answer { font-size: 12px; color: var(--ok); margin: 0 0 8px; }
+.fact-list { margin: 0; padding-left: 20px; font-size: 13px; }
+.fact-list li { margin-bottom: 8px; }
+.module-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+.module-head h2 { margin: 0; }
+.report-tree { margin: 0; padding-left: 18px; font-size: 13px; }
+.report-tree li { margin-bottom: 10px; }
+.report-tree small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+.report-tree .zh { color: var(--warning); font-size: 11px; }
+.gate-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.gate-item:last-child { border-bottom: 0; }
+.gate-mark { flex-shrink: 0; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; font-size: 11px; margin-top: 1px; }
+.gate-mark.pass { color: var(--ok); background: var(--ok-bg); }
+.gate-mark.fail { color: var(--error); background: var(--error-bg); }
+.gate-mark.warn { color: var(--warning); background: var(--warning-bg); }
+.gate-mark.info { color: var(--muted); background: var(--subtle); }
+.gate-item strong { font-weight: 550; display: block; }
+.gate-item p { margin: 3px 0 0; color: var(--muted); }
+.gate-tier { font-size: 11px; font-weight: 600; letter-spacing: .6px; margin: 16px 0 4px; }
+.gate-tier.hard { color: var(--error); }
+.gate-tier.warn { color: var(--warning); }
+.gate-tier.info { color: var(--muted); }
+.dialog-backdrop { position: fixed; inset: 0; background: rgba(20,18,30,.45); display: flex; align-items: center; justify-content: center; z-index: 10; }
+.dialog { width: min(640px, calc(100vw - 40px)); max-height: 84dvh; overflow-y: auto; background: var(--canvas); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px; }
+.dialog h2 { font-size: 16px; margin: 0 0 4px; }
+.dialog .sub { font-size: 12px; color: var(--muted); margin: 0 0 14px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+[hidden] { display: none !important; }
+@media (max-width: 1100px) { .work-grid.with-proposal { grid-template-columns: minmax(0, 1fr); } .stage-stepper { flex-wrap: wrap; } .stage-step { flex: 1 1 45%; } }
+@media (max-width: 760px) { .app { flex-direction: column; height: auto; } .sidebar { width: 100%; flex: 0 0 auto; padding: 16px 14px 8px; border-right: 0; border-bottom: 1px solid var(--line); } .sidebar-bottom { display: none; } .re-page { padding: 8px 16px 24px; } .page-heading h1 { font-size: 21px; } .form-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="app" id="app" data-theme="light">
+  <a class="skip-link" href="#main-content">跳到主内容</a>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"><span></span><i></i></span><div><strong>OptraCall</strong><span>持续做出更好的决策</span></div></div>
+    <button class="new-chat" type="button">＋ 新建项目</button>
+    <button class="nav-item" type="button">📁 项目工作台</button>
+    <nav class="capability-nav" aria-label="能力目录">
+      <button class="nav-item" type="button">◈ 分析资产<span class="nav-tag">演示</span></button>
+      <button class="nav-item" type="button">◇ 场景组合<span class="nav-tag">演示</span></button>
+      <button class="nav-item" type="button">⌘ 连接器<span class="nav-tag">演示</span></button>
+      <button class="nav-item" type="button">▧ 业务插件<span class="nav-tag">演示</span></button>
+      <button class="nav-item" type="button">◆ 指标体系<span class="nav-tag live">真实</span></button>
+      <button class="nav-item selected" type="button" aria-current="page">◇ 需求梳理<span class="nav-tag">演示</span></button>
+    </nav>
+    <div class="sidebar-bottom">
+      <button class="nav-item" type="button">⚙ 模型设置</button>
+      <div class="local-profile"><span class="avatar">O</span><div><strong>本地工作台</strong><span>项目与 Pi Agent</span></div></div>
+    </div>
+  </aside>
+  <main class="main" id="main-content" tabindex="-1">
+    <header class="topbar">
+      <div class="topbar-context"><span class="topbar-title">需求梳理 · Requirement Elaboration</span></div>
+      <div class="workspace-switch" role="group" aria-label="工作区切换"><button type="button" aria-pressed="true">分析</button><button type="button" aria-pressed="false">决策</button></div>
+      <div class="topbar-actions"><span class="demo-badge">Pi Agent</span><button class="icon-button" type="button" id="theme-toggle" aria-label="切换深浅色">◐</button></div>
+    </header>
+    <div class="re-page">
+      <div class="re-banner" role="note"><span aria-hidden="true">⚠</span><div><strong>UI 演示 · 静态合成数据</strong><p>本页为 requirements-elaboration 变更的可点击界面候选：Stage 自由跳转、软门禁、提案卡与送入可交互；数据均为演示样例，不代表已实现或已发布能力。标注交互为验收对照，静态演示本身不构成实现证据。</p></div></div>
+
+      <nav class="re-tabs" role="group" aria-label="需求梳理视图">
+        <button type="button" data-tab="list" class="active">实例列表</button>
+        <button type="button" data-tab="work">4-Stage 工作台</button>
+      </nav>
+
+      <!-- ============ 实例列表 ============ -->
+      <section id="tab-list" class="re-tab" aria-label="实例列表">
+        <div class="page-heading">
+          <div><p class="eyebrow">REQUIREMENT ELABORATION</p><h1>需求梳理</h1><p>把模糊业务诉求结构化为已确认需求与分析框架（RAP 0.2 契约包），再显式送入 Case、项目或任务。设计态前置，不指挥分析步骤。</p></div>
+          <span class="re-label">本机存储 · ~/.optracall/requirement-instances/</span>
+        </div>
+
+        <div class="panel">
+          <h2>新建需求实例</h2>
+          <p class="sub">一句话发起，scene 分流只做提示用途，不改变后续流程。</p>
+          <div class="field"><label for="new-seed">业务诉求</label><input id="new-seed" type="text" value="看一下双11之后会员复购率为什么掉了"></div>
+          <div class="field"><label for="new-scene">场景 scene</label><select id="new-scene"><option selected>topic 专题归因</option><option>daily 轻量快查</option><option>recurring 周期复盘</option></select><p class="field-help">首期不做模板库与材料挂接；纯文本输入。</p></div>
+          <div style="display:flex;justify-content:flex-end"><button class="primary-button" type="button" data-goto="work">创建并进入工作台</button></div>
+        </div>
+
+        <div class="re-cards">
+          <article class="re-card">
+            <div class="re-card-top"><span class="re-tag">RAP 0.2</span><span class="pill ok">已发布 · 1.0.0</span></div>
+            <h3>双11大促后会员复购率下滑归因</h3>
+            <p class="pkg-id">req-ecom-repurchase-202610</p>
+            <p class="desc">定位大促后 30 天会员复购率环比下滑 9% 的主驱动因素，输出干预策略。</p>
+            <div><span class="chip">topic</span><span class="chip">澄清 ×6</span><span class="chip">假设 ×3</span><span class="chip">数据需求 ×3</span></div>
+            <div class="re-card-bottom"><span>发布于 2026-10-28 · 未送入</span><span><button class="text-button" type="button" data-goto="work">打开工作台 →</button>　<button class="text-button" type="button" id="open-send-card">送入 →</button></span></div>
+          </article>
+          <article class="re-card">
+            <div class="re-card-top"><span class="re-tag">草稿</span><span class="pill draft">草稿 · Stage 01</span></div>
+            <h3>某门店销售下降，要不要促销</h3>
+            <p class="pkg-id">req-store-decline-202611</p>
+            <p class="desc">首轮推断已生成 4 条澄清项，尚未回答。</p>
+            <div><span class="chip">daily</span><span class="chip">must_confirm ×2 待处理</span></div>
+            <div class="re-card-bottom"><span>更新于 2026-10-27</span><button class="text-button" type="button" data-goto="work">打开工作台 →</button></div>
+          </article>
+          <article class="re-card">
+            <div class="re-card-top"><span class="re-tag">RAP 0.2</span><span class="pill warn">已确认 · 快照已失效 stale</span></div>
+            <h3>SaaS 订阅流失预警</h3>
+            <p class="pkg-id">req-saas-churn-202609</p>
+            <p class="desc">确认后回改了「目标」，旧快照标记 stale；编辑不阻断，重新确认即可恢复。</p>
+            <div><span class="chip">recurring</span><span class="chip warn chip">一致性警告</span></div>
+            <div class="re-card-bottom"><span>更新于 2026-10-26</span><button class="text-button" type="button" data-goto="work">打开工作台 →</button></div>
+          </article>
+        </div>
+        <p class="re-footer">实例独立实体 · 确认/发布/送入均为用户显式动作 · 无 ShieldCheck，提示与现有产品一致（勿放敏感数据）</p>
+      </section>
+
+      <!-- ============ 4-Stage 工作台 ============ -->
+      <section id="tab-work" class="re-tab" aria-label="4-Stage 工作台" hidden>
+        <div class="page-heading">
+          <div><p class="eyebrow">INSTANCE · req-ecom-repurchase-202610</p><h1>双11大促后会员复购率下滑归因</h1><p>四阶段自由跳转、随时编辑；模型输出先提案卡或草稿，不直接覆写工作稿。</p></div>
+          <span id="work-status"><span class="pill draft">草稿</span></span>
+        </div>
+
+        <div class="hint-bar warn" id="stale-banner" hidden><span aria-hidden="true">⚠</span><div><strong>一致性警告（stale）：</strong>Stage 01「核心目标」在快照确认后被修改，已确认快照与后续框架标记失效；可继续编辑，建议在 Stage 02 重新确认。<span class="re-tag">对照 RE-02</span></div></div>
+
+        <div class="stage-stepper" role="group" aria-label="阶段切换（自由跳转，无通关条件）">
+          <button class="stage-step active" type="button" data-stage="1"><small>STAGE 01</small><strong>诉求与澄清</strong></button>
+          <button class="stage-step" type="button" data-stage="2"><small>STAGE 02</small><strong>事实与假设</strong></button>
+          <button class="stage-step" type="button" data-stage="3"><small>STAGE 03</small><strong>分析与报告框架</strong></button>
+          <button class="stage-step" type="button" data-stage="4"><small>STAGE 04</small><strong>检查与交付</strong></button>
+        </div>
+
+        <div class="work-grid" id="work-grid">
+          <div>
+            <!-- Stage 01 -->
+            <section id="stage-1" aria-label="诉求与澄清">
+              <div class="panel">
+                <h2>核心四要素 <span class="re-tag">对照 RE-04</span></h2>
+                <p class="sub">纯文本录入；本期无材料上传与 ShieldCheck。</p>
+                <div class="form-grid">
+                  <div class="field"><label for="f-name">需求名称</label><input id="f-name" value="双11大促后会员复购率下滑归因"></div>
+                  <div class="field"><label for="f-scene">场景 scene</label><select id="f-scene"><option selected>topic 专题归因</option><option>daily 轻量快查</option><option>recurring 周期复盘</option></select></div>
+                </div>
+                <div class="field"><label for="f-bg">业务背景</label><textarea id="f-bg">双11后大盘复购走低，需排查是商品结构、优惠券力度还是渠道质量导致。</textarea></div>
+                <div class="field"><label for="f-goal">核心目标</label><textarea id="f-goal">定位 Q4 大促后 30 天会员复购率环比下滑 9% 的主驱动因素，并输出干预策略。</textarea></div>
+                <div class="field"><label for="f-decision">决策场景</label><textarea id="f-decision">指导下季度会员权益预算分配及流失召回策略。</textarea></div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+                  <button class="secondary-button" type="button" id="touch-upstream" title="演示：确认快照后修改上游字段触发 stale">模拟修改上游字段（stale 演示）</button>
+                  <button class="primary-button" type="button" id="infer-button">AI 首轮推断</button>
+                </div>
+                <p class="note-block"><strong>插件会话：</strong>推断经独立插件会话调用统一 Runtime（凭据 Host 注入），结构化 JSON 输出；会话不配置数据目录访问工具。<span class="re-tag">对照 RE-03</span></p>
+              </div>
+
+              <div id="infer-result" hidden>
+                <div class="hint-bar" id="completeness-bar"><span aria-hidden="true">ⓘ</span><div id="completeness-text"></div></div>
+                <div class="panel">
+                  <h2>澄清清单 <span class="re-tag">对照 RE-02 / RE-04</span></h2>
+                  <p class="sub">七维分类 × 三级优先；行内操作即时生效，must_confirm 未清零仅提示、不阻断任何操作。</p>
+
+                  <div class="clr-row" data-priority="must" data-status="pending">
+                    <div class="clr-row-top"><span class="prio must">must_confirm</span><span class="dim">指标口径</span><span class="pill warn" data-role="status">待回答</span></div>
+                    <p class="clr-q">「复购」按窗口期内 ≥2 次支付计，退款订单是否剔除？</p>
+                    <p class="clr-rationale">直接影响复购率分子，是下游取数口径前提。</p>
+                    <div class="clr-actions"><button class="text-button" data-clr-act="answered">直接回答</button><button class="text-button" data-clr-act="assumed">按系统假设推进</button><button class="text-button" data-clr-act="skipped">标记跳过</button><button class="text-button" data-clr-act="deferred">标记后置</button></div>
+                  </div>
+                  <div class="clr-row" data-priority="must" data-status="pending">
+                    <div class="clr-row-top"><span class="prio must">must_confirm</span><span class="dim">对象 / 人群</span><span class="pill warn" data-role="status">待回答</span></div>
+                    <p class="clr-q">复购率分母仅含大促首购会员，还是全量会员？</p>
+                    <p class="clr-rationale">人群口径不同会得到完全不同的下滑幅度与归因方向。</p>
+                    <div class="clr-actions"><button class="text-button" data-clr-act="answered">直接回答</button><button class="text-button" data-clr-act="assumed">按系统假设推进</button><button class="text-button" data-clr-act="skipped">标记跳过</button><button class="text-button" data-clr-act="deferred">标记后置</button></div>
+                  </div>
+                  <div class="clr-row" data-priority="must" data-status="answered">
+                    <div class="clr-row-top"><span class="prio must">must_confirm</span><span class="dim">风险</span><span class="pill ok" data-role="status">已回答</span></div>
+                    <p class="clr-q">是否排除内部测试账号与员工单？</p>
+                    <p class="clr-answer">答：排除，测试账号名单由数据组维护。</p>
+                    <div class="clr-actions"><button class="text-button" data-clr-act="answered">修改回答</button><button class="text-button" data-clr-act="deferred">标记后置</button></div>
+                  </div>
+                  <div class="clr-row" data-priority="should" data-status="answered">
+                    <div class="clr-row-top"><span class="prio should">should_confirm</span><span class="dim">输出形式</span><span class="pill ok" data-role="status">已回答</span></div>
+                    <p class="clr-q">结论需要量化到渠道贡献度，还是主因排序即可？</p>
+                    <p class="clr-answer">答：需要渠道贡献度分解，供预算分配直接使用。</p>
+                    <div class="clr-actions"><button class="text-button" data-clr-act="answered">修改回答</button><button class="text-button" data-clr-act="deferred">标记后置</button></div>
+                  </div>
+                  <div class="clr-row" data-priority="should" data-status="assumed">
+                    <div class="clr-row-top"><span class="prio should">should_confirm</span><span class="dim">时间窗口</span><span class="pill accent" data-role="status">按假设推进</span></div>
+                    <p class="clr-q">观察窗口固定 30 天，还是 30/60/90 天对比？</p>
+                    <p class="clr-rationale">系统假设 h-03：固定 30 天，避免口径漂移；假设进入 Stage 02 待确认。</p>
+                    <div class="clr-actions"><button class="text-button" data-clr-act="answered">改为直接回答</button><button class="text-button" data-clr-act="deferred">标记后置</button></div>
+                  </div>
+                  <div class="clr-row" data-priority="defer" data-status="deferred">
+                    <div class="clr-row-top"><span class="prio defer">can_defer</span><span class="dim">可用数据</span><span class="pill draft" data-role="status">已后置</span></div>
+                    <p class="clr-q">会员等级标签以哪个版本为准？</p>
+                    <p class="clr-rationale">后置项自动流入 Stage 03 open_questions，严禁混入已确认事实。</p>
+                    <div class="clr-actions"><button class="text-button" data-clr-act="answered">直接回答</button><button class="text-button" data-clr-act="skipped">标记跳过</button></div>
+                  </div>
+                </div>
+                <p class="re-footer">Stage 01 · 澄清项状态机：answered / assumed / skipped / deferred</p>
+              </div>
+            </section>
+
+            <!-- Stage 02 -->
+            <section id="stage-2" aria-label="事实与假设" hidden>
+              <div class="panel">
+                <h2>已确认事实 <span class="re-tag">对照 RE-04</span></h2>
+                <p class="sub">仅收录业务方明确确认的现状；未确认与后置项不得进入。</p>
+                <ul class="fact-list">
+                  <li>2026 双11 期间大促首购会员 30 天复购率从 28% 下滑至 19%。</li>
+                  <li>美妆与个护类目贡献了主要的新增首购会员。</li>
+                </ul>
+              </div>
+              <div class="panel">
+                <div class="module-head"><h2>推断假设矩阵 <span class="re-tag">对照 RE-02</span></h2><button class="secondary-button" type="button" id="hypo-button">AI 辅助生成假设</button></div>
+                <p class="sub">每条假设含陈述 + 证据线索 + 证伪条件；状态 proposed / confirmed / rejected / deferred。</p>
+                <table class="re-table">
+                  <thead><tr><th>假设</th><th>证伪 / 验证条件</th><th>状态</th><th>操作</th></tr></thead>
+                  <tbody id="hypo-body">
+                    <tr><td><strong>h-01</strong> 高额满减券吸引低客单羊毛党，自然复购意愿偏低<br><span style="color:var(--muted)">证据：券核销订单占比显著上升</span></td><td>券核销用户复购率显著低于无券首购用户（p &lt; 0.01）</td><td><span class="pill warn" data-role="hstatus">proposed</span></td><td><button class="text-button" data-hypo-act="confirmed">采纳</button>　<button class="text-button" data-hypo-act="rejected">拒绝</button>　<button class="text-button" data-hypo-act="deferred">后置</button></td></tr>
+                    <tr><td><strong>h-02</strong> 短视频信息流渠道新客复购质量低于搜索渠道<br><span style="color:var(--muted)">证据：短视频首购占比从去年 22% 升至 41%</span></td><td>渠道分层后复购率差异显著且跨周期稳定</td><td><span class="pill ok" data-role="hstatus">confirmed</span></td><td><button class="text-button" data-hypo-act="proposed">撤销</button>　<button class="text-button" data-hypo-act="deferred">后置</button></td></tr>
+                    <tr><td><strong>h-03</strong> 品类结构变化（美妆占比上升）解释整体下滑<br><span style="color:var(--muted)">证据：美妆新客占比上升但复购基线更低</span></td><td>品类内部复购率若无变化，则结构效应为主因</td><td><span class="pill draft" data-role="hstatus">deferred</span></td><td><button class="text-button" data-hypo-act="confirmed">采纳</button>　<button class="text-button" data-hypo-act="proposed">重新提出</button></td></tr>
+                  </tbody>
+                </table>
+                <p class="note-block"><strong>零幻觉守则：</strong>deferred 与未确认项强制流入 Stage 03 open_questions / risks，不混入已确认事实。</p>
+              </div>
+              <div class="panel">
+                <h2>确认成正式需求 <span class="re-tag">对照 RE-01</span></h2>
+                <p class="sub">用户主动的快照动作，不是通关条件；生成带指纹的不可变快照，作为 Stage 03 唯一输入基线。</p>
+                <div style="display:flex;justify-content:flex-end"><button class="primary-button" type="button" id="confirm-button">确认成正式需求</button></div>
+                <div id="snapshot-card" hidden>
+                  <div class="code-block"><pre>确认快照 · snapshot-2026-10-29T1032
+指纹 sha256:7f83b165…c21e（可复算）
+内容：四要素 + 6 条澄清（2 answered / 1 assumed…）+ 2 条事实 + 3 条假设状态
+状态：confirmed · 快照后上游任何修改 → stale 警告</pre></div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Stage 03 -->
+            <section id="stage-3" aria-label="分析与报告框架" hidden>
+              <div class="panel">
+                <div class="module-head"><h2>分析与报告框架 <span class="re-tag">对照 RE-03 / RE-04</span></h2><button class="primary-button" type="button" id="framework-button">生成框架</button></div>
+                <p class="sub">严格基于已确认快照推演（插件会话，结构化 JSON 输出）；快照 stale 时提示重新确认，仍可编辑。</p>
+              </div>
+              <div id="framework-result" hidden>
+                <div class="panel">
+                  <h2>① 指标体系与口径</h2>
+                  <table class="re-table">
+                    <thead><tr><th>指标</th><th>计算口径</th><th>观察维度</th><th>来源</th></tr></thead>
+                    <tbody>
+                      <tr><td><strong>30日会员复购率</strong></td><td>首购后 30 天内二次有效支付会员数 / 首购会员总数</td><td>首购渠道 · 价格带 · 主营类目 · 会员等级</td><td><span class="chip accent">引用 metric-assets membership-repurchase@1.0.0</span></td></tr>
+                      <tr><td><strong>复购会员数</strong></td><td>窗口内去重购买 ≥2 次的会员数</td><td>首购渠道 · 会员等级</td><td><span class="chip accent">同上</span></td></tr>
+                      <tr><td><strong>券核销首购占比</strong></td><td>大促首购中使用满减券的会员数 / 大促首购会员总数</td><td>渠道 · 券面额档</td><td><span class="chip">本实例新增口径</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="panel">
+                  <h2>② 数据需求清单（P0 / P1 / P2）</h2>
+                  <table class="re-table">
+                    <thead><tr><th>优先级</th><th>表 / 主题</th><th>关键字段</th><th>用途</th></tr></thead>
+                    <tbody>
+                      <tr><td><span class="pill error">P0</span></td><td><code>dwd_trade_order_di</code></td><td>user_id · order_id · order_time · pay_amount · channel_id</td><td>订单明细宽表：复购周期与漏斗计算</td></tr>
+                      <tr><td><span class="pill warn">P1</span></td><td><code>dim_user_tag_df</code></td><td>user_id · member_level · reg_time · age_group</td><td>用户画像特征：分群对比</td></tr>
+                      <tr><td><span class="pill draft">P2</span></td><td><code>dwd_promo_coupon_di</code></td><td>user_id · coupon_id · face_value · used_time</td><td>优惠券核销：验证 h-01</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="panel">
+                  <h2>③ 分析路径与方法矩阵</h2>
+                  <table class="re-table">
+                    <thead><tr><th>业务子问题</th><th>对应假设</th><th>验证方法</th><th>所需数据</th><th>预期产物</th></tr></thead>
+                    <tbody>
+                      <tr><td>不同首购渠道复购率是否存在显著差异？</td><td>h-02</td><td>渠道分层交叉对比 + 卡方检验</td><td>dwd_trade_order_di</td><td>渠道 30 日复购率对比柱状图与显著性结论</td></tr>
+                      <tr><td>满减券是否稀释自然复购意愿？</td><td>h-01</td><td>券核销 cohort 对比</td><td>dwd_trade_order_di · dwd_promo_coupon_di</td><td>有券 / 无券复购率差与置信区间</td></tr>
+                      <tr><td>品类结构变化能解释多少下滑？</td><td>h-03</td><td>品类贡献度分解树</td><td>dwd_trade_order_di</td><td>品类贡献度分解树</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="panel">
+                  <h2>④ 报告框架与结构树</h2>
+                  <ul class="report-tree">
+                    <li><strong>01 核心摘要与复购异动归因总览</strong> — 给出第一贡献因子与影响金额<small>关键问题：下滑核心驱动因素？量化贡献度？</small><small class="zh">零幻觉检查点：相关性推测不得表述为确定性因果</small></li>
+                    <li><strong>02 渠道质量对比</strong> — 渠道分层复购率与显著性<small>关键问题：短视频渠道是否显著低于搜索？</small><small class="zh">零幻觉检查点：显著性须标注样本量与检验方法</small></li>
+                    <li><strong>03 品类结构与券策略影响</strong> — 结构效应与券核销 cohort<small>关键问题：品类结构解释多少下滑？券策略代价？</small><small class="zh">零幻觉检查点：deferred 假设仅可作为待验证项引用</small></li>
+                    <li><strong>04 干预策略建议</strong> — 预算分配与召回策略备选<small>关键问题：各备选策略预期效果与风险？</small><small class="zh">零幻觉检查点：建议不得冒充已验证效果</small></li>
+                  </ul>
+                </div>
+                <div class="panel">
+                  <h2>零幻觉区（自动归集）<span class="re-tag">对照 RE-02</span></h2>
+                  <p class="sub">所有后置 / 未决项强制流入，严禁伪造成业务事实。</p>
+                  <p style="font-size:13px;margin:0 0 6px"><strong>open_questions</strong></p>
+                  <ul class="fact-list" style="font-size:12px">
+                    <li>退款未发货订单是否从复购分母中剔除？当前口径暂定按支付成功口径。</li>
+                    <li>会员等级标签版本未定（来自 Stage 01 can_defer 后置项）。</li>
+                    <li>h-03 品类结构假设后置，待验证。</li>
+                  </ul>
+                  <p style="font-size:13px;margin:10px 0 6px"><strong>risks</strong></p>
+                  <ul class="fact-list" style="font-size:12px">
+                    <li>大促期间渠道投放策略同期变化，归因存在混杂因素。</li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+
+            <!-- Stage 04 -->
+            <section id="stage-4" aria-label="检查与交付" hidden>
+              <div class="panel">
+                <h2>三级检查清单 <span class="re-tag">对照 RE-02</span></h2>
+                <p class="sub">仅「结构完整性」在发布时硬阻断；一致性为警告、业务完备性为提示，均不阻断编辑与跳转。</p>
+                <p class="gate-tier hard">结构完整性 · 发布时硬校验</p>
+                <div id="gate-hard"></div>
+                <p class="gate-tier warn">一致性 · 警告，不阻断</p>
+                <div id="gate-warn"></div>
+                <p class="gate-tier info">业务完备性 · 提示，不阻断</p>
+                <div id="gate-info"></div>
+                <div class="hint-bar" style="margin-top:14px"><span aria-hidden="true">ⓘ</span><div>与参考仓 fail-closed 门禁的差异：OptraCall 不指挥分析步骤，门禁仅保障 RAP 契约自身有效；业务口径缺口以 open_questions 随包交付。</div></div>
+                <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;align-items:center">
+                  <span id="publish-hint" style="font-size:12px;color:var(--muted)"></span>
+                  <button class="primary-button" type="button" id="publish-button">发布 RAP 0.2</button>
+                </div>
+              </div>
+              <div class="panel" id="release-panel" hidden>
+                <div class="module-head"><h2>已发布 · req-ecom-repurchase-202610@1.0.0</h2><span class="pill ok">不可变</span></div>
+                <div class="code-block"><pre>contract: rap/0.2
+id: req-ecom-repurchase-202610
+version: 1.0.0
+package_fingerprint: sha256:9f3a…c21e
+content_fingerprint: sha256:4b81…77d0
+scene: topic · confirmed_snapshot: sha256:7f83b165…c21e
+metrics ×3 · data_needs ×3 · analysis_paths ×3 · report_framework ×4
+open_questions ×3 · risks ×1
+路径：~/.optracall/requirement-instances/releases/req-ecom-repurchase-202610/1.0.0.rap.yaml
+登记：releases/index.json · 同版本同指纹幂等，异指纹拒绝</pre></div>
+                <div style="display:flex;justify-content:flex-end"><button class="primary-button" type="button" id="open-send-release">送入分析 →</button></div>
+                <p class="note-block"><strong>RE-06 闭环：</strong>诉求 → 澄清 → 确认 → 框架 → 发布 → 送入；全程合成数据与合成 provider。</p>
+              </div>
+            </section>
+          </div>
+
+          <!-- 简化提案卡 -->
+          <aside class="proposal" id="proposal" hidden aria-label="AI 提案卡">
+            <h3>AI 提案卡</h3>
+            <p class="sub" id="proposal-sub"></p>
+            <div class="proposal-body" id="proposal-body"></div>
+            <div class="proposal-actions">
+              <button class="primary-button" type="button" id="proposal-adopt">采纳建议</button>
+              <button class="secondary-button" type="button" id="proposal-dismiss">放弃</button>
+            </div>
+            <p class="proposal-note" id="proposal-note">放弃后工作稿零改动 · 无逐字段 diff（简化版）</p>
+            <p class="note-block" style="font-size:11px">模型输出不直接覆写工作稿。<span class="re-tag">对照 RE-04</span></p>
+          </aside>
+        </div>
+        <p class="re-footer">4-Stage 工作台 · 自由跳转 / 软门禁 / 提案卡 · 演示中标注交互为验收对照</p>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- 送入对话框 -->
+<div class="dialog-backdrop" id="send-dialog" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-label="送入分析">
+    <h2>送入分析 <span class="re-tag">对照 RE-05</span></h2>
+    <p class="sub">从已确认或已发布实例显式送入；框架结构化摘要注入目标任务上下文（复用 Case 背景注入模式）。</p>
+    <div class="field"><label for="send-target">目标</label>
+      <select id="send-target">
+        <option>Case 看板 · 大促复盘</option>
+        <option selected>项目 · 会员经营诊断</option>
+        <option>新建任务（送入时创建）</option>
+      </select>
+      <p class="field-help">用户显式选择，无自动注入；实例后续变更不回写已发送任务。</p>
+    </div>
+    <div class="field"><label>注入摘要预览（发送任务时附带）</label>
+      <div class="code-block"><pre>关联需求契约 req-ecom-repurchase-202610@1.0.0（RAP 0.2）
+目标：定位 Q4 大促后 30 天会员复购率下滑 9% 的主驱动因素
+口径：30日会员复购率 / 复购会员数（引用 membership-repurchase@1.0.0）
+数据需求：dwd_trade_order_di(P0) · dim_user_tag_df(P1) · dwd_promo_coupon_di(P2)
+分析路径：渠道分层+卡方 / 券核销 cohort / 品类贡献度分解
+报告树：01 归因总览 · 02 渠道质量 · 03 品类与券策略 · 04 干预建议
+open_questions ×3 · risks ×1（未决项不得当作事实）
+完整契约：~/.optracall/requirement-instances/releases/…/1.0.0.rap.yaml</pre></div>
+    </div>
+    <div class="dialog-actions">
+      <button class="secondary-button" type="button" id="send-cancel">取消</button>
+      <button class="primary-button" type="button" id="send-confirm">确认送入</button>
+    </div>
+    <p class="note-block" id="send-done" hidden><strong>已送入（演示）：</strong>目标任务「发送」时将附带以上摘要；需求梳理不指挥后续分析步骤。</p>
+  </div>
+</div>
+
+<script>
+  const app = document.getElementById('app');
+  const state = { inferred: false, framework: false, snapshot: false, stale: false, published: false };
+
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    app.dataset.theme = app.dataset.theme === 'light' ? 'dark' : 'light';
+  });
+
+  const topTabs = document.querySelectorAll('.re-tabs button');
+  const topPanels = { list: document.getElementById('tab-list'), work: document.getElementById('tab-work') };
+  const activateTab = name => {
+    topTabs.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    for (const [k, p] of Object.entries(topPanels)) p.hidden = k !== name;
+    document.querySelector('.re-page').scrollTop = 0;
+  };
+  topTabs.forEach(b => b.addEventListener('click', () => activateTab(b.dataset.tab)));
+  document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => activateTab(b.dataset.goto)));
+
+  const stageButtons = document.querySelectorAll('.stage-step');
+  const stagePanels = { 1: document.getElementById('stage-1'), 2: document.getElementById('stage-2'), 3: document.getElementById('stage-3'), 4: document.getElementById('stage-4') };
+  stageButtons.forEach(b => b.addEventListener('click', () => {
+    stageButtons.forEach(x => x.classList.toggle('active', x === b));
+    for (const [k, p] of Object.entries(stagePanels)) p.hidden = k !== b.dataset.stage;
+    if (b.dataset.stage === '4') refreshGates();
+  }));
+
+  // 提案卡
+  const proposal = document.getElementById('proposal');
+  const workGrid = document.getElementById('work-grid');
+  const showProposal = (sub, body) => {
+    document.getElementById('proposal-sub').textContent = sub;
+    document.getElementById('proposal-body').textContent = body;
+    document.getElementById('proposal-note').textContent = '放弃后工作稿零改动 · 无逐字段 diff（简化版）';
+    proposal.hidden = false;
+    workGrid.classList.add('with-proposal');
+  };
+  const hideProposal = note => {
+    proposal.hidden = true;
+    workGrid.classList.remove('with-proposal');
+    if (note) {
+      const bar = document.createElement('div');
+      bar.className = 'hint-bar ok';
+      bar.textContent = note;
+      proposal.parentNode.insertBefore(bar, proposal);
+      setTimeout(() => bar.remove(), 4000);
+    }
+  };
+  document.getElementById('proposal-adopt').addEventListener('click', () => hideProposal('已采纳：内容并入工作稿（演示）'));
+  document.getElementById('proposal-dismiss').addEventListener('click', () => hideProposal('已放弃：工作稿零改动'));
+
+  // 业务完备性提示（不阻断）
+  const statusText = { pending: '待回答', answered: '已回答', assumed: '按假设推进', skipped: '已跳过', deferred: '已后置' };
+  const statusClass = { pending: 'warn', answered: 'ok', assumed: 'accent', skipped: 'draft', deferred: 'draft' };
+  const refreshCompleteness = () => {
+    const rows = [...document.querySelectorAll('.clr-row')];
+    const pending = rows.filter(r => r.dataset.priority === 'must' && r.dataset.status === 'pending').length;
+    document.getElementById('completeness-text').innerHTML =
+      `<strong>业务完备性提示：</strong>must_confirm 待处理 ${pending} 项（answered / assumed 视为已收敛）。仅提示，不阻断确认、发布与 Stage 跳转；未决项随 open_questions 交付。`;
+  };
+  document.querySelectorAll('[data-clr-act]').forEach(btn => btn.addEventListener('click', () => {
+    const row = btn.closest('.clr-row');
+    const act = btn.dataset.clrAct;
+    row.dataset.status = act;
+    const pill = row.querySelector('[data-role="status"]');
+    pill.textContent = statusText[act];
+    pill.className = 'pill ' + statusClass[act];
+    if (act === 'answered' && !row.querySelector('.clr-answer')) {
+      const p = document.createElement('p');
+      p.className = 'clr-answer';
+      p.textContent = '答：（演示）用户在此录入回答。';
+      row.querySelector('.clr-rationale')?.after(p);
+    }
+    refreshCompleteness();
+    refreshGates();
+  }));
+
+  // Stage 01 推断
+  document.getElementById('infer-button').addEventListener('click', () => {
+    state.inferred = true;
+    document.getElementById('infer-result').hidden = false;
+    refreshCompleteness();
+    showProposal('首轮推断建议 · 插件会话结构化输出', '建议新增 1 条澄清：促销同期是否有渠道投放策略变更？（维度：风险 / should_confirm）——用于解释归因混杂因素。');
+    refreshGates();
+  });
+
+  // stale 演示
+  document.getElementById('touch-upstream').addEventListener('click', () => {
+    state.stale = true;
+    document.getElementById('stale-banner').hidden = false;
+    document.getElementById('work-status').innerHTML = '<span class="pill warn">已确认 · 快照已失效 stale</span>';
+    refreshGates();
+  });
+
+  // 假设状态流转
+  const hypoClass = { proposed: 'warn', confirmed: 'ok', rejected: 'error', deferred: 'draft' };
+  document.querySelector('#hypo-body').addEventListener('click', e => {
+    const btn = e.target.closest('[data-hypo-act]');
+    if (!btn) return;
+    const pill = btn.closest('tr').querySelector('[data-role="hstatus"]');
+    const act = btn.dataset.hypoAct;
+    pill.textContent = act;
+    pill.className = 'pill ' + hypoClass[act];
+    refreshGates();
+  });
+  document.getElementById('hypo-button').addEventListener('click', () => {
+    if (document.getElementById('hypo-new')) { showProposal('辅助生成假设 · 插件会话结构化输出', 'h-04：美妆类新客首单折扣深于大盘，复购基线天然偏低。'); return; }
+    const tr = document.createElement('tr');
+    tr.id = 'hypo-new';
+    tr.innerHTML = '<td><strong>h-04</strong> 美妆类新客首单折扣深于大盘，复购基线天然偏低<br><span style="color:var(--muted)">证据：AI 建议，待人工补充证据线索</span></td><td>按首单折扣深度分群后复购率梯度单调</td><td><span class="pill warn" data-role="hstatus">proposed</span></td><td><button class="text-button" data-hypo-act="confirmed">采纳</button>　<button class="text-button" data-hypo-act="rejected">拒绝</button>　<button class="text-button" data-hypo-act="deferred">后置</button></td>';
+    document.getElementById('hypo-body').appendChild(tr);
+    showProposal('辅助生成假设 · 插件会话结构化输出', 'h-04：美妆类新客首单折扣深于大盘，复购基线天然偏低。已以 proposed 状态进入矩阵，不自动采纳。');
+    refreshGates();
+  });
+
+  // 确认快照
+  document.getElementById('confirm-button').addEventListener('click', () => {
+    state.snapshot = true;
+    state.stale = false;
+    document.getElementById('snapshot-card').hidden = false;
+    document.getElementById('stale-banner').hidden = true;
+    document.getElementById('work-status').innerHTML = '<span class="pill ok">已确认 · 快照有效</span>';
+    refreshGates();
+  });
+
+  // 生成框架
+  document.getElementById('framework-button').addEventListener('click', () => {
+    state.framework = true;
+    document.getElementById('framework-result').hidden = false;
+    showProposal('框架生成 · 严格基于已确认快照', '框架已生成：指标 ×3、数据需求 ×3、分析路径 ×3、报告树 ×4；3 条后置 / 未决项已强制归集到零幻觉区。');
+    refreshGates();
+  });
+
+  // 三级检查清单
+  const gateItem = (mark, title, desc) => `<div class="gate-item"><span class="gate-mark ${mark}">${mark === 'pass' ? '✓' : mark === 'fail' ? '✕' : mark === 'warn' ? '!' : 'i'}</span><div><strong>${title}</strong><p>${desc}</p></div></div>`;
+  function refreshGates() {
+    const hard = [];
+    hard.push(gateItem('pass', 'RAP 结构可解析', 'schema 校验与 canonical 序列化可复算（演示固定通过）。'));
+    hard.push(gateItem(state.framework ? 'pass' : 'fail', '分析与报告框架非空', state.framework ? '四模块已生成。' : '尚未生成框架 —— 到 Stage 03 点击「生成框架」（唯一会阻断发布的缺口之一）。'));
+    hard.push(gateItem(state.snapshot ? 'pass' : 'fail', '存在已确认需求快照', state.snapshot ? '快照 sha256:7f83b165…c21e。' : '尚未确认 —— 到 Stage 02 点击「确认成正式需求」。'));
+    document.getElementById('gate-hard').innerHTML = hard.join('');
+
+    const warn = [];
+    warn.push(gateItem(state.stale ? 'warn' : 'pass', '快照新鲜度', state.stale ? '上游字段在确认后被修改：建议回 Stage 02 重新确认（不阻断，可带警告发布）。' : '无 stale 标记。'));
+    document.getElementById('gate-warn').innerHTML = warn.join('');
+
+    const rows = [...document.querySelectorAll('.clr-row')];
+    const pending = rows.filter(r => r.dataset.priority === 'must' && r.dataset.status === 'pending').length;
+    const proposed = document.querySelectorAll('#hypo-body [data-role="hstatus"]:not(.ok)').length;
+    const info = [];
+    info.push(gateItem(pending ? 'info' : 'pass', `must_confirm 待处理 ${pending} 项`, '提示项：未收敛口径以 open_questions 随包交付，不阻断发布。'));
+    info.push(gateItem('info', '假设覆盖情况', 'proposed / deferred 假设仅作待验证项引用，严禁混入已确认事实。'));
+    info.push(gateItem('info', '复核签署（演示）', '发布人默认当前本地用户；业务复核备注为可选提示项。'));
+    document.getElementById('gate-info').innerHTML = info.join('');
+
+    const hardPass = state.framework && state.snapshot;
+    const btn = document.getElementById('publish-button');
+    btn.disabled = !hardPass || state.published;
+    document.getElementById('publish-hint').textContent = state.published ? '已发布 1.0.0' : hardPass ? '结构完整性通过，可发布（其余层级为警告 / 提示）' : '发布被结构完整性阻断：请补齐上方 ✕ 项';
+  }
+
+  // 发布
+  document.getElementById('publish-button').addEventListener('click', () => {
+    state.published = true;
+    document.getElementById('release-panel').hidden = false;
+    document.getElementById('work-status').innerHTML = '<span class="pill ok">已发布 · 1.0.0</span>';
+    refreshGates();
+  });
+
+  // 送入对话框
+  const dialog = document.getElementById('send-dialog');
+  const openSend = () => { dialog.hidden = false; document.getElementById('send-done').hidden = true; };
+  document.getElementById('open-send-release').addEventListener('click', openSend);
+  document.getElementById('open-send-card').addEventListener('click', openSend);
+  document.getElementById('send-cancel').addEventListener('click', () => { dialog.hidden = true; });
+  document.getElementById('send-confirm').addEventListener('click', () => { document.getElementById('send-done').hidden = false; });
+  dialog.addEventListener('click', e => { if (e.target === dialog) dialog.hidden = true; });
+
+  refreshGates();
+</script>
+</body>
+</html>
