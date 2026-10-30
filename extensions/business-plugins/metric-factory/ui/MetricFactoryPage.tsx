@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { HostRequestError, createTask as createDiskTask, projectFiles, saveDraft } from '../../../../src/host/ui/runtime-client.ts';
 import type { ClientProject, ClientTask, FileNode } from '../../../../src/host/ui/project-types.ts';
 import type { SapDocument } from '../sap/validate.ts';
+import { MODELING_GUIDE } from '../session/modeling-guide.ts';
+
+export { MODELING_GUIDE };
 
 type LibraryEntry = { id: string; version: string; namespace: string; packageFingerprint: string; contentFingerprint: string; bytesSha256: string; bytes: number; publishedAt: string; publishedBy: string; metricNames: string[]; scenarioIds: string[] };
 type EnablementRecord = { packageId: string; version: string; enabledAt: string; entry?: LibraryEntry };
@@ -26,21 +29,6 @@ const draftFilesOf = (files: FileNode[]): string[] => {
   });
   return walk(files.find(node => node.name === '020_clean')?.children ?? [], '020_clean').sort((a, b) => a.localeCompare(b));
 };
-
-export const MODELING_GUIDE = `请帮我起草一份分析指标体系（SAP 0.2 语义资产包），沉淀可复用的指标口径与分析方法。
-
-建议步骤：
-1. 先向我确认业务背景：要支持什么决策、有哪些维度与时间粒度、已有哪些口径共识。
-2. 起草 YAML 草稿并保存到 020_clean/，文件名建议 <体系id>@<版本>.draft.yaml。
-3. SAP 0.2 结构（未知字段会被拒绝）：
-   - sap: "0.2"
-   - package: { id: 小写字母与中划线, version: 语义化版本, namespace: mf.<id>, fingerprint: "" }
-   - dimensions: 顶层维度清单（小写下划线命名）
-   - metrics: name/display_name/type(simple|ratio|derived|cumulative)/definition(中文口径)/dimensions/time_grains(day|week|month|quarter|year)/owner_role/caliber_switches/type_params(numerator|denominator/expr/measure/window/grain_to_date)/provenance(origin: llm, model: 当前模型, reviewed_by: 留待用户审核)
-   - scenarios: id/version/title/decision_purpose/metric_usages(metric + role: outcome|driver|guardrail)/method_refs/evidence_requirements
-4. 校验规则：指标 dimensions 必须取自顶层清单；场景引用的指标必须存在；ratio 必须有 numerator 与 denominator；type_params 引用的指标必须存在。
-5. 完成后提醒我到「指标体系」页审核发布；发布后草稿仍保留在 020_clean。
-如存在已发布包，可参考 ~/.optracall/metric-assets/<id>/<版本>.sap.yaml 的写法。`;
 
 function MetricCard({ metric }: { metric: SapDocument['metrics'][number] }) {
   return <article className="mf-metric">

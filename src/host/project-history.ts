@@ -15,6 +15,7 @@ export class ProjectHistoryError extends Error {
 export function savedTaskHistory(project: ProjectRecord, task: TaskRecord, sdkVersion: string, capabilities: Record<string, unknown> = {}): ProjectSnapshot {
   const manager = task.sessionFile ? SessionManager.open(task.sessionFile, task.sessionDirectory, path.join(project.rootPath, '020_clean')) : SessionManager.inMemory(path.join(project.rootPath, '020_clean'));
   let lastRun: ProjectSnapshot['lastRun'], activeRequestId: string | undefined;
+  let providedContext: Record<string, unknown> | undefined;
   for (const entry of manager.getEntries()) {
     if (entry.type !== 'custom' || entry.customType !== 'optracall.run') continue;
     const data = entry.data as Record<string, unknown> | undefined;
@@ -23,13 +24,15 @@ export function savedTaskHistory(project: ProjectRecord, task: TaskRecord, sdkVe
     // name a session, so retain their read compatibility without rewriting them.
     if (data.sessionId !== undefined && data.sessionId !== manager.getSessionId()) continue;
     if (data.phase === 'started' || data.phase === undefined) {
+      const supplied = data.providedContext;
+      providedContext = supplied && typeof supplied === 'object' && !Array.isArray(supplied) && (supplied as Record<string, unknown>).version === 1 ? supplied as Record<string, unknown> : undefined;
       activeRequestId = data.requestId; lastRun = { requestId: data.requestId }; continue;
     }
     if (data.phase !== 'settled' || typeof data.outcome !== 'string' || !['completed', 'cancelled', 'failed'].includes(data.outcome) || (activeRequestId !== undefined && activeRequestId !== data.requestId)) continue;
     const outcome = data.outcome as 'completed' | 'cancelled' | 'failed', diagnostic = readRunDiagnostic(data.diagnostic, outcome);
     lastRun = { requestId: data.requestId, outcome, ...(diagnostic ? { diagnostic } : {}) };
   }
-  return { sessionId: task.sessionFile ? manager.getSessionId() : task.id, sessionFile: task.sessionFile, messages: manager.buildSessionContext().messages as Record<string, any>[], tools: [], status: 'idle', sdkVersion, capabilities, ...(lastRun ? { lastRun } : {}) };
+  return { sessionId: task.sessionFile ? manager.getSessionId() : task.id, sessionFile: task.sessionFile, messages: manager.buildSessionContext().messages as Record<string, any>[], tools: [], status: 'idle', sdkVersion, capabilities: { ...capabilities, ...(providedContext ? { semanticContext: providedContext } : {}) }, ...(lastRun ? { lastRun } : {}) };
 }
 
 export async function priorTaskRequest(project: ProjectRecord, task: TaskRecord, requestId: string, fingerprint?: string): Promise<string | undefined> {

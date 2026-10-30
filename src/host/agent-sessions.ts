@@ -1,12 +1,12 @@
 import { runDiagnostic, type RunDiagnostic } from '../agent/run-diagnostics.ts';
-import { ProjectAgent, ProjectRuntimeError, type ProjectAgentOptions, type ProjectEvent, type ProjectSnapshot } from '../agent/project-runtime.ts';
+import { ProjectAgent, ProjectRuntimeError, type ProjectAgentOptions, type ProjectEvent, type ProjectSnapshot, type ProvidedContextInput } from '../agent/project-runtime.ts';
 import type { RuntimeModelConfiguration } from './config-store.ts';
 
 export const AGENT_SESSION_INTERFACE_VERSION = 1 as const;
 declare const sessionRef: unique symbol;
 export type SessionRef<Owner> = { readonly [sessionRef]: Owner };
 export type SessionContext<Owner> = { readonly owner: Owner; readonly requestId?: string; isCurrent(): boolean };
-export type SessionTurn = { text: string; requestId: string; kind?: 'prompt' | 'command'; requestFingerprint?: string };
+export type SessionTurn = { text: string; requestId: string; kind?: 'prompt' | 'command'; requestFingerprint?: string; providedContext?: ProvidedContextInput };
 export type SessionResult = { outcome: 'completed' | 'cancelled' | 'failed'; text: string; sessionFile?: string; diagnostic?: RunDiagnostic; [key: string]: unknown };
 export type SessionRun<Owner> = { requestId: string; accepted: Promise<void>; completion: Promise<SessionResult>; context: SessionContext<Owner> };
 export type SessionLease<Owner> = { readonly context: SessionContext<Owner>; run(turn: SessionTurn): Promise<SessionResult>; start(turn: SessionTurn): SessionRun<Owner> };
@@ -187,7 +187,7 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
         assertOperation(slot, operation);
         if (!resourceCurrent(slot, resource) || !resource.agent.alive) fail('runtime_closed');
         resource.operation = operation;
-        const run = turn.kind === 'command' ? resource.agent.startCommand(turn.text, turn.requestId) : resource.agent.start(turn.text, turn.requestId, turn.requestFingerprint);
+        const run = turn.kind === 'command' ? resource.agent.startCommand(turn.text, turn.requestId) : resource.agent.start(turn.text, turn.requestId, turn.requestFingerprint, turn.providedContext);
         run.accepted.then(accept, rejectAccepted);
         const [result] = await Promise.all([run.completion, run.accepted]);
         return operation.cancelled ? { ...result, outcome: 'cancelled' as const, diagnostic: runDiagnostic({ outcome: 'cancelled', kind: turn.kind ?? 'prompt', retryCount: result.diagnostic?.retryCount }) } : result;

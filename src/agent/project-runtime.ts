@@ -8,6 +8,8 @@ import { runtimeEnvironment } from '../../scripts/runtime-process.ts';
 
 /** Replacement workspace for non-project agent sessions (e.g. business plugins). */
 export type AgentWorkspace = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[] };
+/** Host-provided context receipt; this describes delivery, not business adoption. */
+export type ProvidedContextInput = { rap?: { instanceId: string; version?: string; text: string }; case?: { operationId: string; summary?: string } };
 export type ProjectAgentOptions = { projectId: string; projectDirectory?: string; workspace?: AgentWorkspace; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string };
 export type BrowserUIRequest = { id: string; method: 'select' | 'confirm' | 'input' | 'editor'; title: string; message?: string; options?: string[]; placeholder?: string; prefill?: string };
 export type ProjectSnapshot = { sessionId: string; sessionFile?: string; messages: Record<string, any>[]; tools: string[]; status: 'idle' | 'running'; sdkVersion: string; capabilities: Record<string, unknown>; lastRun?: { requestId: string; outcome?: 'completed' | 'cancelled' | 'failed'; diagnostic?: RunDiagnostic }; uiRequests?: BrowserUIRequest[] };
@@ -101,17 +103,17 @@ export class ProjectAgent {
     return this.#snapshot!;
   }
   async snapshot(): Promise<ProjectSnapshot> { await this.open(); this.#snapshot = await this.#rpc('snapshot'); return this.#snapshot!; }
-  #execute(method: 'prompt' | 'command', text: string, requestId: string, requestFingerprint?: string) {
+  #execute(method: 'prompt' | 'command', text: string, requestId: string, requestFingerprint?: string, providedContext?: ProvidedContextInput) {
     if (this.#running) throw new ProjectRuntimeError('session_busy');
     if (!text.trim() || text.length > 20_000) throw new ProjectRuntimeError('invalid_message');
     if (requestFingerprint !== undefined && (method !== 'prompt' || typeof requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(requestFingerprint))) throw new ProjectRuntimeError('invalid_request_fingerprint');
     const accepted = new Promise<void>((resolve, reject) => { this.#accepted.set(requestId, { resolve, reject }); });
     void accepted.catch(() => {});
-    const completion = this.open().then(() => this.#rpc(method, { text, requestId, ...(requestFingerprint === undefined ? {} : { requestFingerprint }) })).catch(error => { this.#accepted.get(requestId)?.reject(error); throw error; }).finally(() => { this.#running = undefined; this.#accepted.delete(requestId); });
+    const completion = this.open().then(() => this.#rpc(method, { text, requestId, ...(requestFingerprint === undefined ? {} : { requestFingerprint }), ...(providedContext === undefined ? {} : { providedContext }) })).catch(error => { this.#accepted.get(requestId)?.reject(error); throw error; }).finally(() => { this.#running = undefined; this.#accepted.delete(requestId); });
     this.#running = { id: requestId, completion };
     return { requestId, completion, accepted };
   }
-  start(text: string, requestId: string, requestFingerprint?: string) { return this.#execute('prompt', text, requestId, requestFingerprint); }
+  start(text: string, requestId: string, requestFingerprint?: string, providedContext?: ProvidedContextInput) { return this.#execute('prompt', text, requestId, requestFingerprint, providedContext); }
   startCommand(text: string, requestId: string) { return this.#execute('command', text, requestId); }
   async stop() { if (!this.#running) return; await this.open(); await this.#rpc('stop'); await this.#running?.completion; }
   async command(text: string, requestId: string = randomUUID()) { const run = this.#execute('command', text, requestId); const [result] = await Promise.all([run.completion, run.accepted]); return result; }

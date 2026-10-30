@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { startTestHost } from './fixtures/host-process.ts';
+import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
+import { prepareJointContext, readJson } from './fixtures/joint-context.ts';
+import { sessionEvents } from './fixtures/session-events.ts';
+
+test('SV03: Host delivery receipts associate selected RAP and Case with the actual native SAP resource', { timeout: 90_000 }, async t => {
+  const provider = await startSyntheticProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const f = await prepareJointContext(host, provider.baseUrl);
+  const route = `/api/projects/${f.project.id}/tasks/${f.task.id}`;
+  const stream = await sessionEvents(host, f.project.id, f.task.id);
+  t.after(() => stream.close());
+  const id = randomUUID();
+  await readJson(await host.request(`${route}/messages`, 'POST', { requestId: id, text: '保留背景及未确认事项。', requirementContext: f.requirementContext, caseContext: f.caseContext }), 202);
+  await stream.terminal;
+  const state = await readJson(await host.request(route));
+  const entries = (await readFile(state.task.sessionFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  const receipt = entries.find(entry => entry.customType === 'optracall.run' && entry.data.phase === 'started' && entry.data.requestId === id).data.providedContext;
+  assert.equal(receipt.rap.instanceId, f.requirementContext.instanceId);
+  assert.equal(receipt.rap.version, '1.9.0');
+  assert.match(receipt.rap.text, /RR07_RAP_1_9_GOAL/);
+  assert.match(receipt.case.operationId, /^[a-f0-9-]{36}$/);
+  assert.match(receipt.sap.indexText, /membership-repurchase@1\.0\.0/);
+  assert.equal(receipt.claim, 'provided-not-adopted');
+  const nativeBefore = await readFile(state.task.sessionFile);
+  await stream.close(); await host.close();
+  const reopened = await startTestHost({ dataRoot: host.dataRoot, projectsRoot: host.projectsRoot });
+  t.after(() => reopened.close());
+  const saved = await readJson(await reopened.request(route));
+  assert.match(saved.snapshot.capabilities.semanticContext.sap.indexText, /membership-repurchase@1\.0\.0/);
+  assert.equal(saved.snapshot.capabilities.semanticContext.rap.version, '1.9.0');
+  assert.deepEqual(await readFile(state.task.sessionFile), nativeBefore, 'Readback must not backfill native records');
+  assert.equal(provider.requests.length, 1);
+});

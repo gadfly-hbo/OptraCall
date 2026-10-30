@@ -19,6 +19,8 @@ import { createRequirementSessions } from './requirement-sessions.ts';
 import { createAgentSessionDomain, type SessionContext } from './agent-sessions.ts';
 import { savedTaskHistory, priorTaskRequest, ProjectHistoryError } from './project-history.ts';
 import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
+import { createVerificationFeature, parseVerificationSelection } from './verification-host.ts';
+import { VerificationStoreError } from './verification-store.ts';
 
 class RequestFault extends Error {
   readonly status: number; readonly code: string;
@@ -56,7 +58,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const instanceId = options.instanceId ?? randomUUID();
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
   if (!Number.isSafeInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 10) throw new Error('Invalid observer heartbeat interval.');
-  const ready = (async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); })();
+  const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); await verification.reconcileInterrupted(); });
   type ProjectOwner = { project: ProjectRecord; task: TaskRecord };
   const streams = new Map<string, Set<ServerResponse>>();
   const clearing = new Map<string, number>(), archiving = new Set<string>();
@@ -141,6 +143,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     // Only coordinate domain controls; each domain owns its resource ledger.
     const results = await Promise.allSettled([
       projectSessions.closeAll(filter),
+      verification.closeAll(filter),
       ...(!filter.projectId ? [requirementSessions.closeAll(filter)] : []),
     ]);
     for (const key of [...streams.keys()]) {
@@ -158,6 +161,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     if (project.archivedAt !== null) throw new RequestFault(409, 'project_archived');
     if (archiving.has(project.id)) throw new RequestFault(409, 'project_busy');
   }
+  const verification = createVerificationFeature({ dataRoot, codeRoot: options.cwd, projects, cases, configuration, projectSessions, pair, requirementContext: input => requirementPrefix(input),
+    availableConfiguration, mutate, isClosing: () => closing,
+    managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
+  });
   function decorateProject(project: ProjectRecord) {
     try { if (cases.getStatus().state === 'ready') return { ...project, work: cases.getProjectWork(project.id), workUnavailable: false }; } catch {}
     return { ...project, work: null, workUnavailable: true };
@@ -224,7 +231,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   async function projectBusy(projectId: string) {
     const project = await projects.get(projectId);
-    return project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task })));
+    return project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId);
   }
   const priorRequest = priorTaskRequest;
   const savedHistory = (project: ProjectRecord, task: TaskRecord, capabilities: Record<string, unknown> = {}) => savedTaskHistory(project, task, SDK_VERSION, capabilities);
@@ -413,6 +420,26 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const taskRoute = /^tasks\/([a-f0-9-]+)(?:\/(.*))?$/.exec(action ?? '');
         if (taskRoute) {
           const taskId = taskRoute[1]!, operation = taskRoute[2], key = keyOf(projectId, taskId);
+          if (operation === 'verifications/preview' && request.method === 'POST') { verification.assertAvailable(); json(response, 200, await verification.preview(projectId, taskId, parseVerificationSelection(await body(request)))); return; }
+          const verificationRoute = /^verifications(?:\/([a-f0-9-]+)(?:\/(.*))?)?$/.exec(operation ?? '');
+          if (verificationRoute) {
+            verification.assertAvailable();
+            await pair(projectId, taskId, request.method !== 'GET');
+            const id = verificationRoute[1], action = verificationRoute[2];
+            if (!id && request.method === 'GET') { const records = await verification.list(projectId, taskId); json(response, 200, { verifications: await Promise.all(records.map(record => verification.read(record))) }); return; }
+            if (!id && request.method === 'POST') { const result = await verification.start(projectId, taskId, parseVerificationSelection(await body(request))); json(response, result.created ? 202 : 200, { verification: await verification.read(result.verification) }); return; }
+            const owner = { projectId, taskId, verificationId: id! };
+            if (id && !action && request.method === 'GET') { json(response, 200, { verification: await verification.read(owner) }); return; }
+            if (id && request.method === 'POST') {
+              const input = await body(request);
+              if (action === 'stop') { json(response, 200, { verification: await verification.stop(owner) }); return; }
+              if (action === 'author-revision') { json(response, 202, { verification: await verification.revise(owner, typeof input.instructions === 'string' ? input.instructions : '') }); return; }
+              if (action === 'recheck') { json(response, 202, { verification: await verification.recheck(owner) }); return; }
+              if (action === 'ui-response') { json(response, 200, await verification.respondUI(owner, { id: String(input.id ?? ''), ...(typeof input.value === 'string' || typeof input.value === 'boolean' ? { value: input.value } : {}), ...(input.cancelled === true ? { cancelled: true } : {}) })); return; }
+              if (action === 'export') { json(response, 201, { exportedFile: await verification.exportReport(owner), verification: await verification.read(owner) }); return; }
+            }
+            throw new RequestFault(404, 'not_found');
+          }
           if (!operation && request.method === 'GET') { json(response, 200, await taskState(projectId, taskId)); return; }
           if (operation === 'open' && request.method === 'POST') { await body(request); const state = await taskState(projectId, taskId, true); publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot }); json(response, 200, state); return; }
           if (operation === 'draft' && request.method === 'PATCH') {
@@ -460,10 +487,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   const prompt = requirement === undefined ? casePrompt : `${requirement}\n\n${casePrompt}`;
                   startedAt = new Date().toISOString();
                   await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt });
-                  return { prompt };
+                  const selectedRequirement = requirementSelection(input);
+                  const providedContext = {
+                    ...(selectedRequirement && requirement ? { rap: { ...selectedRequirement, text: requirement } } : {}),
+                    ...(input.caseContext ? { case: { operationId: contextOperationId(projectId, taskId, requestId) } } : {}),
+                  };
+                  return { prompt, providedContext };
                 });
                 if ('previous' in prepared) { json(response, 202, { requestId, status: prepared.previous, deduplicated: true }); acknowledge(); return; }
-                const run = lease.start({ text: prepared.prompt!, requestId, requestFingerprint: fingerprint });
+                const run = lease.start({ text: prepared.prompt!, requestId, requestFingerprint: fingerprint, providedContext: prepared.providedContext });
                 terminalContext = run.context;
                 await run.accepted;
                 accepted = true; json(response, 202, { requestId, status: 'running' }); acknowledge();
@@ -536,11 +568,22 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
-      const originalCode = error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
+      const originalCode = error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
       const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
-      const status = error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
+      const status = error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
       json(response, status, { code, message: code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }
   })(); });
-  return { server, ready, configuration, projects, cases, close: async () => { closing = true; await gate; await closeAgents(); for (const responses of requirementStreams.values()) for (const response of responses) response.end(); requirementStreams.clear(); endStreams(); await cases.close(); await projects.close(); if (server.listening) await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }); } };
+  return { server, ready, configuration, projects, cases, close: async () => {
+    closing = true;
+    const errors: unknown[] = [];
+    const release = async (operation: () => unknown | Promise<unknown>) => { try { await operation(); } catch (error) { errors.push(error); } };
+    await release(() => gate);
+    await release(() => closeAgents());
+    await release(() => { for (const responses of requirementStreams.values()) for (const response of responses) response.end(); requirementStreams.clear(); endStreams(); });
+    await release(() => cases.close());
+    await release(() => projects.close());
+    await release(async () => { if (server.listening) await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }); });
+    if (errors.length) throw new AggregateError(errors, 'host_close_failed');
+  } };
 }

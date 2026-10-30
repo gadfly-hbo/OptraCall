@@ -15,10 +15,14 @@ const projectAgentOwners = new Set([
   'tests/host-recovery.test.ts',
   // Captures real runtime callbacks to verify stale editor events after restore.
   'tests/project-session-guards.test.ts',
+  // Isolated real-native provenance assertions; never a product runtime owner.
+  'tests/semantic-provenance.test.ts',
 ]);
 const sdkConsumers = new Set(['src/agent/project-session.ts', 'src/agent/runtime.ts', 'src/agent/browser-ui-context.ts']);
 const historyReaders = new Set(['src/host/project-history.ts', 'tests/project-migration.test.ts', 'tests/project-runtime.test.ts', 'tests/project-host.test.ts']);
-const domainRegistrars = new Set(['src/host/server.ts', 'src/host/requirement-sessions.ts', 'tests/agent-sessions.test.ts']);
+// Verification is a Host-owned profile adapter like requirements; business
+// Extensions still receive only owner-bound ports and cannot register domains.
+const domainRegistrars = new Set(['src/host/server.ts', 'src/host/requirement-sessions.ts', 'src/host/verification-sessions.ts', 'tests/agent-sessions.test.ts']);
 const connectionProbeOwners = new Set(['src/host/server.ts', 'tests/fixtures/runtime-cases.mjs']);
 // Launcher/update tests load their isolated fixture checkout by absolute URL.
 const checkoutLoaders = new Set(['scripts/trial-launcher.mjs', 'tests/trial-launcher.test.ts', 'tests/trial-update.test.ts']);
