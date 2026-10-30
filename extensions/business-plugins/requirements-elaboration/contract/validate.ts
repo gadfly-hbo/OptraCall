@@ -18,11 +18,18 @@ export type HypothesisItem = Readonly<{
 export type FrameworkDocument = Readonly<{
   metrics: readonly Readonly<{ name: string; definition: string; dimensions: readonly string[]; source: string }>[];
   dataNeeds: readonly Readonly<{ table: string; fields: readonly string[]; priority: DataNeedPriority; purpose: string }>[];
+  /** Empty hypothesis means a descriptive question; nonempty values reference a known hypothesis id. */
   analysisPaths: readonly Readonly<{ question: string; hypothesis: string; method: string; requiredData: readonly string[]; expectedOutput: string }>[];
   reportFramework: readonly Readonly<{ section: string; purpose: string; keyQuestions: readonly string[]; evidence: readonly string[]; zeroHallucinationCheck: string }>[];
   openQuestions: readonly string[];
   risks: readonly string[];
 }>;
+
+/** Draft groups may be empty; formal publication and direct send need all four structure groups. */
+export function missingFrameworkSections(framework: FrameworkDocument | undefined) {
+  return (['metrics', 'dataNeeds', 'analysisPaths', 'reportFramework'] as const).filter(section => !framework?.[section].length);
+}
+
 export type SnapshotRef = Readonly<{ fingerprint: string; confirmedAt: string; upstreamDigest: string; confirmedBy: string }>;
 export type RequirementInstance = Readonly<{
   instance: Readonly<{ version: '0.1'; id: string; scene: Scene; title: string; createdAt: string; updatedAt: string }>;
@@ -199,10 +206,10 @@ export function parseInstance(bytes: Uint8Array): RequirementInstance {
       const path = `framework.analysisPaths.${index}`;
       const a = isObject(value) ? value : fail('REQ_STRUCTURE', path);
       keys(a, ['question', 'hypothesis', 'method', 'requiredData', 'expectedOutput'], path);
-      return { question: text(a.question, `${path}.question`), hypothesis: text(a.hypothesis, `${path}.hypothesis`), method: text(a.method, `${path}.method`, true), requiredData: strings(a.requiredData, `${path}.requiredData`, true), expectedOutput: text(a.expectedOutput, `${path}.expectedOutput`, true) };
+      return { question: text(a.question, `${path}.question`), hypothesis: text(a.hypothesis, `${path}.hypothesis`, true), method: text(a.method, `${path}.method`, true), requiredData: strings(a.requiredData, `${path}.requiredData`, true), expectedOutput: text(a.expectedOutput, `${path}.expectedOutput`, true) };
     });
     for (const [index, item] of analysisPaths.entries()) {
-      if (!hypothesisIds.has(item.hypothesis)) fail('REQ_DANGLING_REFERENCE', `framework.analysisPaths.${index}.hypothesis`);
+      if (item.hypothesis !== '' && !hypothesisIds.has(item.hypothesis)) fail('REQ_DANGLING_REFERENCE', `framework.analysisPaths.${index}.hypothesis`);
       for (const [field, table] of item.requiredData.entries()) if (!tables.has(table)) fail('REQ_DANGLING_REFERENCE', `framework.analysisPaths.${index}.requiredData.${field}`);
     }
     const reportFramework = list(f.reportFramework, 'framework.reportFramework').map((value, index) => {
@@ -260,6 +267,8 @@ export function buildRapPublication(instance: RequirementInstance, version: stri
   const checked = parseInstance(new Uint8Array(Buffer.from(canonicalInstanceYaml(instance), 'utf8')));
   const snapshot = checked.snapshot ?? fail('REQ_SNAPSHOT_REQUIRED');
   const framework = checked.framework ?? fail('REQ_FRAMEWORK_REQUIRED');
+  const missingSections = missingFrameworkSections(framework);
+  if (missingSections.length) fail('REQ_FRAMEWORK_REQUIRED', `framework.${missingSections[0]}`);
   if (isStale(checked)) return fail('REQ_STALE_SNAPSHOT');
   if (!semverPattern.test(version)) return fail('REQ_STRUCTURE', 'version');
   if (!releasedBy.trim() || releasedBy.length > 200) return fail('REQ_STRUCTURE', 'releasedBy');

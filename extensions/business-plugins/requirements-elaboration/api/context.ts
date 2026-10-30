@@ -1,5 +1,5 @@
 import { createRequirementStore, RequirementStoreFault, type RequirementReleaseEntry } from '../storage/store.ts';
-import { isStale, type RequirementInstance, type RapDocument } from '../contract/validate.ts';
+import { isStale, missingFrameworkSections, type RequirementInstance, type RapDocument } from '../contract/validate.ts';
 
 type Store = ReturnType<typeof createRequirementStore>;
 
@@ -46,6 +46,6 @@ export function composeRequirementContext(store: Store, instanceId: string, vers
   const instance = store.read(instanceId);
   if (!instance.snapshot) throw new RequirementStoreFault('REQ_SNAPSHOT_REQUIRED');
   if (isStale(instance)) throw new RequirementStoreFault('REQ_STALE_SNAPSHOT');
-  if (!instance.framework) throw new RequirementStoreFault('REQ_FRAMEWORK_REQUIRED');
+  if (!instance.framework || missingFrameworkSections(instance.framework).length) throw new RequirementStoreFault('REQ_FRAMEWORK_REQUIRED');
   return summaryFromInstance(instance);
 }
