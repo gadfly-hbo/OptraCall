@@ -1,6 +1,6 @@
 # 工程可靠性收尾结果
 
-状态：候选实现完成，最终验证/非作者复核/Git与CI交付进行中。基线origin/main `3f4603e`，分支 `codex/engineering-reliability`。
+状态：本地检查与最终非作者复核完成；Git/CI及main合并身份见[PR #11](https://github.com/gadfly-hbo/OptraCall/pull/11)。基线origin/main `3f4603e`，分支 `codex/engineering-reliability`。本轮未切换运行服务。
 
 用户已确认范围见[规格](spec.md)。验证使用隔离合成资料，不修改现有运行服务或用户资料，不调用真实模型。
 
@@ -30,6 +30,13 @@
 
 历史两次M31 terminated底层原因仍UNKNOWN；本次仅验证诊断/恢复契约，不以合成通过宣称已定位供应商或网络原因。Extension正确性方案为[待确认建议](../../../docs/extension-correctness-proposal.md)，没有实施专业校验或新分析循环。
 
-## 后续记录
+## 最终验证与Git交付
 
-最终全量检查、实际浏览器操作、保全比较、独立Standards/Spec、最新main集成及CI/合并分别记录；本轮不自行切换Mac mini既有运行服务或更新MacBook。
+- v5代码候选 `46e783d17c472803f90125b03127461c5cd00227` / tree `aba4c9dbf67f50b026d50e447ce6f990c91b3c1d`：`npm run check` **420/420**，无fail/cancel/skip，含边界检查/类型/构建；`npm audit --audit-level=high`为0项。恢复窗口修复后的完整结果不能被旧408/409/419替代。
+- Standards与Spec均对34文件逐一核对及增量复验，最终0项未解决发现。独立探针与全量测试重叠，不相加；旧P2及失败现场保留。固定源码及逐文件摘要见本地candidate-manifest，后续记录文档不改被测源码。
+- 浏览器在隔离合成Host/Provider实际点击Case采用、摘要下载、旧引用/归档恢复、安全失败刷新和GET观察恢复；两个定位器预期错误从原请求续验，未重发。本轮未调用真实模型；历史真实全链报告中的计算/解释/范围问题仍为独立问题，不以本次工程通过关闭。
+- 保全对比覆盖现有项目工作区、项目/任务/native、RAP及SAP文件共257份，根配置JSON、凭据字节与逻辑SQLite均一致；凭据只输出相等boolean。公开暂存差异对当前3个配置凭据精确值检查为0匹配，不能扩大为通用安全/外传审计。
+- 提交前多次fetch，origin/main仍为`3f4603e`。代码提交[首轮PR Check](https://github.com/gadfly-hbo/OptraCall/actions/runs/41045317670)成功。补充本记录后，最终head检查、合并SHA及main push Check以[PR #11](https://github.com/gadfly-hbo/OptraCall/pull/11)和GitHub实际记录为准，工程交付回执另保存在本地。
+- 推送曾遇到本机旧Git凭据助手路径失效，使用单次命令覆盖调用已安装gh完成推送，未改全局配置或导出token。
+
+Mac mini现有运行服务保留原实例/版本，primary checkout未为本轮切换；Git/CI合并与运行采用、真实模型复验、用户产品验收分别报告。Extension建议待用户确认后另行实施，MacBook未操作。
