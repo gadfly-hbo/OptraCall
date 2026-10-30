@@ -539,4 +539,5 @@ button { color: inherit; }
 .re-dropped { color: var(--muted); font-size: 11px; }
 .dialog-backdrop { position: fixed; inset: 0; background: rgba(20, 18, 30, 0.45); display: flex; align-items: center; justify-content: center; z-index: 30; }
 .re-dialog { width: min(560px, calc(100vw - 40px)); max-height: 84dvh; overflow-y: auto; background: var(--canvas); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; }
+.re-dialog::backdrop { background: rgba(20, 18, 30, 0.45); }
 .re-dialog h2 { font-size: 16px; margin: 0 0 6px; }

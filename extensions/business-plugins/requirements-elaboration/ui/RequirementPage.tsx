@@ -64,7 +64,10 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
   const [actor, setActor] = useState('本地用户');
   const [version, setVersion] = useState('1.0.0');
   const [release, setRelease] = useState<{ entry: ReleaseEntry; rap: Record<string, unknown> } | null>(null);
-  const [sendDialog, setSendDialog] = useState(false);
+  const [sendVersion, setSendVersion] = useState<string | null>(null);
+  const [answerEdit, setAnswerEdit] = useState<{ id: string; text: string } | null>(null);
+  const [answerSaving, setAnswerSaving] = useState(false);
+  const [answerError, setAnswerError] = useState('');
   const [draft, setDraft] = useState({ title: '', scene: 'topic' as Scene });
   const activeProjects = projects.filter(project => project.archivedAt === null);
   const watchRef = useRef<AbortController | null>(null);
@@ -74,7 +77,7 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
     try {
       const value = await requirementRequest<InstanceDetail>(`/${id}`, 'GET');
       setDetail(value);
-      const latest = value.releases.at(-1);
+      const latest = [...value.releases].sort((a, b) => a.version.localeCompare(b.version, 'en', { numeric: true })).at(-1);
       if (latest) { const [major, minor] = latest.version.split('.').map(Number); setVersion(`${major}.${minor! + 1}.0`); }
       return value;
     } catch (fault) { setError(fault instanceof Error ? fault.message : '需求实例读取失败。'); return null; }
@@ -137,9 +140,26 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
     const item = instance.clarifications.find(entry => entry.id === id);
     if (!item) return;
     item.status = status;
-    if (status === 'answered' && item.answer === undefined) item.answer = '（在此填写回答）';
     if (status === 'assumed') { const first = instance.hypotheses[0]; if (first) item.linkedHypothesisId = first.id; }
-    await patch(instance);
+    try { await patch(instance); }
+    catch (fault) { setError(fault instanceof Error ? fault.message : '澄清状态未保存，请重试。'); }
+  };
+  const closeAnswerEditor = (id: string) => {
+    setAnswerEdit(null); setAnswerError('');
+    requestAnimationFrame(() => document.getElementById(`re-answer-trigger-${id}`)?.focus());
+  };
+  const saveAnswer = async () => {
+    if (!detail || !answerEdit || answerSaving) return;
+    const text = answerEdit.text.trim();
+    if (!text) { setAnswerError('请填写实际回答；也可以取消后选择跳过或后置。'); return; }
+    const instance = structuredClone(detail.instance);
+    const item = instance.clarifications.find(entry => entry.id === answerEdit.id);
+    if (!item) return;
+    item.answer = text; item.status = 'answered';
+    setAnswerSaving(true); setAnswerError('');
+    try { await patch(instance); closeAnswerEditor(item.id); }
+    catch (fault) { setAnswerError(fault instanceof Error ? fault.message : '回答未保存，请保留内容并重试。'); }
+    finally { setAnswerSaving(false); }
   };
   const setHypothesisStatus = async (id: string, status: string) => {
     if (!detail) return;
@@ -156,14 +176,14 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
   };
   const publish = async () => {
     if (!detail) return;
-    try { const value = await requirementRequest<{ entry: ReleaseEntry; releases: ReleaseEntry[] }>(`/${detail.instance.instance.id}/publish`, 'POST', { version, releasedBy: actor }); setNotice(`RAP ${value.entry.version} 已发布且不可变。`); const fresh = await reloadDetail(detail.instance.instance.id); const latest = fresh?.releases.at(-1); if (latest) { const read = await requirementRequest<{ entry: ReleaseEntry; rap: Record<string, unknown> }>(`/${detail.instance.instance.id}/releases/${latest.version}`, 'GET'); setRelease(read); } void reloadList(); }
+    try { const value = await requirementRequest<{ entry: ReleaseEntry; releases: ReleaseEntry[] }>(`/${detail.instance.instance.id}/publish`, 'POST', { version, releasedBy: actor }); setNotice(`RAP ${value.entry.version} 已发布且不可变。`); await reloadDetail(detail.instance.instance.id); const read = await requirementRequest<{ entry: ReleaseEntry; rap: Record<string, unknown> }>(`/${detail.instance.instance.id}/releases/${value.entry.version}`, 'GET'); setRelease(read); void reloadList(); }
     catch (fault) { setError(fault instanceof Error ? fault.message : '发布未完成。'); }
   };
   const create = async () => {
     try { const value = await requirementRequest<{ instance: InstanceView }>('', 'POST', { title: draft.title, scene: draft.scene }); setDraft({ title: '', scene: 'topic' }); await reloadList(); await open(value.instance.id); }
     catch (fault) { setError(fault instanceof Error ? fault.message : '创建未完成。'); }
   };
-  const open = async (id: string) => { setRelease(null); setProposal(null); setStage(1); await reloadDetail(id); };
+  const open = async (id: string) => { setRelease(null); setSendVersion(null); setAnswerEdit(null); setAnswerError(''); setProposal(null); setStage(1); await reloadDetail(id); };
   const saveContext = async () => { if (!detail) return; const instance = structuredClone(detail.instance); instance.instance.title = draft.title || instance.instance.title; await patch(instance); };
 
   if (!detail) return <div className="re-page" data-build="requirements-elaboration">
@@ -222,14 +242,20 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
             <p className="re-help">七维分类 × 三级优先；未收敛仅提示，不阻断确认、发布与跳转。</p>
             {instance.clarifications.map(item => <div key={item.id} className="re-clr-row">
               <div className="re-clr-top"><span className={priorityClass[item.priority] ?? 're-prio defer'}>{priorityLabel[item.priority] ?? item.priority}</span><span className="re-dim">{item.category}</span><span className="re-pill draft">{clarificationStatus[item.status] ?? item.status}</span></div>
-              <p className="re-clr-q">{item.question}</p>
+              <p id={`re-question-${item.id}`} className="re-clr-q">{item.question}</p>
               {item.rationale && <p className="re-clr-rationale">{item.rationale}</p>}
               {item.answer && <p className="re-clr-answer">答：{item.answer}</p>}
+              {answerEdit?.id === item.id ? <form className="re-field" onSubmit={event => { event.preventDefault(); void saveAnswer(); }}>
+                <label htmlFor="re-clarification-answer">澄清回答</label>
+                <textarea id="re-clarification-answer" autoFocus rows={3} required disabled={answerSaving} value={answerEdit.text} aria-describedby={`re-question-${item.id} re-answer-help${answerError ? ' re-answer-error' : ''}`} onChange={event => { setAnswerEdit({ id: item.id, text: event.target.value }); setAnswerError(''); }} />
+                <p id="re-answer-help" className="re-help">填写实际回答后保存；空白不能保存，取消不会改变原记录。保存或取消后可编辑其他回答。</p>
+                {answerError && <p id="re-answer-error" className="field-error" role="alert">{answerError}</p>}
+                <div className="re-actions"><button type="submit" className="secondary-button" disabled={answerSaving || !answerEdit.text.trim()}>{answerSaving ? '保存中…' : '保存回答'}</button><button type="button" className="text-button" disabled={answerSaving} onClick={() => closeAnswerEditor(item.id)}>取消编辑</button></div>
+              </form> : <button id={`re-answer-trigger-${item.id}`} className="text-button" disabled={answerSaving || Boolean(answerEdit)} aria-describedby={`re-question-${item.id}`} onClick={() => { setAnswerEdit({ id: item.id, text: item.answer ?? '' }); setAnswerError(''); }}>{item.answer ? '编辑回答' : '直接回答'}</button>}
               <div className="re-clr-actions">
-                <button className="text-button" onClick={() => void updateClarification(item.id, 'answered')}>直接回答</button>
-                <button className="text-button" onClick={() => void updateClarification(item.id, 'assumed')}>按假设推进</button>
-                <button className="text-button" onClick={() => void updateClarification(item.id, 'skipped')}>跳过</button>
-                <button className="text-button" onClick={() => void updateClarification(item.id, 'deferred')}>后置</button>
+                <button className="text-button" disabled={answerSaving} onClick={() => void updateClarification(item.id, 'assumed')}>按假设推进</button>
+                <button className="text-button" disabled={answerSaving} onClick={() => void updateClarification(item.id, 'skipped')}>跳过</button>
+                <button className="text-button" disabled={answerSaving} onClick={() => void updateClarification(item.id, 'deferred')}>后置</button>
               </div>
             </div>)}
           </div>}
@@ -281,7 +307,7 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
               <button className="primary-button" disabled={gates.publishBlocked} onClick={() => void publish()}>{gates.publishBlocked ? '发布被结构完整性阻断' : `发布 RAP 0.2 · ${version}`}</button>
             </div>
           </div>
-          {detail.releases.length > 0 && <div className="panel"><h2>已发布版本</h2><table className="re-table"><thead><tr><th>版本</th><th>指纹</th><th>发布时间 / 人</th><th>送入</th></tr></thead><tbody>{detail.releases.map(entry => <tr key={entry.version}><td><code>{entry.version}</code></td><td><code>{entry.packageFingerprint.slice(0, 19)}…</code></td><td>{entry.releasedAt.slice(0, 16).replace('T', ' ')} · {entry.releasedBy}</td><td><button className="text-button" onClick={() => { setRelease(null); setSendDialog(true); }}>送入分析 →</button></td></tr>)}</tbody></table></div>}
+          {detail.releases.length > 0 && <div className="panel"><h2>已发布版本</h2><table className="re-table"><thead><tr><th>版本</th><th>指纹</th><th>发布时间 / 人</th><th>送入</th></tr></thead><tbody>{detail.releases.map(entry => <tr key={entry.version}><td><code>{entry.version}</code></td><td><code>{entry.packageFingerprint.slice(0, 19)}…</code></td><td>{entry.releasedAt.slice(0, 16).replace('T', ' ')} · {entry.releasedBy}</td><td><button className="text-button" onClick={() => setSendVersion(entry.version)}>送入分析 →</button></td></tr>)}</tbody></table></div>}
           {release && <div className="panel"><h2>发布物预览 · {release.entry.id}@{release.entry.version}</h2><pre className="re-stream">{JSON.stringify(release.rap, null, 2).slice(0, 4000)}</pre></div>}
         </section>}
       </div>
@@ -298,48 +324,61 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
         <p className="re-help">模型输出不直接覆写工作稿；采纳后以草稿状态进入实例，仍可编辑。</p>
       </aside>}
     </div>
-    {sendDialog && <SendDialog projects={activeProjects} instanceTitle={instance.instance.title} onProjectsChanged={onProjectsChanged} onClose={() => setSendDialog(false)} onSend={async (project, task) => { setSendDialog(false); const latest = detail.releases.at(-1)?.version; onSendToTask(project, task, { instanceId: instance.instance.id, version: latest, title: instance.instance.title }); }} />}
+    {sendVersion && <SendDialog projects={activeProjects} instanceTitle={instance.instance.title} version={sendVersion} onProjectsChanged={onProjectsChanged} onClose={() => setSendVersion(null)} onSend={(project, task) => { onSendToTask(project, task, { instanceId: instance.instance.id, version: sendVersion, title: instance.instance.title }); setSendVersion(null); }} />}
   </div>;
 }
 
-function SendDialog({ projects, instanceTitle, onProjectsChanged, onClose, onSend }: { projects: ClientProject[]; onProjectsChanged: () => void; onClose: () => void; onSend: (project: ClientProject, task: ClientTask) => void; instanceTitle: string }) {
+function SendDialog({ projects, instanceTitle, version, onProjectsChanged, onClose, onSend }: { projects: ClientProject[]; onProjectsChanged: () => void; onClose: () => void; onSend: (project: ClientProject, task: ClientTask) => void; instanceTitle: string; version: string }) {
+  const dialog = useRef<HTMLDialogElement>(null), projectSelect = useRef<HTMLSelectElement>(null);
   const [refreshed, setRefreshed] = useState<ClientProject[] | null>(null);
-  const [target, setTarget] = useState<{ projectId: string; taskId: string } | null>(null);
+  const [projectId, setProjectId] = useState(''), [taskId, setTaskId] = useState('');
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
   useEffect(() => { void listProjects().then(value => setRefreshed(value.filter(item => item.archivedAt === null))).catch(() => setRefreshed(projects.length ? projects : [])); }, []);
+  useEffect(() => {
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialog.current?.showModal(); projectSelect.current?.focus();
+    return () => { if (trigger?.isConnected) trigger.focus(); };
+  }, []);
   const list = refreshed ?? projects;
-  const project = list.find(item => item.id === target?.projectId);
-  const task = project?.tasks.find(item => item.id === target?.taskId);
+  const project = list.find(item => item.id === projectId);
+  const task = project?.tasks.find(item => item.id === taskId);
   const createTask = async () => {
-    const candidate = list[0];
-    if (!candidate) return;
-    setCreating(true);
+    if (!project || creating) return;
+    const candidate = project;
+    setCreating(true); setError('');
     try {
       const created = await createDiskTask(candidate.id, `需求分析：${instanceTitle}`);
-      const fresh = (await listProjects()).filter(item => item.archivedAt === null);
-      setRefreshed(fresh);
-      setTarget({ projectId: candidate.id, taskId: created.id });
+      setRefreshed(list.map(item => item.id === candidate.id ? { ...item, tasks: [...item.tasks, created] } : item));
+      setTaskId(created.id);
       onProjectsChanged();
+      try { setRefreshed((await listProjects()).filter(item => item.archivedAt === null)); }
+      catch { setError('任务已在所选项目创建并选中；列表刷新失败，请核对工作台，不要重复创建。'); }
     }
+    catch (fault) { setError(fault instanceof HostRequestError ? fault.message : '创建结果未确认，请先核对所选项目的任务列表，避免重复创建。'); }
     finally { setCreating(false); }
   };
-  return <div className="dialog-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="re-dialog" role="dialog" aria-modal="true" aria-label="送入分析">
-      <h2>送入分析</h2>
+  return <dialog ref={dialog} className="re-dialog" aria-labelledby="re-send-title" onClose={onClose} onCancel={event => { if (creating) event.preventDefault(); }} onClick={event => { if (creating || event.target !== event.currentTarget) return; const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) event.currentTarget.close(); }}>
+    <div>
+      <h2 id="re-send-title">送入分析</h2>
+      <p className="re-help"><strong>RAP {version}</strong> · {instanceTitle}</p>
       <p className="re-help">选择目标任务；发送消息时将附带该需求契约的结构化摘要（目标、口径、数据需求、分析路径、报告树、open questions）。用户显式选择，无自动注入；实例后续变更不回写已发送任务。</p>
-      <div className="re-field"><label>项目</label><select value={target?.projectId ?? ''} onChange={event => { const value = event.target.value; const first = list.find(item => item.id === value)?.tasks.at(-1); setTarget(first ? { projectId: value, taskId: first.id } : null); }}>
+      <div className="re-field"><label htmlFor="re-send-project">项目</label><select ref={projectSelect} id="re-send-project" value={projectId} disabled={creating} aria-describedby="re-send-project-help" onChange={event => { const value = event.target.value; setProjectId(value); setTaskId(list.find(item => item.id === value)?.tasks.at(-1)?.id ?? ''); setError(''); }}>
         <option value="">选择项目…</option>
         {list.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select></div>
-      {project && <div className="re-field"><label>任务</label><select value={target?.taskId ?? ''} onChange={event => setTarget({ projectId: project.id, taskId: event.target.value })}>
+      <p id="re-send-project-help" className="re-help">先选择目标项目；新任务只会创建在该项目内，零任务项目也可选择。</p>
+      {project && <div className="re-field"><label htmlFor="re-send-task">任务</label><select id="re-send-task" value={taskId} disabled={creating || !project.tasks.length} onChange={event => setTaskId(event.target.value)}>
+        {!project.tasks.length && <option value="">暂无任务，请新建任务</option>}
         {project.tasks.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select></div>}
+      {error && <p className="field-error" role="alert">{error}</p>}
       <div className="re-actions">
-        <button className="secondary-button" disabled={!list.length || creating} onClick={() => void createTask()}>{creating ? '创建中…' : '新建任务并选中'}</button>
-        <button className="primary-button" disabled={!project || !task} onClick={() => project && task && onSend(project, task)}>前往发送 →</button>
-        <button className="secondary-button" onClick={onClose}>取消</button>
+        <button className="secondary-button" disabled={!project || creating} onClick={() => void createTask()}>{creating ? '创建中…' : '新建任务并选中'}</button>
+        <button className="primary-button" disabled={!project || !task || creating} onClick={() => project && task && onSend(project, task)}>前往发送 →</button>
+        <button className="secondary-button" disabled={creating} onClick={() => dialog.current?.close()}>取消</button>
       </div>
       <p className="re-help">需求梳理不指挥后续分析步骤；摘要以资料形式注入，Agent 自主决定分析方法。</p>
     </div>
-  </div>;
+  </dialog>;
 }

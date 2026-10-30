@@ -8,7 +8,7 @@ import { createBrowserUIContext, type BrowserUIResponse } from './browser-ui-con
 type Outcome = 'completed' | 'cancelled' | 'failed';
 type LastRun = { requestId: string; outcome?: Outcome };
 type Assistant = Extract<AgentSession['messages'][number], { role: 'assistant' }>;
-type ActiveRun = { id: string; kind: 'prompt' | 'command'; cancelled: boolean; commandFailed?: boolean; last?: Assistant; pending: string; managers: Set<SessionManager> };
+type ActiveRun = { id: string; kind: 'prompt' | 'command'; requestFingerprint?: string; cancelled: boolean; commandFailed?: boolean; last?: Assistant; pending: string; managers: Set<SessionManager> };
 type RunResult = { outcome: Outcome; text: string; result?: unknown; snapshot: ProjectSnapshot };
 const RUN_ENTRY = 'optracall.run';
 
@@ -138,14 +138,15 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
   }
   function attachRunManager(target: SessionManager) {
     if (!run || run.managers.has(target)) return;
-    target.appendCustomEntry(RUN_ENTRY, { phase: 'started', requestId: run.id, sessionId: target.getSessionId(), kind: run.kind });
+    target.appendCustomEntry(RUN_ENTRY, { phase: 'started', requestId: run.id, sessionId: target.getSessionId(), kind: run.kind, ...(run.requestFingerprint === undefined ? {} : { requestFingerprint: run.requestFingerprint }) });
     run.managers.add(target);
     if (session?.sessionManager === target) materializeNewSession(session);
   }
-  function execute(id: string, kind: ActiveRun['kind'], action: () => Promise<unknown>): Promise<RunResult> {
+  function execute(id: string, kind: ActiveRun['kind'], action: () => Promise<unknown>, requestFingerprint?: string): Promise<RunResult> {
     if (run) throw new Error('session_busy');
     if (typeof id !== 'string' || !id.trim()) throw new Error('request_id_required');
-    const current: ActiveRun = { id, kind, cancelled: false, pending: '', managers: new Set() };
+    if (requestFingerprint !== undefined && (kind !== 'prompt' || typeof requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(requestFingerprint))) throw new Error('invalid_request_fingerprint');
+    const current: ActiveRun = { id, kind, ...(requestFingerprint === undefined ? {} : { requestFingerprint }), cancelled: false, pending: '', managers: new Set() };
     run = current;
     try { attachRunManager(manager!); }
     catch (error) { run = undefined; throw error; }
@@ -167,7 +168,7 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     })().finally(() => { run = undefined; pendingOperation = undefined; });
     return pendingOperation;
   }
-  function prompt(text: string, id: string) { return execute(id, 'prompt', () => session!.prompt(text)); }
+  function prompt(text: string, id: string, requestFingerprint?: string) { return execute(id, 'prompt', () => session!.prompt(text), requestFingerprint); }
   async function command(text: string, id: string) {
     const [name, ...tail] = text.trim().split(/\s+/); const argument = tail.join(' ');
     return execute(id, 'command', async () => {
@@ -205,7 +206,7 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
       else if (message.method === 'prompt' || message.method === 'command') {
         if (operation) throw new Error('session_busy');
         operation = message.method;
-        try { result = message.method === 'prompt' ? await prompt(message.input.text, message.input.requestId) : await command(message.input.text, message.input.requestId); }
+        try { result = message.method === 'prompt' ? await prompt(message.input.text, message.input.requestId, message.input.requestFingerprint) : await command(message.input.text, message.input.requestId); }
         finally { operation = undefined; }
       }
       else if (message.method === 'stop') { await stop(); result = { stopped: true }; }

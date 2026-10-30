@@ -100,16 +100,17 @@ export class ProjectAgent {
     return this.#snapshot!;
   }
   async snapshot(): Promise<ProjectSnapshot> { await this.open(); this.#snapshot = await this.#rpc('snapshot'); return this.#snapshot!; }
-  #execute(method: 'prompt' | 'command', text: string, requestId: string) {
+  #execute(method: 'prompt' | 'command', text: string, requestId: string, requestFingerprint?: string) {
     if (this.#running) throw new ProjectRuntimeError('session_busy');
     if (!text.trim() || text.length > 20_000) throw new ProjectRuntimeError('invalid_message');
+    if (requestFingerprint !== undefined && (method !== 'prompt' || typeof requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(requestFingerprint))) throw new ProjectRuntimeError('invalid_request_fingerprint');
     const accepted = new Promise<void>((resolve, reject) => { this.#accepted.set(requestId, { resolve, reject }); });
     void accepted.catch(() => {});
-    const completion = this.open().then(() => this.#rpc(method, { text, requestId })).catch(error => { this.#accepted.get(requestId)?.reject(error); throw error; }).finally(() => { this.#running = undefined; this.#accepted.delete(requestId); });
+    const completion = this.open().then(() => this.#rpc(method, { text, requestId, ...(requestFingerprint === undefined ? {} : { requestFingerprint }) })).catch(error => { this.#accepted.get(requestId)?.reject(error); throw error; }).finally(() => { this.#running = undefined; this.#accepted.delete(requestId); });
     this.#running = { id: requestId, completion };
     return { requestId, completion, accepted };
   }
-  start(text: string, requestId: string) { return this.#execute('prompt', text, requestId); }
+  start(text: string, requestId: string, requestFingerprint?: string) { return this.#execute('prompt', text, requestId, requestFingerprint); }
   async stop() { if (!this.#running) return; await this.open(); await this.#rpc('stop'); await this.#running?.completion; }
   async command(text: string, requestId: string = randomUUID()) { const run = this.#execute('command', text, requestId); const [result] = await Promise.all([run.completion, run.accepted]); return result; }
   respondUI(input: { id: string; value?: string | boolean; cancelled?: boolean }) { return this.#rpc('ui-response', input); }
