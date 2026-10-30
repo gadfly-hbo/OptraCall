@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setImmediate as tick } from 'node:timers/promises';
-import { createAgentSessionDomain, type SessionContext, type SessionLease, type SessionRuntime } from '../src/host/agent-sessions.ts';
+import { createAgentSessionDomain, type SessionContext, type SessionLease, type SessionRuntime, type SessionResult } from '../src/host/agent-sessions.ts';
 import { ProjectRuntimeError, type ProjectAgentOptions, type ProjectEvent, type ProjectSnapshot } from '../src/agent/project-runtime.ts';
 import type { RuntimeModelConfiguration } from '../src/host/config-store.ts';
 
@@ -14,7 +14,7 @@ class Transport implements SessionRuntime {
   closeError?: Error; closeCalls = 0; stopCalls = 0; editor?: string;
   closed = deferred<void>(); closeTask?: Promise<void>;
   listeners = new Set<(event: ProjectEvent) => void>();
-  active?: ReturnType<typeof deferred<{ outcome: 'completed' | 'cancelled' | 'failed'; text: string }>>;
+  active?: ReturnType<typeof deferred<SessionResult>>;
   constructor(options: ProjectAgentOptions) { this.options = options; }
   state(): ProjectSnapshot { return { sessionId: `${this.options.projectId}-native`, messages: [], tools: [], status: this.busy ? 'running' : 'idle', sdkVersion: 'synthetic', capabilities: {} }; }
   async open() { if (this.openWait) await Promise.race([this.openWait.promise, this.closed.promise.then(() => { throw new ProjectRuntimeError('runtime_closed'); })]); this.alive = true; this.emit({ type: 'snapshot', snapshot: this.state() }); return this.state(); }
@@ -22,7 +22,7 @@ class Transport implements SessionRuntime {
   subscribe(listener: (event: ProjectEvent) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   emit(event: ProjectEvent) { for (const listener of this.listeners) listener(event); }
   execute(text: string, id: string, kind: string) {
-    this.calls.push({ text, id, kind }); this.busy = true; const active = deferred<{ outcome: 'completed' | 'cancelled' | 'failed'; text: string }>(); this.active = active;
+    this.calls.push({ text, id, kind }); this.busy = true; const active = deferred<SessionResult>(); this.active = active;
     const completion = active.promise.finally(() => { this.busy = false; if (this.active === active) this.active = undefined; });
     this.emit({ type: 'run.accepted', requestId: id });
     return { requestId: id, accepted: Promise.resolve(), completion };
@@ -256,4 +256,20 @@ test('one close failure does not skip other resources and is not reported as suc
   h.agents[0]!.closeError = new Error('synthetic close failure');
   await assert.rejects(h.domain.closeAll(), { message: 'session_close_failed' }); assert.equal(h.agents[1]!.closeCalls, 1);
   await assert.rejects(h.domain.closeAll(), { message: 'session_close_failed' });
+});
+
+test('ER01: owner cancellation overrides stale failure diagnostics while preserving native retry count', async () => {
+  for (const kind of ['prompt', 'command'] as const) {
+    const h = harness('diagnostic-cancellation', { capabilities: { commands: true } }), ref = h.domain.ref('p/t');
+    const run = h.domain.start(ref, { text: 'synthetic cancellation race', requestId: 'diagnostic-cancel-race', kind });
+    await run.accepted;
+    const agent = h.agents[0]!;
+    agent.stop = async () => { agent.stopCalls++; agent.active?.resolve({ outcome: 'failed', text: '', diagnostic: { code: 'request_terminated', stage: 'native_request', message: '原生模型请求意外终止，底层原因尚未确定。', retryCount: 2 } }); };
+    await h.domain.stop(ref);
+    const result = await run.completion;
+    assert.equal(result.outcome, 'cancelled');
+    assert.deepEqual(result.diagnostic, { code: 'cancelled', stage: kind === 'command' ? 'native_command' : 'native_request', message: '本次操作已取消。', retryCount: 2 });
+    assert.equal(agent.calls.length, 1); assert.equal(agent.stopCalls, 1);
+    await h.domain.closeAll();
+  }
 });

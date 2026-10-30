@@ -18,6 +18,7 @@ import { requirementSessionDirectory, requirementWorkspace } from '../../extensi
 import { createRequirementSessions } from './requirement-sessions.ts';
 import { createAgentSessionDomain, type SessionContext } from './agent-sessions.ts';
 import { savedTaskHistory, priorTaskRequest, ProjectHistoryError } from './project-history.ts';
+import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
 
 class RequestFault extends Error {
   readonly status: number; readonly code: string;
@@ -37,11 +38,24 @@ function body(request: IncomingMessage, limit = 65_536): Promise<Record<string, 
   });
 }
 
-export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string }) {
+function heartbeat(response: ServerResponse, intervalMs: number) {
+  const timer = setInterval(() => {
+    if (response.destroyed || response.writableEnded) { clearInterval(timer); return; }
+    // Avoid buffering an unlimited stream behind a slow observer.
+    if (!response.writableNeedDrain) response.write(': heartbeat\n\n');
+  }, intervalMs);
+  timer.unref();
+  const clear = () => clearInterval(timer);
+  response.once('close', clear); response.once('finish', clear);
+}
+
+export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string; heartbeatIntervalMs?: number }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot });
   let staticUi: Awaited<ReturnType<typeof loadStaticUi>> | undefined;
   const instanceId = options.instanceId ?? randomUUID();
+  const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
+  if (!Number.isSafeInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 10) throw new Error('Invalid observer heartbeat interval.');
   const ready = (async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); })();
   type ProjectOwner = { project: ProjectRecord; task: TaskRecord };
   const streams = new Map<string, Set<ServerResponse>>();
@@ -236,13 +250,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const latest = await pair(projectId, taskId);
       if (latest.project.archivedAt !== null || projectSessions.busy(ref) || !latest.task.lastRun || latest.task.lastRun.id !== task.lastRun?.id || !['running', 'interrupted'].includes(latest.task.lastRun.status)) return;
       const proven = snapshot.lastRun?.requestId === latest.task.lastRun.id ? snapshot.lastRun.outcome : undefined;
-      if (proven || latest.task.lastRun.status === 'running') await projects.markRun(projectId, taskId, { ...latest.task.lastRun, status: proven ?? 'interrupted', settledAt: new Date().toISOString() });
+      const diagnostic = proven ? readRunDiagnostic(snapshot.lastRun?.diagnostic, proven) : readRunDiagnostic(latest.task.lastRun.diagnostic);
+      if (proven || latest.task.lastRun.status === 'running') await projects.markRun(projectId, taskId, { id: latest.task.lastRun.id, startedAt: latest.task.lastRun.startedAt, status: proven ?? 'interrupted', settledAt: new Date().toISOString(), ...(diagnostic ? { diagnostic } : {}) });
     };
     if (task.lastRun && ['running', 'interrupted'].includes(task.lastRun.status)) {
       if (inMutation) await reconcile(); else await mutate(reconcile);
       ({ project, task } = await pair(projectId, taskId));
     }
     snapshot.uiRequests = current.pendingUI.map(event => event.request);
+    const diagnostic = readRunDiagnostic(task.lastRun?.diagnostic, snapshot.lastRun?.outcome);
+    if (diagnostic && snapshot.lastRun && snapshot.lastRun.requestId === task.lastRun?.id) snapshot.lastRun = { ...snapshot.lastRun, diagnostic };
     return { project: decorateProject(project), task, snapshot };
   }
   async function settleProjectRun(owner: ProjectOwner, context: SessionContext<ProjectOwner>, requestId: string, startedAt: string, result?: Record<string, any>) {
@@ -252,7 +269,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const file = result?.sessionFile ?? result?.snapshot?.sessionFile;
       if (file) await projects.setSession(project.id, task.id, file);
       const outcome = result?.outcome ?? result?.snapshot?.lastRun?.outcome;
-      await projects.markRun(project.id, task.id, { id: requestId, status: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'interrupted', startedAt, settledAt: new Date().toISOString() });
+      const diagnostic = readRunDiagnostic(result?.diagnostic ?? result?.snapshot?.lastRun?.diagnostic);
+      await projects.markRun(project.id, task.id, { id: requestId, status: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'interrupted', startedAt, settledAt: new Date().toISOString(), ...(diagnostic ? { diagnostic } : {}) });
     });
   }
   const server = createServer((request, response) => { void (async () => {
@@ -277,6 +295,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         try { requirementPlugin.store.read(instanceId); } catch { throw new RequestFault(404, 'not_found'); }
         response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.flushHeaders();
         const responses = requirementStreams.get(instanceId) ?? new Set(); responses.add(response); requirementStreams.set(instanceId, responses); response.write(': requirement connection\n\n');
+        heartbeat(response, heartbeatIntervalMs);
         response.once('close', () => { responses.delete(response); if (!responses.size) requirementStreams.delete(instanceId); });
         return;
       }
@@ -390,7 +409,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         }
         if (action === 'files/copy-to-clean' && request.method === 'POST') { const input = await body(request); json(response, 201, { file: await projects.copyToClean(projectId, String(input.path ?? '')) }); return; }
         if (action === 'files/save-report' && request.method === 'POST') { const input = await body(request, 14 * 1024 * 1024); json(response, 201, { file: await projects.saveReport(projectId, String(input.name ?? ''), String(input.text ?? '')) }); return; }
-        if (action === 'files/content' && request.method === 'GET') { const file = await projects.readFile(projectId, url.searchParams.get('path') ?? ''); response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(file.bytes); return; }
+        if (action === 'files/content' && request.method === 'GET') { const expected = url.searchParams.get('expectedSha256'); if (expected !== null && !/^[a-f0-9]{64}$/.test(expected)) throw new RequestFault(400, 'invalid_expected_sha256'); const file = await projects.readFile(projectId, url.searchParams.get('path') ?? ''); if (expected !== null && createHash('sha256').update(file.bytes).digest('hex') !== expected) throw new RequestFault(409, 'artifact_version_changed'); response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(file.bytes); return; }
         const taskRoute = /^tasks\/([a-f0-9-]+)(?:\/(.*))?$/.exec(action ?? '');
         if (taskRoute) {
           const taskId = taskRoute[1]!, operation = taskRoute[2], key = keyOf(projectId, taskId);
@@ -407,6 +426,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             await pair(projectId, taskId);
             response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.flushHeaders();
             const responses = streams.get(key) ?? new Set(); responses.add(response); streams.set(key, responses); response.write(': task connection\n\n');
+            heartbeat(response, heartbeatIntervalMs);
             response.once('close', () => { responses.delete(response); if (!responses.size) streams.delete(key); });
             try { const state = await taskState(projectId, taskId); if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ type: 'snapshot', snapshot: state.snapshot, projectId, taskId })}\n\n`); }
             catch { if (!response.destroyed && !response.writableEnded) { response.write(`data: ${JSON.stringify({ type: 'stream.error', message: '任务连接未就绪，请检查模型配置或重新连接。', projectId, taskId })}\n\n`); response.end(); } }
@@ -451,15 +471,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                 await settleProjectRun(owner, run.context, requestId, startedAt!, result);
                 return result;
               } catch (error) {
-                if (startedAt) await settleProjectRun(owner, lease.context, requestId, startedAt).catch(() => {});
+                if (startedAt) await settleProjectRun(owner, lease.context, requestId, startedAt, { diagnostic: runtimeDiagnostic(error) }).catch(() => {});
                 throw error;
               }
             });
             void completion.then(result => {
-              if (result && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: result.outcome });
+              if (result && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: result.outcome, ...(result.diagnostic ? { diagnostic: readRunDiagnostic(result.diagnostic) } : {}) });
             }, error => {
               rejectAcknowledgement(error);
-              if (accepted && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。' });
+              if (accepted && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。', diagnostic: runtimeDiagnostic(error) });
             });
             await acknowledged; return;
           }
@@ -498,16 +518,17 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                 await settleProjectRun(owner, run.context, requestId, startedAt!, value);
                 return value;
               } catch (error) {
-                if (startedAt) await settleProjectRun(owner, lease.context, requestId, startedAt).catch(() => {});
+                if (startedAt) await settleProjectRun(owner, lease.context, requestId, startedAt, { diagnostic: runtimeDiagnostic(error) }).catch(() => {});
                 throw error;
               }
             }).catch(error => {
-              if (terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '命令已中断，请检查后显式重试。' });
+              if (terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '命令已中断，请检查后显式重试。', diagnostic: runtimeDiagnostic(error) });
               throw error;
             });
             if (terminalContext?.isCurrent()) {
               const outcome = result.outcome ?? (result as any).snapshot?.lastRun?.outcome;
-              publish(projectId, taskId, { type: 'run.settled', requestId, outcome: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'failed' });
+              const diagnostic = readRunDiagnostic((result as any).diagnostic ?? (result as any).snapshot?.lastRun?.diagnostic);
+              publish(projectId, taskId, { type: 'run.settled', requestId, outcome: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'failed', ...(diagnostic ? { diagnostic } : {}) });
             }
             json(response, 200, result); return;
           }
@@ -518,7 +539,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const originalCode = error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
       const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
       const status = error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
-      json(response, status, { code, message: code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
+      json(response, status, { code, message: code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }
   })(); });
   return { server, ready, configuration, projects, cases, close: async () => { closing = true; await gate; await closeAgents(); for (const responses of requirementStreams.values()) for (const response of responses) response.end(); requirementStreams.clear(); endStreams(); await cases.close(); await projects.close(); if (server.listening) await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }); } };

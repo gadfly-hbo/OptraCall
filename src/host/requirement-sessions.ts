@@ -1,6 +1,7 @@
 import type { ProjectEvent } from '../agent/project-runtime.ts';
 import { createAgentSessionDomain } from './agent-sessions.ts';
 import type { RuntimeModelConfiguration } from './config-store.ts';
+import { readRunDiagnostic, type RunDiagnostic } from '../agent/run-diagnostics.ts';
 
 export type RequirementWorkspaceDescriptor = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[] };
 export type RequirementSessionManagerOptions = {
@@ -14,7 +15,7 @@ export type RequirementSessionManagerOptions = {
   mutate: <T,>(operation: () => T | Promise<T>) => Promise<T>;
   isClosing: () => boolean;
 };
-export type RequirementRunResult = { outcome: 'completed' | 'cancelled' | 'failed'; text: string };
+export type RequirementRunResult = { outcome: 'completed' | 'cancelled' | 'failed'; text: string; diagnostic?: RunDiagnostic };
 export type RequirementSessionLease = { run: (text: string, requestId: string) => Promise<RequirementRunResult> };
 
 /** Requirement business profile: current selection per operation, its own workspace,
@@ -46,7 +47,8 @@ export function createRequirementSessions(options: RequirementSessionManagerOpti
     return domain.withSession(domain.ref(instanceId), lease => use({
       run: async (text, requestId) => {
         const result = await lease.run({ text, requestId });
-        return { outcome: result.outcome, text: result.text };
+        const diagnostic = readRunDiagnostic(result.diagnostic);
+        return { outcome: result.outcome, text: result.text, ...(diagnostic ? { diagnostic } : {}) };
       },
     }));
   }

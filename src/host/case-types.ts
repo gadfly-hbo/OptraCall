@@ -20,7 +20,10 @@ export type CaseArtifactRecord = {
 };
 export type CaseArtifactView = CaseArtifactRecord & {
   availability: 'available' | 'missing' | 'changed' | 'inaccessible' | 'project_unlinked' | 'unlinked';
-  projectName?: string; taskName?: string;
+  projectName?: string; taskName?: string; adoptedVersion?: ArtifactAdoption;
+};
+export type ArtifactAdoption = {
+  operationId: string; sourceRelativePath: string; sourceSha256: string; sourceBytes: number; sourceObservedAt: string; savedAt: string;
 };
 export type WorkEventType = 'case_created' | 'case_updated' | 'case_closed' | 'case_reopened' | 'project_linked'
   | 'project_unlinked' | 'artifact_linked' | 'artifact_updated' | 'artifact_unlinked' | 'note_added'

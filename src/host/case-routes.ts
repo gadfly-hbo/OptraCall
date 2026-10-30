@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { CaseStore, CaseStoreError } from './case-store.ts';
-import type { CaseArtifactRecord, CaseArtifactView, CaseStatus, ProjectWorkStatus } from './case-types.ts';
+import type { ArtifactAdoption, CaseArtifactRecord, CaseArtifactView, CaseStatus, ProjectWorkStatus } from './case-types.ts';
 import type { ConfigurationStore } from './config-store.ts';
 import { ProjectStore, type ProjectRecord } from './project-store.ts';
 
@@ -34,10 +34,10 @@ function mutation(input: Record<string, unknown>) { return { operationId: string
 
 /** Case routes share the Host lifecycle queue; original project identity stays in ProjectStore. */
 export function createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject }: Dependencies) {
-  async function artifactView(artifact: CaseArtifactRecord, linked: Set<string>): Promise<CaseArtifactView> {
+  async function artifactView(artifact: CaseArtifactRecord, linked: Set<string>, adoption?: ArtifactAdoption): Promise<CaseArtifactView> {
     let project: ProjectRecord | undefined;
     try { project = await projects.get(artifact.projectId); } catch { /* A missing original project is a broken reference, never a new project. */ }
-    const source = { ...(project ? { projectName: project.name } : {}), ...(artifact.taskId && project?.tasks.some(task => task.id === artifact.taskId) ? { taskName: project.tasks.find(task => task.id === artifact.taskId)!.name } : {}) };
+    const source = { ...(project ? { projectName: project.name } : {}), ...(adoption ? { adoptedVersion: adoption } : {}), ...(artifact.taskId && project?.tasks.some(task => task.id === artifact.taskId) ? { taskName: project.tasks.find(task => task.id === artifact.taskId)!.name } : {}) };
     if (artifact.unlinkedAt) return { ...artifact, ...source, availability: 'unlinked' };
     if (!linked.has(artifact.projectId)) return { ...artifact, ...source, availability: 'project_unlinked' };
     if (!project) return { ...artifact, ...source, availability: 'inaccessible' };
@@ -87,6 +87,30 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
     return { project: project ? await decorateProject(project) : null, operationId: common.operationId, projectId, linked: receipt.phase === 'completed', phase: receipt.phase,
       ...(receipt.phase === 'completed' && receipt.result?.case ? { case: receipt.result.case } : {}) };
   }
+  async function adoptArtifact(caseId: string, input: Record<string, unknown>) {
+    const command = { ...mutation(input), caseId, projectId: string(input.projectId), relativePath: string(input.relativePath), taskId: nullableString(input.taskId), role: (input.role ?? 'file') as CaseArtifactRecord['role'], displayName: nullableString(input.displayName) };
+    const previous = cases.getOperation(command.operationId);
+    if (previous) {
+      const receipt = cases.reserveArtifactAdoption(command); // Validate the entire original command before returning its receipt.
+      if (receipt.phase === 'completed') return receipt.result;
+      if (receipt.phase === 'prepared') cases.markArtifactAdoptionNeedsReview(command.operationId);
+      throw new CaseRouteError('artifact_adoption_needs_review', 409, { operationId: command.operationId, projectId: command.projectId });
+    }
+    const project = await projects.get(command.projectId); assertActive(project);
+    if (command.taskId && !project.tasks.some(task => task.id === command.taskId)) throw new CaseRouteError('task_not_found', 404);
+    cases.reserveArtifactAdoption(command);
+    try {
+      const saved = await projects.saveArtifactVersion(command.projectId, command.relativePath, command.operationId);
+      return cases.completeArtifactAdoption(command.operationId, { relativePath: saved.file.path, uploadId: saved.file.id, sha256: saved.source.sha256, bytes: saved.source.bytes, sourceObservedAt: saved.source.observedAt, savedAt: saved.file.uploadedAt });
+    } catch (error) {
+      // A copy may already exist. Keep it and the receipt for inspection; never copy or replay automatically.
+      const receipt = cases.getOperation(command.operationId);
+      if (receipt?.phase === 'completed') return receipt.result;
+      const code = (error as { code?: string }).code;
+      cases.markArtifactAdoptionNeedsReview(command.operationId, code === 'ENOENT' ? 'source_unavailable' : code === 'unsafe_file_path' ? 'source_unsafe' : code === 'file_changed_during_observation' ? 'source_changed' : code === 'upload_too_large' ? 'source_too_large' : code === 'upload_name_conflict' ? 'name_conflict' : 'save_or_link_failed');
+      throw new CaseRouteError('artifact_adoption_needs_review', 409, { operationId: command.operationId, projectId: command.projectId });
+    }
+  }
   return async function handle({ pathname, method, input = {} }: RouteRequest): Promise<RouteResult> {
     if (pathname === '/api/cases/storage' && method === 'GET') return { body: cases.getStatus() };
     if (pathname === '/api/cases/storage/initialize' && method === 'POST') return { body: await mutate(() => cases.initialize()) };
@@ -119,7 +143,8 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
     const caseId = match[1]!, action = match[2];
     if (!action && method === 'GET') {
       const record = cases.getCase(caseId), projectLinks = cases.listProjectLinks(caseId), linked = new Set(projectLinks.map(link => link.projectId));
-      return { body: { case: record, projectLinks, artifacts: await Promise.all(cases.getArtifacts(caseId, { includeUnlinked: true }).map(artifact => artifactView(artifact, linked))), pendingOperations: cases.listPendingProjectOperations(caseId), events: cases.getEvents('case', caseId), projectEvents: projectLinks.flatMap(link => cases.getEvents('project', link.projectId)) } };
+      const adoptions = cases.getArtifactAdoptions(caseId);
+      return { body: { case: record, projectLinks, artifacts: await Promise.all(cases.getArtifacts(caseId, { includeUnlinked: true }).map(artifact => artifactView(artifact, linked, adoptions.get(artifact.id)))), pendingOperations: [...cases.listPendingProjectOperations(caseId), ...cases.listPendingArtifactAdoptions(caseId)], events: cases.getEvents('case', caseId), projectEvents: projectLinks.flatMap(link => cases.getEvents('project', link.projectId)) } };
     }
     if (!action && method === 'PATCH') return { body: await mutate(() => ({ case: cases.updateCase({ ...mutation(input), caseId, title: string(input.title), description: string(input.description), judgement: string(input.judgement), nextStep: string(input.nextStep) }) })) };
     if (method === 'POST' && ['status', 'close', 'reopen', 'notes'].includes(action ?? '')) return { body: await mutate(() => {
@@ -136,6 +161,7 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
     if (action === 'projects/create' && method === 'POST') return { status: 201, body: await mutate(() => createProjectAndLink(caseId, input)) };
     const projectMatch = /^projects\/([a-f0-9-]+)$/.exec(action ?? '');
     if (projectMatch && method === 'DELETE') return { body: await mutate(() => cases.unlinkProject({ ...mutation(input), caseId, projectId: projectMatch[1]! })) };
+    if (action === 'artifacts/adopt' && method === 'POST') return { body: await mutate(() => adoptArtifact(caseId, input)) };
     if (action === 'artifacts' && method === 'POST') return { body: await mutate(async () => {
       const common = mutation(input), projectId = string(input.projectId), relativePath = string(input.relativePath), taskId = nullableString(input.taskId);
       const prior = cases.getOperation(common.operationId);

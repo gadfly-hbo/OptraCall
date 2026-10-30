@@ -4,7 +4,9 @@
 
 涉及Agent交互、SDK接入、会话启停/恢复、模型配置或插件接入的变更，开始前必须读取工程规范的IN01–IN07及[统一会话接入说明](docs/agent-session-integration.md)，在本变更规格记录Interface版本、owner/profile和验收范围。Codex、Qoder共用这些规则；工具入口只引用同一来源。
 
-当前变更为 [统一会话接入与生命周期管理一期](openspec/changes/unified-session-management-phase1/spec.md)：用户已确认v0.3 US01–US12，授权实现、本地检查、兼容/联合回归、非作者复核及Git/CI交付、更新main后合并。共用接口与少量实现，状态按域/owner隔离，业务策略留在各适配器；保留原项目、任务、会话和文件，不自行切换现有运行服务、调用真实模型或更新MacBook。实际完成情况见[结果记录](openspec/changes/unified-session-management-phase1/result.md)。
+当前变更为[工程可靠性收尾](openspec/changes/engineering-reliability/spec.md)：用户已授权失败诊断、连接观察恢复、采用版本追溯及本地/联合回归、独立复核和Git/CI后合并main，合并前更新main。保留现有资料，沿用软约束和统一会话入口；验收及运行采用边界见[结果记录](openspec/changes/engineering-reliability/result.md)。[Extension正确性建议](docs/extension-correctness-proposal.md)仍待用户确认。
+
+[统一会话接入一期](openspec/changes/unified-session-management-phase1/result.md)已交付，共用接口与少量实现、owner状态和业务策略分开。本次继续遵守同源接入规范。
 
 上一轮[requirements-flexibility](openspec/changes/requirements-flexibility/result.md)允许未确认框架草稿，取消澄清/假设凑数，支持描述性分析不引用假设，并补同会话一次有限格式修正；保留其正式发布、送入和兼容回退边界。
 

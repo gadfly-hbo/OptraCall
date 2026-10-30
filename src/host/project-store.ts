@@ -1,3 +1,4 @@
+import { readRunDiagnostic, type RunDiagnostic } from '../agent/run-diagnostics.ts';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
@@ -6,7 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 export const PROJECT_DIRECTORIES = ['010_draw', '020_clean', '060_reports'] as const;
 export type ProjectDirectory = typeof PROJECT_DIRECTORIES[number];
 export interface ProjectConfiguration { id: string; revision: number; provider: string; model: string; name: string; baseUrl: string; api?: string; thinkingLevel?: string }
-export interface ProjectRun { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string }
+export interface ProjectRun { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic }
 export interface UploadedFile { id: string; originalName: string; path: string; bytes: number; sha256: string; uploadedAt: string; source: { kind: 'upload' | 'copy' | 'user-save-report'; from?: string } }
 export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string }
 export interface ProjectRecord { schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
@@ -33,7 +34,8 @@ function publicConfiguration(input: unknown): ProjectConfiguration {
 function projectName(value: unknown): string { if (typeof value !== 'string' || !value.trim() || value.trim().length > 80 || /[\u0000-\u001f\u007f]/.test(value)) return fail('invalid_project_name'); return value.trim(); }
 function validRun(value: unknown): ProjectRun {
   if (!object(value) || typeof value.id !== 'string' || !uuid.test(value.id) || typeof value.status !== 'string' || !runStates.has(value.status) || !isoDate(value.startedAt) || (value.status === 'running' ? value.settledAt !== undefined : !isoDate(value.settledAt))) return fail('invalid_run');
-  return { id: value.id, status: value.status as ProjectRun['status'], startedAt: value.startedAt, ...(value.settledAt === undefined ? {} : { settledAt: value.settledAt as string }) };
+  const diagnostic = readRunDiagnostic(value.diagnostic, value.status === 'completed' || value.status === 'failed' || value.status === 'cancelled' ? value.status : undefined);
+  return { id: value.id, status: value.status as ProjectRun['status'], startedAt: value.startedAt, ...(value.settledAt === undefined ? {} : { settledAt: value.settledAt as string }), ...(diagnostic ? { diagnostic } : {}) };
 }
 
 export class ProjectStore {
@@ -284,7 +286,7 @@ export class ProjectStore {
     const bytes = Buffer.from(value); try { new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { fail('upload_requires_utf8'); }
     return { originalName: name, bytes };
   }
-  async #upload(id: string, input: { originalName: string; bytes: Buffer }, directory: ProjectDirectory, source: UploadedFile['source']): Promise<UploadedFile> {
+  async #upload(id: string, input: { originalName: string; bytes: Buffer }, directory: ProjectDirectory, source: UploadedFile['source'], exclusiveName = false): Promise<UploadedFile> {
     const project = await this.#read(id); this.#active(project); const fileId = randomUUID();
     const original = input.originalName.trim(), extension = path.extname(original), stem = original.slice(0, -extension.length);
     let relative = '';
@@ -296,7 +298,7 @@ export class ProjectStore {
       const next = { ...project, uploads: [...project.uploads, uploaded], updatedAt: uploaded.uploadedAt }; this.#metadataBytes(next);
       let handle;
       try { handle = await fs.open(target, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue; throw error; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') { if (exclusiveName) fail('upload_name_conflict'); continue; } throw error; }
       try { await handle.writeFile(input.bytes); await handle.sync(); } finally { await handle.close(); }
       await this.#write(next); return uploaded;
     }
@@ -350,6 +352,38 @@ export class ProjectStore {
       if (bytes !== initial.size || final.size !== initial.size || final.mtimeMs !== initial.mtimeMs || final.ctimeMs !== initial.ctimeMs || current.ino !== initial.ino || current.dev !== initial.dev || current.nlink !== 1 || current.isSymbolicLink()) return fail('file_changed_during_observation');
       return { sha256: digest.digest('hex'), bytes, observedAt: new Date().toISOString() };
     } finally { await handle.close(); }
+  }
+  /** Explicitly save the bytes observed now, without making the original or the copy immutable. */
+  saveArtifactVersion(projectId: string, relativePath: string, operationId: string): Promise<{ file: UploadedFile; source: { sha256: string; bytes: number; observedAt: string } }> {
+    return this.#mutation(async () => {
+      if (!uuid.test(operationId)) return fail('invalid_operation_id');
+      const project = await this.#read(projectId); this.#active(project);
+      const target = await this.#safePath(projectId, relativePath), before = await fs.lstat(target, { bigint: true });
+      if (!before.isFile() || before.nlink !== 1n) return fail('unsafe_file_path');
+      if (before.size > BigInt(maxUploadBytes)) return fail('upload_too_large');
+      const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+      let bytes: Buffer;
+      try {
+        const initial = await handle.stat({ bigint: true });
+        if (!initial.isFile() || initial.nlink !== 1n || initial.ino !== before.ino || initial.dev !== before.dev) return fail('unsafe_file_path');
+        const chunks: Buffer[] = []; let length = 0;
+        for (;;) {
+          const buffer = Buffer.allocUnsafe(64 * 1024), chunk = await handle.read(buffer, 0, buffer.length, null);
+          if (!chunk.bytesRead) break;
+          length += chunk.bytesRead; if (length > maxUploadBytes) return fail('upload_too_large');
+          chunks.push(buffer.subarray(0, chunk.bytesRead));
+        }
+        const final = await handle.stat({ bigint: true }), current = await fs.lstat(target, { bigint: true });
+        if (BigInt(length) !== initial.size || final.size !== initial.size || final.mtimeNs !== initial.mtimeNs || final.ctimeNs !== initial.ctimeNs || current.ino !== initial.ino || current.dev !== initial.dev || current.size !== initial.size || current.mtimeNs !== initial.mtimeNs || current.ctimeNs !== initial.ctimeNs || current.nlink !== 1n || current.isSymbolicLink()) return fail('file_changed_during_observation');
+        bytes = Buffer.concat(chunks, length);
+      } finally { await handle.close(); }
+      const source = { sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length, observedAt: new Date().toISOString() };
+      const extension = path.extname(relativePath), suffix = /^\.[a-z0-9_-]{1,20}$/i.test(extension) ? extension : '.bin';
+      const file = await this.#upload(projectId, { originalName: `adopted-${operationId}${suffix}`, bytes }, '060_reports', { kind: 'copy', from: relativePath }, true);
+      const check = await this.observeFile(projectId, file.path);
+      if (check.sha256 !== source.sha256 || check.bytes !== source.bytes) return fail('file_changed_during_observation');
+      return { file, source };
+    });
   }
   async saveReport(projectId: string, name: string, text: string): Promise<UploadedFile> {
     if (typeof name !== 'string' || !['.md', '.txt'].includes(path.extname(name.trim()).toLowerCase())) return fail('invalid_report_name');

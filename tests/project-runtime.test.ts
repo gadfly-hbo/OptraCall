@@ -1,10 +1,11 @@
+import { createServer } from 'node:http';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { ProjectAgent } from '../src/agent/project-runtime.ts';
+import { ProjectAgent, type ProjectEvent } from '../src/agent/project-runtime.ts';
 import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
 import { ConfigurationStore } from '../src/host/config-store.ts';
 import { ProjectStore } from '../src/host/project-store.ts';
@@ -102,7 +103,7 @@ test('SDK-04: cancellation settles once, stores its known outcome, and soft dire
   assert.equal((await running.completion).outcome, 'cancelled');
   assert.equal(events.filter(event => event.type === 'run.settled' && event.requestId === 'cancelled-run').length, 1);
   const snapshot = await agent.snapshot();
-  assert.deepEqual(snapshot.lastRun, { requestId: 'cancelled-run', outcome: 'cancelled' });
+  assert.deepEqual(snapshot.lastRun, { requestId: 'cancelled-run', outcome: 'cancelled', diagnostic: { code: 'cancelled', stage: 'native_request', message: '本次操作已取消。', retryCount: 0 } });
   const request = JSON.stringify(f.provider.requests[0].body.messages);
   assert.match(request, /do not read data in 010_draw/);
   assert.match(request, /020_clean/); assert.match(request, /060_reports/);
@@ -140,7 +141,7 @@ test('SDK-04: native error messages are masked in events and JSONL and do not re
   const result = await agent.start('The next request fails authentication.', 'failed-run').completion;
   assert.equal(result.outcome, 'failed'); assert.equal(result.text, '');
   const snapshot = await agent.snapshot();
-  assert.deepEqual(snapshot.lastRun, { requestId: 'failed-run', outcome: 'failed' });
+  assert.deepEqual(snapshot.lastRun, { requestId: 'failed-run', outcome: 'failed', diagnostic: { code: 'authentication_failed', stage: 'native_request', message: '原生模型请求被拒绝认证，请检查该任务的模型配置。', retryCount: 0 } });
   const entries = (await readFile(snapshot.sessionFile!, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
   assert.ok(scalarStrings([entries, events, snapshot, result]).every(value => !value.includes(key)));
   assert.equal(f.provider.requests.length, 2, 'Authentication failure is not automatically retried by the native SDK.');
@@ -198,7 +199,7 @@ test('SDK-04: a slash prompt keeps the Host request id, streams under it and can
   await within(agent.stop(), 'Stopping a slash prompt must release the actual SDK run.');
   const result = await within(pending, 'A stopped slash command must settle.');
   assert.equal(result.outcome, 'cancelled');
-  assert.deepEqual(result.snapshot.lastRun, { requestId: id, outcome: 'cancelled' });
+  assert.deepEqual(result.snapshot.lastRun, { requestId: id, outcome: 'cancelled', diagnostic: { code: 'cancelled', stage: 'native_command', message: '本次操作已取消。', retryCount: 0 } });
   assert.equal(events.filter(event => event.type === 'run.settled' && event.requestId === id).length, 1);
 });
 
@@ -311,7 +312,7 @@ test('SDK-04: a native compact command owns the Host run and public stop aborts 
   await within(agent.stop(), 'Stop must abort native manual compaction.');
   assert.equal((await within(pending, 'Cancelled compaction must settle.')).outcome, 'cancelled');
   await until(() => f.provider.requests[2].closedEarly ? true : undefined, 'The compaction provider connection must actually be aborted.');
-  assert.deepEqual((await agent.snapshot()).lastRun, { requestId: id, outcome: 'cancelled' });
+  assert.deepEqual((await agent.snapshot()).lastRun, { requestId: id, outcome: 'cancelled', diagnostic: { code: 'cancelled', stage: 'native_command', message: '本次操作已取消。', retryCount: 0 } });
   assert.equal(events.filter(event => event.type === 'run.settled' && event.requestId === id).length, 1);
 });
 
@@ -386,4 +387,82 @@ test('SDK-04: the child receives initial and newer Host draft state without an e
   await reopened.setEditorState('Latest state before opening'); await reopened.open();
   assert.equal(await read(reopened), 'Latest state before opening');
   assert.equal(f.provider.requests.length, 0);
+});
+
+test('ER01: native failure diagnostics survive result, event and reopen without exposing provider details', async t => {
+  const f = await fixture(t, 'synthetic-diagnostic-private-key'), agent = f.create(); f.provider.setMode('failure');
+  const events: ProjectEvent[] = []; agent.subscribe(event => events.push(event));
+  const result = await agent.start('Synthetic authentication failure.', 'diagnostic-failure').completion;
+  assert.equal(result.outcome, 'failed');
+  assert.equal(result.diagnostic?.code, 'authentication_failed');
+  assert.equal(result.diagnostic?.stage, 'native_request');
+  assert.equal(result.diagnostic?.retryCount, 0);
+  assert.ok(typeof result.diagnostic?.message === 'string' && result.diagnostic.message.length > 0);
+  assert.ok(!JSON.stringify(result.diagnostic).includes('synthetic-private-detail'));
+  assert.ok(!JSON.stringify(result.diagnostic).includes(f.options.configuration.apiKey));
+  const terminal = events.find(event => event.type === 'run.settled'); assert.ok(terminal && terminal.type === 'run.settled');
+  assert.deepEqual(terminal.diagnostic, result.diagnostic);
+  const state = await agent.snapshot(); assert.deepEqual(state.lastRun?.diagnostic, result.diagnostic);
+  const nativeBefore = await readFile(state.sessionFile!, 'utf8');
+  await agent.close();
+  const reopened = await f.create(state.sessionFile).open();
+  assert.deepEqual(reopened.lastRun?.diagnostic, result.diagnostic);
+  assert.equal(await readFile(state.sessionFile!, 'utf8'), nativeBefore, 'Readback does not rewrite existing native entries');
+  assert.equal(f.provider.requests.length, 1, 'Diagnostics/readback add no model retry or replay');
+});
+
+test('ER01: command failure has a command stage while cancellation is not relabelled as failure', async t => {
+  const f = await fixture(t, 'synthetic-diagnostic-private-key');
+  await mkdir(path.join(f.options.resourceRoot, 'extensions'), { recursive: true });
+  await writeFile(path.join(f.options.resourceRoot, 'extensions', 'diagnostic-command.ts'), "export default function(pi){pi.registerCommand('diagnostic-command',{description:'Synthetic failure',handler:async()=>{throw new Error('synthetic-private-detail synthetic-diagnostic-private-key');}});}\n");
+  const agent = f.create(); const command = await agent.command('/diagnostic-command', 'diagnostic-command-failure');
+  assert.equal(command.outcome, 'failed');
+  assert.equal(command.diagnostic?.code, 'command_failed');
+  assert.equal(command.diagnostic?.stage, 'native_command');
+  assert.ok(!JSON.stringify(command.diagnostic).includes('synthetic-private-detail'));
+  f.provider.setMode('slow'); const run = agent.start('Wait until explicitly cancelled.', 'diagnostic-cancel');
+  await f.provider.waitForRequests(1); await agent.stop();
+  const cancelled = await run.completion;
+  assert.equal(cancelled.outcome, 'cancelled');
+  assert.equal(cancelled.diagnostic?.code, 'cancelled');
+  assert.equal(f.provider.requests.length, 1);
+});
+
+for (const kind of ['prompt', 'command'] as const) for (const recovered of [false, true]) test(`ER01: native ${kind} retry summary ${recovered ? 'recovers' : 'fails'} without Host retry or model changes`, { timeout: 20_000 }, async t => {
+  const f = await fixture(t); let requests = 0; const baselineRequests = kind === 'command' ? 2 : 0;
+  const provider = createServer(async (request, response) => {
+    for await (const _ of request) { /* consume the synthetic request */ }
+    requests++;
+    if (requests > baselineRequests && (!recovered || requests <= baselineRequests + 2)) {
+      response.writeHead(429, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'synthetic-private-rate-limit-detail', type: 'rate_limit_error' } })); return;
+    }
+    response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    response.write('data: '+JSON.stringify({ id: 'synthetic-recovered', object: 'chat.completion.chunk', created: 1, model: 'synthetic-model', choices: [{ index: 0, delta: { role: 'assistant', content: 'Recovered synthetic reply.' }, finish_reason: null }] })+'\n\n');
+    response.write('data: '+JSON.stringify({ id: 'synthetic-recovered', object: 'chat.completion.chunk', created: 1, model: 'synthetic-model', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })+'\n\n');
+    response.end('data: [DONE]\n\n');
+  });
+  await new Promise<void>(resolve => provider.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>(resolve => { provider.close(() => resolve()); provider.closeAllConnections(); }));
+  const address = provider.address(); assert.ok(address && typeof address === 'object');
+  f.options.configuration.baseUrl = `http://127.0.0.1:${address.port}/v1`;
+  await mkdir(f.options.resourceRoot, { recursive: true });
+  await writeFile(path.join(f.options.resourceRoot, 'settings.json'), JSON.stringify({ retry: { enabled: true, maxRetries: 2, baseDelayMs: 1 }, compaction: { enabled: false, keepRecentTokens: 1, reserveTokens: 16 } }));
+  const agent = f.create(), events: ProjectEvent[] = []; agent.subscribe(event => events.push(event));
+  if (kind === 'command') {
+    await agent.start('First synthetic message for native compaction.', 'compact-before-1').completion;
+    await agent.start('Second synthetic message for native compaction.', 'compact-before-2').completion;
+    events.length = 0;
+  }
+  const result = kind === 'command' ? await agent.command('/compact', 'diagnostic-retry') : await agent.start('Exercise the existing native retry budget.', 'diagnostic-retry').completion;
+  assert.equal(result.outcome, recovered ? 'completed' : 'failed');
+  assert.equal(result.diagnostic?.code, recovered ? 'completed_after_retry' : kind === 'command' ? 'command_failed' : 'rate_limited');
+  const starts = events.filter(event => event.type === 'native' && (event.event.type === 'auto_retry_start' || event.event.type === 'summarization_retry_attempt_start'));
+  assert.equal(starts.length, 2); assert.equal(result.diagnostic?.retryCount, starts.length);
+  // This fixture splits compact history: SDK compact() generates a history
+  // summary and a turn-prefix summary after the two observed retry attempts.
+  const expectedNativeRequests = kind === 'command' && recovered ? 4 : 3;
+  assert.equal(requests - baselineRequests, expectedNativeRequests, 'Only native requests occur; successful split compaction includes two summaries');
+  assert.ok(!JSON.stringify(result.diagnostic).includes('synthetic-private-rate-limit-detail'));
+  assert.deepEqual((await agent.snapshot()).lastRun?.diagnostic, result.diagnostic);
 });

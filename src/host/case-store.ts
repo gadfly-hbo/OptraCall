@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import type {
   CaseStorageStatus, CaseRecord, CaseStatus, CaseProjectLink, ProjectWorkRecord, ProjectWorkInput,
-  CaseArtifactRecord, ArtifactInput, WorkEvent, WorkEventType, OperationReceipt, CaseContextSelection, CaseContextSnapshot,
+  CaseArtifactRecord, ArtifactInput, ArtifactAdoption, WorkEvent, WorkEventType, OperationReceipt, CaseContextSelection, CaseContextSnapshot,
 } from './case-types.ts';
 
 const DATABASE = 'decision-cases.sqlite3', MARKER = 'decision-cases-store.json';
@@ -33,6 +33,11 @@ function text(value: unknown, max: number, trim = false, required = false, forbi
   return result;
 }
 function optionalText(value: unknown, max: number): string | null { return value == null || value === '' ? null : text(value, max, true) || null; }
+function artifactPath(value: unknown): string {
+  const relativePath = text(value, 4096), pieces = relativePath.split('/');
+  if (pieces.length < 2 || !['010_draw', '020_clean', '060_reports'].includes(pieces[0]!) || pieces.some(piece => !piece || piece === '.' || piece === '..') || /[\\\x00-\x1f\x7f]/.test(relativePath)) fail('invalid_artifact_path');
+  return relativePath;
+}
 function now(): string { return new Date().toISOString(); }
 function canonical(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
@@ -412,9 +417,7 @@ export class CaseStore {
     return this.database().prepare(`SELECT * FROM case_artifact_links WHERE case_id=?${options.includeUnlinked === false ? ' AND unlinked_at IS NULL' : ''} ORDER BY created_at,id`).all(caseId).map(row => fromRow<CaseArtifactRecord>(row));
   }
   saveArtifact(input: Mutation & ArtifactInput & { uploadId?: string | null; observedSha256?: string | null; observedBytes?: number | null; observedAt?: string | null }): { case: CaseRecord; artifact: CaseArtifactRecord } {
-    const relativePath = text(input.relativePath, 4096);
-    const pieces = relativePath.split('/');
-    if (pieces.length < 2 || !['010_draw', '020_clean', '060_reports'].includes(pieces[0]!) || pieces.some(piece => !piece || piece === '.' || piece === '..') || /[\\\x00-\x1f\x7f]/.test(relativePath)) fail('invalid_artifact_path');
+    const relativePath = artifactPath(input.relativePath);
     const clean = { operationId: uuid(input.operationId), caseId: uuid(input.caseId), projectId: uuid(input.projectId), expectedRevision: revision(input.expectedRevision), relativePath,
       ...(input.taskId !== undefined ? { taskId: input.taskId === null ? null : uuid(input.taskId) } : {}),
       ...(input.uploadId !== undefined ? { uploadId: input.uploadId === null ? null : uuid(input.uploadId) } : {}),
@@ -435,6 +438,8 @@ export class CaseStore {
       if (!this.linked(clean.caseId, clean.projectId)) fail('project_not_linked', 409);
       const row = this.database().prepare('SELECT * FROM case_artifact_links WHERE case_id=? AND project_id=? AND relative_path=?').get(clean.caseId, clean.projectId, clean.relativePath);
       const previous = row ? fromRow<CaseArtifactRecord>(row) : null, time = now();
+      // A later ordinary link must not refresh the identity/hash of an explicitly adopted version.
+      if (previous && this.getArtifactAdoptions(clean.caseId).has(previous.id)) fail('adopted_version_reference', 409);
       const artifact: CaseArtifactRecord = previous ? { ...previous, unlinkedAt: null } : { id: randomUUID(), caseId: clean.caseId, projectId: clean.projectId, relativePath: clean.relativePath, taskId: null, uploadId: null, role: 'file', displayName: null, observedSha256: null, observedBytes: null, observedAt: null, createdAt: time, updatedAt: time, unlinkedAt: null };
       for (const key of ['taskId', 'uploadId', 'role', 'displayName', 'observedSha256', 'observedBytes', 'observedAt'] as const) if (Object.hasOwn(clean, key)) Object.assign(artifact, { [key]: clean[key] });
       const delta = changes(previous ?? {}, artifact);
@@ -444,6 +449,56 @@ export class CaseStore {
       const eventType = !previous || previous.unlinkedAt ? 'artifact_linked' : 'artifact_updated';
       return { case: this.touchCase(before, eventType, clean.operationId, { artifact: { before: previous, after: artifact } }), artifact };
     });
+  }
+  reserveArtifactAdoption(input: Mutation & ArtifactInput): OperationReceipt {
+    const clean = { operationId: uuid(input.operationId), caseId: uuid(input.caseId), projectId: uuid(input.projectId), expectedRevision: revision(input.expectedRevision), relativePath: artifactPath(input.relativePath), mode: 'adopted_version', taskId: input.taskId == null ? null : uuid(input.taskId), role: input.role ?? 'file', displayName: optionalText(input.displayName, 200) };
+    if (!['file', 'analysis_result', 'report'].includes(clean.role)) fail('invalid_artifact_role');
+    const digest = sha(canonical({ kind: 'artifact_save', ...clean }));
+    return this.transaction(() => {
+      const previous = this.getOperation(clean.operationId);
+      if (previous) { if (previous.kind !== 'artifact_save' || previous.requestSha256 !== digest) fail('operation_conflict', 409); return previous; }
+      this.activeCase(clean.caseId, clean.expectedRevision);
+      if (!this.linked(clean.caseId, clean.projectId)) fail('project_not_linked', 409);
+      const time = now();
+      this.insert('operation_receipts', { operationId: clean.operationId, kind: 'artifact_save', requestSha256: digest, caseId: clean.caseId, projectId: clean.projectId, phase: 'prepared', resultJson: JSON.stringify({ input: clean }), createdAt: time, updatedAt: time });
+      return this.getOperation(clean.operationId)!;
+    });
+  }
+  markArtifactAdoptionNeedsReview(operationId: string, reason: 'interrupted' | 'source_unavailable' | 'source_unsafe' | 'source_changed' | 'source_too_large' | 'name_conflict' | 'save_or_link_failed' = 'interrupted'): void {
+    const receipt = this.getOperation(uuid(operationId));
+    if (!receipt || receipt.kind !== 'artifact_save') fail('artifact_adoption_not_found', 404);
+    if (receipt.phase === 'completed') fail('artifact_adoption_already_completed', 409);
+    this.database().prepare("UPDATE operation_receipts SET phase='needs_review',result_json=?,updated_at=? WHERE operation_id=?").run(JSON.stringify({ ...receipt.result, reviewReason: reason }), now(), operationId);
+  }
+  completeArtifactAdoption(operationId: string, saved: { relativePath: string; uploadId: string; sha256: string; bytes: number; sourceObservedAt: string; savedAt: string }): { case: CaseRecord; artifact: CaseArtifactRecord; adoption: ArtifactAdoption } {
+    return this.transaction(() => {
+      const receipt = this.getOperation(uuid(operationId));
+      if (!receipt || receipt.kind !== 'artifact_save') fail('artifact_adoption_not_found', 404);
+      if (receipt.phase === 'completed') return receipt.result as unknown as { case: CaseRecord; artifact: CaseArtifactRecord; adoption: ArtifactAdoption };
+      if (receipt.phase !== 'prepared') fail('artifact_adoption_needs_review', 409);
+      const input = receipt.result!.input as Mutation & ArtifactInput;
+      const before = this.activeCase(receipt.caseId!, input.expectedRevision);
+      if (!this.linked(before.id, receipt.projectId!)) fail('project_not_linked', 409);
+      const relativePath = artifactPath(saved.relativePath);
+      if (!relativePath.startsWith(`060_reports/adopted-${receipt.operationId}.`) || !/^[0-9a-f]{64}$/.test(saved.sha256) || !Number.isSafeInteger(saved.bytes) || saved.bytes < 0 || !Number.isFinite(Date.parse(saved.sourceObservedAt)) || !Number.isFinite(Date.parse(saved.savedAt))) fail('invalid_artifact_observation');
+      const time = now(), artifact: CaseArtifactRecord = { id: randomUUID(), caseId: before.id, projectId: receipt.projectId!, relativePath, taskId: input.taskId ?? null, uploadId: uuid(saved.uploadId), role: input.role ?? 'file', displayName: input.displayName ?? null, observedSha256: saved.sha256, observedBytes: saved.bytes, observedAt: saved.savedAt, createdAt: time, updatedAt: time, unlinkedAt: null };
+      const adoption: ArtifactAdoption = { operationId: receipt.operationId, sourceRelativePath: input.relativePath, sourceSha256: saved.sha256, sourceBytes: saved.bytes, sourceObservedAt: saved.sourceObservedAt, savedAt: saved.savedAt };
+      this.insert('case_artifact_links', artifact);
+      const result = { case: this.touchCase(before, 'artifact_linked', receipt.operationId, { artifact: { before: null, after: artifact }, adoption: { before: null, after: adoption } }), artifact, adoption };
+      this.database().prepare("UPDATE operation_receipts SET phase='completed',result_json=?,updated_at=? WHERE operation_id=?").run(JSON.stringify(result), now(), operationId);
+      return result;
+    });
+  }
+  getArtifactAdoptions(caseId: string): Map<string, ArtifactAdoption> {
+    const result = new Map<string, ArtifactAdoption>();
+    for (const row of this.database().prepare("SELECT result_json FROM operation_receipts WHERE kind='artifact_save' AND case_id=? AND phase='completed'").all(uuid(caseId))) {
+      const saved = JSON.parse(String(row.result_json)) as { artifact: CaseArtifactRecord; adoption: ArtifactAdoption };
+      if (saved.adoption) result.set(saved.artifact.id, saved.adoption);
+    }
+    return result;
+  }
+  listPendingArtifactAdoptions(caseId: string): OperationReceipt[] {
+    return this.database().prepare("SELECT operation_id FROM operation_receipts WHERE kind='artifact_save' AND case_id=? AND phase!='completed' ORDER BY created_at,operation_id").all(uuid(caseId)).map(row => this.getOperation(String(row.operation_id))!);
   }
   unlinkArtifact(input: Mutation & { artifactId: string }): { case: CaseRecord; artifact: CaseArtifactRecord } {
     const clean = { operationId: uuid(input.operationId), caseId: uuid(input.caseId), artifactId: uuid(input.artifactId), expectedRevision: revision(input.expectedRevision) };
