@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
+import { createRequirementSessions } from '../src/host/requirement-sessions.ts';
+import type { RuntimeModelConfiguration } from '../src/host/config-store.ts';
+import { requirementWorkspace } from '../extensions/business-plugins/requirements-elaboration/session/workspace.ts';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
 import { controlledRequirementProcess } from './fixtures/requirement-lifecycle-process.ts';
@@ -85,9 +89,12 @@ test('RR05: closing before mutation admission cancels queued opening without a p
 
 test('RR05: finishing an older close cannot remove a replacement generation', async t => {
   const f = await controlledRequirementProcess(t);
-  const pending = f.manager.run('req-replaced', 'old generation', 'old-run');
-  void pending.catch(() => {});
+  const completed = f.manager.run('req-replaced', 'old generation', 'old-run');
   const old = await f.spawned('req-replaced');
+  await f.release(old);
+  await completed;
+  // The old resource is idle. An active operation retains its admission until
+  // safe drain, covered separately by SM03 in the public Interface tests.
   await f.holdClose(old);
   const closing = f.manager.close('req-replaced');
   await f.waitClosing(old);
@@ -97,7 +104,6 @@ test('RR05: finishing an older close cannot remove a replacement generation', as
   assert.equal((await replacement).outcome, 'completed');
   await f.releaseClose(old);
   await closing;
-  await assert.rejects(pending);
   assert.equal(f.manager.live('req-replaced'), true);
   assert.equal((await f.manager.run('req-replaced', 'replacement continues', 'replacement-next')).outcome, 'completed');
 });
@@ -124,4 +130,40 @@ test('RR05: provider close of an older entry does not cancel a different-provide
   await f.release(observed.child);
   assert.equal((await replacement).outcome, 'completed');
   assert.equal(f.manager.live('req-provider-replaced'), true);
+});
+
+test('SM11 requirement compatibility: rebuilding with the same configuration retains old files without implicitly resuming them', async t => {
+  const scratch = await mkdtemp(path.join(os.tmpdir(), 'optracall-requirement-rebuild-'));
+  const provider = await startSyntheticProvider();
+  const configuration: Readonly<RuntimeModelConfiguration> = { id: 'stable-requirement-profile', revision: 1, name: 'Synthetic restart', provider: 'openai-compatible', api: 'openai-completions', baseUrl: provider.baseUrl, model: 'rebuild-model', apiKey: 'synthetic-rebuild-only' };
+  const create = () => createRequirementSessions({
+    codeRoot: process.cwd(), resourceRoot: path.join(scratch, 'resources'), managementPorts: () => [],
+    sessionDirectory: id => path.join(scratch, id, 'sessions'), workspaceFor: id => requirementWorkspace(path.join(scratch, id)),
+    configurationSnapshot: (id, revision) => (!id || id === configuration.id) && (revision === undefined || revision === configuration.revision) ? configuration : undefined,
+    publish: () => {}, mutate: async operation => operation(), isClosing: () => false,
+  });
+  let manager: ReturnType<typeof createRequirementSessions> | undefined;
+  t.after(async () => { await manager?.closeAll(); await provider.close(); await rm(scratch, { recursive: true, force: true }); });
+  manager = create();
+  const id = 'req-same-configuration-rebuild';
+  provider.setChunks(['ORIGINAL_REQUIREMENT_NATIVE_CONTEXT_MARKER']);
+  assert.equal((await manager.run(id, 'first explicit synthetic request', 'rebuild-first')).outcome, 'completed');
+  await manager.closeAll();
+  const directory = path.join(scratch, id, 'sessions');
+  const originalFiles = (await readdir(directory)).filter(name => name.endsWith('.jsonl'));
+  assert.equal(originalFiles.length, 1);
+  const originalPath = path.join(directory, originalFiles[0]!);
+  const originalBytes = await readFile(originalPath);
+  assert.match(originalBytes.toString(), /ORIGINAL_REQUIREMENT_NATIVE_CONTEXT_MARKER/);
+
+  manager = create();
+  assert.equal(manager.live(id), false);
+  assert.equal(manager.busy(id), false);
+  provider.setChunks(['REBUILT_REQUIREMENT_NATIVE_CONTEXT_MARKER']);
+  assert.equal((await manager.run(id, 'second explicit synthetic request', 'rebuild-second')).outcome, 'completed');
+  assert.equal(provider.requests.length, 2, 'reconstruction must not replay the previous operation');
+  const secondContext = JSON.stringify(provider.requests[1]!.body.messages);
+  assert.doesNotMatch(secondContext, /ORIGINAL_REQUIREMENT_NATIVE_CONTEXT_MARKER/, 'no persisted native pointer is added to the requirement profile');
+  assert.deepEqual(await readFile(originalPath), originalBytes, 'the historical file remains at its original path and retains every byte');
+  assert.equal((await readdir(directory)).filter(name => name.endsWith('.jsonl')).length, 2, 'the explicit operation after reconstruction creates its own native session');
 });

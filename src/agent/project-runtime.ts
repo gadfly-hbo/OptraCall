@@ -111,6 +111,7 @@ export class ProjectAgent {
     return { requestId, completion, accepted };
   }
   start(text: string, requestId: string, requestFingerprint?: string) { return this.#execute('prompt', text, requestId, requestFingerprint); }
+  startCommand(text: string, requestId: string) { return this.#execute('command', text, requestId); }
   async stop() { if (!this.#running) return; await this.open(); await this.#rpc('stop'); await this.#running?.completion; }
   async command(text: string, requestId: string = randomUUID()) { const run = this.#execute('command', text, requestId); const [result] = await Promise.all([run.completion, run.accepted]); return result; }
   respondUI(input: { id: string; value?: string | boolean; cancelled?: boolean }) { return this.#rpc('ui-response', input); }

@@ -13,7 +13,9 @@ type Child = { pid: number; cwd: string };
 const entry = String.raw`
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 const cwd = process.cwd(), pid = process.pid;
+const sessionId = randomUUID();
 const marker = name => path.join(cwd, name + '-' + pid);
 fs.writeFileSync(marker('spawned'), JSON.stringify({ pid, cwd }));
 const wait = name => new Promise(resolve => {
@@ -21,6 +23,7 @@ const wait = name => new Promise(resolve => {
   const timer = setInterval(() => { if (fs.existsSync(marker(name))) { clearInterval(timer); resolve(); } }, 5);
 });
 const reply = (id, result) => process.send?.({ kind: 'reply', id, result });
+let sessionFile;
 process.on('message', async request => {
   if (request.kind !== 'request') return;
   if (request.method === 'close') {
@@ -28,9 +31,15 @@ process.on('message', async request => {
     if (fs.existsSync(path.join(cwd, 'hold-close'))) await wait('release-close');
     process.send?.({ kind: 'reply', id: request.id, result: null }, () => process.exit(0));
   } else if (request.method === 'open') {
-    reply(request.id, { messages: [], tools: [], status: 'idle', sessionFile: path.join(cwd, 'controlled.jsonl') });
+    sessionFile = path.join(request.input.sessionDirectory, 'controlled.jsonl');
+    fs.writeFileSync(sessionFile, JSON.stringify({ type: 'session', version: 3, id: sessionId, timestamp: new Date().toISOString(), cwd }) + '\n');
+    reply(request.id, { messages: [], tools: [], status: 'idle', sessionFile });
   } else if (request.method === 'prompt') {
     fs.writeFileSync(marker('prompted'), request.input.text);
+    fs.appendFileSync(sessionFile, JSON.stringify({ type: 'custom', id: randomUUID().slice(0, 8), parentId: null, timestamp: new Date().toISOString(), customType: 'optracall.run', data: { phase: 'started', requestId: request.input.requestId, sessionId, kind: 'prompt' } }) + '\n');
+    // The shared port waits for durable native acceptance as well as completion.
+    // Provide a real synthetic file for ProjectAgent's path check and fsync.
+    process.send?.({ kind: 'event', event: { type: 'run.accepted', requestId: request.input.requestId, sessionFile } });
     reply(request.id, { outcome: 'completed', text: 'controlled subprocess response' });
   } else if (request.method === 'stop') reply(request.id, null);
 });
