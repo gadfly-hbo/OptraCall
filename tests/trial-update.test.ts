@@ -145,3 +145,96 @@ test('UPDATE-01: a failed build is preserved and the same approved commit can be
   await fs.writeFile(path.join(f.root, 'allow-build'), 'ready\n'); const result = await update(f.options); assert.deepEqual(result, { updated: false, from: target, targetSha: target });
   assert.equal(await fs.readFile(path.join(f.clone, 'dist/built.txt'), 'utf8'), 'new\n'); assert.equal(await fs.readFile(path.join(f.data, 'session.jsonl'), 'utf8'), 'synthetic history must remain\n');
 });
+
+async function githubCli(t: test.TestContext, root: string, result: { exitCode?: number; payload?: unknown; raw?: string }) {
+  const bin = path.join(root, 'cli-bin'), calls = path.join(root, 'cli-calls.jsonl');
+  await fs.mkdir(bin); const executable = path.join(bin, 'gh');
+  const source = `#!${process.execPath}\nimport fs from 'node:fs';fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(process.argv.slice(2))+'\\n');fs.writeFileSync(${JSON.stringify(path.join(root, 'cli-environment.json'))},JSON.stringify(Object.keys(process.env).filter(key=>key.startsWith('GH_')||key.startsWith('GITHUB_'))));process.stdout.write(${JSON.stringify(result.raw ?? JSON.stringify(result.payload ?? {}))},()=>process.exit(${result.exitCode ?? 0}));\n`;
+  await fs.writeFile(executable, source, { mode: 0o755 });
+  const previousPath = process.env.PATH; process.env.PATH = bin + path.delimiter + '/usr/bin:/bin';
+  t.after(() => { process.env.PATH = previousPath; });
+  return { executable, bin, calls: async () => (await fs.readFile(calls, 'utf8')).trim().split('\n').map(line => JSON.parse(line)) };
+}
+
+test('UPDATE-02: authenticated GitHub CLI admits the verified commit even when anonymous quota is exhausted', async t => {
+  const f = await fixture(t), target = await f.publish();
+  const cli = await githubCli(t, f.root, { payload: { workflow_runs: [f.success(target)] } });
+  let anonymousRequests = 0;
+  t.mock.method(globalThis, 'fetch', async () => { anonymousRequests++; return new Response('{}', { status: 403, headers: { 'x-ratelimit-remaining': '0' } }); });
+  const result = await update({ ...f.options, githubApiBase: 'https://api.github.com' });
+  assert.equal(result.targetSha, target); assert.equal(await command(f.clone, 'rev-parse', 'HEAD'), target);
+  assert.equal(await fs.readFile(path.join(f.clone, 'dist/built.txt'), 'utf8'), 'new\n');
+  assert.equal(await fs.readFile(path.join(f.data, 'session.jsonl'), 'utf8'), 'synthetic history must remain\n');
+  assert.equal(anonymousRequests, 0);
+  const args = (await cli.calls())[0];
+  assert.ok(args.includes('--hostname') && args.includes('github.com'));
+  assert.ok(args.includes('--method') && args.includes('GET'));
+  assert.ok(args.some((arg: string) => arg.startsWith('/repos/gadfly-hbo/OptraCall/actions/workflows/check.yml/runs?') && arg.includes('head_sha=' + target) && arg.includes('event=push') && arg.includes('branch=main')));
+  assert.ok(!args.includes('--show-token') && !args.includes('--verbose'));
+});
+
+test('UPDATE-02: an installed CLI without a login keeps the public-repository update path', async t => {
+  const f = await fixture(t), target = await f.publish();
+  const cli = await githubCli(t, f.root, { exitCode: 4 }); let anonymousRequests = 0;
+  t.mock.method(globalThis, 'fetch', async (url: URL) => { anonymousRequests++; assert.equal(url.origin, 'https://api.github.com'); assert.ok(url.searchParams.get('head_sha') === target); return new Response(JSON.stringify({ workflow_runs: [f.success(target)] })); });
+  assert.equal((await update({ ...f.options, githubApiBase: 'https://api.github.com' })).targetSha, target);
+  assert.equal((await cli.calls()).length, 1); assert.equal(anonymousRequests, 1);
+});
+
+test('UPDATE-02: a missing CLI keeps the public path without installing software or changing user data', async t => {
+  const f = await fixture(t), target = await f.publish();
+  const cli = await githubCli(t, f.root, {}); await fs.rename(cli.executable, cli.executable + '-unused');
+  const gitExecutable = (await exec('which', ['git'])).stdout.trim(); await fs.symlink(gitExecutable, path.join(cli.bin, 'git'));
+  await fs.symlink('/bin/sh', path.join(cli.bin, 'sh'));
+  process.env.PATH = cli.bin; let anonymousRequests = 0;
+  t.mock.method(globalThis, 'fetch', async () => { anonymousRequests++; return new Response(JSON.stringify({ workflow_runs: [f.success(target)] })); });
+  assert.equal((await update({ ...f.options, githubApiBase: 'https://api.github.com' })).targetSha, target);
+  assert.equal(anonymousRequests, 1); assert.equal(await fs.readFile(path.join(f.data, 'session.jsonl'), 'utf8'), 'synthetic history must remain\n');
+  await assert.rejects(fs.access(path.join(f.root, 'cli-calls.jsonl')));
+});
+
+test('UPDATE-02: no-login anonymous quota exhaustion has an actionable error and never adopts source', async t => {
+  for (const status of [403, 429]) await t.test(String(status), async sub => {
+    const f = await fixture(sub); await f.publish(); await githubCli(sub, f.root, { exitCode: 4 });
+    sub.mock.method(globalThis, 'fetch', async () => new Response('{}', { status, headers: { 'x-ratelimit-remaining': '0' } }));
+    await assert.rejects(update({ ...f.options, githubApiBase: 'https://api.github.com' }), { code: 'trial_ci_rate_limited' });
+    assert.equal(await command(f.clone, 'rev-parse', 'HEAD'), f.initial); await assert.rejects(fs.access(path.join(f.clone, 'dist')));
+    assert.equal(await fs.readFile(path.join(f.data, 'session.jsonl'), 'utf8'), 'synthetic history must remain\n');
+  });
+});
+
+test('UPDATE-02: a configured CLI failure or invalid response never falls back to anonymous or leaks output', async t => {
+  for (const result of [{ exitCode: 1, raw: 'SYNTHETIC_SECRET_DO_NOT_EXPOSE' }, { exitCode: 0, raw: 'SYNTHETIC_SECRET_DO_NOT_EXPOSE' }, { exitCode: 0, raw: JSON.stringify({ workflow_runs: [], padding: 'x'.repeat(4 * 1024 * 1024) }) }]) await t.test(result.raw.length > 100 ? 'oversized response' : 'exit ' + result.exitCode, async sub => {
+    const f = await fixture(sub); await f.publish(); await githubCli(sub, f.root, result); let anonymousRequests = 0;
+    sub.mock.method(globalThis, 'fetch', async () => { anonymousRequests++; throw new Error('Must not use anonymous fallback'); });
+    await assert.rejects(update({ ...f.options, githubApiBase: 'https://api.github.com' }), (error: any) => error.code === 'trial_ci_authenticated_unavailable' && !JSON.stringify(error).includes('SYNTHETIC_SECRET_DO_NOT_EXPOSE') && !String(error).includes('SYNTHETIC_SECRET_DO_NOT_EXPOSE'));
+    assert.equal(anonymousRequests, 0); assert.equal(await command(f.clone, 'rev-parse', 'HEAD'), f.initial); await assert.rejects(fs.access(path.join(f.clone, 'dist')));
+  });
+});
+
+test('UPDATE-02: authenticated results keep the same exact-commit and latest-attempt CI gate', async t => {
+  for (const variant of ['failed', 'wrong SHA', 'newer failed attempt']) await t.test(variant, async sub => {
+    const f = await fixture(sub), target = await f.publish();
+    const runs = variant === 'newer failed attempt' ? [f.success(target), f.success(target, { run_attempt: 2, conclusion: 'failure' })] : [f.success(target, variant === 'failed' ? { conclusion: 'failure' } : { head_sha: 'a'.repeat(40) })];
+    await githubCli(sub, f.root, { payload: { workflow_runs: runs } }); let anonymousRequests = 0;
+    sub.mock.method(globalThis, 'fetch', async () => { anonymousRequests++; throw new Error('Must not bypass CI'); });
+    await assert.rejects(update({ ...f.options, githubApiBase: 'https://api.github.com' }), { code: 'trial_ci_not_passed' });
+    assert.equal(anonymousRequests, 0); assert.equal(await command(f.clone, 'rev-parse', 'HEAD'), f.initial);
+  });
+});
+
+test('UPDATE-02: custom API fixtures never invoke GitHub authentication', async t => {
+  const f = await fixture(t), target = await f.publish(); await githubCli(t, f.root, { exitCode: 1 }); f.setBody({ workflow_runs: [f.success(target)] });
+  assert.equal((await update(f.options)).targetSha, target); await assert.rejects(fs.access(path.join(f.root, 'cli-calls.jsonl')));
+  assert.equal(f.requests(), 1);
+});
+
+test('UPDATE-02: inherited host, repository, debug and token overrides are not forwarded to the CI CLI', async t => {
+  const f = await fixture(t), target = await f.publish(); await githubCli(t, f.root, { payload: { workflow_runs: [f.success(target)] } });
+  for (const key of ['GH_HOST', 'GH_REPO', 'GH_DEBUG', 'GH_TOKEN', 'GITHUB_TOKEN']) {
+    const previous = process.env[key]; process.env[key] = 'SYNTHETIC_UNTRUSTED_OVERRIDE';
+    t.after(() => { if (previous === undefined) delete process.env[key]; else process.env[key] = previous; });
+  }
+  assert.equal((await update({ ...f.options, githubApiBase: 'https://api.github.com' })).targetSha, target);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(f.root, 'cli-environment.json'), 'utf8')), ['GH_PROMPT_DISABLED']);
+});

@@ -31,6 +31,8 @@ const messages = {
   trial_local_ahead_or_diverged: '产品副本与远端 main 无法安全快进，已停止更新并保留现场。',
   trial_ci_not_passed: '最新 main 的发布检查尚未通过，请稍后重试更新。',
   trial_ci_unavailable: '暂时无法核对 GitHub 发布检查，请稍后重试更新。',
+  trial_ci_authenticated_unavailable: '无法通过本机 GitHub CLI 核对发布检查，请检查网络或 GitHub 登录状态后重试更新。',
+  trial_ci_rate_limited: 'GitHub 匿名查询已限流。请在本机安装 GitHub CLI 并用 gh auth login 登录后重试更新。',
   trial_fetch_failed: '无法读取 GitHub 最新 main，请检查网络后重试。',
   trial_install_failed: '运行依赖安装未完成，现场已保留；请重试更新或反馈。',
   trial_build_failed: '产品构建未完成，现场已保留；请重试更新或反馈。',

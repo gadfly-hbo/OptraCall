@@ -1,10 +1,12 @@
 # OptraCall 工程规范
 
-版本 v1.0 · 2026-10-30 · 本项目开发流程的统一来源
+版本 v1.1 · 2026-10-30 · 本项目开发流程的统一来源
 
 ## 1. 当前范围与依据
 
-当前增量为[统一会话接入与生命周期管理一期](../openspec/changes/unified-session-management-phase1/spec.md)：用户已确认方案v0.3 US01–US12，授权实现、固化Codex/Qoder接入规范、本地检查、兼容迁移验证、RAP+SAP+Case联合回归、非作者独立复核，以及Git/CI交付并合并main；合并前先更新main并重验受影响部分。公共接口与少量实现共用，各域/owner状态和业务策略分开，保留原项目、任务、会话和文件。本次不新增持久结构、模型调用、业务数据试迁移、运行服务采用或其他设备操作；代码交付与实际运行采用分别报告。执行与结果见本变更[记录](../openspec/changes/unified-session-management-phase1/result.md)。
+当前增量为[一键更新GitHub校验修复](../openspec/changes/trial-authenticated-update/spec.md)：用户授权修复匿名限流问题，保留现有项目、任务、会话和文件，完成检查、非作者独立复核与Git/CI交付并合并main；合并前更新main。随后在Mac mini实际采用，并以合成数据、真实模型从需求梳理开始验证当前产品全链路，不设模型测试预算上限；仅本地模拟经营动作，不授权真实业务派发或其他设备操作。执行、受限项与交付分别记入本变更[记录](../openspec/changes/trial-authenticated-update/result.md)及本地真实测试报告。
+
+上一变更为[统一会话接入与生命周期管理一期](../openspec/changes/unified-session-management-phase1/spec.md)：用户已确认方案v0.3 US01–US12，授权实现、固化Codex/Qoder接入规范、本地检查、兼容迁移验证、RAP+SAP+Case联合回归、非作者独立复核，以及Git/CI交付并合并main；合并前先更新main并重验受影响部分。公共接口与少量实现共用，各域/owner状态和业务策略分开，保留原项目、任务、会话和文件。该次代码变更不新增持久结构或模型调用；后续Mac mini运行采用已另获用户授权。执行与结果见本变更[记录](../openspec/changes/unified-session-management-phase1/result.md)。
 
 以下Case及试用交付为历史授权记录，不扩大当前增量范围。[Case一期](../openspec/changes/decision-case/spec.md)已按D01–D12及最新UI Demo实施、验证和复核；仅增加SQLite，保留现有项目、任务、会话和文件。其本地、模型试跑、Git/CI与产品验收仍按当时各自证据报告。
 
