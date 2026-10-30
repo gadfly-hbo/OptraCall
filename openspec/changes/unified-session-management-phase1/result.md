@@ -1,6 +1,6 @@
 # 一期实施记录
 
-2026-10-30 · LOCAL_VERIFIED / REVIEW_PENDING，尚未Git交付。
+2026-10-30 · 实现、本地验收及独立复核完成。Git/CI交付见[PR #9](https://github.com/gadfly-hbo/OptraCall/pull/9)；实际head检查、合并和main push结果分别以其可访问记录核定，本文不预写未发生的CI通过或合并。
 
 用户已确认v0.3 US01–US12并授权本地检查、兼容验证、联合回归、独立复核与Git/CI合main。基线 `cb178d4b714b7aef559b67ebb52f4265c884a860`；开工fetch后origin/main未前移。已确认proposal保持原字节，实际实施依据见[spec.md](spec.md)。
 
@@ -17,7 +17,7 @@
 | SM09 需求四项 | LOCAL PASS：原18项及新增3项需求回归；完整检查包含未确认/无假设/有限修正/来源冲突 |
 | SM10 RAP+SAP+Case | LOCAL PASS：joint-context、requirement-flexible-joint及需求闭环，实际合成Provider输入/精确版本/stale拒绝 |
 | SM11 保全/回退 | LOCAL PASS：schema1原4项、需求重建、永久兼容及真实旧Host回退演练；25个非DB文件、SQLite schema/7表逻辑数据、native父链/草稿/发布物保持 |
-| SM12 工程/独立复核/CI | 本地354/354、类型/构建/边界检查及审计0漏洞；首轮独立复核发现P1/P2已修复，待固定新候选重验及PR/main CI，不继承旧PASS |
+| SM12 工程/独立复核/CI | LOCAL PASS：354/354、类型/构建/边界检查及审计0漏洞；16e2b95非作者Standards 30/30、Spec 54/54及3个独立反例通过，原P1/P2关闭。Git/CI见PR #9实际head及main记录，不继承旧PASS |
 | SM13 UI范围 | LOCAL PASS：无前端源码/布局变化；正常浏览器命令/UI和项目/文件/草稿/刷新不重放路径通过，外部请求及浏览器异常均0 |
 | SM14 标准固化/工具读取 | IN01–IN07、入口、guide、类型、AST约束及6项正反回归到位；Codex只读接入任务实际读取4文件并正确给出v1规划；Qoder SDK预检无CLI登录未进模型；用户授权的Qoder应用任务实际Read4成功、v1回读正确；显式文件清单验证不冒称自动项目加载 |
 
@@ -34,7 +34,7 @@
 - 真实行为RED/GREEN：`core/admission-*`、`core/close-drain-*`；需求`requirements/`；`project-late-editor-baseline-red.log`→`project-late-editor-green.log`；`native-event-order-red.log`→`native-event-order-green.log`。中途完整检查3项失败为SSE终态早于业务收尾/最终快照，后修为业务完成后发布一次终态，`terminal-order-green.log`及最终完整检查关闭这些失败。
 - 需求受控fixture补齐实际合成JSONL/accepted，不以假ACK弱化持久语义。RR05旧finally保护改用idle旧资源被hold的场景；活跃operation关闭另按SM03阻止竞争，原因及原断言保留见`rr05-fixture-adjustment.md`。
 - 兼容：`compatibility/cross-version-reviewed-final.log`及`latest-cross-version-result.json`。实际旧版`cb178d4` Host打开新资料并用已完成UUID重试；请求数3→4→4，193个基线blob身份一致。永久测试不依赖本地archive或Git历史。
-- 浏览器：`browser/command-ui-order-fixed.log`，11命令/8回应/1合成请求；`browser/live-projects-final.log`，保存/读取/草稿/报告/刷新/窄屏及显式连接测试。最初确认弹窗失败为native snapshot/UI投影乱序，已新增长期反例并修复，原失败`command-ui-final.log`保留。
+- 浏览器：最终16e2b95候选的`browser/browser-command-ui.js.delivery.log`，11命令/8回应/1合成请求；`browser/browser-live-projects.js.delivery.log`，保存/读取/草稿/报告/刷新/窄屏及显式连接测试（2合成请求），均无外部请求或浏览器异常。最初确认弹窗失败为native snapshot/UI投影乱序，已新增长期反例并修复，原失败`command-ui-final.log`保留。
 - 工具读取：`governance/codex-entry-readback.md`记录Codex当前只读子任务，不冒称安装CLI另进程；Qoder原始安装版入口/加载器核查、SDK登录预检失败与应用实际任务记录分别保存（`governance/qoder-app-readback.md`/`.json`）。应用任务“接入规范验证”使用原GLM-5.3，4次Read逐项允许；2模型迭代成功，未执行其他工具。四文件与已核定规范候选字节相同，未修改全局规则/账户/模型或创建Worktree。
 
 原有项目、会话、文件和原运行服务未纳入写入式工程验证；不操作MacBook，产品试验只使用合成Provider。Qoder工程读取验证另获用户明确授权，权限仅限4个公开工程文件。失败、NOT_RUN及UNKNOWN保留；Git/CI、运行采用和产品验收分别报告。
@@ -44,6 +44,16 @@
 首轮固定候选383a19d由非作者Standards/Spec并行复核，分别独立27/27与52/52；发现真实问题而非放行：
 
 - P1 / SM06：Provider清理等待期间，新需求owner能发出请求。独立反例日志保留`review/spec/provider-clear-admission.log`；永久反例在旧候选返回200/产生请求，而新候选返回409/0请求，另一Provider仍正常。Host用同一可用配置投影对项目/需求按实际捕获Provider准入；全局清理另覆盖期间新增Provider，计数防止重叠清理过早解除。`global-clear-admission-red.log`→`all-clear-admission-green.log`，完整354/354。首个临时fixture缺少noChangeReason产生422的现场保留，已使用有效输出复现200→409，不把fixture错误当产品RED。
-- P2 / IN02：TypeScript窄类型未移除实际对象的closeAll，完整需求管理对象曾被注入插件。Host现明确构造冻结的run/withSession/stop/busy业务facade，管理能力只留Host。独立实读证据`review/standards/capability-readback.log`保留，待新固定候选实际能力重验。
+- P2 / IN02：TypeScript窄类型未移除实际对象的closeAll，完整需求管理对象曾被注入插件。Host现明确构造冻结的run/withSession/stop/busy业务facade，管理能力只留Host。首轮实读证据`review/standards/capability-readback.log`保留；16e2b95以真实源表达式及真实manager读回keys严格为4个方法、frozen=true、无closeAll/live/close/ref/name，原P2关闭。
 
-原始报告和失败均保留；修复后的完整候选须由同两条独立复核线重新核定，作者修复/354绿色不代替独立PASS。
+原始报告和失败均保留；修复后的完整候选已由同两条非作者复核线重新核定。以下结论仅对固定16e2b95及相应证据，不替代实际head CI、运行采用或用户产品验收。
+
+## Standards
+
+PASS（有限范围）。22文件摘要匹配、HEAD正确、工作树干净；独立30/30（公共Interface、AST及Host guards/SM06）与全仓AST约束通过。运行时4方法冻结facade读回完成，原P2关闭；未发现新硬规则违规或可行动Fowler味道项。报告`review/standards/standards-review-16e2b95.md`。
+
+## Spec
+
+PASS（有限范围）。22文件及proposal身份匹配；独立54/54目标回归、原P1的有界409/0请求检查1/1、局部/全局重叠清理2/2通过，原P1关闭。重叠清理的第一请求完成、第二仍held时重存同Provider凭据仍拒绝派发，全部结束后显式恢复仅1请求。报告`review/spec/report-fixed.md`。Qoder四文件摘要实核一致，其显式路径验证与自动加载未验的限定保留。
+
+未关闭发现：Standards 0；Spec 0。最后的规格/结果归档为文档记录更新；运行时及长期测试仍为已核定候选字节。PR和main的最终CI、合并身份回读另存`.local/unified-session-management-phase1/delivery/`及本任务交付答复。
