@@ -45,8 +45,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const ready = (async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); })();
   type ProjectOwner = { project: ProjectRecord; task: TaskRecord };
   const streams = new Map<string, Set<ServerResponse>>();
-  const clearing = new Set<string>(), archiving = new Set<string>();
-  let gate = Promise.resolve(), testing = false, closing = false;
+  const clearing = new Map<string, number>(), archiving = new Set<string>();
+  let gate = Promise.resolve(), testing = false, closing = false, clearingAll = 0;
   // metric-factory business plugin: the extension owns handlers, the host owns transport.
   const metricFactoryRoutes = createMetricFactoryRoutes({
     libraryRoot: path.join(dataRoot, 'metric-assets'),
@@ -60,12 +60,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
   const endStreams = (id?: string) => { for (const [key, responses] of streams) { if (id && key !== id) continue; for (const response of responses) response.end(); streams.delete(key); } };
   const publish = (projectId: string, taskId: string, event: object) => { for (const response of streams.get(keyOf(projectId, taskId)) ?? []) if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...event, projectId, taskId })}\n\n`); };
+  const availableConfiguration = (id?: string, revision?: number) => {
+    const snapshot = configuration.snapshot(id, revision);
+    return snapshot && !clearingAll && !clearing.has(snapshot.provider) ? snapshot : undefined;
+  };
   const projectSessions = createAgentSessionDomain<ProjectOwner>({
     name: 'project-tasks',
     profile: {
       key: owner => keyOf(owner.project.id, owner.task.id),
       projectId: owner => owner.project.id,
-      configuration: owner => configuration.snapshot(owner.task.configuration.id, owner.task.configuration.revision),
+      configuration: owner => availableConfiguration(owner.task.configuration.id, owner.task.configuration.revision),
       admit: async owner => {
         if (closing) throw new RequestFault(503, 'host_closing');
         const { task } = await pair(owner.project.id, owner.task.id, true);
@@ -77,7 +81,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       },
       capabilities: { commands: true, ui: true, editor: true },
     },
-    configurationSnapshot: (id, revision) => configuration.snapshot(id, revision),
+    configurationSnapshot: availableConfiguration,
     mutate,
     isClosing: () => closing,
     publish: (owner, event, context) => {
@@ -109,12 +113,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
     sessionDirectory: instanceId => requirementSessionDirectory(path.join(dataRoot, 'requirement-instances', instanceId)),
     workspaceFor: instanceId => requirementWorkspace(path.join(dataRoot, 'requirement-instances', instanceId)),
-    configurationSnapshot: (id, revision) => configuration.snapshot(id, revision),
+    configurationSnapshot: availableConfiguration,
     publish: publishRequirement,
     mutate,
     isClosing: () => closing,
   });
-  const requirementPlugin = createRequirementRoutes({ storeRoot: path.join(dataRoot, 'requirement-instances'), readBody: request => body(request), sessions: requirementSessions });
+  const requirementPlugin = createRequirementRoutes({
+    storeRoot: path.join(dataRoot, 'requirement-instances'),
+    readBody: request => body(request),
+    sessions: Object.freeze({ run: requirementSessions.run, withSession: requirementSessions.withSession, stop: requirementSessions.stop, busy: requirementSessions.busy }),
+  });
   const closeAgents = async (filter: { provider?: string; projectId?: string } = {}) => {
     // Only coordinate domain controls; each domain owns its resource ledger.
     const results = await Promise.allSettled([
@@ -295,13 +303,20 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const provider = url.searchParams.get('provider') ?? undefined;
           const providers = await mutate(() => {
             const values = provider ? [provider] : [...new Set(configuration.list().map(value => value.provider))];
-            for (const value of values) clearing.add(value);
+            for (const value of values) clearing.set(value, (clearing.get(value) ?? 0) + 1);
+            if (!provider) clearingAll++;
             return values;
           });
           // Cancellation/drain is outside the business mutation gate: completions
           // and opening checks must be able to acquire that gate while clearing.
           try { await closeAgents({ provider }); await mutate(() => configuration.clear(provider)); }
-          finally { await mutate(() => { for (const value of providers) clearing.delete(value); }); }
+          finally { await mutate(() => {
+            for (const value of providers) {
+              const remaining = (clearing.get(value) ?? 1) - 1;
+              if (remaining) clearing.set(value, remaining); else clearing.delete(value);
+            }
+            if (!provider) clearingAll--;
+          }); }
           json(response, 200, { configuration: configuration.read() }); return;
         }
       }

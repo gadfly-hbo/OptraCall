@@ -80,3 +80,44 @@ test('SM05/SM07: restored task rejects stale editor events and preserves native 
   } finally { await reader.cancel(); await pump; }
   assert.equal(provider.requests.length, 0, 'Open, archive/restore and editor events must not send model requests');
 });
+
+for (const clearAll of [false, true]) test(`SM06: ${clearAll ? 'global' : 'provider'} clearing blocks its scope and preserves other-provider admission`, { timeout: 30_000 }, async t => {
+  const scratch = await mkdtemp(path.join(os.tmpdir(), 'optracall-clear-admission-'));
+  const a = await startSyntheticProvider(), b = await startSyntheticProvider();
+  const answer = '```json\n' + JSON.stringify({ clarifications: [{ category: '指标口径', priority: 'should_confirm', question: '是否排除退款？', rationale: 'Synthetic provider isolation' }], facts: [], hypotheses: [] }) + '\n```';
+  a.setChunks([answer]); b.setChunks([answer]);
+  const host = createHost({ cwd: process.cwd(), uiPorts: [4183], transportVersion: '8.12.2', dataRoot: path.join(scratch, 'host'), projectsRoot: path.join(scratch, 'projects') });
+  await host.ready;
+  await new Promise<void>(resolve => host.server.listen(0, '127.0.0.1', resolve));
+  const address = host.server.address(); assert.ok(address && typeof address === 'object');
+  const request = (route: string, method = 'GET', body?: unknown) => fetch(`http://127.0.0.1:${address.port}/api/${route}`, { method, headers: { 'content-type': 'application/json', 'x-optracall-client': '1', origin: 'http://127.0.0.1:4183' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  const original = ProjectAgent.prototype.close;
+  let enter!: () => void, release!: () => void, held = false;
+  const entered = new Promise<void>(resolve => { enter = resolve; }), drain = new Promise<void>(resolve => { release = resolve; });
+  let deletion: Promise<Response> | undefined;
+  t.after(async () => { release(); await deletion; ProjectAgent.prototype.close = original; await host.close(); await a.close(); await b.close(); });
+  const { configuration } = await (await request('configuration', 'PUT', { name: 'Clear A', provider: 'openai-compatible', baseUrl: a.baseUrl, model: 'synthetic-a', apiKey: 'synthetic-clear-a' })).json();
+  const { project } = await (await request('projects', 'POST', { name: 'Idle resource blocker' })).json();
+  const { task } = await (await request(`projects/${project.id}/tasks`, 'POST', { name: 'Idle task' })).json();
+  assert.equal((await request(`projects/${project.id}/tasks/${task.id}/open`, 'POST', {})).status, 200);
+  const { instance } = await (await request('requirement-instances', 'POST', { title: 'New owner during clear', scene: 'topic' })).json();
+  ProjectAgent.prototype.close = function () { if (!held) { held = true; enter(); return drain.then(() => original.call(this)); } return original.call(this); };
+  deletion = request(clearAll ? 'configuration' : 'configuration?provider=' + encodeURIComponent(configuration.provider), 'DELETE');
+  await entered;
+  const rejected = await request(`requirement-instances/${instance.id}/generate`, 'POST', { call: 'elicit' });
+  assert.equal(rejected.status, 409, await rejected.clone().text());
+  assert.equal(a.requests.length, 0, 'A new owner cannot dispatch through the closing provider');
+
+  const selected = await request('configuration', 'PUT', { name: 'Independent B', provider: 'openai-compatible', baseUrl: b.baseUrl, model: 'synthetic-b', apiKey: 'synthetic-clear-b' });
+  assert.equal(selected.status, 200);
+  assert.equal((await request(`requirement-instances/${instance.id}/generate`, 'POST', { call: 'elicit' })).status, clearAll ? 409 : 200);
+  assert.equal(b.requests.length, clearAll ? 0 : 1, 'Only a provider-specific clear permits another provider to dispatch');
+  release(); assert.equal((await deletion).status, 200);
+  if (clearAll) {
+    assert.equal((await request('configuration', 'PUT', { name: 'Explicit after global clear', provider: 'openai-compatible', baseUrl: b.baseUrl, model: 'synthetic-b', apiKey: 'synthetic-clear-b-after' })).status, 200);
+    assert.equal((await request(`requirement-instances/${instance.id}/generate`, 'POST', { call: 'elicit' })).status, 200);
+  }
+  assert.equal(b.requests.length, 1);
+  assert.equal(b.requests[0]!.body.model, 'synthetic-b');
+  assert.equal(a.requests.length, 0);
+});
