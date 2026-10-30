@@ -8,6 +8,8 @@ const messages: Record<string, string> = {
   project_archived: '项目已归档，请先恢复后继续操作。', case_store_uninitialized: '请先启用 Case 记录。',
   case_store_unavailable: 'Case 存储暂时不可用，现有项目仍保留。', project_not_linked: '此项目已不再关联当前 Case，请刷新核对。',
   configuration_required: '请先在模型设置中配置新项目使用的模型。',
+  artifact_adoption_needs_review: '版本保存结果需要核对，可能已有副本。请保留操作记录和项目文件，不要重复保存；刷新 Case 可查看待核对记录。',
+  adopted_version_reference: '这个副本已有采用版本记录，不能刷新其摘要或来源。请保留原记录，从源文件显式保存新版本。',
 };
 export class CaseRequestError extends Error {
   constructor(readonly code: string, readonly status: number, readonly details?: Record<string, unknown>) { super(messages[code] ?? (status === 409 ? '记录或版本发生变化，请刷新核对；未覆盖已有内容。' : '请求未完成，请检查输入或本地存储后重试。')); }
@@ -39,5 +41,6 @@ export const readProjectWork = (projectId: string) => request<{ work: ProjectWor
 export const saveProjectWork = (projectId: string, input: ProjectWorkInput) => request<{ work: ProjectWorkRecord }>(projectPath(projectId), 'PATCH', input);
 export const projectEvents = (projectId: string) => request<{ events: WorkEvent[] }>(`${projectPath(projectId)}/events`);
 export const projectNote = (projectId: string, input: CaseMutation & { note: string; feedbackSource?: string | null; originCaseId?: string }) => request<{ work: ProjectWorkRecord }>(`${projectPath(projectId)}/notes`, 'POST', input);
-export const saveArtifact = (id: string, input: CaseMutation & ArtifactInput) => request<{ case: CaseRecord }>(`${casePath(id)}/artifacts`, 'POST', input);
+export type ArtifactSelectionInput = ArtifactInput & { saveVersion?: boolean };
+export const saveArtifact = (id: string, input: CaseMutation & ArtifactSelectionInput) => request<{ case: CaseRecord }>(`${casePath(id)}/artifacts${input.saveVersion ? '/adopt' : ''}`, 'POST', input);
 export const unlinkArtifact = (id: string, artifactId: string, input: CaseMutation) => request<{ case: CaseRecord }>(`${casePath(id)}/artifacts/${encodeURIComponent(artifactId)}`, 'DELETE', input);

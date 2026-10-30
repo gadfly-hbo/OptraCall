@@ -44,26 +44,105 @@ export async function uploadFile(id: string, file: File, directory: '010_draw' |
 }
 export async function copyToClean(id: string, path: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/files/copy-to-clean`, 'POST', { path }); }
 export async function saveReport(id: string, text: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/files/save-report`, 'POST', { name: `report-${new Date().toISOString().replace(/[:.]/g, '-')}.md`, text }); }
-export async function downloadFile(id: string, file: FileNode): Promise<void> {
-  const response = await fetch(`/api/projects/${encodeURIComponent(id)}/files/content?path=${encodeURIComponent(file.path)}`, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' } });
-  if (!response.ok) throw new HostRequestError('文件暂时无法下载，请刷新文件列表后重试。');
+export async function downloadFile(id: string, file: FileNode, expectedSha256?: string): Promise<void> {
+  const response = await fetch(`/api/projects/${encodeURIComponent(id)}/files/content?path=${encodeURIComponent(file.path)}${expectedSha256 ? `&expectedSha256=${encodeURIComponent(expectedSha256)}` : ''}`, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' } });
+  if (!response.ok) {
+    if (response.status === 409) throw new HostRequestError('采用副本的内容已变化，与保存版本不一致；未下载，请先核对来源。', {}, 'artifact_version_changed');
+    throw new HostRequestError('文件暂时无法下载，请刷新文件列表后重试。');
+  }
   const url = URL.createObjectURL(await response.blob()); const anchor = document.createElement('a'); anchor.href = url; anchor.download = file.name; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export async function watchTask(projectId: string, taskId: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal): Promise<void> {
-  const response = await fetch(`/api/${taskPath(projectId, taskId)}/events`, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal });
-  if (!response.ok || !response.body) throw new HostRequestError('任务事件连接未建立，请重新连接。');
-  const reader = response.body.getReader(); const decoder = new TextDecoder(); let pending = '';
+export type TaskWatchOptions = { idleTimeoutMs?: number };
+export async function watchTask(projectId: string, taskId: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal, options: TaskWatchOptions = {}): Promise<void> {
+  if (signal.aborted) return;
+  const observation = new AbortController(), observationSignal = AbortSignal.any([signal, observation.signal]);
+  let timer: ReturnType<typeof setTimeout> | undefined, reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  const clearWatchdog = () => { if (timer !== undefined) clearTimeout(timer); timer = undefined; };
+  const touch = () => { clearWatchdog(); timer = setTimeout(() => observation.abort(), options.idleTimeoutMs ?? 45000); };
+  signal.addEventListener('abort', clearWatchdog, { once: true }); touch();
   try {
+    const response = await fetch(`/api/${taskPath(projectId, taskId)}/events`, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal: observationSignal });
+    if (!response.ok || !response.body) throw new HostRequestError('任务事件连接未建立，请重新连接。');
+    reader = response.body.getReader(); const decoder = new TextDecoder(); let pending = '';
     while (!signal.aborted) {
       const item = await reader.read(); if (item.done) break;
+      touch(); // Any received bytes, including comment heartbeats, keep observation alive.
       pending += decoder.decode(item.value, { stream: true }); pending = pending.replace(/\r\n/g, '\n');
       let boundary;
       while ((boundary = pending.indexOf('\n\n')) >= 0) {
         const block = pending.slice(0, boundary); pending = pending.slice(boundary + 2);
         const data = block.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
-        if (data) onEvent(JSON.parse(data) as ProjectEvent);
+        if (data && !signal.aborted) {
+          const event = JSON.parse(data) as ProjectEvent;
+          if ((!event.projectId || event.projectId === projectId) && (!event.taskId || event.taskId === taskId)) onEvent(event);
+        }
       }
     }
     if (!signal.aborted) throw new HostRequestError('任务事件连接已断开；恢复连接只读取状态，不会重复发送消息。');
-  } finally { await reader.cancel().catch(() => {}); }
+  } catch (error) { if (!signal.aborted) throw error; }
+  finally { clearWatchdog(); signal.removeEventListener('abort', clearWatchdog); observation.abort(); await reader?.cancel().catch(() => {}); }
+}
+
+export type TaskObservationState = { state: 'connecting' | 'connected' | 'recovering' | 'disconnected'; message?: string; requestId?: string };
+export type TaskObservationOptions = TaskWatchOptions & {
+  onConnection?: (value: TaskObservationState) => void;
+  onReadback?: (value: TaskState, requestId?: string) => void;
+  expectedRequestId?: () => string | undefined;
+};
+const observationBackoff = [500, 1500, 3000];
+function waitForObservation(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    if (signal.aborted) { resolve(); return; }
+    const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
+    const timer = setTimeout(finish, ms); signal.addEventListener('abort', finish, { once: true });
+  });
+}
+function checkedReadback(value: TaskState, projectId: string, taskId: string, expectedRequestId?: string): { requestId?: string; message: string } {
+  if (value.project.id !== projectId || value.task.id !== taskId) throw new HostRequestError('无法确认原任务状态：返回的任务归属不一致。');
+  const saved = value.task.lastRun, native = value.snapshot.lastRun, requestId = expectedRequestId ?? saved?.id ?? native?.requestId;
+  if (!requestId && !saved && !native && value.snapshot.status === 'idle') return { message: '已读回空闲任务，没有确认新的运行结果。' };
+  if (!requestId || saved?.id !== requestId || native?.requestId !== requestId) throw new HostRequestError('无法确认原请求状态：请求记录已变化或缺少对应记录。');
+  if (saved.status === 'running' && value.snapshot.status === 'running' && !native.outcome) return { requestId, message: '已读回：原请求仍在运行。' };
+  if (value.snapshot.status === 'idle' && (saved.status === 'completed' || saved.status === 'failed' || saved.status === 'cancelled') && native.outcome === saved.status) {
+    const label = { completed: '已完成', failed: '已失败', cancelled: '已停止' }[saved.status];
+    return { requestId, message: `已读回：原请求${label}。` };
+  }
+  throw new HostRequestError('无法确认原请求终态，任务结果仍未知；不会重发消息。');
+}
+/** Restore observation only. All network actions here are GET; missing events are not replayed. */
+export async function observeTask(projectId: string, taskId: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal, options: TaskObservationOptions = {}): Promise<void> {
+  let observedRequestId: string | undefined;
+  const report = (value: TaskObservationState) => { if (!signal.aborted) options.onConnection?.(value); };
+  for (let attempt = 0; attempt <= observationBackoff.length && !signal.aborted; attempt++) {
+    let connected = false;
+    report({ state: attempt ? 'recovering' : 'connecting', message: attempt ? '正在恢复任务观察连接；不会重发消息。' : undefined });
+    try {
+      await watchTask(projectId, taskId, event => {
+        if (signal.aborted) return;
+        if (event.type === 'snapshot') observedRequestId = event.snapshot.lastRun?.requestId ?? observedRequestId;
+        else if ('requestId' in event && event.requestId) observedRequestId = event.requestId;
+        if (!connected && event.type === 'snapshot') { connected = true; report({ state: 'connected' }); }
+        onEvent(event);
+      }, signal, options);
+      if (signal.aborted) return;
+    } catch { if (signal.aborted) return; }
+    report({ state: 'recovering', message: '观察连接已断开，正在只读核对任务状态；不会重发消息。' });
+    let message = '任务状态仍未知；不会重发消息。', requestId = options.expectedRequestId?.() ?? observedRequestId;
+    try {
+      const value = await readTask(projectId, taskId, AbortSignal.any([signal, AbortSignal.timeout(10000)]));
+      if (signal.aborted) return;
+      const currentRequestId = options.expectedRequestId?.();
+      if (currentRequestId && currentRequestId !== requestId) throw new HostRequestError('无法确认原请求状态：当前请求已变化。');
+      const readback = checkedReadback(value, projectId, taskId, requestId);
+      requestId = readback.requestId; message = readback.message;
+      options.onReadback?.(value, requestId);
+    } catch (error) {
+      if (signal.aborted) return;
+      if (error instanceof HostRequestError && error.message.startsWith('无法确认')) message = error.message;
+    }
+    if (signal.aborted) return;
+    if (attempt === observationBackoff.length) { report({ state: 'disconnected', requestId, message: `${message} 实时观察暂未恢复，请显式重新连接。` }); return; }
+    report({ state: 'recovering', requestId, message: `${message} 正在恢复实时观察。` });
+    await waitForObservation(observationBackoff[attempt]!, signal);
+  }
 }

@@ -4,7 +4,9 @@
 
 ## 1. 当前范围与依据
 
-当前增量为[一键更新GitHub校验修复](../openspec/changes/trial-authenticated-update/spec.md)：用户授权修复匿名限流问题，保留现有项目、任务、会话和文件，完成检查、非作者独立复核与Git/CI交付并合并main；合并前更新main。随后在Mac mini实际采用，并以合成数据、真实模型从需求梳理开始验证当前产品全链路，不设模型测试预算上限；仅本地模拟经营动作，不授权真实业务派发或其他设备操作。执行、受限项与交付分别记入本变更[记录](../openspec/changes/trial-authenticated-update/result.md)及本地真实测试报告。
+当前增量为[工程可靠性收尾](../openspec/changes/engineering-reliability/spec.md)：用户已确认失败诊断、连接观察恢复、采用版本追溯；保留现有项目、任务、会话和文件，不新增硬沙箱、不自动重放或换模型。完成本地/兼容检查、RAP+SAP+Case联合回归、非作者复核与Git/CI后合并main，合并前更新main。仅使用隔离合成Provider和资料验证，不自行切换现有运行服务或操作MacBook。Extension正确性另见[待确认建议](extension-correctness-proposal.md)，本轮不实施。
+
+上一增量为[一键更新GitHub校验修复](../openspec/changes/trial-authenticated-update/spec.md)：用户授权修复匿名限流问题，保留现有项目、任务、会话和文件，完成检查、非作者独立复核与Git/CI交付并合并main；合并前更新main。随后在Mac mini实际采用，并以合成数据、真实模型从需求梳理开始验证当前产品全链路，不设模型测试预算上限；仅本地模拟经营动作，不授权真实业务派发或其他设备操作。执行、受限项与交付分别记入本变更[记录](../openspec/changes/trial-authenticated-update/result.md)及本地真实测试报告。
 
 上一变更为[统一会话接入与生命周期管理一期](../openspec/changes/unified-session-management-phase1/spec.md)：用户已确认方案v0.3 US01–US12，授权实现、固化Codex/Qoder接入规范、本地检查、兼容迁移验证、RAP+SAP+Case联合回归、非作者独立复核，以及Git/CI交付并合并main；合并前先更新main并重验受影响部分。公共接口与少量实现共用，各域/owner状态和业务策略分开，保留原项目、任务、会话和文件。该次代码变更不新增持久结构或模型调用；后续Mac mini运行采用已另获用户授权。执行与结果见本变更[记录](../openspec/changes/unified-session-management-phase1/result.md)。
 

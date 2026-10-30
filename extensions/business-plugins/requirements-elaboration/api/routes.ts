@@ -4,6 +4,7 @@ import { createRequirementStore, RequirementStoreFault, type RequirementReleaseE
 import { computeGateReport, instanceStatus, pendingMustConfirm, type GateReport } from '../gates/checks.ts';
 import { buildGenerationPrompt, normalizeElicit, normalizeHypotheses, normalizeFramework, parseModelJson, type GenerationCall } from '../session/prompts.ts';
 import { parseInstance, isStale, upstreamFingerprint, RequirementFault, type RequirementInstance } from '../contract/validate.ts';
+import { readRunDiagnostic, type RunDiagnostic } from '../../../../src/agent/run-diagnostics.ts';
 
 class ApiFault extends Error {
   readonly status: number;
@@ -15,8 +16,8 @@ export type RequirementRoutesOptions = {
   storeRoot: string;
   readBody: (request: IncomingMessage) => Promise<Record<string, unknown>>;
   sessions: {
-    run: (instanceId: string, text: string, requestId: string) => Promise<{ outcome: 'completed' | 'cancelled' | 'failed'; text: string }>;
-    withSession: <T,>(instanceId: string, use: (session: { run: (text: string, requestId: string) => Promise<{ outcome: 'completed' | 'cancelled' | 'failed'; text: string }> }) => Promise<T>) => Promise<T>;
+    run: (instanceId: string, text: string, requestId: string) => Promise<{ outcome: 'completed' | 'cancelled' | 'failed'; text: string; diagnostic?: RunDiagnostic }>;
+    withSession: <T,>(instanceId: string, use: (session: { run: (text: string, requestId: string) => Promise<{ outcome: 'completed' | 'cancelled' | 'failed'; text: string; diagnostic?: RunDiagnostic }> }) => Promise<T>) => Promise<T>;
     stop: (instanceId: string) => Promise<boolean>;
     busy: (instanceId: string) => boolean;
   };
@@ -128,16 +129,19 @@ export function createRequirementRoutes(options: RequirementRoutesOptions) {
             const parsed = parseModelJson(reply);
             return call === 'elicit' ? normalizeElicit(parsed, instance) : call === 'hypotheses' ? normalizeHypotheses(parsed, instance) : normalizeFramework(parsed, instance);
           };
-          const incomplete = (outcome: 'cancelled' | 'failed', repairAttempts: 0 | 1) => ({ status: 502, value: { code: 'model_run_failed', outcome, repairAttempts, message: '模型调用未完成，未自动重放；请检查后显式重试。' } });
+          const incomplete = (outcome: 'cancelled' | 'failed', repairAttempts: 0 | 1, detail?: RunDiagnostic) => {
+            const diagnostic = readRunDiagnostic(detail);
+            return { status: 502, value: { code: 'model_run_failed', outcome, repairAttempts, message: diagnostic?.message ?? '模型调用未完成，未自动重放；请检查后显式重试。', ...(diagnostic ? { diagnostic } : {}) } };
+          };
           const first = await session.run(prompt, randomUUID());
-          if (first.outcome !== 'completed') return incomplete(first.outcome, 0);
+          if (first.outcome !== 'completed') return incomplete(first.outcome, 0, first.diagnostic);
           let validation: RequirementFault;
           try { return { status: 200, value: { call, proposal: normalize(first.text), source, repairAttempts: 0 } }; }
           catch (error) { if (!(error instanceof RequirementFault)) throw error; validation = error; }
           // Exactly one format correction after a completed reply. No failed,
           // cancelled or unknown run is replayed, and no analysis loop is built.
           const corrected = await session.run(`上一次输出已完成，但未通过输出校验：${validation.code}${validation.path ? ` @ ${validation.path}` : ''}。请在当前会话中仅修复上一次 JSON 的格式或结构，遵守原请求的字段约定；不要重新分析、不要新增事实或改变已知/未知边界。只返回一个完整 JSON 代码块。这是本次生成唯一的一次格式修复；本轮仍失败将停止。`, randomUUID());
-          if (corrected.outcome !== 'completed') return incomplete(corrected.outcome, 1);
+          if (corrected.outcome !== 'completed') return incomplete(corrected.outcome, 1, corrected.diagnostic);
           try { return { status: 200, value: { call, proposal: normalize(corrected.text), source, repairAttempts: 1 } }; }
           catch (error) {
             if (!(error instanceof RequirementFault)) throw error;

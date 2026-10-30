@@ -1,0 +1,64 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { startTestHost } from './fixtures/host-process.ts';
+import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
+import { sessionEvents } from './fixtures/session-events.ts';
+import { prepareJointContext, readJson } from './fixtures/joint-context.ts';
+
+test('ER11: exact RAP/SAP/Case and saved adoption survive failure, explicit continuation and restart without replay', { timeout: 90_000 }, async t => {
+  const provider = await startSyntheticProvider(); t.after(() => provider.close());
+  let host = await startTestHost(); t.after(() => host.close());
+  const f = await prepareJointContext(host, provider.baseUrl);
+  const route = `/api/projects/${f.project.id}/tasks/${f.task.id}`;
+  const source = '060_reports/joint-result.md', original = '# Synthetic adopted report\nResult: 1\n';
+  await readJson(await host.request(`/api/projects/${f.project.id}/files/save-report`, 'POST', { name: 'joint-result.md', text: original }), 201);
+  const command = { operationId: randomUUID(), expectedRevision: f.caseContext.caseRevision, projectId: f.project.id, relativePath: source, taskId: f.task.id, role: 'report', displayName: '联合回归采用报告' };
+  const saved = await readJson(await host.request(`/api/cases/${f.case.id}/artifacts/adopt`, 'POST', command));
+  const caseContext = { ...f.caseContext, caseRevision: saved.case.revision, selectedReferenceIds: [saved.artifact.id] };
+  const sourcePath = path.join(f.project.rootPath, source), savedPath = path.join(f.project.rootPath, saved.artifact.relativePath);
+  await writeFile(sourcePath, '# Later working report\nResult: 2\n');
+  assert.equal(await readFile(savedPath, 'utf8'), original);
+  const text = 'ER11只核对明确送入的背景和保存版本，不执行业务动作';
+  const input = { text, caseContext, requirementContext: f.requirementContext };
+  const failedId = randomUUID(); provider.setMode('failure');
+  const firstStream = await sessionEvents(host, f.project.id, f.task.id);
+  await readJson(await host.request(route + '/messages', 'POST', { ...input, requestId: failedId }), 202);
+  const failure = await firstStream.terminal; await firstStream.close();
+  assert.equal(failure.type, 'run.settled');
+  if (failure.type === 'run.settled') { assert.equal(failure.outcome, 'failed'); assert.equal(failure.diagnostic?.code, 'authentication_failed'); }
+  const failedState = await readJson(await host.request(route));
+  assert.equal(failedState.task.lastRun.id, failedId); assert.equal(failedState.task.lastRun.status, 'failed');
+  for (let i = 0; i < 2; i++) await readJson(await host.request(route));
+  const duplicate = await readJson(await host.request(route + '/messages', 'POST', { ...input, requestId: failedId }), 202);
+  assert.equal(duplicate.deduplicated, true); assert.equal(provider.requests.length, 1);
+  provider.setMode('success'); provider.setChunks(['ER11 explicitly continued synthetic result']);
+  const secondId = randomUUID(), secondStream = await sessionEvents(host, f.project.id, f.task.id);
+  await readJson(await host.request(route + '/messages', 'POST', { ...input, requestId: secondId }), 202);
+  const success = await secondStream.terminal; await secondStream.close();
+  assert.equal(success.type, 'run.settled'); if (success.type === 'run.settled') assert.equal(success.outcome, 'completed');
+  assert.equal(provider.requests.length, 2);
+  for (const call of provider.requests) {
+    const system = JSON.stringify(call.body.messages?.filter(m => m.role === 'system'));
+    const user = JSON.stringify(call.body.messages?.filter(m => m.role === 'user'));
+    assert.ok(system.includes('membership-repurchase@1.0.0')); assert.ok(!system.includes('membership-repurchase@1.1.0'));
+    for (const token of [f.case.id, f.case.title, saved.artifact.relativePath, `${f.requirementContext.instanceId}@1.9.0`, 'RR07_RAP_1_9_DEFINITION']) assert.ok(user.includes(token), token);
+    assert.ok(!user.includes('RR07_RAP_1_10_DEFINITION_NOT_SELECTED'));
+  }
+  const before = await readJson(await host.request(route)), nativeBefore = await readFile(before.task.sessionFile);
+  const roots = { dataRoot: host.dataRoot, projectsRoot: host.projectsRoot };
+  await host.close(); host = await startTestHost(roots);
+  const after = await readJson(await host.request(route));
+  assert.equal(after.task.lastRun.id, secondId); assert.equal(after.task.lastRun.status, 'completed');
+  assert.deepEqual(await readFile(after.task.sessionFile), nativeBefore);
+  assert.equal(await readFile(path.join(f.project.rootPath, '020_clean/joint-input.csv'), 'utf8'), f.input);
+  assert.equal(await readFile(savedPath, 'utf8'), original);
+  assert.deepEqual((await readJson(await host.request(`/api/cases/${f.case.id}`))).artifacts.find((a: any) => a.id === saved.artifact.id).adoptedVersion, saved.adoption);
+  assert.equal((await readJson(await host.request(`/api/metric-factory/projects/${f.project.id}`))).records[0].version, '1.0.0');
+  assert.equal(provider.requests.length, 2, 'All reopened reads must stay observational');
+  await writeFile(savedPath, 'externally modified saved version');
+  await readJson(await host.request(route + '/messages', 'POST', { ...input, requestId: randomUUID() }), 409);
+  assert.equal(provider.requests.length, 2, 'A changed selected saved file is rejected before model execution');
+});

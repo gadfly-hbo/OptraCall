@@ -3,13 +3,14 @@ import { existsSync, readFileSync, writeFileSync, chmodSync, renameSync, unlinkS
 import { randomUUID } from 'node:crypto';
 import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, VERSION, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory } from './sdk.ts';
 import type { ProjectAgentOptions, ProjectSnapshot } from './project-runtime.ts';
+import { runDiagnostic, readRunDiagnostic, type RunDiagnostic } from './run-diagnostics.ts';
 import { createBrowserUIContext, type BrowserUIResponse } from './browser-ui-context.ts';
 
 type Outcome = 'completed' | 'cancelled' | 'failed';
-type LastRun = { requestId: string; outcome?: Outcome };
+type LastRun = { requestId: string; outcome?: Outcome; diagnostic?: RunDiagnostic };
 type Assistant = Extract<AgentSession['messages'][number], { role: 'assistant' }>;
-type ActiveRun = { id: string; kind: 'prompt' | 'command'; requestFingerprint?: string; cancelled: boolean; commandFailed?: boolean; last?: Assistant; pending: string; managers: Set<SessionManager> };
-type RunResult = { outcome: Outcome; text: string; result?: unknown; snapshot: ProjectSnapshot };
+type ActiveRun = { id: string; kind: 'prompt' | 'command'; requestFingerprint?: string; cancelled: boolean; commandFailed?: boolean; retryCount: number; last?: Assistant; pending: string; managers: Set<SessionManager> };
+type RunResult = { outcome: Outcome; text: string; result?: unknown; snapshot: ProjectSnapshot; diagnostic?: RunDiagnostic };
 const RUN_ENTRY = 'optracall.run';
 
 export async function runProjectSession(transport: { close: () => Promise<void> }) {
@@ -38,7 +39,10 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
       // Forks copy native entries. A copied marker belongs to its originating session.
       if (!data || data.sessionId !== manager!.getSessionId() || typeof data.requestId !== 'string') continue;
       if (data.phase === 'started') return { requestId: data.requestId };
-      if (data.phase === 'settled' && ['completed', 'cancelled', 'failed'].includes(String(data.outcome))) return { requestId: data.requestId, outcome: data.outcome as Outcome };
+      if (data.phase === 'settled' && ['completed', 'cancelled', 'failed'].includes(String(data.outcome))) {
+        const diagnostic = readRunDiagnostic(data.diagnostic);
+        return { requestId: data.requestId, outcome: data.outcome as Outcome, ...(diagnostic ? { diagnostic } : {}) };
+      }
     }
     return undefined;
   }
@@ -75,6 +79,7 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
       reload: () => runtime!.session.reload(),
     }, onError: error => { if (run && error.event === 'command') run.commandFailed = true; publish({ type: 'native', requestId: run?.id, event: { type: 'extension_error', error } }); } });
     unsubscribe = next.subscribe(event => {
+      if ((event.type === 'auto_retry_start' || event.type === 'summarization_retry_attempt_start') && run) run.retryCount++;
       if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') streamDelta(event.assistantMessageEvent.delta);
       if (event.type === 'message_end') {
         if (event.message.role === 'assistant' && run) { run.last = event.message; flushDelta(); }
@@ -146,25 +151,26 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     if (run) throw new Error('session_busy');
     if (typeof id !== 'string' || !id.trim()) throw new Error('request_id_required');
     if (requestFingerprint !== undefined && (kind !== 'prompt' || typeof requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(requestFingerprint))) throw new Error('invalid_request_fingerprint');
-    const current: ActiveRun = { id, kind, ...(requestFingerprint === undefined ? {} : { requestFingerprint }), cancelled: false, pending: '', managers: new Set() };
+    const current: ActiveRun = { id, kind, ...(requestFingerprint === undefined ? {} : { requestFingerprint }), cancelled: false, retryCount: 0, pending: '', managers: new Set() };
     run = current;
     try { attachRunManager(manager!); }
     catch (error) { run = undefined; throw error; }
     publish({ type: 'run.accepted', requestId: id, sessionFile: manager!.getSessionFile() });
     publish({ type: 'snapshot', snapshot: snapshot() });
     pendingOperation = (async () => {
-      let failed = false, result: unknown;
-      try { result = await action(); await session!.waitForIdle(); } catch { failed = true; }
+      let failed = false, result: unknown, failure: unknown;
+      try { result = await action(); await session!.waitForIdle(); } catch (error) { failed = true; failure = error; }
       flushDelta();
       const last = current.last, nativeCancelled = Boolean(result && typeof result === 'object' && 'cancelled' in result && result.cancelled);
       const outcome: Outcome = current.cancelled || nativeCancelled || last?.stopReason === 'aborted' ? 'cancelled' : failed || current.commandFailed || last?.stopReason === 'error' ? 'failed' : 'completed';
+      const diagnostic = runDiagnostic({ outcome, kind, retryCount: current.retryCount, error: failure ?? last?.errorMessage, commandFailed: current.commandFailed });
       const answer = redactText(last?.content.filter(part => part.type === 'text').map(part => part.text).join('') ?? '');
-      for (const target of current.managers) target.appendCustomEntry(RUN_ENTRY, { phase: 'settled', requestId: id, sessionId: target.getSessionId(), outcome, kind });
+      for (const target of current.managers) target.appendCustomEntry(RUN_ENTRY, { phase: 'settled', requestId: id, sessionId: target.getSessionId(), outcome, kind, ...(diagnostic ? { diagnostic } : {}) });
       run = undefined;
       const state = snapshot();
       publish({ type: 'snapshot', snapshot: state });
-      publish({ type: 'run.settled', requestId: id, outcome, ...(outcome === 'failed' ? { error: '模型、工具或扩展请求未完成，请检查配置后显式重试。' } : {}) });
-      return { outcome, text: answer, result: redact(result ?? null), snapshot: state };
+      publish({ type: 'run.settled', requestId: id, outcome, ...(outcome === 'failed' ? { error: diagnostic!.message } : {}), ...(diagnostic ? { diagnostic } : {}) });
+      return { outcome, text: answer, result: redact(result ?? null), snapshot: state, ...(diagnostic ? { diagnostic } : {}) };
     })().finally(() => { run = undefined; pendingOperation = undefined; });
     return pendingOperation;
   }
