@@ -47,7 +47,7 @@ custom固定范围共52次实际作者尝试（51完成、1上游500重试耗尽
 
 正式来源：manifest `41d07deba73ef9527e4184d186b6fe6793993315a49c7b7370cd66193cc370e9`，产品仍为candidate-02。38份输入/评分文件、8个语义变体和20种实际prompt与前批逐字一致，独立Standards已核对；只改变评估配置保真和独立身份，不换题、模型、金标或评分阈值。
 
-正式不使用中继。隔离Host通过正常入口保存原native Provider/API/固定官方URL/模型及假密钥；仅该评估实例的动态snapshot在原校验后严格核对唯一配置身份，再返回只在内存替换密钥的新副本。配置文件、公开DTO与源数据根均不保存源密钥；推理沿原Host、公共生命周期、ProjectAgent和官方API。sourceRev5与隔离localRev1分别记录，不伪装同一版本。此凭据替身仅用于评估，不是产品或插件接线范式，也不证明源凭据持久化流程。
+正式不使用中继。隔离Host通过正常入口保存原native Provider/API/固定官方URL/模型及假密钥；仅该评估实例的动态snapshot在原校验后严格核对唯一配置身份，再返回只在内存替换密钥的新副本。隔离配置文件和公开DTO不含源密钥；原数据根不写入，既有凭据仅只读解析。推理沿原Host、公共生命周期、ProjectAgent和官方API。sourceRev5与隔离localRev1分别记录，不伪装同一版本。此凭据替身仅用于评估，不是产品或插件接线范式，也不证明源凭据持久化流程。
 
 独立验证含28项凭据接缝检查、两次实际Host/ProjectAgent初始化及本地假Anthropic请求参数核对；0外部API初始化保留完整native profile/high，源密钥哨兵无落盘。正式根不装探针、observer或网络guard，无祖先AGENTS/金标；C2与base/C1/D分根。
 
@@ -103,4 +103,6 @@ A使用现有ProjectAgent/worker的原生Pi薄适配，不是完全裸SDK，因�
 
 初始只读保全快照含257份既有项目/会话/发布物/文件、2份配置文件及decision-cases.sqlite3逻辑状态；凭据摘要只在进程内比较。产品无数据库、project schema或发布格式迁移。最终只读复核时间为2026-10-30 18:19:33 UTC：257文件、2配置均无增加/缺失/字节变化，Case数据库schema/逐表行摘要一致，凭据字节仅进程内比较一致。`preservation/final-after.json`与`final-comparison.json`保留，不包含凭据摘要。
 
-Git仅草稿审查收口，CI结果待实际提交身份登记；**不合并main**。Mac mini原运行服务和MacBook均未切换，现有项目、会话和文件不作为工程测试工作区。旧代码可继续读取原对象，但通常不显示新核算目录；回退先停止活跃核算，保留新增目录和文件，不用旧备份覆盖新增工作。
+Git已创建草稿[PR #12](https://github.com/gadfly-hbo/OptraCall/pull/12)，首提交`337abb0846c3920984ff344662d524017dc4e294`；7份文档与最终r3增量均经非作者复核。main在提交前重新fetch仍为`e30dd19`，没有新增基线需要集成。当前提交身份和托管检查以该PR的Commits及[Checks](https://github.com/gadfly-hbo/OptraCall/pull/12/checks)为准，本地最终读回保存于`git-delivery-receipt.json`；工程CI不改变完整SV11 FAIL，**不合并main**。首次推送因Git引用已删除的旧gh路径而失败，后以本次命令级现有gh凭据助手成功推送，未修改全局配置。
+
+Mac mini原运行服务和MacBook均未切换，现有项目、会话和文件不作为工程测试工作区。旧代码可继续读取原对象，但通常不显示新核算目录；回退先停止活跃核算，保留新增目录和文件，不用旧备份覆盖新增工作。
