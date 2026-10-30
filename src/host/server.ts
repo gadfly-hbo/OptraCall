@@ -71,7 +71,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
     sessionDirectory: instanceId => requirementSessionDirectory(path.join(dataRoot, 'requirement-instances', instanceId)),
     workspaceFor: instanceId => requirementWorkspace(path.join(dataRoot, 'requirement-instances', instanceId)),
-    configurationSnapshot: () => configuration.snapshot(),
+    configurationSnapshot: (id, revision) => configuration.snapshot(id, revision),
     publish: publishRequirement,
     mutate,
     isClosing: () => closing,
@@ -83,7 +83,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     for (const [key, entry] of opening) if ((!filter.provider || entry.provider === filter.provider) && (!filter.projectId || entry.projectId === filter.projectId)) { opening.delete(key); targets.set(key, entry.agent); }
     await Promise.all([...targets].map(async ([key, agent]) => { await agent.close(); endStreams(key); }));
     if (filter.projectId) for (const key of [...streams.keys()]) if (key.startsWith(filter.projectId + '/')) endStreams(key);
-    await requirementSessions.closeAll({ ...(filter.provider ? { provider: filter.provider } : {}) });
+    if (!filter.projectId) await requirementSessions.closeAll({ ...(filter.provider ? { provider: filter.provider } : {}) });
   };
   function assertActive(project: ProjectRecord) {
     if (project.archivedAt !== null) throw new RequestFault(409, 'project_archived');
@@ -102,17 +102,29 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   };
   // 送入：requirement contract summary composed at send time; later edits never
   // flow back into an already-sent message.
-  const requirementPrefix = (input: Record<string, unknown>): string | undefined => {
+  const requirementSelection = (input: Record<string, unknown>): { instanceId: string; version?: string } | undefined => {
     if (input.requirementContext === undefined) return undefined;
     const selection = input.requirementContext;
     if (!selection || typeof selection !== 'object' || Array.isArray(selection)) throw new RequestFault(400, 'invalid_requirement_context');
     const instanceId = String((selection as Record<string, unknown>).instanceId ?? '');
     const rawVersion = (selection as Record<string, unknown>).version;
-    try { return composeRequirementContext(requirementPlugin.store, instanceId, rawVersion === undefined ? undefined : String(rawVersion)); }
+    return { instanceId, ...(rawVersion === undefined ? {} : { version: String(rawVersion) }) };
+  };
+  const requirementPrefix = (input: Record<string, unknown>): string | undefined => {
+    const selection = requirementSelection(input);
+    if (!selection) return undefined;
+    try { return composeRequirementContext(requirementPlugin.store, selection.instanceId, selection.version); }
     catch (error) {
       const code = (error as { code?: string }).code ?? 'requirement_unavailable';
       throw new RequestFault(code === 'REQ_STORE_NOT_FOUND' ? 404 : 409, code === 'REQ_STORE_NOT_FOUND' ? 'not_found' : 'requirement_unavailable');
     }
+  };
+  const requestFingerprint = (input: Record<string, unknown>): string | undefined => {
+    const requirement = requirementSelection(input);
+    if (!requirement) return undefined;
+    const selection = input.caseContext as CaseContextSelection | undefined;
+    const caseContext = selection && typeof selection === 'object' && !Array.isArray(selection) ? { caseId: selection.caseId, caseRevision: selection.caseRevision, projectWorkRevision: selection.projectWorkRevision, selectedReferenceIds: selection.selectedReferenceIds } : selection ?? null;
+    return createHash('sha256').update(JSON.stringify(['optracall_request_v1', input.text, caseContext, requirement])).digest('hex');
   };
   async function prepareCasePrompt(projectId: string, taskId: string, input: Record<string, unknown>, accepted = false) {    const operationId = contextOperationId(projectId, taskId, input.requestId as string);
     const existing = cases.getStatus().state === 'ready' ? cases.getOperation(operationId) : null;
@@ -146,9 +158,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     for (const entry of agents.values()) if (entry.projectId === projectId && (entry.agent.busy || entry.agent.pendingUI.length)) return true;
     return false;
   }
-  async function priorRequest(project: ProjectRecord, task: TaskRecord, requestId: string): Promise<string | undefined> {
-    if (task.lastRun?.id === requestId) return task.lastRun.status;
-    let previous: string | undefined;
+  async function priorRequest(project: ProjectRecord, task: TaskRecord, requestId: string, fingerprint?: string): Promise<string | undefined> {
+    // lastRun caches status only. The native started marker owns the accepted
+    // request identity, including after restart or when this is the last run.
+    let previous: string | undefined = task.lastRun?.id === requestId ? task.lastRun.status : undefined;
+    let identityMatched = false;
     // Only this task's native ledger is authoritative, including its forks.
     for (const file of await readdir(task.sessionDirectory)) {
       if (!file.endsWith('.jsonl')) continue;
@@ -157,12 +171,20 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const manager = SessionManager.open(target, task.sessionDirectory, path.join(project.rootPath, '020_clean'));
       for (const marker of manager.getEntries()) {
         if (marker.type !== 'custom' || marker.customType !== 'optracall.run') continue;
-        const data = marker.data as { requestId?: string; phase?: string; outcome?: string } | undefined;
+        const data = marker.data as { requestId?: string; phase?: string; outcome?: string; requestFingerprint?: unknown } | undefined;
         if (data?.requestId !== requestId) continue;
+        if (data.phase === 'started') {
+          if (data.requestFingerprint !== undefined) {
+            if (typeof data.requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(data.requestFingerprint)) throw new RequestFault(409, 'session_history_unavailable');
+            if (data.requestFingerprint !== fingerprint) throw new RequestFault(409, 'operation_conflict');
+            identityMatched = true;
+          } else if (fingerprint !== undefined) throw new RequestFault(409, 'operation_conflict');
+        }
         if (data.phase === 'settled' && ['completed', 'cancelled', 'failed'].includes(data.outcome ?? '')) previous = data.outcome;
         else if (!previous && data.phase === 'started') previous = 'interrupted';
       }
     }
+    if (previous !== undefined && fingerprint !== undefined && !identityMatched) throw new RequestFault(409, 'operation_conflict');
     return previous;
   }
   async function agentFor(initialProject: ProjectRecord, initialTask: TaskRecord): Promise<ProjectAgent> {
@@ -383,13 +405,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (operation === 'messages' && request.method === 'POST') {
             const input = await body(request);
             if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
-            const initial = await pair(projectId, taskId, true), known = await priorRequest(initial.project, initial.task, input.requestId);
+            const fingerprint = requestFingerprint(input);
+            const initial = await pair(projectId, taskId, true), known = await priorRequest(initial.project, initial.task, input.requestId, fingerprint);
             // Validate and pin the selected snapshot before opening a runtime.
             await mutate(async () => { await prepareCasePrompt(projectId, taskId, input, Boolean(known)); requirementPrefix(input); });
             if (known) { json(response, 202, { requestId: input.requestId, status: known, deduplicated: true }); return; }
             const agent = await agentFor(initial.project, initial.task);
             await mutate(async () => {
-              const { project, task } = await pair(projectId, taskId, true), previous = await priorRequest(project, task, input.requestId as string);
+              const { project, task } = await pair(projectId, taskId, true), previous = await priorRequest(project, task, input.requestId as string, fingerprint);
               if (previous) { json(response, 202, { requestId: input.requestId, status: previous, deduplicated: true }); return; }
               assertUsable(project, task, agent); if (agent.busy) throw new RequestFault(409, 'session_busy');
               if (input.caseContext) {
@@ -401,7 +424,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               const requirement = requirementPrefix(input);
               const prompt = requirement === undefined ? await prepareCasePrompt(projectId, taskId, input) : `${requirement}\n\n${await prepareCasePrompt(projectId, taskId, input)}`;
               const startedAt = new Date().toISOString(); await projects.markRun(projectId, taskId, { id: input.requestId as string, status: 'running', startedAt });
-              const run = agent.start(prompt, input.requestId as string);
+              const run = agent.start(prompt, input.requestId as string, fingerprint);
               void run.completion.then(async (result: any) => { await projects.markRun(projectId, taskId, { id: input.requestId as string, status: result.outcome, startedAt, settledAt: new Date().toISOString() }); }).catch(async () => { await projects.markRun(projectId, taskId, { id: input.requestId as string, status: 'interrupted', startedAt, settledAt: new Date().toISOString() }).catch(() => {}); publish(projectId, taskId, { type: 'run.settled', requestId: input.requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。' }); });
               await run.accepted; json(response, 202, { requestId: input.requestId, status: 'running' });
             }); return;

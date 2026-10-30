@@ -2,7 +2,9 @@
 
 开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.2](docs/OptraCall_产品讨论稿_v0.2.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
 
-当前变更为 [requirements-elaboration](openspec/changes/requirements-elaboration/spec.md)：把参考仓库 requirements-elaboration 改造为 OptraCall 业务插件「需求梳理」（4-Stage 软门禁、独立插件会话走统一 Runtime、RAP 0.2 契约包、显式送入任务上下文）。会话入口泛化（`project-runtime`／`project-session`／`server.ts` 会话段）按 A 路线由 Qoder 实施、Codex 专项复核。实施结果见[交付记录](openspec/changes/requirements-elaboration/result.md)。
+当前变更为 [requirements-reliability](openspec/changes/requirements-reliability/spec.md)：修复目标项目／发布版本选择与真实回答编辑，收尾模型切换和会话隔离，补RAP＋SAP＋Case联合回归。涉及会话关闭或请求重试时，核对[结果记录](openspec/changes/requirements-reliability/result.md)中的归属与legacy回执兼容边界。
+
+[需求梳理初始实现](openspec/changes/requirements-elaboration/spec.md)为4-Stage软门禁、独立插件会话走统一Runtime、RAP 0.2及显式送入。A路线泛化由Qoder实施；原[交付证据](openspec/changes/requirements-elaboration/result.md)保留，本轮受影响接缝检查另记于可靠性结果。
 
 上一变更为 [Case一期](openspec/changes/decision-case/spec.md)（已合并 PR #4）及其后的 [macbook-trial-delivery](openspec/changes/macbook-trial-delivery/spec.md) 单向试用交付；各自的结果与授权范围保留在对应记录中。
 
