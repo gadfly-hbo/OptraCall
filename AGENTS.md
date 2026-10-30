@@ -2,7 +2,9 @@
 
 开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.2](docs/OptraCall_产品讨论稿_v0.2.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
 
-当前变更为 [requirements-reliability](openspec/changes/requirements-reliability/spec.md)：修复目标项目／发布版本选择与真实回答编辑，收尾模型切换和会话隔离，补RAP＋SAP＋Case联合回归。涉及会话关闭或请求重试时，核对[结果记录](openspec/changes/requirements-reliability/result.md)中的归属与legacy回执兼容边界。
+当前变更为 [requirements-flexibility](openspec/changes/requirements-flexibility/spec.md)：允许未确认框架草稿，取消澄清／假设凑数，支持描述性分析不引用假设，补同会话一次有限格式修正。正式发布与送入边界、旧RAP保留及新空引用内容的回退限制见本变更规格与[结果记录](openspec/changes/requirements-flexibility/result.md)。
+
+上一轮[requirements-reliability](openspec/changes/requirements-reliability/result.md)已修复目标项目／发布版本选择、真实回答编辑、模型切换和会话隔离；涉及会话关闭或请求重试时，继续核对其归属与legacy回执兼容边界。
 
 [需求梳理初始实现](openspec/changes/requirements-elaboration/spec.md)为4-Stage软门禁、独立插件会话走统一Runtime、RAP 0.2及显式送入。A路线泛化由Qoder实施；原[交付证据](openspec/changes/requirements-elaboration/result.md)保留，本轮受影响接缝检查另记于可靠性结果。
 

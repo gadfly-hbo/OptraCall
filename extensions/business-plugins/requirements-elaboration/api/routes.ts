@@ -3,7 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import { createRequirementStore, RequirementStoreFault, type RequirementReleaseEntry } from '../storage/store.ts';
 import { computeGateReport, instanceStatus, pendingMustConfirm, type GateReport } from '../gates/checks.ts';
 import { buildGenerationPrompt, normalizeElicit, normalizeHypotheses, normalizeFramework, parseModelJson, type GenerationCall } from '../session/prompts.ts';
-import { parseInstance, isStale, RequirementFault, type RequirementInstance } from '../contract/validate.ts';
+import { parseInstance, isStale, upstreamFingerprint, RequirementFault, type RequirementInstance } from '../contract/validate.ts';
 
 class ApiFault extends Error {
   readonly status: number;
@@ -16,6 +16,7 @@ export type RequirementRoutesOptions = {
   readBody: (request: IncomingMessage) => Promise<Record<string, unknown>>;
   sessions: {
     run: (instanceId: string, text: string, requestId: string) => Promise<{ outcome: 'completed' | 'cancelled' | 'failed'; text: string }>;
+    withSession: <T,>(instanceId: string, use: (session: { run: (text: string, requestId: string) => Promise<{ outcome: 'completed' | 'cancelled' | 'failed'; text: string }> }) => Promise<T>) => Promise<T>;
     stop: (instanceId: string) => Promise<boolean>;
     busy: (instanceId: string) => boolean;
   };
@@ -39,6 +40,7 @@ const storeMessage = (code: string): string => ({
   REQ_SNAPSHOT_REQUIRED: '尚未确认正式需求：请先在 Stage 02 完成确认。',
   REQ_STALE_SNAPSHOT: '快照已失效（上游内容有修改）：请回 Stage 02 重新确认后再发布。',
   REQ_FRAMEWORK_REQUIRED: '尚未生成分析与报告框架：请先在 Stage 03 生成框架。',
+  REQ_PROPOSAL_SOURCE_CHANGED: '生成提案后需求内容已修改，请基于当前工作稿重新生成后再采纳。',
 }[code] ?? '需求实例操作未完成，请检查输入或本地数据后重试。');
 
 /** Host-owned HTTP transport calls these handlers; the plugin never binds a port itself. */
@@ -81,8 +83,16 @@ export function createRequirementRoutes(options: RequirementRoutesOptions) {
         const input = await options.readBody(request);
         if (!input.instance || typeof input.instance !== 'object') throw new ApiFault(400, 'instance_body_required', '请求体必须包含完整 instance。');
         const current = readInstance(id);
+        if (input.proposalSourceFingerprint !== undefined && input.proposalSourceFingerprint !== upstreamFingerprint(current)) throw new ApiFault(409, 'REQ_PROPOSAL_SOURCE_CHANGED', storeMessage('REQ_PROPOSAL_SOURCE_CHANGED'));
+        let proposed = input.instance;
+        if (input.proposalSourceFingerprint !== undefined) {
+          // A generation proposal never owns confirmation. Another window may
+          // have confirmed the same upstream while the model was still running.
+          const { snapshot: _ignored, ...draft } = proposed as Record<string, unknown>;
+          proposed = { ...draft, ...(current.snapshot ? { snapshot: current.snapshot } : {}) };
+        }
         let next: RequirementInstance;
-        try { next = parseInstance(new Uint8Array(Buffer.from(JSON.stringify(input.instance), 'utf8'))); }
+        try { next = parseInstance(new Uint8Array(Buffer.from(JSON.stringify(proposed), 'utf8'))); }
         catch (error) { if (error instanceof RequirementFault) throw new ApiFault(400, error.code, `实例未通过校验（${error.code}${error.path ? ` @ ${error.path}` : ''}）。`); throw error; }
         if (next.instance.id !== current.instance.id) throw new ApiFault(400, 'instance_identity_mismatch', '实例 id 不可修改。');
         return { status: 200, value: detail(store.save({ ...next, instance: { ...next.instance, createdAt: current.instance.createdAt } })) };
@@ -110,22 +120,30 @@ export function createRequirementRoutes(options: RequirementRoutesOptions) {
         const call = String(input.call ?? '') as GenerationCall;
         if (!calls.includes(call)) throw new ApiFault(400, 'call_invalid', '调用点必须是 elicit / hypotheses / framework。');
         const instance = readInstance(id);
-        // Framework generation consumes the confirmed snapshot as its only legal
-        // input; a missing or stale baseline is an input problem, not a gate on
-        // editing or navigation.
-        if (call === 'framework') {
-          if (!instance.snapshot) throw new ApiFault(409, 'REQ_SNAPSHOT_REQUIRED', storeMessage('REQ_SNAPSHOT_REQUIRED'));
-          if (isStale(instance)) throw new ApiFault(409, 'REQ_STALE_SNAPSHOT', storeMessage('REQ_STALE_SNAPSHOT'));
-        }
         if (options.sessions.busy(id)) throw new ApiFault(409, 'session_busy', '该实例的模型调用正在进行，请等待完成或停止后重试。');
         const prompt = buildGenerationPrompt(call, instance);
-        const result = await options.sessions.run(id, prompt, randomUUID());
-        if (result.outcome !== 'completed') return { status: 502, value: { code: 'model_run_failed', outcome: result.outcome, message: '模型调用未完成，请检查配置后显式重试。' } };
-        let parsed: unknown;
-        try { parsed = parseModelJson(result.text); }
-        catch { return { status: 422, value: { code: 'REQ_MODEL_OUTPUT_INVALID', message: '模型输出无法解析为 JSON，请重试生成。' } }; }
-        const proposal = call === 'elicit' ? normalizeElicit(parsed, instance) : call === 'hypotheses' ? normalizeHypotheses(parsed, instance) : normalizeFramework(parsed);
-        return { status: 200, value: { call, proposal } };
+        const source = { fingerprint: upstreamFingerprint(instance), confirmation: !instance.snapshot ? 'unconfirmed' : isStale(instance) ? 'stale' : 'confirmed' };
+        return await options.sessions.withSession(id, async session => {
+          const normalize = (reply: string) => {
+            const parsed = parseModelJson(reply);
+            return call === 'elicit' ? normalizeElicit(parsed, instance) : call === 'hypotheses' ? normalizeHypotheses(parsed, instance) : normalizeFramework(parsed, instance);
+          };
+          const incomplete = (outcome: 'cancelled' | 'failed', repairAttempts: 0 | 1) => ({ status: 502, value: { code: 'model_run_failed', outcome, repairAttempts, message: '模型调用未完成，未自动重放；请检查后显式重试。' } });
+          const first = await session.run(prompt, randomUUID());
+          if (first.outcome !== 'completed') return incomplete(first.outcome, 0);
+          let validation: RequirementFault;
+          try { return { status: 200, value: { call, proposal: normalize(first.text), source, repairAttempts: 0 } }; }
+          catch (error) { if (!(error instanceof RequirementFault)) throw error; validation = error; }
+          // Exactly one format correction after a completed reply. No failed,
+          // cancelled or unknown run is replayed, and no analysis loop is built.
+          const corrected = await session.run(`上一次输出已完成，但未通过输出校验：${validation.code}${validation.path ? ` @ ${validation.path}` : ''}。请在当前会话中仅修复上一次 JSON 的格式或结构，遵守原请求的字段约定；不要重新分析、不要新增事实或改变已知/未知边界。只返回一个完整 JSON 代码块。这是本次生成唯一的一次格式修复；本轮仍失败将停止。`, randomUUID());
+          if (corrected.outcome !== 'completed') return incomplete(corrected.outcome, 1);
+          try { return { status: 200, value: { call, proposal: normalize(corrected.text), source, repairAttempts: 1 } }; }
+          catch (error) {
+            if (!(error instanceof RequirementFault)) throw error;
+            return { status: 422, value: { code: 'REQ_MODEL_OUTPUT_INVALID', validation: { code: error.code, path: error.path }, repairAttempts: 1, message: `输出经一次格式修复仍未通过校验（${error.code}${error.path ? ` @ ${error.path}` : ''}）；原始输出已保留，请检查后显式重试。` } };
+          }
+        });
       }
       if (id && operation === 'stop' && request.method === 'POST') {
         await options.readBody(request);
@@ -141,6 +159,9 @@ export function createRequirementRoutes(options: RequirementRoutesOptions) {
         return { status, value: { code, message: storeMessage(code) } };
       }
       const code = (error as { code?: unknown }).code;
+      if (code === 'generation_cancelled' || code === 'runtime_closed') return { status: 502, value: { code: 'model_run_failed', outcome: 'cancelled', message: '生成已停止或会话已关闭，未自动重放。' } };
+      if (code === 'runtime_process_stopped' || code === 'runtime_unavailable') return { status: 502, value: { code: 'model_run_failed', outcome: 'failed', uncertain: true, message: '会话运行中断，结果未确认，未自动重放。' } };
+      if (code === 'configuration_changed') return { status: 409, value: { code, message: '本次生成使用的模型配置已失效，未切换模型或自动重放。' } };
       if (code === 'configuration_required' || code === 'session_busy') return { status: 409, value: { code, message: code === 'configuration_required' ? '请先在模型设置中配置模型。' : '该实例的模型调用正在进行，请等待完成或停止后重试。' } };
       throw error;
     }

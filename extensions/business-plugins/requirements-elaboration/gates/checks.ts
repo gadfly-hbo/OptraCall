@@ -1,4 +1,4 @@
-import { derivedOpenQuestions, isStale, type RequirementInstance } from '../contract/validate.ts';
+import { derivedOpenQuestions, isStale, missingFrameworkSections, type RequirementInstance } from '../contract/validate.ts';
 
 export type GateLevel = 'hard' | 'warn' | 'info';
 export type GateStatus = 'pass' | 'fail' | 'warn' | 'info';
@@ -22,9 +22,11 @@ export function instanceStatus(instance: RequirementInstance): 'draft' | 'confir
  * host never prescribes analysis steps.
  */
 export function computeGateReport(instance: RequirementInstance): GateReport {
+  const missingSections = missingFrameworkSections(instance.framework);
+  const sectionTitles = { metrics: '指标', dataNeeds: '数据需求', analysisPaths: '分析路径', reportFramework: '报告树' };
   const hard: GateItem[] = [
     { id: 'rap-parseable', level: 'hard', status: 'pass', title: 'RAP 结构可解析', detail: '实例通过 schema 校验，canonical 序列化与指纹可复算。' },
-    { id: 'framework-present', level: 'hard', status: instance.framework ? 'pass' : 'fail', title: '分析与报告框架非空', detail: instance.framework ? `指标 ×${instance.framework.metrics.length} · 数据需求 ×${instance.framework.dataNeeds.length} · 分析路径 ×${instance.framework.analysisPaths.length} · 报告树 ×${instance.framework.reportFramework.length}。` : '尚未生成框架：到 Stage 03 生成后再发布。' },
+    { id: 'framework-present', level: 'hard', status: missingSections.length ? 'fail' : 'pass', title: '正式框架结构齐全', detail: instance.framework ? `指标 ×${instance.framework.metrics.length} · 数据需求 ×${instance.framework.dataNeeds.length} · 分析路径 ×${instance.framework.analysisPaths.length} · 报告树 ×${instance.framework.reportFramework.length}。${missingSections.length ? `正式发布尚缺：${missingSections.map(section => sectionTitles[section]).join('、')}；探索草稿可以继续编辑。` : ''}` : '尚未生成框架：到 Stage 03 生成草稿并补齐正式结构后再发布。' },
     { id: 'snapshot-present', level: 'hard', status: instance.snapshot ? 'pass' : 'fail', title: '存在已确认需求快照', detail: instance.snapshot ? `快照 ${instance.snapshot.fingerprint.slice(0, 19)}…，确认人 ${instance.snapshot.confirmedBy}。` : '尚未确认：到 Stage 02 点击「确认成正式需求」。' },
   ];
   const warn: GateItem[] = [

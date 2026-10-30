@@ -54,7 +54,7 @@ test('RE-03: elicit proposals continue the id sequence and drop invalid entries'
   assert.deepEqual(proposal.facts, ['双11复购率下滑']);
   assert.deepEqual(proposal.hypotheses.map(item => item.id), ['hyp-1']);
   assert.equal(proposal.hypotheses[0]!.status, 'proposed');
-  assert.equal(proposal.dropped, 3, 'invalid category, missing category, empty hypothesis');
+  assert.equal(proposal.dropped, 5, 'invalid category, missing category, two invalid facts, empty hypothesis');
   const continued = normalizeElicit({ clarifications: [{ category: '风险', priority: 'can_defer', question: 'Q', rationale: 'R' }], facts: [], hypotheses: [] }, sampleInstance());
   assert.equal(continued.clarifications[0]!.id, 'clr-4');
 });

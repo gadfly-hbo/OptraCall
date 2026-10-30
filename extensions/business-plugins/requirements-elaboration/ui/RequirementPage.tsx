@@ -27,10 +27,11 @@ type GateReport = { hard: GateItem[]; warn: GateItem[]; info: GateItem[]; publis
 type ReleaseEntry = { id: string; version: string; scene: string; title: string; packageFingerprint: string; contentFingerprint: string; releasedAt: string; releasedBy: string; openQuestionCount: number; metricCount: number };
 type InstanceView = { id: string; title: string; scene: Scene; createdAt: string; updatedAt: string; status: 'draft' | 'confirmed' | 'stale'; mustConfirmPending: number; releasedCount: number };
 type InstanceDetail = { instance: RequirementInstance; gates: GateReport; releases: ReleaseEntry[] };
-type Proposal =
+type ProposalSource = { fingerprint: string; confirmation: 'unconfirmed' | 'confirmed' | 'stale' };
+type Proposal = { instanceId: string; source: ProposalSource; repairAttempts: 0 | 1; noChangeReason?: string } & (
   | { call: 'elicit'; clarifications: ClarificationItem[]; facts: string[]; hypotheses: HypothesisItem[]; dropped: number }
   | { call: 'hypotheses'; hypotheses: HypothesisItem[]; dropped: number }
-  | { call: 'framework'; framework: Framework; dropped: number };
+  | { call: 'framework'; framework: Framework; dropped: number });
 
 async function requirementRequest<T>(path: string, method: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/requirement-instances${path}`, { method, mode: 'same-origin', credentials: 'omit', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
@@ -58,6 +59,7 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
   const [stage, setStage] = useState(1);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [adopting, setAdopting] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -84,8 +86,8 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
   }, []);
   useEffect(() => { void reloadList(); return () => watchRef.current?.abort(); }, [reloadList]);
 
-  const patch = async (instance: RequirementInstance) => {
-    const value = await requirementRequest<InstanceDetail>(`/${instance.instance.id}`, 'PATCH', { instance });
+  const patch = async (instance: RequirementInstance, proposalSourceFingerprint?: string) => {
+    const value = await requirementRequest<InstanceDetail>(`/${instance.instance.id}`, 'PATCH', { instance, ...(proposalSourceFingerprint ? { proposalSourceFingerprint } : {}) });
     setDetail(value);
     void reloadList();
     return value;
@@ -116,22 +118,28 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
   };
   const generate = async (call: 'elicit' | 'hypotheses' | 'framework') => {
     if (!detail) return;
+    const instanceId = detail.instance.instance.id;
     setGenerating(true); setError(''); setProposal(null); watchStream(detail.instance.instance.id);
     try {
-      const value = await requirementRequest<{ call: 'elicit' | 'hypotheses' | 'framework'; proposal: Omit<Proposal, 'call'> }>(`/${detail.instance.instance.id}/generate`, 'POST', { call });
-      setProposal({ call: value.call, ...value.proposal } as Proposal);
+      const value = await requirementRequest<{ call: Proposal['call']; proposal: Record<string, unknown>; source: ProposalSource; repairAttempts: 0 | 1 }>(`/${instanceId}/generate`, 'POST', { call });
+      setProposal({ call: value.call, ...value.proposal, instanceId, source: value.source, repairAttempts: value.repairAttempts } as Proposal);
     } catch (fault) { setError(fault instanceof Error ? fault.message : '模型调用未完成，请重试。'); }
     finally { setGenerating(false); watchRef.current?.abort(); }
   };
   const stopGeneration = async () => { if (!detail) return; try { await requirementRequest(`/${detail.instance.instance.id}/stop`, 'POST', {}); } catch { /* stopped run settles anyway */ } };
   const adopt = async () => {
-    if (!detail || !proposal) return;
-    const instance = structuredClone(detail.instance) as RequirementInstance & { clarifications: ClarificationItem[]; hypotheses: HypothesisItem[] };
-    if (proposal.call === 'elicit') { instance.clarifications.push(...proposal.clarifications); instance.facts.push(...proposal.facts); instance.hypotheses.push(...proposal.hypotheses); }
-    if (proposal.call === 'hypotheses') instance.hypotheses.push(...proposal.hypotheses);
-    if (proposal.call === 'framework') instance.framework = proposal.framework;
-    setProposal(null);
-    await patch(instance);
+    if (!detail || !proposal || adopting || proposal.instanceId !== detail.instance.instance.id) return;
+    setAdopting(true); setError('');
+    try {
+      const current = await requirementRequest<InstanceDetail>(`/${proposal.instanceId}`, 'GET');
+      const instance = structuredClone(current.instance);
+      if (proposal.call === 'elicit') { instance.clarifications.push(...proposal.clarifications); instance.facts.push(...proposal.facts); instance.hypotheses.push(...proposal.hypotheses); }
+      if (proposal.call === 'hypotheses') instance.hypotheses.push(...proposal.hypotheses);
+      if (proposal.call === 'framework') instance.framework = proposal.framework;
+      await patch(instance, proposal.source.fingerprint); setProposal(null);
+    }
+    catch (fault) { setError(fault instanceof Error ? fault.message : '建议未采纳，原提案已保留，请核对当前工作稿。'); }
+    finally { setAdopting(false); }
   };
   const dismiss = () => setProposal(null);
   const updateClarification = async (id: string, status: string) => {
@@ -171,7 +179,7 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
   };
   const confirm = async () => {
     if (!detail) return;
-    try { await requirementRequest(`/${detail.instance.instance.id}/confirm`, 'POST', { confirmedBy: actor }); await reloadDetail(detail.instance.instance.id); setNotice('已生成不可变确认快照，可作为 Stage 03 的输入基线。'); }
+    try { await requirementRequest(`/${detail.instance.instance.id}/confirm`, 'POST', { confirmedBy: actor }); await reloadDetail(detail.instance.instance.id); void reloadList(); setNotice('已生成不可变确认快照，正式发布与送入前请核对框架及未决项。'); }
     catch (fault) { setError(fault instanceof Error ? fault.message : '确认未完成。'); }
   };
   const publish = async () => {
@@ -215,6 +223,8 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
   </div>;
 
   const instance = detail.instance, gates = detail.gates;
+  const activeProposal = proposal?.instanceId === instance.instance.id ? proposal : null;
+  const proposalHasChanges = activeProposal && (activeProposal.call === 'framework' || activeProposal.hypotheses.length > 0 || activeProposal.call === 'elicit' && (activeProposal.clarifications.length > 0 || activeProposal.facts.length > 0));
   return <div className="re-page" data-build="requirements-elaboration">
     <button className="text-button re-back" onClick={() => { setDetail(null); void reloadList(); }}>← 返回实例列表</button>
     <div className="page-heading"><div><p className="eyebrow">INSTANCE · {instance.instance.id}</p><h1>{instance.instance.title}</h1><p>四阶段自由跳转、随时编辑；快照失效仅提示再确认，不锁死编辑。</p></div><span className={statusClass[instances.find(item => item.id === instance.instance.id)?.status ?? 'draft']}>{statusLabel[instances.find(item => item.id === instance.instance.id)?.status ?? 'draft']}</span></div>
@@ -276,19 +286,19 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
           </div>
           <div className="panel">
             <h2>确认成正式需求</h2>
-            <p className="re-help">用户主动的快照动作，不是通关条件；生成带指纹的不可变快照，作为 Stage 03 唯一输入基线。{instance.snapshot ? `当前快照 ${instance.snapshot.fingerprint.slice(0, 19)}… · 确认人 ${instance.snapshot.confirmedBy}` : ''}</p>
+            <p className="re-help">用户主动的快照动作，不是探索框架的前置条件；生成带指纹的不可变快照，供正式发布与送入核对。{instance.snapshot ? `当前快照 ${instance.snapshot.fingerprint.slice(0, 19)}… · 确认人 ${instance.snapshot.confirmedBy}` : ''}</p>
             <div className="re-actions"><input className="re-actor" value={actor} aria-label="确认人" onChange={event => setActor(event.target.value)} /><button className="primary-button" onClick={() => void confirm()}>{instance.snapshot ? '重新确认（生成新快照）' : '确认成正式需求'}</button></div>
           </div>
         </section>}
         {stage === 3 && <section aria-label="分析与报告框架">
           <div className="panel">
             <div className="re-panel-head"><h2>分析与报告框架</h2><span className="re-actions"><button className="primary-button" disabled={generating} onClick={() => void generate('framework')}>{generating ? '生成中…' : '生成框架'}</button>{generating && <button className="secondary-button" onClick={() => void stopGeneration()}>停止</button>}</span></div>
-            <p className="re-help">严格基于已确认快照推演；需要先在 Stage 02 完成确认，快照失效时先重新确认。</p>
+            <p className="re-help">未确认也可先生成框架草稿；正式发布与送入仍需有效确认。</p>
             {generating && streamText && <pre className="re-stream">{streamText}</pre>}
           </div>
           {instance.framework && <div className="panel"><h2>① 指标体系与口径</h2><table className="re-table"><thead><tr><th>指标</th><th>口径</th><th>维度</th><th>来源</th></tr></thead><tbody>{instance.framework.metrics.map((metric, index) => <tr key={index}><td><strong>{metric.name}</strong></td><td>{metric.definition}</td><td>{metric.dimensions.join(' · ')}</td><td>{metric.source}</td></tr>)}</tbody></table></div>}
           {instance.framework && <div className="panel"><h2>② 数据需求清单</h2><table className="re-table"><thead><tr><th>优先级</th><th>表 / 主题</th><th>字段</th><th>用途</th></tr></thead><tbody>{instance.framework.dataNeeds.map((need, index) => <tr key={index}><td><span className={need.priority === 'P0' ? 're-pill warn' : need.priority === 'P1' ? 're-pill draft' : 're-pill draft'}>{need.priority}</span></td><td><code>{need.table}</code></td><td>{need.fields.join(' · ')}</td><td>{need.purpose}</td></tr>)}</tbody></table></div>}
-          {instance.framework && <div className="panel"><h2>③ 分析路径与方法矩阵</h2><table className="re-table"><thead><tr><th>子问题</th><th>假设</th><th>方法</th><th>数据</th><th>预期产物</th></tr></thead><tbody>{instance.framework.analysisPaths.map((path, index) => <tr key={index}><td>{path.question}</td><td>{path.hypothesis}</td><td>{path.method}</td><td>{path.requiredData.join(' · ')}</td><td>{path.expectedOutput}</td></tr>)}</tbody></table></div>}
+          {instance.framework && <div className="panel"><h2>③ 分析路径与方法矩阵</h2><table className="re-table"><thead><tr><th>子问题</th><th>假设</th><th>方法</th><th>数据</th><th>预期产物</th></tr></thead><tbody>{instance.framework.analysisPaths.map((path, index) => <tr key={index}><td>{path.question}</td><td>{path.hypothesis || '描述性分析（无需假设）'}</td><td>{path.method}</td><td>{path.requiredData.join(' · ')}</td><td>{path.expectedOutput}</td></tr>)}</tbody></table></div>}
           {instance.framework && <div className="panel"><h2>④ 报告框架与结构树</h2>{instance.framework.reportFramework.map((section, index) => <div key={index} className="re-report-node"><strong>{section.section}</strong><span> — {section.purpose}</span>{section.keyQuestions.length > 0 && <p>关键问题：{section.keyQuestions.join('；')}</p>}<p className="re-zero-hallu">零幻觉检查点：{section.zeroHallucinationCheck}</p></div>)}</div>}
           {instance.framework && <div className="panel"><h2>零幻觉区（自动归集）</h2><p className="re-help">后置 / 未决项强制流入，严禁伪造成事实。</p>{instance.framework.openQuestions.length > 0 && <><p><strong>open_questions</strong></p><ul className="re-facts">{instance.framework.openQuestions.map((question, index) => <li key={index}>{question}</li>)}</ul></>}{instance.framework.risks.length > 0 && <><p><strong>risks</strong></p><ul className="re-facts">{instance.framework.risks.map((risk, index) => <li key={index}>{risk}</li>)}</ul></>}</div>}
           {!instance.framework && <p className="re-help">尚未生成框架。</p>}
@@ -311,17 +321,22 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
           {release && <div className="panel"><h2>发布物预览 · {release.entry.id}@{release.entry.version}</h2><pre className="re-stream">{JSON.stringify(release.rap, null, 2).slice(0, 4000)}</pre></div>}
         </section>}
       </div>
-      {proposal && <aside className="re-proposal" aria-label="AI 提案卡">
-        <h3>AI 提案卡</h3>
+      {activeProposal && proposal && <aside className="re-proposal" aria-label="AI 提案卡">
+        <h3>{proposal.call === 'framework' ? '未确认框架草稿' : 'AI 提案卡'}</h3>
         <p className="re-help">{proposal.call === 'elicit' ? '首轮推断建议' : proposal.call === 'hypotheses' ? '辅助生成假设' : '框架生成'} · 放弃后工作稿零改动</p>
+        <p className="re-help re-proposal-source">输入来源：{proposal.source.confirmation === 'confirmed' ? '已确认的当前工作稿；本提案仍为草稿' : proposal.source.confirmation === 'stale' ? '当前工作稿（原确认快照已失效）' : '当前工作稿（尚未确认）'} · 输入指纹 {proposal.source.fingerprint.slice(0, 19)}…</p>
+        {proposal.repairAttempts === 1 && <p className="re-help" role="status">已在同一会话追加 1 次格式修正；首次输出保留在会话记录中。</p>}
         <div className="re-proposal-body">
+          {proposal.noChangeReason && <p>{proposal.noChangeReason}</p>}
           {proposal.call === 'elicit' && <>{proposal.clarifications.map(item => <p key={item.id}>· [{priorityLabel[item.priority]}] {item.category}：{item.question}</p>)}{proposal.facts.map((fact, index) => <p key={`f${index}`}>事实 · {fact}</p>)}{proposal.hypotheses.map(item => <p key={item.id}>假设 · {item.statement}</p>)}</>}
           {proposal.call === 'hypotheses' && proposal.hypotheses.map(item => <p key={item.id}>假设 · {item.statement}（证伪：{item.validationCondition || '待补充'}）</p>)}
           {proposal.call === 'framework' && <p>指标 ×{proposal.framework.metrics.length} · 数据需求 ×{proposal.framework.dataNeeds.length} · 分析路径 ×{proposal.framework.analysisPaths.length} · 报告树 ×{proposal.framework.reportFramework.length} · open_questions ×{proposal.framework.openQuestions.length}</p>}
+          {proposal.call === 'framework' && proposal.framework.openQuestions.length > 0 && <><p><strong>待确认问题</strong></p><ul className="re-facts">{proposal.framework.openQuestions.map((question, index) => <li key={index}>{question}</li>)}</ul></>}
+          {proposal.call === 'framework' && proposal.framework.risks.length > 0 && <><p><strong>风险</strong></p><ul className="re-facts">{proposal.framework.risks.map((risk, index) => <li key={index}>{risk}</li>)}</ul></>}
           {proposal.dropped > 0 && <p className="re-dropped">已丢弃无效条目 ×{proposal.dropped}</p>}
         </div>
-        <div className="re-actions"><button className="primary-button" onClick={() => void adopt()}>采纳建议</button><button className="secondary-button" onClick={dismiss}>放弃</button></div>
-        <p className="re-help">模型输出不直接覆写工作稿；采纳后以草稿状态进入实例，仍可编辑。</p>
+        <div className="re-actions">{proposalHasChanges ? <><button className="primary-button" disabled={adopting} onClick={() => void adopt()}>{adopting ? '采纳中…' : '采纳建议'}</button><button className="secondary-button" disabled={adopting} onClick={dismiss}>放弃</button></> : <button className="primary-button" onClick={dismiss}>知道了</button>}</div>
+        <p className="re-help">{proposalHasChanges ? '模型输出不直接覆写工作稿；采纳只更新草稿，不代替正式确认或发布。' : '本次无需新增内容；知道了只关闭提案，不改写工作稿。'}</p>
       </aside>}
     </div>
     {sendVersion && <SendDialog projects={activeProjects} instanceTitle={instance.instance.title} version={sendVersion} onProjectsChanged={onProjectsChanged} onClose={() => setSendVersion(null)} onSend={(project, task) => { onSendToTask(project, task, { instanceId: instance.instance.id, version: sendVersion, title: instance.instance.title }); setSendVersion(null); }} />}

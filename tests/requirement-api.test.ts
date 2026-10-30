@@ -14,11 +14,13 @@ async function harness(options: { replies?: string[]; outcome?: 'completed' | 'f
   const queue: Record<string, unknown>[] = [];
   const prompts: string[] = [];
   const calls = { run: 0, stop: 0 };
+  const run = async (text: string) => { calls.run++; prompts.push(text); return { outcome: options.outcome ?? 'completed' as const, text: options.replies?.shift() ?? '{}' }; };
   const { routes, store } = createRequirementRoutes({
     storeRoot: root(),
     readBody: async () => queue.shift() ?? {},
     sessions: {
-      run: async (_id, text) => { calls.run++; prompts.push(text); return { outcome: options.outcome ?? 'completed', text: options.replies?.shift() ?? '{}' }; },
+      run: async (_id, text) => run(text),
+      withSession: async (_id, use) => use({ run: async text => run(text) }),
       stop: async () => { calls.stop++; return true; },
       busy: () => options.busy ?? false,
     },
@@ -100,13 +102,17 @@ test('RE-03: busy sessions are rejected without a second run', async () => {
   assert.equal((busy.value as { code: string }).code, 'session_busy');
 });
 
-test('RE-03: framework generation requires a fresh confirmed snapshot', async () => {
-  const { routes, store, body } = await harness();
+test('RF01: missing and stale snapshots do not block an unconfirmed framework proposal', async () => {
+  const framework = sampleInstance().framework!;
+  const descriptive = { ...framework, analysisPaths: framework.analysisPaths.map(item => ({ ...item, hypothesis: '' })) };
+  const { routes, store, body } = await harness({ replies: ['```json\n' + JSON.stringify(descriptive) + '\n```', '```json\n' + JSON.stringify(framework) + '\n```'] });
   const instance = store.create({ title: '双11复购下滑归因', scene: 'topic' });
   body({ call: 'framework' });
   const missing = await call(routes, 'POST', `/api/requirement-instances/${instance.instance.id}/generate`);
-  assert.equal(missing.status, 409);
-  assert.equal((missing.value as { code: string }).code, 'REQ_SNAPSHOT_REQUIRED');
+  assert.equal(missing.status, 200);
+  assert.equal((missing.value as { source: { confirmation: string } }).source.confirmation, 'unconfirmed');
+  assert.equal(store.read(instance.instance.id).snapshot, undefined);
+  assert.equal(store.read(instance.instance.id).framework, undefined, 'generation does not adopt its proposal');
   const seeded = { ...sampleInstance(), instance: { ...sampleInstance().instance, id: instance.instance.id, createdAt: instance.instance.createdAt } };
   store.save(seeded);
   store.confirm(store.read(instance.instance.id), 'huangbo');
@@ -115,8 +121,8 @@ test('RE-03: framework generation requires a fresh confirmed snapshot', async ()
   store.save(stale as never);
   body({ call: 'framework' });
   const rejected = await call(routes, 'POST', `/api/requirement-instances/${instance.instance.id}/generate`);
-  assert.equal(rejected.status, 409);
-  assert.equal((rejected.value as { code: string }).code, 'REQ_STALE_SNAPSHOT');
+  assert.equal(rejected.status, 200);
+  assert.equal((rejected.value as { source: { confirmation: string } }).source.confirmation, 'stale');
 });
 
 test('RE-01: confirm and publish routes expose store semantics with mapped codes', async () => {
