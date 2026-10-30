@@ -1,6 +1,6 @@
 # 实施与验证记录
 
-状态：本地候选完成，待独立复核、Git/CI与实际更新采用；真实模型全链路尚未开始。
+状态：本地检查、非作者两轴独立复核及源码候选PR检查通过；待最终发布记录的提交CI、合并与实际更新采用；真实模型全链路尚未开始。
 
 基线main：`3b9eb6ae5984cbe0115a0a42b7112d6a287d81d4`，分支`codex/trial-authenticated-update`。当前用户授权覆盖更新修复、Git/CI合并main及后续真实模型合成全链路验证。
 
@@ -19,3 +19,13 @@
 - 当前原5项目/10任务/108文件及Case逻辑已捕获只读保全基线，未改写旧业务数据。
 
 本地证据位于`.local/trial-authenticated-update/`；本地检查不代替实际提交CI、独立复核或修复后正常更新入口采用。
+
+## 固定源码候选与独立复核
+
+候选`e568d44f1b07efe99bd5a1b89a8b1afd0e70a1a8`，相对main基线3b9eb6a共7文件。
+
+- Standards：0项发现，独立隔离18/18探针通过；包含固定官方GET、环境覆盖清除、token不导出/错误不泄露、自定义地址不认证、4MiB限额及实际15秒超时、匿名失败和最新失败CI阻断。
+- Spec：0项实现缺陷，独立21/21探针通过；认证可用时不触发匿名、exit1/无效/过大响应失败且不降级、exit4/无CLI公共路径、403/429、固定SHA与官方身份、最新run/attempt等均核对。AU07最终Git/CI/main身份与AU08实机采用保持待验，未代称通过。
+- PR [#10](https://github.com/gadfly-hbo/OptraCall/pull/10)源码候选Check [41005410120](https://github.com/gadfly-hbo/OptraCall/actions/runs/41005410120)成功。发布记录变更后的最终提交仍须以PR实际head检查为准，不能沿用旧SHA CI。
+
+完整独立报告与探针在`.local/trial-authenticated-update/review/{standards,spec}/`。合并前再次fetch main；若基线推进则整合后重验受影响范围。实际采用与真实模型报告后续保留在本地持久证据，不将原始会话、凭据或运行日志加入公开仓库。
