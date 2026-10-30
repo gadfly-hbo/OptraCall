@@ -2,11 +2,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
-import { readdir, lstat } from 'node:fs/promises';
 import { AgentRuntime, CONNECTION_PROMPT, SDK_VERSION } from '../agent/runtime.ts';
-import { SessionManager } from '../agent/sdk.ts';
-import { ProjectAgent, ProjectRuntimeError, type ProjectSnapshot } from '../agent/project-runtime.ts';
-import { ConfigurationStore, ConfigurationStoreError, TARGET_MODELS, type RuntimeModelConfiguration } from './config-store.ts';
+import { ProjectRuntimeError, type ProjectSnapshot } from '../agent/project-runtime.ts';
+import { ConfigurationStore, ConfigurationStoreError, TARGET_MODELS } from './config-store.ts';
 import { ProjectStore, ProjectStoreFault, type ProjectRecord, type TaskRecord } from './project-store.ts';
 import { CaseStore, CaseStoreError } from './case-store.ts';
 import { createCaseRoutes, CaseRouteError } from './case-routes.ts';
@@ -18,6 +16,8 @@ import { createRequirementRoutes } from '../../extensions/business-plugins/requi
 import { composeRequirementContext } from '../../extensions/business-plugins/requirements-elaboration/api/context.ts';
 import { requirementSessionDirectory, requirementWorkspace } from '../../extensions/business-plugins/requirements-elaboration/session/workspace.ts';
 import { createRequirementSessions } from './requirement-sessions.ts';
+import { createAgentSessionDomain, type SessionContext } from './agent-sessions.ts';
+import { savedTaskHistory, priorTaskRequest, ProjectHistoryError } from './project-history.ts';
 
 class RequestFault extends Error {
   readonly status: number; readonly code: string;
@@ -43,11 +43,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   let staticUi: Awaited<ReturnType<typeof loadStaticUi>> | undefined;
   const instanceId = options.instanceId ?? randomUUID();
   const ready = (async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); })();
-  type LiveEntry = { projectId: string; taskId: string; agent: ProjectAgent; configuration: Readonly<RuntimeModelConfiguration> };
-  const agents = new Map<string, LiveEntry>();
-  const opening = new Map<string, { task: Promise<ProjectAgent>; projectId: string; taskId: string; agent: ProjectAgent; provider: string }>(), streams = new Map<string, Set<ServerResponse>>();
-  const epochs = new Map<string, number>(), clearing = new Set<string>(), archiving = new Set<string>();
-  let gate = Promise.resolve(), testing = false, closing = false;
+  type ProjectOwner = { project: ProjectRecord; task: TaskRecord };
+  const streams = new Map<string, Set<ServerResponse>>();
+  const clearing = new Map<string, number>(), archiving = new Set<string>();
+  let gate = Promise.resolve(), testing = false, closing = false, clearingAll = 0;
   // metric-factory business plugin: the extension owns handlers, the host owns transport.
   const metricFactoryRoutes = createMetricFactoryRoutes({
     libraryRoot: path.join(dataRoot, 'metric-assets'),
@@ -61,6 +60,49 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
   const endStreams = (id?: string) => { for (const [key, responses] of streams) { if (id && key !== id) continue; for (const response of responses) response.end(); streams.delete(key); } };
   const publish = (projectId: string, taskId: string, event: object) => { for (const response of streams.get(keyOf(projectId, taskId)) ?? []) if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...event, projectId, taskId })}\n\n`); };
+  const availableConfiguration = (id?: string, revision?: number) => {
+    const snapshot = configuration.snapshot(id, revision);
+    return snapshot && !clearingAll && !clearing.has(snapshot.provider) ? snapshot : undefined;
+  };
+  const projectSessions = createAgentSessionDomain<ProjectOwner>({
+    name: 'project-tasks',
+    profile: {
+      key: owner => keyOf(owner.project.id, owner.task.id),
+      projectId: owner => owner.project.id,
+      configuration: owner => availableConfiguration(owner.task.configuration.id, owner.task.configuration.revision),
+      admit: async owner => {
+        if (closing) throw new RequestFault(503, 'host_closing');
+        const { task } = await pair(owner.project.id, owner.task.id, true);
+        if (clearing.has(task.configuration.provider)) throw new RequestFault(409, 'configuration_required');
+      },
+      agentOptions: async owner => {
+        const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
+        return { projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }) };
+      },
+      capabilities: { commands: true, ui: true, editor: true },
+    },
+    configurationSnapshot: availableConfiguration,
+    mutate,
+    isClosing: () => closing,
+    publish: (owner, event, context) => {
+      const { project, task } = owner;
+      // Project terminal means the operation, persistence and final snapshot have
+      // drained. It is projected after withSession settles, not at SDK turn end.
+      if (event.type === 'run.settled') return;
+      // Queue all projections in native order. Publishing a UI question ahead
+      // of an earlier snapshot would let that snapshot clear the new question.
+      void mutate(async () => {
+        if (!context.isCurrent()) return;
+        if (event.type === 'ui.editor' || event.type === 'snapshot') {
+          const current = await pair(project.id, task.id);
+          if (!context.isCurrent() || current.project.archivedAt !== null) return;
+          if (event.type === 'ui.editor') await projects.saveDraft(project.id, task.id, event.text);
+          else if (event.snapshot.sessionFile && current.task.sessionFile !== event.snapshot.sessionFile) await projects.setSession(project.id, task.id, event.snapshot.sessionFile);
+        }
+        if (context.isCurrent()) publish(project.id, task.id, event);
+      }).catch(() => { if (context.isCurrent()) publish(project.id, task.id, { type: 'ui.notification', level: 'error', message: '扩展修改的草稿或会话指针未能保存，请检查本地存储后重试。' }); });
+    },
+  });
   // requirements-elaboration plugin sessions use the generalized runtime entry with
   // a workspace instead of a project; this seam is flagged for dedicated Codex review.
   const requirementStreams = new Map<string, Set<ServerResponse>>();
@@ -71,19 +113,32 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
     sessionDirectory: instanceId => requirementSessionDirectory(path.join(dataRoot, 'requirement-instances', instanceId)),
     workspaceFor: instanceId => requirementWorkspace(path.join(dataRoot, 'requirement-instances', instanceId)),
-    configurationSnapshot: (id, revision) => configuration.snapshot(id, revision),
+    configurationSnapshot: availableConfiguration,
     publish: publishRequirement,
     mutate,
     isClosing: () => closing,
   });
-  const requirementPlugin = createRequirementRoutes({ storeRoot: path.join(dataRoot, 'requirement-instances'), readBody: request => body(request), sessions: requirementSessions });
+  const requirementPlugin = createRequirementRoutes({
+    storeRoot: path.join(dataRoot, 'requirement-instances'),
+    readBody: request => body(request),
+    sessions: Object.freeze({ run: requirementSessions.run, withSession: requirementSessions.withSession, stop: requirementSessions.stop, busy: requirementSessions.busy }),
+  });
   const closeAgents = async (filter: { provider?: string; projectId?: string } = {}) => {
-    const targets = new Map<string, ProjectAgent>();
-    for (const [key, entry] of agents) if ((!filter.provider || entry.configuration.provider === filter.provider) && (!filter.projectId || entry.projectId === filter.projectId)) { agents.delete(key); targets.set(key, entry.agent); }
-    for (const [key, entry] of opening) if ((!filter.provider || entry.provider === filter.provider) && (!filter.projectId || entry.projectId === filter.projectId)) { opening.delete(key); targets.set(key, entry.agent); }
-    await Promise.all([...targets].map(async ([key, agent]) => { await agent.close(); endStreams(key); }));
-    if (filter.projectId) for (const key of [...streams.keys()]) if (key.startsWith(filter.projectId + '/')) endStreams(key);
-    if (!filter.projectId) await requirementSessions.closeAll({ ...(filter.provider ? { provider: filter.provider } : {}) });
+    // Only coordinate domain controls; each domain owns its resource ledger.
+    const results = await Promise.allSettled([
+      projectSessions.closeAll(filter),
+      ...(!filter.projectId ? [requirementSessions.closeAll(filter)] : []),
+    ]);
+    for (const key of [...streams.keys()]) {
+      const [projectId, taskId] = key.split('/');
+      if (filter.projectId && projectId !== filter.projectId) continue;
+      if (filter.provider) {
+        try { if ((await pair(projectId!, taskId!)).task.configuration.provider !== filter.provider) continue; } catch { continue; }
+      }
+      endStreams(key);
+    }
+    const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failures.length) throw new AggregateError(failures.map(result => result.reason), 'session_close_failed');
   };
   function assertActive(project: ProjectRecord) {
     if (project.archivedAt !== null) throw new RequestFault(409, 'project_archived');
@@ -153,114 +208,52 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     if (writable) assertActive(project);
     return { project, task };
   }
-  function projectBusy(projectId: string) {
-    for (const entry of opening.values()) if (entry.projectId === projectId) return true;
-    for (const entry of agents.values()) if (entry.projectId === projectId && (entry.agent.busy || entry.agent.pendingUI.length)) return true;
-    return false;
+  async function projectBusy(projectId: string) {
+    const project = await projects.get(projectId);
+    return project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task })));
   }
-  async function priorRequest(project: ProjectRecord, task: TaskRecord, requestId: string, fingerprint?: string): Promise<string | undefined> {
-    // lastRun caches status only. The native started marker owns the accepted
-    // request identity, including after restart or when this is the last run.
-    let previous: string | undefined = task.lastRun?.id === requestId ? task.lastRun.status : undefined;
-    let identityMatched = false;
-    // Only this task's native ledger is authoritative, including its forks.
-    for (const file of await readdir(task.sessionDirectory)) {
-      if (!file.endsWith('.jsonl')) continue;
-      const target = path.join(task.sessionDirectory, file), entry = await lstat(target);
-      if (!entry.isFile() || entry.isSymbolicLink() || entry.nlink !== 1) throw new RequestFault(409, 'session_history_unavailable');
-      const manager = SessionManager.open(target, task.sessionDirectory, path.join(project.rootPath, '020_clean'));
-      for (const marker of manager.getEntries()) {
-        if (marker.type !== 'custom' || marker.customType !== 'optracall.run') continue;
-        const data = marker.data as { requestId?: string; phase?: string; outcome?: string; requestFingerprint?: unknown } | undefined;
-        if (data?.requestId !== requestId) continue;
-        if (data.phase === 'started') {
-          if (data.requestFingerprint !== undefined) {
-            if (typeof data.requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(data.requestFingerprint)) throw new RequestFault(409, 'session_history_unavailable');
-            if (data.requestFingerprint !== fingerprint) throw new RequestFault(409, 'operation_conflict');
-            identityMatched = true;
-          } else if (fingerprint !== undefined) throw new RequestFault(409, 'operation_conflict');
-        }
-        if (data.phase === 'settled' && ['completed', 'cancelled', 'failed'].includes(data.outcome ?? '')) previous = data.outcome;
-        else if (!previous && data.phase === 'started') previous = 'interrupted';
-      }
-    }
-    if (previous !== undefined && fingerprint !== undefined && !identityMatched) throw new RequestFault(409, 'operation_conflict');
-    return previous;
-  }
-  async function agentFor(initialProject: ProjectRecord, initialTask: TaskRecord): Promise<ProjectAgent> {
-    // Reserve the task under the same gate as archive/clear. The SDK starts and
-    // awaits extension UI outside that gate, so replies and cancellation work.
-    const ticket = await mutate(async () => {
-      if (closing) throw new RequestFault(503, 'host_closing');
-      const { project, task } = await pair(initialProject.id, initialTask.id, true);
-      if (clearing.has(task.configuration.provider)) throw new RequestFault(409, 'configuration_required');
-      const key = keyOf(project.id, task.id), existing = agents.get(key);
-      if (existing?.agent.alive && existing.agent.busy) return { agent: existing.agent };
-      const snapshot = configuration.snapshot(task.configuration.id, task.configuration.revision);
-      if (!snapshot) throw new RequestFault(409, 'configuration_required');
-      if (existing?.agent.alive && existing.configuration.apiKey === snapshot.apiKey && existing.configuration.api === snapshot.api && existing.configuration.baseUrl === snapshot.baseUrl) return { agent: existing.agent };
-      const inFlight = opening.get(key); if (inFlight) return { operation: inFlight.task, key, pendingAgent: inFlight.agent };
-      const epoch = epochs.get(snapshot.provider) ?? 0, address = server.address();
-      const agent = new ProjectAgent({ projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), configuration: snapshot, managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }) });
-      agent.subscribe(event => {
-        if (event.type !== 'ui.editor') { publish(project.id, task.id, event); return; }
-        void projects.saveDraft(project.id, task.id, event.text).then(() => publish(project.id, task.id, event), () => publish(project.id, task.id, { type: 'ui.notification', level: 'error', message: '扩展修改的草稿未能保存，请检查本地存储后重试。' }));
-      });
-      const assertCurrent = async () => {
-        if (closing) throw new RequestFault(503, 'host_closing');
-        assertActive(await projects.get(project.id));
-        const current = configuration.snapshot(task.configuration.id, task.configuration.revision);
-        if (clearing.has(snapshot.provider) || epoch !== (epochs.get(snapshot.provider) ?? 0) || !current || current.apiKey !== snapshot.apiKey || current.baseUrl !== snapshot.baseUrl || current.api !== snapshot.api) throw new RequestFault(409, 'configuration_changed');
-        if (opening.get(key)?.agent !== agent) throw new ProjectRuntimeError('runtime_closed');
-      };
-      let begin!: () => void; const reserved = new Promise<void>(resolve => { begin = resolve; });
-      const operation = (async () => {
-        await reserved;
-        try {
-          if (existing) { await existing.agent.close(); if (agents.get(key)?.agent === existing.agent) agents.delete(key); }
-          await assertCurrent();
-          const state = await agent.open();
-          await assertCurrent();
-          if (state.sessionFile) await projects.setSession(project.id, task.id, state.sessionFile);
-          await assertCurrent(); agents.set(key, { projectId: project.id, taskId: task.id, agent, configuration: snapshot }); return agent;
-        } catch (error) { await agent.close(); throw error; }
-      })();
-      void operation.catch(() => {});
-      opening.set(key, { task: operation, projectId: project.id, taskId: task.id, agent, provider: snapshot.provider });
-      return { operation, begin, key, pendingAgent: agent };
-    });
-    if (ticket.agent) return ticket.agent;
-    ticket.begin?.();
-    try { return await ticket.operation!; } finally { if (opening.get(ticket.key!)?.agent === ticket.pendingAgent) opening.delete(ticket.key!); }
-  }
-  function savedHistory(project: ProjectRecord, task: TaskRecord, capabilities: Record<string, unknown> = {}): ProjectSnapshot {
-    const manager = task.sessionFile ? SessionManager.open(task.sessionFile, task.sessionDirectory, path.join(project.rootPath, '020_clean')) : SessionManager.inMemory(path.join(project.rootPath, '020_clean'));
-    const last: any = manager.getEntries().filter((entry: any) => entry.type === 'custom' && entry.customType === 'optracall.run').at(-1);
-    return { sessionId: task.sessionFile ? manager.getSessionId() : task.id, sessionFile: task.sessionFile, messages: manager.buildSessionContext().messages as Record<string, any>[], tools: [], status: 'idle', sdkVersion: SDK_VERSION, capabilities, ...(last?.data?.requestId ? { lastRun: { requestId: last.data.requestId, ...(last.data.outcome ? { outcome: last.data.outcome } : {}) } } : {}) };
-  }
-  async function taskState(projectId: string, taskId: string, activate = false) {
-    let { project, task } = await pair(projectId, taskId); let snapshot: ProjectSnapshot;
-    const key = keyOf(projectId, taskId), active = agents.get(key)?.agent;
-    const interrupted = !active?.alive && !opening.has(key) && (Boolean(active) || ['running', 'interrupted'].includes(task.lastRun?.status ?? ''));
+  const priorRequest = priorTaskRequest;
+  const savedHistory = (project: ProjectRecord, task: TaskRecord, capabilities: Record<string, unknown> = {}) => savedTaskHistory(project, task, SDK_VERSION, capabilities);
+  async function taskState(projectId: string, taskId: string, activate = false, inMutation = false) {
+    let { project, task } = await pair(projectId, taskId);
+    const ref = projectSessions.ref({ project, task });
+    let current = await projectSessions.read(ref), snapshot: ProjectSnapshot;
+    const interrupted = !current.live && !current.opening && (Boolean(current.context) || ['running', 'interrupted'].includes(task.lastRun?.status ?? ''));
     if (activate) assertActive(project);
     try {
       if (project.archivedAt !== null) snapshot = savedHistory(project, task, { projectArchived: true });
-      else if (active?.alive) snapshot = await active.snapshot();
-      else if (activate && !interrupted) snapshot = await (await agentFor(project, task)).snapshot();
-      else { configuration.snapshot(task.configuration.id, task.configuration.revision); snapshot = savedHistory(project, task, interrupted ? { runtimeInterrupted: true } : { uninitialized: true }); }
+      else if (current.live && current.snapshot) snapshot = current.snapshot;
+      else if (activate && !interrupted) {
+        await projectSessions.open(ref); current = await projectSessions.read(ref);
+        snapshot = current.snapshot!;
+        if (snapshot?.sessionFile) await mutate(async () => {
+          if (current.context?.isCurrent()) await projects.setSession(projectId, taskId, snapshot.sessionFile!);
+        });
+        ({ project, task } = await pair(projectId, taskId));
+      } else { configuration.snapshot(task.configuration.id, task.configuration.revision); snapshot = savedHistory(project, task, interrupted ? { runtimeInterrupted: true } : { uninitialized: true }); }
     } catch (error) { if (!(error instanceof ConfigurationStoreError)) throw error; snapshot = savedHistory(project, task, { requiresConfiguration: true }); }
-    if (project.archivedAt === null && task.lastRun && ['running', 'interrupted'].includes(task.lastRun.status) && !agents.get(key)?.agent.busy && !opening.has(key)) {
-      const proven = snapshot.lastRun?.requestId === task.lastRun.id ? snapshot.lastRun.outcome : undefined;
-      if (proven || task.lastRun.status === 'running') { task = await projects.markRun(projectId, taskId, { ...task.lastRun, status: proven ?? 'interrupted', settledAt: new Date().toISOString() }); project = await projects.get(projectId); }
+    const reconcile = async () => {
+      const latest = await pair(projectId, taskId);
+      if (latest.project.archivedAt !== null || projectSessions.busy(ref) || !latest.task.lastRun || latest.task.lastRun.id !== task.lastRun?.id || !['running', 'interrupted'].includes(latest.task.lastRun.status)) return;
+      const proven = snapshot.lastRun?.requestId === latest.task.lastRun.id ? snapshot.lastRun.outcome : undefined;
+      if (proven || latest.task.lastRun.status === 'running') await projects.markRun(projectId, taskId, { ...latest.task.lastRun, status: proven ?? 'interrupted', settledAt: new Date().toISOString() });
+    };
+    if (task.lastRun && ['running', 'interrupted'].includes(task.lastRun.status)) {
+      if (inMutation) await reconcile(); else await mutate(reconcile);
+      ({ project, task } = await pair(projectId, taskId));
     }
-    const live = agents.get(key)?.agent ?? opening.get(key)?.agent;
-    if (live) snapshot.uiRequests = live.pendingUI.map(event => event.request);
+    snapshot.uiRequests = current.pendingUI.map(event => event.request);
     return { project: decorateProject(project), task, snapshot };
   }
-  function assertUsable(project: ProjectRecord, task: TaskRecord, agent: ProjectAgent) {
-    assertActive(project);
-    const entry = agents.get(keyOf(project.id, task.id)), current = configuration.snapshot(task.configuration.id, task.configuration.revision);
-    if (!agent.alive || entry?.agent !== agent || clearing.has(task.configuration.provider) || !current || entry.configuration.apiKey !== current.apiKey || entry.configuration.baseUrl !== current.baseUrl || entry.configuration.api !== current.api) throw new RequestFault(409, 'configuration_changed');
+  async function settleProjectRun(owner: ProjectOwner, context: SessionContext<ProjectOwner>, requestId: string, startedAt: string, result?: Record<string, any>) {
+    await mutate(async () => {
+      const { project, task } = await pair(owner.project.id, owner.task.id);
+      if (!context.isCurrent() || task.lastRun?.id !== requestId) return;
+      const file = result?.sessionFile ?? result?.snapshot?.sessionFile;
+      if (file) await projects.setSession(project.id, task.id, file);
+      const outcome = result?.outcome ?? result?.snapshot?.lastRun?.outcome;
+      await projects.markRun(project.id, task.id, { id: requestId, status: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'interrupted', startedAt, settledAt: new Date().toISOString() });
+    });
   }
   const server = createServer((request, response) => { void (async () => {
     try {
@@ -306,11 +299,26 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (url.pathname === '/api/configuration') {
         if (request.method === 'GET') { json(response, 200, { configuration: configuration.read() }); return; }
         if (request.method === 'PUT') { const input = await body(request); const saved = await mutate(async () => { const value = await configuration.save(input); await configuration.select(value.id); return value; }); json(response, 200, { configuration: saved }); return; }
-        if (request.method === 'DELETE') { const provider = url.searchParams.get('provider') ?? undefined; await mutate(async () => {
-          const providers = provider ? [provider] : [...new Set(configuration.list().map(value => value.provider))];
-          for (const key of providers) { clearing.add(key); epochs.set(key, (epochs.get(key) ?? 0) + 1); }
-          try { await closeAgents({ provider }); await configuration.clear(provider); } finally { for (const key of providers) clearing.delete(key); }
-        }); json(response, 200, { configuration: configuration.read() }); return; }
+        if (request.method === 'DELETE') {
+          const provider = url.searchParams.get('provider') ?? undefined;
+          const providers = await mutate(() => {
+            const values = provider ? [provider] : [...new Set(configuration.list().map(value => value.provider))];
+            for (const value of values) clearing.set(value, (clearing.get(value) ?? 0) + 1);
+            if (!provider) clearingAll++;
+            return values;
+          });
+          // Cancellation/drain is outside the business mutation gate: completions
+          // and opening checks must be able to acquire that gate while clearing.
+          try { await closeAgents({ provider }); await mutate(() => configuration.clear(provider)); }
+          finally { await mutate(() => {
+            for (const value of providers) {
+              const remaining = (clearing.get(value) ?? 1) - 1;
+              if (remaining) clearing.set(value, remaining); else clearing.delete(value);
+            }
+            if (!provider) clearingAll--;
+          }); }
+          json(response, 200, { configuration: configuration.read() }); return;
+        }
       }
       if (url.pathname === '/api/connection-test' && request.method === 'POST') {
         const input = await body(request);
@@ -356,10 +364,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             if (value.archivedAt !== null) return value;
             archiving.add(projectId);
             try {
-              if (projectBusy(projectId)) throw new RequestFault(409, 'project_busy');
-              for (const task of value.tasks) if (task.lastRun?.status === 'running') await taskState(projectId, task.id);
+              if (await projectBusy(projectId)) throw new RequestFault(409, 'project_busy');
+              for (const task of value.tasks) if (task.lastRun?.status === 'running') await taskState(projectId, task.id, false, true);
               value = await projects.get(projectId);
-              if (projectBusy(projectId) || value.tasks.some(task => task.lastRun?.status === 'running')) throw new RequestFault(409, 'project_busy');
+              if (await projectBusy(projectId) || value.tasks.some(task => task.lastRun?.status === 'running')) throw new RequestFault(409, 'project_busy');
               const archived = await projects.archive(projectId); await closeAgents({ projectId }); return archived;
             } finally { archiving.delete(projectId); }
           }); json(response, 200, { project: decorateProject(project) }); return;
@@ -389,8 +397,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (!operation && request.method === 'GET') { json(response, 200, await taskState(projectId, taskId)); return; }
           if (operation === 'open' && request.method === 'POST') { await body(request); const state = await taskState(projectId, taskId, true); publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot }); json(response, 200, state); return; }
           if (operation === 'draft' && request.method === 'PATCH') {
-            const input = await body(request); await pair(projectId, taskId, true); const text = String(input.text ?? ''), task = await projects.saveDraft(projectId, taskId, text);
-            const agent = agents.get(key)?.agent ?? opening.get(key)?.agent; if (agent) await agent.setEditorState(text).catch(() => {});
+            const input = await body(request), text = String(input.text ?? '');
+            const owner = await pair(projectId, taskId, true);
+            const task = await mutate(async () => { await pair(projectId, taskId, true); return projects.saveDraft(projectId, taskId, text); });
+            await projectSessions.setEditorState(projectSessions.ref(owner), text).catch(() => {});
             json(response, 200, { task }); return;
           }
           if (operation === 'events' && request.method === 'GET') {
@@ -405,74 +415,111 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (operation === 'messages' && request.method === 'POST') {
             const input = await body(request);
             if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
-            const fingerprint = requestFingerprint(input);
-            const initial = await pair(projectId, taskId, true), known = await priorRequest(initial.project, initial.task, input.requestId, fingerprint);
-            // Validate and pin the selected snapshot before opening a runtime.
-            await mutate(async () => { await prepareCasePrompt(projectId, taskId, input, Boolean(known)); requirementPrefix(input); });
-            if (known) { json(response, 202, { requestId: input.requestId, status: known, deduplicated: true }); return; }
-            const agent = await agentFor(initial.project, initial.task);
-            await mutate(async () => {
-              const { project, task } = await pair(projectId, taskId, true), previous = await priorRequest(project, task, input.requestId as string, fingerprint);
-              if (previous) { json(response, 202, { requestId: input.requestId, status: previous, deduplicated: true }); return; }
-              assertUsable(project, task, agent); if (agent.busy) throw new RequestFault(409, 'session_busy');
-              if (input.caseContext) {
-                const selection = input.caseContext as CaseContextSelection, record = cases.getCase(selection.caseId);
-                if (record.status === 'closed') throw new CaseStoreError('case_closed', 409);
-                if (record.revision !== selection.caseRevision || cases.getProjectWork(projectId).revision !== selection.projectWorkRevision) throw new CaseStoreError('revision_conflict', 409);
-                if (!cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new CaseStoreError('project_not_linked', 409);
+            const requestId = input.requestId, fingerprint = requestFingerprint(input), owner = await pair(projectId, taskId, true);
+            const known = await priorRequest(owner.project, owner.task, requestId, fingerprint);
+            if (known) {
+              await mutate(async () => { await prepareCasePrompt(projectId, taskId, input, true); requirementPrefix(input); });
+              json(response, 202, { requestId, status: known, deduplicated: true }); return;
+            }
+            let accepted = false, terminalContext: SessionContext<ProjectOwner> | undefined;
+            let acknowledge!: () => void, rejectAcknowledgement!: (error: unknown) => void;
+            const acknowledged = new Promise<void>((resolve, reject) => { acknowledge = resolve; rejectAcknowledgement = reject; });
+            const completion = projectSessions.withSession(projectSessions.ref(owner), async lease => {
+              let startedAt: string | undefined;
+              try {
+                const prepared = await mutate(async () => {
+                  const { project, task } = await pair(projectId, taskId, true), previous = await priorRequest(project, task, requestId, fingerprint);
+                  if (previous) return { previous };
+                  if (input.caseContext) {
+                    const selection = input.caseContext as CaseContextSelection, record = cases.getCase(selection.caseId);
+                    if (record.status === 'closed') throw new CaseStoreError('case_closed', 409);
+                    if (record.revision !== selection.caseRevision || cases.getProjectWork(projectId).revision !== selection.projectWorkRevision) throw new CaseStoreError('revision_conflict', 409);
+                    if (!cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new CaseStoreError('project_not_linked', 409);
+                  }
+                  const requirement = requirementPrefix(input), casePrompt = await prepareCasePrompt(projectId, taskId, input);
+                  const prompt = requirement === undefined ? casePrompt : `${requirement}\n\n${casePrompt}`;
+                  startedAt = new Date().toISOString();
+                  await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt });
+                  return { prompt };
+                });
+                if ('previous' in prepared) { json(response, 202, { requestId, status: prepared.previous, deduplicated: true }); acknowledge(); return; }
+                const run = lease.start({ text: prepared.prompt!, requestId, requestFingerprint: fingerprint });
+                terminalContext = run.context;
+                await run.accepted;
+                accepted = true; json(response, 202, { requestId, status: 'running' }); acknowledge();
+                const result = await run.completion;
+                await settleProjectRun(owner, run.context, requestId, startedAt!, result);
+                return result;
+              } catch (error) {
+                if (startedAt) await settleProjectRun(owner, lease.context, requestId, startedAt).catch(() => {});
+                throw error;
               }
-              const requirement = requirementPrefix(input);
-              const prompt = requirement === undefined ? await prepareCasePrompt(projectId, taskId, input) : `${requirement}\n\n${await prepareCasePrompt(projectId, taskId, input)}`;
-              const startedAt = new Date().toISOString(); await projects.markRun(projectId, taskId, { id: input.requestId as string, status: 'running', startedAt });
-              const run = agent.start(prompt, input.requestId as string, fingerprint);
-              void run.completion.then(async (result: any) => { await projects.markRun(projectId, taskId, { id: input.requestId as string, status: result.outcome, startedAt, settledAt: new Date().toISOString() }); }).catch(async () => { await projects.markRun(projectId, taskId, { id: input.requestId as string, status: 'interrupted', startedAt, settledAt: new Date().toISOString() }).catch(() => {}); publish(projectId, taskId, { type: 'run.settled', requestId: input.requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。' }); });
-              await run.accepted; json(response, 202, { requestId: input.requestId, status: 'running' });
-            }); return;
+            });
+            void completion.then(result => {
+              if (result && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: result.outcome });
+            }, error => {
+              rejectAcknowledgement(error);
+              if (accepted && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。' });
+            });
+            await acknowledged; return;
           }
           if (operation === 'stop' && request.method === 'POST') {
-            await body(request); await pair(projectId, taskId, true);
-            const pending = opening.get(key);
-            if (pending) { await pending.agent.close(); if (opening.get(key)?.agent === pending.agent) opening.delete(key); }
-            else await agents.get(key)?.agent.stop();
+            await body(request); const owner = await pair(projectId, taskId, true);
+            await projectSessions.stop(projectSessions.ref(owner));
             json(response, 200, { stopped: true }); return;
           }
           if (operation === 'ui-response' && request.method === 'POST') {
             const input = await body(request); await pair(projectId, taskId, true);
             if (typeof input.id !== 'string' || !input.id || input.id.length > 200 || (input.value !== undefined && typeof input.value !== 'string' && typeof input.value !== 'boolean') || (input.cancelled !== undefined && typeof input.cancelled !== 'boolean')) throw new RequestFault(400, 'invalid_ui_response');
-            const agent = agents.get(key)?.agent ?? opening.get(key)?.agent; if (!agent?.alive) throw new RequestFault(409, 'ui_request_unavailable');
-            const result = await agent.respondUI({ id: input.id, value: input.value as string | boolean | undefined, cancelled: input.cancelled as boolean | undefined });
+            const owner = await pair(projectId, taskId, true);
+            const result = await projectSessions.respondUI(projectSessions.ref(owner), { id: input.id, value: input.value as string | boolean | undefined, cancelled: input.cancelled as boolean | undefined });
             if (!result?.accepted) throw new RequestFault(409, 'ui_request_unavailable'); json(response, 200, result); return;
           }
           if (operation === 'commands' && request.method === 'POST') {
             const input = await body(request);
             if (typeof input.text !== 'string' || !input.text.startsWith('/') || input.text.length > 20000 || (input.requestId !== undefined && (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId)))) throw new RequestFault(400, 'invalid_command');
-            const requestId = typeof input.requestId === 'string' ? input.requestId : randomUUID(), initial = await pair(projectId, taskId, true), known = await priorRequest(initial.project, initial.task, requestId);
+            const requestId = typeof input.requestId === 'string' ? input.requestId : randomUUID(), owner = await pair(projectId, taskId, true);
+            const known = await priorRequest(owner.project, owner.task, requestId);
             if (known) { json(response, 200, { result: { deduplicated: true }, outcome: known, snapshot: (await taskState(projectId, taskId)).snapshot }); return; }
-            const agent = await agentFor(initial.project, initial.task);
-            const ticket = await mutate(async () => {
-              const { project, task } = await pair(projectId, taskId, true), previous = await priorRequest(project, task, requestId);
-              if (previous) return { previous };
-              assertUsable(project, task, agent); if (agent.busy) throw new RequestFault(409, 'session_busy');
-              const startedAt = new Date().toISOString(); await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt });
-              const completion = agent.command(input.text as string, requestId).then(async result => {
-                if (result.snapshot?.sessionFile) await projects.setSession(projectId, taskId, result.snapshot.sessionFile);
-                const outcome = result.outcome ?? result.snapshot?.lastRun?.outcome;
-                await projects.markRun(projectId, taskId, { id: requestId, status: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'interrupted', startedAt, settledAt: new Date().toISOString() }); return result;
-              }).catch(async error => { await projects.markRun(projectId, taskId, { id: requestId, status: 'interrupted', startedAt, settledAt: new Date().toISOString() }).catch(() => {}); publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '命令已中断，请检查后显式重试。' }); throw error; });
-              return { completion };
+            let terminalContext: SessionContext<ProjectOwner> | undefined;
+            const result = await projectSessions.withSession(projectSessions.ref(owner), async lease => {
+              let startedAt: string | undefined;
+              try {
+                const previous = await mutate(async () => {
+                  const { project, task } = await pair(projectId, taskId, true), prior = await priorRequest(project, task, requestId);
+                  if (prior) return prior;
+                  startedAt = new Date().toISOString();
+                  await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt });
+                });
+                if (previous) return { result: { deduplicated: true }, outcome: previous, snapshot: (await taskState(projectId, taskId)).snapshot };
+                const run = lease.start({ text: input.text as string, requestId, kind: 'command' });
+                terminalContext = run.context;
+                const [value] = await Promise.all([run.completion, run.accepted]);
+                await settleProjectRun(owner, run.context, requestId, startedAt!, value);
+                return value;
+              } catch (error) {
+                if (startedAt) await settleProjectRun(owner, lease.context, requestId, startedAt).catch(() => {});
+                throw error;
+              }
+            }).catch(error => {
+              if (terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '命令已中断，请检查后显式重试。' });
+              throw error;
             });
-            if ('completion' in ticket) json(response, 200, await ticket.completion);
-            else json(response, 200, { result: { deduplicated: true }, outcome: ticket.previous, snapshot: (await taskState(projectId, taskId)).snapshot });
-            return;
+            if (terminalContext?.isCurrent()) {
+              const outcome = result.outcome ?? (result as any).snapshot?.lastRun?.outcome;
+              publish(projectId, taskId, { type: 'run.settled', requestId, outcome: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'failed' });
+            }
+            json(response, 200, result); return;
           }
         }
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
-      const code = error instanceof RequestFault || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
-      const status = error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || code === 'project_archived' ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
+      const originalCode = error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
+      const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
+      const status = error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
       json(response, status, { code, message: code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }
   })(); });
-  return { server, ready, configuration, projects, cases, close: async () => { closing = true; await gate; await closeAgents(); await requirementSessions.closeAll(); for (const responses of requirementStreams.values()) for (const response of responses) response.end(); requirementStreams.clear(); endStreams(); await cases.close(); await projects.close(); if (server.listening) await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }); } };
+  return { server, ready, configuration, projects, cases, close: async () => { closing = true; await gate; await closeAgents(); for (const responses of requirementStreams.values()) for (const response of responses) response.end(); requirementStreams.clear(); endStreams(); await cases.close(); await projects.close(); if (server.listening) await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }); } };
 }

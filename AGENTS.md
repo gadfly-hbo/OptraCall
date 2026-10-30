@@ -2,7 +2,11 @@
 
 开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.2](docs/OptraCall_产品讨论稿_v0.2.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
 
-当前变更为 [requirements-flexibility](openspec/changes/requirements-flexibility/spec.md)：允许未确认框架草稿，取消澄清／假设凑数，支持描述性分析不引用假设，补同会话一次有限格式修正。正式发布与送入边界、旧RAP保留及新空引用内容的回退限制见本变更规格与[结果记录](openspec/changes/requirements-flexibility/result.md)。
+涉及Agent交互、SDK接入、会话启停/恢复、模型配置或插件接入的变更，开始前必须读取工程规范的IN01–IN07及[统一会话接入说明](docs/agent-session-integration.md)，在本变更规格记录Interface版本、owner/profile和验收范围。Codex、Qoder共用这些规则；工具入口只引用同一来源。
+
+当前变更为 [统一会话接入与生命周期管理一期](openspec/changes/unified-session-management-phase1/spec.md)：用户已确认v0.3 US01–US12，授权实现、本地检查、兼容/联合回归、非作者复核及Git/CI交付、更新main后合并。共用接口与少量实现，状态按域/owner隔离，业务策略留在各适配器；保留原项目、任务、会话和文件，不自行切换现有运行服务、调用真实模型或更新MacBook。实际完成情况见[结果记录](openspec/changes/unified-session-management-phase1/result.md)。
+
+上一轮[requirements-flexibility](openspec/changes/requirements-flexibility/result.md)允许未确认框架草稿，取消澄清/假设凑数，支持描述性分析不引用假设，并补同会话一次有限格式修正；保留其正式发布、送入和兼容回退边界。
 
 上一轮[requirements-reliability](openspec/changes/requirements-reliability/result.md)已修复目标项目／发布版本选择、真实回答编辑、模型切换和会话隔离；涉及会话关闭或请求重试时，继续核对其归属与legacy回执兼容边界。
 

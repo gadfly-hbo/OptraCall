@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { createRequirementSessions } from '../src/host/requirement-sessions.ts';
+import { createRequirementSessions, type RequirementRunResult } from '../src/host/requirement-sessions.ts';
 import type { RuntimeModelConfiguration } from '../src/host/config-store.ts';
 import { requirementWorkspace } from '../extensions/business-plugins/requirements-elaboration/session/workspace.ts';
 import { sampleInstance } from './fixtures/requirement-sample.ts';
@@ -143,13 +143,14 @@ async function leaseFixture(t: import('node:test').TestContext, replies: readonl
   let selected: Readonly<RuntimeModelConfiguration> = first;
   const configurations = new Map([[first.id, first], [second.id, second]]);
   let closing = false;
-  const manager = createRequirementSessions({
+  let manager: ReturnType<typeof createRequirementSessions> | undefined;
+  t.after(async () => { await manager?.closeAll(); await provider.close(); await rm(scratch, { recursive: true, force: true }); });
+  manager = createRequirementSessions({
     codeRoot: process.cwd(), resourceRoot: path.join(scratch, 'resources'), managementPorts: () => [],
     sessionDirectory: id => path.join(scratch, id, 'sessions'), workspaceFor: id => requirementWorkspace(path.join(scratch, id)),
     configurationSnapshot: (id, revision) => { const value = id ? configurations.get(id) : selected; return value && (revision === undefined || value.revision === revision) ? value : undefined; },
     publish: () => {}, mutate: async operation => operation(), isClosing: () => closing,
   });
-  t.after(async () => { await manager.closeAll(); await provider.close(); await rm(scratch, { recursive: true, force: true }); });
   return { manager, provider, selectOther: () => { selected = second; }, invalidate: () => configurations.delete(first.id), closeHost: () => { closing = true; } };
 }
 
@@ -185,7 +186,7 @@ test('RF04 lease: stop and invalid configuration in the between-turn gap prevent
   }
 });
 
-test('RF04 lease: closing provider A cancels its old operation without removing replacement B', { timeout: 20_000 }, async t => {
+test('RF04 lease: closing provider A blocks replacement until its operation drains, then B can run', { timeout: 20_000 }, async t => {
   const f = await leaseFixture(t, [{ text: validElicit }, { text: validElicit, hold: true }]), gap = deferred(), resume = deferred();
   const id = 'req-lease-replacement';
   const previous = f.manager.withSession(id, async lease => { await lease.run('provider A first', 'first-a'); gap.resolve(); await resume.promise; return lease.run('provider A must not resume', 'correction-a'); });
@@ -193,13 +194,48 @@ test('RF04 lease: closing provider A cancels its old operation without removing 
   await gap.promise;
   await f.manager.closeAll({ provider: 'provider-a' });
   f.selectOther();
-  const replacement = f.manager.run(id, 'provider B new explicit generation', 'generation-b');
-  await f.provider.waitForRequests(2);
+  assert.equal(f.manager.busy(id), true, 'the cancelled callback still owns its admission until it drains');
+  await assert.rejects(f.manager.run(id, 'must wait for safe drain', 'premature-b'), { code: 'session_busy' });
   resume.resolve();
   await assert.rejects(previous);
-  assert.equal(f.manager.busy(id), true, 'old finally must not remove the replacement lease');
+  const replacement = f.manager.run(id, 'provider B new explicit generation', 'generation-b');
+  await f.provider.waitForRequests(2);
+  assert.equal(f.manager.busy(id), true, 'the replacement operation keeps its own admission');
   f.provider.release(1);
   assert.equal((await replacement).outcome, 'completed');
   assert.deepEqual(f.provider.requests.map(item => item.body.model), ['lease-model-a', 'lease-model-b']);
   assert.equal(f.manager.live(id), true);
+});
+
+test('SM03 requirement lease: returning before its turn finishes cancels and drains the abandoned run', { timeout: 20_000 }, async t => {
+  const f = await leaseFixture(t, [{ text: validElicit, hold: true }]);
+  let abandoned: Promise<RequirementRunResult> | undefined;
+  const pending = f.manager.withSession('req-abandoned-return', async lease => {
+    abandoned = lease.run('a synthetic turn that must not escape its operation', 'abandoned-return');
+    void abandoned.catch(() => {});
+    await f.provider.waitForRequests(1);
+    return 'callback returned before the SDK turn';
+  });
+  await assert.rejects(pending, 'an operation must not report normal success while abandoning a running turn');
+  await abandoned?.catch(() => {});
+  assert.equal(f.provider.requests.length, 1);
+  assert.equal(f.provider.requests[0]!.closedEarly, true, 'the abandoned provider request must be stopped before releasing its operation');
+  assert.equal(f.manager.busy('req-abandoned-return'), false);
+});
+
+test('SM03 requirement lease: a throwing callback drains its in-flight turn and preserves the callback error', { timeout: 20_000 }, async t => {
+  const f = await leaseFixture(t, [{ text: validElicit, hold: true }]);
+  const callbackError = new Error('synthetic callback failure');
+  let abandoned: Promise<RequirementRunResult> | undefined;
+  const pending = f.manager.withSession('req-abandoned-throw', async lease => {
+    abandoned = lease.run('a synthetic turn must be stopped after callback failure', 'abandoned-throw');
+    void abandoned.catch(() => {});
+    await f.provider.waitForRequests(1);
+    throw callbackError;
+  });
+  await assert.rejects(pending, error => error === callbackError);
+  assert.equal(f.provider.requests[0]!.closedEarly, true, 'throwing business code must not leave its SDK turn running');
+  await abandoned?.catch(() => {});
+  assert.equal(f.provider.requests.length, 1);
+  assert.equal(f.manager.busy('req-abandoned-throw'), false);
 });

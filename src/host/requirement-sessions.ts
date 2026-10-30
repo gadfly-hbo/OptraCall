@@ -1,4 +1,5 @@
-import { ProjectAgent, ProjectRuntimeError, type ProjectEvent } from '../agent/project-runtime.ts';
+import type { ProjectEvent } from '../agent/project-runtime.ts';
+import { createAgentSessionDomain } from './agent-sessions.ts';
 import type { RuntimeModelConfiguration } from './config-store.ts';
 
 export type RequirementWorkspaceDescriptor = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[] };
@@ -16,143 +17,47 @@ export type RequirementSessionManagerOptions = {
 export type RequirementRunResult = { outcome: 'completed' | 'cancelled' | 'failed'; text: string };
 export type RequirementSessionLease = { run: (text: string, requestId: string) => Promise<RequirementRunResult> };
 
-/**
- * Plugin session lifecycle for requirement instances — the generalized entry of
- * project-runtime driven with a workspace instead of a project directory. This is
- * the A-route seam: Qoder implementation, flagged for dedicated Codex review.
- * The manager transports SDK calls and events only; it never parses business data.
+/** Requirement business profile: current selection per operation, its own workspace,
+ * no automatic native-history reconstruction, and its original result projection.
+ * Resource state and lifecycle are owned exclusively by the shared domain implementation.
  */
 export function createRequirementSessions(options: RequirementSessionManagerOptions) {
-  type Entry = { agent: ProjectAgent; configuration: Readonly<RuntimeModelConfiguration> };
-  type Opening = { configuration: Readonly<RuntimeModelConfiguration>; agent?: ProjectAgent; cancelled: boolean; task: Promise<ProjectAgent> };
-  type Operation = { configuration: Readonly<RuntimeModelConfiguration>; agent?: ProjectAgent; cancelled: boolean };
-  const entries = new Map<string, Entry>();
-  const opening = new Map<string, Opening>();
-  const operations = new Map<string, Operation>();
-  const sameConfiguration = (a: Readonly<RuntimeModelConfiguration>, b: Readonly<RuntimeModelConfiguration>) => a.id === b.id && a.revision === b.revision && a.provider === b.provider && a.model === b.model && a.apiKey === b.apiKey && a.api === b.api && a.baseUrl === b.baseUrl;
-  const assertConfiguration = (snapshot: Readonly<RuntimeModelConfiguration>) => {
-    const current = options.configurationSnapshot(snapshot.id, snapshot.revision);
-    if (!current || !sameConfiguration(current, snapshot)) throw new ProjectRuntimeError('configuration_changed');
-  };
+  const domain = createAgentSessionDomain<string>({
+    name: 'requirements-elaboration',
+    profile: {
+      key: instanceId => instanceId,
+      configuration: () => options.configurationSnapshot(),
+      agentOptions: instanceId => ({
+        projectId: `requirement:${instanceId}`,
+        workspace: options.workspaceFor(instanceId),
+        sessionDirectory: options.sessionDirectory(instanceId),
+        codeRoot: options.codeRoot,
+        resourceRoot: options.resourceRoot,
+        managementPorts: options.managementPorts(),
+      }),
+    },
+    configurationSnapshot: options.configurationSnapshot,
+    mutate: options.mutate,
+    isClosing: options.isClosing,
+    publish: (instanceId, event) => options.publish(instanceId, event),
+  });
 
-  async function agentFor(instanceId: string, snapshot: Readonly<RuntimeModelConfiguration>): Promise<ProjectAgent> {
-    const pending = opening.get(instanceId);
-    if (pending) return pending.task;
-    if (options.isClosing()) throw new ProjectRuntimeError('runtime_closed');
-    const assertOpening = () => {
-      if (record.cancelled || opening.get(instanceId) !== record || options.isClosing()) throw new ProjectRuntimeError('runtime_closed');
-      assertConfiguration(snapshot);
-    };
-    // Register ownership before joining the Host mutation queue. A credential
-    // clear may own that queue and must invalidate this pending call without
-    // waiting on the queued operation that follows it.
-    const record: Opening = { configuration: snapshot, cancelled: false, task: Promise.resolve().then(async () => {
-      try {
-        const spawned = await options.mutate(() => {
-          assertOpening();
-          const existing = entries.get(instanceId);
-          if (existing?.agent.alive && sameConfiguration(existing.configuration, snapshot)) { record.agent = existing.agent; return { agent: existing.agent, reused: true }; }
-          if (existing?.agent.busy) throw new ProjectRuntimeError('session_busy');
-          const agent = new ProjectAgent({
-            projectId: `requirement:${instanceId}`,
-            workspace: options.workspaceFor(instanceId),
-            sessionDirectory: options.sessionDirectory(instanceId),
-            codeRoot: options.codeRoot,
-            resourceRoot: options.resourceRoot,
-            configuration: snapshot,
-            managementPorts: options.managementPorts(),
-          });
-          record.agent = agent;
-          agent.subscribe(event => {
-            if (entries.get(instanceId)?.agent === agent || (opening.get(instanceId) === record && !record.cancelled)) options.publish(instanceId, event);
-          });
-          return { agent, reused: false, previous: existing };
-        });
-        assertOpening();
-        if (spawned.reused) return spawned.agent;
-        if (spawned.previous) { await spawned.previous.agent.close(); if (entries.get(instanceId)?.agent === spawned.previous.agent) entries.delete(instanceId); }
-        assertOpening();
-        await spawned.agent.open();
-        assertOpening();
-        entries.set(instanceId, { agent: spawned.agent, configuration: snapshot });
-        return spawned.agent;
-      } catch (error) {
-        if (record.agent) {
-          if (entries.get(instanceId)?.agent === record.agent) entries.delete(instanceId);
-          await record.agent.close().catch(() => {});
-        }
-        throw error;
-      }
-    }) };
-    opening.set(instanceId, record);
-    try { return await record.task; } finally { if (opening.get(instanceId) === record) opening.delete(instanceId); }
-  }
-
-  async function closeInstances(ids: Iterable<string>): Promise<void> {
-    const targets = new Set<ProjectAgent>();
-    for (const id of ids) {
-      const operation = operations.get(id);
-      if (operation) { operation.cancelled = true; operations.delete(id); if (operation.agent) targets.add(operation.agent); }
-      const pending = opening.get(id);
-      if (pending) { pending.cancelled = true; opening.delete(id); if (pending.agent) targets.add(pending.agent); }
-      const entry = entries.get(id);
-      if (entry) { entries.delete(id); targets.add(entry.agent); }
-    }
-    await Promise.all([...targets].map(agent => agent.close()));
-  }
-
-  // A lease owns one admitted operation across optional subsequent SDK turns.
-  // The caller decides what to submit; this layer only fixes resource identity,
-  // configuration and cancellation ownership, including the idle gap between turns.
   async function withSession<T>(instanceId: string, use: (lease: RequirementSessionLease) => Promise<T>): Promise<T> {
-    if (operations.has(instanceId) || opening.has(instanceId) || entries.get(instanceId)?.agent.busy) throw new ProjectRuntimeError('session_busy');
-    if (options.isClosing()) throw new ProjectRuntimeError('runtime_closed');
-    const configuration = options.configurationSnapshot();
-    if (!configuration) throw new ProjectRuntimeError('configuration_required');
-    const operation: Operation = { configuration, cancelled: false };
-    operations.set(instanceId, operation);
-    try {
-      const agent = await agentFor(instanceId, configuration);
-      operation.agent = agent;
-      const assertLease = () => {
-        if (operation.cancelled || operations.get(instanceId) !== operation) throw new ProjectRuntimeError('generation_cancelled');
-        if (options.isClosing() || entries.get(instanceId)?.agent !== agent || !agent.alive) throw new ProjectRuntimeError('runtime_closed');
-        assertConfiguration(configuration);
-      };
-      assertLease();
-      return await use({ run: async (text, requestId) => {
-        assertLease();
-        const result = await agent.start(text, requestId).completion;
-        return { outcome: operation.cancelled ? 'cancelled' : result.outcome, text: result.text };
-      } });
-    } finally {
-      if (operations.get(instanceId) === operation) operations.delete(instanceId);
-    }
+    return domain.withSession(domain.ref(instanceId), lease => use({
+      run: async (text, requestId) => {
+        const result = await lease.run({ text, requestId });
+        return { outcome: result.outcome, text: result.text };
+      },
+    }));
   }
 
   return {
     withSession,
     run: (instanceId: string, text: string, requestId: string): Promise<RequirementRunResult> => withSession(instanceId, lease => lease.run(text, requestId)),
-    async stop(instanceId: string): Promise<boolean> {
-      if (opening.has(instanceId)) { await closeInstances([instanceId]); return true; }
-      const operation = operations.get(instanceId);
-      if (operation) operation.cancelled = true;
-      const entry = entries.get(instanceId);
-      if (!entry) return Boolean(operation);
-      await entry.agent.stop();
-      return true;
-    },
-    busy(instanceId: string): boolean { return operations.has(instanceId) || Boolean(entries.get(instanceId)?.agent.busy) || opening.has(instanceId); },
-    live(instanceId: string): boolean { return Boolean(entries.get(instanceId)?.agent.alive); },
-    close: (instanceId: string): Promise<void> => closeInstances([instanceId]),
-    async closeAll(filter: { provider?: string } = {}): Promise<void> {
-      const targets = new Set<ProjectAgent>();
-      // A live entry and its replacement opening can belong to different
-      // providers. Select the owned objects, not their shared instance ID.
-      for (const [id, operation] of operations) if (!filter.provider || operation.configuration.provider === filter.provider) { operation.cancelled = true; operations.delete(id); if (operation.agent) targets.add(operation.agent); }
-      for (const [id, entry] of entries) if (!filter.provider || entry.configuration.provider === filter.provider) { entries.delete(id); targets.add(entry.agent); }
-      for (const [id, pending] of opening) if (!filter.provider || pending.configuration.provider === filter.provider) { pending.cancelled = true; opening.delete(id); if (pending.agent) targets.add(pending.agent); }
-      await Promise.all([...targets].map(agent => agent.close()));
-    },
+    stop: (instanceId: string): Promise<boolean> => domain.stop(domain.ref(instanceId)),
+    busy: (instanceId: string): boolean => domain.busy(domain.ref(instanceId)),
+    live: (instanceId: string): boolean => domain.live(domain.ref(instanceId)),
+    close: (instanceId: string): Promise<void> => domain.close(domain.ref(instanceId)),
+    closeAll: (filter: { provider?: string } = {}): Promise<void> => domain.closeAll(filter),
   };
 }
