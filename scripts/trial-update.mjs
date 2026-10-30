@@ -31,20 +31,40 @@ async function checkout(root, expectedOrigin) {
   }
   return git(root, ['rev-parse', 'HEAD']);
 }
-async function successfulMainCheck(target, githubApiBase) {
-  const endpoint = new URL('/repos/gadfly-hbo/OptraCall/actions/workflows/check.yml/runs', githubApiBase);
-  if (!['https:', 'http:'].includes(endpoint.protocol) || endpoint.username || endpoint.password) throw new TrialUpdateError('trial_ci_endpoint_invalid');
-  endpoint.search = new URLSearchParams({ head_sha: target, event: 'push', branch: 'main', per_page: '100' }).toString();
-  let payload;
+async function githubCliRuns(endpoint) {
+  // The CLI owns credential lookup; never extract a token or pass it to a URL.
+  // A fixture/custom API must not receive the user's GitHub authentication.
+  if (endpoint.origin !== 'https://api.github.com') return undefined;
+  let stdout;
+  try {
+    ({ stdout } = await exec('gh', ['api', '--hostname', 'github.com', '--method', 'GET', '--header', 'accept: application/vnd.github+json', endpoint.pathname + endpoint.search], { env: { ...commandEnvironment(), GH_PROMPT_DISABLED: '1' }, maxBuffer: 4 * 1024 * 1024, timeout: 15_000 }));
+  } catch (error) {
+    // gh documents exit 4 as authentication required. Only absence of the CLI
+    // or absence of a login allows the existing public-repository path.
+    if (!error.killed && (error.code === 'ENOENT' || error.code === 4)) return undefined;
+    throw new TrialUpdateError('trial_ci_authenticated_unavailable');
+  }
+  try { return JSON.parse(stdout); }
+  catch { throw new TrialUpdateError('trial_ci_authenticated_unavailable'); }
+}
+async function publicRuns(endpoint) {
   try {
     const response = await fetch(endpoint, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'OptraCall-trial-updater' }, redirect: 'error', signal: AbortSignal.timeout(15_000) });
+    if (response.status === 429 || (response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0')) throw new TrialUpdateError('trial_ci_rate_limited');
     if (!response.ok) throw new Error('CI unavailable');
     const reader = response.body?.getReader(); if (!reader) throw new Error('CI response empty');
     const chunks = []; let size = 0;
     try { while (true) { const chunk = await reader.read(); if (chunk.done) break; size += chunk.value.byteLength; if (size > 4 * 1024 * 1024) throw new Error('CI response oversized'); chunks.push(Buffer.from(chunk.value)); } }
     finally { await reader.cancel().catch(() => {}); }
-    payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  } catch { throw new TrialUpdateError('trial_ci_unavailable'); }
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch (error) { if (error instanceof TrialUpdateError) throw error; throw new TrialUpdateError('trial_ci_unavailable'); }
+}
+async function successfulMainCheck(target, githubApiBase) {
+  const endpoint = new URL('/repos/gadfly-hbo/OptraCall/actions/workflows/check.yml/runs', githubApiBase);
+  if (!['https:', 'http:'].includes(endpoint.protocol) || endpoint.username || endpoint.password) throw new TrialUpdateError('trial_ci_endpoint_invalid');
+  endpoint.search = new URLSearchParams({ head_sha: target, event: 'push', branch: 'main', per_page: '100' }).toString();
+  const authenticated = await githubCliRuns(endpoint);
+  const payload = authenticated === undefined ? await publicRuns(endpoint) : authenticated;
   if (!payload || !Array.isArray(payload.workflow_runs)) throw new TrialUpdateError('trial_ci_unavailable');
   const matching = payload.workflow_runs.filter(run => run && Number.isSafeInteger(run.id) && run.id > 0 && run.name === 'Check' && run.path === '.github/workflows/check.yml' && run.head_sha === target && run.head_branch === 'main' && run.event === 'push' && run.repository?.full_name === 'gadfly-hbo/OptraCall' && run.head_repository?.full_name === 'gadfly-hbo/OptraCall');
   matching.sort((a, b) => b.id - a.id || (b.run_attempt ?? 1) - (a.run_attempt ?? 1));
