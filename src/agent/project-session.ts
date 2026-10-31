@@ -22,7 +22,8 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
   let pendingOperation: Promise<RunResult> | undefined;
   let browserUI: ReturnType<typeof createBrowserUIContext> | undefined;
   let editorText: string | undefined;
-  const fixedDraft = () => options?.workspace?.capabilityPolicy === 'fixed-draft';
+  // Both sealed text profiles reuse the same no-execution resource path.
+  const fixedInput = () => options?.workspace?.capabilityPolicy === 'fixed-draft' || options?.workspace?.capabilityPolicy === 'text-only';
   const send = (value: unknown) => { if (process.connected) process.send?.(value); };
   const redactText = (text: string) => {
     let secret = options?.configuration?.apiKey;
@@ -59,7 +60,7 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     }
     return sapProvision() ? { sap: sapProvision(), claim: 'provided-not-adopted' } : undefined;
   }
-  const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getEntries())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { nativeTools: !fixedDraft(), python: fixedDraft() ? false : 'bash', powershell: fixedDraft() ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, resources: options.resourceRoot, extensions: !fixedDraft(), skills: !fixedDraft(), mcp: !fixedDraft(), codemode: !fixedDraft(), sessionTree: !fixedDraft(), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedDraft() ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedDraft(), terminalComponents: false } } });
+  const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getEntries())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { nativeTools: !fixedInput(), python: fixedInput() ? false : 'bash', powershell: fixedInput() ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, resources: options.resourceRoot, extensions: !fixedInput(), skills: !fixedInput(), mcp: !fixedInput(), codemode: !fixedInput(), sessionTree: !fixedInput(), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput(), terminalComponents: false } } });
   const environmentExtension: ExtensionFactory = pi => {
     // The SDK applies this replacement to agent state before its own JSONL append.
     pi.on('message_end', event => ({ message: redact(event.message) }));
@@ -104,7 +105,7 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
   async function open(o: ProjectAgentOptions) {
     if (runtime) throw new Error('session_already_open');
     options = o;
-    if (fixedDraft() && o.sessionFile) throw new Error('fixed_draft_history_not_allowed');
+    if (fixedInput() && o.sessionFile) throw new Error('fixed_draft_history_not_allowed');
     if (editorText === undefined) editorText = o.draft ?? '';
     const cwd = o.workspace?.cwd ?? path.join(o.projectDirectory!, '020_clean');
     const credentials = { read: async () => undefined, list: async () => [], modify: async () => { throw new Error('Host owns credentials.'); }, delete: async () => {} };
@@ -116,7 +117,7 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     const model = models.getModel(providerId, o.configuration.model);
     if (!model) throw new Error('model_unavailable');
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
-      const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: fixedDraft() ? {
+      const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
         extensionFactories: [environmentExtension],
@@ -127,8 +128,8 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
       } });
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
-      services.settingsManager.applyOverrides({ defaultTools: fixedDraft() ? [] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search'])] });
-      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(fixedDraft() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : {}), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
+      services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? [] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search'])] });
+      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : {}), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
       if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
       return { ...created, services, diagnostics: services.diagnostics };
     };
@@ -194,12 +195,12 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     return pendingOperation;
   }
   function prompt(text: string, id: string, requestFingerprint?: string, input?: ProvidedContextInput) {
-    if (fixedDraft() && input?.enterprise) throw new Error('fixed_draft_materials_not_allowed');
+    if (fixedInput() && input?.enterprise) throw new Error('fixed_draft_materials_not_allowed');
     const providedContext = redact({ version: 1, claim: 'provided-not-adopted', providedAt: new Date().toISOString(), requestTextSha256: createHash('sha256').update(text).digest('hex'), ...(input?.rap ? { rap: input.rap } : {}), ...(input?.case ? { case: input.case } : {}), ...(input?.enterprise ? { enterprise: input.enterprise } : {}), ...(typeof input?.originalUserText === 'string' ? { originalUserText: input.originalUserText } : {}), ...(sapProvision() ? { sap: sapProvision() } : {}) });
     return execute(id, 'prompt', () => session!.prompt(text), requestFingerprint, providedContext);
   }
   async function command(text: string, id: string) {
-    if (fixedDraft()) throw new Error('fixed_draft_commands_not_allowed');
+    if (fixedInput()) throw new Error('fixed_draft_commands_not_allowed');
     const [name, ...tail] = text.trim().split(/\s+/); const argument = tail.join(' ');
     return execute(id, 'command', async () => {
       if (name === '/tools') return session!.getAllTools();

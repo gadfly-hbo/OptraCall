@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>决策看板 UI Demo · OptraCall</title>
+<style>
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; color: inherit; }
+button:disabled { cursor: not-allowed; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #a397e0; outline-offset: 3px; }
+.demo-page { --canvas:#fff; --surface:#fff; --subtle:#f5f5f8; --hover:#ececf2; --ink:#24232b; --muted:#6c6b78; --faint:#777580; --line:#e6e5eb; --accent:#6550c9; --accent-soft:#eeebfb; --warning:#80530c; --warning-bg:#fff7e8; --error:#a12b36; --error-bg:#fff4f4; background: var(--canvas); color: var(--ink); font-size: 14px; line-height: 1.55; min-height: 100vh; padding: 6px 32px 40px; }
+.demo-note { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 14px 0 0; padding: 10px 14px; border: 1px dashed var(--accent); border-radius: 8px; background: var(--accent-soft); color: var(--muted); font-size: 12px; }
+.demo-note strong { color: var(--ink); }
+.eyebrow { letter-spacing: 2.2px; color: var(--accent); font-size: 11px; margin: 0 0 6px; font-weight: 600; }
+.decision-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin: 16px 0 24px; }
+.decision-heading h1 { font-size: 24px; line-height: 1.4; font-weight: 550; margin: 0 0 8px; }
+.decision-heading p:last-child { margin: 0; color: var(--muted); font-size: 13px; }
+.decision-stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; margin: 24px 0 24px; }
+.decision-stats > div { border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; background: var(--surface); }
+.decision-stats > div > span { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 12px; }
+.decision-stats small { color: var(--muted); font-size: 10px; font-weight: 400; }
+.decision-stats strong { display: flex; align-items: baseline; gap: 7px; font-size: 30px; font-weight: 550; padding: 8px 0 2px; }
+.decision-stats p { font-size: 11px; color: var(--muted); margin: 0; }
+.board-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 18px 0 6px; }
+.board-toolbar select { padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); max-width: 220px; }
+.board-toolbar .spacer { flex: 1; }
+.secondary-button { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 7px 14px; }
+.primary-button { border: 1px solid transparent; background: var(--accent); color: #fff; border-radius: 7px; padding: 7px 14px; }
+.board-reports { margin: 14px 0 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.board-reports > h3 { font-size: 12px; font-weight: 550; color: var(--muted); margin: 0; padding: 12px 16px 4px; }
+.board-report-list { padding: 6px 10px 12px; display: grid; gap: 6px; }
+.board-report-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px; border-radius: 7px; background: var(--subtle); font-size: 12px; }
+.report-name { font-weight: 550; overflow-wrap: anywhere; }
+.report-project { color: var(--muted); }
+.report-bytes { color: var(--faint); font-size: 11px; }
+.report-actions { margin-left: auto; display: flex; gap: 8px; }
+.report-actions button { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; }
+.report-actions .primary-button { padding: 4px 10px; font-size: 11px; }
+.board-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 10px; border: 1px solid var(--line); color: var(--muted); background: var(--surface); white-space: nowrap; }
+.board-chip.run { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: var(--accent-soft); }
+.board-chip.fail { color: var(--error); border-color: color-mix(in srgb, var(--error) 35%, var(--line)); background: var(--error-bg); }
+.board-chip.warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 35%, var(--line)); background: var(--warning-bg); }
+.board-chip.pr-high { color: var(--error); border-color: color-mix(in srgb, var(--error) 30%, var(--line)); }
+.board-chip.pr-medium { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.board-chip.ev-data { color: #1c7c4a; border-color: color-mix(in srgb, #1c7c4a 30%, var(--line)); }
+.board-chip.ev-multi { color: #2456b8; border-color: color-mix(in srgb, #2456b8 30%, var(--line)); }
+.board-chip.ev-logic { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 30%, var(--line)); }
+.board-chip input { margin: 0; }
+.board-confidence { font-size: 10px; color: var(--faint); }
+.decision-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.decision-section-heading h2 { font-size: 15px; margin: 0; font-weight: 550; }
+.decision-section-heading > span { color: var(--muted); font-size: 11px; }
+.decision-board { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
+.decision-lane { min-width: 0; border-radius: 8px; background: var(--subtle); padding: 14px; }
+.decision-lane-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 14px; }
+.decision-lane-heading h3 { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 550; margin: 0; }
+.decision-lane-heading > span { color: var(--muted); font-size: 11px; }
+.decision-card { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 16px; margin-bottom: 12px; }
+.decision-card:last-child { margin-bottom: 0; }
+.decision-card h4 { font-size: 13px; font-weight: 550; line-height: 1.7; margin: 12px 0 8px; }
+.decision-card > p { color: var(--muted); font-size: 12px; line-height: 1.8; margin: 0 0 12px; }
+.board-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.card-source { font-size: 10px; color: var(--faint); }
+.card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.card-actions button { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); font-size: 12px; }
+.card-actions .primary-button { padding: 5px 12px; font-size: 12px; }
+.card-dismissed-reason { font-size: 11px; color: var(--muted); background: var(--subtle); border-radius: 6px; padding: 6px 9px; margin: 0 0 10px; }
+.board-evidence { margin: 10px 0 0; border-top: 1px dashed var(--line); }
+.board-evidence summary { cursor: pointer; padding: 8px 0 2px; font-size: 11px; color: var(--muted); }
+.board-evidence .fact { margin: 8px 0; font-size: 12px; }
+.board-evidence .fact p { margin: 0; }
+.board-evidence blockquote { margin: 5px 0 0; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--subtle); border-radius: 0 6px 6px 0; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.board-evidence .reasoning { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+.board-tasks { display: grid; gap: 6px; margin-top: 10px; }
+.board-task { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; background: var(--subtle); font-size: 12px; }
+.task-title { font-weight: 500; margin: 0; }
+.task-meta { color: var(--faint); font-size: 11px; margin: 2px 0 0; }
+.task-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.task-actions button { padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; }
+.board-task-feedback { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--muted); }
+.board-task-feedback p { margin: 0; }
+.board-stars { color: var(--accent); letter-spacing: 2px; }
+.board-lane-empty { border: 1px dashed var(--line); border-radius: 7px; padding: 14px; color: var(--faint); font-size: 11px; text-align: center; }
+dialog { border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; max-width: 520px; width: calc(100vw - 48px); }
+dialog::backdrop { background: rgba(36,35,43,.45); }
+.dialog-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.dialog-heading h2 { font-size: 16px; margin: 0; font-weight: 550; }
+.icon-button { border: 0; background: transparent; font-size: 13px; }
+.board-form { display: grid; gap: 10px; margin: 14px 0 4px; }
+.board-form label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.board-form input, .board-form textarea, .board-form select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); }
+.board-form textarea { min-height: 72px; resize: vertical; }
+.form-error { color: var(--error); font-size: 11px; margin: 0; }
+.board-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+@media (max-width: 1100px) { .decision-board { grid-template-columns: minmax(0,1fr); } .decision-stats { gap: 8px; } }
+</style>
+</head>
+<body>
+<div class="demo-page">
+  <p class="demo-note"><strong>补确认 UI Demo（2026-10-31）</strong>与当前已实现交互一致，可点击操作：过滤、抽取状态、采纳/驳回（必填理由）、任务流转、回录反馈、人工补充、已驳回开关、归档项目只读。数据为同日真实模型试跑的合成样例，仅供形态确认，不含真实经营数据。</p>
+  <div class="decision-heading"><div><p class="eyebrow">DECISION BOARD</p><h1>决策看板</h1><p>跨项目汇总分析报告，把判断、行动与反馈放在同一处。</p></div></div>
+  <section class="decision-stats" id="stats" aria-label="看板统计"></section>
+  <div class="board-toolbar">
+    <select id="project-filter" aria-label="按项目过滤"></select>
+    <select id="evidence-filter" aria-label="按证据等级过滤">
+      <option value="all">全部证据</option><option>数据支撑</option><option>多源佐证</option><option>逻辑推断</option><option>经验假设</option>
+    </select>
+    <select id="priority-filter" aria-label="按优先级过滤">
+      <option value="all">全部优先级</option><option value="high">高优</option><option value="medium">中优</option><option value="low">低优</option>
+    </select>
+    <select id="source-filter" aria-label="按来源过滤">
+      <option value="all">全部来源</option><option value="extracted">模型抽取</option><option value="manual">人工补充</option>
+    </select>
+    <span class="spacer"></span>
+    <label class="board-chip" id="dismissed-toggle" hidden><input type="checkbox" id="show-dismissed">已驳回 <span id="dismissed-count"></span></label>
+    <button class="secondary-button" id="manual-open">补充建议</button>
+  </div>
+  <section class="board-reports" aria-label="项目报告"><h3 id="report-heading">项目报告</h3><div class="board-report-list" id="reports"></div></section>
+  <div class="decision-section-heading"><h2>从建议到结果</h2><span id="project-summary"></span></div>
+  <section class="decision-board" aria-label="决策泳道">
+    <div class="decision-lane"><div class="decision-lane-heading"><h3><span aria-hidden="true">◇</span>判断建议</h3><span id="suggested-count"></span></div><div id="lane-suggested"></div></div>
+    <div class="decision-lane"><div class="decision-lane-heading"><h3><span aria-hidden="true">↗</span>行动跟进</h3><span id="adopted-count"></span></div><div id="lane-adopted"></div></div>
+    <div class="decision-lane"><div class="decision-lane-heading"><h3><span aria-hidden="true">↻</span>结果复盘</h3><span id="review-count"></span></div><div id="lane-review"></div></div>
+  </section>
+</div>
+
+<dialog id="dismiss-dialog"><div class="dialog-heading"><h2>驳回建议</h2><button class="icon-button" aria-label="关闭" onclick="closeDialog('dismiss-dialog')">✕</button></div>
+  <p class="card-source" id="dismiss-item-title"></p>
+  <form class="board-form" id="dismiss-form">
+    <label for="dismiss-reason">驳回理由（必填，至少 2 字）</label>
+    <textarea id="dismiss-reason" placeholder="例如：范围外 / 证据不足 / 已有同类行动"></textarea>
+    <p class="form-error" id="dismiss-error" hidden>请填写至少 2 个字符的理由。</p>
+    <div class="board-dialog-actions"><button type="button" class="secondary-button" onclick="closeDialog('dismiss-dialog')">取消</button><button class="primary-button" type="submit">确认驳回</button></div>
+  </form>
+</dialog>
+
+<dialog id="task-dialog"><div class="dialog-heading"><h2>添加行动任务</h2><button class="icon-button" aria-label="关闭" onclick="closeDialog('task-dialog')">✕</button></div>
+  <p class="card-source" id="task-item-title"></p>
+  <form class="board-form" id="task-form">
+    <label for="task-title">任务标题（必填）</label><input id="task-title" required>
+    <label for="task-owner">负责人</label><input id="task-owner" placeholder="选填">
+    <label for="task-due">截止日期</label><input id="task-due" type="date">
+    <label for="task-priority">优先级</label><select id="task-priority"><option value="high">高优</option><option value="medium" selected>中优</option><option value="low">低优</option></select>
+    <div class="board-dialog-actions"><button type="button" class="secondary-button" onclick="closeDialog('task-dialog')">取消</button><button class="primary-button" type="submit">添加任务</button></div>
+  </form>
+</dialog>
+
+<dialog id="feedback-dialog"><div class="dialog-heading"><h2 id="feedback-title">回录反馈</h2><button class="icon-button" aria-label="关闭" onclick="closeDialog('feedback-dialog')">✕</button></div>
+  <p class="card-source" id="feedback-task-title"></p>
+  <form class="board-form" id="feedback-form">
+    <label for="feedback-adopted">是否按建议执行</label><select id="feedback-adopted"><option value="yes">按建议执行</option><option value="no">未按原建议执行</option></select>
+    <label for="feedback-outcome">执行结果</label><input id="feedback-outcome" placeholder="例如：召回权益已上线">
+    <label for="feedback-metric">指标变化</label><input id="feedback-metric" placeholder="例如：复购率 +2.4%">
+    <label for="feedback-review">复盘</label><textarea id="feedback-review" placeholder="适用条件、修正意见与后续学习"></textarea>
+    <label for="feedback-score">评分（1–5）</label><select id="feedback-score"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+    <div class="board-dialog-actions"><button type="button" class="secondary-button" onclick="closeDialog('feedback-dialog')">取消</button><button class="primary-button" type="submit">保存反馈</button></div>
+  </form>
+</dialog>
+
+<dialog id="manual-dialog"><div class="dialog-heading"><h2>人工补充建议</h2><button class="icon-button" aria-label="关闭" onclick="closeDialog('manual-dialog')">✕</button></div>
+  <p class="card-source">登记报告外的经验判断；证据固定为“经验假设”，与抽取项同样走采纳 / 驳回闭环。</p>
+  <form class="board-form" id="manual-form">
+    <label for="manual-project">归属项目（必填）</label><select id="manual-project"></select>
+    <label for="manual-title">建议标题（必填）</label><input id="manual-title" required>
+    <label for="manual-rationale">理由（必填）</label><textarea id="manual-rationale" required></textarea>
+    <label for="manual-impact">预期效果</label><input id="manual-impact" placeholder="选填">
+    <label for="manual-priority">优先级</label><select id="manual-priority"><option value="high">高优</option><option value="medium" selected>中优</option><option value="low">低优</option></select>
+    <div class="board-dialog-actions"><button type="button" class="secondary-button" onclick="closeDialog('manual-dialog')">取消</button><button class="primary-button" type="submit">补充建议</button></div>
+  </form>
+</dialog>
+
+<script>
+'use strict';
+const EV_CLASS = { '数据支撑': 'ev-data', '多源佐证': 'ev-multi', '逻辑推断': 'ev-logic', '经验假设': 'ev-exp' };
+const PR_LABEL = { high: '高优', medium: '中优', low: '低优' };
+const TS_LABEL = { todo: '待办', doing: '进行中', done: '已完成' };
+const state = {
+  filters: { project: 'all', evidence: 'all', priority: 'all', source: 'all' },
+  showDismissed: false,
+  projects: [
+    { id: 'p1', name: '会员复购真实模型试跑', archivedAt: null },
+    { id: 'p2', name: '旧档复盘（演示归档只读）', archivedAt: '2026-10-20T00:00:00.000Z' },
+  ],
+  reports: [
+    { projectId: 'p1', relativePath: '060_reports/repurchase_report.md', name: 'repurchase_report.md', bytes: 12599, availability: 'available', extraction: { status: 'completed', itemCount: 6, error: null } },
+    { projectId: 'p1', relativePath: '060_reports/渠道活动小结.md', name: '渠道活动小结.md', bytes: 2140, availability: 'available', extraction: null },
+    { projectId: 'p2', relativePath: '060_reports/九月复盘.md', name: '九月复盘.md', bytes: 8303, availability: 'available', extraction: null },
+  ],
+  items: [
+    { id: 'i1', projectId: 'p1', sourceKind: 'extracted', status: 'adopted', title: '立即专项核查渠道C在10月的投放、素材、定向、落地页及履约售后变化，并与9月基线对比', rationale: '高价值C -21.1pp 为唯一显著分渠道变化；普通C同向-9.0pp；C高价值新客+38%伴随复购率下滑。', expectedImpact: '定位C渠道10月的具体变化点，回收高价值复购缺口的主要部分', priority: 'high', evidenceLevel: '数据支撑', confidence: 0.9, evidence: { facts: [ { text: '高价值渠道C复购率显著下滑', quote: '高价值 | **渠道C** | **45.6%（31/68）** | **24.5%（23/94）**' }, { text: '两层级同向下滑', quote: '渠道C两层级同向下滑且高价值跌幅最大、统计显著' } ], level: '数据支撑', reasoning: '分层明细与显著性检验直接来自清洗数据的复算脚本。' }, tasks: [ { id: 't1', title: '调取渠道C十月投放与落地页变更清单', owner: '渠道运营', dueDate: '2026-11-07', status: 'done', priority: 'high', feedback: { adopted: true, outcome: '已确认素材与定向变更', metricDelta: '待下窗口复购数据验证', review: '变更点已定位，待回收效果', score: 4 } } ] },
+    { id: 'i2', projectId: 'p1', sourceKind: 'extracted', status: 'suggested', title: '暂不将高价值会员复购下滑归因于渠道A满减，不据此调整或停投满减', rationale: '最大跌幅在C而非满减所在的A；A普通复购反升；满减期老客被激活。', expectedImpact: '避免误伤促销带来的老客激活与订单增量，同时不掩盖C渠道问题', priority: 'high', evidenceLevel: '多源佐证', confidence: 0.75, evidence: { facts: [ { text: '跌幅最大在渠道C', quote: '最大跌幅在渠道C（-21.1pp）而非A（-8.0pp，不显著）' }, { text: '渠道A普通会员复购上升', quote: '渠道A普通会员复购率**上升** 4.7pp（37.0%→41.7%）' } ], level: '多源佐证', reasoning: '分层表、mix 分解与旬度对照多处相互印证。' }, tasks: [] },
+    { id: 'i3', projectId: 'p1', sourceKind: 'extracted', status: 'suggested', title: '核实高价值会员分层在两个观察期是否采用一致的阈值、价值窗口和快照时点', rationale: '高价值占比 29.6%→33.8%；下滑只在高价值层且跨渠道，形态符合层内人群变化。', expectedImpact: '成本最低的排除项；若口径确有稀释，修正后下滑幅度可能显著收窄', priority: 'high', evidenceLevel: '数据支撑', confidence: 0.9, evidence: { facts: [ { text: '高价值占比上升', quote: '高价值占比 29.6%→33.8%（237→270 人）' } ], level: '数据支撑', reasoning: '分母结构来自口径核对表与复算脚本输出。' }, tasks: [] },
+    { id: 'i4', projectId: 'p1', sourceKind: 'extracted', status: 'suggested', title: '对10月未复购的高价值会员开展小样本原因调研，优先覆盖渠道C并其次覆盖渠道A', rationale: '下滑为频次型而非客单型或时间平移，需一手原因证据。', expectedImpact: '区分“体验/权益/需求饱和”三类原因，指导后续动作', priority: 'medium', evidenceLevel: '数据支撑', confidence: 0.9, evidence: { facts: [ { text: '下滑性质是频次下降', quote: '高价值 30 天内人均有效订单 1.401→1.278' } ], level: '数据支撑', reasoning: '频次、客单与窗口补量三组对照均来自复算脚本。' }, tasks: [] },
+    { id: 'i5', projectId: 'p1', sourceKind: 'extracted', status: 'suggested', title: '对高价值会员试点30天内二购召回，并通过对照组评估效果', rationale: '高价值复购真实流失且普通层稳定，缺口确定存在且集中。', expectedImpact: '若召回有效可直接回收复购率；对照组设计避免再次把相关当因果', priority: 'medium', evidenceLevel: '逻辑推断', confidence: 0.55, evidence: { facts: [ { text: '缺口确定存在且集中' } ], level: '逻辑推断', reasoning: '由分层缺口推得可试点空间，效果需对照验证。' }, tasks: [] },
+    { id: 'i6', projectId: 'p1', sourceKind: 'extracted', status: 'dismissed', dismissedReason: '口径监控属例行建设，先聚焦本轮下滑处置', title: '将复购口径固化到指标字典，并按周监控分层与渠道的复购率和分母', rationale: '本次口径边界稳健，但分层口径存在未知。', expectedImpact: '及时发现同类结构变化，使下次归因有同口径基线', priority: 'medium', evidenceLevel: '数据支撑', confidence: 0.9, evidence: { facts: [ { text: '口径边界稳健', quote: '按 29/30/31 天计算复购率均不变' } ], level: '数据支撑', reasoning: '口径核对表的稳健性检验。' }, tasks: [] },
+  ],
+};
+const projectName = id => state.projects.find(project => project.id === id)?.name ?? id;
+const projectArchived = id => state.projects.find(project => project.id === id)?.archivedAt != null;
+let dismissTargetId = null, taskTargetId = null, feedbackTaskRef = null, taskSeq = 100, itemSeq = 100;
+const closeDialog = id => document.getElementById(id).close();
+function openDialog(id) { const dialog = document.getElementById(id); if (!dialog.open) dialog.showModal(); }
+
+function itemCard(item, options = {}) {
+  const evidence = item.evidence ? `<details class="board-evidence"><summary>证据与推导（${item.evidence.facts.length} 条事实）</summary>${item.evidence.facts.map(fact => `<div class="fact"><p>${fact.text}</p>${fact.quote ? `<blockquote>${fact.quote}</blockquote>` : ''}</div>`).join('')}${item.evidence.reasoning ? `<p class="reasoning">推导：${item.evidence.reasoning}</p>` : ''}</details>` : '';
+  const openTasks = (item.tasks ?? []).filter(task => task.status !== 'done').map(task => `<div class="board-task"><p class="task-title">${task.title}</p><p class="task-meta">${TS_LABEL[task.status]}${task.owner ? ` · ${task.owner}` : ''}${task.dueDate ? ` · 截止 ${task.dueDate}` : ''}</p><div class="task-actions">${task.status === 'todo' ? `<button onclick="setTaskStatus('${task.id}','doing')">开始</button>` : ''}${task.status === 'doing' ? `<button onclick="setTaskStatus('${task.id}','todo')">退回待办</button>` : ''}<button onclick="setTaskStatus('${task.id}','done')">完成</button></div></div>`).join('');
+  return `<article class="decision-card"><div class="board-card-top"><span class="board-chip pr-${item.priority}">${PR_LABEL[item.priority]}</span>${item.evidenceLevel ? `<span class="board-chip ${EV_CLASS[item.evidenceLevel]}">${item.evidenceLevel}</span>` : ''}${item.confidence != null ? `<span class="board-confidence">置信度 ${Math.round(item.confidence * 100)}%</span>` : ''}<span class="board-chip">${item.sourceKind === 'manual' ? '人工' : '抽取'}</span></div>
+  <h4>${item.title}</h4><p>${item.rationale}</p>${item.expectedImpact ? `<p>预期效果：${item.expectedImpact}</p>` : ''}${item.status === 'dismissed' && item.dismissedReason ? `<p class="card-dismissed-reason">驳回理由：${item.dismissedReason}</p>` : ''}${evidence}${openTasks ? `<div class="board-tasks">${openTasks}</div>` : ''}
+  <footer class="card-actions"><span class="card-source">${projectName(item.projectId)}${item.reportId === undefined && item.sourceKind === 'manual' ? ' · 报告外补充' : ''}</span>${item.status === 'suggested' && !projectArchived(item.projectId) ? `<button class="primary-button" onclick="adoptItem('${item.id}')">采纳</button><button onclick="askDismiss('${item.id}')">驳回</button>` : ''}${item.status === 'adopted' && !projectArchived(item.projectId) ? `<button onclick="askTask('${item.id}')">添加任务</button><button onclick="askDismiss('${item.id}')">驳回</button>` : ''}</footer></article>`;
+}
+function filteredItems() {
+  return state.items.filter(item => (state.filters.project === 'all' || item.projectId === state.filters.project)
+    && (state.filters.evidence === 'all' || item.evidenceLevel === state.filters.evidence)
+    && (state.filters.priority === 'all' || item.priority === state.filters.priority)
+    && (state.filters.source === 'all' || item.sourceKind === state.filters.source));
+}
+function render() {
+  const items = filteredItems();
+  const suggested = items.filter(item => item.status === 'suggested');
+  const dismissed = items.filter(item => item.status === 'dismissed');
+  const adopted = items.filter(item => item.status === 'adopted');
+  const review = adopted.flatMap(item => item.tasks.filter(task => task.status === 'done').map(task => ({ task, item })));
+  document.getElementById('stats').innerHTML = `
+    <div><span>报告<small>060_reports</small></span><strong>${state.reports.length}<small>份</small></strong><p>各项目最终报告</p></div>
+    <div><span>待判断<small>含人工补充</small></span><strong>${state.items.filter(i => i.status === 'suggested').length}<small>项</small></strong><p>其中高优 ${state.items.filter(i => i.status === 'suggested' && i.priority === 'high').length} 项</p></div>
+    <div><span>已采纳<small>行动跟进</small></span><strong>${state.items.filter(i => i.status === 'adopted').length}<small>项</small></strong><p>可拆解任务并跟进</p></div>`;
+  const projectSelect = document.getElementById('project-filter');
+  projectSelect.innerHTML = `<option value="all">全部项目</option>` + state.projects.map(project => `<option value="${project.id}">${project.name}${project.archivedAt ? '（已归档）' : ''}</option>`).join('');
+  projectSelect.value = state.filters.project;
+  const dismissedToggle = document.getElementById('dismissed-toggle');
+  dismissedToggle.hidden = dismissed.length === 0;
+  document.getElementById('dismissed-count').textContent = dismissed.length;
+  document.getElementById('show-dismissed').checked = state.showDismissed;
+  const reports = state.reports.filter(report => state.filters.project === 'all' || report.projectId === state.filters.project);
+  document.getElementById('report-heading').textContent = `项目报告（${reports.length}）`;
+  document.getElementById('reports').innerHTML = reports.map(report => {
+    const archived = projectArchived(report.projectId), extraction = report.extraction;
+    const chip = extraction === null ? '<span class="board-chip">未抽取</span>'
+      : extraction.status === 'running' ? '<span class="board-chip run">抽取中…</span>'
+      : extraction.status === 'completed' ? `<span class="board-chip">已抽取 ${extraction.itemCount} 条</span>`
+      : extraction.status === 'failed' ? `<span class="board-chip fail">抽取失败</span>` : '<span class="board-chip">已取消</span>';
+    const changed = report.availability === 'changed' ? '<span class="board-chip warn">报告已变化 · 建议重新抽取</span>' : report.availability === 'missing' ? '<span class="board-chip fail">报告文件不存在</span>' : '';
+    const action = extraction?.status === 'running' ? `<button>停止</button>` : `<button class="primary-button" ${archived || report.availability === 'missing' ? 'disabled' : ''} title="${archived ? '项目已归档，恢复后可抽取' : ''}" onclick="demoExtract('${report.projectId}','${report.name}')">${extraction ? '重新抽取' : '抽取建议'}</button>`;
+    return `<div class="board-report-row"><span class="report-name">${report.name}</span><span class="report-project">${projectName(report.projectId)}${archived ? '（已归档）' : ''}</span><span class="report-bytes">${(report.bytes / 1024).toFixed(1)} KB</span>${changed}${chip}<span class="report-actions">${action}</span></div>`;
+  }).join('') || '<div class="board-lane-empty">当前过滤下没有报告。</div>';
+  document.getElementById('project-summary').textContent = `${state.projects.filter(p => !p.archivedAt).length} 个活跃项目 · ${state.projects.filter(p => p.archivedAt).length} 个已归档`;
+  document.getElementById('suggested-count').textContent = `${suggested.length} 项待判断`;
+  document.getElementById('lane-suggested').innerHTML = suggested.map(item => itemCard(item)).join('')
+    + (state.showDismissed ? dismissed.map(item => itemCard(item)).join('') : '')
+    || '<div class="board-lane-empty">暂无待判断建议。</div>';
+  document.getElementById('adopted-count').textContent = `${adopted.length} 项已采纳`;
+  document.getElementById('lane-adopted').innerHTML = adopted.map(item => itemCard(item)).join('') || '<div class="board-lane-empty">采纳建议后在这里拆解任务：负责人、截止日与执行状态。</div>';
+  document.getElementById('review-count').textContent = `${review.length} 项已完成`;
+  document.getElementById('lane-review').innerHTML = review.map(({ task, item }) => `<article class="decision-card"><div class="board-card-top"><span class="board-chip ev-multi">${TS_LABEL[task.status]}</span>${task.feedback ? `<span class="board-chip run">${'★'.repeat(task.feedback.score)}${'☆'.repeat(5 - task.feedback.score)}</span>` : ''}</div><h4>${task.title}</h4><p class="card-source">所属：${item.title} · ${projectName(item.projectId)}${task.owner ? ` · 负责人 ${task.owner}` : ''}${task.dueDate ? ` · 截止 ${task.dueDate}` : ''}</p>${task.feedback ? `<div class="board-task-feedback"><p>${task.feedback.adopted ? '按建议执行' : '未按原建议执行'}${task.feedback.outcome ? ` · ${task.feedback.outcome}` : ''}${task.feedback.metricDelta ? ` · 指标变化 ${task.feedback.metricDelta}` : ''}</p>${task.feedback.review ? `<p>复盘：${task.feedback.review}</p>` : ''}</div>` : '<p class="card-source">尚未回录反馈。</p>'}<footer class="card-actions"><button onclick="askFeedback('${task.id}','${item.id}')">${task.feedback ? '更新反馈' : '回录反馈'}</button></footer></article>`).join('') || '<div class="board-lane-empty">任务完成后回录反馈：结果、指标变化与评分，形成复盘记录。</div>';
+  const manualProjects = document.getElementById('manual-project');
+  const active = state.projects.filter(project => !project.archivedAt);
+  manualProjects.innerHTML = active.map(project => `<option value="${project.id}">${project.name}</option>`).join('');
+  manualProjects.disabled = active.length === 0;
+}
+window.adoptItem = id => { const item = state.items.find(entry => entry.id === id); item.status = 'adopted'; render(); };
+window.askDismiss = id => { dismissTargetId = id; const item = state.items.find(entry => entry.id === id); document.getElementById('dismiss-item-title').textContent = `${item.title} · 驳回后不能直接改为采纳，可重新抽取或人工补充。`; document.getElementById('dismiss-reason').value = ''; document.getElementById('dismiss-error').hidden = true; openDialog('dismiss-dialog'); };
+document.getElementById('dismiss-form').onsubmit = event => { event.preventDefault(); const reason = document.getElementById('dismiss-reason').value.trim(); if ([...reason].length < 2) { document.getElementById('dismiss-error').hidden = false; return; } const item = state.items.find(entry => entry.id === dismissTargetId); item.status = 'dismissed'; item.dismissedReason = reason; state.showDismissed = true; closeDialog('dismiss-dialog'); render(); };
+window.askTask = id => { taskTargetId = id; const item = state.items.find(entry => entry.id === id); document.getElementById('task-item-title').textContent = `所属建议：${item.title}`; ['task-title', 'task-owner'].forEach(field => document.getElementById(field).value = ''); document.getElementById('task-due').value = ''; document.getElementById('task-priority').value = 'medium'; openDialog('task-dialog'); };
+document.getElementById('task-form').onsubmit = event => { event.preventDefault(); const title = document.getElementById('task-title').value.trim(); if (!title) return; const item = state.items.find(entry => entry.id === taskTargetId); item.tasks.push({ id: 't' + taskSeq++, title, owner: document.getElementById('task-owner').value.trim(), dueDate: document.getElementById('task-due').value, status: 'todo', priority: document.getElementById('task-priority').value }); closeDialog('task-dialog'); render(); };
+window.setTaskStatus = (taskId, status) => { for (const item of state.items) { const task = (item.tasks ?? []).find(entry => entry.id === taskId); if (task) { task.status = status; break; } } render(); };
+window.askFeedback = (taskId, itemId) => { const item = state.items.find(entry => entry.id === itemId); const task = item.tasks.find(entry => entry.id === taskId); feedbackTaskRef = { taskId, itemId }; const existing = task.feedback; document.getElementById('feedback-title').textContent = existing ? '更新反馈' : '回录反馈'; document.getElementById('feedback-task-title').textContent = `任务：${task.title}${existing ? ' · 再次提交会覆盖原反馈' : ''}`; document.getElementById('feedback-adopted').value = existing?.adopted === false ? 'no' : 'yes'; document.getElementById('feedback-outcome').value = existing?.outcome ?? ''; document.getElementById('feedback-metric').value = existing?.metricDelta ?? ''; document.getElementById('feedback-review').value = existing?.review ?? ''; document.getElementById('feedback-score').value = String(existing?.score ?? 3); openDialog('feedback-dialog'); };
+document.getElementById('feedback-form').onsubmit = event => { event.preventDefault(); const { taskId, itemId } = feedbackTaskRef; const item = state.items.find(entry => entry.id === itemId); const task = item.tasks.find(entry => entry.id === taskId); task.feedback = { adopted: document.getElementById('feedback-adopted').value === 'yes', outcome: document.getElementById('feedback-outcome').value.trim(), metricDelta: document.getElementById('feedback-metric').value.trim(), review: document.getElementById('feedback-review').value.trim(), score: Number(document.getElementById('feedback-score').value) }; closeDialog('feedback-dialog'); render(); };
+document.getElementById('manual-open').onclick = () => { ['manual-title', 'manual-rationale', 'manual-impact'].forEach(field => document.getElementById(field).value = ''); openDialog('manual-dialog'); };
+document.getElementById('manual-form').onsubmit = event => { event.preventDefault(); const title = document.getElementById('manual-title').value.trim(), rationale = document.getElementById('manual-rationale').value.trim(), projectId = document.getElementById('manual-project').value; if (!title || !rationale || !projectId) return; state.items.push({ id: 'i' + itemSeq++, projectId, sourceKind: 'manual', status: 'suggested', title, rationale, expectedImpact: document.getElementById('manual-impact').value.trim(), priority: document.getElementById('manual-priority').value, evidenceLevel: '经验假设', confidence: 0.35, evidence: null, tasks: [] }); closeDialog('manual-dialog'); render(); };
+window.demoExtract = (projectId, reportName) => {
+  const report = state.reports.find(entry => entry.projectId === projectId && entry.name === reportName);
+  if (!report || projectArchived(projectId)) return;
+  report.extraction = { status: 'running', itemCount: null, error: null }; render();
+  setTimeout(() => {
+    report.extraction = { status: 'completed', itemCount: 3, error: null };
+    if (reportName === '渠道活动小结.md') {
+      for (let index = 0; index < 3; index++) state.items.push({ id: 'i' + itemSeq++, projectId, sourceKind: 'extracted', status: 'suggested', title: `（Demo 模拟抽取）渠道活动建议 ${index + 1}`, rationale: '演示数据：实际产品由所选真实模型从报告抽取，并经逐字引用校验。', expectedImpact: '', priority: index === 0 ? 'high' : 'medium', evidenceLevel: '逻辑推断', confidence: 0.55, evidence: { facts: [{ text: '演示事实' }], level: '逻辑推断', reasoning: '演示推导。' }, tasks: [] });
+    }
+    render();
+  }, 1500);
+};
+for (const [id, key] of [['project-filter', 'project'], ['evidence-filter', 'evidence'], ['priority-filter', 'priority'], ['source-filter', 'source']]) document.getElementById(id).onchange = event => { state.filters[key] = event.target.value; render(); };
+document.getElementById('show-dismissed').onchange = event => { state.showDismissed = event.target.checked; render(); };
+render();
+</script>
+</body>
+</html>

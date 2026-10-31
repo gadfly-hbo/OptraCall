@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { catalogCategories, catalogItems, catalogMeta, filterCatalog, type CatalogCategory, type CatalogEntry, type CatalogItem } from './catalog-data.ts';
 
-function CatalogDetails({ item, onClose }: { item: CatalogItem; onClose: () => void }) {
+type PlannedCatalogItem = Exclude<CatalogItem, { status: '已接入' }>;
+
+function CatalogDetails({ item, onClose }: { item: PlannedCatalogItem; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => { if (!dialog.current?.open) dialog.current?.showModal(); }, []);
   return <dialog ref={dialog} className="catalog-dialog" aria-labelledby="catalog-detail-title" onClose={onClose}>
@@ -17,7 +19,7 @@ function CatalogDetails({ item, onClose }: { item: CatalogItem; onClose: () => v
 export function CatalogPage({ category, onCategoryChange, onOpenEntry, onBack }: { category: CatalogCategory; onCategoryChange: (category: CatalogCategory) => void; onOpenEntry: (entry: CatalogEntry) => void; onBack: () => void }) {
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState('全部');
-  const [selected, setSelected] = useState<CatalogItem | null>(null);
+  const [selected, setSelected] = useState<PlannedCatalogItem | null>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const meta = catalogMeta[category];
   const items = filterCatalog(category, query, tag);

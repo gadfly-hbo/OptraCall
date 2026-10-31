@@ -1,6 +1,6 @@
 export const catalogCategories = ['assets', 'scenarios', 'connectors', 'plugins'] as const;
 export type CatalogCategory = typeof catalogCategories[number];
-export type CatalogEntry = 'metric' | 'requirement' | 'enterprise-materials';
+export type CatalogEntry = 'metric' | 'requirement' | 'enterprise-materials' | 'decision';
 export type CatalogItem = {
   id: string; category: CatalogCategory; name: string; description: string;
   tags: string[]; source: string; note: string;
@@ -41,7 +41,7 @@ export const catalogItems: CatalogItem[] = [
   planned('plugins', 'P03', '分析结果验证器', '核对指标、计算、图表与证据是否相互一致。', ['结果验证', '证据检查'], '目录不是验证器结果，未运行项不能标为通过。'),
   planned('plugins', 'P04', '地理空间分析', '为距离、覆盖与区域聚合提供专业计算。', ['空间分析', '门店经营'], '尚无坐标、地图服务或空间计算。'),
   planned('plugins', 'P05', 'Excel／BI 资产复用', '登记已有测算表和查询，说明参数与重算限制。', ['Excel', '资产复用'], '没有重算工作簿，缓存值与实际计算将在接入时区分。'),
-  { id: 'decision-platform', category: 'plugins', name: '决策工作台', description: '为项目、建议、行动与结果复盘预留协同工作区。', tags: ['决策协同', '行动反馈'], source: 'decision-platform 项目 README · 只读核对', status: '预留接入', note: '尚未接入 OptraCall。仅借用项目化看板的布局语义；不复制旧独立 Runtime，不读取远端数据，不执行业务动作。' },
+  { id: 'decision-platform', category: 'plugins', name: '决策看板', description: '跨项目汇总分析报告，抽取建议并跟进采纳、行动与复盘。', tags: ['决策协同', '行动反馈'], source: '本仓库决策看板 · 顶部“决策”入口', status: '已接入', entry: 'decision', note: '读取各项目 060_reports 报告并显式触发模型抽取；进入决策看板页面后，实际能力以该页面为准。' },
 ];
 
 export function filterCatalog(category: CatalogCategory, query: string, tag: string): CatalogItem[] {

@@ -44,10 +44,11 @@ test('CAT-02: tag and query apply together; unmatched input is a real empty resu
   assert.equal(filterCatalog('assets', '完全不存在的占位工具', '全部').length, 0);
   assert.equal(filterCatalog('assets', '指标', '报告模板').length, 0);
 });
-test('CAT-03: decision-platform is a reserved plugin, not an invented numbered candidate', () => {
+test('CAT-03: decision-platform is the connected decision board, not an invented numbered candidate', () => {
   const item = catalogItems.find(item => item.id === 'decision-platform');
   assert.ok(item);
   assert.equal(item.category, 'plugins');
-  assert.equal(item.status, '预留接入');
-  assert.match(item.note, /未接入/);
+  assert.equal(item.status, '已接入');
+  assert.equal(item.entry, 'decision');
+  assert.match(item.note, /决策看板页面/);
 });

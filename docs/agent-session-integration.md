@@ -54,6 +54,8 @@ async function runFeature(
 
 `SessionProfile<Owner>`只提供现有差异：`key`、可选真实`projectId`、`configuration`、`agentOptions`、可选`admit`和能力声明`capabilities`。`configuration`同步选择配置；公共实现捕获完整快照，并在打开和后续派发前核对。`agentOptions`只交出已有获准原生参数，生产路径由公共实现创建`ProjectAgent`。
 
+企业资料与决策看板联合接入继续使用 Interface v1。普通任务提供授权公共目录及可选材料，不改变其工具或分析方式；决策抽取在既有独立 owner/profile 声明非持久 `text-only` 能力，复用封闭文本资源路径而不加载执行扩展／技能／MCP／祖先上下文，也不续接历史或开放命令。它保留原报告 20,000 码点的显式截断合同，包装后的技术传输上限为 65,536 UTF-16；原 `fixed-draft` 的完整输入仍限 20,000。两种封闭文本能力与普通分析的差异不写入额外业务队列，实施证据见[企业资料交付记录](../openspec/changes/enterprise-business-context/delivery.md)。
+
 Host提供`configurationSnapshot`、原有`mutate`、`isClosing`与事件`publish`。测试中的`createAgent`用于受控替换传输，不是Extension自行创建Runtime的接入口。业务校验、文件保存、RAP/SAP/Case解析、lastRun/草稿、发布及结果解释留在原业务适配器。
 
 | 策略 | 项目任务 | 需求梳理 |
