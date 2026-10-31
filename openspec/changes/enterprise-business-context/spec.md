@@ -1,8 +1,8 @@
 # enterprise-business-context：企业业务资料与自主分析上下文
 
-2026-10-31 · LOCAL_IMPLEMENTED_REVIEWED · 五项 A 已实现；514 项测试与构建通过，非作者复核 PASS_WITH_LIMITS，完整范围见 result
+2026-10-31 · MAIN_MERGED_CI_PASS · 五项A已交付，集成后535项检查与CI通过；真实模型质量PARTIAL，见result
 
-用户随后已授权更新 main（含 Qoder 决策看板）、解决冲突、复验与非作者复核、Git/CI 后合并；成功合并后再以合成数据和真实模型走全链路，暂不切换原运行服务。当前交付顺序和范围见 [delivery.md](delivery.md)，不再沿用下文历史阶段的 Git／模型暂缓边界。
+用户随后授权的更新main（含Qoder决策看板）、解决冲突、复验及非作者复核、Git/CI后合并已完成；合成真实模型全链路已实际执行，功能到达决策反馈但质量PARTIAL，原服务未切换。身份与结果见 [delivery.md](delivery.md) 和 [live-flow-result.md](live-flow-result.md)，不再沿用下文历史阶段的Git／模型暂缓边界。
 
 ## 当前实施授权（替代下文原 Demo 阶段的修改范围）
 
