@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { createAgentSessionDomain, type SessionResult } from './agent-sessions.ts';
 import type { RuntimeModelConfiguration } from './config-store.ts';
 import { runtimeDiagnostic } from '../agent/run-diagnostics.ts';
-import type { CreateVerificationInput, VerificationOwner, VerificationRecord, VerificationStore } from './verification-store.ts';
+import type { RunDiagnostic } from '../agent/run-diagnostics.ts';
+import type { CreateVerificationInput, VerificationOwner, VerificationRecord, VerificationStore, VerificationAuthorRevision } from './verification-store.ts';
 import { VerificationStoreError } from './verification-store.ts';
 
 export type VerificationSelection = {
@@ -22,9 +23,10 @@ export function createVerificationSessions(options: {
   admitRecheck(owner: VerificationOwner): void | Promise<void>;
   assertInputs(owner: VerificationOwner): void | Promise<void>;
   stopAuthor(record: VerificationRecord): Promise<void>;
+  prepareRevision(record: VerificationRecord, instructions: string): Promise<Pick<VerificationAuthorRevision, 'mode' | 'configuration'>>;
   projectIds(): Promise<string[]>;
   prepare(projectId: string, taskId: string, selection: VerificationSelection): Promise<CreateVerificationInput>;
-  revise(record: VerificationRecord, requestId: string, instructions: string): Promise<{ outcome: string; text: string; sessionFile?: string; files?: string[] }>;
+  revise(record: VerificationRecord, requestId: string, instructions: string): Promise<{ outcome: string; text: string; sessionFile?: string; files?: string[]; diagnostic?: RunDiagnostic }>;
   export(record: VerificationRecord, text: string): Promise<string>;
 }) {
   const store = options.store;
@@ -132,7 +134,8 @@ export function createVerificationSessions(options: {
     const record = await options.mutate(async () => {
       await options.admit(owner); await options.admitRevision(owner); const record = await store.read(owner);
       if (record.state !== 'completed' || !record.comparisonResult || record.revisionCount) throw new VerificationStoreError('verification_revision_unavailable');
-      return store.update(owner, { revisionCount: 1, authorRevision: { requestId: randomUUID(), status: 'running' } });
+      const metadata = await options.prepareRevision(record, instructions);
+      return store.update(owner, { revisionCount: 1, authorRevision: { requestId: randomUUID(), status: 'running', ...metadata } });
     });
     void (async () => {
       try {
@@ -140,13 +143,14 @@ export function createVerificationSessions(options: {
         await options.mutate(async () => {
           const latest = await store.read(owner);
           if (latest.authorRevision?.status !== 'running') return;
-          await store.update(owner, { authorRevision: { requestId: record.authorRevision!.requestId, status: result.outcome === 'completed' ? 'completed' : result.outcome === 'cancelled' ? 'cancelled' : 'failed', reportText: result.text, ...(result.sessionFile ? { sessionFile: result.sessionFile } : {}), ...(result.files ? { files: result.files } : {}) } });
+          await store.update(owner, { ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}), authorRevision: { ...latest.authorRevision, status: result.outcome === 'completed' && result.text.trim() && result.files?.length ? 'completed' : result.outcome === 'cancelled' ? 'cancelled' : 'failed', ...(result.outcome === 'completed' && result.files?.length ? { reportText: result.text } : {}), ...(result.sessionFile ? { sessionFile: result.sessionFile } : {}), ...(result.files ? { files: result.files } : {}) } });
         });
       } catch (error) { await options.mutate(async () => {
-        if ((await store.read(owner)).authorRevision?.status !== 'running') return;
+        const latest = await store.read(owner);
+        if (latest.authorRevision?.status !== 'running') return;
         const diagnostic = runtimeDiagnostic(error);
         const provenSourceFailure = diagnostic.code === 'verification_source_changed' || diagnostic.code === 'verification_source_missing';
-        await store.update(owner, { authorRevision: { requestId: record.authorRevision!.requestId, status: provenSourceFailure ? 'failed' : 'unknown' }, diagnostic });
+        await store.update(owner, { authorRevision: { ...latest.authorRevision, status: provenSourceFailure ? 'failed' : 'unknown' }, diagnostic });
       }); }
     })();
     return read(owner);
@@ -182,11 +186,14 @@ export function createVerificationSessions(options: {
     await domain.closeAll(filter);
     for (const projectId of filter.projectId ? [filter.projectId] : await options.projectIds()) {
       for (const record of await store.list(projectId)) {
-        if (filter.provider && record.configuration.provider !== filter.provider) continue;
-        if (!['preparing','ready','running'].includes(record.state)) continue;
+        const verifierMatches = !filter.provider || record.configuration.provider === filter.provider;
+        const revisionMatches = !filter.provider || record.authorRevision?.mode === 'fixed-draft' && record.authorRevision.configuration?.provider === filter.provider;
+        if (!verifierMatches && !revisionMatches) continue;
+        if (!['preparing','ready','running'].includes(record.state) && record.authorRevision?.status !== 'running') continue;
         await options.mutate(async () => {
           const current = await store.read(record);
-          if (['preparing','ready','running'].includes(current.state)) await store.update(record, { state: 'interrupted', diagnostic: runtimeDiagnostic({ code: 'runtime_closed' }) });
+          if (verifierMatches && ['preparing','ready','running'].includes(current.state)) await store.update(record, { state: 'interrupted', diagnostic: runtimeDiagnostic({ code: 'runtime_closed' }) });
+          if (revisionMatches && current.authorRevision?.status === 'running') await store.update(record, { authorRevision: { ...current.authorRevision, status: 'unknown' }, diagnostic: runtimeDiagnostic({ code: 'runtime_closed' }) });
         });
       }
     }

@@ -14,7 +14,7 @@ export type VerificationConfiguration = { id: string; revision: number; provider
 export type VerificationResultInput = { text: string; requestId?: string; sessionFile?: string };
 export type VerificationResult = VerificationResultInput & { file: string; sha256: string; savedAt: string; files: VerificationFile[]; captureNotes?: string[] };
 export type VerificationIndependence = { status: 'observed' | 'informed' | 'unknown'; note?: string };
-export type VerificationAuthorRevision = { requestId: string; status: 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown'; reportText?: string; sessionFile?: string; files?: string[] };
+export type VerificationAuthorRevision = { requestId: string; status: 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown'; reportText?: string; sessionFile?: string; files?: string[]; mode?: 'fixed-draft'; configuration?: VerificationConfiguration };
 export type CreateVerificationInput = VerificationOwner & {
   question: string;
   selection: unknown;
@@ -185,8 +185,17 @@ export function createVerificationStore(options: { dataRoot: string }) {
     if (record.authorRevealedAt !== undefined && (!timestamp(record.authorRevealedAt) || !record.coldResult) || record.phase !== 'cold' && !record.authorRevealedAt || record.comparisonResult && (!record.coldResult || !record.authorRevealedAt) || record.recheckResult && !record.comparisonResult || record.state === 'completed' && !(record.phase === 'recheck' ? record.recheckResult : record.comparisonResult)) corrupt();
     return record;
   }
-  async function checkNativeFile(record: VerificationRecord, value: unknown) {
-    const inScope = (file: unknown): file is string => typeof file === 'string' && path.isAbsolute(file) && file === path.resolve(file) && file.endsWith('.jsonl') && Boolean(path.relative(record.sessionDirectory, file)) && !path.relative(record.sessionDirectory, file).startsWith('..') && !path.isAbsolute(path.relative(record.sessionDirectory, file));
+  const revisionWorkspace = (owner: VerificationOwner) => path.join(recordDirectory(owner), 'revision-workspace');
+  const revisionSessionDirectory = (owner: VerificationOwner) => path.join(recordDirectory(owner), 'revision-native');
+  const revisionResourceRoot = (owner: VerificationOwner) => path.join(recordDirectory(owner), 'revision-resources');
+  async function prepareRevisionWorkspace(owner: VerificationOwner) {
+    await read(owner);
+    for (const target of [revisionWorkspace(owner), revisionSessionDirectory(owner), revisionResourceRoot(owner)]) await directory(target, true);
+  }
+  async function checkNativeFile(record: VerificationRecord, value: unknown, revision = false) {
+    const sessionDirectory = revision ? revisionSessionDirectory(record) : record.sessionDirectory;
+    const cwd = revision ? revisionWorkspace(record) : record.workspace;
+    const inScope = (file: unknown): file is string => typeof file === 'string' && path.isAbsolute(file) && file === path.resolve(file) && file.endsWith('.jsonl') && Boolean(path.relative(sessionDirectory, file)) && !path.relative(sessionDirectory, file).startsWith('..') && !path.isAbsolute(path.relative(sessionDirectory, file));
     if (!inScope(value)) fail('verification_native_scope_invalid');
     try {
       const expected = await regular(value as string), handle = await open(value as string, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -196,7 +205,7 @@ export function createVerificationStore(options: { dataRoot: string }) {
         const buffer = Buffer.alloc(65_536), read = await handle.read(buffer, 0, buffer.length, 0), boundary = buffer.subarray(0, read.bytesRead).indexOf(10);
         if (boundary < 0) fail('verification_native_scope_invalid');
         const header = JSON.parse(buffer.subarray(0, boundary).toString('utf8'));
-        if (header.type !== 'session' || typeof header.id !== 'string' || header.cwd !== record.workspace || header.parentSession != null && !inScope(header.parentSession)) fail('verification_native_scope_invalid');
+        if (header.type !== 'session' || typeof header.id !== 'string' || header.cwd !== cwd || header.parentSession != null && !inScope(header.parentSession)) fail('verification_native_scope_invalid');
         const current = await lstat(value as string);
         if (current.isSymbolicLink() || current.nlink !== 1 || current.dev !== actual.dev || current.ino !== actual.ino) fail('verification_native_scope_invalid');
       } finally { await handle.close(); }
@@ -205,6 +214,9 @@ export function createVerificationStore(options: { dataRoot: string }) {
   async function checkNativeReferences(record: VerificationRecord) {
     const pointers = [record.native?.sessionFile, record.coldResult?.sessionFile, record.comparisonResult?.sessionFile, record.recheckResult?.sessionFile].filter(value => value !== undefined);
     for (const file of new Set(pointers)) await checkNativeFile(record, file);
+    // Legacy revisions may point at the original task history. Preserve those
+    // bytes and references; only the new, explicitly tagged profile is ours.
+    if (record.authorRevision?.mode === 'fixed-draft' && record.authorRevision.sessionFile !== undefined) await checkNativeFile(record, record.authorRevision.sessionFile, true);
   }
   async function read(owner: VerificationOwner): Promise<VerificationRecord> {
     const target = path.join(recordDirectory(owner), 'record.json');
@@ -430,6 +442,16 @@ export function createVerificationStore(options: { dataRoot: string }) {
     if (!record.authorRevealedAt) return [];
     return Promise.all(record.authorFiles.map(async file => ({ relativePath: file.relativePath, sha256: file.sha256, bytes: await checked(file) })));
   }
+  async function readDataFiles(owner: VerificationOwner): Promise<{ relativePath: string; sha256: string; bytes: Buffer }[]> {
+    const record = await read(owner);
+    return Promise.all(record.dataFiles.map(async file => ({ relativePath: file.relativePath, sha256: file.sha256, bytes: await checked(file) })));
+  }
+  async function verifyResultFiles(owner: VerificationOwner) {
+    const record = await read(owner);
+    for (const result of [record.coldResult, record.comparisonResult]) {
+      if (!result || digest(await bytes(result.file)) !== result.sha256) fail('verification_snapshot_changed');
+    }
+  }
   async function reconcileInterrupted(): Promise<VerificationRecord[]> {
     const base = path.join(dataRoot, 'analysis-verifications');
     if (!await directory(base, false, true)) return [];
@@ -457,6 +479,12 @@ export function createVerificationStore(options: { dataRoot: string }) {
     verifyWorkspaceInputs,
     stageRevision,
     readAuthorFiles,
+    readDataFiles,
+    verifyResultFiles,
+    revisionWorkspace,
+    revisionSessionDirectory,
+    revisionResourceRoot,
+    prepareRevisionWorkspace,
     reconcileInterrupted,
     workspace,
     recordDirectory,

@@ -6,9 +6,7 @@ import type { ProjectStore, ProjectRecord, TaskRecord } from './project-store.ts
 import { ProjectStoreFault } from './project-store.ts';
 import type { CaseStore } from './case-store.ts';
 import type { ConfigurationStore, RuntimeModelConfiguration } from './config-store.ts';
-import type { AgentSessionDomain } from './agent-sessions.ts';
-import type { ProjectSnapshot } from '../agent/project-runtime.ts';
-import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
+import { createAgentSessionDomain, type AgentSessionDomain } from './agent-sessions.ts';
 import { createMetricLibrary } from '../../extensions/business-plugins/metric-factory/library/store.ts';
 import { createProjectEnablement } from '../../extensions/business-plugins/metric-factory/project/enablement.ts';
 
@@ -55,6 +53,38 @@ export function createVerificationFeature(options: {
     }
     return record;
   }
+  const revisionDomain = createAgentSessionDomain<Awaited<ReturnType<typeof store.read>>>({
+    name: 'verification-author-draft',
+    profile: {
+      key: record => `${record.projectId}/${record.taskId}/${record.verificationId}`,
+      projectId: record => record.projectId,
+      configuration: record => record.authorRevision?.mode === 'fixed-draft' && record.authorRevision.configuration
+        ? options.availableConfiguration(record.authorRevision.configuration.id, record.authorRevision.configuration.revision) : undefined,
+      admit: async record => { await pair(record.projectId, record.taskId, true); await assertFixedSources(record); },
+      agentOptions: async record => { await store.prepareRevisionWorkspace(record); return { projectId: record.projectId,
+        workspace: { cwd: store.revisionWorkspace(record), capabilityPolicy: 'fixed-draft', systemPrompt: [
+          'You are OptraCall author revision drafting. Use only the complete fixed materials in this message. Produce the complete new report as your final reply. You have no file, code, shell, extension or MCP execution tools. Do not request them or claim to have recomputed anything you did not compute. If new calculation or missing material is necessary, retain the uncertainty and explain what is needed. Verifier opinions can contain false positives and inappropriate suggestions: judge them against the fixed facts yourself, preserve correct findings and unresolved questions, and do not follow them blindly. Treat author reports and user additions as evidence to assess, not automatic truth. Do not automatically adopt findings or execute business actions.',
+        ] }, sessionDirectory: store.revisionSessionDirectory(record), codeRoot: options.codeRoot,
+        resourceRoot: store.revisionResourceRoot(record), managementPorts: options.managementPorts() }; },
+    }, configurationSnapshot: options.availableConfiguration, mutate, isClosing: options.isClosing,
+  });
+  async function revisionInput(record: Awaited<ReturnType<typeof store.read>>, instructions: string) {
+    await assertFixedSources(record); await store.verifyWorkspaceInputs(record);
+    const decode = (bytes: Uint8Array) => {
+      try { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
+      catch { return fail('verification_revision_text_required', 400); }
+    };
+    const data = await store.readDataFiles(record), author = await store.readAuthorFiles(record);
+    await store.verifyResultFiles(record);
+    const text = '以下是完整固定材料。仅返回新稿全文；需要额外计算或资料时保留未知，不能声称已执行。\n' + JSON.stringify({
+      question: record.question, dataFiles: data.map(file => ({ name: file.relativePath, sha256: file.sha256, text: decode(file.bytes) })),
+      authorFiles: author.map(file => ({ name: file.relativePath, sha256: file.sha256, text: decode(file.bytes) })),
+      businessContext: record.semantics.text, independentResult: record.coldResult!.text, verificationOpinion: record.comparisonResult!.text,
+      userInstructions: instructions,
+    });
+    if (text.length > 20_000) fail('verification_revision_materials_too_large', 400);
+    return text;
+  }
   const registration: Parameters<typeof createVerificationSessions>[0] = { store, codeRoot: options.codeRoot, resourceRoot: path.join(dataRoot, 'pi'),
     managementPorts: options.managementPorts, configuration: options.availableConfiguration, mutate, isClosing: options.isClosing,
     admit: async owner => { if (options.isClosing()) fail('host_closing', 503); await pair(owner.projectId, owner.taskId, true); },
@@ -64,7 +94,15 @@ export function createVerificationFeature(options: {
       for (const file of record.authorRevision?.files ?? []) if ((await projects.readFile(owner.projectId, file)).bytes.toString('utf8') !== record.authorRevision?.reportText) fail('verification_revision_changed');
     },
     assertInputs: async owner => { await assertFixedSources(owner); },
-    stopAuthor: async record => { const original = await pair(record.projectId, record.taskId); if (original.task.lastRun?.id === record.authorRevision?.requestId) await projectSessions.stop(projectSessions.ref(original)); },
+    stopAuthor: async record => { await revisionDomain.stop(revisionDomain.ref(record)); },
+    prepareRevision: async (record, instructions) => {
+      await revisionInput(record, instructions);
+      const { task } = await pair(record.projectId, record.taskId, true);
+      const model = options.availableConfiguration(task.configuration.id, task.configuration.revision);
+      if (!model) return fail('configuration_required');
+      const { id, revision, provider, model: modelId, name, thinkingLevel } = model;
+      return { mode: 'fixed-draft', configuration: { id, revision, provider, model: modelId, name, ...(thinkingLevel ? { thinkingLevel } : {}) } };
+    },
     projectIds: async () => (await projects.list()).map(project => project.id),
     prepare: async (projectId, taskId, selection) => {
       const owner = await pair(projectId, taskId, true);
@@ -114,48 +152,29 @@ export function createVerificationFeature(options: {
         semantics: { text: semantic.join('\n\n').split(dataRoot).join('[原库路径仅Host保留]'), sources }, ...(selection.retryOf ? { retryOf: selection.retryOf } : {}) };
     },
     revise: async (record, requestId, instructions) => {
-      const owner = await pair(record.projectId, record.taskId, true), ref = projectSessions.ref(owner);
-      if (projectSessions.busy(ref)) return fail('session_busy');
-      const startedAt = new Date().toISOString();
-      return projectSessions.withSession(ref, async lease => {
-        const proceed = await mutate(async () => {
-          if ((await store.read(record)).authorRevision?.status !== 'running') return false;
-          await assertFixedSources(record);
-          await projects.markRun(record.projectId, record.taskId, { id: requestId, status: 'running', startedAt }); return true;
-        });
-        if (!proceed) return { outcome: 'cancelled', text: '' };
-        const stage = async (name: string, text: string) => {
-          const relative = `020_clean/${name}`;
-          try { if ((await projects.readFile(record.projectId, relative)).bytes.toString('utf8') !== text) fail('verification_revision_input_changed'); return relative; }
-          catch (error) { if (!(error instanceof ProjectStoreFault && error.code === 'file_not_found') && (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-          return (await projects.upload({ projectId: record.projectId, directory: '020_clean', name, bytes: Buffer.from(text) })).path;
-        };
-        const findings = await stage(`verification-${record.verificationId}-findings.md`, record.comparisonResult!.text);
-        const basis = await stage(`verification-${record.verificationId}-basis.md`, record.semantics.text);
-        const run = lease.start({ requestId, text: `用户明确要求依据核算意见修订。保留全部原始文件和报告；新脚本/结果使用新文件名。此轮最终回复作为明确的修订交付快照，Host另存新报告，不猜测其他文件是否最终报告。\n问题：${record.question}\n固定目标：${record.authorFiles.map(file => file.relativePath).join(', ')}\n完整核算意见：${findings}\n完整本次业务依据：${basis}。若与旧会话口径冲突，明确保留差异，不悄悄消解。\n核算意见摘要（可能截断，请读取完整文件）：\n${record.comparisonResult!.text.slice(0, 4000)}\n用户补充：${instructions.slice(0, 3000)}\n自主查证后修正，保留剩余分歧/未知，不自动采用或执行业务。` });
-        try {
-          const result = await run.completion;
-          // Diagnose a missing/changed source before task metadata persistence
-          // can fail for that same missing project and obscure the cause.
-          await assertSourceFiles(record);
-          await mutate(async () => {
-            if (!run.context.isCurrent()) return;
-            const snapshot = result.snapshot as ProjectSnapshot | undefined;
-            if (snapshot?.sessionFile) await projects.setSession(record.projectId, record.taskId, snapshot.sessionFile);
-            const diagnostic = readRunDiagnostic(result.diagnostic);
-            await projects.markRun(record.projectId, record.taskId, { id: requestId, status: result.outcome, startedAt, settledAt: new Date().toISOString(), ...(diagnostic ? { diagnostic } : {}) });
+      const ref = revisionDomain.ref(record);
+      const text = await revisionInput(record, instructions);
+      try {
+        return await revisionDomain.withSession(ref, async lease => {
+          if ((await store.read(record)).authorRevision?.status !== 'running') return { outcome: 'cancelled', text: '' };
+          const run = lease.start({ requestId, text });
+          await run.accepted;
+          const snapshot = (await revisionDomain.read(ref)).snapshot;
+          if (snapshot?.sessionFile) await mutate(async () => {
+            const current = await store.read(record);
+            if (current.authorRevision?.status === 'running' && lease.context.isCurrent()) await store.update(record, { authorRevision: { ...current.authorRevision, sessionFile: snapshot.sessionFile } });
           });
+          const result = await run.completion;
+          await assertFixedSources(record); await store.verifyWorkspaceInputs(record); await store.verifyResultFiles(record);
           const files: string[] = [];
           if (result.outcome === 'completed' && result.text.trim()) await mutate(async () => {
             if (!lease.context.isCurrent() || (await store.read(record)).authorRevision?.status !== 'running') return;
+            await assertFixedSources(record);
             files.push((await projects.saveReport(record.projectId, `verification-${record.verificationId}-revision.md`, result.text)).path);
           });
-          return { outcome: result.outcome, text: result.text, sessionFile: (result.snapshot as ProjectSnapshot | undefined)?.sessionFile, files };
-        } catch (error) {
-          await mutate(async () => { if (run.context.isCurrent()) await projects.markRun(record.projectId, record.taskId, { id: requestId, status: 'interrupted', startedAt, settledAt: new Date().toISOString(), diagnostic: runtimeDiagnostic(error) }); }).catch(() => {});
-          throw error;
-        }
-      });
+          return { outcome: result.outcome, text: result.text, ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}), ...(snapshot?.sessionFile ? { sessionFile: snapshot.sessionFile } : {}), files };
+        });
+      } finally { await revisionDomain.close(ref); }
     },
     export: async (record, text) => {
       await pair(record.projectId, record.taskId, true);
@@ -168,9 +187,15 @@ export function createVerificationFeature(options: {
   const feature = createVerificationSessions(registration);
   const assertAvailable = () => { if (storageUnavailable) fail('verification_storage_unavailable', 503); };
   return { ...feature, assertAvailable,
+    revisionBusy: async (projectId: string, taskId: string) => !storageUnavailable && (await store.list(projectId, taskId)).some(record => record.authorRevision?.status === 'running'),
     reconcileInterrupted: async () => { try { return await store.reconcileInterrupted(); } catch { storageUnavailable = true; return []; } },
     busy: async (projectId: string) => storageUnavailable ? false : feature.busy(projectId),
-    closeAll: async (filter: { projectId?: string; provider?: string } = {}) => { if (!storageUnavailable) await feature.closeAll(filter); },
+    closeAll: async (filter: { projectId?: string; provider?: string } = {}) => {
+      if (storageUnavailable) return;
+      const results = await Promise.allSettled([revisionDomain.closeAll(filter), feature.closeAll(filter)]);
+      const failed = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+      if (failed.length) throw new AggregateError(failed.map(result => result.reason), 'verification_close_failed');
+    },
     preview: async (projectId: string, taskId: string, selection: VerificationSelection) => {
       const prepared = await mutate(() => registration.prepare(projectId, taskId, selection));
       const { id, revision, provider, model, name } = prepared.configuration;

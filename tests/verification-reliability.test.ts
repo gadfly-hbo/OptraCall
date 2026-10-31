@@ -86,7 +86,8 @@ test('revision reports a proven source overwrite as failed even when the real SD
   await writeFile(path.join(f.root, 'failed-readback.json'), JSON.stringify(failed, null, 2));
   const persisted = JSON.parse(await readFile(f.recordPath, 'utf8'));
   const owner = await f.request(`/api/projects/${f.project.id}/tasks/${f.task.id}`);
-  const native = (await readFile(owner.task.sessionFile, 'utf8')).split('\n').filter(Boolean).map(line => JSON.parse(line));
+  assert.equal(owner.task.sessionFile ?? null, null, 'revision must not replace the original task pointer');
+  const native = (await readFile(persisted.authorRevision.sessionFile, 'utf8')).split('\n').filter(Boolean).map(line => JSON.parse(line));
   const settled = native.find(entry => entry.customType === 'optracall.run' && entry.data.phase === 'settled' && entry.data.requestId === persisted.authorRevision.requestId);
   assert.equal(settled?.data.outcome, 'completed', 'the regression must exercise an SDK-completed revision');
   await writeFile(path.join(f.root, 'native-termination.json'), JSON.stringify(settled, null, 2));

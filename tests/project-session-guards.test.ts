@@ -1,11 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import { ProjectAgent, type ProjectEvent } from '../src/agent/project-runtime.ts';
 import { createHost } from '../src/host/server.ts';
 import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
+
+test('fixed-draft worker refuses command RPC instead of restoring tools or executing native bash', { timeout: 30_000 }, async t => {
+  const scratch = path.resolve('.local/semantic-verification/revision-closeout', `worker-${randomUUID()}`);
+  const provider = await startSyntheticProvider();
+  const agent = new ProjectAgent({ projectId: 'synthetic-revision', codeRoot: process.cwd(),
+    workspace: { cwd: path.join(scratch, 'workspace'), capabilityPolicy: 'fixed-draft', systemPrompt: ['Use only supplied fixed materials and return a new draft.'] },
+    sessionDirectory: path.join(scratch, 'native'), resourceRoot: path.join(scratch, 'resources'), managementPorts: [],
+    configuration: { id: 'synthetic-revision', revision: 1, name: 'Synthetic revision', provider: 'custom-synthetic-revision', api: 'openai-completions', baseUrl: provider.baseUrl, model: 'synthetic-guard', apiKey: 'synthetic-only-key' },
+  });
+  t.after(async () => { await agent.close(); await provider.close(); });
+  assert.deepEqual((await agent.open()).tools, []);
+  for (const command of ['/reload', '/fork', '/new', '/tools', '! echo MUST_NOT_EXECUTE', '/model other', '/skill:unsafe']) {
+    await assert.rejects(agent.command(command), error => Boolean(error && typeof error === 'object' && 'cause' in error && /fixed_draft_commands_not_allowed/.test(JSON.stringify(error.cause))));
+    assert.deepEqual((await agent.snapshot()).tools, []);
+  }
+  assert.equal(provider.requests.length, 0, 'native commands must be refused before prompt/tool execution');
+  const turn = agent.start('Complete fixed UTF-8 material: amount=10. Return new draft only.', randomUUID());
+  await turn.accepted; assert.equal((await turn.completion).outcome, 'completed');
+  assert.equal(provider.requests[0]!.body.tools?.length ?? 0, 0);
+  assert.deepEqual((await agent.snapshot()).tools, []);
+});
 
 test('SM05/SM07: restored task rejects stale editor events and preserves native snapshot/UI event order', { timeout: 30_000 }, async t => {
   const scratch = await mkdtemp(path.join(os.tmpdir(), 'optracall-resource-guard-'));

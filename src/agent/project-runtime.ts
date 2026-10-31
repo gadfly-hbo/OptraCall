@@ -7,7 +7,7 @@ import type { RuntimeModelConfiguration } from '../host/config-store.ts';
 import { runtimeEnvironment } from '../../scripts/runtime-process.ts';
 
 /** Replacement workspace for non-project agent sessions (e.g. business plugins). */
-export type AgentWorkspace = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[] };
+export type AgentWorkspace = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[]; capabilityPolicy?: 'fixed-draft' };
 /** Host-provided context receipt; this describes delivery, not business adoption. */
 export type ProvidedContextInput = { rap?: { instanceId: string; version?: string; text: string }; case?: { operationId: string; summary?: string } };
 export type ProjectAgentOptions = { projectId: string; projectDirectory?: string; workspace?: AgentWorkspace; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string };

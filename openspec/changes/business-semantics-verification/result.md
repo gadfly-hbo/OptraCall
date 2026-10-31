@@ -1,10 +1,12 @@
 # 实施与验证记录
 
-2026-10-30—31 · **保全验收 FAIL，禁止合并 main** · [SV01–SV12规格](spec.md)
+2026-10-30—31 · **修订工程/保全复验通过，专业质量 PARTIAL；历史FAIL保留** · [SV01–SV12规格](spec.md)
 
-**阻断结论：** 作者修订违反原件保全，完整SV11失败。真实环境257份既有文件、2份配置、Case数据库逻辑及凭据与开始时一致；损坏发生在隔离合成评估项目。当前只做必要工程诊断/资源释放收尾及草稿审查，不安装、不切服务、不合并main。后续权限/修订流程须确认[聚焦收尾建议](../../../docs/verification-revision-preservation-followup.md)。
+**当前结论：** 用户确认的只读出稿接缝已完成工程及有限真实行为保全复验；另存新稿不改原任务会话。六份真实新稿5正确、1重要错误，后者复查仍漏报，未被采用，专业质量保持PARTIAL。全部适用验收、非作者最终复核和实际head CI约束工程交付；Git、运行服务采用与产品验收分开。下述原全工具修订破坏合成原件的FAIL、UNKNOWN及旧现场保留，不倒写为成功。实际原257文件、2配置、Case逻辑和凭据末次比较一致。
 
 用户已确认v0.1并授权实施、真实模型合成对照、完整验证和Git/CI后合并main。已更新origin/main，基线为`e30dd1997d7ae26da5e0352be8089dde96401850`，工作分支`codex/business-semantics-verification`。运行服务采用和产品验收分别报告。
+
+2026-10-31补充确认：用户已批准只读固定材料出稿、Host另存的新修订权限方案，在原PR #12继续交付。新基线23:12 UTC复核257文件、2配置、Case逻辑均与上轮最终快照一致；凭据只读、摘要仅进程内保存。工程RED先在全新合成fixture通过真实HTTP→SDK复现旧模型bash实际覆盖报告/删除数据，没有改动旧事故或真实根；当前结果见文末新收尾记录。
 
 ## 实施范围
 
@@ -99,10 +101,53 @@ A使用现有ProjectAgent/worker的原生Pi薄适配，不是完全裸SDK，因�
 
 非作者Standards限定工程复核PASS：受影响21/21，独立真实原子替换探针8000次读取无错误，实际观察到132次合法path nlink=0；最终28文件哈希一致。另一非作者Spec限定工程增量PASS：独立28/28，代码及7份文档未发现新增P1/P2，待确认建议没有扩权实现。全部真实模型结果仍属于candidate-02，未在r3复跑；新增工程GREEN不代表真实模型保全修复，P1和完整SV11 FAIL继续开放。
 
-## 兼容与交付状态
+## 兼容与草稿交付状态（candidate-03-r3历史）
 
 初始只读保全快照含257份既有项目/会话/发布物/文件、2份配置文件及decision-cases.sqlite3逻辑状态；凭据摘要只在进程内比较。产品无数据库、project schema或发布格式迁移。最终只读复核时间为2026-10-30 18:19:33 UTC：257文件、2配置均无增加/缺失/字节变化，Case数据库schema/逐表行摘要一致，凭据字节仅进程内比较一致。`preservation/final-after.json`与`final-comparison.json`保留，不包含凭据摘要。
 
 Git已创建草稿[PR #12](https://github.com/gadfly-hbo/OptraCall/pull/12)，首提交`337abb0846c3920984ff344662d524017dc4e294`；7份文档与最终r3增量均经非作者复核。main在提交前重新fetch仍为`e30dd19`，没有新增基线需要集成。当前提交身份和托管检查以该PR的Commits及[Checks](https://github.com/gadfly-hbo/OptraCall/pull/12/checks)为准，本地最终读回保存于`git-delivery-receipt.json`；工程CI不改变完整SV11 FAIL，**不合并main**。首次推送因Git引用已删除的旧gh路径而失败，后以本次命令级现有gh凭据助手成功推送，未修改全局配置。
 
 Mac mini原运行服务和MacBook均未切换，现有项目、会话和文件不作为工程测试工作区。旧代码可继续读取原对象，但通常不显示新核算目录；回退先停止活跃核算，保留新增目录和文件，不用旧备份覆盖新增工作。
+
+## 已确认的只读出稿收尾
+
+### 接缝与工程复验
+
+Host静态注册`verification-author-draft`，继续用Interface v1和原Pi。修订不续接原作者native；Host提供完整固定数据、语义、原稿、冷读依据及核算意见，新资源仅返回新稿，Host另存到`060_reports`。SDK创建时`tools:[]`、`noTools:'all'`、`excludeTools:['*']`，不加载磁盘扩展、MCP、skills、prompt templates或上下文文件，原生命令不可调用；仅保留可信保存前脱敏扩展。普通分析/初次核算/知情复查的工具策略保持原状，不加OS沙箱、IR或固定计算方法库。
+
+旧record format1原位可读，新`authorRevision.mode/configuration/sessionFile`仅为可选执行证据。附属cwd/native/resources位于本record的`revision-workspace`、`revision-native`、`revision-resources`；原任务指针/父链/draft/lastRun及JSONL全文不改。固定材料UTF-8不能完整解码或全文超过20,000个JS UTF-16字符，在派发前拒绝、不占修订次数，不截断或回落全工具。
+
+最终候选`candidate-04-r2`完整30代码/测试文件codeDigest为`c4f9a513ccb2061cfa8dfd1916d863402007e2dc90d58ab189443b82de786c79`，manifest SHA `b4ba56515e65a38742ff040782994de7c7603391052ec7c160942283b69ea2c2`。本地完整491/491、边界检查、TypeScript和构建通过；两位非作者各自独立重验后代码工程限定PASS。
+
+旧candidate04虽本地488通过，独立复核检出两项P2，失败保留：原任务commands在拒绝前markRun改历史；清核算Provider B误将Provider A修订标unknown。修正为mutate内markRun前准入，以及每阶段按其捕获Provider标状态；永久RED→GREEN及独立7/7受影响复验完成。源固定后未随模型成绩再修改。
+
+SDK独立正反探针证明：仅隐藏active工具仍可经deferred间接执行；空允许清单下10种强制工具调用及动态注册/reload/重开均不能执行。最终产品另经非作者实际Worker/Host验证9种工具拒绝、7种命令拒绝、磁盘`.js`扩展加载正控、分片密钥脱敏，以及取消/配置/迟到/关闭、并发准入、保存碰撞、附属软链/跨owner和legacy无mode只读。没有以工具名字为空替代实际行为测试。
+
+### 新根有限真实复测
+
+固定六条件：3份事前自然重要错、固定错误E01/正确C01、另列1份后验不当建议T06。只从仓库内事前冻结合成副本取数据/原稿/语义/cold/compare，建立全新project/task/verification及纯user历史哨兵；不访问、恢复或重放旧事故。导入通过公开Store方法，明确`informed`、工程历史导入，未伪造新cold、Provider assistant或usage。六份完整输入10,478—13,644个UTF-16字符，无裁剪，未把golden/评分规则送入Agent。
+
+模型仍为原选MiniMax M3.1 Flash、官方Anthropic线路及原生metadata，source revision5映射新隔离local revision1，实际native均high。隔离配置只存假密钥，原已审核instance snapshot接缝仅内存替换密钥，不中继、不改模型或工具外推配置。准备脚本首轮因把060报告当上传目录而中止，0模型；修正评估入口后新根准备成功，原准备失败留存、不算产品RED或模型尝试。
+
+按HTTP正常入口实际6次出稿POST、冻结六稿评分后6次知情复查POST；共12个新业务turn均有SDK started/settled、唯一requestId、Host终态及新产物对应。无重放、换模型、额外裁判或第二轮改稿。每次派发前后和关闭后比对所有6项目的完整目录条目、固定材料、全部任务状态、普通native全文及核算native；只允许本次新增报告、附属native/resources和复查的合法追加。6出稿和6复查均技术完成、源完整性4项true、正常关闭，所有原件/原任务不变。
+
+| 条件 | 新稿专业评分 | 一次知情复查 |
+| --- | --- | --- |
+| T04 r1 | 正确，删除无依据的0—12pp因果限制 | 主目标判断准确；中间统计代码错误自行修正，过程保留 |
+| T04 r2 | 正确，纠正假设性基线方向 | 主目标判断准确；中间自写计算问题及轻微来源误归属另记 |
+| T05 r2 | 正确，将缺货压低74单/日降为待验证假设 | 主目标判断准确，仍重复旧摘要位数虚警 |
+| E01 r1 | 正确，修复总110/店内52/线上58 | 主目标判断准确，但附加会员情景总额写80，应78 |
+| C01 r1 | 保留正确110/52/58 | 主目标判断准确；“折扣/退款不共现就不可能重复扣”的辅助推理错误另记 |
+| T06 r1，后验风险诊断 | **新增重要错**：将未确认的非负/无抵扣等前提当事实，排除“门店承担且已含→207”分支 | **漏报并维持错误建议**，把同一未证前提写成`x≤35`代码枚举；代码执行没有验证业务前提 |
+
+六稿为5 correct/1 important_error；事前三自然固定三配对净变化+3，但原正确自然样本分母为0，不能估计一般“正确→错”概率。T06单列correct→important_error，不拿前三稿收益抵消。复查主目标准确5/6不表示全文无误，附加错误均保存。错误新稿确实已另存，**没有用户采用或真实经营动作**；采用后条款为NOT_RUN，不记PASS或无风险。六稿评分冻结SHA `6ebcc957601c4cad9d6d7bc884dc0d3db088db216802492ea095affad7509966`；六复查评分冻结SHA `a74fbadf8347b482a78314765ec081b9e0e1de77372ca31bf8c21339dfcda215`，后者不改前者。
+
+专业结论保持PARTIAL，不宣称完整SV11、通用正确率或产品验收。核算由用户显式发起，不自动对每轮分析运行、不自动采纳或发布资产。按原SV11关于未采用错误单列、工程/未达标质量分别交付及SV12关于Git/运行/验收分开的约定，工程交付与专业限制分别报告；不设置新的“六稿必须全对”门槛，也不把后验风险混入原旧对照分母。原candidate02的60/48成绩仍属旧候选，不移植为新模型PASS。
+
+### 最终兼容、凭据与交付证据
+
+- 原真实资料末次只读比较2026-10-30 23:54:57 UTC：257文件、2配置、1个Case数据库schema/逐表行摘要均无增减/字节或逻辑变化；凭据仅进程内比较一致，证据不保存其摘要。
+- 基线`2f732ce`旧Store reader可读6个新mode/configuration/附属native记录，不初始化原Store，不改写record。原项目schema、SQLite、RAP/SAP0.2与发布字节均未迁移；回退先停活跃操作，保留新增文件，不覆盖旧备份，不恢复旧全工具修订。
+- 新运行根241个普通文件源密钥literal/JSON转义/URI变体扫描0匹配、0跳过；不冒称OS全盘访问或落盘审计。12业务turn捕获73个assistant/response ID（仅可见响应下界）、81工具调用/81结果；SDK totalTokens 1,461,160，reasoning另列38,188不重复加总，SDK费用估计0.0970976316，供应商结算及完整API请求数UNKNOWN。
+- 浏览器用隔离合成Provider走完核算、只读出稿、一次复查、另存和文件刷新，4个本地合成请求、0外部模型、0浏览器错误；原CSV/作者字节不变。截图仅作界面证据，不证明专业正确。专属标签和4183测试Host已关闭，原4173服务PID26365保持。
+- 固定候选、两次完整检查、非作者复验、旧reader、12次真实阶段/评分、最终比对及`final-runtime-audit.json`等保存在`.local/semantic-verification/revision-closeout/`，不提交原生对话、凭据或私有日志。工程Git交付继续使用[PR #12](https://github.com/gadfly-hbo/OptraCall/pull/12)，最终head/CI/合并以该PR及[Checks](https://github.com/gadfly-hbo/OptraCall/pull/12/checks)实际读回和本地交付收据为准。合并前重新更新main并核候选，不据CI推断专业正确；Mac mini运行采用、MacBook和产品验收仍未执行。

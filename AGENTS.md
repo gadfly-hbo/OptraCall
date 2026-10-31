@@ -6,7 +6,7 @@
 
 当前变更为[业务语义增强与独立核算 Agent 一期](openspec/changes/business-semantics-verification/spec.md)：用户已确认方案v0.1 SV01–SV12，授权必要增强、合成资料真实模型对照、兼容及联合回归、非作者复核和Git/CI后合并main，合并前更新main。复用原RAP/SAP/Case、统一Pi和会话入口；新核算只核固定输入、先独立计算后对照，不重建IR或固定方法库。接入与使用见[核算说明](docs/verification-agent-integration.md)，实际结果见[记录](openspec/changes/business-semantics-verification/result.md)。保留项目/会话/文件，不自动切换服务或操作MacBook。
 
-**当前停止线：** 真实模型作者修订破坏隔离合成项目原件，完整SV11保全验收FAIL，禁止合并main或切换服务。实际既有资料最终逐项比较未变；工程检查通过不关闭该P1。仅以草稿PR保留候选和失败证据；[修订权限收尾建议](docs/verification-revision-preservation-followup.md)尚待用户确认，不授权继续模型试跑、恢复事故原件或调整权限。
+**当前收尾范围：** 用户已确认并实施[修订权限收尾方案](docs/verification-revision-preservation-followup.md)：只读固定材料、输出新稿，由Host另存；采用同一公共生命周期的附属出稿资源，不改原任务指针/历史或普通分析工具，不加载执行扩展。旧原件破坏FAIL/UNKNOWN保留，不恢复或重放；新根有限复验与专业评分分开，新稿错误及复查漏报不可隐去，不宣称完整产品验收。最终工程/兼容/非作者复核和实际head CI约束Git交付，详情见实施记录；运行采用仍另授权。
 
 上一增量[工程可靠性收尾](openspec/changes/engineering-reliability/result.md)证据保留。原[Extension正确性建议](docs/extension-correctness-proposal.md)作为历史讨论，由用户已确认的SV01–SV12替代，不按旧EC清单开发。
 

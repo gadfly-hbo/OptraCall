@@ -2,7 +2,7 @@
 
 版本 v0.1 · 2026-10-30 · 用户已整体确认 SV01–SV12
 
-2026-10-31实施状态：完整SV11保全验收FAIL，当前禁止合并main，详见[实际记录](../openspec/changes/business-semantics-verification/result.md)。以下保留原确认方案；[修订权限补充建议](verification-revision-preservation-followup.md)尚待确认，不作为已实施决定。
+2026-10-31实施状态：历史完整SV11保全FAIL保留；用户已批准并实施[修订权限补充方案](verification-revision-preservation-followup.md)，新只读出稿接缝的工程/保全复验与专业PARTIAL分别交付。以下保留原确认方案；最终复核、CI/合并、运行采用与产品验收详见[实际记录](../openspec/changes/business-semantics-verification/result.md)，不以补充确认代替验收。
 
 本期让 RAP、SAP、Case 提供更准确、可追溯的业务背景，并增加由用户发起的独立核算能力。分析和核算都由 Agent 自主选方法、写代码和执行，Host 管输入、会话、保存与展示，不重建 IR、固定计算方法库或通用统计裁判。
 

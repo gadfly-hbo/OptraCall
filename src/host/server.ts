@@ -90,6 +90,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if (closing) throw new RequestFault(503, 'host_closing');
         const { task } = await pair(owner.project.id, owner.task.id, true);
         if (clearing.has(task.configuration.provider)) throw new RequestFault(409, 'configuration_required');
+        if (await verification.revisionBusy(owner.project.id, owner.task.id)) throw new RequestFault(409, 'session_busy');
       },
       agentOptions: async owner => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
@@ -477,6 +478,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                 const prepared = await mutate(async () => {
                   const { project, task } = await pair(projectId, taskId, true), previous = await priorRequest(project, task, requestId, fingerprint);
                   if (previous) return { previous };
+                  if (await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
                   if (input.caseContext) {
                     const selection = input.caseContext as CaseContextSelection, record = cases.getCase(selection.caseId);
                     if (record.status === 'closed') throw new CaseStoreError('case_closed', 409);
@@ -540,6 +542,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                 const previous = await mutate(async () => {
                   const { project, task } = await pair(projectId, taskId, true), prior = await priorRequest(project, task, requestId);
                   if (prior) return prior;
+                  if (await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
                   startedAt = new Date().toISOString();
                   await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt });
                 });
@@ -571,7 +574,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const originalCode = error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
       const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
       const status = error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
-      json(response, status, { code, message: code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
+      json(response, status, { code, message: code === 'verification_revision_materials_too_large' ? '修订固定材料全文超过20,000字符，请缩小本次核算所选资料后新建核算；未启动修订模型，不会截断或恢复执行工具。' : code === 'verification_revision_text_required' ? '修订出稿仅接收完整UTF-8文本材料；所选文件不能解码，未启动修订模型。' : code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }
   })(); });
   return { server, ready, configuration, projects, cases, close: async () => {

@@ -2,7 +2,7 @@
 
 2026-10-30 · 用户已确认方案 v0.1 SV01–SV12并授权实施／验证／GitCI合并
 
-2026-10-31状态：**完整SV11保全验收FAIL，禁止合并main。** 失败、工程收尾与兼容结果见[记录](result.md)。[权限与修订收尾建议](../../../docs/verification-revision-preservation-followup.md)尚未获准，原确认范围不因此自动扩大。
+2026-10-31状态：历史完整SV11保全FAIL保留；用户已确认并实施[权限与修订收尾方案](../../../docs/verification-revision-preservation-followup.md)。工程/保全、专业PARTIAL、最终非作者复核、CI/合并及运行采用分别见[记录](result.md)；适用门槛和复核未完成前不得合并，不以工程交付冒称产品验收。
 
 基线 origin/main `e30dd19`；工作分支 `codex/business-semantics-verification`。完整决定与逻辑结构以[确认方案](../../../docs/business-semantics-and-independent-verification-phase1-proposal.md)为准，12项用户决定均为确认、一致。沿用工程规范v1.1、IN01–IN07、Agent Session Interface v1。
 
@@ -17,6 +17,17 @@
 ## 验收接缝
 
 用户批准SV08/SV11的公开保存/读取、Host HTTP／真实SDK、原生记录及UI操作接缝作为TDD/回归表面。按确定性行为逐片RED→GREEN，不以私有Map断言或源码匹配代替行为。
+
+### 已确认的作者修订收尾
+
+- 使用原Interface v1公共生命周期的附属出稿资源，owner仍绑定原project/task/verification。只接收固定材料正文和核算意见，生成完整新稿，由Host使用唯一文件名保存。原任务sessionFile/父链/历史、普通分析工具配置不改写；新资源仍按项目/Provider/退出范围取消和关闭，不建第二SDK入口或运行台账。
+- 出稿资源从创建时不注册执行工具，不加载skills/prompts/context files、MCP或动态扩展；不能以隐藏工具名代替撤销可调用能力。若完整固定材料超出可承载范围，明确拒绝并保留未知，不截断或回落全工具。此项为修订资源权限，不是普通分析或独立核算的OS沙箱。
+- 通过实际SDK受控调用证明write/edit/bash、codemode/deferred、MCP及动态工具均不能执行；失败/取消/配置变化/迟到/关闭/重开不污染普通分析。新稿必须新增，固定输入、原项目目录和原native前缀前后核对，旧unknown和事故现场不回填/恢复。
+- 有限真实复测在全新隔离合成根复用预先固定的六个修订条件，分别保留3个自然错误、固定错误/正确对照和1个后验不当建议诊断，不能伪装新独立收益样本。每条件最多一次新出稿及一次显式复查，先冻结新稿评分再显式发起复查；不重跑旧事故或无限追加。保持原模型及原生配置保真，模型专业质量和权限保全分开评分。
+
+修订附属记录沿用已批准SV08的可选执行证据/结果引用逻辑组，保持record format 1和旧对象可读，不改项目schema、SQLite、RAP/SAP格式。确有必要新增的物理指针及缺失处理须在实现前固定并验证，不能以缺省值触发旧全工具修订。
+
+物理接缝固定在既有record目录`<dataRoot>/analysis-verifications/<projectId>/<taskId>/<verificationId>/`：`revision-workspace`为附属cwd，`revision-native`保存独立JSONL，`revision-resources`为干净SDK资源根。复用`authorRevision.sessionFile`记录附属native，可选新增`mode:'fixed-draft'`及非敏感`configuration`（id/revision/provider/model/name?/thinkingLevel?）；会话未创建时sessionFile缺省，配置不包含凭据。新mode仅允许本记录的revision-native/cwd及内部父引用；旧无mode记录保持可读，不当成新附属资源，不恢复旧全工具策略。Host静态profile为`verification-author-draft`，公共工作区可选能力标识`capabilityPolicy:'fixed-draft'`不由前端自由注册。
 
 | ID | 验收 |
 | --- | --- |
