@@ -1,6 +1,6 @@
 # 企业业务资料：更新 main、Git/CI 交付与合并后全链路
 
-2026-10-31 · LOCAL_INTEGRATION_VERIFIED · Git/CI 交付进行中，真实模型仍待 main 合并后执行
+2026-10-31 · MAIN_MERGED_CI_PASS · Git/CI 交付完成，合并后真实模型全链路结果另记
 
 ## 本次用户授权
 
@@ -57,4 +57,17 @@
 
 非作者最终复核为 **PASS_WITH_LIMITS**，两项独立复现的 P2 已关闭，无未关闭标准／规格发现；独立最终原生七项与边界检查通过，另保留企业／联合闭环／资源检查证据及测试工件范围偏差说明。46 文件候选逐字节／SHA 核对一致，清单 `85e816105e62367ccc8d2b9be2e5e889c68808a6d97121d0cd012f00a02471c4`。正式报告见 [delivery-independent-review.md](delivery-independent-review.md)。后续本节和报告入库仅改说明，不改变已验源码／测试。
 
-公开内容检查未发现真实凭据或经营数据；既有默认数据根未初始化／写入，原运行服务不切换。当前证据仍不等于托管 CI、main 成功合并或真实模型效果，后续按真实状态追加。
+公开内容检查未发现真实凭据或经营数据；既有默认数据根未初始化／写入，原运行服务不切换。上述本地固定候选证据只代表当时范围，托管 CI、合并与模型结果如下分开记录。
+
+## 实际 Git／CI 与 main 合并
+
+- 功能及集成 head 为 `89a57fd13f3d3a04f77b0e9f156d5b4249e17255`，源码树 `4f124b0b235ffa0d561f0cef83edfbb28c96a34c`。[PR #15](https://github.com/gadfly-hbo/OptraCall/pull/15) 的[实际 head CI](https://github.com/gadfly-hbo/OptraCall/actions/runs/41178618497) 成功：535/535、边界、类型、构建及依赖审核通过。
+- 合并前再次 fetch，main 仍为 `913fd383085764c60fd28c6d758aeba9f6638301`，无需再次重验不同基线；预期 head 校验后 squash 合并为 `aa79262a2c3f11de4affd76abf13477f12c60387`。
+- [main push CI](https://github.com/gadfly-hbo/OptraCall/actions/runs/41178916872) 成功；合并树与通过检查的候选树逐字节一致。canonical main `/Users/bendandebaba/DevWorkSpace/OptraCall` 干净快进至该提交，并重新构建成功。非作者合并后只读复核再次确认身份、两次 CI 与源码／测试字节。
+- 初次 push 遇到机器既有 Git credential helper 指向失效路径；只在该次命令使用现有 `gh` 登录的 helper 覆盖后成功，不改全局 Git 配置、不新增凭据。
+
+证据保留在 `.local/enterprise-business-context/delivery/merged-delivery.json`、`main-ci-final.json` 和 `independent-review/POST-MERGE.md`；合并后复核原文入库为 [delivery-post-merge-review.md](delivery-post-merge-review.md)。原文的HEAD／WIP是其审计时点，证据目录定位见 [原文出处与时点](live-flow-result.md#独立原文的出处与时点)。main源码同步与构建不代表运行采用，既有服务没有切换；真实模型只在成功合并后启动的独立合成数据根执行。
+
+## 合并后实测结论
+
+独立合成真实模型试验已完成，详见 [live-flow-result.md](live-flow-result.md)：需求、企业资料与Case背景、RAP／SAP、分析、核算、决策抽取、逐项采纳／弃用、任务反馈及刷新／重开均有实际记录。前两次分析 terminated，第三次精简输出后完成；原稿含建议依据错误，核算检出该错但自身新增两项错误，看板忠实传播原错。**功能到达反馈，整体质量 PARTIAL，不能宣称一遍走通、原稿整体采用或产品验收通过。** 原稿未整体采用进Case，未修复或覆盖错误；只模拟使用独立核对正确的North项。测试资源已关闭，原服务与默认配置保留。

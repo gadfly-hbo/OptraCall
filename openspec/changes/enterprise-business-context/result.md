@@ -1,8 +1,8 @@
 # enterprise-business-context：规格、UI 与实施记录
 
-2026-10-31 · LOCAL_IMPLEMENTED_REVIEWED · 五项 A 已实现；514 项测试、构建及完整候选非作者复核完成，结论限本地工程
+2026-10-31 · MAIN_MERGED_CI_PASS · 更新main集成后535项检查与托管CI通过；真实模型全链路专业质量PARTIAL
 
-后续用户已授权 Git/CI 交付、更新 main 并处理 Qoder 决策看板冲突、检查通过后合并，以及成功合并后的真实模型合成全链路。该阶段正在执行，实际结果见 [delivery.md](delivery.md)；以下未 Git／未调用真实模型的结论保留其原本地候选阶段范围。
+后续用户授权的 Git/CI 交付、更新main及Qoder决策看板冲突处理已完成，PR #15合并为`aa79262`，PR及main CI均通过。真实模型合成试验经两次失败及显式精简续写后到达决策反馈，但原稿和核算成品均有专业错误，整体质量PARTIAL；未整体采用错误报告，未切原服务。实际结果见 [delivery.md](delivery.md) 和 [live-flow-result.md](live-flow-result.md)；以下未Git／未调用真实模型的结论保留其原本地候选阶段范围。
 
 ## 当前实施进度
 
