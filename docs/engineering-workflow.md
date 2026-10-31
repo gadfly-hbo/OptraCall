@@ -4,7 +4,11 @@
 
 ## 1. 当前范围与依据
 
-当前增量为[工程可靠性收尾](../openspec/changes/engineering-reliability/spec.md)：用户已确认失败诊断、连接观察恢复、采用版本追溯；保留现有项目、任务、会话和文件，不新增硬沙箱、不自动重放或换模型。完成本地/兼容检查、RAP+SAP+Case联合回归、非作者复核与Git/CI后合并main，合并前更新main。仅使用隔离合成Provider和资料验证，不自行切换现有运行服务或操作MacBook。Extension正确性另见[待确认建议](extension-correctness-proposal.md)，本轮不实施。
+当前增量为[业务语义增强与独立核算 Agent 一期](../openspec/changes/business-semantics-verification/spec.md)：用户已确认v0.1 SV01–SV12，授权复用现有RAP/SAP/Case的必要增强、新核算接入、本地检查、兼容保全、联合回归、真实模型合成对照、非作者复核及Git/CI后合并main，合并前更新main。保留项目、会话和文件；不重建IR或固定方法库、不新增硬沙箱、不自动重放或换模型，不切原运行服务，不操作MacBook。原[EC建议](extension-correctness-proposal.md)留作历史讨论，由[确认方案](business-semantics-and-independent-verification-phase1-proposal.md)取代。
+
+**当前交付收尾：** 用户已确认并实施[修订权限收尾方案](verification-revision-preservation-followup.md)，仅修订出稿资源收窄能力：读取固定正文、输出新稿、Host另存，使用统一生命周期的附属资源，不替换原任务指针/历史，不影响普通分析全工具策略。新根工程与有限真实保全复验、旧资料末次比较分别有证据；模型专业质量仍有重要错/漏报，保持PARTIAL、错误稿未采用，不宣称完整SV11或产品验收。旧原件破坏FAIL/UNKNOWN不恢复、清理或重放；全部适用验收/非作者复核/实际head CI约束工程合并，运行采用不自动进行，实际交付见本变更记录。
+
+上一增量为[工程可靠性收尾](../openspec/changes/engineering-reliability/result.md)，失败诊断、观察恢复和采用版本能力及其实际交付证据保持原范围，不代表分析正确性已解决。
 
 上一增量为[一键更新GitHub校验修复](../openspec/changes/trial-authenticated-update/spec.md)：用户授权修复匿名限流问题，保留现有项目、任务、会话和文件，完成检查、非作者独立复核与Git/CI交付并合并main；合并前更新main。随后在Mac mini实际采用，并以合成数据、真实模型从需求梳理开始验证当前产品全链路，不设模型测试预算上限；仅本地模拟经营动作，不授权真实业务派发或其他设备操作。执行、受限项与交付分别记入本变更[记录](../openspec/changes/trial-authenticated-update/result.md)及本地真实测试报告。
 
@@ -76,6 +80,10 @@ Codex 与 Qoder 在同一工程规范下协作。每项变更明确修改范围�
 
 规范完成验收须分别记录当前Codex/Qoder版本、实际项目入口及读取证据；文件存在或加载器支持某文件名不等于任务已读取。未实际验证的工具项记NOT_RUN，不能宣称固化全部通过；不得为凑通过改全局配置、调用未获准模型或启动MacBook开发。静态导入检查只覆盖已知绕过形式，仍需实际调用链、行为回归及非作者复核。
 
+独立核算沿用Interface v1，由Host的核算适配器静态注册profile；owner包含真实projectId/taskId/verificationId，原任务资源和结果权威保持原位。按已确认SV05先固定独立结果再提供作者产物；核算、显式作者修订、一次复查和用户采用分开，不从completed推断专业正确或经营效果。固定输入、快照、原生指针归属与普通文件完整性由Host核对，不承担统计计算裁判。`SessionTurn.providedContext`是向后兼容的可选交付回执，新JSONL自定义记录可保存实际来源，旧记录不回填；SAP记录资源实际初始化索引，不使用当前启用列表伪造历史采用。详细技术与可观察限制见[核算接入说明](verification-agent-integration.md)。Codex/Qoder及其他开发者修改此接缝均先读本节与该说明；不建立平行Runtime、全局运行队列或固定方法注册中心。
+
+已确认的修订出稿使用Host静态`verification-author-draft`附属profile和`fixed-draft`能力策略，由同一Interface v1管理。固定全文由Host读入，创建时不注册可执行工具，不自动加载技能、上下文文件、MCP或扩展；只允许产品可信脱敏扩展，不向业务Ref暴露SDK管理对象或原生命令。不得仅隐藏工具名、临时修改原分析会话后依赖finally恢复，或在材料过大时回落全工具。新native归本记录的revision-native，原项目会话指针/父链/历史保持原位，原普通分析及独立核算的既有工具策略不变。接入必须覆盖实际工具拒绝、动态/间接调用、取消/关闭/重开和原件字节保全；空工具不代表内容正确或OS沙箱。
+
 ## 3. 连续 SDD 与 TDD
 
 每项非平凡变更在 `openspec/changes/<change-id>/` 维护一份简洁规格和现有结果记录；首次实际变更时再创建目录。必要设计和证据用链接关联，普通纠错更新原记录。最少写清：完整可观察结果、需求/验收标识、范围与不做事项、允许修改路径、关键边界、适用检查和未决问题。
@@ -90,6 +98,8 @@ Codex 与 Qoder 在同一工程规范下协作。每项变更明确修改范围�
 测试从需求和验收导出，不照着实现重述。环境、导入、定位器或 fixture 失败不算产品 RED；后补测试不能伪造历史失败。测试修改或删除应解释覆盖如何保留，不能通过削弱断言把失败改成成功。
 
 从首个可运行切片起，尽早走用户正常入口、实际配置、代表输入、真实工具及适用的保存/重开、失败、取消和恢复路径。需要模型、数据或外部副作用的检查，沿用有效任务授权；缺少授权时明确未验证范围。Mock、结构校验或 SDK 导入通过不能证明真实分析成功。
+
+真实模型评估不能仅凭模型名称相同认定配置等价。冻结并用实际SDK核对Provider/协议/线路、reasoning、thinking level、contextWindow、maxTokens、compat及相关输入限制；中继或自定义Provider可能触发通用模型默认值，必须先核对实际注册模型和请求参数。隔离测试的内存凭据替身仅替换获准配置的密钥，保留原配置校验、版本与公共生命周期；只用于评估，不作为Extension或生产接线范式。实际原配置、诊断替身、合成Provider和供应商结算费用分别报告，不能混用成绩或将SDK费用估计0写成免费。
 
 同一责任方持续完成诊断、修复和回归。普通修正复用有效规格与授权，不为每次编辑重建文档套件、全量回归或独立审批；新增产品行为、重要契约/持久化结构、数据权限或外部影响边界，先补齐必要决定再实施受影响部分。
 

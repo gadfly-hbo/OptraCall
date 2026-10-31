@@ -14,6 +14,8 @@ function contextBlock(instance: RequirementInstance): string {
     `核心目标：${instance.context.goal || '（未填写）'}`,
     `决策场景：${instance.context.decisionScenario || '（未填写）'}`,
     `输入状态：${!instance.snapshot ? '当前工作稿尚未确认' : isStale(instance) ? '确认快照已过期，以下使用当前工作稿，不沿用旧确认' : '当前上游信息已有有效确认快照'}；本次模型输出仍为待用户采纳的草稿，不等于正式确认或发布。`,
+    '仅对影响本次决策的业务含义核对单位、对象粒度、分母、去重、退款或取消、时间归属及来源；已有明确共识直接复用，不重复凑问题。缺失内容保留未知，来源冲突并列保留并澄清，不自行写成已确认口径。',
+    '分析路径只是可调整的建议，由分析 Agent 按问题和数据自主选方法；不要编排必须执行的固定计算步骤。',
   ].join('\n');
 }
 

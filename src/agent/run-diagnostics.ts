@@ -1,6 +1,6 @@
 import type { Outcome } from './events.ts';
 
-export type RunDiagnosticCode = 'authentication_failed' | 'rate_limited' | 'request_terminated' | 'request_failed' | 'command_failed' | 'runtime_stopped' | 'runtime_start_failed' | 'runtime_start_timeout' | 'cancelled' | 'completed_after_retry';
+export type RunDiagnosticCode = 'authentication_failed' | 'rate_limited' | 'request_terminated' | 'request_failed' | 'command_failed' | 'runtime_stopped' | 'runtime_start_failed' | 'runtime_start_timeout' | 'cancelled' | 'completed_after_retry' | 'verification_source_changed' | 'verification_source_missing';
 export type RunDiagnostic = { code: RunDiagnosticCode; stage: 'native_request' | 'native_command' | 'runtime'; message: string; retryCount: number };
 const messages: Record<RunDiagnosticCode, string> = {
   authentication_failed: '原生模型请求被拒绝认证，请检查该任务的模型配置。',
@@ -13,6 +13,8 @@ const messages: Record<RunDiagnosticCode, string> = {
   runtime_start_timeout: '等待原生运行环境启动超时。',
   cancelled: '本次操作已取消。',
   completed_after_retry: '本次操作经原生重试后完成。',
+  verification_source_changed: '本次核对的原始文件已变化，修订交付失败；原冻结证据保留。',
+  verification_source_missing: '本次核对的原始文件或项目目录已缺失，修订交付失败；原冻结证据保留。',
 };
 const count = (value: unknown): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 function diagnostic(code: RunDiagnosticCode, stage: RunDiagnostic['stage'], retryCount: number): RunDiagnostic { return { code, stage, message: messages[code], retryCount: count(retryCount) }; }
@@ -35,7 +37,8 @@ export function runDiagnostic(input: { outcome: Outcome; kind: 'prompt' | 'comma
  * inspect cause/stack or emit the original exception message. */
 export function runtimeDiagnostic(error: unknown): RunDiagnostic {
   const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
-  const observed: RunDiagnosticCode = code === 'runtime_process_stopped' || code === 'runtime_closed' ? 'runtime_stopped'
+  const observed: RunDiagnosticCode = code === 'verification_source_changed' || code === 'verification_source_missing' ? code
+    : code === 'runtime_process_stopped' || code === 'runtime_closed' ? 'runtime_stopped'
     : code === 'runtime_start_failed' || code === 'runtime_start_timeout' ? code : 'request_failed';
   return diagnostic(observed, 'runtime', 0);
 }
