@@ -8,8 +8,8 @@ function CatalogDetails({ item, onClose }: { item: CatalogItem; onClose: () => v
     <div className="dialog-heading"><span className={`catalog-symbol ${item.category}`} aria-hidden="true">{catalogMeta[item.category].symbol}</span><button className="icon-button" aria-label="关闭规划详情" onClick={() => dialog.current?.close()}>✕</button></div>
     <p className="eyebrow">{catalogMeta[item.category].label} · {item.id}</p><h2 id="catalog-detail-title">{item.name}</h2><p className="detail-summary">{item.description}</p>
     <div className="catalog-tags">{item.tags.map(tag => <span key={tag}>{tag}</span>)}</div>
-    <dl className="detail-metadata"><div><dt>当前状态</dt><dd>{item.status} · 未接入</dd></div><div><dt>参考来源</dt><dd>{item.source}</dd></div></dl>
-    <div className="detail-note"><h3>接入边界</h3><p>{item.note}</p></div><p className="detail-footer">此处只展示规划说明，不安装、连接或运行能力。</p>
+    <dl className="detail-metadata"><div><dt>当前状态</dt><dd>{item.status === '已接入' ? '已接入 · 顶部“决策”入口可用' : `${item.status} · 未接入`}</dd></div><div><dt>参考来源</dt><dd>{item.source}</dd></div></dl>
+    <div className="detail-note"><h3>接入边界</h3><p>{item.note}</p></div>{item.status === '已接入' ? <p className="detail-footer">该能力已接入，实际功能以决策看板页面为准。</p> : <p className="detail-footer">此处只展示规划说明，不安装、连接或运行能力。</p>}
     <button className="secondary-button dialog-close" onClick={() => dialog.current?.close()}>关闭详情</button>
   </dialog>;
 }

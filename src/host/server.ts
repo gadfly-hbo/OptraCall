@@ -21,6 +21,9 @@ import { savedTaskHistory, priorTaskRequest, ProjectHistoryError } from './proje
 import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
 import { createVerificationFeature, parseVerificationSelection } from './verification-host.ts';
 import { VerificationStoreError } from './verification-store.ts';
+import { createDecisionBoardStore } from '../../extensions/business-plugins/decision-board/storage/store.ts';
+import { createDecisionBoardRoutes } from '../../extensions/business-plugins/decision-board/api/routes.ts';
+import { createDecisionBoardSessions } from './decision-board-sessions.ts';
 
 class RequestFault extends Error {
   readonly status: number; readonly code: string;
@@ -58,7 +61,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const instanceId = options.instanceId ?? randomUUID();
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
   if (!Number.isSafeInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 10) throw new Error('Invalid observer heartbeat interval.');
-  const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); await verification.reconcileInterrupted(); });
+  const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); await boardStore.init(); await verification.reconcileInterrupted(); });
   type ProjectOwner = { project: ProjectRecord; task: TaskRecord };
   const streams = new Map<string, Set<ServerResponse>>();
   const clearing = new Map<string, number>(), archiving = new Set<string>();
@@ -145,6 +148,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const results = await Promise.allSettled([
       projectSessions.closeAll(filter),
       verification.closeAll(filter),
+      boardSessions.closeAll(filter),
       ...(!filter.projectId ? [requirementSessions.closeAll(filter)] : []),
     ]);
     for (const key of [...streams.keys()]) {
@@ -165,6 +169,30 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const verification = createVerificationFeature({ dataRoot, codeRoot: options.cwd, projects, cases, configuration, projectSessions, pair, requirementContext: input => requirementPrefix(input),
     availableConfiguration, mutate, isClosing: () => closing,
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
+  });
+  // decision-board business plugin: fixed report extraction plus the decision
+  // loop store; the host owns transport, sessions and project access checks.
+  const boardStore = createDecisionBoardStore({ root: path.join(dataRoot, 'decision-board') });
+  const boardSessions = createDecisionBoardSessions({
+    store: boardStore, extractionRoot: path.join(dataRoot, 'decision-board', 'extractions'),
+    codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'),
+    managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
+    configurationSnapshot: () => availableConfiguration(),
+    projectAccess: async projectId => { const project = await projects.get(projectId); assertActive(project); return { name: project.name }; },
+    projectName: async projectId => (await projects.get(projectId)).name,
+    readFile: (projectId, relativePath) => projects.readFile(projectId, relativePath),
+    observeFile: (projectId, relativePath) => projects.observeFile(projectId, relativePath),
+    mutate, isClosing: () => closing,
+  });
+  const decisionBoardRoutes = createDecisionBoardRoutes({
+    store: boardStore,
+    readBody: request => body(request),
+    mutate,
+    projectOverview: async () => (await projects.list()).map(({ id, name, archivedAt }) => ({ id, name, archivedAt })),
+    projectFiles: (projectId: string) => projects.tree(projectId),
+    assertActiveProject: async projectId => { assertActive(await projects.get(projectId)); },
+    startExtraction: boardSessions.start,
+    stopExtraction: boardSessions.stop,
   });
   function decorateProject(project: ProjectRecord) {
     try { if (cases.getStatus().state === 'ready') return { ...project, work: cases.getProjectWork(project.id), workUnavailable: false }; } catch {}
@@ -232,7 +260,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   async function projectBusy(projectId: string) {
     const project = await projects.get(projectId);
-    return project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId);
+    return project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId) || boardSessions.busy(projectId);
   }
   const priorRequest = priorTaskRequest;
   const savedHistory = (project: ProjectRecord, task: TaskRecord, capabilities: Record<string, unknown> = {}) => savedTaskHistory(project, task, SDK_VERSION, capabilities);
@@ -309,6 +337,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       const requirement = await requirementPlugin.routes(request, url);
       if (requirement) { json(response, requirement.status, requirement.value); return; }
+      const decisionBoard = await decisionBoardRoutes.routes(request, url);
+      if (decisionBoard) { json(response, decisionBoard.status, decisionBoard.value); return; }
       if (url.pathname === '/api/configurations' && request.method === 'GET') { json(response, 200, { configurations: configuration.list(), selectedId: configuration.read()?.id ?? null }); return; }
       if (url.pathname === '/api/configuration/select' && request.method === 'POST') { const input = await body(request); json(response, 200, { configuration: await mutate(() => configuration.select(String(input.id ?? ''))) }); return; }
       if (url.pathname === '/api/configuration/import' && request.method === 'POST') {
@@ -585,6 +615,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     await release(() => closeAgents());
     await release(() => { for (const responses of requirementStreams.values()) for (const response of responses) response.end(); requirementStreams.clear(); endStreams(); });
     await release(() => cases.close());
+    await release(() => boardStore.close());
     await release(() => projects.close());
     await release(async () => { if (server.listening) await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }); });
     if (errors.length) throw new AggregateError(errors, 'host_close_failed');

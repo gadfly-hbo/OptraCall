@@ -1,6 +1,13 @@
 import { createServer, type ServerResponse } from 'node:http';
 
 export type SyntheticMode = 'success' | 'failure' | 'slow';
+/** Canned decision-board extraction reply, keyed by model name so existing
+ * synthetic consumers keep their default plain-text chunks. */
+const BOARD_EXTRACT_MODEL = 'synthetic-board-extract';
+const BOARD_EXTRACT_REPLY = '好的\n```json\n' + JSON.stringify([
+  { title: '补发高价值会员召回权益', rationale: '高价值会员复购显著下滑。', expectedImpact: '挽回部分流失订单', priority: 'high', effort: '2人日', evidence: { level: '数据支撑', reasoning: '复购结论来自清洗数据。', facts: [{ text: '复购率下滑', quote: 'BOARD_QUOTE_MARKER_复购率42%→31%' }] } },
+  { title: '核对渠道投放记录', rationale: '渠道贡献主要降幅。', expectedImpact: '', priority: 'medium', effort: '', evidence: { level: '逻辑推断', reasoning: '由渠道结构推断。', facts: [{ text: '渠道降幅最大' }] } },
+]) + '\n```\n完';
 export async function startSyntheticProvider() {
   const requests: { path: string; authorization?: string; body: { model?: string; messages?: { role: string; content: unknown }[]; tools?: unknown[] }; closedEarly: boolean }[] = [];
   let mode: SyntheticMode = 'success', chunks = ['SDK ', '合成回复'];
@@ -18,7 +25,7 @@ export async function startSyntheticProvider() {
     const send = (delta: unknown, finish: string | null = null) => response.write(`data: ${JSON.stringify({ id: 'synthetic', object: 'chat.completion.chunk', created: 1, model: record.body.model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`);
     send({ role: 'assistant', content: '' });
     if (requestMode === 'slow') { send({ content: '部分合成回复' }); return; }
-    for (const text of chunks) send({ content: text });
+    for (const text of record.body.model === BOARD_EXTRACT_MODEL ? [BOARD_EXTRACT_REPLY] : chunks) send({ content: text });
     send({}, 'stop'); response.write('data: [DONE]\n\n'); response.end();
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
