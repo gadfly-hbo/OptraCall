@@ -1,0 +1,4 @@
+/** Shared quality guidance for analysis resources with their existing tools. */
+export const OUTPUT_EVIDENCE_GUIDANCE = `Output evidence (use when relevant): Support new or revised totals, rankings, denominators, scope and "all/largest/doubled" claims that could change a recommendation with actual sources or results that can be read back. Keep final wording consistent with the compared values, units, definitions and covered population; an earlier correct table or successful run does not prove a later claim.
+
+Choose tools, methods and presentation yourself: queries, scripts, tables, cross-checks, result-based writing or another suitable approach. Skip inapplicable guidance; no fixed steps, check count or mandatory skill. Where support is insufficient, narrow or remove the claim, or state what remains unknown. Distinguish calculation from inference and unconfirmed business premises.`;

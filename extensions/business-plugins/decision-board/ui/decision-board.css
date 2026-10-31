@@ -6,14 +6,17 @@
 
 .board-reports { margin: 14px 0 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .board-reports > h3 { font-size: 12px; font-weight: 550; color: var(--muted); margin: 0; padding: 12px 16px 4px; }
+.board-context-note { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 6px 0 12px; }
+.board-reports > .board-context-note { padding: 0 16px; margin: 4px 0; }
 .board-report-list { padding: 6px 10px 12px; display: grid; gap: 6px; max-height: 300px; overflow-y: auto; }
 .board-report-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 8px; border-radius: 7px; background: var(--subtle); font-size: 12px; }
 .board-report-row .report-name { font-weight: 550; min-width: 0; overflow-wrap: anywhere; }
 .board-report-row .report-project { color: var(--muted); }
 .board-report-row .report-bytes { color: var(--faint); font-size: 11px; }
+.board-report-row .report-input { color: var(--muted); }
 .board-report-row .report-actions { margin-left: auto; display: flex; gap: 8px; }
 .board-report-row .report-actions button { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; }
-.board-report-row .report-actions .primary-button { padding: 4px 10px; font-size: 11px; }
+.board-report-row .report-actions .primary-button { padding: 4px 10px; font-size: 11px; border-color: var(--accent); background: var(--accent); color: var(--canvas); }
 
 .board-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 10px; border: 1px solid var(--line); color: var(--muted); background: var(--surface); white-space: nowrap; }
 .board-chip.run { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: var(--accent-soft); }
@@ -28,12 +31,12 @@
 .board-chip.ev-logic { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 30%, var(--line)); }
 .app[data-theme="dark"] .board-chip.ev-data { color: #6fd8a0; }
 .app[data-theme="dark"] .board-chip.ev-multi { color: #8ab4ff; }
-.board-confidence { font-size: 10px; color: var(--faint); }
+.decision-card .board-source-report { color: var(--muted); font-size: 12px; margin: 8px 0 0; overflow-wrap: anywhere; }
 .decision-card .card-source { font-size: 10px; color: var(--faint); }
 .decision-card .board-impact { color: var(--ink); }
 .decision-card .card-actions { display: flex; gap: 8px; padding-top: 12px; }
 .decision-card .card-actions button { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); font-size: 12px; }
-.decision-card .card-actions .primary-button { padding: 5px 12px; font-size: 12px; }
+.decision-card .card-actions .primary-button { padding: 5px 12px; font-size: 12px; border-color: var(--accent); background: var(--accent); color: var(--canvas); }
 .decision-card .card-dismissed-reason { font-size: 11px; color: var(--muted); background: var(--subtle); border-radius: 6px; padding: 6px 9px; margin: 0 0 10px; }
 
 .board-evidence { margin: 10px 0 0; border-top: 1px dashed var(--line); }
@@ -42,6 +45,8 @@
 .board-evidence .fact p { margin: 0; }
 .board-evidence blockquote { margin: 5px 0 0; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--subtle); border-radius: 0 6px 6px 0; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
 .board-evidence .reasoning { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+.board-evidence .board-reference-value { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+.board-evidence { overflow-wrap: anywhere; }
 
 .board-tasks { display: grid; gap: 6px; margin-top: 10px; }
 .board-task { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; background: var(--subtle); font-size: 12px; }

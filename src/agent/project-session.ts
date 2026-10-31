@@ -6,6 +6,7 @@ import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessi
 import type { ProjectAgentOptions, ProjectSnapshot, ProvidedContextInput } from './project-runtime.ts';
 import { runDiagnostic, readRunDiagnostic, type RunDiagnostic } from './run-diagnostics.ts';
 import { createBrowserUIContext, type BrowserUIResponse } from './browser-ui-context.ts';
+import { OUTPUT_EVIDENCE_GUIDANCE } from './output-evidence.ts';
 
 type Outcome = 'completed' | 'cancelled' | 'failed';
 type LastRun = { requestId: string; outcome?: Outcome; diagnostic?: RunDiagnostic };
@@ -14,7 +15,7 @@ type ActiveRun = { id: string; kind: 'prompt' | 'command'; requestFingerprint?: 
 type RunResult = { outcome: Outcome; text: string; result?: unknown; snapshot: ProjectSnapshot; diagnostic?: RunDiagnostic };
 const RUN_ENTRY = 'optracall.run';
 
-export async function runProjectSession(transport: { close: () => Promise<void> }) {
+export async function runProjectSession(transport: { close: () => Promise<void>; setHttpIdleTimeoutMs(value: number): void; settings(): Record<string, number>; observe(baseUrl: string, emit: (record: Record<string, unknown>) => void): () => void }) {
   let runtime: AgentSessionRuntime | undefined, session: AgentSession | undefined, manager: SessionManager | undefined;
   let options: ProjectAgentOptions, unsubscribe: (() => void) | undefined;
   let operation: 'prompt' | 'command' | undefined, closing = false;
@@ -60,7 +61,7 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     }
     return sapProvision() ? { sap: sapProvision(), claim: 'provided-not-adopted' } : undefined;
   }
-  const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getEntries())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { nativeTools: !fixedInput(), python: fixedInput() ? false : 'bash', powershell: fixedInput() ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, resources: options.resourceRoot, extensions: !fixedInput(), skills: !fixedInput(), mcp: !fixedInput(), codemode: !fixedInput(), sessionTree: !fixedInput(), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput(), terminalComponents: false } } });
+  const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getEntries())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { nativeTools: !fixedInput(), python: fixedInput() ? false : 'bash', powershell: fixedInput() ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput(), skills: !fixedInput(), mcp: !fixedInput(), codemode: !fixedInput(), sessionTree: !fixedInput(), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput(), terminalComponents: false } } });
   const environmentExtension: ExtensionFactory = pi => {
     // The SDK applies this replacement to agent state before its own JSONL append.
     pi.on('message_end', event => ({ message: redact(event.message) }));
@@ -124,7 +125,7 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
         systemPrompt: o.workspace!.systemPrompt.join('\n\n'), appendSystemPrompt: [],
       } : {
         extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), createMcpExtension(), environmentExtension],
-        appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [`You are OptraCall. Workspace conventions: your working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze prepared project materials in 020_clean and authorized shared business materials announced by the Host. 010_draw archives originals and is not automatically attached to model context. This is a soft instruction, not sensitive-data isolation; the full native tools are available without a sandbox or tool interception. Write intermediate/process files to 020_clean by default. Save final reports to ${path.join(o.projectDirectory!, '060_reports')} when asked to produce a final report. Determine analysis methods and tools yourself from the user's request. These are directory conventions, not a prescribed analysis procedure.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
+        appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [`You are OptraCall. Workspace conventions: your working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze prepared project materials in 020_clean and authorized shared business materials announced by the Host. 010_draw archives originals and is not automatically attached to model context. This is a soft instruction, not sensitive-data isolation; the full native tools are available without a sandbox or tool interception. Write intermediate/process files to 020_clean by default. Save final reports to ${path.join(o.projectDirectory!, '060_reports')} when asked to produce a final report. Determine analysis methods and tools yourself from the user's request. These are directory conventions, not a prescribed analysis procedure.`, OUTPUT_EVIDENCE_GUIDANCE, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } });
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
@@ -138,6 +139,7 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     runtime.setBeforeSessionInvalidate(() => { unsubscribe?.(); unsubscribe = undefined; if (browserUI?.pending().length && run) run.cancelled = true; browserUI?.dispose(); });
     runtime.setRebindSession(bindSession);
     await bindSession(runtime.session);
+    transport.setHttpIdleTimeoutMs(runtime.session.settingsManager.getHttpIdleTimeoutMs());
     return snapshot();
   }
   function materializeNewSession(targetSession: AgentSession) {
@@ -179,11 +181,21 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     publish({ type: 'snapshot', snapshot: snapshot() });
     pendingOperation = (async () => {
       let failed = false, result: unknown, failure: unknown;
+      let transportCause: string | undefined;
+      transport.setHttpIdleTimeoutMs(session!.settingsManager.getHttpIdleTimeoutMs());
+      const stopObserving = transport.observe(options.configuration.baseUrl, record => {
+        if (run !== current) return;
+        transportCause = record.phase === 'failed' && typeof record.causeCode === 'string' ? record.causeCode : undefined;
+        const safe = redact({ ...record, requestId: id });
+        for (const target of current.managers) target.appendCustomEntry('optracall.http', { ...safe, sessionId: target.getSessionId() });
+        publish({ type: 'native', requestId: id, event: { type: 'http.transport', ...safe } });
+      });
       try { result = await action(); await session!.waitForIdle(); } catch (error) { failed = true; failure = error; }
+      finally { stopObserving(); }
       flushDelta();
       const last = current.last, nativeCancelled = Boolean(result && typeof result === 'object' && 'cancelled' in result && result.cancelled);
       const outcome: Outcome = current.cancelled || nativeCancelled || last?.stopReason === 'aborted' ? 'cancelled' : failed || current.commandFailed || last?.stopReason === 'error' ? 'failed' : 'completed';
-      const diagnostic = runDiagnostic({ outcome, kind, retryCount: current.retryCount, error: failure ?? last?.errorMessage, commandFailed: current.commandFailed });
+      const diagnostic = runDiagnostic({ outcome, kind, retryCount: current.retryCount, error: failure ?? last?.errorMessage, commandFailed: current.commandFailed, transportCause });
       const answer = redactText(last?.content.filter(part => part.type === 'text').map(part => part.text).join('') ?? '');
       for (const target of current.managers) target.appendCustomEntry(RUN_ENTRY, { phase: 'settled', requestId: id, sessionId: target.getSessionId(), outcome, kind, ...(diagnostic ? { diagnostic } : {}) });
       run = undefined;

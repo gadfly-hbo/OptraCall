@@ -11,6 +11,7 @@ const projectAgentOwners = new Set([
   'src/host/agent-sessions.ts',
   'tests/agent-sessions.test.ts',
   'tests/project-runtime.test.ts',
+  'tests/model-http-environment.test.ts', // OR01/OR02: controlled SDK worker transport and safe native receipt boundary.
   'tests/requirement-runtime.test.ts',
   'tests/host-recovery.test.ts',
   // Captures real runtime callbacks to verify stale editor events after restore.

@@ -5,6 +5,7 @@ import { createAgentSessionDomain, type SessionResult } from './agent-sessions.t
 import type { RuntimeModelConfiguration } from './config-store.ts';
 import { runtimeDiagnostic } from '../agent/run-diagnostics.ts';
 import type { RunDiagnostic } from '../agent/run-diagnostics.ts';
+import { OUTPUT_EVIDENCE_GUIDANCE } from '../agent/output-evidence.ts';
 import type { CreateVerificationInput, VerificationOwner, VerificationRecord, VerificationStore, VerificationAuthorRevision } from './verification-store.ts';
 import { VerificationStoreError } from './verification-store.ts';
 
@@ -42,6 +43,8 @@ export function createVerificationSessions(options: {
           'You are an independent verification analyst in OptraCall. Choose methods yourself and actually execute code when needed. Use only the copied inputs and provided business facts. Keep assumptions, unconfirmed meanings and differences visible. Do not infer causality from a numerical match.',
           'Work and write only inside this verification workspace. inputs/ contains fixed copies: do not edit these files; save transformations to new files. Do not search parent directories, other projects, native session history, Host metadata or the original author files. This is a soft instruction, not a sandbox. Shared tools and resources do not grant additional data or business-action authority.',
           'In the independent first turn do not seek the author answer. Later the Host may explicitly provide fixed author files for comparison. A repeated author script is reproducibility evidence, not an independent calculation. Do not publish assets, change source files or execute business actions.',
+          OUTPUT_EVIDENCE_GUIDANCE,
+          'Apply the same evidence standard to your own new claims; finding an author error does not prove your additions correct. State which author values were checked, which claims are your own new calculation or inference, and which business judgments remain unknown.',
         ] }, sessionDirectory: record.sessionDirectory, ...(record.native?.sessionFile ? { sessionFile: record.native.sessionFile } : {}), codeRoot: options.codeRoot, resourceRoot: options.resourceRoot, managementPorts: options.managementPorts() };
       }, capabilities: { ui: true },
     }, configurationSnapshot: options.configuration, mutate: options.mutate, isClosing: options.isClosing,

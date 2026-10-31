@@ -13,7 +13,7 @@ async function until<T>(read: () => Promise<T>, done: (value: T) => boolean): Pr
 }
 
 async function fixture(t: TestContext, input: { data?: Buffer; author?: string; verifierModel?: string } = {}) {
-  const root = path.resolve('.local/semantic-verification/revision-closeout', randomUUID());
+  const root = path.resolve(process.env.OPTRACALL_TEST_ARTIFACTS_ROOT ?? '.local/semantic-verification', 'revision-closeout', randomUUID());
   const dataRoot = path.join(root, 'host-data'), projectsRoot = path.join(root, 'projects');
   await mkdir(root, { recursive: true });
   const requests: any[] = [], responses = new Set<ServerResponse>();
