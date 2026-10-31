@@ -8,8 +8,8 @@ export const boardSystemPrompt = [
   '只输出一个 ```json 围栏代码块，内容为 JSON 数组，每项含 title、rationale、expectedImpact、priority、effort、evidence；不要输出围栏外的任何文字；全部使用中文；最多 20 条，宁缺毋滥，没有可靠建议时输出 []。',
 ];
 
-export function boardWorkspace(extractionDirectory: string): { cwd: string; systemPrompt: string[]; defaultTools: readonly string[] } {
-  return { cwd: path.join(extractionDirectory, 'workspace'), systemPrompt: [...boardSystemPrompt], defaultTools: [] };
+export function boardWorkspace(extractionDirectory: string): { cwd: string; systemPrompt: string[]; defaultTools: readonly string[]; capabilityPolicy: 'text-only' } {
+  return { cwd: path.join(extractionDirectory, 'workspace'), systemPrompt: [...boardSystemPrompt], defaultTools: [], capabilityPolicy: 'text-only' };
 }
 
 export function boardSessionDirectory(extractionDirectory: string): string {

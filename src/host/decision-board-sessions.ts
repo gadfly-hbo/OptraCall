@@ -10,7 +10,9 @@ import { boardSessionDirectory, boardWorkspace, buildExtractionPrompt, enforceVe
 import { normalizeExtractionOutput } from '../../extensions/business-plugins/decision-board/extraction/normalize.ts';
 
 type BoardStore = ReturnType<typeof createDecisionBoardStore>;
-type BoardOwner = { projectId: string; extractionId: string };
+// This owner never leaves this Host adapter. Preserve the actual trigger-time
+// credential snapshot in the shared lifecycle; only public metadata is stored.
+type BoardOwner = { projectId: string; extractionId: string; capturedConfiguration?: Readonly<RuntimeModelConfiguration> };
 
 /** Decision-board extraction profile: one fixed report per turn, no tools, no
  * continuation. Lifecycle is owned exclusively by the shared domain implementation. */
@@ -20,7 +22,7 @@ export function createDecisionBoardSessions(options: {
   codeRoot: string;
   resourceRoot: string;
   managementPorts(): number[];
-  configurationSnapshot(): Readonly<RuntimeModelConfiguration> | null | undefined;
+  configurationSnapshot(id?: string, revision?: number): Readonly<RuntimeModelConfiguration> | null | undefined;
   projectAccess(projectId: string): Promise<{ name: string }>;
   projectName(projectId: string): Promise<string>;
   readFile(projectId: string, relativePath: string): Promise<{ name: string; bytes: Buffer }>;
@@ -35,13 +37,12 @@ export function createDecisionBoardSessions(options: {
     profile: {
       key: owner => owner.extractionId,
       projectId: owner => owner.projectId,
-      configuration: () => options.configurationSnapshot(),
+      configuration: owner => owner.capturedConfiguration,
       admit: async owner => {
         const record = store.readExtraction(owner.extractionId);
-        if (record) {
-          const running = store.runningExtractionForReport(record.reportId);
-          if (running && running.id !== owner.extractionId) throw new DecisionBoardFault('extraction_busy');
-        }
+        if (!record || record.status !== 'running') throw new DecisionBoardFault('extraction_not_running');
+        const running = store.runningExtractionForReport(record.reportId);
+        if (running && running.id !== owner.extractionId) throw new DecisionBoardFault('extraction_busy');
         await options.projectAccess(owner.projectId);
       },
       agentOptions: owner => ({
@@ -53,7 +54,7 @@ export function createDecisionBoardSessions(options: {
         managementPorts: options.managementPorts(),
       }),
     },
-    configurationSnapshot: () => options.configurationSnapshot(),
+    configurationSnapshot: (id, revision) => options.configurationSnapshot(id, revision),
     mutate: options.mutate,
     isClosing: options.isClosing,
   });
@@ -66,7 +67,7 @@ export function createDecisionBoardSessions(options: {
       await mkdir(boardSessionDirectory(directoryOf(owner.extractionId)), { recursive: true, mode: 0o700 });
       await domain.withSession(ref, async lease => {
         const record = store.readExtraction(owner.extractionId);
-        if (!record) return;
+        if (!record || record.status !== 'running') return;
         const report = store.getReport(record.reportId);
         const projectName = await options.projectName(owner.projectId).catch(() => owner.projectId);
         const result = await lease.run({ requestId: randomUUID(), text: buildExtractionPrompt({ projectName, reportPath: report?.relativePath ?? '', staged: { text: record.reportExcerpt, chars: record.sourceChars, truncated: record.truncated } }) });
@@ -108,7 +109,7 @@ export function createDecisionBoardSessions(options: {
         sourceSha256, sourceBytes: observation.bytes, sourceChars: staged.chars, truncated: staged.truncated, reportExcerpt: staged.text });
       return store.readExtraction(extractionId)!;
     });
-    void execute({ projectId, extractionId });
+    void execute({ projectId, extractionId, capturedConfiguration: configuration });
     return created;
   }
 

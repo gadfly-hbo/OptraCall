@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, mkdir, access } from 'node:fs/promises';
 import path from 'node:path';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
@@ -16,6 +16,41 @@ const REPORT_TEXT = '# 会员复购分析\n\n高价值会员复购率从42%降�
 function reply(items: unknown[]): string { return '好的\n```json\n' + JSON.stringify(items) + '\n```\n完'; }
 const ITEM_A = { title: '补发高价值会员召回权益', rationale: '高价值会员复购显著下滑。', expectedImpact: '挽回部分流失订单', priority: 'high', effort: '2人日', confidence: 0.01, evidence: { level: '数据支撑', reasoning: '复购率来自清洗数据结论。', facts: [{ text: '复购率下降', quote: 'REPORT_QUOTE_MARKER' }] } };
 const ITEM_B = { title: '核对渠道A投放记录', rationale: '渠道A贡献主要降幅。', expectedImpact: '', priority: 'medium', effort: '', evidence: { level: '逻辑推断', reasoning: '由渠道结构推断。', facts: [{ text: '渠道A降幅最大' }] } };
+
+test('DB03/DB11: fixed-report extraction does not load installed executable resources or ancestor context', { timeout: 30000 }, async t => {
+  const provider = await startSyntheticProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  const marker = path.join(host.dataRoot, 'unexpected-extension-load.txt');
+  const extensions = path.join(host.dataRoot, 'pi/extensions');
+  await mkdir(extensions, { recursive: true });
+  await writeFile(path.join(extensions, 'board-boundary.ts'), `import { writeFileSync } from 'node:fs'; export default function() { writeFileSync(${JSON.stringify(marker)}, 'EXECUTED'); }\n`);
+  await writeFile(path.join(host.dataRoot, 'AGENTS.md'), 'UNRELATED_ANCESTOR_CONTEXT_MUST_NOT_ENTER_FIXED_REPORT\n');
+  await readJson(await host.request('/api/configuration', 'PUT', { name: '固定报告合成模型', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-model', apiKey: 'synthetic-key' }));
+  const { project } = await readJson(await host.request('/api/projects', 'POST', { name: '固定材料边界' }), 201);
+  await readJson(await host.request(`/api/projects/${project.id}/files/save-report`, 'POST', { name: 'fixed.md', text: REPORT_TEXT }), 201);
+  provider.setChunks([reply([ITEM_A])]);
+  await readJson(await host.request('/api/decision-board/reports/extract', 'POST', { projectId: project.id, path: '060_reports/fixed.md' }), 202);
+  const board = await until(async () => readJson(await host.request('/api/decision-board')), value => value.reports[0].extraction?.status !== 'running');
+  assert.equal(board.reports[0].extraction.status, 'completed');
+  await assert.rejects(access(marker), { code: 'ENOENT' }, 'Empty tool names are not sufficient if extension code can execute');
+  assert.ok(!JSON.stringify(provider.requests[0].body.messages).includes('UNRELATED_ANCESTOR_CONTEXT'));
+  assert.equal(provider.requests[0].body.tools?.length ?? 0, 0);
+});
+
+test('DB03: the 20000-code-point report boundary includes non-BMP text without losing the fixed input envelope', { timeout: 30000 }, async t => {
+  const provider = await startSyntheticProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  await readJson(await host.request('/api/configuration', 'PUT', { name: '报告长度合成模型', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-model', apiKey: 'synthetic-key' }));
+  const { project } = await readJson(await host.request('/api/projects', 'POST', { name: '字符边界' }), 201);
+  const text = '😀'.repeat(20000);
+  await readJson(await host.request(`/api/projects/${project.id}/files/save-report`, 'POST', { name: 'boundary.md', text }), 201);
+  provider.setChunks([reply([])]);
+  const started = await readJson(await host.request('/api/decision-board/reports/extract', 'POST', { projectId: project.id, path: '060_reports/boundary.md' }), 202);
+  const board = await until(async () => readJson(await host.request('/api/decision-board')), value => value.reports[0].extraction?.status !== 'running');
+  assert.equal(board.reports[0].extraction.status, 'completed');
+  assert.equal(started.extraction.truncated, false);
+  assert.ok(JSON.stringify(provider.requests[0].body.messages).includes(text));
+});
 
 test('DB01–DB09: extraction, decisions, tasks, feedback and re-extraction across projects', { timeout: 90_000 }, async t => {
   const provider = await startSyntheticProvider(), host = await startTestHost();

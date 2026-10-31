@@ -196,6 +196,7 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
 
   if (!detail) return <div className="re-page" data-build="requirements-elaboration">
     <div className="page-heading"><div><p className="eyebrow">REQUIREMENT ELABORATION · 业务插件</p><h1>需求梳理</h1><p>把模糊业务诉求结构化为已确认需求与分析框架（RAP 0.2），再显式送入 Case、项目或任务。设计态前置，不指挥分析步骤。</p></div><span className="re-store">本机存储 · ~/.optracall/requirement-instances/</span></div>
+    <button className="text-button" onClick={onBack}>返回业务插件 →</button>
     {error && <div className="error-notice" role="alert"><div><strong>需求梳理提示</strong><p>{error}</p></div><button className="text-button" onClick={() => { setError(''); void reloadList(); }}>重试</button></div>}
     {notice && <p className="project-notice" role="status">{notice}<button className="text-button" onClick={() => setNotice('')}>知道了</button></p>}
     <div className="re-create panel">

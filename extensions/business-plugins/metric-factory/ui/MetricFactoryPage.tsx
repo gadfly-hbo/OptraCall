@@ -108,7 +108,7 @@ export function MetricFactoryPage({ projects, onOpenTask, onProjectsChanged, onB
   return <div className="mf-page" data-build="metric-factory-mvp">
     <div className="page-heading">
       <div>
-        <p className="eyebrow">METRIC FACTORY · 业务插件</p>
+        <p className="eyebrow">METRIC FACTORY · 分析资产</p>
         <h1 ref={heading} tabIndex={-1}>指标体系</h1>
         <p>在任务中与 Pi 协作起草指标体系，审核发布到本机全局库；项目按精确版本启用，分析时引用口径并注明版本。</p>
       </div>
@@ -212,7 +212,7 @@ export function MetricFactoryPage({ projects, onOpenTask, onProjectsChanged, onB
         <button className="primary-button" disabled={!modelingProject} onClick={() => void createModelingTask()}>创建并打开任务</button>
       </div>
     </dialog>}
-    <p className="mf-footer"><button className="text-button" onClick={onBack}>返回工作区 →</button> · Agent 对全局库只读；发布与启用均为显式操作</p>
+    <p className="mf-footer"><button className="text-button" onClick={onBack}>返回分析资产 →</button> · Agent 对全局库只读；发布与启用均为显式操作</p>
   </div>;
 }
 
