@@ -1,0 +1,63 @@
+/* 决策看板：沿用产品 token，占位样式之外的看板组件样式。 */
+.board-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 18px 0 6px; }
+.board-toolbar select { padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); max-width: 220px; }
+.board-toolbar .spacer { flex: 1; }
+.board-error { display: flex; align-items: center; gap: 8px; margin: 10px 0; padding: 10px 13px; border: 1px solid var(--error); border-radius: 7px; background: var(--error-bg); color: var(--error); font-size: 12px; }
+
+.board-reports { margin: 14px 0 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.board-reports > h3 { font-size: 12px; font-weight: 550; color: var(--muted); margin: 0; padding: 12px 16px 4px; }
+.board-report-list { padding: 6px 10px 12px; display: grid; gap: 6px; max-height: 300px; overflow-y: auto; }
+.board-report-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 8px; border-radius: 7px; background: var(--subtle); font-size: 12px; }
+.board-report-row .report-name { font-weight: 550; min-width: 0; overflow-wrap: anywhere; }
+.board-report-row .report-project { color: var(--muted); }
+.board-report-row .report-bytes { color: var(--faint); font-size: 11px; }
+.board-report-row .report-actions { margin-left: auto; display: flex; gap: 8px; }
+.board-report-row .report-actions button { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; }
+.board-report-row .report-actions .primary-button { padding: 4px 10px; font-size: 11px; }
+
+.board-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 10px; border: 1px solid var(--line); color: var(--muted); background: var(--surface); white-space: nowrap; }
+.board-chip.run { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: var(--accent-soft); }
+.board-chip.fail { color: var(--error); border-color: color-mix(in srgb, var(--error) 35%, var(--line)); background: var(--error-bg); }
+.board-chip.warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 35%, var(--line)); background: var(--warning-bg); }
+
+.board-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.board-chip.pr-high { color: var(--error); border-color: color-mix(in srgb, var(--error) 30%, var(--line)); }
+.board-chip.pr-medium { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.board-chip.ev-data { color: #1c7c4a; border-color: color-mix(in srgb, #1c7c4a 30%, var(--line)); }
+.board-chip.ev-multi { color: #2456b8; border-color: color-mix(in srgb, #2456b8 30%, var(--line)); }
+.board-chip.ev-logic { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 30%, var(--line)); }
+.app[data-theme="dark"] .board-chip.ev-data { color: #6fd8a0; }
+.app[data-theme="dark"] .board-chip.ev-multi { color: #8ab4ff; }
+.board-confidence { font-size: 10px; color: var(--faint); }
+.decision-card .card-source { font-size: 10px; color: var(--faint); }
+.decision-card .board-impact { color: var(--ink); }
+.decision-card .card-actions { display: flex; gap: 8px; padding-top: 12px; }
+.decision-card .card-actions button { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); font-size: 12px; }
+.decision-card .card-actions .primary-button { padding: 5px 12px; font-size: 12px; }
+.decision-card .card-dismissed-reason { font-size: 11px; color: var(--muted); background: var(--subtle); border-radius: 6px; padding: 6px 9px; margin: 0 0 10px; }
+
+.board-evidence { margin: 10px 0 0; border-top: 1px dashed var(--line); }
+.board-evidence summary { cursor: pointer; padding: 8px 0 2px; font-size: 11px; color: var(--muted); }
+.board-evidence .fact { margin: 8px 0; font-size: 12px; }
+.board-evidence .fact p { margin: 0; }
+.board-evidence blockquote { margin: 5px 0 0; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--subtle); border-radius: 0 6px 6px 0; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.board-evidence .reasoning { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+
+.board-tasks { display: grid; gap: 6px; margin-top: 10px; }
+.board-task { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; background: var(--subtle); font-size: 12px; }
+.board-task .task-title { font-weight: 500; }
+.board-task .task-meta { color: var(--faint); font-size: 11px; margin-top: 2px; }
+.board-task .task-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.board-task .task-actions button { padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; }
+.board-task .task-feedback { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--muted); }
+.board-stars { color: var(--accent); letter-spacing: 2px; }
+
+.board-empty { border: 1px dashed var(--line); border-radius: 8px; padding: 18px; color: var(--muted); font-size: 12px; text-align: center; background: var(--surface); }
+.board-lane-empty { border: 1px dashed var(--line); border-radius: 7px; padding: 14px; color: var(--faint); font-size: 11px; text-align: center; }
+
+.board-form { display: grid; gap: 10px; margin: 14px 0 4px; }
+.board-form label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.board-form input, .board-form textarea, .board-form select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); }
+.board-form textarea { min-height: 72px; resize: vertical; }
+.board-form .form-error { color: var(--error); font-size: 11px; }
+.board-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
