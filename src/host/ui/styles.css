@@ -226,6 +226,10 @@ button { color: inherit; }
 .catalog-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .catalog-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); display: flex; flex-direction: column; }
 .catalog-card:hover { border-color: var(--focus); box-shadow: 0 3px 14px #18122e05; }
+.catalog-card.is-planned { background: var(--subtle); }
+.catalog-card.is-planned:hover { border-color: var(--line); box-shadow: none; }
+.catalog-card.is-planned .catalog-symbol { background: var(--line); color: var(--muted); }
+.available-badge { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 2px 7px; font-size: 10px; }
 .catalog-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
 .catalog-symbol { display: inline-grid; place-items: center; width: 36px; height: 36px; background: var(--accent-soft); color: var(--accent); border-radius: 8px; font-size: 23px; flex-shrink: 0; }
 .planned-badge { display: inline-flex; background: var(--subtle); color: var(--muted); font-size: 10px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 5px; white-space: nowrap; }
@@ -235,7 +239,8 @@ button { color: inherit; }
 .catalog-tags > span { display: inline-block; font-size: 10px; color: var(--muted); padding: 2px 6px; background: var(--subtle); border-radius: 4px; }
 .catalog-card-bottom { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--line); }
 .catalog-card-bottom > span { color: var(--muted); font-size: 11px; }
-.catalog-card-bottom button { border: 0; background: transparent; padding: 2px 0 2px 6px; color: var(--accent); font-size: 11px; }
+.catalog-card-bottom button { border: 0; background: transparent; padding: 2px 0 2px 6px; color: var(--muted); font-size: 11px; }
+.catalog-card-bottom .catalog-open-button { background: var(--accent); color: var(--canvas); border-radius: 5px; padding: 6px 11px; font-size: 12px; }
 .catalog-card-bottom button > span { margin-left: 4px; }
 .catalog-page-footer { color: var(--muted); font-size: 11px; padding-top: 26px; text-align: center; }
 .catalog-empty { padding: 60px 16px; text-align: center; border: 1px dashed var(--line); border-radius: 8px; }

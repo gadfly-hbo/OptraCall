@@ -1,3 +1,4 @@
+import { presentContextMessages } from './context-presentation.ts';
 import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync, chmodSync, renameSync, unlinkSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -48,7 +49,17 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     return undefined;
   }
   const sapProvision = () => options.metricIndexText ? { indexText: options.metricIndexText, sha256: createHash('sha256').update(options.metricIndexText).digest('hex'), basis: 'runtime-initialization' } : undefined;
-  const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(session!.messages) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { nativeTools: !fixedDraft(), python: fixedDraft() ? false : 'bash', powershell: fixedDraft() ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, resources: options.resourceRoot, extensions: !fixedDraft(), skills: !fixedDraft(), mcp: !fixedDraft(), codemode: !fixedDraft(), sessionTree: !fixedDraft(), ...(sapProvision() ? { semanticContext: { sap: sapProvision(), claim: 'provided-not-adopted' } } : {}), extensionUI: { dialogs: fixedDraft() ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedDraft(), terminalComponents: false } } });
+  function semanticProvision(): Record<string, unknown> | undefined {
+    for (const entry of [...manager!.getEntries()].reverse()) {
+      if (entry.type !== 'custom' || entry.customType !== RUN_ENTRY) continue;
+      const data = entry.data as Record<string, unknown> | undefined;
+      if (!data || (data.sessionId !== undefined && data.sessionId !== manager!.getSessionId()) || (data.phase !== 'started' && data.phase !== undefined)) continue;
+      const supplied = data.providedContext;
+      return supplied && typeof supplied === 'object' && !Array.isArray(supplied) && (supplied as Record<string, unknown>).version === 1 ? supplied as Record<string, unknown> : undefined;
+    }
+    return sapProvision() ? { sap: sapProvision(), claim: 'provided-not-adopted' } : undefined;
+  }
+  const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getEntries())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { nativeTools: !fixedDraft(), python: fixedDraft() ? false : 'bash', powershell: fixedDraft() ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, resources: options.resourceRoot, extensions: !fixedDraft(), skills: !fixedDraft(), mcp: !fixedDraft(), codemode: !fixedDraft(), sessionTree: !fixedDraft(), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedDraft() ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedDraft(), terminalComponents: false } } });
   const environmentExtension: ExtensionFactory = pi => {
     // The SDK applies this replacement to agent state before its own JSONL append.
     pi.on('message_end', event => ({ message: redact(event.message) }));
@@ -112,7 +123,7 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
         systemPrompt: o.workspace!.systemPrompt.join('\n\n'), appendSystemPrompt: [],
       } : {
         extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), createMcpExtension(), environmentExtension],
-        appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [`You are OptraCall. Workspace conventions: your working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze only materials the user places in 020_clean. 010_draw archives originals and is not automatically attached to model context. This is a soft instruction, not sensitive-data isolation; the full native tools are available without a sandbox or tool interception. Write intermediate/process files to 020_clean by default. Save final reports to ${path.join(o.projectDirectory!, '060_reports')} when asked to produce a final report. Determine analysis methods and tools yourself from the user's request. These are directory conventions, not a prescribed analysis procedure.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
+        appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [`You are OptraCall. Workspace conventions: your working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze prepared project materials in 020_clean and authorized shared business materials announced by the Host. 010_draw archives originals and is not automatically attached to model context. This is a soft instruction, not sensitive-data isolation; the full native tools are available without a sandbox or tool interception. Write intermediate/process files to 020_clean by default. Save final reports to ${path.join(o.projectDirectory!, '060_reports')} when asked to produce a final report. Determine analysis methods and tools yourself from the user's request. These are directory conventions, not a prescribed analysis procedure.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } });
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
@@ -183,7 +194,8 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
     return pendingOperation;
   }
   function prompt(text: string, id: string, requestFingerprint?: string, input?: ProvidedContextInput) {
-    const providedContext = redact({ version: 1, claim: 'provided-not-adopted', providedAt: new Date().toISOString(), requestTextSha256: createHash('sha256').update(text).digest('hex'), ...(input?.rap ? { rap: input.rap } : {}), ...(input?.case ? { case: input.case } : {}), ...(sapProvision() ? { sap: sapProvision() } : {}) });
+    if (fixedDraft() && input?.enterprise) throw new Error('fixed_draft_materials_not_allowed');
+    const providedContext = redact({ version: 1, claim: 'provided-not-adopted', providedAt: new Date().toISOString(), requestTextSha256: createHash('sha256').update(text).digest('hex'), ...(input?.rap ? { rap: input.rap } : {}), ...(input?.case ? { case: input.case } : {}), ...(input?.enterprise ? { enterprise: input.enterprise } : {}), ...(typeof input?.originalUserText === 'string' ? { originalUserText: input.originalUserText } : {}), ...(sapProvision() ? { sap: sapProvision() } : {}) });
     return execute(id, 'prompt', () => session!.prompt(text), requestFingerprint, providedContext);
   }
   async function command(text: string, id: string) {
@@ -195,7 +207,12 @@ export async function runProjectSession(transport: { close: () => Promise<void> 
       if (name === '/tree') return manager!.getTree();
       if (name === '/compact') return session!.compact(argument || undefined);
       if (name === '/reload') { await session!.reload(); return { reloaded: true }; }
-      if (name === '/fork') return argument ? runtime!.fork(tail[0], tail[1] === 'at' ? { position: 'at' } : undefined) : { entries: session!.getUserMessagesForForking() };
+      if (name === '/fork') {
+        if (argument) return runtime!.fork(tail[0], tail[1] === 'at' ? { position: 'at' } : undefined);
+        const entries = session!.getUserMessagesForForking();
+        const labels = presentContextMessages(entries.map(entry => ({ role: 'user', content: entry.text })), manager!.getEntries());
+        return { entries: entries.map((entry, index) => ({ ...entry, text: labels[index].originalUserText ?? entry.text })) };
+      }
       if (name === '/branch') return argument ? session!.navigateTree(argument) : manager!.getBranch();
       if (name === '/skills') return session!.resourceLoader.getSkills();
       if (name === '/prompts') return session!.resourceLoader.getPrompts();

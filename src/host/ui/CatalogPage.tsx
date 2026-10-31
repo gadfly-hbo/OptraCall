@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { catalogCategories, catalogItems, catalogMeta, filterCatalog, type CatalogCategory, type CatalogItem } from './catalog-data.ts';
+import { catalogCategories, catalogItems, catalogMeta, filterCatalog, type CatalogCategory, type CatalogEntry, type CatalogItem } from './catalog-data.ts';
 
 function CatalogDetails({ item, onClose }: { item: CatalogItem; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -14,7 +14,7 @@ function CatalogDetails({ item, onClose }: { item: CatalogItem; onClose: () => v
   </dialog>;
 }
 
-export function CatalogPage({ category, onCategoryChange, onBack }: { category: CatalogCategory; onCategoryChange: (category: CatalogCategory) => void; onBack: () => void }) {
+export function CatalogPage({ category, onCategoryChange, onOpenEntry, onBack }: { category: CatalogCategory; onCategoryChange: (category: CatalogCategory) => void; onOpenEntry: (entry: CatalogEntry) => void; onBack: () => void }) {
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState('全部');
   const [selected, setSelected] = useState<CatalogItem | null>(null);
@@ -22,18 +22,19 @@ export function CatalogPage({ category, onCategoryChange, onBack }: { category: 
   const meta = catalogMeta[category];
   const items = filterCatalog(category, query, tag);
   const all = catalogItems.filter(item => item.category === category);
+  const availableCount = all.filter(item => item.status === '已接入').length;
   const tags = ['全部', ...new Set(all.flatMap(item => item.tags))];
   useEffect(() => { setQuery(''); setTag('全部'); setSelected(null); title.current?.focus(); }, [category]);
   return <div className="catalog-page">
     <div className="catalog-tabs" role="group" aria-label="能力目录分类">{catalogCategories.map(key => <button key={key} aria-pressed={category === key} className={category === key ? 'active' : ''} onClick={() => onCategoryChange(key)}><span aria-hidden="true">{catalogMeta[key].symbol}</span>{catalogMeta[key].label}</button>)}</div>
-    <div className="page-heading"><div><p className="eyebrow">能力目录</p><h1 ref={title} tabIndex={-1}>{meta.label}</h1><p>{meta.description}</p></div><span className="catalog-demo-label">演示目录 · 未接入</span></div>
-    <div className="catalog-intro"><p>参考候选规划展示的虚拟示例，不代表已实现、已安装或可运行能力。</p><button className="text-button" onClick={onBack}>返回工作区 →</button></div>
+    <div className="page-heading"><div><p className="eyebrow">能力目录</p><h1 ref={title} tabIndex={-1}>{meta.label}</h1><p>{meta.description}</p></div><span className="catalog-demo-label">{availableCount ? `${availableCount} 项已接入` : '规划目录 · 未接入'}</span></div>
+    <div className="catalog-intro"><p>已接入功能可直接打开；灰色方块为规划中，尚未接入。</p><button className="text-button" onClick={onBack}>返回工作区 →</button></div>
     <div className="catalog-toolbar"><label className="catalog-search"><span aria-hidden="true">⌕</span><span className="sr-only">搜索{meta.label}</span><input value={query} placeholder={`搜索${meta.label}、标签或编号`} onChange={event => setQuery(event.target.value)} /></label><label className="catalog-filter"><span>业务标签</span><select value={tag} onChange={event => setTag(event.target.value)}>{tags.map(value => <option key={value}>{value}</option>)}</select></label></div>
-    <div className="catalog-result-count" role="status">{query || tag !== '全部' ? `找到 ${items.length} 项示例` : `${all.length} 项规划示例`}</div>
-    {items.length ? <div className="catalog-grid">{items.map(item => <article className="catalog-card" key={item.id}>
-      <div className="catalog-card-top"><span className={`catalog-symbol ${category}`} aria-hidden="true">{meta.symbol}</span><span className="planned-badge">{item.status}</span></div><h2>{item.name}</h2><p>{item.description}</p><div className="catalog-tags">{item.tags.map(value => <span key={value}>{value}</span>)}</div><div className="catalog-card-bottom"><span>{item.id}</span><button aria-label={`查看${item.name}规划`} onClick={() => setSelected(item)}>查看规划 <span aria-hidden="true">↗</span></button></div>
-    </article>)}</div> : <div className="catalog-empty"><span aria-hidden="true">⌕</span><h2>没有找到匹配的示例</h2><p>试试其他关键词，或清除当前筛选。</p><button className="secondary-button" onClick={() => { setQuery(''); setTag('全部'); }}>清除筛选</button></div>}
-    <footer className="catalog-page-footer">目录仅作界面演示 · 实际能力待后续接入</footer>
+    <div className="catalog-result-count" role="status">{query || tag !== '全部' ? `找到 ${items.length} 项` : `${all.length} 项 · ${availableCount} 项已接入 · ${all.length - availableCount} 项规划中`}</div>
+    {items.length ? <div className="catalog-grid">{items.map(item => <article className={`catalog-card ${item.status === '已接入' ? 'is-available' : 'is-planned'}`} key={item.id}>
+      <div className="catalog-card-top"><span className={`catalog-symbol ${category}`} aria-hidden="true">{meta.symbol}</span><span className={item.status === '已接入' ? 'available-badge' : 'planned-badge'}>{item.status === '已接入' ? '已接入' : `${item.status} · 未接入`}</span></div><h2>{item.name}</h2><p>{item.description}</p><div className="catalog-tags">{item.tags.map(value => <span key={value}>{value}</span>)}</div><div className="catalog-card-bottom"><span>{item.id}</span>{item.status === '已接入' ? <button className="catalog-open-button" aria-label={`打开${item.name}`} onClick={() => onOpenEntry(item.entry)}>打开 <span aria-hidden="true">→</span></button> : <button aria-label={`查看${item.name}规划`} onClick={() => setSelected(item)}>查看规划 <span aria-hidden="true">↗</span></button>}</div>
+    </article>)}</div> : <div className="catalog-empty"><span aria-hidden="true">⌕</span><h2>没有找到匹配的功能或规划</h2><p>试试其他关键词，或清除当前筛选。</p><button className="secondary-button" onClick={() => { setQuery(''); setTag('全部'); }}>清除筛选</button></div>}
+    <footer className="catalog-page-footer">规划方块只提供说明，不安装、连接或运行能力。</footer>
     {selected && <CatalogDetails item={selected} onClose={() => setSelected(null)} />}
   </div>;
 }

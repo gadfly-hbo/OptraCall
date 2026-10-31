@@ -1,3 +1,4 @@
+import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -281,4 +282,48 @@ test('CFG-04: clearing credentials preserves project history and files, and rest
   const after = await json(await restarted.request(`/api/projects/${project.id}/tasks/${task.id}`));
   assert.equal(after.snapshot.capabilities.requiresConfiguration, true); assert.ok(JSON.stringify(after.snapshot.messages).includes('清除凭据前的合成历史回复。'));
   assert.equal(provider.requests.length, 1, 'Restart must not reimport credentials, replay messages or switch to a fallback model.');
+});
+
+test('EB10/11: read-only request receipts reopen older revisions and unknown legacy evidence after later turns and restart', { timeout: 60000 }, async t => {
+  const provider = await startSyntheticProvider(); t.after(() => provider.close());
+  let host = await startTestHost(); t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', { name: 'Receipt history synthetic', provider: 'openai-compatible',
+    baseUrl: provider.baseUrl, model: 'synthetic-enterprise', apiKey: 'synthetic-receipt-history-key' }));
+  const { project } = await json(await host.request('/api/projects', 'POST', { name: '历史回执合成项目' }), 201);
+  const { task } = await json(await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: '多轮不同资料' }), 201);
+  const route = `/api/projects/${project.id}/tasks/${task.id}`;
+  await json(await host.request(`${route}/context-receipts`));
+  const draft = await json(await host.request('/api/enterprise-materials', 'POST', { title: '历史原文', body: '旧修订依据' }), 201);
+  let detail = await json(await host.request(`/api/enterprise-materials/${draft.material.id}/enable`, 'POST', { expectedVersion: draft.material.version }));
+  const refs = [];
+  for (const text of ['第一轮', '第二轮']) {
+    const requestId = randomUUID(), revisionId = detail.material.activeRevisionId;
+    const stream = await projectEvents(host, project.id, task.id);
+    await json(await host.request(`${route}/messages`, 'POST', { requestId, text,
+      enterpriseMaterials: [{ storeId: detail.storeId, materialId: detail.material.id, revisionId, mode: 'full' }] }), 202);
+    await stream.terminal(requestId); await stream.close();
+    refs.push({ requestId, revisionId });
+    if (text === '第一轮') {
+      const changed = await json(await host.request(`/api/enterprise-materials/${draft.material.id}`, 'PUT', { expectedVersion: detail.material.version, body: '新修订依据' }));
+      detail = await json(await host.request(`/api/enterprise-materials/${draft.material.id}/enable`, 'POST', { expectedVersion: changed.material.version }));
+    }
+  }
+  const state = await json(await host.request(route));
+  await host.close();
+  const manager = SessionManager.open(state.task.sessionFile, state.task.sessionDirectory, path.join(project.rootPath, '020_clean'));
+  manager.appendCustomEntry('optracall.run', { requestId: 'legacy-no-recorded-sources' });
+  const before = await fs.readFile(state.task.sessionFile);
+  host = await startTestHost({ dataRoot: host.dataRoot, projectsRoot: host.projectsRoot });
+  const { receipts } = await json(await host.request(`${route}/context-receipts`));
+  assert.equal(receipts.length, 3);
+  for (const [index, ref] of refs.entries()) {
+    const recorded = receipts.find((item: { requestId: string }) => item.requestId === ref.requestId);
+    assert.equal(recorded.providedContext.enterprise.materials[0].revisionId, ref.revisionId);
+    assert.equal(recorded.providedContext.enterprise.materials[0].providedText, index ? '新修订依据' : '旧修订依据');
+    assert.equal(recorded.providedContext.claim, 'provided-not-adopted');
+  }
+  assert.equal(receipts.find((item: { requestId: string }) => item.requestId === 'legacy-no-recorded-sources').providedContext, undefined);
+  assert.deepEqual(await fs.readFile(state.task.sessionFile), before);
+  assert.equal(provider.requests.length, 2);
+  await json(await host.request(`/api/projects/${project.id}/tasks/${randomUUID()}/context-receipts`), 404);
 });

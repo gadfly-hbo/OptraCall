@@ -17,10 +17,13 @@ import { composeRequirementContext } from '../../extensions/business-plugins/req
 import { requirementSessionDirectory, requirementWorkspace } from '../../extensions/business-plugins/requirements-elaboration/session/workspace.ts';
 import { createRequirementSessions } from './requirement-sessions.ts';
 import { createAgentSessionDomain, type SessionContext } from './agent-sessions.ts';
-import { savedTaskHistory, priorTaskRequest, ProjectHistoryError } from './project-history.ts';
+import { savedTaskHistory, priorTaskRequest, taskContextReceipts, ProjectHistoryError } from './project-history.ts';
 import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
 import { createVerificationFeature, parseVerificationSelection } from './verification-host.ts';
 import { VerificationStoreError } from './verification-store.ts';
+import { EnterpriseMaterialsStore, EnterpriseMaterialsError } from './enterprise-materials-store.ts';
+import { handleEnterpriseMaterialsRoute } from './enterprise-materials-routes.ts';
+import { EnterpriseContextError, enterpriseRequestIdentity, prepareEnterpriseContext } from './enterprise-materials-context.ts';
 
 class RequestFault extends Error {
   readonly status: number; readonly code: string;
@@ -54,6 +57,7 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
 export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string; heartbeatIntervalMs?: number }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot });
+  const enterpriseMaterials = new EnterpriseMaterialsStore(dataRoot);
   let staticUi: Awaited<ReturnType<typeof loadStaticUi>> | undefined;
   const instanceId = options.instanceId ?? randomUUID();
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
@@ -196,12 +200,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       throw new RequestFault(code === 'REQ_STORE_NOT_FOUND' ? 404 : 409, code === 'REQ_STORE_NOT_FOUND' ? 'not_found' : 'requirement_unavailable');
     }
   };
-  const requestFingerprint = (input: Record<string, unknown>): string | undefined => {
+  const requestFingerprint = async (input: Record<string, unknown>): Promise<string | undefined> => {
     const requirement = requirementSelection(input);
-    if (!requirement) return undefined;
+    const enterprise = await enterpriseRequestIdentity(enterpriseMaterials, input);
+    if (!requirement && !enterprise) return undefined;
     const selection = input.caseContext as CaseContextSelection | undefined;
     const caseContext = selection && typeof selection === 'object' && !Array.isArray(selection) ? { caseId: selection.caseId, caseRevision: selection.caseRevision, projectWorkRevision: selection.projectWorkRevision, selectedReferenceIds: selection.selectedReferenceIds } : selection ?? null;
-    return createHash('sha256').update(JSON.stringify(['optracall_request_v1', input.text, caseContext, requirement])).digest('hex');
+    return createHash('sha256').update(JSON.stringify(enterprise ? ['optracall_request_enterprise_v1', input.text, caseContext, requirement ?? null, enterprise] : ['optracall_request_v1', input.text, caseContext, requirement])).digest('hex');
   };
   async function prepareCasePrompt(projectId: string, taskId: string, input: Record<string, unknown>, accepted = false) {    const operationId = contextOperationId(projectId, taskId, input.requestId as string);
     const existing = cases.getStatus().state === 'ready' ? cases.getOperation(operationId) : null;
@@ -295,6 +300,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         throw new RequestFault(404, 'not_found');
       }
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
+      if (await handleEnterpriseMaterialsRoute({ request, response, url, store: enterpriseMaterials, cases, mutate })) return;
       const metricFactory = await metricFactoryRoutes(request, url);
       if (metricFactory) { json(response, metricFactory.status, metricFactory.value); return; }
       const requirementEvent = /^\/api\/requirement-instances\/(req-[a-z0-9][a-z0-9-]{0,60})\/events$/.exec(url.pathname);
@@ -421,6 +427,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const taskRoute = /^tasks\/([a-f0-9-]+)(?:\/(.*))?$/.exec(action ?? '');
         if (taskRoute) {
           const taskId = taskRoute[1]!, operation = taskRoute[2], key = keyOf(projectId, taskId);
+          if (operation === 'context-receipts' && request.method === 'GET') { const { project, task } = await pair(projectId, taskId); json(response, 200, { receipts: taskContextReceipts(project, task) }); return; }
           if (operation === 'verifications/preview' && request.method === 'POST') { verification.assertAvailable(); json(response, 200, await verification.preview(projectId, taskId, parseVerificationSelection(await body(request)))); return; }
           const verificationRoute = /^verifications(?:\/([a-f0-9-]+)(?:\/(.*))?)?$/.exec(operation ?? '');
           if (verificationRoute) {
@@ -461,9 +468,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             return;
           }
           if (operation === 'messages' && request.method === 'POST') {
-            const input = await body(request);
+            const input = await body(request, 262144);
             if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
-            const requestId = input.requestId, fingerprint = requestFingerprint(input), owner = await pair(projectId, taskId, true);
+            const requestId = input.requestId, fingerprint = await requestFingerprint(input), owner = await pair(projectId, taskId, true);
             const known = await priorRequest(owner.project, owner.task, requestId, fingerprint);
             if (known) {
               await mutate(async () => { await prepareCasePrompt(projectId, taskId, input, true); requirementPrefix(input); });
@@ -485,14 +492,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                     if (record.revision !== selection.caseRevision || cases.getProjectWork(projectId).revision !== selection.projectWorkRevision) throw new CaseStoreError('revision_conflict', 409);
                     if (!cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new CaseStoreError('project_not_linked', 409);
                   }
-                  const requirement = requirementPrefix(input), casePrompt = await prepareCasePrompt(projectId, taskId, input);
-                  const prompt = requirement === undefined ? casePrompt : `${requirement}\n\n${casePrompt}`;
+                  const requirement = requirementPrefix(input);
+                  const enterprise = await prepareEnterpriseContext(enterpriseMaterials, cases, input);
+                  const casePrompt = await prepareCasePrompt(projectId, taskId, input);
+                  const prompt = `${enterprise.text}\n\n${requirement === undefined ? casePrompt : `${requirement}\n\n${casePrompt}`}`;
+                  if (prompt.length > 131072) throw new EnterpriseContextError('enterprise_context_too_large', 413);
                   startedAt = new Date().toISOString();
                   await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt });
                   const selectedRequirement = requirementSelection(input);
                   const providedContext = {
+                    originalUserText: input.text as string,
                     ...(selectedRequirement && requirement ? { rap: { ...selectedRequirement, text: requirement } } : {}),
                     ...(input.caseContext ? { case: { operationId: contextOperationId(projectId, taskId, requestId) } } : {}),
+                    ...(enterprise.provision ? { enterprise: enterprise.provision } : {}),
                   };
                   return { prompt, providedContext };
                 });
@@ -571,6 +583,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
+      if (error instanceof EnterpriseContextError || error instanceof EnterpriseMaterialsError) {
+        const messages: Record<string, string> = {
+          enterprise_materials_too_large: '主动附带正文合计超过20,000字符；请显式调整范围或仅提供来源定位，未截断正文、未发送模型。',
+          enterprise_context_too_large: '本轮材料和来源说明合计超过上下文技术上限；请缩小主动附带范围或仅提供来源定位，未自动截断。',
+          enterprise_material_disabled: '该资料已停用，不能作为新材料主动附带；既有引用和历史修订仍可回读。',
+          enterprise_body_unavailable: '这份修订尚未取得正文；可以仅提供来源定位，或先在企业资料页补充正文。',
+          invalid_enterprise_range: '所选正文范围无效，请按预览确认UTF-16起止位置；未自动改成其他片段。',
+          enterprise_case_context_changed: '本案企业资料或补充已经变化，请刷新查看后重新选择。',
+          enterprise_case_store_changed: 'Case库或企业资料库身份不同，未自动重新关联。',
+        };
+        json(response, error.status, { code: error.code, message: messages[error.code] ?? '企业业务资料未能取得，请刷新核对明确修订和来源；未替换为最新版。' });
+        return;
+      }
       const originalCode = error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
       const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
       const status = error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;

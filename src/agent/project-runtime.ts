@@ -4,12 +4,13 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { RunDiagnostic } from './run-diagnostics.ts';
 import type { RuntimeModelConfiguration } from '../host/config-store.ts';
+import type { EnterpriseContextProvision } from '../host/enterprise-materials-types.ts';
 import { runtimeEnvironment } from '../../scripts/runtime-process.ts';
 
 /** Replacement workspace for non-project agent sessions (e.g. business plugins). */
 export type AgentWorkspace = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[]; capabilityPolicy?: 'fixed-draft' };
 /** Host-provided context receipt; this describes delivery, not business adoption. */
-export type ProvidedContextInput = { rap?: { instanceId: string; version?: string; text: string }; case?: { operationId: string; summary?: string } };
+export type ProvidedContextInput = { rap?: { instanceId: string; version?: string; text: string }; case?: { operationId: string; summary?: string }; enterprise?: EnterpriseContextProvision; originalUserText?: string };
 export type ProjectAgentOptions = { projectId: string; projectDirectory?: string; workspace?: AgentWorkspace; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string };
 export type BrowserUIRequest = { id: string; method: 'select' | 'confirm' | 'input' | 'editor'; title: string; message?: string; options?: string[]; placeholder?: string; prefill?: string };
 export type ProjectSnapshot = { sessionId: string; sessionFile?: string; messages: Record<string, any>[]; tools: string[]; status: 'idle' | 'running'; sdkVersion: string; capabilities: Record<string, unknown>; lastRun?: { requestId: string; outcome?: 'completed' | 'cancelled' | 'failed'; diagnostic?: RunDiagnostic }; uiRequests?: BrowserUIRequest[] };
@@ -105,7 +106,10 @@ export class ProjectAgent {
   async snapshot(): Promise<ProjectSnapshot> { await this.open(); this.#snapshot = await this.#rpc('snapshot'); return this.#snapshot!; }
   #execute(method: 'prompt' | 'command', text: string, requestId: string, requestFingerprint?: string, providedContext?: ProvidedContextInput) {
     if (this.#running) throw new ProjectRuntimeError('session_busy');
-    if (!text.trim() || text.length > 20_000) throw new ProjectRuntimeError('invalid_message');
+    // Ordinary Host messages can include a separately bounded source envelope.
+    // The fixed-draft resource keeps its approved full-input 20k limit.
+    const textLimit = this.#options.workspace?.capabilityPolicy !== 'fixed-draft' && providedContext !== undefined ? 131_072 : 20_000;
+    if (!text.trim() || text.length > textLimit) throw new ProjectRuntimeError('invalid_message');
     if (requestFingerprint !== undefined && (method !== 'prompt' || typeof requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(requestFingerprint))) throw new ProjectRuntimeError('invalid_request_fingerprint');
     const accepted = new Promise<void>((resolve, reject) => { this.#accepted.set(requestId, { resolve, reject }); });
     void accepted.catch(() => {});

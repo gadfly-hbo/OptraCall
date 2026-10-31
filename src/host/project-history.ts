@@ -4,6 +4,7 @@ import { SessionManager } from '../agent/sdk.ts';
 import type { ProjectSnapshot } from '../agent/project-runtime.ts';
 import { readRunDiagnostic } from '../agent/run-diagnostics.ts';
 import type { ProjectRecord, TaskRecord } from './project-store.ts';
+import { presentContextMessages } from '../agent/context-presentation.ts';
 
 export class ProjectHistoryError extends Error {
   readonly code: string;
@@ -32,7 +33,25 @@ export function savedTaskHistory(project: ProjectRecord, task: TaskRecord, sdkVe
     const outcome = data.outcome as 'completed' | 'cancelled' | 'failed', diagnostic = readRunDiagnostic(data.diagnostic, outcome);
     lastRun = { requestId: data.requestId, outcome, ...(diagnostic ? { diagnostic } : {}) };
   }
-  return { sessionId: task.sessionFile ? manager.getSessionId() : task.id, sessionFile: task.sessionFile, messages: manager.buildSessionContext().messages as Record<string, any>[], tools: [], status: 'idle', sdkVersion, capabilities: { ...capabilities, ...(providedContext ? { semanticContext: providedContext } : {}) }, ...(lastRun ? { lastRun } : {}) };
+  return { sessionId: task.sessionFile ? manager.getSessionId() : task.id, sessionFile: task.sessionFile, messages: presentContextMessages(manager.buildSessionContext().messages, manager.getEntries()) as Record<string, any>[], tools: [], status: 'idle', sdkVersion, capabilities: { ...capabilities, ...(providedContext ? { semanticContext: providedContext } : {}) }, ...(lastRun ? { lastRun } : {}) };
+}
+
+/** Lazy read projection of native records; never opens a worker or backfills a receipt. */
+export function taskContextReceipts(project: ProjectRecord, task: TaskRecord) {
+  if (!task.sessionFile) return [];
+  const manager = SessionManager.open(task.sessionFile, task.sessionDirectory, path.join(project.rootPath, '020_clean'));
+  const receipts = new Map<string, { requestId: string; sessionId?: string; providedAt?: string; providedContext?: Record<string, unknown> }>();
+  for (const entry of manager.getEntries()) {
+    if (entry.type !== 'custom' || entry.customType !== 'optracall.run') continue;
+    const data = entry.data as Record<string, unknown> | undefined;
+    if (!data || typeof data.requestId !== 'string' || !data.requestId.trim() || (data.phase !== 'started' && data.phase !== undefined) ||
+      (data.sessionId !== undefined && data.sessionId !== manager.getSessionId())) continue;
+    const raw = data.providedContext;
+    const context = raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as Record<string, unknown>).version === 1 ? raw as Record<string, unknown> : undefined;
+    receipts.set(data.requestId, { requestId: data.requestId, ...(typeof data.sessionId === 'string' ? { sessionId: data.sessionId } : {}),
+      ...(context ? { providedContext: context, ...(typeof context.providedAt === 'string' ? { providedAt: context.providedAt } : {}) } : {}) });
+  }
+  return [...receipts.values()];
 }
 
 export async function priorTaskRequest(project: ProjectRecord, task: TaskRecord, requestId: string, fingerprint?: string): Promise<string | undefined> {
