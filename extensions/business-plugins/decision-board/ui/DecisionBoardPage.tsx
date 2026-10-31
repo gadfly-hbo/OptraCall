@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BoardRequestError, addManualItem, addTask, adoptItem, dismissItem, extractReport, readBoard, saveFeedback, setTaskStatus, stopExtraction, type BoardItemView, type BoardReportView, type BoardTaskView, type BoardView } from './decision-board-client.ts';
-import type { EvidenceLevel, Priority } from '../types.ts';
+import { EVIDENCE_CONFIDENCE, type EvidenceLevel, type Priority } from '../types.ts';
 
 const EVIDENCE_CLASS: Record<string, string> = { '数据支撑': 'ev-data', '多源佐证': 'ev-multi', '逻辑推断': 'ev-logic', '经验假设': 'ev-exp' };
 const PRIORITY_LABEL: Record<string, string> = { high: '高优', medium: '中优', low: '低优' };
@@ -59,6 +59,7 @@ export function DecisionBoardPage() {
     && (sourceFilter === 'all' || item.sourceKind === sourceFilter)), [board, projectFilter, evidenceFilter, priorityFilter, sourceFilter]);
   const projectName = (id: string) => projects.find(project => project.id === id)?.name ?? id;
   const projectArchived = (id: string) => projects.find(project => project.id === id)?.archivedAt != null;
+  const sourceReport = (item: BoardItemView) => item.extractionId ? board?.reports.find(report => report.projectId === item.projectId && report.extraction?.id === item.extractionId) : undefined;
   const reports = (board?.reports ?? []).filter(report => projectFilter === 'all' || report.projectId === projectFilter);
   const suggested = items.filter(item => item.status === 'suggested');
   const dismissed = items.filter(item => item.status === 'dismissed');
@@ -69,7 +70,7 @@ export function DecisionBoardPage() {
     <div className="decision-heading"><div><p className="eyebrow">DECISION BOARD</p><h1 ref={title} tabIndex={-1}>决策看板</h1><p>跨项目汇总分析报告，把判断、行动与反馈放在同一处。</p></div></div>
     {error && <p className="board-error" role="alert">{error}</p>}
     {board && <section className="decision-stats board-stats" aria-label="看板统计">
-      <div><span>报告<small>060_reports</small></span><strong>{board.stats.reports}<small>份</small></strong><p>各项目最终报告</p></div>
+      <div><span>报告<small>060_reports</small></span><strong>{board.stats.reports}<small>份</small></strong><p>各项目已保存的报告文件</p></div>
       <div><span>待判断<small>含人工补充</small></span><strong>{board.stats.suggested}<small>项</small></strong><p>其中高优 {board.stats.highPrioritySuggested} 项</p></div>
       <div><span>已采纳<small>行动跟进</small></span><strong>{board.stats.adopted}<small>项</small></strong><p>可拆解任务并跟进</p></div>
     </section>}
@@ -99,41 +100,43 @@ export function DecisionBoardPage() {
 
     <section className="board-reports" aria-label="项目报告">
       <h3>项目报告（{reports.length}）{board?.stats.runningExtractions ? ` · 抽取中 ${board.stats.runningExtractions}` : ''}</h3>
+      <p className="board-context-note">每次抽取只读取一份报告；证据标签是模型对报告内容的判断，尚不代表独立核验。</p>
       {!board ? <div className="board-report-list"><div className="board-empty">正在读取项目报告…</div></div>
         : !reports.length ? <div className="board-report-list"><div className="board-empty">还没有项目报告。在项目工作台让分析任务输出报告，或从对话回复“保存为最终报告”，报告会出现在各项目的 060_reports 中。</div></div>
         : <div className="board-report-list">{reports.map(report => <ReportRow key={`${report.projectId}/${report.relativePath}`} report={report} archived={projectArchived(report.projectId)} disabled={pending !== null} onExtract={() => run(`extract:${report.relativePath}`, () => extractReport(report.projectId, report.relativePath))} onStop={() => report.extraction && run(`stop:${report.relativePath}`, () => stopExtraction(report.extraction!.id))} />)}</div>}
     </section>
 
     <div className="decision-section-heading"><h2>从建议到结果</h2><span>{projects.filter(project => project.archivedAt === null).length} 个活跃项目 · {projects.filter(project => project.archivedAt !== null).length} 个已归档</span></div>
+    <p className="board-context-note">采纳记录由用户决定；任务完成与业务效果分别回录。</p>
     <section className="decision-board" aria-label="决策泳道">
       <div className="decision-lane review">
         <div className="decision-lane-heading"><h3><span aria-hidden="true">◇</span>判断建议</h3><span>{suggested.length} 项待判断</span></div>
         {!suggested.length && !(showDismissed && dismissed.length) ? <div className="board-lane-empty">暂无待判断建议。从上方报告触发“抽取建议”，或点“补充建议”登记报告外的判断。</div>
           : <>
-            {suggested.map(item => <ItemCard key={item.id} item={item} projectName={projectName(item.projectId)} disabled={pending !== null}
+            {suggested.map(item => <ItemCard key={item.id} item={item} report={sourceReport(item)} projectName={projectName(item.projectId)} disabled={pending !== null}
               onAdopt={() => run(`adopt:${item.id}`, () => adoptItem(item.id))}
               onDismiss={() => setDismissTarget(item)} />)}
-            {showDismissed && dismissed.map(item => <ItemCard key={item.id} item={item} projectName={projectName(item.projectId)} disabled={pending !== null} />)}
+            {showDismissed && dismissed.map(item => <ItemCard key={item.id} item={item} report={sourceReport(item)} projectName={projectName(item.projectId)} disabled={pending !== null} />)}
           </>}
       </div>
       <div className="decision-lane action">
         <div className="decision-lane-heading"><h3><span aria-hidden="true">↗</span>行动跟进</h3><span>{adopted.length} 项已采纳</span></div>
         {!adopted.length ? <div className="board-lane-empty">采纳建议后在这里拆解任务：负责人、截止日与执行状态。</div>
-          : adopted.map(item => <ItemCard key={item.id} item={item} projectName={projectName(item.projectId)} disabled={pending !== null}
+          : adopted.map(item => <ItemCard key={item.id} item={item} report={sourceReport(item)} projectName={projectName(item.projectId)} disabled={pending !== null}
             onAddTask={() => setTaskTarget(item)}
             onTaskStatus={(taskId, status) => run(`task:${taskId}`, () => setTaskStatus(taskId, status))}
             onFeedback={task => setFeedbackTask({ task, item })}
             onDismiss={() => setDismissTarget(item)} />)}
       </div>
       <div className="decision-lane feedback">
-        <div className="decision-lane-heading"><h3><span aria-hidden="true">↻</span>结果复盘</h3><span>{reviewTasks.length} 项已完成</span></div>
+        <div className="decision-lane-heading"><h3><span aria-hidden="true">↻</span>结果复盘</h3><span>{reviewTasks.length} 项任务已完成</span></div>
         {!reviewTasks.length ? <div className="board-lane-empty">任务完成后回录反馈：结果、指标变化与评分，形成复盘记录。</div>
           : reviewTasks.map(({ task, item }) => <article className="decision-card" key={task.id}>
-            <div className="board-card-top"><span className="board-chip ev-multi">{TASK_STATUS_LABEL[task.status]}</span>{task.feedback && <span className="board-chip run">{'★'.repeat(task.feedback.score)}{'☆'.repeat(5 - task.feedback.score)}</span>}</div>
+            <div className="board-card-top"><span className="board-chip">任务{TASK_STATUS_LABEL[task.status]}</span>{task.feedback && <span className="board-chip run" aria-label={`用户反馈评分 ${task.feedback.score} 分`}>{'★'.repeat(task.feedback.score)}{'☆'.repeat(5 - task.feedback.score)}</span>}</div>
             <h4>{task.title}</h4>
             <p className="card-source">所属：{item.title} · {projectName(item.projectId)}{task.owner ? ` · 负责人 ${task.owner}` : ''}{task.dueDate ? ` · 截止 ${task.dueDate}` : ''}</p>
             {task.feedback ? <div className="board-task-feedback">
-              <p>{task.feedback.adopted ? '按建议执行' : '未按原建议执行'}{task.feedback.outcome ? ` · ${task.feedback.outcome}` : ''}{task.feedback.metricDelta ? ` · 指标变化 ${task.feedback.metricDelta}` : ''}</p>
+              <p>用户回录：{task.feedback.adopted ? '按建议执行' : '未按原建议执行'}{task.feedback.outcome ? ` · ${task.feedback.outcome}` : ''}{task.feedback.metricDelta ? ` · 指标变化 ${task.feedback.metricDelta}` : ''}</p>
               {task.feedback.review && <p>复盘：{task.feedback.review}</p>}
             </div> : <p className="card-source">尚未回录反馈。</p>}
             <footer className="card-actions"><button disabled={pending !== null} onClick={() => setFeedbackTask({ task, item })}>{task.feedback ? '更新反馈' : '回录反馈'}</button></footer>
@@ -160,7 +163,9 @@ function ReportRow({ report, archived, disabled, onExtract, onStop }: { report: 
       : extraction.status === 'running' ? <span className="board-chip run">抽取中…</span>
       : extraction.status === 'completed' ? <span className="board-chip">已抽取 {extraction.itemCount ?? 0} 条</span>
       : extraction.status === 'failed' ? <span className="board-chip fail">抽取失败</span>
-      : <span className="board-chip">已取消</span>}
+      : extraction.status === 'cancelled' ? <span className="board-chip">已取消</span>
+      : <span className="board-chip warn">抽取已中断</span>}
+    {extraction && <span className="report-input">本次抽取输入：1 份报告</span>}
     <span className="report-actions">
       {extraction?.status === 'running'
         ? <button disabled={disabled} onClick={onStop}>停止</button>
@@ -169,27 +174,39 @@ function ReportRow({ report, archived, disabled, onExtract, onStop }: { report: 
   </div>;
 }
 
-function ItemCard({ item, projectName: name, disabled, onAdopt, onDismiss, onAddTask, onTaskStatus, onFeedback }: {
-  item: BoardItemView; projectName: string; disabled: boolean;
+function ItemCard({ item, report, projectName: name, disabled, onAdopt, onDismiss, onAddTask, onTaskStatus, onFeedback }: {
+  item: BoardItemView; report?: BoardReportView; projectName: string; disabled: boolean;
   onAdopt?: () => void; onDismiss?: () => void; onAddTask?: () => void;
   onTaskStatus?: (taskId: string, status: string) => void; onFeedback?: (task: BoardTaskView) => void;
 }) {
   const openTasks = item.tasks.filter(task => task.status !== 'done');
+  const manual = item.sourceKind === 'manual';
+  const mappedReference = item.evidenceLevel !== null && EVIDENCE_CONFIDENCE[item.evidenceLevel] === item.confidence;
+  const reportName = report ? report.name : item.reportId !== null ? '原抽取报告名称未知' : '来源报告未知';
   return <article className="decision-card">
     <div className="board-card-top">
       <span className={`board-chip pr-${item.priority}`}>{PRIORITY_LABEL[item.priority]}</span>
-      {item.evidenceLevel && <span className={`board-chip ${EVIDENCE_CLASS[item.evidenceLevel]}`}>{item.evidenceLevel}</span>}
-      {item.confidence !== null && <span className="board-confidence">置信度 {Math.round(item.confidence * 100)}%</span>}
-      <span className="board-chip">{item.sourceKind === 'manual' ? '人工' : '抽取'}</span>
+      <span className="board-chip">{item.evidenceLevel ? `${manual ? '固定标签' : '模型标签'}：${item.evidenceLevel}` : '证据标签未知'}</span>
+      <span className="board-chip">{manual ? '人工' : '抽取'}</span>
     </div>
     <h4>{item.title}</h4>
     <p>{item.rationale}</p>
     {item.expectedImpact && <p className="board-impact">预期效果：{item.expectedImpact}</p>}
     {item.status === 'dismissed' && item.dismissedReason && <p className="card-dismissed-reason">驳回理由：{item.dismissedReason}</p>}
-    {item.evidence && <details className="board-evidence"><summary>证据与推导（{item.evidence.facts.length} 条事实）</summary>
-      {item.evidence.facts.map((fact, index) => <div className="fact" key={index}><p>{fact.text}</p>{fact.quote && <blockquote>{fact.quote}</blockquote>}</div>)}
-      <p className="reasoning">推导：{item.evidence.reasoning}</p>
-    </details>}
+    {!manual && <p className="board-source-report">{report ? `抽取自：${reportName}` : reportName}</p>}
+    <details className="board-evidence"><summary>来源与依据{item.evidence ? `（${item.evidence.facts.length} 项报告依据）` : ''}</summary>
+      {manual ? <p className="reasoning">人工补充；经验假设为固定标签。</p> : <>
+        <p className="reasoning">{report ? `抽取报告：${report.relativePath}` : reportName}</p>
+        {item.extractionId && item.reportId !== null && <p className="reasoning">本次抽取输入：1 份报告</p>}
+        <p className="reasoning">同一报告的多处引文，不代表独立多源验证。</p>
+      </>}
+      <p className="board-reference-value">{item.confidence === null ? '参考值未知' : `${mappedReference ? '标签参考值' : '已存参考值'} ${item.confidence}`}</p>
+      {item.confidence !== null && <p className="reasoning">{mappedReference ? '参考值按证据标签映射，不是模型自报概率或已验证正确率。' : '参考值来源未知，不能作为已验证正确率。'}</p>}
+      {item.evidence ? <>
+        {item.evidence.facts.map((fact, index) => <div className="fact" key={index}><p>{fact.text}</p>{fact.quote && <blockquote>{fact.quote}</blockquote>}</div>)}
+        <p className="reasoning">{manual ? '补充说明' : '模型推导'}：{item.evidence.reasoning}</p>
+      </> : <p className="reasoning">未记录证据与推导。</p>}
+    </details>
     {onAddTask && item.tasks.length > 0 && <div className="board-tasks">{openTasks.map(task => <div className="board-task" key={task.id}>
       <p className="task-title">{task.title}</p>
       <p className="task-meta">{TASK_STATUS_LABEL[task.status]}{task.owner ? ` · ${task.owner}` : ''}{task.dueDate ? ` · 截止 ${task.dueDate}` : ''}</p>

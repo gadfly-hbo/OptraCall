@@ -18,7 +18,7 @@ async function until<T>(read: () => Promise<T>, done: (value: T) => boolean): Pr
 }
 
 async function fixture(t: TestContext, label: string) {
-  const root = path.resolve('.local/semantic-verification/reliability-closeout', `${label}-${randomUUID()}`);
+  const root = path.resolve(process.env.OPTRACALL_TEST_ARTIFACTS_ROOT ?? '.local/semantic-verification', 'reliability-closeout', `${label}-${randomUUID()}`);
   const dataRoot = path.join(root, 'host-data'), projectsRoot = path.join(root, 'projects');
   await mkdir(root, { recursive: true });
   let hold = false, release: (() => void) | undefined;

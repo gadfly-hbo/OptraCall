@@ -3,6 +3,17 @@ async (page) => {
   const initial = new URL(page.url()), baseUrl = initial.origin, providerUrl = initial.searchParams.get('provider');
   if (initial.hostname !== '127.0.0.1' || initial.port !== '4183' || !providerUrl || new URL(providerUrl).hostname !== '127.0.0.1') throw new Error('Use isolated QA UI4183 and its localhost synthetic Provider.');
   const assert = (value, message) => { if (!value) throw new Error(message); };
+  const textContrast = locator => locator.evaluate(element => {
+    const luminance = color => {
+      const rgb = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => {
+        const channel = value / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+    };
+    const style = getComputedStyle(element), foreground = luminance(style.color), background = luminance(style.backgroundColor);
+    return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+  });
   const errors = [], outbound = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => { const url = new URL(request.url()); if (url.protocol.startsWith('http') && url.hostname !== '127.0.0.1') outbound.push(url.origin); });
@@ -40,11 +51,15 @@ async (page) => {
   assert(await reportRow('复购分析.md').getByText('未抽取').isVisible(), 'active report starts unextracted');
   assert(await reportRow('旧报告.md').getByText('已归档').isVisible(), 'archived project is labelled');
   assert(await reportRow('旧报告.md').getByRole('button', { name: '抽取建议', exact: true }).isDisabled(), 'archived project extraction is disabled');
+  assert(await textContrast(reportRow('复购分析.md').getByRole('button', { name: '抽取建议', exact: true })) >= 4.5, 'extraction entry has readable button text');
   // Reading and filtering the board never calls models (DB03).
   const beforeProvider = (await metrics()).requestCount;
   await board.getByLabel('按证据等级过滤').selectOption('数据支撑');
   assert(await board.getByLabel('按证据等级过滤').inputValue() === '数据支撑', 'evidence filter applied');
   await board.getByLabel('按证据等级过滤').selectOption('all');
+  await board.getByLabel('按项目过滤').selectOption(archived.id);
+  assert((await board.locator('.board-report-row').count()) === 1, 'project filter limits report rows');
+  await board.getByLabel('按项目过滤').selectOption('all');
   assert((await metrics()).requestCount === beforeProvider, 'navigation and filters must not call the model');
 
   // Explicit extraction drives the only model call; the canned reply keeps one
@@ -52,12 +67,23 @@ async (page) => {
   await reportRow('复购分析.md').getByRole('button', { name: '抽取建议', exact: true }).click();
   await reportRow('复购分析.md').getByText('已抽取 2 条', { exact: false }).waitFor({ timeout: 30_000 });
   assert((await metrics()).requestCount === beforeProvider + 1, 'extraction adds exactly one model call');
+  assert(await reportRow('复购分析.md').getByText('本次抽取输入：1 份报告', { exact: true }).isVisible(), 'extraction identifies its single report input');
   await card('补发高价值会员召回权益').getByRole('heading', { name: '补发高价值会员召回权益' }).waitFor();
-  assert(await card('补发高价值会员召回权益').getByText('置信度 90%').isVisible(), 'confidence derives from 数据支撑');
-  assert(await card('核对渠道投放记录').getByText('置信度 55%').isVisible(), 'confidence derives from 逻辑推断');
+  assert(await card('补发高价值会员召回权益').getByText('模型标签：数据支撑', { exact: true }).isVisible(), 'evidence label identifies model origin');
+  assert(await card('补发高价值会员召回权益').getByText('抽取自：复购分析.md', { exact: true }).isVisible(), 'source resolves through the actual extraction association');
+  assert(await textContrast(card('补发高价值会员召回权益').getByRole('button', { name: '采纳', exact: true })) >= 4.5, 'adoption entry has readable button text');
+  assert((await card('补发高价值会员召回权益').locator('.board-confidence').count()) === 0, 'uncalibrated reference values stay out of the main badge row');
   await card('补发高价值会员召回权益').locator('summary').click();
+  assert(await card('补发高价值会员召回权益').getByText('标签参考值 0.9', { exact: true }).isVisible(), 'confidence keeps the stored raw value without correctness percentage');
+  await card('核对渠道投放记录').locator('summary').click();
+  assert(await card('核对渠道投放记录').getByText('标签参考值 0.55', { exact: true }).isVisible(), 'logical inference keeps its stored value');
+  assert(await board.getByText('采纳记录由用户决定；任务完成与业务效果分别回录。', { exact: true }).isVisible(), 'adoption, task completion and effects are separate');
+  assert(await card('补发高价值会员召回权益').getByText('参考值按证据标签映射，不是模型自报概率或已验证正确率。', { exact: true }).isVisible(), 'mapping is explained without misattributing confidence');
   assert(await card('补发高价值会员召回权益').getByText('BOARD_QUOTE_MARKER_复购率42%→31%').isVisible(), 'verbatim quote renders');
   assert((await card('补发高价值会员召回权益').locator('blockquote').count()) === 1, 'quote-less facts stay facts');
+  await board.getByLabel('按优先级过滤').selectOption('high');
+  assert((await lane('review').locator('.decision-card').count()) === 1, 'priority filter limits suggestions');
+  await board.getByLabel('按优先级过滤').selectOption('all');
 
   // Decision loop: adopt -> task -> done -> feedback; dismiss keeps reasons (DB05/DB07/DB08).
   await card('补发高价值会员召回权益').getByRole('button', { name: '采纳', exact: true }).click();
@@ -97,7 +123,14 @@ async (page) => {
   const manualCard = lane('review').locator('.decision-card', { hasText: '人工补充渠道排查' });
   await manualCard.waitFor();
   assert(await manualCard.getByText('人工', { exact: true }).isVisible(), 'manual badge');
-  assert(await manualCard.getByText('经验假设').isVisible(), 'manual evidence level');
+  assert(await manualCard.getByText('固定标签：经验假设', { exact: true }).isVisible(), 'manual fixed evidence level');
+  assert((await manualCard.getByText(/模型标签/).count()) === 0, 'manual evidence is never attributed to a model');
+  await manualCard.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  assert(await manualCard.getByText('标签参考值 0.35', { exact: true }).isVisible(), 'manual raw confidence is retained');
+  await board.getByLabel('按来源过滤').selectOption('manual');
+  assert((await lane('review').locator('.decision-card').count()) === 1, 'manual source filter limits suggestions');
+  await board.getByLabel('按来源过滤').selectOption('all');
 
   // Re-extraction rebuilds only suggested items (DB06). The running chip gates
   // the completion wait: the completed text alone can match the previous round.
@@ -118,6 +151,51 @@ async (page) => {
   await page.setViewportSize({ width: 1720, height: 1000 });
   void focused;
 
+  // Public read-boundary fixtures cover historical/missing provenance without
+  // changing stored records or introducing another extraction/model call.
+  const savedBoard = await api('decision-board');
+  const extracted = savedBoard.items.find(item => item.sourceKind === 'extracted');
+  assert(extracted, 'extracted item fixture exists');
+  const multi = { ...extracted, id: 'ui-multi', status: 'suggested', title: '同报告多处引用', evidenceLevel: '多源佐证', confidence: 0.75,
+    evidence: { level: '多源佐证', reasoning: '同一报告的两处内容。', facts: [{ text: '第一处', quote: '原文甲' }, { text: '第二处', quote: '原文乙' }] }, tasks: [] };
+  const unknown = { ...extracted, id: 'ui-unknown', status: 'suggested', title: '历史来源缺失', reportId: null, extractionId: null, evidenceLevel: null, confidence: null, evidence: null, tasks: [] };
+  const historical = { ...multi, id: 'ui-historical', title: '历史抽取来源', extractionId: 'unmatched-old-extraction' };
+  const unmapped = { ...unknown, id: 'ui-unmapped', title: '未知来源参考值', confidence: 0.123 };
+  const readFixture = { ...savedBoard, items: [multi, unknown, historical, unmapped],
+    reports: savedBoard.reports.map(report => report.extraction ? { ...report, extraction: { ...report.extraction, status: 'interrupted' } } : report),
+    stats: { ...savedBoard.stats, suggested: 4, adopted: 0, dismissed: 0 } };
+  await page.route('**/api/decision-board', route => route.request().method() === 'GET' ? route.fulfill({ json: readFixture }) : route.continue());
+  await page.reload();
+  await page.getByRole('button', { name: '决策', exact: true }).click();
+  await card('同报告多处引用').waitFor();
+  assert(await card('同报告多处引用').getByText('模型标签：多源佐证', { exact: true }).isVisible(), 'original multi-source label is retained and attributed');
+  await card('同报告多处引用').locator('summary').click();
+  assert(await card('同报告多处引用').getByText('标签参考值 0.75', { exact: true }).isVisible(), '0.75 is not converted into a correctness percentage');
+  assert(await card('同报告多处引用').getByText('同一报告的多处引文，不代表独立多源验证。', { exact: true }).isVisible(), 'multiple quotes do not establish independent sources');
+  assert(await card('历史来源缺失').getByText('证据标签未知', { exact: true }).isVisible(), 'missing evidence is unknown');
+  await card('历史来源缺失').locator('summary').click();
+  assert(await card('历史来源缺失').getByText('参考值未知', { exact: true }).isVisible(), 'missing confidence is unknown');
+  assert(await card('历史来源缺失').locator('.board-source-report').getByText('来源报告未知', { exact: true }).isVisible(), 'missing report provenance stays unknown');
+  assert(await card('历史抽取来源').locator('.board-source-report').getByText('原抽取报告名称未知', { exact: true }).isVisible(), 'old extraction is never attributed to latest report');
+  await card('未知来源参考值').locator('summary').click();
+  assert(await card('未知来源参考值').getByText('已存参考值 0.123', { exact: true }).isVisible(), 'unmapped stored value is preserved');
+  assert(await card('未知来源参考值').getByText('参考值来源未知，不能作为已验证正确率。', { exact: true }).isVisible(), 'missing mapping provenance is not invented');
+  assert(await reportRow('复购分析.md').getByText('抽取已中断', { exact: true }).isVisible(), 'interrupted extraction is distinct from cancelled or completed');
+  assert((await board.getByText(/置信度 \d+%|正确率 \d+%/).count()) === 0, 'no percentage is presented as validated confidence');
+  assert(await card('同报告多处引用').getByRole('button', { name: '采纳', exact: true }).isEnabled(), 'source caveat never blocks adoption');
+  for (const width of [1280, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const extra = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    assert(extra <= 1, `source details fit ${width}px (${extra}px overflow)`);
+  }
+  await page.unroute('**/api/decision-board');
+  await page.reload();
+  await page.getByRole('button', { name: '决策', exact: true }).click();
+  await lane('action').getByRole('heading', { name: '补发高价值会员召回权益' }).waitFor();
+  await manualCard.waitFor();
+  assert((await metrics()).requestCount === beforeProvider + 2, 'read/reload/provenance fixtures never run models');
+
   assert(errors.length === 0, `page errors: ${errors.join('; ')}`);
   assert(outbound.length === 0, `external requests: ${outbound.join('; ')}`);
+  return { status: 'PASS', syntheticProviderRequests: 2, sourceAndConfidence: true, decisionLoop: true, filters: 4, widths: [1720, 1280, 768, 390], pageErrors: errors.length, externalRequests: outbound.length };
 }
