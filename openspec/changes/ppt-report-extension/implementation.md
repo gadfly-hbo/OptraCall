@@ -21,3 +21,17 @@
 - 端到端冒烟（无模型）：按 guide 骨架生成 3 页合成 deck → digit_check OK → page_images 3 页 OK。
 
 **待接（后续任务）**：Host 挂载 `additionalSkillPaths`（Codex 侧）、报告页生成入口（PPT-05）、B 精修插件（PPT-06～09）。
+
+## B · 逐页精修插件（2026-11-02 交付，Qoder 侧）
+
+**交付物**（`extensions/business-plugins/ppt-refiner/`）
+
+- `types.ts` + `storage/deck-store.ts`：deck 注册、版本快照（原子写）、回退（先存当前）、页锁定、终版导出 + 差异清单（不回写 md）。
+- `scripts/edit_slide.py`：run 级文本替换，字节隔离；`--report` 锚点拦截未覆盖数字，`--allow-uncovered` 供用户确认直改。
+- `session/workspace.ts`：精修会话提示词（md 锚点只读、锁定页不触碰、数字红线、页图自检、last-turn.json 差异捕获）。
+- `api/routes.ts`：create/get/locks/revert/export/turn/stop/render/image；turn 按字节变化快照并消费 last-turn.json；render 直接跑确定性页图管线（不经模型）；Host 绑定 transport，插件不建会话/端口。
+- `ui/RefinerPage.tsx` + `refiner-client.ts` + `refiner.css`：页网格真实页图、选页对话、版本历史回退、导出与差异清单。
+
+**验证**：`tests/ppt-refiner-core.test.ts`（7）、`tests/ppt-refiner-api.test.ts`（3）全绿；`npx tsc --noEmit` 干净；`vite build` 通过。
+
+**待接（Host/Codex）**：`agent-sessions.ts` 注册 `ppt-refiner` 域/profile 与 facade 适配（参照 requirement-sessions.ts）；`project-session.ts` 挂 `additionalSkillPaths`；`server.ts` 挂路由（deckRoot、pythonPath、skillScriptsDir）；`App.tsx` 精修页导航与报告页「生成 PPTX 版本」入口（PPT-05）；`catalog-data.ts` 分析资产已接入条目（PPT-12）；合成端到端与独立复核。
