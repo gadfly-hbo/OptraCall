@@ -1,8 +1,8 @@
 # PPT 报告能力产品讨论稿（生成 skill + 逐页精修插件）
 
-版本 v0.6 · 2026 年 11 月 1 日 · 决策点与视觉基线已确认，未授权实施
+版本 v0.7 · 2026 年 11 月 1 日 · 实施中（P0 验证阶段），未授权模型调用
 
-状态：v0.1 根据用户两部分思路整理；v0.2–v0.4 逐轮确认触发方式、底本、流程边界、接入范围、md 报告锚点与 D1 编辑链路；v0.5 整体确认 D4–D8，§6 全部决策点关闭。下一步按工程规范创建变更并完成两项 P0 技术验证；v0.6 版式视觉基线经用户确认（§3.2 / 规格 PPT-04）。实施需另行授权，并遵守[工程规范](engineering-workflow.md)与统一会话接入规范 IN01–IN07。
+状态：v0.1–v0.6 讨论与决策收敛（触发方式、流程边界、接入范围、md 锚点、D1 编辑链路、D4–D8、视觉基线）；v0.7 起进入实施：底本因许可证调整为 MIT 组合（§3.2），P0 验证进行中，记录见[变更规格](../openspec/changes/ppt-report-extension/spec.md)与[P0 验证记录](../openspec/changes/ppt-report-extension/p0-validation.md)。实施与模型调用按工程规范与各自授权执行。
 
 ---
 
@@ -18,7 +18,7 @@ OptraCall 的正式分析报告目前以 Markdown 产出（`060_reports`）。�
 ### 1.1 用户已确认要点（2026-11-01 反馈，v0.2）
 
 1. **触发**：skill 生成候选版 PPTX 不由 Agent 自动触发；默认用户手动发起。唯一例外：分析需求中已显式声明需要 PPTX 报告。
-2. **底本**：生成 skill 以 Anthropic 官方 pptx skill 为底本，吸收其他 skill 的优势项。
+2. **底本**：~~生成 skill 以 Anthropic 官方 pptx skill 为底本~~（v0.7 修订：其 LICENSE 为专有许可，禁止复制/衍生/分发/在 Anthropic Services 外保留副本，公开仓库不可用）——改为 **MIT 组合底本**：生成向 `minimax-ai/skills@pptx-generator`（MIT）+ 编辑向 `claude-office-skills@pptx-manipulation`（MIT）；Anthropic skill 仅作方法论参考，不复制任何文本/代码；版式层吸收 reports-factory 实测设计系统与用户参考 skill 优势项。
 3. **流程边界**：分析流程到产出候选版 PPTX 即结束；逐页修改在 B 工具读取候选版 PPTX 后的独立对话中进行，不回原分析会话（在原会话里改 PPT 上下文会乱）。
 4. **接入范围**：reports-factory 只有逐页修改工具作为业务插件开发接入 OptraCall，**不是整体接入**；严格遵守 OptraCall 接入规范，特别是统一 Agent Runtime 底座。
 5. **md 报告锚点（v0.3 接受）**：精修会话只读携带 md 报告作为数字/事实锚点，内容级改动可对照原文；改动是否强制回流 md 报告仍为 D5 待讨论。
@@ -50,9 +50,9 @@ OptraCall 的正式分析报告目前以 Markdown 产出（`060_reports`）。�
 - 候选版的含义：数字与结论可回溯到 md 报告、结构完整、版式达到「可直接进入逐页精修」的水准，不承诺零人工修正。
 - 产物为纯 .pptx，不携带自定义源工件（D1 已确认）；整页级重构由 B 侧用底本工具单页重生成兜底。
 
-### 3.2 构建参考（已确认：Anthropic 官方 pptx skill 为底本）
+### 3.2 构建参考（v0.7 确认：MIT 组合底本）
 
-底本与优势吸收来源（2026-11-01 确认；调研为发现式记录，未安装）：
+底本与优势吸收来源（许可证均经 GitHub API 核实，2026-11-01；调研为发现式记录）：
 
 **社区标杆**
 - `anthropics/skills@pptx`（skills.sh 246.5K 安装）：Anthropic 官方 pptx skill，创建/读取/编辑 .pptx 的完整方法论，事实上的行业标准参考。
@@ -67,7 +67,7 @@ OptraCall 的正式分析报告目前以 Markdown 产出（`060_reports`）。�
 - PPT 内容核对（linksass）：逐数字回源对账，与 OptraCall 数字红线高度契合，可作守则参考。
 - PPT（Qoder 官方 plugin，含 1 skill + 1 MCP）：整体工作流参考。
 
-用户还将另行提供数个优质 PPT 生成 skill 作参考。**底本已确认为 `anthropics/skills@pptx`**；上列候选与用户参考作为优势吸收来源（如模板体系、风格提取、数字回源核对、报告→演示的输入形态），逐项评估取舍，不做整包拼凑。版式层以底本方法论为框架，吸收 reports-factory 实测版式系统（色彩、字体栈、页型模板）作为视觉基线，视觉质量纳入 skill 验收（v0.6 已确认；用户反馈：候选版观感不得低于 reports-factory 一版 skill 的产出）。
+用户还将另行提供数个优质 PPT 生成 skill 作参考。**底本（v0.7）：`minimax-ai/skills@pptx-generator`（MIT，生成向）+ `claude-office-skills/skills@pptx-manipulation`（MIT，编辑向）**，可复制/修改/分发并保留版权与许可声明；上列其他候选与用户参考作为优势吸收来源（如模板体系、风格提取、数字回源核对、报告→演示的输入形态），逐项评估取舍，不做整包拼凑。Anthropic 官方 pptx skill 因专有许可降为**方法论参考**（只总结方法，不复制文本/代码）。版式层以所选底本方法论为框架，吸收 reports-factory 实测版式系统（色彩、字体栈、页型模板）作为视觉基线，视觉质量纳入 skill 验收（v0.6 已确认；用户反馈：候选版观感不得低于 reports-factory 一版 skill 的产出）。
 
 ### 3.3 内容守则（与 OptraCall 原则对齐）
 
@@ -199,3 +199,9 @@ reports-factory 的 skill 内容守则虽不照抄，但其红线与 OptraCall �
 - 变更规格与 UI 演示已创建并同步提交确认（见 §6 末尾指针）。
 - 新增决定——版式规范资源随 skill 入仓、视觉质量对照基线样张核验（规格 PPT-04），版式层吸收 reports-factory 实测设计系统；用户已确认。
 - UI 演示幻灯片已升级为目标版式语言示意（三色系、页型模板、有限强调）。
+
+## v0.7 修订说明（进入实施）
+
+- 用户授权进入开发；P0 验证启动，记录见[P0 验证记录](../openspec/changes/ppt-report-extension/p0-validation.md)。
+- **底本变更**：Anthropic pptx skill 经许可证核实为专有许可（禁止复制/衍生/分发），不可进入公开仓库；经用户确认改为 MIT 组合底本（minimax pptx-generator 生成向 + claude-office-skills pptx-manipulation 编辑向），Anthropic 降为方法论参考。
+- P0-3（skill 发现路径）与 P0-1（页图渲染管线，LibreOffice 经授权安装）已完成；P0-2 进行中。
