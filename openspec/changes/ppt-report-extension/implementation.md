@@ -49,3 +49,21 @@
 **验证**：`npm run check` 全绿（772 pass / 0 fail / 3 环境跳过 + 构建）。真实 host HTTP 冒烟（无模型）：create/get/locks/export/render/image/stop 全通。dev server 浏览器实测：目录进入精修页、打开 deck（3 页真实页图）、选页、锁定/解锁、版本历史、导出差异清单、报告文件「生成 PPTX」按钮渲染正常。
 
 **尚未做（留待授权/后续）**：真实模型端到端（生成候选版、精修对话、视觉自检——需另行模型调用授权）；非作者独立复核；Git PR/CI 交付。
+
+## 真实模型端到端（2026-11-02，用户授权，合成数据）
+
+环境：dev server + 项目【合成试跑20261029-464ae3】（MiniMax M3）+ `~/.optracall/ppt-venv`。
+
+| 验收 | 实测结果 |
+| --- | --- |
+| PPT-04/05 生成 | 报告文件「生成 PPTX」按钮 → 任务 `PPT 生成 · simulated_execution`（预填草稿确认后发送）→ 真实模型产出 `060_reports/simulated_execution_候选版.pptx`（9 页，46KB）。`digit_check` 全绿（数字逐字含图表缓存）；`page_images` 9 页；页型结构合理（封面/目录/章节/KPI/对比/结论）。 |
+| PPT-06 单页精修 | turn1 仅改第 3 页眉标题为结论句（edit_slide.py run 级替换），**仅 slide3.xml 变化**，快照 v2（pages[3]+diff）。 |
+| PPT-09 锚点与差异 | turn2 改 42.5%→43.9%：先 `ANCHOR_REFUSED` 拦截 → 用户显式指定后 `--allow-uncovered` 直改 + `uncovered-confirmed` 差异记录，md 未动；Agent 还指出旧推导「≈8pp」失效。 |
+| PPT-07 视觉自检 | turn3 全 9 页视觉+几何检查：抓到柱高与改后数值不符、8pp 旧推导、accent/navy 对比度 2.33:1、眉标序列断裂等真实问题；未修改任何页。 |
+| PPT-08 锁定（发现并已修复的 bug） | 初版只有提示词约束，锁 P6 后仍被改（v4）。修复：`edit_slide.py`/`splice_slide.py` 读 meta.json 硬门禁（exit 5）+ turn 路由预检引用页码（409 不开会话）。实机复验：Agent 两次被脚本门禁拒绝、deck 字节不变；单测覆盖路由预检。 |
+| PPT-08 版本回退 | revert(v2)：先存当前（v5）再回滚，deck 与 v2 一致，版本链完整。 |
+| PPT-11 导出 | `final.pptx` + `final.diff.md`：含 v2/v3/v4 全部差异与锚点状态（covered / uncovered-confirmed），标注不回写 md。 |
+
+其他并发修复：soffice 每次转换使用独立 `UserInstallation` profile（并行转换不再冲突）。
+
+**未做视觉盲评**：候选版观感对照（reports-factory 一版 skill 水准）留用户验收；我侧只验证结构、数字与管线。
