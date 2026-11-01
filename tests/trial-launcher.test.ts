@@ -131,6 +131,23 @@ test('TRIAL-09: concurrent recovery of a dead lock owner still creates one insta
  assert.equal(attempts.filter(result=>result.status==='started').length,1);assert.equal(new Set(attempts.map(result=>result.instanceId)).size,1);
 });
 
+test('TRIAL-13: Finder passes trusted bundled CA and its private CLI path through to the actual Host', async t => {
+ const f=await fixture();f.options.port=await availablePort();t.after(async()=>{await launcher.stopTrial(f.options).catch(()=>{});await f.cleanup();});
+ const entry=path.join(f.root,'scripts/start-host.mjs');
+ await writeFile(entry,(await readFile(entry,'utf8')).replace("{ui:'Synthetic trial UI'}","{ui:'Synthetic trial UI',nodeOptions:process.env.NODE_OPTIONS,disabledTls:process.env.NODE_TLS_REJECT_UNAUTHORIZED,extraCa:process.env.NODE_EXTRA_CA_CERTS,certFile:process.env.SSL_CERT_FILE,certDir:process.env.SSL_CERT_DIR,systemCa:process.env.NODE_USE_SYSTEM_CA,searchPath:process.env.PATH}"));
+ await commitFixture(f.root);f.build=await stampFixture(f.root);
+ const home=path.join(f.root,'finder-home'),runtime=path.join(home,'Library/Application Support/OptraCall/runtime/node/bin'),tools=path.join(home,'Library/Application Support/OptraCall/tools/gh/bin');
+ await mkdir(runtime,{recursive:true});await mkdir(tools,{recursive:true});await symlink(process.execPath,path.join(runtime,'node'));
+ const args=[`--root=${f.root}`,`--state-root=${f.options.stateRoot}`,`--data-root=${f.options.dataRoot}`,`--projects-root=${f.options.projectsRoot}`,`--port=${f.options.port}`,'--json','--no-open'];
+ const finderEnv={...process.env,HOME:home,PATH:'/usr/bin:/bin',NODE_OPTIONS:'--no-warnings',NODE_TLS_REJECT_UNAUTHORIZED:'0',NODE_EXTRA_CA_CERTS:'/synthetic/untrusted.pem',SSL_CERT_FILE:'/synthetic/roots.pem',SSL_CERT_DIR:'/synthetic/roots',NODE_USE_SYSTEM_CA:'1'};
+ const output=await execute('bash',[path.resolve('启动 OptraCall.command'),...args],{cwd:'/',env:finderEnv});
+ const running=JSON.parse(output.stdout.trim()),value=await(await fetch(running.url)).json();
+ assert.equal(value.nodeOptions,'--use-bundled-ca');assert.equal(value.disabledTls,undefined);
+ for(const key of ['extraCa','certFile','certDir','systemCa'])assert.equal(value[key],undefined,key);
+ assert.ok(value.searchPath.split(path.delimiter).includes(tools));
+ await launcher.stopTrial(f.options);
+});
+
 test('TRIAL-10: a new clean Host checkout cannot start with an old retained UI build', async t => {
  const f=await actualHostFixture();f.options.port=await availablePort();t.after(async()=>{await launcher.stopTrial(f.options).catch(()=>{});await f.cleanup();});
  await writeFile(path.join(f.root,'scripts/start-host.mjs'),await readFile(path.join(f.root,'scripts/start-host.mjs'),'utf8')+'\n// synthetic next Host release; UI build failed before replacement\n');

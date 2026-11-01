@@ -1,6 +1,10 @@
 #!/bin/bash
 # Finder starts with a minimal PATH. Resolve and verify a runtime before using it.
 set -eu
+# Trial installs use Node's verified built-in roots even when a relocated
+# runtime was compiled with certificate paths from another machine.
+export NODE_OPTIONS=--use-bundled-ca
+unset NODE_TLS_REJECT_UNAUTHORIZED NODE_EXTRA_CA_CERTS SSL_CERT_FILE SSL_CERT_DIR NODE_USE_SYSTEM_CA
 optracall_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 optracall_node=''
 for optracall_candidate in \
@@ -19,7 +23,7 @@ if [ -z "$optracall_node" ]; then
   printf '%s\n' 'OptraCall 需要 Node.js 25 或更新版本。请反馈部署问题；启动入口不会自动安装或更新。' >&2
   exit 1
 fi
-PATH="$(dirname -- "$optracall_node"):$optracall_root/.runtime/python/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+PATH="$(dirname -- "$optracall_node"):$HOME/Library/Application Support/OptraCall/tools/gh/bin:$optracall_root/.runtime/python/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 export PATH
 cd -- "$optracall_root"
 exec "$optracall_node" "$optracall_root/scripts/trial-launcher.mjs" "$@"

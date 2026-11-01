@@ -11,6 +11,9 @@ export class TrialUpdateError extends Error {
 function commandEnvironment() {
   const env = {};
   for (const key of ['PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'SYSTEMROOT']) if (process.env[key]) env[key] = process.env[key];
+  // Fixed public CA choice only; inherited preload or TLS-disable options
+  // must not be forwarded to authenticated helpers or install/build children.
+  env.NODE_OPTIONS = '--use-bundled-ca';
   env.PATH = path.dirname(process.execPath) + path.delimiter + (env.PATH ?? '/usr/bin:/bin');
   return env;
 }

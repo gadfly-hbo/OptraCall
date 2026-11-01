@@ -42,6 +42,21 @@ test('UPDATE-01: a trial copy on a development branch is refused without fetchin
   await assert.rejects(fs.access(path.join(f.clone, 'dist')));
 });
 
+test('UPDATE-03: real npm build children receive trusted bundled CA without inherited preloads or disabled TLS', async t => {
+  const f = await fixture(t);
+  await fs.writeFile(path.join(f.upstream, 'build.mjs'), "import fs from 'node:fs/promises'; await fs.mkdir('dist',{recursive:true}); await fs.writeFile('dist/environment.json',JSON.stringify({options:process.env.NODE_OPTIONS,disabledTls:process.env.NODE_TLS_REJECT_UNAUTHORIZED}));\n");
+  const target = await f.publish(); f.setBody({ workflow_runs: [f.success(target)] });
+  const preload = path.join(f.root, 'preload.cjs'), marker = path.join(f.root, 'preload-must-not-run');
+  await fs.writeFile(preload, `require('node:fs').writeFileSync(${JSON.stringify(marker)},'unexpected')`);
+  const previousOptions = process.env.NODE_OPTIONS, previousTls = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  process.env.NODE_OPTIONS = '--require=' + JSON.stringify(preload); process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  t.after(() => { if (previousOptions === undefined) delete process.env.NODE_OPTIONS; else process.env.NODE_OPTIONS = previousOptions; if (previousTls === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED; else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTls; });
+  assert.equal((await update(f.options)).targetSha, target);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(f.clone, 'dist/environment.json'), 'utf8')), { options: '--use-bundled-ca' });
+  await assert.rejects(fs.access(marker));
+  assert.equal(await fs.readFile(path.join(f.data, 'session.jsonl'), 'utf8'), 'synthetic history must remain\n');
+});
+
 test('UPDATE-01: a clean shallow consumer adopts the exact successful main CI commit, installs and builds, preserving user data', async t => {
   const f = await fixture(t), target = await f.publish(); f.setBody({ workflow_runs: [f.success(target)] });
   const result = await update(f.options);
