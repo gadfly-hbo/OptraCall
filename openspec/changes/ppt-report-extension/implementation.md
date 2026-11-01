@@ -35,3 +35,17 @@
 **验证**：`tests/ppt-refiner-core.test.ts`（7）、`tests/ppt-refiner-api.test.ts`（3）全绿；`npx tsc --noEmit` 干净；`vite build` 通过。
 
 **待接（Host/Codex）**：`agent-sessions.ts` 注册 `ppt-refiner` 域/profile 与 facade 适配（参照 requirement-sessions.ts）；`project-session.ts` 挂 `additionalSkillPaths`；`server.ts` 挂路由（deckRoot、pythonPath、skillScriptsDir）；`App.tsx` 精修页导航与报告页「生成 PPTX 版本」入口（PPT-05）；`catalog-data.ts` 分析资产已接入条目（PPT-12）；合成端到端与独立复核。
+
+## Host 接线（2026-11-02 由 Qoder 一次性完成，用户改派）
+
+用户先选「留给 Codex」，随后改为主 Agent 一次做完。完成：
+
+- `project-session.ts`：`additionalSkillPaths` 挂 `extensions/analysis-assets`（普通 + 受保护会话）；服务级实测 `ppt-report` 发现为 true。
+- `src/host/ppt-refiner-sessions.ts`：Interface v3 域/profile 适配（deck 工作区、md 锚点提示词、facade）；`agent-sessions.ts` 统一生命周期，无自建 Runtime。
+- `server.ts`：`/api/ppt-refiner` 路由挂载、closeAll 协调、pythonPath 自动发现（`~/.optracall/ppt-venv`，已建环境并装 requirements）。
+- `App.tsx` / `ProjectSpace.tsx` / `catalog-data.ts`：精修工作台视图、分析资产与业务插件已接入条目、报告文件「生成 PPTX」动作（创建任务并预填生成引导草稿，用户确认才发送——手动触发，无自动模型调用）。
+- `scripts/check-agent-session-boundary.mjs`：`ppt-refiner-sessions.ts` 登记为域注册方（IN06 契约维护）。
+
+**验证**：`npm run check` 全绿（772 pass / 0 fail / 3 环境跳过 + 构建）。真实 host HTTP 冒烟（无模型）：create/get/locks/export/render/image/stop 全通。dev server 浏览器实测：目录进入精修页、打开 deck（3 页真实页图）、选页、锁定/解锁、版本历史、导出差异清单、报告文件「生成 PPTX」按钮渲染正常。
+
+**尚未做（留待授权/后续）**：真实模型端到端（生成候选版、精修对话、视觉自检——需另行模型调用授权）；非作者独立复核；Git PR/CI 交付。
