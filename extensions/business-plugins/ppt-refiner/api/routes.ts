@@ -22,6 +22,8 @@ export type PptRefinerRoutesOptions = {
   deckRoot: string;
   sessions: RefinerSessionFacade;
   readBody: (request: IncomingMessage) => Promise<Record<string, unknown>>;
+  skillScriptsDir?: string;
+  pythonPath?: string;
 };
 
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -113,6 +115,25 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
       store.meta();
       await options.sessions.stop(path.dirname(store.deckPath));
       return { status: 200, value: { stopped: true } };
+    },
+    async render(deckId: string) {
+      const store = storeOf(deckId);
+      store.meta();
+      if (!options.skillScriptsDir) throw fault(503, 'render_unavailable', '页图渲染未配置。');
+      const { spawnSync } = await import('node:child_process');
+      const outDir = path.join(path.dirname(store.deckPath), 'pages');
+      const proc = spawnSync(options.pythonPath ?? 'python3', [path.join(options.skillScriptsDir, 'page_images.py'), '--deck', store.deckPath, '--out', outDir], { encoding: 'utf-8' });
+      if (proc.status !== 0) throw fault(422, 'render_failed', `${proc.stderr || proc.stdout}`.slice(0, 400));
+      const { readdirSync } = await import('node:fs');
+      return { status: 200, value: { files: readdirSync(outDir).filter(n => n.endsWith('.png')).sort() } };
+    },
+    async image(deckId: string, name: string) {
+      const store = storeOf(deckId);
+      store.meta();
+      if (!/^(slide|thumb)-\d{2}\.png$/.test(name)) throw fault(400, 'invalid_image', '页图名称不合法。');
+      const file = path.join(path.dirname(store.deckPath), 'pages', name);
+      if (!existsSync(file)) throw fault(404, 'image_not_found', '页图不存在，请先渲染。');
+      return { status: 200, value: { name, dataUrl: `data:image/png;base64,${readFileSync(file).toString('base64')}` } };
     },
     mapFault(error: unknown): RefinerApiFault {
       if (error instanceof RefinerApiFault) return error;
