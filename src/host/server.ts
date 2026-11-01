@@ -180,6 +180,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     readBody: request => body(request),
     skillScriptsDir: path.resolve(options.cwd, 'extensions/analysis-assets/ppt-report/scripts'),
     pythonPath: process.env.PPT_REPORT_PYTHON ?? (existsSync(path.join(dataRoot, 'ppt-venv', 'bin', 'python')) ? path.join(dataRoot, 'ppt-venv', 'bin', 'python') : 'python3'),
+    allowedRoots: [path.join(dataRoot, 'ppt-decks'), projectsRoot, path.resolve(options.cwd, 'tests', 'fixtures')],
+    codeRoot: options.cwd,
   });
   const closeAgents = async (filter: { provider?: string; projectId?: string } = {}) => {
     // Only coordinate domain controls; each domain owns its resource ledger.

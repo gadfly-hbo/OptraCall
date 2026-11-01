@@ -18,7 +18,7 @@ function setup(dir: string, runImpl?: RefinerSessionFacade['run']) {
     run: runImpl ?? (async () => ({ text: '未修改' })),
     stop: async () => {},
   };
-  const routes = createPptRefinerRoutes({ deckRoot: dir, sessions, readBody: async () => ({}) });
+  const routes = createPptRefinerRoutes({ deckRoot: dir, sessions, readBody: async () => ({}), allowedRoots: [dir, fixtures] });
   return routes;
 }
 
@@ -80,6 +80,7 @@ test('api: render produces page images and image endpoint returns data url', { s
       readBody: async () => ({}),
       skillScriptsDir: path.join(root, 'extensions/analysis-assets/ppt-report/scripts'),
       pythonPath: process.env.PPT_REPORT_PYTHON ?? 'python3',
+      allowedRoots: [dir, fixtures],
     });
     await routes.create({ id: 'deck-render', sourcePptx: fixtureDeck, title: 'render', reportPath: fixtureReport });
     const rendered = await routes.render('deck-render');
@@ -118,5 +119,81 @@ test('api: turn pre-check rejects locked referenced page without starting sessio
     const ok = await routes.turn('deck-lock', { text: '第 1 页不用改', requestId: 'r-ok' });
     assert.equal(calls, 1);
     assert.equal(ok.value.snapshot, null);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('api: turn outcome failed/cancelled maps status and still snapshots on change', async () => {
+  const dir = tempDir();
+  try {
+    let mode = 'failed';
+    const routes = setup(dir, async (deckDir) => {
+      writeFileSync(path.join(deckDir, 'deck.pptx'), Buffer.concat([readFileSync(path.join(deckDir, 'deck.pptx')), Buffer.from('x')]));
+      return { text: '部分完成', outcome: mode };
+    });
+    await routes.create({ id: 'deck-outcome', sourcePptx: fixtureDeck, title: 'outcome', reportPath: fixtureReport });
+    const failed = await routes.turn('deck-outcome', { text: '改一点', requestId: 'r-failed' });
+    assert.equal(failed.status, 422);
+    assert.equal(failed.value.outcome, 'failed');
+    assert.ok(failed.value.snapshot, 'modified deck must snapshot even on failed outcome');
+    mode = 'cancelled';
+    const cancelled = await routes.turn('deck-outcome', { text: '再改', requestId: 'r-cancelled' });
+    assert.equal(cancelled.status, 409);
+    assert.equal(cancelled.value.outcome, 'cancelled');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('api: slide guard restores locked page modified outside scripts and reports violation', async () => {
+  const dir = tempDir();
+  try {
+    const routes = createPptRefinerRoutes({
+      deckRoot: dir,
+      sessions: { run: async (deckDir) => {
+        // agent bypasses scripts: rewrites locked slide 2 directly via zip
+        const { execFileSync } = await import('node:child_process');
+        execFileSync(process.env.PPT_REPORT_PYTHON ?? 'python3', ['-c', `
+import zipfile
+p = ${JSON.stringify(path.join(deckDir, 'deck.pptx'))}
+z = zipfile.ZipFile(p)
+entries = {n: z.read(n) for n in z.namelist()}
+entries['ppt/slides/slide2.xml'] = entries['ppt/slides/slide2.xml'].replace('长尾门店同比'.encode(), '违规改写'.encode())
+with zipfile.ZipFile(p, 'w', zipfile.ZIP_DEFLATED) as out:
+    for n, d in entries.items():
+        out.writestr(n, d)
+`]);
+        return { text: '绕过脚本改了锁定页', outcome: 'completed' };
+      }, stop: async () => {} },
+      readBody: async () => ({}),
+      skillScriptsDir: path.join(root, 'extensions/analysis-assets/ppt-report/scripts'),
+      pythonPath: process.env.PPT_REPORT_PYTHON ?? 'python3',
+      allowedRoots: [dir, fixtures],
+      codeRoot: root,
+    });
+    await routes.create({ id: 'deck-guard', sourcePptx: fixtureDeck, title: 'guard', reportPath: fixtureReport });
+    await routes.setLock('deck-guard', { page: 2, locked: true });
+    const result = await routes.turn('deck-guard', { text: '做点什么', requestId: 'r-guard' });
+    assert.deepEqual(result.value.violations, [{ page: 2, restored: true }]);
+    const text = JSON.parse(spawnSync(process.env.PPT_REPORT_PYTHON ?? 'python3', ['-c', `import zipfile,re,json;z=zipfile.ZipFile(${JSON.stringify(path.join(dir, 'deck-guard', 'deck.pptx'))});x=z.read('ppt/slides/slide2.xml').decode('utf-8');print(json.dumps('违规改写' in x))`], { encoding: 'utf-8' }).stdout);
+    assert.equal(text, false, 'locked slide must be restored to before-turn bytes');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('api: turn includes selected page in session text', async () => {
+  const dir = tempDir();
+  try {
+    let seen = '';
+    const routes = setup(dir, async (_deckDir, turn) => { seen = turn.text; return { text: 'ok' }; });
+    await routes.create({ id: 'deck-page', sourcePptx: fixtureDeck, title: 'page', reportPath: fixtureReport });
+    await routes.turn('deck-page', { text: '改标题', requestId: 'r-page', page: 3 });
+    assert.match(seen, /当前选中第 3 页/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('api: paths outside allowed roots are rejected', async () => {
+  const dir = tempDir();
+  try {
+    const routes = createPptRefinerRoutes({ deckRoot: dir, sessions: { run: async () => ({ text: '' }), stop: async () => {} }, readBody: async () => ({}), allowedRoots: [dir, fixtures] });
+    await assert.rejects(() => routes.create({ id: 'deck-badpath', sourcePptx: '/etc/passwd', title: 'x', reportPath: fixtureReport }), (e: unknown) => e instanceof RefinerApiFault && e.code === 'path_not_allowed');
+    await routes.create({ id: 'deck-goodpath', sourcePptx: fixtureDeck, title: 'x', reportPath: fixtureReport });
+    await assert.rejects(() => routes.exportDeck('deck-goodpath', { outDir: '/etc' }), (e: unknown) => e instanceof RefinerApiFault && e.code === 'path_not_allowed');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

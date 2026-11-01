@@ -131,3 +131,28 @@ test('edit_slide hard lock gate refuses locked pages from meta.json', () => {
     assert.equal(ok.code, 0, ok.out);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('edit_slide escapes XML special characters in replacement text', () => {
+  const dir = tempDir();
+  try {
+    const out = path.join(dir, 'out.pptx');
+    const r = edit(['--deck', fixtureDeck, '--slide', '2', '--match', '长尾门店同比', '--replace', '长尾&A<B>同比', '--out', out]);
+    assert.equal(r.code, 0, r.out);
+    const xml = JSON.parse(spawnSync(python, ['-c', `import zipfile,json,xml.etree.ElementTree as ET;z=zipfile.ZipFile(${JSON.stringify(out)});x=z.read('ppt/slides/slide2.xml').decode('utf-8');ET.fromstring(x);print(json.dumps('valid'))`], { encoding: 'utf-8' }).stdout);
+    assert.equal(xml, 'valid');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('deck store: revert marks undone versions and export excludes them', () => {
+  const dir = tempDir();
+  try {
+    const store = createDeckStore(dir);
+    store.register({ sourcePptx: fixtureDeck, title: 'revert-diff', reportPath: fixtureReport });
+    store.snapshot({ pages: [2], summary: '后续被回退的改动', diffs: [{ page: 2, kind: 'number', summary: '42.5% → 43.9%', anchor: 'uncovered-confirmed' }] });
+    store.revert(1);
+    const out = store.exportFinal({ outDir: path.join(dir, 'exports') });
+    const diff = readFileSync(out.diff, 'utf-8');
+    assert.ok(!diff.includes('43.9%'), diff);
+    assert.match(diff, /无内容级改动差异/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

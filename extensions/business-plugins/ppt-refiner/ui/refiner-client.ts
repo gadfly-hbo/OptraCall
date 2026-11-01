@@ -34,7 +34,7 @@ export const readDeck = (deckId: string) => request<DeckView>(`/decks/${encodeUR
 export const setPageLock = (deckId: string, page: number, locked: boolean) => request<{ meta: DeckMeta }>(`/decks/${encodeURIComponent(deckId)}/locks`, 'POST', { page, locked });
 export const revertDeck = (deckId: string, version: number) => request<{ reverted: number; versions: VersionEntry[] }>(`/decks/${encodeURIComponent(deckId)}/revert`, 'POST', { version });
 export const exportDeck = (deckId: string, input: { outDir: string; fileName?: string }) => request<{ pptx: string; diff: string; versionCount: number }>(`/decks/${encodeURIComponent(deckId)}/export`, 'POST', input);
-export const runTurn = (deckId: string, text: string, requestId: string) => request<TurnResult>(`/decks/${encodeURIComponent(deckId)}/turns`, 'POST', { text, requestId });
+export const runTurn = (deckId: string, text: string, requestId: string, page?: number) => request<TurnResult & { outcome?: string; violations?: { page: number; restored: boolean }[] }>(`/decks/${encodeURIComponent(deckId)}/turns`, 'POST', { text, requestId, ...(page !== undefined ? { page } : {}) });
 export const stopSession = (deckId: string) => request<{ stopped: boolean }>(`/decks/${encodeURIComponent(deckId)}/stop`, 'POST', {});
 export const renderDeck = (deckId: string) => request<{ files: string[] }>(`/decks/${encodeURIComponent(deckId)}/render`, 'POST', {});
 export const readImage = (deckId: string, name: string) => request<{ name: string; dataUrl: string }>(`/decks/${encodeURIComponent(deckId)}/images/${encodeURIComponent(name)}`);

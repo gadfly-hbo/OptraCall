@@ -19,6 +19,7 @@ export type VersionEntry = Readonly<{
   pages: readonly number[];
   summary: string;
   diffs: readonly DiffEntry[];
+  undone?: boolean;
 }>;
 
 export class DeckFault extends Error {

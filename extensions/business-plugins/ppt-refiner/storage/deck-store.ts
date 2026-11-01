@@ -36,6 +36,12 @@ function writeAtomic(file: string, data: string | Buffer) {
   try { fsyncSync(dir); } finally { closeSync(dir); }
 }
 
+function copyAtomic(source: string, target: string) {
+  const tmp = `${target}.tmp-${randomUUID()}`;
+  copyFileSync(source, tmp);
+  renameSync(tmp, target);
+}
+
 export function createDeckStore(deckDir: string) {
   const root = path.resolve(deckDir);
   const versionsDir = path.join(root, 'versions');
@@ -77,7 +83,7 @@ export function createDeckStore(deckDir: string) {
     const entry: VersionEntry = { version: next, at: new Date().toISOString(), pages: input.pages, summary: input.summary, diffs: input.diffs ?? [] };
     if (entry.pages.some(p => !pageNumber(p))) fail('DECK_INVALID_PAGE');
     if (entry.summary.length > 500) fail('DECK_INVALID_INPUT');
-    copyFileSync(deckPath, versionFile(next));
+    copyAtomic(deckPath, versionFile(next));
     writeAtomic(versionMetaFile(next), JSON.stringify(entry, null, 2));
     return entry;
   };
@@ -115,8 +121,11 @@ export function createDeckStore(deckDir: string) {
     },
     revert(version: number): VersionEntry {
       const target = readVersion(version);
+      for (const entry of listVersions()) {
+        if (entry.version > version && !entry.undone) writeAtomic(versionMetaFile(entry.version), JSON.stringify({ ...entry, undone: true }, null, 2));
+      }
       snapshot({ pages: [], summary: `回退 v${version} 前状态` });
-      copyFileSync(versionFile(version), deckPath);
+      copyAtomic(versionFile(version), deckPath);
       const meta = readMeta();
       writeMeta({ ...meta, updatedAt: new Date().toISOString() });
       return target;
@@ -127,10 +136,10 @@ export function createDeckStore(deckDir: string) {
       mkdirSync(input.outDir, { recursive: true, mode: 0o700 });
       const name = input.fileName && /^[\w一-龥.-]+\.pptx$/.test(input.fileName) ? input.fileName : 'final.pptx';
       const pptxOut = path.join(input.outDir, name);
-      copyFileSync(deckPath, pptxOut);
+      copyAtomic(deckPath, pptxOut);
       const versions = listVersions();
       const lines = ['# 与 md 报告的差异清单', '', `deck: ${meta.title}`, `锚点报告: ${meta.sourceReport}`, `导出时间: ${new Date().toISOString()}`, ''];
-      const entries = versions.flatMap(v => v.diffs.map(d => ({ version: v.version, ...d })));
+      const entries = versions.filter(v => !v.undone).flatMap(v => v.diffs.map(d => ({ version: v.version, ...d })));
       if (!entries.length) lines.push('（无内容级改动差异）');
       for (const d of entries) lines.push(`- v${d.version} · P${d.page} · ${d.kind} · ${d.summary} · 锚点: ${d.anchor}`);
       lines.push('', '差异仅标记，不回写 md 报告；回填请在报告侧另行修订。');

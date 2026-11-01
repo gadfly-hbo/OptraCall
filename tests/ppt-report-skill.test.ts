@@ -93,9 +93,16 @@ test('splice copies referenced media with new rIds and updates content types', (
 import zipfile
 z=zipfile.ZipFile(${JSON.stringify(out)})
 print(z.read('ppt/slides/_rels/slide3.xml.rels').decode('utf-8'))
-print(z.read('ppt/slides/slide3.xml').decode('utf-8').count('rSpliced3x'))
+print(z.read('ppt/slides/slide3.xml').decode('utf-8'))
 `);
     assert.match(rels, /rSpliced3x/);
+    const slideXml = runInlinePython(`
+import zipfile
+z=zipfile.ZipFile(${JSON.stringify(out)})
+print(z.read('ppt/slides/slide3.xml').decode('utf-8'))
+`);
+    assert.ok(slideXml.includes('rSpliced3x'), 'slide XML must reference new media rId');
+    assert.ok(!slideXml.includes('r:embed="rId'), 'old rId must not remain');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -148,5 +155,43 @@ test('splice_slide hard lock gate refuses locked pages from meta.json', () => {
     assert.equal(r.code, 5, r.out);
     assert.match(r.out, /PAGE_LOCKED/);
     assert.equal(existsSync(out), false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('splice copies chart part, workbook and content types for chart replacement', () => {
+  const dir = tempDir();
+  try {
+    const out = path.join(dir, 'out.pptx');
+    const r = run('splice_slide.py', ['--deck', path.join(fixtures, 'deck-good.pptx'), '--replacement', path.join(fixtures, 'replacement-chart.pptx'), '--slide', '3', '--out', out]);
+    assert.equal(r.code, 0, r.out);
+    const before = zipEntries(path.join(fixtures, 'deck-good.pptx'));
+    const after = zipEntries(out);
+    const chartParts = Object.keys(after).filter(n => n.startsWith('ppt/charts/spliced-3-'));
+    assert.ok(chartParts.some(n => n.endsWith('.xml') && !n.endsWith('.rels')), JSON.stringify(chartParts));
+    assert.ok(Object.keys(after).some(n => n.startsWith('ppt/embeddings/spliced-3-')), 'workbook copied');
+    for (const name of Object.keys(before)) {
+      if (name === 'ppt/slides/slide3.xml' || name === '[Content_Types].xml' || name === 'ppt/slides/_rels/slide3.xml.rels') continue;
+      assert.equal(after[name], before[name], `${name} must stay byte-identical`);
+    }
+    const rels = runInlinePython(`
+import zipfile
+z=zipfile.ZipFile(${JSON.stringify(out)})
+print(z.read('ppt/slides/_rels/slide3.xml.rels').decode('utf-8'))
+`);
+    assert.match(rels, /rSpliced3c/);
+    const chartXml = runInlinePython(`
+import zipfile
+z=zipfile.ZipFile(${JSON.stringify(out)})
+import glob
+name=[n for n in z.namelist() if n.startswith('ppt/charts/spliced-3-') and n.endswith('.xml') and not n.endswith('.rels')][0]
+print(z.read(name).decode('utf-8')[:4000])
+`);
+    assert.match(chartXml, /rSpliced3w/);
+    const ct = runInlinePython(`
+import zipfile
+z=zipfile.ZipFile(${JSON.stringify(out)})
+print(z.read('[Content_Types].xml').decode('utf-8'))
+`);
+    assert.match(ct, /drawingml.chart\+xml/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

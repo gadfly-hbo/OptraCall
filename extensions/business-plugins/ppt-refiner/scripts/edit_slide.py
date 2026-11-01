@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import zipfile
+from xml.sax.saxutils import escape
 
 NUMBER = re.compile(r'[+\-]?\d[\d,]*(?:\.\d+)?%?')
 
@@ -76,7 +77,7 @@ def main():
             print(f"ANCHOR_REFUSED: numbers not in report: {', '.join(uncovered)}. Provide evidence or confirm direct edit with --allow-uncovered.", file=sys.stderr)
             return 4
 
-    new_xml = xml.replace(args.match, args.replace)
+    new_xml = xml.replace(args.match, escape(args.replace))
     if new_xml == xml:
         print('ERROR: replacement produced no change', file=sys.stderr)
         return 3

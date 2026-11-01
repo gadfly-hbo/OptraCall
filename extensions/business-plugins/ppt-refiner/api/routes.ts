@@ -1,6 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { createDeckStore } from '../storage/deck-store.ts';
 import { DeckFault, type DiffEntry } from '../types.ts';
@@ -24,6 +25,8 @@ export type PptRefinerRoutesOptions = {
   readBody: (request: IncomingMessage) => Promise<Record<string, unknown>>;
   skillScriptsDir?: string;
   pythonPath?: string;
+  allowedRoots?: string[];
+  codeRoot?: string;
 };
 
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -45,6 +48,20 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
     if (!value || value.length > max) throw fault(400, 'invalid_input', `字段 ${key} 为空或超长。`);
     return value;
   };
+  const assertAllowedPath = (value: string) => {
+    const roots = options.allowedRoots ?? [options.deckRoot];
+    let real: string;
+    try { real = realpathSync(value); } catch { throw fault(400, 'path_not_allowed', '路径不存在或不可读。'); }
+    if (!roots.some(root => real === root || real.startsWith(root + path.sep))) throw fault(400, 'path_not_allowed', '路径不在授权目录内。');
+    return real;
+  };
+
+  const assertAllowedDir = (value: string) => {
+    const roots = options.allowedRoots ?? [options.deckRoot];
+    const resolved = path.resolve(value);
+    if (!path.isAbsolute(resolved) || !roots.some(root => resolved === root || resolved.startsWith(root + path.sep))) throw fault(400, 'path_not_allowed', '目录不在授权范围内。');
+    return resolved;
+  };
 
   const api = {
     async create(input: Record<string, unknown>) {
@@ -52,9 +69,9 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
       if (!deckIdPattern.test(id)) throw fault(400, 'invalid_deck_id', 'deck 标识需形如 deck-xxx。');
       const store = storeOf(id);
       const meta = store.register({
-        sourcePptx: bodyText(input, 'sourcePptx', 1000),
+        sourcePptx: assertAllowedPath(bodyText(input, 'sourcePptx', 1000)),
         title: bodyText(input, 'title', 200),
-        reportPath: bodyText(input, 'reportPath', 1000),
+        reportPath: assertAllowedPath(bodyText(input, 'reportPath', 1000)),
       });
       return { status: 201, value: { meta, deckPath: store.deckPath } };
     },
@@ -76,26 +93,48 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
     },
     async exportDeck(deckId: string, input: Record<string, unknown>) {
       const store = storeOf(deckId);
-      const outDir = bodyText(input, 'outDir', 1000);
-      if (!path.isAbsolute(outDir)) throw fault(400, 'invalid_out_dir', '导出目录必须是绝对路径。');
+      const outDir = assertAllowedDir(bodyText(input, 'outDir', 1000));
       return { status: 200, value: store.exportFinal({ outDir, fileName: typeof input.fileName === 'string' ? input.fileName : undefined }) };
     },
     async turn(deckId: string, input: Record<string, unknown>) {
       const store = storeOf(deckId);
-      store.meta();
+      const meta = store.meta();
       const text = bodyText(input, 'text', 4000);
       const requestId = bodyText(input, 'requestId', 80);
+      const selectedPage = input.page === undefined ? undefined : Number(input.page);
+      if (selectedPage !== undefined && (!Number.isSafeInteger(selectedPage) || selectedPage < 1)) throw fault(400, 'invalid_page', '页码不合法。');
       // Deterministic pre-check for explicitly referenced pages; anything
       // the agent does beyond this is still gated by the scripts themselves.
-      const referenced = new Set<number>();
+      const referenced = new Set<number>(selectedPage !== undefined ? [selectedPage] : []);
       for (const m of text.matchAll(/第\s*(\d+)\s*页|[Pp](\d+)(?![\d%])/g)) referenced.add(Number(m[1] ?? m[2]));
       for (const page of referenced) store.assertEditable(page);
       const deckDir = path.dirname(store.deckPath);
       const turnRecord = path.join(deckDir, 'last-turn.json');
+      const beforeCopy = path.join(deckDir, `.before-${requestId}.pptx`);
       const before = existsSync(store.deckPath) ? createHash('sha256').update(readFileSync(store.deckPath)).digest('hex') : '';
+      if (existsSync(store.deckPath) && options.pythonPath) copyFileSync(store.deckPath, beforeCopy);
       if (existsSync(turnRecord)) rmSync(turnRecord);
       const started = Date.now();
-      const reply = await options.sessions.run(deckDir, { text, requestId });
+      const sessionText = selectedPage !== undefined ? `当前选中第 ${selectedPage} 页。\n\n${text}` : text;
+      const reply = await options.sessions.run(deckDir, { text: sessionText, requestId });
+      const outcome = (reply as { outcome?: string }).outcome ?? 'completed';
+      const violations: { page: number; restored: boolean }[] = [];
+      if (existsSync(beforeCopy) && options.pythonPath) {
+        const guardScript = path.resolve(options.codeRoot ?? '', 'extensions/business-plugins/ppt-refiner/scripts/slide_guard.py');
+        const runGuard = (args: string[]) => spawnSync(options.pythonPath!, [guardScript, ...args], { encoding: 'utf-8' });
+        const diff = runGuard(['diff', '--before', beforeCopy, '--after', store.deckPath]);
+        if (diff.status === 0) {
+          const changed = JSON.parse(diff.stdout) as string[];
+          for (const part of changed) {
+            const page = Number(/slide(\d+)\.xml$/.exec(part)?.[1]);
+            if (meta.lockedPages.includes(page)) {
+              const restore = runGuard(['restore', '--before', beforeCopy, '--after', store.deckPath, '--slides', String(page)]);
+              violations.push({ page, restored: restore.status === 0 });
+            }
+          }
+        }
+        rmSync(beforeCopy, { force: true });
+      }
       const after = existsSync(store.deckPath) ? createHash('sha256').update(readFileSync(store.deckPath)).digest('hex') : '';
       let snapshot = null;
       if (after && after !== before) {
@@ -111,9 +150,11 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
             rmSync(turnRecord);
           } catch { rmSync(turnRecord, { force: true }); }
         }
-        snapshot = store.snapshot({ pages, summary: text.slice(0, 200), diffs });
+        const violationNote = violations.length ? `；锁定页违规已回滚：${violations.map(v => `P${v.page}`).join(',')}` : '';
+        snapshot = store.snapshot({ pages, summary: text.slice(0, 200) + violationNote, diffs });
       }
-      return { status: 200, value: { reply: reply.text, snapshot, elapsedMs: Date.now() - started } };
+      const status = outcome === 'completed' ? 200 : outcome === 'cancelled' ? 409 : 422;
+      return { status, value: { reply: reply.text, outcome, snapshot, violations, elapsedMs: Date.now() - started } };
     },
     async stopSession(deckId: string) {
       const store = storeOf(deckId);

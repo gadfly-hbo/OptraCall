@@ -97,7 +97,8 @@ function RefinerWorkbench({ view, refresh, onBack }: { view: DeckView; refresh: 
       <button className="primary-button" disabled={busy} onClick={async () => {
         setBusy(true); setError(''); setExportInfo('');
         try {
-          const out = await exportDeck(deckId, { outDir: `${view.deckPath.replace(/\/deck\.pptx$/, '')}/exports`, fileName: 'final.pptx' });
+          const exportDir = view.meta.sourceReport.includes('060_reports/') ? view.meta.sourceReport.replace(/\/[^/]+$/, '') : `${view.deckPath.replace(/\/deck\.pptx$/, '')}/exports`;
+          const out = await exportDeck(deckId, { outDir: exportDir, fileName: 'final.pptx' });
           setExportInfo(`已导出：${out.pptx}（差异清单 ${out.diff}）`);
         } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
       }}>导出终版</button>
@@ -142,7 +143,7 @@ function RefinerWorkbench({ view, refresh, onBack }: { view: DeckView; refresh: 
           setInput(''); setBusy(true); setError('');
           setChat(prev => [...prev, { who: 'user', text }]);
           try {
-            const result = await runTurn(deckId, text, crypto.randomUUID());
+            const result = await runTurn(deckId, text, crypto.randomUUID(), selected);
             setChat(prev => [...prev, { who: 'agent', text: result.reply, note: result.snapshot ? `已存版本 v${result.snapshot.version}` : '（无内容变化）' }]);
             await afterMutation();
           } catch (err) { setChat(prev => [...prev, { who: 'agent', text: `未完成：${err instanceof Error ? err.message : String(err)}` }]); }
