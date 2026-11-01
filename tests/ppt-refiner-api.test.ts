@@ -197,3 +197,87 @@ test('api: paths outside allowed roots are rejected', async () => {
     await assert.rejects(() => routes.exportDeck('deck-goodpath', { outDir: '/etc' }), (e: unknown) => e instanceof RefinerApiFault && e.code === 'path_not_allowed');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('api: slide guard also restores modified slide rels of locked page', async () => {
+  const dir = tempDir();
+  try {
+    const routes = createPptRefinerRoutes({
+      deckRoot: dir,
+      sessions: { run: async (deckDir) => {
+        const { execFileSync } = await import('node:child_process');
+        execFileSync(process.env.PPT_REPORT_PYTHON ?? 'python3', ['-c', `
+import zipfile
+p = ${JSON.stringify(path.join(deckDir, 'deck.pptx'))}
+z = zipfile.ZipFile(p)
+entries = {n: z.read(n) for n in z.namelist()}
+rels = 'ppt/slides/_rels/slide2.xml.rels'
+entries[rels] = entries[rels].replace(b'rId1', b'rHacked')
+with zipfile.ZipFile(p, 'w', zipfile.ZIP_DEFLATED) as out:
+    for n, d in entries.items():
+        out.writestr(n, d)
+`]);
+        return { text: '改了 rels', outcome: 'completed' };
+      }, stop: async () => {} },
+      readBody: async () => ({}),
+      pythonPath: process.env.PPT_REPORT_PYTHON ?? 'python3',
+      allowedRoots: [dir, fixtures],
+      codeRoot: root,
+    });
+    await routes.create({ id: 'deck-rels', sourcePptx: fixtureDeck, title: 'rels', reportPath: fixtureReport });
+    await routes.setLock('deck-rels', { page: 2, locked: true });
+    const result = await routes.turn('deck-rels', { text: '改点东西', requestId: 'r-rels' });
+    assert.deepEqual(result.value.violations, [{ page: 2, restored: true }]);
+    const after = JSON.parse(spawnSync(process.env.PPT_REPORT_PYTHON ?? 'python3', ['-c', `import zipfile,json;z=zipfile.ZipFile(${JSON.stringify(path.join(dir, 'deck-rels', 'deck.pptx'))});print(json.dumps('rHacked' in z.read('ppt/slides/_rels/slide2.xml.rels').decode('utf-8')))`], { encoding: 'utf-8' }).stdout);
+    assert.equal(after, false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('api: thrown session failure still snapshots modified deck and cleans before-copy', async () => {
+  const dir = tempDir();
+  try {
+    const routes = setup(dir, async (deckDir) => {
+      writeFileSync(path.join(deckDir, 'deck.pptx'), Buffer.concat([readFileSync(path.join(deckDir, 'deck.pptx')), Buffer.from('x')]));
+      throw new Error('session exploded');
+    });
+    await routes.create({ id: 'deck-thrown', sourcePptx: fixtureDeck, title: 'thrown', reportPath: fixtureReport });
+    const result = await routes.turn('deck-thrown', { text: '改一下', requestId: 'r-thrown' });
+    assert.equal(result.status, 500);
+    assert.ok(result.value.snapshot, 'modified deck must snapshot even when session throws');
+    assert.equal(existsSync(path.join(dir, 'deck-thrown', '.before-r-thrown.pptx')), false, 'before-copy must be removed');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('api: export outDir symlink escape is rejected', async () => {
+  const dir = tempDir();
+  try {
+    const routes = createPptRefinerRoutes({ deckRoot: dir, sessions: { run: async () => ({ text: '' }), stop: async () => {} }, readBody: async () => ({}), allowedRoots: [dir, fixtures] });
+    await routes.create({ id: 'deck-symlink', sourcePptx: fixtureDeck, title: 'x', reportPath: fixtureReport });
+    const { symlinkSync } = await import('node:fs');
+    symlinkSync('/tmp', path.join(dir, 'escape'));
+    await assert.rejects(() => routes.exportDeck('deck-symlink', { outDir: path.join(dir, 'escape') }), (e: unknown) => e instanceof RefinerApiFault && e.code === 'path_not_allowed');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('api: repeated revert restores undone version diff into export', async () => {
+  const dir = tempDir();
+  try {
+    const { createDeckStore } = await import('../extensions/business-plugins/ppt-refiner/storage/deck-store.ts');
+    const store = createDeckStore(path.join(dir, 'deck-revert2'));
+    store.register({ sourcePptx: fixtureDeck, title: 'revert2', reportPath: fixtureReport });
+    store.snapshot({ pages: [2], summary: 'v2 diff', diffs: [{ page: 2, kind: 'wording', summary: 'v2 改动', anchor: 'none' }] });
+    store.revert(1);
+    store.revert(2);
+    const out = store.exportFinal({ outDir: path.join(dir, 'out') });
+    assert.match(readFileSync(out.diff, 'utf-8'), /v2 改动/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('api: mapFault maps session_busy to 409', () => {
+  const dir = tempDir();
+  try {
+    const routes = setup(dir);
+    const mapped = routes.mapFault(Object.assign(new Error('busy'), { code: 'session_busy' }));
+    assert.equal(mapped.status, 409);
+    assert.equal(mapped.code, 'session_busy');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

@@ -48,8 +48,11 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
     if (!value || value.length > max) throw fault(400, 'invalid_input', `字段 ${key} 为空或超长。`);
     return value;
   };
+  const allowedRootsReal = () => (options.allowedRoots ?? [options.deckRoot]).map(root => {
+    try { return realpathSync(root); } catch { return path.resolve(root); }
+  });
   const assertAllowedPath = (value: string) => {
-    const roots = options.allowedRoots ?? [options.deckRoot];
+    const roots = allowedRootsReal();
     let real: string;
     try { real = realpathSync(value); } catch { throw fault(400, 'path_not_allowed', '路径不存在或不可读。'); }
     if (!roots.some(root => real === root || real.startsWith(root + path.sep))) throw fault(400, 'path_not_allowed', '路径不在授权目录内。');
@@ -57,9 +60,16 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
   };
 
   const assertAllowedDir = (value: string) => {
-    const roots = options.allowedRoots ?? [options.deckRoot];
+    const roots = allowedRootsReal();
     const resolved = path.resolve(value);
-    if (!path.isAbsolute(resolved) || !roots.some(root => resolved === root || resolved.startsWith(root + path.sep))) throw fault(400, 'path_not_allowed', '目录不在授权范围内。');
+    if (!path.isAbsolute(resolved)) throw fault(400, 'path_not_allowed', '目录不在授权范围内。');
+    // Resolve symlinked ancestors; non-existent tails are appended after
+    // the realpath of the first existing ancestor.
+    const missing: string[] = [];
+    let probe = resolved;
+    while (!existsSync(probe)) { missing.unshift(path.basename(probe)); probe = path.dirname(probe); }
+    const real = path.join(realpathSync(probe), ...missing);
+    if (!roots.some(root => real === root || real.startsWith(root + path.sep))) throw fault(400, 'path_not_allowed', '目录不在授权范围内。');
     return resolved;
   };
 
@@ -116,8 +126,11 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
       if (existsSync(turnRecord)) rmSync(turnRecord);
       const started = Date.now();
       const sessionText = selectedPage !== undefined ? `当前选中第 ${selectedPage} 页。\n\n${text}` : text;
-      const reply = await options.sessions.run(deckDir, { text: sessionText, requestId });
-      const outcome = (reply as { outcome?: string }).outcome ?? 'completed';
+      let reply: { text: string } | undefined;
+      let thrown: unknown;
+      try { reply = await options.sessions.run(deckDir, { text: sessionText, requestId }); }
+      catch (error) { thrown = error; }
+      const outcome = thrown ? 'failed' : ((reply as { outcome?: string } | undefined)?.outcome ?? 'completed');
       const violations: { page: number; restored: boolean }[] = [];
       if (existsSync(beforeCopy) && options.pythonPath) {
         const guardScript = path.resolve(options.codeRoot ?? '', 'extensions/business-plugins/ppt-refiner/scripts/slide_guard.py');
@@ -126,7 +139,7 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
         if (diff.status === 0) {
           const changed = JSON.parse(diff.stdout) as string[];
           for (const part of changed) {
-            const page = Number(/slide(\d+)\.xml$/.exec(part)?.[1]);
+            const page = Number(/slide(\d+)\.xml(?:\.rels)?$/.exec(part)?.[1]);
             if (meta.lockedPages.includes(page)) {
               const restore = runGuard(['restore', '--before', beforeCopy, '--after', store.deckPath, '--slides', String(page)]);
               violations.push({ page, restored: restore.status === 0 });
@@ -153,8 +166,9 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
         const violationNote = violations.length ? `；锁定页违规已回滚：${violations.map(v => `P${v.page}`).join(',')}` : '';
         snapshot = store.snapshot({ pages, summary: text.slice(0, 200) + violationNote, diffs });
       }
-      const status = outcome === 'completed' ? 200 : outcome === 'cancelled' ? 409 : 422;
-      return { status, value: { reply: reply.text, outcome, snapshot, violations, elapsedMs: Date.now() - started } };
+      const status = thrown ? api.mapFault(thrown).status : outcome === 'completed' ? 200 : outcome === 'cancelled' ? 409 : 422;
+      const mappedMessage = thrown ? api.mapFault(thrown).message : undefined;
+      return { status, value: { reply: thrown ? mappedMessage : reply!.text, outcome, snapshot, violations, elapsedMs: Date.now() - started } };
     },
     async stopSession(deckId: string) {
       const store = storeOf(deckId);
@@ -183,6 +197,9 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
     },
     mapFault(error: unknown): RefinerApiFault {
       if (error instanceof RefinerApiFault) return error;
+      const code = (error as { code?: string } | null)?.code;
+      if (code === 'session_busy') return fault(409, 'session_busy', '精修会话占用中，请稍后重试。');
+      if (code === 'session_closed' || code === 'host_closing') return fault(503, code, '服务正在关闭，请稍后重试。');
       if (error instanceof DeckFault) {
         const status = error.code === 'PAGE_LOCKED' ? 409 : error.code.endsWith('NOT_FOUND') ? 404 : error.code === 'DECK_EXISTS' ? 409 : 400;
         return fault(status, error.code.toLowerCase(), error.message);

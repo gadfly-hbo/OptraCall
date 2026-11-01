@@ -18,7 +18,7 @@ def load(path):
 
 
 def slide_parts(entries):
-    return {n for n in entries if re.fullmatch(r'ppt/slides/slide\d+\.xml', n)}
+    return {n for n in entries if re.fullmatch(r'ppt/slides/slide\d+\.xml', n) or re.fullmatch(r'ppt/slides/_rels/slide\d+\.xml\.rels', n)}
 
 
 def main():
@@ -36,7 +36,12 @@ def main():
         print(json.dumps(changed))
         return 0
 
-    parts = [f'ppt/slides/slide{n}.xml' for n in args.slides.split(',') if n]
+    parts = []
+    for n in args.slides.split(','):
+        if not n:
+            continue
+        parts.append(f'ppt/slides/slide{n}.xml')
+        parts.append(f'ppt/slides/_rels/slide{n}.xml.rels')
     if not parts:
         print('ERROR: --slides required for restore', file=sys.stderr)
         return 2

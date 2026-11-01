@@ -123,6 +123,7 @@ export function createDeckStore(deckDir: string) {
       const target = readVersion(version);
       for (const entry of listVersions()) {
         if (entry.version > version && !entry.undone) writeAtomic(versionMetaFile(entry.version), JSON.stringify({ ...entry, undone: true }, null, 2));
+        if (entry.version === version && entry.undone) writeAtomic(versionMetaFile(entry.version), JSON.stringify({ ...entry, undone: false }, null, 2));
       }
       snapshot({ pages: [], summary: `回退 v${version} 前状态` });
       copyAtomic(versionFile(version), deckPath);
