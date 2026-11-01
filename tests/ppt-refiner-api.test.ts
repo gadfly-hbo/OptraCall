@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createPptRefinerRoutes, RefinerApiFault, type RefinerSessionFacade } from '../extensions/business-plugins/ppt-refiner/api/routes.ts';
+import { spawnSync } from 'node:child_process';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const fixtures = path.join(root, 'tests/fixtures/ppt-report');
@@ -67,5 +68,24 @@ test('api: turn snapshots only on byte change and captures last-turn.json diffs'
     const exported = await routes.exportDeck('deck-turn', { outDir: path.join(dir, 'out2') });
     const diff = readFileSync(exported.value.diff, 'utf-8');
     assert.match(diff, /标题改写/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('api: render produces page images and image endpoint returns data url', { skip: spawnSync(process.env.PPT_REPORT_PYTHON ?? 'python3', ['-c', 'import pypdfium2'], { encoding: 'utf-8' }).status !== 0 }, async () => {
+  const dir = tempDir();
+  try {
+    const routes = createPptRefinerRoutes({
+      deckRoot: dir,
+      sessions: { run: async () => ({ text: '' }), stop: async () => {} },
+      readBody: async () => ({}),
+      skillScriptsDir: path.join(root, 'extensions/analysis-assets/ppt-report/scripts'),
+      pythonPath: process.env.PPT_REPORT_PYTHON ?? 'python3',
+    });
+    await routes.create({ id: 'deck-render', sourcePptx: fixtureDeck, title: 'render', reportPath: fixtureReport });
+    const rendered = await routes.render('deck-render');
+    assert.ok(rendered.value.files.includes('slide-01.png'), JSON.stringify(rendered.value.files));
+    const image = await routes.image('deck-render', 'thumb-01.png');
+    assert.match(image.value.dataUrl, /^data:image\/png;base64,/);
+    await assert.rejects(() => routes.image('deck-render', '../secret'), (e: unknown) => e instanceof RefinerApiFault && e.status === 400);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

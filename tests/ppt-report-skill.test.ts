@@ -121,8 +121,9 @@ test('page_images rejects a non-zip deck before invoking soffice', () => {
 });
 
 const sofficePresent = [process.env.SOFFICE, '/Applications/LibreOffice.app/Contents/MacOS/soffice', '/usr/bin/soffice'].some(p => p && existsSync(p));
+const pdfiumAvailable = spawnSync(python, ['-c', 'import pypdfium2'], { encoding: 'utf-8' }).status === 0;
 
-test('page_images renders every page with matching count (real soffice)', { skip: !sofficePresent }, () => {
+test('page_images renders every page with matching count (real soffice)', { skip: !sofficePresent || !pdfiumAvailable }, () => {
   const dir = tempDir();
   try {
     const out = path.join(dir, 'pages');
