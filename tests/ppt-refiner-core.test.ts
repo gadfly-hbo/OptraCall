@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -114,5 +114,20 @@ test('edit_slide allows covered numbers and user-confirmed uncovered edits', () 
     const direct = path.join(dir, 'direct.pptx');
     const r2 = edit(['--deck', fixtureDeck, '--slide', '2', '--match', '+3%', '--replace', '+3.2%', '--out', direct, '--report', fixtureReport, '--allow-uncovered']);
     assert.equal(r2.code, 0, r2.out);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('edit_slide hard lock gate refuses locked pages from meta.json', () => {
+  const dir = tempDir();
+  try {
+    writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ lockedPages: [2] }));
+    copyFileSync(fixtureDeck, path.join(dir, 'deck.pptx'));
+    const lockedOut = path.join(dir, 'locked.pptx');
+    const r2 = edit(['--deck', path.join(dir, 'deck.pptx'), '--slide', '2', '--match', '长尾', '--replace', 'x', '--out', lockedOut]);
+    assert.equal(r2.code, 5, r2.out);
+    assert.match(r2.out, /PAGE_LOCKED/);
+    assert.equal(existsSync(lockedOut), false);
+    const ok = edit(['--deck', path.join(dir, 'deck.pptx'), '--slide', '1', '--match', '重点门店', '--replace', '重点', '--out', path.join(dir, 'ok.pptx')]);
+    assert.equal(ok.code, 0, ok.out);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

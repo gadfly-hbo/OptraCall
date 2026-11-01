@@ -9,6 +9,8 @@ The replacement deck must use the same slide size as the target deck.
 No external dependencies.
 """
 import argparse
+import json
+import os
 import re
 import sys
 import zipfile
@@ -17,6 +19,22 @@ import xml.etree.ElementTree as ET
 R_ID = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id'
 PKG_REL_NS = 'http://schemas.openxmlformats.org/package/2006/relationships'
 CT_NS = 'http://schemas.openxmlformats.org/package/2006/content-types'
+
+
+def assert_editable(deck_path, slide):
+    """Hard lock gate: deck meta.json lockedPages wins over any prompt."""
+    meta_path = os.path.join(os.path.dirname(os.path.abspath(deck_path)), 'meta.json')
+    if not os.path.exists(meta_path):
+        return
+    try:
+        with open(meta_path, encoding='utf-8') as f:
+            locked = json.load(f).get('lockedPages', [])
+    except (OSError, ValueError):
+        return
+    if slide in locked:
+        print(f'PAGE_LOCKED: slide {slide} is locked and must stay byte-identical', file=sys.stderr)
+        sys.exit(5)
+
 
 
 def slide_size(entries):
@@ -64,6 +82,7 @@ def main():
     if target_part not in src:
         print(f'ERROR: {target_part} not found in deck', file=sys.stderr)
         return 2
+    assert_editable(args.deck, args.slide)
     if slide_size(src) != slide_size(rep):
         print('ERROR: slide size mismatch; regenerate replacement at target deck sldSz', file=sys.stderr)
         return 2

@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 
 SOFFICE_CANDIDATES = [
@@ -68,8 +69,12 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     pdf_dir = os.path.join(args.out, '.pdf')
     os.makedirs(pdf_dir, exist_ok=True)
+    # Isolated user profile per invocation: concurrent headless conversions
+    # must not fight over the shared LibreOffice profile.
+    profile_dir = tempfile.mkdtemp(prefix='lo-profile-')
+    profile_url = 'file://' + profile_dir
     proc = subprocess.run(
-        [soffice, '--headless', '--convert-to', 'pdf', '--outdir', pdf_dir, os.path.abspath(args.deck)],
+        [soffice, '-env:UserInstallation=' + profile_url, '--headless', '--convert-to', 'pdf', '--outdir', pdf_dir, os.path.abspath(args.deck)],
         capture_output=True, text=True, timeout=300,
     )
     stem = os.path.splitext(os.path.basename(args.deck))[0]

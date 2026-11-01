@@ -85,6 +85,11 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
       store.meta();
       const text = bodyText(input, 'text', 4000);
       const requestId = bodyText(input, 'requestId', 80);
+      // Deterministic pre-check for explicitly referenced pages; anything
+      // the agent does beyond this is still gated by the scripts themselves.
+      const referenced = new Set<number>();
+      for (const m of text.matchAll(/第\s*(\d+)\s*页|[Pp](\d+)(?![\d%])/g)) referenced.add(Number(m[1] ?? m[2]));
+      for (const page of referenced) store.assertEditable(page);
       const deckDir = path.dirname(store.deckPath);
       const turnRecord = path.join(deckDir, 'last-turn.json');
       const before = existsSync(store.deckPath) ? createHash('sha256').update(readFileSync(store.deckPath)).digest('hex') : '';

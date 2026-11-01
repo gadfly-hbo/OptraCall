@@ -105,3 +105,18 @@ test('api: dispatcher maps /api/ppt-refiner urls and faults', async () => {
     assert.equal(other, null);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('api: turn pre-check rejects locked referenced page without starting session', async () => {
+  const dir = tempDir();
+  try {
+    let calls = 0;
+    const routes = setup(dir, async () => { calls += 1; return { text: 'should not run' }; });
+    await routes.create({ id: 'deck-lock', sourcePptx: fixtureDeck, title: 'lock', reportPath: fixtureReport });
+    await routes.setLock('deck-lock', { page: 2, locked: true });
+    await assert.rejects(() => routes.turn('deck-lock', { text: '修改第 2 页标题', requestId: 'r-lock' }), (e: unknown) => e instanceof Error && 'code' in e && e.code === 'PAGE_LOCKED');
+    assert.equal(calls, 0, 'session must not start for locked page');
+    const ok = await routes.turn('deck-lock', { text: '第 1 页不用改', requestId: 'r-ok' });
+    assert.equal(calls, 1);
+    assert.equal(ok.value.snapshot, null);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

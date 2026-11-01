@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
@@ -135,5 +135,18 @@ test('page_images renders every page with matching count (real soffice)', { skip
     }
     const bad = run('page_images.py', ['--deck', path.join(fixtures, 'deck-bad.pptx'), '--out', path.join(dir, 'pages2')]);
     assert.equal(bad.code, 0, bad.out);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('splice_slide hard lock gate refuses locked pages from meta.json', () => {
+  const dir = tempDir();
+  try {
+    writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ lockedPages: [2] }));
+    copyFileSync(path.join(fixtures, 'deck-good.pptx'), path.join(dir, 'deck.pptx'));
+    const out = path.join(dir, 'out.pptx');
+    const r = run('splice_slide.py', ['--deck', path.join(dir, 'deck.pptx'), '--replacement', path.join(fixtures, 'replacement-single.pptx'), '--slide', '2', '--out', out]);
+    assert.equal(r.code, 5, r.out);
+    assert.match(r.out, /PAGE_LOCKED/);
+    assert.equal(existsSync(out), false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

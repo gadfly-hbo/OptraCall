@@ -9,11 +9,29 @@ that check for user-confirmed direct edits (to be recorded in the diff
 list by the caller). No external dependencies.
 """
 import argparse
+import json
+import os
 import re
 import sys
 import zipfile
 
 NUMBER = re.compile(r'[+\-]?\d[\d,]*(?:\.\d+)?%?')
+
+
+def assert_editable(deck_path, slide):
+    """Hard lock gate: deck meta.json lockedPages wins over any prompt."""
+    meta_path = os.path.join(os.path.dirname(os.path.abspath(deck_path)), 'meta.json')
+    if not os.path.exists(meta_path):
+        return
+    try:
+        with open(meta_path, encoding='utf-8') as f:
+            locked = json.load(f).get('lockedPages', [])
+    except (OSError, ValueError):
+        return
+    if slide in locked:
+        print(f'PAGE_LOCKED: slide {slide} is locked and must stay byte-identical', file=sys.stderr)
+        sys.exit(5)
+
 
 
 def load_zip(path):
@@ -37,6 +55,7 @@ def main():
     if part not in src:
         print(f'ERROR: {part} not found', file=sys.stderr)
         return 2
+    assert_editable(args.deck, args.slide)
     xml = src[part].decode('utf-8')
     runs = re.findall(r'<a:t>([^<]*)</a:t>', xml)
     if args.match not in xml:
