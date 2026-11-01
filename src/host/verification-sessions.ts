@@ -1,11 +1,13 @@
 import { open } from 'node:fs/promises';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { createAgentSessionDomain, type SessionResult } from './agent-sessions.ts';
+import { createHash, randomUUID } from 'node:crypto';
+import { createAgentSessionDomain, type SessionResult, type SessionLease, type SessionExecutionPlan, type SessionCleanupRequest } from './agent-sessions.ts';
 import type { RuntimeModelConfiguration } from './config-store.ts';
 import { runtimeDiagnostic } from '../agent/run-diagnostics.ts';
 import type { RunDiagnostic } from '../agent/run-diagnostics.ts';
+import type { ProjectEvent } from '../agent/project-runtime.ts';
 import { OUTPUT_EVIDENCE_GUIDANCE } from '../agent/output-evidence.ts';
+import { authorContext, authorPreview, contextEvidence } from './verification-context.ts';
 import type { CreateVerificationInput, VerificationOwner, VerificationRecord, VerificationStore, VerificationAuthorRevision } from './verification-store.ts';
 import { VerificationStoreError } from './verification-store.ts';
 
@@ -26,7 +28,7 @@ export function createVerificationSessions(options: {
   stopAuthor(record: VerificationRecord): Promise<void>;
   prepareRevision(record: VerificationRecord, instructions: string): Promise<Pick<VerificationAuthorRevision, 'mode' | 'configuration'>>;
   projectIds(): Promise<string[]>;
-  prepare(projectId: string, taskId: string, selection: VerificationSelection): Promise<CreateVerificationInput>;
+  prepare(projectId: string, taskId: string, selection: VerificationSelection, ifMatch?: string, parentContext?: unknown): Promise<CreateVerificationInput>;
   revise(record: VerificationRecord, requestId: string, instructions: string): Promise<{ outcome: string; text: string; sessionFile?: string; files?: string[]; diagnostic?: RunDiagnostic }>;
   export(record: VerificationRecord, text: string): Promise<string>;
 }) {
@@ -69,7 +71,7 @@ export function createVerificationSessions(options: {
       await domain.withSession(ref, async lease => {
         await options.mutate(() => store.update(record, { state: 'running', phase: 'cold' }));
         const firstId = randomUUID();
-        const first = await lease.run({ requestId: firstId, text: `独立核算任务：${record.question}\n\n只读取 inputs/ 中的获准数据和 inputs/business-context.md。请自主选择计算或验证方式，实际运行并保存依据；本轮尚未提供作者答案。最终回复说明关键计算、假设及不能确认的内容。` });
+        const first = await lease.run({ requestId: firstId, text: `独立核算任务：${record.question}\n\n本轮提供 inputs/ 中的获准数据和 inputs/business-context.md，尚未提供作者答案。请自主决定计算、查证和呈现方式；条件不足、无法计算或保留未知也可以作为本轮回复。工具调用、自主迭代和自修复由你安排，不要求固定步骤、方法、工具或检查数量。` });
         await writes;
         if (!lease.context.isCurrent()) return;
         if (first.outcome !== 'completed') { await terminal(record, first); return; }
@@ -84,9 +86,8 @@ export function createVerificationSessions(options: {
         if (!lease.context.isCurrent()) return;
         cold = false;
         const fixed = await store.read(record);
-        const previews = (await store.readAuthorFiles(fixed)).map(file => `文件 author/${file.relativePath}，SHA256 ${file.sha256}\n${file.bytes.toString('utf8').slice(0, 4000)}`);
         const secondId = randomUUID();
-        const second = await lease.run({ requestId: secondId, text: `独立结果已先保存。现在才开放固定作者产物：\n${previews.join('\n\n').slice(0, 12000)}\n\n完整副本位于 author/。请与本次独立依据对照，逐项说明核查范围、计算/口径/方法前提/解释差异和无法确认事项。明确哪些是独立复算，哪些只是重跑作者代码；不要以双方一致或程序完成证明业务成立，不要修改作者原稿。` });
+        const second = await lease.run({ requestId: secondId, text: authorContext(await store.readAuthorFiles(fixed), fixed.workspace) });
         await writes;
         if (!lease.context.isCurrent()) return;
         if (second.outcome !== 'completed') { await terminal(record, second); return; }
@@ -104,7 +105,7 @@ export function createVerificationSessions(options: {
       if (!['cancelled','interrupted'].includes(current.state)) await options.mutate(() => store.update(record, { state: 'unknown', diagnostic: runtimeDiagnostic(error) })).catch(() => {});
     } finally { unsubscribe(); await writes.catch(() => {}); await eventFile.close(); await domain.close(ref).catch(() => {}); }
   }
-  async function start(projectId: string, taskId: string, selection: VerificationSelection) {
+  async function start(projectId: string, taskId: string, selection: VerificationSelection, ifMatch?: string) {
     const owner = { projectId, taskId, verificationId: selection.verificationId };
     // An existing accepted intent never re-reads changed sources or dispatches again.
     try {
@@ -113,14 +114,15 @@ export function createVerificationSessions(options: {
       if (JSON.stringify(ordered(previous.selection)) !== JSON.stringify(ordered(selection))) throw new VerificationStoreError('verification_selection_conflict');
       return { verification: previous, created: false };
     } catch (error) { if (!(error instanceof VerificationStoreError) || error.code !== 'verification_not_found') throw error; }
-    const prepared = await options.mutate(async () => { await options.admit(owner); return store.create(await options.prepare(projectId, taskId, selection)); });
+    const prepared = await options.mutate(async () => { await options.admit(owner); return store.create(await options.prepare(projectId, taskId, selection, ifMatch)); });
     if (prepared.created) void initial(prepared.record).catch(async error => { await options.mutate(() => store.update(owner, { state: 'unknown', diagnostic: runtimeDiagnostic(error) })).catch(() => {}); });
     return { verification: prepared.record, created: prepared.created };
   }
   async function read(owner: VerificationOwner) {
     const record = await store.read(owner), current = await domain.read(domain.ref(record));
-    const authorReports = (await store.readAuthorFiles(record)).map(file => ({ path: file.relativePath, text: file.bytes.toString('utf8').slice(0, 100_000), sha256: file.sha256 }));
-    return { ...record, id: record.verificationId, status: record.state, phase: record.phase === 'compare' ? 'comparison' : record.phase, model: record.configuration, independence: { ...record.independence, details: record.independence.note }, revision: record.authorRevision ? { ...record.authorRevision, text: record.authorRevision.reportText } : undefined, uiRequests: current.pendingUI.map(event => event.request), authorReports };
+    const authorReports = (await store.readAuthorFiles(record)).map(file => authorPreview(file, record.workspace));
+    const evidence = contextEvidence(record, await store.readRuntimeEvidence(record));
+    return { ...record, id: record.verificationId, status: record.state, phase: record.phase === 'compare' ? 'comparison' : record.phase, model: record.configuration, independence: { ...record.independence, details: record.independence.note }, revision: record.authorRevision ? { ...record.authorRevision, text: record.authorRevision.reportText } : undefined, uiRequests: current.pendingUI.map(event => event.request), authorReports, contextEvidence: evidence };
   }
   async function stop(owner: VerificationOwner) {
     const record = await store.read(owner);
@@ -168,7 +170,10 @@ export function createVerificationSessions(options: {
       return store.update(owner, { phase: 'recheck', state: 'running', recheckCount: 1 });
     });
     void domain.withSession(domain.ref(record), async lease => {
-      const requestId = randomUUID(), result = await lease.run({ requestId, text: `这是对已见作者产物的修订复查，不是新的冷读独立核算。原数据与业务口径已核对固定副本；若发现新变化请明确无法沿用。完整作者修订回复位于 author-revision/revision.md，请读取全文；以下仅为可能截断的摘要：\n${record.authorRevision!.reportText!.slice(0, 8000)}\n请仅复查此前差异是否得到解决，保留证据与剩余分歧，不再要求下一轮自动修改。` });
+      const report = record.authorRevision!.reportText!;
+      let end = Math.min(8000, report.length);
+      if (end > 0 && end < report.length && /[\uD800-\uDBFF]/.test(report[end - 1]!) && /[\uDC00-\uDFFF]/.test(report[end]!)) end--;
+      const requestId = randomUUID(), result = await lease.run({ requestId, text: `这是对已见作者产物的修订复查，不是新的冷读独立核算。原数据与业务口径已核对固定副本；若发现新变化请明确无法沿用。本记录唯一新稿requestId=${record.authorRevision!.requestId}，SHA256=${createHash('sha256').update(report).digest('hex')}。完整固定稿可按需自主读取，位置 author-revision/revision.md。以下仅主动提供[0,${end})/${report.length} UTF-16摘要，不表示已读全文：\n${report.slice(0, end)}\n请自主复查前次差异及新稿中与本次问题相关的重要内容和新增主张，保留实际核查范围、证据与未知。可以一致或无需新增错误；不要求固定工具、步骤或检查数量，不自动要求下一轮修改。` });
       if (!lease.context.isCurrent()) return;
       if (result.outcome !== 'completed') { await terminal(owner, result); return; }
       await options.mutate(async () => { if (!lease.context.isCurrent()) return; await options.assertInputs(owner); await store.verifyWorkspaceInputs(owner, { revision: true }); await store.readAuthorFiles(owner); await store.saveRecheckResult(owner, resultInput(result, requestId)); await store.update(owner, { state: 'completed', native: resultInput(result, requestId) }); });
@@ -202,6 +207,30 @@ export function createVerificationSessions(options: {
     }
   }
   return { start, read, stop, revise, recheck, exportReport, list: store.list, closeAll,
+    /** Host-only automatic consumer of this same domain, never another runtime.
+     * Its caller owns material/version records; the common lease owns resources. */
+    withAutomaticSession: <T>(record: VerificationRecord, use: (session: {
+      lease: SessionLease<VerificationRecord>;
+      reopen(plan: SessionExecutionPlan): Promise<unknown>;
+      read(): ReturnType<typeof domain.read>;
+      subscribe(listener: (event: ProjectEvent) => void): () => void;
+    }) => Promise<T>): Promise<T> => {
+      const ref = domain.ref(record);
+      return domain.withSession(ref, lease => use({ lease,
+        reopen: plan => lease.reopen(domain.execution(ref, plan)),
+        read: () => domain.read(ref),
+        subscribe: listener => domain.subscribe(ref, event => listener(event)),
+      }));
+    },
+    stopAutomatic: async (owner: VerificationOwner) => domain.stop(domain.ref(await store.read(owner))),
+    closeAutomatic: async (owner: VerificationOwner, cleanup?: Partial<SessionCleanupRequest>) => domain.close(domain.ref(await store.read(owner)), cleanup),
+    registerAutomaticOrigin: (record: VerificationRecord) => domain.registerFresh(domain.ref(record)),
+    hasUnprovenProjectWriter: async (projectId: string) => (await store.list(projectId)).some(record => {
+      const state = domain.executionState(domain.ref(record));
+      return state.unmanagedSeen || state.mode === 'unmanaged' || state.mode === 'unknown'
+        || Boolean(record.native?.sessionFile && !state.freshRegistered);
+    }),
+    automaticUI: async (owner: VerificationOwner) => (await domain.read(domain.ref(await store.read(owner)))).pendingUI.map(event => event.request),
     busy: async (projectId: string) => (await store.list(projectId)).some(record => domain.busy(domain.ref(record)) || ['preparing','ready','running'].includes(record.state) || record.authorRevision?.status === 'running'),
     respondUI: async (owner: VerificationOwner, input: { id: string; value?: string | boolean; cancelled?: boolean }) => domain.respondUI(domain.ref(await store.read(owner)), input),
   };

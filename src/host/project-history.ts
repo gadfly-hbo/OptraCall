@@ -33,7 +33,29 @@ export function savedTaskHistory(project: ProjectRecord, task: TaskRecord, sdkVe
     const outcome = data.outcome as 'completed' | 'cancelled' | 'failed', diagnostic = readRunDiagnostic(data.diagnostic, outcome);
     lastRun = { requestId: data.requestId, outcome, ...(diagnostic ? { diagnostic } : {}) };
   }
-  return { sessionId: task.sessionFile ? manager.getSessionId() : task.id, sessionFile: task.sessionFile, messages: presentContextMessages(manager.buildSessionContext().messages, manager.getEntries()) as Record<string, any>[], tools: [], status: 'idle', sdkVersion, capabilities: { ...capabilities, ...(providedContext ? { semanticContext: providedContext } : {}) }, ...(lastRun ? { lastRun } : {}) };
+  return { sessionId: task.sessionFile ? manager.getSessionId() : task.id, sessionFile: task.sessionFile, messages: presentContextMessages(manager.buildSessionContext().messages, manager.getBranch(), manager.getSessionId()) as Record<string, any>[], tools: [], status: 'idle', sdkVersion, capabilities: { ...capabilities, ...(providedContext ? { semanticContext: providedContext } : {}) }, ...(lastRun ? { lastRun } : {}) };
+}
+
+/** Resolve an explicitly selected reply from this task's native ledger, never client text. */
+export async function readSavedTaskReply(project: ProjectRecord, task: TaskRecord, selection: { sessionId: string; messageId: string }): Promise<{ text: string; sessionId: string; messageId: string }> {
+  if (typeof selection.sessionId !== 'string' || !selection.sessionId || typeof selection.messageId !== 'string' || !selection.messageId || selection.messageId.length > 200) throw new ProjectHistoryError('reply_not_found');
+  let reply: { text: string; sessionId: string; messageId: string } | undefined;
+  for (const name of await readdir(task.sessionDirectory)) {
+    if (!name.endsWith('.jsonl')) continue;
+    const file = path.join(task.sessionDirectory, name), stat = await lstat(file);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new ProjectHistoryError('session_history_unavailable');
+    const manager = SessionManager.open(file, task.sessionDirectory, path.join(project.rootPath, '020_clean'));
+    if (manager.getSessionId() !== selection.sessionId) continue;
+    const entry = manager.getEntries().find(entry => entry.id === selection.messageId);
+    if (!entry || entry.type !== 'message' || entry.message.role !== 'assistant') continue;
+    const content = entry.message.content;
+    const text = typeof content === 'string' ? content : content.filter(part => part.type === 'text').map(part => part.text).join('');
+    if (!text.trim()) throw new ProjectHistoryError('reply_not_found');
+    if (reply) throw new ProjectHistoryError('session_history_unavailable');
+    reply = {text,sessionId:selection.sessionId,messageId:selection.messageId};
+  }
+  if (!reply) throw new ProjectHistoryError('reply_not_found');
+  return reply;
 }
 
 /** Lazy read projection of native records; never opens a worker or backfills a receipt. */

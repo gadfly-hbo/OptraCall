@@ -4,6 +4,12 @@
 
 ## 1. 当前范围与依据
 
+**固定版本与MacBook试用交付当前授权（2026-11-01）：** 用户要求暂停继续全链路测试，固定现有版本并完成Git／CI、合并main及MacBook更新供实际体验。按[本次交付规格](../openspec/changes/current-version-trial-delivery/spec.md)先更新main、保留WIP及原始证据，完成适用工程检查、非作者复核、实际head及合并main CI，再通过原试用入口同步MacBook；保留该机已有项目／会话／文件及配置，不切换Mac mini运行服务。没有新模型全链路实验、专业FAIL重评或新分析方法开发。此前“暂不Git／MacBook”的阶段边界由本次明确授权替代，其余产品与保全边界保持。实际交付见[记录](../openspec/changes/current-version-trial-delivery/result.md)，试用范围见[用户说明](current-version-trial.md)。
+
+**托管执行优化当前授权（2026-11-01）：** 用户已通过[方案／spec](../openspec/changes/managed-execution-optimization/spec.md)及 D1–D8 全 A，授权本地实施、适用完整检查、固定工作量性能对照复测及非作者独立复核。保留后台并行、原件保护、停止／UNKNOWN及项目／会话／文件；Host只管理环境。暂不 Git/CI 交付、安装或切换运行服务，不操作MacBook。原生命周期补充、自动核算范围与旧专业FAIL保持，下段为此前增量授权。
+
+**2026-11-01当前实施范围：** 用户已通过[自动独立核算与原主Agent修订spec/UI](../openspec/changes/automatic-verification-revision/spec.md)、九项结构决定及[生命周期补充A](../openspec/changes/automatic-verification-revision/lifecycle-supplement-proposal.md)。本次继续本地实现、适用检查、合成资料真实模型验证及非作者独立复核；不自动Git/CI、切换运行服务、安装扩展或操作MacBook。当前Interface v3仅为显式开启自动核算的受信新任务前移环境托管，Agent仍自主计算、判断和修订；原v2阻断及旧专业FAIL保留。以下各段保留历史增量的当时授权，不扩大当前范围。
+
 当前增量为[业务语义增强与独立核算 Agent 一期](../openspec/changes/business-semantics-verification/spec.md)：用户已确认v0.1 SV01–SV12，授权复用现有RAP/SAP/Case的必要增强、新核算接入、本地检查、兼容保全、联合回归、真实模型合成对照、非作者复核及Git/CI后合并main，合并前更新main。保留项目、会话和文件；不重建IR或固定方法库、不新增硬沙箱、不自动重放或换模型，不切原运行服务，不操作MacBook。原[EC建议](extension-correctness-proposal.md)留作历史讨论，由[确认方案](business-semantics-and-independent-verification-phase1-proposal.md)取代。
 
 **当前交付收尾：** 用户已确认并实施[修订权限收尾方案](verification-revision-preservation-followup.md)，仅修订出稿资源收窄能力：读取固定正文、输出新稿、Host另存，使用统一生命周期的附属资源，不替换原任务指针/历史，不影响普通分析全工具策略。新根工程与有限真实保全复验、旧资料末次比较分别有证据；模型专业质量仍有重要错/漏报，保持PARTIAL、错误稿未采用，不宣称完整SV11或产品验收。旧原件破坏FAIL/UNKNOWN不恢复、清理或重放；全部适用验收/非作者复核/实际head CI约束工程合并，运行采用不自动进行，实际交付见本变更记录。
@@ -60,9 +66,11 @@ Codex 与 Qoder 在同一工程规范下协作。每项变更明确修改范围�
 
 统一底座允许按任务隔离会话与上下文。所需会话的创建、续接、停止及事件处理均经过统一入口；具体接口与并发方式随实际任务确定。宿主不直接组合 pi-agent-core + pi-ai 自建运行底座；SDK 内部的传递依赖不受此限制。实施时核对并锁定兼容版本，不能将“已声明同一依赖”当成实际共用 Runtime 的证明。
 
-### 统一会话接入规范（Interface v1）
+### 统一会话接入规范（当前Interface v3，兼容v1/v2业务子集）
 
 以下IN01–IN07适用于Codex、Qoder及其他开发者。准确类型及Interface版本以`src/host/agent-sessions.ts`为准；最小使用方式、业务差异和验证示例见[接入说明](agent-session-integration.md)。本节是强制规则唯一来源，AGENTS及工具专属项目入口仅放同源指针。
+
+当前v3落实用户已确认的[生命周期补充A边界](../openspec/changes/automatic-verification-revision/lifecycle-supplement-proposal.md)：仅显式开启自动核算的受信新任务，从首次普通执行前托管工具资源；允许任务内后台与并行计算，正常交接先等待计算自然结束，显式停止才强制收回。Host只管理材料、权限、资源归属及实际收尾，不决定Agent公式、工具选择、专业意见或是否改稿。未开启的普通任务保持原策略；旧任务及重启后缺可信起点的资源不因JSONL标记、关闭driver或读取历史而升级为受管。v3候选的检查与非作者复核结论另记，接口存在不等于专业验证或运行采用完成。
 
 | 标识 | 必须遵守的接入规则 |
 | --- | --- |
@@ -73,6 +81,12 @@ Codex 与 Qoder 在同一工程规范下协作。每项变更明确修改范围�
 | IN05 Host资源权限 | 凭据解析、原生资源创建和跨owner清理由核准Host路径负责。插件只使用非敏感引用及获准能力，不通过消息中的任意workspace/sessionFile、密钥或Provider绕过配置；事件与日志继续脱敏，会话port不扩大数据或经营动作授权。 |
 | IN06 契约共同维护 | 新能力先补契约、消费者适配与验收。Codex负责Host/Agent集成与主链路，Qoder交付Extension接入及证据；不单方面改变另一方契约。不兼容变化或范围扩大先补适用决定；底层导入例外的新增/变更须说明理由并独立复核。 |
 | IN07 交付验证 | 交付覆盖正常路径、取消、配置变化、迟到结果、保存/恢复与兼容范围；公共改动复测现有消费者及第三合成接入。导入约束加入`npm run check`及CI，合规样例通过、受控绕过样例失败、恢复合规后通过；不能靠跳过检查、删除断言或扩大白名单制造通过。 |
+
+**2026-11-01会话接缝初始v2增量（历史候选）：** [自动核算与主Agent修订](../openspec/changes/automatic-verification-revision/spec.md)及其[九项结构合同](../openspec/changes/automatic-verification-revision/structure-decisions.md)已由用户确认。当前Interface v2兼容原v1调用子集，增加Host-only `execution/owns`和lease的`quiesce/reopen/onCancel`；不向业务port暴露执行资格创建/owner证明。资格绑定真实owner和当前operation，不能从JSON、任意workspace或旧lease恢复。公共层在同一占用内确认旧资源终止后受控重开，不由业务层另建busy/代际/运行队列或平行Runtime。
+
+原任务与核算仍各持原owner权威，自动链只关联实际请求。可信SDK驱动唯一写原native；所有Agent可控的文件/代码/codemode/间接工具均须跨受限执行边界，不得在驱动内留下动态执行后门。工具执行器不是另一位分析Agent，不能改变专业意见、选择方法或补计算；普通分析及旧封闭文本资源保留其原工具合同。具体保护可行性、局限及实际完成范围记录在当前变更，不将合成探针扩大成完整产品验收。
+
+父取消先撤后续派发，再等匹配子操作和本资源安全停止；阶段间也不能提前idle。子停止/资源关闭失败时隔离原owner、保留UNKNOWN，显式close可重试失败清理，不能自动重放请求。按Provider/project/owner关闭只等待匹配资源与子停止，不受无关operation影响。IN07验证须覆盖这一增量及所有旧消费者，详见同源接入说明；历史v1实施记录仍保留原事实。
 
 两类策略继续保留：项目任务使用绑定配置和已保存sessionFile；需求梳理在operation开始捕获当前配置，生成与最多一次修正期间固定，重建沿用原新建native策略。各owner的原生会话、上下文、配置快照与占用独立；Host只持域管理引用，协调明确的Provider/真实项目/退出范围，不另建资源台账或全局Agent运行队列。需求的目标项目不是需求会话归属。SDK原生历史读取及固定连接探针只由检查中列明的路径承担，不能借例外接管业务会话。
 

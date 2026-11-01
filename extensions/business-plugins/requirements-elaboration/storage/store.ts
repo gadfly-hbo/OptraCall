@@ -14,6 +14,7 @@ export type RequirementReleaseEntry = Readonly<{
   openQuestionCount: number; metricCount: number;
 }>;
 export type InstanceSummary = Readonly<{ id: string; title: string; scene: Scene; createdAt: string; updatedAt: string }>;
+export type RequirementFeedbackOrigin = { operationId: string; handoffId: string; requestHash: string };
 
 export class RequirementStoreFault extends Error {
   readonly code: string;
@@ -131,6 +132,17 @@ export function createRequirementStore(directory: string) {
     ensureDirectory(releasesRoot);
     atomicWrite(releasesIndexPath, Buffer.from(JSON.stringify({ version: 1, entries }, null, 2) + '\n', 'utf8'), 0o600);
   };
+  const readFeedbackOrigin = (id: string): RequirementFeedbackOrigin | null => {
+    checkedId(id); const target = instanceDirectory(id);
+    if (!existsSync(target)) return null;
+    const dir = lstatSync(target); if (!dir.isDirectory() || dir.isSymbolicLink()) fail('REQ_STORE_CORRUPT');
+    const file = path.join(target, 'feedback-creation-origin.json');
+    if (!existsSync(file)) return null;
+    const stat = lstatSync(file); if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 4096) fail('REQ_STORE_CORRUPT');
+    let value: unknown; try { value = JSON.parse(readFileSync(file, 'utf8')); } catch { return fail('REQ_STORE_CORRUPT'); }
+    if (!object(value) || Object.keys(value).sort().join(',') !== 'handoffId,operationId,requestHash' || !/^[a-f0-9-]{36}$/.test(String(value.operationId)) || !/^[a-f0-9-]{36}$/.test(String(value.handoffId)) || !digestPattern.test(String(value.requestHash))) fail('REQ_STORE_CORRUPT');
+    return value as RequirementFeedbackOrigin;
+  };
 
   return {
     root,
@@ -144,6 +156,52 @@ export function createRequirementStore(directory: string) {
         context: { background: '', goal: '', decisionScenario: '' },
         clarifications: [], facts: [], hypotheses: [],
       });
+    },
+    readFeedbackOrigin,
+    /** Feedback drafts retain the original YAML contract; source authority lives in the handoff. */
+    createFromFeedback(input: { instanceId: string; title: string; scene: Scene; background: string; origin: RequirementFeedbackOrigin; resume?: boolean }): RequirementInstance {
+      const id = checkedId(input.instanceId), title = String(input.title ?? '').trim(), origin = input.origin;
+      if (!title || title.length > 200 || typeof input.background !== 'string' || input.background.length > 100000 || !object(origin) || !/^[a-f0-9-]{36}$/.test(origin.operationId) || !/^[a-f0-9-]{36}$/.test(origin.handoffId) || !digestPattern.test(origin.requestHash)) fail('REQ_STRUCTURE');
+      ensureDirectory(root);
+      const target = instanceDirectory(id);
+      if (existsSync(target)) {
+        const previous = readFeedbackOrigin(id);
+        if (!previous || previous.operationId !== origin.operationId || previous.handoffId !== origin.handoffId || previous.requestHash !== origin.requestHash) fail('REQ_FEEDBACK_ORIGIN_CONFLICT');
+        return readInstance(id);
+      }
+      const stagingRoot = `${root}.feedback-staging`; ensureDirectory(stagingRoot);
+      const lockFile = path.join(stagingRoot, `${id}.publish.lock`);
+      let claim: { origin: RequirementFeedbackOrigin; stagingName: string; createdAt: string; pid: number };
+      if (existsSync(lockFile)) {
+        const stat = lstatSync(lockFile); if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 4096) fail('REQ_STORE_CORRUPT');
+        let previous: unknown; try { previous = JSON.parse(readFileSync(lockFile, 'utf8')); } catch { return fail('REQ_STORE_CORRUPT'); }
+        if (!object(previous) || !object(previous.origin) || previous.origin.operationId !== origin.operationId || previous.origin.handoffId !== origin.handoffId || previous.origin.requestHash !== origin.requestHash || typeof previous.stagingName !== 'string' || !/^[a-f0-9-]{36}$/.test(previous.stagingName) || !isoDate(previous.createdAt) || !Number.isSafeInteger(previous.pid) || Number(previous.pid) < 1) fail('REQ_FEEDBACK_ORIGIN_CONFLICT');
+        if (!input.resume) fail('REQ_FEEDBACK_CREATION_NEEDS_REVIEW');
+        claim = previous as unknown as typeof claim;
+        if (claim.pid !== process.pid) { try { process.kill(claim.pid, 0); fail('REQ_FEEDBACK_CREATION_NEEDS_REVIEW'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; } }
+      } else {
+        claim = { origin, stagingName: randomUUID(), createdAt: new Date().toISOString(), pid: process.pid };
+        const fd = openSync(lockFile, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+        try { writeFileSync(fd, JSON.stringify(claim)); fsyncSync(fd); } finally { closeSync(fd); }
+      }
+      const staging = path.join(stagingRoot, claim.stagingName); ensureDirectory(staging);
+      const instance: RequirementInstance = { instance: { version: '0.1', id, title, scene: input.scene, createdAt: claim.createdAt, updatedAt: claim.createdAt }, context: { background: input.background, goal: '', decisionScenario: '' }, clarifications: [], facts: [], hypotheses: [] };
+      const yaml = Buffer.from(canonicalYaml(instance), 'utf8'); parseInstance(yaml);
+      for (const [name, bytes] of [['instance.yaml', yaml], ['feedback-creation-origin.json', Buffer.from(JSON.stringify(origin) + '\n')]] as const) {
+        const file = path.join(staging, name);
+        if (existsSync(file)) {
+          const stat = lstatSync(file); if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || !readFileSync(file).equals(bytes)) fail('REQ_FEEDBACK_ORIGIN_CONFLICT');
+        } else atomicWrite(file, bytes, 0o600);
+      }
+      // The feature's single Host writer plus this exclusive planned-ID claim
+      // covers publication. Never rename onto an existing target. A failed
+      // publish leaves the complete stage outside ordinary instance enumeration.
+      if (existsSync(target)) fail('REQ_FEEDBACK_ORIGIN_CONFLICT');
+      renameSync(staging, target);
+      const parent = openSync(root, 'r'); try { fsyncSync(parent); } finally { closeSync(parent); }
+      unlinkSync(lockFile);
+      const stagedParent = openSync(stagingRoot, 'r'); try { fsyncSync(stagedParent); } finally { closeSync(stagedParent); }
+      return readInstance(id);
     },
     list(): readonly InstanceSummary[] {
       if (!existsSync(root)) return [];

@@ -41,11 +41,23 @@ export type BoardTaskRecord = {
   status: TaskStatus; priority: Priority; note: string;
   createdAt: string; updatedAt: string;
 };
+export type FeedbackEffect = 'unknown' | 'positive' | 'negative' | 'none';
+export type SaveFeedbackInput = {
+  operationId: string; expectedLatestRevisionId: string | null;
+  adopted: boolean; outcome: string; metricDelta: string; review: string; score: number | null;
+  effect?: FeedbackEffect;
+};
 export type TaskFeedbackRecord = {
-  taskId: string; adopted: boolean; outcome: string; metricDelta: string; review: string; score: number;
+  taskId: string; adopted: boolean; outcome: string; metricDelta: string; review: string; score: number | null;
+  effect: FeedbackEffect;
   createdAt: string; updatedAt: string;
 };
-export type BoardTaskView = BoardTaskRecord & { feedback?: TaskFeedbackRecord };
+export type TaskFeedbackRevision = TaskFeedbackRecord & {
+  revisionId: string; revisionNumber: number; operationId: string | null; requestSha256: string | null;
+  savedAt: string; origin: 'user-save' | 'legacy-current';
+  legacyCreatedAt: string | null; legacyUpdatedAt: string | null;
+};
+export type BoardTaskView = BoardTaskRecord & { feedback?: TaskFeedbackRevision };
 export type BoardItemView = BoardItemRecord & { tasks: BoardTaskView[] };
 
 /** Validated extraction item shape produced by normalizeExtractionOutput. */

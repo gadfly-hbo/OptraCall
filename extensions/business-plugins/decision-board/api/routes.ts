@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { DecisionBoardFault, createDecisionBoardStore } from '../storage/store.ts';
-import type { BoardItemRecord, BoardItemView, BoardTaskRecord, BoardTaskView, ExtractionRecord, ExtractionStatus, TaskFeedbackRecord } from '../types.ts';
+import type { BoardItemRecord, BoardItemView, BoardTaskRecord, BoardTaskView, ExtractionRecord, ExtractionStatus, FeedbackEffect, SaveFeedbackInput, TaskFeedbackRevision } from '../types.ts';
 
 export class BoardRouteError extends Error {
   readonly status: number;
@@ -48,7 +48,12 @@ const messages: Record<string, { status: number; message: string }> = {
   invalid_item_decision: { status: 409, message: '该建议已有决策，请刷新核对后再操作。' },
   task_requires_adoption: { status: 409, message: '只有已采纳的建议才能添加行动任务。' },
   invalid_text: { status: 400, message: '输入内容不完整、为空或超过长度限制。' },
-  invalid_feedback: { status: 400, message: '反馈需包含执行与否和 1–5 的整数评分。' },
+  invalid_feedback: { status: 400, message: '请明确是否按建议执行；评分可不填，填写时须为 1–5 的整数。' },
+  feedback_client_upgrade_required: { status: 409, message: '请刷新升级页面后保存反馈；旧页面缺少保存意图或当前修订身份，本次未写入。' },
+  feedback_operation_conflict: { status: 409, message: '此保存意图已有不同内容，请先查询原操作并保留当前输入。' },
+  feedback_revision_conflict: { status: 409, message: '反馈已有新修订，请对照最新内容后重新保存；当前输入应保留。' },
+  feedback_revision_not_found: { status: 404, message: '未找到该反馈修订。' },
+  project_not_found: { status: 404, message: '未找到反馈所属项目。' },
   invalid_observation: { status: 400, message: '报告观测信息无效，请刷新后重试。' },
   project_archived: { status: 409, message: '项目已归档，请先恢复后继续操作。' },
   project_busy: { status: 409, message: '项目正在归档或仍有运行中的工作，请稍后重试。' },
@@ -58,6 +63,8 @@ const messages: Record<string, { status: number; message: string }> = {
   board_store_unavailable: { status: 503, message: '决策看板存储暂不可用，请稍后重试。' },
   unsafe_board_storage: { status: 503, message: '决策看板存储位置异常，已停止写入。' },
   unsupported_board_schema: { status: 503, message: '决策看板存储版本不受支持。' },
+  invalid_board_database: { status: 503, message: '决策看板存储校验未通过，原库已保留并停止写入。' },
+  board_migration_failed: { status: 503, message: '决策看板升级未完成，已回滚本次升级并保留原库，请先检查。' },
   board_store_busy: { status: 503, message: '决策看板存储正被其他实例使用。' },
 };
 
@@ -78,6 +85,22 @@ function string(input: Record<string, unknown>, key: string, required = true): s
   return value;
 }
 
+function feedbackInput(input: Record<string, unknown>): SaveFeedbackInput {
+  if (!input.operationId || !Object.hasOwn(input, 'expectedLatestRevisionId')) throw new BoardRouteError(409, 'feedback_client_upgrade_required', messages.feedback_client_upgrade_required!.message);
+  const score = input.score === undefined ? null : input.score, effect = input.effect === undefined ? 'unknown' : input.effect;
+  if (typeof input.operationId !== 'string' || !projectIdPattern.test(input.operationId)
+    || (input.expectedLatestRevisionId !== null && (typeof input.expectedLatestRevisionId !== 'string' || !projectIdPattern.test(input.expectedLatestRevisionId)))
+    || typeof input.adopted !== 'boolean' || (score !== null && (typeof score !== 'number' || !Number.isSafeInteger(score) || score < 1 || score > 5))
+    || typeof effect !== 'string' || !['unknown', 'positive', 'negative', 'none'].includes(effect)) throw new BoardRouteError(400, 'invalid_feedback', messages.invalid_feedback!.message);
+  const content = (key: string) => {
+    if (input[key] === undefined) return '';
+    if (typeof input[key] !== 'string') throw new BoardRouteError(400, 'invalid_feedback', messages.invalid_feedback!.message);
+    return input[key];
+  };
+  return { operationId: input.operationId, expectedLatestRevisionId: input.expectedLatestRevisionId, adopted: input.adopted,
+    outcome: content('outcome'), metricDelta: content('metricDelta'), review: content('review'), score, effect: effect as FeedbackEffect };
+}
+
 /** Host-owned HTTP transport calls these handlers; the plugin never binds a port itself. */
 export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
   const store = options.store;
@@ -85,9 +108,15 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
   function itemView(item: BoardItemRecord, tasksByItem: Map<string, BoardTaskView[]>): BoardItemView {
     return { ...item, tasks: tasksByItem.get(item.id) ?? [] };
   }
-  function taskView(task: BoardTaskRecord, feedbackByTask: Map<string, TaskFeedbackRecord>): BoardTaskView {
+  function taskView(task: BoardTaskRecord, feedbackByTask: Map<string, TaskFeedbackRevision>): BoardTaskView {
     const feedback = feedbackByTask.get(task.id);
     return feedback ? { ...task, feedback } : { ...task };
+  }
+
+  async function readableTask(taskId: string): Promise<BoardTaskRecord> {
+    const task = store.getTask(taskId), item = store.getItem(task.itemId);
+    if (!(await options.projectOverview()).some(project => project.id === item.projectId)) throw new BoardRouteError(404, 'project_not_found', messages.project_not_found!.message);
+    return task;
   }
 
   async function view(): Promise<BoardView> {
@@ -161,6 +190,29 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
     const input = ['POST', 'PATCH', 'PUT'].includes(request.method ?? '') ? await options.readBody(request) : {};
     try {
       if (route === '' && request.method === 'GET') return { status: 200, value: await view() };
+      if (route === 'feedback/history' && request.method === 'GET') {
+        return { status: 200, value: await options.mutate(async () => {
+          const task = await readableTask(url.searchParams.get('taskId') ?? '');
+          return { revisions: store.listFeedbackHistory(task.id) };
+        }) };
+      }
+      const revisionRoute = /^feedback\/revisions\/([0-9a-f-]{36})$/.exec(route);
+      if (revisionRoute && request.method === 'GET') {
+        return { status: 200, value: await options.mutate(async () => {
+          const feedback = store.getFeedbackRevision(revisionRoute[1]!);
+          if (!feedback) throw new BoardRouteError(404, 'feedback_revision_not_found', messages.feedback_revision_not_found!.message);
+          await readableTask(feedback.taskId);
+          return { feedback };
+        }) };
+      }
+      const operationRoute = /^feedback\/operations\/([0-9a-f-]{36})$/.exec(route);
+      if (operationRoute && request.method === 'GET') {
+        return { status: 200, value: await options.mutate(async () => {
+          const feedback = store.getFeedbackOperation(operationRoute[1]!);
+          if (feedback) await readableTask(feedback.taskId);
+          return { feedback };
+        }) };
+      }
       if (route === 'reports/extract' && request.method === 'POST') {
         const projectId = string(input, 'projectId'), relativePath = string(input, 'path');
         if (!projectIdPattern.test(projectId)) throw new BoardRouteError(400, 'invalid_text', messages.invalid_text!.message);
@@ -210,16 +262,12 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
       }
       const feedbackRoute = /^tasks\/([0-9a-f-]{36})\/feedback$/.exec(route);
       if (feedbackRoute && request.method === 'POST') {
-        const task = await options.mutate(() => store.listTasks().find(entry => entry.id === feedbackRoute[1]));
-        if (!task) throw new BoardRouteError(404, 'task_not_found', messages.task_not_found!.message);
-        await options.assertActiveProject((await options.mutate(() => store.getItem(task.itemId))).projectId);
-        return { status: 200, value: { feedback: await options.mutate(() => store.saveFeedback(task.id, {
-          adopted: input.adopted === true,
-          outcome: string(input, 'outcome', false),
-          metricDelta: string(input, 'metricDelta', false),
-          review: string(input, 'review', false),
-          score: Number(input.score),
-        })) } };
+        const clean = feedbackInput(input);
+        return { status: 200, value: { feedback: await options.mutate(async () => {
+          const task = store.getTask(feedbackRoute[1]!);
+          await options.assertActiveProject(store.getItem(task.itemId).projectId);
+          return store.saveFeedback(task.id, clean);
+        }) } };
       }
       return null;
     } catch (error) {

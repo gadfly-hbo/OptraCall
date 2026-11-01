@@ -172,6 +172,7 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
       if (saved) { observation = { sha256: saved.observedSha256, bytes: saved.observedBytes, observedAt: saved.observedAt }; uploadId = saved.uploadId; }
       else {
         const project = await projects.get(projectId);
+        assertActive(project);
         if (taskId && !project.tasks.some(task => task.id === taskId)) throw new CaseRouteError('task_not_found', 404);
         observation = await projects.observeFile(projectId, relativePath);
         uploadId = project.uploads.find(upload => upload.path === relativePath)?.id ?? null;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
 import { prepareJointContext, readJson } from './fixtures/joint-context.ts';
-import { listVerifications, previewVerification, readSapProvision, readVerification, startVerification, verificationAction, verificationFiles, verificationInputError, VerificationRequestError, VerificationSubmissionUnknown, type VerificationInput, type VerificationRecord } from '../src/host/ui/verification-client.ts';
+import { downloadVerificationAuthorFile, listVerifications, previewVerification, readSapProvision, readVerification, startVerification, verificationAction, verificationFiles, verificationInputError, VerificationRequestError, VerificationSubmissionUnknown, type VerificationInput, type VerificationRecord } from '../src/host/ui/verification-client.ts';
 
 const id = 'f49f0bb1-20fb-4781-881c-74912c6ab1c0';
 const input: VerificationInput = { verificationId: id, question: '核对会员人数', dataFiles: ['020_clean/member.csv'], authorFiles: ['060_reports/report.md'] };
@@ -105,6 +105,79 @@ test('SV03 preview failure never starts or looks up a verification intent', asyn
   t.mock.method(globalThis, 'fetch', async (url: string) => { calls.push(String(url)); return response({ code: 'preview_unavailable' }, 503); });
   await assert.rejects(previewVerification('project-a', 'task-a', input), (error: unknown) => error instanceof VerificationRequestError && error.code === 'preview_unavailable');
   assert.deepEqual(calls, ['/api/projects/project-a/tasks/task-a/verifications/preview']);
+});
+
+test('CR02 start carries the reviewed preview as If-Match without changing the saved selection', async t => {
+  const etag = '"' + 'a'.repeat(64) + '"';
+  const calls: { headers: Headers; body: unknown }[] = [];
+  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => {
+    calls.push({ headers: new Headers(init.headers), body: JSON.parse(String(init.body)) });
+    return response({ verification: record });
+  });
+  await startVerification('project-a', 'task-a', input, undefined, etag);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.headers.get('if-match'), etag);
+  assert.deepEqual(calls[0]!.body, input, 'preview identity belongs in the conditional request, not the durable selection');
+});
+
+test('CR02 a changed reviewed source is shown as conflict without retry or readback', async t => {
+  const methods: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => {
+    methods.push(init.method ?? 'GET');
+    return response({ code: 'verification_preview_changed', message: '预览后的材料已变化，请重新预览。' }, 409);
+  });
+  await assert.rejects(startVerification('project-a', 'task-a', input, undefined, '"' + 'b'.repeat(64) + '"'), (error: unknown) => error instanceof VerificationRequestError && error.code === 'verification_preview_changed');
+  assert.deepEqual(methods, ['POST']);
+});
+
+test('CR02 a start without prior preview keeps the original request contract', async t => {
+  let observed: RequestInit | undefined;
+  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => { observed = init; return response({ verification: record }); });
+  assert.equal((await startVerification('project-a', 'task-a', input)).id, id);
+  assert.equal(new Headers(observed?.headers).get('if-match'), null);
+  assert.deepEqual(JSON.parse(String(observed?.body)), input);
+});
+
+test('CR05 fixed author download errors never save JSON or fall back to the current project file', async t => {
+  const urls: string[] = [];
+  let blobs = 0;
+  t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+    urls.push(String(url));
+    assert.equal(init.cache, 'no-store');
+    assert.equal(init.credentials, 'omit');
+    assert.equal(new Headers(init.headers).get('x-optracall-client'), '1');
+    return response({ code: 'verification_fixed_file_changed' }, 409);
+  });
+  t.mock.method(Response.prototype, 'blob', async () => { blobs++; return new Blob(['ERROR_MUST_NOT_BE_SAVED']); });
+  await assert.rejects(downloadVerificationAuthorFile('project-a', 'task-a', id, '060_reports/固定报告.md'), (error: unknown) => error instanceof VerificationRequestError && error.status === 409);
+  assert.deepEqual(urls, [`/api/projects/project-a/tasks/task-a/verifications/${id}/author-file?path=060_reports%2F%E5%9B%BA%E5%AE%9A%E6%8A%A5%E5%91%8A.md`]);
+  assert.equal(blobs, 0, 'an error response must not be presented as a downloaded fixed file');
+});
+
+test('CR10 known environment refusal explains the cause without treating admission as an unknown execution', async t => {
+  const cases = [
+    { code: 'verification_source_changed', reason: /原来源文件已变化/ },
+    { code: 'verification_source_missing', reason: /原来源文件缺失/ },
+    { code: 'verification_revision_materials_too_large', reason: /20,000 UTF-16/ },
+    { code: 'verification_revision_text_required', reason: /UTF-8/ },
+  ];
+  let current = cases[0]!, calls = 0;
+  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => {
+    calls++; assert.equal(init.method, 'POST');
+    return response({ code: current.code, message: '请求未完成，请检查输入或本地服务后重试。' }, 400);
+  });
+  for (const item of cases) {
+    current = item;
+    await assert.rejects(verificationAction('project-a', 'task-a', id, 'author-revision'), (error: unknown) => {
+      assert.ok(error instanceof VerificationRequestError);
+      assert.equal(error.code, item.code);
+      assert.match(error.message, item.reason);
+      assert.match(error.message, /保留/);
+      assert.doesNotMatch(error.message, /是否已完成|结果尚未确认/);
+      return true;
+    });
+  }
+  assert.equal(calls, cases.length, 'known refusals make no query, replay or fallback request');
 });
 
 test('SV03 SAP display reads only supplied provenance and cannot fill unknowns from current enablement', () => {

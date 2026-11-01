@@ -9,7 +9,8 @@ export type ProjectDirectory = typeof PROJECT_DIRECTORIES[number];
 export interface ProjectConfiguration { id: string; revision: number; provider: string; model: string; name: string; baseUrl: string; api?: string; thinkingLevel?: string }
 export interface ProjectRun { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic }
 export interface UploadedFile { id: string; originalName: string; path: string; bytes: number; sha256: string; uploadedAt: string; source: { kind: 'upload' | 'copy' | 'user-save-report'; from?: string } }
-export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string }
+export interface FeedbackTaskOrigin { handoffId: string; operationId: string; requestHash: string }
+export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; feedbackOrigin?: FeedbackTaskOrigin }
 export interface ProjectRecord { schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
 export class ProjectStoreFault extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
@@ -32,6 +33,10 @@ function publicConfiguration(input: unknown): ProjectConfiguration {
   return { id: input.id as string, name: input.name as string, provider: input.provider as string, model: input.model as string, baseUrl: input.baseUrl as string, revision: input.revision as number, ...(input.api === undefined ? {} : { api: input.api as string }), ...(input.thinkingLevel === undefined ? {} : { thinkingLevel: input.thinkingLevel as string }) };
 }
 function projectName(value: unknown): string { if (typeof value !== 'string' || !value.trim() || value.trim().length > 80 || /[\u0000-\u001f\u007f]/.test(value)) return fail('invalid_project_name'); return value.trim(); }
+function feedbackOrigin(value: unknown): FeedbackTaskOrigin {
+  if (!object(value) || typeof value.handoffId !== 'string' || !uuid.test(value.handoffId) || typeof value.operationId !== 'string' || !uuid.test(value.operationId) || typeof value.requestHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.requestHash)) return fail('invalid_feedback_origin');
+  return { handoffId: value.handoffId, operationId: value.operationId, requestHash: value.requestHash };
+}
 function validRun(value: unknown): ProjectRun {
   if (!object(value) || typeof value.id !== 'string' || !uuid.test(value.id) || typeof value.status !== 'string' || !runStates.has(value.status) || !isoDate(value.startedAt) || (value.status === 'running' ? value.settledAt !== undefined : !isoDate(value.settledAt))) return fail('invalid_run');
   const diagnostic = readRunDiagnostic(value.diagnostic, value.status === 'completed' || value.status === 'failed' || value.status === 'cancelled' ? value.status : undefined);
@@ -164,6 +169,7 @@ export class ProjectStore {
       await this.#assertTaskDirectory(id, task);
       if (input.sessionFile !== undefined) { if (typeof input.sessionFile !== 'string') fail('invalid_project_metadata'); await this.#validateSession(id, task, input.sessionFile as string); task.sessionFile = input.sessionFile as string; }
       if (input.lastRun !== undefined) task.lastRun = validRun(input.lastRun);
+      if (input.feedbackOrigin !== undefined) task.feedbackOrigin = feedbackOrigin(input.feedbackOrigin);
       tasks.push(task);
     }
     return { schemaVersion: 2, id, name, createdAt: value.createdAt, updatedAt: value.updatedAt, configuration, uploads, archivedAt: value.archivedAt as string | null, tasks };
@@ -234,6 +240,25 @@ export class ProjectStore {
       const next = { ...project, tasks: [...project.tasks, task], updatedAt: now }; this.#metadataBytes(next);
       const tasks = path.join(this.dataRoot, 'projects', projectId, 'tasks');
       await this.#directory(tasks); await this.#directory(path.join(tasks, id)); await this.#directory(this.#taskDirectory(projectId, task));
+      await this.#write(next); return this.#decorateTask(projectId, task);
+    });
+  }
+  /** Host-only stable creation: retries read the original task, including later user edits. */
+  createTaskWithFeedback(projectId: string, input: { taskId: string; name: string; draft: string; feedbackOrigin: FeedbackTaskOrigin; configuration?: ProjectConfiguration }): Promise<TaskRecord> {
+    const name = projectName(input.name), origin = feedbackOrigin(input.feedbackOrigin);
+    this.#id(input.taskId);
+    if (typeof input.draft !== 'string' || input.draft.length > 20000) return Promise.reject(new ProjectStoreFault('invalid_draft'));
+    return this.#mutation(async () => {
+      const project = await this.#read(projectId), existing = project.tasks.find(task => task.id === input.taskId);
+      if (existing) {
+        if (!existing.feedbackOrigin || JSON.stringify(existing.feedbackOrigin) !== JSON.stringify(origin)) return fail('feedback_origin_conflict');
+        return this.#decorateTask(projectId, existing);
+      }
+      this.#active(project);
+      const now = new Date().toISOString(), task: StoredTask = { id: input.taskId, name, createdAt: now, updatedAt: now, configuration: publicConfiguration(input.configuration ?? project.configuration), draft: input.draft, sessionStorage: 'task', feedbackOrigin: origin };
+      const next = { ...project, tasks: [...project.tasks, task], updatedAt: now }; this.#metadataBytes(next);
+      const directory = path.join(this.dataRoot, 'projects', projectId, 'tasks');
+      await this.#directory(directory); await this.#directory(path.join(directory, task.id)); await this.#directory(this.#taskDirectory(projectId, task));
       await this.#write(next); return this.#decorateTask(projectId, task);
     });
   }
@@ -352,6 +377,62 @@ export class ProjectStore {
       if (bytes !== initial.size || final.size !== initial.size || final.mtimeMs !== initial.mtimeMs || final.ctimeMs !== initial.ctimeMs || current.ino !== initial.ino || current.dev !== initial.dev || current.nlink !== 1 || current.isSymbolicLink()) return fail('file_changed_during_observation');
       return { sha256: digest.digest('hex'), bytes, observedAt: new Date().toISOString() };
     } finally { await handle.close(); }
+  }
+  /** Same-handle source capture for the explicitly selected feedback materials. */
+  async captureFeedbackFile(projectId: string, relativePath: string): Promise<{ bytes: Buffer; sha256: string; observedAt: string }> {
+    if (!/^(020_clean|060_reports)\//.test(relativePath)) return fail('invalid_feedback_file');
+    const target = await this.#safePath(projectId, relativePath), before = await fs.lstat(target, { bigint: true });
+    if (!before.isFile() || before.nlink !== 1n) return fail('unsafe_file_path');
+    if (before.size > BigInt(maxUploadBytes)) return fail('upload_too_large');
+    const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const initial = await handle.stat({ bigint: true });
+      if (!initial.isFile() || initial.nlink !== 1n || initial.ino !== before.ino || initial.dev !== before.dev) return fail('unsafe_file_path');
+      const chunks: Buffer[] = []; let length = 0;
+      for (;;) { const buffer = Buffer.allocUnsafe(65536), chunk = await handle.read(buffer, 0, buffer.length, null); if (!chunk.bytesRead) break; length += chunk.bytesRead; if (length > maxUploadBytes) return fail('upload_too_large'); chunks.push(buffer.subarray(0, chunk.bytesRead)); }
+      const final = await handle.stat({ bigint: true }), current = await fs.lstat(target, { bigint: true });
+      if (BigInt(length) !== initial.size || final.size !== initial.size || final.mtimeNs !== initial.mtimeNs || final.ctimeNs !== initial.ctimeNs || current.ino !== initial.ino || current.dev !== initial.dev || current.size !== initial.size || current.mtimeNs !== initial.mtimeNs || current.ctimeNs !== initial.ctimeNs || current.nlink !== 1n || current.isSymbolicLink()) return fail('file_changed_during_observation');
+      const bytes = Buffer.concat(chunks, length); return { bytes, sha256: createHash('sha256').update(bytes).digest('hex'), observedAt: new Date().toISOString() };
+    } finally { await handle.close(); }
+  }
+  async observeFeedbackReference(projectId: string, relativePath: string): Promise<{ availability: 'available' | 'missing' | 'unavailable' | 'too_large'; observation: { sha256: string; bytes: number; observedAt: string } | null }> {
+    if (!/^(020_clean|060_reports)\//.test(relativePath)) return fail('invalid_feedback_file');
+    await this.#assertProject(projectId); this.#relative(relativePath);
+    try {
+      const target = await this.#safePath(projectId, relativePath, true), stat = await fs.lstat(target);
+      if (!stat.isFile() || stat.nlink !== 1) return fail('unsafe_file_path');
+      if (stat.size > maxUploadBytes) return { availability: 'too_large', observation: null };
+      return { availability: 'available', observation: await this.observeFile(projectId, relativePath) };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') return { availability: 'missing', observation: null };
+      if (code === 'EACCES' || code === 'EPERM') return { availability: 'unavailable', observation: null };
+      throw error;
+    }
+  }
+  saveFeedbackFile(projectId: string, operationId: string, text: string, recoverExisting = false): Promise<UploadedFile> {
+    this.#id(operationId);
+    const prepared = this.#uploadInput(`feedback-${operationId}.md`, Buffer.from(text, 'utf8'));
+    return this.#mutation(async () => {
+      const project = await this.#read(projectId); this.#active(project);
+      const relativePath = `020_clean/${prepared.originalName}`, expected = createHash('sha256').update(prepared.bytes).digest('hex');
+      const existing = project.uploads.find(file => file.path === relativePath);
+      if (existing) {
+        const observed = await this.observeFile(projectId, relativePath);
+        if (existing.sha256 !== expected || observed.sha256 !== expected || observed.bytes !== prepared.bytes.length) return fail('feedback_file_changed');
+        return existing;
+      }
+      const target = await this.#safePath(projectId, relativePath, true);
+      try {
+        await fs.lstat(target);
+        if (!recoverExisting) return fail('feedback_file_needs_review');
+        const observed = await this.observeFile(projectId, relativePath);
+        if (observed.sha256 !== expected || observed.bytes !== prepared.bytes.length) return fail('feedback_file_changed');
+        const file: UploadedFile = { id: randomUUID(), originalName: prepared.originalName, path: relativePath, bytes: observed.bytes, sha256: observed.sha256, uploadedAt: observed.observedAt, source: { kind: 'upload' } };
+        await this.#write({ ...project, uploads: [...project.uploads, file], updatedAt: file.uploadedAt }); return file;
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      return this.#upload(projectId, prepared, '020_clean', { kind: 'upload' }, true);
+    });
   }
   /** Explicitly save the bytes observed now, without making the original or the copy immutable. */
   saveArtifactVersion(projectId: string, relativePath: string, operationId: string): Promise<{ file: UploadedFile; source: { sha256: string; bytes: number; observedAt: string } }> {

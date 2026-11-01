@@ -61,3 +61,16 @@ test('unparseable source fails closed instead of silently passing the boundary c
   assert.equal(result.length, 1);
   assert.match(result[0].reason, /syntax errors/);
 });
+
+test('protected execution utilities may use native tools but cannot become another SDK session owner', () => {
+  const file = 'src/agent/protected-tool-process.ts';
+  assert.deepEqual(inspectSessionSource(file, `import { createReadTool, createWriteTool, createCodemodeExtension } from './sdk.ts';`), []);
+  for (const source of [
+    `import { SessionManager } from './sdk.ts';`,
+    `import { createAgentSessionServices } from './sdk.ts';`,
+    `import * as sdk from './sdk.ts';`,
+    `import { ProjectAgent } from './project-runtime.ts'; new ProjectAgent(options);`,
+    `import { createAgentSessionDomain } from '../host/agent-sessions.ts';`,
+  ]) assert.ok(inspectSessionSource(file, source).length, source);
+  assert.ok(inspectSessionSource(plugin, `import { createReadTool } from '../../../src/agent/sdk.ts';`).length);
+});

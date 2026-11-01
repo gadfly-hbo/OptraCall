@@ -25,6 +25,136 @@ async function fixture(t: TestContext, key = 'synthetic-only-key') {
 }
 const messageText = (messages: Record<string, any>[]) => messages.map(message => typeof message.content === 'string' ? message.content : (message.content ?? []).filter((part: any) => part.type === 'text').map((part: any) => part.text).join('')).join('\n');
 function scalarStrings(value: unknown): string[] { if (typeof value === 'string') return [value]; if (Array.isArray(value)) return value.flatMap(scalarStrings); if (value && typeof value === 'object') return Object.values(value).flatMap(scalarStrings); return []; }
+
+test('runtime execution mode is a read-only Host option fact, never a snapshot declaration', () => {
+  const base = { projectId: 'mode-fixture', projectDirectory: '/mode-fixture', sessionDirectory: '/mode-fixture/native', resourceRoot: '/mode-fixture/resources', codeRoot: process.cwd(), managementPorts: [], configuration: { id: 'synthetic', name: 'Synthetic', revision: 1, provider: 'synthetic', api: 'openai-completions' as const, baseUrl: 'http://127.0.0.1:1', model: 'synthetic-model', apiKey: 'synthetic-key' } };
+  const ordinary = new ProjectAgent(base);
+  assert.equal(ordinary.executionMode, 'unmanaged');
+  const scope = { id: 'mode', cwd: '/mode-fixture/work', writableRoot: '/mode-fixture/work', readRoots: [] };
+  const protectedAgent = new ProjectAgent({ ...base, protectedExecution: scope });
+  assert.equal(protectedAgent.executionMode, 'protected');
+  const managed = new ProjectAgent({ ...base, protectedExecution: { ...scope, profile: 'ordinary' } });
+  assert.equal(managed.executionMode, 'ordinary');
+  assert.throws(() => Object.assign(managed, { executionMode: 'unmanaged' }), TypeError);
+});
+
+test('protected runtime cleanup requires an explicit successful driver acknowledgement', async t => {
+  const scratch = await mkdtemp(path.join(os.tmpdir(), 'optracall-cleanup-ack-'));
+  t.after(() => rm(scratch, { recursive: true, force: true }));
+  for (const mode of ['ack', 'error', 'exit']) {
+    const codeRoot = path.join(scratch, mode);
+    await mkdir(path.join(codeRoot, 'scripts'), { recursive: true });
+    await writeFile(path.join(codeRoot, 'scripts/project-entry.mjs'), `
+      let closes=0;
+      process.send({kind:'ready'});
+      process.on('message', message => {
+        if(message.method==='open') process.send({kind:'reply',id:message.id,result:{sessionId:'fixture',messages:[],tools:[],status:'idle',sdkVersion:'fixture',capabilities:{}}});
+        if(message.method==='close') {
+          closes++;
+          if(${JSON.stringify(mode)}==='exit') process.exit(0);
+          const ack=${JSON.stringify(mode)}==='ack'||closes>1;
+          process.send({kind:'reply',id:message.id,...(ack?{result:{closed:true}}:{error:'sdk_operation_failed',detail:{message:'protected_cleanup_unknown'}})});
+          if(ack) process.disconnect();
+        }
+      });`);
+    const cwd = path.join(codeRoot, 'work'); await mkdir(cwd);
+    const agent = new ProjectAgent({ projectId: 'cleanup-fixture', workspace: { cwd, systemPrompt: [] },
+      protectedExecution: { id: mode, cwd, writableRoot: cwd, readRoots: [] }, codeRoot,
+      sessionDirectory: path.join(codeRoot, 'sessions'), resourceRoot: path.join(codeRoot, 'resources'), managementPorts: [],
+      configuration: { id: 'synthetic', name: 'Synthetic', revision: 1, provider: 'synthetic', api: 'openai-completions', baseUrl: 'http://127.0.0.1:1', model: 'synthetic-model', apiKey: 'synthetic-key' } });
+    await agent.open();
+    if (mode === 'ack') await agent.close();
+    else {
+      await assert.rejects(agent.close(), /protected_cleanup_unknown/, `${mode} cannot establish executor cleanup`);
+      if(mode === 'error') await agent.close();
+      else await assert.rejects(agent.close(), /protected_cleanup_unknown/, 'a dead driver cannot supply a cleanup acknowledgement');
+    }
+  }
+});
+
+test('managed stop and turn retirement share one driver close and retain failed cleanup for explicit retry', async t => {
+  for (const order of ['stop-first', 'close-first', 'cleanup-fails']) await t.test(order, async t => {
+    const scratch = await mkdtemp(path.join(os.tmpdir(), 'optracall-managed-stop-close-'));
+    const methods = path.join(scratch, 'methods.jsonl'); await mkdir(path.join(scratch, 'scripts'));
+    await writeFile(path.join(scratch, 'scripts/project-entry.mjs'), `
+      import {appendFileSync} from 'node:fs';
+      let running,closes=0;
+      const cancel = () => {
+        if(running) {process.send({kind:'reply',id:running,result:{outcome:'cancelled'}});running=undefined;}
+      };
+      process.send({kind:'ready'});
+      process.on('message', message => {
+        appendFileSync(${JSON.stringify(methods)},JSON.stringify(message.method)+'\\n');
+        if(message.method==='open') process.send({kind:'reply',id:message.id,result:{sessionId:'fixture',messages:[],tools:[],status:'idle',sdkVersion:'fixture',capabilities:{}}});
+        if(message.method==='prompt') running=message.id;
+        // Reproduce the IPC race: cancellation settles the SDK turn before a
+        // separate stop request is acknowledged. Retirement can then close
+        // and disconnect this driver while that stop request is still waiting.
+        if(message.method==='stop') cancel();
+        if(message.method==='close') {
+          cancel();closes++;
+          setTimeout(() => {
+            if(${JSON.stringify(order)}==='cleanup-fails'&&closes===1) process.send({kind:'reply',id:message.id,error:'sdk_operation_failed',detail:{message:'protected_cleanup_unknown'}});
+            else {process.send({kind:'reply',id:message.id,result:{closed:true}});process.disconnect();}
+          },20);
+        }
+      });`);
+    const cwd = path.join(scratch, 'work'); await mkdir(cwd);
+    const agent = new ProjectAgent({ projectId: 'stop-close', workspace: { cwd, systemPrompt: [] }, codeRoot: scratch,
+      protectedExecution: { id: order, cwd, writableRoot: cwd, readRoots: [], profile: 'ordinary' },
+      sessionDirectory: path.join(scratch, 'native'), resourceRoot: path.join(scratch, 'resources'), managementPorts: [],
+      configuration: { id: 'synthetic', name: 'synthetic', provider: 'synthetic', model: 'synthetic', revision: 1, api: 'openai-completions', baseUrl: 'http://127.0.0.1:1', apiKey: 'synthetic-key' } });
+    t.after(async () => { await agent.close(); await rm(scratch, { recursive: true, force: true }); });
+    await agent.open();
+    const run = agent.start('synthetic cancellation', order);
+    const deadline = Date.now() + 2000;
+    while (!(await readFile(methods, 'utf8')).includes('"prompt"')) { assert.ok(Date.now() < deadline); await new Promise(resolve => setTimeout(resolve, 5)); }
+    const retirement = run.completion.then(() => agent.close());
+    const cleanup = order === 'close-first' ? [agent.close(), agent.stop(), retirement] : [agent.stop(), retirement];
+    const settled = await within(Promise.allSettled(cleanup), 'all cleanup callers must settle after the same driver acknowledgement');
+    const outcome = (result: PromiseSettledResult<unknown>) => result.status === 'fulfilled' ? 'fulfilled' : String(result.reason);
+    assert.deepEqual(settled.map(outcome), cleanup.map(() => order === 'cleanup-fails' ? 'Error: protected_cleanup_unknown' : 'fulfilled'));
+    assert.equal((await run.completion).outcome, 'cancelled');
+    if (order === 'cleanup-fails') {
+      await assert.rejects(agent.stop(), /protected_cleanup_unknown/, 'another stop must preserve the failed cleanup instead of retrying it');
+      assert.deepEqual((await readFile(methods, 'utf8')).trim().split('\n').map(line => JSON.parse(line)), ['open', 'prompt', 'close']);
+      await agent.close();
+    }
+    assert.equal(agent.alive, false);
+    assert.deepEqual((await readFile(methods, 'utf8')).trim().split('\n').map(line => JSON.parse(line)), ['open', 'prompt', 'close', ...(order === 'cleanup-fails' ? ['close'] : [])]);
+  });
+});
+
+test('managed stop interrupts a pending drain without creating or replaying an SDK turn', async t => {
+  const scratch = await mkdtemp(path.join(os.tmpdir(), 'optracall-drain-stop-'));
+  const methods = path.join(scratch, 'methods.jsonl'); await mkdir(path.join(scratch, 'scripts'));
+  await writeFile(path.join(scratch, 'scripts/project-entry.mjs'), `
+    import {appendFileSync} from 'node:fs';
+    let draining;
+    process.send({kind:'ready'});
+    process.on('message', message => {
+      appendFileSync(${JSON.stringify(methods)},JSON.stringify(message.method)+'\\n');
+      if(message.method==='open') process.send({kind:'reply',id:message.id,result:{sessionId:'fixture',messages:[],tools:[],status:'idle',sdkVersion:'fixture',capabilities:{}}});
+      if(message.method==='drain') draining=message.id;
+      if(message.method==='close') {
+        if(draining) process.send({kind:'reply',id:draining,error:'sdk_operation_failed',detail:{message:'protected_executor_closed'}});
+        process.send({kind:'reply',id:message.id,result:{closed:true}});process.disconnect();
+      }
+    });`);
+  const cwd = path.join(scratch, 'work'); await mkdir(cwd);
+  const agent = new ProjectAgent({ projectId: 'drain-stop', workspace: { cwd, systemPrompt: [] }, codeRoot: scratch,
+    protectedExecution: { id: 'drain-stop', cwd, writableRoot: cwd, readRoots: [], profile: 'ordinary' },
+    sessionDirectory: path.join(scratch, 'native'), resourceRoot: path.join(scratch, 'resources'), managementPorts: [],
+    configuration: { id: 'synthetic', name: 'synthetic', provider: 'synthetic', model: 'synthetic', revision: 1, api: 'openai-completions', baseUrl: 'http://127.0.0.1:1', apiKey: 'synthetic-key' } });
+  t.after(async () => { await agent.close(); await rm(scratch, { recursive: true, force: true }); });
+  await agent.open(); const draining = agent.drain(); const rejectedDrain = assert.rejects(draining, /sdk_operation_failed/);
+  const deadline = Date.now() + 2000;
+  while (!(await readFile(methods, 'utf8')).includes('"drain"')) { assert.ok(Date.now() < deadline); await new Promise(resolve => setTimeout(resolve, 10)); }
+  await within(agent.stop(), 'stop must remain reachable while resource drain is waiting');
+  await rejectedDrain;
+  assert.equal(agent.alive, false);
+  assert.deepEqual((await readFile(methods, 'utf8')).trim().split('\n').map(line => JSON.parse(line)), ['open', 'drain', 'close']);
+});
 async function within<T>(promise: Promise<T>, message: string, milliseconds = 2000): Promise<T> { let timer: ReturnType<typeof setTimeout> | undefined; try { return await Promise.race([promise, new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(message)), milliseconds); })]); } finally { if (timer) clearTimeout(timer); } }
 async function until<T>(read: () => T | undefined, message: string): Promise<T> { const deadline = Date.now() + 2000; return new Promise<T>((resolve, reject) => { const check = () => { const result = read(); if (result !== undefined) { resolve(result); return; } if (Date.now() >= deadline) { reject(new Error(message)); return; } setTimeout(check, 5); }; check(); }); }
 

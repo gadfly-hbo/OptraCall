@@ -93,8 +93,8 @@ test('DB01–DB09: extraction, decisions, tasks, feedback and re-extraction acro
   const { task } = await readJson(await host.request(`/api/decision-board/items/${itemA.id}/tasks`, 'POST', { title: '配置召回权益', owner: '运营甲', dueDate: '2026-11-15' }), 201);
   await readJson(await host.request(`/api/decision-board/tasks/${task.id}/status`, 'POST', { status: 'doing' }), 200);
   await readJson(await host.request(`/api/decision-board/tasks/${task.id}/status`, 'POST', { status: 'done' }), 200);
-  await readJson(await host.request(`/api/decision-board/tasks/${task.id}/feedback`, 'POST', { adopted: true, outcome: '已执行', metricDelta: '+2.4%', review: '召回有效', score: 4 }), 200);
-  await readJson(await host.request(`/api/decision-board/tasks/${task.id}/feedback`, 'POST', { adopted: true, outcome: '已执行并复盘', metricDelta: '+2.4%', review: '召回有效，继续观察', score: 5 }), 200);
+  const firstFeedback = await readJson(await host.request(`/api/decision-board/tasks/${task.id}/feedback`, 'POST', { operationId: randomUUID(), expectedLatestRevisionId: null, adopted: true, outcome: '已执行', metricDelta: '+2.4%', review: '召回有效', score: 4 }), 200);
+  await readJson(await host.request(`/api/decision-board/tasks/${task.id}/feedback`, 'POST', { operationId: randomUUID(), expectedLatestRevisionId: firstFeedback.feedback.revisionId, adopted: true, outcome: '已执行并复盘', metricDelta: '+2.4%', review: '召回有效，继续观察', score: 5 }), 200);
   const afterLoop = await getBoard();
   assert.equal(afterLoop.stats.adopted, 1);
   assert.equal(afterLoop.stats.dismissed, 1);
@@ -154,4 +154,41 @@ test('DB03/DB11: invalid output, cancellation, non-UTF-8 reports and missing pat
   // DB11: the board never writes report files.
   const { readFile } = await import('node:fs/promises');
   assert.equal(await readFile(path.join(project.rootPath, '060_reports/r.md'), 'utf8'), REPORT_TEXT);
+});
+
+
+test('FC02/FC03/FC16/FC17: public HTTP feedback requires explicit intent/boolean, preserves history and reads archived records', { timeout: 30000 }, async t => {
+  const provider = await startSyntheticProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  await readJson(await host.request('/api/configuration', 'PUT', { name: '反馈HTTP合成配置', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-model', apiKey: 'synthetic-key' }));
+  const { project } = await readJson(await host.request('/api/projects', 'POST', { name: '反馈HTTP合成项目' }), 201);
+  const { item } = await readJson(await host.request('/api/decision-board/items', 'POST', { projectId: project.id, title: '人工行动', rationale: '不需要模型抽取' }), 201);
+  await readJson(await host.request(`/api/decision-board/items/${item.id}/adopt`, 'POST', {}));
+  const { task } = await readJson(await host.request(`/api/decision-board/items/${item.id}/tasks`, 'POST', { title: '未知效果也能记录' }), 201);
+  const route = `/api/decision-board/tasks/${task.id}/feedback`;
+  const old = await readJson(await host.request(route, 'POST', { adopted: true, score: 3 }), 409);
+  assert.equal(old.code, 'feedback_client_upgrade_required');
+  const input = { operationId: randomUUID(), expectedLatestRevisionId: null, adopted: false, outcome: '', metricDelta: '', review: '', score: null };
+  for (const adopted of [undefined, 'false', null, 0]) {
+    const invalid = await readJson(await host.request(route, 'POST', { ...input, adopted }), 400);
+    assert.equal(invalid.code, 'invalid_feedback');
+  }
+  for (const score of ['', '3', 0, 6, 2.5]) await readJson(await host.request(route, 'POST', { ...input, score }), 400);
+  const { feedback: first } = await readJson(await host.request(route, 'POST', input));
+  assert.equal(first.score, null); assert.equal(first.effect, 'unknown');
+  const { feedback: second } = await readJson(await host.request(route, 'POST', { ...input, operationId: randomUUID(), expectedLatestRevisionId: first.revisionId, review: '用户认为未改善', effect: 'none' }));
+  assert.equal(second.revisionNumber, 2);
+  const replay = await readJson(await host.request(route, 'POST', input));
+  assert.deepEqual(replay.feedback, first);
+  await readJson(await host.request(route, 'POST', { ...input, review: 'same intent changed' }), 409);
+  await readJson(await host.request(route, 'POST', { ...input, operationId: randomUUID() }), 409);
+  assert.deepEqual((await readJson(await host.request(`/api/decision-board/feedback/history?taskId=${task.id}`))).revisions, [first, second]);
+  assert.deepEqual((await readJson(await host.request(`/api/decision-board/feedback/revisions/${first.revisionId}`))).feedback, first);
+  assert.deepEqual((await readJson(await host.request(`/api/decision-board/feedback/operations/${input.operationId}`))).feedback, first);
+  assert.equal((await readJson(await host.request(`/api/decision-board/feedback/operations/${randomUUID()}`))).feedback, null);
+  await readJson(await host.request(`/api/projects/${project.id}/archive`, 'POST', {}));
+  assert.equal((await readJson(await host.request(`/api/decision-board/feedback/history?taskId=${task.id}`))).revisions.length, 2);
+  const archived = await readJson(await host.request(route, 'POST', { ...input, operationId: randomUUID(), expectedLatestRevisionId: second.revisionId }), 409);
+  assert.equal(archived.code, 'project_archived');
+  assert.equal(provider.requests.length, 0, 'feedback and history never call a model');
 });

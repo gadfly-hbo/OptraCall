@@ -1,6 +1,6 @@
 # Agent会话接入说明
 
-适用Interface v1。强制接入规则的唯一来源是[工程规范IN01–IN07](engineering-workflow.md)；本说明提供类型定位、使用方法及验证入口，不维护另一套规则。准确字段和返回类型以[src/host/agent-sessions.ts](../src/host/agent-sessions.ts)导出的`AGENT_SESSION_INTERFACE_VERSION`、`AgentSessionPort`、`SessionProfile`等为准。
+当前工程增量适用Interface v3，兼容原v1/v2业务调用子集。强制接入规则的唯一来源是[工程规范IN01–IN07](engineering-workflow.md)；本说明提供类型定位、使用方法及验证入口，不维护另一套规则。准确字段和返回类型以[src/host/agent-sessions.ts](../src/host/agent-sessions.ts)导出的`AGENT_SESSION_INTERFACE_VERSION`、`AgentSessionPort`、`SessionProfile`等为准。下文历史v1接入保留其当时事实，不代表自动核算整包或产品验收已完成。
 
 ## 开始接入前
 
@@ -15,14 +15,15 @@
 
 ## 接入关系与类型
 
-Host静态注册profile，用`createAgentSessionDomain(options)`创建独立域实例；项目域和需求域共用代码，各自持有owner的运行资源。Host持域管理引用，业务只获得`AgentSessionPort<Owner>`及Host核验后产生的`SessionRef<Owner>`。`AgentSessionPort`排除`name`、`ref`和`closeAll`；现有业务入口也可以继续注入更窄的业务facade，如需求的`run/withSession/stop`。
+Host静态注册profile，用`createAgentSessionDomain(options)`创建独立域实例；项目域和需求域共用代码，各自持有owner的运行资源。Host持域管理引用，业务只获得`AgentSessionPort<Owner>`及Host核验后产生的`SessionRef<Owner>`。当前`AgentSessionPort`排除`name`、`ref`、`closeAll`、`execution`、`owns`、`registerFresh`和`executionState`；现有业务入口也可以继续注入更窄的业务facade，如需求的`run/withSession/stop`。
 
 | 类型 | 用途 |
 | --- | --- |
 | `SessionRef<Owner>` | 不透明的内存调用资格，绑定域和owner；不表示worker已经启动，不是新的持久会话ID |
 | `SessionTurn` | 实际一轮请求的`text`、`requestId`及可选`kind`、`requestFingerprint`；沿用任务内请求关联 |
 | `SessionRun<Owner>` | 单turn句柄，包含`accepted`、`completion`和操作`context` |
-| `SessionLease<Owner>` | 一个获准业务操作内的临时使用权，提供`run/start`与操作`context`，可以在原生同会话中执行多turn |
+| `SessionLease<Owner>` | 一个获准业务操作内的临时使用权，提供`run/start`与操作`context`；v2增加`quiesce/reopen/onCancel`，不增加平行运行权威 |
+| `SessionExecution<Owner>` | v2由Host为当前原owner/operation生成的不透明执行资格，不是持久会话ID或客户端可传的配置对象 |
 | `SessionContext<Owner>` | Host提供的owner、可用requestId及`isCurrent()`；用于业务写入前核对归属和代际，不由业务自填generation |
 | `AgentSessionDomain<Owner>` | Host管理表面，另有注册Ref及按范围关闭能力；不传给Extension |
 
@@ -50,11 +51,59 @@ async function runFeature(
 
 多turn用`withSession(ref, async lease => { ... })`。每次`await lease.run(turn)`等待该turn终态，业务自己决定是否进行下一轮；需求的有限格式修正只是需求业务策略。整个回调期间保持同一个捕获配置及操作占用，turn之间仍busy。一个lease最多一轮在途调用；回调结束后lease失效。漏await、抛错、取消或外泄lease按公共实现收尾，业务不能另建运行台账补救。
 
+## Interface v2：受控执行环境与子操作停止
+
+用户已整体确认[自动核算九项结构合同](../openspec/changes/automatic-verification-revision/structure-decisions.md)。v2仅补资源权限和同链生命周期，原`SessionTurn`、模型配置快照、普通`start/run/withSession`及v1消费者调用方式保留；不创建新的Agent Runtime、分析步骤或专业放行门。
+
+**初始v2候选的阻断保留：** 切换前普通worker的脱组后代无法证实收尾，因此当时公开capability拒绝开启，见[旧候选实施结果](../openspec/changes/automatic-verification-revision/implementation-result.md)。用户随后确认生命周期补充A；当前v3只为从可信创建起点开始受管的新任务增加准入，不把旧资源升级。补充候选按实际检查和非作者复核证据判断，不能以接口存在宣称完成验收；当前分层结果见[生命周期补齐记录](../openspec/changes/automatic-verification-revision/lifecycle-supplement-result.md)。
+
+| 能力 | 准确含义 |
+| --- | --- |
+| Host `domain.execution(ref, plan)` | 只为当前已占用operation创建不透明资格，冻结Host构造的保护scope；scope不能来自业务JSON中的任意目录、会话或凭据 |
+| Host `domain.owns(ref, context)` | 以运行时WeakMap证明当前context属于同域、同owner及有效lease；复制字段或JSON不能伪造；用于绑定自动核算子操作资格，不是普遍跳过busy |
+| `lease.quiesce()` | 在原占用内先drain受管计算，再确认实际关闭；存在在途turn/opening时拒绝，不派发模型、不释放lease。v3拒绝unmanaged或曾经unmanaged的资源，不把driver退出当作其后代收尾证明 |
+| `lease.reopen(execution)` | 校验资格属于本operation后先quiesce，再经同一公共入口重开受控资源；跨域、跨owner、旧lease或JSON资格均拒绝，不能在现worker上临时更改策略再finally恢复 |
+| `lease.onCancel(handler)` | 注册绑定子资源的幂等停止动作，返回移除函数；父操作先撤下一步派发资格，再等待实际子停止。handler不得依赖调用方已持有的Host mutate门闩，避免配置关闭时互相等待 |
+
+资格创建、owner证明与跨域管理留在Host，不向Extension暴露完整domain。自动链的Host适配器仍负责核对原任务canonical会话、原配置、固定材料和实际请求；公共层不按业务名判断是否该核算、接受哪条意见或怎样计算。
+
+可信SDK驱动只处理模型、原生会话与产品可信代码，原native由SDK唯一写入。Agent控制的文件写/edit、bash/Python、codemode及间接工具必须委派给同一受限执行进程；执行器不是另一位Agent，没有模型会话，不能读取/写入native、Host凭据或管理材料，也不能把IPC结果升级成驱动事件。原始工具名称/参数/结果和Agent方法选择保持。不可安全委派的扩展或已有/远程MCP明确不可用，不回落到可信驱动执行；普通分析原工具策略和旧fixed-draft合同保持。
+
+SDK驱动仍走原Provider/模型/线路，不引入Provider relay、会话执行副本或Host字节尾搬运。保护scope只安排可读资源、新计算目录和新稿写位置，不提供经营计算或统计方法。Mac权限能力不支持、旧资源无法确认关闭或来源变化时，停止自动派发并保留未知；不能用无工具文本出稿冒充主Agent重算。
+
+`stop`/匹配范围`closeAll`只处理对应operation的子停止，不等待无关Provider/owner。阶段间无父turn在途时，仍须等已启动的子停止结束后才释放占用；失败的子停止保持原operation隔离准入，后续显式close仅重试失败动作，成功后才恢复可用。迟到回执只能补真实技术事实，不能复活下一轮派发。
+
+公共增量验收覆盖原v1各消费者、第三合成消费者、受控重开/原canonical、取消间隙、关闭失败/重试、配置变化、跨owner、过期资格、晚到结果及原生接入静态约束。当前实现和未完成项见[实施记录](../openspec/changes/automatic-verification-revision/implementation.md)；单元检查不是原件全面保护或模型专业收益证明。
+
+自动链Store的公开文件读写在同一实例内共用短暂文件系统一致性锁，覆盖原子发布、读取及CAS，防止读取看见发布中的临时硬链接或半份记录。锁只等待该Store的文件操作，不包含模型请求、Agent工具、会话lease或整条自动链，也不决定Agent派发顺序；运行占用仍由公共会话层管理，不构成全局Agent运行队列。
+
+## Interface v3：首次执行托管与可信起点
+
+v3的权限变化以[用户已确认补充](../openspec/changes/automatic-verification-revision/lifecycle-supplement-proposal.md)为依据，不扩大为全产品沙箱。Host-only `registerFresh(ref)`仅在实际创建新业务owner时调用；GET、旧列表、恢复、重启或重放不调用。`executionState(ref)`从同一公共slot读取实际资源、未托管历史和当前Host可信创建资格，不另建运行状态Map；这两项不暴露给业务port。SDK的原生opened/closed记录由可信驱动写入和fsync，但单独的JSONL标记不能给旧任务授予资格。
+
+`SessionProfile.executionMode(owner)`可异步选择当前允许的unmanaged/ordinary/protected环境；`agentOptions`的第三参数只接收Host绑定本operation的执行计划。公共层按实际构造参数记录资源模式，并在复用前比较模式；开关变化不能把旧unmanaged资源静默换成“已证明收尾”。原v1消费者不提供新hook时仍走原接入方式。
+
+`SessionRuntime.drain()`封闭本scope的新工具派发并等待后台计算自然结束；既不调用模型，也不按时长、费用或工具次数终止分析。普通自动任务的Python/bash、并行与后台计算可跨工具结果继续，工具cwd为项目020，允许写020/060；同链核算和返修只写自己的新工作区。公共层在正常交接及操作结束时drain，再close核定收尾；显式stop可打断等待并强制收回本owner资源，收尾失败保持busy/UNKNOWN，只能显式重试清理，不能重放模型。
+
+实际工具执行由无模型的受管进程负责。macOS权限禁止脱组、间接外部执行及访问native/凭据；可信guardian持有未reap的PGID leader身份，正常drain不发信号，close在身份保留期间回收，最终确认组消失才ACK。普通任务的已有010软提示保留，未开启自动功能的任务不套用本scope。受管模式内既有/远程MCP及用户执行扩展目前不可用，技能仅复制可安全读取的材料；不是宣称所有原生扩展原样可用，也不是分析方法限制。
+
+同项目另一条旧任务、未托管任务或手动执行核算的资源无法核定时，自动准入/交接保守拒绝，不替其他owner停止计算。当前可信起点保存在本Host公共生命周期内：重启后旧任务及未知fork不自动恢复自动资格，保留记录和文件，关闭自动设置后仍可普通分析。选中未运行的新任务只读加载，不提前open worker；保存设置和GET不会触发模型。
+
+公共v3的清理结果由原Resource上的单一retirement持有：失败Promise不会因自动finally、quiesce或父子回调再次执行而重试。`close(ref, { retryFailed: false })`用于自动收尾，缺省的显式close保持原重试语义；`onCancel`收到公共层产生的`{ retryFailed }`，初始取消为false，用户显式close重试失败子动作才为true。业务透传该资格，不从HTTP JSON或专业意见自造；自动finally不能借一次普通close调用暗获重试许可。成功清理与操作结果UNKNOWN分开，清理后的历史UNKNOWN不改写成运行成功。
+
+本地托管优化沿同一 v3 实施：同 immutable scope 按需复用原 SDK read/write/edit/ls；bash/codemode/grep/find 保留一次性独立组，只有自然退出且完整核清后才提前收集。read/ls 取消后的异步尾部与图片线程仍属本 scope；正常 release 不 abort，公共 stop 才强收本 owner 全部组。自然收集失败也算既有 retirement 失败，公共 `retryFailed` 资格由 Resource 沿可信 SDK driver 下传，自动 finally 不能把首次 driver close 变成失败重试。整个 scope 的全部资源闭合才写原 native closed；技术工具结果丢失即使资源收净也保留失败／UNKNOWN，不能让模型最终文本补造成功。具体范围及验收见[优化规格](../openspec/changes/managed-execution-optimization/spec.md)。
+
+以上只证明环境与技术交接，不能证明Agent已读或采纳意见，更不能证明核算正确。完整初稿、核算意见、新稿与逐稿复查仍按自动链业务记录保存；Host不计算经营数值、不按意见内容选择后续动作。
+
 ## profile与业务策略
 
 `SessionProfile<Owner>`只提供现有差异：`key`、可选真实`projectId`、`configuration`、`agentOptions`、可选`admit`和能力声明`capabilities`。`configuration`同步选择配置；公共实现捕获完整快照，并在打开和后续派发前核对。`agentOptions`只交出已有获准原生参数，生产路径由公共实现创建`ProjectAgent`。
 
 企业资料与决策看板联合接入继续使用 Interface v1。普通任务提供授权公共目录及可选材料，不改变其工具或分析方式；决策抽取在既有独立 owner/profile 声明非持久 `text-only` 能力，复用封闭文本资源路径而不加载执行扩展／技能／MCP／祖先上下文，也不续接历史或开放命令。它保留原报告 20,000 码点的显式截断合同，包装后的技术传输上限为 65,536 UTF-16；原 `fixed-draft` 的完整输入仍限 20,000。两种封闭文本能力与普通分析的差异不写入额外业务队列，实施证据见[企业资料交付记录](../openspec/changes/enterprise-business-context/delivery.md)。
+
+反馈闭环A沿同一Interface v1，在普通任务请求／`ProvidedContextInput`增加可选feedback材料及回执，owner/profile不变。实际选材参与原request fingerprint；原生`optracall.run`保留当时提供的正文／片段／引用身份，缺字段的旧JSONL保持未知、不回填。只有实际native提供记录可确认delivery，HTTP202不证明已读／采用；普通工具与分析策略不变。原生回复的UI投影只追加实际session／entry身份，创建需求时Host回读并核预览全文SHA，不以列表位置或客户端正文冒充来源。业务意图／Case选择／部分成功留在feature及原Store，公共生命周期不接管。验收与限制见[反馈闭环实施记录](../openspec/changes/decision-feedback-loop/implementation.md)。
+
+B/C继续沿原`independent-verification`和`verification-author-draft`，不改Interface v1或`SessionTurn.providedContext`。材料片段说明保存在本次实际用户请求正文中，由旧record的request/native及原events作只读投影；缺旧证据保持未知。临时ETag／If-Match留在核算业务HTTP适配器，不入selection或持久会话结构，已有意图优先只读回执。固定全文下载只读本owner固定副本，不open会话。Host不以引用数、读取事件、特定产物或专业评分驱动运行；两次材料交付不限制Pi在各turn内的自主分析。具体来源、限额与验收见[本期实施记录](../openspec/changes/analysis-verification-reliability/implementation.md)。
 
 Host提供`configurationSnapshot`、原有`mutate`、`isClosing`与事件`publish`。测试中的`createAgent`用于受控替换传输，不是Extension自行创建Runtime的接入口。业务校验、文件保存、RAP/SAP/Case解析、lastRun/草稿、发布及结果解释留在原业务适配器。
 

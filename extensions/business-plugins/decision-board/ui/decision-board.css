@@ -66,3 +66,9 @@
 .board-form textarea { min-height: 72px; resize: vertical; }
 .board-form .form-error { color: var(--error); font-size: 11px; }
 .board-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.board-dialog-actions, .decision-card .card-actions { flex-wrap: wrap; }
+.feedback-history { display: grid; gap: 14px; margin: 16px 0; }
+.feedback-history-item { border: 1px solid var(--line); border-radius: 9px; padding: 14px; }
+.feedback-history-item h3 { font-size: 14px; margin: 0 0 8px; }
+.feedback-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.7; }
+.board-page :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { ProjectStore } from '../src/host/project-store.ts';
+import { savedTaskHistory, readSavedTaskReply } from '../src/host/project-history.ts';
+
+test('FC13: a selected native reply is owner-bound, exact and read without rewriting the session', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'optracall-feedback-reply-'));
+  const store = new ProjectStore({dataRoot:path.join(root,'private'),projectsRoot:path.join(root,'projects')});
+  await store.init(); t.after(async()=>{await store.close();await fs.rm(root,{recursive:true,force:true});});
+  const configuration = {id:'synthetic',revision:1,name:'Synthetic',provider:'synthetic',model:'synthetic',baseUrl:'http://127.0.0.1:1'};
+  const project = await store.create({name:'回复来源合成项目',configuration});
+  const task = await store.createTask(project.id,{name:'普通复盘任务'}), sessionId = randomUUID(), now = new Date().toISOString();
+  const file = path.join(task.sessionDirectory,'feedback-reply.jsonl');
+  const message = {role:'assistant',content:[{type:'text',text:'仅合成复盘：旧试点条件与新门店不同，效果未知。'}],api:'openai-completions',provider:'synthetic',model:'synthetic',usage:{input:0,output:0,cacheRead:0,cacheWrite:0,totalTokens:0,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}},stopReason:'stop',timestamp:Date.now()};
+  const old = {type:'message',id:'old-reply',parentId:null,timestamp:now,message:{...message,content:[{type:'text',text:'旧分支回复'}]}};
+  const current = {type:'message',id:'selected-reply',parentId:null,timestamp:now,message};
+  const bytes = Buffer.from([{type:'session',version:3,id:sessionId,timestamp:now,cwd:path.join(project.rootPath,'020_clean')},old,current].map(x=>JSON.stringify(x)).join('\n')+'\n');
+  await fs.writeFile(file,bytes,{mode:0o600}); await store.setSession(project.id,task.id,file);
+  const source = await store.getTask(project.id,task.id);
+  const history = savedTaskHistory(project,source,'synthetic-history');
+  assert.equal(history.messages.length,1);
+  assert.equal(history.messages[0]?.nativeEntryId,'selected-reply');
+  assert.equal(history.messages[0]?.nativeSessionId,sessionId);
+  assert.deepEqual(await readSavedTaskReply(project,source,{sessionId,messageId:'selected-reply'}),{text:'仅合成复盘：旧试点条件与新门店不同，效果未知。',sessionId,messageId:'selected-reply'});
+  await assert.rejects(readSavedTaskReply(project,source,{sessionId:randomUUID(),messageId:'selected-reply'}),/reply_not_found/);
+  await assert.rejects(readSavedTaskReply(project,source,{sessionId,messageId:'missing'}),/reply_not_found/);
+  const other = await store.createTask(project.id,{name:'另一个任务'});
+  await assert.rejects(readSavedTaskReply(project,other,{sessionId,messageId:'selected-reply'}),/reply_not_found/);
+  assert.deepEqual(await fs.readFile(file),bytes);
+});

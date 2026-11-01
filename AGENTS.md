@@ -4,9 +4,13 @@
 
 涉及Agent交互、SDK接入、会话启停/恢复、模型配置或插件接入的变更，开始前必须读取工程规范的IN01–IN07及[统一会话接入说明](docs/agent-session-integration.md)，在本变更规格记录Interface版本、owner/profile和验收范围。Codex、Qoder共用这些规则；工具入口只引用同一来源。
 
-当前变更为[业务语义增强与独立核算 Agent 一期](openspec/changes/business-semantics-verification/spec.md)：用户已确认方案v0.1 SV01–SV12，授权必要增强、合成资料真实模型对照、兼容及联合回归、非作者复核和Git/CI后合并main，合并前更新main。复用原RAP/SAP/Case、统一Pi和会话入口；新核算只核固定输入、先独立计算后对照，不重建IR或固定方法库。接入与使用见[核算说明](docs/verification-agent-integration.md)，实际结果见[记录](openspec/changes/business-semantics-verification/result.md)。保留项目/会话/文件，不自动切换服务或操作MacBook。
+当前为[固定版本与MacBook试用交付](openspec/changes/current-version-trial-delivery/spec.md)：用户授权固定现有A/B/C、自动核算及托管优化候选，更新main并完成检查、非作者复核和CI后合并，再更新MacBook供用户体验。暂停新的模型全链路实验；保留专业FAIL、项目、会话和文件，不切换Mac mini运行服务。试用范围见[说明](docs/current-version-trial.md)，实际交付按[记录](openspec/changes/current-version-trial-delivery/result.md)分别核对。
 
-**当前收尾范围：** 用户已确认并实施[修订权限收尾方案](docs/verification-revision-preservation-followup.md)：只读固定材料、输出新稿，由Host另存；采用同一公共生命周期的附属出稿资源，不改原任务指针/历史或普通分析工具，不加载执行扩展。旧原件破坏FAIL/UNKNOWN保留，不恢复或重放；新根有限复验与专业评分分开，新稿错误及复查漏报不可隐去，不宣称完整产品验收。最终工程/兼容/非作者复核和实际head CI约束Git交付，详情见实施记录；运行采用仍另授权。
+此前[B/C分析可靠性与核算范围](openspec/changes/analysis-verification-reliability/spec.md)的实施及检查见[实施记录](openspec/changes/analysis-verification-reliability/implementation.md)，真实模型结果见[专业验证](openspec/changes/analysis-verification-reliability/professional-evaluation.md)。Host只负责材料交付、权限和记录，Agent自主选择方法、工具及内部迭代。实验参考未通过专业标准，不推广到产品默认。后续可靠性工作先读该规格和评估协议，保留首次结果、取消、FAIL/UNKNOWN；使用未见结果修订候选时重新准备未见变体。以下历史授权不自动扩大当前范围。
+
+历史变更[业务语义增强与独立核算 Agent 一期](openspec/changes/business-semantics-verification/spec.md)：用户已确认方案v0.1 SV01–SV12，授权必要增强、合成资料真实模型对照、兼容及联合回归、非作者复核和Git/CI后合并main，合并前更新main。复用原RAP/SAP/Case、统一Pi和会话入口；新核算只核固定输入、先独立计算后对照，不重建IR或固定方法库。接入与使用见[核算说明](docs/verification-agent-integration.md)，实际结果见[记录](openspec/changes/business-semantics-verification/result.md)。保留项目/会话/文件，不自动切换服务或操作MacBook。
+
+**历史修订权限收尾：** 用户已确认并实施[修订权限收尾方案](docs/verification-revision-preservation-followup.md)：只读固定材料、输出新稿，由Host另存；采用同一公共生命周期的附属出稿资源，不改原任务指针/历史或普通分析工具，不加载执行扩展。旧原件破坏FAIL/UNKNOWN保留，不恢复或重放；新根有限复验与专业评分分开，新稿错误及复查漏报不可隐去，不宣称完整产品验收。最终工程/兼容/非作者复核和实际head CI约束Git交付，详情见实施记录；运行采用仍另授权。
 
 上一增量[工程可靠性收尾](openspec/changes/engineering-reliability/result.md)证据保留。原[Extension正确性建议](docs/extension-correctness-proposal.md)作为历史讨论，由用户已确认的SV01–SV12替代，不按旧EC清单开发。
 

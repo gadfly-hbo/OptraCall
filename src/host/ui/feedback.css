@@ -1,0 +1,37 @@
+.feedback-review { max-width: 1320px; margin-inline: auto; }
+.feedback-heading, .feedback-section-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.feedback-heading h1 { margin: 6px 0 10px; font-size: 25px; }
+.feedback-heading p, .feedback-source p { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.feedback-source { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin: 22px 0; padding: 18px 20px; }
+.feedback-source strong { font-size: 15px; }
+.feedback-columns { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; gap: 24px; }
+.feedback-main, .feedback-preview { min-width: 0; }
+.feedback-preview { border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: var(--surface); }
+.feedback-preview h2, .feedback-section-title h2 { font-size: 15px; margin: 0 0 14px; }
+.feedback-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.feedback-field { display: grid; gap: 7px; margin: 0 0 17px; color: var(--ink); font-size: 13px; }
+.feedback-field input, .feedback-field textarea, .feedback-field select, .feedback-choice select, .feedback-range input { padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); min-width: 0; max-width: 100%; font: inherit; }
+.feedback-field textarea { resize: vertical; line-height: 1.65; }
+.feedback-help { color: var(--muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.feedback-notice { color: var(--muted); font-size: 12px; line-height: 1.7; border-left: 3px solid var(--accent); padding: 9px 12px; background: var(--subtle); }
+.feedback-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; margin: 9px 0; background: var(--surface); font-size: 12px; }
+.feedback-choice > label:first-child { display: flex; align-items: flex-start; gap: 7px; min-width: 0; overflow-wrap: anywhere; flex: 1; }
+.feedback-mode { margin-left: auto; }
+.feedback-range { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.feedback-range label { display: grid; gap: 5px; }
+.feedback-files { margin: 14px 0; }
+.feedback-review summary, .feedback-context summary { cursor: pointer; font-size: 12px; line-height: 1.7; padding-block: 8px; }
+.feedback-material-body { margin: 10px 0; border-block-start: 1px solid var(--line); }
+.feedback-material-body pre, .feedback-next pre, .feedback-receipt pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflow-y: auto; background: var(--subtle); padding: 12px; border-radius: 7px; font-size: 12px; line-height: 1.7; }
+.feedback-hash { font-size: 10px; color: var(--faint); overflow-wrap: anywhere; }
+.feedback-confirm { display: flex; gap: 8px; font-size: 12px; align-items: flex-start; margin: 18px 0; }
+.feedback-operation { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.feedback-operation button + button { margin-top: 9px; }
+.feedback-review :focus-visible, .feedback-context :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.feedback-context, .feedback-next, .feedback-receipt { border: 1px solid var(--line); border-radius: 9px; margin: 10px 0; padding: 12px 15px; background: var(--surface); font-size: 12px; }
+.feedback-context .feedback-material-body pre { max-height: 240px; }
+.feedback-context-heading, .feedback-next-actions { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 9px; }
+.feedback-context label.feedback-selected { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; }
+.feedback-next .feedback-field { margin-block: 13px; }
+@media (max-width: 900px) { .feedback-columns { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .feedback-heading > button { flex: 0 0 auto; } .feedback-review { padding-inline: 16px; } .feedback-preview { padding: 15px; } .feedback-range { grid-template-columns: minmax(0, 1fr); } .feedback-choice { flex-direction: column; align-items: stretch; } .feedback-mode { margin-left: 0; } }
