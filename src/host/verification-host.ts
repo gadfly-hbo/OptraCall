@@ -1,14 +1,15 @@
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { createVerificationSessions, type VerificationSelection } from './verification-sessions.ts';
-import { createVerificationStore, VerificationStoreError, type VerificationOwner } from './verification-store.ts';
+import { createVerificationStore, VerificationStoreError, type CreateVerificationInput, type VerificationOwner } from './verification-store.ts';
 import type { ProjectStore, ProjectRecord, TaskRecord } from './project-store.ts';
 import { ProjectStoreFault } from './project-store.ts';
 import type { CaseStore } from './case-store.ts';
 import type { ConfigurationStore, RuntimeModelConfiguration } from './config-store.ts';
-import { createAgentSessionDomain, type AgentSessionDomain } from './agent-sessions.ts';
+import { createAgentSessionDomain, type AgentSessionDomain, type SessionContext } from './agent-sessions.ts';
 import { createMetricLibrary } from '../../extensions/business-plugins/metric-factory/library/store.ts';
 import { createProjectEnablement } from '../../extensions/business-plugins/metric-factory/project/enablement.ts';
+import { authorContext, materialPreview } from './verification-context.ts';
 
 type Owner = { project: ProjectRecord; task: TaskRecord };
 export function createVerificationFeature(options: {
@@ -24,6 +25,17 @@ export function createVerificationFeature(options: {
   let storageUnavailable = false;
   const fail = (code: string, status = 409): never => { throw new VerificationStoreError(code, status); };
   const hash = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+  const previewETag = (prepared: CreateVerificationInput) => {
+    const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
+      ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical((value as Record<string, unknown>)[key])])) : value;
+    const businessSelection = Object.fromEntries(Object.entries(prepared.selection as VerificationSelection).filter(([key]) => key !== 'verificationId'));
+    return `"${hash(JSON.stringify(canonical({ projectId: prepared.projectId, taskId: prepared.taskId, selection: businessSelection, configuration: {
+      id: prepared.configuration.id, revision: prepared.configuration.revision, provider: prepared.configuration.provider,
+      model: prepared.configuration.model, thinkingLevel: prepared.configuration.thinkingLevel,
+    }, data: prepared.dataFiles.map(file => ({ relativePath: file.relativePath, bytes: file.bytes.length, sha256: hash(file.bytes) })),
+    author: prepared.authorFiles.map(file => ({ relativePath: file.relativePath, bytes: file.bytes.length, sha256: hash(file.bytes) })),
+    semantics: hash(prepared.semantics?.text ?? '') }))) }"`;
+  };
   async function assertSourceFiles(record: Pick<Awaited<ReturnType<typeof store.read>>, 'projectId' | 'dataFiles' | 'authorFiles'>) {
     for (const file of [...record.dataFiles, ...record.authorFiles]) {
       let observed;
@@ -104,9 +116,12 @@ export function createVerificationFeature(options: {
       return { mode: 'fixed-draft', configuration: { id, revision, provider, model: modelId, name, ...(thinkingLevel ? { thinkingLevel } : {}) } };
     },
     projectIds: async () => (await projects.list()).map(project => project.id),
-    prepare: async (projectId, taskId, selection) => {
+    prepare: async (projectId, taskId, selection, ifMatch, parentContext) => {
       const owner = await pair(projectId, taskId, true);
-      if (projectSessions.busy(projectSessions.ref(owner)) || owner.task.lastRun?.status === 'running') fail('session_busy');
+      const ref = projectSessions.ref(owner);
+      const qualified = parentContext !== undefined && projectSessions.owns(ref, parentContext as SessionContext<Owner>);
+      if ((projectSessions.busy(ref) || owner.task.lastRun?.status === 'running') && !qualified) fail('session_busy');
+      if (parentContext !== undefined && !qualified) fail('invalid_parent_session');
       if (typeof selection.question !== 'string' || !selection.question.trim() || selection.question.length > 4000) fail('invalid_verification_question', 400);
       const selected = selection.configurationId ? configuration.read(selection.configurationId) : owner.task.configuration;
       const model = selected && options.availableConfiguration(selected.id, selected.revision);
@@ -115,9 +130,15 @@ export function createVerificationFeature(options: {
         if (!Array.isArray(names) || !names.length || names.length > 32 || new Set(names).size !== names.length) fail('invalid_verification_files', 400);
         return Promise.all(names.map(async relativePath => {
           if (typeof relativePath !== 'string' || !(data ? relativePath.startsWith('020_clean/') : /^(020_clean|060_reports)\//.test(relativePath))) fail('invalid_verification_files', 400);
-          const before = await projects.observeFile(projectId, relativePath), file = await projects.readFile(projectId, relativePath), after = await projects.observeFile(projectId, relativePath);
-          if (before.sha256 !== after.sha256 || before.bytes !== file.bytes.length || before.sha256 !== hash(file.bytes)) fail('verification_source_changed');
-          return { relativePath, bytes: file.bytes, sha256: before.sha256, sourcePath: path.join(owner.project.rootPath, relativePath) };
+          try {
+            const before = await projects.observeFile(projectId, relativePath), file = await projects.readFile(projectId, relativePath), after = await projects.observeFile(projectId, relativePath);
+            if (before.sha256 !== after.sha256 || before.bytes !== file.bytes.length || before.sha256 !== hash(file.bytes)) fail('verification_source_changed');
+            return { relativePath, bytes: file.bytes, sha256: before.sha256, sourcePath: path.join(owner.project.rootPath, relativePath) };
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof ProjectStoreFault && error.code === 'file_not_found') fail('verification_source_missing');
+            if (error instanceof ProjectStoreFault && error.code === 'file_changed_during_observation') fail('verification_source_changed');
+            throw error;
+          }
         }));
       };
       const sources: { kind: string; id?: string; version?: string; sha256?: string; confirmed?: boolean; note?: string }[] = [];
@@ -148,8 +169,16 @@ export function createVerificationFeature(options: {
         sources.push({ kind: 'case', id: record.id, version: String(record.revision), note: '用户确认属于事前背景，内容仍可能有未知。' });
       }
       const [dataFiles, authorFiles] = await Promise.all([capture(selection.dataFiles, true), capture(selection.authorFiles, false)]);
-      return { projectId, taskId, verificationId: selection.verificationId, question: selection.question, selection, configuration: model, dataFiles, authorFiles,
+      // Validate that complete identity/location metadata fits the original
+      // transport limit before registration; no author material goes to cold.
+      authorContext(authorFiles, store.workspace(selection.verificationId));
+      const prepared = { projectId, taskId, verificationId: selection.verificationId, question: selection.question, selection, configuration: model, dataFiles, authorFiles,
         semantics: { text: semantic.join('\n\n').split(dataRoot).join('[原库路径仅Host保留]'), sources }, ...(selection.retryOf ? { retryOf: selection.retryOf } : {}) };
+      if (ifMatch !== undefined) {
+        if (!/^"[a-f0-9]{64}"$/.test(ifMatch)) fail('invalid_verification_preview', 400);
+        if (previewETag(prepared) !== ifMatch) fail('verification_preview_changed');
+      }
+      return prepared;
     },
     revise: async (record, requestId, instructions) => {
       const ref = revisionDomain.ref(record);
@@ -187,6 +216,25 @@ export function createVerificationFeature(options: {
   const feature = createVerificationSessions(registration);
   const assertAvailable = () => { if (storageUnavailable) fail('verification_storage_unavailable', 503); };
   return { ...feature, assertAvailable,
+    automatic: {
+      store,
+      assertInputs: assertFixedSources,
+      withSession: feature.withAutomaticSession,
+      stop: feature.stopAutomatic,
+      close: feature.closeAutomatic,
+      hasUnprovenProjectWriter: feature.hasUnprovenProjectWriter,
+      ui: feature.automaticUI,
+      respondUI: feature.respondUI,
+      prepare: async (projectId: string, taskId: string, selection: VerificationSelection, parentContext: SessionContext<Owner>) => {
+        assertAvailable();
+        const owner = await pair(projectId, taskId, true);
+        if (!projectSessions.owns(projectSessions.ref(owner), parentContext)) fail('invalid_parent_session');
+        const result = await store.create(await registration.prepare(projectId, taskId, selection, undefined, parentContext));
+        if (result.created) feature.registerAutomaticOrigin(result.record);
+        return result;
+      },
+    },
+    readFixedAuthor: store.readFixedAuthor,
     revisionBusy: async (projectId: string, taskId: string) => !storageUnavailable && (await store.list(projectId, taskId)).some(record => record.authorRevision?.status === 'running'),
     reconcileInterrupted: async () => { try { return await store.reconcileInterrupted(); } catch { storageUnavailable = true; return []; } },
     busy: async (projectId: string) => storageUnavailable ? false : feature.busy(projectId),
@@ -199,7 +247,10 @@ export function createVerificationFeature(options: {
     preview: async (projectId: string, taskId: string, selection: VerificationSelection) => {
       const prepared = await mutate(() => registration.prepare(projectId, taskId, selection));
       const { id, revision, provider, model, name } = prepared.configuration;
-      return { semantics: prepared.semantics, configuration: { id, revision, provider, model, name }, note: '预览不启动模型、不登记核算；开始时重新固定输入。' };
+      return { semantics: prepared.semantics, configuration: { id, revision, provider, model, name }, etag: previewETag(prepared),
+        selectedMaterials: { dataFiles: prepared.dataFiles.map(file => materialPreview({ ...file, sha256: hash(file.bytes) })),
+          authorFiles: prepared.authorFiles.map(file => materialPreview({ ...file, sha256: hash(file.bytes) })) },
+        note: '预览不启动模型、不登记核算；开始时按本次观察身份重新核对并固定输入。' };
     },
   };
 }

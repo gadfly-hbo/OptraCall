@@ -1,4 +1,6 @@
 import type { BrowserUIRequest, BrowserUIResponse, FileNode } from './project-types.ts';
+import type { VerificationAuthorPreview, VerificationContextEvidence, VerificationMaterialPreview, VerificationSelectedMaterials } from '../verification-context.ts';
+export type { VerificationAuthorPreview, VerificationContextEvidence, VerificationMaterialPreview } from '../verification-context.ts';
 
 export type VerificationSelection = {
   question: string; dataFiles: string[]; authorFiles: string[]; businessContext?: string;
@@ -6,28 +8,43 @@ export type VerificationSelection = {
   useCurrentSap?: boolean; configurationId?: string; retryOf?: string;
 };
 export type VerificationInput = VerificationSelection & { verificationId: string };
+export type VerificationFixedMaterial = { relativePath: string; sha256: string; bytes: number; snapshotPath: string; sourcePath?: string };
 export type VerificationPreview = {
   semantics: { text: string; sha256?: string; sources: { kind: string; id?: string; version?: string; sha256?: string; confirmed?: boolean; note?: string }[] };
   configuration: { id: string; revision: number; provider: string; model: string; name?: string };
   note: string;
+  selectedMaterials?: VerificationSelectedMaterials;
+  etag?: string;
 };
 export type VerificationRecord = {
   id: string; verificationId?: string; projectId: string; taskId: string; question: string;
   status: 'preparing' | 'ready' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'unknown';
   phase?: 'cold' | 'comparison' | 'recheck'; createdAt: string; updatedAt: string; selection: VerificationSelection;
   model?: { id: string; revision: number; provider: string; model: string; name?: string };
-  coldResult?: { text: string }; comparisonResult?: { text: string }; recheckResult?: { text: string };
+  coldResult?: { text: string; requestId?: string }; comparisonResult?: { text: string; requestId?: string }; recheckResult?: { text: string; requestId?: string };
   diagnostic?: { message?: string } | string;
   independence?: { status: string; details?: string | string[] };
-  revision?: { status?: string; files?: string[]; text?: string }; exportedFile?: string;
-  authorReports?: { path: string; text: string; sha256?: string }[];
+  revision?: { status?: string; files?: string[]; text?: string; requestId?: string }; exportedFile?: string;
+  revisionCount?: number; recheckCount?: number;
+  dataFiles?: VerificationFixedMaterial[]; authorFiles?: VerificationFixedMaterial[];
+  semantics?: VerificationPreview['semantics']; authorRevealedAt?: string;
+  contextEvidence?: VerificationContextEvidence;
+  authorReports?: (Partial<VerificationAuthorPreview> & { path: string; text: string; sha256?: string })[];
   uiRequests?: BrowserUIRequest[];
+};
+const knownEnvironmentRefusals: Record<string, string> = {
+  verification_source_changed: '原来源文件已变化，已拒绝本次操作；原核算记录和固定材料继续保留。请核对来源，需要采用新资料时显式新建核算。',
+  verification_source_missing: '原来源文件缺失，无法开始本次操作；原核算记录继续保留。请核对来源后再决定下一步。',
+  verification_preview_changed: '已看预览后的材料或业务依据已变化，未登记新核算；问题和选材保留，请重新查看本次材料。',
+  verification_revision_materials_too_large: '本次修订固定全文超过20,000 UTF-16，未启动出稿；原稿和核算记录保留。请缩小选材后显式新建核算。',
+  verification_revision_text_required: '所选修订材料不能完整解码为UTF-8文字，未启动出稿；原稿和核算记录保留。请整理可读资料后显式新建核算。',
 };
 export class VerificationRequestError extends Error {
   readonly code: string;
   readonly status: number;
   constructor(code: string, status: number, message?: string) {
-    super(message ?? (status === 409 ? '记录或输入已变化，请先核对原核算。' : '核算请求未完成，请检查输入后重试。'));
+    const knownRefusal = status >= 400 && status < 500 && Object.hasOwn(knownEnvironmentRefusals, code) ? knownEnvironmentRefusals[code] : undefined;
+    super(knownRefusal ?? message ?? (status === 409 ? '记录或输入已变化，请先核对原核算。' : '核算请求未完成，请检查输入后重试。'));
     this.code = code; this.status = status;
   }
 }
@@ -36,8 +53,8 @@ export class VerificationSubmissionUnknown extends Error {
   constructor(verificationId: string) { super('核算提交结果尚未确认。操作编号已保留，请先查询原记录；不会自动重发或另建核算。'); this.verificationId = verificationId; }
 }
 const scopePath = (projectId: string, taskId: string) => `projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/verifications`;
-async function request<T>(route: string, method = 'GET', input?: unknown, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`/api/${route}`, { method, credentials: 'omit', mode: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(input === undefined ? {} : { body: JSON.stringify(input) }), ...(signal ? { signal } : {}) });
+async function request<T>(route: string, method = 'GET', input?: unknown, signal?: AbortSignal, ifMatch?: string): Promise<T> {
+  const response = await fetch(`/api/${route}`, { method, credentials: 'omit', mode: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1', ...(ifMatch ? { 'if-match': ifMatch } : {}) }, ...(input === undefined ? {} : { body: JSON.stringify(input) }), ...(signal ? { signal } : {}) });
   const result = await response.json();
   if (!response.ok) throw new VerificationRequestError(result.code ?? result.error ?? 'verification_request_failed', response.status, result.message);
   return result as T;
@@ -52,11 +69,11 @@ export async function readVerification(projectId: string, taskId: string, id: st
 export async function listVerifications(projectId: string, taskId: string, signal?: AbortSignal): Promise<VerificationRecord[]> {
   return (await request<{ verifications: VerificationRecord[] }>(scopePath(projectId, taskId), 'GET', undefined, signal)).verifications.map(value => checked(value, projectId, taskId));
 }
-export async function startVerification(projectId: string, taskId: string, input: VerificationInput, signal?: AbortSignal): Promise<VerificationRecord> {
+export async function startVerification(projectId: string, taskId: string, input: VerificationInput, signal?: AbortSignal, ifMatch?: string): Promise<VerificationRecord> {
   const invalid = verificationInputError(input);
   if (invalid) throw new VerificationRequestError('invalid_verification_selection', 400, invalid);
   try {
-    return checked((await request<{ verification: VerificationRecord }>(scopePath(projectId, taskId), 'POST', input, signal)).verification, projectId, taskId, input.verificationId);
+    return checked((await request<{ verification: VerificationRecord }>(scopePath(projectId, taskId), 'POST', input, signal, ifMatch)).verification, projectId, taskId, input.verificationId);
   } catch (error) {
     if (error instanceof VerificationRequestError && error.status < 500) throw error;
     try { return await readVerification(projectId, taskId, input.verificationId, AbortSignal.timeout(10000)); }
@@ -85,6 +102,13 @@ export async function verificationAction(projectId: string, taskId: string, id: 
 export async function respondVerificationUI(projectId: string, taskId: string, id: string, input: BrowserUIResponse): Promise<VerificationRecord> {
   await request(`${scopePath(projectId, taskId)}/${encodeURIComponent(id)}/ui-response`, 'POST', input, AbortSignal.timeout(30000));
   return readVerification(projectId, taskId, id, AbortSignal.timeout(10000));
+}
+export async function downloadVerificationAuthorFile(projectId: string, taskId: string, id: string, relativePath: string): Promise<void> {
+  const response = await fetch(`/api/${scopePath(projectId, taskId)}/${encodeURIComponent(id)}/author-file?path=${encodeURIComponent(relativePath)}`, { credentials: 'omit', mode: 'same-origin', cache: 'no-store', headers: { 'x-optracall-client': '1' } });
+  if (!response.ok) throw new VerificationRequestError('verification_fixed_file_unavailable', response.status, '固定作者副本暂不可下载或身份已变化；未改取当前同名文件，请重新读取本记录。');
+  const url = URL.createObjectURL(await response.blob()), anchor = document.createElement('a');
+  anchor.href = url; anchor.download = relativePath.split('/').at(-1) ?? '核算固定材料'; anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export function verificationFiles(tree: readonly FileNode[]): { data: FileNode[]; authors: FileNode[] } {
   const all: FileNode[] = [];

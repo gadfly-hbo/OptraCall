@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { EVIDENCE_CONFIDENCE, PRIORITIES, EVIDENCE_LEVELS, type BoardItemRecord, type BoardTaskRecord, type Evidence, type EvidenceLevel, type ExtractionConfiguration, type ExtractionRecord, type ExtractionStatus, type NormalizedItem, type Priority, type ReportRecord, type TaskFeedbackRecord, type TaskStatus } from '../types.ts';
+import { EVIDENCE_CONFIDENCE, PRIORITIES, EVIDENCE_LEVELS, type BoardItemRecord, type BoardTaskRecord, type Evidence, type EvidenceLevel, type ExtractionConfiguration, type ExtractionRecord, type ExtractionStatus, type FeedbackEffect, type NormalizedItem, type Priority, type ReportRecord, type SaveFeedbackInput, type TaskFeedbackRevision, type TaskStatus } from '../types.ts';
 
 export class DecisionBoardFault extends Error {
   readonly code: string;
@@ -80,6 +80,27 @@ CREATE INDEX board_tasks_item ON board_tasks(item_id);
 PRAGMA user_version=1;
 `;
 
+const FEEDBACK_SCHEMA = `
+CREATE TABLE feedback_revisions (
+ revision_id TEXT PRIMARY KEY,
+ task_id TEXT NOT NULL REFERENCES board_tasks(id) ON DELETE RESTRICT,
+ revision_number INTEGER NOT NULL CHECK(revision_number>0),
+ operation_id TEXT UNIQUE, request_sha256 TEXT,
+ adopted INTEGER NOT NULL CHECK(adopted IN (0,1)),
+ outcome TEXT NOT NULL CHECK(length(outcome)<=4000),
+ metric_delta TEXT NOT NULL CHECK(length(metric_delta)<=1000),
+ review TEXT NOT NULL CHECK(length(review)<=4000),
+ score INTEGER CHECK(score IS NULL OR (score BETWEEN 1 AND 5 AND score=CAST(score AS INTEGER))),
+ effect TEXT NOT NULL CHECK(effect IN ('unknown','positive','negative','none')),
+ saved_at TEXT NOT NULL,
+ origin TEXT NOT NULL CHECK(origin IN ('user-save','legacy-current')),
+ legacy_created_at TEXT, legacy_updated_at TEXT,
+ UNIQUE(task_id,revision_number),
+ CHECK((origin='user-save' AND operation_id IS NOT NULL AND request_sha256 IS NOT NULL AND length(request_sha256)=64 AND legacy_created_at IS NULL AND legacy_updated_at IS NULL)
+    OR (origin='legacy-current' AND operation_id IS NULL AND request_sha256 IS NULL AND revision_number=1 AND legacy_created_at IS NOT NULL AND legacy_updated_at IS NOT NULL))
+);
+`;
+
 function camel(row: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(row).map(([key, value]) => [key.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase()), value]));
 }
@@ -91,7 +112,10 @@ const extraction = (row: Record<string, unknown>): ExtractionRecord => {
   const value = strip(camel(row), ['configurationJson']) as unknown as ExtractionRecord;
   return { ...value, configuration: JSON.parse(String(row.configuration_json)) as ExtractionConfiguration, truncated: Number(row.truncated) === 1 };
 };
-const feedback = (row: Record<string, unknown>): TaskFeedbackRecord => ({ ...camel(row) as unknown as TaskFeedbackRecord, adopted: Number(row.adopted) === 1 });
+const feedback = (row: Record<string, unknown>): TaskFeedbackRevision => {
+  const record = camel(row) as unknown as TaskFeedbackRevision;
+  return { ...record, adopted: Number(row.adopted) === 1, createdAt: record.legacyCreatedAt ?? record.savedAt, updatedAt: record.legacyUpdatedAt ?? record.savedAt };
+};
 
 function text(value: unknown, max: number, required = false): string {
   if (typeof value !== 'string' || value.includes('\0')) fail('invalid_text');
@@ -113,6 +137,36 @@ function transaction<T>(db: DatabaseSync, operation: () => T): T {
   catch (error) { db.exec('ROLLBACK'); throw error; }
 }
 
+function schemaInventory(db: DatabaseSync) {
+  return db.prepare('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name').all().map(row => ({ ...row, sql: row.sql === null ? null : String(row.sql).replace(/;$/, '').replace(/\s+/g, ' ').trim() }));
+}
+function validateSchema(db: DatabaseSync, version: number): void {
+  const expected = new DatabaseSync(':memory:', { allowExtension: false });
+  try {
+    if (version > 0) expected.exec(SCHEMA);
+    if (version === 2) expected.exec(FEEDBACK_SCHEMA);
+    if (JSON.stringify(schemaInventory(db)) !== JSON.stringify(schemaInventory(expected))) fail('unsupported_board_schema');
+  } finally { expected.close(); }
+  if (db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok' || db.prepare('PRAGMA foreign_key_check').all().length) fail('invalid_board_database');
+}
+
+function feedbackInput(taskId: string, input: SaveFeedbackInput) {
+  if (!input.operationId || !Object.hasOwn(input, 'expectedLatestRevisionId')) fail('feedback_client_upgrade_required');
+  const operationId = uuid(input.operationId);
+  const expectedLatestRevisionId = input.expectedLatestRevisionId === null ? null : uuid(input.expectedLatestRevisionId);
+  const score = input.score === undefined ? null : input.score;
+  const effect = input.effect ?? 'unknown';
+  if (typeof input.adopted !== 'boolean' || (score !== null && (!Number.isSafeInteger(score) || score < 1 || score > 5)) || !['unknown', 'positive', 'negative', 'none'].includes(effect)) fail('invalid_feedback');
+  const bounded = (value: unknown, max: number) => {
+    if (value === undefined) return '';
+    if (typeof value !== 'string' || value.includes('\0') || value.length > max) fail('invalid_feedback');
+    return value.trim();
+  };
+  // This fixed object order is the canonical payload; absent optional fields
+  // normalize to the same explicit values as the corresponding UI controls.
+  return { taskId, operationId, expectedLatestRevisionId, adopted: input.adopted, outcome: bounded(input.outcome, 4000), metricDelta: bounded(input.metricDelta, 1000), review: bounded(input.review, 4000), score, effect: effect as FeedbackEffect };
+}
+
 /** Local decision-board storage. Only this directory is owned; report files stay
  * read-only in their projects and are identified by observation hashes. */
 export function createDecisionBoardStore(options: { root: string }) {
@@ -124,19 +178,42 @@ export function createDecisionBoardStore(options: { root: string }) {
     close();
     if (openRoots.get(root)) fail('board_store_busy');
     fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+    const directory = fs.lstatSync(root);
+    if (!directory.isDirectory() || directory.isSymbolicLink()) fail('unsafe_board_storage');
     const file = path.join(root, DATABASE);
-    if (!fs.existsSync(file)) { const handle = fs.openSync(file, 'wx', 0o600); fs.closeSync(handle); }
+    if (!fs.existsSync(file)) { const handle = fs.openSync(file, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW, 0o600); fs.closeSync(handle); }
     const stat = fs.lstatSync(file);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) fail('unsafe_board_storage');
-    db = new DatabaseSync(file, { allowExtension: false });
-    openRoots.set(root, (openRoots.get(root) ?? 0) + 1);
-    db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=1000; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;');
-    const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-    if (version === 0) db.exec(SCHEMA);
-    else if (version !== 1) fail('unsupported_board_schema');
-    // A running row can only come from a previous process; it never resumes silently.
-    db.prepare("UPDATE extractions SET status='interrupted', updated_at=? WHERE status='running'").run(now());
-    return Promise.resolve();
+    let upgrading = false;
+    try {
+      db = new DatabaseSync(file, { allowExtension: false });
+      openRoots.set(root, (openRoots.get(root) ?? 0) + 1);
+      const after = fs.lstatSync(file);
+      if (!after.isFile() || after.isSymbolicLink() || after.nlink !== 1 || stat.ino !== after.ino || stat.dev !== after.dev) fail('unsafe_board_storage');
+      db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=1000;');
+      const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+      if (![0, 1, 2].includes(version)) fail('unsupported_board_schema');
+      validateSchema(db, version);
+      db.exec('PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;');
+      if (db.prepare('PRAGMA journal_mode').get()?.journal_mode !== 'delete' || db.prepare('PRAGMA synchronous').get()?.synchronous !== 2 || db.prepare('PRAGMA foreign_keys').get()?.foreign_keys !== 1) fail('unsafe_board_storage');
+      if (version < 2) {
+        upgrading = true;
+        transaction(db, () => {
+          if (version === 0) database().exec(SCHEMA);
+          database().exec(FEEDBACK_SCHEMA);
+          const at = now();
+          for (const legacy of database().prepare('SELECT * FROM task_feedback ORDER BY task_id').all()) {
+            database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at) VALUES (?,?,1,NULL,NULL,?,?,?,?,?,'unknown',?,'legacy-current',?,?)`)
+              .run(randomUUID(), legacy.task_id!, legacy.adopted!, legacy.outcome!, legacy.metric_delta!, legacy.review!, legacy.score!, at, legacy.created_at!, legacy.updated_at!);
+          }
+          database().exec('PRAGMA user_version=2;');
+        });
+        upgrading = false;
+      }
+      // A running row can only come from a previous process; it never resumes silently.
+      db.prepare("UPDATE extractions SET status='interrupted', updated_at=? WHERE status='running'").run(now());
+      return Promise.resolve();
+    } catch (error) { close(); if (upgrading && !(error instanceof DecisionBoardFault)) fail('board_migration_failed'); throw error; }
   }
   function close(): void {
     if (!db) return;
@@ -265,6 +342,10 @@ export function createDecisionBoardStore(options: { root: string }) {
     return task(row);
   }
   const listTasks = (): BoardTaskRecord[] => (database().prepare('SELECT * FROM board_tasks ORDER BY created_at, id').all() as Record<string, unknown>[]).map(task);
+  function getTask(taskId: string): BoardTaskRecord {
+    const row = database().prepare('SELECT * FROM board_tasks WHERE id=?').get(uuid(taskId));
+    return row ? task(row) : fail('task_not_found');
+  }
   function setTaskStatus(taskId: string, status: string): BoardTaskRecord {
     uuid(taskId);
     if (!['todo', 'doing', 'done'].includes(String(status))) fail('invalid_text');
@@ -272,17 +353,38 @@ export function createDecisionBoardStore(options: { root: string }) {
     if (result.changes === 0) fail('task_not_found');
     return task(database().prepare('SELECT * FROM board_tasks WHERE id=?').get(taskId) as Record<string, unknown>);
   }
-  function saveFeedback(taskId: string, input: { adopted: boolean; outcome: string; metricDelta: string; review: string; score: number }): TaskFeedbackRecord {
+  function saveFeedback(taskId: string, input: SaveFeedbackInput): TaskFeedbackRevision {
     uuid(taskId);
-    if (typeof input.adopted !== 'boolean' || !Number.isSafeInteger(input.score) || input.score < 1 || input.score > 5) fail('invalid_feedback');
-    if (!database().prepare('SELECT id FROM board_tasks WHERE id=?').get(taskId)) fail('task_not_found');
-    const at = now();
-    database().prepare(`INSERT INTO task_feedback (task_id,adopted,outcome,metric_delta,review,score,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)
-      ON CONFLICT(task_id) DO UPDATE SET adopted=excluded.adopted, outcome=excluded.outcome, metric_delta=excluded.metric_delta, review=excluded.review, score=excluded.score, updated_at=excluded.updated_at`)
-      .run(taskId, input.adopted ? 1 : 0, text(input.outcome ?? '', 4000), text(input.metricDelta ?? '', 1000), text(input.review ?? '', 4000), input.score, at, at);
-    return feedback(database().prepare('SELECT * FROM task_feedback WHERE task_id=?').get(taskId) as Record<string, unknown>);
+    const clean = feedbackInput(taskId, input);
+    const digest = createHash('sha256').update(JSON.stringify(clean)).digest('hex');
+    return transaction(database(), () => {
+      getTask(taskId);
+      const prior = getFeedbackOperation(clean.operationId);
+      if (prior) {
+        if (prior.requestSha256 !== digest) fail('feedback_operation_conflict');
+        return prior;
+      }
+      const latest = database().prepare('SELECT revision_id,revision_number FROM feedback_revisions WHERE task_id=? ORDER BY revision_number DESC LIMIT 1').get(taskId);
+      if ((latest?.revision_id ?? null) !== clean.expectedLatestRevisionId) fail('feedback_revision_conflict');
+      const revisionId = randomUUID();
+      database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'user-save',NULL,NULL)`)
+        .run(revisionId, taskId, Number(latest?.revision_number ?? 0) + 1, clean.operationId, digest, clean.adopted ? 1 : 0, clean.outcome, clean.metricDelta, clean.review, clean.score, clean.effect, now());
+      return getFeedbackRevision(revisionId)!;
+    });
   }
-  const listFeedback = (): TaskFeedbackRecord[] => (database().prepare('SELECT * FROM task_feedback ORDER BY created_at').all() as Record<string, unknown>[]).map(feedback);
+  function listFeedbackHistory(taskId: string): TaskFeedbackRevision[] {
+    getTask(taskId);
+    return database().prepare('SELECT * FROM feedback_revisions WHERE task_id=? ORDER BY revision_number').all(taskId).map(feedback);
+  }
+  function getFeedbackRevision(revisionId: string): TaskFeedbackRevision | null {
+    const row = database().prepare('SELECT * FROM feedback_revisions WHERE revision_id=?').get(uuid(revisionId));
+    return row ? feedback(row) : null;
+  }
+  function getFeedbackOperation(operationId: string): TaskFeedbackRevision | null {
+    const row = database().prepare('SELECT * FROM feedback_revisions WHERE operation_id=?').get(uuid(operationId));
+    return row ? feedback(row) : null;
+  }
+  const listFeedback = (): TaskFeedbackRevision[] => database().prepare('SELECT f.* FROM feedback_revisions f WHERE NOT EXISTS (SELECT 1 FROM feedback_revisions n WHERE n.task_id=f.task_id AND n.revision_number>f.revision_number) ORDER BY f.saved_at,f.task_id').all().map(feedback);
 
-  return { init, close, registerReport, getReport, listReports, createExtraction, readExtraction, listExtractions, runningExtractionForReport, finishExtraction, listItems, getItem, addManualItem, decideItem, addTask, listTasks, setTaskStatus, saveFeedback, listFeedback };
+  return { init, close, registerReport, getReport, listReports, createExtraction, readExtraction, listExtractions, runningExtractionForReport, finishExtraction, listItems, getItem, addManualItem, decideItem, addTask, getTask, listTasks, setTaskStatus, saveFeedback, listFeedback, listFeedbackHistory, getFeedbackRevision, getFeedbackOperation };
 }

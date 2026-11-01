@@ -1,0 +1,63 @@
+.automatic-verification { margin: 4px 0 14px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 12px; min-width: 0; }
+.automatic-heading, .automatic-record-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.automatic-heading h2 { margin: 0; font-size: 14px; }
+.automatic-heading p { margin: 5px 0 8px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.automatic-heading > div { min-width: 0; }
+.automatic-heading > button { flex-shrink: 0; font-size: 11px; min-height: 32px; }
+.automatic-badge { display: inline-block; border: 1px solid var(--line); padding: 2px 7px; border-radius: 4px; font-size: 10px; color: var(--muted); }
+.automatic-policy { margin-left: 8px; color: var(--muted); font-size: 10px; }
+.automatic-verification > .verification-hint { margin-top: 10px; line-height: 1.7; }
+.automatic-warning { padding: 9px 10px; color: var(--warning); background: var(--warning-bg); border-radius: 6px; overflow-wrap: anywhere; font-size: 11px; line-height: 1.7; }
+.automatic-record-heading { margin-top: 14px; align-items: center; }
+.automatic-record-heading h3 { margin: 0; font-size: 12px; }
+.automatic-record-heading > span { color: var(--muted); font-size: 11px; }
+.automatic-record-heading .text-button { font-size: 11px; }
+.automatic-empty { padding: 10px 0 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.automatic-observation { margin-top: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 11px; }
+.automatic-observation strong { font-weight: 500; }
+.automatic-observation p { margin: 6px 0; line-height: 1.7; }
+.automatic-detail { border-top: 1px solid var(--line); margin-top: 12px; padding: 3px 4px 0 0; min-width: 0; max-height: min(56dvh, 680px); overflow-y: auto; overflow-wrap: anywhere; }
+.automatic-detail > p { line-height: 1.7; }
+.automatic-reason { font-size: 12px; font-weight: 500; }
+.automatic-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.automatic-summary > div { padding: 8px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.automatic-summary dt { color: var(--muted); font-size: 10px; }
+.automatic-summary dd { margin: 5px 0 0; font-weight: 500; }
+.automatic-materials, .automatic-detail details, .automatic-settings-context { border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; margin: 10px 0; min-width: 0; overflow-wrap: anywhere; }
+.automatic-materials > section { margin: 12px 0; padding-top: 5px; border-top: 1px solid var(--line); }
+.automatic-materials > section:first-of-type { border: 0; }
+.automatic-materials p, .automatic-settings-context p { margin: 6px 0; font-size: 11px; line-height: 1.7; }
+.automatic-material-list { list-style: none; margin: 8px 0; padding: 0; }
+.automatic-material-list li { display: grid; gap: 5px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 10px; overflow-wrap: anywhere; }
+.automatic-material-list strong { font-size: 11px; font-weight: 500; }
+.automatic-material-list span, .automatic-material-list code { color: var(--muted); }
+.automatic-path { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
+.automatic-versions > ol { padding-left: 18px; }
+.automatic-versions li { padding: 6px 0; margin: 7px 0; font-size: 11px; }
+.automatic-report-reader pre { margin: 10px 0 0; padding: 10px; max-height: 340px; overflow: auto; border-radius: 5px; background: var(--subtle); white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; font-size: 12px; line-height: 1.75; }
+.automatic-report-reader pre:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.automatic-identity { margin: 10px 0 0; font-size: 10px; color: var(--muted); }
+.automatic-identity > div { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 8px; margin: 5px 0; }
+.automatic-identity dt, .automatic-identity dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.automatic-identity code { font-size: inherit; }
+.automatic-question { margin: 12px 0; padding: 12px; border: 1px solid var(--focus); border-radius: 6px; }
+.automatic-question > p { white-space: pre-wrap; line-height: 1.7; }
+.automatic-question fieldset { border: 0; padding: 0; }
+.automatic-dialog { width: min(740px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); overflow: auto; box-sizing: border-box; }
+.automatic-dialog::backdrop { background: rgb(0 0 0 / 38%); }
+.automatic-dialog > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.automatic-dialog h2 { font-size: 16px; margin: 0; }
+.automatic-dialog > header p { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.automatic-settings-fields { margin: 14px 0 0; padding: 0; border: 0; min-width: 0; }
+.automatic-dialog .verification-field { font-size: 12px; }
+.automatic-file-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.automatic-files { margin: 4px 0 12px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; min-width: 0; max-height: 240px; overflow-y: auto; }
+.automatic-files legend { padding: 0 4px; font-size: 11px; }
+.automatic-files label { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0; font-size: 11px; line-height: 1.6; }
+.automatic-files input { margin: 3px 0 0; flex-shrink: 0; accent-color: var(--accent); }
+.automatic-files label > span { min-width: 0; overflow-wrap: anywhere; }
+.automatic-files small { display: block; color: var(--muted); font-size: 10px; }
+.automatic-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.automatic-dialog .verification-error { font-size: 12px; }
+.automatic-verification button:focus-visible, .automatic-verification input:focus-visible, .automatic-verification select:focus-visible, .automatic-verification textarea:focus-visible, .automatic-verification summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 680px) { .automatic-verification { padding: 12px; }.automatic-heading { flex-wrap: wrap; }.automatic-heading > button { width: 100%; }.automatic-summary { grid-template-columns: minmax(0, 1fr); gap: 2px; }.automatic-file-columns { grid-template-columns: minmax(0, 1fr); gap: 0; }.automatic-dialog { padding: 14px; }.automatic-record-heading { flex-wrap: wrap; }.automatic-identity > div { grid-template-columns: 90px minmax(0, 1fr); }.automatic-dialog-actions > button { flex: 1; }.automatic-dialog > header .text-button { flex-shrink: 0; } }

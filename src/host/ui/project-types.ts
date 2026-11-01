@@ -6,6 +6,7 @@ export type ProjectConfiguration = Omit<PublicModelConfiguration, 'hasApiKey'>;
 export type ClientTask = {
   id: string; name: string; draft: string; configuration: ProjectConfiguration;
   createdAt: string; updatedAt: string; sessionStorage: 'legacy' | 'task'; sessionFile?: string;
+  feedbackOrigin?: { handoffId: string; operationId: string; requestHash: string };
   lastRun?: { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic };
 };
 export type ClientProject = {
@@ -17,7 +18,7 @@ export type TaskState = { project: ClientProject; task: ClientTask; snapshot: Se
 export const taskKey = (projectId: string, taskId: string) => `${projectId}/${taskId}`;
 export type FileNode = { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] };
 export type NativeContent = { type: string; text?: string; name?: string; id?: string; arguments?: unknown };
-export type NativeMessage = { role: string; originalUserText?: string; content?: string | NativeContent[]; timestamp?: number; toolCallId?: string; toolName?: string; isError?: boolean; stopReason?: string; command?: string; output?: string; display?: boolean; customType?: string };
+export type NativeMessage = { role: string; nativeEntryId?: string; nativeSessionId?: string; originalUserText?: string; content?: string | NativeContent[]; timestamp?: number; toolCallId?: string; toolName?: string; isError?: boolean; stopReason?: string; command?: string; output?: string; display?: boolean; customType?: string };
 export type BrowserUIRequest = { id: string; method: 'select' | 'confirm' | 'input' | 'editor'; title: string; message?: string; options?: string[]; placeholder?: string; prefill?: string; timeout?: number };
 export type BrowserUIResponse = { id: string; value?: string | boolean; cancelled?: boolean };
 export type SessionSnapshot = { sessionId: string; sessionFile?: string; messages: NativeMessage[]; tools: string[]; status: 'idle' | 'running'; sdkVersion: string; lastRun?: { requestId: string; outcome?: 'completed' | 'failed' | 'cancelled'; diagnostic?: RunDiagnostic }; uiRequests?: BrowserUIRequest[]; capabilities?: Record<string, unknown> };

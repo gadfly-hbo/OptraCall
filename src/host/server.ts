@@ -17,7 +17,7 @@ import { composeRequirementContext } from '../../extensions/business-plugins/req
 import { requirementSessionDirectory, requirementWorkspace } from '../../extensions/business-plugins/requirements-elaboration/session/workspace.ts';
 import { createRequirementSessions } from './requirement-sessions.ts';
 import { createAgentSessionDomain, type SessionContext } from './agent-sessions.ts';
-import { savedTaskHistory, priorTaskRequest, taskContextReceipts, ProjectHistoryError } from './project-history.ts';
+import { savedTaskHistory, priorTaskRequest, taskContextReceipts, readSavedTaskReply, ProjectHistoryError } from './project-history.ts';
 import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
 import { createVerificationFeature, parseVerificationSelection } from './verification-host.ts';
 import { VerificationStoreError } from './verification-store.ts';
@@ -27,6 +27,11 @@ import { EnterpriseContextError, enterpriseRequestIdentity, prepareEnterpriseCon
 import { createDecisionBoardStore } from '../../extensions/business-plugins/decision-board/storage/store.ts';
 import { createDecisionBoardRoutes } from '../../extensions/business-plugins/decision-board/api/routes.ts';
 import { createDecisionBoardSessions } from './decision-board-sessions.ts';
+import { createDecisionFeedbackFeature } from './decision-feedback-routes.ts';
+import { DecisionFeedbackError } from './decision-feedback-store.ts';
+import { createAutomaticVerificationFeature } from './automatic-verification-host.ts';
+import { AutomaticVerificationStoreError } from './automatic-verification-store.ts';
+import type { FeedbackContextSelection, FeedbackContextReceipt, FeedbackSource } from './decision-feedback-types.ts';
 
 class RequestFault extends Error {
   readonly status: number; readonly code: string;
@@ -65,7 +70,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const instanceId = options.instanceId ?? randomUUID();
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
   if (!Number.isSafeInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 10) throw new Error('Invalid observer heartbeat interval.');
-  const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); await boardStore.init(); await verification.reconcileInterrupted(); });
+  const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); await boardStore.init(); await decisionFeedback.init(); await verification.reconcileInterrupted(); await automatic.init(); });
   type ProjectOwner = { project: ProjectRecord; task: TaskRecord };
   const streams = new Map<string, Set<ServerResponse>>();
   const clearing = new Map<string, number>(), archiving = new Set<string>();
@@ -93,15 +98,20 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       key: owner => keyOf(owner.project.id, owner.task.id),
       projectId: owner => owner.project.id,
       configuration: owner => availableConfiguration(owner.task.configuration.id, owner.task.configuration.revision),
+      executionMode: async owner => {
+        const id = { projectId: owner.project.id, taskId: owner.task.id };
+        return (await automatic.store.readSettings(id)).enabled && (await automatic.capabilities(id)).supported ? 'ordinary' : 'unmanaged';
+      },
       admit: async owner => {
         if (closing) throw new RequestFault(503, 'host_closing');
         const { task } = await pair(owner.project.id, owner.task.id, true);
         if (clearing.has(task.configuration.provider)) throw new RequestFault(409, 'configuration_required');
         if (await verification.revisionBusy(owner.project.id, owner.task.id)) throw new RequestFault(409, 'session_busy');
       },
-      agentOptions: async owner => {
+      agentOptions: async (owner, _configuration, execution) => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
-        return { projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }) };
+        const protectedExecution = await automatic.ordinaryExecution({ project, task }, execution);
+        return { projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(protectedExecution ? { protectedExecution } : {}) };
       },
       capabilities: { commands: true, ui: true, editor: true },
     },
@@ -123,7 +133,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (event.type === 'ui.editor') await projects.saveDraft(project.id, task.id, event.text);
           else if (event.snapshot.sessionFile && current.task.sessionFile !== event.snapshot.sessionFile) await projects.setSession(project.id, task.id, event.snapshot.sessionFile);
         }
-        if (context.isCurrent()) publish(project.id, task.id, event);
+        if (context.isCurrent()) publish(project.id, task.id, event.type === 'snapshot'
+          ? { ...event, snapshot: { ...event.snapshot, status: projectSessions.busy(projectSessions.ref(owner)) ? 'running' : event.snapshot.status } } : event);
       }).catch(() => { if (context.isCurrent()) publish(project.id, task.id, { type: 'ui.notification', level: 'error', message: '扩展修改的草稿或会话指针未能保存，请检查本地存储后重试。' }); });
     },
   });
@@ -174,6 +185,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     availableConfiguration, mutate, isClosing: () => closing,
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
   });
+  const automatic = createAutomaticVerificationFeature({ dataRoot, projects, verification, sessions: projectSessions, pair,
+    ordinaryReadRoots: () => [enterpriseMaterials.directoryPath, path.join(enterpriseMaterials.root, 'bodies'), path.join(enterpriseMaterials.root, 'files')],
+    configuration: availableConfiguration,
+    selectedConfiguration: id => { const selected = configuration.read(id); if (!selected) throw new RequestFault(409, 'configuration_required'); const snapshot = availableConfiguration(selected.id, selected.revision); if (!snapshot) throw new RequestFault(409, 'configuration_required'); return snapshot; },
+    mutate, settle: settleProjectRun,
+    notify: (owner, text) => publish(owner.projectId, owner.taskId, { type: 'ui.notification', level: 'warning', message: text }),
+  });
   // decision-board business plugin: fixed report extraction plus the decision
   // loop store; the host owns transport, sessions and project access checks.
   const boardStore = createDecisionBoardStore({ root: path.join(dataRoot, 'decision-board') });
@@ -203,6 +221,39 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     return { ...project, work: null, workUnavailable: true };
   }
   const caseRoutes = createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject });
+  const decisionFeedback = createDecisionFeedbackFeature({
+    dataRoot, projects, cases, requirements: requirementPlugin.store, mutate,
+    assertActive: async projectId => { assertActive(await projects.get(projectId)); },
+    readReply: async (projectId, taskId, selection) => {
+      const { project, task } = await pair(projectId, taskId);
+      return readSavedTaskReply(project, task, selection);
+    },
+    readSource: (boardTaskId, revisionId): FeedbackSource => {
+      const task = boardStore.getTask(boardTaskId);
+      if (!task) throw new RequestFault(404, 'task_not_found');
+      const item = boardStore.getItem(task.itemId);
+      if (!item) throw new RequestFault(404, 'item_not_found');
+      const feedbackRevision = revisionId === null ? null : boardStore.getFeedbackRevision(revisionId);
+      if (revisionId !== null && (!feedbackRevision || feedbackRevision.taskId !== task.id)) throw new RequestFault(404, 'feedback_not_found');
+      const report = item.reportId === null ? null : boardStore.getReport(item.reportId);
+      if (report && report.projectId !== item.projectId) throw new RequestFault(409, 'feedback_source_changed');
+      const extraction = item.extractionId ? boardStore.readExtraction(item.extractionId) : null;
+      if (extraction && (!report || extraction.reportId !== report.id)) throw new RequestFault(409, 'feedback_source_changed');
+      return { sourceProjectId: item.projectId, boardItemId: item.id, boardTaskId: task.id, item, task,
+        feedbackRevision, latestFeedbackRevisionId: boardStore.listFeedbackHistory(task.id).at(-1)?.revisionId ?? null,
+        report: report ? { id: report.id, relativePath: report.relativePath, extractionId: extraction?.id ?? null,
+          sourceSha256: extraction?.sourceSha256 ?? null, sourceBytes: extraction?.sourceBytes ?? null,
+          reportExcerpt: extraction?.reportExcerpt ?? null, truncated: extraction?.truncated ?? null } : null };
+    },
+  });
+  async function recordFeedbackDelivery(projectId: string, taskId: string, requestId: string, fingerprint: string | undefined) {
+    const { project, task } = await pair(projectId, taskId);
+    const supplied = taskContextReceipts(project, task).find(value => value.requestId === requestId);
+    const receipt = supplied?.providedContext?.feedback as FeedbackContextReceipt | undefined;
+    if (!receipt || !supplied?.providedAt || !fingerprint) return;
+    decisionFeedback.store.recordDelivery({schemaVersion:1,deliveryId:receipt.deliveryId,handoffId:receipt.handoffId,projectId,taskId,requestId,
+      providedAt:supplied.providedAt,requestFingerprint:fingerprint,nativeSessionId:supplied.sessionId ?? null,receipt});
+  }
   // SDK request IDs are task-local. Namespace the SQLite receipt while retaining
   // the original request ID for the native run and its existing retry ledger.
   const contextOperationId = (projectId: string, taskId: string, requestId: string) => {
@@ -228,13 +279,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       throw new RequestFault(code === 'REQ_STORE_NOT_FOUND' ? 404 : 409, code === 'REQ_STORE_NOT_FOUND' ? 'not_found' : 'requirement_unavailable');
     }
   };
-  const requestFingerprint = async (input: Record<string, unknown>): Promise<string | undefined> => {
+  const requestFingerprint = async (input: Record<string, unknown>, projectId: string, taskId: string): Promise<string | undefined> => {
     const requirement = requirementSelection(input);
     const enterprise = await enterpriseRequestIdentity(enterpriseMaterials, input);
-    if (!requirement && !enterprise) return undefined;
+    const feedback = await decisionFeedback.requestIdentity(projectId, taskId, input.feedbackContext as FeedbackContextSelection | undefined);
+    if (!requirement && !enterprise && feedback === undefined) return undefined;
     const selection = input.caseContext as CaseContextSelection | undefined;
     const caseContext = selection && typeof selection === 'object' && !Array.isArray(selection) ? { caseId: selection.caseId, caseRevision: selection.caseRevision, projectWorkRevision: selection.projectWorkRevision, selectedReferenceIds: selection.selectedReferenceIds } : selection ?? null;
-    return createHash('sha256').update(JSON.stringify(enterprise ? ['optracall_request_enterprise_v1', input.text, caseContext, requirement ?? null, enterprise] : ['optracall_request_v1', input.text, caseContext, requirement])).digest('hex');
+    return createHash('sha256').update(JSON.stringify(feedback !== undefined ? ['optracall_request_feedback_v1',projectId,taskId,input.text,caseContext,requirement ?? null,enterprise ?? null,feedback] : enterprise ? ['optracall_request_enterprise_v1', input.text, caseContext, requirement ?? null, enterprise] : ['optracall_request_v1', input.text, caseContext, requirement])).digest('hex');
   };
   async function prepareCasePrompt(projectId: string, taskId: string, input: Record<string, unknown>, accepted = false) {    const operationId = contextOperationId(projectId, taskId, input.requestId as string);
     const existing = cases.getStatus().state === 'ready' ? cases.getOperation(operationId) : null;
@@ -301,6 +353,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     snapshot.uiRequests = current.pendingUI.map(event => event.request);
     const diagnostic = readRunDiagnostic(task.lastRun?.diagnostic, snapshot.lastRun?.outcome);
     if (diagnostic && snapshot.lastRun && snapshot.lastRun.requestId === task.lastRun?.id) snapshot.lastRun = { ...snapshot.lastRun, diagnostic };
+    snapshot = { ...snapshot, status: projectSessions.busy(ref) ? 'running' : 'idle' };
     return { project: decorateProject(project), task, snapshot };
   }
   async function settleProjectRun(owner: ProjectOwner, context: SessionContext<ProjectOwner>, requestId: string, startedAt: string, result?: Record<string, any>) {
@@ -345,6 +398,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (requirement) { json(response, requirement.status, requirement.value); return; }
       const decisionBoard = await decisionBoardRoutes.routes(request, url);
       if (decisionBoard) { json(response, decisionBoard.status, decisionBoard.value); return; }
+      if (url.pathname.startsWith('/api/decision-feedback/')) {
+        const feedback = await decisionFeedback.handle({pathname:url.pathname+url.search,method:request.method ?? 'GET',
+          ...(['POST','PUT','PATCH'].includes(request.method ?? '') ? {input:await body(request,1024*1024)} : {})});
+        if (feedback) { json(response,feedback.status,feedback.body);return; }
+      }
       if (url.pathname === '/api/configurations' && request.method === 'GET') { json(response, 200, { configurations: configuration.list(), selectedId: configuration.read()?.id ?? null }); return; }
       if (url.pathname === '/api/configuration/select' && request.method === 'POST') { const input = await body(request); json(response, 200, { configuration: await mutate(() => configuration.select(String(input.id ?? ''))) }); return; }
       if (url.pathname === '/api/configuration/import' && request.method === 'POST') {
@@ -411,7 +469,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (url.pathname === '/api/projects') {
         if (request.method === 'GET') { json(response, 200, { projects: (await projects.list()).map(decorateProject) }); return; }
         if (request.method === 'POST') {
-          const input = await body(request), value = await mutate(async () => { const selected = configuration.read(typeof input.configurationId === 'string' ? input.configurationId : undefined); if (!selected?.hasApiKey) throw new RequestFault(409, 'configuration_required'); return projects.create({ name: String(input.name ?? ''), configuration: selected }); });
+          const input = await body(request), value = await mutate(async () => {
+            const selected = configuration.read(typeof input.configurationId === 'string' ? input.configurationId : undefined);
+            if (!selected?.hasApiKey) throw new RequestFault(409, 'configuration_required');
+            const created = await projects.create({ name: String(input.name ?? ''), configuration: selected });
+            for (const task of created.tasks) if (!task.sessionFile && !task.lastRun) projectSessions.registerFresh(projectSessions.ref({ project: created, task }));
+            return created;
+          });
           json(response, 201, { project: decorateProject(value) }); return;
         }
       }
@@ -441,7 +505,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const project = await projects.get(projectId); assertActive(project);
             const selected = typeof input.configurationId === 'string' ? configuration.read(input.configurationId) : project.configuration;
             if (!selected || !configuration.snapshot(selected.id, selected.revision)) throw new RequestFault(409, 'configuration_required');
-            return projects.createTask(projectId, { name: String(input.name ?? ''), configuration: selected });
+            const created = await projects.createTask(projectId, { name: String(input.name ?? ''), configuration: selected });
+            projectSessions.registerFresh(projectSessions.ref({ project: await projects.get(projectId), task: created }));
+            return created;
           }); json(response, 201, { task }); return;
         }
         if (action === 'files' && request.method === 'GET') { json(response, 200, { files: await projects.tree(projectId) }); return; }
@@ -457,6 +523,29 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const taskRoute = /^tasks\/([a-f0-9-]+)(?:\/(.*))?$/.exec(action ?? '');
         if (taskRoute) {
           const taskId = taskRoute[1]!, operation = taskRoute[2], key = keyOf(projectId, taskId);
+          const automaticRoute = /^automatic-verification\/(settings|status|capabilities|chains)(?:\/([a-f0-9]{64})(?:\/(stop|ui-response|reports\/([1-9][0-9]*)))?)?$/.exec(operation ?? '');
+          if (automaticRoute) {
+            const owner = { projectId, taskId }, original = await pair(projectId, taskId, request.method !== 'GET');
+            automatic.assertAvailable();
+            const section = automaticRoute[1], chainId = automaticRoute[2], action = automaticRoute[3];
+            if (section === 'settings' && !chainId && request.method === 'GET') { json(response, 200, { settings: await automatic.store.readSettings(owner) }); return; }
+            if (section === 'settings' && !chainId && request.method === 'PUT') {
+              const input = await body(request);
+              json(response, 200, { settings: await mutate(() => automatic.saveSettings(owner, input.settings as any, input.expectedRevision as number)) }); return;
+            }
+            if (section === 'status' && request.method === 'GET') { json(response, 200, { busy: projectSessions.busy(projectSessions.ref(original)), observation: await automatic.store.readLatestObservation(owner) }); return; }
+            if (section === 'capabilities' && request.method === 'GET') { json(response, 200, await automatic.capabilities(owner)); return; }
+            if (section === 'chains' && !chainId && request.method === 'GET') { json(response, 200, { chains: await automatic.store.listChains(owner) }); return; }
+            if (section === 'chains' && chainId && !action && request.method === 'GET') { json(response, 200, { chain: await automatic.readChain({ ...owner, chainId }) }); return; }
+            if (section === 'chains' && chainId && action?.startsWith('reports/') && request.method === 'GET') { json(response, 200, { report: await automatic.readFixedReport({ ...owner, chainId }, Number(automaticRoute[4])) }); return; }
+            if (section === 'chains' && chainId && action === 'stop' && request.method === 'POST') { await body(request); json(response, 200, { chain: await automatic.stop({ ...owner, chainId }) }); return; }
+            if (section === 'chains' && chainId && action === 'ui-response' && request.method === 'POST') {
+              const input = await body(request);
+              if (typeof input.id !== 'string' || !['project-tasks', 'independent-verification'].includes(String(input.domain)) || input.value !== undefined && typeof input.value !== 'string' && typeof input.value !== 'boolean' || input.cancelled !== undefined && typeof input.cancelled !== 'boolean') throw new RequestFault(400, 'invalid_ui_response');
+              json(response, 200, { chain: await automatic.respondUI({ ...owner, chainId }, { domain: String(input.domain), verificationId: typeof input.verificationId === 'string' ? input.verificationId : undefined, id: input.id, value: input.value as string | boolean | undefined, cancelled: input.cancelled as boolean | undefined }) }); return;
+            }
+            throw new RequestFault(404, 'not_found');
+          }
           if (operation === 'context-receipts' && request.method === 'GET') { const { project, task } = await pair(projectId, taskId); json(response, 200, { receipts: taskContextReceipts(project, task) }); return; }
           if (operation === 'verifications/preview' && request.method === 'POST') { verification.assertAvailable(); json(response, 200, await verification.preview(projectId, taskId, parseVerificationSelection(await body(request)))); return; }
           const verificationRoute = /^verifications(?:\/([a-f0-9-]+)(?:\/(.*))?)?$/.exec(operation ?? '');
@@ -465,9 +554,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             await pair(projectId, taskId, request.method !== 'GET');
             const id = verificationRoute[1], action = verificationRoute[2];
             if (!id && request.method === 'GET') { const records = await verification.list(projectId, taskId); json(response, 200, { verifications: await Promise.all(records.map(record => verification.read(record))) }); return; }
-            if (!id && request.method === 'POST') { const result = await verification.start(projectId, taskId, parseVerificationSelection(await body(request))); json(response, result.created ? 202 : 200, { verification: await verification.read(result.verification) }); return; }
+            if (!id && request.method === 'POST') { const ifMatch = request.headers['if-match']; if (Array.isArray(ifMatch)) throw new RequestFault(400, 'invalid_verification_preview'); const result = await verification.start(projectId, taskId, parseVerificationSelection(await body(request)), ifMatch); json(response, result.created ? 202 : 200, { verification: await verification.read(result.verification) }); return; }
             const owner = { projectId, taskId, verificationId: id! };
             if (id && !action && request.method === 'GET') { json(response, 200, { verification: await verification.read(owner) }); return; }
+            if (id && action === 'author-file' && request.method === 'GET') { const file = await verification.readFixedAuthor(owner, url.searchParams.get('path') ?? ''); response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(file.relativePath))}`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(file.bytes); return; }
             if (id && request.method === 'POST') {
               const input = await body(request);
               if (action === 'stop') { json(response, 200, { verification: await verification.stop(owner) }); return; }
@@ -479,7 +569,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             throw new RequestFault(404, 'not_found');
           }
           if (!operation && request.method === 'GET') { json(response, 200, await taskState(projectId, taskId)); return; }
-          if (operation === 'open' && request.method === 'POST') { await body(request); const state = await taskState(projectId, taskId, true); publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot }); json(response, 200, state); return; }
+          if (operation === 'open' && request.method === 'POST') { await body(request); const automaticEnabled = (await automatic.store.readSettings({ projectId, taskId })).enabled; const state = await taskState(projectId, taskId, !automaticEnabled); publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot }); json(response, 200, state); return; }
           if (operation === 'draft' && request.method === 'PATCH') {
             const input = await body(request), text = String(input.text ?? '');
             const owner = await pair(projectId, taskId, true);
@@ -500,13 +590,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (operation === 'messages' && request.method === 'POST') {
             const input = await body(request, 262144);
             if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
-            const requestId = input.requestId, fingerprint = await requestFingerprint(input), owner = await pair(projectId, taskId, true);
+            const requestId = input.requestId, fingerprint = await requestFingerprint(input,projectId,taskId), owner = await pair(projectId, taskId, true);
             const known = await priorRequest(owner.project, owner.task, requestId, fingerprint);
             if (known) {
               await mutate(async () => { await prepareCasePrompt(projectId, taskId, input, true); requirementPrefix(input); });
+              await mutate(() => recordFeedbackDelivery(projectId,taskId,requestId,fingerprint));
               json(response, 202, { requestId, status: known, deduplicated: true }); return;
             }
-            let accepted = false, terminalContext: SessionContext<ProjectOwner> | undefined;
+            let accepted = false, terminalContext: SessionContext<ProjectOwner> | undefined, terminalRequestId = requestId;
             let acknowledge!: () => void, rejectAcknowledgement!: (error: unknown) => void;
             const acknowledged = new Promise<void>((resolve, reject) => { acknowledge = resolve; rejectAcknowledgement = reject; });
             const completion = projectSessions.withSession(projectSessions.ref(owner), async lease => {
@@ -525,37 +616,58 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   const requirement = requirementPrefix(input);
                   const enterprise = await prepareEnterpriseContext(enterpriseMaterials, cases, input);
                   const casePrompt = await prepareCasePrompt(projectId, taskId, input);
-                  const prompt = `${enterprise.text}\n\n${requirement === undefined ? casePrompt : `${requirement}\n\n${casePrompt}`}`;
+                  const feedback = await decisionFeedback.prepareFeedbackContext(projectId,taskId,input.feedbackContext as FeedbackContextSelection | undefined,requestId);
+                  const originalPrompt = `${enterprise.text}\n\n${requirement === undefined ? casePrompt : `${requirement}\n\n${casePrompt}`}`;
+                  const prompt = feedback.text ? `${feedback.text}\n\n${originalPrompt}` : originalPrompt;
                   if (prompt.length > 131072) throw new EnterpriseContextError('enterprise_context_too_large', 413);
                   startedAt = new Date().toISOString();
-                  await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt });
                   const selectedRequirement = requirementSelection(input);
                   const providedContext = {
                     originalUserText: input.text as string,
                     ...(selectedRequirement && requirement ? { rap: { ...selectedRequirement, text: requirement } } : {}),
                     ...(input.caseContext ? { case: { operationId: contextOperationId(projectId, taskId, requestId) } } : {}),
                     ...(enterprise.provision ? { enterprise: enterprise.provision } : {}),
+                    ...(feedback.receipt ? { feedback:feedback.receipt } : {}),
                   };
-                  return { prompt, providedContext };
+                  let automaticObservation;
+                  try { automaticObservation = await automatic.admit({ project, task }, requestId, fingerprint ?? createHash('sha256').update(JSON.stringify(['automatic-request-v1', projectId, taskId, requestId, prompt])).digest('hex')); }
+                  catch (error) { if ((await automatic.store.readSettings({ projectId, taskId })).enabled) throw error; publish(projectId, taskId, { type: 'ui.notification', level: 'warning', message: '自动核算设置或材料不可用，本次按普通分析执行；未自动补派核算。' }); }
+                  await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt });
+                  return { prompt, providedContext, automaticObservation };
                 });
                 if ('previous' in prepared) { json(response, 202, { requestId, status: prepared.previous, deduplicated: true }); acknowledge(); return; }
                 const run = lease.start({ text: prepared.prompt!, requestId, requestFingerprint: fingerprint, providedContext: prepared.providedContext });
                 terminalContext = run.context;
                 await run.accepted;
                 accepted = true; json(response, 202, { requestId, status: 'running' }); acknowledge();
+                await mutate(() => recordFeedbackDelivery(projectId,taskId,requestId,fingerprint)).catch(() => {
+                  publish(projectId,taskId,{type:'ui.notification',level:'warning',message:'本轮发送已被接受，但独立交付记录待核对；请查看原生提供回执，未自动重发。'});
+                });
                 const result = await run.completion;
                 await settleProjectRun(owner, run.context, requestId, startedAt!, result);
-                return result;
+                const followed = await automatic.complete(owner, lease, prepared.automaticObservation, result);
+                terminalRequestId = followed.requestId || requestId;
+                return followed.result;
               } catch (error) {
                 if (startedAt) await settleProjectRun(owner, lease.context, requestId, startedAt, { diagnostic: runtimeDiagnostic(error) }).catch(() => {});
                 throw error;
               }
             });
-            void completion.then(result => {
-              if (result && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: result.outcome, ...(result.diagnostic ? { diagnostic: readRunDiagnostic(result.diagnostic) } : {}) });
-            }, error => {
+            void completion.then(async result => {
+              if (!result || closing) return;
+              await automatic.operationFinished({ projectId, taskId }, requestId, result);
+              await mutate(async () => {
+                if (closing) return;
+                const latest = await pair(projectId, taskId);
+                if (latest.task.lastRun?.id === terminalRequestId && !projectSessions.busy(projectSessions.ref(latest))) publish(projectId, taskId, { type: 'run.settled', requestId: terminalRequestId, outcome: result.outcome, ...(result.diagnostic ? { diagnostic: readRunDiagnostic(result.diagnostic) } : {}) });
+                const state = await taskState(projectId, taskId, false, true);
+                publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot });
+              });
+            }).catch(async error => {
               rejectAcknowledgement(error);
-              if (accepted && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。', diagnostic: runtimeDiagnostic(error) });
+              await automatic.operationFinished({ projectId, taskId }, requestId, undefined, error).catch(() => {});
+              if (!closing && accepted && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。', diagnostic: runtimeDiagnostic(error) });
+              if (!closing) await taskState(projectId, taskId).then(state => publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot })).catch(() => {});
             });
             await acknowledged; return;
           }
@@ -586,6 +698,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   if (prior) return prior;
                   if (await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
                   startedAt = new Date().toISOString();
+                  await automatic.admit({ project, task }, requestId, createHash('sha256').update(JSON.stringify(['automatic-command-v1', projectId, taskId, requestId, input.text])).digest('hex'));
                   await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt });
                 });
                 if (previous) return { result: { deduplicated: true }, outcome: previous, snapshot: (await taskState(projectId, taskId)).snapshot };
@@ -613,6 +726,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
+      if (error instanceof DecisionFeedbackError) { json(response,error.statusCode,{code:error.code,message:'反馈交接未完成，请保留输入并核对原操作或来源；未自动重发或替换材料。'});return; }
       if (error instanceof EnterpriseContextError || error instanceof EnterpriseMaterialsError) {
         const messages: Record<string, string> = {
           enterprise_materials_too_large: '主动附带正文合计超过20,000字符；请显式调整范围或仅提供来源定位，未截断正文、未发送模型。',
@@ -626,10 +740,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         json(response, error.status, { code: error.code, message: messages[error.code] ?? '企业业务资料未能取得，请刷新核对明确修订和来源；未替换为最新版。' });
         return;
       }
-      const originalCode = error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
+      const originalCode = error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
       const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
-      const status = error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
-      json(response, status, { code, message: code === 'verification_revision_materials_too_large' ? '修订固定材料全文超过20,000字符，请缩小本次核算所选资料后新建核算；未启动修订模型，不会截断或恢复执行工具。' : code === 'verification_revision_text_required' ? '修订出稿仅接收完整UTF-8文本材料；所选文件不能解码，未启动修订模型。' : code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
+      const status = error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable', 'unmanaged_execution_unknown'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
+      json(response, status, { code, message: ['automatic_unmanaged_history', 'unmanaged_execution_unknown'].includes(code) ? '本项目或任务缺少可信的受管执行起点或完整收尾证明，暂不能开启自动核算；原项目和会话保留，关闭自动核算后可继续普通分析。' : code === 'automatic_unsupported_protection' ? '当前系统不支持所需执行保护，未启动自动核算或修订。' : code === 'verification_revision_materials_too_large' ? '修订固定材料全文超过20,000字符，请缩小本次核算所选资料后新建核算；未启动修订模型，不会截断或恢复执行工具。' : code === 'verification_revision_text_required' ? '修订出稿仅接收完整UTF-8文本材料；所选文件不能解码，未启动修订模型。' : code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }
   })(); });
   return { server, ready, configuration, projects, cases, close: async () => {
@@ -641,6 +755,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     await release(() => { for (const responses of requirementStreams.values()) for (const response of responses) response.end(); requirementStreams.clear(); endStreams(); });
     await release(() => cases.close());
     await release(() => boardStore.close());
+    await release(() => decisionFeedback.close());
     await release(() => projects.close());
     await release(async () => { if (server.listening) await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }); });
     if (errors.length) throw new AggregateError(errors, 'host_close_failed');

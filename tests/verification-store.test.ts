@@ -67,6 +67,39 @@ test('saved native pointers cannot reopen an author session or a copied foreign 
   } finally { await rm(dataRoot, { recursive: true, force: true }); }
 });
 
+test('runtime evidence reads only validated owner logs without rewriting records or following event symlinks', async () => {
+  const dataRoot = await mkdtemp(path.join(os.tmpdir(), 'optracall-verification-evidence-'));
+  try {
+    const store = createVerificationStore({ dataRoot }), request = input();
+    const { record } = await store.create(request);
+    await store.update(request, { state: 'running' });
+    await store.saveColdResult(request, { text: '已知条件不足，保留未知。', requestId: 'cold-request' });
+    await store.revealAuthor(request);
+    await mkdir(record.sessionDirectory, { recursive: true });
+    const sessionFile = path.join(record.sessionDirectory, 'own.jsonl');
+    const header = { type: 'session', version: 3, id: randomUUID(), cwd: record.workspace };
+    await writeFile(sessionFile, JSON.stringify(header) + '\n');
+    await store.saveComparisonResult(request, { text: '本次未能确认作者结论。', requestId: 'comparison-request', sessionFile });
+    const eventFile = path.join(store.recordDirectory(request), 'events.jsonl');
+    const event = { type: 'native', requestId: 'comparison-request', event: { type: 'tool_execution_start', toolName: 'read', toolCallId: 'read-1', args: { path: 'author/060_reports/report.md' } } };
+    await writeFile(eventFile, JSON.stringify(event) + '\n');
+    const recordFile = path.join(store.recordDirectory(request), 'record.json'), before = await readFile(recordFile);
+    const observed = await store.readRuntimeEvidence(request);
+    assert.deepEqual(observed.native?.entries, [header]); assert.deepEqual(observed.events, [event]);
+    assert.deepEqual(await readFile(recordFile), before);
+    const outside = path.join(dataRoot, 'other-owner-events.jsonl');
+    await writeFile(outside, '{"private":"OTHER_OWNER_SENTINEL"}\n');
+    await rm(eventFile); await symlink(outside, eventFile);
+    const unsafe = await store.readRuntimeEvidence(request);
+    assert.equal(unsafe.events, undefined); assert.deepEqual(unsafe.native?.entries, [header]);
+    assert.equal(await readFile(outside, 'utf8'), '{"private":"OTHER_OWNER_SENTINEL"}\n');
+    assert.deepEqual(await readFile(recordFile), before);
+    await writeFile(sessionFile, Buffer.concat([Buffer.from(JSON.stringify(header) + '\n'), Buffer.from([0xff])]));
+    assert.equal((await store.readRuntimeEvidence(request)).native, undefined, 'Invalid UTF-8 is not converted into replacement-character history');
+    assert.deepEqual(await readFile(recordFile), before);
+  } finally { await rm(dataRoot, { recursive: true, force: true }); }
+});
+
 test('a UUID already owned by another task cannot inject files into its cold workspace', async () => {
   const dataRoot = await mkdtemp(path.join(os.tmpdir(), 'optracall-verification-owner-'));
   try {

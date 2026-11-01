@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HostRequestError, createTask as createDiskTask, listProjects } from '../../../../src/host/ui/runtime-client.ts';
 import type { ClientProject, ClientTask } from '../../../../src/host/ui/project-types.ts';
+import { FeedbackRequirementSource } from '../../../../src/host/ui/FeedbackContextPanel.tsx';
 
 type Scene = 'daily' | 'topic' | 'recurring';
 type ClarificationItem = { id: string; category: string; priority: string; question: string; rationale: string; status: string; answer?: string; linkedHypothesisId?: string };
@@ -47,12 +48,13 @@ const priorityLabel: Record<string, string> = { must_confirm: '必须确认', sh
 const clarificationStatus: Record<string, string> = { pending: '待回答', answered: '已回答', assumed: '按假设推进', skipped: '已跳过', deferred: '已后置' };
 const stages = ['诉求与澄清', '事实与假设', '分析与报告框架', '检查与交付'] as const;
 
-export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBack, onSendToTask }: {
+export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBack, onSendToTask, initialInstanceId }: {
   projects: ClientProject[];
   onOpenTask: (project: ClientProject, task: ClientTask) => void;
   onProjectsChanged: () => void;
   onBack: () => void;
   onSendToTask: (project: ClientProject, task: ClientTask, requirement: { instanceId: string; version?: string; title: string }) => void;
+  initialInstanceId?: string;
 }) {
   const [instances, setInstances] = useState<InstanceView[]>([]);
   const [detail, setDetail] = useState<InstanceDetail | null>(null);
@@ -192,6 +194,7 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
     catch (fault) { setError(fault instanceof Error ? fault.message : '创建未完成。'); }
   };
   const open = async (id: string) => { setRelease(null); setSendVersion(null); setAnswerEdit(null); setAnswerError(''); setProposal(null); setStage(1); await reloadDetail(id); };
+  useEffect(() => { if (initialInstanceId) void open(initialInstanceId); }, [initialInstanceId]);
   const saveContext = async () => { if (!detail) return; const instance = structuredClone(detail.instance); instance.instance.title = draft.title || instance.instance.title; await patch(instance); };
 
   if (!detail) return <div className="re-page" data-build="requirements-elaboration">
@@ -228,6 +231,7 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
   const proposalHasChanges = activeProposal && (activeProposal.call === 'framework' || activeProposal.hypotheses.length > 0 || activeProposal.call === 'elicit' && (activeProposal.clarifications.length > 0 || activeProposal.facts.length > 0));
   return <div className="re-page" data-build="requirements-elaboration">
     <button className="text-button re-back" onClick={() => { setDetail(null); void reloadList(); }}>← 返回实例列表</button>
+    <FeedbackRequirementSource key={detail.instance.instance.id} instanceId={detail.instance.instance.id} />
     <div className="page-heading"><div><p className="eyebrow">INSTANCE · {instance.instance.id}</p><h1>{instance.instance.title}</h1><p>四阶段自由跳转、随时编辑；快照失效仅提示再确认，不锁死编辑。</p></div><span className={statusClass[instances.find(item => item.id === instance.instance.id)?.status ?? 'draft']}>{statusLabel[instances.find(item => item.id === instance.instance.id)?.status ?? 'draft']}</span></div>
     {error && <div className="error-notice" role="alert"><div><strong>需求梳理提示</strong><p>{error}</p></div><button className="text-button" onClick={() => setError('')}>关闭</button></div>}
     {notice && <p className="project-notice" role="status">{notice}<button className="text-button" onClick={() => setNotice('')}>知道了</button></p>}

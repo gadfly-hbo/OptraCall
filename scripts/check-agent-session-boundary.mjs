@@ -18,14 +18,30 @@ const projectAgentOwners = new Set([
   'tests/project-session-guards.test.ts',
   // Isolated real-native provenance assertions; never a product runtime owner.
   'tests/semantic-provenance.test.ts',
+  // AV08: isolated real SDK verification of canonical history and tool denial.
+  'tests/protected-session.test.ts',
+  // MO05: real SDK close acknowledgement while an ordinary response is held.
+  'tests/managed-execution-stop-held.test.ts',
 ]);
 const sdkConsumers = new Set(['src/agent/project-session.ts', 'src/agent/runtime.ts', 'src/agent/browser-ui-context.ts']);
+// Exact native tool/resource helpers, without session/runtime constructors.
+const toolSdkConsumers = new Map([
+  ['src/agent/protected-tools.ts', new Set(['createReadToolDefinition', 'createWriteToolDefinition', 'createEditToolDefinition', 'createBashToolDefinition', 'createGrepToolDefinition', 'createFindToolDefinition', 'createLsToolDefinition', 'createCodemodeExtension'])],
+  ['src/agent/protected-tool-process.ts', new Set(['createReadTool', 'createWriteTool', 'createEditTool', 'createBashTool', 'createGrepTool', 'createFindTool', 'createLsTool', 'createCodemodeExtension'])],
+  // MO02: native-only file executor and exact SDK equivalence fixture; no session/model capability.
+  ['src/agent/protected-file-process.ts', new Set(['createReadTool', 'createWriteTool', 'createEditTool', 'createLsTool'])],
+  ['src/agent/protected-bash-operations.ts', new Set()], // Public operations type only; no SDK value capability.
+  ['tests/protected-file-process.test.ts', new Set(['createReadTool'])],
+  ['tests/protected-bash-operations.test.ts', new Set(['createBashTool'])],
+  ['src/agent/protected-skills.ts', new Set()],
+  ['tests/protected-skills.test.ts', new Set(['loadSkillsFromDir'])],
+]);
 const historyReaders = new Set(['src/host/project-history.ts', 'tests/project-migration.test.ts', 'tests/project-runtime.test.ts', 'tests/project-host.test.ts']);
 // Verification is a Host-owned profile adapter like requirements; business
 // Extensions still receive only owner-bound ports and cannot register domains.
 // The verification Host also owns the separate, no-execution draft profile.
 // decision-board extraction follows the same Host-owned adapter pattern.
-const domainRegistrars = new Set(['src/host/server.ts', 'src/host/requirement-sessions.ts', 'src/host/verification-sessions.ts', 'src/host/verification-host.ts', 'src/host/decision-board-sessions.ts', 'tests/agent-sessions.test.ts']);
+const domainRegistrars = new Set(['src/host/server.ts', 'src/host/requirement-sessions.ts', 'src/host/verification-sessions.ts', 'src/host/verification-host.ts', 'src/host/decision-board-sessions.ts', 'tests/agent-sessions.test.ts', 'tests/agent-session-execution.test.ts']);
 const connectionProbeOwners = new Set(['src/host/server.ts', 'tests/fixtures/runtime-cases.mjs']);
 // Launcher/update tests load their isolated fixture checkout by absolute URL.
 const checkoutLoaders = new Set(['scripts/trial-launcher.mjs', 'tests/trial-launcher.test.ts', 'tests/trial-update.test.ts']);
@@ -73,7 +89,8 @@ function inspectParsedSource(filePath, source, sourceFile) {
     const target = canonicalSource(file, ref.source), names = ref.names;
     if (sdkPackage.test(ref.source) && file !== 'src/agent/sdk.ts') fail(pos, 'the SDK package is imported only by src/agent/sdk.ts');
     if (target === 'src/agent/sdk.ts' && !sdkConsumers.has(file)) {
-      if (!historyReaders.has(file) || names.some(name => name !== 'SessionManager')) fail(pos, 'SDK access requires an approved runtime or native-history reader');
+      const tools = toolSdkConsumers.get(file);
+      if (tools ? names.some(name => !tools.has(name)) : !historyReaders.has(file) || names.some(name => name !== 'SessionManager')) fail(pos, 'SDK access requires an approved runtime or native-history reader');
     }
     if (target === 'src/agent/project-runtime.ts' && names.some(name => ['ProjectAgent', '*', 'default'].includes(name)) && !projectAgentOwners.has(file)) fail(pos, 'features use an injected session port, not ProjectAgent');
     if (target === 'src/agent/project-session.ts' && file !== 'scripts/project-entry.mjs') fail(pos, 'native session execution belongs to the dedicated process entry');

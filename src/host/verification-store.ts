@@ -442,6 +442,26 @@ export function createVerificationStore(options: { dataRoot: string }) {
     if (!record.authorRevealedAt) return [];
     return Promise.all(record.authorFiles.map(async file => ({ relativePath: file.relativePath, sha256: file.sha256, bytes: await checked(file) })));
   }
+  async function readFixedAuthor(owner: VerificationOwner, relativePath: string) {
+    const record = await read(owner);
+    const file = record.authorFiles.find(file => file.relativePath === relativePath);
+    if (!file) return fail('verification_author_file_not_selected', 404);
+    return { relativePath: file.relativePath, sha256: file.sha256, bytes: await checked(file) };
+  }
+  async function readRuntimeEvidence(owner: VerificationOwner) {
+    const record = await read(owner);
+    let native: { sessionFile: string; entries: unknown[] } | undefined, events: unknown[] | undefined;
+    const readEntries = async (target: string) => {
+      const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(await bytes(target));
+      return text.split('\n').filter(Boolean).map(line => JSON.parse(line) as unknown);
+    };
+    // Paths come only from the validated owner record, never from a request.
+    // Growing, missing or malformed observation logs remain unavailable.
+    const sessionFile = record.comparisonResult?.sessionFile;
+    if (sessionFile) try { await checkNativeFile(record, sessionFile); native = { sessionFile, entries: await readEntries(sessionFile) }; } catch { /* No reconstruction from other sessions. */ }
+    try { events = await readEntries(path.join(recordDirectory(record), 'events.jsonl')); } catch { /* Absence does not prove no reads. */ }
+    return { ...(native ? { native } : {}), ...(events ? { events } : {}) };
+  }
   async function readDataFiles(owner: VerificationOwner): Promise<{ relativePath: string; sha256: string; bytes: Buffer }[]> {
     const record = await read(owner);
     return Promise.all(record.dataFiles.map(async file => ({ relativePath: file.relativePath, sha256: file.sha256, bytes: await checked(file) })));
@@ -479,6 +499,8 @@ export function createVerificationStore(options: { dataRoot: string }) {
     verifyWorkspaceInputs,
     stageRevision,
     readAuthorFiles,
+    readFixedAuthor,
+    readRuntimeEvidence,
     readDataFiles,
     verifyResultFiles,
     revisionWorkspace,

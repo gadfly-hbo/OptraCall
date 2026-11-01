@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, symlink, link, mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { createDecisionBoardStore } from '../extensions/business-plugins/decision-board/storage/store.ts';
 import { EVIDENCE_CONFIDENCE, type NormalizedItem } from '../extensions/business-plugins/decision-board/types.ts';
 
@@ -111,12 +112,12 @@ test('tasks require adoption; status and feedback round-trip', async () => {
     assert.equal(task.status, 'todo');
     assert.equal(store.setTaskStatus(task.id, 'doing').status, 'doing');
     assert.equal(store.setTaskStatus(task.id, 'done').status, 'done');
-    store.saveFeedback(task.id, { adopted: true, outcome: '已执行', metricDelta: '+3%', review: '有效', score: 4 });
-    store.saveFeedback(task.id, { adopted: false, outcome: '部分执行', metricDelta: '0', review: '效果未达预期', score: 2 });
+    const originalFeedback = store.saveFeedback(task.id, { operationId: randomUUID(), expectedLatestRevisionId: null, adopted: true, outcome: '已执行', metricDelta: '+3%', review: '有效', score: 4 });
+    store.saveFeedback(task.id, { operationId: randomUUID(), expectedLatestRevisionId: originalFeedback.revisionId, adopted: false, outcome: '部分执行', metricDelta: '0', review: '效果未达预期', score: 2 });
     assert.equal(store.listFeedback().length, 1);
     assert.equal(store.listFeedback()[0]!.score, 2);
     assert.equal(store.listTasks()[0]!.owner, '负责人甲');
-    assert.throws(() => store.saveFeedback(task.id, { adopted: true, outcome: 'x', metricDelta: 'x', review: 'x', score: 6 }), { code: 'invalid_feedback' });
+    assert.throws(() => store.saveFeedback(task.id, { operationId: randomUUID(), expectedLatestRevisionId: originalFeedback.revisionId, adopted: true, outcome: 'x', metricDelta: 'x', review: 'x', score: 6 }), { code: 'invalid_feedback' });
   });
 });
 
@@ -150,4 +151,199 @@ test('failed extraction records the error and preserves previous items', async (
     assert.equal(store.readExtraction(extractionId)!.error, 'extraction_invalid_output');
     assert.equal(store.listItems().length, 0);
   });
+});
+
+// Frozen schema1 fixture: production code must preserve these five table definitions.
+const LEGACY_BOARD_SCHEMA = `
+CREATE TABLE reports (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ project_id TEXT NOT NULL, relative_path TEXT NOT NULL,
+ observed_sha256 TEXT, observed_bytes INTEGER, observed_at TEXT,
+ last_extraction_at TEXT,
+ first_seen_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ UNIQUE(project_id, relative_path)
+);
+CREATE TABLE extractions (
+ id TEXT PRIMARY KEY,
+ report_id INTEGER NOT NULL REFERENCES reports(id) ON DELETE RESTRICT,
+ configuration_json TEXT NOT NULL,
+ status TEXT NOT NULL CHECK(status IN ('running','completed','failed','cancelled','interrupted')),
+ error TEXT,
+ source_sha256 TEXT NOT NULL, source_bytes INTEGER NOT NULL,
+ source_chars INTEGER NOT NULL, truncated INTEGER NOT NULL,
+ item_count INTEGER, dropped_item_count INTEGER,
+ session_file TEXT, report_excerpt TEXT NOT NULL,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE board_items (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL,
+ report_id INTEGER REFERENCES reports(id) ON DELETE RESTRICT,
+ extraction_id TEXT,
+ source_kind TEXT NOT NULL CHECK(source_kind IN ('extracted','manual')),
+ title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 200),
+ rationale TEXT NOT NULL CHECK(length(rationale) BETWEEN 1 AND 4000),
+ expected_impact TEXT NOT NULL DEFAULT '' CHECK(length(expected_impact)<=2000),
+ priority TEXT NOT NULL CHECK(priority IN ('high','medium','low')),
+ effort TEXT CHECK(effort IS NULL OR length(effort)<=200),
+ confidence REAL CHECK(confidence IS NULL OR (confidence>0 AND confidence<=1)),
+ evidence_level TEXT CHECK(evidence_level IS NULL OR evidence_level IN ('数据支撑','多源佐证','逻辑推断','经验假设')),
+ evidence_json TEXT,
+ status TEXT NOT NULL CHECK(status IN ('suggested','adopted','dismissed')),
+ dismissed_reason TEXT, decided_at TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ CHECK((status='dismissed' AND dismissed_reason IS NOT NULL AND length(dismissed_reason)>=2) OR (status!='dismissed' AND dismissed_reason IS NULL))
+);
+CREATE TABLE board_tasks (
+ id TEXT PRIMARY KEY,
+ item_id TEXT NOT NULL REFERENCES board_items(id) ON DELETE RESTRICT,
+ title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 200),
+ owner TEXT CHECK(owner IS NULL OR length(owner)<=200),
+ due_date TEXT CHECK(due_date IS NULL OR length(due_date)<=40),
+ note TEXT NOT NULL DEFAULT '' CHECK(length(note)<=2000),
+ status TEXT NOT NULL CHECK(status IN ('todo','doing','done')),
+ priority TEXT NOT NULL CHECK(priority IN ('high','medium','low')),
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE task_feedback (
+ task_id TEXT PRIMARY KEY REFERENCES board_tasks(id) ON DELETE RESTRICT,
+ adopted INTEGER NOT NULL CHECK(adopted IN (0,1)),
+ outcome TEXT NOT NULL DEFAULT '' CHECK(length(outcome)<=4000),
+ metric_delta TEXT NOT NULL DEFAULT '' CHECK(length(metric_delta)<=1000),
+ review TEXT NOT NULL DEFAULT '' CHECK(length(review)<=4000),
+ score INTEGER NOT NULL CHECK(score BETWEEN 1 AND 5),
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX board_items_report ON board_items(report_id);
+CREATE INDEX board_tasks_item ON board_tasks(item_id);
+PRAGMA user_version=1;
+`;
+const legacyTables = ['reports', 'extractions', 'board_items', 'board_tasks', 'task_feedback'];
+function legacySnapshot(db: DatabaseSync) {
+  return legacyTables.map(name => ({ name, sql: db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(name), rows: db.prepare(`SELECT * FROM ${name} ORDER BY rowid`).all() }));
+}
+function seedLegacy(root: string) {
+  const file = path.join(root, 'decision-board.sqlite3');
+  const db = new DatabaseSync(file); db.exec(LEGACY_BOARD_SCHEMA);
+  const extractionId = randomUUID(), itemId = randomUUID(), taskId = randomUUID();
+  const created = '2026-10-01T00:00:00.000Z', updated = '2026-10-15T00:00:00.000Z';
+  db.prepare('INSERT INTO reports (id,project_id,relative_path,observed_sha256,observed_bytes,observed_at,last_extraction_at,first_seen_at,updated_at) VALUES (1,?,?,?,?,?,?,?,?)').run(project, '060_reports/old.md', 'a'.repeat(64), 9, created, created, created, created);
+  db.prepare('INSERT INTO extractions (id,report_id,configuration_json,status,source_sha256,source_bytes,source_chars,truncated,item_count,report_excerpt,created_at,updated_at) VALUES (?,1,?,?,?,?,?,?,?,?,?,?)').run(extractionId, JSON.stringify(configuration), 'completed', 'a'.repeat(64), 9, 3, 0, 1, '旧报告', created, created);
+  db.prepare('INSERT INTO board_items (id,project_id,report_id,extraction_id,source_kind,title,rationale,priority,status,created_at,updated_at) VALUES (?,?,1,?,?,?,?,?,?,?,?)').run(itemId, project, extractionId, 'extracted', '旧建议', '旧依据', 'medium', 'adopted', created, created);
+  db.prepare('INSERT INTO board_tasks (id,item_id,title,status,priority,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run(taskId, itemId, '旧行动', 'doing', 'medium', created, created);
+  db.prepare('INSERT INTO task_feedback (task_id,adopted,outcome,metric_delta,review,score,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)').run(taskId, 0, '  原正文\n', '', '未知并非无效', 2, created, updated);
+  return { file, db, taskId, before: legacySnapshot(db), created, updated };
+}
+
+test('FC02/FC03: null score, immutable revisions, canonical intent retries and latest CAS', async () => {
+  await withStore(async store => {
+    const suggestion = store.addManualItem({ projectId: project, title: '反馈修订', rationale: '测试未知与负面' });
+    store.decideItem(suggestion.id, { status: 'adopted' });
+    const task = store.addTask(suggestion.id, { title: '尚未完成也能反馈' });
+    const input = { operationId: randomUUID(), expectedLatestRevisionId: null, adopted: false, outcome: '', metricDelta: '', review: '尚未执行，效果未知', score: null };
+    const first = store.saveFeedback(task.id, input);
+    assert.equal(first.score, null); assert.equal(first.effect, 'unknown');
+    assert.equal(first.revisionNumber, 1); assert.equal(first.origin, 'user-save');
+    const second = store.saveFeedback(task.id, { ...input, operationId: randomUUID(), expectedLatestRevisionId: first.revisionId, adopted: true, review: '用户认为变差，未经核验', effect: 'negative', score: 1 });
+    assert.equal(second.revisionNumber, 2);
+    assert.deepEqual(store.saveFeedback(task.id, { ...input, effect: 'unknown' }), first, 'same normalized intent returns the original even after a newer revision');
+    assert.throws(() => store.saveFeedback(task.id, { ...input, review: 'changed same intent' }), { code: 'feedback_operation_conflict' });
+    assert.throws(() => store.saveFeedback(task.id, { ...input, operationId: randomUUID() }), { code: 'feedback_revision_conflict' });
+    assert.deepEqual(store.listFeedbackHistory(task.id), [first, second]);
+    assert.deepEqual(store.getFeedbackRevision(first.revisionId), first);
+    assert.deepEqual(store.getFeedbackOperation(input.operationId), first);
+    assert.equal(store.getFeedbackOperation(randomUUID()), null);
+    assert.deepEqual(store.listFeedback(), [second]);
+    assert.equal(store.listTasks()[0]!.status, 'todo', 'feedback does not mark action done');
+  });
+});
+
+test('FC04/FC18: schema1 upgrade preserves original DDL/rows and one honest known baseline across reopen', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'optracall-board-migration-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const fixture = seedLegacy(root); fixture.db.close();
+  const store = createDecisionBoardStore({ root }); t.after(() => store.close());
+  await store.init();
+  const [baseline] = store.listFeedbackHistory(fixture.taskId);
+  assert.ok(baseline); assert.equal(baseline.origin, 'legacy-current');
+  assert.equal(baseline.operationId, null); assert.equal(baseline.requestSha256, null);
+  assert.equal(baseline.revisionNumber, 1); assert.equal(baseline.effect, 'unknown');
+  assert.equal(baseline.legacyCreatedAt, fixture.created); assert.equal(baseline.legacyUpdatedAt, fixture.updated);
+  assert.equal(baseline.outcome, '  原正文\n'); assert.equal(baseline.score, 2);
+  const next = store.saveFeedback(fixture.taskId, { operationId: randomUUID(), expectedLatestRevisionId: baseline.revisionId, adopted: true, outcome: '新增回录', metricDelta: '', review: '', score: null });
+  store.close(); await store.init();
+  assert.deepEqual(store.listFeedbackHistory(fixture.taskId), [baseline, next]);
+  const db = new DatabaseSync(fixture.file, { readOnly: true });
+  try { assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 2); assert.deepEqual(legacySnapshot(db), fixture.before); } finally { db.close(); }
+});
+
+test('FC18: unknown schema objects fail before migration and close the failed connection', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'optracall-board-invalid-migration-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const fixture = seedLegacy(root);
+  fixture.db.exec('CREATE TRIGGER unexpected_feedback_write AFTER INSERT ON task_feedback BEGIN UPDATE reports SET observed_bytes=0; END;');
+  fixture.db.close(); const original = await readFile(fixture.file);
+  const store = createDecisionBoardStore({ root }); t.after(() => store.close());
+  await assert.rejects(async () => store.init(), { code: 'unsupported_board_schema' });
+  assert.deepEqual(await readFile(fixture.file), original);
+  const repair = new DatabaseSync(fixture.file); repair.exec('DROP TRIGGER unexpected_feedback_write'); repair.close();
+  await store.init();
+  assert.equal(store.listFeedbackHistory(fixture.taskId).length, 1);
+});
+
+
+test('FC18: a failed migration rolls back new objects/version and preserves all legacy rows', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'optracall-board-rollback-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const fixture = seedLegacy(root);
+  // Schema1 SQLite allowed this value, although its application never generated it.
+  fixture.db.prepare('UPDATE task_feedback SET score=2.5 WHERE task_id=?').run(fixture.taskId);
+  const before = legacySnapshot(fixture.db); fixture.db.close();
+  const store = createDecisionBoardStore({ root }); t.after(() => store.close());
+  await assert.rejects(async () => store.init(), { code: 'board_migration_failed' });
+  const db = new DatabaseSync(fixture.file);
+  try {
+    assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 1);
+    assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE name='feedback_revisions'").get(), undefined);
+    assert.deepEqual(legacySnapshot(db), before);
+    db.prepare('UPDATE task_feedback SET score=2 WHERE task_id=?').run(fixture.taskId);
+  } finally { db.close(); }
+  await store.init();
+  assert.equal(store.listFeedbackHistory(fixture.taskId).length, 1);
+});
+
+
+test('FC02/FC16: UTF-16 limits, task ownership and intent uniqueness never create partial feedback', async () => {
+  await withStore(async store => {
+    const suggestion = store.addManualItem({ projectId: project, title: '反馈边界', rationale: '原任务与他项隔离' });
+    store.decideItem(suggestion.id, { status: 'adopted' });
+    const firstTask = store.addTask(suggestion.id, { title: '第一项' }), secondTask = store.addTask(suggestion.id, { title: '第二项' });
+    const input = { operationId: randomUUID(), expectedLatestRevisionId: null, adopted: false, outcome: '', metricDelta: '', review: '', score: null };
+    const first = store.saveFeedback(firstTask.id, input);
+    assert.throws(() => store.saveFeedback(secondTask.id, input), { code: 'feedback_operation_conflict' });
+    assert.equal(store.listFeedbackHistory(secondTask.id).length, 0);
+    assert.throws(() => store.saveFeedback(secondTask.id, { ...input, operationId: randomUUID(), review: '😀'.repeat(2001) }), { code: 'invalid_feedback' });
+    assert.equal(store.listFeedbackHistory(secondTask.id).length, 0);
+    const second = store.saveFeedback(secondTask.id, { ...input, operationId: randomUUID(), review: '😀'.repeat(2000) });
+    assert.equal(second.review.length, 4000);
+    assert.deepEqual(store.getFeedbackRevision(first.revisionId), first);
+    assert.equal(store.getFeedbackRevision(randomUUID()), null);
+    assert.throws(() => store.listFeedbackHistory(randomUUID()), { code: 'task_not_found' });
+  });
+});
+
+test('FC18: unknown schema versions and unsafe linked storage preserve their original data', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'optracall-board-open-safety-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const fixture = seedLegacy(root); fixture.db.exec('PRAGMA user_version=99'); fixture.db.close();
+  const original = await readFile(fixture.file);
+  const unsupported = createDecisionBoardStore({ root });
+  await assert.rejects(async () => unsupported.init(), { code: 'unsupported_board_schema' });
+  assert.deepEqual(await readFile(fixture.file), original);
+  const symlinkRoot = path.join(root, 'linked-root'); await symlink(root, symlinkRoot);
+  await assert.rejects(async () => createDecisionBoardStore({ root: symlinkRoot }).init(), { code: 'unsafe_board_storage' });
+  const hardlinkRoot = path.join(root, 'hardlink-root'); await mkdir(hardlinkRoot);
+  await link(fixture.file, path.join(hardlinkRoot, 'decision-board.sqlite3'));
+  await assert.rejects(async () => createDecisionBoardStore({ root: hardlinkRoot }).init(), { code: 'unsafe_board_storage' });
+  assert.deepEqual(await readFile(fixture.file), original);
 });

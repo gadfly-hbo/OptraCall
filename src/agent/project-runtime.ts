@@ -5,13 +5,15 @@ import { randomUUID } from 'node:crypto';
 import type { RunDiagnostic } from './run-diagnostics.ts';
 import type { RuntimeModelConfiguration } from '../host/config-store.ts';
 import type { EnterpriseContextProvision } from '../host/enterprise-materials-types.ts';
+import type { FeedbackContextReceipt } from '../host/decision-feedback-types.ts';
 import { runtimeEnvironment } from '../../scripts/runtime-process.ts';
+import type { ProtectedExecutionScope } from './protected-tools.ts';
 
 /** Replacement workspace for non-project agent sessions (e.g. business plugins). */
 export type AgentWorkspace = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[]; capabilityPolicy?: 'fixed-draft' | 'text-only' };
 /** Host-provided context receipt; this describes delivery, not business adoption. */
-export type ProvidedContextInput = { rap?: { instanceId: string; version?: string; text: string }; case?: { operationId: string; summary?: string }; enterprise?: EnterpriseContextProvision; originalUserText?: string };
-export type ProjectAgentOptions = { projectId: string; projectDirectory?: string; workspace?: AgentWorkspace; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string };
+export type ProvidedContextInput = { rap?: { instanceId: string; version?: string; text: string }; case?: { operationId: string; summary?: string }; enterprise?: EnterpriseContextProvision; feedback?: FeedbackContextReceipt; originalUserText?: string };
+export type ProjectAgentOptions = { projectId: string; projectDirectory?: string; workspace?: AgentWorkspace; protectedExecution?: ProtectedExecutionScope; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string };
 export type BrowserUIRequest = { id: string; method: 'select' | 'confirm' | 'input' | 'editor'; title: string; message?: string; options?: string[]; placeholder?: string; prefill?: string };
 export type ProjectSnapshot = { sessionId: string; sessionFile?: string; messages: Record<string, any>[]; tools: string[]; status: 'idle' | 'running'; sdkVersion: string; capabilities: Record<string, unknown>; lastRun?: { requestId: string; outcome?: 'completed' | 'cancelled' | 'failed'; diagnostic?: RunDiagnostic }; uiRequests?: BrowserUIRequest[] };
 export type ProjectEvent = { type: 'snapshot'; snapshot: ProjectSnapshot } | { type: 'text.delta'; text: string; requestId: string } | { type: 'native'; event: Record<string, any>; requestId?: string } | { type: 'run.settled'; outcome: 'completed' | 'cancelled' | 'failed'; requestId: string; error?: string; diagnostic?: RunDiagnostic } | { type: 'run.accepted'; requestId: string; sessionFile?: string } | { type: 'ui.request'; request: BrowserUIRequest; requestId?: string } | { type: 'ui.dismiss'; id: string } | { type: 'ui.notification'; message: string; level?: string } | { type: 'ui.status'; key: string; text?: string } | { type: 'ui.editor'; text: string };
@@ -35,7 +37,12 @@ export class ProjectAgent {
   #closed = false;
   #editorReady = false;
   #closeTask?: Promise<void>;
+  #stopTask?: Promise<void>;
+  #managedCleanupAcknowledged = false;
   constructor(options: ProjectAgentOptions) { this.#options = options; }
+  /** The common Host layer may capture this construction fact. An Agent's
+   * snapshot, text, or tool result cannot mint a managed transition proof. */
+  get executionMode(): 'unmanaged' | 'ordinary' | 'protected' { return this.#options.protectedExecution ? this.#options.protectedExecution.profile ?? 'protected' : 'unmanaged'; }
   get busy() { return Boolean(this.#running); }
   get alive() { return !this.#closed && Boolean(this.#child?.connected) && this.#child?.exitCode === null && this.#child?.signalCode === null; }
   get pendingUI() { return [...this.#questions.values()]; }
@@ -60,10 +67,10 @@ export class ProjectAgent {
     const workspaceRoot = o.workspace?.cwd ?? path.join(o.projectDirectory!, '020_clean');
     await mkdir(o.resourceRoot, { recursive: true, mode: 0o700 });
     await mkdir(o.sessionDirectory, { recursive: true, mode: 0o700 });
-    const temp = path.join(workspaceRoot, '.tmp');
+    const temp = o.protectedExecution ? path.join(o.sessionDirectory, '.protected-tmp') : path.join(workspaceRoot, '.tmp');
     await mkdir(temp, { recursive: true, mode: 0o700 });
     if (this.#closed) throw new ProjectRuntimeError('runtime_closed');
-    const child = spawn(process.execPath, [path.join(o.codeRoot, 'scripts/project-entry.mjs')], { cwd: workspaceRoot, env: { ...runtimeEnvironment(), PI_CODING_AGENT_DIR: o.resourceRoot, TMPDIR: temp }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+    const child = spawn(process.execPath, [path.join(o.codeRoot, 'scripts/project-entry.mjs')], { cwd: workspaceRoot, detached: process.platform !== 'win32', env: { ...runtimeEnvironment(), PI_CODING_AGENT_DIR: o.resourceRoot, TMPDIR: temp }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
     this.#child = child;
     // Provider and extension output is not a log transport. In particular it
     // cannot bypass secret masking through stderr or stdout.
@@ -94,7 +101,7 @@ export class ProjectAgent {
     const fail = () => { for (const p of this.#pending.values()) p.reject(new ProjectRuntimeError('runtime_process_stopped')); this.#pending.clear(); for (const p of this.#accepted.values()) p.reject(new ProjectRuntimeError('runtime_process_stopped')); this.#accepted.clear(); for (const id of this.#questions.keys()) this.#emit({ type: 'ui.dismiss', id }); this.#questions.clear(); };
     child.on('error', fail); child.on('exit', fail);
     const ready = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => { child.kill('SIGTERM'); reject(new ProjectRuntimeError('runtime_start_timeout')); }, 30_000);
+      const timer = setTimeout(() => { this.#signal(child, 'SIGTERM'); reject(new ProjectRuntimeError('runtime_start_timeout')); }, 30_000);
       child.once('exit', () => { clearTimeout(timer); const error = new ProjectRuntimeError('runtime_start_failed'); error.cause = startupDiagnostic; reject(error); });
       child.on('message', (message: any) => { if (message?.kind === 'ready') { clearTimeout(timer); child.stderr?.off('data', startupOutput); child.stderr?.resume(); startupDiagnostic = ''; resolve(); } });
     });
@@ -120,25 +127,70 @@ export class ProjectAgent {
   }
   start(text: string, requestId: string, requestFingerprint?: string, providedContext?: ProvidedContextInput) { return this.#execute('prompt', text, requestId, requestFingerprint, providedContext); }
   startCommand(text: string, requestId: string) { return this.#execute('command', text, requestId); }
-  async stop() { if (!this.#running) return; await this.open(); await this.#rpc('stop'); await this.#running?.completion; }
+  async drain() {
+    if (!this.#options.protectedExecution || !this.#child && !this.#opening) return;
+    if (this.#opening) await this.#opening;
+    if (this.#closed) throw new ProjectRuntimeError('runtime_closed');
+    // No SDK turn is created: the common lease waits for its already-owned
+    // local calculations while a concurrent stop can still revoke the scope.
+    await this.#rpc('drain');
+  }
+  async stop(cleanup: { retryFailed?: boolean } = {}) {
+    if (!this.#options.protectedExecution) { if (!this.#running) return; await this.open(); await this.#rpc('stop'); await this.#running?.completion; return; }
+    if (!this.#stopTask) this.#stopTask = (async () => {
+      // A managed scope can contain legitimate background work even after its
+      // current SDK turn settled. The driver's close already stops that turn,
+      // closes owned tools and waits for SDK idle before acknowledging cleanup.
+      // Share its one close task with concurrent turn retirement; a separate
+      // stop RPC can otherwise be interrupted by retirement's disconnect.
+      if (this.#opening) await this.#opening;
+      await this.close({ retryFailed: cleanup.retryFailed === true });
+    })();
+    return this.#stopTask;
+  }
   async command(text: string, requestId: string = randomUUID()) { const run = this.#execute('command', text, requestId); const [result] = await Promise.all([run.completion, run.accepted]); return result; }
   respondUI(input: { id: string; value?: string | boolean; cancelled?: boolean }) { return this.#rpc('ui-response', input); }
   setEditorState(text: string) { this.#options.draft = text; return this.#editorReady ? this.#rpc('editor-state', { text }) : Promise.resolve(); }
-  close(): Promise<void> { if (!this.#closeTask) { this.#closed = true; this.#closeTask = this.#dispose(); } return this.#closeTask; }
-  async #dispose() {
+  close(cleanup: { retryFailed?: boolean } = {}): Promise<void> {
+    if (!this.#closeTask) {
+      this.#closed = true;
+      const task = this.#dispose(cleanup); this.#closeTask = task;
+      // Retry only resource cleanup on an explicit close, never a model turn.
+      if (this.#options.protectedExecution) void task.catch(() => { if (this.#closeTask === task) this.#closeTask = undefined; });
+    }
+    return this.#closeTask;
+  }
+  #signal(child: ChildProcess, signal: NodeJS.Signals) {
+    try { if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, signal); else child.kill(signal); } catch { /* owned process group has exited */ }
+  }
+  async #dispose(cleanup: { retryFailed?: boolean }) {
     if (!this.#child) return;
     const child = this.#child;
+    let protectedCleanupAcknowledged = this.#managedCleanupAcknowledged;
     if (child.exitCode === null && child.signalCode === null) {
       let deadline: ReturnType<typeof setTimeout> | undefined;
-      await Promise.race([this.#rpc('close').catch(() => {}), new Promise<void>(resolve => { deadline = setTimeout(() => { child.kill('SIGTERM'); resolve(); }, 3000); })]);
+      let cleanupError: unknown;
+      await Promise.race([this.#rpc('close', { retryFailed: cleanup.retryFailed !== false }).then(result => { protectedCleanupAcknowledged = result?.closed === true; if (protectedCleanupAcknowledged) this.#managedCleanupAcknowledged = true; }, error => { cleanupError = error; }), new Promise<void>(resolve => { deadline = setTimeout(() => { if (!this.#options.protectedExecution) this.#signal(child, 'SIGTERM'); resolve(); }, this.#options.protectedExecution ? 8000 : 3000); })]);
       if (deadline) clearTimeout(deadline);
+      // Keep a responsive driver and its exact executor ownership available for
+      // explicit cleanup retry. Killing it after an error loses that authority.
+      if (this.#options.protectedExecution && !protectedCleanupAcknowledged && child.connected) {
+        const error = new ProjectRuntimeError('protected_cleanup_unknown'); error.cause = cleanupError; throw error;
+      }
     }
     // A signal exit has exitCode=null too. Do not wait for an event that already
     // happened when the terminal process group interrupted the native runtime.
     if (child.exitCode === null && child.signalCode === null) await new Promise<void>(resolve => {
-      const timer = setTimeout(() => { child.kill('SIGKILL'); }, 1000);
+      const timer = setTimeout(() => { this.#signal(child, 'SIGKILL'); }, 1000);
       child.once('exit', () => { clearTimeout(timer); resolve(); });
     });
+    // A reaped group's numeric ID may be reused; a successful managed close
+    // already proves its execution resources are gone and needs no stale kill.
+    if (!this.#options.protectedExecution) this.#signal(child, 'SIGKILL');
     this.#listeners.clear();
+    // Killing the trusted SDK driver does not establish that its separately
+    // sandboxed tool processes were cleaned up. Preserve the shared owner's
+    // quarantine unless that driver explicitly completed executor cleanup.
+    if (this.#options.protectedExecution && !protectedCleanupAcknowledged) throw new ProjectRuntimeError('protected_cleanup_unknown');
   }
 }
