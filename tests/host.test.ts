@@ -6,7 +6,8 @@ import { startTestHost } from './fixtures/host-process.ts';
 
 test('ISO-01: Host environment excludes provider credentials, config overrides and code injection', () => {
   const env = runtimeEnvironment({ PATH: '/synthetic/bin', OPENAI_API_KEY: 'poison', AWS_PROFILE: 'poison', PI_CODING_AGENT_DIR: '/poison', NODE_OPTIONS: '--require=poison', HTTPS_PROXY: 'http://poison', HOME: '/poison' });
-  assert.deepEqual(Object.keys(env).sort(), ['NODE_DISABLE_COMPILE_CACHE', 'OPTRACALL_HOST_ISOLATED', 'PATH', 'PI_OFFLINE', 'PI_SKIP_VERSION_CHECK', 'PI_TELEMETRY'].sort());
+  assert.deepEqual(Object.keys(env).sort(), ['NODE_DISABLE_COMPILE_CACHE', 'NODE_OPTIONS', 'OPTRACALL_HOST_ISOLATED', 'PATH', 'PI_OFFLINE', 'PI_SKIP_VERSION_CHECK', 'PI_TELEMETRY'].sort());
+  assert.equal(env.NODE_OPTIONS, '--use-bundled-ca');
 });
 
 test('CFG-02: split UTF-8 JSON bytes preserve Chinese configuration text', async t => {

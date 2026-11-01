@@ -6,6 +6,8 @@ Mac mini负责开发、工程测试和交付；GitHub main保存经复核及CI�
 
 当前包含反馈闭环、自动核算和托管优化的试用范围见[本次版本说明](current-version-trial.md)。自动核算采用单独的受管执行环境，只有当前Host可信新建起点的任务具备资格；其工具／扩展限制不等同于默认关闭自动核算时的普通分析能力。专业验证仍有重要错误及漏报，工程交付不替代用户体验或专业验收。
 
+应用私有CLI可放在`~/Library/Application Support/OptraCall/tools/gh/bin/gh`，Finder入口会在自己的PATH内发现，不更改系统PATH。试用入口及更新的npm子进程使用Node自带的可信根证书并保持TLS验证，避免私有运行包引用构建机不存在的证书目录；不导入Mini系统证书或关闭验证，不继承任意Node preload／禁TLS选项。CLI安装和该机登录由显式部署／用户操作完成，产品不自动安装或登录。修正及验证见[运行时信任记录](../openspec/changes/macbook-runtime-trust/result.md)。
+
 ## 三个双击入口
 
 | 入口 | 行为 |
