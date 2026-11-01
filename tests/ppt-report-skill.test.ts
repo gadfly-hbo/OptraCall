@@ -12,17 +12,17 @@ const scripts = path.join(root, 'extensions/analysis-assets/ppt-report/scripts')
 const fixtures = path.join(root, 'tests/fixtures/ppt-report');
 const python = process.env.PPT_REPORT_PYTHON ?? 'python3';
 
-function run(script, args) {
+function run(script: string, args: string[]) {
   const res = spawnSync(python, [path.join(scripts, script), ...args], { encoding: 'utf-8' });
   return { code: res.status, out: `${res.stdout}${res.stderr}` };
 }
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), 'ppt-report-test-'));
 }
-function sha(file) {
+function sha(file: string) {
   return createHash('sha256').update(readFileSync(file)).digest('hex');
 }
-function zipEntries(file) {
+function zipEntries(file: string) {
   const out = runInlinePython(`
 import zipfile,hashlib,json
 z=zipfile.ZipFile(${JSON.stringify(file)})
@@ -30,7 +30,7 @@ print(json.dumps({n:hashlib.sha256(z.read(n)).hexdigest() for n in z.namelist()}
 `);
   return JSON.parse(out);
 }
-function runInlinePython(code) {
+function runInlinePython(code: string) {
   return execFileSync(python, ['-c', code], { encoding: 'utf-8' }).trim();
 }
 
@@ -45,7 +45,7 @@ test('digit_check flags uncovered slide and chart-cache numbers with part names'
   assert.equal(r.code, 1, r.out);
   const result = JSON.parse(r.out);
   assert.equal(result.ok, false);
-  const parts = Object.fromEntries(result.findings.map(f => [f.part, f.uncovered]));
+  const parts = Object.fromEntries(result.findings.map((f: { part: string; uncovered: string[] }) => [f.part, f.uncovered]));
   assert.ok(parts['ppt/slides/slide2.xml']?.includes('9.9%'), JSON.stringify(parts));
   assert.ok(parts['ppt/charts/chart1.xml']?.includes('999'), JSON.stringify(parts));
 });
@@ -89,7 +89,7 @@ test('splice copies referenced media with new rIds and updates content types', (
       if (name === 'ppt/slides/slide3.xml' || name === '[Content_Types].xml' || name === 'ppt/slides/_rels/slide3.xml.rels') continue;
       assert.equal(after[name], before[name], `${name} must stay byte-identical`);
     }
-    const rels = readFileSync(out).length && runInlinePython(`
+    const rels = runInlinePython(`
 import zipfile
 z=zipfile.ZipFile(${JSON.stringify(out)})
 print(z.read('ppt/slides/_rels/slide3.xml.rels').decode('utf-8'))
