@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { existsSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
@@ -16,6 +17,8 @@ import { createRequirementRoutes } from '../../extensions/business-plugins/requi
 import { composeRequirementContext } from '../../extensions/business-plugins/requirements-elaboration/api/context.ts';
 import { requirementSessionDirectory, requirementWorkspace } from '../../extensions/business-plugins/requirements-elaboration/session/workspace.ts';
 import { createRequirementSessions } from './requirement-sessions.ts';
+import { createPptRefinerRoutes } from '../../extensions/business-plugins/ppt-refiner/api/routes.ts';
+import { createPptRefinerSessions } from './ppt-refiner-sessions.ts';
 import { createAgentSessionDomain, type SessionContext } from './agent-sessions.ts';
 import { savedTaskHistory, priorTaskRequest, taskContextReceipts, readSavedTaskReply, ProjectHistoryError } from './project-history.ts';
 import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
@@ -158,13 +161,33 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     readBody: request => body(request),
     sessions: Object.freeze({ run: requirementSessions.run, withSession: requirementSessions.withSession, stop: requirementSessions.stop, busy: requirementSessions.busy }),
   });
+  const refinerStreams = new Map<string, Set<ServerResponse>>();
+  const publishRefiner = (deckId: string, event: object) => { for (const response of refinerStreams.get(deckId) ?? []) if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...event, deckId })}\n\n`); };
+  const refinerSessions = createPptRefinerSessions({
+    codeRoot: options.cwd,
+    resourceRoot: path.join(dataRoot, 'pi'),
+    managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
+    deckRoot: path.join(dataRoot, 'ppt-decks'),
+    skillScriptsDir: path.resolve(options.cwd, 'extensions/analysis-assets/ppt-report/scripts'),
+    configurationSnapshot: availableConfiguration,
+    publish: publishRefiner,
+    mutate,
+    isClosing: () => closing,
+  });
+  const refinerRoutes = createPptRefinerRoutes({
+    deckRoot: path.join(dataRoot, 'ppt-decks'),
+    sessions: Object.freeze({ run: refinerSessions.run, stop: refinerSessions.stop }),
+    readBody: request => body(request),
+    skillScriptsDir: path.resolve(options.cwd, 'extensions/analysis-assets/ppt-report/scripts'),
+    pythonPath: process.env.PPT_REPORT_PYTHON ?? (existsSync(path.join(dataRoot, 'ppt-venv', 'bin', 'python')) ? path.join(dataRoot, 'ppt-venv', 'bin', 'python') : 'python3'),
+  });
   const closeAgents = async (filter: { provider?: string; projectId?: string } = {}) => {
     // Only coordinate domain controls; each domain owns its resource ledger.
     const results = await Promise.allSettled([
       projectSessions.closeAll(filter),
       verification.closeAll(filter),
       boardSessions.closeAll(filter),
-      ...(!filter.projectId ? [requirementSessions.closeAll(filter)] : []),
+      ...(!filter.projectId ? [requirementSessions.closeAll(filter), refinerSessions.closeAll(filter)] : []),
     ]);
     for (const key of [...streams.keys()]) {
       const [projectId, taskId] = key.split('/');
@@ -396,6 +419,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       const requirement = await requirementPlugin.routes(request, url);
       if (requirement) { json(response, requirement.status, requirement.value); return; }
+      const refiner = await refinerRoutes.routes(request, url);
+      if (refiner) { json(response, refiner.status, refiner.value); return; }
       const decisionBoard = await decisionBoardRoutes.routes(request, url);
       if (decisionBoard) { json(response, decisionBoard.status, decisionBoard.value); return; }
       if (url.pathname.startsWith('/api/decision-feedback/')) {

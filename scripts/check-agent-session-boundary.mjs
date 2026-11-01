@@ -41,7 +41,7 @@ const historyReaders = new Set(['src/host/project-history.ts', 'tests/project-mi
 // Extensions still receive only owner-bound ports and cannot register domains.
 // The verification Host also owns the separate, no-execution draft profile.
 // decision-board extraction follows the same Host-owned adapter pattern.
-const domainRegistrars = new Set(['src/host/server.ts', 'src/host/requirement-sessions.ts', 'src/host/verification-sessions.ts', 'src/host/verification-host.ts', 'src/host/decision-board-sessions.ts', 'tests/agent-sessions.test.ts', 'tests/agent-session-execution.test.ts']);
+const domainRegistrars = new Set(['src/host/server.ts', 'src/host/requirement-sessions.ts', 'src/host/verification-sessions.ts', 'src/host/verification-host.ts', 'src/host/decision-board-sessions.ts', 'src/host/ppt-refiner-sessions.ts', 'tests/agent-sessions.test.ts', 'tests/agent-session-execution.test.ts']);
 const connectionProbeOwners = new Set(['src/host/server.ts', 'tests/fixtures/runtime-cases.mjs']);
 // Launcher/update tests load their isolated fixture checkout by absolute URL.
 const checkoutLoaders = new Set(['scripts/trial-launcher.mjs', 'tests/trial-launcher.test.ts', 'tests/trial-update.test.ts']);

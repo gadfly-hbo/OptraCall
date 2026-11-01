@@ -89,3 +89,19 @@ test('api: render produces page images and image endpoint returns data url', { s
     await assert.rejects(() => routes.image('deck-render', '../secret'), (e: unknown) => e instanceof RefinerApiFault && e.status === 400);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('api: dispatcher maps /api/ppt-refiner urls and faults', async () => {
+  const dir = tempDir();
+  try {
+    const routes = setup(dir);
+    const post = { method: 'POST' } as never;
+    const created = await routes.routes(post, new URL('http://x/api/ppt-refiner/decks'));
+    assert.equal(created?.status, 400, 'empty body must map to invalid_deck_id 400');
+    const bad = await routes.routes(post, new URL('http://x/api/ppt-refiner/decks/deck-demo/locks'));
+    assert.equal(bad?.status, 400, 'empty page must map to invalid_page 400');
+    const missing = await routes.routes({ method: 'GET' } as never, new URL('http://x/api/ppt-refiner/decks/deck-missing'));
+    assert.equal(missing?.status, 404, JSON.stringify(missing));
+    const other = await routes.routes(post, new URL('http://x/api/other'));
+    assert.equal(other, null);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

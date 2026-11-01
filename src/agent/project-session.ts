@@ -171,6 +171,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     const model = models.getModel(providerId, o.configuration.model);
     if (!model) throw new Error('model_unavailable');
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
+      const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
@@ -180,6 +181,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         noExtensions: true, noSkills: !o.protectedExecution?.skillRoot, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
         extensionFactories: [createToolSearchExtension(), environmentExtension],
+        additionalSkillPaths: [analysisAssetsDir],
         skillsOverride: (base: { skills: Parameters<typeof snapshotProtectedSkills>[0]; diagnostics: any[] }) => {
           const snapshot = o.protectedExecution?.skillRoot ? snapshotProtectedSkills(base.skills, o.protectedExecution.skillRoot) : { skills: [], unavailable: [] };
           unavailableSkills = snapshot.unavailable;
@@ -189,6 +191,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           `The Host has provided a managed tool execution environment (${o.protectedExecution?.profile ?? 'protected'}). The tools run in ${protectedTools.scope.cwd}. Authorized readable material locations: ${JSON.stringify(protectedTools.scope.readRoots)}. Authorized writable locations: ${JSON.stringify([protectedTools.scope.writableRoot, ...(protectedTools.scope.writeRoots ?? [])])}. ${ordinaryManaged() ? 'Background and parallel calculations may continue across tool calls within this operation; the Host retains their resources until stop, close, or the authorized phase handoff.' : 'Existing data and reports are read-only; save new calculations and deliverables in the new workspace.'} Native session and credential files are unavailable to execution tools. Existing/remote MCP and user execution extensions are unavailable here. All child processes must remain inside this operation\'s owned execution groups: detached sessions and posix_spawn are unavailable. The python and python3 entrypoints use the installed same-version direct interpreters (${JSON.stringify(protectedTools.pythonRuntimes)}); use these entrypoints or their recorded direct executable paths instead of absolute framework launcher wrappers. Ordinary fork/exec subprocesses remain available. Choose methods and tools yourself. Codemode store/load is scoped to this execution workspace. Unavailable tools: ${JSON.stringify(protectedTools.unavailableTools)}.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } : {
         extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), createMcpExtension(), environmentExtension],
+        additionalSkillPaths: [analysisAssetsDir],
         appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [`You are OptraCall. Workspace conventions: your working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze prepared project materials in 020_clean and authorized shared business materials announced by the Host. 010_draw archives originals and is not automatically attached to model context. This is a soft instruction, not sensitive-data isolation; the full native tools are available without a sandbox or tool interception. Write intermediate/process files to 020_clean by default. Save final reports to ${path.join(o.projectDirectory!, '060_reports')} when asked to produce a final report. Determine analysis methods and tools yourself from the user's request. These are directory conventions, not a prescribed analysis procedure.`, OUTPUT_EVIDENCE_GUIDANCE, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } });
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.

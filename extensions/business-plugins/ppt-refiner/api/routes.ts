@@ -46,7 +46,7 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
     return value;
   };
 
-  return {
+  const api = {
     async create(input: Record<string, unknown>) {
       const id = bodyText(input, 'id', 70);
       if (!deckIdPattern.test(id)) throw fault(400, 'invalid_deck_id', 'deck 标识需形如 deck-xxx。');
@@ -143,5 +143,33 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
       }
       return fault(500, 'internal', '内部错误。');
     },
+    /** Host-style dispatcher: parse /api/ppt-refiner paths; null when not ours. */
+    routes: async (request: IncomingMessage, url: URL): Promise<{ status: number; value: unknown } | null> => {
+      if (!url.pathname.startsWith('/api/ppt-refiner')) return null;
+      const method = request.method ?? 'GET';
+      const parts = url.pathname.replace(/^\/api\/ppt-refiner\/?/, '').split('/').filter(Boolean);
+      try {
+        if (parts[0] !== 'decks') return null;
+        if (parts.length === 1 && method === 'POST') return await api.create(await options.readBody(request));
+        const deckId = decodeURIComponent(parts[1] ?? '');
+        if (parts.length === 2 && method === 'GET') return await api.get(deckId);
+        const action = parts[2];
+        if (parts.length === 3 && method === 'POST') {
+          const input = await options.readBody(request);
+          if (action === 'locks') return await api.setLock(deckId, input);
+          if (action === 'revert') return await api.revert(deckId, input);
+          if (action === 'export') return await api.exportDeck(deckId, input);
+          if (action === 'turns') return await api.turn(deckId, input);
+          if (action === 'stop') return await api.stopSession(deckId);
+          if (action === 'render') return await api.render(deckId);
+        }
+        if (parts.length === 4 && action === 'images' && method === 'GET') return await api.image(deckId, decodeURIComponent(parts[3] ?? ''));
+        return null;
+      } catch (error) {
+        const mapped = api.mapFault(error);
+        return { status: mapped.status, value: { code: mapped.code, message: mapped.message } };
+      }
+    },
   };
+  return api;
 }
