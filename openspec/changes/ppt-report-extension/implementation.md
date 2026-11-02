@@ -67,3 +67,10 @@
 其他并发修复：soffice 每次转换使用独立 `UserInstallation` profile（并行转换不再冲突）。
 
 **未做视觉盲评**：候选版观感对照（reports-factory 一版 skill 水准）留用户验收；我侧只验证结构、数字与管线。
+
+## 独立复核与 Git 交付（2026-11-02）
+
+- **非作者独立复核**：三轮至最终 **PASS**。Round 1（CHANGES_REQUIRED）：锁定绕过、选中页缺失、图表拼回、revert 差异、turn outcome、路径白名单、XML 转义、原子复制——全部修复并复验；Round 2：rels 守卫、异常 turn、outDir 符号链接、重复 revert、session_busy 映射——修复并复验；Round 3 终审 PASS（.local/review-ppt-report/review-final.md）。
+- **PR/CI**：PR #21（feat: PPT generation skill and per-page refinement plugin），CI `check` 绿（Ubuntu / Node 25.9.0，`npm run check` + 依赖审计），2026-11-02 squash 合并（mergedAt 00:09:32Z）。
+- **本地 main 快进**：`main` 在另一 worktree（/Users/bendandebaba/DevWorkSpace/OptraCall）被检出，本 worktree 无法快进；在原 worktree 执行 `git pull --ff-only` 即可（origin/main 已是合并头）。
+- 完整检查：`npm run check` 787 pass / 0 fail（3 环境跳过）+ 构建成功。
