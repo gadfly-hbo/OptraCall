@@ -152,3 +152,22 @@ TF02/TF12 浏览器根：`/Users/bendandebaba/OptraCall-artifacts/target-forecas
 
 
 非作者随后对947cc7a集成增量作只读复核：4份上游文档变化与30/30运行时身份确认，工程规范§4专项仍通过，无新增发现；原报告已追加至 independent-review.md。归档采用已核本仓惯例：合并后更新当前 spec/result 事实，在原变更目录稳定保留全部历史与证据，不迁移或改写原材料。
+
+## 合并交付与原位归档
+
+2026-11-03 依用户“授权，且完成后直接合并”完成下列实际操作；前述待授权、待合并或复核落稿时等待全量终态的文字保留其历史阶段，不作为当前状态。
+
+| 对象 | 实际回读身份与结果 |
+| --- | --- |
+| 唯一功能 PR | [PR #26](https://github.com/gadfly-hbo/OptraCall/pull/26)，`qoder/target-forecast` → `main`，已 squash 合并；无第二个功能 PR |
+| 实际 PR head CI | `7f772de581de0d0d19c5631b3b2ab0c39345d557`；[Check #70](https://github.com/gadfly-hbo/OptraCall/actions/runs/41538819893)，attempt 1，completed/success；checkout 明确使用 PR head SHA，锁文件安装、全量检查和 high 级依赖审计各步骤成功；Ubuntu 904 项＝844 PASS / 60 条件 SKIP / 0 FAIL |
+| squash 提交 | `0f8ee5ba0e3c626e517457cd08289a5ddd0d4cd9`；唯一父提交 `484995d908087449e64e9c352b9d5e33d8358afd`，GitHub `merged_at=2026-11-02T22:42:51Z`；使用 expected_head_sha 防止误合并已移动候选 |
+| 完整树核对 | PR head 与 squash 提交树均为 `123f1703b0f9d08e3d79617e00b91903242ec97b`，`git diff --exit-code` 确认完全相同，不只比较标题或部分文件 |
+| 合并 main CI | [Check #71](https://github.com/gadfly-hbo/OptraCall/actions/runs/41539571198)，head `0f8ee5ba0e3c626e517457cd08289a5ddd0d4cd9`，attempt 1，completed/success；锁文件安装、全量检查与 high 级审计各步骤通过，Ubuntu 904 项＝844 PASS / 60 条件 SKIP / 0 FAIL |
+| 本地 main | 主仓 `/Users/bendandebaba/DevWorkSpace/OptraCall` 在确认分支为 main、工作树干净及源/目标身份后，以 `git merge --ff-only origin/main` 从 `484995d` 快进至 `0f8ee5b`；回读与 origin/main 一致且干净 |
+
+本次 spec/result 归档在独立工作树 `codex/target-forecast-archive` 实施，保持全部变更目录稳定原路径；原候选清单、移交包、历史 FAIL/UNKNOWN、输入及验证环境失败不重写。仅文档收尾不改产品源码、测试、黄金或已复核规格合同；当前收尾提交自身身份、发布、成功 CI 与最终 main 快进另以实际 Git/Actions 和本地回执核对，不提前填写未来成功。
+
+公开锚点为 PR 与实际 head CI；原始 API 回读、job 日志、树身份、集成及快进证据保留于 `/Users/bendandebaba/OptraCall-artifacts/target-forecast-git-ci-20261103/`，原始本地及独立复核证据根不变。没有新建 PR 来单独交付归档。
+
+剩余范围继续独立保留：真实模型自主选 skill、多轮调参与专业报告质量及用户产品验收 NOT_RUN；原仓退役/JuanerAI 文档处置、优惠券复盘脚本化、pandas 环境与设备采用未执行，仍须各自另获授权。macOS 本地 3 条件 SKIP、Linux CI 60 条件 SKIP、既有 bundle 警告与 moderate 依赖提示均保留，不将合并或归档当作这些边界已验收。

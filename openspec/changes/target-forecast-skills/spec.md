@@ -1,5 +1,7 @@
 # target-forecast 三测算 skill（分析资产承接）
 
+**工程实施归档（2026-11-03）**：三 skill、唯一目录接缝及独立复核发现的修复已交付。[PR #26](https://github.com/gadfly-hbo/OptraCall/pull/26) 实际 head `7f772de` 的全量 CI 通过后，按用户明确授权直接 squash 为 `0f8ee5b`；受检 head 与合并提交完整树相同，本地 main 已安全快进。TF01–TF14 适用本地工程验收及职责边界/复用检查均有证据；规格、结果、复核、原清单和移交包在本目录原位保留，不迁移历史。后续 main CI 与收尾提交回读见[交付归档记录](result.md#合并交付与原位归档)。真实模型、专业报告质量及用户产品验收、原仓退役和设备采用仍分别属于后续范围，本归档不替代它们。
+
 2026-11-02 · 用户已确认[讨论稿 v0.2](../../../docs/TargetForecast能力承接产品讨论稿_v0.2.md)（skill 形态、D1–D5、三 skill 实现思路、纯 Python+openpyxl 依赖边界），本规格据此制定；无 UI 变更，无 UI Demo 环节。交付走[移交交付模式](../../../docs/engineering-workflow.md#qoder--codex-移交交付模式)：Qoder 在 `qoder/target-forecast` 分支交付 skill 本体与本文档，整体移交 Codex 实施唯一 Host 接缝（目录登记）、非作者独立复核与 Git/CI 至合并。
 
 原仓 [target-forecast](https://github.com/gadfly-hbo/target-forecast)（业务基线 `df5acd6`）仅作领域参考：数学公式、校验语义与黄金案例为对照基线；其 workbench 壳、页面、存储、副车、pandas 实现均不进入本仓。
