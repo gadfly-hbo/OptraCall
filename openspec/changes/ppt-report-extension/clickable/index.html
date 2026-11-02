@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PPT 报告能力 UI Demo · OptraCall</title>
+<style>
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; color: inherit; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #a397e0; outline-offset: 3px; }
+.demo-page { --canvas:#fff; --surface:#fff; --subtle:#f5f5f8; --hover:#ececf2; --ink:#24232b; --muted:#6c6b78; --faint:#777580; --line:#e6e5eb; --accent:#6550c9; --accent-soft:#eeebfb; --warning:#80530c; --warning-bg:#fff7e8; --error:#a12b36; --error-bg:#fff4f4; --ok:#1c7c4a; --ok-bg:#eef7f1; --navy:#263442; background: var(--canvas); color: var(--ink); font-size: 14px; line-height: 1.55; min-height: 100vh; padding: 6px 32px 48px; }
+.demo-note { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 14px 0 0; padding: 10px 14px; border: 1px dashed var(--accent); border-radius: 8px; background: var(--accent-soft); color: var(--muted); font-size: 12px; }
+.demo-note strong { color: var(--ink); }
+.eyebrow { letter-spacing: 2.2px; color: var(--accent); font-size: 11px; margin: 0 0 6px; font-weight: 600; }
+.page-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin: 16px 0 18px; }
+.page-heading h1 { font-size: 22px; line-height: 1.4; font-weight: 550; margin: 0 0 6px; }
+.page-heading .sub { color: var(--muted); font-size: 13px; margin: 0; }
+.tabs { display: flex; gap: 8px; margin: 0 0 20px; border-bottom: 1px solid var(--line); }
+.tab-button { border: 0; background: transparent; padding: 9px 16px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab-button[aria-selected="true"] { color: var(--ink); font-weight: 550; border-bottom-color: var(--accent); }
+.panel[hidden] { display: none; }
+.secondary-button { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 7px 14px; }
+.primary-button { border: 1px solid transparent; background: var(--accent); color: #fff; border-radius: 7px; padding: 7px 14px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); background: var(--surface); white-space: nowrap; }
+.chip.accent { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: var(--accent-soft); }
+.chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); background: var(--ok-bg); }
+.chip.warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 35%, var(--line)); background: var(--warning-bg); }
+.chip.error { color: var(--error); border-color: color-mix(in srgb, var(--error) 35%, var(--line)); background: var(--error-bg); }
+/* ---- 报告页入口 ---- */
+.report-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 20px 22px; max-width: 760px; }
+.report-card .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 16px; }
+.report-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.hint-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0 0; padding: 10px 14px; border-radius: 8px; background: var(--accent-soft); border: 1px dashed var(--accent); color: var(--muted); font-size: 12px; max-width: 760px; }
+.candidate-box { margin-top: 16px; border-top: 1px dashed var(--line); padding-top: 16px; }
+.candidate-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); }
+.candidate-row .name { font-weight: 550; }
+.candidate-row .path { color: var(--faint); font-size: 11px; }
+.gen-progress { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; padding: 12px 0 0; }
+.cat-item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: var(--surface); }
+.cat-item.new { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); }
+.cat-item .name { font-weight: 600; }
+.cat-item .desc { flex-basis: 100%; color: var(--muted); font-size: 12px; margin: 2px 0 0; }
+.cat-item .note { flex-basis: 100%; color: var(--faint); font-size: 11px; border-top: 1px dashed var(--line); padding-top: 8px; margin: 4px 0 0; }
+.cat-item.new .note { border-top-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.demo-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-top: 18px; }
+.flow-note { max-width: 760px; margin-top: 18px; color: var(--faint); font-size: 12px; }
+/* ---- 精修工作台 ---- */
+.refiner { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.refiner-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.refiner-head h2 { font-size: 16px; margin: 0; font-weight: 550; }
+.refiner-head .spacer { flex: 1; }
+.refiner-body { display: grid; grid-template-columns: 218px minmax(0,1fr) 340px; min-height: 640px; }
+.page-grid { border-right: 1px solid var(--line); padding: 14px; overflow-y: auto; max-height: 720px; }
+.page-grid h3, .qa-panel h3, .chat-panel h3, .diff-panel h3 { font-size: 12px; font-weight: 550; color: var(--muted); margin: 0 0 10px; }
+.grid-item { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-bottom: 10px; background: var(--surface); text-align: left; width: 100%; display: block; }
+.grid-item:hover { background: var(--hover); }
+.grid-item.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.grid-meta { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 10px; color: var(--faint); }
+.grid-meta .num { font-weight: 600; color: var(--muted); }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.dot.ok { background: var(--ok); }
+.dot.warn { background: #d99a2b; }
+.dot.none { background: var(--line); }
+.stage { border-right: 1px solid var(--line); padding: 14px; overflow-y: auto; max-height: 720px; }
+.stage .slide-wrap { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--subtle); }
+.stage .stage-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.stage .stage-toolbar .spacer { flex: 1; }
+.qa-panel { border: 1px solid var(--line); border-radius: 8px; margin-top: 14px; padding: 12px 14px; background: var(--subtle); }
+.qa-issue { display: flex; gap: 8px; align-items: baseline; font-size: 12px; margin: 6px 0; }
+.qa-issue .sev { flex: none; font-size: 10px; padding: 1px 7px; border-radius: 999px; }
+.qa-issue .sev.warn { color: var(--warning); background: var(--warning-bg); }
+.qa-note { font-size: 11px; color: var(--faint); margin: 10px 0 0; border-top: 1px dashed var(--line); padding-top: 8px; }
+.chat-panel { padding: 14px; display: flex; flex-direction: column; max-height: 720px; }
+.chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 2px 2px 12px; }
+.msg { max-width: 92%; border-radius: 10px; padding: 9px 12px; font-size: 12.5px; }
+.msg.user { align-self: flex-end; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line)); }
+.msg.agent { align-self: flex-start; background: var(--subtle); border: 1px solid var(--line); }
+.msg .who { font-size: 10px; color: var(--faint); margin-bottom: 3px; }
+.msg .anchor { margin-top: 7px; padding: 6px 9px; border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 6px 6px 0; font-size: 11px; color: var(--muted); }
+.msg ul { margin: 6px 0 0; padding-left: 18px; }
+.chat-input-row { display: flex; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.chat-input-row input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; }
+.lock-notice { font-size: 11px; color: var(--warning); background: var(--warning-bg); border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--line)); border-radius: 7px; padding: 7px 10px; margin-bottom: 8px; }
+.diff-panel { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; max-height: 200px; overflow-y: auto; }
+.diff-item { display: flex; gap: 8px; align-items: baseline; font-size: 11.5px; padding: 6px 8px; border-radius: 6px; background: var(--subtle); margin-bottom: 6px; }
+.diff-item .page { flex: none; font-weight: 600; color: var(--accent); font-size: 10px; }
+.diff-empty { color: var(--faint); font-size: 11px; }
+/* ---- slide 绘制（对齐目标 skill 版式规范：navy/paper/accent 三色系、有限强调、页型模板） ---- */
+.slide { --navy:#263442; --accent:#b44626; --paper:#f7f6f3; --panel:#fff; --line:#dedcd6; --ink:#242830; --muted:#626773; aspect-ratio: 16/9; width: 100%; border-radius: 4px; overflow: hidden; position: relative; font-size: 11px; background: var(--paper); color: var(--ink); font-family: 'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif; }
+.slide .s-num { position: absolute; right: 4.5%; bottom: 4.5%; font-size: .8em; color: color-mix(in srgb, var(--muted) 65%, transparent); letter-spacing: .1em; }
+.slide .s-pad { position: absolute; inset: 7.5% 8%; display: flex; flex-direction: column; }
+.slide .s-eyebrow { font-size: .82em; letter-spacing: .22em; color: var(--muted); text-transform: uppercase; display: flex; align-items: center; gap: .9em; }
+.slide .s-eyebrow::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.slide .s-title { font-weight: 650; font-size: 1.8em; line-height: 1.4; margin-top: .55em; color: var(--navy); }
+.slide .s-rule { width: 2.4em; height: 3px; background: var(--accent); border-radius: 2px; margin-top: .7em; }
+.slide .s-sub { font-size: 1.05em; color: var(--muted); margin-top: .7em; line-height: 1.7; }
+.slide ul { margin: 1.1em 0 0; padding: 0; list-style: none; }
+.slide li { margin: .6em 0; font-size: 1.02em; padding-left: 1.2em; position: relative; }
+.slide li::before { content: ''; position: absolute; left: 0; top: .5em; width: .42em; height: .42em; border-radius: 2px; background: var(--navy); }
+.slide .s-kpis { display: flex; gap: 4%; margin-top: 1.4em; }
+.slide .s-kpi { flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 1em 1.15em; }
+.slide .s-kpi .v { font-size: 2.2em; font-weight: 700; color: var(--navy); letter-spacing: -.01em; }
+.slide .s-kpi .v.hot { color: var(--accent); }
+.slide .s-kpi .l { font-size: .92em; color: var(--muted); margin-top: .3em; }
+.slide .s-chart { margin-top: 1.1em; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.slide .s-bars { display: flex; align-items: flex-end; gap: 7%; flex: 1; border-bottom: 1.5px solid var(--line); padding: 0 2%; }
+.slide .s-bar { flex: 1; background: color-mix(in srgb, var(--navy) 88%, #fff); border-radius: 4px 4px 0 0; }
+.slide .s-bar.alt { background: var(--accent); }
+.slide .s-xlabels { display: flex; gap: 7%; padding: .5em 2% 0; }
+.slide .s-xlabels span { flex: 1; text-align: center; font-size: .85em; color: var(--muted); }
+.slide .s-takeaway { margin-top: 1em; padding: .55em .95em; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; font-size: .98em; }
+.slide .s-toc { margin-top: 1.2em; }
+.slide .s-toc .row { display: flex; align-items: baseline; gap: 1.1em; padding: .6em .2em; border-bottom: 1px solid var(--line); font-size: 1.05em; }
+.slide .s-toc .row:last-child { border-bottom: 0; }
+.slide .s-toc .no { color: var(--accent); font-weight: 650; font-size: .88em; letter-spacing: .08em; }
+.slide .s-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 4%; margin-top: 1.4em; }
+.slide .s-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 1.05em 1.15em; }
+.slide .s-card .tag { display: inline-block; font-size: .78em; color: #fff; background: var(--navy); border-radius: 999px; padding: .18em .85em; letter-spacing: .08em; }
+.slide .s-card .tag.alt { background: var(--accent); }
+.slide .s-card p { margin: .65em 0 0; font-size: .98em; line-height: 1.6; }
+.slide.cover, .slide.end { background: var(--navy); color: #f2f4f6; }
+.slide.cover .s-eyebrow, .slide.end .s-eyebrow { color: #d6dde4; justify-content: center; }
+.slide.cover .s-eyebrow::after, .slide.end .s-eyebrow::after { display: none; }
+.slide.cover .s-title, .slide.end .s-title { color: #fff; font-size: 2.5em; font-weight: 700; }
+.slide.cover .s-sub, .slide.end .s-sub { color: #d6dde4; }
+.slide.cover .s-center, .slide.end .s-center { margin: auto; text-align: center; max-width: 86%; }
+.slide.cover .s-rule, .slide.end .s-rule { margin: 1.1em auto 0; }
+.grid-item .slide { font-size: 4.6px; }
+/* ---- 对话框 / toast ---- */
+dialog { border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; max-width: 560px; width: calc(100vw - 48px); }
+dialog::backdrop { background: rgba(36,35,43,.45); }
+dialog h2 { font-size: 16px; margin: 0 0 6px; font-weight: 550; }
+dialog .dlg-sub { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.version-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; margin-bottom: 8px; font-size: 12.5px; background: var(--surface); }
+.version-row .name { font-weight: 550; }
+.version-row .desc { color: var(--muted); flex: 1; }
+.toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); background: var(--ink); color: #fff; font-size: 12.5px; border-radius: 8px; padding: 9px 16px; opacity: 0; pointer-events: none; transition: opacity .25s; }
+.toast.show { opacity: .95; }
+@media (max-width: 1180px) { .refiner-body { grid-template-columns: 180px minmax(0,1fr); } .chat-panel { grid-column: 1 / -1; border-top: 1px solid var(--line); max-height: none; } }
+</style>
+</head>
+<body>
+<div class="demo-page">
+  <p class="demo-note"><strong>补确认 UI Demo（2026-11-01）</strong>对应变更 <code>ppt-report-extension</code> 讨论候选（spec 与本演示同步提交）。两个界面可点击切换：「报告页入口」演示 A 手动触发生成；「逐页精修工作台」演示 B 独立会话精修（选页、对话改、视觉自检、锁定、版本、差异清单导出）。数据全部为合成样例；静态演示不构成实现证据，标注的交互为验收对照。</p>
+
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">PPT REPORT · OptraCall</p>
+      <h1>PPT 报告能力（生成 skill + 逐页精修）</h1>
+      <p class="sub">md 正式报告 → 用户手动触发生成候选版 PPTX → 独立会话逐页精修 → 终版导出。分析流程到候选版产出即结束，精修不回原分析会话。</p>
+    </div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab-button" id="tab-report" role="tab" aria-selected="true" aria-controls="panel-report">报告页入口（A · 触发生成）</button>
+    <button class="tab-button" id="tab-refiner" role="tab" aria-selected="false" aria-controls="panel-refiner">逐页精修工作台（B）</button>
+    <button class="tab-button" id="tab-catalog" role="tab" aria-selected="false" aria-controls="panel-catalog">能力目录 · 分析资产</button>
+  </div>
+
+  <!-- ============ Tab 1: 报告页入口 ============ -->
+  <section class="panel" id="panel-report" role="tabpanel" aria-labelledby="tab-report">
+    <div class="report-card">
+      <p class="eyebrow">060_REPORTS · 正式报告</p>
+      <h2 style="margin:0;font-size:18px;">Q3 经营复盘分析报告</h2>
+      <div class="meta">
+        <span class="chip">markdown · 已复核</span>
+        <span class="chip">正式版 v1.2</span>
+        <span class="chip">任务：Q3 复盘与建议</span>
+      </div>
+      <div class="report-actions">
+        <button class="secondary-button">查看报告</button>
+        <button class="primary-button" id="generate-btn">生成 PPTX 版本</button>
+        <span class="chip" id="declared-chip" hidden>需求已声明 PPTX</span>
+      </div>
+      <div class="gen-progress" id="gen-progress" hidden><span class="spinner"></span><span id="gen-status">生成会话已启动（独立会话，输入为该 md 报告 + ppt-report skill）…</span></div>
+      <div class="candidate-box" id="candidate-box" hidden>
+        <div class="candidate-row">
+          <span class="name">Q3_经营复盘_汇报_候选版_v1.pptx</span>
+          <span class="chip ok">生成完成</span>
+          <span class="path">060_reports/</span>
+          <span style="flex:1"></span>
+          <button class="secondary-button" id="regen-btn">重新生成</button>
+          <button class="primary-button" id="open-refiner-btn">打开逐页精修</button>
+        </div>
+      </div>
+    </div>
+    <div class="hint-bar" id="declared-hint" hidden>
+      <span class="chip accent">需求声明</span>分析需求中已显式声明 PPTX 需求：报告完成即提示生成，无需等待再次手动发起。
+    </div>
+    <label class="demo-toggle"><input type="checkbox" id="declared-toggle"> 演示切换：模拟「分析需求已声明 PPTX」的入口形态</label>
+    <p class="flow-note">默认无声明：不自动生成、不提示打扰；生成会话独立于原分析会话，产物为候选版 .pptx（唯一工件，不含自定义源）。候选版即分析流程终点，后续修改进入逐页精修。</p>
+  </section>
+
+  <!-- ============ Tab 2: 精修工作台 ============ -->
+  <section class="panel" id="panel-refiner" role="tabpanel" aria-labelledby="tab-refiner" hidden>
+    <div class="refiner">
+      <div class="refiner-head">
+        <h2>Q3_经营复盘_汇报 · 逐页精修</h2>
+        <span class="chip accent">md 锚点 · 只读</span>
+        <span class="chip">候选版 v1 · 来自生成 skill</span>
+        <span class="spacer"></span>
+        <span class="chip" id="version-chip">当前 v3</span>
+        <button class="secondary-button" id="history-btn">版本历史</button>
+        <button class="primary-button" id="export-btn">导出终版</button>
+      </div>
+      <div class="refiner-body">
+        <div class="page-grid" id="page-grid" role="listbox" aria-label="页网格"></div>
+        <div class="stage">
+          <div class="slide-wrap" id="stage-slide"></div>
+          <div class="stage-toolbar">
+            <span id="stage-label" style="font-size:12px;color:var(--muted);"></span>
+            <span class="spacer"></span>
+            <button class="secondary-button" id="lock-btn">锁定本页</button>
+            <button class="secondary-button" id="qa-btn">视觉自检本页</button>
+          </div>
+          <div class="qa-panel">
+            <h3>视觉自检</h3>
+            <div id="qa-body"></div>
+            <p class="qa-note">检查项：文字遮挡 / 溢出边界 / 对齐 / 对比度 / 字号；封面与章节页的大留白按页型容忍，不计缺陷（继承 reports-factory look_page 校准结论）。</p>
+          </div>
+        </div>
+        <div class="chat-panel">
+          <h3>对话修改（独立精修会话）</h3>
+          <div class="chat-log" id="chat-log"></div>
+          <div class="chat-input-row">
+            <input id="chat-input" placeholder="描述对本页的修改，如：标题压缩成一句结论" aria-label="修改指令">
+            <button class="primary-button" id="chat-send">发送</button>
+          </div>
+          <div class="diff-panel">
+            <h3>改动记录 · 与 md 报告的差异</h3>
+            <div id="diff-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Tab 3: 能力目录 · 分析资产 ============ -->
+  <section class="panel" id="panel-catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden>
+    <div class="report-card" style="max-width:880px;">
+      <p class="eyebrow">能力目录 · 分析资产</p>
+      <h2 style="margin:0 0 4px;font-size:18px;">分析资产</h2>
+      <p style="color:var(--muted);font-size:12.5px;margin:0 0 16px;">复用业务定义、分析方法与表达规范，让每次分析都有依据。</p>
+      <div id="catalog-list"></div>
+    </div>
+    <p class="flow-note" style="max-width:880px;">资产随产品内置分发：安装 OptraCall 即含全部已接入资产，无需单独安装或点击安装；资产版本随产品版本更新。「点击安装／市场导入第三方 skill」本变更不做（产品讨论稿 v0.2 已确认不建插件市场）。</p>
+  </section>
+
+  <dialog id="export-dialog">
+    <h2>导出终版 PPTX</h2>
+    <p class="dlg-sub">导出前核对与 md 报告的差异清单。差异仅标记，不回写 md 报告；如需回填请在报告侧另行修订。</p>
+    <div id="export-diff"></div>
+    <div class="dialog-actions">
+      <button class="secondary-button" id="export-cancel">取消</button>
+      <button class="primary-button" id="export-confirm">导出至 060_reports</button>
+    </div>
+  </dialog>
+
+  <dialog id="history-dialog">
+    <h2>版本历史</h2>
+    <p class="dlg-sub">每轮修改自动存快照，可回退任意版（首期不自动清理）。</p>
+    <div id="version-list"></div>
+    <div class="dialog-actions"><button class="secondary-button" id="history-close">关闭</button></div>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const toastEl = $('toast');
+let toastTimer;
+function toast(text) { toastEl.textContent = text; toastEl.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200); }
+function switchTab(name) {
+  ['report', 'refiner', 'catalog'].forEach((t) => {
+    $('tab-' + t).setAttribute('aria-selected', String(t === name));
+    $('panel-' + t).hidden = t !== name;
+  });
+}
+$('tab-report').addEventListener('click', () => switchTab('report'));
+$('tab-refiner').addEventListener('click', () => switchTab('refiner'));
+$('tab-catalog').addEventListener('click', () => switchTab('catalog'));
+
+const catalogAssets = [
+  { name: '企业业务资料', status: '已接入', desc: '集中维护企业背景原文与修订，Case 引用明确版本并补充本案资料。', note: '公共资料、明确修订与本案补充各自保留来源。' },
+  { name: '指标体系', status: '已接入', desc: '维护可复用的指标定义、业务口径与 SAP 发布版本，并按需关联项目。', note: '使用现有指标体系工作台。' },
+  { name: 'PPT 报告生成 skill', status: '已接入 · 本变更新增', fresh: true, desc: '从正式 md 报告生成候选版 PPTX：内容红线（不编造、数字逐字）+ 版式规范 + 底本工具集。', note: '随产品内置，无需安装：版本随 OptraCall 更新。使用入口＝报告页「生成 PPTX 版本」；条目详情含版本、适用条件与守则摘要。' },
+  { name: '分析方法资产包（A02）', status: '规划示例', desc: '组织漏斗、Cohort、RFM 与变化分解等常用方法。', note: '尚未接入 OptraCall。' },
+  { name: '报告与表达规范资产包（A05）', status: '规划示例', desc: '复用经营复盘、实验报告的结构与证据表达要求。', note: 'PPT 报告生成 skill 落地后，其版式规范即该方向首个真实资产。' },
+];
+$('catalog-list').innerHTML = catalogAssets.map((a) => `
+  <div class="cat-item ${a.fresh ? 'new' : ''}">
+    <span class="name">${a.name}</span>
+    <span class="chip ${a.fresh ? 'accent' : a.status === '已接入' ? 'ok' : ''}">${a.status}</span>
+    <span class="desc">${a.desc}</span>
+    <span class="note">${a.note}</span>
+  </div>`).join('');
+
+/* ---------- Tab 1：触发生成 ---------- */
+$('generate-btn').addEventListener('click', () => {
+  $('gen-progress').hidden = false;
+  $('generate-btn').disabled = true;
+  $('gen-status').textContent = '生成会话运行中：读取 md 报告 → 逐页起草 → 渲染自检…';
+  setTimeout(() => {
+    $('gen-progress').hidden = true;
+    $('candidate-box').hidden = false;
+    $('generate-btn').disabled = false;
+    toast('候选版 PPTX 已生成（演示）');
+  }, 1600);
+});
+$('regen-btn').addEventListener('click', () => toast('重新生成将覆盖候选版（演示：未执行）'));
+$('open-refiner-btn').addEventListener('click', () => { switchTab('refiner'); toast('已进入逐页精修（独立会话）'); });
+$('declared-toggle').addEventListener('change', (e) => {
+  $('declared-hint').hidden = !e.target.checked;
+  $('declared-chip').hidden = !e.target.checked;
+});
+
+/* ---------- 合成 deck 数据 ---------- */
+const pages = [
+  { id: 1, type: 'cover', title: 'Q3 经营复盘', sub: '重点门店承压 · 长尾正向 · 两条行动建议', eyebrow: '01 / 封面', locked: true, modified: false, qa: { status: 'ok', issues: [] } },
+  { id: 2, type: 'toc', title: '目录', items: ['结论摘要', '重点与长尾门店对比', '销售趋势', '原因分析', '行动建议'], eyebrow: '02 / 目录', qa: { status: 'ok', issues: [] } },
+  { id: 3, type: 'summary', title: 'Q3 整体：重点承压、长尾回暖', eyebrow: '03 / 结论摘要', bullets: ['重点门店销售 880 万，同比 -7.1%', '长尾门店合计同比 +3%，客流恢复领先', '建议 1：重点门店补货试点；建议 2：持续监控 9 月转化率'], qa: { status: 'ok', issues: [] } },
+  { id: 4, type: 'kpi', title: '重点 880 万同比 -7.1%，长尾 +3% 形成反差', eyebrow: '04 / 对比', kpis: [{ v: '880 万', l: '重点门店 Q3 销售', hot: true }, { v: '-7.1%', l: '重点门店同比', hot: true }, { v: '+3%', l: '长尾门店同比' }], locked: false, modified: true, qa: { status: 'ok', issues: [] } },
+  { id: 5, type: 'chart', title: '7–9 月销售趋势', eyebrow: '05 / 趋势', bars: [{ h: 62 }, { h: 55 }, { h: 48, alt: true }, { h: 70 }], xlabels: ['7月', '8月', '9月·重点', '9月·长尾'], takeaway: '重点门店逐月走低，长尾 9 月回升至季度高点', modified: false, qa: { status: 'warn', issues: [{ sev: 'warn', text: 'y 轴数据标签字号 10px 偏小，低于正文可读下限' }] } },
+  { id: 6, type: 'summary', title: '原因分析：三个主要解释', eyebrow: '06 / 原因', bullets: ['周边竞对开业分流（8 月起）', '重点门店补货周期拉长，缺货天数增加', '长尾门店社区活动带动复购'], qa: { status: 'ok', issues: [] } },
+  { id: 7, type: 'actions', title: '行动建议', eyebrow: '07 / 建议', items: ['建议 1 · 重点门店补货试点（2 家店，4 周）', '建议 2 · 持续监控 9 月转化率并双周回顾'], qa: { status: 'ok', issues: [] } },
+  { id: 8, type: 'end', title: '附录与数据来源', sub: '明细见正式报告 md · Q3_经营复盘分析报告', eyebrow: '08 / 结尾', qa: { status: 'ok', issues: [] } },
+];
+const typeLabel = { cover: '封面', toc: '目录', summary: '内容', kpi: '数据', chart: '图表', actions: '建议', end: '结尾' };
+let selected = 4;
+const diffs = [
+  { page: 4, text: '标题措辞改写为直接结论（数字未变）' },
+  { page: 4, text: '「880 万」「-7.1%」强调样式（数值未变）' },
+];
+
+function slideHtml(p, cls) {
+  const num = `<span class="s-num">${String(p.id).padStart(2, '0')} / ${String(pages.length).padStart(2, '0')}</span>`;
+  const head = (t) => `<div class="s-eyebrow">${p.eyebrow}</div><div class="s-title">${t}</div><div class="s-rule"></div>`;
+  let body = '';
+  if (p.type === 'cover' || p.type === 'end') body = `<div class="s-pad"><div class="s-center"><div class="s-eyebrow">${p.eyebrow}</div><div class="s-title">${p.title}</div><div class="s-rule"></div><div class="s-sub">${p.sub ?? ''}</div></div></div>`;
+  else if (p.type === 'toc') body = `<div class="s-pad">${head(p.title)}<div class="s-toc">${p.items.map((t, i) => `<div class="row"><span class="no">0${i + 1}</span><span>${t}</span></div>`).join('')}</div></div>${num}`;
+  else if (p.type === 'actions') body = `<div class="s-pad">${head(p.title)}<div class="s-cards">${p.items.map((t, i) => `<div class="s-card"><span class="tag ${i === 0 ? '' : 'alt'}">建议 ${i + 1}</span><p>${t.replace(/^建议 ?[12] · /, '')}</p></div>`).join('')}</div></div>${num}`;
+  else if (p.type === 'kpi') body = `<div class="s-pad">${head(p.title)}<div class="s-kpis">${p.kpis.map((k) => `<div class="s-kpi"><div class="v ${k.hot ? 'hot' : ''}">${k.v}</div><div class="l">${k.l}</div></div>`).join('')}</div></div>${num}`;
+  else if (p.type === 'chart') body = `<div class="s-pad">${head(p.title)}<div class="s-chart"><div class="s-bars">${p.bars.map((b) => `<div class="s-bar ${b.alt ? 'alt' : ''}" style="height:${b.h}%"></div>`).join('')}</div><div class="s-xlabels">${p.xlabels.map((x) => `<span>${x}</span>`).join('')}</div></div><div class="s-takeaway">${p.takeaway}</div></div>${num}`;
+  else body = `<div class="s-pad">${head(p.title)}<ul>${p.bullets.map((b) => `<li>${b}</li>`).join('')}</ul></div>${num}`;
+  return `<div class="slide ${p.type} ${cls ?? ''}">${body}</div>`;
+}
+
+function renderGrid() {
+  $('page-grid').innerHTML = pages.map((p) => `
+    <button class="grid-item ${p.id === selected ? 'selected' : ''}" data-page="${p.id}" role="option" aria-selected="${p.id === selected}">
+      ${slideHtml(p)}
+      <div class="grid-meta">
+        <span class="num">P${p.id}</span><span>${typeLabel[p.type]}</span>
+        ${p.locked ? '<span title="已锁定">🔒</span>' : ''}
+        ${p.modified ? '<span class="chip accent" style="padding:0 6px;font-size:9px">改</span>' : ''}
+        <span style="flex:1"></span>
+        <span class="dot ${p.qa.status}" title="视觉自检"></span>
+      </div>
+    </button>`).join('');
+  $('page-grid').querySelectorAll('.grid-item').forEach((b) => b.addEventListener('click', () => { selected = Number(b.dataset.page); renderAll(); }));
+}
+
+function renderStage() {
+  const p = pages.find((x) => x.id === selected);
+  $('stage-slide').innerHTML = slideHtml(p);
+  $('stage-label').textContent = `P${p.id} · ${typeLabel[p.type]}${p.locked ? ' · 已锁定' : ''}${p.modified ? ' · 本轮已修改' : ''}`;
+  $('lock-btn').textContent = p.locked ? '解锁本页' : '锁定本页';
+  const qaBody = $('qa-body');
+  if (p.qa.status === 'ok') qaBody.innerHTML = `<div class="qa-issue"><span class="sev warn" style="color:var(--ok);background:var(--ok-bg)">通过</span><span>无遮挡 / 溢出 / 对比 / 字号问题${p.type === 'cover' || p.type === 'end' ? '（大留白按页型容忍）' : ''}</span></div>`;
+  else qaBody.innerHTML = p.qa.issues.map((i) => `<div class="qa-issue"><span class="sev ${i.sev}">待修</span><span>${i.text}</span></div>`).join('');
+  const input = $('chat-input');
+  if (p.locked) { input.disabled = true; $('chat-send').disabled = true; input.placeholder = '该页已锁定，解锁后才能修改'; }
+  else { input.disabled = false; $('chat-send').disabled = false; input.placeholder = '描述对本页的修改，如：标题压缩成一句结论'; }
+}
+
+function renderDiffs(target) {
+  const html = diffs.length ? diffs.map((d) => `<div class="diff-item"><span class="page">P${d.page}</span><span>${d.text}</span></div>`).join('') : '<p class="diff-empty">暂无与 md 报告的差异</p>';
+  if (target) target.innerHTML = html; else $('diff-list').innerHTML = html;
+}
+function renderAll() { renderGrid(); renderStage(); renderDiffs(); }
+
+/* ---------- 对话（预置脚本 + 演示发送） ---------- */
+function addMsg(who, html) {
+  const div = document.createElement('div');
+  div.className = `msg ${who}`;
+  div.innerHTML = `<div class="who">${who === 'user' ? '我' : 'Agent · 精修会话'}</div>${html}`;
+  $('chat-log').appendChild(div);
+  $('chat-log').scrollTop = $('chat-log').scrollHeight;
+}
+addMsg('agent', '已读取候选版 PPTX（8 页）与 md 报告锚点（只读）。选中任意一页后用对话修改；我只改这一页，不动其他页与锁定页。');
+addMsg('user', 'P4：标题改成一句直接结论，880 万放大突出。');
+addMsg('agent', `已修改 P4 并重出页图：<ul><li>标题改写为「重点 880 万同比 -7.1%，长尾 +3% 形成反差」</li><li>「880 万」强调放大（数值未变，逐字来自 md 报告）</li></ul><div class="anchor">md 锚点核对：880 万 / -7.1% / +3% 与报告原文逐字一致</div>`);
+addMsg('user', 'P4：长尾增速改成 +3.2%。');
+addMsg('agent', `未修改。md 报告中长尾同比为 +3%，未找到 +3.2% 的出处。<div class="anchor">锚点拦截：报告没有的数字不静默写入。如确有依据，请提供来源或确认后我再直改并记入差异清单。</div>`);
+
+$('chat-send').addEventListener('click', send);
+$('chat-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+function send() {
+  const text = $('chat-input').value.trim();
+  const p = pages.find((x) => x.id === selected);
+  if (!text || !p || p.locked) return;
+  addMsg('user', text);
+  $('chat-input').value = '';
+  setTimeout(() => {
+    addMsg('agent', `已按指令修改 P${p.id} 并重出页图（演示脚本：固定示例回复）。<div class="anchor">涉及数字/事实的改动会与 md 报告核对：一致则放行，不一致则拦截并提示依据。</div>`);
+    p.modified = true;
+    if (!diffs.some((d) => d.page === p.id && d.text.includes('对话修改'))) diffs.push({ page: p.id, text: '对话修改（演示标记，未触数字红线）' });
+    renderAll();
+  }, 500);
+}
+
+/* ---------- 锁定 / 自检 / 版本 / 导出 ---------- */
+$('lock-btn').addEventListener('click', () => {
+  const p = pages.find((x) => x.id === selected);
+  p.locked = !p.locked;
+  toast(p.locked ? `P${p.id} 已锁定：后续修改与重生成不触碰此页` : `P${p.id} 已解锁`);
+  renderAll();
+});
+$('qa-btn').addEventListener('click', () => toast('视觉自检：页图回传模型复查（演示：状态见左侧点标）'));
+
+const versions = [
+  { name: 'v3（当前）', desc: 'P5 趋势图字号修正', current: true },
+  { name: 'v2', desc: 'P4 标题改写 + 数字强调' },
+  { name: 'v1', desc: '生成 skill 初始候选版' },
+];
+$('version-chip').textContent = '当前 v3';
+$('history-btn').addEventListener('click', () => {
+  $('version-list').innerHTML = versions.map((v) => `
+    <div class="version-row"><span class="name">${v.name}</span><span class="desc">${v.desc}</span>${v.current ? '<span class="chip ok">当前</span>' : '<button class="secondary-button" data-ver="' + v.name + '">回退到此版</button>'}</div>`).join('');
+  $('history-dialog').showModal();
+  $('version-list').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { toast(`已回退到 ${b.dataset.ver}（演示）`); $('history-dialog').close(); }));
+});
+$('history-close').addEventListener('click', () => $('history-dialog').close());
+
+$('export-btn').addEventListener('click', () => {
+  renderDiffs($('export-diff'));
+  $('export-dialog').showModal();
+});
+$('export-cancel').addEventListener('click', () => $('export-dialog').close());
+$('export-confirm').addEventListener('click', () => { $('export-dialog').close(); toast('终版 PPTX 已导出至 060_reports，附差异清单（演示）'); });
+
+renderAll();
+</script>
+</body>
+</html>
