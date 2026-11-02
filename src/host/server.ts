@@ -20,6 +20,7 @@ import { requirementSessionDirectory, requirementWorkspace } from '../../extensi
 import { createRequirementSessions } from './requirement-sessions.ts';
 import { createPptRefinerRoutes } from '../../extensions/business-plugins/ppt-refiner/api/routes.ts';
 import { createPptRefinerSessions } from './ppt-refiner-sessions.ts';
+import { createPptRefinerAccess } from './ppt-refiner-access.ts';
 import { createAgentSessionDomain, type SessionContext } from './agent-sessions.ts';
 import { savedTaskHistory, priorTaskRequest, taskContextReceipts, readSavedTaskReply, ProjectHistoryError } from './project-history.ts';
 import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
@@ -171,6 +172,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   });
   const refinerStreams = new Map<string, Set<ServerResponse>>();
   const publishRefiner = (deckId: string, event: object) => { for (const response of refinerStreams.get(deckId) ?? []) if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...event, deckId })}\n\n`); };
+  const refinerAccess = createPptRefinerAccess({ projects, deckRoot: path.join(dataRoot, 'ppt-decks'), assertActive });
   const refinerSessions = createPptRefinerSessions({
     codeRoot: options.cwd,
     resourceRoot: path.join(dataRoot, 'pi'),
@@ -178,17 +180,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     deckRoot: path.join(dataRoot, 'ppt-decks'),
     skillScriptsDir: path.resolve(options.cwd, 'extensions/analysis-assets/ppt-report/scripts'),
     configurationSnapshot: availableConfiguration,
+    resolveOwner: refinerAccess.resolveOwner,
     publish: publishRefiner,
     mutate,
     isClosing: () => closing,
   });
   const refinerRoutes = createPptRefinerRoutes({
     deckRoot: path.join(dataRoot, 'ppt-decks'),
-    sessions: Object.freeze({ run: refinerSessions.run, stop: refinerSessions.stop }),
+    sessions: Object.freeze({ withSession: refinerSessions.withSession, mutate: refinerSessions.mutate, stop: refinerSessions.stop, busy: refinerSessions.busy }),
+    registerDeck: (input, use) => mutate(async () => use(await refinerAccess.create(input))),
+    resolveAccess: refinerAccess.read,
     readBody: request => body(request),
     skillScriptsDir: path.resolve(options.cwd, 'extensions/analysis-assets/ppt-report/scripts'),
     pythonPath: process.env.PPT_REPORT_PYTHON ?? (existsSync(path.join(dataRoot, 'ppt-venv', 'bin', 'python')) ? path.join(dataRoot, 'ppt-venv', 'bin', 'python') : 'python3'),
-    allowedRoots: [path.join(dataRoot, 'ppt-decks'), projectsRoot, path.resolve(options.cwd, 'tests', 'fixtures')],
     codeRoot: options.cwd,
   });
   const closeAgents = async (filter: { provider?: string; projectId?: string } = {}) => {
@@ -197,7 +201,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       projectSessions.closeAll(filter),
       verification.closeAll(filter),
       boardSessions.closeAll(filter),
-      ...(!filter.projectId ? [requirementSessions.closeAll(filter), refinerSessions.closeAll(filter)] : []),
+      refinerSessions.closeAll(filter),
+      ...(!filter.projectId ? [requirementSessions.closeAll(filter)] : []),
     ]);
     for (const key of [...streams.keys()]) {
       const [projectId, taskId] = key.split('/');
@@ -350,7 +355,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   async function projectBusy(projectId: string) {
     const project = await projects.get(projectId);
-    return project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId) || boardSessions.busy(projectId);
+    return project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId) || boardSessions.busy(projectId) || refinerSessions.busyProject(projectId);
   }
   const priorRequest = priorTaskRequest;
   const savedHistory = (project: ProjectRecord, task: TaskRecord, capabilities: Record<string, unknown> = {}) => savedTaskHistory(project, task, SDK_VERSION, capabilities);
