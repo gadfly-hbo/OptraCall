@@ -23,15 +23,29 @@ export function NewProjectDialog({ configurations, selectedId, onCreate, onSetti
 }
 
 const folderNotes: Record<string, string> = { '010_draw': '上传原件归档', '020_clean': '分析资料与过程文件', '060_reports': '最终报告 · 可下载' };
-export function ProjectFiles({ project, refreshToken, onClose, onGeneratePptx }: { project: ClientProject; refreshToken: number; onClose: () => void; onGeneratePptx?: (file: { name: string; path: string }) => void }) {
+export function ProjectFiles({ project, refreshToken, onClose, onGeneratePptx, onRefinePptx }: { project: ClientProject; refreshToken: number; onClose: () => void; onGeneratePptx?: (file: { name: string; path: string }) => void; onRefinePptx?: (file: { name: string; path: string }, reportPath: string) => void }) {
   const heading = useRef<HTMLHeadingElement>(null); const input = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<FileNode[]>([]); const [directory, setDirectory] = useState<'010_draw' | '020_clean'>('010_draw');
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
+  const reportPicker = useRef<HTMLDialogElement>(null), reportPickerTrigger = useRef<HTMLButtonElement | null>(null);
+  const [pendingPptx, setPendingPptx] = useState<{ name: string; path: string }>(), [selectedReport, setSelectedReport] = useState(''), [pickerError, setPickerError] = useState('');
+  const collectReports = (nodes: FileNode[]): FileNode[] => nodes.flatMap(item => item.kind === 'directory' ? collectReports(item.children ?? []) : item.path.startsWith('060_reports/') && /\.md$/i.test(item.name) ? [item] : []);
+  const reports = collectReports(files);
+  const beginRefiner = (file: { name: string; path: string }, trigger: HTMLButtonElement) => {
+    setError('');
+    if (!reports.length) { setError('请先在本项目 060_reports 保存正式 md 报告，再为候选版打开精修。'); return; }
+    const stem = file.name.replace(/\.pptx$/i, '').replace(/_候选版$/, '').toLowerCase();
+    const matching = reports.filter(report => report.name.replace(/\.md$/i, '').toLowerCase() === stem);
+    if (matching.length === 1) { onRefinePptx?.(file, matching[0]!.path); return; }
+    reportPickerTrigger.current = trigger; setPendingPptx(file); setSelectedReport(reports.length === 1 ? reports[0]!.path : ''); setPickerError('');
+  };
+  useEffect(() => { if (pendingPptx && !reportPicker.current?.open) reportPicker.current?.showModal(); }, [pendingPptx]);
+  const closeReportPicker = () => { setPendingPptx(undefined); setPickerError(''); requestAnimationFrame(() => reportPickerTrigger.current?.focus()); };
   const refresh = async () => { setLoading(true); try { setFiles(await projectFiles(project.id)); setError(''); } catch (error) { setError(errorText(error)); } finally { setLoading(false); } };
   useEffect(() => { if (window.innerWidth <= 1100) heading.current?.focus(); }, [project.id]);
   useEffect(() => { let alive = true; setLoading(true); void projectFiles(project.id).then(value => { if (alive) { setFiles(value); setError(''); } }, error => { if (alive) setError(errorText(error)); }).finally(() => { if (alive) setLoading(false); }); return () => { alive = false; }; }, [project.id, refreshToken]);
   const act = async (operation: () => Promise<void>, message: string) => { setBusy(true); setError(''); setNotice(''); try { await operation(); await refresh(); setNotice(message); } catch (error) { setError(errorText(error)); } finally { setBusy(false); } };
-  const node = (item: FileNode) => item.kind === 'directory' ? <details key={item.path} open={item.path === '020_clean'}><summary><span className="folder-chevron" aria-hidden="true">›</span><FolderIcon /><code>{item.name}</code></summary>{folderNotes[item.path] && <p className="folder-note">{folderNotes[item.path]}</p>}{item.children?.length ? <div className="file-children">{item.children.map(node)}</div> : <p>空文件夹 · 尚无文件</p>}</details> : <div key={item.path} className="project-file-row"><span className="file-name" title={item.name}>{item.name}</span><div className="file-actions"><button className="text-button" disabled={busy} aria-label={`下载 ${item.name}`} onClick={() => { void act(() => downloadFile(project.id, item), '已准备文件下载。'); }}>下载</button>{!project.archivedAt && item.path.startsWith('010_draw/') && <button className="text-button" disabled={busy} aria-label={`复制到分析区 ${item.name}`} onClick={() => { void act(() => copyToClean(project.id, item.path), '已复制到 020_clean，Agent 现在可以读取该副本；未自动开始分析。'); }}>放入分析区</button>}{!project.archivedAt && onGeneratePptx && item.path.startsWith('060_reports/') && item.name.endsWith('.md') && <button className="text-button" disabled={busy} aria-label={`生成 PPTX 版本 ${item.name}`} onClick={() => onGeneratePptx({ name: item.name, path: item.path })}>生成 PPTX</button>}</div></div>;
+  const node = (item: FileNode) => item.kind === 'directory' ? <details key={item.path} open={item.path === '020_clean'}><summary><span className="folder-chevron" aria-hidden="true">›</span><FolderIcon /><code>{item.name}</code></summary>{folderNotes[item.path] && <p className="folder-note">{folderNotes[item.path]}</p>}{item.children?.length ? <div className="file-children">{item.children.map(node)}</div> : <p>空文件夹 · 尚无文件</p>}</details> : <div key={item.path} className="project-file-row"><span className="file-name" title={item.name}>{item.name}</span><div className="file-actions"><button className="text-button" disabled={busy} aria-label={`下载 ${item.name}`} onClick={() => { void act(() => downloadFile(project.id, item), '已准备文件下载。'); }}>下载</button>{!project.archivedAt && item.path.startsWith('010_draw/') && <button className="text-button" disabled={busy} aria-label={`复制到分析区 ${item.name}`} onClick={() => { void act(() => copyToClean(project.id, item.path), '已复制到 020_clean，Agent 现在可以读取该副本；未自动开始分析。'); }}>放入分析区</button>}{!project.archivedAt && onGeneratePptx && item.path.startsWith('060_reports/') && item.name.endsWith('.md') && <button className="text-button" disabled={busy} aria-label={`生成 PPTX 版本 ${item.name}`} onClick={() => onGeneratePptx({ name: item.name, path: item.path })}>生成 PPTX</button>}{!project.archivedAt && onRefinePptx && item.path.startsWith('060_reports/') && /\.pptx$/i.test(item.name) && <button className="text-button" disabled={busy} aria-label={`逐页精修 ${item.name}`} onClick={event => beginRefiner({ name: item.name, path: item.path }, event.currentTarget)}>逐页精修</button>}</div></div>;
   return <aside id="project-files" className="project-files" aria-label="项目文件">
     <div className="project-files-heading"><div><span className="eyebrow">项目空间</span><h2 ref={heading} tabIndex={-1}>项目文件</h2></div><button className="icon-button" aria-label="关闭项目文件栏" onClick={onClose}>✕</button></div>
     <div className="project-files-info"><FolderIcon /><div><strong>{project.name}</strong><span>本机项目 · 3 个默认文件夹</span></div></div>
@@ -43,6 +57,13 @@ export function ProjectFiles({ project, refreshToken, onClose, onGeneratePptx }:
     <div className="file-tree-toolbar"><span>项目目录</span><button className="text-button" disabled={busy || loading} onClick={() => { void refresh(); }}>刷新文件</button></div>
     {loading && <p className="file-feedback" role="status">正在读取项目文件…</p>}{error && <p className="file-feedback field-error" role="alert">{error}</p>}{notice && <p className="file-feedback" role="status">{notice}</p>}
     <nav className="project-file-tree" aria-label="项目文件夹">{files.map(node)}</nav>
+    {pendingPptx && <dialog ref={reportPicker} className="catalog-dialog project-dialog" aria-labelledby="ppt-report-picker-title" onClose={closeReportPicker}>
+      <h2 id="ppt-report-picker-title">选择正式报告锚点</h2><p className="detail-summary">为 {pendingPptx.name} 选择同项目的 md 报告。精修保留该报告原文，终版另存差异清单。</p>
+      <form onSubmit={event => { event.preventDefault(); if (!reports.some(report => report.path === selectedReport)) { setPickerError('请选择本项目的正式 md 报告。'); return; } const file = pendingPptx; reportPicker.current?.close(); onRefinePptx?.(file, selectedReport); }}>
+        <div className="field"><label htmlFor="ppt-anchor-report">正式 md 报告</label><select id="ppt-anchor-report" value={selectedReport} required aria-invalid={Boolean(pickerError)} aria-describedby="ppt-anchor-help" onChange={event => { setSelectedReport(event.target.value); setPickerError(''); }}><option value="">请选择报告</option>{reports.map(report => <option key={report.path} value={report.path}>{report.path}</option>)}</select><p id="ppt-anchor-help" className={pickerError ? 'field-error' : 'field-help'} role={pickerError ? 'alert' : undefined}>{pickerError || '只显示当前项目 060_reports 中的 md 报告。'}</p></div>
+        <div className="project-dialog-actions"><button className="secondary-button" type="button" onClick={() => reportPicker.current?.close()}>取消</button><button className="primary-button" type="submit" disabled={!selectedReport}>打开逐页精修</button></div>
+      </form>
+    </dialog>}
     <footer><span>文件保存在本机</span><code title={project.rootPath}>{project.rootPath}</code></footer>
   </aside>;
 }

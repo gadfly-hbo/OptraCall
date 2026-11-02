@@ -15,7 +15,7 @@
 
 ## 接入关系与类型
 
-Host静态注册profile，用`createAgentSessionDomain(options)`创建独立域实例；项目域和需求域共用代码，各自持有owner的运行资源。Host持域管理引用，业务只获得`AgentSessionPort<Owner>`及Host核验后产生的`SessionRef<Owner>`。当前`AgentSessionPort`排除`name`、`ref`、`closeAll`、`execution`、`owns`、`registerFresh`和`executionState`；现有业务入口也可以继续注入更窄的业务facade，如需求的`run/withSession/stop`。
+Host静态注册profile，用`createAgentSessionDomain(options)`创建独立域实例；项目域和需求域共用代码，各自持有owner的运行资源。Host持域管理引用，业务只获得`AgentSessionPort<Owner>`及Host核验后产生的`SessionRef<Owner>`。当前`AgentSessionPort`排除`name`、`ref`、`closeAll`、`busyInScope`、`execution`、`owns`、`registerFresh`和`executionState`；现有业务入口也可以继续注入更窄的业务facade，如需求的`run/withSession/stop`。
 
 | 类型 | 用途 |
 | --- | --- |
@@ -28,6 +28,8 @@ Host静态注册profile，用`createAgentSessionDomain(options)`创建独立域�
 | `AgentSessionDomain<Owner>` | Host管理表面，另有注册Ref及按范围关闭能力；不传给Extension |
 
 TypeScript类型本身不构成安全隔离。Host仍负责封闭注册、验证真实业务归属和授权；调用方拿到合法Ref也不能扩大数据、工具或经营动作权限。域与owner隔离是同进程逻辑隔离，不是进程隔离或敏感数据沙箱。
+
+PPT接线修复为Host增加同一公共域上的只读`busyInScope({projectId?,provider?})`查询：直接投影原slot、operation、opening、resource及retirement状态，覆盖准备、阶段间和收尾，不创建资源或第二份状态台账。它与`closeAll`一样只留在Host管理表面，排除于业务`AgentSessionPort`；业务调用子集及Interface v3不变。真实项目owner仍由Host验证，不能从客户端路径自造；检查覆盖匹配／不匹配范围、取消后的实际收尾和第三合成消费者。
 
 ## 最小业务调用
 

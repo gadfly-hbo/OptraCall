@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { loadSkillsFromDir } from '../src/agent/sdk.ts';
 import { snapshotProtectedSkills } from '../src/agent/protected-skills.ts';
 
@@ -30,4 +31,17 @@ test('unsafe skill attachments never become visible as a partial accepted snapsh
   const result = snapshotProtectedSkills(loaded, destination);
   assert.equal(result.skills.length, 0); assert.deepEqual(result.unavailable, ['unsafe']); assert.deepEqual(readdirSync(destination), []);
   assert.equal(readFileSync(secret, 'utf8'), 'PRIVATE');
+});
+
+test('PPT skill discovery and protected snapshot retain the real page-order helper and complete assets', () => {
+  const codeRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const source = path.join(codeRoot, 'extensions/analysis-assets');
+  const skill = loadSkillsFromDir({ dir: source, source: 'project' }).skills.find(item => item.name === 'ppt-report');
+  assert.ok(skill, 'the actual repository asset must be discoverable by the locked SDK');
+  const destination = mkdtempSync(path.join(os.tmpdir(), 'optracall-ppt-snapshot-'));
+  const result = snapshotProtectedSkills([skill], destination);
+  assert.deepEqual(result.unavailable, []); assert.equal(result.skills.length, 1);
+  for (const relative of ['SKILL.md', 'scripts/pptx_parts.py', 'scripts/splice_slide.py', 'references/design-system.md']) {
+    assert.deepEqual(readFileSync(path.join(result.skills[0]!.baseDir, relative)), readFileSync(path.join(skill.baseDir, relative)), relative);
+  }
 });

@@ -13,6 +13,8 @@ export type DeckMeta = Readonly<{
   createdAt: string;
   updatedAt: string;
   configuration?: Readonly<{ id: string; revision?: number }>;
+  /** Missing on legacy decks; it must not be guessed from the latest version number. */
+  currentVersion?: number;
 }>;
 export type VersionEntry = Readonly<{
   version: number;
@@ -21,6 +23,10 @@ export type VersionEntry = Readonly<{
   summary: string;
   diffs: readonly DiffEntry[];
   undone?: boolean;
+  /** null is a known root; missing is legacy/unknown history. */
+  parentVersion?: number | null;
+  /** Only explicit false marks a content change without a verified difference record. */
+  diffsKnown?: boolean;
 }>;
 
 export class DeckFault extends Error {
