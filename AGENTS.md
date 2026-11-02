@@ -2,6 +2,8 @@
 
 开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.2](docs/OptraCall_产品讨论稿_v0.2.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
 
+本项目遵循“Host 管环境，Agent 自主执行”，优先复用既有 SDK／Runtime 能力。新增设计遵守[工程规范第2节](docs/engineering-workflow.md#产品-agent-与工程-agent)，最终验收完成[职责边界及复用检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；详细规则仅在工程规范维护。
+
 涉及Agent交互、SDK接入、会话启停/恢复、模型配置或插件接入的变更，开始前必须读取工程规范的IN01–IN07及[统一会话接入说明](docs/agent-session-integration.md)，在本变更规格记录Interface版本、owner/profile和验收范围。Codex、Qoder共用这些规则；工具入口只引用同一来源。
 
 当前为[固定版本与MacBook试用交付](openspec/changes/current-version-trial-delivery/spec.md)：用户授权固定现有A/B/C、自动核算及托管优化候选，更新main并完成检查、非作者复核和CI后合并，再更新MacBook供用户体验。暂停新的模型全链路实验；保留专业FAIL、项目、会话和文件，不切换Mac mini运行服务。试用范围见[说明](docs/current-version-trial.md)，实际交付按[记录](openspec/changes/current-version-trial-delivery/result.md)分别核对。
