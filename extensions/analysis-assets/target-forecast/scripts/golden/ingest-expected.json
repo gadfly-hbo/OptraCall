@@ -1,0 +1,222 @@
+{
+ "expected": {
+  "agg_unified": [
+   {
+    "buyers": 400,
+    "gmv": 87000.0,
+    "month": "2025-01",
+    "new_customers": 100,
+    "new_gmv": 15000.0,
+    "new_orders": 100,
+    "old_customers": 300,
+    "old_gmv": 72000.0,
+    "old_orders": 360.0,
+    "orders": 460.0,
+    "platform": "私域",
+    "units": null,
+    "uv": 7800
+   },
+   {
+    "buyers": 420,
+    "gmv": 96487.5,
+    "month": "2025-02",
+    "new_customers": 110,
+    "new_gmv": 17050.0,
+    "new_orders": 110,
+    "old_customers": 310,
+    "old_gmv": 79437.5,
+    "old_orders": 387.5,
+    "orders": 497.5,
+    "platform": "私域",
+    "units": null,
+    "uv": 8100
+   }
+  ],
+  "blockers": {
+   "bad_date": {
+    "error": "[测试] 「日期」列存在无法解析的值（第 2 行），请检查格式"
+   },
+   "dup_month": {
+    "error": "[测试] 月份 2025-01 重复出现（第 2、3 行），请先消除重复月份"
+   },
+   "nonpositive_amount": {
+    "error": "[测试] 「实付金额」存在空值/非正值（第 2 行，共 1 行）。口径：实付金额=支付净额（已扣退款），本工具不做退款抵减；请按净额口径导出或剔除退款行"
+   },
+   "order_identity": {
+    "error": "[测试] 同一订单号对应多个用户（订单号 O1，如第 2、3 行），请先核对订单身份"
+   }
+  },
+  "detail_structure": [
+   {
+    "gmv": 89.0,
+    "品类": "裤装",
+    "梯队": "爆款",
+    "款数": 1
+   },
+   {
+    "gmv": 45.0,
+    "品类": "配饰",
+    "梯队": "新品",
+    "款数": 1
+   }
+  ],
+  "detail_unified": [
+   {
+    "buyers": 2,
+    "gmv": 556.0,
+    "month": "2025-01",
+    "new_customers": 2,
+    "new_gmv": 556.0,
+    "new_orders": 2,
+    "old_customers": 0,
+    "old_gmv": 0.0,
+    "old_orders": 0,
+    "orders": 2,
+    "platform": "天猫",
+    "units": 4,
+    "uv": null
+   },
+   {
+    "buyers": 1,
+    "gmv": 299.0,
+    "month": "2025-02",
+    "new_customers": 0,
+    "new_gmv": 0.0,
+    "new_orders": 0,
+    "old_customers": 1,
+    "old_gmv": 299.0,
+    "old_orders": 1,
+    "orders": 1,
+    "platform": "天猫",
+    "units": 1,
+    "uv": null
+   },
+   {
+    "buyers": 1,
+    "gmv": 89.0,
+    "month": "2025-06",
+    "new_customers": 1,
+    "new_gmv": 89.0,
+    "new_orders": 1,
+    "old_customers": 0,
+    "old_gmv": 0.0,
+    "old_orders": 0,
+    "orders": 1,
+    "platform": "天猫",
+    "units": 1,
+    "uv": null
+   },
+   {
+    "buyers": 1,
+    "gmv": 45.0,
+    "month": "2026-02",
+    "new_customers": 1,
+    "new_gmv": 45.0,
+    "new_orders": 1,
+    "old_customers": 0,
+    "old_gmv": 0.0,
+    "old_orders": 0,
+    "orders": 1,
+    "platform": "天猫",
+    "units": 3,
+    "uv": null
+   }
+  ],
+  "order_level_rows": 5
+ },
+ "input": {
+  "agg_rows": [
+   {
+    "UV": 7800,
+    "新客客单": 150.0,
+    "新客数": 100,
+    "月份": "2025-01",
+    "老客复购频次": 1.2,
+    "老客客单": 200.0,
+    "老客数": 300
+   },
+   {
+    "UV": 8100,
+    "新客客单": 155.0,
+    "新客数": 110,
+    "月份": "2025-02",
+    "老客复购频次": 1.25,
+    "老客客单": 205.0,
+    "老客数": 310
+   }
+  ],
+  "caliber": {
+   "baseline_months": 12,
+   "goods_window_months": 12,
+   "new_customer_window_days": 365,
+   "new_product_days": 90,
+   "target_months": 12,
+   "tier_pareto_pct": 0.78,
+   "tier_scope": "platform",
+   "tier_tail_pct": 0.2
+  },
+  "detail_rows": [
+   {
+    "件数": 1,
+    "原价金额": 199.0,
+    "品类": "上衣",
+    "商品ID": "S1",
+    "实付金额": 199.0,
+    "日期": "2025-01-10",
+    "用户ID": "U1",
+    "订单号": "O1"
+   },
+   {
+    "件数": 2,
+    "原价金额": 158.0,
+    "品类": "裤装",
+    "商品ID": "S2",
+    "实付金额": 158.0,
+    "日期": "2025-01-10",
+    "用户ID": "U1",
+    "订单号": "O1"
+   },
+   {
+    "件数": 1,
+    "原价金额": 199.0,
+    "品类": "上衣",
+    "商品ID": "S1",
+    "实付金额": 199.0,
+    "日期": "2025-01-20",
+    "用户ID": "U2",
+    "订单号": "O2"
+   },
+   {
+    "件数": 1,
+    "原价金额": 299.0,
+    "品类": "鞋靴",
+    "商品ID": "S3",
+    "实付金额": 299.0,
+    "日期": "2025-02-15",
+    "用户ID": "U1",
+    "订单号": "O3"
+   },
+   {
+    "件数": 1,
+    "原价金额": 89.0,
+    "品类": "裤装",
+    "商品ID": "S2",
+    "实付金额": 89.0,
+    "日期": "2025-06-01",
+    "用户ID": "U3",
+    "订单号": "O4"
+   },
+   {
+    "件数": 3,
+    "原价金额": 45.0,
+    "品类": "配饰",
+    "商品ID": "S4",
+    "实付金额": 45.0,
+    "日期": "2026-02-25",
+    "用户ID": "U2",
+    "订单号": "O5"
+   }
+  ],
+  "new_customer_window_days": 365
+ }
+}

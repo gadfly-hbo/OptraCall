@@ -1,0 +1,477 @@
+{
+ "expected": {
+  "baseline": {
+   "conclusion": {
+    "evidence_status": "synthetic_assumptions",
+    "message": "存在潜在可行方案，但关键行为参数缺少适用证据（证据状态：synthetic_assumptions），建议小范围验证后再放量",
+    "type": "needs_validation"
+   },
+   "delta_pi_cents": {
+    "无券": 0.0,
+    "满109减5": -1005414.784422,
+    "满129减5": -50798.718081,
+    "满139减10": -412744.664476,
+    "满139减20": -3193377.546669,
+    "满139减5": 47473.713987,
+    "满159减10": 876986.750491,
+    "满159减5": 638507.611567,
+    "满79减5": -1722662.241943,
+    "满99减10": -3182575.216157
+   },
+   "selected_label": "满159减10",
+   "top_label": "满159减10"
+  },
+  "scenarios": [
+   {
+    "changes": {
+     "behavior.conversion.k": 0.45
+    },
+    "name": "低响应",
+    "ranking_changed": true,
+    "rows": [
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08,
+      "delta_pi_cents": 0.0,
+      "feasible": true,
+      "label": "无券",
+      "merchant_subsidy_cents": 0.0
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08203920904911596,
+      "delta_pi_cents": -2148738.19131,
+      "feasible": false,
+      "label": "满79减5",
+      "merchant_subsidy_cents": 2875744.141777
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08326307153273643,
+      "delta_pi_cents": -3898938.85252,
+      "feasible": false,
+      "label": "满99减10",
+      "merchant_subsidy_cents": 5537175.8455
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.0811046558496826,
+      "delta_pi_cents": -1462845.977082,
+      "feasible": false,
+      "label": "满109减5",
+      "merchant_subsidy_cents": 2235768.064573
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08042328361346879,
+      "delta_pi_cents": -521031.27622,
+      "feasible": false,
+      "label": "满129减5",
+      "merchant_subsidy_cents": 1399604.382509
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08028518388611557,
+      "delta_pi_cents": -427778.084574,
+      "feasible": false,
+      "label": "满139减5",
+      "merchant_subsidy_cents": 1300297.844786
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08169036777223113,
+      "delta_pi_cents": -1233751.85872,
+      "feasible": false,
+      "label": "满139减10",
+      "merchant_subsidy_cents": 3281191.379141
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.0843662673185092,
+      "delta_pi_cents": -4317406.323648,
+      "feasible": false,
+      "label": "满139减20",
+      "merchant_subsidy_cents": 7940083.257035
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.0798141581473594,
+      "delta_pi_cents": 155111.385152,
+      "feasible": true,
+      "label": "满159减5",
+      "merchant_subsidy_cents": 681810.462738
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08106831629471879,
+      "delta_pi_cents": 23401.84483,
+      "feasible": true,
+      "label": "满159减10",
+      "merchant_subsidy_cents": 2087241.850952
+     }
+    ],
+    "selected_still_feasible": true,
+    "top_label": "满159减5"
+   },
+   {
+    "changes": {
+     "behavior.conversion.k": 1.35
+    },
+    "name": "高响应",
+    "ranking_changed": true,
+    "rows": [
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08,
+      "delta_pi_cents": 0.0,
+      "feasible": true,
+      "label": "无券",
+      "merchant_subsidy_cents": 0.0
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08659617107443242,
+      "delta_pi_cents": -1296586.292576,
+      "feasible": false,
+      "label": "满79减5",
+      "merchant_subsidy_cents": 3103592.243043
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.09053579880546371,
+      "delta_pi_cents": -2466211.579793,
+      "feasible": false,
+      "label": "满99减10",
+      "merchant_subsidy_cents": 6264448.572773
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08440740814326057,
+      "delta_pi_cents": -547983.591761,
+      "feasible": false,
+      "label": "满109减5",
+      "merchant_subsidy_cents": 2400905.679252
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08321398128788739,
+      "delta_pi_cents": 419433.840059,
+      "feasible": true,
+      "label": "满129减5",
+      "merchant_subsidy_cents": 1539139.26623
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08287511194366952,
+      "delta_pi_cents": 522725.512548,
+      "feasible": true,
+      "label": "满139减5",
+      "merchant_subsidy_cents": 1429794.247664
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08687022388733905,
+      "delta_pi_cents": 408262.529769,
+      "feasible": true,
+      "label": "满139减10",
+      "merchant_subsidy_cents": 3799176.990652
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.09472597954872503,
+      "delta_pi_cents": -2069348.769691,
+      "feasible": false,
+      "label": "满139减20",
+      "merchant_subsidy_cents": 10012025.703078
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08207830909075563,
+      "delta_pi_cents": 1121903.837982,
+      "feasible": true,
+      "label": "满159减5",
+      "merchant_subsidy_cents": 795018.009908
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08559661818151125,
+      "delta_pi_cents": 1730571.656151,
+      "feasible": true,
+      "label": "满159减10",
+      "merchant_subsidy_cents": 2540072.039631
+     }
+    ],
+    "selected_still_feasible": true,
+    "top_label": "满159减10"
+   },
+   {
+    "changes": {
+     "behavior.churn": 0.05,
+     "behavior.q_curve.q_cap": 0.4
+    },
+    "name": "低凑单高流失",
+    "ranking_changed": true,
+    "rows": [
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08,
+      "delta_pi_cents": 0.0,
+      "feasible": true,
+      "label": "无券",
+      "merchant_subsidy_cents": 0.0
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08385787207088861,
+      "delta_pi_cents": -1819556.886683,
+      "feasible": false,
+      "label": "满79减5",
+      "merchant_subsidy_cents": 2888758.146838
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08600611214319327,
+      "delta_pi_cents": -3033050.880876,
+      "feasible": false,
+      "label": "满99减10",
+      "merchant_subsidy_cents": 5234042.468205
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.081819351922195,
+      "delta_pi_cents": -1275701.693609,
+      "feasible": false,
+      "label": "满109减5",
+      "merchant_subsidy_cents": 2201737.243296
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08017561614474294,
+      "delta_pi_cents": -605963.257825,
+      "feasible": false,
+      "label": "满129减5",
+      "merchant_subsidy_cents": 1284453.354046
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.0799277028792272,
+      "delta_pi_cents": -560354.748549,
+      "feasible": false,
+      "label": "满139减5",
+      "merchant_subsidy_cents": 1227271.224551
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08265540575845438,
+      "delta_pi_cents": -899251.946198,
+      "feasible": false,
+      "label": "满139减10",
+      "merchant_subsidy_cents": 2989084.898204
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08794272623446742,
+      "delta_pi_cents": -2926690.659761,
+      "feasible": false,
+      "label": "满139减20",
+      "merchant_subsidy_cents": 7443998.463049
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.07881675428797283,
+      "delta_pi_cents": -197613.998925,
+      "feasible": false,
+      "label": "满159减5",
+      "merchant_subsidy_cents": 585810.891746
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08123350857594566,
+      "delta_pi_cents": 165150.21866,
+      "feasible": true,
+      "label": "满159减10",
+      "merchant_subsidy_cents": 1703243.566985
+     }
+    ],
+    "selected_still_feasible": true,
+    "top_label": "满159减10"
+   },
+   {
+    "changes": {
+     "behavior.conversion.k": 0.25
+    },
+    "name": "极低响应",
+    "ranking_changed": true,
+    "rows": [
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08,
+      "delta_pi_cents": 0.0,
+      "feasible": true,
+      "label": "无券",
+      "merchant_subsidy_cents": 0.0
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08102655082126786,
+      "delta_pi_cents": -2338105.279918,
+      "feasible": false,
+      "label": "满79减5",
+      "merchant_subsidy_cents": 2825111.230385
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08164690991657482,
+      "delta_pi_cents": -4217322.690904,
+      "feasible": false,
+      "label": "满99减10",
+      "merchant_subsidy_cents": 5375559.683884
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08037071089555416,
+      "delta_pi_cents": -1666148.729376,
+      "feasible": false,
+      "label": "满109减5",
+      "merchant_subsidy_cents": 2199070.816867
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.07980312857470909,
+      "delta_pi_cents": -730023.524282,
+      "feasible": false,
+      "label": "满129减5",
+      "merchant_subsidy_cents": 1368596.630571
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.07970964431777025,
+      "delta_pi_cents": -639001.106157,
+      "feasible": false,
+      "label": "满139减5",
+      "merchant_subsidy_cents": 1271520.866369
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08053928863554048,
+      "delta_pi_cents": -1598643.945051,
+      "feasible": false,
+      "label": "满139减10",
+      "merchant_subsidy_cents": 3166083.465472
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.0820641090451279,
+      "delta_pi_cents": -4816974.668971,
+      "feasible": false,
+      "label": "满139减20",
+      "merchant_subsidy_cents": 7479651.602358
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.07931101349327135,
+      "delta_pi_cents": -59731.382144,
+      "feasible": false,
+      "label": "满159减5",
+      "merchant_subsidy_cents": 656653.230034
+     },
+     {
+      "budget_exceeded": false,
+      "conversion_rate": 0.08006202698654269,
+      "delta_pi_cents": -355969.224352,
+      "feasible": false,
+      "label": "满159减10",
+      "merchant_subsidy_cents": 1986612.920134
+     }
+    ],
+    "selected_still_feasible": false,
+    "top_label": "无券"
+   }
+  ],
+  "sensitive_params": [
+   {
+    "delta_pi_spread_cents": 1232955.974843,
+    "delta_pi_values_cents": [
+     -355969.224352,
+     876986.750491
+    ],
+    "param": "极低响应"
+   },
+   {
+    "delta_pi_spread_cents": 853584.905661,
+    "delta_pi_values_cents": [
+     23401.84483,
+     876986.750491
+    ],
+    "param": "低响应"
+   },
+   {
+    "delta_pi_spread_cents": 853584.9056599999,
+    "delta_pi_values_cents": [
+     1730571.656151,
+     876986.750491
+    ],
+    "param": "高响应"
+   },
+   {
+    "delta_pi_spread_cents": 711836.531831,
+    "delta_pi_values_cents": [
+     165150.21866,
+     876986.750491
+    ],
+    "param": "低凑单高流失"
+   }
+  ],
+  "single_factor": [
+   {
+    "delta_pi_spread_cents": 853584.905661,
+    "delta_pi_values_cents": [
+     23401.84483,
+     876986.750491
+    ],
+    "param": "低响应"
+   },
+   {
+    "delta_pi_spread_cents": 853584.9056599999,
+    "delta_pi_values_cents": [
+     1730571.656151,
+     876986.750491
+    ],
+    "param": "高响应"
+   },
+   {
+    "delta_pi_spread_cents": 711836.531831,
+    "delta_pi_values_cents": [
+     165150.21866,
+     876986.750491
+    ],
+    "param": "低凑单高流失"
+   },
+   {
+    "delta_pi_spread_cents": 1232955.974843,
+    "delta_pi_values_cents": [
+     -355969.224352,
+     876986.750491
+    ],
+    "param": "极低响应"
+   }
+  ]
+ },
+ "input": {
+  "variants": {
+   "低凑单高流失": {
+    "behavior.churn": 0.05,
+    "behavior.q_curve.q_cap": 0.4
+   },
+   "低响应": {
+    "behavior.conversion.k": 0.45
+   },
+   "极低响应": {
+    "behavior.conversion.k": 0.25
+   },
+   "高响应": {
+    "behavior.conversion.k": 1.35
+   }
+  }
+ }
+}

@@ -45,3 +45,21 @@ test('PPT skill discovery and protected snapshot retain the real page-order help
     assert.deepEqual(readFileSync(path.join(result.skills[0]!.baseDir, relative)), readFileSync(path.join(skill.baseDir, relative)), relative);
   }
 });
+
+test('TF01: the three forecast skills load from the analysis-assets directory and snapshot intact', () => {
+  const codeRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const source = path.join(codeRoot, 'extensions/analysis-assets');
+  const { skills } = loadSkillsFromDir({ dir: source, source: 'project' });
+  const byName = new Map(skills.map(item => [item.name, item]));
+  for (const name of ['target-forecast', 'coupon-forecast', 'roi-forecast']) {
+    const skill = byName.get(name);
+    assert.ok(skill, `${name} must be discoverable by the locked SDK; got ${skills.map(item => item.name).join(',')}`);
+    assert.equal(skill.baseDir, path.join(source, name), `${name} must resolve to its analysis-assets directory`);
+    assert.ok((skill.description ?? '').length > 30, `${name} must carry an activation description`);
+  }
+  const destination = mkdtempSync(path.join(os.tmpdir(), 'optracall-tf-snapshot-'));
+  const picked = ['target-forecast', 'coupon-forecast', 'roi-forecast'].map(name => byName.get(name)!);
+  const result = snapshotProtectedSkills(picked, destination);
+  assert.deepEqual(result.unavailable, []); assert.equal(result.skills.length, 3);
+  for (const skill of result.skills) assert.ok(readFileSync(path.join(skill.baseDir, 'SKILL.md'), 'utf8').length > 0);
+});

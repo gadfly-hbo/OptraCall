@@ -1,0 +1,1142 @@
+{
+ "compare": {
+  "conclusion": {
+   "evidence_status": "synthetic_assumptions",
+   "message": "存在潜在可行方案，但关键行为参数缺少适用证据（证据状态：synthetic_assumptions），建议小范围验证后再放量",
+   "type": "needs_validation"
+  },
+  "objective": "incremental_contribution",
+  "pareto": [
+   "满159减10"
+  ],
+  "ranking": [
+   "满159减10",
+   "满159减5",
+   "满139减5",
+   "无券"
+  ],
+  "rows": [
+   {
+    "breakeven": null,
+    "candidate": {
+     "enabled": false,
+     "face_value_cents": 0,
+     "label": "无券",
+     "threshold_cents": null
+    },
+    "controlled_loss": false,
+    "feasible": true,
+    "label": "无券",
+    "metrics": {
+     "avg_contribution_cents": 3300.0,
+     "baseline_contribution_cents": 26400000.0,
+     "churn_rate": 0.0,
+     "conversion_rate": 0.08,
+     "delta_c": 0.0,
+     "gmv_paid_cents": 88000000.0,
+     "gmv_pre_cents": 88000000.0,
+     "gross_new_rate": 0.0,
+     "incremental_contribution_cents": 0.0,
+     "lost_orders": 0,
+     "merchant_subsidy_cents": 0.0,
+     "natural_redemptions": 0,
+     "new_orders": 0,
+     "orders": 8000.0,
+     "orders_baseline": 8000.0,
+     "platform_subsidy_cents": 0.0,
+     "retention": 1.0,
+     "roi": null,
+     "topup_redemptions": 0,
+     "total_contribution_cents": 26400000.0
+    },
+    "violations": []
+   },
+   {
+    "breakeven": null,
+    "candidate": {
+     "enabled": true,
+     "face_value_cents": 500,
+     "label": "满79减5",
+     "threshold_cents": 7900
+    },
+    "controlled_loss": false,
+    "feasible": false,
+    "label": "满79减5",
+    "metrics": {
+     "avg_contribution_cents": 2926.709418,
+     "baseline_contribution_cents": 26400000.0,
+     "churn_rate": 0.000239271963542275,
+     "conversion_rate": 0.08431769006177418,
+     "delta_c": 0.004317690061774181,
+     "gmv_paid_cents": 89233684.975813,
+     "gmv_pre_cents": 92223353.168223,
+     "gross_new_rate": 0.004556962025316456,
+     "incremental_contribution_cents": -1722662.241943,
+     "lost_orders": 23.927196354227497,
+     "merchant_subsidy_cents": 2989668.19241,
+     "natural_redemptions": 5120.0,
+     "new_orders": 455.6962025316456,
+     "orders": 8431.769006177417,
+     "orders_baseline": 8000.0,
+     "platform_subsidy_cents": 0.0,
+     "retention": 0.9970091004557216,
+     "roi": -0.5762051609327066,
+     "topup_redemptions": 403.6401822886252,
+     "total_contribution_cents": 24677337.758057
+    },
+    "violations": [
+     {
+      "constraint": "incremental_contribution",
+      "message": "增量贡献 -17226.62 元低于底线 0.00 元"
+     }
+    ]
+   },
+   {
+    "breakeven": null,
+    "candidate": {
+     "enabled": true,
+     "face_value_cents": 1000,
+     "label": "满99减10",
+     "threshold_cents": 9900
+    },
+    "controlled_loss": false,
+    "feasible": false,
+    "label": "满99减10",
+    "metrics": {
+     "avg_contribution_cents": 2671.757847,
+     "baseline_contribution_cents": 26400000.0,
+     "churn_rate": 0.00037329210362720437,
+     "conversion_rate": 0.08689943516910008,
+     "delta_c": 0.006899435169100068,
+     "gmv_paid_cents": 91159977.767464,
+     "gmv_pre_cents": 97060789.976601,
+     "gross_new_rate": 0.007272727272727273,
+     "incremental_contribution_cents": -3182575.216157,
+     "lost_orders": 37.32921036272044,
+     "merchant_subsidy_cents": 5900812.209137,
+     "natural_redemptions": 3840.0,
+     "new_orders": 727.2727272727273,
+     "orders": 8689.943516910007,
+     "orders_baseline": 8000.0,
+     "platform_subsidy_cents": 0.0,
+     "retention": 0.9953338487046599,
+     "roi": -0.5393452805071483,
+     "topup_redemptions": 1333.5394818639784,
+     "total_contribution_cents": 23217424.783843
+    },
+    "violations": [
+     {
+      "constraint": "incremental_contribution",
+      "message": "增量贡献 -31825.75 元低于底线 0.00 元"
+     }
+    ]
+   },
+   {
+    "breakeven": null,
+    "candidate": {
+     "enabled": true,
+     "face_value_cents": 500,
+     "label": "满109减5",
+     "threshold_cents": 10900
+    },
+    "controlled_loss": false,
+    "feasible": false,
+    "label": "满109减5",
+    "metrics": {
+     "avg_contribution_cents": 3068.608366,
+     "baseline_contribution_cents": 26400000.0,
+     "churn_rate": 0.000546720297106392,
+     "conversion_rate": 0.0827560319964716,
+     "delta_c": 0.0027560319964715896,
+     "gmv_paid_cents": 90058070.086392,
+     "gmv_pre_cents": 92376406.958305,
+     "gross_new_rate": 0.0033027522935779817,
+     "incremental_contribution_cents": -1005414.784422,
+     "lost_orders": 54.672029710639194,
+     "merchant_subsidy_cents": 2318336.871913,
+     "natural_redemptions": 3840.0,
+     "new_orders": 330.2752293577982,
+     "orders": 8275.60319964716,
+     "orders_baseline": 8000.0,
+     "platform_subsidy_cents": 0.0,
+     "retention": 0.9931659962861701,
+     "roi": -0.4336793313356443,
+     "topup_redemptions": 466.3985144680404,
+     "total_contribution_cents": 25394585.215578
+    },
+    "violations": [
+     {
+      "constraint": "incremental_contribution",
+      "message": "增量贡献 -10054.15 元低于底线 0.00 元"
+     }
+    ]
+   },
+   {
+    "breakeven": null,
+    "candidate": {
+     "enabled": true,
+     "face_value_cents": 500,
+     "label": "满129减5",
+     "threshold_cents": 12900
+    },
+    "controlled_loss": false,
+    "feasible": false,
+    "label": "满129减5",
+    "metrics": {
+     "avg_contribution_cents": 3220.440197,
+     "baseline_contribution_cents": 26400000.0,
+     "churn_rate": 0.0009720652237405247,
+     "conversion_rate": 0.08181863245067808,
+     "delta_c": 0.00181863245067808,
+     "gmv_paid_cents": 91259205.196592,
+     "gmv_pre_cents": 92728577.020961,
+     "gross_new_rate": 0.0027906976744186047,
+     "incremental_contribution_cents": -50798.718081,
+     "lost_orders": 97.20652237405248,
+     "merchant_subsidy_cents": 1469371.82437,
+     "natural_redemptions": 1920.0,
+     "new_orders": 279.06976744186045,
+     "orders": 8181.863245067808,
+     "orders_baseline": 8000.0,
+     "platform_subsidy_cents": 0.0,
+     "retention": 0.9878491847032435,
+     "roi": -0.03457172462305882,
+     "topup_redemptions": 739.6738812973762,
+     "total_contribution_cents": 26349201.281919
+    },
+    "violations": [
+     {
+      "constraint": "incremental_contribution",
+      "message": "增量贡献 -507.99 元低于底线 0.00 元"
+     }
+    ]
+   },
+   {
+    "breakeven": {
+     "budget_ok_at_be": true,
+     "c_be": 0.0814507917459898,
+     "d_c_plus_be": 0.0024605718886512216,
+     "delta_c_be": 0.0014507917459898045,
+     "merchant_subsidy_at_be_cents": 1358578.23778,
+     "nonpositive_pi_new": false,
+     "note": null,
+     "pi_new_avg_cents": 3670.0,
+     "reachable_cap": 0.92,
+     "within_reachable_cap": true
+    },
+    "candidate": {
+     "enabled": true,
+     "face_value_cents": 500,
+     "label": "满139减5",
+     "threshold_cents": 13900
+    },
+    "controlled_loss": false,
+    "feasible": true,
+    "label": "满139减5",
+    "metrics": {
+     "avg_contribution_cents": 3241.900682,
+     "baseline_contribution_cents": 26400000.0,
+     "churn_rate": 0.0010097801426614114,
+     "conversion_rate": 0.08158014791489254,
+     "delta_c": 0.0015801479148925455,
+     "gmv_paid_cents": 91343353.154479,
+     "gmv_pre_cents": 92708399.200703,
+     "gross_new_rate": 0.002589928057553957,
+     "incremental_contribution_cents": 47473.713987,
+     "lost_orders": 100.97801426614112,
+     "merchant_subsidy_cents": 1365046.046225,
+     "natural_redemptions": 1920.0,
+     "new_orders": 258.9928057553957,
+     "orders": 8158.014791489254,
+     "orders_baseline": 8000.0,
+     "platform_subsidy_cents": 0.0,
+     "retention": 0.9873777482167324,
+     "roi": 0.034778104459030984,
+     "topup_redemptions": 551.0992866929439,
+     "total_contribution_cents": 26447473.713987
+    },
+    "violations": []
+   },
+   {
+    "breakeven": null,
+    "candidate": {
+     "enabled": true,
+     "face_value_cents": 1000,
+     "label": "满139减10",
+     "threshold_cents": 13900
+    },
+    "controlled_loss": false,
+    "feasible": false,
+    "label": "满139减10",
+    "metrics": {
+     "avg_contribution_cents": 3083.431908,
+     "baseline_contribution_cents": 26400000.0,
+     "churn_rate": 0.0008995602853228224,
+     "conversion_rate": 0.08428029582978509,
+     "delta_c": 0.004280295829785091,
+     "gmv_paid_cents": 94884614.216509,
+     "gmv_pre_cents": 98424798.401405,
+     "gross_new_rate": 0.005179856115107914,
+     "incremental_contribution_cents": -412744.664476,
+     "lost_orders": 89.95602853228225,
+     "merchant_subsidy_cents": 3540184.184897,
+     "natural_redemptions": 1920.0,
+     "new_orders": 517.9856115107914,
+     "orders": 8428.02958297851,
+     "orders_baseline": 8000.0,
+     "platform_subsidy_cents": 0.0,
+     "retention": 0.9887554964334647,
+     "roi": -0.1165884719322897,
+     "topup_redemptions": 1102.1985733858878,
+     "total_contribution_cents": 25987255.335524
+    },
+    "violations": [
+     {
+      "constraint": "incremental_contribution",
+      "message": "增量贡献 -4127.45 元低于底线 0.00 元"
+     }
+    ]
+   },
+   {
+    "breakeven": null,
+    "candidate": {
+     "enabled": true,
+     "face_value_cents": 2000,
+     "label": "满139减20",
+     "threshold_cents": 13900
+    },
+    "controlled_loss": false,
+    "feasible": false,
+    "label": "满139减20",
+    "metrics": {
+     "avg_contribution_cents": 2591.583149,
+     "baseline_contribution_cents": 26400000.0,
+     "churn_rate": 0.0008135887965987233,
+     "conversion_rate": 0.0895461234336171,
+     "delta_c": 0.009546123433617104,
+     "gmv_paid_cents": 98299535.297898,
+     "gmv_pre_cents": 107275589.777954,
+     "gross_new_rate": 0.010359712230215827,
+     "incremental_contribution_cents": -3193377.546669,
+     "lost_orders": 81.35887965987231,
+     "merchant_subsidy_cents": 8976054.480056,
+     "natural_redemptions": 1920.0,
+     "new_orders": 1035.9712230215828,
+     "orders": 8954.61234336171,
+     "orders_baseline": 8000.0,
+     "platform_subsidy_cents": 0.0,
+     "retention": 0.989830140042516,
+     "roi": -0.35576628392401155,
+     "topup_redemptions": 1532.056017006384,
+     "total_contribution_cents": 23206622.453331
+    },
+    "violations": [
+     {
+      "constraint": "incremental_contribution",
+      "message": "增量贡献 -31933.78 元低于底线 0.00 元"
+     }
+    ]
+   },
+   {
+    "breakeven": {
+     "budget_ok_at_be": true,
+     "c_be": 0.07945089963412265,
+     "d_c_plus_be": 0.0007688169584613581,
+     "delta_c_be": -0.000549100365877353,
+     "merchant_subsidy_at_be_cents": 663647.537076,
+     "nonpositive_pi_new": false,
+     "note": null,
+     "pi_new_avg_cents": 4270.0,
+     "reachable_cap": 0.92,
+     "within_reachable_cap": true
+    },
+    "candidate": {
+     "enabled": true,
+     "face_value_cents": 500,
+     "label": "满159减5",
+     "threshold_cents": 15900
+    },
+    "controlled_loss": false,
+    "feasible": true,
+    "label": "满159减5",
+    "metrics": {
+     "avg_contribution_cents": 3340.304595,
+     "baseline_contribution_cents": 26400000.0,
+     "churn_rate": 0.0013179173243387176,
+     "conversion_rate": 0.08094623361905752,
+     "delta_c": 0.0009462336190575089,
+     "gmv_paid_cents": 91851325.256647,
+     "gmv_pre_cents": 92589739.49297,
+     "gross_new_rate": 0.0022641509433962265,
+     "incremental_contribution_cents": 638507.611567,
+     "lost_orders": 131.79173243387177,
+     "merchant_subsidy_cents": 738414.236323,
+     "natural_redemptions": 640.0,
+     "new_orders": 226.41509433962264,
+     "orders": 8094.623361905751,
+     "orders_baseline": 8000.0,
+     "platform_subsidy_cents": 0.0,
+     "retention": 0.9835260334457661,
+     "roi": 0.8647011124088073,
+     "topup_redemptions": 610.413378306412,
+     "total_contribution_cents": 27038507.611567
+    },
+    "violations": []
+   },
+   {
+    "breakeven": {
+     "budget_ok_at_be": true,
+     "c_be": 0.08100624243575227,
+     "d_c_plus_be": 0.0022020770844297104,
+     "delta_c_be": 0.001006242435752272,
+     "merchant_subsidy_at_be_cents": 2081034.465055,
+     "nonpositive_pi_new": false,
+     "note": null,
+     "pi_new_avg_cents": 3770.0,
+     "reachable_cap": 0.92,
+     "within_reachable_cap": true
+    },
+    "candidate": {
+     "enabled": true,
+     "face_value_cents": 1000,
+     "label": "满159减10",
+     "threshold_cents": 15900
+    },
+    "controlled_loss": false,
+    "feasible": true,
+    "label": "满159减10",
+    "metrics": {
+     "avg_contribution_cents": 3273.27243,
+     "baseline_contribution_cents": 26400000.0,
+     "churn_rate": 0.0011958346486774353,
+     "conversion_rate": 0.08333246723811502,
+     "delta_c": 0.0033324672381150177,
+     "gmv_paid_cents": 96321822.040647,
+     "gmv_pre_cents": 98635478.985939,
+     "gross_new_rate": 0.004528301886792453,
+     "incremental_contribution_cents": 876986.750491,
+     "lost_orders": 119.58346486774353,
+     "merchant_subsidy_cents": 2313656.945291,
+     "natural_redemptions": 640.0,
+     "new_orders": 452.8301886792453,
+     "orders": 8333.246723811502,
+     "orders_baseline": 8000.0,
+     "platform_subsidy_cents": 0.0,
+     "retention": 0.985052066891532,
+     "roi": 0.3790478758209756,
+     "topup_redemptions": 1220.826756612824,
+     "total_contribution_cents": 27276986.750491
+    },
+    "violations": []
+   }
+  ]
+ },
+ "golden_table": [
+  [
+   "无券",
+   null,
+   0,
+   0.08,
+   0.0,
+   264000.0,
+   0.0
+  ],
+  [
+   "满79减5",
+   7900,
+   500,
+   0.084318,
+   29896.68,
+   246773.38,
+   -17226.62
+  ],
+  [
+   "满99减10",
+   9900,
+   1000,
+   0.086899,
+   59008.12,
+   232174.25,
+   -31825.75
+  ],
+  [
+   "满109减5",
+   10900,
+   500,
+   0.082756,
+   23183.37,
+   253945.85,
+   -10054.15
+  ],
+  [
+   "满129减5",
+   12900,
+   500,
+   0.081819,
+   14693.72,
+   263492.01,
+   -507.99
+  ],
+  [
+   "满139减5",
+   13900,
+   500,
+   0.08158,
+   13650.46,
+   264474.74,
+   474.74
+  ],
+  [
+   "满139减10",
+   13900,
+   1000,
+   0.08428,
+   35401.84,
+   259872.55,
+   -4127.45
+  ],
+  [
+   "满139减20",
+   13900,
+   2000,
+   0.089546,
+   89760.54,
+   232066.22,
+   -31933.78
+  ],
+  [
+   "满159减5",
+   15900,
+   500,
+   0.080946,
+   7384.14,
+   270385.08,
+   6385.08
+  ],
+  [
+   "满159减10",
+   15900,
+   1000,
+   0.083332,
+   23136.57,
+   272769.87,
+   8769.87
+  ]
+ ],
+ "input_spec": {
+  "baseline": {
+   "baskets": [
+    {
+     "amount_cents": 6000,
+     "label": "A=60",
+     "weight": 0.2
+    },
+    {
+     "amount_cents": 9000,
+     "label": "A=90",
+     "weight": 0.2
+    },
+    {
+     "amount_cents": 11000,
+     "label": "A=110",
+     "weight": 0.3
+    },
+    {
+     "amount_cents": 14000,
+     "label": "A=140",
+     "weight": 0.2
+    },
+    {
+     "amount_cents": 19000,
+     "label": "A=190",
+     "weight": 0.1
+    }
+   ],
+   "conversion_rate": 0.08,
+   "data_snapshot_id": "synthetic-baskets-v1",
+   "visitors": 100000
+  },
+  "behavior": {
+   "churn": 0.02,
+   "conversion": {
+    "k": 0.9,
+    "mode": "relative",
+    "s_max": 0.5
+   },
+   "new_basket": [
+    {
+     "amount_cents": "at_threshold",
+     "label": "新增成交",
+     "margin_rate": 0.3,
+     "redeem": 1,
+     "weight": 1.0
+    }
+   ],
+   "q_curve": {
+    "d_ref": 0.1,
+    "lam": 2.2,
+    "q_cap": 0.8
+   },
+   "q_mode": "curve",
+   "reach_base": 1.0,
+   "reach_new": 1.0,
+   "redeem_natural": 0.8,
+   "redeem_topup": 1.0
+  },
+  "candidates": [
+   {
+    "enabled": false,
+    "face_value_cents": 0,
+    "label": "无券",
+    "threshold_cents": null
+   },
+   {
+    "enabled": true,
+    "face_value_cents": 500,
+    "label": "满79减5",
+    "threshold_cents": 7900
+   },
+   {
+    "enabled": true,
+    "face_value_cents": 1000,
+    "label": "满99减10",
+    "threshold_cents": 9900
+   },
+   {
+    "enabled": true,
+    "face_value_cents": 500,
+    "label": "满109减5",
+    "threshold_cents": 10900
+   },
+   {
+    "enabled": true,
+    "face_value_cents": 500,
+    "label": "满129减5",
+    "threshold_cents": 12900
+   },
+   {
+    "enabled": true,
+    "face_value_cents": 500,
+    "label": "满139减5",
+    "threshold_cents": 13900
+   },
+   {
+    "enabled": true,
+    "face_value_cents": 1000,
+    "label": "满139减10",
+    "threshold_cents": 13900
+   },
+   {
+    "enabled": true,
+    "face_value_cents": 2000,
+    "label": "满139减20",
+    "threshold_cents": 13900
+   },
+   {
+    "enabled": true,
+    "face_value_cents": 500,
+    "label": "满159减5",
+    "threshold_cents": 15900
+   },
+   {
+    "enabled": true,
+    "face_value_cents": 1000,
+    "label": "满159减10",
+    "threshold_cents": 15900
+   }
+  ],
+  "constraints": {
+   "allow_controlled_loss": false,
+   "merchant_coupon_budget_cents": null,
+   "min_incremental_contribution_cents": 0.0
+  },
+  "cost": {
+   "fee_basis": "customer_paid",
+   "fee_rate": 0.0,
+   "fixed_activity_cost_cents": 0.0,
+   "fixed_fee_cents": 0.0,
+   "margin_addon_rate": 0.3,
+   "margin_base_rate": 0.3,
+   "merchant_share_rho": 1.0,
+   "return_adj_cents": 0.0
+  },
+  "currency": "CNY",
+  "evidence_status": "synthetic_assumptions",
+  "objective": "incremental_contribution",
+  "observation_unit": "unique_visitor_first_paid_order",
+  "parameter_sources": {
+   "behavior.conversion": {
+    "note": "提案第七节演示参数",
+    "source_type": "synthetic_demo"
+   },
+   "behavior.q_curve": {
+    "note": "提案第七节演示参数",
+    "source_type": "synthetic_demo"
+   }
+  },
+  "scenario_id": "coupon-demo-001",
+  "schema_version": "2.0",
+  "window": {
+   "days": 7,
+   "type": "fixed_activity_window"
+  }
+ },
+ "rows": [
+  {
+   "candidate": {
+    "enabled": false,
+    "face_value_cents": 0,
+    "label": "无券",
+    "threshold_cents": null
+   },
+   "decomposition": {
+    "fixed_costs": -0.0,
+    "lost_orders": 0.0,
+    "natural_redemption": 0.0,
+    "new_orders": 0,
+    "other_retained": 0.0,
+    "topup": 0.0
+   },
+   "limitations": [
+    "可变费用未配置（按 0 计），履约/支付费用需另行确认",
+    "退货调整为 0 的情景估计，未含退货结算规则"
+   ],
+   "metrics": {
+    "avg_contribution_cents": 3300.0,
+    "baseline_contribution_cents": 26400000.0,
+    "churn_rate": 0.0,
+    "conversion_rate": 0.08,
+    "delta_c": 0.0,
+    "gmv_paid_cents": 88000000.0,
+    "gmv_pre_cents": 88000000.0,
+    "gross_new_rate": 0.0,
+    "incremental_contribution_cents": 0.0,
+    "lost_orders": 0,
+    "merchant_subsidy_cents": 0.0,
+    "natural_redemptions": 0,
+    "new_orders": 0,
+    "orders": 8000.0,
+    "orders_baseline": 8000.0,
+    "platform_subsidy_cents": 0.0,
+    "retention": 1.0,
+    "roi": null,
+    "topup_redemptions": 0,
+    "total_contribution_cents": 26400000.0
+   }
+  },
+  {
+   "candidate": {
+    "enabled": true,
+    "face_value_cents": 500,
+    "label": "满79减5",
+    "threshold_cents": 7900
+   },
+   "decomposition": {
+    "fixed_costs": -0.0,
+    "lost_orders": -43068.953438,
+    "natural_redemption": -2560000.0,
+    "new_orders": 852151.898734,
+    "other_retained": 0.0,
+    "topup": 28254.81276
+   },
+   "limitations": [
+    "加购金额按“恰好凑到门槛”(B=T)简化，非商品可凑性保证",
+    "凑单概率使用演示情景曲线 q=q_cap·exp(−λg)·min(1,(F/T)/d_ref)，非行为定律，参数须可替换",
+    "可变费用未配置（按 0 计），履约/支付费用需另行确认",
+    "退货调整为 0 的情景估计，未含退货结算规则",
+    "新增成交篮子为单一结果类型（金额=门槛）——演算简化，寻优需对新增篮子做压力检查",
+    "新增篮子结构未随门槛调整（静态假设），跨候选比较时需显式说明"
+   ],
+   "metrics": {
+    "avg_contribution_cents": 2926.709418,
+    "baseline_contribution_cents": 26400000.0,
+    "churn_rate": 0.000239271963542275,
+    "conversion_rate": 0.08431769006177418,
+    "delta_c": 0.004317690061774181,
+    "gmv_paid_cents": 89233684.975813,
+    "gmv_pre_cents": 92223353.168223,
+    "gross_new_rate": 0.004556962025316456,
+    "incremental_contribution_cents": -1722662.241943,
+    "lost_orders": 23.927196354227497,
+    "merchant_subsidy_cents": 2989668.19241,
+    "natural_redemptions": 5120.0,
+    "new_orders": 455.6962025316456,
+    "orders": 8431.769006177417,
+    "orders_baseline": 8000.0,
+    "platform_subsidy_cents": 0.0,
+    "retention": 0.9970091004557216,
+    "roi": -0.5762051609327066,
+    "topup_redemptions": 403.6401822886252,
+    "total_contribution_cents": 24677337.758057
+   }
+  },
+  {
+   "candidate": {
+    "enabled": true,
+    "face_value_cents": 1000,
+    "label": "满99减10",
+    "threshold_cents": 9900
+   },
+   "decomposition": {
+    "fixed_costs": -0.0,
+    "lost_orders": -77502.545548,
+    "natural_redemption": -3840000.0,
+    "new_orders": 1432727.272727,
+    "other_retained": 0.0,
+    "topup": -697799.943336
+   },
+   "limitations": [
+    "加购金额按“恰好凑到门槛”(B=T)简化，非商品可凑性保证",
+    "凑单概率使用演示情景曲线 q=q_cap·exp(−λg)·min(1,(F/T)/d_ref)，非行为定律，参数须可替换",
+    "可变费用未配置（按 0 计），履约/支付费用需另行确认",
+    "退货调整为 0 的情景估计，未含退货结算规则",
+    "新增成交篮子为单一结果类型（金额=门槛）——演算简化，寻优需对新增篮子做压力检查",
+    "新增篮子结构未随门槛调整（静态假设），跨候选比较时需显式说明"
+   ],
+   "metrics": {
+    "avg_contribution_cents": 2671.757847,
+    "baseline_contribution_cents": 26400000.0,
+    "churn_rate": 0.00037329210362720437,
+    "conversion_rate": 0.08689943516910008,
+    "delta_c": 0.006899435169100068,
+    "gmv_paid_cents": 91159977.767464,
+    "gmv_pre_cents": 97060789.976601,
+    "gross_new_rate": 0.007272727272727273,
+    "incremental_contribution_cents": -3182575.216157,
+    "lost_orders": 37.32921036272044,
+    "merchant_subsidy_cents": 5900812.209137,
+    "natural_redemptions": 3840.0,
+    "new_orders": 727.2727272727273,
+    "orders": 8689.943516910007,
+    "orders_baseline": 8000.0,
+    "platform_subsidy_cents": 0.0,
+    "retention": 0.9953338487046599,
+    "roi": -0.5393452805071483,
+    "topup_redemptions": 1333.5394818639784,
+    "total_contribution_cents": 23217424.783843
+   }
+  },
+  {
+   "candidate": {
+    "enabled": true,
+    "face_value_cents": 500,
+    "label": "满109减5",
+    "threshold_cents": 10900
+   },
+   "decomposition": {
+    "fixed_costs": -0.0,
+    "lost_orders": -120567.325412,
+    "natural_redemption": -1920000.0,
+    "new_orders": 914862.385321,
+    "other_retained": 0.0,
+    "topup": 120290.155669
+   },
+   "limitations": [
+    "加购金额按“恰好凑到门槛”(B=T)简化，非商品可凑性保证",
+    "凑单概率使用演示情景曲线 q=q_cap·exp(−λg)·min(1,(F/T)/d_ref)，非行为定律，参数须可替换",
+    "可变费用未配置（按 0 计），履约/支付费用需另行确认",
+    "退货调整为 0 的情景估计，未含退货结算规则",
+    "新增成交篮子为单一结果类型（金额=门槛）——演算简化，寻优需对新增篮子做压力检查",
+    "新增篮子结构未随门槛调整（静态假设），跨候选比较时需显式说明"
+   ],
+   "metrics": {
+    "avg_contribution_cents": 3068.608366,
+    "baseline_contribution_cents": 26400000.0,
+    "churn_rate": 0.000546720297106392,
+    "conversion_rate": 0.0827560319964716,
+    "delta_c": 0.0027560319964715896,
+    "gmv_paid_cents": 90058070.086392,
+    "gmv_pre_cents": 92376406.958305,
+    "gross_new_rate": 0.0033027522935779817,
+    "incremental_contribution_cents": -1005414.784422,
+    "lost_orders": 54.672029710639194,
+    "merchant_subsidy_cents": 2318336.871913,
+    "natural_redemptions": 3840.0,
+    "new_orders": 330.2752293577982,
+    "orders": 8275.60319964716,
+    "orders_baseline": 8000.0,
+    "platform_subsidy_cents": 0.0,
+    "retention": 0.9931659962861701,
+    "roi": -0.4336793313356443,
+    "topup_redemptions": 466.3985144680404,
+    "total_contribution_cents": 25394585.215578
+   }
+  },
+  {
+   "candidate": {
+    "enabled": true,
+    "face_value_cents": 500,
+    "label": "满129减5",
+    "threshold_cents": 12900
+   },
+   "decomposition": {
+    "fixed_costs": -0.0,
+    "lost_orders": -257061.942565,
+    "natural_redemption": -960000.0,
+    "new_orders": 940465.116279,
+    "other_retained": 0.0,
+    "topup": 225798.108204
+   },
+   "limitations": [
+    "加购金额按“恰好凑到门槛”(B=T)简化，非商品可凑性保证",
+    "凑单概率使用演示情景曲线 q=q_cap·exp(−λg)·min(1,(F/T)/d_ref)，非行为定律，参数须可替换",
+    "可变费用未配置（按 0 计），履约/支付费用需另行确认",
+    "退货调整为 0 的情景估计，未含退货结算规则",
+    "新增成交篮子为单一结果类型（金额=门槛）——演算简化，寻优需对新增篮子做压力检查",
+    "新增篮子结构未随门槛调整（静态假设），跨候选比较时需显式说明"
+   ],
+   "metrics": {
+    "avg_contribution_cents": 3220.440197,
+    "baseline_contribution_cents": 26400000.0,
+    "churn_rate": 0.0009720652237405247,
+    "conversion_rate": 0.08181863245067808,
+    "delta_c": 0.00181863245067808,
+    "gmv_paid_cents": 91259205.196592,
+    "gmv_pre_cents": 92728577.020961,
+    "gross_new_rate": 0.0027906976744186047,
+    "incremental_contribution_cents": -50798.718081,
+    "lost_orders": 97.20652237405248,
+    "merchant_subsidy_cents": 1469371.82437,
+    "natural_redemptions": 1920.0,
+    "new_orders": 279.06976744186045,
+    "orders": 8181.863245067808,
+    "orders_baseline": 8000.0,
+    "platform_subsidy_cents": 0.0,
+    "retention": 0.9878491847032435,
+    "roi": -0.03457172462305882,
+    "topup_redemptions": 739.6738812973762,
+    "total_contribution_cents": 26349201.281919
+   }
+  },
+  {
+   "candidate": {
+    "enabled": true,
+    "face_value_cents": 500,
+    "label": "满139减5",
+    "threshold_cents": 13900
+   },
+   "decomposition": {
+    "fixed_costs": -0.0,
+    "lost_orders": -268457.872137,
+    "natural_redemption": -960000.0,
+    "new_orders": 950503.597122,
+    "other_retained": 0.0,
+    "topup": 325427.989001
+   },
+   "limitations": [
+    "加购金额按“恰好凑到门槛”(B=T)简化，非商品可凑性保证",
+    "凑单概率使用演示情景曲线 q=q_cap·exp(−λg)·min(1,(F/T)/d_ref)，非行为定律，参数须可替换",
+    "可变费用未配置（按 0 计），履约/支付费用需另行确认",
+    "退货调整为 0 的情景估计，未含退货结算规则",
+    "新增成交篮子为单一结果类型（金额=门槛）——演算简化，寻优需对新增篮子做压力检查",
+    "新增篮子结构未随门槛调整（静态假设），跨候选比较时需显式说明"
+   ],
+   "metrics": {
+    "avg_contribution_cents": 3241.900682,
+    "baseline_contribution_cents": 26400000.0,
+    "churn_rate": 0.0010097801426614114,
+    "conversion_rate": 0.08158014791489254,
+    "delta_c": 0.0015801479148925455,
+    "gmv_paid_cents": 91343353.154479,
+    "gmv_pre_cents": 92708399.200703,
+    "gross_new_rate": 0.002589928057553957,
+    "incremental_contribution_cents": 47473.713987,
+    "lost_orders": 100.97801426614112,
+    "merchant_subsidy_cents": 1365046.046225,
+    "natural_redemptions": 1920.0,
+    "new_orders": 258.9928057553957,
+    "orders": 8158.014791489254,
+    "orders_baseline": 8000.0,
+    "platform_subsidy_cents": 0.0,
+    "retention": 0.9873777482167324,
+    "roi": 0.034778104459030984,
+    "topup_redemptions": 551.0992866929439,
+    "total_contribution_cents": 26447473.713987
+   }
+  },
+  {
+   "candidate": {
+    "enabled": true,
+    "face_value_cents": 1000,
+    "label": "满139减10",
+    "threshold_cents": 13900
+   },
+   "decomposition": {
+    "fixed_costs": -0.0,
+    "lost_orders": -234515.744274,
+    "natural_redemption": -1920000.0,
+    "new_orders": 1642014.388489,
+    "other_retained": 0.0,
+    "topup": 99756.691309
+   },
+   "limitations": [
+    "加购金额按“恰好凑到门槛”(B=T)简化，非商品可凑性保证",
+    "凑单概率使用演示情景曲线 q=q_cap·exp(−λg)·min(1,(F/T)/d_ref)，非行为定律，参数须可替换",
+    "可变费用未配置（按 0 计），履约/支付费用需另行确认",
+    "退货调整为 0 的情景估计，未含退货结算规则",
+    "新增成交篮子为单一结果类型（金额=门槛）——演算简化，寻优需对新增篮子做压力检查",
+    "新增篮子结构未随门槛调整（静态假设），跨候选比较时需显式说明"
+   ],
+   "metrics": {
+    "avg_contribution_cents": 3083.431908,
+    "baseline_contribution_cents": 26400000.0,
+    "churn_rate": 0.0008995602853228224,
+    "conversion_rate": 0.08428029582978509,
+    "delta_c": 0.004280295829785091,
+    "gmv_paid_cents": 94884614.216509,
+    "gmv_pre_cents": 98424798.401405,
+    "gross_new_rate": 0.005179856115107914,
+    "incremental_contribution_cents": -412744.664476,
+    "lost_orders": 89.95602853228225,
+    "merchant_subsidy_cents": 3540184.184897,
+    "natural_redemptions": 1920.0,
+    "new_orders": 517.9856115107914,
+    "orders": 8428.02958297851,
+    "orders_baseline": 8000.0,
+    "platform_subsidy_cents": 0.0,
+    "retention": 0.9887554964334647,
+    "roi": -0.1165884719322897,
+    "topup_redemptions": 1102.1985733858878,
+    "total_contribution_cents": 25987255.335524
+   }
+  },
+  {
+   "candidate": {
+    "enabled": true,
+    "face_value_cents": 2000,
+    "label": "满139减20",
+    "threshold_cents": 13900
+   },
+   "decomposition": {
+    "fixed_costs": -0.0,
+    "lost_orders": -208040.88454,
+    "natural_redemption": -3840000.0,
+    "new_orders": 2248057.553957,
+    "other_retained": 0.0,
+    "topup": -1393394.216087
+   },
+   "limitations": [
+    "加购金额按“恰好凑到门槛”(B=T)简化，非商品可凑性保证",
+    "凑单概率使用演示情景曲线 q=q_cap·exp(−λg)·min(1,(F/T)/d_ref)，非行为定律，参数须可替换",
+    "可变费用未配置（按 0 计），履约/支付费用需另行确认",
+    "退货调整为 0 的情景估计，未含退货结算规则",
+    "新增成交篮子为单一结果类型（金额=门槛）——演算简化，寻优需对新增篮子做压力检查",
+    "新增篮子结构未随门槛调整（静态假设），跨候选比较时需显式说明"
+   ],
+   "metrics": {
+    "avg_contribution_cents": 2591.583149,
+    "baseline_contribution_cents": 26400000.0,
+    "churn_rate": 0.0008135887965987233,
+    "conversion_rate": 0.0895461234336171,
+    "delta_c": 0.009546123433617104,
+    "gmv_paid_cents": 98299535.297898,
+    "gmv_pre_cents": 107275589.777954,
+    "gross_new_rate": 0.010359712230215827,
+    "incremental_contribution_cents": -3193377.546669,
+    "lost_orders": 81.35887965987231,
+    "merchant_subsidy_cents": 8976054.480056,
+    "natural_redemptions": 1920.0,
+    "new_orders": 1035.9712230215828,
+    "orders": 8954.61234336171,
+    "orders_baseline": 8000.0,
+    "platform_subsidy_cents": 0.0,
+    "retention": 0.989830140042516,
+    "roi": -0.35576628392401155,
+    "topup_redemptions": 1532.056017006384,
+    "total_contribution_cents": 23206622.453331
+   }
+  },
+  {
+   "candidate": {
+    "enabled": true,
+    "face_value_cents": 500,
+    "label": "满159减5",
+    "threshold_cents": 15900
+   },
+   "decomposition": {
+    "fixed_costs": -0.0,
+    "lost_orders": -392352.041497,
+    "natural_redemption": -320000.0,
+    "new_orders": 966792.45283,
+    "other_retained": 0.0,
+    "topup": 384067.200235
+   },
+   "limitations": [
+    "加购金额按“恰好凑到门槛”(B=T)简化，非商品可凑性保证",
+    "凑单概率使用演示情景曲线 q=q_cap·exp(−λg)·min(1,(F/T)/d_ref)，非行为定律，参数须可替换",
+    "可变费用未配置（按 0 计），履约/支付费用需另行确认",
+    "退货调整为 0 的情景估计，未含退货结算规则",
+    "新增成交篮子为单一结果类型（金额=门槛）——演算简化，寻优需对新增篮子做压力检查",
+    "新增篮子结构未随门槛调整（静态假设），跨候选比较时需显式说明"
+   ],
+   "metrics": {
+    "avg_contribution_cents": 3340.304595,
+    "baseline_contribution_cents": 26400000.0,
+    "churn_rate": 0.0013179173243387176,
+    "conversion_rate": 0.08094623361905752,
+    "delta_c": 0.0009462336190575089,
+    "gmv_paid_cents": 91851325.256647,
+    "gmv_pre_cents": 92589739.49297,
+    "gross_new_rate": 0.0022641509433962265,
+    "incremental_contribution_cents": 638507.611567,
+    "lost_orders": 131.79173243387177,
+    "merchant_subsidy_cents": 738414.236323,
+    "natural_redemptions": 640.0,
+    "new_orders": 226.41509433962264,
+    "orders": 8094.623361905751,
+    "orders_baseline": 8000.0,
+    "platform_subsidy_cents": 0.0,
+    "retention": 0.9835260334457661,
+    "roi": 0.8647011124088073,
+    "topup_redemptions": 610.413378306412,
+    "total_contribution_cents": 27038507.611567
+   }
+  },
+  {
+   "candidate": {
+    "enabled": true,
+    "face_value_cents": 1000,
+    "label": "满159减10",
+    "threshold_cents": 15900
+   },
+   "decomposition": {
+    "fixed_costs": -0.0,
+    "lost_orders": -347904.082995,
+    "natural_redemption": -640000.0,
+    "new_orders": 1707169.811321,
+    "other_retained": 0.0,
+    "topup": 157721.022164
+   },
+   "limitations": [
+    "加购金额按“恰好凑到门槛”(B=T)简化，非商品可凑性保证",
+    "凑单概率使用演示情景曲线 q=q_cap·exp(−λg)·min(1,(F/T)/d_ref)，非行为定律，参数须可替换",
+    "可变费用未配置（按 0 计），履约/支付费用需另行确认",
+    "退货调整为 0 的情景估计，未含退货结算规则",
+    "新增成交篮子为单一结果类型（金额=门槛）——演算简化，寻优需对新增篮子做压力检查",
+    "新增篮子结构未随门槛调整（静态假设），跨候选比较时需显式说明"
+   ],
+   "metrics": {
+    "avg_contribution_cents": 3273.27243,
+    "baseline_contribution_cents": 26400000.0,
+    "churn_rate": 0.0011958346486774353,
+    "conversion_rate": 0.08333246723811502,
+    "delta_c": 0.0033324672381150177,
+    "gmv_paid_cents": 96321822.040647,
+    "gmv_pre_cents": 98635478.985939,
+    "gross_new_rate": 0.004528301886792453,
+    "incremental_contribution_cents": 876986.750491,
+    "lost_orders": 119.58346486774353,
+    "merchant_subsidy_cents": 2313656.945291,
+    "natural_redemptions": 640.0,
+    "new_orders": 452.8301886792453,
+    "orders": 8333.246723811502,
+    "orders_baseline": 8000.0,
+    "platform_subsidy_cents": 0.0,
+    "retention": 0.985052066891532,
+    "roi": 0.3790478758209756,
+    "topup_redemptions": 1220.826756612824,
+    "total_contribution_cents": 27276986.750491
+   }
+  }
+ ]
+}
