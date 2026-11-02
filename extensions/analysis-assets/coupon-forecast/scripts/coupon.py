@@ -24,7 +24,7 @@ import math
 import sys
 from dataclasses import dataclass, field, asdict
 
-ENGINE_VERSION = "optracall-coupon-1"
+ENGINE_VERSION = "optracall-coupon-2"
 
 
 class SpecError(ValueError):
@@ -141,7 +141,7 @@ def _check_semantics(spec: ScenarioSpec) -> list:
     b = spec.baseline
     if b is None:
         return ["缺少 baseline"]
-    wsum = sum(bk.weight for bk in b.baskets)
+    wsum = math.fsum(bk.weight for bk in b.baskets)
     if abs(wsum - 1.0) > 1e-9:
         errors.append(f"基准篮子权重合计必须为 1，实际 {wsum:.6f}")
     for i, bk in enumerate(b.baskets):
@@ -210,6 +210,16 @@ def _check_q(h, errors: list) -> None:
             errors.append("d_ref 必须 > 0")
     if h.q_mode == "table" and not h.q_table:
         errors.append("凑单参数表为空")
+    if h.q_mode == "table":
+        for i, row in enumerate(h.q_table):
+            q = row.get("q")
+            if not isinstance(q, (int, float)) or isinstance(q, bool) or not 0 <= q <= 1:
+                errors.append(f"q_table[{i}].q 必须在 [0,1]")
+            for field in ("gap_max", "ftr_max"):
+                value = row.get(field)
+                if value is not None and (not isinstance(value, (int, float))
+                                          or not math.isfinite(value) or value < 0):
+                    errors.append(f"q_table[{i}].{field} 必须为有限非负数或 null")
 
 
 def _check_conversion(h, errors: list) -> None:
@@ -228,10 +238,13 @@ def _check_conversion(h, errors: list) -> None:
 
 
 def _check_new_basket(h, errors: list) -> None:
-    wsum = sum(nb.get("weight", 0.0) for nb in h.new_basket)
+    wsum = math.fsum(nb.get("weight", 0.0) for nb in h.new_basket)
     if h.new_basket and abs(wsum - 1.0) > 1e-9:
         errors.append(f"新增结果分布 vⱼ 权重合计必须为 1，实际 {wsum:.6f}")
     for j, nb in enumerate(h.new_basket):
+        _prob(nb.get("weight"), f"新增结果[{j}].weight", errors)
+        if nb.get("margin_rate") is not None:
+            _prob(nb["margin_rate"], f"新增结果[{j}].margin_rate", errors)
         amt = nb.get("amount_cents", "at_threshold")
         if amt != "at_threshold" and (not isinstance(amt, int) or isinstance(amt, bool) or amt <= 0):
             errors.append(f"新增结果[{j}]金额必须是正整数分或 'at_threshold'")
@@ -504,24 +517,24 @@ def _conversion_response(spec: ScenarioSpec, t, f, c0: float, retention: float,
 def _aggregate_ledger(ledger: list, n_visitors, c0: float, e_pi0: float, l_rate: float,
                       d_c_plus: float, k_cost: float) -> dict:
     def _sum(key):
-        return sum(r[key] for r in ledger)
+        return math.fsum(r[key] for r in ledger)
 
     retention = 1.0 - l_rate
-    orders = sum(r["expected_orders"] for r in ledger if r["group"] != "loss")
-    gmv_pre = sum(r["expected_orders"] * r["amount_cents"] for r in ledger)
-    gmv_paid = sum(r["expected_orders"] * r["customer_paid_cents"] for r in ledger)
+    orders = math.fsum(r["expected_orders"] for r in ledger if r["group"] != "loss")
+    gmv_pre = math.fsum(r["expected_orders"] * r["amount_cents"] for r in ledger)
+    gmv_paid = math.fsum(r["expected_orders"] * r["customer_paid_cents"] for r in ledger)
     merchant_sub = _sum("merchant_subsidy_cents")
     platform_sub = _sum("platform_subsidy_cents")
     pi_coupon = _sum("contribution_cents") - k_cost
     pi0_total = n_visitors * c0 * e_pi0
     delta_pi = pi_coupon - pi0_total
     conversion = c0 * retention + d_c_plus
-    natural_red = sum(r["expected_orders"] for r in ledger
+    natural_red = math.fsum(r["expected_orders"] for r in ledger
                       if r["group"] == "natural" and r["redeemed"] == 1)
-    topup_red = sum(r["expected_orders"] for r in ledger
+    topup_red = math.fsum(r["expected_orders"] for r in ledger
                     if r["group"] == "topup" and r["redeemed"] == 1)
-    new_orders = sum(r["expected_orders"] for r in ledger if r["group"] == "new")
-    lost_orders = sum(r["expected_orders"] for r in ledger if r["group"] == "loss")
+    new_orders = math.fsum(r["expected_orders"] for r in ledger if r["group"] == "new")
+    lost_orders = math.fsum(r["expected_orders"] for r in ledger if r["group"] == "loss")
 
     return {
         "conversion_rate": conversion,
@@ -568,7 +581,7 @@ def _decompose(ledger: list, pi0_by_basket: list, k_cost: float) -> dict:
         "topup": _delta_vs_pi0("topup"),
         "other_retained": _delta_vs_pi0("natural", 0) + _delta_vs_pi0("keep") + _delta_vs_pi0("base"),
         "lost_orders": _delta_vs_pi0("loss"),
-        "new_orders": sum(r["contribution_cents"] for r in ledger if r["group"] == "new"),
+        "new_orders": math.fsum(r["contribution_cents"] for r in ledger if r["group"] == "new"),
         "fixed_costs": -float(k_cost),
     }
 
@@ -815,7 +828,7 @@ def _breakeven(spec: ScenarioSpec, cand: dict, row: dict) -> dict:
         v_fee = c.fixed_fee_cents + (c.fee_rate * paid if c.fee_basis == "customer_paid" else c.fee_rate * amt)
         return amt * m_j - int(nb["redeem"]) * c.merchant_share_rho * f - v_fee - c.return_adj_cents
 
-    pi_new_avg = sum(float(nb["weight"]) * _pi_new(nb) for nb in h.new_basket)
+    pi_new_avg = math.fsum(float(nb["weight"]) * _pi_new(nb) for nb in h.new_basket)
     k = c.fixed_activity_cost_cents
     pi_base_after = row["metrics"]["total_contribution_cents"] - row["decomposition"]["new_orders"] + k
     pi0 = row["metrics"]["baseline_contribution_cents"]
@@ -900,6 +913,11 @@ def compare(spec: ScenarioSpec, candidates: list | None = None) -> dict:
     cand_list = candidates if candidates is not None else spec.candidates
     if not cand_list:
         cand_list = generate_candidates(spec)
+    else:
+        cand_list = list(cand_list)
+        if not any(not candidate.get("enabled") for candidate in cand_list):
+            cand_list.insert(0, {"enabled": False, "threshold_cents": None,
+                                 "face_value_cents": 0, "label": "无券"})
 
     rows = []
     for cand in cand_list:
@@ -932,10 +950,11 @@ def compare(spec: ScenarioSpec, candidates: list | None = None) -> dict:
         rows.append(row)
 
     valid_rows = [r for r in rows if r["metrics"] is not None]
-    if not valid_rows:
+    coupon_rows = [r for r in rows if r["candidate"].get("enabled")]
+    if not valid_rows or (coupon_rows and all(r["metrics"] is None for r in coupon_rows)):
         return {"rows": rows, "ranking": [], "pareto": [], "objective": spec.objective,
                 "conclusion": {"type": "invalid_comparison",
-                                "message": "所有候选均不合法，无法形成有效比较，请先修复输入",
+                                "message": "所有优惠券候选均不合法，保留无券基线，请先修复输入再比较",
                                 "evidence_status": spec.evidence_status}}
 
     feasible = [r for r in valid_rows if r["feasible"]]
@@ -1038,7 +1057,7 @@ def stress_test(spec: ScenarioSpec, variants: dict) -> dict:
     }
 
     scenarios = []
-    for name, changes in variants.items():
+    for name, changes in sorted(variants.items()):
         spec_v = _variant_spec(spec, changes)
         budget_v = spec_v.constraints.merchant_coupon_budget_cents
         cmp_v = compare(spec_v)
@@ -1068,7 +1087,9 @@ def stress_test(spec: ScenarioSpec, variants: dict) -> dict:
 
     by_param: dict = {}
     for sc in scenarios:
-        param = sc["name"].rsplit("#", 1)[0]
+        if len(sc["changes"]) != 1:
+            continue  # Joint scenarios cannot identify a single parameter's effect.
+        param = next(iter(sc["changes"]))
         row = next((r for r in sc["rows"] if r["label"] == selected), None) if selected else None
         if row:
             by_param.setdefault(param, []).append(row["delta_pi_cents"])
@@ -1154,7 +1175,7 @@ def _load_json(path: str) -> dict:
 
 
 def _emit(obj, out_path):
-    text = json.dumps(obj, ensure_ascii=False, indent=2)
+    text = json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False)
     if out_path:
         with open(out_path, "w", encoding="utf-8") as fh:
             fh.write(text + "\n")
@@ -1176,10 +1197,27 @@ def selftest() -> bool:
 
     for i, g in enumerate(golden["rows"]):
         res = simulate(spec, g["candidate"])
+        for basket_index in range(len(spec.baseline.baskets)):
+            branches = [row for row in res["ledger"]
+                        if row["basket_index"] == basket_index and row["group"] != "new"]
+            probabilities = [row["probability"] for row in branches]
+            if (any(not 0 <= value <= 1 for value in probabilities)
+                    or abs(math.fsum(probabilities) - 1) > 1e-12):
+                problems.append(f"row[{i}] 篮子[{basket_index}] 互斥分支概率不合法")
+        if g["candidate"].get("enabled"):
+            budget_spec = copy.deepcopy(spec)
+            budget_spec.constraints.merchant_coupon_budget_cents = 0
+            budget_result = simulate(budget_spec, g["candidate"])
+            if budget_result["metrics"] != res["metrics"]:
+                problems.append(f"row[{i}] 预算约束截断了原始测算")
+            violations, _ = _check_constraints(budget_spec, g["candidate"], budget_result["metrics"])
+            if res["metrics"]["merchant_subsidy_cents"] > 0 and not any(
+                    violation["constraint"] == "merchant_coupon_budget" for violation in violations):
+                problems.append(f"row[{i}] 超预算未过滤")
         for k in ("metrics", "decomposition", "limitations"):
             if res[k] != g[k]:
                 problems.append(f"row[{i}] {g['candidate'].get('label')}/{k}: 期望 {g[k]!r} 实得 {res[k]!r}")
-        dec_sum = sum(res["decomposition"].values())
+        dec_sum = math.fsum(res["decomposition"].values())
         if abs(dec_sum - res["metrics"]["incremental_contribution_cents"]) > 1e-3:
             problems.append(f"row[{i}] 拆解对平不变量失败: {dec_sum} vs "
                             f"{res['metrics']['incremental_contribution_cents']}")
@@ -1322,7 +1360,7 @@ def main(argv: list) -> int:
             variants = _load_json(args[args.index("--variants") + 1])
             res = stress_test(spec, variants)
             out = {"engine_version": ENGINE_VERSION,
-                   "input_digest": input_digest({"scenario_file": args[1], "variants": variants}),
+                   "input_digest": input_digest({"scenario": spec.to_dict(), "variants": variants}),
                    "result": res}
             out_path = args[args.index("-o") + 1] if "-o" in args else None
             _emit(out, out_path)
@@ -1331,7 +1369,7 @@ def main(argv: list) -> int:
             out_path = args[args.index("-o") + 1] if "-o" in args else None
             _emit(SCENARIO_TEMPLATE, out_path)
             return 0
-        if cmd == "selftest":
+        if cmd in ("selftest", "--selftest"):
             return 0 if selftest() else 1
         print(f"未知命令 {cmd!r}；可用: simulate / compare / stress / template / selftest",
               file=sys.stderr)

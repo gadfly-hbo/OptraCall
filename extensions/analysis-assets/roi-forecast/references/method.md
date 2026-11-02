@@ -1,6 +1,6 @@
 # 投放 ROI 测算方法
 
-引擎版本 `optracall-roi-1`。数学与校验语义承接 target-forecast 原仓 `roi_tool`（MIT，业务基线 `df5acd6`），以 OptraCall 分析资产形态纯 Python 重实现；等价性由黄金案例自检证明（见文末）。
+引擎版本 `optracall-roi-2`。数学与校验语义承接 target-forecast 原仓 `roi_tool`（MIT，业务基线 `df5acd6`），以 OptraCall 分析资产形态纯 Python 重实现；等价性由黄金案例自检证明（见文末）。
 
 ## 1. 链路公式（单计划）
 
@@ -44,7 +44,7 @@ gap   = CVR* − CVR        （>0 即低于保本线）
 
 ## 5. 输出身份
 
-每次输出携带 `engine_version`（`optracall-roi-1`）与 `input_digest`（输入 canonical JSON 的 SHA-256 前 16 位）。同输入 + 同引擎版本 = 逐字节一致输出；引擎逻辑变更须递增版本。报告中照抄这两项，供复盘与复核。
+每次输出携带 `engine_version`（`optracall-roi-2`）与 `input_digest`（输入 canonical JSON 的 SHA-256 前 16 位）。同输入 + 同引擎版本 = 逐字节一致输出；引擎逻辑变更须递增版本。报告中照抄这两项，供复盘与复核。
 
 ## 6. 黄金案例
 

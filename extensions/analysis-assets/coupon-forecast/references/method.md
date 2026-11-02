@@ -1,10 +1,10 @@
 # 优惠券四子模型测算方法
 
-引擎版本 `optracall-coupon-1`。数学与校验语义承接 target-forecast 原仓 `coupon_tool`（《优惠券测算工具 v2.0 方案》§4 逐式实现，业务基线 `df5acd6`），OptraCall 分析资产形态纯 Python 重实现；等价性由黄金案例自检证明。
+引擎版本 `optracall-coupon-2`。数学与校验语义承接 target-forecast 原仓 `coupon_tool`（《优惠券测算工具 v2.0 方案》§4 逐式实现，业务基线 `df5acd6`），OptraCall 分析资产形态纯 Python 重实现；等价性由黄金案例自检证明。
 
 ## 0. 单位与对象约定
 
-- 金额一律**整数分**（int 进入校验；float 参与期望计算，输出取 6 位小数）；概率与比率为 0–1 float；
+- 输入名义金额为**整数分**（int 进入校验）；概率加权后的期望金额以分为单位，用 float 计算并输出至 6 位小数，不先取整；概率与比率为 0–1 float；
 - 观察单位：独立访客的首次支付订单（`unique_visitor_first_paid_order`）；N=访客数，缺 N 时按每观察单位口径并提示；
 - 篮子（basket）：一笔基准成交的券前可用商品金额 Aᵢ 与条件权重 wᵢ（Σwᵢ=1）。
 

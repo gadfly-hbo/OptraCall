@@ -24,7 +24,7 @@ import json
 import os
 import sys
 
-ENGINE_VERSION = "optracall-forecast-1"
+ENGINE_VERSION = "optracall-forecast-2"
 
 DEFAULT_CALIBER = {
     "new_customer_window_days": 365,
@@ -99,7 +99,7 @@ def baseline(monthly: list, months: int) -> dict:
         "annualized": months_present != 12,
     }
     uvs = [r["uv"] for r in win if r.get("uv") is not None]
-    if uvs and sum(uvs) > 0:
+    if len(uvs) == n and all(uv > 0 for uv in uvs):
         b["uv"] = sum(uvs) / len(uvs)
         b["cvr"] = _safe(orders_s, sum(uvs))
     else:
@@ -176,7 +176,7 @@ def run_platform(monthly: list, structure, scenarios: dict, caliber: dict,
         target_months = [_month_add(last, i + 1) for i in range(n_months)]
 
     person, field, goods = [], None, None
-    for name, p in scenarios.items():
+    for name, p in sorted(scenarios.items()):
         p = {**p, "_name": name}
         person.extend(project_person(base, p, target_months, shares))
         f = project_field(base, p, target_months, shares)
@@ -304,7 +304,7 @@ def run(input_data: dict) -> dict:
     target_months = [_month_add(common_end, i + 1) for i in range(n_months)]
 
     results = {}
-    for p, v in platforms_in.items():
+    for p, v in sorted(platforms_in.items()):
         unified = v["unified"]
         months = [r["month"] for r in unified]
         own_end = max(months)
@@ -326,6 +326,11 @@ def run(input_data: dict) -> dict:
                "trailing_gap": trailing, "missing_months": missing,
                "short_history": len(months) < 12}
         r = run_platform(unified, v.get("structure"), scenarios, caliber, target_months)
+        window = sorted(unified, key=lambda row: row["month"])[-caliber["baseline_months"]:]
+        cov["uv_missing_months"] = [row["month"] for row in window
+                                    if row.get("uv") is None or row["uv"] <= 0]
+        if cov["uv_missing_months"]:
+            cov["uv_note"] = "基线窗口 UV 未完整覆盖，场视角不适用，采用人视角主口径；请补齐同月 UV 后重算"
         r["coverage"] = cov
         results[p] = r
 
@@ -440,7 +445,7 @@ def selftest() -> bool:
 
 
 def main(argv: list) -> int:
-    if len(argv) >= 2 and argv[1] == "selftest":
+    if len(argv) >= 2 and argv[1] in ("selftest", "--selftest"):
         return 0 if selftest() else 1
     if len(argv) < 4 or argv[1] != "run" or argv[2] != "--input":
         print(__doc__, file=sys.stderr)
@@ -455,7 +460,7 @@ def main(argv: list) -> int:
         return 1
     out["input_digest"] = input_digest(data)
     out_path = argv[argv.index("-o") + 1] if "-o" in argv else None
-    text = json.dumps(out, ensure_ascii=False, indent=2)
+    text = json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False)
     if out_path:
         with open(out_path, "w", encoding="utf-8") as fh:
             fh.write(text + "\n")

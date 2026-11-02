@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sys
 
-ENGINE_VERSION = "optracall-roi-1"
+ENGINE_VERSION = "optracall-roi-2"
 
 REQUIRED_FIELDS = ("name", "spend_cny", "cpc_cny", "cvr", "aov_cny", "gross_margin", "refund_rate")
 
@@ -43,6 +44,9 @@ def validate_plan(plan: dict) -> None:
     for f in REQUIRED_FIELDS:
         if f not in plan or plan[f] in (None, ""):
             raise PlanError(f"{name}: 缺少字段 {f}")
+        if f != "name" and (isinstance(plan[f], bool) or not isinstance(plan[f], (int, float))
+                            or not math.isfinite(plan[f])):
+            raise PlanError(f"{name}: {f} 必须为有限数值")
     checks = [
         ("spend_cny", plan["spend_cny"] > 0, "消耗必须 > 0"),
         ("cpc_cny", plan["cpc_cny"] > 0, "CPC 必须 > 0"),
@@ -59,6 +63,10 @@ def validate_plan(plan: dict) -> None:
 def _eval_plan(plan: dict, cvr_growth: float, aov_growth: float) -> dict:
     cvr = plan["cvr"] * (1 + cvr_growth)
     aov = plan["aov_cny"] * (1 + aov_growth)
+    if not 0 < cvr < 1:
+        raise PlanError(f"{plan['name']}: 情景 cvr_growth 使 cvr 超出 (0,1)")
+    if not math.isfinite(aov) or aov <= 0:
+        raise PlanError(f"{plan['name']}: 情景 aov_growth 使 aov_cny 非正或非有限")
     spend, cpc = plan["spend_cny"], plan["cpc_cny"]
     keep = (1 - plan["refund_rate"]) * plan["gross_margin"]
 
@@ -96,6 +104,10 @@ def evaluate(plans: list, scenarios: dict) -> dict:
 
     out = {"scenarios": {}}
     for sname, s in scenarios.items():
+        for field in ("cvr_growth", "aov_growth"):
+            value = s.get(field, 0.0)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise PlanError(f"情景 {sname}: {field} 必须为有限数值")
         cvr_growth = float(s.get("cvr_growth", 0.0))
         aov_growth = float(s.get("aov_growth", 0.0))
         evaluated = [_eval_plan(p, cvr_growth, aov_growth) for p in plans]
@@ -114,10 +126,10 @@ def evaluate(plans: list, scenarios: dict) -> dict:
     # 跨情景结论稳定性：某计划在各档下净贡献符号是否一致
     stability = {}
     for idx, p in enumerate(plans):
-        nets = [out["scenarios"][sname]["plans"][idx]["net"] for sname in scenarios]
+        verdicts = {sname: out["scenarios"][sname]["plans"][idx]["verdict"] for sname in scenarios}
         stability[p["name"]] = {
-            "verdicts": {sname: out["scenarios"][sname]["plans"][idx]["verdict"] for sname in scenarios},
-            "stable": all(n > 0 for n in nets) or all(n <= 0 for n in nets),
+            "verdicts": verdicts,
+            "stable": len(set(verdicts.values())) == 1,
         }
     out["stability"] = stability
     return out
@@ -238,7 +250,7 @@ def main(argv: list) -> int:
                 data = json.load(fh)
             out = run(data)
             out_path = args[3] if len(args) >= 4 and args[2] == "-o" else None
-            text = json.dumps(out, ensure_ascii=False, indent=2)
+            text = json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False)
             if out_path:
                 with open(out_path, "w", encoding="utf-8") as fh:
                     fh.write(text + "\n")
@@ -248,7 +260,7 @@ def main(argv: list) -> int:
             return 0
         if cmd == "template":
             out_path = args[1] if args and args[0] == "-o" and len(args) > 1 else None
-            text = json.dumps(TEMPLATE, ensure_ascii=False, indent=2)
+            text = json.dumps(TEMPLATE, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False)
             if out_path:
                 with open(out_path, "w", encoding="utf-8") as fh:
                     fh.write(text + "\n")
@@ -256,7 +268,7 @@ def main(argv: list) -> int:
             else:
                 print(text)
             return 0
-        if cmd == "selftest":
+        if cmd in ("selftest", "--selftest"):
             return 0 if selftest() else 1
         print(f"未知命令 {cmd!r}；可用: run / template / selftest", file=sys.stderr)
         return 2

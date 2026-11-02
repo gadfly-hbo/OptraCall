@@ -13,7 +13,7 @@
 - 新建 `extensions/analysis-assets/target-forecast/`：`SKILL.md`（激活描述、红线、工作流、资源索引）+ `scripts/`（`ingest.py` 模式A/B xlsx 导入与三级质量校验、`forecast.py` 人/货/场三视角测算、`template.py` 导入模板生成，均带 `--selftest` 与 `requirements.txt`）+ `references/`（`method.md` 公式与口径、`input-spec.md` 列定义与质量规则、`golden-cases.md` 合成场景期望值）。
 - 新建 `extensions/analysis-assets/coupon-forecast/`：`SKILL.md` + `scripts/`（`coupon.py` 四子模型测算/候选生成/比较/压力、`bucket.py` 订单明细分桶、`template.py`，均带 `--selftest`）+ `references/`（`method.md` 四子模型与不变量、`review.md` 复盘方法（文档形态）、`golden-cases.md` 黄金表）。
 - 新建 `extensions/analysis-assets/roi-forecast/`：`SKILL.md` + `scripts/`（`roi.py` 链路核算/情景/排名/稳定性，带 `--selftest`）+ `references/`（`method.md`）。
-- 三引擎纯 Python 重实现（仅标准库+openpyxl）；引擎身份 `optracall-forecast-1`（测算）/ `optracall-forecast-ingest-1`（导入）/ `optracall-coupon-1` / `optracall-roi-1`；黄金案例期望值随各 skill `scripts/golden/` 分发，`--selftest` 随身对照。
+- 三引擎纯 Python 重实现（仅标准库+openpyxl）；引擎身份 `optracall-forecast-2`（测算）/ `optracall-forecast-ingest-2`（导入）/ `optracall-coupon-2` / `optracall-roi-2`；黄金案例期望值随各 skill `scripts/golden/` 分发，`--selftest` 随身对照。
 - Host 接缝（**Codex 归属，接管阶段实施**）：`src/host/ui/catalog-data.ts` "分析资产"新增 3 条"已接入"条目（名称、说明、版本、适用条件；`CatalogEntry` 类型扩展）；`src/host/ui/App.tsx` `openCatalogEntry` 对三条目的点击导航到项目视图（使用现场＝项目任务对话），行为对齐 ppt-report 条目先例（App.tsx:210）。
 - `openspec/changes/target-forecast-skills/`（本目录）与讨论稿归档。
 
@@ -28,7 +28,7 @@
 ## Interface 接入记录（IN01）
 
 - 无 SDK 接入/会话变更：skill 经 [project-session.ts](../../../src/agent/project-session.ts) 既有 `additionalSkillPaths`（`extensions/analysis-assets`）对普通任务与受管执行任务（经快照）生效，Interface v3、域/profile/owner 均不变；IN02–IN07 无新义务项。
-- 唯一 Host 侧改动为 catalog-data 数据行（上文），无代码逻辑接缝。
+- 唯一 Host 侧改动为 catalog-data 数据行（上文），另在既有 openCatalogEntry 为三条目导航到项目视图；无会话或分析流程接缝。
 
 ## 关键规则
 
@@ -43,6 +43,10 @@
 - R9 结果即文件：中间结果默认 `020_clean`、最终报告 `060_reports`；无插件存储；`010_draw` 原件软约束继续适用。
 - R10 移植保真：三内核公式与校验语义按原仓重实现；forecast 去 pandas 化的等价性以黄金案例证明，不口头宣称。
 
+接管复核后的验收口径补记：coupon/roi 黄金仍逐值一致，不修改黄金来适配失败。forecast/ingest 比较函数实际为相对 `1e-9`、绝对 `1e-6`，blocker 黄金消息逐字一致；原先仅写“1e-9”的简述不代表绝对容差也是 1e-9。券门槛、面额、篮子名义金额必须整数分；原仓与冻结黄金中的概率加权期望金额允许小数分（输出至 6 位），不能将“整数分”解读为期望值先取整。名义单位合同及原黄金均保持。
+
+版本 2 修正错误输入及边界情景：导入摘要绑定实际单元格和口径，保留 Excel 物理行号；缺身份、非法月份及数值按行拒绝。UV 必须完整覆盖基线窗口才能启用场主口径，否则披露缺月并采用人主口径。人工券候选仍补无券基线；所有券均非法时保留无券行并报 invalid_comparison；单因素敏感性按实际参数路径归组，多因素仅披露情景。ROI 稳定性用舍入前盈亏符号判断，非法计划或情景数值携带字段名拒绝。coupon 显式稳定求和以兼容 Python 3.9/3.14，保留原黄金逐值口径。
+
 ## 验收
 
 | 标识 | 条件 | 对应 |
@@ -51,7 +55,7 @@
 | TF02 | 能力目录"分析资产"出现 3 条"已接入"条目，形态对齐 ppt-report 先例：来源标注、note 说明使用入口＝项目任务对话；点击导航到项目视图；无需安装步骤、无市场入口；文案与实际能力一致 | D5 |
 | TF03 | target-forecast 导入：模式A（明细：滚动窗口新老客、订单级聚合、净额口径）与模式B（聚合表：人公式派生 GMV、UV 可选）产出统一月度指标层；blocker（重复月份/非正金额/订单身份冲突/日期不可解析）定位行号拒绝；confirmable/quality 清单不静默 | C1/C2 |
 | TF04 | target-forecast 测算：人/货/场三视角月度+年度、多情景一次计算、每平台独立+全渠道汇总（比率分子分母重算、转化率覆盖口径如实标注）、基期年化对比、人 vs 货交叉校验差异如实呈现 | C1 |
-| TF05 | coupon 测算：四子模型不变量（互斥分支概率合计=1、贡献拆解与 ΔΠ 对平、金额全程整数分）；无券候选始终参与；预算为过滤约束不截断成本；四类结论不强行推荐 | C3 |
+| TF05 | coupon 测算：四子模型不变量（互斥分支概率合计=1、贡献拆解与 ΔΠ 对平、输入名义金额为整数分，期望金额以分计算并保留小数）；无券候选始终参与；预算为过滤约束不截断成本；四类结论不强行推荐 | C3 |
 | TF06 | coupon 压力：变体敏感性（参数范围用户指定，不内置 ±20%），输出 ΔΠ/排序变化/最敏感参数 | C3 |
 | TF07 | roi 测算：链路公式、保本 CVR* 与 gap、below_breakeven、净贡献排名、跨档符号稳定性；参数校验语义保留（错误消息带字段名） | C4 |
 | TF08 | 三脚本 `--selftest` 全绿（黄金案例逐项对照）；同输入重复运行输出逐字节一致；输出含 `engine_version`+`input_digest` | C5/R1/R2 |
@@ -63,6 +67,8 @@
 | TF14 | 既有链路回归：`npm run check`（含 agent-session 边界检查）通过；Host 侧改动仅限 catalog-data 三条目与 `openCatalogEntry` 导航接线，无其他代码逻辑改动 | — |
 
 ## 适用检查与未决
+
+- 2026-11-03 接管补记：交接提交 `0b436e5` 的原始 30 文件清单核对为 29/30，一项 `review-handoff.md` 哈希与清单不一致但与交接提交字节一致；用户知情并明确接受实际移交包后继续。原清单与移交包保留，详见 [result.md 接管记录](result.md#codex-接管与候选核对)。本次后续候选须另外固定身份，不将原核对改记为通过。
 
 - 三套 `--selftest` 实测；`npm run check` 全量；合成 Provider 端到端（TF11）；浏览器点验能力目录三条目（TF02）。
 - 移交包：候选清单+哈希、Codex 任务书（catalog-data 登记文案建议、独立复核导引）；移交后 Codex 实施目录登记、非作者独立复核（干净上下文子 Agent，覆盖 R1–R10 与 TF01–TF14）、Git/CI 至合并。

@@ -150,7 +150,7 @@ def selftest() -> bool:
 
 
 def main(argv: list) -> int:
-    if len(argv) >= 2 and argv[1] == "selftest":
+    if len(argv) >= 2 and argv[1] in ("selftest", "--selftest"):
         return 0 if selftest() else 1
     out_dir = "."
     if len(argv) >= 3 and argv[1] == "--out-dir":
@@ -164,4 +164,12 @@ def main(argv: list) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    try:
+        sys.exit(main(sys.argv))
+    except ModuleNotFoundError as exc:
+        if exc.name != "openpyxl":
+            raise
+        import shlex
+        print(f"缺少 openpyxl；请在获准的 Python 环境安装：{shlex.quote(sys.executable)} -m pip install -r "
+              f"{shlex.quote(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'requirements.txt'))}", file=sys.stderr)
+        sys.exit(1)

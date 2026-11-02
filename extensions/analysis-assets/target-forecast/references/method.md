@@ -1,13 +1,13 @@
 # 目标测算方法（人/货/场三视角）
 
-引擎身份：`optracall-forecast-1`（测算，本文件）与 `optracall-forecast-ingest-1`（导入）。数学承接 target-forecast 原仓 `target_forecast` 引擎（原引擎 forecast-engine-1.1，业务基线 `df5acd6`），OptraCall 形态纯 Python 重实现；等价性由黄金案例自检证明（数值容差 1e-9，去 pandas 化的求和次序可能引入远小于该容差的浮点差异）。
+引擎身份：`optracall-forecast-2`（测算，本文件）与 `optracall-forecast-ingest-2`（导入）。数学承接 target-forecast 原仓 `target_forecast` 引擎（原引擎 forecast-engine-1.1，业务基线 `df5acd6`），OptraCall 形态纯 Python 重实现；等价性由黄金案例自检证明（数值容差 1e-9，去 pandas 化的求和次序可能引入远小于该容差的浮点差异）。
 
 ## 1. 三视角公式
 
 | 视角 | 公式 | 启用条件 | 地位 |
 | --- | --- | --- | --- |
 | 人 | GMV = 新客数×新客客单 + 老客数×复购频次×老客客单 | 恒可用 | 模式A主口径 |
-| 场 | GMV = UV × 转化率 × 客单 | 该平台有 UV | 模式B主口径（有流量数据时优先） |
+| 场 | GMV = UV × 转化率 × 客单 | 该平台基线窗口每月均有正 UV | 模式B主口径（有流量数据时优先） |
 | 货 | GMV = Σ(品类×梯队基期 × (1+梯队增速)) | 有订单明细结构 | 校验视角 |
 
 主口径 = 有流量数据用场，否则用人。三视角对同一笔 GMV 负责，互为校验（差异>5% 打标"需复核"）。

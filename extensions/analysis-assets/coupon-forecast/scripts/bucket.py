@@ -21,7 +21,7 @@ import tempfile
 
 sys.dont_write_bytecode = True  # 同目录导入不落 __pycache__，保持分析资产目录干净
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from coupon import Basket  # noqa: E402
+from coupon import Basket, ENGINE_VERSION, input_digest  # noqa: E402
 
 
 def _issue(level, code, message):
@@ -211,7 +211,11 @@ def import_file(path: str, kind: str | None = None, visitors=None, conversion=No
         if conversion is None:
             snap["issues"].append(_issue("warning", "missing_conversion",
                                          "未提供 --conversion（无券基准转化率 C₀）：基准片段中为空，测算前必须补"))
-    return {"kind": kind, "row_count": snap["row_count"],
+    digest_rows = json.loads(json.dumps(rows, ensure_ascii=False, default=str))
+    return {"engine_version": ENGINE_VERSION,
+            "input_digest": input_digest({"headers": headers, "rows": digest_rows, "kind": kind,
+                                          "visitors": visitors, "conversion": conversion}),
+            "kind": kind, "row_count": snap["row_count"],
             "issues": snap["issues"], "ok": not errors, "baseline": baseline}
 
 
@@ -264,7 +268,7 @@ def selftest() -> bool:
 
 
 def main(argv: list) -> int:
-    if len(argv) >= 2 and argv[1] == "selftest":
+    if len(argv) >= 2 and argv[1] in ("selftest", "--selftest"):
         return 0 if selftest() else 1
     if len(argv) < 3 or argv[1] != "--input":
         print(__doc__, file=sys.stderr)
@@ -293,7 +297,7 @@ def main(argv: list) -> int:
         print(json.dumps({"error": {"type": "invalid_input", "message": str(exc)}},
                          ensure_ascii=False), file=sys.stderr)
         return 1
-    text = json.dumps(result, ensure_ascii=False, indent=2)
+    text = json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False)
     if out_path:
         with open(out_path, "w", encoding="utf-8") as fh:
             fh.write(text + "\n")
@@ -304,4 +308,12 @@ def main(argv: list) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    try:
+        sys.exit(main(sys.argv))
+    except ModuleNotFoundError as exc:
+        if exc.name != "openpyxl":
+            raise
+        import shlex
+        print(f"缺少 openpyxl；请在获准的 Python 环境安装：{shlex.quote(sys.executable)} -m pip install -r "
+              f"{shlex.quote(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'requirements.txt'))}", file=sys.stderr)
+        sys.exit(1)

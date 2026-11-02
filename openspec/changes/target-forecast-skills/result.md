@@ -1,6 +1,13 @@
 # target-forecast 三测算 skill · 实施与验证记录
 
-日期：2026-11-03 · 分支：`qoder/target-forecast` · 状态：Qoder 侧开发与本地验证完成，待整体移交 Codex（目录登记接缝、非作者独立复核、Git/CI 至合并）；尚未推送
+日期：2026-11-03 · 分支：`qoder/target-forecast` · 状态：Codex 已接管，正在实施目录接缝及独立复核；Git/CI 交付尚待用户另行授权。下文 Qoder 原始证据及未验证项保留其移交时范围。
+
+## Codex 接管与候选核对
+
+- 独立工作树：`/Users/bendandebaba/.codex/worktrees/target-forecast-delivery/OptraCall`；交接提交与 origin 分支均为 `0b436e591d3d56a3394edd28593074599b688b2e`，基线 `636ac3a53f69c524030cc6294d6eeccbdae3f6d7`。原 Qoder 工作树已游离，移交后 Codex 为唯一写入者。
+- 原候选清单实际列 30 个文件；首次逐项核对 **29/30 一致**。唯一差异是 `review-handoff.md`：清单预期前缀 `d1bb5e129083ecca`，实际 SHA-256 为 `6b767f9271bee99f0b06f9abd7db9f11f089a56b4c1af9943e5698c3f93d429d`；实际文件与交接提交 blob 一致，工作树干净。清单自身也与交接提交一致，故原始清单内部不一致，不能记为全部通过。
+- 已暂停实施并向用户说明差异；用户明确回复“同意，确认”，接受以交接提交中的实际移交包继续。原 `candidate-manifest.txt` 与 `review-handoff.md` 保持原字节，不回写清单掩盖失败。移交包中“尚未提交/推送”等为 Qoder 收尾前历史描述，由本次已推送提交及接管记录说明当前状态。
+- 原始核对证据：`/Users/bendandebaba/OptraCall-artifacts/target-forecast-intake-20261103T003606/`；独立复核核对证据：`/Users/bendandebaba/OptraCall-artifacts/target-forecast-intake-audit-20261103-003658-0212a82c/`。本项用户接受仅解决候选身份差异，不代替工程复核、Git/CI、产品验收或设备采用授权。
 
 ## 授权与流程
 
@@ -57,7 +64,7 @@ extensions/analysis-assets/
 | TF11（任务内全流程，真实 SDK 路径） | PASS：startTestHost 合成 Provider 任务会话内，Agent 经 bash 实际执行 7 项 selftest 全绿 + template→run→报告链路；引擎身份与 input_digest 经工具结果回传写入报告；报告按 020/060 目录约定落 `project.rootPath/060_reports`；普通任务 read/bash/edit/write 工具保留 |
 | `npm run check` 全量 | exit 0：900 项（897 PASS / 3 条件 SKIP / 0 FAIL）+ 边界检查（未改边界脚本）+ 构建；既有 bundle 体积警告保持披露 |
 
-## 验收映射（TF01–TF14 当前状态）
+## Qoder 移交时验收映射（保留原范围）
 
 | 标识 | 状态 | 依据 |
 | --- | --- | --- |
@@ -87,3 +94,56 @@ extensions/analysis-assets/
 ## 下一步
 
 整体移交 Codex：核对候选清单 → 实施唯一接缝（catalog-data 三条目 + openCatalogEntry 导航）→ 非作者独立复核（干净上下文子 Agent）→ Git/CI 至合并 main。
+
+## Codex 实施与修复（2026-11-03）
+
+本节更新接管后的实际状态，上文是 Qoder 移交时证据，不追溯改写为 Codex 验证结论。Host 修改仍严格只有 `catalog-data.ts` 的三条已接入资产及 `CatalogEntry`，和 `App.tsx/openCatalogEntry` 的项目视图导航。无会话域、Interface、owner/profile、agentOptions、Runtime、依赖包/锁文件、边界豁免或其他 Host 改动。
+
+- TF02：新增经营目标测算、优惠券测算、投放 ROI 测算；来源与 note 元数据对齐 ppt-report。既有卡片不展示 source/note，故 description 也说明内置、随产品更新及项目任务对话入口，未扩大 Host 组件范围。
+- 身份与导入：ingest 摘要原来只含文件名、平台、模式、行数，改单元格不变；现绑定实际表头/单元格与口径。coupon stress 原来摘要只绑定情景文件路径，现绑定实际内容；bucket 补引擎身份与实际内容摘要。空行后的 Excel 物理行号保留，非法月份、缺订单/用户/商品身份、负值/非有限值及非法转化率定位拒绝。
+- 数学边界：部分月份缺 UV 原来会用全月订单除部分月 UV，将零增长场主口径翻倍；现要求基线窗口每月正 UV，否则披露缺月并用人主口径。人工券候选原来会漏无券；现始终补入且不修改原输入，所有券均非法仍保留无券行并报 invalid_comparison。q_table 概率及新增篮子权重逐项校验，防止负概率/订单。敏感性由实际变更参数路径分组，多因素只作为联合情景披露。ROI 近保本稳定性改用舍入前盈亏符号，非法计划/情景参数带字段名拒绝。
+- 确定性与便携：Python 3.9 原 coupon 自检 16 项失败，独立定位为 Python 求和算法差异，并非 math.exp；显式 `math.fsum` 后与原 Python 3.14 黄金逐值一致，未改黄金或放宽容差。forecast 对平台/情景对象稳定排序，计算 JSON 排序键输出；七入口兼容 `selftest` 与 `--selftest`。四个 xlsx CLI 缺 openpyxl 时给出所选 Python 环境的 requirements 安装指引，不继续硬算。
+- 红线及版本：三份 skill 明确 Python 环境；coupon/roi 补数据、口径、假设变更后的旧结论过期，coupon 报告明确身份栏位，修正元/分百倍换算文案。当前四个引擎版本均递增为 `optracall-forecast-2` / `optracall-forecast-ingest-2` / `optracall-coupon-2` / `optracall-roi-2`；原黄金不变。名义金额输入整数分、概率加权期望金额允许小数分，沿用原仓/冻结黄金口径，原“金额全程整数分”简述已精确化，未把期望值取整凑通过。
+- TF01/TF11：原测试只有 ROI 的 template/run/report，另两类仅跑 selftest，不能称三类全流程。现为三独立任务各自发现三 skill、只读取所选 skill、真实 SDK bash 准备输入/计算、回传实际数值与身份、write 报告并按 020/060 读回，另有无关问候任务不使用工具的合成对照。forecast 在 Node 测试中只读取冻结案例 input（不读 expected）并用标准库计算；xlsx 模板/导入验收独立于 Node CI，避免隐式依赖 runner 的 openpyxl。另以产品 HTTP 开启受管任务，实际首个 SDK 请求含三 skill 的受保护快照路径，逐一读回 SKILL 字节与源一致；该条按现有受管平台合同限 macOS，其他平台明确 SKIP。固定合成 Provider 路由不能证明真实模型自主激活率；该项继续 NOT_RUN。
+
+### 接管后验证与证据
+
+统一命令及失败日志根：`/Users/bendandebaba/OptraCall-artifacts/target-forecast-intake-20261103T003606/`；运行时代码候选为 `runtime-candidate.json`（完整 SHA-256，不含仍在收尾的 OpenSpec 文档）。
+
+| 验收 | 接管后证据与范围 |
+| --- | --- |
+| TF01 | 实际产品普通任务和 macOS 受管任务均在 SDK 请求中发现三 skill，受管位置为真实快照且 SKILL 字节一致；非作者另独立校验 SDK 加载器两路径及三 skill 全资源逐字节一致（加载器探针无模型请求） |
+| TF02 | 隔离浏览器三条目均为已接入、项目任务入口可见、逐一点击进入项目看板；与现有 ppt-report 形态一致 |
+| TF03/04/05/06/07 | 原黄金自检 + 独立反例复现/修复复验；新增 `python3 -B tests/target-forecast-cli-regressions.py` 覆盖摘要、物理行号、月份、缺身份/非法数值、部分 UV、人工无券、四类结论、概率、权重、敏感性、ROI 符号/情景、缺依赖与 canonical 顺序；coupon 自检另补真实逐篮子分支概率/预算不截断不变量 |
+| TF08/10/13 | 七个脚本两种自检拼法及 Python 3.9.6/3.14.4 实测；黄金不变，实际比较容差见 spec；缺依赖 `-S` 环境 exit1 并给指引；未安装新全局包 |
+| TF09 | 非作者复核激活分工、红线、资源路径；所有新增文字与脚本实际合同一致 |
+| TF11 | `node --test tests/protected-skills.test.ts tests/target-forecast-skills.test.ts`：最终 9/9 PASS（含 TF01 受管发现）；三类真实 SDK 合成任务与无关任务对照，真实模型未运行 |
+| TF12 | 隔离浏览器 Case 产物可用、决策板展开实际报告路径/引文，两处真实下载并核对与原文件 SHA-256 相同；复用原合同，未新增预览或持久字段 |
+| TF14 | 完整 `npm run check` 首轮 903 项＝900 PASS / 3 条件 SKIP / 0 FAIL，边界/tsc/构建通过；首轮期间仍有修正，另对冻结运行时候选运行最终全量，最终状态见下方收尾记录 |
+
+TF02/TF12 浏览器根：`/Users/bendandebaba/OptraCall-artifacts/target-forecast-qa-20261103-004531/`。`catalog-three-skills-visible.png`、`case-artifact.png`、`board-reference.png` 与 AX 文本保留；Case/Board 下载文件及原回读均为 5370 字节，SHA-256 `989eb23e16fe3582d1a6f29c75b02b5618c2f9563f8e7191395071262c88a282`。这份固定 QA 报告在修复前由脚本以 ROI 引擎 1 生成，只用于文件引用合同，不代替版本 2 数学验收；版本 2 任务证据由 TF11 提供。Provider 仅 seed 决策板抽取发生 1 次合成请求，目录/项目/Case/Board 查看与下载后仍为 1，无真实模型调用。
+
+失败证据保留：原 manifest 29/30、Python 3.9 coupon 16 项失败、各独立边界反例与对应 RED 均保留。回归编写中变体 fixture 类型和可选列选择错误、首次脚本文本替换的语法错误、预算断言名称错误已纠正并留日志，这些属于验证/编辑失败，不冒充产品 RED。独立隔离 archive 全量检查的 stamp-build 因无 `.git` 失败亦为验证环境限制，未伪造 Git 元数据；真实工作树的最终完整检查另列。现有 Vite 大 bundle 警告及 npm 安装 2 项 moderate 审计提示保留，未擅改依赖。
+
+独立复核以禁用 site-packages 的 Python 路径实证原 Node TF11 隐式依赖 openpyxl 的失败，日志 `stdlib-tf11-target.log` 保留于规格复核根；上述标准库输入路径负责关闭该环境缺口，未把故障隐去或向 CI 添加分析包。所有 Python 自检与 `tests/target-forecast-cli-regressions.py` 继续在声明的 Python+openpyxl 环境独立运行，不纳入 Node CI。
+
+### 交付边界
+
+已授权的本地实现、验证与非作者复核持续完成；Git/CI 尚未开始：未集成最新 main、未提交推送新候选、未建 PR、未调用 hosted CI、未合并或归档。须按本次用户指令另获 Git/CI 授权，实际 PR head CI 成功后再请用户确认 squash。真实模型、原仓退役/JuanerAI 文档处置、优惠券复盘脚本化、pandas 环境与设备采用均未随本任务执行。
+
+
+### 本地工程准备收尾
+
+- 冻结运行时/测试/规格后的最终 `npm run check`：**exit 0，904 项＝901 PASS / 3 条件 SKIP / 0 FAIL**，含 agent-session 边界、全部 Node 测试、tsc、Vite 构建；`npm-check-final-v2.log` 保留完整日志。既有大 bundle 警告保留。此前各轮全量不替代本次冻结树检查。
+- `final-python-validation.json`：Python 3.9.6 / 3.14.4 各七项 `--selftest`，共14/14通过；新增 CLI 边界回归各16项通过。`tf-sdk-managed.log`：9/9 Node目标测试通过，无SKIP；受管发现实际在本机macOS执行。独立标准库路径探针关闭了Node目标流隐式openpyxl依赖。
+- 两名干净上下文非作者复核者分别覆盖规格/数学与规范/架构，先独立导出预期、源只读、隔离产物；所有发现经根修复并由原复核者复验关闭。完整报告见 [independent-review.md](independent-review.md)。工程规范§4职责边界与复用专项：**本次变更及受影响接缝通过，无需例外**，不外推既有全仓合规。
+- 复核身份：`takeover-candidate-final.json` 的34文件 SHA-256清单经两名复核者各自核得34/34一致，清单SHA-256 `f43e1f2aa993c5a73c625ca7e7505e436fb6fa53c38862b7e5e2857ba1cbe0e1`。该清单固定后只追加本结果终态和独立报告，运行时/测试/规格不再变动；Git交付前另核当前完整清单。
+- 隔离QA服务和浏览器标签已关闭，合成数据、报告、原始失败及下载字节证据保留；用户现有服务未切换。浏览器实际下载到默认 Downloads 后复制入QA根，详见 `browser-validation.md`，未虚称预先设置隔离下载目录。
+- 当前仅本地工程准备完成，分支工作树保留未提交修复；后续按上方边界申请 Git/CI 授权。TF01–TF14的适用本地工程验收均有证据；真实模型激活/专业报告质量、用户产品验收、CI、合并、归档与运行采用分别保持未完成，不能由本节PASS替代。
+
+
+## 已授权 Git/CI 交付阶段
+
+2026-11-03 用户明确回复“授权，且完成后直接合并”，授权本变更集成最新 main、提交推送、单一PR、实际head CI成功后直接squash合并、本地main安全快进与规格/结果原位归档，不再另设合并确认。上述“Git/CI待授权”为此前阶段快照，真实模型/原仓退役/设备采用等后续边界仍不扩大。
+
+交付前重新核对35文件完整清单 `delivery-preauthorization-manifest.json`：35/35 SHA-256一致；原候选清单/移交包保持原字节，工作树只有本次已复核修复。fetch后最新origin/main为`484995d908087449e64e9c352b9d5e33d8358afd`，相对基线`636ac3a`仅4份simlab OpenSpec文档，无运行时/测试/依赖/构建变化。单PR尚未建立，以下实际交付回读逐项追加，不预填CI或合并成功。

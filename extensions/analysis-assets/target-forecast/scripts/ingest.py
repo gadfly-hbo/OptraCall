@@ -26,11 +26,12 @@ from __future__ import annotations
 
 import calendar
 import json
+import math
 import os
 import sys
 from datetime import date, datetime, timedelta
 
-ENGINE_VERSION = "optracall-forecast-ingest-1"
+ENGINE_VERSION = "optracall-forecast-ingest-2"
 
 DETAIL_REQUIRED = ["日期", "订单号", "用户ID", "商品ID", "实付金额"]
 DETAIL_OPTIONAL = ["品类", "件数", "原价金额"]
@@ -42,6 +43,8 @@ UNIFIED_COLUMNS = ["platform", "month", "gmv", "orders", "units", "buyers", "uv"
 
 
 def _norm_str_id(value) -> str:
+    if value is None:
+        return ""
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value).strip()
@@ -51,7 +54,8 @@ def _to_num(value):
     if isinstance(value, bool) or value is None or value == "":
         return None
     try:
-        return float(value)
+        number = float(value)
+        return number if math.isfinite(number) else None
     except (TypeError, ValueError):
         return None
 
@@ -78,15 +82,25 @@ def _norm_month(value) -> str:
     if isinstance(value, date):
         return f"{value.year:04d}-{value.month:02d}"
     s = str(value).strip()
-    if len(s) == 7 and s[4] == "-":
-        return s
     s2 = s.replace("/", "-").replace(".", "-")
     parts = s2.split("-")
-    if len(parts) == 2:
-        return f"{int(parts[0]):04d}-{int(parts[1]):02d}"
-    if len(s) == 8 and s.isdigit():
-        return f"{s[:4]}-{s[4:6]}"
+    try:
+        if len(parts) == 2:
+            parsed = date(int(parts[0]), int(parts[1]), 1)
+            return f"{parsed.year:04d}-{parsed.month:02d}"
+        if len(s) in (6, 8) and s.isdigit():
+            parsed = date(int(s[:4]), int(s[4:6]), 1)
+            return f"{parsed.year:04d}-{parsed.month:02d}"
+    except ValueError:
+        pass
     raise ValueError(f"无法解析月份: {value!r}，请用 YYYY-MM")
+
+
+class WorksheetRow(dict):
+    """Keep physical row provenance separate from user-controlled column names."""
+    def __init__(self, values, excel_row):
+        super().__init__(values)
+        self.excel_row = excel_row
 
 
 def read_xlsx_rows(path: str):
@@ -100,10 +114,10 @@ def read_xlsx_rows(path: str):
         wb.close()
         return [], []
     out = []
-    for values in rows_iter:
+    for excel_row, values in enumerate(rows_iter, start=2):
         if all(v is None or str(v).strip() == "" for v in values):
             continue
-        out.append({h: v for h, v in zip(headers, values) if h})
+        out.append(WorksheetRow({h: v for h, v in zip(headers, values) if h}, excel_row))
     wb.close()
     return headers, out
 
@@ -124,6 +138,10 @@ def validate_detail_rows(rows: list, platform: str) -> list:
     bad_dates, bad_amounts = [], []
     by_order_user: dict = {}
     for idx, r in enumerate(rows, start=2):
+        idx = getattr(r, "excel_row", idx)
+        for column in ("订单号", "用户ID", "商品ID"):
+            if not _norm_str_id(r.get(column)):
+                raise BlockerError(f"[{platform}] 「{column}」缺失（第 {idx} 行）")
         d = _parse_date(r.get("日期"))
         if d is None:
             bad_dates.append(idx)
@@ -334,10 +352,11 @@ def validate_agg_rows(rows: list, platform: str):
     recs = []
     seen_months: dict = {}
     for idx, r in enumerate(rows, start=2):
+        idx = getattr(r, "excel_row", idx)
         try:
             month = _norm_month(r.get("月份"))
         except ValueError as exc:
-            raise BlockerError(f"[{platform}] {exc}")
+            raise BlockerError(f"[{platform}] {exc}（第 {idx} 行）")
         if month in seen_months:
             same = [seen_months[month], idx]
             raise BlockerError(f"[{platform}] 月份 {month} 重复出现（第 {'、'.join(map(str, same))} 行），请先消除重复月份")
@@ -345,11 +364,15 @@ def validate_agg_rows(rows: list, platform: str):
         rec = {"row": idx, "month": month}
         for c in AGG_REQUIRED[1:]:
             v = _to_num(r.get(c))
-            if v is None:
+            if v is None or v < 0:
                 raise BlockerError(f"[{platform}] 「{c}」存在空值/非法数值（第 {idx} 行）")
             rec[c] = v
         for c in ("UV", "新客订单数", "转化率", "GMV"):
             rec[c] = _to_num(r.get(c)) if c in r else None
+            if r.get(c) not in (None, ""):
+                value = rec[c]
+                if value is None or value < 0 or (c == "转化率" and not 0 < value <= 1):
+                    raise BlockerError(f"[{platform}] 「{c}」存在非法数值（第 {idx} 行）")
         recs.append(rec)
     if sum(x["新客数"] * x["新客客单"] + x["老客数"] * x["老客复购频次"] * x["老客客单"] for x in recs) <= 0:
         raise BlockerError(f"[{platform}] 派生 GMV 合计为 0，没有可测算的业务量")
@@ -436,6 +459,8 @@ def ingest_detail(path: str, platform: str, caliber: dict) -> dict:
         "engine_version": ENGINE_VERSION,
         "input": {"file": os.path.basename(path), "platform": platform, "mode": "A",
                   "rows": len(rows)},
+        "input_digest": _digest({"headers": headers, "rows": rows, "platform": platform,
+                                 "mode": "A", "caliber": caliber}),
         "unified": unified,
         "structure": structure,
         "coverage": cov,
@@ -460,6 +485,7 @@ def ingest_agg(path: str, platform: str) -> dict:
         "engine_version": ENGINE_VERSION,
         "input": {"file": os.path.basename(path), "platform": platform, "mode": "B",
                   "rows": len(rows)},
+        "input_digest": _digest({"headers": headers, "rows": rows, "platform": platform, "mode": "B"}),
         "unified": unified,
         "structure": None,
         "coverage": cov,
@@ -471,7 +497,8 @@ def ingest_agg(path: str, platform: str) -> dict:
 
 def _digest(obj) -> str:
     import hashlib
-    canon = json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    canon = json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+                       allow_nan=False, default=lambda value: value.isoformat())
     return hashlib.sha256(canon.encode("utf-8")).hexdigest()[:16]
 
 
@@ -563,7 +590,7 @@ def selftest() -> bool:
 
 
 def main(argv: list) -> int:
-    if len(argv) >= 2 and argv[1] == "selftest":
+    if len(argv) >= 2 and argv[1] in ("selftest", "--selftest"):
         return 0 if selftest() else 1
     if len(argv) < 4 or argv[1] not in ("detail", "agg") or argv[2] != "--input":
         print(__doc__, file=sys.stderr)
@@ -588,8 +615,7 @@ def main(argv: list) -> int:
         print(json.dumps({"ok": False, "blockers": [str(exc)]}, ensure_ascii=False), file=sys.stderr)
         return 1
     result["ok"] = True
-    result["input_digest"] = _digest(result["input"])
-    text = json.dumps(result, ensure_ascii=False, indent=2)
+    text = json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False)
     if out_path:
         with open(out_path, "w", encoding="utf-8") as fh:
             fh.write(text + "\n")
@@ -602,4 +628,12 @@ def main(argv: list) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    try:
+        sys.exit(main(sys.argv))
+    except ModuleNotFoundError as exc:
+        if exc.name != "openpyxl":
+            raise
+        import shlex
+        print(f"缺少 openpyxl；请在获准的 Python 环境安装：{shlex.quote(sys.executable)} -m pip install -r "
+              f"{shlex.quote(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'requirements.txt'))}", file=sys.stderr)
+        sys.exit(1)
