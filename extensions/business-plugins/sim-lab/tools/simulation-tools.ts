@@ -1,6 +1,8 @@
 import { Type } from 'typebox';
 import { defineTool } from '../../../../src/agent/sdk.ts';
 import { SimLabService } from '../service/simlab-service.ts';
+import { EngineFault } from '../kernel/engine.ts';
+import { StoreFault } from '../storage/store.ts';
 
 // 5 个正交推演工具：只声明能力与业务契约，不规定 Agent 的分析步骤。
 // 固化（freeze）刻意不设为工具：正式记录由用户在页面确认（C7）。
@@ -26,11 +28,9 @@ const textResult = (envelope: Envelope) => ({
   details: envelope as Record<string, unknown>,
   ...(envelope.status === 'rejected' ? { isError: true } : {}),
 });
-const rejected = (error: unknown) => textResult({
-  status: 'rejected',
-  code: (error as { code?: string })?.code ?? 'simulation_failed',
-  message: error instanceof Error ? error.message : '推演操作未完成。',
-});
+const rejected = (error: unknown) => textResult(error instanceof EngineFault || error instanceof StoreFault
+  ? { status: 'rejected', code: error.code, message: error.message }
+  : { status: 'rejected', code: 'simulation_failed', message: '推演操作未完成，请检查本地存储状态后重试。' });
 const succeeded = (data: unknown) => textResult({ status: 'succeeded', data });
 
 const summaryOf = (run: { results: Record<string, { summary: unknown; conservation: boolean; validDays: number }> }, draftRevision: number, id: string) => ({
@@ -69,12 +69,12 @@ export function createSimulationTools(options: { storeRoot: string; projectId: s
         try {
           if (params.action === 'list') return succeeded({ drafts: await service.listDrafts() });
           if (params.action === 'create') {
-            if (!params.name) return rejected(Object.assign(new Error('create 需要 name。'), { code: 'invalid_name' }));
+            if (!params.name) return rejected(new EngineFault('invalid_name', 'create 需要 name。'));
             return succeeded({ draft: await service.createDraft({ name: params.name, parameters: params.parameters, variants: params.variants }) });
           }
-          if (!params.draftId) return rejected(Object.assign(new Error('该操作需要 draftId。'), { code: 'draft_not_found' }));
+          if (!params.draftId) return rejected(new EngineFault('draft_not_found', '该操作需要 draftId。'));
           if (params.action === 'get') return succeeded({ draft: await service.getDraft(params.draftId) });
-          if (params.expectedRevision === undefined) return rejected(Object.assign(new Error('update 需要 expectedRevision。'), { code: 'revision_conflict' }));
+          if (params.expectedRevision === undefined) return rejected(new EngineFault('revision_conflict', 'update 需要 expectedRevision。'));
           return succeeded({ draft: await service.updateDraft(params.draftId, { name: params.name, parameters: params.parameters, variants: params.variants }, params.expectedRevision) });
         } catch (error) { return rejected(error); }
       },
@@ -95,7 +95,7 @@ export function createSimulationTools(options: { storeRoot: string; projectId: s
           const data: Record<string, unknown> = { ...summaryOf(run, run.draftRevision, run.id), engineVersion: run.engineVersion };
           if (params.includeLedger && params.variantId) {
             const result = run.results[params.variantId];
-            if (!result) return rejected(Object.assign(new Error('运行记录中没有该变体结果。'), { code: 'invalid_variant' }));
+            if (!result) return rejected(new EngineFault('invalid_variant', '运行记录中没有该变体结果。'));
             data.ledger = { variantId: params.variantId, rows: result.rows };
           }
           return succeeded(data);
@@ -130,7 +130,7 @@ export function createSimulationTools(options: { storeRoot: string; projectId: s
         try {
           if (!params.snapshotId) {
             const snapshots = await service.listSnapshots();
-            return succeeded({ snapshots: snapshots.map(s => ({ id: s.id, name: s.name, frozenAt: s.frozenAt, draftId: s.draftId, variant: s.variant, summary: s.result.summary, engineVersion: s.engineVersion })) });
+            return succeeded({ snapshots: snapshots.map(s => ({ id: s.id, name: s.name, frozenAt: s.frozenAt, draftId: s.draftId, variant: s.variant, summary: s.result.summary, engineVersion: s.engineVersion, model: s.model })) });
           }
           const snapshot = await service.getSnapshot(params.snapshotId);
           const { result, ...rest } = snapshot;

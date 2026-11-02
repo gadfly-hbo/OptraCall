@@ -31,7 +31,7 @@ test('SIM-TOOLS-02: inspect returns engine caliber and unmodeled boundaries', as
   const { tools } = await fixture(t);
   const result = await call(tools.simulation_inspect, {});
   assert.equal(result.details.status, 'succeeded');
-  assert.equal(result.details.data.engineVersion, 'optracall-sim-1');
+  assert.equal(result.details.data.engineVersion, 'optracall-sim-2');
   assert.ok(result.details.data.unmodeled.includes('概率分布与随机仿真'));
   assert.ok(result.details.data.caliber.perturbations.includes('leadTimeDelta'));
 });
@@ -77,7 +77,7 @@ test('SIM-TOOLS-03: agent full flow — draft, run, stress, evidence readback', 
   assert.equal(listed.details.data.snapshots[0].id, snapshot.id);
   const detail = await call(tools.simulation_evidence, { snapshotId: snapshot.id, includeLedger: true });
   assert.equal(detail.details.data.snapshot.result.rows.length, 30);
-  assert.equal(detail.details.data.snapshot.engineVersion, 'optracall-sim-1');
+  assert.equal(detail.details.data.snapshot.engineVersion, 'optracall-sim-2');
 });
 
 test('SIM-TOOLS-04: not-found and validation errors use structured rejection envelopes', async t => {
@@ -91,4 +91,14 @@ test('SIM-TOOLS-04: not-found and validation errors use structured rejection env
   assert.equal(noRevision.details.code, 'revision_conflict');
   const noSnapshot = await call(tools.simulation_evidence, { snapshotId: 'SNAP-9999' });
   assert.equal(noSnapshot.details.code, 'snapshot_not_found');
+});
+
+test('SIM-TOOLS-05: unexpected storage faults do not expose Host paths or raw system messages', async t => {
+  const { tools, storeRoot } = await fixture(t);
+  await fs.writeFile(storeRoot, 'synthetic obstruction');
+  const result = await call(tools.simulation_draft, { action: 'list' });
+  assert.equal(result.details.status, 'rejected');
+  assert.equal(result.details.code, 'simulation_failed');
+  assert.ok(!JSON.stringify(result).includes(storeRoot));
+  assert.ok(!JSON.stringify(result).includes('ENOTDIR'));
 });

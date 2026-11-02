@@ -71,7 +71,9 @@ export function validatePerturbation(perturbation: SimPerturbation): void {
 }
 
 export function inputHashOf(p: SimParameters, v: SimVariant, perturbation: SimPerturbation): string {
-  const canonical = JSON.stringify({ engineVersion: ENGINE_VERSION, parameters: p, variant: v, perturbation });
+  const canonical = JSON.stringify({ engineVersion: ENGINE_VERSION, parameters: p, variant: v, perturbation }, (_key, value) =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value);
   return createHash('sha256').update(canonical).digest('hex');
 }
 
@@ -153,7 +155,8 @@ export function simulate(p: SimParameters, variant: SimVariant, perturbation: Si
 
     const dayValid = stock === startStock + received - shipped
       && backlog === startBacklog + accepted - shipped - cancelled
-      && Math.abs(cash - (startCash + revenue - purchasePayment - fulfillmentFee - holdingFee)) < 1e-6
+      && Math.abs(cash - (startCash + revenue - purchasePayment - fulfillmentFee - holdingFee)) <= Math.max(1e-6,
+        Number.EPSILON * 8 * (Math.abs(cash) + Math.abs(startCash) + revenue + purchasePayment + fulfillmentFee + holdingFee))
       && stock >= 0 && backlog >= 0;
     if (dayValid) validDays++;
     rows.push({
@@ -167,11 +170,12 @@ export function simulate(p: SimParameters, variant: SimVariant, perturbation: Si
   const conservation = validDays === p.days
     && stock === openingStock + tReceived - tShipped
     && tAccepted === tShipped + tCancelled + closingBacklog
-    && Math.abs(cash - (openingCash + tRevenue - tPurchases - tFulfillment - tHolding)) < 0.01;
+    && Math.abs(cash - (openingCash + tRevenue - tPurchases - tFulfillment - tHolding)) <= Math.max(0.01,
+      Number.EPSILON * 8 * p.days * (Math.abs(cash) + Math.abs(openingCash) + tRevenue + tPurchases + tFulfillment + tHolding));
   return {
     engineVersion: ENGINE_VERSION,
     inputHash: inputHashOf(p, variant, perturbation),
-    perturbation: { ...perturbation },
+    perturbation: Object.fromEntries(Object.entries(perturbation).sort(([a], [b]) => a.localeCompare(b))),
     rows,
     summary: {
       demand: tDemand, accepted: tAccepted, shipped: tShipped, cancelled: tCancelled, unaccepted: tUnaccepted,
@@ -194,10 +198,10 @@ export const DEFAULT_PARAMETERS: SimParameters = {
   cash: 180000, maxWait: 3, cashThreshold: 60000,
 };
 
-export function defaultVariants(): SimVariant[] {
+export function defaultVariants(days = DEFAULT_PARAMETERS.days): SimVariant[] {
   return [
     { id: 'baseline', name: '基线 · 常规补货', openingExtraStock: 0, acceptanceCap: null },
     { id: 'advance', name: '提前囤货 +900 件', openingExtraStock: 900, acceptanceCap: null },
-    { id: 'split', name: '限量分批 · 日上限 250', openingExtraStock: 0, acceptanceCap: 250, promoWindow: { start: 8, end: 21 }, promoLiftScale: 0.5 },
+    { id: 'split', name: '限量分批 · 日上限 250', openingExtraStock: 0, acceptanceCap: 250, promoWindow: { start: Math.min(8, days), end: Math.min(21, days) }, promoLiftScale: 0.5 },
   ];
 }

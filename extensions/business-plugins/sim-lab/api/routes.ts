@@ -32,7 +32,7 @@ function serviceFor(options: SimLabRoutesOptions, projectId: string): SimLabServ
 
 function httpStatus(code: string): number {
   if (code.endsWith('_not_found')) return 404;
-  if (['revision_conflict', 'record_conflict', 'stale_run', 'project_archived'].includes(code)) return 409;
+  if (['revision_conflict', 'record_conflict', 'stale_run', 'project_archived', 'store_busy'].includes(code)) return 409;
   if (code === 'conservation_failed') return 422;
   return 400;
 }

@@ -24,7 +24,19 @@ export class SimLabStore {
   constructor(root: string) { this.root = path.resolve(root); }
 
   #serialize<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.#gate.then(operation);
+    const result = this.#gate.then(async () => {
+      await fs.mkdir(this.root, { recursive: true, mode: 0o700 });
+      const root = await fs.lstat(this.root);
+      if (!root.isDirectory() || root.isSymbolicLink()) fail('unsafe_store_directory', '存储目录不安全。');
+      // A short filesystem critical section also covers Host/worker processes.
+      // A crash leaves the lock in place: preserve UNKNOWN rather than guess and replay.
+      const lock = path.join(this.root, '.operation-lock');
+      await fs.mkdir(lock, { mode: 0o700 }).catch(error => {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') return fail('store_busy', '推演资产正被访问，或上次操作收尾未知；请核对本地状态后重试。');
+        throw error;
+      });
+      try { return await operation(); } finally { await fs.rmdir(lock); }
+    });
     this.#gate = result.then(() => {}, () => {});
     return result;
   }
@@ -152,7 +164,7 @@ export class SimLabStore {
     });
   }
 
-  /** CAS 更新：写前复读当前 revision，不一致即冲突；进程内串行化。 */
+  /** CAS 更新：跨实例/进程短锁内复读 revision，不一致即冲突。 */
   updateDraft(id: string, expectedRevision: number, mutate: (current: DraftRecord) => Omit<DraftRecord, 'revision' | 'createdAt' | 'updatedAt'>): Promise<DraftRecord> {
     return this.#serialize(async () => {
       const current = this.#decodeDraft(await this.#readJson(this.#draftFile(id)).catch(error => {
@@ -179,6 +191,8 @@ export class SimLabStore {
 
   insertSnapshot(input: Omit<SnapshotRecord, 'id' | 'frozenAt'>): Promise<SnapshotRecord> {
     return this.#serialize(async () => {
+      const current = this.#decodeDraft(await this.#readJson(this.#draftFile(input.draftId)));
+      if (current.revision !== input.draftRevision) fail('revision_conflict', '草稿在固化前已被修改，请刷新后重试。');
       const sequence = await this.#nextSequence('snapshot');
       const snapshot: SnapshotRecord = { ...input, id: `SNAP-${String(sequence).padStart(4, '0')}`, frozenAt: new Date().toISOString() };
       await this.#ensure('snapshots');

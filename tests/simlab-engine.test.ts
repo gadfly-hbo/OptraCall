@@ -82,3 +82,20 @@ test('SIM-ENGINE-04: parameter and variant boundaries are enforced', () => {
   ]) throwsCode(() => simulate(p, bad), 'invalid_variant');
   assert.doesNotThrow(() => validateVariant(v, 30));
 });
+
+test('SIM-ENGINE-05: object key order does not change equivalent input identity or result bytes', () => {
+  const p = base(), variant = baseline();
+  const reordered = <T extends object>(value: T) => Object.fromEntries(Object.entries(value).reverse()) as T;
+  const first = simulate(p, variant, { demandMultiplier: 1.25, priceMultiplier: 1.1 });
+  const second = simulate(reordered(p), reordered(variant), { priceMultiplier: 1.1, demandMultiplier: 1.25 });
+  assert.equal(JSON.stringify(first), JSON.stringify(second));
+});
+
+test('SIM-ENGINE-06: fractional monetary inputs conserve cash at all permitted magnitudes', () => {
+  for (const cost of [9999.999, 100.1234567]) {
+    const result = simulate({ ...base(), days: 90, demand: 5000, inventory: 100000, capacity: 10000,
+      price: 99999.99, cost, fulfillmentCost: 123.456789, holdingCost: 9.87654321, cash: 100000000 }, baseline());
+    assert.equal(result.validDays, 90);
+    assert.equal(result.conservation, true);
+  }
+});

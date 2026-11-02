@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { fork } from 'node:child_process';
 import { SimLabService } from '../extensions/business-plugins/sim-lab/service/simlab-service.ts';
 
 const PROJECT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -105,4 +106,86 @@ test('SIM-STORE-04: freeze enforces evidence discipline and snapshots are immuta
   const before = await fs.readFile(file, 'utf8');
   await service.updateDraft(draft.id, { name: '改名不影响快照' }, 2);
   assert.equal(await fs.readFile(file, 'utf8'), before);
+});
+
+test('SIM-STORE-05: accepted drafts run at the seven-day boundary and partial updates validate retained variants', async t => {
+  const { service } = await fixture(t);
+  const short = await service.createDraft({ name: '七天', parameters: { days: 7, promoStart: 1, promoEnd: 7 } });
+  assert.equal((await service.runDraft(short.id)).results.split!.rows.length, 7);
+  const long = await service.createDraft({ name: '缩短窗口' });
+  await rejectsCode(service.updateDraft(long.id, { parameters: { days: 7, promoStart: 1, promoEnd: 7 } }, 1), 'invalid_variant');
+  assert.equal((await service.getDraft(long.id)).revision, 1);
+  await rejectsCode(service.createDraft({ name: '不支持退货', variants: [{ id: 'one', name: 'one', returnRate: 0.5 }] }), 'invalid_variant');
+  await rejectsCode(service.createDraft({ name: '不支持日内规则', variants: [{ id: 'one', name: 'one', promoWindow: { start: 1, end: 7, hourly: true } }] }), 'invalid_variant');
+});
+
+test('SIM-STORE-06: freeze rechecks the draft revision at the atomic snapshot publication', async t => {
+  const { service } = await fixture(t);
+  const draft = await service.createDraft({ name: '固化竞态' }), run = await service.runDraft(draft.id);
+  const original = service.store.getRun.bind(service.store);
+  t.mock.method(service.store, 'getRun', async (id: string) => {
+    await service.updateDraft(draft.id, { parameters: { demand: 999 } }, 1);
+    return original(id);
+  });
+  await rejectsCode(service.freeze(draft.id, { runId: run.id, variantId: 'baseline', expectedRevision: 1 }), 'revision_conflict');
+  assert.deepEqual(await service.listSnapshots(), []);
+});
+
+test('SIM-STORE-07: independent store instances never acknowledge two writes for one revision', async t => {
+  const { root, service } = await fixture(t);
+  const peer = new SimLabService(path.join(root, 'project'), PROJECT);
+  const draft = await service.createDraft({ name: '两个写入者' });
+  const results = await Promise.allSettled([
+    service.updateDraft(draft.id, { parameters: { demand: 333 } }, 1),
+    peer.updateDraft(draft.id, { parameters: { capacity: 444 } }, 1),
+  ]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  const latest = await service.getDraft(draft.id);
+  assert.equal(latest.revision, 2);
+  assert.ok(latest.parameters.demand === 333 || latest.parameters.capacity === 444);
+});
+
+test('SIM-STORE-08: independent processes protect CAS, and orphan locks preserve unknown work', async t => {
+  const { root, service } = await fixture(t);
+  const draft = await service.createDraft({ name: '跨进程CAS' });
+  const workerFile = path.join(root, 'worker.mjs');
+  const storeModule = new URL('../extensions/business-plugins/sim-lab/storage/store.ts', import.meta.url).href;
+  await fs.writeFile(workerFile, `import {SimLabStore} from ${JSON.stringify(storeModule)};
+    const store=new SimLabStore(process.argv[2]);
+    process.once('message', async ({id,field})=>{let result;try { const draft=await store.updateDraft(id,1,current=>({...current,parameters:{...current.parameters,[field]:777}}));result={ok:true,revision:draft.revision}; } catch(error){result={ok:false,code:error.code};}process.send(result,()=>process.disconnect());});process.send({ready:true});`);
+  const workers = ['demand', 'capacity'].map(field => {
+    const child = fork(workerFile, [path.join(root, 'project')], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    t.after(() => { if (child.exitCode === null) child.kill('SIGTERM'); });
+    let ready!: () => void, done!: (value: { ok: boolean; code?: string }) => void;
+    const prepared = new Promise<void>(resolve => { ready = resolve; });
+    const result = new Promise<{ ok: boolean; code?: string }>(resolve => { done = resolve; });
+    child.on('message', value => { const message = value as { ready?: boolean; ok: boolean; code?: string }; if (message.ready) ready(); else done(message); });
+    return { prepared, result, start: () => child.send({ id: draft.id, field }) };
+  });
+  await Promise.all(workers.map(worker => worker.prepared)); workers.forEach(worker => worker.start());
+  const results = await Promise.all(workers.map(worker => worker.result));
+  assert.equal(results.filter(result => result.ok).length, 1);
+  assert.ok(results.filter(result => !result.ok).every(result => ['store_busy', 'revision_conflict'].includes(result.code!)));
+  const file = path.join(root, 'project', 'drafts', draft.id + '.json'), before = await fs.readFile(file);
+  await fs.mkdir(path.join(root, 'project', '.operation-lock'));
+  await rejectsCode(service.updateDraft(draft.id, { name: '不得重放' }, 2), 'store_busy');
+  assert.deepEqual(await fs.readFile(file), before);
+});
+
+test('SIM-STORE-09: snapshot readback resolves its original engine rules and preserves unknown versions', async t => {
+  const { root, service } = await fixture(t);
+  const draft = await service.createDraft({ name: '快照口径' }), run = await service.runDraft(draft.id);
+  const snapshot = await service.freeze(draft.id, { runId: run.id, variantId: 'split', expectedRevision: 1 });
+  const current = await service.getSnapshot(snapshot.id);
+  assert.equal(current.model.status, 'known');
+  assert.deepEqual(current.model.effective.promoWindow, { start: 8, end: 21 });
+  assert.equal(current.model.effective.promoLift, 40);
+  const file = path.join(root, 'project', 'snapshots', snapshot.id + '.json');
+  for (const version of ['optracall-sim-1', 'unknown-future-engine']) {
+    const bytes = JSON.stringify({ ...snapshot, engineVersion: version });
+    await fs.writeFile(file, bytes);
+    const reread = await service.getSnapshot(snapshot.id);
+    assert.equal(reread.model.status, version === 'optracall-sim-1' ? 'known' : 'unknown');
+    assert.equal(await fs.readFile(file, 'utf8'), bytes, 'read-time rules never rewrite historical evidence');
+  }
 });

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { SimLabStore } from '../storage/store.ts';
+import { engineRules, snapshotRules } from '../kernel/model-rules.ts';
 import {
   simulate, validateParameters, validateVariant, validatePerturbation,
   DEFAULT_PARAMETERS, defaultVariants, EngineFault,
@@ -28,11 +29,13 @@ function mergeParameters(base: SimParameters, input: unknown): SimParameters {
 }
 
 function validateVariants(input: unknown, days: number, fallback: SimVariant[]): SimVariant[] {
-  if (input === undefined) return fallback;
+  if (input === undefined) { for (const variant of fallback) validateVariant(variant, days); return fallback; }
   if (!Array.isArray(input) || !input.length || input.length > MAX_VARIANTS_PER_DRAFT) throw new EngineFault('variant_limit', `方案变体须为 1–${MAX_VARIANTS_PER_DRAFT} 个。`);
   const ids = new Set<string>();
   const variants = input.map(item => {
     if (!object(item)) throw new EngineFault('invalid_variant', '变体必须是对象。');
+    for (const key of Object.keys(item)) if (!['id', 'name', 'openingExtraStock', 'acceptanceCap', 'promoWindow', 'promoLiftScale'].includes(key)) throw new EngineFault('invalid_variant', `未知变体字段 ${key}。`);
+    if (object(item.promoWindow)) for (const key of Object.keys(item.promoWindow)) if (!['start', 'end'].includes(key)) throw new EngineFault('invalid_variant', `未知活动窗口字段 ${key}。`);
     const variant: SimVariant = {
       id: String(item.id ?? ''), name: String(item.name ?? ''),
       openingExtraStock: item.openingExtraStock === undefined ? 0 : item.openingExtraStock as number,
@@ -59,14 +62,7 @@ export class SimLabService {
       engineVersion: ENGINE_VERSION,
       variantLimit: MAX_VARIANTS_PER_DRAFT,
       windowDays: { min: 7, max: 90 },
-      caliber: {
-        eventOrder: ['到货入库', '需求承接（可按变体限流）', 'FIFO 发货', '超期订单取消', '现金费用与周期补货'],
-        procurement: '每 7 天（D1/D8/D15/…）按 7 天基础需求量下单，提前期到货，采购当日付款',
-        demandShock: '开启后 D8–D21 需求 ×1.3', supplyShock: '开启后补货到货 +3 天',
-        contribution: '发货 ×（单价 − 进价 − 单件履约成本）',
-        cashRule: '发货确认收入；D0 额外现货按进价即刻扣款',
-        perturbations: ['demandMultiplier', 'capacityMultiplier', 'leadTimeDelta', 'priceMultiplier'],
-      },
+      caliber: engineRules(ENGINE_VERSION).caliber!,
       defaults: { parameters: DEFAULT_PARAMETERS, variants: defaultVariants() },
       unmodeled: UNMODELED_CAPABILITIES,
       disclaimer: '确定性假设模型：输出是假设的严谨展开，不是现实预测、概率、优化推荐或因果效果。',
@@ -78,7 +74,7 @@ export class SimLabService {
 
   async createDraft(input: { name: unknown; parameters?: unknown; variants?: unknown }): Promise<DraftRecord> {
     const parameters = mergeParameters(DEFAULT_PARAMETERS, input.parameters);
-    const variants = validateVariants(input.variants, parameters.days, defaultVariants());
+    const variants = validateVariants(input.variants, parameters.days, defaultVariants(parameters.days));
     return this.store.insertDraft({
       schemaVersion: 1, id: randomUUID(), projectId: this.projectId, name: draftName(input.name), parameters, variants,
     });
@@ -130,8 +126,8 @@ export class SimLabService {
     });
   }
 
-  listSnapshots(): Promise<SnapshotRecord[]> { return this.store.listSnapshots(); }
-  getSnapshot(id: string): Promise<SnapshotRecord> { return this.store.getSnapshot(id); }
+  async listSnapshots() { return (await this.store.listSnapshots()).map(snapshot => ({ ...snapshot, model: snapshotRules(snapshot) })); }
+  async getSnapshot(id: string) { const snapshot = await this.store.getSnapshot(id); return { ...snapshot, model: snapshotRules(snapshot) }; }
 
   /** 固化：唯一盖章点。要求 CAS 匹配、运行对应当前草稿、守恒通过；快照不可改写。 */
   async freeze(draftId: string, input: { runId: string; variantId: string; expectedRevision: number; name?: unknown }): Promise<SnapshotRecord> {

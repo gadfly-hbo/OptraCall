@@ -38,7 +38,7 @@ test('SIM-API-01: inspect and unknown paths', async t => {
   const { call } = await fixture(t);
   const inspect = await call('GET', '/api/simlab/inspect');
   assert.equal(inspect?.status, 200);
-  assert.equal((inspect?.value as any).engineVersion, 'optracall-sim-1');
+  assert.equal((inspect?.value as any).engineVersion, 'optracall-sim-2');
   assert.equal(await call('GET', '/api/other'), undefined);
   assert.equal((await call('GET', '/api/simlab/nope'))?.status, 404);
   assert.equal((await call('GET', `/api/simlab/projects/${'b'.repeat(36)}/drafts`))?.status, 404);

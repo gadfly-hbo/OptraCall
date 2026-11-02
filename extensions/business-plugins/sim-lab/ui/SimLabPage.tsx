@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ClientProject, ClientTask } from '../../../../src/host/ui/project-types.ts';
 import * as client from './simlab-client.ts';
+import { ENGINE_VERSION } from '../types.ts';
+import { snapshotRules } from '../kernel/model-rules.ts';
 import type { DraftRecord, RunRecord, SnapshotRecord, StressRow, SimVariant, SimParameters, SimPerturbation } from './simlab-client.ts';
 
 const money = (v: number) => (v < 0 ? '−¥' : '¥') + Math.abs(Math.round(v)).toLocaleString('zh-CN');
@@ -38,6 +40,13 @@ const toVariant = (f: VariantForm): SimVariant => ({
   ...(f.promoLiftScale.trim() ? { promoLiftScale: Number(f.promoLiftScale) } : {}),
 });
 const formOf = (p: SimParameters): Record<string, string> => Object.fromEntries(PARAM_FIELDS.map(f => [f.key, String(p[f.key])]));
+const COMPARE_FIELDS = [
+  { key: 'shipped', label: '发货（件）', format: num },
+  { key: 'inventory', label: '期末库存（件）', format: num },
+  { key: 'backlog', label: '积压（件）', format: num },
+  { key: 'cash', label: '现金（元）', format: money },
+  { key: 'contribution', label: '贡献毛利（元）', format: money },
+] as const;
 
 export function SimLabPage({ projects, onOpenTask, onBack }: {
   projects: ClientProject[];
@@ -51,6 +60,7 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
   const draft = loadedDraft?.projectId === projectId && loadedDraft.id === draftId ? loadedDraft : undefined;
   const draftProjectId = drafts.find(d => d.id === draftId)?.projectId;
   const [tab, setTab] = useState<Tab>('params'), [variantId, setVariantId] = useState('');
+  const [compareMetric, setCompareMetric] = useState<typeof COMPARE_FIELDS[number]['key']>('cash');
   const [form, setForm] = useState<Record<string, string>>({}), [shocks, setShocks] = useState({ demandShock: true, supplyShock: true });
   const [variantForms, setVariantForms] = useState<VariantForm[]>([]);
   const [stressRows, setStressRows] = useState<StressRow[]>([]), [stressDim, setStressDim] = useState('demand'), [stressMag, setStressMag] = useState('25'), [stressScope, setStressScope] = useState('all');
@@ -88,6 +98,9 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
   const latestRun = useMemo(() => [...runs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0], [runs]);
   const stale = Boolean(latestRun && draft && latestRun.draftRevision !== draft.revision);
   const currentResult = latestRun?.results[variantId];
+  const selectedVariant = draft?.variants.find(variant => variant.id === variantId);
+  const effectivePromo = selectedVariant?.promoWindow ?? (draft ? { start: draft.parameters.promoStart, end: draft.parameters.promoEnd } : undefined);
+  const effectiveLift = draft ? draft.parameters.promoLift * (selectedVariant?.promoLiftScale ?? 1) : 0;
   const parameters = (): SimParameters => {
     const values = Object.fromEntries(PARAM_FIELDS.map(f => [f.key, Number(form[f.key])]));
     return { ...values, ...shocks } as SimParameters;
@@ -163,7 +176,7 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
         <p className="detail-summary">把备货与促销假设展开成可审计的逐日账本；探索自由，固化从严。确定性假设模型，不是预测。</p></div>
       <div className="plugin-heading-actions">
         <select aria-label="选择项目" value={projectId} disabled={busy} onChange={event => setProjectId(event.target.value)}>{projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.archivedAt ? '（已归档）' : ''}</option>)}</select>
-        <span className="sim-chip">引擎 optracall-sim-1</span>
+        <span className="sim-chip">引擎 {ENGINE_VERSION}</span>
         <button className="secondary-button" onClick={onBack}>返回能力目录</button>
       </div>
     </header>
@@ -190,6 +203,12 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
               <span>贡献毛利 {money(s.result.summary.contribution)} · 最低现金 {money(s.result.summary.minCash)}</span>
               <span>履约率 {pct(s.result.summary.fulfillmentRate)} · 期末库存 {num(s.result.summary.closingInventory)} 件</span>
               <span>输入摘要 {shortHash(s.inputHash)} · 运行 {s.runId} / 草稿 rev {s.draftRevision}</span>
+              {(() => { const model = snapshotRules(s); return <div>
+                <p>{model.disclaimer}</p>
+                {model.status === 'known' && <><p>口径：{model.caliber!.procurement}；{model.caliber!.cashRule}；{model.caliber!.contribution}。</p>
+                  <p>活动窗 D{model.effective.promoWindow.start}–D{model.effective.promoWindow.end}，需求 +{model.effective.promoLift}%；D0 额外现货 {model.effective.openingExtraStock} 件；日承接上限 {model.effective.acceptanceCap ?? '不限'}。</p>
+                  <p>未建模：{model.unmodeled!.join('、')}。</p></>}
+              </div>; })()}
               <span className="sim-chip frozen">不可变 · Case／决策板接入待完成</span>
             </div>
           </details>)}
@@ -292,6 +311,24 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
                 })}</tr>;
               })}</tbody>
             </table></div>}
+            {latestRun && <>
+              <div className="panel-heading"><h3>逐日方案差异</h3><label>对比指标<select aria-label="逐日对比指标" value={compareMetric} onChange={event => setCompareMetric(event.target.value as typeof compareMetric)}>
+                {COMPARE_FIELDS.map(field => <option key={field.key} value={field.key}>{field.label}</option>)}
+              </select></label></div>
+              <p className="panel-hint">每列显示当日数值及相对首个方案的差值；首个方案仅作差值基准。</p>
+              <div className="ledger-wrap"><div className="ledger-scroll"><table aria-label="逐日方案差异">
+                <thead><tr><th>日</th>{draft.variants.map((variant, index) => <th key={variant.id}>{variant.name}{index === 0 ? '（差值基准）' : ''}</th>)}</tr></thead>
+                <tbody>{Array.from({ length: latestRun.results[draft.variants[0]!.id]?.rows.length ?? 0 }, (_, dayIndex) => {
+                  const baseline = latestRun.results[draft.variants[0]!.id]?.rows[dayIndex]?.[compareMetric];
+                  const format = COMPARE_FIELDS.find(field => field.key === compareMetric)!.format;
+                  return <tr key={dayIndex}><td>D{dayIndex + 1}</td>{draft.variants.map((variant, index) => {
+                    const value = latestRun.results[variant.id]?.rows[dayIndex]?.[compareMetric];
+                    const delta = value !== undefined && baseline !== undefined ? value - baseline : undefined;
+                    return <td key={variant.id}>{value === undefined ? '—' : format(value)}{index > 0 && delta !== undefined && <small> · Δ {delta > 0 ? '+' : delta < 0 ? '−' : '±'}{format(Math.abs(delta))}</small>}</td>;
+                  })}</tr>;
+                })}</tbody>
+              </table></div></div>
+            </>}
             <p className="panel-hint">指标是引擎输出的标准汇总数据；哪个指标重要、结论如何解读，由你在分析与决策中判断，本页不预设结论。</p>
           </section>}
 
@@ -352,7 +389,8 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
       <ul className="freeze-caliber">
         <li>窗口 {draft.parameters.days} 天 · FIFO 发货 · 订单等待 {draft.parameters.maxWait} 天后取消</li>
         <li>每 7 天按 7 天基础需求量补货，提前期 {draft.parameters.leadTime} 天{draft.parameters.supplyShock ? '（含供给延迟 +3 天）' : ''}，采购当日付款</li>
-        <li>活动窗 D{draft.parameters.promoStart}–D{draft.parameters.promoEnd}，需求 +{draft.parameters.promoLift}%{draft.parameters.demandShock ? ' · D8–21 需求冲击 ×1.3' : ''} · 现金口径：发货确认收入</li>
+        <li>活动窗 D{effectivePromo?.start}–D{effectivePromo?.end}，需求 +{effectiveLift}%{draft.parameters.demandShock ? ' · D8–21 需求冲击 ×1.3' : ''} · 现金口径：发货确认收入</li>
+        <li>D0 额外现货 {selectedVariant?.openingExtraStock} 件（按进价扣款）；日承接上限 {selectedVariant?.acceptanceCap ?? '不限'}。</li>
         <li>贡献毛利 = 发货 ×（单价 − 进价 − 履约成本）</li>
       </ul>
       <div className="freeze-metrics">
