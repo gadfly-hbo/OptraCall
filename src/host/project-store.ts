@@ -10,7 +10,7 @@ export interface ProjectConfiguration { id: string; revision: number; provider: 
 export interface ProjectRun { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic }
 export interface UploadedFile { id: string; originalName: string; path: string; bytes: number; sha256: string; uploadedAt: string; source: { kind: 'upload' | 'copy' | 'user-save-report'; from?: string } }
 export interface FeedbackTaskOrigin { handoffId: string; operationId: string; requestHash: string }
-export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; feedbackOrigin?: FeedbackTaskOrigin }
+export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin }
 export interface ProjectRecord { schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
 export class ProjectStoreFault extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
@@ -169,6 +169,7 @@ export class ProjectStore {
       await this.#assertTaskDirectory(id, task);
       if (input.sessionFile !== undefined) { if (typeof input.sessionFile !== 'string') fail('invalid_project_metadata'); await this.#validateSession(id, task, input.sessionFile as string); task.sessionFile = input.sessionFile as string; }
       if (input.lastRun !== undefined) task.lastRun = validRun(input.lastRun);
+      if (input.simulationTools !== undefined) { if (typeof input.simulationTools !== 'boolean') return fail('invalid_project_metadata'); task.simulationTools = input.simulationTools; }
       if (input.feedbackOrigin !== undefined) task.feedbackOrigin = feedbackOrigin(input.feedbackOrigin);
       tasks.push(task);
     }
@@ -231,12 +232,12 @@ export class ProjectStore {
   }
   #task(project: StoredProject, taskId: string): StoredTask { this.#id(taskId); const task = project.tasks.find(task => task.id === taskId); if (!task) return fail('task_not_found'); return task; }
   async getTask(projectId: string, taskId: string): Promise<TaskRecord> { return this.#decorateTask(projectId, this.#task(await this.#read(projectId), taskId)); }
-  createTask(projectId: string, input: { name: string; configuration?: ProjectConfiguration }): Promise<TaskRecord> {
+  createTask(projectId: string, input: { name: string; configuration?: ProjectConfiguration; simulationTools?: boolean }): Promise<TaskRecord> {
     const name = projectName(input.name);
     return this.#mutation(async () => {
       const project = await this.#read(projectId); this.#active(project);
       const configuration = publicConfiguration(input.configuration ?? project.configuration), id = randomUUID(), now = new Date().toISOString();
-      const task: StoredTask = { id, name, createdAt: now, updatedAt: now, configuration, draft: '', sessionStorage: 'task' };
+      const task: StoredTask = { id, name, createdAt: now, updatedAt: now, configuration, draft: '', sessionStorage: 'task', ...(input.simulationTools ? { simulationTools: true } : {}) };
       const next = { ...project, tasks: [...project.tasks, task], updatedAt: now }; this.#metadataBytes(next);
       const tasks = path.join(this.dataRoot, 'projects', projectId, 'tasks');
       await this.#directory(tasks); await this.#directory(path.join(tasks, id)); await this.#directory(this.#taskDirectory(projectId, task));
@@ -272,6 +273,10 @@ export class ProjectStore {
   saveDraft(projectId: string, taskId: string, draft: string): Promise<TaskRecord> {
     if (typeof draft !== 'string' || draft.length > 20000) return Promise.reject(new ProjectStoreFault('invalid_draft'));
     return this.#updateTask(projectId, taskId, task => ({ ...task, draft }));
+  }
+  setSimulationTools(projectId: string, taskId: string, enabled: boolean): Promise<TaskRecord> {
+    if (typeof enabled !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_simulation_tools'));
+    return this.#updateTask(projectId, taskId, task => ({ ...task, ...(enabled ? { simulationTools: true } : { simulationTools: undefined }) }));
   }
   async #validateSession(projectId: string, task: StoredTask, file: string): Promise<void> {
     const relative = path.relative(this.#taskDirectory(projectId, task), file);

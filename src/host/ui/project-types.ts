@@ -6,6 +6,7 @@ export type ProjectConfiguration = Omit<PublicModelConfiguration, 'hasApiKey'>;
 export type ClientTask = {
   id: string; name: string; draft: string; configuration: ProjectConfiguration;
   createdAt: string; updatedAt: string; sessionStorage: 'legacy' | 'task'; sessionFile?: string;
+  simulationTools?: boolean;
   feedbackOrigin?: { handoffId: string; operationId: string; requestHash: string };
   lastRun?: { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic };
 };

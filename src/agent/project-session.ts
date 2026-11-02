@@ -9,6 +9,7 @@ import { createBrowserUIContext, type BrowserUIResponse } from './browser-ui-con
 import { OUTPUT_EVIDENCE_GUIDANCE } from './output-evidence.ts';
 import { createProtectedTools } from './protected-tools.ts';
 import { snapshotProtectedSkills } from './protected-skills.ts';
+import { createSimulationTools } from '../../extensions/business-plugins/sim-lab/tools/simulation-tools.ts';
 
 type Outcome = 'completed' | 'cancelled' | 'failed';
 type LastRun = { requestId: string; outcome?: Outcome; diagnostic?: RunDiagnostic };
@@ -163,6 +164,9 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       executionId = randomUUID();
     }
     const credentials = { read: async () => undefined, list: async () => [], modify: async () => { throw new Error('Host owns credentials.'); }, delete: async () => {} };
+    // 经营推演工具按任务级开关注入普通项目任务；受管/封闭文本资源不注入——
+    // 其纯计算执行体未经受限执行边界核验，按不可安全委派扩展明确不提供（SIM12）。
+    const simulationTools = !fixedInput() && !o.protectedExecution && o.simulationTools ? createSimulationTools(o.simulationTools) : undefined;
     const models = await ModelRuntime.create({ credentials, modelsPath: null, allowModelNetwork: false, refreshOnCreate: false });
     const builtin = models.getModel(o.configuration.provider, o.configuration.model);
     const providerId = `optracall-${o.configuration.id}-${o.configuration.revision}`;
@@ -197,7 +201,9 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
       services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? [] : protectedTools ? [...protectedTools.tools.map(tool => tool.name), 'tool_search'] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search'])] });
-      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: protectedTools.tools, tools: [...protectedTools.tools.map(tool => tool.name), 'tool_search'] } : {}), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
+      // SDK modifiers append to either a plain workspace allowlist or inherited defaults.
+      if (simulationTools) services.settingsManager.applyOverrides({ defaultTools: simulationTools.map(tool => `+${tool.name}`) });
+      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: protectedTools.tools, tools: [...protectedTools.tools.map(tool => tool.name), 'tool_search'] } : simulationTools ? { customTools: simulationTools } : {}), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
       if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
       return { ...created, services, diagnostics: services.diagnostics };
     };

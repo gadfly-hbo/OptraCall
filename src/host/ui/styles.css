@@ -89,7 +89,8 @@ button { color: inherit; }
 .message-content { padding-left: 37px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.85; }
 .message.user .message-content { color: var(--ink); }
 .message-meta { color: var(--muted); font-size: 11px; padding-left: 37px; }
-.has-messages .composer-area { margin-top: 12px; }
+.has-messages .composer-area { margin-top: 12px; flex: 0 1 auto; min-height: 0; max-height: 50%; overflow-y: auto; scrollbar-gutter: stable; }
+.has-messages .message-scroll { min-height: 160px; }
 .has-messages .composer textarea { min-height: 48px; }
 .has-messages .workspace-footer { margin-top: 0; padding: 12px 16px; }
 .has-messages .messages { width: calc(100% - 64px); }

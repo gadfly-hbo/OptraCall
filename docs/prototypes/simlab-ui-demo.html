@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>经营推演 UI Demo · OptraCall</title>
+<style>
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select { font: inherit; }
+button { cursor: pointer; color: inherit; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid #a397e0; outline-offset: 3px; }
+.demo-page { --canvas:#fff; --surface:#fff; --subtle:#f5f5f8; --ink:#24232b; --muted:#6c6b78; --faint:#777580; --line:#e6e5eb; --accent:#6550c9; --accent-soft:#eeebfb; --warning:#80530c; --warning-bg:#fff7e8; --error:#a12b36; --error-bg:#fff4f4; --ok:#1c7c4a; --ok-bg:#eef7f1; background: var(--canvas); color: var(--ink); font-size: 14px; line-height: 1.55; min-height: 100vh; padding: 6px 32px 40px; }
+.demo-note { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 14px 0 0; padding: 10px 14px; border: 1px dashed var(--accent); border-radius: 8px; background: var(--accent-soft); color: var(--muted); font-size: 12px; }
+.demo-note strong { color: var(--ink); }
+.eyebrow { letter-spacing: 2.2px; color: var(--accent); font-size: 11px; margin: 0 0 6px; font-weight: 600; }
+.sim-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; margin: 16px 0 14px; }
+.sim-heading h1 { font-size: 24px; line-height: 1.4; font-weight: 550; margin: 0 0 8px; }
+.sim-heading .sub { margin: 0; color: var(--muted); font-size: 13px; }
+.sim-heading-actions { display: flex; align-items: center; gap: 10px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 10px; border: 1px solid var(--line); color: var(--muted); background: var(--surface); white-space: nowrap; }
+.chip.explore { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: var(--accent-soft); }
+.chip.frozen { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); background: var(--ok-bg); }
+.chip.warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 35%, var(--line)); background: var(--warning-bg); }
+.chip.fail { color: var(--error); border-color: color-mix(in srgb, var(--error) 35%, var(--line)); background: var(--error-bg); }
+.chip.tool { color: #2456b8; border-color: color-mix(in srgb, #2456b8 30%, var(--line)); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.primary-button { border: 1px solid transparent; background: var(--accent); color: #fff; border-radius: 7px; padding: 7px 14px; }
+.secondary-button { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 7px 14px; }
+.principle-strip { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 10px 14px; background: var(--subtle); border-radius: 8px; font-size: 12px; color: var(--muted); margin-bottom: 18px; }
+.principle-strip strong { color: var(--ink); font-weight: 550; }
+.sim-layout { display: grid; grid-template-columns: 250px minmax(0,1fr); gap: 20px; align-items: start; }
+.rail { display: grid; gap: 16px; }
+.rail-section { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 12px; }
+.rail-section > h3 { font-size: 12px; font-weight: 550; color: var(--muted); margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; }
+.draft-card { border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--accent-soft); border-radius: 7px; padding: 10px 12px; }
+.draft-card h4 { margin: 0 0 4px; font-size: 13px; font-weight: 550; }
+.draft-card p { margin: 0 0 6px; font-size: 11px; color: var(--muted); }
+.snap-item { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; margin-bottom: 8px; background: var(--surface); }
+.snap-item:last-child { margin-bottom: 0; }
+.snap-item summary { cursor: pointer; font-size: 12px; }
+.snap-item .snap-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--accent); font-weight: 600; }
+.snap-item .snap-meta { display: block; color: var(--faint); font-size: 11px; margin-top: 2px; }
+.snap-item .snap-body { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--muted); display: grid; gap: 4px; }
+.sim-main { min-width: 0; }
+.sim-tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.sim-tab { border: 0; background: transparent; padding: 9px 14px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.sim-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 550; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.panel-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 14px; }
+.panel-heading h2 { font-size: 15px; margin: 0; font-weight: 550; }
+.panel-heading .hint { color: var(--muted); font-size: 12px; margin: 0; }
+.param-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 10px; margin-bottom: 20px; }
+.param-grid label { display: grid; gap: 4px; font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; background: var(--surface); }
+.param-grid input { border: 0; padding: 0; font-size: 15px; font-weight: 550; color: var(--ink); background: transparent; width: 100%; }
+.variant-list { display: grid; gap: 10px; }
+.variant-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: var(--surface); }
+.variant-card.selected { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.variant-card h4 { margin: 0; font-size: 13px; font-weight: 550; }
+.variant-card .deltas { display: flex; flex-wrap: wrap; gap: 5px; }
+.variant-card .grow { flex: 1; min-width: 160px; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-card { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; background: var(--surface); }
+.stat-card > span { color: var(--muted); font-size: 12px; display: block; }
+.stat-card strong { display: block; font-size: 26px; font-weight: 550; padding: 6px 0 2px; }
+.stat-card small { color: var(--faint); font-size: 11px; }
+.stat-card.alert { border-color: color-mix(in srgb, var(--warning) 40%, var(--line)); background: var(--warning-bg); }
+.stat-card.alert strong { color: var(--warning); }
+.ledger-wrap { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.ledger-scroll { max-height: 400px; overflow: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th { text-align: right; font-weight: 550; color: var(--muted); background: var(--subtle); padding: 8px 10px; position: sticky; top: 0; white-space: nowrap; }
+td { text-align: right; padding: 6px 10px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+tr.promo-row td { background: #fbfaff; }
+td.negative { color: var(--error); font-weight: 600; }
+td.cash-warn { color: var(--warning); }
+.ledger-footer { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--subtle); font-size: 11px; color: var(--muted); }
+.compare-table td.best { background: var(--ok-bg); font-weight: 600; }
+.compare-note { font-size: 11px; color: var(--faint); margin: 10px 0 0; }
+.stress-builder { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--subtle); margin-bottom: 14px; }
+.stress-builder label { display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
+.stress-builder select, .stress-builder input { padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); }
+.stress-builder input { width: 90px; }
+.stress-results td { text-align: left; }
+.stress-results td.num { text-align: right; }
+.delta-pos { color: var(--ok); }
+.delta-neg { color: var(--error); }
+.task-card { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; background: var(--surface); margin-bottom: 14px; }
+.task-card h3 { margin: 0 0 4px; font-size: 14px; font-weight: 550; }
+.task-card .task-meta { color: var(--faint); font-size: 11px; margin: 0 0 12px; }
+.trail { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.trail li { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 12px; }
+.trail .step { color: var(--faint); font-size: 11px; min-width: 18px; }
+.trail .desc { color: var(--muted); }
+.agent-conclusion { border-left: 3px solid var(--accent); background: var(--subtle); border-radius: 0 7px 7px 0; padding: 10px 12px; font-size: 12px; color: var(--muted); margin: 12px 0 0; }
+.freeze-pending { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--accent-soft); border-radius: 8px; padding: 12px 14px; }
+.freeze-pending p { margin: 0; font-size: 12px; color: var(--muted); flex: 1; min-width: 200px; }
+.freeze-pending strong { color: var(--ink); }
+.human-note { font-size: 12px; color: var(--muted); background: var(--subtle); border-radius: 8px; padding: 12px 14px; margin: 0; }
+dialog { border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; max-width: 560px; width: calc(100vw - 48px); max-height: 86vh; overflow: auto; }
+dialog::backdrop { background: rgba(36,35,43,.45); }
+.dialog-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.dialog-heading h2 { font-size: 16px; margin: 0; font-weight: 550; }
+.icon-button { border: 0; background: transparent; font-size: 13px; }
+.freeze-section { margin: 12px 0; }
+.freeze-section h4 { margin: 0 0 6px; font-size: 12px; color: var(--muted); font-weight: 550; }
+.freeze-section ul { margin: 0; padding-left: 18px; font-size: 12px; color: var(--muted); display: grid; gap: 3px; }
+.freeze-metrics { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.freeze-metrics div { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; font-size: 12px; }
+.freeze-metrics span { color: var(--muted); display: block; font-size: 11px; }
+.freeze-metrics strong { font-size: 17px; font-weight: 550; }
+.freeze-immutable { font-size: 12px; color: var(--warning); background: var(--warning-bg); border-radius: 7px; padding: 9px 12px; margin: 12px 0 0; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none; z-index: 10; }
+.sim-disclaimer { margin-top: 24px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); font-size: 12px; color: var(--muted); }
+.sim-disclaimer strong { color: var(--ink); }
+@media (max-width: 1100px) { .sim-layout { grid-template-columns: minmax(0,1fr); } .stat-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .demo-page { padding: 6px 16px 32px; } }
+</style>
+</head>
+<body class="demo-page">
+<div class="demo-note"><strong>经营推演 · 可点击 UI 原型</strong><span>依据《SimLab 能力承接产品讨论稿 v0.2》全新设计；数据全部为合成示例，页面内置确定性演示引擎实时计算（同输入同输出），非真实业务结果。</span></div>
+
+<header class="sim-heading">
+  <div>
+    <p class="eyebrow">OPTRACALL · 项目工作区</p>
+    <h1>经营推演</h1>
+    <p class="sub">项目：双十一大促备货（演示） · 把备货假设展开成可审计的逐日账本，再把结论固化成决策证据。</p>
+  </div>
+  <div class="sim-heading-actions">
+    <span class="chip">引擎 optracall-sim-1</span>
+    <button class="secondary-button" id="newDraftBtn">新建草稿</button>
+  </div>
+</header>
+
+<div class="principle-strip">
+  <span><strong>探索自由</strong>：草稿任意改、任意次运行，不设门槛</span>
+  <span><strong>固化从严</strong>：口径+参数+结果一次确认，快照不可改写</span>
+  <span><strong>双模式</strong>：页面直接推演（零模型费用） · 任务中 Agent 工具化推演</span>
+</div>
+
+<div class="sim-layout">
+  <aside class="rail">
+    <section class="rail-section">
+      <h3>推演草稿 <span class="chip explore">探索中</span></h3>
+      <div class="draft-card">
+        <h4>大促备货方案对比</h4>
+        <p>3 个方案变体 · 窗口 <span id="railWindow">30</span> 天</p>
+        <p>更新于 2026-11-02 10:24（演示）</p>
+      </div>
+    </section>
+    <section class="rail-section">
+      <h3>已固化快照</h3>
+      <div id="snapList">
+        <details class="snap-item">
+          <summary><span class="snap-id">SNAP-2411-001</span> 双十一 · 基线口径<span class="snap-meta">2026-10-30 固化 · 引擎 optracall-sim-1</span></summary>
+          <div class="snap-body">
+            <span>口径：30 天窗口 / FIFO / 常规补货</span>
+            <span>贡献毛利 ¥274,180 · 最低现金 ¥121,030</span>
+            <span>履约率 85.9% · 期末库存 540 件</span>
+            <span class="chip frozen">不可变 · 可引用为 Case 证据</span>
+          </div>
+        </details>
+        <details class="snap-item">
+          <summary><span class="snap-id">SNAP-2410-018</span> 国庆备货复盘<span class="snap-meta">2026-10-12 固化 · 引擎 optracall-sim-1</span></summary>
+          <div class="snap-body">
+            <span>口径：30 天窗口 / FIFO / 提前囤货 600 件</span>
+            <span>贡献毛利 ¥198,660 · 最低现金 ¥88,420</span>
+            <span>履约率 91.2% · 期末库存 1,120 件</span>
+          </div>
+        </details>
+      </div>
+    </section>
+  </aside>
+
+  <main class="sim-main">
+    <nav class="sim-tabs" aria-label="推演视图">
+      <button class="sim-tab active" data-tab="params">方案与参数</button>
+      <button class="sim-tab" data-tab="results">推演结果</button>
+      <button class="sim-tab" data-tab="compare">方案对比</button>
+      <button class="sim-tab" data-tab="stress">扰动分析</button>
+      <button class="sim-tab" data-tab="task">任务联动</button>
+    </nav>
+
+    <section class="tab-panel active" id="panel-params">
+      <div class="panel-heading">
+        <h2>草稿参数</h2>
+        <p class="hint">修改参数后点「重新运行」，三个变体同步重算（同输入同输出）。</p>
+        <button class="primary-button" id="rerunBtn">重新运行</button>
+      </div>
+      <div class="param-grid">
+        <label>推演窗口（天，7–90）<input type="number" id="p-days" value="30" min="7" max="90"></label>
+        <label>日均基础需求（件）<input type="number" id="p-demand" value="180" min="0"></label>
+        <label>期初现货库存（件）<input type="number" id="p-inventory" value="1800" min="0"></label>
+        <label>每日发货产能（件）<input type="number" id="p-capacity" value="250" min="0"></label>
+        <label>采购提前期（天）<input type="number" id="p-lead" value="5" min="1"></label>
+        <label>商品单价（元）<input type="number" id="p-price" value="128" min="0"></label>
+        <label>商品进价（元）<input type="number" id="p-cost" value="72" min="0"></label>
+        <label>单件履约成本（元）<input type="number" id="p-fulfill" value="9" min="0"></label>
+        <label>单件日仓储费（元）<input type="number" id="p-holding" value="0.15" min="0" step="0.01"></label>
+        <label>期初可用现金（元）<input type="number" id="p-cash" value="180000" min="0"></label>
+        <label>订单等待上限（天）<input type="number" id="p-maxwait" value="3" min="0"></label>
+        <label>现金预警线（元）<input type="number" id="p-cashtreshold" value="60000" min="0"></label>
+      </div>
+      <div class="panel-heading"><h2>方案变体（3 / 8）</h2><p class="hint">变体数量上限为资源边界，不是分析限制；更多方案可拆分新草稿。</p></div>
+      <div class="variant-list" id="variantList"></div>
+    </section>
+
+    <section class="tab-panel" id="panel-results">
+      <div class="panel-heading">
+        <h2>推演结果 <span class="chip explore">探索性</span></h2>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <select id="resultVariant" aria-label="选择变体"></select>
+          <button class="primary-button" id="freezeBtn">固化当前结果为快照</button>
+        </div>
+      </div>
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="ledger-wrap">
+        <div class="ledger-scroll">
+          <table id="ledgerTable">
+            <thead><tr><th>日</th><th>需求</th><th>承接</th><th>发货</th><th>取消</th><th>积压</th><th>期末库存</th><th>现金</th><th>贡献</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="ledger-footer" id="ledgerFooter"></div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="panel-compare">
+      <div class="panel-heading"><h2>方案对比</h2><p class="hint">同一份草稿参数下三个变体的并排结果；绿色为该行最优。</p></div>
+      <div class="ledger-wrap"><div class="ledger-scroll" style="max-height:none">
+        <table class="compare-table" id="compareTable">
+          <thead><tr><th>指标</th><th>基线 · 常规补货</th><th>提前囤货 +900 件</th><th>限量分批 · 日上限 250</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div></div>
+      <p class="compare-note">指标是引擎输出的标准汇总数据；哪个指标重要、结论如何解读，由你在分析与决策中判断，本页不预设结论。期末库存无「最优」方向，故不高亮。</p>
+    </section>
+
+    <section class="tab-panel" id="panel-stress">
+      <div class="panel-heading"><h2>扰动分析</h2><p class="hint">维度与幅度自定义（引擎能力范围内校验），不预置固定清单。</p></div>
+      <div class="stress-builder">
+        <label>扰动维度
+          <select id="stressDim">
+            <option value="demand">日均需求（%）</option>
+            <option value="capacity">日产能（%）</option>
+            <option value="lead">提前期（天）</option>
+            <option value="price">商品单价（%）</option>
+          </select>
+        </label>
+        <label>幅度（可正可负）<input type="number" id="stressMag" value="25" step="1"></label>
+        <label>应用范围
+          <select id="stressScope"><option value="all">全部变体</option><option value="v1">仅基线</option><option value="v2">仅提前囤货</option><option value="v3">仅限量分批</option></select>
+        </label>
+        <button class="primary-button" id="stressRun">运行扰动</button>
+        <button class="secondary-button" id="stressClear">清空</button>
+      </div>
+      <div class="ledger-wrap"><div class="ledger-scroll" style="max-height:340px">
+        <table class="stress-results" id="stressTable">
+          <thead><tr><th>扰动</th><th>变体</th><th>贡献毛利 Δ</th><th>最低现金 Δ</th><th>履约率 Δ</th><th>阈值变化</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div></div>
+    </section>
+
+    <section class="tab-panel" id="panel-task">
+      <div class="panel-heading"><h2>任务联动</h2><p class="hint">同一批推演资产，Agent 在项目任务中用工具完成；固化的章在你手上。</p></div>
+      <div class="task-card">
+        <h3>任务 · 大促备货方案评估（演示）</h3>
+        <p class="task-meta">项目任务域 · 沿用任务模型配置 · Agent 自主决定调用顺序与次数</p>
+        <ol class="trail">
+          <li><span class="step">1</span><span class="chip tool">simulation_inspect</span><span class="desc">读取引擎口径、参数规则与未建模边界</span></li>
+          <li><span class="step">2</span><span class="chip tool">simulation_draft</span><span class="desc">创建草稿「大促备货方案对比」，登记 3 个方案变体</span></li>
+          <li><span class="step">3</span><span class="chip tool">simulation_run</span><span class="desc">逐变体运行 30 天推演（3 次），读取逐日账本与汇总指标</span></li>
+          <li><span class="step">4</span><span class="chip tool">simulation_stress</span><span class="desc">对全部变体施加「需求 +25%」「提前期 +3 天」扰动，检验结论稳健性</span></li>
+        </ol>
+        <blockquote class="agent-conclusion">Agent 结论（演示）：三个变体中「提前囤货 +900 件」贡献毛利与履约率最优，但 D1 采购后现金跌破预警线；若需求上行 25%，该变体现金风险进一步扩大。建议采纳提前囤货，同时将首批补货量下调或拆分账期外验证。固化建议已就绪，等待你在经营推演页确认。</blockquote>
+      </div>
+      <div class="freeze-pending" id="freezePending">
+        <span class="chip explore">待你确认</span>
+        <p><strong>Agent 固化建议：</strong>将「提前囤货 +900 件」当前口径、参数与推演结果固化为快照，供 Case 决策引用。</p>
+        <button class="primary-button" id="taskFreezeBtn">前往确认固化</button>
+      </div>
+      <p class="human-note" style="margin-top:14px">为什么固化由你确认：快照一旦生成即不可改写，会成为决策证据。「把草稿变成正式记录」是人的决定——Agent 完成全部准备与建议，但不给自己盖章。固化后 Agent 可通过 <span class="chip tool">simulation_evidence</span> 读到回执继续工作。</p>
+    </section>
+  </main>
+</div>
+
+<footer class="sim-disclaimer">
+  <strong>边界声明：</strong>本页面为确定性假设模型，输出是「假设的严谨展开」，不是现实预测、概率、优化推荐或因果效果。v1 未建模：退货退款、多仓、账期、税费、固定成本、概率分布与随机仿真。演示引擎仅用于原型展示，实施时以 `optracall-sim-1` 引擎及守恒回归测试为准。
+</footer>
+
+<dialog id="freezeDialog" aria-labelledby="freezeTitle">
+  <div class="dialog-heading"><h2 id="freezeTitle">固化快照</h2><button class="icon-button" id="freezeClose" aria-label="关闭">✕</button></div>
+  <p style="font-size:12px;color:var(--muted);margin:0 0 4px">一次性确认口径、参数与结果。变体：<strong id="freezeVariantName"></strong> <span class="chip explore">当前为探索性结果</span></p>
+  <div class="freeze-section"><h4>口径（随快照冻结）</h4>
+    <ul>
+      <li>窗口 <span id="fz-days"></span> 天 · FIFO 发货 · 订单等待 <span id="fz-maxwait"></span> 天后取消</li>
+      <li>补货节奏 D1/D8/D15/D22，按 7 天基础需求量下单，提前期 <span id="fz-lead"></span> 天</li>
+      <li>促销窗与需求冲击按草稿设定；现金口径：发货确认收入，采购当日付款</li>
+      <li>贡献毛利 = 发货 ×（单价 − 进价 − 履约成本）</li>
+    </ul>
+  </div>
+  <div class="freeze-section"><h4>结果</h4><div class="freeze-metrics" id="freezeMetrics"></div></div>
+  <div class="freeze-section"><h4>身份</h4>
+    <ul><li>引擎 optracall-sim-1 · 输入摘要 sha256:9f3c…d2a1（演示）</li><li id="fz-conservation"></li></ul>
+  </div>
+  <p class="freeze-immutable">固化后快照不可改写；后续修改草稿并重新推演，将生成新的快照。</p>
+  <div class="dialog-actions"><button class="secondary-button" id="freezeCancel">取消</button><button class="primary-button" id="freezeConfirm">确认固化</button></div>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+'use strict';
+// 演示引擎：确定性 FIFO 逐日推演。仅用于原型，数字由当前参数实时计算。
+const $ = id => document.getElementById(id);
+const money = v => (v < 0 ? '−¥' : '¥') + Math.abs(Math.round(v)).toLocaleString('zh-CN');
+const num = v => Math.round(v).toLocaleString('zh-CN');
+const pct = v => (v * 100).toFixed(1) + '%';
+const signed = (v, fmt) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmt(Math.abs(v));
+
+function baseParams() {
+  return {
+    days: Math.min(90, Math.max(7, +$('p-days').value || 30)),
+    demand: +$('p-demand').value || 0,
+    inventory: +$('p-inventory').value || 0,
+    capacity: +$('p-capacity').value || 0,
+    lead: Math.max(1, +$('p-lead').value || 1),
+    price: +$('p-price').value || 0,
+    cost: +$('p-cost').value || 0,
+    fulfill: +$('p-fulfill').value || 0,
+    holding: +$('p-holding').value || 0,
+    cash: +$('p-cash').value || 0,
+    maxWait: +$('p-maxwait').value || 0,
+    cashThreshold: +$('p-cashtreshold').value || 0,
+  };
+}
+const VARIANTS = [
+  { id: 'v1', name: '基线 · 常规补货', deltas: ['促销窗 D8–14（需求 ×1.8）', '常规补货节奏'], openingExtra: 0, cashDelta: 0, cap: null, longPromo: false },
+  { id: 'v2', name: '提前囤货 +900 件', deltas: ['D0 额外现货 900 件', '期初现金 −¥64,800'], openingExtra: 900, cashDelta: -64800, cap: null, longPromo: false },
+  { id: 'v3', name: '限量分批 · 日上限 250', deltas: ['促销窗 D8–21（需求 ×1.4）', '日承接上限 250 件'], openingExtra: 0, cashDelta: 0, cap: 250, longPromo: true },
+];
+
+function runSim(p, variant, perturb = {}) {
+  const dm = perturb.demandMultiplier ?? 1, pm = perturb.priceMultiplier ?? 1;
+  const cap = Math.max(0, Math.round(p.capacity * (perturb.capacityMultiplier ?? 1)));
+  const lead = p.lead + (perturb.leadDelta ?? 0);
+  const price = p.price * pm;
+  let stock = p.inventory + variant.openingExtra, cash = p.cash + variant.cashDelta;
+  let queue = [], pipeline = [], rows = [], validDays = 0;
+  let tDemand = 0, tAccepted = 0, tShipped = 0, tCancelled = 0, tContribution = 0, tReceived = 0, tPurchases = 0;
+  let minCash = cash, minCashDay = 0;
+  const procureQty = Math.round(p.demand * 7);
+  for (let day = 1; day <= p.days; day++) {
+    const startStock = stock, startCash = cash, startBacklog = queue.reduce((a, o) => a + o.qty, 0);
+    let received = 0;
+    for (const po of pipeline) if (po.arrival === day) received += po.qty;
+    pipeline = pipeline.filter(po => po.arrival > day);
+    stock += received; tReceived += received;
+    let factor = 1;
+    if (variant.longPromo) { if (day >= 8 && day <= 21) factor = 1.4; }
+    else { if (day >= 8 && day <= 14) factor = 1.8; else if (day >= 15 && day <= 21) factor = 1.3; }
+    const demand = Math.round(p.demand * factor * dm);
+    const accepted = variant.cap ? Math.min(demand, variant.cap) : demand;
+    if (accepted > 0) queue.push({ day, qty: accepted });
+    const waiting = queue.reduce((a, o) => a + o.qty, 0);
+    let remaining = Math.min(stock, cap, waiting), shipped = remaining;
+    while (remaining > 0 && queue.length) {
+      const order = queue[0], count = Math.min(order.qty, remaining);
+      order.qty -= count; remaining -= count;
+      if (!order.qty) queue.shift();
+    }
+    stock -= shipped;
+    let cancelled = 0;
+    queue = queue.filter(o => { if (day - o.day >= p.maxWait) { cancelled += o.qty; return false; } return true; });
+    const backlog = queue.reduce((a, o) => a + o.qty, 0);
+    let purchasePayment = 0;
+    if ([1, 8, 15, 22].includes(day) && day <= p.days) {
+      purchasePayment = procureQty * p.cost; tPurchases += purchasePayment;
+      pipeline.push({ arrival: day + lead, qty: procureQty });
+    }
+    const revenue = shipped * price, contribution = shipped * (price - p.cost - p.fulfill);
+    const holdingFee = stock * p.holding;
+    cash += revenue - purchasePayment - shipped * p.fulfill - holdingFee;
+    tDemand += demand; tAccepted += accepted; tShipped += shipped; tCancelled += cancelled; tContribution += contribution;
+    if (cash < minCash) { minCash = cash; minCashDay = day; }
+    const ok = stock === startStock + received - shipped
+      && backlog === startBacklog + accepted - shipped - cancelled
+      && Math.abs(cash - (startCash + revenue - purchasePayment - shipped * p.fulfill - holdingFee)) < 1e-6;
+    if (ok) validDays++;
+    rows.push({ day, demand, accepted, shipped, cancelled, backlog, inventory: stock, cash, contribution, promo: factor > 1 });
+  }
+  const closingStock = stock;
+  const conservation = validDays === p.days
+    && closingStock === p.inventory + variant.openingExtra + tReceived - tShipped
+    && tAccepted === tShipped + tCancelled + queue.reduce((a, o) => a + o.qty, 0);
+  return { rows, validDays, conservation, metrics: {
+    contribution: tContribution, minCash, minCashDay,
+    closingInventory: closingStock, fulfillment: tDemand ? tShipped / tDemand : 0,
+    cancelRate: tAccepted ? tCancelled / tAccepted : 0,
+  } };
+}
+
+let params = baseParams();
+let results = {};
+let selectedVariant = 'v2';
+let frozen = false;
+let snapSeq = 2;
+
+function computeAll() {
+  params = baseParams();
+  results = {};
+  for (const v of VARIANTS) results[v.id] = runSim(params, v);
+  $('railWindow').textContent = params.days;
+}
+
+function renderVariants() {
+  $('variantList').innerHTML = VARIANTS.map(v => {
+    const r = results[v.id];
+    return `<div class="variant-card ${selectedVariant === v.id ? 'selected' : ''}">
+      <div class="grow"><h4>${v.name}</h4><div class="deltas" style="margin-top:6px">${v.deltas.map(d => `<span class="chip">${d}</span>`).join('')}</div></div>
+      <span class="chip explore">探索性 · 已运行</span>
+      <span style="font-size:12px;color:var(--muted)">贡献 ${money(r.metrics.contribution)} · 履约 ${pct(r.metrics.fulfillment)}</span>
+      <button class="secondary-button" data-open-variant="${v.id}">查看结果</button>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('[data-open-variant]').forEach(btn => btn.addEventListener('click', () => {
+    selectedVariant = btn.dataset.openVariant;
+    $('resultVariant').value = selectedVariant;
+    switchTab('results'); renderResults(); renderVariants();
+  }));
+}
+
+function renderStats(r) {
+  const m = r.metrics, alert = m.minCash < params.cashThreshold;
+  $('statGrid').innerHTML = `
+    <div class="stat-card"><span>贡献毛利</span><strong>${money(m.contribution)}</strong><small>发货 ×（单价−进价−履约）</small></div>
+    <div class="stat-card ${alert ? 'alert' : ''}"><span>最低现金 ${alert ? '⚠' : ''}</span><strong>${money(m.minCash)}</strong><small>第 ${m.minCashDay} 天 · 预警线 ${money(params.cashThreshold)}</small></div>
+    <div class="stat-card"><span>期末库存</span><strong>${num(m.closingInventory)} 件</strong><small>含在途另行披露</small></div>
+    <div class="stat-card"><span>履约率</span><strong>${pct(m.fulfillment)}</strong><small>发货 ÷ 总需求 · 取消率 ${pct(m.cancelRate)}</small></div>`;
+}
+
+function renderResults() {
+  const r = results[selectedVariant];
+  renderStats(r);
+  $('ledgerTable').querySelector('tbody').innerHTML = r.rows.map(d => `<tr class="${d.promo ? 'promo-row' : ''}">
+    <td>D${d.day}</td><td>${num(d.demand)}</td><td>${num(d.accepted)}</td><td>${num(d.shipped)}</td>
+    <td>${num(d.cancelled)}</td><td>${num(d.backlog)}</td><td>${num(d.inventory)}</td>
+    <td class="${d.cash < 0 ? 'negative' : d.cash < params.cashThreshold ? 'cash-warn' : ''}">${money(d.cash)}</td>
+    <td>${money(d.contribution)}</td></tr>`).join('');
+  $('ledgerFooter').innerHTML = `
+    <span class="chip ${r.conservation ? 'frozen' : 'fail'}">守恒校验 ${r.validDays}/${params.days} 天${r.conservation ? '通过' : '未通过'}（演示引擎）</span>
+    <span>引擎 optracall-sim-1</span><span>输入摘要 sha256:9f3c…d2a1（演示）</span>
+    <span class="chip explore">探索性结果 · 同输入同输出</span>`;
+}
+
+function renderCompare() {
+  const rows = [
+    { label: '贡献毛利', get: m => m.contribution, fmt: money, best: 'max' },
+    { label: '最低现金', get: m => m.minCash, fmt: money, best: 'max' },
+    { label: '最低现金出现日', get: m => m.minCashDay, fmt: v => 'D' + v, best: null },
+    { label: '期末库存（件）', get: m => m.closingInventory, fmt: num, best: null },
+    { label: '履约率', get: m => m.fulfillment, fmt: pct, best: 'max' },
+    { label: '取消率', get: m => m.cancelRate, fmt: pct, best: 'min' },
+  ];
+  $('compareTable').querySelector('tbody').innerHTML = rows.map(row => {
+    const vals = VARIANTS.map(v => row.get(results[v.id].metrics));
+    let bestIdx = -1;
+    if (row.best === 'max') bestIdx = vals.indexOf(Math.max(...vals));
+    if (row.best === 'min') bestIdx = vals.indexOf(Math.min(...vals));
+    return `<tr><td>${row.label}</td>${VARIANTS.map((v, i) => {
+      const warn = row.label === '最低现金' && vals[i] < params.cashThreshold ? ' <span class="chip warn">低于预警线</span>' : '';
+      return `<td class="${i === bestIdx ? 'best' : ''}">${row.fmt(vals[i])}${warn}</td>`;
+    }).join('')}</tr>`;
+  }).join('');
+}
+
+const DIM_LABEL = { demand: '日均需求', capacity: '日产能', lead: '提前期', price: '商品单价' };
+function stressLabel(dim, mag) {
+  return `${DIM_LABEL[dim]} ${mag > 0 ? '+' : ''}${mag}${dim === 'lead' ? ' 天' : '%'}`;
+}
+function runStress(dim, mag, scope) {
+  const perturb = dim === 'demand' ? { demandMultiplier: 1 + mag / 100 }
+    : dim === 'capacity' ? { capacityMultiplier: 1 + mag / 100 }
+    : dim === 'lead' ? { leadDelta: mag } : { priceMultiplier: 1 + mag / 100 };
+  const targets = scope === 'all' ? VARIANTS : VARIANTS.filter(v => v.id === scope);
+  return targets.map(v => {
+    const base = results[v.id].metrics, after = runSim(params, v, perturb).metrics;
+    const flips = [];
+    if (base.minCash >= 0 && after.minCash < 0) flips.push('<span class="chip fail">现金转负</span>');
+    if (base.minCash >= params.cashThreshold && after.minCash < params.cashThreshold) flips.push('<span class="chip warn">跌破预警线</span>');
+    return { label: stressLabel(dim, mag), variant: v.name,
+      dContribution: after.contribution - base.contribution,
+      dMinCash: after.minCash - base.minCash,
+      dFulfillment: after.fulfillment - base.fulfillment,
+      flip: flips.join(' ') || '—' };
+  });
+}
+let stressRows = [];
+function renderStress() {
+  $('stressTable').querySelector('tbody').innerHTML = stressRows.map(r => `<tr>
+    <td>${r.label}</td><td>${r.variant}</td>
+    <td class="num ${r.dContribution >= 0 ? 'delta-pos' : 'delta-neg'}">${signed(r.dContribution, money)}</td>
+    <td class="num ${r.dMinCash >= 0 ? 'delta-pos' : 'delta-neg'}">${signed(r.dMinCash, money)}</td>
+    <td class="num ${r.dFulfillment >= 0 ? 'delta-pos' : 'delta-neg'}">${signed(r.dFulfillment * 100, v => v.toFixed(1) + 'pp')}</td>
+    <td>${r.flip}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--faint)">尚无扰动结果；设置维度与幅度后运行。</td></tr>';
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.sim-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+}
+document.querySelectorAll('.sim-tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+function renderAll() {
+  computeAll();
+  const sel = $('resultVariant');
+  if (!sel.options.length) sel.innerHTML = VARIANTS.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  sel.value = selectedVariant;
+  renderVariants(); renderResults(); renderCompare(); renderStress();
+}
+$('resultVariant').addEventListener('change', e => { selectedVariant = e.target.value; renderResults(); renderVariants(); });
+$('rerunBtn').addEventListener('click', () => {
+  frozen = false;
+  $('freezeBtn').textContent = '固化当前结果为快照'; $('freezeBtn').disabled = false;
+  $('taskFreezeBtn').textContent = '前往确认固化'; $('taskFreezeBtn').disabled = false;
+  renderAll(); toast('已按当前参数重新运行 · 同输入同输出');
+});
+$('stressRun').addEventListener('click', () => {
+  const dim = $('stressDim').value, mag = +$('stressMag').value || 0;
+  if (dim !== 'lead' && (mag <= -100)) { toast('幅度超出引擎能力范围：乘数需大于 0'); return; }
+  stressRows = stressRows.concat(runStress(dim, mag, $('stressScope').value));
+  renderStress();
+});
+$('stressClear').addEventListener('click', () => { stressRows = []; renderStress(); });
+$('newDraftBtn').addEventListener('click', () => toast('原型演示：新建草稿向导未展开，当前仅展示「大促备货方案对比」'));
+
+// 固化流程：唯一盖章点，由用户在页面确认。
+function openFreeze() {
+  if (frozen) { toast('该结果已固化，快照不可改写'); return; }
+  const v = VARIANTS.find(x => x.id === selectedVariant), r = results[selectedVariant], m = r.metrics;
+  $('freezeVariantName').textContent = v.name;
+  $('fz-days').textContent = params.days; $('fz-maxwait').textContent = params.maxWait; $('fz-lead').textContent = params.lead;
+  $('freezeMetrics').innerHTML = `
+    <div><span>贡献毛利</span><strong>${money(m.contribution)}</strong></div>
+    <div><span>最低现金（D${m.minCashDay}）</span><strong>${money(m.minCash)}</strong></div>
+    <div><span>期末库存</span><strong>${num(m.closingInventory)} 件</strong></div>
+    <div><span>履约率</span><strong>${pct(m.fulfillment)}</strong></div>`;
+  $('fz-conservation').textContent = `守恒校验 ${r.validDays}/${params.days} 天通过（演示引擎）`;
+  $('freezeDialog').showModal();
+}
+$('freezeBtn').addEventListener('click', openFreeze);
+$('taskFreezeBtn').addEventListener('click', openFreeze);
+$('freezeClose').addEventListener('click', () => $('freezeDialog').close());
+$('freezeCancel').addEventListener('click', () => $('freezeDialog').close());
+$('freezeConfirm').addEventListener('click', () => {
+  const v = VARIANTS.find(x => x.id === selectedVariant), m = results[selectedVariant].metrics;
+  const snapId = 'SNAP-2411-' + String(snapSeq).padStart(3, '0');
+  snapSeq++;
+  const item = document.createElement('details');
+  item.className = 'snap-item';
+  item.innerHTML = `<summary><span class="snap-id">${snapId}</span> ${v.name}<span class="snap-meta">2026-11-02 固化 · 引擎 optracall-sim-1</span></summary>
+    <div class="snap-body"><span>口径：${params.days} 天窗口 / FIFO / 补货 D1·D8·D15·D22</span>
+    <span>贡献毛利 ${money(m.contribution)} · 最低现金 ${money(m.minCash)}</span>
+    <span>履约率 ${pct(m.fulfillment)} · 期末库存 ${num(m.closingInventory)} 件</span>
+    <span class="chip frozen">不可变 · 可引用为 Case 证据</span></div>`;
+  $('snapList').prepend(item);
+  frozen = true;
+  $('freezeDialog').close();
+  $('freezeBtn').textContent = '已固化（不可改写）'; $('freezeBtn').disabled = true;
+  $('taskFreezeBtn').textContent = '已固化'; $('taskFreezeBtn').disabled = true;
+  toast(`已固化 ${snapId}（演示）· Agent 可经 simulation_evidence 读取回执`);
+});
+
+let toastTimer;
+function toast(text) {
+  const el = $('toast'); el.textContent = text; el.style.display = 'block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.style.display = 'none'; }, 3600);
+}
+
+renderAll();
+stressRows = runStress('demand', 25, 'all');
+renderStress();
+</script>
+</body>
+</html>

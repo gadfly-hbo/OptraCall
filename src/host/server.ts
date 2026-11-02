@@ -13,6 +13,7 @@ import type { CaseContextSelection } from './case-types.ts';
 import { loadStaticUi } from './static-ui.ts';
 import { createMetricFactoryRoutes } from '../../extensions/business-plugins/metric-factory/api/routes.ts';
 import { metricIndexText } from '../../extensions/business-plugins/metric-factory/project/index-text.ts';
+import { createSimLabRoutes } from '../../extensions/business-plugins/sim-lab/api/routes.ts';
 import { createRequirementRoutes } from '../../extensions/business-plugins/requirements-elaboration/api/routes.ts';
 import { composeRequirementContext } from '../../extensions/business-plugins/requirements-elaboration/api/context.ts';
 import { requirementSessionDirectory, requirementWorkspace } from '../../extensions/business-plugins/requirements-elaboration/session/workspace.ts';
@@ -89,6 +90,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     readBody: (request: IncomingMessage) => body(request),
   });
   const keyOf = (projectId: string, taskId: string) => `${projectId}/${taskId}`;
+  const simLabRoutes = createSimLabRoutes({
+    dataRoot,
+    projectExists: async (projectId: string) => { try { await projects.get(projectId); return true; } catch { return false; } },
+    projectArchived: async (projectId: string) => (await projects.get(projectId)).archivedAt !== null,
+    readBody: (request: IncomingMessage) => body(request),
+    saveReport: (projectId, name, text) => mutate(() => projects.saveReport(projectId, name, text)),
+  });
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
   const endStreams = (id?: string) => { for (const [key, responses] of streams) { if (id && key !== id) continue; for (const response of responses) response.end(); streams.delete(key); } };
   const publish = (projectId: string, taskId: string, event: object) => { for (const response of streams.get(keyOf(projectId, taskId)) ?? []) if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...event, projectId, taskId })}\n\n`); };
@@ -115,7 +123,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       agentOptions: async (owner, _configuration, execution) => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
         const protectedExecution = await automatic.ordinaryExecution({ project, task }, execution);
-        return { projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(protectedExecution ? { protectedExecution } : {}) };
+        return { projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(protectedExecution ? { protectedExecution } : {}) };
       },
       capabilities: { commands: true, ui: true, editor: true },
     },
@@ -414,6 +422,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (await handleEnterpriseMaterialsRoute({ request, response, url, store: enterpriseMaterials, cases, mutate })) return;
       const metricFactory = await metricFactoryRoutes(request, url);
       if (metricFactory) { json(response, metricFactory.status, metricFactory.value); return; }
+      const simLab = await simLabRoutes(request, url);
+      if (simLab) { json(response, simLab.status, simLab.value); return; }
       const requirementEvent = /^\/api\/requirement-instances\/(req-[a-z0-9][a-z0-9-]{0,60})\/events$/.exec(url.pathname);
       if (requirementEvent && request.method === 'GET') {
         const instanceId = requirementEvent[1]!;
@@ -537,7 +547,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const project = await projects.get(projectId); assertActive(project);
             const selected = typeof input.configurationId === 'string' ? configuration.read(input.configurationId) : project.configuration;
             if (!selected || !configuration.snapshot(selected.id, selected.revision)) throw new RequestFault(409, 'configuration_required');
-            const created = await projects.createTask(projectId, { name: String(input.name ?? ''), configuration: selected });
+            const created = await projects.createTask(projectId, { name: String(input.name ?? ''), configuration: selected, simulationTools: input.simulationTools === true });
             projectSessions.registerFresh(projectSessions.ref({ project: await projects.get(projectId), task: created }));
             return created;
           }); json(response, 201, { task }); return;
@@ -579,6 +589,18 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             throw new RequestFault(404, 'not_found');
           }
           if (operation === 'context-receipts' && request.method === 'GET') { const { project, task } = await pair(projectId, taskId); json(response, 200, { receipts: taskContextReceipts(project, task) }); return; }
+          if (operation === 'simulation-tools' && request.method === 'PUT') {
+            const input = await body(request);
+            if (typeof input.enabled !== 'boolean') throw new RequestFault(400, 'invalid_simulation_tools');
+            const task = await mutate(async () => {
+              const owner = await pair(projectId, taskId, true); assertActive(owner.project);
+              const ref = projectSessions.ref(owner);
+              if (projectSessions.busy(ref) || await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
+              if (Boolean(owner.task.simulationTools) !== input.enabled) await projectSessions.close(ref);
+              return projects.setSimulationTools(projectId, taskId, input.enabled as boolean);
+            });
+            json(response, 200, { task }); return;
+          }
           if (operation === 'verifications/preview' && request.method === 'POST') { verification.assertAvailable(); json(response, 200, await verification.preview(projectId, taskId, parseVerificationSelection(await body(request)))); return; }
           const verificationRoute = /^verifications(?:\/([a-f0-9-]+)(?:\/(.*))?)?$/.exec(operation ?? '');
           if (verificationRoute) {
