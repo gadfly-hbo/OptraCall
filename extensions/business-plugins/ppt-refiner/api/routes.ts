@@ -78,10 +78,15 @@ export function createPptRefinerRoutes(options: PptRefinerRoutesOptions) {
       const id = bodyText(input, 'id', 70);
       if (!deckIdPattern.test(id)) throw fault(400, 'invalid_deck_id', 'deck 标识需形如 deck-xxx。');
       const store = storeOf(id);
+      const configuration = input.configuration === undefined ? undefined : (() => {
+        if (!object(input.configuration) || typeof input.configuration.id !== 'string') throw fault(400, 'invalid_input', '模型配置不合法。');
+        return { id: input.configuration.id, ...(Number.isSafeInteger(input.configuration.revision) ? { revision: Number(input.configuration.revision) } : {}) };
+      })();
       const meta = store.register({
         sourcePptx: assertAllowedPath(bodyText(input, 'sourcePptx', 1000)),
         title: bodyText(input, 'title', 200),
         reportPath: assertAllowedPath(bodyText(input, 'reportPath', 1000)),
+        ...(configuration ? { configuration } : {}),
       });
       return { status: 201, value: { meta, deckPath: store.deckPath } };
     },

@@ -156,3 +156,21 @@ test('deck store: revert marks undone versions and export excludes them', () => 
     assert.match(diff, /无内容级改动差异/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('deck store: register persists deck-bound configuration', () => {
+  const dir = tempDir();
+  try {
+    const store = createDeckStore(dir);
+    store.register({ sourcePptx: fixtureDeck, title: 'bound', reportPath: fixtureReport, configuration: { id: 'minimax-m3', revision: 1 } });
+    assert.deepEqual(store.meta().configuration, { id: 'minimax-m3', revision: 1 });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('refinerConfiguration: deck-bound config wins, fallback to current selection', async () => {
+  const { refinerConfiguration } = await import('../src/host/ppt-refiner-sessions.ts');
+  const calls: (string | number | undefined)[][] = [];
+  const snapshot = (id?: string, revision?: number) => { calls.push([id, revision]); return { model: id ?? 'current' } as never; };
+  refinerConfiguration({ configuration: { id: 'minimax-m3', revision: 1 } }, snapshot);
+  refinerConfiguration({}, snapshot);
+  assert.deepEqual(calls, [['minimax-m3', 1], [undefined, undefined]]);
+});
