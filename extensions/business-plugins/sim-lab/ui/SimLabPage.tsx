@@ -3,6 +3,10 @@ import type { ClientProject, ClientTask } from '../../../../src/host/ui/project-
 import * as client from './simlab-client.ts';
 import { ENGINE_VERSION } from '../types.ts';
 import { snapshotRules } from '../kernel/model-rules.ts';
+import type { FreezeSuggestion } from './task-suggestions.ts';
+import * as cases from '../../../../src/host/ui/case-client.ts';
+import { downloadFile } from '../../../../src/host/ui/runtime-client.ts';
+import { CaseDialog } from '../../../../src/host/ui/CaseDialogs.tsx';
 import type { DraftRecord, RunRecord, SnapshotRecord, StressRow, SimVariant, SimParameters, SimPerturbation } from './simlab-client.ts';
 
 const money = (v: number) => (v < 0 ? '−¥' : '¥') + Math.abs(Math.round(v)).toLocaleString('zh-CN');
@@ -48,18 +52,20 @@ const COMPARE_FIELDS = [
   { key: 'contribution', label: '贡献毛利（元）', format: money },
 ] as const;
 
-export function SimLabPage({ projects, onOpenTask, onBack }: {
+export function SimLabPage({ projects, onOpenTask, onBack, initialSelection }: {
   projects: ClientProject[];
   onOpenTask: (project: ClientProject, task: ClientTask) => void;
   onBack: () => void;
+  initialSelection?: FreezeSuggestion;
 }) {
-  const [projectId, setProjectId] = useState(() => (projects.filter(p => !p.archivedAt).at(-1) ?? projects.at(-1))?.id ?? '');
+  const [projectId, setProjectId] = useState(() => initialSelection?.projectId ?? (projects.filter(p => !p.archivedAt).at(-1) ?? projects.at(-1))?.id ?? '');
   const project = projects.find(p => p.id === projectId), archived = Boolean(project?.archivedAt);
   const [drafts, setDrafts] = useState<DraftRecord[]>([]), [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
   const [draftId, setDraftId] = useState(''), [loadedDraft, setDraft] = useState<DraftRecord>(), [runs, setRuns] = useState<RunRecord[]>([]);
   const draft = loadedDraft?.projectId === projectId && loadedDraft.id === draftId ? loadedDraft : undefined;
   const draftProjectId = drafts.find(d => d.id === draftId)?.projectId;
-  const [tab, setTab] = useState<Tab>('params'), [variantId, setVariantId] = useState('');
+  const [tab, setTab] = useState<Tab>(initialSelection ? 'results' : 'params'), [variantId, setVariantId] = useState('');
+  const [requestedRunId, setRequestedRunId] = useState(initialSelection?.runId);
   const [compareMetric, setCompareMetric] = useState<typeof COMPARE_FIELDS[number]['key']>('cash');
   const [form, setForm] = useState<Record<string, string>>({}), [shocks, setShocks] = useState({ demandShock: true, supplyShock: true });
   const [variantForms, setVariantForms] = useState<VariantForm[]>([]);
@@ -67,14 +73,21 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [createOpen, setCreateOpen] = useState(false), [createName, setCreateName] = useState('');
   const [freezeOpen, setFreezeOpen] = useState(false);
+  const [exported, setExported] = useState<Awaited<ReturnType<typeof client.exportSnapshot>>>();
+  const [caseChoices, setCaseChoices] = useState<cases.CaseRecord[]>([]), [caseChoice, setCaseChoice] = useState('');
+  const [caseOperation, setCaseOperation] = useState<{ caseId: string; operationId: string; expectedRevision: number }>();
   useEffect(() => {
     if (!projectId) return;
     let current = true;
     setDrafts([]); setSnapshots([]); setDraftId(''); setDraft(undefined); setRuns([]); setError(''); setNotice(''); setStressRows([]); setFreezeOpen(false); setCreateOpen(false);
+    setExported(undefined); setCaseChoices([]); setCaseChoice(''); setCaseOperation(undefined);
     void Promise.all([client.listDrafts(projectId), client.listSnapshots(projectId)]).then(([d, s]) => {
       if (!current) return;
       setDrafts(d.drafts); setSnapshots(s.snapshots);
-      if (d.drafts.length) setDraftId(d.drafts.at(-1)!.id);
+      if (initialSelection?.projectId === projectId) {
+        if (d.drafts.some(draft => draft.id === initialSelection.draftId)) setDraftId(initialSelection.draftId);
+        else setError('建议指定的草稿不存在或不可用；保留原身份，未选择其他草稿。');
+      } else if (d.drafts.length) setDraftId(d.drafts.at(-1)!.id);
     }).catch(e => { if (current) setError(e instanceof Error ? e.message : '读取失败'); });
     return () => { current = false; };
   }, [projectId]);
@@ -89,15 +102,17 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
       setForm(formOf(d.draft.parameters));
       setShocks({ demandShock: d.draft.parameters.demandShock, supplyShock: d.draft.parameters.supplyShock });
       setVariantForms(d.draft.variants.map(fromVariant));
-      setVariantId(d.draft.variants[0]?.id ?? '');
+      setVariantId(initialSelection?.projectId === projectId && initialSelection.draftId === draftId ? initialSelection.variantId : d.draft.variants[0]?.id ?? '');
       setStressRows([]);
     }).catch(e => { if (current) setError(e instanceof Error ? e.message : '读取失败'); });
     return () => { current = false; };
   }, [projectId, draftId, draftProjectId]);
 
-  const latestRun = useMemo(() => [...runs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0], [runs]);
+  const selectedSuggestion = initialSelection?.projectId === projectId && initialSelection.draftId === draftId;
+  const latestRun = useMemo(() => requestedRunId && selectedSuggestion ? runs.find(run => run.id === requestedRunId) : [...runs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0], [runs, requestedRunId, selectedSuggestion]);
   const stale = Boolean(latestRun && draft && latestRun.draftRevision !== draft.revision);
   const currentResult = latestRun?.results[variantId];
+  const suggestionChanged = Boolean(selectedSuggestion && requestedRunId && latestRun && (latestRun.draftRevision !== initialSelection.draftRevision || latestRun.engineVersion !== initialSelection.engineVersion || latestRun.results[initialSelection.variantId]?.inputHash !== initialSelection.inputHash));
   const selectedVariant = draft?.variants.find(variant => variant.id === variantId);
   const effectivePromo = selectedVariant?.promoWindow ?? (draft ? { start: draft.parameters.promoStart, end: draft.parameters.promoEnd } : undefined);
   const effectiveLift = draft ? draft.parameters.promoLift * (selectedVariant?.promoLiftScale ?? 1) : 0;
@@ -116,6 +131,7 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
       setDraft(updated.draft); setDrafts(previous => previous.map(d => d.id === updated.draft.id ? updated.draft : d));
       if (runAfter) {
         const ran = await client.runDraft(projectId, draft.id);
+        setRequestedRunId(undefined);
         setRuns(previous => [ran.run, ...previous]); setTab('results');
         setNotice(`已保存并运行（revision ${updated.draft.revision} · ${ran.run.id}）`);
       } else setNotice(`草稿已保存（revision ${updated.draft.revision}）`);
@@ -127,6 +143,7 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
     setBusy(true); setError(''); setNotice('');
     try {
       const ran = await client.runDraft(projectId, draft.id);
+      setRequestedRunId(undefined);
       setRuns(previous => [ran.run, ...previous]); setTab('results');
       setNotice(`已按当前草稿重新运行（${ran.run.id}）· 同输入同输出`);
     } catch (e) { setError(e instanceof Error ? e.message : '运行失败'); }
@@ -157,13 +174,37 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
     finally { setBusy(false); }
   };
   const freeze = async () => {
-    if (!projectId || !draft || !latestRun) return;
+    if (!projectId || !draft || !latestRun || archived || stale || suggestionChanged) return;
     setBusy(true); setError('');
     try {
       const frozen = await client.freezeSnapshot(projectId, draft.id, { runId: latestRun.id, variantId, expectedRevision: draft.revision });
       setSnapshots(previous => [frozen.snapshot, ...previous]);
-      setFreezeOpen(false); setNotice(`已固化 ${frozen.snapshot.id} · 快照不可改写；Case／决策板接入待完成`);
+      setFreezeOpen(false); setNotice(`已固化 ${frozen.snapshot.id} · 可导出证据报告并引用到 Case／决策板`);
     } catch (e) { setError(e instanceof Error ? e.message : '固化失败'); setFreezeOpen(false); }
+    finally { setBusy(false); }
+  };
+  const exportEvidence = async (snapshot: SnapshotRecord) => {
+    if (busy || archived) return;
+    setBusy(true); setError('');
+    try {
+      const value = await client.exportSnapshot(projectId, snapshot.id);
+      setExported(value); setCaseChoice(''); setCaseOperation(undefined);
+      setNotice(`已另存 ${value.file.path}；决策板报告列表可见，尚未自动抽取。`);
+      const available = await cases.list().catch(() => undefined);
+      setCaseChoices(available?.cases.filter(record => record.status !== 'closed' && available.projectLinks.some(link => link.projectId === projectId && link.caseId === record.id)) ?? []);
+    } catch (e) { setError(e instanceof Error ? e.message : '导出结果未知，请先核对项目文件，勿盲目重复导出。'); }
+    finally { setBusy(false); }
+  };
+  const linkEvidence = async () => {
+    if (busy || archived || !exported || !caseChoice) return;
+    setBusy(true); setError('');
+    try {
+      const pending = caseOperation ?? { caseId: caseChoice, operationId: crypto.randomUUID(), expectedRevision: (await cases.detail(caseChoice)).case.revision };
+      setCaseOperation(pending);
+      await cases.saveArtifact(pending.caseId, { operationId: pending.operationId, expectedRevision: pending.expectedRevision,
+        projectId, relativePath: exported.file.path, expectedSha256: exported.file.sha256, role: 'analysis_result', displayName: `经营推演 ${exported.snapshotId}` });
+      setCaseOperation(undefined); setNotice(`已把 ${exported.snapshotId} 的证据报告引用到 Case，可在 Case 成果中查看固定指标与文件摘要。`);
+    } catch (e) { if (e instanceof cases.CaseRequestError && ['revision_conflict', 'case_conflict'].includes(e.code)) setCaseOperation(undefined); setError(e instanceof Error ? e.message : '引用结果未知；保留同一操作，核对后重试。'); }
     finally { setBusy(false); }
   };
 
@@ -182,6 +223,7 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
     </header>
     {error && <div className="global-notice" role="alert"><span>{error}</span><button className="text-button" onClick={() => setError('')}>关闭提示</button></div>}
     {notice && <p className="project-notice" role="status">{notice}</p>}
+    {selectedSuggestion && requestedRunId && <p className="project-notice" role="status">查看 Agent 建议的 {requestedRunId}／{initialSelection.variantId}。{latestRun ? suggestionChanged ? '建议身份与实际运行不一致，停止固化，请核对原记录。' : stale ? '草稿已变化，原建议已过期；需重新推演后再固化。' : '仅为建议，请核对口径和结果后确认。' : '尚未读到该运行，保留指定身份，不替换为最新运行。'}</p>}
     {archived && <div className="archive-banner" role="status">项目已归档，当前为只读查看；恢复项目后可继续推演。</div>}
 
     <div className="simlab-layout">
@@ -209,10 +251,21 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
                   <p>活动窗 D{model.effective.promoWindow.start}–D{model.effective.promoWindow.end}，需求 +{model.effective.promoLift}%；D0 额外现货 {model.effective.openingExtraStock} 件；日承接上限 {model.effective.acceptanceCap ?? '不限'}。</p>
                   <p>未建模：{model.unmodeled!.join('、')}。</p></>}
               </div>; })()}
-              <span className="sim-chip frozen">不可变 · Case／决策板接入待完成</span>
+              <span className="sim-chip frozen">不可变 · 可导出为 Case／决策板证据</span>
+              <button className="secondary-button" disabled={writeDisabled} onClick={() => void exportEvidence(s)}>导出 {s.id} 证据报告</button>
             </div>
           </details>)}
         </section>
+        {exported && <section className="rail-section" aria-label="快照证据引用">
+          <h3>证据报告 · {exported.snapshotId}</h3><p>{exported.file.path}</p><p>文件 SHA-256：{exported.file.sha256}</p>
+          <button className="secondary-button" onClick={() => void downloadFile(projectId, { kind: 'file', name: exported.file.originalName, path: exported.file.path }, exported.file.sha256).catch(e => setError(e instanceof Error ? e.message : '下载失败'))}>下载证据报告</button>
+          <label>引用到已关联 Case<select aria-label="引用到 Case" disabled={busy || archived} value={caseChoice} onChange={event => { setCaseChoice(event.target.value); setCaseOperation(undefined); }}>
+            <option value="">选择 Case</option>{caseChoices.map(record => <option key={record.id} value={record.id}>{record.title}</option>)}
+          </select></label>
+          {!caseChoices.length && <p>请先在 Case 看板创建事项并关联本项目，再导出并引用。</p>}
+          <button className="secondary-button" disabled={writeDisabled || !caseChoice} onClick={() => void linkEvidence()}>引用到 Case</button>
+          <p>指标为冻结的假设模型结果；引用不代表采纳建议或真实效果。</p>
+        </section>}
       </aside>
 
       <main className="simlab-main">
@@ -262,7 +315,7 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
               <div className="panel-actions">
                 <select aria-label="选择变体" value={variantId} onChange={event => setVariantId(event.target.value)}>{draft.variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select>
                 <button className="secondary-button" disabled={writeDisabled} onClick={() => void rerun()}>重新运行</button>
-                <button className="primary-button" disabled={writeDisabled || !latestRun || stale} title={stale ? '草稿已修改，请先重新运行' : undefined} onClick={() => setFreezeOpen(true)}>固化当前结果为快照</button>
+                <button className="primary-button" disabled={writeDisabled || !latestRun || stale || suggestionChanged} title={stale ? '草稿已修改，请先重新运行' : suggestionChanged ? '建议身份与运行不一致' : undefined} onClick={() => setFreezeOpen(true)}>固化当前结果为快照</button>
               </div></div>
             {stale && <p className="sim-warning" role="status">草稿已在运行后修改（运行 rev {latestRun?.draftRevision} ≠ 当前 rev {draft.revision}）。结果为历史探索记录，固化前请重新运行。</p>}
             {!latestRun ? <div className="simlab-empty"><p>尚未运行。到「方案与参数」保存并运行，或点「重新运行」。</p></div> : currentResult && <>
@@ -375,15 +428,13 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
 
     <footer className="simlab-disclaimer"><strong>边界声明：</strong>本页面为确定性假设模型，输出是「假设的严谨展开」，不是现实预测、概率、优化推荐或因果效果。v1 未建模：退货退款、多仓、账期、税费、固定成本、日内现金流、概率分布与随机仿真。</footer>
 
-    {createOpen && <div className="sim-dialog-backdrop" role="presentation"><div className="sim-dialog" role="dialog" aria-modal="true" aria-labelledby="sim-create-title">
-      <h2 id="sim-create-title">新建推演草稿</h2>
+    {createOpen && <CaseDialog title="新建推演草稿" busy={busy} onClose={() => setCreateOpen(false)} className="sim-dialog">
       <label>草稿名称<input autoFocus value={createName} maxLength={80} placeholder="例如：双十一备货方案对比" onChange={event => setCreateName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void createDraft(); }} /></label>
       <p className="panel-hint">从默认参数与三个参考变体起步，可自由修改。</p>
       <div className="dialog-actions"><button className="secondary-button" onClick={() => setCreateOpen(false)}>取消</button><button className="primary-button" disabled={busy || !createName.trim()} onClick={() => void createDraft()}>创建草稿</button></div>
-    </div></div>}
+    </CaseDialog>}
 
-    {freezeOpen && latestRun && currentResult && draft && <div className="sim-dialog-backdrop" role="presentation"><div className="sim-dialog" role="dialog" aria-modal="true" aria-labelledby="sim-freeze-title">
-      <h2 id="sim-freeze-title">固化快照</h2>
+    {freezeOpen && latestRun && currentResult && draft && <CaseDialog title="固化快照" busy={busy} onClose={() => setFreezeOpen(false)} className="sim-dialog">
       <p className="panel-hint">一次性确认口径、参数与结果。变体：<strong>{draft.variants.find(v => v.id === variantId)?.name}</strong></p>
       <h4>口径（随快照冻结）</h4>
       <ul className="freeze-caliber">
@@ -402,6 +453,6 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
       <p className="panel-hint">{latestRun.engineVersion} · {latestRun.id} · 输入摘要 {shortHash(currentResult.inputHash)} · 守恒 {currentResult.validDays}/{draft.parameters.days} 天通过</p>
       <p className="freeze-immutable">固化后快照不可改写；后续修改草稿并重新推演，将生成新的快照。</p>
       <div className="dialog-actions"><button className="secondary-button" disabled={busy} onClick={() => setFreezeOpen(false)}>取消</button><button className="primary-button" disabled={busy} onClick={() => void freeze()}>确认固化</button></div>
-    </div></div>}
+    </CaseDialog>}
   </div>;
 }

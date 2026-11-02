@@ -4,6 +4,7 @@ import { EVIDENCE_CONFIDENCE, type EvidenceLevel, type Priority, type TaskFeedba
 import { CaseDialog } from '../../../../src/host/ui/CaseDialogs.tsx';
 import { FeedbackReview } from '../../../../src/host/ui/FeedbackReview.tsx';
 import type { FeedbackReviewStart } from '../../../../src/host/ui/FeedbackContextPanel.tsx';
+import { downloadFile } from '../../../../src/host/ui/runtime-client.ts';
 
 const EVIDENCE_CLASS: Record<string, string> = { '数据支撑': 'ev-data', '多源佐证': 'ev-multi', '逻辑推断': 'ev-logic', '经验假设': 'ev-exp' };
 const PRIORITY_LABEL: Record<string, string> = { high: '高优', medium: '中优', low: '低优' };
@@ -169,6 +170,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview }: { initi
 
 function ReportRow({ report, archived, disabled, onExtract, onStop }: { report: BoardReportView; archived: boolean; disabled: boolean; onExtract: () => void; onStop: () => void }) {
   const extraction = report.extraction;
+  const [downloadError, setDownloadError] = useState('');
   return <div className="board-report-row">
     <span className="report-name">{report.name}</span>
     <span className="report-project">{report.projectName}{archived ? '（已归档）' : ''}</span>
@@ -183,10 +185,12 @@ function ReportRow({ report, archived, disabled, onExtract, onStop }: { report: 
       : <span className="board-chip warn">抽取已中断</span>}
     {extraction && <span className="report-input">本次抽取输入：1 份报告</span>}
     <span className="report-actions">
+      <button disabled={report.availability === 'missing'} onClick={() => { setDownloadError(''); void downloadFile(report.projectId, { kind: 'file', name: report.name, path: report.relativePath }).catch(error => setDownloadError(error instanceof Error ? error.message : '下载失败')); }}>下载报告证据</button>
       {extraction?.status === 'running'
         ? <button disabled={disabled} onClick={onStop}>停止</button>
         : <button className="primary-button" disabled={disabled || archived || report.availability === 'missing'} title={archived ? '项目已归档，恢复后可抽取' : undefined} onClick={onExtract}>{extraction ? '重新抽取' : '抽取建议'}</button>}
     </span>
+    {downloadError && <span role="alert">{downloadError}</span>}
   </div>;
 }
 

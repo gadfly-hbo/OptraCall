@@ -3,6 +3,7 @@ import path from 'node:path';
 import { SimLabService } from '../service/simlab-service.ts';
 import { EngineFault } from '../kernel/engine.ts';
 import { StoreFault } from '../storage/store.ts';
+import { snapshotReport } from '../service/evidence-report.ts';
 
 class ApiFault extends Error {
   readonly status: number;
@@ -15,6 +16,7 @@ export type SimLabRoutesOptions = {
   projectExists: (projectId: string) => Promise<boolean>;
   projectArchived: (projectId: string) => Promise<boolean>;
   readBody: (request: IncomingMessage) => Promise<Record<string, unknown>>;
+  saveReport?: (projectId: string, name: string, text: string) => Promise<unknown>;
 };
 
 const projectIdPattern = /^[a-f0-9-]{36}$/;
@@ -96,6 +98,14 @@ export function createSimLabRoutes(options: SimLabRoutesOptions) {
       }
       if (collection === 'snapshots' && id && !action && request.method === 'GET') {
         return { status: 200, value: { snapshot: await (await readableProject(projectId)).getSnapshot(id) } };
+      }
+      if (collection === 'snapshots' && id && action === 'export' && request.method === 'POST') {
+        await options.readBody(request);
+        const service = await writableProject(projectId), snapshot = await service.getSnapshot(id);
+        if (!options.saveReport) throw new ApiFault(503, 'export_unavailable', '当前Host未提供证据导出。');
+        const { model: _readModel, ...frozen } = snapshot;
+        const file = await options.saveReport(projectId, `simlab-${snapshot.id}-${snapshot.inputHash.slice(0, 12)}.md`, snapshotReport(frozen));
+        return { status: 201, value: { file, snapshotId: snapshot.id } };
       }
       throw new ApiFault(404, 'not_found', '未知推演接口。');
     } catch (error) {

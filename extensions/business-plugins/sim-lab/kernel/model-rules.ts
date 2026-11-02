@@ -27,7 +27,9 @@ export function engineRules(version: string) {
 
 /** Read-time interpretation by the record's engine identity; never rewrites stored evidence. */
 export function snapshotRules(snapshot: SnapshotRecord) {
-  return { ...engineRules(snapshot.engineVersion), effective: {
+  const model = engineRules(snapshot.engineVersion);
+  if (model.status === 'unknown') return model;
+  return { ...model, effective: {
     promoWindow: snapshot.variant.promoWindow ?? { start: snapshot.parameters.promoStart, end: snapshot.parameters.promoEnd },
     promoLift: snapshot.parameters.promoLift * (snapshot.variant.promoLiftScale ?? 1),
     acceptanceCap: snapshot.variant.acceptanceCap, openingExtraStock: snapshot.variant.openingExtraStock,

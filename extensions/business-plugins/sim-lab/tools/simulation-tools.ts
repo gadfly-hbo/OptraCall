@@ -88,11 +88,23 @@ export function createSimulationTools(options: { storeRoot: string; projectId: s
         draftId: Type.String(),
         includeLedger: Type.Optional(Type.Boolean({ description: '为 true 时附 variantId 指定变体的逐日账本' })),
         variantId: Type.Optional(Type.String()),
+        suggestFreeze: Type.Optional(Type.Object({ variantId: Type.String(), reason: Type.String({ minLength: 1, maxLength: 1000 }) }, { description: '仅当你明确建议用户固化某方案时填写；返回对话建议卡，不执行固化。' })),
       }),
       execute: async (_id, params) => {
         try {
+          const suggestion = params.suggestFreeze;
+          if (suggestion) {
+            if (typeof suggestion.reason !== 'string' || !suggestion.reason.trim() || suggestion.reason.length > 1000) return rejected(new EngineFault('invalid_suggestion', '固化建议需提供1–1000字理由。'));
+            const draft = await service.getDraft(params.draftId);
+            if (!draft.variants.some(variant => variant.id === suggestion.variantId)) return rejected(new EngineFault('invalid_variant', '固化建议的方案不在草稿中。'));
+          }
           const run = await service.runDraft(params.draftId);
           const data: Record<string, unknown> = { ...summaryOf(run, run.draftRevision, run.id), engineVersion: run.engineVersion };
+          if (suggestion) {
+            const result = run.results[suggestion.variantId];
+            if (result) data.freezeSuggestion = { projectId: options.projectId, draftId: run.draftId, draftRevision: run.draftRevision, runId: run.id, variantId: suggestion.variantId, reason: suggestion.reason.trim(), engineVersion: run.engineVersion, inputHash: result.inputHash };
+            else data.suggestionStatus = 'variant_changed'; // The run remains a successful, saved operation.
+          }
           if (params.includeLedger && params.variantId) {
             const result = run.results[params.variantId];
             if (!result) return rejected(new EngineFault('invalid_variant', '运行记录中没有该变体结果。'));

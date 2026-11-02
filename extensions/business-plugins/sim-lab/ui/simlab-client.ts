@@ -28,3 +28,4 @@ export const listRuns = (projectId: string, draftId: string) => request<{ runs: 
 export const stressDraft = (projectId: string, draftId: string, input: { perturbation: SimPerturbation; variantIds?: string[] }) => request<{ rows: StressRow[] }>(`projects/${projectId}/drafts/${draftId}/stress`, 'POST', input);
 export const listSnapshots = (projectId: string) => request<{ snapshots: SnapshotRecord[] }>(`projects/${projectId}/snapshots`);
 export const freezeSnapshot = (projectId: string, draftId: string, input: { runId: string; variantId: string; expectedRevision: number; name?: string }) => request<{ snapshot: SnapshotRecord }>(`projects/${projectId}/drafts/${draftId}/freeze`, 'POST', input);
+export const exportSnapshot = (projectId: string, snapshotId: string) => request<{ snapshotId: string; file: { path: string; originalName: string; sha256: string; bytes: number } }>(`projects/${projectId}/snapshots/${snapshotId}/export`, 'POST', {});

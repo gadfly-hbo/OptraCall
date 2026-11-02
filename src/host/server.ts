@@ -94,6 +94,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     projectExists: async (projectId: string) => { try { await projects.get(projectId); return true; } catch { return false; } },
     projectArchived: async (projectId: string) => (await projects.get(projectId)).archivedAt !== null,
     readBody: (request: IncomingMessage) => body(request),
+    saveReport: (projectId, name, text) => mutate(() => projects.saveReport(projectId, name, text)),
   });
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
   const endStreams = (id?: string) => { for (const [key, responses] of streams) { if (id && key !== id) continue; for (const response of responses) response.end(); streams.delete(key); } };

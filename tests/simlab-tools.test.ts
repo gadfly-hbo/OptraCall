@@ -102,3 +102,20 @@ test('SIM-TOOLS-05: unexpected storage faults do not expose Host paths or raw sy
   assert.ok(!JSON.stringify(result).includes(storeRoot));
   assert.ok(!JSON.stringify(result).includes('ENOTDIR'));
 });
+
+test('SIM-TOOLS-06: explicit suggestions identify the saved run and invalid suggestions do not run', async t => {
+  const { tools, storeRoot } = await fixture(t), service = new SimLabService(storeRoot, PROJECT);
+  const draft = await service.createDraft({ name: '建议合同' });
+  const invalid = await call(tools.simulation_run, { draftId: draft.id, suggestFreeze: { variantId: 'missing', reason: '无效方案' } });
+  assert.equal(invalid.details.code, 'invalid_variant');
+  assert.deepEqual(await service.listRuns(), []);
+  const ordinary = await call(tools.simulation_run, { draftId: draft.id });
+  assert.equal(ordinary.details.data.freezeSuggestion, undefined);
+  const proposed = await call(tools.simulation_run, { draftId: draft.id, suggestFreeze: { variantId: 'split', reason: '请用户核对分批方案' } });
+  const suggestion = proposed.details.data.freezeSuggestion;
+  assert.equal(suggestion.runId, proposed.details.data.runId);
+  assert.equal(suggestion.draftRevision, draft.revision);
+  assert.equal(suggestion.projectId, PROJECT);
+  assert.equal(suggestion.inputHash, (await service.getRun(suggestion.runId)).results.split!.inputHash);
+  assert.deepEqual(await service.listSnapshots(), [], 'suggestion is never a freeze action');
+});

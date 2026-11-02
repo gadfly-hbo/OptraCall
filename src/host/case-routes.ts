@@ -177,6 +177,7 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
         observation = await projects.observeFile(projectId, relativePath);
         uploadId = project.uploads.find(upload => upload.path === relativePath)?.id ?? null;
       }
+      if (input.expectedSha256 !== undefined && (typeof input.expectedSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(input.expectedSha256) || observation.sha256 !== input.expectedSha256)) throw new CaseRouteError('artifact_version_changed', 409);
       return cases.saveArtifact({ ...common, caseId, projectId, relativePath, taskId, uploadId,
         role: (input.role ?? 'file') as CaseArtifactRecord['role'], displayName: nullableString(input.displayName), observedSha256: observation.sha256, observedBytes: observation.bytes, observedAt: observation.observedAt });
     }) };

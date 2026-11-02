@@ -41,6 +41,6 @@ export const readProjectWork = (projectId: string) => request<{ work: ProjectWor
 export const saveProjectWork = (projectId: string, input: ProjectWorkInput) => request<{ work: ProjectWorkRecord }>(projectPath(projectId), 'PATCH', input);
 export const projectEvents = (projectId: string) => request<{ events: WorkEvent[] }>(`${projectPath(projectId)}/events`);
 export const projectNote = (projectId: string, input: CaseMutation & { note: string; feedbackSource?: string | null; originCaseId?: string }) => request<{ work: ProjectWorkRecord }>(`${projectPath(projectId)}/notes`, 'POST', input);
-export type ArtifactSelectionInput = ArtifactInput & { saveVersion?: boolean };
+export type ArtifactSelectionInput = ArtifactInput & { saveVersion?: boolean; expectedSha256?: string };
 export const saveArtifact = (id: string, input: CaseMutation & ArtifactSelectionInput) => request<{ case: CaseRecord }>(`${casePath(id)}/artifacts${input.saveVersion ? '/adopt' : ''}`, 'POST', input);
 export const unlinkArtifact = (id: string, artifactId: string, input: CaseMutation) => request<{ case: CaseRecord }>(`${casePath(id)}/artifacts/${encodeURIComponent(artifactId)}`, 'DELETE', input);

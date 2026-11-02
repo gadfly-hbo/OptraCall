@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
+import { freezeSuggestionFor } from '../extensions/business-plugins/sim-lab/ui/task-suggestions.ts';
 
 async function json(response: Response, expected = 200): Promise<any> { assert.equal(response.status, expected, await response.clone().text()); return response.json(); }
 async function settled(host: Awaited<ReturnType<typeof startTestHost>>, route: string, requestId: string) {
@@ -32,7 +33,7 @@ test('SIM-AGENT-01: task-enabled simulation tools run through the unified SDK ru
       const envelopes = context.recentToolResults.map(message => providerMessageText(message.content)).filter(Boolean).map(text => JSON.parse(text));
       const draftId = envelopes.map(value => value?.data?.draft?.id).find(Boolean);
       assert.ok(draftId, 'draft id must come back through the real tool result envelope');
-      return { calls: [{ name: context.requestNumber === 3 ? 'simulation_run' : 'simulation_stress', arguments: { draftId, ...(context.requestNumber === 4 ? { perturbation: { demandMultiplier: 1.25 } } : {}) } }] };
+      return { calls: [{ name: context.requestNumber === 3 ? 'simulation_run' : 'simulation_stress', arguments: { draftId, ...(context.requestNumber === 4 ? { perturbation: { demandMultiplier: 1.25 } } : { suggestFreeze: { variantId: 'baseline', reason: '合成Agent建议：请用户核对后固化基线。' } }) } }] };
     }
     if (context.requestNumber === 5) return { calls: [{ name: 'simulation_evidence', arguments: {} }] };
     return { text: '合成总结：已创建草稿并完成推演。' };
@@ -40,7 +41,7 @@ test('SIM-AGENT-01: task-enabled simulation tools run through the unified SDK ru
   const requestId = randomUUID();
   await json(await host.request(`/api/projects/${project.id}/tasks/${task.id}/messages`, 'POST', { text: '请用推演工具创建草稿并运行', requestId }), 202);
   await provider.waitForRequests(6, 45_000);
-  const { task: finalTask } = await settled(host, `/api/projects/${project.id}/tasks/${task.id}`, requestId);
+  const { task: finalTask, snapshot: initialSnapshot } = await settled(host, `/api/projects/${project.id}/tasks/${task.id}`, requestId);
   assert.equal(finalTask.lastRun.id, requestId);
 
   const toolNames = new Set(provider.requests.flatMap(record => (record.body.tools ?? []).map(tool => tool.function?.name ?? '')));
@@ -52,6 +53,9 @@ test('SIM-AGENT-01: task-enabled simulation tools run through the unified SDK ru
   const executed = provider.requests.at(-1)!.body.messages!.filter(message => message.role === 'tool').map(message => JSON.parse(providerMessageText(message.content)));
   assert.equal(executed.length, 5, 'all five tools must actually execute through the SDK');
   for (const envelope of executed) assert.equal(envelope.status, 'succeeded');
+  const suggestions = initialSnapshot.messages.map((_message: unknown, index: number) => freezeSuggestionFor(initialSnapshot.messages, index, project.id)).filter(Boolean);
+  assert.equal(suggestions.length, 1, 'the actual SDK tool call/result produces one explicit suggestion card');
+  assert.equal(suggestions[0].variantId, 'baseline');
 
   const drafts = await json(await host.request(`/api/simlab/projects/${project.id}/drafts`));
   assert.equal(drafts.drafts.length, 1);
