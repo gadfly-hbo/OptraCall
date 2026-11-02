@@ -1,6 +1,6 @@
 export const catalogCategories = ['assets', 'scenarios', 'connectors', 'plugins'] as const;
 export type CatalogCategory = typeof catalogCategories[number];
-export type CatalogEntry = 'metric' | 'requirement' | 'enterprise-materials' | 'decision';
+export type CatalogEntry = 'metric' | 'requirement' | 'enterprise-materials' | 'decision' | 'refiner' | 'ppt-report';
 export type CatalogItem = {
   id: string; category: CatalogCategory; name: string; description: string;
   tags: string[]; source: string; note: string;
@@ -19,6 +19,7 @@ function planned(category: CatalogCategory, id: string, name: string, descriptio
 export const catalogItems: CatalogItem[] = [
   { id: 'enterprise-business-materials', category: 'assets', name: '企业业务资料', description: '集中维护企业背景原文与修订，Case 引用明确版本并补充本案资料。', tags: ['企业背景', '资料原文'], source: 'OptraCall 企业业务资料', note: '公共资料、明确修订与本案补充各自保留来源。', status: '已接入', entry: 'enterprise-materials' },
   { id: 'metric-factory', category: 'assets', name: '指标体系', description: '维护可复用的指标定义、业务口径与 SAP 发布版本，并按需关联项目。', tags: ['指标口径', '业务定义'], source: 'OptraCall 指标体系', note: '使用现有指标体系工作台。', status: '已接入', entry: 'metric' },
+  { id: 'ppt-report', category: 'assets', name: 'PPT 报告生成', description: '以正式 md 报告生成候选版 PPTX：内容红线（不编造、数字逐字）+ 版式规范 + 单页重生成与核对脚本，随产品内置。', tags: ['PPT 生成', '报告表达'], source: 'OptraCall 分析资产 · ppt-report skill', note: '无需安装：随产品分发，版本随 OptraCall 更新。使用入口＝项目文件 060_reports 中 md 报告的「生成 PPTX」按钮；分析需求已声明 PPTX 的任务在报告完成后可直接生成。', status: '已接入', entry: 'ppt-report' },
   planned('assets', 'A02', '分析方法资产包', '组织漏斗、Cohort、RFM 与变化分解等常用方法。', ['分析方法', '适用条件'], '方法是 Agent 可参考的材料，不是宿主强制执行的阶段。'),
   planned('assets', 'A03', '假设与策略资产包', '保留候选解释、反证要求和策略适用条件。', ['假设策略', '反证'], '候选假设不等于已确认事实，策略也不等于实际执行。'),
   planned('assets', 'A04', '实验与效果评估资产包', '明确实验单位、评价窗口与效果解释边界。', ['实验评估', '统计约定'], '未来需结合真实实验设计与数据质量判断适用性。'),
@@ -42,6 +43,7 @@ export const catalogItems: CatalogItem[] = [
   planned('plugins', 'P04', '地理空间分析', '为距离、覆盖与区域聚合提供专业计算。', ['空间分析', '门店经营'], '尚无坐标、地图服务或空间计算。'),
   planned('plugins', 'P05', 'Excel／BI 资产复用', '登记已有测算表和查询，说明参数与重算限制。', ['Excel', '资产复用'], '没有重算工作簿，缓存值与实际计算将在接入时区分。'),
   { id: 'decision-platform', category: 'plugins', name: '决策看板', description: '跨项目汇总分析报告，抽取建议并跟进采纳、行动与复盘。', tags: ['决策协同', '行动反馈'], source: '本仓库决策看板 · 顶部“决策”入口', status: '已接入', entry: 'decision', note: '读取各项目 060_reports 报告并显式触发模型抽取；进入决策看板页面后，实际能力以该页面为准。' },
+  { id: 'ppt-refiner', category: 'plugins', name: 'PPT 逐页精修', description: '读取候选版 PPTX，在独立会话中逐页对话修改：页图预览、数字锚点拦截、页锁定、版本回退、差异清单导出。', tags: ['PPT 精修', '报告编审'], source: 'OptraCall 业务插件 · ppt-refiner', note: '仅面向本产品生成的候选版；md 报告只读锚定，不回写；使用统一 Agent 底座与独立精修会话。', status: '已接入', entry: 'refiner' },
 ];
 
 export function filterCatalog(category: CatalogCategory, query: string, tag: string): CatalogItem[] {
