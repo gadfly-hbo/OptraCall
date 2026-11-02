@@ -1,6 +1,6 @@
 # 经营推演一期 · 实施与验证记录
 
-日期：2026-11-02 · 分支：`qoder/sim-lab` · 当前状态：已获 Git/CI 授权并集成最新main，集成重验完成，推送／PR／实际head CI按下文分项记录；历史流程偏差保留
+日期：2026-11-02 · 开发分支：`qoder/sim-lab` · 当前状态：PR #25 已 squash 合并，实际 head／合并 main CI 均通过，本地 main 已快进；本稳定目录保留为实施归档。历史流程偏差及未验收项保留，实际交付身份见末节。
 
 本节开头至“未决与后续”为 Qoder 交接时状态。Codex 接管、首次不通过、修复，以及用户后续要求补齐 SIM08／SIM11 的当前进度，分别见后续追加记录。
 
@@ -154,3 +154,24 @@
 - 增量独立报告、33份共享浏览器证据加SHA清单、故障与停止回执保存在 `.local/simlab-takeover/git-ci/`。仅本次QA及其会话已优雅停止，跟踪进程/端口无残留，现场未删除。原本地FAIL/UNKNOWN与前轮复核均保留。
 
 此快照尚不填写PR或CI成功事实；推送后的真实远端head、单PR链接及实际head CI以现场回读另记。当前没有squash合并、main快进或OpenSpec归档，仍须后续确认；本地检查不替代托管CI。
+
+## 合并交付与实施归档
+
+以下为2026-11-02后续现场回读，承接上面的历史阶段快照，不覆盖原交接缺口、首次不通过、FAIL／UNKNOWN、流程偏差或条件跳过。
+
+| 对象 | 实际身份与结果 |
+| --- | --- |
+| 单一功能PR | [PR #25](https://github.com/gadfly-hbo/OptraCall/pull/25)，`qoder/sim-lab` → `main`，已合并；没有自动合并或第二个功能PR |
+| 实际PR head | `c85d2da7f519ac4a09d4b00e1d9f069012968fc1`；[Check #66](https://github.com/gadfly-hbo/OptraCall/actions/runs/41457296781)，attempt 1，completed／success，受检SHA匹配 |
+| squash提交 | `fd6f9714909d1628cd81d751f7fe9537af9b5b6f`，唯一父提交 `be1caaf9bb80f80af272f1041fe8e3bf359722eb`；GitHub回读由 `gadfly-hbo` 于北京时间22:05:21合并。Codex收到本轮“确认”后回读发现已合并，未重复调用合并或改写历史 |
+| 树核对 | PR head 与 squash 提交的完整Git树均为 `8f78b87cfbc8f4f9be230f19c132ec2b448edbf2`，不是仅凭提交标题推断实现一致 |
+| 合并main CI | [main push检查](https://github.com/gadfly-hbo/OptraCall/actions/runs/41458638750)，head `fd6f971`，attempt 1，completed／success；锁文件安装、`npm run check`、高危级别审计各步骤成功 |
+| 本地main | 主仓开始时干净且位于 `be1caaf`，经 `git merge --ff-only origin/main` 安全快进至 `fd6f971`，与origin/main一致，未切换运行服务或改动其他工作树 |
+
+用户先授权集成main、推送／PR／CI，后明确确认合并与收尾。此次Git交付不追溯改变Qoder未获直接指定即实施Host接缝的流程偏差，也不追认SIM08／SIM11后补测试为实现前TDD；两条原记录继续有效。
+
+按本仓既有OpenSpec惯例，`spec.md`、本结果、`independent-review.md`、原候选清单及移交包在 `openspec/changes/simlab-capability/` 原路径作为实施归档保留，不移动或重写历史材料。原清单固定的是Qoder交接候选，不用它冒充Codex修复后的最终候选清单。合并后的本次收尾提交只更新规格／结果事实，产品源码及测试与受检合并树保持一致；该文档提交自身身份、发布和CI另以Git／Actions及本地最终回执核对，不提前记为通过。
+
+最终公开锚点为上述PR与两次实际CI；原始公开API回读、main快进、归档一致性检查及最后状态回执留在接管工作树的 `.local/simlab-takeover/git-ci/`。源代码、长期测试、规格和复核已随功能PR交付，原始本地验证及失败现场未删除。
+
+**剩余范围：** 真实模型端到端、专业效果及用户产品验收未执行；本地完整检查的3项条件SKIP、既有bundle体积警告和2项moderate依赖项保留；集成QA因缺 `pypdfium2` 的PPT图像验收仍为环境受限，不记渲染PASS。原仓 `gadfly-hbo/sim-lab` 转只读、两份JuanerAI文档标superseded、MacBook体验及运行服务采用均未执行，按原约定另行申请授权。以上后续不阻止本次已完成工程实施的稳定路径归档，也不代表这些后续已验收。
