@@ -44,7 +44,7 @@ c1保留结果记录更新前的原始“待验证”候选；c2为初次本地�
 | 项目模型未绑定 | 按正常 UI 请求形状经真实 Host 创建 deck，meta 无项目／配置绑定；原配置解析函数因此调用全局当前 `snapshot()`。未调用模型，不声称已实测数据发向另一 Provider。真实项目归属、归档忙碌与范围关闭缺口另有源码证据。 |
 | 导出覆盖原件 | 隔离真实 Host 接受 `projects/.../010_draw` 导出目标，HTTP 200并替换同名合成原件；原件前后 SHA 不同。没有触碰用户原件。 |
 | busy 请求破坏在途差异 | 路由组件配合有门闩的合成 session facade：第二轮被 busy 拒绝、HTTP 409，但先删除第一轮 `last-turn.json`，第一轮快照的 diffs 变为空。 |
-| guard 失败误报成功 | 合成 session facade 将 deck 写成无效 zip，真实 Python guard 失败；路由仍返回 completed/200、生成损坏稿快照且删除 before 副本。没有把未知保护结果标记为成功。 |
+| guard 失败误报成功 | 合成 session facade 将 deck 写成无效 zip，真实 Python guard 失败；路由仍返回 completed/200、生成损坏稿快照且删除 before 副本。该 completed/200 属误报成功；本轮复核将保护失败／未核定结果记为不通过，不据返回值认定保护成功。 |
 | 多次回退漏差异 | 纯 Store 复验 v1→v2(A)→v3(B)→回退v1→恢复v3：deck字节恢复到含A+B的v3，但导出清单只有B，漏A。 |
 
 规范轴5项确定问题、规格轴5项问题分别保存在 `delivery/ppt-host-review/standards/report.md` 与 `delivery/ppt-host-review/spec/review.md`；二者有重叠，分别保留判断，不把条数相加当独立缺陷数。规格轴另指出 UI 无运行中停止入口、失败／取消后不读回已保存快照、报告候选到精修缺直接入口；这些为源码／已确认规格对照，本轮未做浏览器动态复验。
