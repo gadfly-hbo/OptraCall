@@ -11,7 +11,7 @@
 .sim-chip.tool { color: #2456b8; border-color: color-mix(in srgb, #2456b8 30%, var(--line)); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0 4px 4px 0; }
 .simlab-layout { display: grid; grid-template-columns: 250px minmax(0,1fr); gap: 20px; align-items: start; }
 .simlab-rail { display: grid; gap: 16px; }
-.rail-section { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 12px; }
+.rail-section { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 12px; min-width: 0; overflow-wrap: anywhere; }
 .rail-section > h3 { font-size: 12px; font-weight: 550; color: var(--muted); margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; }
 .rail-empty { color: var(--faint); font-size: 12px; margin: 0; }
 .rail-draft { display: grid; gap: 3px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 10px 12px; margin-bottom: 8px; }
@@ -77,6 +77,7 @@
 .task-tools-note p:last-child { margin-bottom: 0; }
 .task-link-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--surface); margin-bottom: 10px; }
 .task-link-card strong { display: block; font-size: 13px; font-weight: 550; }
+.task-link-card > div { min-width: 0; overflow-wrap: anywhere; }
 .task-link-card span { color: var(--faint); font-size: 11px; }
 .simlab-disclaimer { margin-top: 24px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); font-size: 12px; color: var(--muted); }
 .simlab-disclaimer strong { color: var(--ink); }
