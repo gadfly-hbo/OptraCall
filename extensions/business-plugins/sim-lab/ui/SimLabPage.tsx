@@ -216,7 +216,11 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
               <label className="param-check"><input type="checkbox" checked={shocks.supplyShock} disabled={writeDisabled} onChange={event => setShocks(previous => ({ ...previous, supplyShock: event.target.checked }))} />供给延迟（补货 +3 天）</label>
             </div>
             <div className="panel-heading"><h2>方案变体（{variantForms.length} / 8）</h2>
-              <button className="secondary-button" disabled={writeDisabled || variantForms.length >= 8} onClick={() => setVariantForms(previous => [...previous, { id: `variant-${previous.length + 1}`, name: `方案 ${previous.length + 1}`, openingExtraStock: '0', acceptanceCap: '', promoStart: '', promoEnd: '', promoLiftScale: '' }])}>添加变体</button></div>
+              <button className="secondary-button" disabled={writeDisabled || variantForms.length >= 8} onClick={() => setVariantForms(previous => {
+                let sequence = previous.length + 1;
+                while (previous.some(variant => variant.id === `variant-${sequence}`)) sequence++;
+                return [...previous, { id: `variant-${sequence}`, name: `方案 ${sequence}`, openingExtraStock: '0', acceptanceCap: '', promoStart: '', promoEnd: '', promoLiftScale: '' }];
+              })}>添加变体</button></div>
             <p className="panel-hint">变体上限是资源边界不是分析限制；更多方案可拆分新草稿。留空的可选字段表示不覆盖草稿默认值。</p>
             <div className="variant-list">{variantForms.map((v, index) => <div className="variant-card" key={v.id}>
               <div className="variant-row">
