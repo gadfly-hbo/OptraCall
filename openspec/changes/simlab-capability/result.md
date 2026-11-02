@@ -1,6 +1,6 @@
 # 经营推演一期 · 实施与验证记录
 
-日期：2026-11-02 · 分支：`qoder/sim-lab` · 当前状态：本地实现、适用检查及非作者代码复核完成，待 Git/CI 授权；历史流程偏差保留
+日期：2026-11-02 · 分支：`qoder/sim-lab` · 当前状态：已获 Git/CI 授权并集成最新main，集成重验完成，推送／PR／实际head CI按下文分项记录；历史流程偏差保留
 
 本节开头至“未决与后续”为 Qoder 交接时状态。Codex 接管、首次不通过、修复，以及用户后续要求补齐 SIM08／SIM11 的当前进度，分别见后续追加记录。
 
@@ -140,3 +140,17 @@
 按用户任务4，先申请集成main、重验、推送、单PR和实际head CI授权；实际head检查通过后再请用户确认squash合并。基线推进将使旧复核/CI的受影响部分失效，须重验，不能照搬本记录的PASS。合并后再更新交付事实、快进本地main及适用归档。
 
 没有真实模型端到端、新专业评估、原仓退役、JuanerAI文档更新、MacBook体验或运行服务切换；这些仍按各自约定另获授权。用户产品验收未执行，本记录只收尾本地工程与限定验证。
+
+## Git／CI 授权与 main 集成（推送前快照）
+
+2026-11-02用户回复“授权”，允许集成最新main、重验、推送、创建单PR及运行实际head CI；squash合并仍须CI之后用户另行确认。该授权不追溯改变历史流程偏差，也不扩大模型、运行采用、原仓退役或MacBook范围。
+
+- 原候选 `d1b25a1`，fetch后main/origin/main均为 `be1caaf9bb80f80af272f1041fe8e3bf359722eb`；主仓和本分支均干净。集成提交 `ecdadee9e3408cedbfdc2c7400f97fa4e0673ceb` 的双亲为d1b25a1和be1caaf。
+- incoming为已经交付的PPT Host接缝修复。只有App.tsx的3处hunk冲突：保留完整Refiner类型/source/deck/leaveguard及报告入口，同时保留SimLab分支、目录分类/目标重置、实际建议卡与任务开关；未发明新的业务行为。server及规范自动合并，IN01–IN07／Interface v3和原owner不变。
+- `npx tsc --noEmit`退出0；96项接缝目标检查退出0；固定ecdadee的 `npm run check`退出0：898项、895PASS、3条件SKIP、0FAIL，边界及构建通过，日志 `.local/simlab-takeover/git-ci/integrated-check.log`。既有3条SKIP与bundle体积警告保持披露。
+- `npm audit --audit-level=high --json`退出0，high/critical为0，保留原2项moderate；没有为通过审计改依赖或静默升级。
+- 两位非作者在新的archive隔离根做集成增量复核：Standards独立66项、Spec独立72项及各自类型/边界/真实SDK并发探针通过。确认推演代码相对原候选、PPT实现相对main的固定blob均保留；同项目空闲task切换工具不停止在途PPT，其他项目归档不误停，本项目实际收尾前继续busy。
+- 短浏览器点验M01–M07通过：原RUN1/split卡仍定位旧运行；导出md进文件栏/Board且未抽取；项目报告选择、固定配置deck及返回/侧栏离开guard保持，实际stop收尾后才离开；归档阻断、停止后归档及恢复通过。原720单元格等未变实现不重复跑。新QA的预览请求实际422：该隔离dataRoot无ppt-venv，默认Python缺pypdfium2；本次图像验收环境受限，原HTTP错误/诊断完整保留，没有新增安装或声称渲染PASS。
+- 增量独立报告、33份共享浏览器证据加SHA清单、故障与停止回执保存在 `.local/simlab-takeover/git-ci/`。仅本次QA及其会话已优雅停止，跟踪进程/端口无残留，现场未删除。原本地FAIL/UNKNOWN与前轮复核均保留。
+
+此快照尚不填写PR或CI成功事实；推送后的真实远端head、单PR链接及实际head CI以现场回读另记。当前没有squash合并、main快进或OpenSpec归档，仍须后续确认；本地检查不替代托管CI。

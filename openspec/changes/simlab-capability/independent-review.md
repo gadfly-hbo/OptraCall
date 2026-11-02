@@ -70,3 +70,14 @@
 - 本轮没有真实模型端到端、MacBook体验、原仓退役或产品验收。最新main尚未集成，Git/CI尚待用户授权；基线变化后须重验受影响范围及必要复核，当前PASS不自动沿用到未来提交。
 
 双轴汇总：Standards首轮2项／最严重P2，Spec首轮7项／最严重P1；两轴发现现均关闭，最终无未解决代码阻断。历史流程偏差与后续交付门槛分别保留。
+
+## 获授权集成最新 main 的独立增量复核
+
+固定对象 `ecdadee9e3408cedbfdc2c7400f97fa4e0673ceb`，双亲d1b25a1与main be1caaf。两位原非作者复核者各建新的archive隔离根，先从SIM／IN07与PPT修复受影响验收导出预期，检查双亲diff、固定blob及实际SDK；未用前轮PASS自动替代App冲突后的集成核验。
+
+- Standards：独立66项定向回归、类型及边界检查、1项跨功能真实Host／SDK并发探针通过。确认Host-only busyInScope仍是原公共权威的只读投影，空闲task切换/close不误停在途PPT，跨项目归档隔离、实际收尾后才解除busy。集成增量无新增阻断发现。
+- Spec：独立72项定向回归、类型/边界及同项目SDK并发探针通过。SimLab插件/工具/Store/Case接缝与原候选一致，PPT/公共会话/ProjectSpace与main一致；App完整Refiner类型/source/deck/leaveguard和SimLab target/card/reset均保留。共享浏览器证据核读单列于最终增量报告，未把旧UI PASS直接沿用。
+- 共享UI点验M01–M07通过，原目标卡与报告导出、PPT报告选择、实际stop收尾后的导航、开关/归档隔离通过；证据清单33/33摘要一致。M08图像验收环境受限：预览实际422且Python缺pypdfium2，故障保留，不声称本次渲染通过；被带入的渲染实现相对main未变。
+- Root完整检查在固定ecdadee退出0：898测试/895PASS/3SKIP、边界及构建通过；高危审计退出0，0 high/critical，既有2 moderate保留。局部独立检查不冒充这次作者全量运行，作者全量也不冒充托管CI。
+
+原始增量报告及探针见 `.local/simlab-takeover/git-ci/independent/{standards,spec}/`，共享UI、实际故障及停止回执见 `git-ci/shared-ui/`。本追加限本次main集成与受影响接缝；历史流程偏差、真实模型/产品验收、实际head CI和用户合并确认仍各自保留。
