@@ -62,6 +62,40 @@ test('read and subscribe do not construct resources; refs are restricted to thei
   await assert.rejects(c.domain.read(ref), { code: 'invalid_session_reference' }); unsubscribe();
 });
 
+test('Host scope busy reads the existing operation through preparation and finalization without opening or blocking other scopes', async () => {
+  const h = harness('scope-read'), third = harness('third-feature'), prepared = deferred<void>(), finish = deferred<void>();
+  assert.equal(h.domain.busyInScope({ projectId: 'project-a' }), false);
+  assert.equal(h.agents.length, 0);
+  const pending = h.domain.withSession(h.domain.ref('project-a/deck-a'), async () => { prepared.resolve(); await finish.promise; });
+  await prepared.promise;
+  assert.equal(h.domain.busyInScope({ projectId: 'project-a' }), true);
+  assert.equal(h.domain.busyInScope({ projectId: 'project-b' }), false);
+  assert.equal(h.domain.busyInScope({ provider: 'a' }), true);
+  assert.equal(h.domain.busyInScope({ provider: 'b' }), false);
+  assert.equal(third.domain.busyInScope({ projectId: 'project-a' }), false, 'the third consumer has independent authoritative state');
+  assert.equal(h.agents.length, 0, 'a scope query cannot create an SDK resource');
+  await h.domain.closeAll({ projectId: 'project-a' });
+  assert.equal(h.domain.busyInScope({ projectId: 'project-a' }), true, 'cancelled finalization still owns the operation');
+  finish.resolve(); await pending;
+  assert.equal(h.domain.busyInScope({ projectId: 'project-a' }), false);
+  await h.domain.closeAll();
+});
+
+test('Host scope busy includes matching resource retirement until actual close completion', async () => {
+  const closed = deferred<void>();
+  const h = harness('scope-retirement', { setup: agent => { agent.closeWait = closed; } });
+  const ref = h.domain.ref('project-a/deck-a');
+  await h.domain.open(ref);
+  assert.equal(h.domain.busyInScope({ projectId: 'project-a' }), false);
+  const closing = h.domain.closeAll({ projectId: 'project-a' });
+  await until(() => h.agents[0]!.closeCalls === 1);
+  assert.equal(h.domain.busyInScope({ projectId: 'project-a' }), true);
+  assert.equal(h.domain.busyInScope({ projectId: 'project-b' }), false);
+  assert.equal(h.domain.busyInScope({ provider: 'b' }), false);
+  closed.resolve(); await closing;
+  assert.equal(h.domain.busyInScope({ projectId: 'project-a' }), false);
+});
+
 test('accepted preserves busy until completion; newer operation invalidates captured callbacks', async () => {
   const h = harness(), ref = h.domain.ref('p/t');
   const run = h.domain.start(ref, { text: 'first', requestId: 'first' });

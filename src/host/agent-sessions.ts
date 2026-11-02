@@ -61,6 +61,8 @@ export type AgentSessionDomain<Owner> = {
   start(ref: SessionRef<Owner>, turn: SessionTurn): SessionRun<Owner>;
   withSession<T>(ref: SessionRef<Owner>, use: (lease: SessionLease<Owner>) => T | Promise<T>): Promise<T>;
   busy(ref: SessionRef<Owner>): boolean;
+  /** Host-only read projection over the same authoritative operation/resource state. */
+  busyInScope(filter?: SessionFilter): boolean;
   live(ref: SessionRef<Owner>): boolean;
   stop(ref: SessionRef<Owner>): Promise<boolean>;
   close(ref: SessionRef<Owner>, cleanup?: Partial<SessionCleanupRequest>): Promise<void>;
@@ -70,7 +72,7 @@ export type AgentSessionDomain<Owner> = {
 };
 /** Host injects business methods with its validated owner reference. Domain
  * registration, reference minting and cross-owner cleanup remain Host-only. */
-export type AgentSessionPort<Owner> = Omit<AgentSessionDomain<Owner>, 'name' | 'ref' | 'closeAll' | 'execution' | 'owns' | 'registerFresh' | 'executionState'>;
+export type AgentSessionPort<Owner> = Omit<AgentSessionDomain<Owner>, 'name' | 'ref' | 'closeAll' | 'busyInScope' | 'execution' | 'owns' | 'registerFresh' | 'executionState'>;
 
 /** One implementation, instantiated by Host for separate business domains. */
 export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptions<Owner>): AgentSessionDomain<Owner> {
@@ -439,6 +441,16 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
     },
     withSession,
     busy(ref) { const { key } = identity(ref); return busySlot(slots.get(key)); },
+    busyInScope(filter = {}) {
+      const matches = (owner: Owner, configuration: Readonly<RuntimeModelConfiguration>) => (!filter.projectId || options.profile.projectId?.(owner) === filter.projectId) && (!filter.provider || configuration.provider === filter.provider);
+      for (const slot of slots.values()) {
+        if (!busySlot(slot)) continue;
+        if (slot.operation && matches(slot.operation.owner, slot.operation.configuration)) return true;
+        if (slot.opening && matches(slot.owner, slot.opening.configuration)) return true;
+        if (slot.resource && matches(slot.resource.owner, slot.resource.configuration)) return true;
+      }
+      return [...closingResources].some(resource => matches(resource.owner, resource.configuration));
+    },
     live(ref) { const { key } = identity(ref); return Boolean(slots.get(key)?.resource?.agent.alive); },
     async stop(ref) {
       const { key } = identity(ref), slot = slots.get(key);

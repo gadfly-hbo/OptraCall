@@ -15,6 +15,10 @@ import re
 import sys
 import zipfile
 from xml.sax.saxutils import escape
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'analysis-assets/ppt-report/scripts'))
+from pptx_parts import slide_part
 
 NUMBER = re.compile(r'[+\-]?\d[\d,]*(?:\.\d+)?%?')
 
@@ -37,7 +41,10 @@ def assert_editable(deck_path, slide):
 
 def load_zip(path):
     with zipfile.ZipFile(path) as z:
-        return {n: z.read(n) for n in z.namelist()}
+        names = z.namelist()
+        if len(names) != len(set(names)):
+            raise ValueError('duplicate package parts')
+        return {n: z.read(n) for n in names}
 
 
 def main():
@@ -51,10 +58,11 @@ def main():
     ap.add_argument('--allow-uncovered', action='store_true')
     args = ap.parse_args()
 
-    src = load_zip(args.deck)
-    part = f'ppt/slides/slide{args.slide}.xml'
-    if part not in src:
-        print(f'ERROR: {part} not found', file=sys.stderr)
+    try:
+        src = load_zip(args.deck)
+        part = slide_part(src, args.slide)
+    except (ValueError, KeyError, OSError, zipfile.BadZipFile) as error:
+        print(f'ERROR: {error}', file=sys.stderr)
         return 2
     assert_editable(args.deck, args.slide)
     xml = src[part].decode('utf-8')

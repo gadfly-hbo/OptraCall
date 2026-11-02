@@ -4,6 +4,8 @@
 
 ## 1. 当前范围与依据
 
+**PPT Host接线修复当前授权（2026-11-02）：** 用户在已记录的接线复核“不通过”后明确授权直接修复，按[修复规格](../openspec/changes/ppt-host-wiring-repair/spec.md)落实原D4–D8合同，完成适用完整检查、隔离合成验证、非作者独立复核及Git／CI后合并main。保留现有项目、deck、版本、会话、原件与失败证据，不自动重放／换模型，不切换运行服务，不操作MacBook；真实Provider实验与产品验收未因此授权。原规范／检查记录PR #23合并不代表PPT已修复，实际结果见[修复记录](../openspec/changes/ppt-host-wiring-repair/result.md)。
+
 **固定版本与MacBook试用交付当前授权（2026-11-01）：** 用户要求暂停继续全链路测试，固定现有版本并完成Git／CI、合并main及MacBook更新供实际体验。按[本次交付规格](../openspec/changes/current-version-trial-delivery/spec.md)先更新main、保留WIP及原始证据，完成适用工程检查、非作者复核、实际head及合并main CI，再通过原试用入口同步MacBook；保留该机已有项目／会话／文件及配置，不切换Mac mini运行服务。没有新模型全链路实验、专业FAIL重评或新分析方法开发。此前“暂不Git／MacBook”的阶段边界由本次明确授权替代，其余产品与保全边界保持。实际交付见[记录](../openspec/changes/current-version-trial-delivery/result.md)，试用范围见[用户说明](current-version-trial.md)。
 
 **托管执行优化当前授权（2026-11-01）：** 用户已通过[方案／spec](../openspec/changes/managed-execution-optimization/spec.md)及 D1–D8 全 A，授权本地实施、适用完整检查、固定工作量性能对照复测及非作者独立复核。保留后台并行、原件保护、停止／UNKNOWN及项目／会话／文件；Host只管理环境。暂不 Git/CI 交付、安装或切换运行服务，不操作MacBook。原生命周期补充、自动核算范围与旧专业FAIL保持，下段为此前增量授权。

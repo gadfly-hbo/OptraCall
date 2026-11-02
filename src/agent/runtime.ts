@@ -6,6 +6,15 @@ import type { Outcome, PresentationEvent } from './events.ts';
 
 export const SDK_VERSION = VERSION;
 export const CONNECTION_PROMPT = '请仅回复 OK。';
+let builtinCatalog: Promise<ModelRuntime> | undefined;
+/** The same locked SDK catalog used by project sessions, without credentials or network access. */
+export async function modelSupportsImages(configuration: { provider: string; model: string }): Promise<boolean> {
+  builtinCatalog ??= ModelRuntime.create({
+    credentials: { read: async () => undefined, list: async () => [], modify: async () => { throw new Error('Catalog is read-only.'); }, delete: async () => {} },
+    modelsPath: null, refreshOnCreate: false, allowModelNetwork: false,
+  });
+  return (await builtinCatalog).getModel(configuration.provider, configuration.model)?.input.includes('image') ?? false;
+}
 type AssistantReply = Awaited<ReturnType<ModelRuntime['completeSimple']>>;
 export type SessionDescription = { id: string; projectId: string; configurationRevision: number; model: string; tools: string[]; persisted: boolean };
 export type RunResult = { requestId: string; outcome: Outcome; text: string };

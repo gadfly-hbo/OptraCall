@@ -11,10 +11,11 @@ No external dependencies.
 import argparse
 import json
 import os
-import re
+import posixpath
 import sys
 import zipfile
 import xml.etree.ElementTree as ET
+from pptx_parts import relationship_part, resolve_part, slide_part
 
 R_ID = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id'
 PKG_REL_NS = 'http://schemas.openxmlformats.org/package/2006/relationships'
@@ -38,14 +39,17 @@ def assert_editable(deck_path, slide):
 
 
 def slide_size(entries):
-    pres = entries['ppt/presentation.xml'].decode('utf-8')
-    m = re.search(r'<p:sldSz cx="(\d+)" cy="(\d+)"', pres)
-    return (m.group(1), m.group(2)) if m else None
+    pres = ET.fromstring(entries['ppt/presentation.xml'])
+    size = pres.find(pres.tag.rsplit('}', 1)[0] + '}sldSz')
+    return (size.get('cx'), size.get('cy')) if size is not None else None
 
 
 def load_zip(path):
     with zipfile.ZipFile(path) as z:
-        return {n: z.read(n) for n in z.namelist()}
+        names = z.namelist()
+        if len(names) != len(set(names)):
+            raise ValueError('duplicate package parts')
+        return {n: z.read(n) for n in names}
 
 
 def write_zip(path, entries, order):
@@ -64,10 +68,6 @@ def media_content_type(ext):
     return 'image/jpeg' if ext in ('jpg', 'jpeg') else f'image/{ext}'
 
 
-def part_path(target):
-    return ('ppt/' + target[3:]) if target.startswith('../') else ('ppt/slides/' + target)
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--deck', required=True)
@@ -76,23 +76,25 @@ def main():
     ap.add_argument('--out', required=True)
     args = ap.parse_args()
 
-    src = load_zip(args.deck)
-    rep = load_zip(args.replacement)
-    target_part = f'ppt/slides/slide{args.slide}.xml'
-    if target_part not in src:
-        print(f'ERROR: {target_part} not found in deck', file=sys.stderr)
+    try:
+        src = load_zip(args.deck)
+        rep = load_zip(args.replacement)
+        target_part = slide_part(src, args.slide)
+        replacement_part = slide_part(rep, 1)
+    except (ValueError, KeyError, OSError, zipfile.BadZipFile, ET.ParseError) as error:
+        print(f'ERROR: {error}', file=sys.stderr)
         return 2
     assert_editable(args.deck, args.slide)
     if slide_size(src) != slide_size(rep):
         print('ERROR: slide size mismatch; regenerate replacement at target deck sldSz', file=sys.stderr)
         return 2
 
-    new_slide = rep['ppt/slides/slide1.xml']
+    new_slide = rep[replacement_part]
     new_media = {}
     image_rels = []
     chart_rels = []
     new_chart_parts = {}
-    rels_name = 'ppt/slides/_rels/slide1.xml.rels'
+    rels_name = relationship_part(replacement_part)
     if rels_name in rep:
         rels = ET.fromstring(rep[rels_name])
         for rel in rels.findall(f'{{{PKG_REL_NS}}}Relationship'):
@@ -100,7 +102,9 @@ def main():
             rtype = rel.get('Type') or ''
             target = rel.get('Target') or ''
             if rtype.endswith('/image'):
-                source_name = part_path(target).replace('ppt/slides/ppt/', 'ppt/')
+                if rel.get('TargetMode', 'Internal') != 'Internal':
+                    raise ValueError('replacement media must be an internal package part')
+                source_name = resolve_part(replacement_part, target)
                 if source_name not in rep:
                     print(f'ERROR: media part missing in replacement: {source_name}', file=sys.stderr)
                     return 2
@@ -109,9 +113,11 @@ def main():
                 new_rid = f'rSpliced{args.slide}x{rid}'
                 for attr in ('r:id', 'r:embed'):
                     new_slide = new_slide.replace(f'{attr}="{rid}"'.encode(), f'{attr}="{new_rid}"'.encode())
-                image_rels.append((new_rid, rtype, media_name.replace('ppt/', '../')))
+                image_rels.append((new_rid, rtype, posixpath.relpath(media_name, posixpath.dirname(target_part))))
             elif rtype.endswith('/chart'):
-                chart_source = part_path(target).replace('ppt/slides/ppt/', 'ppt/')
+                if rel.get('TargetMode', 'Internal') != 'Internal':
+                    raise ValueError('replacement chart must be an internal package part')
+                chart_source = resolve_part(replacement_part, target)
                 if chart_source not in rep:
                     print(f'ERROR: chart part missing in replacement: {chart_source}', file=sys.stderr)
                     return 2
@@ -121,7 +127,7 @@ def main():
                     new_slide = new_slide.replace(f'{attr}="{rid}"'.encode(), f'{attr}="{new_rid}"'.encode())
                 chart_xml = rep[chart_source]
                 # chart's own relationships (embedded workbook etc.)
-                chart_rels_name = chart_source.replace('charts/', 'charts/_rels/') + '.rels'
+                chart_rels_name = relationship_part(chart_source)
                 if chart_rels_name in rep:
                     crels = ET.fromstring(rep[chart_rels_name])
                     for crel in crels.findall(f'{{{PKG_REL_NS}}}Relationship'):
@@ -130,8 +136,9 @@ def main():
                         ctarget = crel.get('Target') or ''
                         if not (ctype.endswith('/package') or ctype.endswith('/oleObject')):
                             continue
-                        emb_source = ('ppt/' + ctarget[3:]) if ctarget.startswith('../') else ('ppt/charts/' + ctarget)
-                        emb_source = emb_source.replace('ppt/charts/ppt/', 'ppt/')
+                        if crel.get('TargetMode', 'Internal') != 'Internal':
+                            raise ValueError('replacement embedding must be an internal package part')
+                        emb_source = resolve_part(chart_source, ctarget)
                         if emb_source not in rep:
                             print(f'ERROR: embedded part missing in replacement: {emb_source}', file=sys.stderr)
                             return 2
@@ -141,17 +148,17 @@ def main():
                         for attr in ('r:id', 'r:embed'):
                             chart_xml = chart_xml.replace(f'{attr}="{crid}"'.encode(), f'{attr}="{new_crid}"'.encode())
                         crel.set('Id', new_crid)
-                        crel.set('Target', emb_name.replace('ppt/', '../'))
+                        crel.set('Target', posixpath.relpath(emb_name, posixpath.dirname(chart_name)))
                     ET.register_namespace('', PKG_REL_NS)
-                    new_chart_parts[chart_name.replace('charts/', 'charts/_rels/') + '.rels'] = ET.tostring(crels, encoding='utf-8', xml_declaration=True)
+                    new_chart_parts[relationship_part(chart_name)] = ET.tostring(crels, encoding='utf-8', xml_declaration=True)
                 new_chart_parts[chart_name] = chart_xml
-                chart_rels.append((new_rid, rtype, chart_name.replace('ppt/', '../')))
+                chart_rels.append((new_rid, rtype, posixpath.relpath(chart_name, posixpath.dirname(target_part))))
 
     # The replaced slide keeps its own layout and non-media relationships.
     # Its old image/notes relationships are dropped; new media relationships
     # are appended with fresh rIds. Without such changes the original rels
     # bytes are preserved untouched.
-    target_rels_name = target_part.replace('slides/', 'slides/_rels/') + '.rels'
+    target_rels_name = relationship_part(target_part)
     dropped_notes_part = None
     write_rels = bool(new_media) or bool(chart_rels)
     if target_rels_name in src:
@@ -164,7 +171,7 @@ def main():
                 write_rels = True
             elif rtype.endswith('/notesSlide'):
                 rels.remove(rel)
-                dropped_notes_part = part_path(target).replace('ppt/slides/ppt/', 'ppt/')
+                dropped_notes_part = resolve_part(target_part, target)
                 write_rels = True
         for new_rid, rtype, target in image_rels + chart_rels:
             node = ET.SubElement(rels, f'{{{PKG_REL_NS}}}Relationship')
@@ -184,7 +191,7 @@ def main():
     out_entries.update(new_chart_parts)
     if dropped_notes_part:
         out_entries.pop(dropped_notes_part, None)
-        out_entries.pop(dropped_notes_part.replace('notesSlides/', 'notesSlides/_rels/') + '.rels', None)
+        out_entries.pop(relationship_part(dropped_notes_part), None)
     if new_rels is not None:
         ET.register_namespace('', PKG_REL_NS)
         out_entries[target_rels_name] = new_rels

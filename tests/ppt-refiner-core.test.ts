@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
+import fs, { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, copyFileSync, mkdirSync, linkSync, symlinkSync, readdirSync, lstatSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +40,112 @@ test('deck store: register, snapshot, revert with pre-revert snapshot', () => {
     assert.equal(store.versions().length, 3, 'revert must snapshot current state first');
     assert.equal(store.versions()[2].summary, '回退 v1 前状态');
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('deck store: register refuses occupied partial roots without changing any retained file', () => {
+  for (const occupied of ['deck.pptx', 'meta.json', '.before-unresolved.pptx', 'protection-failure.json', 'sessions/native.jsonl', 'versions/v1.pptx']) {
+    const dir = tempDir();
+    try {
+      const file = path.join(dir, occupied); mkdirSync(path.dirname(file), { recursive: true });
+      const retained = Buffer.from('UNRESOLVED_SYNTHETIC_ORIGINAL'); writeFileSync(file, retained);
+      const source = readFileSync(fixtureDeck);
+      const entries = readdirSync(dir).sort();
+      const store = createDeckStore(dir);
+      assert.throws(() => store.register({ sourcePptx: fixtureDeck, title: 'partial root', reportPath: fixtureReport }), (error: unknown) => error instanceof DeckFault && error.code === 'DECK_EXISTS');
+      assert.deepEqual(readFileSync(file), retained, occupied);
+      assert.deepEqual(readFileSync(fixtureDeck), source, 'candidate source is retained');
+      assert.deepEqual(readdirSync(dir).sort(), entries, 'rejected registration creates no child or cleanup side effect');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
+test('deck store: register never follows pre-existing soft hard or dangling destination links', () => {
+  for (const kind of ['symlink', 'hardlink', 'dangling']) {
+    const dir = tempDir(); const retainedDir = tempDir();
+    try {
+      const target = path.join(retainedDir, 'original.pptx'); const bytes = Buffer.from('UNRESOLVED_LINKED_ORIGINAL');
+      if (kind !== 'dangling') writeFileSync(target, bytes);
+      const deck = path.join(dir, 'deck.pptx');
+      if (kind === 'hardlink') linkSync(target, deck); else symlinkSync(target, deck);
+      const stat = lstatSync(deck); const store = createDeckStore(dir);
+      assert.throws(() => store.register({ sourcePptx: fixtureDeck, title: 'linked root', reportPath: fixtureReport }), (error: unknown) => error instanceof DeckFault && error.code === 'DECK_EXISTS');
+      assert.equal(lstatSync(deck).ino, stat.ino, 'existing destination entry remains intact');
+      if (kind !== 'dangling') assert.deepEqual(readFileSync(target), bytes);
+      else assert.equal(existsSync(target), false);
+      assert.deepEqual(readdirSync(dir), ['deck.pptx']);
+    } finally { rmSync(dir, { recursive: true, force: true }); rmSync(retainedDir, { recursive: true, force: true }); }
+  }
+});
+
+test('deck store: register destination races cannot overwrite linked deck or initial version targets', () => {
+  const originalCopy = fs.copyFileSync;
+  for (const name of ['deck.pptx', 'versions/v1.pptx']) for (const kind of ['symlink', 'hardlink']) {
+    const dir = tempDir(); const retainedDir = tempDir();
+    try {
+      const target = path.join(retainedDir, 'original.pptx'); const bytes = Buffer.from('RACING_SYNTHETIC_ORIGINAL'); writeFileSync(target, bytes);
+      const destination = path.join(dir, name); let injected = false;
+      fs.copyFileSync = (source, output, flags) => {
+        if (output === destination && !injected) { injected = true; if (kind === 'hardlink') linkSync(target, destination); else symlinkSync(target, destination); }
+        return originalCopy(source, output, flags);
+      };
+      syncBuiltinESMExports();
+      const store = createDeckStore(dir);
+      assert.throws(() => store.register({ sourcePptx: fixtureDeck, title: 'racing root', reportPath: fixtureReport }), (error: unknown) => error instanceof DeckFault && error.code === 'DECK_EXISTS');
+      assert.equal(injected, true, 'race reaches the actual copy operation');
+      assert.deepEqual(readFileSync(target), bytes);
+      assert.equal(existsSync(path.join(dir, 'meta.json')), false, 'partial registration is not published');
+    } finally { fs.copyFileSync = originalCopy; syncBuiltinESMExports(); rmSync(dir, { recursive: true, force: true }); rmSync(retainedDir, { recursive: true, force: true }); }
+  }
+});
+
+test('deck store: register accepts a vacant root or an existing empty versions directory', () => {
+  for (const mode of ['missing', 'empty', 'empty-versions']) {
+    const parent = tempDir(); const dir = mode === 'missing' ? path.join(parent, 'new-deck') : parent;
+    try {
+      if (mode === 'empty-versions') mkdirSync(path.join(dir, 'versions'));
+      const store = createDeckStore(dir);
+      assert.equal(store.register({ sourcePptx: fixtureDeck, title: 'vacant root', reportPath: fixtureReport }).currentVersion, 1);
+      assert.equal(store.versions().length, 1);
+      assert.deepEqual(readFileSync(store.deckPath), readFileSync(fixtureDeck));
+    } finally { rmSync(parent, { recursive: true, force: true }); }
+  }
+});
+
+test('deck store: register refuses unsafe root and versions links without writing through them', () => {
+  for (const component of ['root', 'versions']) {
+    const dir = tempDir(); const retainedDir = tempDir();
+    try {
+      const marker = path.join(retainedDir, 'unresolved.txt'); const bytes = Buffer.from('RETAIN_DIRECTORY_EVIDENCE'); writeFileSync(marker, bytes);
+      const deckRoot = component === 'root' ? path.join(dir, 'linked-root') : dir;
+      symlinkSync(retainedDir, component === 'root' ? deckRoot : path.join(deckRoot, 'versions'));
+      const store = createDeckStore(deckRoot);
+      assert.throws(() => store.register({ sourcePptx: fixtureDeck, title: 'unsafe directory', reportPath: fixtureReport }), (error: unknown) => error instanceof DeckFault && error.code === 'DECK_UNSAFE_ROOT');
+      assert.deepEqual(readdirSync(retainedDir), ['unresolved.txt']);
+      assert.deepEqual(readFileSync(marker), bytes);
+    } finally { rmSync(dir, { recursive: true, force: true }); rmSync(retainedDir, { recursive: true, force: true }); }
+  }
+});
+
+test('deck store: registration metadata publication cannot replace a concurrent retained entry', () => {
+  const originalLink = fs.linkSync;
+  for (const kind of ['symlink', 'hardlink']) {
+    const dir = tempDir(); const retainedDir = tempDir();
+    try {
+      const target = path.join(retainedDir, 'unresolved-meta'); const bytes = Buffer.from('RETAIN_CONCURRENT_METADATA'); writeFileSync(target, bytes);
+      const meta = path.join(dir, 'meta.json'); let injected = false;
+      fs.linkSync = (source, output) => {
+        if (output === meta && !injected) { injected = true; if (kind === 'hardlink') originalLink(target, meta); else symlinkSync(target, meta); }
+        return originalLink(source, output);
+      };
+      syncBuiltinESMExports();
+      const store = createDeckStore(dir);
+      assert.throws(() => store.register({ sourcePptx: fixtureDeck, title: 'concurrent metadata', reportPath: fixtureReport }), (error: unknown) => error instanceof DeckFault && error.code === 'DECK_EXISTS');
+      assert.equal(injected, true, 'race occurs at the final publication');
+      assert.deepEqual(readFileSync(target), bytes);
+      assert.deepEqual(readFileSync(meta), bytes);
+      assert.deepEqual(readFileSync(store.deckPath), readFileSync(fixtureDeck), 'new partial files remain as failure evidence');
+    } finally { fs.linkSync = originalLink; syncBuiltinESMExports(); rmSync(dir, { recursive: true, force: true }); rmSync(retainedDir, { recursive: true, force: true }); }
+  }
 });
 
 test('deck store: page lock blocks editing and unlock restores', () => {
@@ -166,11 +274,189 @@ test('deck store: register persists deck-bound configuration', () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('refinerConfiguration: deck-bound config wins, fallback to current selection', async () => {
+test('deck store: restoring a descendant restores all of its inherited differences', () => {
+  const dir = tempDir();
+  try {
+    const store = createDeckStore(dir);
+    store.register({ sourcePptx: fixtureDeck, title: 'ancestor differences', reportPath: fixtureReport });
+    writeFileSync(store.deckPath, Buffer.concat([readFileSync(store.deckPath), Buffer.from('A')]));
+    store.snapshot({ pages: [1], summary: 'A', diffs: [{ page: 1, kind: 'number', summary: 'DIFF_A', anchor: 'uncovered-confirmed' }] });
+    writeFileSync(store.deckPath, Buffer.concat([readFileSync(store.deckPath), Buffer.from('B')]));
+    store.snapshot({ pages: [2], summary: 'B', diffs: [{ page: 2, kind: 'number', summary: 'DIFF_B', anchor: 'uncovered-confirmed' }] });
+    const third = readFileSync(store.deckPath);
+    store.revert(1);
+    store.revert(3);
+    assert.deepEqual(readFileSync(store.deckPath), third);
+    const exported = store.exportFinal({ outDir: path.join(dir, 'exports') });
+    const diff = readFileSync(exported.diff, 'utf8');
+    assert.match(diff, /DIFF_A/, 'v3 still contains its v2 change');
+    assert.match(diff, /DIFF_B/);
+    assert.equal(exported.diffHistoryKnown, true);
+    assert.equal(store.versions().length, 5, 'both pre-revert snapshots remain available');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('deck store: branch edits export only the current branch differences', () => {
+  const dir = tempDir();
+  try {
+    const store = createDeckStore(dir);
+    store.register({ sourcePptx: fixtureDeck, title: 'branch', reportPath: fixtureReport });
+    store.snapshot({ pages: [1], summary: 'discarded', diffs: [{ page: 1, kind: 'wording', summary: 'OLD_BRANCH', anchor: 'none' }] });
+    store.revert(1);
+    store.snapshot({ pages: [2], summary: 'new branch', diffs: [{ page: 2, kind: 'wording', summary: 'NEW_BRANCH', anchor: 'none' }] });
+    const exported = store.exportFinal({ outDir: path.join(dir, 'exports') });
+    const diff = readFileSync(exported.diff, 'utf8');
+    assert.match(diff, /NEW_BRANCH/);
+    assert.doesNotMatch(diff, /OLD_BRANCH/);
+    assert.equal(exported.diffHistoryKnown, true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('deck store: export refuses either existing output before publishing the pair', () => {
+  for (const collision of ['final.pptx', 'final.diff.md']) {
+    const dir = tempDir();
+    try {
+      const store = createDeckStore(dir);
+      store.register({ sourcePptx: fixtureDeck, title: 'collision', reportPath: fixtureReport });
+      const outDir = path.join(dir, 'exports'); mkdirSync(outDir);
+      const occupied = path.join(outDir, collision); const bytes = Buffer.from('existing retained output');
+      writeFileSync(occupied, bytes);
+      assert.throws(() => store.exportFinal({ outDir }), (error: unknown) => error instanceof DeckFault && error.code === 'EXPORT_EXISTS');
+      assert.deepEqual(readFileSync(occupied), bytes);
+      assert.equal(existsSync(path.join(outDir, collision === 'final.pptx' ? 'final.diff.md' : 'final.pptx')), false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
+test('deck store: export refuses linked and dangling output names without changing their targets', () => {
+  for (const collision of ['final.pptx', 'final.diff.md']) for (const kind of ['symlink', 'hardlink', 'dangling']) {
+    const dir = tempDir();
+    try {
+      const store = createDeckStore(dir);
+      store.register({ sourcePptx: fixtureDeck, title: 'linked collision', reportPath: fixtureReport });
+      const outDir = path.join(dir, 'exports'); mkdirSync(outDir);
+      const target = path.join(dir, 'retained'); const bytes = Buffer.from('linked retained bytes');
+      if (kind !== 'dangling') writeFileSync(target, bytes);
+      const occupied = path.join(outDir, collision);
+      if (kind === 'hardlink') linkSync(target, occupied); else symlinkSync(target, occupied);
+      assert.throws(() => store.exportFinal({ outDir }), (error: unknown) => error instanceof DeckFault && error.code === 'EXPORT_EXISTS');
+      if (kind !== 'dangling') assert.deepEqual(readFileSync(target), bytes);
+      else assert.equal(existsSync(target), false);
+      assert.equal(existsSync(path.join(outDir, collision === 'final.pptx' ? 'final.diff.md' : 'final.pptx')), false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
+test('deck store: legacy lineage remains readable and explicitly unknown without rewriting history', () => {
+  const dir = tempDir();
+  try {
+    const store = createDeckStore(dir);
+    store.register({ sourcePptx: fixtureDeck, title: 'legacy', reportPath: fixtureReport });
+    store.snapshot({ pages: [1], summary: 'legacy edit', diffs: [{ page: 1, kind: 'wording', summary: 'LEGACY_CHANGE', anchor: 'none' }] });
+    const metaFile = path.join(dir, 'meta.json'); const meta = JSON.parse(readFileSync(metaFile, 'utf8')); delete meta.currentVersion;
+    writeFileSync(metaFile, JSON.stringify(meta));
+    const records = [1, 2].map(n => path.join(dir, 'versions', `v${n}.json`));
+    for (const record of records) { const entry = JSON.parse(readFileSync(record, 'utf8')); delete entry.parentVersion; writeFileSync(record, JSON.stringify(entry)); }
+    const retained = [metaFile, ...records].map(file => readFileSync(file));
+    const exported = store.exportFinal({ outDir: path.join(dir, 'exports') });
+    assert.equal(exported.diffHistoryKnown, false);
+    const diff = readFileSync(exported.diff, 'utf8');
+    assert.match(diff, /历史.*未核定|谱系.*未知/);
+    assert.match(diff, /LEGACY_CHANGE/, 'historical evidence remains visible but cannot be claimed adopted');
+    assert.doesNotMatch(diff, /无内容级改动差异/);
+    [metaFile, ...records].forEach((file, i) => assert.deepEqual(readFileSync(file), retained[i]));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('deck store: unrecorded external edits are disclosed and cannot create a falsely complete lineage', () => {
+  const dir = tempDir();
+  try {
+    const store = createDeckStore(dir);
+    store.register({ sourcePptx: fixtureDeck, title: 'external edit', reportPath: fixtureReport });
+    writeFileSync(store.deckPath, Buffer.concat([readFileSync(store.deckPath), Buffer.from('manual')]));
+    const first = store.exportFinal({ outDir: path.join(dir, 'manual-export') });
+    assert.equal(first.diffHistoryKnown, false);
+    const beforeSha256 = createHash('sha256').update(readFileSync(store.deckPath)).digest('hex');
+    writeFileSync(store.deckPath, Buffer.concat([readFileSync(store.deckPath), Buffer.from('agent')]));
+    store.snapshot({ pages: [2], summary: 'after manual change', diffs: [], beforeSha256 });
+    const second = store.exportFinal({ outDir: path.join(dir, 'edited-export') });
+    assert.equal(second.diffHistoryKnown, false);
+    assert.match(readFileSync(second.diff, 'utf8'), /历史.*未核定|谱系.*未知/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('deck store: version file identity must match its record before history can be used', () => {
+  const dir = tempDir();
+  try {
+    const store = createDeckStore(dir);
+    store.register({ sourcePptx: fixtureDeck, title: 'version identity', reportPath: fixtureReport });
+    const record = path.join(dir, 'versions/v1.json');
+    const entry = JSON.parse(readFileSync(record, 'utf8'));
+    writeFileSync(record, JSON.stringify({ ...entry, version: 2 }));
+    assert.throws(() => store.versions(), (error: unknown) => error instanceof DeckFault && error.code === 'DECK_CORRUPT');
+    assert.equal(existsSync(path.join(dir, 'exports')), false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('deck store: a pre-revert checkpoint retains unknown external edits when restored', () => {
+  const dir = tempDir();
+  try {
+    const store = createDeckStore(dir);
+    store.register({ sourcePptx: fixtureDeck, title: 'external checkpoint', reportPath: fixtureReport });
+    writeFileSync(store.deckPath, Buffer.concat([readFileSync(store.deckPath), Buffer.from('manual-change')]));
+    const manuallyChanged = readFileSync(store.deckPath);
+    store.revert(1);
+    store.revert(2);
+    assert.deepEqual(readFileSync(store.deckPath), manuallyChanged);
+    const exported = store.exportFinal({ outDir: path.join(dir, 'exports') });
+    assert.equal(exported.diffHistoryKnown, false);
+    assert.match(readFileSync(exported.diff, 'utf8'), /历史.*未核定|谱系.*未知/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('deck store: a missing content difference record stays unknown through descendants and restore', () => {
+  const dir = tempDir();
+  try {
+    const store = createDeckStore(dir);
+    store.register({ sourcePptx: fixtureDeck, title: 'missing difference record', reportPath: fixtureReport });
+    const beforeSha256 = createHash('sha256').update(readFileSync(store.deckPath)).digest('hex');
+    writeFileSync(store.deckPath, Buffer.concat([readFileSync(store.deckPath), Buffer.from('unrecorded-content-change')]));
+    store.snapshot({ pages: [], summary: 'content changed without a valid machine record', diffs: [], beforeSha256, diffsKnown: false });
+    const first = store.exportFinal({ outDir: path.join(dir, 'unknown-export') });
+    assert.equal(first.diffHistoryKnown, false);
+    assert.doesNotMatch(readFileSync(first.diff, 'utf8'), /无内容级改动差异/);
+    assert.match(readFileSync(first.diff, 'utf8'), /本轮.*未核定|内容差异.*未核定/);
+    assert.equal(createDeckStore(dir).versions().find(entry => entry.version === 2)?.diffsKnown, false);
+    store.snapshot({ pages: [2], summary: 'later known record', diffs: [{ page: 2, kind: 'wording', summary: 'LATER_KNOWN', anchor: 'none' }], diffsKnown: true });
+    assert.equal(store.exportFinal({ outDir: path.join(dir, 'descendant-export') }).diffHistoryKnown, false);
+    store.revert(1);
+    assert.equal(store.exportFinal({ outDir: path.join(dir, 'root-export') }).diffHistoryKnown, true, 'discarding the unknown branch restores the known root');
+    store.revert(3);
+    assert.equal(store.exportFinal({ outDir: path.join(dir, 'restored-export') }).diffHistoryKnown, false, 'restoring its descendant must retain the unknown content change');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('deck store: difference record confidence is a strict optional boolean', () => {
+  const dir = tempDir();
+  try {
+    const store = createDeckStore(dir);
+    store.register({ sourcePptx: fixtureDeck, title: 'record confidence', reportPath: fixtureReport });
+    assert.equal(store.exportFinal({ outDir: path.join(dir, 'omitted-flag') }).diffHistoryKnown, true, 'omitted legacy confidence alone is not an unknown marker');
+    const record = path.join(dir, 'versions/v1.json');
+    const entry = JSON.parse(readFileSync(record, 'utf8'));
+    writeFileSync(record, JSON.stringify({ ...entry, diffsKnown: 'false' }));
+    assert.throws(() => store.versions(), (error: unknown) => error instanceof DeckFault && error.code === 'DECK_CORRUPT');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('refinerConfiguration: deck-bound or explicit project configuration only, never global fallback', async () => {
   const { refinerConfiguration } = await import('../src/host/ppt-refiner-sessions.ts');
   const calls: (string | number | undefined)[][] = [];
   const snapshot = (id?: string, revision?: number) => { calls.push([id, revision]); return { model: id ?? 'current' } as never; };
-  refinerConfiguration({ configuration: { id: 'minimax-m3', revision: 1 } }, snapshot);
-  refinerConfiguration({}, snapshot);
-  assert.deepEqual(calls, [['minimax-m3', 1], [undefined, undefined]]);
+  const project = { id: 'project-a', revision: 2 };
+  assert.deepEqual(refinerConfiguration({ configuration: { id: 'minimax-m3', revision: 1 } }, snapshot, project), { model: 'minimax-m3' });
+  assert.deepEqual(refinerConfiguration({}, snapshot, project), { model: 'project-a' });
+  assert.equal(refinerConfiguration({}, snapshot), undefined);
+  assert.equal(refinerConfiguration({ configuration: { id: 'missing', revision: 3 } }, (id, revision) => { calls.push([id, revision]); return undefined; }, project), undefined);
+  assert.deepEqual(calls, [['minimax-m3', 1], ['project-a', 2], ['missing', 3]]);
 });
