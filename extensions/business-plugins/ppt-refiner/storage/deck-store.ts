@@ -15,7 +15,8 @@ function decodeMeta(value: unknown): DeckMeta {
     || typeof value.sourceReport !== 'string' || !value.sourceReport.trim()
     || !Array.isArray(value.lockedPages) || !value.lockedPages.every(pageNumber)
     || !isoDate(value.createdAt) || !isoDate(value.updatedAt)) return fail('DECK_CORRUPT');
-  return { id: value.id as string, title: value.title as string, sourceReport: value.sourceReport as string, lockedPages: value.lockedPages as number[], createdAt: value.createdAt as string, updatedAt: value.updatedAt as string };
+  if (value.configuration !== undefined && (!object(value.configuration) || typeof value.configuration.id !== 'string' || (value.configuration.revision !== undefined && !Number.isSafeInteger(value.configuration.revision)))) return fail('DECK_CORRUPT');
+  return { id: value.id as string, title: value.title as string, sourceReport: value.sourceReport as string, lockedPages: value.lockedPages as number[], createdAt: value.createdAt as string, updatedAt: value.updatedAt as string, ...(object(value.configuration) ? { configuration: value.configuration as { id: string; revision?: number } } : {}) };
 }
 
 function decodeVersion(value: unknown): VersionEntry {
@@ -90,7 +91,7 @@ export function createDeckStore(deckDir: string) {
 
   return {
     deckPath,
-    register(input: { sourcePptx: string; title: string; reportPath: string }): DeckMeta {
+    register(input: { sourcePptx: string; title: string; reportPath: string; configuration?: { id: string; revision?: number } }): DeckMeta {
       ensureRoot();
       if (existsSync(metaPath)) fail('DECK_EXISTS');
       const stat = lstatSync(input.sourcePptx);
@@ -98,7 +99,7 @@ export function createDeckStore(deckDir: string) {
       if (!input.title.trim() || input.title.length > 200) fail('DECK_INVALID_INPUT');
       copyFileSync(input.sourcePptx, deckPath);
       const now = new Date().toISOString();
-      const meta: DeckMeta = { id: path.basename(root).toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'deck', title: input.title, sourceReport: path.resolve(input.reportPath), lockedPages: [], createdAt: now, updatedAt: now };
+      const meta: DeckMeta = { id: path.basename(root).toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'deck', title: input.title, sourceReport: path.resolve(input.reportPath), lockedPages: [], createdAt: now, updatedAt: now, ...(input.configuration ? { configuration: input.configuration } : {}) };
       writeMeta(meta);
       snapshot({ pages: [], summary: '初始候选版' });
       return meta;

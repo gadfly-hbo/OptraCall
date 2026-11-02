@@ -20,13 +20,18 @@ export type PptRefinerSessionManagerOptions = {
 
 export type PptRefinerRunResult = { outcome: 'completed' | 'cancelled' | 'failed'; text: string; diagnostic?: RunDiagnostic };
 
+/** Deck-bound model configuration: stored at register, falls back to current selection. */
+export function refinerConfiguration(meta: { configuration?: { id: string; revision?: number } }, snapshot: (id?: string, revision?: number) => Readonly<RuntimeModelConfiguration> | null | undefined) {
+  return meta.configuration ? snapshot(meta.configuration.id, meta.configuration.revision) : snapshot();
+}
+
 /** Refinement business profile: deck workspace + md anchor, unified lifecycle. */
 export function createPptRefinerSessions(options: PptRefinerSessionManagerOptions) {
   const domain = createAgentSessionDomain<string>({
     name: 'ppt-refiner',
     profile: {
       key: deckId => deckId,
-      configuration: () => options.configurationSnapshot(),
+      configuration: deckId => refinerConfiguration(createDeckStore(path.join(options.deckRoot, deckId)).meta(), options.configurationSnapshot),
       agentOptions: deckId => {
         const deckDir = path.join(options.deckRoot, deckId);
         const meta = createDeckStore(deckDir).meta();

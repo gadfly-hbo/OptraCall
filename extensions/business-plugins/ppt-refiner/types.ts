@@ -12,6 +12,7 @@ export type DeckMeta = Readonly<{
   lockedPages: readonly number[];
   createdAt: string;
   updatedAt: string;
+  configuration?: Readonly<{ id: string; revision?: number }>;
 }>;
 export type VersionEntry = Readonly<{
   version: number;
