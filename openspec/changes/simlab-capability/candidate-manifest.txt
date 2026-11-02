@@ -1,0 +1,34 @@
+# simlab-capability 候选清单 · 2026-11-02 20:34 · 分支 qoder/sim-lab · 基线 d58061b
+# 工作区全部变更（修改+新增），SHA-256 前 16 位；不含本清单自身
+
+c41358b2fca325bb  package-lock.json
+b2a0d76ec61e339e  package.json
+9129bf3a931c7217  scripts/check-agent-session-boundary.mjs
+b9b1f32865c6f37f  src/agent/project-runtime.ts
+2e83f98ec932d614  src/agent/project-session.ts
+6c798985c220b97d  src/host/project-store.ts
+5c002361281653e0  src/host/server.ts
+0afc5e9b9e9b7440  src/host/ui/App.tsx
+8a7183329936978a  src/host/ui/ProjectDialogs.tsx
+72bf30441082d851  src/host/ui/catalog-data.ts
+0fba15ac6c9d7bde  src/host/ui/project-types.ts
+2999183d301b1888  src/host/ui/runtime-client.ts
+08b9a9c813bf917e  docs/SimLab能力承接产品讨论稿_v0.2.md
+3e1c0f0d51e9ea39  docs/prototypes/simlab-ui-demo.html
+502678b67616f6c2  extensions/business-plugins/sim-lab/api/routes.ts
+81ff208f038cc300  extensions/business-plugins/sim-lab/kernel/engine.ts
+394766d4bb81c09c  extensions/business-plugins/sim-lab/service/simlab-service.ts
+b271385bb05d412e  extensions/business-plugins/sim-lab/storage/store.ts
+ebe6ca1a43c1f16a  extensions/business-plugins/sim-lab/tools/simulation-tools.ts
+e85ba1efe502c3c7  extensions/business-plugins/sim-lab/types.ts
+4ed1456d8882b44d  extensions/business-plugins/sim-lab/ui/SimLabPage.tsx
+597f6cade67ce461  extensions/business-plugins/sim-lab/ui/simlab-client.ts
+66a511a87f9a2d24  extensions/business-plugins/sim-lab/ui/simlab.css
+9a2ff86f61c4c8f0  openspec/changes/simlab-capability/result.md
+82e80f6ddc8bc59d  openspec/changes/simlab-capability/review-handoff.md
+4b506ca50284e271  openspec/changes/simlab-capability/spec.md
+30202285f784a918  tests/simlab-agent-flow.test.ts
+0f6e382a44de1769  tests/simlab-engine.test.ts
+9f7de7f84db88b92  tests/simlab-routes.test.ts
+6d6519e898f49d55  tests/simlab-store.test.ts
+bfd0349bbd8c7782  tests/simlab-tools.test.ts

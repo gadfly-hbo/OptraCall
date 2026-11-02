@@ -34,6 +34,8 @@ const toolSdkConsumers = new Map([
   ['tests/protected-file-process.test.ts', new Set(['createReadTool'])],
   ['tests/protected-bash-operations.test.ts', new Set(['createBashTool'])],
   ['src/agent/protected-skills.ts', new Set()],
+  // SIM01: declarative simulation tool definitions only; no session/model capability.
+  ['extensions/business-plugins/sim-lab/tools/simulation-tools.ts', new Set(['defineTool'])],
   ['tests/protected-skills.test.ts', new Set(['loadSkillsFromDir'])],
 ]);
 const historyReaders = new Set(['src/host/project-history.ts', 'tests/project-migration.test.ts', 'tests/project-runtime.test.ts', 'tests/project-host.test.ts']);
