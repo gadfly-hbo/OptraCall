@@ -2,7 +2,7 @@
 
 ## 候选与实施
 
-基线为 `codex/four-base`，HEAD `285491bdee439daefe9cafb1f62778703dedf47b`，开始时工作区干净。当前候选为本变更涉及的未提交文档；固定摘要及检查／复核证据在 `.local/host-agent-boundary-governance/`。
+初次本地文档阶段基线为 `codex/four-base`，HEAD `285491bdee439daefe9cafb1f62778703dedf47b`，开始时工作区干净，当时以未提交文档固定候选；固定摘要及检查／复核证据在 `.local/host-agent-boundary-governance/`。
 
 - 工程规范更新为 v1.2：第2节补齐 BG01–BG02，第4节新增 BG03–BG04 专项最终检查并纳入工程完成条件。
 - AGENTS 增加简短原则及两处同源锚点；本目录规格记录授权、验收与范围，覆盖 BG05。
@@ -28,3 +28,7 @@ c1保留结果记录更新前的原始“待验证”候选；c2为初次本地�
 2026-11-02用户追加授权提交并合并 main，特别要求核对 reports-factory、PPT skill 及编辑功能。fetch 后 `origin/main` 已从初始基线前进至 `96a82222b7beea21992d69f8ff5b5c44b1262a4f`，包含已合并 PR #21 的 PPT 生成 skill／逐页编辑插件及 PR #22 的 deck 绑定模型配置；这两项未改动本次两份规范文件。
 
 本次交付在保留四份文档的基础上集成最新 main，不重复合并已 squash 交付的功能分支。集成后以相对最新 main 的文件清单及产品 blob 一致性核对功能保全；文档阶段的58处引用及无运行时变更证据只作为原范围记录。最终候选检查、非作者复核、PR/head/main CI、合并及本机同步的实际身份分别保存在 `.local/host-agent-boundary-governance/delivery/`，未完成项不预记通过。
+
+已创建规范提交 `c69550b`，通过普通 merge 提交 `6ae8d0c` 集成上述 main，无冲突。`origin/qoder/reports-factory` 的 `d23fd55e00b741bd98d923ea098fd49245c9efbb` 与该 main 的整棵 tree 均为 `f637b2ef4796fd5486221a19089653e109ebb9ca`，两者文件差异为空；集成候选相对该 main 仅有本次四份文档增量，`extensions/`、`src/`、`scripts/`、`tests/`、依赖和 CI 文件均与该 main 完全一致。既有 PPT 功能保全已核对，无需再次合并 reports-factory 分支。
+
+最终 Git 候选的文档检查及独立复核另存上述 delivery 目录；实际 head CI、PR 合并、合并后 main CI 和本机同步以执行后的 receipt 回读为准。没有进行新的模型试验、安装、产品运行采用或其他设备操作。
