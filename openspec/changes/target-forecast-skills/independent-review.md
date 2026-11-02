@@ -114,3 +114,34 @@
 无新增Host分析编排、平行Runtime、会话域/owner/profile、权限扩大、插件持久结构、全局Python环境或依赖变更。已有资源治理与快照仍是环境职责；没有以安全/预算名义添加方法配额或内部步骤门槛。就本次变更和实际受影响接缝，工程规范§4专项**通过**，无需例外。未检查的既有实现不因此获整体合规背书。
 
 无未关闭规范轴发现；不提出额外架构抽象或大重构。最终全量check完成情况、hosted CI、Git交付、安装/服务采用和Product Acceptance须分别报告；真实模型自主激活/多轮调参/报告专业质量保持NOT_RUN。原仓退役、设备操作、真实业务行为未授权也未执行。
+
+
+## 最新 main 集成增量复核（原报告）
+
+# target-forecast main集成规范专项复核
+
+**结论：集成影响检查与本次变更的Host–Agent职责／Runtime复用专项继续通过，无新增规范阻断发现。** 本次只读查看Git对象、差异与作者检查日志；未Git写入、未修改源文件、未重跑产品测试。
+
+## 固定身份与影响
+
+- 已核修复提交`825c8ef76ef54991ea25ecf610bf05d1c6a63db9`；集成提交`947cc7afafe41662d543a3a1e3f77a6bd414de6f`的父提交准确为825c8ef与最新main `484995d908087449e64e9c352b9d5e33d8358afd`。
+- 947相对825 **严格只有4份SimLab OpenSpec文档、219行新增**：live-independent-review.md 128行、live-validation.md 68行、result.md 8行、spec.md 15行；无代码、测试、依赖、工程规范、统一接入或CI修改。此增量记录另一变更的实际验证/交付，不增加本任务模型、数据、设备或运行采用授权。
+- 对先前独立复核34项清单中的30份运行时／测试／产品讨论稿，逐项读取947提交blob并核完整SHA-256，**30/30与已复核字节完全一致**。不是仅凭工作树clean或文件名判断。读取时工作树干净；完整证据在`integration-identity.json`。
+
+因此，本次原先确认的Host仅2文件接缝、三独立skill、零Interface/域/owner/profile/agentOptions/边界豁免变化、既有SDK普通发现/受管快照、Case/Board文件合同均未改变。没有新的Host计算、专业判断、分析步骤编排或平行Runtime；规范§4范围内通过仍成立，不外推既有全仓合规。
+
+## 集成验证与旧证据适用性
+
+根作者的集成日志位于`/Users/bendandebaba/OptraCall-artifacts/target-forecast-git-ci-20261103/`。本人读到targeted-node.log终态 **9/9 PASS、0SKIP**（含真实产品受管发现），boundary.log明确PASS，python-regressions.log **16项OK**；typecheck.log无诊断。另已读取根保存的`integration-checks.json`真实命令回执：四项以&&串行执行，最终session39553 exit_code=0并运行至Python回归终态，因而四项各exit0，包括tsc。该回执副本为`integration-author-checks-receipt.json`。命令由根执行，不将空日志单独当作成功证明，也不冒充本复核独立运行了这些检查。
+
+旧本地904项全量、独立两轴复核及双Python自检保留原固定候选身份；此次4文档增量与30文件blob相等证据足以说明其运行时适用性。集成后9项SDK+边界+类型及16项Python定向复验相称，无需为此文档base增量再造一轮本地全量；待发布实际head仍须由正常CI运行完整检查。若后续实际代码/测试变动，此判断须重新评估；仅交付记录追加可做文档范围复核。
+
+## 最小原位归档方案
+
+本仓OpenSpec根只有changes，没有单独archive目录或配置化迁移机制。明确先例：simlab `result.md:173`、`spec.md:3`，requirements-reliability与product-help `spec.md:3`：规格、结果、复核、候选清单、移交包保留在原稳定change路径，标注实施归档，不迁移或重写历史。
+
+建议保持`openspec/changes/target-forecast-skills/`全部原路径。用户本轮已授权Git/CI且通过后直接squash，result已新增授权事实；历史“待授权／另请确认”保留当时状态，不再次设置合并Gate。actual-head CI成功后按授权完成squash，再回读实际PR head、检查run/attempt/SHA、squash提交/父/tree、main push CI及本地main安全快进。在spec顶部补“实施归档”及result末节链接，result追加一张实际交付身份表与证据位置即可，不预写未来成功或自引用未来SHA。若合并后追加文档提交，该提交自身身份/CI与产品树不变另核。
+
+原FAIL/UNKNOWN、原manifest29/30、条件SKIP、验证环境失败、真实模型NOT_RUN和专业/用户验收边界继续保留。Git/CI授权不扩大安装、服务切换、MacBook、原仓退役或真实业务动作范围。
+
+初次只读预检恰逢根并发完成merge，动态merge-base已从636推进到484，导致预检断言失败；已改按上述显式固定提交核对，保留为检查器时序问题，不冒充产品RED。待实际发布head/CI及归档文档到位后，可继续做相称的规范/交付收尾核对。

@@ -147,3 +147,8 @@ TF02/TF12 浏览器根：`/Users/bendandebaba/OptraCall-artifacts/target-forecas
 2026-11-03 用户明确回复“授权，且完成后直接合并”，授权本变更集成最新 main、提交推送、单一PR、实际head CI成功后直接squash合并、本地main安全快进与规格/结果原位归档，不再另设合并确认。上述“Git/CI待授权”为此前阶段快照，真实模型/原仓退役/设备采用等后续边界仍不扩大。
 
 交付前重新核对35文件完整清单 `delivery-preauthorization-manifest.json`：35/35 SHA-256一致；原候选清单/移交包保持原字节，工作树只有本次已复核修复。fetch后最新origin/main为`484995d908087449e64e9c352b9d5e33d8358afd`，相对基线`636ac3a`仅4份simlab OpenSpec文档，无运行时/测试/依赖/构建变化。单PR尚未建立，以下实际交付回读逐项追加，不预填CI或合并成功。
+
+修复提交 `825c8ef` 后，以 merge 提交 `947cc7afafe41662d543a3a1e3f77a6bd414de6f` 集成上述最新 main，无冲突；相对修复候选仍仅这4份上游文档，原复核清单的30份运行时/测试/产品讨论稿 SHA-256 完全未变。按闭合影响映射重验边界、9项目标Node（含本机受管实际发现）、tsc、16项Python回归，四命令均 exit0；回执 `target-forecast-git-ci-20261103/integration-checks.json` 与各日志保留。此前冻结代码完整检查904项通过仍对应完全相同的运行时/测试；托管CI将另核实际推送head并运行全量，不用本地目标重验替代。
+
+
+非作者随后对947cc7a集成增量作只读复核：4份上游文档变化与30/30运行时身份确认，工程规范§4专项仍通过，无新增发现；原报告已追加至 independent-review.md。归档采用已核本仓惯例：合并后更新当前 spec/result 事实，在原变更目录稳定保留全部历史与证据，不迁移或改写原材料。
