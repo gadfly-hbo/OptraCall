@@ -1,8 +1,8 @@
 # 经营推演一期（sim-lab 能力承接）
 
-用户于 2026-11-02 确认[产品讨论稿 v0.2](../../docs/SimLab能力承接产品讨论稿_v0.2.md)：以 OptraCall 原生方式实现经营仿真推演能力，sim-lab 原仓（`gadfly-hbo/sim-lab` v0.2.0，HEAD `c00d3b8`）仅作领域参考与素材（D1–D4：插件方式接入、全新设计不受原仓约束、交互式与 Agent 驱动一步到位、交付后原仓退役）。Q1–Q4 按讨论稿建议确认：界面名"经营推演"、插件目录 `sim-lab`；单一盖章点（固化快照，口径并入固化）；推演窗口 7–90 天参数化、方案变体上限为资源边界（8/草稿）；Agent 工具集以 5 个正交工具起步。Q5（快照指标接 Case 呈现方式）规格阶段与 Codex 对齐后落定。
+用户于 2026-11-02 确认[产品讨论稿 v0.2](../../../docs/SimLab能力承接产品讨论稿_v0.2.md)：以 OptraCall 原生方式实现经营仿真推演能力，sim-lab 原仓（`gadfly-hbo/sim-lab` v0.2.0，HEAD `c00d3b8`）仅作领域参考与素材（D1–D4：插件方式接入、全新设计不受原仓约束、交互式与 Agent 驱动一步到位、交付后原仓退役）。Q1–Q4 按讨论稿建议确认：界面名"经营推演"、插件目录 `sim-lab`；单一盖章点（固化快照，口径并入固化）；推演窗口 7–90 天参数化、方案变体上限为资源边界（8/草稿）；Agent 工具集以 5 个正交工具起步。Q5（快照指标接 Case 呈现方式）规格阶段与 Codex 对齐后落定。
 
-本规格先行，UI Demo（[原型](../../docs/prototypes/simlab-ui-demo.html)）先于实施交用户确认；用户确认 Demo 后启动实施。Git/CI 交付、合并 main、原仓退役时点分别按届时授权执行。
+本规格先行，UI Demo（[原型](../../../docs/prototypes/simlab-ui-demo.html)）先于实施交用户确认；用户确认 Demo 后启动实施。Git/CI 交付、合并 main、原仓退役时点分别按届时授权执行。
 
 **实施记录（2026-11-02）**：用户已确认 Demo 并指令开工。**IN06 安排（参照 decision-board 先例）**：本变更由 Qoder 在 `qoder/sim-lab` 分支实施全链路，含通常属 Codex 的 Host 接线与 `scripts/check-agent-session-boundary.mjs` 的 `toolSdkConsumers` 清单（例外理由：sim-lab 工具文件仅使用 `defineTool` 纯声明式定义助手，无会话/模型能力）。合并前须 Codex 侧接缝互查，独立复核专门覆盖 Host 接缝与边界清单例外；后续该接缝维护回归 Codex 归属。实际实施与验证见[结果记录](result.md)。
 
@@ -69,3 +69,11 @@
 - 新增单测+守恒/确定性回归+`npm run check` 全量+浏览器点验；合成 Provider 端到端（SIM07）。
 - Host-Agent 职责边界及复用专项检查按工程规范§4 执行（对照讨论稿§4 原则锚定句）。
 - 未决：Q5 快照指标接 Case 呈现（与 Codex 对齐）；UI Demo 用户确认结论记入本规格后实施；非作者独立复核、Git/CI 交付、合并 main、原仓退役时点分别另行请示安排。
+
+## Codex 接管范围（2026-11-02）
+
+用户将 `qoder/sim-lab` 整体移交 Codex：原基线 `d58061b`，单一交接提交 `4cc1195`；移交后 Qoder 只读。Codex 在独立工作树核对候选，直接完成接缝修复、适用检查、干净上下文非作者复核与发现处理，并将三阶段移交模式固化到工程规范 v1.3。后续维护仍复用 Interface v3、既有 project-tasks owner/profile，不增加持久字段或会话域。
+
+开关接缝按 R5 修正：只在任务空闲时更改；经公共生命周期释放旧资源并保留 canonical 历史，下一次 open/send 使用更新后的工具选择。推演工具按 SDK 追加语义启用，保留普通读写工具；受管 ordinary/protected 及 fixed-draft/text-only 明确不注入。前端隔离项目/草稿读取并在写操作期间保持目标，插件只映射自己的业务错误，Host 传输错误保留原状态。
+
+验收与授权保持分项：SIM11/Q5 尚未落定，SIM08 专用卡片未实现，以上缺口不能写成一期全部验收完成。原模型/专业结果、取消、FAIL/UNKNOWN 和原候选证据保留。完成本地修复和复核后再申请集成 main、推送、单 PR 与实际 head CI；squash 合并须用户另行确认，原仓退役及 MacBook 体验另获授权。此处不提前归档未完成变更。

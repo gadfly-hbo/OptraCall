@@ -220,9 +220,11 @@ export function App() {
   const createTask = async (name: string, configurationId: string, simulationTools: boolean) => { if (!taskDialogProject) return; const project = taskDialogProject, task = await createDiskTask(project.id, name, configurationId || undefined, simulationTools), updated = { ...project, tasks: [...project.tasks, task] }; setProjects(previous => previous.map(item => item.id === project.id ? { ...item, tasks: [...item.tasks, task] } : item)); setTaskDialogProject(undefined); dialogTrigger.current = null; void chooseTask(updated, task); };
   const toggleSimulationTools = async (enabled: boolean) => {
     if (!active || !activeTask || !activeKey) return;
-    const task = await setTaskSimulationTools(active.id, activeTask.id, enabled);
-    updateTask(active.id, activeTask.id, () => task);
-    changeUI(activeKey, old => ({ ...old, notice: `已${enabled ? '开启' : '关闭'}经营推演工具，新会话打开后生效。` }));
+    const projectId = active.id, taskId = activeTask.id, key = activeKey;
+    const task = await setTaskSimulationTools(projectId, taskId, enabled);
+    updateTask(projectId, taskId, () => task);
+    await refreshTask(projectId, taskId);
+    changeUI(key, old => ({ ...old, notice: `已${enabled ? '开启' : '关闭'}经营推演工具，下次打开会话或发送消息时生效，历史保留。` }));
   };
   const projectAction = async (project: ClientProject, operation: 'archive' | 'restore') => {
     const prefix = project.id + '/'; setProjectActionId(project.id); setGlobalError('');

@@ -1,6 +1,8 @@
 import type { IncomingMessage } from 'node:http';
 import path from 'node:path';
 import { SimLabService } from '../service/simlab-service.ts';
+import { EngineFault } from '../kernel/engine.ts';
+import { StoreFault } from '../storage/store.ts';
 
 class ApiFault extends Error {
   readonly status: number;
@@ -98,8 +100,7 @@ export function createSimLabRoutes(options: SimLabRoutesOptions) {
       throw new ApiFault(404, 'not_found', '未知推演接口。');
     } catch (error) {
       if (error instanceof ApiFault) return { status: error.status, value: { code: error.code, message: error.message } };
-      const code = (error as { code?: string })?.code;
-      if (code) return { status: httpStatus(code), value: { code, message: error instanceof Error ? error.message : '推演操作未完成。' } };
+      if (error instanceof EngineFault || error instanceof StoreFault) return { status: httpStatus(error.code), value: { code: error.code, message: error.message } };
       throw error;
     }
   };

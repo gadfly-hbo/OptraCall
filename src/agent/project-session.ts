@@ -200,7 +200,9 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       } });
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
-      services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? [] : protectedTools ? [...protectedTools.tools.map(tool => tool.name), 'tool_search'] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...(simulationTools ? simulationTools.map(tool => tool.name) : [])] });
+      services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? [] : protectedTools ? [...protectedTools.tools.map(tool => tool.name), 'tool_search'] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search'])] });
+      // SDK modifiers append to either a plain workspace allowlist or inherited defaults.
+      if (simulationTools) services.settingsManager.applyOverrides({ defaultTools: simulationTools.map(tool => `+${tool.name}`) });
       const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: protectedTools.tools, tools: [...protectedTools.tools.map(tool => tool.name), 'tool_search'] } : simulationTools ? { customTools: simulationTools } : {}), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
       if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
       return { ...created, services, diagnostics: services.diagnostics };

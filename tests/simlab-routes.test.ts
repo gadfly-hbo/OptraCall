@@ -5,8 +5,20 @@ import path from 'node:path';
 import os from 'node:os';
 import type { IncomingMessage } from 'node:http';
 import { createSimLabRoutes } from '../extensions/business-plugins/sim-lab/api/routes.ts';
+import { startTestHost } from './fixtures/host-process.ts';
 
 const PROJECT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+test('SIM-API-04: Host JSON transport errors keep their status and precede plugin validation', async t => {
+  const host = await startTestHost(); t.after(() => host.close());
+  const route = `/api/simlab/projects/${PROJECT}/drafts`;
+  const wrongType = await fetch(host.baseUrl + route, { method: 'POST', headers: { ...host.headers, 'content-type': 'text/plain' }, body: '{}' });
+  assert.equal(wrongType.status, 415);
+  assert.equal((await wrongType.json()).code, 'json_required');
+  const oversized = await host.request(route, 'POST', { name: 'x'.repeat(65_536) });
+  assert.equal(oversized.status, 413);
+  assert.equal((await oversized.json()).code, 'request_too_large');
+});
 
 async function fixture(t: { after: (fn: () => Promise<void>) => void }, archived = false) {
   const dataRoot = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'optracall-simlab-api-')));

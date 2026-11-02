@@ -586,7 +586,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (operation === 'simulation-tools' && request.method === 'PUT') {
             const input = await body(request);
             if (typeof input.enabled !== 'boolean') throw new RequestFault(400, 'invalid_simulation_tools');
-            const task = await mutate(async () => { const { project } = await pair(projectId, taskId, true); assertActive(project); return projects.setSimulationTools(projectId, taskId, input.enabled as boolean); });
+            const task = await mutate(async () => {
+              const owner = await pair(projectId, taskId, true); assertActive(owner.project);
+              const ref = projectSessions.ref(owner);
+              if (projectSessions.busy(ref) || await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
+              if (Boolean(owner.task.simulationTools) !== input.enabled) await projectSessions.close(ref);
+              return projects.setSimulationTools(projectId, taskId, input.enabled as boolean);
+            });
             json(response, 200, { task }); return;
           }
           if (operation === 'verifications/preview' && request.method === 'POST') { verification.assertAvailable(); json(response, 200, await verification.preview(projectId, taskId, parseVerificationSelection(await body(request)))); return; }

@@ -4,7 +4,7 @@
 
 ## 授权与流程
 
-- 2026-11-02 用户确认[讨论稿 v0.2](../../docs/SimLab能力承接产品讨论稿_v0.2.md)及 Q1–Q4 建议，随后确认 [UI Demo](../../docs/prototypes/simlab-ui-demo.html) 并指令"开工"。实施按[规格](spec.md)执行。
+- 2026-11-02 用户确认[讨论稿 v0.2](../../../docs/SimLab能力承接产品讨论稿_v0.2.md)及 Q1–Q4 建议，随后确认 [UI Demo](../../../docs/prototypes/simlab-ui-demo.html) 并指令"开工"。实施按[规格](spec.md)执行。
 - **IN06 安排（参照 decision-board 先例）**：本变更由 Qoder 在 `qoder/sim-lab` 分支实施全链路，含通常属 Codex 的 Host 接线（`src/host/server.ts`、`src/agent/project-session.ts`、`src/agent/project-runtime.ts`、`src/host/project-store.ts`、`src/host/ui/*`、`scripts/check-agent-session-boundary.mjs` 的 `toolSdkConsumers` 清单）。合并前须 Codex 侧接缝互查，独立复核专门覆盖 Host 接缝；后续该接缝维护回归 Codex 归属。
 - **边界清单例外理由**：`extensions/business-plugins/sim-lab/tools/simulation-tools.ts` 登记进 `toolSdkConsumers`，仅允许 `defineTool`（纯声明式工具定义助手，无会话/模型能力），与 `src/agent/protected-tools.ts` 同类例外。IN06 要求的理由记录于此，独立复核须覆盖。
 - `package.json` 新增直接依赖 `typebox@1.3.27`（SDK 既有传递依赖同版本显式声明，lockfile 已同步）。
@@ -57,3 +57,25 @@
 - Git/CI 交付、合并 main、原仓退役（含 JuanerAI 文档 superseded 标注）、MacBook 体验均按届时授权另行执行。
 - Q5（快照指标接 Case 呈现）待与 Codex 对齐后另立增量；SIM08 对话内建议卡片如需专门 UI 亦属后续。
 - 真实模型端到端试跑未做（本次验证全部为合成 Provider/合成数据）。
+
+## Codex 接管与接缝互查（2026-11-02，后续记录）
+
+以上为 Qoder 交接时的实施与判断，保留原范围；下述新增证据不追溯改写原候选。
+
+- 主仓 `/Users/bendandebaba/DevWorkSpace/OptraCall` 和入口工作树在接管前干净；fetch 后候选与 origin 一致。独立工作树 `/Users/bendandebaba/.codex/worktrees/simlab-delivery/OptraCall` 检出 `qoder/sim-lab`，初始 HEAD `4cc11955654e6fbb4cd788aa71ea46b0998c90eb`，基线 `d58061b08534d48d7847d8447575058a1faa45d4`；原 Qoder 工作树保持游离。
+- 原 `candidate-manifest.txt` 实际列出 **31** 项（不含清单自身），31/31 SHA-256 前16位一致。移交说明的29+本包/用户提示30均为计数差异，未少核文件。完整核对读回 `.local/simlab-takeover/intake-hashes.json`；原清单不重写，后续候选另固定。
+- 七项接缝已互查：继续复用 project-tasks，无新域/profile/owner；agentOptions 仅可序列化的项目路径配置；schema2 缺少可选 simulationTools 的旧记录继续读取；路由、前端与 defineTool 例外另由下表覆盖。没有真实模型或真实凭据调用、运行服务切换及 MacBook 操作。
+
+| 发现 | 修复与因果证据 |
+| --- | --- |
+| 开启推演工具时，plain 工具名覆盖 SDK 默认 read/bash/edit/write | 使用 SDK `+name` 追加，保留默认及 workspace 选择。增强 SIM-AGENT-01 在原候选可复现缺少 read；首次 RED `.local/simlab-takeover/seam-red.log` |
+| 元数据开关未使已存在 worker 采用新工具集，且HTTP可在运行中切换 | 空闲准入检查后经公共 close 释放旧资源，下一次 open/send 生效；保留原 sessionFile 与旧字节前缀。SIM-AGENT-02 初始 RED 同上，修复验证开/关、busy拒绝及历史保全 |
+| 项目与草稿共用读取代际，跨项目切换丢弃新列表并请求旧草稿 | 分开取消读取、核对草稿项目归属；写入期间固定项目/草稿选择。真实浏览器因果复现与复验另留隔离QA证据 |
+| 插件吞并 Host JSON类型/大小错误，把415/413改成400 | 仅捕获 EngineFault/StoreFault，Host传输错误回交原映射；SIM-API-04 RED `.local/simlab-takeover/routes-red.log` |
+| 界面称快照已可接 Case，但 SIM11 尚未实现 | 改为显式显示 Case／决策板接入待完成；保留正式SIM11缺口 |
+
+合成 SDK 端到端已扩为5工具实际调用与成功信封，随后用户HTTP固化、同任务 simulation_evidence 读取具体回执；原用例只实际调用 inspect/draft/run，不能把另外两工具的“已暴露”写成实际调用。新增闭合文本与受管资源的实际 SDK open 排除检查，以及 defineTool 单能力的合规/绕过反例。受管测试首次因合成 fixture 未提供 projectDirectory 失败（`.local/simlab-takeover/seam-green-2.log`），已补齐 fixture；该次不计产品RED。
+
+工程规范已升至 **v1.3**，第2节固化“Qoder → Codex 移交交付模式”：开发、分支移交、Codex接管至合并三个阶段，单一写入者，非作者与干净上下文，及现有授权和复核约束。
+
+后续适用全量检查、独立复核与职责边界最终结论在下文追加。Git/CI交付尚待用户授权，当前 origin/main `be1caaf` 较原基线已有PPT接缝更新，尚未集成本分支；原仓退役、MacBook体验及产品验收未执行。

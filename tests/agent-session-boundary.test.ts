@@ -62,6 +62,19 @@ test('unparseable source fails closed instead of silently passing the boundary c
   assert.match(result[0].reason, /syntax errors/);
 });
 
+test('simulation tool exception permits defineTool alone, without runtime capabilities', () => {
+  const file = 'extensions/business-plugins/sim-lab/tools/simulation-tools.ts';
+  const sdk = '../../../../src/agent/sdk.ts';
+  assert.deepEqual(inspectSessionSource(file, `import { defineTool } from '${sdk}';`), []);
+  for (const source of [
+    `import { createAgentSessionServices } from '${sdk}';`,
+    `import { defineTool, SessionManager } from '${sdk}';`,
+    `import * as sdk from '${sdk}';`,
+    `const sdk = await import('${sdk}');`,
+    `import { defineTool } from '@earendil-works/pi-coding-agent';`,
+  ]) assert.ok(inspectSessionSource(file, source).length, source);
+});
+
 test('protected execution utilities may use native tools but cannot become another SDK session owner', () => {
   const file = 'src/agent/protected-tool-process.ts';
   assert.deepEqual(inspectSessionSource(file, `import { createReadTool, createWriteTool, createCodemodeExtension } from './sdk.ts';`), []);

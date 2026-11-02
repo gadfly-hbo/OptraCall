@@ -8,6 +8,28 @@ import os from 'node:os';
 import { ProjectAgent } from '../src/agent/project-runtime.ts';
 import { createProtectedExecutionScope } from '../src/agent/protected-tools.ts';
 
+test('simulation opt-in is excluded from closed-text and managed SDK resources', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'optracall-simulation-boundaries-'));
+  for (const mode of ['fixed-draft', 'text-only', ...(process.platform === 'darwin' ? ['ordinary', 'protected'] : [])]) {
+    const work = path.join(root, mode, 'work'), sessions = path.join(root, mode, 'sessions'), resources = path.join(root, mode, 'resources');
+    for (const directory of [work, sessions, resources]) await mkdir(directory, { recursive: true, mode: 0o700 });
+    const managed = mode === 'ordinary' || mode === 'protected';
+    const agent = new ProjectAgent({
+      projectId: randomUUID(), projectDirectory: work, codeRoot: process.cwd(), resourceRoot: resources, sessionDirectory: sessions, managementPorts: [],
+      workspace: { cwd: work, systemPrompt: ['Synthetic capability boundary check.'], ...(!managed ? { capabilityPolicy: mode as 'fixed-draft' | 'text-only', defaultTools: [] } : {}) },
+      ...(managed ? { protectedExecution: { id: `sim-${mode}`, profile: mode as 'ordinary' | 'protected', cwd: work, writableRoot: work, readRoots: [] } } : {}),
+      simulationTools: { storeRoot: path.join(root, 'sim-lab'), projectId: 'synthetic-project' },
+      configuration: { id: randomUUID(), revision: 1, name: 'synthetic exclusion', provider: 'openai-compatible', api: 'openai-completions', baseUrl: 'http://127.0.0.1:1/v1', model: 'synthetic', apiKey: 'synthetic-key' },
+    });
+    t.after(() => agent.close());
+    const snapshot = await agent.open();
+    assert.ok(!snapshot.tools.some(name => name.startsWith('simulation_')), mode);
+    if (!managed) assert.deepEqual(snapshot.tools, []);
+    else assert.ok(snapshot.tools.includes('bash'), `${mode} retains its permitted native tools`);
+    await agent.close();
+  }
+});
+
 test('real SDK and native terminal receipt retain failed execution when a model replies after a lost tool result', { skip: process.platform !== 'darwin', timeout: 30_000 }, async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'optracall-protected-missing-'));
   const projectDirectory = path.join(root, 'project'), sessionDirectory = path.join(root, 'native'), resourceRoot = path.join(root, 'resources'), work = path.join(root, 'work');

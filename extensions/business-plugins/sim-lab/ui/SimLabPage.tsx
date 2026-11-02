@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ClientProject, ClientTask } from '../../../../src/host/ui/project-types.ts';
 import * as client from './simlab-client.ts';
 import type { DraftRecord, RunRecord, SnapshotRecord, StressRow, SimVariant, SimParameters, SimPerturbation } from './simlab-client.ts';
@@ -47,7 +47,9 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
   const [projectId, setProjectId] = useState(() => (projects.filter(p => !p.archivedAt).at(-1) ?? projects.at(-1))?.id ?? '');
   const project = projects.find(p => p.id === projectId), archived = Boolean(project?.archivedAt);
   const [drafts, setDrafts] = useState<DraftRecord[]>([]), [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
-  const [draftId, setDraftId] = useState(''), [draft, setDraft] = useState<DraftRecord>(), [runs, setRuns] = useState<RunRecord[]>([]);
+  const [draftId, setDraftId] = useState(''), [loadedDraft, setDraft] = useState<DraftRecord>(), [runs, setRuns] = useState<RunRecord[]>([]);
+  const draft = loadedDraft?.projectId === projectId && loadedDraft.id === draftId ? loadedDraft : undefined;
+  const draftProjectId = drafts.find(d => d.id === draftId)?.projectId;
   const [tab, setTab] = useState<Tab>('params'), [variantId, setVariantId] = useState('');
   const [form, setForm] = useState<Record<string, string>>({}), [shocks, setShocks] = useState({ demandShock: true, supplyShock: true });
   const [variantForms, setVariantForms] = useState<VariantForm[]>([]);
@@ -55,33 +57,33 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [createOpen, setCreateOpen] = useState(false), [createName, setCreateName] = useState('');
   const [freezeOpen, setFreezeOpen] = useState(false);
-  const seq = useRef(0);
-
   useEffect(() => {
     if (!projectId) return;
-    const ticket = ++seq.current;
-    setDrafts([]); setSnapshots([]); setDraftId(''); setDraft(undefined); setRuns([]); setError('');
+    let current = true;
+    setDrafts([]); setSnapshots([]); setDraftId(''); setDraft(undefined); setRuns([]); setError(''); setNotice(''); setStressRows([]); setFreezeOpen(false); setCreateOpen(false);
     void Promise.all([client.listDrafts(projectId), client.listSnapshots(projectId)]).then(([d, s]) => {
-      if (seq.current !== ticket) return;
+      if (!current) return;
       setDrafts(d.drafts); setSnapshots(s.snapshots);
       if (d.drafts.length) setDraftId(d.drafts.at(-1)!.id);
-    }).catch(e => { if (seq.current === ticket) setError(e instanceof Error ? e.message : '读取失败'); });
+    }).catch(e => { if (current) setError(e instanceof Error ? e.message : '读取失败'); });
+    return () => { current = false; };
   }, [projectId]);
 
   useEffect(() => {
-    if (!projectId || !draftId) return;
-    const ticket = ++seq.current;
-    setError('');
+    if (!projectId || !draftId || draftProjectId !== projectId) return;
+    let current = true;
+    setDraft(undefined); setRuns([]); setError(''); setNotice('');
     void Promise.all([client.getDraft(projectId, draftId), client.listRuns(projectId, draftId)]).then(([d, r]) => {
-      if (seq.current !== ticket) return;
+      if (!current) return;
       setDraft(d.draft); setRuns(r.runs);
       setForm(formOf(d.draft.parameters));
       setShocks({ demandShock: d.draft.parameters.demandShock, supplyShock: d.draft.parameters.supplyShock });
       setVariantForms(d.draft.variants.map(fromVariant));
       setVariantId(d.draft.variants[0]?.id ?? '');
       setStressRows([]);
-    }).catch(e => { if (seq.current === ticket) setError(e instanceof Error ? e.message : '读取失败'); });
-  }, [projectId, draftId]);
+    }).catch(e => { if (current) setError(e instanceof Error ? e.message : '读取失败'); });
+    return () => { current = false; };
+  }, [projectId, draftId, draftProjectId]);
 
   const latestRun = useMemo(() => [...runs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0], [runs]);
   const stale = Boolean(latestRun && draft && latestRun.draftRevision !== draft.revision);
@@ -147,7 +149,7 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
     try {
       const frozen = await client.freezeSnapshot(projectId, draft.id, { runId: latestRun.id, variantId, expectedRevision: draft.revision });
       setSnapshots(previous => [frozen.snapshot, ...previous]);
-      setFreezeOpen(false); setNotice(`已固化 ${frozen.snapshot.id} · 快照不可改写，可被 Case 引用为决策证据`);
+      setFreezeOpen(false); setNotice(`已固化 ${frozen.snapshot.id} · 快照不可改写；Case／决策板接入待完成`);
     } catch (e) { setError(e instanceof Error ? e.message : '固化失败'); setFreezeOpen(false); }
     finally { setBusy(false); }
   };
@@ -160,7 +162,7 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
       <div><p className="eyebrow">OPTRACALL · 经营推演</p><h1>经营推演</h1>
         <p className="detail-summary">把备货与促销假设展开成可审计的逐日账本；探索自由，固化从严。确定性假设模型，不是预测。</p></div>
       <div className="plugin-heading-actions">
-        <select aria-label="选择项目" value={projectId} onChange={event => setProjectId(event.target.value)}>{projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.archivedAt ? '（已归档）' : ''}</option>)}</select>
+        <select aria-label="选择项目" value={projectId} disabled={busy} onChange={event => setProjectId(event.target.value)}>{projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.archivedAt ? '（已归档）' : ''}</option>)}</select>
         <span className="sim-chip">引擎 optracall-sim-1</span>
         <button className="secondary-button" onClick={onBack}>返回能力目录</button>
       </div>
@@ -174,7 +176,7 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
         <section className="rail-section">
           <h3>推演草稿 <button className="text-button" disabled={writeDisabled} onClick={() => setCreateOpen(true)}>＋ 新建</button></h3>
           {!drafts.length && <p className="rail-empty">暂无草稿。新建草稿开始探索性推演。</p>}
-          {drafts.map(d => <button key={d.id} className={`rail-draft ${d.id === draftId ? 'selected' : ''}`} onClick={() => setDraftId(d.id)}>
+          {drafts.filter(d => d.projectId === projectId).map(d => <button key={d.id} disabled={busy} className={`rail-draft ${d.id === draftId ? 'selected' : ''}`} onClick={() => setDraftId(d.id)}>
             <strong>{d.name}</strong><span>{d.variants.length} 个变体 · 窗口 {d.parameters.days} 天 · rev {d.revision}</span>
           </button>)}
         </section>
@@ -188,7 +190,7 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
               <span>贡献毛利 {money(s.result.summary.contribution)} · 最低现金 {money(s.result.summary.minCash)}</span>
               <span>履约率 {pct(s.result.summary.fulfillmentRate)} · 期末库存 {num(s.result.summary.closingInventory)} 件</span>
               <span>输入摘要 {shortHash(s.inputHash)} · 运行 {s.runId} / 草稿 rev {s.draftRevision}</span>
-              <span className="sim-chip frozen">不可变 · 可引用为 Case 证据</span>
+              <span className="sim-chip frozen">不可变 · Case／决策板接入待完成</span>
             </div>
           </details>)}
         </section>
@@ -318,7 +320,7 @@ export function SimLabPage({ projects, onOpenTask, onBack }: {
             <div className="task-tools-note">
               <p>Agent 可用工具（任务级显式开启后生效）：</p>
               <p>{['simulation_inspect', 'simulation_draft', 'simulation_run', 'simulation_stress', 'simulation_evidence'].map(name => <span key={name} className="sim-chip tool">{name}</span>)}</p>
-              <p className="panel-hint">开启方式：新建任务时勾选「经营推演工具」，或在任务对话的「Pi 能力与命令」中打开任务级开关（新会话打开后生效）。固化不设 Agent 工具，Agent 给出建议后由你在本页确认；它可通过 simulation_evidence 读到回执。</p>
+              <p className="panel-hint">开启方式：新建任务时勾选「经营推演工具」，或在任务空闲时切换「Pi 能力与命令」中的开关；下次打开会话或发送消息时生效，历史保留。受管任务与封闭文本资源不提供推演工具。固化不设 Agent 工具，Agent 给出建议后由你在本页确认；它可通过 simulation_evidence 读到回执。</p>
             </div>
             {!simulationTasks.length ? <div className="simlab-empty"><p>还没有开启经营推演工具的任务。新建任务时勾选，或在任务内打开开关。</p></div>
               : simulationTasks.map(({ project: p, task }) => <div className="task-link-card" key={task.id}>
