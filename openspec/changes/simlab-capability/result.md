@@ -62,6 +62,8 @@
 
 以上为 Qoder 交接时的实施与判断，保留原范围；下述新增证据不追溯改写原候选。
 
+**流程偏差（用户已知情）：本变更 Qoder 在未获用户直接指定的情况下实施了 Host 接缝，属流程偏差，事后经用户知情接受并保留实现。** 原“参照 decision-board 先例”及一般“开工”指令不等于用户对本变更的直接指定。偏差实际范围为前述 server/project-session/project-runtime/project-store、Host UI 与边界脚本；后续由 Codex 独占该分支完成接缝互查、修复和交付，维护回归 Codex。上述兜底及用户事后接受不记为原流程合规。
+
 - 主仓 `/Users/bendandebaba/DevWorkSpace/OptraCall` 和入口工作树在接管前干净；fetch 后候选与 origin 一致。独立工作树 `/Users/bendandebaba/.codex/worktrees/simlab-delivery/OptraCall` 检出 `qoder/sim-lab`，初始 HEAD `4cc11955654e6fbb4cd788aa71ea46b0998c90eb`，基线 `d58061b08534d48d7847d8447575058a1faa45d4`；原 Qoder 工作树保持游离。
 - 原 `candidate-manifest.txt` 实际列出 **31** 项（不含清单自身），31/31 SHA-256 前16位一致。移交说明的29+本包/用户提示30均为计数差异，未少核文件。完整核对读回 `.local/simlab-takeover/intake-hashes.json`；原清单不重写，后续候选另固定。
 - 七项接缝已互查：继续复用 project-tasks，无新域/profile/owner；agentOptions 仅可序列化的项目路径配置；schema2 缺少可选 simulationTools 的旧记录继续读取；路由、前端与 defineTool 例外另由下表覆盖。没有真实模型或真实凭据调用、运行服务切换及 MacBook 操作。
@@ -77,5 +79,7 @@
 合成 SDK 端到端已扩为5工具实际调用与成功信封，随后用户HTTP固化、同任务 simulation_evidence 读取具体回执；原用例只实际调用 inspect/draft/run，不能把另外两工具的“已暴露”写成实际调用。新增闭合文本与受管资源的实际 SDK open 排除检查，以及 defineTool 单能力的合规/绕过反例。受管测试首次因合成 fixture 未提供 projectDirectory 失败（`.local/simlab-takeover/seam-green-2.log`），已补齐 fixture；该次不计产品RED。
 
 工程规范已升至 **v1.3**，第2节固化“Qoder → Codex 移交交付模式”：开发、分支移交、Codex接管至合并三个阶段，单一写入者，非作者与干净上下文，及现有授权和复核约束。
+
+用户更新接手指令后，规范进一步明确接缝例外须有用户对具体变更的直接指定，IN06 记录范围、理由及维护回归；没有指定由 Codex 实施，先例或一般开工不自动授权。规范同时要求保留未获指定即实施的流程偏差，事后接受不追溯改为合规。
 
 后续适用全量检查、独立复核与职责边界最终结论在下文追加。Git/CI交付尚待用户授权，当前 origin/main `be1caaf` 较原基线已有PPT接缝更新，尚未集成本分支；原仓退役、MacBook体验及产品验收未执行。
