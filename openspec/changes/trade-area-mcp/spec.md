@@ -1,6 +1,6 @@
 # 商圈数据 MCP 连接器（首个连接器 · 标准奠基）
 
-状态：规格 v0.1（2026-11-03，按已确认决策 D1–D13 修订）；实施暂缓（讨论稿 D6），启动另行授权。
+状态：规格 v0.3（2026-11-03，已确认 D1–D13＋Codex接管实施授权）；本地接缝、完整检查及非作者独立复核完成，发现已闭合；用户已授权Git/CI及实际head CI通过后直接squash合并、main快进和归档，交付进行中；真实模型及MacBook采用仍另授权。
 
 2026-11-03 · 依据[商圈/天气 MCP 连接器能力承接产品讨论稿 v0.1](../../../docs/商圈天气MCP连接器能力承接产品讨论稿_v0.1.md) 制定；讨论稿决策 D1–D13 已全部经用户确认（2026-11-03），其中 D7（数据快照落位/公开仓不放经营数据/原仓暂不退役）、D8（任务级显式开启）、D9（交付顺序商圈先行）、D10（3 工具集）、D11（能力目录条目）、D13（全量 2835 家导入）直接约束本变更。本变更为两个独立连接器中的**首个**：交付商圈数据连接器本体，并随交付建立 **OptraCall MCP 连接器接入标准 v1**（含 [docs/mcp-connector-integration.md](../../../docs/mcp-connector-integration.md) 标准正文），供后续连接器（如天气）复用。天气连接器为独立变更（[weather-mcp](../weather-mcp/spec.md)），不随本变更交付。
 
@@ -28,17 +28,23 @@
 
 - 不做云端 MCP、远程部署、跨机服务；数据仅本机；
 - 不做写入类工具、订阅刷新、定时更新、原仓 ETL 重跑（数据以原仓产物快照承接）；
-- 不做页面 UI（无独立连接器页面，能力目录条目+导航即可）；不做独立进程/端口/探活协议；
+- 不做独立连接器页面；只实施已确认的能力目录、任务能力清单与版本行。不另建独立产品服务、监听端口或自管进程/探活协议；stdio子进程由既有SDK管理；
 - 不新建会话域/profile/owner，不建平行 Runtime，不改模型配置；
 - 不迁移原仓前端/ETL 工程；不处理原仓 `reports/`、`dist/` 等非数据底座内容；
 - 不做天气连接器（独立变更）、不做第三方 MCP 安装市场。
 
 ## Interface 接入记录（IN01）
 
+### Codex 接管补充（2026-11-03）
+
+- 初始HEAD `6633353`、基线 `7109a6e`，原清单20/20哈希一致，清单/移交包未改；独立工作树接管，原Qoder工作树在干净状态游离释放分支，唯一写入者转为Codex。原授权/缺口保留当时记录，本次用户已明确启动接缝实施，Git/CI、真实模型、MacBook采用仍各自另授权。
+- 任务能力采用保留 `simulationTools`、新增可选 `tradeAreaTools` 的 schema2 向后兼容字段方案，通用能力列表/开关API共用原生命周期；版本只读呈现与快照完整版本保留决定见 [structure-decisions.md](structure-decisions.md)。不新增会话域、owner/profile或Interface版本，不自动迁移/改写旧任务与native。
+- **IN06 薄层SDK导入例外（已通过两名非作者专项复核，限本候选）**：实测SDK1.4.0签名为 `pi.registerMcpServer(name, config)`，并非移交文档的单对象示例。SDK默认 `mcp.json` 同命名空间配置会覆盖extension注册（含command/env/exposure），仅保留名称白名单不足以保证任务开关与可信入口。公共SDK只导出 `LoadedMcpConfig` 类型，没有导出其默认loader；于唯一SDK导入面 `src/agent/sdk.ts` 通过固定字面量相对路径导入锁定1.4.0安装包的内部 `dist/extensions/mcp/config.js`（无任意动态模块加载），仅复用原 `loadMcpConfig` 函数，在其返回的同一解析结果中过滤产品保留namespace，保留其它用户MCP、信任判断和SDK错误。版本/函数不符则失败，不回退到未过滤loader，不重写配置解析或建立Runtime。升级SDK时必须重核/回归并在公共loader可用时移除此例外。覆盖同名/下划线碰撞不启动、其他配置仍可用、默认关闭及受管/封闭不加载。
+
 - 工程规范 v1.3；Interface v3（`src/host/agent-sessions.ts`）；**复用项目任务域 `project-tasks`，不注册新域**。
 - owner/profile：项目任务既有 owner（projectId+taskId）；连接器工具作为该域任务的可用能力经 SDK 既有 MCP 缝隙注入，不改变准入、模型选择、历史与续接策略。
-- 修改范围：`src/agent/project-session.ts` MCP 注册接线（Codex 维护）；连接器本体仅提供 server 与工具定义（Qoder 维护），不 import SDK 会话管理、不接触凭据。
-- 工具执行体为进程内纯只读计算（读本机 dataRoot 数据快照），无网络、无副作用；受管 ordinary/protected 及 fixed-draft/text-only 任务明确不注入（沿用现有 `disabledBuiltinExtensions` 边界）。
+- 修改范围：`src/agent/project-session.ts` MCP 注册接线（Codex 维护）；连接器本体仅提供 server 与工具定义（原 Qoder 实现，移交后 Codex 维护），不 import SDK 会话管理、不接触凭据。
+- 工具在SDK管理的stdio子进程中纯本地只读查询/计算（读本机dataRoot快照），无连接器网络请求与经营副作用；结果进入任务模型上下文。受管 ordinary/protected 及 fixed-draft/text-only 明确不注入。历史“进程内”描述由本次用户明确要求的stdio接线修正，不创建平行Runtime。
 - 事件/日志脱敏、凭据与资源权限全部沿用 Host 既有路径；本连接器无对外网络与凭据需求（egress=none）。
 
 ## 关键规则
@@ -58,7 +64,7 @@
 | --- | --- | --- |
 | TA01 | 3 工具经产品任务会话真实 SDK 路径可用（合成 Provider 驱动）：Agent 在任务中完成筛选→详情→评分全流程，多商圈对比由多次详情调用自主组合 | R2/R7 |
 | TA02 | 数据导入：幂等重跑一致、版本身份完整（HEAD/生成时间/条目数/哈希清单）、导入报告如实记录警告与脏值过滤 | R1/R3 |
-| TA03 | 缺失语义：未公开字段不造数、推断值带标记、缺因子评分=null；抽查原仓已知修正案例（如爱山广场零售额、湖州站双站）数据正确 | R3 |
+| TA03 | 缺失语义：未公开字段不造数、推断值带标记、缺因子评分=null；抽查原仓固定修正案例 C01（零售额修正口径）与 C02（双站区分）数据正确；具体实体映射保留于仓外私有验收证据 | R3 |
 | TA04 | 评分对照：`tradearea_score` 与原仓四因子算法在黄金权重集上结果一致（含权重比例语义） | R3 |
 | TA05 | 结构化报错覆盖参数越界/商圈不存在/分页越界；Agent 可依信封纠错 | R4 |
 | TA06 | 启用边界：默认任务无商圈工具；显式开启后可用；受管执行/封闭资源/fixed-draft 任务不注入；无平行 Runtime、无 SDK 绕过 | R5 |
@@ -73,7 +79,7 @@
 
 真实数据验证（参考数据经 MacBook 只读拷贝至 `.local/trade-area-ref/`）：全量 2835 家导入 `.local/trade-area-data-dev/`（sourceHead `2ba41d2`，57 分片，快照 digest `e9185d4e…d6fc`），**评分等价性 2835/2835 一致、0 不一致**；导入报告记录 12 条省份解析脏值（数据原样保留）；96 家 `score=null` 与原仓"2739/2835 可评分"吻合。stdio 真实路径冒烟通过（JSON-RPC 握手、三工具各一次、指标过滤与信封报错）。TDD 顺序：测试先行 RED（模块缺失失败）→ 实现 GREEN，两处夹具缺陷（metrics 未填原始值、分片结构包装差异）修正后 10/10；真实分片为纯数组（DistrictDetail[]），与合成夹具差异已按真实契约对齐。
 
-未完成（如实）：Host 接缝（会话注册/能力目录条目/dataRoot 正式落位）归 Codex 未实施；TA01（产品任务会话端到端）、TA07（浏览器点验）依赖接缝；真实模型任务实测属验收阶段。验证证据与命令见 [result.md](result.md)。
+移交当时未完成（历史事实，当前进度见 result 的 Codex 章节）：Host 接缝（会话注册/能力目录条目/dataRoot 正式落位）归 Codex 未实施；TA01（产品任务会话端到端）、TA07（浏览器点验）依赖接缝；真实模型任务实测属验收阶段。验证证据与命令见 [result.md](result.md)。
 
 **移交（2026-11-03）**：候选与移交包已固定为分支第三提交（[review-handoff.md](review-handoff.md)＋candidate-manifest.txt，20 文件哈希自校验通过）；分支所有权移交 Codex 至合并，Qoder 此后对本分支只读。天气连接器按 D9 于本变更合并后另起。
 
@@ -82,4 +88,16 @@
 - 新增单测+工具合同测试+导入测试+评分黄金对照；`npm run check` 全量；合成 Provider 端到端（TA01）；浏览器点验能力目录条目（TA07）。
 - Host-Agent 职责边界及复用专项检查按工程规范 §4 执行。
 - UI Demo：[原型](../../../docs/prototypes/connector-ui-demo.html)（能力目录条目、任务级开启、会话内开关、对话示意四场景）**用户已于 2026-11-03 全部确认**：①开启入口两处——新建任务对话框能力清单（泛化 sim-lab 单开关，商圈/天气独立勾选）＋会话内「Pi 能力与命令」面板开关（仅空闲时可切换，沿用 sim-lab 修正后的接缝语义）；②能力目录条目文案与导航照 Demo，两个条目按钮统一描边样式（不按交付先后区分）；③数据版本行位于 Pi 能力面板内（快照身份：版本·条目数·引擎身份·来源提交）。Demo 确认不构成实施启动授权（D6）。
-- 未决：产品 dataRoot 的正式导入在 Host 接缝集成时执行（参考数据已从 MacBook 原仓只读拷贝至本仓 `.local/trade-area-ref/`，开发验证用导入位于 `.local/trade-area-data-dev/`）；开启入口的 UI 实施细节随 Host 接缝（Codex）；实施启动后的 Git/CI、合并与 MacBook 更新分别另行授权。
+- 移交时待办（正式导入/UI 接缝现已完成，见 result）：产品 dataRoot 的正式导入在 Host 接缝集成时执行（参考数据已从 MacBook 原仓只读拷贝至本仓 `.local/trade-area-ref/`，开发验证用导入位于 `.local/trade-area-data-dev/`）；开启入口的 UI 实施细节随 Host 接缝（Codex）；实施启动后的 Git/CI、合并与 MacBook 更新分别另行授权。
+
+
+## Codex 本地收尾签收（2026-11-03）
+
+Host接缝、R1完整版本修复、两个独立P2修复及公开内容去标识已完成，详情见[result](result.md)与[两轴独立复核](independent-review.md)。任务字段/版本布局决定见[结构决定](structure-decisions.md)。最终运行候选v7的 `npm run check` 退出0：933项/930通过/0失败/3条件跳过，含边界、类型及构建；非作者规格轴/规范轴与工程§4职责边界/SDK复用、IN06专项均在已查范围通过。
+
+TA01为合成Provider驱动真实SDK/stdio路径，TA07为隔离合成浏览器操作；正式本机2835条导入、UI合成2样本与真实模型验收各自分开。当前未提交/push/开PR/运行hosted CI或合并；按用户指令先申请Git/CI授权，squash另等用户确认。真实模型、MacBook更新、服务切换、天气及未来来源版本导入未随本阶段执行。原Qoder阶段缺口及后续失败按当时范围保留，不因当前通过改写历史。
+
+
+## Git交付授权补充（2026-11-03）
+
+本地签收之后，用户明确授权Git/CI，实际head CI通过后直接squash合并，并安全快进本地main及完成OpenSpec归档，不再另询问合并。最新main仍7109a6e，原运行候选未发生集成源码增量；本补充仅记录权限与进度，不改TA01–TA10或运行边界。真实模型、MacBook更新、服务切换、天气及未来来源版本导入仍另行授权。

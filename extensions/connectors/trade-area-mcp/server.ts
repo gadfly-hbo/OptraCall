@@ -17,7 +17,7 @@ export interface ToolDefinition {
 
 const DATA_HINT = '数据为快照导入的已核定商圈档案（缺失字段＝未公开，不造占位值；inferred 标记推断值）；结果中的 dataVersion 标识数据版本，引用商圈事实时可注明。';
 
-// zod shape 只做基础类型收口；精确约束（整数/上下限/枚举/已知指标名）在 store 层校验，
+// zod shape 只做基础类型收口；精确约束（整数/上下限/枚举/已知键）在工具回调及 store 层校验，
 // 让违规以 isError + invalid_param 结构化信封返回（可被 Agent 自纠错），而非 SDK 协议错误。
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
@@ -29,7 +29,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       city: z.string().optional(),
       rating: z.string().optional(),
       keyword: z.string().optional(),
-      metrics: z.record(z.string(), z.object({ gte: z.number().optional(), lte: z.number().optional() })).optional(),
+      metrics: z.record(z.string(), z.looseObject({ gte: z.number().optional(), lte: z.number().optional() })).optional(),
       page: z.number().optional(),
       pageSize: z.number().optional(),
     },
@@ -48,7 +48,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     readonly: true,
     inputShape: {
       ids: z.array(z.string()),
-      weights: z.object({ traffic: z.number(), pop: z.number(), crowd: z.number(), parking: z.number() }).optional(),
+      weights: z.looseObject({ traffic: z.number().optional(), pop: z.number().optional(), crowd: z.number().optional(), parking: z.number().optional() }).describe('提供时须包含且仅包含 traffic/pop/crowd/parking 四个数值；完整性由工具实现返回结构化错误。').optional(),
     },
   },
 ];
@@ -64,10 +64,13 @@ export function createTradeAreaServer(options: { dataRoot: string }) {
   for (const definition of TOOL_DEFINITIONS) {
     server.registerTool(definition.name, {
       description: definition.description,
-      inputSchema: definition.inputShape,
+      // Preserve keys until the implementation can reject them with its envelope;
+      // z.object's default stripping would silently bypass precise-key checks.
+      inputSchema: z.looseObject(definition.inputShape),
       annotations: { title: definition.name, readOnlyHint: true },
     }, async (args: unknown) => {
       try {
+        if (Object.keys(args as object).some(key => !Object.hasOwn(definition.inputShape, key))) throw new ToolError('invalid_param', '参数包含未知字段');
         const payload = await handlers[definition.name](args);
         const result = payload as Record<string, unknown>;
         return {

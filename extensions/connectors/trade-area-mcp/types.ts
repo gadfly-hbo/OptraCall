@@ -88,6 +88,8 @@ export interface DataVersion {
   total: number;
   sourceHead: string;
   sourceRepo: string;
+  engineVersion: string;
+  importerVersion: number;
 }
 
 /** 中国 34 个省级行政区，用于导入报告识别省份解析脏值 */

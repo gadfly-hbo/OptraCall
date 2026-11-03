@@ -3,11 +3,12 @@
  * 重算一致，不一致 fail-closed）→ 原子写入 snapshot.json；同源重导为幂等 no-op。
  * 旧快照归档至 history/ 供追溯；省份解析脏值只记录不修改（数据保持原样）。 */
 
-import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DEFAULT_WEIGHTS, SCORING_ENGINE_VERSION, computeScore } from './scoring.ts';
 import { KNOWN_PROVINCES, type DataIndex, type DistrictSummary, type SnapshotManifest } from './types.ts';
+import { sha256, canonical, snapshotDigest, readSnapshotFile, readSnapshotManifest } from './snapshot.ts';
 
 export interface ImportOptions {
   sourceDir: string;
@@ -26,30 +27,36 @@ export interface ImportReport {
   warnings: { dirtyProvinces: { id: string; name: string; province: string }[] };
 }
 
-function sha256(buffer: Buffer): string {
-  return createHash('sha256').update(buffer).digest('hex');
-}
-
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value as Record<string, unknown>).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
 function readSource(sourceDir: string): { indexBuffer: Buffer; index: DataIndex; shards: { name: string; buffer: Buffer }[] } {
   const indexPath = path.join(sourceDir, 'index.json');
   if (!existsSync(indexPath)) throw new Error(`import: 源目录缺少 index.json（${indexPath}）`);
   const indexBuffer = readFileSync(indexPath);
   const index = JSON.parse(indexBuffer.toString('utf8')) as DataIndex;
-  if (typeof index.generatedAt !== 'string' || !Array.isArray(index.districts) || index.total !== index.districts.length) {
+  if (typeof index.generatedAt !== 'string' || !Number.isFinite(Date.parse(index.generatedAt)) || !Array.isArray(index.districts) || index.total !== index.districts.length) {
     throw new Error(`import: index.json 结构校验失败（total=${String(index.total)} 实际 ${index.districts?.length}）`);
   }
   const detailsDir = path.join(sourceDir, 'details');
   if (!existsSync(detailsDir)) throw new Error(`import: 源目录缺少 details/（${detailsDir}）`);
   const shards = readdirSync(detailsDir).filter(name => /^s\d+\.json$/.test(name)).sort().map(name => ({ name, buffer: readFileSync(path.join(detailsDir, name)) }));
   if (!shards.length) throw new Error('import: details/ 下没有 s{N}.json 分片');
+  const summaries = new Map<string, DistrictSummary>();
+  for (const district of index.districts) {
+    if (!district || typeof district.id !== 'string' || !district.id.trim() || summaries.has(district.id) || !Number.isSafeInteger(district.shard) || district.shard < 0) throw new Error('import: detail identity/index shard 无效或重复');
+    summaries.set(district.id, district);
+  }
+  const seen = new Set<string>();
+  for (const shard of shards) {
+    const records: unknown = JSON.parse(shard.buffer.toString('utf8'));
+    if (!Array.isArray(records)) throw new Error(`import: details/${shard.name} 须为详情数组`);
+    for (const record of records) {
+      if (!record || typeof record !== 'object' || typeof record.id !== 'string' || seen.has(record.id)) throw new Error('import: detail identity 缺失或重复');
+      const summary = summaries.get(record.id);
+      if (!summary || `s${summary.shard}.json` !== shard.name || Object.entries(summary).some(([key, value]) => canonical(record[key]) !== canonical(value))
+        || !record.dimensions || typeof record.dimensions !== 'object' || Array.isArray(record.dimensions)) throw new Error('import: detail 与 index 的身份、字段或分片不一致');
+      seen.add(record.id);
+    }
+  }
+  if (seen.size !== summaries.size) throw new Error('import: detail 分片不完整，拒绝导入缺失详情');
   return { indexBuffer, index, shards };
 }
 
@@ -90,29 +97,50 @@ export function importTradeAreaData(options: ImportOptions): ImportReport {
     engineVersion: SCORING_ENGINE_VERSION,
     generatedAt: index.generatedAt,
     total: index.total,
-    importerVersion: 1,
+    importerVersion: 2,
     files,
   };
-  const digest = sha256(Buffer.from(canonical(identity)));
+  const digest = snapshotDigest(identity);
 
   const snapshotPath = path.join(dataRoot, 'snapshot.json');
-  if (existsSync(snapshotPath)) {
-    const existing = JSON.parse(readFileSync(snapshotPath, 'utf8')) as SnapshotManifest;
-    if (existing.digest === digest) {
-      return { result: 'unchanged', total: index.total, shardCount: shards.length, snapshotDigest: digest, scoreEquivalence, warnings: { dirtyProvinces } };
+  mkdirSync(dataRoot, { recursive: true, mode: 0o700 });
+  const lock = path.join(dataRoot, '.import.lock');
+  const handle = openSync(lock, 'wx', 0o600);
+  try {
+    writeFileSync(handle, `${process.pid}\n`);
+    const preserveVersion = (manifest: SnapshotManifest, buffers: { path: string; bytes: Buffer }[]) => {
+      const versions = path.join(dataRoot, 'versions'), destination = path.join(versions, manifest.digest);
+      mkdirSync(versions, { recursive: true, mode: 0o700 });
+      if (existsSync(destination)) {
+        const saved = readSnapshotManifest(destination);
+        if (saved.digest !== manifest.digest) throw new Error('import: stored version identity mismatch');
+        for (const entry of saved.files) readSnapshotFile(destination, saved, entry.path);
+        return saved;
+      }
+      const stage = mkdtempSync(path.join(dataRoot, '.import-'));
+      mkdirSync(path.join(stage, 'details'), { mode: 0o700 });
+      for (const entry of buffers) writeFileSync(path.join(stage, entry.path), entry.bytes, { flag: 'wx', mode: 0o400, flush: true });
+      writeFileSync(path.join(stage, 'snapshot.json'), JSON.stringify(manifest, null, 2), { flag: 'wx', mode: 0o400, flush: true });
+      renameSync(stage, destination);
+      return manifest;
+    };
+    const existing = existsSync(snapshotPath) ? readSnapshotManifest(dataRoot) : undefined;
+    if (existing) {
+      const oldBuffers = existing.files.map(entry => ({ path: entry.path, bytes: readSnapshotFile(dataRoot, existing, entry.path) }));
+      if (existing.digest === digest) return { result: 'unchanged', total: index.total, shardCount: shards.length, snapshotDigest: digest, scoreEquivalence, warnings: { dirtyProvinces } };
+      preserveVersion(existing, oldBuffers);
     }
-    mkdirSync(path.join(dataRoot, 'history'), { recursive: true });
-    const archived = path.join(dataRoot, 'history', `snapshot-${existing.digest.slice(0, 16)}.json`);
-    if (!existsSync(archived)) writeFileSync(archived, JSON.stringify(existing, null, 2));
-  }
-
-  mkdirSync(path.join(dataRoot, 'details'), { recursive: true });
-  cpSync(path.join(sourceDir, 'index.json'), path.join(dataRoot, 'index.json'));
-  for (const shard of shards) cpSync(path.join(sourceDir, 'details', shard.name), path.join(dataRoot, 'details', shard.name));
-
-  const manifest: SnapshotManifest = { ...identity, importedAt: new Date().toISOString(), digest };
-  const tmp = `${snapshotPath}.tmp`;
-  writeFileSync(tmp, JSON.stringify(manifest, null, 2));
-  renameSync(tmp, snapshotPath);
-  return { result: 'imported', total: index.total, shardCount: shards.length, snapshotDigest: digest, scoreEquivalence, warnings: { dirtyProvinces } };
+    const manifest = preserveVersion({ ...identity, importedAt: new Date().toISOString(), digest }, [
+      { path: 'index.json', bytes: indexBuffer }, ...shards.map(shard => ({ path: `details/${shard.name}`, bytes: shard.buffer })),
+    ]);
+    if (existing) {
+      mkdirSync(path.join(dataRoot, 'history'), { recursive: true, mode: 0o700 });
+      const archived = path.join(dataRoot, 'history', `snapshot-${existing.digest}.json`);
+      if (!existsSync(archived)) writeFileSync(archived, JSON.stringify(existing, null, 2), { flag: 'wx', mode: 0o400, flush: true });
+    }
+    const tmp = `${snapshotPath}.${randomUUID()}.tmp`;
+    writeFileSync(tmp, JSON.stringify(manifest, null, 2), { flag: 'wx', mode: 0o600, flush: true });
+    renameSync(tmp, snapshotPath);
+    return { result: 'imported', total: index.total, shardCount: shards.length, snapshotDigest: digest, scoreEquivalence, warnings: { dirtyProvinces } };
+  } finally { closeSync(handle); unlinkSync(lock); }
 }

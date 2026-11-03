@@ -23,7 +23,7 @@ export async function startTestHost(options: { timeoutMs?: number; uiPort?: numb
   const baseUrl = `http://127.0.0.1:${port}`;
   const headers = { 'content-type': 'application/json', 'x-optracall-client': '1', origin: `http://127.0.0.1:${uiPort}` };
   return {
-    baseUrl, port, headers, scratch, dataRoot, projectsRoot,
+    baseUrl, port, pid: child.pid!, headers, scratch, dataRoot, projectsRoot,
     request: (route: string, method = 'GET', body?: unknown, signal?: AbortSignal) => fetch(baseUrl + route, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}), ...(signal ? { signal } : {}) }),
     output: () => ({ stdout, stderr }),
     close: async () => { if (child.exitCode !== null) return; child.kill('SIGTERM'); const [code] = await once(child, 'exit'); if (code !== 0) throw new Error(`Test Host shutdown failed (${code}): ${stderr}`); },

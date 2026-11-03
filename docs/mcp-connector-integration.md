@@ -27,36 +27,42 @@ extensions/connectors/<id>/
 
 | 字段 | 约定 |
 | --- | --- |
-| `id` / `name` / `version` | kebab-case id（即注册 server 名，工具全名 `mcp__<id 去连字符>__<tool>`）；name 供能力目录 |
+| `id` / `name` / `version` | kebab-case id（即注册 server 名，SDK把非英数/下划线字符转换为下划线）；本例工具全名 `mcp__trade_area_mcp__tradearea_search` 等；name 供能力目录 |
 | `kind` | `local-data`（本机数据快照）或 `remote-api`（外部 API 适配） |
 | `transport` | v1 为 `{type:'stdio', command, args, env}`——pi SDK 1.4.0 的 `registerMcpServer` 仅支持 stdio/http 注册（2026-11-03 核对），无 in-process 注册；升级 SDK 后如支持可增补 |
 | `egress` | 域名白名单数组；`local-data` 恒为 `[]`；`remote-api` 的白名单由 Host 侧强制执行，连接器无法自行扩大 |
 | `credentials` | `none` 或 `referenced`（仅引用，Host 解析，连接器不接触明文） |
 | `tools` | 工具名清单＋只读声明；`readOnlyHint` 如实标注且不作权限依据 |
-| `data` | datasetId、落位 `<dataRoot>/connectors/<id>/`、更新策略（v1 一律 `explicit-reimport` 或按查询即时获取） |
+| `data` | datasetId、清单明确的本机落位（本例 `<dataRoot>/connectors/trade-area/`，不从注册id猜路径）、更新策略（local-data 为 `explicit-reimport`） |
 | `standard` | 指回本文 |
 
 ## 3. 工具合同
 
 - **少量、正交、只读**；无写入/副作用工具；批量参数设上限（防上下文爆量，如单次 ≤50 对象、分页 ≤100）。
-- 工具 schema 用基础类型收口，精确约束（整数/上下限/枚举/已知键）在实现层校验——违规以 `isError` + 结构化信封返回而非协议错误，供 Agent 自主纠错。
+- 工具 schema 用基础类型收口；基础类型错误或缺少必需顶级字段可由 MCP SDK schema 校验拒绝，不保证进入工具回调。精确约束（整数/上下限/枚举/已知键、weights 四键完整性）在实现层校验，违规以 `isError` + 结构化信封返回，供 Agent 自主纠错。对象 schema 保留额外键后明确拒绝，不能用默认 strip 静默修正参数。
 - 错误信封：`{error:{code, message, detail?}}`，code ∈ `invalid_param` / `not_found` / `data_unavailable` / `capability_unsupported`（可按连接器扩展并 README 记录）。缺失/不完整**如实呈现，不填零、不造占位值**。
 - 结果携带**版本身份**（local-data：数据快照 digest；remote-api：来源＋获取时间＋缓存时效），供引用溯源。
 - 描述写明能力边界与诚实声明（如"情景推演非预测"“不产出结论”），激活分工不与其他连接器/skill 重叠抢激活。
 
 ## 4. 数据与版本（local-data）
 
-- 快照式导入：源数据（ETL 产物等）→ 逐文件 SHA-256 清单 → 内容寻址 digest → 原子写 `snapshot.json`；导入前做**等价性/一致性核对**，不一致 fail-closed 拒绝导入。
-- 快照不可变；更新＝显式重导新版，旧快照归档 `history/`；同源重导幂等 no-op。
-- 数据仅存 `<dataRoot>/connectors/<id>/`；**公开仓不含经营数据**；已知脏值只记录不改数据。
-- 派生计算（评分/聚合）实现为带版本标识的确定性引擎（同输入同输出，逐字节/逐值一致），黄金对照进长期测试。
+- 快照式导入：源数据（ETL 产物等）→ index/详情身份和完整性核对 → 逐文件 SHA-256 清单 → 内容寻址 digest；评分不一致或详情缺失/冲突 fail-closed。
+- 本例 importerVersion 2 先把完整 manifest/index/details 写入 `versions/<完整digest>/`，独占导入锁下完成版本再原子发布根 `snapshot.json`；已存版本不覆盖，旧manifest另留history。旧v1平铺根只读兼容，首次更新保存完整旧版且不覆盖其平铺数据；数据布局及回退限制见变更[结构决定](../openspec/changes/trade-area-mcp/structure-decisions.md)。
+- reader绑定首次所读manifest与完整版本目录，按需验证实际文件长度/哈希；同源重导也验证已存内容才返回幂等no-op，不用相同digest掩盖损坏。版本身份包括 sourceHead/generatedAt/total/engineVersion/importerVersion 和文件清单。
+- 数据根按清单 `data.location` 明确分配，本例 `<dataRoot>/connectors/trade-area/`（不可从注册 id 猜路径）；**公开仓不含经营数据**；已知脏值只记录不改数据。
+- 派生计算（评分/聚合）实现为带版本标识的确定性引擎（同输入同输出，逐字节/逐值一致），黄金对照进长期测试。本例 `engineVersion` 标识四因子业务数学合同，不是实现字节指纹；同公式的数值表示修正由源码提交/候选摘要区分，保留修正前反例，不声称全输入前后逐值等价。
 
 ## 5. Host 接缝（Codex 归属）
 
-1. **会话注册**：经环境扩展 `pi.registerMcpServer({name: <id>, config: <connector.json transport>})` 注入普通任务（仅任务级显式开启后；对齐 sim-lab 修正后的接缝语义：仅空闲时切换，经公共生命周期释放旧资源）。受管执行、封闭资源、fixed-draft/text-only 任务不注入（沿用现有 `disabledBuiltinExtensions` 边界）。
+1. **会话注册**：实际SDK1.4.0 API为 `pi.registerMcpServer(name, config)`。Host使用当前Node绝对路径、可信codeRoot下server绝对入口和Host构造的数据根；env按SDK规则转义字面量美元符，command/args不套env模板。仅任务级显式开启后注册普通任务；空闲变化先经公共生命周期close再保存，新open/send重建。受管 ordinary/protected、fixed-draft/text-only 不注入；不新增域/profile/owner或Runtime。
 2. **能力目录**："连接器"分区"已接入"条目（形态对齐 target-forecast 先例）＋ `openCatalogEntry` 导航到项目视图。
-3. **数据落位**：分配 `<dataRoot>/connectors/<id>/`；导入后校验快照完整。
+3. **数据落位**：按清单 `data.location` 分配，本例 `<dataRoot>/connectors/trade-area/`；导入后校验快照完整。
 4. **出境强制**（remote-api）：传输层仅放行清单域；开启时一次性向用户说明出境内容（D12），不逐次确认。
+
+5. **工具目录与配置边界**：本例server默认 `exposure:hidden`，仅三个确切名字以 `toolExposure:direct` 放行；配置文件的同保留namespace不能替换产品server或绕过任务开关，其他用户MCP保留。因SDK默认配置优先覆盖注册且未公开默认loader，唯一SDK导入面有锁定1.4.0的最小私有loader复用例外，理由/退出条件见[IN06记录](../openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)，须非作者专项复核；不新增任意动态loader白名单。
+6. **可观测目录指纹**：利用SDK公开 `getAllTools` 和 `tool_call` hooks，完整三名目录首次就绪后固定其名称/描述/参数/exposure指纹。观察到变化或缺失后，本worker资源中的商圈调用持续拒绝，含codemode嵌套；目录改回或SDK reload不清冻，关闭重建资源才重新取基线。`before_agent_start`仅观测，不冒充可取消门禁。不把SDK适配缓存当完整raw `tools/list`，不声称检查与RPC原子、能撤回在途调用或发现未通知/未刷新变化。
+
+stdio生命周期沿用SDK：普通stop取消当前请求、保留可复用server；公共close经既有 `runtime.dispose()` 等待MCP关闭。本例直接stdio子进程退出有实测，不把SDK默认close扩大为所有逃逸后代收尾证明；受管路径继续排除。local-data代码只读本机文件，不发网络请求；工具结果仍进入所选任务模型上下文。SDK stdio默认继承driver环境，不构成凭据或OS文件沙箱；无新增凭据配置。天气及remote-api白名单实施属后续独立变更，本次不宣称已完成。
 
 Qoder 交付连接器本体（server/工具/适配/导入脚本/测试/README）与适用证据；接缝实施与主链路回归归 Codex。未经用户对具体变更直接指定，Qoder 不实施接缝（工程规范 v1.3 IN06）。
 

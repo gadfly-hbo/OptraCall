@@ -115,6 +115,7 @@ footer.demo-footer { margin-top: 26px; padding-top: 12px; border-top: 1px solid 
     <div>
       <h1>商圈/天气 MCP 连接器</h1>
       <p class="sub">能力目录条目 · 任务级开启 · 天气出境说明 · 会话内可用能力</p>
+      <p class="hint">静态交互原型：所有项目、商圈、数值、天气及模型对话均为合成示意，不来自真实经营记录，不调用模型或数据接口。天气仅为后续独立变更的设计，本分支未接入。</p>
     </div>
   </div>
   <div class="principle-strip">
@@ -230,7 +231,7 @@ footer.demo-footer { margin-top: 26px; padding-top: 12px; border-top: 1px solid 
       <span>灰＝既有工具</span><span>蓝＝连接器工具</span><span class="new-legend">紫＝本次新增的连接器开关</span>
     </div>
     <div class="chat-frame">
-      <div class="chat-head"><strong>湖州新店选址评估</strong><span>湖州万达广场项目 / 任务 2</span><span style="margin-left:auto">空闲</span></div>
+      <div class="chat-head"><strong>湖州新店选址评估</strong><span>合成商圈B项目 / 任务 2</span><span style="margin-left:auto">空闲</span></div>
       <div class="chat-body">
         <details class="harness" open>
           <summary>Pi 能力与命令</summary>
@@ -265,7 +266,7 @@ footer.demo-footer { margin-top: 26px; padding-top: 12px; border-top: 1px solid 
   <section class="tab-panel" data-panel="chat">
     <div class="panel-heading">
       <h2>对话使用示意</h2>
-      <p class="hint">Agent 自主决定查询与组合方式；工具调用与结果在会话中可展开查看</p>
+      <p class="hint">以下档案、评级、评分、排名和天气结论全部为合成示意。Agent 自主决定查询与组合方式；工具调用与结果在会话中可展开查看</p>
     </div>
     <div class="chat-demo">
       <div class="msg user">
@@ -273,17 +274,17 @@ footer.demo-footer { margin-top: 26px; padding-top: 12px; border-top: 1px solid 
         <div class="body">帮我在湖州看几个候选商圈，客流和周边人口要好，租金先不管；再结合去年 10 月的天气看看周末客流会不会被降水压住。</div>
       </div>
       <div class="tool-call">调用工具 · tradearea_search {"city":"湖州","metrics":{"trafficWeekday":{"gte":2}},"pageSize":20}</div>
-      <div class="tool-result">返回 8 家商圈摘要 · 数据版本 v2026-11-02 · 湖州爱山广场(S)、湖州万达广场(A+)、东吴银泰城(A)…</div>
+      <div class="tool-result">返回 8 家商圈摘要 · 数据版本 v2026-11-02 · 合成商圈A(S)、合成商圈B(A+)、合成商圈C(A)…</div>
       <div class="tool-call">调用工具 · tradearea_detail {"ids":["0003","0087","0121"]}</div>
-      <div class="tool-result">返回 3 家完整档案：12 维度全文＋来源＋可信度；爱山广场「日均客流」为推断值（inferred），未公开字段无值不造数</div>
+      <div class="tool-result">返回 3 家完整档案：12 维度全文＋来源＋可信度；合成商圈A「日均客流」为推断值（inferred），未公开字段无值不造数</div>
       <div class="tool-call">调用工具 · weather_history {"lat":30.87,"lon":120.09,"start":"2025-10-01","end":"2025-10-31","fields":["precipSum"]}</div>
       <div class="tool-result">返回 31/31 日降水；其中 6 个周末日降水＞10mm（缓存 41h 前获取，已标注时效）</div>
-      <div class="tool-call">调用工具 · tradearea_score {"ids":["0003","0087","0121"],"weights":{"traffic":40,"pop3km":30,"crowd":20,"parking":10}}</div>
-      <div class="tool-result">评分：爱山广场 78.2 · 万达广场 71.5 · 银泰城 65.0（客流权重已按你的要求上调）</div>
+      <div class="tool-call">调用工具 · tradearea_score {"ids":["0003","0087","0121"],"weights":{"traffic":40,"pop":30,"crowd":20,"parking":10}}</div>
+      <div class="tool-result">评分：合成商圈A 78.2 · 合成商圈B 71.5 · 合成商圈C 65.0（客流权重已按你的要求上调）</div>
       <div class="msg">
         <div class="author">OptraCall · minimax-m31-flash</div>
-        <div class="body">三家候选中爱山广场综合最强（基于商圈数据 v2026-11-02）：客流与 3 公里人口均列湖州前 20%，客群与服饰定位匹配度高；但注意其客流为推断口径（可信度 B）。去年 10 月四个周末有明显降水，若规律延续，露天街区型商圈（银泰城周边）周末客流风险更高，爱山广场以室内动线为主、受影响较小。<br>我的判断和依据如上；三家完整档案与评分参数可继续追问，也可以调整权重重算。</div>
-        <p class="meta">商圈事实源自本机数据快照（可溯源）；天气源自 Open-Meteo 历史档案（缓存已标注）；分析结论为 Agent 判断，未预设。</p>
+        <div class="body">三家候选中合成商圈A综合最强（基于商圈数据 v2026-11-02）：客流与 3 公里人口均列湖州前 20%，客群与服饰定位匹配度高；但注意其客流为推断口径（可信度 B）。去年 10 月四个周末有明显降水，若规律延续，露天街区型商圈（合成商圈C周边）周末客流风险更高，合成商圈A以室内动线为主、受影响较小。<br>我的判断和依据如上；三家完整档案与评分参数可继续追问，也可以调整权重重算。</div>
+        <p class="meta">本段为合成对话，未读取真实快照、未访问 Open-Meteo、未调用模型。正式产品的工具结果应标注实际数据版本与来源；分析由 Agent 自主完成。</p>
       </div>
     </div>
     <p class="hint" style="margin-top:12px">本页展示的是能力注入：没有强制步骤或顺序，Agent 按问题自主选择查询、组合与解读；对比、排序等推导由 Agent 完成（D10，无 compare 工具）。</p>

@@ -65,12 +65,16 @@ export function computeScore(percentiles: PercentileMap, weights: ScoreWeights =
     weight: weights[key],
   })).filter(factor => factor.value !== null && factor.weight > 0);
 
-  const totalWeight = factors.reduce((sum, factor) => sum + factor.weight, 0);
-  if (!totalWeight) return { score: null, factors: [] };
+  if (!factors.length) return { score: null, factors: [] };
 
   const enabled = (Object.keys(weights) as FactorKey[]).filter(key => weights[key] > 0);
   if (!enabled.every(key => values[key] !== null)) return { score: null, factors };
 
-  const weighted = factors.reduce((sum, factor) => sum + (factor.value as number) * factor.weight, 0);
-  return { score: Math.round((weighted / totalWeight) * 10) / 10, factors };
+  // Normalize before any weight sums/products, preserving proportional semantics
+  // at huge and subnormal scales. Keep original weights for completeness above
+  // and for the returned receipt, even if a relative weight rounds down to zero.
+  const maximum = Math.max(...factors.map(factor => factor.weight));
+  const denominator = factors.reduce((sum, factor) => sum + factor.weight / maximum, 0);
+  const numerator = factors.reduce((sum, factor) => sum + (factor.value as number) * (factor.weight / maximum), 0);
+  return { score: Math.round((numerator / denominator) * 10) / 10, factors };
 }
