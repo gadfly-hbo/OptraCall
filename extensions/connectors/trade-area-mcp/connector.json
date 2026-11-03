@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "trade-area-mcp",
+  "name": "商圈数据",
+  "version": "0.1.0",
+  "kind": "local-data",
+  "transport": {
+    "type": "stdio",
+    "command": "node",
+    "args": ["extensions/connectors/trade-area-mcp/main.ts"],
+    "env": { "TRADEAREA_DATA_ROOT": "<dataRoot>/connectors/trade-area" }
+  },
+  "egress": [],
+  "credentials": "none",
+  "tools": [
+    { "name": "tradearea_search", "readonly": true },
+    { "name": "tradearea_detail", "readonly": true },
+    { "name": "tradearea_score", "readonly": true }
+  ],
+  "data": {
+    "datasetId": "optracall-tradearea-data",
+    "location": "<dataRoot>/connectors/trade-area",
+    "updatePolicy": "explicit-reimport",
+    "importScript": "extensions/connectors/trade-area-mcp/scripts/import-data.mjs"
+  },
+  "standard": "docs/mcp-connector-integration.md"
+}

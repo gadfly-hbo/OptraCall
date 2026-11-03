@@ -13,7 +13,7 @@
 ## 范围
 
 - 新建 `extensions/connectors/trade-area-mcp/`（连接器标准 v1 首例，目录与清单结构按标准执行）：
-  - `connector.json`：id `trade-area-mcp`、kind `local-data`、transport `in-process`（以实施时核对的 SDK 能力为准）、egress `none`、credentials `none`、工具清单（只读声明）、数据版本身份栏位；
+  - `connector.json`：id `trade-area-mcp`、kind `local-data`、transport `stdio`（实施核对 2026-11-03：pi SDK 1.4.0 `registerMcpServer` 仅支持 stdio/http 注册，无 in-process 注册）、egress `none`、credentials `none`、工具清单（只读声明）、数据版本身份栏位；
   - `server/`：MCP server 本体与 3 个正交只读工具（`tradearea_search` / `tradearea_detail` / `tradearea_score`，参数 schema 与报错信封以实施规格细化）；
   - `scripts/import-data.mjs`（或同等形态）：从 trade-area 原仓 ETL 产物（`public/data/index.json`+详情分片，全量 2835 家，D13）快照式导入本机 dataRoot，记录数据版本身份（原仓 HEAD、generatedAt、条目数、内容哈希清单），幂等重跑；
   - `README.md`：解决任务、输入输出、数据来源与版本、权限与数据出口（无网络无凭据）、启停方式。
@@ -67,9 +67,17 @@
 | TA09 | 标准正文 `docs/mcp-connector-integration.md` 随交付落仓，内容与本实现一致，可独立理解 | R6 |
 | TA10 | 既有链路回归通过；`npm run check`（含 agent-session 边界检查）通过 | — |
 
-## 适用检查与未决
+## 实施记录（Qoder 侧，2026-11-03）
+
+用户授权产品开发（AGENTS.md 当前授权段），Qoder 完成连接器本体与标准正文：`extensions/connectors/trade-area-mcp/`（types/scoring/store/server/main/import-data/connector.json/scripts/README）＋ `docs/mcp-connector-integration.md`（标准 v1）＋ `tests/trade-area-mcp.test.ts`。依赖新增 `@modelcontextprotocol/sdk@1.32.2`、`zod@4.6.7`（package.json/lock 同步）。实施核对：pi SDK 1.4.0 `registerMcpServer` 仅支持 stdio/http，connector.json transport 定为 `stdio`；工具 schema 用 zod 基础类型收口、精确约束在 store 层校验（违规走 `isError`+`invalid_param` 信封而非协议错误）。
+
+真实数据验证（参考数据经 MacBook 只读拷贝至 `.local/trade-area-ref/`）：全量 2835 家导入 `.local/trade-area-data-dev/`（sourceHead `2ba41d2`，57 分片，快照 digest `e9185d4e…d6fc`），**评分等价性 2835/2835 一致、0 不一致**；导入报告记录 12 条省份解析脏值（数据原样保留）；96 家 `score=null` 与原仓"2739/2835 可评分"吻合。stdio 真实路径冒烟通过（JSON-RPC 握手、三工具各一次、指标过滤与信封报错）。TDD 顺序：测试先行 RED（模块缺失失败）→ 实现 GREEN，两处夹具缺陷（metrics 未填原始值、分片结构包装差异）修正后 10/10；真实分片为纯数组（DistrictDetail[]），与合成夹具差异已按真实契约对齐。
+
+未完成（如实）：Host 接缝（会话注册/能力目录条目/dataRoot 正式落位）归 Codex 未实施；TA01（产品任务会话端到端）、TA07（浏览器点验）依赖接缝；真实模型任务实测属验收阶段。验证证据与命令见 [result.md](result.md)。
+
+
 
 - 新增单测+工具合同测试+导入测试+评分黄金对照；`npm run check` 全量；合成 Provider 端到端（TA01）；浏览器点验能力目录条目（TA07）。
 - Host-Agent 职责边界及复用专项检查按工程规范 §4 执行。
 - UI Demo：[原型](../../../docs/prototypes/connector-ui-demo.html)（能力目录条目、任务级开启、会话内开关、对话示意四场景）**用户已于 2026-11-03 全部确认**：①开启入口两处——新建任务对话框能力清单（泛化 sim-lab 单开关，商圈/天气独立勾选）＋会话内「Pi 能力与命令」面板开关（仅空闲时可切换，沿用 sim-lab 修正后的接缝语义）；②能力目录条目文案与导航照 Demo，两个条目按钮统一描边样式（不按交付先后区分）；③数据版本行位于 Pi 能力面板内（快照身份：版本·条目数·引擎身份·来源提交）。Demo 确认不构成实施启动授权（D6）。
-- 未决：SDK in-process transport 的确切注册方式以实施时锁定的 SDK 版本核对为准；数据从 MacBook 原仓取得到 Mac mini dataRoot 的搬运方式（一次性拷贝或经 GitHub 克隆后导入）实施时定；实施启动、Git/CI、合并与 MacBook 更新分别另行授权。
+- 未决：产品 dataRoot 的正式导入在 Host 接缝集成时执行（参考数据已从 MacBook 原仓只读拷贝至本仓 `.local/trade-area-ref/`，开发验证用导入位于 `.local/trade-area-data-dev/`）；开启入口的 UI 实施细节随 Host 接缝（Codex）；实施启动后的 Git/CI、合并与 MacBook 更新分别另行授权。
