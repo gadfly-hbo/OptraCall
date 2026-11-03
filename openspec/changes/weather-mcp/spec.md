@@ -1,6 +1,6 @@
 # 天气 MCP 连接器（Open-Meteo 历史天气 · 第二个连接器）
 
-状态：**本地实施、检查及非作者独立复核完成，待真实API/Git授权（2026-11-03）**——商圈连接器已合并 main（squash `2c56dd2`，PR #27），本变更按 D9 在其后独立实施；对齐合并版[标准 v1](../../../docs/mcp-connector-integration.md)（transport 定为 stdio；接缝形态对齐 trade-area 先例：任务能力开关、`registerMcpServer(name, config)`、目录指纹冻结、受管任务不注入）。实施决定（随启动落定）：**单工具 `weather_history`**（来源/许可说明并入工具描述，可推导不设 meta 工具，同 D10 原则）；城市名→坐标 v1 仅内置少量常用城市，其余用经纬度；缓存时效默认 72 小时（可配置）；查询时区固定 `Asia/Shanghai` 并在结果标注；日期跨度上限 366 天。
+状态：**已整合最新 main、单次真实 API 冒烟通过，Git/CI交付中；squash待确认（2026-11-03）**——商圈连接器已合并 main（squash `2c56dd2`，PR #27），本变更按 D9 在其后独立实施；对齐合并版[标准 v1](../../../docs/mcp-connector-integration.md)（transport 定为 stdio；接缝形态对齐 trade-area 先例：任务能力开关、`registerMcpServer(name, config)`、目录指纹冻结、受管任务不注入）。实施决定（随启动落定）：**单工具 `weather_history`**（来源/许可说明并入工具描述，可推导不设 meta 工具，同 D10 原则）；城市名→坐标 v1 仅内置少量常用城市，其余用经纬度；缓存时效默认 72 小时（可配置）；查询时区固定 `Asia/Shanghai` 并在结果标注；日期跨度上限 366 天。
 
 2026-11-03 · 依据[商圈/天气 MCP 连接器能力承接产品讨论稿 v0.1](../../../docs/商圈天气MCP连接器能力承接产品讨论稿_v0.1.md) 制定。本变更为两个独立连接器中的**第二个**：交付天气连接器本体，复用 [trade-area-mcp](../trade-area-mcp/spec.md) 随交付建立的 [MCP 连接器接入标准 v1](../../../docs/mcp-connector-integration.md)（目录、清单、工具合同、Host 接缝模式同源），验证标准的可复用性；不随该变更交付，不共享分支或合并批次。
 
@@ -94,3 +94,16 @@ Codex接缝与发现修复、浏览器点验、两名干净上下文非作者独
 WX01真SDK合成路径、WX02–WX08本地适用范围与WX09本地完整检查闭合；真实Open-Meteo单次湖州2025-10冒烟未授权未运行，真实源响应/限流/延迟未验。Git/Hosted CI/合并归档未授权未执行；真实模型任务、服务采用及MacBook仍另行授权。当前分支保留未提交Codex增量，主仓main未改，不把本地工程通过称产品验收。
 
 最新main读回已前进至 `4a3be3d`（PR #28）；本地当前候选仍基于351d835，新增main尚未集成。Git授权后先集成/重验共用接缝，再进行实际head CI；本地阶段通过不代表该集成已完成。
+
+
+## 获授权后的集成与真实源阶段（2026-11-03）
+
+用户对上一条明确列出的两项回复“授权”：①单次湖州2025-10真实API冒烟；②Git/CI（先集成最新main、重验、提交推送、单PR、实际head CI）。squash仍需CI通过后用户确认，真实模型及MacBook更新未授权。上文旧阶段的未集成/未授权状态保留为历史；本节为当前阶段。
+
+先将已验天气增量固定为264559e，再fetch并合入最新origin/main `4a3be3d36b6c2511635b2c044de2068b6b6ca4df`，合并提交 `afbd81a3ec8ce335fd841c5095c04d468dd61541`。App两处冲突均保留双方意图：新main的需求返回上下文、TaskWorkflow、前置核算及结果布局，叠加天气目录导航和TaskCapabilityList任务key；store/server/styles自动合并后重新验证。工程规范现v1.4，§2及IN01–IN07未变，Interface仍v3、owner/profile及原loader例外不扩展。
+
+新完整561文件候选独立复核/受影响探针与浏览器回归完成；root新 `npm run check` exit0：964项961通过/0失败/3条件SKIP，边界/类型/构建通过。两名非作者独立复核集成增量、Host–Agent职责/SDK复用和IN06通过，无未关闭发现；详见 [independent-review.md](independent-review.md) 最新集成报告。旧基线绿色未用作新main的替代。
+
+获授权真实API通过生产weather-mcp-entry→P/Q的MCP stdio执行唯一weather_history：湖州坐标30.8671/120.1023、2025-10-01..31、两字段、Asia/Shanghai；查询约1505ms，31/31日完整、无缺失/重复/null，cache miss及落盘/本地文件读回一致、P/Q正常退出。该次由root烟测脚本直接启动生产传输；不冒称经PiSDK真实模型分析。工具派发1次、自动重试0；脚本未观察底层HTTP包数、剩余配额或供应商费用。真实源可用性结论只覆盖该次输入/时刻，真实模型质量及用户产品验收仍待另验。
+
+后续单PR、实际head CI按真实Git/Actions身份核定；本规格不预填未来CI/合并结果。合并、main快进及OpenSpec归档仍待获准执行，不因API冒烟或Git授权自动操作设备/服务。

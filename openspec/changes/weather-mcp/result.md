@@ -1,6 +1,6 @@
 # 天气 MCP 连接器 · 实施与验证记录
 
-2026-11-03 · 分支 `qoder/weather-mcp`（基于合并后 main `351d835`）· 状态：Codex 接缝、修复、本地完整检查和非作者独立复核均完成；真实 API、Git/CI、模型及设备未授权未执行。下列 Qoder 记录保留接管前原范围，当前增量见文末。
+2026-11-03 · 分支 `qoder/weather-mcp`（基于合并后 main `351d835`）· 状态：本地实施、最新main集成/重验及非作者复核完成；获授权单次真实API冒烟通过，Git/CI交付中；合并待确认，真实模型和设备未授权。下列 Qoder 记录保留接管前原范围，当前增量见文末。
 
 ## 授权与流程
 
@@ -121,3 +121,30 @@ tests/weather-mcp.test.ts   # 10 项测试（合成 HTTP 夹具，零真实网�
 本地验收映射：WX01合成真实SDK路径通过（真实API/真实模型待验）；WX02/03/04、WX05本机macOS强制、WX06能力/资源边界、WX07目录及D12、WX08标准复用、WX09本地完整工程检查通过。没有真实API或该API域DNS、真实模型、Git提交/推送/PR/CI/合并、MacBook或生产服务切换；主仓main保持清洁。下一授权门：单次湖州2025-10全月真实API冒烟；集成main、提交推送、单PR、实际head CI；squash合并仍待用户明确确认。真实模型和MacBook更新按用户首句另行授权，不自动执行。
 
 收尾时共享主仓已由其他变更前进到 `4a3be3d36b6c2511635b2c044de2068b6b6ca4df`（PR #28，trial uploads/analysis setup修复），main及origin/main读回同头且清洁。本任务未移动main。该增量触及App/server/project-store等共用接缝；上文本地v5验证仍只对应原base351d835上的天气候选，没有集成或覆盖该新main。后续Git获授权后必须先集成最新main并重验受影响部分及独立复核增量，重新取得实际head CI，不沿用旧基线绿色。
+
+
+## 后续授权与集成交付阶段（2026-11-03）
+
+用户回复“授权”，覆盖上一答复明确列出的单次Open-Meteo冒烟及Git/CI两项，不包含squash、真实模型、MacBook或服务切换。原接管、本地及旧基线记录不回写；以下记录新的实际事实。
+
+| 对象 | 实际身份/结果 |
+| --- | --- |
+| 初次Codex提交 | `264559e`固定原已验候选，38个本任务文件；暂存后发现汇总报告末尾空白，删除空白后cached diff --check通过（无代码/测试变化），不隐藏原检查发现 |
+| 集成main | fetch确认origin/main=`4a3be3d36b6c2511635b2c044de2068b6b6ca4df`；保留历史merge至 `afbd81a3ec8ce335fd841c5095c04d468dd61541`，树 `5cb492a3f1aa2713bd821a875a08c32e3e5ca110`。只App两处文本冲突，保留main需求上下文/前置自动核算/结果区/TaskWorkflow，再加weather导航和taskcap key，无新行为 |
+| 新完整候选 | `integrated-candidate-v1.json` SHA256 `96918feecd635f12aa9fcd6ab06eb22decf6d6fd4b6050fbf6eb1f3dc3b41042`，561文件；root检查与两轴目标运行后全哈希零差异。package/lock、SDK薄层、公共生命周期和P/Q治理代码未因main集成改变 |
+| root新全量 | `integrated-full-check.log`实际exit0，964项961PASS/0FAIL/0cancelled/3条件SKIP，边界/tsc/Vite/stamp完成；logSHA `143a2e4c8482b1b02ce6dabd6037c43b67c3ee55bfb4aec01df505d50b55b92e`；`integrated-full-check-receipt.json` SHA256 `dd66cacca4265c31b8060bb3a600da1f0e8abc255cbcb48a562b90eb310f1500`。原3条条件SKIP和>500kB chunk提示继续保留，不称PPT页面图已验 |
+| 集成Spec独立复核 | 新561文件上48/48目标、11/11独立反例/二进制上传-天气能力交叉探针、实际SDK四模式排除、边界/类型通过；上传/原件复制/下载逐字节、重启旧元数据读取不补写、归档/Provider0等重新实跑 |
+| 集成Standards独立复核 | 新561文件上26/26目标、实际SDK四模式、A/B真实资源隔离、边界/类型通过；App两来源反向重建只增weather导航/key，原main流程意图保留；§4职责/SDK复用及IN06复用通过 |
+| 集成浏览器 | `ui-qa-integrated/`：目录天气导航，新步骤/50MiB提示，需求往返原URL/草稿，原auto dialog保留输入/关闭回焦点/off，三能力及D12 A1→B0→B自身重开1，合成天气缓存引用及reload不重放。两个实际截图及AX保留，console[]；导航/设置Provider0，明确send后共2；QA正常关闭。两轴只读核证据，不冒称自己操作浏览器 |
+
+### 单次真实Open-Meteo冒烟
+
+原始证据位于仓外 `live-api-authorized/weather-huzhou-2025-10-2xvMwW/`，不把真实源原始数据发布到公开仓。生产入口/传输/连接器10个源码SHA与集成候选相符，脚本最小环境、无真实模型/凭据、无上游覆盖或放宽白名单。
+
+- 原RPC只有一条 `weather_history` 工具派发：lat30.8671/lon120.1023，2025-10-01..31，temperature_2m_mean与precipitation_sum，Asia/Shanghai；自动重试0，未再发缓存命中查询。
+- 返回 `LIVE_SMOKE_PASS`，工具查询1505.423ms，expected/actual=31/31，日期/两字段齐全，无missing/duplicate/null；来源/许可/fetchedAt/cache.hit=false如实标注。
+- 唯一缓存2746字节，SHA256 `f364106990add7b643df26618ed605bd23a43af2d9189f768c6c5569fccf4277`，request/daily/fetchedAt与payload及独立读回完全一致；P退出0、Q关闭后ESRCH。此烟测由root直接启动生产P/Q stdio，进程组归烟测脚本管理；真正PiSDK生命周期另由weather-agent-flow及独立owner测试证明，两者不混称真实模型运行。
+- `receipt.json` SHA256 `514ba484e3c188c6aa248953b901ac994e448003c7c8034592255c3ead00b98a`；两轴只读核原RPC、源码、cache和生命周期原件，无额外API或DNS。保留一次性派发marker，未自动重试。
+- 该响应未出现限流错误；剩余配额/限流真实失败、底层HTTP发包次数、费用及供应商结算未观察，不把tool1推成已抓包证明HTTP1或免费结算。该次成功仅证明这个输入/时刻/生产传输合同，不代证长期天气正确性或模型经营分析质量。
+
+当前WX01真实源冒烟补证、WX02–08集成范围、WX09本地完整及独立复核均有新证据；最终PR与实际head CI以本次Git/Actions及仓外交付回执核定，不预写未来身份以避免自引用文档循环。squash合并仍待用户确认，main快进/OpenSpec归档在获准合并后执行。真实模型、MacBook更新和Mac mini运行采用仍未执行。

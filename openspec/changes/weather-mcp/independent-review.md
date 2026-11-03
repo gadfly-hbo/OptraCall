@@ -1,5 +1,7 @@
 # 历史天气 MCP · 非作者独立复核
 
+**后续授权阶段更新（2026-11-03）：** 当前已整合main4a3be3d，运行候选为561文件，完整检查964项961通过/0失败/3条件SKIP；两轴在新候选上独立重验通过。root获授权真实源冒烟另次执行成功，两轴只读核原件，非真实模型分析。旧v5/555文件本地阶段及原“未集成/未授权”记录保留为历史；最新集成报告和范围澄清在文末，Git/Hosted CI与squash结果仍分别核定。
+
 2026-11-03。本地工程范围结论：**Spec轴、Standards轴及工程§4 Host–Agent职责边界/SDK复用、IN06既有例外复用均通过；已发现项均修复并独立重验，无未关闭可行动发现。** 结论限下述固定候选与实际证据，不代证真实API/真实模型、Hosted CI、Git交付/合并、设备采用或产品验收。
 
 ## 身份与独立性
@@ -366,6 +368,164 @@ root隔离浏览器v3先确证：A启用后切到预先已启用B，B标题与`s
 核对摘要和三条完整原文见`full-v5-independent-readback.json`。v1独立23/25、初版夹具/目录探针失败、v4UI暂停、后续最小修复及重验保持原文件，不由最终绿色覆盖。
 
 本补证只闭合本地完整工程检查的证据；root收据记录真实API/模型/MacBook/Git写/服务切换0。本轴未执行这些动作；未运行Hosted CI、Git交付/合并、真实Archive API/DNS、真实模型专业验证或产品验收。后续spec/result与汇总报告的纯文档收尾身份仍需另核，不能预写未来交付。
+
+
+---
+
+
+## 后续授权阶段：新main集成复核及真实源补证
+
+以下报告重新固定561文件候选，未沿用旧基线绿色。Spec原文§5曾将API烟测进程组归属误写成SDK拥有；紧接其后的非作者澄清只替代该单句，原件保留。该API是root脚本直接启动的生产MCP P/Q stdio，非PiSDK真实模型会话；实际PiSDK所有权/stop/close另由产品合成会话与独立owner测试证明。
+
+### 新main集成Spec独立报告
+
+原件：`/Users/bendandebaba/OptraCall-artifacts/weather-independent-spec-6z2r2734/integration/integrated-spec-review-v1.md`；SHA256 `24bfe85c81255d631f44e8c8d78dd239e409ab73cb9e82188850a8058a582de6`。
+
+## Weather MCP 合入新main后的非作者 Spec 增量复核
+
+结论：**已查集成范围通过，无新增可行动发现。** 天气合同与新main试用修复意图在本候选中同时保留；这是新候选上的源码、目标验证、交叉探针及作者证据独立核对结果，未直接沿用旧base351d835的PASS。
+
+### 1. 身份、预期及范围
+
+- 源：`/Users/bendandebaba/.codex/worktrees/weather-delivery/OptraCall`。完整561文件 `integrated-candidate-v1.json` SHA256 `96918feecd635f12aa9fcd6ab06eb22decf6d6fd4b6050fbf6eb1f3dc3b41042`；源及本隔离副本逐文件字节/SHA全部匹配，目标验证和根完整检查后再核561/561无差异。
+- 清单身份为ours `264559e` 与mergeHead `4a3be3d36b6c2511635b2c044de2068b6b6ca4df`。根随后报告已固定合并提交`afbd81a`且源代码树未变；本轴未运行Git，提交/分支身份为根和固定清单的记录，**本轴独立确认的是561文件字节身份**。
+- 先读最新工程v1.4和trial-report-20261103-repair规格，再冻结`expectations.md`（SHA256 `c623e928f47da587c3d689d37344cf5d9e64e170f0e27d753436484ebe257de8`），以原E01–E11/WX01–09及新main的TR01–TR03导出I1–I7集成预期。工程§2/IN01–IN07与旧天气固定输入逐字节相同；v1.4新增UI Demo/修复流程已读。
+- 只读核两个方向patch并实算其目标Git-blob摘要：weather→integrated 22文件、main→integrated 45文件均与本受检副本相符，见`integration-diff-readback.json`。图工具用于代码发现，最终读固定副本真实代码；patch不是全部候选身份的替代物。
+- 未参与本候选任何源码/测试/规格创作；源、测试、既有证据/Git只读，全部验证仅在本`integration/`，TMPDIR为其`tmp/`。本复核者未发起真实API/DNS、真实模型、Git或MacBook操作。
+
+### 2. 集成预期 → 结果
+
+| 预期 | 结果与独立证据 |
+| --- | --- |
+| I1 固定完整身份 | 通过。561/561源与副本匹配，清单/两向patch/检查后读回保存；无未纳入的源码变化。 |
+| I2 原天气完整合同 | 通过已查集成范围。新候选重新运行天气目标含真实SDK/P/Q、cache miss/hit/expired、默认off/开启/保留namespace、busy/stop/close、取消迟到、覆盖null/缺失及Host限制；另同一原独立10探针只换导入与DATA隔离路径重跑全过，未把历史P2修复当免验。实际SDK四类fixed-draft/text-only/ordinary/protected均不注入。SDK依赖/loader例外/天气传输实现与已验天气候选同字节。 |
+| I3 TR01 上传与store/API共存 | 通过。新main项目材料格式、50MiB（含HTTP）、二进制逐字节、UTF8文本、无覆盖/路径/链接/归档保护、旧metadata读回、报告10MiB原限制目标全部通过。独立真实HTTP交叉探针创建weather/trade/sim三开关任务后上传PPTX非法UTF8二进制，010→020复制/下载相同；切weather off、Host关闭/重启，原metadata只读字节未改、其他能力和两附件保留，再on/归档后拒上传/切能力，Provider请求0。 |
+| I4 TR02 需求入口与返回 | 通过已查接缝。App冲突解决保留requirementReturnTask、openTaskRequirements及returnFromRequirements，按真实project/task返回，不覆盖原工作台显式送入；RequirementPage backLabel仍保留。独立核作者AX：相同project/task URL，返回后的`message-input`为“整合点验草稿：天气与需求往返后保留”；此前Provider0。未将此扩大为新一轮真实需求生成/发布验收。 |
+| I5 TR03 新main已批准布局/设置保全 | 通过集成保全。TaskWorkflow仅导航与真实busy/已有回复投影，明确可直接分析，无Host步骤门禁；需求返回上下文、资料/对话/结果区、前置自动核算引用到原dialog、原配置字段、企业资料/反馈/历史折叠及结果区手动核算源码保留。作者AX与两截图显示新导航/50MiB文案/前置设置、结果区与天气控件并存；原设置草稿可见且自动功能Value0，不因打开入口启用。未重新覆盖该main全套320px/主题/所有历史界面验收。 |
+| I6 App两处冲突与D12任务隔离 | 通过。main→integrated的App差异只有weather目录导航分支与TaskCapabilityList `key={activeKey}`，新main的要求上下文/前置设置/结果区没有回退。独立读完整AX：A开卡1→切已启用B卡0→B自身关再开卡1，各weather值1；合成结果及reload同任务/回复保留。当前集成页面实际序列为1→0→1，不冒称另取了A返回页面。无ACK/额外确认或分析流程变化。 |
+| I7 新候选验证/职责边界 | 通过已查范围。独立48目标、11反例/交叉探针、1项实际SDK四模式、boundary/tsc均exit0；另独立核根964项完整check的新身份及原日志。新main上传/导航是材料与交互管理，天气权限仍是Host环境治理；未增SDK导入面、域/profile/owner、平行Runtime、Host经营补计算或推理编排。 |
+
+### 3. 自己执行的检查
+
+| 命令（隔离副本/TMPDIR） | 实际结果 | 证据 |
+| --- | --- | --- |
+| `node --test tests/weather-*.test.ts tests/task-capabilities.test.ts tests/project-upload.test.ts tests/project-store.test.ts` | exit0，48/48，0FAIL/0SKIP | target-tests-v1.log |
+| `node --test --test-name-pattern='task optional capabilities' tests/protected-session.test.ts` | exit0，1/1，内部4类实际SDK资源 | sdk-boundary-v1.log |
+| `node --test independent-cross-probe.mjs independent-weather-probes.mjs` | exit0，11/11，0FAIL/0SKIP | independent-probes-v1.log |
+| `npm run check:agent-sessions` | exit0 | boundary-v1.log |
+| `npx tsc --noEmit` | exit0 | tsc-v1.log |
+
+没有重跑根并发全量；没有在源写dist/临时文件。`verification-summary-v1.json`记录实际目标命令及读回。
+
+### 4. 作者完整检查与浏览器证据的独立核读
+
+本节动作执行者为root，本复核者只读核验，未冒称自己执行完整check或浏览器手势。
+
+根集成`integrated-full-check-receipt.json`实算SHA256 `dd66cacca4265c31b8060bb3a600da1f0e8abc255cbcb48a562b90eb310f1500`，原日志SHA256 `143a2e4c8482b1b02ce6dabd6037c43b67c3ee55bfb4aec01df505d50b55b92e`一致；绑定同561文件清单。原日志首末、964项961PASS/0FAIL/0cancelled/3SKIP、边界PASS和tsc/Vite/stamp结束已核，收据exit0，源与副本再次561/561无差异。三条SKIP原文均找到：当前平台/新owner支持受管profile而跳过unsupported反向分支、两项真实soffice图像条件测试。Vite >500kB chunk提示保留；未声称零警告或PPT图像已验。详见`full-check-independent-readback.json`。
+
+`ui-qa-integrated/`核读九份完整AX和两图：task-entry、requirements-return、automatic-settings、capabilities-preserved、a-enabled/b-after-a/b-reenabled、weather-complete、reloaded；逐项读URL、标题、草稿、设置off和说明卡数量。`combined-task.jpg`/`weather-disclosure.jpg`视觉符合源码与AX。导航/需求往返/前置设置/A-B开关阶段的before-explicit-send=0；显式合成天气缓存调用后Provider总2，reload后仍2，console=[]、正常关闭。`ui-evidence-checks.json`记录核对与各原件SHA；浏览器动作仍归作者，未全面重验所有main UI细节。
+
+### 5. 获授权真实API冒烟原件核读（未由本复核发起）
+
+根指定原件 `live-api-authorized/weather-huzhou-2025-10-2xvMwW/receipt.json` SHA256实算 `514ba484e3c188c6aa248953b901ac994e448003c7c8034592255c3ead00b98a`。本轴只读receipt、rpc.jsonl、cache-readback及已落盘cache；未再次连API或解析其DNS。
+
+- receipt的10个入口/传输/连接器源码SHA与本集成清单匹配，入口为真实Host weather-mcp-entry/P/Q路径。
+- 原RPC记录只有一条send tools/call（weather_history），参数确为湖州30.8671/120.1023、2025-10-01..31、两字段；queryAttemptCount=1、automaticRetryCount=0。**底层HTTP发包次数为NOT_OBSERVED_BY_SCRIPT，未抓包，不能据此声称实际服务器HTTP请求数已证明为1。**
+- structuredContent、文本JSON与payload一致；独立重算日期恰31/31、无重复/缺失/null/字段缺漏，时区Asia/Shanghai、来源/许可标注、首次cache.hit=false。工具查询耗时约1505ms，不把它改称独立测得的服务器延迟。
+- 唯一缓存文件长度及SHA、parsed request/daily/fetchedAt与payload及cache-readback匹配。生命周期原件记录P退出0、Q关闭后ABSENT_ESRCH、P/Q同一SDK拥有的进程组；本轴核原件一致性，不在事后对可能复用的PID发信号。
+
+该次根LIVE_SMOKE_PASS闭合这个固定查询的真实返回/覆盖/落盘与关闭证据；不代证限流/网络失败真实发生、多地域/商业使用许可、长期可用性、模型分析专业质量。核读细节 `live-api-evidence-independent-readback.json`。
+
+### 6. 发现、边界与后续
+
+本次集成增量未发现需修复的代码问题，未修改源、测试或规格。旧P2城市/夹具/D12及原FAIL/暂停/覆盖漏项仍在原报告保留，本次只是新main集成增量的独立结论。
+
+本报告不代表Hosted CI、Git交付/PR、squash合并（仍未获用户授权）、MacBook/运行采用或用户产品验收；根实际后续身份/CI另记。真实API根已按授权一次执行，本轴仅核原件，真实模型未运行。后续仅更新本变更文档时仍需核纯文档增量身份，不能把本报告扩大到未来代码改动。
+
+复核时间：2026-11-03T13:13:44.517347+00:00。
+
+
+---
+
+### 集成Spec原件的进程组归属范围澄清
+
+原件：`/Users/bendandebaba/OptraCall-artifacts/weather-independent-spec-6z2r2734/integration/scope-clarification.md`；SHA256 `fdb8a973a6b94e65d5a25d84af7249ffebb66441b0b10730ce9d3a87436889b0`。
+
+## 集成 Spec 报告：真实 API 冒烟进程组归属澄清
+
+本澄清仅替代 `integrated-spec-review-v1.md` §5 中“P/Q同一SDK拥有的进程组”这一归属表述。v1原报告保持原字节，SHA256仍为 `24bfe85c81255d631f44e8c8d78dd239e409ab73cb9e82188850a8058a582de6`；不追溯修改该原件。
+
+正确范围：这次获授权真实API冒烟由root直接spawn生产 `weather-mcp-entry.ts`（detached:true），通过JSON-RPC调用天气工具。生命周期原件记录P退出0、Q关闭后ABSENT_ESRCH，以及P/Q在**同一root直接创建并拥有的进程组**内。它证明该次生产P/Q stdio路径的查询、缓存与资源收尾；不能称为该次由PiSDK创建/拥有进程组，也不能称真实API经PiSDK会话或真实模型完成。
+
+真正PiSDK所有权、公共生命周期与owner隔离的证据来自另行执行的weather-agent-flow及独立owner隔离验证；它们与本次真实API原件分别报告，不能合并扩大其中任何一项的证明范围。v1其他计数/身份/覆盖/缓存及本地集成结论不变，底层HTTP发包次数仍为NOT_OBSERVED_BY_SCRIPT。后续引用v1时应连同本澄清使用，以本澄清限定该单句。
+
+本次只写隔离根追加说明，未修改源、原报告或既有证据，未调用API/DNS、模型、Git或设备。
+
+记录时间：2026-11-03T13:15:42.641974+00:00。
+
+
+---
+
+### 新main集成Standards独立报告
+
+原件：`/Users/bendandebaba/OptraCall-artifacts/weather-review-standards-20261103-mYzMJK/integration/standards-integration-review.md`；SHA256 `542d4cc3629d30dd727a73b8fc1b61c294f20ad68bb287d48e3662318ea2c52f`。
+
+## Weather MCP × main4a3be3d 集成增量 Standards 复核
+
+结论：**固定集成候选规范轴通过；工程§4 Host–Agent职责边界/SDK复用及IN06既有例外复用在本次集成范围通过；无未关闭可行动代码发现。** 此为新的集成复核，不以旧351d835候选PASS替代。root后续实际提交head/Hosted CI、main squash、运行采用与产品验收仍各自另证，squash仍待用户明确确认。
+
+### 1 预期、范围及身份
+
+独立复核者未参与本候选任何产品代码、测试、规格或冲突解决创作。先核561文件身份，读取工程规范v1.4（含§2/IN01–07、§3、§4、§5）、试用报告修复spec及统一接入说明，再于实现/测试/作者新结果读取前冻结`expectations-before-integration-code.md`，SHA256 `31d9c55f336eb716ad0ae4702aaa14e5d2fc1c9c51cecb06533b681393e81370`。产物均在本integration隔离根；原源/测试/规格/旧证据只读。没有自行API/DNS、真实模型、Git、SSH、MacBook或服务动作。
+
+集成清单`/Users/bendandebaba/OptraCall-artifacts/weather-handoff-20261103/integrated-candidate-v1.json` SHA256 `96918feecd635f12aa9fcd6ab06eb22decf6d6fd4b6050fbf6eb1f3dc3b41042`，561/561实际字节/哈希匹配；原ours264559e、mergeHead `4a3be3d36b6c2511635b2c044de2068b6b6ca4df`。root随后完成集成mergecommit afbd81a并报告源字节不变；本轴没有运行Git，commit身份来自root，受检对象以561完整清单为准。目标检查后本轴再核原源及隔离副本561均零差异；作者UI/API/完整检查后又核原源零差异。
+
+两方向patch也读回固定：`weather-to-integrated.patch` SHA256 `7186f69935ce6c0975d8ddf9a0203a2af5333a480a47c5ddb4fd81418e320778`；`main-to-integrated.patch` SHA256 `a204e282de92e49d92dc6d7e3e5c7419e20c958efbbfcb95d3c3e9e6b7a8070e`。本轴按各patch将当前App在内存逆向重建两来源，核每一context/new hunk匹配；main→integrated的App字符差异只两组插入：weather目录导航、TaskCapabilityList的activeKey。重建结果及字符差异存`*.patch.App-before.tsx`/`*.patch.App-character-delta.json`，无Git操作。
+
+### 2 预期→核对
+
+| 预期 | 集成结论与证据 |
+| --- | --- |
+| I01身份/授权 | 通过当前受检范围。旧候选报告、失败和暂停轨迹保留；本轮API只核root获授权的单次执行证据，未自行重试。Git/CI授权不扩大真实模型/设备或squash权限。 |
+| I02 v1.4/Agent自主 | 通过。TaskWorkflow只以busy/已有消息/回复选择当前导航标记，所有按钮可按需进入资料/需求/对话/结果，显示“可直接开始”；不调用Agent或制定分析方法/必经门禁。较明显UI已由main所带规格记录两轮Demo审核；此次集成不重新发明流程。 |
+| I03 App两边意图 | 通过。内存逆向来源核对支持main原需求return上下文、TaskWorkflow、前置核算/原dialog引用、背景折叠/结果区布局全部保持；仅叠加weather导航与任务key。openTaskRequirements捕获现有project/task ID，返回仅selectContext/openWorkspace，不自动发模型；显式送入仍原chooseTask合同。TaskCapabilityList key保持，D12说明不跨任务继承。作者集成AX/截图另核如下。 |
+| I04上传50MiB边界 | 通过。新project-upload常量精确50×1024²、base64体上限+有限JSON开销；仅files/upload采用，实际Store仍核解码后精确上限。二进制字节保留、010到020显式复制、UTF-8文本、路径/链接/无覆盖/归档原规则未丢；saveReport仍10MiB，企业/反馈上限未被泛化。上传不解析或触发模型；独立整50MiB HTTP/超限/下载断言通过。 |
+| I05公共生命周期/归属 | 通过。server保持真实project/task owner/profile、原准入与configuration；能力路径仍公共busy/修订占用拒绝→匹配ref close成功→持久保存。前置核算只透传原SettingsHandle打开原dialog，不自动启用、不升级旧未托管资格。独立天气SDK开关/stop复用/close/native前缀，以及A/B实资源隔离重新通过。 |
+| I06 SDK/PQ/IN06 | 通过。12项关键源逐hash与旧v5一致：SDK唯一导入面、project-runtime/session、P入口/worker/transport/egress、公共agent-sessions、能力清单、边界脚本、package与lock。无新SDK导入/allowlist/依赖/owner/profile/Runtime。新候选boundary通过、四类actual SDK排除重新通过；fixed-draft/text-only/ordinary/protected均无weather。P/Q治理源码不因upload/UI主线合入扩大；仍限Seatbelt macOS，普通分析不是安全沙箱。 |
+| I07验证/证据 | 通过本地适用范围。独立26项/实际四模式/A-B资源隔离/边界/tsc；root完整964项的原始日志/收据身份另核。作者浏览器动作与本轴证据读取、root真实API动作与本轴只读核验分开。 |
+| I08结论分类 | 通过本轮记录。旧基线通过保留当时范围，本报告对新main集成重新作出结论；真实单次源冒烟不代表模型专业质量、广泛天气源可靠性、商用许可或Hosted CI/产品验收。当前spec/result中的旧“未集成/未授权”阶段描述须由root在文档收尾追加新事实并分列历史，本报告不将其当当前新授权来源。 |
+
+SDK会话循环、工具/上下文和公共生命周期仍复用原能力。P/Q与有限HTTP Map是同一SDK资源内的传输权限适配，不构成平行Runtime/另一Agent；TaskWorkflow是用户导航，不是Agent执行计划。IN06只复用原固定1.4.0私有loader例外，无新例外；普通工具/其他MCP合同保持。基于实际调用链、源身份及新回归，§4与IN06专项通过；未发现需强制重构的启发式气味。
+
+### 3 本轴实际命令（全部隔离candidate/）
+
+所有命令TMPDIR为本integration/tmp，关闭compile cache；不在原源写产物、不重复root全量。
+
+| 命令 | 结果 | 证据 |
+| --- | --- | --- |
+| `node --test tests/project-upload.test.ts tests/project-store.test.ts tests/task-capabilities.test.ts tests/weather-agent-flow.test.ts` | exit0；26/26，0SKIP | `logs/integration-targets.{json,log}` |
+| `npm run check:agent-sessions` | exit0 | `logs/integration-boundary.{json,log}` |
+| `./node_modules/.bin/tsc --noEmit` | exit0 | `logs/integration-tsc.{json,log}` |
+| `node --test --test-name-pattern=task optional capabilities tests/protected-session.test.ts` | exit0；一测试实际循环4模式 | `logs/four-exclusions.{json,log}` |
+| `node integration/probes/owner-isolation.mjs`（实际绝对路径） | exit0；A/B各实际P/Q，关闭A退出A两进程，B保留两进程/native前缀和weather，A后续off | `logs/owner-isolation.{json,log}`、`probes/owner-isolation.json` |
+
+候选/source比对、来源重建、日志receipt均为本轴实际执行；浏览器和真实API下面是作者实际执行的只读复核。
+
+### 4 root完整检查、浏览器及单次API证据
+
+**完整检查。** 收据`integrated-full-check-receipt.json`实SHA256 `dd66cacca4265c31b8060bb3a600da1f0e8abc255cbcb48a562b90eb310f1500`，绑定上述561清单；原日志`integrated-full-check.log`实SHA256 `143a2e4c8482b1b02ce6dabd6037c43b67c3ee55bfb4aec01df505d50b55b92e`相符。逐条summary和3SKIP原文实际在日志找到：964项961PASS/0FAIL/0cancelled/3条件SKIP，boundary PASS、tsc/Vite/stamp完成，exit0来自实际收据。仍保留unsupported分支因本机支持而跳过、两项real soffice图像SKIP及>500kB chunk提示。非作者没有重跑或把旧960项结果代入。
+
+**浏览器。** 本轴实际读取`ui-qa-integrated/`的task-entry、requirements-return、automatic-settings、capabilities-preserved、a-enabled、b-after-a、b-reenabled、weather-complete、reloaded全部AX；实际查看combined-task.jpg/weather-disclosure.jpg。新main四导航、50MiB提示、原自动设置dialog字段、需求往返后B任务真实标题及“整合点验草稿”原文均在AX；自动状态仍未启用，三能力仍可见；天气卡计数A启用1→B已开0→B自身重开1。两截图显示可选前置核算/对话与结果区共存，天气说明内联、许可/数据出口文案保持。before-explicit-send收据请求0，明确send后的provider-requests计2/errors[]，console[]/closed正常并realModel0；reload保留回复/任务且没有追加请求。本轴不冒称自己操作浏览器，完整焦点操作等由root ui-checks记录，实际AX/截图覆盖范围见`ui-evidence-readback.json`。
+
+**单次真实API。** root执行的`live-api-authorized/weather-huzhou-2025-10-2xvMwW/receipt.json`实SHA256 `514ba484e3c188c6aa248953b901ac994e448003c7c8034592255c3ead00b98a`。本轴只读重算其10个生产源SHA，与集成manifest全部一致；entry为产品weather-mcp-entry，P/Q同进程组、P exit0/Q关闭后ESRCH。请求为湖州30.8671/120.1023、2025-10-01至31、双字段/Asia/Shanghai；实际结果逐日31日期无重复、各日两字段为数值，coverage无missing/dup/null，首次cache.hit=false。唯一cache文件2746字节、SHA256 `f364106990add7b643df26618ed605bd23a43af2d9189f768c6c5569fccf4277`实读相符，daily及fetchedAt与工具payload完全一致。工具查询一次、自动重试0、查询约1505ms；actualHttpAttemptCount保持`NOT_OBSERVED_BY_SCRIPT`，不推断HTTP包数、DNS实际次数或供应商费用。该冒烟为产品P/Q stdio查询，不是实际Pi+真实模型分析；无本轴额外API/DNS。详情`full-and-api-evidence-readback.json`。
+
+### 5 发现、限制及后续
+
+本集成增量0未关闭可行动代码发现；未覆盖root以外main全部实现的全面生产审计。source equality只用于影响映射，已在新候选重跑受影响Host/SDK/上传与隔离路径；旧12阶段namespace动态证据不冒充本轮重跑，相关核心确切不变且完整新check涵盖已有目录guard回归。
+
+root新Git/API授权不等于本轴可自行外部执行；本轴全程未Git/API/DNS/模型/SSH/设备动作。单次真实源成功只证明此输入/时刻/产品stdio路径的可用性和返回合同，不证明长期可用/限流、所有地理区间、数据物理准确性或商业许可批准；真实模型专业质量仍未验。Linux实际OS、2个真实soffice图像、Hosted CI、远端PR/main squash、安装/服务/MacBook采用与产品验收不由本地或单次API通过替代。
+
+当前受检源561身份下，后续root将仅补本变更文档；需另核文档身份和授权/阶段措辞，不必把纯文档追加误写成已验完整提交。新源码/契约若再变，应固定新候选、复查受影响范围并取得实际head CI。原全部weather报告/FAIL/UNKNOWN/暂停/关闭保留，本报告只是集成阶段新结论。
 
 
 ---
