@@ -1,6 +1,6 @@
 # Codex → Qoder：任务内委派与原生联网接缝回执
 
-2026-11-04。分支 `codex/Host-Agent-Extension` 长期保留；skill 本体继续由 Qoder 在 `qoder/ext-skills` 实施，本次没有修改该工作树。源码基线 `fa52ae2`，用户已授权本分支提交、推送、PR及CI；实际远端提交和检查结果需核验，不能将契约可用写成已在现有服务上线。最终身份与工程结果见 [result.md](result.md)。
+2026-11-04。分支 `codex/Host-Agent-Extension` 长期保留；skill 本体继续由 Qoder 在 `qoder/ext-skills` 实施，本次没有修改该工作树。源码基线 `fa52ae2`，源码交付提交 `2a6b34f` 已推送、[PR #30](https://github.com/gadfly-hbo/OptraCall/pull/30) 未合并，其实际head Check #85已通过；后续记录增量的head CI另核验。不能将契约可用写成已在现有服务上线。最终身份与工程结果见 [result.md](result.md)。
 
 ## R1：subagent
 
@@ -59,5 +59,9 @@ description: 调查公开来源并区分证据与未知。
 请求和来源发往当前所选模型Provider，沿现有Host凭据通路，不给skill/角色文件密钥，不跨用其他Provider凭据。原生搜索可能另计费；SDK token/成本估计不等于供应商结算，当前结算UNKNOWN。源URL仅从Provider结构化回执取得，正文自述链接不伪造为搜索证据；显示来源不等于内容已专业核实。
 
 真实样例与限制必须一起保留：首次产品MiMo保存3条结构化来源，但对版本/许可问题诚实说明不足；MiniMax检索66来源并自然续接，90秒内未最终答。修复后的新MiMo公开问题又在60秒截止取消、完整来源未证实。原URL回读51个200、17个403、1个404，不能只保留成功页。这些均见 [首次产品记录](product-live-validation.md) 和 [后续记录](product-live-v2-validation.md)，不当全部模型或完整产品问答验收。
+
+用户后续明确“不再测试DeepSeek”，仅重测四个原MiniMax/MiMo配置。本轮新问题中，**MiniMax M3及M3.1 Flash均正确回答Python官方最新稳定版本与发布日期，并有本次可核验官方来源；两者150字格式仍FAIL。MiMo Pro把旧版本当最新，MiMo Flash识别正确版本但诚实说明日期不足。** 四项均正常结束，47个结构化URL回读46×200/1×403；MiniMax中间搜索工具错误仍保留。详见 [重测记录](product-live-retest-validation.md)。这补足两项MiniMax在该问题的核心事实闭环，不能外推MiMo稳定正确、旧问题通过、格式通过或服务已采用；没有为skill硬编码研究流程或替模型补答案。
+
+M3另有附带博客发布日期误述（26日误称与25日发行同日），不记全文全对。包含150字格式的先验全条件判定仍为0/4，[非作者原报告](product-live-retest-review.md)及原文/投影长度均保留。
 
 完整工程检查、非作者原发现及修复增量见 [result.md](result.md)。本期未切换服务、未操作MacBook；Qoder可以依本契约编写skill，其在实际产品服务可用仍依赖后续Git集成及另行授权的运行采用。

@@ -8,6 +8,8 @@
 
 2026-11-04用户明确授权“提交、推送本分支，并创建 PR、运行 CI”。交付至长期分支 `codex/Host-Agent-Extension`，PR目标为 `main`；实际head检查结果另核对。本次授权不包含合并、设备更新或运行服务采用。
 
+同日用户新增授权“deepseek不再测试，重新真实测试下minimax和MiMo”。按已交付源码 `2a6b34f`，仅以四个原MiniMax/MiMo配置各一次真实产品问答补证，不再测试DeepSeek，不换端点/模型，不改产品搜索参数；新根、先验验收、独立官方参考、300秒截止、失败保全及结果见 [重测记录](product-live-retest-validation.md)。本次补充不追溯关闭原未完成问题或扩大运行采用。
+
 ## R1：同一父生命周期中的 Pi 原生子会话
 
 - 继续锁定 SDK 1.4.0。官方 subagent 是示例扩展，不是自动启用的 Runtime；其 CLI spawn 不继承本产品内存 Provider。1.5.0 示例无变化且有 schema 兼容变更，本期不为此升级。证据见 `sdk-research.md`。

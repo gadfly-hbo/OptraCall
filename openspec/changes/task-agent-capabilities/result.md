@@ -1,6 +1,6 @@
 # 任务 Agent 能力实施与验证记录
 
-2026-11-04。工作树 `/Users/bendandebaba/.codex/worktrees/31d3/OptraCall`，长期分支 `codex/Host-Agent-Extension`，基线 `fa52ae2f2507309dcb204b3cef616397a19bf62d`。本记录区分实现、工程验证、真实搜索观察、Git/CI及运行采用；不覆盖既有专业 FAIL/UNKNOWN。用户已授权本分支提交、推送、PR及CI，进入Git交付；合并、服务采用和用户验收未执行。
+2026-11-04。工作树 `/Users/bendandebaba/.codex/worktrees/31d3/OptraCall`，长期分支 `codex/Host-Agent-Extension`，基线 `fa52ae2f2507309dcb204b3cef616397a19bf62d`。本记录区分实现、工程验证、真实搜索观察、Git/CI及运行采用；不覆盖既有专业 FAIL/UNKNOWN。用户已授权本分支提交、推送、PR及CI，首个提交 `2a6b34f` 已推送，[PR #30](https://github.com/gadfly-hbo/OptraCall/pull/30) 打开未合并；合并、服务采用和用户验收未执行。后续纯文档重测补证另见末节。
 
 ## 实现范围
 
@@ -51,3 +51,11 @@ R2 保持原 Provider/model/api/baseUrl：MiniMax M3/M3.1 Flash 声明版本化�
 - 两位非作者在固定v2分别重验原发现及旧消费者，并对v3两处增量和交付文档作最终补充核对；原不通过及其独立RED不改写。原报告、范围和补充全文见 `independent-review.md`，最终结论以该汇总所附原文为准。
 
 R1本地工程合同和R2原生协议适配具备当前源代码/合成SDK证据；真实问答的取消、证据不足及NOT_PROVED仍未关闭，不据此宣布专业或用户产品验收。用户于2026-11-04明确授权提交、推送本分支、创建PR及运行CI。交付前fetch核对：HEAD、origin/main及origin/codex/Host-Agent-Extension均为上述基线；578文件最终清单全部摘要匹配，源码/测试未再变化，可沿用v3本地检查和独立复核。此后仅补充Git授权/交付状态文档；实际PR与head CI结果须以远端记录核验，不能预写通过。**未授权合并，未切换服务、未更新MacBook**；长期分支继续保留。
+
+### 首次Git交付与新增真实重测
+
+首个源码交付提交 `2a6b34fb2cfb6be0530920d02a02e6f1784640dd` 对应 [Check #85](https://github.com/gadfly-hbo/OptraCall/actions/runs/41733190308) 已实际通过：Ubuntu/Node25.9.0，1001项／931PASS／0FAIL／70条件SKIP，会话边界、类型、构建及 `npm audit --audit-level=high` 成功；保留2项moderate，不表述为零漏洞。非作者核对实际checkout为该head，完成日志SHA256 `25aa91ed3f59e0f7ad3320b0d79cbcf7c32c1017c92be78ea0e4085d17ecff7b`。Git本机首次推送因旧credential helper路径不存在而失败，随后仅用命令级现有gh路径成功推送，没有改全局配置或重写历史。交付收据位于 `.local/task-agent-capabilities/git-delivery/`。
+
+用户随后明确排除DeepSeek并授权MiniMax/MiMo重测。本轮以该源码、原四配置各一次新公开问题，**四项均真实搜索并正常完成；MiniMax两项给出正确版本/日期及可核验本次官方来源，但均未遵守150字；MiMo Pro旧版本误判，MiMo Flash诚实但缺发布日期。** 核心事实闭环与包含格式的全条件验收分别报告：两项MiniMax核心闭环成立，先验全条件 `FULL_ANSWER_PASS` 为0/4。不能再笼统说一次完整事实回答都没有，也不能将格式/内容缺口写成已消除。
+
+47个结构化URL读回46×200/1×403，另4个正文额外官方URL均200、单独存放；MiniMax原生中间搜索错误10/26个仍保留。M3附带“博客同日发布”也有事实差错（博客26日、发行25日），核心正确不等于全文全对。源码/原配置字节未改，没有模型补跑、自动重放或切线。完整身份、逐模型结果、长度、来源与失败见 [重测记录](product-live-retest-validation.md) 及[独立复核原文](product-live-retest-review.md)；本增量只修改记录，不新增产品实现或确定性测试。实际新增文档提交的head CI继续按PR记录核验，不能用Check #85冒充新head结果；原三个未完成问题、旧专业FAIL/UNKNOWN、未合并及未运行采用边界均保持。
