@@ -113,6 +113,7 @@ test('RF04: cancelled initial and correction turns never cause another dispatch'
       assert.equal(result.outcome, 'cancelled');
       assert.equal(result.repairAttempts, initial ? 0 : 1);
       assert.equal(provider.requests.length, initial ? 1 : 2);
+      await provider.waitForClosed(provider.requests.length - 1);
       assert.equal(provider.requests.at(-1)!.closedEarly, true);
     } finally { await host.close(); await provider.close(); }
   }
@@ -218,6 +219,7 @@ test('SM03 requirement lease: returning before its turn finishes cancels and dra
   });
   await assert.rejects(pending, 'an operation must not report normal success while abandoning a running turn');
   await abandoned?.catch(() => {});
+  await f.provider.waitForClosed(0);
   assert.equal(f.provider.requests.length, 1);
   assert.equal(f.provider.requests[0]!.closedEarly, true, 'the abandoned provider request must be stopped before releasing its operation');
   assert.equal(f.manager.busy('req-abandoned-return'), false);
@@ -234,6 +236,7 @@ test('SM03 requirement lease: a throwing callback drains its in-flight turn and 
     throw callbackError;
   });
   await assert.rejects(pending, error => error === callbackError);
+  await f.provider.waitForClosed(0);
   assert.equal(f.provider.requests[0]!.closedEarly, true, 'throwing business code must not leave its SDK turn running');
   await abandoned?.catch(() => {});
   assert.equal(f.provider.requests.length, 1);

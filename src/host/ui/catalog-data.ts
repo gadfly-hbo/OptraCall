@@ -1,6 +1,6 @@
 export const catalogCategories = ['assets', 'scenarios', 'connectors', 'plugins'] as const;
 export type CatalogCategory = typeof catalogCategories[number];
-export type CatalogEntry = 'metric' | 'requirement' | 'enterprise-materials' | 'decision' | 'refiner' | 'ppt-report' | 'simlab' | 'target-forecast' | 'coupon-forecast' | 'roi-forecast';
+export type CatalogEntry = 'metric' | 'requirement' | 'enterprise-materials' | 'decision' | 'refiner' | 'ppt-report' | 'simlab' | 'target-forecast' | 'coupon-forecast' | 'roi-forecast' | 'trade-area-mcp';
 export type CatalogItem = {
   id: string; category: CatalogCategory; name: string; description: string;
   tags: string[]; source: string; note: string;
@@ -33,6 +33,7 @@ export const catalogItems: CatalogItem[] = [
   planned('scenarios', 'S04', '目标与预测纠偏', '对照目标、预测和实际，组织差距判断与行动反馈。', ['目标管理', '预测反馈'], '场景组合不复制底层插件实现，也不建立独立 Runtime。'),
   planned('scenarios', 'S05', '用户反馈诊断', '整理评论、工单主题，形成进一步调查的问题。', ['用户反馈', '文本分析'], '未来按授权读取资料，文本提及不能代表全体用户发生率。'),
   planned('scenarios', 'S06', '门店空间经营分析', '组合门店与区域材料，支持覆盖和选址研究。', ['门店经营', '空间分析'], '此处没有地图计算，候选区域只作为示例。'),
+  { id: 'trade-area-mcp', category: 'connectors', name: '商圈数据', description: '按省市、评级、关键词与指标筛选商圈，读取完整档案及来源、可信度，按自定义权重计算选址评分。数据快照在本机，连接器无网络外发。', tags: ['商圈', '选址', '本机数据'], source: 'OptraCall 连接器 · trade-area-mcp', note: '使用入口＝项目任务对话，任务级显式开启后由 Agent 自主查询，结果带数据版本。未公开字段如实保留；查询结果会进入所选任务模型上下文，不代表整段对话零数据外发。', status: '已接入', entry: 'trade-area-mcp' },
   planned('connectors', 'C01', '数据库与数据仓库', '发现获准访问的表、字段与查询结果。', ['数据库', '只读查询'], '尚无连接实例、凭据、查询或数据读取。'),
   planned('connectors', 'C02', 'BI 指标与报表', '复用既有报表、指标定义与刷新信息。', ['BI', '语义模型'], '正式业务定义与来源访问分别核对，不自动采用映射。'),
   planned('connectors', 'C03', '业务系统', '按授权获取订单、会员、库存等有限业务对象。', ['ERP', 'CRM', '电商'], '目录不授予 ERP/CRM 访问或业务写入权限。'),

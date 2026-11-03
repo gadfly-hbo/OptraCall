@@ -2,6 +2,8 @@ import type { EnterpriseCaseSelection, EnterpriseMaterialSelection } from '../en
 import type { FeedbackContextSelection } from '../decision-feedback-types.ts';
 import type { CaseContextSelection } from '../case-types.ts';
 import type { RequirementContextSelection } from './requirement-types.ts';
+import type { TaskCapability, TaskCapabilities } from '../task-capabilities.ts';
+import type { TradeAreaStatus } from '../trade-area-status.ts';
 import type { BrowserUIResponse, ClientProject, ClientTask, FileNode, ProjectEvent, PublicModelConfiguration, SessionSnapshot, TaskState } from './project-types.ts';
 
 export class HostRequestError extends Error {
@@ -30,7 +32,9 @@ export async function renameProject(id: string, name: string): Promise<ClientPro
 export async function archiveProject(id: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}/archive`, 'POST', {})).project; }
 export async function restoreProject(id: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}/restore`, 'POST', {})).project; }
 const taskPath = (projectId: string, taskId: string) => `projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`;
-export async function createTask(projectId: string, name: string, configurationId?: string, simulationTools?: boolean): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`projects/${encodeURIComponent(projectId)}/tasks`, 'POST', { name, ...(configurationId ? { configurationId } : {}), ...(simulationTools ? { simulationTools: true } : {}) })).task; }
+export async function createTask(projectId: string, name: string, configurationId?: string, capabilities: TaskCapabilities | boolean = {}): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`projects/${encodeURIComponent(projectId)}/tasks`, 'POST', { name, ...(configurationId ? { configurationId } : {}), ...(typeof capabilities === 'boolean' ? { simulationTools: capabilities } : capabilities) })).task; }
+export async function setTaskCapability(projectId: string, taskId: string, capability: TaskCapability, enabled: boolean): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`${taskPath(projectId, taskId)}/capabilities`, 'PUT', { capability, enabled })).task; }
+export function readTradeAreaStatus(signal?: AbortSignal): Promise<TradeAreaStatus> { return request('connectors/trade-area', 'GET', undefined, signal); }
 export async function setSimulationTools(projectId: string, taskId: string, enabled: boolean): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/simulation-tools`, 'PUT', { enabled })).task; }
 export function readTask(projectId: string, taskId: string, signal?: AbortSignal): Promise<TaskState> { return request(taskPath(projectId, taskId), 'GET', undefined, signal); }
 export function openTask(projectId: string, taskId: string): Promise<TaskState> { return request(`${taskPath(projectId, taskId)}/open`, 'POST', {}); }

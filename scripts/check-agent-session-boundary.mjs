@@ -47,7 +47,9 @@ const domainRegistrars = new Set(['src/host/server.ts', 'src/host/requirement-se
 const connectionProbeOwners = new Set(['src/host/server.ts', 'tests/fixtures/runtime-cases.mjs']);
 // Launcher/update tests load their isolated fixture checkout by absolute URL.
 const checkoutLoaders = new Set(['scripts/trial-launcher.mjs', 'tests/trial-launcher.test.ts', 'tests/trial-update.test.ts']);
-const sdkPackage = /^(?:@earendil-works\/pi-coding-agent|@mariozechner\/pi-(?:coding-agent|agent-core|ai)|pi-(?:coding-agent|agent-core|ai))(?:\/|$)/;
+const sdkPackageName = '(?:@earendil-works/pi-coding-agent|@mariozechner/pi-(?:coding-agent|agent-core|ai)|pi-(?:coding-agent|agent-core|ai))';
+const sdkPackage = new RegExp(`^${sdkPackageName}(?:/|$)`);
+const installedSdkPackage = new RegExp(`(?:^|/)node_modules/${sdkPackageName}(?:/|$)`);
 
 function valueNames(clause, isTypeOnly = false) {
   if (isTypeOnly || clause?.phaseModifier === SyntaxKind.TypeKeyword) return [];
@@ -89,7 +91,7 @@ function inspectParsedSource(filePath, source, sourceFile) {
       return;
     }
     const target = canonicalSource(file, ref.source), names = ref.names;
-    if (sdkPackage.test(ref.source) && file !== 'src/agent/sdk.ts') fail(pos, 'the SDK package is imported only by src/agent/sdk.ts');
+    if ((sdkPackage.test(ref.source) || installedSdkPackage.test(ref.source.replaceAll('\\', '/'))) && file !== 'src/agent/sdk.ts') fail(pos, 'the SDK package is imported only by src/agent/sdk.ts');
     if (target === 'src/agent/sdk.ts' && !sdkConsumers.has(file)) {
       const tools = toolSdkConsumers.get(file);
       if (tools ? names.some(name => !tools.has(name)) : !historyReaders.has(file) || names.some(name => name !== 'SessionManager')) fail(pos, 'SDK access requires an approved runtime or native-history reader');

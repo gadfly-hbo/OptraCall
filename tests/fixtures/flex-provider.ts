@@ -6,13 +6,16 @@ export type FlexReply = { text: string; hold?: boolean; status?: number };
 export async function startFlexProvider(replies: readonly FlexReply[]) {
   const requests: { body: any; closedEarly: boolean }[] = [];
   const held = new Map<number, () => void>();
+  const closed = new Map<number, Promise<void>>();
   const responses = new Set<ServerResponse>();
   const server = createServer(async (request, response) => {
     const parts: Buffer[] = []; for await (const chunk of request) parts.push(Buffer.from(chunk));
     const index = requests.length;
     const record = { body: JSON.parse(Buffer.concat(parts).toString()), closedEarly: false };
+    let resolveClosed!: () => void;
+    closed.set(index, new Promise<void>(resolve => { resolveClosed = resolve; }));
     requests.push(record); responses.add(response);
-    response.on('close', () => { record.closedEarly = !response.writableEnded; responses.delete(response); held.delete(index); });
+    response.on('close', () => { record.closedEarly = !response.writableEnded; responses.delete(response); held.delete(index); resolveClosed(); });
     const reply = replies[index] ?? { text: 'unexpected extra provider call', status: 400 };
     const send = () => {
       if (reply.status) { response.writeHead(reply.status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify({ error: { message: 'synthetic provider failure' } })); return; }
@@ -28,6 +31,16 @@ export async function startFlexProvider(replies: readonly FlexReply[]) {
     baseUrl: `http://127.0.0.1:${address.port}/v1`, requests,
     release: (index: number) => { const send = held.get(index); if (!send) throw new Error('No held synthetic reply'); held.delete(index); send(); },
     waitForRequests: (count: number) => new Promise<void>((resolve, reject) => { const start = Date.now(); const timer = setInterval(() => { if (requests.length >= count) { clearInterval(timer); resolve(); } else if (Date.now() - start > 10_000) { clearInterval(timer); reject(new Error('Synthetic request missing')); } }, 5); }),
+    // SDK cancellation and the remote HTTP close callback are different event
+    // sources. Await the actual wire observation instead of guessing its order.
+    waitForClosed: (index: number) => {
+      const completion = closed.get(index);
+      if (!completion) return Promise.reject(new Error('Synthetic request missing'));
+      return new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Synthetic request did not close')), 10_000);
+        void completion.then(() => { clearTimeout(timer); resolve(); });
+      });
+    },
     close: () => new Promise<void>((resolve, reject) => { for (const response of responses) response.destroy(); server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }),
   };
 }

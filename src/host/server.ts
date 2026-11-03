@@ -7,6 +7,8 @@ import { AgentRuntime, CONNECTION_PROMPT, SDK_VERSION } from '../agent/runtime.t
 import { ProjectRuntimeError, type ProjectSnapshot } from '../agent/project-runtime.ts';
 import { ConfigurationStore, ConfigurationStoreError, TARGET_MODELS } from './config-store.ts';
 import { ProjectStore, ProjectStoreFault, type ProjectRecord, type TaskRecord } from './project-store.ts';
+import { isTaskCapability } from './task-capabilities.ts';
+import { readTradeAreaStatus } from './trade-area-status.ts';
 import { CaseStore, CaseStoreError } from './case-store.ts';
 import { createCaseRoutes, CaseRouteError } from './case-routes.ts';
 import type { CaseContextSelection } from './case-types.ts';
@@ -123,7 +125,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       agentOptions: async (owner, _configuration, execution) => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
         const protectedExecution = await automatic.ordinaryExecution({ project, task }, execution);
-        return { projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(protectedExecution ? { protectedExecution } : {}) };
+        return { projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(protectedExecution ? { protectedExecution } : {}) };
       },
       capabilities: { commands: true, ui: true, editor: true },
     },
@@ -419,6 +421,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         throw new RequestFault(404, 'not_found');
       }
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
+      if (url.pathname === '/api/connectors/trade-area' && request.method === 'GET') { json(response, 200, readTradeAreaStatus(dataRoot)); return; }
       if (await handleEnterpriseMaterialsRoute({ request, response, url, store: enterpriseMaterials, cases, mutate })) return;
       const metricFactory = await metricFactoryRoutes(request, url);
       if (metricFactory) { json(response, metricFactory.status, metricFactory.value); return; }
@@ -547,7 +550,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const project = await projects.get(projectId); assertActive(project);
             const selected = typeof input.configurationId === 'string' ? configuration.read(input.configurationId) : project.configuration;
             if (!selected || !configuration.snapshot(selected.id, selected.revision)) throw new RequestFault(409, 'configuration_required');
-            const created = await projects.createTask(projectId, { name: String(input.name ?? ''), configuration: selected, simulationTools: input.simulationTools === true });
+            if (input.tradeAreaTools !== undefined && typeof input.tradeAreaTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
+            const created = await projects.createTask(projectId, { name: String(input.name ?? ''), configuration: selected, simulationTools: input.simulationTools === true, tradeAreaTools: input.tradeAreaTools === true });
             projectSessions.registerFresh(projectSessions.ref({ project: await projects.get(projectId), task: created }));
             return created;
           }); json(response, 201, { task }); return;
@@ -589,15 +593,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             throw new RequestFault(404, 'not_found');
           }
           if (operation === 'context-receipts' && request.method === 'GET') { const { project, task } = await pair(projectId, taskId); json(response, 200, { receipts: taskContextReceipts(project, task) }); return; }
-          if (operation === 'simulation-tools' && request.method === 'PUT') {
+          if ((operation === 'simulation-tools' || operation === 'capabilities') && request.method === 'PUT') {
             const input = await body(request);
-            if (typeof input.enabled !== 'boolean') throw new RequestFault(400, 'invalid_simulation_tools');
+            const capability = operation === 'simulation-tools' ? 'simulationTools' : input.capability;
+            if (!isTaskCapability(capability) || typeof input.enabled !== 'boolean') throw new RequestFault(400, operation === 'simulation-tools' ? 'invalid_simulation_tools' : 'invalid_task_capability');
             const task = await mutate(async () => {
               const owner = await pair(projectId, taskId, true); assertActive(owner.project);
               const ref = projectSessions.ref(owner);
               if (projectSessions.busy(ref) || await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
-              if (Boolean(owner.task.simulationTools) !== input.enabled) await projectSessions.close(ref);
-              return projects.setSimulationTools(projectId, taskId, input.enabled as boolean);
+              if (Boolean(owner.task[capability]) !== input.enabled) await projectSessions.close(ref);
+              return projects.setTaskCapability(projectId, taskId, capability, input.enabled as boolean);
             });
             json(response, 200, { task }); return;
           }
