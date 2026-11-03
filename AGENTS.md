@@ -4,6 +4,8 @@
 
 本项目遵循“Host 管环境，Agent 自主执行”，优先复用既有 SDK／Runtime 能力。新增设计遵守[工程规范第2节](docs/engineering-workflow.md#产品-agent-与工程-agent)，最终验收完成[职责边界及复用检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；详细规则仅在工程规范维护。
 
+当前为[商圈/天气 MCP 连接器能力承接](openspec/changes/trade-area-mcp/spec.md)：用户已确认[讨论稿 D1–D13](docs/商圈天气MCP连接器能力承接产品讨论稿_v0.1.md)与[UI Demo](docs/prototypes/connector-ui-demo.html)四项交互，2026-11-03 起授权 Qoder 进行产品开发，后续开发不必逐项请示。商圈连接器先行（奠基 `extensions/connectors/` 与标准正文），天气连接器为其合并后独立变更；两者独立交付。Host 接缝仍按工程规范归 Codex（本次授权不构成 IN06 直接指定，如用户另行指定须在规格记录例外）。原仓 trade-area/data-mcps 仅作参考（经 MacBook 只读），公开仓不含经营数据，实施启动、Git/CI 与合并按工程规范节奏执行。
+
 当前用户已明确授权[PPT Host 接线修复](openspec/changes/ppt-host-wiring-repair/spec.md)：修复已核实的项目／配置归属、完整操作占用、保护、导出／差异及UI接缝，保留原FAIL、版本、会话与文件；适用检查、独立复核及Git／CI后合并main，不切换服务、不操作MacBook或新增真实模型实验。原检查“不通过”与本次修复结果分别记录。
 
 涉及Agent交互、SDK接入、会话启停/恢复、模型配置或插件接入的变更，开始前必须读取工程规范的IN01–IN07及[统一会话接入说明](docs/agent-session-integration.md)，在本变更规格记录Interface版本、owner/profile和验收范围。Codex、Qoder共用这些规则；工具入口只引用同一来源。
