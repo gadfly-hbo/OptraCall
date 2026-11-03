@@ -2,7 +2,7 @@
 
 **工程实施原位归档（2026-11-03）**：[PR #29](https://github.com/gadfly-hbo/OptraCall/pull/29) 实际 head `6b5e301c53b75c45381e6a02adb4b800fbef91f8` 经 [Check #81](https://github.com/gadfly-hbo/OptraCall/actions/runs/41643551070) attempt 1 成功，用户明确确认后 squash 为 `722af86fd2bf5a9972bbbc6dc537e4c0bd79941b`。受检 head 与 squash 完整树一致，本地 main 已安全快进。规格、结果、独立复核、结构决定、原清单与移交包在本目录保留；历史失败及各阶段授权不回写。合并 main、归档提交自身 CI 和后续真实模型／MacBook采用分别按[结果记录](result.md#合并交付与原位归档)及实际回执核定。
 
-状态：**本地实施、非作者复核、实际 PR head CI 与获准合并完成，工程实施原位归档；真实模型测试及 MacBook 更新已另获授权、待实际执行。** 商圈连接器已合并 main（squash `2c56dd2`，PR #27），本变更按 D9 在其后独立实施；对齐合并版[标准 v1](../../../docs/mcp-connector-integration.md)（transport 定为 stdio；接缝形态对齐 trade-area 先例：任务能力开关、`registerMcpServer(name, config)`、目录指纹冻结、受管任务不注入）。实施决定（随启动落定）：**单工具 `weather_history`**（来源/许可说明并入工具描述，可推导不设 meta 工具，同 D10 原则）；城市名→坐标 v1 仅内置少量常用城市，其余用经纬度；缓存时效默认 72 小时（可配置）；查询时区固定 `Asia/Shanghai` 并在结果标注；日期跨度上限 366 天。
+状态：**本地实施、非作者复核、实际 PR head CI 与获准合并完成，工程实施原位归档；后续两轮真实模型功能闭环完成，报告内容FAIL；MacBook更新已获授权，实际采用按回执核定。** [有限真实模型记录](live-validation.md)保留模型错误及未验证范围。商圈连接器已合并 main（squash `2c56dd2`，PR #27），本变更按 D9 在其后独立实施；对齐合并版[标准 v1](../../../docs/mcp-connector-integration.md)（transport 定为 stdio；接缝形态对齐 trade-area 先例：任务能力开关、`registerMcpServer(name, config)`、目录指纹冻结、受管任务不注入）。实施决定（随启动落定）：**单工具 `weather_history`**（来源/许可说明并入工具描述，可推导不设 meta 工具，同 D10 原则）；城市名→坐标 v1 仅内置少量常用城市，其余用经纬度；缓存时效默认 72 小时（可配置）；查询时区固定 `Asia/Shanghai` 并在结果标注；日期跨度上限 366 天。
 
 2026-11-03 · 依据[商圈/天气 MCP 连接器能力承接产品讨论稿 v0.1](../../../docs/商圈天气MCP连接器能力承接产品讨论稿_v0.1.md) 制定。本变更为两个独立连接器中的**第二个**：交付天气连接器本体，复用 [trade-area-mcp](../trade-area-mcp/spec.md) 随交付建立的 [MCP 连接器接入标准 v1](../../../docs/mcp-connector-integration.md)（目录、清单、工具合同、Host 接缝模式同源），验证标准的可复用性；不随该变更交付，不共享分支或合并批次。
 

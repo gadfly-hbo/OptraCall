@@ -166,3 +166,11 @@ tests/weather-mcp.test.ts   # 10 项测试（合成 HTTP 夹具，零真实网�
 本次独立 `codex/weather-archive` 工作树只更新工程入口及spec/result三份Markdown，未改产品源码、测试、依赖、真实数据或已签署独立报告。归档提交完整树因文档而不同，须核对只有这三份文档变化、其余源码blob不变；其自身SHA、推送、实际main push CI及最终main快进以Git/Actions和仓外回执核定，不为自引用无限追加提交。证据根 `/Users/bendandebaba/OptraCall-artifacts/weather-model-delivery-20261103/`，此前工程/API/CI原始证据仍保留在各原根。
 
 后续真实模型测试使用隔离dataRoot、合成商圈资料及既有湖州整月天气缓存，经正常Host→Pi SDK→MCP任务路径执行，模型选择依据已批准配置与既有成功证据，不自动换模型或重放失败；功能、数值和文件回读由非作者另核。测试结果如实记录后，MacBook通过现有main试用更新入口安全快进、按锁安装与构建启动，保留该机既有配置、项目、会话和文件。此处仅记录授权与计划，不预写模型或设备成功。
+
+## 归档后真实模型与设备采用记录
+
+原位归档提交`6af3ed7d3343d99c8078fb47a12043adf18e641d`的实际main push [Check #83](https://github.com/gadfly-hbo/OptraCall/actions/runs/41647428317) attempt 1成功：964项／901PASS／0FAIL／63条件SKIP，原告警保留；仅3MD变化，本地main安全快进且清洁。合并main、归档main和PR head CI分别核定，未相互替代。
+
+随后按授权在隔离普通任务执行商圈＋天气两轮真实MiniMax模型，实际49次工具调用／32条模型HTTP记录，四个连接器工具均被实际调用，天气命中固定整月缓存。Agent自主分析、两稿保存及API字节回读、同原生会话重开均有证据，首稿未被第二稿覆盖。**功能闭环完成，报告内容FAIL**：数值符号、降水表义和错误筛选归因等未由最终completed掩盖；两轮共5个工具失败及原始write/edit保留，没有第三轮人工纠错或Host改算。[完整有限验证记录](live-validation.md)列明身份、范围、失败与非作者核对。
+
+MacBook按随后授权的采用范围接收main和同一已批准2835条不可变商圈快照；本机已有项目／会话／配置和原来源仓WIP保全，不导入新来源版本。该步骤的实际执行、loaded runtime、成功CI、60文件快照校验及原文件保全以仓外最终收据与交付说明回读；本纯文档提交创建时不预写设备成功或自身未来SHA。此增量仅补充原位归档记录，不改已签署工程报告、候选清单、产品源码或依赖，也不把旧专业FAIL/PARTIAL追认为通过。

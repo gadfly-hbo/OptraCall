@@ -4,7 +4,7 @@
 
 本项目遵循“Host 管环境，Agent 自主执行”，优先复用既有 SDK／Runtime 能力。新增设计遵守[工程规范第2节](docs/engineering-workflow.md#产品-agent-与工程-agent)，最终验收完成[职责边界及复用检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；详细规则仅在工程规范维护。
 
-[商圈数据 MCP 连接器](openspec/changes/trade-area-mcp/result.md#合并交付与原位归档)与[天气连接器](openspec/changes/weather-mcp/result.md#合并交付与原位归档)已分别经非作者复核、实际head CI及获授权squash入main，OpenSpec原位归档；后续维护先读对应结果和[商圈IN06](openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)的SDK薄层复用边界。Qoder整体移交后只读，接缝及后续维护由Codex承接，原清单、移交包及失败保留。用户已另授权归档后进行两连接器真实模型测试、再更新MacBook，实际执行与限制按天气结果分别回读；Mac mini原运行服务保持。经营数据留在获准本机dataRoot，公开样例使用合成材料，未来来源版本导入仍单独授权。
+[商圈数据 MCP 连接器](openspec/changes/trade-area-mcp/result.md#合并交付与原位归档)与[天气连接器](openspec/changes/weather-mcp/result.md#合并交付与原位归档)已分别经非作者复核、实际head CI及获授权squash入main，OpenSpec原位归档；后续维护先读对应结果和[商圈IN06](openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)的SDK薄层复用边界。Qoder整体移交后只读，接缝及后续维护由Codex承接，原清单、移交包及失败保留。[后续真实模型记录](openspec/changes/weather-mcp/live-validation.md)为两轮工具／保存闭环完成、报告内容FAIL，不能当专业或用户产品验收；已授权MacBook main及同一正式快照采用，实际运行与保全按最终回执核定。Mac mini原运行服务保持，经营数据与凭据留在获准本机根，未来来源版本导入仍单独授权。
 
 当前用户已明确授权[PPT Host 接线修复](openspec/changes/ppt-host-wiring-repair/spec.md)：修复已核实的项目／配置归属、完整操作占用、保护、导出／差异及UI接缝，保留原FAIL、版本、会话与文件；适用检查、独立复核及Git／CI后合并main，不切换服务、不操作MacBook或新增真实模型实验。原检查“不通过”与本次修复结果分别记录。
 
