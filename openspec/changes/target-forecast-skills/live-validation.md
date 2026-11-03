@@ -68,3 +68,21 @@
 更新前已记录1206关键文件 SHA（含auth/settings、两SQLite及既有ppt-venv，约51.65MB）、3符号链接，0读取/不稳定错误；项目根当前为空，没有既存native会话，不能虚称保全了已有会话。trial锁/控制与logs动态项单列，其他私有runtime/tools保留metadata-only边界。字节仅在peer流式哈希，不解析/展示凭据或业务内容，也不复制Mini配置/项目到peer。
 
 完成此次实跑与证据发布后，按用户授权沿用原 `trial-command.sh update` 核对最新main的成功CI、仅快进/锁文件安装/构建并启动；实际采用及更新后保全另记，不提前填写成功。预检与可复用保全脚本在 `/Users/bendandebaba/OptraCall-artifacts/target-forecast-live-macbook-preflight-20261103T015049Z-2e601e02/`。原仓退役/JuanerAI文档、复盘脚本化、pandas环境仍未随本阶段执行。
+
+## 证据发布与 MacBook 首次实际采用
+
+上述“准备”固定记录更新前状态。随后五份Markdown以 `bc23098c0e970be376cea1b178331bea6ad35164` 发布main（parent `fa39c38`，tree `aa0974a1d819c77a02871c09bf2ef1980145ecca`）；没有另建功能PR或改动内核。非作者文档发布范围复核无阻断，原报告逐字汇编；其范围报告在 `/Users/bendandebaba/OptraCall-artifacts/target-forecast-review-standards-20261103T004426/docs-scope-review.md`。本地protected-skills 4/4、差异与相对引用检查通过；[该实际head的Check #73](https://github.com/gadfly-hbo/OptraCall/actions/runs/41567002780) attempt 1 success，904项=844 PASS/60条件SKIP/0 FAIL，构建、agent-session边界和高危审计通过。既有2项moderate依赖提示保留。Mini主仓main安全快进至同提交、干净且tracking 0/0，未启动或切换Mini原服务。
+
+2026-11-03 10:41北京时间（02:41 UTC），MacBook原 `trial-command.sh update` 正常退出0，完成停机状态核对、目标main成功CI核对、Git只快进、锁文件安装、构建及原launcher启动。没有reset/stash/clean、切分支、回推、复制Mini配置或新建业务项目，没有在MacBook运行模型。实际回读：
+
+| 对象 | 首次采用实测 |
+| --- | --- |
+| checkout / runtime | `bc23098c0e970be376cea1b178331bea6ad35164` / tree `aa0974a1d819c77a02871c09bf2ef1980145ecca`，dirty=false；main干净、origin/main 0/0、pushurl=DISABLED |
+| 活动实例 | `f4912109-758e-41d5-820d-9a013bd56953`，Host PID17164、wrapper17163；codeRoot `/Users/huangbo/Dev/OptraCall`，私有Node25.9.0；不是旧控制记录或仅磁盘build |
+| 就绪与页面 | `/api/health` ready/200、SDK1.4.0；根页及JS/CSS/favicon均200；4173 listener与runtime PID一致 |
+| 三skill与补漏 | 三份SKILL存在且与发布候选SHA一致；method为 `44e5047554298b8ae210360f7e20a6ced3610e435efe65333d1027848b249393` |
+| 保全 | 1206关键文件SHA/size/mode/mtime零变化、零新增/缺失，3符号链接零变化，读取/不稳定错误0；现有配置、凭据、数据库与ppt-venv保持；项目根仍为空，不虚称已测旧会话兼容 |
+
+7个既存目录metadata变化，以及新增正常project-store/decision-feedback锁、新启动日志和trial实例等动态变化单列保留，不写全部metadata不变。未清理这些锁、原日志或任何评估失败。其他私有runtime/tools首次仅metadata预检，未扩大为全盘字节审计。
+
+原命令输出、actual-head CI原始API/job日志、真实health/进程/静态资源和前后哈希回执在 `/Users/bendandebaba/OptraCall-artifacts/target-forecast-live-20261103-9d346410/delivery/`（`macbook-update-first.log`、`macbook-first-runtime.json`、`macbook-first-critical-comparison.json`）。本段只固定首次采用；文档收尾如产生后续提交，仍须实际head CI及同入口追齐，最终Git/runtime身份另存该目录，不能预写未来成功。设备更新完成不改变本轮整体PARTIAL和各专业稿FAIL/PARTIAL，也不代表用户本人已产品接受。

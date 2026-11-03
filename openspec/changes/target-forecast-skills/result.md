@@ -179,3 +179,11 @@ TF02/TF12 浏览器根：`/Users/bendandebaba/OptraCall-artifacts/target-forecas
 本阶段没有修改Host/会话/模型默认值/内核脚本/测试/依赖；只在首稿封存后补齐target-forecast方法说明遗漏的既有末名尾部保底。算法与版本2保持，旧oracle分类独立性受限、目录列举/事实陈述偏离、验收方错误反馈及所有失败原样保留。不重建Host财务裁判，不追加隐藏模型修订loop。
 
 MacBook当前已完成只读预检、关键文件SHA及元数据保全准备，待上述证据发布/实际head CI后按用户授权从原试用入口更新；实际runtime与保全回读另记。Mac mini原服务未切换，隔离真实模型Host已正常关闭；原仓退役、复盘脚本和pandas提案等边界不扩大。
+
+### 实跑证据发布与 MacBook 首次采用完成
+
+上述待更新状态为当时记录。真实模型证据与既有方法补漏已发布main `bc23098c0e970be376cea1b178331bea6ad35164`，非作者文档范围复核、本地protected-skills 4项及引用/差异检查通过；[actual-head Check #73](https://github.com/gadfly-hbo/OptraCall/actions/runs/41567002780) attempt 1 success（904=844 PASS/60条件SKIP/0 FAIL，构建、边界与高危审计通过；2项moderate提示保留），Mini主仓已安全快进且干净。原功能仍仅PR #26，本次没有另建功能PR。
+
+MacBook随后通过既有更新入口正常退出0，已实际运行同commit/tree、dirty=false的ready实例 `f4912109-758e-41d5-820d-9a013bd56953`；main干净且origin/main 0/0，三skill到位，根页/资源/health均200。1206关键文件及3符号链接零变化，配置/凭据/数据库/ppt-venv保留；正常锁、日志和7目录metadata变化单列，项目根仍空，无peer模型调用。首次实例身份、CI及保全详见 [live-validation.md](live-validation.md#证据发布与-macbook-首次实际采用)；后续收据文档提交仍经CI并从原入口追齐，最终实际身份保存在同一外部delivery证据目录。
+
+本授权的真实实跑与设备更新已执行；三首稿FAIL、修订后目标/ROI FAIL、券PARTIAL原样保留，不把完成调用、合并、安装或正常启动写成专业全通过或用户本人产品接受。Mini原服务未切换，原仓退役、复盘脚本化及pandas等后续边界未执行。
