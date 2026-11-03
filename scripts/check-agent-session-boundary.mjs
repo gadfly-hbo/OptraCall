@@ -22,10 +22,14 @@ const projectAgentOwners = new Set([
   'tests/protected-session.test.ts',
   // MO05: real SDK close acknowledgement while an ordinary response is held.
   'tests/managed-execution-stop-held.test.ts',
+  'tests/subagent-runtime.test.ts', // SA01-SA04: isolated real SDK foreground delegation and parent cleanup.
+  'tests/native-search-runtime.test.ts', // WEB01/02: loopback native-provider blocks and SDK continuation.
 ]);
 const sdkConsumers = new Set(['src/agent/project-session.ts', 'src/agent/runtime.ts', 'src/agent/browser-ui-context.ts']);
 // Exact native tool/resource helpers, without session/runtime constructors.
 const toolSdkConsumers = new Map([
+  ['src/agent/subagent.ts', new Set(['defineTool', 'parseFrontmatter'])], // Data discovery/tool schema only; SDK constructors remain in project-session.
+  ['src/agent/native-search.ts', new Set()], // Protocol hooks only; no SDK constructor or independent loop.
   ['src/agent/protected-tools.ts', new Set(['createReadToolDefinition', 'createWriteToolDefinition', 'createEditToolDefinition', 'createBashToolDefinition', 'createGrepToolDefinition', 'createFindToolDefinition', 'createLsToolDefinition', 'createCodemodeExtension'])],
   ['src/agent/protected-tool-process.ts', new Set(['createReadTool', 'createWriteTool', 'createEditTool', 'createBashTool', 'createGrepTool', 'createFindTool', 'createLsTool', 'createCodemodeExtension'])],
   // MO02: native-only file executor and exact SDK equivalence fixture; no session/model capability.
@@ -43,7 +47,7 @@ const historyReaders = new Set(['src/host/project-history.ts', 'tests/project-mi
 // Extensions still receive only owner-bound ports and cannot register domains.
 // The verification Host also owns the separate, no-execution draft profile.
 // decision-board extraction follows the same Host-owned adapter pattern.
-const domainRegistrars = new Set(['src/host/server.ts', 'src/host/requirement-sessions.ts', 'src/host/verification-sessions.ts', 'src/host/verification-host.ts', 'src/host/decision-board-sessions.ts', 'src/host/ppt-refiner-sessions.ts', 'tests/agent-sessions.test.ts', 'tests/agent-session-execution.test.ts']);
+const domainRegistrars = new Set(['src/host/server.ts', 'src/host/requirement-sessions.ts', 'src/host/verification-sessions.ts', 'src/host/verification-host.ts', 'src/host/decision-board-sessions.ts', 'src/host/ppt-refiner-sessions.ts', 'tests/agent-sessions.test.ts', 'tests/agent-session-execution.test.ts', 'tests/subagent-runtime.test.ts']); // SA03: actual shared-owner cleanup quarantine probe.
 const connectionProbeOwners = new Set(['src/host/server.ts', 'tests/fixtures/runtime-cases.mjs']);
 // Launcher/update tests load their isolated fixture checkout by absolute URL.
 const checkoutLoaders = new Set(['scripts/trial-launcher.mjs', 'tests/trial-launcher.test.ts', 'tests/trial-update.test.ts']);

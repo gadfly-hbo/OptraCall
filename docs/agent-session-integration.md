@@ -145,6 +145,10 @@ Host的`closeAll({ provider?, projectId? })`在注册域间协调，各域权威
 
 ## 接入验证与工具读取
 
+任务内前台委派与原生联网沿用 Interface v3 及原 project/task owner，接缝契约和适用范围见[任务 Agent 能力规格](../openspec/changes/task-agent-capabilities/spec.md)。`subagent` 在同一父 Resource 中管理隔离内存 SDK 子会话；不向 Extension 开放域注册、凭据或另起 Runtime。普通与受管 ordinary 项目任务可用，protected、固定文本和专属业务 workspace 排除；子工具权限与执行资源仍由原父 scope 管理。
+
+角色来自实际已加载 skill 的 `agents/*.md`，使用命名空间及只收窄的工具清单；`web_search` 表示已接通 Provider 的服务端能力，只有声明或缺省继承该能力的角色获得它。子结果和失败经父工具回执保存，不提供后台存续或独立子 native 历史。MiniMax 原生块续接、MiMo 来源回执与新可选 assistant 元数据由 SDK 钩子薄适配，旧记录不回填；协议续接所需的隐藏技术记录不作为用户业务消息发往 Provider。准确调用、限制、验证及尚未执行的 Git/运行采用状态以本变更结果和 Qoder 回执为准。
+
 按当前变更实际范围关联SM01–SM14证据。检查入口由`package.json`提供：`check:agent-sessions`检查导入/构造路径，`check`同时运行约束、长期测试及构建，CI沿用同一入口。共享行为测试与实际Host/SDK合成Provider、正常HTTP/UI、保存/重开、取消及RAP+SAP+Case联合回归互补；不能只靠import通过或内部Map断言宣称完成。
 
 边界脚本使用当前锁定TypeScript的AST解析，识别静态导入、重导出、require、动态import及已知直接构造；忽略注释、字符串、JSX和模板正文，仍检查模板表达式中的调用。准确例外及理由在[scripts/check-agent-session-boundary.mjs](../scripts/check-agent-session-boundary.mjs)，覆盖SDK薄层、公共实现、原生历史读取、固定连接探针和明确测试路径。没有Host或tests全目录豁免。检查不解释所有反射/动态代码，也不替代资源归属和业务策略的独立复核。

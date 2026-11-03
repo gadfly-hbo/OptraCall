@@ -279,6 +279,12 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
     // there is no in-flight parent turn.
     if (operation.cancellation) try { await operation.cancellation; } catch (error) { failures.push(error); }
     const finalResource = operation.resource ?? slot.resource;
+    // Attached foreground SDK resources can fail cleanup in an unmanaged
+    // parent too. Its drain checks those owned handles without inventing a
+    // managed execution scope or retrying the failed shutdown.
+    if (finalResource?.mode === 'unmanaged' && finalResource.agent.alive) {
+      try { await finalResource.agent.drain?.(); } catch (error) { failures.push(error); }
+    }
     if (finalResource && finalResource.mode !== 'unmanaged') {
       try {
         const resource = finalResource;

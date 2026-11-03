@@ -60,7 +60,7 @@ export class AgentRuntime {
       const models = await this.#models();
       const id = `optracall-${configuration.revision}`;
       const builtin = configuration.sdkProvider ? models.getModel(configuration.sdkProvider, configuration.model) : undefined;
-      models.registerProvider(id, { api: configuration.api ?? 'openai-completions', baseUrl: configuration.baseUrl, models: [builtin ? { ...builtin, id: configuration.model } : { id: configuration.model, name: configuration.model, reasoning: false, input: ['text'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 32_000, maxTokens: 1024 }] });
+      models.registerProvider(id, { api: configuration.api ?? 'openai-completions', baseUrl: configuration.baseUrl, models: [builtin ? { ...builtin, id: configuration.model, api: configuration.api ?? 'openai-completions', baseUrl: configuration.baseUrl } : { id: configuration.model, name: configuration.model, reasoning: false, input: ['text'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 32_000, maxTokens: 1024 }] });
       await models.setRuntimeApiKey(id, configuration.apiKey);
       return id;
     })();
