@@ -1,6 +1,6 @@
 # 天气 MCP 连接器（Open-Meteo 历史天气 · 第二个连接器）
 
-状态：规格 v0.1（2026-11-03，含已确认决策 D12）；实施暂缓（讨论稿 D6），交付顺序按 D9 在商圈连接器合并后独立交付，复用其奠基的连接器标准。
+状态：**实施中（2026-11-03 启动）**——商圈连接器已合并 main（squash `2c56dd2`，PR #27），本变更按 D9 在其后独立实施；对齐合并版[标准 v1](../../../docs/mcp-connector-integration.md)（transport 定为 stdio；接缝形态对齐 trade-area 先例：任务能力开关、`registerMcpServer(name, config)`、目录指纹冻结、受管任务不注入）。实施决定（随启动落定）：**单工具 `weather_history`**（来源/许可说明并入工具描述，可推导不设 meta 工具，同 D10 原则）；城市名→坐标 v1 仅内置少量常用城市，其余用经纬度；缓存时效默认 72 小时（可配置）；查询时区固定 `Asia/Shanghai` 并在结果标注；日期跨度上限 366 天。
 
 2026-11-03 · 依据[商圈/天气 MCP 连接器能力承接产品讨论稿 v0.1](../../../docs/商圈天气MCP连接器能力承接产品讨论稿_v0.1.md) 制定。本变更为两个独立连接器中的**第二个**：交付天气连接器本体，复用 [trade-area-mcp](../trade-area-mcp/spec.md) 随交付建立的 [MCP 连接器接入标准 v1](../../../docs/mcp-connector-integration.md)（目录、清单、工具合同、Host 接缝模式同源），验证标准的可复用性；不随该变更交付，不共享分支或合并批次。
 
@@ -61,7 +61,16 @@
 | WX08 | 标准复用核对：目录/清单/工具合同与 `docs/mcp-connector-integration.md` 一致；如有标准修订，修订随本变更记录 | R7 |
 | WX09 | 既有链路回归通过；`npm run check`（含边界检查）通过 | — |
 
+## 实施记录（Qoder 侧，2026-11-03）
+
+商圈连接器合并 main（squash `2c56dd2`＋归档 `351d835`）后，Qoder 在 `qoder/weather-mcp` 分支（基于合并后 main）完成连接器本体：`extensions/connectors/weather-mcp/`（types/cities 内嵌于 types/coverage/open-meteo/cache/service/server/main/connector.json/README）＋ `tests/weather-mcp.test.ts`。零新增依赖（复用标准 v1 的 @modelcontextprotocol/sdk 与 zod）。
+
+实施决定（对齐标准 v1 与 trade-area 先例）：顶层工具 schema 用 `z.looseObject` 保留未知键、实现精确拒绝（缺必需键实测由 SDK 协议级拒绝，符合标准 §3"不保证进入回调"口径）；错误信封扩展 `source_unavailable`（detail.reason：rate_limited/quota_exhausted/timeout/cancelled/network/upstream_error/auth_invalid，含 Retry-After）；不自动重试；缓存默认 TTL 72h、过期即重取不冒充新数据；出境自限于 `archive-api.open-meteo.com`（URL 构造自检）；城市坐标表 10 城、时区固定 Asia/Shanghai、跨度上限 366 天、end 须早于今天。
+
+验证：TDD 先行（RED 模块缺失）→ GREEN 10/10（含 MCP 协议往返、stdio 预热缓存冒烟，全部合成 HTTP 夹具零真实网络）；`npm run check` exit 0（943 项：940 PASS/0 FAIL/3 条件 SKIP）。真实 API 冒烟属外部副作用，按本规格未决项另行授权。未完成（如实）：Host 接缝（能力开关条目、`registerMcpServer` 注册、目录条目、UI、**首个 remote-api 的出境白名单传输层强制**——Host 侧新工作）归 Codex；WX01 产品路径端到端、WX05 出境强制实测、WX07 目录点验待接缝。证据见 [result.md](result.md)。
+
 ## 适用检查与未决
+
 
 - 适配器层以合成 HTTP 夹具测试（本仓测试模式自建，不迁 data-mcps 夹具）；真实 Open-Meteo 请求属外部副作用，按届时授权实测并记录费用/限流实际情况；`npm run check` 全量；浏览器点验目录条目。
 - UI Demo：与商圈连接器共用[原型](../../../docs/prototypes/connector-ui-demo.html)，**用户已于 2026-11-03 全部确认**：出境说明为内联卡片、勾选天气时出现一次、不弹窗不阻断（D12 交互定稿）；开启入口两处与能力目录描边按钮统一，同商圈条目。Demo 确认不构成实施启动授权（D6）。
