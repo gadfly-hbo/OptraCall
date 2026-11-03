@@ -47,7 +47,7 @@ test('TA06: task capability choices are independent, validated, and archived pro
   const { task: disabled } = await json(await host.request(taskRoute + '/capabilities', 'PUT', { capability: 'tradeAreaTools', enabled: false }));
   assert.equal(disabled.tradeAreaTools, undefined);
   assert.equal(disabled.simulationTools, true, 'switching one capability must preserve the other');
-  assert.equal((await json(await host.request(taskRoute + '/capabilities', 'PUT', { capability: 'weatherTools', enabled: true }), 400)).code, 'invalid_task_capability');
+  assert.equal((await json(await host.request(taskRoute + '/capabilities', 'PUT', { capability: 'unknownTools', enabled: true }), 400)).code, 'invalid_task_capability');
   assert.equal((await json(await host.request(taskRoute + '/capabilities', 'PUT', { capability: 'tradeAreaTools', enabled: 'true' }), 400)).code, 'invalid_task_capability');
   await json(await host.request(`/api/projects/${project.id}/archive`, 'POST', {}));
   assert.equal((await json(await host.request(taskRoute + '/capabilities', 'PUT', { capability: 'tradeAreaTools', enabled: true }), 409)).code, 'project_archived');

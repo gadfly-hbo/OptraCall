@@ -126,7 +126,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       agentOptions: async (owner, _configuration, execution) => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
         const protectedExecution = await automatic.ordinaryExecution({ project, task }, execution);
-        return { projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(protectedExecution ? { protectedExecution } : {}) };
+        return { projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(protectedExecution ? { protectedExecution } : {}) };
       },
       capabilities: { commands: true, ui: true, editor: true },
     },
@@ -551,8 +551,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const project = await projects.get(projectId); assertActive(project);
             const selected = typeof input.configurationId === 'string' ? configuration.read(input.configurationId) : project.configuration;
             if (!selected || !configuration.snapshot(selected.id, selected.revision)) throw new RequestFault(409, 'configuration_required');
+            if (input.weatherTools !== undefined && typeof input.weatherTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
             if (input.tradeAreaTools !== undefined && typeof input.tradeAreaTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
-            const created = await projects.createTask(projectId, { name: String(input.name ?? ''), configuration: selected, simulationTools: input.simulationTools === true, tradeAreaTools: input.tradeAreaTools === true });
+            const created = await projects.createTask(projectId, { name: String(input.name ?? ''), configuration: selected, simulationTools: input.simulationTools === true, tradeAreaTools: input.tradeAreaTools === true, weatherTools: input.weatherTools === true });
             projectSessions.registerFresh(projectSessions.ref({ project: await projects.get(projectId), task: created }));
             return created;
           }); json(response, 201, { task }); return;

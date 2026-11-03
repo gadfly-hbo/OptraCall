@@ -60,9 +60,21 @@ extensions/connectors/<id>/
 4. **出境强制**（remote-api）：传输层仅放行清单域；开启时一次性向用户说明出境内容（D12），不逐次确认。
 
 5. **工具目录与配置边界**：本例server默认 `exposure:hidden`，仅三个确切名字以 `toolExposure:direct` 放行；配置文件的同保留namespace不能替换产品server或绕过任务开关，其他用户MCP保留。因SDK默认配置优先覆盖注册且未公开默认loader，唯一SDK导入面有锁定1.4.0的最小私有loader复用例外，理由/退出条件见[IN06记录](../openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)，须非作者专项复核；不新增任意动态loader白名单。
-6. **可观测目录指纹**：利用SDK公开 `getAllTools` 和 `tool_call` hooks，完整三名目录首次就绪后固定其名称/描述/参数/exposure指纹。观察到变化或缺失后，本worker资源中的商圈调用持续拒绝，含codemode嵌套；目录改回或SDK reload不清冻，关闭重建资源才重新取基线。`before_agent_start`仅观测，不冒充可取消门禁。不把SDK适配缓存当完整raw `tools/list`，不声称检查与RPC原子、能撤回在途调用或发现未通知/未刷新变化。
+6. **可观测目录指纹**：利用SDK公开 `getAllTools` 和 `tool_call` hooks，各连接器的完整确切工具名首次就绪后固定其名称/描述/参数/exposure指纹（商圈三名、天气一名）。观察到变化或缺失后，本worker资源中该连接器调用持续拒绝；两个命名空间的摘要/冻结状态各自独立，含codemode嵌套；目录改回或SDK reload不清冻，关闭重建资源才重新取基线。`before_agent_start`仅观测，不冒充可取消门禁。不把SDK适配缓存当完整raw `tools/list`，不声称检查与RPC原子、能撤回在途调用或发现未通知/未刷新变化。
 
-stdio生命周期沿用SDK：普通stop取消当前请求、保留可复用server；公共close经既有 `runtime.dispose()` 等待MCP关闭。本例直接stdio子进程退出有实测，不把SDK默认close扩大为所有逃逸后代收尾证明；受管路径继续排除。local-data代码只读本机文件，不发网络请求；工具结果仍进入所选任务模型上下文。SDK stdio默认继承driver环境，不构成凭据或OS文件沙箱；无新增凭据配置。天气及remote-api白名单实施属后续独立变更，本次不宣称已完成。
+stdio生命周期沿用SDK：普通stop取消当前请求、保留可复用server；公共close经既有 `runtime.dispose()` 等待MCP关闭。本例直接stdio子进程退出有实测，不把SDK默认close扩大为所有逃逸后代收尾证明；受管路径继续排除。local-data代码只读本机文件，不发网络请求；工具结果仍进入所选任务模型上下文。SDK stdio默认继承driver环境，不构成凭据或OS文件沙箱；无新增凭据配置。以上为首个 local-data 的接缝事实；天气 remote-api 使用下述受限传输，不能照搬普通 stdio 环境作为网络隔离。
+
+
+### 首个 remote-api 事实：weather-mcp
+
+2026-11-03 随 [weather-mcp](../openspec/changes/weather-mcp/spec.md) 增补，详细理由/兼容见其 [S1–S5](../openspec/changes/weather-mcp/structure-decisions.md)，标准版本仍为 v1。
+
+- 产品注册入口为可信 Host `src/agent/weather-mcp-entry.ts`（P），连接器自己的 `main.ts` 为 standalone 入口；直接运行后者只具适配器自限，不具 Host 出境强制，不可当产品验收。
+- P 不 import 连接器。执行 worker Q 同时受 macOS Seatbelt deny-default 无网络/无 fork 与 Node 权限限制，仅经继承 fd3 发请求/取消。P 仅接受固定 HTTPS `archive-api.open-meteo.com:443/v1/archive`、六个参数（坐标/日期/字段/固定时区），固定 GET，禁止自带 body/headers/proxy/CONNECT、重定向和重试；域名解析仅公开 IPv4，固定本次地址并保留域名证书验证，限制帧/并发/响应与超时。
+- SDK 仍是会话与进程组收尾权威；P/Q 不另建 Runtime、guardian 或监听端口。普通 stop 取消当前查询并保留可复用资源；公共 close/reload 释放两进程。实际进程退出与在途取消须分别验证。
+- Node `--allow-net` 不是域白名单，Node 权限也不是对恶意代码的独立安全沙箱。v1 仅支持 Seatbelt 可用的 macOS，其他平台 fail-closed；Linux CI 的策略/协议测试与 macOS 实际隔离证据分开记录，不以条件 SKIP 声称全平台支持。
+- 开启时内联 D12 说明卡：目标域、坐标/日期/字段/时区、免费 API 非商业条件、结果进入所选模型上下文；只在启用手势时说明，不弹窗不逐调用确认。不新建持久同意表。
+- 缓存落 `<dataRoot>/connectors/weather/entries/`，默认72h；缓存身份为来源/获取时间/时效，损坏当未命中，过期重取；取消/迟到不落成功缓存。原缓存结构不变。
 
 Qoder 交付连接器本体（server/工具/适配/导入脚本/测试/README）与适用证据；接缝实施与主链路回归归 Codex。未经用户对具体变更直接指定，Qoder 不实施接缝（工程规范 v1.3 IN06）。
 

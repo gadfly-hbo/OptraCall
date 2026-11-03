@@ -4,7 +4,7 @@
 
 本项目遵循“Host 管环境，Agent 自主执行”，优先复用既有 SDK／Runtime 能力。新增设计遵守[工程规范第2节](docs/engineering-workflow.md#产品-agent-与工程-agent)，最终验收完成[职责边界及复用检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；详细规则仅在工程规范维护。
 
-[商圈数据 MCP 连接器](openspec/changes/trade-area-mcp/result.md#合并交付与原位归档)已通过本地工程与非作者复核，经实际head CI后squash入main；归档及最终main CI身份按记录核对。后续维护先读该记录及[规格IN06](openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)的SDK薄层复用边界。Qoder原实现已整体移交Codex，本变更接缝及后续维护由Codex承接；原清单、移交包和失败保留。天气按D9为后续独立变更；真实模型、MacBook、运行采用及未来来源版本导入仍各自另授权。经营数据留在获准本机dataRoot，公开样例使用合成材料。
+[商圈数据 MCP 连接器](openspec/changes/trade-area-mcp/result.md#合并交付与原位归档)已通过本地工程与非作者复核，经实际head CI后squash入main；归档及最终main CI身份按记录核对。后续维护先读该记录及[规格IN06](openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)的SDK薄层复用边界。Qoder原实现已整体移交Codex，本变更接缝及后续维护由Codex承接；原清单、移交包和失败保留。[天气连接器](openspec/changes/weather-mcp/spec.md)随后按D9由Qoder在`qoder/weather-mcp`分支实施并整体移交Codex：单工具+Open-Meteo适配器+缓存TTL+失败路径信封，全部合成夹具验证（943项检查通过）、真实API调用0次；Host接缝（含首个remote-api出境白名单强制）与真实API冒烟归Codex，均须按记录另行授权。真实模型、MacBook、运行采用及未来来源版本导入仍各自另授权。经营数据留在获准本机dataRoot，公开样例使用合成材料。
 
 当前用户已明确授权[PPT Host 接线修复](openspec/changes/ppt-host-wiring-repair/spec.md)：修复已核实的项目／配置归属、完整操作占用、保护、导出／差异及UI接缝，保留原FAIL、版本、会话与文件；适用检查、独立复核及Git／CI后合并main，不切换服务、不操作MacBook或新增真实模型实验。原检查“不通过”与本次修复结果分别记录。
 
