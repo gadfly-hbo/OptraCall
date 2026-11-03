@@ -1,6 +1,6 @@
 # 天气 MCP 连接器 · 实施与验证记录
 
-2026-11-03 · 分支 `qoder/weather-mcp`（基于合并后 main `351d835`）· 状态：本地实施、最新main集成/重验及非作者复核完成；获授权单次真实API冒烟通过，Git/CI交付中；合并待确认，真实模型和设备未授权。下列 Qoder 记录保留接管前原范围，当前增量见文末。
+2026-11-03 · 分支 `qoder/weather-mcp`（基于合并后 main `351d835`）· 状态：本地实施、最新main集成/重验、非作者复核及实际head CI通过，已获准squash合并并快进本地main，工程实施原位归档；真实模型测试与MacBook更新已另获授权，实际执行另记。下列 Qoder 记录保留接管前原范围，当前增量见文末。
 
 ## 授权与流程
 
@@ -148,3 +148,21 @@ tests/weather-mcp.test.ts   # 10 项测试（合成 HTTP 夹具，零真实网�
 - 该响应未出现限流错误；剩余配额/限流真实失败、底层HTTP发包次数、费用及供应商结算未观察，不把tool1推成已抓包证明HTTP1或免费结算。该次成功仅证明这个输入/时刻/生产传输合同，不代证长期天气正确性或模型经营分析质量。
 
 当前WX01真实源冒烟补证、WX02–08集成范围、WX09本地完整及独立复核均有新证据；最终PR与实际head CI以本次Git/Actions及仓外交付回执核定，不预写未来身份以避免自引用文档循环。squash合并仍待用户确认，main快进/OpenSpec归档在获准合并后执行。真实模型、MacBook更新和Mac mini运行采用仍未执行。
+
+## 合并交付与原位归档
+
+用户随后明确指示“确认合并main，并完成 OpenSpec 归档，然后再真实模型测试，更新MacBook”。此授权替代上段等待合并、模型和设备授权的阶段状态；按归档→真实模型→MacBook更新顺序执行，保留各自证据。Mac mini原运行服务不因本授权切换。
+
+| 对象 | 实际身份与结果 |
+| --- | --- |
+| 唯一功能PR | [#29](https://github.com/gadfly-hbo/OptraCall/pull/29)，实际head `6b5e301c53b75c45381e6a02adb4b800fbef91f8`，base `4a3be3d36b6c2511635b2c044de2068b6b6ca4df`；合并前再次fetch、核对清洁候选及base未变 |
+| 实际head CI | [Check #81](https://github.com/gadfly-hbo/OptraCall/actions/runs/41643551070)，attempt 1，实际checkout为上述完整head，success；Ubuntu/Node25.9.0，964项／901 PASS／0 FAIL／63条件SKIP，边界、类型、构建及高危审计通过。2项moderate依赖告警、node-domexception弃用和既有bundle提示保留，未强升SDK或修改锁文件 |
+| squash与完整树 | `722af86fd2bf5a9972bbbc6dc537e4c0bd79941b`，唯一父提交4a3be3d；与受检head完整树同为 `00c0414cf35fbcda111b69d7386b41387a4e5dfe`，没有合并引入的未验源码变化 |
+| 本地main首次快进 | 主仓 `/Users/bendandebaba/DevWorkSpace/OptraCall` 干净，从4a3be3d经 `merge --ff-only origin/main` 到722af86；原天气工作树和其他分支保留，没有reset、stash、clean或切换原服务 |
+| 合并main CI | [Check #82](https://github.com/gadfly-hbo/OptraCall/actions/runs/41646457468)，实际head 722af86、event push、attempt 1，success；964项／901 PASS／0 FAIL／63条件SKIP，边界、类型、构建及高危审计通过。与PR head证据分别核对，原告警和SKIP保留 |
+
+沿用本仓simlab、target-forecast和trade-area的OpenSpec惯例，本目录原位保留规格、结果、独立报告、结构决定、原候选清单和移交包，不移动路径或回写清单。原Qoder缺口、工程发现、首修不足、夹具错误、混合在途运行、FAIL／UNKNOWN与条件SKIP继续保留。两名非作者原报告及最终实际head CI复核分别可追溯；本归档不提升为模型专业质量或用户产品验收。
+
+本次独立 `codex/weather-archive` 工作树只更新工程入口及spec/result三份Markdown，未改产品源码、测试、依赖、真实数据或已签署独立报告。归档提交完整树因文档而不同，须核对只有这三份文档变化、其余源码blob不变；其自身SHA、推送、实际main push CI及最终main快进以Git/Actions和仓外回执核定，不为自引用无限追加提交。证据根 `/Users/bendandebaba/OptraCall-artifacts/weather-model-delivery-20261103/`，此前工程/API/CI原始证据仍保留在各原根。
+
+后续真实模型测试使用隔离dataRoot、合成商圈资料及既有湖州整月天气缓存，经正常Host→Pi SDK→MCP任务路径执行，模型选择依据已批准配置与既有成功证据，不自动换模型或重放失败；功能、数值和文件回读由非作者另核。测试结果如实记录后，MacBook通过现有main试用更新入口安全快进、按锁安装与构建启动，保留该机既有配置、项目、会话和文件。此处仅记录授权与计划，不预写模型或设备成功。
