@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ClientProject, PublicModelConfiguration } from './project-types.ts';
 import { HostRequestError } from './runtime-client.ts';
+import { TaskCapabilityList } from './TaskCapabilities.tsx';
+import type { TaskCapabilities } from '../task-capabilities.ts';
 
 const errorText = (error: unknown) => error instanceof HostRequestError ? error.message : '本地服务暂时不可用，请重试。';
-export function TaskDialog({ project, configurations, onCreate, onClose }: { project: ClientProject; configurations: PublicModelConfiguration[]; onCreate: (name: string, configurationId: string, simulationTools: boolean) => Promise<void>; onClose: () => void }) {
+export function TaskDialog({ project, configurations, onCreate, onClose }: { project: ClientProject; configurations: PublicModelConfiguration[]; onCreate: (name: string, configurationId: string, capabilities: TaskCapabilities) => Promise<void>; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null), input = useRef<HTMLInputElement>(null);
-  const [name, setName] = useState(''), [configurationId, setConfigurationId] = useState(''), [simulationTools, setSimulationTools] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [name, setName] = useState(''), [configurationId, setConfigurationId] = useState(''), [capabilities, setCapabilities] = useState<TaskCapabilities>({}), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const configured = configurations.find(item => item.id === (configurationId || project.configuration.id))?.hasApiKey;
   useEffect(() => { dialog.current?.showModal(); input.current?.focus(); }, []);
   return <dialog ref={dialog} className="catalog-dialog project-dialog" aria-labelledby="new-task-title" onCancel={event => { if (busy) event.preventDefault(); }} onClose={onClose}>
     <div className="dialog-heading"><span className="eyebrow">{project.name}</span><button className="icon-button" aria-label="关闭新建任务" disabled={busy} onClick={() => dialog.current?.close()}>✕</button></div>
     <h2 id="new-task-title">新建任务</h2><p className="detail-summary">任务独立保存对话和草稿，共享此项目的文件。</p>
-    <form noValidate onSubmit={async event => { event.preventDefault(); const cleaned = name.trim(); if (!cleaned || cleaned.length > 80) { setError('请输入1–80个字符的任务名称。'); input.current?.focus(); return; } if (!configured) { setError('请先在模型设置中配置所选模型。'); return; } setBusy(true); setError(''); try { await onCreate(cleaned, configurationId, simulationTools); } catch (error) { setError(errorText(error)); } finally { setBusy(false); } }}>
+    <form noValidate onSubmit={async event => { event.preventDefault(); const cleaned = name.trim(); if (!cleaned || cleaned.length > 80) { setError('请输入1–80个字符的任务名称。'); input.current?.focus(); return; } if (!configured) { setError('请先在模型设置中配置所选模型。'); return; } setBusy(true); setError(''); try { await onCreate(cleaned, configurationId, capabilities); } catch (error) { setError(errorText(error)); } finally { setBusy(false); } }}>
       <div className="field"><label htmlFor="task-name">任务名称</label><input ref={input} id="task-name" value={name} maxLength={80} required disabled={busy} placeholder="例如：销售变化与原因" aria-invalid={Boolean(error)} aria-describedby="task-name-help" onChange={event => { setName(event.target.value); setError(''); }} /><p id="task-name-help" className={error ? 'field-error' : 'field-help'} role={error ? 'alert' : undefined}>{error || '同一项目下可以创建多个独立任务。'}</p></div>
       <div className="field"><label htmlFor="task-model">任务模型</label><select id="task-model" value={configurationId} disabled={busy} onChange={event => { setConfigurationId(event.target.value); setError(''); }}><option value="">继承项目配置 · {project.configuration.model}</option>{configurations.map(item => <option key={item.id} value={item.id}>{item.name} · {item.model}{item.hasApiKey ? '' : ' · 需要配置'}</option>)}</select><p className="field-help">默认继承项目配置，可为此任务另选模型。</p></div>
-      <div className="field"><label htmlFor="task-simulation-tools" style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input id="task-simulation-tools" type="checkbox" checked={simulationTools} disabled={busy} onChange={event => setSimulationTools(event.target.checked)} />为此任务开启经营推演工具</label><p className="field-help">开启后 Agent 可用 simulation_inspect / draft / run / stress / evidence 五个推演工具；默认不开启。固化快照始终在经营推演页由你确认。</p></div>
+      <TaskCapabilityList settings={capabilities} disabled={busy} context="create" onChange={(capability, enabled) => setCapabilities(previous => ({ ...previous, [capability]: enabled }))} />
       <div className="project-dialog-actions"><button className="secondary-button" type="button" disabled={busy} onClick={() => dialog.current?.close()}>取消</button><button className="primary-button" type="submit" disabled={busy}>{busy ? '正在创建…' : '创建任务'}</button></div>
     </form>
   </dialog>;

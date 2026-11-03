@@ -156,7 +156,7 @@ test('managed stop interrupts a pending drain without creating or replaying an S
   assert.deepEqual((await readFile(methods, 'utf8')).trim().split('\n').map(line => JSON.parse(line)), ['open', 'drain', 'close']);
 });
 async function within<T>(promise: Promise<T>, message: string, milliseconds = 2000): Promise<T> { let timer: ReturnType<typeof setTimeout> | undefined; try { return await Promise.race([promise, new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(message)), milliseconds); })]); } finally { if (timer) clearTimeout(timer); } }
-async function until<T>(read: () => T | undefined, message: string): Promise<T> { const deadline = Date.now() + 2000; return new Promise<T>((resolve, reject) => { const check = () => { const result = read(); if (result !== undefined) { resolve(result); return; } if (Date.now() >= deadline) { reject(new Error(message)); return; } setTimeout(check, 5); }; check(); }); }
+async function until<T>(read: () => T | undefined, message: string, milliseconds = 2000): Promise<T> { const deadline = Date.now() + milliseconds; return new Promise<T>((resolve, reject) => { const check = () => { const result = read(); if (result !== undefined) { resolve(result); return; } if (Date.now() >= deadline) { reject(new Error(message)); return; } setTimeout(check, 5); }; check(); }); }
 
 test('SDK-04: a project exposes the complete native macOS toolset and bundled harness', async () => {
   const scratch = await mkdtemp(path.join(os.tmpdir(), 'optracall-native-'));
@@ -394,7 +394,9 @@ test('SDK-04: a session-start extension can receive a browser answer before open
   await writeFile(path.join(f.options.resourceRoot, 'extensions', 'startup-question.ts'), "export default function(pi){pi.on('session_start',async(_event,ctx)=>{await ctx.ui.confirm('Startup synthetic question','Answer before the SDK session is opened.');});}\n");
   const agent = f.create(), events: any[] = []; agent.subscribe(event => events.push(event));
   let opened = false; const pending = agent.open().then(value => { opened = true; return value; }); void pending.catch(() => {});
-  const request = await until(() => events.find(event => event.type === 'ui.request')?.request, 'The startup browser question must be forwarded before open resolves.');
+  // This observation includes worker/SDK cold startup, not just UI forwarding.
+  // Loaded startup can legitimately exceed 2s; keep the ordering assertions below.
+  const request = await until(() => events.find(event => event.type === 'ui.request')?.request, 'The startup browser question must be forwarded before open resolves.', 10_000);
   assert.equal(opened, false);
   assert.equal((await agent.respondUI({ id: request.id, value: true })).accepted, true);
   assert.deepEqual((await within(pending, 'A startup answer must release open.')).uiRequests, []);

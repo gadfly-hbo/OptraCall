@@ -2,7 +2,7 @@ import { presentContextMessages } from './context-presentation.ts';
 import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync, chmodSync, renameSync, unlinkSync, constants, openSync, fstatSync, fsyncSync, closeSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, VERSION, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory } from './sdk.ts';
+import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, VERSION, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory } from './sdk.ts';
 import type { ProjectAgentOptions, ProjectSnapshot, ProvidedContextInput } from './project-runtime.ts';
 import { runDiagnostic, readRunDiagnostic, type RunDiagnostic } from './run-diagnostics.ts';
 import { createBrowserUIContext, type BrowserUIResponse } from './browser-ui-context.ts';
@@ -10,6 +10,7 @@ import { OUTPUT_EVIDENCE_GUIDANCE } from './output-evidence.ts';
 import { createProtectedTools } from './protected-tools.ts';
 import { snapshotProtectedSkills } from './protected-skills.ts';
 import { createSimulationTools } from '../../extensions/business-plugins/sim-lab/tools/simulation-tools.ts';
+import { canonical } from '../../extensions/connectors/trade-area-mcp/snapshot.ts';
 
 type Outcome = 'completed' | 'cancelled' | 'failed';
 type LastRun = { requestId: string; outcome?: Outcome; diagnostic?: RunDiagnostic };
@@ -29,6 +30,8 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   let protectedTools: Awaited<ReturnType<typeof createProtectedTools>> | undefined;
   let unavailableSkills: string[] = [];
   let executionId: string | undefined;
+  // Resource lifetime state deliberately survives SDK extension reload/fork within this worker.
+  let tradeAreaDirectoryDigest: string | undefined, tradeAreaDirectoryFrozen = false;
   const executionBindings = new Map<string, { manager: SessionManager; file: string; cwd: string; closed: boolean }>();
   let editorText: string | undefined;
   // Both sealed text profiles reuse the same no-execution resource path.
@@ -107,6 +110,40 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   }
   const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { nativeTools: !fixedInput(), python: fixedInput() ? false : 'bash', powershell: fixedInput() || protectedTools ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools, skills: !fixedInput() && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)), mcp: !fixedInput() && !protectedTools, codemode: !fixedInput(), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged()), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: options.protectedExecution?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } });
   const environmentExtension: ExtensionFactory = pi => {
+    const connectorEnabled = !fixedInput() && !options.protectedExecution && Boolean(options.tradeAreaConnector);
+    const prefix = 'mcp__trade_area_mcp__';
+    if (connectorEnabled) {
+      // SDK config values interpret dollar substitutions. Preserve literal Host-owned paths.
+      const literal = (value: string) => value.replaceAll('$', () => '$$');
+      pi.registerMcpServer('trade-area-mcp', {
+        type: 'stdio', command: process.execPath,
+        args: [path.resolve(options.codeRoot, 'extensions/connectors/trade-area-mcp/main.ts')],
+        env: { TRADEAREA_DATA_ROOT: literal(path.resolve(options.tradeAreaConnector!.dataRoot)) },
+        exposure: 'hidden', toolExposure: { tradearea_search: 'direct', tradearea_detail: 'direct', tradearea_score: 'direct' },
+      });
+    }
+    const checkDirectory = () => {
+      if (!connectorEnabled || tradeAreaDirectoryFrozen) return false;
+      const expected = ['tradearea_search', 'tradearea_detail', 'tradearea_score'].map(name => prefix + name);
+      const tools = pi.getAllTools().filter(tool => tool.name.startsWith(prefix)).sort((a, b) => a.name.localeCompare(b.name));
+      if (tools.length !== expected.length || expected.some(name => !tools.some(tool => tool.name === name && tool.exposure !== 'hidden'))) {
+        if (tools.length || tradeAreaDirectoryDigest) tradeAreaDirectoryFrozen = true;
+        return false; // Never pin an empty/partial startup directory.
+      }
+      try {
+        const digest = createHash('sha256').update(canonical(tools.map(({ name, description, parameters, exposure }) => ({ name, description, parameters, exposure })))).digest('hex');
+        if (tradeAreaDirectoryDigest && tradeAreaDirectoryDigest !== digest) tradeAreaDirectoryFrozen = true;
+        tradeAreaDirectoryDigest ??= digest;
+      } catch { tradeAreaDirectoryFrozen = true; }
+      return !tradeAreaDirectoryFrozen;
+    };
+    // MCP's earlier handler waits for direct servers. This hook observes, not dispatches or blocks a model turn.
+    pi.on('before_agent_start', () => { checkDirectory(); });
+    pi.on('tool_call', event => {
+      if (!event.toolName.startsWith(prefix)) return;
+      if (!connectorEnabled) return { block: true, reason: '商圈工具未在当前普通任务资源开启。' };
+      if (!checkDirectory()) return { block: true, reason: tradeAreaDirectoryFrozen ? '商圈工具目录已变化，本会话连接器已冻结；请核对版本后关闭并重开会话。' : '商圈工具目录尚未完整就绪，请先核对连接器状态。' };
+    });
     // The SDK applies this replacement to agent state before its own JSONL append.
     pi.on('message_end', event => ({ message: redact(event.message) }));
   };
@@ -167,6 +204,13 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     // 经营推演工具按任务级开关注入普通项目任务；受管/封闭文本资源不注入——
     // 其纯计算执行体未经受限执行边界核验，按不可安全委派扩展明确不提供（SIM12）。
     const simulationTools = !fixedInput() && !o.protectedExecution && o.simulationTools ? createSimulationTools(o.simulationTools) : undefined;
+    const loadMcpConfig = !fixedInput() && !o.protectedExecution ? await getSdkMcpConfigLoader() : undefined;
+    const mcpExtension = loadMcpConfig ? createMcpExtension({ loadConfig: context => {
+      const loaded = loadMcpConfig({ agentDir: getAgentDir(), cwd: context.cwd, projectTrusted: context.isProjectTrusted() });
+      const reserved = (name: string) => name.replace(/[^A-Za-z0-9_]/g, '_') === 'trade_area_mcp';
+      const rejected = loaded.servers.filter(entry => reserved(entry.name));
+      return { ...loaded, servers: loaded.servers.filter(entry => !reserved(entry.name)), errors: [...loaded.errors, ...rejected.map(entry => `Reserved product MCP namespace rejected: ${entry.name}. Enable the task capability to use the product connector.`)] };
+    } }) : undefined;
     const models = await ModelRuntime.create({ credentials, modelsPath: null, allowModelNetwork: false, refreshOnCreate: false });
     const builtin = models.getModel(o.configuration.provider, o.configuration.model);
     const providerId = `optracall-${o.configuration.id}-${o.configuration.revision}`;
@@ -194,7 +238,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         appendSystemPrompt: [...(o.workspace?.systemPrompt ?? []), ...(ordinaryManaged() ? [`You are OptraCall. The current working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze prepared project materials in 020_clean and authorized shared business materials announced by the Host. Write intermediate/process files to 020_clean by default and final reports to ${path.join(o.projectDirectory!, '060_reports')}. Determine analysis methods and tools yourself; these are directory conventions, not prescribed analysis steps.`, OUTPUT_EVIDENCE_GUIDANCE] : []),
           `The Host has provided a managed tool execution environment (${o.protectedExecution?.profile ?? 'protected'}). The tools run in ${protectedTools.scope.cwd}. Authorized readable material locations: ${JSON.stringify(protectedTools.scope.readRoots)}. Authorized writable locations: ${JSON.stringify([protectedTools.scope.writableRoot, ...(protectedTools.scope.writeRoots ?? [])])}. ${ordinaryManaged() ? 'Background and parallel calculations may continue across tool calls within this operation; the Host retains their resources until stop, close, or the authorized phase handoff.' : 'Existing data and reports are read-only; save new calculations and deliverables in the new workspace.'} Native session and credential files are unavailable to execution tools. Existing/remote MCP and user execution extensions are unavailable here. All child processes must remain inside this operation\'s owned execution groups: detached sessions and posix_spawn are unavailable. The python and python3 entrypoints use the installed same-version direct interpreters (${JSON.stringify(protectedTools.pythonRuntimes)}); use these entrypoints or their recorded direct executable paths instead of absolute framework launcher wrappers. Ordinary fork/exec subprocesses remain available. Choose methods and tools yourself. Codemode store/load is scoped to this execution workspace. Unavailable tools: ${JSON.stringify(protectedTools.unavailableTools)}.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } : {
-        extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), createMcpExtension(), environmentExtension],
+        extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), mcpExtension!, environmentExtension],
         additionalSkillPaths: [analysisAssetsDir],
         appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [`You are OptraCall. Workspace conventions: your working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze prepared project materials in 020_clean and authorized shared business materials announced by the Host. 010_draw archives originals and is not automatically attached to model context. This is a soft instruction, not sensitive-data isolation; the full native tools are available without a sandbox or tool interception. Write intermediate/process files to 020_clean by default. Save final reports to ${path.join(o.projectDirectory!, '060_reports')} when asked to produce a final report. Determine analysis methods and tools yourself from the user's request. These are directory conventions, not a prescribed analysis procedure.`, OUTPUT_EVIDENCE_GUIDANCE, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } });

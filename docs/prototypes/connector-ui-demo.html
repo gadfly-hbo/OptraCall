@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>商圈/天气 MCP 连接器 UI Demo · OptraCall</title>
+<style>
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select { font: inherit; }
+button { cursor: pointer; color: inherit; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid #a397e0; outline-offset: 3px; }
+.demo-page { --canvas:#fff; --surface:#fff; --subtle:#f5f5f8; --hover:#ececf2; --ink:#24232b; --muted:#6c6b78; --faint:#777580; --line:#e6e5eb; --accent:#6550c9; --accent-soft:#eeebfb; --focus:#a397e0; --warning:#80530c; --warning-bg:#fff7e8; --error:#a12b36; --error-bg:#fff4f4; --ok:#1c7c4a; --ok-bg:#eef7f1; background: var(--canvas); color: var(--ink); font-size: 14px; line-height: 1.55; min-height: 100vh; padding: 6px 32px 48px; }
+.demo-note { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; margin: 14px 0 0; padding: 10px 14px; border: 1px dashed var(--accent); border-radius: 8px; background: var(--accent-soft); color: var(--muted); font-size: 12px; }
+.demo-note strong { color: var(--ink); }
+.eyebrow { letter-spacing: 2.2px; color: var(--accent); font-size: 11px; margin: 18px 0 6px; font-weight: 600; }
+.heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; margin: 0 0 6px; }
+.heading h1 { font-size: 24px; line-height: 1.4; font-weight: 550; margin: 0; }
+.heading .sub { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.principle-strip { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 14px; background: var(--subtle); border-radius: 8px; font-size: 12px; color: var(--muted); margin: 14px 0 18px; }
+.principle-strip strong { color: var(--ink); font-weight: 550; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.tab { border: 0; background: transparent; padding: 9px 14px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 550; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.panel-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 14px; }
+.panel-heading h2 { font-size: 15px; margin: 0; font-weight: 550; }
+.panel-heading .hint { color: var(--muted); font-size: 12px; margin: 0; }
+/* 能力目录 */
+.catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.catalog-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.catalog-card.planned { opacity: .62; }
+.catalog-card > header { display: flex; align-items: center; gap: 10px; }
+.catalog-symbol { display: inline-grid; place-items: center; width: 36px; height: 36px; background: var(--accent-soft); color: var(--accent); border-radius: 8px; font-size: 21px; flex-shrink: 0; }
+.catalog-card h3 { margin: 0; font-size: 14px; font-weight: 550; }
+.available-badge { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 2px 7px; font-size: 10px; margin-left: auto; white-space: nowrap; }
+.planned-badge { color: var(--muted); background: var(--subtle); border-radius: 4px; padding: 2px 7px; font-size: 10px; margin-left: auto; white-space: nowrap; }
+.catalog-desc { margin: 0; font-size: 12.5px; color: var(--muted); }
+.catalog-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.catalog-tags > span { font-size: 10px; color: var(--muted); padding: 2px 7px; background: var(--subtle); border-radius: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.catalog-note { border-top: 1px dashed var(--line); padding-top: 8px; font-size: 11.5px; color: var(--faint); }
+.catalog-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
+.catalog-open-button { background: var(--accent); color: #fff; border: 0; border-radius: 5px; padding: 6px 11px; font-size: 12px; }
+.catalog-open-button.ghost { background: transparent; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.version-chip { font-size: 10.5px; color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+/* 表单与对话框 */
+.dialog-wrap { display: grid; grid-template-columns: minmax(320px, 460px) minmax(260px, 1fr); gap: 22px; align-items: start; }
+.dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 18px 20px; box-shadow: 0 12px 32px -18px rgba(36,35,43,.25); }
+.dialog h3 { margin: 0 0 4px; font-size: 16px; font-weight: 550; }
+.dialog .sub { margin: 0 0 14px; color: var(--muted); font-size: 12px; }
+.field { display: grid; gap: 5px; margin-bottom: 12px; }
+.field label { font-size: 12px; color: var(--muted); }
+.field input, .field select { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; font-size: 13px; background: var(--canvas); color: var(--ink); width: 100%; }
+.cap-group { border: 1px solid var(--line); border-radius: 8px; padding: 4px 12px; margin-bottom: 14px; }
+.cap-group > p { margin: 8px 0 4px; font-size: 11px; color: var(--faint); }
+.cap-row { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; border-top: 1px solid var(--line); }
+.cap-row:first-of-type { border-top: 0; }
+.cap-row input { margin: 3px 0 0; accent-color: var(--accent); flex-shrink: 0; }
+.cap-row .cap-text { display: grid; gap: 1px; }
+.cap-row strong { font-size: 13px; font-weight: 550; }
+.cap-row small { font-size: 11.5px; color: var(--muted); }
+.egress-card { border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--line)); background: var(--warning-bg); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: var(--warning); margin: 10px 0 2px; display: none; }
+.egress-card.show { display: block; }
+.egress-card strong { color: var(--ink); }
+.egress-card ul { margin: 6px 0 0; padding-left: 18px; }
+.egress-card li { margin: 2px 0; }
+.side-note { border: 1px dashed var(--line); border-radius: 8px; padding: 12px 14px; font-size: 12px; color: var(--muted); display: grid; gap: 8px; }
+.side-note strong { color: var(--ink); }
+.primary-button { border: 1px solid var(--accent); background: var(--accent); color: #fff; font-weight: 500; border-radius: 7px; padding: 8px 16px; }
+.secondary-button { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 7px 14px; }
+/* 任务会话 */
+.chat-frame { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.chat-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--subtle); font-size: 12px; color: var(--muted); }
+.chat-head strong { color: var(--ink); font-size: 13px; }
+.chat-body { padding: 16px; display: grid; gap: 12px; }
+.harness { border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
+.harness > summary { cursor: pointer; padding: 10px 14px; font-size: 13px; font-weight: 550; color: var(--ink); list-style: revert; }
+.harness-body { padding: 2px 14px 12px; border-top: 1px solid var(--line); display: grid; gap: 10px; }
+.harness-body h4 { margin: 6px 0 0; font-size: 11px; color: var(--faint); font-weight: 600; letter-spacing: .4px; }
+.tool-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.tool-chip { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: var(--muted); background: var(--subtle); border-radius: 4px; padding: 2px 7px; }
+.tool-chip.connector { color: #2456b8; background: #eef3fd; border: 1px solid color-mix(in srgb, #2456b8 22%, var(--line)); }
+.tool-chip.new { color: var(--accent); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.switch-row { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; }
+.switch-row input { margin: 3px 0 0; accent-color: var(--accent); flex-shrink: 0; }
+.switch-row .cap-text { display: grid; gap: 1px; }
+.switch-row strong { font-size: 12.5px; font-weight: 550; }
+.switch-row small { font-size: 11px; color: var(--muted); }
+.data-version { font-size: 11px; color: var(--faint); border-top: 1px dashed var(--line); padding-top: 8px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.harness-note { font-size: 11px; color: var(--faint); margin: 0; }
+/* 对话示意 */
+.chat-demo { display: grid; gap: 12px; }
+.msg { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; max-width: 92%; background: var(--surface); }
+.msg.user { margin-left: auto; background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); }
+.msg .author { font-size: 11px; color: var(--muted); margin-bottom: 4px; display: flex; gap: 6px; align-items: center; }
+.msg .body { font-size: 13px; }
+.tool-call { font-size: 12px; color: var(--muted); border-left: 3px solid color-mix(in srgb, var(--accent) 45%, var(--line)); padding: 4px 10px; background: var(--subtle); border-radius: 0 6px 6px 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.tool-result { font-size: 11.5px; color: var(--faint); border-left: 3px solid var(--line); padding: 4px 10px; background: var(--canvas); border-radius: 0 6px 6px 0; }
+.tool-result code, .msg .body code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; background: var(--subtle); border-radius: 4px; padding: 1px 5px; color: var(--ink); }
+.msg .meta { font-size: 11px; color: var(--faint); margin: 6px 0 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.legend > span { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; background: var(--subtle); }
+.legend .new-legend { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: var(--accent-soft); }
+footer.demo-footer { margin-top: 26px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+</style>
+</head>
+<body>
+<div class="demo-page">
+  <div class="demo-note"><strong>UI Demo · 待确认</strong>商圈数据连接器（首个 MCP）与历史天气连接器的界面形态提案。产品尚未实施；本页为静态原型，勾选与切换可交互，用于确认交互形态。</div>
+  <p class="eyebrow">OPTRACALL · MCP 连接器</p>
+  <div class="heading">
+    <div>
+      <h1>商圈/天气 MCP 连接器</h1>
+      <p class="sub">能力目录条目 · 任务级开启 · 天气出境说明 · 会话内可用能力</p>
+      <p class="hint">静态交互原型：所有项目、商圈、数值、天气及模型对话均为合成示意，不来自真实经营记录，不调用模型或数据接口。天气仅为后续独立变更的设计，本分支未接入。</p>
+    </div>
+  </div>
+  <div class="principle-strip">
+    <span><strong>Host 管环境</strong>：注册、启用开关、出境白名单</span>
+    <span><strong>Agent 自主</strong>：何时查询、如何组合、如何解读</span>
+    <span>连接器默认关闭，<strong>任务级显式开启</strong>（D8）</span>
+    <span>可推导组合<strong>不设工具</strong>（D10）</span>
+    <span>商圈＝本机数据无网络 · 天气＝白名单出境（D12）</span>
+  </div>
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-tab="catalog" type="button">① 能力目录</button>
+    <button class="tab" data-tab="create" type="button">② 新建任务开启</button>
+    <button class="tab" data-tab="session" type="button">③ 任务会话内</button>
+    <button class="tab" data-tab="chat" type="button">④ 对话使用示意</button>
+  </div>
+
+  <!-- ① 能力目录 -->
+  <section class="tab-panel active" data-panel="catalog">
+    <div class="panel-heading">
+      <h2>能力目录 · 连接器</h2>
+      <p class="hint">分区早已存在（原为 6 条规划示例），本变更使其出现首批「已接入」条目</p>
+    </div>
+    <div class="catalog-grid">
+      <article class="catalog-card">
+        <header><span class="catalog-symbol">⌘</span><h3>商圈数据</h3><span class="available-badge">已接入</span></header>
+        <p class="catalog-desc">2835 家商圈档案查询：按省市/评级/关键词筛选、读取 12 维度完整档案（含来源与可信度）、自定义权重选址评分。数据快照在本机，无网络外发。</p>
+        <div class="catalog-tags"><span>商圈</span><span>选址</span><span>本机数据</span></div>
+        <p class="catalog-note">无需安装：数据快照已导入本机。使用入口＝项目任务对话，任务级开启后 Agent 自主查询，结果带数据版本可溯源；未公开数据如实标注，不编造。</p>
+        <div class="catalog-card-bottom">
+          <span class="version-chip">v2026-11-02 · 2835 家 · optracall-tradearea-data-1</span>
+          <button class="catalog-open-button ghost" data-goto="session" type="button">到项目任务使用</button>
+        </div>
+      </article>
+      <article class="catalog-card">
+        <header><span class="catalog-symbol">⌘</span><h3>历史天气</h3><span class="available-badge">已接入</span></header>
+        <p class="catalog-desc">Open-Meteo 历史日天气查询：温度、降水等变量进入分析与复盘。期望日期与实际返回逐日核对，缺失如实呈现不填零；缓存结果标注时效。</p>
+        <div class="catalog-tags"><span>天气</span><span>外部数据</span></div>
+        <p class="catalog-note">需任务级开启；开启时一次性说明出境内容（仅坐标、日期与字段参数，仅访问 archive-api.open-meteo.com，无密钥），此后不逐次确认。</p>
+        <div class="catalog-card-bottom">
+          <span class="version-chip">weather-mcp · 随第二变更交付</span>
+          <button class="catalog-open-button ghost" data-goto="create" type="button">到项目任务使用</button>
+        </div>
+      </article>
+      <article class="catalog-card planned">
+        <header><span class="catalog-symbol">⌘</span><h3>数据库与数据仓库</h3><span class="planned-badge">规划示例</span></header>
+        <p class="catalog-desc">发现获准访问的表、字段与查询结果。</p>
+        <p class="catalog-note">尚未接入 OptraCall。尚无连接实例、凭据、查询或数据读取。</p>
+      </article>
+      <article class="catalog-card planned">
+        <header><span class="catalog-symbol">⌘</span><h3>外部情报与专业数据</h3><span class="planned-badge">规划示例</span></header>
+        <p class="catalog-desc">补充天气、区域与行业等外部变量。</p>
+        <p class="catalog-note">尚未接入 OptraCall。天气与商圈数据已由本批连接器承接，本条目后续按实际来源更新。</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ② 新建任务开启 -->
+  <section class="tab-panel" data-panel="create">
+    <div class="panel-heading">
+      <h2>新建任务 · 能力选择</h2>
+      <p class="hint">沿用「经营推演工具」复选框先例，泛化为任务能力清单；勾选「历史天气」查看一次性出境说明</p>
+    </div>
+    <div class="dialog-wrap">
+      <form class="dialog" onsubmit="return false">
+        <h3>新建任务</h3>
+        <p class="sub">任务拥有独立会话与草稿；能力开关仅对本任务生效。</p>
+        <div class="field"><label for="t-name">任务名称</label><input id="t-name" value="湖州新店选址评估" /></div>
+        <div class="field"><label for="t-model">模型配置</label><select id="t-model"><option>minimax-m31-flash（默认）</option><option>其他已保存配置</option></select></div>
+        <div class="cap-group">
+          <div class="cap-row">
+            <input type="checkbox" id="cap-sim" checked />
+            <div class="cap-text"><strong>经营推演工具</strong><small>假设推演、方案对比与扰动（既有能力，先例开关）</small></div>
+          </div>
+          <div class="cap-row">
+            <input type="checkbox" id="cap-tradearea" checked />
+            <div class="cap-text"><strong>商圈数据连接器</strong><small>2835 家商圈档案筛选/详情/评分 · 本机数据、无网络外发 · v2026-11-02</small></div>
+          </div>
+          <div class="cap-row">
+            <input type="checkbox" id="cap-weather" />
+            <div class="cap-text"><strong>历史天气连接器</strong><small>Open-Meteo 历史日天气 · 外部网络（白名单出境）</small></div>
+          </div>
+          <div class="egress-card" id="egress-card">
+            <strong>开启后将向外部服务发送：</strong>
+            <ul>
+              <li>目标域名仅 <code>archive-api.open-meteo.com</code>（Host 白名单强制，连接器无法访问其他地址）</li>
+              <li>内容仅：城市坐标、日期区间、请求的天气字段；<strong>不发送</strong>项目文件、对话内容或任何经营数据</li>
+              <li>无密钥、无账号；免费档使用条件见工具说明</li>
+            </ul>
+            此为一次性说明，开启后查询不再逐次确认；关闭连接器随时可停。
+          </div>
+          <p>能力开启后由 Agent 在任务中自主决定是否与何时使用；本表单不编排任何分析步骤。</p>
+        </div>
+        <button class="primary-button" data-goto="session" type="button">创建任务</button>
+        <button class="secondary-button" type="button" style="margin-left:8px">取消</button>
+      </form>
+      <aside class="side-note">
+        <strong>设计说明（待你确认）</strong>
+        <span>1. 开启入口两处：新建任务对话框（本页）＋任务会话内「Pi 能力与命令」面板（下一页，仅空闲时可切换）——完全对齐经营推演工具的既有交互先例。</span>
+        <span>2. sim-lab 的单一开关在此泛化为「任务能力」清单；商圈与天气各自独立勾选，互不绑定。</span>
+        <span>3. 出境说明只在勾选天气时出现一次（内联卡片，不弹窗、不阻断）；商圈连接器无网络，不需要说明。</span>
+        <span>4. 对话框里的版本号（v2026-11-02 · 2835 家）来自数据快照身分，Agent 引用商圈事实时可注明该版本。</span>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ③ 任务会话内 -->
+  <section class="tab-panel" data-panel="session">
+    <div class="panel-heading">
+      <h2>任务会话 · Pi 能力与命令</h2>
+      <p class="hint">既有面板新增连接器开关与数据版本行；勾选/取消下面的开关，查看工具列表变化</p>
+    </div>
+    <div class="legend">
+      <span>灰＝既有工具</span><span>蓝＝连接器工具</span><span class="new-legend">紫＝本次新增的连接器开关</span>
+    </div>
+    <div class="chat-frame">
+      <div class="chat-head"><strong>湖州新店选址评估</strong><span>合成商圈B项目 / 任务 2</span><span style="margin-left:auto">空闲</span></div>
+      <div class="chat-body">
+        <details class="harness" open>
+          <summary>Pi 能力与命令</summary>
+          <div class="harness-body">
+            <h4>可用工具</h4>
+            <div class="tool-list" id="tool-list">
+              <span class="tool-chip">bash</span><span class="tool-chip">read</span><span class="tool-chip">write</span><span class="tool-chip">edit</span><span class="tool-chip">grep</span><span class="tool-chip">glob</span><span class="tool-chip connector">simulation_run</span><span class="tool-chip connector" data-conn="tradearea">tradearea_search</span><span class="tool-chip connector" data-conn="tradearea">tradearea_detail</span><span class="tool-chip connector" data-conn="tradearea">tradearea_score</span><span class="tool-chip connector" data-conn="weather">weather_history</span>
+            </div>
+            <h4>任务能力（仅空闲时可切换）</h4>
+            <div class="switch-row">
+              <input type="checkbox" id="sw-sim" checked />
+              <div class="cap-text"><strong>经营推演工具</strong><small>既有开关</small></div>
+            </div>
+            <div class="switch-row">
+              <input type="checkbox" id="sw-tradearea" checked />
+              <div class="cap-text"><strong>商圈数据连接器</strong><small>本机数据快照 · 无网络外发</small></div>
+            </div>
+            <div class="switch-row">
+              <input type="checkbox" id="sw-weather" />
+              <div class="cap-text"><strong>历史天气连接器</strong><small>白名单出境（archive-api.open-meteo.com）· 开启时已一次性说明</small></div>
+            </div>
+            <p class="data-version" id="data-version">商圈数据快照 v2026-11-02 · 2835 家 · 273 城市 · optracall-tradearea-data-1 · 来源 trade-area@2ba41d2</p>
+            <p class="harness-note">Python 通过 bash 执行。默认从 020_clean 读取分析资料并保存过程文件；最终报告写入 060_reports。连接器只提供查询能力，是否使用、如何组合由 Agent 决定。</p>
+          </div>
+        </details>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:10px">开关切换遵循 sim-lab 修正后的接缝语义：仅任务空闲时更改，经公共生命周期释放旧资源，下一次发送使用更新后的工具选择。</p>
+  </section>
+
+  <!-- ④ 对话使用示意 -->
+  <section class="tab-panel" data-panel="chat">
+    <div class="panel-heading">
+      <h2>对话使用示意</h2>
+      <p class="hint">以下档案、评级、评分、排名和天气结论全部为合成示意。Agent 自主决定查询与组合方式；工具调用与结果在会话中可展开查看</p>
+    </div>
+    <div class="chat-demo">
+      <div class="msg user">
+        <div class="author">你</div>
+        <div class="body">帮我在湖州看几个候选商圈，客流和周边人口要好，租金先不管；再结合去年 10 月的天气看看周末客流会不会被降水压住。</div>
+      </div>
+      <div class="tool-call">调用工具 · tradearea_search {"city":"湖州","metrics":{"trafficWeekday":{"gte":2}},"pageSize":20}</div>
+      <div class="tool-result">返回 8 家商圈摘要 · 数据版本 v2026-11-02 · 合成商圈A(S)、合成商圈B(A+)、合成商圈C(A)…</div>
+      <div class="tool-call">调用工具 · tradearea_detail {"ids":["0003","0087","0121"]}</div>
+      <div class="tool-result">返回 3 家完整档案：12 维度全文＋来源＋可信度；合成商圈A「日均客流」为推断值（inferred），未公开字段无值不造数</div>
+      <div class="tool-call">调用工具 · weather_history {"lat":30.87,"lon":120.09,"start":"2025-10-01","end":"2025-10-31","fields":["precipSum"]}</div>
+      <div class="tool-result">返回 31/31 日降水；其中 6 个周末日降水＞10mm（缓存 41h 前获取，已标注时效）</div>
+      <div class="tool-call">调用工具 · tradearea_score {"ids":["0003","0087","0121"],"weights":{"traffic":40,"pop":30,"crowd":20,"parking":10}}</div>
+      <div class="tool-result">评分：合成商圈A 78.2 · 合成商圈B 71.5 · 合成商圈C 65.0（客流权重已按你的要求上调）</div>
+      <div class="msg">
+        <div class="author">OptraCall · minimax-m31-flash</div>
+        <div class="body">三家候选中合成商圈A综合最强（基于商圈数据 v2026-11-02）：客流与 3 公里人口均列湖州前 20%，客群与服饰定位匹配度高；但注意其客流为推断口径（可信度 B）。去年 10 月四个周末有明显降水，若规律延续，露天街区型商圈（合成商圈C周边）周末客流风险更高，合成商圈A以室内动线为主、受影响较小。<br>我的判断和依据如上；三家完整档案与评分参数可继续追问，也可以调整权重重算。</div>
+        <p class="meta">本段为合成对话，未读取真实快照、未访问 Open-Meteo、未调用模型。正式产品的工具结果应标注实际数据版本与来源；分析由 Agent 自主完成。</p>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:12px">本页展示的是能力注入：没有强制步骤或顺序，Agent 按问题自主选择查询、组合与解读；对比、排序等推导由 Agent 完成（D10，无 compare 工具）。</p>
+  </section>
+
+  <footer class="demo-footer">
+    <span>依据：《商圈/天气 MCP 连接器能力承接产品讨论稿 v0.1》D1–D13 · trade-area-mcp / weather-mcp 规格</span>
+    <span>配色与组件沿用 OptraCall 应用样式（styles.css 设计 token）</span>
+    <span>2026-11-03 · 原型仅供交互确认，非实现</span>
+  </footer>
+</div>
+<script>
+const tabs = document.querySelectorAll('.tab');
+const panels = document.querySelectorAll('.tab-panel');
+function show(name) {
+  tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  panels.forEach(p => p.classList.toggle('active', p.dataset.panel === name));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab)));
+document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => show(b.dataset.goto)));
+const egressCard = document.getElementById('egress-card');
+const capWeather = document.getElementById('cap-weather');
+const syncEgress = () => egressCard.classList.toggle('show', capWeather.checked);
+capWeather.addEventListener('change', syncEgress);
+const weatherChips = () => document.querySelectorAll('[data-conn="weather"]');
+const tradeareaChips = () => document.querySelectorAll('[data-conn="tradearea"]');
+const swTradearea = document.getElementById('sw-tradearea');
+const swWeather = document.getElementById('sw-weather');
+const dataVersion = document.getElementById('data-version');
+function syncTools() {
+  tradeareaChips().forEach(chip => chip.style.display = swTradearea.checked ? '' : 'none');
+  weatherChips().forEach(chip => chip.style.display = swWeather.checked ? '' : 'none');
+  dataVersion.style.display = swTradearea.checked ? '' : 'none';
+}
+swTradearea.addEventListener('change', syncTools);
+swWeather.addEventListener('change', syncTools);
+syncTools();
+</script>
+</body>
+</html>

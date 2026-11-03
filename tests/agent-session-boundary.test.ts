@@ -2,6 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inspectSessionSource } from '../scripts/check-agent-session-boundary.mjs';
 
+test('SDK private installed paths remain confined to the sole reviewed SDK surface', () => {
+  const privatePath = '../../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js';
+  const source = `import { loadMcpConfig } from '${privatePath}';`;
+  assert.ok(inspectSessionSource('extensions/business-plugins/example/entry.ts', source).length, 'relative node_modules paths must not bypass the SDK import boundary');
+  assert.ok(inspectSessionSource('src/host/feature.ts', `import x from 'file:///example/node_modules/@earendil-works/pi-coding-agent/dist/index.js';`).length);
+  assert.deepEqual(inspectSessionSource('src/agent/sdk.ts', `import { loadMcpConfig } from '../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js';`), [], 'the fixed IN06 thin import stays at the existing sole SDK surface');
+});
+
 const plugin = 'extensions/business-plugins/example/session.ts';
 
 test('a feature uses injected session types without importing a runtime or constructing a manager', () => {

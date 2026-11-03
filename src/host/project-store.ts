@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { isProjectUploadName, PROJECT_TEXT_UPLOAD_EXTENSIONS, PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
+import { isTaskCapability, type TaskCapability } from './task-capabilities.ts';
 
 export const PROJECT_DIRECTORIES = ['010_draw', '020_clean', '060_reports'] as const;
 export type ProjectDirectory = typeof PROJECT_DIRECTORIES[number];
@@ -11,7 +12,7 @@ export interface ProjectConfiguration { id: string; revision: number; provider: 
 export interface ProjectRun { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic }
 export interface UploadedFile { id: string; originalName: string; path: string; bytes: number; sha256: string; uploadedAt: string; source: { kind: 'upload' | 'copy' | 'user-save-report'; from?: string } }
 export interface FeedbackTaskOrigin { handoffId: string; operationId: string; requestHash: string }
-export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin }
+export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin }
 export interface ProjectRecord { schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
 export class ProjectStoreFault extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
@@ -171,6 +172,7 @@ export class ProjectStore {
       if (input.sessionFile !== undefined) { if (typeof input.sessionFile !== 'string') fail('invalid_project_metadata'); await this.#validateSession(id, task, input.sessionFile as string); task.sessionFile = input.sessionFile as string; }
       if (input.lastRun !== undefined) task.lastRun = validRun(input.lastRun);
       if (input.simulationTools !== undefined) { if (typeof input.simulationTools !== 'boolean') return fail('invalid_project_metadata'); task.simulationTools = input.simulationTools; }
+      if (input.tradeAreaTools !== undefined) { if (typeof input.tradeAreaTools !== 'boolean') return fail('invalid_project_metadata'); task.tradeAreaTools = input.tradeAreaTools; }
       if (input.feedbackOrigin !== undefined) task.feedbackOrigin = feedbackOrigin(input.feedbackOrigin);
       tasks.push(task);
     }
@@ -233,12 +235,13 @@ export class ProjectStore {
   }
   #task(project: StoredProject, taskId: string): StoredTask { this.#id(taskId); const task = project.tasks.find(task => task.id === taskId); if (!task) return fail('task_not_found'); return task; }
   async getTask(projectId: string, taskId: string): Promise<TaskRecord> { return this.#decorateTask(projectId, this.#task(await this.#read(projectId), taskId)); }
-  createTask(projectId: string, input: { name: string; configuration?: ProjectConfiguration; simulationTools?: boolean }): Promise<TaskRecord> {
+  createTask(projectId: string, input: { name: string; configuration?: ProjectConfiguration; simulationTools?: boolean; tradeAreaTools?: boolean }): Promise<TaskRecord> {
     const name = projectName(input.name);
+    if (input.tradeAreaTools !== undefined && typeof input.tradeAreaTools !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
     return this.#mutation(async () => {
       const project = await this.#read(projectId); this.#active(project);
       const configuration = publicConfiguration(input.configuration ?? project.configuration), id = randomUUID(), now = new Date().toISOString();
-      const task: StoredTask = { id, name, createdAt: now, updatedAt: now, configuration, draft: '', sessionStorage: 'task', ...(input.simulationTools ? { simulationTools: true } : {}) };
+      const task: StoredTask = { id, name, createdAt: now, updatedAt: now, configuration, draft: '', sessionStorage: 'task', ...(input.simulationTools ? { simulationTools: true } : {}), ...(input.tradeAreaTools ? { tradeAreaTools: true } : {}) };
       const next = { ...project, tasks: [...project.tasks, task], updatedAt: now }; this.#metadataBytes(next);
       const tasks = path.join(this.dataRoot, 'projects', projectId, 'tasks');
       await this.#directory(tasks); await this.#directory(path.join(tasks, id)); await this.#directory(this.#taskDirectory(projectId, task));
@@ -277,7 +280,11 @@ export class ProjectStore {
   }
   setSimulationTools(projectId: string, taskId: string, enabled: boolean): Promise<TaskRecord> {
     if (typeof enabled !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_simulation_tools'));
-    return this.#updateTask(projectId, taskId, task => ({ ...task, ...(enabled ? { simulationTools: true } : { simulationTools: undefined }) }));
+    return this.setTaskCapability(projectId, taskId, 'simulationTools', enabled);
+  }
+  setTaskCapability(projectId: string, taskId: string, capability: TaskCapability, enabled: boolean): Promise<TaskRecord> {
+    if (!isTaskCapability(capability) || typeof enabled !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
+    return this.#updateTask(projectId, taskId, task => ({ ...task, [capability]: enabled || undefined }));
   }
   async #validateSession(projectId: string, task: StoredTask, file: string): Promise<void> {
     const relative = path.relative(this.#taskDirectory(projectId, task), file);
