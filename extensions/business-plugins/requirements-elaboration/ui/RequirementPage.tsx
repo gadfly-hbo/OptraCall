@@ -48,11 +48,12 @@ const priorityLabel: Record<string, string> = { must_confirm: '必须确认', sh
 const clarificationStatus: Record<string, string> = { pending: '待回答', answered: '已回答', assumed: '按假设推进', skipped: '已跳过', deferred: '已后置' };
 const stages = ['诉求与澄清', '事实与假设', '分析与报告框架', '检查与交付'] as const;
 
-export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBack, onSendToTask, initialInstanceId }: {
+export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBack, backLabel = '返回业务插件', onSendToTask, initialInstanceId }: {
   projects: ClientProject[];
   onOpenTask: (project: ClientProject, task: ClientTask) => void;
   onProjectsChanged: () => void;
   onBack: () => void;
+  backLabel?: string;
   onSendToTask: (project: ClientProject, task: ClientTask, requirement: { instanceId: string; version?: string; title: string }) => void;
   initialInstanceId?: string;
 }) {
@@ -199,7 +200,7 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
 
   if (!detail) return <div className="re-page" data-build="requirements-elaboration">
     <div className="page-heading"><div><p className="eyebrow">REQUIREMENT ELABORATION · 业务插件</p><h1>需求梳理</h1><p>把模糊业务诉求结构化为已确认需求与分析框架（RAP 0.2），再显式送入 Case、项目或任务。设计态前置，不指挥分析步骤。</p></div><span className="re-store">本机存储 · ~/.optracall/requirement-instances/</span></div>
-    <button className="text-button" onClick={onBack}>返回业务插件 →</button>
+    <button className="text-button" onClick={onBack}>{backLabel} →</button>
     {error && <div className="error-notice" role="alert"><div><strong>需求梳理提示</strong><p>{error}</p></div><button className="text-button" onClick={() => { setError(''); void reloadList(); }}>重试</button></div>}
     {notice && <p className="project-notice" role="status">{notice}<button className="text-button" onClick={() => setNotice('')}>知道了</button></p>}
     <div className="re-create panel">
@@ -230,7 +231,7 @@ export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBac
   const activeProposal = proposal?.instanceId === instance.instance.id ? proposal : null;
   const proposalHasChanges = activeProposal && (activeProposal.call === 'framework' || activeProposal.hypotheses.length > 0 || activeProposal.call === 'elicit' && (activeProposal.clarifications.length > 0 || activeProposal.facts.length > 0));
   return <div className="re-page" data-build="requirements-elaboration">
-    <button className="text-button re-back" onClick={() => { setDetail(null); void reloadList(); }}>← 返回实例列表</button>
+    <div className="re-actions re-back"><button className="text-button" onClick={() => { setDetail(null); void reloadList(); }}>← 返回实例列表</button><button className="text-button" onClick={onBack}>{backLabel} →</button></div>
     <FeedbackRequirementSource key={detail.instance.instance.id} instanceId={detail.instance.instance.id} />
     <div className="page-heading"><div><p className="eyebrow">INSTANCE · {instance.instance.id}</p><h1>{instance.instance.title}</h1><p>四阶段自由跳转、随时编辑；快照失效仅提示再确认，不锁死编辑。</p></div><span className={statusClass[instances.find(item => item.id === instance.instance.id)?.status ?? 'draft']}>{statusLabel[instances.find(item => item.id === instance.instance.id)?.status ?? 'draft']}</span></div>
     {error && <div className="error-notice" role="alert"><div><strong>需求梳理提示</strong><p>{error}</p></div><button className="text-button" onClick={() => setError('')}>关闭</button></div>}

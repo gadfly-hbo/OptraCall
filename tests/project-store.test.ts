@@ -243,7 +243,7 @@ test('invalid uploads, names and outcomes do not create successful attachments o
   const { store } = await fixture(t); const project = await store.create({ name: '限制检查', configuration });
   const task = await store.createTask(project.id, { name: '限制任务' });
   for (const name of ['../escape.csv', '/absolute.txt', 'broken.exe', 'a\\b.json', 'a\u0000.txt']) await assert.rejects(async () => store.upload({ projectId: project.id, name, bytes: new Uint8Array() }));
-  await assert.rejects(async () => store.upload({ projectId: project.id, name: 'huge.txt', bytes: new Uint8Array(10 * 1024 * 1024 + 1) }), /upload_too_large/);
+  await assert.rejects(async () => store.upload({ projectId: project.id, name: 'huge.txt', bytes: new Uint8Array(50 * 1024 * 1024 + 1) }), /upload_too_large/);
   await assert.rejects(async () => store.upload({ projectId: project.id, name: 'binary.txt', bytes: new Uint8Array([0xff, 0xfe, 0xff]) }), /upload_requires_utf8/);
   await assert.rejects(store.create({ name: '  ', configuration }), /invalid_project_name/);
   await assert.rejects(async () => store.markRun(project.id, task.id, { id: randomUUID(), status: 'completed', startedAt: '2026-10-28T12:00:00.000Z' }), /invalid_run/);

@@ -1,4 +1,8 @@
 .automatic-verification { margin: 4px 0 14px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 12px; min-width: 0; }
+.automatic-fold-heading { cursor: pointer; color: var(--ink); line-height: 1.6; }
+.automatic-fold-heading > strong { margin: 0 12px 0 4px; font-size: 13px; font-weight: 550; }
+.automatic-fold-heading .automatic-badge { vertical-align: middle; }
+.automatic-fold-content { padding-top: 16px; }
 .automatic-heading, .automatic-record-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .automatic-heading h2 { margin: 0; font-size: 14px; }
 .automatic-heading p { margin: 5px 0 8px; color: var(--muted); font-size: 11px; line-height: 1.6; }

@@ -250,8 +250,10 @@ export function AutomaticVerificationPanel({ project, task, configurations, task
     const all = [...current, ...values.filter(path => !current.some(file => file.path === path)).map(path => ({ kind: 'file' as const, path, name: path.split('/').at(-1) ?? path }))];
     return <fieldset className="automatic-files" aria-describedby={`${uid}-error ${uid}-${role}-help`} aria-invalid={Boolean(saveError && issue?.field === role)}><legend>{role === 'data' ? '首次独立核算的源数据' : '首次依据保存后开放的作者过程件（可选）'}</legend><p id={`${uid}-${role}-help`} className="verification-hint">{role === 'data' ? '只选择020_clean中的源材料，作者脚本和结果放在另一组。' : '作者过程件和报告在首次依据保存后才开放，不据此替Agent选择方法。'}</p>{all.length ? all.map(file => <label key={file.path}><input type="checkbox" checked={values.includes(file.path)} disabled={posting || (role === 'data' ? (draft.processFiles ?? []).includes(file.path) : (draft.dataFiles ?? []).includes(file.path) || draft.reportPath === file.path)} onChange={event => edit({ [role === 'data' ? 'dataFiles' : 'processFiles']: event.target.checked ? [...values, file.path] : values.filter(value => value !== file.path) })} /><span>{file.path}{!current.some(item => item.path === file.path) && <small>已保存选择，当前目录未列出</small>}</span></label>) : <p className="verification-hint">暂无可选文件；未自动选择或推断相关资料。</p>}</fieldset>;
   };
-  const selectedUncertain = uncertainAction?.chainId === selected?.chainId;
-  return <section className="automatic-verification" aria-labelledby={`${uid}-title`} aria-busy={loading}>
+  const selectedUncertain = Boolean(selected && uncertainAction?.chainId === selected.chainId);
+  return <details className="automatic-verification" aria-busy={loading}>
+    <summary className="automatic-fold-heading"><strong>自动核算与修订</strong><span className="automatic-badge" role="status">{loading ? '读取中' : selected?.uiRequests?.length ? '等待回应' : selectedUncertain ? '状态待确认' : active ? '正在处理' : error ? '读取异常' : capabilities && !capabilities.supported ? '暂不可用' : settings.enabled ? '已启用' : '未启用'}</span></summary>
+    <div className="automatic-fold-content">
     <header className="automatic-heading"><div><h2 id={`${uid}-title`}>自动核算与修订</h2><p>{capabilities && !capabilities.supported ? '自动交接暂不可用；可以回看已有记录或编辑设置草稿。' : settings.enabled ? '指定报告形成新版本后，独立核算意见会自动交回原主Agent。' : '默认关闭。普通分析和原手动核算照常使用。'}</p><span className="automatic-badge">{capabilities && !capabilities.supported ? '暂不可用' : settings.enabled ? '已启用' : '未启用'}</span><span className="automatic-policy">后续请求最多返修{settings.maxAuthorTurns}次</span></div><button ref={settingsButton} type="button" className="secondary-button" disabled={loading || posting || archived} onClick={openSettings}>{capabilities && !capabilities.supported ? '查看设置' : settings.enabled ? '查看或调整设置' : '设置并启用'}</button></header>
     <p className="verification-hint">主Agent自主判断核算意见，可重算、修订或说明不采纳；新稿再核。系统只交材料、执行权限和保存记录，不保证整份报告正确。</p>
     {capabilities && !capabilities.supported && <p className="automatic-warning">{capabilities.reason ?? '当前环境不支持所需的原件保护，自动功能不能启用。'}普通分析和已有记录不受影响。</p>}
@@ -296,5 +298,6 @@ export function AutomaticVerificationPanel({ project, task, configurations, task
         <div className="automatic-dialog-actions"><button type="button" className="secondary-button" disabled={posting} onClick={closeSettings}>取消，保留输入</button><button type="submit" className="primary-button" disabled={posting || archived || saveUncertain || (draft.enabled && !capabilities?.supported)}>{posting ? '正在保存…' : '保存任务设置'}</button></div>
       </form>}
     </dialog>
-  </section>;
+    </div>
+  </details>;
 }
