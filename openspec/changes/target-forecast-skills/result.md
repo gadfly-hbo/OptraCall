@@ -171,3 +171,11 @@ TF02/TF12 浏览器根：`/Users/bendandebaba/OptraCall-artifacts/target-forecas
 公开锚点为 PR 与实际 head CI；原始 API 回读、job 日志、树身份、集成及快进证据保留于 `/Users/bendandebaba/OptraCall-artifacts/target-forecast-git-ci-20261103/`，原始本地及独立复核证据根不变。没有新建 PR 来单独交付归档。
 
 剩余范围继续独立保留：真实模型自主选 skill、多轮调参与专业报告质量及用户产品验收 NOT_RUN；原仓退役/JuanerAI 文档处置、优惠券复盘脚本化、pandas 环境与设备采用未执行，仍须各自另获授权。macOS 本地 3 条件 SKIP、Linux CI 60 条件 SKIP、既有 bundle 警告与 moderate 依赖提示均保留，不将合并或归档当作这些边界已验收。
+
+## 真实模型实跑与 MacBook 更新后续阶段
+
+2026-11-03 用户另行授权真实模型实跑，完成后更新MacBook。原工程归档中的 NOT_RUN 保留其当时范围，本阶段结果见 [live-validation.md](live-validation.md) 与 [非作者原报告](live-independent-review.md)：当前MiniMax M3.1 Flash经真实Host/SDK完成三类普通任务及无关对照；三案各一次明确反馈修订，全部7个请求completed，固定核心计算/身份/原件保全限定通过，首稿专业均FAIL，修订后目标/ROI仍FAIL、券PARTIAL，不能写整体专业或用户本人产品验收通过。
+
+本阶段没有修改Host/会话/模型默认值/内核脚本/测试/依赖；只在首稿封存后补齐target-forecast方法说明遗漏的既有末名尾部保底。算法与版本2保持，旧oracle分类独立性受限、目录列举/事实陈述偏离、验收方错误反馈及所有失败原样保留。不重建Host财务裁判，不追加隐藏模型修订loop。
+
+MacBook当前已完成只读预检、关键文件SHA及元数据保全准备，待上述证据发布/实际head CI后按用户授权从原试用入口更新；实际runtime与保全回读另记。Mac mini原服务未切换，隔离真实模型Host已正常关闭；原仓退役、复盘脚本和pandas提案等边界不扩大。
