@@ -1,6 +1,6 @@
 # 商圈数据 MCP 连接器 · 实施与验证记录
 
-2026-11-03 · 分支 `qoder/data-mcps` · 当前状态：Codex 接缝、最终本地完整检查与非作者独立复核已完成，发现已闭合；用户已授权Git/CI与实际head CI通过后直接squash合并，交付进行中。以下先保留 Qoder 移交时记录，最新状态见末节。真实模型验收与设备更新另行授权。
+2026-11-03 · 分支 `qoder/data-mcps` · 当前状态：Codex 接缝及复核发现已闭合，实际PR head CI通过后已获授权squash入main并安全快进本地主仓；OpenSpec原位归档收尾，合并main及归档提交自身CI另按末节实际回读。以下先保留 Qoder 移交时记录，最新状态见末节。真实模型验收与设备更新另行授权。
 
 ## 授权与流程
 
@@ -190,3 +190,25 @@ v4作者全量检查 `full-check-final-numeric.log` 返回1（931项927通过/1�
 再次fetch后 `origin/main` 仍为 `7109a6e63660a900b557300a73765f852c2cbd00`，`origin/qoder/data-mcps` 为移交HEAD `6633353dc1b01524a4c3e3b5c9a2f4cc03a7f58a`。固定v8的50项SHA均一致；`git merge --ff-only origin/main` 返回Already up to date，没有源码/测试/依赖基线增量，不重复已通过的933项检查。两轴最终文档窄核均已通过，回执分别位于两独立证据根 `final-doc-review.md`。
 
 当前准备提交、push及唯一PR，随后检查实际head的hosted CI；未把本地检查当CI。若head/base变化或CI失败，保留证据、修复并重验受影响部分后再合并。
+
+
+## 合并交付与原位归档
+
+2026-11-03。用户已在本地实施及两轴复核后授权Git/CI，并明确实际head CI成功后直接squash合并、本地main快进与归档。仅此变更使用该直接合并授权，不改全局工程规范或其它任务门禁。
+
+| 对象 | 实际身份与结果 |
+| --- | --- |
+| 唯一功能PR | [#27](https://github.com/gadfly-hbo/OptraCall/pull/27)，head `90ec33fe2dcc1086264d2ace830fa6b909465e57`；移交3提交加Codex接缝/修复提交，共4提交集中squash，无第二个功能PR |
+| 最新main集成 | fetch后仍 `7109a6e63660a900b557300a73765f852c2cbd00`；merge --ff-only返回Already up to date；运行源码/测试没有基线增量，沿用本地933项有效证据，不重复绿色重跑 |
+| 实际head CI | [Check #75](https://github.com/gadfly-hbo/OptraCall/actions/runs/41614354525) attempt 1 success；日志checkout确为上述head，Ubuntu/Node25.9.0，**933项、873 PASS、0 FAIL、60条件SKIP**，边界/tsc/build和高危审计通过；2项moderate提示及既有bundle提示保留。Linux条件跳过不冒充macOS保护/真实渲染验收 |
+| squash及完整树 | `2c56dd2f41ca89269eedf6a22696836cf907f0e6`，唯一父提交7109a6e；受检head树与squash树同为 `ea140d4c90aa165ab08c22d44aef7c108a5970a1`，合并没有引入未检查的源码变化 |
+| 本地main首次快进 | 主仓 `/Users/bendandebaba/DevWorkSpace/OptraCall` 开始干净位于7109a6e，经 `git merge --ff-only origin/main` 到2c56dd2，工作树干净；没有切换原运行服务或其它设备 |
+| 合并main CI | [Check #76](https://github.com/gadfly-hbo/OptraCall/actions/runs/41615361931)，实际head为2c56dd2，attempt 1 **success**；933项/873 PASS/0 FAIL/60条件SKIP，边界/类型/构建及高危审计通过，2项moderate保留；与PR head证据分别核对 |
+
+沿用本仓target-forecast/simlab已核实的OpenSpec惯例，`spec.md`、本结果、`independent-review.md`、`structure-decisions.md`、原清单与移交包在 `openspec/changes/trade-area-mcp/` 稳定原路径作为实施归档保留；不新建迁移目录或重写原交接清单。原Qoder阶段缺口、候选枚举错误、两个P2及首修不足、SM03/SDK04全量失败、夹具错误与SKIP继续按各自阶段保留。
+
+本次在独立 `codex/trade-area-archive` 工作树仅整理AGENTS当前入口及spec/result三份Markdown，不改产品、测试、依赖、数据或已签署独立报告。归档提交自身完整树会因文档变化而不同，须核对仅三MD增量及其它源码blob不变，不能把它写成完整树与PR相同。归档提交的实际SHA、发布、成功CI与最终main快进在Git/Actions和仓外回执核定，不预填自身未来身份，也不为记录自身SHA无限追加文档提交。
+
+公开锚点为唯一PR及实际CI；原始head日志、API回读、暂存/候选身份、head与squash树、首次main快进及最终归档回执保留于 `/Users/bendandebaba/OptraCall-artifacts/trade-area-handoff-20261103/`。两名非作者原复核与新增窄核证据仍在各自独立根，不把它们误称为已随仓包含的原始日志。经营数据与原始Provider/native记录未提交，当前公开候选只含代码、规范及合成样例；此结论不提升为远端全历史秘密审计。
+
+**后续边界：** 真实模型端到端/专业质量与用户本人产品验收、MacBook更新或运行采用、天气实现及未来来源版本导入均未在本次Git收尾执行。正式2835条只落指定本机dataRoot，浏览器/端到端仍为隔离合成验证；没有模型调用或设备操作因Git授权而自动发生。本地3条及Linux60条条件SKIP、moderate依赖与bundle提示保留，不以合并/归档冒充这些范围通过。
