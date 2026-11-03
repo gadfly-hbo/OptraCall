@@ -5,7 +5,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { FetchLike } from './open-meteo.ts';
-import { WeatherService } from './service.ts';
+import { WeatherService, LICENSE_NOTE } from './service.ts';
 import { CITY_PRESETS, MAX_SPAN_DAYS, TIMEZONE, ToolError, WEATHER_FIELDS } from './types.ts';
 
 export interface ToolDefinition {
@@ -17,7 +17,7 @@ export interface ToolDefinition {
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: 'weather_history',
-    description: `查询历史日天气（日均温 temperature_2m_mean °C、日降水 precipitation_sum mm，时区固定 ${TIMEZONE}）。定位二选一：city（内置 ${Object.keys(CITY_PRESETS).join('/')}）或经纬度 lat+lon；start/end 为 YYYY-MM-DD（历史区间，跨度 ≤${MAX_SPAN_DAYS} 天）。结果带来源（Open-Meteo Archive，历史观测/再分析，非预报）、获取时间与缓存时效；期望日期与实际返回逐日核对，缺失日期在 coverage.missingDates 如实列出、不填零，字段 null＝上游明示无值。限流/超时返回结构化错误（不自动重试）。适合为经营/选址分析补充天气变量；如何使用天气数据由你自行判断并说明。`,
+    description: `查询历史日天气（日均温 temperature_2m_mean °C、日降水 precipitation_sum mm，时区固定 ${TIMEZONE}）。定位二选一：city（内置 ${Object.keys(CITY_PRESETS).join('/')}）或经纬度 lat+lon；start/end 为 YYYY-MM-DD（历史区间，跨度 ≤${MAX_SPAN_DAYS} 天）。结果带来源（Open-Meteo Archive，历史观测/再分析，非预报）、获取时间与缓存时效；期望日期与实际返回逐日核对，缺失日期在 coverage.missingDates 如实列出、不填零，字段 null＝上游明示无值。限流/超时返回结构化错误（不自动重试）。适合为经营/选址分析补充天气变量；如何使用天气数据由你自行判断并说明。${LICENSE_NOTE}`,
     readonly: true,
   },
 ];

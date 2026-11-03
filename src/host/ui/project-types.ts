@@ -8,6 +8,7 @@ export type ClientTask = {
   createdAt: string; updatedAt: string; sessionStorage: 'legacy' | 'task'; sessionFile?: string;
   simulationTools?: boolean;
   tradeAreaTools?: boolean;
+  weatherTools?: boolean;
   feedbackOrigin?: { handoffId: string; operationId: string; requestHash: string };
   lastRun?: { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic };
 };

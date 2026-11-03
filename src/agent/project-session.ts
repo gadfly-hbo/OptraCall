@@ -31,7 +31,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   let unavailableSkills: string[] = [];
   let executionId: string | undefined;
   // Resource lifetime state deliberately survives SDK extension reload/fork within this worker.
-  let tradeAreaDirectoryDigest: string | undefined, tradeAreaDirectoryFrozen = false;
+  const connectorDirectories = new Map<string, { digest?: string; frozen: boolean }>();
   const executionBindings = new Map<string, { manager: SessionManager; file: string; cwd: string; closed: boolean }>();
   let editorText: string | undefined;
   // Both sealed text profiles reuse the same no-execution resource path.
@@ -110,39 +110,50 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   }
   const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { nativeTools: !fixedInput(), python: fixedInput() ? false : 'bash', powershell: fixedInput() || protectedTools ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools, skills: !fixedInput() && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)), mcp: !fixedInput() && !protectedTools, codemode: !fixedInput(), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged()), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: options.protectedExecution?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } });
   const environmentExtension: ExtensionFactory = pi => {
-    const connectorEnabled = !fixedInput() && !options.protectedExecution && Boolean(options.tradeAreaConnector);
-    const prefix = 'mcp__trade_area_mcp__';
-    if (connectorEnabled) {
-      // SDK config values interpret dollar substitutions. Preserve literal Host-owned paths.
-      const literal = (value: string) => value.replaceAll('$', () => '$$');
-      pi.registerMcpServer('trade-area-mcp', {
-        type: 'stdio', command: process.execPath,
-        args: [path.resolve(options.codeRoot, 'extensions/connectors/trade-area-mcp/main.ts')],
-        env: { TRADEAREA_DATA_ROOT: literal(path.resolve(options.tradeAreaConnector!.dataRoot)) },
-        exposure: 'hidden', toolExposure: { tradearea_search: 'direct', tradearea_detail: 'direct', tradearea_score: 'direct' },
-      });
-    }
-    const checkDirectory = () => {
-      if (!connectorEnabled || tradeAreaDirectoryFrozen) return false;
-      const expected = ['tradearea_search', 'tradearea_detail', 'tradearea_score'].map(name => prefix + name);
-      const tools = pi.getAllTools().filter(tool => tool.name.startsWith(prefix)).sort((a, b) => a.name.localeCompare(b.name));
+    const eligible = !fixedInput() && !options.protectedExecution;
+    const connectors = [
+      { label: '商圈', prefix: 'mcp__trade_area_mcp__', enabled: eligible && Boolean(options.tradeAreaConnector), tools: ['tradearea_search', 'tradearea_detail', 'tradearea_score'] },
+      { label: '天气', prefix: 'mcp__weather_mcp__', enabled: eligible && Boolean(options.weatherConnector), tools: ['weather_history'] },
+    ];
+    // Only env values use SDK dollar interpolation; command/args remain literal.
+    const literal = (value: string) => value.replaceAll('$', () => '$$');
+    if (connectors[0].enabled) pi.registerMcpServer('trade-area-mcp', {
+      type: 'stdio', command: process.execPath,
+      args: [path.resolve(options.codeRoot, 'extensions/connectors/trade-area-mcp/main.ts')],
+      env: { TRADEAREA_DATA_ROOT: literal(path.resolve(options.tradeAreaConnector!.dataRoot)) },
+      exposure: 'hidden', toolExposure: { tradearea_search: 'direct', tradearea_detail: 'direct', tradearea_score: 'direct' },
+    });
+    if (connectors[1].enabled) pi.registerMcpServer('weather-mcp', {
+      type: 'stdio', command: process.execPath,
+      args: [path.resolve(options.codeRoot, 'src/agent/weather-mcp-entry.ts')],
+      env: { WEATHER_CACHE_ROOT: literal(path.resolve(options.weatherConnector!.cacheRoot)), NODE_OPTIONS: '', NODE_PATH: '', NODE_EXTRA_CA_CERTS: '', NODE_TLS_REJECT_UNAUTHORIZED: '1', NODE_USE_ENV_PROXY: '0', OPENSSL_CONF: '/dev/null', OPENSSL_ENGINES: '', HTTP_PROXY: '', HTTPS_PROXY: '', ALL_PROXY: '' },
+      exposure: 'hidden', toolExposure: { weather_history: 'direct' },
+    });
+    const checkDirectory = (connector: typeof connectors[number]) => {
+      if (!connector.enabled) return false;
+      let state = connectorDirectories.get(connector.prefix);
+      if (!state) { state = { frozen: false }; connectorDirectories.set(connector.prefix, state); }
+      if (state.frozen) return false;
+      const expected = connector.tools.map(name => connector.prefix + name);
+      const tools = pi.getAllTools().filter(tool => tool.name.startsWith(connector.prefix)).sort((a, b) => a.name.localeCompare(b.name));
       if (tools.length !== expected.length || expected.some(name => !tools.some(tool => tool.name === name && tool.exposure !== 'hidden'))) {
-        if (tools.length || tradeAreaDirectoryDigest) tradeAreaDirectoryFrozen = true;
-        return false; // Never pin an empty/partial startup directory.
+        if (tools.length || state.digest) state.frozen = true;
+        return false;
       }
       try {
         const digest = createHash('sha256').update(canonical(tools.map(({ name, description, parameters, exposure }) => ({ name, description, parameters, exposure })))).digest('hex');
-        if (tradeAreaDirectoryDigest && tradeAreaDirectoryDigest !== digest) tradeAreaDirectoryFrozen = true;
-        tradeAreaDirectoryDigest ??= digest;
-      } catch { tradeAreaDirectoryFrozen = true; }
-      return !tradeAreaDirectoryFrozen;
+        if (state.digest && state.digest !== digest) state.frozen = true;
+        state.digest ??= digest;
+      } catch { state.frozen = true; }
+      return !state.frozen;
     };
-    // MCP's earlier handler waits for direct servers. This hook observes, not dispatches or blocks a model turn.
-    pi.on('before_agent_start', () => { checkDirectory(); });
+    // MCP waits for direct servers before this observation; this is not a model-turn gate.
+    pi.on('before_agent_start', () => { for (const connector of connectors) checkDirectory(connector); });
     pi.on('tool_call', event => {
-      if (!event.toolName.startsWith(prefix)) return;
-      if (!connectorEnabled) return { block: true, reason: '商圈工具未在当前普通任务资源开启。' };
-      if (!checkDirectory()) return { block: true, reason: tradeAreaDirectoryFrozen ? '商圈工具目录已变化，本会话连接器已冻结；请核对版本后关闭并重开会话。' : '商圈工具目录尚未完整就绪，请先核对连接器状态。' };
+      const connector = connectors.find(item => event.toolName.startsWith(item.prefix));
+      if (!connector) return;
+      if (!connector.enabled) return { block: true, reason: `${connector.label}工具未在当前普通任务资源开启。` };
+      if (!checkDirectory(connector)) return { block: true, reason: connectorDirectories.get(connector.prefix)?.frozen ? `${connector.label}工具目录已变化，本会话连接器已冻结；请核对版本后关闭并重开会话。` : `${connector.label}工具目录尚未完整就绪，请先核对连接器状态。` };
     });
     // The SDK applies this replacement to agent state before its own JSONL append.
     pi.on('message_end', event => ({ message: redact(event.message) }));
@@ -207,7 +218,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     const loadMcpConfig = !fixedInput() && !o.protectedExecution ? await getSdkMcpConfigLoader() : undefined;
     const mcpExtension = loadMcpConfig ? createMcpExtension({ loadConfig: context => {
       const loaded = loadMcpConfig({ agentDir: getAgentDir(), cwd: context.cwd, projectTrusted: context.isProjectTrusted() });
-      const reserved = (name: string) => name.replace(/[^A-Za-z0-9_]/g, '_') === 'trade_area_mcp';
+      const reserved = (name: string) => ['trade_area_mcp', 'weather_mcp'].includes(name.replace(/[^A-Za-z0-9_]/g, '_'));
       const rejected = loaded.servers.filter(entry => reserved(entry.name));
       return { ...loaded, servers: loaded.servers.filter(entry => !reserved(entry.name)), errors: [...loaded.errors, ...rejected.map(entry => `Reserved product MCP namespace rejected: ${entry.name}. Enable the task capability to use the product connector.`)] };
     } }) : undefined;

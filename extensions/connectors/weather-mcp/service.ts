@@ -12,7 +12,7 @@ import {
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ALLOWED_KEYS = ['city', 'lat', 'lon', 'start', 'end', 'fields'];
 
-const LICENSE_NOTE = '数据来自 Open-Meteo 历史天气 API（Archive API，非商业用途免费档，条款以官方为准）；结果为历史观测/再分析值，不是预报。';
+export const LICENSE_NOTE = '数据来自 Open-Meteo 历史天气 API（Archive API，非商业用途免费档，条款 https://open-meteo.com/en/terms，数据按CC-BY 4.0署名）；结果为历史观测/再分析值，不是预报。';
 
 export interface HistoryArgs {
   city?: string;
@@ -35,7 +35,8 @@ export interface HistoryResult {
 
 function isValidDate(value: string): boolean {
   if (!DATE_PATTERN.test(value)) return false;
-  return new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+  const time = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value;
 }
 
 function spanDays(start: string, end: string): number {
@@ -46,14 +47,18 @@ export class WeatherService {
   private readonly cache: WeatherCache;
   private readonly fetchImpl?: FetchLike;
   private readonly timeoutMs: number;
+  private readonly now: () => Date;
 
   constructor(options: { cacheRoot: string; ttlHours?: number; timeoutMs?: number; fetchImpl?: FetchLike; now?: () => Date }) {
     this.cache = new WeatherCache(options.cacheRoot, { ttlHours: options.ttlHours, now: options.now });
     this.fetchImpl = options.fetchImpl;
     this.timeoutMs = options.timeoutMs ?? 10_000;
+    this.now = options.now ?? (() => new Date());
   }
 
   async history(args: HistoryArgs, signal?: AbortSignal): Promise<HistoryResult> {
+    const checkCancelled = () => { if (signal?.aborted) throw new ToolError('source_unavailable', '查询已取消，结果未知，未自动重试', { reason: 'cancelled' }); };
+    checkCancelled();
     for (const key of Object.keys(args)) {
       if (!ALLOWED_KEYS.includes(key)) {
         throw new ToolError('invalid_param', `未知参数 ${key}；可用参数：${ALLOWED_KEYS.join('/')}`, { key });
@@ -68,7 +73,7 @@ export class WeatherService {
     }
     let lat: number, lon: number;
     if (typeof args.city === 'string') {
-      const preset = CITY_PRESETS[args.city];
+      const preset = Object.hasOwn(CITY_PRESETS, args.city) ? CITY_PRESETS[args.city] : undefined;
       if (!preset) {
         throw new ToolError('invalid_param', `未内置城市「${args.city}」的坐标；内置城市：${Object.keys(CITY_PRESETS).join('/')}，其余请直接提供 lat/lon`, { city: args.city });
       }
@@ -90,12 +95,13 @@ export class WeatherService {
     if (spanDays(args.start, args.end) < 0) {
       throw new ToolError('invalid_param', 'start 不能晚于 end', { start: args.start, end: args.end });
     }
-    if (spanDays(args.start, args.end) > MAX_SPAN_DAYS) {
-      throw new ToolError('invalid_param', `日期跨度超过 ${MAX_SPAN_DAYS} 天上限，请分段查询`, { spanDays: spanDays(args.start, args.end) });
+    if (spanDays(args.start, args.end) + 1 > MAX_SPAN_DAYS) {
+      throw new ToolError('invalid_param', `日期跨度超过 ${MAX_SPAN_DAYS} 天上限，请分段查询`, { spanDays: spanDays(args.start, args.end) + 1 });
     }
-    if (args.end >= new Date().toISOString().slice(0, 10)) {
+    if (args.end >= new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(this.now())) {
       throw new ToolError('invalid_param', '本工具只查历史：end 须早于今天（最近几天上游尚未归档，覆盖核对会如实报告缺失）', { end: args.end });
     }
+    if (args.fields !== undefined && (!Array.isArray(args.fields) || !args.fields.length)) throw new ToolError('invalid_param', 'fields 须包含至少一个支持的天气字段');
     const fields: WeatherField[] = [];
     for (const field of args.fields ?? [...WEATHER_FIELDS]) {
       if (!WEATHER_FIELDS.includes(field as WeatherField)) {
@@ -118,7 +124,8 @@ export class WeatherService {
       }
       throw error;
     }
-    const fetchedAt = new Date().toISOString();
+    const fetchedAt = this.now().toISOString();
+    checkCancelled();
     this.cache.write(request, { daily: fetched.daily, fetchedAt });
     return this.toResult(request, args.city, fetched.daily, { hit: false, fetchedAt, ageHours: 0 });
   }

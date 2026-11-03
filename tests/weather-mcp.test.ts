@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { OPEN_METEO_BASE, buildUrl, fetchDailyHistory } from '../extensions/connectors/weather-mcp/open-meteo.ts';
@@ -26,6 +27,41 @@ function apiDaily(dates: string[], temp: (number | null)[], precip: (number | nu
 function fetchNever(): never {
   throw new Error('network must not be touched in this test');
 }
+
+test('WX04: cache can publish and read under the actual Node no-network permission mode', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'optracall-weather-permission-cache-'));
+  const moduleUrl = pathToFileURL(path.resolve('extensions/connectors/weather-mcp/cache.ts')).href;
+  const script = `const {WeatherCache}=await import(${JSON.stringify(moduleUrl)}); const cache=new WeatherCache(${JSON.stringify(root)}); const request=${JSON.stringify(REQ)}; cache.write(request,{daily:[],fetchedAt:new Date().toISOString()}); if(!cache.read(request)?.fresh)throw new Error('cache did not publish');`;
+  execFileSync(process.execPath, ['--permission', '--allow-fs-read=' + process.cwd(), '--allow-fs-write=' + root, '--allow-fs-read=' + root, '--input-type=module', '-e', script], { timeout: 10_000, stdio: 'pipe' });
+});
+
+test('WX03: date/field bounds are precise and historical cutoff uses the declared Shanghai timezone', async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'optracall-weather-bounds-'));
+  let calls = 0;
+  const service = new WeatherService({ cacheRoot: root, now: () => new Date('2026-11-03T16:30:00Z'), fetchImpl: async () => { calls++; return response(apiDaily(['2026-11-03'], [20], [0])); } });
+  const base = { city: '湖州', start: '2025-10-01', end: '2025-10-01' };
+  for (const args of [{ ...base, start: '2025-99-99' }, { ...base, fields: [] }, { ...base, start: '2024-01-01', end: '2025-01-01' }]) {
+    await assert.rejects(service.history(args), (error: any) => error.code === 'invalid_param');
+  }
+  assert.equal(calls, 0);
+  const yesterday = await service.history({ city: '湖州', start: '2026-11-03', end: '2026-11-03' });
+  assert.equal(yesterday.cache.fetchedAt, '2026-11-03T16:30:00.000Z');
+  assert.equal(calls, 1);
+  await assert.rejects(service.history({ city: '湖州', start: '2026-11-04', end: '2026-11-04' }), (error: any) => error.code === 'invalid_param');
+});
+
+test('WX04: syntactically valid but corrupt or mismatched cache entries are misses', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'optracall-weather-corrupt-'));
+  const cache = new WeatherCache(root), file = path.join(root, 'entries', cache.keyOf(REQ as never) + '.json');
+  mkdirSync(path.dirname(file), { recursive: true });
+  const valid = { request: { ...REQ, fields: [...REQ.fields] }, fetchedAt: new Date().toISOString(), daily: [{ date: '2025-10-01', values: { temperature_2m_mean: 20, precipitation_sum: null } }] };
+  for (const corrupt of [null, [], { ...valid, request: { ...valid.request, lat: 31 } }, { ...valid, fetchedAt: 'invalid-date' }, { ...valid, daily: 'not-an-array' }, { ...valid, daily: [{ date: '2025-02-30', values: {} }] }, { ...valid, daily: [{ date: '2025-10-01', values: { precipitation_sum: 'unknown' } }] }]) {
+    writeFileSync(file, JSON.stringify(corrupt));
+    assert.equal(cache.read(REQ as never), undefined, 'corruption must not masquerade as a fresh hit');
+  }
+  writeFileSync(file, JSON.stringify(valid));
+  assert.equal(cache.read(REQ as never)?.fresh, true);
+});
 
 test('coverage checks expected date keys honestly: complete, missing, duplicate, null values', () => {
   assert.deepEqual(expectedDates('2025-10-01', '2025-10-03'), ['2025-10-01', '2025-10-02', '2025-10-03']);
@@ -100,10 +136,67 @@ test('adapter classifies upstream failures: 429+Retry-After, 400, 5xx, timeout',
   assert.equal(timedOut.detail.reason, 'timeout');
 });
 
+test('WX02: Retry-After accepts actual Headers and HTTP dates without inventing a wait', async () => {
+  for (const headers of [new Headers({ 'Retry-After': '37' }), { 'Retry-After': '37' }]) {
+    const error = await fetchDailyHistory(REQ as never, { fetchImpl: async () => ({ status: 429, headers, text: async () => 'rate limited' }) }).catch(error => error);
+    assert.equal(error.detail.retryAfterSeconds, 37);
+  }
+  const future = new Date(Date.now() + 120_000).toUTCString();
+  const error = await fetchDailyHistory(REQ as never, { fetchImpl: async () => response({}, 429, { 'retry-after': future }) }).catch(error => error);
+  assert.ok(error.detail.retryAfterSeconds >= 119 && error.detail.retryAfterSeconds <= 120);
+  const invalid = await fetchDailyHistory(REQ as never, { fetchImpl: async () => response({}, 429, { 'retry-after': '-1' }) }).catch(error => error);
+  assert.equal(invalid.detail.retryAfterSeconds, undefined);
+});
+
+test('WX02/04: cancellation and deadlines settle even if upstream ignores abort, with no late cache publication', { timeout: 1000 }, async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'optracall-weather-cancel-'));
+  let calls = 0, release!: (value: ReturnType<typeof response>) => void;
+  const service = new WeatherService({ cacheRoot: root, timeoutMs: 30, fetchImpl: () => { calls++; return new Promise(resolve => { release = resolve; }); } });
+  const args = { city: '湖州', start: REQ.start, end: REQ.end };
+  const pre = new AbortController(); pre.abort();
+  await assert.rejects(service.history(args, pre.signal), (error: any) => error.detail?.reason === 'cancelled');
+  assert.equal(calls, 0);
+  const controller = new AbortController();
+  const pending = service.history(args, controller.signal); controller.abort();
+  await assert.rejects(pending, (error: any) => error.detail?.reason === 'cancelled');
+  release(response(apiDaily([REQ.start], [25], [0])));
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(new WeatherCache(root).read(REQ as never), undefined);
+  await assert.rejects(service.history(args), (error: any) => error.detail?.reason === 'timeout');
+  release(response(apiDaily([REQ.start], [25], [0])));
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(calls, 2);
+  assert.equal(new WeatherCache(root).read(REQ as never), undefined);
+});
+
+test('WX02/03: malformed upstream columns, dates and values are refused instead of becoming null or complete coverage', async () => {
+  const malformed = [
+    apiDaily([REQ.start], [], [0]),
+    { time: [REQ.start], temperature_2m_mean: [20] },
+    apiDaily(['2025-02-30'], [20], [0]),
+    apiDaily(['2025-09-30'], [20], [0]),
+    { time: [REQ.start], temperature_2m_mean: ['20'], precipitation_sum: [0] },
+  ];
+  for (const daily of malformed) {
+    await assert.rejects(fetchDailyHistory(REQ as never, { fetchImpl: async () => response(daily) }), (error: any) => error.code === 'source_unavailable' && error.detail?.reason === 'malformed_response');
+  }
+  const valid = await fetchDailyHistory(REQ as never, { fetchImpl: async () => response(apiDaily([REQ.start], [null], [0])) });
+  assert.equal(valid.daily[0].values.temperature_2m_mean, null);
+});
+
 function makeService(overrides: Record<string, unknown> = {}) {
   const cacheRoot = mkdtempSync(path.join(os.tmpdir(), 'optracall-weather-service-'));
   return { cacheRoot, service: new WeatherService({ cacheRoot, timeoutMs: 1000, ...overrides }) };
 }
+
+test('WX03: prototype property names are unknown cities and never reach the upstream', async () => {
+  let calls = 0;
+  const { service } = makeService({ fetchImpl: async () => { calls++; return response(apiDaily([REQ.start], [18], [0])); } });
+  for (const city of ['__proto__', 'constructor', 'toString', '不存在市']) {
+    await assert.rejects(service.history({ city, start: REQ.start, end: REQ.start }), (error: any) => error.code === 'invalid_param' && error.detail?.city === city);
+  }
+  assert.equal(calls, 0);
+});
 
 test('service validates city/coords/date parameters with structured envelopes', async () => {
   const { service } = makeService();
