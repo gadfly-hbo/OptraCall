@@ -75,6 +75,8 @@
 
 未完成（如实）：Host 接缝（会话注册/能力目录条目/dataRoot 正式落位）归 Codex 未实施；TA01（产品任务会话端到端）、TA07（浏览器点验）依赖接缝；真实模型任务实测属验收阶段。验证证据与命令见 [result.md](result.md)。
 
+**移交（2026-11-03）**：候选与移交包已固定为分支第三提交（[review-handoff.md](review-handoff.md)＋candidate-manifest.txt，20 文件哈希自校验通过）；分支所有权移交 Codex 至合并，Qoder 此后对本分支只读。天气连接器按 D9 于本变更合并后另起。
+
 
 
 - 新增单测+工具合同测试+导入测试+评分黄金对照；`npm run check` 全量；合成 Provider 端到端（TA01）；浏览器点验能力目录条目（TA07）。
