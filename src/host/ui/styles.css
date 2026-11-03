@@ -141,6 +141,50 @@ button { color: inherit; }
 .project-start > button { display: inline-flex; align-items: center; gap: 8px; }
 .project-start > span { display: block; margin-top: 20px; color: var(--faint); font-size: 11px; }
 .welcome h1 { overflow-wrap: anywhere; }
+
+.task-workflow { width: min(800px, calc(100% - 64px)); margin: 24px auto 0; flex-shrink: 0; }
+.task-workflow-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.task-workflow-heading > div { min-width: 0; }
+.task-workflow-heading .eyebrow { margin-bottom: 4px; overflow-wrap: anywhere; }
+.task-workflow h1 { margin: 0; font-size: 22px; line-height: 1.4; font-weight: 550; overflow-wrap: anywhere; }
+.task-workflow-status { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.task-workflow ol { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0; margin: 0; list-style: none; }
+.task-workflow li { min-width: 0; }
+.task-workflow nav button { display: flex; align-items: flex-start; gap: 8px; width: 100%; min-height: 70px; padding: 12px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); text-align: left; }
+.task-workflow nav button:hover { background: var(--hover); }
+.task-workflow nav button[aria-current="step"] { border-color: var(--focus); background: var(--accent-soft); }
+.task-step-number { display: grid; place-items: center; flex-shrink: 0; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); font-size: 11px; }
+.task-workflow [aria-current="step"] .task-step-number { color: var(--accent); border-color: var(--focus); }
+.task-workflow nav button > span:last-child { min-width: 0; }
+.task-workflow strong { display: block; font-size: 13px; font-weight: 550; }
+.task-workflow small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.task-workflow-help, .task-start-hint { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+.task-start-hint { text-align: center; padding: 20px 16px 0; }
+.chat-page .composer-area { margin-top: 18px; }
+.task-context-options { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
+.task-context-options > summary { cursor: pointer; font-weight: 500; line-height: 1.6; }
+.task-context-options > summary > span { margin-left: 12px; font-size: 11px; color: var(--muted); }
+.task-context-options[open] > :not(summary) { margin-top: 12px; }
+.task-analysis-options { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); }
+.task-analysis-options > div { min-width: 0; }
+.task-analysis-options strong { font-size: 12px; font-weight: 550; }
+.task-analysis-options strong > span { margin-left: 8px; color: var(--muted); font-size: 11px; font-weight: 400; }
+.task-analysis-options p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.task-analysis-options > button { flex-shrink: 0; font-size: 12px; }
+.task-results { margin-top: 20px; }
+.task-results > h2 { font-size: 12px; font-weight: 550; color: var(--muted); margin: 0 0 10px; }
+.task-workflow button:focus-visible, .task-context-options > summary:focus-visible, .task-results:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+@media (max-width: 760px) {
+  .task-workflow { width: calc(100% - 32px); margin-top: 16px; }
+  .task-workflow-heading { align-items: flex-start; margin-bottom: 12px; }
+  .task-workflow h1 { font-size: 20px; }
+  .task-workflow-status { font-size: 11px; max-width: 36%; text-align: right; white-space: normal; }
+  .task-workflow ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .task-workflow nav button { min-height: 66px; padding: 10px; }
+  .task-start-hint { padding-top: 12px; }
+  .task-analysis-options { flex-wrap: wrap; }
+  .task-analysis-options > button { margin-left: auto; }
+}
 .project-dialog h2 { margin-bottom: 10px; }
 .project-dialog .field { margin-top: 24px; }
 .default-folders { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); margin-top: 18px; }

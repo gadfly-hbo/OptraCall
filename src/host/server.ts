@@ -7,6 +7,7 @@ import { AgentRuntime, CONNECTION_PROMPT, SDK_VERSION } from '../agent/runtime.t
 import { ProjectRuntimeError, type ProjectSnapshot } from '../agent/project-runtime.ts';
 import { ConfigurationStore, ConfigurationStoreError, TARGET_MODELS } from './config-store.ts';
 import { ProjectStore, ProjectStoreFault, type ProjectRecord, type TaskRecord } from './project-store.ts';
+import { PROJECT_UPLOAD_JSON_MAX_BYTES } from './project-upload.ts';
 import { isTaskCapability } from './task-capabilities.ts';
 import { readTradeAreaStatus } from './trade-area-status.ts';
 import { CaseStore, CaseStoreError } from './case-store.ts';
@@ -558,8 +559,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         }
         if (action === 'files' && request.method === 'GET') { json(response, 200, { files: await projects.tree(projectId) }); return; }
         if (action === 'files/upload' && request.method === 'POST') {
-          const input = await body(request, 14 * 1024 * 1024);
-          if (typeof input.content !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input.content)) throw new RequestFault(400, 'invalid_file_encoding');
+          const input = await body(request, PROJECT_UPLOAD_JSON_MAX_BYTES);
+          if (typeof input.content !== 'string' || input.content.length % 4 !== 0) throw new RequestFault(400, 'invalid_file_encoding');
+          const padding = input.content.endsWith('==') ? 2 : input.content.endsWith('=') ? 1 : 0;
+          if (/[^A-Za-z0-9+/]/.test(input.content.slice(0, input.content.length - padding))) throw new RequestFault(400, 'invalid_file_encoding');
           if (input.directory !== undefined && input.directory !== '010_draw' && input.directory !== '020_clean') throw new RequestFault(400, 'invalid_upload_directory');
           json(response, 201, { file: await projects.upload({ projectId, name: String(input.name ?? ''), bytes: Buffer.from(input.content, 'base64'), directory: input.directory as '010_draw' | '020_clean' | undefined }) }); return;
         }

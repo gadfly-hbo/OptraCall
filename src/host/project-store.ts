@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
+import { isProjectUploadName, PROJECT_TEXT_UPLOAD_EXTENSIONS, PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
 import { isTaskCapability, type TaskCapability } from './task-capabilities.ts';
 
 export const PROJECT_DIRECTORIES = ['010_draw', '020_clean', '060_reports'] as const;
@@ -317,10 +318,14 @@ export class ProjectStore {
     const actual = await fs.realpath(target).catch(async error => { if (missingLeaf && (error as NodeJS.ErrnoException).code === 'ENOENT') return path.join(await fs.realpath(path.dirname(target)), path.basename(target)); throw error; });
     if (!inside(projectRoot, actual)) fail('unsafe_file_path'); return target;
   }
-  #uploadInput(name: string, value: Uint8Array): { originalName: string; bytes: Buffer } {
-    if (typeof name !== 'string' || !name.trim() || name.length > 200 || /[\\/\u0000-\u001f\u007f]/.test(name) || !['.csv', '.json', '.md', '.txt'].includes(path.extname(name.trim()).toLowerCase())) fail('invalid_upload_name');
-    if (!(value instanceof Uint8Array) || value.byteLength > maxUploadBytes) fail('upload_too_large');
-    const bytes = Buffer.from(value); try { new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { fail('upload_requires_utf8'); }
+  #uploadInput(name: string, value: Uint8Array, kind: 'text' | 'project-material' = 'text'): { originalName: string; bytes: Buffer } {
+    const material = kind === 'project-material';
+    if (typeof name !== 'string' || (material ? !isProjectUploadName(name) : !name.trim() || name.length > 200 || /[\\/\u0000-\u001f\u007f]/.test(name) || !['.csv', '.json', '.md', '.txt'].includes(path.extname(name.trim()).toLowerCase()))) fail('invalid_upload_name');
+    if (!(value instanceof Uint8Array) || value.byteLength > (material ? PROJECT_UPLOAD_MAX_BYTES : maxUploadBytes)) fail('upload_too_large');
+    const bytes = Buffer.from(value);
+    if (!material || PROJECT_TEXT_UPLOAD_EXTENSIONS.includes(path.extname(name.trim()).toLowerCase())) {
+      try { new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { fail('upload_requires_utf8'); }
+    }
     return { originalName: name, bytes };
   }
   async #upload(id: string, input: { originalName: string; bytes: Buffer }, directory: ProjectDirectory, source: UploadedFile['source'], exclusiveName = false): Promise<UploadedFile> {
@@ -342,7 +347,7 @@ export class ProjectStore {
     return fail('upload_name_conflict');
   }
   upload(input: { projectId: string; name: string; bytes: Uint8Array; directory?: '010_draw' | '020_clean' }): Promise<UploadedFile> {
-    const prepared = this.#uploadInput(input.name, input.bytes), directory = input.directory ?? '010_draw';
+    const prepared = this.#uploadInput(input.name, input.bytes, 'project-material'), directory = input.directory ?? '010_draw';
     if (directory !== '010_draw' && directory !== '020_clean') return Promise.reject(new ProjectStoreFault('invalid_upload_directory'));
     return this.#mutation(() => this.#upload(input.projectId, prepared, directory, { kind: 'upload' }));
   }
@@ -352,7 +357,7 @@ export class ProjectStore {
     return this.#mutation(async () => {
       const project = await this.#read(projectId); this.#active(project); const source = await this.readFile(projectId, relativeRawPath);
       const originalName = project.uploads.find(item => item.path === relativeRawPath)?.originalName ?? source.name;
-      return this.#upload(projectId, this.#uploadInput(originalName, source.bytes), '020_clean', { kind: 'copy', from: relativeRawPath });
+      return this.#upload(projectId, this.#uploadInput(originalName, source.bytes, 'project-material'), '020_clean', { kind: 'copy', from: relativeRawPath });
     });
   }
   async tree(projectId: string): Promise<FileNode[]> {

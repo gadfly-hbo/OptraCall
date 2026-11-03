@@ -1,12 +1,13 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type Ref } from 'react';
 import type { BrowserUIRequest, BrowserUIResponse, ClientProject, ClientTask, FileNode, PublicModelConfiguration } from './project-types.ts';
 import type { RequirementContextSelection } from './requirement-types.ts';
 import { downloadFile, projectFiles } from './runtime-client.ts';
 import { downloadVerificationAuthorFile, listVerifications, previewVerification, readSapProvision, readVerification, respondVerificationUI, startVerification, verificationAction, verificationFiles, verificationInputError, verificationPhaseLabel, verificationStatusLabel, VerificationRequestError, VerificationSubmissionUnknown, type VerificationFixedMaterial, type VerificationInput, type VerificationMaterialPreview, type VerificationPreview, type VerificationRecord, type VerificationSelection } from './verification-client.ts';
 import './verification-panel.css';
-import { AutomaticVerificationPanel } from './AutomaticVerificationPanel.tsx';
+import { AutomaticVerificationPanel, type AutomaticSettingsHandle } from './AutomaticVerificationPanel.tsx';
 
 type Props = {
+  automaticSettingsRef?: Ref<AutomaticSettingsHandle>;
   project: ClientProject; task: ClientTask; configurations: PublicModelConfiguration[]; taskBusy: boolean; filesRevision: number;
   requirementContext?: RequirementContextSelection; caseContext?: { id: string; title: string; description: string; revision: number };
   semanticContext?: unknown;
@@ -64,7 +65,7 @@ function VerificationQuestion({ request, disabled, onAnswer }: { request: Browse
   </section>;
 }
 
-export function VerificationPanel({ project, task, configurations, taskBusy, filesRevision, requirementContext, caseContext, semanticContext, onFilesChanged }: Props) {
+export function VerificationPanel({ automaticSettingsRef, project, task, configurations, taskBusy, filesRevision, requirementContext, caseContext, semanticContext, onFilesChanged }: Props) {
   const uid = useId(), mounted = useRef(true), detailRequest = useRef(0), previewRequest = useRef(0), detailTarget = useRef<string | undefined>(undefined), heading = useRef<HTMLHeadingElement>(null), previewButton = useRef<HTMLButtonElement>(null), draftActive = useRef(false);
   const [open, setOpen] = useState(false), [formOpen, setFormOpen] = useState(false), [files, setFiles] = useState<FileNode[]>([]), [records, setRecords] = useState<VerificationRecord[]>([]);
   const [selected, setSelected] = useState<VerificationRecord>(), [loading, setLoading] = useState(false), [posting, setPosting] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState(''), [observation, setObservation] = useState(0);
@@ -208,7 +209,7 @@ export function VerificationPanel({ project, task, configurations, taskBusy, fil
   const revisionWasStarted = Boolean(selected?.revision || selected?.revisionCount);
   const recheckWasStarted = Boolean(selected?.recheckResult || selected?.recheckCount || selected?.phase === 'recheck');
   return <section className="verification" aria-label="独立核算">
-    <AutomaticVerificationPanel key={`${project.id}/${task.id}`} project={project} task={task} configurations={configurations} taskBusy={taskBusy} filesRevision={filesRevision} requirementContext={requirementContext} caseContext={caseContext} onFilesChanged={onFilesChanged} />
+    <AutomaticVerificationPanel ref={automaticSettingsRef} key={`${project.id}/${task.id}`} project={project} task={task} configurations={configurations} taskBusy={taskBusy} filesRevision={filesRevision} requirementContext={requirementContext} caseContext={caseContext} onFilesChanged={onFilesChanged} />
     <button type="button" className="text-button verification-trigger" aria-expanded={open} aria-controls={`${uid}-panel`} onClick={() => setOpen(value => !value)}>核算关键结论{Boolean(selected?.uiRequests?.length) && <span className="verification-waiting">等待回应</span>}<span aria-hidden="true">{open ? '⌃' : '⌄'}</span></button>
     {open && <div id={`${uid}-panel`} className="verification-panel">
       <header className="verification-heading"><div><h2 ref={heading} tabIndex={-1}>独立核算</h2><p>另一会话自主形成依据，差异与未知分别保留。</p></div><button type="button" className="secondary-button" disabled={archived || taskBusy || locked} onClick={() => openForm()}>发起核算</button></header>

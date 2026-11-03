@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ClientProject, FileNode, PublicModelConfiguration } from './project-types.ts';
 import { copyToClean, downloadFile, HostRequestError, projectFiles, uploadFile } from './runtime-client.ts';
+import { isProjectUploadName, PROJECT_UPLOAD_ACCEPT, PROJECT_UPLOAD_MAX_BYTES } from '../project-upload.ts';
 
 function FolderIcon() { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" /></svg>; }
 const errorText = (error: unknown) => error instanceof HostRequestError ? error.message : '本地文件服务暂时不可用，请重试。';
@@ -49,11 +50,12 @@ export function ProjectFiles({ project, refreshToken, onClose, onGeneratePptx, o
   return <aside id="project-files" className="project-files" aria-label="项目文件">
     <div className="project-files-heading"><div><span className="eyebrow">项目空间</span><h2 ref={heading} tabIndex={-1}>项目文件</h2></div><button className="icon-button" aria-label="关闭项目文件栏" onClick={onClose}>✕</button></div>
     <div className="project-files-info"><FolderIcon /><div><strong>{project.name}</strong><span>本机项目 · 3 个默认文件夹</span></div></div>
-    {project.archivedAt ? <p className="archive-file-note">项目已归档，可查看和下载文件；恢复后可继续上传和编辑。</p> : <div className="file-upload"><label htmlFor="upload-directory">上传位置</label><select id="upload-directory" value={directory} disabled={busy} onChange={event => setDirectory(event.target.value as '010_draw' | '020_clean')}><option value="010_draw">010_draw · 原件归档</option><option value="020_clean">020_clean · 分析资料与过程文件</option></select><button className="secondary-button" disabled={busy} onClick={() => input.current?.click()}>{busy ? '正在处理…' : '上传文件'}</button><input ref={input} type="file" multiple accept=".csv,.json,.md,.txt" hidden aria-label="选择上传文件" onChange={async event => {
+    {project.archivedAt ? <p className="archive-file-note">项目已归档，可查看和下载文件；恢复后可继续上传和编辑。</p> : <div className="file-upload"><label htmlFor="upload-directory">上传位置</label><select id="upload-directory" value={directory} disabled={busy} onChange={event => setDirectory(event.target.value as '010_draw' | '020_clean')}><option value="010_draw">010_draw · 原件归档</option><option value="020_clean">020_clean · 分析资料与过程文件</option></select><button className="secondary-button" disabled={busy} onClick={() => input.current?.click()}>{busy ? '正在处理…' : '上传文件'}</button><input ref={input} type="file" multiple accept={PROJECT_UPLOAD_ACCEPT} hidden aria-label="选择上传文件" onChange={async event => {
       const selected = Array.from(event.target.files ?? []); event.target.value = ''; if (!selected.length) return;
-      if (selected.length > 10 || selected.some(file => file.size > 10 * 1024 * 1024)) { setError('每次最多 10 个文件，单文件不超过 10 MiB。'); return; }
+      if (selected.length > 10 || selected.some(file => file.size > PROJECT_UPLOAD_MAX_BYTES)) { setError('每次最多 10 个文件，单文件不超过 50 MiB。'); return; }
+      if (selected.some(file => !isProjectUploadName(file.name))) { setError('请选择支持的文档、网页、演示文稿、表格或文本文件。'); return; }
       const target = directory; await act(async () => { for (const file of selected) await uploadFile(project.id, file, target); }, target === '010_draw' ? '上传已保存到原件归档区。需要分析时请显式将副本放入分析区；未自动调用模型。' : '上传已保存到分析区，可发送你的分析问题；上传本身不会调用模型。');
-    }} /><p>CSV / JSON / Markdown / TXT · UTF-8 · 单文件 ≤ 10 MiB</p><p className="file-scope-note">目录用途不提供敏感数据隔离，请勿上传敏感数据。</p></div>}
+    }} /><p>PDF / Word / HTML / MHTML / PPT / Excel / 文本 · 单文件 ≤ 50 MiB</p><p>CSV / TSV / JSON / Markdown / TXT 需 UTF-8；保留原文件，上传不自动解析或开始分析。</p><p className="file-scope-note">目录用途不提供敏感数据隔离，请勿上传敏感数据。</p></div>}
     <div className="file-tree-toolbar"><span>项目目录</span><button className="text-button" disabled={busy || loading} onClick={() => { void refresh(); }}>刷新文件</button></div>
     {loading && <p className="file-feedback" role="status">正在读取项目文件…</p>}{error && <p className="file-feedback field-error" role="alert">{error}</p>}{notice && <p className="file-feedback" role="status">{notice}</p>}
     <nav className="project-file-tree" aria-label="项目文件夹">{files.map(node)}</nav>

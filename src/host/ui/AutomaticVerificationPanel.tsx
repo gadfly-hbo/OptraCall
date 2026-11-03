@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import type { AutomaticSettings, AutomaticSettingsInput, AutomaticVersion } from '../automatic-verification-types.ts';
 import type { BrowserUIResponse, ClientProject, ClientTask, FileNode, PublicModelConfiguration } from './project-types.ts';
 import type { RequirementContextSelection } from './requirement-types.ts';
@@ -13,7 +13,9 @@ import {
 } from './automatic-verification-client.ts';
 import './automatic-verification.css';
 
+export type AutomaticSettingsHandle = { openSettings: (trigger?: HTMLElement) => void };
 type Props = {
+  ref?: Ref<AutomaticSettingsHandle>;
   project: ClientProject; task: ClientTask; configurations: PublicModelConfiguration[];
   taskBusy: boolean; filesRevision: number;
   requirementContext?: RequirementContextSelection;
@@ -94,10 +96,12 @@ function FixedReport({ projectId, taskId, chainId, version }: { projectId: strin
   </details>;
 }
 
-export function AutomaticVerificationPanel({ project, task, configurations, taskBusy, filesRevision, requirementContext, caseContext, onFilesChanged }: Props) {
+export function AutomaticVerificationPanel({ ref, project, task, configurations, taskBusy, filesRevision, requirementContext, caseContext, onFilesChanged }: Props) {
   const uid = useId(), mounted = useRef(true), selectedTarget = useRef<string | undefined>(undefined), requestSerial = useRef(0), changed = useRef(onFilesChanged), seenVersions = useRef(new Map<string, number>());
   changed.current = onFilesChanged;
   const dialog = useRef<HTMLDialogElement>(null), settingsButton = useRef<HTMLButtonElement>(null), dialogHeading = useRef<HTMLHeadingElement>(null), formError = useRef<HTMLParagraphElement>(null);
+  const disclosure = useRef<HTMLDetailsElement>(null), settingsReturnFocus = useRef<HTMLElement | null>(null);
+  const [settingsRequested, setSettingsRequested] = useState(false);
   const [settings, setSettings] = useState(() => freshSettings(project.id, task.id)), [capabilities, setCapabilities] = useState<AutomaticCapabilities>();
   const [status, setStatus] = useState<AutomaticStatus>();
   const [chains, setChains] = useState<AutomaticChainView[]>([]), [selected, setSelected] = useState<AutomaticChainView>(), [selectedId, setSelectedId] = useState<string>();
@@ -175,14 +179,25 @@ export function AutomaticVerificationPanel({ project, task, configurations, task
     void projectFiles(project.id).then(value => { if (!controller.signal.aborted) setFiles(value); }, () => { if (!controller.signal.aborted) setFilesError('项目文件暂未读回，原选择保留；可关闭后重新打开设置。'); }).finally(() => { if (!controller.signal.aborted) setFilesLoading(false); });
     return () => controller.abort();
   }, [dialogOpen, project.id, filesRevision]);
-  const openSettings = () => {
-    if (!draft) { setDraft(automaticSettingsDraft(settings)); setDraftRevision(settings.revision); }
-    setSaveError(''); setDialogOpen(true);
+  const openSettings = (trigger: HTMLElement | null = settingsButton.current) => {
+    if (posting || archived) return;
+    settingsReturnFocus.current = trigger; setSettingsRequested(true);
   };
+  useImperativeHandle(ref, () => ({ openSettings }));
+  useEffect(() => {
+    if (!settingsRequested || loading || posting || archived) return;
+    if (disclosure.current) disclosure.current.open = true;
+    if (!draft) { setDraft(automaticSettingsDraft(settings)); setDraftRevision(settings.revision); }
+    setSaveError(''); setDialogOpen(true); setSettingsRequested(false);
+  }, [settingsRequested, loading, posting, archived, draft, settings]);
+  const restoreSettingsFocus = () => requestAnimationFrame(() => {
+    if (settingsReturnFocus.current?.isConnected) settingsReturnFocus.current.focus();
+    else settingsButton.current?.focus();
+  });
   const closeSettings = () => {
     if (posting) return;
     dialog.current?.close(); setDialogOpen(false);
-    requestAnimationFrame(() => settingsButton.current?.focus());
+    restoreSettingsFocus();
   };
   const edit = (input: Partial<AutomaticSettingsInput>) => setDraft(old => ({ ...(old ?? automaticSettingsDraft(settings)), ...input }));
   const rebaseSettings = async () => {
@@ -206,7 +221,7 @@ export function AutomaticVerificationPanel({ project, task, configurations, task
       if (!mounted.current) return;
       setSettings(value); setDraft(undefined); setSaveUncertain(false); dialog.current?.close(); setDialogOpen(false);
       setNotice(value.enabled ? '已启用：从后续普通分析的新报告版本开始自动交接，不回放旧请求。' : '已关闭后续自动交接，历史及普通分析保留。');
-      requestAnimationFrame(() => settingsButton.current?.focus());
+      restoreSettingsFocus();
     } catch (error) {
       if (!mounted.current) return;
       if (error instanceof AutomaticVerificationUncertain) setSaveUncertain(true);
@@ -250,9 +265,11 @@ export function AutomaticVerificationPanel({ project, task, configurations, task
     const all = [...current, ...values.filter(path => !current.some(file => file.path === path)).map(path => ({ kind: 'file' as const, path, name: path.split('/').at(-1) ?? path }))];
     return <fieldset className="automatic-files" aria-describedby={`${uid}-error ${uid}-${role}-help`} aria-invalid={Boolean(saveError && issue?.field === role)}><legend>{role === 'data' ? '首次独立核算的源数据' : '首次依据保存后开放的作者过程件（可选）'}</legend><p id={`${uid}-${role}-help`} className="verification-hint">{role === 'data' ? '只选择020_clean中的源材料，作者脚本和结果放在另一组。' : '作者过程件和报告在首次依据保存后才开放，不据此替Agent选择方法。'}</p>{all.length ? all.map(file => <label key={file.path}><input type="checkbox" checked={values.includes(file.path)} disabled={posting || (role === 'data' ? (draft.processFiles ?? []).includes(file.path) : (draft.dataFiles ?? []).includes(file.path) || draft.reportPath === file.path)} onChange={event => edit({ [role === 'data' ? 'dataFiles' : 'processFiles']: event.target.checked ? [...values, file.path] : values.filter(value => value !== file.path) })} /><span>{file.path}{!current.some(item => item.path === file.path) && <small>已保存选择，当前目录未列出</small>}</span></label>) : <p className="verification-hint">暂无可选文件；未自动选择或推断相关资料。</p>}</fieldset>;
   };
-  const selectedUncertain = uncertainAction?.chainId === selected?.chainId;
-  return <section className="automatic-verification" aria-labelledby={`${uid}-title`} aria-busy={loading}>
-    <header className="automatic-heading"><div><h2 id={`${uid}-title`}>自动核算与修订</h2><p>{capabilities && !capabilities.supported ? '自动交接暂不可用；可以回看已有记录或编辑设置草稿。' : settings.enabled ? '指定报告形成新版本后，独立核算意见会自动交回原主Agent。' : '默认关闭。普通分析和原手动核算照常使用。'}</p><span className="automatic-badge">{capabilities && !capabilities.supported ? '暂不可用' : settings.enabled ? '已启用' : '未启用'}</span><span className="automatic-policy">后续请求最多返修{settings.maxAuthorTurns}次</span></div><button ref={settingsButton} type="button" className="secondary-button" disabled={loading || posting || archived} onClick={openSettings}>{capabilities && !capabilities.supported ? '查看设置' : settings.enabled ? '查看或调整设置' : '设置并启用'}</button></header>
+  const selectedUncertain = Boolean(selected && uncertainAction?.chainId === selected.chainId);
+  return <details ref={disclosure} className="automatic-verification" aria-busy={loading}>
+    <summary className="automatic-fold-heading"><strong>自动核算与修订记录</strong><span className="automatic-badge" role="status">{loading ? '读取中' : selected?.uiRequests?.length ? '等待回应' : selectedUncertain ? '状态待确认' : active ? '正在处理' : error ? '读取异常' : capabilities && !capabilities.supported ? '暂不可用' : settings.enabled ? '已启用' : '未启用'}</span></summary>
+    <div className="automatic-fold-content">
+    <header className="automatic-heading"><div><h2 id={`${uid}-title`}>自动核算与修订</h2><p>{capabilities && !capabilities.supported ? '自动交接暂不可用；可以回看已有记录或编辑设置草稿。' : settings.enabled ? '指定报告形成新版本后，独立核算意见会自动交回原主Agent。' : '默认关闭。普通分析和原手动核算照常使用。'}</p><span className="automatic-badge">{capabilities && !capabilities.supported ? '暂不可用' : settings.enabled ? '已启用' : '未启用'}</span><span className="automatic-policy">后续请求最多返修{settings.maxAuthorTurns}次</span></div><button ref={settingsButton} type="button" className="secondary-button" disabled={loading || posting || archived} onClick={event => openSettings(event.currentTarget)}>{capabilities && !capabilities.supported ? '查看设置' : settings.enabled ? '查看或调整设置' : '设置并启用'}</button></header>
     <p className="verification-hint">主Agent自主判断核算意见，可重算、修订或说明不采纳；新稿再核。系统只交材料、执行权限和保存记录，不保证整份报告正确。</p>
     {capabilities && !capabilities.supported && <p className="automatic-warning">{capabilities.reason ?? '当前环境不支持所需的原件保护，自动功能不能启用。'}普通分析和已有记录不受影响。</p>}
     {archived && <p className="verification-hint">项目已归档，只可回看已有记录。</p>}{active && <p className="verification-hint">本任务正在自动处理中；停止并安全收尾后可继续普通分析。</p>}
@@ -271,7 +288,7 @@ export function AutomaticVerificationPanel({ project, task, configurations, task
       <section className="automatic-steps"><h4>交接与Agent原文</h4>{selected.steps.map(step => <details key={step.stepId}><summary>{automaticPhaseLabel[step.phase]} · {step.status === 'completed' ? '已有终态' : step.status === 'accepted' ? '请求已接受' : step.status === 'planned' ? '尚未证实接受' : step.status === 'unknown' ? '结果待确认' : step.status === 'cancelled' ? '已停止' : '运行失败'}</summary>{step.phase === 'recheck' && <p className="verification-hint">这是已见作者信息后的知情复查，不是新的冷读。</p>}{step.result?.text !== undefined ? <pre>{step.result.text}</pre> : <p className="verification-hint">{step.verificationRef ? '原文由首次核算记录保存，可在本链材料区只读回看。' : '尚未回读原文，不用当前材料补造。'}</p>}<dl className="automatic-identity"><div><dt>实际请求</dt><dd>{step.requestId}</dd></div><div><dt>接受时间</dt><dd>{dateText(step.acceptedAt)}</dd></div><div><dt>对应报告SHA</dt><dd>{step.inputSha256 ?? '未记录'}</dd></div>{step.result && <div><dt>结果SHA</dt><dd>{step.result.sha256}</dd></div>}</dl></details>)}</section>
       <div className="verification-actions"><button type="button" className="secondary-button" disabled={loading || posting} onClick={() => { void query(); }}>重新读取本链</button>{(automaticChainRunning(selected) || automaticCleanupRetryable(selected)) && !archived && <button type="button" className="secondary-button" disabled={posting || (selectedUncertain && uncertainAction?.operation === 'stop' && !automaticCleanupRetryable(selected))} onClick={() => { void stop(); }}>{automaticCleanupRetryable(selected) && !automaticChainRunning(selected) ? '重试资源清理' : '停止本次自动处理'}</button>}</div><p className="verification-hint">旧稿和意见保留。末次意见若未实际交回，不称主Agent已读；采用报告与经营动作仍需显式操作。</p>
     </article>}
-    <dialog ref={dialog} className="automatic-dialog" aria-labelledby={`${uid}-dialog-title`} onCancel={event => { event.preventDefault(); closeSettings(); }} onClose={() => { setDialogOpen(false); requestAnimationFrame(() => settingsButton.current?.focus()); }}>
+    <dialog ref={dialog} className="automatic-dialog" aria-labelledby={`${uid}-dialog-title`} onCancel={event => { event.preventDefault(); closeSettings(); }} onClose={() => { setDialogOpen(false); restoreSettingsFocus(); }}>
       <header><div><h2 ref={dialogHeading} tabIndex={-1} id={`${uid}-dialog-title`}>自动核算与修订设置</h2><p>只对本任务后续普通请求生效，保存设置不调用模型。</p></div><button type="button" className="text-button" aria-label="关闭设置并保留输入" disabled={posting} onClick={closeSettings}>关闭</button></header>
       {draft && <form onSubmit={event => { event.preventDefault(); void save(); }}>
         <fieldset disabled={posting || archived} className="automatic-settings-fields"><legend className="sr-only">本任务自动核算设置</legend>
@@ -296,5 +313,6 @@ export function AutomaticVerificationPanel({ project, task, configurations, task
         <div className="automatic-dialog-actions"><button type="button" className="secondary-button" disabled={posting} onClick={closeSettings}>取消，保留输入</button><button type="submit" className="primary-button" disabled={posting || archived || saveUncertain || (draft.enabled && !capabilities?.supported)}>{posting ? '正在保存…' : '保存任务设置'}</button></div>
       </form>}
     </dialog>
-  </section>;
+    </div>
+  </details>;
 }

@@ -4,6 +4,8 @@
 
 Mac mini负责开发、工程测试和交付；GitHub main保存经复核及CI的集成版本。MacBook在 `/Users/huangbo/Dev/OptraCall` 使用独立浅克隆，只接收main、体验和反馈。该副本禁用默认push，不从MacBook提交或回推。部署时安装依赖、构建产品不属于在MacBook开发。
 
+2026-11-03确认的长期`Test-And-Repair`试用修正分支及其与`main`的关系，见[工程规范第5节](engineering-workflow.md#5-git-与-ci-的精简节奏)；本说明中的MacBook更新来源仍为`main`。
+
 当前包含反馈闭环、自动核算和托管优化的试用范围见[本次版本说明](current-version-trial.md)。自动核算采用单独的受管执行环境，只有当前Host可信新建起点的任务具备资格；其工具／扩展限制不等同于默认关闭自动核算时的普通分析能力。专业验证仍有重要错误及漏报，工程交付不替代用户体验或专业验收。
 
 应用私有CLI可放在`~/Library/Application Support/OptraCall/tools/gh/bin/gh`，Finder入口会在自己的PATH内发现，不更改系统PATH。试用入口及更新的npm子进程使用Node自带的可信根证书并保持TLS验证，避免私有运行包引用构建机不存在的证书目录；不导入Mini系统证书或关闭验证，不继承任意Node preload／禁TLS选项。CLI安装和该机登录由显式部署／用户操作完成，产品不自动安装或登录。修正及验证见[运行时信任记录](../openspec/changes/macbook-runtime-trust/result.md)。
@@ -46,4 +48,4 @@ Mac mini负责开发、工程测试和交付；GitHub main保存经复核及CI�
 
 首次部署只对确认空的指定文件夹执行 `git clone --depth 1 --single-branch --branch main`。若非空，先核对保留，不覆写已有内容。使用MacBook原生Node.js 25+及依赖；需要专用Node时放在 `~/Library/Application Support/OptraCall/runtime/node/`，不替换全局Node。Finder入口也可识别clone内 `.runtime/node/`、Homebrew和有效PATH中的Node；Python通过原生bash与本机PATH使用。
 
-反馈请附实际运行版本／提交、复现步骤、预期与实际、可安全提供的截图或日志；不要回传密钥或敏感业务资料。由Mac mini修复、经工程交付进入main，MacBook再通过更新入口接收。部署检查只证明产品安装和基本运行，用户试用及正式产品验收另行确认。
+反馈请附实际运行版本／提交、复现步骤、预期与实际、可安全提供的截图或日志；不要回传密钥或敏感业务资料。试用报告存放于MacBook的 `/Users/huangbo/Dev/OptraCall-Test-And-Repair/待修复`；Mac mini通过SSH读取，修复完成后移至同根目录的`已修复`，详见[报告读取与归档约定](engineering-workflow.md#试用报告读取与修复归档)。由Mac mini修复、经工程交付进入main，MacBook再通过更新入口接收。部署检查只证明产品安装和基本运行，用户试用及正式产品验收另行确认。
