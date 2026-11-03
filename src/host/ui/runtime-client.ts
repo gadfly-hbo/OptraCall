@@ -5,6 +5,7 @@ import type { RequirementContextSelection } from './requirement-types.ts';
 import type { TaskCapability, TaskCapabilities } from '../task-capabilities.ts';
 import type { TradeAreaStatus } from '../trade-area-status.ts';
 import type { BrowserUIResponse, ClientProject, ClientTask, FileNode, ProjectEvent, PublicModelConfiguration, SessionSnapshot, TaskState } from './project-types.ts';
+import { isProjectUploadName, PROJECT_UPLOAD_MAX_BYTES } from '../project-upload.ts';
 
 export class HostRequestError extends Error {
   readonly fields: Record<string, string>;
@@ -45,9 +46,16 @@ export function runCommand(projectId: string, taskId: string, text: string, requ
 export async function answerInteraction(projectId: string, taskId: string, response: BrowserUIResponse): Promise<void> { await request(`${taskPath(projectId, taskId)}/ui-response`, 'POST', response); }
 export async function projectFiles(id: string): Promise<FileNode[]> { return (await request<{ files: FileNode[] }>(`projects/${encodeURIComponent(id)}/files`, 'GET')).files; }
 export async function uploadFile(id: string, file: File, directory: '010_draw' | '020_clean'): Promise<void> {
-  const bytes = new Uint8Array(await file.arrayBuffer()); let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-  await request(`projects/${encodeURIComponent(id)}/files/upload`, 'POST', { name: file.name, content: btoa(binary), directory });
+  if (file.size > PROJECT_UPLOAD_MAX_BYTES) throw new HostRequestError('单文件不超过 50 MiB。', {}, 'upload_too_large');
+  if (!isProjectUploadName(file.name)) throw new HostRequestError('请选择支持的文档、网页、演示文稿、表格或文本文件。', {}, 'invalid_upload_name');
+  const content = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new HostRequestError('文件读取失败，请重新选择。'));
+    reader.onabort = () => reject(new HostRequestError('文件读取已取消。'));
+    reader.onload = () => { const result = String(reader.result), comma = result.indexOf(','); if (comma < 0) reject(new HostRequestError('文件读取失败，请重新选择。')); else resolve(result.slice(comma + 1)); };
+    reader.readAsDataURL(file);
+  });
+  await request(`projects/${encodeURIComponent(id)}/files/upload`, 'POST', { name: file.name, content, directory });
 }
 export async function copyToClean(id: string, path: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/files/copy-to-clean`, 'POST', { path }); }
 export async function saveReport(id: string, text: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/files/save-report`, 'POST', { name: `report-${new Date().toISOString().replace(/[:.]/g, '-')}.md`, text }); }
