@@ -165,6 +165,12 @@ button { color: inherit; }
 .task-context-options > summary { cursor: pointer; font-weight: 500; line-height: 1.6; }
 .task-context-options > summary > span { margin-left: 12px; font-size: 11px; color: var(--muted); }
 .task-context-options[open] > :not(summary) { margin-top: 12px; }
+.task-analysis-options { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); }
+.task-analysis-options > div { min-width: 0; }
+.task-analysis-options strong { font-size: 12px; font-weight: 550; }
+.task-analysis-options strong > span { margin-left: 8px; color: var(--muted); font-size: 11px; font-weight: 400; }
+.task-analysis-options p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.task-analysis-options > button { flex-shrink: 0; font-size: 12px; }
 .task-results { margin-top: 20px; }
 .task-results > h2 { font-size: 12px; font-weight: 550; color: var(--muted); margin: 0 0 10px; }
 .task-workflow button:focus-visible, .task-context-options > summary:focus-visible, .task-results:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
@@ -176,6 +182,8 @@ button { color: inherit; }
   .task-workflow ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .task-workflow nav button { min-height: 66px; padding: 10px; }
   .task-start-hint { padding-top: 12px; }
+  .task-analysis-options { flex-wrap: wrap; }
+  .task-analysis-options > button { margin-left: auto; }
 }
 .project-dialog h2 { margin-bottom: 10px; }
 .project-dialog .field { margin-top: 24px; }

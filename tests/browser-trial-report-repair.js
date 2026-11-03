@@ -46,6 +46,59 @@ async (page, { artifactDir = '.local/trial-repair-20261103/browser', target } = 
   checks.push('A fresh task with no automatic records does not claim an uncertain operation.');
   if (target === 'automatic-empty-state') return { result: 'PASS', checks, browserErrors: errors.length, externalRequests: outbound.length };
 
+  const preconfigure = page.getByRole('button', { name: '配置自动核算', exact: true });
+  assert(await preconfigure.count() === 1, 'The analysis composer must expose one pre-analysis automatic-verification configuration entry.');
+  assert(await preconfigure.isVisible(), 'Pre-analysis automatic-verification configuration must be visible.');
+  assert(await preconfigure.evaluate(button => Boolean(button.compareDocumentPosition(document.querySelector('#message-input')) & Node.DOCUMENT_POSITION_FOLLOWING)), 'Automatic verification must be configurable before the composer.');
+  await preconfigure.focus(); await page.keyboard.press('Enter');
+  const preSettingsDialog = page.getByRole('dialog', { name: '自动核算与修订设置', exact: true });
+  await preSettingsDialog.waitFor();
+  assert(await automaticSummary.evaluate(element => element.parentElement.open), 'The pre-analysis entry must expand the original results disclosure for its existing settings dialog.');
+  const firstSettingsDraft = '第一任务未保存的自动核算问题';
+  await preSettingsDialog.getByRole('textbox', { name: '需要核算的问题', exact: true }).fill(firstSettingsDraft);
+  await preSettingsDialog.getByRole('button', { name: '关闭设置并保留输入', exact: true }).click();
+  await preSettingsDialog.waitFor({ state: 'hidden' });
+  assert(await preconfigure.evaluate(element => element === document.activeElement), 'Closing pre-analysis settings must restore focus to its external trigger.');
+  await preconfigure.click(); await preSettingsDialog.waitFor();
+  assert(await preSettingsDialog.getByRole('textbox', { name: '需要核算的问题', exact: true }).inputValue() === firstSettingsDraft, 'Closing and reopening pre-analysis settings keeps this task\'s unsaved input.');
+  assert(!await preSettingsDialog.getByRole('checkbox', { name: '启用本任务的自动核算与修订', exact: true }).isChecked(), 'Opening pre-analysis configuration must not enable automatic verification.');
+  const firstOwner = new URL(page.url()), ownerProject = firstOwner.searchParams.get('project'), ownerTask = firstOwner.searchParams.get('task');
+  const settingsPath = `/api/projects/${ownerProject}/tasks/${ownerTask}/automatic-verification/settings`;
+  const [settingsSaved] = await Promise.all([
+    page.waitForResponse(response => response.request().method() === 'PUT' && new URL(response.url()).pathname === settingsPath && response.ok()),
+    preSettingsDialog.getByRole('button', { name: '保存任务设置', exact: true }).click(),
+  ]);
+  const settingsReadback = (await settingsSaved.json()).settings;
+  assert(settingsReadback.projectId === ownerProject && settingsReadback.taskId === ownerTask && settingsReadback.enabled === false && settingsReadback.question === firstSettingsDraft, 'Pre-analysis save must use this exact owner and retain the explicit disabled setting.');
+  await preSettingsDialog.waitFor({ state: 'hidden' });
+  assert(await preconfigure.evaluate(element => element === document.activeElement), 'Saving pre-analysis settings must restore focus to its external trigger.');
+  await automaticSummary.click();
+  assert(await automaticSummary.evaluate(element => !element.parentElement.open), 'The results disclosure remains manually collapsible after preconfiguration.');
+  assert((await metrics()).requestCount === before, 'Pre-analysis configuration must not implicitly call a model.');
+  checks.push('Pre-analysis configuration reuses the dialog, preserves same-task draft, saves disabled settings to the exact owner, expands/collapses results and restores trigger focus without model work.');
+
+  const background = page.locator('details.task-context-options');
+  await background.locator(':scope > summary').click();
+  const enterprisePicker = background.locator('details.eb-picker'), enterpriseHistory = background.locator('details.eb-history');
+  await enterprisePicker.locator(':scope > summary').click();
+  assert(await enterprisePicker.getByRole('searchbox', { name: '查找本轮企业资料', exact: true }).isVisible(), 'Enterprise material selection remains usable after expanding task context.');
+  assert(await enterprisePicker.getByRole('button', { name: '刷新可检索目录', exact: true }).isVisible(), 'Enterprise material refresh remains reachable.');
+  await enterpriseHistory.locator(':scope > summary').click();
+  assert(await enterpriseHistory.getByRole('button', { name: '刷新历史来源记录', exact: true }).isVisible(), 'Historical enterprise-context receipts remain reachable.');
+  await enterpriseHistory.getByText('此任务没有可回读的请求来源记录；旧依据保持未知，不按当前资料补填。', { exact: true }).waitFor();
+  await page.screenshot({ path: `${artifactDir}/preserved-enterprise-context.png`, fullPage: true });
+  await background.locator(':scope > summary').click();
+  const harness = page.locator('details.harness-panel');
+  await harness.locator(':scope > summary').click();
+  assert(await harness.getByRole('checkbox', { name: '经营推演工具', exact: true }).isVisible(), 'Simulation task capability remains visibly configurable.');
+  assert(await harness.getByRole('checkbox', { name: '商圈数据连接器', exact: true }).isVisible(), 'Trade-area task capability remains visibly configurable.');
+  assert(await page.locator('.composer').getByRole('button', { name: /synthetic-model/ }).isVisible(), 'The task model configuration button remains visible.');
+  await page.screenshot({ path: `${artifactDir}/preserved-task-capabilities.png`, fullPage: true });
+  await harness.locator(':scope > summary').click();
+  assert((await metrics()).requestCount === before, 'Expanding original material/receipt/capability controls must not call a model.');
+  checks.push('Expanded enterprise material selection/history, simulation/trade-area capability controls and task model configuration remain visible.');
+  if (target === 'preconfigure') return { result: 'PASS', checks, browserErrors: errors.length, externalRequests: outbound.length };
+
   const nav = page.getByRole('navigation', { name: '分析任务步骤', exact: true });
   for (const step of ['资料准备', '需求梳理', '分析对话', '结果与核算']) assert(await nav.getByRole('button', { name: new RegExp(step) }).isVisible(), 'Task step must be a reachable action: ' + step);
   assert(await nav.locator('[aria-current="step"]').count() === 1, 'Exactly one observable task stage is current.');
@@ -122,6 +175,11 @@ async (page, { artifactDir = '.local/trial-repair-20261103/browser', target } = 
   await automaticSummary.waitFor();
   assert(await automaticSummary.evaluate(element => !element.parentElement.open), 'A second task starts with automatic verification collapsed.');
   assert(await input.inputValue() === '', 'A second task does not inherit the first task draft.');
+  await preconfigure.click(); await preSettingsDialog.waitFor();
+  assert(await preSettingsDialog.getByRole('textbox', { name: '需要核算的问题', exact: true }).inputValue() !== firstSettingsDraft, 'The second task must not inherit the first task\'s automatic settings.');
+  await preSettingsDialog.getByRole('button', { name: '关闭设置并保留输入', exact: true }).click();
+  await preSettingsDialog.waitFor({ state: 'hidden' });
+  assert(await preconfigure.evaluate(element => element === document.activeElement), 'Second-task preconfiguration closes back to its own trigger.');
   await page.getByRole('button', { name: taskName, exact: true }).click();
   await page.waitForFunction(value => document.querySelector('#message-input')?.value === value, draft);
   assert(await automaticSummary.evaluate(element => !element.parentElement.open), 'Returning to a task does not leave another task panel expanded.');
