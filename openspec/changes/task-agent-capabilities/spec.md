@@ -2,11 +2,13 @@
 
 2026-11-03，当前分支 `codex/Host-Agent-Extension`，初始 HEAD `fa52ae2f2507309dcb204b3cef616397a19bf62d`。用户指定本分支长期负责 Host、Agent 与 Extension 协调；Codex 为唯一写入者，Qoder 在 `qoder/ext-skills` 维护 skill 本体。完成或合并单次任务不删除本分支，不改变其他工作树或运行服务。
 
+**2026-11-04工程原位归档：** 用户已授权“合并main，并更新给到qoder的回执”；PR #30已按最终受检head squash为main `f174ebbf7dfd1eb6cd63f4be4a9a013b166d51a9`。本目录原位保留全部规格、研究、独立报告及真实FAIL/UNKNOWN；合并身份、CI、Qoder回执与运行采用分别见 [result.md](result.md) 和 [qoder-receipt.md](qoder-receipt.md)。工程合并不追认为模型全条件或用户产品验收通过。
+
 ## 依据与授权
 
 用户转发 R1/R2 任务书并要求核实落地、给 Qoder 回执。遵守工程规范 §2–§8、IN01–IN07 及 `docs/agent-session-integration.md`。本次开展本机 Host/Agent 实施、合成 Provider 验证、适用检查和非作者复核；真实检索的供应商、凭据使用与计费路径须按 R2 的决策方案确定。没有 MacBook 操作、真实经营数据、服务切换、模型线路变更或自动合并授权。Git/CI 与运行采用分别报告。
 
-2026-11-04用户明确授权“提交、推送本分支，并创建 PR、运行 CI”。交付至长期分支 `codex/Host-Agent-Extension`，PR目标为 `main`；实际head检查结果另核对。本次授权不包含合并、设备更新或运行服务采用。
+2026-11-04用户首次明确授权“提交、推送本分支，并创建 PR、运行 CI”。交付至长期分支 `codex/Host-Agent-Extension`，PR目标为 `main`；实际head检查结果另核对。该次授权当时不包含合并、设备更新或运行服务采用；后续明确合并授权见上述归档状态，不扩大为设备或服务采用。
 
 同日用户新增授权“deepseek不再测试，重新真实测试下minimax和MiMo”。按已交付源码 `2a6b34f`，仅以四个原MiniMax/MiMo配置各一次真实产品问答补证，不再测试DeepSeek，不换端点/模型，不改产品搜索参数；新根、先验验收、独立官方参考、300秒截止、失败保全及结果见 [重测记录](product-live-retest-validation.md)。本次补充不追溯关闭原未完成问题或扩大运行采用。
 
