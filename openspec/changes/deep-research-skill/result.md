@@ -1,6 +1,6 @@
 # deep-research 深度研究 skill · 实施与验证记录
 
-日期：2026-11-04 · 分支：`qoder/ext-skills`（基线 `32ebe84` = 本分支 WIP 文档 + main `8425ca1`）· 状态：原候选用户测评已通过；Codex已接管、修复独立发现并实施目录与默认折叠测评UI，本地完整检查、真实产品浏览器点验及两轴非作者重验通过；修正版未复测，Git/CI待本轮授权。下文 Qoder 验证证据保留其移交时范围。
+日期：2026-11-04 · 分支：`qoder/ext-skills`（原基线 `32ebe84`；现已集成main `bee3ae0`）· 状态：目录与默认折叠测评UI已实施，原基线完整检查及两轴非作者重验通过；集成后95项受影响回归、边界、类型、构建、真实产品UI及两轴非作者集成重验通过。已获Git/CI及CI成功后直接squash／快进main／归档授权，准备唯一PR和实际head CI。修正版未复测。下文 Qoder 验证证据保留其移交时范围。
 
 ## 用户测评回执（2026-11-04，显式通过）
 
@@ -95,3 +95,17 @@ Codex已直接修正提示词三类冲突、移交书计数与链接，并补深
 `qa-ui/`保留22件AX／DOM／截图证据；汇总 `product-ui-qa-receipt.json` SHA-256 `f8348ed7a47e8a1a4d4246f204525de2a38ba00142574f7d3e10181dbf6454b0`。一次深色full-page截图为空白，原件 `dark-expanded.png` 保留，不计成功；随后正常可见捕获 `dark-expanded-visible.png` 与AX证据成功。浏览器console告警／错误记录为空。测试Host已按SIGTERM正常关闭、两个自建标签页和原型服务已关闭；`catalog-qa-closed.json`记录**26个GET、0个修改请求**，没有发送模型请求或改变现网服务。
 
 上述证明目录展示与导航，不是修正版用户测评或专业质量验收。两名原独立复核者的最终本地结论与证据见[独立复核](independent-review.md)：本地Spec通过，Standards限范围通过，无遗留可行动发现；其实际角色为只读核验固定UI证据，不冒称由复核者亲自点浏览器。Spec独立11项受影响回归与数值／静态渲染探针通过；Standards独立52项、边界、类型及45项数值／SSR探针通过。所有结论绑定原基线本地v1，后续仅非运行时OpenSpec文字收尾，不以局部检查冒称新main或CI通过。
+
+## 获授权 Git/CI 与最新 main 集成
+
+用户明确授权“Git/CI，CI通过后直接squash合并、快进main并归档”。原基线收尾v2共599文件，SHA-256 `566c9a78b5937d848726c5069bc6346c6b3ca17a82549315a9f52961dd4ed8dc`；两名非作者对仅三份OpenSpec文字增量分别通过，其他596文件不变。提交前首次暂存检查发现新增Demo第160行的12个尾随空格，已仅删除该空白；原件、失败与无行为差异核对保留在 `git-authorization-and-stage.json` 及仓外原HTML，不冒充产品失败。
+
+修正提交 `7df7582` 后fetch核对origin/main仍为 `bee3ae0a8d2e6dd626ef284a7561839c3f14b65f`，以合并提交 `ef95ce7` 集成。工程规范仅版本冲突，保留main全部现行授权／IN01–IN07／四点原则及第3、4节真实RED和最少人工作业要求，再加本分支长期skill测评门禁与统一折叠展示指针，版本v1.6。App冲突保留main的企业资料焦点清理与个人资料／语义追溯新入口，仅为既有项目看板分支加deep-research；边界脚本自动合并仅增加原DR03精确测试owner例外。相对main无subagent／native-search／会话公共层／依赖／锁变更。
+
+按影响范围重验：skill发现／快照／委派／原生检索／边界／测评展示，以及共享App相关既有企业资料、个人资料、语义上下文、候选与项目资料UI合同，**95/95通过、0失败、0跳过**；`npm run check:agent-sessions`、`npx tsc --noEmit`及 `npm run build`通过，原大bundle警告保留。日志在证据根 `integration/`。此为集成后受影响检查，**没有声称重新执行本地全量检查**；原1008项结果保留原基线范围，实际交付head全量CI另核。
+
+集成v3完整866文件，SHA-256 `cac82d3d63a0dd90d1ec41c50e805740d6cb089fe0bd4c3eff7aad55ebf02b70`，检查及新UI点验前后无漂移。Spec独立43项、Standards独立63项加边界／类型通过，均限受影响范围；二者独立证明App除新增deep条件外逐字等main，工程规范main第2–4节全保留，边界仅精确一行，公共Runtime与锁不变。最终集成报告及SHA见[独立复核](independent-review.md)。初始口述差异路径27为计数误记，实际对main为26条且均属本任务，计数断言纠正不记产品RED。
+
+新main正常Host再次实点五项默认收起、展开及键盘收起、打开项目看板，main新增个人资料与企业资料常规入口仍可进入；浅深色及390px滚动明细无横向溢出。16件固定证据见 `integration/qa-ui/`，QA回执SHA-256 `b9619974327574a7943385c7f1f2fa4ee5d274dc813dbe3a704f0600acec2435`；14个GET、无修改请求或模型发送，console为空，独立Host按SIGTERM关闭、临时视口和标签页收尾。两名非作者核验全部证据SHA并看图／AX，不冒称自己操作浏览器。
+
+再次fetch确认main仍bee3ae0、原远端skill分支仍0329249，无并发写入；GitHub实读main的[Check run 41793620459](https://github.com/gadfly-hbo/OptraCall/actions/runs/41793620459)为success，该基线既有交付与本轮受影响复验分别报告。当前只对三份OpenSpec作最终文字编录；功能／提示词／测试保持v3受检字节。后续唯一PR、实际head与合并回执另记，不预写未来身份。

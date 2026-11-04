@@ -1,6 +1,6 @@
 # deep-research skill · 非作者独立复核
 
-2026-11-04 · **本地修正候选限范围通过；原候选不通过记录保留。** 尚未集成最新main、提交推送、运行hosted CI或合并，不作完整交付声明。修正版未取得新的用户模型测评。
+2026-11-04 · **原基线本地及最新main集成增量均限范围通过；原候选不通过记录保留。** 实际head CI、合并与归档尚待执行，不作完整交付声明。修正版未取得新的用户模型测评。各阶段原身份与限制分别保留，最新集成见末节。
 
 ## 复核者、候选与方法
 
@@ -66,6 +66,30 @@ Spec轴独立执行11项目标测试通过，包含展示4项、skill／角色�
 
 上述目录均位于 `/Users/bendandebaba/OptraCall-artifacts/`，完整日志、冻结预期、反例与验证清单随报告保留。首次辅助Git比较失败、独立验证依赖缺件／探针编译工具API误用、原边界FAIL、新展示真实RED及后续有效检查分列保留，不把环境故障写成产品RED，也不以重跑抹去原FAIL。
 
-## 尚未完成
+## 原本地阶段的待办
 
 最新main整合及受影响重验、实际head CI、获授权Git交付／squash合并、本地main快进及OpenSpec归档尚未执行。后续基线或源码变化，须固定新身份并复核失效范围；不沿用不适用PASS。修正版用户测评、真实模型专业质量、产品验收、MacBook与运行采用分别核定，本地通过不扩大其授权。
+
+## 文档收尾与 main 集成后续
+
+纯OpenSpec收尾v2固定599文件，SHA-256 `566c9a78b5937d848726c5069bc6346c6b3ca17a82549315a9f52961dd4ed8dc`。两轴确认精确仅spec／result两改及本报告新增、其他596文件不变，12个相对链接可达、6份主报告SHA一致，没有重跑测试。Spec追加 `docs-v2-addendum/final-docs-v2-spec-addendum.md` SHA `0a015e8728966d11a36a09fbbe30dca7f2be60d8bc156a149dc2fc1420e69f4a`；Standards追加 `docs-v2-addendum/standards-docs-v2-addendum.md` SHA `161ced304e50c6fa4cb94d4095a16b42fe63b3cce82d87438c86f1487b8149d8`，位于上表对应独立根。P3降级另可溯原Standards验证附录SHA `ef572e05426c94c4982f27183d36034450cb5d135b6635804c86f732e6a81b1d`。
+
+用户现已明确授权Git/CI及CI通过后直接squash／快进main／归档；此前未授权的历史记录保持当时范围。提交前仅修复Demo空白行尾随空格，再于 `ef95ce7` 集成main `bee3ae0`。App只在main现行导航增加deep-research，工程规范保全main四点原则／新增必做人工作业检查与既有授权，再加长期skill门禁和默认折叠展示规则。根会话95项受影响回归、边界、类型、构建通过，不称本地全量重跑；新完整候选和实际UI证据交原两名非作者做集成增量复核，最终结论另记。此段为当前过程记录，不提前沿用旧PASS背书集成后候选或未来CI。
+
+## 最新 main 集成 v3 最终独立结论
+
+完整866文件清单SHA-256 `cac82d3d63a0dd90d1ec41c50e805740d6cb089fe0bd4c3eff7aad55ebf02b70`，HEAD `ef95ce796a6c584b8221053a8a8c4a4b641854bf`加3份OpenSpec过程文字；父提交为修正7df7582和main bee3ae0。两名原非作者重新导出本阶段预期、逐项固定866文件并在独立副本验证，检查与QA后均零漂移。实际相对main **26路径**，初始27口述已显式纠正，无缺候选文件；不是产品RED。
+
+两轴结论均为 **PASS_WITH_SCOPE，无新增必须修复发现**：
+
+- App精确等于main加一次deep-research项目看板条件；main全部企业资料焦点清理、个人资料及语义入口逐字保留。
+- 工程规范仅版本和长期skill两段新增，main第2–4节及四原则／最少人工作业／现行授权无删除；边界脚本仅精确DR03测试owner一行，公共Agent／会话／package／lock逐字等main。
+- 四原则专项通过本轮范围：Host静态展示和导航、Agent自主、既有Pi发现／委派／检索复用；正常使用新增必做人工作业为0，测评展开为自愿披露，不成为技能使用门槛。未重审main全部295路径或推广既有批准例外。
+- Spec隔离直接43/43通过；Standards隔离63/63、边界与类型通过。root95项／构建为只读核验的另一份证据，原数值探针及完整检查保持原阶段范围，没有声称集成后本地全量重跑。
+- 16件集成UI证据SHA全部匹配，分别查看截图及AX／布局：默认五项收起、一次展开／键盘收起、项目导航、main个人／企业入口、深色与390px可滚动明细可用。14GET、无修改请求、正常SIGTERM与console空匹配；浏览器实际由root操作，二者只读核证据。
+
+Spec报告：`/Users/bendandebaba/OptraCall-artifacts/deep-research-independent-spec-integrated-v3-20261104T085846633416Z/integrated-v3-spec-review.md`，SHA-256 `d1ee31750388f19b4b70760d4a43d13c911b3e658e2d52ec7b298bd7d9a25a5f`。
+
+Standards报告：`/Users/bendandebaba/OptraCall-artifacts/deep-research-independent-standards-integration-20261104-165829-67946/standards-integration-v3-review.md`，SHA-256 `26ecddf7358cf6b9ea7bac3383abbcafc8ff8ac92baace604c26b14c62799624`。
+
+QA回执 `integration/product-ui-qa-receipt.json` SHA-256 `b9619974327574a7943385c7f1f2fa4ee5d274dc813dbe3a704f0600acec2435`。这些结论只涵盖固定集成候选及本轮接缝；未覆盖未来PR／main CI、合并归档、设备采用或修正版用户真实测评。后续三份OpenSpec最终编录为非运行时文档增量，实际身份及窄核追加存于原独立证据目录，不为记录自身SHA无限改动报告。

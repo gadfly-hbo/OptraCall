@@ -1,5 +1,7 @@
 # deep-research 深度研究 skill（WorkBuddy gpt-researcher-team 能力承接）
 
+状态：本地实施、最新main集成及两轴非作者受影响重验完成；已获Git/CI和CI通过后直接合并／归档授权，实际head CI与归档尚未完成。原用户测评绑定a78a478，修正版未复测，见[结果](result.md)。
+
 2026-11-04 · 本变更是 `qoder/ext-skills` 长期 skills 安装分支的首轮安装。来源：WorkBuddy 市场插件 gpt-researcher-team v2.0.0（7 角色 × 5 阶段深度研究团队，MIT，MacBook `/Users/huangbo/.workbuddy/plugins/marketplaces/experts/plugins/gpt-researcher-team/`），仅承接其研究方法、来源标准、审稿纪律与报告结构等能力；其市场外壳（plugin.json/人设/头像/quickPrompts）与 WorkBuddy 团队协议（TeamCreate/SendMessage）不进入本仓。
 
 依据 Codex [任务 Agent 能力回执](../task-agent-capabilities/qoder-receipt.md)（main 功能提交 `f174ebb`）：产品工具 `subagent`（single/parallel/chain，角色仅从本次已加载 skill 的 `agents/*.md` 发现，命名为 `<skill>/<role>`）与 Provider 原生 `web_search`（MiniMax-M3/M3.1-Flash 与 mimo-v2.6-pro/flash 路线自动注入；deepseek-flash 未接通）。本 skill 不修改该接缝，只消费其契约。
@@ -82,3 +84,7 @@
 ### 当前本地验收状态
 
 原移交基线的修正候选已完成 `npm run check`（1008项：1005通过、0失败、3原条件跳过，含边界／类型／构建），并在隔离正常Host实点DR08／DR09：五项默认收起、一次展开全部指标与分母、键盘收起、无回执不补造、浅深色及390px窄屏、打开进入项目看板。26个Host请求均为GET，无模型请求；证据身份、无效截图与最终非作者复核见[结果](result.md)及[独立复核](independent-review.md)。本地结果不替代后续最新main整合、实际head CI、合并或修正版用户测评；当前未归档。
+
+### 获授权集成增量
+
+用户随后授权Git/CI及CI通过后直接squash合并、快进main并归档。已于 `ef95ce7` 集成最新main `bee3ae0`，保留现行四点原则、全部main语义追溯／个人资料行为与既有授权；工程规范v1.6新增同源测评展示标准。集成后95项受影响回归、边界、类型和构建通过，实际产品UI与原非作者集成增量核验均通过：独立43／63项回归分别保留，866文件零漂移及16件产品UI证据匹配；14个GET无模型发送，main个人资料和企业资料入口保留。此为定向复验，不把原基线1008项写成集成后本地全量。合并／CI／归档的实际回执以最终记录为准，真实模型复测与设备／服务边界不扩大。
