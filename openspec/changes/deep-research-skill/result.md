@@ -1,6 +1,6 @@
 # deep-research 深度研究 skill · 实施与验证记录
 
-日期：2026-11-04 · 分支：`qoder/ext-skills`（原基线 `32ebe84`；现已集成main `bee3ae0`）· 状态：目录与默认折叠测评UI已实施，原基线完整检查及两轴非作者重验通过；集成后95项受影响回归、边界、类型、构建、真实产品UI及两轴非作者集成重验通过。已获Git/CI及CI成功后直接squash／快进main／归档授权，准备唯一PR和实际head CI。修正版未复测。下文 Qoder 验证证据保留其移交时范围。
+日期：2026-11-04 · 分支：`qoder/ext-skills`（原基线 `32ebe84`，先后集成main `bee3ae0`／`98c7139`）· 状态：Codex实施、修复、浏览器及非作者复核闭合，最终实际head CI通过后已获授权squash入main，本地main安全快进；OpenSpec原位归档收尾，合并main及归档提交自身CI以末节及仓外实际回执分别核定。修正版未复测。下文 Qoder 验证证据保留其移交时范围。
 
 ## 用户测评回执（2026-11-04，显式通过）
 
@@ -109,3 +109,42 @@ Codex已直接修正提示词三类冲突、移交书计数与链接，并补深
 新main正常Host再次实点五项默认收起、展开及键盘收起、打开项目看板，main新增个人资料与企业资料常规入口仍可进入；浅深色及390px滚动明细无横向溢出。16件固定证据见 `integration/qa-ui/`，QA回执SHA-256 `b9619974327574a7943385c7f1f2fa4ee5d274dc813dbe3a704f0600acec2435`；14个GET、无修改请求或模型发送，console为空，独立Host按SIGTERM关闭、临时视口和标签页收尾。两名非作者核验全部证据SHA并看图／AX，不冒称自己操作浏览器。
 
 再次fetch确认main仍bee3ae0、原远端skill分支仍0329249，无并发写入；GitHub实读main的[Check run 41793620459](https://github.com/gadfly-hbo/OptraCall/actions/runs/41793620459)为success，该基线既有交付与本轮受影响复验分别报告。当前只对三份OpenSpec作最终文字编录；功能／提示词／测试保持v3受检字节。后续唯一PR、实际head与合并回执另记，不预写未来身份。
+
+## 后续 main 私有 Python 增量与最终复核
+
+首次公开head `f6a56250cc6bb02e5153d9ad407873a58d473eaf` 的 [Check #93](https://github.com/gadfly-hbo/OptraCall/actions/runs/41806378670) attempt1成功：1377项／1282 PASS／0 FAIL／95条件SKIP，实际checkout匹配。合并前fetch发现main已推进至 `98c7139b6caa20f34c333c59c0744302b3b3bb3d`（PR #32私有Python部署修复），因此没有使用旧head检查直接合并，而以 `662c630` 无冲突集成该12路径增量，再更新同一个PR。
+
+新完整v5共874文件，清单SHA-256 `ae586124619480cd86e3270ba1e725601717386693cd69d946a656f4669550b5`。相对已审v4恰为main的4改8新增，其余862文件不变；本轮26路径、全部skill／UI／测评数据、现行四原则、SDK及owner生命周期与依赖锁均保持原字节。新main源码完全保全，不把本轮复核变成重审其全部功能或真机安装。
+
+root仅重验Python环境及分析skill／委派消费者：81项＝55 PASS／0 FAIL／26条件SKIP，边界、构建（含tsc）通过。SKIP原文分为原legacy集成材料未提供1项、portable集成环境未提供2项、macOS私有集成环境未提供22项、锁定发行缓存未提供1项；初始仓外摘要“缺ready”的粗略描述保留，精确澄清见 `integration-python/skip-reason-clarification.json`，不推断每项均实际运行了READY探针。没有新增外网安装或设备环境验收。原16件UI证据仅对字节未变的UI继续适用，不扩大为Python部署验证。
+
+两名原非作者对新874文件和接缝再验，结论均为 **PASS_WITH_SCOPE、无新增必须修复发现**：Spec直接23项及缺可选Python仍可经真实SDK／角色委派和实读method的2项合成场景通过；Standards独立30项＝27 PASS／0 FAIL／3材料条件SKIP、边界和类型通过。报告分别为：
+
+- `/Users/bendandebaba/OptraCall-artifacts/deep-research-independent-spec-baseline98-20261104T093204617212Z/baseline98-v5-spec-review.md`，SHA-256 `7b5f605b63f09644c8eaf7717bfe8ff53a399d130a3d9721b76485966e3a11c0`。
+- `/Users/bendandebaba/OptraCall-artifacts/deep-research-independent-standards-python-integration-20261104-173224-36659/standards-python-integration-v5-review.md`，SHA-256 `7d7d6dc461440e8c456baccea9206de1f12aa37a0d1cfdc9d68c62906d70c545`。
+
+前述原基线1008项、首轮集成95项和这次81项分别保持范围，没有把定向检查写成集成后本地全量重跑。CI #93保留旧head身份，不能代替更新后的最终检查。
+
+## 合并交付与原位归档
+
+用户已明确授权“Git/CI，CI通过后直接squash合并、快进main并归档”；授权时已说明原测评仅绑定a78a478、修正版未复测。执行没有重新索要已授予的合并确认，也没有将Git授权写成用户复测通过。
+
+| 对象 | 实际身份与结果 |
+| --- | --- |
+| 唯一功能PR | [#33](https://github.com/gadfly-hbo/OptraCall/pull/33)，最终head `662c630d9420c9731d9e155238ad0d1d6f7aba46`，base `98c7139b6caa20f34c333c59c0744302b3b3bb3d`；本任务26路径集中交付，无第二个功能PR |
+| 最终实际head CI | [Check #95](https://github.com/gadfly-hbo/OptraCall/actions/runs/41808461312)，attempt1 success；Ubuntu／Node25.9.0，**1411项／1310 PASS／0 FAIL／101条件SKIP**，边界／类型／构建及高危审计通过。2项moderate漏洞与既有bundle提示保留，Linux条件跳过不当macOS或真实Python安装验收 |
+| squash与完整树 | `30eda7004a4547ff8a1f97d6ac1cf031d28f62f4`，唯一父提交98c7139；与受检head完整树同为 `6860d77783737279a4941d19c6e049811caa9457`，合并没有引入未验源码变化 |
+| 本地main首次快进 | 主仓 `/Users/bendandebaba/DevWorkSpace/OptraCall` 干净，从bee3ae0以 `merge --ff-only origin/main` 到30eda70，之后仍干净；本轮未切换运行服务或操作MacBook |
+| 合并main CI | [Check #96](https://github.com/gadfly-hbo/OptraCall/actions/runs/41810259068)，event push、实际head30eda70；本归档文档编写时进行中，成功终态另据实际Actions及仓外回执核定，不预写通过 |
+
+GitHub合并连接器首先返回InternalError，REST返回HTTP502；回读PR仍open且merged=false后，CLI返回“Merge already in progress”。保持源与分支，先等待并检查远端；随后在main／head未变、PR为CLEAN／MERGEABLE且不在队列的条件下重试同一受保护squash请求，最终回读 `merged=true`、时间 `2026-11-04T09:50:46Z`。上述失败、过程中非空但不代表已合并的测试merge SHA，以及最终真实回执均保留；不猜测究竟由哪个先前请求完成合并。没有绕过保护、强推或删除长期分支。
+
+最终head CI身份另由原Spec复核者独立核实，报告 `head95-ci-addendum/actual-head95-ci-identity-review.md` 位于上述baseline98独立根，SHA-256 `834b150437afc4153f405d459b36e5252ea456b51b75fcef4a49eab0d5e09b7d`。它只证明CI及观察时PR状态，不用原先open观察冒称最终合并；实际合并／树／快进见本次Git对象及 `squash-identity-receipt.json`、`main-first-fast-forward.json`。
+
+沿用本仓simlab／target-forecast／trade-area／weather惯例，本目录原位保留spec、result、独立报告、原候选清单及handoff；不迁移路径或回写原14文件清单。原清单约束交接时0329249，后修候选由新清单与Git身份另记。原发现、不通过、环境失败、真实RED、SKIP、空白截图、原测评与未复测状态均保留。
+
+归档在独立 `codex/deep-research-archive` 工作树仅修改AGENTS最小同源入口和spec／result三份Markdown；不改产品、提示词、测试、依赖、数据或已签署独立报告。三MD提交前须完成相称差异／引用／非作者窄核，其余源码blob须与30eda70逐项相同；归档提交完整树因文档而不同，不称完整树仍等PR。提交自身SHA、推送、独立main push CI及最终main快进以Git／Actions和仓外最终回执核定，不为自引用无限追加文档提交。
+
+长期 `qoder/ext-skills` 保留；本轮归档检查闭合后由Codex释放自身检出权并回交Qoder继续下一轮，实际branch／tree／clean与写入交回以最终回读为准。Qoder原游离工作树与其他分支WIP保持；不reset／stash／clean或改写历史。本轮未新增真实模型实验、操作MacBook、切换运行服务或处置原WorkBuddy插件。修正版用户测评及适用专业／产品验收继续另核，原有效回执、代价和产物口径算术差异不被归档抹去。
+
+完整交付证据根仍为 `/Users/bendandebaba/OptraCall-artifacts/deep-research-handoff-20261104-a772ae02/`，原始GitHub／CI日志、候选、失败、报告与最终refs／树／安全快进收据均持久保留，公开锚点为本PR及实际Actions；原始日志不宣称已随公开仓包含。
