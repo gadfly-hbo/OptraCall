@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "provider": "astral-python-build-standalone",
+  "release": "20260414",
+  "python": "3.14.4",
+  "machine": "arm64",
+  "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.14.4%2B20260414-aarch64-apple-darwin-install_only_stripped.tar.gz",
+  "sha256": "6f304f4ec30854611f23316578302235fb517cd970519ecdd11a8c4db87fd843",
+  "bytes": 18349137,
+  "interpreter": "bin/python3.14",
+  "interpreterSha256": "bf4ea26231212e330b8e9b6f24969a30f894fec88665bf42754070d114ac7fc6"
+}

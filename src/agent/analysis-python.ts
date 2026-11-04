@@ -20,6 +20,20 @@ export function inspectAnalysisPython(input: AnalysisPythonEnvironment, codeRoot
     const lock = JSON.parse(readFileSync(path.join(codeRoot, 'scripts', 'analysis-python-lock.json'), 'utf8'));
     const ready = JSON.parse(readFileSync(readyFile, 'utf8'));
     if (ready.lockSha256 !== sha(readFileSync(path.join(codeRoot, 'scripts', 'analysis-python-lock.json'))) || ready.id !== lock.id || ready.python !== lock.python || ready.machine !== lock.machine || typeof ready.basePrefix !== 'string' || !path.isAbsolute(ready.basePrefix)) throw new Error('analysis_python_drift');
+    let interpreterSha256 = lock.interpreterSha256;
+    const portable = Object.hasOwn(ready, 'portableLockSha256');
+    if (portable) {
+      try {
+        const portableBytes = readFileSync(path.join(codeRoot, 'scripts', 'analysis-python-portable-lock.json'));
+        if (typeof ready.portableLockSha256 !== 'string' || ready.portableLockSha256 !== sha(portableBytes)) throw new Error('analysis_python_drift');
+        const distribution = JSON.parse(portableBytes.toString());
+        if (distribution.schemaVersion !== 1 || distribution.provider !== 'astral-python-build-standalone' || distribution.python !== lock.python || distribution.machine !== lock.machine || distribution.interpreter !== 'bin/python3.14' || typeof distribution.interpreterSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(distribution.interpreterSha256) || ready.basePrefix !== root) throw new Error('analysis_python_drift');
+        interpreterSha256 = distribution.interpreterSha256;
+      } catch { throw new Error('analysis_python_drift'); }
+      const readyInfo = lstatSync(readyFile);
+      if (!readyInfo.isFile() || readyInfo.isSymbolicLink() || realpathSync(readyFile) !== readyFile) throw new Error('analysis_python_drift');
+      if ((lstatSync(root).mode | readyInfo.mode) & 0o222) throw new Error('analysis_python_unsealed');
+    }
     if (!Array.isArray(ready.files) || !ready.files.length) throw new Error('analysis_python_drift');
     for (const file of ready.files) {
       if (typeof file.path !== 'string' || path.isAbsolute(file.path) || file.path.split(path.sep).includes('..')) throw new Error('analysis_python_drift');
@@ -27,11 +41,11 @@ export function inspectAnalysisPython(input: AnalysisPythonEnvironment, codeRoot
       if (!info.isFile() || info.isSymbolicLink() || realpathSync(target) !== target || sha(readFileSync(target)) !== file.sha256) throw new Error('analysis_python_drift');
     }
     const executable = path.join(root, 'bin', 'python3');
-    if (sha(readFileSync(executable)) !== lock.interpreterSha256) throw new Error('analysis_python_drift');
-    const probe = spawnSync(executable, ['-I', '-S', '-c', "import json,sys,platform;print(json.dumps({'prefix':sys.prefix,'basePrefix':sys.base_prefix,'python':platform.python_version(),'machine':platform.machine()}))"], { encoding: 'utf8', timeout: 5000, env: { PYTHONDONTWRITEBYTECODE: '1' } });
+    if (sha(readFileSync(executable)) !== interpreterSha256) throw new Error('analysis_python_drift');
+    const probe = spawnSync(executable, ['-B', '-I', '-S', '-c', "import json,sys,platform;print(json.dumps({'prefix':sys.prefix,'basePrefix':sys.base_prefix,'python':platform.python_version(),'machine':platform.machine()}))"], { encoding: 'utf8', timeout: 5000, env: { PYTHONDONTWRITEBYTECODE: '1' } });
     if (probe.status !== 0) throw new Error('analysis_python_incompatible');
     const actual = JSON.parse(probe.stdout);
-    if (actual.prefix !== root || realpathSync(actual.basePrefix) !== realpathSync(ready.basePrefix) || actual.python !== lock.python || actual.machine !== lock.machine) throw new Error('analysis_python_incompatible');
+    if (actual.prefix !== root || (portable && actual.basePrefix !== root) || realpathSync(actual.basePrefix) !== realpathSync(ready.basePrefix) || actual.python !== lock.python || actual.machine !== lock.machine) throw new Error('analysis_python_incompatible');
     return { state: 'ready', root, executable, version: lock.python, basePrefix: realpathSync(ready.basePrefix) };
   } catch (error) { return { state: 'unavailable', reason: error instanceof Error && /^analysis_python_/.test(error.message) ? error.message : 'analysis_python_missing' }; }
 }

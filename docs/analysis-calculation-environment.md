@@ -12,9 +12,10 @@ Host只向符合资格的原会话提供应用私有Python环境位置；Pi 1.4.
 
 ## 本机锁版与准备
 
-[锁文件](../scripts/analysis-python-lock.json)固定CPython 3.14.4 arm64、DuckDB 2.0.0、openpyxl 3.1.5、et-xmlfile 2.0.0及解释器／wheel hash。当前解释器基于该Mac的Homebrew 3.14.4安装，私有目录仍依赖其stdlib／动态库；不能直接作为其他设备的独立Python发行包。
+[原锁文件](../scripts/analysis-python-lock.json)继续固定CPython 3.14.4 arm64、DuckDB 2.0.0、openpyxl 3.1.5、et-xmlfile 2.0.0及原解释器／wheel hash。原Homebrew环境字节不改、继续兼容，但不能直接复制到其他设备。新安装默认使用[便携发行锁](../scripts/analysis-python-portable-lock.json)固定的Astral CPython 3.14.4官方可重定位包，校验archive和直接解释器hash，完整stdlib／动态库与原三锁版依赖均放在同一应用私有根；不安装Homebrew或更改系统Python／全局PATH。
 
-获授权安装时，从候选代码根执行 `node scripts/setup-analysis-python.mjs`。脚本校验解释器及wheel身份，创建`.local/analysis-python/<lock.id>`、离线无依赖安装已核wheel并封为只读；下载只发生于这个工程准备步骤。现有目标目录会拒绝覆盖；诊断可显式用`--candidate <新名称>`准备另一个环境，Host不会自动采用该诊断目录。运行时不执行pip、不隐式下载或更换依赖。
+获授权安装时，从候选代码根执行 `node scripts/setup-analysis-python.mjs`。
+脚本校验固定发行包、解释器及wheel身份，创建`.local/analysis-python/<lock.id>`、离线无依赖安装已核wheel并封为只读；下载只发生于这个工程准备步骤。全私有CPython使用真实pyvenv.cfg关闭user-site注入，prefix/basePrefix均为该私有根；其配置及完整运行树进入文件清单。显式`--legacy`保留原Homebrew准备路径。新ready.portableLockSha256只接受固定第二锁；无该字段的旧ready仍走原锁，不能随意选解释器／锁文件或绕过身份。portable root／ready未封为只读时不接受READY。现有目标目录会拒绝覆盖；诊断可显式用`--candidate <新名称>`准备另一个环境，Host不会自动采用该诊断目录。运行时不执行pip、不隐式下载或更换依赖。
 
 `inspectAnalysisPython`实际核对prefix、解释器、包文件hash与import环境；缺失／漂移保留明确错误，普通原有工具仍可由Agent自主选择，不自动降权或放宽managed权限。实际原生工具记录／文件才证明某次采用，环境可用不证明用了DuckDB。
 
@@ -29,3 +30,5 @@ Host只向符合资格的原会话提供应用私有Python环境位置；Pi 1.4.
 SQL、参数、实际版本／设置和结果沿原020／060文件、Pi native及可选M2 citation保存；Host核技术身份与字节，不推断业务正确或补SQL。固定输入扩到五类／单件50MiB；文本来源七类／单件50MiB、合计100MiB。XLSX仍为原二进制，MD保UTF8原文／UTF16位置，不由Host解析为表或重算公式。
 
 新reader支持v1/v2，旧记录读取不迁移，新写才升index。兼容代码可用`ProjectDataContextStore`的`writeVersion:1`收窄新写，仍读已有v2；这是工程构造选项，不是新增用户设置。停止提供`analysisPython`资格和移除依赖应与历史读取分开；不能回到旧二进制后假定能读v2，也不能删新数据或用旧副本覆盖新工作。实际部署／回退另按获授权固定版本执行。
+
+跨Mac安装修复与实际交付证据见[窄规格](../openspec/changes/duckdb-private-python-install/spec.md)及[结果](../openspec/changes/duckdb-private-python-install/result.md)。不能仅凭代码更新宣称目标环境已安装；安装后还须fresh身份和原工具路径回读。
