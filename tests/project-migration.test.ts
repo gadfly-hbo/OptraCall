@@ -104,8 +104,8 @@ for (const outcome of ['completed', 'failed', 'cancelled'] as const) test(`ER01 
     { phase: 'started', requestId: id, sessionId },
     { phase: 'settled', requestId: id, sessionId, outcome, diagnostic: { ...diagnostic, message: 'synthetic-private-provider-payload', rawError: 'synthetic-private-provider-payload' } },
   ]);
-  assert.deepEqual(f.read().lastRun, { requestId: id, outcome, diagnostic });
-  assert.equal(JSON.stringify(f.read().lastRun).includes('synthetic-private-provider-payload'), false);
+  assert.deepEqual((await f.read()).lastRun, { requestId: id, outcome, diagnostic });
+  assert.equal(JSON.stringify((await f.read()).lastRun).includes('synthetic-private-provider-payload'), false);
   assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes, 'Native history reads do not rewrite old JSONL');
 });
 
@@ -115,7 +115,7 @@ test('ER01 recovery: legacy markers and unknown optional diagnostics remain read
     { phase: 'started', requestId: id },
     { phase: 'settled', requestId: id, outcome: 'failed', diagnostic: { code: 'future_unknown_code', stage: 'native_request', message: 'synthetic-private-provider-payload', retryCount: 4 } },
   ]);
-  assert.deepEqual(f.read().lastRun, { requestId: id, outcome: 'failed' });
+  assert.deepEqual((await f.read()).lastRun, { requestId: id, outcome: 'failed' });
   assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
 });
 
@@ -125,7 +125,7 @@ test('ER01 recovery: copied fork-parent markers cannot become the current sessio
     { phase: 'started', requestId: id, sessionId },
     { phase: 'settled', requestId: id, sessionId: parent, outcome: 'failed', diagnostic: parentDiagnostic },
   ]);
-  assert.deepEqual(f.read().lastRun, { requestId: id });
+  assert.deepEqual((await f.read()).lastRun, { requestId: id });
   assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
 });
 
@@ -137,7 +137,7 @@ test('ER01 recovery: a late terminal for an earlier request cannot supply outcom
     { phase: 'started', requestId: next, sessionId },
     { phase: 'settled', requestId: first, sessionId, outcome: 'failed', diagnostic: oldDiagnostic },
   ]);
-  assert.deepEqual(f.read().lastRun, { requestId: next });
+  assert.deepEqual((await f.read()).lastRun, { requestId: next });
   assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
 });
 
@@ -148,7 +148,7 @@ test('ER01 recovery: nonterminal or invalid-outcome markers never promote a run 
     { phase: 'started', requestId: id, sessionId, outcome: 'failed', diagnostic },
     { phase: 'settled', requestId: id, sessionId, outcome: 'not-a-terminal', diagnostic },
   ]);
-  assert.deepEqual(f.read().lastRun, { requestId: id });
+  assert.deepEqual((await f.read()).lastRun, { requestId: id });
   assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
 });
 
@@ -164,7 +164,7 @@ test('ER01 recovery: completed, failed and cancelled histories keep each request
       { phase: 'started', requestId: current, sessionId },
       { phase: 'settled', requestId: current, sessionId, outcome, diagnostic },
     ]);
-    assert.deepEqual(f.read().lastRun, { requestId: current, outcome, diagnostic });
+    assert.deepEqual((await f.read()).lastRun, { requestId: current, outcome, diagnostic });
     assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
   }
 });
@@ -177,7 +177,7 @@ test('ER01 recovery: a diagnostic contradictory to its native outcome is ignored
       { phase: 'started', requestId: id, sessionId },
       { phase: 'settled', requestId: id, sessionId, outcome, diagnostic },
     ]);
-    assert.deepEqual(f.read().lastRun, { requestId: id, outcome });
+    assert.deepEqual((await f.read()).lastRun, { requestId: id, outcome });
     assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
   }
 });

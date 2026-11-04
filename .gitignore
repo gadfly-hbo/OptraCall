@@ -60,3 +60,6 @@ coverage/
 dist/
 build/
 *.tsbuildinfo
+
+# Generated browser QA evidence; retained locally at exact original paths
+/output/playwright/

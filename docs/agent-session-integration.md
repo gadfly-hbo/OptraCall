@@ -154,3 +154,38 @@ Host的`closeAll({ provider?, projectId? })`在注册域间协调，各域权威
 边界脚本使用当前锁定TypeScript的AST解析，识别静态导入、重导出、require、动态import及已知直接构造；忽略注释、字符串、JSX和模板正文，仍检查模板表达式中的调用。准确例外及理由在[scripts/check-agent-session-boundary.mjs](../scripts/check-agent-session-boundary.mjs)，覆盖SDK薄层、公共实现、原生历史读取、固定连接探针和明确测试路径。没有Host或tests全目录豁免。检查不解释所有反射/动态代码，也不替代资源归属和业务策略的独立复核。
 
 工具读取证据分开记录：先核对当前安装版Codex/Qoder实际项目入口，再用触发IN01的只读接入规划任务观察实际读取记录和规则版本。AGENTS、加载器代码或入口文件可访问只证明可达，不能证明任务已读取；某工具不可用或未现场核验，记NOT_RUN。工具项目入口只引用本工程规范与本说明，不复制正文、修改全局配置或开启MacBook开发。完整结果由[本变更记录](../openspec/changes/unified-session-management-phase1/result.md)保存，不能从文档存在推导SM14已通过。
+
+## 个人资料按需复用（M4）
+
+M4 v0.2沿Interface v3业务子集、原project-tasks owner和配置／lease；`ProjectAgentOptions.personalContext`为Host注入的只读find/read callback，不可从业务JSON或worker options自行注册，现有IPC只传启用标记与受限请求／回包。普通unmanaged真实项目任务可自主使用`find_personal_context`／`read_personal_context`，零调用正常；受管ordinary只接用户显式选择的固定文本。冷读、封闭文本和插件资源不因M4得到个人资料工具或材料。
+
+`ProvidedContextInput.personal`可选地携带准备好的文本及最小receipt；文本由原用户请求送SDK，原生`providedContext.personal`仅存schemaVersion／实际items元信息。请求fingerprint包含准确选择与范围，已接受的同ID请求先回读，不按今天源状态或纠正重送。没有第三声明工具、机器成果采用关系或新增持久消息／正文库。
+
+Pi1.4.0的`ctx.executeTool`已提供参数／权限hooks及nested，但SDK原工具ctx在调用结束后仍可能被保留复用；M4启用时沿public工具定义给ctx委托增加绑定现有ActiveRun／session／manager／SDK signal及实际调用存续期的最小闭包，保留原SDK delegate及合法直接／多层nested。它不新建生命周期、运行队列或业务代际；相同manager的跨run、旧parent、同ID／覆盖signal及合法组合均另有实际合成反例／正例。其它profile不启用此适配。
+
+新增及受影响的历史读取沿现safe snapshot、public parser／inMemory投影，绝不以`SessionManager.open`迁移或初始化原件。显式打开新会话时复用既有SDK导出／首次持久化路径保存真实空header，历史GET不补造丢失记录。实际保存的工具content／用户请求与当时治理是交付依据；nested只有父元信息时子正文UNKNOWN，不强迫重读补证。人的历史页一击按准确native记录重新读取，并另核此刻治理；不以挂载时缓存当“今天可读”。
+
+本期合同／符合性、检查与限制见[M4 spec](../openspec/changes/fourbase-context-reuse/spec.md)及[实施记录](../openspec/changes/fourbase-context-reuse/implementation.md)。本地合成工程验证不代表真实模型质量、经营收益、Git／CI或运行采用。
+
+## Case判断与方案草案（M5）
+
+M5沿Interface v3业务子集和原project-tasks／unmanaged owner，通过`ProjectAgentOptions.caseDecisions`提供窄业务read/save callback。两个Pi工具为`read_case_decisions`／`save_case_decision_draft`；复用M4既有IPC请求、取消与call-local SDK ctx资格，不创建新会话域、运行队列或工具循环。回调函数不跨IPC，仅传Host生成的启用位；workspace／managed／cold／sealed／插件不获Case工具。普通无Case任务仍正常分析，本轮无绑定时Case写不可用。
+
+当轮Case取原`task_context_prepare`完成回执，核对其命名空间、真实project/task/request及snapshot归属；不猜项目关联的首末Case，不持久新增task→Case指针。sessionId/toolCallId和signal来自实际SDK调用及原ActiveRun，Host核资格后按真实namespace派生operationId；模型参数不接Case、权限、用户作者或人的选择／执行／反馈。取消前已提交的Case事务保留；晚到新写拒绝，原操作可查，不重跑模型。
+
+Case业务SQL及原operation receipt是业务保存权威，native只证明实际给Agent的结果；合法nested继续走SDK组合，只有父元信息时不伪造子正文。目录只返回有界元信息，准确正文分片；请求及工具输出预算分别校验，不把已保存行重新当请求而损坏合法数据。人的选择／关联／归档／恢复沿Case UI，与Agent工具和会话发送资格分开；同App的未完成UI意图按store/Case暂存React状态，不成为持久账或Runtime权威。
+
+兼容启动采用当前固定候选加`--disable-case-decisions`：可读schema1/2和已有新记录、继续原Case维护，关闭新M5工具及业务写入口；原成功operation仍可读回。原schema1二进制不能直接读schema2，不用旧备份覆盖新工作。真实环境首次迁移前须备妥经验证的兼容候选，本轮仅隔离合成验证，未执行真实部署／升级。
+
+批准范围、公开接缝、真实RED／GREEN与实际符合性分别见[M5 spec](../openspec/changes/fourbase-case-decisions/spec.md)和[实施记录](../openspec/changes/fourbase-case-decisions/implementation.md)。原Case／RAP／Board／Feedback及M3.1／M4各自保留权威，Host不裁定因果、代人作取舍或自动派发行动。
+
+
+## 多事项经验来源（M6）
+
+M6仍沿Interface v3／Pi1.4.0和原project-tasks普通unmanaged owner；`ProjectAgentOptions.caseSources`由Host注入窄只读find/read callback，worker仅收到Host生成的`experienceLearningEnabled`位。`read_case_sources`可由未绑定Case的普通任务按需查读当前用户原全局Case可读范围，复用M4同一IPC请求map、SDK call-local、取消与预算；不创建域、会话、循环、后台模型或新运行队列。M5写入仍须原当轮Case回执，不以历史来源Case冒充owner。
+
+Case卡片及人的choice读准确旧引用；原feedback／handoff、Board及个人来源仍由原resolver核对，分片正文显式携带范围／续页和限制。三类LearningSourceRef扩展供个人资料／候选使用；M5 `target.type=source`继续仅旧四类，SQL schema2不变。候选正文仍仅Pi native；人的整理沿原Enterprise草稿CAS、个人元信息CAS和明确retain／pending，不伪装跨Store原子。
+
+兼容启动用当前候选加`--disable-experience-learning`：不提供新工具／新增来源候选写入／候选转整理入口，原v1/v2及既有引用仍可读和原样维护。个人账GET不升级，首次显式新引用写入才升外层v2；原行、操作指纹与native字节不回填。原始v1程序不保证可读v2，不能恢复旧账覆盖新工作。当前项目归档、源Case结束、Agent封闭资格和人的全局资料维护各循原权威。
+
+批准包、真实检查与未验证项见[M6 spec](../openspec/changes/fourbase-experience-learning/spec.md)及[实施记录](../openspec/changes/fourbase-experience-learning/implementation.md)。可选单组对照只新建普通任务并写草稿，不打开Agent或自动发送；真实增益／因果、真实Provider／业务数据、Git／部署及产品验收分别取证。

@@ -1,3 +1,4 @@
+import { analysisPythonFor } from '../agent/analysis-python.ts';
 import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -41,7 +42,7 @@ export function createVerificationSessions(options: {
       admit: owner => options.admit(owner),
       agentOptions: async owner => {
         const record = await store.read(owner);
-        return { projectId: record.projectId, workspace: { cwd: record.workspace, systemPrompt: [
+        return { projectId: record.projectId, analysisPython: analysisPythonFor(options.codeRoot), workspace: { cwd: record.workspace, systemPrompt: [
           'You are an independent verification analyst in OptraCall. Choose methods yourself and actually execute code when needed. Use only the copied inputs and provided business facts. Keep assumptions, unconfirmed meanings and differences visible. Do not infer causality from a numerical match.',
           'Work and write only inside this verification workspace. inputs/ contains fixed copies: do not edit these files; save transformations to new files. Do not search parent directories, other projects, native session history, Host metadata or the original author files. This is a soft instruction, not a sandbox. Shared tools and resources do not grant additional data or business-action authority.',
           'In the independent first turn do not seek the author answer. Later the Host may explicitly provide fixed author files for comparison. A repeated author script is reproducibility evidence, not an independent calculation. Do not publish assets, change source files or execute business actions.',

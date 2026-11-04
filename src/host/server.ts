@@ -1,3 +1,4 @@
+import { analysisPythonFor } from '../agent/analysis-python.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -12,6 +13,10 @@ import { isTaskCapability } from './task-capabilities.ts';
 import { readTradeAreaStatus } from './trade-area-status.ts';
 import { CaseStore, CaseStoreError } from './case-store.ts';
 import { createCaseRoutes, CaseRouteError } from './case-routes.ts';
+import { createCaseDecisionService } from './case-decision-service.ts';
+import { createCaseDecisionRoutes } from './case-decision-routes.ts';
+import { createCaseSourcesService } from './case-sources-service.ts';
+import { createCaseSourcesRoutes } from './case-sources-routes.ts';
 import type { CaseContextSelection } from './case-types.ts';
 import { loadStaticUi } from './static-ui.ts';
 import { createMetricFactoryRoutes } from '../../extensions/business-plugins/metric-factory/api/routes.ts';
@@ -40,6 +45,25 @@ import { DecisionFeedbackError } from './decision-feedback-store.ts';
 import { createAutomaticVerificationFeature } from './automatic-verification-host.ts';
 import { AutomaticVerificationStoreError } from './automatic-verification-store.ts';
 import type { FeedbackContextSelection, FeedbackContextReceipt, FeedbackSource } from './decision-feedback-types.ts';
+import { ProjectDataContextStore, ProjectDataContextFault } from './project-data-context-store.ts';
+import { handleProjectDataContextRoute, dataContextErrorResponse } from './project-data-context-routes.ts';
+import { createProjectDataContextReferences } from './project-data-context-references.ts';
+import { prepareProjectDataContext, projectDataRequestIdentity } from './project-data-context-context.ts';
+import { PersonalRetentionStore } from './personal-retention-store.ts';
+import { createPersonalSourceReader } from './personal-retention-sources.ts';
+import { createPersonalLookup } from './personal-retention-lookup.ts';
+import { handlePersonalRetentionRoute } from './personal-retention-routes.ts';
+import { AgentCandidateControls } from './agent-candidate-controls.ts';
+import { CandidateReadError, createAgentCandidateReader } from './agent-candidate-reader.ts';
+import { handleAgentCandidateRoute } from './agent-candidate-routes.ts';
+import { createPersonalContextReader } from './personal-context-reader.ts';
+import { readPersonalContextHistory } from './personal-context-history.ts';
+import { SemanticContextService, SemanticContextFault } from './semantic-context-service.ts';
+import { SemanticReadFault } from '../../extensions/business-plugins/semantic-context/reader.ts';
+import { createSemanticContextPort } from './semantic-context-port.ts';
+import { createMetricLibrary } from '../../extensions/business-plugins/metric-factory/library/store.ts';
+import type { SemanticQueryInput } from '../../extensions/business-plugins/semantic-context/types.ts';
+import { PersonalContextError, parsePersonalContextReadInput, parsePersonalContextSelections } from './personal-context-validation.ts';
 
 class RequestFault extends Error {
   readonly status: number; readonly code: string;
@@ -70,10 +94,12 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
   response.once('close', clear); response.once('finish', clear);
 }
 
-export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string; heartbeatIntervalMs?: number }) {
+export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
-  const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot });
+  const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false });
   const enterpriseMaterials = new EnterpriseMaterialsStore(dataRoot);
+  const projectDataReferences = createProjectDataContextReferences({ dataRoot, projects, enterpriseMaterials });
+  const projectDataContext = new ProjectDataContextStore({ dataRoot, projects, validateReferences: projectDataReferences.validate });
   let staticUi: Awaited<ReturnType<typeof loadStaticUi>> | undefined;
   const instanceId = options.instanceId ?? randomUUID();
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
@@ -126,7 +152,37 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       agentOptions: async (owner, _configuration, execution) => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
         const protectedExecution = await automatic.ordinaryExecution({ project, task }, execution);
-        return { projectId: project.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(protectedExecution ? { protectedExecution } : {}) };
+        return { analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(protectedExecution ? { protectedExecution } : { personalContext: async (action, input, context) => {
+          context.signal.throwIfAborted();
+          await pair(project.id, task.id, true);
+          const result = action === 'find' ? await personalContext.find(input, { signal: context.signal }) : await personalContext.read(parsePersonalContextReadInput(input), { signal: context.signal });
+          context.signal.throwIfAborted();
+          await pair(project.id, task.id, true);
+          context.signal.throwIfAborted();
+          return { content: [{ type: 'text', text: result.text }], details: result.details };
+        }, semanticContext: createSemanticContextPort({ projectId: project.id, taskId: task.id, projects, data: projectDataContext, reader: semanticContext, mutate, isClosing: () => closing }), caseSources: options.experienceLearningEnabled === false ? undefined : async (action, input, context) => {
+          context.assertCurrent();
+          const assertCurrent = () => { context.assertCurrent(); if (closing) throw new RequestFault(409, 'case_sources_run_unavailable'); };
+          const authority = { projectId: project.id, taskId: task.id, signal: context.signal, assertCurrent };
+          const result = action === 'find' ? await caseSources.findForAgent(input, authority) : await caseSources.readForAgent(input, authority);
+          assertCurrent();
+          return { content: [{ type: 'text', text: result.text }], details: result.details };
+        }, caseDecisions: options.caseDecisionsEnabled === false ? undefined : async (action, input, context) => {
+          context.assertCurrent();
+          await pair(project.id, task.id, action === 'save');
+          const receipt = cases.getOperation(context.caseOperationId), snapshot = receipt?.result;
+          if (context.caseOperationId !== contextOperationId(project.id, task.id, context.requestId) || receipt?.kind !== 'task_context_prepare' || receipt.phase !== 'completed' || receipt.projectId !== project.id || !snapshot || snapshot.projectId !== project.id || snapshot.taskId !== task.id || snapshot.caseId !== receipt.caseId) throw new RequestFault(409, 'case_decision_binding_unavailable');
+          const assertCurrent = () => { context.assertCurrent(); if (closing) throw new RequestFault(409, 'case_decision_run_unavailable'); };
+          const hex = createHash('sha256').update(JSON.stringify(['case_decision_tool', project.id, task.id, context.requestId, context.sessionId, context.toolCallId])).digest('hex');
+          const operationId = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20,32)}`;
+          const authority = { caseStoreId: cases.getStatus().storeId!, caseId: String(snapshot.caseId), projectId: project.id, taskId: task.id, requestId: context.requestId, sessionId: context.sessionId, toolCallId: context.toolCallId, operationId, signal: context.signal, assertCurrent };
+          if (action === 'read') {
+            const result = await caseDecisions.readForAgent(input, authority); assertCurrent();
+            return { content: [{ type: 'text', text: result.text }], details: result.details };
+          }
+          const saved = await caseDecisions.saveForAgent(input, authority); assertCurrent();
+          return { content: [{ type: 'text', text: JSON.stringify(saved) }], details: { type: 'optracall.case-decision-save', ...saved } };
+        } }) };
       },
       capabilities: { commands: true, ui: true, editor: true },
     },
@@ -236,6 +292,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   // decision-board business plugin: fixed report extraction plus the decision
   // loop store; the host owns transport, sessions and project access checks.
   const boardStore = createDecisionBoardStore({ root: path.join(dataRoot, 'decision-board') });
+  const readPersonalSource = createPersonalSourceReader({ enterprise: enterpriseMaterials, projects, dataContext: projectDataContext, board: boardStore, candidates: { read: (ref, context) => candidateReader.read(ref, context) }, readCaseSource: (ref, context) => caseSources.readPersonalSource(ref, context) });
+  const personalRetention = new PersonalRetentionStore({ dataRoot, materials: enterpriseMaterials, readSource: readPersonalSource, allowNewLearningSources: options.experienceLearningEnabled !== false });
+  const personalLookup = createPersonalLookup({ personal: personalRetention, enterprise: enterpriseMaterials, projects, dataContext: projectDataContext, readSource: readPersonalSource });
+  const candidateControls = new AgentCandidateControls({ dataRoot, readTarget: async ref => { const row = await candidateReader.read(ref); if (row.status !== 'available') throw new CandidateReadError('candidate_source_unknown'); } });
+  const candidateReader = createAgentCandidateReader({ projects, controls: candidateControls });
+  const personalContext = createPersonalContextReader({ projects, retention: personalRetention, controls: candidateControls });
+  const semanticContext = new SemanticContextService({ projects, data: projectDataContext, enterprise: enterpriseMaterials, cases,
+    metricLibrary: () => createMetricLibrary(path.join(dataRoot, 'metric-assets')), readSource: readPersonalSource, personal: personalContext });
   const boardSessions = createDecisionBoardSessions({
     store: boardStore, extractionRoot: path.join(dataRoot, 'decision-board', 'extractions'),
     codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'),
@@ -287,9 +351,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           reportExcerpt: extraction?.reportExcerpt ?? null, truncated: extraction?.truncated ?? null } : null };
     },
   });
+  const caseDecisions = createCaseDecisionService({ cases, projects, mutate, assertActive, readSource: readPersonalSource, personalContext, board: boardStore, requirements: requirementPlugin.store, readHandoff: id => decisionFeedback.store.getHandoff(id) });
+  const caseDecisionRoutes = createCaseDecisionRoutes(caseDecisions);
+  const caseSources = createCaseSourcesService({ cases, projects, assertActive, readReference: caseDecisions.source });
+  const caseSourcesRoutes = createCaseSourcesRoutes(caseSources);
   async function recordFeedbackDelivery(projectId: string, taskId: string, requestId: string, fingerprint: string | undefined) {
     const { project, task } = await pair(projectId, taskId);
-    const supplied = taskContextReceipts(project, task).find(value => value.requestId === requestId);
+    const supplied = (await taskContextReceipts(project, task)).find(value => value.requestId === requestId);
     const receipt = supplied?.providedContext?.feedback as FeedbackContextReceipt | undefined;
     if (!receipt || !supplied?.providedAt || !fingerprint) return;
     decisionFeedback.store.recordDelivery({schemaVersion:1,deliveryId:receipt.deliveryId,handoffId:receipt.handoffId,projectId,taskId,requestId,
@@ -324,10 +392,17 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const requirement = requirementSelection(input);
     const enterprise = await enterpriseRequestIdentity(enterpriseMaterials, input);
     const feedback = await decisionFeedback.requestIdentity(projectId, taskId, input.feedbackContext as FeedbackContextSelection | undefined);
-    if (!requirement && !enterprise && feedback === undefined) return undefined;
+    const projectData = projectDataRequestIdentity(input.projectData);
+    const selectedPersonal = input.personalContext === undefined ? [] : parsePersonalContextSelections(input.personalContext);
+    const personal = selectedPersonal.length ? selectedPersonal : undefined;
+    if (!requirement && !enterprise && feedback === undefined && projectData === undefined && personal === undefined) return undefined;
     const selection = input.caseContext as CaseContextSelection | undefined;
     const caseContext = selection && typeof selection === 'object' && !Array.isArray(selection) ? { caseId: selection.caseId, caseRevision: selection.caseRevision, projectWorkRevision: selection.projectWorkRevision, selectedReferenceIds: selection.selectedReferenceIds } : selection ?? null;
-    return createHash('sha256').update(JSON.stringify(feedback !== undefined ? ['optracall_request_feedback_v1',projectId,taskId,input.text,caseContext,requirement ?? null,enterprise ?? null,feedback] : enterprise ? ['optracall_request_enterprise_v1', input.text, caseContext, requirement ?? null, enterprise] : ['optracall_request_v1', input.text, caseContext, requirement])).digest('hex');
+    const identity = personal ? ['optracall_request_personal_context_v1', projectId, taskId, input.text, caseContext, requirement ?? null, enterprise ?? null, feedback ?? null, projectData ?? null, personal]
+      : projectData ? ['optracall_request_project_data_v1', projectId, taskId, input.text, caseContext, requirement ?? null, enterprise ?? null, feedback ?? null, projectData]
+      : feedback !== undefined ? ['optracall_request_feedback_v1',projectId,taskId,input.text,caseContext,requirement ?? null,enterprise ?? null,feedback]
+      : enterprise ? ['optracall_request_enterprise_v1', input.text, caseContext, requirement ?? null, enterprise] : ['optracall_request_v1', input.text, caseContext, requirement];
+    return createHash('sha256').update(JSON.stringify(identity)).digest('hex');
   };
   async function prepareCasePrompt(projectId: string, taskId: string, input: Record<string, unknown>, accepted = false) {    const operationId = contextOperationId(projectId, taskId, input.requestId as string);
     const existing = cases.getStatus().state === 'ready' ? cases.getOperation(operationId) : null;
@@ -369,7 +444,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const interrupted = !current.live && !current.opening && (Boolean(current.context) || ['running', 'interrupted'].includes(task.lastRun?.status ?? ''));
     if (activate) assertActive(project);
     try {
-      if (project.archivedAt !== null) snapshot = savedHistory(project, task, { projectArchived: true });
+      if (project.archivedAt !== null) snapshot = await savedHistory(project, task, { projectArchived: true });
       else if (current.live && current.snapshot) snapshot = current.snapshot;
       else if (activate && !interrupted) {
         await projectSessions.open(ref); current = await projectSessions.read(ref);
@@ -378,8 +453,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (current.context?.isCurrent()) await projects.setSession(projectId, taskId, snapshot.sessionFile!);
         });
         ({ project, task } = await pair(projectId, taskId));
-      } else { configuration.snapshot(task.configuration.id, task.configuration.revision); snapshot = savedHistory(project, task, interrupted ? { runtimeInterrupted: true } : { uninitialized: true }); }
-    } catch (error) { if (!(error instanceof ConfigurationStoreError)) throw error; snapshot = savedHistory(project, task, { requiresConfiguration: true }); }
+      } else { configuration.snapshot(task.configuration.id, task.configuration.revision); snapshot = await savedHistory(project, task, interrupted ? { runtimeInterrupted: true } : { uninitialized: true }); }
+    } catch (error) { if (!(error instanceof ConfigurationStoreError)) throw error; snapshot = await savedHistory(project, task, { requiresConfiguration: true }); }
     const reconcile = async () => {
       const latest = await pair(projectId, taskId);
       if (latest.project.archivedAt !== null || projectSessions.busy(ref) || !latest.task.lastRun || latest.task.lastRun.id !== task.lastRun?.id || !['running', 'interrupted'].includes(latest.task.lastRun.status)) return;
@@ -422,8 +497,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         throw new RequestFault(404, 'not_found');
       }
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
+      if (await handleProjectDataContextRoute({ request, response, url, store: projectDataContext, projects, readBody: body, choices: projectDataReferences.choices, sourceStatuses: projectDataReferences.statuses, conceptSource: projectDataReferences.conceptSource, mutate, isClosing: () => closing })) return;
       if (url.pathname === '/api/connectors/trade-area' && request.method === 'GET') { json(response, 200, readTradeAreaStatus(dataRoot)); return; }
       if (await handleEnterpriseMaterialsRoute({ request, response, url, store: enterpriseMaterials, cases, mutate })) return;
+      if (await handleAgentCandidateRoute({ request, response, url, reader: candidateReader, controls: candidateControls, readBody: body, isClosing: () => closing , experienceLearningEnabled: options.experienceLearningEnabled !== false })) return;
+      if (await handlePersonalRetentionRoute({ request, response, url, store: personalRetention, materials: enterpriseMaterials, lookup: personalLookup, readSource: readPersonalSource, readBody: body, mutate, isClosing: () => closing })) return;
       const metricFactory = await metricFactoryRoutes(request, url);
       if (metricFactory) { json(response, metricFactory.status, metricFactory.value); return; }
       const simLab = await simLabRoutes(request, url);
@@ -448,6 +526,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const feedback = await decisionFeedback.handle({pathname:url.pathname+url.search,method:request.method ?? 'GET',
           ...(['POST','PUT','PATCH'].includes(request.method ?? '') ? {input:await body(request,1024*1024)} : {})});
         if (feedback) { json(response,feedback.status,feedback.body);return; }
+      }
+      const semanticQuery = /^\/api\/projects\/([a-f0-9-]+)\/tasks\/([a-f0-9-]+)\/semantic-context$/.exec(url.pathname);
+      if (semanticQuery && request.method === 'POST') {
+        const projectId = semanticQuery[1]!, taskId = semanticQuery[2]!;
+        await pair(projectId, taskId);
+        const input = await body(request);
+        json(response, 200, await semanticContext.query(projectId, taskId, input as SemanticQueryInput, { audience: 'human' }));
+        return;
       }
       if (url.pathname === '/api/configurations' && request.method === 'GET') { json(response, 200, { configurations: configuration.list(), selectedId: configuration.read()?.id ?? null }); return; }
       if (url.pathname === '/api/configuration/select' && request.method === 'POST') { const input = await body(request); json(response, 200, { configuration: await mutate(() => configuration.select(String(input.id ?? ''))) }); return; }
@@ -507,6 +593,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (timedOut) throw new RequestFault(504, 'connection_timeout'); if (result.outcome !== 'completed') throw new RequestFault(502, 'connection_failed');
           json(response, 200, { ok: true, revision: ticket.snapshot.revision, reply: result.text.slice(0, 300), message: '已通过统一 Pi SDK 收到固定短句回复。' });
         } finally { if (timer) clearTimeout(timer); response.off('close', cancel); await probe.clear(); testing = false; } return;
+      }
+      if (url.pathname === '/api/case-sources' || url.pathname.startsWith('/api/case-sources/')) {
+        const result = await caseSourcesRoutes({ pathname: url.pathname, method: request.method ?? 'GET', searchParams: url.searchParams, ...(request.method === 'POST' ? { input: await body(request, 262_144) } : {}) });
+        if (!result) throw new RequestFault(404, 'not_found');
+        json(response, 200, result.body); return;
+      }
+      if (/^\/api\/cases\/[a-f0-9-]+\/decisions(?:\/|$)/.test(url.pathname)) {
+        const result = await caseDecisionRoutes({ pathname: url.pathname, method: request.method ?? 'GET', searchParams: url.searchParams, ...(['POST', 'PATCH', 'DELETE'].includes(request.method ?? '') ? { input: await body(request, 262_144) } : {}) });
+        if (!result) throw new RequestFault(404, 'not_found');
+        json(response, result.status ?? 200, result.body); return;
       }
       if (url.pathname.startsWith('/api/cases') || /^\/api\/projects\/[a-f0-9-]+\/work(?:\/|$)/.test(url.pathname)) {
         const result = await caseRoutes({ pathname: url.pathname, method: request.method ?? 'GET', ...(['POST', 'PATCH', 'DELETE'].includes(request.method ?? '') ? { input: await body(request, 1024 * 1024) } : {}) });
@@ -596,7 +692,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             }
             throw new RequestFault(404, 'not_found');
           }
-          if (operation === 'context-receipts' && request.method === 'GET') { const { project, task } = await pair(projectId, taskId); json(response, 200, { receipts: taskContextReceipts(project, task) }); return; }
+          if (operation === 'personal-context' && request.method === 'GET') {
+            const { project, task } = await pair(projectId, taskId);
+            json(response, 200, await readPersonalContextHistory(project, task, async (target, budget) => {
+              const read = await personalContext.read({ target }, { budget });
+              return { target, state: 'available', governance: read.details.items[0]?.governance };
+            })); return;
+          }
+          if (operation === 'context-receipts' && request.method === 'GET') { const { project, task } = await pair(projectId, taskId); json(response, 200, { receipts: await taskContextReceipts(project, task) }); return; }
           if ((operation === 'simulation-tools' || operation === 'capabilities') && request.method === 'PUT') {
             const input = await body(request);
             const capability = operation === 'simulation-tools' ? 'simulationTools' : input.capability;
@@ -677,11 +780,24 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                     if (!cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new CaseStoreError('project_not_linked', 409);
                   }
                   const requirement = requirementPrefix(input);
+                  const selections = input.personalContext === undefined ? [] : parsePersonalContextSelections(input.personalContext);
+                  const personal = selections.length ? await personalContext.prepare(selections) : undefined;
                   const enterprise = await prepareEnterpriseContext(enterpriseMaterials, cases, input);
                   const casePrompt = await prepareCasePrompt(projectId, taskId, input);
                   const feedback = await decisionFeedback.prepareFeedbackContext(projectId,taskId,input.feedbackContext as FeedbackContextSelection | undefined,requestId);
+                  const projectData = await prepareProjectDataContext(projectDataContext, projectId, input.projectData);
+                  for (const supplied of projectData.provision ?? []) {
+                    const description = supplied.description;
+                    if (description) await projectDataReferences.validate(projectId, {
+                      conceptRefs: description.mappings.flatMap(mapping => mapping.conceptRefs), sapRefs: description.mappings.flatMap(mapping => mapping.sapRefs),
+                      nativeEvidence: description.observation.nativeEvidence ? [description.observation.nativeEvidence] : [],
+                      artifactEvidence: description.observation.artifactEvidence ? [description.observation.artifactEvidence] : [],
+                    });
+                  }
                   const originalPrompt = `${enterprise.text}\n\n${requirement === undefined ? casePrompt : `${requirement}\n\n${casePrompt}`}`;
-                  const prompt = feedback.text ? `${feedback.text}\n\n${originalPrompt}` : originalPrompt;
+                  const withData = projectData.text ? `${projectData.text}\n\n${originalPrompt}` : originalPrompt;
+                  const withFeedback = feedback.text ? `${feedback.text}\n\n${withData}` : withData;
+                  const prompt = personal ? `本次人明确指定的历史参考（不是本次指令、权限或已核实事实）：\n${personal.text}\n\n${withFeedback}` : withFeedback;
                   if (prompt.length > 131072) throw new EnterpriseContextError('enterprise_context_too_large', 413);
                   startedAt = new Date().toISOString();
                   const selectedRequirement = requirementSelection(input);
@@ -691,6 +807,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                     ...(input.caseContext ? { case: { operationId: contextOperationId(projectId, taskId, requestId) } } : {}),
                     ...(enterprise.provision ? { enterprise: enterprise.provision } : {}),
                     ...(feedback.receipt ? { feedback:feedback.receipt } : {}),
+                    ...(projectData.provision ? { projectData: projectData.provision } : {}),
+                    ...(personal ? { personal: { text: personal.text, receipt: { schemaVersion: 1 as const, items: personal.details.items } } } : {}),
                   };
                   let automaticObservation;
                   try { automaticObservation = await automatic.admit({ project, task }, requestId, fingerprint ?? createHash('sha256').update(JSON.stringify(['automatic-request-v1', projectId, taskId, requestId, prompt])).digest('hex')); }
@@ -789,6 +907,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
+      if (error instanceof PersonalContextError) {
+        const unavailable = error.code === 'personal_context_selection_unavailable' && error.unavailableTargets?.length;
+        json(response, error.status, unavailable ? { code: 'PERSONAL_CONTEXT_UNAVAILABLE', accepted: false,
+          unavailablePersonalContext: error.unavailableTargets!.map(item => item.index),
+          message: '所列个人资料无法按准确版本提供；问题与选择已保留，未发送。可明确移除不可用项后发送。' }
+          : { code: error.code, accepted: false, message: '个人资料参数或范围不可用；未替换为其他版本，请保留问题并核对。' }); return;
+      }
+      if (error instanceof ProjectDataContextFault) { const result = dataContextErrorResponse(error); json(response, result.status, result.body); return; }
       if (error instanceof DecisionFeedbackError) { json(response,error.statusCode,{code:error.code,message:'反馈交接未完成，请保留输入并核对原操作或来源；未自动重发或替换材料。'});return; }
       if (error instanceof EnterpriseContextError || error instanceof EnterpriseMaterialsError) {
         const messages: Record<string, string> = {
@@ -803,9 +929,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         json(response, error.status, { code: error.code, message: messages[error.code] ?? '企业业务资料未能取得，请刷新核对明确修订和来源；未替换为最新版。' });
         return;
       }
-      const originalCode = error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
+      const originalCode = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
       const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
-      const status = error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable', 'unmanaged_execution_unknown'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
+      const status = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable', 'unmanaged_execution_unknown'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
       json(response, status, { code, message: ['automatic_unmanaged_history', 'unmanaged_execution_unknown'].includes(code) ? '本项目或任务缺少可信的受管执行起点或完整收尾证明，暂不能开启自动核算；原项目和会话保留，关闭自动核算后可继续普通分析。' : code === 'automatic_unsupported_protection' ? '当前系统不支持所需执行保护，未启动自动核算或修订。' : code === 'verification_revision_materials_too_large' ? '修订固定材料全文超过20,000字符，请缩小本次核算所选资料后新建核算；未启动修订模型，不会截断或恢复执行工具。' : code === 'verification_revision_text_required' ? '修订出稿仅接收完整UTF-8文本材料；所选文件不能解码，未启动修订模型。' : code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }
   })(); });

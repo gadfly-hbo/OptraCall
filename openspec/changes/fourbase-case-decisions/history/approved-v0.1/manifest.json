@@ -1,0 +1,46 @@
+{
+  "capturedAt": "2026-11-03T14:37:46.116208+00:00",
+  "userDecision": "确认M5 spec/UI Demo，D01-D08全部按A实施，开始产品开发；四原则，优先复用Pi及现有能力",
+  "sourcePreparationManifest": {
+    "path": ".local/fourbase-modules/m5/delivery-manifest.json",
+    "bytes": 110578,
+    "sha256": "343580f4a89a9f2402fb60d97ad47aa17854517a83e02132752563f862fa2850"
+  },
+  "files": [
+    {
+      "path": "openspec/changes/fourbase-case-decisions/history/approved-v0.1/spec.md",
+      "bytes": 6971,
+      "sha256": "7118b35e3bc9689921e54804b3b0fcdbc5bfbbe7c7592a23b3fb23a9adff1ae6"
+    },
+    {
+      "path": "openspec/changes/fourbase-case-decisions/history/approved-v0.1/structure-decisions.md",
+      "bytes": 20584,
+      "sha256": "3c85fba4b45b91c0c866733af36ce8fe892a87ff4dd3cc1dac6a216604c60557"
+    },
+    {
+      "path": "openspec/changes/fourbase-case-decisions/history/approved-v0.1/reuse-audit.md",
+      "bytes": 5748,
+      "sha256": "c112710af81fa682b30e13a074b942efecdc122250a1fd83a34c5ac780888533"
+    },
+    {
+      "path": "openspec/changes/fourbase-case-decisions/history/approved-v0.1/ui-review.md",
+      "bytes": 4689,
+      "sha256": "e2a00982fac997b3221f9dc0279d7c15dfae7b928a67e162780eac19f86e6615"
+    },
+    {
+      "path": "openspec/changes/fourbase-case-decisions/history/approved-v0.1/result.md",
+      "bytes": 5962,
+      "sha256": "6ea63c7979346041d808d2866271e8795b656f2142e56df2dd026766a9a3dab6"
+    },
+    {
+      "path": "openspec/changes/fourbase-case-decisions/history/approved-v0.1/confirmation.html",
+      "bytes": 8515,
+      "sha256": "c1a2183c2f4b80dcc4384304a16d286f7772e234ae79920dfcf4c9f5d4dda004"
+    },
+    {
+      "path": "openspec/changes/fourbase-case-decisions/history/approved-v0.1/fourbase-m5-case-decisions-ui-demo.html",
+      "bytes": 57400,
+      "sha256": "80030aa53738ff3c5a633473a9d3db5a4f76fbe1a36279fdd6be5b47ee135c7a"
+    }
+  ]
+}

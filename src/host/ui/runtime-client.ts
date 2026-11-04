@@ -1,5 +1,7 @@
+import type { PersonalContextSelection } from '../personal-context-types.ts';
 import type { EnterpriseCaseSelection, EnterpriseMaterialSelection } from '../enterprise-materials-types.ts';
 import type { FeedbackContextSelection } from '../decision-feedback-types.ts';
+import type { ProjectDataContextSelection } from '../project-data-context-types.ts';
 import type { CaseContextSelection } from '../case-types.ts';
 import type { RequirementContextSelection } from './requirement-types.ts';
 import type { TaskCapability, TaskCapabilities } from '../task-capabilities.ts';
@@ -10,13 +12,16 @@ import { isProjectUploadName, PROJECT_UPLOAD_MAX_BYTES } from '../project-upload
 export class HostRequestError extends Error {
   readonly fields: Record<string, string>;
   readonly code: string;
-  constructor(message: string, fields: Record<string, string> = {}, code = 'host_request_failed') { super(message); this.fields = fields; this.code = code; }
+  readonly unavailablePersonalContext?: number[];
+  readonly accepted?: boolean;
+  readonly status?: number;
+  constructor(message: string, fields: Record<string, string> = {}, code = 'host_request_failed', unavailablePersonalContext?: number[], accepted?: boolean, status?: number) { super(message); this.fields = fields; this.code = code; this.unavailablePersonalContext = unavailablePersonalContext; this.accepted = accepted; this.status = status; }
 }
 
 async function request<T>(path: string, method: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/${path}`, { method, mode: 'same-origin', credentials: 'omit', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}), ...(signal ? { signal } : {}) });
   const result = await response.json();
-  if (!response.ok) throw new HostRequestError(result.message ?? '本地服务未完成请求。', result.fields ?? {}, result.code ?? result.error ?? 'host_request_failed');
+  if (!response.ok) throw new HostRequestError(result.message ?? '本地服务未完成请求。', result.fields ?? {}, result.code ?? result.error ?? 'host_request_failed', result.code === 'PERSONAL_CONTEXT_UNAVAILABLE' && result.accepted === false && Array.isArray(result.unavailablePersonalContext) && result.unavailablePersonalContext.length > 0 && result.unavailablePersonalContext.every((index: unknown) => Number.isSafeInteger(index) && Number(index) >= 0) ? result.unavailablePersonalContext : undefined, typeof result.accepted === 'boolean' ? result.accepted : undefined, response.status);
   return result as T;
 }
 export async function readConfiguration(signal?: AbortSignal): Promise<PublicModelConfiguration | null> { return (await request<{ configuration: PublicModelConfiguration | null }>('configuration', 'GET', undefined, signal)).configuration; }
@@ -40,7 +45,7 @@ export async function setSimulationTools(projectId: string, taskId: string, enab
 export function readTask(projectId: string, taskId: string, signal?: AbortSignal): Promise<TaskState> { return request(taskPath(projectId, taskId), 'GET', undefined, signal); }
 export function openTask(projectId: string, taskId: string): Promise<TaskState> { return request(`${taskPath(projectId, taskId)}/open`, 'POST', {}); }
 export async function saveDraft(projectId: string, taskId: string, text: string): Promise<void> { await request(`${taskPath(projectId, taskId)}/draft`, 'PATCH', { text }); }
-export async function sendMessage(projectId: string, taskId: string, text: string, requestId: string, caseContext?: CaseContextSelection, requirementContext?: RequirementContextSelection, enterpriseMaterials?: EnterpriseMaterialSelection[], enterpriseCaseContext?: EnterpriseCaseSelection, feedbackContext?: FeedbackContextSelection): Promise<void> { await request(`${taskPath(projectId, taskId)}/messages`, 'POST', { text, requestId, ...(caseContext ? { caseContext } : {}), ...(requirementContext ? { requirementContext } : {}), ...(enterpriseMaterials?.length ? { enterpriseMaterials } : {}), ...(enterpriseCaseContext ? { enterpriseCaseContext } : {}), ...(feedbackContext ? { feedbackContext } : {}) }); }
+export async function sendMessage(projectId: string, taskId: string, text: string, requestId: string, caseContext?: CaseContextSelection, requirementContext?: RequirementContextSelection, enterpriseMaterials?: EnterpriseMaterialSelection[], enterpriseCaseContext?: EnterpriseCaseSelection, feedbackContext?: FeedbackContextSelection, projectData?: ProjectDataContextSelection[], personalContext?: PersonalContextSelection[]): Promise<void> { await request(`${taskPath(projectId, taskId)}/messages`, 'POST', { text, requestId, ...(caseContext ? { caseContext } : {}), ...(requirementContext ? { requirementContext } : {}), ...(enterpriseMaterials?.length ? { enterpriseMaterials } : {}), ...(enterpriseCaseContext ? { enterpriseCaseContext } : {}), ...(feedbackContext ? { feedbackContext } : {}), ...(projectData?.length ? { projectData } : {}), ...(personalContext?.length ? { personalContext } : {}) }); }
 export async function stopTask(projectId: string, taskId: string): Promise<void> { await request(`${taskPath(projectId, taskId)}/stop`, 'POST', {}); }
 export function runCommand(projectId: string, taskId: string, text: string, requestId: string = crypto.randomUUID()): Promise<{ result: unknown; snapshot: SessionSnapshot; outcome?: 'completed' | 'failed' | 'cancelled' }> { return request(`${taskPath(projectId, taskId)}/commands`, 'POST', { text, requestId }); }
 export async function answerInteraction(projectId: string, taskId: string, response: BrowserUIResponse): Promise<void> { await request(`${taskPath(projectId, taskId)}/ui-response`, 'POST', response); }

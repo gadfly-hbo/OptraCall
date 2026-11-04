@@ -218,6 +218,10 @@ export class ProjectStore {
     return projects.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   }
   async get(id: string): Promise<ProjectRecord> { return this.#decorate(await this.#read(id)); }
+  /** Data-context saves share the project gate with archive and existing writes. */
+  withDataContextMutation<T>(projectId: string, operation: (project: ProjectRecord) => Promise<T>): Promise<T> {
+    return this.#mutation(async () => { const project = await this.#read(projectId); this.#active(project); return operation(this.#decorate(project)); });
+  }
   #active(project: StoredProject): void { if (project.archivedAt !== null) fail('project_archived'); }
   rename(id: string, input: string): Promise<ProjectRecord> {
     const name = projectName(input);
@@ -397,18 +401,19 @@ export class ProjectStore {
       return { sha256: digest.digest('hex'), bytes, observedAt: new Date().toISOString() };
     } finally { await handle.close(); }
   }
-  /** Same-handle source capture for the explicitly selected feedback materials. */
-  async captureFeedbackFile(projectId: string, relativePath: string): Promise<{ bytes: Buffer; sha256: string; observedAt: string }> {
+  /** Same-handle capture; feedback keeps its 10 MiB default, explicitly fixed inputs may use the upload bound. */
+  async captureFeedbackFile(projectId: string, relativePath: string, maximum = maxUploadBytes): Promise<{ bytes: Buffer; sha256: string; observedAt: string }> {
+    if (!Number.isSafeInteger(maximum) || maximum < 0 || maximum > PROJECT_UPLOAD_MAX_BYTES) return fail('invalid_capture_limit');
     if (!/^(020_clean|060_reports)\//.test(relativePath)) return fail('invalid_feedback_file');
     const target = await this.#safePath(projectId, relativePath), before = await fs.lstat(target, { bigint: true });
     if (!before.isFile() || before.nlink !== 1n) return fail('unsafe_file_path');
-    if (before.size > BigInt(maxUploadBytes)) return fail('upload_too_large');
+    if (before.size > BigInt(maximum)) return fail('upload_too_large');
     const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       const initial = await handle.stat({ bigint: true });
       if (!initial.isFile() || initial.nlink !== 1n || initial.ino !== before.ino || initial.dev !== before.dev) return fail('unsafe_file_path');
       const chunks: Buffer[] = []; let length = 0;
-      for (;;) { const buffer = Buffer.allocUnsafe(65536), chunk = await handle.read(buffer, 0, buffer.length, null); if (!chunk.bytesRead) break; length += chunk.bytesRead; if (length > maxUploadBytes) return fail('upload_too_large'); chunks.push(buffer.subarray(0, chunk.bytesRead)); }
+      for (;;) { const buffer = Buffer.allocUnsafe(65536), chunk = await handle.read(buffer, 0, buffer.length, null); if (!chunk.bytesRead) break; length += chunk.bytesRead; if (length > maximum) return fail('upload_too_large'); chunks.push(buffer.subarray(0, chunk.bytesRead)); }
       const final = await handle.stat({ bigint: true }), current = await fs.lstat(target, { bigint: true });
       if (BigInt(length) !== initial.size || final.size !== initial.size || final.mtimeNs !== initial.mtimeNs || final.ctimeNs !== initial.ctimeNs || current.ino !== initial.ino || current.dev !== initial.dev || current.size !== initial.size || current.mtimeNs !== initial.mtimeNs || current.ctimeNs !== initial.ctimeNs || current.nlink !== 1n || current.isSymbolicLink()) return fail('file_changed_during_observation');
       const bytes = Buffer.concat(chunks, length); return { bytes, sha256: createHash('sha256').update(bytes).digest('hex'), observedAt: new Date().toISOString() };

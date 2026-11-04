@@ -1,3 +1,4 @@
+import type { AnalysisPythonEnvironment } from './analysis-python.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdir, open } from 'node:fs/promises';
 import path from 'node:path';
@@ -8,12 +9,19 @@ import type { EnterpriseContextProvision } from '../host/enterprise-materials-ty
 import type { FeedbackContextReceipt } from '../host/decision-feedback-types.ts';
 import { runtimeEnvironment } from '../../scripts/runtime-process.ts';
 import type { ProtectedExecutionScope } from './protected-tools.ts';
+import type { ProjectDataContextProvision } from '../host/project-data-context-context.ts';
+import type { PersonalContextPort, PersonalContextReceipt, PersonalContextToolResult } from './personal-context.ts';
+import type { CaseDecisionPort } from './case-decisions.ts';
+import type { CaseSourcesPort } from './case-sources.ts';
+import type { SemanticContextPort } from './semantic-context.ts';
 
 /** Replacement workspace for non-project agent sessions (e.g. business plugins). */
 export type AgentWorkspace = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[]; capabilityPolicy?: 'fixed-draft' | 'text-only' };
 /** Host-provided context receipt; this describes delivery, not business adoption. */
-export type ProvidedContextInput = { rap?: { instanceId: string; version?: string; text: string }; case?: { operationId: string; summary?: string }; enterprise?: EnterpriseContextProvision; feedback?: FeedbackContextReceipt; originalUserText?: string };
-export type ProjectAgentOptions = { projectId: string; projectDirectory?: string; workspace?: AgentWorkspace; protectedExecution?: ProtectedExecutionScope; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string; simulationTools?: { storeRoot: string; projectId: string }; tradeAreaConnector?: { dataRoot: string }; weatherConnector?: { cacheRoot: string } };
+export type ProvidedContextInput = { rap?: { instanceId: string; version?: string; text: string }; case?: { operationId: string; summary?: string }; enterprise?: EnterpriseContextProvision; feedback?: FeedbackContextReceipt; projectData?: ProjectDataContextProvision[]; personal?: { text: string; receipt: PersonalContextReceipt }; originalUserText?: string };
+export type ProjectAgentOptions = { projectId: string; taskId?: string; projectDirectory?: string; workspace?: AgentWorkspace; analysisPython?: AnalysisPythonEnvironment; protectedExecution?: ProtectedExecutionScope; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string; personalContext?: PersonalContextPort; caseDecisions?: CaseDecisionPort; caseSources?: CaseSourcesPort; semanticContext?: SemanticContextPort; simulationTools?: { storeRoot: string; projectId: string }; tradeAreaConnector?: { dataRoot: string }; weatherConnector?: { cacheRoot: string } };
+/** Host callbacks never cross IPC; only the granted capability bit does. */
+export type ProjectAgentWireOptions = Omit<ProjectAgentOptions, 'personalContext' | 'caseDecisions' | 'caseSources' | 'semanticContext'> & { personalContextEnabled?: boolean; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; semanticContextEnabled?: boolean };
 export type BrowserUIRequest = { id: string; method: 'select' | 'confirm' | 'input' | 'editor'; title: string; message?: string; options?: string[]; placeholder?: string; prefill?: string };
 export type ProjectSnapshot = { sessionId: string; sessionFile?: string; messages: Record<string, any>[]; tools: string[]; status: 'idle' | 'running'; sdkVersion: string; capabilities: Record<string, unknown>; lastRun?: { requestId: string; outcome?: 'completed' | 'cancelled' | 'failed'; diagnostic?: RunDiagnostic }; uiRequests?: BrowserUIRequest[] };
 export type ProjectEvent = { type: 'snapshot'; snapshot: ProjectSnapshot } | { type: 'text.delta'; text: string; requestId: string } | { type: 'native'; event: Record<string, any>; requestId?: string } | { type: 'run.settled'; outcome: 'completed' | 'cancelled' | 'failed'; requestId: string; error?: string; diagnostic?: RunDiagnostic } | { type: 'run.accepted'; requestId: string; sessionFile?: string } | { type: 'ui.request'; request: BrowserUIRequest; requestId?: string } | { type: 'ui.dismiss'; id: string } | { type: 'ui.notification'; message: string; level?: string } | { type: 'ui.status'; key: string; text?: string } | { type: 'ui.editor'; text: string };
@@ -31,8 +39,9 @@ export class ProjectAgent {
   #snapshot?: ProjectSnapshot;
   #pending = new Map<string, { resolve: (value: any) => void; reject: (error: Error) => void }>();
   #listeners = new Set<(event: ProjectEvent) => void>();
-  #running?: { id: string; completion: Promise<any> };
+  #running?: { id: string; completion: Promise<any>; cancelRequested?: boolean; providedContext?: ProvidedContextInput };
   #accepted = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
+  #personalRequests = new Map<string, AbortController>();
   #questions = new Map<string, Extract<ProjectEvent, { type: 'ui.request' }>>();
   #closed = false;
   #editorReady = false;
@@ -56,6 +65,31 @@ export class ProjectAgent {
       this.#child!.send({ kind: 'request', id, method, input }, error => { if (error) { this.#pending.delete(id); reject(new ProjectRuntimeError('runtime_unavailable')); } });
     });
   }
+  #cancelPersonalRequests() { for (const controller of this.#personalRequests.values()) controller.abort(); this.#personalRequests.clear(); }
+  async #personalRequest(child: ChildProcess, raw: any) {
+    const current = this.#running, controller = new AbortController();
+    const isCase = raw.feature === 'case-decisions', isSources = raw.feature === 'case-sources', isSemantic = raw.feature === 'semantic-context';
+    const knownFeature = raw.feature === undefined || raw.feature === 'personal' || isCase || isSources || isSemantic;
+    const port = isCase ? this.#options.caseDecisions : isSources ? this.#options.caseSources : isSemantic ? this.#options.semanticContext : this.#options.personalContext;
+    const errorCode = isCase ? 'case_decision_run_unavailable' : isSources ? 'case_sources_run_unavailable' : isSemantic ? 'semantic_context_run_unavailable' : 'personal_context_run_unavailable';
+    const available = () => Boolean(knownFeature && !this.#closed && child === this.#child && child.connected && current && !current.cancelRequested && this.#running === current && raw.requestId === current.id && raw.sessionId === this.#snapshot?.sessionId && !controller.signal.aborted && !this.#options.workspace && !this.#options.protectedExecution && this.#options.projectId && this.#options.taskId && port && (!(isCase || isSources || isSemantic) || typeof raw.toolCallId === 'string' && raw.toolCallId.trim()) && (!isCase || current.providedContext?.case?.operationId));
+    if (typeof raw.id !== 'string' || this.#personalRequests.has(raw.id)) return;
+    const reply = (value: object) => { if (child.connected) child.send({ kind: 'personal-context-reply', id: raw.id, ...value }, () => {}); };
+    if (!available() || !(isCase ? ['read', 'save'] : isSemantic ? ['find', 'read', 'trace', 'record'] : ['find', 'read']).includes(raw.action) || !raw.input || typeof raw.input !== 'object' || Array.isArray(raw.input)) { reply({ error: errorCode }); return; }
+    this.#personalRequests.set(raw.id, controller);
+    try {
+      const assertCurrent = () => { if (!available()) throw new ProjectRuntimeError(errorCode); };
+      const result = isCase ? await this.#options.caseDecisions!(raw.action, raw.input, { signal: controller.signal, requestId: current!.id, sessionId: this.#snapshot!.sessionId, toolCallId: raw.toolCallId, caseOperationId: current!.providedContext!.case!.operationId, assertCurrent }) : isSemantic ? await this.#options.semanticContext!(raw.action, raw.input, { signal: controller.signal, requestId: current!.id, sessionId: this.#snapshot!.sessionId, toolCallId: raw.toolCallId, assertCurrent }) : isSources ? await this.#options.caseSources!(raw.action, raw.input, { signal: controller.signal, requestId: current!.id, sessionId: this.#snapshot!.sessionId, toolCallId: raw.toolCallId, assertCurrent }) : await this.#options.personalContext!(raw.action, raw.input, { signal: controller.signal });
+      assertCurrent();
+      // Enforce the transport envelope before it crosses IPC, in addition to
+      // the SDK-side model-visible text bound.
+      if (Buffer.byteLength(JSON.stringify(result), 'utf8') > 256 * 1024) throw new ProjectRuntimeError('personal_context_payload_limit');
+      reply({ result });
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && /^[a-z0-9_]{1,100}$/.test(error.code) ? error.code : 'personal_context_read_failed';
+      reply({ error: code });
+    } finally { if (this.#personalRequests.get(raw.id) === controller) this.#personalRequests.delete(raw.id); }
+  }
   open(): Promise<ProjectSnapshot> {
     if (this.#closed) return Promise.reject(new ProjectRuntimeError('runtime_closed'));
     if (!this.#opening) this.#opening = this.#open();
@@ -70,6 +104,8 @@ export class ProjectAgent {
     const temp = o.protectedExecution ? path.join(o.sessionDirectory, '.protected-tmp') : path.join(workspaceRoot, '.tmp');
     await mkdir(temp, { recursive: true, mode: 0o700 });
     if (this.#closed) throw new ProjectRuntimeError('runtime_closed');
+    // Optional libraries never replace an unmanaged worker's original Python.
+    // Managed tool entrypoints are constructed inside createProtectedTools.
     const child = spawn(process.execPath, [path.join(o.codeRoot, 'scripts/project-entry.mjs')], { cwd: workspaceRoot, detached: process.platform !== 'win32', env: { ...runtimeEnvironment(), PI_CODING_AGENT_DIR: o.resourceRoot, TMPDIR: temp }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
     this.#child = child;
     // Provider and extension output is not a log transport. In particular it
@@ -79,6 +115,8 @@ export class ProjectAgent {
     const startupOutput = (chunk: Buffer) => { startupDiagnostic = (startupDiagnostic + chunk.toString()).slice(-2000); };
     child.stderr?.on('data', startupOutput);
     child.on('message', (raw: any) => {
+      if (raw?.kind === 'personal-context-request') { void this.#personalRequest(child, raw); return; }
+      if (raw?.kind === 'personal-context-cancel') { this.#personalRequests.get(raw.id)?.abort(); this.#personalRequests.delete(raw.id); return; }
       if (raw?.kind === 'reply') {
         const pending = this.#pending.get(raw.id); if (!pending) return;
         this.#pending.delete(raw.id);
@@ -98,7 +136,7 @@ export class ProjectAgent {
         this.#emit(raw.event);
       }
     });
-    const fail = () => { for (const p of this.#pending.values()) p.reject(new ProjectRuntimeError('runtime_process_stopped')); this.#pending.clear(); for (const p of this.#accepted.values()) p.reject(new ProjectRuntimeError('runtime_process_stopped')); this.#accepted.clear(); for (const id of this.#questions.keys()) this.#emit({ type: 'ui.dismiss', id }); this.#questions.clear(); };
+    const fail = () => { this.#cancelPersonalRequests(); for (const p of this.#pending.values()) p.reject(new ProjectRuntimeError('runtime_process_stopped')); this.#pending.clear(); for (const p of this.#accepted.values()) p.reject(new ProjectRuntimeError('runtime_process_stopped')); this.#accepted.clear(); for (const id of this.#questions.keys()) this.#emit({ type: 'ui.dismiss', id }); this.#questions.clear(); };
     child.on('error', fail); child.on('exit', fail);
     const ready = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => { this.#signal(child, 'SIGTERM'); reject(new ProjectRuntimeError('runtime_start_timeout')); }, 30_000);
@@ -107,7 +145,10 @@ export class ProjectAgent {
     });
     await ready;
     this.#editorReady = true;
-    this.#snapshot = await this.#rpc('open', o);
+    const { personalContext, caseDecisions, caseSources, semanticContext, ...serializable } = o;
+    const ordinary = !o.workspace && !o.protectedExecution && o.projectId && o.taskId;
+    const wire: ProjectAgentWireOptions = { ...serializable, personalContextEnabled: Boolean(personalContext && ordinary), caseDecisionsEnabled: Boolean(caseDecisions && ordinary), experienceLearningEnabled: Boolean(caseSources && ordinary), semanticContextEnabled: Boolean(semanticContext && ordinary) };
+    this.#snapshot = await this.#rpc('open', wire);
     return this.#snapshot!;
   }
   async snapshot(): Promise<ProjectSnapshot> { await this.open(); this.#snapshot = await this.#rpc('snapshot'); return this.#snapshot!; }
@@ -122,7 +163,7 @@ export class ProjectAgent {
     const accepted = new Promise<void>((resolve, reject) => { this.#accepted.set(requestId, { resolve, reject }); });
     void accepted.catch(() => {});
     const completion = this.open().then(() => this.#rpc(method, { text, requestId, ...(requestFingerprint === undefined ? {} : { requestFingerprint }), ...(providedContext === undefined ? {} : { providedContext }) })).catch(error => { this.#accepted.get(requestId)?.reject(error); throw error; }).finally(() => { this.#running = undefined; this.#accepted.delete(requestId); });
-    this.#running = { id: requestId, completion };
+    this.#running = { id: requestId, completion, providedContext };
     return { requestId, completion, accepted };
   }
   start(text: string, requestId: string, requestFingerprint?: string, providedContext?: ProvidedContextInput) { return this.#execute('prompt', text, requestId, requestFingerprint, providedContext); }
@@ -139,6 +180,8 @@ export class ProjectAgent {
     await this.#rpc('drain');
   }
   async stop(cleanup: { retryFailed?: boolean } = {}) {
+    if (this.#running) this.#running.cancelRequested = true;
+    this.#cancelPersonalRequests();
     if (!this.#options.protectedExecution) { if (!this.#running) return; await this.open(); await this.#rpc('stop'); await this.#running?.completion; return; }
     if (!this.#stopTask) this.#stopTask = (async () => {
       // A managed scope can contain legitimate background work even after its
@@ -156,7 +199,7 @@ export class ProjectAgent {
   setEditorState(text: string) { this.#options.draft = text; return this.#editorReady ? this.#rpc('editor-state', { text }) : Promise.resolve(); }
   close(cleanup: { retryFailed?: boolean } = {}): Promise<void> {
     if (!this.#closeTask) {
-      this.#closed = true;
+      this.#closed = true; this.#cancelPersonalRequests();
       const task = this.#dispose(cleanup); this.#closeTask = task;
       // Retry only resource cleanup on an explicit close, never a model turn.
       void task.catch(error => { if ((this.#options.protectedExecution || error instanceof ProjectRuntimeError && error.code === 'subagent_cleanup_unknown') && this.#closeTask === task) this.#closeTask = undefined; });
