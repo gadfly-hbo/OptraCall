@@ -52,4 +52,6 @@ extensions/analysis-assets/deep-research/
 
 ## 下一步
 
-移交 Codex：核对候选清单 → 实施目录接缝（catalog-data 一条目 + `openCatalogEntry` 导航，文案建议见 handoff）→ 非作者独立复核（覆盖 DR1–DR9 与 DR01–DR07）→ 按用户授权走 Git/CI 至合并。
+**当前处于 skill 测评门禁（2026-11-04用户确认，见工程规范 §5 长期分支条款）：** Qoder 已完成本体与适用检查，等待用户测评 deep-research skill；用户显式确认"测评通过"后，才将 [handoff/codex-takeover-brief.md](handoff/codex-takeover-brief.md) 转交 Codex（现已备好、暂缓转交）。测评未通过则修复后重新送测，测评结论记入本文件。
+
+移交后 Codex：核对候选清单 → 实施目录接缝（catalog-data 一条目 + `openCatalogEntry` 导航，文案建议见 handoff）→ 非作者独立复核（覆盖 DR1–DR9 与 DR01–DR07）→ 按用户授权走 Git/CI 至合并。
