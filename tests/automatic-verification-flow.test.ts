@@ -143,7 +143,7 @@ async function startDelayedReportProvider(options: Parameters<typeof startAutoma
         const payload = JSON.parse(lastUser.slice(lastUser.indexOf(marker) + marker.length).trim()) as { reportPath: string; readyPath: string; releasePath: string; content: string };
         const script = `import time\nfrom pathlib import Path\nPath(${JSON.stringify(payload.readyPath)}).write_text('ready')\nwhile not Path(${JSON.stringify(payload.releasePath)}).exists():\n time.sleep(.02)\ntime.sleep(.15)\nPath(${JSON.stringify(payload.reportPath)}).write_text(${JSON.stringify(payload.content)},encoding='utf-8')\n`;
         const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
-        const command = `python3 -c ${quote(script)} >/dev/null 2>&1 & echo background-started`;
+        const command = `(python3 -c ${quote(script)}; background_exit_code=$?; printf '%s\\n' "$background_exit_code" > ${quote(payload.readyPath + '.exit')}) >/dev/null 2>${quote(payload.readyPath + '.stderr')} & echo background-started`;
         send({ tool_calls: [{ index: 0, id: 'delayed-report-background', type: 'function', function: { name: 'bash', arguments: JSON.stringify({ command }) } }] }); send({}, 'tool_calls');
       }
       response.write('data: [DONE]\n\n'); response.end();
@@ -266,7 +266,18 @@ test('AV03 managed background report created after the SDK turn settles is drain
   const report = '# 后台合成报告\n\n退款反事实：1,900元。\n';
   const requestId = await f.send(`AUTOMATIC_DELAYED_BACKGROUND_REPORT\n${JSON.stringify({ reportPath: f.reportPath, readyPath, releasePath, content: report })}`);
   const settled = await until(f.readTask, value => value.task.lastRun?.id === requestId && value.task.lastRun.status === 'completed', 'SDK turn completed before its background report');
-  assert.equal(await readFile(readyPath, 'utf8'), 'ready', 'the actual SDK bash tool started the Python background process');
+  const readBackgroundText = async (file: string) => {
+    try { return await readFile(file, 'utf8'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
+  };
+  // Shell completion does not acknowledge asynchronous Python startup. Keep
+  // its diagnostics, then observe readiness without releasing its report gate.
+  const background = await until(async () => ({
+    ready: await readBackgroundText(readyPath),
+    stderr: await readBackgroundText(readyPath + '.stderr'),
+    exitCode: await readBackgroundText(readyPath + '.exit'),
+  }), value => value.ready === 'ready' || Boolean(value.exitCode?.trim()), 'Python background readiness (null exitCode means no exit observed)');
+  assert.equal(background.ready, 'ready', `the actual SDK bash tool must start the Python background process: ${JSON.stringify(background)}`);
   const nativeBeforeReport = await readFile(settled.task.sessionFile, 'utf8');
   assert.ok(nativeBeforeReport.trim().split('\n').map(line => JSON.parse(line)).some(entry => entry.customType === 'optracall.run' && entry.data?.requestId === requestId && entry.data.phase === 'settled' && entry.data.outcome === 'completed'));
   await assert.rejects(readFile(f.reportPath), { code: 'ENOENT' });
