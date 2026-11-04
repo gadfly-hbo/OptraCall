@@ -366,7 +366,7 @@ export class ProjectStore {
       return this.#upload(projectId, this.#uploadInput(originalName, source.bytes, 'project-material'), '020_clean', { kind: 'copy', from: relativeRawPath });
     });
   }
-  async tree(projectId: string): Promise<FileNode[]> {
+  async tree(projectId: string, directories: readonly ProjectDirectory[] = PROJECT_DIRECTORIES): Promise<FileNode[]> {
     await this.#assertProject(projectId);
     const node = async (relative: string): Promise<FileNode> => {
       const target = await this.#safePath(projectId, relative), stat = await fs.lstat(target), name = path.basename(target);
@@ -375,7 +375,7 @@ export class ProjectStore {
       for (const entry of (await fs.readdir(target)).sort((a, b) => a.localeCompare(b))) children.push(await node(`${relative}/${entry}`));
       return { name, path: relative, kind: 'directory', children };
     };
-    return Promise.all(PROJECT_DIRECTORIES.map(directory => node(directory)));
+    return Promise.all(directories.map(directory => node(directory)));
   }
   async readFile(projectId: string, relativePath: string): Promise<{ name: string; bytes: Buffer }> {
     const target = await this.#safePath(projectId, relativePath), before = await fs.lstat(target);
