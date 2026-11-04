@@ -15,6 +15,6 @@ a54a3b57ec82ef3e4e62678f82a6f2239b57d72262421726949221320d5c3c53  tests/protecte
 c669535e262884af7d12dce8c847ce6dceda326b18dc9b76a0f19eb6e08e77f9  openspec/changes/deep-research-skill/spec.md
 0374be4dbfb8cf0077fa598c4e66999d20a009866464e3a1e1800a3abe10abd0  openspec/changes/deep-research-skill/result.md
 527bf0395b52cb53595be3f37e023e12e4070811045a75dd22d7ac93354a4ad4  openspec/changes/deep-research-skill/handoff/codex-catalog-seam.md
-cfd429beb4bb717b7b513426af49ada30fc513f1ff9e28a59df4861b609f6c3e  openspec/changes/deep-research-skill/handoff/codex-takeover-brief.md
+dbf45759d57afbe514e9c7898c7622344fbdf9c0e69d7e908f10bba9719d4acd  openspec/changes/deep-research-skill/handoff/codex-takeover-brief.md
 
 范围声明：以上 14 个文件为本变更交接内容；docs/engineering-workflow.md 的分支记录与测评门禁条款（8b99699、bb0f3d8、c3c84b4）为流程治理提交，不属本候选运行时内容。无 Host/Agent 运行时代码改动；无 package.json/lockfile 变化。skill 测评门禁：用户 2026-11-04 显式确认通过（回执见 result.md）。
