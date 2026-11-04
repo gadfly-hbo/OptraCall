@@ -1,6 +1,20 @@
 # deep-research 深度研究 skill · 实施与验证记录
 
-日期：2026-11-04 · 分支：`qoder/ext-skills`（基线 `32ebe84` = 本分支 WIP 文档 + main `8425ca1`）· 状态：Qoder 本地实施与检查完成，待非作者复核与 Codex 目录接缝；Git/CI 交付按用户另行授权。
+日期：2026-11-04 · 分支：`qoder/ext-skills`（基线 `32ebe84` = 本分支 WIP 文档 + main `8425ca1`）· 状态：用户测评已通过（见下节），待 Codex 目录接缝、非作者复核与 Git/CI 授权。下文 Qoder 验证证据保留其移交时范围。
+
+## 用户测评回执（2026-11-04，显式通过）
+
+按工程规范 §5 skill 测评门禁，用户以自有流程测评（variant=装入本 skill，baseline=不装），结论：**有效（effective），测评通过**。
+
+| 指标 | baseline | variant | 判读 |
+| --- | --- | --- | --- |
+| 激活率 | — | 80.0%（8/10） | 触发充分 |
+| 胜率 | — | 75.0%（3胜/1平/0负/6未判定） | 有实质提升 |
+| 断言通过率（条目累计） | 16.2% | 29.4% | **+13.2pp，超增益门槛 10pp**（"值得归档"关键判定） |
+| 平均耗时 | 278.9s | 460.8s | 变慢 65% |
+| 平均 token | 1.11M | 1.72M | +55% |
+
+产物口径复核为 +27.9pp（baseline 14.7% → variant 44.1%），两种口径均远超门槛，结论不依赖口径选择。耗时与 token 成本上升如实保留为已知代价。本回执为用户测评结论，不替代第4节非作者独立复核与工程检查。
 
 ## 实施范围（实际交付物）
 
@@ -52,6 +66,4 @@ extensions/analysis-assets/deep-research/
 
 ## 下一步
 
-**当前处于 skill 测评门禁（2026-11-04用户确认，见工程规范 §5 长期分支条款）：** Qoder 已完成本体与适用检查，等待用户测评 deep-research skill；用户显式确认"测评通过"后，才将 [handoff/codex-takeover-brief.md](handoff/codex-takeover-brief.md) 转交 Codex（现已备好、暂缓转交）。测评未通过则修复后重新送测，测评结论记入本文件。
-
-移交后 Codex：核对候选清单 → 实施目录接缝（catalog-data 一条目 + `openCatalogEntry` 导航，文案建议见 handoff）→ 非作者独立复核（覆盖 DR1–DR9 与 DR01–DR07）→ 按用户授权走 Git/CI 至合并。
+skill 测评门禁已通过（2026-11-04 用户显式确认，回执见上节）。移交 Codex：核对候选清单 → 实施目录接缝（catalog-data 一条目 + `openCatalogEntry` 导航，文案建议见 handoff）→ 非作者独立复核（覆盖 DR1–DR9 与 DR01–DR07）→ 按用户授权走 Git/CI 至合并。任务书：[handoff/codex-takeover-brief.md](handoff/codex-takeover-brief.md)。

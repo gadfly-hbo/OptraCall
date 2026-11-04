@@ -1,5 +1,6 @@
-deep-research skill 交接候选清单（SHA-256，2026-11-04）
-基线：32ebe84（= 8b99699 分支记录 + main 8425ca1）；候选提交见 result.md 记录。
+deep-research skill 交接候选清单（SHA-256，2026-11-04，测评通过后放行版）
+skill 运行时/测试/规格候选 = 提交 a78a478（未变动）；本清单另含测评回执更新后的 result.md 与放行版任务书。
+分支：origin/qoder/ext-skills；基线：32ebe84（= 8b99699 分支记录 + main 8425ca1）。
 
 4d4847581b82fbb6ea3aaf31e0c54880ea3225d3591ee7c3fc762bf788ab30ad  extensions/analysis-assets/deep-research/SKILL.md
 637142596e1d464f68c129d58e0a41e7c61613dd4dee6c7a76153c1d026350db  extensions/analysis-assets/deep-research/agents/researcher.md
@@ -12,7 +13,8 @@ d7658479034d458bc8c5f94a284f3e531e7e01ef1a63bafdecbaa9cc4fa62386  extensions/ana
 a54a3b57ec82ef3e4e62678f82a6f2239b57d72262421726949221320d5c3c53  tests/protected-skills.test.ts
 219e08eb06899bc178c6df975a3487d505df164831bce58c7ca9d39a5cbe410d  scripts/check-agent-session-boundary.mjs
 c669535e262884af7d12dce8c847ce6dceda326b18dc9b76a0f19eb6e08e77f9  openspec/changes/deep-research-skill/spec.md
-060deda9073528af30fedcd41d2af89441beecae418b80e620c02fcea8fafe60  openspec/changes/deep-research-skill/result.md
+0374be4dbfb8cf0077fa598c4e66999d20a009866464e3a1e1800a3abe10abd0  openspec/changes/deep-research-skill/result.md
 527bf0395b52cb53595be3f37e023e12e4070811045a75dd22d7ac93354a4ad4  openspec/changes/deep-research-skill/handoff/codex-catalog-seam.md
+cfd429beb4bb717b7b513426af49ada30fc513f1ff9e28a59df4861b609f6c3e  openspec/changes/deep-research-skill/handoff/codex-takeover-brief.md
 
-范围声明：以上 13 个文件为本变更候选全部内容；docs/engineering-workflow.md 的分支记录（8b99699）先于本候选提交，不属本变更。无 Host/Agent 运行时代码改动；无 package.json/lockfile 变化。
+范围声明：以上 14 个文件为本变更交接内容；docs/engineering-workflow.md 的分支记录与测评门禁条款（8b99699、bb0f3d8、c3c84b4）为流程治理提交，不属本候选运行时内容。无 Host/Agent 运行时代码改动；无 package.json/lockfile 变化。skill 测评门禁：用户 2026-11-04 显式确认通过（回执见 result.md）。

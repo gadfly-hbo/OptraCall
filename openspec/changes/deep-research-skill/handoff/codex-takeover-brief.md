@@ -1,10 +1,10 @@
 # 任务书：deep-research skill 接管至合并（Qoder → Codex）
 
-2026-11-04 · 本任务书自包含，配合 [handoff/codex-catalog-seam.md](codex-catalog-seam.md) 与 [handoff/candidate-manifest.txt](candidate-manifest.txt) 使用。按工程规范 §2 移交交付模式执行。
+2026-11-04 · **skill 测评门禁已通过，本任务书正式放行转交。** 用户以自有流程测评（variant=装 skill vs baseline=不装），结论：有效（effective）。关键指标：激活率 80.0%（8/10）、胜率 75.0%（3胜/1平/0负/6未判定）、断言通过率 16.2%→29.4%（**+13.2pp，超增益门槛 10pp**；产物口径复核 +27.9pp，两口径均超门槛）；已知代价：平均耗时 278.9s→460.8s（+65%）、平均 token 1.11M→1.72M（+55%），如实保留。完整回执见 [result.md 用户测评回执](../result.md)。测评通过不替代第4节非作者独立复核。本任务书自包含，配合 [handoff/codex-catalog-seam.md](codex-catalog-seam.md) 与 [handoff/candidate-manifest.txt](candidate-manifest.txt) 使用，按工程规范 §2 移交交付模式执行。
 
 ## 交接物与身份
 
-- 分支：`origin/qoder/ext-skills`，交接提交 **`a78a478`**（"feat(skills): deep-research 深度研究 skill（gpt-researcher-team 能力承接）"）。
+- 分支：`origin/qoder/ext-skills`，skill 候选提交 **`a78a478`**（"feat(skills): deep-research 深度研究 skill（gpt-researcher-team 能力承接）"）；其后为本目录文档更新（测评门禁条款、回执记录与本任务书），以交接时分支 head 为准（见 result.md 与清单哈希）。
 - 基线：`32ebe84` = `8b99699`（分支角色记录，docs/engineering-workflow.md §5，先于本候选）+ origin/main `8425ca1`（含 f174ebb subagent/native-search 与回执文档）。
 - 候选共 13 个文件，SHA-256 清单见 [candidate-manifest.txt](candidate-manifest.txt)：skill 本体 7 个（SKILL.md、agents/researcher.md、agents/reviewer.md、references/×4）+ tests 2 个（新建 deep-research-skill.test.ts、protected-skills.test.ts 追加 DR01）+ 边界脚本 1 个（check-agent-session-boundary.mjs 的 projectAgentOwners 追加本测试，同 subagent-runtime 先例）+ OpenSpec 3 个（spec/result/接缝任务书）。无 Host/Agent 运行时代码、无依赖/锁文件变化。
 - Qoder 侧验证已完成：目标测试 7/7 PASS（DR01 发现+角色快照、DR03 合成 Provider 端到端：委派隔离、chain {previous}、子角色实读 references）；`npm run check` exit 0＝1004 项（1001 PASS / 0 FAIL / 3 条件 SKIP）+ 边界 + tsc + 构建。证据与边界见 [result.md](../result.md)。
