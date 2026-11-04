@@ -1,0 +1,60 @@
+{
+  "capturedAt": "2026-11-03T23:28:03.062538+00:00",
+  "userDecision": "确认M6方案和Ui，开始开发",
+  "interpretation": "Whole v0.1 spec/UI acceptance adopts D01-D06 recommended A as previously offered; no alternative requested; local implementation/required synthetic checks/review only",
+  "sourceDelivery": {
+    "path": ".local/fourbase-modules/m6/delivery-manifest.json",
+    "bytes": 249919,
+    "sha256": "ad711dc42ffdf7e9de17049476240a214673770d3719a63dc8182720596de9f1"
+  },
+  "files": [
+    {
+      "originalPath": "docs/prototypes/fourbase-m6-experience-learning-ui-demo.html",
+      "path": "openspec/changes/fourbase-experience-learning/history/approved-v0.1/fourbase-m6-experience-learning-ui-demo.html",
+      "bytes": 64992,
+      "sha256": "5df4f295e4586462744a02467054bbe06426ecc90e255e29a1c3cc787d6fa4ed"
+    },
+    {
+      "originalPath": "openspec/changes/fourbase-experience-learning/confirmation.html",
+      "path": "openspec/changes/fourbase-experience-learning/history/approved-v0.1/confirmation.html",
+      "bytes": 5330,
+      "sha256": "8f62fc760cf94090b8cf598ee8842bc8ecb88cefa99aa35207b42ca503cdb308"
+    },
+    {
+      "originalPath": "openspec/changes/fourbase-experience-learning/evaluation-protocol.md",
+      "path": "openspec/changes/fourbase-experience-learning/history/approved-v0.1/evaluation-protocol.md",
+      "bytes": 4750,
+      "sha256": "f699c440b73052b32d52baa7e04765280bcc288342551182e512a60d5e0c3bcc"
+    },
+    {
+      "originalPath": "openspec/changes/fourbase-experience-learning/result.md",
+      "path": "openspec/changes/fourbase-experience-learning/history/approved-v0.1/result.md",
+      "bytes": 6959,
+      "sha256": "75d2b5fd1de8fe020ea3e51dd4f50ae80b1fa1704e0f79bc422468fd359157f2"
+    },
+    {
+      "originalPath": "openspec/changes/fourbase-experience-learning/reuse-audit.md",
+      "path": "openspec/changes/fourbase-experience-learning/history/approved-v0.1/reuse-audit.md",
+      "bytes": 7308,
+      "sha256": "970b87201c046db7530f37b6a4b06b4f4c5c1136bd37d03fea2d750257cb081c"
+    },
+    {
+      "originalPath": "openspec/changes/fourbase-experience-learning/spec.md",
+      "path": "openspec/changes/fourbase-experience-learning/history/approved-v0.1/spec.md",
+      "bytes": 9198,
+      "sha256": "e69103a2bc3ca1aca41c6e293a6af441e4664888c2892b30b04e862cf9b54fff"
+    },
+    {
+      "originalPath": "openspec/changes/fourbase-experience-learning/structure-decisions.md",
+      "path": "openspec/changes/fourbase-experience-learning/history/approved-v0.1/structure-decisions.md",
+      "bytes": 16925,
+      "sha256": "8e9b83cd9cde2df216e8805595b8756d4ca351d65fc4874262c6f7952a067835"
+    },
+    {
+      "originalPath": "openspec/changes/fourbase-experience-learning/ui-review.md",
+      "path": "openspec/changes/fourbase-experience-learning/history/approved-v0.1/ui-review.md",
+      "bytes": 4811,
+      "sha256": "2137d1677ec056b713832f53e39c7be5a142d06c1c191c067a9d8e3e5cb35c21"
+    }
+  ]
+}

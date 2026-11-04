@@ -1,3 +1,8 @@
+export class CaseStoreError extends Error {
+  readonly statusCode: number;
+  readonly code: string;
+  constructor(code: string, statusCode = 400) { super(code); this.name = 'CaseStoreError'; this.code = code; this.statusCode = statusCode; }
+}
 export type CaseStatus = 'pending' | 'analyzing' | 'awaiting_confirmation' | 'observing' | 'closed';
 export type ProjectWorkStatus = 'not_started' | 'in_progress' | 'awaiting_feedback' | 'completed' | 'cancelled';
 export type CaseStorageStatus = { state: 'ready' | 'uninitialized' | 'unavailable'; code?: string; storeId?: string };
@@ -27,7 +32,7 @@ export type ArtifactAdoption = {
 };
 export type WorkEventType = 'case_created' | 'case_updated' | 'case_closed' | 'case_reopened' | 'project_linked'
   | 'project_unlinked' | 'artifact_linked' | 'artifact_updated' | 'artifact_unlinked' | 'note_added'
-  | 'project_work_updated' | 'project_work_note_added';
+  | 'project_work_updated' | 'project_work_note_added' | 'case_strategy_choice';
 export type WorkEvent = {
   id: string; subjectType: 'case' | 'project'; subjectId: string; revision: number; eventType: WorkEventType;
   operationId: string; actorKind: 'user' | 'host'; originCaseId: string | null;

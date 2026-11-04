@@ -1,0 +1,63 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { startTestHost } from './fixtures/host-process.ts';
+import { readJson } from './fixtures/joint-context.ts';
+
+test('EL01/09 public cross-Case source discovery is available without a current Case or native session', { timeout: 30_000 }, async t => {
+  const host = await startTestHost(); t.after(() => host.close());
+  await readJson(await host.request('/api/cases/storage/initialize', 'POST', {}));
+  const health = await host.request('/api/health'); assert.equal(health.status, 200);
+  const response = await host.request('/api/case-sources');
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.items, []); assert.equal(body.continuation, null);
+});
+
+test('EL02 exact card reference uses original feedback and named handoff observations; unreadable original stays UNKNOWN', { timeout: 30_000 }, async t => {
+  const { randomUUID } = await import('node:crypto');
+  const { CaseStore } = await import('../src/host/case-store.ts');
+  let host = await startTestHost(); t.after(() => host.close());
+  await readJson(await host.request('/api/configuration', 'PUT', { name: 'M6合成', provider: 'openai-compatible', baseUrl: 'http://127.0.0.1:1', model: 'synthetic', apiKey: 'synthetic-only' }));
+  const { project } = await readJson(await host.request('/api/projects', 'POST', { name: '合成反馈来源' }), 201);
+  const { task: sourceTask } = await readJson(await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: '原任务' }), 201);
+  await readJson(await host.request('/api/cases/storage/initialize', 'POST', {}));
+  const { case: record } = await readJson(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '合成历史事项' }), 201);
+  await readJson(await host.request(`/api/cases/${record.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: record.revision, projectId: project.id }));
+  const { item } = await readJson(await host.request('/api/decision-board/items', 'POST', { projectId: project.id, title: '历史建议', rationale: '只作合成工程验证' }), 201);
+  await readJson(await host.request(`/api/decision-board/items/${item.id}/adopt`, 'POST', {}));
+  const { task } = await readJson(await host.request(`/api/decision-board/items/${item.id}/tasks`, 'POST', { title: '历史行动' }), 201);
+  const feedbackCommand = { operationId: randomUUID(), expectedLatestRevisionId: null, adopted: true, outcome: 'M6_ORIGINAL_FEEDBACK_ONLY' + '甲'.repeat(3800), metricDelta: '', review: '未核定因果' + '乙'.repeat(3800), score: null, effect: 'unknown' };
+  const { feedback } = await readJson(await host.request(`/api/decision-board/tasks/${task.id}/feedback`, 'POST', feedbackCommand));
+  const conditions = { sourceNature: 'synthetic', observationPeriod: '仅2026-10合成窗口' + '期'.repeat(2800), applicability: '仅该合成条件' + '用'.repeat(2800), limitations: '没有经营增益证据' + '限'.repeat(2800) };
+  const { preview } = await readJson(await host.request('/api/decision-feedback/preview', 'POST', { boardTaskId: task.id, feedbackRevisionId: feedback.revisionId, question: '核对历史', taskName: '合成复盘', ...conditions, materials: [{ id: 'feedback', kind: 'feedback', mode: 'full' }] }));
+  const { handoff } = await readJson(await host.request('/api/decision-feedback/handoffs', 'POST', { operationId: randomUUID(), previewId: preview.previewId }), 201);
+  await readJson(await host.request(`/api/decision-board/tasks/${task.id}/feedback`, 'POST', { ...feedbackCommand, operationId: randomUUID(), expectedLatestRevisionId: feedback.revisionId, outcome: 'M6_NEWER_FEEDBACK_MUST_NOT_REPLACE' }));
+  await host.close();
+  const store = new CaseStore({ dataRoot: host.dataRoot }); await store.init();
+  const decision = store.saveDecisionDraft({ operationId: randomUUID(), caseStoreId: store.getStatus().storeId!, caseId: record.id, expectedRevision: 0, kind: 'strategy', payload: { title: '有限建议', proposal: '卡片正文不等于原反馈' }, references: [{ relation: 'feedback', note: null, target: { type: 'feedback', sourceProjectId: project.id, boardTaskId: task.id, feedbackRevisionId: feedback.revisionId, handoffId: handoff.handoffId } }] }, { actorKind: 'agent', projectId: project.id, taskId: sourceTask.id, requestId: randomUUID(), sessionId: 'synthetic-seed', toolCallId: 'seed' });
+  const missing = store.saveDecisionDraft({ operationId: randomUUID(), caseStoreId: decision.caseStoreId, caseId: record.id, expectedRevision: 0, kind: 'hypothesis', payload: { title: '原交接失读', statement: '不能改读较新反馈或省略观察范围' }, references: [{ relation: 'feedback', note: null, target: { type: 'feedback', sourceProjectId: project.id, boardTaskId: task.id, feedbackRevisionId: feedback.revisionId, handoffId: randomUUID() } }] }, { actorKind: 'agent', projectId: project.id, taskId: sourceTask.id, requestId: randomUUID(), sessionId: 'synthetic-seed', toolCallId: 'missing-source' });
+  store.close();
+  host = await startTestHost({ dataRoot: host.dataRoot, projectsRoot: host.projectsRoot });
+  await readJson(await host.request(`/api/projects/${project.id}/archive`, 'POST', {}));
+  const target = { type: 'case-decision', caseStoreId: decision.caseStoreId, caseId: record.id, recordId: decision.recordId, revision: 1 };
+  const result = await readJson(await host.request('/api/case-sources/read', 'POST', { target, part: 'reference', sourceIndex: 0 }));
+  assert.ok(result.text.includes('M6_ORIGINAL_FEEDBACK_ONLY'));
+  assert.equal(result.text.includes('M6_NEWER_FEEDBACK_MUST_NOT_REPLACE'), false);
+  assert.equal(result.details.observation.observationPeriod, conditions.observationPeriod);
+  assert.equal(result.details.observation.applicability, conditions.applicability);
+  assert.equal(result.details.observation.limitations, conditions.limitations);
+  assert.equal(result.details.partial, true);
+  let page = result, delivered = '', count = 0;
+  do {
+    assert.ok(page.text.length <= 32768); assert.ok(Buffer.byteLength(JSON.stringify(page)) <= 256 * 1024);
+    delivered += page.text.split('\n').slice(2).join('\n'); count++; assert.ok(count <= 10);
+    if (!page.details.continuation) break;
+    assert.ok(page.text.includes(page.details.continuation));
+    page = await readJson(await host.request('/api/case-sources/read', 'POST', { target, part: 'reference', sourceIndex: 0, continuation: page.details.continuation }));
+  } while (true);
+  assert.ok(delivered.includes('M6_ORIGINAL_FEEDBACK_ONLY')); assert.ok(delivered.includes(conditions.limitations));
+  assert.equal(delivered.includes('M6_NEWER_FEEDBACK_MUST_NOT_REPLACE'), false);
+  const unknown = await readJson(await host.request('/api/case-sources/read', 'POST', { target: { ...target, recordId: missing.recordId }, part: 'reference', sourceIndex: 0 }));
+  assert.equal(unknown.details.status, 'unknown'); assert.equal(unknown.details.code, 'case_decision_feedback_handoff_missing');
+  assert.ok(unknown.text.includes('UNKNOWN')); assert.equal(unknown.text.includes('M6_ORIGINAL_FEEDBACK_ONLY'), false);
+});

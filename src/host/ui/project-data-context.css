@@ -1,0 +1,60 @@
+.project-files:has(.pdc-panel) { width: min(520px, 44vw); flex-basis: min(520px, 44vw); }
+.pdc-panel { border-top: 1px solid var(--line); padding: 20px 16px; color: var(--ink); font-size: .875rem; min-width: 0; }
+.pdc-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pdc-heading .eyebrow { margin-bottom: 4px; }
+.pdc-panel h3 { font-size: 1.125rem; line-height: 1.4; font-weight: 600; margin: 0; }
+.pdc-panel h4, .pdc-panel legend { font-size: .9375rem; font-weight: 600; margin: 0 0 12px; padding: 0; }
+.pdc-panel p { margin: 8px 0; }
+.pdc-path, .pdc-panel code, .pdc-record, .pdc-history { overflow-wrap: anywhere; min-width: 0; }
+.pdc-path, .pdc-help, .pdc-record > div > span { color: var(--muted); font-size: .8125rem; line-height: 1.6; }
+.pdc-section { min-width: 0; margin: 20px 0 0; padding: 20px 0 0; border: 0; border-top: 1px solid var(--line); }
+.pdc-inline-fields { min-width: 0; border: 0; padding: 0; margin: 12px 0 0; }
+.pdc-observation-evidence { color: var(--muted); font-size: .8125rem; overflow-wrap: anywhere; }
+.pdc-observation-evidence code { display: block; overflow-wrap: anywhere; }
+.pdc-section label { display: grid; gap: 6px; margin: 12px 0; font-weight: 500; }
+.pdc-section input:not([type=checkbox]):not([type=file]), .pdc-section textarea, .pdc-section select { min-width: 0; width: 100%; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; font-weight: 400; }
+.pdc-section input[type=file] { max-width: 100%; font-weight: 400; font-size: .8125rem; }
+.pdc-section select[multiple] { min-height: 104px; }
+.pdc-section textarea { resize: vertical; line-height: 1.6; }
+.pdc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pdc-panel .pdc-check { display: flex; align-items: flex-start; gap: 8px; font-weight: 400; }
+.pdc-check input { margin-top: 4px; flex: 0 0 auto; }
+.pdc-panel details { margin: 12px 0; }
+.pdc-panel summary, .pdc-selected summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+.pdc-panel details > summary { padding: 4px 0; }
+.pdc-panel code { display: block; color: var(--muted); font-size: .75rem; }
+.pdc-record { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.pdc-record > div { min-width: 0; }
+.pdc-record > div > span { display: block; }
+.pdc-record p { margin: 4px 0; }
+.pdc-record .text-button { flex: 0 0 auto; }
+.pdc-preview, .pdc-history { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--subtle); }
+.pdc-preview > span { display: block; margin: 6px 0; overflow-wrap: anywhere; }
+.pdc-preview .primary-button { margin-top: 8px; }
+.pdc-error { padding: 10px 12px; border-radius: 6px; background: var(--error-bg); color: var(--error); overflow-wrap: anywhere; }
+.pdc-status { padding: 10px 12px; border-radius: 6px; background: var(--accent-soft); color: var(--ink); overflow-wrap: anywhere; }
+.pdc-source-options { margin: 12px 0; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.pdc-evidence { overflow: auto; max-height: 320px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .75rem; padding: 12px; background: var(--subtle); border-radius: 6px; }
+.pdc-selected { margin: 8px 0; padding: 12px; background: var(--subtle); border: 1px solid var(--line); border-radius: 6px; font-size: .8125rem; overflow-wrap: anywhere; }
+.pdc-selected p { margin: 8px 0; color: var(--muted); }
+.pdc-selected code { display: block; white-space: normal; overflow-wrap: anywhere; font-size: .75rem; }
+.pdc-selected label { display: grid; gap: 6px; margin: 8px 0; }
+.pdc-selected select { width: 100%; min-width: 0; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+.pdc-selected .pdc-record:last-of-type { border: 0; }
+.pdc-panel button:disabled, .pdc-panel fieldset:disabled { opacity: .65; }
+.pdc-panel fieldset:disabled button { opacity: 1; }
+.pdc-panel .primary-button, .pdc-panel .secondary-button { min-height: 36px; max-width: 100%; white-space: normal; }
+@media (max-width: 1100px) { .project-files:has(.pdc-panel) { width: min(560px, calc(100vw - 24px)); flex-basis: auto; } }
+@media (max-width: 480px) { .pdc-panel { padding: 16px 12px; } .pdc-grid { grid-template-columns: minmax(0, 1fr); gap: 0; } .pdc-record { flex-wrap: wrap; gap: 4px; } }
+
+.pdc-friendly-lines ol { margin: 12px 0; padding-left: 3em; max-height: 320px; overflow: auto; background: var(--subtle); border-radius: 6px; }
+.pdc-friendly-lines li { padding: 2px 12px 2px 4px; color: var(--muted); font-size: .75rem; }
+.pdc-friendly-lines li span { display: block; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pdc-panel :is(input, select, textarea, button, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.pdc-calculation-evidence > summary { font-weight: 600; padding: 8px 0; }
+.pdc-calculation-evidence label { display: grid; gap: 6px; margin: 12px 0; }
+.pdc-calculation-evidence select { width: 100%; min-width: 0; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; }
+.pdc-calculation-attachment { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 4px 12px; margin: 8px 0; overflow-wrap: anywhere; }
+.pdc-calculation-attachment > span { min-width: 0; }
+.pdc-pending { margin: 12px 0; padding: 12px; border: 1px solid var(--line); border-radius: 6px; }

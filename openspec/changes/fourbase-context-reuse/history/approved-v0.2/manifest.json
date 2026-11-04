@@ -1,0 +1,35 @@
+{
+  "approvedBy": "user current turn: 确认M4v0.2spec与UI，D01-D06全部A，开始产品开发",
+  "files": [
+    {
+      "path": "openspec/changes/fourbase-context-reuse/history/approved-v0.2/README.md",
+      "sha256": "1a9982a3934fb524f5adcf1c3e0dad294a101912cc90726ac9e040e7043b628c",
+      "bytes": 330
+    },
+    {
+      "path": "openspec/changes/fourbase-context-reuse/history/approved-v0.2/fourbase-m4-reuse-ui-demo.html",
+      "sha256": "557eaaba133227cac5ee681f84f482ceee74fb9fe70380cf6434dbda19f5ddc3",
+      "bytes": 63911
+    },
+    {
+      "path": "openspec/changes/fourbase-context-reuse/history/approved-v0.2/result.md",
+      "sha256": "b3d38e49ff37f2f2068a8d0cc17fa65483a0190143c320eb1ef111f78fa1821c",
+      "bytes": 7119
+    },
+    {
+      "path": "openspec/changes/fourbase-context-reuse/history/approved-v0.2/spec.md",
+      "sha256": "cbc7cd27ed03435c15c5f28afa717266b952125422a87e10fe631d65ea5e262b",
+      "bytes": 10474
+    },
+    {
+      "path": "openspec/changes/fourbase-context-reuse/history/approved-v0.2/structure-decisions.md",
+      "sha256": "5e46b27edb6d0fa6b09643c59c3ec40436af3d6221b672bd5e17093923acfb4c",
+      "bytes": 13473
+    },
+    {
+      "path": "openspec/changes/fourbase-context-reuse/history/approved-v0.2/ui-review.md",
+      "sha256": "cd0d9022f221dea126fb1a577a7fdf31413239a5cb9524c2112a14d53a29beb4",
+      "bytes": 3485
+    }
+  ]
+}

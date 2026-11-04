@@ -1,0 +1,37 @@
+{
+  "stage": "v0.1 superseded confirmation package, never product-implemented; raw byte snapshots, original relative links not rewritten",
+  "deliveryManifest": ".local/fourbase-modules/m31/delivery-manifest.json",
+  "deliverySha256": "d2266d03db5c449e9973d802613b9e8a8321066b7622ea166970271304ed1cbe",
+  "files": [
+    {
+      "original": "docs/prototypes/fourbase-m31-agent-candidates-ui-demo.html",
+      "snapshot": "openspec/changes/fourbase-autonomous-candidates/history/v0.1/fourbase-m31-agent-candidates-ui-demo.html",
+      "sha256": "0fdbfd76cfe5a4713819089e0e6000bdd9d27653f3bbee2a2bc38453d2104466"
+    },
+    {
+      "original": "openspec/changes/fourbase-autonomous-candidates/result.md",
+      "snapshot": "openspec/changes/fourbase-autonomous-candidates/history/v0.1/result.md",
+      "sha256": "9df35ba4580160a66c7594ee4bf7f4ea2ffd9bd22c9d97dc1babfd8d89344468"
+    },
+    {
+      "original": "openspec/changes/fourbase-autonomous-candidates/reuse-audit.md",
+      "snapshot": "openspec/changes/fourbase-autonomous-candidates/history/v0.1/reuse-audit.md",
+      "sha256": "721ba988fe75bc9bac2f65c30e9f44b211eb435e8fd026738b7f16c7943e980c"
+    },
+    {
+      "original": "openspec/changes/fourbase-autonomous-candidates/spec.md",
+      "snapshot": "openspec/changes/fourbase-autonomous-candidates/history/v0.1/spec.md",
+      "sha256": "f8cc16691a001892081fe62fe4f44569e534870bd0130bdb5bc50c45daf15d13"
+    },
+    {
+      "original": "openspec/changes/fourbase-autonomous-candidates/structure-decisions.md",
+      "snapshot": "openspec/changes/fourbase-autonomous-candidates/history/v0.1/structure-decisions.md",
+      "sha256": "72f16bdb05a54b7d511dab80d42cba011b17d9a1353f0a88ed8647871d3ad343"
+    },
+    {
+      "original": "openspec/changes/fourbase-autonomous-candidates/ui-review.md",
+      "snapshot": "openspec/changes/fourbase-autonomous-candidates/history/v0.1/ui-review.md",
+      "sha256": "6a39ed588aab798ce80d4a21c249064e033f6dcb307d9c155ea497ba32726860"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>M5 方案决定摘要 · 待确认</title><style>
+:root{color-scheme:light dark;--bg:#f9f8fc;--panel:#fff;--ink:#302b3c;--muted:#675d76;--line:#e3ddeb;--accent:#755aa8}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 system-ui,-apple-system,sans-serif}main{max-width:960px;margin:auto;padding:40px 24px}h1{font-size:28px;line-height:1.35}h2{font-size:20px;margin-top:32px}h3{font-size:18px;margin-top:0}p{margin:10px 0}a{color:var(--accent)}a:focus-visible{outline:3px solid var(--accent);outline-offset:4px}article,.notice{border:1px solid var(--line);border-radius:10px;padding:20px;background:var(--panel);margin:16px 0}.status{font-size:14px;color:var(--muted)}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}ul{padding-left:22px}code{overflow-wrap:anywhere}footer{margin-top:32px;color:var(--muted)}@media(prefers-color-scheme:dark){:root{--bg:#17141d;--panel:#211c2a;--ink:#efebf5;--muted:#c1b5d1;--line:#453b52;--accent:#bfa4ee}}@media print{body{background:white;color:#222}main{padding:0}article{break-inside:avoid}a{color:#222}footer{color:#444}}
+@media print{:root{color-scheme:light;--bg:#fff;--panel:#fff;--ink:#222;--muted:#444;--line:#bbb;--accent:#222}article,.notice{background:#fff;color:#222}}
+</style></head><body><main>
+<p class="status">OptraCall · 2026-11-03 · v0.1 · 确认包摘要</p>
+<h1>让 Case 保留判断、方案和当时的选择</h1>
+<div class="notice"><strong>8组均建议A，待用户整体确认。</strong><p>仅方案与虚构UI准备，产品未开发，未建表或迁移。本页是方案审阅摘要，不是产品页面，不接Pi、模型、业务库或浏览器存储。</p></div>
+<p>继续在原任务提问，Agent按需要整理或修订Case草案。人真正要作取舍时再选一次；新证据不会抹掉旧选择、报告、行动和反馈。沿用Host管环境、Agent自主执行、优先复用Pi、减少人的操作。</p>
+<p><a href="spec.md">完整spec</a> · <a href="structure-decisions.md">完整字段与合同决定包</a> · <a href="../../../docs/prototypes/fourbase-m5-case-decisions-ui-demo.html">可点击虚构UI Demo</a></p>
+<h2>确认范围</h2>
+<table><thead><tr><th>类别</th><th>项</th><th>数量／当前状态</th></tr></thead><tbody><tr><td>主线业务记录</td><td>D01、D02、D04</td><td>3，待确认</td></tr><tr><td>支撑合同与验收</td><td>D03、D06、D07、D08</td><td>4，待确认</td></tr><tr><td>联合展示</td><td>D05</td><td>1，待确认</td></tr></tbody></table>
+<article><h3>D01 · 归属和使用方式</h3><p><strong>A：Case内两类有版本草案，原任务直接问，允许零条。</strong>现有总判断散文不足以准确定位多项判断及依赖；不必建全局“双库”服务或让用户填表。</p><p>替代B为全局CRUD／人工维护，C为只存散文；分别扩大维护负担或缺失独立身份。</p><p class="status">用户决定：待整体确认；一致性：待定；分类：主线。</p></article>
+<article><h3>D02 · 身份和历史</h3><p><strong>A：稳定ID，独立追加修订，只要求标题和核心陈述／做法。</strong>每条可逐渐补充范围、未知、计划等。Host保存真实作者和时间；Agent草案不是人的采纳或事实认证。每业务operation只存一张卡，部分完成如实表达。人的关联／归档／恢复同样另存新修订，原正文作者不冒换；专业正文纠正沿原任务提问，完整人工编辑器延期。</p><p>替代B覆盖当前稿会丢史；C每次换身份会失去连续关系。</p><p class="status">用户决定：待整体确认；一致性：待定；分类：主线。</p></article>
+<article><h3>D03 · 来源和影响</h3><p><strong>A：引用准确原版本，关系和影响由作者说明。</strong>复用原来源读取，可选支持／反对／背景／限制；策略可依赖多条或零条假设。来源失读保持UNKNOWN，不换latest。Host只展示关系和版本，不推断因果或撤回选择。</p><p>替代B按标题／latest漂移会失真；C自动推断全部影响会侵入Agent判断。</p><p class="status">用户决定：待整体确认；一致性：待定；分类：支撑。</p></article>
+<article><h3>D04 · 人的选择</h3><p><strong>A：人的独立选择事件绑定准确策略版，理由可选。</strong>支持试行、补证、暂缓、不采用、不行动、继续、调整、停止考虑。未选不等于拒绝，新版不继承旧版选择。跨版本同一策略做并发保护，未知先查原操作。</p><p>替代B由草案自动采纳／继承混淆权威；C必须先建Board建议增加操作。</p><p class="status">用户决定：待整体确认；一致性：待定；分类：主线。</p></article>
+<article><h3>D05 · 行动和反馈</h3><p><strong>A：沿原Board／Feedback维护，Case只关联和补拟议计划。</strong>选择、执行和效果分开；可多对多关联原行动，准确反馈修订不会被最新稿覆盖。原行动目前仅新增／改状态，本期不暗加完整行动编辑器。</p><p>替代B重建并双向同步行动／反馈会造成多份权威。拟议责任、时间可留未知，不强迫先填满计划。</p><p class="status">用户决定：待整体确认；一致性：待定；分类：联合展示。</p></article>
+<article><h3>D06 · Pi和接入</h3><p><strong>A：原Pi／project-tasks生命周期，加两个窄Case读／草案保存工具。</strong>当前写口确实缺失；真实当轮Case绑定决定范围，不猜首末Case。Agent不能写人的选择／行动／反馈；工具、会话发送、人的UI权限分开。合法nested仍可用，不建消息库或新循环。</p><p>替代B新建Agent、队列、运行时或把只读口改通用写口，重复且扩大权限。</p><p class="status">用户决定：待整体确认；一致性：待定；分类：支撑。</p></article>
+<article><h3>D07 · 存储和回退</h3><p><strong>A：原Case SQLite升级schema2，加一张不可变修订表，复用原receipt和人事件。</strong>可复用Case事务、身份和外键，避免侧库存储与恢复机制。</p><p><strong>明确代价：旧schema1程序不能读schema2。</strong>将来首次真实迁移前，必须先提供并验证可读v1/v2、关闭M5的兼容回退版本。GET不升级；不以旧备份覆盖新工作；提交不明保留UNKNOWN并停新写。</p><p>替代B独立侧存储能保旧程序，但增加另一存储身份／恢复和跨库准入；C只存notes不足以满足核心行为。本轮没有实施任何方案。</p><p class="status">用户决定：待整体确认；一致性：待定；分类：支撑。</p></article>
+<article><h3>D08 · 保全与验收</h3><p><strong>A：旧版可读，关闭／归档保只读；先真实RED再最小实现，最终独立检查。</strong>真实产品通过公开UI／HTTP、原Host→Pi→合成Provider、事务／native、升级／回退及原消费者回归验证。原专业FAIL、UNKNOWN和M31 NOT_PROVED保留。</p><p>替代B自动清理／重放／换源或以测试全绿替代确认，会破坏证据。本轮原型点验不证明产品已经实现。</p><p class="status">用户决定：待整体确认；一致性：待定；分类：支撑。</p></article>
+<h2>拟议结构与未进入内容</h2>
+<p>原Case唯一归属；新增一张Case记录修订表，逻辑分假设／策略；原Case事件补人的取舍，原操作回执继续幂等。证据只引用原权威，行动／反馈继续原处维护。所有具体字段、空值、约束、读写入口与兼容步骤以完整D01–D08为准。</p>
+<p>延期：M6成熟学习、M7 DuckDB／Semantica等按缺口增强；全局双库CRUD、依赖／因果引擎、企业IAM、后台提醒、真实经营派发均不进入本期。尚无真实经营试点／频次验证，原Board持续编辑能力未扩展。无新增流程例外。</p>
+<h2>下一步</h2><p>请整体确认spec、D01–D08和UI，建议全部A；如需修改请指明项号。确认前只停留在准备包，不开发产品或迁移。Git／CI、安装／运行采用、真实模型／材料和MacBook另按授权处理。</p>
+<footer>本页无脚本、远程字体或资源；可直接打开或打印。待确认不是已批准。</footer>
+</main></body></html>
