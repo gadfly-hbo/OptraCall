@@ -62,6 +62,9 @@ import { SemanticContextService, SemanticContextFault } from './semantic-context
 import { SemanticReadFault } from '../../extensions/business-plugins/semantic-context/reader.ts';
 import { createSemanticContextPort } from './semantic-context-port.ts';
 import { createMetricLibrary } from '../../extensions/business-plugins/metric-factory/library/store.ts';
+import { createSapMethodStore } from '../../extensions/business-plugins/metric-factory/methods/store.ts';
+import { createSapMethodRoutes } from './sap-method-routes.ts';
+import { createSapMethodFeature } from './sap-method-feature.ts';
 import type { SemanticQueryInput } from '../../extensions/business-plugins/semantic-context/types.ts';
 import { PersonalContextError, parsePersonalContextReadInput, parsePersonalContextSelections } from './personal-context-validation.ts';
 
@@ -94,7 +97,7 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
   response.once('close', clear); response.once('finish', clear);
 }
 
-export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean }) {
+export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false });
   const enterpriseMaterials = new EnterpriseMaterialsStore(dataRoot);
@@ -127,6 +130,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     saveReport: (projectId, name, text) => mutate(() => projects.saveReport(projectId, name, text)),
   });
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
+  const sapMethods = createSapMethodStore(path.join(dataRoot, 'metric-assets'));
+  const sapMethodRoutes = createSapMethodRoutes({ store: sapMethods, enabled: options.sapMethodsEnabled !== false, readBody: request => body(request, 512 * 1024), mutate, isClosing: () => closing,
+    readSource: (methodId, version, index) => sapMethodFeature.readSource(methodId, version, index) });
   const endStreams = (id?: string) => { for (const [key, responses] of streams) { if (id && key !== id) continue; for (const response of responses) response.end(); streams.delete(key); } };
   const publish = (projectId: string, taskId: string, event: object) => { for (const response of streams.get(keyOf(projectId, taskId)) ?? []) if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...event, projectId, taskId })}\n\n`); };
   const availableConfiguration = (id?: string, revision?: number) => {
@@ -254,13 +260,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     pythonPath: process.env.PPT_REPORT_PYTHON ?? (existsSync(path.join(dataRoot, 'ppt-venv', 'bin', 'python')) ? path.join(dataRoot, 'ppt-venv', 'bin', 'python') : 'python3'),
     codeRoot: options.cwd,
   });
-  const closeAgents = async (filter: { provider?: string; projectId?: string } = {}) => {
+  const closeAgents = async (filter: { provider?: string; projectId?: string } = {}, flushMethodReceipts = true) => {
     // Only coordinate domain controls; each domain owns its resource ledger.
     const results = await Promise.allSettled([
       projectSessions.closeAll(filter),
       verification.closeAll(filter),
       boardSessions.closeAll(filter),
       refinerSessions.closeAll(filter),
+      sapMethodFeature.closeAll(filter),
       ...(!filter.projectId ? [requirementSessions.closeAll(filter)] : []),
     ]);
     for (const key of [...streams.keys()]) {
@@ -273,6 +280,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     }
     const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
     if (failures.length) throw new AggregateError(failures.map(result => result.reason), 'session_close_failed');
+    if (flushMethodReceipts) await sapMethodFeature.flushReceipts(filter);
   };
   function assertActive(project: ProjectRecord) {
     if (project.archivedAt !== null) throw new RequestFault(409, 'project_archived');
@@ -299,7 +307,22 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const candidateReader = createAgentCandidateReader({ projects, controls: candidateControls });
   const personalContext = createPersonalContextReader({ projects, retention: personalRetention, controls: candidateControls });
   const semanticContext = new SemanticContextService({ projects, data: projectDataContext, enterprise: enterpriseMaterials, cases,
-    metricLibrary: () => createMetricLibrary(path.join(dataRoot, 'metric-assets')), readSource: readPersonalSource, personal: personalContext });
+    metricLibrary: () => createMetricLibrary(path.join(dataRoot, 'metric-assets')), ...(options.sapMethodsEnabled !== false ? { methodLibrary: sapMethods } : {}), readSource: readPersonalSource, personal: personalContext });
+  const sapMethodFeature = createSapMethodFeature({
+    dataRoot, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), store: sapMethods, enabled: options.sapMethodsEnabled !== false,
+    managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
+    configurationSnapshot: availableConfiguration, pair, mutate, isClosing: () => closing,
+    sourceBusy: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })),
+    readBody: request => body(request),
+    personal: (action, input, signal) => action === 'find' ? personalContext.find(input, { signal }) : personalContext.read(parsePersonalContextReadInput(input), { signal }),
+    methods: (projectId, taskId, action, input, signal) => {
+      const common = { ...(input.pageSize !== undefined ? { pageSize: input.pageSize as number } : {}), ...(input.continuation !== undefined ? { continuation: input.continuation as string | null } : {}) };
+      if (action === 'find') return semanticContext.query(projectId, taskId, { action: 'find', kinds: ['sap-method'], query: typeof input.query === 'string' ? input.query : '', ...common }, { signal, audience: 'agent' });
+      const target = input.target ?? { kind: 'sap-method', methodId: input.methodId, version: input.version, ...(input.publishedHash !== undefined ? { publishedHash: input.publishedHash } : {}) };
+      if (!target || typeof target !== 'object' || !('kind' in target) || target.kind !== 'sap-method') throw new RequestFault(400, 'invalid_sap_method_source');
+      return semanticContext.query(projectId, taskId, { action: 'read', target, ...common } as SemanticQueryInput, { signal, audience: 'agent' });
+    },
+  });
   const boardSessions = createDecisionBoardSessions({
     store: boardStore, extractionRoot: path.join(dataRoot, 'decision-board', 'extractions'),
     codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'),
@@ -433,7 +456,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   async function projectBusy(projectId: string) {
     const project = await projects.get(projectId);
-    return project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId) || boardSessions.busy(projectId) || refinerSessions.busyProject(projectId);
+    return project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId) || boardSessions.busy(projectId) || refinerSessions.busyProject(projectId) || sapMethodFeature.busyInScope({ projectId });
   }
   const priorRequest = priorTaskRequest;
   const savedHistory = (project: ProjectRecord, task: TaskRecord, capabilities: Record<string, unknown> = {}) => savedTaskHistory(project, task, SDK_VERSION, capabilities);
@@ -504,6 +527,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (await handlePersonalRetentionRoute({ request, response, url, store: personalRetention, materials: enterpriseMaterials, lookup: personalLookup, readSource: readPersonalSource, readBody: body, mutate, isClosing: () => closing })) return;
       const metricFactory = await metricFactoryRoutes(request, url);
       if (metricFactory) { json(response, metricFactory.status, metricFactory.value); return; }
+      const methodResult = await sapMethodRoutes(request, url);
+      if (methodResult) { json(response, methodResult.status, methodResult.value); return; }
+      const methodExtraction = await sapMethodFeature.handle(request, url);
+      if (methodExtraction) { json(response, methodExtraction.status, methodExtraction.value); return; }
       const simLab = await simLabRoutes(request, url);
       if (simLab) { json(response, simLab.status, simLab.value); return; }
       const requirementEvent = /^\/api\/requirement-instances\/(req-[a-z0-9][a-z0-9-]{0,60})\/events$/.exec(url.pathname);
@@ -637,7 +664,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               for (const task of value.tasks) if (task.lastRun?.status === 'running') await taskState(projectId, task.id, false, true);
               value = await projects.get(projectId);
               if (await projectBusy(projectId) || value.tasks.some(task => task.lastRun?.status === 'running')) throw new RequestFault(409, 'project_busy');
-              const archived = await projects.archive(projectId); await closeAgents({ projectId }); return archived;
+              // This path holds the business mutation gate; receipt writers
+              // may need that gate, so only close idle resources here.
+              const archived = await projects.archive(projectId); await closeAgents({ projectId }, false); return archived;
             } finally { archiving.delete(projectId); }
           }); json(response, 200, { project: decorateProject(project) }); return;
         }

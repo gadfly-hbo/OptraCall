@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-04",
+  "authorization": "确认spec和UI demo，D01–D08按照推荐，进入开发",
+  "head": "57742b99d173bfa6413e83705682b0444359add4",
+  "approved_inputs": [
+    {
+      "path": "docs/OptraCall_Analysis_IR_产品讨论稿_v1.2.md",
+      "archive": "OptraCall_Analysis_IR_产品讨论稿_v1.2.md",
+      "sha256": "12e5be381afdb5c5d6c7cb506259fb907df6bf852d4dfa150c83055c5899dd96"
+    },
+    {
+      "path": "docs/prototypes/sap-analysis-methods-ui-demo.html",
+      "archive": "sap-analysis-methods-ui-demo.html",
+      "sha256": "01d608ae25d6a15787e3a3cbd162bea114c8e3d4ca889cd018108be99ccb2a78"
+    },
+    {
+      "path": "openspec/changes/sap-analysis-methods/result.md",
+      "archive": "result.md",
+      "sha256": "dbe77678aba211a761122c1a39b244e08b3849106e8b68b8ee8838e9e59ee74d"
+    },
+    {
+      "path": "openspec/changes/sap-analysis-methods/reuse-evidence.md",
+      "archive": "reuse-evidence.md",
+      "sha256": "0344df7b1cff9591b4f4c7d0d83bede76e6f209a67d7f348880728522ec3204c"
+    },
+    {
+      "path": "openspec/changes/sap-analysis-methods/spec.md",
+      "archive": "spec.md",
+      "sha256": "4853473131b38b854cc31cfb41232c350cbc5a63a461df1b8337d9762fa08174"
+    },
+    {
+      "path": "openspec/changes/sap-analysis-methods/structure-decisions.md",
+      "archive": "structure-decisions.md",
+      "sha256": "3fd70f2e4d9eb3a0d41e6141356150117e6d7e4181098341b73063a0c8101063"
+    },
+    {
+      "path": "openspec/changes/sap-analysis-methods/ui-review.md",
+      "archive": "ui-review.md",
+      "sha256": "7d5aae54cc0489ac4f19584e34e9c41f0816a8a8c55a31c23d2e3c6e6a0585e7"
+    },
+    {
+      "path": "openspec/changes/sap-analysis-methods/review-summary.html",
+      "archive": "review-summary.html",
+      "sha256": "4ef49322255b2b02b43e3e72fa7463d1c8f62a3b2023bda492bce8ecca974c2a"
+    }
+  ]
+}

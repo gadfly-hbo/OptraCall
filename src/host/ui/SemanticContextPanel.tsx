@@ -41,6 +41,7 @@ const sourceLabels: Record<SemanticSourceState, string> = { available: '来源�
 const targetLabel = (target: SemanticTarget): string => {
   switch (target.kind) {
     case 'sap': return `${target.packageId}@${target.version}${target.metricName ? ` · ${target.metricName}` : ''}`;
+    case 'sap-method': return `SAP 方法 ${target.methodId} · v${target.version}`;
     case 'enterprise': return `${target.materialId} · 修订 ${target.revisionId}`;
     case 'data-input': return `${target.datasetId} · 输入 ${target.inputVersionId}`;
     case 'data-description': return `${target.datasetId} · 说明 ${target.descriptionRevisionId} · 输入 ${target.inputVersionId}`;

@@ -43,11 +43,11 @@ async (page) => {
   }
   passed.push('Exactly four sidebar directories, category synchronization and honest placeholder status');
   await category('分析资产').click();
-  const metricCard = page.locator('.catalog-card').filter({ has: page.getByRole('heading', { name: '指标体系', exact: true }) });
+  const metricCard = page.locator('.catalog-card').filter({ has: page.getByRole('heading', { name: 'SAP 分析资产', exact: true }) });
   assert(await metricCard.getByText('已接入', { exact: true }).isVisible(), 'Metrics must be a real entry');
   const plannedCard = page.locator('.catalog-card.is-planned').first();
   assert(await metricCard.evaluate(element => getComputedStyle(element).backgroundColor) !== await plannedCard.evaluate(element => getComputedStyle(element).backgroundColor), 'Real and planning cards must have different surfaces');
-  await metricCard.getByRole('button', { name: '打开指标体系', exact: true }).click(); await title('指标体系').waitFor();
+  await metricCard.getByRole('button', { name: '打开SAP 分析资产', exact: true }).click(); await title('指标体系').waitFor();
   assert(await category('分析资产').getAttribute('aria-current') === 'page', 'Metric page must remain under assets');
   await page.getByRole('button', { name: '返回分析资产 →', exact: true }).click(); await title('分析资产').waitFor();
   await category('业务插件').click();
@@ -57,16 +57,16 @@ async (page) => {
   passed.push('Real metrics and requirements cards open existing pages and return to their owning categories');
   await page.getByRole('group', { name: '能力目录分类' }).getByRole('button', { name: '分析资产', exact: true }).click();
   const search = page.getByRole('textbox', { name: '搜索分析资产', exact: true });
-  await search.fill('  COHORT  ');
+  await search.fill('  SAP  ');
   assert(await page.locator('.catalog-card').count() === 1, 'Search must match case-insensitively');
-  await page.getByRole('combobox', { name: '业务标签', exact: true }).selectOption('指标口径');
+  await page.getByRole('combobox', { name: '业务标签', exact: true }).selectOption('报告表达');
   await page.getByRole('heading', { name: '没有找到匹配的功能或规划' }).waitFor();
   await page.getByRole('button', { name: '清除筛选', exact: true }).click();
   assert(await search.inputValue() === '', 'Clear resets query');
-  assert(await page.locator('.catalog-card').count() === 6, 'Clear restores category entries and planning examples');
-  const detailTrigger = page.getByRole('button', { name: '查看分析方法资产包规划', exact: true });
+  assert(await page.locator('.catalog-card').count() === 10, 'Clear restores the unified SAP entry and remaining planning examples');
+  const detailTrigger = page.getByRole('button', { name: '查看假设与策略资产包规划', exact: true });
   await detailTrigger.click();
-  const dialog = page.getByRole('dialog', { name: '分析方法资产包', exact: true });
+  const dialog = page.getByRole('dialog', { name: '假设与策略资产包', exact: true });
   await dialog.waitFor();
   assert(await dialog.getByText('规划示例 · 未接入', { exact: true }).isVisible(), 'Detail must disclose not integrated');
   assert(await page.evaluate(() => document.querySelector('dialog')?.contains(document.activeElement)), 'Focus must enter modal');

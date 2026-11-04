@@ -12,6 +12,14 @@ test('SDK private installed paths remain confined to the sole reviewed SDK surfa
 
 const plugin = 'extensions/business-plugins/example/session.ts';
 
+test('SAM11: the reviewed SAP Host registrar can bind a public domain but cannot own an SDK runtime', () => {
+  const file = 'src/host/sap-method-sessions.ts';
+  assert.deepEqual(inspectSessionSource(file, `import { createAgentSessionDomain } from './agent-sessions.ts';`), []);
+  assert.ok(inspectSessionSource(plugin, `import { createAgentSessionDomain } from '../../../src/host/agent-sessions.ts';`).length > 0);
+  assert.ok(inspectSessionSource(file, `import { ProjectAgent } from '../agent/project-runtime.ts'; new ProjectAgent(options);`).length > 0);
+  assert.ok(inspectSessionSource(file, `import { createAgentSession } from '../agent/sdk.ts';`).length > 0);
+});
+
 test('a feature uses injected session types without importing a runtime or constructing a manager', () => {
   const source = `import type { SessionRef, SessionTurn } from '../../../src/host/agent-sessions.ts';
     import { ProjectRuntimeError, type ProjectSnapshot } from '../../../src/agent/project-runtime.ts';
