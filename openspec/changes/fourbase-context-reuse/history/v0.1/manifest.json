@@ -1,0 +1,41 @@
+{
+  "stage": "M4 v0.1 original confirmation package, NOT userapproved; originaldesignPASSwithlimitsnotfourprinciple necessityproof",
+  "files": [
+    {
+      "original": "openspec/changes/fourbase-context-reuse/spec.md",
+      "snapshot": "openspec/changes/fourbase-context-reuse/history/v0.1/spec.md",
+      "sha256": "d54bf8597337720aff435360cdb9fe955169803657dcc4918371f3ad74b4ba10",
+      "bytes": 12884
+    },
+    {
+      "original": "openspec/changes/fourbase-context-reuse/structure-decisions.md",
+      "snapshot": "openspec/changes/fourbase-context-reuse/history/v0.1/structure-decisions.md",
+      "sha256": "d91cec49c90c8a89059b7671fdeaee4f2bc3e77c66d501d30d5dc8ea812fa4dc",
+      "bytes": 20720
+    },
+    {
+      "original": "openspec/changes/fourbase-context-reuse/reuse-audit.md",
+      "snapshot": "openspec/changes/fourbase-context-reuse/history/v0.1/reuse-audit.md",
+      "sha256": "d304d42052bf47c11cff6522ea05309d4c3d6fad3e6468aa63756fed7b925dea",
+      "bytes": 6725
+    },
+    {
+      "original": "openspec/changes/fourbase-context-reuse/ui-review.md",
+      "snapshot": "openspec/changes/fourbase-context-reuse/history/v0.1/ui-review.md",
+      "sha256": "f6c882c57d76383cd261350879db635c5d2a3c740a2cc47f2c28fb37af422f71",
+      "bytes": 3917
+    },
+    {
+      "original": "openspec/changes/fourbase-context-reuse/result.md",
+      "snapshot": "openspec/changes/fourbase-context-reuse/history/v0.1/result.md",
+      "sha256": "e41ebb21956457b7a2be55d99cc849c393368585509945d62f0af829168cd679",
+      "bytes": 5795
+    },
+    {
+      "original": "docs/prototypes/fourbase-m4-reuse-ui-demo.html",
+      "snapshot": "openspec/changes/fourbase-context-reuse/history/v0.1/fourbase-m4-reuse-ui-demo.html",
+      "sha256": "2f6287405cba810958ed6aaf63738ded9b50bffaeca4558c6dfc99c130b4df28",
+      "bytes": 66005
+    }
+  ]
+}

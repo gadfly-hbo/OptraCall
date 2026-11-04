@@ -1,0 +1,51 @@
+.cd-panel { min-width: 0; color: var(--ink); }
+.cd-heading, .cd-record-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.cd-heading { margin-bottom: 20px; }
+.cd-heading h3, .cd-group > h3 { margin: 0 0 8px; font-size: 16px; line-height: 1.5; }
+.cd-heading p, .cd-help, .cd-meta, .cd-record-meta { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.cd-heading p { margin: 0; }
+.cd-heading > button { flex: 0 0 auto; }
+.cd-group { min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 20px; background: var(--surface); margin: 18px 0; }
+.cd-help { margin: 0 0 16px; }
+.cd-record { min-width: 0; padding: 18px 0; }
+.cd-record + .cd-record { border-top: 1px solid var(--line); }
+.cd-record h4 { font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; margin: 12px 0 8px; }
+.cd-version { padding: 3px 7px; background: var(--subtle); border: 1px solid var(--line); border-radius: 4px; flex: 0 0 auto; }
+.cd-prose { font-size: 13px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
+.cd-meta { margin: 7px 0; overflow-wrap: anywhere; }
+.cd-change, .cd-empty { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; background: var(--subtle); font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.cd-choice { padding: 10px 12px; margin: 12px 0; border: 1px solid var(--line); border-radius: 6px; background: var(--subtle); font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.cd-choice p { margin: 0; }
+.cd-choice p + p { margin-top: 6px; color: var(--muted); }
+.cd-empty { margin: 16px 0; }
+.cd-empty p { margin: 7px 0 0; color: var(--muted); }
+.cd-record-list { min-width: 0; }
+.cd-data { display: grid; gap: 12px; margin: 12px 0; }
+.cd-data > div { display: grid; grid-template-columns: minmax(80px, .35fr) minmax(0, 1fr); gap: 12px; }
+.cd-data dt { color: var(--muted); font-size: 12px; }
+.cd-data dd { margin: 0; white-space: pre-wrap; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.cd-optional { margin: 20px 0; }
+.cd-optional > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.cd-source-list { margin: 24px 0; border-top: 1px solid var(--line); padding-top: 20px; }
+.cd-source-list h3, .cd-source-body h3 { font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+.cd-source-list ol { padding-left: 22px; }
+.cd-source-list li { font-size: 12px; line-height: 1.8; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.cd-source-list li > button { margin: 9px 0; }
+.cd-source-list details, .cd-source-list summary { color: var(--muted); font-size: 12px; }
+.cd-source-body { padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--subtle); margin: 16px 0; }
+.cd-source-body h4 { margin: 8px 0; font-size: 14px; }
+.cd-source-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.8; max-width: 100%; }
+.cd-choice-history { padding-left: 22px; font-size: 12px; line-height: 1.8; }
+.cd-choice-history li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.cd-choice-history p { margin: 4px 0; overflow-wrap: anywhere; }
+.cd-link-option { padding: 16px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.cd-link-option h3 { font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.cd-work { display: grid; gap: 10px; padding: 20px; margin: 0 0 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); }
+.cd-work h3 { margin: 0; font-size: 16px; line-height: 1.5; }
+.cd-work p { font-size: 12px; color: var(--muted); line-height: 1.8; margin: 4px 0; }
+.cd-work label { font-size: 12px; font-weight: 550; margin-top: 4px; }
+.cd-work select { width: 100%; min-width: 0; min-height: 40px; padding: 9px 11px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 13px; }
+.cd-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0; }
+.cd-legacy { margin: 24px 0; border-top: 1px solid var(--line); padding-top: 18px; }
+.cd-legacy > summary { font-size: 13px; cursor: pointer; color: var(--muted); margin-bottom: 18px; }
+@media (max-width: 620px) { .cd-heading { flex-wrap: wrap; } .cd-group { padding: 14px; } .cd-record-meta { flex-wrap: wrap; gap: 6px; } }

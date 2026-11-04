@@ -14,6 +14,8 @@ const SHA = /^[0-9a-f]{64}$/;
 const fieldNames = ['title', 'category', 'body', 'source', 'owner', 'scope', 'effectiveTime', 'sourceFileId'] as const;
 const now = () => new Date().toISOString();
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
+/** Identity includes the complete saved draft, not only its body. */
+export const enterpriseDraftSha256 = (fields: EnterpriseMaterialFields): string => hash(JSON.stringify(fieldNames.map(key => fields[key])));
 const object = (value: unknown): value is Record<string, any> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const clone = <T>(value: T): T => structuredClone(value);
 
@@ -135,9 +137,21 @@ export class EnterpriseMaterialsStore {
     }
     return true;
   }
-  private load(): Index {
-    this.ensureRoot();
+  private load(readOnly = false): Index {
+    if (readOnly) {
+      // Optional history discovery must not create an asset store or repair a
+      // missing directory. Reuse the same validation and exact reads below.
+      for (const directory of [this.dataRoot, this.root, ...['bodies', 'files', 'cases'].map(name => path.join(this.root, name))]) {
+        let stat: fs.Stats;
+        try { stat = fs.lstatSync(directory); } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') fail('enterprise_source_missing', 404);
+          return fail('unsafe_enterprise_storage', 503);
+        }
+        if (!stat.isDirectory() || stat.isSymbolicLink()) fail('unsafe_enterprise_storage', 503);
+      }
+    } else this.ensureRoot();
     if (!fs.existsSync(this.indexPath)) {
+      if (readOnly) fail('enterprise_source_missing', 404);
       const contents = fs.readdirSync(this.root).filter(name => !['bodies', 'files', 'cases'].includes(name));
       if (contents.length || ['bodies', 'files', 'cases'].some(name => fs.readdirSync(path.join(this.root, name)).length)) fail('enterprise_index_missing', 503);
       const created: Index = { schemaVersion: 1, storeId: randomUUID(), materials: [] };
@@ -195,6 +209,14 @@ export class EnterpriseMaterialsStore {
     index.materials.push(material); this.save(index); return this.detail(index, material);
   }
   async get(materialId: string): Promise<EnterpriseMaterialDetail> { const index = this.load(); return this.detail(index, this.material(index, materialId)); }
+  /** Metadata projection for exact cross-resource refs; never reads unrelated revision bodies. */
+  async referenceIndex(options: { readOnly?: boolean } = {}) {
+    const index = this.load(options.readOnly);
+    return { storeId: index.storeId, materials: index.materials.map(material => ({
+      materialId: material.id, enabled: material.enabled,
+      revisions: material.revisions.map(revision => ({ revisionId: revision.revisionId, number: revision.number, title: revision.title, scope: revision.scope, effectiveTime: revision.effectiveTime, bodySha256: revision.bodySha256, ...(options.readOnly ? { createdAt: revision.createdAt } : {}) })),
+    })) };
+  }
   async update(materialId: string, expectedVersion: number, input: Partial<EnterpriseMaterialFields>): Promise<EnterpriseMaterialDetail> {
     const index = this.load(), material = this.material(index, materialId);
     this.checkVersion(material, expectedVersion);
@@ -225,11 +247,32 @@ export class EnterpriseMaterialsStore {
     material.enabled = false; material.version++; material.updatedAt = now();
     this.save(index); return this.detail(index, material);
   }
-  async readRevision(materialId: string, revisionId: string): Promise<EnterpriseMaterialRevision> {
-    const index = this.load(), material = this.material(index, materialId);
+  async readRevision(materialId: string, revisionId: string, options: { readOnly?: boolean } = {}): Promise<EnterpriseMaterialRevision> {
+    const index = this.load(options.readOnly), material = this.material(index, materialId);
     const revision = material.revisions.find(item => item.revisionId === id(revisionId)) ?? fail('enterprise_revision_not_found', 404);
     if (revision.sourceFileId) this.verifiedFile(material.files.find(file => file.id === revision.sourceFileId)!);
     return this.revision(material, revision);
+  }
+  /** Stable target retries verify the original payload before considering today's draft. */
+  async freezeExact(materialId: string, expectedVersion: number, revisionId: string, expectedDraftSha256: string): Promise<EnterpriseMaterialRevision> {
+    const index = this.load(), material = this.material(index, materialId); id(revisionId);
+    if (typeof expectedDraftSha256 !== 'string' || !SHA.test(expectedDraftSha256)) fail('invalid_enterprise_draft_identity');
+    const existing = material.revisions.find(item => item.revisionId === revisionId);
+    if (existing) {
+      const revision = this.revision(material, existing);
+      if (enterpriseDraftSha256(revision) !== expectedDraftSha256) fail('enterprise_revision_identity_conflict', 409);
+      if (existing.sourceFileId) this.verifiedFile(material.files.find(file => file.id === existing.sourceFileId)!);
+      return revision;
+    }
+    this.checkVersion(material, expectedVersion);
+    const fields = this.fields(material.draft);
+    if (enterpriseDraftSha256(fields) !== expectedDraftSha256) fail('enterprise_draft_identity_conflict', 409);
+    const source = material.files.find(file => file.id === fields.sourceFileId);
+    if (!fields.body.trim() && (!source || source.bytes === 0)) fail('enterprise_content_required');
+    if (source) this.verifiedFile(source);
+    const revision: StoredRevision = { ...clone(material.draft), revisionId, number: material.revisions.length + 1, createdAt: now() };
+    material.revisions.push(revision); material.version++; material.updatedAt = now();
+    this.save(index); return this.revision(material, revision);
   }
   private verifiedFile(file: StoredFile) {
     const bytes = this.safeRead(this.filePath(file.id), ENTERPRISE_FILE_LIMIT);

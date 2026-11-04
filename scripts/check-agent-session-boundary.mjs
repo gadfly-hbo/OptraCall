@@ -10,7 +10,13 @@ import { SyntaxKind, isImportDeclaration, isExportDeclaration, isImportEqualsDec
 const projectAgentOwners = new Set([
   'src/host/agent-sessions.ts',
   'tests/agent-sessions.test.ts',
+  'tests/analysis-python.test.ts', // DB01/02/05: real Pi, synthetic provider and private environment/profile lifecycle.
   'tests/project-runtime.test.ts',
+  'tests/agent-candidate-runtime.test.ts', // M3.1 isolated synthetic SDK proof only.
+  'tests/personal-context-runtime.test.ts', // M4 isolated direct/nested SDK + callback transport proof only.
+  'tests/semantic-context-runtime.test.ts', // L1 isolated SDK callback/nested/cancellation/auxiliary-failure proof; no product runtime ownership.
+  'tests/experience-learning-runtime.test.ts', // M6 isolated ordinary cross-Case read/candidate qualification proof only.
+  'tests/case-decision-runtime.test.ts', // M5 isolated SDK/Case callback scope proof; not a product runtime owner.
   'tests/model-http-environment.test.ts', // OR01/OR02: controlled SDK worker transport and safe native receipt boundary.
   'tests/requirement-runtime.test.ts',
   'tests/host-recovery.test.ts',
@@ -29,6 +35,7 @@ const projectAgentOwners = new Set([
 const sdkConsumers = new Set(['src/agent/project-session.ts', 'src/agent/runtime.ts', 'src/agent/browser-ui-context.ts']);
 // Exact native tool/resource helpers, without session/runtime constructors.
 const toolSdkConsumers = new Map([
+  ['src/host/native-session-snapshot.ts', new Set(['SessionManager', 'parseSessionEntries'])], // M3.1 guarded inMemory projection only; no open/create.
   ['src/agent/subagent.ts', new Set(['defineTool', 'parseFrontmatter'])], // Data discovery/tool schema only; SDK constructors remain in project-session.
   ['src/agent/native-search.ts', new Set()], // Protocol hooks only; no SDK constructor or independent loop.
   ['src/agent/protected-tools.ts', new Set(['createReadToolDefinition', 'createWriteToolDefinition', 'createEditToolDefinition', 'createBashToolDefinition', 'createGrepToolDefinition', 'createFindToolDefinition', 'createLsToolDefinition', 'createCodemodeExtension'])],

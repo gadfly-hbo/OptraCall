@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>M3.1 Agent候选 · OptraCall UI演示</title>
+<link rel="icon" href="data:,">
+<style>
+:root{--bg:#faf9fc;--side:#f4f3f7;--surface:#fff;--soft:#f7f6fa;--text:#302b3a;--muted:#6d6579;--faint:#847b90;--line:#e4e0eb;--accent:#745ba8;--accent-soft:#f0eaf8;--warn:#8c641b;--warn-bg:#faf3e5;--focus:#745ba8;--shadow:0 16px 60px #23152d21;--good:#386d60;--good-bg:#edf5f1}
+html[data-theme=dark]{--bg:#19171e;--side:#211e28;--surface:#25222d;--soft:#2c2834;--text:#ede8f3;--muted:#b7adc4;--faint:#a49ab1;--line:#41394d;--accent:#c6a9f2;--accent-soft:#3b2d50;--warn:#ebc27a;--warn-bg:#3a3022;--focus:#c6a9f2;--shadow:0 16px 60px #0007;--good:#9ecfbc;--good-bg:#263c34}
+*{box-sizing:border-box}html{scrollbar-gutter:stable}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}button,input,select,textarea{font:inherit;color:inherit;accent-color:var(--accent)}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.6}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible,[tabindex="-1"]:focus-visible,a:focus-visible{outline:2px solid var(--focus);outline-offset:3px}h1,h2,h3,p{margin:0}h1{font-size:24px;font-weight:600;line-height:1.5}h2{font-size:17px;font-weight:600}h3{font-size:14px;font-weight:600}a{color:var(--accent)}.small{font-size:12px}.tiny{font-size:11px}.muted,.footnote{color:var(--muted)}.footnote{font-size:11px;line-height:1.8;overflow-wrap:anywhere}.mono{font:11px/1.8 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;white-space:pre-wrap}.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.spread{justify-content:space-between}.stack{display:grid;gap:12px}.spaced{margin-top:18px}.gap-top{margin-top:9px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:7px 12px;border:1px solid var(--line);background:var(--surface);border-radius:6px;font-size:12px;line-height:1.5;text-decoration:none}.btn:hover{background:var(--soft)}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}html[data-theme=dark] .btn.primary{color:#23172f}.btn.quiet{border-color:transparent;background:transparent;color:var(--accent)}.btn.compact{min-height:32px;padding:5px 9px;font-size:11px}.pill{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:5px;background:var(--soft);padding:2px 7px;font-size:11px;color:var(--muted);line-height:1.7}.pill.purple{background:var(--accent-soft);color:var(--accent);border-color:transparent}.pill.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}.sidebar{position:fixed;inset:0 auto 0 0;width:230px;background:var(--side);border-right:1px solid var(--line);padding:26px 17px;display:flex;flex-direction:column;overflow-y:auto}.brand{display:flex;align-items:center;gap:10px;padding:0 12px 27px;font-size:21px;font-weight:600;letter-spacing:-.4px}.brandmark{display:grid;place-items:center;width:32px;height:32px;background:var(--accent);color:#fff;border-radius:9px}.brand small{display:block;font-size:10px;font-weight:400;letter-spacing:0;color:var(--muted)}.navlabel{padding:21px 12px 8px;font-size:11px;color:var(--faint)}.nav{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:transparent;color:var(--muted);padding:10px 12px;margin:2px 0;border-radius:7px;font-size:13px}.nav[aria-current=page]{background:var(--accent-soft);color:var(--accent);font-weight:600}.navdot{width:7px;height:7px;border:1px solid currentColor;border-radius:50%;flex:none}.sidebarfooter{margin-top:auto;padding:30px 12px 0;color:var(--muted);font-size:11px}.main{margin-left:230px;min-width:0}.topbar{min-height:68px;border-bottom:1px solid var(--line);background:var(--surface);padding:14px 30px;display:flex;gap:15px;align-items:center;justify-content:space-between}.crumb{font-size:12px;color:var(--muted);display:flex;gap:9px;align-items:center;flex-wrap:wrap}.theme{width:36px;height:36px;padding:0;font-size:17px;flex:none}.demo-banner{background:var(--warn-bg);color:var(--warn);border-bottom:1px solid var(--line);padding:9px 30px;font-size:11px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.content{max-width:1390px;margin:0 auto;padding:28px 32px 48px}.pagehead{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:20px}.eyebrow{font-size:11px;color:var(--accent);margin-bottom:5px}.subtitle{font-size:12px;color:var(--muted);margin-top:7px;max-width:690px}.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;min-width:0}.findbar{padding:18px 20px 16px}.searchrow{display:flex;align-items:flex-end;gap:10px}.searchfield{flex:1;min-width:0}.field{display:block;margin-bottom:14px;font-size:12px;min-width:0}.field>span{display:block;font-weight:500;margin-bottom:6px}.field input,.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:8px 10px;line-height:1.7;font-size:12px;min-width:0}.field textarea{resize:vertical;min-height:135px}.field small{display:block;margin-top:5px;color:var(--muted);font-size:11px}.searchfield.field{margin:0}.filterrow{display:flex;gap:10px 23px;flex-wrap:wrap;margin-top:12px}.check{display:flex;align-items:flex-start;gap:8px;font-size:12px;cursor:pointer}.check input{flex:none;margin:4px 0 0}.tabs{display:flex;gap:7px;flex-wrap:wrap;margin:15px 0 0}.tabs button{border:1px solid transparent;border-radius:5px;background:transparent;padding:6px 12px;font-size:12px;color:var(--muted);min-height:34px}.tabs button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);font-weight:600}.views{margin:0 0 17px;padding-bottom:13px;border-bottom:1px solid var(--line)}.resultshead{padding:16px 2px 11px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.result{border-top:1px solid var(--line);padding:18px 20px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:13px;align-items:center}.result:first-child{border-top:0}.result:hover{background:var(--soft)}.result-title{display:inline;text-align:left;border:0;padding:0;background:none;font-size:14px;font-weight:600;line-height:1.7;color:var(--text);overflow-wrap:anywhere}.result-title:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}.result h2{margin-top:8px;font-size:14px}.preview{font-size:12px;color:var(--muted);margin-top:7px;overflow-wrap:anywhere}.resultmeta{margin-top:9px;color:var(--muted);font-size:11px;overflow-wrap:anywhere}.caution{font-size:11px;color:var(--warn);margin-top:8px;overflow-wrap:anywhere}.match{font-size:11px;color:var(--accent);margin-top:8px}.empty{text-align:center;padding:42px 23px}.empty p{margin-top:8px}.note{font-size:12px;line-height:1.85;padding:11px 13px;background:var(--soft);border:1px solid var(--line);border-radius:6px;color:var(--muted);overflow-wrap:anywhere}.note.warning{background:var(--warn-bg);color:var(--warn);border-color:transparent}.note.good{background:var(--good-bg);color:var(--good);border-color:transparent}.status:empty{display:none}.status{margin:14px 0}.section{padding:20px 0;border-bottom:1px solid var(--line)}.section:first-child{padding-top:0}.section:last-child{border-bottom:0}.sectiontitle{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:13px}.paper{background:var(--soft);border:1px solid var(--line);padding:15px;border-radius:7px;color:var(--text);font-size:13px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere}.metadata{display:grid;grid-template-columns:90px minmax(0,1fr);gap:7px 13px;font-size:12px;margin:13px 0}.metadata dt{color:var(--muted)}.metadata dd{margin:0;overflow-wrap:anywhere}.sourcecard{border:1px solid var(--line);border-radius:6px;padding:12px 13px;background:var(--surface);min-width:0}.sourcecard h3{font-size:12px}.sourcecard .meta{font-size:11px;color:var(--muted);margin:5px 0}.dialog{color:var(--text);background:var(--surface);border:1px solid var(--line);padding:0;border-radius:10px;box-shadow:var(--shadow);width:min(730px,calc(100vw - 28px));max-height:calc(100dvh - 28px);overflow:auto}.dialog::backdrop{background:#17131e58}.drawer{position:fixed;inset:0 0 0 auto;margin:0;width:min(690px,100vw);height:100dvh;max-height:100dvh;border-radius:0;border-right:0}.dialoghead{padding:19px 22px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:14px;justify-content:space-between;background:var(--surface);position:sticky;top:0;z-index:2}.dialoghead>div{min-width:0}.dialoghead h2{font-size:17px;overflow-wrap:anywhere}.dialoghead p{font-size:11px;color:var(--muted);margin-top:4px}.close{border:0;background:transparent;color:var(--muted);width:34px;height:34px;border-radius:5px;flex:none;font-size:22px;line-height:1}.dialogbody{padding:21px 22px}.dialogfooter{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:13px 22px;z-index:2;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}.democontrols{margin-top:23px;border:1px dashed var(--line);border-radius:7px;padding:0 16px;background:var(--soft)}summary{cursor:pointer;font-size:12px;font-weight:500;color:var(--muted);padding:13px 0}.controlbody{border-top:1px solid var(--line);padding:15px 0}.controlgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.controlgroup{min-width:0}.controlgroup h3{font-size:12px;margin-bottom:8px}.controlgroup .field{margin-bottom:10px}.history{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:10px}.history li{border:1px solid var(--line);border-radius:6px;padding:11px 13px;font-size:12px;overflow-wrap:anywhere}.history .paper{margin-top:7px;font-size:12px}.decisionlist{margin:0;padding-left:22px;font-size:12px;line-height:1.9}.decisionlist li{padding:5px 0}.walk{border-top:1px solid var(--line);padding-top:14px}.walk p{font-size:12px;color:var(--muted);margin-bottom:10px}.error{color:var(--warn);font-size:12px;margin-bottom:12px}.skip{position:absolute;top:-80px;left:12px;z-index:20;background:var(--surface);padding:10px;border:2px solid var(--focus)}.skip:focus{top:10px}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:1050px){.sidebar{width:195px}.main{margin-left:195px}.content{padding:24px}.topbar,.demo-banner{padding-left:24px;padding-right:24px}.pagehead{flex-wrap:wrap}}
+@media(max-width:720px){.sidebar{position:relative;width:100%;padding:13px 17px;display:block;border-right:0;border-bottom:1px solid var(--line)}.brand{padding:0;font-size:18px}.brandmark{width:29px;height:29px;border-radius:7px}.brand small{display:none}.sidebar .navlabel,.sidebar .nav,.sidebarfooter{display:none}.main{margin-left:0}.topbar{min-height:49px;padding:8px 17px}.demo-banner{padding:8px 17px;gap:2px 8px;line-height:1.65}.content{padding:22px 17px 35px}.pagehead{gap:13px;margin-bottom:18px}h1{font-size:22px}.findbar{padding:16px}.searchrow{align-items:stretch;flex-wrap:wrap}.searchfield{flex-basis:100%}.filterrow{gap:9px 17px}.tabs{gap:3px}.tabs button{padding:6px 9px}.result{padding:16px;grid-template-columns:minmax(0,1fr);gap:9px}.result>.btn{justify-self:start}.controlgrid{grid-template-columns:1fr}.dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px)}.drawer{width:100vw;max-height:100dvh}.dialoghead{padding:16px}.dialogbody{padding:17px 16px}.dialogfooter{padding:12px 16px}.metadata{grid-template-columns:72px minmax(0,1fr);gap:6px 9px}.dialoghead h2{font-size:16px}.dialogfooter .row{gap:7px}.democontrols{padding:0 12px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<a class="skip" href="#pageTitle">跳到个人资料</a>
+<aside class="sidebar" aria-label="工作台导航示意">
+  <div class="brand"><span class="brandmark" aria-hidden="true">O</span><div>OptraCall<small>让每次判断，有据可循</small></div></div>
+  <div class="navlabel">工作台 · 演示导航</div>
+  <div class="nav"><span class="navdot" aria-hidden="true"></span>分析 ｜ 决策</div>
+  <div class="nav"><span class="navdot" aria-hidden="true"></span>项目</div>
+  <div class="nav" aria-current="page"><span class="navdot" aria-hidden="true"></span>个人资料</div>
+  <div class="navlabel">资料与环境</div>
+  <button class="nav" id="reviewShortcut"><span class="navdot" aria-hidden="true"></span>方案审阅说明</button>
+  <div class="nav"><span class="navdot" aria-hidden="true"></span>设置</div>
+  <div class="sidebarfooter">M3.1 精简修订 v0.2 · 待审阅<br>延续原个人资料入口<br>所有项目与正文均为虚构</div>
+</aside>
+<main class="main">
+  <header class="topbar"><div class="crumb"><span>个人空间</span><span aria-hidden="true">/</span><span>个人资料</span></div><button class="btn theme" id="themeButton" aria-label="切换深色模式" title="切换浅色／深色">◐</button></header>
+  <div class="demo-banner" role="note"><strong>UI演示 v0.2 · 虚构资料 · 刷新重置 · 具体合同与UI待审阅</strong><span>已接受精简方向，尚未产品开发；纯内存，没有模型、SDK、接口、浏览器存储或真实文件连接</span></div>
+  <div class="content">
+    <div class="pagehead"><div><div class="eyebrow">工作自然留下线索，按需要再来看</div><h1 id="pageTitle" tabindex="-1">个人资料</h1><p class="subtitle">探索：Agent在工作中自选记录候选，人按需阅读、重点收藏、纠正或排除。无需每天写笔记，也不要求逐条审批；没有候选时也可正常工作。</p></div><button class="btn" id="manualEntry">原有人工笔记</button></div>
+    <section class="panel findbar" aria-label="个人资料查找">
+      <div class="tabs views" id="viewTabs" aria-label="发现范围"><button data-view="current" aria-pressed="true">全部资料</button><button data-view="bookmarks" aria-pressed="false">重点收藏</button><button data-view="manual" aria-pressed="false">原有人工资料</button><button data-view="history" aria-pressed="false">异常历史</button><button data-view="excluded" aria-pressed="false">已排除</button></div>
+      <form id="searchForm"><div class="searchrow"><label class="field searchfield"><span>查找个人资料</span><input id="query" type="search" maxlength="200" placeholder="标题、别名或适用范围关键词" autocomplete="off"></label><button class="btn primary" type="submit">查找</button><button class="btn" type="button" id="clearSearch">清空</button></div><div class="filterrow"><label class="check"><input id="includeBody" type="checkbox">含正文关键词</label><label class="field searchfield"><span>父任务状态</span><select id="parentFilter"><option value="all">全部状态</option><option value="completed">技术完成</option><option value="running">运行中</option><option value="cancelled">已取消</option><option value="failed">技术失败</option><option value="unknown">UNKNOWN</option></select></label><label class="field searchfield"><span>已保存路径</span><select id="pathFilter"><option value="all">全部保存路径</option><option value="current">任务当前保存路径</option><option value="other">其它已保存路径</option></select></label></div></form>
+      <div class="tabs" id="categoryTabs" aria-label="资料类别"><button data-category="all" aria-pressed="true">全部</button><button data-category="concept" aria-pressed="false">概念</button><button data-category="knowledge" aria-pressed="false">知识</button><button data-category="experience" aria-pressed="false">经验</button><button data-category="data" aria-pressed="false">项目数据</button></div>
+    </section>
+    <div id="pageStatus" class="status" role="status" aria-live="polite"></div>
+    <div id="readNotice" class="status"></div>
+    <div class="resultshead"><span class="small" id="resultCount" role="status" aria-live="polite"></span><span class="footnote" id="resultScope"></span></div>
+    <section class="panel" id="results" aria-label="资料结果"></section>
+    <p class="footnote gap-top">候选是Agent声明，重点收藏是你的关注；两者都不证明内容正确。这里只阅读和管理资料，M4按需使用尚未实现。</p>
+    <details class="democontrols" id="reviewNotes">
+      <summary>方案审阅说明 <span class="tiny">· 当前产品差异与6项决定</span></summary>
+      <div class="controlbody stack">
+        <p class="note">本页问题：已保存的有效候选能否跨父任务状态与保存路径统一发现，原生失读后仍保留人的必要控制？用户已接受精简方向；v0.2具体合同与更新UI待审阅，本文件尚未成为产品。</p>
+        <p class="footnote">当前M3已具备人工笔记、明确保留、版本／归档与来源查找。本页保留原入口和类别，新增的是拟定的Agent候选、原生引用收藏、独立纠正注记及排除；没有重做或完整模拟旧M3编辑／保留流程。原M3 Demo及其确认不被本页替换。</p>
+        <h2>6项推荐A · 精简方向已接受，具体合同与UI待审阅</h2>
+        <ol class="decisionlist">
+          <li><strong>D01 原生正文：</strong>候选正文仅来自Pi原生工具结果details，人的控制只记引用。已有持久能力可复用，避免第二份候选正文。<span class="pill">待确认</span></li>
+          <li><strong>D02 精确身份：</strong>小型版本化声明、真实任务身份和精确原生引用；资料来源沿M3读取。防止把Agent自述当用户确认或真实归属。<span class="pill">待确认</span></li>
+          <li><strong>D03 原任务自主记录：</strong>同一核准普通任务、同一轮Pi；有效返回仍待保存，成功结果精确回读才显示已记录。父任务取消不撤销此前有效保存的候选，明确迟到只进异常历史。<span class="pill">修订待审阅</span></li>
+          <li><strong>D04 只读发现：</strong>各已保存路径的有效候选统一浏览；父任务状态与保存位置分别筛选，fork副本去重。不把保存路径当实时模型上下文。<span class="pill">修订待审阅</span></li>
+          <li><strong>D05 人的控制：</strong>收藏仅关注，纠正追加独立注记。失读后，已有有效人的记录可支持取消收藏、排除／恢复；仍不能新收藏或加纠正，不修复来源。<span class="pill">修订待审阅</span></li>
+          <li><strong>D06 保存与退出：</strong>一个操作标识兼事件标识，同一候选设定才检查冲突，独立意见顺序追加；不迁移M3，不双写候选。原子保存与容量限制属于后续产品实现。<span class="pill">修订待审阅</span></li>
+        </ol>
+        <p class="footnote">Pi已有原语：同轮工具、原生工具结果details、会话历史／分支和只读内存投影。产品新增：候选声明格式与归属校验、个人资料汇总、人的引用操作与同条冲突规则；它们不是Pi现成记忆功能。保存位置仅据已保存task指针与磁盘快照标注，未持久导航的实时同步未知。</p>
+        <p class="footnote">仅unmanaged普通任务拟注入候选工具；受管ordinary／protected、封闭出稿、text-only、独立冷读和历史只读不注入。页面浏览不创建会话。哈希核字节，不是防篡改认证；人的入口与状态不是身份认证或真实事实，重点收藏没有正文备份承诺。</p>
+        <p class="footnote">本页只模拟内存规则，未接通真实身份／权限、JSONL、工具、磁盘保存／fsync、跨进程并发或2MiB容量限制。产品仍须保留单文件原子保存、同operationId回读、坏账只读和满额拒绝。M4消费、自动注入、学习评分、语义搜索及实际效果均未实现。</p>
+      </div>
+    </details>
+    <details class="democontrols" id="demoControls">
+      <summary>演示控制 <span class="tiny">· 独立于产品流程，手工预置例文</span></summary>
+      <div class="controlbody stack">
+        <p class="footnote">只为了体验状态变化；这些按钮不代表Host给Agent规定流程、时机或条数。Agent可自行决定零条或多条。本页不会调用模型或持久保存任何内容。</p>
+        <div class="controlgrid"><div class="controlgroup"><h3>模拟一次自主记录</h3><label class="field"><span>此任务是否支持</span><select id="taskCapability"><option value="supported">普通任务 · 可记录候选</option><option value="unsupported">此任务暂不支持记录候选</option></select></label><label class="field"><span>父任务状态 · 与保存资格分开</span><select id="runOutcome"><option value="completed">技术完成</option><option value="cancelled">已取消 · 此前有效保存仍保留</option><option value="failed">技术失败 · 此前有效保存仍保留</option><option value="unknown">中断／UNKNOWN</option><option value="running">任务运行中</option></select></label><label class="field"><span>工具记录情况</span><select id="recordState"><option value="saved">有效结果已保存且精确回读</option><option value="pending">有效返回 · 尚待保存</option><option value="late">取消生效后迟到 · 只进异常历史</option><option value="ineligible">原运行资格已失效 · 只进异常历史</option><option value="error">工具错误 · 只进异常历史</option></select></label><button class="btn" id="simulateRecord">模拟Agent记录</button><button class="btn compact gap-top" id="savePending">模拟回读待保存结果</button><p class="footnote gap-top">每次载入一条手工虚构声明，不是模型输出。取消选项表示有效保存之后父任务取消；返回前失去取消资格须选迟到／失效。</p></div><div class="controlgroup"><h3>读取与分支边界</h3><label class="field"><span>原生候选可读状态</span><select id="nativeState"><option value="readable">可精确回读</option><option value="missing">原生记录缺失 · UNKNOWN</option><option value="changed">精确内容变化 · UNKNOWN</option><option value="corrupt">记录损坏 · UNKNOWN</option></select></label><label class="field"><span>额外业务来源</span><select id="businessState"><option value="readable">固定资料可读</option><option value="missing">固定资料缺失</option><option value="changed">固定资料不符</option></select></label><button class="btn" id="simulateFork">模拟同一候选的fork副本</button><button class="btn gap-top" id="firstUnread">从无引用初始状态模拟首次失读</button><p class="footnote gap-top">已读后失读可留下精确引用；只有人的有效记录已保存该目标时，才可取消收藏／排除／恢复。首次未知只报文件级UNKNOWN，不猜身份。</p></div></div>
+        <div class="row"><button class="btn" id="emptyCandidates">模拟没有候选</button><button class="btn" id="resetDemo">重置全部演示</button><span class="footnote" id="demoState"></span></div>
+        <div class="row"><button class="btn compact" id="replayOperation">模拟丢回执后查原操作</button><button class="btn compact" id="changedOperation">模拟同操作改请求</button><button class="btn compact" id="sameConflict">模拟同条设定冲突</button><button class="btn compact" id="crossSuccess">模拟跨条互不冲突</button><button class="btn compact" id="appendNotes">模拟并发追加意见</button></div>
+        <div class="walk"><h3>引导体验</h3><div class="tabs" id="walkTabs" aria-label="演示情景"><button data-walk="attention" aria-pressed="true">阅读与纠正</button><button data-walk="exclusion" aria-pressed="false">排除与副本</button><button data-walk="history" aria-pressed="false">保存与不可读</button><button data-walk="concurrency" aria-pressed="false">人的操作冲突</button></div><p id="walkDescription" class="gap-top"></p><div id="walkActions" class="row"></div><p id="walkStatus" class="footnote gap-top" role="status" aria-live="polite"></p></div>
+      </div>
+    </details>
+  </div>
+</main>
+<dialog class="dialog drawer" id="detailDialog" aria-labelledby="detailTitle"><header class="dialoghead"><div><h2 id="detailTitle" tabindex="-1">候选详情</h2><p>UI演示 · 项目、原文、来源、身份均为人工虚构</p></div><button class="close" data-close="detailDialog" aria-label="关闭资料详情">×</button></header><div class="dialogbody" id="detailBody"></div><footer class="dialogfooter" id="detailFooter"></footer></dialog>
+<dialog class="dialog" id="sourceDialog" aria-labelledby="sourceTitle"><header class="dialoghead"><div><h2 id="sourceTitle" tabindex="-1">准确来源</h2><p>本页虚构阅读面板 · 未读取实际会话或文件</p></div><button class="close" data-close="sourceDialog" aria-label="关闭准确来源">×</button></header><div class="dialogbody" id="sourceBody"></div></dialog>
+<dialog class="dialog" id="correctionDialog" aria-labelledby="correctionTitle"><header class="dialoghead"><div><h2 id="correctionTitle">补充纠正意见</h2><p>追加独立人工注记；Agent原文和已有意见都保留</p></div><button class="close" data-close="correctionDialog" aria-label="关闭纠正意见">×</button></header><div class="dialogbody"><form id="correctionForm"><label class="field"><span>你的意见 <span class="muted">必填</span></span><textarea id="correctionNote" maxlength="4000" required aria-describedby="correctionHelp correctionError" placeholder="说明你认为需要补充或纠正的地方；无需重写候选。"></textarea><small id="correctionHelp">这仍是人的独立意见，不会将候选改成已证实事实。</small></label><p id="correctionError" class="error" role="alert"></p><button class="btn compact" id="fillCorrection" type="button">填入虚构示例意见</button></form></div><footer class="dialogfooter"><button class="btn" data-close="correctionDialog">返回</button><button class="btn primary" form="correctionForm" type="submit">追加这条意见</button></footer></dialog>
+<script>
+'use strict';
+// Standalone logic prototype. This model owns only fictional, in-memory state.
+// The real candidate body would be read from Pi details; this page has no integration.
+const CandidateDemo = (() => {
+  const copy = value => JSON.parse(JSON.stringify(value));
+  const data = () => [
+    {id:'candidate-demo-01',kind:'knowledge',title:'比较促销前，先统一退货所属期',body:'【虚构Agent候选】比较促销与非促销表现前，先说明销售和退货的所属期。跨期退货单列；口径仍不一致时，保留“暂不可比”的判断。\n\n本条是口径提醒，没有完成因果识别，也没有证明活动有效。',aliases:['退货口径','净销对齐'],scope:'虚构零售渠道 · 月度复盘',caution:'仅适用于比较口径核对；不能据此认定促销效果。',createdAt:'2026-11-03 10:20（演示）',branch:true,run:'completed',source:'report',origin:'session-demo-october / entry-demo-017 / tool-demo-07'},
+    {id:'candidate-demo-02',kind:'experience',title:'保留未解决的差异，再讨论行动',body:'【虚构Agent候选】技术分析虽已完成，但这次业务比较仍有口径差异。先把未知写在结论旁，再决定是否能行动。\n\n这是一条对失败判断的教训，不表示业务结果成功。',aliases:['复盘差异','保留未知'],scope:'虚构渠道复盘 · 不确定性说明',caution:'业务效果尚无反馈；不泛化到所有项目。',createdAt:'2026-11-03 09:40（演示）',branch:true,run:'completed',source:'feedback',origin:'session-demo-october / entry-demo-015 / tool-demo-06'},
+    {id:'candidate-demo-history',kind:'knowledge',title:'其它保存路径：渠道归属需要核对',body:'【虚构Agent候选】渠道名称变化时，先核对当时归属。本条来自其它已保存路径，仍可发现，但保存位置不代表实时模型上下文。',aliases:['旧渠道'],scope:'虚构旧渠道',caution:'来自其它已保存路径；是否适用于新项目未知。',createdAt:'2026-11-02 15:10（演示）',branch:false,run:'completed',source:'report',origin:'session-demo-old / entry-demo-009 / tool-demo-03'},
+    {id:'candidate-demo-cancelled',kind:'experience',title:'父任务取消前已保存的观察',body:'【虚构Agent候选】本条在工具资格有效时返回并保存，之后父任务才取消。候选仍可查，但观察是否正确、工作是否完成均不能由此推定。',aliases:[],scope:null,caution:'父任务后来取消；候选没有因此得到事实确认。',createdAt:'2026-11-02 14:20（演示）',branch:true,run:'cancelled',source:null,origin:'session-demo-cancelled / entry-demo-004 / tool-demo-02'}
+  ];
+  const manual = [
+    {id:'manual-demo-01',kind:'knowledge',title:'人工笔记：把未知和判断一起留下',body:'【虚构M3人工笔记】再次阅读时，应能分清当时已知的依据和未解决的问题。\n这是已明确保留的原M3人工内容，不是Agent自动候选。',aliases:['人工记录'],scope:'个人随手记',caution:'个人经验；无外部原文。',mode:'manual'},
+    {id:'concept-demo-01',kind:'concept',title:'净销售额 · 已引用概念说明',body:'【虚构M3概念投影】来自M2字段映射实际选用的准确资料修订；不从标题推断概念。',aliases:['净销'],scope:'虚构渠道比较表',mode:'projection'},
+    {id:'data-demo-01',kind:'data',title:'十月渠道比较表 · 项目登记',body:'【虚构M3项目数据】只聚合原项目登记元信息，正文与维护仍在原项目。本页没有扫描工作区。',aliases:['渠道比较'],scope:'虚构十月渠道复盘项目（已归档）',mode:'projection'}
+  ];
+  const target = item => {const [originSessionId,entryId,toolCallId]=item.origin.split(' / ');return {projectId:'project-demo-october',taskId:'task-demo-compare',originSessionId,entryId,toolCallId,expectedDetailsSha256:'demo-hash-placeholder-'+item.id};};
+  const sameTarget = (a,b) => JSON.stringify(a)===JSON.stringify(b);
+  const initial = () => {const candidates=data().map(item=>({...item,recordState:'saved'}));return {candidates,manual:copy(manual),controls:{'candidate-demo-history':{bookmark:true,excluded:false,notes:[],targetRevision:1}},events:[{operationId:'demo-initial-bookmark',target:target(candidates[2]),action:'bookmark',note:null,createdAt:'2026-11-03T01:00:00.000Z',targetRevision:1}],next:1,operationNext:1,lastRequest:null,pending:[],forkSeen:false,nativeState:'readable',businessState:'readable',taskCapability:'supported',nextOutcome:'completed',nextRecordState:'saved',notice:''};};
+  const control = (state,id) => state.controls[id] || {bookmark:false,excluded:false,notes:[],targetRevision:0};
+  const ledgerTarget = (state,item) => state.events.some(e=>sameTarget(e.target,target(item)));
+  const readable = state => state.nativeState === 'readable';
+  const current = item => item.recordState === 'saved';
+  function reduce(previous, action) {
+    if(action.type==='reset') return initial();
+    const state=copy(previous), item=state.candidates.find(c=>c.id===action.id);
+    if(action.type==='configure') { state[action.key]=action.value; state.notice='演示状态已切换；没有读写真实记录。'; return state; }
+    if(action.type==='empty'||action.type==='first-unread') {state.candidates=[];state.controls={};state.events=[];state.lastRequest=null;state.pending=[];state.forkSeen=false;state.nativeState=action.type==='first-unread'?'missing':'readable';state.notice=action.type==='empty'?'模拟：Agent没有留下候选。这是正常状态，原M3人工资料仍在。':'模拟一次首次查询：文件不可用，且没有此前精确读取或人的记录。仅文件级UNKNOWN，不猜候选数、身份或可操作目标。';return state;}
+    if(action.type==='fork') { if(!state.candidates.some(c=>c.id==='candidate-demo-01')){state.notice='当前没有这条候选可用于模拟副本；可先重置演示。';return state;} state.forkSeen=true; state.notice='模拟发现原候选的fork副本：核为同一原始记录，仍只显示一条；已有排除和人工注记保持。'; return state; }
+    if(action.type==='replay'||action.type==='changed-operation') {if(!state.lastRequest){state.notice='请先进行一次人的操作，再模拟回读其回执。';return state;}const request=copy(state.lastRequest);if(action.type==='changed-operation')request.type=request.type==='exclude'?'restore':'exclude';return reduce(state,request);}
+    if(['same-conflict','cross-success','append-notes'].includes(action.type)) {
+      const a=state.candidates.find(c=>c.id==='candidate-demo-01'),b=state.candidates.find(c=>c.id==='candidate-demo-02');
+      if(!a||!b||!readable(state)){state.notice='请先重置到可读的虚构初始状态，再体验操作冲突。';return state;}
+      const av=control(state,a.id).targetRevision,bv=control(state,b.id).targetRevision;
+      if(action.type==='append-notes'){const first=reduce(state,{type:'correct',id:a.id,note:'【虚构并发意见甲】请保留跨期归属未知。'}),second=reduce(first,{type:'correct',id:a.id,note:'【虚构并发意见乙】不要据此认定促销有效。'});second.notice='两份独立意见均已顺序追加，无需读取对方版本；旧意见与原文保留。';return second;}
+      const first=reduce(state,{type:'exclude',id:a.id,expectedTargetRevision:av});
+      const second=reduce(first,{type:action.type==='same-conflict'?'restore':'bookmark',id:action.type==='same-conflict'?a.id:b.id,expectedTargetRevision:action.type==='same-conflict'?av:bv});
+      second.notice=(action.type==='same-conflict'?'第一处排除已保存；另一处基于旧状态的恢复被拒绝。':'甲条的排除与乙条的收藏均已保存；跨条互不冲突。')+' '+second.notice;return second;
+    }
+    if(action.type==='record'||action.type==='save-pending') {
+      if(action.type==='record'&&state.taskCapability!=='supported') {state.notice='此任务暂不支持记录候选，原工作留痕照常保留；没有新增候选，也没有额外启动模型。';return state;}
+      if(!readable(state)){state.notice='原生当前无法精确回读，不能模拟“已记录”；现有UNKNOWN与人的记录保持。';return state;}
+      if(action.type==='save-pending'){if(!state.pending.length)return state;const n=state.pending.shift();n.recordState='saved';state.candidates.unshift(n);state.notice='模拟成功结果现已精确回读，才标“已记录”。父任务状态只作标签，不证明业务正确。';return state;}
+      const id='candidate-demo-new-'+state.next++, n={id,kind:'experience',title:'新候选：同一来源仍值得重新判断',body:'【手工预置虚构新候选】同一固定报告可能支持另一项观察。是否适用于当前问题，要分别判断范围和局限。\n\n这是一条新的工具调用声明，不是旧候选的分支副本；排除旧条目不会自动封禁它。',aliases:['重新判断','同一来源'],scope:'虚构零售渠道 · 月度复盘',caution:'这条新观察也未人工确认，没有证明任何经营效果。',createdAt:'本次模拟记录（演示 '+state.next+'）',branch:true,run:state.nextOutcome,source:'report',origin:'session-demo-october / entry-demo-new-'+state.next+' / tool-demo-new-'+state.next,recordState:state.nextRecordState};
+      if(n.recordState==='pending'){state.pending.push(n);state.notice='模拟工具有效返回：已接受，待保存。尚无精确成功结果回读，不能显示“已记录”或加入候选列表。';return state;}
+      state.candidates.unshift(n);state.notice=current(n)?'模拟有效结果已保存并精确回读，无需逐条批准。父任务即使取消／失败／运行中，候选仍可发现；它仍未人工确认。':'模拟工具迟到、失去资格或错误：仅异常历史可查，不属于正常候选，也不承诺有效候选正文。';return state;
+    }
+    if(!item) return state;
+    const note=action.type==='correct'?String(action.note||'').trim():null;
+    const request={type:action.type,id:item.id,operationId:action.operationId||'demo-operation-'+state.operationNext++,target:action.target||target(item),note};
+    if(action.type!=='correct')request.expectedTargetRevision=action.expectedTargetRevision??control(state,item.id).targetRevision;
+    const prior=state.events.find(e=>e.operationId===request.operationId);
+    if(prior){const same=sameTarget(prior.target,request.target)&&prior.action===request.type&&prior.note===request.note&&(request.type==='correct'||request.expectedTargetRevision===prior.targetRevision-1);state.notice=same?'已回读原操作回执，没有重复写入；即使现在原生不可读，也保留原成功回执。':'同一操作标识的请求发生变化，已拒绝；没有重复写入或覆盖。';return state;}
+    if(!current(item)){state.notice='这条是异常历史，不是有效候选；不开放人的候选操作。';return state;}
+    if(!sameTarget(request.target,target(item))){state.notice='精确目标或内容hash不一致，保持UNKNOWN；未重新绑定目标。';return state;}
+    if(!readable(state)&&(!ledgerTarget(state,item)||!['unbookmark','exclude','restore'].includes(action.type))){state.notice='原生不可读：仅有效人的记录已有精确目标时可取消收藏、排除／恢复；新收藏和纠正不可用。UNKNOWN保持。';return state;}
+    const c=copy(control(state,item.id));
+    if(action.type!=='correct'&&request.expectedTargetRevision!==c.targetRevision){state.notice='这条候选的控制状态已被另一处修改，当前操作冲突；已显示现状态，请按明确意图重新操作。其它条目不受影响。';return state;}
+    if(action.type==='bookmark') c.bookmark=true;
+    else if(action.type==='unbookmark') c.bookmark=false;
+    else if(action.type==='exclude') c.excluded=true;
+    else if(action.type==='restore') c.excluded=false;
+    else if(action.type==='correct') {if(!note||note.length>4000)return state;c.notes.push({note,targetRevision:c.targetRevision+1});}
+    else return state;
+    c.targetRevision++;state.controls[item.id]=c;
+    state.events.push({operationId:request.operationId,target:request.target,action:request.type,note,createdAt:new Date(Date.UTC(2026,10,3,2,0,state.events.length)).toISOString(),targetRevision:c.targetRevision});state.lastRequest=request;
+    state.notice=action.type==='bookmark'?'已重点收藏：仅表达关注，候选仍未人工确认。':action.type==='unbookmark'?'已取消重点收藏，原文和人的意见保持。':action.type==='correct'?'已追加独立人工注记，Agent原文和旧意见保持。':action.type==='exclude'?'已排除此条及其分支副本。未来同来源新内容仍可能出现；收藏和注记保留。':'已解除人的排除，收藏和注记保持；不修复原生来源，也不证明正确。';
+    if(!readable(state))state.notice+=' 原生内容仍UNKNOWN，没有恢复正文、类别或业务来源。';
+    return state;
+  }
+  function select(state, filters) {
+    let rows=[];
+    const candidates=state.candidates.filter(item=>{
+      const c=control(state,item.id);
+      if(filters.view==='history')return !current(item);
+      if(!current(item))return false;
+      if(filters.view==='excluded')return c.excluded;
+      if(c.excluded)return false;
+      if(filters.view==='bookmarks')return c.bookmark;
+      if(filters.view==='manual')return false;
+      return true;
+    }).map(item=>({...item,mode:'candidate',unreadable:!readable(state)}));
+    if(filters.view==='current'||filters.view==='manual')rows=copy(state.manual);
+    rows=[...candidates,...rows];
+    const q=filters.query.trim().toLocaleLowerCase();
+    return rows.filter(item=>{
+      if(item.mode==='candidate'&&(filters.parent!=='all'||filters.path!=='all')){
+        if(item.unreadable)return false;
+        if(filters.parent!=='all'&&item.run!==filters.parent)return false;
+        if(filters.path!=='all'&&item.branch!==(filters.path==='current'))return false;
+      }
+      if(filters.category!=='all') {
+        if(item.unreadable||item.recordState&&item.recordState!=='saved')return false; // UNKNOWN and errors have no candidate category.
+        if(filters.category!==item.kind)return false;
+      }
+      if(!q)return true;
+      if(item.unreadable||item.recordState&&item.recordState!=='saved')return false;
+      const fields=[item.title,item.scope,(item.aliases||[]).join(' ')];
+      if(filters.body)fields.push(item.body);
+      return fields.some(v=>String(v||'').toLocaleLowerCase().includes(q));
+    });
+  }
+  return {initial,reduce,select,control,readable,current,target,ledgerTarget,sameTarget};
+})();
+
+// Thin presentation layer; all business-like state transitions above are pure.
+const $=id=>document.getElementById(id);
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const kinds={knowledge:'知识',experience:'经验',concept:'概念',data:'项目数据'};
+const runs={completed:'父任务技术完成',cancelled:'父任务已取消',failed:'父任务技术失败',unknown:'父任务中断 · UNKNOWN',running:'父任务运行中'};
+const issues={late:'取消生效后迟到',ineligible:'原运行／会话资格失效',error:'工具错误'};
+const eventLabels={bookmark:'重点收藏',unbookmark:'取消重点收藏',correct:'追加纠正注记',exclude:'排除此条',restore:'解除排除'};
+let state=CandidateDemo.initial(),filters={view:'current',category:'all',query:'',body:false,parent:'all',path:'all'},selected=null,walk='attention',walkStep=0;
+const returnFocus=new Map();
+const findCandidate=id=>state.candidates.find(item=>item.id===id);
+const findItem=id=>findCandidate(id)||state.manual.find(item=>item.id===id);
+const isCandidate=item=>!!findCandidate(item.id);
+const itemEvents=item=>state.events.filter(e=>CandidateDemo.sameTarget(e.target,CandidateDemo.target(item)));
+const historyMarkup=item=>itemEvents(item).length?`<ol class="history">${itemEvents(item).map(e=>`<li>${esc(eventLabels[e.action])} · ${esc(e.createdAt)}（虚构时间）${e.note?`<p class="gap-top">${esc(e.note)}</p>`:''}</li>`).join('')}</ol>`:'<p class="footnote">本次演示尚无人的操作。</p>';
+const statusPills=item=>{const c=CandidateDemo.control(state,item.id),known=CandidateDemo.readable(state);if(!CandidateDemo.current(item))return known?`<span class="pill warn">异常历史 · 非有效候选</span><span class="pill warn">${esc(issues[item.recordState])}</span><span class="pill">${esc(runs[item.run])}</span>`:'<span class="pill warn">已知历史引用 · 原生不可读 · UNKNOWN</span>';return `<span class="pill purple">Agent候选 · 未人工确认</span>${known?`<span class="pill">已记录</span><span class="pill">${kinds[item.kind]}</span><span class="pill ${item.run==='completed'?'':'warn'}">${esc(runs[item.run])}</span><span class="pill">${item.branch?'任务当前保存路径':'其它已保存路径'}</span>`:''}${c.bookmark?'<span class="pill">★ 重点收藏</span>':''}${c.excluded?'<span class="pill">已排除</span>':''}${!known?'<span class="pill warn">原生不可读 · UNKNOWN</span>':''}${c.notes.length?'<span class="pill">有人工注记</span>':''}`;};
+function show(id){const d=$(id);returnFocus.set(id,document.activeElement);if(!d.open)d.showModal();const target=d.querySelector('textarea')||d.querySelector('button');target?.focus({preventScroll:true});}
+function close(id){const d=$(id);d.close();const saved=returnFocus.get(id),top=[...document.querySelectorAll('dialog[open]')].at(-1);const target=saved?.isConnected&&(!top||top.contains(saved))?saved:top?.querySelector('h2')||$('pageTitle');target.focus({preventScroll:true});returnFocus.delete(id);}
+function apply(action){state=CandidateDemo.reduce(state,action);render();if($('detailDialog').open&&selected)renderDetail();}
+function render(){
+  const rows=CandidateDemo.select(state,filters);
+  document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===filters.view)));
+  document.querySelectorAll('[data-category]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.category===filters.category)));
+  $('resultCount').textContent=`${rows.length} 条${filters.query?'命中':'资料'} · 全部为虚构示例`;
+  const scopes={current:'各已保存路径的有效候选与已知引用；原M3资料独立保留',bookmarks:'明确收藏的候选或UNKNOWN引用；排除项单列',manual:'原M3人工保留与聚合投影 · 本页仅展示',history:'明确迟到／工具错误／失资格记录；不当正常候选',excluded:'仅已排除条目；收藏、人工注记和历史保留'};
+  $('resultScope').textContent=scopes[filters.view];
+  $('pageStatus').innerHTML=state.notice?`<div class="note">${esc(state.notice)}</div>`:'';
+  $('readNotice').innerHTML=(!CandidateDemo.readable(state)?`<div class="note warning">${state.candidates.length?'原生候选无法精确回读：已知引用仍可显示UNKNOWN，正文、类别、生成时间与业务来源不展示。仅有效人的记录已有目标时可取消收藏、排除／恢复；只曾读过的引用仍只读。':'文件级UNKNOWN：本次没有已知精确引用，不能判断候选数或猜测身份；仍可显示原M3资料。'} 父状态／保存路径筛选不匹配无法核对的引用，不代表候选不存在。</div>`:'')+(state.pending.length?`<div class="note warning gap-top">${state.pending.length} 次虚构工具返回已接受、待保存；尚未显示为“已记录”，不计入候选列表。</div>`:'');
+  $('results').innerHTML=rows.length?rows.map(item=>{
+    const candidate=item.mode==='candidate',c=CandidateDemo.control(state,item.id),unknown=candidate&&item.unreadable,abnormal=candidate&&!CandidateDemo.current(item);
+    const title=unknown?'原生候选不可读 · UNKNOWN':abnormal?'异常记录：'+issues[item.recordState]:item.title;
+    return `<article class="result"><div><div class="row">${candidate?statusPills(item):`<span class="pill purple">${kinds[item.kind]}</span><span class="pill">${item.mode==='manual'?'M3人工 · 已保留':'M3只读聚合'}</span>`}</div><h2><button class="result-title" data-action="detail" data-id="${item.id}">${esc(title)}</button></h2><p class="preview">${unknown?'只保留精确引用和人的控制状态；没有可确认的候选正文，不回落最新稿。':abnormal?'这条记录没有有效候选资格，只保留异常原因，不展示候选正文或开放收藏／纠正。':esc(item.body.slice(0,112))+(item.body.length>112?'…':'')}</p><p class="resultmeta">${unknown||abnormal?'准确引用：'+esc(item.origin):'范围：'+esc(item.scope||'未知')}${candidate&&!unknown&&!abnormal?' · '+esc(item.createdAt):''}</p>${!unknown&&!abnormal&&item.caution?`<p class="caution">局限：${esc(item.caution)}</p>`:''}${candidate&&c.notes.length?`<p class="caution">最新人工意见：${esc(c.notes.at(-1).note)}</p>`:''}${candidate&&!unknown&&state.forkSeen&&item.id==='candidate-demo-01'?'<p class="resultmeta">已核对fork副本：仍是同一条，不重复显示。</p>':''}${filters.query&&!unknown?'<p class="match">按所选标题／别名／范围'+(filters.body?'／正文':'')+'关键词匹配；命中不代表正确。</p>':''}</div><button class="btn" data-action="detail" data-id="${item.id}">阅读详情</button></article>`;
+  }).join(''):`<div class="empty"><h2>${filters.query?'没有关键词命中':filters.view==='excluded'?'还没有排除的候选':filters.view==='bookmarks'?'还没有重点收藏':filters.view==='history'?'没有可列出的异常历史':'这里暂时没有可显示的资料'}</h2><p class="small muted">${filters.query?'可调整关键词或按需包含正文；没有命中不证明相关事实不存在。':filters.view==='current'?'Agent可以不留下任何候选。无需写日记或审批，原工作可以继续。':'这只是当前筛选结果；不会据此补生成内容。'}</p></div>`;
+  $('nativeState').value=state.nativeState;$('businessState').value=state.businessState;$('taskCapability').value=state.taskCapability;$('runOutcome').value=state.nextOutcome;$('recordState').value=state.nextRecordState;$('parentFilter').value=filters.parent;$('pathFilter').value=filters.path;$('savePending').disabled=!state.pending.length;$('replayOperation').disabled=!state.lastRequest;$('changedOperation').disabled=!state.lastRequest;
+  $('demoState').textContent=`已知虚构引用${state.candidates.length}条 · 人的事件${state.events.length}条${!CandidateDemo.readable(state)&&!state.candidates.length?' · 文件内容UNKNOWN，未推断候选数':''}${state.forkSeen?' · 已模拟同条fork副本':''}`;
+}
+function renderDetail(){
+  const item=findItem(selected);if(!item)return;
+  if(!isCandidate(item)){
+    $('detailTitle').textContent=item.title;
+    $('detailBody').innerHTML=`<div class="row"><span class="pill purple">${kinds[item.kind]}</span><span class="pill">${item.mode==='manual'?'原M3人工 · 已保留':'原M3只读聚合'}</span></div><p class="note spaced">这是原M3能力的虚构展示。人工笔记及明确保留仍沿原Enterprise修订／个人决定，本页不迁移或重写旧流程。</p><div class="paper spaced">${esc(item.body)}</div><dl class="metadata"><dt>适用范围</dt><dd>${esc(item.scope||'未知')}</dd><dt>业务正确性</dt><dd>未因保留或查找而确认</dd></dl><p class="footnote">新建、编辑、保留、归档及原M3历史请按原已确认Demo／产品路径。本文件没有接入该编辑流程。</p>`;
+    $('detailFooter').innerHTML='<span class="footnote">原M3语义保持 · 这里只读展示</span><button class="btn" data-close="detailDialog">关闭</button>';return;
+  }
+  const c=CandidateDemo.control(state,item.id),readable=CandidateDemo.readable(state),nativeIssue={missing:'原生记录缺失',changed:'精确内容不符',corrupt:'原生记录损坏'}[state.nativeState];
+  if(!CandidateDemo.current(item)){
+    $('detailTitle').textContent=readable?'异常历史 · 非有效候选':'已知历史引用 · UNKNOWN';
+    $('detailBody').innerHTML=`<section class="section"><div class="row">${statusPills(item)}</div><p class="note warning spaced">${readable?esc(issues[item.recordState])+'。本条没有有效候选资格，不因父任务完成、工具返回或记录存在就成为正常候选。':'原生记录无法精确回读，当前仅显示此前已知引用，不借缓存确认异常原因、父任务状态或保存路径。'}</p><h3 class="spaced">异常记录引用</h3><div class="mono gap-top">${esc(item.origin)}</div><p class="footnote gap-top">均为虚构历史。不展示候选正文、类别或业务来源，不开放收藏、纠正或排除／恢复。</p></section>`;
+    $('detailFooter').innerHTML='<p class="footnote">异常历史只读；不会触发新任务、模型或补写。</p><button class="btn" data-close="detailDialog">关闭</button>';return;
+  }
+  if(!readable){
+    $('detailTitle').textContent='原生候选不可读 · UNKNOWN';
+    $('detailBody').innerHTML=`<section class="section"><div class="row">${statusPills(item)}</div><p class="note warning spaced">${esc(nativeIssue)}。当前仅能确认此前精确引用及人的既有控制，不能确认候选正文、类别、生成时间、额外业务来源或保存路径／父任务状态；不使用缓存payload补齐，也不回落最新稿。</p><h3 class="spaced">保留的精确引用</h3><div class="mono gap-top">projectId: project-demo-october\ntaskId: task-demo-compare\norigin: ${esc(item.origin)}\noccurrence: ${esc(item.id)}\nexpectedDetailsSha256: ${esc(CandidateDemo.target(item).expectedDetailsSha256)}（非真实字节摘要）</div><p class="footnote gap-top">均为本页虚构引用。重点收藏仅保存引用，没有候选正文或额外来源备份。</p><button class="btn compact gap-top" data-action="native-source">查看原生读取状态</button></section><section class="section"><h3>人的独立意见</h3>${c.notes.length?`<p class="footnote gap-top">仅回看已追加的人工注记；不能据此推断Agent原文或业务来源。</p><ol class="history">${[...c.notes].reverse().map((note,i)=>`<li><strong>${i===0?'最新意见':'历史意见'}</strong> · 同条第${note.targetRevision}次操作<div class="paper">${esc(note.note)}</div></li>`).join('')}</ol>`:'<p class="footnote gap-top">没有已记录的人工注记。</p>'}</section><section class="section"><h3>人的既有控制</h3><dl class="metadata"><dt>重点收藏</dt><dd>${c.bookmark?'已收藏 · 仅表达关注':'未收藏'}</dd><dt>排除状态</dt><dd>${c.excluded?'已排除此条及其分支副本':'未排除；列表仅显示UNKNOWN引用'}</dd><dt>当前内容</dt><dd>UNKNOWN，不从人的控制推断已确认或已恢复</dd></dl><details><summary>查看人的操作历史</summary>${historyMarkup(item)}</details></section>`;
+    const trusted=CandidateDemo.ledgerTarget(state,item);
+    $('detailFooter').innerHTML=`<div class="row"><button class="btn" data-action="${c.bookmark?'unbookmark':'bookmark'}" ${trusted&&c.bookmark?'':'disabled'}>${c.bookmark?'取消重点收藏':'新收藏不可用'}</button><button class="btn" disabled>纠正不可用</button><button class="btn" data-action="${c.excluded?'restore':'exclude'}" ${trusted?'':'disabled'}>${c.excluded?'恢复此条':'排除此条'}</button></div><p class="footnote">${trusted?'人的有效记录已有精确目标，可取消收藏、排除／恢复。恢复只改人的标志，原生仍UNKNOWN；不恢复正文或业务来源。':'仅本次曾读过引用，尚无人的有效记录保存该目标；此时只能阅读UNKNOWN与引用，不新增控制。'} 新收藏及纠正都需原文可精确回读。</p>`;
+    return;
+  }
+  $('detailTitle').textContent=readable?item.title:'原生候选不可读 · UNKNOWN';
+  $('detailBody').innerHTML=`<section class="section"><div class="row">${statusPills(item)}</div><p class="note spaced">候选来自Agent自主声明，尚未人工确认。重点收藏只表达关注；父任务状态不证明业务结论正确。</p>${item.run!=='completed'||!item.branch?`<p class="note warning spaced">已保存有效候选仍可发现：${esc(runs[item.run])}，${item.branch?'任务当前保存路径':'其它已保存路径'}。这些标签不代表实时模型上下文；收藏／恢复不改变父任务或保存路径。</p>`:''}<h3 class="spaced">Agent原文</h3>${readable?`<div class="paper gap-top">${esc(item.body)}</div>`:`<p class="note warning gap-top">${esc(nativeIssue)}，不能确认候选正文，保持UNKNOWN。不会展示缓存副本或按标题找最新记录替代。已有人的控制仍可读。</p>`}<dl class="metadata"><dt>适用范围</dt><dd>${readable?esc(item.scope||'未知／未说明'):'原生不可读，范围未知'}</dd><dt>业务时间</dt><dd>未知／未说明；不以生成时间代替</dd><dt>局限／提醒</dt><dd>${readable?esc(item.caution||'未说明，不表示无风险'):'无法回读'}</dd><dt>生成时间</dt><dd>${esc(item.createdAt)} · 技术时间</dd></dl></section><section class="section"><h3>生成依据与准确来源</h3><div class="sourcecard gap-top"><div class="row"><strong class="small">Pi原生生成记录</strong><span class="pill ${readable?'':'warn'}">${readable?'可精确回读（虚构）':'UNKNOWN'}</span></div><p class="footnote gap-top">证明产生过该声明，不证明业务真实。候选保存在原生任务记录中；重点收藏只保存引用。</p><button class="btn compact gap-top" data-action="native-source">查看原生记录</button></div>${item.source?`<div class="sourcecard gap-top"><div class="row"><strong class="small">${item.source==='report'?'固定报告＋附件':'准确反馈修订'}</strong><span class="pill ${state.businessState==='readable'?'':'warn'}">${state.businessState==='readable'?'准确来源可读（虚构）':state.businessState==='missing'?'来源缺失':'精确来源不符'}</span></div><p class="footnote gap-top">${item.source==='report'?'十月渠道复盘 · citation-demo-fixed-003':'反馈：跨期退货应单列 · feedback-demo-revision-04'}</p><button class="btn compact gap-top" data-action="business-source">查看业务来源</button></div>`:'<p class="note gap-top">业务依据尚未补充；只有原生生成记录，不变成已证实结论。</p>'}<details class="gap-top"><summary>准确引用身份 <span class="tiny">· 均为演示身份</span></summary><div class="mono">projectId: project-demo-october\ntaskId: task-demo-compare\norigin: ${esc(item.origin)}\noccurrence: ${esc(item.id)}\nexpectedDetailsSha256: ${esc(CandidateDemo.target(item).expectedDetailsSha256)}（非真实字节摘要）</div><p class="footnote gap-top">真实方案由Host校验原始entry／toolCall／完整details hash；这里的hash是明确占位值，没有执行校验。</p></details></section><section class="section"><div class="sectiontitle"><h3>人的独立意见</h3><span class="pill">原文保持</span></div>${c.notes.length?`<p class="footnote">最近一条优先展示；新意见再次追加，旧意见不覆盖。</p><ol class="history">${[...c.notes].reverse().map((note,i)=>`<li><strong>${i===0?'最新意见':'历史意见'}</strong> · 同条第${note.targetRevision}次操作<div class="paper">${esc(note.note)}</div></li>`).join('')}</ol>`:'<p class="footnote">尚未补充。无需为了保留候选而填写意见。</p>'}</section><section class="section"><h3>当前控制状态</h3><dl class="metadata"><dt>发现资格</dt><dd>${c.excluded?'已排除此条':readable?'已保存有效候选，可统一发现':'仅UNKNOWN精确引用，不宣称可读候选'}</dd><dt>重点收藏</dt><dd>${c.bookmark?'已收藏 · 仅表达关注':'未收藏 · 不妨碍有效候选被发现'}</dd><dt>人工确认</dt><dd>未因任何演示动作变成已确认事实</dd><dt>保存路径</dt><dd>${item.branch?'任务当前保存路径':'其它已保存路径；收藏不切换'}</dd><dt>父任务状态</dt><dd>${esc(runs[item.run])}</dd></dl><p class="footnote">排除只影响这条候选及其分支副本，未来同来源新内容仍可能出现。恢复不清收藏或纠正，不改变保存路径／父状态；来源失读仍为UNKNOWN。</p>${state.forkSeen&&item.id==='candidate-demo-01'?'<p class="note gap-top">已模拟fork复制：还是同一个原始occurrence，人的排除、收藏和注记不被绕过。</p>':''}<details class="gap-top"><summary>查看人的操作历史</summary>${historyMarkup(item)}</details></section>`;
+  $('detailFooter').innerHTML=`<div class="row"><button class="btn primary" data-action="${c.bookmark?'unbookmark':'bookmark'}">${c.bookmark?'取消重点收藏':'重点收藏'}</button><button class="btn" data-action="correct">补充纠正意见</button><button class="btn" data-action="${c.excluded?'restore':'exclude'}">${c.excluded?'恢复此条':'排除此条'}</button></div><p class="footnote">这些操作不改Agent原文、不证明正确，也不自动送给新任务。</p>`;
+}
+function openDetail(id){selected=id;renderDetail();show('detailDialog');}
+function openSource(native){
+  const item=findCandidate(selected);if(!item)return;
+  $('sourceTitle').textContent=native?'Pi原生生成记录':'准确业务来源';
+  if(native){const good=CandidateDemo.readable(state);$('sourceBody').innerHTML=`<div class="note">虚构精确阅读面板；不会启动Agent或打开实际会话。</div><dl class="metadata"><dt>原生身份</dt><dd class="mono">${esc(item.origin)}</dd><dt>候选身份</dt><dd class="mono">${esc(item.id)}</dd><dt>工具结果</dt><dd>${good?'原生成功结果details（手工预置）':'无法精确回读 · UNKNOWN'}</dd>${good?`<dt>原请求</dt><dd>${esc(runs[item.run])}</dd>`:''}</dl>${good?`<h3>候选原文</h3><div class="paper gap-top">${esc(item.body)}</div><p class="footnote spaced">这是预先写好的示例；没有原生JSONL文件、工具执行或真实哈希校验。技术保存不等于事实核验。</p>`:'<p class="note warning">准确原生记录不可读。仅保留引用，不显示缓存正文、不回落最新稿；人的旧注记和收藏状态仍可在详情查看。</p>'}`;}
+  else{if(!CandidateDemo.readable(state)){$('sourceBody').innerHTML='<p class="note warning">原生候选不可读，额外业务来源的绑定无法核对；不使用缓存来源身份或正文补读。UNKNOWN。</p>';show('sourceDialog');return;}const good=state.businessState==='readable';$('sourceBody').innerHTML=`<div class="row"><span class="pill">${item.source==='report'?'M2固定报告／附件':'反馈准确修订'}</span><span class="pill ${good?'':'warn'}">${good?'可读（虚构）':state.businessState==='missing'?'来源缺失':'精确来源不符'}</span></div><div class="mono spaced">${item.source==='report'?'projectId: project-demo-october\ncitationId: citation-demo-fixed-003\n位置: report + attachment/demo-return-mapping.csv':'sourceProjectId: project-demo-october\nboardTaskId: board-task-demo-08\nfeedbackRevisionId: feedback-demo-revision-04'}</div>${good?'<div class="paper spaced">【人工虚构固定来源】比较表混合了当期销售和上期退货。跨期项目仍待核对，不能凭这份报告判定促销有效。</div>':'<p class="note warning spaced">不能回读这份准确来源；引用继续保留，不找当前最新稿替代。候选本身仍只是Agent声明。</p>'}<p class="footnote spaced">原资料和附件均由本页手工预置；未连接产品或读取外部文件。</p>`;}
+  show('sourceDialog');
+}
+function setView(view){filters.view=view;render();}
+const walks={
+  attention:{description:'从固定初始状态阅读一条候选，再重点收藏和追加意见。观察：收藏不改变“未人工确认”，意见与原文分开。',steps:[['打开候选',()=>openDetail('candidate-demo-01')],['重点收藏',()=>{apply({type:'bookmark',id:'candidate-demo-01'});openDetail('candidate-demo-01');}],['追加虚构纠正',()=>{apply({type:'correct',id:'candidate-demo-01',note:'【虚构人工意见】跨期退货是否应计入本次比较，仍须核对业务确认期。'});openDetail('candidate-demo-01');}],['再追加一条意见',()=>{apply({type:'correct',id:'candidate-demo-01',note:'【虚构第二条意见】不要将口径一致直接当成因果效果成立；原意见继续保留。'});openDetail('candidate-demo-01');}]]},
+  exclusion:{description:'排除同一条候选，再模拟其fork副本和另一条新声明。观察：副本不能复活旧条目；同来源的新内容仍可能出现。',steps:[['排除此条',()=>apply({type:'exclude',id:'candidate-demo-01'})],['模拟fork副本',()=>apply({type:'fork'})],['模拟同来源新候选',()=>apply({type:'record'})],['去已排除查看',()=>{setView('excluded');openDetail('candidate-demo-01');}],['恢复原条目',()=>{apply({type:'restore',id:'candidate-demo-01'});setView('current');openDetail('candidate-demo-01');}]]},
+  history:{description:'已保存有效候选可来自其它保存路径，也可在父任务取消后保留。失读后，只对人的有效记录已有目标取消收藏／排除／恢复；原生仍UNKNOWN。',steps:[['阅读其它路径收藏',()=>{setView('bookmarks');openDetail('candidate-demo-history');}],['查看父取消但已存候选',()=>{setView('current');openDetail('candidate-demo-cancelled');}],['模拟原生记录缺失',()=>{apply({type:'configure',key:'nativeState',value:'missing'});setView('bookmarks');openDetail('candidate-demo-history');}],['失读时取消原收藏',()=>{apply({type:'unbookmark',id:'candidate-demo-history'});setView('current');openDetail('candidate-demo-history');}],['失读时排除此条',()=>{apply({type:'exclude',id:'candidate-demo-history'});setView('excluded');openDetail('candidate-demo-history');}],['失读时恢复仍UNKNOWN',()=>{apply({type:'restore',id:'candidate-demo-history'});setView('current');openDetail('candidate-demo-history');}]]},
+  concurrency:{description:'同条控制的过期设定须冲突；不同候选互不冲突；独立意见直接追加。原操作回读不受后续失读阻止，不重复生成事件。',steps:[['体验同条冲突',()=>{apply({type:'same-conflict'});setView('excluded');openDetail('candidate-demo-01');}],['体验跨条独立',()=>{apply({type:'cross-success'});setView('bookmarks');openDetail('candidate-demo-02');}],['追加两份独立意见',()=>{apply({type:'append-notes'});setView('excluded');openDetail('candidate-demo-01');}],['失读后查原操作',()=>{apply({type:'configure',key:'nativeState',value:'missing'});apply({type:'replay'});openDetail('candidate-demo-01');}],['同操作改请求被拒绝',()=>{apply({type:'changed-operation'});openDetail('candidate-demo-01');}]]}
+};
+function renderWalk(){document.querySelectorAll('[data-walk]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.walk===walk)));$('walkDescription').textContent=walks[walk].description;$('walkActions').innerHTML=`<button class="btn" id="startWalk">从初始状态开始此情景</button>${walks[walk].steps.map((s,i)=>`<button class="btn compact" data-step="${i}" ${i===walkStep?'':'disabled'}>${i+1}. ${esc(s[0])}</button>`).join('')}`;$('walkStatus').textContent=walkStep>=walks[walk].steps.length?'此情景已完成；可重新开始，或使用自由演示按钮继续。':'下一步：'+walks[walk].steps[walkStep][0]+'。可随时从初始状态重新开始。';}
+function resetUI(){document.querySelectorAll('dialog[open]').forEach(d=>d.close());returnFocus.clear();state=CandidateDemo.initial();filters={view:'current',category:'all',query:'',body:false,parent:'all',path:'all'};$('query').value='';$('includeBody').checked=false;selected=null;render();}
+document.addEventListener('click',event=>{
+  const b=event.target.closest('button');if(!b||b.disabled)return;
+  if(b.dataset.close){close(b.dataset.close);return;}
+  if(b.dataset.view){setView(b.dataset.view);return;}
+  if(b.dataset.category){filters.category=b.dataset.category;render();return;}
+  if(b.dataset.walk){walk=b.dataset.walk;walkStep=0;resetUI();renderWalk();return;}
+  if(b.id==='startWalk'){walkStep=0;resetUI();renderWalk();return;}
+  if(b.dataset.step!==undefined){const i=Number(b.dataset.step);if(i!==walkStep)return;walks[walk].steps[i][1]();walkStep++;renderWalk();return;}
+  const action=b.dataset.action;
+  if(action==='detail'){openDetail(b.dataset.id);return;}
+  if(action==='native-source'||action==='business-source'){openSource(action==='native-source');return;}
+  if(action==='correct'){$('correctionNote').value='';$('correctionError').textContent='';$('correctionNote').removeAttribute('aria-invalid');show('correctionDialog');return;}
+  if(['bookmark','unbookmark','exclude','restore'].includes(action)){apply({type:action,id:selected});const next={bookmark:'unbookmark',unbookmark:'bookmark',exclude:'restore',restore:'exclude'}[action],target=$('detailFooter').querySelector(`[data-action="${next}"]:not(:disabled)`);(target||$('detailTitle')).focus({preventScroll:true});return;}
+});
+$('searchForm').addEventListener('submit',event=>{event.preventDefault();filters.query=$('query').value.trim();filters.body=$('includeBody').checked;render();});
+$('includeBody').addEventListener('change',()=>{filters.body=$('includeBody').checked;render();});
+$('clearSearch').addEventListener('click',()=>{$('query').value='';filters.query='';render();$('query').focus();});
+$('manualEntry').addEventListener('click',()=>{filters.category='all';filters.query='';$('query').value='';setView('manual');$('pageStatus').innerHTML='<div class="note">原有人工笔记和保留流程沿M3。本页仅展示虚构内容，没有接入新建或编辑；无需每天写笔记。</div>';});
+$('simulateRecord').addEventListener('click',()=>apply({type:'record'}));
+$('simulateFork').addEventListener('click',()=>apply({type:'fork'}));
+$('emptyCandidates').addEventListener('click',()=>apply({type:'empty'}));
+$('firstUnread').addEventListener('click',()=>{resetUI();apply({type:'first-unread'});});
+$('savePending').addEventListener('click',()=>apply({type:'save-pending'}));
+$('replayOperation').addEventListener('click',()=>apply({type:'replay'}));
+$('changedOperation').addEventListener('click',()=>apply({type:'changed-operation'}));
+$('sameConflict').addEventListener('click',()=>apply({type:'same-conflict'}));
+$('crossSuccess').addEventListener('click',()=>apply({type:'cross-success'}));
+$('appendNotes').addEventListener('click',()=>apply({type:'append-notes'}));
+$('resetDemo').addEventListener('click',()=>{resetUI();walkStep=0;renderWalk();state.notice='全部演示已重置；没有删除实际数据。';render();});
+[['taskCapability','taskCapability'],['runOutcome','nextOutcome'],['recordState','nextRecordState'],['nativeState','nativeState'],['businessState','businessState']].forEach(([id,key])=>$(id).addEventListener('change',()=>apply({type:'configure',key,value:$(id).value})));
+[['parentFilter','parent'],['pathFilter','path']].forEach(([id,key])=>$(id).addEventListener('change',()=>{filters[key]=$(id).value;render();}));
+$('themeButton').addEventListener('click',()=>{const dark=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=dark?'dark':'light';$('themeButton').setAttribute('aria-label',dark?'切换浅色模式':'切换深色模式');});
+$('reviewShortcut').addEventListener('click',()=>{$('reviewNotes').open=true;$('reviewNotes').scrollIntoView({block:'start'});$('reviewNotes').querySelector('summary').focus({preventScroll:true});});
+$('fillCorrection').addEventListener('click',()=>{$('correctionNote').value='【虚构人工意见】口径核对只是比较的前提，仍不能据此认定促销有效；请保留未解决的归属差异。';$('correctionNote').focus();});
+$('correctionForm').addEventListener('submit',event=>{event.preventDefault();const note=$('correctionNote').value.trim();if(!note){$('correctionError').textContent='请填写你的意见，或返回继续阅读。';$('correctionNote').setAttribute('aria-invalid','true');$('correctionNote').focus();return;}if(!CandidateDemo.readable(state)){$('correctionError').textContent='原生目标当前不可核对，输入保持；未追加意见。';return;}apply({type:'correct',id:selected,note});close('correctionDialog');});
+document.querySelectorAll('dialog').forEach(d=>d.addEventListener('cancel',event=>{event.preventDefault();close(d.id);}));
+render();renderWalk();
+</script>
+</body>
+</html>
