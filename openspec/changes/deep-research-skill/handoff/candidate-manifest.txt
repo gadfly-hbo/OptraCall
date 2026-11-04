@@ -1,0 +1,20 @@
+deep-research skill 交接候选清单（SHA-256，2026-11-04，测评通过后放行版）
+skill 运行时/测试/规格候选 = 提交 a78a478（未变动）；本清单另含测评回执更新后的 result.md 与放行版任务书。
+分支：origin/qoder/ext-skills；基线：32ebe84（= 8b99699 分支记录 + main 8425ca1）。
+
+4d4847581b82fbb6ea3aaf31e0c54880ea3225d3591ee7c3fc762bf788ab30ad  extensions/analysis-assets/deep-research/SKILL.md
+637142596e1d464f68c129d58e0a41e7c61613dd4dee6c7a76153c1d026350db  extensions/analysis-assets/deep-research/agents/researcher.md
+99b7f07ef1c2c505c8400d7a22ed233fbb76ff17340b333e639cc25538f225b9  extensions/analysis-assets/deep-research/agents/reviewer.md
+1b84984e2d537b48dc3e3048cad2a4207ed82e33399767e216138a69072b17f2  extensions/analysis-assets/deep-research/references/method.md
+870a408303100ce7af943c15f197c524b91275e65e30fda112d15f957e6b525f  extensions/analysis-assets/deep-research/references/source-standards.md
+98758661967ee8af8f965f7bab13d232b9d76bfe49c3e2c3028752abb5983d4b  extensions/analysis-assets/deep-research/references/review-checklist.md
+d7658479034d458bc8c5f94a284f3e531e7e01ef1a63bafdecbaa9cc4fa62386  extensions/analysis-assets/deep-research/references/report-structure.md
+03ed16c4bd63eddb20542ebfb8cc4e57cb7cded4a850297cb9429af490a3454e  tests/deep-research-skill.test.ts
+a54a3b57ec82ef3e4e62678f82a6f2239b57d72262421726949221320d5c3c53  tests/protected-skills.test.ts
+219e08eb06899bc178c6df975a3487d505df164831bce58c7ca9d39a5cbe410d  scripts/check-agent-session-boundary.mjs
+c669535e262884af7d12dce8c847ce6dceda326b18dc9b76a0f19eb6e08e77f9  openspec/changes/deep-research-skill/spec.md
+0374be4dbfb8cf0077fa598c4e66999d20a009866464e3a1e1800a3abe10abd0  openspec/changes/deep-research-skill/result.md
+527bf0395b52cb53595be3f37e023e12e4070811045a75dd22d7ac93354a4ad4  openspec/changes/deep-research-skill/handoff/codex-catalog-seam.md
+dbf45759d57afbe514e9c7898c7622344fbdf9c0e69d7e908f10bba9719d4acd  openspec/changes/deep-research-skill/handoff/codex-takeover-brief.md
+
+范围声明：以上 14 个文件为本变更交接内容；docs/engineering-workflow.md 的分支记录与测评门禁条款（8b99699、bb0f3d8、c3c84b4）为流程治理提交，不属本候选运行时内容。无 Host/Agent 运行时代码改动；无 package.json/lockfile 变化。skill 测评门禁：用户 2026-11-04 显式确认通过（回执见 result.md）。

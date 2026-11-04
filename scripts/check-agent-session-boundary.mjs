@@ -30,6 +30,7 @@ const projectAgentOwners = new Set([
   'tests/managed-execution-stop-held.test.ts',
   'tests/subagent-runtime.test.ts', // SA01-SA04: isolated real SDK foreground delegation and parent cleanup.
   'tests/native-search-runtime.test.ts', // WEB01/02: loopback native-provider blocks and SDK continuation.
+  'tests/deep-research-skill.test.ts', // DR03: isolated real SDK delegation through the shipped deep-research skill; never a product runtime owner.
 ]);
 const sdkConsumers = new Set(['src/agent/project-session.ts', 'src/agent/runtime.ts', 'src/agent/browser-ui-context.ts']);
 // Exact native tool/resource helpers, without session/runtime constructors.

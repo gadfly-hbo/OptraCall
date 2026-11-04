@@ -6,6 +6,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { loadSkillsFromDir } from '../src/agent/sdk.ts';
 import { snapshotProtectedSkills } from '../src/agent/protected-skills.ts';
+import { discoverSubagentRoles } from '../src/agent/subagent.ts';
 
 test('protected skill snapshots keep complete safe resources and immutable old versions', () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'optracall-protected-skills-')), source = path.join(root, 'skills'), destination = path.join(root, 'snapshots');
@@ -62,4 +63,23 @@ test('TF01: the three forecast skills load from the analysis-assets directory an
   const result = snapshotProtectedSkills(picked, destination);
   assert.deepEqual(result.unavailable, []); assert.equal(result.skills.length, 3);
   for (const skill of result.skills) assert.ok(readFileSync(path.join(skill.baseDir, 'SKILL.md'), 'utf8').length > 0);
+});
+
+test('DR01: deep-research loads with exactly its researcher and reviewer roles and snapshots intact', () => {
+  const codeRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const source = path.join(codeRoot, 'extensions/analysis-assets');
+  const { skills } = loadSkillsFromDir({ dir: source, source: 'project' });
+  const skill = skills.find(item => item.name === 'deep-research');
+  assert.ok(skill, `deep-research must be discoverable by the locked SDK; got ${skills.map(item => item.name).join(',')}`);
+  assert.equal(skill.baseDir, path.join(source, 'deep-research'), 'deep-research must resolve to its analysis-assets directory');
+  assert.ok((skill.description ?? '').length > 30, 'deep-research must carry an activation description');
+  const roles = discoverSubagentRoles(skills);
+  assert.deepEqual(roles.map(role => role.name), ['deep-research/researcher', 'deep-research/reviewer'], `only the shipped deep-research roles may be delegatable; got ${roles.map(role => role.name).join(',')}`);
+  assert.ok(roles.every(role => role.baseDir === skill.baseDir));
+  const destination = mkdtempSync(path.join(os.tmpdir(), 'optracall-dr-snapshot-'));
+  const result = snapshotProtectedSkills([skill], destination);
+  assert.deepEqual(result.unavailable, []); assert.equal(result.skills.length, 1);
+  for (const relative of ['SKILL.md', 'agents/researcher.md', 'agents/reviewer.md', 'references/method.md', 'references/source-standards.md', 'references/review-checklist.md', 'references/report-structure.md']) {
+    assert.deepEqual(readFileSync(path.join(result.skills[0]!.baseDir, relative)), readFileSync(path.join(skill.baseDir, relative)), relative);
+  }
 });
