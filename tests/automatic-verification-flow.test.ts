@@ -210,7 +210,12 @@ for (const stage of ['compare', 'recheck'] as const) test(`AV06 ${stage} backgro
   const work = path.join(f.host.dataRoot, 'automatic-verifications', f.project.id, f.task.id, 'chains', chain.chainId, 'work', stage === 'compare' ? 'compare' : 'recheck-1', 'work');
   const release = path.join(work, 'handoff-release');
   try {
-    assert.equal(await readFile(path.join(work, 'handoff-ready'), 'utf8'), 'ready');
+    // Shell exit and SDK reply can precede the background interpreter's first
+    // write. Wait for its actual handshake before testing the handoff barrier.
+    assert.equal(await until(() => readFile(path.join(work, 'handoff-ready'), 'utf8').catch(error => {
+      if (error?.code === 'ENOENT') return '';
+      throw error;
+    }), value => value === 'ready', `${stage} background verifier ready`), 'ready');
     await assert.rejects(readFile(path.join(work, 'handoff-done')), { code: 'ENOENT' });
     await new Promise(resolve => setTimeout(resolve, 150));
     assert.equal(f.provider.requests.filter(value => value.stage === 'author' && !value.toolReply).length, stage === 'compare' ? 0 : 1, 'a completed SDK reply cannot hand active background writers to another Agent');
