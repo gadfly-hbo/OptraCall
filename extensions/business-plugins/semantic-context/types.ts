@@ -4,6 +4,7 @@ import type { PersonalContextTarget } from '../../../src/host/personal-context-t
 /** Transient query tuples only. Original Stores retain identity and persistence authority. */
 export type SemanticTarget =
   | { kind: 'sap'; packageId: string; version: string; metricName?: string; publishedHash?: string | null }
+  | { kind: 'sap-method'; methodId: string; version: number; publishedHash?: string | null }
   | { kind: 'enterprise'; storeId: string; materialId: string; revisionId: string; location?: { start: number; end: number } }
   | { kind: 'data-input'; projectId: string; datasetId: string; inputVersionId: string }
   | { kind: 'data-description'; projectId: string; datasetId: string; inputVersionId: string; descriptionRevisionId: string }
