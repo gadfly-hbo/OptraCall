@@ -316,7 +316,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     readBody: request => body(request),
     mutate,
     projectOverview: async () => (await projects.list()).map(({ id, name, archivedAt }) => ({ id, name, archivedAt })),
-    projectFiles: (projectId: string) => projects.tree(projectId),
+    projectFiles: (projectId: string) => projects.tree(projectId, ['060_reports']),
     assertActiveProject: async projectId => { assertActive(await projects.get(projectId)); },
     startExtraction: boardSessions.start,
     stopExtraction: boardSessions.stop,
