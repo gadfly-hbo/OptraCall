@@ -17,5 +17,5 @@
 ## 复核导引（非作者复核任务书要点）
 
 - 先从 spec.md 的 DR1–DR9、验收 DR01–DR07 独立导出预期，再核对实现与作者测试；源文件只读。
-- 重点：引用红线与回执规则是否与 [native-search.ts](../../../src/agent/native-search.ts) 实际行为一致（回执块文案逐字对应）；无检索路线降级指引是否与 Host guidance 矛盾；角色文件是否符合 [subagent.ts](../../../src/agent/subagent.ts) 发现契约（name/description/tools、无 model/cwd/agentDir、真实文件）；委派用法示例与工具 schema（三形态互斥、1–8 项、{previous}）是否一致；"质量目标非硬门禁"的降格是否被如实记录而非削弱原插件纪律；报告结构与免责声明完整性。
+- 重点：引用红线与回执规则是否与 [native-search.ts](../../../../src/agent/native-search.ts) 实际行为一致（回执块文案逐字对应）；无检索路线降级指引是否与 Host guidance 矛盾；角色文件是否符合 [subagent.ts](../../../../src/agent/subagent.ts) 发现契约（name/description/tools、无 model/cwd/agentDir、真实文件）；委派用法示例与工具 schema（三形态互斥、1–8 项、{previous}）是否一致；"质量目标非硬门禁"的降格是否被如实记录而非削弱原插件纪律；报告结构与免责声明完整性。
 - 复核上下文独立、不继承本会话；发现经根修复后由原复核者复验受影响范围。

@@ -282,6 +282,31 @@ button { color: inherit; }
 .catalog-card > p { font-size: 12px; line-height: 1.8; color: var(--muted); margin: 0 0 18px; flex: 1; }
 .catalog-tags { display: flex; gap: 5px; flex-wrap: wrap; }
 .catalog-tags > span { display: inline-block; font-size: 10px; color: var(--muted); padding: 2px 6px; background: var(--subtle); border-radius: 4px; }
+.skill-evaluation { margin-top: 16px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }
+.skill-evaluation > summary { display: flex; align-items: center; gap: 8px; min-height: 36px; padding-top: 8px; cursor: pointer; list-style: none; }
+.skill-evaluation > summary::-webkit-details-marker { display: none; }
+.skill-evaluation > summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 3px; }
+.skill-evaluation > summary > span:nth-child(2) { margin-left: auto; text-align: right; }
+.skill-evaluation > summary > span:last-child { transition: transform .12s; }
+.skill-evaluation[open] > summary > span:last-child { transform: rotate(180deg); }
+.skill-evaluation-body { padding-top: 10px; overflow-wrap: anywhere; }
+.skill-evaluation-body p { margin: 0 0 8px; line-height: 1.7; }
+.skill-evaluation-verdict, .skill-evaluation-gain { color: var(--accent); }
+.skill-evaluation-label { font-size: 10px; }
+.skill-evaluation-comparison { font-size: 16px; color: var(--ink); }
+.skill-evaluation-comparison > span[aria-hidden] { color: var(--muted); margin: 0 5px; }
+.skill-evaluation-comparison strong { font-size: 21px; font-weight: 600; }
+.skill-evaluation-primary { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 14px 0; }
+.skill-evaluation-primary > div { min-width: 70px; flex: 1; }
+.skill-evaluation-primary dt { margin-bottom: 3px; font-size: 10px; }
+.skill-evaluation-primary dd { margin: 0; color: var(--ink); font-size: 12px; }
+.skill-evaluation-primary small { font-size: 10px; color: var(--muted); }
+.skill-evaluation .skill-evaluation-pending { color: var(--warning); }
+.skill-evaluation-details { border-top: 1px solid var(--line); margin: 12px 0 0; padding-top: 12px; }
+.skill-evaluation-details > div { display: grid; grid-template-columns: 76px minmax(0,1fr); gap: 8px; margin-bottom: 8px; }
+.skill-evaluation-details dd { margin: 0; color: var(--ink); }
+.skill-evaluation-details small { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; }
+.skill-evaluation-body .skill-evaluation-footnote { margin-top: 12px; font-size: 10px; }
 .catalog-card-bottom { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--line); }
 .catalog-card-bottom > span { color: var(--muted); font-size: 11px; }
 .catalog-card-bottom button { border: 0; background: transparent; padding: 2px 0 2px 6px; color: var(--muted); font-size: 11px; }

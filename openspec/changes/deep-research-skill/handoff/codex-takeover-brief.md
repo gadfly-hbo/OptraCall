@@ -11,14 +11,14 @@
 
 ## 需 Codex 完成
 
-1. **核对候选**：fetch 后在自己的独立工作树检出 `qoder/ext-skills`，逐项核对 13 文件 SHA-256 与提交字节一致；差异即停并向用户说明，不回写清单。
+1. **核对候选**：fetch 后在自己的独立工作树检出 `qoder/ext-skills`，逐项核对 14 文件 SHA-256 与提交字节一致；差异即停并向用户说明，不回写清单。
 2. **实施唯一 Host 接缝**：`src/host/ui/catalog-data.ts` 新增 `deep-research` CatalogEntry 与"已接入"条目 + `App.tsx` `openCatalogEntry` 导航到项目视图；文案建议与理由见 [codex-catalog-seam.md](codex-catalog-seam.md)（note 需如实区分有/无原生检索路线）。完成后浏览器点验：条目可见、点击进项目看板，形态对齐 ppt-report/target-forecast。
 3. **非作者独立复核**：全新干净上下文子 Agent（未参与本候选任何部分、不继承作者会话），先从 [spec.md](../spec.md) 的 DR1–DR9 与验收 DR01–DR07 独立导出预期，再核对实现与作者测试；重点项见 codex-catalog-seam.md 复核导引（引用红线与 native-search 回执行为逐字一致性、角色文件合规、委派示例与工具 schema 一致、质量目标降格如实性、报告结构完整性）。源文件只读；发现经根修复后由原复核者复验。
 4. **Git/CI 交付**（需用户另行授权时先申请）：集成最新 main 并重验受影响部分 → 集中单 PR → 实际 head CI 成功 → 获授权后 squash 合并、本地 main 安全快进 → 更新 spec/result 实际状态并按惯例原位归档（含目录接缝与复核证据）。
 
 ## 回执要求
 
-给 Qoder 与用户：候选核对结果（n/13）、接缝实施与浏览器点验证据、非作者复核结论（发现/修复/复验）、Git/CI 与合并回执（PR 号、head CI、main 提交号）、OpenSpec 归档位置。
+给 Qoder 与用户：候选核对结果（n/14）、接缝实施与浏览器点验证据、非作者复核结论（发现/修复/复验）、Git/CI 与合并回执（PR 号、head CI、main 提交号）、OpenSpec 归档位置。
 
 ## 边界
 

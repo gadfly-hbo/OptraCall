@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>OptraCall · Skill 测评卡片 UI Demo</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; font-synthesis: none; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    button, summary { touch-action: manipulation; }
+    button:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    [hidden] { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    .app { --canvas: #fff; --sidebar: #f7f7f9; --surface: #fff; --subtle: #f5f5f8; --hover: #ececf2; --ink: #24232b; --muted: #6c6b78; --faint: #777580; --line: #e6e5eb; --accent: #6550c9; --accent-soft: #eeebfb; --focus: #a397e0; --warning: #80530c; --warning-bg: #fff7e8; min-height: 100dvh; color: var(--ink); background: var(--canvas); font-size: 14px; line-height: 1.55; color-scheme: light; }
+    .app[data-theme="dark"] { color-scheme: dark; --canvas: #1b1b20; --sidebar: #16161b; --surface: #232329; --subtle: #292930; --hover: #32323a; --ink: #eeeef2; --muted: #b2b0be; --faint: #a7a5b2; --line: #3d3b47; --accent: #b7a7ff; --accent-soft: #30294a; --focus: #c4b7ff; --warning: #edc887; --warning-bg: #372c1b; }
+    .skip-link { position: fixed; top: -100px; left: 20px; z-index: 5; padding: 10px; color: var(--ink); background: var(--surface); }
+    .skip-link:focus { top: 12px; }
+    .demo-banner { position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--line); padding: 9px 28px; background: var(--subtle); color: var(--muted); font-size: 12px; }
+    .demo-banner strong { color: var(--ink); font-weight: 550; }
+    .topbar { max-width: 1320px; margin: auto; padding: 21px 32px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .brand { display: inline-flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
+    .brand-mark { width: 29px; height: 29px; display: grid; place-items: center; color: var(--accent); background: var(--accent-soft); border-radius: 8px; font-size: 20px; }
+    .theme-button, .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 7px 11px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; font-size: 12px; }
+    .theme-button:hover, .secondary-button:hover { background: var(--subtle); }
+    main { max-width: 1320px; padding: 9px 32px 38px; margin: auto; }
+    .context { margin: 0 0 23px; padding-bottom: 14px; border-bottom: 1px solid var(--line); color: var(--accent); font-size: 13px; font-weight: 500; }
+    .context span { display: inline-flex; align-items: center; gap: 7px; }
+    .context svg { width: 18px; height: 18px; }
+    .page-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 26px; }
+    .eyebrow { color: var(--muted); font-size: 11px; margin: 0 0 4px; }
+    h1 { margin: 0 0 9px; font-size: 28px; font-weight: 550; line-height: 1.4; letter-spacing: -.5px; }
+    h1:focus { outline: none; }
+    .page-heading p:last-child { color: var(--muted); margin: 0; font-size: 13px; }
+    .catalog-demo-label { display: inline-flex; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .catalog-result-count { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+    .catalog-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+    .catalog-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); display: flex; flex-direction: column; }
+    .catalog-card:hover { border-color: var(--focus); box-shadow: 0 3px 14px #18122e05; }
+    .catalog-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+    .catalog-symbol { display: inline-grid; place-items: center; width: 36px; height: 36px; background: var(--accent-soft); color: var(--accent); border-radius: 8px; flex-shrink: 0; }
+    .catalog-symbol svg { width: 22px; height: 22px; }
+    .available-badge { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 2px 7px; font-size: 10px; }
+    .catalog-card h2 { font-size: 15px; line-height: 1.5; font-weight: 550; margin: 0 0 9px; overflow-wrap: anywhere; }
+    .catalog-card > p { font-size: 12px; line-height: 1.8; color: var(--muted); margin: 0 0 18px; }
+    .catalog-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+    .catalog-tags > span { display: inline-block; font-size: 10px; color: var(--muted); padding: 2px 6px; background: var(--subtle); border-radius: 4px; }
+    .evaluation { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .evaluation-head { display: flex; justify-content: space-between; align-items: center; gap: 9px; margin-bottom: 12px; font-size: 11px; color: var(--muted); }
+    .evaluation-head strong { font-weight: 500; color: var(--accent); }
+    .metric-label { margin: 0 0 4px; color: var(--muted); font-size: 11px; }
+    .main-metric { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; margin-bottom: 4px; font-size: 23px; line-height: 1.35; font-variant-numeric: tabular-nums; font-weight: 550; letter-spacing: -.5px; }
+    .main-metric .baseline { color: var(--muted); font-size: 16px; font-weight: 400; }
+    .main-metric .arrow { color: var(--faint); font-size: 14px; font-weight: 400; }
+    .delta { margin: 0; color: var(--accent); font-size: 12px; font-weight: 500; }
+    .metric-minor { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px; padding: 12px 0 0; margin: 0; }
+    .metric-minor div { min-width: 0; }
+    .metric-minor dt { color: var(--muted); font-size: 10px; margin-bottom: 3px; }
+    .metric-minor dd { margin: 0; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+    .metric-minor small { color: var(--muted); font-size: 10px; font-weight: 400; white-space: nowrap; }
+    .revision-note { margin: 11px 0 0; color: var(--warning); font-size: 10px; line-height: 1.65; }
+    details { margin-top: 12px; }
+    summary { width: fit-content; color: var(--muted); font-size: 11px; cursor: pointer; padding: 4px 0; border-radius: 2px; }
+    summary:hover { color: var(--accent); }
+    details[open] summary { margin-bottom: 9px; color: var(--accent); }
+    .detail-list { margin: 0; padding: 12px; border-radius: 6px; background: var(--subtle); font-size: 11px; }
+    .detail-list > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 9px; margin-bottom: 9px; }
+    .detail-list > div:last-child { margin-bottom: 0; }
+    .detail-list dt { color: var(--muted); }
+    .detail-list dd { margin: 0; overflow-wrap: anywhere; }
+    .detail-list dd span { display: block; margin-top: 3px; color: var(--muted); line-height: 1.6; }
+    code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .95em; }
+    .evaluation > summary { width: 100%; min-height: 30px; margin-bottom: 0; list-style: none; }
+    .evaluation > summary::-webkit-details-marker { display: none; }
+    .evaluation > summary::after { content: '⌄'; }
+    .evaluation[open] > summary { margin-bottom: 12px; }
+    .evaluation[open] > summary::after { transform: rotate(180deg); }
+    .evaluation > summary strong { margin-left: auto; }
+    .evaluation.pending .evaluation-head { margin-bottom: 7px; }
+    .evaluation.pending .evaluation-head strong { color: var(--muted); font-weight: 400; }
+    .evaluation.pending p { margin: 0; color: var(--faint); font-size: 11px; line-height: 1.7; }
+    .catalog-card-bottom { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--line); }
+    .catalog-card-bottom > span { min-width: 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+    .catalog-open-button { border: 0; background: var(--accent); color: var(--canvas); border-radius: 5px; padding: 7px 11px; font-size: 12px; flex-shrink: 0; min-height: 32px; }
+    .catalog-open-button:hover { filter: brightness(.93); }
+    .catalog-open-button span { margin-left: 4px; }
+    .catalog-page-footer { color: var(--muted); font-size: 11px; padding-top: 26px; text-align: center; }
+    .board-heading { margin-top: 22px; }
+    .board-note { margin: 0 0 22px; padding: 12px 14px; border-radius: 6px; background: var(--subtle); color: var(--muted); font-size: 12px; }
+    .demo-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .board-lane { min-width: 0; padding: 14px; background: var(--subtle); border: 1px solid var(--line); border-radius: 8px; min-height: 240px; }
+    .board-lane h2 { margin: 0 0 14px; font-size: 12px; font-weight: 500; color: var(--muted); }
+    .board-lane h2 span { margin-left: 6px; color: var(--faint); }
+    .board-card { padding: 15px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+    .board-card h3 { margin: 0 0 8px; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+    .board-card p, .board-empty { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.8; }
+    .board-card small { display: block; margin-top: 17px; color: var(--faint); font-size: 10px; }
+    .board-empty { padding: 24px 5px; text-align: center; }
+    @media (max-width: 1050px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 680px) {
+      .demo-banner { padding: 9px 16px; font-size: 11px; }
+      .topbar { padding: 17px 16px; }
+      main { padding: 6px 16px 28px; }
+      .context { margin-bottom: 22px; }
+      .page-heading { flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+      h1 { font-size: 23px; }
+      .catalog-grid, .demo-board { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+      .catalog-card { padding: 18px; }
+      .catalog-card > p { margin-bottom: 14px; }
+      .board-lane { min-height: 140px; }
+      .catalog-page-footer { text-align: left; line-height: 1.8; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  </style>
+</head>
+<body>
+<div class="app" id="app" data-theme="light">
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <div class="demo-banner"><strong>UI Demo · 待确认</strong>；只预览目录与测评信息，不调用模型/创建真实项目</div>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">◈</span>OptraCall</div>
+    <button class="theme-button" id="theme-toggle" type="button" aria-pressed="false" aria-label="切换到深色模式"><span aria-hidden="true" id="theme-icon">☾</span><span id="theme-label">深色</span></button>
+  </header>
+  <main id="main">
+    <section id="catalog" aria-labelledby="catalog-title">
+      <div class="context"><span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5 12 3l8 2.5v13L12 21l-8-2.5zM12 3v18M4 5.5 12 8l8-2.5"/></svg>分析资产</span></div>
+      <div class="page-heading">
+        <div><p class="eyebrow">能力目录</p><h1 id="catalog-title" tabindex="-1">分析资产</h1><p>复用业务知识、分析方法与报告表达能力。</p></div>
+        <span class="catalog-demo-label">4 项已接入 · 示例</span>
+      </div>
+      <p class="catalog-result-count">4 项演示 · 3 个 skill · 1 项其他资产</p>
+      <div class="catalog-grid">
+        <article class="catalog-card" aria-labelledby="research-title">
+          <div class="catalog-card-top"><span class="catalog-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5 12 3l8 2.5v13L12 21l-8-2.5zM12 3v18M4 5.5 12 8l8-2.5"/></svg></span><span class="available-badge">已接入</span></div>
+          <h2 id="research-title">深度研究</h2>
+          <p>多源研究、来源核对与报告写作，按需委派调研与审稿。联网检索取决于所选模型路线；未接通时基于用户资料综述。</p>
+          <div class="catalog-tags"><span>深度研究</span><span>来源核对</span></div>
+          <details class="evaluation" aria-label="深度研究用户测评">
+            <summary class="evaluation-head"><span>用户测评</span><strong>修正版待复测</strong></summary><div class="evaluation-content"><p class="metric-label">原候选测评：有效</p>
+            <p class="metric-label">断言通过率 · 条目累计</p>
+            <div class="main-metric"><span class="sr-only">从</span><span class="baseline">16.2%</span><span class="arrow" aria-hidden="true">→</span><span class="sr-only">提升至</span><span>29.4%</span></div>
+            <p class="delta">+13.2 个百分点</p>
+            <dl class="metric-minor">
+              <div><dt>激活率</dt><dd>80.0% <small>8/10</small></dd></div>
+              <div><dt>耗时</dt><dd>+65%</dd></div>
+              <div><dt>Token</dt><dd>+55%</dd></div>
+            </dl>
+            <p class="revision-note">测评对应原候选；修正版未复测</p>
+              <dl class="detail-list">
+                <div><dt>日期 / 样本</dt><dd>2026-11-04 · 10 项</dd></div>
+                <div><dt>对照</dt><dd>baseline：未装 skill<span>variant：装 skill</span></dd></div>
+                <div><dt>判定胜率</dt><dd>75.0%（3/4）<span>3 胜 · 1 平 · 0 负 · 6 未判定<br>分母为已判定的 4 项</span></dd></div>
+                <div><dt>平均耗时</dt><dd>278.9 → 460.8 秒</dd></div>
+                <div><dt>平均 Token</dt><dd>1.11M → 1.72M</dd></div>
+                <div><dt>用户结论</dt><dd>有效（effective）<span>用户提供的结论，仅代表本次测评样本。</span></dd></div>
+                <div><dt>候选版本</dt><dd><code>a78a478</code><span>测评对应原候选；修正版未复测。</span></dd></div>
+              </dl>
+
+          </div></details>
+          <div class="catalog-card-bottom"><span>deep-research</span><button class="catalog-open-button" type="button" data-open="深度研究" aria-label="打开深度研究演示">打开 <span aria-hidden="true">→</span></button></div>
+        </article>
+        <article class="catalog-card" aria-labelledby="coupon-title">
+          <div class="catalog-card-top"><span class="catalog-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5 12 3l8 2.5v13L12 21l-8-2.5zM12 3v18M4 5.5 12 8l8-2.5"/></svg></span><span class="available-badge">已接入</span></div>
+          <h2 id="coupon-title">优惠券测算</h2>
+          <p>内置分析 skill，随 OptraCall 更新。在项目任务对话中使用。满减券四子模型情景测算：保留无券基线，比较回本所需转化提升、约束过滤与压力结果，确定性脚本随产品内置。</p>
+          <div class="catalog-tags"><span>优惠券</span><span>营销测算</span></div>
+          <details class="evaluation pending" aria-label="优惠券测算用户测评"><summary class="evaluation-head"><span>用户测评</span><strong>数据待补</strong></summary><div class="evaluation-content"><p>暂未提供该 skill 的用户对照测评回执。</p></div></details>
+          <div class="catalog-card-bottom"><span>coupon-forecast</span><button class="catalog-open-button" type="button" data-open="优惠券测算" aria-label="打开优惠券测算演示">打开 <span aria-hidden="true">→</span></button></div>
+        </article>
+        <article class="catalog-card" aria-labelledby="ppt-title">
+          <div class="catalog-card-top"><span class="catalog-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5 12 3l8 2.5v13L12 21l-8-2.5zM12 3v18M4 5.5 12 8l8-2.5"/></svg></span><span class="available-badge">已接入</span></div>
+          <h2 id="ppt-title">PPT 报告生成</h2>
+          <p>以正式 md 报告生成候选版 PPTX：内容红线（不编造、数字逐字）+ 版式规范 + 单页重生成与核对脚本，随产品内置。</p>
+          <div class="catalog-tags"><span>PPT 生成</span><span>报告表达</span></div>
+          <details class="evaluation pending" aria-label="PPT 报告生成用户测评"><summary class="evaluation-head"><span>用户测评</span><strong>数据待补</strong></summary><div class="evaluation-content"><p>暂未提供该 skill 的用户对照测评回执。</p></div></details>
+          <div class="catalog-card-bottom"><span>ppt-report</span><button class="catalog-open-button" type="button" data-open="PPT 报告生成" aria-label="打开PPT报告生成演示">打开 <span aria-hidden="true">→</span></button></div>
+        </article>
+        <article class="catalog-card" aria-labelledby="metric-title">
+          <div class="catalog-card-top"><span class="catalog-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5 12 3l8 2.5v13L12 21l-8-2.5zM12 3v18M4 5.5 12 8l8-2.5"/></svg></span><span class="available-badge">已接入</span></div>
+          <h2 id="metric-title">指标体系</h2>
+          <p>维护可复用的指标定义、业务口径与 SAP 发布版本，并按需关联项目。</p>
+          <div class="catalog-tags"><span>指标口径</span><span>业务定义</span></div>
+          <div class="catalog-card-bottom"><span>metric-factory</span><button class="catalog-open-button" type="button" data-open="指标体系" aria-label="打开指标体系演示">打开 <span aria-hidden="true">→</span></button></div>
+        </article>
+      </div>
+      <footer class="catalog-page-footer">用户测评区域仅用于 skill；其他分析资产沿用现有介绍卡片。</footer>
+    </section>
+    <section id="project-demo" aria-labelledby="project-title" hidden>
+      <button class="secondary-button" id="back-button" type="button">← 返回分析资产</button>
+      <div class="page-heading board-heading"><div><p class="eyebrow">项目看板示例 · 演示</p><h1 id="project-title" tabindex="-1">深度研究 · 示例项目</h1><p>演示目录「打开」后的页面衔接。</p></div><span class="catalog-demo-label">仅内存预览</span></div>
+      <p class="board-note">这是静态项目看板示例；未创建真实项目、启动任务或调用模型。返回即可继续浏览卡片。</p>
+      <div class="demo-board">
+        <section class="board-lane" aria-labelledby="todo-title"><h2 id="todo-title">待开始 <span>1</span></h2><article class="board-card"><h3 id="demo-task-name">使用深度研究</h3><p>确认研究目标与资料范围</p><small>示例任务 · 未运行</small></article></section>
+        <section class="board-lane" aria-labelledby="doing-title"><h2 id="doing-title">进行中 <span>0</span></h2><p class="board-empty">暂无示例任务</p></section>
+        <section class="board-lane" aria-labelledby="done-title"><h2 id="done-title">已完成 <span>0</span></h2><p class="board-empty">暂无示例任务</p></section>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+  (() => {
+    'use strict';
+    const app = document.getElementById('app');
+    const themeButton = document.getElementById('theme-toggle');
+    const catalog = document.getElementById('catalog');
+    const project = document.getElementById('project-demo');
+    let lastOpened = null;
+    themeButton.addEventListener('click', () => {
+      const dark = app.dataset.theme !== 'dark';
+      app.dataset.theme = dark ? 'dark' : 'light';
+      themeButton.setAttribute('aria-pressed', String(dark));
+      themeButton.setAttribute('aria-label', dark ? '切换到浅色模式' : '切换到深色模式');
+      document.getElementById('theme-label').textContent = dark ? '浅色' : '深色';
+      document.getElementById('theme-icon').textContent = dark ? '☀' : '☾';
+    });
+    document.querySelectorAll('[data-open]').forEach(button => {
+      button.addEventListener('click', () => {
+        lastOpened = button;
+        const name = button.dataset.open;
+        document.getElementById('project-title').textContent = name + ' · 示例项目';
+        document.getElementById('demo-task-name').textContent = '使用' + name;
+        catalog.hidden = true;
+        project.hidden = false;
+        document.getElementById('project-title').focus();
+        window.scrollTo(0, 0);
+      });
+    });
+    document.getElementById('back-button').addEventListener('click', () => {
+      project.hidden = true;
+      catalog.hidden = false;
+      if (lastOpened) lastOpened.focus();
+    });
+  })();
+</script>
+</body>
+</html>

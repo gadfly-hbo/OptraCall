@@ -1,6 +1,6 @@
 # deep-research 深度研究 skill · 实施与验证记录
 
-日期：2026-11-04 · 分支：`qoder/ext-skills`（基线 `32ebe84` = 本分支 WIP 文档 + main `8425ca1`）· 状态：用户测评已通过（见下节），待 Codex 目录接缝、非作者复核与 Git/CI 授权。下文 Qoder 验证证据保留其移交时范围。
+日期：2026-11-04 · 分支：`qoder/ext-skills`（基线 `32ebe84` = 本分支 WIP 文档 + main `8425ca1`）· 状态：原候选用户测评已通过；Codex已接管、修复独立发现并实施目录与默认折叠测评UI，本地完整检查、真实产品浏览器点验及两轴非作者重验通过；修正版未复测，Git/CI待本轮授权。下文 Qoder 验证证据保留其移交时范围。
 
 ## 用户测评回执（2026-11-04，显式通过）
 
@@ -67,3 +67,31 @@ extensions/analysis-assets/deep-research/
 ## 下一步
 
 skill 测评门禁已通过（2026-11-04 用户显式确认，回执见上节）。移交 Codex：核对候选清单 → 实施目录接缝（catalog-data 一条目 + `openCatalogEntry` 导航，文案建议见 handoff）→ 非作者独立复核（覆盖 DR1–DR9 与 DR01–DR07）→ 按用户授权走 Git/CI 至合并。任务书：[handoff/codex-takeover-brief.md](handoff/codex-takeover-brief.md)。
+
+## Codex 接管与新增测评展示准备（2026-11-04）
+
+14/14完整SHA与交接HEAD0329249逐字节一致后开始工作，原清单保持不变；原Qoder工作树干净、同HEAD游离，Codex独立工作树检出qoder/ext-skills。原始14文件在仓外保全。证据根`/Users/bendandebaba/OptraCall-artifacts/deep-research-handoff-20261104-a772ae02/`（0700）；首次核验辅助脚本误假定后加移交书已存在于a78，产生git-show128，修正辅助比较后才取得14/14，不是清单差异或产品RED。
+
+两名全新干净上下文非作者先冻结预期，再独立核实现与测试。原候选均暂不通过：Spec轴2项P2（来源硬配额、缺来源块误判能力），Standards轴2项P2（来源硬配额、默认大纲确认）及1项P3（移交书13/14残留）；两个handoff源码链接另有路径错误。原报告与环境失败保留，未用测试绿抹去。Spec原阶段有效39/39目标／接缝合成回归，Standards原阶段48/48目标、boundary、6项独立例外反例及类型重验通过；首次依赖缺件的环境失败与后续有效验证分开记录。
+
+Codex已直接修正提示词三类冲突、移交书计数与链接，并补深度研究目录条目／项目导航；没有改subagent/native-search实现或作者测试。修正后的检查及原复核者重验另记，不能提前写通过。
+
+用户已明确确认[展示规范](../../../docs/skill-evaluation-display.md)与[可点击Demo](../../../docs/prototypes/skill-evaluation-catalog-demo.html)，随后追加全部测评数据默认收起、手动点击一次展开；Demo与正式实现同步按此更新。展开后共同呈现条目累计增益13.2个百分点、激活率80.0%及耗时约+65%／Token约+55%、已判定胜率75.0%（3/4，另6未判定）和完整比较值；已有skill未给回执则数据待补。所有skill共享一个静态元信息与原生details展示组件，无嵌套第二次展开、没有持久设置／后端接口或模型触发。原型仍仅内存预览，正式产品浏览器证据另记。
+
+上节测评回执按原样保留，实际测评对象为a78a478七文件。接管后提示词已修正，**修正版尚未复测**，不能把原测评通过移作新版成绩。原回执“产物口径+27.9pp、14.7%→44.1%”不自洽（两端差29.4个百分点）；待用户核正，本次主卡与详情只采用无歧义的条目累计13.2个百分点，不覆盖或静默修正原回执。
+
+主仓main核清洁且已前进到bee3ae0；目前尚未集成新main、推送、开PR、运行hosted CI或合并。没有切换产品运行服务、操作MacBook或新增真实模型实验。skill分支长期保留，本轮合并原位归档后按任务书归还Qoder的写入归属，不提前回交或删除分支。
+
+提示词修正后39项合成目标／subagent／native-search接缝回归通过。展示元信息按TDD先留真实RED：既有目录无任何skill测评槽位，预期5项实际0项；外层shell首轮以cat结束不代表测试exit0通过，随后单独捕获node测试exit1与同一行为失败。最小实现后4项共享展示数据／分母／百分点／缺失值测试通过，类型检查通过；这些只证明目录显示计算与数据边界，不冒称真实模型增益复测。全量检查与最终浏览器／非作者重验另记，不预写成功。
+
+## Codex 本地完整检查与真实产品 UI 点验
+
+固定本地完整候选 `local-candidate-v1.json` 共598文件，SHA-256 `2de89047ffd8c04c3566f30176ddef240defdd5251c8f5ed42d3b58724631b65`，覆盖原HEAD的全部跟踪文件及本轮新增文件，非仅原14文件。此时仍在原移交基线上，未集成最新main。
+
+`npm run check` exit0：**1008项＝1005 PASS／0 FAIL／3条件SKIP**，边界、tsc、Vite构建及构建标记完成。原3条条件SKIP及大bundle警告保留。`full-check-local.log` SHA-256 `99bd92b8a09acd41ac44d499d1ac114ca912d8319bad5b30323093d3c2783558`；结果见证据根的 `full-check-local-receipt.json`。检查后及浏览器收尾后分别重核598文件，均零漂移。此为本地全量检查，不是hosted CI，也不提前证明新main整合后的候选。
+
+以独立0700数据根启动产品正常 `createHost` 和构建后的正式UI，未导入凭据、经营资料或旧项目。Codex根会话通过浏览器实际操作：分析资产五个skill测评区默认全部closed，数值不可见；点击深度研究一次即展开完整五项指标／样本／被测版本，再次点击或焦点内Return收起；数据待补展开不补造零值；打开深度研究进入既有空项目看板。桌面浅深色及390×844窄屏均检查，窄屏文档宽390、测评区clientWidth与scrollWidth均320，无嵌套details或横向溢出，完整数据可正常滚动阅读。测试临时视口已恢复。
+
+`qa-ui/`保留22件AX／DOM／截图证据；汇总 `product-ui-qa-receipt.json` SHA-256 `f8348ed7a47e8a1a4d4246f204525de2a38ba00142574f7d3e10181dbf6454b0`。一次深色full-page截图为空白，原件 `dark-expanded.png` 保留，不计成功；随后正常可见捕获 `dark-expanded-visible.png` 与AX证据成功。浏览器console告警／错误记录为空。测试Host已按SIGTERM正常关闭、两个自建标签页和原型服务已关闭；`catalog-qa-closed.json`记录**26个GET、0个修改请求**，没有发送模型请求或改变现网服务。
+
+上述证明目录展示与导航，不是修正版用户测评或专业质量验收。两名原独立复核者的最终本地结论与证据见[独立复核](independent-review.md)：本地Spec通过，Standards限范围通过，无遗留可行动发现；其实际角色为只读核验固定UI证据，不冒称由复核者亲自点浏览器。Spec独立11项受影响回归与数值／静态渲染探针通过；Standards独立52项、边界、类型及45项数值／SSR探针通过。所有结论绑定原基线本地v1，后续仅非运行时OpenSpec文字收尾，不以局部检查冒称新main或CI通过。
