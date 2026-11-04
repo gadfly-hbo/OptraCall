@@ -1,6 +1,6 @@
 # deep-research 深度研究 skill（WorkBuddy gpt-researcher-team 能力承接）
 
-状态：本地实施、最新main集成及两轴非作者受影响重验完成；已获Git/CI和CI通过后直接合并／归档授权，实际head CI与归档尚未完成。原用户测评绑定a78a478，修正版未复测，见[结果](result.md)。
+**工程实施原位归档（2026-11-04）**：[PR #33](https://github.com/gadfly-hbo/OptraCall/pull/33) 的实际head `662c630d9420c9731d9e155238ad0d1d6f7aba46` 经 [Check #95](https://github.com/gadfly-hbo/OptraCall/actions/runs/41808461312) 成功后，按用户直接合并授权squash为 `30eda7004a4547ff8a1f97d6ac1cf031d28f62f4`，完整树与受检head相同，本地main已安全快进。规格、结果、独立复核、原清单与移交包在本目录稳定原路径保留；合并main及本归档提交自身CI分别按[最终记录](result.md#合并交付与原位归档)及实际Git／Actions回执核定。原用户测评仅绑定a78a478，修正版未复测；工程归档不提升为真实模型专业或用户产品验收。
 
 2026-11-04 · 本变更是 `qoder/ext-skills` 长期 skills 安装分支的首轮安装。来源：WorkBuddy 市场插件 gpt-researcher-team v2.0.0（7 角色 × 5 阶段深度研究团队，MIT，MacBook `/Users/huangbo/.workbuddy/plugins/marketplaces/experts/plugins/gpt-researcher-team/`），仅承接其研究方法、来源标准、审稿纪律与报告结构等能力；其市场外壳（plugin.json/人设/头像/quickPrompts）与 WorkBuddy 团队协议（TeamCreate/SendMessage）不进入本仓。
 
