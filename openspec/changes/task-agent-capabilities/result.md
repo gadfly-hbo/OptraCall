@@ -1,6 +1,6 @@
 # 任务 Agent 能力实施与验证记录
 
-2026-11-04。工作树 `/Users/bendandebaba/.codex/worktrees/31d3/OptraCall`，长期分支 `codex/Host-Agent-Extension`，基线 `fa52ae2f2507309dcb204b3cef616397a19bf62d`。本记录区分实现、工程验证、真实搜索观察、Git/CI及运行采用；不覆盖既有专业 FAIL/UNKNOWN。用户已授权本分支提交、推送、PR及CI，首个提交 `2a6b34f` 已推送，[PR #30](https://github.com/gadfly-hbo/OptraCall/pull/30) 打开未合并；合并、服务采用和用户验收未执行。后续纯文档重测补证另见末节。
+2026-11-04。实施工作树 `/Users/bendandebaba/.codex/worktrees/31d3/OptraCall`，长期分支 `codex/Host-Agent-Extension`，基线 `fa52ae2f2507309dcb204b3cef616397a19bf62d`。本记录区分实现、工程验证、真实搜索观察、Git/CI及运行采用；不覆盖既有专业 FAIL/UNKNOWN。[PR #30](https://github.com/gadfly-hbo/OptraCall/pull/30) 已按随后用户授权squash合并main `f174ebb`，工程实施原位归档；服务采用和用户产品验收未执行。先前阶段及其未授权状态保留，当前合并/Qoder回执补证见末节。
 
 ## 实现范围
 
@@ -40,7 +40,7 @@ R2 保持原 Provider/model/api/baseUrl：MiniMax M3/M3.1 Flash 声明版本化�
 
 ## 最终固定候选与交付状态
 
-最终全量、非作者增量核对和Qoder回执见下；不能用v1/v2较早结果替代后续候选。获授权的Git提交/推送、PR及实际head CI按实际结果记录；合并main、运行采用及用户验收另待相应授权/证据。角色/工具调用合同见 [spec.md](spec.md)，完整回执由 `qoder-receipt.md` 承接。
+最终全量、非作者增量核对和Qoder回执见下；不能用v1/v2较早结果替代后续候选。下列保留当时阶段的Git授权及证据，后续明确合并授权与实际结果见末节；运行采用和用户验收仍分别报告。角色/工具调用合同见 [spec.md](spec.md)，完整回执由 `qoder-receipt.md` 承接。
 
 ### v3工程收尾补证
 
@@ -50,7 +50,7 @@ R2 保持原 Provider/model/api/baseUrl：MiniMax M3/M3.1 Flash 声明版本化�
 - 3项SKIP保持：本机macOS支持受管profile而未执行unsupported平台分支；两项真实soffice页面图像测试。没有把这些写成通过，保留既有Vite大于500kB bundle提示。
 - 两位非作者在固定v2分别重验原发现及旧消费者，并对v3两处增量和交付文档作最终补充核对；原不通过及其独立RED不改写。原报告、范围和补充全文见 `independent-review.md`，最终结论以该汇总所附原文为准。
 
-R1本地工程合同和R2原生协议适配具备当前源代码/合成SDK证据；真实问答的取消、证据不足及NOT_PROVED仍未关闭，不据此宣布专业或用户产品验收。用户于2026-11-04明确授权提交、推送本分支、创建PR及运行CI。交付前fetch核对：HEAD、origin/main及origin/codex/Host-Agent-Extension均为上述基线；578文件最终清单全部摘要匹配，源码/测试未再变化，可沿用v3本地检查和独立复核。此后仅补充Git授权/交付状态文档；实际PR与head CI结果须以远端记录核验，不能预写通过。**未授权合并，未切换服务、未更新MacBook**；长期分支继续保留。
+R1本地工程合同和R2原生协议适配具备当前源代码/合成SDK证据；真实问答的取消、证据不足及NOT_PROVED仍未关闭，不据此宣布专业或用户产品验收。用户于2026-11-04明确授权提交、推送本分支、创建PR及运行CI。交付前fetch核对：HEAD、origin/main及origin/codex/Host-Agent-Extension均为上述基线；578文件最终清单全部摘要匹配，源码/测试未再变化，可沿用v3本地检查和独立复核。此后仅补充Git授权/交付状态文档；实际PR与head CI结果须以远端记录核验，不能预写通过。**首次提交时尚未授权合并，未切换服务、未更新MacBook**；后续合并授权见末节，长期分支继续保留。
 
 ### 首次Git交付与新增真实重测
 
@@ -58,4 +58,22 @@ R1本地工程合同和R2原生协议适配具备当前源代码/合成SDK证据
 
 用户随后明确排除DeepSeek并授权MiniMax/MiMo重测。本轮以该源码、原四配置各一次新公开问题，**四项均真实搜索并正常完成；MiniMax两项给出正确版本/日期及可核验本次官方来源，但均未遵守150字；MiMo Pro旧版本误判，MiMo Flash诚实但缺发布日期。** 核心事实闭环与包含格式的全条件验收分别报告：两项MiniMax核心闭环成立，先验全条件 `FULL_ANSWER_PASS` 为0/4。不能再笼统说一次完整事实回答都没有，也不能将格式/内容缺口写成已消除。
 
-47个结构化URL读回46×200/1×403，另4个正文额外官方URL均200、单独存放；MiniMax原生中间搜索错误10/26个仍保留。M3附带“博客同日发布”也有事实差错（博客26日、发行25日），核心正确不等于全文全对。源码/原配置字节未改，没有模型补跑、自动重放或切线。完整身份、逐模型结果、长度、来源与失败见 [重测记录](product-live-retest-validation.md) 及[独立复核原文](product-live-retest-review.md)；本增量只修改记录，不新增产品实现或确定性测试。实际新增文档提交的head CI继续按PR记录核验，不能用Check #85冒充新head结果；原三个未完成问题、旧专业FAIL/UNKNOWN、未合并及未运行采用边界均保持。
+47个结构化URL读回46×200/1×403，另4个正文额外官方URL均200、单独存放；MiniMax原生中间搜索错误10/26个仍保留。M3附带“博客同日发布”也有事实差错（博客26日、发行25日），核心正确不等于全文全对。源码/原配置字节未改，没有模型补跑、自动重放或切线。完整身份、逐模型结果、长度、来源与失败见 [重测记录](product-live-retest-validation.md) 及[独立复核原文](product-live-retest-review.md)；本增量只修改记录，不新增产品实现或确定性测试。该新增文档head的Check #86身份与结果见末节，不能用Check #85冒充；重测发布当时仍未获合并授权，原三个未完成问题、旧专业FAIL/UNKNOWN及未运行采用边界均保持。
+
+## 合并main、Qoder回执与原位归档
+
+用户随后明确指示“合并main，并更新给到qoder的回执”，替代前述等待合并的阶段状态；没有新增真实模型、设备更新或服务采用授权。按最终受检head精确合并，原FAIL/UNKNOWN、独立报告和原始清单不回写。
+
+| 项目 | 已核实际事实 |
+| --- | --- |
+| 唯一功能PR | [#30](https://github.com/gadfly-hbo/OptraCall/pull/30)，最终head `805029727e57b46fda4468b72d849a18ffb4bedf`，base `fa52ae2f2507309dcb204b3cef616397a19bf62d`；合并前再次fetch，双方未前进，候选清洁 |
+| 最终head CI | [Check #86](https://github.com/gadfly-hbo/OptraCall/actions/runs/41741303376) attempt1，实际checkout=8050297，1001项／931PASS／0FAIL／70条件SKIP；边界、类型、构建及高危审计成功，2项moderate保留；日志SHA256 `2338ef762e45b9ad941eebb315aea5850cde40958c3b8a49503fc21d39102141` |
+| squash及完整树 | `f174ebbf7dfd1eb6cd63f4be4a9a013b166d51a9`，唯一父为fa52ae2；与受检8050297完整树均为 `9db66b341846084a98ca953b957bfd3b728bff90`。GitHub实际merged=true，未拿预览merge_commit_sha当交付身份 |
+| 本地main首次快进 | `/Users/bendandebaba/DevWorkSpace/OptraCall` 干净，从fa52ae2以 `merge --ff-only origin/main` 到f174ebb；只读进程核对未见Node/Bun/Deno使用该工作树cwd或命令引用其源路径，没有重启/切换服务 |
+| 非作者合并前复核 | 当前PR/head/base/Check86与290个源码、测试及脚本一致；无未关闭工程阻断。模型质量、严格0/4和费用UNKNOWN未被抬为通过，报告保留在 `.local/task-agent-capabilities/merge-closeout-review/` |
+
+沿用本仓原位归档惯例，目录路径、规格、研究、两轮非作者原报告、真实取消/不足/错误及候选证据保持；不移动历史路径。工程实施已合并归档，联网与子Agent的适用范围仍按规格，未完成质量项不因此关闭。
+
+本次独立 `codex/task-agent-capabilities-closeout` 工作树基于真实squash main，仅修改本规格、结果和Qoder回执三份Markdown，补实际交付身份和原位归档；产品源码、测试、依赖、角色合同及Provider配置未改。文档提交自身SHA、普通fast-forward推送、实际main push CI及最终本地main/长期分支对齐以Git/Actions和交付收据逐项核验，不预写未来成功，也不为自引用无限追加提交。合并main CI与随后文档main CI分别核对，不以PR CI替代。
+
+[Qoder回执](qoder-receipt.md)现以包含f174ebb及本回执的main为接入基线，保留skill分发角色、调用参数、普通/受管/受保护策略、原生搜索与凭据/出境边界及真实质量缺口。Codex未修改Qoder工作树；Qoder自行保留WIP后集成main，现有产品服务是否加载该代码另行核定。长期 `codex/Host-Agent-Extension` 不删除、不reset或改写历史；原始交付/重测/CI证据仍在实施工作树 `.local/task-agent-capabilities/`。

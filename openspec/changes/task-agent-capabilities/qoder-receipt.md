@@ -1,6 +1,8 @@
 # Codex → Qoder：任务内委派与原生联网接缝回执
 
-2026-11-04。分支 `codex/Host-Agent-Extension` 长期保留；skill 本体继续由 Qoder 在 `qoder/ext-skills` 实施，本次没有修改该工作树。源码基线 `fa52ae2`，源码交付提交 `2a6b34f` 已推送、[PR #30](https://github.com/gadfly-hbo/OptraCall/pull/30) 未合并，其实际head Check #85已通过；后续记录增量的head CI另核验。不能将契约可用写成已在现有服务上线。最终身份与工程结果见 [result.md](result.md)。
+2026-11-04更新：用户已授权合并main及更新本回执。[PR #30](https://github.com/gadfly-hbo/OptraCall/pull/30) 已squash合并，**main功能提交为 `f174ebbf7dfd1eb6cd63f4be4a9a013b166d51a9`**；其完整树与最终受检head `805029727e57b46fda4468b72d849a18ffb4bedf` 相同，实际head的 [Check #86](https://github.com/gadfly-hbo/OptraCall/actions/runs/41741303376) 已通过。main push检查与本回执纯文档收尾的最终SHA/CI按Git/Actions及交付收据逐提交核验，不能用PR检查冒充main检查。完整结果见 [result.md](result.md)。
+
+**给Qoder的接入基线：** 使用包含上述功能提交及本回执的main；`codex/Host-Agent-Extension`长期保留，由Codex维护Host/Agent接缝。`deep-research` skill本体继续由Qoder在 `qoder/ext-skills` 实施；Qoder保留其WIP后按常规集成main，不依赖未合并的功能候选。本次Codex没有修改Qoder工作树，也未切换任何运行服务或操作MacBook。main代码已合入不表示现有产品服务已加载，运行采用仍另行授权。
 
 ## R1：subagent
 
@@ -52,7 +54,7 @@ description: 调查公开来源并区分证据与未知。
 | --- | --- |
 | MiniMax-M3 / MiniMax-M3.1-Flash，现有Anthropic端点 | Provider服务端 `web_search_20250305`，工具名 `web_search`；保留原始搜索块，pause_turn由SDK同一生命周期自然续接 |
 | mimo-v2.6-pro / mimo-v2.6-flash，现有token-plan-cn端点 | Provider原生 `{type:"web_search",max_keyword:3,force_search:false,limit:1}`，Agent决定调用；保留annotations来源与专用搜索usage |
-| deepseek-flash，现有Chat Completions端点 | 本次探索声明422；不注入、不自动切协议/端点或另接搜索服务，Agent须如实说明当前未接通能力 |
+| deepseek-flash，现有Chat Completions端点 | 历史探索声明422，用户已明确不再测试；不注入、不自动切协议/端点或另接搜索服务，Agent须如实说明当前未接通能力 |
 
 联网是Provider原生工具，不是可由本地 `executeTool` 调用的function或MCP；在实际模型请求中与函数工具并存。skill应让Agent按目标自主使用 `web_search`，无需在Host规定研究阶段或固定调用顺序。本期没有独立 `web_fetch` 工具；普通任务原有bash等能力并不因此改变，受管执行器也不新增网络权限。
 
@@ -64,4 +66,4 @@ description: 调查公开来源并区分证据与未知。
 
 M3另有附带博客发布日期误述（26日误称与25日发行同日），不记全文全对。包含150字格式的先验全条件判定仍为0/4，[非作者原报告](product-live-retest-review.md)及原文/投影长度均保留。
 
-完整工程检查、非作者原发现及修复增量见 [result.md](result.md)。本期未切换服务、未操作MacBook；Qoder可以依本契约编写skill，其在实际产品服务可用仍依赖后续Git集成及另行授权的运行采用。
+完整工程检查、非作者原发现及修复增量见 [result.md](result.md)。本回执已明确main功能提交，Qoder可以依本契约开展skill实现及适用合成验证：角色随skill分发、仅通过 `subagent` 参数调用，不自行新建Runtime或读取凭据。真实模型/计费、数据及运行采用范围按各自有效授权，不能从本次合并推导额外许可；本回执不以MiMo内容失败、格式FAIL或旧未完成问题为通过。
