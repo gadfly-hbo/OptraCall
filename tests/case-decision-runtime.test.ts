@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { ProjectAgent, type ProjectAgentOptions } from '../src/agent/project-runtime.ts';
+import { ProjectAgent, ProjectRuntimeError, type ProjectAgentOptions } from '../src/agent/project-runtime.ts';
 import { startToolProvider } from './fixtures/tool-provider.ts';
 
 async function fixture(t: TestContext) {
@@ -41,8 +41,18 @@ test('M5 CD08 scope regression: unbound and zero-tool prompts stay ordinary; pro
   f.provider.setResponder(({recentToolResults})=>recentToolResults.length?{text:'普通回答。'}:{calls:[{name:'read_case_decisions',arguments:{}}]});
   assert.equal((await agent.start('无Case普通分析，无需建Case。',randomUUID()).completion).outcome,'completed');assert.equal(calls,0);
   const ordinaryWorkspace={cwd:path.join(f.options.projectDirectory,'020_clean'),systemPrompt:['Synthetic plugin.']};
-  for(const extra of [{taskId:undefined},{workspace:ordinaryWorkspace},{workspace:{...ordinaryWorkspace,capabilityPolicy:'text-only' as const}},{protectedExecution:{id:randomUUID(),profile:'ordinary' as const,cwd:ordinaryWorkspace.cwd,writableRoot:ordinaryWorkspace.cwd,readRoots:[]}}]){
-    const a=f.create({...extra,caseDecisions,sessionDirectory:path.join(f.root,randomUUID())});assert.ok(!(await a.open()).tools.includes('save_case_decision_draft'));
+  for(const extra of [{taskId:undefined},{workspace:ordinaryWorkspace},{workspace:{...ordinaryWorkspace,capabilityPolicy:'text-only' as const}}]){
+    const requests=f.provider.requests.length,a=f.create({...extra,caseDecisions,sessionDirectory:path.join(f.root,randomUUID())}),opened=await a.open();
+    assert.ok(!opened.tools.includes('save_case_decision_draft'));assert.ok(!opened.tools.includes('read_case_decisions'));assert.equal(f.provider.requests.length,requests);
+  }
+  for(const profile of ['ordinary','protected'] as const){
+    const requests=f.provider.requests.length,a=f.create({caseDecisions,protectedExecution:{id:randomUUID(),profile,cwd:ordinaryWorkspace.cwd,writableRoot:ordinaryWorkspace.cwd,readRoots:[]},sessionDirectory:path.join(f.root,randomUUID())});
+    if(process.platform==='darwin'){
+      const opened=await a.open();assert.ok(!opened.tools.includes('save_case_decision_draft'));assert.ok(!opened.tools.includes('read_case_decisions'));
+    }else{
+      await assert.rejects(a.open(),error=>{assert.ok(error instanceof ProjectRuntimeError);assert.equal(error.code,'sdk_operation_failed');assert.deepEqual(error.cause,{message:'unsupported_protection'});return true;});
+    }
+    assert.equal(f.provider.requests.length,requests,'managed capability inspection or unsupported-platform refusal must not call a Provider');
   }
   f.provider.setResponder(()=>({text:'零记录正常回答。'}));
   assert.equal((await agent.start('有Case也可零条草案。',randomUUID(),undefined,{case:{operationId:randomUUID()}}).completion).outcome,'completed');assert.equal(calls,0);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { ProjectAgent, type ProjectAgentOptions } from '../src/agent/project-runtime.ts';
+import { ProjectAgent, ProjectRuntimeError, type ProjectAgentOptions } from '../src/agent/project-runtime.ts';
 import { startToolProvider } from './fixtures/tool-provider.ts';
 import { readSavedTaskReply } from '../src/host/project-history.ts';
 import { createNativeSnapshotReadBudget } from '../src/host/native-session-snapshot.ts';
@@ -58,8 +58,20 @@ test('M6 EL08 real native candidate chooses v2 only for new refs; feature-off ke
 test('M6 EL09 scope: plugin/sealed/managed/no-task resources never receive the new tool', async t => {
   const f = await fixture(t), caseSources = async () => ({ content: [{ type: 'text' as const, text: 'unavailable' }], details: {} });
   const workspace = { cwd: path.join(f.options.projectDirectory, '020_clean'), systemPrompt: ['Synthetic plugin only.'] };
-  for (const extra of [{ taskId: undefined }, { workspace }, { workspace: { ...workspace, capabilityPolicy: 'text-only' as const } }, { workspace: { ...workspace, capabilityPolicy: 'fixed-draft' as const } }, { protectedExecution: { id: randomUUID(), profile: 'ordinary' as const, cwd: workspace.cwd, writableRoot: workspace.cwd, readRoots: [] } }]) {
+  for (const extra of [{ taskId: undefined }, { workspace }, { workspace: { ...workspace, capabilityPolicy: 'text-only' as const } }, { workspace: { ...workspace, capabilityPolicy: 'fixed-draft' as const } }]) {
+    const requests = f.provider.requests.length;
     assert.ok(!(await f.create({ ...extra, caseSources, sessionDirectory: path.join(f.root, randomUUID()) }).open()).tools.includes('read_case_sources'));
+    assert.equal(f.provider.requests.length, requests);
+  }
+  for (const profile of ['ordinary', 'protected'] as const) {
+    const requests = f.provider.requests.length;
+    const agent = f.create({ caseSources, protectedExecution: { id: randomUUID(), profile, cwd: workspace.cwd, writableRoot: workspace.cwd, readRoots: [] }, sessionDirectory: path.join(f.root, randomUUID()) });
+    if (process.platform === 'darwin') {
+      assert.ok(!(await agent.open()).tools.includes('read_case_sources'));
+    } else {
+      await assert.rejects(agent.open(), error => { assert.ok(error instanceof ProjectRuntimeError); assert.equal(error.code, 'sdk_operation_failed'); assert.deepEqual(error.cause, { message: 'unsupported_protection' }); return true; });
+    }
+    assert.equal(f.provider.requests.length, requests, 'managed capability inspection or unsupported-platform refusal must not call a Provider');
   }
 });
 

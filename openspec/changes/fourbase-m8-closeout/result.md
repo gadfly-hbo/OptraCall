@@ -55,3 +55,11 @@
 用户已授权Git／CI及squash合并最新main。提交前核暂存精确清单及公开内容，之后以PR真实head CI、合并SHA与main push CI、本地main安全快进逐项为证；这些动作不由本地检查替代。最终交付事实和干净工作区读回保存在PR及阶段3的L1→L2 handoff，不在提交前预写成功。
 
 阶段3交接在工程树外写出，记录真实branch／HEAD／tree／upstream、main祖先／树与相关worktree状态、Git／CI链接及保留限制；不得reset／clean／stash或删除WIP制造干净。其它历史脏工作树明确保留。原Mac mini运行服务、MacBook、真实数据／凭据及正式L2组件安装均不在本轮切换范围。
+
+## 首次托管CI原始失败（PR #31）
+
+提交23eb047982fc075aef304c7c7f654dd370b59b7a、tree063f0feff15579af51e553abe4f6d4142e3e0312，PR #31；首次[实际head CI](https://github.com/gadfly-hbo/OptraCall/actions/runs/41791319348)为1370项／1273 PASS／2 FAIL／95条件SKIP，未进入build／audit，**不通过且未合并**。本地1370／1367／0／3与该Ubuntu结果分别保留，不能互相替代。
+
+失败为M5 CD08及M6 EL09两个scope测试直接尝试本平台不可用的managed保护，实际产品按原合同返回sdk_operation_failed／unsupported_protection。修复范围只在两份测试：不支持时验证明确拒绝及零新增Provider调用，支持时继续核受管profile不扩工具；其它profile断言保留，不跳过整个测试、不放开产品保护或修改CI。原始日志保存在本机`implementation/pr31-ci-original.log`；修后定点检查、非作者增量复核及新实际head CI继续单独核定，不覆盖首次失败或套用旧PASS。
+
+修后两份测试在新的物理隔离目录完成Mac定点14／14 PASS、0 SKIP及typecheck PASS，原Mac受管工具断言和其它profile断言继续执行，并增加ordinary／protected双profile及零Provider访问验证。Ubuntu拒绝分支仍须新实际head CI验证，未用Mac通过推导跨平台已通过；证据在`implementation/pr31-platform-fix/run-_5oyy1iw/`。本次提交仅两份测试及本段记录，产品源码与已验收UI不变。
