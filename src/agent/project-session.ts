@@ -2,7 +2,7 @@ import { presentContextMessages } from './context-presentation.ts';
 import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync, chmodSync, renameSync, unlinkSync, constants, openSync, fstatSync, fsyncSync, closeSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, VERSION, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory } from './sdk.ts';
+import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, SettingsManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, VERSION, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory } from './sdk.ts';
 import type { ProjectAgentOptions, ProjectSnapshot, ProvidedContextInput } from './project-runtime.ts';
 import { runDiagnostic, readRunDiagnostic, type RunDiagnostic } from './run-diagnostics.ts';
 import { createBrowserUIContext, type BrowserUIResponse } from './browser-ui-context.ts';
@@ -11,6 +11,8 @@ import { createProtectedTools } from './protected-tools.ts';
 import { snapshotProtectedSkills } from './protected-skills.ts';
 import { createSimulationTools } from '../../extensions/business-plugins/sim-lab/tools/simulation-tools.ts';
 import { canonical } from '../../extensions/connectors/trade-area-mcp/snapshot.ts';
+import { createSubagentTool, discoverSubagentRoles, type SubagentRole } from './subagent.ts';
+import { createNativeSearchExtension, nativeSearchMode } from './native-search.ts';
 
 type Outcome = 'completed' | 'cancelled' | 'failed';
 type LastRun = { requestId: string; outcome?: Outcome; diagnostic?: RunDiagnostic };
@@ -30,6 +32,26 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   let protectedTools: Awaited<ReturnType<typeof createProtectedTools>> | undefined;
   let unavailableSkills: string[] = [];
   let executionId: string | undefined;
+  let nativeSearchFailure: string | undefined;
+  // Attached SDK resources belong to this worker's one public Resource. Failed
+  // retirement stays here until the same explicit close-retry is authorized.
+  const children = new Set<AgentSessionRuntime>();
+  const childRetirements = new Map<AgentSessionRuntime, Promise<void>>();
+  const failedChildRetirements = new Set<AgentSessionRuntime>();
+  function retireChild(child: AgentSessionRuntime, retryFailed = false): Promise<void> {
+    if (retryFailed && failedChildRetirements.delete(child)) childRetirements.delete(child);
+    let task = childRetirements.get(child);
+    if (!task) {
+      task = (async () => { await child.session.waitForIdle(); await child.dispose(); children.delete(child); })();
+      childRetirements.set(child, task);
+      void task.then(() => childRetirements.delete(child), () => failedChildRetirements.add(child));
+    }
+    return task;
+  }
+  async function retireChildren(retryFailed = false) {
+    const results = await Promise.allSettled([...children].map(child => retireChild(child, retryFailed)));
+    if (results.some(result => result.status === 'rejected')) throw new Error('subagent_cleanup_unknown');
+  }
   // Resource lifetime state deliberately survives SDK extension reload/fork within this worker.
   const connectorDirectories = new Map<string, { digest?: string; frozen: boolean }>();
   const executionBindings = new Map<string, { manager: SessionManager; file: string; cwd: string; closed: boolean }>();
@@ -108,7 +130,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     }
     return sapProvision() ? { sap: sapProvision(), claim: 'provided-not-adopted' } : undefined;
   }
-  const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { nativeTools: !fixedInput(), python: fixedInput() ? false : 'bash', powershell: fixedInput() || protectedTools ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools, skills: !fixedInput() && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)), mcp: !fixedInput() && !protectedTools, codemode: !fixedInput(), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged()), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: options.protectedExecution?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } });
+  const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { nativeTools: !fixedInput(), subagent: session!.getActiveToolNames().includes('subagent'), nativeSearch: !fixedInput() && !options.workspace && (!protectedTools || ordinaryManaged()) ? nativeSearchMode(options.configuration) ?? false : false, python: fixedInput() ? false : 'bash', powershell: fixedInput() || protectedTools ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools, skills: !fixedInput() && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)), mcp: !fixedInput() && !protectedTools, codemode: !fixedInput(), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged()), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: options.protectedExecution?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } });
   const environmentExtension: ExtensionFactory = pi => {
     const eligible = !fixedInput() && !options.protectedExecution;
     const connectors = [
@@ -225,12 +247,69 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     const models = await ModelRuntime.create({ credentials, modelsPath: null, allowModelNetwork: false, refreshOnCreate: false });
     const builtin = models.getModel(o.configuration.provider, o.configuration.model);
     const providerId = `optracall-${o.configuration.id}-${o.configuration.revision}`;
-    models.registerProvider(providerId, { api: o.configuration.api, baseUrl: o.configuration.baseUrl, models: [builtin ? { ...builtin, id: o.configuration.model } : { id: o.configuration.model, name: o.configuration.name, reasoning: false, input: ['text'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 32_000, maxTokens: 4096 }] });
+    models.registerProvider(providerId, { api: o.configuration.api, baseUrl: o.configuration.baseUrl, models: [builtin ? { ...builtin, id: o.configuration.model, api: o.configuration.api, baseUrl: o.configuration.baseUrl } : { id: o.configuration.model, name: o.configuration.name, reasoning: false, input: ['text'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 32_000, maxTokens: 4096 }] });
     await models.setRuntimeApiKey(providerId, o.configuration.apiKey);
     const model = models.getModel(providerId, o.configuration.model);
     if (!model) throw new Error('model_unavailable');
+    async function runSubagent(parent: AgentSession, role: SubagentRole, task: string, signal?: AbortSignal) {
+      const cancelled = () => signal?.aborted || closing || run?.cancelled;
+      const result = (outcome: 'completed' | 'failed' | 'cancelled', text = '') => ({ agent: role.name, outcome, text: redactText(text) });
+      if (cancelled()) return result('cancelled');
+      // User execution extensions are not copied. Tool availability is the
+      // intersection of the parent's active capability and this SDK environment.
+      const nativeNames = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls', 'powershell', 'codemode', 'tool_search'];
+      const inherited = [...parent.getActiveToolNames().filter(name => nativeNames.includes(name)), ...(nativeSearchMode(o.configuration) ? ['web_search'] : [])];
+      if (role.tools?.some(name => !inherited.includes(name))) throw new Error('subagent_tool_not_permitted');
+      const allowed = role.tools ?? inherited;
+      const clientTools = allowed.filter(name => name !== 'web_search');
+      let childSearchFailure: string | undefined;
+      const namespace = `subagent-${randomUUID()}`;
+      const customTools = protectedTools?.narrow(clientTools.filter(name => name !== 'tool_search'), namespace);
+      let child: AgentSessionRuntime | undefined;
+      const abort = () => { void child?.session.abort().catch(() => {}); };
+      signal?.addEventListener('abort', abort, { once: true });
+      try {
+        child = await createAgentSessionRuntime(async () => {
+          const services = await createAgentSessionServices({ cwd, agentDir: o.resourceRoot, modelRuntime: models,
+            settingsManager: SettingsManager.inMemory(parent.settingsManager.getSettings()),
+            resourceLoaderOptions: { noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
+              disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
+              extensionFactories: [...(allowed.includes('web_search') ? [createNativeSearchExtension(o.configuration, code => { childSearchFailure = code; })] : []), (pi => { pi.on('message_end', event => ({ message: redact(event.message) })); }) as ExtensionFactory, ...(!protectedTools && allowed.includes('codemode') ? [createCodemodeExtension({ mode: 'on' })] : []), ...(allowed.includes('tool_search') ? [createToolSearchExtension()] : [])],
+              systemPrompt: parent.systemPrompt,
+              appendSystemPrompt: [`You are the isolated role ${role.name}. Your task is delivered separately; parent conversation is not inherited. Skill resources are at ${role.baseDir}.`, role.prompt],
+            } });
+          const created = await createAgentSessionFromServices({ services, sessionManager: SessionManager.inMemory(cwd), model,
+            thinkingLevel: parent.thinkingLevel, tools: clientTools, excludeTools: nativeNames.filter(name => !allowed.includes(name)),
+            ...(customTools ? { customTools } : {}),
+          });
+          if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
+          return { ...created, services, diagnostics: services.diagnostics };
+        }, { cwd, agentDir: o.resourceRoot, sessionManager: SessionManager.inMemory(cwd) });
+        children.add(child);
+        await child.session.bindExtensions({ mode: 'rpc' });
+        if (cancelled()) return result('cancelled');
+        await child.session.prompt(task, { expandPromptTemplates: false });
+        await child.session.waitForIdle();
+        if (childSearchFailure) throw new Error(childSearchFailure);
+        const last = [...child.session.messages].reverse().find((message): message is Assistant => message.role === 'assistant');
+        if (cancelled() || last?.stopReason === 'aborted') return result('cancelled');
+        if (!last || last.stopReason === 'error') return result('failed', 'Subagent model request did not complete.');
+        protectedTools?.assertHealthy();
+        const text = last.content.filter(part => part.type === 'text').map(part => part.text).join('');
+        return text.trim() ? result('completed', text) : result('failed', 'Subagent returned no result.');
+      } catch { return result(cancelled() ? 'cancelled' : 'failed', 'Subagent execution did not complete.'); }
+      finally {
+        signal?.removeEventListener('abort', abort);
+        if (child) { if (cancelled()) await child.session.abort(); await retireChild(child); }
+      }
+    }
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
       const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
+      const delegation = !fixedInput() && !o.workspace && (!o.protectedExecution || ordinaryManaged());
+      const searchGuidance: ExtensionFactory = pi => { pi.on('before_agent_start', event => ({ systemPrompt: event.systemPrompt + (nativeSearchMode(o.configuration)
+        ? '\nThe configured Provider offers native web_search for this task. Decide when to search. Distinguish actual search results and their source URLs from prior knowledge; if no search ran, failed, or returned insufficient evidence, state that accurately. The Host preserves Provider source receipts but does not verify the claims for you.'
+        : '\nNo Provider-native web_search is connected on this configured route. Other permitted tools remain available. Do not claim that you searched unless an actual available tool retrieved the information; do not invent source URLs.') })); };
+      const searchExtensions = delegation ? [createNativeSearchExtension(o.configuration, code => { nativeSearchFailure = code; }), searchGuidance] : [];
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
@@ -239,7 +318,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       } : protectedTools ? {
         noExtensions: true, noSkills: !o.protectedExecution?.skillRoot, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
-        extensionFactories: [createToolSearchExtension(), environmentExtension],
+        extensionFactories: [createToolSearchExtension(), ...searchExtensions, environmentExtension],
         additionalSkillPaths: [analysisAssetsDir],
         skillsOverride: (base: { skills: Parameters<typeof snapshotProtectedSkills>[0]; diagnostics: any[] }) => {
           const snapshot = o.protectedExecution?.skillRoot ? snapshotProtectedSkills(base.skills, o.protectedExecution.skillRoot) : { skills: [], unavailable: [] };
@@ -249,17 +328,20 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         appendSystemPrompt: [...(o.workspace?.systemPrompt ?? []), ...(ordinaryManaged() ? [`You are OptraCall. The current working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze prepared project materials in 020_clean and authorized shared business materials announced by the Host. Write intermediate/process files to 020_clean by default and final reports to ${path.join(o.projectDirectory!, '060_reports')}. Determine analysis methods and tools yourself; these are directory conventions, not prescribed analysis steps.`, OUTPUT_EVIDENCE_GUIDANCE] : []),
           `The Host has provided a managed tool execution environment (${o.protectedExecution?.profile ?? 'protected'}). The tools run in ${protectedTools.scope.cwd}. Authorized readable material locations: ${JSON.stringify(protectedTools.scope.readRoots)}. Authorized writable locations: ${JSON.stringify([protectedTools.scope.writableRoot, ...(protectedTools.scope.writeRoots ?? [])])}. ${ordinaryManaged() ? 'Background and parallel calculations may continue across tool calls within this operation; the Host retains their resources until stop, close, or the authorized phase handoff.' : 'Existing data and reports are read-only; save new calculations and deliverables in the new workspace.'} Native session and credential files are unavailable to execution tools. Existing/remote MCP and user execution extensions are unavailable here. All child processes must remain inside this operation\'s owned execution groups: detached sessions and posix_spawn are unavailable. The python and python3 entrypoints use the installed same-version direct interpreters (${JSON.stringify(protectedTools.pythonRuntimes)}); use these entrypoints or their recorded direct executable paths instead of absolute framework launcher wrappers. Ordinary fork/exec subprocesses remain available. Choose methods and tools yourself. Codemode store/load is scoped to this execution workspace. Unavailable tools: ${JSON.stringify(protectedTools.unavailableTools)}.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } : {
-        extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), mcpExtension!, environmentExtension],
+        extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), mcpExtension!, ...searchExtensions, environmentExtension],
         additionalSkillPaths: [analysisAssetsDir],
         appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [`You are OptraCall. Workspace conventions: your working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze prepared project materials in 020_clean and authorized shared business materials announced by the Host. 010_draw archives originals and is not automatically attached to model context. This is a soft instruction, not sensitive-data isolation; the full native tools are available without a sandbox or tool interception. Write intermediate/process files to 020_clean by default. Save final reports to ${path.join(o.projectDirectory!, '060_reports')} when asked to produce a final report. Determine analysis methods and tools yourself from the user's request. These are directory conventions, not a prescribed analysis procedure.`, OUTPUT_EVIDENCE_GUIDANCE, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } });
+      let parent: AgentSession;
+      const subagent = delegation ? createSubagentTool(discoverSubagentRoles(services.resourceLoader.getSkills().skills), (role, task, signal) => runSubagent(parent, role, task, signal)) : undefined;
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
-      services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? [] : protectedTools ? [...protectedTools.tools.map(tool => tool.name), 'tool_search'] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search'])] });
+      services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? [] : protectedTools ? [...protectedTools.tools.map(tool => tool.name), 'tool_search', ...(subagent ? ['subagent'] : [])] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...(subagent ? ['+subagent'] : [])] });
       // SDK modifiers append to either a plain workspace allowlist or inherited defaults.
       if (simulationTools) services.settingsManager.applyOverrides({ defaultTools: simulationTools.map(tool => `+${tool.name}`) });
-      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: protectedTools.tools, tools: [...protectedTools.tools.map(tool => tool.name), 'tool_search'] } : simulationTools ? { customTools: simulationTools } : {}), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
+      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: [...protectedTools.tools, ...(subagent ? [subagent] : [])], tools: [...protectedTools.tools.map(tool => tool.name), 'tool_search', ...(subagent ? ['subagent'] : [])] } : { customTools: [...(simulationTools ?? []), ...(subagent ? [subagent] : [])] }), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
       if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
+      parent = created.session;
       return { ...created, services, diagnostics: services.diagnostics };
     };
     manager = o.sessionFile && existsSync(o.sessionFile) ? SessionManager.open(o.sessionFile, o.sessionDirectory, cwd) : SessionManager.create(cwd, o.sessionDirectory);
@@ -299,9 +381,11 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   }
   function execute(id: string, kind: ActiveRun['kind'], action: () => Promise<unknown>, requestFingerprint?: string, providedContext?: Record<string, unknown>): Promise<RunResult> {
     if (run) throw new Error('session_busy');
+    if (failedChildRetirements.size) throw new Error('subagent_cleanup_unknown');
     if (typeof id !== 'string' || !id.trim()) throw new Error('request_id_required');
     if (requestFingerprint !== undefined && (kind !== 'prompt' || typeof requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(requestFingerprint))) throw new Error('invalid_request_fingerprint');
     const current: ActiveRun = { id, kind, ...(requestFingerprint === undefined ? {} : { requestFingerprint }), ...(providedContext ? { providedContext } : {}), cancelled: false, retryCount: 0, pending: '', managers: new Set() };
+    nativeSearchFailure = undefined;
     run = current;
     try { attachRunManager(manager!); }
     catch (error) { run = undefined; throw error; }
@@ -318,11 +402,11 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         for (const target of current.managers) target.appendCustomEntry('optracall.http', { ...safe, sessionId: target.getSessionId() });
         publish({ type: 'native', requestId: id, event: { type: 'http.transport', ...safe } });
       });
-      try { result = await action(); await session!.waitForIdle(); protectedTools?.assertHealthy(); } catch (error) { failed = true; failure = error; }
+      try { result = await action(); await session!.waitForIdle(); await retireChildren(); protectedTools?.assertHealthy(); if (nativeSearchFailure) throw new Error(nativeSearchFailure); } catch (error) { failed = true; failure = error; }
       finally { stopObserving(); }
       flushDelta();
       const last = current.last, nativeCancelled = Boolean(result && typeof result === 'object' && 'cancelled' in result && result.cancelled);
-      const outcome: Outcome = current.cancelled || nativeCancelled || last?.stopReason === 'aborted' ? 'cancelled' : failed || current.commandFailed || last?.stopReason === 'error' ? 'failed' : 'completed';
+      const outcome: Outcome = current.cancelled || nativeCancelled ? 'cancelled' : nativeSearchFailure ? 'failed' : last?.stopReason === 'aborted' ? 'cancelled' : failed || current.commandFailed || last?.stopReason === 'error' ? 'failed' : 'completed';
       const diagnostic = runDiagnostic({ outcome, kind, retryCount: current.retryCount, error: failure ?? last?.errorMessage, commandFailed: current.commandFailed, transportCause });
       const answer = redactText(last?.content.filter(part => part.type === 'text').map(part => part.text).join('') ?? '');
       for (const target of current.managers) target.appendCustomEntry(RUN_ENTRY, { phase: 'settled', requestId: id, sessionId: target.getSessionId(), outcome, kind, ...(diagnostic ? { diagnostic } : {}) });
@@ -367,10 +451,13 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     browserUI?.dismissPending();
     session?.abortCompaction(); session?.abortBranchSummary();
     const aborting = session?.abort(); void aborting?.catch(() => {});
+    const childAborts = [...children].map(child => child.session.abort());
+    for (const abortingChild of childAborts) void abortingChild.catch(() => {});
     // Native turn completion and owned background resources are different
     // facts. Stop the latter as well, including when no SDK turn is in flight.
     await protectedTools?.close(cleanup);
-    await aborting; await pending;
+    await aborting; await Promise.all(childAborts); await pending;
+    await retireChildren(cleanup.retryFailed === true);
     await session?.waitForIdle();
     recordManagedClosure();
   }
@@ -393,7 +480,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         finally { operation = undefined; }
       }
       else if (message.method === 'stop') { await stop(); result = { stopped: true }; }
-      else if (message.method === 'drain') { await protectedTools?.drain(); result = { drained: true }; }
+      else if (message.method === 'drain') { await retireChildren(); await protectedTools?.drain(); result = { drained: true }; }
       else if (message.method === 'ui-response') result = { accepted: browserUI?.respond(message.input as BrowserUIResponse) ?? false };
       else if (message.method === 'editor-state') {
         const text: unknown = message.input?.text;

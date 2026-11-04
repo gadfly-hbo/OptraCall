@@ -231,7 +231,7 @@ export async function createProtectedTools(input: { scope: ProtectedExecutionSco
       cleanupFailure = group.cleanupError; throw group.cleanupError;
     });
   };
-  const makeGroup = (id: string, shared: boolean, initial?: { name: string; params: unknown; pending: PendingTool }): ToolGroup => {
+  const makeGroup = (id: string, shared: boolean, initial?: { name: string; params: unknown; pending: PendingTool; toolNames?: readonly string[] }): ToolGroup => {
     const identity = { version: 2, scopeId: scope.id, nonce: randomUUID(), toolCallId: id };
     const child = spawn(python, ['-I', '-S', path.join(codeRoot, 'scripts', 'protected-tool-supervisor.py'), process.execPath,
       path.join(codeRoot, 'scripts', shared ? 'protected-file-entry.mjs' : 'protected-tool-entry.mjs'), profile, scope.cwd], {
@@ -344,7 +344,7 @@ export async function createProtectedTools(input: { scope: ProtectedExecutionSco
     child.once('close', () => { if (!group.closed) fault(unknown(), true); });
     // Always enqueue open/execute first, before a concurrent stop can enqueue close.
     send(shared ? 'protected.open' : 'protected.execute', shared ? { cwd: scope.cwd } : {
-      tool: initial!.name, params: initial!.params, toolNames, cwd: scope.cwd, writableRoot: scope.writableRoot,
+      tool: initial!.name, params: initial!.params, toolNames: initial!.toolNames ?? toolNames, cwd: scope.cwd, writableRoot: scope.writableRoot,
     });
     return group;
   };
@@ -370,7 +370,8 @@ export async function createProtectedTools(input: { scope: ProtectedExecutionSco
       if (signal?.aborted) abort();
     } };
   };
-  const dispatch = async (name: string, id: string, params: unknown, signal?: AbortSignal, onUpdate?: (value: any) => void) => {
+  const dispatch = async (name: string, id: string, params: unknown, signal?: AbortSignal, onUpdate?: (value: any) => void, allowedTools: readonly string[] = toolNames) => {
+    if (!allowedTools.includes(name)) fail('protected_tool_unavailable');
     if (cleanupFailure) throw cleanupFailure;
     if (closed) fail('protected_executor_closed');
     if (draining) fail('protected_executor_draining');
@@ -398,16 +399,23 @@ export async function createProtectedTools(input: { scope: ProtectedExecutionSco
       } catch (error) { ticket.call.settle(error instanceof Error ? error : unknown()); }
     } else {
       reserved.set(id, id);
-      const group = makeGroup(id, false, { name, params, pending: ticket.call }); ticket.attach(group);
+      const group = makeGroup(id, false, { name, params, pending: ticket.call, toolNames: allowedTools }); ticket.attach(group);
     }
     return ticket.call.completion;
   };
-  const execute = (name: string, id: string, params: unknown, signal?: AbortSignal, onUpdate?: (value: any) => void) => {
-    const task = dispatch(name, id, params, signal, onUpdate); executing.add(task);
+  const execute = (name: string, id: string, params: unknown, signal?: AbortSignal, onUpdate?: (value: any) => void, allowedTools: readonly string[] = toolNames) => {
+    const task = dispatch(name, id, params, signal, onUpdate, allowedTools); executing.add(task);
     void task.finally(() => executing.delete(task)).catch(() => {}); return task;
   };
   const tools: ToolDefinition<any, any>[] = definitions.map(definition => ({ ...definition, execute: (id: string, params: unknown, signal: AbortSignal | undefined, onUpdate: ((value: any) => void) | undefined, _context?: unknown) => execute(definition.name, id, params, signal, onUpdate) }));
   return { scope, tools, unavailableTools, pythonRuntimes: executable.interpreters,
+    narrow: (allowed: readonly string[], namespace: string): ToolDefinition<any, any>[] => {
+      if (!namespace || allowed.some(name => !toolNames.includes(name))) fail('protected_tool_unavailable');
+      const ceiling = Object.freeze([...new Set(allowed)]);
+      return definitions.filter(definition => ceiling.includes(definition.name)).map(definition => ({ ...definition,
+        execute: (id, params, signal, onUpdate) => execute(definition.name, `${namespace}:${id}`, params, signal, onUpdate, ceiling),
+      }));
+    },
     // This is a technical execution receipt check, never an analysis/content
     // verdict. The SDK must not journal completed after losing a tool result.
     assertHealthy: () => { if (cleanupFailure) throw cleanupFailure; }, drain: async () => {

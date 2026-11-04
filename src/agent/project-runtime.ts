@@ -128,7 +128,10 @@ export class ProjectAgent {
   start(text: string, requestId: string, requestFingerprint?: string, providedContext?: ProvidedContextInput) { return this.#execute('prompt', text, requestId, requestFingerprint, providedContext); }
   startCommand(text: string, requestId: string) { return this.#execute('command', text, requestId); }
   async drain() {
-    if (!this.#options.protectedExecution || !this.#child && !this.#opening) return;
+    // Unmanaged business workspaces cannot acquire attached subagents. Keep
+    // their legacy transport contract: no new drain RPC is required there.
+    if (!this.#options.protectedExecution && this.#options.workspace) return;
+    if (!this.#child && !this.#opening) return;
     if (this.#opening) await this.#opening;
     if (this.#closed) throw new ProjectRuntimeError('runtime_closed');
     // No SDK turn is created: the common lease waits for its already-owned
@@ -156,7 +159,7 @@ export class ProjectAgent {
       this.#closed = true;
       const task = this.#dispose(cleanup); this.#closeTask = task;
       // Retry only resource cleanup on an explicit close, never a model turn.
-      if (this.#options.protectedExecution) void task.catch(() => { if (this.#closeTask === task) this.#closeTask = undefined; });
+      void task.catch(error => { if ((this.#options.protectedExecution || error instanceof ProjectRuntimeError && error.code === 'subagent_cleanup_unknown') && this.#closeTask === task) this.#closeTask = undefined; });
     }
     return this.#closeTask;
   }
@@ -172,6 +175,12 @@ export class ProjectAgent {
       let cleanupError: unknown;
       await Promise.race([this.#rpc('close', { retryFailed: cleanup.retryFailed !== false }).then(result => { protectedCleanupAcknowledged = result?.closed === true; if (protectedCleanupAcknowledged) this.#managedCleanupAcknowledged = true; }, error => { cleanupError = error; }), new Promise<void>(resolve => { deadline = setTimeout(() => { if (!this.#options.protectedExecution) this.#signal(child, 'SIGTERM'); resolve(); }, this.#options.protectedExecution ? 8000 : 3000); })]);
       if (deadline) clearTimeout(deadline);
+      // A responsive ordinary driver can also own an attached SDK resource
+      // whose shutdown failed. Retain that exact handle for explicit cleanup;
+      // killing the driver must not stand in for its acknowledgement.
+      if (!protectedCleanupAcknowledged && child.connected && cleanupError instanceof ProjectRuntimeError && (cleanupError.cause as { message?: string } | undefined)?.message === 'subagent_cleanup_unknown') {
+        const error = new ProjectRuntimeError('subagent_cleanup_unknown'); error.cause = cleanupError; throw error;
+      }
       // Keep a responsive driver and its exact executor ownership available for
       // explicit cleanup retry. Killing it after an error loses that authority.
       if (this.#options.protectedExecution && !protectedCleanupAcknowledged && child.connected) {
