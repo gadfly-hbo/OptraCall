@@ -133,15 +133,15 @@ export function validateManifest(input: unknown): ModelPackManifest {
   const sessionRef = nonEmptyString(tr.sessionRef);
   if (!trainedAt || !sessionRef) throw new ModelPackValidationError('TRAINING_INVALID');
   const training: ModelTraining = { splitSeed: tr.splitSeed, task: tr.task as ModelTask, targets, trainedAt, sessionRef };
-  if (object(tr.groups)) {
-    const groups: Record<string, string[]> = {};
-    let valid = true;
+  if (tr.groups !== undefined) {
+    if (!object(tr.groups)) throw new ModelPackValidationError('TRAINING_INVALID');
+    const entries: Array<[string, string[]]> = [];
     for (const [key, value] of Object.entries(tr.groups)) {
       const list = stringArray(value);
-      if (!list) { valid = false; break; }
-      groups[key] = list;
+      if (!list) throw new ModelPackValidationError('TRAINING_INVALID');
+      entries.push([key, list]);
     }
-    if (valid) training.groups = groups;
+    training.groups = Object.fromEntries(entries);
   }
 
   if (!object(input.usage)) throw new ModelPackValidationError('USAGE_INVALID');

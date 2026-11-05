@@ -21,6 +21,7 @@ import { readCaseDecisionsParameters, saveCaseDecisionParameters, type CaseDecis
 import { canonical } from '../../extensions/connectors/trade-area-mcp/snapshot.ts';
 import { createSubagentTool, discoverSubagentRoles, type SubagentRole } from './subagent.ts';
 import { createNativeSearchExtension, nativeSearchMode } from './native-search.ts';
+import { createModelPackTools } from './model-pack-tools.ts';
 
 type Outcome = 'completed' | 'cancelled' | 'failed';
 type LastRun = { requestId: string; outcome?: Outcome; diagnostic?: RunDiagnostic };
@@ -286,6 +287,8 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     // 经营推演工具按任务级开关注入普通项目任务；受管/封闭文本资源不注入——
     // 其纯计算执行体未经受限执行边界核验，按不可安全委派扩展明确不提供（SIM12）。
     const simulationTools = !fixedInput() && !o.protectedExecution && o.simulationTools ? createSimulationTools(o.simulationTools) : undefined;
+    const modelPackTools = !fixedInput() && !o.workspace && !o.protectedExecution && o.projectDirectory && o.modelPackTools
+      ? createModelPackTools({ ...o.modelPackTools, projectRoot: o.projectDirectory }) : undefined;
     // Only the Host's ordinary project-task options carry both real owner keys.
     // A business-plugin workspace, managed scope or sealed reader never gains it.
     const createCandidateTools = (boundManager: SessionManager) => {
@@ -431,7 +434,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     }
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
       const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
-      const customTools = [...(simulationTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager)];
+      const customTools = [...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager)];
       const delegation = !fixedInput() && !o.workspace && (!o.protectedExecution || ordinaryManaged());
       const searchGuidance: ExtensionFactory = pi => { pi.on('before_agent_start', event => ({ systemPrompt: event.systemPrompt + (nativeSearchMode(o.configuration)
         ? '\nThe configured Provider offers native web_search for this task. Decide when to search. Distinguish actual search results and their source URLs from prior knowledge; if no search ran, failed, or returned insufficient evidence, state that accurately. The Host preserves Provider source receipts but does not verify the claims for you.'

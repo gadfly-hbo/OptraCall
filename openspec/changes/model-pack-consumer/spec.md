@@ -1,8 +1,9 @@
 # 模型包消费端（薄接入：加载器 + 注册表 + 分析调用）
 
-状态：规格 v0.2（2026-11-05，用户已整体确认；Qoder Extension 切片已实施并通过适用检查，Host 接缝待 Codex）。
+状态：规格 v0.2（2026-11-06，已确认方案；Extension 与 Host 接缝本地工程完成，待 Git/CI 交付；MP09 未授权／NOT_RUN）。
 
-**确认与实施进度（2026-11-05）：** 用户已明确「按推荐采纳；UIdemo通过」——D1–D8 全部按推荐采纳，[UI Demo](../../../docs/prototypes/model-pack-consumer-ui-demo.html) 通过 UI Gate（页面信息结构/交互流程/文案确认；视觉细节以正式实施为准）。按工程规范 v1.6 与 §6 移交模式启动实施：**Qoder 已完成 Extension 本体切片**（`types.ts` 合同与纯校验、`ui/model-pack-client.ts`、`ui/ModelRegistryPage.tsx`、`ui/model-pack.css`、`tests/model-pack-types.test.ts`＋`tests/model-pack-client.test.ts`），本地 `npm run check` exit 0（1477 项：1447 PASS／0 FAIL／30 条件 SKIP，含 agent-session 边界 PASS），页面经 standalone `tsc` 严格类型核对通过；实施与证据见 [result.md](result.md)。**Host 接缝（store/routes/工具注入/task-capabilities/catalog/App.tsx 接线）维持工程规范 v1.6 默认归属 Codex，用户未对本变更直接指定 Qoder 实施接缝（无 IN06 例外）**；移交包见 [review-handoff.md](review-handoff.md)。MP01–MP02、MP04–MP10 依赖 Host 接缝，待 Codex 实施后验收；MP03 注册表页浏览器点验待 App.tsx 接线后进行。**Git 提交/推送/CI/合并未启动，须先获用户明确 Git/CI 授权**（对齐商圈/天气先例：实现授权不等于 Git 授权）；真实包冒烟（MP09）的 MacBook 只读拷贝亦须另行授权。
+**确认与当前进度：** 用户于2026-11-05明确「按推荐采纳；UIdemo通过」，D1–D8 与四场景 Demo 保持有效。Qoder 切片原件和1477项检查保留在移交 `380d5ab` 及 result §1–5。Codex 已完成 store/routes、工具、任务能力、目录与页面接缝，固定修正版的完整检查1558项／1528通过／0失败／30原条件跳过、实际 SDK 合成 Provider 全链路、桌面浏览器及两个全新非作者复核通过；v1三个P2与历史前置TDD证明 NOT_PROVED 均保留，详见 [result](result.md) 与 [独立复核](independent-review.md)。用户已授权实际 head CI 通过后直接 squash 合并、快进 main 和归档，当前尚未完成该交付，不把本地检查写成 CI。Host 由 Codex 默认归属实施，无 IN06 例外或 Qoder 接缝偏差。MP09真实包拷贝、真实模型与运行／设备采用未授权、未执行。
+
 
 2026-11-05 · 用户已确认方向：**OptraCall 侧只做薄消费端——“模型包加载器 + 注册表视图 + 分析 skill 内调 predict”，训练仍在 MPS 走**。训练侧为 MacBook 本机独立产品 Model Pack Studio（`/Users/huangbo/Dev/Projects/model-mlflow`，只读参考，本变更不修改该仓），其 D4 定案“打包带走”明确：交付物＝自包含纯 Node 包，**包格式（formatVersion=1）是两产品间契约，OptraCall 侧加载器走本仓 openspec 流程**；`formatVersion` 变更须两产品同步规格，本变更只消费 v1。
 
@@ -58,7 +59,7 @@ README.md       人读用法与指标说明
 - 不引入 MLflow 或任何新第三方依赖（沙箱用 Node 自带 `--permission`）；
 - 不注册新会话域/owner/profile，不建平行 Runtime，不改模型配置。
 
-## 5. 决定项（D1–D8，推荐已标注，待用户确认）
+## 5. 决定项（D1–D8，用户已整体确认）
 
 - **D1 目录归属＝plugins 分类“模型包”条目（推荐）**。用户框架即“业务插件模块”；有专用页面+版本化工件+Host 存储，形态对齐 simlab/refiner。代价：与 metric-factory（assets 分类、同为版本化库）存在分类口径差，条目文案需写清“模型是训练产出的可执行资产”。备选：归 assets。
 - **D2 安装方式＝本机文件夹路径导入（推荐）**。两产品同机，MPS 导出目录直选；Host 校验后**拷入** `dataRoot/models/`（快照固化，源目录随后可删）。代价：路径输入须严格校验（只认含合法 manifest 的目录，防任意路径读取）。备选：上传 zip（多一步打包，无同机必要性）。
@@ -129,4 +130,16 @@ README.md       人读用法与指标说明
 2. ~~UI Demo 待用户审核~~ **已解决（2026-11-05）**：用户「UIdemo通过」，UI Gate 通过；正式实施沿用 Demo 信息结构，视觉细节以实施为准。
 3. ~~Host 接缝归属~~ **已明确（2026-11-05）**：维持默认 Codex（移交模式），用户未直接指定 Qoder 实施接缝，无 IN06 例外。
 4. MPS 侧是否同步在 README/导出包内注明「OptraCall 消费端已接入」——属 MPS 仓改动，需另获该仓授权，本变更不动。
-5. **待授权（不随实施自动启动）**：① Git 提交/推送/CI/合并；② MP09 真实包冒烟所需的 MacBook 只读拷贝；③ Host 接缝实施后的真实模型任务实测（MP07 合成 Provider 端到端属工程验证，真实模型另计）。
+5. **授权状态**：Git/CI及成功后直接 squash／main快进／归档已获用户本轮明确授权；实际交付仍待完成。MP09 MacBook只读拷贝、真实模型任务、运行和设备采用仍各自另授权，MP07合成 Provider 工程验证不替代它们。
+
+## 13. Codex 接管时的结构落实（2026-11-05）
+
+原 D1–D8、formatVersion=1 与 UI 确认继续有效，以下是 R1/R3/R6 和 IN01 的最小实施决定，不新增会话域或训练能力。
+
+- **存储**：`dataRoot/models/registry.sqlite`，SQLite user_version=1；name/version 主键和同名唯一 Production 部分索引。货架 stage 由本注册表维护，不改导入 manifest 的原始 stage。三个快照文件按固定文件名、长度和原字节计算整体 SHA-256；安装后文件 0444、目录 0555。文件发布与 SQLite 事务之间不宣称跨介质原子事务；未登记目录保留并拒绝覆盖，不能把中断后的未知当已成功。
+- **损坏恢复**：只读检查只标记 corrupted，不改字节。用户显式重导且与原登记 SHA 完全相同时，先保留损坏版本到同模型的 `.corrupted-v<n>-<uuid>`，再恢复原登记字节；stage、安装时间和历史版本身份不重建。不同字节仍版本冲突。链接及损坏文件不会被工具执行；无静默修复或覆盖外部链接原件。
+- **纯度与 CLI**：复用已锁定 TypeScript 7 AST，在 Host 扫描 v1 的纯 predict 模块，拒绝已识别的外部/动态 import、执行器、环境、时钟、随机与构造器访问；拼接等未被静态扫描识别的代码生成由沙箱再次拒绝。MPS 的固定 Host CLI 附于明确标记之后，涉及 node:fs/node:url 的封套不是模型纯计算合同；本消费端从不执行该封套，只执行重新扫描的纯模块。不能把标记本身当代码可信证明。未识别/不满足纯计算合同的包拒绝导入，不改变 v1 格式。
+- **沙箱**：Node ≥25 的 `--permission`（不授予网络）、`--disallow-code-generation-from-strings`、`--no-experimental-sqlite`、不继承父环境和仅三根管道。已验证纯模块以 data URL 加载，不获取包路径、项目路径或凭据；子进程不获项目文件读写权限，Host 用现有安全读句柄交付输入、按授权另存新输出。没有无沙箱回落、重试或经营补计算。执行器仅一个无模型进程；取消/超时须等实际 close 后返回。Node 官方权限机制并非通用恶意代码隔离，纯度扫描和最小能力是同一边界的必要组成，不能只凭 `--permission` 字样宣称安全。
+- **工具文件合同**：inputPath 限项目 `020_clean/`，outputPath 限 `020_clean/` 或 `060_reports/`，支持 UTF-8 CSV/JSON；现有目标不覆盖，链接和多硬链接拒绝。默认找 Production；显式 version 可用 Staging，Archived 拒绝。输出验证是形状/目标数值合同，不做业务判断。预测结果与出处仍进入用户选择的任务模型上下文，计算无网络不等于整条任务零外传。
+- **HTTP/UI兼容**：旧 `GET /models/:name/:version` 的 `{model}` 保留并加 `manifest` 原件；旧 client getModel 不变，新详情方法消费全文。失败阶段原文保留，UI 映射到验货步骤；明确的沙箱不可用为拒绝，网络丢回执/不明服务错误保持 UNKNOWN。CSS 限于模型注册表页面。
+- **导入检查例外（IN06）**：模型工具只获 defineTool；合成 SDK 测试只列单文件 owner。专用无模型执行器仅允许固定的编码 data 模块表达式，任意 file/SDK/变量模块加载仍由边界检查拒绝，纳入独立复核。

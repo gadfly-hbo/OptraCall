@@ -30,11 +30,13 @@ const projectAgentOwners = new Set([
   'tests/managed-execution-stop-held.test.ts',
   'tests/subagent-runtime.test.ts', // SA01-SA04: isolated real SDK foreground delegation and parent cleanup.
   'tests/native-search-runtime.test.ts', // WEB01/02: loopback native-provider blocks and SDK continuation.
+  'tests/model-pack-agent-flow.test.ts', // MP04/07: isolated real SDK/loopback provider proof; never product runtime ownership.
   'tests/deep-research-skill.test.ts', // DR03: isolated real SDK delegation through the shipped deep-research skill; never a product runtime owner.
 ]);
 const sdkConsumers = new Set(['src/agent/project-session.ts', 'src/agent/runtime.ts', 'src/agent/browser-ui-context.ts']);
 // Exact native tool/resource helpers, without session/runtime constructors.
 const toolSdkConsumers = new Map([
+  ['src/agent/model-pack-tools.ts', new Set(['defineTool'])], // MP04/07: declarative tools only, no session constructors.
   ['src/host/native-session-snapshot.ts', new Set(['SessionManager', 'parseSessionEntries'])], // M3.1 guarded inMemory projection only; no open/create.
   ['src/agent/subagent.ts', new Set(['defineTool', 'parseFrontmatter'])], // Data discovery/tool schema only; SDK constructors remain in project-session.
   ['src/agent/native-search.ts', new Set()], // Protocol hooks only; no SDK constructor or independent loop.
@@ -77,7 +79,7 @@ function moduleReference(node) {
   if (isImportEqualsDeclaration(node) && node.moduleReference.expression) return { source: node.moduleReference.expression.text, names: node.isTypeOnly ? [] : ['*'] };
   if (isImportTypeNode(node) && node.argument.literal) return { source: node.argument.literal.text, names: [] };
   if (isCallExpression(node) && (node.expression.kind === SyntaxKind.ImportKeyword || (isIdentifier(node.expression) && node.expression.text === 'require') || (isPropertyAccessExpression(node.expression) && node.expression.name.text === 'require'))) {
-    return { source: node.arguments[0] && isStringLiteralLikeNode(node.arguments[0]) ? node.arguments[0].text : undefined, names: ['*'] };
+    return { source: node.arguments[0] && isStringLiteralLikeNode(node.arguments[0]) ? node.arguments[0].text : undefined, names: ['*'], valueModule: node.arguments[0]?.getText() === "`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`" };
   }
 }
 
@@ -98,6 +100,9 @@ function inspectParsedSource(filePath, source, sourceFile) {
   }
   function checkReference(ref, pos) {
     if (ref.source === undefined) {
+      // MP06: the exact value-only executor imports its verified pure core as an
+      // encoded data module. No file/SDK path or arbitrary module argument is allowed.
+      if (file === 'src/host/model-pack-runner.mjs' && ref.valueModule) return;
       // The trial updater intentionally resolves its own checked-out script.
       if (!checkoutLoaders.has(file)) fail(pos, 'non-literal module loading requires a reviewed entry point');
       return;
