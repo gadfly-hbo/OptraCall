@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync, symlinkSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -80,6 +80,24 @@ test('DR01: deep-research loads with exactly its researcher and reviewer roles a
   const result = snapshotProtectedSkills([skill], destination);
   assert.deepEqual(result.unavailable, []); assert.equal(result.skills.length, 1);
   for (const relative of ['SKILL.md', 'agents/researcher.md', 'agents/reviewer.md', 'references/method.md', 'references/source-standards.md', 'references/review-checklist.md', 'references/report-structure.md']) {
+    assert.deepEqual(readFileSync(path.join(result.skills[0]!.baseDir, relative)), readFileSync(path.join(skill.baseDir, relative)), relative);
+  }
+});
+
+test('DA01: data-analysis loads without subagent roles and snapshots its scripts and references intact', () => {
+  const codeRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const source = path.join(codeRoot, 'extensions/analysis-assets');
+  const { skills } = loadSkillsFromDir({ dir: source, source: 'project' });
+  const skill = skills.find(item => item.name === 'data-analysis');
+  assert.ok(skill, `data-analysis must be discoverable by the locked SDK; got ${skills.map(item => item.name).join(',')}`);
+  assert.equal(skill.baseDir, path.join(source, 'data-analysis'), 'data-analysis must resolve to its analysis-assets directory');
+  assert.ok((skill.description ?? '').length > 30, 'data-analysis must carry an activation description');
+  assert.ok(!existsSync(path.join(skill.baseDir, 'agents')), 'data-analysis ships no subagent roles');
+  assert.deepEqual(discoverSubagentRoles(skills).map(role => role.name), ['deep-research/researcher', 'deep-research/reviewer'], 'adding this skill must not change the delegatable role set');
+  const destination = mkdtempSync(path.join(os.tmpdir(), 'optracall-da-snapshot-'));
+  const result = snapshotProtectedSkills([skill], destination);
+  assert.deepEqual(result.unavailable, []); assert.equal(result.skills.length, 1);
+  for (const relative of ['SKILL.md', 'scripts/calc.py', 'scripts/quality_check.py', 'references/method.md', 'references/sample-data.md', 'references/examples.md']) {
     assert.deepEqual(readFileSync(path.join(result.skills[0]!.baseDir, relative)), readFileSync(path.join(skill.baseDir, relative)), relative);
   }
 });
