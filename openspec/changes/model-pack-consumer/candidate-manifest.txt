@@ -1,0 +1,10 @@
+34924e8593d4a959  docs/prototypes/model-pack-consumer-ui-demo.html
+d66d56a5e8e0f149  extensions/business-plugins/model-pack/types.ts
+ae3d7cc3430ffbdb  extensions/business-plugins/model-pack/ui/ModelRegistryPage.tsx
+802b743e79d972f6  extensions/business-plugins/model-pack/ui/model-pack-client.ts
+c885d36b9f98be38  extensions/business-plugins/model-pack/ui/model-pack.css
+5511602878e187b9  openspec/changes/model-pack-consumer/result.md
+7cd2d427d2b41ecb  openspec/changes/model-pack-consumer/review-handoff.md
+8316f3eaff0cd5ee  openspec/changes/model-pack-consumer/spec.md
+09bb39fb99f33403  tests/model-pack-client.test.ts
+53fd9eb6664e1169  tests/model-pack-types.test.ts
