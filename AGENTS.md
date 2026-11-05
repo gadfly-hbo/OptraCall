@@ -4,6 +4,8 @@
 
 本项目遵循四点产品原则：**Host 管环境、Agent 自主执行、优先复用 Pi 已有能力、减少人的操作**。准备或修改 spec／UI、开发及验收时，必须按[工程规范第2节](docs/engineering-workflow.md#四点产品原则)与[前置检查](docs/engineering-workflow.md#3-连续-sdd-与-tdd)核对实际职责、复用依据和最少用户操作路径，完成[专项最终检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；完整规则仅在工程规范维护。
 
+[模型包消费端](openspec/changes/model-pack-consumer/result.md#合并交付与原位归档)已完成本地工程、非作者复验及实际head CI并获授权squash入main，OpenSpec原位保留。后续维护先读其规格与结果：MPS仅作训练/导出端，OptraCall消费v1纯计算包；任务显式开启、受管/封闭资源排除，版本快照不可变、损坏不静默修复。原失败和历史前置TDD证明NOT_PROVED保留；MP09真实包、真实模型质量、运行采用及设备更新未执行，各自另授权。
+
 维护[deep-research skill](openspec/changes/deep-research-skill/result.md#合并交付与原位归档)或新增skill测评展示时，先读其归档记录及[统一展示规范](docs/skill-evaluation-display.md)：测评默认收起，历史回执绑定被测版本。长期`qoder/ext-skills`分支的测评门禁、移交与写入归属按工程规范第2、5节执行；本轮修正版未复测，工程合并不替代用户测评。
 
 [商圈数据 MCP 连接器](openspec/changes/trade-area-mcp/result.md#合并交付与原位归档)与[天气连接器](openspec/changes/weather-mcp/result.md#合并交付与原位归档)已分别经非作者复核、实际head CI及获授权squash入main，OpenSpec原位归档；后续维护先读对应结果和[商圈IN06](openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)的SDK薄层复用边界。Qoder整体移交后只读，接缝及后续维护由Codex承接，原清单、移交包及失败保留。[后续真实模型记录](openspec/changes/weather-mcp/live-validation.md)为两轮工具／保存闭环完成、报告内容FAIL，不能当专业或用户产品验收；已授权MacBook main及同一正式快照采用，实际运行与保全按最终回执核定。Mac mini原运行服务保持，经营数据与凭据留在获准本机根，未来来源版本导入仍单独授权。

@@ -2,7 +2,7 @@
 
 日期：2026-11-05 · 分支：`qoder/model-pack`（基线 main `2b9800b`）· 责任：**Qoder 完成 Extension 本体切片；Host 接缝归 Codex（工程规范 v1.6 默认，无 IN06 例外）**
 
-第1–5节保留 Qoder 阶段 Extension 切片及当时缺口，未回写为当时已完成；第6节起为 Codex 接管、修复和独立复验的实际记录。当前本地工程与非作者复验完成，Git/CI交付尚待；MP09、真实模型、运行与设备采用未执行。
+第1–5节保留 Qoder 阶段 Extension 切片及当时缺口，未回写为当时已完成；第6节起为 Codex 接管、修复和独立复验的实际记录。当前本地工程、非作者复验、实际head CI及获授权squash交付完成，main已安全快进；归档三Markdown仅编录结果，后续main检查终态另核。MP09、真实模型、运行与设备采用未执行。
 
 ## 1. 已实施（Qoder Extension 切片）
 
@@ -125,3 +125,25 @@ MP09 未授权、NOT_RUN，不借合成 Provider 或包替代真实 MPS 包一�
 | MP10 | 本地PASS | 完整1558项与构建；实际head CI仍按Git交付后另记 |
 
 以上为本地工程验收及独立复核，不是CI、真实模型质量、产品验收或运行采用。原20项类型/client的历史行为前置TDD证明NOT_PROVED保持。下一步在本轮Git授权内核对最新main、集中单PR和实际head CI，再按用户已授予的成功后直接合并/快进/归档安排完成交付。
+
+## 合并交付与原位归档
+
+用户本轮明确授权Git/CI及CI通过后直接squash、快进main、归档；据此执行，没有重复请求已授予的合并确认。
+
+| 对象 | 实际身份与结果 |
+| --- | --- |
+| 原样移交 | `380d5ab5aa17d2e1a087b523d4b668ef6c5972c9`，原10/10核验，原工作树游离停写 |
+| Codex接缝与修正 | `2c2baeb64abd62c060f5e33a6b5800705df1d6da`；prePR939文件，最终3MD以外936文件与v2受检一致，完整清单SHA `22c77cd90e7455a8bcd607d3627d9cee4d23a04b4cb2f7255d3040eae63c3d7d`；两个原复核者另完成最终文档和全量回执读回 |
+| 唯一功能PR | [#36](https://github.com/gadfly-hbo/OptraCall/pull/36)，35路径、2提交；base最新main `2b9800bc181b9477109c28c85ab46057ee74243d`已包含，无额外merge。合并前再次fetch核对base/head未变 |
+| 实际head CI | [Check #104](https://github.com/gadfly-hbo/OptraCall/actions/runs/42063896716)，pull_request／attempt1 success，实际checkout为2c2baeb；**1558项／1457 PASS／0 FAIL／101条件SKIP**；边界、tsc、构建、高危审计成功。2项moderate与原bundle提示保留，Linux跳过不当本机或真机证明。完整日志SHA `83e1bfc1a8d07a609607f27771cfc8893f12d8aca78088d0844983046df8bc00` |
+| squash／完整树 | `0fb601b6100fd08c1f8bc382fdfc30c573350365`，唯一父2b9800b；树`a72db947d9419910d690b31df5aae407918d1114`与受检head相同，GitHub回读MERGED，时间2026-11-05T16:34:52Z |
+| 本地main | 主仓干净57742b9以ff-only到0fb601b，之后干净；包含已交付SAP基线一起快进，不将主仓85路径全部归入本PR35路径 |
+| 合并main检查 | [Check #105](https://github.com/gadfly-hbo/OptraCall/actions/runs/42065909438)，push／head0fb601b；本归档正文固定时进行中，终态据实际Actions及本机收据另核 |
+
+最终非作者文档读回补充在原隔离根，Spec SHA `16cf1905eab9a61c703bd095e014e51c35b5398f3fc852189501f8d9c1e633b2`、Standards SHA `c25d53017896f64524666a3aed1d80ebf18d77cff80a4c141bda9ce87b0127b8`。两者确认全量1558／1528／0／30与真实日志匹配、936文件未变，v1 FAIL／原TDD NOT_PROVED／MP09 NOT_RUN均保留。
+
+沿本仓先例在 `openspec/changes/model-pack-consumer/` **原位归档**：保留spec、result、independent-review、原清单与handoff，不改原10项哈希，不把修后代码伪装成原候选。独立 `codex/model-pack-archive` 树只修改AGENTS最小指针及spec/result三Markdown，签署复核、产品、测试、依赖、数据不变，其余936文件与合并树逐项相同；提交自身SHA、push及最终main快进由Git／Actions和本机最终回执给出，不为自引用无限追加文档提交。
+
+整个过程没有运行采用、切服务、MacBook更新、真实模型实验或真实包导入；MPS仓未修改。本轮qoder/model-pack所有修复与交付由Codex承担，Qoder原树停留干净游离380d5ab，不回转开发或改写历史。0消息/连接测试的桌面浏览器QA、合成Provider工程端到端、真实模型与用户产品验收仍分别记录。
+
+原件、原失败/UNKNOWN/NOT_PROVED、SKIP、无效工具或夹具操作及修后通过均持久保存在本次交付树 `.local/model-pack-delivery/`。公开锚点为本PR及实际Actions；原始日志不宣称已随公开仓包含，公开内容没有新增行级经营资料、模型权重或凭据。

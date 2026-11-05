@@ -1,8 +1,8 @@
 # 模型包消费端（薄接入：加载器 + 注册表 + 分析调用）
 
-状态：规格 v0.2（2026-11-06，已确认方案；Extension 与 Host 接缝本地工程完成，待 Git/CI 交付；MP09 未授权／NOT_RUN）。
+状态：工程变更已原位归档（2026-11-06）；PR #36 已获授权 squash 入 main，实际 head CI 通过。MP09 未授权／NOT_RUN，真实模型及运行／设备采用另核。
 
-**确认与当前进度：** 用户于2026-11-05明确「按推荐采纳；UIdemo通过」，D1–D8 与四场景 Demo 保持有效。Qoder 切片原件和1477项检查保留在移交 `380d5ab` 及 result §1–5。Codex 已完成 store/routes、工具、任务能力、目录与页面接缝，固定修正版的完整检查1558项／1528通过／0失败／30原条件跳过、实际 SDK 合成 Provider 全链路、桌面浏览器及两个全新非作者复核通过；v1三个P2与历史前置TDD证明 NOT_PROVED 均保留，详见 [result](result.md) 与 [独立复核](independent-review.md)。用户已授权实际 head CI 通过后直接 squash 合并、快进 main 和归档，当前尚未完成该交付，不把本地检查写成 CI。Host 由 Codex 默认归属实施，无 IN06 例外或 Qoder 接缝偏差。MP09真实包拷贝、真实模型与运行／设备采用未授权、未执行。
+**确认与当前进度：** 用户于2026-11-05明确「按推荐采纳；UIdemo通过」，D1–D8 与四场景 Demo 保持有效。Qoder 切片原件和1477项检查保留在移交 `380d5ab` 及 result §1–5。Codex 已完成 store/routes、工具、任务能力、目录与页面接缝，固定修正版的完整检查1558项／1528通过／0失败／30原条件跳过、实际 SDK 合成 Provider 全链路、桌面浏览器及两个全新非作者复核通过；v1三个P2与历史前置TDD证明 NOT_PROVED 均保留，详见 [result](result.md) 与 [独立复核](independent-review.md)。用户已授权实际 head CI 通过后直接 squash 合并、快进 main 和归档；现 PR #36 已按此合并为 `0fb601b`、本地 main 安全快进，实际 head Check #104 成功。合并 main 与归档推送检查分别回读，不把本地检查代替 CI。Host 由 Codex 默认归属实施，无 IN06 例外或 Qoder 接缝偏差。MP09真实包拷贝、真实模型与运行／设备采用未授权、未执行。
 
 
 2026-11-05 · 用户已确认方向：**OptraCall 侧只做薄消费端——“模型包加载器 + 注册表视图 + 分析 skill 内调 predict”，训练仍在 MPS 走**。训练侧为 MacBook 本机独立产品 Model Pack Studio（`/Users/huangbo/Dev/Projects/model-mlflow`，只读参考，本变更不修改该仓），其 D4 定案“打包带走”明确：交付物＝自包含纯 Node 包，**包格式（formatVersion=1）是两产品间契约，OptraCall 侧加载器走本仓 openspec 流程**；`formatVersion` 变更须两产品同步规格，本变更只消费 v1。
@@ -130,7 +130,7 @@ README.md       人读用法与指标说明
 2. ~~UI Demo 待用户审核~~ **已解决（2026-11-05）**：用户「UIdemo通过」，UI Gate 通过；正式实施沿用 Demo 信息结构，视觉细节以实施为准。
 3. ~~Host 接缝归属~~ **已明确（2026-11-05）**：维持默认 Codex（移交模式），用户未直接指定 Qoder 实施接缝，无 IN06 例外。
 4. MPS 侧是否同步在 README/导出包内注明「OptraCall 消费端已接入」——属 MPS 仓改动，需另获该仓授权，本变更不动。
-5. **授权状态**：Git/CI及成功后直接 squash／main快进／归档已获用户本轮明确授权；实际交付仍待完成。MP09 MacBook只读拷贝、真实模型任务、运行和设备采用仍各自另授权，MP07合成 Provider 工程验证不替代它们。
+5. **授权状态**：Git/CI及成功后直接 squash／main快进／归档已获用户本轮明确授权；PR #36 与实际 head CI 已交付，main 已安全快进；归档提交自身身份和后续 main CI 终态由 Git/Actions 与本机最终回执核定。MP09 MacBook只读拷贝、真实模型任务、运行和设备采用仍各自另授权，MP07合成 Provider 工程验证不替代它们。
 
 ## 13. Codex 接管时的结构落实（2026-11-05）
 
@@ -143,3 +143,13 @@ README.md       人读用法与指标说明
 - **工具文件合同**：inputPath 限项目 `020_clean/`，outputPath 限 `020_clean/` 或 `060_reports/`，支持 UTF-8 CSV/JSON；现有目标不覆盖，链接和多硬链接拒绝。默认找 Production；显式 version 可用 Staging，Archived 拒绝。输出验证是形状/目标数值合同，不做业务判断。预测结果与出处仍进入用户选择的任务模型上下文，计算无网络不等于整条任务零外传。
 - **HTTP/UI兼容**：旧 `GET /models/:name/:version` 的 `{model}` 保留并加 `manifest` 原件；旧 client getModel 不变，新详情方法消费全文。失败阶段原文保留，UI 映射到验货步骤；明确的沙箱不可用为拒绝，网络丢回执/不明服务错误保持 UNKNOWN。CSS 限于模型注册表页面。
 - **导入检查例外（IN06）**：模型工具只获 defineTool；合成 SDK 测试只列单文件 owner。专用无模型执行器仅允许固定的编码 data 模块表达式，任意 file/SDK/变量模块加载仍由边界检查拒绝，纳入独立复核。
+
+## 14. 合并与原位归档
+
+唯一功能 [PR #36](https://github.com/gadfly-hbo/OptraCall/pull/36)，head `2c2baeb64abd62c060f5e33a6b5800705df1d6da`、base `2b9800b`，实际 [Check #104](https://github.com/gadfly-hbo/OptraCall/actions/runs/42063896716) attempt1 success：1558项／1457通过／0失败／101条件跳过，边界、类型、构建及高危审计通过。Linux跳过不替代本机1528通过或真实设备验收。
+
+获授权 squash `0fb601b6100fd08c1f8bc382fdfc30c573350365` 与受检head完整树均为 `a72db947d9419910d690b31df5aae407918d1114`。本地main由干净57742b9安全快进到0fb601b；其间已包含原本地尚未快进的SAP基线2b9800b，不把全部85路径归为本轮35路径PR。
+
+归档沿本仓惯例原目录保留，不迁移/重写候选清单、移交包、独立报告或失败。独立归档工作树仅AGENTS同源指针及spec/result三Markdown改变，其余936源文件逐项与0fb601b一致。合并main的 [Check #105](https://github.com/gadfly-hbo/OptraCall/actions/runs/42065909438) 在本正文固定时进行中，终态及归档提交自身CI以实际Actions/本机最终回执另核，不预写通过或自引用追加无限提交。
+
+当前能力停用沿现候选关闭任务modelTools；旧注册表/版本/项目/native保留。直接旧程序写新schema2可能丢未知可选开关，不用旧备份覆盖新增工作；运行回退/采用仍需相应授权。本轮不切服务、不更新MacBook、不改MPS；MP09与真实模型结果不因工程归档升级为PASS。
