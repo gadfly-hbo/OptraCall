@@ -2,7 +2,7 @@ import type { SkillEvaluation } from './skill-evaluation.ts';
 
 export const catalogCategories = ['assets', 'scenarios', 'connectors', 'plugins'] as const;
 export type CatalogCategory = typeof catalogCategories[number];
-export type CatalogEntry = 'metric' | 'requirement' | 'enterprise-materials' | 'decision' | 'refiner' | 'ppt-report' | 'simlab' | 'target-forecast' | 'coupon-forecast' | 'roi-forecast' | 'deep-research' | 'trade-area-mcp' | 'weather-mcp';
+export type CatalogEntry = 'metric' | 'requirement' | 'enterprise-materials' | 'decision' | 'refiner' | 'ppt-report' | 'simlab' | 'model-pack' | 'target-forecast' | 'coupon-forecast' | 'roi-forecast' | 'deep-research' | 'trade-area-mcp' | 'weather-mcp';
 export type CatalogItem = {
   id: string; category: CatalogCategory; name: string; description: string;
   tags: string[]; source: string; note: string;
@@ -62,6 +62,7 @@ export const catalogItems: CatalogItem[] = [
   { id: 'decision-platform', category: 'plugins', name: '决策看板', description: '跨项目汇总分析报告，抽取建议并跟进采纳、行动与复盘。', tags: ['决策协同', '行动反馈'], source: '本仓库决策看板 · 顶部“决策”入口', status: '已接入', entry: 'decision', note: '读取各项目 060_reports 报告并显式触发模型抽取；进入决策看板页面后，实际能力以该页面为准。' },
   { id: 'ppt-refiner', category: 'plugins', name: 'PPT 逐页精修', description: '读取候选版 PPTX，在独立会话中逐页对话修改：页图预览、数字锚点拦截、页锁定、版本回退、差异清单导出。', tags: ['PPT 精修', '报告编审'], source: 'OptraCall 业务插件 · ppt-refiner', note: '仅面向本产品生成的候选版；md 报告只读锚定，不回写；使用统一 Agent 底座与独立精修会话。', status: '已接入', entry: 'refiner' },
   { id: 'sim-lab', category: 'plugins', name: '经营推演', description: '把备货与促销假设展开成可审计的逐日账本：多方案对比、自定义扰动、固化不可变快照作为决策证据；页面直接推演，也可在任务中由 Agent 工具化推演。', tags: ['经营仿真', '决策证据'], source: 'OptraCall 业务插件 · sim-lab', note: '确定性假设模型，不是预测；探索自由、固化由用户确认。Agent 工具需在任务级显式开启。', status: '已接入', entry: 'simlab' },
+  { id: 'model-pack', category: 'plugins', name: '模型包', description: '导入训练产出的可执行模型资产，查看版本、留出指标与数据指纹，在本机沙箱执行预测、无网络外发；训练在 MPS（Model Pack Studio）完成。', tags: ['模型预测', '版本注册表', '本机执行'], source: 'OptraCall 业务插件 · model-pack', note: '注册表管理导入与晋级；任务级开启模型预测工具后，由 Agent 自主发现、选版本、备数与解读。预测结果和出处会进入所选任务模型上下文，不代表整段对话零数据外发。', status: '已接入', entry: 'model-pack' },
 ];
 
 export function filterCatalog(category: CatalogCategory, query: string, tag: string): CatalogItem[] {

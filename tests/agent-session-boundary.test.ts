@@ -103,3 +103,16 @@ test('protected execution utilities may use native tools but cannot become anoth
   ]) assert.ok(inspectSessionSource(file, source).length, source);
   assert.ok(inspectSessionSource(plugin, `import { createReadTool } from '../../../src/agent/sdk.ts';`).length);
 });
+
+test('MP06 value-only model executor can import its encoded data module but no arbitrary module',()=>{
+ const runner='src/host/model-pack-runner.mjs';
+ const data="await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);";
+ assert.deepEqual(inspectSessionSource(runner,data),[]);
+ for(const file of [runner,plugin]) {
+  assert.ok(inspectSessionSource(file,'await import(modulePath);').length);
+  assert.ok(inspectSessionSource(file,'await import(`file://${modulePath}`);').length);
+ }
+ assert.ok(inspectSessionSource(plugin,data).length);
+ assert.deepEqual(inspectSessionSource('src/agent/model-pack-tools.ts',"import { defineTool } from './sdk.ts';"),[]);
+ assert.ok(inspectSessionSource('src/agent/model-pack-tools.ts',"import { SessionManager } from './sdk.ts';").length);
+});

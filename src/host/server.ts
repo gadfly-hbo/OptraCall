@@ -9,6 +9,8 @@ import { ProjectRuntimeError, type ProjectSnapshot } from '../agent/project-runt
 import { ConfigurationStore, ConfigurationStoreError, TARGET_MODELS } from './config-store.ts';
 import { ProjectStore, ProjectStoreFault, type ProjectRecord, type TaskRecord } from './project-store.ts';
 import { PROJECT_UPLOAD_JSON_MAX_BYTES } from './project-upload.ts';
+import { ModelPackStore } from './model-pack-store.ts';
+import { createModelPackRoutes } from './model-pack-routes.ts';
 import { isTaskCapability } from './task-capabilities.ts';
 import { readTradeAreaStatus } from './trade-area-status.ts';
 import { CaseStore, CaseStoreError } from './case-store.ts';
@@ -100,6 +102,7 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
 export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false });
+  const modelPacks = new ModelPackStore(path.join(dataRoot, 'models'));
   const enterpriseMaterials = new EnterpriseMaterialsStore(dataRoot);
   const projectDataReferences = createProjectDataContextReferences({ dataRoot, projects, enterpriseMaterials });
   const projectDataContext = new ProjectDataContextStore({ dataRoot, projects, validateReferences: projectDataReferences.validate });
@@ -130,6 +133,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     saveReport: (projectId, name, text) => mutate(() => projects.saveReport(projectId, name, text)),
   });
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
+  const modelPackRoutes = createModelPackRoutes({store:modelPacks,readBody:body,mutate,isClosing:()=>closing});
   const sapMethods = createSapMethodStore(path.join(dataRoot, 'metric-assets'));
   const sapMethodRoutes = createSapMethodRoutes({ store: sapMethods, enabled: options.sapMethodsEnabled !== false, readBody: request => body(request, 512 * 1024), mutate, isClosing: () => closing,
     readSource: (methodId, version, index) => sapMethodFeature.readSource(methodId, version, index) });
@@ -158,7 +162,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       agentOptions: async (owner, _configuration, execution) => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
         const protectedExecution = await automatic.ordinaryExecution({ project, task }, execution);
-        return { analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(protectedExecution ? { protectedExecution } : { personalContext: async (action, input, context) => {
+        return { analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution } : { personalContext: async (action, input, context) => {
           context.signal.throwIfAborted();
           await pair(project.id, task.id, true);
           const result = action === 'find' ? await personalContext.find(input, { signal: context.signal }) : await personalContext.read(parsePersonalContextReadInput(input), { signal: context.signal });
@@ -525,6 +529,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (await handleEnterpriseMaterialsRoute({ request, response, url, store: enterpriseMaterials, cases, mutate })) return;
       if (await handleAgentCandidateRoute({ request, response, url, reader: candidateReader, controls: candidateControls, readBody: body, isClosing: () => closing , experienceLearningEnabled: options.experienceLearningEnabled !== false })) return;
       if (await handlePersonalRetentionRoute({ request, response, url, store: personalRetention, materials: enterpriseMaterials, lookup: personalLookup, readSource: readPersonalSource, readBody: body, mutate, isClosing: () => closing })) return;
+      const modelPack = await modelPackRoutes(request, url);
+      if (modelPack) { json(response, modelPack.status, modelPack.body); return; }
       const metricFactory = await metricFactoryRoutes(request, url);
       if (metricFactory) { json(response, metricFactory.status, metricFactory.value); return; }
       const methodResult = await sapMethodRoutes(request, url);
@@ -676,9 +682,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const project = await projects.get(projectId); assertActive(project);
             const selected = typeof input.configurationId === 'string' ? configuration.read(input.configurationId) : project.configuration;
             if (!selected || !configuration.snapshot(selected.id, selected.revision)) throw new RequestFault(409, 'configuration_required');
+            if (input.modelTools !== undefined && typeof input.modelTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
             if (input.weatherTools !== undefined && typeof input.weatherTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
             if (input.tradeAreaTools !== undefined && typeof input.tradeAreaTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
-            const created = await projects.createTask(projectId, { name: String(input.name ?? ''), configuration: selected, simulationTools: input.simulationTools === true, tradeAreaTools: input.tradeAreaTools === true, weatherTools: input.weatherTools === true });
+            const created = await projects.createTask(projectId, { name: String(input.name ?? ''), configuration: selected, simulationTools: input.simulationTools === true, tradeAreaTools: input.tradeAreaTools === true, weatherTools: input.weatherTools === true, modelTools: input.modelTools === true });
             projectSessions.registerFresh(projectSessions.ref({ project: await projects.get(projectId), task: created }));
             return created;
           }); json(response, 201, { task }); return;
@@ -971,6 +978,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     await release(() => gate);
     await release(() => closeAgents());
     await release(() => { for (const responses of requirementStreams.values()) for (const response of responses) response.end(); requirementStreams.clear(); endStreams(); });
+    await release(() => modelPacks.close());
     await release(() => cases.close());
     await release(() => boardStore.close());
     await release(() => decisionFeedback.close());

@@ -40,6 +40,6 @@ export function TaskCapabilityList({ settings, disabled, onChange, context }: { 
       <p>本次启用只说明一次，查询时不逐次确认。可在任务空闲时关闭；在途查询可使用停止按钮取消。</p>
     </aside>}
     <p className="connector-data-version" role="status">商圈数据版本：{tradeAreaVersionText(status)}</p>
-    <p className="task-capability-help">默认关闭，仅对本任务生效。开启后由 Agent 自主选用；受管执行及封闭出稿不提供这些工具。连接器查询结果会进入所选任务模型上下文。</p>
+    <p className="task-capability-help">默认关闭，仅对本任务生效。开启后由 Agent 自主选用；受管执行及封闭出稿不提供这些工具。工具结果和出处会进入所选任务模型上下文。</p>
   </fieldset>;
 }
