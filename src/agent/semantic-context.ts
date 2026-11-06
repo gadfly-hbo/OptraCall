@@ -1,5 +1,6 @@
 import { Type } from 'typebox';
 import type { SemanticQueryResult } from '../../extensions/business-plugins/semantic-context/types.ts';
+import { semanticGraphParameters, type SemanticGraphResult } from '../../extensions/business-plugins/semantic-context/graph.ts';
 
 /** Original M2 acknowledgement only; author declaration does not verify adoption. */
 export type SemanticSourcesRecorded = {
@@ -7,11 +8,17 @@ export type SemanticSourcesRecorded = {
   projectId: string; citationId: string; operationId: string; indexRevision: number;
   replayed: boolean; publishedOnRetry: boolean; report: { originalPath: string; sha256: string; bytes: number };
 };
-export type SemanticContextToolResult = { content: { type: 'text'; text: string }[]; details: SemanticQueryResult | SemanticSourcesRecorded };
+export type SemanticContextToolResult = { content: { type: 'text'; text: string }[]; details: SemanticQueryResult | SemanticSourcesRecorded | SemanticGraphResult };
 /** The existing Host run supplies authority; model arguments cannot bind an owner. */
-export type SemanticContextPort = (action: 'find' | 'read' | 'trace' | 'record', input: Record<string, unknown>, context: {
+export type SemanticContextCallContext = {
   signal: AbortSignal; requestId: string; sessionId: string; toolCallId: string; assertCurrent: () => void;
-}) => Promise<SemanticContextToolResult>;
+  /** Host-only actual Resource run identity; never serialized to the SDK. */
+  readonly runToken?: object;
+  registerCleanup?: (cleanup: (options: { retryFailed?: boolean }) => Promise<void>) => void;
+};
+export type SemanticContextPort = (action: 'find' | 'read' | 'trace' | 'record', input: Record<string, unknown>, context: SemanticContextCallContext) => Promise<SemanticContextToolResult>;
+/** Separate read capability: granting graph access never grants original M2 writes. */
+export type SemanticContextReadPort = (action: 'find' | 'read' | 'trace' | 'graph', input: Record<string, unknown>, context: SemanticContextCallContext) => Promise<SemanticContextToolResult>;
 
 const exact = { additionalProperties: false };
 const id = Type.String({ minLength: 1, maxLength: 1024 });
@@ -43,10 +50,12 @@ const pagination = {
   pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
   continuation: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 4096 }), Type.Null()])),
 };
-export const readSemanticContextParameters = Type.Union([
+export const legacyReadSemanticContextParameters = Type.Union([
   Type.Object({ action: Type.Literal('find'), query: Type.Optional(Type.String({ maxLength: 200 })), kinds: Type.Optional(Type.Array(Type.Union(kinds.map(kind => Type.Literal(kind))))), ...pagination }, exact),
   Type.Object({ action: Type.Union([Type.Literal('read'), Type.Literal('trace')]), target, ...pagination }, exact),
 ]);
+export const readSemanticContextParameters = Type.Union([legacyReadSemanticContextParameters, semanticGraphParameters]);
+export { semanticGraphParameters };
 const file = Type.Object({ path: id, sha256: sha, bytes: Type.Integer({ minimum: 0, maximum: 50 * 1024 * 1024 }) }, exact);
 const conceptRef = Type.Object({ storeId: id, materialId: id, revisionId: id, location: Type.Optional(range) }, exact);
 const sapRef = Type.Object({ packageId: id, version: id, metricName: id, publishedHash: nullableSha }, exact);

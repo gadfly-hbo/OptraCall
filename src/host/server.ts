@@ -62,7 +62,9 @@ import { createPersonalContextReader } from './personal-context-reader.ts';
 import { readPersonalContextHistory } from './personal-context-history.ts';
 import { SemanticContextService, SemanticContextFault } from './semantic-context-service.ts';
 import { SemanticReadFault } from '../../extensions/business-plugins/semantic-context/reader.ts';
-import { createSemanticContextPort } from './semantic-context-port.ts';
+import { createSemanticContextPort, createSemanticContextReadPort } from './semantic-context-port.ts';
+import { createSemanticGraphService, type SemanticGraphBinding } from './semantic-graph-service.ts';
+import { createSemanticGraphAuthority } from './semantic-graph-authority.ts';
 import { createMetricLibrary } from '../../extensions/business-plugins/metric-factory/library/store.ts';
 import { createSapMethodStore } from '../../extensions/business-plugins/metric-factory/methods/store.ts';
 import { createSapMethodRoutes } from './sap-method-routes.ts';
@@ -99,7 +101,7 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
   response.once('close', clear); response.once('finish', clear);
 }
 
-export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean }) {
+export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false });
   const modelPacks = new ModelPackStore(path.join(dataRoot, 'models'));
@@ -162,7 +164,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       agentOptions: async (owner, _configuration, execution) => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
         const protectedExecution = await automatic.ordinaryExecution({ project, task }, execution);
-        return { analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution } : { personalContext: async (action, input, context) => {
+        const semanticPort = createSemanticContextPort({ projectId: project.id, taskId: task.id, projects, data: projectDataContext, reader: semanticContext, mutate, isClosing: () => closing });
+        const semanticContextRead = semanticGraph && options.semanticGraph?.bindingFor(project.id, task.id) && (!protectedExecution || protectedExecution.profile === 'ordinary')
+          ? createSemanticContextReadPort({ projectId: project.id, taskId: task.id, projects, legacy: semanticPort, graph: semanticGraph, graphOnly: Boolean(protectedExecution), isClosing: () => closing }) : undefined;
+        return { analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution } : { personalContext: async (action, input, context) => {
           context.signal.throwIfAborted();
           await pair(project.id, task.id, true);
           const result = action === 'find' ? await personalContext.find(input, { signal: context.signal }) : await personalContext.read(parsePersonalContextReadInput(input), { signal: context.signal });
@@ -170,7 +175,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           await pair(project.id, task.id, true);
           context.signal.throwIfAborted();
           return { content: [{ type: 'text', text: result.text }], details: result.details };
-        }, semanticContext: createSemanticContextPort({ projectId: project.id, taskId: task.id, projects, data: projectDataContext, reader: semanticContext, mutate, isClosing: () => closing }), caseSources: options.experienceLearningEnabled === false ? undefined : async (action, input, context) => {
+        }, semanticContext: semanticPort, caseSources: options.experienceLearningEnabled === false ? undefined : async (action, input, context) => {
           context.assertCurrent();
           const assertCurrent = () => { context.assertCurrent(); if (closing) throw new RequestFault(409, 'case_sources_run_unavailable'); };
           const authority = { projectId: project.id, taskId: task.id, signal: context.signal, assertCurrent };
@@ -312,6 +317,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const personalContext = createPersonalContextReader({ projects, retention: personalRetention, controls: candidateControls });
   const semanticContext = new SemanticContextService({ projects, data: projectDataContext, enterprise: enterpriseMaterials, cases,
     metricLibrary: () => createMetricLibrary(path.join(dataRoot, 'metric-assets')), ...(options.sapMethodsEnabled !== false ? { methodLibrary: sapMethods } : {}), readSource: readPersonalSource, personal: personalContext });
+  const semanticGraph = options.semanticGraph ? createSemanticGraphService({ bindingFor: options.semanticGraph.bindingFor,
+    authorityFor: (projectId, taskId, binding) => createSemanticGraphAuthority({ projectId, taskId, projects, data: projectDataContext, enterprise: enterpriseMaterials, reader: semanticContext, dataRoot, binding }) }) : undefined;
   const sapMethodFeature = createSapMethodFeature({
     dataRoot, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), store: sapMethods, enabled: options.sapMethodsEnabled !== false,
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
@@ -518,7 +525,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const origin = request.headers.origin, allowed = [...options.uiPorts, address.port].flatMap(port => [`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
       if (origin && !allowed.includes(origin)) throw new RequestFault(403, 'origin_rejected');
       const url = new URL(request.url ?? '/', host);
-      if (url.pathname === '/api/health' && request.method === 'GET') { json(response, 200, { status: 'ready', sdkVersion: SDK_VERSION, transportVersion: options.transportVersion, chatMode: 'live', credentials: 'host-persistent', filePolicy: 'soft-prompt-no-sensitive-data-isolation', ...(staticUi ? { runtime: { instanceId, pid: process.pid, codeRoot: path.resolve(options.cwd), version: staticUi.build.version, commit: staticUi.build.commit, tree: staticUi.build.tree, builtAt: staticUi.build.builtAt, dirty: staticUi.build.dirty } } : {}) }); return; }
+      if (url.pathname === '/api/health' && request.method === 'GET') { json(response, 200, { status: 'ready', sdkVersion: SDK_VERSION, transportVersion: options.transportVersion, chatMode: 'live', credentials: 'host-persistent', filePolicy: 'soft-prompt-no-sensitive-data-isolation', ...(options.semanticGraph?.configuration ? { semanticGraph: { enabled: options.semanticGraph.configuration.enabled, configurationSha256: options.semanticGraph.configuration.configurationSha256, assets: options.semanticGraph.configuration.assets.map(({ projectId, snapshotId }) => ({ projectId, snapshotId })) } } : {}), ...(staticUi ? { runtime: { instanceId, pid: process.pid, codeRoot: path.resolve(options.cwd), version: staticUi.build.version, commit: staticUi.build.commit, tree: staticUi.build.tree, builtAt: staticUi.build.builtAt, dirty: staticUi.build.dirty } } : {}) }); return; }
       if (staticUi && !url.pathname.startsWith('/api/') && url.pathname !== '/api') {
         if (staticUi.serve(request, response, url)) return;
         throw new RequestFault(404, 'not_found');

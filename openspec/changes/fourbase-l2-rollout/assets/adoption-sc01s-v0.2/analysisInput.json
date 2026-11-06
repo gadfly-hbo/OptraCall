@@ -1,0 +1,92 @@
+{
+  "dataset_id": "SYN-DATA-0003",
+  "periods": {
+    "A": {
+      "start": "2026-09-01",
+      "end": "2026-09-14"
+    },
+    "B": {
+      "start": "2026-10-01",
+      "end": "2026-10-14"
+    }
+  },
+  "conditions": {
+    "material_nature": "本资料为无真实主体的零售合成材料；金额仅是本题交易输入，不是现实经营事实。",
+    "scope": "各记录的门店及渠道范围依本资料明确声明；不据去标识定义补全企业特殊政策。",
+    "unit": "元；币种、税口径与可比性须按明确声明及逐记录上下文核对。",
+    "refund_definition": "五类退款均在范围内。退款金额为正，计算零售额时扣减；退款按唯一原订单的支付时间和原门店归属，事件日期只用于事件、截数和跨期核查。",
+    "interpretation": "仅做金额与条件核查；金额构成不证明根因、因果、策略效果或实际经营决定。",
+    "store_scope": "列出的门店均为匿名线下直营合成门店；两期使用同一门店集合。",
+    "currency": "CNY",
+    "tax_basis": "订单成交与退款均为同一含税金额口径。",
+    "snapshot_cutoff": "2026-10-31T23:59:59+08:00",
+    "event_coverage": "所列有效退款是本合成台账截至明确截止时间的完整记录；截止以后的事件另列但不纳该快照。五类均在台账范围内，某类无行只表示本快照无该类事件。",
+    "event_identity": "订单身份唯一；退款事件身份唯一且无取消、冲正或超额退款。",
+    "refund_observation": "本题描述支付群组的截止快照，未规定统一观察天数，亦不保证终身退款已完结；只可作截至快照的描述比较。",
+    "field_roles": "paid_amount_yuan为本限定订单集退款前有效支付金额。gmv_display_amount_yuan为接口另行展示的GMV口径，范围含本订单集之外的虚构线上项；不作为三核心的金额输入。retail_amount_label_yuan在本接口虽然显示为“零售额”，其字段定义仍是退款前有效支付额的别名，不是已扣退款的净额。仅凭字段名或别称不得合并指标。"
+  },
+  "orders": [
+    {
+      "order_id": "SYN-C01",
+      "store_id": "SYN-C11",
+      "paid_date": "2026-09-03",
+      "paid_amount_yuan": 240,
+      "gmv_display_amount_yuan": 300,
+      "retail_amount_label_yuan": 240
+    },
+    {
+      "order_id": "SYN-C02",
+      "store_id": "SYN-C12",
+      "paid_date": "2026-09-04",
+      "paid_amount_yuan": 180,
+      "gmv_display_amount_yuan": 240,
+      "retail_amount_label_yuan": 180
+    },
+    {
+      "order_id": "SYN-C03",
+      "store_id": "SYN-C11",
+      "paid_date": "2026-10-03",
+      "paid_amount_yuan": 220,
+      "gmv_display_amount_yuan": 280,
+      "retail_amount_label_yuan": 220
+    },
+    {
+      "order_id": "SYN-C04",
+      "store_id": "SYN-C12",
+      "paid_date": "2026-10-04",
+      "paid_amount_yuan": 210,
+      "gmv_display_amount_yuan": 250,
+      "retail_amount_label_yuan": 210
+    }
+  ],
+  "refunds": [
+    {
+      "refund_event_id": "SYN-C01",
+      "order_id": "SYN-C01",
+      "refund_date": "2026-09-08",
+      "refund_amount_yuan": 12,
+      "refund_type": "未发货仅退款"
+    },
+    {
+      "refund_event_id": "SYN-C02",
+      "order_id": "SYN-C02",
+      "refund_date": "2026-09-09",
+      "refund_amount_yuan": 18,
+      "refund_type": "退货退款"
+    },
+    {
+      "refund_event_id": "SYN-C03",
+      "order_id": "SYN-C03",
+      "refund_date": "2026-10-08",
+      "refund_amount_yuan": 8,
+      "refund_type": "已发货仅退款"
+    },
+    {
+      "refund_event_id": "SYN-C04",
+      "order_id": "SYN-C04",
+      "refund_date": "2026-10-09",
+      "refund_amount_yuan": 22,
+      "refund_type": "额外退款"
+    }
+  ]
+}

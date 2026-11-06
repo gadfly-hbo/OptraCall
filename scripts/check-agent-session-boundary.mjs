@@ -18,6 +18,8 @@ const projectAgentOwners = new Set([
   'tests/sdk-tool-context-runtime.test.ts', // R1 frozen-source/qualification proof through the existing ProjectAgent seam only.
   'tests/sdk-network-compat.test.ts', // R3 loopback MCP/controlled TLS through the unchanged worker/transport entry only.
   'tests/semantic-context-runtime.test.ts', // L1 isolated SDK callback/nested/cancellation/auxiliary-failure proof; no product runtime ownership.
+  'tests/s4-runtime-lifecycle.test.ts', // D13: synthetic same-Resource read-capability/reap/quarantine proof only.
+  'tests/s4-runtime-sdk.test.ts', // D13: actual Pi SDK graph-only ordinary modes and cancellation proof only.
   'tests/experience-learning-runtime.test.ts', // M6 isolated ordinary cross-Case read/candidate qualification proof only.
   'tests/case-decision-runtime.test.ts', // M5 isolated SDK/Case callback scope proof; not a product runtime owner.
   'tests/model-http-environment.test.ts', // OR01/OR02: controlled SDK worker transport and safe native receipt boundary.
@@ -65,6 +67,10 @@ const domainRegistrars = new Set(['src/host/server.ts', 'src/host/requirement-se
 const connectionProbeOwners = new Set(['src/host/server.ts', 'tests/fixtures/runtime-cases.mjs']);
 // Launcher/update tests load their isolated fixture checkout by absolute URL.
 const checkoutLoaders = new Set(['scripts/trial-launcher.mjs', 'tests/trial-launcher.test.ts', 'tests/trial-update.test.ts']);
+// S3's retained engineering bridge loads seven fixed Store modules from the
+// explicitly supplied isolated source projection. It is not an SDK entry point
+// or a product query path; all ordinary SDK/ProjectAgent import rules still apply.
+const engineeringStoreLoaders = new Set(['scripts/fourbase_l2/authority.mjs']);
 const sdkPackageName = '(?:(?:@earendil-works/|@mariozechner/)?pi-(?:coding-agent|agent-core|ai|codemode|mcp|tui|telemetry))';
 const sdkPackage = new RegExp(`^${sdkPackageName}(?:/|$)`);
 const installedSdkPackage = new RegExp(`(?:^|/)node_modules/${sdkPackageName}(?:/|$)`);
@@ -84,7 +90,7 @@ function moduleReference(node) {
   if (isImportEqualsDeclaration(node) && node.moduleReference.expression) return { source: node.moduleReference.expression.text, names: node.isTypeOnly ? [] : ['*'] };
   if (isImportTypeNode(node) && node.argument.literal) return { source: node.argument.literal.text, names: [] };
   if (isCallExpression(node) && (node.expression.kind === SyntaxKind.ImportKeyword || (isIdentifier(node.expression) && node.expression.text === 'require') || (isPropertyAccessExpression(node.expression) && node.expression.name.text === 'require'))) {
-    return { source: node.arguments[0] && isStringLiteralLikeNode(node.arguments[0]) ? node.arguments[0].text : undefined, names: ['*'], valueModule: node.arguments[0]?.getText() === "`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`" };
+    return { source: node.arguments[0] && isStringLiteralLikeNode(node.arguments[0]) ? node.arguments[0].text : undefined, names: ['*'], loader: node, valueModule: node.arguments[0]?.getText() === "`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`" };
   }
 }
 
@@ -169,7 +175,9 @@ function inspectParsedSource(filePath, source, sourceFile) {
       // encoded data module. No file/SDK path or arbitrary module argument is allowed.
       if (file === 'src/host/model-pack-runner.mjs' && ref.valueModule) return;
       // The trial updater intentionally resolves its own checked-out script.
-      if (!checkoutLoaders.has(file)) fail(pos, 'non-literal module loading requires a reviewed entry point');
+      const expression = ref.loader?.getText(sourceFile) ?? '';
+      const reviewedStoreLoad = engineeringStoreLoaders.has(file) && /^import\s*\(\s*pathToFileURL\s*\(\s*path\.join\s*\(\s*input\.sourceRoot\s*,\s*relative\s*\)\s*\)\s*\.href\s*\)$/.test(expression);
+      if (!checkoutLoaders.has(file) && !reviewedStoreLoad) fail(pos, 'non-literal module loading requires a reviewed entry point');
       return;
     }
     const target = canonicalSource(file, ref.source), names = ref.names;

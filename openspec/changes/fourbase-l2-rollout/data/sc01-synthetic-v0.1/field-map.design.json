@@ -1,0 +1,566 @@
+{
+  "document_kind": "S1_field_mapping_design_not_M2_save_request",
+  "version": "0.1",
+  "exercise_id": "SC-01S",
+  "input_file": "input.json",
+  "input_sha256": "ec996f92bed8c18b5a9809760827a59ddde85d115ad905df96a3dfac7f63372d",
+  "source_policy": "Only existing deidentified definitions and wholly synthetic input. No production objects or references created.",
+  "material_ids_not_product_refs": [
+    "C02",
+    "C03",
+    "C04",
+    "MTH-01",
+    "SRC-METRIC-01"
+  ],
+  "global_pointers": {
+    "channel": "/scope/channel",
+    "stores": "/scope/store_ids",
+    "currency": "/scope/currency",
+    "unit": "/scope/amount_unit",
+    "tax_basis": "/scope/tax_basis",
+    "data_cutoff": "/scope/data_cutoff",
+    "timezone": "/scope/timezone",
+    "is_synthetic": "/is_synthetic",
+    "assumptions": "/synthetic_assumptions"
+  },
+  "period_pointers": [
+    {
+      "id_pointer": "/periods/0/period_id",
+      "start_pointer": "/periods/0/start_date",
+      "end_inclusive_pointer": "/periods/0/end_date_inclusive",
+      "day_count_pointer": "/periods/0/days"
+    },
+    {
+      "id_pointer": "/periods/1/period_id",
+      "start_pointer": "/periods/1/start_date",
+      "end_inclusive_pointer": "/periods/1/end_date_inclusive",
+      "day_count_pointer": "/periods/1/days"
+    }
+  ],
+  "C02_order_records": [
+    {
+      "record_pointer": "/orders/0",
+      "order_id_pointer": "/orders/0/order_id",
+      "store_pointer": "/orders/0/store_id",
+      "channel_pointer": "/orders/0/channel",
+      "business_time_pointer": "/orders/0/payment_time",
+      "amount_pointer": "/orders/0/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/1",
+      "order_id_pointer": "/orders/1/order_id",
+      "store_pointer": "/orders/1/store_id",
+      "channel_pointer": "/orders/1/channel",
+      "business_time_pointer": "/orders/1/payment_time",
+      "amount_pointer": "/orders/1/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/2",
+      "order_id_pointer": "/orders/2/order_id",
+      "store_pointer": "/orders/2/store_id",
+      "channel_pointer": "/orders/2/channel",
+      "business_time_pointer": "/orders/2/payment_time",
+      "amount_pointer": "/orders/2/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/3",
+      "order_id_pointer": "/orders/3/order_id",
+      "store_pointer": "/orders/3/store_id",
+      "channel_pointer": "/orders/3/channel",
+      "business_time_pointer": "/orders/3/payment_time",
+      "amount_pointer": "/orders/3/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/4",
+      "order_id_pointer": "/orders/4/order_id",
+      "store_pointer": "/orders/4/store_id",
+      "channel_pointer": "/orders/4/channel",
+      "business_time_pointer": "/orders/4/payment_time",
+      "amount_pointer": "/orders/4/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/5",
+      "order_id_pointer": "/orders/5/order_id",
+      "store_pointer": "/orders/5/store_id",
+      "channel_pointer": "/orders/5/channel",
+      "business_time_pointer": "/orders/5/payment_time",
+      "amount_pointer": "/orders/5/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/6",
+      "order_id_pointer": "/orders/6/order_id",
+      "store_pointer": "/orders/6/store_id",
+      "channel_pointer": "/orders/6/channel",
+      "business_time_pointer": "/orders/6/payment_time",
+      "amount_pointer": "/orders/6/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/7",
+      "order_id_pointer": "/orders/7/order_id",
+      "store_pointer": "/orders/7/store_id",
+      "channel_pointer": "/orders/7/channel",
+      "business_time_pointer": "/orders/7/payment_time",
+      "amount_pointer": "/orders/7/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/8",
+      "order_id_pointer": "/orders/8/order_id",
+      "store_pointer": "/orders/8/store_id",
+      "channel_pointer": "/orders/8/channel",
+      "business_time_pointer": "/orders/8/payment_time",
+      "amount_pointer": "/orders/8/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/9",
+      "order_id_pointer": "/orders/9/order_id",
+      "store_pointer": "/orders/9/store_id",
+      "channel_pointer": "/orders/9/channel",
+      "business_time_pointer": "/orders/9/payment_time",
+      "amount_pointer": "/orders/9/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/10",
+      "order_id_pointer": "/orders/10/order_id",
+      "store_pointer": "/orders/10/store_id",
+      "channel_pointer": "/orders/10/channel",
+      "business_time_pointer": "/orders/10/payment_time",
+      "amount_pointer": "/orders/10/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/11",
+      "order_id_pointer": "/orders/11/order_id",
+      "store_pointer": "/orders/11/store_id",
+      "channel_pointer": "/orders/11/channel",
+      "business_time_pointer": "/orders/11/payment_time",
+      "amount_pointer": "/orders/11/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/12",
+      "order_id_pointer": "/orders/12/order_id",
+      "store_pointer": "/orders/12/store_id",
+      "channel_pointer": "/orders/12/channel",
+      "business_time_pointer": "/orders/12/payment_time",
+      "amount_pointer": "/orders/12/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/13",
+      "order_id_pointer": "/orders/13/order_id",
+      "store_pointer": "/orders/13/store_id",
+      "channel_pointer": "/orders/13/channel",
+      "business_time_pointer": "/orders/13/payment_time",
+      "amount_pointer": "/orders/13/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/14",
+      "order_id_pointer": "/orders/14/order_id",
+      "store_pointer": "/orders/14/store_id",
+      "channel_pointer": "/orders/14/channel",
+      "business_time_pointer": "/orders/14/payment_time",
+      "amount_pointer": "/orders/14/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/15",
+      "order_id_pointer": "/orders/15/order_id",
+      "store_pointer": "/orders/15/store_id",
+      "channel_pointer": "/orders/15/channel",
+      "business_time_pointer": "/orders/15/payment_time",
+      "amount_pointer": "/orders/15/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/16",
+      "order_id_pointer": "/orders/16/order_id",
+      "store_pointer": "/orders/16/store_id",
+      "channel_pointer": "/orders/16/channel",
+      "business_time_pointer": "/orders/16/payment_time",
+      "amount_pointer": "/orders/16/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/17",
+      "order_id_pointer": "/orders/17/order_id",
+      "store_pointer": "/orders/17/store_id",
+      "channel_pointer": "/orders/17/channel",
+      "business_time_pointer": "/orders/17/payment_time",
+      "amount_pointer": "/orders/17/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/18",
+      "order_id_pointer": "/orders/18/order_id",
+      "store_pointer": "/orders/18/store_id",
+      "channel_pointer": "/orders/18/channel",
+      "business_time_pointer": "/orders/18/payment_time",
+      "amount_pointer": "/orders/18/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/19",
+      "order_id_pointer": "/orders/19/order_id",
+      "store_pointer": "/orders/19/store_id",
+      "channel_pointer": "/orders/19/channel",
+      "business_time_pointer": "/orders/19/payment_time",
+      "amount_pointer": "/orders/19/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/20",
+      "order_id_pointer": "/orders/20/order_id",
+      "store_pointer": "/orders/20/store_id",
+      "channel_pointer": "/orders/20/channel",
+      "business_time_pointer": "/orders/20/payment_time",
+      "amount_pointer": "/orders/20/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/21",
+      "order_id_pointer": "/orders/21/order_id",
+      "store_pointer": "/orders/21/store_id",
+      "channel_pointer": "/orders/21/channel",
+      "business_time_pointer": "/orders/21/payment_time",
+      "amount_pointer": "/orders/21/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/22",
+      "order_id_pointer": "/orders/22/order_id",
+      "store_pointer": "/orders/22/store_id",
+      "channel_pointer": "/orders/22/channel",
+      "business_time_pointer": "/orders/22/payment_time",
+      "amount_pointer": "/orders/22/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/23",
+      "order_id_pointer": "/orders/23/order_id",
+      "store_pointer": "/orders/23/store_id",
+      "channel_pointer": "/orders/23/channel",
+      "business_time_pointer": "/orders/23/payment_time",
+      "amount_pointer": "/orders/23/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/24",
+      "order_id_pointer": "/orders/24/order_id",
+      "store_pointer": "/orders/24/store_id",
+      "channel_pointer": "/orders/24/channel",
+      "business_time_pointer": "/orders/24/payment_time",
+      "amount_pointer": "/orders/24/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/25",
+      "order_id_pointer": "/orders/25/order_id",
+      "store_pointer": "/orders/25/store_id",
+      "channel_pointer": "/orders/25/channel",
+      "business_time_pointer": "/orders/25/payment_time",
+      "amount_pointer": "/orders/25/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/26",
+      "order_id_pointer": "/orders/26/order_id",
+      "store_pointer": "/orders/26/store_id",
+      "channel_pointer": "/orders/26/channel",
+      "business_time_pointer": "/orders/26/payment_time",
+      "amount_pointer": "/orders/26/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/27",
+      "order_id_pointer": "/orders/27/order_id",
+      "store_pointer": "/orders/27/store_id",
+      "channel_pointer": "/orders/27/channel",
+      "business_time_pointer": "/orders/27/payment_time",
+      "amount_pointer": "/orders/27/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/28",
+      "order_id_pointer": "/orders/28/order_id",
+      "store_pointer": "/orders/28/store_id",
+      "channel_pointer": "/orders/28/channel",
+      "business_time_pointer": "/orders/28/payment_time",
+      "amount_pointer": "/orders/28/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/29",
+      "order_id_pointer": "/orders/29/order_id",
+      "store_pointer": "/orders/29/store_id",
+      "channel_pointer": "/orders/29/channel",
+      "business_time_pointer": "/orders/29/payment_time",
+      "amount_pointer": "/orders/29/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/30",
+      "order_id_pointer": "/orders/30/order_id",
+      "store_pointer": "/orders/30/store_id",
+      "channel_pointer": "/orders/30/channel",
+      "business_time_pointer": "/orders/30/payment_time",
+      "amount_pointer": "/orders/30/gross_amount_yuan"
+    },
+    {
+      "record_pointer": "/orders/31",
+      "order_id_pointer": "/orders/31/order_id",
+      "store_pointer": "/orders/31/store_id",
+      "channel_pointer": "/orders/31/channel",
+      "business_time_pointer": "/orders/31/payment_time",
+      "amount_pointer": "/orders/31/gross_amount_yuan"
+    }
+  ],
+  "C03_refund_records": [
+    {
+      "record_pointer": "/refunds/0",
+      "refund_id_pointer": "/refunds/0/refund_id",
+      "order_join_key_pointer": "/refunds/0/order_id",
+      "event_time_pointer": "/refunds/0/refund_time",
+      "refund_kind_pointer": "/refunds/0/refund_kind",
+      "amount_pointer": "/refunds/0/refund_amount_yuan",
+      "matched_order_pointer": "/orders/0",
+      "business_time_pointer": "/orders/0/payment_time",
+      "store_pointer": "/orders/0/store_id",
+      "channel_pointer": "/orders/0/channel"
+    },
+    {
+      "record_pointer": "/refunds/1",
+      "refund_id_pointer": "/refunds/1/refund_id",
+      "order_join_key_pointer": "/refunds/1/order_id",
+      "event_time_pointer": "/refunds/1/refund_time",
+      "refund_kind_pointer": "/refunds/1/refund_kind",
+      "amount_pointer": "/refunds/1/refund_amount_yuan",
+      "matched_order_pointer": "/orders/3",
+      "business_time_pointer": "/orders/3/payment_time",
+      "store_pointer": "/orders/3/store_id",
+      "channel_pointer": "/orders/3/channel"
+    },
+    {
+      "record_pointer": "/refunds/2",
+      "refund_id_pointer": "/refunds/2/refund_id",
+      "order_join_key_pointer": "/refunds/2/order_id",
+      "event_time_pointer": "/refunds/2/refund_time",
+      "refund_kind_pointer": "/refunds/2/refund_kind",
+      "amount_pointer": "/refunds/2/refund_amount_yuan",
+      "matched_order_pointer": "/orders/4",
+      "business_time_pointer": "/orders/4/payment_time",
+      "store_pointer": "/orders/4/store_id",
+      "channel_pointer": "/orders/4/channel"
+    },
+    {
+      "record_pointer": "/refunds/3",
+      "refund_id_pointer": "/refunds/3/refund_id",
+      "order_join_key_pointer": "/refunds/3/order_id",
+      "event_time_pointer": "/refunds/3/refund_time",
+      "refund_kind_pointer": "/refunds/3/refund_kind",
+      "amount_pointer": "/refunds/3/refund_amount_yuan",
+      "matched_order_pointer": "/orders/7",
+      "business_time_pointer": "/orders/7/payment_time",
+      "store_pointer": "/orders/7/store_id",
+      "channel_pointer": "/orders/7/channel"
+    },
+    {
+      "record_pointer": "/refunds/4",
+      "refund_id_pointer": "/refunds/4/refund_id",
+      "order_join_key_pointer": "/refunds/4/order_id",
+      "event_time_pointer": "/refunds/4/refund_time",
+      "refund_kind_pointer": "/refunds/4/refund_kind",
+      "amount_pointer": "/refunds/4/refund_amount_yuan",
+      "matched_order_pointer": "/orders/8",
+      "business_time_pointer": "/orders/8/payment_time",
+      "store_pointer": "/orders/8/store_id",
+      "channel_pointer": "/orders/8/channel"
+    },
+    {
+      "record_pointer": "/refunds/5",
+      "refund_id_pointer": "/refunds/5/refund_id",
+      "order_join_key_pointer": "/refunds/5/order_id",
+      "event_time_pointer": "/refunds/5/refund_time",
+      "refund_kind_pointer": "/refunds/5/refund_kind",
+      "amount_pointer": "/refunds/5/refund_amount_yuan",
+      "matched_order_pointer": "/orders/11",
+      "business_time_pointer": "/orders/11/payment_time",
+      "store_pointer": "/orders/11/store_id",
+      "channel_pointer": "/orders/11/channel"
+    },
+    {
+      "record_pointer": "/refunds/6",
+      "refund_id_pointer": "/refunds/6/refund_id",
+      "order_join_key_pointer": "/refunds/6/order_id",
+      "event_time_pointer": "/refunds/6/refund_time",
+      "refund_kind_pointer": "/refunds/6/refund_kind",
+      "amount_pointer": "/refunds/6/refund_amount_yuan",
+      "matched_order_pointer": "/orders/12",
+      "business_time_pointer": "/orders/12/payment_time",
+      "store_pointer": "/orders/12/store_id",
+      "channel_pointer": "/orders/12/channel"
+    },
+    {
+      "record_pointer": "/refunds/7",
+      "refund_id_pointer": "/refunds/7/refund_id",
+      "order_join_key_pointer": "/refunds/7/order_id",
+      "event_time_pointer": "/refunds/7/refund_time",
+      "refund_kind_pointer": "/refunds/7/refund_kind",
+      "amount_pointer": "/refunds/7/refund_amount_yuan",
+      "matched_order_pointer": "/orders/15",
+      "business_time_pointer": "/orders/15/payment_time",
+      "store_pointer": "/orders/15/store_id",
+      "channel_pointer": "/orders/15/channel"
+    },
+    {
+      "record_pointer": "/refunds/8",
+      "refund_id_pointer": "/refunds/8/refund_id",
+      "order_join_key_pointer": "/refunds/8/order_id",
+      "event_time_pointer": "/refunds/8/refund_time",
+      "refund_kind_pointer": "/refunds/8/refund_kind",
+      "amount_pointer": "/refunds/8/refund_amount_yuan",
+      "matched_order_pointer": "/orders/16",
+      "business_time_pointer": "/orders/16/payment_time",
+      "store_pointer": "/orders/16/store_id",
+      "channel_pointer": "/orders/16/channel"
+    },
+    {
+      "record_pointer": "/refunds/9",
+      "refund_id_pointer": "/refunds/9/refund_id",
+      "order_join_key_pointer": "/refunds/9/order_id",
+      "event_time_pointer": "/refunds/9/refund_time",
+      "refund_kind_pointer": "/refunds/9/refund_kind",
+      "amount_pointer": "/refunds/9/refund_amount_yuan",
+      "matched_order_pointer": "/orders/19",
+      "business_time_pointer": "/orders/19/payment_time",
+      "store_pointer": "/orders/19/store_id",
+      "channel_pointer": "/orders/19/channel"
+    },
+    {
+      "record_pointer": "/refunds/10",
+      "refund_id_pointer": "/refunds/10/refund_id",
+      "order_join_key_pointer": "/refunds/10/order_id",
+      "event_time_pointer": "/refunds/10/refund_time",
+      "refund_kind_pointer": "/refunds/10/refund_kind",
+      "amount_pointer": "/refunds/10/refund_amount_yuan",
+      "matched_order_pointer": "/orders/20",
+      "business_time_pointer": "/orders/20/payment_time",
+      "store_pointer": "/orders/20/store_id",
+      "channel_pointer": "/orders/20/channel"
+    },
+    {
+      "record_pointer": "/refunds/11",
+      "refund_id_pointer": "/refunds/11/refund_id",
+      "order_join_key_pointer": "/refunds/11/order_id",
+      "event_time_pointer": "/refunds/11/refund_time",
+      "refund_kind_pointer": "/refunds/11/refund_kind",
+      "amount_pointer": "/refunds/11/refund_amount_yuan",
+      "matched_order_pointer": "/orders/23",
+      "business_time_pointer": "/orders/23/payment_time",
+      "store_pointer": "/orders/23/store_id",
+      "channel_pointer": "/orders/23/channel"
+    },
+    {
+      "record_pointer": "/refunds/12",
+      "refund_id_pointer": "/refunds/12/refund_id",
+      "order_join_key_pointer": "/refunds/12/order_id",
+      "event_time_pointer": "/refunds/12/refund_time",
+      "refund_kind_pointer": "/refunds/12/refund_kind",
+      "amount_pointer": "/refunds/12/refund_amount_yuan",
+      "matched_order_pointer": "/orders/24",
+      "business_time_pointer": "/orders/24/payment_time",
+      "store_pointer": "/orders/24/store_id",
+      "channel_pointer": "/orders/24/channel"
+    },
+    {
+      "record_pointer": "/refunds/13",
+      "refund_id_pointer": "/refunds/13/refund_id",
+      "order_join_key_pointer": "/refunds/13/order_id",
+      "event_time_pointer": "/refunds/13/refund_time",
+      "refund_kind_pointer": "/refunds/13/refund_kind",
+      "amount_pointer": "/refunds/13/refund_amount_yuan",
+      "matched_order_pointer": "/orders/27",
+      "business_time_pointer": "/orders/27/payment_time",
+      "store_pointer": "/orders/27/store_id",
+      "channel_pointer": "/orders/27/channel"
+    },
+    {
+      "record_pointer": "/refunds/14",
+      "refund_id_pointer": "/refunds/14/refund_id",
+      "order_join_key_pointer": "/refunds/14/order_id",
+      "event_time_pointer": "/refunds/14/refund_time",
+      "refund_kind_pointer": "/refunds/14/refund_kind",
+      "amount_pointer": "/refunds/14/refund_amount_yuan",
+      "matched_order_pointer": "/orders/28",
+      "business_time_pointer": "/orders/28/payment_time",
+      "store_pointer": "/orders/28/store_id",
+      "channel_pointer": "/orders/28/channel"
+    },
+    {
+      "record_pointer": "/refunds/15",
+      "refund_id_pointer": "/refunds/15/refund_id",
+      "order_join_key_pointer": "/refunds/15/order_id",
+      "event_time_pointer": "/refunds/15/refund_time",
+      "refund_kind_pointer": "/refunds/15/refund_kind",
+      "amount_pointer": "/refunds/15/refund_amount_yuan",
+      "matched_order_pointer": "/orders/31",
+      "business_time_pointer": "/orders/31/payment_time",
+      "store_pointer": "/orders/31/store_id",
+      "channel_pointer": "/orders/31/channel"
+    }
+  ],
+  "control_only_records": [
+    {
+      "store_pointer": "/synthetic_net_controls/0/store_id",
+      "period_pointer": "/synthetic_net_controls/0/period_id",
+      "amount_pointer": "/synthetic_net_controls/0/net_amount_yuan",
+      "nature_pointer": "/synthetic_net_controls/0/source_kind"
+    },
+    {
+      "store_pointer": "/synthetic_net_controls/1/store_id",
+      "period_pointer": "/synthetic_net_controls/1/period_id",
+      "amount_pointer": "/synthetic_net_controls/1/net_amount_yuan",
+      "nature_pointer": "/synthetic_net_controls/1/source_kind"
+    },
+    {
+      "store_pointer": "/synthetic_net_controls/2/store_id",
+      "period_pointer": "/synthetic_net_controls/2/period_id",
+      "amount_pointer": "/synthetic_net_controls/2/net_amount_yuan",
+      "nature_pointer": "/synthetic_net_controls/2/source_kind"
+    },
+    {
+      "store_pointer": "/synthetic_net_controls/3/store_id",
+      "period_pointer": "/synthetic_net_controls/3/period_id",
+      "amount_pointer": "/synthetic_net_controls/3/net_amount_yuan",
+      "nature_pointer": "/synthetic_net_controls/3/source_kind"
+    },
+    {
+      "store_pointer": "/synthetic_net_controls/4/store_id",
+      "period_pointer": "/synthetic_net_controls/4/period_id",
+      "amount_pointer": "/synthetic_net_controls/4/net_amount_yuan",
+      "nature_pointer": "/synthetic_net_controls/4/source_kind"
+    },
+    {
+      "store_pointer": "/synthetic_net_controls/5/store_id",
+      "period_pointer": "/synthetic_net_controls/5/period_id",
+      "amount_pointer": "/synthetic_net_controls/5/net_amount_yuan",
+      "nature_pointer": "/synthetic_net_controls/5/source_kind"
+    },
+    {
+      "store_pointer": "/synthetic_net_controls/6/store_id",
+      "period_pointer": "/synthetic_net_controls/6/period_id",
+      "amount_pointer": "/synthetic_net_controls/6/net_amount_yuan",
+      "nature_pointer": "/synthetic_net_controls/6/source_kind"
+    },
+    {
+      "store_pointer": "/synthetic_net_controls/7/store_id",
+      "period_pointer": "/synthetic_net_controls/7/period_id",
+      "amount_pointer": "/synthetic_net_controls/7/net_amount_yuan",
+      "nature_pointer": "/synthetic_net_controls/7/source_kind"
+    }
+  ],
+  "calculation_meanings": {
+    "C02": "sum selected order gross_amount_yuan, grouped by order store and payment-time window",
+    "C03": "join refund.order_id to order.order_id, then sum refund_amount_yuan by original order store and payment-time window; refund_time is event/cutoff evidence",
+    "C04": "C02 minus C03 for same scope/window; no direct input pointer pretends to be this derived measure",
+    "controls": "same-design synthetic control values only, not authoritative real net sales or independent business evidence"
+  },
+  "M2_materialization_boundary": {
+    "existing_location_kind": "json-pointer",
+    "pointer_semantics": "literal RFC6901 locations only; no wildcard, join, grouping or execution implied",
+    "refs_needed_later": "real published indicator packageId/version/metricName/publishedHash after asset publication; M2 publishedHash value may be null and semantic-method publishedHash is optional and nullable under existing contracts; fix actual known hashes, never invent a hash or add a universal nonempty gate; do not invent refs from candidate IDs",
+    "concept_ref_boundary": "existing enterprise material storeId/materialId/revisionId only; not arbitrary ontology-node IDs",
+    "statement_policy": "existing scope and provenance enums; future engineering statements use agent-inference, explain synthetic assumptions in text, no synthetic provenance enum; business confirmed is not implied",
+    "not_created": [
+      "projectId",
+      "datasetId",
+      "inputVersionId",
+      "descriptionRevisionId",
+      "mappingId",
+      "published metric/method refs",
+      "native evidence",
+      "M2 HTTP payload",
+      "production schema"
+    ]
+  }
+}

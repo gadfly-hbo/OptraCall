@@ -1,0 +1,439 @@
+{
+  "document_kind": "synthetic_business_exercise_input",
+  "exercise_id": "SC-01S",
+  "version": "0.1",
+  "is_synthetic": true,
+  "notice": "全部对象、日期、金额、事件及控制数均为人工合成，不代表企业经营事实或反馈。指标含义参考获准去标识资料；下列样本条件均为演练设定，不是企业正式规则。",
+  "metric_source_ref": "../metric-candidates.v0.1.json",
+  "core_candidate_ids": [
+    "C02",
+    "C03",
+    "C04"
+  ],
+  "scope": {
+    "channel": "offline_direct",
+    "store_ids": [
+      "SYN-STORE-01",
+      "SYN-STORE-02",
+      "SYN-STORE-03",
+      "SYN-STORE-04"
+    ],
+    "currency": "CNY",
+    "amount_unit": "元",
+    "tax_basis": "样本统一按同一含税口径，不计算税率或毛利",
+    "data_cutoff": "2026-11-04T23:59:59+08:00",
+    "timezone": "Asia/Shanghai"
+  },
+  "periods": [
+    {
+      "period_id": "A",
+      "start_date": "2026-09-01",
+      "end_date_inclusive": "2026-09-28",
+      "days": 28
+    },
+    {
+      "period_id": "B",
+      "start_date": "2026-10-01",
+      "end_date_inclusive": "2026-10-28",
+      "days": 28
+    }
+  ],
+  "synthetic_assumptions": [
+    "四家门店及两个期间的可比集合固定，所有订单均为本例范围内的有效支付订单，无取消、支付冲正或跨币种换算。",
+    "退款金额为正数，净额计算时扣减；退款归属于其关联订单的支付日期，不归属于退款事件发生日期。",
+    "本例只构造支付后7日内发生且已纳入截止快照的退款；两期全部样本支付均已超过该观察窗。这不是企业退款政策，不能外推真实成熟度。",
+    "两类已造退款事件按事件ID区分且不重复，单笔及同单累计退款不超过关联支付金额；其他退款类型本例为零，不代表现实不存在。",
+    "金额均为整数元，未覆盖小数舍入、复杂调整或全部源特例。",
+    "synthetic_net_controls为同批合成的工程控制数，不是真实独立报表或业务对账证据。"
+  ],
+  "orders": [
+    {
+      "order_id": "SYN-ORDER-01-A-01",
+      "store_id": "SYN-STORE-01",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-03T14:00:00+08:00",
+      "gross_amount_yuan": 20000
+    },
+    {
+      "order_id": "SYN-ORDER-01-A-02",
+      "store_id": "SYN-STORE-01",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-10T14:00:00+08:00",
+      "gross_amount_yuan": 15000
+    },
+    {
+      "order_id": "SYN-ORDER-01-A-03",
+      "store_id": "SYN-STORE-01",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-18T14:00:00+08:00",
+      "gross_amount_yuan": 10000
+    },
+    {
+      "order_id": "SYN-ORDER-01-A-04",
+      "store_id": "SYN-STORE-01",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-27T14:00:00+08:00",
+      "gross_amount_yuan": 5000
+    },
+    {
+      "order_id": "SYN-ORDER-01-B-01",
+      "store_id": "SYN-STORE-01",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-03T14:00:00+08:00",
+      "gross_amount_yuan": 18000
+    },
+    {
+      "order_id": "SYN-ORDER-01-B-02",
+      "store_id": "SYN-STORE-01",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-10T14:00:00+08:00",
+      "gross_amount_yuan": 13500
+    },
+    {
+      "order_id": "SYN-ORDER-01-B-03",
+      "store_id": "SYN-STORE-01",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-18T14:00:00+08:00",
+      "gross_amount_yuan": 9000
+    },
+    {
+      "order_id": "SYN-ORDER-01-B-04",
+      "store_id": "SYN-STORE-01",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-27T14:00:00+08:00",
+      "gross_amount_yuan": 4500
+    },
+    {
+      "order_id": "SYN-ORDER-02-A-01",
+      "store_id": "SYN-STORE-02",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-03T14:00:00+08:00",
+      "gross_amount_yuan": 16000
+    },
+    {
+      "order_id": "SYN-ORDER-02-A-02",
+      "store_id": "SYN-STORE-02",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-10T14:00:00+08:00",
+      "gross_amount_yuan": 12000
+    },
+    {
+      "order_id": "SYN-ORDER-02-A-03",
+      "store_id": "SYN-STORE-02",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-18T14:00:00+08:00",
+      "gross_amount_yuan": 8000
+    },
+    {
+      "order_id": "SYN-ORDER-02-A-04",
+      "store_id": "SYN-STORE-02",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-27T14:00:00+08:00",
+      "gross_amount_yuan": 4000
+    },
+    {
+      "order_id": "SYN-ORDER-02-B-01",
+      "store_id": "SYN-STORE-02",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-03T14:00:00+08:00",
+      "gross_amount_yuan": 17200
+    },
+    {
+      "order_id": "SYN-ORDER-02-B-02",
+      "store_id": "SYN-STORE-02",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-10T14:00:00+08:00",
+      "gross_amount_yuan": 12900
+    },
+    {
+      "order_id": "SYN-ORDER-02-B-03",
+      "store_id": "SYN-STORE-02",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-18T14:00:00+08:00",
+      "gross_amount_yuan": 8600
+    },
+    {
+      "order_id": "SYN-ORDER-02-B-04",
+      "store_id": "SYN-STORE-02",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-27T14:00:00+08:00",
+      "gross_amount_yuan": 4300
+    },
+    {
+      "order_id": "SYN-ORDER-03-A-01",
+      "store_id": "SYN-STORE-03",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-03T14:00:00+08:00",
+      "gross_amount_yuan": 12000
+    },
+    {
+      "order_id": "SYN-ORDER-03-A-02",
+      "store_id": "SYN-STORE-03",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-10T14:00:00+08:00",
+      "gross_amount_yuan": 9000
+    },
+    {
+      "order_id": "SYN-ORDER-03-A-03",
+      "store_id": "SYN-STORE-03",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-18T14:00:00+08:00",
+      "gross_amount_yuan": 6000
+    },
+    {
+      "order_id": "SYN-ORDER-03-A-04",
+      "store_id": "SYN-STORE-03",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-27T14:00:00+08:00",
+      "gross_amount_yuan": 3000
+    },
+    {
+      "order_id": "SYN-ORDER-03-B-01",
+      "store_id": "SYN-STORE-03",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-03T14:00:00+08:00",
+      "gross_amount_yuan": 10000
+    },
+    {
+      "order_id": "SYN-ORDER-03-B-02",
+      "store_id": "SYN-STORE-03",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-10T14:00:00+08:00",
+      "gross_amount_yuan": 7500
+    },
+    {
+      "order_id": "SYN-ORDER-03-B-03",
+      "store_id": "SYN-STORE-03",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-18T14:00:00+08:00",
+      "gross_amount_yuan": 5000
+    },
+    {
+      "order_id": "SYN-ORDER-03-B-04",
+      "store_id": "SYN-STORE-03",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-27T14:00:00+08:00",
+      "gross_amount_yuan": 2500
+    },
+    {
+      "order_id": "SYN-ORDER-04-A-01",
+      "store_id": "SYN-STORE-04",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-03T14:00:00+08:00",
+      "gross_amount_yuan": 8000
+    },
+    {
+      "order_id": "SYN-ORDER-04-A-02",
+      "store_id": "SYN-STORE-04",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-10T14:00:00+08:00",
+      "gross_amount_yuan": 6000
+    },
+    {
+      "order_id": "SYN-ORDER-04-A-03",
+      "store_id": "SYN-STORE-04",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-18T14:00:00+08:00",
+      "gross_amount_yuan": 4000
+    },
+    {
+      "order_id": "SYN-ORDER-04-A-04",
+      "store_id": "SYN-STORE-04",
+      "channel": "offline_direct",
+      "payment_time": "2026-09-27T14:00:00+08:00",
+      "gross_amount_yuan": 2000
+    },
+    {
+      "order_id": "SYN-ORDER-04-B-01",
+      "store_id": "SYN-STORE-04",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-03T14:00:00+08:00",
+      "gross_amount_yuan": 7200
+    },
+    {
+      "order_id": "SYN-ORDER-04-B-02",
+      "store_id": "SYN-STORE-04",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-10T14:00:00+08:00",
+      "gross_amount_yuan": 5400
+    },
+    {
+      "order_id": "SYN-ORDER-04-B-03",
+      "store_id": "SYN-STORE-04",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-18T14:00:00+08:00",
+      "gross_amount_yuan": 3600
+    },
+    {
+      "order_id": "SYN-ORDER-04-B-04",
+      "store_id": "SYN-STORE-04",
+      "channel": "offline_direct",
+      "payment_time": "2026-10-27T14:00:00+08:00",
+      "gross_amount_yuan": 1800
+    }
+  ],
+  "refunds": [
+    {
+      "refund_id": "SYN-REFUND-01-A-01",
+      "order_id": "SYN-ORDER-01-A-01",
+      "refund_time": "2026-09-05T14:00:00+08:00",
+      "refund_kind": "未发货仅退款额",
+      "refund_amount_yuan": 1200
+    },
+    {
+      "refund_id": "SYN-REFUND-01-A-02",
+      "order_id": "SYN-ORDER-01-A-04",
+      "refund_time": "2026-10-02T14:00:00+08:00",
+      "refund_kind": "退货退款额",
+      "refund_amount_yuan": 800
+    },
+    {
+      "refund_id": "SYN-REFUND-01-B-01",
+      "order_id": "SYN-ORDER-01-B-01",
+      "refund_time": "2026-10-05T14:00:00+08:00",
+      "refund_kind": "未发货仅退款额",
+      "refund_amount_yuan": 3600
+    },
+    {
+      "refund_id": "SYN-REFUND-01-B-02",
+      "order_id": "SYN-ORDER-01-B-04",
+      "refund_time": "2026-11-01T14:00:00+08:00",
+      "refund_kind": "退货退款额",
+      "refund_amount_yuan": 2400
+    },
+    {
+      "refund_id": "SYN-REFUND-02-A-01",
+      "order_id": "SYN-ORDER-02-A-01",
+      "refund_time": "2026-09-05T14:00:00+08:00",
+      "refund_kind": "未发货仅退款额",
+      "refund_amount_yuan": 1800
+    },
+    {
+      "refund_id": "SYN-REFUND-02-A-02",
+      "order_id": "SYN-ORDER-02-A-04",
+      "refund_time": "2026-10-02T14:00:00+08:00",
+      "refund_kind": "退货退款额",
+      "refund_amount_yuan": 1200
+    },
+    {
+      "refund_id": "SYN-REFUND-02-B-01",
+      "order_id": "SYN-ORDER-02-B-01",
+      "refund_time": "2026-10-05T14:00:00+08:00",
+      "refund_kind": "未发货仅退款额",
+      "refund_amount_yuan": 1200
+    },
+    {
+      "refund_id": "SYN-REFUND-02-B-02",
+      "order_id": "SYN-ORDER-02-B-04",
+      "refund_time": "2026-11-01T14:00:00+08:00",
+      "refund_kind": "退货退款额",
+      "refund_amount_yuan": 800
+    },
+    {
+      "refund_id": "SYN-REFUND-03-A-01",
+      "order_id": "SYN-ORDER-03-A-01",
+      "refund_time": "2026-09-05T14:00:00+08:00",
+      "refund_kind": "未发货仅退款额",
+      "refund_amount_yuan": 600
+    },
+    {
+      "refund_id": "SYN-REFUND-03-A-02",
+      "order_id": "SYN-ORDER-03-A-04",
+      "refund_time": "2026-10-02T14:00:00+08:00",
+      "refund_kind": "退货退款额",
+      "refund_amount_yuan": 400
+    },
+    {
+      "refund_id": "SYN-REFUND-03-B-01",
+      "order_id": "SYN-ORDER-03-B-01",
+      "refund_time": "2026-10-05T14:00:00+08:00",
+      "refund_kind": "未发货仅退款额",
+      "refund_amount_yuan": 2400
+    },
+    {
+      "refund_id": "SYN-REFUND-03-B-02",
+      "order_id": "SYN-ORDER-03-B-04",
+      "refund_time": "2026-11-01T14:00:00+08:00",
+      "refund_kind": "退货退款额",
+      "refund_amount_yuan": 1600
+    },
+    {
+      "refund_id": "SYN-REFUND-04-A-01",
+      "order_id": "SYN-ORDER-04-A-01",
+      "refund_time": "2026-09-05T14:00:00+08:00",
+      "refund_kind": "未发货仅退款额",
+      "refund_amount_yuan": 600
+    },
+    {
+      "refund_id": "SYN-REFUND-04-A-02",
+      "order_id": "SYN-ORDER-04-A-04",
+      "refund_time": "2026-10-02T14:00:00+08:00",
+      "refund_kind": "退货退款额",
+      "refund_amount_yuan": 400
+    },
+    {
+      "refund_id": "SYN-REFUND-04-B-01",
+      "order_id": "SYN-ORDER-04-B-01",
+      "refund_time": "2026-10-05T14:00:00+08:00",
+      "refund_kind": "未发货仅退款额",
+      "refund_amount_yuan": 600
+    },
+    {
+      "refund_id": "SYN-REFUND-04-B-02",
+      "order_id": "SYN-ORDER-04-B-04",
+      "refund_time": "2026-11-01T14:00:00+08:00",
+      "refund_kind": "退货退款额",
+      "refund_amount_yuan": 400
+    }
+  ],
+  "synthetic_net_controls": [
+    {
+      "store_id": "SYN-STORE-01",
+      "period_id": "A",
+      "net_amount_yuan": 48000,
+      "source_kind": "synthetic_control_same_design"
+    },
+    {
+      "store_id": "SYN-STORE-01",
+      "period_id": "B",
+      "net_amount_yuan": 39000,
+      "source_kind": "synthetic_control_same_design"
+    },
+    {
+      "store_id": "SYN-STORE-02",
+      "period_id": "A",
+      "net_amount_yuan": 37000,
+      "source_kind": "synthetic_control_same_design"
+    },
+    {
+      "store_id": "SYN-STORE-02",
+      "period_id": "B",
+      "net_amount_yuan": 41000,
+      "source_kind": "synthetic_control_same_design"
+    },
+    {
+      "store_id": "SYN-STORE-03",
+      "period_id": "A",
+      "net_amount_yuan": 29000,
+      "source_kind": "synthetic_control_same_design"
+    },
+    {
+      "store_id": "SYN-STORE-03",
+      "period_id": "B",
+      "net_amount_yuan": 21000,
+      "source_kind": "synthetic_control_same_design"
+    },
+    {
+      "store_id": "SYN-STORE-04",
+      "period_id": "A",
+      "net_amount_yuan": 19000,
+      "source_kind": "synthetic_control_same_design"
+    },
+    {
+      "store_id": "SYN-STORE-04",
+      "period_id": "B",
+      "net_amount_yuan": 17000,
+      "source_kind": "synthetic_control_same_design"
+    }
+  ]
+}

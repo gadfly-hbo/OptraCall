@@ -1,0 +1,64 @@
+{
+  "document_kind": "synthetic_engineering_reference_not_business_input",
+  "exercise_id": "SC-01S",
+  "input_sha256": "ec996f92bed8c18b5a9809760827a59ddde85d115ad905df96a3dfac7f63372d",
+  "notice": "仅用于工程核对，不能注入被评估Agent来充当独立分析；不是真实经营结果、真实反馈或因果证据。",
+  "record_counts": {
+    "orders": 32,
+    "refunds": 16,
+    "stores": 4
+  },
+  "period_totals": {
+    "A": {
+      "terminal_sales_yuan": 140000,
+      "refund_yuan": 7000,
+      "net_sales_yuan": 133000
+    },
+    "B": {
+      "terminal_sales_yuan": 131000,
+      "refund_yuan": 13000,
+      "net_sales_yuan": 118000
+    }
+  },
+  "comparison_B_minus_A": {
+    "terminal_sales_change_yuan": -9000,
+    "refund_change_yuan": 6000,
+    "refund_net_effect_yuan": -6000,
+    "net_sales_change_yuan": -15000
+  },
+  "store_comparison": [
+    {
+      "store_id": "SYN-STORE-01",
+      "terminal_sales_change_yuan": -5000,
+      "refund_change_yuan": 4000,
+      "refund_net_effect_yuan": -4000,
+      "net_sales_change_yuan": -9000
+    },
+    {
+      "store_id": "SYN-STORE-02",
+      "terminal_sales_change_yuan": 3000,
+      "refund_change_yuan": -1000,
+      "refund_net_effect_yuan": 1000,
+      "net_sales_change_yuan": 4000
+    },
+    {
+      "store_id": "SYN-STORE-03",
+      "terminal_sales_change_yuan": -5000,
+      "refund_change_yuan": 3000,
+      "refund_net_effect_yuan": -3000,
+      "net_sales_change_yuan": -8000
+    },
+    {
+      "store_id": "SYN-STORE-04",
+      "terminal_sales_change_yuan": -2000,
+      "refund_change_yuan": 0,
+      "refund_net_effect_yuan": 0,
+      "net_sales_change_yuan": -2000
+    }
+  ],
+  "acceptance_limits": [
+    "金额恒等分解，不表示经营根因或先查哪端的标准决策答案",
+    "控制数和交易记录同批合成，不证明真实独立业务对账",
+    "不会生成任何人的真实决定、行动或反馈"
+  ]
+}

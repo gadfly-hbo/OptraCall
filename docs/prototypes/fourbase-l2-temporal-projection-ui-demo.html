@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
+<title>OptraCall · L2 后端语义支撑与首个 P1 · v0.3 确认前 Demo</title>
+<style>
+:root{color-scheme:light;--bg:#faf9fc;--side:#f4f3f7;--surface:#fff;--soft:#f7f6fa;--text:#302b3a;--muted:#6d6579;--line:#e4e0eb;--accent:#745ba8;--accent-soft:#f0eaf8;--warn:#86601d;--warn-bg:#faf3e5;--good:#386d60;--good-bg:#edf5f1;--shadow:0 16px 60px #23152d21}
+html[data-theme=dark]{color-scheme:dark;--bg:#19171e;--side:#211e28;--surface:#25222d;--soft:#2c2834;--text:#ede8f3;--muted:#b7adc4;--line:#41394d;--accent:#c6a9f2;--accent-soft:#3b2d50;--warn:#ebc27a;--warn-bg:#3a3022;--good:#9ecfbc;--good-bg:#263c34;--shadow:0 16px 60px #0007}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}button,textarea,select{font:inherit;color:inherit;accent-color:var(--accent)}button{cursor:pointer}button:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible,a:focus-visible,[tabindex="-1"]:focus-visible{outline:2px solid var(--accent);outline-offset:3px}h1,h2,h3,p{margin:0}h1{font-size:25px;line-height:1.4;font-weight:600}h2{font-size:17px;font-weight:600}h3{font-size:14px;font-weight:600}p,li,dd,span{overflow-wrap:anywhere}a{color:var(--accent)}[hidden]{display:none!important}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}.spread{justify-content:space-between}.muted{color:var(--muted)}.small{font-size:12px;color:var(--muted)}.space{margin-top:16px}.btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:8px 12px;min-height:38px;max-width:100%;font-size:13px;line-height:1.6;overflow-wrap:anywhere}.btn:hover{background:var(--soft)}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}html[data-theme=dark] .btn.primary{color:#23172f}.btn.quiet{border-color:transparent;background:transparent;color:var(--accent)}.tag{display:inline-block;padding:2px 7px;border-radius:5px;background:var(--soft);color:var(--muted);border:1px solid var(--line);font-size:12px}.tag.accent{background:var(--accent-soft);color:var(--accent);border-color:transparent}.tag.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}.tag.good{background:var(--good-bg);color:var(--good);border-color:transparent}.sidebar{position:fixed;inset:0 auto 0 0;width:220px;padding:26px 18px;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column}.brand{font-size:21px;font-weight:600;padding:0 12px 28px}.brand small{display:block;color:var(--muted);font-size:10px;font-weight:400}.nav{padding:10px 12px;border-radius:6px;color:var(--muted);font-size:13px;margin:2px 0}.nav.active{background:var(--accent-soft);color:var(--accent);font-weight:600}.sidefoot{margin-top:auto;color:var(--muted);padding:20px 12px;font-size:12px}.main{margin-left:220px;min-width:0}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:14px 30px;border-bottom:1px solid var(--line);background:var(--surface)}.crumb{font-size:12px;color:var(--muted)}.banner{background:var(--warn-bg);color:var(--warn);font-size:12px;padding:10px 30px;border-bottom:1px solid var(--line)}.content{max-width:1400px;margin:auto;padding:28px 30px 48px}.intro>p{color:var(--muted);margin-top:8px;max-width:76ch}.eyebrow{color:var(--accent);font-size:12px;margin-bottom:6px}.context{margin:22px 0;display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:16px;padding:14px 18px;background:var(--soft);border:1px solid var(--line);border-radius:7px}.context dt{font-size:12px;color:var(--muted)}.context dd{font-size:13px;margin:3px 0 0}.workgrid{display:grid;grid-template-columns:minmax(250px,.8fr) minmax(0,1.25fr);gap:20px;align-items:start}.panel{border:1px solid var(--line);border-radius:8px;background:var(--surface);min-width:0}.pad{padding:20px}.question label{display:block;font-size:13px;font-weight:500;margin:18px 0 8px}.question textarea{width:100%;min-height:150px;resize:vertical;line-height:1.8;padding:11px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}.question .row{margin-top:10px}.question .small{flex:1 1 160px}.form-error{color:var(--warn);font-size:12px;margin-top:7px}.form-error:empty{display:none}.notice{padding:12px 14px;font-size:13px;border:1px solid var(--line);border-radius:6px;background:var(--soft);color:var(--muted)}.notice.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}.notice.good{background:var(--good-bg);color:var(--good);border-color:transparent}.notice:empty{display:none}.brief-list{padding:0;list-style:none;margin:19px 0 0}.brief-list li{padding:12px 0;border-top:1px solid var(--line);font-size:13px}.brief-list p{font-size:12px;color:var(--muted);margin-top:3px}.answerhead{padding:18px 20px;border-bottom:1px solid var(--line)}.answerhead>p{font-size:12px;color:var(--muted);margin-top:8px}.part{padding:18px 20px;border-bottom:1px solid var(--line)}.part h3{font-size:15px;margin-bottom:9px}.part p+p{margin-top:9px}.part blockquote{margin:12px 0;padding:11px 14px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 5px 5px 0;font-size:13px}.answerfoot{padding:16px 20px}.placeholder{padding:28px 22px}.placeholder>p{color:var(--muted);margin-top:10px;font-size:13px}.guide-list{padding-left:19px;margin:20px 0}.guide-list li{padding-bottom:11px;font-size:13px}.source-link{border:0;padding:0;background:transparent;color:var(--accent);text-align:left;text-decoration:underline;text-underline-offset:3px;font-size:inherit;line-height:inherit;overflow-wrap:anywhere}.citations{display:flex;flex-wrap:wrap;gap:7px 14px;margin-top:10px;font-size:12px}.tech{border-top:1px solid var(--line);margin-top:16px}summary{cursor:pointer;font-size:12px;font-weight:500;color:var(--muted);padding:12px 0}.demo{margin-top:26px;padding:0 17px;border:1px dashed var(--line);border-radius:7px;background:var(--soft)}.demobody{padding:15px 0;border-top:1px solid var(--line)}.scenario-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}.scenario-tabs button{border:1px solid var(--line);padding:7px 11px;border-radius:6px;background:var(--surface);font-size:12px;min-height:36px}.scenario-tabs button[aria-selected=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}.walkthrough{padding:15px;background:var(--surface);border:1px solid var(--line);border-radius:6px;margin-top:12px}.walkthrough p{font-size:13px;color:var(--muted);margin:5px 0 12px}.state{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0 0;padding:13px 15px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}.state dt{font-size:12px;color:var(--muted)}.state dd{font-size:12px;margin:4px 0 0}.freeplay{margin-top:15px;display:flex;gap:8px;flex-wrap:wrap}.freeplay .btn{font-size:12px}.dialog{padding:0;border:1px solid var(--line);border-radius:8px;color:var(--text);background:var(--surface);max-height:calc(100dvh - 28px);width:min(740px,calc(100vw - 28px));overflow:auto;box-shadow:var(--shadow)}.dialog::backdrop{background:#17131e68}.drawer{margin:0 0 0 auto;width:min(690px,calc(100vw - 20px));height:100dvh;max-height:100dvh;border-radius:8px 0 0 8px}.dialoghead{position:sticky;top:0;z-index:2;background:var(--surface);padding:18px 20px;border-bottom:1px solid var(--line);display:flex;gap:12px;justify-content:space-between;align-items:flex-start}.dialoghead h2{font-size:17px}.close{border:1px solid transparent;background:transparent;color:var(--muted);font-size:22px;line-height:1.2;min-width:36px;min-height:36px;flex:none;border-radius:5px}.dialogbody{padding:20px}.dialogfoot{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:13px 20px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}.tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);margin-bottom:17px;flex-wrap:wrap}.tabs button{min-height:40px;padding:8px 2px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:13px}.tabs button[aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent)}.evidence{list-style:none;margin:0;padding:0}.evidence>li{padding:16px 0;border-bottom:1px solid var(--line)}.evidence>li:first-child{padding-top:0}.evidence p{font-size:13px;margin-top:7px}.chain{padding:13px 15px;background:var(--soft);border:1px solid var(--line);border-radius:6px;font-size:13px;overflow-wrap:anywhere;margin-top:10px}.chain .relation{display:block;color:var(--muted);padding:5px 0}.timeline{padding-left:20px}.timeline li{padding:0 0 20px 9px}.timeline p{font-size:13px;margin-top:6px}.readable{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px 14px;font-size:13px;margin:14px 0}.readable dt{color:var(--muted)}.readable dd{margin:0}.paper{padding:15px;border:1px solid var(--line);border-radius:6px;background:var(--soft);white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.9}.mono{font:12px/1.8 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;white-space:pre-wrap}.skip{position:absolute;left:12px;top:-90px;background:var(--surface);border:2px solid var(--accent);padding:9px;z-index:20}.skip:focus{top:8px}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:1100px){.sidebar{width:185px}.main{margin-left:185px}.content{padding:24px 22px}.topbar,.banner{padding-inline:22px}.workgrid{grid-template-columns:minmax(230px,.8fr) minmax(0,1.1fr)}}
+@media(max-width:850px){.sidebar{display:none}.main{margin-left:0}.workgrid{grid-template-columns:1fr}.context{grid-template-columns:1fr 1fr}.context>div:first-child{grid-column:1/-1}.state{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:430px){h1{font-size:22px}.content{padding:21px 14px 34px}.topbar,.banner{padding-inline:14px}.topbar{gap:8px}.topbar .tag{display:none}.context{grid-template-columns:1fr;padding:13px;gap:10px}.context>div:first-child{grid-column:auto}.pad,.part,.answerhead,.answerfoot{padding:16px}.dialogbody{padding:16px}.dialoghead,.dialogfoot{padding:14px 16px}.drawer{width:calc(100vw - 10px)}.readable{grid-template-columns:1fr;gap:3px}.readable dd{margin-bottom:8px}.scenario-tabs{gap:6px}.scenario-tabs button{flex:1 1 40%;text-align:center}.btn{padding-inline:10px}.state{padding:11px;gap:10px}.demobody .freeplay .btn{flex:1 1 40%}}
+.plan-review{margin:22px 0 28px;padding:20px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}.plan-review>p,.plan-details>p{font-size:13px;color:var(--muted);margin-top:8px}.plan-details{margin-top:13px;border-top:1px solid var(--line)}.plan-details>summary{font-size:14px;color:var(--text)}.capability-grid{list-style:none;margin:8px 0 18px;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.capability-grid li{padding:15px;border:1px solid var(--line);border-radius:6px;background:var(--soft);min-width:0}.capability-grid p{font-size:13px;color:var(--muted);margin-top:6px}.component-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0}.component-grid>section{min-width:0;border-left:2px solid var(--line);padding-left:13px}.component-grid p{font-size:13px;margin-top:8px}.scope-list{padding-left:19px;margin:12px 0 0;font-size:13px}.scope-list li{padding-bottom:8px}.product-heading{border-top:1px solid var(--line);padding-top:24px}.product-heading h2{font-size:20px}.product-heading>p{font-size:13px;color:var(--muted);margin-top:8px}.meaning-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}.meaning-pair>div{padding:13px;border:1px solid var(--line);border-radius:6px;background:var(--soft)}.meaning-pair p{font-size:13px;margin-top:6px}.review-link{font-size:12px;text-underline-offset:3px}.meaning-note{margin:16px 0}.plan-review .tag{margin-top:3px}
+@media(max-width:850px){.component-grid{grid-template-columns:1fr}}
+@media(max-width:550px){.plan-review{padding:16px}.capability-grid,.meaning-pair{grid-template-columns:1fr}.capability-grid li{padding:13px}.product-heading h2{font-size:19px}}
+</style>
+</head>
+<body>
+<a class="skip" href="#workspace">跳到当前任务</a>
+<aside class="sidebar" aria-label="演示位置">
+  <div class="brand">OptraCall<small>持续做出更好的决策</small></div>
+  <div class="nav">项目看板</div><div class="nav active">秋季促销复盘</div><div class="nav">个人资料</div><div class="nav">分析资产</div><div class="nav">业务插件</div>
+  <div class="sidefoot">虚构项目 · 原任务继续<br>没有真实数据或引擎连接</div>
+</aside>
+<main class="main">
+  <header class="topbar"><div class="crumb">L2 方案审阅 / 后端语义支撑与首个切片 / 原任务候选体验</div><div class="row"><span class="tag">v0.3 · 待整体确认</span><button class="btn" id="theme" type="button" aria-label="切换为深色主题">深色</button></div></header>
+  <div class="banner"><strong>v0.3 虚构原型 · 预置回答 · 未接 Semantica／Graphiti／产品／模型</strong>。仅内存模拟，刷新重置；没有网络、浏览器存储、数据库或真实文件连接。</div>
+  <div class="content">
+    <div class="intro"><div class="eyebrow">后端语义支撑 · 完整 L2 与本轮 P1 分开确认</div><h1>帮助 Agent 理解业务语义，正确使用依据</h1><p>L2 以本体表达概念、适用范围和规则，以知识图谱组织对象、关系、来源与版本。Semantica 是优先路线，经原 Pi 工具供 Agent 自主取用、理解与判断；界面详情只辅助核对来源。</p></div>
+    <section class="plan-review" aria-labelledby="planHeading">
+      <div class="row spread"><h2 id="planHeading">A · 方案审阅：完整 L2 与首个 P1</h2><span class="tag warn">方案说明，不是已安装能力</span></div>
+      <p>这一层用于整体确认。日常产品用户直接在下方任务提问，不需要选择阶段、组件或维护图谱。</p>
+      <details class="plan-details" open>
+        <summary>完整 L2 希望解决什么</summary>
+        <ul class="capability-grid">
+          <li><div class="row spread"><h3>业务语义组织</h3><span class="tag">后续待细化</span></div><p>在后端用本体表达概念、指标、规则和适用范围，让 Agent 理解“净销售额包含什么”“门店与渠道同名是否同义”。原 SAP 与资料继续持有定义权威。</p></li>
+          <li><div class="row spread"><h3>来源、规则约束与冲突</h3><span class="tag">P1 先核来源</span></div><p>保留来源性质、适用范围、冲突和未知；让 Agent 查原文判断规则是否适用。结构约束通过不等于业务正确，更不自动决定哪条规则胜出；完整约束检查后续细化。</p></li>
+          <li><div class="row spread"><h3>关系与事实演变</h3><span class="tag">P1 验证最小一角</span></div><p>知识图谱组织对象、关系、来源与版本，保留支持、反对、依赖及生效／留存／更新差别。持续事实更新、实体对齐和更复杂演变按具体缺口继续研究。</p></li>
+          <li><div class="row spread"><h3>Agent 按需结构化检索</h3><span class="tag">P1 只做工程对照</span></div><p>经原 Pi 工具供 Agent 在授权范围内自主取用语义材料，再理解、核适用性和解释冲突。目标回答应主动说明关键口径与限制；Host不规定内部查询顺序或另造修正循环。</p></li>
+        </ul>
+        <p class="notice">这些是完整 L2 的目标范围，尚待按能力补齐规格、结构决定与有效授权。不是全部已实现，也不表示完成某个后续阶段就已交付完整 L2。</p>
+      </details>
+      <div class="component-grid">
+        <section aria-labelledby="semanticaRole"><div class="row"><h3 id="semanticaRole">Semantica</h3><span class="tag accent">后端语义支撑优先路线</span></div><p>优先评估其本体／语义组织和知识图谱模块，组织概念、范围、规则、对象、关系、来源与版本，帮助 Agent 正确理解和适用。尚未实装；P1只验证固定发行版的最小来源／显式关系／时间／快照组合，不运行完整本体或规则检查。</p></section>
+        <section aria-labelledby="graphitiRole"><div class="row"><h3 id="graphitiRole">Graphiti</h3><span class="tag">有明确缺口再比较</span></div><p>侧重从持续事件组织实体、事实与关系，保留来源及变化历史。若持续更新、实体对齐或时间检索仍有Semantica最小路径未满足的具体缺口，再作同源比较。P1不运行Graphiti，不默认同时维护两个引擎。</p></section>
+      </div>
+      <p class="notice">二者在来源、关系、检索与时间能力上有重叠：Semantica也有双时间能力，Graphiti也支持实体／关系类型，不按“语义／时间”各自独占。原SAP、企业资料、M2与Case继续是权威来源；Pi继续唯一Agent运行入口。派生图不替人决定口径、取舍或自动改写历史。</p>
+      <details class="plan-details" open>
+        <summary>本轮 P1 到哪里；哪些能力留待后续</summary>
+        <div class="row"><span class="tag accent">P1 · 首个小切片</span><span class="tag warn">整体确认后才开始隔离验证</span></div>
+        <ul class="scope-list"><li>固定 Semantica <strong>0.7.0</strong>，只在隔离合成材料中核来源、显式关系、时间、版本快照、持久重开与从源重建。</li><li>与当前 L1 使用相同材料、问题和边界对照；如有语义损失或无增益，保留失败并收缩，不先写一套替代引擎。</li><li><span class="tag">未来能力 · 未纳入 P1</span> 完整本体治理、自动抽取、持续摄取、Graphiti 运行及正式产品接线。它们属于可能的后续能力，按实际问题另行细化；不是永久排除，也不是本轮已批准开发。</li></ul>
+        <p class="notice space">P1只验证接入底座的工程行为，不能据此或据预置界面声称 Agent 语义理解增强。完整后端价值要在后续检验 Agent 能否正确理解、适用规则和处理冲突，不能凭界面页或图节点数通过。</p>
+        <p class="small space">下方产品交互仅示意目标回答与可选依据核对；不代表 P1 已提供正式产品能力。本页没有安装、启动或配置引擎的操作。</p>
+      </details>
+      <div class="row space"><a class="review-link" href="#productPreview">体验原任务里的自然提问</a><span class="small">普通用户无需阅读或选择上面的技术范围。</span></div>
+    </section>
+    <section id="productPreview" aria-labelledby="productHeading">
+      <header class="product-heading"><div class="row spread"><h2 id="productHeading">B · 原任务候选体验</h2><span class="tag">目标回答示意 · 未纳入 P1 产品接线</span></div><p>直接描述问题并发送，Agent在回答正文主动解释关键口径、冲突与结论限制。查看依据是自愿核对；不打开详情也应看懂回答并继续任务。下方内容全部预置自虚构来源，不是引擎理解或规则验证结果。</p></header>
+    <dl class="context"><div><dt>当前任务</dt><dd>秋季促销复盘 · 门店净销售额</dd></div><div><dt>回看的原稿</dt><dd>10月10日报告 · 第2稿</dd></div><div><dt>人的后续选择</dt><dd>未记录 · 与 Agent 建议分开</dd></div></dl>
+    <div id="notice" class="notice space" role="status" aria-live="polite"></div>
+    <section class="workgrid space" id="workspace" tabindex="-1" aria-label="当前任务工作区">
+      <section class="panel pad">
+        <div class="row spread"><h2>沿原任务继续问</h2><span class="tag accent">新增必做操作 0</span></div>
+        <form id="questionForm" class="question">
+          <label for="question">继续分析</label><textarea id="question" aria-describedby="questionHelp questionError">回看C-17当时为何建议小范围试促销，今天哪些前提需要重核？请说明当时采用什么规则、哪些证据支持、后来哪些前提变了。</textarea>
+          <p id="questionError" class="form-error" role="alert"></p>
+          <div class="row spread"><span id="questionHelp" class="small">本 Demo 不解析输入，只展示当前情景的预置回答。</span><button class="btn primary" type="submit" id="send">发送</button><button class="btn" type="button" id="stop" hidden>停止</button></div>
+        </form>
+        <ul class="brief-list">
+          <li><strong>规则保留原版</strong><p>直营门店与线上渠道的同名口径分开，准确旧版失读就说明缺口。</p></li>
+          <li><strong>关系保留方向</strong><p>支持、反对与依赖来自原声明，不升级为因果或正确性证明。</p></li>
+          <li><strong>新材料不改过去</strong><p>11月留存的10月生效通知，不改变原报告写明的引用。</p></li>
+        </ul>
+        <p class="small space">可自愿查看依据或继续追问。没有图谱编辑、安装开关或普通读取审批。</p>
+      </section>
+      <section class="panel" id="answer" aria-label="Agent 预置回答" aria-live="polite" aria-busy="false"></section>
+    </section>
+    </section>
+    <details class="demo" id="demoControls">
+      <summary>审阅情景与模拟状态 · 不属于日常操作</summary>
+      <div class="demobody">
+        <h2>观察相同三问的边界</h2><p class="small space">切换情景只重置本页状态，不发送问题、不查询来源。按下方步骤或自由尝试，再使用正常发送。所有“结果”均为虚构预置，不能证明 L2 较 L1 有收益。</p>
+        <div class="scenario-tabs" id="scenarioTabs" role="tablist" aria-label="预置情景">
+          <button type="button" role="tab" id="scenario-normal" aria-selected="true" aria-controls="walkthrough" data-scenario="normal">正常三问</button>
+          <button type="button" role="tab" id="scenario-ambiguous" aria-selected="false" aria-controls="walkthrough" tabindex="-1" data-scenario="ambiguous">同名与反证</button>
+          <button type="button" role="tab" id="scenario-partial" aria-selected="false" aria-controls="walkthrough" tabindex="-1" data-scenario="partial">时间映射有缺口</button>
+          <button type="button" role="tab" id="scenario-unavailable" aria-selected="false" aria-controls="walkthrough" tabindex="-1" data-scenario="unavailable">投影不可用</button>
+          <button type="button" role="tab" id="scenario-other" aria-selected="false" aria-controls="walkthrough" tabindex="-1" data-scenario="missing">其他边界</button>
+        </div>
+        <section class="walkthrough" id="walkthrough" role="tabpanel" aria-labelledby="scenario-normal"></section>
+        <div class="freeplay" aria-label="自由尝试其他状态">
+          <button class="btn" type="button" data-preset="missing">准确原文失读</button><button class="btn" type="button" data-preset="unsupported">无法表达的时间</button><button class="btn" type="button" data-preset="empty">空语义资料</button><button class="btn" type="button" data-preset="loading">查找中与停止</button><button class="btn" type="button" id="reset">重置全部示例</button>
+        </div>
+        <dl class="state" id="stateView" aria-label="当前完整模拟状态"></dl>
+        <p class="small space">原件、SAP、人的选择始终不变。此处状态只描述本页演示；不代表实际引擎查询、保存回执、历史全量快照或真实模型推理。</p>
+      </div>
+    </details>
+  </div>
+</main>
+<dialog class="dialog drawer" id="traceDialog" aria-labelledby="traceHeading">
+  <header class="dialoghead"><div><h2 id="traceHeading">依据与前提变化</h2><p class="small">自愿核对 · 关键口径和限制已在回答正文说明</p></div><button class="close" type="button" data-close="traceDialog" aria-label="关闭依据与前提变化">×</button></header>
+  <div class="dialogbody"><div class="tabs" role="tablist" aria-label="查看依据的角度"><button type="button" role="tab" id="trace-original" aria-selected="true" aria-controls="tracePanel" data-view="original">原稿与关系</button><button type="button" role="tab" id="trace-today" aria-selected="false" aria-controls="tracePanel" data-view="today" tabindex="-1">今天回看</button></div><section id="tracePanel" role="tabpanel" aria-labelledby="trace-original"></section></div>
+  <footer class="dialogfoot"><button class="btn" type="button" data-action="followup">把待核问题加入草稿</button><button class="btn" type="button" data-close="traceDialog">关闭</button></footer>
+</dialog>
+<dialog class="dialog" id="sourceDialog" aria-labelledby="sourceHeading">
+  <header class="dialoghead"><h2 id="sourceHeading">准确来源</h2><button class="close" type="button" data-close="sourceDialog" aria-label="关闭准确来源">×</button></header><div class="dialogbody" id="sourceBody"></div><footer class="dialogfoot"><button class="btn" type="button" data-close="sourceDialog">返回</button></footer>
+</dialog>
+<div class="sr-only" id="announcer" aria-live="polite"></div>
+<script>
+// Throwaway state prototype. No product contracts, persistence, model, or engine calls.
+const demoModel = (() => {
+  const initial = () => ({scenario:'normal',phase:'idle',view:'original',sends:0,question:'',last:'等待正常发送',choice:'未记录，与 Agent 建议分开',sourcesChanged:false});
+  const reduce = (state, action) => {
+    if(action.type==='reset') return initial();
+    if(action.type==='scenario') return {...state,scenario:action.value,phase:'idle',view:'original',question:'',last:'只切换情景，未发送／未查询'};
+    if(action.type==='send') return {...state,phase:state.scenario==='loading'?'loading':'complete',sends:state.sends+1,question:action.question,last:state.scenario==='loading'?'模拟查找中':'预置回答已展示'};
+    if(action.type==='stop') return {...state,phase:'stopped',last:'停止本页模拟，未重放'};
+    if(action.type==='view') return {...state,view:action.value,last:'查看已有预置内容，未查询／未改原件'};
+    if(action.type==='draft') return {...state,last:'仅预填当前草稿，尚未发送'};
+    if(action.type==='source') return {...state,last:'查看准确来源：'+action.key+'；未改原件'};
+    return state;
+  };
+  return {initial,reduce};
+})();
+const $ = id => document.getElementById(id);
+const esc = text => String(text).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+let state=demoModel.initial();
+const scenarioNames={normal:'正常三问',ambiguous:'同名与反证',partial:'时间映射有缺口',unavailable:'投影不可用',missing:'准确原文失读',unsupported:'无法表达的时间',empty:'空语义资料',loading:'查找中与停止'};
+const phases={idle:'等待发送',complete:'预置回答已展示',loading:'模拟查找中',stopped:'已停止，缺口保留'};
+const sources={
+  report:{title:'10月10日销售复盘报告',version:'R-10／第2稿',ref:'虚构源 R-10 / 第2稿',saved:'2026-10-10T17:00:00+08:00',time:'报告日期10月10日；不证明被引规则的生效时间',kind:'作者产物',body:'本稿按门店净销售额1.2、输入I-1及说明D-1分析。建议仅小范围试促销并继续观察。现有资料不能区分促销、节假日与缺货的影响。'},
+  rule:{title:'门店净销售额',version:'SAP 1.2',ref:'虚构源 A / store-sales@1.2/net-sales',saved:'2026-09-20T09:00:00+08:00',time:'未给出明确业务生效时间；不以留存时间代替',kind:'已发布定义（虚构）',body:'名称“净销售额”；范围为直营门店；支付金额减当期登记退款；本定义不描述因果，也未提供促销效果保证。'},
+  newRule:{title:'门店净销售额后续版',version:'SAP 1.3',ref:'虚构源 B / store-sales@1.3/net-sales',saved:'2026-10-28T09:00:00+08:00',time:'10月28日发布；不是旧报告当时已采用的证明',kind:'同一门店定义的后续发布（虚构）',body:'名称相同；范围仍为直营门店；退款按原销售业务日归属。它是新发布版，不能替换旧报告明确引用的1.2。'},
+  channel:{title:'渠道净销售额',version:'SAP 1.2',ref:'虚构源 C / channel-sales@1.2/net-sales',saved:'2026-09-21T09:00:00+08:00',time:'未给出明确业务生效时间；不按名称补成门店规则',kind:'同名异域的已发布定义（虚构）',body:'名称“净销售额”；范围为线上渠道；包含渠道服务费调整，与门店口径不同。不可仅按名称或相同版本号合并。'},
+  citation:{title:'报告明确来源声明',version:'K-10／原引用记录',ref:'虚构源 K-10 / R-10第2稿 / A / I-1 / D-1',saved:'2026-10-10T17:05:00+08:00',time:'来源声明留存时间，不证明模型当时知道的全部内容',kind:'作者声明引用',body:'作者明确声明引用 A、I-1、D-1；固定成果为R-10第2稿。声明不证明实际计算采用或专业正确。\n这是本页虚构来源记录，不是产品已成功保存的回执；无真实hash或运行证据。'},
+  input:{title:'门店试销固定输入',version:'I-1／第1版',ref:'虚构源 I-1 / 固定输入第1版',saved:'2026-10-09T15:00:00+08:00',time:'试销观察期未给精确起止；不自动补成有效期',kind:'固定输入摘要',body:'已固定的示例摘要：门店试销观察与常规时段不同；不包含随机分配或足以识别因果的对照。这里没有真实明细数据。'},
+  description:{title:'固定输入的数据说明',version:'D-1／第1修订',ref:'虚构源 D-1 / I-1的数据说明 / 第1修订',saved:'2026-10-09T16:00:00+08:00',time:'业务日按上海时间；退款记录可能迟到',kind:'数据说明声明',body:'一行代表门店日汇总；金额单位元；业务日按上海时间；退款记录可能迟到。该说明是声明，不是已核定唯一键或因果设计。'},
+  judgment:{title:'促销判断与显式关系',version:'C-17／J-1 第1修订',ref:'虚构 C-17 / J-1 / 第1修订',saved:'2026-10-10T18:00:00+08:00',time:'判断保存时间；不是关系有效期',kind:'判断及显式关系；人的后续选择独立',body:'只建议小范围试验，不能宣布已证明有效。\n本示例原关系声明：J-1 → supports → K-10；J-1 → opposes → E-1；J-1 → depends_on → K-10。\n再从K-10的明确引用查回A；不是Case直接引用SAP。人的后续选择仍独立，不因图变化自动改变。关系标签不自动裁决反证或因果。'},
+  counter:{title:'缺货记录',version:'E-1／第1修订',ref:'虚构源 E-1 / enterprise / 第1修订',saved:'2026-10-09T18:00:00+08:00',time:'原文称“试销期间”；没有精确起止窗口',kind:'有来源的反证／限制材料',body:'试销期间有缺货；销量下降可能受供给限制。仅凭销售变化不足以归因于促销。\n这是反证／限制材料，不自动否定所有促销方案。'},
+  notice:{title:'退款归属通知',version:'N-1／第1修订',ref:'虚构源 N-1 / enterprise / 第1修订',saved:'2026-11-02T10:00:00+08:00',time:'原文明确声明：自2026年10月1日起适用（日期粒度）',kind:'后来留存的制度声明',body:'直营门店退款应归回原销售业务日，自2026年10月1日起适用。\n这是一份回溯生效声明；不证明10月10日已提供或采用。'},
+  vague:{title:'口头补充',version:'U-1／第1修订',ref:'虚构源 U-1 / enterprise / 第1修订',saved:'未知',time:'发言发生、提供对象及时间均未知',kind:'时间证据不足的来源声明',body:'有人称此前已口头通知。\n发言发生、实际留存、提供对象与时间均无可靠证据；不可补成10月10日已知。'}
+};
+function sourceLink(key,label){return `<button class="source-link" type="button" data-source="${key}">${esc(label||sources[key].title)}</button>`;}
+function dispatch(action){state=demoModel.reduce(state,action);renderState();}
+function announce(message){$('announcer').textContent=message;}
+function renderState(){
+  $('stateView').innerHTML=[['情景',scenarioNames[state.scenario]],['回答状态',phases[state.phase]],['模拟发送次数',String(state.sends)+'；开页／切换不增加'],['查看角度',({original:'原稿与关系',today:'今天回看'})[state.view]],['辅助查询',state.scenario==='unavailable'?'不可用，继续原查读':state.scenario==='empty'?'无相关记录，继续原工具':'仅预置内容，无真实查询'],['原件／人的选择','均未改变 · '+state.choice],['保存与网络','无持久化／无网络／无模型'],['最近动作',state.last]].map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
+  $('send').hidden=state.phase==='loading';$('stop').hidden=state.phase!=='loading';$('answer').setAttribute('aria-busy',String(state.phase==='loading'));
+}
+function renderIdle(){
+  $('answer').innerHTML='<div class="placeholder"><span class="tag accent">原任务 · 直接发送</span><h2 class="space">三问，仍从已有材料开始</h2><p>不要求先整理关系、补全日期、建立 Case 或安装引擎。发送问题，体验当前情景的预置回答。</p><ol class="guide-list"><li><strong>当时采用什么规则</strong><br>回答正文说明所用口径、业务含义与范围。</li><li><strong>哪些证据支持</strong><br>回答指出来源与反证；按需再核对详细原文。</li><li><strong>后来哪些前提变了</strong><br>正文解释版本差异、回溯声明与结论限制。</li></ol><p class="notice">这是目标回答示意，尚未正式接线；并未证明后端语义理解、规则适用、双时间查询或分析质量。</p></div>';
+}
+function limitation(){
+  if(state.scenario==='partial')return '<p class="notice warn space">部分映射：反证没有准确有效期，当前关系覆盖也不完整。以下只能回答已定位记录，不能声称“截至当时的全部事实”。</p>';
+  if(state.scenario==='unsupported')return '<p class="notice warn space">口头补充U-1没有可靠的发言、留存或提供时间，无法支持精确历史时点查询。保留原文与未知，不补成10月10日已知。</p>';
+  if(state.scenario==='missing')return '<p class="notice warn space">固定输入I-1原文当前不可读，原引用保留、内容未核实；说明D-1仍可读。不会以新版或同名文件补位I-1。</p>';
+  if(state.scenario==='unavailable')return '<p class="notice warn space">辅助投影当前不可用。可继续沿 L1 的准确引用与原工具分析；本次不提供派生多跳或时点查询结论。</p>';
+  return '';
+}
+function renderComplete(){
+  if(state.scenario==='empty'){
+    $('answer').innerHTML='<div class="answerhead"><h2>Agent · 预置回答</h2><p>空语义资料情景 · 没有相关留存记录</p></div><div class="part"><h3>仍可继续原分析</h3><p>本次没有找到可用的规则或关系记录。这不代表当时没有规则，三问中的准确历史依据仍为未知。</p><p>我可以使用你已获准提供的普通文件和原工具继续分析，并明确说明口径缺口。无需先创建 Case、发表资料或维护图谱。</p><p class="notice space">这里没有真实执行计算或读取文件；“继续”仅演示原任务入口保持可用。</p></div><footer class="answerfoot"><button class="btn" data-action="followup" type="button">把待核问题加入草稿</button></footer>';return;
+  }
+  $('answer').innerHTML=`<header class="answerhead"><div class="row spread"><h2>Agent · 预置回答</h2><span class="tag ${state.scenario==='unavailable'?'warn':'accent'}">${state.scenario==='unavailable'?'沿原引用继续':'有限证据可追溯'}</span></div><p>这次问题：${esc(state.question)}</p>${limitation()}</header>
+    <div class="part"><h3>1. 当时采用了什么规则？</h3><p><strong>本次按直营门店 SAP 1.2 回看原稿：</strong>${sourceLink('rule','这版净销售额')}是<strong>支付金额减当期登记退款</strong>。${sourceLink('report','10月10日报告第2稿')}明确声明引用它；原报告的实际计算是否采用、是否正确，仍不能只凭声明核实。</p><p>另一个同名 ${sourceLink('channel','渠道 SAP 1.2')}适用线上渠道，包含渠道服务费调整，<strong>本次不与门店口径混用</strong>。准确引用能区分两者；对象不明确时应核清范围，不能只按名称或版本号合并。</p><p class="small">口径定义解释如何计量，不提供促销因果或效果保证。</p></div>
+    <div class="part"><h3>2. 哪些证据支持？</h3><p>原 ${sourceLink('citation','来源声明K-10')}连接报告、${sourceLink('input','固定输入I-1')}、${sourceLink('description','说明D-1')}与规则。${state.scenario==='missing'?'I-1准确原文当前失读，正文、样本、对照与时间均未核，不能用旧摘要断言其具备或缺少对照。':'可读I-1声明没有随机分配或足以识别因果的对照。'}可读D-1仍声明一行是门店日汇总、金额单位元、业务日按上海时间，且退款可能迟到。</p><p>${sourceLink('judgment','C-17 判断J-1第1修订')}保留明确方向的支持、反对与依赖；可读的${sourceLink('counter','缺货记录E-1')}指出销量下降也可能受供给限制。因此原建议只到小范围试验，<strong>不能宣布促销有效，也不能由反证自动否定所有方案</strong>。</p><p class="small">关系陈述、作者引用、材料送达与实际采用分开；找到一条路径不等于证据充分，opposes标签也不自动裁决反证。</p></div>
+    <div class="part"><h3>3. 后来哪些前提变了？</h3><p><strong>需要重核退款归属：</strong>${sourceLink('newRule','10月28日发布的门店SAP1.3')}将退款按原销售业务日归属，原1.2则按当期登记退款。${sourceLink('notice','退款归属通知N-1')}声明“自10月1日起适用”，但直到<strong>11月2日才留存</strong>。这与D-1的迟到退款声明一起，可能影响原业务日的净销售额；不是看到新版就自动替换原稿口径。</p><p>这份回溯声明只到日期粒度，不证明10月10日已送达、已知或采用；${sourceLink('vague','口头补充U-1')}的相关时间也未知。E-1的缺货限制仍应保留，现有证据不能确定口径差异会把促销判断改变多少。</p><p>如果本轮需要量化差异，我会针对退款登记日、原销售业务日及准确输入的必要缺口核对或澄清；<strong>不要求先补齐整个资料库</strong>。可在当前可读范围继续分析，并说明未核部分。</p><p><strong>原稿与选择分开：</strong>报告仍声明门店 SAP 1.2；人的后续选择尚未记录。是否调整今天的判断由 Agent 或人结合原文评估，不由图事实失效自动裁定。</p></div>
+    <footer class="answerfoot"><div class="row"><button class="btn" type="button" id="viewEvidence" data-action="evidence">查看依据</button><button class="btn" type="button" id="viewChanges" data-action="changes">查看前提变化</button><button class="btn quiet" type="button" data-action="followup">继续追问</button></div><details class="tech"><summary>辅助查询范围 · 按需查看</summary><p class="small">${state.scenario==='unavailable'?'本次没有派生查询结果；只展示原有准确引用的模拟读取。':'本次展示虚构、预置的有限链路，不代表查全或完整 asOf 历史。'} 正文的口径与冲突解释是目标回答示例，未执行真实语义理解或规则校验；依据详情只供自愿核对，不打开也不影响继续任务。</p><p class="small space">未接引擎，未执行真实保存。来源原件、Pi 历史、SAP 与人的选择仍各有原权威。</p></details></footer>`;
+}
+function renderAnswer(){
+  if(state.phase==='idle')renderIdle();
+  else if(state.phase==='complete')renderComplete();
+  else $('answer').innerHTML=`<div class="placeholder"><span class="tag warn">${state.phase==='loading'?'模拟查找中':'已停止'}</span><h2 class="space">${state.phase==='loading'?'辅助查找可停止':'原任务草稿仍在'}</h2><p>${state.phase==='loading'?'此预设保持查找中，便于检查停止。没有网络、模型或真实查询。':'本次模拟停止，未得到完整查询结果；没有把查找中记成成功，也没有自动重放。可调整问题后继续正常发送。'}</p><p class="notice space">原件、人的选择与普通分析工具均未改变。</p></div>`;
+  renderState();
+}
+function mappingDetails(){
+  const status=state.scenario==='unsupported'?'unsupported':state.scenario==='partial'||state.scenario==='missing'?'partial':state.scenario==='unavailable'?'unavailable':'引用可映射；时间含未知（仅示例）';
+  return `<details class="tech"><summary>技术映射与覆盖范围 · 可选</summary><dl class="readable"><dt>示例状态</dt><dd>${esc(status)}</dd><dt>准确引用</dt><dd>按各来源原身份／修订定位；本页没有真实hash，未核字节。</dd><dt>关系与来源</dt><dd>保留原方向、来源性质及不确定性；未将推断改为正式定义。</dd><dt>时间限制</dt><dd>${state.scenario==='partial'?'E-1原文的“试销期间”缺少精确起止，不能完成该条准确业务时点筛选。':state.scenario==='unsupported'?'U-1发言、留存及提供时间均无可靠证据；无法无损补成准确时点或10月10日已知。':state.scenario==='unavailable'?'投影未返回结果，不能展示派生查询成功。':'业务时间只沿原文声明，可靠留存沿该件记录；缺失为未知，不证明当时已知。'}</dd><dt>覆盖</dt><dd>仅本页列出的预置来源，不是全部历史、全部可读材料或已证明专业正确。</dd><dt>组件</dt><dd>Semantica／Graphiti均未连接。无安装、后端或运行成功证据。</dd></dl></details>`;
+}
+function meaningDetails(){
+  return `<details class="tech"><summary>口径说明／业务含义（可选）</summary><p class="notice">关键口径与限制已在回答正文解释。这里仅供自愿核对A／B／C／D-1原声明，不是独立页面、必经步骤或自动规则裁决。</p><ul class="evidence space">
+    <li><h3>“净销售额”包含什么？</h3><p>${sourceLink('rule','门店1.2（A）')}适用直营门店：<strong>支付金额减当期登记退款</strong>。定义给出口径，不提供促销因果或效果保证。</p><p>${sourceLink('channel','同名渠道1.2（C）')}适用线上渠道，包含渠道服务费调整。名称和版本号一样，仍是不同业务范围；没有依据就不合并。</p><div class="citations">${sourceLink('rule','核对门店定义A')}${sourceLink('channel','核对渠道定义C')}</div></li>
+    <li><h3>退款归在哪个业务日？</h3><div class="meaning-pair"><div><h3>原稿引用 · 门店1.2</h3><p>A以当期登记退款计算，不自动改写成新归属规则。</p></div><div><h3>后续发布 · 门店1.3</h3><p>B将退款按原销售业务日归属，新版单独保留。</p></div></div><p>${sourceLink('description','说明D-1')}声明一行代表门店日汇总、金额单位元、业务日按上海时间，且退款可能迟到。应核对退款登记时点与原销售业务日，不能把这份说明当成已验证唯一键或完整业务约束。</p><div class="citations">${sourceLink('rule','原版A')}${sourceLink('newRule','后续版B')}${sourceLink('description','数据说明D-1')}</div></li>
+    <li><h3>版本差异提示，仍需判断适用</h3><p>A与B的退款归属不同，门店与渠道范围也不同；这提示需要核适用版本和本次资料。该提示不会按“更新日期更晚”自动选择B，不会将渠道C当A的别名，也不自动改SAP、旧稿或人的选择。</p><p class="small">本页没有运行本体、约束检查或后台同步。这些预置解释不证明完整L2、P1或Agent语义理解增强。</p></li></ul>${state.scenario==='missing'?'<p class="notice warn space">当前I-1准确原文失读，样本、正文及其时间均未核。此处业务说明仅来自仍可读的A／B／C／D-1，不用D-1替代I-1正文。</p>':limitation()}</details>`;
+}
+function originalContent(){
+  return `<p class="notice">沿准确原引用看“写了什么”。关系标签保留原声明方向，不等于事实、因果或全部证据。</p><ul class="evidence space">
+    <li><h3>原稿 → 明确引用 → 门店 SAP 1.2</h3><p>原稿的准确引用可与渠道同名定义消歧，不根据展示名或“最新”选择规则。</p><div class="citations">${sourceLink('report','打开原稿第2稿')}${sourceLink('rule','打开门店SAP1.2')}${sourceLink('channel','对照同名渠道口径')}</div></li>
+    <li><h3>原稿 → 来源声明 → 固定输入／说明／规则</h3><p>这是作者声明，不是真实计算采用的证明。${state.scenario==='missing'?'固定输入原文失读，内容未核；保留准确指向。':'I-1没有随机对照，D-1明确日汇总／元／上海业务日与退款可能迟到。'}</p><div class="citations">${sourceLink('citation','查看K-10原声明')}${sourceLink('input','打开准确输入I-1')}${sourceLink('description','打开准确说明D-1')}</div></li>
+    <li><h3>判断的三条显式关系</h3><p>以下箭头仅复述虚构 C-17/J-1 的原关系，不从相似文本自动生成。</p><div class="chain">判断 J-1 · 第1修订<span class="relation">→ supports（原声明） →</span>${sourceLink('citation','引用清单 K-10')}</div><div class="chain">判断 J-1 · 第1修订<span class="relation">→ opposes（原声明） →</span>${sourceLink('counter','反证 E-1 · 第1修订')}</div><div class="chain">判断 J-1 · 第1修订<span class="relation">→ depends_on（原声明） →</span>${sourceLink('citation','引用清单 K-10')}<span class="relation">→ 明确引用（另一段来源） →</span>${sourceLink('rule','门店 SAP 1.2')}</div><p>经原引用清单查回规则；这里没有Case直接指向SAP的依赖边。</p><div class="citations">${sourceLink('judgment','核对原关系与选择边界')}${sourceLink('counter','查看缺货记录原文')}</div></li>
+    <li><h3>反证与缺口共同保留</h3><p>可读的E-1缺货记录限制“仅凭销量变化归因促销”的判断。${state.scenario==='missing'?'I-1准确原文当前不可读，样本及对照条件未核。':'试销期没有精确起止，I-1声明样本没有足以识别因果的对照。'}不能因支持链更短就省略反证，也不能把未查到当作不存在。</p></li></ul>${limitation()}${meaningDetails()}${mappingDetails()}`;
+}
+function todayContent(){
+  return `<p class="notice">分开看业务生效声明、系统留存与原稿实际引用。以下是有限来源的回看，不是“当时所有知识”快照。</p><ol class="timeline space">
+    <li><h3>9月20日09:00留存 · 门店规则1.2</h3><p>直营门店支付金额减当期登记退款；未给明确业务生效时间。9月21日09:00留存的渠道同名规则含服务费调整，不能合并。</p><div class="citations">${sourceLink('rule','查看准确源A')}${sourceLink('channel','查看同名源C')}</div></li>
+    <li><h3>10月9日 · 固定输入、说明与缺货记录</h3><p>${state.scenario==='missing'?'I-1原文当前不可读，其正文、样本与时间未重新核验，不能凭旧摘要补成当前已核内容。':'I-1于15:00留存。'}可读的D-1于16:00留存；E-1于18:00留存，已提示缺货限制。E-1原文“试销期间”没有精确起止，不能补成完整有效期。</p><div class="citations">${sourceLink('input','输入I-1')}${sourceLink('description','说明D-1')}${sourceLink('counter','缺货记录E-1')}</div></li>
+    <li><h3>10月10日 · 原稿、来源与判断</h3><p>R-10第2稿于17:00留存，K-10于17:05声明引用A／I-1／D-1，J-1于18:00保留原三条关系。只建议小范围试验，不声明已证明有效；实际计算采用或专业正确性仍需独立证据。</p><div class="citations">${sourceLink('report','原稿R-10')}${sourceLink('citation','声明K-10')}${sourceLink('judgment','判断J-1')}</div></li>
+    <li><h3>10月28日09:00发布 · 门店规则1.3</h3><p>退款按原销售业务日归属，与A的当期登记退款不同；新发布不把源B变成旧稿当时引用的源A。</p><div class="citations">${sourceLink('newRule','查看后续准确版本B')}</div></li><li><h3>11月2日10:00留存 · 退款归属通知</h3><p><strong>业务声明：自10月1日起适用；留存：11月2日。</strong>生效只到日期粒度，不补成被知晓时刻。缺少10月10日前送达或读取凭据，当时已知仍为未知。</p><div class="citations">${sourceLink('notice','查看N-1两种时间')}</div></li>
+    <li><h3>时间未知 · 口头补充</h3><p>U-1仅说“有人称此前已口头通知”。发言、实际留存、提供对象和时间无可靠证据，不能由Agent或Host补成10月10日已知，也不能当作不存在。</p><div class="citations">${sourceLink('vague','查看U-1原文与未知')}</div></li>
+    <li><h3>今天回看 · 前提需要核实</h3><p>B与N-1提示重核退款归属，D-1的迟到退款与E-1的缺货限制仍应保留。这是预置Agent判断；不自动撤回SAP、原报告或人的选择。</p></li></ol>${limitation()}${mappingDetails()}`;
+}
+function renderTrace(){
+  $('tracePanel').innerHTML=state.view==='original'?originalContent():todayContent();$('tracePanel').setAttribute('aria-labelledby','trace-'+state.view);
+  for(const view of ['original','today']){const selected=state.view===view;$('trace-'+view).setAttribute('aria-selected',String(selected));$('trace-'+view).tabIndex=selected?0:-1;}
+}
+const returnFocus=new Map();
+function openDialog(id){returnFocus.set(id,document.activeElement);$(id).showModal();$(id).querySelector('button').focus({preventScroll:true});}
+for(const id of ['traceDialog','sourceDialog'])$(id).addEventListener('close',()=>{const opener=returnFocus.get(id);if(opener?.isConnected)opener.focus({preventScroll:true});});
+function showTrace(view){dispatch({type:'view',value:view});renderTrace();if(!$('traceDialog').open)openDialog('traceDialog');}
+function showSource(key){
+  const source=sources[key];if(!source)return;const missing=state.scenario==='missing'&&key==='input';
+  $('sourceHeading').textContent=source.title+' · '+source.version;
+  $('sourceBody').innerHTML=`<span class="tag ${missing?'warn':'accent'}">${missing?'准确原文当前不可读':'准确版本 · 虚构原文'}</span><dl class="readable"><dt>来源性质</dt><dd>${esc(source.kind)}</dd><dt>准确版本</dt><dd>${esc(source.version)}</dd><dt>系统留存</dt><dd>${missing?'原清单记载 '+esc(source.saved)+'；仅保留引用元信息，当前原件与时间未重新核验。':esc(source.saved)}</dd><dt>业务时间声明</dt><dd>${missing?'原文当前不可读，业务时间声明未核；不从旧摘要补成当前已核内容。':esc(source.time)}</dd></dl>${missing?'<div class="notice warn">这份准确原文当前失读，正文、样本与时间未核实。原引用及目录声明仍保留，不打开最新版、同名文件或相邻修订来替代；D-1／E-1可读也不等于I-1已读。</div>':`<div class="paper">${esc(source.body)}</div>`}<details class="tech"><summary>准确引用详情 · 按需展开</summary><dl class="readable"><dt>示例引用</dt><dd class="mono">${esc(source.ref)}</dd><dt>字节／hash</dt><dd>本页没有真实文件或hash；不可当作产品回执或保全证据。</dd><dt>读取资格</dt><dd>产品实施须重新沿当前源权限核定；投影命中不授予额外权限。本Demo不连接任何受限源。</dd><dt>更新与失效</dt><dd>保持准确原引用；派生状态变化不改写旧源，不回落latest。</dd></dl></details>`;
+  dispatch({type:'source',key:source.ref});openDialog('sourceDialog');
+}
+const walkthroughs={
+  normal:['从原任务直接问三问','先发送，再自愿查看依据与今天回看。观察同一原稿引用始终保留。'],
+  ambiguous:['同名不能合并，反证不能省略','发送后查看门店与渠道两个口径，再查看判断的方向和反证；不自动改人的选择。'],
+  partial:['精确不了的时间，就保留缺口','发送后在详情查看 partial：有留存日期并不表示已知业务有效期，不得伪造完整历史。'],
+  unavailable:['辅助不可用，原分析仍能继续','发送后沿原L1准确引用展示边界；不要求修好引擎后才继续，也不假装派生查询成功。'],
+  other:['其他边界','自由尝试准确原文失读、无法表达的时间、空资料或停止；每种情景仍需要正常发送。']
+};
+function renderWalkthrough(){
+  const tab=walkthroughs[state.scenario]?state.scenario:'other';
+  for(const name of Object.keys(walkthroughs)){const selected=name===tab;$('scenario-'+name).setAttribute('aria-selected',String(selected));$('scenario-'+name).tabIndex=selected?0:-1;}
+  $('walkthrough').setAttribute('aria-labelledby','scenario-'+tab);
+  const [title,description]=walkthroughs[tab];
+  $('walkthrough').innerHTML=`<h3>${esc(walkthroughs[state.scenario]?title:scenarioNames[state.scenario])}</h3><p>${esc(walkthroughs[state.scenario]?description:'该状态仍需正常发送才展示预置结果；未读取任何产品材料。')}</p><div class="row"><button class="btn" type="button" data-step="send">发送示例问题</button><button class="btn" type="button" data-step="evidence">可选 · 查看依据</button><button class="btn" type="button" data-step="today">可选 · 今天回看</button></div>`;
+}
+function setScenario(value){
+  if(state.phase==='loading')dispatch({type:'stop'});
+  dispatch({type:'scenario',value});$('notice').textContent='已选择“'+scenarioNames[value]+'”。只切换本页预设，未发送、未查询；可正常发送继续。';renderWalkthrough();renderAnswer();announce('情景已切换，未自动发送。');
+}
+function sendQuestion(){
+  const text=$('question').value.trim();
+  if(!text){$('questionError').textContent='请先写下要继续分析的问题。';$('question').setAttribute('aria-invalid','true');$('question').focus();return;}
+  $('questionError').textContent='';$('question').removeAttribute('aria-invalid');$('notice').textContent='';dispatch({type:'send',question:text});renderAnswer();announce(state.phase==='loading'?'模拟查找中，可以停止。':'预置回答已展示；没有真实查询、模型或保存。');
+}
+function toDraft(){
+  const draft='请继续核实：退款按登记期还是原销售业务日归属、迟到退款和缺货如何限制原建议、N-1在当时是否送达，以及U-1的时间缺口；保留准确原稿和未知，不自动修改人的选择。';
+  $('question').value=($('question').value.trim()+'\n\n'+draft).trim();dispatch({type:'draft'});
+  for(const id of ['sourceDialog','traceDialog'])if($(id).open)$(id).close();
+  $('notice').textContent='待核问题已加入当前任务草稿，尚未发送；没有修改SAP、来源、报告或人的选择。';
+  requestAnimationFrame(()=>{$('question').focus();$('question').setSelectionRange($('question').value.length,$('question').value.length);});announce('已加入当前草稿，尚未发送。');
+}
+$('questionForm').addEventListener('submit',event=>{event.preventDefault();sendQuestion();});
+$('stop').addEventListener('click',()=>{dispatch({type:'stop'});renderAnswer();$('send').focus();announce('已停止本页模拟；没有自动重放。');});
+$('theme').addEventListener('click',()=>{const dark=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=dark?'dark':'light';$('theme').textContent=dark?'浅色':'深色';$('theme').setAttribute('aria-label',dark?'切换为浅色主题':'切换为深色主题');});
+$('reset').addEventListener('click',()=>{dispatch({type:'reset'});$('question').value='回看C-17当时为何建议小范围试促销，今天哪些前提需要重核？请说明当时采用什么规则、哪些证据支持、后来哪些前提变了。';$('questionError').textContent='';$('question').removeAttribute('aria-invalid');$('notice').textContent='已重置本页虚构示例；没有操作真实文件或服务。';renderWalkthrough();renderAnswer();});
+document.addEventListener('click',event=>{
+  const button=event.target.closest('button');if(!button)return;
+  if(button.dataset.close){$(button.dataset.close).close();return;}
+  if(button.dataset.scenario){setScenario(button.dataset.scenario);return;}
+  if(button.dataset.preset){setScenario(button.dataset.preset);return;}
+  if(button.dataset.source){showSource(button.dataset.source);return;}
+  if(button.dataset.view){dispatch({type:'view',value:button.dataset.view});renderTrace();return;}
+  const action=button.dataset.action;
+  if(action==='evidence'){showTrace('original');return;}if(action==='changes'){showTrace('today');return;}if(action==='followup'){toDraft();return;}
+  if(button.dataset.step==='send'){sendQuestion();return;}
+  if(button.dataset.step){if(state.phase!=='complete'||state.scenario==='empty'){$('notice').textContent='请先正常发送，形成预置回答后再自愿查看依据；没有自动查询。';announce('请先正常发送。');return;}showTrace(button.dataset.step==='today'?'today':'original');}
+});
+function arrowTabs(container,selector,onSelect){
+  container.addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    const tabs=[...container.querySelectorAll(selector)];const current=tabs.indexOf(document.activeElement);if(current<0)return;event.preventDefault();
+    const index=event.key==='Home'?0:event.key==='End'?tabs.length-1:(current+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+    onSelect(tabs[index]);tabs[index].focus();
+  });
+}
+arrowTabs($('scenarioTabs'),'[role=tab]',button=>setScenario(button.dataset.scenario));
+arrowTabs($('traceDialog').querySelector('.tabs'),'[role=tab]',button=>{dispatch({type:'view',value:button.dataset.view});renderTrace();});
+renderWalkthrough();renderAnswer();
+</script>
+</body>
+</html>

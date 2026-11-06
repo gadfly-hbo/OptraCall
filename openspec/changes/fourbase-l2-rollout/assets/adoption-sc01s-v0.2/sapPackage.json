@@ -1,0 +1,98 @@
+{
+  "sap": "0.2",
+  "package": {
+    "id": "optracall-sc01s-retail",
+    "version": "0.2.0",
+    "namespace": "mf.optracall-sc01s-retail",
+    "fingerprint": "sha256:243871116527cef504b48d4557bf0fa77d8c71983b796201d4ddb059e22560b8"
+  },
+  "dimensions": [
+    "store"
+  ],
+  "metrics": [
+    {
+      "name": "terminal_sales_amount",
+      "display_name": "终端成交额",
+      "type": "simple",
+      "definition": "店铺退款前销售额。获准去标识定义包含直营、加盟、电商范围，按订单支付时间统计；渠道归属及一次性业务等特殊条件须随原定义核对，本摘要未迁入完整主体特例。金额单位沿源为元。实际范围、币种、税口径、有效支付金额字段及可加总粒度以本题明确来源为准，缺失不补为已满足。GMV定义接近不构成同义或合并依据。本资产simple仅表达合格支付金额的聚合，不重判原指标类别。",
+      "dimensions": [
+        "store"
+      ],
+      "time_grains": [
+        "day"
+      ],
+      "owner_role": "分析任务",
+      "caliber_switches": {},
+      "provenance": {
+        "origin": "manual",
+        "note": "人工整理自获准去标识摘录 SRC-METRIC-01 / r1，候选 C02；source_cells：A379、H379、I379、L379、M379；摘录文件 data/metric-candidates.v0.1.json，SHA-256 f5e5665c9d4fa9d9dc9dfebf077322e4ab503f5c6813933cf3ee0305c5d88275。源单元格仅为核查定位，不授予原企业附件读取权限；原企业身份、编码、版本标识及完整主体特例未随本包迁入。本包0.2.0为工程整理的条件限定合成适用版；仅保留获准去标识定义及前置要求，不声明任何新题的条件已满足；实际已知、未知与冲突见该题同源材料。"
+      }
+    },
+    {
+      "name": "retail_refund_amount",
+      "display_name": "零售退款额",
+      "type": "simple",
+      "definition": "店铺退款产生的金额，正值，计算净额时扣减。源金额构成为未发货仅退款、退货退款、已发货仅退款、拒收退款及额外退款之和；类型边界与渠道、实际字段须核对。统计归属按原订单支付时间：关联唯一原订单后依原支付日期和原门店归组；退款事件日期用于事件、截止及跨期核查，不能替代支付归属。金额单位为元，实际币种／税口径／范围、去重／冲正／回补、截止与观察成熟度依显式来源；未知或冲突不自动裁决。simple是本资产事件金额聚合表达，不把多类构成变成无条件原子口径。",
+      "dimensions": [
+        "store"
+      ],
+      "time_grains": [
+        "day"
+      ],
+      "owner_role": "分析任务",
+      "caliber_switches": {},
+      "provenance": {
+        "origin": "manual",
+        "note": "人工整理自获准去标识摘录 SRC-METRIC-01 / r1，候选 C03；source_cells：A376、H376、I376、J376、L376、M376；摘录文件 data/metric-candidates.v0.1.json，SHA-256 f5e5665c9d4fa9d9dc9dfebf077322e4ab503f5c6813933cf3ee0305c5d88275。源单元格仅为核查定位，不授予原企业附件读取权限；原企业身份、编码、版本标识及完整主体特例未随本包迁入。本包0.2.0为工程整理的条件限定合成适用版；仅保留获准去标识定义及前置要求，不声明任何新题的条件已满足；实际已知、未知与冲突见该题同源材料。"
+      }
+    },
+    {
+      "name": "net_retail_sales",
+      "display_name": "零售额",
+      "type": "derived",
+      "definition": "店铺销售额扣减退款后的实际销售金额，别称零售金额／净销额只供发现，不跨范围自动合并。依赖terminal_sales_amount和retail_refund_amount；仅在同一范围、单位、币种、税口径、支付时间归属及可加总粒度下成立。两期变化为B−A，金额关系为Δ零售额＝Δ成交额−Δ退款额；退款增加对应净额负向金额影响。没有直接原始净额主输入，金额恒等关系不证明源正确、根因、因果或策略效果。净变化为零时不强算以该变化为分母的贡献率。实际前置未知时可核已知部分，并限定条件结论；derived／expr不要求Host计算。",
+      "dimensions": [
+        "store"
+      ],
+      "time_grains": [
+        "day"
+      ],
+      "owner_role": "分析任务",
+      "caliber_switches": {},
+      "type_params": {
+        "expr": "terminal_sales_amount - retail_refund_amount"
+      },
+      "provenance": {
+        "origin": "manual",
+        "note": "人工整理自获准去标识摘录 SRC-METRIC-01 / r1，候选 C04；source_cells：A627、B627、H627、I627、J627、K627、L627、M627；摘录文件 data/metric-candidates.v0.1.json，SHA-256 f5e5665c9d4fa9d9dc9dfebf077322e4ab503f5c6813933cf3ee0305c5d88275。源单元格仅为核查定位，不授予原企业附件读取权限；原企业身份、编码、版本标识及完整主体特例未随本包迁入。本包0.2.0为工程整理的条件限定合成适用版；仅保留获准去标识定义及前置要求，不声明任何新题的条件已满足；实际已知、未知与冲突见该题同源材料。"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "synthetic_net_sales_change",
+      "version": "0.2.0",
+      "title": "条件限定合成门店两期零售额拆解与核查",
+      "decision_purpose": "核查明确来源支持的两期金额及条件；可核部分、冲突和未知分开，不预设增减方向，不产生现实经营动作。Agent自主选择方法和工具。",
+      "metric_usages": [
+        {
+          "metric": "net_retail_sales",
+          "role": "outcome",
+          "note": "同口径派生金额及变化。"
+        },
+        {
+          "metric": "terminal_sales_amount",
+          "role": "driver",
+          "note": "退款前成交项金额变化，不代表根因。"
+        },
+        {
+          "metric": "retail_refund_amount",
+          "role": "driver",
+          "note": "正值退款，净额金额影响取其变化的相反数；按原支付归属。"
+        }
+      ],
+      "method_refs": [],
+      "evidence_requirements": "读取准确三核心发布版和方法；核固定输入、字段映射、支付时间归属、五类退款、截止与观察、身份冲突，以及范围／币种／税／单位和可比性。条件要求不是已满足声明，缺失及冲突须保留。方法准确发布Ref由原入口另记。"
+    }
+  ]
+}

@@ -295,7 +295,7 @@ export function createAutomaticVerificationFeature(options: {
             await assertFixed(); await verification.store.revealAuthor(fixed!);
             const compareScope = await makeScope(chainOwner!, 'compare', [inputs, path.join(fixed!.workspace, 'author'), coldScope.writableRoot]);
             await verifier.reopen({ protectedExecution: compareScope });
-            const compareText = authorContext(await verification.store.readAuthorFiles(fixed!), fixed!.workspace);
+            const compareText = authorContext(await verification.store.readAuthorFiles(fixed!), fixed!.workspace, { automaticFeedback: true });
             const compared = await step('compare', compareText, requestId => verifier.lease.start({ requestId, text: compareText }),
               async (result, requestId) => { await verification.store.saveComparisonResult(fixed!, { text: result.text, requestId, sessionFile: result.sessionFile }); await verification.store.update(fixed!, { state: 'completed' }); });
             await verifier.lease.quiesce(); await assertFixed();

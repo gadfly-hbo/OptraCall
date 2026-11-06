@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>OptraCall · S5 可靠性收尾确认包</title>
+  <style>
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; color: #20302b; background: #f4f6f4; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1056px; margin: 32px auto 64px; padding: 0 24px; }
+    header, section { background: #fff; border: 1px solid #dce3df; border-radius: 12px; padding: 26px 30px; margin-bottom: 18px; }
+    .eyebrow { color: #52645c; font-size: 13px; letter-spacing: .04em; }
+    h1 { font-size: 30px; line-height: 1.3; margin: 12px 0 16px; }
+    h2 { font-size: 21px; margin: 0 0 15px; }
+    p, li { font-size: 15px; line-height: 1.85; }
+    p { margin: 10px 0; }
+    a { color: #176347; text-underline-offset: 3px; }
+    a:focus-visible { outline: 3px solid #28785b; outline-offset: 4px; }
+    .status { display: inline-block; border: 1px solid #dcc78f; background: #fff8e7; color: #664a0b; border-radius: 5px; padding: 3px 9px; font-size: 13px; }
+    .notice { background: #f1f6f3; border-left: 3px solid #3e765a; padding: 12px 16px; }
+    .steps { margin: 0; padding-left: 22px; }
+    .steps li { margin-bottom: 14px; padding-left: 5px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 660px; }
+    caption { text-align: left; color: #52645c; font-size: 13px; padding-bottom: 10px; }
+    th, td { border-bottom: 1px solid #e0e6e2; text-align: left; padding: 12px 10px; vertical-align: top; line-height: 1.7; }
+    th { background: #f5f7f5; font-weight: 600; }
+    td:first-child { width: 86px; white-space: nowrap; }
+    .muted, footer { color: #52645c; }
+    footer { font-size: 13px; line-height: 1.8; padding: 0 8px; }
+    code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .92em; }
+    @media (max-width: 640px) { main { padding: 0 14px; margin-top: 16px; } header, section { padding: 21px 18px; } h1 { font-size: 25px; } }
+    @media print { :root { background: white; } main { max-width: none; margin: 0; } header, section { border-radius: 0; break-inside: avoid; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">OptraCall · 完整 L2 的 S5 增量 · v0.1 / 2026-11-06</div>
+    <h1>S5 可靠性收尾与固定版本新未见对照</h1>
+    <span class="status">D15全部A已确认 · R0修复完成 · 已收尾：工程通过 · 首稿／最高稿各0/6 · 2完成／4超时 · R2不启动</span>
+    <p>保留 Semantica，先处理实际可靠性缺口；已见回归达标后，才锁定一版开展新未见对照。后台业务语义建设仍是重点，普通用户的提问路径保持。</p>
+    <p><a href="s5-reliability-closeout-plan.md">阅读完整方案与验收</a> · <a href="s5-reliability-preparation-result.md">准备及复核记录</a> · <a href="s5-results.md">上轮实际结果</a> · <a href="s5-reliability-results.md">本轮收尾结果</a></p>
+    <p class="notice">本页是确认材料摘要，不是产品 UI Demo。没有新增业务含义页、图谱管理或用户必做步骤；本页保留批准方案摘要；本轮结果为工程组合检查通过、可靠性未达标，专业与采用均已封存，实际限制及建议见本轮收尾结果。</p>
+  </header>
+
+  <section aria-labelledby="reason-title">
+    <h2 id="reason-title">为什么先收尾</h2>
+    <p>上轮19次任务已全部关闭。32份首／终稿的预定关键金额和兼容分区项吻合；全文仍出现成熟度、两期未来修正、税与币种前提等重要错误，且一份合格首稿经自动修订退化。</p>
+    <p>图工具已实际返回语义，准确引用可核，但还存在分页未续、来源警示未披露、空查询被推成全图缺失等问题。5个首次配对跨了候选版本，完整同候选收益未成立。</p>
+  </section>
+
+  <section aria-labelledby="sequence-title">
+    <h2 id="sequence-title">确认后按这个顺序推进</h2>
+    <ol class="steps">
+      <li><strong>R0：定位和最小工程修正。</strong>核实际发布资料、构图、资格检查、工具content、报告与核算各层。先复现<code>/conditions</code>回源静态疑点，不将它直接当成全部来源gap的原因。沿现有方法、条件和原Pi接缝修正。</li>
+      <li><strong>R1：已见可靠性回归。</strong>六目标一轮，最多两轮、12次真实启动；轮内不换候选。最后完整一轮首稿／终稿均无重要错误、正确稿不退化，才进入新未见。失败与取消占额，不挑最佳重跑。</li>
+      <li><strong>冻结后 R2：只跑一个新未见批次。</strong>2开放＋12首次＋4重复＋1取消，最多19次。每对两臂相邻、顺序预随机，全程同一代码／资产／模型配置；需修复就停批，不混版拼收益。</li>
+    </ol>
+    <p>R1旧正确稿和gold只作外部评价参考，不提前喂给主分析或冷读核算。R2两开放只用公开已见fixture，关闭并复核共享树后再生成封存正式新题；此间应用、通用资产和模型配置不变。</p>
+    <p class="muted">若首轮六目标达标，本包最多实际25次启动；完整上限31。16链的32份首／终稿全部评分冻结后解盲，主稿、修稿、重复、开放和取消分别保留。</p>
+  </section>
+
+  <section aria-labelledby="decisions-title">
+    <h2 id="decisions-title">D15.1–D15.8：全部 A 已整体确认</h2>
+    <div class="table-wrap">
+      <table>
+        <caption>完整替代选项、范围、停止条件及验收以 Markdown 方案为准。保留 Semantica 及既有配置事实不重复征询。</caption>
+        <thead><tr><th scope="col">项号</th><th scope="col">推荐 A 的实际含义</th></tr></thead>
+        <tbody>
+          <tr><td>D15.1</td><td>保留 Semantica0.7.0、Pi1.4.0／Interface v3、3指标＋1方法，无产品UI差额，不换引擎／模型。</td></tr>
+          <tr><td>D15.2</td><td>先用公开合成fixture复现缺口，再作最小接缝修正；只开放准确合法语义片段，不放开整个输入／明细。</td></tr>
+          <tr><td>D15.3</td><td>核当前实际发布内容，必要时沿原结构发布方法新修订／新图；通用规则同源供给两臂，旧版与旧图保留。</td></tr>
+          <tr><td>D15.4</td><td>沿原核算／修订context验证全文新增主张和不退化；作者可拒用错误意见，不扩图权限、不由Host补算。</td></tr>
+          <tr><td>D15.5</td><td>已见最多2轮×6目标＝12真实启动。最后一轮完整达标才进新未见；不达标则停在S5并交结果。</td></tr>
+          <tr><td>D15.6</td><td>一个新批最多19启动：六新首次成套配对、两对重复、两开放及一取消。L1不建图，两臂业务资料同源。</td></tr>
+          <tr><td>D15.7</td><td>分别核工程、完整报告、准确采用及增量价值；不以主表正确、工具成功或全部写未知代替专业通过。</td></tr>
+          <tr><td>D15.8</td><td>新增总上限31启动、模型新增支出上限100元；仅用既有S5专属MiniMax订阅与原线路，不买／续／充或切按量。全部角色、重试、失败及取消的消费计入。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="boundaries-title">
+    <h2 id="boundaries-title">验收和边界</h2>
+    <p>Agent自主选择阅读、查询、方法、续页与修正；有分页时可按需续读，也可明确限制已返回子集。Host只管环境、准确身份、准入、资源与保存；不强制先查图或采纳核算意见。</p>
+    <p>新未见专业结果按原六首次／臂、两重复／臂分别报告。推荐L2首终稿均无重要错误、两臂修订无新增重要错误；增量价值可以为无增益或退化，不能预写“更快更准”。</p>
+    <p>启动前重新只读核额度及有效配置，旧33%不是当前可用额度。配额恢复且冻结身份不变时可续原未启动项；未知消费、内存子Agent及供应商结算不可核则UNKNOWN。31次任务启动不等于31个Provider请求。</p>
+    <p>本包不包含第32次启动、第二个新未见批次、Git／CI／合并、正式服务或MacBook采用、真实经营数据及S6。即使本次通过，也不代表真实经营V404或反馈闭环V405已完成。</p>
+  </section>
+
+  <footer>用户已整体确认D15.1–D15.8全部推荐A并授权开发。按R0、R1闸口、固定候选与单一R2顺序执行；本页不表示专业验证或产品验收已通过。</footer>
+</main>
+</body>
+</html>

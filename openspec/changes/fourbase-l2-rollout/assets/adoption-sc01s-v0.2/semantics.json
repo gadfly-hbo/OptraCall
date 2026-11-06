@@ -1,0 +1,213 @@
+{
+  "enterprise": {
+    "title": "匿名合成零售资料及条件",
+    "category": "合成分析背景",
+    "body": "本资料不含真实企业或经营事实。三核心定义来自获准去标识指标摘录。各题已知、未知及冲突只按该题输入conditions和逐行来源声明；旧样本中的范围、币种、税、观察天数、唯一性和去重条件不迁入。GMV仅辨义，不成为第四核心指标。工程整理不等于业务确认。",
+    "source": "获准去标识摘录 SRC-METRIC-01/r1 与本题合成输入的显式条件；不授予原企业附件读取权限。",
+    "owner": "合成材料准备者",
+    "scope": "仅当前匿名合成交易输入；不作为现实企业全域规则。",
+    "effectiveTime": "仅随当前固定输入及准确发布引用使用；不推断现实业务有效期。"
+  },
+  "fieldRules": [
+    {
+      "pointerPattern": "/dataset_id",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/periods/A/start",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/periods/A/end",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/periods/B/start",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/periods/B/end",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/material_nature",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/scope",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/unit",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/refund_definition",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/interpretation",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/store_scope",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/currency",
+      "meaning": "逐记录来源币种；null未知，不补汇率或CNY。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/tax_basis",
+      "meaning": "逐记录税口径；null未知，未提供换算规则。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/snapshot_cutoff",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/event_coverage",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/event_identity",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/refund_observation",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/conditions/field_roles",
+      "meaning": "该位置为本题明确给定的资料条件／定位声明；只按原文理解，null表示未提供。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/orders/*/order_id",
+      "meaning": "合成原订单关联键；支付与退款按该键关联，身份条件另见conditions。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/orders/*/store_id",
+      "meaning": "合成原订单门店；退款随原订单门店归属。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/orders/*/paid_date",
+      "meaning": "原订单支付日期，确定支付期间归属。",
+      "metricNames": [
+        "terminal_sales_amount",
+        "retail_refund_amount",
+        "net_retail_sales"
+      ],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/orders/*/paid_amount_yuan",
+      "meaning": "退款前有效支付金额；null表示该位置未提供。字段适用性、币种／税／范围及可能冲突见conditions及逐记录声明。",
+      "metricNames": [
+        "terminal_sales_amount",
+        "net_retail_sales"
+      ],
+      "unit": "元"
+    },
+    {
+      "pointerPattern": "/orders/*/gmv_display_amount_yuan",
+      "meaning": "另行展示GMV且范围不同；不是本三核心金额输入。",
+      "metricNames": [],
+      "unit": "元"
+    },
+    {
+      "pointerPattern": "/orders/*/retail_amount_label_yuan",
+      "meaning": "本接口显示别名“零售额”的退款前支付金额；并非已扣退款净额。",
+      "metricNames": [],
+      "unit": "元"
+    },
+    {
+      "pointerPattern": "/refunds/*/refund_event_id",
+      "meaning": "来源退款事件标识；不据字段名称默认全样本唯一，重复裁决见conditions。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/refunds/*/order_id",
+      "meaning": "合成原订单关联键；支付与退款按该键关联，身份条件另见conditions。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/refunds/*/refund_date",
+      "meaning": "退款事件日期；仅作事件／截止核查，不取代原支付期间。",
+      "metricNames": [],
+      "unit": null
+    },
+    {
+      "pointerPattern": "/refunds/*/refund_amount_yuan",
+      "meaning": "正值退款事件行金额；五类、事件身份及币种／税／范围条件另核。",
+      "metricNames": [
+        "retail_refund_amount",
+        "net_retail_sales"
+      ],
+      "unit": "元"
+    },
+    {
+      "pointerPattern": "/refunds/*/refund_type",
+      "meaning": "来源声明的五类退款之一；未列行不能脱离覆盖条件推断现实为零。",
+      "metricNames": [
+        "retail_refund_amount"
+      ],
+      "unit": null
+    }
+  ],
+  "statements": [
+    {
+      "scope": "row-meaning",
+      "text": "orders为原支付订单行，refunds为退款台账行；事件与行的身份条件及覆盖见输入conditions，不默认每行是唯一事件。"
+    },
+    {
+      "scope": "business-time",
+      "text": "退款按关联原订单支付日期及门店归组；退款事件日期仅用于事件与截止核查。截止或观察成熟度未知时保留未知。"
+    },
+    {
+      "scope": "source-and-limitations",
+      "text": "本题conditions及逐行范围／币种／税声明是合成适用条件的直接来源；方法的条件要求不等于本题已满足。未知、冲突及工程推断不冒充业务确认。"
+    }
+  ]
+}

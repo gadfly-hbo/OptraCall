@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>OptraCall · S5 下一轮有限修正确认包</title>
+  <style>
+    :root{color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#20302b;background:#f4f6f4}
+    *{box-sizing:border-box}body{margin:0}main{max-width:1060px;margin:32px auto 64px;padding:0 24px}
+    header,section{background:#fff;border:1px solid #dce3df;border-radius:12px;padding:26px 30px;margin-bottom:18px}
+    .eyebrow,.muted,footer{color:#52645c}.eyebrow,footer{font-size:13px}h1{font-size:30px;line-height:1.35;margin:12px 0 16px}h2{font-size:21px;margin:0 0 15px}
+    p,li{font-size:15px;line-height:1.85}p{margin:10px 0}li{margin-bottom:8px}a{color:#176347;text-underline-offset:3px}a:focus-visible{outline:3px solid #28785b;outline-offset:4px}
+    .status{display:inline-block;border:1px solid #dcc78f;background:#fff8e7;color:#664a0b;border-radius:5px;padding:3px 9px;font-size:13px}
+    .notice{background:#f1f6f3;border-left:3px solid #3e765a;padding:12px 16px}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px;min-width:650px}
+    th,td{border-bottom:1px solid #e0e6e2;text-align:left;padding:12px 10px;vertical-align:top;line-height:1.7}th{background:#f5f7f5}caption{text-align:left;color:#52645c;font-size:13px;padding-bottom:10px}
+    code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em}footer{line-height:1.8;padding:0 8px}
+    @media(max-width:640px){main{padding:0 14px;margin-top:16px}header,section{padding:21px 18px}h1{font-size:25px}}
+    @media print{:root{background:#fff}main{max-width:none;margin:0}header,section{border-radius:0;break-inside:avoid}}
+  </style>
+</head>
+<body><main>
+  <header>
+    <div class="eyebrow">OptraCall · S5 有限修正 · v0.1 · 2026-11-06（北京时间）</div>
+    <h1>先修清语义边界、反馈和尾段交付</h1>
+    <span class="status">D16全部A已确认 · 工程通过 · 首例专业FAIL后停止 · 1/8</span>
+    <p>保留 Semantica0.7.0、Pi1.4.0／Interface v3、3个核心指标与1份方法。本轮仍在S5，不进入S6，不开展新未见对照。</p>
+    <p><a href="s5-limited-repair-plan.md">完整方案与D16选择</a> · <a href="s5-limited-repair-preparation-result.md">准备及复核记录</a> · <a href="s5-reliability-results.md">上轮封存结果</a></p>
+    <p class="notice">本页是整体确认材料，非产品UI或完成能力演示。普通用户零新增必做步骤，没有业务含义页、图谱控制台或条件维护表。</p>
+  </header>
+  <section aria-labelledby="cause">
+    <h2 id="cause">已证实什么，尚未证明什么</h2>
+    <p>六个已知目标首稿／最高固定稿各0/6通过，金额与兼容项吻合；2条链完成、4条超时取消。关键方法与条件已到达主Agent和cold，错误仍进入回答；K3／K5／K6还有错误意见被接受后进入新稿的可核链。</p>
+    <p>当前本题conditions整体包成一个Condition，与通用未知和方法前提挂在同一方法下，存在可辨识性缺口。但K3没查图、L1也失败，不能认定细化图就能解决全部错误。</p>
+    <p>20分钟是研究执行器的整链上限。K5在首稿与前三段之后，recheck只剩约13秒，并只获得前6000／13854字符。K2／K3全文复查已完成仍漏错，故修尾段不能替代专业质量修正。各请求慢的具体原因、图的因果影响仍未知。</p>
+  </section>
+  <section aria-labelledby="changes">
+    <h2 id="changes">本次四项有限差额</h2>
+    <ol>
+      <li><strong>条件能分清。</strong>本题声明逐项以既有Condition／来源供find查读，保留通用未知范围；仅有实际方法依据的前提连requires，不把任意false／null变成方法禁用。true也只是stated，不自动业务证真。仍回原<code>/conditions</code>整片段，L1获得同源说明。</li>
+      <li><strong>争议有依据。</strong>自动compare的重要分歧应定位原句、源前提、相反依据与建议，保持自由文本；作者已有的保持／修改／反驳能力沿用，Host不替人判业务真伪。</li>
+      <li><strong>复查能装全文就主动给全。</strong>取消自动recheck固定6000前缀限制，总序列化预算仍20,000字符。装不下保留最大合法连续前缀、准确范围和fixedPath／SHA，不宣称全文已核。</li>
+      <li><strong>耗时按阶段看。</strong>沿原请求与step事实分别核首稿上界、SDK段、整链与退休。推荐保持20分钟执行＋最多2分钟退休；不降档、不加轮次、不跳独立核算，不承诺更多内联一定更快。</li>
+    </ol>
+    <p class="muted">现有方法已有相关业务边界，“再加同一句提示”或“再允许反驳”不算新增修复。没有新本体类型／公开字段、业务真值、规则引擎、Graphiti、RAG、ClaimStore或平行Runtime。</p>
+  </section>
+  <section aria-labelledby="decisions">
+    <h2 id="decisions">D16.1–D16.8：推荐整体采用A</h2>
+    <div class="table-wrap"><table>
+      <caption>替代B、完整权限与验收以Markdown方案为准；原A已整体确认；工程／模型实际进度以实施记录为准。</caption>
+      <thead><tr><th scope="col">决定</th><th scope="col">推荐A</th></tr></thead>
+      <tbody>
+        <tr><td>D16.1 范围</td><td>保持原引擎、3指标＋1方法，只作条件投影与自动核算交接的有限修正。</td></tr>
+        <tr><td>D16.2 语义</td><td>本题声明逐项可检索，通用未知／方法前提分别保留；不升satisfied、不扩来源权限。</td></tr>
+        <tr><td>D16.3 反馈</td><td>重要分歧给出可检查依据，作者有据取舍；不建意见裁判／主张库。</td></tr>
+        <tr><td>D16.4 交付</td><td>自动复查在原20k信封内全文优先，超限范围真实；普通手动8000路径不顺带改。</td></tr>
+        <tr><td>D16.5 时限</td><td>研究执行20分钟＋最多2分钟退休。B是提前选定30分钟观察，不能称性能修复，不能中途切换。</td></tr>
+        <tr><td>D16.6 数量</td><td>未来新包最多8次：先K3／K5两个已知哨兵，通过后同版完整6目标；失败早停、不重跑、不换版续批。</td></tr>
+        <tr><td>D16.7 标准</td><td>首稿及最高固定稿全文、预定金额、修订新增错、整链完成分别核；正式六目标十二用途位全部PASS才达标。</td></tr>
+        <tr><td>D16.8 费用</td><td>独立新增8次／100元上限；仅既有MiniMax专属订阅原线路／high、脱敏／合成隔离根，旧未用额度不转入。</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+  <section aria-labelledby="validation">
+    <h2 id="validation">先工程，再有限验证</h2>
+    <p><strong>工程阶段零真实模型：</strong>Condition原值／来源与适用范围、旧图保全、错owner／SHA、partial／分页、20k转义和UTF-16边界、尾段实际进入Host→Pi→受控Provider请求、取消／迟到／原手动调用兼容，以及完整适用检查与全新非作者复核。受控Provider不能证明模型会拒用错误意见。</p>
+    <p><strong>获授权后才开始已知验证：</strong>首请求前冻结完整候选。先2个哨兵，每项首稿和最高固定稿全文均PASS、无新增重要错、在时限内正常结束并关闭，才进完整6目标；任一失败就停。N1重复场景另列，不凑成六目标。有据正常不改稿按同版双用途核验；不把取消伪装成正常保持，不用同版重复凑样本，不靠全部写未知过关。</p>
+    <p>全部评分冻结后才做实际采用审计；当前不生成新未见题或gold。即使本包通过，也只证明该固定条件下的已知可靠性，新未见对照仍另议。</p>
+  </section>
+  <section aria-labelledby="stop">
+    <h2 id="stop">当前停止位置</h2>
+    <p>用户已授权实施与有限真实验证。工程及独立复核通过；K3／L2首例正常闭链19分01秒，但首稿／最高固定稿均专业FAIL，返修新增重要错误，已在1/8次后停止。K5及N2六项不启动，不进新未见或S6；<a href="s5-limited-repair-results.md">实际结果</a>分别记录技术与内容。原企业XLSX未读取，旧19次与D15新增7次、原稿／坏稿／评分／FAIL／UNKNOWN保持。</p>
+    <p>实施／验证须有明确授权；只授权开发时模型保持未启动，整体授权实施与验证后满足客观闸口可接续，已确认订阅事实不重复索要。未来重核实时配置与额度，不拿旧83%当余额，不买额／续费／按量fallback。</p>
+    <p>本包不包含Git／CI／合并、部署／服务／MacBook采用、真实经营数据、S6或R2。</p>
+  </section>
+  <footer>D16.1–D16.8全部A已获确认；先工程与独立复核，再按哨兵闸口执行。当前没有真实模型质量或性能收益结论。</footer>
+</main></body></html>

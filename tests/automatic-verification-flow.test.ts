@@ -9,6 +9,9 @@ import { readJson } from './fixtures/joint-context.ts';
 import { AUTOMATIC_INITIAL_MARKER, AUTOMATIC_WARMUP_MARKER, startAutomaticProvider, type AutomaticSyntheticScenario, type AutomaticProviderRequest } from './fixtures/automatic-provider.ts';
 import type { AutomaticChain, AutomaticSettingsInput } from '../src/host/automatic-verification-types.ts';
 import { createAutomaticVerificationStore } from '../src/host/automatic-verification-store.ts';
+import { OUTPUT_EVIDENCE_GUIDANCE } from '../src/agent/output-evidence.ts';
+import { automaticAuthorContext } from '../src/host/automatic-verification-context.ts';
+import { AUTOMATIC_FEEDBACK_EVIDENCE_GUIDANCE } from '../src/host/verification-context.ts';
 
 const source = 'row,amount\n1,2120\n2,-140\n3,-80\n';
 const author = '# 合成初稿\n\n退款反事实：2,120元。\n';
@@ -22,8 +25,8 @@ async function requireAutomatic(t: any, f: Awaited<ReturnType<typeof fixture>>) 
   if (!capability.supported) { t.skip(`NOT_RUN: ${capability.reason ?? 'automatic execution protection unavailable'}`); return false; }
   return true;
 }
-async function fixture(scenario: AutomaticSyntheticScenario = 'repair', caseName?: string, providerFactory: typeof startAutomaticProvider = startAutomaticProvider, presetId?: string) {
-  const runRoot = path.resolve('.local/automatic-verification-revision/engineering-runs', randomUUID());
+async function fixture(scenario: AutomaticSyntheticScenario = 'repair', caseName?: string, providerFactory: typeof startAutomaticProvider = startAutomaticProvider, presetId?: string, engineeringRoot = '.local/automatic-verification-revision/engineering-runs') {
+  const runRoot = path.resolve(engineeringRoot, randomUUID());
   await mkdir(runRoot, { recursive: true });
   const provider = await providerFactory({ scenario });
   let host: Awaited<ReturnType<typeof startTestHost>>;
@@ -114,6 +117,150 @@ test('AV06 a UTF-8 BOM revision preserves exact author bytes in the saved report
   assert.equal(revision.recheckRequestId, chain.steps[3]!.requestId);
   assert.ok(f.provider.requests.some(request => request.stage === 'recheck' && !request.toolReply));
   assert.equal(await readFile(f.reportPath, 'utf8'), author, 'the prior report remains unchanged');
+});
+
+test('D15 protected author feedback receives the ordinary evidence standard through the actual Host and SDK request', { timeout: 120000 }, async t => {
+  const f = await fixture('repair', t.name); t.after(() => f.close());
+  if (!await requireAutomatic(t, f)) return;
+  await readJson(await f.host.request(`${f.route}/settings`, 'PUT', { expectedRevision: 0, settings: f.settings }));
+  const chain = await f.completed(await f.writeInitial());
+  assert.equal(chain.state, 'completed', JSON.stringify(chain));
+  assert.deepEqual(chain.steps.map(step => step.phase), ['cold', 'compare', 'author', 'recheck']);
+  const contentText = (content: unknown): string => typeof content === 'string' ? content : Array.isArray(content)
+    ? content.map(part => part && typeof part === 'object' && typeof part.text === 'string' ? part.text : '').join('\n') : '';
+  const ordinary = f.provider.requests.find(request => request.stage === 'ordinary' && !request.toolReply);
+  const revision = f.provider.requests.find(request => request.stage === 'author' && !request.toolReply);
+  assert.ok(ordinary, 'the original public task reaches the synthetic Provider through Pi');
+  assert.ok(revision, 'the protected author phase reaches the synthetic Provider through Pi');
+  assert.ok(OUTPUT_EVIDENCE_GUIDANCE.length > 0, 'an empty shared standard cannot make this comparison pass');
+  const ordinarySystem = ordinary.body.messages!.filter(message => message.role === 'system').map(message => contentText(message.content)).join('\n');
+  assert.ok(ordinarySystem.includes(OUTPUT_EVIDENCE_GUIDANCE), 'the ordinary author actually receives the existing standard');
+  const prefix = '自动核算意见已交回原主Agent\n';
+  assert.equal(revision.lastUser.startsWith(prefix), true);
+  const supplied = JSON.parse(revision.lastUser.slice(prefix.length));
+  assert.equal(supplied.report.version, chain.versions[0]!.version);
+  assert.equal(supplied.report.sha256, chain.versions[0]!.sha256);
+  assert.equal(sha(await readFile(supplied.report.fixedPath)), supplied.report.sha256);
+  assert.equal(supplied.output.reportPath.endsWith('/work/author-1/work/report.md'), true);
+  assert.match(supplied.note, /误报/); assert.match(supplied.note, /不改稿/); assert.match(supplied.note, /反驳/);
+  assert.equal(await readFile(f.reportPath, 'utf8'), author, 'the fixed correct-or-incorrect original is retained');
+  const cold = f.provider.requests.find(request => request.stage === 'cold' && !request.toolReply);
+  assert.ok(cold);
+  assert.equal(cold.body.messages!.some(message => message.role === 'user' && contentText(message.content).includes(author)), false, 'the new author guidance cannot expose the author report before independent work');
+  await writeFile(path.join(path.dirname(f.host.dataRoot), 'author-evidence-delivery.json'), JSON.stringify({
+    scope: 'SYNTHETIC_REAL_HOST_SDK_DELIVERY_ONLY',
+    ordinaryRequestBodySha256: sha(JSON.stringify(ordinary.body)),
+    ordinarySuppliedGuidance: ordinarySystem.slice(ordinarySystem.indexOf(OUTPUT_EVIDENCE_GUIDANCE), ordinarySystem.indexOf(OUTPUT_EVIDENCE_GUIDANCE) + OUTPUT_EVIDENCE_GUIDANCE.length),
+    protectedAuthorRequestBodySha256: sha(JSON.stringify(revision.body)),
+    protectedAuthorLastUser: revision.lastUser,
+    protectedAuthorMessageRoles: revision.body.messages!.map(message => message.role),
+    coldAuthorReportAbsent: true,
+  }, null, 2));
+  assert.equal(supplied.outputEvidenceGuidance, OUTPUT_EVIDENCE_GUIDANCE,
+    'the actual protected-author feedback must retain the same complete evidence standard as the ordinary author');
+});
+
+test('D15 author evidence guidance keeps the original 20k budget and rejects an unrepresentable encoded envelope', () => {
+  const hash = 'a'.repeat(64), input = {
+    question: 'q'.repeat(4000), report: { version: 1, path: '060_reports/report.md', fixedPath: '/fixed/report.md', sha256: hash },
+    authorTurn: { number: 1, limit: 1 }, coldResult: { text: '😀'.repeat(8000), file: '/fixed/cold.md', sha256: hash },
+    opinion: { text: 'opinion'.repeat(3000), file: '/fixed/opinion.md', sha256: hash }, output: { reportPath: '/work/report.md' },
+  };
+  const prefix = '自动核算意见已交回原主Agent\n', text = automaticAuthorContext(input), supplied = JSON.parse(text.slice(prefix.length));
+  assert.ok(text.length <= 20_000);
+  assert.equal(supplied.question, input.question, 'the normal public 4k question remains complete');
+  assert.deepEqual(supplied.report, input.report); assert.deepEqual(supplied.output, input.output);
+  assert.equal(supplied.outputEvidenceGuidance, OUTPUT_EVIDENCE_GUIDANCE);
+  for (const key of ['coldResult', 'opinion'] as const) {
+    assert.equal(supplied[key].file, input[key].file); assert.equal(supplied[key].sha256, hash);
+    assert.equal(supplied[key].totalLength, input[key].text.length);
+    assert.ok(supplied[key].end <= 5000); assert.equal(supplied[key].text, input[key].text.slice(0, supplied[key].end));
+  }
+  assert.equal(supplied.coldResult.end, 5000); assert.equal(supplied.opinion.end, 5000);
+  // D15's shared standard already made this encoded base unrepresentable;
+  // D16 also retains grounded-feedback guidance inside the same total limit.
+  // Neither standard nor fixed identities may be sliced to make it fit.
+  assert.throws(() => automaticAuthorContext({ ...input, question: '\0'.repeat(3060),
+    coldResult: { ...input.coldResult, text: '' }, opinion: { ...input.opinion, text: '' } }), { code: 'automatic_author_context_too_large' });
+});
+
+test('D16 actual Host and Pi deliver grounded feedback and a fitting full fixed recheck tail', { timeout: 120000 }, async t => {
+  const tail = '\nNEW_CLAIM_TAIL\n', revised = '正文'.repeat(6919) + tail;
+  assert.equal(revised.length, 13_854);
+  const evidenceRoot = process.env.OPTRACALL_D16_CONTEXT_EVIDENCE_ROOT ?? '.local/d16-context-engineering';
+  const f = await fixture('repair', t.name, options => startAutomaticProvider({ ...options, revisedText: revised }), undefined, path.join(evidenceRoot, 'host-sdk'));
+  t.after(() => f.close());
+  if (!await requireAutomatic(t, f)) return;
+  await readJson(await f.host.request(`${f.route}/settings`, 'PUT', { expectedRevision: 0, settings: f.settings }));
+  const chain = await f.completed(await f.writeInitial());
+  assert.equal(chain.state, 'completed', JSON.stringify(chain));
+  assert.deepEqual(chain.steps.map(step => step.phase), ['cold', 'compare', 'author', 'recheck']);
+  assert.equal(chain.versions.length, 2);
+  const first = chain.versions[0]!, final = chain.versions[1]!;
+  const cold = f.provider.requests.find(request => request.stage === 'cold' && !request.toolReply);
+  const compare = f.provider.requests.find(request => request.stage === 'compare' && !request.toolReply);
+  const authorRequest = f.provider.requests.find(request => request.stage === 'author' && !request.toolReply);
+  const recheck = f.provider.requests.find(request => request.stage === 'recheck' && !request.toolReply);
+  assert.ok(cold && compare && authorRequest && recheck);
+  const coldUserText = cold.body.messages!.filter(message => message.role === 'user').map(message =>
+    typeof message.content === 'string' ? message.content : Array.isArray(message.content)
+      ? message.content.filter(part => part?.type === 'text').map(part => part.text).join('') : '').join('\n');
+  assert.ok(coldUserText.includes('独立核算任务：'));
+  for (const authorOnlyLine of ['# 合成初稿', '退款反事实：2,120元。']) {
+    assert.equal(coldUserText.includes(authorOnlyLine), false,
+      'decoded cold text blocks cannot disclose the author report, even as JSON-escaped multiline text');
+  }
+  assert.ok(compare.lastUser.includes(AUTOMATIC_FEEDBACK_EVIDENCE_GUIDANCE));
+  assert.ok(compare.lastUser.length <= 20_000);
+  const authorPacket = JSON.parse(authorRequest.lastUser.slice('自动核算意见已交回原主Agent\n'.length));
+  assert.equal(authorPacket.feedbackEvidenceGuidance, AUTOMATIC_FEEDBACK_EVIDENCE_GUIDANCE);
+  assert.equal(authorPacket.report.version, first.version); assert.equal(authorPacket.report.sha256, first.sha256);
+  const recheckPacket = JSON.parse(recheck.lastUser.slice('修订复查（已知作者信息，不是新冷读）\n'.length));
+  assert.ok(recheck.lastUser.length <= 20_000);
+  assert.equal(recheckPacket.text, revised);
+  assert.equal(recheckPacket.start, 0); assert.equal(recheckPacket.end, 13_854); assert.equal(recheckPacket.totalLength, 13_854);
+  assert.equal(recheckPacket.text.endsWith(tail), true);
+  assert.equal(recheckPacket.version, 2); assert.equal(recheckPacket.sha256, final.sha256);
+  assert.equal(sha(await readFile(recheckPacket.fixedPath)), final.sha256);
+  assert.equal(await readFile(f.reportPath, 'utf8'), author);
+  const status = await readJson(await f.host.request(`${f.route}/status`));
+  assert.equal(status.busy, false);
+  const verification = (await readJson(await f.host.request(`${f.taskRoute}/verifications/${chain.firstVerification!.verificationId}`))).verification;
+  assert.equal(verification.projectId, f.project.id); assert.equal(verification.taskId, f.task.id);
+  assert.equal(verification.verificationId, chain.firstVerification!.verificationId);
+  // The legacy manual evidence projection does not establish an automatic
+  // protected-scope readback. Verify the registered native bytes themselves.
+  const nativePaths = [...new Set([chain.native.sessionFile, verification.native?.sessionFile,
+    ...chain.steps.map(step => step.sessionFile)].filter((file): file is string => typeof file === 'string'))];
+  const nativeCopies: { path: string; bytes: number; sha256: string }[] = [];
+  const nativeUsers: string[] = [];
+  for (const file of nativePaths) {
+    const bytes = await readFile(file);
+    nativeCopies.push({ path: file, bytes: bytes.length, sha256: sha(bytes) });
+    for (const line of bytes.toString('utf8').trim().split('\n')) {
+      const entry = JSON.parse(line), message = entry.message;
+      if (message?.role !== 'user') continue;
+      nativeUsers.push(typeof message.content === 'string' ? message.content : message.content
+        .filter((part: any) => part?.type === 'text').map((part: any) => part.text).join(''));
+    }
+  }
+  assert.ok(nativeUsers.includes(compare.lastUser), 'the exact comparison request is retained by the actual native writer');
+  assert.ok(nativeUsers.includes(authorRequest.lastUser), 'the exact author context is retained by the actual native writer');
+  assert.ok(nativeUsers.includes(recheck.lastUser), 'the fitting tail is retained in the exact native recheck request');
+  assert.equal(sha((await readFile(chain.native.sessionFile)).subarray(0, chain.native.bytes)), chain.native.sha256);
+  const runRoot = path.dirname(f.host.dataRoot);
+  await writeFile(path.join(runRoot, 'd16-provider-requests.json'), JSON.stringify(f.provider.requests, null, 2));
+  await writeFile(path.join(runRoot, 'd16-context-delivery.json'), JSON.stringify({
+    scope: 'ENGINEERING_CONTROLLED_PROVIDER_NOT_PROFESSIONAL_QUALITY',
+    projectId: f.project.id, taskId: f.task.id, chainId: chain.chainId,
+    first, final, coldAuthorAbsent: true,
+    comparisonRequestSha256: sha(compare.lastUser), authorRequestSha256: sha(authorRequest.lastUser),
+    recheckRequestSha256: sha(recheck.lastUser), recheckCharacters: recheckPacket.end,
+    tailDelivered: true, originalReportUnchanged: true, busyAfterCompletion: false,
+    providerBaseUrl: f.provider.baseUrl, provider: 'local synthetic only',
+    legacyManualProvidedContextStatus: verification.contextEvidence.provided.status,
+    registeredNativeCopies: nativeCopies,
+  }, null, 2));
 });
 
 /** Test-only transport: the ordinary canned reply starts an actual owned

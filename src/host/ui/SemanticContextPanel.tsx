@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PersonalDialog } from './PersonalDialog.tsx';
 import { readSemanticContext } from './semantic-context-client.ts';
-import type { SemanticContextReader, SemanticContextRecord, SemanticItem, SemanticQueryInput, SemanticQueryResult, SemanticSourceState, SemanticTarget } from './semantic-context-client.ts';
+import type { SemanticContextReader, SemanticContextRecord, SemanticGraphResult, SemanticGraphMetadata, SemanticItem, SemanticQueryInput, SemanticQueryResult, SemanticSourceState, SemanticTarget } from './semantic-context-client.ts';
 import './semantic-context.css';
 
 export type SemanticContextPanelProps = { projectId: string; taskId: string; records?: SemanticContextRecord[]; readContext?: SemanticContextReader; onFollowup?: (draft: string) => void };
@@ -83,6 +83,44 @@ export function SemanticContextEvidence({ result, perspective = 'saved', onRead,
   </div>;
 }
 
+const conditionLabels = { stated: '来源已声明，是否成立仍需核查', 'required-not-established': '必要条件尚未核实成立', unknown: '未知', disputed: '有争议' };
+const savedGraphJson = (value: unknown) => JSON.stringify(value, (key, item) => key === 'sourceHandle' || key === 'continuation' ? undefined : item, 2);
+function GraphMetadata({ metadata }: { metadata: SemanticGraphMetadata }) {
+  return <>
+    <p className="sc-meta">声明性质：{metadata.claimKind}；来源投影、工程解释与合成设定均不等于业务已确认。</p>
+    {metadata.conditionState && <p className="sc-note">条件状态：{metadata.conditionState} · {conditionLabels[metadata.conditionState]}</p>}
+    {metadata.operandRole && <p className="sc-note">操作数角色：{metadata.operandRole}{metadata.operandRole === 'subtrahend' ? '（减项）' : '（被减项）'}</p>}
+    {metadata.roleText && <p>字段角色：{metadata.roleText}</p>}
+    <dl className="sc-metadata"><dt>适用前提</dt><dd>{metadata.conditions.length ? metadata.conditions.map((condition, index) => <div key={index}>{condition}</div>) : '未另列前提；不表示任意场景适用'}</dd>
+      <dt>限制</dt><dd>{metadata.limitations.length ? metadata.limitations.map((limit, index) => <div key={index}>{limit}</div>) : '未另列限制；不表示没有局限'}</dd>
+      <dt>业务时间声明</dt><dd>{metadata.businessTime.length ? metadata.businessTime.map((time, index) => <div key={index}>{time.text}<small>原文位置：{time.source}</small></div>) : '未记录 · UNKNOWN；不由图构建时间推定'}</dd></dl>
+    {metadata.sourceRefs.length > 0 && <ul className="sc-gaps">{metadata.sourceRefs.map((ref, index) => <li key={index}>{targetLabel(ref)}{(ref.kind === 'sap' || ref.kind === 'sap-method') && ref.publishedHash == null && <small>发布哈希未声明 · UNKNOWN；不补造校验信息</small>}</li>)}</ul>}
+    {metadata.buildSources.length > 0 && <p className="sc-meta">构建定位：{metadata.buildSources.map(source => `${source.inputKey} · ${source.locator}${source.nature ? ` · ${source.nature}` : ''}`).join('；')}。工程整理不冒充企业确认。</p>}
+    <details><summary>原始元数据与准确引用</summary><pre>{savedGraphJson(metadata)}</pre></details>
+  </>;
+}
+
+/** Only the actual saved payload is rendered. No graph continuation or source handle is activated here. */
+export function SemanticGraphEvidence({ result }: { result: SemanticGraphResult }) {
+  if (!['available', 'partial'].includes(result.state)) return <div className="sc-evidence"><p className="sc-note">当时返回 · {sourceLabels[result.state]}。本条语义结果未取得可展示正文，身份、原文与缓存内容不展示；具体依据仍为未知。原任务仍可继续。</p></div>;
+  return <div className="sc-evidence"><h3>当时返回的业务含义</h3>
+    <p className="sc-note">这是原工具当次实际提供的语义，不代表已正确采用或专业正确性已获证。条件、冲突与未知仍须结合原文核对；图中的依赖不证明因果。</p>
+    <p className="sc-meta">{sourceLabels[result.state]} · {result.coverage.complete ? '本次返回范围完整；不代表全企业覆盖或经营真值' : '当时范围尚未完整核定 · 部分／未知'}{result.coverage.depthLimit !== undefined ? ` · 遍历上限 ${result.coverage.depthLimit}，实际深度 ${result.coverage.depthReached ?? '未知'}，${result.coverage.exhausted ? '本范围已穷尽' : '本范围未穷尽'}` : ''}</p>
+    {result.coverage.gaps.length > 0 && <ul className="sc-gaps">{result.coverage.gaps.map((gap, index) => <li key={index}>{gap}</li>)}</ul>}
+    {result.code && <p className="sc-note">当次状态：{result.code}</p>}
+    {!result.nodes.length && !result.edges.length && !result.sources.length && <p className="sc-empty">当时没有取得本范围匹配内容；不代表规则或事实不存在。</p>}
+    {result.nodes.map(node => <article className="sc-source" key={node.id}><div className="sc-row"><h4>{node.metadata.candidateLocator || node.type}</h4><span className="sc-status">{node.type}</span></div>
+      {node.contentRange && <p className="sc-meta">准确语义片段 [{node.contentRange.start}, {node.contentRange.end}) / {node.contentRange.total} UTF-16；其余正文仍未返回。</p>}
+      <pre className="sc-paper">{node.content}</pre><GraphMetadata metadata={node.metadata} /><details><summary>准确派生身份</summary><p>{node.id}</p></details></article>)}
+    {result.edges.length > 0 && <section className="sc-relations"><h3>原关系与依据</h3><p className="sc-meta">每条关系保留原方向和独立依据；平行或相反声明分别展示，不自动裁决。</p>{result.edges.map(edge => <article className="sc-relation" key={edge.id}><h4>{edge.type}</h4><p>{edge.source} → {edge.target}</p><p className="sc-meta">关系身份：{edge.id}</p><GraphMetadata metadata={edge.metadata} /></article>)}</section>}
+    {result.paths.length > 0 && <section className="sc-relations"><h3>当次有限依赖路径</h3><p className="sc-meta">相同节点顺序、不同关系依据的路径分别保留；不代表任意图的完整推理。</p>{result.paths.map((path, index) => <article className="sc-relation" key={JSON.stringify(path)}><h4>路径 {index + 1}</h4><p>{path.nodeIds.join(' → ')}</p><ol>{path.steps.map((step, stepIndex) => <li key={stepIndex}>{path.nodeIds[stepIndex]} {step.direction === 'forward' ? '→' : '←'} {path.nodeIds[stepIndex + 1]} · {step.edgeId} · {step.direction}</li>)}</ol></article>)}</section>}
+    {result.sources.map((source, index) => <article className="sc-source" key={index}><h4>当时取得的准确原文</h4>{source.ref && <p className="sc-meta">{targetLabel(source.ref)}</p>}{source.buildSource && <p className="sc-meta">{source.buildSource.inputKey} · {source.buildSource.locator}；工程整理不冒充企业确认。</p>}<p className="sc-meta">来源性质：{source.nature}</p>
+      {source.range && <p className="sc-meta">准确原文片段 [{source.range.start}, {source.range.end}) / {source.range.total} UTF-16；不代表全文。</p>}{source.body === null ? <p className="sc-note">当时未返回可核定正文 · UNKNOWN。</p> : <pre className="sc-paper">{source.body}</pre>}{source.gaps.length > 0 && <ul className="sc-gaps">{source.gaps.map((gap, gapIndex) => <li key={gapIndex}>{gap}</li>)}</ul>}</article>)}
+    {result.coverage.continuation && <p className="sc-note">当时还有后续页／片段，当前详情仅展示已保存内容。需要时在原任务正常追问，重新取得有权结果。</p>}
+    <details><summary>当时图快照的准确身份与校验信息</summary><pre>{savedGraphJson({ snapshot: result.snapshot, operation: result.operation })}</pre></details>
+  </div>;
+}
+
 export type SemanticContextLookup = { state: 'idle' | 'loading' | 'cancelled' | 'error' | 'done'; result?: SemanticQueryResult; error?: string };
 export function SemanticContextDetails({ records, view, lookup, onRead, onTrace, onCancel, onFollowup, onContinue, onContinueRecord }: { records: SemanticContextRecord[]; view: 'saved' | 'current'; lookup: SemanticContextLookup; onRead?: (target: SemanticTarget) => void; onTrace?: (target: SemanticTarget) => void; onCancel?: () => void; onFollowup?: (draft: string) => void; onContinue?: () => void; onContinueRecord?: (record: SemanticContextRecord) => void }) {
   return <div className="sc-content" aria-busy={view === 'current' && lookup.state === 'loading' || undefined}>
@@ -93,8 +131,9 @@ export function SemanticContextDetails({ records, view, lookup, onRead, onTrace,
         {record.issue && <p className="sc-error" role="status">{record.issue} 原稿引用与提供范围未知，原记录保持。</p>}
         {record.issue && record.input?.action === 'read' && record.input.target && onRead && <div className="sc-note"><p>当前回读只核对这份准确来源，不能补造历史子工具正文或保存回执。</p><button className="secondary-button" type="button" onClick={() => onRead(record.input!.target!)}>现在按原引用回读</button></div>}
         {record.result && <SemanticContextEvidence result={record.result} onRead={onRead} onTrace={onTrace} onContinue={record.input && onContinueRecord ? () => onContinueRecord(record) : undefined} />}
+        {record.graphResult && <SemanticGraphEvidence result={record.graphResult} />}
         {record.receipt && <section className="sc-source"><h3>作者声明引用回执</h3><p className="sc-note">原 M2 已返回这份成果来源的保存回执；只代表作者明确声明引用，不证明真实计算采用或专业正确性。</p><dl className="sc-metadata"><dt>准确来源记录</dt><dd>{record.receipt.citationId}</dd><dt>原成果</dt><dd>{record.receipt.report.originalPath}</dd><dt>原操作</dt><dd>{record.receipt.operationId}</dd><dt>索引版本</dt><dd>{record.receipt.indexRevision}</dd></dl><p className="sc-meta">{record.receipt.replayed ? '回读原操作回执；没有重复创建引用。' : '本次原操作回执。'}</p>{onRead && <button className="secondary-button" type="button" onClick={() => onRead({ kind: 'data-citation', projectId: record.receipt!.projectId, citationId: record.receipt!.citationId })}>查看这份声明的准确来源</button>}<details><summary>原回执与校验信息</summary><pre>{JSON.stringify(record.receipt, null, 2)}</pre></details></section>}
-        {!record.result && !record.receipt && !record.issue && <p className="sc-note">这项原工具结果无法核定，引用与提供范围未知。</p>}
+        {!record.result && !record.graphResult && !record.receipt && !record.issue && <p className="sc-note">这项原工具结果无法核定，引用与提供范围未知。</p>}
         {record.native && <details><summary>原生记录身份</summary><dl className="sc-metadata"><dt>会话</dt><dd>{record.native.sessionId}</dd><dt>记录</dt><dd>{record.native.entryId}</dd>{record.native.toolCallId && <><dt>调用</dt><dd>{record.native.toolCallId}</dd></>}{record.native.recordedAt && <><dt>原生记录时间</dt><dd>{record.native.recordedAt}</dd></>}</dl></details>}
       </section>)}
     </> : <>

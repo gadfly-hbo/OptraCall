@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OptraCall S4 整体接入确认 · v0.1</title>
+  <style>
+    :root { color-scheme: light; --ink:#172b34; --muted:#526771; --line:#d7e1e5; --accent:#17665d; --soft:#edf5f3; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#f3f6f7; color:var(--ink); font:16px/1.75 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+    main { max-width:1060px; margin:32px auto; padding:44px; background:#fff; border:1px solid var(--line); border-radius:14px; }
+    h1 { margin:.25em 0; font-size:30px; line-height:1.4; } h2 { margin:34px 0 12px; font-size:21px; }
+    p { margin:10px 0; } a { color:var(--accent); text-underline-offset:3px; } a:focus-visible { outline:3px solid #e3b251; outline-offset:4px; }
+    .eyebrow,.muted { color:var(--muted); } .eyebrow { font-size:13px; letter-spacing:.04em; }
+    .status { display:inline-block; padding:3px 12px; border:1px solid #b9d2cb; background:var(--soft); border-radius:20px; font-size:14px; }
+    .lead { font-size:18px; } .note { padding:16px 20px; border-left:4px solid var(--accent); background:var(--soft); }
+    .flow { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:16px 0; }
+    .step { border:1px solid var(--line); border-radius:10px; padding:16px; } .step strong { display:block; margin-bottom:4px; }
+    .table-wrap { overflow:auto; } table { width:100%; border-collapse:collapse; font-size:14px; }
+    caption { text-align:left; margin-bottom:10px; color:var(--muted); } th,td { padding:12px; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:#f3f7f8; } th:first-child { width:80px; } .decisions th:nth-child(2) { width:48%; }
+    code { font: .9em ui-monospace,SFMono-Regular,monospace; overflow-wrap:anywhere; } ul { padding-left:22px; }
+    footer { margin-top:30px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:14px; }
+    @media(max-width:700px) { main { margin:0; padding:24px 18px; border:0; border-radius:0; } h1 { font-size:25px; } .flow { grid-template-columns:1fr; } }
+    @media print { body { background:white; } main { margin:0; max-width:none; padding:0; border:0; } .step,tr { break-inside:avoid; } h2 { break-after:avoid; } a { color:inherit; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">OPTRACALL · S4 整体接入方案 · v0.1 · 2026-11-05</p>
+    <h1>让原 Pi Agent 用上已建好的业务语义</h1>
+    <p class="status">D13 八项 A 已整体确认 · 尚未开发</p>
+    <p class="lead">仍在原任务提问。Agent 按需取得指标定义、字段含义、方法条件、冲突、未知与来源，再自主分析和回答。</p>
+    <p class="muted">完整字段、权限、收尾与验收合同以<a href="s4-integration-plan.md">整体方案及 D13 决策包</a>为准。此页是确认摘要，不是新增产品页面或 UI Demo。</p>
+  </header>
+
+  <h2>这一步接什么</h2>
+  <div class="flow" aria-label="语义信息流示意">
+    <div class="step"><strong>① 原 Pi 任务调用</strong>复用 <code>read_semantic_context</code>，新增明确的 <code>graph</code> 分支。Agent 自主决定何时使用。</div>
+    <div class="step"><strong>② Host 管授权与资源</strong>绑定真实项目、任务和当前运行；只读查询用一次性 Python job，原 Store 继续权威。</div>
+    <div class="step"><strong>③ 回到同一 Agent</strong>有界完整语义进入模型可见 content，Agent 选择计算方法并解释关键口径，SDK 留真实记录。</div>
+  </div>
+  <p>首批仍为 SC-01S：3 个核心指标、1 份方法、8 类对象、54 节点／63 边及 337 个字段定位。经营明细留原分析工具；不扩行业库，不预填经营结论。</p>
+  <p class="note">必须补齐两个真实差额：启用自动核算的 managed ordinary 普通任务，也要获得窄只读能力；取消时必须证明查询进程及其子树已经退出，不能只撤回回包。</p>
+
+  <h2>D13 的 8 项确认结果：全部 A</h2>
+  <div class="table-wrap">
+  <table class="decisions">
+    <caption>用户已整体采用 8 项 A，均为一致、已确认；尚未实施。D12 沿用，无新 SQL 表／事实库／会话库。</caption>
+    <thead><tr><th scope="col">决定</th><th scope="col">推荐 A 与原因</th><th scope="col">替代 B 与影响</th><th scope="col">状态</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">D13.1</th><td><strong>一个原读工具，两种普通父任务。</strong>unmanaged 与 managed ordinary 都能用 graph；managed 只新增这一分支，不顺带开放旧个人／Case 目录，避免用户关闭自动核算。</td><td>先仅 unmanaged：实施更窄，但 S4 只能记部分完成；不要求用户改模式补齐。</td><td>A／一致<br>已确认，未实施</td></tr>
+      <tr><th scope="row">D13.2</th><td><strong>6 类有限读操作。</strong>业务含义、条件、性质、冲突与来源进 content；保留原 find／read／trace。</td><td>只给目录／摘要不能验收语义使用；暴露全部 MCP 会扩大权限。</td><td>A／一致<br>已确认，未实施</td></tr>
+      <tr><th scope="row">D13.3</th><td><strong>Host 当前资格决定能看什么。</strong>先过滤来源，再搜索／分页／遍历；图标签不能授予权限。</td><td>仅信构建时 enabled 或图内标签，无法可靠处理当前撤权。</td><td>A／一致<br>已确认，未实施</td></tr>
+      <tr><th scope="row">D13.4</th><td><strong>一次性可信 Python 查询 job。</strong>原 Resource 等待实际退出，原 Store 经 Host 窄代理校验；无第二 Runtime。</td><td>常驻服务增加刷新／owner／缓存合同；只 abort 回包不能证明安全收尾。</td><td>A／一致<br>已确认，未实施</td></tr>
+      <tr><th scope="row">D13.5</th><td><strong>同 run 固定准确快照。</strong>有界原文与完整 JSON 分页，资格变化旧续页失效；失败不选 latest。</td><td>自动追最新／静默回退会混版并掩盖损坏。</td><td>A／一致<br>已确认，未实施</td></tr>
+      <tr><th scope="row">D13.6</th><td><strong>原记录与可选依据。</strong>不改旧历史、不新建页面；M2 写权限与子 Agent 继承范围不扩。</td><td>新增业务含义页／引用库或工具扩权会增加流程与迁移。</td><td>A／一致<br>已确认，未实施</td></tr>
+      <tr><th scope="row">D13.7</th><td><strong>4 个工程切片，11 项验收。</strong>实际合成 Host／Pi SDK 路径、取消、权限、兼容及独立复核；真实效果留 S5。</td><td>只测 Python／mock 不能证明接线，直接上线超出当前范围。</td><td>A／一致<br>已确认，未实施</td></tr>
+      <tr><th scope="row">D13.8</th><td><strong>保全 WIP，复用已交付底座。</strong>核 Pi1.4.0／Interface v3、Semantica0.7.0 和原方法接缝；当前只确认方案、尚未开工。</td><td>现在改代码／安装／切服务或整包覆盖，违反“暂不开发”。</td><td>A／一致<br>已确认，未实施</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>Pi 可以问什么</h2>
+  <div class="table-wrap"><table>
+    <caption>6 类操作供自主选择，不是 6 个强制步骤。</caption>
+    <thead><tr><th scope="col">操作</th><th scope="col">取得的内容</th><th scope="col">边界</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">find</th><td>相关概念、指标／方法版、字段和条件声明</td><td>当前有权有限图按词组子串匹配，按准确 ID 稳定排序，不承诺通用 GraphRAG</td></tr>
+      <tr><th scope="row">definition</th><td>业务定义、准确版本、条件、限制与性质</td><td>未知与争议保留，不自动认定企业口径成立</td></tr>
+      <tr><th scope="row">neighbors</th><td>一跳完整关系、方向、平行边及各自依据</td><td>不按同端点折叠，不造反向来源</td></tr>
+      <tr><th scope="row">dependencies</th><td>金额操作数和方法所需指标</td><td>有界依赖遍历，不执行公式</td></tr>
+      <tr><th scope="row">impact</th><td>字段→指标→方法的有限影响关系</td><td>每步保留准确边 ID、遍历方向与来源，平行边不折叠；路径不当经营因果</td></tr>
+      <tr><th scope="row">source</th><td>已授权来源句柄对应的准确语义片段</td><td>不返回交易明细、控制／参考答案、企业原附件或磁盘根</td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">建议资源合同：页缺省 20、最大 100；遍历深度缺省 2、最大 4；单次最多处理 200 合格节点／500 合格边；模型 content 完整 JSON 不超过 24KiB UTF-8。达到边界明确不完整，不截断 JSON、不暗中丢关键条件。</p>
+
+  <h2>权限与使用体验</h2>
+  <ul>
+    <li>模型不传 owner、目录、凭据、会话文件或任意查询代码。Host 从实际 run 核资格，并在回包前再次检查。</li>
+    <li>managed ordinary 只加 graph 可信只读包装，不顺带开放旧目录动作、M2 写工具、任意 MCP／扩展；专用 protected、fixed-draft／text-only、核算／修订、业务 workspace 和子角色不扩权。</li>
+    <li>来源禁用／错误治理对新查询即时生效，历史准确引用保留；缺失 hash 按原合同保留限制，不补造值。</li>
+    <li>同一工具说明列出获准 graph 能力，调用顺序仍由 Agent 选择；原依据详情补新结果类型的必要投影，不建新页。主回答由 Agent 解释关键口径／冲突；正常新增必做操作为 0。</li>
+    <li>L1 继续提供原资料与分析工具，图不可用时可继续有权分析；兜底不能绕过撤权或版本要求。</li>
+  </ul>
+
+  <h2>批准开工后的验证顺序</h2>
+  <ol>
+    <li><strong>S4.1：</strong>真实 owner、窄读资格、查询 job 所有权及取消／清理失败保护。</li>
+    <li><strong>S4.2：</strong>6 类查询、当前源筛选、准确版本、模型结果及分页正反例。</li>
+    <li><strong>S4.3：</strong>两种普通任务走实际 Host／Pi SDK／Python／原 Store／合成 Provider 回合，并保存重开。</li>
+    <li><strong>S4.4：</strong>适用完整检查、原消费者及第三合成接入、独立规格／标准和四原则复核。</li>
+  </ol>
+  <p>当前尚未执行这些验证。S3 的 45 项通过不当作 S4 接线通过；真实 Provider 的准确率／速度、运行采用、真实经营 V404 与反馈 V405 留待 S5／S6。</p>
+
+  <footer>
+    <p><strong>本次停止位置：</strong>整体方案已确认，尚未开工。未开发、未安装／接线／运行模型、未切服务或操作其他设备、未做 Git 写入／CI；企业原附件与真实经营根不读取。</p>
+    <p><a href="s4-integration-plan.md">查看完整接口与 11 项验收</a> · <a href="s4-preparation-result.md">查看准备记录与未验证范围</a> · <a href="s3-validation.md">查看 S3 已完成范围</a></p>
+  </footer>
+</main>
+</body>
+</html>

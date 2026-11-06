@@ -13,16 +13,16 @@ import type { ProjectDataContextProvision } from '../host/project-data-context-c
 import type { PersonalContextPort, PersonalContextReceipt, PersonalContextToolResult } from './personal-context.ts';
 import type { CaseDecisionPort } from './case-decisions.ts';
 import type { CaseSourcesPort } from './case-sources.ts';
-import type { SemanticContextPort } from './semantic-context.ts';
+import type { SemanticContextPort, SemanticContextReadPort } from './semantic-context.ts';
 import type { SapMethodSourcePort } from './sap-method-extraction.ts';
 
 /** Replacement workspace for non-project agent sessions (e.g. business plugins). */
 export type AgentWorkspace = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[]; capabilityPolicy?: 'fixed-draft' | 'text-only' | 'source-reader' };
 /** Host-provided context receipt; this describes delivery, not business adoption. */
 export type ProvidedContextInput = { rap?: { instanceId: string; version?: string; text: string }; case?: { operationId: string; summary?: string }; enterprise?: EnterpriseContextProvision; feedback?: FeedbackContextReceipt; projectData?: ProjectDataContextProvision[]; personal?: { text: string; receipt: PersonalContextReceipt }; originalUserText?: string };
-export type ProjectAgentOptions = { projectId: string; taskId?: string; projectDirectory?: string; workspace?: AgentWorkspace; analysisPython?: AnalysisPythonEnvironment; protectedExecution?: ProtectedExecutionScope; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string; personalContext?: PersonalContextPort; caseDecisions?: CaseDecisionPort; caseSources?: CaseSourcesPort; semanticContext?: SemanticContextPort; sapMethodSources?: SapMethodSourcePort; simulationTools?: { storeRoot: string; projectId: string }; tradeAreaConnector?: { dataRoot: string }; weatherConnector?: { cacheRoot: string }; modelPackTools?: { modelsRoot: string } };
+export type ProjectAgentOptions = { projectId: string; taskId?: string; projectDirectory?: string; workspace?: AgentWorkspace; analysisPython?: AnalysisPythonEnvironment; protectedExecution?: ProtectedExecutionScope; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string; personalContext?: PersonalContextPort; caseDecisions?: CaseDecisionPort; caseSources?: CaseSourcesPort; semanticContext?: SemanticContextPort; semanticContextRead?: SemanticContextReadPort; sapMethodSources?: SapMethodSourcePort; simulationTools?: { storeRoot: string; projectId: string }; tradeAreaConnector?: { dataRoot: string }; weatherConnector?: { cacheRoot: string }; modelPackTools?: { modelsRoot: string } };
 /** Host callbacks never cross IPC; only the granted capability bit does. */
-export type ProjectAgentWireOptions = Omit<ProjectAgentOptions, 'personalContext' | 'caseDecisions' | 'caseSources' | 'semanticContext' | 'sapMethodSources'> & { personalContextEnabled?: boolean; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; semanticContextEnabled?: boolean; sapMethodSourcesEnabled?: boolean };
+export type ProjectAgentWireOptions = Omit<ProjectAgentOptions, 'personalContext' | 'caseDecisions' | 'caseSources' | 'semanticContext' | 'semanticContextRead' | 'sapMethodSources'> & { personalContextEnabled?: boolean; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; semanticContextEnabled?: boolean; semanticContextReadEnabled?: boolean; sapMethodSourcesEnabled?: boolean };
 export type BrowserUIRequest = { id: string; method: 'select' | 'confirm' | 'input' | 'editor'; title: string; message?: string; options?: string[]; placeholder?: string; prefill?: string };
 export type ProjectSnapshot = { sessionId: string; sessionFile?: string; messages: Record<string, any>[]; tools: string[]; status: 'idle' | 'running'; sdkVersion: string; capabilities: Record<string, unknown>; lastRun?: { requestId: string; outcome?: 'completed' | 'cancelled' | 'failed'; diagnostic?: RunDiagnostic }; uiRequests?: BrowserUIRequest[] };
 export type ProjectEvent = { type: 'snapshot'; snapshot: ProjectSnapshot } | { type: 'text.delta'; text: string; requestId: string } | { type: 'native'; event: Record<string, any>; requestId?: string } | { type: 'run.settled'; outcome: 'completed' | 'cancelled' | 'failed'; requestId: string; error?: string; diagnostic?: RunDiagnostic } | { type: 'run.accepted'; requestId: string; sessionFile?: string } | { type: 'ui.request'; request: BrowserUIRequest; requestId?: string } | { type: 'ui.dismiss'; id: string } | { type: 'ui.notification'; message: string; level?: string } | { type: 'ui.status'; key: string; text?: string } | { type: 'ui.editor'; text: string };
@@ -30,6 +30,12 @@ export class ProjectRuntimeError extends Error {
   readonly code: string;
   constructor(code: string) { super(code); this.code = code; }
 }
+
+type HostContextRequest = {
+  controller: AbortController; owned: boolean; completion: Promise<void>; settled: boolean;
+  cleanup?: (options: { retryFailed?: boolean }) => Promise<void>;
+  cleanupTask?: Promise<void>; cleanupError?: unknown;
+};
 
 // This adapter only transports SDK calls and events. It never chooses analysis
 // steps, parses business data, or implements an agent/tool loop.
@@ -42,7 +48,7 @@ export class ProjectAgent {
   #listeners = new Set<(event: ProjectEvent) => void>();
   #running?: { id: string; completion: Promise<any>; cancelRequested?: boolean; providedContext?: ProvidedContextInput };
   #accepted = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
-  #personalRequests = new Map<string, AbortController>();
+  #personalRequests = new Map<string, HostContextRequest>();
   #questions = new Map<string, Extract<ProjectEvent, { type: 'ui.request' }>>();
   #closed = false;
   #editorReady = false;
@@ -53,11 +59,17 @@ export class ProjectAgent {
   /** The common Host layer may capture this construction fact. An Agent's
    * snapshot, text, or tool result cannot mint a managed transition proof. */
   get executionMode(): 'unmanaged' | 'ordinary' | 'protected' { return this.#options.protectedExecution ? this.#options.protectedExecution.profile ?? 'protected' : 'unmanaged'; }
-  get busy() { return Boolean(this.#running); }
+  get busy() { return Boolean(this.#running) || [...this.#personalRequests.values()].some(request => request.owned); }
   get alive() { return !this.#closed && Boolean(this.#child?.connected) && this.#child?.exitCode === null && this.#child?.signalCode === null; }
   get pendingUI() { return [...this.#questions.values()]; }
   subscribe(listener: (event: ProjectEvent) => void) { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; }
-  #emit(event: ProjectEvent) { for (const listener of this.#listeners) listener(event); }
+  #presentSnapshot(snapshot: ProjectSnapshot): ProjectSnapshot {
+    return [...this.#personalRequests.values()].some(request => request.owned) ? { ...snapshot, status: 'running' } : snapshot;
+  }
+  #emit(event: ProjectEvent) {
+    if (event.type === 'snapshot') event = { ...event, snapshot: this.#presentSnapshot(event.snapshot) };
+    for (const listener of this.#listeners) listener(event);
+  }
   #rpc(method: string, input?: unknown): Promise<any> {
     if (!this.#child?.connected) return Promise.reject(new ProjectRuntimeError('runtime_unavailable'));
     const id = randomUUID();
@@ -66,30 +78,79 @@ export class ProjectAgent {
       this.#child!.send({ kind: 'request', id, method, input }, error => { if (error) { this.#pending.delete(id); reject(new ProjectRuntimeError('runtime_unavailable')); } });
     });
   }
-  #cancelPersonalRequests() { for (const controller of this.#personalRequests.values()) controller.abort(); this.#personalRequests.clear(); }
+  #cleanupPersonalRequest(request: HostContextRequest, options: { retryFailed?: boolean } = {}): Promise<void> {
+    if (!request.cleanup) return Promise.resolve();
+    if (request.cleanupError && options.retryFailed === true) { request.cleanupTask = undefined; request.cleanupError = undefined; }
+    if (!request.cleanupTask) {
+      request.cleanupTask = Promise.resolve().then(() => request.cleanup!({ retryFailed: options.retryFailed === true })).catch(error => { request.cleanupError = error; throw error; });
+    }
+    return request.cleanupTask;
+  }
+  #cancelPersonalRequests() {
+    for (const [id, request] of this.#personalRequests) {
+      request.controller.abort();
+      if (!request.owned) this.#personalRequests.delete(id);
+      else void this.#cleanupPersonalRequest(request).catch(() => {});
+    }
+  }
+  async #waitPersonalRequests(options: { retryFailed?: boolean } = {}) {
+    const requests = [...this.#personalRequests.entries()].filter(([, request]) => request.owned);
+    await Promise.all(requests.map(([, request]) => request.completion));
+    for (const [id, request] of requests) {
+      if (request.cleanupError && options.retryFailed === true) {
+        await this.#cleanupPersonalRequest(request, options).catch(() => {});
+        if (!request.cleanupError && this.#personalRequests.get(id) === request) this.#personalRequests.delete(id);
+      }
+    }
+    if ([...this.#personalRequests.values()].some(request => request.owned)) throw new ProjectRuntimeError('semantic_context_cleanup_unknown');
+  }
   async #personalRequest(child: ChildProcess, raw: any) {
     const current = this.#running, controller = new AbortController();
     const isCase = raw.feature === 'case-decisions', isSources = raw.feature === 'case-sources', isSemantic = raw.feature === 'semantic-context', isSapMethod = raw.feature === 'sap-method-source';
     const knownFeature = raw.feature === undefined || raw.feature === 'personal' || isCase || isSources || isSemantic || isSapMethod;
-    const port = isSapMethod ? this.#options.sapMethodSources : isCase ? this.#options.caseDecisions : isSources ? this.#options.caseSources : isSemantic ? this.#options.semanticContext : this.#options.personalContext;
+    const semanticRead = isSemantic && raw.action !== 'record' && this.#options.semanticContextRead;
+    const port = isSapMethod ? this.#options.sapMethodSources : isCase ? this.#options.caseDecisions : isSources ? this.#options.caseSources : isSemantic ? semanticRead || this.#options.semanticContext : this.#options.personalContext;
     const errorCode = isSapMethod ? 'sap_method_source_run_unavailable' : isCase ? 'case_decision_run_unavailable' : isSources ? 'case_sources_run_unavailable' : isSemantic ? 'semantic_context_run_unavailable' : 'personal_context_run_unavailable';
-    const available = () => Boolean(knownFeature && !this.#closed && child === this.#child && child.connected && current && !current.cancelRequested && this.#running === current && raw.requestId === current.id && raw.sessionId === this.#snapshot?.sessionId && !controller.signal.aborted && (isSapMethod ? this.#options.workspace?.capabilityPolicy === 'source-reader' : !this.#options.workspace) && !this.#options.protectedExecution && this.#options.projectId && this.#options.taskId && port && (!(isCase || isSources || isSemantic || isSapMethod) || typeof raw.toolCallId === 'string' && raw.toolCallId.trim()) && (!isCase || current.providedContext?.case?.operationId));
+    const managedGraph = Boolean(semanticRead && raw.action === 'graph' && !this.#options.workspace && this.#options.protectedExecution?.profile === 'ordinary');
+    const available = () => Boolean(knownFeature && !this.#closed && child === this.#child && child.connected && current && !current.cancelRequested && this.#running === current && raw.requestId === current.id && raw.sessionId === this.#snapshot?.sessionId && !controller.signal.aborted && (isSapMethod ? this.#options.workspace?.capabilityPolicy === 'source-reader' : !this.#options.workspace) && (!this.#options.protectedExecution || managedGraph) && this.#options.projectId && this.#options.taskId && port && (!(isCase || isSources || isSemantic || isSapMethod) || typeof raw.toolCallId === 'string' && raw.toolCallId.trim()) && (!isCase || current.providedContext?.case?.operationId));
     if (typeof raw.id !== 'string' || this.#personalRequests.has(raw.id)) return;
     const reply = (value: object) => { if (child.connected) child.send({ kind: 'personal-context-reply', id: raw.id, ...value }, () => {}); };
-    if (!available() || !(isSapMethod ? ['catalog', 'read-session', 'find-memory', 'read-memory', 'find-methods', 'read-method'] : isCase ? ['read', 'save'] : isSemantic ? ['find', 'read', 'trace', 'record'] : ['find', 'read']).includes(raw.action) || !raw.input || typeof raw.input !== 'object' || Array.isArray(raw.input)) { reply({ error: errorCode }); return; }
-    this.#personalRequests.set(raw.id, controller);
-    try {
-      const assertCurrent = () => { if (!available()) throw new ProjectRuntimeError(errorCode); };
-      const result = isSapMethod ? await this.#options.sapMethodSources!(raw.action, raw.input, { signal: controller.signal, requestId: current!.id, sessionId: this.#snapshot!.sessionId, toolCallId: raw.toolCallId, assertCurrent }) : isCase ? await this.#options.caseDecisions!(raw.action, raw.input, { signal: controller.signal, requestId: current!.id, sessionId: this.#snapshot!.sessionId, toolCallId: raw.toolCallId, caseOperationId: current!.providedContext!.case!.operationId, assertCurrent }) : isSemantic ? await this.#options.semanticContext!(raw.action, raw.input, { signal: controller.signal, requestId: current!.id, sessionId: this.#snapshot!.sessionId, toolCallId: raw.toolCallId, assertCurrent }) : isSources ? await this.#options.caseSources!(raw.action, raw.input, { signal: controller.signal, requestId: current!.id, sessionId: this.#snapshot!.sessionId, toolCallId: raw.toolCallId, assertCurrent }) : await this.#options.personalContext!(raw.action, raw.input, { signal: controller.signal });
-      assertCurrent();
-      // Enforce the transport envelope before it crosses IPC, in addition to
-      // the SDK-side model-visible text bound.
-      if (Buffer.byteLength(JSON.stringify(result), 'utf8') > 256 * 1024) throw new ProjectRuntimeError('personal_context_payload_limit');
-      reply({ result });
-    } catch (error) {
-      const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && /^[a-z0-9_]{1,100}$/.test(error.code) ? error.code : 'personal_context_read_failed';
-      reply({ error: code });
-    } finally { if (this.#personalRequests.get(raw.id) === controller) this.#personalRequests.delete(raw.id); }
+    if (!available() || !(isSapMethod ? ['catalog', 'read-session', 'find-memory', 'read-memory', 'find-methods', 'read-method'] : isCase ? ['read', 'save'] : isSemantic ? ['find', 'read', 'trace', 'record', ...(semanticRead ? ['graph'] : [])] : ['find', 'read']).includes(raw.action) || !raw.input || typeof raw.input !== 'object' || Array.isArray(raw.input)) { reply({ error: errorCode }); return; }
+    const request: HostContextRequest = { controller, owned: Boolean(semanticRead), completion: Promise.resolve(), settled: false };
+    this.#personalRequests.set(raw.id, request);
+    request.completion = (async () => {
+      let response: object;
+      try {
+        const assertCurrent = () => { if (!available()) throw new ProjectRuntimeError(errorCode); };
+        const context = { signal: controller.signal, requestId: current!.id, sessionId: this.#snapshot!.sessionId, toolCallId: raw.toolCallId, assertCurrent,
+          ...(semanticRead ? { runToken: current!, registerCleanup: (cleanup: (options: { retryFailed?: boolean }) => Promise<void>) => {
+            if (request.settled) throw new ProjectRuntimeError('semantic_context_run_unavailable');
+            if (request.cleanup && request.cleanup !== cleanup) throw new ProjectRuntimeError('semantic_context_cleanup_already_registered');
+            request.cleanup = cleanup;
+            if (controller.signal.aborted) void this.#cleanupPersonalRequest(request).catch(() => {});
+          } } : {}) };
+        const result = isSapMethod ? await this.#options.sapMethodSources!(raw.action, raw.input, context) : isCase ? await this.#options.caseDecisions!(raw.action, raw.input, { ...context, caseOperationId: current!.providedContext!.case!.operationId }) : isSemantic ? semanticRead ? await semanticRead(raw.action, raw.input, context) : await this.#options.semanticContext!(raw.action, raw.input, context) : isSources ? await this.#options.caseSources!(raw.action, raw.input, context) : await this.#options.personalContext!(raw.action, raw.input, { signal: controller.signal });
+        assertCurrent();
+        // The entire envelope is bounded before crossing IPC. Model content has
+        // its separate SDK-side character and graph-byte bounds.
+        if (Buffer.byteLength(JSON.stringify(result), 'utf8') > 256 * 1024) throw new ProjectRuntimeError('personal_context_payload_limit');
+        response = { result };
+      } catch (error) {
+        const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && /^[a-z0-9_]{1,100}$/.test(error.code) ? error.code : 'personal_context_read_failed';
+        response = { error: code };
+      }
+      await this.#cleanupPersonalRequest(request).catch(() => {});
+      request.settled = true;
+      if (request.cleanupError) response = { error: 'semantic_context_cleanup_unknown' };
+      else if (this.#personalRequests.get(raw.id) === request) {
+        this.#personalRequests.delete(raw.id);
+        if (request.owned && !this.#closed && this.#snapshot?.status === 'idle') this.#emit({ type: 'snapshot', snapshot: this.#snapshot });
+      }
+      // A revoked run can receive an error acknowledgement, never late content.
+      if (controller.signal.aborted || this.#running !== current || this.#closed) response = { error: errorCode };
+      reply(response);
+    })();
+    await request.completion;
   }
   open(): Promise<ProjectSnapshot> {
     if (this.#closed) return Promise.reject(new ProjectRuntimeError('runtime_closed'));
@@ -117,7 +178,7 @@ export class ProjectAgent {
     child.stderr?.on('data', startupOutput);
     child.on('message', (raw: any) => {
       if (raw?.kind === 'personal-context-request') { void this.#personalRequest(child, raw); return; }
-      if (raw?.kind === 'personal-context-cancel') { this.#personalRequests.get(raw.id)?.abort(); this.#personalRequests.delete(raw.id); return; }
+      if (raw?.kind === 'personal-context-cancel') { const request = this.#personalRequests.get(raw.id); if (request) { request.controller.abort(); if (request.owned) void this.#cleanupPersonalRequest(request).catch(() => {}); else this.#personalRequests.delete(raw.id); } return; }
       if (raw?.kind === 'reply') {
         const pending = this.#pending.get(raw.id); if (!pending) return;
         this.#pending.delete(raw.id);
@@ -146,15 +207,15 @@ export class ProjectAgent {
     });
     await ready;
     this.#editorReady = true;
-    const { personalContext, caseDecisions, caseSources, semanticContext, sapMethodSources, ...serializable } = o;
+    const { personalContext, caseDecisions, caseSources, semanticContext, semanticContextRead, sapMethodSources, ...serializable } = o;
     const ordinary = !o.workspace && !o.protectedExecution && o.projectId && o.taskId;
-    const wire: ProjectAgentWireOptions = { ...serializable, personalContextEnabled: Boolean(personalContext && ordinary), caseDecisionsEnabled: Boolean(caseDecisions && ordinary), experienceLearningEnabled: Boolean(caseSources && ordinary), semanticContextEnabled: Boolean(semanticContext && ordinary), sapMethodSourcesEnabled: Boolean(sapMethodSources && o.workspace?.capabilityPolicy === 'source-reader' && !o.protectedExecution) };
+    const wire: ProjectAgentWireOptions = { ...serializable, personalContextEnabled: Boolean(personalContext && ordinary), caseDecisionsEnabled: Boolean(caseDecisions && ordinary), experienceLearningEnabled: Boolean(caseSources && ordinary), semanticContextEnabled: Boolean(semanticContext && ordinary), semanticContextReadEnabled: Boolean(semanticContextRead && !o.workspace && (!o.protectedExecution || o.protectedExecution.profile === 'ordinary') && o.projectId && o.taskId), sapMethodSourcesEnabled: Boolean(sapMethodSources && o.workspace?.capabilityPolicy === 'source-reader' && !o.protectedExecution) };
     this.#snapshot = await this.#rpc('open', wire);
-    return this.#snapshot!;
+    return this.#presentSnapshot(this.#snapshot!);
   }
-  async snapshot(): Promise<ProjectSnapshot> { await this.open(); this.#snapshot = await this.#rpc('snapshot'); return this.#snapshot!; }
+  async snapshot(): Promise<ProjectSnapshot> { await this.open(); this.#snapshot = await this.#rpc('snapshot'); return this.#presentSnapshot(this.#snapshot!); }
   #execute(method: 'prompt' | 'command', text: string, requestId: string, requestFingerprint?: string, providedContext?: ProvidedContextInput) {
-    if (this.#running) throw new ProjectRuntimeError('session_busy');
+    if (this.busy) throw new ProjectRuntimeError('session_busy');
     // Ordinary Host messages can include a separately bounded source envelope.
     // The fixed-draft resource keeps its approved full-input 20k limit.
     const policy = this.#options.workspace?.capabilityPolicy;
@@ -163,7 +224,7 @@ export class ProjectAgent {
     if (requestFingerprint !== undefined && (method !== 'prompt' || typeof requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(requestFingerprint))) throw new ProjectRuntimeError('invalid_request_fingerprint');
     const accepted = new Promise<void>((resolve, reject) => { this.#accepted.set(requestId, { resolve, reject }); });
     void accepted.catch(() => {});
-    const completion = this.open().then(() => this.#rpc(method, { text, requestId, ...(requestFingerprint === undefined ? {} : { requestFingerprint }), ...(providedContext === undefined ? {} : { providedContext }) })).catch(error => { this.#accepted.get(requestId)?.reject(error); throw error; }).finally(() => { this.#running = undefined; this.#accepted.delete(requestId); });
+    const completion = this.open().then(() => this.#rpc(method, { text, requestId, ...(requestFingerprint === undefined ? {} : { requestFingerprint }), ...(providedContext === undefined ? {} : { providedContext }) })).then(async result => { await this.#waitPersonalRequests(); return result; }, async error => { await this.#waitPersonalRequests(); throw error; }).catch(error => { this.#accepted.get(requestId)?.reject(error); throw error; }).finally(() => { this.#running = undefined; this.#accepted.delete(requestId); });
     this.#running = { id: requestId, completion, providedContext };
     return { requestId, completion, accepted };
   }
@@ -178,12 +239,12 @@ export class ProjectAgent {
     if (this.#closed) throw new ProjectRuntimeError('runtime_closed');
     // No SDK turn is created: the common lease waits for its already-owned
     // local calculations while a concurrent stop can still revoke the scope.
-    await this.#rpc('drain');
+    await Promise.all([this.#rpc('drain'), this.#waitPersonalRequests()]);
   }
   async stop(cleanup: { retryFailed?: boolean } = {}) {
     if (this.#running) this.#running.cancelRequested = true;
     this.#cancelPersonalRequests();
-    if (!this.#options.protectedExecution) { if (!this.#running) return; await this.open(); await this.#rpc('stop'); await this.#running?.completion; return; }
+    if (!this.#options.protectedExecution) { const running = this.#running; if (running) { await this.open(); await this.#rpc('stop'); } await this.#waitPersonalRequests(); await running?.completion; return; }
     if (!this.#stopTask) this.#stopTask = (async () => {
       // A managed scope can contain legitimate background work even after its
       // current SDK turn settled. The driver's close already stops that turn,
@@ -203,7 +264,7 @@ export class ProjectAgent {
       this.#closed = true; this.#cancelPersonalRequests();
       const task = this.#dispose(cleanup); this.#closeTask = task;
       // Retry only resource cleanup on an explicit close, never a model turn.
-      void task.catch(error => { if ((this.#options.protectedExecution || error instanceof ProjectRuntimeError && error.code === 'subagent_cleanup_unknown') && this.#closeTask === task) this.#closeTask = undefined; });
+      void task.catch(error => { if ((this.#options.protectedExecution || error instanceof ProjectRuntimeError && ['subagent_cleanup_unknown', 'semantic_context_cleanup_unknown'].includes(error.code)) && this.#closeTask === task) this.#closeTask = undefined; });
     }
     return this.#closeTask;
   }
@@ -211,6 +272,16 @@ export class ProjectAgent {
     try { if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, signal); else child.kill(signal); } catch { /* owned process group has exited */ }
   }
   async #dispose(cleanup: { retryFailed?: boolean }) {
+    // Revoke the SDK caller immediately as well as the Host request. Waiting
+    // for Python before closing the caller could let its tool error dispatch
+    // another model turn in the interval between reap and driver shutdown.
+    const results = await Promise.allSettled([
+      this.#waitPersonalRequests({ retryFailed: cleanup.retryFailed !== false }),
+      this.#disposeDriver(cleanup),
+    ]);
+    for (const result of results) if (result.status === 'rejected') throw result.reason;
+  }
+  async #disposeDriver(cleanup: { retryFailed?: boolean }) {
     if (!this.#child) return;
     const child = this.#child;
     let protectedCleanupAcknowledged = this.#managedCleanupAcknowledged;

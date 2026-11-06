@@ -48,6 +48,10 @@ export function trialOptions(input = {}) {
   const home = input.home ?? os.homedir();
   const dataRoot = path.resolve(input.dataRoot ?? path.join(home, '.optracall'));
   const options = { root: path.resolve(input.root ?? rootDefault), dataRoot, projectsRoot: path.resolve(input.projectsRoot ?? path.join(home, 'OptraCallProjects')), stateRoot: path.resolve(input.stateRoot ?? path.join(dataRoot, 'trial')), uiRoot: input.uiRoot, port: input.port ?? 4173, nodePath: input.nodePath ?? process.execPath, openBrowser: input.openBrowser ?? true, startupTimeoutMs: input.startupTimeoutMs ?? 30_000, stopTimeoutMs: input.stopTimeoutMs ?? 12_000, lockTimeoutMs: input.lockTimeoutMs ?? 35_000 };
+  if (input.semanticConfig !== undefined) {
+    if (typeof input.semanticConfig !== 'string' || !path.isAbsolute(input.semanticConfig) || input.semanticConfig.includes('\0')) throw new TypeError('Invalid absolute semantic configuration path.');
+    options.semanticConfig = input.semanticConfig;
+  }
   options.uiRoot = path.resolve(options.uiRoot ?? path.join(options.root, 'dist'));
   if (!Number.isInteger(options.port) || options.port < 1 || options.port > 65535) throw new TypeError('Invalid OptraCall trial port.');
   return options;
@@ -195,11 +199,17 @@ async function startUnlocked(options) {
   try { build = JSON.parse(await fs.readFile(path.join(options.uiRoot, 'optracall-build.json'), 'utf8')); } catch { fail('build_required'); }
   if (build.schema !== 1 || typeof build.version !== 'string' || !/^[a-f0-9]{40}$/.test(build.commit) || typeof build.builtAt !== 'string') fail('build_required');
   await assertBuildCheckout(options, build);
+  let semanticConfig = options.semanticConfig;
+  if (semanticConfig === undefined) {
+    const defaultConfig = path.join(options.dataRoot, 'semantic-graph.json');
+    try { await fs.lstat(defaultConfig); semanticConfig = defaultConfig; }
+    catch (error) { if (error.code !== 'ENOENT') fail('unsafe_control_file'); }
+  }
   await directory(path.join(options.stateRoot, 'logs'));
   const instanceId = randomUUID(), url = `http://127.0.0.1:${options.port}/`, logFile = path.join(options.stateRoot, 'logs', `${new Date().toISOString().replace(/[:.]/g, '-')}-${instanceId}.log`);
   const log = await fs.open(logFile, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
   let child;
-  try { child = spawn(options.nodePath, [path.join(options.root, 'scripts/start-host.mjs'), `--port=${options.port}`, `--ui-port=${options.port}`, `--data-root=${options.dataRoot}`, `--projects-root=${options.projectsRoot}`, `--ui-root=${options.uiRoot}`, `--instance-id=${instanceId}`], { cwd: options.root, detached: true, stdio: ['ignore', log.fd, log.fd], env: process.env }); }
+  try { child = spawn(options.nodePath, [path.join(options.root, 'scripts/start-host.mjs'), `--port=${options.port}`, `--ui-port=${options.port}`, `--data-root=${options.dataRoot}`, `--projects-root=${options.projectsRoot}`, `--ui-root=${options.uiRoot}`, `--instance-id=${instanceId}`, ...(semanticConfig ? [`--semantic-config=${semanticConfig}`] : [])], { cwd: options.root, detached: true, stdio: ['ignore', log.fd, log.fd], env: process.env }); }
   finally { await log.close(); }
   let spawnError; child.once('error', error => { spawnError = error; }); child.unref();
   const deadline = Date.now() + options.startupTimeoutMs; let status;
@@ -250,12 +260,12 @@ export async function updateAndStartTrial(input = {}) {
   const started = JSON.parse(stdout.trim()); return { ...started, update };
 }
 function cliArguments(command, options) {
-  return [path.join(options.root, 'scripts/trial-launcher.mjs'), command, '--json', `--root=${options.root}`, `--state-root=${options.stateRoot}`, `--data-root=${options.dataRoot}`, `--projects-root=${options.projectsRoot}`, `--ui-root=${options.uiRoot}`, `--port=${options.port}`, ...(options.openBrowser ? [] : ['--no-open'])];
+  return [path.join(options.root, 'scripts/trial-launcher.mjs'), command, '--json', `--root=${options.root}`, `--state-root=${options.stateRoot}`, `--data-root=${options.dataRoot}`, `--projects-root=${options.projectsRoot}`, `--ui-root=${options.uiRoot}`, `--port=${options.port}`, ...(options.semanticConfig ? [`--semantic-config=${options.semanticConfig}`] : []), ...(options.openBrowser ? [] : ['--no-open'])];
 }
 async function main() {
   const [command, ...args] = process.argv.slice(2), values = new Map();
-  for (const arg of args) { const index = arg.indexOf('='); const name = index < 0 ? arg : arg.slice(0, index); if (!['--root', '--state-root', '--data-root', '--projects-root', '--ui-root', '--port', '--no-open', '--json'].includes(name)) throw new Error('Unknown trial argument.'); values.set(name, index < 0 ? true : arg.slice(index + 1)); }
-  const options = { root: values.get('--root'), stateRoot: values.get('--state-root'), dataRoot: values.get('--data-root'), projectsRoot: values.get('--projects-root'), uiRoot: values.get('--ui-root'), port: values.has('--port') ? Number(values.get('--port')) : undefined, openBrowser: !values.has('--no-open') };
+  for (const arg of args) { const index = arg.indexOf('='); const name = index < 0 ? arg : arg.slice(0, index); if (!['--root', '--state-root', '--data-root', '--projects-root', '--ui-root', '--semantic-config', '--port', '--no-open', '--json'].includes(name)) throw new Error('Unknown trial argument.'); values.set(name, index < 0 ? true : arg.slice(index + 1)); }
+  const options = { root: values.get('--root'), stateRoot: values.get('--state-root'), dataRoot: values.get('--data-root'), projectsRoot: values.get('--projects-root'), uiRoot: values.get('--ui-root'), semanticConfig: values.get('--semantic-config'), port: values.has('--port') ? Number(values.get('--port')) : undefined, openBrowser: !values.has('--no-open') };
   const action = { start: startTrial, stop: stopTrial, update: updateAndStartTrial }[command]; if (!action) throw new Error('Use start, stop or update.');
   const result = await action(options);
   if (values.has('--json')) console.log(JSON.stringify(result));
