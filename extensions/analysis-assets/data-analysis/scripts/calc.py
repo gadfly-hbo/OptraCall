@@ -20,7 +20,7 @@ import argparse
 import json
 import sys
 from datetime import date
-from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation, DecimalException
 
 VERSION = "optracall-data-calc-1"
 TOL = Decimal("0.01")
@@ -37,14 +37,31 @@ class ReconcileError(Exception):
 
 def d(value, label="数值"):
     """转 Decimal；走 str 中转避免 float 二进制误差。"""
-    if isinstance(value, Decimal):
-        return value
     if isinstance(value, bool):
         raise InputError("%s 不能是布尔值" % label)
     try:
-        return Decimal(str(value)).copy_abs() * (Decimal(-1) if str(value).strip().startswith("-") else Decimal(1))
+        result = value if isinstance(value, Decimal) else Decimal(str(value))
     except (InvalidOperation, ValueError):
         raise InputError("%s 不是合法数字：%r" % (label, value))
+    if not result.is_finite():
+        raise InputError("%s 必须是有限数值" % label)
+    return result
+
+
+def exact(value):
+    """保留算式与闭合所需的全部小数；整数仍沿用两位金额格式。"""
+    value = d(value)
+    if value == 0:
+        return "0.00"
+    whole, _, fraction = format(value, "f").partition(".")
+    return whole + "." + fraction.rstrip("0").ljust(2, "0")
+
+
+def positive_integer(value, label):
+    number = d(value, label)
+    if number <= 0 or number != number.to_integral_value():
+        raise InputError("%s 必须是正整数，不能截断小数" % label)
+    return int(number)
 
 
 def q(value, places=2):
@@ -100,6 +117,7 @@ def cmd_decompose(args):
     b = [v for _, v in base]
     c = [v for _, v in cur]
     n = len(names)
+    raw_effects = []
 
     if args.mode == "mul":
         total_b, total_c = product(b), product(c)
@@ -108,36 +126,38 @@ def cmd_decompose(args):
         for i in range(n):
             right = product(b[i + 1:])
             effect = (c[i] - b[i]) * left * right
-            formula = "(%s − %s)" % (q(c[i]), q(b[i]))
+            raw_effects.append(effect)
+            formula = "(%s − %s)" % (exact(c[i]), exact(b[i]))
             if left != Decimal(1):
-                formula += " × %s" % q(left)
+                formula += " × %s" % exact(left)
             if right != Decimal(1):
-                formula += " × %s" % q(right)
+                formula += " × %s" % exact(right)
             effects.append({
-                "factor": names[i], "base": q(b[i]), "current": q(c[i]),
-                "effect": q(effect), "formula": "%s = %s" % (formula, q(effect)),
+                "factor": names[i], "base": exact(b[i]), "current": exact(c[i]),
+                "effect": exact(effect), "formula": "%s = %s" % (formula, exact(effect)),
             })
             left *= c[i]
     else:
         total_b, total_c = sum(b, Decimal(0)), sum(c, Decimal(0))
+        raw_effects = [c[i] - b[i] for i in range(n)]
         effects = [{
-            "factor": names[i], "base": q(b[i]), "current": q(c[i]),
-            "effect": q(c[i] - b[i]), "formula": "(%s − %s) = %s" % (q(c[i]), q(b[i]), q(c[i] - b[i])),
+            "factor": names[i], "base": exact(b[i]), "current": exact(c[i]),
+            "effect": exact(raw_effects[i]), "formula": "(%s − %s) = %s" % (exact(c[i]), exact(b[i]), exact(raw_effects[i])),
         } for i in range(n)]
 
     total_change = total_c - total_b
-    effect_sum = sum(Decimal(e["effect"]) for e in effects)
+    effect_sum = sum(raw_effects, Decimal(0))
     diff = abs(effect_sum - total_change)
     if diff > TOL:
         raise ReconcileError("拆解不闭合：|Σ效应 %s − 总变动 %s| = %s > %s" % (q(effect_sum), q(total_change), q(diff), q(TOL)))
-    for e in effects:
-        e["share_of_change"] = pct(Decimal(e["effect"]) / total_change) if total_change != 0 else "总变动为0，不计算占比"
+    for e, raw in zip(effects, raw_effects):
+        e["share_of_change"] = pct(raw / total_change) if total_change != 0 else "总变动为0，不计算占比"
     emit({
         "engine": VERSION, "metric": args.metric, "mode": args.mode,
         "order": "效应按因子给出顺序依次剥离：先变动者先剥离（顺序不同结果不同，报告须写明剥离顺序）",
-        "base_total": q(total_b), "current_total": q(total_c), "total_change": q(total_change),
+        "base_total": exact(total_b), "current_total": exact(total_c), "total_change": exact(total_change),
         "effects": effects,
-        "closure": {"sum_effects": q(effect_sum), "total_change": q(total_change), "diff": q(diff), "tolerance": q(TOL), "ok": True},
+        "closure": {"sum_effects": exact(effect_sum), "total_change": exact(total_change), "diff": exact(diff), "tolerance": q(TOL), "ok": True},
     })
 
 
@@ -150,16 +170,14 @@ def cmd_compare(args):
     delta = cur - base
     change = delta / base
     payload = {
-        "engine": VERSION, "label": args.label, "base": q(base), "current": q(cur),
-        "delta": q(delta), "pct_change": pct(change),
-        "formula": "(%s − %s) ÷ %s = %s" % (q(cur), q(base), q(base), pct(change)),
+        "engine": VERSION, "label": args.label, "base": exact(base), "current": exact(cur),
+        "delta": exact(delta), "pct_change": pct(change),
+        "formula": "(%s − %s) ÷ %s = %s（百分比保留2位）" % (exact(cur), exact(base), exact(base), pct(change)),
     }
     if args.base_days or args.cur_days:
         if not (args.base_days and args.cur_days):
             raise InputError("按天对齐须同时给出 --base-days 与 --cur-days（口径缺失不硬算）")
-        bd, cd = int(d(args.base_days, "--base-days")), int(d(args.cur_days, "--cur-days"))
-        if bd <= 0 or cd <= 0:
-            raise InputError("期间天数必须为正")
+        bd, cd = positive_integer(args.base_days, "--base-days"), positive_integer(args.cur_days, "--cur-days")
         payload["days"] = {"base_days": str(bd), "cur_days": str(cd), "equal_length": bd == cd,
                            "day_ratio": pct(Decimal(cd) / Decimal(bd))}
         if bd != cd:
@@ -167,7 +185,7 @@ def cmd_compare(args):
             payload["daily_aligned"] = {
                 "base_daily": q(daily_b), "current_daily": q(daily_c),
                 "daily_delta": q(daily_c - daily_b), "daily_pct_change": pct((daily_c - daily_b) / daily_b),
-                "formula": "(%s ÷ %d) 与 (%s ÷ %d) 相比 = %s" % (q(base), bd, q(cur), cd, pct((daily_c - daily_b) / daily_b)),
+                "formula": "(%s ÷ %d) 与 (%s ÷ %d) 相比 = %s（百分比保留2位）" % (exact(base), bd, exact(cur), cd, pct((daily_c - daily_b) / daily_b)),
                 "note": "期间不等长（基期 %d 天、本期 %d 天），总量不可直比；日历效应本身即解释 %s 的量级，先按天对齐再谈经营原因" % (bd, cd, pct(abs(Decimal(cd) / Decimal(bd) - 1))),
             }
     emit(payload)
@@ -196,13 +214,15 @@ def cmd_outlier(args):
         raise InputError("样本量 %d < 3，无法做异常检测" % n)
     ordered = sorted(values)
     if args.method == "3sigma":
+        if args.min_n < 30:
+            raise InputError("3σ 最小样本量不能低于 30")
         if n < args.min_n:
             raise InputError("3σ 法要求样本量 ≥ %d（正态近似），当前 %d；小样本或偏态分布请用 --method iqr" % (args.min_n, n))
         mean = sum(values, Decimal(0)) / Decimal(n)
         var = sum((v - mean) ** 2 for v in values) / Decimal(n - 1)
         std = var.sqrt()
         outliers = [{"value": q(v), "z": q((v - mean) / std), "deviation": pct(abs(v - mean) / abs(mean)) if mean != 0 else "均值为0，偏离度不可定义"}
-                    for v in values if abs((v - mean) / std) > Z_THRESHOLD]
+                    for v in values if std != 0 and abs((v - mean) / std) > Z_THRESHOLD]
         emit({
             "engine": VERSION, "method": "3sigma", "n": str(n),
             "mean": q(mean), "sample_std": q(std), "rule": "|z| > 3",
@@ -212,7 +232,10 @@ def cmd_outlier(args):
         q1, q3 = tukey_quartiles(ordered)
         iqr = q3 - q1
         lo, hi = q1 - Decimal("1.5") * iqr, q3 + Decimal("1.5") * iqr
-        outliers = [{"value": q(v), "below_lower": v < lo, "above_upper": v > hi}
+        outliers = [{"value": exact(v), "below_lower": v < lo, "above_upper": v > hi,
+                     "reference_bound": exact(lo if v < lo else hi),
+                     "deviation": exact(lo - v if v < lo else v - hi),
+                     "deviation_unit": "原值单位：距最近IQR边界的距离"}
                     for v in values if v < lo or v > hi]
         emit({
             "engine": VERSION, "method": "iqr", "n": str(n),
@@ -233,7 +256,7 @@ def cmd_weighted(args):
         parts = chunk.split(":")
         if len(parts) != 3:
             raise InputError("--groups 格式应为 名称:均值:样本数（逗号分隔），收到 %r" % chunk)
-        name, mean, count = parts[0].strip(), d(parts[1], "均值"), int(d(parts[2], "样本数"))
+        name, mean, count = parts[0].strip(), d(parts[1], "均值"), positive_integer(parts[2], "样本数")
         if not name:
             raise InputError("分组名不能为空")
         if count <= 0:
@@ -246,10 +269,10 @@ def cmd_weighted(args):
     weighted = sum(m * c for _, m, c in groups) / total_n
     emit({
         "engine": VERSION,
-        "groups": [{"name": n_, "mean": q(m), "count": str(int(c))} for n_, m, c in groups],
+        "groups": [{"name": n_, "mean": exact(m), "count": str(int(c))} for n_, m, c in groups],
         "arithmetic_mean_of_means": q(arithmetic), "weighted_mean": q(weighted),
         "gap": q(arithmetic - weighted),
-        "weighted_formula": "(%s) ÷ %d = %s" % (" + ".join("%s×%s" % (q(m), str(int(c))) for _, m, c in groups), int(total_n), q(weighted)),
+        "weighted_formula": "(%s) ÷ %d = %s（结果保留2位）" % (" + ".join("%s×%s" % (exact(m), str(int(c))) for _, m, c in groups), int(total_n), q(weighted)),
         "note": "各组样本数不等时，算术平均≠加权平均；报告分组均值汇总必须用加权值并说明分母",
     })
 
@@ -301,7 +324,9 @@ def cmd_trend(args):
     slope = sxy / sxx
     intercept = my - slope * mx
     r2 = (sxy * sxy) / (sxx * syy)
-    strong = Decimal(str(args.r2_threshold))
+    strong = d(args.r2_threshold, "--r2-threshold")
+    if not Decimal("0.7") <= strong <= Decimal(1):
+        raise InputError("方向性阈值须在 [0.7,1] 内，不得降低已声明门槛")
     verdict = ("方向性明显（R² ≥ %s），可描述趋势方向" % q(strong)) if r2 >= strong else \
               ("R² < %s，不得称「明显趋势」，只可描述波动" % q(strong))
     emit({
@@ -469,6 +494,9 @@ def main(argv=None):
     except ReconcileError as e:
         sys.stderr.write("闭合失败：%s\n" % e)
         return 3
+    except (DecimalException, OverflowError, ValueError) as e:
+        sys.stderr.write("输入错误：数值超出可计算范围（%s）\n" % type(e).__name__)
+        return 2
 
 
 if __name__ == "__main__":

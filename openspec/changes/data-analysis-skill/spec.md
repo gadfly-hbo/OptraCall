@@ -62,3 +62,16 @@
 - `node --test tests/protected-skills.test.ts tests/data-analysis-skill.test.ts`；`python3 scripts/calc.py --selftest` 与 `python3 scripts/quality_check.py --selftest`（本机实测）；随后 `npm run check` 全量。
 - skill 测评门禁：完成后同步 MacBook `/Users/huangbo/Dev/Projects/skill-eval/pending/data-analysis/`，等用户回执；循环至显式通过后才写 Codex 接缝任务书。
 - 未决：季节指数/移动平均、JOIN 体检（另立增量）；真实数据分析质量与激活率（用户测评）。
+
+## Codex 接管与修正范围（2026-11-06）
+
+独立工作树从f9005f7接管，原清单12/12及提交字节一致；其中6份skill、2份测试和本规格的原字节均与6df72f4一致。原清单、移交包及作者阶段证据保留，不回写为修后清单；本节起记录Codex增量。Qoder原树停留同提交游离状态，本轮由Codex唯一写入，合并归档后再归还长期分支。
+
+- 目录接缝沿deep-research的同一折叠卡片与projects导航。为如实承载provisional、限制和用户已指定的单向覆盖，最小扩展共享SkillEvaluation可选字段；旧条目默认行为保持，当前data-analysis显式覆盖工程修正版。断言增益由38/142与139/159未舍入率计算，显示26.8%→87.4%及+60.7pp；不补造置信水平。无新布局、页面或交互，沿已确认Demo，按工程规范§3无需另出Demo；实际浏览器仍须点验。
+- 非作者发现的已确认DA03–DA06计算／输入／门禁合同问题由Codex修复：未舍入效应闭合及算式、常量方差0、非有限数、整数天数／样本数、3σ和趋势阈值下限、IQR实际边界偏离量，以及同一局部比较的期间对齐、普通行动段、无声明的相关表述。保留因果RED、旧自检GREEN与永久定向回归，不以作者自检代替独立复验。
+- 纠正样例加盟A客单价持平、方法中交叉项由后剥离者承担，以及激活描述过宽、JOIN排查不必要转交人工、DA4不能识别业务分母定义等说明。JOIN专用体检、季节／移动平均、评估P1–P11／12条断言定义加固均不开发；复核修正不触发用户复测。
+- 闭合效应、输入及算式保留必要精度；展示百分比等按声明位数最后舍入。两脚本继续纯标准库；新增Node永久回归仅运行有界合成CLI／门禁案例，原双脚本selftest仍在验收和复核独立执行，不改变Qoder两份测试。
+- DA09的“无Host/Agent代码变化”对应Qoder切片；Codex最终候选包含上述明确授权目录／展示接缝，不改SDK、Interface v3、owner/profile、Runtime、凭据、依赖或锁文件。工程规范四原则仍适用；只在隔离合成根做Host/Pi/UI验证，不切任何现有运行服务、不操作MacBook、不新增真实模型实验。
+- 首次全量暴露既有修订权限测试夹具仅等待持久completed、未等公开snapshot.idle的准入时序窗口。只加强该夹具等待，保留15秒边界与全部202／原件保护断言，不改产品Busy合同或重试POST；独立源码评估、原FAIL及修后结果分别保留。
+
+用户测评通过及单向覆盖以本任务书和result回执为准，旧“等待测评”的措辞保留为作者阶段记录。原始历史TDD顺序若无前置RED证据，记NOT_PROVED，不能用当前补测伪造；当前修复RED/GREEN和非作者结论另列。

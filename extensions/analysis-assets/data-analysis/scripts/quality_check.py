@@ -29,7 +29,7 @@ INCOMPLETE_MARK = "输入不完整"
 DIRECT_MODE = "输出形态：直答"
 INCOMPLETE_PERIOD_WORDS = ["至今", "本月还没结束", "进行中的", "截至今天"]
 COMPARE_WORDS = ["同比", "环比", "上一期相比", "前期对比"]
-CAUSAL_CLAIM = ["导致", "因而上升", "因而下降", "造成了"]
+ALIGNED_PERIOD = r"(?:按天对齐|同天数期间|同期等长|等长期间)"
 CAUSAL_GUARD = ["未做因果检验", "相关性不等于因果", "需进一步验证"]
 INTERPOLATE_WORDS = ["填充了缺失", "对缺失值进行填充"]
 INTERPOLATE_NEGATION = re.compile(r"[未不没](?:做|进行|曾)?插补")
@@ -42,9 +42,12 @@ class InputError(Exception):
 
 def d(value):
     try:
-        return Decimal(str(value))
+        number = Decimal(str(value))
     except (InvalidOperation, ValueError):
         return None
+    if not number.is_finite():
+        raise InputError("数值须为有限数：%r" % value)
+    return number
 
 
 def emit(payload):
@@ -97,18 +100,37 @@ def check_report(text):
     else:
         add("F2", "ok", False, "期间/来源/样本量/口径要素齐备")
 
-    has_compare = any(w in text for w in COMPARE_WORDS)
     open_period = any(w in text for w in INCOMPLETE_PERIOD_WORDS)
-    add("R1", "error", has_compare and open_period,
-        "报告做同/环比比较，同时出现未完成期间词（%s）——期间不完整不得比较，须等长或按天对齐"
+    paragraphs = re.split(r"\n[ \t]*\n|(?m:^[ \t]{0,3}#{1,6}[ \t]+.*$)", text)
+
+    def omit_tracking_name(match):
+        name = match.group(1).strip()
+        # 仅排除明确标注、无数值或当前比较断言的指标名，不豁免行动段。
+        named_metric = re.fullmatch(r"[\u4e00-\u9fffA-Za-z_]+(?:率|额|量|数|价|指数)", name)
+        asserted = re.search(r"本月至今|截至今天|当前|现为|已|增长了|下降了|增加了|减少了|提升了|持平|翻倍|高于|低于", name)
+        return "" if named_metric and not asserted else match.group(0)
+
+    unaligned_comparisons = []
+    for paragraph in paragraphs:
+        comparison = re.sub(r"跟踪指标[：:]([^，,。；;\n]+)", omit_tracking_name, paragraph)
+        if any(w in comparison for w in COMPARE_WORDS):
+            aligned = re.sub(r"(?:尚未|未|没有|不|需要?|应当?|建议)(?:做|进行)?" + ALIGNED_PERIOD, "", comparison)
+            if not re.search(ALIGNED_PERIOD, aligned):
+                unaligned_comparisons.append(paragraph)
+    add("R1", "error", open_period and bool(unaligned_comparisons),
+        "报告出现未完成期间词（%s）；对应比较段须明确等长或按天对齐，其他段的对齐说明不替代该比较"
         % "、".join(w for w in INCOMPLETE_PERIOD_WORDS if w in text))
 
     action_body = ""
     if not direct and "行动" in order:
         pos = [p for p, kw, _ in headings if kw == "行动"][0]
         nxt = [p for p, kw, _ in headings if p > pos]
-        action_body = text[pos:nxt[0] if nxt else len(text)]
-        advice = re.findall(r"^[ \t]{0,3}(?:[-*+]|\d+[.、])[ \t]+.*$", action_body, re.MULTILINE)
+        start = text.find("\n", pos)
+        action_body = text[start + 1:nxt[0] if nxt else len(text)] if start != -1 else ""
+        advice = [item.strip()
+                  for paragraph in re.split(r"\n[ \t]*\n", action_body)
+                  for item in re.split(r"(?m)(?=^[ \t]{0,3}(?:[-*+]|\d+[.、])[ \t]+)", paragraph)
+                  if item.strip()]
         bad = [ln for ln in advice
                if not (re.search(r"责任人|负责[人人]", ln) and re.search(r"时限|日前|天内|周内|月底前|季度内", ln))]
         add("R2", "error", bool(bad),
@@ -120,10 +142,9 @@ def check_report(text):
         add("R2", "error", True, "未找到行动段，无法核建议四要素")
 
     corr = re.search(r"相关系数|r\s*=|ρ\s*=|皮尔逊|斯皮尔曼", text)
-    causal = any(w in text for w in CAUSAL_CLAIM)
     guarded = any(w in text for w in CAUSAL_GUARD)
-    add("R3", "error", bool(corr) and causal and not guarded,
-        "报告给出相关系数并使用因果表述，但未声明「未做因果检验／相关性不等于因果」")
+    add("R3", "error", bool(corr) and not guarded,
+        "报告给出相关系数，但未声明「未做因果检验／相关性不等于因果」")
 
     small_sample = re.search(r"样本量[^。]{0,12}(<\s*30|不足)", text)
     low_conf = any(w in text for w in ["仅供参考", "置信不足", "置信度不足"])
@@ -229,8 +250,10 @@ def check_data(path, key_columns):
         if bad_range:
             rate_problems.append("%s 超出 [0,100]：%s" % (col, "、".join("第%d行=%s" % p for p in bad_range[:3])))
         elif mixed:
-            rate_problems.append("%s 同时存在 <1 与 >1 的值（0-1 与百分数口径混用，疑似分母定义漂移）" % col)
-    add("DA4", "error", bool(rate_problems), "；".join(rate_problems) or ("率列区间一致" if rate_cols else "无率类列"))
+            rate_problems.append("%s 同时存在 <1 与 >1 的值（疑似 0-1 比例与百分数单位混用）" % col)
+    add("DA4", "error", bool(rate_problems),
+        ("；".join(rate_problems) or ("率列未见区间/单位疑点" if rate_cols else "无率类列"))
+        + ("；仅检查数值区间与单位疑点，分母定义需资料确认" if rate_cols else ""))
 
     numeric_cols = [c for c in (reader.fieldnames or []) if all(d(row[c]) is not None for row in rows)]
     total_hits = []
