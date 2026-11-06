@@ -7,6 +7,7 @@ import type { ProjectDataContextStore } from './project-data-context-store.ts';
 import type { EnterpriseMaterialsStore } from './enterprise-materials-store.ts';
 import type { CaseStore } from './case-store.ts';
 import type { createMetricLibrary } from '../../extensions/business-plugins/metric-factory/library/store.ts';
+import type { SapMethodStore } from '../../extensions/business-plugins/metric-factory/methods/store.ts';
 import type { ReadPersonalSource } from './personal-retention-types.ts';
 import type { PersonalContextFindInput, PersonalContextReadInput, PersonalContextReadOptions, PersonalContextResult } from './personal-context-types.ts';
 import { learningSourceRef } from './learning-source-validation.ts';
@@ -18,6 +19,7 @@ export type SemanticQueryOptions = { signal?: AbortSignal; audience?: 'human' | 
 export type SemanticContextServiceOptions = {
   projects: ProjectStore; data: ProjectDataContextStore; enterprise: EnterpriseMaterialsStore; cases: CaseStore;
   metricLibrary?: Pick<ReturnType<typeof createMetricLibrary>, 'list' | 'read'> | (() => Pick<ReturnType<typeof createMetricLibrary>, 'list' | 'read'>);
+  methodLibrary?: Pick<SapMethodStore, 'listPublished' | 'getPublished'>;
   readSource?: ReadPersonalSource;
   personal?: { find(input: PersonalContextFindInput, options?: PersonalContextReadOptions): Promise<PersonalContextResult>; read(input: PersonalContextReadInput, options?: PersonalContextReadOptions): Promise<PersonalContextResult> };
 };
@@ -80,6 +82,16 @@ export class SemanticContextService {
         item.body = value.canonicalYaml; item.sha256 = value.entry.bytesSha256; item.recordedAt = { field: 'publishedAt', value: value.entry.publishedAt };
         item.governance = { authority: 'published-SAP', publishedBy: value.entry.publishedBy };
         if (target.publishedHash == null) item.gaps.push('reference-did-not-record-published-hash');
+      } else if (target.kind === 'sap-method') {
+        if (!this.options.methodLibrary) { item.state = 'unknown'; item.gaps.push('sap-method-library-unavailable'); return item; }
+        const value = this.options.methodLibrary.getPublished(target.methodId, target.version);
+        if (target.publishedHash != null && target.publishedHash !== value.version.contentSha256) { item.state = 'hash-conflict'; item.code = 'semantic_context_sap_method_hash_conflict'; return item; }
+        item.title = value.version.title; item.body = JSON.stringify(value.version, null, 2); item.sha256 = value.version.contentSha256;
+        item.recordedAt = { field: 'publishedAt', value: value.publication.publishedAt };
+        item.governance = { authority: 'published-SAP-method', issue: value.issue };
+        if (value.issue?.status === 'confirmed') item.gaps.push('known-error-not-default-recommended');
+        if (target.publishedHash == null) item.gaps.push('reference-did-not-record-published-hash');
+        if (value.version.relation) item.relations.push(relation(value.version.relation.kind, { kind: 'sap-method', ...value.version.relation.target }));
       } else if (target.kind === 'enterprise') {
         const metadata = await this.options.enterprise.referenceIndex({ readOnly: true }); current();
         if (metadata.storeId !== target.storeId) throw new SemanticContextFault('semantic_context_store_mismatch', 403);
@@ -204,6 +216,18 @@ export class SemanticContextService {
           const library = typeof this.options.metricLibrary === 'function' ? this.options.metricLibrary() : this.options.metricLibrary;
           if (library) for (const entry of library.list()) for (const metricName of entry.metricNames) if (matches(entry.id, entry.namespace, metricName)) {
             items.push({ ...blank({ kind: 'sap', packageId: entry.id, version: entry.version, metricName, publishedHash: entry.bytesSha256 }), title: `${metricName} / ${entry.id}@${entry.version}`, sha256: entry.bytesSha256, recordedAt: { field: 'publishedAt', value: entry.publishedAt }, governance: { authority: 'published-SAP' } });
+          }
+        } catch (error) { current(); directoryGaps.push(errorCode(error)); }
+      }
+      if (wants('sap-method') && this.options.methodLibrary) {
+        try {
+          for (const entry of this.options.methodLibrary.listPublished()) {
+            const value = this.options.methodLibrary.getPublished(entry.id, entry.publishedVersion!);
+            if (matches(entry.title, value.version.content.conditions, value.version.content.logic)) {
+              items.push({ ...blank({ kind: 'sap-method', methodId: entry.id, version: value.version.version, publishedHash: value.version.contentSha256 }),
+                title: value.version.title, sha256: value.version.contentSha256, recordedAt: { field: 'publishedAt', value: value.publication.publishedAt },
+                governance: { authority: 'published-SAP-method', issue: value.issue } });
+            }
           }
         } catch (error) { current(); directoryGaps.push(errorCode(error)); }
       }

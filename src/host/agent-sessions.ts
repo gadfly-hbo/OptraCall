@@ -62,7 +62,7 @@ export type AgentSessionDomain<Owner> = {
   withSession<T>(ref: SessionRef<Owner>, use: (lease: SessionLease<Owner>) => T | Promise<T>): Promise<T>;
   busy(ref: SessionRef<Owner>): boolean;
   /** Host-only read projection over the same authoritative operation/resource state. */
-  busyInScope(filter?: SessionFilter): boolean;
+  busyInScope(filter?: SessionFilter, ownerMatches?: (owner: Owner) => boolean): boolean;
   live(ref: SessionRef<Owner>): boolean;
   stop(ref: SessionRef<Owner>): Promise<boolean>;
   close(ref: SessionRef<Owner>, cleanup?: Partial<SessionCleanupRequest>): Promise<void>;
@@ -447,8 +447,8 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
     },
     withSession,
     busy(ref) { const { key } = identity(ref); return busySlot(slots.get(key)); },
-    busyInScope(filter = {}) {
-      const matches = (owner: Owner, configuration: Readonly<RuntimeModelConfiguration>) => (!filter.projectId || options.profile.projectId?.(owner) === filter.projectId) && (!filter.provider || configuration.provider === filter.provider);
+    busyInScope(filter = {}, ownerMatches = () => true) {
+      const matches = (owner: Owner, configuration: Readonly<RuntimeModelConfiguration>) => (!filter.projectId || options.profile.projectId?.(owner) === filter.projectId) && (!filter.provider || configuration.provider === filter.provider) && ownerMatches(owner);
       for (const slot of slots.values()) {
         if (!busySlot(slot)) continue;
         if (slot.operation && matches(slot.operation.owner, slot.operation.configuration)) return true;

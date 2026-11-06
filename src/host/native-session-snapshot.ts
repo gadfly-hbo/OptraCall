@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { parseSessionEntries, SessionManager } from '../agent/sdk.ts';
 
 export const nativeSnapshotLimit = 50 * 1024 * 1024;
@@ -86,5 +87,5 @@ export async function readNativeSessionSnapshot(file: string, directory: string,
   if (entries.length !== values.length) return bad();
   const manager = SessionManager.inMemory(cwd, undefined, entries);
   options.signal?.throwIfAborted();
-  return { file, bytes: bytes.length, manager, entries: manager.getEntries(), branchIds: new Set(manager.getBranch().map(entry => entry.id)) };
+  return { file, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), manager, entries: manager.getEntries(), branchIds: new Set(manager.getBranch().map(entry => entry.id)) };
 }

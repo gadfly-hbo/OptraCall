@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模型包消费端 UI Demo · OptraCall</title>
+<style>
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select { font: inherit; }
+button { cursor: pointer; color: inherit; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid #a397e0; outline-offset: 3px; }
+.demo-page { --canvas:#fff; --surface:#fff; --subtle:#f5f5f8; --hover:#ececf2; --ink:#24232b; --muted:#6c6b78; --faint:#777580; --line:#e6e5eb; --accent:#6550c9; --accent-soft:#eeebfb; --focus:#a397e0; --warning:#80530c; --warning-bg:#fff7e8; --error:#a12b36; --error-bg:#fff4f4; --ok:#1c7c4a; --ok-bg:#eef7f1; background: var(--canvas); color: var(--ink); font-size: 14px; line-height: 1.55; min-height: 100vh; padding: 6px 32px 56px; }
+.demo-page[data-theme="dark"] { --canvas:#1b1b20; --surface:#232329; --subtle:#292930; --hover:#34343c; --ink:#eeeef2; --muted:#b7b7c2; --faint:#9a9aa6; --line:#3d3b47; --accent:#b7a7ff; --accent-soft:#30294a; --focus:#7d6bb5; --warning:#f0c36d; --warning-bg:#3a3122; --error:#ef9aa4; --error-bg:#3d272b; --ok:#8fd6ab; --ok-bg:#22382c; }
+.demo-note { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; margin: 14px 0 0; padding: 10px 14px; border: 1px dashed var(--accent); border-radius: 8px; background: var(--accent-soft); color: var(--muted); font-size: 12px; }
+.demo-note strong { color: var(--ink); }
+.eyebrow { letter-spacing: 2.2px; color: var(--accent); font-size: 11px; margin: 18px 0 6px; font-weight: 600; }
+.heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; margin: 0 0 6px; }
+.heading h1 { font-size: 24px; line-height: 1.4; font-weight: 550; margin: 0; }
+.heading .sub { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.theme-toggle { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 7px 12px; font-size: 12px; color: var(--muted); }
+.principle-strip { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 14px; background: var(--subtle); border-radius: 8px; font-size: 12px; color: var(--muted); margin: 14px 0 18px; }
+.principle-strip strong { color: var(--ink); font-weight: 550; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.tab { border: 0; background: transparent; padding: 9px 14px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 550; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.panel-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 14px; }
+.panel-heading h2 { font-size: 15px; margin: 0; font-weight: 550; }
+.panel-heading .hint { color: var(--muted); font-size: 12px; margin: 0; }
+.primary-button { border: 1px solid var(--accent); background: var(--accent); color: #fff; font-weight: 500; border-radius: 7px; padding: 8px 16px; font-size: 13px; }
+.demo-page[data-theme="dark"] .primary-button { color: #1b1b20; }
+.secondary-button { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 7px 14px; font-size: 13px; }
+.ghost-button { border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); background: transparent; color: var(--accent); border-radius: 6px; padding: 5px 11px; font-size: 12px; }
+/* 注册表 */
+.registry-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.registry-toolbar .count { color: var(--muted); font-size: 12px; margin-right: auto; }
+table.registry { width: 100%; border-collapse: collapse; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); min-width: 720px; }
+.table-scroll { overflow-x: auto; }
+table.registry th { text-align: left; font-size: 11px; letter-spacing: .6px; color: var(--faint); font-weight: 550; padding: 9px 12px; background: var(--subtle); border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.registry td { padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: middle; }
+table.registry tr:last-child td { border-bottom: 0; }
+table.registry tbody tr { cursor: pointer; }
+table.registry tbody tr:hover { background: var(--hover); }
+table.registry tbody tr.selected { background: var(--accent-soft); }
+.model-name { font-weight: 550; white-space: nowrap; }
+.model-goal { color: var(--muted); font-size: 11.5px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.version-chip { font-size: 11px; color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.stage-badge { display: inline-block; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 550; white-space: nowrap; }
+.stage-Production { color: var(--ok); background: var(--ok-bg); }
+.stage-Staging { color: var(--warning); background: var(--warning-bg); }
+.stage-Archived { color: var(--muted); background: var(--subtle); }
+.metric-cell { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+.task-tag { font-size: 10.5px; color: var(--muted); padding: 2px 7px; background: var(--subtle); border-radius: 4px; white-space: nowrap; }
+/* 详情面板 */
+.detail-panel { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 16px 18px; margin-top: 18px; }
+.detail-panel h3 { margin: 0 0 2px; font-size: 15px; font-weight: 550; }
+.detail-panel .detail-sub { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 4px 22px; }
+.detail-section { border-top: 1px solid var(--line); padding: 10px 0; }
+.detail-section:first-child { border-top: 0; }
+.detail-section h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: .8px; color: var(--faint); font-weight: 550; text-transform: uppercase; }
+.kv { display: grid; grid-template-columns: 92px 1fr; gap: 3px 10px; font-size: 12.5px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; word-break: break-all; }
+.detail-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.usage-code { background: var(--subtle); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; color: var(--ink); overflow-x: auto; white-space: pre; margin: 6px 0 0; }
+.detail-empty { color: var(--faint); font-size: 12.5px; padding: 24px 0; text-align: center; }
+/* 对话框 */
+.dialog-backdrop { position: fixed; inset: 0; background: rgba(20,19,26,.4); display: none; place-items: center; z-index: 40; padding: 20px; }
+.dialog-backdrop.open { display: grid; }
+.dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 20px 22px; box-shadow: 0 18px 48px -20px rgba(20,19,26,.4); width: min(520px, 100%); }
+.dialog h3 { margin: 0 0 4px; font-size: 16px; font-weight: 550; }
+.dialog .sub { margin: 0 0 16px; color: var(--muted); font-size: 12px; }
+.field { display: grid; gap: 5px; margin-bottom: 14px; }
+.field label { font-size: 12px; color: var(--muted); }
+.field input { border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; font-size: 13px; background: var(--canvas); color: var(--ink); width: 100%; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.field .help { font-size: 11.5px; color: var(--faint); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.check-steps { display: grid; gap: 7px; margin: 14px 0 0; }
+.check-step { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--faint); }
+.check-step .dot { width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid var(--line); display: inline-grid; place-items: center; font-size: 10px; flex-shrink: 0; color: transparent; }
+.check-step.running { color: var(--ink); }
+.check-step.running .dot { border-color: var(--accent); border-top-color: transparent; animation: spin .8s linear infinite; }
+.check-step.pass { color: var(--ink); }
+.check-step.pass .dot { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+.check-step.fail { color: var(--error); }
+.check-step.fail .dot { border-color: var(--error); background: var(--error-bg); color: var(--error); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.check-step .step-note { color: var(--muted); font-size: 11.5px; margin-left: auto; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.sim-toggle { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 9px 11px; border: 1px dashed var(--line); border-radius: 8px; font-size: 12px; color: var(--muted); }
+.sim-toggle input { accent-color: var(--accent); }
+.alert { border-radius: 8px; padding: 10px 12px; font-size: 12.5px; margin-top: 12px; display: none; }
+.alert.show { display: block; }
+.alert.error { border: 1px solid color-mix(in srgb, var(--error) 40%, var(--line)); background: var(--error-bg); color: var(--error); }
+.alert.ok { border: 1px solid color-mix(in srgb, var(--ok) 40%, var(--line)); background: var(--ok-bg); color: var(--ok); }
+.alert strong { color: var(--ink); }
+.alert code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; }
+/* 对话场景 */
+.chat-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 20px; align-items: start; }
+.chat-frame { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.chat-head { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid var(--line); background: var(--subtle); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.chat-head strong { color: var(--ink); font-size: 13px; }
+.cap-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 11px; font-size: 11.5px; color: var(--muted); }
+.cap-pill .led { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.cap-pill.on { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); color: var(--ok); }
+.cap-pill.on .led { background: var(--ok); }
+.chat-body { padding: 16px; display: grid; gap: 12px; min-height: 340px; align-content: start; }
+.msg { max-width: 86%; padding: 10px 13px; border-radius: 10px; font-size: 13px; }
+.msg.user { background: var(--accent-soft); color: var(--ink); margin-left: auto; border-bottom-right-radius: 3px; }
+.msg.agent { background: var(--subtle); border-bottom-left-radius: 3px; }
+.msg.agent .msg-role { font-size: 11px; color: var(--faint); margin-bottom: 3px; }
+.tool-card { border: 1px solid var(--line); border-radius: 9px; background: var(--canvas); overflow: hidden; }
+.tool-card > summary { cursor: pointer; padding: 9px 13px; font-size: 12.5px; display: flex; align-items: center; gap: 9px; list-style: none; }
+.tool-card > summary::-webkit-details-marker { display: none; }
+.tool-card .tool-name { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--accent); font-weight: 550; }
+.tool-card .tool-state { margin-left: auto; font-size: 11px; color: var(--ok); }
+.tool-card .tool-state.error { color: var(--error); }
+.tool-card .tool-body { border-top: 1px solid var(--line); padding: 10px 13px; font-size: 12px; color: var(--muted); background: var(--subtle); }
+.tool-card .tool-body pre { margin: 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; white-space: pre-wrap; color: var(--ink); }
+.result-card { border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 10px; background: var(--surface); padding: 13px 15px; }
+.result-card h4 { margin: 0 0 8px; font-size: 13px; font-weight: 550; display: flex; align-items: center; gap: 8px; }
+.result-card table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.result-card th { text-align: left; color: var(--faint); font-weight: 500; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+.result-card td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--line); font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; }
+.result-card tr:last-child td { border-bottom: 0; }
+.provenance { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--muted); }
+.provenance code { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink); }
+.chat-input-row { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--subtle); }
+.chat-input-row input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: 13px; background: var(--canvas); color: var(--ink); }
+.side-note { border: 1px dashed var(--line); border-radius: 9px; padding: 13px 15px; font-size: 12px; color: var(--muted); display: grid; gap: 9px; align-content: start; }
+.side-note strong { color: var(--ink); }
+.side-note ul { margin: 0; padding-left: 17px; display: grid; gap: 5px; }
+/* 能力目录 */
+.catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.catalog-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.catalog-card.planned { opacity: .62; }
+.catalog-card > header { display: flex; align-items: center; gap: 10px; }
+.catalog-symbol { display: inline-grid; place-items: center; width: 36px; height: 36px; background: var(--accent-soft); color: var(--accent); border-radius: 8px; font-size: 19px; flex-shrink: 0; }
+.catalog-card h3 { margin: 0; font-size: 14px; font-weight: 550; }
+.available-badge { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 2px 7px; font-size: 10px; margin-left: auto; white-space: nowrap; }
+.planned-badge { color: var(--muted); background: var(--subtle); border-radius: 4px; padding: 2px 7px; font-size: 10px; margin-left: auto; white-space: nowrap; }
+.catalog-desc { margin: 0; font-size: 12.5px; color: var(--muted); }
+.catalog-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.catalog-tags > span { font-size: 10px; color: var(--muted); padding: 2px 7px; background: var(--subtle); border-radius: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.catalog-note { border-top: 1px dashed var(--line); padding-top: 8px; font-size: 11.5px; color: var(--faint); }
+.catalog-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
+/* 失败与边界 */
+.boundary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; align-items: start; }
+.boundary-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 15px 17px; display: grid; gap: 10px; align-content: start; }
+.boundary-card h3 { margin: 0; font-size: 13.5px; font-weight: 550; }
+.boundary-card .b-sub { margin: 0; font-size: 12px; color: var(--muted); }
+.envelope { background: var(--subtle); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; white-space: pre-wrap; color: var(--ink); margin: 0; }
+.boundary-card .b-note { font-size: 11.5px; color: var(--faint); margin: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 11.5px; color: var(--muted); margin-top: 14px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+<div class="demo-page" id="demoPage" data-theme="light">
+
+  <p class="eyebrow">OPTRACALL · MODEL PACK CONSUMER · UI DEMO</p>
+  <div class="heading">
+    <div>
+      <h1>模型包消费端：加载器 + 注册表 + 分析调用</h1>
+      <p class="sub">薄消费端方案（训练仍在 Model Pack Studio）· 规格 v0.1 · 2026-11-05</p>
+    </div>
+    <button class="theme-toggle" id="themeToggle" type="button">切换深色</button>
+  </div>
+
+  <div class="demo-note">
+    <span><strong>Demo 边界：</strong>虚构数据、内存状态、不连真实 Host；刷新即复位。</span>
+    <span><strong>可点击：</strong>导入验货、行详情、晋级确认、对话发送、能力开关均可实际操作。</span>
+    <span><strong>确认范围：</strong>页面信息结构、交互流程与文案；视觉细节以正式实施为准。</span>
+  </div>
+
+  <div class="principle-strip">
+    <span><strong>Host 管环境</strong>：验货 · 快照 · 注册表 · 沙箱执行 · 权限门</span>
+    <span><strong>Agent 自主执行</strong>：发现 · 选版本 · 备数 · 解读 · 引用</span>
+    <span><strong>复用既有能力</strong>：任务能力开关 · SQLite 存储 · dataRoot 快照 · 目录导航</span>
+    <span><strong>减少人的操作</strong>：必做动作仅 2 个——导入包、晋级上线</span>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" role="tab" aria-selected="true" data-tab="registry">① 模型注册表</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="chat">② 任务对话调用</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="catalog">③ 能力目录条目</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="boundary">④ 失败与边界</button>
+  </div>
+
+  <!-- ① 注册表 -->
+  <section class="tab-panel active" id="tab-registry" role="tabpanel">
+    <div class="panel-heading">
+      <h2>模型注册表（货架）</h2>
+      <p class="hint">导入的模型包快照存于本机 dataRoot/models/，只读不可变；同名模型同时只有一个 Production。</p>
+    </div>
+    <div class="registry-layout">
+      <div>
+        <div class="registry-toolbar">
+          <span class="count" id="registryCount"></span>
+          <button class="primary-button" id="openImport" type="button">导入模型包…</button>
+        </div>
+        <div class="table-scroll">
+        <table class="registry">
+          <thead>
+            <tr><th>模型</th><th>版本</th><th>状态</th><th>任务型</th><th>留出指标</th><th>导入时间</th><th></th></tr>
+          </thead>
+          <tbody id="registryBody"></tbody>
+        </table>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--ok)"></i>Production＝分析默认可调</span>
+          <span><i style="background:var(--warning)"></i>Staging＝Agent 显式指定版本才可调</span>
+          <span><i style="background:var(--line)"></i>Archived＝可查不可调</span>
+        </div>
+      </div>
+      <aside class="detail-panel" id="detailPanel" aria-live="polite">
+        <div class="detail-empty">点击左侧任意模型行查看详情</div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ② 对话 -->
+  <section class="tab-panel" id="tab-chat" role="tabpanel">
+    <div class="panel-heading">
+      <h2>项目任务对话：Agent 自主调用模型</h2>
+      <p class="hint">任务级开启「模型预测工具」后，Agent 自主完成发现→备数→预测→注明出处；用户正常提问，无逐次确认。</p>
+    </div>
+    <div class="chat-layout">
+      <div class="chat-frame">
+        <div class="chat-head">
+          <strong>季度经营复盘</strong><span>/ 任务：销量分析</span>
+          <span class="cap-pill" id="capPill"><span class="led"></span><span id="capPillText">模型预测工具：关</span></span>
+          <button class="ghost-button" id="capToggle" type="button" style="margin-left:auto">开启能力</button>
+        </div>
+        <div class="chat-body" id="chatBody">
+          <div class="msg agent"><div class="msg-role">Pi Agent</div>任务已就绪。可以直接提出分析问题；开启「模型预测工具」后，需要预测数字时我会调用注册表里的模型计算，不自行估算。</div>
+        </div>
+        <div class="chat-input-row">
+          <input id="chatInput" type="text" value="下个月各品类的订单量大概多少？给我一份预测" aria-label="消息输入">
+          <button class="primary-button" id="chatSend" type="button">发送</button>
+        </div>
+      </div>
+      <div class="side-note">
+        <strong>这个场景里谁做什么</strong>
+        <ul>
+          <li><strong>用户</strong>：正常提问（零新增必做操作）。</li>
+          <li><strong>Agent</strong>：modelpack_list 查货架 → 按 usage.inputs 从 020 备输入 CSV → modelpack_predict → 解读并写报告。</li>
+          <li><strong>Host</strong>：只按注册表解析包、node --permission 沙箱执行、结果带出处回传；不编排步骤、不补算。</li>
+        </ul>
+        <strong>红线</strong>
+        <ul>
+          <li>预测数字出自模型脚本，不经 LLM 心算。</li>
+          <li>报告注明模型名/版本/留出指标（出处随行）。</li>
+          <li>能力未开启时 Agent 如实声明不用模型，不假装预测。</li>
+        </ul>
+        <span style="color:var(--faint)">试试：关闭能力后再发送同一问题，对比两种行为。</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ 目录 -->
+  <section class="tab-panel" id="tab-catalog" role="tabpanel">
+    <div class="panel-heading">
+      <h2>能力目录 · 业务插件分类（D1 推荐归属）</h2>
+      <p class="hint">新条目「模型包」带已接入徽章，点击导航到注册表页；文案如实说明训练在 MPS、本机执行、无网络外发。</p>
+    </div>
+    <div class="catalog-grid">
+      <div class="catalog-card">
+        <header>
+          <span class="catalog-symbol">▧</span>
+          <h3>模型包</h3>
+          <span class="available-badge">已接入</span>
+        </header>
+        <p class="catalog-desc">导入 Model Pack Studio 训练的自包含模型包（销量预测、会员流失、人货画像匹配等），注册表管理版本与上线状态；项目任务开启「模型预测工具」后由 Agent 沙箱调用，预测数字带模型出处。</p>
+        <div class="catalog-tags"><span>formatVersion 1</span><span>本机执行</span><span>无网络外发</span><span>训练在 MPS</span></div>
+        <p class="catalog-note">模型训练、指标重算与效果回流在 Model Pack Studio 完成；OptraCall 只消费导出包。导入即 Staging，升 Production 由你点击确认。</p>
+        <div class="catalog-card-bottom">
+          <span class="version-chip">dataRoot/models/</span>
+          <button class="ghost-button" type="button" data-goto="registry">打开模型注册表</button>
+        </div>
+      </div>
+      <div class="catalog-card">
+        <header>
+          <span class="catalog-symbol">▧</span>
+          <h3>需求梳理</h3>
+          <span class="available-badge">已接入</span>
+        </header>
+        <p class="catalog-desc">梳理业务问题、确认信息与未知，维护 RAP，并显式送入项目任务。（现有条目，示意并列关系）</p>
+        <div class="catalog-tags"><span>需求澄清</span><span>RAP</span></div>
+        <p class="catalog-note">使用现有需求梳理插件和统一会话入口。</p>
+        <div class="catalog-card-bottom">
+          <span class="version-chip">既有插件</span>
+          <button class="ghost-button" type="button" disabled>打开</button>
+        </div>
+      </div>
+      <div class="catalog-card">
+        <header>
+          <span class="catalog-symbol">▧</span>
+          <h3>经营推演</h3>
+          <span class="available-badge">已接入</span>
+        </header>
+        <p class="catalog-desc">多方案推演、压力对照和证据读取；固化快照仍由你确认。（现有条目，示意并列关系）</p>
+        <div class="catalog-tags"><span>情景推演</span><span>压力对照</span></div>
+        <p class="catalog-note">任务级开启经营推演工具后由 Agent 自主调用。</p>
+        <div class="catalog-card-bottom">
+          <span class="version-chip">既有插件</span>
+          <button class="ghost-button" type="button" disabled>打开</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ④ 失败与边界 -->
+  <section class="tab-panel" id="tab-boundary" role="tabpanel">
+    <div class="panel-heading">
+      <h2>失败与边界（如实呈现，不静默）</h2>
+      <p class="hint">验货不过＝结构化原因＋不入库；执行失败＝信封回传 Agent 自主纠错；受管任务不注入。</p>
+    </div>
+    <div class="boundary-grid">
+      <div class="boundary-card">
+        <h3>验货门拒绝（导入时）</h3>
+        <p class="b-sub">任一检查不过＝拒绝导入，dataRoot 无半成品，源目录不动。</p>
+        <pre class="envelope">{
+  "ok": false,
+  "stage": "purity_scan",
+  "reason": "predict.mjs 含禁止调用: require('fs')",
+  "hint": "模型包须零依赖纯计算；请在 MPS 重新训练导出"
+}</pre>
+        <p class="b-note">检查顺序：结构/formatVersion → manifest 字段 → 纯度重扫 → 沙箱冒烟。</p>
+      </div>
+      <div class="boundary-card">
+        <h3>predict 执行失败（对话中）</h3>
+        <p class="b-sub">信封回传 Agent，由其自主换版本、修输入或如实报告；Host 不代跑、不重试。</p>
+        <pre class="envelope">{
+  "ok": false,
+  "model": "member-churn v1",
+  "reason": "输入缺少 usage.inputs 声明列: last_login_days",
+  "rows_received": 812
+}</pre>
+        <p class="b-note">沙箱不可用＝fail closed 拒绝执行并如实报告，不回落无沙箱运行。</p>
+      </div>
+      <div class="boundary-card">
+        <h3>启用边界</h3>
+        <p class="b-sub">modelTools 默认关；两处开启入口（新建任务对话框＋会话内 Pi 能力面板，仅空闲可切换）。</p>
+        <pre class="envelope">受管 ordinary / protected 任务：不注入
+fixed-draft / text-only 资源：不注入
+未开启任务：Agent 如实声明不用模型</pre>
+        <p class="b-note">对齐商圈/天气连接器既有语义；无平行 Runtime、无 SDK 绕过。</p>
+      </div>
+      <div class="boundary-card">
+        <h3>快照损坏（人为破坏 dataRoot）</h3>
+        <p class="b-sub">注册表哈希与快照不符＝标记损坏＋引导重新导入，不静默修复。</p>
+        <pre class="envelope">{
+  "name": "order-forecast",
+  "version": 1,
+  "state": "corrupted",
+  "detail": "sha256 与注册记录不一致",
+  "action": "请从 MPS 导出目录重新导入该版本"
+}</pre>
+        <p class="b-note">旧版本永久保留可追溯；重装同版本字节一致＝幂等通过。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 导入对话框 -->
+  <div class="dialog-backdrop" id="importBackdrop">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+      <h3 id="importTitle">导入模型包</h3>
+      <p class="sub">选择 MPS 导出的包目录（含 predict.mjs / manifest.json / README.md）。校验通过后拷入 dataRoot/models/ 固化快照，源目录随后可删。</p>
+      <div class="field">
+        <label for="importPath">包目录路径</label>
+        <input id="importPath" type="text" value="/Users/huangbo/Dev/Projects/model-mlflow/workspace/exports/promo-uplift/v1" spellcheck="false">
+        <span class="help">仅接受含合法 manifest.json（formatVersion=1）的目录；不读取路径下其他内容。</span>
+      </div>
+      <div class="check-steps" id="checkSteps" hidden>
+        <div class="check-step" data-step="structure"><span class="dot">✓</span>结构与 formatVersion 校验<span class="step-note"></span></div>
+        <div class="check-step" data-step="manifest"><span class="dot">✓</span>manifest 字段合法性<span class="step-note"></span></div>
+        <div class="check-step" data-step="purity"><span class="dot">✓</span>纯度重扫（禁 fs/网络/eval/随机/时钟）<span class="step-note"></span></div>
+        <div class="check-step" data-step="smoke"><span class="dot">✓</span>沙箱冒烟（node --permission 跑一行）<span class="step-note"></span></div>
+        <div class="check-step" data-step="install"><span class="dot">✓</span>拷入快照＋注册表登记（Staging）<span class="step-note"></span></div>
+      </div>
+      <label class="sim-toggle"><input type="checkbox" id="simFail"> 模拟验货失败（演示拒绝路径）</label>
+      <div class="alert error" id="importError"></div>
+      <div class="alert ok" id="importOk"></div>
+      <div class="dialog-actions">
+        <button class="secondary-button" id="importCancel" type="button">关闭</button>
+        <button class="primary-button" id="importRun" type="button">开始验货并导入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 晋级确认 -->
+  <div class="dialog-backdrop" id="promoteBackdrop">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="promoteTitle">
+      <h3 id="promoteTitle">升级为 Production</h3>
+      <p class="sub" id="promoteSub"></p>
+      <div class="alert ok show" style="margin-top:0">
+        <strong>最小人审：</strong>模型上线是业务决定。晋级后同名旧 Production 自动归档（可查不可调）；分析工具默认只调 Production。
+      </div>
+      <div class="dialog-actions">
+        <button class="secondary-button" id="promoteCancel" type="button">取消</button>
+        <button class="primary-button" id="promoteConfirm" type="button">确认晋级</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- 主题 ---------- */
+  $('themeToggle').addEventListener('click', function () {
+    var page = $('demoPage');
+    var dark = page.getAttribute('data-theme') === 'dark';
+    page.setAttribute('data-theme', dark ? 'light' : 'dark');
+    this.textContent = dark ? '切换深色' : '切换浅色';
+  });
+
+  /* ---------- Tabs ---------- */
+  var tabs = document.querySelectorAll('.tab');
+  function activate(name) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute('data-tab') === name;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.tab-panel').forEach(function (p) {
+      p.classList.toggle('active', p.id === 'tab-' + name);
+    });
+  }
+  tabs.forEach(function (t) { t.addEventListener('click', function () { activate(this.getAttribute('data-tab')); }); });
+  document.querySelectorAll('[data-goto]').forEach(function (b) { b.addEventListener('click', function () { activate(this.getAttribute('data-goto')); }); });
+
+  /* ---------- 注册表数据（虚构） ---------- */
+  var models = [
+    { name: 'order-forecast', version: 2, stage: 'Production', task: 'regression', goal: '按品类日订单数据预测订单量，重点看 MAE',
+      metrics: { mae: 3.0447, rmse: 4.0917 }, metricLabel: 'mae 3.04 · rmse 4.09',
+      fingerprint: { sha256: '08b0fd90…66f2df2d', rows: 1456, columns: ['business_date', 'product_category', 'order_count', 'gross_order_amount', 'discount_amount'] },
+      training: { splitSeed: 42, targets: ['order_count'], trainedAt: '2026-11-01T06:57:42Z', sessionRef: 's_623ba63c' },
+      usage: { inputs: ['business_date', 'product_category', 'gross_order_amount', 'discount_amount'], outputs: ['order_count'], form: 'predict(rows) -> rows' },
+      installedAt: '2026-11-05 10:12' },
+    { name: 'order-forecast', version: 1, stage: 'Archived', task: 'regression', goal: '按品类日订单数据预测订单量（首版）',
+      metrics: { mae: 34.55, rmse: 40.55 }, metricLabel: 'mae 34.55 · rmse 40.55',
+      fingerprint: { sha256: '08b0fd90…66f2df2d', rows: 1456, columns: ['business_date', 'product_category', 'order_count', 'gross_order_amount', 'discount_amount'] },
+      training: { splitSeed: 42, targets: ['order_count'], trainedAt: '2026-10-28T09:20:11Z', sessionRef: 's_5e02235a' },
+      usage: { inputs: ['business_date', 'product_category', 'gross_order_amount', 'discount_amount'], outputs: ['order_count'], form: 'predict(rows) -> rows' },
+      installedAt: '2026-10-29 15:40' },
+    { name: 'member-churn', version: 1, stage: 'Staging', task: 'binary_classification', goal: '90 天未复购会员流失预测',
+      metrics: { accuracy: 0.871, f1: 0.812 }, metricLabel: 'acc 0.871 · f1 0.812',
+      fingerprint: { sha256: '7c11ab02…90ef31c4', rows: 8420, columns: ['member_id', 'recency_days', 'freq_180d', 'monetary_180d', 'last_login_days', 'churned'] },
+      training: { splitSeed: 42, targets: ['churned'], trainedAt: '2026-11-03T11:02:55Z', sessionRef: 's_a91f0c22' },
+      usage: { inputs: ['recency_days', 'freq_180d', 'monetary_180d', 'last_login_days'], outputs: ['churned'], form: 'predict(rows) -> rows' },
+      installedAt: '2026-11-04 09:26' },
+    { name: 'persona-match', version: 1, stage: 'Staging', task: 'multilabel_share', goal: '单品与渠道人群画像匹配度（占比型）',
+      metrics: { share_mae: 0.061, top1: 0.72, top3: 0.94 }, metricLabel: 'share-mae 0.061 · top1 0.72 · top3 0.94',
+      fingerprint: { sha256: '5d90ff71…2ab7c0e8', rows: 312, columns: ['sku_id', 'channel', 'age_share', 'gender_share', 'city_tier_share', 'power_share'] },
+      training: { splitSeed: 42, targets: ['age_share', 'gender_share', 'city_tier_share', 'power_share'], trainedAt: '2026-11-04T08:44:03Z', sessionRef: 's_77b2e910', groups: { '人群维度': ['age_share', 'gender_share', 'city_tier_share', 'power_share'] } },
+      usage: { inputs: ['sku_id', 'channel'], outputs: ['age_share', 'gender_share', 'city_tier_share', 'power_share'], form: 'predict(rows) -> rows' },
+      installedAt: '2026-11-05 08:55' }
+  ];
+  var selected = null;
+
+  var TASK_LABEL = { regression: '回归', binary_classification: '二分类', multilabel_share: '占比型' };
+
+  function renderRegistry() {
+    var body = $('registryBody');
+    body.innerHTML = '';
+    var order = { Production: 0, Staging: 1, Archived: 2 };
+    var rows = models.slice().sort(function (a, b) {
+      return a.name === b.name ? b.version - a.version : (order[a.stage] - order[b.stage]) || a.name.localeCompare(b.name);
+    });
+    rows.forEach(function (m) {
+      var tr = document.createElement('tr');
+      tr.tabIndex = 0;
+      if (selected === m) tr.classList.add('selected');
+      var canPromote = m.stage === 'Staging';
+      tr.innerHTML =
+        '<td><span class="model-name">' + m.name + '</span><div class="model-goal">' + m.goal + '</div></td>' +
+        '<td><span class="version-chip">v' + m.version + '</span></td>' +
+        '<td><span class="stage-badge stage-' + m.stage + '">' + m.stage + '</span></td>' +
+        '<td><span class="task-tag">' + TASK_LABEL[m.task] + '</span></td>' +
+        '<td class="metric-cell">' + m.metricLabel + '</td>' +
+        '<td class="version-chip">' + m.installedAt + '</td>' +
+        '<td>' + (canPromote ? '<button class="ghost-button" data-promote="' + m.name + '@' + m.version + '" type="button">晋级</button>' : '') + '</td>';
+      tr.addEventListener('click', function (e) {
+        if (e.target.closest('[data-promote]')) return;
+        selected = m; renderRegistry(); renderDetail(m);
+      });
+      tr.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selected = m; renderRegistry(); renderDetail(m); }
+      });
+      body.appendChild(tr);
+    });
+    var prod = models.filter(function (m) { return m.stage === 'Production'; }).length;
+    var staging = models.filter(function (m) { return m.stage === 'Staging'; }).length;
+    $('registryCount').textContent = '共 ' + models.length + ' 个版本 · Production ' + prod + ' · Staging ' + staging;
+    body.querySelectorAll('[data-promote]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openPromote(this.getAttribute('data-promote'));
+      });
+    });
+  }
+
+  function renderDetail(m) {
+    var p = $('detailPanel');
+    p.innerHTML =
+      '<h3>' + m.name + ' <span class="version-chip">v' + m.version + '</span></h3>' +
+      '<p class="detail-sub"><span class="stage-badge stage-' + m.stage + '">' + m.stage + '</span> · ' + TASK_LABEL[m.task] + ' · 导入于 ' + m.installedAt + '</p>' +
+      '<div class="detail-grid">' +
+      '<div class="detail-section"><h4>留出指标（MPS Host 重算，随行 manifest）</h4><dl class="kv">' +
+        Object.keys(m.metrics).map(function (k) { return '<dt>' + k + '</dt><dd>' + m.metrics[k] + '</dd>'; }).join('') +
+      '</dl></div>' +
+      '<div class="detail-section"><h4>数据指纹</h4><dl class="kv">' +
+        '<dt>sha256</dt><dd>' + m.fingerprint.sha256 + '</dd>' +
+        '<dt>行 × 列</dt><dd>' + m.fingerprint.rows + ' × ' + m.fingerprint.columns.length + '</dd>' +
+        '<dt>列名</dt><dd>' + m.fingerprint.columns.join(', ') + '</dd>' +
+      '</dl></div>' +
+      '<div class="detail-section"><h4>训练信息</h4><dl class="kv">' +
+        '<dt>切分种子</dt><dd>' + m.training.splitSeed + '</dd>' +
+        '<dt>targets</dt><dd>' + m.training.targets.join(', ') + '</dd>' +
+        '<dt>训练时间</dt><dd>' + m.training.trainedAt + '</dd>' +
+        '<dt>来源会话</dt><dd>' + m.training.sessionRef + '</dd>' +
+      '</dl></div>' +
+      '<div class="detail-section"><h4>用法（usage）</h4><dl class="kv">' +
+        '<dt>inputs</dt><dd>' + m.usage.inputs.join(', ') + '</dd>' +
+        '<dt>outputs</dt><dd>' + m.usage.outputs.join(', ') + '</dd>' +
+      '</dl><pre class="usage-code">import { predict } from "dataRoot/models/' + m.name + '/v' + m.version + '/predict.mjs";\npredict(rows)  // → 每行附加 ' + m.usage.outputs[0] + ' 预测键\n# 或 Agent 经 modelpack_predict 工具沙箱调用</pre></div>' +
+      '</div>' +
+      '<div class="detail-actions">' +
+        (m.stage === 'Staging' ? '<button class="primary-button" type="button" onclick="window.__promote(\'' + m.name + '@' + m.version + '\')">升级为 Production</button>' : '') +
+        (m.stage === 'Production' ? '<span style="font-size:12px;color:var(--muted)">当前上线版本 · 分析默认调用</span>' : '') +
+        (m.stage === 'Archived' ? '<span style="font-size:12px;color:var(--muted)">已归档 · 可查不可调</span>' : '') +
+      '</div>';
+  }
+
+  /* ---------- 晋级 ---------- */
+  var promoteTarget = null;
+  window.__promote = function (key) { openPromote(key); };
+  function openPromote(key) {
+    var parts = key.split('@');
+    promoteTarget = models.find(function (m) { return m.name === parts[0] && String(m.version) === parts[1]; });
+    if (!promoteTarget) return;
+    var old = models.find(function (m) { return m.name === promoteTarget.name && m.stage === 'Production'; });
+    $('promoteSub').textContent = promoteTarget.name + ' v' + promoteTarget.version + '（' + TASK_LABEL[promoteTarget.task] + ' · ' + promoteTarget.metricLabel + '）' +
+      (old ? '　·　当前 Production：v' + old.version + ' 将自动归档' : '');
+    $('promoteBackdrop').classList.add('open');
+    $('promoteConfirm').focus();
+  }
+  $('promoteCancel').addEventListener('click', function () { $('promoteBackdrop').classList.remove('open'); });
+  $('promoteConfirm').addEventListener('click', function () {
+    if (promoteTarget) {
+      models.forEach(function (m) { if (m.name === promoteTarget.name && m.stage === 'Production') m.stage = 'Archived'; });
+      promoteTarget.stage = 'Production';
+      selected = promoteTarget;
+      renderRegistry(); renderDetail(promoteTarget);
+    }
+    $('promoteBackdrop').classList.remove('open');
+  });
+  $('promoteBackdrop').addEventListener('click', function (e) { if (e.target === this) this.classList.remove('open'); });
+
+  /* ---------- 导入 ---------- */
+  var STEP_NOTES = {
+    structure: ['3 件齐全 · formatVersion=1', '缺 manifest.json'],
+    manifest: ['name/promo-uplift v1 · regression', 'name 不合法: Promo_Uplift!'],
+    purity: ['0 违规（无 fs/网络/eval/随机/时钟）', "含禁止调用: require('fs')"],
+    smoke: ['predict(1 行) → 输出含目标列', '冒烟失败: predict 输出缺 order_count'],
+    install: ['dataRoot/models/promo-uplift/v1 · Staging', '']
+  };
+  var STEP_KEYS = ['structure', 'manifest', 'purity', 'smoke', 'install'];
+
+  $('openImport').addEventListener('click', function () {
+    resetImport();
+    $('importBackdrop').classList.add('open');
+    $('importPath').focus();
+  });
+  $('importCancel').addEventListener('click', function () { $('importBackdrop').classList.remove('open'); });
+  $('importBackdrop').addEventListener('click', function (e) { if (e.target === this) this.classList.remove('open'); });
+
+  function resetImport() {
+    $('checkSteps').hidden = true;
+    $('importError').classList.remove('show');
+    $('importOk').classList.remove('show');
+    $('importRun').disabled = false;
+    $('importRun').textContent = '开始验货并导入';
+    document.querySelectorAll('.check-step').forEach(function (s) {
+      s.className = 'check-step';
+      s.querySelector('.step-note').textContent = '';
+    });
+  }
+
+  $('importRun').addEventListener('click', function () {
+    var path = $('importPath').value.trim();
+    if (!path) { showImportError('请填写包目录路径。'); return; }
+    var fail = $('simFail').checked;
+    resetImport();
+    $('checkSteps').hidden = false;
+    $('importRun').disabled = true;
+    $('importRun').textContent = '验货中…';
+    var failAt = fail ? 2 : -1; // 演示：纯度重扫失败
+    var i = 0;
+    function next() {
+      if (i > 0) {
+        var prev = document.querySelector('.check-step[data-step="' + STEP_KEYS[i - 1] + '"]');
+        prev.classList.remove('running');
+        prev.classList.add('pass');
+        prev.querySelector('.step-note').textContent = STEP_NOTES[STEP_KEYS[i - 1]][0];
+      }
+      if (i === failAt) {
+        var bad = document.querySelector('.check-step[data-step="' + STEP_KEYS[i] + '"]');
+        bad.classList.remove('running');
+        bad.classList.add('fail');
+        bad.querySelector('.step-note').textContent = STEP_NOTES[STEP_KEYS[i]][1];
+        showImportError('<strong>导入被拒绝 · 未落任何文件。</strong><br>纯度重扫不过：<code>predict.mjs 含禁止调用 require(\'fs\')</code><br>模型包须零依赖纯计算；请在 MPS 重新训练导出后再导入。源目录未改动。');
+        $('importRun').disabled = false;
+        $('importRun').textContent = '重新验货';
+        return;
+      }
+      if (i >= STEP_KEYS.length) {
+        var newModel = {
+          name: 'promo-uplift', version: 1, stage: 'Staging', task: 'regression', goal: '促销活动对客单价的增量预测（演示导入）',
+          metrics: { mae: 6.82, rmse: 9.1 }, metricLabel: 'mae 6.82 · rmse 9.10',
+          fingerprint: { sha256: 'a31c07de…5f8b2190', rows: 2210, columns: ['order_id', 'promo_flag', 'discount_rate', 'basket_amount', 'uplift_amount'] },
+          training: { splitSeed: 42, targets: ['uplift_amount'], trainedAt: '2026-11-05T02:18:40Z', sessionRef: 's_c40d17ef' },
+          usage: { inputs: ['promo_flag', 'discount_rate', 'basket_amount'], outputs: ['uplift_amount'], form: 'predict(rows) -> rows' },
+          installedAt: '刚刚'
+        };
+        models.push(newModel);
+        renderRegistry();
+        $('importOk').innerHTML = '<strong>导入成功。</strong> promo-uplift v1 已入注册表（Staging）· 快照固化于 dataRoot/models/promo-uplift/v1 · 源目录可删。升 Production 由你在注册表点击确认。';
+        $('importOk').classList.add('show');
+        $('importRun').textContent = '已导入';
+        return;
+      }
+      var cur = document.querySelector('.check-step[data-step="' + STEP_KEYS[i] + '"]');
+      cur.classList.add('running');
+      i += 1;
+      setTimeout(next, 520);
+    }
+    next();
+  });
+
+  function showImportError(html) {
+    var el = $('importError');
+    el.innerHTML = html;
+    el.classList.add('show');
+  }
+
+  /* ---------- 对话场景 ---------- */
+  var capOn = false;
+  function renderCap() {
+    $('capPill').classList.toggle('on', capOn);
+    $('capPillText').textContent = '模型预测工具：' + (capOn ? '开' : '关');
+    $('capToggle').textContent = capOn ? '关闭能力' : '开启能力';
+  }
+  $('capToggle').addEventListener('click', function () {
+    capOn = !capOn; renderCap();
+    var body = $('chatBody');
+    var tip = document.createElement('div');
+    tip.className = 'msg agent';
+    tip.innerHTML = '<div class="msg-role">系统</div>「模型预测工具」已' + (capOn ? '开启：本任务注入 modelpack_list / modelpack_predict 两个工具（仅空闲时可切换；受管任务不注入）。' : '关闭：工具已移除，需要预测数字时我会如实声明不用模型。');
+    body.appendChild(tip);
+    body.scrollTop = body.scrollHeight;
+  });
+
+  var sending = false;
+  $('chatSend').addEventListener('click', function () {
+    if (sending) return;
+    var input = $('chatInput');
+    var text = input.value.trim();
+    if (!text) return;
+    sending = true;
+    $('chatSend').disabled = true;
+    var body = $('chatBody');
+    var userMsg = document.createElement('div');
+    userMsg.className = 'msg user';
+    userMsg.textContent = text;
+    body.appendChild(userMsg);
+    input.value = '';
+
+    var steps = capOn ? capOnSteps() : capOffSteps();
+    var idx = 0;
+    function play() {
+      if (idx >= steps.length) { sending = false; $('chatSend').disabled = false; return; }
+      var node = steps[idx]();
+      body.appendChild(node);
+      body.scrollTop = body.scrollHeight;
+      idx += 1;
+      setTimeout(play, idx === 1 ? 500 : 750);
+    }
+    setTimeout(play, 450);
+  });
+
+  function agentMsg(html) {
+    var d = document.createElement('div');
+    d.className = 'msg agent';
+    d.innerHTML = '<div class="msg-role">Pi Agent</div>' + html;
+    return d;
+  }
+  function toolCard(name, state, stateClass, bodyHtml) {
+    var det = document.createElement('details');
+    det.className = 'tool-card';
+    det.open = true;
+    det.innerHTML = '<summary><span class="tool-name">' + name + '</span><span class="tool-state' + (stateClass ? ' ' + stateClass : '') + '">' + state + '</span></summary>' +
+      (bodyHtml ? '<div class="tool-body">' + bodyHtml + '</div>' : '');
+    return det;
+  }
+
+  function capOnSteps() {
+    return [
+      function () { return agentMsg('需要预测数字——先查注册表货架，不自行估算。'); },
+      function () {
+        return toolCard('modelpack_list', '完成 · 4 个版本', '',
+          '<pre>order-forecast  v2  Production  regression  mae 3.04\nmember-churn    v1  Staging     binary      acc 0.871\npersona-match   v1  Staging     share       top1 0.72\norder-forecast  v1  Archived    —</pre>');
+      },
+      function () { return agentMsg('选用 order-forecast v2（Production）。按 usage.inputs 从项目 020_clean 的品类日订单表准备输入 CSV（business_date / product_category / gross_order_amount / discount_amount，下月日期行由我按日历生成）。'); },
+      function () {
+        return toolCard('modelpack_predict', '完成 · 沙箱执行 31 行', '',
+          '<pre>{\n  "model": "order-forecast",\n  "version": 2,\n  "stage": "Production",\n  "rows": 31,\n  "output": "020_clean/predict-order-202612.csv",\n  "sandbox": "node --permission (network: deny)",\n  "provenance": { "mae": 3.0447, "fingerprint": "08b0fd90…", "trainedAt": "2026-11-01" }\n}</pre>');
+      },
+      function () {
+        var card = document.createElement('div');
+        card.className = 'result-card';
+        card.innerHTML =
+          '<h4>下月品类订单量预测（模型计算，非估算）</h4>' +
+          '<table><thead><tr><th>品类</th><th>预测订单量（月合计）</th><th>环比</th></tr></thead><tbody>' +
+          '<tr><td>cate-a</td><td>1,284</td><td>+3.1%</td></tr>' +
+          '<tr><td>cate-b</td><td>947</td><td>+1.8%</td></tr>' +
+          '<tr><td>cate-c</td><td>742</td><td>−0.6%</td></tr>' +
+          '<tr><td>cate-d</td><td>531</td><td>+2.4%</td></tr>' +
+          '</tbody></table>' +
+          '<div class="provenance">出处：<code>order-forecast v2</code>（Production）· 留出指标 mae 3.04 / rmse 4.09 · 数据指纹 <code>08b0fd90…</code> · 沙箱执行 31 行 · 明细 <code>020_clean/predict-order-202612.csv</code></div>';
+        return card;
+      },
+      function () { return agentMsg('预测明细已存 020_clean，月合计如上。口径说明：模型按品类日订单特征预测，环比由我按 11 月实际值计算；预测出自模型脚本（出处见上卡），最终报告我会写入 060_reports 并附模型出处与局限（训练数据截至 2026-11-01，未含 12 月大促假设）。'); }
+    ];
+  }
+
+  function capOffSteps() {
+    return [
+      function () { return agentMsg('本任务未开启「模型预测工具」，我不会自行估算或编造预测数字。两个选择：① 在会话内「Pi 能力与命令」面板开启模型预测工具（仅空闲时可切换），我用注册表里的 order-forecast v2 计算；② 我基于 020 历史数据做趋势描述（不含预测值）。要哪种？'); }
+    ];
+  }
+
+  renderCap();
+  renderRegistry();
+})();
+</script>
+</body>
+</html>

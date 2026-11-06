@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { writeFile, mkdir, access } from 'node:fs/promises';
+import { writeFile, mkdir, access, symlink, link, readFile, readlink, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
@@ -16,6 +16,62 @@ const REPORT_TEXT = '# 会员复购分析\n\n高价值会员复购率从42%降�
 function reply(items: unknown[]): string { return '好的\n```json\n' + JSON.stringify(items) + '\n```\n完'; }
 const ITEM_A = { title: '补发高价值会员召回权益', rationale: '高价值会员复购显著下滑。', expectedImpact: '挽回部分流失订单', priority: 'high', effort: '2人日', confidence: 0.01, evidence: { level: '数据支撑', reasoning: '复购率来自清洗数据结论。', facts: [{ text: '复购率下降', quote: 'REPORT_QUOTE_MARKER' }] } };
 const ITEM_B = { title: '核对渠道A投放记录', rationale: '渠道A贡献主要降幅。', expectedImpact: '', priority: 'medium', effort: '', evidence: { level: '逻辑推断', reasoning: '由渠道结构推断。', facts: [{ text: '渠道A降幅最大' }] } };
+
+test('BS01/BS02: unrelated input links do not block the board, while ordinary file access remains protected', async t => {
+  const provider = await startSyntheticProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  await readJson(await host.request('/api/configuration', 'PUT', { name: 'Board scope synthetic', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-model', apiKey: 'synthetic-board-scope-only' }));
+  const { project } = await readJson(await host.request('/api/projects', 'POST', { name: 'Report scope' }), 201);
+  await readJson(await host.request(`/api/projects/${project.id}/files/save-report`, 'POST', { name: 'safe.md', text: '# Safe report\n\nSYNTHETIC_SAFE_REPORT' }), 201);
+  const target = path.join(host.dataRoot, 'outside-board-sentinel.txt');
+  await writeFile(target, 'SYNTHETIC_OUTSIDE_MUST_NOT_ENTER_BOARD');
+  const links = ['010_draw', '020_clean'].map(directory => ({ relative: `${directory}/input-link.txt`, absolute: path.join(project.rootPath, directory, 'input-link.txt') }));
+  for (const entry of links) await symlink(target, entry.absolute);
+
+  const board = await readJson(await host.request('/api/decision-board'));
+  assert.equal(board.reports.length, 1);
+  assert.equal(board.reports[0].relativePath, '060_reports/safe.md');
+  assert.equal(board.reports[0].availability, 'available');
+  assert.equal(JSON.stringify(board).includes('SYNTHETIC_OUTSIDE_MUST_NOT_ENTER_BOARD'), false);
+  const files = await host.request(`/api/projects/${project.id}/files`);
+  assert.equal(files.status, 400);
+  assert.equal((await files.json()).code, 'unsafe_file_path');
+  for (const entry of links) {
+    const download = await host.request(`/api/projects/${project.id}/files/content?path=${entry.relative}`);
+    assert.equal(download.status, 400);
+    assert.equal((await download.json()).code, 'unsafe_file_path');
+    assert.equal(await readlink(entry.absolute), target);
+  }
+  assert.equal(await readFile(target, 'utf8'), 'SYNTHETIC_OUTSIDE_MUST_NOT_ENTER_BOARD');
+  assert.equal(await readFile(path.join(project.rootPath, '060_reports/safe.md'), 'utf8'), '# Safe report\n\nSYNTHETIC_SAFE_REPORT');
+  assert.equal(provider.requests.length, 0);
+});
+
+test('BS02: protected links inside the report scope still fail closed without reading their targets', async t => {
+  for (const kind of ['symlink', 'hardlink']) await t.test(kind, async t => {
+    const provider = await startSyntheticProvider(), host = await startTestHost();
+    t.after(async () => { await host.close(); await provider.close(); });
+    await readJson(await host.request('/api/configuration', 'PUT', { name: 'Protected report synthetic', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-model', apiKey: 'synthetic-board-protected-only' }));
+    const { project } = await readJson(await host.request('/api/projects', 'POST', { name: 'Protected report scope' }), 201);
+    const target = path.join(host.dataRoot, 'outside-report-sentinel.md'), unsafe = path.join(project.rootPath, '060_reports', 'unsafe.md');
+    await writeFile(target, 'SYNTHETIC_PROTECTED_REPORT_TARGET');
+    if (kind === 'symlink') await symlink(target, unsafe); else await link(target, unsafe);
+    const before = await lstat(unsafe);
+    const board = await host.request('/api/decision-board');
+    assert.equal(board.status, 500);
+    const fault = await board.json();
+    assert.equal(fault.code, 'unsafe_file_path');
+    assert.equal(JSON.stringify(fault).includes('SYNTHETIC_PROTECTED_REPORT_TARGET'), false);
+    const download = await host.request(`/api/projects/${project.id}/files/content?path=060_reports/unsafe.md`);
+    assert.equal(download.status, 400);
+    assert.equal((await download.json()).code, 'unsafe_file_path');
+    const after = await lstat(unsafe);
+    assert.equal(after.ino, before.ino);
+    assert.equal(after.nlink, before.nlink);
+    assert.equal(await readFile(target, 'utf8'), 'SYNTHETIC_PROTECTED_REPORT_TARGET');
+    assert.equal(provider.requests.length, 0);
+  });
+});
 
 test('DB03/DB11: fixed-report extraction does not load installed executable resources or ancestor context', { timeout: 30000 }, async t => {
   const provider = await startSyntheticProvider(); t.after(() => provider.close());

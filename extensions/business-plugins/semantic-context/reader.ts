@@ -6,7 +6,7 @@ export class SemanticReadFault extends Error {
   constructor(code: string, status = 400) { super(code); this.code = code; this.status = status; }
 }
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
-const kinds = ['sap', 'enterprise', 'data-input', 'data-description', 'data-citation', 'data-evidence', 'case-decision', 'case-choice', 'source', 'personal'] as const;
+const kinds = ['sap', 'sap-method', 'enterprise', 'data-input', 'data-description', 'data-citation', 'data-evidence', 'case-decision', 'case-choice', 'source', 'personal'] as const;
 export function parseSemanticQueryInput(value: unknown): SemanticQueryInput {
   const fail = (): never => { throw new SemanticReadFault('invalid_semantic_context_request'); };
   if (!object(value) || !['find', 'read', 'trace'].includes(String(value.action))) return fail();
@@ -22,6 +22,7 @@ export function parseSemanticQueryInput(value: unknown): SemanticQueryInput {
   const target = value.target;
   const fields: Record<SemanticTarget['kind'], [string[], string[]]> = {
     sap: [['packageId', 'version'], ['metricName', 'publishedHash']], enterprise: [['storeId', 'materialId', 'revisionId'], ['location']],
+    'sap-method': [['methodId', 'version'], ['publishedHash']],
     'data-input': [['projectId', 'datasetId', 'inputVersionId'], []], 'data-description': [['projectId', 'datasetId', 'inputVersionId', 'descriptionRevisionId'], []],
     'data-citation': [['projectId', 'citationId'], []], 'data-evidence': [['projectId', 'citationId', 'attachmentIndex'], []],
     'case-decision': [['caseStoreId', 'caseId', 'recordId', 'revision'], []], 'case-choice': [['caseStoreId', 'caseId', 'choiceId'], []],
@@ -33,7 +34,7 @@ export function parseSemanticQueryInput(value: unknown): SemanticQueryInput {
   for (const [key, item] of Object.entries(target)) {
     if (key === 'kind') continue;
     if (key === 'source' || key === 'target') { if (!object(item)) return fail(); }
-    else if (key === 'revision' || key === 'attachmentIndex') { if (!(key === 'attachmentIndex' && item === null) && (!Number.isSafeInteger(item) || Number(item) < (key === 'revision' ? 1 : 0))) return fail(); }
+    else if (key === 'revision' || key === 'attachmentIndex' || key === 'version' && target.kind === 'sap-method') { if (!(key === 'attachmentIndex' && item === null) && (!Number.isSafeInteger(item) || Number(item) < (key === 'attachmentIndex' ? 0 : 1))) return fail(); }
     else if (key === 'publishedHash') { if (item !== null && (typeof item !== 'string' || !/^[a-f0-9]{64}$/.test(item))) return fail(); }
     else if (key === 'location') { if (!object(item) || Object.keys(item).some(key => !['start', 'end'].includes(key)) || !Number.isSafeInteger(item.start) || !Number.isSafeInteger(item.end) || Number(item.start) < 0 || Number(item.end) <= Number(item.start)) return fail(); }
     else if (typeof item !== 'string' || !item.length || item.length > 1000 || item.includes('\0')) return fail();

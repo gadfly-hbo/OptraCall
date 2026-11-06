@@ -1,0 +1,115 @@
+// Run with playwright-cli run-code against an isolated Host. The initial URL must
+// include sapQa=1, project, task and provider (the configured loopback provider).
+// fault=list-read optionally interrupts one collection GET to exercise read retry;
+// it never supplies a fabricated API response. All successful reads/writes are real.
+async (page) => {
+  const initial = new URL(page.url()), baseUrl = initial.origin;
+  const projectId = initial.searchParams.get('project'), taskId = initial.searchParams.get('task'), provider = initial.searchParams.get('provider');
+  const assert = (value, message) => { if (!value) throw new Error(message); };
+  assert(initial.hostname === '127.0.0.1' && initial.searchParams.get('sapQa') === '1' && projectId && taskId && provider && new URL(provider).hostname === '127.0.0.1', 'Use an explicitly isolated loopback Host/project/task/provider.');
+  const headers = { origin: baseUrl, 'x-optracall-client': '1' }, checks = [], errors = [], outbound = [];
+  const runName = initial.searchParams.get('fault') === 'list-read' ? 'read-retry' : 'core';
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('request', request => { if (new URL(request.url()).hostname !== '127.0.0.1') outbound.push(request.url()); });
+  const get = async path => { const response = await page.request.get(baseUrl + path, { headers }); assert(response.ok(), `GET ${path}: ${response.status()}`); return response.json(); };
+  const configurations = await get('/api/configurations');
+  assert(configurations.configurations.some(value => value.id === configurations.selectedId && value.baseUrl === provider), 'The isolated Host must still select the supplied synthetic loopback provider.');
+  const collection = `/api/projects/${projectId}/tasks/${taskId}/sap-method-extractions`;
+  const records = (await get(collection)).extractions;
+  assert(records.length >= 2 && records.every((value, index) => !index || records[index - 1].createdAt >= value.createdAt), 'Prepare at least two receipts in the actual API descending order.');
+  const expected = records[0];
+  assert(expected?.methodId && Number.isSafeInteger(expected.version), 'Prepare at least two completed extraction receipts on the isolated source.');
+  const sourceURL = `${baseUrl}/?project=${projectId}&task=${taskId}`;
+  if (initial.searchParams.get('fault') === 'list-read') {
+    let interrupted = false;
+    await page.route(baseUrl + collection, async route => {
+      if (route.request().method() !== 'GET' || interrupted) return route.continue();
+      interrupted = true; await route.abort('connectionreset');
+    });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(sourceURL);
+  if (initial.searchParams.get('fault') === 'list-read') {
+    await page.getByRole('button', { name: '重新读取提取记录', exact: true }).click();
+    checks.push('A failed collection read retries the actual Host without creating a new extraction');
+  }
+  const receiptLink = page.getByRole('button', { name: /^查看(已保存方法|原方法的准确版本)$/ });
+  await receiptLink.waitFor();
+  const exactPath = `/api/sap/methods/${expected.methodId}/versions/${expected.version}`;
+  const opened = page.waitForRequest(request => request.method() === 'GET' && new URL(request.url()).pathname.includes('/api/sap/methods/') && new URL(request.url()).pathname.includes('/versions/'));
+  await receiptLink.click();
+  assert(new URL((await opened).url()).pathname === exactPath, 'Reentering a task must open the newest extraction receipt, with its exact saved method/version.');
+  checks.push('The newest descending receipt opens its exact method/version');
+  const methodPage = page.getByRole('region', { name: 'SAP 分析方法', exact: true });
+  await methodPage.locator('h1').waitFor();
+  await methodPage.locator('.sap-method-sources > summary').click();
+  const sourceTrigger = methodPage.getByRole('button', { name: '查看来源原文', exact: true }).first();
+  const sourceResponse = page.waitForResponse(response => new URL(response.url()).pathname.startsWith(exactPath + '/sources/') && response.request().method() === 'GET');
+  await sourceTrigger.click();
+  const sourceValue = await (await sourceResponse).json(), sourceDialog = page.getByRole('dialog').filter({ has: page.getByRole('button', { name: '关闭来源', exact: true }) });
+  assert(sourceValue.text, 'The actual extraction source must have readable captured text.');
+  await sourceDialog.getByText(sourceValue.text, { exact: true }).waitFor();
+  if (sourceValue.governance) await sourceDialog.getByRole('region', { name: '当前来源治理', exact: true }).getByText(sourceValue.governance, { exact: true }).waitFor();
+  await page.keyboard.press('Escape'); await sourceDialog.waitFor({ state: 'detached' });
+  await page.waitForFunction(element => element === document.activeElement, await sourceTrigger.elementHandle());
+  assert(await sourceTrigger.evaluate(element => element === document.activeElement), 'Closing the native source dialog must restore its trigger focus.');
+  checks.push('The exact source is loaded on demand and Escape restores keyboard focus');
+  await methodPage.getByRole('button', { name: '← 返回分析方法', exact: true }).click();
+  await methodPage.getByRole('button', { name: '新建方法', exact: true }).click();
+  const title = `浏览器手工方法 ${Date.now()}`;
+  await methodPage.getByRole('textbox', { name: /^方法名称/ }).fill(title);
+  await methodPage.getByRole('textbox', { name: '问题与适用条件', exact: true }).fill('用于有完整期间的合成比较。');
+  await methodPage.getByRole('textbox', { name: '分析逻辑', exact: true }).fill('v1 固定原始逻辑：先核对期间再比较。');
+  await methodPage.getByRole('textbox', { name: '检查与局限', exact: true }).fill('合成产品流程验证，不代表专业验收。');
+  const createResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/sap/methods' && response.request().method() === 'POST');
+  await methodPage.getByRole('button', { name: '保存为未发布版本', exact: true }).click();
+  const created = await (await createResponse).json(), methodId = created.method?.id;
+  assert(methodId && created.version.version === 1 && created.method.publishedVersion === null, 'Manual save must create v1 without publication.');
+  await methodPage.getByText('v1 · 已保存未发布', { exact: true }).waitFor();
+  const publicationResponse = page.waitForResponse(response => new URL(response.url()).pathname === `/api/sap/methods/${methodId}/publish` && response.request().method() === 'POST');
+  await methodPage.getByRole('button', { name: '发布此版本', exact: true }).click();
+  const publication = await (await publicationResponse).json();
+  assert(publication.method.publishedVersion === 1 && publication.version.contentSha256 === created.version.contentSha256, 'Publication must target saved v1 content identity.');
+  await methodPage.getByRole('button', { name: '编辑为新版本', exact: true }).click();
+  await methodPage.getByRole('textbox', { name: '分析逻辑', exact: true }).fill('v2 草稿逻辑：保留完整期间检查，并补分组对照。');
+  const saveV2 = page.waitForResponse(response => new URL(response.url()).pathname === `/api/sap/methods/${methodId}/versions` && response.request().method() === 'POST');
+  await methodPage.getByRole('button', { name: '保存为未发布版本', exact: true }).click();
+  const v2 = await (await saveV2).json();
+  assert(v2.version.version === 2 && v2.method.publishedVersion === 1, 'Saving v2 must preserve the published v1 reference boundary.');
+  checks.push('Manual v1 save, explicit publication, and unpublished v2 preserve the original published version');
+  await methodPage.getByRole('button', { name: /^v1 · 已发布/ }).click();
+  await methodPage.getByText('v1 固定原始逻辑：先核对期间再比较。', { exact: true }).waitFor();
+  await methodPage.getByRole('button', { name: '编辑为新版本', exact: true }).click();
+  assert(await methodPage.getByRole('textbox', { name: '分析逻辑', exact: true }).inputValue() === 'v1 固定原始逻辑：先核对期间再比较。', 'Editing history must preserve the selected v1 text.');
+  await methodPage.getByRole('textbox', { name: '分析逻辑', exact: true }).fill('v3 从 v1 整理：保留期间检查并明确样本局限。');
+  const saveV3 = page.waitForResponse(response => new URL(response.url()).pathname === `/api/sap/methods/${methodId}/versions` && response.request().method() === 'POST');
+  await methodPage.getByRole('button', { name: '保存为未发布版本', exact: true }).click();
+  const v3Response = await saveV3, v3 = await v3Response.json(), v3Input = v3Response.request().postDataJSON();
+  assert(v3Response.ok() && v3.version.version === 3 && v3Input.baseVersion === 2 && v3Input.relation.target.version === 1 && v3.method.publishedVersion === 1, 'Historical v1 revision must CAS-lock latest v2, record source v1, and save v3 without publication.');
+  assert(v3.method.versions.find(version => version.version === 1).content.logic === created.version.content.logic, 'The original published v1 must remain unchanged.');
+  checks.push('Editing historical v1 saves v3 from the selected text while checking current v2 and preserving v1');
+  await page.screenshot({ path: `output/playwright/sap-methods-real-host-${runName}-desktop.png`, fullPage: true });
+  await methodPage.getByRole('button', { name: '编辑方法', exact: true }).click();
+  await methodPage.getByRole('textbox', { name: /^方法名称/ }).fill(title + ' 未保存输入');
+  await methodPage.getByRole('button', { name: '取消编辑', exact: true }).click();
+  const leave = page.getByRole('dialog', { name: '保留未保存的编辑？', exact: true });
+  await leave.waitFor();
+  await page.waitForFunction(() => document.activeElement?.textContent === '继续编辑');
+  assert(await leave.getByRole('button', { name: '继续编辑', exact: true }).evaluate(element => element === document.activeElement), 'Unsaved dialog must focus the preserving action.');
+  await page.keyboard.press('Escape'); await leave.waitFor({ state: 'detached' });
+  assert((await methodPage.getByRole('textbox', { name: /^方法名称/ }).inputValue()).endsWith(' 未保存输入'), 'Escape must retain the unsaved input.');
+  checks.push('Native unsaved confirmation defaults to preserving input and Escape keeps edits');
+  await page.setViewportSize({ width: 390, height: 844 });
+  if (await page.getByRole('button', { name: '切换为深色', exact: true }).isVisible()) await page.getByRole('button', { name: '切换为深色', exact: true }).click();
+  assert(await page.locator('.app').getAttribute('data-theme') === 'dark', 'The mobile check must actually use the dark theme.');
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'The method editor must not overflow the 390px viewport.');
+  await methodPage.getByRole('button', { name: '取消编辑', exact: true }).click();
+  await page.getByRole('dialog', { name: '保留未保存的编辑？', exact: true }).getByRole('button', { name: '放弃未保存修改', exact: true }).click();
+  await methodPage.getByText('v3 · 已保存未发布', { exact: true }).waitFor();
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'The method detail must not overflow the 390px viewport.');
+  await page.screenshot({ path: `output/playwright/sap-methods-real-host-${runName}-mobile-dark.png`, fullPage: true });
+  checks.push('Dark 390px editor, confirmation and exact saved detail remain usable');
+  assert(errors.length === 0, 'Browser exceptions: ' + errors.join('; '));
+  assert(outbound.length === 0, 'External browser requests: ' + outbound.join('; '));
+  return { result: 'PASS', scope: 'Isolated real Host with synthetic Pi source; successful API responses are not mocked', checks, methodId, exactExtraction: expected.requestId, browserErrors: errors.length, externalRequests: outbound.length };
+}

@@ -26,6 +26,7 @@ const personal = Type.Union([
 ]);
 const target = Type.Union([
   Type.Object({ kind: Type.Literal('sap'), packageId: id, version: id, metricName: Type.Optional(id), publishedHash: Type.Optional(nullableSha) }, exact),
+  Type.Object({ kind: Type.Literal('sap-method'), methodId: uuid, version: Type.Integer({ minimum: 1 }), publishedHash: Type.Optional(nullableSha) }, exact),
   Type.Object({ kind: Type.Literal('enterprise'), storeId: id, materialId: id, revisionId: id, location: Type.Optional(range) }, exact),
   Type.Object({ kind: Type.Literal('data-input'), projectId: id, datasetId: id, inputVersionId: id }, exact),
   Type.Object({ kind: Type.Literal('data-description'), projectId: id, datasetId: id, inputVersionId: id, descriptionRevisionId: id }, exact),
@@ -36,7 +37,7 @@ const target = Type.Union([
   Type.Object({ kind: Type.Literal('source'), source: Type.Record(Type.String(), Type.Unknown(), { description: 'An exact original M4/M6 LearningSourceRef returned by the directory; keep its type, original identity/version/hash fields and optional excerpt. Host validates the original source contract.' }) }, exact),
   Type.Object({ kind: Type.Literal('personal'), target: personal }, exact),
 ]);
-const kinds = ['sap', 'enterprise', 'data-input', 'data-description', 'data-citation', 'data-evidence', 'case-decision', 'case-choice', 'source', 'personal'];
+const kinds = ['sap', 'sap-method', 'enterprise', 'data-input', 'data-description', 'data-citation', 'data-evidence', 'case-decision', 'case-choice', 'source', 'personal'];
 const pagination = {
   recordedBefore: Type.Optional(Type.String({ description: 'ISO8601 timestamp with timezone, filtering trustworthy recorded time only; unknown time remains explicitly unknown.' })),
   pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),

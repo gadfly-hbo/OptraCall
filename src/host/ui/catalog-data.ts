@@ -2,7 +2,7 @@ import type { SkillEvaluation } from './skill-evaluation.ts';
 
 export const catalogCategories = ['assets', 'scenarios', 'connectors', 'plugins'] as const;
 export type CatalogCategory = typeof catalogCategories[number];
-export type CatalogEntry = 'metric' | 'requirement' | 'enterprise-materials' | 'decision' | 'refiner' | 'ppt-report' | 'simlab' | 'target-forecast' | 'coupon-forecast' | 'roi-forecast' | 'deep-research' | 'data-analysis' | 'trade-area-mcp' | 'weather-mcp';
+export type CatalogEntry = 'metric' | 'requirement' | 'enterprise-materials' | 'decision' | 'refiner' | 'ppt-report' | 'simlab' | 'model-pack' | 'target-forecast' | 'coupon-forecast' | 'roi-forecast' | 'deep-research' | 'data-analysis' | 'trade-area-mcp' | 'weather-mcp';
 export type CatalogItem = {
   id: string; category: CatalogCategory; name: string; description: string;
   tags: string[]; source: string; note: string;
@@ -41,14 +41,13 @@ function planned(category: CatalogCategory, id: string, name: string, descriptio
 }
 export const catalogItems: CatalogItem[] = [
   { id: 'enterprise-business-materials', category: 'assets', name: '企业业务资料', description: '集中维护企业背景原文与修订，Case 引用明确版本并补充本案资料。', tags: ['企业背景', '资料原文'], source: 'OptraCall 企业业务资料', note: '公共资料、明确修订与本案补充各自保留来源。', status: '已接入', entry: 'enterprise-materials' },
-  { id: 'metric-factory', category: 'assets', name: '指标体系', description: '维护可复用的指标定义、业务口径与 SAP 发布版本，并按需关联项目。', tags: ['指标口径', '业务定义'], source: 'OptraCall 指标体系', note: '使用现有指标体系工作台。', status: '已接入', entry: 'metric' },
+  { id: 'metric-factory', category: 'assets', name: 'SAP 分析资产', description: '统一管理分析指标与分析方法；方法先保存、后发布，发布后供后续任务按需参考。', tags: ['指标口径', '指标体系', '分析方法', '适用条件'], source: 'OptraCall 分析资产', note: '指标定义保留原发布边界；IR 与非 IR 方法共用保存、发布、版本与纠错规则，不另建调用流程。', status: '已接入', entry: 'metric' },
   { id: 'ppt-report', category: 'assets', skill: {}, name: 'PPT 报告生成', description: '以正式 md 报告生成候选版 PPTX：内容红线（不编造、数字逐字）+ 版式规范 + 单页重生成与核对脚本，随产品内置。', tags: ['PPT 生成', '报告表达'], source: 'OptraCall 分析资产 · ppt-report skill', note: '无需安装：随产品分发，版本随 OptraCall 更新。使用入口＝项目文件 060_reports 中 md 报告的「生成 PPTX」按钮；分析需求已声明 PPTX 的任务在报告完成后可直接生成。', status: '已接入', entry: 'ppt-report' },
   { id: 'target-forecast', category: 'assets', skill: {}, name: '经营目标测算', description: '内置分析 skill，随 OptraCall 更新。在项目任务对话中使用。人、货、场三视角 GMV 目标测算：数据三级校验、口径确认、多情景计算与交叉校验，确定性脚本随产品内置。', tags: ['目标测算', '人货场'], source: 'OptraCall 分析资产 · target-forecast skill', note: '无需安装 skill：随产品分发，版本随 OptraCall 更新。使用入口＝项目任务对话，直接提出目标测算问题；Agent 按需使用 skill 与脚本，报告落 060_reports。脚本需要 Python 与 openpyxl；测算属于情景推演，不是预测承诺。', status: '已接入', entry: 'target-forecast' },
   { id: 'coupon-forecast', category: 'assets', skill: {}, name: '优惠券测算', description: '内置分析 skill，随 OptraCall 更新。在项目任务对话中使用。满减券四子模型情景测算：保留无券基线，比较回本所需转化提升、约束过滤与压力结果，确定性脚本随产品内置。', tags: ['优惠券', '营销测算'], source: 'OptraCall 分析资产 · coupon-forecast skill', note: '无需安装 skill：随产品分发，版本随 OptraCall 更新。使用入口＝项目任务对话，直接提出发券决策问题；Agent 按需使用 skill 与脚本，报告落 060_reports。脚本需要 Python，表格导入另需 openpyxl；允许不发券的结论。', status: '已接入', entry: 'coupon-forecast' },
   { id: 'roi-forecast', category: 'assets', skill: {}, name: '投放 ROI 测算', description: '内置分析 skill，随 OptraCall 更新。在项目任务对话中使用。多投放计划盈亏链路测算：保本转化率、情景敏感度、净贡献排名与跨档稳定性，确定性脚本随产品内置。', tags: ['投放 ROI', '盈亏测算'], source: 'OptraCall 分析资产 · roi-forecast skill', note: '无需安装 skill：随产品分发，版本随 OptraCall 更新。使用入口＝项目任务对话，直接提出投放盈亏问题；Agent 按需使用 skill 与脚本，报告落 060_reports。脚本需要 Python；测算属于情景推演，允许净亏损的结论。', status: '已接入', entry: 'roi-forecast' },
   { id: 'deep-research', category: 'assets', skill: { evaluation: deepResearchEvaluation }, name: '深度研究', description: '内置分析 skill，随 OptraCall 更新。在项目任务对话中开展多源研究与报告写作，按需委派调研、审稿子角色，保留来源引用与研究局限。', tags: ['深度研究', '研究报告'], source: 'OptraCall 分析资产 · deep-research skill', note: '使用入口＝项目任务对话，提出行业研究、竞品分析或专题调研问题，最终报告落 060_reports。检索取决于当前配置路线：MiniMax M3/M3.1-Flash、MiMo v2.6 系列接通原生检索；DeepSeek flash 路线未接通时如实声明，仅基于用户材料综述。没有可引用来源不等于路线未接通；重要决策请核验来源和结论。', status: '已接入', entry: 'deep-research' },
   { id: 'data-analysis', category: 'assets', skill: { evaluation: dataAnalysisEvaluation }, name: '运营数据分析', description: '内置分析 skill，随 OptraCall 更新。在项目任务对话中支持业务数据的趋势对比、异常定位与指标变化拆解，配套复算脚本、报告格式检查和数据体检，辅助输出六段式报告。', tags: ['数据分析', '归因'], source: 'OptraCall 分析资产 · data-analysis skill', note: '使用入口＝项目任务对话，提出分析数据、看趋势或找异常类问题，最终报告落 060_reports。脚本需 python3（纯标准库）。不做目标测算、发券、投放与公开信息深度研究，对应各自 skill。本次测评 Token 用量约为不装 skill 的 40.1 倍。', status: '已接入', entry: 'data-analysis' },
-  planned('assets', 'A02', '分析方法资产包', '组织漏斗、Cohort、RFM 与变化分解等常用方法。', ['分析方法', '适用条件'], '方法是 Agent 可参考的材料，不是宿主强制执行的阶段。'),
   planned('assets', 'A03', '假设与策略资产包', '保留候选解释、反证要求和策略适用条件。', ['假设策略', '反证'], '候选假设不等于已确认事实，策略也不等于实际执行。'),
   planned('assets', 'A04', '实验与效果评估资产包', '明确实验单位、评价窗口与效果解释边界。', ['实验评估', '统计约定'], '未来需结合真实实验设计与数据质量判断适用性。'),
   planned('assets', 'A05', '报告与表达规范资产包', '复用经营复盘、实验报告的结构与证据表达要求。', ['报告模板', '表达规范'], '此处没有生成报告，模板是否生效需在接入任务中验证。'),
@@ -75,6 +74,7 @@ export const catalogItems: CatalogItem[] = [
   { id: 'decision-platform', category: 'plugins', name: '决策看板', description: '跨项目汇总分析报告，抽取建议并跟进采纳、行动与复盘。', tags: ['决策协同', '行动反馈'], source: '本仓库决策看板 · 顶部“决策”入口', status: '已接入', entry: 'decision', note: '读取各项目 060_reports 报告并显式触发模型抽取；进入决策看板页面后，实际能力以该页面为准。' },
   { id: 'ppt-refiner', category: 'plugins', name: 'PPT 逐页精修', description: '读取候选版 PPTX，在独立会话中逐页对话修改：页图预览、数字锚点拦截、页锁定、版本回退、差异清单导出。', tags: ['PPT 精修', '报告编审'], source: 'OptraCall 业务插件 · ppt-refiner', note: '仅面向本产品生成的候选版；md 报告只读锚定，不回写；使用统一 Agent 底座与独立精修会话。', status: '已接入', entry: 'refiner' },
   { id: 'sim-lab', category: 'plugins', name: '经营推演', description: '把备货与促销假设展开成可审计的逐日账本：多方案对比、自定义扰动、固化不可变快照作为决策证据；页面直接推演，也可在任务中由 Agent 工具化推演。', tags: ['经营仿真', '决策证据'], source: 'OptraCall 业务插件 · sim-lab', note: '确定性假设模型，不是预测；探索自由、固化由用户确认。Agent 工具需在任务级显式开启。', status: '已接入', entry: 'simlab' },
+  { id: 'model-pack', category: 'plugins', name: '模型包', description: '导入训练产出的可执行模型资产，查看版本、留出指标与数据指纹，在本机沙箱执行预测、无网络外发；训练在 MPS（Model Pack Studio）完成。', tags: ['模型预测', '版本注册表', '本机执行'], source: 'OptraCall 业务插件 · model-pack', note: '注册表管理导入与晋级；任务级开启模型预测工具后，由 Agent 自主发现、选版本、备数与解读。预测结果和出处会进入所选任务模型上下文，不代表整段对话零数据外发。', status: '已接入', entry: 'model-pack' },
 ];
 
 export function filterCatalog(category: CatalogCategory, query: string, tag: string): CatalogItem[] {

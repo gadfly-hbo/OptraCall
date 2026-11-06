@@ -2,6 +2,8 @@
 
 当前工程增量适用Interface v3，兼容原v1/v2业务调用子集。强制接入规则的唯一来源是[工程规范IN01–IN07](engineering-workflow.md)；本说明提供类型定位、使用方法及验证入口，不维护另一套规则。准确字段和返回类型以[src/host/agent-sessions.ts](../src/host/agent-sessions.ts)导出的`AGENT_SESSION_INTERFACE_VERSION`、`AgentSessionPort`、`SessionProfile`等为准。下文历史v1接入保留其当时事实，不代表自动核算整包或产品验收已完成。
 
+涉及 SDK／依赖／适配变化时，同时执行[官方 Pi SDK 来源与版本约束](engineering-workflow.md#官方-pi-sdk-来源与版本约束)和[升级流程](engineering-workflow.md#pi-sdk-升级流程)。本说明及 Interface v3 的旧验收不豁免包完整性、用户指定版本或内部接口逐版复核；当前核对与未处理风险见[记录](../openspec/changes/pi-sdk-governance/result.md)。
+
 ## 开始接入前
 
 在当前变更规格中记录：工程规范版本、Interface版本、真实owner、Host注册位置/profile、允许修改路径、模型/工具/历史策略与验收。遇到新能力时先核对现有Interface是否表达得了，按IN06补齐适配与验收；有实质业务差异的部分留在业务模块。
@@ -12,6 +14,7 @@
 - [需求梳理Host适配器](../src/host/requirement-sessions.ts)：当前配置捕获、独立workspace、生成及一次修正的会话占用。
 - [公共接口与实现](../src/host/agent-sessions.ts)：启动、占用、配置身份、取消/关闭及代际保护。
 - [公共行为及第三合成消费者测试](../tests/agent-sessions.test.ts)：通过同一实现接入不同profile，验证状态/事件/取消的隔离。测试消费者不代表新增产品插件。
+- [SAP方法后置提取](../src/host/sap-method-sessions.ts)：Interface v3附属profile，真实源project/task＋提取身份，独立原生会话；`source-reader`只读获准固定来源，不加载执行工具／用户扩展／skills／MCP，不续接原任务会话。具体合同与本地验收见[实施合同](../openspec/changes/sap-analysis-methods/implementation-contract.md)。
 
 ## 接入关系与类型
 
@@ -28,6 +31,8 @@ Host静态注册profile，用`createAgentSessionDomain(options)`创建独立域�
 | `AgentSessionDomain<Owner>` | Host管理表面，另有注册Ref及按范围关闭能力；不传给Extension |
 
 TypeScript类型本身不构成安全隔离。Host仍负责封闭注册、验证真实业务归属和授权；调用方拿到合法Ref也不能扩大数据、工具或经营动作权限。域与owner隔离是同进程逻辑隔离，不是进程隔离或敏感数据沙箱。
+
+Host的`busyInScope(filter, ownerMatches?)`可对同一公共资源状态作更精确的只读owner筛选；当前SAP提取用它查询同task所有提取及失败关闭残留。该谓词不进入`AgentSessionPort`或可序列化输入，不授予运行或关闭资格，Interface版本保持v3。
 
 PPT接线修复为Host增加同一公共域上的只读`busyInScope({projectId?,provider?})`查询：直接投影原slot、operation、opening、resource及retirement状态，覆盖准备、阶段间和收尾，不创建资源或第二份状态台账。它与`closeAll`一样只留在Host管理表面，排除于业务`AgentSessionPort`；业务调用子集及Interface v3不变。真实项目owner仍由Host验证，不能从客户端路径自造；检查覆盖匹配／不匹配范围、取消后的实际收尾和第三合成消费者。
 
