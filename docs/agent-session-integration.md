@@ -2,6 +2,8 @@
 
 当前工程增量适用Interface v3，兼容原v1/v2业务调用子集。强制接入规则的唯一来源是[工程规范IN01–IN07](engineering-workflow.md)；本说明提供类型定位、使用方法及验证入口，不维护另一套规则。准确字段和返回类型以[src/host/agent-sessions.ts](../src/host/agent-sessions.ts)导出的`AGENT_SESSION_INTERFACE_VERSION`、`AgentSessionPort`、`SessionProfile`等为准。下文历史v1接入保留其当时事实，不代表自动核算整包或产品验收已完成。
 
+涉及 SDK／依赖／适配变化时，同时执行[官方 Pi SDK 来源与版本约束](engineering-workflow.md#官方-pi-sdk-来源与版本约束)和[升级流程](engineering-workflow.md#pi-sdk-升级流程)。本说明及 Interface v3 的旧验收不豁免包完整性、用户指定版本或内部接口逐版复核；当前核对与未处理风险见[记录](../openspec/changes/pi-sdk-governance/result.md)。
+
 ## 开始接入前
 
 在当前变更规格中记录：工程规范版本、Interface版本、真实owner、Host注册位置/profile、允许修改路径、模型/工具/历史策略与验收。遇到新能力时先核对现有Interface是否表达得了，按IN06补齐适配与验收；有实质业务差异的部分留在业务模块。

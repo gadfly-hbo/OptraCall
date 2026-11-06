@@ -7,7 +7,60 @@ test('SDK private installed paths remain confined to the sole reviewed SDK surfa
   const source = `import { loadMcpConfig } from '${privatePath}';`;
   assert.ok(inspectSessionSource('extensions/business-plugins/example/entry.ts', source).length, 'relative node_modules paths must not bypass the SDK import boundary');
   assert.ok(inspectSessionSource('src/host/feature.ts', `import x from 'file:///example/node_modules/@earendil-works/pi-coding-agent/dist/index.js';`).length);
-  assert.deepEqual(inspectSessionSource('src/agent/sdk.ts', `import { loadMcpConfig } from '../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js';`), [], 'the fixed IN06 thin import stays at the existing sole SDK surface');
+  assert.deepEqual(inspectSessionSource('src/agent/sdk.ts', `export async function getSdkMcpConfigLoader() { if (VERSION !== '1.4.0') throw new Error('unsupported'); const { loadMcpConfig } = await import('../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js'); return loadMcpConfig; }`), [], 'the fixed IN06 thin import stays behind the pinned check at the existing sole SDK surface');
+});
+
+test('R4: fixed SDK surface rejects unreviewed internal paths, early loading and direct Pi dependency imports', () => {
+  for (const source of [
+    `import { loadMcpConfig } from '../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js';`,
+    `const config = await import('../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js');`,
+    `export async function getSdkMcpConfigLoader() { return import('../../node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js'); }`,
+    `export async function getSdkMcpConfigLoader() { return import('../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js'); }`,
+  ]) assert.ok(inspectSessionSource('src/agent/sdk.ts', source).length, source);
+  for (const name of ['agent-core', 'ai', 'codemode', 'mcp', 'tui', 'telemetry']) {
+    for (const source of [`import x from '@earendil-works/pi-${name}';`, `export * from '@earendil-works/pi-${name}';`, `const x = import('../../../node_modules/@earendil-works/pi-${name}/dist/index.js');`]) {
+      assert.ok(inspectSessionSource(plugin, source).length, source);
+    }
+  }
+});
+
+test('R4: known SDK definition writes fail while new Host-owned definitions remain legal', () => {
+  for (const mutation of [
+    `definition.execute = wrapped;`, `definition['execute'] = wrapped;`,
+    `const alias = definition; alias.execute = wrapped;`,
+    `Object.assign(definition, { execute: wrapped });`,
+    `Object.defineProperty(definition, 'execute', { value: wrapped });`,
+    `Object.defineProperties(definition, { execute: { value: wrapped } });`,
+    `Reflect.set(definition, 'execute', wrapped);`,
+  ]) assert.ok(inspectSessionSource('src/agent/project-session.ts', `const definition = session.getToolDefinition(name); ${mutation}`).length, mutation);
+  assert.ok(inspectSessionSource('src/agent/project-session.ts', `session.getToolDefinition(name).execute = wrapped;`).length);
+  assert.deepEqual(inspectSessionSource('src/agent/tool-context-adapter.ts', `const owned = Object.create(Object.getPrototypeOf(original), Object.getOwnPropertyDescriptors(original)); owned.execute = wrapped;`), []);
+});
+
+test('R4 review regression: expression wrappers cannot hide a known SDK definition write', () => {
+  for (const value of ['(session.getToolDefinition(name))', 'session.getToolDefinition(name)!', '(session.getToolDefinition(name) as ToolDefinition)', '(<ToolDefinition>session.getToolDefinition(name))', '(session.getToolDefinition(name) satisfies ToolDefinition)']) {
+    assert.ok(inspectSessionSource('src/agent/project-session.ts', `${value}.execute = wrapped;`).length, value);
+    assert.ok(inspectSessionSource('src/agent/project-session.ts', `Reflect.set(${value}, 'execute', wrapped);`).length, value);
+  }
+  for (const mutation of ['(definition.execute) = wrapped;', '(Object.assign)(definition, {execute: wrapped});', '(Reflect.set)(definition, "execute", wrapped);']) {
+    assert.ok(inspectSessionSource('src/agent/project-session.ts', `const definition = session.getToolDefinition(name); ${mutation}`).length, mutation);
+  }
+});
+
+test('R4 review regression: SDK provenance respects function/block/parameter shadowing and follows a real outer alias', () => {
+  const file = 'src/agent/project-session.ts';
+  for (const legal of [
+    `function inspect() { const definition = session.getToolDefinition(name); return definition; }
+     function own() { const definition = { execute: original }; definition.execute = wrapped; }`,
+    `const definition = session.getToolDefinition(name); function own(definition) { definition.execute = wrapped; }`,
+    `const definition = session.getToolDefinition(name); { const definition = { execute: original }; definition.execute = wrapped; }`,
+    `const definition = session.getToolDefinition(name); function own({definition}) { definition.execute = wrapped; }`,
+    `const definition = session.getToolDefinition(name); { const {definition} = hostOwned; definition.execute = wrapped; }`,
+    `const definition = session.getToolDefinition(name); function own([definition]) { definition.execute = wrapped; }`,
+  ]) assert.deepEqual(inspectSessionSource(file, legal), [], legal);
+  assert.ok(inspectSessionSource(file, `const definition = session.getToolDefinition(name); function nested() { const alias = definition; alias.execute = wrapped; }`).length);
+  assert.ok(inspectSessionSource(file, `function nested() { { var definition = session.getToolDefinition(name); } definition.execute = wrapped; }`).length);
+  assert.ok(inspectSessionSource(file, `function inspect() { var definition = session.getToolDefinition(name); var definition; definition.execute = wrapped; }`).length);
 });
 
 const plugin = 'extensions/business-plugins/example/session.ts';

@@ -22,6 +22,7 @@ import { canonical } from '../../extensions/connectors/trade-area-mcp/snapshot.t
 import { createSubagentTool, discoverSubagentRoles, type SubagentRole } from './subagent.ts';
 import { createNativeSearchExtension, nativeSearchMode } from './native-search.ts';
 import { createModelPackTools } from './model-pack-tools.ts';
+import { createToolContextAdapter } from './tool-context-adapter.ts';
 
 type Outcome = 'completed' | 'cancelled' | 'failed';
 type LastRun = { requestId: string; outcome?: Outcome; diagnostic?: RunDiagnostic };
@@ -66,40 +67,11 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   const connectorDirectories = new Map<string, { digest?: string; frozen: boolean }>();
   const executionBindings = new Map<string, { manager: SessionManager; file: string; cwd: string; closed: boolean }>();
   const personalRequests = new Map<string, { resolve: (result: PersonalContextToolResult | CaseDecisionToolResult | SemanticContextToolResult | SapMethodSourceToolResult) => void; reject: (error: Error) => void }>();
-  const personalScopedDefinitions = new WeakSet<object>();
   function rejectPersonalRequests() { for (const pending of personalRequests.values()) pending.reject(new Error('personal_context_run_unavailable')); personalRequests.clear(); }
-  function bindPersonalToolContexts(target: AgentSession) {
-    const sourceReader = options.workspace?.capabilityPolicy === 'source-reader' && options.sapMethodSourcesEnabled;
-    if (!(options.personalContextEnabled || options.caseDecisionsEnabled || options.experienceLearningEnabled || options.semanticContextEnabled || sourceReader) || options.workspace && !sourceReader || options.protectedExecution || !options.projectId || !options.taskId) return;
-    // Pi 1.4.0 keeps executeTool's caller/default signal usable after successful
-    // settlement. Bind that existing SDK delegate to its actual invocation, not
-    // its caller ID: IDs can repeat and callers can override the nested signal.
-    for (const tool of target.getAllTools()) {
-      const definition = target.getToolDefinition(tool.name);
-      if (!definition || personalScopedDefinitions.has(definition)) continue;
-      personalScopedDefinitions.add(definition);
-      const execute = definition.execute;
-      definition.execute = async (toolCallId, parameters, signal, update, ctx) => {
-        if (!ctx) return execute.call(definition, toolCallId, parameters, signal, update, ctx);
-        const invocationRun = run, invocationManager = target.sessionManager;
-        const invocationSessionId = invocationManager.getSessionId(), sdkSignal = target.agent.signal;
-        let invocationActive = true;
-        const available = () => Boolean(invocationActive && invocationRun && run === invocationRun && !invocationRun.cancelled && !closing && session === target && manager === invocationManager && target.sessionManager === invocationManager && invocationManager.getSessionId() === invocationSessionId && ctx.sessionManager === invocationManager && sdkSignal && target.agent.signal === sdkSignal && !sdkSignal.aborted && !signal?.aborted);
-        const denied = (name: string, args: unknown) => ({ toolCall: { type: 'toolCall' as const, id: `${toolCallId}/0`, name, arguments: args as Record<string, unknown> }, result: { content: [{ type: 'text' as const, text: 'personal_context_run_unavailable' }], details: {} }, isError: true });
-        // Copy descriptors onto a fresh object. Inheriting from the old ctx would
-        // expose its unqualified executeTool through the prototype chain.
-        const scopedContext: ExtensionToolContext = Object.create(Object.getPrototypeOf(ctx), {
-          ...Object.getOwnPropertyDescriptors(ctx),
-          executeTool: { value: async (name: string, args: unknown, nestedOptions?: Parameters<ExtensionToolContext['executeTool']>[2]) => {
-            if (!available()) return denied(name, args);
-            const outcome = await ctx.executeTool(name, args, nestedOptions);
-            return available() ? outcome : denied(name, args);
-          } },
-        });
-        try { return await execute.call(definition, toolCallId, parameters, signal, update, scopedContext); }
-        finally { invocationActive = false; }
-      };
-    }
+  function qualifyToolInvocation(target: AgentSession, ctx: ExtensionToolContext, signal: AbortSignal | undefined) {
+    const invocationRun = run, invocationManager = target.sessionManager;
+    const invocationSessionId = invocationManager.getSessionId(), sdkSignal = target.agent.signal;
+    return () => Boolean(invocationRun && run === invocationRun && !invocationRun.cancelled && !closing && session === target && manager === invocationManager && target.sessionManager === invocationManager && invocationManager.getSessionId() === invocationSessionId && ctx.sessionManager === invocationManager && sdkSignal && target.agent.signal === sdkSignal && !sdkSignal.aborted && !signal?.aborted);
   }
   let editorText: string | undefined;
   // Both sealed text profiles reuse the same no-execution resource path.
@@ -255,9 +227,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       switchSession: (file, input) => runtime!.switchSession(file, input),
       reload: () => runtime!.session.reload(),
     }, onError: error => { if (run && error.event === 'command') run.commandFailed = true; publish({ type: 'native', requestId: run?.id, event: { type: 'extension_error', error } }); } });
-    bindPersonalToolContexts(next);
     unsubscribe = next.subscribe(event => {
-      if (event.type === 'tool_execution_start') bindPersonalToolContexts(next);
       if ((event.type === 'auto_retry_start' || event.type === 'summarization_retry_attempt_start') && run) run.retryCount++;
       if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') streamDelta(event.assistantMessageEvent.delta);
       if (event.type === 'message_end') {
@@ -432,7 +402,11 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         if (child) { if (cancelled()) await child.session.abort(); await retireChild(child); }
       }
     }
+    const sourceReader = o.workspace?.capabilityPolicy === 'source-reader' && o.sapMethodSourcesEnabled;
+    const scopeToolContexts = Boolean((o.personalContextEnabled || o.caseDecisionsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || sourceReader) && (!o.workspace || sourceReader) && !o.protectedExecution && o.projectId && o.taskId);
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
+      let parent: AgentSession;
+      const contextAdapter = scopeToolContexts ? createToolContextAdapter((ctx, signal) => qualifyToolInvocation(parent, ctx, signal)) : undefined;
       const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
       const customTools = [...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager)];
       const delegation = !fixedInput() && !o.workspace && (!o.protectedExecution || ordinaryManaged());
@@ -440,7 +414,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         ? '\nThe configured Provider offers native web_search for this task. Decide when to search. Distinguish actual search results and their source URLs from prior knowledge; if no search ran, failed, or returned insufficient evidence, state that accurately. The Host preserves Provider source receipts but does not verify the claims for you.'
         : '\nNo Provider-native web_search is connected on this configured route. Other permitted tools remain available. Do not claim that you searched unless an actual available tool retrieved the information; do not invent source URLs.') })); };
       const searchExtensions = delegation ? [createNativeSearchExtension(o.configuration, code => { nativeSearchFailure = code; }), searchGuidance] : [];
-      const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: fixedInput() ? {
+      const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: { ...(contextAdapter ? { extensionsOverride: contextAdapter.extensionsOverride } : {}), ...(fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
         extensionFactories: [environmentExtension],
@@ -461,15 +435,16 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), mcpExtension!, ...searchExtensions, environmentExtension],
         additionalSkillPaths: [analysisAssetsDir],
         appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [`You are OptraCall. Workspace conventions: your working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze prepared project materials in 020_clean and authorized shared business materials announced by the Host. 010_draw archives originals and is not automatically attached to model context. This is a soft instruction, not sensitive-data isolation; the full native tools are available without a sandbox or tool interception. Write intermediate/process files to 020_clean by default. Save final reports to ${path.join(o.projectDirectory!, '060_reports')} when asked to produce a final report. Determine analysis methods and tools yourself from the user's request. These are directory conventions, not a prescribed analysis procedure.`, OUTPUT_EVIDENCE_GUIDANCE, ...(o.metricIndexText ? [o.metricIndexText] : [])],
-      } });
-      let parent: AgentSession;
+      }) } });
       const subagent = delegation ? createSubagentTool(discoverSubagentRoles(services.resourceLoader.getSkills().skills), (role, task, signal) => runSubagent(parent, role, task, signal)) : undefined;
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
       services.settingsManager.applyOverrides({ defaultTools: o.workspace?.capabilityPolicy === 'source-reader' ? [sapMethodSourceToolName] : fixedInput() ? [] : protectedTools ? [...protectedTools.tools.map(tool => tool.name), 'tool_search', ...(subagent ? ['subagent'] : [])] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...(subagent ? ['+subagent'] : [])] });
       // SDK modifiers append to either a plain workspace allowlist or inherited defaults.
       if (customTools.length) services.settingsManager.applyOverrides({ defaultTools: customTools.map(tool => `+${tool.name}`) });
-      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(o.workspace?.capabilityPolicy === 'source-reader' ? { tools: [sapMethodSourceToolName], customTools } : fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: [...protectedTools.tools, ...(subagent ? [subagent] : [])], tools: [...protectedTools.tools.map(tool => tool.name), 'tool_search', ...(subagent ? ['subagent'] : [])] } : { customTools: [...customTools, ...(subagent ? [subagent] : [])] }), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
+      const productTools = [...customTools, ...(subagent ? [subagent] : [])];
+      const ownedTools = contextAdapter ? productTools.map(tool => contextAdapter.tool(tool)) : productTools;
+      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(o.workspace?.capabilityPolicy === 'source-reader' ? { tools: [sapMethodSourceToolName], customTools: ownedTools } : fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: [...protectedTools.tools, ...(subagent ? [subagent] : [])], tools: [...protectedTools.tools.map(tool => tool.name), 'tool_search', ...(subagent ? ['subagent'] : [])] } : { customTools: ownedTools }), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
       if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
       parent = created.session;
       return { ...created, services, diagnostics: services.diagnostics };
