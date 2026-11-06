@@ -1,6 +1,6 @@
 # data-analysis 运营数据分析 skill · 实施与验证记录
 
-日期：2026-11-05（作者阶段）／2026-11-06（Codex 接管）· 分支：`qoder/ext-skills`（基线 `33c95c5`）· 状态：用户测评及初始本地检查通过；用户已授权 Git/CI 并在 CI 通过后直接合并归档，最新 main 已集成，新增发现修后复验中。历史失败及一次验证目录偏差保留。下文 Qoder 验证证据保留其移交时范围，Codex 增量见末节。
+日期：2026-11-05（作者阶段）／2026-11-06（Codex 接管）· 分支：`qoder/ext-skills`（基线 `33c95c5`）· 状态：PR #39 已按授权 squash 合入 main，本地 main 已快进，合并后 main CI 成功，本目录原位归档；归档 push CI 和分支回交以末节及最终 Git／Actions 回执为准。历史失败、取消及一次验证目录偏差保留。下文 Qoder 验证证据保留其移交时范围，Codex 增量见末节。
 
 ## 用户测评回执（2026-11-06，显式通过）
 
@@ -152,3 +152,24 @@ v5 冻结清单覆盖 971 文件（SHA-256 `ee05f6cb7c4d9e8af242bde853c9fe565d6e
 不修改测试 deadline、断言、SDK 或 CI 定义。后续本地完整验证仅把测试文件调度显式限制为并发 2，顺序执行原三阶段 `npm run check:agent-sessions` → `node --test --test-concurrency=2 tests/*.test.ts` → `npm run build`，逐步成功才继续。此条件不同于默认 `npm run check`，不能混称默认已通过。Node 不允许该参数放入 NODE_OPTIONS（命令探测 exit 9），因此使用明确 CLI 参数，不改全局配置。最终实际 PR head CI 仍按未改的原工作流运行默认完整命令，成功后才允许合并。
 
 证据将保存在仓外 `/Users/bendandebaba/OptraCall-artifacts/data-analysis-handoff-20261106-gph2yz9a/`，待全部交付结束复制冻结材料、保留符号链接本身并逐项哈希读回；公开锚点以实际 PR／Actions 为准，不宣称私有原始日志已入公开仓。
+
+## 合并交付与原位归档
+
+本轮只开 [PR #39](https://github.com/gadfly-hbo/OptraCall/pull/39)。用户明确授权 CI 通过后直接合并归档，未再次申请相同授权。实际 source head 为 `fc82a6f6ee4d2cdeb25e99afd10c36e3723a6576`；原 v6 的 971 文件逐项等于该提交，source／职责／新 QA 的原非作者复核关闭，必须修复项为 0。
+
+| 门槛 | 实际结果与身份 |
+| --- | --- |
+| 本机受控完整三阶段 | exit `[0,0,0]`，204个测试文件全覆盖；1645 tests／1615 PASS／0 FAIL／0 CANCELLED／30 SKIP；测试文件并发2，非默认命令条件。日志SHA-256 `5e5117fd09b9ce5860a7a7af21ab5a1a4f7dad5d0ffae5ad1f292856b95988c2`，回执SHA `95a7d44987ee74ba07dc52ce3c85ff3bcb443f674a792e3c10596116ccb28ad3`；构建版本`fc82a6f` |
+| 实际 PR head 默认 CI | [Check #112](https://github.com/gadfly-hbo/OptraCall/actions/runs/42170523716)，run `42170523716`／job `127737017631`／attempt 1，event=`pull_request`，checkout／job／run均实际`fc82a6f`；1645 tests／1544 PASS／0 FAIL／0 CANCELLED／101 SKIP，边界、tsc、Vite及审计全成功 |
+| head CI 非作者核验 | 原规格复核者独立核实际fetch／checkout／git log及完整job日志；101条SKIP逐条与总计相同，不把平台／私有依赖未置备升级为覆盖PASS。完整日志SHA-256 `6a5603fd0a8f780efc79e78384b623027b45948e037ac7ebafa5f7dd35f7038e`，报告`ci-pr39-head/independent-ci-report.md` |
+| squash与树核对 | GitHub回读`merged=true`，时间`2026-11-06T05:57:19Z`，main=`7537fbad77545336bc9e9b3208515aa269bd57e1`，单父`1fdfb09`；main与source完整tree均为`6e9b70154e979a030657e65d3843aae6f5bd987f`。PR合成merge SHA未作受检身份 |
+| 本地main首次快进 | 干净`main`由`1fdfb09`以`merge --ff-only origin/main`到`7537fba`，前后均干净，没有stash／reset／覆盖WIP |
+| 合并后main push CI | [Check #113](https://github.com/gadfly-hbo/OptraCall/actions/runs/42171438976)，event=`push`、head=`7537fba`／attempt 1，completed／success，默认完整检查、构建及审计全部成功；与PR head CI分别核定 |
+
+审计保留2 moderate，0 high／0 critical；官方SDK 1.4.0／来源及既有薄层例外按本轮已列证据核定，未按审计建议升级SDK。本机默认并发原失败、v3漏核／新P2、MP04原409、worker取消及CONN请求计数失败、reviewer目录偏差、历史RED NOT_PROVED和用户provisional／成本均保留。实际head CI的默认命令通过不被表述为本机默认并发稳定性已证明。
+
+沿本仓惯例在独立`codex/data-analysis-archive`工作树仅修改AGENTS最小指针与本目录spec／result三份Markdown；原候选清单、handoff、非作者报告、运行资源、测试和依赖不动，其余968个Git blob须与`7537fba`逐项一致。不迁移OpenSpec路径、不另开第二个PR；归档提交自身SHA、最终main push CI与最后main快进以Git／Actions及仓外最终回执核定，避免为自引用反复追加文档提交。
+
+归档窄复核另有一次命令边界偏差：复核者误用可能写Git对象／index cache的`git write-tree`，不应列为只读命令。产品、文档和分支引用未改；未事先留Git元数据快照，不能声称缓存／对象时间完全无变化。其后用只读库存／blob及内存树摘要重新核对，三MD和其余968个blob身份一致。偏差及原“只读”约定保留在私有复核记录，不把后续核对改写为全过程无副作用。
+
+长期`qoder/ext-skills`不删除、reset或改写历史；归档检查闭合后合入最新main保留历史，Codex释放检出权，原Qoder工作树再检出同一长期分支并恢复后续轮写入资格。实际回交的branch／head／tree／clean以最终回执为准，当前不冒称已经交回。其他分支／工作树及原件保持。未切换运行服务、更新MacBook、执行新真实模型或第三方原仓操作；工程交付、用户原测评与运行采用分别报告。
