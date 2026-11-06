@@ -4,6 +4,8 @@
 
 涉及 SDK／依赖／适配变化时，同时执行[官方 Pi SDK 来源与版本约束](engineering-workflow.md#官方-pi-sdk-来源与版本约束)和[升级流程](engineering-workflow.md#pi-sdk-升级流程)。本说明及 Interface v3 的旧验收不豁免包完整性、用户指定版本或内部接口逐版复核；当前核对与未处理风险见[记录](../openspec/changes/pi-sdk-governance/result.md)。
 
+涉及 Semantica 接缝时，另按同源[官方组件规则](engineering-workflow.md#semantica-官方组件来源与版本约束)与[资产兼容及回退流程](engineering-workflow.md#semantica-升级验证与回退)核对；不因本说明沿用 Interface v3 就豁免组件版本、原包或既有图资产的验证。
+
 ## 开始接入前
 
 在当前变更规格中记录：工程规范版本、Interface版本、真实owner、Host注册位置/profile、允许修改路径、模型/工具/历史策略与验收。遇到新能力时先核对现有Interface是否表达得了，按IN06补齐适配与验收；有实质业务差异的部分留在业务模块。
