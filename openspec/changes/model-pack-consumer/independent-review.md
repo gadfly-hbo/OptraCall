@@ -33,3 +33,11 @@ v2 为939文件，清单 SHA `9ba1d746865f70adbbecf2dfed17a0d3bfc0adb62fb803cbfd
 - 规范轴111项适用用例通过，schema未知/失败缓存、旧v1只读兼容、四进程安装及并发晋级、UI组件与3份新AX/截图复验通过；已报两P2关闭，无剩余必须修复项。首轮7项为复核副本未建.local的夹具初始化失败，原日志保留，补自己目录后7/7；不计产品RED。源报告 `review-standards-20261105T235923-37d8eac0/closure-v2.md` SHA `9dab2ee195fa69e77cd251c2b9b0ce10caad6993e62a0fffbeed7a68ad6bc1de`。
 - **职责边界及复用专项：通过本变更适用范围。** 实际复用project-tasks／Interface v3、原Pi工具/会话入口和能力开关；模型选择、备数、调用、纠错和解释由Agent决定，Host只治理导入、存储、权限、沙箱和成果保存；没有新Runtime/owner/profile/模型循环或必经分析流程。额外人工仅显式导入、业务上线确认，原任务开关沿既有模式。结论不扩至未检查的其他模块或真实经营效果。
 - root固定v2完整检查29随后exit0：1558项／1528通过／0失败／30原条件跳过，边界、tsc、构建通过；独立者自身目标检查与root完整检查分别记录。`final-local-check-receipt.json` 及原日志 SHA `48f3f6f676e38b2beec839ae207bb7a3925c485f53771d24c81410e7ce51b191` 可回读。GitHub CI 尚待实际交付head，不以本报告代替。
+
+## 2026-11-06 冒烟兼容修正复核
+
+全新上下文非作者先从MP01／CSV与JSON合同及职责边界导出预期，源码、测试、规格和原始证据只读，仅在自行创建的隔离根验证。发现首版字符串单探针导致数字JSON模型新拒绝（F1/P2），以原数字探针成功、首版导入失败的合成反例证明；根保留RED并补双形态导入验货后，由原复核者重验关闭。
+
+独立合成边界7/7、受控验货失败分支8/8、真实store目标9/9通过；CSV文本／引号／Unicode与JSON数字继续可用，沙箱不可用／取消／超时／输出上限不转入另一探针，不落半成品。实际predict未改、仍单次执行。职责及复用专项通过本次修正范围：导入验货为Host环境治理，没有SDK、owner/profile、模型循环或分析编排变化；冒烟不证明业务语义。源报告位于本轮 `.local/model-pack-live/independent-review/reviewer-20261106-01/review-v2.md`，SHA `09f904bcc665bc8fec50c7fa7e57c5a44e3fb4a2e71e9fe31b2cedd489161f1f`。
+
+原真实任务按用户最新指示取消且不评分，当前业务模型与LLM最终验收SKIPPED；旧备份包有限结果不扩为当前产品验收。完整检查、实际head CI和设备采用另按[后续记录](live-validation.md)核定，本段不预先批准未执行的采用。

@@ -153,3 +153,7 @@ README.md       人读用法与指标说明
 归档沿本仓惯例原目录保留，不迁移/重写候选清单、移交包、独立报告或失败。独立归档工作树仅AGENTS同源指针及spec/result三Markdown改变，其余936源文件逐项与0fb601b一致。合并main的 [Check #105](https://github.com/gadfly-hbo/OptraCall/actions/runs/42065909438) 在本正文固定时进行中，终态及归档提交自身CI以实际Actions/本机最终回执另核，不预写通过或自引用追加无限提交。
 
 当前能力停用沿现候选关闭任务modelTools；旧注册表/版本/项目/native保留。直接旧程序写新schema2可能丢未知可选开关，不用旧备份覆盖新增工作；运行回退/采用仍需相应授权。本轮不切服务、不更新MacBook、不改MPS；MP09与真实模型结果不因工程归档升级为PASS。
+
+## 2026-11-06 授权后续与范围更新
+
+用户新增授权MP09、真实模型验收、运行采用与MacBook更新，随后明确当前业务模型尚未生成、真实测试跳过。保留旧工程归档时的NOT_RUN及本轮已发生的备份包有限检查／首失败；当前真实业务模型与LLM最终验收记SKIPPED，不再调用或重放。冒烟输入类型修正、因果RED及后续工程／运行采用独立记录于[真实验收与运行采用](live-validation.md)。沿用原Pi1.4.0／Interface v3、project-tasks owner/profile和存储结构，不改SDK、模型配置、权限或界面；无新增UI Demo需求。运行采用不将隔离包自动安装／晋级到业务货架。

@@ -4,6 +4,28 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ModelPackStore } from '../src/host/model-pack-store.ts';
 import { writeModelPack } from './model-pack-fixtures.ts';
+test('MP01 import retains numeric JSON model compatibility alongside CSV string inputs',async t=>{
+ const root=await fs.mkdtemp(path.resolve('.local/model-pack-number-smoke-'));
+ t.after(async()=>{const unlock=async(d:string)=>{await fs.chmod(d,0o700);for(const f of await fs.readdir(d,{withFileTypes:true}))if(f.isDirectory())await unlock(path.join(d,f.name));};await unlock(root);await fs.rm(root,{recursive:true,force:true});});
+ const source=await writeModelPack(root,1,'export function predict(rows){return rows.map(r=>({prediction:r.x+1}));}');
+ const models=path.join(root,'models'),store=new ModelPackStore(models);t.after(()=>store.close());
+ assert.equal((await store.importPack(source)).stage,'Staging');
+ await fs.mkdir(path.join(root,'project/020_clean'),{recursive:true});await fs.mkdir(path.join(root,'project/060_reports'));
+ await fs.writeFile(path.join(root,'project/020_clean/in.json'),'[{"x":7}]');
+ await store.predict({name:'synthetic-model',version:1,projectRoot:path.join(root,'project'),inputPath:'020_clean/in.json',outputPath:'060_reports/out.json'});
+ assert.equal(JSON.parse(await fs.readFile(path.join(root,'project/060_reports/out.json'),'utf8'))[0].prediction,8);
+});
+test('MP01 import smoke uses CSV string cells so a valid textual-input model is not rejected',async t=>{
+ const root=await fs.mkdtemp(path.resolve('.local/model-pack-text-smoke-'));
+ t.after(async()=>{const unlock=async(d:string)=>{await fs.chmod(d,0o700);for(const f of await fs.readdir(d,{withFileTypes:true}))if(f.isDirectory())await unlock(path.join(d,f.name));};await unlock(root);await fs.rm(root,{recursive:true,force:true});});
+ const source=await writeModelPack(root,1,'export function predict(rows){return rows.map(r=>({prediction:Number(r.x.slice(0,1))*2}));}');
+ const models=path.join(root,'models'),store=new ModelPackStore(models);t.after(()=>store.close());
+ assert.equal((await store.importPack(source)).stage,'Staging');
+ await fs.mkdir(path.join(root,'project/020_clean'),{recursive:true});await fs.mkdir(path.join(root,'project/060_reports'));
+ await fs.writeFile(path.join(root,'project/020_clean/in.csv'),'x\n7\n');
+ await store.predict({name:'synthetic-model',version:1,projectRoot:path.join(root,'project'),inputPath:'020_clean/in.csv',outputPath:'060_reports/out.json'});
+ assert.equal(JSON.parse(await fs.readFile(path.join(root,'project/060_reports/out.json'),'utf8'))[0].prediction,14);
+});
 test('MP01 a valid pure package imports as Staging without altering its source',async t=>{
  const root=await fs.mkdtemp(path.resolve('.local/model-pack-store-')); t.after(async()=>{ const unlock=async(d:string)=>{await fs.chmod(d,0o700);for(const f of await fs.readdir(d,{withFileTypes:true}))if(f.isDirectory())await unlock(path.join(d,f.name));};await unlock(root);await fs.rm(root,{recursive:true,force:true}); });
  const source=await writeModelPack(root), before=await fs.readFile(path.join(source,'manifest.json'));

@@ -82,7 +82,14 @@ export class ModelPackStore {
   let files:ReturnType<typeof packageBytes>;try {if(fs.realpathSync(sourcePath)!==path.resolve(sourcePath))fail('UNSAFE_PATH');files=packageBytes(sourcePath);}catch(error){if(error instanceof ModelPackError)throw error;return fail('PACKAGE_INCOMPLETE',400,'structure','包须包含三个普通文件，且路径不可为链接');}
   let manifest;try{manifest=validateManifest(parse(files['manifest.json']));}catch(error){return fail((error as {code?:string}).code??'MANIFEST_INVALID',400,'manifest');}
   const source=files['predict.mjs'].toString('utf8');pureModelSource(source);
-  try {const smoke=await executePureModel(source,[Object.fromEntries(manifest.usage.inputs.map(name=>[name,1]))]);validateOutput(smoke,manifest.usage.outputs);}catch(error){if(error instanceof ModelPackError){error.detail.stage='sandbox_smoke';throw error;}return fail('SANDBOX_UNAVAILABLE',503,'sandbox_smoke');}
+  // Format v1 has no input types. Cover CSV string cells and numeric JSON
+  // cells during admission; this is not a retry of a user prediction request.
+  try {
+   for(const value of ['1',1]){
+    try {const smoke=await executePureModel(source,[Object.fromEntries(manifest.usage.inputs.map(name=>[name,value]))]);validateOutput(smoke,manifest.usage.outputs);break;}
+    catch(error){if(value==='1'&&error instanceof ModelPackError&&['MODEL_EXECUTION_FAILED','MODEL_OUTPUT_INVALID'].includes(error.code))continue;throw error;}
+   }
+  }catch(error){if(error instanceof ModelPackError){error.detail.stage='sandbox_smoke';throw error;}return fail('SANDBOX_UNAVAILABLE',503,'sandbox_smoke');}
   const digest=hash(files),db=this.database(true)!;db.exec('BEGIN IMMEDIATE');let staged:string|undefined,installed:string|undefined,damaged:string|undefined,restoreTarget:string|undefined;
   try {
    const current=this.entries().find(m=>m.name===manifest.model.name&&m.version===manifest.model.version);
