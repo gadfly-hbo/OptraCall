@@ -1,8 +1,8 @@
 # 模型包消费端（薄接入：加载器 + 注册表 + 分析调用）
 
-状态：工程变更已原位归档（2026-11-06）；PR #36 已获授权 squash 入 main，实际 head CI 通过。MP09 未授权／NOT_RUN，真实模型及运行／设备采用另核。
+状态：工程变更已原位归档（2026-11-06）；后续兼容修正PR #37已入main，两机首次实际采用a5b4d63。当前业务模型／LLM最终验收由用户决定SKIPPED；实际范围及最终采用身份见末节与[后续记录](live-validation.md)。
 
-**确认与当前进度：** 用户于2026-11-05明确「按推荐采纳；UIdemo通过」，D1–D8 与四场景 Demo 保持有效。Qoder 切片原件和1477项检查保留在移交 `380d5ab` 及 result §1–5。Codex 已完成 store/routes、工具、任务能力、目录与页面接缝，固定修正版的完整检查1558项／1528通过／0失败／30原条件跳过、实际 SDK 合成 Provider 全链路、桌面浏览器及两个全新非作者复核通过；v1三个P2与历史前置TDD证明 NOT_PROVED 均保留，详见 [result](result.md) 与 [独立复核](independent-review.md)。用户已授权实际 head CI 通过后直接 squash 合并、快进 main 和归档；现 PR #36 已按此合并为 `0fb601b`、本地 main 安全快进，实际 head Check #104 成功。合并 main 与归档推送检查分别回读，不把本地检查代替 CI。Host 由 Codex 默认归属实施，无 IN06 例外或 Qoder 接缝偏差。MP09真实包拷贝、真实模型与运行／设备采用未授权、未执行。
+**原工程归档时的确认与进度（历史）：** 用户于2026-11-05明确「按推荐采纳；UIdemo通过」，D1–D8 与四场景 Demo 保持有效。Qoder 切片原件和1477项检查保留在移交 `380d5ab` 及 result §1–5。Codex 已完成 store/routes、工具、任务能力、目录与页面接缝，固定修正版的完整检查1558项／1528通过／0失败／30原条件跳过、实际 SDK 合成 Provider 全链路、桌面浏览器及两个全新非作者复核通过；v1三个P2与历史前置TDD证明 NOT_PROVED 均保留，详见 [result](result.md) 与 [独立复核](independent-review.md)。用户已授权实际 head CI 通过后直接 squash 合并、快进 main 和归档；现 PR #36 已按此合并为 `0fb601b`、本地 main 安全快进，实际 head Check #104 成功。合并 main 与归档推送检查分别回读，不把本地检查代替 CI。Host 由 Codex 默认归属实施，无 IN06 例外或 Qoder 接缝偏差。MP09真实包拷贝、真实模型与运行／设备采用未授权、未执行。
 
 
 2026-11-05 · 用户已确认方向：**OptraCall 侧只做薄消费端——“模型包加载器 + 注册表视图 + 分析 skill 内调 predict”，训练仍在 MPS 走**。训练侧为 MacBook 本机独立产品 Model Pack Studio（`/Users/huangbo/Dev/Projects/model-mlflow`，只读参考，本变更不修改该仓），其 D4 定案“打包带走”明确：交付物＝自包含纯 Node 包，**包格式（formatVersion=1）是两产品间契约，OptraCall 侧加载器走本仓 openspec 流程**；`formatVersion` 变更须两产品同步规格，本变更只消费 v1。
@@ -153,3 +153,9 @@ README.md       人读用法与指标说明
 归档沿本仓惯例原目录保留，不迁移/重写候选清单、移交包、独立报告或失败。独立归档工作树仅AGENTS同源指针及spec/result三Markdown改变，其余936源文件逐项与0fb601b一致。合并main的 [Check #105](https://github.com/gadfly-hbo/OptraCall/actions/runs/42065909438) 在本正文固定时进行中，终态及归档提交自身CI以实际Actions/本机最终回执另核，不预写通过或自引用追加无限提交。
 
 当前能力停用沿现候选关闭任务modelTools；旧注册表/版本/项目/native保留。直接旧程序写新schema2可能丢未知可选开关，不用旧备份覆盖新增工作；运行回退/采用仍需相应授权。本轮不切服务、不更新MacBook、不改MPS；MP09与真实模型结果不因工程归档升级为PASS。
+
+## 2026-11-06 授权后续与范围更新
+
+用户新增授权MP09、真实模型验收、运行采用与MacBook更新，随后明确当前业务模型尚未生成、真实测试跳过。保留旧工程归档时的NOT_RUN及本轮已发生的备份包有限检查／首失败；当前真实业务模型与LLM最终验收记SKIPPED，不再调用或重放。冒烟输入类型修正、因果RED及后续工程／运行采用独立记录于[真实验收与运行采用](live-validation.md)。沿用原Pi1.4.0／Interface v3、project-tasks owner/profile和存储结构，不改SDK、模型配置、权限或界面；无新增UI Demo需求。运行采用不将隔离包自动安装／晋级到业务货架。
+
+后续兼容修正已由非作者复验、完整检查及PR #37实际head CI交付，squash入main为a5b4d63，其main push CI成功。两机首次源码／构建／运行均采用a5b4d63、原持久资料保全、货架为空；开发主仓因另项WIP安全暂缓快进。验收、失败、取消及采用收据按后续记录原位归档；当前真实业务模型／LLM最终验收仍SKIPPED，不以安装通过替代。
