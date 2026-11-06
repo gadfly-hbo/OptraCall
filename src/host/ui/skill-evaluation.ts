@@ -3,6 +3,9 @@ export type SkillEvaluation = {
   date: string;
   testedRevision: string;
   revisedSinceEvaluation: boolean;
+  coversEngineeringRevisions?: boolean;
+  provisional?: boolean;
+  limitations?: string;
   outcome: 'effective' | 'ineffective' | 'inconclusive';
   sampleCount: number;
   assertions: MetricComparison & { basis: string };
