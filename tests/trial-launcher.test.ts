@@ -24,8 +24,8 @@ async function fixture() {
   await writeFile(path.join(root, 'package.json'), JSON.stringify({type:'module',version:'0.1.0-synthetic',scripts:{build:'node -e "process.exit(88)"'}}));
   await writeFile(path.join(root,'.gitignore'),'dist/\nstate/\nhost/\nprojects/\nfinder-home/\nnode_modules/\nstopped.json\n');
   await writeFile(path.join(root, 'scripts', 'start-host.mjs'), `import { createServer } from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
-const args=new Map(process.argv.slice(2).map(v=>v.split('='))); const build=JSON.parse(fs.readFileSync(path.join(process.cwd(),'dist/optracall-build.json'),'utf8'));const instanceId=args.get('--instance-id');
-const server=createServer((request,response)=>{response.setHeader('content-type','application/json');if(request.url==='/api/health')response.end(JSON.stringify({status:'ready',runtime:{instanceId,pid:process.pid,codeRoot:process.cwd(),...build}}));else response.end(JSON.stringify({ui:'Synthetic trial UI'}));});
+const args=new Map(process.argv.slice(2).map(v=>{const i=v.indexOf('=');return [v.slice(0,i),v.slice(i+1)];})); const build=JSON.parse(fs.readFileSync(path.join(process.cwd(),'dist/optracall-build.json'),'utf8'));const instanceId=args.get('--instance-id');
+const server=createServer((request,response)=>{response.setHeader('content-type','application/json');if(request.url==='/api/health')response.end(JSON.stringify({status:'ready',runtime:{instanceId,pid:process.pid,codeRoot:process.cwd(),...build},semanticConfig:args.get('--semantic-config')??null}));else response.end(JSON.stringify({ui:'Synthetic trial UI'}));});
 server.listen(Number(args.get('--port')),'127.0.0.1',()=>console.log(JSON.stringify({kind:'host-ready',port:server.address().port})));
 process.on('SIGTERM',()=>{fs.writeFileSync(path.join(process.cwd(),'stopped.json'),JSON.stringify({instanceId,signal:'SIGTERM'}));server.close(()=>process.exit(0));});
 `);
@@ -53,6 +53,35 @@ test('TRIAL-01: occupied port is reported without touching another local service
 });
 
 async function availablePort() { const server=createServer(); server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');await new Promise<void>(resolve=>server.close(()=>resolve()));return address.port; }
+
+test('D17 launcher forwards one explicit absolute semantic configuration through its original start entry', async t => {
+ const f=await fixture();f.options.port=await availablePort();
+ const semanticConfig=path.join(f.options.dataRoot,'semantic=graph.json');
+ const options={...f.options,semanticConfig};
+ t.after(async()=>{await launcher.stopTrial(options).catch(()=>{});await f.cleanup();});
+ const running=await launcher.startTrial(options);
+ const health=await(await fetch(new URL('api/health',running.url))).json();
+ assert.equal(health.semanticConfig,semanticConfig,'the launched Host receives the exact path, including equals signs');
+ assert.throws(()=>launcher.trialOptions({...f.options,semanticConfig:'relative.json'}),/semantic configuration/i);
+ assert.equal((await launcher.stopTrial(options)).status,'stopped');
+});
+
+test('D17 original start and restart retain the one dataRoot semantic config, while explicit selection takes precedence', async t => {
+ const f=await fixture();f.options.port=await availablePort();
+ t.after(async()=>{await launcher.stopTrial(f.options).catch(()=>{});await f.cleanup();});
+ await mkdir(f.options.dataRoot,{recursive:true});
+ const defaultFile=path.join(f.options.dataRoot,'semantic-graph.json');
+ await writeFile(defaultFile,JSON.stringify({schemaVersion:1,enabled:false}));
+ const first=await launcher.startTrial(f.options);
+ assert.equal((await(await fetch(new URL('api/health',first.url))).json()).semanticConfig,defaultFile);
+ await launcher.stopTrial(f.options);
+ const second=await launcher.startTrial(f.options);
+ assert.equal((await(await fetch(new URL('api/health',second.url))).json()).semanticConfig,defaultFile);
+ await launcher.stopTrial(f.options);
+ const explicitFile=path.join(f.options.dataRoot,'explicit.json');
+ const selected=await launcher.startTrial({...f.options,semanticConfig:explicitFile});
+ assert.equal((await(await fetch(new URL('api/health',selected.url))).json()).semanticConfig,explicitFile);
+});
 
 test('TRIAL-02: start reuses the live instance, reports its actual build, and stops it gracefully', async t => {
  const f=await fixture();f.options.port=await availablePort();t.after(async()=>{await launcher.stopTrial(f.options).catch(()=>{});await f.cleanup();});

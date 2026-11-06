@@ -43,15 +43,17 @@ test('recheck identifies the fixed full report and discloses unpinned process sc
   const p = parse(automaticRecheckContext(input), recheckPrefix);
   assert.equal(p.operation, 'automatic-recheck'); assert.equal(p.version, 2); assert.equal(p.sha256, sha);
   assert.equal(p.fixedPath, input.fixedPath); assert.equal(p.processPath, input.processPath);
-  fragment(input.text, p, 6000); assert.match(p.note, /只读/); assert.match(p.note, /未逐项固定/); assert.match(p.note, /不表示已读/);
+  fragment(input.text, p, 20_000); assert.match(p.note, /只读/); assert.match(p.note, /未逐项固定/); assert.match(p.note, /不表示已读/);
 });
 
 test('recheck budgets escaped content and Unicode without trimming fixed identity or scope note', () => {
   const input = { version: 3, sha256: sha, fixedPath: '/fixed/' + 'p'.repeat(8000), processPath: '/work/process', text: '"\\\n\t\0'.repeat(10_000) };
   const p = parse(automaticRecheckContext(input), recheckPrefix);
-  assert.equal(p.fixedPath, input.fixedPath); assert.equal(p.processPath, input.processPath); assert.equal(typeof p.note, 'string'); fragment(input.text, p, 6000);
+  assert.equal(p.fixedPath, input.fixedPath); assert.equal(p.processPath, input.processPath); assert.equal(typeof p.note, 'string'); fragment(input.text, p, 20_000);
   const emoji = { ...input, fixedPath: '/fixed/report', text: 'a'.repeat(5999) + '😀tail' };
-  const q = parse(automaticRecheckContext(emoji), recheckPrefix); assert.equal(q.end, 5999); fragment(emoji.text, q, 6000);
+  // D16 delivers this fitting report completely; the long escaped case and
+  // dedicated D16 boundary regression still check safe truncation.
+  const q = parse(automaticRecheckContext(emoji), recheckPrefix); assert.equal(q.end, emoji.text.length); assert.equal(q.text, emoji.text); fragment(emoji.text, q, 20_000);
 });
 
 test('unrepresentable base metadata is rejected instead of truncating identities or JSON', () => {

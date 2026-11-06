@@ -38,6 +38,9 @@ export type VerificationRuntimeEvidence = {
 type FixedBytes = { relativePath: string; sha256: string; bytes: Uint8Array; sourcePath?: string };
 const OPEN = '[OPTRACALL_AUTHOR_CONTEXT_V1]\n';
 const CLOSE = '\n[/OPTRACALL_AUTHOR_CONTEXT_V1]';
+/** Business guidance for the existing automatic feedback handoff. This is
+ * supplied text, not a Host truth check or a persisted feedback protocol. */
+export const AUTOMATIC_FEEDBACK_EVIDENCE_GUIDANCE = '重要分歧应定位固定稿中的原句或位置，注明所依赖的固定来源及适用前提、相反证据或依据，解释为何不成立或尚不能成立，再提出保留或修改的建议及新增主张需要的前提。区分已给事实、未知、假设、反事实和建议。无相反依据的疑虑只列为待核，不能写成事实更正；通用未确认标记不能自动覆盖本题来源已明确给出的声明。核算意见及其新增主张也可能有错，作者应按实际源证据取舍，可保持、修改或有据反驳。允许无分歧和自由文本，不要求固定表格、条数、工具或分析顺序。Host仅交付固定材料、位置及范围，不裁决业务真伪或强制采纳意见。';
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 const object = (value: unknown): Record<string, unknown> | undefined => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 
@@ -64,7 +67,7 @@ export function authorPreview(file: FixedBytes, workspace: string): Verification
     end, totalLength: text === undefined ? null : text.length, truncated: text !== undefined && end! < text.length };
 }
 /** Build the actual supplied text once; the native user message is its readback authority. */
-export function authorContext(files: readonly FixedBytes[], workspace: string): string {
+export function authorContext(files: readonly FixedBytes[], workspace: string, options: { automaticFeedback?: boolean } = {}): string {
   const texts = files.map(file => decode(file.bytes));
   const fragments: VerificationAuthorFragment[] = files.map((file, index) => {
     const text = texts[index];
@@ -75,7 +78,8 @@ export function authorContext(files: readonly FixedBytes[], workspace: string): 
   });
   const compose = () => '首次回复已保存。现在开放以下固定作者副本。清单中的[start,end)为本请求主动附带的UTF-16文字范围，totalLength为原解码长度；完整副本可按需自主读取。text为空表示本请求未主动附正文；not-utf8表示无UTF-8文字摘要，完整字节仍可用。单文件正文最多4000、合计最多12000 UTF-16；完整请求沿原20000限制，因此实际片段也可能更短。材料可用不表示已经读取或核查。\n' +
     OPEN + JSON.stringify({ version: 1, files: fragments }) + CLOSE +
-    '\n请自主决定对照方式，说明实际核查范围、依据、分歧及无法确认事项。可以一致、保留未知或说明尚未核到；不要求固定工具、方法、步骤或检查数量。重跑作者代码与独立计算的含义不同；不要修改作者原稿或将一致、程序完成当成业务成立。';
+    '\n请自主决定对照方式，说明实际核查范围、依据、分歧及无法确认事项。可以一致、保留未知或说明尚未核到；不要求固定工具、方法、步骤或检查数量。重跑作者代码与独立计算的含义不同；不要修改作者原稿或将一致、程序完成当成业务成立。' +
+    (options.automaticFeedback ? '\n' + AUTOMATIC_FEEDBACK_EVIDENCE_GUIDANCE : '');
   if (compose().length > 20_000) throw new VerificationStoreError('verification_author_context_too_large', 400);
   let remaining = 12_000;
   for (const [index, text] of texts.entries()) {

@@ -1,6 +1,8 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { ProjectAgent, type ProjectAgentOptions } from '../src/agent/project-runtime.ts';
@@ -234,4 +236,83 @@ test('L1 L110: a settled SDK caller cannot reuse its captured executeTool in a s
   const results = (await entries(agent)).filter(entry => entry.message?.role === 'toolResult');
   assert.ok(JSON.stringify(results.find(entry => entry.message.toolName === 'replay_l1_context').message.content).includes('STALE_L1_CALLER_REJECTED'));
   assert.equal(results.find(entry => entry.message.toolName === 'read_semantic_context').message.isError, false);
+});
+
+test('L1 wire: semantic Union fields reach the original Anthropic SDK without changing argument conversion', { timeout: 60_000 }, async t => {
+  for (const graph of [false, true]) await t.test(graph ? 'L2 capability' : 'L1 capability', async t => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'optracall-semantic-wire-'));
+    const projectDirectory = path.join(root, 'project');
+    for (const name of ['010_draw', '020_clean', '060_reports']) await mkdir(path.join(projectDirectory, name), { recursive: true });
+    const captured: { tools?: { name?: string; description?: string; input_schema?: { properties?: Record<string, unknown>; required?: string[] } }[] }[] = [];
+    const calls = [
+      { action: 'find', query: 'synthetic' },
+      { action: 'find', query: null },
+      { action: 'find', pageSize: null },
+      { action: 'read', operation: 'definition', target },
+      ...(graph ? [{ action: 'graph', operation: 'definition', nodeId: 'MetricVersion:synthetic' }] : []),
+    ];
+    const server = createServer(async (request, response) => {
+      const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      captured.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      const send = (type: string, data: unknown) => response.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+      send('message_start', { type: 'message_start', message: { id: 'synthetic-semantic-wire', type: 'message', role: 'assistant', model: 'MiniMax-M3.1-Flash', content: [], stop_reason: null, usage: { input_tokens: 1, output_tokens: 0 } } });
+      if (captured.length === 1) for (const [index, input] of calls.entries()) {
+        send('content_block_start', { type: 'content_block_start', index, content_block: { type: 'tool_use', id: `synthetic-${index}`, name: 'read_semantic_context', input: {} } });
+        send('content_block_delta', { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: JSON.stringify(input) } });
+        send('content_block_stop', { type: 'content_block_stop', index });
+      }
+      else {
+        send('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } });
+        send('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Synthetic wire validation completed.' } });
+        send('content_block_stop', { type: 'content_block_stop', index: 0 });
+      }
+      send('message_delta', { type: 'message_delta', delta: { stop_reason: captured.length === 1 ? 'tool_use' : 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } });
+      send('message_stop', { type: 'message_stop' }); response.end();
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => new Promise<void>(resolve => { server.close(() => resolve()); server.closeAllConnections(); }));
+    const address = server.address(); assert.ok(address && typeof address !== 'string');
+    const delivered: { action: string; input: Record<string, unknown> }[] = [];
+    const read = async (action: string, input: Record<string, unknown>): Promise<SemanticContextToolResult> => { delivered.push({ action, input }); return queryResult('find'); };
+    const agent = new ProjectAgent({ projectId: randomUUID(), taskId: randomUUID(), projectDirectory, codeRoot: process.cwd(), sessionDirectory: path.join(root, 'native'), resourceRoot: path.join(root, 'pi'), managementPorts: [], configuration: { id: 'minimax-m31-flash', name: 'Synthetic exact native model', revision: 1, provider: 'minimax-cn', api: 'anthropic-messages', model: 'MiniMax-M3.1-Flash', baseUrl: `http://127.0.0.1:${address.port}`, apiKey: 'synthetic-semantic-wire-only' }, semanticContext: read, ...(graph ? { semanticContextRead: read } : {}) });
+    t.after(() => agent.close());
+    await agent.open();
+    assert.equal((await agent.start('Synthetic local tool serialization and validation only.', randomUUID()).completion).outcome, 'completed');
+    const tool = captured[0]?.tools?.find(tool => tool.name === 'read_semantic_context'); assert.ok(tool?.input_schema?.properties);
+    assert.ok(tool.input_schema.properties.action, 'actual original SDK wire must advertise the semantic action');
+    assert.deepEqual(tool.input_schema.required, ['action']);
+    if (graph) {
+      for (const operation of ['find', 'definition', 'neighbors', 'dependencies', 'impact', 'source']) assert.ok(JSON.stringify(tool.input_schema.properties.operation).includes(`"${operation}"`));
+      assert.match(tool.description!, /action graph/);
+    } else { assert.equal(tool.input_schema.properties.operation, undefined); assert.doesNotMatch(JSON.stringify(tool.input_schema.properties.action), /"graph"/); }
+    assert.ok(delivered.some(call => call.action === 'find' && call.input.query === 'synthetic'));
+    assert.ok(delivered.some(call => call.action === 'find' && call.input.query === ''), 'preserve the original SDK null-to-string conversion');
+    assert.equal(delivered.length, graph ? 3 : 2, 'optional pageSize:null and mixed-branch arguments must stay rejected');
+    const native = await entries(agent), results = native.filter(entry => entry.message?.role === 'toolResult' && entry.message.toolName === 'read_semantic_context');
+    assert.equal(results.filter(entry => entry.message.isError).length, 2);
+    await agent.close();
+  });
+});
+
+test('L1 wire: serialization projection preserves original schema identity and does not inject absent or restricted capabilities', async () => {
+  const { semanticContextAnthropicPayload } = await import('../src/agent/semantic-context-wire.ts');
+  const { legacyReadSemanticContextParameters: legacy, readSemanticContextParameters: mixed, semanticGraphParameters: graphOnly } = await import('../src/agent/semantic-context.ts');
+  type WireTool = { name: string; type?: string; input_schema?: { type: string; properties: Record<string, unknown>; required: string[]; description?: string } };
+  const nativeSearch = { name: 'web_search', type: 'web_search_20250305' };
+  for (const parameters of [legacy, mixed, graphOnly]) {
+    const before = JSON.stringify(parameters), anyOf = parameters.anyOf, symbols = Object.getOwnPropertySymbols(parameters).map(symbol => [symbol, Object.getOwnPropertyDescriptor(parameters, symbol)] as const);
+    const payload: { other: string; tools: WireTool[] } = { other: 'preserved', tools: [{ name: 'read_semantic_context', input_schema: { type: 'object', properties: {}, required: [], description: 'existing wire annotation' } }, nativeSearch] };
+    const projected = semanticContextAnthropicPayload(payload, parameters) as typeof payload;
+    assert.notEqual(projected, payload); assert.notEqual(projected.tools, payload.tools); assert.notEqual(projected.tools[0], payload.tools[0]);
+    assert.deepEqual(payload.tools[0].input_schema?.properties, {}); assert.equal(projected.other, payload.other); assert.equal(projected.tools[1], nativeSearch);
+    assert.equal(JSON.stringify(parameters), before); assert.equal(parameters.anyOf, anyOf); for (const [symbol, descriptor] of symbols) assert.deepEqual(Object.getOwnPropertyDescriptor(parameters, symbol), descriptor);
+    const wire = projected.tools[0].input_schema!;
+    assert.equal(wire.description, 'existing wire annotation');
+    assert.equal('target' in wire.properties, parameters !== graphOnly, 'graph-only modes gain no legacy target');
+    assert.equal('operation' in wire.properties, parameters !== legacy, 'L1 gains no graph operation');
+  }
+  assert.equal(semanticContextAnthropicPayload({ tools: [nativeSearch] }, mixed), undefined, 'never add an absent semantic tool');
+  assert.equal(semanticContextAnthropicPayload({ tools: [{ type: 'function', function: { name: 'read_semantic_context', parameters: mixed } }] }, mixed), undefined, 'OpenAI payload stays untouched');
+  assert.equal(semanticContextAnthropicPayload({ tools: [{ name: 'read_semantic_context', strict: true, input_schema: {} }] }, mixed), undefined, 'strict provider schemas stay untouched');
 });

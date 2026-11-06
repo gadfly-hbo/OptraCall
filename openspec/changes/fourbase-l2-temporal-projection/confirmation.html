@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L2 后端语义支撑与 P1 确认包 · OptraCall</title>
+<style>:root{color-scheme:light dark;--bg:#f7f7fa;--ink:#24232e;--muted:#666474;--line:#dedde6;--card:#fff;--accent:#6352bb}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 system-ui,-apple-system,sans-serif}main{max-width:980px;margin:48px auto;padding:0 24px}h1{font-size:30px;line-height:1.3}h2{font-size:20px;margin-top:32px}p{max-width:80ch}a{color:var(--accent)}.note{padding:18px 22px;background:var(--card);border:1px solid var(--line);border-radius:12px}.muted{color:var(--muted)}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;vertical-align:top;padding:12px 10px;border-bottom:1px solid var(--line)}th{font-weight:600}code{overflow-wrap:anywhere}.table{overflow-x:auto}a:focus-visible{outline:3px solid var(--accent);outline-offset:4px}@media(prefers-color-scheme:dark){:root{--bg:#15151b;--ink:#e9e7f3;--muted:#aaa7ba;--line:#34323f;--card:#1d1c25;--accent:#b5a8ff}}@media print{body{background:white;color:#111}main{margin:0;max-width:none}a{color:#111}tr{break-inside:avoid}}@media(max-width:600px){main{margin:24px auto;padding:0 16px}h1{font-size:25px}th,td{min-width:110px}.note{padding:14px}}</style>
+<main><p class="muted">OptraCall · 2026-11-04 · v0.3 · 待整体确认</p><h1>L2：以后端本体与知识图谱支撑 Agent 理解语义</h1>
+<p><strong>L2的主要价值在后端。</strong>优先借Semantica本体表达概念／范围／关系类型与明确规则，用知识图谱组织具体对象／事实／关系／来源／版本，经原工具资格供Agent按需取得、理解和正确使用。来源／规则、关系／事实演变和检索服务该目标；语义理解是否改善仍须实证。原SAP、资料与Case保留权威，Pi承担会话与自主分析，用户正常新增必做操作为零。</p>
+<p class="note"><strong>用户直接看回答即可取得关键解释。</strong>Agent应在正文主动说明相关关键口径、适用范围、重要冲突／未知及其对结论的影响。原“查看依据”详情中的业务含义／口径说明仅供自愿深入核对，不增加独立页面、一级导航或必做查看步骤。不打开详情也能继续任务；Host不强制每轮查L2、固定分析顺序或代Agent处理冲突。</p>
+<h2>完整L2与本轮覆盖</h2><div class="table"><table><thead><tr><th>完整能力方向</th><th>用户可问什么</th><th>本轮P1边界</th></tr></thead><tbody>
+<tr><td>业务语义组织</td><td>净销售额包含什么？门店和渠道同名指标有何区别？</td><td>仅用已有定义／范围核准确引用，不实现完整本体治理。</td></tr>
+<tr><td>来源、规则与冲突</td><td>规则依据在哪里？哪些声明冲突、哪些还未知？</td><td>核来源与明确声明；规则引擎／OWL／SHACL检查未纳入P1。</td></tr>
+<tr><td>关系与事实演变</td><td>判断依赖哪些证据？后来哪些前提变化了？</td><td>验证显式关系、两个时间轴、快照／更新／失效与重建；不持续全量摄取。</td></tr>
+<tr><td>Agent按需查询</td><td>根据当前问题找语义、关系、历史和证据，再继续分析。</td><td>只做工程同源对照，无正式工具接线／真实模型效果证明。</td></tr>
+</tbody></table></div>
+<h2>Semantica／Graphiti怎样参与</h2><p><strong>两者是实现L2的候选组件。</strong>Semantica优先评估语义／本体、关系、来源、规则约束及时间模块；Graphiti在持续事件输入、实体对齐、增量事实更新和历史检索出现明确缺口后针对同题比较。能力有重叠，Semantica也有时间能力，Graphiti也支持类型与来源；不默认两套一起安装或按“语义／时间”机械拆分。</p>
+<p>OptraCall补业务引用／身份映射、权限、Pi工具接入、保存及必要展示。前端解释窗口不构成语义权威，也不把常规理解和冲突识别交给用户。组件约束校验不等于业务真值／专业正确，事实失效不自动改SAP、旧报告或人的选择。</p>
+<div class="note"><strong>本版确认后端定位与主答／可选依据交互；实施建议仍仅先开原P1。</strong><br>P1保持固定Semantica 0.7.0最小来源／显式关系／时间／SQLite快照与同源L1对照，只验接入底座，不证明Agent语义理解增强。Graphiti不安装、不摄取、不运行。完整本体治理、抽取／对齐和持续更新按后续切片细化，核心增益要看Agent理解、口径适用和冲突处理的实际改善，不能以图节点数、页面或预置回答代替。P2接线另定范围，不等于完整L2一次做完；组件安装、运行或开发仍须先获本版整体确认。</div>
+<p><a href="../../../docs/prototypes/fourbase-l2-temporal-projection-ui-demo.html">打开可点击 UI Demo</a> · <a href="spec.md">完整规格</a> · <a href="structure-decisions.md">逐项决定与账本</a> · <a href="research.md">官方静态研究</a> · <a href="evaluation-protocol.md">验收协议</a> · <a href="result.md">准备结果及限制</a></p>
+<h2>十项推荐决定</h2><p class="muted">每项用户决定均为“未回复”，一致性“待核”，状态“待确认”；没有以沉默视为批准。全部推荐A，均可整体暂缓。</p>
+<div class="table"><table><thead><tr><th>项目</th><th>建议 A 与原因</th><th>替代与影响</th></tr></thead><tbody>
+<tr><td>D01 后端定位／阶段</td><td>本体／知识图谱支撑Agent语义理解；P1仅底座工程，原Store为权威。</td><td>B把P1索引当完整L2；C一次全做。前者定位不全，后者缺具体证据。</td></tr>
+<tr><td>D02 组件作用／本轮包</td><td>Semantica为优先语义路线、Graphiti按缺口比较；P1仅固定0.7.0最小模块／本地SQLite。</td><td>B现在装两套全部；C永久排除一个。前者扩大负担，后者证据不足。</td></tr>
+<tr><td>D03 身份／粒度</td><td>原类型化引用、准确修订及声明来源；同名和平行关系分开。</td><td>B按名称合并；C全域实体ID。前者丢历史，后者增治理。</td></tr>
+<tr><td>D04 字段组</td><td>原生graph与最小metadata保留原ref、hash、方向、性质、时间原文及缺口。</td><td>B九类通用对象。重复已有业务权威。</td></tr>
+<tr><td>D05 时间／版本</td><td>来源明确才精确筛选；业务有效、可靠留存、原稿引用分开，不用默认now补历史。</td><td>B保存时间代生效；C仅无时间关系。B语义错误，C收缩目标。</td></tr>
+<tr><td>D06 写读／失效</td><td>仅固定合成源确定性映射；新候选代，不回写SAP／报告／人的选择。</td><td>B后台全量自动裁决；C手工维护图。扩大职责或用户负担。</td></tr>
+<tr><td>D07 工程持久</td><td>仅<code>.local/fourbase-l2-poc/</code>隔离，原生两库分别验证重开，全代成功才标可用。</td><td>B合Case库；C仅内存。前者复杂，后者不证持久。</td></tr>
+<tr><td>D08 检查／退出</td><td>P1工程与核心语义理解增益分账，后者须Agent表现实证；记录成本/失败，无收益收缩。</td><td>B凭官网、图节点或演示通过。不能证明产品价值。</td></tr>
+<tr><td>D09 主答／可选依据</td><td>关键口径和冲突由Agent正文主动解释，原依据详情内的口径说明仅可选，无独立页或新增必做。</td><td>B先建图向导。增加普通用户操作。</td></tr>
+<tr><td>D10 整体确认／后续</td><td>先确认v0.3，再仅开原P1；后续切片按实证补规格／结构／授权，P2不是完整L2全部实现。</td><td>B一起部署／真实试验；C仅确认文档UI。B扩大授权，C仍不运行POC。</td></tr>
+</tbody></table></div>
+<h2>P1结构摘要与后续事项</h2><p>P1只提出可重建的派生ReadModel：实体对应原修订，边对应原有向声明，字段逻辑组直接映射原引用／组件原生字段。不建业务表、迁移、统一ID或第二消息库。13类结构完整性已在决定包逐项归属；完整L2的本体／规则、增量事实／实体对齐等尚未提出生产持久合同，不能因确认方向就视为具体schema、模型或后台摄取获批。</p>
+<p>关键风险：发布包API的文本查询、双轴不同截点、默认时间、平行边比较和跨两库一致性均有边界。业务样例沿Case→引用清单→SAP，不新增直接Case/SAP关系；精确时间原语单独验证，不为业务未知时间补值。浏览器旧v0.1曾因Work设置禁用受阻，此前v0.2直接打开本地HTML被URL策略拒绝file协议（仅HTTP／HTTPS）；v0.3未再尝试或绕过，实际桌面／375px／主题／焦点／交互与请求观察均NOT_RUN。组件安装、运行、Agent理解与专业收益未证，全部原FAIL／UNKNOWN／NOT_PROVED及旧WIP保留。</p>
+<p class="note">请整体确认v0.3后端语义定位、spec／UI与D01–D10；建议全A，确认后的实施仍仅原P1。当前只获准备材料修订授权，未开工；具体字段与理由以决定包为准。确认数：0／10；待确认：10；已批准例外：0。</p>
+</main></html>

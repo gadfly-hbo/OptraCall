@@ -169,3 +169,15 @@ test('MP06 value-only model executor can import its encoded data module but no a
  assert.deepEqual(inspectSessionSource('src/agent/model-pack-tools.ts',"import { defineTool } from './sdk.ts';"),[]);
  assert.ok(inspectSessionSource('src/agent/model-pack-tools.ts',"import { SessionManager } from './sdk.ts';").length);
 });
+
+test('S4 exact synthetic SDK fixtures and engineering Store loader are reviewed without widening product runtime imports', () => {
+  for (const file of ['tests/s4-runtime-lifecycle.test.ts', 'tests/s4-runtime-sdk.test.ts']) {
+    assert.deepEqual(inspectSessionSource(file, `import { ProjectAgent } from '../src/agent/project-runtime.ts'; new ProjectAgent(options);`), []);
+  }
+  const nativeLoader = 'scripts/fourbase_l2/authority.mjs';
+  assert.deepEqual(inspectSessionSource(nativeLoader, 'const load = relative => import(pathToFileURL(path.join(input.sourceRoot, relative)).href);'), []);
+  assert.ok(inspectSessionSource(nativeLoader, `import { createAgentSession } from '@earendil-works/pi-coding-agent';`).length > 0);
+  assert.ok(inspectSessionSource(nativeLoader, `import { ProjectAgent } from '../../src/agent/project-runtime.ts'; new ProjectAgent(options);`).length > 0);
+  assert.ok(inspectSessionSource('scripts/fourbase_l2/unreviewed.mjs', 'await import(arbitraryRoot);').length > 0);
+  assert.ok(inspectSessionSource(nativeLoader, 'await import(arbitraryRoot);').length > 0, 'only the reviewed original Store-loader expression is excepted');
+});

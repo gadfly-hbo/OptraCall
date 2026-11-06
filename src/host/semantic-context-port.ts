@@ -1,9 +1,31 @@
-import type { SemanticContextPort } from '../agent/semantic-context.ts';
+import type { SemanticContextPort, SemanticContextReadPort } from '../agent/semantic-context.ts';
+import type { createSemanticGraphService } from './semantic-graph-service.ts';
 import type { SemanticQueryInput } from '../../extensions/business-plugins/semantic-context/types.ts';
 import { SemanticContextFault, type SemanticContextService } from './semantic-context-service.ts';
 import type { ProjectStore } from './project-store.ts';
 import type { ProjectDataContextStore } from './project-data-context-store.ts';
 import type { CreateDataCitation } from './project-data-context-types.ts';
+
+/** A Host-bound read facet. Managed ordinary receives graph only, never M2 writes. */
+export function createSemanticContextReadPort(options: {
+  projectId: string; taskId: string; projects: ProjectStore; legacy: SemanticContextPort;
+  graph: ReturnType<typeof createSemanticGraphService>; graphOnly: boolean; isClosing: () => boolean;
+}): SemanticContextReadPort {
+  return async (action, input, context) => {
+    const assertCurrent = () => {
+      context.signal.throwIfAborted(); context.assertCurrent();
+      if (options.isClosing()) throw new SemanticContextFault('semantic_context_run_unavailable', 409);
+    };
+    assertCurrent(); await options.projects.getTask(options.projectId, options.taskId); assertCurrent();
+    if (action !== 'graph') {
+      if (options.graphOnly || !['find', 'read', 'trace'].includes(action)) throw new SemanticContextFault('semantic_context_read_not_authorized', 403);
+      return options.legacy(action, input, { ...context, assertCurrent });
+    }
+    const result = await options.graph.query(options.projectId, options.taskId, { ...input, action: 'graph' }, { ...context, assertCurrent });
+    assertCurrent();
+    return { content: [{ type: 'text', text: JSON.stringify(result) }], details: result };
+  };
+}
 
 /** Owner-qualified access to existing business records, never an analysis step. */
 export function createSemanticContextPort(options: {
