@@ -60,6 +60,10 @@ pi-coding-agent SDK 是整个 OptraCall 产品的统一 Agent Runtime。Codex �
 
 产品接入优先薄适配：任务与会话关联、UI 事件展示、上下文和工具提供、结果保存。会话循环、上下文压缩等先复用 SDK 已有能力；具体可用性仍需针对选定版本验证。
 
+### Semantica 的采用与升级边界
+
+**2026-11-06 已确认架构约束：** Semantica 作为业务语义支撑引擎，与 Pi SDK 遵守同等的官方原包、用户指定升级版本和 OptraCall 自有适配要求；它不替代统一 Agent Runtime 或原业务资产权威。业务本体、图数据与来源映射由 OptraCall 维护。长期来源及版本约束见[工程规范](engineering-workflow.md#semantica-官方组件来源与版本约束)，既有资产兼容、验证和回退按[升级流程](engineering-workflow.md#semantica-升级验证与回退)执行；规则建立本身不构成组件升级或运行服务变更的授权。
+
 ### 三核心不再作为强制结构
 
 业务语义、必要计算校验和执行安全仍有价值，但不要求恢复 JuanerAI 原有模块形态。SCR、IR、Harness 相关代码只有在解决具体问题且收益明确时才复用；不把完整 IR 或多阶段交接设为所有分析的入口条件。

@@ -16,6 +16,8 @@
 
 当前用户已明确授权[PPT Host 接线修复](openspec/changes/ppt-host-wiring-repair/spec.md)：修复已核实的项目／配置归属、完整操作占用、保护、导出／差异及UI接缝，保留原FAIL、版本、会话与文件；适用检查、独立复核及Git／CI后合并main，不切换服务、不操作MacBook或新增真实模型实验。原检查“不通过”与本次修复结果分别记录。
 
+涉及 Semantica 接入、依赖、适配或升级时，必须读取[官方组件规则](docs/engineering-workflow.md#semantica-官方组件来源与版本约束)与[资产兼容及回退流程](docs/engineering-workflow.md#semantica-升级验证与回退)。Semantica 与 Pi 均采用官方原包，精确升级目标由用户指定；长期规则只在工程规范维护，规范本身不构成依赖升级或运行采用授权。
+
 涉及Agent交互、SDK接入、会话启停/恢复、模型配置或插件接入的变更，开始前必须读取工程规范的IN01–IN07及[统一会话接入说明](docs/agent-session-integration.md)，在本变更规格记录Interface版本、owner/profile和验收范围。Codex、Qoder共用这些规则；工具入口只引用同一来源。
 
 当前为[固定版本与MacBook试用交付](openspec/changes/current-version-trial-delivery/spec.md)：用户授权固定现有A/B/C、自动核算及托管优化候选，更新main并完成检查、非作者复核和CI后合并，再更新MacBook供用户体验。暂停新的模型全链路实验；保留专业FAIL、项目、会话和文件，不切换Mac mini运行服务。试用范围见[说明](docs/current-version-trial.md)，实际交付按[记录](openspec/changes/current-version-trial-delivery/result.md)分别核对。
