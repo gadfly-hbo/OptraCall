@@ -4,6 +4,8 @@
 
 本项目遵循四点产品原则：**Host 管环境、Agent 自主执行、优先复用 Pi 已有能力、减少人的操作**。准备或修改 spec／UI、开发及验收时，必须按[工程规范第2节](docs/engineering-workflow.md#四点产品原则)与[前置检查](docs/engineering-workflow.md#3-连续-sdd-与-tdd)核对实际职责、复用依据和最少用户操作路径，完成[专项最终检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；完整规则仅在工程规范维护。
 
+涉及 SDK、依赖或适配层的设计、实现与验收前，必须读取[官方 Pi SDK 来源与版本约束](docs/engineering-workflow.md#官方-pi-sdk-来源与版本约束)和[升级流程](docs/engineering-workflow.md#pi-sdk-升级流程)：统一使用未经修改的官方发布包，SDK 目标版本由用户明确指定，兼容适配在 OptraCall 自身完成。源码补丁、私有 fork、安装目录改写或绕过公开契约的运行时改写均不能作为修复手段；公开扩展机制按同一规范使用。当前[规则核对](openspec/changes/pi-sdk-governance/result.md)列有未处理风险，不能从规则已建立推断既有实现全部合规。
+
 [模型包消费端](openspec/changes/model-pack-consumer/result.md#合并交付与原位归档)已完成工程交付并原位归档。维护时先读规格、结果及[后续采用记录](openspec/changes/model-pack-consumer/live-validation.md)：MPS训练／导出，OptraCall消费v1纯计算包；任务显式开启、受管／封闭资源排除，快照不可变、损坏不静默修复。用户后续授权运行采用及设备更新，实际状态按后续收据核定；当前真实业务模型与LLM验收已由用户决定跳过。旧备份包有限检查、取消、原失败及历史前置TDD证明NOT_PROVED保留。
 
 维护[deep-research skill](openspec/changes/deep-research-skill/result.md#合并交付与原位归档)或新增skill测评展示时，先读其归档记录及[统一展示规范](docs/skill-evaluation-display.md)：测评默认收起，历史回执绑定被测版本。长期`qoder/ext-skills`分支的测评门禁、移交与写入归属按工程规范第2、5节执行；本轮修正版未复测，工程合并不替代用户测评。

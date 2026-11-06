@@ -240,6 +240,63 @@ test('failed resource close remains busy and is available to a later explicit cl
   await h.domain.close(ref); assert.equal(h.domain.busy(ref), false);
 });
 
+test('R2: an MCP loader opening failure releases its owner only after actual cleanup succeeds', async () => {
+  const cleaned = deferred<void>();
+  const h = harness('r2-clean-open', { setup: agent => {
+    if (agent.options.projectId !== 'p/failing') return;
+    agent.open = async () => { throw new Error('mcp_config_sdk_loader_unavailable'); };
+    agent.closeWait = cleaned;
+  } });
+  const ref = h.domain.ref('p/failing');
+  const rejected = assert.rejects(h.domain.open(ref), { message: 'mcp_config_sdk_loader_unavailable' });
+  await until(() => h.agents[0]?.closeCalls === 1);
+  assert.equal(h.domain.busy(ref), true, 'cleanup in progress still owns the opening');
+  assert.equal((await h.domain.read(ref)).opening, true);
+  assert.throws(() => h.domain.start(ref, { text: 'must not dispatch', requestId: 'blocked-open' }), { code: 'session_busy' });
+  const other = h.domain.start(h.domain.ref('p/healthy'), { text: 'independent owner', requestId: 'healthy-open' });
+  await other.accepted;
+  h.agents[1]!.settle(); await other.completion;
+  cleaned.resolve(); await rejected;
+  assert.equal(h.domain.busy(ref), false);
+  assert.deepEqual(await h.domain.read(ref), { live: false, busy: false, opening: false, pendingUI: [] });
+  assert.equal(h.agents[0]!.calls.length, 0);
+  assert.equal(h.agents[0]!.closeCalls, 1);
+  assert.equal(h.agents.length, 2, 'failure cleanup never reopens or replays the failed owner');
+  await h.domain.closeAll();
+});
+
+test('R2: failed or unknown cleanup after an MCP loader opening failure quarantines only the original owner', async t => {
+  for (const cleanupError of ['synthetic_cleanup_failed', 'protected_cleanup_unknown']) await t.test(cleanupError, async () => {
+    const h = harness('r2-failed-open', { setup: agent => {
+      if (agent.options.projectId !== 'p/failing') return;
+      agent.open = async () => { throw new Error('mcp_config_sdk_loader_unavailable'); };
+      agent.closeError = new Error(cleanupError);
+    } });
+    const ref = h.domain.ref('p/failing');
+    await assert.rejects(h.domain.open(ref), { message: 'mcp_config_sdk_loader_unavailable' });
+    assert.equal(h.domain.busy(ref), true);
+    assert.equal(h.domain.executionState(ref).mode, 'unknown');
+    assert.equal((await h.domain.read(ref)).opening, false);
+    await assert.rejects(h.domain.open(ref), { code: 'session_busy' });
+    assert.throws(() => h.domain.start(ref, { text: 'must not dispatch', requestId: 'blocked-open' }), { code: 'session_busy' });
+    const count = h.events.length;
+    h.agents[0]!.emit({ type: 'snapshot', snapshot: h.agents[0]!.state() });
+    assert.equal(h.events.length, count, 'failed opening callbacks cannot become current');
+    const other = h.domain.start(h.domain.ref('p/healthy'), { text: 'independent owner', requestId: 'healthy-open' });
+    await other.accepted; h.agents[1]!.settle(); await other.completion;
+    assert.equal(h.domain.busy(ref), true);
+    assert.equal(h.agents[0]!.closeCalls, 1, 'neither reads nor another owner automatically retries failed cleanup');
+    await assert.rejects(h.domain.close(ref), { message: 'session_close_failed' });
+    h.agents[0]!.closeTask = undefined; h.agents[0]!.closeError = undefined;
+    await h.domain.close(ref);
+    assert.equal(h.domain.busy(ref), false);
+    assert.equal(h.domain.executionState(ref).mode, 'none');
+    assert.equal(h.agents[0]!.calls.length, 0);
+    assert.equal(h.agents.length, 2, 'an explicit close retries cleanup alone');
+    await h.domain.closeAll();
+  });
+});
+
 test('failed close of idle A preserves an already admitted replacement B and retries only A', async () => {
   const h = harness(), ref = h.domain.ref('r'); await h.domain.open(ref);
   const old = h.agents[0]!, wait = deferred<void>(); old.closeWait = wait; old.closeError = new Error('old A termination unknown');
