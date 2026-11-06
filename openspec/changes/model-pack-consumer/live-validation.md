@@ -33,3 +33,15 @@
 ### 修正工程检查
 
 最终模型包目标102/102通过；完整 `npm run check` exit0：1560项／1530通过／0失败／30原条件跳过，含会话边界、类型和构建。完整日志 SHA `59bce8c98254b16ed0ed8642c8a208de5e6e6e578f1fcb9377c918f6b3d4bed8`；既有构建体积提示保留。首版单探针完整检查1559／1529／0／30也保留，但未覆盖独立发现F1，不能代替修正版。非作者复验见[复核追加](independent-review.md#2026-11-06-冒烟兼容修正复核)。当前无UI／SDK／依赖／schema变化，新增测试全为合成，不含原模型权重或训练行。
+
+### Git／CI 与首次实际采用
+
+[PR #37](https://github.com/gadfly-hbo/OptraCall/pull/37) head `66fae3867061adcb7fe3f83469e576ae1fa0e5ac`，基线4298db9；实际 [Check #107](https://github.com/gadfly-hbo/OptraCall/actions/runs/42151252467) attempt1／pull_request成功：1560项／1459通过／0失败／101条件跳过，边界、类型、构建及高危依赖审计通过。按既有授权直接squash `a5b4d63a7a971dd8d07031335f545a181ffcd127`；完整树与受检head同为 `3ed08036fedd3c3b05d8eac3092585dbcb3f01ac`。其 main push [Check #108](https://github.com/gadfly-hbo/OptraCall/actions/runs/42152195706) attempt1也成功，计数相同。Linux条件跳过不改写本机检查或当前真实验收SKIPPED。
+
+两机经原更新入口，只快进、锁文件安装与构建后，首次实际采用a5b4d63。Mini旧实例正常停止前24个原任务均idle，使用独立干净产品clone继续绑定原dataRoot／projectsRoot／trial控制根；MacBook沿原独立main clone从0e6c575更新。各机HEAD、dist及health实际commit/tree一致、dirty=false，均ready；只读GET配置／项目／模型货架，未发送消息、open或连接测试。实际货架均为空，隔离样本没有安装或晋级到业务根。
+
+Mini基线2568文件中，2566个原数据文件SHA逐项不变、0缺失；另2个项目／反馈进程锁随正常重启换为新PID，已核验锁归属并保留前后字节。初始保全脚本将锁变化误作数据变化的失败回执保留，再按已核实控制文件单独记录，未泛化豁免其它变化；现有3份SQLite原文件均未变。MacBook基线68文件全部SHA逐项不变、0缺失。两机更新前私有备份保留，不用旧副本覆盖新增工作。
+
+开发主仓main仍为4298db9：其另项AGENTS／规范WIP与本轮路径重叠，Git安全拒绝快进。没有stash、reset或覆盖；开工已固定的6份WIP字节未变，其他任务新增内容继续保留，不把开发主仓写成干净或已快进。两机运行用的独立产品main副本与该WIP分开。
+
+本次仅为产品代码安装与运行采用，不是当前业务模型或用户产品验收。停用模型工具沿任务开关，包和旧版本保留；代码回退不能当数据回退。真实测试须遵从用户最新跳过决定，不自动续跑中断任务。首次采用回执在本轮私有证据的 `mini-adoption-first.json`、`macbook-adoption-first.json`、`mini-runtime-first.json`、`macbook-runtime-first.json` 与前后保全清单；后续纯文档归档main经自身CI后，两机再沿相同入口接收，最终实际运行身份以最后健康回执为准。

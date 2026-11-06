@@ -41,3 +41,11 @@ v2 为939文件，清单 SHA `9ba1d746865f70adbbecf2dfed17a0d3bfc0adb62fb803cbfd
 独立合成边界7/7、受控验货失败分支8/8、真实store目标9/9通过；CSV文本／引号／Unicode与JSON数字继续可用，沙箱不可用／取消／超时／输出上限不转入另一探针，不落半成品。实际predict未改、仍单次执行。职责及复用专项通过本次修正范围：导入验货为Host环境治理，没有SDK、owner/profile、模型循环或分析编排变化；冒烟不证明业务语义。源报告位于本轮 `.local/model-pack-live/independent-review/reviewer-20261106-01/review-v2.md`，SHA `09f904bcc665bc8fec50c7fa7e57c5a44e3fb4a2e71e9fe31b2cedd489161f1f`。
 
 原真实任务按用户最新指示取消且不评分，当前业务模型与LLM最终验收SKIPPED；旧备份包有限结果不扩为当前产品验收。完整检查、实际head CI和设备采用另按[后续记录](live-validation.md)核定，本段不预先批准未执行的采用。
+
+## 2026-11-06 Git与首次采用独立读回
+
+同一非作者逐项核验固定66fae38的940文件、完整日志与私有候选清单零漂移，源码／测试与其已复验版本同字节。独立GitHub查询及日志读回确认Check #107实际PR head、#108实际main push均completed/success，1560／1459／0／101；squash a5b4d63与PR完整树相同。
+
+独立实时读取Mini及通过既有SSH别名macbook读取MacBook：各机HEAD／构建／health commit=a5b4d63、tree=3ed08036一致且干净，货架为空。独立复算Mini2566原数据SHA、2个已重建锁的当前PID归属，以及MacBook68原文件SHA均与保全说明一致；原6份开发WIP SHA未变，开发主仓延后快进如实记录。首轮锁误判报告、mDNS地址解析失败和改用既有SSH别名的成功结果分别保留，不计作产品缺陷。取消任务仍单request、cancelled／retry0，未提升为真实质量通过。
+
+首次实际采用结论通过上述范围。源报告 `adoption-first-review-v4.md` 位于原私有复核根，SHA `4c468438b551087e7eb6eb3b8427005c96cf3860f917dd16b2586f3798c154e7`。当前纯文档归档提交、自身CI及两机再次接收的最终身份须由后续实际回执核定，不在本段预签；用户产品验收保持另证。
