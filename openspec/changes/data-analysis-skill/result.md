@@ -1,6 +1,6 @@
 # data-analysis 运营数据分析 skill · 实施与验证记录
 
-日期：2026-11-05（作者阶段）／2026-11-06（Codex 接管）· 分支：`qoder/ext-skills`（基线 `33c95c5`）· 状态：用户测评已通过，Codex 接缝、浏览器点验、修后完整检查及原非作者受影响复核通过；一次验证目录偏差保留，本轮 Git/CI 尚待另行授权。下文 Qoder 验证证据保留其移交时范围，Codex 增量见末节。
+日期：2026-11-05（作者阶段）／2026-11-06（Codex 接管）· 分支：`qoder/ext-skills`（基线 `33c95c5`）· 状态：用户测评及初始本地检查通过；用户已授权 Git/CI 并在 CI 通过后直接合并归档，最新 main 已集成，新增发现修后复验中。历史失败及一次验证目录偏差保留。下文 Qoder 验证证据保留其移交时范围，Codex 增量见末节。
 
 ## 用户测评回执（2026-11-06，显式通过）
 
@@ -123,3 +123,32 @@ Git/CI 尚未申请／执行，本变更尚未合并或归档；最终集成最�
 - 独立 DA08 首次改用全空代码根时的 `runtime_start_failed` 500 是验证环境失败，保留记录；补充只读代码资源引用、所有产物留在复核隔离根后，原断言逻辑 1/1 PASS，不能将环境失败称为产品 RED。
 - 规范复核者直接运行新增质量测试时，其硬编码 scratch 在作者证据区新增一个 `regression-VaHWzN/data.csv`，属于验证目录偏差。新目录原地保留，无既有文件／源码变动；后续仅路径适配在复核者根重跑 **5/5 PASS**（`quality-isolated-v2.log`）。偏差那次不作为符合约定目录的运行证据，不声称复核全程所有产物都在原定隔离根；细节见独立复核记录。
 - 用户模型测评、合成工程验证、独立复核、Git/CI、产品验收与运行采用分别报告；本轮无新增真实模型实验、运行采用、MacBook 更新或第三方原仓操作。
+
+## Git/CI 授权与最新 main 集成（2026-11-06）
+
+用户明确授权提交、集成最新 main 重验、push 单 PR、实际 head CI 通过后直接 squash 合并、本地 main 安全快进、OpenSpec 原位归档及长期分支归还；真实模型、服务切换和 MacBook 不包含在内。前文“尚待授权”是当时状态，不再作为停止线。
+
+先固定已复核 v3 为 `717ef26`，再合入 `origin/main=1fdfb0923d5f84fdfa89f457405f5eb6d6981391`，集成提交 `30f79a4`。App／catalog 两处冲突从精确 main 文件补入 data-analysis 类型、原测评元信息和项目导航，保留 SAP 与 model-pack 入口，不恢复 main 已移除的 A02 规划项。SDK／Runtime／会话实现、三份治理脚本及 package／lock 的 11 个关键 blob 与 main 完全一致；不带回旧 SDK 改写或降级。规格复核者在自己的隔离根再次实跑 DA08 **1/1 PASS**，原断言不变。
+
+### 集成新发现与修复
+
+1. **deep-research 单向裁定漏核（P2）**：本分支基线 `33c95c5` 已明确记载 2026-11-04 用户裁定 effective 覆盖 `30eda70`，此前卡片及本轮 v3 展示说明仍称待复测，存在矛盾。规范复核者独立核实七份运行资源当前与 `30eda70` 同字节；根给实际旧条目补既有覆盖字段及裁定限制说明，保留被测身份 `a78a478`、全部原指标与未重测事实。共享回归保留“未获覆盖”的合成分支，不能把所有历史回执都自动当已覆盖。私有观测先 1/1 FAIL，永久回归 6 项先 2 FAIL／4 PASS，修后永久＋观测 **7/7 PASS**。v3 当时通过及作者／复核者漏核事实均保留，不能将旧结论提前套用到最终集成候选。展示规范与工程规范 v1.8 的 §5、AGENTS 同源指针同步澄清，SDK 治理段不改。
+2. **集成全量中的模型包夹具（MP04）**：`30f79a4` 完整检查为 **1645 项／1614 PASS／1 FAIL／30 SKIP，exit 1**，未执行后续构建；日志 `integrated-full-check-v4.log` SHA-256 `5fee48dad1b6a9d3cbcee163fcdecead07a14129d3dacf84be835dd4211c0149`。实际路径是 hold→stop 返回 200→立即归档遇到 `409 project_busy`，并非该测试先等了 completed。原非作者核对 stop 等底层取消、外层 lease 仍待 finish／drain 清槽；仅在 MP04 stop 后按原文件 30s／20ms 惯例等待匹配 request 的非 running 终态和公共 snapshot.idle。共享 settled 的 completed 断言、所有状态码／模型／归档断言及一次归档 POST 保持，不改生产 Busy 合同。原文件定向 **5/5 PASS**；原失败保留，源码链支持窗口解释，不只以复跑推断因果。
+
+这些是本轮集成发现的工程合同／展示修正，不是用户排除的 12 条测评断言加固，也未改 Qoder 原两份 data-analysis 测试。新增修正后的完整检查与正式浏览器、非作者复验另列，不将原 1432 项结果冒称为最新集成通过。
+
+### SDK 来源与依赖核对
+
+使用 main 现有只读 `verify-official-pi.py`，核当前独立工作树安装的七个官方 Pi 1.4.0 包，对照官方 registry 元数据、归档与锁文件 SRI，累计 **2530 文件，7/7 PASS，changed/missing/extra/symlink 均 0**。回执 `integration-v4/official-pi-receipt.json` SHA-256 `fcf21f6667bda2fa3c6fbce4ce5a4613001e23a15cbdd90aff663de25e4164b4`。未安装、改写或升级 SDK，不推及运行服务和其他设备。`npm audit --audit-level=high` exit 0，保留既有 **2 moderate／0 high／0 critical**，不为本轮自动更新依赖。
+
+### 修后集成验证现场
+
+v5 冻结清单覆盖 971 文件（SHA-256 `ee05f6cb7c4d9e8af242bde853c9fe565d6eebf38713590ba86414ff357cf05d`），前后核对零源漂移。规范复核者确认 deep-research P2 关闭，实际 deep／DA 暂定／未获覆盖合成回执三场景独立 SSR 通过；MP04 源差额与 5/5 定向日志核实，必须修复项为 0。
+
+正式浏览器再次运行集成构建：data-analysis 默认收起、鼠标／空格开合、浅深色指标与项目 CTA；deep-research 保留 a78a478 原指标并显示覆盖 30eda70；现有 SAP／模型包入口实际导航正常。`qa/browser-integrated-v5/receipt.json` SHA-256 `72881ecc3d4f124d1d7de142622055b5f83c431b1cc18079259398dc72196545`，19 份 AX／PNG 及四份 UI 源哈希经非作者独立核验。13 次 GET，messages/open/connectionTest 均 0，隔离 Host／本轮标签正常关闭；只测桌面，窄屏仍 NOT_RUN。
+
+**默认 `npm run check` v5 仍 exit 1**：1645 项／1613 PASS／1 FAIL／1 CANCELLED／30 SKIP。MP04 已通过；既有 `protected-file-process.test.ts:161` 是覆盖十次 worker 启停的用例达到总 20s 上限，日志不足以定位停在哪一次，不能称全部协议断言失败。另 `sdk-connection.test.ts:38` 的 200ms 连接超时用例收到 504、health 200，但 Provider 完整请求计数为 0（原断言要求 1）；计数在读完 body 后记录，0 不证明未尝试联网。Host 创建不计入这 200ms，首次 prompt 派发与完整请求记录可能同该窗口竞争。原日志 `integrated-full-check-v5.log` 保留。相同源两文件原样隔离运行 **10/10 PASS，0 skip/cancelled**，对应 worker 用例 3.70s、连接超时用例 0.85s；这支持负载／时序条件敏感，但不单凭绿色重跑断言唯一根因已证实。
+
+不修改测试 deadline、断言、SDK 或 CI 定义。后续本地完整验证仅把测试文件调度显式限制为并发 2，顺序执行原三阶段 `npm run check:agent-sessions` → `node --test --test-concurrency=2 tests/*.test.ts` → `npm run build`，逐步成功才继续。此条件不同于默认 `npm run check`，不能混称默认已通过。Node 不允许该参数放入 NODE_OPTIONS（命令探测 exit 9），因此使用明确 CLI 参数，不改全局配置。最终实际 PR head CI 仍按未改的原工作流运行默认完整命令，成功后才允许合并。
+
+证据将保存在仓外 `/Users/bendandebaba/OptraCall-artifacts/data-analysis-handoff-20261106-gph2yz9a/`，待全部交付结束复制冻结材料、保留符号链接本身并逐项哈希读回；公开锚点以实际 PR／Actions 为准，不宣称私有原始日志已入公开仓。

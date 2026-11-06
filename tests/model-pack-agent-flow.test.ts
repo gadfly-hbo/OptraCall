@@ -46,6 +46,15 @@ test('MP04: Host task capability defaults off, persists independently, and can o
   await provider.waitForRequests(1);
   assert.equal((await json(await host.request(route + '/capabilities', 'PUT', { capability: 'modelTools', enabled: false }), 409)).code, 'session_busy');
   await json(await host.request(route + '/stop', 'POST', {}));
+  // Stop acknowledges cancellation before the enclosing lease necessarily
+  // finishes. Archive still requires that same public task status to be idle.
+  const stopDeadline = Date.now() + 30_000;
+  for (;;) {
+    const state = await json(await host.request(route));
+    if (state.task.lastRun?.id === requestId && state.task.lastRun.status !== 'running' && state.snapshot.status === 'idle') break;
+    if (Date.now() > stopDeadline) assert.fail(`Stopped task did not become idle: ${JSON.stringify(state)}`);
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
   await json(await host.request(`/api/projects/${project.id}/archive`, 'POST', {}));
   assert.equal((await json(await host.request(route + '/capabilities', 'PUT', { capability: 'modelTools', enabled: false }), 409)).code, 'project_archived');
   assert.equal((await json(await host.request(route))).task.modelTools, true);

@@ -12,12 +12,14 @@ export type CatalogItem = {
 });
 const deepResearchEvaluation: SkillEvaluation = {
   date: '2026-11-04', testedRevision: 'a78a478', revisedSinceEvaluation: true,
+  coversEngineeringRevisions: true,
   outcome: 'effective', sampleCount: 10,
   assertions: { basis: '条目累计', baseline: 16.2, variant: 29.4 },
   activation: { activated: 8, total: 10 },
   judgments: { wins: 3, ties: 1, losses: 0, undetermined: 6 },
   seconds: { baseline: 278.9, variant: 460.8 },
   tokens: { baseline: 1_110_000, variant: 1_720_000 },
+  limitations: '2026-11-04 用户裁定原有效结论覆盖工程修正后的交付版 30eda70；指标仍来自 a78a478 的原测评，不表示对修后字节重新测评。',
 };
 const dataAnalysisEvaluation: SkillEvaluation = {
   date: '2026-11-06', testedRevision: '6df72f4（评估归档 1.9.0 · hash 63adebba）', revisedSinceEvaluation: true,

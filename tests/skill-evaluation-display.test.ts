@@ -16,6 +16,8 @@ test('the historical deep-research receipt remains bound to its tested revision 
   assert.ok(evaluation);
   assert.equal(evaluation.testedRevision, 'a78a478');
   assert.equal(evaluation.revisedSinceEvaluation, true);
+  assert.equal(evaluation.coversEngineeringRevisions, true);
+  assert.match(evaluation.limitations ?? '', /2026-11-04.*30eda70/);
   assert.deepEqual(evaluation.judgments, { wins: 3, ties: 1, losses: 0, undetermined: 6 });
   assert.equal(evaluation.sampleCount, 10);
   assert.equal(catalogItems.find(item => item.id === 'coupon-forecast')?.skill?.evaluation, undefined);
@@ -34,7 +36,11 @@ test('an explicitly covered engineering revision keeps its provisional verdict w
   assert.doesNotMatch(html, /修正版待复测|修正版未复测|原候选测评/);
   assert.doesNotMatch(html.match(/<details[^>]*>/)![0], /\bopen(?:[=\s>])/);
 
-  const legacyHtml = renderToStaticMarkup(createElement(SkillEvaluationPanel, { name: '深度研究', evaluation: historical }));
+  const acceptedHtml = renderToStaticMarkup(createElement(SkillEvaluationPanel, { name: '深度研究', evaluation: historical }));
+  assert.match(acceptedHtml, /用户已确认结论覆盖本轮工程修正后的交付版/);
+  assert.doesNotMatch(acceptedHtml, /修正版待复测|修正版未复测|原候选测评/);
+
+  const legacyHtml = renderToStaticMarkup(createElement(SkillEvaluationPanel, { name: '合成未获覆盖回执', evaluation: { ...historical, coversEngineeringRevisions: false } }));
   assert.match(legacyHtml, /修正版待复测/);
   assert.match(legacyHtml, /测评对应原候选；修正版未复测。/);
   assert.doesNotMatch(legacyHtml, /覆盖本轮工程修正后的交付版|暂定/);
