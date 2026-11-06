@@ -1,6 +1,6 @@
 # Pi SDK 接入风险整改方案 v0.2
 
-2026-11-06 · **用户已确认v0.2，本地工程验证完成，限制保留；未作Git／运行交付**。原批准字节在`.local/pi-sdk-adaptation-repair/implementation/before/openspec/changes/pi-sdk-adaptation-repair/spec.md`保留；需求范围不扩。当前事实见[实施记录](implementation.md)及[结果](result.md)，准备／改前评估与实施结果分别记录。依据[风险核对](../pi-sdk-governance/result.md)及[工程规范](../../../docs/engineering-workflow.md#官方-pi-sdk-来源与版本约束)。
+2026-11-06 · **用户已确认v0.2，本地工程验证完成；后续已授权Git／CI交付，运行采用未授权**。原批准字节在`.local/pi-sdk-adaptation-repair/implementation/before/openspec/changes/pi-sdk-adaptation-repair/spec.md`保留；产品需求范围不扩。当前事实见[实施记录](implementation.md)、[结果](result.md)及[Git／CI记录](delivery.md)，准备／改前评估、实施与交付分别记录。依据[风险核对](../pi-sdk-governance/result.md)及[工程规范](../../../docs/engineering-workflow.md#官方-pi-sdk-来源与版本约束)。
 
 v0.2根据[改前四原则与稳定性评估](stability-and-principles.md)收窄v0.1：R1严格保留原启用条件和失败域；R3先补兼容证据，无已证实差额不改传输代码；R4只做合成兼容／保全验证、只读工程诊断和最小工程检查，不在本包加入正式旧历史拒开策略。v0.1原文及原准备复核保存在`.local/pi-sdk-adaptation-repair/assessment/before/`及既有报告，原准备PASS不等于稳定性PASS或实施授权。
 
