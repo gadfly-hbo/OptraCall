@@ -4,7 +4,7 @@ import type { SemanticSourceState, SemanticTarget } from './types.ts';
 
 /** Transient D13 transport only. Original Stores retain business authority. */
 export const semanticGraphNodeTypes = ['MetricConcept', 'MetricVersion', 'MethodVersion', 'SourceRevision', 'Statement', 'Condition', 'InputVersion', 'FieldRole'] as const;
-export const semanticGraphRelationTypes = ['version_of', 'depends_on', 'has_source', 'requires', 'maps_to', 'describes_input', 'distinct_from', 'potential_conflict'] as const;
+export const semanticGraphRelationTypes = ['version_of', 'depends_on', 'has_source', 'requires', 'maps_to', 'describes_input', 'distinct_from', 'potential_conflict', 'asserted_relation'] as const;
 export type SemanticGraphNodeType = typeof semanticGraphNodeTypes[number];
 export type SemanticGraphRelationType = typeof semanticGraphRelationTypes[number];
 export type SemanticGraphOperation = 'find' | 'definition' | 'neighbors' | 'dependencies' | 'impact' | 'source';
@@ -16,7 +16,8 @@ export type SemanticGraphQuery = Page & { action: 'graph' } & (
   | { operation: 'dependencies' | 'impact'; nodeId: string; depth?: number }
   | { operation: 'source'; sourceHandle: string }
 );
-export type SemanticGraphSourceRef = Extract<SemanticTarget, { kind: 'sap' | 'sap-method' | 'enterprise' | 'data-input' | 'data-description' }> & { sourceHandle?: string };
+export type StudioSemanticGraphSourceRef = { kind: 'studio-source'; systemId: string; assetId: string; version: string; publishedHash: string; projectId: string };
+export type SemanticGraphSourceRef = (Extract<SemanticTarget, { kind: 'sap' | 'sap-method' | 'enterprise' | 'data-input' | 'data-description' }> | StudioSemanticGraphSourceRef) & { sourceHandle?: string };
 export type SemanticGraphBuildSource = {
   inputKey: string; locator: string; sha256?: string;
   nature?: 'deidentified-source' | 'synthetic-data' | 'asset-publication' | 'engineering-design'; sourceHandle?: string;
@@ -27,6 +28,7 @@ export type SemanticGraphMetadata = {
   conditions: string[]; limitations: string[]; businessTime: { text: string; source: string }[];
   candidateLocator?: string; conditionState?: 'stated' | 'required-not-established' | 'unknown' | 'disputed';
   operandRole?: 'minuend' | 'subtrahend'; roleText?: string;
+  predicate?: string; weak?: boolean; actualMethod?: string; assetKind?: string;
 };
 export type SemanticGraphRange = { start: number; end: number; total: number };
 export type SemanticGraphNode = { id: string; type: SemanticGraphNodeType; content: string; metadata: SemanticGraphMetadata; contentRange?: SemanticGraphRange };

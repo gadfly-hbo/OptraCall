@@ -18,6 +18,7 @@ test('D17 explicit disabled semantic config survives actual Host startup without
   const health = await (await host.request('/api/health')).json();
   assert.deepEqual(health.semanticGraph, { enabled: false, configurationSha256: createHash('sha256').update(content).digest('hex'), assets: [] });
   assert.equal((await host.request('/api/projects')).status, 200);
+  assert.equal(health.studio?.semanticEngineConfigured, false, 'disabled legacy config must not enable a Studio interpreter');
   t.diagnostic(`retained disabled-config root: ${root}`);
 });
 
@@ -60,6 +61,7 @@ test('D17 enabled startup configuration binds only its project and stays fixed u
   await writeFile(file, content);
   const loaded = await loadSemanticGraphConfiguration({ file, codeRoot, dataRoot, projectsRoot }); assert.ok(loaded);
   assert.deepEqual(loaded.bindingFor(projectId, taskId), { runRoot, snapshotId, python, codeRoot });
+  assert.equal(loaded.python, python, 'the accepted Host-only interpreter can be reused without another environment configuration');
   assert.equal(loaded.bindingFor('44444444-4444-4444-8444-444444444444', taskId), undefined);
   assert.equal(loaded.bindingFor(projectId, ''), undefined);
   assert.deepEqual(loaded.configuration, { enabled: true, configurationSha256: createHash('sha256').update(content).digest('hex'), assets: [{ projectId, snapshotId }] });
@@ -83,6 +85,8 @@ test('D17 actual Host reports only the accepted configuration identity, not grap
   const health = await (await host.request('/api/health')).json();
   assert.deepEqual(health.semanticGraph, { enabled: true, configurationSha256: createHash('sha256').update(content).digest('hex'), assets: [{ projectId, snapshotId }] });
   assert.doesNotMatch(JSON.stringify(health.semanticGraph), /ready|python|runRoot|\/Users\//);
+  assert.equal(health.studio?.semanticEngineConfigured, true, 'the original normal launcher config enables the same interpreter for Studio');
+  assert.doesNotMatch(JSON.stringify(health.studio), /python|runRoot|\/Users\//);
   await assert.rejects(readFile(marker), (error: any) => error.code === 'ENOENT', 'startup health does not run a graph query');
 });
 

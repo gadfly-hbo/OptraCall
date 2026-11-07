@@ -93,8 +93,9 @@ async function verifySnapshot(binding: SemanticGraphBinding, expected: SemanticG
     const prefix = `snapshots/${binding.snapshotId}/`;
     const bytes = await read(prefix + 'receipt.json');
     if (createHash('sha256').update(bytes).digest('hex') !== expected.receiptSha256) throw error('semantic_graph_snapshot_changed', 409);
-    const receipt = JSON.parse(bytes.toString('utf8')) as { snapshotId: string; files: Record<string, {name:string;sha256:string;bytes:number}>; inputs: {relativePath:string;sha256:string;bytes:number}[] };
-    if (receipt.snapshotId !== binding.snapshotId || hash(receipt.inputs) !== expected.inputFingerprint || receipt.inputs.length !== 9) throw error('semantic_graph_snapshot_changed', 409);
+    const receipt = JSON.parse(bytes.toString('utf8')) as { formatVersion?: number; snapshotId: string; files: Record<string, {name:string;sha256:string;bytes:number}>; inputs: {relativePath:string;sha256:string;bytes:number}[] };
+    if (receipt.snapshotId !== binding.snapshotId || hash(receipt.inputs) !== expected.inputFingerprint ||
+        (receipt.formatVersion === 2 ? receipt.inputs.length < 1 || receipt.inputs.length > 256 : receipt.formatVersion !== undefined && receipt.formatVersion !== 1 || receipt.inputs.length !== 9)) throw error('semantic_graph_snapshot_changed', 409);
     for (const [kind, sha] of [['graph', expected.snapshot.graphSha256], ['ontology', expected.snapshot.ontologySha256]]) {
       const item = receipt.files[kind!]; if (!item || item.name.includes('/') || item.sha256 !== sha) throw error('semantic_graph_snapshot_changed', 409);
       const content = await read(prefix + item.name); if (content.length !== item.bytes || createHash('sha256').update(content).digest('hex') !== sha) throw error('semantic_graph_snapshot_changed', 409);

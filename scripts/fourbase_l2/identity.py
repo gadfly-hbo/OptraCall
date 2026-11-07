@@ -54,11 +54,12 @@ def ref_identity(ref):
         'enterprise': ('storeId', 'materialId', 'revisionId'),
         'data-input': ('projectId', 'datasetId', 'inputVersionId'),
         'data-description': ('projectId', 'datasetId', 'inputVersionId', 'descriptionRevisionId'),
+        'studio-source': ('systemId', 'assetId', 'version', 'projectId'),
     }.get(kind)
     if fields is None:
         raise ValueError('unsupported_source_ref')
     allowed = {'kind', *fields}
-    if kind in ('sap', 'sap-method'):
+    if kind in ('sap', 'sap-method', 'studio-source'):
         allowed.add('publishedHash')
     if kind == 'enterprise':
         allowed.add('location')

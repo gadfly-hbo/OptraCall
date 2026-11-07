@@ -66,7 +66,8 @@ export type AgentSessionDomain<Owner> = {
   live(ref: SessionRef<Owner>): boolean;
   stop(ref: SessionRef<Owner>): Promise<boolean>;
   close(ref: SessionRef<Owner>, cleanup?: Partial<SessionCleanupRequest>): Promise<void>;
-  closeAll(filter?: SessionFilter): Promise<void>;
+  /** Host-only scope predicate; no new session or callback ownership. */
+  closeAll(filter?: SessionFilter, ownerMatches?: (owner: Owner) => boolean): Promise<void>;
   respondUI(ref: SessionRef<Owner>, input: { id: string; value?: string | boolean; cancelled?: boolean }): Promise<any>;
   setEditorState(ref: SessionRef<Owner>, text: string): Promise<any>;
 };
@@ -347,10 +348,10 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
     if (abandoned) fail('generation_cancelled');
     return result;
   }
-  async function closeMatching(filter: SessionFilter, onlyKey?: string, retryFailed = true) {
+  async function closeMatching(filter: SessionFilter, onlyKey?: string, retryFailed = true, ownerMatches: (owner: Owner) => boolean = () => true) {
     const targets = new Set<Resource>();
     const matchingOperations: { slot: Slot; operation: Operation }[] = [];
-    const matches = (owner: Owner, configuration: Readonly<RuntimeModelConfiguration>) => (!filter.provider || configuration.provider === filter.provider) && (!filter.projectId || options.profile.projectId?.(owner) === filter.projectId) && (onlyKey === undefined || options.profile.key(owner) === onlyKey);
+    const matches = (owner: Owner, configuration: Readonly<RuntimeModelConfiguration>) => ownerMatches(owner) && (!filter.provider || configuration.provider === filter.provider) && (!filter.projectId || options.profile.projectId?.(owner) === filter.projectId) && (onlyKey === undefined || options.profile.key(owner) === onlyKey);
     for (const slot of slots.values()) {
       const operation = slot.operation;
       if (operation && matches(operation.owner, operation.configuration)) {
@@ -469,7 +470,7 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
       return Boolean(operation || pending || resource);
     },
     close(ref, cleanup) { const { key } = identity(ref); return closeMatching({}, key, cleanup?.retryFailed !== false); },
-    closeAll: (filter = {}) => closeMatching(filter),
+    closeAll: (filter = {}, ownerMatches = () => true) => closeMatching(filter, undefined, true, ownerMatches),
     respondUI(ref, input) {
       if (!options.profile.capabilities?.ui) return Promise.reject(new ProjectRuntimeError('unsupported_session_capability'));
       const slot = slotFor(ref), resource = slot.opening?.resource ?? slot.resource;

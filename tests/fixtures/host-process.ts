@@ -6,12 +6,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { runtimeEnvironment, workspaceRoot } from '../../scripts/runtime-process.ts';
 
-export async function startTestHost(options: { timeoutMs?: number; uiPort?: number; dataRoot?: string; projectsRoot?: string; cwd?: string; disableCaseDecisions?: boolean; disableExperienceLearning?: boolean; semanticConfig?: string } = {}) {
+export async function startTestHost(options: { timeoutMs?: number; uiPort?: number; dataRoot?: string; projectsRoot?: string; cwd?: string; disableCaseDecisions?: boolean; disableExperienceLearning?: boolean; semanticConfig?: string; studioPython?: string } = {}) {
   const entry = fileURLToPath(new URL('../../scripts/host-entry.mjs', import.meta.url));
   const uiPort = options.uiPort ?? 4183;
   const scratch = await mkdtemp(path.join(os.tmpdir(), 'optracall-host-test-'));
   const dataRoot = options.dataRoot ?? path.join(scratch, 'host'), projectsRoot = options.projectsRoot ?? path.join(scratch, 'projects');
-  const child = spawn(process.execPath, [entry, '--port=0', `--ui-port=${uiPort}`, `--connection-timeout-ms=${options.timeoutMs ?? 2000}`, `--data-root=${dataRoot}`, `--projects-root=${projectsRoot}`, ...(options.disableCaseDecisions ? ['--disable-case-decisions'] : []), ...(options.disableExperienceLearning ? ['--disable-experience-learning'] : []), ...(options.semanticConfig ? [`--semantic-config=${options.semanticConfig}`] : [])], { cwd: options.cwd ?? workspaceRoot, env: runtimeEnvironment(), stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [entry, '--port=0', `--ui-port=${uiPort}`, `--connection-timeout-ms=${options.timeoutMs ?? 2000}`, `--data-root=${dataRoot}`, `--projects-root=${projectsRoot}`, ...(options.disableCaseDecisions ? ['--disable-case-decisions'] : []), ...(options.disableExperienceLearning ? ['--disable-experience-learning'] : []), ...(options.semanticConfig ? [`--semantic-config=${options.semanticConfig}`] : []), ...(options.studioPython ? [`--studio-python=${options.studioPython}`] : [])], { cwd: options.cwd ?? workspaceRoot, env: runtimeEnvironment(), stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '', stderr = '';
   child.stdout.on('data', chunk => { stdout += chunk.toString(); });
   child.stderr.on('data', chunk => { stderr += chunk.toString(); });

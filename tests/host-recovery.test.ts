@@ -15,16 +15,21 @@ async function configure(host: Awaited<ReturnType<typeof startTestHost>>, provid
   assert.equal(saved.status, 200); const created = await host.request('/api/projects', 'POST', { name: 'Recovery project' }); assert.equal(created.status, 201); const { project } = await created.json();
   const taskCreated = await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: 'Recovery task' }); assert.equal(taskCreated.status, 201); return { ...project, task: (await taskCreated.json()).task };
 }
-async function waitRun(host: Awaited<ReturnType<typeof startTestHost>>, id: string, taskId: string, requestId: string) {
+async function waitRun(host: Awaited<ReturnType<typeof startTestHost>>, id: string, taskId: string, requestId: string, readyForNextTurn = false) {
   const started = Date.now();
-  for (;;) { const response = await host.request(`/api/projects/${id}/tasks/${taskId}`); assert.equal(response.status, 200, `Task readback failed: ${await response.clone().text()}`); const state = await response.json(); if (state.task.lastRun?.id === requestId && state.task.lastRun.status !== 'running') return state; if (Date.now() - started > 10_000) throw new Error('Synthetic run did not settle.'); await pause(10); }
+  // A durable run result can precede the public session's native drain.
+  for (;;) { const response = await host.request(`/api/projects/${id}/tasks/${taskId}`); assert.equal(response.status, 200, `Task readback failed: ${await response.clone().text()}`); const state = await response.json(); if (state.task.lastRun?.id === requestId && state.task.lastRun.status !== 'running' && (!readyForNextTurn || state.snapshot.status === 'idle')) return state; if (Date.now() - started > 10_000) throw new Error('Synthetic run did not settle.'); await pause(10); }
 }
 
 test('CHAT-04: every accepted native request UUID stays deduplicated after later turns and across a restart', async t => {
   const provider = await startSyntheticProvider(); t.after(() => provider.close());
   const host = await startTestHost(); t.after(() => host.close()); const project = await configure(host, provider);
   const ids = [randomUUID(), randomUUID()];
-  for (const [index, requestId] of ids.entries()) { assert.equal((await host.request(`/api/projects/${project.id}/tasks/${project.task.id}/messages`, 'POST', { text: `original-${index}`, requestId })).status, 202); assert.equal((await waitRun(host, project.id, project.task.id, requestId)).task.lastRun.status, 'completed'); }
+  for (const [index, requestId] of ids.entries()) {
+    const response = await host.request(`/api/projects/${project.id}/tasks/${project.task.id}/messages`, 'POST', { text: `original-${index}`, requestId });
+    assert.equal(response.status, 202, response.status === 202 ? '' : `Turn ${index + 1} admission: ${await response.text()}`);
+    assert.equal((await waitRun(host, project.id, project.task.id, requestId, true)).task.lastRun.status, 'completed');
+  }
   const replay = await host.request(`/api/projects/${project.id}/tasks/${project.task.id}/messages`, 'POST', { text: 'original-0', requestId: ids[0] });
   assert.equal(replay.status, 202); assert.equal((await replay.json()).deduplicated, true); assert.equal(provider.requests.length, 2);
   await host.close(); const reopened = await startTestHost({ dataRoot: host.dataRoot, projectsRoot: host.projectsRoot }); t.after(() => reopened.close());

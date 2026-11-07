@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { createProjectEnablement } from '../../extensions/business-plugins/metric-factory/project/enablement.ts';
 import { parseSapDraft } from '../../extensions/business-plugins/metric-factory/sap/validate.ts';
 import { parseSemanticQueryInput } from '../../extensions/business-plugins/semantic-context/reader.ts';
-import type { SemanticGraphSourceRef } from '../../extensions/business-plugins/semantic-context/graph.ts';
+import type { SemanticGraphSourceRef, StudioSemanticGraphSourceRef } from '../../extensions/business-plugins/semantic-context/graph.ts';
 import type { SemanticTarget, SemanticItem } from '../../extensions/business-plugins/semantic-context/types.ts';
 import type { SemanticGraphAuthority, SemanticGraphAuthorityCheck, SemanticGraphAuthorityContext, SemanticGraphAuthoritySource, SemanticGraphBinding } from './semantic-graph-service.ts';
 import type { SemanticContextService } from './semantic-context-service.ts';
@@ -14,14 +14,25 @@ import { canonical, readBytes, safePath } from './project-data-context-io.ts';
 
 const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
 const object = (v: unknown): v is Record<string, any> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
-const allowedKinds = new Set(['sap', 'sap-method', 'enterprise', 'data-input', 'data-description']);
+const allowedKinds = new Set(['sap', 'sap-method', 'enterprise', 'data-input', 'data-description', 'studio-source']);
 const privateLocation = /(?:\/Users\/|\/home\/|\/private\/|\.codex\/attachments|synthetic_net_controls|credentials\.json)/;
 const current = (ctx: SemanticGraphAuthorityContext) => { ctx.signal.throwIfAborted(); ctx.assertCurrent(); };
+
+export type StudioGraphSourceContext = SemanticGraphAuthorityContext & { projectId: string; taskId: string };
+export type StudioGraphSourceAuthority = {
+  check(ref: StudioSemanticGraphSourceRef, context: StudioGraphSourceContext): Promise<SemanticGraphAuthorityCheck>;
+  read(ref: StudioSemanticGraphSourceRef, context: StudioGraphSourceContext): Promise<{ state: SemanticGraphAuthorityCheck['state']; body: string | null; gaps: string[]; nature?: string }>;
+};
+const validStudioRef = (ref: StudioSemanticGraphSourceRef) => {
+  const fields = ['kind', 'systemId', 'assetId', 'version', 'publishedHash', 'projectId'];
+  return Object.keys(ref).every(key => fields.includes(key)) && fields.every(key => typeof ref[key as keyof StudioSemanticGraphSourceRef] === 'string' && ref[key as keyof StudioSemanticGraphSourceRef].length > 0 && !ref[key as keyof StudioSemanticGraphSourceRef].includes('\0')) && /^[a-f0-9]{64}$/.test(ref.publishedHash);
+};
 
 /** Source authorization stays with the real Host Stores, never a graph label. */
 export function createSemanticGraphAuthority(options: {
   projectId: string; taskId: string; projects: ProjectStore; data: ProjectDataContextStore;
   enterprise: EnterpriseMaterialsStore; reader: SemanticContextService; dataRoot: string; binding: SemanticGraphBinding;
+  studioSources?: StudioGraphSourceAuthority;
 }): SemanticGraphAuthority {
   const enablement = () => createProjectEnablement(path.join(options.dataRoot, 'projects', options.projectId)).list();
   // This facet accepts exactly the verified snapshot declarations. Native Store
@@ -58,6 +69,15 @@ export function createSemanticGraphAuthority(options: {
         if (!object(ref) || !allowedKinds.has(ref.kind) || 'sourceHandle' in ref) return reject('forbidden', 'source-kind-not-authorized');
         if (!recursive && !(await declared()).refs.has(canonical(ref))) return reject('forbidden', 'source-not-declared-by-snapshot');
         current(ctx);
+        if (ref.kind === 'studio-source') {
+          if (!validStudioRef(ref) || !options.studioSources) return reject('forbidden', 'studio-source-not-authorized');
+          await options.projects.getTask(options.projectId, options.taskId); current(ctx);
+          if ((await options.projects.get(options.projectId)).archivedAt !== null) return reject('forbidden', 'project-not-active');
+          const checked = await options.studioSources.check(ref, { ...ctx, projectId: options.projectId, taskId: options.taskId }); current(ctx);
+          if (checked.state === 'available' && checked.observedHash !== ref.publishedHash) return reject('hash-conflict', 'studio-source-hash-mismatch');
+          if (!Array.isArray(checked.gaps) || checked.gaps.some(gap => typeof gap !== 'string')) return reject('unknown', 'studio-source-validation-failed');
+          return { ...checked, ref, revision: checked.revision ?? hash(canonical([ref, checked.state, checked.gaps, checked.observedHash])) };
+        }
         parseSemanticQueryInput({ action: 'read', target: ref });
         if ('projectId' in ref && ref.projectId !== options.projectId) return reject('forbidden', 'source-owner-mismatch');
         await options.projects.getTask(options.projectId, options.taskId); current(ctx);
@@ -106,7 +126,7 @@ export function createSemanticGraphAuthority(options: {
     current(ctx); return results;
   }
   const blocked = (state: SemanticGraphAuthorityCheck['state'], gap: string) => ({ state, body: null, gaps: [gap] });
-  async function readSource(source: SemanticGraphAuthoritySource, ctx: SemanticGraphAuthorityContext) {
+  async function readSource(source: SemanticGraphAuthoritySource, ctx: SemanticGraphAuthorityContext): ReturnType<SemanticGraphAuthority['readSource']> {
     current(ctx); await options.projects.getTask(options.projectId, options.taskId); current(ctx);
     let body: string | null = null, nature = 'source-projection';
     let qualificationGaps: string[] = [];
@@ -114,7 +134,12 @@ export function createSemanticGraphAuthority(options: {
       const before = (await checkMany([source.ref], ctx))[0]!;
       if (before.state !== 'available') return blocked(before.state, 'source-ineligible');
       const ref = source.ref;
-      if (ref.kind === 'sap') {
+      if (ref.kind === 'studio-source') {
+        if (!options.studioSources || !validStudioRef(ref)) return blocked('forbidden', 'studio-source-not-authorized');
+        const value = await options.studioSources.read(ref, { ...ctx, projectId: options.projectId, taskId: options.taskId }); current(ctx);
+        if (value.state !== 'available' || typeof value.body !== 'string') return blocked(value.state, 'studio-source-unavailable');
+        body = value.body; nature = value.nature ?? 'asset-publication';
+      } else if (ref.kind === 'sap') {
         const library = typeof options.reader.options.metricLibrary === 'function' ? options.reader.options.metricLibrary() : options.reader.options.metricLibrary;
         const publication = library!.read(ref.packageId, ref.version);
         const document = parseSapDraft(new Uint8Array(Buffer.from(publication.canonicalYaml)));
@@ -143,6 +168,17 @@ export function createSemanticGraphAuthority(options: {
       if (!input || source.sha256 !== input.sha256 || source.nature !== input.nature) return blocked('hash-conflict', 'frozen-source-identity-mismatch');
       if (!(await declared()).builds.has(canonical(source))) return blocked('forbidden', 'source-not-declared-by-snapshot');
       current(ctx);
+      if (receipt.formatVersion === 2 && /^studio-[a-f0-9]{64}$/.test(source.inputKey)) {
+        if (source.locator !== '/body' || source.nature !== 'asset-publication' || !/^inputs\//.test(input.relativePath)) return blocked('forbidden', 'nonsemantic-input-location');
+        const raw = await readBytes(await safePath(options.binding.runRoot, input.relativePath), 1024 * 1024); current(ctx);
+        if (raw.length !== input.bytes || hash(raw) !== input.sha256) return blocked('hash-conflict', 'frozen-input-changed');
+        const original = JSON.parse(raw.toString('utf8'));
+        if (!object(original) || !object(original.ref) || !allowedKinds.has(original.ref.kind) || typeof original.body !== 'string') return blocked('forbidden', 'invalid-studio-source');
+        const fresh = await readSource({ kind: 'ref', ref: original.ref as SemanticGraphSourceRef }, ctx); current(ctx);
+        if (fresh.state !== 'available' || fresh.body === null) return fresh;
+        if (original.ref.kind === 'studio-source' && fresh.body !== original.body) return blocked('hash-conflict', 'frozen-source-body-mismatch');
+        return { ...fresh, nature: 'asset-publication' };
+      }
       const roots: Record<string, string[]> = {
         'metric-excerpt': ['/candidates', '/source_id', '/review_findings'], 'metric-publication': ['/metrics', '/package'],
         'method-publication': ['/content', '/sources', '/title', '/relation'],
