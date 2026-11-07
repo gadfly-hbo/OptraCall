@@ -1,6 +1,6 @@
 # Studio 首期本地工程结果
 
-以下首轮本地结果及当时暂缓边界作为历史保留。用户后续已追加真实模型、Git与两机更新授权；本轮实际结果见末节及[专业记录](professional-evaluation.md)。
+当前结论见[首期最终验收](#首期最终验收)。以下本地实施、工程交付候选及当时的专业结论按历史阶段保留。各轮原始判定见[专业记录](professional-evaluation.md)。
 
 2026-11-07。**已完成本轮获授权的本地实施、完整工程检查、浏览器检查及非作者复核。** 改动留在 `codex/Semantic_Analytical_Asset_Studio`，未提交、未Git交付、未迁移产品数据、未切换服务；真实模型专业质量及用户产品验收未执行。
 
@@ -72,3 +72,55 @@
 本文件固定提交前可证的工程/专业事实。Git PR head、实际CI、squash main、main push CI及两机采用结果以本变更对应PR的最终描述和本机私有采用收据为准；不能从本文件的候选状态推定这些动作已经完成。适用检查、独立复核和准确交付门禁完成后，本变更工程记录在本目录原位归档；原FAIL/HOLD/NOT_RUN/NOT_PROVED继续保留，不表示专业问题已关闭。
 
 两机沿各自原dataRoot/projectsRoot及原语义配置/旧图采用，不导入合成体系、失败候选、会话或凭据。现有项目均schema2，未核到需要搬迁/重写的旧Studio业务数据，故不制造格式迁移。切换须先正常关闭、同机私有备份并读回，再用准确main构建；Mini保留旧release并更新准确桌面入口，MacBook原clean main只快进。失败回退仅代码/环境组合，不拿旧备份覆盖新版新增项目/会话/文件。最终具体身份与保全差异另按实际收据核定。
+
+## 首期最终验收
+
+2026-11-07，按 v1.0 第 9 节及已批准的 FA01–FA06 矩阵，Studio 首期在限定的合成销售退款案例范围内验收通过。范围为青鹭站、松渡站、雁汀站三店，2026 年 3 月 2–8 日和 3 月 9–15 日两个等长期间，人民币，按发生口径与支付订单群口径核对门店净额和期间变化。原方案 SHA-256 为 `4b731550cf17ed4dfe0f5316f57d96f8a72e4896cd2c0853c4095ef2e12598e0`，与批准时一致。依据和原评审包身份见[批准记录](approval.json)。本节的 `.local` 链接指向原验收工作树的私有留档，公开仓库保留核定摘要，原始报告、会话、截图和回执在本机保存。
+
+### 工程检查与运行采用
+
+- **已交付工程版本通过。** PR #42 的 `819865e` 实际 head CI #119 与合并后 `02ecac0` 主分支 CI #120 均通过，各 1,746 项通过、143 项条件跳过、零失败。Mac mini 和 MacBook 的采用回执均绑定 `02ecac0`。本次实际工作台走验前后，Mac mini 读回同一实例与准确版本。[原 PR #42](https://github.com/gadfly-hbo/OptraCall/pull/42) · [PR CI #119](https://github.com/gadfly-hbo/OptraCall/actions/runs/42341613605) · [main CI #120](https://github.com/gadfly-hbo/OptraCall/actions/runs/42342305781) · [工程交付及两机采用回执](../../../.local/studio-delivery/delivery-result.md) · [走验前健康回执](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/before-health.json) · [发布后健康回执](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/after-formal-publish-health.json)
+- **后续本地修复通过工程检查。** 图身份 GR01 和使用声明 DU01、DU02 已在原验收工作区检查，后续隔离实模使用包含这些修复的候选。收口前该候选本地全量检查 1,839 项通过、51 项跳过、零失败。收口后用户另行授权仅交付两项修复及 FA01–FA06 记录，Git 与 CI 结果见本次对应 PR。既有设备采用回执仍绑定上条版本。[图身份复验](../studio-graph-entity-identity/result.md) · [使用声明契约复验](../studio-declare-use-contract/result.md)
+- Host 提供准确版本、范围、权限、会话状态和分项回执。分析 Agent 自主选择口径、执行复算并按原会话修订，继续复用 Pi 和官方 Semantica。用户在实际走验中确认限定范围和正式发布两项决定。
+
+### 实模专业验收
+
+下列结论绑定限定案例及确切成果。首次自然出稿、定向修订和专业复核分别记录。
+
+D3 在后续隔离实模中已按原生供给核对范围、用途限制、正式模块结果和项目采用资格。此结论与 Agent 的实际读取、业务计算及报告评分分别取证。[D3 实模复验](../../../.local/studio-followup/run.gQwu6Q0G/acceptance-summary.md)
+
+| 项 | 最终判定与证据 |
+|---|---|
+| FA01 建设 | **通过。** 新合成资料形成源稿、Binding、SAP 指标与方法。经 Pi 的官方文字抽取有实际原生回执和出处，候选经核查后形成正式本体 rev5。用准确正式资产经官方 Semantica 刷新并选中图快照，读回 150 个节点、265 条关系。原输入结构问题和原图 UNKNOWN 保留。[抽取与初次复核](../../../.local/studio-followup/run.gQwu6Q0G/independent-release/initial.md) · [修订后源稿复核](../../../.local/studio-followup/run.gQwu6Q0G/independent-release/revised-maintenance.md) · [实际构图读回](../../../.local/studio-followup/run.gQwu6Q0G/graph-real-route-readback.json) |
+| FA02 发布 | **通过。** 两轮限定发布各有语义源、SAP 指标和 SAP 方法三个实际成功回执，分别发布 `0.2.0`／方法 v2 与 `0.4.0`／方法 v4；各自项目采用由准确版本回执证明，图刷新单列。早期未合格候选、试算文件及银行勾稽用途留在正式供给范围之外。[首次发布](../../../.local/studio-followup/run.gQwu6Q0G/fresh-first-publication-response.json) · [首次采用](../../../.local/studio-followup/run.gQwu6Q0G/fresh-first-adoption-response.json) · [修订后发布](../../../.local/studio-followup/run.gQwu6Q0G/fresh-revised-publication-response.json) · [修订后采用](../../../.local/studio-followup/run.gQwu6Q0G/fresh-revised-adoption-response.json) |
+| FA03 普通使用 | **v6 整稿通过。** 普通新任务自主查找并实际读用 `0.2.0` 与方法 v2，回答门店净额和期间变化。原 Agent 在同一会话修订，独立复核确认 375/375 项一致，逐笔解释、正式状态及实际读用相符。PASS 绑定 v6，SHA-256 `748468a57ebceb57a555bc71cc8a35fa0879a4ea10ab36ee54218e43cdd824c1`。首稿中断及原专业 FAIL、历次修订判定保留。[v6 独立复核](../../../.local/studio-followup/fa03-020-v6.vW3e8xT5/audit/independent-report-review.md) · [原稿和会话保全](../../../.local/studio-followup/fa03-020-v6.vW3e8xT5/preservation-final.json) |
+| FA04 回补再用 | **通过。** 退款来源迁移反馈交回原建设 Agent，按新来源修订、限定再发布与采用后，独立普通任务实际读用 `0.4.0` 和方法 v4。原普通 Agent 的定向修订稿与准确使用绑定，独立 `assess-use` 回读为 `pass`，原反馈 `55073d17-d713-445c-9961-996847eb2150` 回读为 `verified`。通过限该反馈、该报告及限定双口径用途。独立使用评估披露一处术语歧义，普通分析 v4 报告中的「两口径之差」在该处实指两个版本情景的差。初次盲测 FAIL、旧版本和原报告保留。[使用与评估回执](../../../.local/studio-followup/downstream-resolution/evidence.md) · [反馈验证读回](../../../.local/studio-followup/downstream-resolution/construction/retry/old-C/verified.json) |
+
+### 用户产品验收
+
+用户委托在 Mac mini 实际工作台操作，分别确认只发布两项 r2 和正式发布准确预览。工作台使用五份已核对的合成资料，MiMo V2.6 Flash 原建设任务耗时 1,697.478 秒。三个浏览器追踪段记录 41 个代操作，用户决策耗时单列为未测量。
+
+| 项 | 最终判定与证据 |
+|---|---|
+| FA05 等待与接续 | **当日实际工作台走验通过。** 银行勾稽缺资料进入等待后，独立净额与期间变化继续建设并实际发布。两次返回列表重进均读回同一体系、任务、原生会话和原请求，浏览器只有一条原建设消息 POST。发布后，工作台分别显示两项正式成果和仍在等待的银行缺口。原建设 Agent 接手见 FA04，归档只读与保留原反馈关联有工程回归证据。[归档工程回归](../../../tests/studio-store.test.ts) · [重进核对](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/gap-reentry-check.json) · [分项结果截图](../../../.local/studio-followup/fa05-actual.wWmR5mk0/output/playwright/14-formal-publish-actual-result.png) · [发布后等待项截图](../../../.local/studio-followup/fa05-actual.wWmR5mk0/output/playwright/16-bank-waiting-after-publish.png) |
+| FA06 首期完成 | **通过。** 核定基于 FA01–FA05 累积证据。两个核心问题及建设、发布、普通新任务使用、回补再用四段已有实模证据，FA05 完成当日实际走验。结论限本记录的合成门店、期间、币种和双口径范围。跨日接续和实际工作台归档保留为未走验。[FA05 与 FA06 核定记录](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/FA05-FA06-final-assessment.json) |
+
+### 两项 r2 正式发布回执
+
+2026-11-07 23:21:24.505（UTC+08:00），工作台按确认的预览 `b0f61263-6a00-4af7-850a-e93384dd856a` 发出一次正式发布请求 `0a520a68-fcfd-4081-8bdc-bbdf2504ceca`。预览指纹为 `5731ecf8c4e25477cbdf394aedb3740db6ba36b9b237ae8231df65f2b8bbc58b`。原操作、发布响应及后续回读一致，**语义源模块 `studio-source` 返回一条 `succeeded`，覆盖以下两项**。
+
+| 正式成果 | 版本 | 资产 ID | SHA-256 |
+|---|---|---|---|
+| 两口径净额与期间变化结果表 | r2 | `0777ac96-5b06-4500-9b47-21995e7b4952` | `2ac5c82c1ccf0d13e409023d7193d641ac89d05e2e9f00d1da8e2761097570d4` |
+| 口径规则、数据取舍清单与退款入选矩阵 | r2 | `943323a7-8c37-4db0-81b6-668d8d68a6ad` | `c6cd336c2ea2a3175e88c1726f7a0e6341adbe15df1684128159b2b1afc8167c` |
+
+[原发布操作回执](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/formal-publish-original-operation.json)的文件 SHA-256 为 `13a0b52c150eda82acb66294e5476bea293715cdec0c8287b4c964ffa7ad0c6c`。[实际结果回读](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/formal-publish-result-readback.json)的文件 SHA-256 为 `18979eba74211660852e859e6041bdf6b4b60879bba4df3b76c0d26f5543cf91`。原会话、原请求、浏览器追踪和截图保存在同一试用的本机私有证据目录。
+
+### 保留的缺口和历史判定
+
+| 状态 | 保留范围 |
+|---|---|
+| 等待 | 银行勾稽方法 `a4c16455-4eb7-4e4e-98ed-85da74059148` v1 仍为候选，等待项 `cfc7b4cb-a126-487b-bfec-8bf3eef8cc46` 保持 `waiting`。缺银行逐笔到账流水与清算批次对应表，银行方法及勾稽结论均排除在本次发布范围。[银行方法权威读回](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/bank-method-v1-after-publish.json) |
+| 未触发（`NOT_TRIGGERED`） | 本次正式发布的模块失败与 UNKNOWN 未触发。早期准备预览的拒绝、隔离环境原图 UNKNOWN 及历史传输诊断另行保留。本次两项 r2 发布没有项目采用目标、图刷新或使用记录，各自以先前相关环节的实际回执为准。 |
+| 本轮未走验（`NOT_EXERCISED`） | 本次工作台走验为当日离开后重进，跨日返回与归档操作留在未走验范围。已有归档工程检查单独保留。 |
+| 历史 FAIL、HOLD 和 NOT_RUN | 早期 A/B 报告问题、维护候选 HOLD 与普通 B 未运行，以及新案例首次普通报告和下游首次盲测 FAIL 各保留原判。定向修订及限定用途的再用通过按准确版本另记。原方案、原稿、旧版本、会话及原始回执保全。[历史专业记录](professional-evaluation.md) · [旧案例复验与保全](../../../.local/studio-followup/run.gQwu6Q0G/acceptance-summary.md) |

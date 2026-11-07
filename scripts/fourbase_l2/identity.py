@@ -106,8 +106,11 @@ def _sources(refs, buildSources, inputIdentities):
     return ([references[k] for k in sorted(references)], [builds[k] for k in sorted(builds)])
 
 
-def claim_id(type, refs, buildSources, inputIdentities, claimKind, content):
-    return stable_id(type, [*_sources(refs, buildSources, inputIdentities), claimKind, content])
+def claim_id(type, refs, buildSources, inputIdentities, claimKind, content, *, studio_entity_key=None):
+    payload = [*_sources(refs, buildSources, inputIdentities), claimKind, content]
+    if studio_entity_key is not None:
+        payload.append(['studio-entity-key', studio_entity_key])
+    return stable_id(type, payload)
 
 
 def edge_id(source, target, type, metadata, inputIdentities):
