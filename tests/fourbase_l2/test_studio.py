@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.fourbase_l2.identity import canonical, ref_identity
+from scripts.fourbase_l2.identity import canonical, claim_id, edge_id, ref_identity
 from scripts.fourbase_l2.query import query_graph
 from scripts.fourbase_l2.readmodel import SnapshotError, SnapshotStore
 from scripts.fourbase_l2.studio_build import build
@@ -61,6 +61,45 @@ class StudioSnapshotTests(unittest.TestCase):
         withdrawn = query_graph(view, {'action': 'graph', 'operation': 'find', 'query': '退款'})
         self.assertEqual(withdrawn['nodes'], [])
         self.assertIn('source-ineligible-results-excluded', withdrawn['gaps'])
+
+    def test_same_text_with_distinct_local_keys_keeps_both_graph_relations(self):
+        projection = json.loads(self.source['body'])
+        projection['entities'].append({'key': 'prior_refund', 'text': '退款', 'label': 'EVENT'})
+        projection['relationships'].append({'source': 'prior_refund', 'target': 'store', 'predicate': '旧口径归属'})
+        self.source['body'] = json.dumps(projection, ensure_ascii=False)
+
+        result = self.make()
+        graph = SnapshotStore(self.root, self.authority).load(result['snapshotId']).query()
+        refunds = {node['metadata'].get('studioEntityKey'): node['id']
+                   for node in graph['nodes'] if node['content'] == '退款'}
+        relations = [edge for edge in graph['edges'] if edge['type'] == 'asserted_relation']
+
+        self.assertEqual(set(refunds), {None, 'prior_refund'})
+        self.assertEqual(len(relations), 2)
+        self.assertEqual({edge['source']: edge['metadata']['predicate'] for edge in relations},
+                         {refunds[None]: '归属', refunds['prior_refund']: '旧口径归属'})
+
+        snapshot = self.root / 'snapshots' / result['snapshotId']
+        inputs = json.loads((snapshot / 'receipt.json').read_text())['inputs']
+        ontology = json.loads((snapshot / 'ontology.json').read_text())
+        invalid_metadata = {'studioEntityKey': 'undeclared_refund',
+                            'sourceRefs': [{**self.ref, 'assetId': 'other-source'}],
+                            'claimKind': 'engineering-interpretation'}
+        for field, value in invalid_metadata.items():
+            with self.subTest(field=field):
+                nodes, edges = copy.deepcopy((graph['nodes'], graph['edges']))
+                node = next(node for node in nodes if node['metadata'].get('studioEntityKey') == 'prior_refund')
+                previous_id = node['id']
+                meta = node['metadata']
+                meta[field] = value
+                node['id'] = claim_id(node['type'], meta['sourceRefs'], meta['buildSources'], inputs, meta['claimKind'],
+                                      node['content'], studio_entity_key=meta['studioEntityKey'])
+                for edge in edges:
+                    if edge['source'] == previous_id:
+                        edge['source'] = node['id']
+                        edge['id'] = edge_id(edge['source'], edge['target'], edge['type'], edge['metadata'], inputs)
+                with self.assertRaisesRegex(SnapshotError, 'invalid_studio_entity_key'):
+                    SnapshotStore(self.root, self.authority).write(nodes, edges, ontology, inputs, format_version=2)
 
     def test_a_v2_projection_does_not_relax_v1_scene_contract(self):
         result = self.make()

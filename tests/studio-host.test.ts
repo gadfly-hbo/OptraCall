@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 
@@ -62,6 +62,62 @@ test('ST02/18: starting a Studio uses one real project task and its exact operat
   assert.equal(projects.find((item: any) => item.id === project.id).tasks.length, 1);
   const conflict = await host.request('/api/studio/systems', 'POST', { ...input, name: 'Different payload' });
   assert.equal(conflict.status, 409);
+});
+
+test('Studio use declaration advertises an array, explains invalid sources and saves the corrected declaration', { timeout: 45_000 }, async t => {
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', { name: 'Synthetic Studio declaration', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-studio-declaration', apiKey: 'synthetic-declaration' }));
+  const { project: owner } = await json(await host.request('/api/projects', 'POST', { name: 'Construction owner' }), 201);
+  const { project } = await json(await host.request('/api/projects', 'POST', { name: 'Ordinary analysis owner' }), 201);
+  const { system } = await json(await host.request('/api/studio/systems', 'POST', { requestId: randomUUID(), name: 'Synthetic declaration', projectId: owner.id, goal: 'Record exact report sources', topicTitle: 'Refunds' }), 201);
+  const systemRoute = `/api/studio/systems/${system.id}`;
+  const { task } = await json(await host.request(`${systemRoute}/use`, 'POST', { requestId: randomUUID(), projectId: project.id }));
+  await json(await host.request(`/api/projects/${project.id}/files/upload`, 'POST', { directory: '020_clean', name: 'input.csv', content: Buffer.from('amount\n5\n').toString('base64') }), 201);
+  const { materials } = await json(await host.request(`/api/studio/materials?projectId=${project.id}`));
+  const source = materials.find((item: any) => item.ref.locator === '020_clean/input.csv')?.ref;
+  assert.ok(source);
+  const body = 'Synthetic ordinary report.\n', locator = '060_reports/declaration.md';
+  const sha256 = createHash('sha256').update(body).digest('hex');
+  const report = { authority: 'task', id: task.id, taskId: task.id, projectId: project.id, locator, version: sha256, sha256 };
+  const declare = (sources: unknown) => ({ name: 'studio_assets', arguments: { action: 'declare-use', systemId: system.id, payload: { report, sources } } });
+  const calls = [{ name: 'write', arguments: { path: `../${locator}`, content: body } }, declare({ item: [source] }), declare(source), declare(Array(201).fill(source)), declare([null]), declare([source])];
+  provider.setResponder(async context => {
+    const turn = context.recentToolResults.length;
+    if (turn === calls.length - 1) assert.deepEqual((await json(await host.request(systemRoute))).system.uses, [], 'Malformed declarations must not save use records.');
+    return turn < calls.length ? { calls: [calls[turn]!] } : { text: 'DECLARATION_CORRECTED' };
+  });
+  const route = `/api/projects/${project.id}/tasks/${task.id}`, requestId = randomUUID();
+  await json(await host.request(`${route}/messages`, 'POST', { requestId, text: 'Synthetic use declaration protocol check.', studioContext: { systemId: system.id, purpose: 'analysis' } }), 202);
+  let state: any;
+  const deadline = Date.now() + 25_000;
+  do {
+    state = await json(await host.request(route));
+    if (state.task.lastRun?.id === requestId && state.snapshot.status === 'idle') break;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  } while (Date.now() < deadline);
+  assert.deepEqual(provider.errors, []);
+  assert.equal(state.task.lastRun?.status, 'completed');
+  const schema = provider.requests[0]?.body.tools?.find(tool => tool.function?.name === 'studio_assets')?.function?.parameters as { properties?: { payload?: { properties?: { sources?: { anyOf?: { type?: string }[] } } } } };
+  assert.ok(schema?.properties?.payload?.properties?.sources?.anyOf?.some(part => part.type === 'array'), 'The SDK must send a nested array schema to the provider.');
+  const results = state.snapshot.messages.filter((message: any) => message.role === 'toolResult' && message.toolName === 'studio_assets');
+  assert.equal(results.length, 5);
+  for (const rejected of results.slice(0, 2)) {
+    assert.equal(rejected.isError, true);
+    assert.match(providerMessageText(rejected.content), /payload\.sources.*JSON array.*received object/);
+  }
+  assert.equal(results[2].isError, true);
+  assert.match(providerMessageText(results[2].content), /\binvalid_studio_sources\b/);
+  assert.equal(results[3].isError, true);
+  assert.match(providerMessageText(results[3].content), /\binvalid_studio_source\b/);
+  assert.equal(results[4].isError, false);
+  assert.match(providerMessageText(results[4].content), /author-declaration-not-professional-verification/);
+  const { system: saved } = await json(await host.request(systemRoute));
+  assert.equal(saved.uses.length, 1);
+  assert.equal(saved.uses[0].taskId, task.id);
+  assert.equal(saved.uses[0].report.sha256, sha256);
+  assert.deepEqual(saved.uses[0].sources, [source]);
+  assert.equal(saved.uses[0].verification, 'not_assessed');
 });
 
 test('Studio graph unavailable fails before dispatch and leaves independent source work usable', async t => {

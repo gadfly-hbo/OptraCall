@@ -87,17 +87,20 @@ def build(command, authority):
                 raise SnapshotError('invalid_source_projection')
         else:
             entities, relationships = [{'key': 'source-statement', 'text': source['body'], 'label': source['kind']}], []
-        local = {}
+        local, statement_texts = {}, set()
         for entity in entities:
             if (not isinstance(entity, dict) or set(entity) - {'key', 'text', 'label'}
                     or not all(isinstance(entity.get(k), str) and entity[k] for k in ('key', 'text', 'label'))
                     or entity['key'] in local):
                 raise SnapshotError('invalid_source_entity')
             meta = metadata(ref, input_key, assetKind=entity['label'], actualMethod='structured-source')
-            node_id = claim_id('Statement', [ref], meta['buildSources'], inputs, meta['claimKind'], entity['text'])
-            # Distinct declared entities must not silently collapse identities.
-            if node_id in {node['id'] for node in nodes}:
-                raise SnapshotError('duplicate_source_entity')
+            # Same-text entities can have different relationships. Keep the
+            # original identity wherever it is already unambiguous.
+            if entity['text'] in statement_texts:
+                meta['studioEntityKey'] = entity['key']
+            statement_texts.add(entity['text'])
+            node_id = claim_id('Statement', [ref], meta['buildSources'], inputs, meta['claimKind'],
+                               entity['text'], studio_entity_key=meta.get('studioEntityKey'))
             nodes.append({'id': node_id, 'type': 'Statement', 'content': entity['text'], 'metadata': meta})
             local[entity['key']] = node_id
             edge_meta = metadata(ref, input_key)

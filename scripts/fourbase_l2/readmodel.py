@@ -244,7 +244,7 @@ class SnapshotStore:
         """Formal Studio sources projected without the historical SC-01 fixture quota."""
         _require(isinstance(nodes, list) and nodes and len(nodes) <= 4096
                  and isinstance(edges, list) and len(edges) <= 8192, 'invalid_graph_structure')
-        by_id = {}
+        by_id, projection_keys = {}, {}
         for node in nodes:
             _require(isinstance(node, dict) and set(node) == {'id', 'type', 'content', 'metadata'}
                      and node.get('type') in NODE_TYPES and _string(node.get('content'))
@@ -252,11 +252,32 @@ class SnapshotStore:
             self._metadata(node, documents)
             meta = node['metadata']
             _require(meta['sourceRefs'] and all(ref.get('kind') in {'studio-source', 'sap', 'sap-method', 'enterprise', 'data-input', 'data-description'} and (ref.get('kind') not in {'studio-source', 'sap', 'sap-method'} or _hash(ref.get('publishedHash'))) for ref in meta['sourceRefs']), 'invalid_studio_source')
+            if 'studioEntityKey' in meta:
+                build_sources = meta['buildSources']
+                _require(node['type'] == 'Statement' and _string(meta['studioEntityKey']) and len(build_sources) == 1
+                         and build_sources[0]['locator'] == '/body', 'invalid_studio_entity_key')
+                input_key = build_sources[0]['inputKey']
+                document = documents[input_key][0]
+                _require(isinstance(document, dict) and meta['sourceRefs'] == [document.get('ref')]
+                         and meta['claimKind'] == 'source-projection', 'invalid_studio_entity_key')
+                if input_key not in projection_keys:
+                    seen, keys = set(), {}
+                    try:
+                        for entity in json.loads(document['body'])['entities']:
+                            text = entity['text']
+                            if text in seen:
+                                keys[entity['key']] = text
+                            seen.add(text)
+                    except (KeyError, TypeError, ValueError) as error:
+                        raise SnapshotError('invalid_studio_entity_key') from error
+                    projection_keys[input_key] = keys
+                _require(projection_keys[input_key].get(meta['studioEntityKey']) == node['content'], 'invalid_studio_entity_key')
             if node['type'] == 'SourceRevision':
                 _require(len(meta['sourceRefs']) == 1, 'missing_exact_node_identity')
                 expected = stable_id('SourceRevision', ref_identity(meta['sourceRefs'][0]))
             else:
-                expected = claim_id(node['type'], meta['sourceRefs'], meta['buildSources'], inputs, meta['claimKind'], node['content'])
+                expected = claim_id(node['type'], meta['sourceRefs'], meta['buildSources'], inputs, meta['claimKind'],
+                                    node['content'], studio_entity_key=meta.get('studioEntityKey'))
             _require(node['id'] == expected, 'node_identity_mismatch')
             by_id[node['id']] = node
         seen = set()
