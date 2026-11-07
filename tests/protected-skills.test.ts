@@ -101,3 +101,21 @@ test('DA01: data-analysis loads without subagent roles and snapshots its scripts
     assert.deepEqual(readFileSync(path.join(result.skills[0]!.baseDir, relative)), readFileSync(path.join(skill.baseDir, relative)), relative);
   }
 });
+
+test('DRV01: decision-review loads without subagent roles and snapshots its template, references and examples intact', () => {
+  const codeRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const source = path.join(codeRoot, 'extensions/analysis-assets');
+  const { skills } = loadSkillsFromDir({ dir: source, source: 'project' });
+  const skill = skills.find(item => item.name === 'decision-review');
+  assert.ok(skill, `decision-review must be discoverable by the locked SDK; got ${skills.map(item => item.name).join(',')}`);
+  assert.equal(skill.baseDir, path.join(source, 'decision-review'), 'decision-review must resolve to its analysis-assets directory');
+  assert.ok((skill.description ?? '').length > 30, 'decision-review must carry an activation description');
+  assert.ok(!existsSync(path.join(skill.baseDir, 'agents')), 'decision-review ships no subagent roles');
+  assert.deepEqual(discoverSubagentRoles(skills).map(role => role.name), ['deep-research/researcher', 'deep-research/reviewer'], 'adding this skill must not change the delegatable role set');
+  const destination = mkdtempSync(path.join(os.tmpdir(), 'optracall-drv-snapshot-'));
+  const result = snapshotProtectedSkills([skill], destination);
+  assert.deepEqual(result.unavailable, []); assert.equal(result.skills.length, 1);
+  for (const relative of ['SKILL.md', 'references/decision-theory-primer.md', 'references/toc-tp-usage.md', 'references/evidence-and-causality.md', 'references/decision-analysis.md', 'references/uncertainty-and-bounded-rationality.md', 'references/decision-quality-checklist.md', 'templates/decision-brief.md', 'examples/coupon-decision-example.md', 'examples/insufficient-evidence-example.md']) {
+    assert.deepEqual(readFileSync(path.join(result.skills[0]!.baseDir, relative)), readFileSync(path.join(skill.baseDir, relative)), relative);
+  }
+});
