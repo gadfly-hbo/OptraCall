@@ -12,6 +12,8 @@ export type SemanticGraphConfigurationSummary = {
 export type SemanticGraphConfiguration = {
   configuration: SemanticGraphConfigurationSummary;
   bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined;
+  /** Host-only accepted interpreter; never part of the public health summary. */
+  readonly python?: string;
 };
 export class SemanticGraphConfigurationError extends Error {
   readonly code: string;
@@ -93,5 +95,5 @@ export async function loadSemanticGraphConfiguration(options: {
     assets.push(Object.freeze({ projectId: project.projectId, snapshotId: project.snapshotId }));
   }
   const configuration = Object.freeze({ enabled: true, configurationSha256, assets: Object.freeze(assets) });
-  return Object.freeze({ configuration, bindingFor: (projectId: string, taskId: string) => uuid.test(taskId) ? bindings.get(projectId) : undefined });
+  return Object.freeze({ configuration, python: value.python, bindingFor: (projectId: string, taskId: string) => uuid.test(taskId) ? bindings.get(projectId) : undefined });
 }

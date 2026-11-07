@@ -52,7 +52,7 @@ export function isSemanticQueryResult(value: unknown): value is SemanticQueryRes
 }
 
 const graphNodes = ['MetricConcept', 'MetricVersion', 'MethodVersion', 'SourceRevision', 'Statement', 'Condition', 'InputVersion', 'FieldRole'];
-const graphEdges = ['version_of', 'depends_on', 'has_source', 'requires', 'maps_to', 'describes_input', 'distinct_from', 'potential_conflict'];
+const graphEdges = ['version_of', 'depends_on', 'has_source', 'requires', 'maps_to', 'describes_input', 'distinct_from', 'potential_conflict', 'asserted_relation'];
 const graphOperations = ['find', 'definition', 'neighbors', 'dependencies', 'impact', 'source'];
 const keysOnly = (value: Record<string, unknown>, keys: string[]) => Object.keys(value).every(key => keys.includes(key));
 const nonempty = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && !value.includes('\0');
@@ -64,6 +64,7 @@ function graphRef(value: unknown): value is SemanticGraphSourceRef {
     sap: ['packageId', 'version', 'metricName', 'publishedHash'], 'sap-method': ['methodId', 'version', 'publishedHash'],
     enterprise: ['storeId', 'materialId', 'revisionId', 'location'], 'data-input': ['projectId', 'datasetId', 'inputVersionId'],
     'data-description': ['projectId', 'datasetId', 'inputVersionId', 'descriptionRevisionId'],
+    'studio-source': ['systemId', 'assetId', 'version', 'publishedHash', 'projectId'],
   };
   if (typeof value.kind !== 'string' || !Object.hasOwn(fields, value.kind) || !keysOnly(value, ['kind', 'sourceHandle', ...fields[value.kind]!])) return false;
   if (value.kind === 'sap' && (!nonempty(value.packageId) || !nonempty(value.version) || value.metricName !== undefined && !nonempty(value.metricName))) return false;
@@ -71,6 +72,7 @@ function graphRef(value: unknown): value is SemanticGraphSourceRef {
   if (value.kind === 'enterprise' && (!['storeId', 'materialId', 'revisionId'].every(key => nonempty(value[key])) || value.location !== undefined && !(object(value.location) && keysOnly(value.location, ['start', 'end']) && integer(value.location.start) && integer(value.location.end) && value.location.end > value.location.start))) return false;
   if (value.kind === 'data-input' && !['projectId', 'datasetId', 'inputVersionId'].every(key => nonempty(value[key]))) return false;
   if (value.kind === 'data-description' && !['projectId', 'datasetId', 'inputVersionId', 'descriptionRevisionId'].every(key => nonempty(value[key]))) return false;
+  if (value.kind === 'studio-source' && (!['systemId', 'assetId', 'version', 'projectId'].every(key => nonempty(value[key])) || !hash(value.publishedHash))) return false;
   return value.publishedHash === undefined || value.publishedHash === null || hash(value.publishedHash);
 }
 function graphBuildSource(value: unknown): boolean {
@@ -79,14 +81,16 @@ function graphBuildSource(value: unknown): boolean {
     && (value.nature === undefined || typeof value.nature === 'string' && ['deidentified-source', 'synthetic-data', 'asset-publication', 'engineering-design'].includes(value.nature));
 }
 function graphMetadata(value: unknown): boolean {
-  return object(value) && keysOnly(value, ['sourceRefs', 'buildSources', 'claimKind', 'conditions', 'limitations', 'businessTime', 'candidateLocator', 'conditionState', 'operandRole', 'roleText'])
+  return object(value) && keysOnly(value, ['sourceRefs', 'buildSources', 'claimKind', 'conditions', 'limitations', 'businessTime', 'candidateLocator', 'conditionState', 'operandRole', 'roleText', 'predicate', 'weak', 'actualMethod', 'assetKind'])
     && Array.isArray(value.sourceRefs) && value.sourceRefs.every(graphRef) && Array.isArray(value.buildSources) && value.buildSources.every(graphBuildSource)
     && value.sourceRefs.length + value.buildSources.length > 0
     && typeof value.claimKind === 'string' && ['source-projection', 'engineering-interpretation', 'synthetic-assumption'].includes(value.claimKind)
     && textList(value.conditions) && textList(value.limitations) && Array.isArray(value.businessTime) && value.businessTime.every(time => object(time) && keysOnly(time, ['text', 'source']) && strings(time, 'text', 'source'))
     && (value.candidateLocator === undefined || nonempty(value.candidateLocator))
     && (value.conditionState === undefined || typeof value.conditionState === 'string' && ['stated', 'required-not-established', 'unknown', 'disputed'].includes(value.conditionState))
-    && (value.operandRole === undefined || value.operandRole === 'minuend' || value.operandRole === 'subtrahend') && (value.roleText === undefined || nonempty(value.roleText));
+    && (value.operandRole === undefined || value.operandRole === 'minuend' || value.operandRole === 'subtrahend') && (value.roleText === undefined || nonempty(value.roleText))
+    && (value.predicate === undefined || nonempty(value.predicate)) && (value.weak === undefined || typeof value.weak === 'boolean')
+    && (value.actualMethod === undefined || nonempty(value.actualMethod)) && (value.assetKind === undefined || nonempty(value.assetKind));
 }
 
 /** Passive validation of a recorded tool payload; it grants no current read authority. */
@@ -98,7 +102,7 @@ export function isSemanticGraphResult(value: unknown): value is SemanticGraphRes
     && (node.type === 'Condition' ? object(node.metadata) && node.metadata.conditionState !== undefined : object(node.metadata) && node.metadata.conditionState === undefined)
     && (node.contentRange === undefined || graphRange(node.contentRange) && node.content.length === node.contentRange.end - node.contentRange.start))) return false;
   const nodes = new Map(value.nodes.map(node => [node.id, node]));
-  if (nodes.size !== value.nodes.length || !Array.isArray(value.edges) || !value.edges.every(edge => object(edge) && keysOnly(edge, ['id', 'source', 'target', 'type', 'metadata']) && nonempty(edge.id) && nonempty(edge.source) && nonempty(edge.target) && nodes.has(edge.source) && nodes.has(edge.target) && typeof edge.type === 'string' && graphEdges.includes(edge.type) && graphMetadata(edge.metadata) && object(edge.metadata) && edge.metadata.conditionState === undefined)) return false;
+  if (nodes.size !== value.nodes.length || !Array.isArray(value.edges) || !value.edges.every(edge => object(edge) && keysOnly(edge, ['id', 'source', 'target', 'type', 'metadata']) && nonempty(edge.id) && nonempty(edge.source) && nonempty(edge.target) && nodes.has(edge.source) && nodes.has(edge.target) && typeof edge.type === 'string' && graphEdges.includes(edge.type) && graphMetadata(edge.metadata) && object(edge.metadata) && edge.metadata.conditionState === undefined && (edge.type !== 'asserted_relation' || nonempty(edge.metadata.predicate)))) return false;
   const edges = new Map(value.edges.map(edge => [edge.id, edge]));
   if (edges.size !== value.edges.length || !Array.isArray(value.paths) || !value.paths.every(path => {
     if (!object(path) || !keysOnly(path, ['nodeIds', 'steps']) || !Array.isArray(path.nodeIds) || path.nodeIds.length < 2 || !path.nodeIds.every(id => typeof id === 'string' && nodes.has(id)) || !Array.isArray(path.steps) || path.steps.length + 1 !== path.nodeIds.length) return false;

@@ -18,6 +18,7 @@ from .identity import claim_id, edge_id, ref_identity, stable_id
 COMPONENT = {'name': 'semantica', 'version': '0.7.0',
              'wheelSha256': 'faf27d6259ae813ddb44c5213e2f8867592f27e6e3d6b47cea10f1844513799f'}
 NODE_TYPES = {'MetricConcept', 'MetricVersion', 'MethodVersion', 'SourceRevision', 'Statement', 'Condition', 'InputVersion', 'FieldRole'}
+STUDIO_EDGE_TYPES = {'asserted_relation'}
 EDGE_TYPES = {'version_of', 'depends_on', 'has_source', 'requires', 'maps_to', 'describes_input', 'distinct_from', 'potential_conflict'}
 METRICS = {'terminal_sales_amount', 'retail_refund_amount', 'net_retail_sales'}
 NATURES = {'deidentified-source', 'synthetic-data', 'asset-publication', 'engineering-design'}
@@ -233,8 +234,56 @@ class SnapshotStore:
             else:
                 raise SnapshotError('unsupported_build_source_format')
 
-    def _structure(self, nodes, edges, inputs, documents):
+    def _structure(self, nodes, edges, inputs, documents, format_version=1):
+        if format_version == 2:
+            return self._studio_structure(nodes, edges, inputs, documents)
+        _require(format_version == 1, 'unsupported_format')
+        return self._structure_v1(nodes, edges, inputs, documents)
+
+    def _studio_structure(self, nodes, edges, inputs, documents):
+        """Formal Studio sources projected without the historical SC-01 fixture quota."""
+        _require(isinstance(nodes, list) and nodes and len(nodes) <= 4096
+                 and isinstance(edges, list) and len(edges) <= 8192, 'invalid_graph_structure')
+        by_id = {}
+        for node in nodes:
+            _require(isinstance(node, dict) and set(node) == {'id', 'type', 'content', 'metadata'}
+                     and node.get('type') in NODE_TYPES and _string(node.get('content'))
+                     and _string(node.get('id')) and node['id'] not in by_id, 'invalid_node')
+            self._metadata(node, documents)
+            meta = node['metadata']
+            _require(meta['sourceRefs'] and all(ref.get('kind') in {'studio-source', 'sap', 'sap-method', 'enterprise', 'data-input', 'data-description'} and (ref.get('kind') not in {'studio-source', 'sap', 'sap-method'} or _hash(ref.get('publishedHash'))) for ref in meta['sourceRefs']), 'invalid_studio_source')
+            if node['type'] == 'SourceRevision':
+                _require(len(meta['sourceRefs']) == 1, 'missing_exact_node_identity')
+                expected = stable_id('SourceRevision', ref_identity(meta['sourceRefs'][0]))
+            else:
+                expected = claim_id(node['type'], meta['sourceRefs'], meta['buildSources'], inputs, meta['claimKind'], node['content'])
+            _require(node['id'] == expected, 'node_identity_mismatch')
+            by_id[node['id']] = node
+        seen = set()
+        for edge in edges:
+            _require(isinstance(edge, dict) and set(edge) == {'id', 'source', 'target', 'type', 'metadata'}
+                     and all(_string(edge.get(k)) for k in ('id', 'source', 'target', 'type'))
+                     and edge['type'] in EDGE_TYPES | STUDIO_EDGE_TYPES and edge['id'] not in seen
+                     and edge['source'] in by_id and edge['target'] in by_id, 'invalid_edge')
+            self._metadata(edge, documents)
+            meta = edge['metadata']
+            _require(meta['sourceRefs'] and all(ref.get('kind') in {'studio-source', 'sap', 'sap-method', 'enterprise', 'data-input', 'data-description'} and (ref.get('kind') not in {'studio-source', 'sap', 'sap-method'} or _hash(ref.get('publishedHash'))) for ref in meta['sourceRefs']), 'invalid_studio_source')
+            if edge['type'] == 'asserted_relation':
+                _require(_string(meta.get('predicate')) and len(meta['predicate']) <= 256
+                         and by_id[edge['source']]['type'] == by_id[edge['target']]['type'] == 'Statement', 'invalid_asserted_relation')
+            if edge['type'] == 'has_source':
+                _require(by_id[edge['target']]['type'] == 'SourceRevision', 'invalid_edge_direction')
+            if edge['type'] == 'maps_to':
+                _require(_string(meta.get('roleText')), 'missing_field_role')
+            _require(edge['id'] == edge_id(edge['source'], edge['target'], edge['type'], meta, inputs), 'edge_identity_mismatch')
+            seen.add(edge['id'])
+        refs = _all_refs(nodes, edges)
+        _check_hash_assertions(refs)
+        return refs
+
+    def _structure_v1(self, nodes, edges, inputs, documents):
         _require(isinstance(nodes, list) and isinstance(edges, list), 'invalid_graph_structure')
+        _require(all(ref.get('kind') != 'studio-source' for ref in _all_refs(nodes, edges)), 'unsupported_source_ref')
         by_id = {}
         identity_kinds = {'MetricVersion': {'sap'}, 'MethodVersion': {'sap-method'},
                           'SourceRevision': {'enterprise', 'data-description'}, 'InputVersion': {'data-input'}, 'MetricConcept': {'sap'}}
@@ -345,11 +394,12 @@ class SnapshotStore:
         return nodes, edges
 
     @_boundary
-    def write(self, entities, relationships, ontology, inputs, snapshot_id=None):
+    def write(self, entities, relationships, ontology, inputs, snapshot_id=None, *, format_version=1):
+        _require(type(format_version) is int and format_version in (1, 2), 'unsupported_format')
         snapshot_id = _uuid(str(uuid.uuid4()) if snapshot_id is None else snapshot_id)
         nodes, edges, ontology, inputs = copy.deepcopy((entities, relationships, ontology, inputs))
         documents = self._inputs(inputs)
-        refs = self._structure(nodes, edges, inputs, documents)
+        refs = self._structure(nodes, edges, inputs, documents, format_version)
         self._ontology(ontology, nodes)
         _require(all(i['state'] == 'available' for i in _checks(self.authority, refs)), 'source_not_eligible_for_build')
         snapshots = self.run_root / 'snapshots'
@@ -368,8 +418,8 @@ class SnapshotStore:
         graph_bytes, ontology_bytes = self._read(root / 'graph.json'), self._read(root / 'ontology.json')
         read_nodes, read_edges = self._native_logical(_json(graph_bytes), snapshot_id)
         _require(read_nodes == nodes and read_edges == edges and _json(ontology_bytes) == ontology, 'native_roundtrip_mismatch')
-        self._structure(read_nodes, read_edges, inputs, documents)
-        receipt = {'formatVersion': 1, 'snapshotId': snapshot_id, 'graphId': snapshot_id,
+        self._structure(read_nodes, read_edges, inputs, documents, format_version)
+        receipt = {'formatVersion': format_version, 'snapshotId': snapshot_id, 'graphId': snapshot_id,
                    'builtAt': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'), 'component': dict(COMPONENT),
                    'files': {kind: {'name': kind + '.json', 'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}
                              for kind, data in (('graph', graph_bytes), ('ontology', ontology_bytes))}, 'inputs': inputs}
@@ -386,7 +436,7 @@ class SnapshotStore:
         self._directory(root)
         receipt = _json(self._read(root / 'receipt.json'))
         _require(isinstance(receipt, dict) and set(receipt) == {'formatVersion', 'snapshotId', 'graphId', 'builtAt', 'component', 'files', 'inputs'}, 'invalid_receipt')
-        _require(type(receipt['formatVersion']) is int and receipt['formatVersion'] == 1, 'unsupported_format')
+        _require(type(receipt['formatVersion']) is int and receipt['formatVersion'] in (1, 2), 'unsupported_format')
         _require(receipt['snapshotId'] == receipt['graphId'] == snapshot_id, 'snapshot_identity_mismatch')
         _require(receipt['component'] == COMPONENT, 'component_identity_mismatch')
         built_at = datetime.fromisoformat(receipt['builtAt'].replace('Z', '+00:00'))
@@ -402,7 +452,7 @@ class SnapshotStore:
             _require(len(files[kind]) == record['bytes'] and hashlib.sha256(files[kind]).hexdigest() == record['sha256'], 'file_integrity_mismatch')
         documents = self._inputs(receipt['inputs'])
         nodes, edges = self._native_logical(_json(files['graph']), snapshot_id)
-        refs = self._structure(nodes, edges, receipt['inputs'], documents)
+        refs = self._structure(nodes, edges, receipt['inputs'], documents, receipt['formatVersion'])
         self._ontology(_json(files['ontology']), nodes)
         # Disabled/known-error history may reopen; new queries still exclude it.
         _require(all(i['state'] in {'available', 'disabled', 'excluded', 'forbidden', 'known-error'}

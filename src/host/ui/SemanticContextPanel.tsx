@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PersonalDialog } from './PersonalDialog.tsx';
 import { readSemanticContext } from './semantic-context-client.ts';
 import type { SemanticContextReader, SemanticContextRecord, SemanticGraphResult, SemanticGraphMetadata, SemanticItem, SemanticQueryInput, SemanticQueryResult, SemanticSourceState, SemanticTarget } from './semantic-context-client.ts';
+import type { StudioSemanticGraphSourceRef } from '../../../extensions/business-plugins/semantic-context/graph.ts';
 import './semantic-context.css';
 
 export type SemanticContextPanelProps = { projectId: string; taskId: string; records?: SemanticContextRecord[]; readContext?: SemanticContextReader; onFollowup?: (draft: string) => void };
@@ -38,8 +39,9 @@ function SemanticContextOwner({ projectId, taskId, records = [], readContext = r
 }
 
 const sourceLabels: Record<SemanticSourceState, string> = { available: '来源可读', missing: '来源缺失', 'hash-conflict': '哈希冲突', forbidden: '权限不足', excluded: '已排除', disabled: '已停用', unknown: '未知', partial: '部分结果' };
-const targetLabel = (target: SemanticTarget): string => {
+const targetLabel = (target: SemanticTarget | StudioSemanticGraphSourceRef): string => {
   switch (target.kind) {
+    case 'studio-source': return `Studio ${target.systemId} · ${target.assetId}@${target.version}`;
     case 'sap': return `${target.packageId}@${target.version}${target.metricName ? ` · ${target.metricName}` : ''}`;
     case 'sap-method': return `SAP 方法 ${target.methodId} · v${target.version}`;
     case 'enterprise': return `${target.materialId} · 修订 ${target.revisionId}`;
@@ -91,6 +93,9 @@ function GraphMetadata({ metadata }: { metadata: SemanticGraphMetadata }) {
     {metadata.conditionState && <p className="sc-note">条件状态：{metadata.conditionState} · {conditionLabels[metadata.conditionState]}</p>}
     {metadata.operandRole && <p className="sc-note">操作数角色：{metadata.operandRole}{metadata.operandRole === 'subtrahend' ? '（减项）' : '（被减项）'}</p>}
     {metadata.roleText && <p>字段角色：{metadata.roleText}</p>}
+    {metadata.predicate && <p>原关系声明：{metadata.predicate}</p>}
+    {metadata.weak !== undefined && <p className="sc-note">{metadata.weak ? '弱关系声明，仍需结合来源核查；不推定为业务确认。' : '已记录非弱关系声明；是否成立仍以原文与实际核查为准。'}</p>}
+    {metadata.actualMethod && <p className="sc-meta">实际提取方法：{metadata.actualMethod}{metadata.assetKind ? ` · 源稿类型：${metadata.assetKind}` : ''}</p>}
     <dl className="sc-metadata"><dt>适用前提</dt><dd>{metadata.conditions.length ? metadata.conditions.map((condition, index) => <div key={index}>{condition}</div>) : '未另列前提；不表示任意场景适用'}</dd>
       <dt>限制</dt><dd>{metadata.limitations.length ? metadata.limitations.map((limit, index) => <div key={index}>{limit}</div>) : '未另列限制；不表示没有局限'}</dd>
       <dt>业务时间声明</dt><dd>{metadata.businessTime.length ? metadata.businessTime.map((time, index) => <div key={index}>{time.text}<small>原文位置：{time.source}</small></div>) : '未记录 · UNKNOWN；不由图构建时间推定'}</dd></dl>

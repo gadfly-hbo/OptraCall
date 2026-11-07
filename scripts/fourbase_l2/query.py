@@ -6,7 +6,7 @@ Pagination and source handles remain Host responsibilities.
 """
 import copy
 
-from .readmodel import EDGE_TYPES, NODE_TYPES, SnapshotError
+from .readmodel import EDGE_TYPES, STUDIO_EDGE_TYPES, NODE_TYPES, SnapshotError
 
 MAX_NODES = 200
 MAX_EDGES = 500
@@ -41,7 +41,7 @@ def parse_query(value):
         elif operation in {'dependencies', 'impact'}:
             allowed |= {'depth'}
     require(set(value) <= allowed)
-    for field, choices in [('nodeTypes', NODE_TYPES), ('relationTypes', EDGE_TYPES)]:
+    for field, choices in [('nodeTypes', NODE_TYPES), ('relationTypes', EDGE_TYPES | STUDIO_EDGE_TYPES)]:
         if field in value:
             entries = value[field]
             require(isinstance(entries, list) and all(isinstance(v, str) and v in choices for v in entries)
@@ -68,7 +68,7 @@ def _logical(item, inputs, node):
     """Only D12 semantic fields cross the query boundary, never file records."""
     original = item['metadata']
     fields = ('sourceRefs', 'claimKind', 'conditions', 'limitations', 'businessTime',
-              'candidateLocator', 'conditionState', 'operandRole', 'roleText')
+              'candidateLocator', 'conditionState', 'operandRole', 'roleText', 'predicate', 'weak', 'actualMethod', 'assetKind')
     metadata = {k: copy.deepcopy(original[k]) for k in fields if k in original}
     metadata['buildSources'] = []
     for source in original['buildSources']:
