@@ -75,13 +75,24 @@
 
 ## 首期最终验收
 
-2026-11-07，按 v1.0 第 9 节及已批准的 FA01–FA06 矩阵，Studio 首期在限定的合成销售退款案例范围内验收通过。范围为青鹭站、松渡站、雁汀站三店，2026 年 3 月 2–8 日和 3 月 9–15 日两个等长期间，人民币，按发生口径与支付订单群口径核对门店净额和期间变化。原方案 SHA-256 为 `4b731550cf17ed4dfe0f5316f57d96f8a72e4896cd2c0853c4095ef2e12598e0`，与批准时一致。依据和原评审包身份见[批准记录](approval.json)。本节的 `.local` 链接指向原验收工作树的私有留档，公开仓库保留核定摘要，原始报告、会话、截图和回执在本机保存。
+2026-11-07，按 v1.0 第 9 节及已批准的 FA01–FA06 矩阵，Studio 首期在限定的合成销售退款案例范围内验收通过。范围为青鹭站、松渡站、雁汀站三店，2026 年 3 月 2–8 日和 3 月 9–15 日两个等长期间，人民币，按发生口径与支付订单群口径核对门店净额和期间变化。原方案 SHA-256 为 `4b731550cf17ed4dfe0f5316f57d96f8a72e4896cd2c0853c4095ef2e12598e0`，与批准时一致。依据和原评审包身份见[批准记录](approval.json)。原验收的 `.local` 链接指向原工作树的私有留档。本次运行采用的两份回执附在当前交付工作树的 `.local` 目录，备份清单和原始回执按设备保存在各自本机。
 
-### 工程检查与运行采用
+### 工程与 Git／CI
 
-- **已交付工程版本通过。** PR #42 的 `819865e` 实际 head CI #119 与合并后 `02ecac0` 主分支 CI #120 均通过，各 1,746 项通过、143 项条件跳过、零失败。Mac mini 和 MacBook 的采用回执均绑定 `02ecac0`。本次实际工作台走验前后，Mac mini 读回同一实例与准确版本。[原 PR #42](https://github.com/gadfly-hbo/OptraCall/pull/42) · [PR CI #119](https://github.com/gadfly-hbo/OptraCall/actions/runs/42341613605) · [main CI #120](https://github.com/gadfly-hbo/OptraCall/actions/runs/42342305781) · [工程交付及两机采用回执](../../../.local/studio-delivery/delivery-result.md) · [走验前健康回执](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/before-health.json) · [发布后健康回执](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/after-formal-publish-health.json)
-- **后续本地修复通过工程检查。** 图身份 GR01 和使用声明 DU01、DU02 已在原验收工作区检查，后续隔离实模使用包含这些修复的候选。收口前该候选本地全量检查 1,839 项通过、51 项跳过、零失败。收口后用户另行授权仅交付两项修复及 FA01–FA06 记录，Git 与 CI 结果见本次对应 PR。既有设备采用回执仍绑定上条版本。[图身份复验](../studio-graph-entity-identity/result.md) · [使用声明契约复验](../studio-declare-use-contract/result.md)
+- **首版交付通过。** PR #42 的实际提交 `819865e` 经 CI #119 检查，合并后的 `02ecac0` 经 main CI #120 检查。两次各 1,746 项通过、143 项条件跳过、零失败。[原 PR #42](https://github.com/gadfly-hbo/OptraCall/pull/42) · [PR CI #119](https://github.com/gadfly-hbo/OptraCall/actions/runs/42341613605) · [main CI #120](https://github.com/gadfly-hbo/OptraCall/actions/runs/42342305781)
+- **收口交付通过。** PR #43 交付图身份 GR01、使用声明 DU01／DU02 和 FA01–FA06 收口记录。实际提交 `24f17c9` 经 CI #121 检查，通过后 squash 合并至 `5328572`，再经 main CI #122 检查。两次各 1,747 项通过、143 项条件跳过、零失败。交付候选本地全量检查 1,839 项通过、51 项条件跳过、零失败，Python 语义图回归 84 项通过。[PR #43](https://github.com/gadfly-hbo/OptraCall/pull/43) · [PR CI #121](https://github.com/gadfly-hbo/OptraCall/actions/runs/42387454720) · [main CI #122](https://github.com/gadfly-hbo/OptraCall/actions/runs/42388111940) · [图身份复验](../studio-graph-entity-identity/result.md) · [使用声明契约复验](../studio-declare-use-contract/result.md)
 - Host 提供准确版本、范围、权限、会话状态和分项回执。分析 Agent 自主选择口径、执行复算并按原会话修订，继续复用 Pi 和官方 Semantica。用户在实际走验中确认限定范围和正式发布两项决定。
+
+### 两机运行采用
+
+2026-11-08 00:03（北京时间）分别回读通过。两机实际运行 `53285729bc68cfe0e6f4f97d9d4df67d5ad50012`，源码树为 `8b002d9d7054001940679abb055a587654491185`。两机健康接口均为 HTTP 200、`ready`，Studio 语义引擎已配置，Pi 1.4.0、Semantica 0.7.0。每机 4 个实际提供的前端构建文件均与本机清单一致。
+
+| 设备 | 切换及实际读回 | 同机保全与回执 |
+|---|---|---|
+| Mac mini | 从运行中的 `02ecac0` 正常停机，保留旧发行目录并启动独立新发行版。三份桌面入口已更新，重复启动入口读回同一新实例。原 Studio 体系读回一致，两项 r2 仍为正式成果，银行勾稽继续等待资料。 | 停机备份 6,736 项，另备份 60,326 项历史证据。10 个项目、26 个任务、25 份项目会话 JSONL 保留，原数据条目零差异。[Mac mini 采用回执](../../../.local/studio-phase1-adoption/mini-receipt.json) |
+| MacBook | 原试用目录的 `02ecac0` 当时已停机。原 checkout 快进到准确目标并构建启动，Studio 列表为空。 | 停机备份 1,772 项，含原试用报告，另备份旧 checkout 26,570 项。2 个项目、2 个任务保留，原数据条目零差异。[MacBook 采用回执](../../../.local/studio-phase1-adoption/macbook-receipt.json) |
+
+两机沿原数据根、项目根和语义配置运行，现有数据兼容，未迁移。原方案、原稿、原会话和历次 FAIL 保留。运行烟测未调用真实模型，实模专业验收和用户产品验收仍按下列各自的版本和范围核定。此前 `02ecac0` 的双机采用回执作为历史记录保留。[首版交付及两机采用回执](../../../.local/studio-delivery/delivery-result.md)
 
 ### 实模专业验收
 
@@ -98,7 +109,7 @@ D3 在后续隔离实模中已按原生供给核对范围、用途限制、正�
 
 ### 用户产品验收
 
-用户委托在 Mac mini 实际工作台操作，分别确认只发布两项 r2 和正式发布准确预览。工作台使用五份已核对的合成资料，MiMo V2.6 Flash 原建设任务耗时 1,697.478 秒。三个浏览器追踪段记录 41 个代操作，用户决策耗时单列为未测量。
+用户委托在 Mac mini 实际工作台操作，分别确认只发布两项 r2 和正式发布准确预览。走验绑定当时运行的 `02ecac0`，前后读回同一实例。工作台使用五份已核对的合成资料，MiMo V2.6 Flash 原建设任务耗时 1,697.478 秒。三个浏览器追踪段记录 41 个代操作，用户决策耗时单列为未测量。[走验前健康回执](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/before-health.json) · [发布后健康回执](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/after-formal-publish-health.json)
 
 | 项 | 最终判定与证据 |
 |---|---|
@@ -122,5 +133,5 @@ D3 在后续隔离实模中已按原生供给核对范围、用途限制、正�
 |---|---|
 | 等待 | 银行勾稽方法 `a4c16455-4eb7-4e4e-98ed-85da74059148` v1 仍为候选，等待项 `cfc7b4cb-a126-487b-bfec-8bf3eef8cc46` 保持 `waiting`。缺银行逐笔到账流水与清算批次对应表，银行方法及勾稽结论均排除在本次发布范围。[银行方法权威读回](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/bank-method-v1-after-publish.json) |
 | 未触发（`NOT_TRIGGERED`） | 本次正式发布的模块失败与 UNKNOWN 未触发。早期准备预览的拒绝、隔离环境原图 UNKNOWN 及历史传输诊断另行保留。本次两项 r2 发布没有项目采用目标、图刷新或使用记录，各自以先前相关环节的实际回执为准。 |
-| 本轮未走验（`NOT_EXERCISED`） | 本次工作台走验为当日离开后重进，跨日返回与归档操作留在未走验范围。已有归档工程检查单独保留。 |
+| 本轮未走验（`NOT_EXERCISED`） | 本次工作台走验为当日离开后重进，跨日接续与实际工作台归档留在未走验范围。已有归档工程检查单独保留。 |
 | 历史 FAIL、HOLD 和 NOT_RUN | 早期 A/B 报告问题、维护候选 HOLD 与普通 B 未运行，以及新案例首次普通报告和下游首次盲测 FAIL 各保留原判。定向修订及限定用途的再用通过按准确版本另记。原方案、原稿、旧版本、会话及原始回执保全。[历史专业记录](professional-evaluation.md) · [旧案例复验与保全](../../../.local/studio-followup/run.gQwu6Q0G/acceptance-summary.md) |
