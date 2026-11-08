@@ -52,7 +52,9 @@ async function fixture(t: TestContext, input: { data?: Buffer; author?: string; 
   await request(`/api/projects/${project.id}/files/save-report`, 'POST', { name: 'author.md', text: input.author ?? 'ORIGINAL_AUTHOR_TEXT' }, 201);
   // Materialize a real ordinary native history before creating the verification.
   const firstId = randomUUID(); await request(taskRoute + '/messages', 'POST', { requestId: firstId, text: '保留原任务历史。' }, 202);
-  const original = await until(() => request(taskRoute), value => value.task.lastRun?.status === 'completed');
+  // Durable completion may precede drain/lease release. A new operation is
+  // admissible only after the same public status also reports idle.
+  const original = await until(() => request(taskRoute), value => value.task.lastRun?.status === 'completed' && value.snapshot.status === 'idle');
   const native = await readFile(original.task.sessionFile);
   const owner = { projectId: project.id, taskId: task.id, verificationId: randomUUID() };
   const route = taskRoute + '/verifications/' + owner.verificationId;

@@ -1,0 +1,18 @@
+data-analysis skill 交接候选清单（SHA-256，2026-11-06，测评通过后放行版）
+skill 运行时/测试/规格候选 = 提交 6df72f4（未变动）；result.md 与任务书为测评回执更新版。
+分支：origin/qoder/ext-skills；基线：33c95c5。
+
+63adebbaf67fdfde0aa6e23369a4385c823c35ff320222257cd6533a62ee877e  extensions/analysis-assets/data-analysis/SKILL.md
+1b6de4ad8eac298ee2c014387d62eea8ac7570596a6eb78c8b6fe7a19488d1b1  extensions/analysis-assets/data-analysis/scripts/calc.py
+895ecb31b7d618a42c4b39e35b2eebf7f82336df43e84f92ee5ba0659ae2e8c2  extensions/analysis-assets/data-analysis/scripts/quality_check.py
+a0d7db0fb3511cb550a0043289edcbd65f68eda9b349cb2a92208eb318b80159  extensions/analysis-assets/data-analysis/references/method.md
+79ea6322e8bd32fd97ce7d819fb9f4fc9a5d35b1011d4d8c325e8c242ee542bf  extensions/analysis-assets/data-analysis/references/sample-data.md
+d56b488564a0ad76156de924c1f58b3745b2b441c197e4695ddabeaea164cd2b  extensions/analysis-assets/data-analysis/references/examples.md
+95bc0529b1f9d34568c18a71f0d94f190180027ebaf2bf722308541ec81278d3  tests/data-analysis-skill.test.ts
+b2166c8ccb59afb3e05c93c591e4f0193c8fa2f97d6053aab8957229a83d09fb  tests/protected-skills.test.ts
+da8208b77ba6484d4349414e44c0f94f883503e2c02542a9c61a451823aefa49  openspec/changes/data-analysis-skill/spec.md
+93d5dd7445c4d229b001232ef958e0eb3eb7102c4c0b1c34771aa95a157349b4  openspec/changes/data-analysis-skill/result.md
+25709e35e214a065fb06b0f5e264524d7d85e0cb9a9fbeb64671d31b2914b701  openspec/changes/data-analysis-skill/handoff/codex-catalog-seam.md
+3951fac8ebe5d154628eb4be63f3e164d2fdff2040880645b4c5dafefe575631  openspec/changes/data-analysis-skill/handoff/codex-takeover-brief.md
+
+范围声明：以上 12 个文件为本变更交接内容。skill 测评门禁：用户 2026-11-06 显式确认通过（effective·有效但昂贵·provisional，归档 1.9.0，被测内容＝6df72f4 字节）；回执见 result.md。无 Host/Agent 运行时代码改动；无 package.json/lockfile 变化。

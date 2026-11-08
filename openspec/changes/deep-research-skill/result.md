@@ -1,0 +1,155 @@
+# deep-research 深度研究 skill · 实施与验证记录
+
+日期：2026-11-04 · 分支：`qoder/ext-skills`（原基线 `32ebe84`，先后集成main `bee3ae0`／`98c7139`）· 状态：Codex实施、修复、浏览器及非作者复核闭合，最终实际head CI通过后已获授权squash入main，本地main安全快进；OpenSpec原位归档收尾，合并main及归档提交自身CI以末节及仓外实际回执分别核定。修正版未复测。下文 Qoder 验证证据保留其移交时范围。
+
+## 用户测评回执（2026-11-04，显式通过）
+
+按工程规范 §5 skill 测评门禁，用户以自有流程测评（variant=装入本 skill，baseline=不装），结论：**有效（effective），测评通过**。
+
+| 指标 | baseline | variant | 判读 |
+| --- | --- | --- | --- |
+| 激活率 | — | 80.0%（8/10） | 触发充分 |
+| 胜率 | — | 75.0%（3胜/1平/0负/6未判定） | 有实质提升 |
+| 断言通过率（条目累计） | 16.2% | 29.4% | **+13.2pp，超增益门槛 10pp**（"值得归档"关键判定） |
+| 平均耗时 | 278.9s | 460.8s | 变慢 65% |
+| 平均 token | 1.11M | 1.72M | +55% |
+
+产物口径复核为 +27.9pp（baseline 14.7% → variant 44.1%），两种口径均远超门槛，结论不依赖口径选择。耗时与 token 成本上升如实保留为已知代价。本回执为用户测评结论，不替代第4节非作者独立复核与工程检查。
+
+## 实施范围（实际交付物）
+
+```
+extensions/analysis-assets/deep-research/
+├── SKILL.md                       # 激活描述 + 环境判别（有无原生检索）+ 红线6条 + 方法指引 + 委派用法 + 资源索引 + 边界
+├── agents/researcher.md           # 调研员：独立检索、证据/先验区分、回传格式、缺口声明
+├── agents/reviewer.md             # 审稿人：6维标准、硬性退回、3轮规则、输出格式
+└── references/
+    ├── method.md                  # 5阶段×3模式、研究参数卡、委派模式（single/tasks/chain）与并行建议
+    ├── source-standards.md        # 来源优先级、数量质量目标、时效窗口、引用格式、回执规则
+    ├── review-checklist.md        # 6维审查、退回条件、轮次规则、修订原则
+    └── report-structure.md        # 报告模板、引言结论写法、终检清单、020/060落盘
+```
+
+另：`tests/protected-skills.test.ts` 追加 DR01；新建 `tests/deep-research-skill.test.ts`（合成 Provider 端到端）；`scripts/check-agent-session-boundary.mjs` 的 `projectAgentOwners` 追加该测试文件（同 subagent-runtime 先例，注明 DR03 隔离真实 SDK 验证、非产品运行时 owner）；`openspec/changes/deep-research-skill/`（spec/result/移交包）。
+
+无 Host/Agent 代码改动；无依赖与锁文件变化；无 scripts（纯提示词与方法资产）；无会话域/owner/Interface 变更。
+
+## 承接映射（保真记录）
+
+| 原插件（gpt-researcher-team） | 本产品形态 |
+| --- | --- |
+| research-chief-editor 主编（编排/参数卡/超时降级） | 任务 Agent 自身；编排自主，方法为指引非强制 |
+| topic-researcher 谭溯源 | `deep-research/researcher`（委派） |
+| draft-reviewer 明鉴秋 | `deep-research/reviewer`（委派，隔离上下文=独立视角） |
+| research-planner / draft-reviser / report-writer / report-publisher | 父 Agent 内化（大纲/修订/汇总/组装不需隔离上下文） |
+| ≥5来源等硬配额、整报≥20来源 | 承接为质量目标与自检口径（DR4），达不到如实披露差距 |
+| 人设/头像/plugin.json/quickPrompts/TeamCreate/SendMessage/进度通报模板 | 不承接（市场外壳与 WorkBuddy 团队协议） |
+
+## 验证证据
+
+| 检查 | 结果 |
+| --- | --- |
+| `node --test tests/protected-skills.test.ts tests/deep-research-skill.test.ts` | 7/7 PASS：DR01（SDK 发现 deep-research、`discoverSubagentRoles` 全仓仅产出 `deep-research/researcher` 与 `deep-research/reviewer`、受管快照逐字节保留 7 个资源文件）+ 2 项 DR03 端到端 + 既有 4 项 |
+| DR03 端到端（合成 Provider，真实 analysis-assets 目录） | PASS：普通任务快照含 `subagent` 工具；父 Agent 实际委派 researcher（single）与 researcher→reviewer（chain，`{previous}` 正确传递）；子会话 fresh（单条 user、不含父对话私密标记、无递归 subagent）；子 system 指令含真实角色正文（"调研员（researcher）"/"审稿人（reviewer）"）与真实 skill 资源根；模型与凭据与父冻结一致 |
+| DR03 资源可读 | PASS：被委派 researcher 以 read 工具实际读取仓库内 `references/method.md` 并把内容回传父会话 |
+| 边界检查 | 首轮 FAIL（新测试构造 ProjectAgent 未在豁免清单），按 subagent-runtime 先例把 `tests/deep-research-skill.test.ts` 加入 `projectAgentOwners`（注明 DR03 隔离真实 SDK 验证）后 PASS；未放宽其他规则 |
+| `npm run check` 全量 | exit 0：1004 项＝1001 PASS / 0 FAIL / 3 条件 SKIP + 边界 PASS + tsc + Vite 构建；既有大 bundle 警告保持披露 |
+| DR02/DR04/DR07 文档复核 | 自检通过：SKILL.md 红线（引用真实/不冒充检索/事实观点区分）与环境判别、四份 references 路径在 DR01 快照断言中逐一验证存在且字节保留；正式非作者复核待做 |
+
+## 如实保留的边界与未验证项
+
+- 全部端到端为合成 Provider；真实模型的检索激活、研究报告专业质量、多章并行与审稿循环的实际表现未验证（另授权）。
+- deepseek-flash 路线无原生检索：skill 指引为如实声明降级，未验证真实模型是否遵循。
+- 审稿独立性是"隔离上下文"意义下的独立（同一模型），非人类专家审稿；skill 与本记录均不宣称等价。
+- DR06 catalog 登记未实施（Host 接缝归 Codex，移交包已附文案建议）；能力目录暂无"深度研究"条目，不影响 skill 在任务会话中的发现与使用。
+- 原插件仓库（MacBook WorkBuddy 目录）未做任何改动；处置另议。
+
+## 下一步
+
+skill 测评门禁已通过（2026-11-04 用户显式确认，回执见上节）。移交 Codex：核对候选清单 → 实施目录接缝（catalog-data 一条目 + `openCatalogEntry` 导航，文案建议见 handoff）→ 非作者独立复核（覆盖 DR1–DR9 与 DR01–DR07）→ 按用户授权走 Git/CI 至合并。任务书：[handoff/codex-takeover-brief.md](handoff/codex-takeover-brief.md)。
+
+## Codex 接管与新增测评展示准备（2026-11-04）
+
+14/14完整SHA与交接HEAD0329249逐字节一致后开始工作，原清单保持不变；原Qoder工作树干净、同HEAD游离，Codex独立工作树检出qoder/ext-skills。原始14文件在仓外保全。证据根`/Users/bendandebaba/OptraCall-artifacts/deep-research-handoff-20261104-a772ae02/`（0700）；首次核验辅助脚本误假定后加移交书已存在于a78，产生git-show128，修正辅助比较后才取得14/14，不是清单差异或产品RED。
+
+两名全新干净上下文非作者先冻结预期，再独立核实现与测试。原候选均暂不通过：Spec轴2项P2（来源硬配额、缺来源块误判能力），Standards轴2项P2（来源硬配额、默认大纲确认）及1项P3（移交书13/14残留）；两个handoff源码链接另有路径错误。原报告与环境失败保留，未用测试绿抹去。Spec原阶段有效39/39目标／接缝合成回归，Standards原阶段48/48目标、boundary、6项独立例外反例及类型重验通过；首次依赖缺件的环境失败与后续有效验证分开记录。
+
+Codex已直接修正提示词三类冲突、移交书计数与链接，并补深度研究目录条目／项目导航；没有改subagent/native-search实现或作者测试。修正后的检查及原复核者重验另记，不能提前写通过。
+
+用户已明确确认[展示规范](../../../docs/skill-evaluation-display.md)与[可点击Demo](../../../docs/prototypes/skill-evaluation-catalog-demo.html)，随后追加全部测评数据默认收起、手动点击一次展开；Demo与正式实现同步按此更新。展开后共同呈现条目累计增益13.2个百分点、激活率80.0%及耗时约+65%／Token约+55%、已判定胜率75.0%（3/4，另6未判定）和完整比较值；已有skill未给回执则数据待补。所有skill共享一个静态元信息与原生details展示组件，无嵌套第二次展开、没有持久设置／后端接口或模型触发。原型仍仅内存预览，正式产品浏览器证据另记。
+
+上节测评回执按原样保留，实际测评对象为a78a478七文件。接管后提示词已修正，**修正版尚未复测**，不能把原测评通过移作新版成绩。原回执“产物口径+27.9pp、14.7%→44.1%”不自洽（两端差29.4个百分点）；待用户核正，本次主卡与详情只采用无歧义的条目累计13.2个百分点，不覆盖或静默修正原回执。
+
+主仓main核清洁且已前进到bee3ae0；目前尚未集成新main、推送、开PR、运行hosted CI或合并。没有切换产品运行服务、操作MacBook或新增真实模型实验。skill分支长期保留，本轮合并原位归档后按任务书归还Qoder的写入归属，不提前回交或删除分支。
+
+提示词修正后39项合成目标／subagent／native-search接缝回归通过。展示元信息按TDD先留真实RED：既有目录无任何skill测评槽位，预期5项实际0项；外层shell首轮以cat结束不代表测试exit0通过，随后单独捕获node测试exit1与同一行为失败。最小实现后4项共享展示数据／分母／百分点／缺失值测试通过，类型检查通过；这些只证明目录显示计算与数据边界，不冒称真实模型增益复测。全量检查与最终浏览器／非作者重验另记，不预写成功。
+
+## Codex 本地完整检查与真实产品 UI 点验
+
+固定本地完整候选 `local-candidate-v1.json` 共598文件，SHA-256 `2de89047ffd8c04c3566f30176ddef240defdd5251c8f5ed42d3b58724631b65`，覆盖原HEAD的全部跟踪文件及本轮新增文件，非仅原14文件。此时仍在原移交基线上，未集成最新main。
+
+`npm run check` exit0：**1008项＝1005 PASS／0 FAIL／3条件SKIP**，边界、tsc、Vite构建及构建标记完成。原3条条件SKIP及大bundle警告保留。`full-check-local.log` SHA-256 `99bd92b8a09acd41ac44d499d1ac114ca912d8319bad5b30323093d3c2783558`；结果见证据根的 `full-check-local-receipt.json`。检查后及浏览器收尾后分别重核598文件，均零漂移。此为本地全量检查，不是hosted CI，也不提前证明新main整合后的候选。
+
+以独立0700数据根启动产品正常 `createHost` 和构建后的正式UI，未导入凭据、经营资料或旧项目。Codex根会话通过浏览器实际操作：分析资产五个skill测评区默认全部closed，数值不可见；点击深度研究一次即展开完整五项指标／样本／被测版本，再次点击或焦点内Return收起；数据待补展开不补造零值；打开深度研究进入既有空项目看板。桌面浅深色及390×844窄屏均检查，窄屏文档宽390、测评区clientWidth与scrollWidth均320，无嵌套details或横向溢出，完整数据可正常滚动阅读。测试临时视口已恢复。
+
+`qa-ui/`保留22件AX／DOM／截图证据；汇总 `product-ui-qa-receipt.json` SHA-256 `f8348ed7a47e8a1a4d4246f204525de2a38ba00142574f7d3e10181dbf6454b0`。一次深色full-page截图为空白，原件 `dark-expanded.png` 保留，不计成功；随后正常可见捕获 `dark-expanded-visible.png` 与AX证据成功。浏览器console告警／错误记录为空。测试Host已按SIGTERM正常关闭、两个自建标签页和原型服务已关闭；`catalog-qa-closed.json`记录**26个GET、0个修改请求**，没有发送模型请求或改变现网服务。
+
+上述证明目录展示与导航，不是修正版用户测评或专业质量验收。两名原独立复核者的最终本地结论与证据见[独立复核](independent-review.md)：本地Spec通过，Standards限范围通过，无遗留可行动发现；其实际角色为只读核验固定UI证据，不冒称由复核者亲自点浏览器。Spec独立11项受影响回归与数值／静态渲染探针通过；Standards独立52项、边界、类型及45项数值／SSR探针通过。所有结论绑定原基线本地v1，后续仅非运行时OpenSpec文字收尾，不以局部检查冒称新main或CI通过。
+
+## 获授权 Git/CI 与最新 main 集成
+
+用户明确授权“Git/CI，CI通过后直接squash合并、快进main并归档”。原基线收尾v2共599文件，SHA-256 `566c9a78b5937d848726c5069bc6346c6b3ca17a82549315a9f52961dd4ed8dc`；两名非作者对仅三份OpenSpec文字增量分别通过，其他596文件不变。提交前首次暂存检查发现新增Demo第160行的12个尾随空格，已仅删除该空白；原件、失败与无行为差异核对保留在 `git-authorization-and-stage.json` 及仓外原HTML，不冒充产品失败。
+
+修正提交 `7df7582` 后fetch核对origin/main仍为 `bee3ae0a8d2e6dd626ef284a7561839c3f14b65f`，以合并提交 `ef95ce7` 集成。工程规范仅版本冲突，保留main全部现行授权／IN01–IN07／四点原则及第3、4节真实RED和最少人工作业要求，再加本分支长期skill测评门禁与统一折叠展示指针，版本v1.6。App冲突保留main的企业资料焦点清理与个人资料／语义追溯新入口，仅为既有项目看板分支加deep-research；边界脚本自动合并仅增加原DR03精确测试owner例外。相对main无subagent／native-search／会话公共层／依赖／锁变更。
+
+按影响范围重验：skill发现／快照／委派／原生检索／边界／测评展示，以及共享App相关既有企业资料、个人资料、语义上下文、候选与项目资料UI合同，**95/95通过、0失败、0跳过**；`npm run check:agent-sessions`、`npx tsc --noEmit`及 `npm run build`通过，原大bundle警告保留。日志在证据根 `integration/`。此为集成后受影响检查，**没有声称重新执行本地全量检查**；原1008项结果保留原基线范围，实际交付head全量CI另核。
+
+集成v3完整866文件，SHA-256 `cac82d3d63a0dd90d1ec41c50e805740d6cb089fe0bd4c3eff7aad55ebf02b70`，检查及新UI点验前后无漂移。Spec独立43项、Standards独立63项加边界／类型通过，均限受影响范围；二者独立证明App除新增deep条件外逐字等main，工程规范main第2–4节全保留，边界仅精确一行，公共Runtime与锁不变。最终集成报告及SHA见[独立复核](independent-review.md)。初始口述差异路径27为计数误记，实际对main为26条且均属本任务，计数断言纠正不记产品RED。
+
+新main正常Host再次实点五项默认收起、展开及键盘收起、打开项目看板，main新增个人资料与企业资料常规入口仍可进入；浅深色及390px滚动明细无横向溢出。16件固定证据见 `integration/qa-ui/`，QA回执SHA-256 `b9619974327574a7943385c7f1f2fa4ee5d274dc813dbe3a704f0600acec2435`；14个GET、无修改请求或模型发送，console为空，独立Host按SIGTERM关闭、临时视口和标签页收尾。两名非作者核验全部证据SHA并看图／AX，不冒称自己操作浏览器。
+
+再次fetch确认main仍bee3ae0、原远端skill分支仍0329249，无并发写入；GitHub实读main的[Check run 41793620459](https://github.com/gadfly-hbo/OptraCall/actions/runs/41793620459)为success，该基线既有交付与本轮受影响复验分别报告。当前只对三份OpenSpec作最终文字编录；功能／提示词／测试保持v3受检字节。后续唯一PR、实际head与合并回执另记，不预写未来身份。
+
+## 后续 main 私有 Python 增量与最终复核
+
+首次公开head `f6a56250cc6bb02e5153d9ad407873a58d473eaf` 的 [Check #93](https://github.com/gadfly-hbo/OptraCall/actions/runs/41806378670) attempt1成功：1377项／1282 PASS／0 FAIL／95条件SKIP，实际checkout匹配。合并前fetch发现main已推进至 `98c7139b6caa20f34c333c59c0744302b3b3bb3d`（PR #32私有Python部署修复），因此没有使用旧head检查直接合并，而以 `662c630` 无冲突集成该12路径增量，再更新同一个PR。
+
+新完整v5共874文件，清单SHA-256 `ae586124619480cd86e3270ba1e725601717386693cd69d946a656f4669550b5`。相对已审v4恰为main的4改8新增，其余862文件不变；本轮26路径、全部skill／UI／测评数据、现行四原则、SDK及owner生命周期与依赖锁均保持原字节。新main源码完全保全，不把本轮复核变成重审其全部功能或真机安装。
+
+root仅重验Python环境及分析skill／委派消费者：81项＝55 PASS／0 FAIL／26条件SKIP，边界、构建（含tsc）通过。SKIP原文分为原legacy集成材料未提供1项、portable集成环境未提供2项、macOS私有集成环境未提供22项、锁定发行缓存未提供1项；初始仓外摘要“缺ready”的粗略描述保留，精确澄清见 `integration-python/skip-reason-clarification.json`，不推断每项均实际运行了READY探针。没有新增外网安装或设备环境验收。原16件UI证据仅对字节未变的UI继续适用，不扩大为Python部署验证。
+
+两名原非作者对新874文件和接缝再验，结论均为 **PASS_WITH_SCOPE、无新增必须修复发现**：Spec直接23项及缺可选Python仍可经真实SDK／角色委派和实读method的2项合成场景通过；Standards独立30项＝27 PASS／0 FAIL／3材料条件SKIP、边界和类型通过。报告分别为：
+
+- `/Users/bendandebaba/OptraCall-artifacts/deep-research-independent-spec-baseline98-20261104T093204617212Z/baseline98-v5-spec-review.md`，SHA-256 `7b5f605b63f09644c8eaf7717bfe8ff53a399d130a3d9721b76485966e3a11c0`。
+- `/Users/bendandebaba/OptraCall-artifacts/deep-research-independent-standards-python-integration-20261104-173224-36659/standards-python-integration-v5-review.md`，SHA-256 `7d7d6dc461440e8c456baccea9206de1f12aa37a0d1cfdc9d68c62906d70c545`。
+
+前述原基线1008项、首轮集成95项和这次81项分别保持范围，没有把定向检查写成集成后本地全量重跑。CI #93保留旧head身份，不能代替更新后的最终检查。
+
+## 合并交付与原位归档
+
+用户已明确授权“Git/CI，CI通过后直接squash合并、快进main并归档”；授权时已说明原测评仅绑定a78a478、修正版未复测。执行没有重新索要已授予的合并确认，也没有将Git授权写成用户复测通过。
+
+| 对象 | 实际身份与结果 |
+| --- | --- |
+| 唯一功能PR | [#33](https://github.com/gadfly-hbo/OptraCall/pull/33)，最终head `662c630d9420c9731d9e155238ad0d1d6f7aba46`，base `98c7139b6caa20f34c333c59c0744302b3b3bb3d`；本任务26路径集中交付，无第二个功能PR |
+| 最终实际head CI | [Check #95](https://github.com/gadfly-hbo/OptraCall/actions/runs/41808461312)，attempt1 success；Ubuntu／Node25.9.0，**1411项／1310 PASS／0 FAIL／101条件SKIP**，边界／类型／构建及高危审计通过。2项moderate漏洞与既有bundle提示保留，Linux条件跳过不当macOS或真实Python安装验收 |
+| squash与完整树 | `30eda7004a4547ff8a1f97d6ac1cf031d28f62f4`，唯一父提交98c7139；与受检head完整树同为 `6860d77783737279a4941d19c6e049811caa9457`，合并没有引入未验源码变化 |
+| 本地main首次快进 | 主仓 `/Users/bendandebaba/DevWorkSpace/OptraCall` 干净，从bee3ae0以 `merge --ff-only origin/main` 到30eda70，之后仍干净；本轮未切换运行服务或操作MacBook |
+| 合并main CI | [Check #96](https://github.com/gadfly-hbo/OptraCall/actions/runs/41810259068)，event push、实际head30eda70；本归档文档编写时进行中，成功终态另据实际Actions及仓外回执核定，不预写通过 |
+
+GitHub合并连接器首先返回InternalError，REST返回HTTP502；回读PR仍open且merged=false后，CLI返回“Merge already in progress”。保持源与分支，先等待并检查远端；随后在main／head未变、PR为CLEAN／MERGEABLE且不在队列的条件下重试同一受保护squash请求，最终回读 `merged=true`、时间 `2026-11-04T09:50:46Z`。上述失败、过程中非空但不代表已合并的测试merge SHA，以及最终真实回执均保留；不猜测究竟由哪个先前请求完成合并。没有绕过保护、强推或删除长期分支。
+
+最终head CI身份另由原Spec复核者独立核实，报告 `head95-ci-addendum/actual-head95-ci-identity-review.md` 位于上述baseline98独立根，SHA-256 `834b150437afc4153f405d459b36e5252ea456b51b75fcef4a49eab0d5e09b7d`。它只证明CI及观察时PR状态，不用原先open观察冒称最终合并；实际合并／树／快进见本次Git对象及 `squash-identity-receipt.json`、`main-first-fast-forward.json`。
+
+沿用本仓simlab／target-forecast／trade-area／weather惯例，本目录原位保留spec、result、独立报告、原候选清单及handoff；不迁移路径或回写原14文件清单。原清单约束交接时0329249，后修候选由新清单与Git身份另记。原发现、不通过、环境失败、真实RED、SKIP、空白截图、原测评与未复测状态均保留。
+
+归档在独立 `codex/deep-research-archive` 工作树仅修改AGENTS最小同源入口和spec／result三份Markdown；不改产品、提示词、测试、依赖、数据或已签署独立报告。三MD提交前须完成相称差异／引用／非作者窄核，其余源码blob须与30eda70逐项相同；归档提交完整树因文档而不同，不称完整树仍等PR。提交自身SHA、推送、独立main push CI及最终main快进以Git／Actions和仓外最终回执核定，不为自引用无限追加文档提交。
+
+长期 `qoder/ext-skills` 保留；本轮归档检查闭合后由Codex释放自身检出权并回交Qoder继续下一轮，实际branch／tree／clean与写入交回以最终回读为准。Qoder原游离工作树与其他分支WIP保持；不reset／stash／clean或改写历史。本轮未新增真实模型实验、操作MacBook、切换运行服务或处置原WorkBuddy插件。修正版用户测评及适用专业／产品验收继续另核，原有效回执、代价和产物口径算术差异不被归档抹去。
+
+完整交付证据根仍为 `/Users/bendandebaba/OptraCall-artifacts/deep-research-handoff-20261104-a772ae02/`，原始GitHub／CI日志、候选、失败、报告与最终refs／树／安全快进收据均持久保留，公开锚点为本PR及实际Actions；原始日志不宣称已随公开仓包含。
+
+## 用户裁定（2026-11-04，归档后追加）
+
+- **本轮修正版不再复测，流程单向**：skill 测评门禁为一次性判定——测评通过即生效，移交后 Codex 的工程修正（含非作者复核修正）不再触发用户复测；原"有效（effective）"结论覆盖最终合并版（`30eda70`）。上文"修正版未复测"等为裁定前的如实记录，原样保留不改写；工程规范 §5 门禁条款已同步补记单向规则。
+- **同意测评口径处理**：目录测评卡仅采用无歧义的条目累计口径（16.2%→29.4%，+13.2pp）；原回执（含"产物口径 +27.9pp（14.7%→44.1%）"算术不自洽处）原样保留，不覆盖不静默修正。

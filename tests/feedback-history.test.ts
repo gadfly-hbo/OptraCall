@@ -21,7 +21,7 @@ test('FC13: a selected native reply is owner-bound, exact and read without rewri
   const bytes = Buffer.from([{type:'session',version:3,id:sessionId,timestamp:now,cwd:path.join(project.rootPath,'020_clean')},old,current].map(x=>JSON.stringify(x)).join('\n')+'\n');
   await fs.writeFile(file,bytes,{mode:0o600}); await store.setSession(project.id,task.id,file);
   const source = await store.getTask(project.id,task.id);
-  const history = savedTaskHistory(project,source,'synthetic-history');
+  const history = await savedTaskHistory(project,source,'synthetic-history');
   assert.equal(history.messages.length,1);
   assert.equal(history.messages[0]?.nativeEntryId,'selected-reply');
   assert.equal(history.messages[0]?.nativeSessionId,sessionId);

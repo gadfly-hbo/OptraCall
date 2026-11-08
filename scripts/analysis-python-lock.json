@@ -1,0 +1,12 @@
+{
+  "id": "cpython-3.14.4-arm64-duckdb-2.0.0-openpyxl-3.1.5",
+  "python": "3.14.4",
+  "machine": "arm64",
+  "interpreter": "/opt/homebrew/Cellar/python@3.14/3.14.4_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
+  "interpreterSha256": "5ce0f1ab504ae7c1caefa42350a75f6e4e89dc9941723e67bb450713ef27fc9c",
+  "packages": [
+    { "name": "duckdb", "version": "2.0.0", "filename": "duckdb-2.0.0-cp312-abi3-macosx_11_0_arm64.whl", "sha256": "b5d758b53751c930e09d371230241005ea5203c8edc65a1e1fafca83fcc906ef" },
+    { "name": "openpyxl", "version": "3.1.5", "filename": "openpyxl-3.1.5-py2.py3-none-any.whl", "sha256": "5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2" },
+    { "name": "et-xmlfile", "version": "2.0.0", "filename": "et_xmlfile-2.0.0-py3-none-any.whl", "sha256": "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa" }
+  ]
+}

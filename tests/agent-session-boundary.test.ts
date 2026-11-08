@@ -7,10 +7,71 @@ test('SDK private installed paths remain confined to the sole reviewed SDK surfa
   const source = `import { loadMcpConfig } from '${privatePath}';`;
   assert.ok(inspectSessionSource('extensions/business-plugins/example/entry.ts', source).length, 'relative node_modules paths must not bypass the SDK import boundary');
   assert.ok(inspectSessionSource('src/host/feature.ts', `import x from 'file:///example/node_modules/@earendil-works/pi-coding-agent/dist/index.js';`).length);
-  assert.deepEqual(inspectSessionSource('src/agent/sdk.ts', `import { loadMcpConfig } from '../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js';`), [], 'the fixed IN06 thin import stays at the existing sole SDK surface');
+  assert.deepEqual(inspectSessionSource('src/agent/sdk.ts', `export async function getSdkMcpConfigLoader() { if (VERSION !== '1.4.0') throw new Error('unsupported'); const { loadMcpConfig } = await import('../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js'); return loadMcpConfig; }`), [], 'the fixed IN06 thin import stays behind the pinned check at the existing sole SDK surface');
+});
+
+test('R4: fixed SDK surface rejects unreviewed internal paths, early loading and direct Pi dependency imports', () => {
+  for (const source of [
+    `import { loadMcpConfig } from '../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js';`,
+    `const config = await import('../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js');`,
+    `export async function getSdkMcpConfigLoader() { return import('../../node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js'); }`,
+    `export async function getSdkMcpConfigLoader() { return import('../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js'); }`,
+  ]) assert.ok(inspectSessionSource('src/agent/sdk.ts', source).length, source);
+  for (const name of ['agent-core', 'ai', 'codemode', 'mcp', 'tui', 'telemetry']) {
+    for (const source of [`import x from '@earendil-works/pi-${name}';`, `export * from '@earendil-works/pi-${name}';`, `const x = import('../../../node_modules/@earendil-works/pi-${name}/dist/index.js');`]) {
+      assert.ok(inspectSessionSource(plugin, source).length, source);
+    }
+  }
+});
+
+test('R4: known SDK definition writes fail while new Host-owned definitions remain legal', () => {
+  for (const mutation of [
+    `definition.execute = wrapped;`, `definition['execute'] = wrapped;`,
+    `const alias = definition; alias.execute = wrapped;`,
+    `Object.assign(definition, { execute: wrapped });`,
+    `Object.defineProperty(definition, 'execute', { value: wrapped });`,
+    `Object.defineProperties(definition, { execute: { value: wrapped } });`,
+    `Reflect.set(definition, 'execute', wrapped);`,
+  ]) assert.ok(inspectSessionSource('src/agent/project-session.ts', `const definition = session.getToolDefinition(name); ${mutation}`).length, mutation);
+  assert.ok(inspectSessionSource('src/agent/project-session.ts', `session.getToolDefinition(name).execute = wrapped;`).length);
+  assert.deepEqual(inspectSessionSource('src/agent/tool-context-adapter.ts', `const owned = Object.create(Object.getPrototypeOf(original), Object.getOwnPropertyDescriptors(original)); owned.execute = wrapped;`), []);
+});
+
+test('R4 review regression: expression wrappers cannot hide a known SDK definition write', () => {
+  for (const value of ['(session.getToolDefinition(name))', 'session.getToolDefinition(name)!', '(session.getToolDefinition(name) as ToolDefinition)', '(<ToolDefinition>session.getToolDefinition(name))', '(session.getToolDefinition(name) satisfies ToolDefinition)']) {
+    assert.ok(inspectSessionSource('src/agent/project-session.ts', `${value}.execute = wrapped;`).length, value);
+    assert.ok(inspectSessionSource('src/agent/project-session.ts', `Reflect.set(${value}, 'execute', wrapped);`).length, value);
+  }
+  for (const mutation of ['(definition.execute) = wrapped;', '(Object.assign)(definition, {execute: wrapped});', '(Reflect.set)(definition, "execute", wrapped);']) {
+    assert.ok(inspectSessionSource('src/agent/project-session.ts', `const definition = session.getToolDefinition(name); ${mutation}`).length, mutation);
+  }
+});
+
+test('R4 review regression: SDK provenance respects function/block/parameter shadowing and follows a real outer alias', () => {
+  const file = 'src/agent/project-session.ts';
+  for (const legal of [
+    `function inspect() { const definition = session.getToolDefinition(name); return definition; }
+     function own() { const definition = { execute: original }; definition.execute = wrapped; }`,
+    `const definition = session.getToolDefinition(name); function own(definition) { definition.execute = wrapped; }`,
+    `const definition = session.getToolDefinition(name); { const definition = { execute: original }; definition.execute = wrapped; }`,
+    `const definition = session.getToolDefinition(name); function own({definition}) { definition.execute = wrapped; }`,
+    `const definition = session.getToolDefinition(name); { const {definition} = hostOwned; definition.execute = wrapped; }`,
+    `const definition = session.getToolDefinition(name); function own([definition]) { definition.execute = wrapped; }`,
+  ]) assert.deepEqual(inspectSessionSource(file, legal), [], legal);
+  assert.ok(inspectSessionSource(file, `const definition = session.getToolDefinition(name); function nested() { const alias = definition; alias.execute = wrapped; }`).length);
+  assert.ok(inspectSessionSource(file, `function nested() { { var definition = session.getToolDefinition(name); } definition.execute = wrapped; }`).length);
+  assert.ok(inspectSessionSource(file, `function inspect() { var definition = session.getToolDefinition(name); var definition; definition.execute = wrapped; }`).length);
 });
 
 const plugin = 'extensions/business-plugins/example/session.ts';
+
+test('SAM11: the reviewed SAP Host registrar can bind a public domain but cannot own an SDK runtime', () => {
+  const file = 'src/host/sap-method-sessions.ts';
+  assert.deepEqual(inspectSessionSource(file, `import { createAgentSessionDomain } from './agent-sessions.ts';`), []);
+  assert.ok(inspectSessionSource(plugin, `import { createAgentSessionDomain } from '../../../src/host/agent-sessions.ts';`).length > 0);
+  assert.ok(inspectSessionSource(file, `import { ProjectAgent } from '../agent/project-runtime.ts'; new ProjectAgent(options);`).length > 0);
+  assert.ok(inspectSessionSource(file, `import { createAgentSession } from '../agent/sdk.ts';`).length > 0);
+});
 
 test('a feature uses injected session types without importing a runtime or constructing a manager', () => {
   const source = `import type { SessionRef, SessionTurn } from '../../../src/host/agent-sessions.ts';
@@ -94,4 +155,29 @@ test('protected execution utilities may use native tools but cannot become anoth
     `import { createAgentSessionDomain } from '../host/agent-sessions.ts';`,
   ]) assert.ok(inspectSessionSource(file, source).length, source);
   assert.ok(inspectSessionSource(plugin, `import { createReadTool } from '../../../src/agent/sdk.ts';`).length);
+});
+
+test('MP06 value-only model executor can import its encoded data module but no arbitrary module',()=>{
+ const runner='src/host/model-pack-runner.mjs';
+ const data="await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);";
+ assert.deepEqual(inspectSessionSource(runner,data),[]);
+ for(const file of [runner,plugin]) {
+  assert.ok(inspectSessionSource(file,'await import(modulePath);').length);
+  assert.ok(inspectSessionSource(file,'await import(`file://${modulePath}`);').length);
+ }
+ assert.ok(inspectSessionSource(plugin,data).length);
+ assert.deepEqual(inspectSessionSource('src/agent/model-pack-tools.ts',"import { defineTool } from './sdk.ts';"),[]);
+ assert.ok(inspectSessionSource('src/agent/model-pack-tools.ts',"import { SessionManager } from './sdk.ts';").length);
+});
+
+test('S4 exact synthetic SDK fixtures and engineering Store loader are reviewed without widening product runtime imports', () => {
+  for (const file of ['tests/s4-runtime-lifecycle.test.ts', 'tests/s4-runtime-sdk.test.ts']) {
+    assert.deepEqual(inspectSessionSource(file, `import { ProjectAgent } from '../src/agent/project-runtime.ts'; new ProjectAgent(options);`), []);
+  }
+  const nativeLoader = 'scripts/fourbase_l2/authority.mjs';
+  assert.deepEqual(inspectSessionSource(nativeLoader, 'const load = relative => import(pathToFileURL(path.join(input.sourceRoot, relative)).href);'), []);
+  assert.ok(inspectSessionSource(nativeLoader, `import { createAgentSession } from '@earendil-works/pi-coding-agent';`).length > 0);
+  assert.ok(inspectSessionSource(nativeLoader, `import { ProjectAgent } from '../../src/agent/project-runtime.ts'; new ProjectAgent(options);`).length > 0);
+  assert.ok(inspectSessionSource('scripts/fourbase_l2/unreviewed.mjs', 'await import(arbitraryRoot);').length > 0);
+  assert.ok(inspectSessionSource(nativeLoader, 'await import(arbitraryRoot);').length > 0, 'only the reviewed original Store-loader expression is excepted');
 });

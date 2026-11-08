@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "kind": "optracall.semantic-adoption-sources",
+  "release": "sc01s-v0.2",
+  "nature": "deidentified-definitions-and-synthetic-scenario",
+  "scope": "仅一个明确SC-01S合成项目；不将本题条件迁入其他项目或当真实企业通则",
+  "sources": {
+    "analysisInput": {
+      "path": "openspec/changes/fourbase-l2-rollout/assets/adoption-sc01s-v0.2/analysisInput.json",
+      "bytes": 3765,
+      "sha256": "3602ec2e1b90652585e925f2c134ff97fd053707d3f277a9ca48cdc9d05eded8"
+    },
+    "sapPackage": {
+      "path": "openspec/changes/fourbase-l2-rollout/assets/adoption-sc01s-v0.2/sapPackage.json",
+      "bytes": 6468,
+      "sha256": "e0d83babb8c0675e423586b24564aeacaecbe6623bf51e5ce6834c6f04b8eca1"
+    },
+    "method": {
+      "path": "openspec/changes/fourbase-l2-rollout/assets/adoption-sc01s-v0.2/method.json",
+      "bytes": 6371,
+      "sha256": "6c3f3445321227e9297c1f013c22208741bc6e0e1aa826fec12381d4b6fe6235"
+    },
+    "semantics": {
+      "path": "openspec/changes/fourbase-l2-rollout/assets/adoption-sc01s-v0.2/semantics.json",
+      "bytes": 8342,
+      "sha256": "e6b46282114221c762b5686b9fd315ef00feb5348f057602544d6c9111d57964"
+    },
+    "metricExcerpt": {
+      "path": "openspec/changes/fourbase-l2-rollout/data/metric-candidates.v0.1.json",
+      "bytes": 10480,
+      "sha256": "f5e5665c9d4fa9d9dc9dfebf077322e4ab503f5c6813933cf3ee0305c5d88275"
+    }
+  },
+  "excluded": [
+    "raw corporate workbook and identities",
+    "gold/reference answers/readiness/target totals",
+    "old project/task/native/auth/graph UUIDs",
+    "professional scores and model execution receipts"
+  ]
+}

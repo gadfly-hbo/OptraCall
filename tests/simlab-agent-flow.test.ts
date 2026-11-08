@@ -12,7 +12,8 @@ async function settled(host: Awaited<ReturnType<typeof startTestHost>>, route: s
   for (;;) {
     const state = await json(await host.request(route));
     if (state.task.lastRun?.id === requestId && state.task.lastRun.status !== 'running') {
-      assert.equal(state.task.lastRun.status, 'completed'); return state;
+      assert.equal(state.task.lastRun.status, 'completed');
+      if (state.snapshot.status === 'idle') return state;
     }
     if (Date.now() > deadline) assert.fail(`Agent flow did not settle: ${JSON.stringify(state.task.lastRun)}`);
     await new Promise(resolve => setTimeout(resolve, 30));

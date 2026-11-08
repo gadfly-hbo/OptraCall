@@ -1,0 +1,60 @@
+{
+  "approved_at": "2026-11-07",
+  "user_decision": "两项都按你的建议，spec 和 UI Demo 确认通过。按工程规范开始实施，保留原方案、项目、会话和文件，暂不做 Git 交付、迁移或服务切换。",
+  "baseline_commit": "98ee477eb1a3f9bdb0d64f1eed7cbb613b4e00bc",
+  "approved_package": "/Users/bendandebaba/.codex/visualizations/2026/11/06/01a1b192-41a9-7061-9b67-fd018cbba5a3/studio-phase1-review",
+  "files": {
+    "README.md": {
+      "bytes": 3258,
+      "sha256": "8e7aca3b019f4a63a705478dbc1256f6d876615027e02ee7dd636b2e1eb24718"
+    },
+    "baseline-contract.md": {
+      "bytes": 20577,
+      "sha256": "b5432a34513f894a3b423f6b652b799b4dfedc0051271e01a418a1cad1ce1fc8"
+    },
+    "current-main-architecture.md": {
+      "bytes": 12708,
+      "sha256": "10820931278aa78af390b780d2b1fa376d0daf62c808c8266fdf7195389aa8a3"
+    },
+    "current-ui-evidence.md": {
+      "bytes": 13669,
+      "sha256": "4ac80a53cfb6500a1733a60697a1387708aba1fe6d019ab99a0e56ba7b6932e0"
+    },
+    "independent-review.md": {
+      "bytes": 11426,
+      "sha256": "f85ae7a9a8b98d9ed3249d212e85fc29352ba0b80c2fbb6c3493ac457e1f580e"
+    },
+    "index.html": {
+      "bytes": 1730,
+      "sha256": "c3d17b79b5b7828b28243eb4b36b15939825c650a2d91de81e06eac3861e2c2b"
+    },
+    "interaction-states.md": {
+      "bytes": 13658,
+      "sha256": "10ff1995c4465362cdfda9ae46d78c4326a9c76216809293bfb987ddf074f9aa"
+    },
+    "spec.md": {
+      "bytes": 18298,
+      "sha256": "e32d8ccfdc4ec5b59193a1574a9fd73b19e16e9aa48100d97c663619cc0612fc"
+    },
+    "studio-demo.css": {
+      "bytes": 20653,
+      "sha256": "293fba46adfd525ccfee19b25023fdc1b06b3e5387b27069988e5e8996181bbb"
+    },
+    "studio-demo.js": {
+      "bytes": 83896,
+      "sha256": "02fdcface293bee966fc7fcbe1337c3af5190b79b867f03969266aff053aec2f"
+    },
+    "synthetic-data.md": {
+      "bytes": 3588,
+      "sha256": "d52dd15c62505a0ec9384963e43f845a3d81e0ac6f69dc6c25334c04fcd400b5"
+    },
+    "verification.md": {
+      "bytes": 4704,
+      "sha256": "efb9ba1eb259b66066abe0f2160a14f851625c434eef087eb50ec91763461c48"
+    }
+  },
+  "product_plan_sha256": "4b731550cf17ed4dfe0f5316f57d96f8a72e4896cd2c0853c4095ef2e12598e0",
+  "git_delivery": false,
+  "migration": false,
+  "service_adoption": false
+}

@@ -12,7 +12,7 @@ export interface ProjectConfiguration { id: string; revision: number; provider: 
 export interface ProjectRun { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic }
 export interface UploadedFile { id: string; originalName: string; path: string; bytes: number; sha256: string; uploadedAt: string; source: { kind: 'upload' | 'copy' | 'user-save-report'; from?: string } }
 export interface FeedbackTaskOrigin { handoffId: string; operationId: string; requestHash: string }
-export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin }
+export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin }
 export interface ProjectRecord { schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
 export class ProjectStoreFault extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
@@ -172,7 +172,9 @@ export class ProjectStore {
       if (input.sessionFile !== undefined) { if (typeof input.sessionFile !== 'string') fail('invalid_project_metadata'); await this.#validateSession(id, task, input.sessionFile as string); task.sessionFile = input.sessionFile as string; }
       if (input.lastRun !== undefined) task.lastRun = validRun(input.lastRun);
       if (input.simulationTools !== undefined) { if (typeof input.simulationTools !== 'boolean') return fail('invalid_project_metadata'); task.simulationTools = input.simulationTools; }
+      if (input.weatherTools !== undefined) { if (typeof input.weatherTools !== 'boolean') return fail('invalid_project_metadata'); task.weatherTools = input.weatherTools; }
       if (input.tradeAreaTools !== undefined) { if (typeof input.tradeAreaTools !== 'boolean') return fail('invalid_project_metadata'); task.tradeAreaTools = input.tradeAreaTools; }
+      if (input.modelTools !== undefined) { if (typeof input.modelTools !== 'boolean') return fail('invalid_project_metadata'); task.modelTools = input.modelTools; }
       if (input.feedbackOrigin !== undefined) task.feedbackOrigin = feedbackOrigin(input.feedbackOrigin);
       tasks.push(task);
     }
@@ -217,6 +219,10 @@ export class ProjectStore {
     return projects.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   }
   async get(id: string): Promise<ProjectRecord> { return this.#decorate(await this.#read(id)); }
+  /** Data-context saves share the project gate with archive and existing writes. */
+  withDataContextMutation<T>(projectId: string, operation: (project: ProjectRecord) => Promise<T>): Promise<T> {
+    return this.#mutation(async () => { const project = await this.#read(projectId); this.#active(project); return operation(this.#decorate(project)); });
+  }
   #active(project: StoredProject): void { if (project.archivedAt !== null) fail('project_archived'); }
   rename(id: string, input: string): Promise<ProjectRecord> {
     const name = projectName(input);
@@ -235,13 +241,15 @@ export class ProjectStore {
   }
   #task(project: StoredProject, taskId: string): StoredTask { this.#id(taskId); const task = project.tasks.find(task => task.id === taskId); if (!task) return fail('task_not_found'); return task; }
   async getTask(projectId: string, taskId: string): Promise<TaskRecord> { return this.#decorateTask(projectId, this.#task(await this.#read(projectId), taskId)); }
-  createTask(projectId: string, input: { name: string; configuration?: ProjectConfiguration; simulationTools?: boolean; tradeAreaTools?: boolean }): Promise<TaskRecord> {
+  createTask(projectId: string, input: { name: string; configuration?: ProjectConfiguration; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean }): Promise<TaskRecord> {
     const name = projectName(input.name);
+    if (input.modelTools !== undefined && typeof input.modelTools !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
+    if (input.weatherTools !== undefined && typeof input.weatherTools !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
     if (input.tradeAreaTools !== undefined && typeof input.tradeAreaTools !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
     return this.#mutation(async () => {
       const project = await this.#read(projectId); this.#active(project);
       const configuration = publicConfiguration(input.configuration ?? project.configuration), id = randomUUID(), now = new Date().toISOString();
-      const task: StoredTask = { id, name, createdAt: now, updatedAt: now, configuration, draft: '', sessionStorage: 'task', ...(input.simulationTools ? { simulationTools: true } : {}), ...(input.tradeAreaTools ? { tradeAreaTools: true } : {}) };
+      const task: StoredTask = { id, name, createdAt: now, updatedAt: now, configuration, draft: '', sessionStorage: 'task', ...(input.simulationTools ? { simulationTools: true } : {}), ...(input.tradeAreaTools ? { tradeAreaTools: true } : {}), ...(input.weatherTools ? { weatherTools: true } : {}), ...(input.modelTools ? { modelTools: true } : {}) };
       const next = { ...project, tasks: [...project.tasks, task], updatedAt: now }; this.#metadataBytes(next);
       const tasks = path.join(this.dataRoot, 'projects', projectId, 'tasks');
       await this.#directory(tasks); await this.#directory(path.join(tasks, id)); await this.#directory(this.#taskDirectory(projectId, task));
@@ -360,7 +368,7 @@ export class ProjectStore {
       return this.#upload(projectId, this.#uploadInput(originalName, source.bytes, 'project-material'), '020_clean', { kind: 'copy', from: relativeRawPath });
     });
   }
-  async tree(projectId: string): Promise<FileNode[]> {
+  async tree(projectId: string, directories: readonly ProjectDirectory[] = PROJECT_DIRECTORIES): Promise<FileNode[]> {
     await this.#assertProject(projectId);
     const node = async (relative: string): Promise<FileNode> => {
       const target = await this.#safePath(projectId, relative), stat = await fs.lstat(target), name = path.basename(target);
@@ -369,7 +377,7 @@ export class ProjectStore {
       for (const entry of (await fs.readdir(target)).sort((a, b) => a.localeCompare(b))) children.push(await node(`${relative}/${entry}`));
       return { name, path: relative, kind: 'directory', children };
     };
-    return Promise.all(PROJECT_DIRECTORIES.map(directory => node(directory)));
+    return Promise.all(directories.map(directory => node(directory)));
   }
   async readFile(projectId: string, relativePath: string): Promise<{ name: string; bytes: Buffer }> {
     const target = await this.#safePath(projectId, relativePath), before = await fs.lstat(target);
@@ -395,18 +403,19 @@ export class ProjectStore {
       return { sha256: digest.digest('hex'), bytes, observedAt: new Date().toISOString() };
     } finally { await handle.close(); }
   }
-  /** Same-handle source capture for the explicitly selected feedback materials. */
-  async captureFeedbackFile(projectId: string, relativePath: string): Promise<{ bytes: Buffer; sha256: string; observedAt: string }> {
+  /** Same-handle capture; feedback keeps its 10 MiB default, explicitly fixed inputs may use the upload bound. */
+  async captureFeedbackFile(projectId: string, relativePath: string, maximum = maxUploadBytes): Promise<{ bytes: Buffer; sha256: string; observedAt: string }> {
+    if (!Number.isSafeInteger(maximum) || maximum < 0 || maximum > PROJECT_UPLOAD_MAX_BYTES) return fail('invalid_capture_limit');
     if (!/^(020_clean|060_reports)\//.test(relativePath)) return fail('invalid_feedback_file');
     const target = await this.#safePath(projectId, relativePath), before = await fs.lstat(target, { bigint: true });
     if (!before.isFile() || before.nlink !== 1n) return fail('unsafe_file_path');
-    if (before.size > BigInt(maxUploadBytes)) return fail('upload_too_large');
+    if (before.size > BigInt(maximum)) return fail('upload_too_large');
     const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       const initial = await handle.stat({ bigint: true });
       if (!initial.isFile() || initial.nlink !== 1n || initial.ino !== before.ino || initial.dev !== before.dev) return fail('unsafe_file_path');
       const chunks: Buffer[] = []; let length = 0;
-      for (;;) { const buffer = Buffer.allocUnsafe(65536), chunk = await handle.read(buffer, 0, buffer.length, null); if (!chunk.bytesRead) break; length += chunk.bytesRead; if (length > maxUploadBytes) return fail('upload_too_large'); chunks.push(buffer.subarray(0, chunk.bytesRead)); }
+      for (;;) { const buffer = Buffer.allocUnsafe(65536), chunk = await handle.read(buffer, 0, buffer.length, null); if (!chunk.bytesRead) break; length += chunk.bytesRead; if (length > maximum) return fail('upload_too_large'); chunks.push(buffer.subarray(0, chunk.bytesRead)); }
       const final = await handle.stat({ bigint: true }), current = await fs.lstat(target, { bigint: true });
       if (BigInt(length) !== initial.size || final.size !== initial.size || final.mtimeNs !== initial.mtimeNs || final.ctimeNs !== initial.ctimeNs || current.ino !== initial.ino || current.dev !== initial.dev || current.size !== initial.size || current.mtimeNs !== initial.mtimeNs || current.ctimeNs !== initial.ctimeNs || current.nlink !== 1n || current.isSymbolicLink()) return fail('file_changed_during_observation');
       const bytes = Buffer.concat(chunks, length); return { bytes, sha256: createHash('sha256').update(bytes).digest('hex'), observedAt: new Date().toISOString() };

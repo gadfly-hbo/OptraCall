@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-07",
+  "user_instruction": "做真实模型专业验收、Git 交付、迁移或服务切换",
+  "device_clarification": "Mac mini 与 MacBook 都更新",
+  "runtime_targets": ["Mac mini", "MacBook"],
+  "supersedes_task_deferrals": ["real-model professional validation", "Git delivery", "necessary migration", "service switching"],
+  "retained_boundaries": ["preserve original plans, projects, sessions and files", "preserve original failures and unknown results", "official unmodified Pi and Semantica", "no unapproved SDK version upgrade", "no automatic provider top-up", "do not copy synthetic validation data into formal runtime", "MacBook receives main for product trial rather than development"],
+  "model_execution_choice": "reuse current locally selected native configuration; exact tuple and revision recorded per run, no automatic model switch",
+  "formal_migration_rule": "perform only a verified necessary format migration; keep existing data in place when already compatible"
+}

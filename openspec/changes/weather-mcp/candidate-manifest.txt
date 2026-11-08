@@ -1,0 +1,14 @@
+35f93c9166fcd568  AGENTS.md
+193baa9a9fe0943b  extensions/connectors/weather-mcp/README.md
+e9b922b597cd7b7e  extensions/connectors/weather-mcp/cache.ts
+256a6a3e2b748f12  extensions/connectors/weather-mcp/connector.json
+526d794a230ea1cc  extensions/connectors/weather-mcp/coverage.ts
+72c7194ac9d5db1e  extensions/connectors/weather-mcp/main.ts
+99de980f1c19f91d  extensions/connectors/weather-mcp/open-meteo.ts
+791c2a757f004434  extensions/connectors/weather-mcp/server.ts
+32bb48001521eaf8  extensions/connectors/weather-mcp/service.ts
+f7f9b5b35d8c8696  extensions/connectors/weather-mcp/types.ts
+5b23f726cfec567c  openspec/changes/weather-mcp/result.md
+fc771ca36730f1df  openspec/changes/weather-mcp/review-handoff.md
+192256e738471b11  openspec/changes/weather-mcp/spec.md
+22d01f73c86eb06e  tests/weather-mcp.test.ts

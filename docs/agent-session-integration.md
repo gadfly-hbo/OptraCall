@@ -2,6 +2,10 @@
 
 当前工程增量适用Interface v3，兼容原v1/v2业务调用子集。强制接入规则的唯一来源是[工程规范IN01–IN07](engineering-workflow.md)；本说明提供类型定位、使用方法及验证入口，不维护另一套规则。准确字段和返回类型以[src/host/agent-sessions.ts](../src/host/agent-sessions.ts)导出的`AGENT_SESSION_INTERFACE_VERSION`、`AgentSessionPort`、`SessionProfile`等为准。下文历史v1接入保留其当时事实，不代表自动核算整包或产品验收已完成。
 
+涉及 SDK／依赖／适配变化时，同时执行[官方 Pi SDK 来源与版本约束](engineering-workflow.md#官方-pi-sdk-来源与版本约束)和[升级流程](engineering-workflow.md#pi-sdk-升级流程)。本说明及 Interface v3 的旧验收不豁免包完整性、用户指定版本或内部接口逐版复核；当前核对与未处理风险见[记录](../openspec/changes/pi-sdk-governance/result.md)。
+
+涉及 Semantica 接缝时，另按同源[官方组件规则](engineering-workflow.md#semantica-官方组件来源与版本约束)与[资产兼容及回退流程](engineering-workflow.md#semantica-升级验证与回退)核对；不因本说明沿用 Interface v3 就豁免组件版本、原包或既有图资产的验证。
+
 ## 开始接入前
 
 在当前变更规格中记录：工程规范版本、Interface版本、真实owner、Host注册位置/profile、允许修改路径、模型/工具/历史策略与验收。遇到新能力时先核对现有Interface是否表达得了，按IN06补齐适配与验收；有实质业务差异的部分留在业务模块。
@@ -12,6 +16,7 @@
 - [需求梳理Host适配器](../src/host/requirement-sessions.ts)：当前配置捕获、独立workspace、生成及一次修正的会话占用。
 - [公共接口与实现](../src/host/agent-sessions.ts)：启动、占用、配置身份、取消/关闭及代际保护。
 - [公共行为及第三合成消费者测试](../tests/agent-sessions.test.ts)：通过同一实现接入不同profile，验证状态/事件/取消的隔离。测试消费者不代表新增产品插件。
+- [SAP方法后置提取](../src/host/sap-method-sessions.ts)：Interface v3附属profile，真实源project/task＋提取身份，独立原生会话；`source-reader`只读获准固定来源，不加载执行工具／用户扩展／skills／MCP，不续接原任务会话。具体合同与本地验收见[实施合同](../openspec/changes/sap-analysis-methods/implementation-contract.md)。
 
 ## 接入关系与类型
 
@@ -28,6 +33,8 @@ Host静态注册profile，用`createAgentSessionDomain(options)`创建独立域�
 | `AgentSessionDomain<Owner>` | Host管理表面，另有注册Ref及按范围关闭能力；不传给Extension |
 
 TypeScript类型本身不构成安全隔离。Host仍负责封闭注册、验证真实业务归属和授权；调用方拿到合法Ref也不能扩大数据、工具或经营动作权限。域与owner隔离是同进程逻辑隔离，不是进程隔离或敏感数据沙箱。
+
+Host的`busyInScope(filter, ownerMatches?)`可对同一公共资源状态作更精确的只读owner筛选；当前SAP提取用它查询同task所有提取及失败关闭残留。该谓词不进入`AgentSessionPort`或可序列化输入，不授予运行或关闭资格，Interface版本保持v3。
 
 PPT接线修复为Host增加同一公共域上的只读`busyInScope({projectId?,provider?})`查询：直接投影原slot、operation、opening、resource及retirement状态，覆盖准备、阶段间和收尾，不创建资源或第二份状态台账。它与`closeAll`一样只留在Host管理表面，排除于业务`AgentSessionPort`；业务调用子集及Interface v3不变。真实项目owner仍由Host验证，不能从客户端路径自造；检查覆盖匹配／不匹配范围、取消后的实际收尾和第三合成消费者。
 
@@ -145,8 +152,47 @@ Host的`closeAll({ provider?, projectId? })`在注册域间协调，各域权威
 
 ## 接入验证与工具读取
 
+任务内前台委派与原生联网沿用 Interface v3 及原 project/task owner，接缝契约和适用范围见[任务 Agent 能力规格](../openspec/changes/task-agent-capabilities/spec.md)。`subagent` 在同一父 Resource 中管理隔离内存 SDK 子会话；不向 Extension 开放域注册、凭据或另起 Runtime。普通与受管 ordinary 项目任务可用，protected、固定文本和专属业务 workspace 排除；子工具权限与执行资源仍由原父 scope 管理。
+
+角色来自实际已加载 skill 的 `agents/*.md`，使用命名空间及只收窄的工具清单；`web_search` 表示已接通 Provider 的服务端能力，只有声明或缺省继承该能力的角色获得它。子结果和失败经父工具回执保存，不提供后台存续或独立子 native 历史。MiniMax 原生块续接、MiMo 来源回执与新可选 assistant 元数据由 SDK 钩子薄适配，旧记录不回填；协议续接所需的隐藏技术记录不作为用户业务消息发往 Provider。准确调用、限制、验证及尚未执行的 Git/运行采用状态以本变更结果和 Qoder 回执为准。
+
 按当前变更实际范围关联SM01–SM14证据。检查入口由`package.json`提供：`check:agent-sessions`检查导入/构造路径，`check`同时运行约束、长期测试及构建，CI沿用同一入口。共享行为测试与实际Host/SDK合成Provider、正常HTTP/UI、保存/重开、取消及RAP+SAP+Case联合回归互补；不能只靠import通过或内部Map断言宣称完成。
 
 边界脚本使用当前锁定TypeScript的AST解析，识别静态导入、重导出、require、动态import及已知直接构造；忽略注释、字符串、JSX和模板正文，仍检查模板表达式中的调用。准确例外及理由在[scripts/check-agent-session-boundary.mjs](../scripts/check-agent-session-boundary.mjs)，覆盖SDK薄层、公共实现、原生历史读取、固定连接探针和明确测试路径。没有Host或tests全目录豁免。检查不解释所有反射/动态代码，也不替代资源归属和业务策略的独立复核。
 
 工具读取证据分开记录：先核对当前安装版Codex/Qoder实际项目入口，再用触发IN01的只读接入规划任务观察实际读取记录和规则版本。AGENTS、加载器代码或入口文件可访问只证明可达，不能证明任务已读取；某工具不可用或未现场核验，记NOT_RUN。工具项目入口只引用本工程规范与本说明，不复制正文、修改全局配置或开启MacBook开发。完整结果由[本变更记录](../openspec/changes/unified-session-management-phase1/result.md)保存，不能从文档存在推导SM14已通过。
+
+## 个人资料按需复用（M4）
+
+M4 v0.2沿Interface v3业务子集、原project-tasks owner和配置／lease；`ProjectAgentOptions.personalContext`为Host注入的只读find/read callback，不可从业务JSON或worker options自行注册，现有IPC只传启用标记与受限请求／回包。普通unmanaged真实项目任务可自主使用`find_personal_context`／`read_personal_context`，零调用正常；受管ordinary只接用户显式选择的固定文本。冷读、封闭文本和插件资源不因M4得到个人资料工具或材料。
+
+`ProvidedContextInput.personal`可选地携带准备好的文本及最小receipt；文本由原用户请求送SDK，原生`providedContext.personal`仅存schemaVersion／实际items元信息。请求fingerprint包含准确选择与范围，已接受的同ID请求先回读，不按今天源状态或纠正重送。没有第三声明工具、机器成果采用关系或新增持久消息／正文库。
+
+Pi1.4.0的`ctx.executeTool`已提供参数／权限hooks及nested，但SDK原工具ctx在调用结束后仍可能被保留复用；M4启用时沿public工具定义给ctx委托增加绑定现有ActiveRun／session／manager／SDK signal及实际调用存续期的最小闭包，保留原SDK delegate及合法直接／多层nested。它不新建生命周期、运行队列或业务代际；相同manager的跨run、旧parent、同ID／覆盖signal及合法组合均另有实际合成反例／正例。其它profile不启用此适配。
+
+新增及受影响的历史读取沿现safe snapshot、public parser／inMemory投影，绝不以`SessionManager.open`迁移或初始化原件。显式打开新会话时复用既有SDK导出／首次持久化路径保存真实空header，历史GET不补造丢失记录。实际保存的工具content／用户请求与当时治理是交付依据；nested只有父元信息时子正文UNKNOWN，不强迫重读补证。人的历史页一击按准确native记录重新读取，并另核此刻治理；不以挂载时缓存当“今天可读”。
+
+本期合同／符合性、检查与限制见[M4 spec](../openspec/changes/fourbase-context-reuse/spec.md)及[实施记录](../openspec/changes/fourbase-context-reuse/implementation.md)。本地合成工程验证不代表真实模型质量、经营收益、Git／CI或运行采用。
+
+## Case判断与方案草案（M5）
+
+M5沿Interface v3业务子集和原project-tasks／unmanaged owner，通过`ProjectAgentOptions.caseDecisions`提供窄业务read/save callback。两个Pi工具为`read_case_decisions`／`save_case_decision_draft`；复用M4既有IPC请求、取消与call-local SDK ctx资格，不创建新会话域、运行队列或工具循环。回调函数不跨IPC，仅传Host生成的启用位；workspace／managed／cold／sealed／插件不获Case工具。普通无Case任务仍正常分析，本轮无绑定时Case写不可用。
+
+当轮Case取原`task_context_prepare`完成回执，核对其命名空间、真实project/task/request及snapshot归属；不猜项目关联的首末Case，不持久新增task→Case指针。sessionId/toolCallId和signal来自实际SDK调用及原ActiveRun，Host核资格后按真实namespace派生operationId；模型参数不接Case、权限、用户作者或人的选择／执行／反馈。取消前已提交的Case事务保留；晚到新写拒绝，原操作可查，不重跑模型。
+
+Case业务SQL及原operation receipt是业务保存权威，native只证明实际给Agent的结果；合法nested继续走SDK组合，只有父元信息时不伪造子正文。目录只返回有界元信息，准确正文分片；请求及工具输出预算分别校验，不把已保存行重新当请求而损坏合法数据。人的选择／关联／归档／恢复沿Case UI，与Agent工具和会话发送资格分开；同App的未完成UI意图按store/Case暂存React状态，不成为持久账或Runtime权威。
+
+兼容启动采用当前固定候选加`--disable-case-decisions`：可读schema1/2和已有新记录、继续原Case维护，关闭新M5工具及业务写入口；原成功operation仍可读回。原schema1二进制不能直接读schema2，不用旧备份覆盖新工作。真实环境首次迁移前须备妥经验证的兼容候选，本轮仅隔离合成验证，未执行真实部署／升级。
+
+批准范围、公开接缝、真实RED／GREEN与实际符合性分别见[M5 spec](../openspec/changes/fourbase-case-decisions/spec.md)和[实施记录](../openspec/changes/fourbase-case-decisions/implementation.md)。原Case／RAP／Board／Feedback及M3.1／M4各自保留权威，Host不裁定因果、代人作取舍或自动派发行动。
+
+
+## 多事项经验来源（M6）
+
+M6仍沿Interface v3／Pi1.4.0和原project-tasks普通unmanaged owner；`ProjectAgentOptions.caseSources`由Host注入窄只读find/read callback，worker仅收到Host生成的`experienceLearningEnabled`位。`read_case_sources`可由未绑定Case的普通任务按需查读当前用户原全局Case可读范围，复用M4同一IPC请求map、SDK call-local、取消与预算；不创建域、会话、循环、后台模型或新运行队列。M5写入仍须原当轮Case回执，不以历史来源Case冒充owner。
+
+Case卡片及人的choice读准确旧引用；原feedback／handoff、Board及个人来源仍由原resolver核对，分片正文显式携带范围／续页和限制。三类LearningSourceRef扩展供个人资料／候选使用；M5 `target.type=source`继续仅旧四类，SQL schema2不变。候选正文仍仅Pi native；人的整理沿原Enterprise草稿CAS、个人元信息CAS和明确retain／pending，不伪装跨Store原子。
+
+兼容启动用当前候选加`--disable-experience-learning`：不提供新工具／新增来源候选写入／候选转整理入口，原v1/v2及既有引用仍可读和原样维护。个人账GET不升级，首次显式新引用写入才升外层v2；原行、操作指纹与native字节不回填。原始v1程序不保证可读v2，不能恢复旧账覆盖新工作。当前项目归档、源Case结束、Agent封闭资格和人的全局资料维护各循原权威。
+
+批准包、真实检查与未验证项见[M6 spec](../openspec/changes/fourbase-experience-learning/spec.md)及[实施记录](../openspec/changes/fourbase-experience-learning/implementation.md)。可选单组对照只新建普通任务并写草稿，不打开Agent或自动发送；真实增益／因果、真实Provider／业务数据、Git／部署及产品验收分别取证。

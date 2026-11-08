@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OptraCall S5 整体确认包 · v0.2</title>
+  <style>
+    :root { color-scheme:light; --ink:#172b34; --muted:#526771; --line:#d7e1e5; --accent:#17665d; --soft:#edf5f3; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#f3f6f7; color:var(--ink); font:16px/1.75 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+    main { max-width:1120px; margin:32px auto; padding:44px; background:#fff; border:1px solid var(--line); border-radius:14px; }
+    h1 { margin:.25em 0; font-size:30px; line-height:1.4; } h2 { margin:34px 0 12px; font-size:21px; }
+    p { margin:10px 0; } a { color:var(--accent); text-underline-offset:3px; } a:focus-visible { outline:3px solid #e3b251; outline-offset:4px; }
+    .eyebrow,.muted { color:var(--muted); } .eyebrow { font-size:13px; letter-spacing:.04em; }
+    .status { display:inline-block; padding:3px 12px; border:1px solid #b9d2cb; background:var(--soft); border-radius:20px; font-size:14px; }
+    .lead { font-size:18px; } .note { padding:16px 20px; border-left:4px solid var(--accent); background:var(--soft); }
+    .flow { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:16px 0; }
+    .step { border:1px solid var(--line); border-radius:10px; padding:16px; } .step strong { display:block; margin-bottom:4px; }
+    .table-wrap { overflow:auto; } table { width:100%; border-collapse:collapse; font-size:14px; }
+    caption { text-align:left; margin-bottom:10px; color:var(--muted); } th,td { padding:12px; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:#f3f7f8; } th:first-child { min-width:80px; } .decisions th:nth-child(2) { width:46%; }
+    code { font:.9em ui-monospace,SFMono-Regular,monospace; overflow-wrap:anywhere; } ul,ol { padding-left:22px; }
+    footer { margin-top:30px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:14px; }
+    @media(max-width:700px) { main { margin:0; padding:24px 18px; border:0; border-radius:0; } h1 { font-size:25px; } .flow { grid-template-columns:1fr; } }
+    @media print { body { background:white; } main { margin:0; max-width:none; padding:0; border:0; } .step,tr { break-inside:avoid; } h2 { break-after:avoid; } a { color:inherit; } }
+  </style>
+</head>
+<body>
+<main>
+<p class="note">当前实施补记：D14全部A已确认；用户明确改用现有MiniMax M3.1 Flash，S5独占、续费关、无接续积分包。独立工程环境已执行，真实模型当前结果请见 <a href="s5-validation.md">S5验证</a> 与 <a href="s5-implementation.md">实施记录</a>；以下原推荐表保留整体确认时点。</p>
+  <header>
+    <p class="eyebrow">OPTRACALL · S5 独立试运行与真实模型验证 · v0.2 · 2026-11-05</p>
+    <h1>验证真实 Agent 能否用好业务语义</h1>
+    <p class="status">D14 九项 A 已整体确认 · 已进入 S5.1</p>
+    <p class="lead">沿用已建的3个核心指标、1份方法、小本体和带源图。先在独立环境，用真实模型和合成材料核实际使用、正确性、质量与成本。</p>
+    <p class="muted">完整合同以<a href="s5-adoption-validation-plan.md">S5整体实施／验证方案</a>为准；<a href="s5-preparation-result.md">准备与复核记录</a>另核。本页是无脚本的方案摘要，不是新增产品页面、UI Demo或实际验证结果。</p>
+  </header>
+
+  <div class="flow" aria-label="三层交付结果">
+    <div class="step"><strong>独立工程环境</strong>新环境能独立启动、查读、重开和维护，不再依赖旧S2 venv／S3测试根。</div>
+    <div class="step"><strong>真实模型合成验证</strong>Agent自主取得和使用语义；与同源L1配对核正确性、时延、费用和维护投入。</div>
+    <div class="step"><strong>真实经营闭环仍待证</strong>目前没有真实经营数据／反馈。本包通过也不代表完整S5、V404或S6／V405完成。</div>
+  </div>
+  <p class="note"><strong>推荐全部A。</strong>9项是新增范围，D12／D13直接沿用。确认后只授权这里列出的隔离实施；费用、材料与模型前置仍须实际核验，不能把未知写成可用。</p>
+
+  <h2>9项整体决定</h2>
+  <div class="table-wrap"><table class="decisions">
+    <caption>已登记9项用户决定：全部A，一致、已确认。获批原文完整保全；当前从S5.1实施。</caption>
+    <thead><tr><th scope="col">项目</th><th scope="col">A 推荐及原因</th><th scope="col">B 替代及影响</th><th scope="col">当前状态</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">D14.1<br>阶段目标</th><td>先做独立隔离环境＋真实模型合成验证；已有材料足以验证语义资产价值，真实经营与正式服务采用另证。</td><td>全部等待真实经营数据；可以延期，但无法先判断实际模型使用效果。</td><td>A／一致<br>已确认</td></tr>
+      <tr><th scope="row">D14.2<br>环境启动</th><td>每链独立数据／项目／企业资料／配置和历史根，只共享无答案的只读源码与依赖；顺序运行一个原Host，避免跨臂报告读取。</td><td>同项目只换task仍共享资料；沿旧环境只能补工程证据，直接切现有服务增加风险。</td><td>A／一致<br>已确认</td></tr>
+      <tr><th scope="row">D14.3<br>资产维护</th><td>无任务项目准备源，新变体不继承旧样本假设；显式新输入／hash／Ref，停妥离线构图、最终重启后新建task并在open前绑定。</td><td>旧UUID／输入hash、同根并行建图或预建task再重启会混版、争锁或失去受管起点。</td><td>A／一致<br>已确认</td></tr>
+      <tr><th scope="row">D14.4<br>模型凭据</th><td>用户后续明确改用现有MiniMax M3.1 Flash／minimax-cn／anthropic-messages及原国内线路；所有本批角色锁同配置，凭据不入模型／日志。原MiMo选择仅保留历史回执。</td><td>换模型须重定准确线路、费用和比较条件；不默换Provider、计费线路或fallback。</td><td>A／一致<br>已确认</td></tr>
+      <tr><th scope="row">D14.5<br>费用准入</th><td>建议新增支出≤100元，须先核S5专用可执行供应商上限／不可超额配额；覆盖所有角色、循环、重试及未知请求。</td><td>事后估算不能硬控费用；新增物理派发守卫需另给受影响合同，不在本A内隐含实施。</td><td>A／一致<br>已确认</td></tr>
+      <tr><th scope="row">D14.6<br>有限对照</th><td>16条managed正式链＋2条unmanaged开放冒烟＋1条取消探针，最多19次任务启动；同源、同参数、同原自动设置，首稿主评／整链次评。</td><td>只跑已知样本不证未见质量；unmanaged不可冒称盲测；另造profile会改比较条件。</td><td>A／一致<br>已确认</td></tr>
+      <tr><th scope="row">D14.7<br>质量收益</th><td>冻结题集／核对标准，独立核数和全文命题，首次与重复／取消分开，全成本报告；允许无增益／FAIL。</td><td>只看命中或公式、挑最佳重跑会掩盖新增错误，不能证明采用或收益。</td><td>A／一致<br>已确认</td></tr>
+      <tr><th scope="row">D14.8<br>维护体验</th><td>核显式新代、源撤回、坏加载、取消、停用graph后有权L1；只验原可选依据，新增必做0，浏览器限制不绕过。</td><td>新增管理UI／台账、自动latest或绕拒绝扩大范围，暂不做。</td><td>A／一致<br>已确认</td></tr>
+      <tr><th scope="row">D14.9<br>执行范围</th><td>整体确认后允许必要工程开发／依赖安装／隔离验证与满足前置的真实模型；Git／现有服务／其他设备／S6不包含。</td><td>若需Git或正式服务采用，另固定目标、版本与回退，不能自动触发。</td><td>A／一致<br>已确认</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>模型、外发内容与费用边界</h2>
+  <p>用户明确变更后的实际单一配置是 <strong>MiniMax M3.1 Flash</strong>：<code>minimax-m31-flash / minimax-cn / anthropic-messages / MiniMax-M3.1-Flash</code>，保留原线路<code>https://api.minimaxi.com/anthropic</code>。源revision5、隔离实际revision1，原未设置thinkingLevel对应实际SDK的high。订阅Key及只读额度已核，用户确认S5独占、续费关、无接续积分包；原MiMo没有模型请求。</p>
+  <ul>
+    <li>确认后才允许经原Host核用本机现有OptraCall中这一provider的凭据，并按原入口保存到S5隔离配置根；不导出其他凭据，不改原默认模型，不取Pi／其他设备凭据，不购买或订阅新服务。</li>
+    <li>允许向该供应商发送选定脱敏语义、新合成订单／退款分析视图、合法条件、任务指令及Agent生成的计算／报告；这仍是数据外发。</li>
+    <li>企业原工作簿、真实身份／经营数据、消息中的凭据、评估／凭据／无关私有根、控制合计、答案、私有评分／旧答案报告和整个仓库不得进入模型材料。原SDK必需的获准cwd／文件引用／运行时技术路径允许最小必要发送，不承诺零绝对路径；认证头只由Host发往获准Provider。</li>
+    <li>所有原自动核算／修订／复查、子Agent、SDK重试及失败／取消均在预算内。19次任务启动不是19次模型请求；按原自动链保守最多87次业务发送，也不是物理请求上限。</li>
+  </ul>
+  <p class="note"><strong>费用控制当前未证。</strong>建议新增支出≤100元，先验证S5专用供应商上限或不可超额／不自动续费后付的专属配额；不修改共享生产Key的限额。SDK catalog价0不等于免费，<code>before_provider_request</code>抛错也不能止付。若费用边界不能证明，继续可独立完成的工程工作，真实模型不开始；不以付费试发来补证。</p>
+
+  <h2>同源比较怎样做</h2>
+  <p>6个新合成未见变体各测L1／L2一次；H1、H4各额外重复一对，共16条正式链。每链独立dataRoot／projectsRoot／企业资料和历史，顺序关闭、切新根启动原Host，不只在共享项目换会话。两臂同模型／定义／字段关联／数据／条件／原自动设置，仅graph能力有无不同；首次6题和每臂2个重复分开。</p>
+  <div class="table-wrap"><table>
+    <caption>题面类别公开，私有金额／答案和评分细目不进被评模型。</caption>
+    <thead><tr><th scope="col">题目</th><th scope="col">观察内容</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">H1 支付／退款</th><td>跨窗口退款按原支付归属，符号及可核金额正确。</td></tr>
+      <tr><th scope="row">H2 门店相抵</th><td>总体与单店分开，不强算零分母贡献率或经营根因。</td></tr>
+      <tr><th scope="row">H3 GMV辨义</th><td>不混并近似名称，正确理解三核心依赖与字段角色。</td></tr>
+      <tr><th scope="row">H4 截数／成熟度</th><td>可核部分可算，未知条件不补成成立。</td></tr>
+      <tr><th scope="row">H5 可比范围</th><td>范围／币种／税口径不明时，不无条件合并或比较。</td></tr>
+      <tr><th scope="row">H6 重复／冲突</th><td>不默认去重／选最新，保留依据、确定部分与未知。</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li>正式链用既有managed ordinary，两臂同开原自动核算、<code>maxAuthorTurns=1</code>，不改产品默认。首次主分析报告为主指标，整条核算／修订链为次指标；受限核算等角色仍不取得graph。</li>
+    <li>原SC-01S只作2次unmanaged开放冒烟；原input／controls保留，新建去控制分析视图和准确M2输入／说明／图。旧CNY／同含税／7日成熟／无重复等设定不继承为H4/H5/H6事实，必要适用版本沿原发布，旧337定位也按新输入重新核计。</li>
+    <li>金标准、旧答案文档、其他链材料／报告／native／缓存放在所有本链可读根之外，先用原受管工具验证跨链／越界拒读；共享只读代码不含评估／答案产物。unmanaged冒烟不叫盲测，污染／未交付不改成通过。</li>
+    <li>正式managed两臂不新增旧目录动作／record权限；用原文件工具取得同一份带源平面语义，L2再加graph，避免以少给L1资料制造优势。</li>
+    <li>独立准备与评分，先固定中性评分再揭臂。报告全部重要新增主张，不只核公式。六个L2首次均无重要错误且unknown处理正确，才能称本题集合成专业通过。</li>
+    <li>不强迫Agent调用图、按顺序读六操作或反复修稿；零调用如实记录使用未证。首次FAIL保留，修候选后新未见批次另定，不挑最好稿。</li>
+  </ul>
+
+  <h2>批准后的四个工程切片</h2>
+  <p class="muted">实际运行使用仓库外任务专属系统临时根，逐链限定HOME／Pi资源和缓存；本地变更目录仅留固定材料／执行证据。先核上下文不继承工程AGENTS／原用户全局资源；临时环境被外部清理后应按清单重建，不称正式服务采用。</p>
+  <ol>
+    <li><strong>S5.1 独立环境：</strong>每链新根、固定依赖／代码，先在tasks为空的项目准备源，关S5实例后离线建图，最终重启后才POST创建首任务，取真实task.id在首次open／messages前填可信绑定。证明不依赖旧S2/S3根且不读其他链报告。</li>
+    <li><strong>S5.2 请求准入：</strong>单一模型、专属费用／配额边界、同源样本／答案隔离和既有受管资格，任一不满足不发真实请求。</li>
+    <li><strong>S5.3 真实模型：</strong>按冻结的19次启动计划留首稿／自动链／native／usage／取消；独立核对与配对比较，不强求正向增益。</li>
+    <li><strong>S5.4 维护收尾：</strong>工程材料核重开／显式更新／撤回／损坏／停用与回退、适用完整检查、全新非作者双轴及四原则；浏览器按可用权限单独核。</li>
+  </ol>
+  <p class="muted">工程切片不是Agent固定分析步骤。原Store权威、D12快照结构、D13工具／权限／Resource生命周期、Pi1.4.0／Interface v3和原native历史直接复用；无新事实库、会话库、全局current或第二Runtime。</p>
+
+  <h2>验收与停止位置</h2>
+  <p>10项验收覆盖独立可复现、原权威／新身份、维护生命周期、模型／费用／出口、同源隔离、实际取得和采用、专业与成本、原体验／兼容、完整检查／独立复核、分层收尾。具体判据见完整方案S5A01–10。</p>
+  <p>费用账包括初建、更新维护、首稿和整链时延、token／缓存／重试／供应商结算与人工投入。允许结论是无增益、退化、模型未准入或专业FAIL；不能用速度抵销重要错误，也不宣称普遍“更快更准”。</p>
+  <p>当前浏览器交互仍为<strong>NOT_RUN</strong>。此前安全拒绝不通过另一浏览器或服务器绕过，原限制合法解除或明确可用通道具备后再验原可选依据；静态HTML／SSR不代产品体验验收。</p>
+  <p class="note"><strong>九项A已确认，当前进入S5.1。</strong>真实模型仍须先核专属费用／配额及材料等前置。确认后的范围止于隔离试运行与合成验证，不含现有服务切换、Git写入／CI／合并、MacBook／其他设备、真实经营分析或S6。</p>
+  <footer>
+    <p><a href="s5-adoption-validation-plan.md">完整方案与9项决定</a> · <a href="s5-preparation-result.md">准备／复核记录</a> · <a href="s4-validation.md">S4已完成范围</a> · <a href="phase-plan.md">完整阶段计划</a></p>
+    <p>用户已整体确认D14.1–D14.9全部A，均一致。S5.1实施已进入；实际安装／绑定／模型及费用等结果按独立实施记录核，不以本摘要宣称通过。</p>
+  </footer>
+</main>
+</body>
+</html>

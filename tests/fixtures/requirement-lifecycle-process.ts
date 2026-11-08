@@ -17,7 +17,11 @@ import { randomUUID } from 'node:crypto';
 const cwd = process.cwd(), pid = process.pid;
 const sessionId = randomUUID();
 const marker = name => path.join(cwd, name + '-' + pid);
-fs.writeFileSync(marker('spawned'), JSON.stringify({ pid, cwd }));
+// Publish a complete handshake atomically: the parent polls directory entries
+// concurrently, so direct creation exposes a transient empty JSON file.
+const pendingSpawn = path.join(cwd, '.spawned-' + pid + '.tmp');
+fs.writeFileSync(pendingSpawn, JSON.stringify({ pid, cwd }));
+fs.renameSync(pendingSpawn, marker('spawned'));
 const wait = name => new Promise(resolve => {
   if (fs.existsSync(marker(name))) return resolve();
   const timer = setInterval(() => { if (fs.existsSync(marker(name))) { clearInterval(timer); resolve(); } }, 5);

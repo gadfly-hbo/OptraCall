@@ -25,10 +25,15 @@ test('EB15/EB16: metrics and requirements are real category entries without dupl
   assert.equal(catalogItems.some(item => item.name === '行业指标资产包'), false);
 });
 test('CAT-02: search is trimmed, case insensitive and restricted to one category', () => {
-  const methods = filterCatalog('assets', '  cohort  ', '全部');
-  assert.ok(methods.some(item => item.id === 'A02'));
+  const methods = filterCatalog('assets', '  sAp  ', '全部');
+  assert.equal(methods.length, 1);
+  assert.equal(methods[0].id, 'metric-factory');
+  assert.equal(methods[0].entry, 'metric');
+  assert.ok(methods[0].tags.includes('指标口径'));
+  assert.ok(methods[0].tags.includes('分析方法'));
+  assert.equal(catalogItems.some(item => item.id === 'A02'), false, 'method planning merges into the real SAP entry');
   assert.ok(methods.every(item => item.category === 'assets'));
-  assert.equal(filterCatalog('connectors', 'cohort', '全部').length, 0);
+  assert.equal(filterCatalog('connectors', 'sap', '全部').length, 0);
 });
 test('EB01: enterprise business materials is a real entry in analysis assets', () => {
   const materials = filterCatalog('assets', '企业业务资料', '全部');

@@ -8,7 +8,7 @@ import os from 'node:os';
 import { ProjectAgent } from '../src/agent/project-runtime.ts';
 import { createProtectedExecutionScope } from '../src/agent/protected-tools.ts';
 
-test('task simulation and trade-area opt-ins are excluded from actual closed-text and managed SDK resources', async t => {
+test('task optional capabilities are excluded from actual closed-text and managed SDK resources', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'optracall-simulation-boundaries-'));
   for (const mode of ['fixed-draft', 'text-only', ...(process.platform === 'darwin' ? ['ordinary', 'protected'] : [])]) {
     const work = path.join(root, mode, 'work'), sessions = path.join(root, mode, 'sessions'), resources = path.join(root, mode, 'resources');
@@ -20,12 +20,14 @@ test('task simulation and trade-area opt-ins are excluded from actual closed-tex
       ...(managed ? { protectedExecution: { id: `sim-${mode}`, profile: mode as 'ordinary' | 'protected', cwd: work, writableRoot: work, readRoots: [] } } : {}),
       simulationTools: { storeRoot: path.join(root, 'sim-lab'), projectId: 'synthetic-project' },
       tradeAreaConnector: { dataRoot: path.join(root, 'connectors/trade-area') },
+      weatherConnector: { cacheRoot: path.join(root, 'connectors/weather') },
       configuration: { id: randomUUID(), revision: 1, name: 'synthetic exclusion', provider: 'openai-compatible', api: 'openai-completions', baseUrl: 'http://127.0.0.1:1/v1', model: 'synthetic', apiKey: 'synthetic-key' },
     });
     t.after(() => agent.close());
     const snapshot = await agent.open();
     assert.ok(!snapshot.tools.some(name => name.startsWith('simulation_')), mode);
     assert.ok(!snapshot.tools.some(name => name.startsWith('mcp__trade_area_mcp__')), `${mode} must not expose the saved connector opt-in`);
+    assert.ok(!snapshot.tools.some(name => name.startsWith('mcp__weather_mcp__')), `${mode} must exclude weather`);
     assert.equal(snapshot.capabilities.mcp, false, `${mode} has no MCP integration`);
     if (!managed) assert.deepEqual(snapshot.tools, []);
     else assert.ok(snapshot.tools.includes('bash'), `${mode} retains its permitted native tools`);

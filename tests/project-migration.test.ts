@@ -9,6 +9,7 @@ import { ProjectStore } from '../src/host/project-store.ts';
 import { SessionManager } from '../src/agent/sdk.ts';
 import { savedTaskHistory } from '../src/host/project-history.ts';
 import { runDiagnostic } from '../src/agent/run-diagnostics.ts';
+import { readNativeSessionSnapshot } from '../src/host/native-session-snapshot.ts';
 
 async function legacyFixture(t: { after: (fn: () => Promise<void>) => void }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'optracall-legacy-migration-')), id = randomUUID();
@@ -104,8 +105,8 @@ for (const outcome of ['completed', 'failed', 'cancelled'] as const) test(`ER01 
     { phase: 'started', requestId: id, sessionId },
     { phase: 'settled', requestId: id, sessionId, outcome, diagnostic: { ...diagnostic, message: 'synthetic-private-provider-payload', rawError: 'synthetic-private-provider-payload' } },
   ]);
-  assert.deepEqual(f.read().lastRun, { requestId: id, outcome, diagnostic });
-  assert.equal(JSON.stringify(f.read().lastRun).includes('synthetic-private-provider-payload'), false);
+  assert.deepEqual((await f.read()).lastRun, { requestId: id, outcome, diagnostic });
+  assert.equal(JSON.stringify((await f.read()).lastRun).includes('synthetic-private-provider-payload'), false);
   assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes, 'Native history reads do not rewrite old JSONL');
 });
 
@@ -115,7 +116,7 @@ test('ER01 recovery: legacy markers and unknown optional diagnostics remain read
     { phase: 'started', requestId: id },
     { phase: 'settled', requestId: id, outcome: 'failed', diagnostic: { code: 'future_unknown_code', stage: 'native_request', message: 'synthetic-private-provider-payload', retryCount: 4 } },
   ]);
-  assert.deepEqual(f.read().lastRun, { requestId: id, outcome: 'failed' });
+  assert.deepEqual((await f.read()).lastRun, { requestId: id, outcome: 'failed' });
   assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
 });
 
@@ -125,7 +126,7 @@ test('ER01 recovery: copied fork-parent markers cannot become the current sessio
     { phase: 'started', requestId: id, sessionId },
     { phase: 'settled', requestId: id, sessionId: parent, outcome: 'failed', diagnostic: parentDiagnostic },
   ]);
-  assert.deepEqual(f.read().lastRun, { requestId: id });
+  assert.deepEqual((await f.read()).lastRun, { requestId: id });
   assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
 });
 
@@ -137,7 +138,7 @@ test('ER01 recovery: a late terminal for an earlier request cannot supply outcom
     { phase: 'started', requestId: next, sessionId },
     { phase: 'settled', requestId: first, sessionId, outcome: 'failed', diagnostic: oldDiagnostic },
   ]);
-  assert.deepEqual(f.read().lastRun, { requestId: next });
+  assert.deepEqual((await f.read()).lastRun, { requestId: next });
   assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
 });
 
@@ -148,7 +149,7 @@ test('ER01 recovery: nonterminal or invalid-outcome markers never promote a run 
     { phase: 'started', requestId: id, sessionId, outcome: 'failed', diagnostic },
     { phase: 'settled', requestId: id, sessionId, outcome: 'not-a-terminal', diagnostic },
   ]);
-  assert.deepEqual(f.read().lastRun, { requestId: id });
+  assert.deepEqual((await f.read()).lastRun, { requestId: id });
   assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
 });
 
@@ -164,7 +165,7 @@ test('ER01 recovery: completed, failed and cancelled histories keep each request
       { phase: 'started', requestId: current, sessionId },
       { phase: 'settled', requestId: current, sessionId, outcome, diagnostic },
     ]);
-    assert.deepEqual(f.read().lastRun, { requestId: current, outcome, diagnostic });
+    assert.deepEqual((await f.read()).lastRun, { requestId: current, outcome, diagnostic });
     assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
   }
 });
@@ -177,7 +178,42 @@ test('ER01 recovery: a diagnostic contradictory to its native outcome is ignored
       { phase: 'started', requestId: id, sessionId },
       { phase: 'settled', requestId: id, sessionId, outcome, diagnostic },
     ]);
-    assert.deepEqual(f.read().lastRun, { requestId: id, outcome });
+    assert.deepEqual((await f.read()).lastRun, { requestId: id, outcome });
     assert.deepEqual(await fs.readFile(f.sessionFile), f.bytes);
+  }
+});
+
+test('R4 compatibility evidence: SDK opens synthetic v1/v2 copies by rewriting them; read-only seeds and unrelated files remain unchanged', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'optracall-sdk-legacy-proof-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const cwd = path.join(root, '020_clean'); await fs.mkdir(cwd);
+  const parent = path.join(root, 'parent.jsonl'), unrelated = path.join(root, 'original-report.md');
+  const parentBytes = Buffer.from(JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: '2026-10-28T00:00:00.000Z', cwd }) + '\n');
+  const reportBytes = Buffer.from('# Existing synthetic report\nNo migration is authorized for this file.\n');
+  await fs.writeFile(parent, parentBytes); await fs.writeFile(unrelated, reportBytes);
+  for (const version of [1, 2]) {
+    const id = randomUUID(), timestamp = '2026-10-28T00:00:00.000Z';
+    const header = { type: 'session', version, id, timestamp, cwd, parentSession: parent };
+    const entry = { type: 'message', ...(version === 2 ? { id: 'legacy-entry', parentId: null } : {}), timestamp,
+      message: { role: 'hookMessage', customType: 'synthetic-old-hook', content: [{ type: 'text', text: 'SYNTHETIC_LEGACY_CONTENT' }], display: true, timestamp: Date.parse(timestamp) } };
+    const seed = path.join(root, `seed-v${version}.jsonl`), copy = path.join(root, `working-copy-v${version}.jsonl`);
+    const original = Buffer.from([header, entry].map(value => JSON.stringify(value)).join('\n') + '\n');
+    await fs.writeFile(seed, original); await fs.writeFile(copy, original);
+    await assert.rejects(readNativeSessionSnapshot(seed, root, cwd), /native_snapshot_unsupported/);
+    assert.deepEqual(await fs.readFile(seed), original, 'existing read-only projection must not migrate the seed');
+    const manager = SessionManager.open(copy, root, cwd);
+    assert.equal(manager.getHeader()?.version, 3);
+    assert.equal(manager.getHeader()?.id, id);
+    assert.equal(manager.getHeader()?.parentSession, parent);
+    const migrated = (await fs.readFile(copy, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+    assert.notDeepEqual(await fs.readFile(copy), original, 'known SDK auto-migration remains an open product-policy risk');
+    assert.equal(migrated[1].message.role, 'custom');
+    assert.equal(migrated[1].message.content[0].text, 'SYNTHETIC_LEGACY_CONTENT');
+    if (version === 2) assert.equal(migrated[1].id, 'legacy-entry');
+    else assert.equal(typeof migrated[1].id, 'string');
+    assert.equal(migrated[1].parentId, null);
+    assert.deepEqual(await fs.readFile(seed), original);
+    assert.deepEqual(await fs.readFile(parent), parentBytes);
+    assert.deepEqual(await fs.readFile(unrelated), reportBytes);
   }
 });

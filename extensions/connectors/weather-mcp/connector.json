@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "weather-mcp",
+  "name": "历史天气",
+  "version": "0.1.0",
+  "kind": "remote-api",
+  "transport": {
+    "type": "stdio",
+    "command": "node",
+    "args": ["extensions/connectors/weather-mcp/main.ts"],
+    "env": { "WEATHER_CACHE_ROOT": "<dataRoot>/connectors/weather" }
+  },
+  "egress": ["archive-api.open-meteo.com"],
+  "credentials": "none",
+  "tools": [
+    { "name": "weather_history", "readonly": true }
+  ],
+  "data": {
+    "datasetId": "optracall-weather-cache",
+    "location": "<dataRoot>/connectors/weather",
+    "updatePolicy": "cache-ttl-72h"
+  },
+  "standard": "docs/mcp-connector-integration.md"
+}

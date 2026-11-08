@@ -2,11 +2,21 @@
 
 开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.2](docs/OptraCall_产品讨论稿_v0.2.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
 
-本项目遵循“Host 管环境，Agent 自主执行”，优先复用既有 SDK／Runtime 能力。新增设计遵守[工程规范第2节](docs/engineering-workflow.md#产品-agent-与工程-agent)，最终验收完成[职责边界及复用检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；详细规则仅在工程规范维护。
+本项目遵循四点产品原则：**Host 管环境、Agent 自主执行、优先复用 Pi 已有能力、减少人的操作**。准备或修改 spec／UI、开发及验收时，必须按[工程规范第2节](docs/engineering-workflow.md#四点产品原则)与[前置检查](docs/engineering-workflow.md#3-连续-sdd-与-tdd)核对实际职责、复用依据和最少用户操作路径，完成[专项最终检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；完整规则仅在工程规范维护。
 
-[商圈数据 MCP 连接器](openspec/changes/trade-area-mcp/result.md#合并交付与原位归档)已通过本地工程与非作者复核，经实际head CI后squash入main；归档及最终main CI身份按记录核对。后续维护先读该记录及[规格IN06](openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)的SDK薄层复用边界。Qoder原实现已整体移交Codex，本变更接缝及后续维护由Codex承接；原清单、移交包和失败保留。天气按D9为后续独立变更；真实模型、MacBook、运行采用及未来来源版本导入仍各自另授权。经营数据留在获准本机dataRoot，公开样例使用合成材料。
+涉及 SDK、依赖或适配层的设计、实现与验收前，必须读取[官方 Pi SDK 来源与版本约束](docs/engineering-workflow.md#官方-pi-sdk-来源与版本约束)和[升级流程](docs/engineering-workflow.md#pi-sdk-升级流程)：统一使用未经修改的官方发布包，SDK 目标版本由用户明确指定，兼容适配在 OptraCall 自身完成。源码补丁、私有 fork、安装目录改写或绕过公开契约的运行时改写均不能作为修复手段；公开扩展机制按同一规范使用。当前[规则核对](openspec/changes/pi-sdk-governance/result.md)列有未处理风险，不能从规则已建立推断既有实现全部合规。
+
+[模型包消费端](openspec/changes/model-pack-consumer/result.md#合并交付与原位归档)已完成工程交付并原位归档。维护时先读规格、结果及[后续采用记录](openspec/changes/model-pack-consumer/live-validation.md)：MPS训练／导出，OptraCall消费v1纯计算包；任务显式开启、受管／封闭资源排除，快照不可变、损坏不静默修复。用户后续授权运行采用及设备更新，实际状态按后续收据核定；当前真实业务模型与LLM验收已由用户决定跳过。旧备份包有限检查、取消、原失败及历史前置TDD证明NOT_PROVED保留。
+
+维护[deep-research skill](openspec/changes/deep-research-skill/result.md#合并交付与原位归档)或新增skill测评展示时，先读其归档记录及[统一展示规范](docs/skill-evaluation-display.md)：测评默认收起，历史回执绑定被测版本。长期`qoder/ext-skills`分支的测评门禁、移交与写入归属按工程规范第2、5节执行；按已记录的2026-11-04用户裁定，原有效结论覆盖工程修正版，不新增待复测事项；原被测身份与未重测事实保留。
+
+维护[data-analysis skill](openspec/changes/data-analysis-skill/result.md#合并交付与原位归档)时，先读其规格、结果与独立复核；测评门禁、单向工程修正及长期分支归属沿工程规范第2、5节。原失败、暂定结论、成本与验收边界保留，工程合并和运行采用分别核定。
+
+[商圈数据 MCP 连接器](openspec/changes/trade-area-mcp/result.md#合并交付与原位归档)与[天气连接器](openspec/changes/weather-mcp/result.md#合并交付与原位归档)已分别经非作者复核、实际head CI及获授权squash入main，OpenSpec原位归档；后续维护先读对应结果和[商圈IN06](openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)的SDK薄层复用边界。Qoder整体移交后只读，接缝及后续维护由Codex承接，原清单、移交包及失败保留。[后续真实模型记录](openspec/changes/weather-mcp/live-validation.md)为两轮工具／保存闭环完成、报告内容FAIL，不能当专业或用户产品验收；已授权MacBook main及同一正式快照采用，实际运行与保全按最终回执核定。Mac mini原运行服务保持，经营数据与凭据留在获准本机根，未来来源版本导入仍单独授权。
 
 当前用户已明确授权[PPT Host 接线修复](openspec/changes/ppt-host-wiring-repair/spec.md)：修复已核实的项目／配置归属、完整操作占用、保护、导出／差异及UI接缝，保留原FAIL、版本、会话与文件；适用检查、独立复核及Git／CI后合并main，不切换服务、不操作MacBook或新增真实模型实验。原检查“不通过”与本次修复结果分别记录。
+
+涉及 Semantica 接入、依赖、适配或升级时，必须读取[官方组件规则](docs/engineering-workflow.md#semantica-官方组件来源与版本约束)与[资产兼容及回退流程](docs/engineering-workflow.md#semantica-升级验证与回退)。Semantica 与 Pi 均采用官方原包，精确升级目标由用户指定；长期规则只在工程规范维护，规范本身不构成依赖升级或运行采用授权。
 
 涉及Agent交互、SDK接入、会话启停/恢复、模型配置或插件接入的变更，开始前必须读取工程规范的IN01–IN07及[统一会话接入说明](docs/agent-session-integration.md)，在本变更规格记录Interface版本、owner/profile和验收范围。Codex、Qoder共用这些规则；工具入口只引用同一来源。
 

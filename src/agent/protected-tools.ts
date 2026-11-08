@@ -1,3 +1,4 @@
+import { inspectAnalysisPython, type AnalysisPythonEnvironment, type AnalysisPythonAvailability } from './analysis-python.ts';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -117,9 +118,9 @@ function runtimeRoots(codeRoot: string, interpreters: readonly string[]): string
   return [...new Set(result.filter(existsSync).map(entry => realpathSync(entry)))];
 }
 
-function profileFor(scope: ProtectedExecutionScope, codeRoot: string, forbiddenRoots: readonly string[], executableRoot: string, interpreters: readonly string[]): string {
+function profileFor(scope: ProtectedExecutionScope, codeRoot: string, forbiddenRoots: readonly string[], executableRoot: string, interpreters: readonly string[], dependencyRoots: readonly string[] = []): string {
   const writes = [scope.writableRoot, ...(scope.writeRoots ?? [])];
-  const reads = [...runtimeRoots(codeRoot, interpreters), ...scope.readRoots, ...writes, executableRoot, ...(scope.skillRoot ? [scope.skillRoot] : [])];
+  const reads = [...runtimeRoots(codeRoot, interpreters), ...dependencyRoots, ...scope.readRoots, ...writes, executableRoot, ...(scope.skillRoot ? [scope.skillRoot] : [])];
   const rule = (entry: string) => `(${statSync(entry).isDirectory() ? 'subpath' : 'literal'} ${JSON.stringify(entry)})`;
   return [
     '(version 1)', '(deny default)', '(allow file-read-metadata)', '(allow file-read* (literal "/") ' + reads.map(rule).join(' ') + ')',
@@ -139,7 +140,7 @@ function profileFor(scope: ProtectedExecutionScope, codeRoot: string, forbiddenR
 // available in this permission boundary. Preserve the installed interpreter and
 // libraries through read-only aliases to the actual same-version executable.
 // These are environment entrypoints, not new analysis or calculation tools.
-async function executionBin(scope: ProtectedExecutionScope): Promise<{ directory: string; interpreters: { command: string; executable: string; version: string; fallbackAlias: boolean }[] }> {
+async function executionBin(scope: ProtectedExecutionScope, availability?: AnalysisPythonAvailability): Promise<{ directory: string; guardianPython?: string; interpreters: { command: string; executable: string; version: string; fallbackAlias: boolean }[] }> {
   const directory = await mkdtemp(path.join(path.dirname(scope.writableRoot), '.protected-bin-'));
   const query = "import json,os,sys; framework=os.path.join(sys.prefix,'Resources','Python.app','Contents','MacOS','Python'); print(json.dumps({'executable':os.path.realpath(framework if os.path.isfile(framework) else sys.executable),'major':sys.version_info.major,'version':'.'.join(map(str,sys.version_info[:3]))}))";
   const interpreters: { command: string; executable: string; version: string; fallbackAlias: boolean }[] = [];
@@ -161,7 +162,15 @@ async function executionBin(scope: ProtectedExecutionScope): Promise<{ directory
     const quote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
     await writeFile(path.join(directory, name), '#!/bin/bash\nexport PYTHONEXECUTABLE=' + quote(executable) + '\nexec ' + quote(executable) + ' "$@"\n', { flag: 'wx', mode: 0o700 });
   }
-  return { directory, interpreters };
+  const guardianPython = interpreters.find(item => item.command === 'python3')?.executable;
+  if (availability?.state === 'ready') {
+    for (const item of interpreters) {
+      item.executable = availability.executable; item.version = availability.version; item.fallbackAlias = false;
+      const quote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+      await writeFile(path.join(directory, item.command), '#!/bin/bash\nexport PYTHONEXECUTABLE=' + quote(availability.executable) + '\nexport PYTHONNOUSERSITE=1\nexec ' + quote(availability.executable) + ' "$@"\n', { mode: 0o700 });
+    }
+  }
+  return { directory, interpreters, guardianPython };
 }
 
 function executionEnvironment(scope: ProtectedExecutionScope, executableRoot: string) {
@@ -196,7 +205,7 @@ type ToolGroup = {
   cancel(): void; requestClose(): Promise<void>; requestDrain(): Promise<void>;
 };
 
-export async function createProtectedTools(input: { scope: ProtectedExecutionScope; codeRoot: string; forbiddenRoots: readonly string[] }) {
+export async function createProtectedTools(input: { scope: ProtectedExecutionScope; codeRoot: string; forbiddenRoots: readonly string[]; analysisPython?: AnalysisPythonEnvironment }) {
   const scope = await createProtectedExecutionScope(input.scope), codeRoot = await realpath(input.codeRoot);
   const forbidden = input.forbiddenRoots.map(entry => existsSync(entry) ? realpathSync(entry) : path.resolve(entry));
   for (const entry of [...scope.readRoots, scope.writableRoot, ...(scope.writeRoots ?? []), ...(scope.skillRoot ? [scope.skillRoot] : [])]) {
@@ -211,10 +220,18 @@ export async function createProtectedTools(input: { scope: ProtectedExecutionSco
   const unavailableTools = !programPath('fd') && !programPath('fdfind') ? [{ name: 'find', reason: 'fd/fdfind is not installed; protected execution does not download tools' }] : [];
   const definitions = protectedToolDefinitions(scope.cwd).filter(tool => !unavailableTools.some(item => item.name === tool.name));
   const toolNames = definitions.map(tool => tool.name);
-  const executable = await executionBin(scope), executableRoot = executable.directory;
-  const profile = profileFor(scope, codeRoot, forbidden, executableRoot, executable.interpreters.map(item => item.executable)), env = executionEnvironment(scope, executableRoot);
+  const analysisPython = input.analysisPython ? inspectAnalysisPython(input.analysisPython, codeRoot) : undefined;
+  // openpyxl's stdlib mimetypes reads this public system MIME table.
+  // Grant the observed resource itself, never the /etc configuration tree.
+  const mimeTable = '/etc/apache2/mime.types';
+  const dependencyRoots = analysisPython?.state === 'ready' ? [analysisPython.root, analysisPython.basePrefix, ...(existsSync(mimeTable) ? [realpathSync(mimeTable)] : [])] : [];
+  for (const entry of dependencyRoots) {
+    if (forbidden.some(privateRoot => within(entry, privateRoot) || within(privateRoot, entry)) || [scope.writableRoot, ...(scope.writeRoots ?? [])].some(write => within(write, entry) || within(entry, write))) fail('protected_forbidden_runtime');
+  }
+  const executable = await executionBin(scope, analysisPython), executableRoot = executable.directory;
+  const profile = profileFor(scope, codeRoot, forbidden, executableRoot, executable.interpreters.map(item => item.executable), dependencyRoots), env = executionEnvironment(scope, executableRoot);
   assertGroupPolicy(profile, scope, env);
-  const python = executable.interpreters.find(item => item.command === 'python3')?.executable ?? fail('protected_python_runtime_unavailable');
+  const python = executable.guardianPython ?? fail('protected_python_runtime_unavailable');
   const guardianProbe = spawnSync(python, ['-I', '-S', path.join(codeRoot, 'scripts', 'protected-tool-supervisor.py'), '--probe'], {
     cwd: scope.cwd, env: { ...env, PYTHONEXECUTABLE: python }, encoding: 'utf8', timeout: 5000,
   });
@@ -231,7 +248,7 @@ export async function createProtectedTools(input: { scope: ProtectedExecutionSco
       cleanupFailure = group.cleanupError; throw group.cleanupError;
     });
   };
-  const makeGroup = (id: string, shared: boolean, initial?: { name: string; params: unknown; pending: PendingTool }): ToolGroup => {
+  const makeGroup = (id: string, shared: boolean, initial?: { name: string; params: unknown; pending: PendingTool; toolNames?: readonly string[] }): ToolGroup => {
     const identity = { version: 2, scopeId: scope.id, nonce: randomUUID(), toolCallId: id };
     const child = spawn(python, ['-I', '-S', path.join(codeRoot, 'scripts', 'protected-tool-supervisor.py'), process.execPath,
       path.join(codeRoot, 'scripts', shared ? 'protected-file-entry.mjs' : 'protected-tool-entry.mjs'), profile, scope.cwd], {
@@ -344,7 +361,7 @@ export async function createProtectedTools(input: { scope: ProtectedExecutionSco
     child.once('close', () => { if (!group.closed) fault(unknown(), true); });
     // Always enqueue open/execute first, before a concurrent stop can enqueue close.
     send(shared ? 'protected.open' : 'protected.execute', shared ? { cwd: scope.cwd } : {
-      tool: initial!.name, params: initial!.params, toolNames, cwd: scope.cwd, writableRoot: scope.writableRoot,
+      tool: initial!.name, params: initial!.params, toolNames: initial!.toolNames ?? toolNames, cwd: scope.cwd, writableRoot: scope.writableRoot,
     });
     return group;
   };
@@ -370,7 +387,8 @@ export async function createProtectedTools(input: { scope: ProtectedExecutionSco
       if (signal?.aborted) abort();
     } };
   };
-  const dispatch = async (name: string, id: string, params: unknown, signal?: AbortSignal, onUpdate?: (value: any) => void) => {
+  const dispatch = async (name: string, id: string, params: unknown, signal?: AbortSignal, onUpdate?: (value: any) => void, allowedTools: readonly string[] = toolNames) => {
+    if (!allowedTools.includes(name)) fail('protected_tool_unavailable');
     if (cleanupFailure) throw cleanupFailure;
     if (closed) fail('protected_executor_closed');
     if (draining) fail('protected_executor_draining');
@@ -398,16 +416,23 @@ export async function createProtectedTools(input: { scope: ProtectedExecutionSco
       } catch (error) { ticket.call.settle(error instanceof Error ? error : unknown()); }
     } else {
       reserved.set(id, id);
-      const group = makeGroup(id, false, { name, params, pending: ticket.call }); ticket.attach(group);
+      const group = makeGroup(id, false, { name, params, pending: ticket.call, toolNames: allowedTools }); ticket.attach(group);
     }
     return ticket.call.completion;
   };
-  const execute = (name: string, id: string, params: unknown, signal?: AbortSignal, onUpdate?: (value: any) => void) => {
-    const task = dispatch(name, id, params, signal, onUpdate); executing.add(task);
+  const execute = (name: string, id: string, params: unknown, signal?: AbortSignal, onUpdate?: (value: any) => void, allowedTools: readonly string[] = toolNames) => {
+    const task = dispatch(name, id, params, signal, onUpdate, allowedTools); executing.add(task);
     void task.finally(() => executing.delete(task)).catch(() => {}); return task;
   };
   const tools: ToolDefinition<any, any>[] = definitions.map(definition => ({ ...definition, execute: (id: string, params: unknown, signal: AbortSignal | undefined, onUpdate: ((value: any) => void) | undefined, _context?: unknown) => execute(definition.name, id, params, signal, onUpdate) }));
-  return { scope, tools, unavailableTools, pythonRuntimes: executable.interpreters,
+  return { scope, tools, unavailableTools, analysisPython, pythonRuntimes: executable.interpreters,
+    narrow: (allowed: readonly string[], namespace: string): ToolDefinition<any, any>[] => {
+      if (!namespace || allowed.some(name => !toolNames.includes(name))) fail('protected_tool_unavailable');
+      const ceiling = Object.freeze([...new Set(allowed)]);
+      return definitions.filter(definition => ceiling.includes(definition.name)).map(definition => ({ ...definition,
+        execute: (id, params, signal, onUpdate) => execute(definition.name, `${namespace}:${id}`, params, signal, onUpdate, ceiling),
+      }));
+    },
     // This is a technical execution receipt check, never an analysis/content
     // verdict. The SDK must not journal completed after losing a tool result.
     assertHealthy: () => { if (cleanupFailure) throw cleanupFailure; }, drain: async () => {
