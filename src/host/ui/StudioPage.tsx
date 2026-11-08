@@ -226,9 +226,8 @@ export function StudioPage({ active = true, currentProjectId, projects, initialS
   };
   const openPreview = async () => {
     if (!system || readOnly || blocked) return;
-    const unconfirmed = system.publications.filter(({ preview }) => !preview.confirmedAt);
-    const prepared = unconfirmed.reverse().find(({ preview }) =>
-      preview.topicId === system.currentTopicId && !isHistoricalPreview(preview, topicPublication));
+    const unconfirmed = system.publications.filter(({ preview }) => preview.topicId === system.currentTopicId && !preview.confirmedAt);
+    const prepared = unconfirmed.reverse().find(({ preview }) => !isHistoricalPreview(preview, topicPublication));
     if (prepared) { open({ kind: 'preview', preview: prepared.preview }); return; }
     if (unconfirmed.length) {
       setNotice('本主题暂无可打开的新预览。可在发布记录中查阅已保存的结果和预览。');
@@ -238,7 +237,7 @@ export function StudioPage({ active = true, currentProjectId, projects, initialS
     if (!candidates.length && !system.assetRefs.length) { setNotice('本轮尚无具备发布资格的成果。候选与缺口继续保留；请由主 Agent 补充来源和必要核查后准备预览。'); return; }
     if (!topic?.scope.trim()) { setNotice('本轮适用范围尚未记录。请主 Agent 明确本轮范围后准备发布预览；现有候选与旧正式版保持。'); return; }
     const requestId = crypto.randomUUID();
-    await perform('准备发布预览', requestId, () => prepareStudioPublication(system.id, { requestId, assetIds: candidates.map(item => item.asset.id), summary: topic?.goal || '本轮已核对成果', scope: topic?.scope || '', refs: system.assetRefs, checks: candidates.flatMap(item => item.revision.checks), limitations: candidates.flatMap(item => item.revision.limitations), excluded: system.assets.filter(asset => asset.candidateRevision && !candidates.some(item => item.asset.id === asset.id)).map(asset => `${selectedRevision(asset)?.title || asset.id}：候选未完成必要核查`), targetProjectIds: targetProjectId ? [targetProjectId] : [] }), value => { applySystem(value.system); open({ kind: 'preview', preview: value.preview }); });
+    await perform('准备发布预览', requestId, () => prepareStudioPublication(system.id, { requestId, topicId: system.currentTopicId, assetIds: candidates.map(item => item.asset.id), summary: topic?.goal || '本轮已核对成果', scope: topic?.scope || '', refs: system.assetRefs, checks: candidates.flatMap(item => item.revision.checks), limitations: candidates.flatMap(item => item.revision.limitations), excluded: system.assets.filter(asset => asset.candidateRevision && !candidates.some(item => item.asset.id === asset.id)).map(asset => `${selectedRevision(asset)?.title || asset.id}：候选未完成必要核查`), targetProjectIds: targetProjectId ? [targetProjectId] : [] }), value => { applySystem(value.system); open({ kind: 'preview', preview: value.preview }); });
   };
   const newSystem = async () => {
     if (!newProjectId || !name.trim() || !goal.trim() || !topicTitle.trim()) { setError('请选择建设归属项目，并填写体系名称、本轮主题及目标。'); return; }
