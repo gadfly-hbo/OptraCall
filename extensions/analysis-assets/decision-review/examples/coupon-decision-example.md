@@ -2,9 +2,10 @@
 
 > 本示例为合成场景，演示完整八模块决策说明的写法；数字为演示值（正式使用时必须出自 coupon-forecast／data-analysis 等脚本输出并注明出处）。
 
+状态：ready_for_review
+
 # 会员复购连续两月下降，是否发放满减券？
 
-状态：ready_for_review
 日期：2026-11-07 · 依据版本：data-analysis 复购月度对比（020_clean/repurchase-compare.json）、coupon-forecast 券测算（020_clean/coupon-run-2.json）
 
 ## 一、决策问题
