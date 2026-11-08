@@ -75,7 +75,7 @@
 
 ## 首期最终验收
 
-2026-11-07，按 v1.0 第 9 节及已批准的 FA01–FA06 矩阵，Studio 首期在限定的合成销售退款案例范围内验收通过。范围为青鹭站、松渡站、雁汀站三店，2026 年 3 月 2–8 日和 3 月 9–15 日两个等长期间，人民币，按发生口径与支付订单群口径核对门店净额和期间变化。原方案 SHA-256 为 `4b731550cf17ed4dfe0f5316f57d96f8a72e4896cd2c0853c4095ef2e12598e0`，与批准时一致。依据和原评审包身份见[批准记录](approval.json)。原验收的 `.local` 链接指向原工作树的私有留档。本次运行采用的两份回执附在当前交付工作树的 `.local` 目录，备份清单和原始回执按设备保存在各自本机。
+2026-11-07，按 v1.0 第 9 节及已批准的 FA01–FA06 矩阵，Studio 首期在限定的合成销售退款案例范围内验收通过。范围为青鹭站、松渡站、雁汀站三店，2026 年 3 月 2–8 日和 3 月 9–15 日两个等长期间，人民币，按发生口径与支付订单群口径核对门店净额和期间变化。原方案 SHA-256 为 `4b731550cf17ed4dfe0f5316f57d96f8a72e4896cd2c0853c4095ef2e12598e0`，与批准时一致。依据和原评审包身份见[批准记录](approval.json)。原验收的 `.local` 链接指向原工作树的私有留档。两机运行采用回执和 FA05 补验回执附在当前交付工作树的 `.local` 目录，备份清单和原始回执按设备保存在各自本机。
 
 ### 工程与 Git／CI
 
@@ -114,7 +114,19 @@ D3 在后续隔离实模中已按原生供给核对范围、用途限制、正�
 | 项 | 最终判定与证据 |
 |---|---|
 | FA05 等待与接续 | **当日实际工作台走验通过。** 银行勾稽缺资料进入等待后，独立净额与期间变化继续建设并实际发布。两次返回列表重进均读回同一体系、任务、原生会话和原请求，浏览器只有一条原建设消息 POST。发布后，工作台分别显示两项正式成果和仍在等待的银行缺口。原建设 Agent 接手见 FA04，归档只读与保留原反馈关联有工程回归证据。[归档工程回归](../../../tests/studio-store.test.ts) · [重进核对](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/gap-reentry-check.json) · [分项结果截图](../../../.local/studio-followup/fa05-actual.wWmR5mk0/output/playwright/14-formal-publish-actual-result.png) · [发布后等待项截图](../../../.local/studio-followup/fa05-actual.wWmR5mk0/output/playwright/16-bank-waiting-after-publish.png) |
-| FA06 首期完成 | **通过。** 核定基于 FA01–FA05 累积证据。两个核心问题及建设、发布、普通新任务使用、回补再用四段已有实模证据，FA05 完成当日实际走验。结论限本记录的合成门店、期间、币种和双口径范围。跨日接续和实际工作台归档保留为未走验。[FA05 与 FA06 核定记录](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/FA05-FA06-final-assessment.json) |
+| FA06 首期完成 | **通过。** 核定基于 FA01–FA05 累积证据。两个核心问题及建设、发布、普通新任务使用、回补再用四段已有实模证据，FA05 完成当日实际走验。结论限本记录的合成门店、期间、币种和双口径范围。原收口时跨日接续和实际工作台归档为未走验，后续结果见 [FA05 补验](#fa05-跨日接续与实际归档补验)。[原 FA05 与 FA06 核定记录](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/FA05-FA06-final-assessment.json) |
+
+### FA05 跨日接续与实际归档补验
+
+2026-11-08 08:28–08:31（北京时间），在 Mac mini 实际运行的 `5328572` 上补验通过。原工作台走验于 11 月 7 日结束，补验沿用「FA05 河畔合成验收」原项目、原体系及原建设任务。[补验总回执](../../../.local/studio-fa05-crossday-20261108/receipts/FA05-crossday-archive-final.json)
+
+| 检查项 | 实际结果与证据 |
+|---|---|
+| 跨日接续 | 从体系列表点「继续建设」，打开原工作台。建设请求仍为 `completed`，原会话文件 SHA-256 与 68 条历史消息一致。重进阶段浏览器未发写请求，未重放建设或发布。[跨日请求记录](../../../.local/studio-fa05-crossday-20261108/receipts/crossday-requests.txt) · [重进截图](../../../.local/studio-fa05-crossday-20261108/output/playwright/01-crossday-resumed.png) |
+| 实际归档及只读 | 原项目归档返回 HTTP 200。重新加载原工作台仍显示只读，禁用发布预览与续建，隐藏消息输入框。两项 r2 的实际发布结果和原会话仍可查。尝试按原值保存草稿被 Host 以 HTTP 409 `project_archived` 拒绝。[归档回执](../../../.local/studio-fa05-crossday-20261108/receipts/archive-http-response.txt) · [拒绝回执](../../../.local/studio-fa05-crossday-20261108/receipts/archive-draft-rejected.json) · [归档发布历史截图](../../../.local/studio-fa05-crossday-20261108/output/playwright/03-archived-publication-history.png) |
+| 恢复并接续 | 从只读工作台显式恢复原项目，返回 HTTP 200。原任务成功保存合成草稿，刷新后读回，再清回原空草稿。两次保存均返回 HTTP 200，未发送草稿或调用模型。项目、体系、任务、原会话和文件均保留，最终持久差异只有项目及原任务的更新时间。[恢复回执](../../../.local/studio-fa05-crossday-20261108/receipts/restore-http-response.txt) · [草稿保存回执](../../../.local/studio-fa05-crossday-20261108/receipts/draft-save-http-response.txt) · [草稿读回截图](../../../.local/studio-fa05-crossday-20261108/output/playwright/04-restored-draft-resumed.png) |
+
+列表和工作台的原主题摘要仍显示「建设中」，并保留正式发布前的「等待确认」文字。工作台同时显示原任务当前未运行，发布历史及原操作回执确认两项 r2 已正式发布。本次核验的是已完成任务的跨日重开及恢复后的草稿续接。该体系没有反馈条目，反馈接手沿用 FA04 证据。合成案例暂无真实银行流水，按用户裁定银行勾稽不作为本轮 FA05 门槛。原等待项及候选方法 v1 保留，实际银行勾稽未执行。[原操作回执补验读回](../../../.local/studio-fa05-crossday-20261108/receipts/final-original-publish-operation.json) · [银行候选读回](../../../.local/studio-fa05-crossday-20261108/receipts/bank-method-v1-final.json)
 
 ### 两项 r2 正式发布回执
 
@@ -133,5 +145,5 @@ D3 在后续隔离实模中已按原生供给核对范围、用途限制、正�
 |---|---|
 | 等待 | 银行勾稽方法 `a4c16455-4eb7-4e4e-98ed-85da74059148` v1 仍为候选，等待项 `cfc7b4cb-a126-487b-bfec-8bf3eef8cc46` 保持 `waiting`。缺银行逐笔到账流水与清算批次对应表，银行方法及勾稽结论均排除在本次发布范围。[银行方法权威读回](../../../.local/studio-followup/fa05-actual.wWmR5mk0/receipts/bank-method-v1-after-publish.json) |
 | 未触发（`NOT_TRIGGERED`） | 本次正式发布的模块失败与 UNKNOWN 未触发。早期准备预览的拒绝、隔离环境原图 UNKNOWN 及历史传输诊断另行保留。本次两项 r2 发布没有项目采用目标、图刷新或使用记录，各自以先前相关环节的实际回执为准。 |
-| 本轮未走验（`NOT_EXERCISED`） | 本次工作台走验为当日离开后重进，跨日接续与实际工作台归档留在未走验范围。已有归档工程检查单独保留。 |
+| 原收口未走验（历史） | 原当日工作台走验的跨日接续和实际归档判为 `NOT_EXERCISED`，原回执保留。两项已于 2026-11-08 按 [FA05 补验](#fa05-跨日接续与实际归档补验) 通过，归档工程检查单列。 |
 | 历史 FAIL、HOLD 和 NOT_RUN | 早期 A/B 报告问题、维护候选 HOLD 与普通 B 未运行，以及新案例首次普通报告和下游首次盲测 FAIL 各保留原判。定向修订及限定用途的再用通过按准确版本另记。原方案、原稿、旧版本、会话及原始回执保全。[历史专业记录](professional-evaluation.md) · [旧案例复验与保全](../../../.local/studio-followup/run.gQwu6Q0G/acceptance-summary.md) |
