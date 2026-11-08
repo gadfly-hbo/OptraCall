@@ -5,13 +5,13 @@ async (page) => {
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => { if (new URL(request.url()).hostname !== '127.0.0.1') outbound.push(request.url()); });
   const assert = (value, message) => { if (!value) throw new Error(message); };
-  const category = name => page.getByRole('navigation', { name: '能力目录' }).getByRole('button', { name, exact: true });
+  const market = () => page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('button', { name: '插件市场', exact: true });
   const mode = name => page.getByRole('group', { name: '工作区切换' }).getByRole('button', { name, exact: true });
   const expand = async () => { const button = page.getByRole('button', { name: '展开侧栏', exact: true }); if (await button.isVisible()) await button.click(); };
   const noOverflow = async () => assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'No horizontal document overflow');
   const api = async (route, method = 'GET', data) => { const response = await page.request.fetch(base + route, { method, headers: { origin: base, 'x-optracall-client': '1' }, ...(data ? { data } : {}) }); assert(response.ok(), `${method} ${route} failed ${response.status()}`); return response.json(); };
   await page.setViewportSize({ width: 1440, height: 1000 }); await page.goto(base); await expand();
-  await category('分析资产').click();
+  await market().click();
   const entry = page.getByRole('button', { name: '打开企业业务资料', exact: true }); await entry.focus(); await page.keyboard.press('Enter');
   await page.getByRole('heading', { name: '企业业务资料', exact: true, level: 1 }).waitFor();
   const name = '合成结算说明 ' + Date.now(), body1 = '活动销售额以实付金额统计。退款是否含在实付中尚未确认。\n适用范围：直营店。', body2 = body1 + '\n补充说明：某活动的特殊合同须单独核对。';
@@ -136,7 +136,7 @@ async (page) => {
   await picker.locator('summary').filter({ hasText: '预览本轮拟提供内容' }).click();
   assert(await picker.locator('pre').innerText() === body1.slice(0, 10), 'Explicit UTF16 preview uses exact selected range');
   const input = page.getByRole('textbox', { name: '消息', exact: true });
-  await input.fill('保留的普通任务草稿'); await category('分析资产').click();
+  await input.fill('保留的普通任务草稿'); await market().click();
   await page.getByRole('button', { name: '打开企业业务资料', exact: true }).click(); await page.getByRole('heading', { name: '企业业务资料', exact: true, level: 1 }).waitFor();
   await mode('分析').click(); if ((await picker.getAttribute('open')) === null) await picker.locator('summary').first().click(); assert(await input.inputValue() === '保留的普通任务草稿', 'Opening materials preserves task draft');
   assert(await picker.getByRole('checkbox', { name: '本轮附带 ' + name, exact: true }).isChecked(), 'Per-task selection retained across views');
@@ -191,7 +191,7 @@ async (page) => {
   await picker.getByRole('button', { name: '清空本轮企业材料', exact: true }).click();
   checks.push('File-only selected revision ignores unpublished draft body; Case text participates in cap and stale choice requires explicit reselection');
 
-  await category('分析资产').click(); await page.getByRole('button', { name: '打开企业业务资料', exact: true }).click();
+  await market().click(); await page.getByRole('button', { name: '打开企业业务资料', exact: true }).click();
   await page.getByRole('button', { name, exact: true }).click();
   for (const theme of ['light', 'dark']) {
     if (theme === 'dark') await page.getByRole('button', { name: '切换为深色', exact: true }).click();

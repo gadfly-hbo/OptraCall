@@ -7,8 +7,27 @@ async (page) => {
   page.on('pageerror', error => errors.push(error.message));
   const assert = (value, message) => { if (!value) throw new Error(message); };
   const mode = name => page.getByRole('group', { name: '工作区切换' }).getByRole('button', { name, exact: true });
-  const category = name => page.getByRole('navigation', { name: '能力目录' }).getByRole('button', { name, exact: true });
+  const primary = name => page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('button', { name, exact: true });
+  const category = name => page.getByRole('group', { name: '插件市场分类', exact: true }).getByRole('button', { name, exact: true });
   const title = name => page.getByRole('heading', { name, exact: true, level: 1 });
+  const section = name => page.getByRole('heading', { name, exact: true, level: 2 });
+  const layout = name => page.getByRole('group', { name: '显示方式', exact: true }).getByRole('button', { name, exact: true });
+  const cards = () => page.locator('.catalog-card');
+  const openMarket = async () => {
+    await primary('插件市场').click();
+    await title('插件市场').waitFor();
+    await section('分析资产').waitFor();
+    assert(await category('分析资产').getAttribute('aria-pressed') === 'true', 'Entering the market must start with analysis assets');
+  };
+  const openCategory = async name => {
+    if (!await title('插件市场').isVisible()) await openMarket();
+    await category(name).click();
+    await section(name).waitFor();
+    if (await primary('插件市场').isVisible()) {
+      assert(await primary('插件市场').getAttribute('aria-current') === 'page', 'Category switching must keep the market selected');
+    }
+  };
+  const modelCalls = async () => (await (await page.request.get(new URL('/__qa', providerUrl).href)).json()).requestCount;
   const noOverflow = async () => assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Page must not overflow horizontally');
   const createProject = async name => {
     await page.getByRole('button', { name: '新建项目', exact: true }).click();
@@ -31,39 +50,106 @@ async (page) => {
   await page.reload();
   await page.getByRole('button', { name: '新建项目', exact: true }).waitFor();
   await createProject('目录回归项目 ' + Date.now());
-  await page.getByRole('textbox', { name: '消息', exact: true }).fill('页面切换保留的草稿');
-  assert(await page.getByRole('navigation', { name: '能力目录' }).getByRole('button').count() === 4, 'Capability sidebar must contain only the four categories');
-  for (const name of ['分析资产', '场景组合', '连接器', '业务插件']) {
-    await category(name).click(); await title(name).waitFor();
-    assert(await category(name).getAttribute('aria-current') === 'page', 'Sidebar selection must match category');
-    assert(await page.getByRole('group', { name: '能力目录分类' }).getByRole('button', { name, exact: true }).getAttribute('aria-pressed') === 'true', 'Directory selection must match sidebar');
-    assert(await page.locator('.catalog-card').count() >= 3, 'Each category needs distinct feature or planning cards');
-    assert(await page.getByText('已接入功能可直接打开；灰色方块为规划中，尚未接入。', { exact: true }).isVisible(), 'Directory must explain real and planning entries');
-    assert(await page.locator('.catalog-card.is-planned .catalog-open-button').count() === 0, 'Planning cards must not have real open actions');
+  const draftInput = page.getByRole('textbox', { name: '消息', exact: true });
+  await Promise.all([
+    page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().endsWith('/draft') && response.ok()),
+    draftInput.fill('页面切换保留的草稿'),
+  ]);
+  const expectedNavigation = ['Case 看板', '项目看板', 'Studio', '个人资料', '插件市场'];
+  const navigation = page.getByRole('navigation', { name: '主导航', exact: true });
+  assert(await navigation.getByRole('button').count() === expectedNavigation.length, 'Main navigation must have five entries');
+  for (const [index, name] of expectedNavigation.entries()) {
+    assert(await primary(name).evaluate(button => Array.from(button.closest('nav').querySelectorAll('button')).indexOf(button)) === index, 'Unexpected main-navigation order for ' + name);
   }
-  passed.push('Exactly four sidebar directories, category synchronization and honest placeholder status');
-  await category('分析资产').click();
+  await primary('Case 看板').click(); await title('Case 看板').waitFor();
+  await page.getByRole('button', { name: '启用本机 Case 记录', exact: true }).click();
+  const boardView = name => page.locator('.case-view-switch').getByRole('button', { name, exact: true });
+  await boardView('列表').click();
+  await primary('项目看板').click(); await title('项目看板').waitFor();
+  assert(await boardView('方块').getAttribute('aria-pressed') === 'true', 'Case list preference must not change the project board');
+  await openMarket();
+  assert(await layout('方块').getAttribute('aria-pressed') === 'true', 'Market defaults to cards independently of the boards');
+  assert(await page.locator('.topbar-title').textContent() === '插件市场', 'Topbar must identify the market rather than an individual category');
+  const initialModelCalls = await modelCalls();
+  const unexpectedWrites = [];
+  let browsingMarket = true;
+  page.on('request', request => {
+    if (browsingMarket && !['GET', 'HEAD', 'OPTIONS'].includes(request.method())) unexpectedWrites.push(`${request.method()} ${new URL(request.url()).pathname}`);
+  });
+  let expectedLayout = '方块';
+  for (const name of ['分析资产', '场景组合', '连接器', '业务插件']) {
+    await openCategory(name);
+    assert(await category(name).getAttribute('aria-pressed') === 'true', 'Category selection must match its section');
+    assert(await layout(expectedLayout).getAttribute('aria-pressed') === 'true', 'The selected layout must carry across categories');
+    await layout('方块').click();
+    assert(await cards().count() >= 3, 'Each category needs distinct feature or planning entries');
+    assert(await cards().getByRole('heading', { level: 3 }).count() === await cards().count(), 'Each market item has its own h3');
+    assert(await page.getByText('已接入功能可直接打开，规划条目可查看说明。', { exact: true }).isVisible(), 'Market explains connected and planned entries');
+    assert(await page.locator('.catalog-card.is-planned .catalog-open-button').count() === 0, 'Planning entries must not expose real open actions');
+    if (name === '连接器') await page.waitForFunction(() => {
+      const version = document.querySelector('.connector-version-chip')?.textContent?.trim();
+      return Boolean(version && !version.includes('正在读取'));
+    });
+    const evaluation = name === '分析资产' ? page.locator('details.skill-evaluation[aria-label="深度研究用户测评"]') : undefined;
+    if (evaluation) {
+      assert(!await evaluation.evaluate(element => element.open), 'Skill evaluation starts collapsed');
+      await evaluation.locator('summary').click();
+    }
+    const cardContent = await cards().allTextContents();
+    const actionNames = await cards().getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label') ?? button.textContent));
+    await layout('列表').focus(); await page.keyboard.press('Enter');
+    assert(await layout('列表').getAttribute('aria-pressed') === 'true', 'Keyboard can select the list layout');
+    assert(await page.locator('.catalog-list .catalog-card').count() === cardContent.length, 'All entries render as list rows');
+    assert(JSON.stringify(await cards().allTextContents()) === JSON.stringify(cardContent), 'List preserves each card’s information, evaluation and version');
+    assert(JSON.stringify(await cards().getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label') ?? button.textContent))) === JSON.stringify(actionNames), 'List preserves the same entry actions');
+    assert(await cards().evaluateAll(items => items.every((item, index) => index === 0 || item.getBoundingClientRect().top >= items[index - 1].getBoundingClientRect().bottom - 1)), 'List entries must stack vertically');
+    if (evaluation) {
+      assert(await evaluation.evaluate(element => element.open), 'Layout switching keeps an open evaluation expanded');
+      await evaluation.locator('summary').click();
+    }
+    expectedLayout = '列表';
+  }
+  assert(unexpectedWrites.length === 0 && await modelCalls() === initialModelCalls, 'Changing category/layout must remain read-only: ' + unexpectedWrites.join(', '));
+  browsingMarket = false;
+  await primary('项目看板').click(); await title('项目看板').waitFor();
+  assert(await boardView('方块').getAttribute('aria-pressed') === 'true', 'Market list preference must not change the project board');
+  await primary('Case 看板').click(); await title('Case 看板').waitFor();
+  assert(await boardView('列表').getAttribute('aria-pressed') === 'true', 'Market display changes must not overwrite the Case board preference');
+  await openMarket();
+  assert(await layout('列表').getAttribute('aria-pressed') === 'true', 'Reopening the market keeps the shared window preference');
+  passed.push('Five main entries, default analysis assets, four categories with equivalent card/list details and independent board preferences');
   const metricCard = page.locator('.catalog-card').filter({ has: page.getByRole('heading', { name: 'SAP 分析资产', exact: true }) });
   assert(await metricCard.getByText('已接入', { exact: true }).isVisible(), 'Metrics must be a real entry');
   const plannedCard = page.locator('.catalog-card.is-planned').first();
   assert(await metricCard.evaluate(element => getComputedStyle(element).backgroundColor) !== await plannedCard.evaluate(element => getComputedStyle(element).backgroundColor), 'Real and planning cards must have different surfaces');
   await metricCard.getByRole('button', { name: '打开SAP 分析资产', exact: true }).click(); await title('指标体系').waitFor();
-  assert(await category('分析资产').getAttribute('aria-current') === 'page', 'Metric page must remain under assets');
-  await page.getByRole('button', { name: '返回分析资产 →', exact: true }).click(); await title('分析资产').waitFor();
-  await category('业务插件').click();
+  assert(await primary('插件市场').getAttribute('aria-current') === 'page', 'Metric page must remain under assets');
+  await page.getByRole('button', { name: '返回分析资产 →', exact: true }).click(); await section('分析资产').waitFor();
+  await openCategory('业务插件');
   await page.getByRole('button', { name: '打开需求梳理', exact: true }).click(); await title('需求梳理').waitFor();
-  assert(await category('业务插件').getAttribute('aria-current') === 'page', 'Requirements page must remain under plugins');
-  await page.getByRole('button', { name: '返回业务插件 →', exact: true }).click(); await title('业务插件').waitFor();
+  assert(await primary('插件市场').getAttribute('aria-current') === 'page', 'Requirements page must remain under plugins');
+  await page.getByRole('button', { name: '返回业务插件 →', exact: true }).click(); await section('业务插件').waitFor();
   passed.push('Real metrics and requirements cards open existing pages and return to their owning categories');
-  await page.getByRole('group', { name: '能力目录分类' }).getByRole('button', { name: '分析资产', exact: true }).click();
+  await openCategory('分析资产');
+  const initialAssetCount = await cards().count();
   const search = page.getByRole('textbox', { name: '搜索分析资产', exact: true });
+  const tag = page.getByRole('combobox', { name: '业务标签', exact: true });
+  browsingMarket = true;
   await search.fill('  SAP  ');
   assert(await page.locator('.catalog-card').count() === 1, 'Search must match case-insensitively');
-  await page.getByRole('combobox', { name: '业务标签', exact: true }).selectOption('报告表达');
-  await page.getByRole('heading', { name: '没有找到匹配的功能或规划' }).waitFor();
+  await tag.selectOption('分析方法');
+  const filtered = await cards().allTextContents();
+  assert(filtered.length === 1, 'Search plus tag must match the SAP entry');
+  await layout('方块').click();
+  assert(await search.inputValue() === '  SAP  ' && await tag.inputValue() === '分析方法', 'Layout switch must preserve keyword and tag');
+  assert(JSON.stringify(await cards().allTextContents()) === JSON.stringify(filtered), 'Layout switch preserves combined-filter results');
+  await tag.selectOption('报告表达');
+  await layout('列表').click();
+  assert(await search.inputValue() === '  SAP  ' && await tag.inputValue() === '报告表达', 'List switch preserves empty-result filters');
+  await page.getByRole('heading', { name: '没有找到匹配的功能或规划', level: 3, exact: true }).waitFor();
   await page.getByRole('button', { name: '清除筛选', exact: true }).click();
   assert(await search.inputValue() === '', 'Clear resets query');
-  assert(await page.locator('.catalog-card').count() === 10, 'Clear restores the unified SAP entry and remaining planning examples');
+  assert(await tag.inputValue() === '全部' && await cards().count() === initialAssetCount, 'Clear restores every original analysis-asset entry');
   const detailTrigger = page.getByRole('button', { name: '查看假设与策略资产包规划', exact: true });
   await detailTrigger.click();
   const dialog = page.getByRole('dialog', { name: '假设与策略资产包', exact: true });
@@ -73,34 +159,39 @@ async (page) => {
   await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
   assert(await detailTrigger.evaluate(element => element === document.activeElement), 'Escape must return focus to card trigger');
   await detailTrigger.click(); await page.getByRole('button', { name: '关闭详情', exact: true }).click();
-  passed.push('Search, combined filters, empty reset, modal close and keyboard focus return');
-  await category('业务插件').click();
+  await dialog.waitFor({ state: 'detached' });
+  assert(unexpectedWrites.length === 0 && await modelCalls() === initialModelCalls, 'Filtering and reading a plan must remain read-only: ' + unexpectedWrites.join(', '));
+  browsingMarket = false;
+  passed.push('Search and tags survive layout changes; empty reset, read-only planning dialog and keyboard focus return');
+  await openCategory('业务插件');
   const decisionCard = page.locator('.catalog-card').filter({ has: page.getByRole('heading', { name: '决策看板', exact: true }) });
   assert(await decisionCard.getByText('已接入', { exact: true }).isVisible(), 'Decision card must identify a real feature');
   assert(await page.getByRole('button', { name: '查看决策看板规划', exact: true }).count() === 0, 'Real decision board must not be presented as planning');
   await decisionCard.getByRole('button', { name: '打开决策看板', exact: true }).click(); await title('决策看板').waitFor();
   assert(await mode('决策').getAttribute('aria-pressed') === 'true', 'Decision card must open the decision workspace');
-  await category('场景组合').click(); await page.getByRole('button', { name: '返回工作区 →', exact: true }).click(); await title('决策看板').waitFor();
+  await openCategory('场景组合'); await page.getByRole('button', { name: '返回工作区 →', exact: true }).click(); await title('决策看板').waitFor();
   await mode('分析').click();
   assert(await page.getByRole('textbox', { name: '消息', exact: true }).inputValue() === '页面切换保留的草稿', 'Decision card and directory return must preserve the original draft');
   await mode('决策').click(); await title('决策看板').waitFor();
   assert(await mode('决策').getAttribute('aria-pressed') === 'true', 'Decision mode must be selected');
   await page.getByRole('heading', { name: '决策看板', exact: true }).waitFor();
   assert(await page.getByText('把判断、行动与反馈放在同一处', { exact: false }).isVisible(), 'Decision board lede visible');
-  await category('场景组合').click();
+  await openCategory('场景组合');
   await page.getByRole('button', { name: '返回工作区 →', exact: true }).click(); await title('决策看板').waitFor();
   await page.getByRole('button', { name: '模型设置', exact: true }).click();
   await page.getByRole('button', { name: '返回决策工作台', exact: true }).click(); await title('决策看板').waitFor();
-  await category('连接器').click();
+  await openCategory('连接器');
   await page.getByRole('button', { name: '模型设置', exact: true }).click();
-  await page.getByRole('button', { name: '返回连接器', exact: true }).click(); await title('连接器').waitFor();
+  await page.getByRole('button', { name: '返回连接器', exact: true }).click(); await section('连接器').waitFor();
+  await page.getByRole('button', { name: '到项目任务使用商圈数据', exact: true }).click(); await title('项目看板').waitFor();
+  assert(await modelCalls() === initialModelCalls, 'Opening an existing connector destination must not call a model');
   passed.push('Connected decision board card, last workspace return and settings return preserve original task state');
   await mode('分析').click();
   const input = page.getByRole('textbox', { name: '消息', exact: true });
   assert(await input.inputValue() === '页面切换保留的草稿', 'Decision switching must preserve draft');
   await input.fill('跨页面真实回复'); await page.waitForFunction(() => document.querySelector('.send-button')?.disabled === false); await input.press('Enter');
   await page.waitForFunction(() => (document.querySelector('.message.assistant .message-content')?.textContent?.length ?? 0) > 0);
-  await input.fill('回复期间的新草稿'); await mode('决策').click(); await category('分析资产').click(); await mode('分析').click();
+  await input.fill('回复期间的新草稿'); await mode('决策').click(); await openCategory('分析资产'); await mode('分析').click();
   assert(await page.getByRole('button', { name: '停止生成', exact: true }).isVisible(), 'Native slow run must remain active after view switching');
   await page.getByRole('button', { name: '停止生成', exact: true }).click();
   await page.getByRole('status').filter({ hasText: '已停止，已保存的部分输出仍保留' }).waitFor();
@@ -116,7 +207,23 @@ async (page) => {
     assert(await page.evaluate(() => document.querySelector('.workspace-switch').getBoundingClientRect().bottom <= document.querySelector('.topbar').getBoundingClientRect().bottom), 'Mode switch must stay within the header above content');
     await noOverflow();
     await page.getByRole('button', { name: '展开侧栏', exact: true }).click();
-    await category('业务插件').click(); await title('业务插件').waitFor(); await noOverflow();
+    await openCategory('业务插件'); await noOverflow();
+    assert(!await navigation.isVisible(), 'Entering the market closes the narrow sidebar');
+    await page.getByRole('button', { name: '展开侧栏', exact: true }).click();
+    assert(await primary('插件市场').getAttribute('aria-current') === 'page', 'Reopening the narrow sidebar shows the market selected');
+    await page.getByRole('button', { name: '收起侧栏', exact: true }).click();
+    await layout('方块').click(); await noOverflow();
+    await layout('列表').click(); await noOverflow();
+    assert(await page.locator('.catalog-page').evaluate(element => element.scrollWidth <= element.clientWidth), 'The list itself fits the narrow market viewport');
+    assert(await page.locator('.catalog-list .catalog-card').count() > 0, 'Narrow list still presents market entries');
+    const narrowPlan = page.getByRole('button', { name: '查看数据质量与业务对账规划', exact: true });
+    await narrowPlan.click();
+    const narrowDialog = page.getByRole('dialog', { name: '数据质量与业务对账', exact: true });
+    await narrowDialog.waitFor();
+    assert(await narrowDialog.evaluate(element => element.getBoundingClientRect().width < innerWidth), 'Planning dialog fits the narrow viewport');
+    await page.keyboard.press('Escape');
+    await narrowDialog.waitFor({ state: 'detached' });
+    assert(await narrowPlan.evaluate(element => element === document.activeElement), 'Closing a narrow dialog returns focus');
     assert(await page.getByRole('button', { name: '打开需求梳理', exact: true }).isVisible(), 'Existing requirement entry stays usable on narrow screens');
     await page.getByRole('button', { name: '打开决策看板', exact: true }).click(); await title('决策看板').waitFor();
     assert(await mode('决策').getAttribute('aria-pressed') === 'true', 'Narrow decision card opens the real workspace');
@@ -131,5 +238,12 @@ async (page) => {
   assert(await page.evaluate(() => localStorage.length === 0 && sessionStorage.length === 0), 'No browser credential persistence');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: '切换为浅色', exact: true }).click();
+  assert(await modelCalls() === initialModelCalls + 1, 'Only the explicitly sent synthetic analysis may call the model');
+  await openMarket();
+  assert(await layout('列表').getAttribute('aria-pressed') === 'true', 'List preference is retained until refresh');
+  await page.reload();
+  await openMarket();
+  assert(await layout('方块').getAttribute('aria-pressed') === 'true', 'A fresh window state defaults to cards after refresh');
+  passed.push('Refresh restores the default market layout');
   return { result: 'PASS', checks: passed, externalRequests: outbound.length, browserErrors: errors.length };
 }
