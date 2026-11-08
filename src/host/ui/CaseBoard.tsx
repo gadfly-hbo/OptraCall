@@ -25,8 +25,8 @@ type Editing = { kind: 'edit' | 'status' | 'note' | 'link' | 'artifact'; record:
 
 const adoptionReviewReasons: Record<string, string> = { interrupted: '上次保存中断，结果尚未确认。', source_unavailable: '源文件暂不可读取。', source_unsafe: '源文件路径或链接不符合安全读取条件。', source_changed: '读取或核对时文件发生变化。', source_too_large: '文件超过本次保存的10 MiB上限。', name_conflict: '保存位置已有同名文件，未覆盖。', save_or_link_failed: '文件保存或关联未确认完成。' };
 
-export function BoardViewSwitch({ value, onChange }: { value: 'cards' | 'list'; onChange: (value: 'cards' | 'list') => void }) {
-  return <div className="case-view-switch" aria-label="看板显示方式"><button type="button" aria-pressed={value === 'cards'} onClick={() => onChange('cards')}><span aria-hidden="true">▦</span> 方块</button><button type="button" aria-pressed={value === 'list'} onClick={() => onChange('list')}><span aria-hidden="true">☰</span> 列表</button></div>;
+export function BoardViewSwitch({ value, onChange, label = '看板显示方式' }: { value: 'cards' | 'list'; onChange: (value: 'cards' | 'list') => void; label?: string }) {
+  return <div className="case-view-switch" role="group" aria-label={label}><button type="button" aria-pressed={value === 'cards'} onClick={() => onChange('cards')}><span aria-hidden="true">▦</span> 方块</button><button type="button" aria-pressed={value === 'list'} onClick={() => onChange('list')}><span aria-hidden="true">☰</span> 列表</button></div>;
 }
 export function CaseBoard({ projects, configurations, onOpenTask, onCreateTask, onProjectChange, initialCaseId, mode: providedMode, onModeChange, currentWork, onOpenDecisionBoard, decisionUi, onDecisionUiChange }: CaseBoardProps) {
   const [storage, setStorage] = useState<CaseStorageStatus | null>(null), [data, setData] = useState<CaseList>({ cases: [], projectLinks: [] }), [loading, setLoading] = useState(true), [dataReady, setDataReady] = useState(false), [initializing, setInitializing] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
