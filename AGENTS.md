@@ -2,6 +2,8 @@
 
 开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.2](docs/OptraCall_产品讨论稿_v0.2.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
 
+编写或修改 OptraCall 分析类 Skill 本体时（含 `SKILL.md`、随包参考资料、脚本和模板），先读取项目根目录下的 [分析类 Skill 编写规范](docs/分析类Skill编写规范.md)，按规范编写并自检。仅做测评、只读审查、Host 接缝或接入时，沿用各自流程。
+
 本项目遵循四点产品原则：**Host 管环境、Agent 自主执行、优先复用 Pi 已有能力、减少人的操作**。准备或修改 spec／UI、开发及验收时，必须按[工程规范第2节](docs/engineering-workflow.md#四点产品原则)与[前置检查](docs/engineering-workflow.md#3-连续-sdd-与-tdd)核对实际职责、复用依据和最少用户操作路径，完成[专项最终检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；完整规则仅在工程规范维护。
 
 涉及 SDK、依赖或适配层的设计、实现与验收前，必须读取[官方 Pi SDK 来源与版本约束](docs/engineering-workflow.md#官方-pi-sdk-来源与版本约束)和[升级流程](docs/engineering-workflow.md#pi-sdk-升级流程)：统一使用未经修改的官方发布包，SDK 目标版本由用户明确指定，兼容适配在 OptraCall 自身完成。源码补丁、私有 fork、安装目录改写或绕过公开契约的运行时改写均不能作为修复手段；公开扩展机制按同一规范使用。当前[规则核对](openspec/changes/pi-sdk-governance/result.md)列有未处理风险，不能从规则已建立推断既有实现全部合规。
