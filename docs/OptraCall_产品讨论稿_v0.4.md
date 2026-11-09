@@ -292,7 +292,7 @@ flowchart LR
 
 沿用 SDD／TDD、适用检查、非作者独立复核及精简 Git／CI；详细要求唯一维护在[工程规范](engineering-workflow.md)。纯讨论稿变更只做相称内容、一致性、引用和范围复核，不制造产品 RED 或运行无关产品测试。
 
-Mac mini 负责产品方案、开发、工程验证和修复；MacBook 作为用户体验与问题回传端，不形成第二条开发线。Codex 负责 Host／Agent 与整体接入回归，Qoder 负责获分派的 Extension 本体；接缝与移交按工程规范执行。
+Mac mini 负责产品方案、开发、工程验证和修复。MacBook 承担用户体验和问题回传。Codex 与 Qoder 的开发、接入与交付分工按[工程规范第2节](engineering-workflow.md#2-人员设备与运行时分工)执行。
 
 此次仅更新讨论稿与必要文档记录，不修改产品源码、测试、依赖或业务持久结构，不安装 Semantica／Graphiti，不调用真实模型或读取真实业务根／凭据，不切换服务或操作 MacBook。既有 Git、设备及历史功能授权不自动扩为 L2 采用批准。
 
