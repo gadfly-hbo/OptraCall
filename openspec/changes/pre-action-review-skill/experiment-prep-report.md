@@ -73,3 +73,40 @@
 ## 不具备开跑条件
 
 四案均缺项、判据空白、SDK 加载未验证——**当前不具备开跑条件**，不能写成"已具备"。
+
+---
+
+## 项目暂停确认（2026-11-09）
+
+**当前阶段**：材料收集。项目暂停在此阶段，等待四类真实案例。
+
+**暂停原因**：当前环境只有合成资料，缺少 A/B/C/D 四类可核验的真实案例和授权记录。
+
+**已冻结内容**（保留不动）：
+- 最小实验版 Skill（`.local/pre-action-review-experiment/skill/SKILL.md`，SHA-256 `a7aba1c8…e5dc`）
+- 运行配置（`.local/pre-action-review-experiment/freeze/run-config.md`，SHA-256 `32296b9d…0b7e`）
+- 判据框架空白模板（`.local/pre-action-review-experiment/private-criteria/criteria-framework.md`，SHA-256 `9a8acb2a…214f`）
+- 整包 SHA-256 `2114bb97…677e6`
+
+**案例填写模板**（在冻结包外）：
+MacBook `/Users/huangbo/Dev/Projects/skill-eval/.local/pre-action-review-case-intake/CASE-TEMPLATE.md`
+
+用户遇到合适真实案例时复制一份，保留原提案/交办、当时的行动建议、关键材料和授权记录。四类各需一份：
+- A 关键证据缺口
+- B 超出授权范围
+- C 证据充分且已批准
+- D 低风险明确交办
+
+缺项如实标注，不用合成材料补齐。
+
+**恢复条件**（全部满足才恢复）：
+1. 四类真实案例齐备且材料可核验
+2. 收到用户明确恢复指令
+
+**恢复后动作**（材料收齐≠自动启动）：
+1. 独立审阅者预写逐案判据
+2. 离线校验
+3. 另存新的完整冻结包
+4. 真实对照另行授权
+
+**保留不动**：现有冻结包、`bda5f47` 的「无效」结案、全部历史评测记录、决策方法资产。
