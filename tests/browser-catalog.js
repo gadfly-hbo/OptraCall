@@ -8,6 +8,8 @@ async (page) => {
   const assert = (value, message) => { if (!value) throw new Error(message); };
   const mode = name => page.getByRole('group', { name: '工作区切换' }).getByRole('button', { name, exact: true });
   const primary = name => page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('button', { name, exact: true });
+  const settingsEntry = page.getByRole('complementary', { name: '工作台导航', exact: true }).getByRole('button', { name: '设置', exact: true });
+  const settingsTab = name => page.getByRole('group', { name: '设置分类', exact: true }).getByRole('button', { name, exact: true });
   const category = name => page.getByRole('group', { name: '插件市场分类', exact: true }).getByRole('button', { name, exact: true });
   const title = name => page.getByRole('heading', { name, exact: true, level: 1 });
   const section = name => page.getByRole('heading', { name, exact: true, level: 2 });
@@ -55,12 +57,28 @@ async (page) => {
     page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().endsWith('/draft') && response.ok()),
     draftInput.fill('页面切换保留的草稿'),
   ]);
-  const expectedNavigation = ['Case 看板', '项目看板', 'Studio', '个人资料', '插件市场'];
+  const expectedNavigation = ['Case 看板', '项目看板', 'Studio', '插件市场'];
   const navigation = page.getByRole('navigation', { name: '主导航', exact: true });
-  assert(await navigation.getByRole('button').count() === expectedNavigation.length, 'Main navigation must have five entries');
+  assert(await navigation.getByRole('button').count() === expectedNavigation.length, 'The upper navigation must have four entries');
   for (const [index, name] of expectedNavigation.entries()) {
     assert(await primary(name).evaluate(button => Array.from(button.closest('nav').querySelectorAll('button')).indexOf(button)) === index, 'Unexpected main-navigation order for ' + name);
   }
+  assert(await settingsEntry.count() === 1 && await settingsEntry.evaluate(button => Boolean(button.closest('.sidebar-bottom'))), 'The settings entry stays at the bottom of the sidebar');
+  const taskModelShortcut = page.locator('.model-button');
+  const beforeSettings = await modelCalls();
+  await taskModelShortcut.click();
+  await title('设置').waitFor();
+  await section('模型配置').waitFor();
+  assert(await settingsTab('模型设置').getAttribute('aria-pressed') === 'true', 'The task shortcut opens model settings directly');
+  await settingsTab('个人资料').focus();
+  await page.keyboard.press('Enter');
+  await section('个人资料').waitFor();
+  assert(await settingsEntry.getAttribute('aria-current') === 'page' && await settingsTab('个人资料').getAttribute('aria-pressed') === 'true', 'The sidebar keeps settings selected on either tab');
+  assert(!await section('模型配置').isVisible(), 'Only the selected settings panel is visible');
+  await page.getByRole('button', { name: '返回项目空间', exact: true }).click();
+  assert(await draftInput.inputValue() === '页面切换保留的草稿', 'Returning from either settings tab preserves the task draft');
+  await page.waitForFunction(() => document.activeElement?.matches('.model-button'));
+  assert(await modelCalls() === beforeSettings, 'Opening settings and switching its tabs must not call a model');
   await primary('Case 看板').click(); await title('Case 看板').waitFor();
   await page.getByRole('button', { name: '启用本机 Case 记录', exact: true }).click();
   const boardView = name => page.locator('.case-view-switch').getByRole('button', { name, exact: true });
@@ -117,7 +135,7 @@ async (page) => {
   assert(await boardView('列表').getAttribute('aria-pressed') === 'true', 'Market display changes must not overwrite the Case board preference');
   await openMarket();
   assert(await layout('列表').getAttribute('aria-pressed') === 'true', 'Reopening the market keeps the shared window preference');
-  passed.push('Five main entries, default analysis assets, four categories with equivalent card/list details and independent board preferences');
+  passed.push('Four upper navigation entries, bottom settings, preserved task return, four market categories with equivalent card/list details and independent board preferences');
   const metricCard = page.locator('.catalog-card').filter({ has: page.getByRole('heading', { name: 'SAP 分析资产', exact: true }) });
   assert(await metricCard.getByText('已接入', { exact: true }).isVisible(), 'Metrics must be a real entry');
   const plannedCard = page.locator('.catalog-card.is-planned').first();
@@ -178,10 +196,11 @@ async (page) => {
   assert(await page.getByText('把判断、行动与反馈放在同一处', { exact: false }).isVisible(), 'Decision board lede visible');
   await openCategory('场景组合');
   await page.getByRole('button', { name: '返回工作区 →', exact: true }).click(); await title('决策看板').waitFor();
-  await page.getByRole('button', { name: '模型设置', exact: true }).click();
+  await settingsEntry.click();
+  assert(await settingsTab('模型设置').getAttribute('aria-pressed') === 'true', 'The sidebar settings entry defaults to the model tab');
   await page.getByRole('button', { name: '返回决策工作台', exact: true }).click(); await title('决策看板').waitFor();
   await openCategory('连接器');
-  await page.getByRole('button', { name: '模型设置', exact: true }).click();
+  await settingsEntry.click();
   await page.getByRole('button', { name: '返回连接器', exact: true }).click(); await section('连接器').waitFor();
   await page.getByRole('button', { name: '到项目任务使用商圈数据', exact: true }).click(); await title('项目看板').waitFor();
   assert(await modelCalls() === initialModelCalls, 'Opening an existing connector destination must not call a model');
@@ -206,6 +225,14 @@ async (page) => {
     assert(await mode('分析').isVisible() && await mode('决策').isVisible(), 'Mode switch remains visible on narrow screen');
     assert(await page.evaluate(() => document.querySelector('.workspace-switch').getBoundingClientRect().bottom <= document.querySelector('.topbar').getBoundingClientRect().bottom), 'Mode switch must stay within the header above content');
     await noOverflow();
+    await page.getByRole('button', { name: '展开侧栏', exact: true }).click();
+    await settingsEntry.click();
+    await section('模型配置').waitFor(); await noOverflow();
+    await settingsTab('个人资料').click();
+    await section('个人资料').waitFor(); await noOverflow();
+    assert(await page.getByRole('region', { name: '设置', exact: true }).evaluate(element => element.scrollWidth <= element.clientWidth), 'Both settings tabs fit the narrow viewport');
+    await page.getByRole('button', { name: '返回决策工作台', exact: true }).click(); await title('决策看板').waitFor();
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '展开侧栏');
     await page.getByRole('button', { name: '展开侧栏', exact: true }).click();
     await openCategory('业务插件'); await noOverflow();
     assert(!await navigation.isVisible(), 'Entering the market closes the narrow sidebar');

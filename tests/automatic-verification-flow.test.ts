@@ -67,26 +67,27 @@ async function fixture(scenario: AutomaticSyntheticScenario = 'repair', caseName
   } catch (error) { await close(); throw error; }
 }
 
+const publicPresetId = 'deepseek-flash';
 for (const explicitConfiguration of [false, true]) test(`AV01 public preset configuration ID survives automatic settings, admission and the actual SDK chain (${explicitConfiguration ? 'explicit verifier' : 'selected default'})`, { timeout: 120000 }, async t => {
   // Keep the real preset identity, but use an isolated synthetic Provider so
   // this regression cannot send credentials or requests to its native route.
-  const f = await fixture('retain', t.name, startAutomaticProvider, 'mimo-v26-flash'); t.after(() => f.close());
+  const f = await fixture('retain', t.name, startAutomaticProvider, publicPresetId); t.after(() => f.close());
   if (!await requireAutomatic(t, f)) return;
-  assert.equal(f.task.configuration.id, 'mimo-v26-flash');
-  const saved = await readJson(await f.host.request(`${f.route}/settings`, 'PUT', { expectedRevision: 0, settings: { ...f.settings, ...(explicitConfiguration ? { configurationId: 'mimo-v26-flash' } : {}) } }));
-  assert.equal(saved.settings.configurationId, explicitConfiguration ? 'mimo-v26-flash' : undefined);
+  assert.equal(f.task.configuration.id, publicPresetId);
+  const saved = await readJson(await f.host.request(`${f.route}/settings`, 'PUT', { expectedRevision: 0, settings: { ...f.settings, ...(explicitConfiguration ? { configurationId: publicPresetId } : {}) } }));
+  assert.equal(saved.settings.configurationId, explicitConfiguration ? publicPresetId : undefined);
   assert.equal(f.provider.requests.length, 0, 'saving and reading settings cannot dispatch a model');
   const requestId = await f.writeInitial();
   const chain = await f.completed(requestId);
   assert.equal(chain.state, 'completed', JSON.stringify(chain));
-  assert.equal(chain.configuration.id, 'mimo-v26-flash');
-  assert.equal(chain.verificationConfiguration.id, 'mimo-v26-flash');
-  assert.equal(chain.settingsSnapshot.configurationId, explicitConfiguration ? 'mimo-v26-flash' : undefined);
+  assert.equal(chain.configuration.id, publicPresetId);
+  assert.equal(chain.verificationConfiguration.id, publicPresetId);
+  assert.equal(chain.settingsSnapshot.configurationId, explicitConfiguration ? publicPresetId : undefined);
   assert.deepEqual(chain.steps.map(step => step.phase), ['cold', 'compare', 'author']);
   const status = await readJson(await f.host.request(`${f.route}/status`));
   assert.equal(status.observation.requestId, requestId);
-  assert.equal(status.observation.configuration.id, 'mimo-v26-flash');
-  assert.equal(status.observation.verificationConfiguration.id, 'mimo-v26-flash');
+  assert.equal(status.observation.configuration.id, publicPresetId);
+  assert.equal(status.observation.verificationConfiguration.id, publicPresetId);
   assert.ok(f.provider.requests.some(request => request.stage === 'ordinary'));
   assert.ok(f.provider.requests.some(request => request.stage === 'cold'));
   assert.equal(await readFile(f.reportPath, 'utf8'), author);

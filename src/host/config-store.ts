@@ -19,12 +19,23 @@ export type PublicModelConfiguration = ModelConfiguration & { hasApiKey: boolean
 export type RuntimeModelConfiguration = ModelConfiguration & { apiKey: string };
 
 export const TARGET_MODELS: readonly Readonly<ModelConfiguration>[] = Object.freeze([
-  { id: 'minimax-m3', name: 'MiniMax M3', provider: 'minimax-cn', api: 'anthropic-messages', baseUrl: 'https://api.minimaxi.com/anthropic', model: 'MiniMax-M3', revision: 0 },
-  { id: 'minimax-m31-flash', name: 'MiniMax M3.1 Flash', provider: 'minimax-cn', api: 'anthropic-messages', baseUrl: 'https://api.minimaxi.com/anthropic', model: 'MiniMax-M3.1-Flash', revision: 0 },
   { id: 'deepseek-flash', name: 'DeepSeek Flash', provider: 'deepseek', api: 'openai-completions', baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash', revision: 0 },
+  { id: 'minimax-m31-flash', name: 'MiniMax M3.1 Flash', provider: 'minimax-cn', api: 'anthropic-messages', baseUrl: 'https://api.minimaxi.com/anthropic', model: 'MiniMax-M3.1-Flash', revision: 0 },
+  { id: 'glm-53-flash', name: 'GLM-5.3-Flash', provider: 'zai-coding-cn', api: 'openai-completions', baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4', model: 'glm-5.3-flash', revision: 0 },
+].map(value => Object.freeze(value as ModelConfiguration)));
+
+// Fixed inputs for the explicit trial-store cleanup. These are never offered as new presets.
+const retiredTrialModels = [
+  { id: 'minimax-m3', name: 'MiniMax M3', provider: 'minimax-cn', api: 'anthropic-messages', baseUrl: 'https://api.minimaxi.com/anthropic', model: 'MiniMax-M3', revision: 0 },
   { id: 'mimo-v26-pro', name: 'MiMo V2.6 Pro', provider: 'xiaomi-token-plan-cn', api: 'openai-completions', baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1', model: 'mimo-v2.6-pro', revision: 0 },
   { id: 'mimo-v26-flash', name: 'MiMo V2.6 Flash', provider: 'xiaomi-token-plan-cn', api: 'openai-completions', baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1', model: 'mimo-v2.6-flash', revision: 0 },
-].map(value => Object.freeze(value as ModelConfiguration)));
+] satisfies ModelConfiguration[];
+const knownTrialModels = [...TARGET_MODELS, ...retiredTrialModels];
+
+function sameModelIdentity(profile: ModelConfiguration, preset: Readonly<ModelConfiguration>): boolean {
+  return profile.id === preset.id && profile.provider === preset.provider && profile.api === preset.api
+    && profile.baseUrl === preset.baseUrl && profile.model === preset.model;
+}
 
 type Credentials = Record<string, { type: 'api_key'; key: string }>;
 type Settings = { schema: 1; selectedId: string | null; profiles: ModelConfiguration[]; versions: ModelConfiguration[] };
@@ -204,16 +215,47 @@ export class ConfigurationStore {
   read(id?: string): PublicModelConfiguration | null {
     this.#assertReady(); const value = this.#settings.profiles.find(value => value.id === (id ?? this.#settings.selectedId)); return value ? this.#public(value) : null;
   }
+  /** Run only against the specifically authorized, stopped OptraCall trial store. */
+  reconcileTrialModelPresets(): Promise<{ removedIds: string[]; removedProviders: string[] }> {
+    return this.#mutate(async () => {
+      this.#assertReady();
+      const previous = this.#settings;
+      if ([...previous.profiles, ...previous.versions].some(profile => !knownTrialModels.some(preset => sameModelIdentity(profile, preset)))) {
+        throw new ConfigurationStoreError('trial_model_inventory_changed');
+      }
+      const retained = (profile: ModelConfiguration) => TARGET_MODELS.some(preset => sameModelIdentity(profile, preset));
+      const profiles = previous.profiles.filter(retained);
+      const removedIds = previous.profiles.filter(profile => !retained(profile)).map(profile => profile.id);
+      const missing = TARGET_MODELS.filter(preset => !profiles.some(profile => profile.id === preset.id));
+      profiles.push(...missing.map(preset => ({ ...preset })));
+      const versions = previous.versions.filter(retained);
+      const providers = new Set(profiles.map(profile => profile.provider));
+      const removedProviders = Object.keys(this.#credentials).filter(provider => !providers.has(provider));
+      if (removedIds.length || removedProviders.length || missing.length || versions.length !== previous.versions.length) {
+        const settings: Settings = {
+          schema: 1, profiles, versions,
+          selectedId: profiles.some(profile => profile.id === previous.selectedId) ? previous.selectedId : null,
+        };
+        const credentials = Object.fromEntries(Object.entries(this.#credentials).filter(([provider]) => providers.has(provider)));
+        await this.#commit(settings, credentials);
+        this.#settings = settings;
+        this.#credentials = credentials;
+      }
+      return { removedIds, removedProviders };
+    });
+  }
   save(input: unknown): Promise<PublicModelConfiguration> {
     return this.#mutate(async () => {
       this.#assertReady();
       if (!record(input)) throw new ConfigurationStoreError('invalid_configuration');
       const current = typeof input.id === 'string' ? this.#settings.profiles.find(value => value.id === input.id) : this.#settings.profiles.find(value => value.provider === input.provider && value.model === input.model);
-      if (input.id !== undefined && !current) throw new ConfigurationStoreError('configuration_not_found');
-      const id = current?.id ?? randomUUID();
+      const missingPreset = !current && typeof input.id === 'string' ? TARGET_MODELS.find(preset => preset.id === input.id) : undefined;
+      if (input.id !== undefined && !current && !missingPreset) throw new ConfigurationStoreError('configuration_not_found');
+      const id = current?.id ?? missingPreset?.id ?? randomUUID();
       const provider = input.provider === 'openai-compatible' ? current?.provider ?? `custom-${id}` : input.provider;
       const candidate = parseProfile({ ...input, id, provider, api: input.api ?? (input.provider === 'openai-compatible' ? 'openai-completions' : current?.api), revision: (current?.revision ?? 0) + 1 });
-      const native = TARGET_MODELS.find(value => value.provider === candidate.provider);
+      if (missingPreset && !sameModelIdentity(candidate, missingPreset)) throw new ConfigurationStoreError('invalid_configuration');
+      const native = knownTrialModels.find(value => value.provider === candidate.provider);
       if (native && (candidate.baseUrl !== native.baseUrl || candidate.api !== native.api)) throw new ConfigurationStoreError('invalid_configuration', { baseUrl: '原生 Provider 线路固定；其他线路请另建自定义配置。' });
       if (this.#settings.profiles.some(value => value.provider === candidate.provider && value.id !== candidate.id && (value.baseUrl !== candidate.baseUrl || value.api !== candidate.api))) throw new ConfigurationStoreError('invalid_configuration', { baseUrl: '同一 Provider 必须使用相同线路。' });
       const supplied = typeof input.apiKey === 'string' ? input.apiKey.trim() : '';

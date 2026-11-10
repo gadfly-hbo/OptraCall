@@ -83,14 +83,16 @@ const editorSignature = (value: Pick<PersonalEditor, 'fields' | 'metadata' | 'ta
 const editorHasInput = (value: PersonalEditor) => Boolean(value.fields.sourceFileId || Object.values(value.fields).some(field => typeof field === 'string' && field.trim()) || value.metadata.sourceRefs.length || value.metadata.aliases.length || value.metadata.caution?.trim());
 const emptyMetadata = (kind: PersonalMetadata['kind'] = 'knowledge', sourceRefs: LearningSourceRef[] = []): PersonalMetadata => ({ kind, aliases: [], caution: null, sourceRefs });
 
-export function PersonalMaterialsPage({ api = personalRetentionApi, candidateApi, active = true, initialSource, onSourceConsumed, onOpenProject, onOpenMaterial, currentTaskLabel, onUse, onOther }: {
-  active?: boolean; candidateApi?: AgentCandidatesApi; currentTaskLabel?: string; onUse?: (selection: PersonalContextSelection, title: string) => void; onOther?: (selection: PersonalContextSelection, title: string) => void;
+export function PersonalMaterialsPage({ api = personalRetentionApi, candidateApi, active = true, headingLevel = 1, initialSource, onSourceConsumed, onOpenProject, onOpenMaterial, currentTaskLabel, onUse, onOther }: {
+  active?: boolean; headingLevel?: 1 | 2; candidateApi?: AgentCandidatesApi; currentTaskLabel?: string; onUse?: (selection: PersonalContextSelection, title: string) => void; onOther?: (selection: PersonalContextSelection, title: string) => void;
   api?: PersonalRetentionApi; initialSource?: PersonalRetentionEntry | null; onSourceConsumed?: () => void;
   onOpenProject?: (projectId: string) => void; onOpenMaterial?: (materialId: string, revisionId?: string) => void;
 }) {
   const [view, setView] = useState<CandidateView | 'manual'>('all');
+  const Heading = headingLevel === 2 ? 'h2' : 'h1';
   const showManual = view === 'all' || view === 'manual';
   const id = useId(), heading = useRef<HTMLHeadingElement>(null), lookupEpoch = useRef(0);
+  const startedSource = useRef<PersonalRetentionEntry | null>(null);
   const activeRef = useRef(active); activeRef.current = active;
   const editorTrigger = useRef<HTMLElement | null>(null), detailTrigger = useRef<HTMLElement | null>(null), sourceTrigger = useRef<HTMLElement | null>(null), confirmationTrigger = useRef<HTMLElement | null>(null), rowTrigger = useRef<HTMLElement | null>(null);
   const [query, setQuery] = useState(''), [filters, setFilters] = useState<PersonalLookupInput>({ query: '', category: 'all', includeBody: false, includeDrafts: false, includeArchived: false, page: 1, pageSize: 20 });
@@ -128,7 +130,12 @@ export function PersonalMaterialsPage({ api = personalRetentionApi, candidateApi
     return () => { alive = false; };
   }, [active, api]);
   useEffect(() => { if (active) void refresh(); return () => { ++lookupEpoch.current; }; }, [active, api, filters]);
-  useEffect(() => { if (active && initialSource) void beginEntry(initialSource).finally(() => onSourceConsumed?.()); }, [active, initialSource]);
+  useEffect(() => {
+    if (!initialSource) { startedSource.current = null; return; }
+    if (!active || startedSource.current === initialSource) return;
+    startedSource.current = initialSource;
+    void beginEntry(initialSource).finally(() => onSourceConsumed?.());
+  }, [active, initialSource]);
 
   async function readDetail(materialId: string, decisionId?: string, showDraft = false) {
     if (!detail) detailTrigger.current = captureFocus();
@@ -322,7 +329,7 @@ export function PersonalMaterialsPage({ api = personalRetentionApi, candidateApi
     else { rowTrigger.current = captureFocus(); setReadOnlyRow(item); }
   };
   return <section className="pr-page" aria-labelledby={`${id}-heading`}>
-    <header className="page-heading"><div><p className="eyebrow">工作自然留下线索，按需要再来看</p><h1 ref={heading} tabIndex={-1} id={`${id}-heading`}>个人资料</h1><p>Agent 在工作中自选记录候选，你按需阅读、收藏、纠正或排除。无需每天写笔记，也不要求逐条审批。</p></div><div className="pr-row">{editor && <button type="button" className="secondary-button" disabled={busy} onClick={() => { editorTrigger.current = captureFocus(); setEditorOpen(true); }}>继续编辑草稿</button>}<button type="button" className="primary-button" disabled={busy} onClick={() => { void beginEntry(); }}>新建人工笔记</button></div></header>
+    <header className="page-heading"><div><p className="eyebrow">工作自然留下线索，按需要再来看</p><Heading ref={heading} tabIndex={-1} id={`${id}-heading`}>个人资料</Heading><p>Agent 在工作中自选记录候选，你按需阅读、收藏、纠正或排除。无需每天写笔记，也不要求逐条审批。</p></div><div className="pr-row">{editor && <button type="button" className="secondary-button" disabled={busy} onClick={() => { editorTrigger.current = captureFocus(); setEditorOpen(true); }}>继续编辑草稿</button>}<button type="button" className="primary-button" disabled={busy} onClick={() => { void beginEntry(); }}>新建人工笔记</button></div></header>
     <div className="pr-tabs pr-view-tabs" role="group" aria-label="发现范围">{([['all', '全部资料'], ['bookmarked', '重点收藏'], ['manual', '原有人工资料'], ['anomalies', '异常历史'], ['excluded', '已排除']] as const).map(([key, label]) => <button type="button" key={key} aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>)}</div>
     <section className="pr-panel pr-findbar" aria-label="个人资料查找"><form onSubmit={event => { event.preventDefault(); setError(''); setFilters(previous => ({ ...previous, query, page: 1 })); }}><div className="pr-search-row"><label className="pr-search"><span>查找个人资料</span><input type="search" value={query} maxLength={200} placeholder="标题、用户别名或适用范围关键词" autoComplete="off" onChange={event => setQuery(event.target.value)} /></label><button className="primary-button" type="submit">查找</button><button className="secondary-button" type="button" onClick={() => { setQuery(''); setError(''); setFilters(previous => ({ ...previous, query: '', page: 1 })); }}>清空</button></div><div className="pr-filter-row">{([['includeBody', '含正文关键词'], ['includeDrafts', '含未保留草稿'], ['includeArchived', '含归档条目']] as const).filter(([key]) => key === 'includeBody' || showManual).map(([key, label]) => <label key={key}><input type="checkbox" checked={Boolean(filters[key])} onChange={event => setFilters(previous => ({ ...previous, [key]: event.target.checked, page: 1 }))} />{label}</label>)}</div></form><div className="pr-tabs" role="group" aria-label="资料类别">{(Object.keys(kindNames) as (keyof typeof kindNames)[]).map(category => <button key={category} type="button" aria-pressed={filters.category === category} onClick={() => setFilters(previous => ({ ...previous, category, page: 1 }))}>{kindNames[category]}</button>)}</div></section>
     <div hidden={view === 'manual' || filters.category === 'concept' || filters.category === 'data'}><AgentCandidatesPanel active={active && view !== 'manual' && filters.category !== 'concept' && filters.category !== 'data'} view={view === 'manual' ? 'all' : view} api={candidateApi} search={{ query: filters.query ?? '', includeBody: Boolean(filters.includeBody), category: filters.category === 'knowledge' || filters.category === 'experience' ? filters.category : 'all' }} onReadSource={ref => { void readSource(ref); }} onOpenProject={onOpenProject} currentTaskLabel={currentTaskLabel} onUse={onUse} onOther={onOther} onOrganize={organizeCandidate} /></div>
