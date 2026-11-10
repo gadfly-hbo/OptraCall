@@ -80,9 +80,10 @@ for (const managed of [false, true]) test(`PP01/02: ${managed ? 'managed' : 'unm
   assert.ok(isDeepStrictEqual(resumed.tools, fresh.tools), 'resuming the same loadout preserves Provider tool declarations');
   t.diagnostic(`Provider tools: ${declaredNames.join(', ')}; schema sha256 ${createHash('sha256').update(JSON.stringify(fresh.tools)).digest('hex')}`);
   const productPrompt = projectSystemPrompt(clean, reports);
+  const role = managed ? 'You are an expert coding assistant operating inside pi' : "You are OptraCall's analysis and decision-support assistant running on Pi.";
   for (const body of [fresh, resumed]) {
     const system = messageText(body.messages!.filter(message => message.role === 'system' || message.role === 'developer'));
-    assert.ok(system.startsWith('You are an expert coding assistant operating inside pi'));
+    assert.ok(system.startsWith(role));
     assert.ok(system.includes('<tools>'));
     assert.ok(!system.includes('PRE_V2_WORKSPACE'));
     assert.equal(system.split("You are OptraCall's analysis and decision-support assistant.").length - 1, 1, 'the actual Provider prompt must contain exactly one v2 role');
