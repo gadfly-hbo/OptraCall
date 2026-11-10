@@ -1,6 +1,6 @@
 # 11 月 10 日试用修复：设置导航和模型预设
 
-状态：v0.2，2026-11-10 用户回复「通过，按此实现」。已确认设置保留在侧栏底部原位置，并指定 GLM 使用智谱中国区 Coding Plan。确认时 Demo SHA-256 为 ce2631e0c97f17dd955eb5124f02df1df4fdda7d43499661368c21be0b260b05，规格 SHA-256 为 0b888fee5ae557ce6c9eba73e285ed12365fc676da0b8e37a5d98b9879a5f739。修复分支 Test-And-Repair，开工基线 6467eea 与 main 0249406 同树。原报告位于 MacBook 待修复目录，本机证据副本已核对 SHA-256。
+2026-11-10 用户确认 v0.2，设置保留在侧栏底部原位置。GLM 的首轮 Coding Plan 选择由 11 月 11 日的 TR10-4 更正。原确认 Demo SHA-256 为 ce2631e0c97f17dd955eb5124f02df1df4fdda7d43499661368c21be0b260b05，规格 SHA-256 为 0b888fee5ae557ce6c9eba73e285ed12365fc676da0b8e37a5d98b9879a5f739。修复分支 Test-And-Repair，开工基线 6467eea 与 main 0249406 同树。报告的接收与归档证据见结果记录。
 
 | ID | 预期结果 |
 | --- | --- |
