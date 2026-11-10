@@ -4,8 +4,11 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { ProjectAgent, type ProjectEvent } from '../src/agent/project-runtime.ts';
+import { createHash, randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import { ProjectAgent, type ProjectAgentOptions, type ProjectEvent } from '../src/agent/project-runtime.ts';
+import { createProtectedExecutionScope } from '../src/agent/protected-tools.ts';
+import { projectSystemPrompt } from '../src/agent/project-system-prompt.ts';
 import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
 import { ConfigurationStore } from '../src/host/config-store.ts';
 import { ProjectStore } from '../src/host/project-store.ts';
@@ -19,12 +22,77 @@ async function fixture(t: TestContext, key = 'synthetic-only-key') {
   for (const name of ['010_draw', '020_clean', '060_reports']) await mkdir(path.join(projectDirectory, name), { recursive: true });
   const options = { projectId: 'native-session', projectDirectory, sessionDirectory: path.join(scratch, 'sessions'), resourceRoot: path.join(scratch, 'resources'), codeRoot: process.cwd(), managementPorts: [4173, 4174, 4175], configuration: { id: 'synthetic', name: 'Synthetic', revision: 1, provider: 'synthetic', api: 'openai-completions' as const, baseUrl: provider.baseUrl, model: 'synthetic-model', apiKey: key } };
   const agents: ProjectAgent[] = [];
-  const create = (sessionFile?: string, draft?: string) => { const agent = new ProjectAgent({ ...options, ...(sessionFile ? { sessionFile } : {}), ...(draft === undefined ? {} : { draft }) }); agents.push(agent); return agent; };
+  const create = (sessionFile?: string, draft?: string, protectedExecution?: ProjectAgentOptions['protectedExecution']) => {
+    const agent = new ProjectAgent({ ...options, ...(sessionFile ? { sessionFile } : {}), ...(draft === undefined ? {} : { draft }), ...(protectedExecution ? { protectedExecution } : {}) });
+    agents.push(agent); return agent;
+  };
   t.after(async () => { for (const agent of agents) await agent.close(); await provider.close(); await rm(scratch, { recursive: true, force: true }); });
   return { provider, create, options };
 }
 const messageText = (messages: Record<string, any>[]) => messages.map(message => typeof message.content === 'string' ? message.content : (message.content ?? []).filter((part: any) => part.type === 'text').map((part: any) => part.text).join('')).join('\n');
 function scalarStrings(value: unknown): string[] { if (typeof value === 'string') return [value]; if (Array.isArray(value)) return value.flatMap(scalarStrings); if (value && typeof value === 'object') return Object.values(value).flatMap(scalarStrings); return []; }
+
+for (const managed of [false, true]) test(`PP01/02: ${managed ? 'managed' : 'unmanaged'} ordinary task sends v2 and native tools on first use and pre-v2 resume`, { skip: managed && process.platform !== 'darwin', timeout: 30_000 }, async t => {
+  const f = await fixture(t);
+  const clean = path.join(f.options.projectDirectory, '020_clean'), reports = path.join(f.options.projectDirectory, '060_reports');
+  const executionRoot = path.join(path.dirname(f.options.projectDirectory), 'execution');
+  await mkdir(executionRoot, { mode: 0o700 });
+  const scope = managed ? await createProtectedExecutionScope({ id: 'prompt-v2-test', profile: 'ordinary', cwd: clean, writableRoot: executionRoot, writeRoots: [clean, reports], readRoots: [f.options.projectDirectory] }) : undefined;
+  const agent = f.create(undefined, undefined, scope);
+  const first = await agent.open();
+  assert.equal(first.sdkVersion, '1.4.0');
+  assert.equal(agent.executionMode, managed ? 'ordinary' : 'unmanaged');
+  assert.equal(f.provider.requests.length, 0, 'opening a new task alone does not call the Provider');
+  assert.equal((await agent.start('Synthetic first task', 'prompt-v2-first').completion).outcome, 'completed');
+  await agent.close();
+
+  // Reuse the native prompt and loadout records, with a pre-v2 product
+  // addendum, so the fixture preserves Pi's actual tool-declaration history.
+  const messages = SessionManager.open(first.sessionFile!, f.options.sessionDirectory, clean).buildSessionContext().messages;
+  const systemMessages = messages.filter(message => message.role === 'system');
+  const assistant = messages.find(message => message.role === 'assistant');
+  assert.ok(assistant && systemMessages.some(message => message.sections?.addendum));
+  const legacy = SessionManager.create(clean, f.options.sessionDirectory);
+  for (const message of systemMessages) legacy.appendMessage(message.sections?.addendum
+    ? { ...message, sections: { ...message.sections, addendum: '<addendum>You are OptraCall. Workspace conventions: PRE_V2_WORKSPACE.</addendum>' } }
+    : message);
+  legacy.appendMessage({ role: 'user', content: 'PRE_V2_USER_QUESTION', timestamp: Date.now() });
+  legacy.appendMessage({ ...assistant, content: [{ type: 'text', text: 'PRE_V2_ASSISTANT_REPLY' }] });
+  const file = legacy.getSessionFile()!, oldBytes = await readFile(file);
+  const restored = f.create(file, undefined, scope);
+  const reopened = await restored.open();
+  assert.equal(reopened.sessionId, legacy.getSessionId());
+  assert.equal(reopened.sessionFile, file);
+  assert.equal(f.provider.requests.length, 1, 'reopening history alone does not call the Provider');
+  assert.ok((await readFile(file)).subarray(0, oldBytes.length).equals(oldBytes), 'opening may append SDK metadata but preserves all historical bytes');
+  assert.equal((await restored.start('Synthetic follow-up to old conversation', 'prompt-v2-resumed').completion).outcome, 'completed');
+  await restored.close();
+  const currentBytes = await readFile(file);
+  assert.ok(currentBytes.subarray(0, oldBytes.length).equals(oldBytes), 'continuation preserves all historical bytes');
+  assert.ok(currentBytes.length > oldBytes.length);
+
+  assert.equal(f.provider.requests.length, 2);
+  const [fresh, resumed] = f.provider.requests.map(request => request.body);
+  assert.match(messageText(resumed.messages!), /PRE_V2_USER_QUESTION[\s\S]*PRE_V2_ASSISTANT_REPLY[\s\S]*Synthetic follow-up/);
+  const declaredNames = fresh.tools!.map(tool => (tool as { function: { name: string } }).function.name);
+  assert.ok(declaredNames.includes('codemode'));
+  assert.ok(declaredNames.includes('tool_search'));
+  assert.ok(isDeepStrictEqual(resumed.tools, fresh.tools), 'resuming the same loadout preserves Provider tool declarations');
+  t.diagnostic(`Provider tools: ${declaredNames.join(', ')}; schema sha256 ${createHash('sha256').update(JSON.stringify(fresh.tools)).digest('hex')}`);
+  const productPrompt = projectSystemPrompt(clean, reports);
+  for (const body of [fresh, resumed]) {
+    const system = messageText(body.messages!.filter(message => message.role === 'system' || message.role === 'developer'));
+    assert.ok(system.startsWith('You are an expert coding assistant operating inside pi'));
+    assert.ok(system.includes('<tools>'));
+    assert.ok(!system.includes('PRE_V2_WORKSPACE'));
+    assert.equal(system.split("You are OptraCall's analysis and decision-support assistant.").length - 1, 1, 'the actual Provider prompt must contain exactly one v2 role');
+    assert.ok(system.includes('Ask a focused question when an unresolved gap or conflict could materially change the scope, metric definition, conclusion, or recommendation.'));
+    assert.ok(system.includes('For analysis, do not read data in 010_draw.'));
+    assert.ok(system.includes(`requested final reports to ${reports}`));
+    assert.ok(system.includes('## Evidence and delivery'));
+    assert.equal(system.split(productPrompt).length - 1, 1, 'the complete v2 with current paths reaches the Provider once');
+  }
+});
 
 test('runtime execution mode is a read-only Host option fact, never a snapshot declaration', () => {
   const base = { projectId: 'mode-fixture', projectDirectory: '/mode-fixture', sessionDirectory: '/mode-fixture/native', resourceRoot: '/mode-fixture/resources', codeRoot: process.cwd(), managementPorts: [], configuration: { id: 'synthetic', name: 'Synthetic', revision: 1, provider: 'synthetic', api: 'openai-completions' as const, baseUrl: 'http://127.0.0.1:1', model: 'synthetic-model', apiKey: 'synthetic-key' } };
