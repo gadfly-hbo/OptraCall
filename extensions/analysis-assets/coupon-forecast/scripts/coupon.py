@@ -1031,15 +1031,6 @@ def _variant_spec(spec: ScenarioSpec, changes: dict) -> ScenarioSpec:
     return load_spec(data)
 
 
-def single_factor_variants(plan: dict) -> dict:
-    """把 {参数路径: [取值列表]} 展开为单因素命名变体。"""
-    variants: dict = {}
-    for param, values in plan.items():
-        for i, value in enumerate(values, start=1):
-            variants[f"{param}#{i}"] = {param: value}
-    return variants
-
-
 def stress_test(spec: ScenarioSpec, variants: dict) -> dict:
     """对显式变体逐情景重跑 compare；变体不修改原 spec。"""
     if not variants:

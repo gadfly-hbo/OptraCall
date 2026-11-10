@@ -58,8 +58,6 @@ export function parseCaseDecisionReference(value: unknown): CaseDecisionReferenc
   if (!['supports', 'opposes', 'background', 'limits', 'derived_from', 'depends_on', 'action', 'feedback'].includes(String(value.relation))) fail('invalid_case_decision_relation');
   return { relation: value.relation as CaseDecisionReference['relation'], target: parseCaseDecisionTarget(value.target), note: nullable(value.note) };
 }
-export const caseDecisionTarget = parseCaseDecisionTarget;
-export const caseDecisionReference = parseCaseDecisionReference;
 export function parseCaseDecisionGovernance(value: unknown): CaseDecisionGovernanceInput {
   caseDecisionFields(value, ['operationId', 'caseStoreId', 'caseId', 'recordId', 'expectedRevision', 'action', 'reference'], ['operationId', 'caseStoreId', 'caseId', 'recordId', 'expectedRevision', 'action']);
   if (!['archive', 'restore', 'add_reference', 'remove_reference'].includes(String(value.action))) fail('invalid_case_decision_governance');

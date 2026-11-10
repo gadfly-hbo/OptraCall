@@ -2,7 +2,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DecisionFeedbackStore, DecisionFeedbackError, feedbackFail, feedbackHash, feedbackId, feedbackObject, feedbackTextHash } from './decision-feedback-store.ts';
 import { boundedFeedbackText, captureFeedbackMaterials, feedbackDeterministicId, feedbackMaterialsText, feedbackRange, materialIdentity, parseFeedbackPreview, previewFingerprint, selectFeedbackMaterials } from './decision-feedback-context.ts';
-import type { DecisionFeedbackDependencies, FeedbackCaseSelection, FeedbackContextReceipt, FeedbackContextSelection, FeedbackHandoff, FeedbackHandoffResult, FeedbackMaterialSnapshot, FeedbackOperation, FeedbackPreview, FeedbackPreviewInput, FeedbackRequirementInput, FeedbackRouteRequest, FeedbackRouteResult } from './decision-feedback-types.ts';
+import type { DecisionFeedbackDependencies, FeedbackCaseSelection, FeedbackContextReceipt, FeedbackContextSelection, FeedbackHandoff, FeedbackHandoffResult, FeedbackMaterialSnapshot, FeedbackOperation, FeedbackPreview, FeedbackPreviewInput, FeedbackRouteRequest, FeedbackRouteResult } from './decision-feedback-types.ts';
 
 /** Routes own business mutations through the injected Host gate. Context preparation never reacquires it. */
 export function createDecisionFeedbackFeature(deps: DecisionFeedbackDependencies) {

@@ -205,7 +205,6 @@ export class CaseStore {
       return this.status = { state: 'ready', storeId: marker.storeId };
     } catch (error) { this.close(); return this.status = { state: 'unavailable', code: error instanceof CaseStoreError ? error.code : 'invalid_case_database' }; }
   }
-  async openExisting(): Promise<CaseStorageStatus> { return this.init(); }
   async initialize(): Promise<CaseStorageStatus> {
     this.close();
     this.status = { state: 'uninitialized' }; this.uncertainReadsVerified = false;

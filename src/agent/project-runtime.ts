@@ -11,7 +11,7 @@ import type { FeedbackContextReceipt } from '../host/decision-feedback-types.ts'
 import { runtimeEnvironment } from '../../scripts/runtime-process.ts';
 import type { ProtectedExecutionScope } from './protected-tools.ts';
 import type { ProjectDataContextProvision } from '../host/project-data-context-context.ts';
-import type { PersonalContextPort, PersonalContextReceipt, PersonalContextToolResult } from './personal-context.ts';
+import type { PersonalContextPort, PersonalContextReceipt } from './personal-context.ts';
 import type { CaseDecisionPort } from './case-decisions.ts';
 import type { CaseSourcesPort } from './case-sources.ts';
 import type { SemanticContextPort, SemanticContextReadPort } from './semantic-context.ts';

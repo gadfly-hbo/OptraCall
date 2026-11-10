@@ -1,6 +1,6 @@
 import type { PersonalContextSelection } from '../personal-context-types.ts';
 import { useEffect, useId, useRef, useState } from 'react';
-import type { CandidateControlAction, CandidateControlInput, ExactCandidateRef } from '../agent-candidate-controls.ts';
+import type { CandidateControlAction, CandidateControlInput } from '../agent-candidate-controls.ts';
 import type { LearningSourceRef } from '../learning-source-types.ts';
 import { agentCandidatesApi, createCandidateOperationJournal, readCandidateAfterOperation } from './agent-candidates-client.ts';
 import type { AgentCandidatesApi, CandidateLookupInput, CandidateLookupResult, CandidateParentState, CandidateRow, CandidateView } from './agent-candidates-client.ts';

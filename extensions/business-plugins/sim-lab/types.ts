@@ -1,6 +1,5 @@
 // 经营推演共享类型：引擎输入输出、草稿/运行/快照记录与工具合同。
 export const ENGINE_VERSION = 'optracall-sim-2';
-export const ENGINE_SCHEMA_VERSION = 1;
 export const MAX_VARIANTS_PER_DRAFT = 8;
 
 export type SimParameters = {
