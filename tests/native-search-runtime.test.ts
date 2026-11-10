@@ -18,6 +18,9 @@ type Responder = (record: RequestRecord, response: ServerResponse, index: number
 const messagesText = (messages: any[]) => messages.map(message => typeof message.content === 'string' ? message.content : (message.content ?? []).filter((part: any) => part.type === 'text').map((part: any) => part.text ?? '').join('')).join('\n');
 const metadata = (messages: any[]) => messages.flatMap(message => message.optracallNativeSearch ? [message.optracallNativeSearch] : []);
 const declarations = (body: any) => (body.tools ?? []).map((tool: any) => tool.function?.name ?? tool.name ?? tool.type);
+const systemText = (body: any) => messagesText([{ content: body.system }]);
+const piDocsDirectory = path.resolve('node_modules/@earendil-works/pi-coding-agent/docs');
+const conciseDocs = `<docs>\nConsult the installed Pi documentation at ${piDocsDirectory} only for questions about Pi, its SDK, or extensions.\n</docs>`;
 async function until(check: () => boolean, description: string, timeoutMs = 8000) {
   const deadline = Date.now() + timeoutMs;
   while (!check()) { assert.ok(Date.now() < deadline, description); await new Promise(resolve => setTimeout(resolve, 5)); }
@@ -102,6 +105,94 @@ async function fixture(t: TestContext, api: 'anthropic-messages' | 'openai-compl
   t.after(async () => { for (const agent of agents) await agent.close(); for (const response of responses) response.destroy(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await writeFile(path.join(root, 'requests.json'), JSON.stringify(requests, null, 2)); assert.deepEqual(errors, []); });
   return { root, options, requests, events, create, respond: (next: Responder) => { responder = next; } };
 }
+
+test('PD01/02: ordinary MiniMax requests carry concise Pi docs on first use and legacy resume', { timeout: 40_000 }, async t => {
+  const f = await fixture(t), agent = f.create();
+  t.diagnostic(`Captured requests: ${path.join(f.root, 'requests.json')}`);
+  const settings = JSON.stringify({ skills: ['!**'], retry: { enabled: false }, cacheWarming: 'off' });
+  await writeFile(path.join(f.options.resourceRoot, 'settings.json'), settings);
+  const skillFile = path.resolve('extensions/analysis-assets/data-analysis/SKILL.md');
+  const docsFile = path.join(piDocsDirectory, 'sdk.md');
+  f.respond((record, response, index) => index === 1 || index === 4
+    ? anthropic(response, record.body, [
+      { type: 'tool_use', id: `skill-${index}`, name: 'read', input: { path: skillFile, limit: 5 } },
+      { type: 'tool_use', id: `docs-${index}`, name: 'read', input: { path: docsFile, limit: 5 } },
+    ], 'tool_use')
+    : anthropic(response, record.body, [{ type: 'text', text: 'SYNTHETIC_READS_COMPLETE' }]));
+  const first = await agent.open();
+  assert.equal(first.sdkVersion, '1.4.0');
+  assert.equal(f.requests.length, 0);
+  assert.equal((await agent.start('Read the enabled data-analysis Skill and locate the Pi SDK docs.', 'docs-first').completion).outcome, 'completed');
+  await agent.close();
+
+  const legacyRoot = path.join(f.root, 'legacy-resources');
+  await mkdir(path.join(legacyRoot, 'extensions'), { recursive: true });
+  await writeFile(path.join(legacyRoot, 'settings.json'), settings);
+  await writeFile(path.join(legacyRoot, 'extensions', 'docs.ts'), `export default pi => pi.on('before_agent_start', event => {
+    event.systemPromptOptions.sections.docs = 'LEGACY_PI_DOCS_INDEX';
+  });`);
+  const legacy = f.create({ resourceRoot: legacyRoot });
+  const old = await legacy.open();
+  assert.equal((await legacy.start('Legacy task before the Pi docs change.', 'docs-legacy').completion).outcome, 'completed');
+  await legacy.close();
+  assert.ok(systemText(f.requests[2]!.body).includes('<docs>\nLEGACY_PI_DOCS_INDEX\n</docs>'));
+  const file = old.sessionFile!;
+  const cwd = path.join(f.options.projectDirectory!, '020_clean');
+  const oldBytes = await readFile(file);
+  const reopened = f.create({ sessionFile: file });
+  assert.equal((await reopened.open()).sessionId, old.sessionId);
+  assert.equal(f.requests.length, 3, 'opening the old session does not call the Provider');
+  assert.ok((await readFile(file)).subarray(0, oldBytes.length).equals(oldBytes));
+  assert.equal((await reopened.start('Read both files in this same task.', 'docs-resumed').completion).outcome, 'completed');
+  await reopened.close();
+  assert.ok((await readFile(file)).subarray(0, oldBytes.length).equals(oldBytes), 'continuation preserves the legacy journal');
+  assert.equal(f.requests.length, 5);
+
+  const [firstRequest, firstResults, , resumedRequest, resumedResults] = f.requests.map(record => record.body);
+  assert.match(messagesText(resumedRequest.messages), /Legacy task before the Pi docs change[\s\S]*SYNTHETIC_READS_COMPLETE[\s\S]*Read both files/);
+  for (const [body, suffix] of [[firstResults, 1], [resumedResults, 4]] as const) {
+    const results = body.messages.flatMap((message: any) => message.content).filter((block: any) => block.type === 'tool_result');
+    assert.ok(results.some((block: any) => block.tool_use_id === `skill-${suffix}` && !block.is_error && JSON.stringify(block.content).includes('name: data-analysis')));
+    assert.ok(results.some((block: any) => block.tool_use_id === `docs-${suffix}` && !block.is_error && JSON.stringify(block.content).includes('# SDK')));
+  }
+  const firstSystem = systemText(firstRequest);
+  assert.ok(firstSystem.startsWith('You are an expert coding assistant operating inside pi'));
+  assert.ok(firstSystem.includes(skillFile) && firstSystem.includes('<skills>'));
+  assert.ok(firstSystem.includes(`<cwd>\n${cwd}\n</cwd>`));
+  assert.ok(firstSystem.includes('The configured Provider offers native web_search for this task.'));
+  assert.ok(firstRequest.tools.some((tool: any) => tool.type === 'web_search_20250305'));
+  for (const body of [firstResults, resumedRequest, resumedResults]) {
+    assert.deepEqual(body.tools, firstRequest.tools);
+    assert.equal(systemText(body), firstSystem, 'tool turns and explicit continuation use the same system text');
+  }
+  assert.equal(firstSystem.match(/<docs>\n[\s\S]*?\n<\/docs>/)?.[0], conciseDocs, 'actual MiniMax wire uses the single-line docs section');
+});
+
+test('PD02: ordinary tasks respect user prompt and earlier extension overrides', { timeout: 30_000 }, async t => {
+  const f = await fixture(t);
+  for (const mode of ['system', 'docs', 'forced'] as const) {
+    const resourceRoot = path.join(f.root, mode);
+    await mkdir(path.join(resourceRoot, 'extensions'), { recursive: true });
+    await writeFile(path.join(resourceRoot, 'settings.json'), JSON.stringify({ cacheWarming: 'off' }));
+    const marker = `USER_PROMPT_${mode}`;
+    if (mode === 'system') await writeFile(path.join(resourceRoot, 'SYSTEM.md'), marker);
+    else await writeFile(path.join(resourceRoot, 'extensions', 'prompt.ts'), `export default pi => pi.on('before_agent_start', event => {
+      ${mode === 'docs' ? `event.systemPromptOptions.sections.docs = ${JSON.stringify(marker)};` : `return { systemPrompt: ${JSON.stringify(marker)} };`}
+    });`);
+    const agent = f.create({ resourceRoot });
+    const opened = await agent.open();
+    assert.equal((await agent.start('Synthetic user prompt override', `user-${mode}`).completion).outcome, 'completed');
+    const actual = systemText(f.requests.at(-1)!.body);
+    if (mode === 'docs') assert.ok(actual.includes(`<docs>\n${marker}\n</docs>`));
+    else assert.ok(actual.startsWith(marker));
+    assert.ok(!actual.includes(conciseDocs));
+    if (mode === 'forced') {
+      const native = (await readFile(opened.sessionFile!, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+      assert.ok(native.some(entry => entry.message?.role === 'system' && entry.message.sections?.docs?.includes('Pi documentation (read only when')));
+    }
+    await agent.close();
+  }
+});
 
 test('native Anthropic search resumes through the SDK with exact raw assistant blocks and persists them across reopen', { timeout: 40_000 }, async t => {
   const f = await fixture(t), agent = f.create();
@@ -262,6 +353,7 @@ test('business workspaces and fixed/protected profiles do not acquire ordinary n
     await agent.open(); const result = await agent.start('EXCLUDED_NATIVE_SEARCH', `excluded-${mode}`).completion;
     assert.equal(result.outcome, 'completed');
     assert.ok(!f.requests.at(-1)!.body.tools?.some((tool: any) => tool.type === 'web_search_20250305' || tool.type === 'web_search'), `${mode} cannot gain native search by loading a task factory`);
+    assert.ok(!systemText(f.requests.at(-1)!.body).includes(conciseDocs), `${mode} retains its own docs policy`);
     await agent.close();
   }
 });
@@ -274,6 +366,7 @@ test('ordinary managed tasks retain native search without widening tool executio
   const result = await agent.start('MANAGED_NATIVE_SEARCH', 'managed-native-search').completion;
   assert.equal(result.outcome, 'completed');
   assert.ok(f.requests[0].body.tools.some((tool: any) => tool.type === 'web_search_20250305'));
+  assert.match(systemText(f.requests[0].body), /<docs>\nPi documentation \(read only when/);
   assert.ok(metadata((await agent.snapshot()).messages).some(value => value.sources.some((source: any) => source.url === SOURCE.url)));
   await agent.drain();
 });
@@ -323,6 +416,7 @@ test('real delegated SDK sessions inherit native search only when the role tool 
   assert.equal(searcher.length, 2, 'permitted child search uses the same SDK native continuation'); assert.equal(reader.length, 1);
   for (const record of [...searcher, ...reader]) {
     assert.equal(record.body.model, 'MiniMax-M3'); assert.ok(record.usedFrozenCredential);
+    assert.ok(systemText(record.body).includes(conciseDocs), 'delegated roles inherit the parent docs through the existing prompt');
     assert.equal(record.body.messages.filter((message: any) => message.role === 'user').length, 1);
     assert.doesNotMatch(JSON.stringify(record.body.messages), /PARENT_PRIVATE_/);
     const clientTools = record.body.tools.filter((tool: any) => !['web_search_20250305', 'web_search'].includes(tool.type));

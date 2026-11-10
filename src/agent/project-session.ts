@@ -9,7 +9,7 @@ import { presentContextMessages } from './context-presentation.ts';
 import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync, chmodSync, renameSync, unlinkSync, constants, openSync, fstatSync, fsyncSync, closeSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, SettingsManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, VERSION, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory, type ExtensionToolContext } from './sdk.ts';
+import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, SettingsManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, getDocsPath, VERSION, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory, type ExtensionToolContext } from './sdk.ts';
 import type { ProjectAgentWireOptions, ProjectSnapshot, ProvidedContextInput } from './project-runtime.ts';
 import { runDiagnostic, readRunDiagnostic, type RunDiagnostic } from './run-diagnostics.ts';
 import { createBrowserUIContext, type BrowserUIResponse } from './browser-ui-context.ts';
@@ -428,9 +428,18 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
       const customTools = [...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager)];
       const delegation = !fixedInput() && !o.workspace && (!o.protectedExecution || ordinaryManaged());
-      const searchGuidance: ExtensionFactory = pi => { pi.on('before_agent_start', event => ({ systemPrompt: event.systemPrompt + (nativeSearchMode(o.configuration)
-        ? '\nThe configured Provider offers native web_search for this task. Decide when to search. Distinguish actual search results and their source URLs from prior knowledge; if no search ran, failed, or returned insufficient evidence, state that accurately. The Host preserves Provider source receipts but does not verify the claims for you.'
-        : '\nNo Provider-native web_search is connected on this configured route. Other permitted tools remain available. Do not claim that you searched unless an actual available tool retrieved the information; do not invent source URLs.') })); };
+      const searchGuidance: ExtensionFactory = pi => {
+        pi.on('before_agent_start', event => {
+          const prompt = event.systemPromptOptions;
+          // Update the default docs section before reading the prompt that will be sent.
+          if (!o.protectedExecution && !prompt.customPrompt && prompt.forceSystemPrompt === undefined && !Object.hasOwn(prompt.sections, 'docs')) {
+            prompt.sections.docs = `Consult the installed Pi documentation at ${getDocsPath()} only for questions about Pi, its SDK, or extensions.`;
+          }
+          return { systemPrompt: event.systemPrompt + (nativeSearchMode(o.configuration)
+            ? '\nThe configured Provider offers native web_search for this task. Decide when to search. Distinguish actual search results and their source URLs from prior knowledge; if no search ran, failed, or returned insufficient evidence, state that accurately. The Host preserves Provider source receipts but does not verify the claims for you.'
+            : '\nNo Provider-native web_search is connected on this configured route. Other permitted tools remain available. Do not claim that you searched unless an actual available tool retrieved the information; do not invent source URLs.') };
+        });
+      };
       const searchExtensions = delegation ? [createNativeSearchExtension(o.configuration, code => { nativeSearchFailure = code; }), searchGuidance] : [];
       const projectInstructions = () => [projectSystemPrompt(targetCwd, path.join(o.projectDirectory!, '060_reports')), OUTPUT_EVIDENCE_GUIDANCE];
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: { ...(contextAdapter ? { extensionsOverride: contextAdapter.extensionsOverride } : {}), ...(fixedInput() ? {
