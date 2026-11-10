@@ -39,3 +39,14 @@
 首轮 5 条、激活复测 23 条（自然提问 10、明确点名 13）、授权验收 23 条（B 13、C 10）真实模型 HTTP 回执均为 HTTP 200，传输阶段记为 `failed / UNKNOWN`。对应原生模型回复和任务完成证据均已保存。传输收尾原因仍为 **UNKNOWN**，与 Skill 激活及授权判定分别记录。
 
 本机证据保存在仓库根目录下的 `.local/product-system-prompt-v2/skill-acceptance/`。首轮为 `sentinel/summary.json`，激活复测为 `retest-9X9xe4/summary.json`，授权验收为 `bc-I92rkE/summary.json`。各目录保留原生记录、合成输入和报告。
+
+## 未受管普通项目主任务的 Pi 文档段精简
+
+用户确认按 [PD01–PD03](spec.md) 本地实施，基线 `226b863`。在现有联网指引读取 `event.systemPrompt` 前，用官方 Pi 1.4.0 公开事件设置 `sections.docs`，路径来自 `getDocsPath()`。Host 仅提供文档位置，沿用 Pi 的段落渲染和会话接入。Agent 自主选择 Skill、工具和分析步骤，用户操作和权限合同沿原路径。
+
+- **出站比对。** 同一隔离仓库的 MiniMax-M3 回环 RED／GREEN 各捕获 5 份请求。公开扩展生成的旧会话种子请求保持一致。首次任务及旧会话续聊各有首发与工具结果两份请求，四份的文档正文均从 1,367 缩至 180 字符，整份系统文本均减少 1,187 字符。只归一化夹具临时目录，除 `docs` 外的系统文本和 11 项完整工具定义均一致，包括默认首段、v2、共享证据、工作目录及原生联网声明。
+- **历史、资源和权限。** 旧会话打开产生零请求，保留身份和原历史字节，显式续聊与工具结果轮均发送短段。两轮的脚本化工具调用均实际读回 `data-analysis/SKILL.md` 和 Pi `sdk.md`。用户的 `SYSTEM.md`、自定义 `docs` 和强制 Prompt、受管普通及专用任务均通过对照。子角色沿原机制继承短段，其工具和联网范围通过回归。实际受管原件、凭据及嵌套调用权限拒绝通过。
+- **定向检查与独立复核。** 最终 74 项定向测试全过，独立复核通过。保留修改前实际请求仍带长 `docs` 的 RED。初次扩展夹具后缀未被 Pi 发现、初次边界检查拒绝测试直导入 SDK 的日志分别保留。最终夹具沿公共 `ProjectAgent` 入口生成旧会话，复测边界检查通过。依赖、锁文件、v2 正文和保护工具无差异。
+- **完整本地检查。** 隔离副本 `npm run check` 通过，会话边界检查、类型检查及构建成功，1,897 项测试中 1,830 通过、67 跳过、0 失败。构建日志保留 Vite 的包体积提示。独立复核比对本机 Pi 1.4.0 安装包的 1,279 个官方文件，与留存发行归档一致。
+
+本机证据在 `.local/product-system-prompt-v2/docs-slim/`，最终比对为 `wire-compare-final.json`，对应 `red-final-fixture.log`、`green-isolated-wire.log` 和 `green-final.log`。完整检查见 `full-check-final.log`。真实模型自主选用 Skill 与分析表现记为 `NOT_RUN`，既有 v2 验收结论仍对应原实测配置。
