@@ -108,10 +108,12 @@ test('EB07/09: zero selections and no Case still permit real native discovery an
   const stream = await sessionEvents(host, project.id, task.id); t.after(() => stream.close());
   const route = `/api/projects/${project.id}/tasks/${task.id}`;
   await readJson(await host.request(`${route}/messages`, 'POST', { text: '自行查找需要的公共资料。', requestId: randomUUID(), enterpriseMaterials: [] }), 202);
-  await stream.terminal;
+  const terminal = await stream.terminal;
+  assert.equal(terminal.type, 'run.settled');
+  assert.equal(terminal.outcome, 'completed');
   assert.equal(provider.requests.length, 3);
-  const system = JSON.stringify(provider.requests[0].body.messages?.filter(message => message.role === 'system'));
-  assert.ok(system.includes('authorized shared business materials'), 'System workspace guidance must authorize the shared sources outside 020_clean');
+  const system = provider.requests[0].body.messages?.filter(message => message.role === 'system' || message.role === 'developer').map(message => providerMessageText(message.content)).join('\n');
+  assert.ok(system?.includes('Use prepared project materials in 020_clean and other authorized materials provided by the Host.'), 'v2 workspace guidance must recognize Host-authorized sources beyond 020_clean');
   assert.deepEqual(provider.errors, []);
   const saved = await readJson(await host.request(route));
   assert.equal(saved.snapshot.capabilities.semanticContext.enterprise.materials.length, 0);

@@ -15,3 +15,5 @@
 本地证据在 `.local/product-system-prompt-v2/`，包括 `red.log`、`green-final.log`、两组回归日志、`host-smoke.json` 和 `pi-official.json`。所有请求使用隔离目录与回环模拟 Provider，验证的是实际 Host／Pi 接入。
 
 2026-11-10 用户授权按已复核候选集中 Git／CI 交付，合并前同步 `main`，实际 PR head 检查通过后 squash 合并，再核对合并提交的 `main` 检查。规格与实施记录原位保留，实际交付身份和检查回执记录在交付 PR。Pi SDK 保持 1.4.0，保留现有项目、会话和文件。真实模型如何协调 v2 的资料内指令规则与已授权 Skill 的使用留待后续验收。当前授权范围为 Git／CI，运行服务及 MacBook 采用另行安排。
+
+[初次 PR Check #136](https://github.com/gadfly-hbo/OptraCall/actions/runs/42756439627) 在 `b481eae` 检出后，企业资料 EB07/09 对旧系统提示词英文的字面断言失败，本地复现同一失败。测试改为核对已批准 v2 的 Host 授权资料语句及完成终态，保留零选材时经 Pi 真实发现目录、读取原文及保存历史的断言。企业资料和项目 Runtime 两组本地回归 44/44 通过，产品正文和接线保持已复核字节。
