@@ -34,6 +34,9 @@ type ActiveRun = { id: string; kind: 'prompt' | 'command'; requestFingerprint?: 
 type RunResult = { outcome: Outcome; text: string; result?: unknown; snapshot: ProjectSnapshot; diagnostic?: RunDiagnostic };
 const RUN_ENTRY = 'optracall.run';
 const EXECUTION_ENTRY = 'optracall.execution';
+const PI_1_4_0_DEFAULT_ROLE = 'You are an expert coding assistant operating inside pi, a coding agent harness.';
+const PI_1_4_0_DEFAULT_PREAMBLE = `${PI_1_4_0_DEFAULT_ROLE} You help users by reading files, executing commands, editing code, and writing new files.\n\n`;
+const OPTRACALL_ROLE = "You are OptraCall's analysis and decision-support assistant running on Pi.";
 
 export async function runProjectSession(transport: { close: () => Promise<void>; setHttpIdleTimeoutMs(value: number): void; settings(): Record<string, number>; observe(baseUrl: string, emit: (record: Record<string, unknown>) => void): () => void }) {
   let runtime: AgentSessionRuntime | undefined, session: AgentSession | undefined, manager: SessionManager | undefined;
@@ -431,11 +434,17 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       const searchGuidance: ExtensionFactory = pi => {
         pi.on('before_agent_start', event => {
           const prompt = event.systemPromptOptions;
+          const usesDefaultPrompt = !o.protectedExecution && !prompt.customPrompt && prompt.forceSystemPrompt === undefined;
           // Update the default docs section before reading the prompt that will be sent.
-          if (!o.protectedExecution && !prompt.customPrompt && prompt.forceSystemPrompt === undefined && !Object.hasOwn(prompt.sections, 'docs')) {
+          if (usesDefaultPrompt && !Object.hasOwn(prompt.sections, 'docs')) {
             prompt.sections.docs = `Consult the installed Pi documentation at ${getDocsPath()} only for questions about Pi, its SDK, or extensions.`;
           }
-          return { systemPrompt: event.systemPrompt + (nativeSearchMode(o.configuration)
+          let systemPrompt = event.systemPrompt;
+          // The SDK's structured preamble stays intact in the native transcript.
+          if (usesDefaultPrompt && VERSION === '1.4.0' && systemPrompt.startsWith(PI_1_4_0_DEFAULT_PREAMBLE)) {
+            systemPrompt = OPTRACALL_ROLE + systemPrompt.slice(PI_1_4_0_DEFAULT_ROLE.length);
+          }
+          return { systemPrompt: systemPrompt + (nativeSearchMode(o.configuration)
             ? '\nThe configured Provider offers native web_search for this task. Decide when to search. Distinguish actual search results and their source URLs from prior knowledge; if no search ran, failed, or returned insufficient evidence, state that accurately. The Host preserves Provider source receipts but does not verify the claims for you.'
             : '\nNo Provider-native web_search is connected on this configured route. Other permitted tools remain available. Do not claim that you searched unless an actual available tool retrieved the information; do not invent source URLs.') };
         });

@@ -18,7 +18,13 @@ type Responder = (record: RequestRecord, response: ServerResponse, index: number
 const messagesText = (messages: any[]) => messages.map(message => typeof message.content === 'string' ? message.content : (message.content ?? []).filter((part: any) => part.type === 'text').map((part: any) => part.text ?? '').join('')).join('\n');
 const metadata = (messages: any[]) => messages.flatMap(message => message.optracallNativeSearch ? [message.optracallNativeSearch] : []);
 const declarations = (body: any) => (body.tools ?? []).map((tool: any) => tool.function?.name ?? tool.name ?? tool.type);
-const systemText = (body: any) => messagesText([{ content: body.system }]);
+const systemText = (body: any) => messagesText(body.system === undefined
+  ? body.messages.filter((message: any) => message.role === 'system' || message.role === 'developer')
+  : [{ content: body.system }]);
+const defaultPiRole = 'You are an expert coding assistant operating inside pi, a coding agent harness.';
+const optracallRole = "You are OptraCall's analysis and decision-support assistant running on Pi.";
+const toolCapabilitySentence = 'You help users by reading files, executing commands, editing code, and writing new files.';
+const defaultPreamble = `${defaultPiRole} ${toolCapabilitySentence}`;
 const piDocsDirectory = path.resolve('node_modules/@earendil-works/pi-coding-agent/docs');
 const conciseDocs = `<docs>\nConsult the installed Pi documentation at ${piDocsDirectory} only for questions about Pi, its SDK, or extensions.\n</docs>`;
 async function until(check: () => boolean, description: string, timeoutMs = 8000) {
@@ -45,13 +51,13 @@ function anthropic(response: ServerResponse, body: any, blocks: any[], stopReaso
   send('message_delta', { delta: { stop_reason: stopReason, stop_sequence: null }, usage: { output_tokens: 20 } });
   send('message_stop', {}); response.end();
 }
-function openai(response: ServerResponse, body: any, text: string, options: { annotations?: unknown[]; usage?: unknown; tool?: { name: string; input: unknown } } = {}) {
+function openai(response: ServerResponse, body: any, text: string, options: { annotations?: unknown[]; usage?: unknown; tools?: { id: string; name: string; input: unknown }[] } = {}) {
   response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
   const send = (delta: unknown, finish: string | null = null, extra: object = {}) => response.write('data: ' + JSON.stringify({ id: 'synthetic-native-search', object: 'chat.completion.chunk', created: 1, model: body.model, choices: [{ index: 0, delta, finish_reason: finish }], ...extra }) + '\n\n');
   send({ role: 'assistant', content: '', ...(options.annotations ? { annotations: options.annotations } : {}) });
-  if (options.tool) send({ tool_calls: [{ index: 0, id: 'client-read-1', type: 'function', function: { name: options.tool.name, arguments: JSON.stringify(options.tool.input) } }] });
+  if (options.tools?.length) send({ tool_calls: options.tools.map(({ id, name, input }, index) => ({ index, id, type: 'function', function: { name, arguments: JSON.stringify(input) } })) });
   if (text) send({ content: text });
-  send({}, options.tool ? 'tool_calls' : 'stop', options.usage ? { usage: options.usage } : {});
+  send({}, options.tools?.length ? 'tool_calls' : 'stop', options.usage ? { usage: options.usage } : {});
   response.end('data: [DONE]\n\n');
 }
 async function fixture(t: TestContext, api: 'anthropic-messages' | 'openai-completions' = 'anthropic-messages', provider = api === 'anthropic-messages' ? 'minimax-cn' : 'xiaomi-token-plan-cn') {
@@ -106,19 +112,25 @@ async function fixture(t: TestContext, api: 'anthropic-messages' | 'openai-compl
   return { root, options, requests, events, create, respond: (next: Responder) => { responder = next; } };
 }
 
-test('PD01/02: ordinary MiniMax requests carry concise Pi docs on first use and legacy resume', { timeout: 40_000 }, async t => {
-  const f = await fixture(t), agent = f.create();
+for (const api of ['anthropic-messages', 'openai-completions'] as const) test(`PD01/02 and RP01/02: ordinary ${api} requests use the product role on first use and legacy resume`, { timeout: 40_000 }, async t => {
+  const f = await fixture(t, api), agent = f.create();
+  const isAnthropic = api === 'anthropic-messages';
   t.diagnostic(`Captured requests: ${path.join(f.root, 'requests.json')}`);
   const settings = JSON.stringify({ skills: ['!**'], retry: { enabled: false }, cacheWarming: 'off' });
   await writeFile(path.join(f.options.resourceRoot, 'settings.json'), settings);
   const skillFile = path.resolve('extensions/analysis-assets/data-analysis/SKILL.md');
   const docsFile = path.join(piDocsDirectory, 'sdk.md');
-  f.respond((record, response, index) => index === 1 || index === 4
-    ? anthropic(response, record.body, [
-      { type: 'tool_use', id: `skill-${index}`, name: 'read', input: { path: skillFile, limit: 5 } },
-      { type: 'tool_use', id: `docs-${index}`, name: 'read', input: { path: docsFile, limit: 5 } },
-    ], 'tool_use')
-    : anthropic(response, record.body, [{ type: 'text', text: 'SYNTHETIC_READS_COMPLETE' }]));
+  f.respond((record, response, index) => {
+    const tools = index === 1 || index === 4 ? [
+      { id: `skill-${index}`, name: 'read', input: { path: skillFile, limit: 5 } },
+      { id: `docs-${index}`, name: 'read', input: { path: docsFile, limit: 5 } },
+    ] : [];
+    const text = tools.length ? '' : 'SYNTHETIC_READS_COMPLETE';
+    if (isAnthropic) {
+      const blocks = tools.length ? tools.map(tool => ({ type: 'tool_use', ...tool })) : [{ type: 'text', text }];
+      anthropic(response, record.body, blocks, tools.length ? 'tool_use' : 'end_turn');
+    } else openai(response, record.body, text, { tools });
+  });
   const first = await agent.open();
   assert.equal(first.sdkVersion, '1.4.0');
   assert.equal(f.requests.length, 0);
@@ -130,17 +142,22 @@ test('PD01/02: ordinary MiniMax requests carry concise Pi docs on first use and 
   await writeFile(path.join(legacyRoot, 'settings.json'), settings);
   await writeFile(path.join(legacyRoot, 'extensions', 'docs.ts'), `export default pi => pi.on('before_agent_start', event => {
     event.systemPromptOptions.sections.docs = 'LEGACY_PI_DOCS_INDEX';
+    return { systemPrompt: event.systemPrompt };
   });`);
   const legacy = f.create({ resourceRoot: legacyRoot });
   const old = await legacy.open();
   assert.equal((await legacy.start('Legacy task before the Pi docs change.', 'docs-legacy').completion).outcome, 'completed');
   await legacy.close();
-  assert.ok(systemText(f.requests[2]!.body).includes('<docs>\nLEGACY_PI_DOCS_INDEX\n</docs>'));
+  const legacyPrompt = systemText(f.requests[2]!.body);
+  assert.ok(legacyPrompt.startsWith(`${defaultPreamble}\n\n`));
+  assert.ok(legacyPrompt.includes('<docs>\nLEGACY_PI_DOCS_INDEX\n</docs>'));
   const file = old.sessionFile!;
   const cwd = path.join(f.options.projectDirectory!, '020_clean');
   const oldBytes = await readFile(file);
   const reopened = f.create({ sessionFile: file });
-  assert.equal((await reopened.open()).sessionId, old.sessionId);
+  const restored = await reopened.open();
+  assert.equal(restored.sessionId, old.sessionId);
+  assert.equal(restored.sessionFile, file);
   assert.equal(f.requests.length, 3, 'opening the old session does not call the Provider');
   assert.ok((await readFile(file)).subarray(0, oldBytes.length).equals(oldBytes));
   assert.equal((await reopened.start('Read both files in this same task.', 'docs-resumed').completion).outcome, 'completed');
@@ -151,21 +168,27 @@ test('PD01/02: ordinary MiniMax requests carry concise Pi docs on first use and 
   const [firstRequest, firstResults, , resumedRequest, resumedResults] = f.requests.map(record => record.body);
   assert.match(messagesText(resumedRequest.messages), /Legacy task before the Pi docs change[\s\S]*SYNTHETIC_READS_COMPLETE[\s\S]*Read both files/);
   for (const [body, suffix] of [[firstResults, 1], [resumedResults, 4]] as const) {
-    const results = body.messages.flatMap((message: any) => message.content).filter((block: any) => block.type === 'tool_result');
-    assert.ok(results.some((block: any) => block.tool_use_id === `skill-${suffix}` && !block.is_error && JSON.stringify(block.content).includes('name: data-analysis')));
-    assert.ok(results.some((block: any) => block.tool_use_id === `docs-${suffix}` && !block.is_error && JSON.stringify(block.content).includes('# SDK')));
+    const results = isAnthropic
+      ? body.messages.flatMap((message: any) => message.content).filter((block: any) => block.type === 'tool_result' && !block.is_error)
+      : body.messages.filter((message: any) => message.role === 'tool');
+    for (const [id, expected] of [[`skill-${suffix}`, 'name: data-analysis'], [`docs-${suffix}`, '# SDK']]) {
+      assert.ok(results.some((result: any) => (isAnthropic ? result.tool_use_id : result.tool_call_id) === id && JSON.stringify(result.content).includes(expected)));
+    }
   }
   const firstSystem = systemText(firstRequest);
-  assert.ok(firstSystem.startsWith('You are an expert coding assistant operating inside pi'));
+  assert.ok(firstSystem.includes(`<tools>`) && firstSystem.includes(`<rules>`));
   assert.ok(firstSystem.includes(skillFile) && firstSystem.includes('<skills>'));
   assert.ok(firstSystem.includes(`<cwd>\n${cwd}\n</cwd>`));
   assert.ok(firstSystem.includes('The configured Provider offers native web_search for this task.'));
-  assert.ok(firstRequest.tools.some((tool: any) => tool.type === 'web_search_20250305'));
+  assert.ok(firstRequest.tools.some((tool: any) => tool.type === (isAnthropic ? 'web_search_20250305' : 'web_search')));
   for (const body of [firstResults, resumedRequest, resumedResults]) {
     assert.deepEqual(body.tools, firstRequest.tools);
     assert.equal(systemText(body), firstSystem, 'tool turns and explicit continuation use the same system text');
   }
-  assert.equal(firstSystem.match(/<docs>\n[\s\S]*?\n<\/docs>/)?.[0], conciseDocs, 'actual MiniMax wire uses the single-line docs section');
+  assert.equal(firstSystem.match(/<docs>\n[\s\S]*?\n<\/docs>/)?.[0], conciseDocs, 'actual wire uses the single-line docs section');
+  assert.equal(firstSystem.split('\n\n')[0], `${optracallRole} ${toolCapabilitySentence}`, 'actual wire replaces only the default role sentence');
+  const native = (await readFile(first.sessionFile!, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  assert.ok(native.some(entry => entry.message?.role === 'system' && entry.message.sections?.preamble === defaultPreamble), 'the Pi journal retains its structured default preamble');
 });
 
 test('PD02: ordinary tasks respect user prompt and earlier extension overrides', { timeout: 30_000 }, async t => {
@@ -175,16 +198,20 @@ test('PD02: ordinary tasks respect user prompt and earlier extension overrides',
     await mkdir(path.join(resourceRoot, 'extensions'), { recursive: true });
     await writeFile(path.join(resourceRoot, 'settings.json'), JSON.stringify({ cacheWarming: 'off' }));
     const marker = `USER_PROMPT_${mode}`;
-    if (mode === 'system') await writeFile(path.join(resourceRoot, 'SYSTEM.md'), marker);
+    const override = `${defaultPreamble}\n\n${marker}`;
+    if (mode === 'system') await writeFile(path.join(resourceRoot, 'SYSTEM.md'), override);
     else await writeFile(path.join(resourceRoot, 'extensions', 'prompt.ts'), `export default pi => pi.on('before_agent_start', event => {
-      ${mode === 'docs' ? `event.systemPromptOptions.sections.docs = ${JSON.stringify(marker)};` : `return { systemPrompt: ${JSON.stringify(marker)} };`}
+      ${mode === 'docs' ? `event.systemPromptOptions.sections.docs = ${JSON.stringify(marker)};` : `return { systemPrompt: ${JSON.stringify(override)} };`}
     });`);
     const agent = f.create({ resourceRoot });
     const opened = await agent.open();
     assert.equal((await agent.start('Synthetic user prompt override', `user-${mode}`).completion).outcome, 'completed');
     const actual = systemText(f.requests.at(-1)!.body);
-    if (mode === 'docs') assert.ok(actual.includes(`<docs>\n${marker}\n</docs>`));
-    else assert.ok(actual.startsWith(marker));
+    if (mode === 'docs') {
+      assert.ok(actual.includes(`<docs>\n${marker}\n</docs>`));
+      assert.ok(actual.startsWith(optracallRole), 'an override of docs does not replace the default role');
+    }
+    else assert.ok(actual.startsWith(override), 'a complete user override can intentionally copy the default preamble');
     assert.ok(!actual.includes(conciseDocs));
     if (mode === 'forced') {
       const native = (await readFile(opened.sessionFile!, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
@@ -273,7 +300,7 @@ test('native MiMo search and a real client function tool can both run without dr
   const sourceFile = path.join(f.options.projectDirectory!, '020_clean', 'source.txt');
   await writeFile(sourceFile, 'ACTUAL_LOCAL_FILE_CONTENT');
   f.respond((record, response, index) => index === 1
-    ? openai(response, record.body, '', { tool: { name: 'read', input: { path: sourceFile } } })
+    ? openai(response, record.body, '', { tools: [{ id: 'client-read-1', name: 'read', input: { path: sourceFile } }] })
     : openai(response, record.body, 'READ_RESULT: ' + messagesText(record.body.messages.filter((message: any) => message.role === 'tool')), { annotations: [{ type: 'url_citation', ...SOURCE }], usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28, web_search_usage: { tool_usage: 1, page_usage: 1 } } }));
   await agent.open(); const result = await agent.start('READ_AND_SEARCH', 'mimo-search-and-function').completion;
   assert.equal(result.outcome, 'completed'); assert.equal(f.requests.length, 2);
@@ -354,6 +381,7 @@ test('business workspaces and fixed/protected profiles do not acquire ordinary n
     assert.equal(result.outcome, 'completed');
     assert.ok(!f.requests.at(-1)!.body.tools?.some((tool: any) => tool.type === 'web_search_20250305' || tool.type === 'web_search'), `${mode} cannot gain native search by loading a task factory`);
     assert.ok(!systemText(f.requests.at(-1)!.body).includes(conciseDocs), `${mode} retains its own docs policy`);
+    assert.ok(!systemText(f.requests.at(-1)!.body).startsWith(optracallRole), `${mode} retains its own role`);
     await agent.close();
   }
 });
@@ -367,6 +395,7 @@ test('ordinary managed tasks retain native search without widening tool executio
   assert.equal(result.outcome, 'completed');
   assert.ok(f.requests[0].body.tools.some((tool: any) => tool.type === 'web_search_20250305'));
   assert.match(systemText(f.requests[0].body), /<docs>\nPi documentation \(read only when/);
+  assert.ok(systemText(f.requests[0].body).startsWith(`${defaultPreamble}\n\n`));
   assert.ok(metadata((await agent.snapshot()).messages).some(value => value.sources.some((source: any) => source.url === SOURCE.url)));
   await agent.drain();
 });
@@ -416,6 +445,7 @@ test('real delegated SDK sessions inherit native search only when the role tool 
   assert.equal(searcher.length, 2, 'permitted child search uses the same SDK native continuation'); assert.equal(reader.length, 1);
   for (const record of [...searcher, ...reader]) {
     assert.equal(record.body.model, 'MiniMax-M3'); assert.ok(record.usedFrozenCredential);
+    assert.ok(systemText(record.body).startsWith(optracallRole), 'delegated roles inherit the parent role sentence through the existing prompt');
     assert.ok(systemText(record.body).includes(conciseDocs), 'delegated roles inherit the parent docs through the existing prompt');
     assert.equal(record.body.messages.filter((message: any) => message.role === 'user').length, 1);
     assert.doesNotMatch(JSON.stringify(record.body.messages), /PARENT_PRIVATE_/);
