@@ -121,14 +121,19 @@ def check_report(text):
         "报告出现未完成期间词（%s）；对应比较段须明确等长或按天对齐，其他段的对齐说明不替代该比较"
         % "、".join(w for w in INCOMPLETE_PERIOD_WORDS if w in text))
 
-    action_body = ""
     if not direct and "行动" in order:
-        pos = [p for p, kw, _ in headings if kw == "行动"][0]
-        nxt = [p for p, kw, _ in headings if p > pos]
+        pos, _, action_heading = next(heading for heading in headings if heading[1] == "行动")
+        level = len(action_heading.lstrip().split()[0])
+        end = next((p for p, _, line in headings
+                    if p > pos and len(line.lstrip().split()[0]) <= level), len(text))
         start = text.find("\n", pos)
-        action_body = text[start + 1:nxt[0] if nxt else len(text)] if start != -1 else ""
+        action_body = text[start + 1:end] if start != -1 else ""
+        appendix = re.search(rf"(?m)^[ \t]{{0,3}}#{{1,{level}}}[ \t]+附录(?=[ \t：:]|$)", action_body)
+        if appendix:
+            action_body = action_body[:appendix.start()]
         advice = [item.strip()
                   for paragraph in re.split(r"\n[ \t]*\n", action_body)
+                  if not re.fullmatch(r"-{3,}", paragraph.strip())
                   for item in re.split(r"(?m)(?=^[ \t]{0,3}(?:[-*+]|\d+[.、])[ \t]+)", paragraph)
                   if item.strip()]
         bad = [ln for ln in advice
@@ -351,6 +356,25 @@ def run_selftest():
     r = check_report(GOOD_REPORT)
     check("报告·好样例 PASS", r["verdict"] == "PASS" and r["error_count"] == 0)
     check("报告·好样例六段识别", "F1" in [c["id"] for c in r["checks"] if c["level"] == "ok" or not c["hit"]])
+    r = check_report(GOOD_REPORT + "\n---\n")
+    check("报告·行动段分隔线不触发 R2", r["verdict"] == "PASS")
+    appendix = "\n\n## 附录：复算清单\n\n| 来源 | 指标 |\n"
+    r = check_report(GOOD_REPORT + "\n---" + appendix)
+    check("报告·行动段后的附录不触发 R2", r["verdict"] == "PASS")
+
+    for missing, action in (
+        ("责任人", "- 在两周内核对活动订单。"),
+        ("时限", "- 由运营负责人核对活动订单。"),
+    ):
+        r = check_report(GOOD_REPORT + "\n---\n\n" + action + appendix)
+        check(f"报告·分隔线后的行动缺{missing}仍触发 R2",
+              r["verdict"] == "FAIL" and any(
+                  c["id"] == "R2" and c["hit"] and c["detail"].endswith(action)
+                  for c in r["checks"]))
+    r = check_report(GOOD_REPORT + "\n### 行动说明\n\n- 建议核对活动订单。\n")
+    check("报告·下级标题后的真实行动仍检查 R2", any(
+        c["id"] == "R2" and c["hit"] and c["detail"].endswith("- 建议核对活动订单。")
+        for c in r["checks"]))
 
     # 报告·坏样例必须命中（对抗：检查器不许空转）
     r = check_report(BAD_REPORT)
