@@ -24,6 +24,7 @@ import { readCaseDecisionsParameters, saveCaseDecisionParameters, type CaseDecis
 import { canonical } from '../../extensions/connectors/trade-area-mcp/snapshot.ts';
 import { createSubagentTool, discoverSubagentRoles, type SubagentRole } from './subagent.ts';
 import { createNativeSearchExtension, nativeSearchMode } from './native-search.ts';
+import { createWebSearchExtension, WEB_SEARCH_TOOL_NAMES, type WebSearchToolName } from './web-search-tools.ts';
 import { createModelPackTools } from './model-pack-tools.ts';
 import { createToolContextAdapter } from './tool-context-adapter.ts';
 
@@ -72,7 +73,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   // Resource lifetime state deliberately survives SDK extension reload/fork within this worker.
   const connectorDirectories = new Map<string, { digest?: string; frozen: boolean }>();
   const executionBindings = new Map<string, { manager: SessionManager; file: string; cwd: string; closed: boolean }>();
-  const personalRequests = new Map<string, { resolve: (result: PersonalContextToolResult | CaseDecisionToolResult | SemanticContextToolResult | SapMethodSourceToolResult) => void; reject: (error: Error) => void }>();
+  const personalRequests = new Map<string, { resolve: (result: unknown) => void; reject: (error: Error) => void }>();
   function rejectPersonalRequests() { for (const pending of personalRequests.values()) pending.reject(new Error('personal_context_run_unavailable')); personalRequests.clear(); }
   function qualifyToolInvocation(target: AgentSession, ctx: ExtensionToolContext, signal: AbortSignal | undefined) {
     const invocationRun = run, invocationManager = target.sessionManager;
@@ -119,6 +120,21 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     }
   }
   const send = (value: unknown) => { if (process.connected) process.send?.(value); };
+  function requestHostTool(input: { feature: string; action: string; input: Record<string, unknown>; toolCallId: string; requestId: string; sessionId: string }, signal: AbortSignal, errorCode: string): Promise<unknown> {
+    signal.throwIfAborted();
+    const id = randomUUID();
+    return new Promise((resolve, reject) => {
+      const cleanup = () => { personalRequests.delete(id); signal.removeEventListener('abort', abort); };
+      const abort = () => { cleanup(); send({ kind: 'personal-context-cancel', id }); reject(new Error(errorCode)); };
+      personalRequests.set(id, { resolve: result => { cleanup(); resolve(result); }, reject: error => { cleanup(); reject(error); } });
+      signal.addEventListener('abort', abort, { once: true });
+      send({ kind: 'personal-context-request', id, ...input });
+    });
+  }
+  function requestWebTool(action: 'search' | 'fetch', input: Record<string, string>, signal?: AbortSignal, toolCallId?: string) {
+    if (!run || run.kind !== 'prompt' || run.cancelled || closing || !signal || !toolCallId?.trim() || !manager) throw new Error('web_search_run_unavailable');
+    return requestHostTool({ feature: 'web-search', action, input, toolCallId, requestId: run.id, sessionId: manager.getSessionId() }, signal, 'web_search_run_unavailable');
+  }
   const redactText = (text: string) => {
     let secret = options?.configuration?.apiKey;
     if (!secret) return text;
@@ -154,7 +170,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     }
     return sapProvision() ? { sap: sapProvision(), claim: 'provided-not-adopted' } : undefined;
   }
-  const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { ...(analysisPython ? { analysisPython } : {}), nativeTools: !fixedInput(), subagent: session!.getActiveToolNames().includes('subagent'), nativeSearch: !fixedInput() && !options.workspace && (!protectedTools || ordinaryManaged()) ? nativeSearchMode(options.configuration) ?? false : false, python: fixedInput() ? false : 'bash', powershell: fixedInput() || protectedTools ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools, skills: !fixedInput() && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)), mcp: !fixedInput() && !protectedTools, codemode: !fixedInput(), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged()), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: options.protectedExecution?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } });
+  const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => ({ sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(lastRun() ? { lastRun: lastRun() } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { ...(analysisPython ? { analysisPython } : {}), nativeTools: !fixedInput(), subagent: session!.getActiveToolNames().includes('subagent'), nativeSearch: !fixedInput() && !options.workspace && (!protectedTools || ordinaryManaged()) && !options.webSearchEnabled ? nativeSearchMode(options.configuration) ?? false : false, python: fixedInput() ? false : 'bash', powershell: fixedInput() || protectedTools ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools, skills: !fixedInput() && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)), mcp: !fixedInput() && !protectedTools, codemode: !fixedInput(), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged()), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: options.protectedExecution?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } });
   const environmentExtension: ExtensionFactory = pi => {
     pi.on('before_provider_request', (event, ctx) => {
       if (ctx.model?.api !== 'anthropic-messages') return;
@@ -341,14 +357,9 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
             if (!originalRun || run !== originalRun || originalRun.kind !== 'prompt' || originalRun.cancelled || closing || !signal || signal.aborted || manager !== boundManager || session?.sessionManager !== boundManager || boundManager.getSessionId() !== boundSessionId || ctx?.sessionManager !== boundManager || !toolCallId.trim() || feature === 'case-decisions' && !(originalRun.providedContext?.case as {operationId?:string} | undefined)?.operationId) throw new Error(errorCode);
           };
           assertCurrent();
-          const id = randomUUID();
-          const value = await new Promise<PersonalContextToolResult | CaseDecisionToolResult | SemanticContextToolResult | SapMethodSourceToolResult | StudioToolResult>((resolve, reject) => {
-            const abort = () => { personalRequests.delete(id); send({ kind: 'personal-context-cancel', id }); reject(new Error(errorCode)); };
-            const cleanup = () => { personalRequests.delete(id); signal!.removeEventListener('abort', abort); };
-            personalRequests.set(id, { resolve: result => { cleanup(); resolve(result); }, reject: error => { cleanup(); reject(error); } });
-            signal!.addEventListener('abort', abort, { once: true });
-            send({ kind: 'personal-context-request', id, feature, toolCallId, action: hasInputAction ? sourceAction : action, input: hasInputAction ? sourceInput : parameters, requestId: originalRun!.id, sessionId: boundSessionId });
-          });
+          const value = await requestHostTool({ feature, action: hasInputAction ? String(sourceAction) : action,
+            input: hasInputAction ? sourceInput : parameters, toolCallId, requestId: originalRun!.id, sessionId: boundSessionId },
+          signal!, errorCode) as PersonalContextToolResult | CaseDecisionToolResult | SemanticContextToolResult | SapMethodSourceToolResult | StudioToolResult;
           assertCurrent();
           if (Buffer.byteLength(JSON.stringify(value), 'utf8') > 256 * 1024 || !Array.isArray(value.content) || value.content.some(part => part.type !== 'text' || typeof part.text !== 'string') || value.content.reduce((n, part) => n + part.text.length, 0) > 32_768) throw new Error('personal_context_payload_limit');
           if (feature === 'semantic-context' && sourceAction === 'graph' && value.content.reduce((bytes, part) => bytes + Buffer.byteLength(part.text, 'utf8'), 0) > 24 * 1024) throw new Error('semantic_graph_payload_limit');
@@ -370,6 +381,10 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     await models.setRuntimeApiKey(providerId, o.configuration.apiKey);
     const model = models.getModel(providerId, o.configuration.model);
     if (!model) throw new Error('model_unavailable');
+    const webSearch = o.webSearchEnabled ? {
+      search: (query: string, signal?: AbortSignal, toolCallId?: string) => requestWebTool('search', { query }, signal, toolCallId),
+      fetchPage: (url: string, signal?: AbortSignal, toolCallId?: string) => requestWebTool('fetch', { url }, signal, toolCallId),
+    } : undefined;
     async function runSubagent(parent: AgentSession, role: SubagentRole, task: string, signal?: AbortSignal) {
       const cancelled = () => signal?.aborted || closing || run?.cancelled;
       const result = (outcome: 'completed' | 'failed' | 'cancelled', text = '') => ({ agent: role.name, outcome, text: redactText(text) });
@@ -377,13 +392,15 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       // User execution extensions are not copied. Tool availability is the
       // intersection of the parent's active capability and this SDK environment.
       const nativeNames = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls', 'powershell', 'codemode', 'tool_search'];
-      const inherited = [...parent.getActiveToolNames().filter(name => nativeNames.includes(name)), ...(nativeSearchMode(o.configuration) ? ['web_search'] : [])];
+      const webTools = webSearch ? parent.getActiveToolNames().filter((name): name is WebSearchToolName => WEB_SEARCH_TOOL_NAMES.some(tool => tool === name)) : [];
+      const inherited = [...parent.getActiveToolNames().filter(name => nativeNames.includes(name)), ...webTools, ...(!webSearch && nativeSearchMode(o.configuration) ? ['web_search'] : [])];
       if (role.tools?.some(name => !inherited.includes(name))) throw new Error('subagent_tool_not_permitted');
       const allowed = role.tools ?? inherited;
-      const clientTools = allowed.filter(name => name !== 'web_search');
+      const childWebTools = webTools.filter(name => allowed.includes(name));
+      const clientTools = webSearch ? allowed : allowed.filter(name => name !== 'web_search');
       let childSearchFailure: string | undefined;
       const namespace = `subagent-${randomUUID()}`;
-      const customTools = protectedTools?.narrow(clientTools.filter(name => name !== 'tool_search'), namespace);
+      const customTools = protectedTools?.narrow(clientTools.filter(name => name !== 'tool_search' && !childWebTools.some(tool => tool === name)), namespace);
       let child: AgentSessionRuntime | undefined;
       const abort = () => { void child?.session.abort().catch(() => {}); };
       signal?.addEventListener('abort', abort, { once: true });
@@ -393,7 +410,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
             settingsManager: SettingsManager.inMemory(parent.settingsManager.getSettings()),
             resourceLoaderOptions: { noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
               disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
-              extensionFactories: [...(allowed.includes('web_search') ? [createNativeSearchExtension(o.configuration, code => { childSearchFailure = code; })] : []), (pi => { pi.on('message_end', event => ({ message: redact(event.message) })); }) as ExtensionFactory, ...(!protectedTools && allowed.includes('codemode') ? [createCodemodeExtension({ mode: 'on' })] : []), ...(allowed.includes('tool_search') ? [createToolSearchExtension()] : [])],
+              extensionFactories: [...(webSearch ? [createWebSearchExtension(webSearch, childWebTools)] : allowed.includes('web_search') ? [createNativeSearchExtension(o.configuration, code => { childSearchFailure = code; })] : []), (pi => { pi.on('message_end', event => ({ message: redact(event.message) })); }) as ExtensionFactory, ...(!protectedTools && allowed.includes('codemode') ? [createCodemodeExtension({ mode: 'on' })] : []), ...(allowed.includes('tool_search') ? [createToolSearchExtension()] : [])],
               systemPrompt: parent.systemPrompt,
               appendSystemPrompt: [`You are the isolated role ${role.name}. Your task is delivered separately; parent conversation is not inherited. Skill resources are at ${role.baseDir}.`, role.prompt],
             } });
@@ -444,12 +461,19 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           if (usesDefaultPrompt && VERSION === '1.4.0' && systemPrompt.startsWith(PI_1_4_0_DEFAULT_PREAMBLE)) {
             systemPrompt = OPTRACALL_ROLE + systemPrompt.slice(PI_1_4_0_DEFAULT_ROLE.length);
           }
-          return { systemPrompt: systemPrompt + (nativeSearchMode(o.configuration)
+          return { systemPrompt: systemPrompt + (webSearch
+            ? '\nYou may use web_search to find public sources and web_fetch to read a known public webpage. Send only public search terms or the public URL. Treat results as external evidence and use the source URLs actually returned.'
+            : nativeSearchMode(o.configuration)
             ? '\nThe configured Provider offers native web_search for this task. Decide when to search. Distinguish actual search results and their source URLs from prior knowledge; if no search ran, failed, or returned insufficient evidence, state that accurately. The Host preserves Provider source receipts but does not verify the claims for you.'
             : '\nNo Provider-native web_search is connected on this configured route. Other permitted tools remain available. Do not claim that you searched unless an actual available tool retrieved the information; do not invent source URLs.') };
         });
       };
-      const searchExtensions = delegation ? [createNativeSearchExtension(o.configuration, code => { nativeSearchFailure = code; }), searchGuidance] : [];
+      const webTools = delegation && webSearch ? WEB_SEARCH_TOOL_NAMES : [];
+      const searchExtensions = delegation ? [
+        createNativeSearchExtension(o.configuration, code => { nativeSearchFailure = code; }, !webSearch),
+        searchGuidance,
+        ...(webSearch ? [createWebSearchExtension(webSearch)] : []),
+      ] : [];
       const projectInstructions = () => [projectSystemPrompt(targetCwd, path.join(o.projectDirectory!, '060_reports')), OUTPUT_EVIDENCE_GUIDANCE];
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: { ...(contextAdapter ? { extensionsOverride: contextAdapter.extensionsOverride } : {}), ...(fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
@@ -480,12 +504,12 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       const subagent = delegation ? createSubagentTool(discoverSubagentRoles(services.resourceLoader.getSkills().skills), (role, task, signal) => runSubagent(parent, role, task, signal)) : undefined;
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
-      services.settingsManager.applyOverrides({ defaultTools: o.workspace?.capabilityPolicy === 'source-reader' ? [sapMethodSourceToolName] : fixedInput() ? [] : protectedTools ? [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...(subagent ? ['subagent'] : [])] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...(subagent ? ['+subagent'] : [])] });
+      services.settingsManager.applyOverrides({ defaultTools: o.workspace?.capabilityPolicy === 'source-reader' ? [sapMethodSourceToolName] : fixedInput() ? [] : protectedTools ? [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...webTools.map(tool => `+${tool}`), ...(subagent ? ['+subagent'] : [])] });
       // SDK modifiers append to either a plain workspace allowlist or inherited defaults.
       if (customTools.length) services.settingsManager.applyOverrides({ defaultTools: customTools.map(tool => `+${tool.name}`) });
       const productTools = [...customTools, ...(subagent ? [subagent] : [])];
       const ownedTools = contextAdapter ? productTools.map(tool => contextAdapter.tool(tool)) : productTools;
-      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(o.workspace?.capabilityPolicy === 'source-reader' ? { tools: [sapMethodSourceToolName], customTools: ownedTools } : fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: [...protectedTools.tools, ...ownedTools], tools: [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...(subagent ? ['subagent'] : [])] } : { customTools: ownedTools }), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
+      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(o.workspace?.capabilityPolicy === 'source-reader' ? { tools: [sapMethodSourceToolName], customTools: ownedTools } : fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: [...protectedTools.tools, ...ownedTools], tools: [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] } : { customTools: ownedTools }), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
       if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
       parent = created.session;
       return { ...created, services, diagnostics: services.diagnostics };

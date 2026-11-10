@@ -98,6 +98,34 @@ button { color: inherit; }
 .text-button { display: inline-flex; align-items: center; gap: 7px; padding: 5px 0; background: transparent; border: 0; color: var(--accent); font-size: 12px; }
 .text-button:hover { text-decoration: underline; }.back-button { color: var(--muted); margin-bottom: 20px; }
 .settings-page { overflow-y: auto; width: 100%; padding: 15px max(32px, calc((100% - 800px) / 2)) 40px; }
+.settings-page .settings-heading { margin-bottom: 12px; }
+.settings-heading .back-button { margin: 0; flex-shrink: 0; max-width: 48%; text-align: right; }
+.settings-page .settings-tabs button:focus-visible { outline-offset: -2px; }
+.settings-page .page-heading h2 { margin: 0 0 7px; font-size: 18px; font-weight: 550; }
+.settings-page .page-heading h2:focus { outline: none; }
+.settings-personal > .pr-page { padding: 0; overflow: visible; }
+.settings-page .form-heading h3 { margin: 0; font-size: 15px; font-weight: 550; }
+.web-search-settings .page-heading h2:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.web-search-box { margin-bottom: 14px; padding: 16px; }
+.web-search-box h3 { margin: 0 0 5px; font-size: 15px; font-weight: 600; }
+.web-search-box p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.web-search-order { list-style: none; margin: 12px 0 0; padding: 0; }
+.web-search-route { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); }
+.web-search-rank { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.web-search-route-title, .web-search-route-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.web-search-badge { padding: 2px 7px; border: 1px solid var(--line); border-radius: 20px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.web-search-badge.is-configured { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.web-search-badge.is-missing { color: var(--warning); background: var(--warning-bg); border-color: transparent; }
+.web-search-route-actions > button { width: auto; white-space: nowrap; }
+.web-search-save { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 11px; margin-bottom: 9px; }
+@media (max-width: 760px) {
+  .settings-page .settings-tabs { gap: 15px; }
+  .settings-page .settings-tabs button { gap: 5px; white-space: nowrap; }
+  .settings-page .settings-tabs svg { width: 16px; height: 16px; }
+  .web-search-box { padding: 13px; }
+  .web-search-route { grid-template-columns: 28px minmax(0, 1fr); }
+  .web-search-route > .web-search-route-actions { grid-column: 2; }
+}
 .page-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
 .page-heading h1 { font-size: 24px; line-height: 1.4; margin: 0 0 8px; font-weight: 550; }.page-heading h1:focus { outline: none; }
 .page-heading p:last-child { margin: 0; color: var(--muted); font-size: 13px; }
