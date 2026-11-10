@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BoardRequestError, addManualItem, addTask, adoptItem, dismissItem, extractReport, readBoard, saveFeedback, feedbackHistory, feedbackOperation, setTaskStatus, stopExtraction, type BoardItemView, type BoardReportView, type BoardTaskView, type BoardView, type FeedbackInput } from './decision-board-client.ts';
-import { EVIDENCE_CONFIDENCE, type EvidenceLevel, type Priority, type TaskFeedbackRevision } from '../types.ts';
+import { EVIDENCE_CONFIDENCE, type Priority, type TaskFeedbackRevision } from '../types.ts';
 import { CaseDialog } from '../../../../src/host/ui/CaseDialogs.tsx';
 import { FeedbackReview } from '../../../../src/host/ui/FeedbackReview.tsx';
 import type { FeedbackReviewStart } from '../../../../src/host/ui/FeedbackContextPanel.tsx';

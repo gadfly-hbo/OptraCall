@@ -48,9 +48,8 @@ const priorityLabel: Record<string, string> = { must_confirm: '必须确认', sh
 const clarificationStatus: Record<string, string> = { pending: '待回答', answered: '已回答', assumed: '按假设推进', skipped: '已跳过', deferred: '已后置' };
 const stages = ['诉求与澄清', '事实与假设', '分析与报告框架', '检查与交付'] as const;
 
-export function RequirementPage({ projects, onOpenTask, onProjectsChanged, onBack, backLabel = '返回业务插件', onSendToTask, initialInstanceId }: {
+export function RequirementPage({ projects, onProjectsChanged, onBack, backLabel = '返回业务插件', onSendToTask, initialInstanceId }: {
   projects: ClientProject[];
-  onOpenTask: (project: ClientProject, task: ClientTask) => void;
   onProjectsChanged: () => void;
   onBack: () => void;
   backLabel?: string;

@@ -4,7 +4,6 @@ import { createProjectEnablement } from '../../extensions/business-plugins/metri
 import { parseSapDraft } from '../../extensions/business-plugins/metric-factory/sap/validate.ts';
 import { parseSemanticQueryInput } from '../../extensions/business-plugins/semantic-context/reader.ts';
 import type { SemanticGraphSourceRef, StudioSemanticGraphSourceRef } from '../../extensions/business-plugins/semantic-context/graph.ts';
-import type { SemanticTarget, SemanticItem } from '../../extensions/business-plugins/semantic-context/types.ts';
 import type { SemanticGraphAuthority, SemanticGraphAuthorityCheck, SemanticGraphAuthorityContext, SemanticGraphAuthoritySource, SemanticGraphBinding } from './semantic-graph-service.ts';
 import type { SemanticContextService } from './semantic-context-service.ts';
 import type { ProjectStore } from './project-store.ts';

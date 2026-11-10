@@ -37,7 +37,6 @@ export const unlinkProject = (id: string, projectId: string, input: CaseMutation
 export type CreateProjectLinkResult = { project: ClientProject | null; case?: CaseRecord; operationId: string; projectId: string; linked: boolean; phase: OperationReceipt['phase'] };
 export const createProjectAndLink = (id: string, input: CaseMutation & { name: string; configurationId: string }) => request<CreateProjectLinkResult>(`${casePath(id)}/projects/create`, 'POST', input);
 export const operation = (id: string) => request<{ operation: OperationReceipt | null }>(`cases/operations/${encodeURIComponent(id)}`);
-export const readProjectWork = (projectId: string) => request<{ work: ProjectWorkRecord }>(projectPath(projectId));
 export const saveProjectWork = (projectId: string, input: ProjectWorkInput) => request<{ work: ProjectWorkRecord }>(projectPath(projectId), 'PATCH', input);
 export const projectEvents = (projectId: string) => request<{ events: WorkEvent[] }>(`${projectPath(projectId)}/events`);
 export const projectNote = (projectId: string, input: CaseMutation & { note: string; feedbackSource?: string | null; originCaseId?: string }) => request<{ work: ProjectWorkRecord }>(`${projectPath(projectId)}/notes`, 'POST', input);

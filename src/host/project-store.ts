@@ -286,10 +286,6 @@ export class ProjectStore {
     if (typeof draft !== 'string' || draft.length > 20000) return Promise.reject(new ProjectStoreFault('invalid_draft'));
     return this.#updateTask(projectId, taskId, task => ({ ...task, draft }));
   }
-  setSimulationTools(projectId: string, taskId: string, enabled: boolean): Promise<TaskRecord> {
-    if (typeof enabled !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_simulation_tools'));
-    return this.setTaskCapability(projectId, taskId, 'simulationTools', enabled);
-  }
   setTaskCapability(projectId: string, taskId: string, capability: TaskCapability, enabled: boolean): Promise<TaskRecord> {
     if (!isTaskCapability(capability) || typeof enabled !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
     return this.#updateTask(projectId, taskId, task => ({ ...task, [capability]: enabled || undefined }));

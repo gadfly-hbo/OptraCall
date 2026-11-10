@@ -54,8 +54,6 @@
 .board-task .task-meta { color: var(--faint); font-size: 11px; margin-top: 2px; }
 .board-task .task-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
 .board-task .task-actions button { padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; }
-.board-task .task-feedback { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--muted); }
-.board-stars { color: var(--accent); letter-spacing: 2px; }
 
 .board-empty { border: 1px dashed var(--line); border-radius: 8px; padding: 18px; color: var(--muted); font-size: 12px; text-align: center; background: var(--surface); }
 .board-lane-empty { border: 1px dashed var(--line); border-radius: 7px; padding: 14px; color: var(--faint); font-size: 11px; text-align: center; }

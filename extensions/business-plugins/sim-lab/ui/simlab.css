@@ -81,7 +81,6 @@
 .task-link-card span { color: var(--faint); font-size: 11px; }
 .simlab-disclaimer { margin-top: 24px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); font-size: 12px; color: var(--muted); }
 .simlab-disclaimer strong { color: var(--ink); }
-.sim-dialog-backdrop { position: fixed; inset: 0; background: rgba(36,35,43,.45); display: grid; place-items: center; z-index: 30; }
 .sim-dialog { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; max-width: 560px; width: calc(100vw - 48px); max-height: 86vh; overflow: auto; }
 .sim-dialog h2 { font-size: 16px; margin: 0 0 12px; }
 .sim-dialog h4 { font-size: 12px; color: var(--muted); margin: 14px 0 6px; }
