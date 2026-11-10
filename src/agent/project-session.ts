@@ -462,7 +462,11 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       } : {
         extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), mcpExtension!, ...searchExtensions, environmentExtension],
         additionalSkillPaths: [analysisAssetsDir],
-        appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [...projectInstructions(), ...(o.metricIndexText ? [o.metricIndexText] : [])],
+        appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [
+          ...projectInstructions(),
+          ...(o.semanticContextEnabled ? ['If this session supports SAP method lookup and a business definition or analytical convention could affect the result, you may use `read_semantic_context` to find a published `sap-method` using one short metric term per query (search additional terms separately) and read the exact version when useful. Assess its fit, decide whether to use, adapt, or skip it, and cite the version and convention you apply.'] : []),
+          ...(o.metricIndexText ? [o.metricIndexText] : []),
+        ],
       }) } });
       const subagent = delegation ? createSubagentTool(discoverSubagentRoles(services.resourceLoader.getSkills().skills), (role, task, signal) => runSubagent(parent, role, task, signal)) : undefined;
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
