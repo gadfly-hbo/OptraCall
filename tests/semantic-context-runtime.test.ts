@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import os from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { ProjectAgent, type ProjectAgentOptions } from '../src/agent/project-runtime.ts';
 import type { SemanticContextPort, SemanticContextToolResult } from '../src/agent/semantic-context.ts';
-import { startToolProvider, type SyntheticToolCall } from './fixtures/tool-provider.ts';
+import { providerMessageText, startToolProvider, type SyntheticToolCall } from './fixtures/tool-provider.ts';
 
 const target = { kind: 'sap' as const, packageId: 'synthetic-rule', version: '1.2', metricName: 'amount', publishedHash: 'a'.repeat(64) };
 const queryResult = (action: 'find' | 'read' | 'trace', text = 'SYNTHETIC_EXACT_OLD_RULE'): SemanticContextToolResult => ({ content: [{ type: 'text', text }], details: { schemaVersion: 1, type: 'optracall.semantic-context-result', action, state: 'available', items: [], unknownTime: [], indexRevision: 3, coverage: { complete: true, continuation: null, gaps: [] } } });
@@ -101,25 +101,52 @@ test('L1 L101/L102/L107: direct and SDK nested calls keep exact query/save argum
 test('L1 L109/L110/L113: callback-free and forbidden profiles keep original tools; no-query work performs zero semantic IO', async t => {
   const f = await fixture(t);
   const denied: SemanticContextPort = async () => { assert.fail('Unavailable profile must not call the Host semantic port.'); };
-  const baseline = await f.create().open();
+  const hint = 'If this session supports SAP method lookup and a business definition or analytical convention could affect the result, you may use `read_semantic_context` to find a published `sap-method` using one short metric term per query (search additional terms separately) and read the exact version when useful. Assess its fit, decide whether to use, adapt, or skip it, and cite the version and convention you apply.';
+  const question = 'Synthetic normal question; no prerequisite lookup or save.';
+  const checkPrompt = async (agent: ProjectAgent, expected: number, scope: string) => {
+    const before = f.provider.requests.length;
+    assert.equal((await agent.start(question, randomUUID()).completion).outcome, 'completed', scope);
+    assert.equal(f.provider.requests.length, before + 1, scope);
+    const { messages = [], tools } = f.provider.requests[before].body;
+    const system = messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => providerMessageText(message.content)).join('\n');
+    if (expected) {
+      assert.match(system, /<name>data-analysis<\/name>/);
+      const originalSystem = system.replace(`\n\n${hint}`, '').replaceAll(f.root, '<fixture>');
+      const identity = createHash('sha256').update(JSON.stringify({ system: originalSystem, tools })).digest('hex');
+      t.diagnostic(`${scope}: remaining system prompt and tool declarations sha256 ${identity}`);
+    }
+    assert.equal(system.split(hint).length - 1, expected, `${scope}: approved SAP hint occurrences in the Pi request`);
+    assert.equal(providerMessageText(messages.filter(message => message.role === 'user').at(-1)?.content), question, scope);
+    t.diagnostic(`${scope}: SAP hint occurrences ${expected}; original question preserved`);
+  };
+  const withoutPort = f.create();
+  const baseline = await withoutPort.open();
   assert.ok(baseline.tools.includes('bash'));
   assert.ok(!baseline.tools.includes('read_semantic_context'));
   assert.ok(!baseline.tools.includes('record_analysis_sources'));
+  await checkPrompt(withoutPort, 0, 'ordinary without SAP query port');
+  await withoutPort.close();
   const workspace = { cwd: path.join(f.options.projectDirectory, '020_clean'), systemPrompt: ['Synthetic plugin workspace.'] };
-  const profiles: Partial<ProjectAgentOptions>[] = [{ projectId: '' }, { taskId: undefined }, { workspace }, { workspace: { ...workspace, capabilityPolicy: 'fixed-draft' } }, { workspace: { ...workspace, capabilityPolicy: 'text-only' } }];
-  if (process.platform === 'darwin') for (const profile of ['ordinary', 'protected'] as const) profiles.push({ protectedExecution: { id: randomUUID(), profile, cwd: workspace.cwd, writableRoot: workspace.cwd, readRoots: [] } });
-  for (const profile of profiles) {
+  const profiles: [string, Partial<ProjectAgentOptions>][] = [
+    ['without project owner', { projectId: '' }], ['without task owner', { taskId: undefined }],
+    ['dedicated workspace', { workspace }], ['fixed-draft', { workspace: { ...workspace, capabilityPolicy: 'fixed-draft' } }],
+    ['text-only', { workspace: { ...workspace, capabilityPolicy: 'text-only' } }],
+  ];
+  if (process.platform === 'darwin') for (const profile of ['ordinary', 'protected'] as const) profiles.push([`managed ${profile}`, { protectedExecution: { id: randomUUID(), profile, cwd: workspace.cwd, writableRoot: workspace.cwd, readRoots: [] } }]);
+  for (const [scope, profile] of profiles) {
     const agent = f.create({ ...profile, semanticContext: denied, sessionDirectory: path.join(f.root, randomUUID()) });
     const opened = await agent.open();
     assert.ok(!opened.tools.includes('read_semantic_context'));
     assert.ok(!opened.tools.includes('record_analysis_sources'));
     if (!profile.workspace?.capabilityPolicy) assert.ok(opened.tools.includes('bash'));
+    await checkPrompt(agent, 0, scope);
     await agent.close();
   }
   let calls = 0;
   const agent = f.create({ semanticContext: async action => { calls++; return queryResult(action === 'record' ? 'find' : action); } });
-  const completed = await agent.start('Synthetic normal question; no prerequisite lookup or save.', randomUUID()).completion;
-  assert.equal(completed.outcome, 'completed'); assert.equal(calls, 0); assert.equal(f.provider.requests.length, 1);
+  await checkPrompt(agent, 1, 'ordinary with SAP query port');
+  await checkPrompt(agent, 1, 'ordinary follow-up with SAP query port');
+  assert.equal(calls, 0);
   assert.deepEqual((await entries(agent)).filter(entry => entry.message?.role === 'toolResult'), []);
   const reloaded = await agent.command('/reload');
   assert.ok(reloaded.snapshot.tools.includes('read_semantic_context'));
