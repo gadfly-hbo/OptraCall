@@ -20,8 +20,8 @@ const legacyTrialProfiles: ModelConfiguration[] = [
 const activeTrialIds = ['deepseek-flash', 'glm-53-flash', 'minimax-m31-flash'];
 const removedTrialIds = ['mimo-v26-flash', 'mimo-v26-pro', 'minimax-m3'];
 const glmTrialPreset: ModelConfiguration = {
-  id: 'glm-53-flash', name: 'GLM-5.3-Flash', provider: 'zai-coding-cn', api: 'openai-completions',
-  baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4', model: 'glm-5.3-flash', revision: 0,
+  id: 'glm-53-flash', name: 'GLM-5.3-Flash [zai] · 付费 API', provider: 'zai', api: 'openai-completions',
+  baseUrl: 'https://api.z.ai/api/paas/v4', model: 'glm-5.3-flash', revision: 0,
 };
 
 function legacyTrialSettings(selectedId: string | null = null) {
@@ -70,6 +70,44 @@ test('TR10-4: the old store can save the missing GLM preset only with its approv
   assert.deepEqual(reopened.read('glm-53-flash'), saved);
   assert.equal(reopened.snapshot('glm-53-flash', 1)?.apiKey, 'synthetic-new-glm');
   assert.equal(reopened.snapshot()?.apiKey, 'synthetic-existing-deepseek');
+});
+
+test('TR10-4: saving the paid GLM route preserves an inactive Coding Plan revision and the default', async t => {
+  const settings = legacyTrialSettings('deepseek-flash');
+  const previous = { ...glmTrialPreset, name: 'GLM-5.3-Flash', provider: 'zai-coding-cn', baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4', revision: 1 };
+  settings.profiles.push(previous);
+  const dataRoot = await writeLegacyTrialRoot(settings, {
+    deepseek: { type: 'api_key', key: 'synthetic-default' },
+    'zai-coding-cn': { type: 'api_key', key: 'synthetic-previous-coding' },
+  });
+  t.after(() => fs.rm(dataRoot, { recursive: true, force: true }));
+  const store = new ConfigurationStore({ dataRoot });
+  await store.init();
+  assert.equal(store.read('glm-53-flash')?.hasApiKey, false);
+  assert.throws(() => store.snapshot('glm-53-flash', 1), { code: 'configuration_not_found' });
+  await assert.rejects(store.save({ ...previous, apiKey: 'synthetic-coding-rejected' }), { code: 'invalid_configuration' });
+  for (const baseUrl of [
+    'https://api.z.ai/api/coding/paas/v4',
+    'https://api.z.ai/api/%63oding/paas/v4',
+    'https://api.z.ai/api/coding%2Fpaas/v4',
+    'https://api.z.ai/api/%2563oding/paas/v4',
+    'https://api.z.ai//api/coding/paas/v4',
+  ]) {
+    await assert.rejects(store.save({
+      ...glmTrialPreset, id: undefined, provider: 'openai-compatible',
+      baseUrl, apiKey: 'synthetic-coding-rejected',
+    }), { code: 'invalid_configuration' });
+  }
+  await store.save({ ...glmTrialPreset, apiKey: 'synthetic-new-paid' });
+  await store.reconcileTrialModelPresets();
+  const reopened = new ConfigurationStore({ dataRoot });
+  await reopened.init();
+  assert.deepEqual(reopened.read('glm-53-flash'), { ...glmTrialPreset, revision: 2, hasApiKey: true });
+  assert.throws(() => reopened.snapshot('glm-53-flash', 1), { code: 'configuration_not_found' });
+  assert.deepEqual(JSON.parse(await readFile(reopened.settingsPath, 'utf8')).versions.find((value: ModelConfiguration) => value.id === previous.id), previous);
+  assert.ok(!Object.hasOwn(JSON.parse(await readFile(reopened.authPath, 'utf8')), 'zai-coding-cn'));
+  assert.equal(reopened.snapshot('glm-53-flash', 2)?.apiKey, 'synthetic-new-paid');
+  assert.equal(reopened.read()?.id, 'deepseek-flash');
 });
 
 test('TR10-3: the old trial root loses only retired profiles, versions and unshared credentials', async t => {

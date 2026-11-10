@@ -1,20 +1,20 @@
 # 11 月 10 日试用修复：设置导航和模型预设
 
-状态：v0.2，2026-11-10 用户回复「通过，按此实现」。已确认设置保留在侧栏底部原位置，并指定 GLM 使用智谱中国区 Coding Plan。确认时 Demo SHA-256 为 ce2631e0c97f17dd955eb5124f02df1df4fdda7d43499661368c21be0b260b05，规格 SHA-256 为 0b888fee5ae557ce6c9eba73e285ed12365fc676da0b8e37a5d98b9879a5f739。修复分支 Test-And-Repair，开工基线 6467eea 与 main 0249406 同树。原报告位于 MacBook 待修复目录，本机证据副本已核对 SHA-256。
+2026-11-10 用户确认 v0.2，设置保留在侧栏底部原位置。GLM 的首轮 Coding Plan 选择由 11 月 11 日的 TR10-4 更正。原确认 Demo SHA-256 为 ce2631e0c97f17dd955eb5124f02df1df4fdda7d43499661368c21be0b260b05，规格 SHA-256 为 0b888fee5ae557ce6c9eba73e285ed12365fc676da0b8e37a5d98b9879a5f739。修复分支 Test-And-Repair，开工基线 6467eea 与 main 0249406 同树。报告的接收与归档证据见结果记录。
 
 | ID | 预期结果 |
 | --- | --- |
 | TR10-1 | 侧栏上部依次为 Case 看板、项目看板、Studio、插件市场。一级「设置」保留在侧栏底部原模型设置的位置。模型设置和个人资料改为设置内横向二级标签，沿用插件市场的视觉及键盘交互。侧栏进入设置默认打开模型设置。新建项目、项目和任务快捷入口、分析／决策继续可用。 |
 | TR10-2 | 任务模型按钮、缺少模型配置及错误修复等现有入口直达模型标签。从回复、项目材料、企业资料、决策反馈进入个人资料时直达个人标签并保留精确来源。切换标签沿用原工作区返回目标。保留 Studio、SAP 方法与精修离开保护、个人资料草稿和当前任务归属。模型页的表单退出和请求取消沿用原行为。 |
 | TR10-3 | OptraCall 只保留 DeepSeek Flash、MiniMax M3.1 Flash、GLM-5.3-Flash。用户已明确授权 Mac mini 和 MacBook 均实际清除其余 OptraCall 模型配置，双端 Pi Agent 配置及凭据不清除。按准确 provider、协议、地址和模型识别保留项，清理前记录两端目标和引用影响。 |
-| TR10-4 | GLM 使用精确模型 glm-5.3-flash、Pi 1.4.0 的 zai-coding-cn、OpenAI Chat Completions 和 https://open.bigmodel.cn/api/coding/paas/v4。通过原 Host 配置存储入口定向导入 MacBook Pi 的匹配条目，密钥不回显、不落日志或 Git。匹配项缺失时显示待配置。 |
+| TR10-4 | 2026-11-11 用户确认 glm-5.3-flash [zai]，并禁止 OptraCall 使用 GLM Coding Plan。模型设置显示「GLM-5.3-Flash [zai] · 付费 API」和服务地址 https://api.z.ai/api/paas/v4，使用 Pi 1.4.0 的 zai 模型与 OpenAI Chat Completions。通过原 Host 配置存储定向导入 MacBook Pi 的 zai 条目，保留同一预设 ID、原默认模型和历史版本。旧 Coding Plan 版本仅保留记录，配置存储拒绝保存及派发该线路。 |
 | TR10-5 | 完成两项修复、适用测试、非作者复核和两端清理读回后，再以同卷不覆盖方式移动原报告。确认源已不存在，目标的字节与 SHA-256 一致。 |
 
 本轮涉及 Host 界面及模型配置接缝，遵循工程规范 v1.10 的 IN01–IN07。沿用统一会话 Interface v3 及现有项目任务 owner/profile、需求梳理与其他业务 profile 的配置捕获规则。设置页只承载原界面。配置存取复用现有 Host 权限、事务、公开列表及版本解析。保持官方 Pi 1.4.0 和当前依赖锁，GLM 使用现有官方模型注册与传输。Host 负责配置与运行环境，Agent 的分析与工具选择仍在原路径。正常切换设置标签不会触发模型请求或添加必做步骤。
 
 现状已有 5 项内置模型，MiniMax M3 和 M3.1 Flash 共用 minimax-cn 凭据。移除 M3 配置时须保留 Flash 正在使用的共享凭据。存量清理限定 OptraCall 自有模型配置和不再使用的供应商凭据，保留项目、任务、原生会话、报告和绑定引用。旧任务的历史可读，尝试运行已清除的配置时明确指出需使用可用模型，不自动改绑或回落。保留模型仍作默认时维持原默认，默认被清除时显示待选择。核对忙碌状态后按可恢复事务执行，验前验后各做精确读回。
 
-GLM 的公开模型标识见 [Z.AI 官方模型说明](https://docs.z.ai/guides/vlm/glm-5.3-flash)。MacBook Pi 两条路线均存在，已按用户指定仅使用 zai-coding-cn 的 API key。通过隔离 Host 验证保存和请求形状。用户已授权一次不含业务资料的最小连通请求，实际账户连通与合成验证分别记录。
+首次 Coding Plan 线路曾返回 HTTP 401。用户随后明确实际订阅为付费 API，并指定 zai。MacBook Pi 已启用该模型和同 Provider 凭据。Pi 1.4.0 目录中的 zai 默认 URL 仍指向 Coding Plan，OptraCall 复用现有公开模型注册路径覆盖为官方通用 API URL。按同一 Interface v3 及既有 owner/profile 运行，仅调整配置，沿用已确认界面。用隔离 Host 验证原导入入口、固定短句及精确请求，并读回两端同 ID 的实际配置。 [Z.AI 官方模型说明](https://docs.z.ai/guides/vlm/glm-5.3-flash) · [通用 Chat Completions](https://docs.z.ai/api-reference/llm/chat-completion)
 
 验证先保留基线五项模型及两个分散入口的复现。实现后检查五个主入口、两标签、320／390 像素、键盘和返回路径、个人资料来源与任务草稿。使用隔离 Host 与合成传输验证旧根清理、保留共享凭据、旧任务历史读回、GLM 定向导入、失败、取消和无回落。按实际变化执行完整工程检查与非作者复核。两端 Pi Agent 文件状态单独核对。
 
