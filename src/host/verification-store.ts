@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readFile, readdir, rename, link, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, rename, link, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import type { RunDiagnostic } from '../agent/run-diagnostics.ts';

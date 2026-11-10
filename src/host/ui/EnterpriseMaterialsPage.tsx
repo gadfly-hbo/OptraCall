@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import * as api from './enterprise-materials-client.ts';
-import type { EnterpriseMaterial, EnterpriseMaterialFields, EnterpriseMaterialRevision, EnterpriseMaterialsList } from './enterprise-materials-client.ts';
+import type { EnterpriseMaterial, EnterpriseMaterialFields, EnterpriseMaterialsList } from './enterprise-materials-client.ts';
 import './enterprise-materials.css';
 import { EnterpriseMaterialEditorFields } from './EnterpriseMaterialEditorFields.tsx';
 import { personalJsonEqual } from './personal-retention-client.ts';

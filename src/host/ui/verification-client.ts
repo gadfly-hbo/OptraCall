@@ -1,5 +1,5 @@
 import type { BrowserUIRequest, BrowserUIResponse, FileNode } from './project-types.ts';
-import type { VerificationAuthorPreview, VerificationContextEvidence, VerificationMaterialPreview, VerificationSelectedMaterials } from '../verification-context.ts';
+import type { VerificationAuthorPreview, VerificationContextEvidence, VerificationSelectedMaterials } from '../verification-context.ts';
 export type { VerificationAuthorPreview, VerificationContextEvidence, VerificationMaterialPreview } from '../verification-context.ts';
 
 export type VerificationSelection = {

@@ -145,6 +145,5 @@ export class DecisionFeedbackStore {
   saveOperation(record: FeedbackOperation): void { this.#write('operations', feedbackId(record.operationId), record); }
   getHandoff(id: string): FeedbackHandoff | null { return this.#read('handoffs', id); }
   saveHandoff(record: FeedbackHandoff): void { this.#write('handoffs', feedbackId(record.handoffId), record); }
-  getDelivery(id: string): FeedbackDelivery | null { return this.#read('deliveries', id); }
   recordDelivery(record: FeedbackDelivery): void { this.#write('deliveries', feedbackId(record.deliveryId), record); }
 }

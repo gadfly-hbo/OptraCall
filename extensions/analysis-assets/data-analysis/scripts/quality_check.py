@@ -68,6 +68,24 @@ def heading_lines(text):
     return found
 
 
+def without_fenced_code(text):
+    """让 R2 只检查正文，代码示例与相邻行动项保持段落分隔。"""
+    lines = []
+    fence = None
+    for line in text.splitlines(keepends=True):
+        match = re.match(r"^ {0,3}(`{3,}|~{3,})([^\r\n]*)", line)
+        if fence:
+            if match and match[1].startswith(fence) and not match[2].strip(" \t"):
+                fence = None
+            continue
+        if match and (match[1][0] == "~" or "`" not in match[2]):
+            fence = match[1]
+            lines.append("\n")
+        else:
+            lines.append(line)
+    return "".join(lines)
+
+
 def check_report(text):
     checks = []
 
@@ -121,14 +139,22 @@ def check_report(text):
         "报告出现未完成期间词（%s）；对应比较段须明确等长或按天对齐，其他段的对齐说明不替代该比较"
         % "、".join(w for w in INCOMPLETE_PERIOD_WORDS if w in text))
 
-    action_body = ""
-    if not direct and "行动" in order:
-        pos = [p for p, kw, _ in headings if kw == "行动"][0]
-        nxt = [p for p, kw, _ in headings if p > pos]
-        start = text.find("\n", pos)
-        action_body = text[start + 1:nxt[0] if nxt else len(text)] if start != -1 else ""
+    action_text = without_fenced_code(text) if not direct else ""
+    action_headings = heading_lines(action_text)
+    action = next((heading for heading in action_headings if heading[1] == "行动"), None)
+    if action:
+        pos, _, action_heading = action
+        level = len(action_heading.lstrip().split()[0])
+        end = next((p for p, _, line in action_headings
+                    if p > pos and len(line.lstrip().split()[0]) <= level), len(action_text))
+        start = action_text.find("\n", pos)
+        action_body = action_text[start + 1:end] if start != -1 else ""
+        appendix = re.search(rf"(?m)^[ \t]{{0,3}}#{{1,{level}}}[ \t]+附录(?=[ \t：:]|$)", action_body)
+        if appendix:
+            action_body = action_body[:appendix.start()]
         advice = [item.strip()
                   for paragraph in re.split(r"\n[ \t]*\n", action_body)
+                  if not re.fullmatch(r"-{3,}", paragraph.strip())
                   for item in re.split(r"(?m)(?=^[ \t]{0,3}(?:[-*+]|\d+[.、])[ \t]+)", paragraph)
                   if item.strip()]
         bad = [ln for ln in advice
@@ -351,6 +377,37 @@ def run_selftest():
     r = check_report(GOOD_REPORT)
     check("报告·好样例 PASS", r["verdict"] == "PASS" and r["error_count"] == 0)
     check("报告·好样例六段识别", "F1" in [c["id"] for c in r["checks"] if c["level"] == "ok" or not c["hit"]])
+    r = check_report(GOOD_REPORT + "\n---\n")
+    check("报告·行动段分隔线不触发 R2", r["verdict"] == "PASS")
+    appendix = "\n\n## 附录：复算清单\n\n| 来源 | 指标 |\n"
+    r = check_report(GOOD_REPORT + "\n---" + appendix)
+    check("报告·行动段后的附录不触发 R2", r["verdict"] == "PASS")
+
+    for missing, action in (
+        ("责任人", "- 在两周内核对活动订单。"),
+        ("时限", "- 由运营负责人核对活动订单。"),
+    ):
+        r = check_report(GOOD_REPORT + "\n---\n\n" + action + appendix)
+        check(f"报告·分隔线后的行动缺{missing}仍触发 R2",
+              r["verdict"] == "FAIL" and any(
+                  c["id"] == "R2" and c["hit"] and c["detail"].endswith(action)
+                  for c in r["checks"]))
+    r = check_report(GOOD_REPORT + "\n### 行动说明\n\n- 建议核对活动订单。\n")
+    check("报告·下级标题后的真实行动仍检查 R2", any(
+        c["id"] == "R2" and c["hit"] and c["detail"].endswith("- 建议核对活动订单。")
+        for c in r["checks"]))
+    fenced_appendix = "\n```markdown\n责任人与时限填写示例\n## 附录\n```\n"
+    r = check_report(GOOD_REPORT + fenced_appendix + "\n- 建议加强运营。\n")
+    check("报告·围栏内的附录示例不截断 R2", r["verdict"] == "FAIL" and any(
+        c["id"] == "R2" and c["hit"] and c["detail"].endswith("- 建议加强运营。")
+        for c in r["checks"]))
+    tilde_fence = "\n  ~~~~markdown\n~~~\n```\n~~~~text\n## 附录\n- 围栏内的示例。\n  ~~~~~\n"
+    r = check_report(GOOD_REPORT + tilde_fence + appendix)
+    check("报告·围栏后的真实附录仍结束 R2", r["verdict"] == "PASS")
+    r = check_report(GOOD_REPORT + tilde_fence + "\n- 建议加强运营。\n" + appendix)
+    check("报告·围栏内伪关闭不跳过真实行动", r["verdict"] == "FAIL" and any(
+        c["id"] == "R2" and c["hit"] and c["detail"].endswith("- 建议加强运营。")
+        for c in r["checks"]))
 
     # 报告·坏样例必须命中（对抗：检查器不许空转）
     r = check_report(BAD_REPORT)

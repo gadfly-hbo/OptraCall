@@ -9,11 +9,12 @@ import { presentContextMessages } from './context-presentation.ts';
 import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync, chmodSync, renameSync, unlinkSync, constants, openSync, fstatSync, fsyncSync, closeSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, SettingsManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, VERSION, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory, type ExtensionToolContext } from './sdk.ts';
+import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, SettingsManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, getDocsPath, VERSION, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory, type ExtensionToolContext } from './sdk.ts';
 import type { ProjectAgentWireOptions, ProjectSnapshot, ProvidedContextInput } from './project-runtime.ts';
 import { runDiagnostic, readRunDiagnostic, type RunDiagnostic } from './run-diagnostics.ts';
 import { createBrowserUIContext, type BrowserUIResponse } from './browser-ui-context.ts';
 import { OUTPUT_EVIDENCE_GUIDANCE } from './output-evidence.ts';
+import { projectSystemPrompt } from './project-system-prompt.ts';
 import { createProtectedTools } from './protected-tools.ts';
 import { snapshotProtectedSkills } from './protected-skills.ts';
 import { createSimulationTools } from '../../extensions/business-plugins/sim-lab/tools/simulation-tools.ts';
@@ -33,6 +34,9 @@ type ActiveRun = { id: string; kind: 'prompt' | 'command'; requestFingerprint?: 
 type RunResult = { outcome: Outcome; text: string; result?: unknown; snapshot: ProjectSnapshot; diagnostic?: RunDiagnostic };
 const RUN_ENTRY = 'optracall.run';
 const EXECUTION_ENTRY = 'optracall.execution';
+const PI_1_4_0_DEFAULT_ROLE = 'You are an expert coding assistant operating inside pi, a coding agent harness.';
+const PI_1_4_0_DEFAULT_PREAMBLE = `${PI_1_4_0_DEFAULT_ROLE} You help users by reading files, executing commands, editing code, and writing new files.\n\n`;
+const OPTRACALL_ROLE = "You are OptraCall's analysis and decision-support assistant running on Pi.";
 
 export async function runProjectSession(transport: { close: () => Promise<void>; setHttpIdleTimeoutMs(value: number): void; settings(): Record<string, number>; observe(baseUrl: string, emit: (record: Record<string, unknown>) => void): () => void }) {
   let runtime: AgentSessionRuntime | undefined, session: AgentSession | undefined, manager: SessionManager | undefined;
@@ -427,10 +431,26 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
       const customTools = [...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager)];
       const delegation = !fixedInput() && !o.workspace && (!o.protectedExecution || ordinaryManaged());
-      const searchGuidance: ExtensionFactory = pi => { pi.on('before_agent_start', event => ({ systemPrompt: event.systemPrompt + (nativeSearchMode(o.configuration)
-        ? '\nThe configured Provider offers native web_search for this task. Decide when to search. Distinguish actual search results and their source URLs from prior knowledge; if no search ran, failed, or returned insufficient evidence, state that accurately. The Host preserves Provider source receipts but does not verify the claims for you.'
-        : '\nNo Provider-native web_search is connected on this configured route. Other permitted tools remain available. Do not claim that you searched unless an actual available tool retrieved the information; do not invent source URLs.') })); };
+      const searchGuidance: ExtensionFactory = pi => {
+        pi.on('before_agent_start', event => {
+          const prompt = event.systemPromptOptions;
+          const usesDefaultPrompt = !o.protectedExecution && !prompt.customPrompt && prompt.forceSystemPrompt === undefined;
+          // Update the default docs section before reading the prompt that will be sent.
+          if (usesDefaultPrompt && !Object.hasOwn(prompt.sections, 'docs')) {
+            prompt.sections.docs = `Consult the installed Pi documentation at ${getDocsPath()} only for questions about Pi, its SDK, or extensions.`;
+          }
+          let systemPrompt = event.systemPrompt;
+          // The SDK's structured preamble stays intact in the native transcript.
+          if (usesDefaultPrompt && VERSION === '1.4.0' && systemPrompt.startsWith(PI_1_4_0_DEFAULT_PREAMBLE)) {
+            systemPrompt = OPTRACALL_ROLE + systemPrompt.slice(PI_1_4_0_DEFAULT_ROLE.length);
+          }
+          return { systemPrompt: systemPrompt + (nativeSearchMode(o.configuration)
+            ? '\nThe configured Provider offers native web_search for this task. Decide when to search. Distinguish actual search results and their source URLs from prior knowledge; if no search ran, failed, or returned insufficient evidence, state that accurately. The Host preserves Provider source receipts but does not verify the claims for you.'
+            : '\nNo Provider-native web_search is connected on this configured route. Other permitted tools remain available. Do not claim that you searched unless an actual available tool retrieved the information; do not invent source URLs.') };
+        });
+      };
       const searchExtensions = delegation ? [createNativeSearchExtension(o.configuration, code => { nativeSearchFailure = code; }), searchGuidance] : [];
+      const projectInstructions = () => [projectSystemPrompt(targetCwd, path.join(o.projectDirectory!, '060_reports')), OUTPUT_EVIDENCE_GUIDANCE];
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: { ...(contextAdapter ? { extensionsOverride: contextAdapter.extensionsOverride } : {}), ...(fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
@@ -446,12 +466,16 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           unavailableSkills = snapshot.unavailable;
           return { skills: snapshot.skills, diagnostics: [...base.diagnostics, ...snapshot.unavailable.map(name => ({ type: 'warning' as const, message: `Skill unavailable in protected execution: ${name}` }))] };
         },
-        appendSystemPrompt: [...(o.workspace?.systemPrompt ?? []), ...(ordinaryManaged() ? [`You are OptraCall. The current working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze prepared project materials in 020_clean and authorized shared business materials announced by the Host. Write intermediate/process files to 020_clean by default and final reports to ${path.join(o.projectDirectory!, '060_reports')}. Determine analysis methods and tools yourself; these are directory conventions, not prescribed analysis steps.`, OUTPUT_EVIDENCE_GUIDANCE] : []),
+        appendSystemPrompt: [...(o.workspace?.systemPrompt ?? []), ...(ordinaryManaged() ? projectInstructions() : []),
           `The Host has provided a managed tool execution environment (${o.protectedExecution?.profile ?? 'protected'}). The tools run in ${protectedTools.scope.cwd}. Authorized readable material locations: ${JSON.stringify(protectedTools.scope.readRoots)}. Authorized writable locations: ${JSON.stringify([protectedTools.scope.writableRoot, ...(protectedTools.scope.writeRoots ?? [])])}. ${ordinaryManaged() ? 'Background and parallel calculations may continue across tool calls within this operation; the Host retains their resources until stop, close, or the authorized phase handoff.' : 'Existing data and reports are read-only; save new calculations and deliverables in the new workspace.'} Native session and credential files are unavailable to execution tools. Existing/remote MCP and user execution extensions are unavailable here. All child processes must remain inside this operation\'s owned execution groups: detached sessions and posix_spawn are unavailable. The python and python3 entrypoints use the installed same-version direct interpreters (${JSON.stringify(protectedTools.pythonRuntimes)}); use these entrypoints or their recorded direct executable paths instead of absolute framework launcher wrappers. Ordinary fork/exec subprocesses remain available. Choose methods and tools yourself. Codemode store/load is scoped to this execution workspace. Unavailable tools: ${JSON.stringify(protectedTools.unavailableTools)}.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } : {
         extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), mcpExtension!, ...searchExtensions, environmentExtension],
         additionalSkillPaths: [analysisAssetsDir],
-        appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [`You are OptraCall. Workspace conventions: your working directory is ${targetCwd}. For analysis, do not read data in 010_draw. Analyze prepared project materials in 020_clean and authorized shared business materials announced by the Host. 010_draw archives originals and is not automatically attached to model context. This is a soft instruction, not sensitive-data isolation; the full native tools are available without a sandbox or tool interception. Write intermediate/process files to 020_clean by default. Save final reports to ${path.join(o.projectDirectory!, '060_reports')} when asked to produce a final report. Determine analysis methods and tools yourself from the user's request. These are directory conventions, not a prescribed analysis procedure.`, OUTPUT_EVIDENCE_GUIDANCE, ...(o.metricIndexText ? [o.metricIndexText] : [])],
+        appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [
+          ...projectInstructions(),
+          ...(o.semanticContextEnabled ? ['If this session supports SAP method lookup and a business definition or analytical convention could affect the result, you may use `read_semantic_context` to find a published `sap-method` using one short metric term per query (search additional terms separately) and read the exact version when useful. Assess its fit, decide whether to use, adapt, or skip it, and cite the version and convention you apply.'] : []),
+          ...(o.metricIndexText ? [o.metricIndexText] : []),
+        ],
       }) } });
       const subagent = delegation ? createSubagentTool(discoverSubagentRoles(services.resourceLoader.getSkills().skills), (role, task, signal) => runSubagent(parent, role, task, signal)) : undefined;
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
