@@ -9,7 +9,11 @@ async (page) => {
   const mode = name => page.getByRole('group', { name: '工作区切换' }).getByRole('button', { name, exact: true });
   const primary = name => page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('button', { name, exact: true });
   const settingsEntry = page.getByRole('complementary', { name: '工作台导航', exact: true }).getByRole('button', { name: '设置', exact: true });
-  const settingsTab = name => page.getByRole('group', { name: '设置分类', exact: true }).getByRole('button', { name, exact: true });
+  const settingsTabs = page.getByRole('group', { name: '设置分类', exact: true });
+  const settingsTab = name => settingsTabs.getByRole('button', { name, exact: true });
+  const searchOrder = page.getByRole('region', { name: '搜索顺序', exact: true });
+  const saveSearchOrder = () => searchOrder.getByRole('button', { name: '保存顺序', exact: true });
+  const searchProviders = () => searchOrder.locator('.web-search-route-title strong').allTextContents();
   const category = name => page.getByRole('group', { name: '插件市场分类', exact: true }).getByRole('button', { name, exact: true });
   const title = name => page.getByRole('heading', { name, exact: true, level: 1 });
   const section = name => page.getByRole('heading', { name, exact: true, level: 2 });
@@ -79,6 +83,86 @@ async (page) => {
   assert(await draftInput.inputValue() === '页面切换保留的草稿', 'Returning from either settings tab preserves the task draft');
   await page.waitForFunction(() => document.activeElement?.matches('.model-button'));
   assert(await modelCalls() === beforeSettings, 'Opening settings and switching its tabs must not call a model');
+  const searchSettingsPath = '**/api/web-search/settings';
+  let storedOrder = ['minimax', 'deepseek'];
+  let searchConfigured = { minimax: true, deepseek: false };
+  let failRead = true, failWrite = true, loseSaveReceipt = false, searchReads = 0, searchWrites = 0;
+  await page.route(searchSettingsPath, async route => {
+    const request = route.request();
+    assert(request.headers()['x-optracall-client'] === '1', 'Search settings use the existing same-origin client');
+    if (request.method() === 'GET') {
+      searchReads++;
+      if (failRead) { failRead = false; await route.fulfill({ status: 503, json: {} }); return; }
+    } else {
+      assert(request.method() === 'PUT', 'Only reads and explicit saves touch search settings');
+      const payload = request.postDataJSON();
+      assert(Object.keys(payload).length === 1 && Array.isArray(payload.order) && payload.order.length === 2
+        && payload.order.includes('minimax') && payload.order.includes('deepseek'), 'Only the exact provider order is sent');
+      searchWrites++;
+      if (failWrite) { failWrite = false; await route.fulfill({ status: 503, json: {} }); return; }
+      storedOrder = payload.order;
+      if (loseSaveReceipt) { loseSaveReceipt = false; await route.abort('failed'); return; }
+    }
+    await route.fulfill({ json: { order: storedOrder, configured: searchConfigured } });
+  });
+  await settingsEntry.click();
+  assert(JSON.stringify(await settingsTabs.getByRole('button').allTextContents()) === JSON.stringify(['模型设置', '个人资料', '网络搜索']), 'Settings has the three approved tabs');
+  assert(searchReads === 0, 'Model settings does not load search settings');
+  await settingsTab('网络搜索').focus(); await page.keyboard.press('Enter');
+  await section('网络搜索').waitFor();
+  const readFailure = page.getByRole('alert').filter({ hasText: '未能读取网络搜索设置。' });
+  await readFailure.waitFor();
+  assert(!await searchOrder.isVisible(), 'Unavailable settings do not show a guessed order');
+  await readFailure.getByRole('button', { name: '重新读取设置', exact: true }).click();
+  await searchOrder.waitFor();
+  assert(JSON.stringify(await searchProviders()) === JSON.stringify(['MiniMax', 'DeepSeek']), 'Search reads the default order from the Host');
+  const minimaxRoute = searchOrder.getByRole('listitem').filter({ hasText: 'MiniMax M3.1 Flash' });
+  const deepseekRoute = searchOrder.getByRole('listitem').filter({ hasText: 'DeepSeek Flash' });
+  assert(await minimaxRoute.getByText('已配置', { exact: true }).isVisible(), 'Configured credential status is shown');
+  assert(await deepseekRoute.getByText('未配置', { exact: true }).isVisible(), 'Missing credential status is shown');
+  const fetchSettings = page.getByRole('region', { name: '网页读取 · DeepSeek Fetch', exact: true });
+  assert(await fetchSettings.getByText(/URL.*Markdown/).isVisible() && await fetchSettings.getByText('未配置', { exact: true }).isVisible(), 'Fetch shows its independent DeepSeek credential status');
+  await deepseekRoute.getByRole('button', { name: '前往模型设置配置 DeepSeek Flash 凭据', exact: true }).click();
+  await section('模型配置').waitFor();
+  searchConfigured = { minimax: true, deepseek: true };
+  await settingsTab('网络搜索').click();
+  await deepseekRoute.getByText('已配置', { exact: true }).waitFor();
+  await searchOrder.getByRole('button', { name: '下移 MiniMax', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  assert(JSON.stringify(await searchProviders()) === JSON.stringify(['DeepSeek', 'MiniMax']) && searchWrites === 0, 'Keyboard reordering changes only the draft');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '上移 MiniMax');
+  await saveSearchOrder().click();
+  const saveFailure = page.getByRole('alert').filter({ hasText: '未能确认已保存。' });
+  await saveFailure.waitFor();
+  assert(JSON.stringify(storedOrder) === JSON.stringify(['minimax', 'deepseek']), 'An unsuccessful save leaves the stored order intact');
+  await saveFailure.getByRole('button', { name: '重新读取设置', exact: true }).click();
+  await saveSearchOrder().click();
+  await searchOrder.getByText('搜索顺序已保存。', { exact: true }).waitFor();
+  assert(searchWrites === 2 && JSON.stringify(storedOrder) === JSON.stringify(['deepseek', 'minimax']), 'The second save persists the retained draft');
+  await page.reload();
+  await settingsEntry.click(); await settingsTab('网络搜索').click();
+  await searchOrder.waitFor();
+  assert(JSON.stringify(await searchProviders()) === JSON.stringify(['DeepSeek', 'MiniMax']), 'Refreshing reloads the stored order');
+  await searchOrder.getByRole('button', { name: '恢复默认顺序', exact: true }).click();
+  assert(searchWrites === 2 && JSON.stringify(await searchProviders()) === JSON.stringify(['MiniMax', 'DeepSeek']), 'Restoring the default changes only the draft');
+  loseSaveReceipt = true;
+  await saveSearchOrder().click();
+  await saveFailure.waitFor();
+  assert(searchWrites === 3 && JSON.stringify(storedOrder) === JSON.stringify(['minimax', 'deepseek']), 'A lost response can leave the explicit write committed');
+  await saveFailure.getByRole('button', { name: '重新读取设置', exact: true }).click();
+  await searchOrder.getByText('已保存顺序：MiniMax → DeepSeek', { exact: true }).waitFor();
+  storedOrder = ['deepseek', 'minimax'];
+  await settingsTab('模型设置').click(); await settingsTab('网络搜索').click();
+  await searchOrder.getByText('已保存顺序：DeepSeek → MiniMax', { exact: true }).waitFor();
+  assert(JSON.stringify(await searchProviders()) === JSON.stringify(['DeepSeek', 'MiniMax']) && await saveSearchOrder().isDisabled(), 'A confirmed draft no longer masks a later server change');
+  await searchOrder.getByRole('button', { name: '恢复默认顺序', exact: true }).click();
+  await saveSearchOrder().click();
+  await searchOrder.getByText('搜索顺序已保存。', { exact: true }).waitFor();
+  assert(searchWrites === 4 && JSON.stringify(storedOrder) === JSON.stringify(['minimax', 'deepseek']), 'Saving the restored default persists it');
+  assert(await page.getByRole('heading', { name: '查看模拟结果', exact: true }).count() === 0, 'Demo scenarios are absent from the product settings');
+  await page.getByRole('button', { name: '返回项目空间', exact: true }).click();
+  assert(await draftInput.inputValue() === '页面切换保留的草稿' && await modelCalls() === beforeSettings, 'Search settings preserve the original draft and issue no model requests');
+  passed.push('Network search: three tabs, read failure/retry, credential state and direct model settings, keyboard reorder, save failure and recovery, refresh, default restore and independent Fetch');
   await primary('Case 看板').click(); await title('Case 看板').waitFor();
   await page.getByRole('button', { name: '启用本机 Case 记录', exact: true }).click();
   const boardView = name => page.locator('.case-view-switch').getByRole('button', { name, exact: true });
@@ -230,7 +314,10 @@ async (page) => {
     await section('模型配置').waitFor(); await noOverflow();
     await settingsTab('个人资料').click();
     await section('个人资料').waitFor(); await noOverflow();
-    assert(await page.getByRole('region', { name: '设置', exact: true }).evaluate(element => element.scrollWidth <= element.clientWidth), 'Both settings tabs fit the narrow viewport');
+    assert(await page.getByRole('region', { name: '设置', exact: true }).evaluate(element => element.scrollWidth <= element.clientWidth), 'Personal settings fit the narrow viewport');
+    await settingsTab('网络搜索').click(); await searchOrder.waitFor(); await noOverflow();
+    assert(await settingsTabs.evaluate(element => element.scrollWidth <= element.clientWidth)
+      && await page.getByRole('region', { name: '设置', exact: true }).evaluate(element => element.scrollWidth <= element.clientWidth), 'All tabs and network search controls fit the narrow viewport');
     await page.getByRole('button', { name: '返回决策工作台', exact: true }).click(); await title('决策看板').waitFor();
     await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '展开侧栏');
     await page.getByRole('button', { name: '展开侧栏', exact: true }).click();

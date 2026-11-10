@@ -6,6 +6,7 @@ import type { CaseContextSelection } from '../case-types.ts';
 import type { RequirementContextSelection } from './requirement-types.ts';
 import type { TaskCapability, TaskCapabilities } from '../task-capabilities.ts';
 import type { TradeAreaStatus } from '../trade-area-status.ts';
+import type { SearchProvider, WebSearchSettings } from '../web-search.ts';
 import type { BrowserUIResponse, ClientProject, ClientTask, FileNode, ProjectEvent, PublicModelConfiguration, SessionSnapshot, TaskState } from './project-types.ts';
 import { isProjectUploadName, PROJECT_UPLOAD_MAX_BYTES } from '../project-upload.ts';
 
@@ -25,6 +26,18 @@ async function request<T>(path: string, method: string, body?: unknown, signal?:
   return result as T;
 }
 export function readConfigurations(signal?: AbortSignal): Promise<{ configurations: PublicModelConfiguration[]; selectedId: string | null }> { return request('configurations', 'GET', undefined, signal); }
+export type WebSearchOrder = readonly [SearchProvider, SearchProvider];
+export type WebSearchSettingsResponse = Omit<WebSearchSettings, 'order'> & { order: WebSearchOrder };
+async function webSearchSettingsRequest(method: 'GET' | 'PUT', order?: WebSearchOrder, signal?: AbortSignal): Promise<WebSearchSettingsResponse> {
+  const result = await request<WebSearchSettingsResponse>('web-search/settings', method, order && { order }, signal);
+  if (!result || !Array.isArray(result.order) || result.order.length !== 2 || !result.order.includes('minimax') || !result.order.includes('deepseek')
+    || typeof result.configured?.minimax !== 'boolean' || typeof result.configured?.deepseek !== 'boolean') {
+    throw new HostRequestError('网络搜索设置响应无效，请重新读取。');
+  }
+  return result;
+}
+export function readWebSearchSettings(signal?: AbortSignal): Promise<WebSearchSettingsResponse> { return webSearchSettingsRequest('GET', undefined, signal); }
+export function saveWebSearchOrder(order: WebSearchOrder): Promise<WebSearchSettingsResponse> { return webSearchSettingsRequest('PUT', order); }
 export async function saveConfiguration(input: unknown, signal?: AbortSignal): Promise<PublicModelConfiguration> { return (await request<{ configuration: PublicModelConfiguration }>('configuration', 'PUT', input, signal)).configuration; }
 export async function selectConfiguration(id: string, signal?: AbortSignal): Promise<void> { await request('configuration/select', 'POST', { id }, signal); }
 export async function importCredentials(credentials: unknown, signal?: AbortSignal): Promise<void> { await request('configuration/import', 'POST', { credentials }, signal); }

@@ -244,13 +244,18 @@ test('native Anthropic search resumes through the SDK with exact raw assistant b
   assert.ok(native.includes('optracallNativeSearch')); assert.ok(native.includes('synthetic-encrypted-result'));
   assert.ok(messagesText(snapshot.messages).includes(SOURCE.url), 'sources remain visible in the normal message projection');
   await agent.close();
-  const bytes = await readFile(snapshot.sessionFile), reopened = f.create({ sessionFile: snapshot.sessionFile });
+  const bytes = await readFile(snapshot.sessionFile), reopened = f.create({
+    sessionFile: snapshot.sessionFile, taskId: 'native-history',
+    webSearch: { search: async () => assert.fail('no new search was requested'), fetchPage: async () => assert.fail('no fetch was requested') },
+  });
   const restored = await reopened.open();
   assert.equal(f.requests.length, 2, 'reading and reopening search history does not replay searches');
   assert.deepEqual(await readFile(snapshot.sessionFile), bytes, 'opening does not rewrite source evidence');
   assert.deepEqual(metadata(restored.messages), metadata(snapshot.messages));
   await reopened.start('EXPLICIT_NEW_QUESTION', 'native-anthropic-next').completion;
   assert.equal(f.requests.length, 3);
+  assert.ok(declarations(f.requests[2].body).includes('web_search'));
+  assert.ok(!f.requests[2].body.tools.some((tool: any) => tool.type === 'web_search_20250305'), 'new searches go through the Host tool');
   const resumedHistory = f.requests[2].body.messages;
   assert.equal(resumedHistory.filter((message: any) => message.role === 'user').length, 2);
   assert.ok(resumedHistory.some((message: any) => message.role === 'assistant' && JSON.stringify(message.content) === JSON.stringify(SEARCH_BLOCKS)), 'a later explicit turn still carries the original native result blocks');
@@ -374,12 +379,15 @@ test('business workspaces and fixed/protected profiles do not acquire ordinary n
   const f = await fixture(t);
   for (const mode of ['workspace', 'fixed-draft', 'text-only', ...(process.platform === 'darwin' ? ['protected'] : [])]) {
     const cwd = path.join(f.options.projectDirectory!, '020_clean');
-    const agent = f.create({ sessionDirectory: path.join(f.root, 'excluded', mode), ...(mode === 'protected'
+    const agent = f.create({ sessionDirectory: path.join(f.root, 'excluded', mode), taskId: 'restricted-search',
+      webSearch: { search: async () => assert.fail('restricted workspace attempted search'), fetchPage: async () => assert.fail('restricted workspace attempted fetch') },
+      ...(mode === 'protected'
       ? { protectedExecution: { id: 'native-search-excluded', profile: 'protected', cwd, writableRoot: cwd, readRoots: [] } }
       : { workspace: { cwd, systemPrompt: ['Synthetic excluded resource.'], ...(mode === 'workspace' ? {} : { defaultTools: [], capabilityPolicy: mode as 'fixed-draft' | 'text-only' }) } }) });
     await agent.open(); const result = await agent.start('EXCLUDED_NATIVE_SEARCH', `excluded-${mode}`).completion;
     assert.equal(result.outcome, 'completed');
     assert.ok(!f.requests.at(-1)!.body.tools?.some((tool: any) => tool.type === 'web_search_20250305' || tool.type === 'web_search'), `${mode} cannot gain native search by loading a task factory`);
+    assert.ok(!declarations(f.requests.at(-1)!.body).some((name: string) => name === 'web_search' || name === 'web_fetch'), `${mode} cannot gain the Host web tools`);
     assert.ok(!systemText(f.requests.at(-1)!.body).includes(conciseDocs), `${mode} retains its own docs policy`);
     assert.ok(!systemText(f.requests.at(-1)!.body).startsWith(optracallRole), `${mode} retains its own role`);
     await agent.close();

@@ -26,6 +26,7 @@ import { FeedbackContextPanel, FeedbackReceiptHistory, FeedbackRequirementDialog
 import './help-page.css';
 import { NewProjectDialog, ProjectFiles } from './ProjectSpace.tsx';
 import { ModelSettings } from './ModelSettings.tsx';
+import { WebSearchSettings } from './WebSearchSettings.tsx';
 import { BrowserInteraction } from './BrowserInteraction.tsx';
 import { TaskCaseDialog } from './TaskCaseDialog.tsx';
 import { VerificationPanel } from './VerificationPanel.tsx';
@@ -57,10 +58,10 @@ import { ModelRegistryPage } from '../../../extensions/business-plugins/model-pa
 import '../../../extensions/business-plugins/model-pack/ui/model-pack.css';
 import type { RequirementContextSelection } from './requirement-types.ts';
 
-type SettingsView = 'settings' | 'personal-materials';
+type SettingsView = 'settings' | 'personal-materials' | 'web-search-settings';
 type AppView = 'studio' | 'cases' | 'projects' | 'chat' | 'decision' | 'metric' | 'requirement' | 'refiner' | 'enterprise-materials' | 'simlab' | 'model-pack' | CatalogCategory | SettingsView;
 
-type IconName = 'panel' | 'plus' | 'chat' | 'settings' | 'arrow' | 'stop' | 'check' | 'warning' | 'moon' | 'sun' | 'back' | 'assets' | 'market' | 'folder' | 'help';
+type IconName = 'panel' | 'plus' | 'chat' | 'settings' | 'arrow' | 'stop' | 'check' | 'warning' | 'moon' | 'sun' | 'back' | 'assets' | 'market' | 'folder' | 'help' | 'search';
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const shapes: Record<IconName, ReactNode> = {
     help: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 2-2.5 2-2.5 4m0 3v.1" /></>,
@@ -70,6 +71,7 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     chat: <path d="M21 11a8 8 0 0 1-8 8H6l-4 3 1-6a8 8 0 0 1-1-5 9 9 0 0 1 19 0Z" />,
     settings: <><path d="m9 3-1 3-3 1-2 3 2 2-1 3 2 3 3-1 3 2 3-2 3 1 2-3-1-3 2-2-2-3-3-1-1-3Z" /><circle cx="12" cy="11" r="3" /></>,
     arrow: <path d="M12 19V5m-6 6 6-6 6 6" />,
+    search: <><circle cx="10.8" cy="10.8" r="5.8" /><path d="m15.1 15.1 4.1 4.1" /></>,
     stop: <rect x="6" y="6" width="12" height="12" rx="2" />,
     check: <path d="m5 12 4 4L19 6" />,
     warning: <><path d="m12 3 10 17H2L12 3Z" /><path d="M12 9v4m0 3v1" /></>,
@@ -96,7 +98,7 @@ const lastRunError = (task: ClientTask) => task.lastRun?.status === 'interrupted
 export function App() {
   const [projects, setProjects] = useState<ClientProject[]>([]), [activeId, setActiveId] = useState<string>(), [activeTaskId, setActiveTaskId] = useState<string>(), [ui, setUI] = useState<Record<string, TaskUI>>({});
   const [view, setViewState] = useState<AppView>(() => new URL(window.location.href).searchParams.has('studio') ? 'studio' : new URL(window.location.href).searchParams.has('project') ? 'chat' : 'cases');
-  const inSettings = view === 'settings' || view === 'personal-materials';
+  const inSettings = view === 'settings' || view === 'personal-materials' || view === 'web-search-settings';
   const lastWorkspace = useRef<'chat' | 'decision' | 'cases' | 'projects' | 'studio'>('cases'), settingsReturnView = useRef<Exclude<AppView, SettingsView>>('chat');
   const [studioMounted, setStudioMounted] = useState(() => new URL(window.location.href).searchParams.has('studio'));
   const [studioFocus, setStudioFocus] = useState<string>(() => new URL(window.location.href).searchParams.get('studio') || '');
@@ -113,6 +115,7 @@ export function App() {
   const [personalChoice, setPersonalChoice] = useState<PersonalContextChoice>();
   const [personalEntry, setPersonalEntry] = useState<PersonalRetentionEntry>();
   const [personalMounted, setPersonalMounted] = useState(false);
+  const [webSearchMounted, setWebSearchMounted] = useState(false);
   const [comparisonContexts, setComparisonContexts] = useState<Record<string, ComparisonContext>>({}), [comparisonKey, setComparisonKey] = useState<string>();
   const [materialFocus, setMaterialFocus] = useState<{ materialId: string; revisionId?: string }>();
   const [refinerDeckId, setRefinerDeckId] = useState<string>();
@@ -283,6 +286,7 @@ export function App() {
       }
       if (!inSettings || entry) setPersonalEntry(entry);
       if (next === 'personal-materials') setPersonalMounted(true);
+      if (next === 'web-search-settings') setWebSearchMounted(true);
       setHelpOpen(false);
       if (window.innerWidth <= 760) setSidebarOpen(false);
     });
@@ -537,14 +541,15 @@ export function App() {
       {studioUsePending && <div className="global-notice" role="alert"><span>进入分析结果 UNKNOWN；原请求 {studioUsePending.requestId} 保留，未重复创建任务。</span><button type="button" className="secondary-button" onClick={() => { void inspectStudioUse(); }}>核对原创建结果</button></div>}
       <HelpPage open={helpOpen} onBack={closeHelp} />
       <div hidden={helpOpen} className={`workbench-content ${(view === 'chat' || view === 'studio') && filesOpen && active ? 'files-visible' : ''}`}><div className="workbench-view">
-      {(inSettings || personalMounted) && <section className="settings-page" aria-labelledby="settings-title" hidden={!inSettings}>
+      {(inSettings || personalMounted || webSearchMounted) && <section className="settings-page" aria-labelledby="settings-title" hidden={!inSettings}>
         <header className="page-heading settings-heading">
-          <div><h1 id="settings-title">设置</h1><p>管理模型连接和个人资料。</p></div>
+          <div><h1 id="settings-title">设置</h1><p>管理模型连接、个人资料和网络搜索。</p></div>
           <button type="button" className="text-button back-button" onClick={backFromSettings}><span aria-hidden="true">←</span>{settingsBackLabel}</button>
         </header>
         <div className="catalog-tabs settings-tabs" role="group" aria-label="设置分类">
           <button type="button" className={view === 'settings' ? 'active' : undefined} aria-pressed={view === 'settings'} aria-controls="settings-model-panel" onClick={() => openSettingsView('settings')}><Icon name="settings" />模型设置</button>
           <button type="button" className={view === 'personal-materials' ? 'active' : undefined} aria-pressed={view === 'personal-materials'} aria-controls="settings-personal-panel" onClick={() => openSettingsView('personal-materials')}><Icon name="assets" />个人资料</button>
+          <button type="button" className={view === 'web-search-settings' ? 'active' : undefined} aria-pressed={view === 'web-search-settings'} aria-controls="settings-web-search-panel" onClick={() => openSettingsView('web-search-settings')}><Icon name="search" />网络搜索</button>
         </div>
         <div id="settings-model-panel" hidden={view !== 'settings'}>
           {view === 'settings' && <ModelSettings configurations={configurations} selectedId={selectedId} hostStatus={hostStatus} onChange={refreshConfigurations} />}
@@ -554,6 +559,9 @@ export function App() {
             const key = activeKey; setPersonalContexts(previous => ({ ...previous, [key]: [...(previous[key] ?? []).filter(item => JSON.stringify(item.selection) !== JSON.stringify(selection)), { selection, title }] }));
             setHelpOpen(false); setView('chat'); requestAnimationFrame(() => textarea.current?.focus());
           } : undefined} />}
+        </div>
+        <div id="settings-web-search-panel" hidden={view !== 'web-search-settings'}>
+          {webSearchMounted && <WebSearchSettings active={view === 'web-search-settings' && !helpOpen} onModelSettings={() => openSettingsView('settings')} />}
         </div>
       </section>}
       {sapMethodsMounted && <div hidden={view !== 'metric' || sapTab !== 'methods'} className="sap-assets-workspace">{sapTabs}<SapMethodsPage active={view === 'metric' && sapTab === 'methods' && !helpOpen} initialTarget={sapMethodTarget} onTargetConsumed={() => setSapMethodTarget(undefined)} onNavigationGuard={registerSapMethodsLeave} /></div>}

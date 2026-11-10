@@ -13,6 +13,7 @@ import os from 'node:os';
 import { AgentRuntime, CONNECTION_PROMPT, SDK_VERSION } from '../agent/runtime.ts';
 import { ProjectRuntimeError, type ProjectSnapshot } from '../agent/project-runtime.ts';
 import { ConfigurationStore, ConfigurationStoreError, TARGET_MODELS } from './config-store.ts';
+import { createWebSearch } from './web-search.ts';
 import { ProjectStore, ProjectStoreFault, type ProjectRecord, type TaskRecord } from './project-store.ts';
 import { PROJECT_UPLOAD_JSON_MAX_BYTES } from './project-upload.ts';
 import { ModelPackStore } from './model-pack-store.ts';
@@ -107,7 +108,7 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
   response.once('close', clear); response.once('finish', clear);
 }
 
-export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; studioPython?: string; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
+export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; webSearchFetch?: typeof fetch; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; studioPython?: string; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false });
   const modelPacks = new ModelPackStore(path.join(dataRoot, 'models'));
@@ -181,6 +182,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const snapshot = configuration.snapshot(id, revision);
     return snapshot && !clearingAll && !clearing.has(snapshot.provider) ? snapshot : undefined;
   };
+  const webSearch = createWebSearch({ dataRoot, configuration: id => {
+    try { return availableConfiguration(id) ?? null; }
+    catch (error) { if (error instanceof ConfigurationStoreError) return null; throw error; }
+  }, fetch: options.webSearchFetch });
   const projectSessions = createAgentSessionDomain<ProjectOwner>({
     name: 'project-tasks',
     profile: {
@@ -203,7 +208,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const semanticPort = createSemanticContextPort({ projectId: project.id, taskId: task.id, projects, data: projectDataContext, reader: semanticContext, mutate, isClosing: () => closing });
         const semanticContextRead = semanticGraph && (options.semanticGraph?.bindingFor(project.id, task.id) || options.studioPython && studio.availableForTask(project.id, task.id)) && (!protectedExecution || protectedExecution.profile === 'ordinary')
           ? createSemanticContextReadPort({ projectId: project.id, taskId: task.id, projects, legacy: semanticPort, graph: semanticGraph, graphOnly: Boolean(protectedExecution), isClosing: () => closing }) : undefined;
-        return { analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution } : { studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
+        return { analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution } : { studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
           context.signal.throwIfAborted();
           await pair(project.id, task.id, true);
           const result = action === 'find' ? await personalContext.find(input, { signal: context.signal }) : await personalContext.read(parsePersonalContextReadInput(input), { signal: context.signal });
@@ -616,6 +621,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         json(response, 200, await semanticContext.query(projectId, taskId, input as SemanticQueryInput, { audience: 'human' }));
         return;
       }
+      if (url.pathname === '/api/web-search/settings') {
+        if (request.method === 'GET') { json(response, 200, await webSearch.settings()); return; }
+        if (request.method === 'PUT') {
+          const input = await body(request);
+          if (Object.keys(input).some(key => key !== 'order')) throw new RequestFault(400, 'invalid_search_order');
+          try { json(response, 200, await mutate(() => webSearch.saveOrder(input.order))); }
+          catch (error) {
+            if (error && typeof error === 'object' && 'code' in error && error.code === 'invalid_search_order') throw new RequestFault(400, 'invalid_search_order');
+            throw error;
+          }
+          return;
+        }
+      }
       if (url.pathname === '/api/configurations' && request.method === 'GET') { json(response, 200, { configurations: configuration.list(), selectedId: configuration.read()?.id ?? null }); return; }
       if (url.pathname === '/api/configuration/select' && request.method === 'POST') { const input = await body(request); json(response, 200, { configuration: await mutate(() => configuration.select(String(input.id ?? ''))) }); return; }
       if (url.pathname === '/api/configuration/import' && request.method === 'POST') {
@@ -1021,7 +1039,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const originalCode = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
       const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
       const status = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable', 'unmanaged_execution_unknown'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
-      json(response, status, { code, message: ['automatic_unmanaged_history', 'unmanaged_execution_unknown'].includes(code) ? '本项目或任务缺少可信的受管执行起点或完整收尾证明，暂不能开启自动核算；原项目和会话保留，关闭自动核算后可继续普通分析。' : code === 'automatic_unsupported_protection' ? '当前系统不支持所需执行保护，未启动自动核算或修订。' : code === 'verification_revision_materials_too_large' ? '修订固定材料全文超过20,000字符，请缩小本次核算所选资料后新建核算；未启动修订模型，不会截断或恢复执行工具。' : code === 'verification_revision_text_required' ? '修订出稿仅接收完整UTF-8文本材料；所选文件不能解码，未启动修订模型。' : code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'configuration_not_found' ? '原模型配置已不可用，请选择可用模型。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
+      json(response, status, { code, message: ['automatic_unmanaged_history', 'unmanaged_execution_unknown'].includes(code) ? '本项目或任务缺少可信的受管执行起点或完整收尾证明，暂不能开启自动核算；原项目和会话保留，关闭自动核算后可继续普通分析。' : code === 'automatic_unsupported_protection' ? '当前系统不支持所需执行保护，未启动自动核算或修订。' : code === 'verification_revision_materials_too_large' ? '修订固定材料全文超过20,000字符，请缩小本次核算所选资料后新建核算；未启动修订模型，不会截断或恢复执行工具。' : code === 'verification_revision_text_required' ? '修订出稿仅接收完整UTF-8文本材料；所选文件不能解码，未启动修订模型。' : code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'configuration_not_found' ? '原模型配置已不可用，请选择可用模型。' : code === 'invalid_search_order' ? '搜索顺序必须包含 MiniMax 和 DeepSeek 各一次。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }
   })(); });
   return { server, ready, configuration, projects, cases, close: async () => {
