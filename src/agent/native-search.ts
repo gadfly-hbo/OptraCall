@@ -17,7 +17,7 @@ export function nativeSearchMode(configuration: Configuration): Mode | undefined
 }
 
 /** Adapt native protocol blocks through Pi's existing loop and persistence hooks. */
-export function createNativeSearchExtension(configuration: Configuration, onFailure?: (code: string) => void): ExtensionFactory {
+export function createNativeSearchExtension(configuration: Configuration, onFailure?: (code: string) => void, inject = true): ExtensionFactory {
   const mode = nativeSearchMode(configuration);
   return pi => {
     if (!mode) return;
@@ -75,6 +75,8 @@ export function createNativeSearchExtension(configuration: Configuration, onFail
         }
         blocks = []; partialInputs = new Map(); openBlocks = new Set(); streamBytes = 0; sources = new Map(); stopReason = undefined; usage = undefined;
         hasNativeBlocks = false; responseFailed = false; lastReceipt = undefined;
+        // Restore native history without advertising another search route.
+        if (!inject) return payload;
         const tools = Array.isArray(payload.tools) ? [...payload.tools] : [];
         if (!tools.some((tool: any) => tool.type === (mode === 'anthropic' ? 'web_search_20250305' : 'web_search'))) tools.push(mode === 'anthropic'
           ? { type: 'web_search_20250305', name: 'web_search' }
@@ -85,6 +87,7 @@ export function createNativeSearchExtension(configuration: Configuration, onFail
         return event.payload;
       }
     });
+    if (!inject) return;
     pi.on('provider_stream_event', (event, context) => {
       try {
         const data = event.data as Record<string, any>;

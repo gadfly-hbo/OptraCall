@@ -6,6 +6,7 @@ import type { CaseContextSelection } from '../case-types.ts';
 import type { RequirementContextSelection } from './requirement-types.ts';
 import type { TaskCapability, TaskCapabilities } from '../task-capabilities.ts';
 import type { TradeAreaStatus } from '../trade-area-status.ts';
+import type { SearchProvider, WebSearchSettings } from '../web-search.ts';
 import type { BrowserUIResponse, ClientProject, ClientTask, FileNode, ProjectEvent, PublicModelConfiguration, SessionSnapshot, TaskState } from './project-types.ts';
 import { isProjectUploadName, PROJECT_UPLOAD_MAX_BYTES } from '../project-upload.ts';
 
@@ -24,8 +25,19 @@ async function request<T>(path: string, method: string, body?: unknown, signal?:
   if (!response.ok) throw new HostRequestError(result.message ?? '本地服务未完成请求。', result.fields ?? {}, result.code ?? result.error ?? 'host_request_failed', result.code === 'PERSONAL_CONTEXT_UNAVAILABLE' && result.accepted === false && Array.isArray(result.unavailablePersonalContext) && result.unavailablePersonalContext.length > 0 && result.unavailablePersonalContext.every((index: unknown) => Number.isSafeInteger(index) && Number(index) >= 0) ? result.unavailablePersonalContext : undefined, typeof result.accepted === 'boolean' ? result.accepted : undefined, response.status);
   return result as T;
 }
-export async function readConfiguration(signal?: AbortSignal): Promise<PublicModelConfiguration | null> { return (await request<{ configuration: PublicModelConfiguration | null }>('configuration', 'GET', undefined, signal)).configuration; }
 export function readConfigurations(signal?: AbortSignal): Promise<{ configurations: PublicModelConfiguration[]; selectedId: string | null }> { return request('configurations', 'GET', undefined, signal); }
+export type WebSearchOrder = readonly [SearchProvider, SearchProvider];
+export type WebSearchSettingsResponse = Omit<WebSearchSettings, 'order'> & { order: WebSearchOrder };
+async function webSearchSettingsRequest(method: 'GET' | 'PUT', order?: WebSearchOrder, signal?: AbortSignal): Promise<WebSearchSettingsResponse> {
+  const result = await request<WebSearchSettingsResponse>('web-search/settings', method, order && { order }, signal);
+  if (!result || !Array.isArray(result.order) || result.order.length !== 2 || !result.order.includes('minimax') || !result.order.includes('deepseek')
+    || typeof result.configured?.minimax !== 'boolean' || typeof result.configured?.deepseek !== 'boolean') {
+    throw new HostRequestError('网络搜索设置响应无效，请重新读取。');
+  }
+  return result;
+}
+export function readWebSearchSettings(signal?: AbortSignal): Promise<WebSearchSettingsResponse> { return webSearchSettingsRequest('GET', undefined, signal); }
+export function saveWebSearchOrder(order: WebSearchOrder): Promise<WebSearchSettingsResponse> { return webSearchSettingsRequest('PUT', order); }
 export async function saveConfiguration(input: unknown, signal?: AbortSignal): Promise<PublicModelConfiguration> { return (await request<{ configuration: PublicModelConfiguration }>('configuration', 'PUT', input, signal)).configuration; }
 export async function selectConfiguration(id: string, signal?: AbortSignal): Promise<void> { await request('configuration/select', 'POST', { id }, signal); }
 export async function importCredentials(credentials: unknown, signal?: AbortSignal): Promise<void> { await request('configuration/import', 'POST', { credentials }, signal); }
@@ -33,7 +45,6 @@ export async function clearConfiguration(provider?: string, signal?: AbortSignal
 export function testConnection(revision: number, signal?: AbortSignal): Promise<{ ok: boolean; revision: number; reply: string; message: string }> { return request('connection-test', 'POST', { revision }, signal); }
 export async function listProjects(signal?: AbortSignal): Promise<ClientProject[]> { return (await request<{ projects: ClientProject[] }>('projects', 'GET', undefined, signal)).projects; }
 export async function createProject(name: string, configurationId: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>('projects', 'POST', { name, configurationId })).project; }
-export function readProject(id: string, signal?: AbortSignal): Promise<{ project: ClientProject }> { return request(`projects/${encodeURIComponent(id)}`, 'GET', undefined, signal); }
 export async function renameProject(id: string, name: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}`, 'PATCH', { name })).project; }
 export async function archiveProject(id: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}/archive`, 'POST', {})).project; }
 export async function restoreProject(id: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}/restore`, 'POST', {})).project; }
@@ -41,7 +52,6 @@ const taskPath = (projectId: string, taskId: string) => `projects/${encodeURICom
 export async function createTask(projectId: string, name: string, configurationId?: string, capabilities: TaskCapabilities | boolean = {}): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`projects/${encodeURIComponent(projectId)}/tasks`, 'POST', { name, ...(configurationId ? { configurationId } : {}), ...(typeof capabilities === 'boolean' ? { simulationTools: capabilities } : capabilities) })).task; }
 export async function setTaskCapability(projectId: string, taskId: string, capability: TaskCapability, enabled: boolean): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`${taskPath(projectId, taskId)}/capabilities`, 'PUT', { capability, enabled })).task; }
 export function readTradeAreaStatus(signal?: AbortSignal): Promise<TradeAreaStatus> { return request('connectors/trade-area', 'GET', undefined, signal); }
-export async function setSimulationTools(projectId: string, taskId: string, enabled: boolean): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/simulation-tools`, 'PUT', { enabled })).task; }
 export function readTask(projectId: string, taskId: string, signal?: AbortSignal): Promise<TaskState> { return request(taskPath(projectId, taskId), 'GET', undefined, signal); }
 export function openTask(projectId: string, taskId: string): Promise<TaskState> { return request(`${taskPath(projectId, taskId)}/open`, 'POST', {}); }
 export async function saveDraft(projectId: string, taskId: string, text: string): Promise<void> { await request(`${taskPath(projectId, taskId)}/draft`, 'PATCH', { text }); }

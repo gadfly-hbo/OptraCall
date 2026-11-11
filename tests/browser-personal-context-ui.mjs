@@ -6,7 +6,8 @@ const mode = process.env.M4_UI_CASE || 'quick-add';
 const uiOrigin = process.env.M4_UI_ORIGIN || 'http://127.0.0.1:4193';
 assert.equal(new URL(uiOrigin).hostname,'127.0.0.1');
 const label = process.env.M4_UI_EVIDENCE || mode;
-const evidence = '.local/fourbase-modules/m4/implementation/ui';
+const evidence = process.env.M4_UI_EVIDENCE_DIR || '.local/fourbase-modules/m4/implementation/ui';
+const screenshots = process.env.M4_UI_EVIDENCE_DIR || 'output/playwright/m4-implementation';
 await mkdir(evidence, { recursive: true });
 const files = ['App.tsx','PersonalMaterialsPage.tsx','AgentCandidatesPanel.tsx','ProjectSpace.tsx','runtime-client.ts','PersonalContextControls.tsx'];
 const hashes = {};
@@ -41,7 +42,7 @@ await page.addInitScript(({mode}) => {
   if(path==='/api/personal-retention/candidates/lookup')return json({rows:mode==='candidate'?[candidate]:[],partial:false,issues:[],controlsAvailable:true,nextCursor:null});
   if(path==='/api/personal-retention/items/material-old')return json(mode==='exact'&&!url.searchParams.has('decisionId')?{...detail,decision:{...decision,operationId:'decision-new',contentRef:{...row.contentRef,revisionId:'revision-new'},bodySha256:'c'.repeat(64)},content:{...detail.content,body:'后来新正文'}}:detail);
   const match=path.match(/^\/api\/projects\/([^/]+)\/tasks\/([^/]+)(.*)$/);
-  if(match){ const project=projects.find(p=>p.id===match[1]),task=project.tasks.find(t=>t.id===match[2]);const snapshot={sessionId:task.id,messages:[],tools:[],status:'idle',sdkVersion:'synthetic',uiRequests:[]};
+  if(match){ const project=projects.find(p=>p.id===match[1]),task=project.tasks.find(t=>t.id===match[2]);const messages=mode==='source'&&task.id==='task-current'?[{role:'assistant',content:'精确来源测试回复',timestamp:1793664000000,nativeSessionId:'source-session',nativeEntryId:'source-entry'}]:[];const snapshot={sessionId:task.id,messages,tools:[],status:'idle',sdkVersion:'synthetic',uiRequests:[]};
    if(match[3]==='/events')return new Response(new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode('data: '+JSON.stringify({type:'snapshot',snapshot})+'\n\n'));}}),{headers:{'content-type':'text/event-stream'}});
    if(match[3]==='/draft'){task.draft=body.text;window.__m4.drafts.push(body.text);return json({});}
    if(match[3]==='/messages'){window.__m4.messages.push(body);if(mode==='permissions')return json({message:'当前权限不允许',code:'permission_denied',accepted:false,unavailablePersonalContext:[0]},403);if(mode==='ackunknown'||(mode==='ackretry'||mode==='ackreadback')&&window.__m4.messages.length===1)throw new TypeError('synthetic acknowledgement lost');if(mode==='failure'&&window.__m4.messages.length===1)return json({message:'准确旧资料已失读',code:'PERSONAL_CONTEXT_UNAVAILABLE',accepted:false,unavailablePersonalContext:[0]},409);return json({accepted:true},202);}
@@ -73,14 +74,42 @@ if(mode==='history') {
  await page.getByRole('button',{name:'发送消息',exact:true}).click();
  await page.waitForFunction(()=>window.__m4.messages.length===1);
  const state=await page.evaluate(()=>window.__m4); assert.equal(state.messages[0].text,'保留原问题草稿'); assert.equal(state.messages[0].personalContext,undefined); assert.equal(state.requests.filter(x=>x.path.includes('personal-retention')).length,0);
+} else if(mode==='source') {
+ await page.getByRole('button',{name:'整理为知识',exact:true}).click();
+ const tabs=page.getByRole('group',{name:'设置分类',exact:true});
+ const personal=tabs.getByRole('button',{name:'个人资料',exact:true});
+ const model=tabs.getByRole('button',{name:'模型设置',exact:true});
+ const editor=page.getByRole('dialog',{name:'新建人工笔记',exact:true});
+ const checkSource=async()=>{
+   await editor.waitFor();
+   await editor.getByText('精确来源身份',{exact:true}).click();
+   assert.deepEqual(JSON.parse(await editor.locator('.pr-source-card pre').innerText()),{
+     type:'native-reply',projectId:'project-current',taskId:'task-current',sessionId:'source-session',messageId:'source-entry',
+     expectedTextSha256:createHash('sha256').update('精确来源测试回复').digest('hex'),
+   });
+ };
+ assert.equal(await personal.getAttribute('aria-pressed'),'true');
+ await checkSource();
+ await page.keyboard.press('Escape');
+ await editor.waitFor({state:'detached'});
+ await model.click();
+ await personal.click();
+ await page.getByRole('button',{name:'继续编辑草稿',exact:true}).click();
+ await checkSource();
+ await page.keyboard.press('Escape');
+ await editor.waitFor({state:'detached'});
+ await page.getByRole('button',{name:'返回项目空间',exact:true}).click();
+ assert.equal(await page.getByRole('textbox',{name:'消息',exact:true}).inputValue(),'保留原问题草稿');
+ assert.equal((await page.evaluate(()=>window.__m4)).messages.length,0);
 } else {
  const expand=page.getByRole('button',{name:'展开侧栏',exact:true});if(await expand.isVisible())await expand.click();
- await page.getByRole('button',{name:'个人资料',exact:true}).click();
+ await page.getByRole('complementary',{name:'工作台导航',exact:true}).getByRole('button',{name:'设置',exact:true}).click();
+ await page.getByRole('group',{name:'设置分类',exact:true}).getByRole('button',{name:'个人资料',exact:true}).click();
  const result=page.getByRole('article').filter({has:page.getByRole('button',{name:mode==='candidate'?'未收藏准确候选':'准确旧资料',exact:true})});
  await result.waitFor();
  await result.scrollIntoViewIfNeeded();
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Personal results fit viewport before choosing');
- await page.screenshot({path:`output/playwright/m4-implementation/${label}-list.png`,fullPage:true});
+ await page.screenshot({path:`${screenshots}/${label}-list.png`,fullPage:true});
  const add=result.getByRole('button',{name:/加入当前任务/});
  assert.equal(await add.count(),1,'RU05 actual list must provide one-click add to the exact current task');
  if(mode==='target') {
@@ -103,6 +132,8 @@ if(mode==='history') {
  await page.getByRole('textbox',{name:'消息',exact:true}).waitFor();
  assert.equal(await page.getByRole('textbox',{name:'消息',exact:true}).inputValue(),'保留原问题草稿');
  let state=await page.evaluate(()=>window.__m4); assert.equal(state.messages.length,0); assert.equal(state.drafts.length,0);
+ const background=page.locator('details.task-context-options');
+ if(!await background.evaluate(element=>element.open))await background.locator(':scope > summary').click();
  const chosen=page.getByRole('region',{name:'本次指定个人资料',exact:true}); await chosen.waitFor();
  if(mode==='range') {
    await chosen.getByText('准确身份与范围',{exact:true}).click();
@@ -151,11 +182,11 @@ if(mode==='history') {
 }
 assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Product UI must fit the viewport without document overflow');
 assert.deepEqual(errors,[]);
-await page.screenshot({path:`output/playwright/m4-implementation/${label}.png`,fullPage:true});
+await page.screenshot({path:`${screenshots}/${label}.png`,fullPage:true});
 await writeFile(`${evidence}/${label}.json`,JSON.stringify({result:'PASS',mode,errors},null,2));
 console.log('PASS '+mode);
 } catch(error) {
- await page.screenshot({path:`output/playwright/m4-implementation/${label}.png`,fullPage:true}).catch(()=>{});
+ await page.screenshot({path:`${screenshots}/${label}.png`,fullPage:true}).catch(()=>{});
  await writeFile(`${evidence}/${label}.json`,JSON.stringify({result:'FAIL',mode,error:error.message,errors},null,2));
  console.error(error);process.exitCode=1;
 } finally{await browser.close();}

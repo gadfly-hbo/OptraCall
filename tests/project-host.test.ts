@@ -2,11 +2,14 @@ import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 import { SessionManager } from '../src/agent/sdk.ts';
+import { ConfigurationStore } from '../src/host/config-store.ts';
+import { ProjectStore } from '../src/host/project-store.ts';
 
 type Host = Awaited<ReturnType<typeof startTestHost>>;
 type WireEvent = { type?: string; requestId?: string; outcome?: string; text?: string; [key: string]: unknown };
@@ -282,6 +285,42 @@ test('CFG-04: clearing credentials preserves project history and files, and rest
   const after = await json(await restarted.request(`/api/projects/${project.id}/tasks/${task.id}`));
   assert.equal(after.snapshot.capabilities.requiresConfiguration, true); assert.ok(JSON.stringify(after.snapshot.messages).includes('清除凭据前的合成历史回复。'));
   assert.equal(provider.requests.length, 1, 'Restart must not reimport credentials, replay messages or switch to a fallback model.');
+});
+
+test('TR10-3: a task with a retired trial model keeps its native history and explains why sending is blocked', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'optracall-retired-model-'));
+  const options = { dataRoot: path.join(root, 'private'), projectsRoot: path.join(root, 'projects') };
+  const retired = { id: 'minimax-m3', name: 'MiniMax M3', provider: 'minimax-cn', api: 'anthropic-messages' as const, baseUrl: 'https://api.minimaxi.com/anthropic', model: 'MiniMax-M3', revision: 1 };
+  await fs.mkdir(options.dataRoot, { mode: 0o700 });
+  await fs.writeFile(path.join(options.dataRoot, 'settings.json'), JSON.stringify({ schema: 1, selectedId: retired.id, profiles: [retired], versions: [retired] }), { mode: 0o600 });
+  const projects = new ProjectStore(options); await projects.init();
+  const project = await projects.create({ name: '保留历史项目', configuration: retired });
+  const task = await projects.createTask(project.id, { name: '退役模型历史任务' });
+  await projects.saveDraft(project.id, task.id, '保留的未发送草稿');
+  const file = path.join(task.sessionDirectory, 'native-history.jsonl');
+  const timestamp = new Date().toISOString();
+  const bytes = [
+    { type: 'session', version: 3, id: randomUUID(), timestamp, cwd: path.join(project.rootPath, '020_clean') },
+    { type: 'message', id: 'old-reply', parentId: null, timestamp, message: { role: 'assistant', content: [{ type: 'text', text: '保留的历史回复' }], timestamp: Date.parse(timestamp) } },
+  ].map(entry => JSON.stringify(entry)).join('\n') + '\n';
+  await fs.writeFile(file, bytes);
+  await projects.setSession(project.id, task.id, file);
+  await projects.close();
+  const configurations = new ConfigurationStore(options); await configurations.init();
+  await configurations.reconcileTrialModelPresets();
+  const host = await startTestHost(options);
+  t.after(async () => { await host.close(); await fs.rm(root, { recursive: true, force: true }); });
+  const route = `/api/projects/${project.id}/tasks/${task.id}`;
+  const before = await json(await host.request(route));
+  assert.equal(before.snapshot.capabilities.requiresConfiguration, true);
+  assert.ok(JSON.stringify(before.snapshot.messages).includes('保留的历史回复'));
+  assert.equal(before.task.draft, '保留的未发送草稿');
+  const blocked = await json(await host.request(`${route}/messages`, 'POST', { text: '退役配置不可发送', requestId: randomUUID() }), 404);
+  assert.equal(blocked.code, 'configuration_not_found');
+  assert.match(blocked.message, /选择可用模型/);
+  const after = await json(await host.request(route));
+  assert.deepEqual(after.task, before.task);
+  assert.equal(await fs.readFile(file, 'utf8'), bytes);
 });
 
 test('EB10/11: read-only request receipts reopen older revisions and unknown legacy evidence after later turns and restart', { timeout: 60000 }, async t => {

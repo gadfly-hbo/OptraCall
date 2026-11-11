@@ -244,7 +244,7 @@ export function createAutomaticVerificationFeature(options: {
           let writes = Promise.resolve();
           const unsubscribe = verifier.subscribe(event => { writes = writes.then(() => events.writeFile(JSON.stringify(event) + '\n')).then(() => {}); });
           try {
-            async function step(phase: Exclude<AutomaticPhase, 'prepare' | 'ended'>, text: string, run: (requestId: string) => SessionRun<any>, onResult?: (result: SessionResult, requestId: string) => Promise<void>) {
+            async function step(phase: Exclude<AutomaticPhase, 'prepare' | 'ended'>, run: (requestId: string) => SessionRun<any>, onResult?: (result: SessionResult, requestId: string) => Promise<void>) {
               await assertFixed();
               let chain = await store.readChain(chainOwner!);
               const requestId = randomUUID(), item: AutomaticStep = { stepId: randomUUID(), requestId, phase, ordinal: chain.steps.length + 1,
@@ -287,7 +287,7 @@ export function createAutomaticVerificationFeature(options: {
             const coldScope = await makeScope(chainOwner!, 'cold', [inputs]);
             await verification.store.update(fixed!, { state: 'running', phase: 'cold' });
             await verifier.reopen({ protectedExecution: coldScope });
-            const cold = await step('cold', `独立核算任务：${fixed!.question}\n本轮只提供固定源数据和事前语义，作者稿尚未开放。固定资料只读位置：${inputs}；新计算工作区：${coldScope.cwd}。请自主决定方法、工具及查证，条件不足可以保留未知。`,
+            const cold = await step('cold',
               requestId => verifier.lease.start({ requestId, text: `独立核算任务：${fixed!.question}\n固定资料只读位置：${inputs}；本轮未提供作者答案。工具当前工作区：${coldScope.cwd}。工具、计算、验证和自修复由你自主安排，条件不足可保留未知。` }),
               async (result, requestId) => { await verification.store.saveColdResult(fixed!, { text: result.text, requestId, sessionFile: result.sessionFile }); });
             const latest = await verification.store.read(fixed!);
@@ -296,7 +296,7 @@ export function createAutomaticVerificationFeature(options: {
             const compareScope = await makeScope(chainOwner!, 'compare', [inputs, path.join(fixed!.workspace, 'author'), coldScope.writableRoot]);
             await verifier.reopen({ protectedExecution: compareScope });
             const compareText = authorContext(await verification.store.readAuthorFiles(fixed!), fixed!.workspace, { automaticFeedback: true });
-            const compared = await step('compare', compareText, requestId => verifier.lease.start({ requestId, text: compareText }),
+            const compared = await step('compare', requestId => verifier.lease.start({ requestId, text: compareText }),
               async (result, requestId) => { await verification.store.saveComparisonResult(fixed!, { text: result.text, requestId, sessionFile: result.sessionFile }); await verification.store.update(fixed!, { state: 'completed' }); });
             await verifier.lease.quiesce(); await assertFixed();
             const initialRecord = await verification.store.read(fixed!);
@@ -319,7 +319,7 @@ export function createAutomaticVerificationFeature(options: {
                 report: { version: lastVersion.version, path: lastVersion.relativePath, fixedPath: store.materialPath(chainOwner!, lastVersion), sha256: lastVersion.sha256 },
                 authorTurn: { number: ordinal, limit: chain.settingsSnapshot.maxAuthorTurns },
                 coldResult, opinion, output: { reportPath: outputPath } });
-              const author = await step('author', feedback, requestId => lease.start({ requestId, text: feedback }));
+              const author = await step('author', requestId => lease.start({ requestId, text: feedback }));
               await lease.quiesce();
               await assertFixed();
               let content: Buffer;
@@ -344,7 +344,7 @@ export function createAutomaticVerificationFeature(options: {
               await verifier.reopen({ protectedExecution: recheckScope });
               const recheckText = automaticRecheckContext({ version: nextVersion.version, sha256: nextVersion.sha256,
                 fixedPath: store.materialPath(chainOwner!, nextVersion), processPath: authorScope.cwd, text });
-              const checked = await step('recheck', recheckText, requestId => verifier.lease.start({ requestId, text: recheckText }));
+              const checked = await step('recheck', requestId => verifier.lease.start({ requestId, text: recheckText }));
               await verifier.lease.quiesce(); await assertFixed();
               chain = await store.readChain(chainOwner!);
               const versions = chain.versions.map(v => v.version === nextVersion.version ? { ...v, recheckRequestId: checked.requestId } : v);

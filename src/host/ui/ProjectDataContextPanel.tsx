@@ -2,7 +2,7 @@ import { ProjectCalculationEvidence } from './ProjectCalculationEvidence.tsx';
 import { ProjectDataTextEvidence } from './ProjectDataTextEvidence.tsx';
 import { dataContextInputFormat, INPUT_MAX_BYTES, EVIDENCE_FILE_MAX_BYTES, EVIDENCE_TOTAL_MAX_BYTES, INPUT_EXTENSIONS, EVIDENCE_EXTENSIONS } from '../project-data-context-contract.ts';
 import { useEffect, useId, useRef, useState } from 'react';
-import type { CreateDataCitation, DataCitationRecord, DataContextConceptRef, DataContextSapRef, DataContextFieldLocation, DataContextMapping, DataContextObservation, DataContextProvenance, DataContextStatement, DataContextSummary, FreezeProjectInput, ProjectDataContextSelection, SaveDataDescription } from '../project-data-context-types.ts';
+import type { DataCitationRecord, DataContextConceptRef, DataContextSapRef, DataContextFieldLocation, DataContextMapping, DataContextObservation, DataContextProvenance, DataContextStatement, DataContextSummary, ProjectDataContextSelection } from '../project-data-context-types.ts';
 import type { ClientProject, FileNode } from './project-types.ts';
 import * as api from './project-data-context-client.ts';
 import './project-data-context.css';

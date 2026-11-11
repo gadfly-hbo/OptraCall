@@ -6,7 +6,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { FetchLike } from './open-meteo.ts';
 import { WeatherService, LICENSE_NOTE } from './service.ts';
-import { CITY_PRESETS, MAX_SPAN_DAYS, TIMEZONE, ToolError, WEATHER_FIELDS } from './types.ts';
+import { CITY_PRESETS, MAX_SPAN_DAYS, TIMEZONE, ToolError } from './types.ts';
 
 export interface ToolDefinition {
   name: string;

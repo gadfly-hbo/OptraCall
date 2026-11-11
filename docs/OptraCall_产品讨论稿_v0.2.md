@@ -18,7 +18,7 @@ OptraCall 是面向数据驱动决策者的分析与决策工作台。它让成�
 - 技术结构采用 Host + Agent + Extension。Host 管环境，不管分析步骤；pi-coding-agent SDK 统一承接全产品 Agent Runtime；Extension 包含分析资产、连接器和业务插件，共用产品统一运行入口，不自建 Pi SDK 接入层或独立 Runtime。
 - 产品体验参考 WorkBuddy，但服务分析与决策，不扩张为通用办公平台。
 - 吸取 JuanerAI 的资产和经验，不先建立宏大的白皮书与蓝图；重点提炼有效的开发流程和规范。
-- Mac mini 全权负责产品方案、开发、工程测试及修复迭代；MacBook 仅以用户身份体验产品、整理问题并回传。Codex 负责 Host、Agent 与整体接入回归，Qoder 负责 Extension。
+- Mac mini 全权负责产品方案、开发、工程测试及修复迭代。MacBook 以用户身份体验产品、整理问题并回传。Codex 与 Qoder 的开发和接入职责按[工程规范第2节](engineering-workflow.md#2-人员设备与运行时分工)执行。
 - 延续 JuanerAI 的 SDD + TDD、独立复核和必要验证，采用精简 Git/CI 节奏；具体执行以[工程规范](engineering-workflow.md)为准。
 
 ### 为什么重新开始
@@ -54,7 +54,7 @@ Host 将问题、已知业务背景、获准使用的数据与工具交给 Agent
 
 官方 SDK 文档已确认：Pi 可嵌入 Node.js 或 Bun 进程，并提供会话、工具、模型和事件等程序化接口。当前官方文档展示的包名为 @earendil-works/pi-coding-agent；实施时应核对并锁定兼容版本，不照抄历史包名或默认跟随 latest。[1]
 
-pi-coding-agent SDK 是整个 OptraCall 产品的统一 Agent Runtime。Codex 维护产品级 SDK 接入、会话生命周期、事件传递及运行管理入口；Qoder 开发的 Extension 通过这一入口使用 Agent 能力，提供工具、skill、上下文和专业能力，不再自建 Pi SDK 接入层、会话运行管理或独立 Runtime。
+pi-coding-agent SDK 是整个 OptraCall 产品的统一 Agent Runtime。Codex 维护产品级 SDK 接入、会话生命周期、事件传递及运行管理入口。Extension 通过这一入口使用 Agent 能力，提供工具、skill、上下文和专业能力，并共用产品的 SDK 接入、会话管理和 Runtime。
 
 统一底座下可以按任务隔离会话与上下文，具体接口和并发方式随实际任务确定。集成验证既检查依赖，也检查真实调用、会话创建与停止路径，不能仅凭包版本相同就认定共用运行底座。
 
@@ -162,7 +162,7 @@ Extension 按三类组织，但不先做插件市场或统一安装平台。优�
 
 Mac mini 全权负责产品方案、开发、工程测试、诊断与修复迭代。MacBook 仅以用户身份使用产品、总结问题和修改建议并回传；Mac mini 修复后再提供可识别版本复测。体验前标明源码提交、构建与实际运行版本、模型和关键配置。MacBook 不承担工程修复，不形成第二条开发线；用户体验反馈与正式产品验收分别记录。
 
-工程师分工已确认：Codex 负责 Host、Agent，并承担整体接入、主链路集成和回归；Qoder 负责 Extension，提供适用规格、测试、接入说明和证据。两者共同遵守工程规范；最终独立复核者须独立于候选的全部作者，作者之间互查不能自动替代独立复核。分工确认不等于已派发具体功能任务。
+工程师按[工程规范第2节](engineering-workflow.md#2-人员设备与运行时分工)承担开发、接入与交付职责。具体功能按变更规格明确责任人。最终独立复核由独立于候选全部作者的 Agent 执行。
 
 2026 年 10 月 28 日初始化前再次核实：本地仅有 v0.1 讨论稿，尚无 Git 仓库；GitHub 的 gadfly-hbo/OptraCall 为公开空仓库。用户随后明确批准初始化仓库、更新讨论稿及开发规范、首次提交并推送 GitHub，暂不启动产品功能开发。首次交付的提交与远端结果以实际 Git 回读为准。
 

@@ -1,7 +1,7 @@
 import type { ExactCandidateRef, CandidateControlInput, CandidateControlEvent, CandidateControlState } from '../agent-candidate-controls.ts';
 import { personalJsonEqual, request } from './personal-retention-client.ts';
 
-import type { CandidateParentState, CandidateRow, CandidateLookupInput, CandidateLookupResult } from '../agent-candidate-reader.ts';
+import type { CandidateRow, CandidateLookupInput, CandidateLookupResult } from '../agent-candidate-reader.ts';
 export type { CandidateParentState, CandidateRow, CandidateLookupInput, CandidateLookupResult } from '../agent-candidate-reader.ts';
 export type CandidateView = NonNullable<CandidateLookupInput['view']>;
 export type CandidateOperationRead = { storeId: string; event: CandidateControlEvent | null; state: CandidateControlState | null };

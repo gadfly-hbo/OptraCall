@@ -1,0 +1,25 @@
+# 11 月 10 日试用报告修复记录
+
+实现提交 79efeed，分支 Test-And-Repair。设置保留在侧栏底部。模型设置与个人资料在同一设置页切换，工作区返回目标与引用来源保留。预设为 DeepSeek Flash、MiniMax M3.1 Flash、GLM-5.3-Flash。原报告 SHA-256 为 4f2fb8edec5e841501ae9ce36813b2068cd575bedca9e5f5838036d50aadc8fc。
+
+## 11 月 10 日首轮
+
+| 检查 | 结果 |
+| --- | --- |
+| 浏览器 | 设置与任务 7 组、个人资料精确来源及加入任务 3 组通过。个人资料首轮用例未展开既有背景区域而超时，补用户展开步骤后通过。 |
+| 工程检查 | 首轮 1840 通过、1 失败、67 条件跳过，D16 完成状态读到 busy。原基线与候选的 D16 定向重跑均通过，完整复跑 1841 通过、0 失败、67 条件跳过，构建通过。 |
+| 非作者复核 | 找到退役模型缺少明确提示。保存该失败后，补提示并以隔离 Host 证明历史和草稿可读、发送拒绝、任务和原生文件字节保持。既有清除凭据回归一并通过。 |
+| 双端配置清理 | Mac mini 与 MacBook 均删除 MiniMax M3、MiMo V2.6 Pro、MiMo V2.6 Flash，清除 OptraCall 的 MiMo 凭据。两端保留 MiniMax M3.1 Flash 共享密钥与默认选项、DeepSeek 凭据、项目历史摘要和 Pi Agent 文件。两端恢复原 0249406 运行版本。 |
+| GLM 合成线路 | Pi 1.4.0 使用中国区 Coding Plan 的固定短句、请求形状和合成成功回执均通过。 |
+| GLM 真实线路 | 从 MacBook Pi Agent 定向读取 zai-coding-cn 凭据。唯一一次获准的短句请求返回 HTTP 401。GLM 预设在两端显示待配置，失败凭据未写入 OptraCall。 |
+| 报告 | 真实账户连通待解决。原件仍在 MacBook 待修复目录，SHA-256 与接收时一致，已修复目录无同名文件。 |
+
+## 11 月 11 日付费 API 更正与归档
+
+- 用户确认使用 MacBook Pi Agent 的 `zai/glm-5.3-flash` 付费 API，禁止 OptraCall 使用 GLM Coding Plan。修复提交 2b7345c 调整预设和现有导入路径，保留配置 ID 与历史版本，拒绝保存或调用旧线路。Pi 1.4.0 和 Interface v3 沿用原接入。
+- 隔离 Host 导入单个 `zai` 条目，通过 `https://api.z.ai/api/paas/v4/chat/completions` 发出一次固定短句，实际 HTTP 200 并收到 OK。两端用原配置存储事务更新模型设置，运行版本为 ad45f95。设置显示「GLM-5.3-Flash [zai] · 付费 API」及付费地址，MiniMax 仍为默认，两端 OptraCall 均无 GLM Coding Plan 密钥。核对 Pi Agent 文件元数据和项目保全记录。
+- 浏览器点验 Mac mini 的显示名称、地址和已配置状态。非作者独立读回两端实际配置，复核 Coding Plan 保存、派发和编码路径的拒绝行为。固定候选 1928 项检查中 1861 通过、0 失败、67 条件跳过，构建通过。新增拒绝逻辑位于修复分支，当前运行版本采用付费配置。
+- 用户授权的两次成功对账请求分别报告 12455 和 60068 tokens，缓存命中均为 0。首次长请求带有该模型不支持的关闭思考参数，返回 HTTP 400 且无用量回执，改用支持的参数后完成。计费后台金额由用户核对。 [Z.AI 模型说明](https://docs.z.ai/guides/vlm/glm-5.3-flash)
+- 报告已从 MacBook「待修复」移至「已修复」。同卷不覆盖移动后独立 SSH 读回，源已不存在，目标为 130701 字节，SHA-256 与接收时一致。
+
+本机证据位于 .local/trial-repair-20261110/glm-paid。主要记录为 host-live.json、billing-paid-retry.json、billing-60k.json、mini-config.json、macbook-config.json、mini-ui.json、paid-final-check.log 和 report-archive.json。
