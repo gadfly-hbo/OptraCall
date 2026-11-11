@@ -37,7 +37,7 @@ async function fixture(t: TestContext, label: string) {
   });
   await new Promise<void>(resolve => provider.listen(0, '127.0.0.1', resolve));
   const providerAddress = provider.address(); assert.ok(providerAddress && typeof providerAddress !== 'string');
-  const host = createHost({ cwd: process.cwd(), dataRoot, projectsRoot, uiPorts: [4183], transportVersion: 'synthetic-reliability-test' });
+  const host = createHost({ reviewAdmission: 'legacy', cwd: process.cwd(), dataRoot, projectsRoot, uiPorts: [4183], transportVersion: 'synthetic-reliability-test' });
   await host.ready; await new Promise<void>(resolve => host.server.listen(0, '127.0.0.1', resolve));
   const address = host.server.address(); assert.ok(address && typeof address !== 'string');
   const baseUrl = `http://127.0.0.1:${address.port}`;

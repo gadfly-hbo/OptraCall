@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BoardRequestError, addManualItem, addTask, adoptItem, dismissItem, extractReport, readBoard, saveFeedback, feedbackHistory, feedbackOperation, setTaskStatus, stopExtraction, type BoardItemView, type BoardReportView, type BoardTaskView, type BoardView, type FeedbackInput } from './decision-board-client.ts';
-import { EVIDENCE_CONFIDENCE, type Priority, type TaskFeedbackRevision } from '../types.ts';
+import { EVIDENCE_CONFIDENCE, type ConfirmedReviewClaim, type Priority, type TaskFeedbackRevision } from '../types.ts';
 import { CaseDialog } from '../../../../src/host/ui/CaseDialogs.tsx';
 import { FeedbackReview } from '../../../../src/host/ui/FeedbackReview.tsx';
 import type { FeedbackReviewStart } from '../../../../src/host/ui/FeedbackContextPanel.tsx';
 import { downloadFile } from '../../../../src/host/ui/runtime-client.ts';
+import { PersonalDialog } from '../../../../src/host/ui/PersonalDialog.tsx';
+import { readConclusionReport } from '../../../../src/host/ui/conclusion-review-client.ts';
 import type { PersonalRetentionEntry } from '../../../../src/host/ui/personal-retention-client.ts';
 
 const EVIDENCE_CLASS: Record<string, string> = { '数据支撑': 'ev-data', '多源佐证': 'ev-multi', '逻辑推断': 'ev-logic', '经验假设': 'ev-exp' };
@@ -23,10 +25,10 @@ type FeedbackDraft = { executed: 'unknown' | 'yes' | 'no'; outcome: string; metr
 const effectLabel = (effect: string) => ({ unknown: '效果未知', positive: '用户认为有改善', negative: '用户认为变差', none: '用户未观察到改善' })[effect] ?? '效果未知';
 const feedbackDraft = (task: BoardTaskView): FeedbackDraft => ({ executed: task.feedback ? task.feedback.adopted ? 'yes' : 'no' : 'unknown', outcome: task.feedback?.outcome ?? '', metricDelta: task.feedback?.metricDelta ?? '', review: task.feedback?.review ?? '', score: task.feedback?.score == null ? '' : String(task.feedback.score), effect: task.feedback?.effect ?? 'unknown', expectedLatestRevisionId: task.feedback?.revisionId ?? null, operationId: crypto.randomUUID() });
 
-export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, onOrganize }: { initialReview?: FeedbackReviewStart; onOrganize?: (entry: PersonalRetentionEntry) => void; onOpenFeedbackTask: (target: { projectId: string; taskId: string; handoffId: string }) => Promise<void> }) {
+export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialReport, onOrganize }: { initialReport?: { projectId: string; relativePath: string; reportSha256: string }; initialReview?: FeedbackReviewStart; onOrganize?: (entry: PersonalRetentionEntry) => void; onOpenFeedbackTask: (target: { projectId: string; taskId: string; handoffId: string }) => Promise<void> }) {
   const [board, setBoard] = useState<BoardView | null>(null);
   const [error, setError] = useState<string | null>(null), [loadError, setLoadError] = useState<string | null>(null);
-  const [projectFilter, setProjectFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState(initialReport?.projectId ?? 'all');
   const [evidenceFilter, setEvidenceFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
@@ -43,17 +45,29 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, onOrganiz
   const [manualOpen, setManualOpen] = useState(false);
   const title = useRef<HTMLHeadingElement>(null);
   useEffect(() => { title.current?.focus(); }, []);
+  useEffect(() => { if (initialReport) setProjectFilter(initialReport.projectId); }, [initialReport?.projectId, initialReport?.relativePath, initialReport?.reportSha256]);
   useEffect(() => { if (initialReview) setReviewTarget({ taskId: initialReview.boardTaskId, revisionId: initialReview.feedbackRevisionId, selectedFile: initialReview.selectedFile, draftKey: initialReview.draftKey }); }, [initialReview?.draftKey]);
 
   const load = useCallback(async () => {
     try { setBoard(await readBoard()); setLoadError(null); }
-    catch (caught) { setLoadError(caught instanceof BoardRequestError ? caught.message : '决策看板读取失败，请检查本地服务后重试。'); }
+    catch (caught) { if (caught instanceof BoardRequestError && [401, 403].includes(caught.status)) setBoard(null); setLoadError(caught instanceof BoardRequestError ? caught.message : '决策看板读取失败，请检查本地服务后重试。'); }
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     const timer = setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 4000);
     return () => clearInterval(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (!board) { setFeedbackTask(null); setHistoryTask(null); setTaskTarget(null); setDismissTarget(null); setFeedbackDrafts(old => Object.keys(old).length ? {} : old); return; }
+    const visibleItems = new Set(board.items.map(item => item.id));
+    const visibleTasks = new Set(board.items.flatMap(item => item.tasks.map(task => task.id)));
+    if (feedbackTask && !visibleTasks.has(feedbackTask.task.id)) setFeedbackTask(null);
+    if (historyTask && !visibleTasks.has(historyTask.id)) setHistoryTask(null);
+    if (taskTarget && !visibleItems.has(taskTarget.id)) setTaskTarget(null);
+    if (dismissTarget && !visibleItems.has(dismissTarget.id)) setDismissTarget(null);
+    setFeedbackDrafts(old => Object.keys(old).some(id => !visibleTasks.has(id)) ? Object.fromEntries(Object.entries(old).filter(([id]) => visibleTasks.has(id))) : old);
+  }, [board, feedbackTask, historyTask, taskTarget, dismissTarget]);
 
   const run = async (key: string, operation: () => Promise<unknown>) => {
     if (pending) return;
@@ -71,7 +85,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, onOrganiz
     && (sourceFilter === 'all' || item.sourceKind === sourceFilter)), [board, projectFilter, evidenceFilter, priorityFilter, sourceFilter]);
   const projectName = (id: string) => projects.find(project => project.id === id)?.name ?? id;
   const projectArchived = (id: string) => projects.find(project => project.id === id)?.archivedAt != null;
-  const sourceReport = (item: BoardItemView) => item.extractionId ? board?.reports.find(report => report.projectId === item.projectId && report.extraction?.id === item.extractionId) : undefined;
+  const sourceReport = (item: BoardItemView) => item.reportConfirmation ? board?.reports.find(report => report.projectId === item.projectId && report.relativePath === item.reportConfirmation?.relativePath) : item.extractionId ? board?.reports.find(report => report.projectId === item.projectId && report.extraction?.id === item.extractionId) : undefined;
   const reports = (board?.reports ?? []).filter(report => projectFilter === 'all' || report.projectId === projectFilter);
   const suggested = items.filter(item => item.status === 'suggested');
   const dismissed = items.filter(item => item.status === 'dismissed');
@@ -107,7 +121,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, onOrganiz
       </select>
       <label className="sr-only" htmlFor="board-source-filter">按来源过滤</label>
       <select id="board-source-filter" value={sourceFilter} onChange={event => setSourceFilter(event.target.value)}>
-        <option value="all">全部来源</option><option value="extracted">模型抽取</option><option value="manual">人工补充</option>
+        <option value="all">全部来源</option><option value="report-confirmation">报告确认交接</option><option value="extracted">模型抽取</option><option value="manual">人工补充</option>
       </select>
       <span className="spacer" />
       {board && board.stats.dismissed > 0 && <label className="board-chip" id="dismissed-toggle"><input type="checkbox" id="show-dismissed" checked={showDismissed} onChange={event => setShowDismissed(event.target.checked)} />已驳回 <span id="dismissed-count">{board.stats.dismissed}</span></label>}
@@ -119,7 +133,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, onOrganiz
       <p className="board-context-note">每次抽取只读取一份报告；证据标签是模型对报告内容的判断，尚不代表独立核验。</p>
       {!board ? <div className="board-report-list"><div className="board-empty">正在读取项目报告…</div></div>
         : !reports.length ? <div className="board-report-list"><div className="board-empty">还没有项目报告。在项目工作台让分析任务输出报告，或从对话回复“保存为最终报告”，报告会出现在各项目的 060_reports 中。</div></div>
-        : <div className="board-report-list">{reports.map(report => <ReportRow key={`${report.projectId}/${report.relativePath}`} report={report} archived={projectArchived(report.projectId)} disabled={pending !== null} onExtract={() => run(`extract:${report.relativePath}`, () => extractReport(report.projectId, report.relativePath))} onStop={() => report.extraction && run(`stop:${report.relativePath}`, () => stopExtraction(report.extraction!.id))} />)}</div>}
+        : <div className="board-report-list">{reports.map(report => <ReportRow key={`${report.projectId}/${report.relativePath}`} report={report} focused={initialReport?.projectId === report.projectId && initialReport.relativePath === report.relativePath} archived={projectArchived(report.projectId)} disabled={pending !== null} onExtract={() => run(`extract:${report.relativePath}`, () => extractReport(report.projectId, report.relativePath))} onStop={() => report.extraction && run(`stop:${report.relativePath}`, () => stopExtraction(report.extraction!.id))} />)}</div>}
     </section>
 
     <div className="decision-section-heading"><h2>从建议到结果</h2><span>{projects.filter(project => project.archivedAt === null).length} 个活跃项目 · {projects.filter(project => project.archivedAt !== null).length} 个已归档</span></div>
@@ -169,9 +183,34 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, onOrganiz
   </div>;
 }
 
-function ReportRow({ report, archived, disabled, onExtract, onStop }: { report: BoardReportView; archived: boolean; disabled: boolean; onExtract: () => void; onStop: () => void }) {
+function ConfirmedEvidence({ claim }: { claim: ConfirmedReviewClaim }) {
+  return <div className="board-confirmed-evidence">
+    <p>审查判据：{claim.verdict === 'conditional' ? '有条件支持' : '证据支持'}</p>
+    <p>适用条件：{claim.conditions.length ? claim.conditions.join('；') : '本条未另列适用条件。'}</p>
+    <details><summary>审查依据与来源</summary>
+      {claim.evidence.map((source, index) => <div key={index}><p>{source.sourceLocator}</p>{source.sourceSha256 && <p>来源 SHA-256：<code>{source.sourceSha256}</code></p>}<p>Agent 引用位置：{source.locator}</p>{source.quote && <blockquote>{source.quote}</blockquote>}</div>)}
+      <p>判断理由：{claim.reason}</p><p>可能影响：{claim.impact}</p>
+    </details>
+  </div>;
+}
+
+function ReportRow({ report, focused, archived, disabled, onExtract, onStop }: { report: BoardReportView; focused: boolean; archived: boolean; disabled: boolean; onExtract: () => void; onStop: () => void }) {
   const extraction = report.extraction;
   const [downloadError, setDownloadError] = useState('');
+  const [fixedReport, setFixedReport] = useState<{ text: string; sha256: string; title: string }>();
+  const requestSerial = useRef(0);
+  const readableIdentity = (report.confirmations ?? []).map(item => `${item.id}:${item.readStatus}:${item.readStatus === 'available' ? item.fixedReportAvailable : false}`).join('|');
+  useEffect(() => { requestSerial.current++; setFixedReport(undefined); }, [readableIdentity]);
+  useEffect(() => () => { requestSerial.current++; }, []);
+  const viewFixed = async (item: NonNullable<BoardReportView['confirmations']>[number]) => {
+    if (item.readStatus === 'unavailable' || !item.fixedReportAvailable) return;
+    const serial = ++requestSerial.current; setDownloadError(''); setFixedReport(undefined);
+    try {
+      const fixed = await readConclusionReport(report.projectId, item.taskId, item.reviewId);
+      if (fixed.sha256 !== item.reportSha256 || fixed.reviewId !== item.reviewId || fixed.rangeUtf16.start !== 0 || fixed.rangeUtf16.end !== fixed.text.length || fixed.rangeUtf16.total !== fixed.text.length) throw new Error('原审查固定稿身份未能核对。');
+      if (serial === requestSerial.current) setFixedReport({ text: fixed.text, sha256: fixed.sha256, title: fixed.relativePath });
+    } catch (fault) { if (serial === requestSerial.current) setDownloadError(fault instanceof Error ? fault.message : '原审查固定稿暂不可读取，仍可核对保留的版本信息。'); }
+  };
   return <div className="board-report-row">
     <span className="report-name">{report.name}</span>
     <span className="report-project">{report.projectName}{archived ? '（已归档）' : ''}</span>
@@ -191,7 +230,21 @@ function ReportRow({ report, archived, disabled, onExtract, onStop }: { report: 
         ? <button disabled={disabled} onClick={onStop}>停止</button>
         : <button className="primary-button" disabled={disabled || archived || report.availability === 'missing'} title={archived ? '项目已归档，恢复后可抽取' : undefined} onClick={onExtract}>{extraction ? '重新抽取' : '抽取建议'}</button>}
     </span>
+    {(report.confirmations?.length ?? 0) > 0 && <details className="board-confirmed" open={focused || undefined}>
+      <summary>已确认结论 · {report.confirmations!.length} 条</summary>
+      <p className="board-context-note">当前报告摘要：{report.currentSha256 ? <code>{report.currentSha256}</code> : '目前未能核对，以下记录仍归各自固定版本。'}</p>
+      {report.confirmations!.map(item => <article className="board-confirmed-claim" key={item.id}>
+        <p className="board-context-note">报告确认交接 · {report.currentSha256 === item.reportSha256 ? '当前报告版本' : report.currentSha256 ? '历史固定版本' : '固定版本，当前摘要未能核对'}<br />固定摘要：<code>{item.reportSha256}</code></p>
+        {item.readStatus === 'unavailable' ? <p className="board-context-note">来源当前不可读取，结论正文及依据已隐藏。</p> : <>
+          <h4>{item.text}</h4><ConfirmedEvidence claim={item} />
+          <p className="board-context-note">{item.relativePath} · {item.location}<br />审查 {item.reviewId} · 条目 {item.claimId}<br />确认：{item.confirmedBy} · {new Date(item.confirmedAt).toLocaleString('zh-CN')}</p>
+          <button type="button" className="secondary-button" disabled={!item.fixedReportAvailable} onClick={() => void viewFixed(item)}>查看原审查固定稿</button>
+          {item.limitations.map((note, index) => <p className="board-context-note" key={index}>{note}</p>)}
+        </>}
+      </article>)}
+    </details>}
     {downloadError && <span role="alert">{downloadError}</span>}
+    {fixedReport && <PersonalDialog title="原审查固定稿" subtitle={`${fixedReport.title} · ${fixedReport.sha256}`} onClose={() => { requestSerial.current++; setFixedReport(undefined); }}><pre className="board-fixed-report">{fixedReport.text}</pre></PersonalDialog>}
   </div>;
 }
 
@@ -201,32 +254,34 @@ function ItemCard({ item, report, projectName: name, disabled, onAdopt, onDismis
   onTaskStatus?: (taskId: string, status: string) => void; onFeedback?: (task: BoardTaskView) => void; onReview?: (task: BoardTaskView) => void; onHistory?: (task: BoardTaskView) => void;
 }) {
   const openTasks = item.tasks.filter(task => task.status !== 'done');
-  const manual = item.sourceKind === 'manual';
+  const manual = item.sourceKind === 'manual', confirmed = item.sourceKind === 'report-confirmation';
+  const confirmation = item.reportConfirmation;
   const mappedReference = item.evidenceLevel !== null && EVIDENCE_CONFIDENCE[item.evidenceLevel] === item.confidence;
   const reportName = report ? report.name : item.reportId !== null ? '原抽取报告名称未知' : '来源报告未知';
   return <article className="decision-card">
     <div className="board-card-top">
       <span className={`board-chip pr-${item.priority}`}>{PRIORITY_LABEL[item.priority]}</span>
-      <span className="board-chip">{item.evidenceLevel ? `${manual ? '固定标签' : '模型标签'}：${item.evidenceLevel}` : '证据标签未知'}</span>
-      <span className="board-chip">{manual ? '人工' : '抽取'}</span>
+      <span className="board-chip">{confirmed ? confirmation ? `审查判据：${confirmation.verdict === 'conditional' ? '有条件支持' : '证据支持'}` : '审查判据未记录' : item.evidenceLevel ? `${manual ? '固定标签' : '模型标签'}：${item.evidenceLevel}` : '证据标签未知'}</span>
+      <span className="board-chip">{confirmed ? '报告确认交接' : manual ? '人工补充' : '模型抽取'}</span>
     </div>
     <h4>{item.title}</h4>
     <p>{item.rationale}</p>
     {item.expectedImpact && <p className="board-impact">预期效果：{item.expectedImpact}</p>}
     {item.status === 'dismissed' && item.dismissedReason && <p className="card-dismissed-reason">驳回理由：{item.dismissedReason}</p>}
-    {!manual && <p className="board-source-report">{report ? `抽取自：${reportName}` : reportName}</p>}
+    {confirmed && confirmation && <p className="board-source-report">确认自：{confirmation.relativePath}</p>}
+    {!manual && !confirmed && <p className="board-source-report">{report ? `抽取自：${reportName}` : reportName}</p>}
     <details className="board-evidence"><summary>来源与依据{item.evidence ? `（${item.evidence.facts.length} 项报告依据）` : ''}</summary>
-      {manual ? <p className="reasoning">人工补充；经验假设为固定标签。</p> : <>
+      {confirmed && confirmation ? <><p>{confirmation.text}</p><ConfirmedEvidence claim={confirmation} /><p className="reasoning">固定版本：<code>{confirmation.reportSha256}</code><br />{confirmation.relativePath} · {confirmation.location}<br />审查 {confirmation.reviewId} · 条目 {confirmation.claimId}<br />关联结论：{confirmation.conclusionClaimIds.join('、')}<br />确认：{confirmation.confirmedBy} · {new Date(confirmation.confirmedAt).toLocaleString('zh-CN')}</p></> : manual ? <p className="reasoning">人工补充；经验假设为固定标签。</p> : <>
         <p className="reasoning">{report ? `抽取报告：${report.relativePath}` : reportName}</p>
         {item.extractionId && item.reportId !== null && <p className="reasoning">本次抽取输入：1 份报告</p>}
         <p className="reasoning">同一报告的多处引文，不代表独立多源验证。</p>
       </>}
-      <p className="board-reference-value">{item.confidence === null ? '参考值未知' : `${mappedReference ? '标签参考值' : '已存参考值'} ${item.confidence}`}</p>
-      {item.confidence !== null && <p className="reasoning">{mappedReference ? '参考值按证据标签映射，不是模型自报概率或已验证正确率。' : '参考值来源未知，不能作为已验证正确率。'}</p>}
-      {item.evidence ? <>
+      {!confirmed && <p className="board-reference-value">{item.confidence === null ? '参考值未知' : `${mappedReference ? '标签参考值' : '已存参考值'} ${item.confidence}`}</p>}
+      {!confirmed && item.confidence !== null && <p className="reasoning">{mappedReference ? '参考值按证据标签映射，不是模型自报概率或已验证正确率。' : '参考值来源未知，不能作为已验证正确率。'}</p>}
+      {!confirmed && (item.evidence ? <>
         {item.evidence.facts.map((fact, index) => <div className="fact" key={index}><p>{fact.text}</p>{fact.quote && <blockquote>{fact.quote}</blockquote>}</div>)}
         <p className="reasoning">{manual ? '补充说明' : '模型推导'}：{item.evidence.reasoning}</p>
-      </> : <p className="reasoning">未记录证据与推导。</p>}
+      </> : <p className="reasoning">未记录证据与推导。</p>)}
     </details>
     {onAddTask && item.tasks.length > 0 && <div className="board-tasks">{openTasks.map(task => <div className="board-task" key={task.id}>
       <p className="task-title">{task.title}</p>

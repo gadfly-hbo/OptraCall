@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { EVIDENCE_CONFIDENCE, PRIORITIES, EVIDENCE_LEVELS, type BoardItemRecord, type BoardTaskRecord, type Evidence, type EvidenceLevel, type ExtractionConfiguration, type ExtractionRecord, type FeedbackEffect, type NormalizedItem, type Priority, type ReportRecord, type SaveFeedbackInput, type TaskFeedbackRevision } from '../types.ts';
+import { EVIDENCE_CONFIDENCE, PRIORITIES, EVIDENCE_LEVELS, type ConfirmReportConclusionsInput, type ConfirmedConclusionRecord, type ConfirmedReviewClaim, type ConfirmedReviewEvidence, type ReportConfirmationReceipt, type ReportConfirmationSource, type BoardItemRecord, type BoardTaskRecord, type Evidence, type EvidenceLevel, type ExtractionConfiguration, type ExtractionRecord, type FeedbackEffect, type NormalizedItem, type Priority, type ReportRecord, type SaveFeedbackInput, type TaskFeedbackRevision } from '../types.ts';
 
 export class DecisionBoardFault extends Error {
   readonly code: string;
@@ -101,12 +101,46 @@ CREATE TABLE feedback_revisions (
 );
 `;
 
+// SQLite cannot ALTER a CHECK constraint. Replace only board_items inside the
+// migration transaction; all original columns and row values are copied intact.
+const CONFIRMATION_ITEMS_SCHEMA = SCHEMA.slice(SCHEMA.indexOf('CREATE TABLE board_items ('), SCHEMA.indexOf('CREATE TABLE board_tasks ('))
+  .replace('CREATE TABLE board_items (', 'CREATE TABLE board_items_v3 (')
+  .replace("source_kind IN ('extracted','manual')", "source_kind IN ('extracted','manual','report-confirmation')")
+  .replace(' evidence_json TEXT,', ' evidence_json TEXT,\n report_confirmation_json TEXT,')
+  .replace(" CHECK((status='dismissed'", " CHECK((source_kind='report-confirmation' AND report_confirmation_json IS NOT NULL AND confidence IS NULL AND evidence_level IS NULL AND evidence_json IS NULL) OR (source_kind!='report-confirmation' AND report_confirmation_json IS NULL)),\n CHECK((status='dismissed'");
+const CONFIRMATION_SCHEMA = `
+CREATE TABLE confirmed_conclusions (
+ id TEXT PRIMARY KEY, report_id INTEGER NOT NULL REFERENCES reports(id) ON DELETE RESTRICT,
+ project_id TEXT NOT NULL, task_id TEXT NOT NULL, review_id TEXT NOT NULL,
+ report_sha256 TEXT NOT NULL, report_bytes INTEGER NOT NULL, relative_path TEXT NOT NULL,
+ claim_id TEXT NOT NULL, claim_json TEXT NOT NULL,
+ confirmed_by TEXT NOT NULL, confirmed_at TEXT NOT NULL,
+ UNIQUE(report_id,report_sha256,review_id,claim_id)
+);
+CREATE TABLE confirmation_operations (
+ operation_id TEXT PRIMARY KEY, report_id INTEGER NOT NULL REFERENCES reports(id) ON DELETE RESTRICT,
+ request_sha256 TEXT NOT NULL, receipt_json TEXT NOT NULL
+);
+CREATE UNIQUE INDEX board_items_confirmation_claim ON board_items(report_id,
+ json_extract(report_confirmation_json,'$.reportSha256'),json_extract(report_confirmation_json,'$.reviewId'),json_extract(report_confirmation_json,'$.claimId'))
+ WHERE source_kind='report-confirmation';
+`;
+function migrateConfirmations(db: DatabaseSync): void {
+  db.exec(CONFIRMATION_ITEMS_SCHEMA);
+  const columns = 'id,project_id,report_id,extraction_id,source_kind,title,rationale,expected_impact,priority,effort,confidence,evidence_level,evidence_json,status,dismissed_reason,decided_at,created_at,updated_at';
+  db.exec(`INSERT INTO board_items_v3 (${columns}) SELECT ${columns} FROM board_items; DROP TABLE board_items; ALTER TABLE board_items_v3 RENAME TO board_items; CREATE INDEX board_items_report ON board_items(report_id);`);
+  db.exec(CONFIRMATION_SCHEMA);
+  if (db.prepare('PRAGMA foreign_key_check').all().length) fail('invalid_board_database');
+  db.exec('PRAGMA user_version=3;');
+}
+
 function camel(row: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(row).map(([key, value]) => [key.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase()), value]));
 }
 function strip(raw: Record<string, unknown>, keys: string[]): Record<string, unknown> { const result = { ...raw }; for (const key of keys) delete result[key]; return result; }
 const report = (row: Record<string, unknown>): ReportRecord => camel(row) as unknown as ReportRecord;
-const item = (row: Record<string, unknown>): BoardItemRecord => ({ ...strip(camel(row), ['evidenceJson']) as unknown as BoardItemRecord, evidence: row.evidence_json === null ? null : JSON.parse(String(row.evidence_json)) as Evidence });
+const item = (row: Record<string, unknown>): BoardItemRecord => ({ ...strip(camel(row), ['evidenceJson', 'reportConfirmationJson']) as unknown as BoardItemRecord, evidence: row.evidence_json === null ? null : JSON.parse(String(row.evidence_json)) as Evidence, ...(row.report_confirmation_json == null ? {} : { reportConfirmation: JSON.parse(String(row.report_confirmation_json)) as ReportConfirmationSource }) });
+const conclusion = (row: Record<string, unknown>): ConfirmedConclusionRecord => ({ ...strip(camel(row), ['claimJson']), ...JSON.parse(String(row.claim_json)) }) as ConfirmedConclusionRecord;
 const task = (row: Record<string, unknown>): BoardTaskRecord => camel(row) as unknown as BoardTaskRecord;
 const extraction = (row: Record<string, unknown>): ExtractionRecord => {
   const value = strip(camel(row), ['configurationJson']) as unknown as ExtractionRecord;
@@ -131,8 +165,8 @@ function relativeReportPath(value: unknown): string {
   if (pieces.length < 2 || pieces[0] !== '060_reports' || pieces.some(piece => !piece || piece === '.' || piece === '..') || /[\\\x00-\x1f\x7f]/.test(result)) fail('invalid_report_path');
   return result;
 }
-function transaction<T>(db: DatabaseSync, operation: () => T): T {
-  db.exec('BEGIN');
+function transaction<T>(db: DatabaseSync, operation: () => T, immediate = false): T {
+  db.exec(immediate ? 'BEGIN IMMEDIATE' : 'BEGIN');
   try { const result = operation(); db.exec('COMMIT'); return result; }
   catch (error) { db.exec('ROLLBACK'); throw error; }
 }
@@ -144,7 +178,8 @@ function validateSchema(db: DatabaseSync, version: number): void {
   const expected = new DatabaseSync(':memory:', { allowExtension: false });
   try {
     if (version > 0) expected.exec(SCHEMA);
-    if (version === 2) expected.exec(FEEDBACK_SCHEMA);
+    if (version >= 2) expected.exec(FEEDBACK_SCHEMA);
+    if (version === 3) migrateConfirmations(expected);
     if (JSON.stringify(schemaInventory(db)) !== JSON.stringify(schemaInventory(expected))) fail('unsupported_board_schema');
   } finally { expected.close(); }
   if (db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok' || db.prepare('PRAGMA foreign_key_check').all().length) fail('invalid_board_database');
@@ -165,6 +200,27 @@ function feedbackInput(taskId: string, input: SaveFeedbackInput) {
   // This fixed object order is the canonical payload; absent optional fields
   // normalize to the same explicit values as the corresponding UI controls.
   return { taskId, operationId, expectedLatestRevisionId, adopted: input.adopted, outcome: bounded(input.outcome, 4000), metricDelta: bounded(input.metricDelta, 1000), review: bounded(input.review, 4000), score, effect: effect as FeedbackEffect };
+}
+
+function confirmationInput(input: ConfirmReportConclusionsInput) {
+  const hash = (value: string) => /^[a-f0-9]{64}$/.test(value) ? value : fail('invalid_confirmation');
+  const bytes = (value: number) => Number.isSafeInteger(value) && value >= 0 ? value : fail('invalid_confirmation');
+  const fixedText = (value: unknown, max: number): string => typeof value === 'string' && value.trim() && !value.includes('\0') && value.length <= max ? value : fail('invalid_confirmation');
+  const strings = (value: string[]) => Array.isArray(value) && value.length <= 128 ? value.map(v => fixedText(v, 32768)) : fail('invalid_confirmation');
+  const claim = (value: ConfirmedReviewClaim): ConfirmedReviewClaim => {
+    if (!value || !['supported', 'conditional'].includes(value.verdict) || !Array.isArray(value.evidence) || value.evidence.length > 128) fail('invalid_confirmation');
+    return { claimId: fixedText(value.claimId, 32768), text: fixedText(value.text, 32768), location: fixedText(value.location, 32768), verdict: value.verdict, conditions: strings(value.conditions), evidence: value.evidence.map((e): ConfirmedReviewEvidence => {
+      const range = e.rangeUtf16;
+      if (range && (![range.start,range.end,range.total].every(v => Number.isSafeInteger(v) && v >= 0) || range.start > range.end || range.end > range.total)) fail('invalid_confirmation');
+      return { materialId: fixedText(e.materialId, 32768), locator: fixedText(e.locator, 32768), ...(e.quote === undefined ? {} : { quote: fixedText(e.quote, 32768) }), sourceLocator: fixedText(e.sourceLocator, 32768), ...(e.sourceSha256 === undefined ? {} : { sourceSha256: hash(e.sourceSha256) }), ...(range ? { rangeUtf16: { start: range.start, end: range.end, total: range.total } } : {}) };
+    }), reason: fixedText(value.reason, 32768), impact: fixedText(value.impact, 32768) };
+  };
+  if (!Array.isArray(input.conclusions) || !input.conclusions.length || input.conclusions.length > 128 || input.recommendations && (!Array.isArray(input.recommendations) || input.recommendations.length > 128)) fail('invalid_confirmation');
+  const conclusions = input.conclusions.map(claim).sort((a,b) => a.claimId < b.claimId ? -1 : a.claimId > b.claimId ? 1 : 0);
+  const recommendations = (input.recommendations ?? []).map(v => ({ ...claim(v), conclusionClaimIds: [...new Set(strings(v.conclusionClaimIds))].sort() })).sort((a,b) => a.claimId < b.claimId ? -1 : a.claimId > b.claimId ? 1 : 0);
+  const ids = new Set(conclusions.map(c => c.claimId));
+  if (ids.size !== conclusions.length || new Set(recommendations.map(c => c.claimId)).size !== recommendations.length || recommendations.some(r => ids.has(r.claimId) || !r.conclusionClaimIds.length || r.conclusionClaimIds.some(id => !ids.has(id)))) fail('invalid_confirmation');
+  return { operationId: uuid(input.operationId), projectId: uuid(input.projectId), taskId: uuid(input.taskId), reviewId: uuid(input.reviewId), report: { relativePath: relativeReportPath(input.report.relativePath), sha256: hash(input.report.sha256), bytes: bytes(input.report.bytes), observedSha256: hash(input.report.observedSha256), observedBytes: bytes(input.report.observedBytes) }, confirmedBy: text(input.confirmedBy, 200, true), conclusions, recommendations };
 }
 
 /** Local decision-board storage. Only this directory is owned; report files stay
@@ -192,22 +248,26 @@ export function createDecisionBoardStore(options: { root: string }) {
       if (!after.isFile() || after.isSymbolicLink() || after.nlink !== 1 || stat.ino !== after.ino || stat.dev !== after.dev) fail('unsafe_board_storage');
       db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=1000;');
       const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-      if (![0, 1, 2].includes(version)) fail('unsupported_board_schema');
+      if (![0, 1, 2, 3].includes(version)) fail('unsupported_board_schema');
       validateSchema(db, version);
       db.exec('PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;');
       if (db.prepare('PRAGMA journal_mode').get()?.journal_mode !== 'delete' || db.prepare('PRAGMA synchronous').get()?.synchronous !== 2 || db.prepare('PRAGMA foreign_keys').get()?.foreign_keys !== 1) fail('unsafe_board_storage');
-      if (version < 2) {
+      if (version < 3) {
         upgrading = true;
+        db.exec('PRAGMA foreign_keys=OFF;');
         transaction(db, () => {
           if (version === 0) database().exec(SCHEMA);
-          database().exec(FEEDBACK_SCHEMA);
-          const at = now();
-          for (const legacy of database().prepare('SELECT * FROM task_feedback ORDER BY task_id').all()) {
-            database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at) VALUES (?,?,1,NULL,NULL,?,?,?,?,?,'unknown',?,'legacy-current',?,?)`)
-              .run(randomUUID(), legacy.task_id!, legacy.adopted!, legacy.outcome!, legacy.metric_delta!, legacy.review!, legacy.score!, at, legacy.created_at!, legacy.updated_at!);
+          if (version < 2) {
+            database().exec(FEEDBACK_SCHEMA);
+            const at = now();
+            for (const legacy of database().prepare('SELECT * FROM task_feedback ORDER BY task_id').all()) {
+              database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at) VALUES (?,?,1,NULL,NULL,?,?,?,?,?,'unknown',?,'legacy-current',?,?)`)
+                .run(randomUUID(), legacy.task_id!, legacy.adopted!, legacy.outcome!, legacy.metric_delta!, legacy.review!, legacy.score!, at, legacy.created_at!, legacy.updated_at!);
+            }
           }
-          database().exec('PRAGMA user_version=2;');
+          migrateConfirmations(database());
         });
+        db.exec('PRAGMA foreign_keys=ON;');
         upgrading = false;
       }
       // A running row can only come from a previous process; it never resumes silently.
@@ -228,23 +288,88 @@ export function createDecisionBoardStore(options: { root: string }) {
     const projectId = uuid(input.projectId), relativePath = relativeReportPath(input.relativePath);
     if (!/^[a-f0-9]{64}$/.test(input.sha256) || !Number.isSafeInteger(input.bytes) || input.bytes < 0) fail('invalid_observation');
     const at = now();
-    return transaction(database(), () => {
-      const existing = database().prepare('SELECT * FROM reports WHERE project_id=? AND relative_path=?').get(projectId, relativePath) as Record<string, unknown> | undefined;
-      if (!existing) {
-        database().prepare('INSERT INTO reports (project_id,relative_path,observed_sha256,observed_bytes,observed_at,first_seen_at,updated_at) VALUES (?,?,?,?,?,?,?)')
-          .run(projectId, relativePath, input.sha256, input.bytes, at, at, at);
-      } else if (existing.observed_sha256 !== input.sha256 || existing.observed_bytes !== input.bytes) {
-        database().prepare('UPDATE reports SET observed_sha256=?, observed_bytes=?, observed_at=?, updated_at=? WHERE id=?')
-          .run(input.sha256, input.bytes, at, at, Number(existing.id));
-      }
-      return report(database().prepare('SELECT * FROM reports WHERE project_id=? AND relative_path=?').get(projectId, relativePath) as Record<string, unknown>);
-    });
+    return transaction(database(), () => ensureReport(projectId, relativePath, input.sha256, input.bytes, at));
+  }
+  function ensureReport(projectId: string, relativePath: string, sha256: string, bytes: number, at: string): ReportRecord {
+    const existing = database().prepare('SELECT * FROM reports WHERE project_id=? AND relative_path=?').get(projectId, relativePath) as Record<string, unknown> | undefined;
+    if (!existing) {
+      database().prepare('INSERT INTO reports (project_id,relative_path,observed_sha256,observed_bytes,observed_at,first_seen_at,updated_at) VALUES (?,?,?,?,?,?,?)')
+        .run(projectId, relativePath, sha256, bytes, at, at, at);
+    } else if (existing.observed_sha256 !== sha256 || existing.observed_bytes !== bytes) {
+      database().prepare('UPDATE reports SET observed_sha256=?, observed_bytes=?, observed_at=?, updated_at=? WHERE id=?')
+        .run(sha256, bytes, at, at, Number(existing.id));
+    }
+    return report(database().prepare('SELECT * FROM reports WHERE project_id=? AND relative_path=?').get(projectId, relativePath) as Record<string, unknown>);
   }
   function getReport(id: number): ReportRecord | null {
     const row = database().prepare('SELECT * FROM reports WHERE id=?').get(id) as Record<string, unknown> | undefined;
     return row ? report(row) : null;
   }
   const listReports = (): ReportRecord[] => (database().prepare('SELECT * FROM reports ORDER BY project_id, relative_path').all() as Record<string, unknown>[]).map(report);
+
+  function getConfirmationOperation(operationId: string): ReportConfirmationReceipt | null {
+    const row = database().prepare('SELECT receipt_json FROM confirmation_operations WHERE operation_id=?').get(uuid(operationId));
+    return row ? JSON.parse(String(row.receipt_json)) as ReportConfirmationReceipt : null;
+  }
+  function listConfirmedConclusions(reportId?: number): ConfirmedConclusionRecord[] {
+    return (reportId === undefined
+      ? database().prepare('SELECT * FROM confirmed_conclusions ORDER BY confirmed_at,id').all()
+      : database().prepare('SELECT * FROM confirmed_conclusions WHERE report_id=? ORDER BY confirmed_at,id').all(reportId)).map(conclusion);
+  }
+  function confirmReportConclusions(input: ConfirmReportConclusionsInput): ReportConfirmationReceipt {
+    const clean = confirmationInput(input), at = now();
+    const { observedSha256, observedBytes, ...fixedReport } = clean.report;
+    const requestSha256 = createHash('sha256').update(JSON.stringify({ ...clean, report: fixedReport })).digest('hex');
+    return transaction(database(), () => {
+      const prior = getConfirmationOperation(clean.operationId);
+      if (prior) {
+        if (prior.requestSha256 !== requestSha256) fail('confirmation_operation_conflict');
+        return prior;
+      }
+      const owner = ensureReport(clean.projectId, clean.report.relativePath, observedSha256, observedBytes, at);
+      const conclusionIds: string[] = [], addedConclusionIds: string[] = [];
+      for (const claim of clean.conclusions) {
+        const existing = database().prepare('SELECT * FROM confirmed_conclusions WHERE report_id=? AND report_sha256=? AND review_id=? AND claim_id=?').get(owner.id, clean.report.sha256, clean.reviewId, claim.claimId);
+        if (existing) {
+          if (existing.task_id !== clean.taskId || existing.report_bytes !== clean.report.bytes || existing.claim_json !== JSON.stringify(claim)) fail('confirmation_source_conflict');
+          conclusionIds.push(String(existing.id));
+          continue;
+        }
+        const id = randomUUID();
+        database().prepare('INSERT INTO confirmed_conclusions (id,report_id,project_id,task_id,review_id,report_sha256,report_bytes,relative_path,claim_id,claim_json,confirmed_by,confirmed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+          .run(id, owner.id, clean.projectId, clean.taskId, clean.reviewId, clean.report.sha256, clean.report.bytes, clean.report.relativePath, claim.claimId, JSON.stringify(claim), clean.confirmedBy, at);
+        conclusionIds.push(id); addedConclusionIds.push(id);
+      }
+      const boardItemIds: string[] = [], addedBoardItemIds: string[] = [];
+      const conclusionByClaim = new Map(clean.conclusions.map((c,i) => [c.claimId, conclusionIds[i]!]));
+      for (const recommendation of clean.recommendations) {
+        const { conclusionClaimIds, ...claim } = recommendation;
+        const relatedIds = conclusionClaimIds.map(id => conclusionByClaim.get(id)!);
+        const existing = database().prepare("SELECT * FROM board_items WHERE report_id=? AND source_kind='report-confirmation' AND json_extract(report_confirmation_json,'$.reportSha256')=? AND json_extract(report_confirmation_json,'$.reviewId')=? AND json_extract(report_confirmation_json,'$.claimId')=?").get(owner.id, clean.report.sha256, clean.reviewId, claim.claimId);
+        if (existing) {
+          const previous = JSON.parse(String(existing.report_confirmation_json)) as ReportConfirmationSource;
+          const { taskId, reportBytes, reviewId: _reviewId, reportSha256: _sha, relativePath: _path, conclusionIds: oldIds, conclusionClaimIds: oldClaims, confirmedBy: _by, confirmedAt: _at, ...oldClaim } = previous;
+          if (taskId !== clean.taskId || reportBytes !== clean.report.bytes || JSON.stringify(oldClaim) !== JSON.stringify(claim)) fail('confirmation_source_conflict');
+          const source = { ...previous, conclusionIds: [...new Set([...oldIds, ...relatedIds])].sort(), conclusionClaimIds: [...new Set([...oldClaims, ...conclusionClaimIds])].sort() };
+          // Adding a relationship never touches the item's decision or action state.
+          database().prepare('UPDATE board_items SET report_confirmation_json=? WHERE id=?').run(JSON.stringify(source), existing.id!);
+          boardItemIds.push(String(existing.id));
+          continue;
+        }
+        const id = randomUUID();
+        const source: ReportConfirmationSource = { ...claim, taskId: clean.taskId, reviewId: clean.reviewId, reportSha256: clean.report.sha256, reportBytes: clean.report.bytes, relativePath: clean.report.relativePath, conclusionIds: relatedIds, conclusionClaimIds, confirmedBy: clean.confirmedBy, confirmedAt: at };
+        // Existing board columns are bounded display summaries; source.text/reason
+        // above retain the complete reviewed quotation and provenance.
+        const excerpt = (value: string, limit: number) => [...value.trim()].slice(0,limit).join('');
+        database().prepare('INSERT INTO board_items (id,project_id,report_id,extraction_id,source_kind,title,rationale,expected_impact,priority,effort,confidence,evidence_level,evidence_json,report_confirmation_json,status,created_at,updated_at) VALUES (?,?,?,NULL,?,?,?,?,?,NULL,NULL,NULL,NULL,?,?,?,?)')
+          .run(id, clean.projectId, owner.id, 'report-confirmation', excerpt(claim.text,200), excerpt(claim.reason,4000), excerpt(claim.impact,2000), 'medium', JSON.stringify(source), 'suggested', at, at);
+        boardItemIds.push(id); addedBoardItemIds.push(id);
+      }
+      const receipt: ReportConfirmationReceipt = { operationId: clean.operationId, requestSha256, projectId: clean.projectId, taskId: clean.taskId, reviewId: clean.reviewId, reportId: owner.id, reportSha256: clean.report.sha256, confirmedBy: clean.confirmedBy, confirmedAt: at, claimIds: clean.conclusions.map(c => c.claimId), recommendationClaimIds: clean.recommendations.map(c => c.claimId), conclusionIds, boardItemIds, addedConclusionIds, addedBoardItemIds };
+      database().prepare('INSERT INTO confirmation_operations (operation_id,report_id,request_sha256,receipt_json) VALUES (?,?,?,?)').run(clean.operationId, owner.id, requestSha256, JSON.stringify(receipt));
+      return receipt;
+    }, true);
+  }
 
   function createExtraction(input: { id: string; reportId: number; configuration: ExtractionConfiguration; sourceSha256: string; sourceBytes: number; sourceChars: number; truncated: boolean; reportExcerpt: string }): ExtractionRecord {
     const id = uuid(input.id);
@@ -386,5 +511,5 @@ export function createDecisionBoardStore(options: { root: string }) {
   }
   const listFeedback = (): TaskFeedbackRevision[] => database().prepare('SELECT f.* FROM feedback_revisions f WHERE NOT EXISTS (SELECT 1 FROM feedback_revisions n WHERE n.task_id=f.task_id AND n.revision_number>f.revision_number) ORDER BY f.saved_at,f.task_id').all().map(feedback);
 
-  return { init, close, registerReport, getReport, listReports, createExtraction, readExtraction, listExtractions, runningExtractionForReport, finishExtraction, listItems, getItem, addManualItem, decideItem, addTask, getTask, listTasks, setTaskStatus, saveFeedback, listFeedback, listFeedbackHistory, getFeedbackRevision, getFeedbackOperation };
+  return { init, close, confirmReportConclusions, getConfirmationOperation, listConfirmedConclusions, registerReport, getReport, listReports, createExtraction, readExtraction, listExtractions, runningExtractionForReport, finishExtraction, listItems, getItem, addManualItem, decideItem, addTask, getTask, listTasks, setTaskStatus, saveFeedback, listFeedback, listFeedbackHistory, getFeedbackRevision, getFeedbackOperation };
 }

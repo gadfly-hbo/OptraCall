@@ -1,5 +1,6 @@
 import { createRequirementStore, RequirementStoreFault, type RequirementReleaseEntry } from '../storage/store.ts';
-import { isStale, missingFrameworkSections, type RequirementInstance, type RapDocument } from '../contract/validate.ts';
+import { isStale, missingFrameworkSections, upstreamOf, type RequirementInstance, type RapDocument } from '../contract/validate.ts';
+import type { FrameworkProposalRecord } from '../contract/framework-review.ts';
 
 type Store = ReturnType<typeof createRequirementStore>;
 
@@ -59,11 +60,23 @@ function summaryFromInstance(instance: RequirementInstance, sourcePath: string):
 export function composeRequirementContext(store: Store, instanceId: string, version?: string): string {
   if (version !== undefined) {
     const { entry, rap } = store.readRelease(instanceId, version);
-    return summaryFromRap(rap, releasePath(store, entry), entry.version);
+    return summaryFromRap(rap, entry.frameworkVersion ? undefined : releasePath(store, entry), entry.version);
   }
   const instance = store.read(instanceId);
   if (!instance.snapshot) throw new RequirementStoreFault('REQ_SNAPSHOT_REQUIRED');
   if (isStale(instance)) throw new RequirementStoreFault('REQ_STALE_SNAPSHOT');
   if (!instance.framework || missingFrameworkSections(instance.framework).length) throw new RequirementStoreFault('REQ_FRAMEWORK_REQUIRED');
   return summaryFromInstance(instance, `${store.root}/${instance.instance.id}/instance.yaml`);
+}
+
+export function composeReviewedFrameworkContext(instance: RequirementInstance, proposal: FrameworkProposalRecord): string {
+  if (!instance.snapshot) throw new RequirementStoreFault('REQ_SNAPSHOT_REQUIRED');
+  if (isStale(instance)) throw new RequirementStoreFault('REQ_STALE_SNAPSHOT');
+  if (missingFrameworkSections(proposal.framework).length) throw new RequirementStoreFault('REQ_FRAMEWORK_REQUIRED');
+  const { framework, assessment, selectedRap, sources, publicSearch } = proposal;
+  const basis = sources.map(({ id, kind, title, version, target, extent, digest }) => ({ id, kind, title, version, target, extent, digest }));
+  return [
+    `【已确认分析框架 ${instance.instance.id}@${proposal.version}】用户确认了本轮范围。它是分析资料，分析方法、工具和步骤由你自主决定。未决项与假设保留各自状态。`,
+    JSON.stringify({ requirement: upstreamOf(instance), requirementConfirmation: instance.snapshot.fingerprint, selectedRap, framework, assessment, basis, publicSearch }),
+  ].join('\n');
 }

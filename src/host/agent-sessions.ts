@@ -9,7 +9,7 @@ export type SessionRef<Owner> = { readonly [sessionRef]: Owner };
 export type SessionExecution<Owner> = { readonly [sessionExecution]: Owner };
 export type SessionExecutionPlan = { protectedExecution: NonNullable<ProjectAgentOptions['protectedExecution']> };
 export type SessionContext<Owner> = { readonly owner: Owner; readonly requestId?: string; isCurrent(): boolean };
-export type SessionTurn = { text: string; requestId: string; kind?: 'prompt' | 'command'; requestFingerprint?: string; providedContext?: ProvidedContextInput };
+export type SessionTurn = { text: string; requestId: string; kind?: 'prompt' | 'command'; requestFingerprint?: string; providedContext?: ProvidedContextInput; verifyBeforeDispatch?: () => Promise<void> };
 export type SessionResult = { outcome: 'completed' | 'cancelled' | 'failed'; text: string; sessionFile?: string; diagnostic?: RunDiagnostic; [key: string]: unknown };
 export type SessionRun<Owner> = { requestId: string; accepted: Promise<void>; completion: Promise<SessionResult>; context: SessionContext<Owner> };
 export type SessionCleanupRequest = { readonly retryFailed: boolean };
@@ -243,11 +243,29 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
         assertOperation(slot, operation);
         const resource = await ensureOpen(slot, operation.owner, operation.configuration, operation);
         operation.resource = resource;
-        await options.mutate(async () => { assertOperation(slot, operation); await options.profile.admit?.(operation.owner); assertOperation(slot, operation); });
-        assertOperation(slot, operation);
-        if (!resourceCurrent(slot, resource) || !resource.agent.alive) fail('runtime_closed');
-        resource.operation = operation;
-        const run = turn.kind === 'command' ? resource.agent.startCommand(turn.text, turn.requestId) : resource.agent.start(turn.text, turn.requestId, turn.requestFingerprint, turn.providedContext);
+        const admit = async () => {
+          assertOperation(slot, operation);
+          await options.profile.admit?.(operation.owner);
+          assertOperation(slot, operation);
+        };
+        const dispatch = () => {
+          assertOperation(slot, operation);
+          if (!resourceCurrent(slot, resource) || !resource.agent.alive) fail('runtime_closed');
+          resource.operation = operation;
+          return turn.kind === 'command' ? resource.agent.startCommand(turn.text, turn.requestId) : resource.agent.start(turn.text, turn.requestId, turn.requestFingerprint, turn.providedContext);
+        };
+        const verify = turn.verifyBeforeDispatch;
+        let run: ReturnType<typeof dispatch>;
+        if (verify) {
+          run = await options.mutate(async () => {
+            await admit();
+            await verify();
+            return dispatch();
+          });
+        } else {
+          await options.mutate(admit);
+          run = dispatch();
+        }
         run.accepted.then(accept, rejectAccepted);
         const [result] = await Promise.all([run.completion, run.accepted]);
         return operation.cancelled ? { ...result, outcome: 'cancelled' as const, diagnostic: runDiagnostic({ outcome: 'cancelled', kind: turn.kind ?? 'prompt', retryCount: result.diagnostic?.retryCount }) } : result;

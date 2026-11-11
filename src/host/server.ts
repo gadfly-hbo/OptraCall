@@ -33,13 +33,45 @@ import { createMetricFactoryRoutes } from '../../extensions/business-plugins/met
 import { metricIndexText } from '../../extensions/business-plugins/metric-factory/project/index-text.ts';
 import { createSimLabRoutes } from '../../extensions/business-plugins/sim-lab/api/routes.ts';
 import { createRequirementRoutes } from '../../extensions/business-plugins/requirements-elaboration/api/routes.ts';
-import { composeRequirementContext } from '../../extensions/business-plugins/requirements-elaboration/api/context.ts';
+import { composeRequirementContext, composeReviewedFrameworkContext } from '../../extensions/business-plugins/requirements-elaboration/api/context.ts';
+import { frameworkVersionPattern } from '../../extensions/business-plugins/requirements-elaboration/contract/framework-review.ts';
 import { requirementSessionDirectory, requirementWorkspace } from '../../extensions/business-plugins/requirements-elaboration/session/workspace.ts';
 import { createRequirementSessions } from './requirement-sessions.ts';
+import { createRequirementFrameworkSources } from './requirement-framework-sources.ts';
+import { reportCalculationContract } from './report-calculation-admission.ts';
+import { createReportCalculationMaterials } from './report-calculation-materials.ts';
+import { readHistoricalReportFrameworks } from './report-framework-history.ts';
+import { createAnalysisReviewTransition, type ReviewAdmissionContract } from './analysis-review-transition.ts';
+import { createConclusionReviewMaterials, parseConclusionReviewSelection } from './conclusion-review-materials.ts';
+import { conclusionReviewFeedback } from './conclusion-review-feedback.ts';
+import type { ConclusionReviewRecord } from './conclusion-review-contract.ts';
+
+const conclusionReviewMessages: Record<string, string> = {
+  review_transition_pending: '旧核算仍在收尾或状态待核对；原记录保留，尚未开始新的审查。',
+  conclusion_review_preview_required: '请保留所选报告，核对本版报告与依据后再开始审查。',
+  conclusion_review_preview_changed: '报告、依据、配置或权限已变化；原选择保留，请重新核对受影响的版本后开始。',
+  conclusion_review_report_changed: '所选报告的实际字节已变化，请核对版本后重新选择；未替换为当前稿。',
+  conclusion_review_report_too_large: '所选报告超过本轮完整审查限额，请选择可完整审查的版本；原稿保留。',
+  conclusion_review_report_requires_text: '本轮需要完整可读的 UTF-8 报告，请重选可审版本；原文件保留。',
+  conclusion_review_fixed_report_unavailable: '原审查固定稿目前不可回读；已保存的确认结论按当前权限在看板回看，不以当前新版替换。',
+  confirmation_review_not_completed: '这次审查尚未返回完整意见，当前不能确认入板。',
+  confirmation_version_conflict: '当前报告与所审版本不一致；请保留选择，先审查对应新版。',
+  confirmation_operation_conflict: '同一确认请求已有不同选择，请先查回原回执；本次未新增。',
+  confirmation_claim_not_eligible: '仅可确认本版已获支持或有条件支持的结论；请选择可用条目。',
+  confirmation_recommendation_not_eligible: '建议须在本版独立获支持，且关联结论都已明确选择。',
+  confirmation_source_unavailable: '确认来源当前不可读取，原记录保留；本次未写入。',
+  confirmation_requires_conclusion: '请先选择至少一条可用结论。',
+  invalid_confirmation_selection: '确认身份或选择无效，原选择保留，请刷新核对。',
+  conclusion_review_report_unavailable: '所选报告当前不能按准确版本读取，请核对文件和权限；原选择保留。',
+  conclusion_review_carry_unavailable: '当前原任务不能接收此版意见，审查记录与原草稿保留。',
+  review_draft_too_large: '原草稿与意见合计超过20,000字符，尚未追加；原草稿和审查意见保留。',
+  verification_mode_mismatch: '该记录属于另一类审查，请按原记录类型回看。',
+};
+import { readReportCalculationRunReceipt } from '../agent/report-calculation-review.ts';
 import { createPptRefinerRoutes } from '../../extensions/business-plugins/ppt-refiner/api/routes.ts';
 import { createPptRefinerSessions } from './ppt-refiner-sessions.ts';
 import { createPptRefinerAccess } from './ppt-refiner-access.ts';
-import { createAgentSessionDomain, type SessionContext } from './agent-sessions.ts';
+import { createAgentSessionDomain, type AgentSessionDomain, type SessionContext } from './agent-sessions.ts';
 import { savedTaskHistory, priorTaskRequest, taskContextReceipts, readSavedTaskReply, ProjectHistoryError } from './project-history.ts';
 import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
 import { createVerificationFeature, parseVerificationSelection } from './verification-host.ts';
@@ -48,6 +80,7 @@ import { EnterpriseMaterialsStore, EnterpriseMaterialsError } from './enterprise
 import { handleEnterpriseMaterialsRoute } from './enterprise-materials-routes.ts';
 import { EnterpriseContextError, enterpriseRequestIdentity, prepareEnterpriseContext } from './enterprise-materials-context.ts';
 import { createDecisionBoardStore } from '../../extensions/business-plugins/decision-board/storage/store.ts';
+import { createConclusionBoardHandoff } from './conclusion-board-handoff.ts';
 import { createDecisionBoardRoutes } from '../../extensions/business-plugins/decision-board/api/routes.ts';
 import { createDecisionBoardSessions } from './decision-board-sessions.ts';
 import { createDecisionFeedbackFeature } from './decision-feedback-routes.ts';
@@ -109,7 +142,7 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
   response.once('close', clear); response.once('finish', clear);
 }
 
-export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; webSearchFetch?: typeof fetch; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; studioPython?: string; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
+export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; webSearchFetch?: typeof fetch; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; studioPython?: string; reviewAdmission?: ReviewAdmissionContract; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false });
   const modelPacks = new ModelPackStore(path.join(dataRoot, 'models'));
@@ -121,7 +154,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
   if (!Number.isSafeInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 10) throw new Error('Invalid observer heartbeat interval.');
   const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); await boardStore.init(); await decisionFeedback.init(); await verification.reconcileInterrupted(); await automatic.init(); });
-  type ProjectOwner = { project: ProjectRecord; task: TaskRecord };
+  type ProjectOwner = { project: ProjectRecord; task: TaskRecord; reviewAdmission?: ReviewAdmissionContract };
   const streams = new Map<string, Set<ServerResponse>>();
   const clearing = new Map<string, number>(), archiving = new Set<string>();
   let gate = Promise.resolve(), testing = false, closing = false, clearingAll = 0;
@@ -145,7 +178,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
   const modelPackRoutes = createModelPackRoutes({store:modelPacks,readBody:body,mutate,isClosing:()=>closing});
   const sapMethods = createSapMethodStore(path.join(dataRoot, 'metric-assets'));
-  const studio = createStudioFeature({ dataRoot, projects, enterpriseMaterials, readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
+  const studio = createStudioFeature({ dataRoot, projects, enterpriseMaterials, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
     extract: async (system, ref, context) => {
       if (!studioSessions) throw new StudioError('studio_semantica_unavailable', 409);
       const { task } = await pair(system.projectId, system.taskId, true);
@@ -183,17 +216,54 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const snapshot = configuration.snapshot(id, revision);
     return snapshot && !clearingAll && !clearing.has(snapshot.provider) ? snapshot : undefined;
   };
+  const reviewTransition: ReturnType<typeof createAnalysisReviewTransition> = createAnalysisReviewTransition({ initial: options.reviewAdmission,
+    legacyState: async owner => {
+      try {
+        const manual = await verification.conclusionReview.legacyState(owner.projectId, owner.taskId);
+        const chains = await automatic.store.listChains(owner);
+        const oldParentBusy = projectSessions.busyInScope({ projectId: owner.projectId }, value => value.task.id === owner.taskId && value.reviewAdmission === 'legacy');
+        const original = await pair(owner.projectId, owner.taskId);
+        let unknown = manual.unknown || oldParentBusy && projectSessions.executionState(projectSessions.ref(original)).mode === 'unknown';
+        for (const chain of chains) if (chain.state === 'unknown') {
+          if ((await automatic.readChain(chain)).cleanup.state !== 'confirmed') unknown = true;
+        }
+        return { busy: oldParentBusy || manual.busy || chains.some(chain => ['preparing', 'running'].includes(chain.state)), unknown };
+      } catch { return { busy: false, unknown: true }; }
+    },
+  });
+  async function assertConclusionReady(owner: { projectId: string; taskId: string }) {
+    if ((await reviewTransition.status(owner)).state !== 'ready') throw new RequestFault(409, 'review_transition_pending');
+    const original = await pair(owner.projectId, owner.taskId, true);
+    if (projectSessions.busy(projectSessions.ref(original)) || original.task.lastRun?.status === 'running') throw new RequestFault(409, 'session_busy');
+  }
+  function legacyEntryReplaced(response: ServerResponse, projectId: string, taskId: string) {
+    if (reviewTransition.legacyAdmissionAllowed()) return false;
+    json(response, 409, { code: 'review_entry_replaced', accepted: false,
+      newEntry: `/api/projects/${projectId}/tasks/${taskId}/conclusion-reviews`,
+      message: '旧核算入口已更替，请从任务结果区使用“审查结论与建议”。原记录保留，未重新执行。' });
+    return true;
+  }
   const webSearch = createWebSearch({ dataRoot, configuration: id => {
     try { return availableConfiguration(id) ?? null; }
     catch (error) { if (error instanceof ConfigurationStoreError) return null; throw error; }
   }, fetch: options.webSearchFetch });
-  const projectSessions = createAgentSessionDomain<ProjectOwner>({
+  const calculationMaterials = createReportCalculationMaterials({
+    dataRoot, projects, enterpriseMaterials,
+    assertRapCurrent: async (rap, owner) => {
+      if (rap.basisSha256 && createHash('sha256').update(rap.text).digest('hex') !== rap.basisSha256) throw new RequestFault(409, 'requirement_unavailable');
+      if (rap.frameworkVersion) await requirementPlugin.review.assertFrameworkHistoryReadable(rap.instanceId, rap.frameworkVersion, owner.projectId);
+      else if (rap.version) await requirementPlugin.review.assertReleaseReadable(rap.instanceId, rap.version, owner.projectId);
+      else requirementPlugin.store.read(rap.instanceId);
+    },
+  });
+  const projectSessions: AgentSessionDomain<ProjectOwner> = createAgentSessionDomain<ProjectOwner>({
     name: 'project-tasks',
     profile: {
       key: owner => keyOf(owner.project.id, owner.task.id),
       projectId: owner => owner.project.id,
       configuration: owner => availableConfiguration(owner.task.configuration.id, owner.task.configuration.revision),
       executionMode: async owner => {
+        if ((owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'conclusion') return 'unmanaged';
         const id = { projectId: owner.project.id, taskId: owner.task.id };
         return (await automatic.store.readSettings(id)).enabled && (await automatic.capabilities(id)).supported ? 'ordinary' : 'unmanaged';
       },
@@ -205,7 +275,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       },
       agentOptions: async (owner, _configuration, execution) => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
-        const protectedExecution = await automatic.ordinaryExecution({ project, task }, execution);
+        const legacyContract = (owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'legacy';
+        const protectedExecution = legacyContract ? await automatic.ordinaryExecution({ project, task }, execution) : undefined;
         const semanticPort = createSemanticContextPort({ projectId: project.id, taskId: task.id, projects, data: projectDataContext, reader: semanticContext, mutate, isClosing: () => closing });
         const semanticContextRead = semanticGraph && (options.semanticGraph?.bindingFor(project.id, task.id) || options.studioPython && studio.availableForTask(project.id, task.id)) && (!protectedExecution || protectedExecution.profile === 'ordinary')
           ? createSemanticContextReadPort({ projectId: project.id, taskId: task.id, projects, legacy: semanticPort, graph: semanticGraph, graphOnly: Boolean(protectedExecution), isClosing: () => closing }) : undefined;
@@ -216,7 +287,26 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             await pair(project.id, task.id, true);
           },
         });
-        return { analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution } : { projectFiles, studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
+        return { reportCalculationReview: async (selection, context) => {
+          let historicalFrameworks: Awaited<ReturnType<typeof readHistoricalReportFrameworks>> = [], frameworkHistoryUnavailable: string | undefined;
+          if (!context.providedContext?.rap) {
+            try { historicalFrameworks = await readHistoricalReportFrameworks(project, (await pair(project.id, task.id)).task, context.requestId); }
+            catch (error) { frameworkHistoryUnavailable = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'session_history_unavailable'; }
+          }
+          context.assertCurrent();
+          const prepared = await calculationMaterials.prepare({
+            projectId: project.id, taskId: task.id, requestId: context.requestId, sessionId: context.sessionId,
+          }, selection, { ...context, historicalFrameworks, frameworkHistoryUnavailable });
+          return {
+            ...prepared,
+            withCurrentDelivery: (deliver: () => void) => mutate(async () => {
+              context.assertCurrent();
+              await prepared.assertFeedbackCurrent();
+              context.assertCurrent();
+              deliver();
+            }),
+          };
+        }, analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution } : { projectFiles, studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
           context.signal.throwIfAborted();
           await pair(project.id, task.id, true);
           const result = action === 'find' ? await personalContext.find(input, { signal: context.signal }) : await personalContext.read(parsePersonalContextReadInput(input), { signal: context.signal });
@@ -268,8 +358,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (event.type === 'ui.editor') await projects.saveDraft(project.id, task.id, event.text);
           else if (event.snapshot.sessionFile && current.task.sessionFile !== event.snapshot.sessionFile) await projects.setSession(project.id, task.id, event.snapshot.sessionFile);
         }
-        if (context.isCurrent()) publish(project.id, task.id, event.type === 'snapshot'
-          ? { ...event, snapshot: { ...event.snapshot, status: projectSessions.busy(projectSessions.ref(owner)) ? 'running' : event.snapshot.status } } : event);
+        const projected = event.type === 'snapshot'
+          ? { ...event, snapshot: await presentFrameworkHistory(project.id, task.id, { ...event.snapshot, status: projectSessions.busy(projectSessions.ref(owner)) ? 'running' : event.snapshot.status }) }
+          : event;
+        if (context.isCurrent()) publish(project.id, task.id, projected);
       }).catch(() => { if (context.isCurrent()) publish(project.id, task.id, { type: 'ui.notification', level: 'error', message: '扩展修改的草稿或会话指针未能保存，请检查本地存储后重试。' }); });
     },
   });
@@ -277,6 +369,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   // a workspace instead of a project; this seam is flagged for dedicated Codex review.
   const requirementStreams = new Map<string, Set<ServerResponse>>();
   const publishRequirement = (instanceId: string, event: object) => { for (const response of requirementStreams.get(instanceId) ?? []) if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...event, instanceId })}\n\n`); };
+  const frameworkSources = createRequirementFrameworkSources({
+    semantic: () => semanticContext,
+    experienceLearningEnabled: options.experienceLearningEnabled !== false,
+  });
   const requirementSessions = createRequirementSessions({
     codeRoot: options.cwd,
     resourceRoot: path.join(dataRoot, 'pi'),
@@ -287,10 +383,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     publish: publishRequirement,
     mutate,
     isClosing: () => closing,
+    beginFrameworkSources: (approvedTargets, assertCurrent) => frameworkSources.begin({ approvedTargets, assertCurrent }),
   });
   const requirementPlugin = createRequirementRoutes({
     storeRoot: path.join(dataRoot, 'requirement-instances'),
     readBody: request => body(request),
+    mutate,
+    revalidateFrameworkSources: (references, approvedTargets) => frameworkSources.revalidate(references, { approvedTargets }),
     sessions: Object.freeze({ run: requirementSessions.run, withSession: requirementSessions.withSession, stop: requirementSessions.stop, busy: requirementSessions.busy }),
   });
   const refinerStreams = new Map<string, Set<ServerResponse>>();
@@ -345,11 +444,24 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     if (project.archivedAt !== null) throw new RequestFault(409, 'project_archived');
     if (archiving.has(project.id)) throw new RequestFault(409, 'project_busy');
   }
-  const verification = createVerificationFeature({ dataRoot, codeRoot: options.cwd, projects, cases, configuration, projectSessions, pair, requirementContext: input => requirementPrefix(input),
+  const conclusionMaterials = createConclusionReviewMaterials({ dataRoot, projects, pair, availableConfiguration, cases, enterpriseMaterials,
+    requirementContext: (input, projectId) => requirementPrefix(input, projectId),
+    assertRequirementAuthorized: async (selection, projectId) => {
+      if (selection.frameworkVersion) await requirementPlugin.review.assertFrameworkHistoryReadable(selection.instanceId, selection.frameworkVersion, projectId);
+      else if (selection.version) await requirementPlugin.review.assertReleaseReadable(selection.instanceId, selection.version, projectId);
+      else requirementPlugin.store.read(selection.instanceId);
+    },
+  });
+  const verification: ReturnType<typeof createVerificationFeature> = createVerificationFeature({ dataRoot, codeRoot: options.cwd, projects, cases, configuration, projectSessions, pair, requirementContext: (input, projectId) => requirementPrefix(input, projectId),
+    conclusionReview: {
+      prepare: conclusionMaterials.prepare,
+      assertAuthorized: record => conclusionMaterials.assertAuthorized(record, { active: ['preparing', 'ready', 'running'].includes(record.state) }),
+      admit: owner => assertConclusionReady(owner),
+    },
     availableConfiguration, mutate, isClosing: () => closing,
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
   });
-  const automatic = createAutomaticVerificationFeature({ dataRoot, projects, verification, sessions: projectSessions, pair,
+  const automatic: ReturnType<typeof createAutomaticVerificationFeature> = createAutomaticVerificationFeature({ dataRoot, projects, verification, sessions: projectSessions, pair,
     ordinaryReadRoots: () => [enterpriseMaterials.directoryPath, path.join(enterpriseMaterials.root, 'bodies'), path.join(enterpriseMaterials.root, 'files')],
     configuration: availableConfiguration,
     selectedConfiguration: id => { const selected = configuration.read(id); if (!selected) throw new RequestFault(409, 'configuration_required'); const snapshot = availableConfiguration(selected.id, selected.revision); if (!snapshot) throw new RequestFault(409, 'configuration_required'); return snapshot; },
@@ -359,7 +471,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   // decision-board business plugin: fixed report extraction plus the decision
   // loop store; the host owns transport, sessions and project access checks.
   const boardStore = createDecisionBoardStore({ root: path.join(dataRoot, 'decision-board') });
-  const readPersonalSource = createPersonalSourceReader({ enterprise: enterpriseMaterials, projects, dataContext: projectDataContext, board: boardStore, candidates: { read: (ref, context) => candidateReader.read(ref, context) }, readCaseSource: (ref, context) => caseSources.readPersonalSource(ref, context) });
+  const readPersonalSource = createPersonalSourceReader({ enterprise: enterpriseMaterials, projects, dataContext: projectDataContext, board: boardStore, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item), candidates: { read: (ref, context) => candidateReader.read(ref, context) }, readCaseSource: (ref, context) => caseSources.readPersonalSource(ref, context) });
   const personalRetention = new PersonalRetentionStore({ dataRoot, materials: enterpriseMaterials, readSource: readPersonalSource, allowNewLearningSources: options.experienceLearningEnabled !== false });
   const personalLookup = createPersonalLookup({ personal: personalRetention, enterprise: enterpriseMaterials, projects, dataContext: projectDataContext, readSource: readPersonalSource });
   const candidateControls = new AgentCandidateControls({ dataRoot, readTarget: async ref => { const row = await candidateReader.read(ref); if (row.status !== 'available') throw new CandidateReadError('candidate_source_unknown'); } });
@@ -402,9 +514,22 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     mutate,
     projectOverview: async () => (await projects.list()).map(({ id, name, archivedAt }) => ({ id, name, archivedAt })),
     projectFiles: (projectId: string) => projects.tree(projectId, ['060_reports']),
+    observeReport: (projectId, relativePath) => projects.observeFile(projectId, relativePath),
     assertActiveProject: async projectId => { assertActive(await projects.get(projectId)); },
     startExtraction: boardSessions.start,
     stopExtraction: boardSessions.stop,
+    assertItemReadable: item => conclusionHandoff.assertItemReadable(item),
+    presentConfirmation: async record => {
+      try {
+        await conclusionHandoff.assertSource(record);
+        let fixedReportAvailable = true;
+        try { await verification.conclusionReview.readFixedReport({ projectId: record.projectId, taskId: record.taskId, verificationId: record.reviewId }); } catch { fixedReportAvailable = false; }
+        return { ...record, readStatus: 'available' as const, fixedReportAvailable, limitations: fixedReportAvailable ? [] : ['原审查固定稿目前不可回读；以下为确认时实际保存的结论及来源，不代表当前新版。'] };
+      } catch {
+        const { id, reportId, projectId, taskId, reviewId, reportSha256, relativePath, confirmedBy, confirmedAt } = record;
+        return { id, reportId, projectId, taskId, reviewId, reportSha256, relativePath, confirmedBy, confirmedAt, readStatus: 'unavailable' as const };
+      }
+    },
   });
   function decorateProject(project: ProjectRecord) {
     try { if (cases.getStatus().state === 'ready') return { ...project, work: cases.getProjectWork(project.id), workUnavailable: false }; } catch {}
@@ -418,11 +543,12 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const { project, task } = await pair(projectId, taskId);
       return readSavedTaskReply(project, task, selection);
     },
-    readSource: (boardTaskId, revisionId): FeedbackSource => {
+    readSource: async (boardTaskId, revisionId): Promise<FeedbackSource> => {
       const task = boardStore.getTask(boardTaskId);
       if (!task) throw new RequestFault(404, 'task_not_found');
       const item = boardStore.getItem(task.itemId);
       if (!item) throw new RequestFault(404, 'item_not_found');
+      await conclusionHandoff.assertItemReadable(item);
       const feedbackRevision = revisionId === null ? null : boardStore.getFeedbackRevision(revisionId);
       if (revisionId !== null && (!feedbackRevision || feedbackRevision.taskId !== task.id)) throw new RequestFault(404, 'feedback_not_found');
       const report = item.reportId === null ? null : boardStore.getReport(item.reportId);
@@ -436,7 +562,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           reportExcerpt: extraction?.reportExcerpt ?? null, truncated: extraction?.truncated ?? null } : null };
     },
   });
-  const caseDecisions = createCaseDecisionService({ cases, projects, mutate, assertActive, readSource: readPersonalSource, personalContext, board: boardStore, requirements: requirementPlugin.store, readHandoff: id => decisionFeedback.store.getHandoff(id) });
+  const caseDecisions = createCaseDecisionService({ cases, projects, mutate, assertActive, readSource: readPersonalSource, personalContext, board: boardStore, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item), requirements: { readRelease: requirementPlugin.review.assertReleaseReadable }, readHandoff: id => decisionFeedback.store.getHandoff(id) });
   const caseDecisionRoutes = createCaseDecisionRoutes(caseDecisions);
   const caseSources = createCaseSourcesService({ cases, projects, assertActive, readReference: caseDecisions.source });
   const caseSourcesRoutes = createCaseSourcesRoutes(caseSources);
@@ -456,23 +582,174 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   };
   // 送入：requirement contract summary composed at send time; later edits never
   // flow back into an already-sent message.
-  const requirementSelection = (input: Record<string, unknown>): { instanceId: string; version?: string } | undefined => {
+  const requirementSelection = (input: Record<string, unknown>): { instanceId: string; version?: string; frameworkVersion?: string } | undefined => {
     if (input.requirementContext === undefined) return undefined;
     const selection = input.requirementContext;
     if (!selection || typeof selection !== 'object' || Array.isArray(selection)) throw new RequestFault(400, 'invalid_requirement_context');
     const instanceId = String((selection as Record<string, unknown>).instanceId ?? '');
     const rawVersion = (selection as Record<string, unknown>).version;
-    return { instanceId, ...(rawVersion === undefined ? {} : { version: String(rawVersion) }) };
+    const frameworkVersion = (selection as Record<string, unknown>).frameworkVersion;
+    if (frameworkVersion !== undefined && (typeof frameworkVersion !== 'string' || !frameworkVersionPattern.test(frameworkVersion) || rawVersion !== undefined)) throw new RequestFault(400, 'invalid_requirement_context');
+    return { instanceId, ...(rawVersion === undefined ? {} : { version: String(rawVersion) }), ...(frameworkVersion ? { frameworkVersion } : {}) };
   };
-  const requirementPrefix = (input: Record<string, unknown>): string | undefined => {
+  const prepareRequirement = async (input: Record<string, unknown>, projectId?: string) => {
     const selection = requirementSelection(input);
     if (!selection) return undefined;
-    try { return composeRequirementContext(requirementPlugin.store, selection.instanceId, selection.version); }
+    const { store, review } = requirementPlugin;
+    try {
+      if (selection.frameworkVersion) {
+        const instance = store.read(selection.instanceId);
+        const record = await review.confirmed(instance, selection.frameworkVersion, projectId);
+        const text = composeReviewedFrameworkContext(instance, record!);
+        return { ...selection, text, basisSha256: createHash('sha256').update(text).digest('hex') };
+      }
+      const released = selection.version ? await review.assertReleaseReadable(selection.instanceId, selection.version, projectId) : undefined;
+      if (!released && store.readFrameworkState(selection.instanceId)?.confirmations.length) throw new RequestFault(409, 'requirement_unavailable');
+      const text = composeRequirementContext(store, selection.instanceId, selection.version);
+      return { ...selection, text, ...(released?.entry.frameworkVersion ? { basisSha256: createHash('sha256').update(text).digest('hex') } : {}) };
+    }
     catch (error) {
+      if (error instanceof RequestFault) throw error;
       const code = (error as { code?: string }).code ?? 'requirement_unavailable';
       throw new RequestFault(code === 'REQ_STORE_NOT_FOUND' ? 404 : 409, code === 'REQ_STORE_NOT_FOUND' ? 'not_found' : 'requirement_unavailable');
     }
   };
+  const requirementPrefix = async (input: Record<string, unknown>, projectId?: string) => (await prepareRequirement(input, projectId))?.text;
+  const conclusionHandoff = createConclusionBoardHandoff({
+    store: boardStore,
+    readReview: owner => verification.conclusionReview.read(owner),
+    readAuthority: async owner => { await pair(owner.projectId, owner.taskId); return await verification.automatic.store.readConclusionAuthority(owner) as ConclusionReviewRecord; },
+    authorizeSource: record => conclusionMaterials.assertAuthorized(record, { active: false }),
+    project: projectId => projects.get(projectId),
+    observe: (projectId, relativePath) => projects.observeFile(projectId, relativePath),
+  });
+  async function presentConclusionReview(record: ConclusionReviewRecord) {
+    const { project, task } = await pair(record.projectId, record.taskId);
+    let reportCurrentStatus: 'same-path-unchanged' | 'same-path-updated' | 'unavailable' = 'unavailable';
+    try { const current = await projects.observeFile(project.id, record.review.report.relativePath); reportCurrentStatus = current.sha256 === record.review.report.sha256 ? 'same-path-unchanged' : 'same-path-updated'; } catch { /* Fixed history is separate from live availability. */ }
+    let canCarry = record.state === 'completed' && Boolean(record.reviewResult) && !project.archivedAt &&
+      !projectSessions.busy(projectSessions.ref({ project, task })) && task.lastRun?.status !== 'running' && Boolean(availableConfiguration(task.configuration.id, task.configuration.revision));
+    if (canCarry) try { await assertFrameworkContinuation(project.id, task.id); } catch { canCarry = false; }
+    return { ...record, reportChanged: reportCurrentStatus === 'same-path-updated', reportCurrentStatus, canCarry,
+      alreadyCarried: Boolean(task.reviewDraftIds?.includes(record.verificationId)) };
+  }
+  async function conclusionReviewPresentation(owner: { projectId: string; taskId: string; verificationId: string }) {
+    try { return await presentConclusionReview(await verification.conclusionReview.read(owner)); }
+    catch (error) {
+      const record = await verification.automatic.store.readConclusionAuthority(owner);
+      if (record.mode !== 'conclusion-review' || !record.review) throw error;
+      const { task } = await pair(owner.projectId, owner.taskId);
+      // Preserve actual identity/state, but never re-deliver unqualified source
+      // text or opinions through a history/stop response. Disk bytes stay intact.
+      return { projectId: record.projectId, taskId: record.taskId, verificationId: record.verificationId, mode: record.mode,
+        state: record.state, phase: record.phase, createdAt: record.createdAt, updatedAt: record.updatedAt, configuration: record.configuration,
+        review: { schemaVersion: 1, report: record.review.report, materials: [], providedText: '' },
+        sourceStatus: 'unavailable' as const, canCarry: false, alreadyCarried: Boolean(task.reviewDraftIds?.includes(record.verificationId)),
+        reportChanged: false, reportCurrentStatus: 'unavailable' as const };
+    }
+  }
+  async function conclusionSourcesChanged(method?: string) {
+    if (!method || ['GET', 'HEAD'].includes(method)) return;
+    // Run outside the mutation gate: cancellation/finally may need that gate.
+    try { await verification.conclusionReview.revalidateActive(); }
+    catch { process.stderr.write('Conclusion review authorization cleanup remains unknown.\n'); }
+  }
+  async function restrictedRequirementReceipts(project: ProjectRecord, task: TaskRecord, includeBranch = false) {
+    const receipts = await taskContextReceipts(project, task, includeBranch);
+    const restricted = new Map<string, { rap: Record<string, unknown>; text: string; hash?: string; userText?: string }>();
+    for (const entry of receipts) {
+      const context = entry.providedContext;
+      const rap = context?.rap as Record<string, unknown> | undefined;
+      if (!rap || typeof rap.instanceId !== 'string' || typeof rap.basisSha256 !== 'string' || typeof rap.text !== 'string') continue;
+      try {
+        if (typeof rap.frameworkVersion === 'string') await requirementPlugin.review.assertFrameworkHistoryReadable(rap.instanceId, rap.frameworkVersion, project.id);
+        else if (typeof rap.version === 'string') await requirementPlugin.review.assertReleaseReadable(rap.instanceId, rap.version, project.id);
+        else throw new RequestFault(409, 'requirement_unavailable');
+      } catch {
+        const { text, ...identity } = rap;
+        restricted.set(entry.requestId, {
+          rap: { ...identity, sourceStatus: 'unavailable' },
+          text,
+          hash: typeof context?.requestTextSha256 === 'string' ? context.requestTextSha256 : undefined,
+          userText: typeof context?.originalUserText === 'string' ? context.originalUserText : undefined,
+        });
+      }
+    }
+    return { receipts, restricted };
+  }
+  async function assertFrameworkContinuation(projectId: string, taskId: string) {
+    const { project, task } = await pair(projectId, taskId);
+    if ((await restrictedRequirementReceipts(project, task, true)).restricted.size) throw new RequestFault(409, 'requirement_history_source_unavailable');
+    if ((await restrictedCalculationHistory(project, task)).size) throw new RequestFault(409, 'report_calculation_history_source_unavailable');
+  }
+  async function restrictedCalculationHistory(project: ProjectRecord, task: TaskRecord) {
+    const entries = await taskContextReceipts(project, task, true);
+    const restricted = new Map<string, string | undefined>();
+    for (const entry of entries) {
+      const summary = entry.reportCalculationReview, raw = summary?.receipt;
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      const receipt = raw as { reviewId?: string; sha256?: string; owner?: { projectId: string; taskId: string; requestId: string }; materials?: { id: string; state: string }[] };
+      if (typeof receipt.reviewId !== 'string' || !Array.isArray(receipt.materials)) continue;
+      for (const material of receipt.materials) {
+        if (material.state !== 'provided' && material.state !== 'truncated') continue;
+        try {
+          if (!receipt.owner || receipt.owner.projectId !== project.id || receipt.owner.requestId !== entry.requestId) throw new RequestFault(409, 'report_calculation_material_identity');
+          const readable = await calculationMaterials.readMaterial(receipt.owner,
+            receipt.reviewId, material.id, { length: 1, expectedReceiptSha256: receipt.sha256 });
+          if (readable.text === null) restricted.set(receipt.reviewId, summary?.toolCallId);
+        } catch { restricted.set(receipt.reviewId, summary?.toolCallId); }
+      }
+    }
+    return restricted;
+  }
+  async function presentCalculationHistory(projectId: string, taskId: string, snapshot: ProjectSnapshot): Promise<ProjectSnapshot> {
+    const summary = readReportCalculationRunReceipt(snapshot.capabilities?.reportCalculationReview);
+    const hasResult = snapshot.messages.some(message => message.role === 'toolResult' &&
+      (message.toolName === 'review_report_calculations' || message.toolName === 'codemode'));
+    if (!summary?.receipt && !hasResult) return snapshot;
+    const { project, task } = await pair(projectId, taskId), restricted = await restrictedCalculationHistory(project, task);
+    if (!restricted.size) return snapshot;
+    const revoked = (value: unknown) => {
+      const text = JSON.stringify(value ?? '');
+      return [...restricted.keys()].some(reviewId => text.includes(reviewId));
+    };
+    return {
+      ...snapshot,
+      messages: snapshot.messages.map(message => message.role === 'toolResult' && (revoked(message) ||
+        typeof message.toolCallId === 'string' && [...restricted.values()].some(callId => callId === message.toolCallId || callId?.startsWith(message.toolCallId + '/')))
+        ? { ...message, content: [{ type: 'text', text: '计算复核的原始材料当前不可用，已隐藏该版意见。' }], details: { type: 'optracall.report-calculation-review', sourceStatus: 'unavailable' }, nestedCalls: undefined }
+        : message),
+      ...(summary && revoked(summary) ? { capabilities: { ...snapshot.capabilities, reportCalculationReview: { ...summary, sourceStatus: 'unavailable' } } } : {}),
+    };
+  }
+  async function presentFrameworkHistory(projectId: string, taskId: string, snapshot: ProjectSnapshot): Promise<ProjectSnapshot> {
+    snapshot = await presentCalculationHistory(projectId, taskId, snapshot);
+    const hasRequirementContext = (message: Record<string, unknown>) => message.role === 'user' &&
+      (typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? '')).match(/【(?:已确认分析框架|关联需求契约) /);
+    const context = snapshot.capabilities?.semanticContext as Record<string, unknown> | undefined;
+    if (!context?.rap && !snapshot.messages.some(hasRequirementContext)) return snapshot;
+    const { project, task } = await pair(projectId, taskId);
+    const { restricted } = await restrictedRequirementReceipts(project, task, true);
+    if (!restricted.size) return snapshot;
+    const active = snapshot.lastRun?.requestId ? restricted.get(snapshot.lastRun.requestId) : undefined;
+    const messages = snapshot.messages.map(message => {
+      if (!hasRequirementContext(message)) return message;
+      const redact = (text: string) => {
+        for (const item of restricted.values()) {
+          if (item.hash && createHash('sha256').update(text).digest('hex') === item.hash) return item.userText ?? '本次框架依据当前不可用。';
+          text = text.replaceAll(item.text, '【本次框架依据当前不可用】');
+        }
+        return text;
+      };
+      return {
+        ...message,
+        content: typeof message.content === 'string' ? redact(message.content)
+          : Array.isArray(message.content) ? message.content.map(part => part?.type === 'text' && typeof part.text === 'string' ? { ...part, text: redact(part.text) } : part)
+          : message.content,
+      };
+    });
+    return { ...snapshot, messages, ...(active && context ? { capabilities: { ...snapshot.capabilities, semanticContext: { ...context, rap: active.rap } } } : {}) };
+  }
   const requestFingerprint = async (input: Record<string, unknown>, projectId: string, taskId: string): Promise<string | undefined> => {
     const requirement = requirementSelection(input);
     const enterprise = await enterpriseRequestIdentity(enterpriseMaterials, input);
@@ -556,7 +833,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     snapshot.uiRequests = current.pendingUI.map(event => event.request);
     const diagnostic = readRunDiagnostic(task.lastRun?.diagnostic, snapshot.lastRun?.outcome);
     if (diagnostic && snapshot.lastRun && snapshot.lastRun.requestId === task.lastRun?.id) snapshot.lastRun = { ...snapshot.lastRun, diagnostic };
-    snapshot = { ...snapshot, status: projectSessions.busy(ref) ? 'running' : 'idle' };
+    snapshot = await presentFrameworkHistory(projectId, taskId, { ...snapshot, status: projectSessions.busy(ref) ? 'running' : 'idle' });
     return { project: decorateProject(project), task, snapshot };
   }
   async function settleProjectRun(owner: ProjectOwner, context: SessionContext<ProjectOwner>, requestId: string, startedAt: string, result?: Record<string, any>) {
@@ -587,15 +864,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (await studio.handle(request, response, url)) return;
       if (await handleProjectDataContextRoute({ request, response, url, store: projectDataContext, projects, readBody: body, choices: projectDataReferences.choices, sourceStatuses: projectDataReferences.statuses, conceptSource: projectDataReferences.conceptSource, mutate, isClosing: () => closing })) return;
       if (url.pathname === '/api/connectors/trade-area' && request.method === 'GET') { json(response, 200, readTradeAreaStatus(dataRoot)); return; }
-      if (await handleEnterpriseMaterialsRoute({ request, response, url, store: enterpriseMaterials, cases, mutate })) return;
+      if (await handleEnterpriseMaterialsRoute({ request, response, url, store: enterpriseMaterials, cases, mutate })) { await conclusionSourcesChanged(request.method); return; }
       if (await handleAgentCandidateRoute({ request, response, url, reader: candidateReader, controls: candidateControls, readBody: body, isClosing: () => closing , experienceLearningEnabled: options.experienceLearningEnabled !== false })) return;
       if (await handlePersonalRetentionRoute({ request, response, url, store: personalRetention, materials: enterpriseMaterials, lookup: personalLookup, readSource: readPersonalSource, readBody: body, mutate, isClosing: () => closing })) return;
       const modelPack = await modelPackRoutes(request, url);
       if (modelPack) { json(response, modelPack.status, modelPack.body); return; }
       const metricFactory = await metricFactoryRoutes(request, url);
-      if (metricFactory) { json(response, metricFactory.status, metricFactory.value); return; }
+      if (metricFactory) { await conclusionSourcesChanged(request.method); json(response, metricFactory.status, metricFactory.value); return; }
       const methodResult = await sapMethodRoutes(request, url);
-      if (methodResult) { json(response, methodResult.status, methodResult.value); return; }
+      if (methodResult) { await conclusionSourcesChanged(request.method); json(response, methodResult.status, methodResult.value); return; }
       const methodExtraction = await sapMethodFeature.handle(request, url);
       if (methodExtraction) { json(response, methodExtraction.status, methodExtraction.value); return; }
       const simLab = await simLabRoutes(request, url);
@@ -611,9 +888,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         return;
       }
       const requirement = await requirementPlugin.routes(request, url);
-      if (requirement) { json(response, requirement.status, requirement.value); return; }
+      if (requirement) { await conclusionSourcesChanged(request.method); json(response, requirement.status, requirement.value); return; }
       const refiner = await refinerRoutes.routes(request, url);
       if (refiner) { json(response, refiner.status, refiner.value); return; }
+      if (url.pathname === '/api/decision-board' && request.method === 'GET') { await mutate(async () => { try { json(response, 200, await decisionBoardRoutes.viewWithinMutation()); } catch (error) { const mapped = decisionBoardRoutes.fault(error); json(response, mapped.status, { code: mapped.code, message: mapped.message }); } }); return; }
       const decisionBoard = await decisionBoardRoutes.routes(request, url);
       if (decisionBoard) { json(response, decisionBoard.status, decisionBoard.value); return; }
       if (url.pathname.startsWith('/api/decision-feedback/')) {
@@ -713,7 +991,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       if (url.pathname.startsWith('/api/cases') || /^\/api\/projects\/[a-f0-9-]+\/work(?:\/|$)/.test(url.pathname)) {
         const result = await caseRoutes({ pathname: url.pathname, method: request.method ?? 'GET', ...(['POST', 'PATCH', 'DELETE'].includes(request.method ?? '') ? { input: await body(request, 1024 * 1024) } : {}) });
-        if (result) { json(response, result.status ?? 200, result.body); return; }
+        if (result) { await conclusionSourcesChanged(request.method); json(response, result.status ?? 200, result.body); return; }
       }
       if (url.pathname === '/api/projects') {
         if (request.method === 'GET') { json(response, 200, { projects: (await projects.list()).map(decorateProject) }); return; }
@@ -779,6 +1057,108 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const taskRoute = /^tasks\/([a-f0-9-]+)(?:\/(.*))?$/.exec(action ?? '');
         if (taskRoute) {
           const taskId = taskRoute[1]!, operation = taskRoute[2], key = keyOf(projectId, taskId);
+          if (operation === 'conclusion-reviews/transition' && request.method === 'GET') {
+            await pair(projectId, taskId);
+            json(response, 200, { ...await reviewTransition.status({ projectId, taskId }), legacySettings: await automatic.store.readSettings({ projectId, taskId }) });
+            return;
+          }
+          const confirmationRoute = /^conclusion-reviews\/([a-f0-9-]+)\/board-handoff(?:\/([a-f0-9-]+))?$/.exec(operation ?? '');
+          if (confirmationRoute) {
+            const owner = { projectId, taskId, verificationId: confirmationRoute[1]! }, operationId = confirmationRoute[2];
+            const input = request.method === 'POST' ? await body(request) : undefined;
+            await mutate(async () => {
+              try {
+                if (operationId && request.method === 'GET') { json(response, 200, await conclusionHandoff.operation(owner, operationId)); return; }
+                if (!operationId && request.method === 'GET') { json(response, 200, { candidate: await conclusionHandoff.candidate(owner) }); return; }
+                if (!operationId && request.method === 'POST') { const result = await conclusionHandoff.confirm(owner, input); json(response, result.created ? 201 : 200, { receipt: result.receipt }); return; }
+                throw new RequestFault(404, 'not_found');
+              } catch (error) { const code = (error as { code?: string }).code ?? 'confirmation_unavailable'; throw new RequestFault((error as { status?: number }).status ?? (code.startsWith('invalid_') ? 400 : 409), code); }
+            }); return;
+          }
+          const conclusionRoute = /^conclusion-reviews(?:\/(candidates|preview|[a-f0-9-]+)(?:\/(stop|report|carry))?)?$/.exec(operation ?? '');
+          if (conclusionRoute) {
+            const part = conclusionRoute[1], action = conclusionRoute[2];
+            await pair(projectId, taskId, request.method !== 'GET');
+            if (part === 'candidates' && request.method === 'GET') {
+              await mutate(async () => { json(response, 200, await conclusionMaterials.candidates(projectId, taskId)); }); return;
+            }
+            if (part === 'preview' && request.method === 'POST') {
+              const selection = parseConclusionReviewSelection(await body(request));
+              await mutate(async () => {
+                await assertConclusionReady({ projectId, taskId });
+                const preview = await conclusionMaterials.preview(projectId, taskId, selection);
+                response.setHeader('ETag', preview.etag); json(response, 200, { preview });
+              }); return;
+            }
+            if (!part && request.method === 'GET') {
+              await mutate(async () => {
+                const reviews = (await verification.automatic.store.listForManagement(projectId, taskId)).filter(record => record.mode === 'conclusion-review');
+                json(response, 200, { reviews: await Promise.all(reviews.map(conclusionReviewPresentation)) });
+              }); return;
+            }
+            if (!part && request.method === 'POST') {
+              const selection = parseConclusionReviewSelection(await body(request)), ifMatch = request.headers['if-match'];
+              if (typeof ifMatch !== 'string') throw new RequestFault(409, 'conclusion_review_preview_required');
+              const result = await verification.conclusionReview.start(projectId, taskId, selection, ifMatch);
+              await mutate(async () => { json(response, result.created ? 202 : 200, { review: await conclusionReviewPresentation(result.review), created: result.created }); });
+              return;
+            }
+            const owner = { projectId, taskId, verificationId: part! };
+            if (part && !action && request.method === 'GET') {
+              await mutate(async () => { json(response, 200, { review: await conclusionReviewPresentation(owner) }); }); return;
+            }
+            if (action === 'stop' && request.method === 'POST') {
+              await body(request);
+              await verification.conclusionReview.stop(owner);
+              await mutate(async () => { json(response, 200, { review: await conclusionReviewPresentation(owner) }); }); return;
+            }
+            if (action === 'report' && request.method === 'GET') {
+              await mutate(async () => {
+                try {
+                  const report = await verification.conclusionReview.readFixedReport(owner), text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(report.bytes);
+                  json(response, 200, { relativePath: report.relativePath, sha256: createHash('sha256').update(report.bytes).digest('hex'), bytes: report.bytes.length, text,
+                    rangeUtf16: { start: 0, end: text.length, total: text.length }, reviewId: owner.verificationId });
+                } catch (error) {
+                  if (['ENOENT', 'EACCES', 'verification_snapshot_changed', 'verification_file_changed'].includes(String((error as { code?: unknown }).code))) throw new RequestFault(409, 'conclusion_review_fixed_report_unavailable');
+                  throw error;
+                }
+              }); return;
+            }
+            if (action === 'carry' && request.method === 'POST') {
+              const input = await body(request); if (Object.keys(input).length) throw new RequestFault(400, 'invalid_conclusion_review_carry');
+              let carried: Awaited<ReturnType<typeof projects.appendReviewToDraft>> | undefined;
+              await mutate(async () => {
+                const record = await verification.conclusionReview.read(owner), presentation = await presentConclusionReview(record);
+                if (!presentation.canCarry) throw new RequestFault(409, 'conclusion_review_carry_unavailable');
+                carried = await projects.appendReviewToDraft(projectId, taskId, record.verificationId, conclusionReviewFeedback(record));
+                json(response, 200, { ...carried, reviewId: record.verificationId });
+              });
+              if (carried?.appended) await projectSessions.setEditorState(projectSessions.ref(await pair(projectId, taskId)), carried.task.draft).catch(() => {});
+              return;
+            }
+            throw new RequestFault(404, 'not_found');
+          }
+          const reviewMaterial = /^report-calculation-reviews\/([a-f0-9-]+)\/([a-f0-9-]+)\/materials\/([a-z][a-z0-9-]*)$/.exec(operation ?? '');
+          if (reviewMaterial && request.method === 'GET') {
+            await pair(projectId, taskId);
+            const start = url.searchParams.get('start'), length = url.searchParams.get('length');
+            try {
+              await mutate(async () => {
+                const result = await calculationMaterials.readMaterial({ projectId, taskId, requestId: reviewMaterial[1]! },
+                  reviewMaterial[2]!, reviewMaterial[3]!, {
+                    ...(start !== null ? { start: Number(start) } : {}), ...(length !== null ? { length: Number(length) } : {}),
+                    ...(url.searchParams.has('expectedReceiptSha256') ? { expectedReceiptSha256: url.searchParams.get('expectedReceiptSha256')! } : {}),
+                  });
+                json(response, 200, result);
+              });
+            } catch (error) {
+              const code = (error as { code?: unknown }).code;
+              if (typeof code !== 'string') throw error;
+              const status = code === 'ENOENT' ? 404 : code.startsWith('invalid_') || code.includes('invalid') ? 400 : 409;
+              json(response, status, { code: code === 'ENOENT' ? 'report_calculation_material_not_found' : code, message: '该版复核材料当前不可读取，请核对原记录和权限。' });
+            }
+            return;
+          }
           const automaticRoute = /^automatic-verification\/(settings|status|capabilities|chains)(?:\/([a-f0-9]{64})(?:\/(stop|ui-response|reports\/([1-9][0-9]*)))?)?$/.exec(operation ?? '');
           if (automaticRoute) {
             const owner = { projectId, taskId }, original = await pair(projectId, taskId, request.method !== 'GET');
@@ -786,11 +1166,12 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const section = automaticRoute[1], chainId = automaticRoute[2], action = automaticRoute[3];
             if (section === 'settings' && !chainId && request.method === 'GET') { json(response, 200, { settings: await automatic.store.readSettings(owner) }); return; }
             if (section === 'settings' && !chainId && request.method === 'PUT') {
+              if (legacyEntryReplaced(response, projectId, taskId)) return;
               const input = await body(request);
               json(response, 200, { settings: await mutate(() => automatic.saveSettings(owner, input.settings as any, input.expectedRevision as number)) }); return;
             }
             if (section === 'status' && request.method === 'GET') { json(response, 200, { busy: projectSessions.busy(projectSessions.ref(original)), observation: await automatic.store.readLatestObservation(owner) }); return; }
-            if (section === 'capabilities' && request.method === 'GET') { json(response, 200, await automatic.capabilities(owner)); return; }
+            if (section === 'capabilities' && request.method === 'GET') { json(response, 200, reviewTransition.legacyAdmissionAllowed() ? await automatic.capabilities(owner) : { supported: false, retired: true, reason: '旧自动核算入口已停用，设置与记录仅供回看。' }); return; }
             if (section === 'chains' && !chainId && request.method === 'GET') { json(response, 200, { chains: await automatic.store.listChains(owner) }); return; }
             if (section === 'chains' && chainId && !action && request.method === 'GET') { json(response, 200, { chain: await automatic.readChain({ ...owner, chainId }) }); return; }
             if (section === 'chains' && chainId && action?.startsWith('reports/') && request.method === 'GET') { json(response, 200, { report: await automatic.readFixedReport({ ...owner, chainId }, Number(automaticRoute[4])) }); return; }
@@ -809,7 +1190,25 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               return { target, state: 'available', governance: read.details.items[0]?.governance };
             })); return;
           }
-          if (operation === 'context-receipts' && request.method === 'GET') { const { project, task } = await pair(projectId, taskId); json(response, 200, { receipts: await taskContextReceipts(project, task) }); return; }
+          if (operation === 'context-receipts' && request.method === 'GET') {
+            await mutate(async () => {
+              const { project, task } = await pair(projectId, taskId);
+              const { receipts, restricted } = await restrictedRequirementReceipts(project, task);
+              const revokedReviews = await restrictedCalculationHistory(project, task);
+              json(response, 200, { receipts: receipts.map(entry => {
+                const withdrawn = restricted.get(entry.requestId);
+                const review = entry.reportCalculationReview;
+                const material = review?.receipt as { reviewId?: string } | undefined;
+                return {
+                  ...entry,
+                  ...(withdrawn ? { providedContext: { ...entry.providedContext, rap: withdrawn.rap } } : {}),
+                  ...(review && material?.reviewId && revokedReviews.has(material.reviewId)
+                    ? { reportCalculationReview: { ...review, sourceStatus: 'unavailable' } } : {}),
+                };
+              }) });
+            });
+            return;
+          }
           if ((operation === 'simulation-tools' || operation === 'capabilities') && request.method === 'PUT') {
             const input = await body(request);
             const capability = operation === 'simulation-tools' ? 'simulationTools' : input.capability;
@@ -823,9 +1222,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             });
             json(response, 200, { task }); return;
           }
-          if (operation === 'verifications/preview' && request.method === 'POST') { verification.assertAvailable(); json(response, 200, await verification.preview(projectId, taskId, parseVerificationSelection(await body(request)))); return; }
+          if (operation === 'verifications/preview' && request.method === 'POST') { if (legacyEntryReplaced(response, projectId, taskId)) return; verification.assertAvailable(); json(response, 200, await verification.preview(projectId, taskId, parseVerificationSelection(await body(request)))); return; }
           const verificationRoute = /^verifications(?:\/([a-f0-9-]+)(?:\/(.*))?)?$/.exec(operation ?? '');
           if (verificationRoute) {
+            if (request.method !== 'GET' && !['stop', 'ui-response'].includes(verificationRoute[2] ?? '') && legacyEntryReplaced(response, projectId, taskId)) return;
             verification.assertAvailable();
             await pair(projectId, taskId, request.method !== 'GET');
             const id = verificationRoute[1], action = verificationRoute[2];
@@ -844,8 +1244,21 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             }
             throw new RequestFault(404, 'not_found');
           }
-          if (!operation && request.method === 'GET') { json(response, 200, await taskState(projectId, taskId)); return; }
-          if (operation === 'open' && request.method === 'POST') { await body(request); const automaticEnabled = (await automatic.store.readSettings({ projectId, taskId })).enabled; const state = await taskState(projectId, taskId, !automaticEnabled); publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot }); json(response, 200, state); return; }
+          if (!operation && request.method === 'GET') {
+            await mutate(async () => { json(response, 200, await taskState(projectId, taskId, false, true)); });
+            return;
+          }
+          if (operation === 'open' && request.method === 'POST') {
+            await body(request);
+            const automaticEnabled = reviewTransition.legacyAdmissionAllowed() && (await automatic.store.readSettings({ projectId, taskId })).enabled;
+            const state = await taskState(projectId, taskId, !automaticEnabled);
+            await mutate(async () => {
+              state.snapshot = await presentFrameworkHistory(projectId, taskId, state.snapshot);
+              publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot });
+              json(response, 200, state);
+            });
+            return;
+          }
           if (operation === 'draft' && request.method === 'PATCH') {
             const input = await body(request), text = String(input.text ?? '');
             const owner = await pair(projectId, taskId, true);
@@ -859,17 +1272,25 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const responses = streams.get(key) ?? new Set(); responses.add(response); streams.set(key, responses); response.write(': task connection\n\n');
             heartbeat(response, heartbeatIntervalMs);
             response.once('close', () => { responses.delete(response); if (!responses.size) streams.delete(key); });
-            try { const state = await taskState(projectId, taskId); if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ type: 'snapshot', snapshot: state.snapshot, projectId, taskId })}\n\n`); }
+            try {
+              await mutate(async () => {
+                const state = await taskState(projectId, taskId, false, true);
+                if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ type: 'snapshot', snapshot: state.snapshot, projectId, taskId })}\n\n`);
+              });
+            }
             catch { if (!response.destroyed && !response.writableEnded) { response.write(`data: ${JSON.stringify({ type: 'stream.error', message: '任务连接未就绪，请检查模型配置或重新连接。', projectId, taskId })}\n\n`); response.end(); } }
             return;
           }
           if (operation === 'messages' && request.method === 'POST') {
             const input = await body(request, 262144);
             if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
-            const requestId = input.requestId, fingerprint = await requestFingerprint(input,projectId,taskId), owner = await pair(projectId, taskId, true);
+            const requestId = input.requestId, fingerprint = await requestFingerprint(input,projectId,taskId), owner: ProjectOwner = await pair(projectId, taskId, true);
             const known = await priorRequest(owner.project, owner.task, requestId, fingerprint);
             if (known) {
-              await mutate(async () => { await prepareCasePrompt(projectId, taskId, input, true); requirementPrefix(input); });
+              await mutate(async () => {
+                await prepareCasePrompt(projectId, taskId, input, true);
+                if (!requirementSelection(input)?.frameworkVersion) await requirementPrefix(input, projectId);
+              });
               await mutate(() => recordFeedbackDelivery(projectId,taskId,requestId,fingerprint));
               json(response, 202, { requestId, status: known, deduplicated: true }); return;
             }
@@ -883,13 +1304,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   const { project, task } = await pair(projectId, taskId, true), previous = await priorRequest(project, task, requestId, fingerprint);
                   if (previous) return { previous };
                   if (await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
+                  await assertFrameworkContinuation(projectId, taskId);
                   if (input.caseContext) {
                     const selection = input.caseContext as CaseContextSelection, record = cases.getCase(selection.caseId);
                     if (record.status === 'closed') throw new CaseStoreError('case_closed', 409);
                     if (record.revision !== selection.caseRevision || cases.getProjectWork(projectId).revision !== selection.projectWorkRevision) throw new CaseStoreError('revision_conflict', 409);
                     if (!cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new CaseStoreError('project_not_linked', 409);
                   }
-                  const requirement = requirementPrefix(input);
+                  const suppliedRequirement = await prepareRequirement(input, projectId);
+                  const requirement = suppliedRequirement?.text;
                   const selections = input.personalContext === undefined ? [] : parsePersonalContextSelections(input.personalContext);
                   const personal = selections.length ? await personalContext.prepare(selections) : undefined;
                   const enterprise = await prepareEnterpriseContext(enterpriseMaterials, cases, input);
@@ -912,11 +1335,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   const prompt = studioContext ? `${studioContext.text}\n\n${withoutStudio}` : withoutStudio;
                   if (prompt.length > 131072) throw new EnterpriseContextError('enterprise_context_too_large', 413);
                   startedAt = new Date().toISOString();
-                  const selectedRequirement = requirementSelection(input);
                   const providedContext = {
                     originalUserText: input.text as string,
                     ...(studioContext ? { studio: studioContext } : {}),
-                    ...(selectedRequirement && requirement ? { rap: { ...selectedRequirement, text: requirement } } : {}),
+                    ...(suppliedRequirement ? { rap: suppliedRequirement } : {}),
                     ...(input.caseContext ? { case: { operationId: contextOperationId(projectId, taskId, requestId) } } : {}),
                     ...(enterprise.provision ? { enterprise: enterprise.provision } : {}),
                     ...(feedback.receipt ? { feedback:feedback.receipt } : {}),
@@ -924,13 +1346,33 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                     ...(personal ? { personal: { text: personal.text, receipt: { schemaVersion: 1 as const, items: personal.details.items } } } : {}),
                   };
                   let automaticObservation;
-                  try { automaticObservation = await automatic.admit({ project, task }, requestId, fingerprint ?? createHash('sha256').update(JSON.stringify(['automatic-request-v1', projectId, taskId, requestId, prompt])).digest('hex')); }
-                  catch (error) { if ((await automatic.store.readSettings({ projectId, taskId })).enabled) throw error; publish(projectId, taskId, { type: 'ui.notification', level: 'warning', message: '自动核算设置或材料不可用，本次按普通分析执行；未自动补派核算。' }); }
-                  await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt });
-                  return { prompt, providedContext, automaticObservation };
+                  let calculationContract;
+                  owner.reviewAdmission = reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion';
+                  try {
+                    if (owner.reviewAdmission === 'legacy') {
+                      const legacy = await automatic.store.readSettings({ projectId, taskId });
+                      automaticObservation = await automatic.admit({ project, task }, requestId, fingerprint ?? createHash('sha256').update(JSON.stringify(['automatic-request-v1', projectId, taskId, requestId, prompt])).digest('hex'));
+                      calculationContract = reportCalculationContract({ ordinaryPrompt: (input.studioContext as { purpose?: string } | undefined)?.purpose !== 'construction', legacyEnabled: legacy.enabled, legacyAdmitted: Boolean(automaticObservation) });
+                    } else if ((await reviewTransition.status({ projectId, taskId })).state === 'ready') {
+                      calculationContract = reportCalculationContract({ ordinaryPrompt: (input.studioContext as { purpose?: string } | undefined)?.purpose !== 'construction', legacyEnabled: false, legacyAdmitted: false });
+                    }
+                  }
+                  catch (error) { if (owner.reviewAdmission === 'legacy' && (await automatic.store.readSettings({ projectId, taskId })).enabled) throw error; publish(projectId, taskId, { type: 'ui.notification', level: 'warning', message: '复核准入尚不可核对，本次保留普通分析合同；未自动补派核算。' }); }
+                  return { prompt, providedContext: { ...providedContext, ...(calculationContract ? { reportCalculationReview: calculationContract } : {}) }, automaticObservation };
                 });
                 if ('previous' in prepared) { json(response, 202, { requestId, status: prepared.previous, deduplicated: true }); acknowledge(); return; }
-                const run = lease.start({ text: prepared.prompt!, requestId, requestFingerprint: fingerprint, providedContext: prepared.providedContext });
+                const suppliedRap = prepared.providedContext?.rap;
+                const run = lease.start({
+                  text: prepared.prompt!, requestId, requestFingerprint: fingerprint, providedContext: prepared.providedContext,
+                  verifyBeforeDispatch: async () => {
+                    await assertFrameworkContinuation(projectId, taskId);
+                    if (suppliedRap) {
+                      const current = await prepareRequirement(input, projectId);
+                      if (current?.text !== suppliedRap.text) throw new RequestFault(409, 'requirement_unavailable');
+                    }
+                    await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! });
+                  },
+                });
                 terminalContext = run.context;
                 await run.accepted;
                 accepted = true; json(response, 202, { requestId, status: 'running' }); acknowledge();
@@ -981,7 +1423,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (operation === 'commands' && request.method === 'POST') {
             const input = await body(request);
             if (typeof input.text !== 'string' || !input.text.startsWith('/') || input.text.length > 20000 || (input.requestId !== undefined && (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId)))) throw new RequestFault(400, 'invalid_command');
-            const requestId = typeof input.requestId === 'string' ? input.requestId : randomUUID(), owner = await pair(projectId, taskId, true);
+            const requestId = typeof input.requestId === 'string' ? input.requestId : randomUUID(), owner: ProjectOwner = await pair(projectId, taskId, true);
             const known = await priorRequest(owner.project, owner.task, requestId);
             if (known) { json(response, 200, { result: { deduplicated: true }, outcome: known, snapshot: (await taskState(projectId, taskId)).snapshot }); return; }
             let terminalContext: SessionContext<ProjectOwner> | undefined;
@@ -992,12 +1434,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   const { project, task } = await pair(projectId, taskId, true), prior = await priorRequest(project, task, requestId);
                   if (prior) return prior;
                   if (await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
+                  await assertFrameworkContinuation(projectId, taskId);
                   startedAt = new Date().toISOString();
-                  await automatic.admit({ project, task }, requestId, createHash('sha256').update(JSON.stringify(['automatic-command-v1', projectId, taskId, requestId, input.text])).digest('hex'));
-                  await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt });
+                  owner.reviewAdmission = reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion';
+                  if (owner.reviewAdmission === 'legacy') await automatic.admit({ project, task }, requestId, createHash('sha256').update(JSON.stringify(['automatic-command-v1', projectId, taskId, requestId, input.text])).digest('hex'));
                 });
                 if (previous) return { result: { deduplicated: true }, outcome: previous, snapshot: (await taskState(projectId, taskId)).snapshot };
-                const run = lease.start({ text: input.text as string, requestId, kind: 'command' });
+                const run = lease.start({
+                  text: input.text as string, requestId, kind: 'command',
+                  verifyBeforeDispatch: async () => {
+                    await assertFrameworkContinuation(projectId, taskId);
+                    await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! });
+                  },
+                });
                 terminalContext = run.context;
                 const [value] = await Promise.all([run.completion, run.accepted]);
                 await settleProjectRun(owner, run.context, requestId, startedAt!, value);
@@ -1045,12 +1494,24 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         return;
       }
       const originalCode = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
+      if (error instanceof RequestFault && ['requirement_unavailable', 'requirement_history_source_unavailable', 'report_calculation_history_source_unavailable'].includes(originalCode)) {
+        json(response, error.status, {
+          code: originalCode, accepted: false,
+          message: originalCode === 'report_calculation_history_source_unavailable'
+            ? '这条会话中计算复核的来源当前不可用，本次未发送。请在来源恢复后继续，或在新任务使用当前可用资料。'
+            : originalCode === 'requirement_history_source_unavailable'
+            ? '这条会话中已送入的框架依据当前不可用，本次未发送。请在来源恢复后继续，或在新任务使用当前可用资料。'
+            : '所选需求或框架当前不可送入。请回需求梳理核对确认版本和来源。',
+        });
+        return;
+      }
       const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
       const status = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable', 'unmanaged_execution_unknown'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
+      if (conclusionReviewMessages[code]) { json(response, status, { code, message: conclusionReviewMessages[code] }); return; }
       json(response, status, { code, message: ['automatic_unmanaged_history', 'unmanaged_execution_unknown'].includes(code) ? '本项目或任务缺少可信的受管执行起点或完整收尾证明，暂不能开启自动核算；原项目和会话保留，关闭自动核算后可继续普通分析。' : code === 'automatic_unsupported_protection' ? '当前系统不支持所需执行保护，未启动自动核算或修订。' : code === 'verification_revision_materials_too_large' ? '修订固定材料全文超过20,000字符，请缩小本次核算所选资料后新建核算；未启动修订模型，不会截断或恢复执行工具。' : code === 'verification_revision_text_required' ? '修订出稿仅接收完整UTF-8文本材料；所选文件不能解码，未启动修订模型。' : code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'configuration_not_found' ? '原模型配置已不可用，请选择可用模型。' : code === 'invalid_search_order' ? '搜索顺序必须包含 MiniMax 和 DeepSeek 各一次。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }
   })(); });
-  return { server, ready, configuration, projects, cases, close: async () => {
+  return { server, ready, configuration, projects, cases, activateConclusionReviews: () => mutate(() => reviewTransition.activate()), close: async () => {
     closing = true;
     const errors: unknown[] = [];
     const release = async (operation: () => unknown | Promise<unknown>) => { try { await operation(); } catch (error) { errors.push(error); } };

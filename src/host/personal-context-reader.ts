@@ -40,14 +40,20 @@ export function createPersonalContextReader(options: { projects: Pick<ProjectSto
       if (records.storeId !== target.storeId) throw new PersonalContextError('personal_context_store_mismatch', 409);
       const retained = records.items.find(entry => entry.materialId === target.materialId), decision = retained?.decisions.find(entry => entry.operationId === target.decisionId);
       if (!retained || !decision || decision.action !== 'retain' || !decision.contentRef || decision.contentRef.storeId !== target.storeId || decision.contentRef.materialId !== target.materialId || decision.contentRef.revisionId !== target.revisionId || decision.bodySha256 !== target.expectedBodySha256) throw new PersonalContextError('personal_context_target_changed', 409);
+      if (context.retainedOnly && retained.archived) throw new PersonalContextError('personal_context_excluded', 409);
       const saved = await guarded(options.retention.readItem(target.materialId, target.decisionId), context), content = saved.content;
       if (!content || content.revisionId !== target.revisionId || content.bodySha256 !== target.expectedBodySha256) throw new PersonalContextError('personal_context_target_changed', 409);
       const index = await guarded(options.retention.options.materials.referenceIndex(), context);
+      if (context.retainedOnly) {
+        const current = await guarded(options.retention.getItem(target.materialId), context);
+        if (!current || current.archived) throw new PersonalContextError('personal_context_excluded', 409);
+      }
       const metadata = item(target, content.title, content.scope, content.effectiveTime, decision.metadata.caution, { archived: retained.archived, enterpriseEnabled: index.materials.find(m => m.materialId === target.materialId)?.enabled ?? null, sourceProjectArchived: null, targetRevision: null, latestCorrectionOperationId: null });
       if (retained.archived) metadata.limitations.push('人工条目现已归档；此次为准确旧版本的历史参考。');
       if (!content.body && content.sourceFile) metadata.limitations.push('仅附件元信息；未进行OCR或文档文字提取。');
       return { item: metadata, body: content.body, corrections: [], sourceRefs: decision.metadata.sourceRefs };
     }
+    if (context.retainedOnly) throw new PersonalContextError('personal_context_excluded', 409);
     const result = await guarded(candidates.lookup({ pageSize: 100 }, target.candidate, context), context);
     const row = result.rows.find(row => row.ref && sameCandidateRef(row.ref, target.candidate));
     if (!row) throw new PersonalContextError('personal_context_source_unknown', 409);
@@ -152,7 +158,7 @@ export function createPersonalContextReader(options: { projects: Pick<ProjectSto
     let records = null, index = null;
     try { records = await guarded(options.retention.getRecords(), context); index = await guarded(options.retention.options.materials.referenceIndex(), context); }
     catch (error) { abort(context); details.issues.push({ code: failureCode(error) }); }
-    const signature = hash(canonicalCandidateJson({ records, index, query: request.query, kind: request.kind, includeArchived: request.includeArchived }));
+    const signature = hash(canonicalCandidateJson({ records, index, query: request.query, kind: request.kind, includeArchived: request.includeArchived, ...(context.retainedOnly ? { retainedOnly: true } : {}) }));
     let retainedOffset = 0, candidateCursor: string | null = null, candidateSkip = 0, phase = 'retained', candidateFingerprint: string | null = null;
     if (request.continuation) {
       try { const cursor = JSON.parse(Buffer.from(request.continuation, 'base64url').toString('utf8')); if (!object(cursor) || cursor.signature !== signature || !['retained', 'candidate'].includes(String(cursor.phase)) || !Number.isSafeInteger(cursor.retainedOffset) || Number(cursor.retainedOffset) < 0 || !(cursor.candidateCursor === null || typeof cursor.candidateCursor === 'string') || !(cursor.candidateFingerprint === null || typeof cursor.candidateFingerprint === 'string' && /^[a-f0-9]{64}$/.test(cursor.candidateFingerprint)) || !Number.isSafeInteger(cursor.candidateSkip) || Number(cursor.candidateSkip) < 0 || Number(cursor.candidateSkip) > 100) throw new Error(); retainedOffset = Number(cursor.retainedOffset); candidateCursor = cursor.candidateCursor as string | null; candidateSkip = Number(cursor.candidateSkip); candidateFingerprint = cursor.candidateFingerprint as string | null; phase = String(cursor.phase); } catch { throw new PersonalContextError('personal_context_continuation_changed', 409); }
@@ -178,7 +184,7 @@ export function createPersonalContextReader(options: { projects: Pick<ProjectSto
       const target: PersonalContextTarget = { type: 'retained', storeId: records!.storeId, materialId: saved.materialId, decisionId: decision.operationId, revisionId: revision.revisionId, expectedBodySha256: decision.bodySha256 };
       if (details.items.length >= request.pageSize || !push(item(target, revision.title, revision.scope, revision.effectiveTime, decision.metadata.caution, { archived: saved.archived, enterpriseEnabled: material!.enabled, sourceProjectArchived: null, targetRevision: null, latestCorrectionOperationId: null }), decision.metadata.kind, decision.metadata.aliases)) break;
     }
-    if (retainedOffset >= retained.length) phase = 'candidate';
+    if (retainedOffset >= retained.length) phase = context.retainedOnly ? 'done' : 'candidate';
     if (phase === 'candidate' && details.items.length < request.pageSize) {
       const projects = await guarded(options.projects.list(), context);
       const page = await guarded(candidates.lookup({ query: request.query, category: request.kind, includeBody: false, pageSize: 100, ...(candidateCursor ? { cursor: candidateCursor } : {}) }, undefined, context), context);

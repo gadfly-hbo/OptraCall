@@ -1,10 +1,17 @@
 import type { ExtensionFactory } from './sdk.ts';
 import { randomUUID } from 'node:crypto';
+import { isPublicWebUrl } from './public-web-url.ts';
 
 type Configuration = { provider: string; api: string; model: string };
 type Mode = 'anthropic' | 'mimo';
 type Source = { title: string; url: string };
 type SearchReceipt = { version: 1; api: string; originalText: string; projectedText: string; content?: Record<string, any>[]; stopReason?: string; continuationMarker?: string; sources: Source[]; usage?: unknown };
+export type PublicSearchSource = Source & { publishedAt?: string; excerpt?: string };
+export type PublicNativeSearchResult = {
+  status: 'not_searched' | 'sources' | 'empty' | 'failed' | 'unknown';
+  sources: PublicSearchSource[];
+  issues?: ('failed' | 'unknown')[];
+};
 const receiptKey = 'optracallNativeSearch';
 const continuationType = 'optracall.native-search-continuation';
 const maxReceiptBytes = 8 * 1024 * 1024;
@@ -16,8 +23,67 @@ export function nativeSearchMode(configuration: Configuration): Mode | undefined
   if (['mimo', 'xiaomi-token-plan-cn'].includes(configuration.provider) && configuration.api === 'openai-completions' && ['mimo-v2.6-pro', 'mimo-v2.6-flash'].includes(configuration.model)) return 'mimo';
 }
 
+function publicSource(source: Source, raw?: Record<string, unknown>): PublicSearchSource | undefined {
+  if (source.url.length > 2048 || !isPublicWebUrl(source.url)) return;
+  const date = raw?.published_at ?? raw?.published_date;
+  const time = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? Date.parse(date) : NaN;
+  const publishedAt = Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === date ? date as string : undefined;
+  const summary = raw?.content ?? raw?.snippet;
+  const excerpt = typeof summary === 'string' ? summary.replace(/[\x00-\x1f]/g, ' ').trim().slice(0, 400) : '';
+  return { ...source, ...(publishedAt ? { publishedAt } : {}), ...(excerpt ? { excerpt } : {}) };
+}
+
+/** One observation per public prompt. Opaque native blocks stay in Pi's
+ * journal. The Host only receives bounded structured evidence. */
+export function createPublicNativeSearchObservation() {
+  const pendingCalls = new Set<string>();
+  const sources = new Map<string, PublicSearchSource>();
+  let failed = false, incomplete = false, empty = false;
+  let sourceBytes = 0;
+  const remember = (source: PublicSearchSource | undefined) => {
+    if (!source || sources.has(source.url) || sources.size >= 10) return;
+    const size = Buffer.byteLength(JSON.stringify(source));
+    if (sourceBytes + size > 8_000) return;
+    sources.set(source.url, source);
+    sourceBytes += size;
+  };
+  return {
+    observe(receipt: SearchReceipt, details: ReadonlyMap<string, PublicSearchSource>) {
+      if (receipt.api === 'anthropic-messages') {
+        for (const block of receipt.content ?? []) {
+          if (block.type === 'server_tool_use' && block.name === 'web_search' && typeof block.id === 'string') pendingCalls.add(block.id);
+          if (block.type !== 'web_search_tool_result') continue;
+          if (!pendingCalls.delete(block.tool_use_id)) {
+            incomplete = true;
+            continue;
+          }
+          if (block.content?.type === 'web_search_tool_result_error') failed = true;
+          else if (Array.isArray(block.content)) {
+            const actual = block.content.flatMap(result => result?.type === 'web_search_result' && details.has(result.url) ? [details.get(result.url)!] : []);
+            if (!block.content.length) empty = true;
+            else if (!actual.length) incomplete = true;
+            actual.forEach(remember);
+          } else incomplete = true;
+        }
+      } else {
+        details.forEach(remember);
+        const usage = receipt.usage as { tool_usage?: unknown; page_usage?: unknown } | undefined;
+        if (typeof usage?.tool_usage === 'number' && usage.tool_usage > 0 && !details.size) {
+          if (usage.page_usage === 0) empty = true;
+          else incomplete = true;
+        }
+      }
+    },
+    result(): PublicNativeSearchResult {
+      const issues = [...(failed ? ['failed' as const] : []), ...(incomplete || pendingCalls.size ? ['unknown' as const] : [])];
+      if (sources.size) return { status: 'sources', sources: [...sources.values()], ...(issues.length ? { issues } : {}) };
+      return { status: issues.includes('unknown') ? 'unknown' : failed ? 'failed' : empty ? 'empty' : 'not_searched', sources: [] };
+    },
+  };
+}
+
 /** Adapt native protocol blocks through Pi's existing loop and persistence hooks. */
-export function createNativeSearchExtension(configuration: Configuration, onFailure?: (code: string) => void, inject = true): ExtensionFactory {
+export function createNativeSearchExtension(configuration: Configuration, onFailure?: (code: string) => void, inject = true, observePublicSearch?: (receipt: SearchReceipt, details: ReadonlyMap<string, PublicSearchSource>) => void): ExtensionFactory {
   const mode = nativeSearchMode(configuration);
   return pi => {
     if (!mode) return;
@@ -26,6 +92,7 @@ export function createNativeSearchExtension(configuration: Configuration, onFail
     let blocks: Record<string, any>[] = [], partialInputs = new Map<number, string>();
     let openBlocks = new Set<number>(), streamBytes = 0;
     let sources = new Map<string, Source>(), stopReason: string | undefined, usage: unknown;
+    let publicDetails = new Map<string, PublicSearchSource>();
     let hasNativeBlocks = false, responseFailed = false, lastReceipt: SearchReceipt | undefined;
     const collectSources = (root: unknown) => {
       const pending = [{ value: root as any, depth: 0 }];
@@ -37,7 +104,17 @@ export function createNativeSearchExtension(configuration: Configuration, onFail
         if (['web_search_result', 'url_citation'].includes(value.type) && typeof value.url === 'string') {
           try {
             const url = new URL(value.url);
-            if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && value.url.length <= 8192) sources.set(value.url, { title: typeof value.title === 'string' ? value.title.replace(/[\r\n\x00-\x1f]/g, ' ').slice(0, 512) : '', url: value.url });
+            if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && value.url.length <= 8192) {
+              const source = { title: typeof value.title === 'string' ? value.title.replace(/[\r\n\x00-\x1f]/g, ' ').slice(0, 512) : '', url: value.url };
+              sources.set(value.url, source);
+              if (observePublicSearch) {
+                const detail = publicSource(source, value);
+                if (detail) {
+                  const existing = publicDetails.get(detail.url);
+                  publicDetails.set(detail.url, existing ? { ...existing, ...(detail.publishedAt ? { publishedAt: detail.publishedAt } : {}), ...(detail.excerpt ? { excerpt: detail.excerpt } : {}) } : detail);
+                }
+              }
+            }
           } catch { /* A malformed Provider URL is not a source. */ }
         }
         const values = Object.values(value);
@@ -74,6 +151,7 @@ export function createNativeSearchExtension(configuration: Configuration, onFail
           }
         }
         blocks = []; partialInputs = new Map(); openBlocks = new Set(); streamBytes = 0; sources = new Map(); stopReason = undefined; usage = undefined;
+        publicDetails = new Map();
         hasNativeBlocks = false; responseFailed = false; lastReceipt = undefined;
         // Restore native history without advertising another search route.
         if (!inject) return payload;
@@ -132,7 +210,7 @@ export function createNativeSearchExtension(configuration: Configuration, onFail
       if (event.message.stopReason === 'error' || event.message.stopReason === 'aborted') { lastReceipt = undefined; return; }
       if (!hasNativeBlocks && !sources.size && usage === undefined && stopReason !== 'pause_turn') return;
       const content = [...event.message.content];
-      if (sources.size) content.push({ type: 'text', text: '\n\n本次联网检索来源（供应商回执）：\n' + [...sources.values()].map(source => `- ${source.title}: <${source.url}>`).join('\n') });
+      if (sources.size && !observePublicSearch) content.push({ type: 'text', text: '\n\n本次联网检索来源（供应商回执）：\n' + [...sources.values()].map(source => `- ${source.title}: <${source.url}>`).join('\n') });
       const receipt: SearchReceipt = { version: 1, api: configuration.api, originalText: textOf(event.message.content), projectedText: textOf(content), sources: [...sources.values()],
         ...(mode === 'anthropic' ? { content: blocks, stopReason } : {}), ...(usage === undefined ? {} : { usage }) };
       if (stopReason === 'pause_turn') receipt.continuationMarker = `[optracall-native-search:${randomUUID()}]`;
@@ -141,6 +219,7 @@ export function createNativeSearchExtension(configuration: Configuration, onFail
         return { message: { ...event.message, content: [...event.message.content, { type: 'text', text: '\nNative search response could not be retained; this request is incomplete.' }] } };
       }
       lastReceipt = receipt;
+      observePublicSearch?.(receipt, publicDetails);
       return { message: { ...event.message, content, [receiptKey]: receipt } };
     });
     pi.on('agent_before_settle', event => {

@@ -102,9 +102,9 @@ function messageText(entry: Record<string, unknown>): string | undefined {
   if (!Array.isArray(message.content) || message.content.some(part => !object(part) || object(part)!.type !== 'text' || typeof object(part)!.text !== 'string')) return undefined;
   return message.content.map(part => object(part)!.text).join('');
 }
-function suppliedRequest(record: VerificationRecord, native: VerificationRuntimeEvidence['native']): Omit<VerificationContextEvidence['provided'], 'status' | 'note' | 'fragments'> | undefined {
-  const requestId = record.comparisonResult?.requestId;
-  if (!requestId || !native || native.sessionFile !== record.comparisonResult?.sessionFile) return undefined;
+export function suppliedRequest(record: VerificationRecord, native: VerificationRuntimeEvidence['native'], identity = { requestId: record.comparisonResult?.requestId, sessionFile: record.comparisonResult?.sessionFile }): (Omit<VerificationContextEvidence['provided'], 'status' | 'note' | 'fragments'> & { sessionId: string }) | undefined {
+  const requestId = identity.requestId;
+  if (!requestId || !native || native.sessionFile !== identity.sessionFile) return undefined;
   const header = object(native.entries[0]);
   if (header?.type !== 'session' || header.cwd !== record.workspace || typeof header.id !== 'string') return undefined;
   let requestHash: string | undefined;
@@ -123,7 +123,7 @@ function suppliedRequest(record: VerificationRecord, native: VerificationRuntime
     }
     if (!requestHash) continue;
     const text = messageText(entry);
-    if (text !== undefined && sha(text) === requestHash) return { requestId, sessionFile: native.sessionFile,
+    if (text !== undefined && sha(text) === requestHash) return { requestId, sessionId: header.id, sessionFile: native.sessionFile,
       ...(typeof entry.id === 'string' ? { messageId: entry.id } : {}), requestText: text };
   }
   return undefined;

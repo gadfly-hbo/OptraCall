@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { DecisionBoardFault, createDecisionBoardStore } from '../storage/store.ts';
-import type { BoardItemRecord, BoardItemView, BoardTaskRecord, BoardTaskView, ExtractionRecord, ExtractionStatus, FeedbackEffect, SaveFeedbackInput, TaskFeedbackRevision } from '../types.ts';
+import type { ConfirmedConclusionRecord, BoardItemRecord, BoardItemView, BoardTaskRecord, BoardTaskView, ExtractionRecord, ExtractionStatus, FeedbackEffect, SaveFeedbackInput, TaskFeedbackRevision } from '../types.ts';
 
 export class BoardRouteError extends Error {
   readonly status: number;
@@ -9,7 +9,10 @@ export class BoardRouteError extends Error {
 }
 
 export type BoardProjectSummary = { id: string; name: string; archivedAt: string | null };
+export type BoardConfirmedConclusionView = (ConfirmedConclusionRecord & { readStatus: 'available'; fixedReportAvailable: boolean; limitations: string[] }) | (Pick<ConfirmedConclusionRecord, 'id' | 'reportId' | 'projectId' | 'taskId' | 'reviewId' | 'reportSha256' | 'relativePath' | 'confirmedBy' | 'confirmedAt'> & { readStatus: 'unavailable' });
 export type BoardReportView = {
+  currentSha256?: string | null;
+  reportId?: number; confirmations: BoardConfirmedConclusionView[];
   projectId: string; projectName: string; relativePath: string; name: string; bytes: number;
   registered: boolean; observedBytes: number | null; lastExtractionAt: string | null;
   availability: 'available' | 'changed' | 'missing';
@@ -29,6 +32,9 @@ export type DecisionBoardRoutesOptions = {
   assertActiveProject: (projectId: string) => Promise<void>;
   startExtraction: (projectId: string, relativePath: string) => Promise<ExtractionRecord>;
   stopExtraction: (extractionId: string) => Promise<ExtractionRecord>;
+  observeReport?: (projectId: string, relativePath: string) => Promise<{ sha256: string; bytes: number }>;
+  assertItemReadable?: (item: BoardItemRecord) => Promise<void>;
+  presentConfirmation?: (record: ConfirmedConclusionRecord) => Promise<BoardConfirmedConclusionView>;
 };
 
 const projectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -113,17 +119,29 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
     return feedback ? { ...task, feedback } : { ...task };
   }
 
+  async function assertReadable(item: BoardItemRecord) {
+    if (item.sourceKind !== 'report-confirmation') return;
+    if (!options.assertItemReadable) throw new BoardRouteError(409, 'confirmation_source_unavailable', '确认来源当前不可读取。');
+    try { await options.assertItemReadable(item); } catch { throw new BoardRouteError(409, 'confirmation_source_unavailable', '确认来源当前不可读取。'); }
+  }
   async function readableTask(taskId: string): Promise<BoardTaskRecord> {
     const task = store.getTask(taskId), item = store.getItem(task.itemId);
     if (!(await options.projectOverview()).some(project => project.id === item.projectId)) throw new BoardRouteError(404, 'project_not_found', messages.project_not_found!.message);
+    await assertReadable(item);
     return task;
   }
 
-  async function view(): Promise<BoardView> {
-    const [projects, reports, extractions, items, tasks, feedback] = await options.mutate(async () => {
+  async function viewWithinMutation(): Promise<BoardView> {
+    const [projects, reports, extractions, items, tasks, feedback] = await (async () => {
       const overview = await options.projectOverview();
       return [overview, store.listReports(), store.listExtractions(), store.listItems(), store.listTasks(), store.listFeedback()] as const;
-    });
+    })();
+    const confirmations = store.listConfirmedConclusions();
+    const presented = await Promise.all(confirmations.map(async record => {
+      if (options.presentConfirmation) return options.presentConfirmation(record);
+      const { id, reportId, projectId, taskId, reviewId, reportSha256, relativePath, confirmedBy, confirmedAt } = record;
+      return { id, reportId, projectId, taskId, reviewId, reportSha256, relativePath, confirmedBy, confirmedAt, readStatus: 'unavailable' as const };
+    }));
     const projectNames = new Map(projects.map(project => [project.id, project]));
     const scanned = new Map<string, number>();
     for (const project of projects) {
@@ -142,10 +160,15 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
       const registered = reports.find(report => report.projectId === projectId && report.relativePath === relativePath);
       const extraction = registered ? latestByReport.get(registered.id) ?? null : null;
       seen.add(key);
+      let currentSha256: string | null | undefined;
+      if (registered && presented.some(entry => entry.reportId === registered.id)) {
+        try { currentSha256 = (await options.observeReport?.(projectId, relativePath))?.sha256 ?? null; } catch { currentSha256 = null; }
+      }
       reportViews.push({
         projectId, projectName: project?.name ?? projectId, relativePath, name: relativePath.split('/').pop()!, bytes,
+        currentSha256, reportId: registered?.id, confirmations: presented.filter(entry => entry.reportId === registered?.id),
         registered: Boolean(registered), observedBytes: registered?.observedBytes ?? null, lastExtractionAt: registered?.lastExtractionAt ?? null,
-        availability: registered ? registered.observedBytes === bytes ? 'available' : 'changed' : 'available',
+        availability: registered ? currentSha256 ? currentSha256 === registered.observedSha256 ? 'available' : 'changed' : registered.observedBytes === bytes ? 'available' : 'changed' : 'available',
         extraction: extraction ? { id: extraction.id, status: extraction.status, error: extraction.error, createdAt: extraction.createdAt, itemCount: extraction.itemCount } : null,
       });
     }
@@ -156,6 +179,7 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
       const extraction = latestByReport.get(report.id) ?? null;
       reportViews.push({
         projectId: report.projectId, projectName: project?.name ?? report.projectId, relativePath: report.relativePath, name: report.relativePath.split('/').pop()!, bytes: report.observedBytes ?? 0,
+        currentSha256: null, reportId: report.id, confirmations: presented.filter(entry => entry.reportId === report.id),
         registered: true, observedBytes: report.observedBytes, lastExtractionAt: report.lastExtractionAt,
         availability: 'missing', extraction: extraction ? { id: extraction.id, status: extraction.status, error: extraction.error, createdAt: extraction.createdAt, itemCount: extraction.itemCount } : null,
       });
@@ -167,7 +191,8 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
       list.push(taskView(task, feedbackByTask));
       tasksByItem.set(task.itemId, list);
     }
-    const itemViews = items.map(item => itemView(item, tasksByItem));
+    const itemViews: BoardItemView[] = [];
+    for (const item of items) { try { await assertReadable(item); itemViews.push(itemView(item, tasksByItem)); } catch { /* Current source authority also governs derived task/feedback bodies. */ } }
     return {
       projects: projects.map(({ id, name, archivedAt }) => ({ id, name, archivedAt })),
       reports: reportViews.sort((a, b) => a.projectName.localeCompare(b.projectName) || a.relativePath.localeCompare(b.relativePath)),
@@ -184,6 +209,7 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
     };
   }
 
+  const view = () => options.mutate(viewWithinMutation);
   async function routes(request: IncomingMessage, url: URL): Promise<{ status: number; value: unknown } | null> {
     if (!url.pathname.startsWith('/api/decision-board/') && url.pathname !== '/api/decision-board') return null;
     const route = url.pathname.replace(/^\/api\/decision-board\/?/, '');
@@ -229,43 +255,34 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
       const adoptRoute = /^items\/([0-9a-f-]{36})\/adopt$/.exec(route);
       if (adoptRoute && request.method === 'POST') {
         const id = adoptRoute[1]!;
-        const item = await options.mutate(() => store.getItem(id));
-        await options.assertActiveProject(item.projectId);
-        return { status: 200, value: { item: await options.mutate(() => store.decideItem(id, { status: 'adopted' })) } };
+        return { status: 200, value: { item: await options.mutate(async () => { const item = store.getItem(id); await options.assertActiveProject(item.projectId); await assertReadable(item); return store.decideItem(id, { status: 'adopted' }); }) } };
       }
       const dismissRoute = /^items\/([0-9a-f-]{36})\/dismiss$/.exec(route);
       if (dismissRoute && request.method === 'POST') {
         const id = dismissRoute[1]!;
-        const item = await options.mutate(() => store.getItem(id));
-        await options.assertActiveProject(item.projectId);
-        return { status: 200, value: { item: await options.mutate(() => store.decideItem(id, { status: 'dismissed', reason: string(input, 'reason') })) } };
+        return { status: 200, value: { item: await options.mutate(async () => { const item = store.getItem(id); await options.assertActiveProject(item.projectId); await assertReadable(item); return store.decideItem(id, { status: 'dismissed', reason: string(input, 'reason') }); }) } };
       }
       const taskRoute = /^items\/([0-9a-f-]{36})\/tasks$/.exec(route);
       if (taskRoute && request.method === 'POST') {
         const id = taskRoute[1]!;
-        const item = await options.mutate(() => store.getItem(id));
-        await options.assertActiveProject(item.projectId);
-        return { status: 201, value: { task: await options.mutate(() => store.addTask(id, {
+        return { status: 201, value: { task: await options.mutate(async () => { const item = store.getItem(id); await options.assertActiveProject(item.projectId); await assertReadable(item); return store.addTask(id, {
           title: string(input, 'title'),
           ...(input.owner === undefined ? {} : { owner: string(input, 'owner', false) }),
           ...(input.dueDate === undefined ? {} : { dueDate: string(input, 'dueDate', false) }),
           ...(input.priority === undefined ? {} : { priority: string(input, 'priority') }),
           ...(input.note === undefined ? {} : { note: string(input, 'note', false) }),
-        })) } };
+        }); }) } };
       }
       const statusRoute = /^tasks\/([0-9a-f-]{36})\/status$/.exec(route);
       if (statusRoute && request.method === 'POST') {
-        const task = await options.mutate(() => store.listTasks().find(entry => entry.id === statusRoute[1]));
-        if (!task) throw new BoardRouteError(404, 'task_not_found', messages.task_not_found!.message);
-        await options.assertActiveProject((await options.mutate(() => store.getItem(task.itemId))).projectId);
-        return { status: 200, value: { task: await options.mutate(() => store.setTaskStatus(task.id, string(input, 'status'))) } };
+        return { status: 200, value: { task: await options.mutate(async () => { const task = await readableTask(statusRoute[1]!); const item = store.getItem(task.itemId); await options.assertActiveProject(item.projectId); return store.setTaskStatus(task.id, string(input, 'status')); }) } };
       }
       const feedbackRoute = /^tasks\/([0-9a-f-]{36})\/feedback$/.exec(route);
       if (feedbackRoute && request.method === 'POST') {
         const clean = feedbackInput(input);
         return { status: 200, value: { feedback: await options.mutate(async () => {
           const task = store.getTask(feedbackRoute[1]!);
-          await options.assertActiveProject(store.getItem(task.itemId).projectId);
+          const item = store.getItem(task.itemId); await options.assertActiveProject(item.projectId); await assertReadable(item);
           return store.saveFeedback(task.id, clean);
         }) } };
       }
@@ -275,5 +292,5 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
       return { status: mapped.status, value: { code: mapped.code, message: mapped.message } };
     }
   }
-  return { routes, view };
+  return { routes, view, viewWithinMutation, fault };
 }

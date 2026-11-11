@@ -5,7 +5,7 @@ import path from 'node:path';
 import { writeFile, readdir } from 'node:fs/promises';
 import { createAutomaticVerificationStore } from '../src/host/automatic-verification-store.ts';
 import { readAutomaticReport, automaticReportBlob } from '../src/host/ui/automatic-verification-client.ts';
-import { startTestHost } from './fixtures/host-process.ts';
+import { startLegacyTestHost as startTestHost } from './fixtures/host-process.ts'; // Explicit pre-cutover contract; default Host is tested separately.
 import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
 import { readJson } from './fixtures/joint-context.ts';
 

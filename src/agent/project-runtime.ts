@@ -18,14 +18,15 @@ import type { SemanticContextPort, SemanticContextReadPort } from './semantic-co
 import type { SapMethodSourcePort } from './sap-method-extraction.ts';
 import type { WebSearchToolsPort } from './web-search-tools.ts';
 import type { ProjectFilesPort } from './project-files.ts';
+import type { ReportCalculationPrepared, ReportCalculationReviewPort, ReportCalculationSelection } from './report-calculation-review.ts';
 
 /** Replacement workspace for non-project agent sessions (e.g. business plugins). */
-export type AgentWorkspace = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[]; capabilityPolicy?: 'fixed-draft' | 'text-only' | 'source-reader' };
+export type AgentWorkspace = { cwd: string; systemPrompt: readonly string[]; defaultTools?: readonly string[]; capabilityPolicy?: 'fixed-draft' | 'text-only' | 'source-reader' | 'public-search' };
 /** Host-provided context receipt; this describes delivery, not business adoption. */
-export type ProvidedContextInput = { rap?: { instanceId: string; version?: string; text: string }; case?: { operationId: string; summary?: string }; enterprise?: EnterpriseContextProvision; feedback?: FeedbackContextReceipt; projectData?: ProjectDataContextProvision[]; personal?: { text: string; receipt: PersonalContextReceipt }; originalUserText?: string; studio?: { systemId: string; purpose: 'construction' | 'analysis'; text: string; refs: import('../../extensions/business-plugins/studio/contracts.ts').StudioSourceRef[] } };
-export type ProjectAgentOptions = { projectId: string; taskId?: string; projectDirectory?: string; workspace?: AgentWorkspace; analysisPython?: AnalysisPythonEnvironment; protectedExecution?: ProtectedExecutionScope; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string; personalContext?: PersonalContextPort; caseDecisions?: CaseDecisionPort; caseSources?: CaseSourcesPort; semanticContext?: SemanticContextPort; semanticContextRead?: SemanticContextReadPort; sapMethodSources?: SapMethodSourcePort; studio?: StudioPort; webSearch?: WebSearchToolsPort; projectFiles?: ProjectFilesPort; simulationTools?: { storeRoot: string; projectId: string }; tradeAreaConnector?: { dataRoot: string }; weatherConnector?: { cacheRoot: string }; modelPackTools?: { modelsRoot: string } };
+export type ProvidedContextInput = { rap?: { instanceId: string; version?: string; frameworkVersion?: string; basisSha256?: string; text: string }; case?: { operationId: string; summary?: string }; enterprise?: EnterpriseContextProvision; feedback?: FeedbackContextReceipt; projectData?: ProjectDataContextProvision[]; personal?: { text: string; receipt: PersonalContextReceipt }; reportCalculationReview?: { contract: 'foreground-report-calculation-v1' }; originalUserText?: string; studio?: { systemId: string; purpose: 'construction' | 'analysis'; text: string; refs: import('../../extensions/business-plugins/studio/contracts.ts').StudioSourceRef[] } };
+export type ProjectAgentOptions = { projectId: string; taskId?: string; projectDirectory?: string; workspace?: AgentWorkspace; analysisPython?: AnalysisPythonEnvironment; protectedExecution?: ProtectedExecutionScope; sessionDirectory: string; sessionFile?: string; draft?: string; codeRoot: string; resourceRoot: string; configuration: Readonly<RuntimeModelConfiguration>; managementPorts: number[]; metricIndexText?: string; personalContext?: PersonalContextPort; caseDecisions?: CaseDecisionPort; caseSources?: CaseSourcesPort; semanticContext?: SemanticContextPort; semanticContextRead?: SemanticContextReadPort; sapMethodSources?: SapMethodSourcePort; studio?: StudioPort; webSearch?: WebSearchToolsPort; projectFiles?: ProjectFilesPort; reportCalculationReview?: ReportCalculationReviewPort; simulationTools?: { storeRoot: string; projectId: string }; tradeAreaConnector?: { dataRoot: string }; weatherConnector?: { cacheRoot: string }; modelPackTools?: { modelsRoot: string } };
 /** Host callbacks never cross IPC; only the granted capability bit does. */
-export type ProjectAgentWireOptions = Omit<ProjectAgentOptions, 'personalContext' | 'caseDecisions' | 'caseSources' | 'semanticContext' | 'semanticContextRead' | 'sapMethodSources' | 'studio' | 'webSearch' | 'projectFiles'> & { personalContextEnabled?: boolean; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; semanticContextEnabled?: boolean; semanticContextReadEnabled?: boolean; sapMethodSourcesEnabled?: boolean; studioEnabled?: boolean; webSearchEnabled?: boolean; projectFilesEnabled?: boolean };
+export type ProjectAgentWireOptions = Omit<ProjectAgentOptions, 'personalContext' | 'caseDecisions' | 'caseSources' | 'semanticContext' | 'semanticContextRead' | 'sapMethodSources' | 'studio' | 'webSearch' | 'projectFiles' | 'reportCalculationReview'> & { personalContextEnabled?: boolean; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; semanticContextEnabled?: boolean; semanticContextReadEnabled?: boolean; sapMethodSourcesEnabled?: boolean; studioEnabled?: boolean; webSearchEnabled?: boolean; projectFilesEnabled?: boolean; reportCalculationReviewEnabled?: boolean };
 export type BrowserUIRequest = { id: string; method: 'select' | 'confirm' | 'input' | 'editor'; title: string; message?: string; options?: string[]; placeholder?: string; prefill?: string };
 export type ProjectSnapshot = { sessionId: string; sessionFile?: string; messages: Record<string, any>[]; tools: string[]; status: 'idle' | 'running'; sdkVersion: string; capabilities: Record<string, unknown>; lastRun?: { requestId: string; outcome?: 'completed' | 'cancelled' | 'failed'; diagnostic?: RunDiagnostic }; uiRequests?: BrowserUIRequest[] };
 export type ProjectEvent = { type: 'snapshot'; snapshot: ProjectSnapshot } | { type: 'text.delta'; text: string; requestId: string } | { type: 'native'; event: Record<string, any>; requestId?: string } | { type: 'run.settled'; outcome: 'completed' | 'cancelled' | 'failed'; requestId: string; error?: string; diagnostic?: RunDiagnostic } | { type: 'run.accepted'; requestId: string; sessionFile?: string } | { type: 'ui.request'; request: BrowserUIRequest; requestId?: string } | { type: 'ui.dismiss'; id: string } | { type: 'ui.notification'; message: string; level?: string } | { type: 'ui.status'; key: string; text?: string } | { type: 'ui.editor'; text: string };
@@ -49,7 +50,7 @@ export class ProjectAgent {
   #snapshot?: ProjectSnapshot;
   #pending = new Map<string, { resolve: (value: any) => void; reject: (error: Error) => void }>();
   #listeners = new Set<(event: ProjectEvent) => void>();
-  #running?: { id: string; completion: Promise<any>; cancelRequested?: boolean; providedContext?: ProvidedContextInput };
+  #running?: { id: string; completion: Promise<any>; cancelRequested?: boolean; providedContext?: ProvidedContextInput; reportReview?: { toolCallId: string; prepared?: ReportCalculationPrepared } };
   #accepted = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
   #personalRequests = new Map<string, HostContextRequest>();
   #questions = new Map<string, Extract<ProjectEvent, { type: 'ui.request' }>>();
@@ -110,23 +111,32 @@ export class ProjectAgent {
   async #personalRequest(child: ChildProcess, raw: any) {
     const current = this.#running, controller = new AbortController();
     const isCase = raw.feature === 'case-decisions', isSources = raw.feature === 'case-sources', isSemantic = raw.feature === 'semantic-context', isSapMethod = raw.feature === 'sap-method-source', isStudio = raw.feature === 'studio';
-    const isWebSearch = raw.feature === 'web-search', isProjectFiles = raw.feature === 'project-files';
-    const knownFeature = isProjectFiles || isWebSearch || raw.feature === undefined || raw.feature === 'personal' || isCase || isSources || isSemantic || isSapMethod || isStudio;
+    const isWebSearch = raw.feature === 'web-search', isProjectFiles = raw.feature === 'project-files', isReportCalculation = raw.feature === 'report-calculation-review';
+    const knownFeature = isReportCalculation || isProjectFiles || isWebSearch || raw.feature === undefined || raw.feature === 'personal' || isCase || isSources || isSemantic || isSapMethod || isStudio;
     const semanticRead = isSemantic && raw.action !== 'record' && this.#options.semanticContextRead;
-    const port = isProjectFiles ? this.#options.projectFiles : isWebSearch ? this.#options.webSearch : isStudio ? this.#options.studio : isSapMethod ? this.#options.sapMethodSources : isCase ? this.#options.caseDecisions : isSources ? this.#options.caseSources : isSemantic ? semanticRead || this.#options.semanticContext : this.#options.personalContext;
-    const errorCode = isProjectFiles ? 'project_files_run_unavailable' : isWebSearch ? 'web_search_run_unavailable' : isStudio ? 'studio_run_unavailable' : isSapMethod ? 'sap_method_source_run_unavailable' : isCase ? 'case_decision_run_unavailable' : isSources ? 'case_sources_run_unavailable' : isSemantic ? 'semantic_context_run_unavailable' : 'personal_context_run_unavailable';
+    const port = isReportCalculation ? this.#options.reportCalculationReview : isProjectFiles ? this.#options.projectFiles : isWebSearch ? this.#options.webSearch : isStudio ? this.#options.studio : isSapMethod ? this.#options.sapMethodSources : isCase ? this.#options.caseDecisions : isSources ? this.#options.caseSources : isSemantic ? semanticRead || this.#options.semanticContext : this.#options.personalContext;
+    const errorCode = isReportCalculation ? 'report_calculation_run_unavailable' : isProjectFiles ? 'project_files_run_unavailable' : isWebSearch ? 'web_search_run_unavailable' : isStudio ? 'studio_run_unavailable' : isSapMethod ? 'sap_method_source_run_unavailable' : isCase ? 'case_decision_run_unavailable' : isSources ? 'case_sources_run_unavailable' : isSemantic ? 'semantic_context_run_unavailable' : 'personal_context_run_unavailable';
     const managedGraph = Boolean(semanticRead && raw.action === 'graph' && !this.#options.workspace && this.#options.protectedExecution?.profile === 'ordinary');
     const ordinarySearch = isWebSearch && this.#options.protectedExecution?.profile === 'ordinary';
-    const requiresToolIdentity = isProjectFiles || isCase || isSources || isSemantic || isSapMethod || isStudio || isWebSearch;
-    const available = () => Boolean(knownFeature && !this.#closed && child === this.#child && child.connected && current && !current.cancelRequested && this.#running === current && raw.requestId === current.id && raw.sessionId === this.#snapshot?.sessionId && !controller.signal.aborted && (isSapMethod ? this.#options.workspace?.capabilityPolicy === 'source-reader' : !this.#options.workspace) && (!this.#options.protectedExecution || managedGraph || ordinarySearch) && this.#options.projectId && this.#options.taskId && port && (!requiresToolIdentity || typeof raw.toolCallId === 'string' && raw.toolCallId.trim()) && (!isCase || current.providedContext?.case?.operationId));
+    const ordinaryReportCalculation = isReportCalculation && this.#options.protectedExecution?.profile === 'ordinary';
+    const requiresToolIdentity = isReportCalculation || isProjectFiles || isCase || isSources || isSemantic || isSapMethod || isStudio || isWebSearch;
+    const sourceWorkspace = this.#options.workspace?.capabilityPolicy === 'source-reader' && !this.#options.protectedExecution;
+    const scopedRead = sourceWorkspace && semanticRead && ['find', 'read', 'trace'].includes(raw.action);
+    const workspaceAllowed = isSapMethod ? sourceWorkspace : scopedRead || !this.#options.workspace;
+    const available = () => Boolean(knownFeature && !this.#closed && child === this.#child && child.connected && current && !current.cancelRequested &&
+      this.#running === current && raw.requestId === current.id && raw.sessionId === this.#snapshot?.sessionId && !controller.signal.aborted &&
+      workspaceAllowed && (!this.#options.protectedExecution || managedGraph || ordinarySearch || ordinaryReportCalculation) && this.#options.projectId && (scopedRead || this.#options.taskId) &&
+      port && (!requiresToolIdentity || typeof raw.toolCallId === 'string' && raw.toolCallId.trim()) && (!isCase || current.providedContext?.case?.operationId) &&
+      (!isReportCalculation || current.providedContext?.reportCalculationReview?.contract === 'foreground-report-calculation-v1'));
     if (typeof raw.id !== 'string' || this.#personalRequests.has(raw.id)) return;
     const reply = (value: object) => { if (child.connected) child.send({ kind: 'personal-context-reply', id: raw.id, ...value }, () => {}); };
-    const actions = isProjectFiles ? ['read-input', 'read-catalog', 'write-report'] : isWebSearch ? ['search', 'fetch'] : isStudio ? [...STUDIO_ACTIONS] : isSapMethod ? ['catalog', 'read-session', 'find-memory', 'read-memory', 'find-methods', 'read-method'] : isCase ? ['read', 'save'] : isSemantic ? ['find', 'read', 'trace', 'record', ...(semanticRead ? ['graph'] : [])] : ['find', 'read'];
+    const actions = isReportCalculation ? ['prepare', 'validate'] : isProjectFiles ? ['read-input', 'read-catalog', 'write-report'] : isWebSearch ? ['search', 'fetch'] : isStudio ? [...STUDIO_ACTIONS] : isSapMethod ? ['catalog', 'read-session', 'find-memory', 'read-memory', 'find-methods', 'read-method'] : isCase ? ['read', 'save'] : isSemantic ? ['find', 'read', 'trace', 'record', ...(semanticRead ? ['graph'] : [])] : ['find', 'read'];
     if (!available() || !actions.includes(raw.action) || !raw.input || typeof raw.input !== 'object' || Array.isArray(raw.input)) { reply({ error: errorCode }); return; }
-    const request: HostContextRequest = { controller, owned: Boolean(isProjectFiles || semanticRead || isStudio || isWebSearch), completion: Promise.resolve(), settled: false };
+    const request: HostContextRequest = { controller, owned: Boolean(isReportCalculation || isProjectFiles || semanticRead || isStudio || isWebSearch), completion: Promise.resolve(), settled: false };
     this.#personalRequests.set(raw.id, request);
     request.completion = (async () => {
       let response: object;
+      let currentDelivery: ReportCalculationPrepared['withCurrentDelivery'];
       try {
         const assertCurrent = () => { if (!available()) throw new ProjectRuntimeError(errorCode); };
         const context = { signal: controller.signal, requestId: current!.id, sessionId: this.#snapshot!.sessionId, toolCallId: raw.toolCallId, assertCurrent,
@@ -136,7 +146,34 @@ export class ProjectAgent {
             request.cleanup = cleanup;
             if (controller.signal.aborted) void this.#cleanupPersonalRequest(request).catch(() => {});
           } } : {}) };
-        const result = isProjectFiles ? await this.#options.projectFiles!(raw.action, raw.input, context) : isWebSearch
+        const result = isReportCalculation ? await (async () => {
+          if (raw.action === 'prepare') {
+            if (current!.reportReview) throw new ProjectRuntimeError('report_calculation_already_attempted');
+            const binding: { toolCallId: string; prepared?: ReportCalculationPrepared } = { toolCallId: raw.toolCallId };
+            current!.reportReview = binding;
+            try {
+              const prepared = await this.#options.reportCalculationReview!(raw.input as ReportCalculationSelection, { ...context, providedContext: current!.providedContext });
+              assertCurrent();
+              if (typeof prepared.prompt !== 'string' || !prepared.prompt.trim() || prepared.prompt.length > 20_000 || typeof prepared.assertFeedbackCurrent !== 'function') throw new ProjectRuntimeError('report_calculation_materials_unavailable');
+              await prepared.assertFeedbackCurrent();
+              assertCurrent();
+              const packet = { prompt: prepared.prompt, receipt: prepared.receipt };
+              if (Buffer.byteLength(JSON.stringify(packet), 'utf8') > 256 * 1024) throw new ProjectRuntimeError('personal_context_payload_limit');
+              binding.prepared = prepared;
+              currentDelivery = prepared.withCurrentDelivery;
+              return packet;
+            } catch (error) {
+              if (current!.reportReview === binding) current!.reportReview = undefined;
+              throw error;
+            }
+          }
+          const binding = current!.reportReview;
+          if (!binding?.prepared || binding.toolCallId !== raw.toolCallId) throw new ProjectRuntimeError('report_calculation_run_unavailable');
+          await binding.prepared.assertFeedbackCurrent();
+          assertCurrent();
+          currentDelivery = binding.prepared.withCurrentDelivery;
+          return { receipt: binding.prepared.receipt };
+        })() : isProjectFiles ? await this.#options.projectFiles!(raw.action, raw.input, context) : isWebSearch
           ? raw.action === 'search' ? await this.#options.webSearch!.search(raw.input.query, controller.signal)
             : await this.#options.webSearch!.fetchPage(raw.input.url, controller.signal)
           : isStudio ? await this.#options.studio!(raw.action, raw.input, context) : isSapMethod ? await this.#options.sapMethodSources!(raw.action, raw.input, context) : isCase ? await this.#options.caseDecisions!(raw.action, raw.input, { ...context, caseOperationId: current!.providedContext!.case!.operationId }) : isSemantic ? semanticRead ? await semanticRead(raw.action, raw.input, context) : await this.#options.semanticContext!(raw.action, raw.input, context) : isSources ? await this.#options.caseSources!(raw.action, raw.input, context) : await this.#options.personalContext!(raw.action, raw.input, { signal: controller.signal });
@@ -158,7 +195,14 @@ export class ProjectAgent {
       }
       // A revoked run can receive an error acknowledgement, never late content.
       if (controller.signal.aborted || this.#running !== current || this.#closed) response = { error: errorCode };
-      reply(response);
+      if (currentDelivery && 'result' in response) {
+        try { await currentDelivery(() => { if (!available()) throw new ProjectRuntimeError(errorCode); reply(response); }); }
+        catch (error) {
+          if (raw.action === 'prepare' && current && current.reportReview?.toolCallId === raw.toolCallId) current.reportReview = undefined;
+          const code = (error as { code?: unknown }).code;
+          reply({ error: typeof code === 'string' && /^[a-z0-9_]{1,100}$/.test(code) ? code : errorCode });
+        }
+      } else reply(response);
     })();
     await request.completion;
   }
@@ -217,9 +261,11 @@ export class ProjectAgent {
     });
     await ready;
     this.#editorReady = true;
-    const { personalContext, caseDecisions, caseSources, semanticContext, semanticContextRead, sapMethodSources, studio, webSearch, projectFiles, ...serializable } = o;
+    const { personalContext, caseDecisions, caseSources, semanticContext, semanticContextRead, sapMethodSources, studio, webSearch, projectFiles, reportCalculationReview, ...serializable } = o;
     const ordinary = !o.workspace && !o.protectedExecution && o.projectId && o.taskId;
-    const wire: ProjectAgentWireOptions = { ...serializable, projectFilesEnabled: Boolean(projectFiles && ordinary), webSearchEnabled: Boolean(webSearch && !o.workspace && (!o.protectedExecution || o.protectedExecution.profile === 'ordinary') && o.projectId && o.taskId), studioEnabled: Boolean(studio && ordinary), personalContextEnabled: Boolean(personalContext && ordinary), caseDecisionsEnabled: Boolean(caseDecisions && ordinary), experienceLearningEnabled: Boolean(caseSources && ordinary), semanticContextEnabled: Boolean(semanticContext && ordinary), semanticContextReadEnabled: Boolean(semanticContextRead && !o.workspace && (!o.protectedExecution || o.protectedExecution.profile === 'ordinary') && o.projectId && o.taskId), sapMethodSourcesEnabled: Boolean(sapMethodSources && o.workspace?.capabilityPolicy === 'source-reader' && !o.protectedExecution) };
+    const sourceWorkspace = o.workspace?.capabilityPolicy === 'source-reader' && !o.protectedExecution;
+    const graphWorkspace = !o.workspace && (!o.protectedExecution || o.protectedExecution.profile === 'ordinary') && o.taskId;
+    const wire: ProjectAgentWireOptions = { ...serializable, reportCalculationReviewEnabled: Boolean(reportCalculationReview && graphWorkspace && o.projectId), projectFilesEnabled: Boolean(projectFiles && ordinary), webSearchEnabled: Boolean(webSearch && graphWorkspace && o.projectId), studioEnabled: Boolean(studio && ordinary), personalContextEnabled: Boolean(personalContext && ordinary), caseDecisionsEnabled: Boolean(caseDecisions && ordinary), experienceLearningEnabled: Boolean(caseSources && ordinary), semanticContextEnabled: Boolean(semanticContext && ordinary), semanticContextReadEnabled: Boolean(semanticContextRead && o.projectId && (sourceWorkspace || graphWorkspace)), sapMethodSourcesEnabled: Boolean(sapMethodSources && sourceWorkspace) };
     this.#snapshot = await this.#rpc('open', wire);
     return this.#presentSnapshot(this.#snapshot!);
   }

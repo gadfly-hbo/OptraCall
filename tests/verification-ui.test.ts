@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { startTestHost } from './fixtures/host-process.ts';
+import { startTestHost, startLegacyTestHost } from './fixtures/host-process.ts';
 import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
 import { prepareJointContext, readJson } from './fixtures/joint-context.ts';
 import { downloadVerificationAuthorFile, listVerifications, previewVerification, readSapProvision, readVerification, startVerification, verificationAction, verificationFiles, verificationInputError, VerificationRequestError, VerificationSubmissionUnknown, type VerificationInput, type VerificationRecord } from '../src/host/ui/verification-client.ts';
@@ -190,7 +190,7 @@ test('SV03 SAP display reads only supplied provenance and cannot fill unknowns f
 });
 
 test('SV03 preview through the real Host creates neither a model request nor a verification record', { timeout: 60_000 }, async t => {
-  const host = await startTestHost(), provider = await startSyntheticProvider();
+  const host = await startLegacyTestHost(), provider = await startSyntheticProvider();
   t.after(async () => { await host.close(); await provider.close(); });
   const f = await prepareJointContext(host, provider.baseUrl);
   await readJson(await host.request(`/api/projects/${f.project.id}/files/save-report`, 'POST', { name: 'preview-author.md', text: 'PREVIEW_AUTHOR_ANSWER_NOT_SEMANTICS' }), 201);

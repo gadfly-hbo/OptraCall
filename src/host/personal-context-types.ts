@@ -10,5 +10,5 @@ export type PersonalContextRange = { start: number; end: number };
 export type PersonalContextSelection = { target: PersonalContextTarget; range?: PersonalContextRange };
 export type PersonalContextFindInput = { query?: string; kind?: 'all' | 'knowledge' | 'experience'; includeArchived?: boolean; pageSize?: number; continuation?: string | null };
 export type PersonalContextReadInput = PersonalContextSelection & { part?: 'content' | 'corrections' | 'source'; sourceIndex?: number; continuation?: string | null };
-export type PersonalContextReadOptions = { signal?: AbortSignal; budget?: NativeSnapshotReadBudget };
+export type PersonalContextReadOptions = { signal?: AbortSignal; budget?: NativeSnapshotReadBudget; retainedOnly?: boolean };
 export type PersonalContextResult = { text: string; details: PersonalContextDelivery };

@@ -16,6 +16,7 @@ import type { CaseDecisionTarget } from './case-decision-types.ts';
 import { parsePersonalContextReadInput } from './personal-context-validation.ts';
 
 export type SemanticQueryOptions = { signal?: AbortSignal; audience?: 'human' | 'agent'; assertCurrent?: () => void };
+export type RequirementSourceScope = { caseHistory: boolean; approvedTargets: readonly SemanticTarget[] };
 export type SemanticContextServiceOptions = {
   projects: ProjectStore; data: ProjectDataContextStore; enterprise: EnterpriseMaterialsStore; cases: CaseStore;
   metricLibrary?: Pick<ReturnType<typeof createMetricLibrary>, 'list' | 'read'> | (() => Pick<ReturnType<typeof createMetricLibrary>, 'list' | 'read'>);
@@ -54,18 +55,46 @@ function caseTarget(target: CaseDecisionTarget): SemanticTarget | null {
   if (target.type === 'feedback') return { kind: 'source', source: { type: 'feedback', sourceProjectId: target.sourceProjectId, boardTaskId: target.boardTaskId, feedbackRevisionId: target.feedbackRevisionId } };
   return null;
 }
+function inRequirementScope(target: SemanticTarget, scope: RequirementSourceScope): boolean {
+  if (target.kind === 'sap' || target.kind === 'sap-method' || target.kind === 'enterprise') return true;
+  if (target.kind === 'case-decision' || target.kind === 'case-choice') return scope.caseHistory;
+  if (target.kind === 'personal') return target.target.type === 'retained';
+  return 'projectId' in target && scope.approvedTargets.some(approved => canonical(approved) === canonical(target));
+}
+
 export class SemanticContextService {
   readonly options: SemanticContextServiceOptions;
   constructor(options: SemanticContextServiceOptions) { this.options = options; }
   async query(projectId: string, taskId: string, input: SemanticQueryInput, options: SemanticQueryOptions = {}): Promise<SemanticQueryResult> {
+    return this.#query(projectId, taskId, input, options);
+  }
+
+  /** Requirement instances have no project/task read authority by default. */
+  async queryRequirement(input: SemanticQueryInput, scope: RequirementSourceScope, options: SemanticQueryOptions = {}): Promise<SemanticQueryResult> {
+    input = parseSemanticQueryInput(input);
+    if (input.target && !inRequirementScope(input.target, scope)) throw new SemanticContextFault('semantic_context_read_not_authorized', 403);
+    const projectId = input.target && 'projectId' in input.target ? input.target.projectId : null;
+    async function qualifyProject(projects: ProjectStore) {
+      options.signal?.throwIfAborted(); options.assertCurrent?.();
+      if (projectId && (await projects.get(projectId)).archivedAt !== null) throw new SemanticContextFault('semantic_context_read_not_authorized', 403);
+    }
+    await qualifyProject(this.options.projects);
+    const result = await this.#query(projectId, scope, input, { ...options, audience: 'agent' }, scope);
+    await qualifyProject(this.options.projects);
+    options.signal?.throwIfAborted(); options.assertCurrent?.();
+    return result;
+  }
+
+  async #query(projectId: string | null, binding: string | RequirementSourceScope, input: SemanticQueryInput, options: SemanticQueryOptions, requirement?: RequirementSourceScope): Promise<SemanticQueryResult> {
     input = parseSemanticQueryInput(input);
     if (input.target?.kind === 'source') input = { ...input, target: { kind: 'source', source: learningSourceRef(input.target.source) } };
     if (input.target?.kind === 'personal') input = { ...input, target: { kind: 'personal', target: parsePersonalContextReadInput({ target: input.target.target }).target } };
     const current = () => { options.signal?.throwIfAborted(); options.assertCurrent?.(); };
-    current(); await this.options.projects.getTask(projectId, taskId); current();
+    current();
+    if (projectId !== null && typeof binding === 'string') { await this.options.projects.getTask(projectId, binding); current(); }
     const directoryGaps: string[] = [];
     const sourceContinuations: NonNullable<SemanticQueryResult['coverage']['sourceContinuations']> = [];
-    const index = await this.options.data.getIndex(projectId).catch(error => { directoryGaps.push(errorCode(error)); return null; }); current();
+    const index = projectId === null ? null : await this.options.data.getIndex(projectId).catch(error => { directoryGaps.push(errorCode(error)); return null; }); current();
     const items: SemanticItem[] = [];
     const resolve = async (target: SemanticTarget): Promise<SemanticItem> => {
       if ('projectId' in target && target.projectId !== projectId) throw new SemanticContextFault('semantic_context_owner_mismatch', 403);
@@ -96,7 +125,13 @@ export class SemanticContextService {
         const metadata = await this.options.enterprise.referenceIndex({ readOnly: true }); current();
         if (metadata.storeId !== target.storeId) throw new SemanticContextFault('semantic_context_store_mismatch', 403);
         const material = metadata.materials.find(item => item.materialId === target.materialId);
+        if (requirement && !material?.enabled) return { ...item, state: 'disabled', gaps: ['enterprise-material-unavailable'] };
         const revision = await this.options.enterprise.readRevision(target.materialId, target.revisionId, { readOnly: true }); current();
+        if (requirement) {
+          const latest = await this.options.enterprise.referenceIndex({ readOnly: true }); current();
+          if (latest.storeId !== target.storeId || !latest.materials.some(current => current.materialId === target.materialId && current.enabled))
+            return { ...item, state: 'disabled', gaps: ['enterprise-material-unavailable'] };
+        }
         item.title = revision.title; item.sha256 = revision.bodySha256; item.body = revision.body;
         if (target.location) {
           const { start, end } = target.location;
@@ -108,21 +143,22 @@ export class SemanticContextService {
         item.governance = { enabled: material?.enabled ?? null }; item.state = material?.enabled ? 'available' : 'disabled';
         if (revision.sourceFile) item.gaps.push('source-attachment-not-extracted');
       } else if (target.kind === 'data-input') {
-        const { record, bytes } = await this.options.data.readInputEvidence(projectId, target.datasetId, target.inputVersionId); current();
+        const { record, bytes } = await this.options.data.readInputEvidence(target.projectId, target.datasetId, target.inputVersionId); current();
         item.title = record.sourcePath; item.sha256 = record.sha256; item.body = /\.xlsx$/i.test(record.sourcePath) ? null : utf8(bytes);
         item.recordedAt = { field: 'savedAt', value: record.savedAt };
         if (item.body === null) item.gaps.push('binary-or-non-utf8-original-not-extracted');
       } else if (target.kind === 'data-description') {
-        const record = await this.options.data.readDescription(projectId, target.datasetId, target.descriptionRevisionId); current();
+        const record = await this.options.data.readDescription(target.projectId, target.datasetId, target.descriptionRevisionId); current();
         if (record.inputVersionId !== target.inputVersionId) throw new SemanticContextFault('semantic_context_input_version_mismatch', 409);
         item.title = `Data description ${record.descriptionRevisionId}`; item.body = JSON.stringify(record, null, 2);
         item.sha256 = index?.datasets.find(dataset => dataset.datasetId === target.datasetId)?.descriptions.find(ref => ref.descriptionRevisionId === target.descriptionRevisionId)?.recordSha256 ?? null;
         item.recordedAt = { field: 'createdAt', value: record.createdAt };
         item.businessTime = record.statements.filter(statement => statement.scope === 'business-time').map(statement => ({ text: statement.text, source: 'statements.business-time' }));
         item.gaps.push('binding-grain-keys-units-timezones-not-automatically-verified');
-        item.relations = [relation('input', { kind: 'data-input', projectId, datasetId: target.datasetId, inputVersionId: target.inputVersionId }),
+        item.relations = [relation('input', { kind: 'data-input', projectId: target.projectId, datasetId: target.datasetId, inputVersionId: target.inputVersionId }),
           ...record.mappings.flatMap(mapping => [...mapping.conceptRefs.map(ref => relation('concept', { kind: 'enterprise', ...ref })), ...mapping.sapRefs.map(ref => relation('sap', { kind: 'sap', ...ref }))])];
       } else if (target.kind === 'data-citation') {
+        const { projectId } = target;
         const record = await this.options.data.readCitationManifest(projectId, target.citationId); current();
         item.title = record.report.originalPath; item.body = JSON.stringify(record, null, 2); item.sha256 = index?.citations.find(ref => ref.citationId === target.citationId)?.recordSha256 ?? null;
         item.recordedAt = { field: 'savedAt', value: record.savedAt }; item.declaration = { actor: record.declarer, text: record.declaration, claim: 'author-declaration' };
@@ -133,11 +169,13 @@ export class SemanticContextService {
             ...(ref.descriptionRevisionId === null ? [] : [relation('description', { kind: 'data-description', projectId, datasetId: ref.datasetId, inputVersionId: ref.inputVersionId, descriptionRevisionId: ref.descriptionRevisionId })])]),
           ...record.conceptRefs.map(ref => relation('concept', { kind: 'enterprise', ...ref })), ...record.sapRefs.map(ref => relation('sap', { kind: 'sap', ...ref }))];
       } else if (target.kind === 'data-evidence') {
+        const { projectId } = target;
         const { file, bytes } = await this.options.data.readCitationEvidenceFile(projectId, target.citationId, target.attachmentIndex); current();
         item.title = file.originalPath; item.sha256 = file.sha256; item.body = utf8(bytes);
         const record = await this.options.data.readCitationManifest(projectId, target.citationId); current(); item.recordedAt = { field: 'savedAt', value: record.savedAt };
         if (item.body === null) item.gaps.push('binary-or-non-utf8-original-not-extracted');
       } else if (target.kind === 'source') {
+        if (projectId === null) throw new SemanticContextFault('semantic_context_read_not_authorized', 403);
         const source = learningSourceRef(target.source); assertSourceOwner(source, projectId);
         if (source.type === 'enterprise' || source.type === 'citation' || source.type === 'case-decision' || source.type === 'case-choice') {
           const exact = source.type === 'citation' ? { kind: 'data-evidence' as const, projectId: source.projectId, citationId: source.citationId, attachmentIndex: source.target.type === 'report' ? null : source.target.attachmentIndex } : sourceTarget(source);
@@ -183,14 +221,20 @@ export class SemanticContextService {
         // The original M4 reader uses Enterprise load internally. Only call it
         // after all original directories/index already exist and validate.
         await this.options.enterprise.referenceIndex({ readOnly: true }); current();
-        const original = await this.options.personal.read({ target: target.target }, { signal: options.signal }); current();
+        const original = await this.options.personal.read({ target: target.target }, { signal: options.signal, ...(requirement ? { retainedOnly: true } : {}) }); current();
         const metadata = original.details.items[0];
+        if (requirement && (!metadata || metadata.governance.archived || target.target.type !== 'retained'))
+          return { ...item, state: 'disabled', gaps: ['personal-source-unavailable'] };
         item.title = metadata?.title ?? null; item.body = original.text;
+        if (requirement && target.target.type === 'retained') item.sha256 = target.target.expectedBodySha256;
         item.governance = metadata?.governance ?? null;
         item.businessTime = metadata?.effectiveTime ? [{ text: metadata.effectiveTime, source: 'original-M4-effectiveTime' }] : [];
         item.gaps.push('original-m4-tool-payload-not-raw-source-body', ...original.details.issues.map(issue => issue.code));
         if (original.details.partial) item.state = 'partial';
-        if (original.details.continuation) sourceContinuations.push({ tool: 'read_personal_context', input: { target: target.target, continuation: original.details.continuation } });
+        if (original.details.continuation) {
+          if (requirement) item.gaps.push('personal-original-content-continues-beyond-provided-fragment');
+          else sourceContinuations.push({ tool: 'read_personal_context', input: { target: target.target, continuation: original.details.continuation } });
+        }
       } else { item.state = 'unknown'; item.gaps.push('source-adapter-unavailable'); }
       return item;
       } catch (error) { current(); if (error instanceof SemanticContextFault) throw error; return sourceFailure(target, error); }
@@ -202,7 +246,8 @@ export class SemanticContextService {
         if (ref.target) {
           try {
             if ('projectId' in ref.target && ref.target.projectId !== projectId) throw new SemanticContextFault('semantic_context_owner_mismatch', 403);
-            if (ref.target.kind === 'source') assertSourceOwner(ref.target.source, projectId);
+            if (requirement && !inRequirementScope(ref.target, requirement)) throw new SemanticContextFault('semantic_context_read_not_authorized', 403);
+            if (ref.target.kind === 'source' && projectId !== null) assertSourceOwner(ref.target.source, projectId);
           } catch { ref.state = 'forbidden'; }
         }
       }
@@ -235,13 +280,13 @@ export class SemanticContextService {
         let metadata: Awaited<ReturnType<EnterpriseMaterialsStore['referenceIndex']>> | null = null;
         try { metadata = await this.options.enterprise.referenceIndex({ readOnly: true }); current(); }
         catch (error) { current(); directoryGaps.push(errorCode(error)); }
-        if (metadata) for (const material of metadata.materials) for (const revision of material.revisions) if (matches(revision.title, revision.scope)) {
+        if (metadata) for (const material of metadata.materials) for (const revision of material.revisions) if ((!requirement || material.enabled) && matches(revision.title, revision.scope)) {
           items.push({ ...blank({ kind: 'enterprise', storeId: metadata.storeId, materialId: material.materialId, revisionId: revision.revisionId }), title: revision.title, sha256: revision.bodySha256,
             recordedAt: revision.createdAt ? { field: 'createdAt', value: revision.createdAt } : null,
             businessTime: revision.effectiveTime ? [{ text: revision.effectiveTime, source: 'effectiveTime' }] : [], governance: { enabled: material.enabled }, state: material.enabled ? 'available' : 'disabled' });
         }
       }
-      if (index) {
+      if (index && projectId !== null) {
         for (const dataset of index.datasets) if (matches(dataset.name, dataset.sourcePath, dataset.datasetId)) {
           if (wants('data-input')) for (const version of dataset.versions) items.push({ ...blank({ kind: 'data-input', projectId, datasetId: dataset.datasetId, inputVersionId: version.inputVersionId }), title: dataset.name, sha256: version.recordSha256, gaps: ['directory-has-no-version-saved-time-read-exact-target'] });
           if (wants('data-description')) for (const description of dataset.descriptions) items.push({ ...blank({ kind: 'data-description', projectId, datasetId: dataset.datasetId, inputVersionId: description.inputVersionId, descriptionRevisionId: description.descriptionRevisionId }), title: `${dataset.name} / ${description.descriptionRevisionId}`, sha256: description.recordSha256, gaps: ['directory-has-no-description-saved-time-read-exact-target'] });
@@ -251,34 +296,47 @@ export class SemanticContextService {
           if (row.state !== 'available' || matches(row.title ?? '', ref.citationId)) items.push({ ...row, body: null, declaration: null, relations: [] });
         }
       }
-      if ((wants('case-decision') || wants('case-choice')) && this.options.cases.getStatus().state === 'ready') {
-        const caseIds = [...new Set(this.options.cases.listProjectLinks().filter(link => link.projectId === projectId).map(link => link.caseId))];
+      if (requirement) {
+        for (const target of requirement.approvedTargets) {
+          if (!('projectId' in target) || !wants(target.kind)) continue;
+          try {
+            const project = await this.options.projects.get(target.projectId); current();
+            if (project.archivedAt === null) items.push({ ...blank(target), state: 'unknown', gaps: ['approved-locator-only-read-to-verify-content'] });
+          } catch (error) { current(); directoryGaps.push(errorCode(error)); }
+        }
+        if (['data-input', 'data-description', 'data-citation', 'data-evidence'].some(kind => wants(kind as SemanticTarget['kind'])) && !requirement.approvedTargets.length)
+          directoryGaps.push('no-project-materials-authorized-for-this-requirement');
+      }
+      if ((wants('case-decision') || wants('case-choice')) && (!requirement || requirement.caseHistory) && this.options.cases.getStatus().state === 'ready') {
+        const caseIds = requirement ? [undefined] : [...new Set(this.options.cases.listProjectLinks().filter(link => link.projectId === projectId).map(link => link.caseId))];
         for (const caseId of caseIds) {
           let offset = 0;
           for (;;) {
             const rows = this.options.cases.listDecisionSourceEntries({ caseId, query: input.query ?? '', includeArchived: true, offset, pageSize: 51 });
             for (const row of rows) if (wants(row.target.type)) items.push({ ...blank(sourceTarget(row.target)), title: row.title, governance: { caseStatus: row.case.status, lifecycle: row.lifecycle }, gaps: ['directory-has-no-decision-saved-time-read-exact-target'] });
+            current();
             if (rows.length < 51) break; offset += rows.length;
           }
         }
       } else if (wants('case-decision') || wants('case-choice')) {
-        directoryGaps.push(`case-directory-${this.options.cases.getStatus().state}`);
+        directoryGaps.push(requirement && !requirement.caseHistory ? 'case-history-not-authorized' : `case-directory-${this.options.cases.getStatus().state}`);
       }
       if (wants('personal') && this.options.personal) {
-        const originalInput: PersonalContextFindInput = { query: input.query ?? '', kind: 'all', includeArchived: true, pageSize: 50 };
+        const originalInput: PersonalContextFindInput = { query: input.query ?? '', kind: 'all', includeArchived: !requirement, pageSize: 50 };
         try {
           await this.options.enterprise.referenceIndex({ readOnly: true }); current();
-          const original = await this.options.personal.find(originalInput, { signal: options.signal }); current();
-          for (const row of original.details.items) items.push({ ...blank({ kind: 'personal', target: row.target }), title: row.title, governance: row.governance,
+          const original = await this.options.personal.find(originalInput, { signal: options.signal, ...(requirement ? { retainedOnly: true } : {}) }); current();
+          for (const row of original.details.items) if (!requirement || row.target.type === 'retained') items.push({ ...blank({ kind: 'personal', target: row.target }), title: row.title, governance: row.governance,
             businessTime: row.effectiveTime ? [{ text: row.effectiveTime, source: 'original-M4-effectiveTime' }] : [], gaps: [...row.limitations, 'personal-directory-has-no-qualified-system-time'] });
           directoryGaps.push(...original.details.issues.map(issue => issue.code));
           if (original.details.partial) directoryGaps.push('original-personal-directory-partial');
-          if (original.details.continuation) sourceContinuations.push({ tool: 'find_personal_context', input: { ...originalInput, continuation: original.details.continuation } });
+          if (!requirement && original.details.continuation) sourceContinuations.push({ tool: 'find_personal_context', input: { ...originalInput, continuation: original.details.continuation } });
         } catch (error) { current(); directoryGaps.push(errorCode(error), 'personal-original-reader-not-initialized-by-semantic-query'); }
       }
     }
     current();
-    const result = semanticPage(input, items, { identity: sha(canonical({ projectId, taskId, input: { ...input, continuation: null } })), version: sha(canonical({ items, indexRevision: index?.revision ?? null })) }, index?.revision ?? null);
+    const identity = typeof binding === 'string' ? { projectId, taskId: binding } : { projectId, requirement: binding };
+    const result = semanticPage(input, items, { identity: sha(canonical({ ...identity, input: { ...input, continuation: null } })), version: sha(canonical({ items, indexRevision: index?.revision ?? null })) }, index?.revision ?? null);
     result.coverage.gaps.push(...new Set([...items.flatMap(item => item.gaps), ...directoryGaps]));
     if (sourceContinuations.length) {
       result.coverage.sourceContinuations = sourceContinuations.slice(0, 20); result.coverage.complete = false; result.state = 'partial';

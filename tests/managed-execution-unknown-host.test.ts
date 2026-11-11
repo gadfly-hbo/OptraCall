@@ -4,7 +4,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { startTestHost } from './fixtures/host-process.ts';
+import { startLegacyTestHost as startTestHost } from './fixtures/host-process.ts'; // Explicit pre-cutover contract; default Host is tested separately.
 import { readJson } from './fixtures/joint-context.ts';
 
 type WireMessage = { role: string; content?: unknown; tool_call_id?: string };
@@ -87,11 +87,18 @@ test('a missing managed tool result stays failed through HTTP task/native readba
   const requestId = randomUUID();
   await readJson(await host.request(`${taskRoute}/messages`, 'POST', { requestId, text: 'SYNTHETIC_MISSING_EXECUTOR_RESULT：运行本次合成工具检查，然后给出最终回复。' }), 202);
   await until(async () => provider.requests.length, count => count === 1, 'first model request');
-  const started = await until(async () => readJson(await host.request(taskRoute)), value => typeof value.task.sessionFile === 'string', 'native session registration');
+  const observeTask = async () => {
+    const response = await host.request(taskRoute);
+    // A safe snapshot can be unavailable while this same native writer appends.
+    // Only repeat this read; every work/model request assertion stays unchanged.
+    if (response.status === 409 && (await response.clone().json()).code === 'session_history_unavailable') return undefined;
+    return readJson(response);
+  };
+  const started = await until(observeTask, value => typeof value?.task.sessionFile === 'string', 'native session registration');
   nativeFile = started.task.sessionFile; prefix = await readFile(nativeFile!);
   assert.ok(prefix.length > 0);
   provider.release();
-  finalTask = await until(async () => readJson(await host.request(taskRoute)), value => value.task.lastRun?.id === requestId && value.task.lastRun.status !== 'running', 'failed task readback');
+  finalTask = await until(observeTask, value => value?.task.lastRun?.id === requestId && value.task.lastRun.status !== 'running', 'failed task readback');
   automaticStatus = await readJson(await host.request(`${route}/status`));
   chains = (await readJson(await host.request(`${route}/chains`))).chains;
   assert.ok(['failed', 'unknown'].includes(finalTask.task.lastRun.status), JSON.stringify(finalTask.task.lastRun));

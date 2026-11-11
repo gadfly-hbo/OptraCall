@@ -274,7 +274,19 @@ test('FC04/FC18: schema1 upgrade preserves original DDL/rows and one honest know
   store.close(); await store.init();
   assert.deepEqual(store.listFeedbackHistory(fixture.taskId), [baseline, next]);
   const db = new DatabaseSync(fixture.file, { readOnly: true });
-  try { assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 2); assert.deepEqual(legacySnapshot(db), fixture.before); } finally { db.close(); }
+  try {
+    assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 3);
+    const expected = fixture.before.map(table => table.name !== 'board_items' ? table : {
+      ...table,
+      sql: Object.assign(Object.create(null), { sql: String(table.sql!.sql)
+        .replace('CREATE TABLE board_items (', 'CREATE TABLE "board_items" (')
+        .replace("source_kind IN ('extracted','manual')", "source_kind IN ('extracted','manual','report-confirmation')")
+        .replace(' evidence_json TEXT,', ' evidence_json TEXT,\n report_confirmation_json TEXT,')
+        .replace(" CHECK((status='dismissed'", " CHECK((source_kind='report-confirmation' AND report_confirmation_json IS NOT NULL AND confidence IS NULL AND evidence_level IS NULL AND evidence_json IS NULL) OR (source_kind!='report-confirmation' AND report_confirmation_json IS NULL)),\n CHECK((status='dismissed'") }),
+      rows: table.rows.map(row => Object.assign(Object.create(null), row, { report_confirmation_json: null })),
+    });
+    assert.deepEqual(legacySnapshot(db), expected, 'all old values and DDL remain exact except the explicit schema3 board source/metadata addition');
+  } finally { db.close(); }
 });
 
 test('FC18: unknown schema objects fail before migration and close the failed connection', async t => {

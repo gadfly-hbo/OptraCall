@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { startTestHost } from './fixtures/host-process.ts';
+import { startTestHost, startLegacyTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 
 const ANALYSIS_ASSETS = path.resolve(process.cwd(), 'extensions/analysis-assets');
@@ -108,7 +108,7 @@ for (const flow of flows) test('TF11: SDK task reads ' + flow.skill + ', calcula
 
 test('TF01: a managed product task discovers all three skills from protected snapshots', { skip: process.platform !== 'darwin', timeout: 60_000 }, async t => {
   const provider = await startToolProvider(); t.after(() => provider.close());
-  const host = await startTestHost({ timeoutMs: 15_000 }); t.after(() => host.close());
+  const host = await startLegacyTestHost({ timeoutMs: 15_000 }); t.after(() => host.close());
   await json(await host.request('/api/configuration', 'PUT', { name: '受管发现合成', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-tf-model', apiKey: 'synthetic-tf-key' }));
   const { project } = await json(await host.request('/api/projects', 'POST', { name: '受管测算发现' }), 201);
   const { task } = await json(await host.request('/api/projects/' + project.id + '/tasks', 'POST', { name: '只核对skill发现' }), 201);

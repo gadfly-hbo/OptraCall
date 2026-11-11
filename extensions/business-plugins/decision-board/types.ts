@@ -3,7 +3,7 @@ export type Priority = 'high' | 'medium' | 'low';
 export type ItemStatus = 'suggested' | 'adopted' | 'dismissed';
 export type TaskStatus = 'todo' | 'doing' | 'done';
 export type ExtractionStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
-export type SourceKind = 'extracted' | 'manual';
+export type SourceKind = 'extracted' | 'manual' | 'report-confirmation';
 
 export const EVIDENCE_LEVELS: readonly EvidenceLevel[] = ['数据支撑', '多源佐证', '逻辑推断', '经验假设'];
 export const PRIORITIES: readonly Priority[] = ['high', 'medium', 'low'];
@@ -33,6 +33,7 @@ export type BoardItemRecord = {
   title: string; rationale: string; expectedImpact: string;
   priority: Priority; effort: string | null;
   confidence: number | null; evidenceLevel: EvidenceLevel | null; evidence: Evidence | null;
+  reportConfirmation?: ReportConfirmationSource;
   status: ItemStatus; dismissedReason: string | null; decidedAt: string | null;
   createdAt: string; updatedAt: string;
 };
@@ -65,4 +66,38 @@ export type NormalizedItem = {
   title: string; rationale: string; expectedImpact: string;
   priority: Priority; effort: string | null;
   evidence: Evidence;
+};
+
+/** Original review provenance. Review verdicts are never evidence levels. */
+export type ConfirmedReviewEvidence = {
+  materialId: string; locator: string; quote?: string;
+  sourceLocator: string; sourceSha256?: string;
+  rangeUtf16?: { start: number; end: number; total: number };
+};
+export type ConfirmedReviewClaim = {
+  claimId: string; text: string; location: string;
+  verdict: 'supported' | 'conditional'; conditions: string[];
+  evidence: ConfirmedReviewEvidence[]; reason: string; impact: string;
+};
+export type ConfirmReportConclusionsInput = {
+  operationId: string; projectId: string; taskId: string; reviewId: string;
+  report: { relativePath: string; sha256: string; bytes: number; observedSha256: string; observedBytes: number };
+  confirmedBy: string;
+  conclusions: ConfirmedReviewClaim[];
+  recommendations?: (ConfirmedReviewClaim & { conclusionClaimIds: string[] })[];
+};
+export type ConfirmedConclusionRecord = ConfirmedReviewClaim & {
+  id: string; reportId: number; projectId: string; taskId: string; reviewId: string;
+  reportSha256: string; reportBytes: number; relativePath: string;
+  confirmedBy: string; confirmedAt: string;
+};
+export type ReportConfirmationSource = ConfirmedReviewClaim & {
+  taskId: string; reviewId: string; reportSha256: string; reportBytes: number; relativePath: string;
+  conclusionIds: string[]; conclusionClaimIds: string[]; confirmedBy: string; confirmedAt: string;
+};
+export type ReportConfirmationReceipt = {
+  operationId: string; requestSha256: string; projectId: string; taskId: string; reviewId: string;
+  reportId: number; reportSha256: string; confirmedBy: string; confirmedAt: string;
+  claimIds: string[]; recommendationClaimIds: string[];
+  conclusionIds: string[]; boardItemIds: string[]; addedConclusionIds: string[]; addedBoardItemIds: string[];
 };

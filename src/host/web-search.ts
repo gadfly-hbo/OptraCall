@@ -1,5 +1,5 @@
-import { isIP } from 'node:net';
 import path from 'node:path';
+import { isPublicWebUrl } from '../agent/public-web-url.ts';
 import { TARGET_MODELS, type RuntimeModelConfiguration } from './config-store.ts';
 import { atomicJson, isMissing, object, parse, readBytes, safePath } from './project-data-context-io.ts';
 
@@ -16,7 +16,6 @@ const timeoutMs = 12_000;
 const maximumResponseBytes = 2 * 1024 * 1024;
 const maximumMarkdownBytes = 128 * 1024;
 const maximumToolReceiptBytes = 240 * 1024;
-const maximumUrlLength = 8192;
 const count = 10;
 
 const messages = {
@@ -65,16 +64,6 @@ function validOrder(value: unknown): value is SearchProvider[] {
   return Array.isArray(value) && value.length === 2 && value.includes('minimax') && value.includes('deepseek');
 }
 
-function publicUrl(value: unknown): value is string {
-  if (typeof value !== 'string' || value.length > maximumUrlLength || !/^https?:\/\/[^/?#@]+(?:[/?#]|$)/i.test(value) || /[\s\\\x00-\x1f\x7f]/.test(value)) return false;
-  try {
-    const url = new URL(value), host = url.hostname.replace(/\.$/, '');
-    return !url.username && !url.password && !isIP(host.replace(/^\[|\]$/g, ''))
-      && /^(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(host)
-      && !/\.(?:local|localhost|localdomain|internal|lan|home|arpa|test|invalid|example|onion)$/i.test(host);
-  } catch { return false; }
-}
-
 function httpFailure(status: number, page: boolean): ErrorCode {
   switch (status) {
     case 401: return 'auth_invalid';
@@ -109,7 +98,7 @@ function projectHits(value: unknown, provider: SearchProvider, apiKey: string): 
   return rows.slice(0, count).map((row: unknown) => {
     if (!object(row)) throw new SearchFault('malformed_response');
     const url = provider === 'minimax' ? row.link : row.url;
-    if (!publicUrl(url) || url.includes(apiKey) || typeof row.title !== 'string' || typeof row.snippet !== 'string') {
+    if (!isPublicWebUrl(url) || url.includes(apiKey) || typeof row.title !== 'string' || typeof row.snippet !== 'string') {
       throw new SearchFault('malformed_response');
     }
     return {
@@ -255,7 +244,7 @@ export function createWebSearch(options: {
 
   async function fetchPage(url: string, signal?: AbortSignal): Promise<WebFetchResult> {
     if (signal?.aborted) return failure('cancelled');
-    if (!publicUrl(url)) return failure('invalid_url');
+    if (!isPublicWebUrl(url)) return failure('invalid_url');
     const key = credential('deepseek');
     if (!key) return failure('not_configured', [{ provider: 'deepseek', status: 'not_configured', error: detail('not_configured') }]);
     if (url.includes(key)) return failure('invalid_url');

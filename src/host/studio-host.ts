@@ -11,7 +11,7 @@ import type { SemanticContextCallContext } from '../agent/semantic-context.ts';
 import { studioOperations } from './studio-operations.ts';
 import { studioExtractions, studioExtractionId, extractionSummary, extractionResponse, extractionPage, studioTextPage, studioJsonPage } from './studio-extractions.ts';
 import { uuid, text, object, sourceRef, sources as parseSources, digest } from '../../extensions/business-plugins/studio/validation.ts';
-import { createStudioSources } from './studio-sources.ts';
+import { createStudioSources, type StudioSourceDependencies } from './studio-sources.ts';
 import { createMetricLibrary, MetricLibraryFault } from '../../extensions/business-plugins/metric-factory/library/store.ts';
 import { createProjectEnablement } from '../../extensions/business-plugins/metric-factory/project/enablement.ts';
 import { createSapMethodStore } from '../../extensions/business-plugins/metric-factory/methods/store.ts';
@@ -30,6 +30,7 @@ export type StudioHostOptions = {
   taskSnapshot?(projectId: string, taskId: string): Promise<ProjectSnapshot>;
   readTaskReply(projectId: string, taskId: string, selection: { sessionId: string; messageId: string }): Promise<{ text: string }>;
   readOriginal?: (ref: StudioSourceRef, projectId: string, taskId?: string) => Promise<import('./studio-sources.ts').StudioSourceRead>;
+  readRequirementRelease?: StudioSourceDependencies['readRequirementRelease'];
   extract?(system: StudioSystem, ref: StudioSourceRef, context: SemanticContextCallContext): Promise<unknown>;
   refreshGraph?(system: StudioSystem, snapshotId: string, task: TaskRecord): Promise<{ snapshotId: string; sourceRefs: StudioSourceRef[]; detail: string }>;
   inspectGraph?(systemId: string, snapshotId: string): Promise<{ snapshotId: string; sourceRefs: StudioSourceRef[]; detail: string }>;

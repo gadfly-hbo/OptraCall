@@ -18,9 +18,9 @@ const deepSeekKey = 'synthetic-web-deepseek-credential';
 const sourceUrl = 'https://example.com/releases';
 const query = 'synthetic release source';
 
-async function startHost(root: string, webSearchFetch: typeof fetch) {
+async function startHost(root: string, webSearchFetch: typeof fetch, legacy = false) {
   const host = createHost({ cwd: process.cwd(), uiPorts: [4183], transportVersion: 'synthetic-web-search-test',
-    dataRoot: path.join(root, 'host'), projectsRoot: path.join(root, 'projects'), webSearchFetch });
+    dataRoot: path.join(root, 'host'), projectsRoot: path.join(root, 'projects'), webSearchFetch, ...(legacy ? { reviewAdmission: 'legacy' as const } : {}) });
   await host.ready;
   await new Promise<void>(resolve => host.server.listen(0, '127.0.0.1', resolve));
   const address = host.server.address();
@@ -235,7 +235,7 @@ test('受管分析和有权限的子 Agent 可用网页搜索，只读角色不�
     return Response.json({ base_resp: { status_code: 0 }, organic: [
       { title: 'Synthetic managed source', link: sourceUrl, snippet: 'Managed search receipt' },
     ] });
-  });
+  }, true);
   await seedSearchCredentials(host);
   const { projectRoute, route } = await createTask(host, provider.baseUrl);
   const automatic = route + '/automatic-verification';
