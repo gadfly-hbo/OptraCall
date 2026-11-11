@@ -9,14 +9,21 @@ import type { ConfigurationStore, RuntimeModelConfiguration } from './config-sto
 import { createAgentSessionDomain, type AgentSessionDomain, type SessionContext } from './agent-sessions.ts';
 import { createMetricLibrary } from '../../extensions/business-plugins/metric-factory/library/store.ts';
 import { createProjectEnablement } from '../../extensions/business-plugins/metric-factory/project/enablement.ts';
+import type { ConclusionReviewSelection } from './conclusion-review-contract.ts';
+import type { VerificationRecord } from './verification-store.ts';
 import { authorContext, materialPreview } from './verification-context.ts';
 
 type Owner = { project: ProjectRecord; task: TaskRecord };
 export function createVerificationFeature(options: {
+  conclusionReview?: {
+    prepare(projectId: string, taskId: string, selection: ConclusionReviewSelection, ifMatch?: string): Promise<CreateVerificationInput>;
+    assertAuthorized(record: VerificationRecord): void | Promise<void>;
+    admit(owner: VerificationOwner): void | Promise<void>;
+  };
   dataRoot: string; codeRoot: string; projects: ProjectStore; cases: CaseStore; configuration: ConfigurationStore;
   projectSessions: AgentSessionDomain<Owner>;
   pair(projectId: string, taskId: string, writable?: boolean): Promise<Owner>;
-  requirementContext(input: Record<string, unknown>): string | undefined;
+  requirementContext(input: Record<string, unknown>, projectId?: string): string | undefined | Promise<string | undefined>;
   availableConfiguration(id?: string, revision?: number): Readonly<RuntimeModelConfiguration> | undefined;
   managementPorts(): number[]; mutate<T>(operation: () => T | Promise<T>): Promise<T>; isClosing(): boolean;
 }) {
@@ -52,7 +59,7 @@ export function createVerificationFeature(options: {
     const record = await store.read(owner), selection = record.selection as VerificationSelection;
     await assertSourceFiles(record);
     if (selection.requirementContext) {
-      const current = options.requirementContext({ requirementContext: selection.requirementContext });
+      const current = await options.requirementContext({ requirementContext: selection.requirementContext }, owner.projectId);
       if (!current || !record.semantics.sources.some(source => source.kind === 'rap' && source.sha256 === hash(current))) fail('verification_semantics_changed');
     }
     if (selection.caseId && cases.getCase(selection.caseId).revision !== selection.caseRevision) fail('verification_semantics_changed');
@@ -97,7 +104,7 @@ export function createVerificationFeature(options: {
     if (text.length > 20_000) fail('verification_revision_materials_too_large', 400);
     return text;
   }
-  const registration: Parameters<typeof createVerificationSessions>[0] = { store, codeRoot: options.codeRoot, resourceRoot: path.join(dataRoot, 'pi'),
+  const registration: Parameters<typeof createVerificationSessions>[0] = { conclusionReview: options.conclusionReview, store, codeRoot: options.codeRoot, resourceRoot: path.join(dataRoot, 'pi'),
     managementPorts: options.managementPorts, configuration: options.availableConfiguration, mutate, isClosing: options.isClosing,
     admit: async owner => { if (options.isClosing()) fail('host_closing', 503); await pair(owner.projectId, owner.taskId, true); },
     admitRevision: async owner => { const original = await pair(owner.projectId, owner.taskId, true); if (projectSessions.busy(projectSessions.ref(original)) || original.task.lastRun?.status === 'running') fail('session_busy'); if (!options.availableConfiguration(original.task.configuration.id, original.task.configuration.revision)) fail('configuration_required'); await assertFixedSources(owner); },
@@ -148,7 +155,7 @@ export function createVerificationFeature(options: {
         semantic.push(`用户本次补充（未自动成为企业发布事实）：\n${selection.businessContext}`); sources.push({ kind: 'user', confirmed: false });
       }
       if (selection.requirementContext) {
-        const text = options.requirementContext({ requirementContext: selection.requirementContext });
+        const text = await options.requirementContext({ requirementContext: selection.requirementContext }, projectId);
         if (!text) fail('requirement_unavailable');
         semantic.push(text!); sources.push({ kind: 'rap', id: selection.requirementContext.instanceId, ...(selection.requirementContext.version ? { version: selection.requirementContext.version } : {}), sha256: hash(text!), note: '本次明确选择，不自动证明原作者采用。' });
       }
@@ -216,6 +223,15 @@ export function createVerificationFeature(options: {
   const feature = createVerificationSessions(registration);
   const assertAvailable = () => { if (storageUnavailable) fail('verification_storage_unavailable', 503); };
   return { ...feature, assertAvailable,
+    conclusionReview: {
+      start: async (projectId: string, taskId: string, selection: ConclusionReviewSelection, ifMatch?: string) => { assertAvailable(); return feature.startReview(projectId, taskId, selection, ifMatch); },
+      read: feature.readReview, list: feature.listReviews, stop: feature.stopReview, readFixedReport: feature.readFixedReviewReport, revalidateActive: feature.revalidateReviews,
+      legacyState: async (projectId: string, taskId: string) => {
+        const state = await feature.legacyState(projectId, taskId);
+        const records = (await store.list(projectId, taskId)).filter(record => record.mode !== 'conclusion-review');
+        return { ...state, busy: state.busy || records.some(record => revisionDomain.busy(revisionDomain.ref(record))) };
+      },
+    },
     automatic: {
       store,
       assertInputs: assertFixedSources,
@@ -234,7 +250,7 @@ export function createVerificationFeature(options: {
         return result;
       },
     },
-    readFixedAuthor: store.readFixedAuthor,
+    readFixedAuthor: feature.readFixedAuthor,
     revisionBusy: async (projectId: string, taskId: string) => !storageUnavailable && (await store.list(projectId, taskId)).some(record => record.authorRevision?.status === 'running'),
     reconcileInterrupted: async () => { try { return await store.reconcileInterrupted(); } catch { storageUnavailable = true; return []; } },
     busy: async (projectId: string) => storageUnavailable ? false : feature.busy(projectId),

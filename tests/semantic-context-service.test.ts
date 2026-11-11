@@ -8,12 +8,18 @@ import { ProjectDataContextStore } from '../src/host/project-data-context-store.
 import { EnterpriseMaterialsStore } from '../src/host/enterprise-materials-store.ts';
 import { CaseStore } from '../src/host/case-store.ts';
 import { SemanticContextService } from '../src/host/semantic-context-service.ts';
+import { createRequirementFrameworkSources } from '../src/host/requirement-framework-sources.ts';
+import { createSapMethodStore } from '../extensions/business-plugins/metric-factory/methods/store.ts';
+import { AgentCandidateControls } from '../src/host/agent-candidate-controls.ts';
+import { createPersonalContextReader } from '../src/host/personal-context-reader.ts';
+import { PersonalRetentionStore } from '../src/host/personal-retention-store.ts';
 import { createMetricLibrary } from '../extensions/business-plugins/metric-factory/library/store.ts';
 import { preparePublication } from '../extensions/business-plugins/metric-factory/sap/validate.ts';
 
 const evidenceRoot = path.resolve('.local/fourbase-modules/m7-l1-semantic-trace/implementation/read-service');
 const config: ProjectConfiguration = { id: 'synthetic', revision: 1, name: 'Synthetic', provider: 'synthetic', model: 'synthetic', baseUrl: 'http://127.0.0.1' };
 const sha = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
+const toolContext = () => ({ signal: new AbortController().signal, requestId: 'synthetic-framework-run', sessionId: 'synthetic-framework-session', toolCallId: 'synthetic-tool-call', assertCurrent: () => {} });
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   await fs.mkdir(evidenceRoot, { recursive: true });
   const root = await fs.mkdtemp(path.join(evidenceRoot, 'fixture-'));
@@ -26,6 +32,117 @@ async function fixture(t: { after(fn: () => Promise<void>): void }) {
   t.after(async () => { await projects.close(); });
   return { root, projects, project, taskId: task.id, data, enterprise, cases, service };
 }
+
+test('RAF-A1/A4: published SAP and enabled enterprise reads pin exact versions; catalog entries and withdrawn bodies cannot serve as evidence', async t => {
+  const f = await fixture(t), metricLibrary = createMetricLibrary(path.join(f.projects.dataRoot, 'metric-assets')), methodLibrary = createSapMethodStore(path.join(f.projects.dataRoot, 'metric-assets'));
+  const raw = await fs.readFile('extensions/business-plugins/metric-factory/fixtures/membership-repurchase@1.0.0.draft.yaml', 'utf8');
+  const first = metricLibrary.publish(preparePublication(Buffer.from(raw)), 'Synthetic publisher');
+  const draft = await methodLibrary.save({ requestId: randomUUID(), origin: 'other', title: 'SYNTHETIC_UNPUBLISHED_METHOD', sources: [],
+    content: { conditions: 'Same store', logic: 'Cohort comparison', judgment: 'Needs data', limits: 'Not causation' } });
+  const published = await methodLibrary.save({ requestId: randomUUID(), origin: 'other', title: 'Published cohort method', sources: [],
+    content: { conditions: 'Stable definition', logic: 'SYNTHETIC_PUBLISHED_METHOD', judgment: 'Check denominator', limits: 'Partial period' } });
+  await methodLibrary.publish(published.method.id, { requestId: randomUUID(), version: 1, expectedSha256: published.version.contentSha256 });
+  const material = await f.enterprise.create({ title: 'Synthetic currently approved concept', body: 'SYNTHETIC_ENTERPRISE_BODY' });
+  const enabled = await f.enterprise.enable(material.material.id, material.material.version);
+  const enterprise = { kind: 'enterprise' as const, storeId: enabled.storeId, materialId: material.material.id, revisionId: enabled.material.activeRevisionId! };
+  const semantic = new SemanticContextService({ ...f.service.options, metricLibrary, methodLibrary });
+  const sources = createRequirementFrameworkSources({ semantic: () => semantic, experienceLearningEnabled: true }), operation = sources.begin();
+  const catalog = await operation.read('find', { kinds: ['sap', 'sap-method', 'enterprise'] }, toolContext());
+  assert.match(catalog.content[0]!.text, /Published cohort method/);
+  assert.doesNotMatch(catalog.content[0]!.text, /SYNTHETIC_UNPUBLISHED_METHOD|SYNTHETIC_ENTERPRISE_BODY|frameworkSourceIds/);
+  assert.deepEqual(operation.references(), []);
+  const unavailable = await operation.read('read', { target: { kind: 'sap-method', methodId: draft.method.id, version: 1 } }, toolContext());
+  assert.doesNotMatch(unavailable.content[0]!.text, /SYNTHETIC_UNPUBLISHED_METHOD|frameworkSourceIds/);
+  const sap = { kind: 'sap', packageId: first.id, version: first.version, publishedHash: first.bytesSha256 };
+  const read = await operation.read('read', { target: sap }, toolContext());
+  assert.match(read.content[0]!.text, /frameworkSourceIds/);
+  await operation.read('read', { target: enterprise }, toolContext());
+  const [sapRef, conceptRef] = operation.references();
+  assert.ok(sapRef && conceptRef);
+  assert.deepEqual(sapRef.target, sap);
+  assert.equal(sapRef.version, '1.0.0');
+  assert.equal(conceptRef.digest, sha('SYNTHETIC_ENTERPRISE_BODY'));
+  assert.deepEqual(sources.begin().references([sapRef.id]), [], 'no receipt from a previous operation can be reused as current');
+  metricLibrary.publish(preparePublication(Buffer.from(raw.replace('version: 1.0.0', 'version: 1.1.0').replace('复购会员数', '重复购买会员数'))), 'Synthetic publisher');
+  assert.deepEqual(await sources.revalidate([sapRef, conceptRef]), [], 'an unrelated newer release preserves the approved old identity');
+  await f.enterprise.disable(material.material.id, enabled.material.version);
+  assert.deepEqual(await sources.revalidate([sapRef, conceptRef]), [{ id: conceptRef.id, status: 'unavailable' }]);
+  const revoked = await sources.begin().read('read', { target: enterprise }, toolContext());
+  assert.doesNotMatch(JSON.stringify(revoked), /SYNTHETIC_ENTERPRISE_BODY|Synthetic currently approved concept|frameworkSourceIds/);
+});
+
+test('RAF-A1/A4: prior case records are accessible; a project report or input needs a separate exact grant', async t => {
+  const f = await fixture(t);
+  await f.cases.initialize();
+  t.after(async () => f.cases.close());
+  const content = Buffer.from('value\nSYNTHETIC_AUTHORIZED_DATA\n');
+  const file = await f.projects.upload({ projectId: f.project.id, name: 'records.csv', bytes: content, directory: '020_clean' });
+  const inputVersionId = randomUUID(), datasetId = randomUUID();
+  await f.data.freezeInput(f.project.id, { operationId: inputVersionId, inputVersionId, datasetId, baseIndexRevision: 0, name: 'Authorized data', sourcePath: file.path, expectedSha256: file.sha256, expectedBytes: file.bytes });
+  const inputTarget = { kind: 'data-input' as const, projectId: f.project.id, datasetId, inputVersionId };
+  const reportPath = '060_reports/historical.md', report = '# SYNTHETIC_PRIVATE_REPORT';
+  await fs.writeFile(path.join(f.project.rootPath, reportPath), report);
+  const citationId = randomUUID();
+  await f.data.createCitation(f.project.id, { operationId: citationId, citationId, baseIndexRevision: 1, report: { path: reportPath, sha256: sha(report), bytes: Buffer.byteLength(report) }, attachments: [],
+    selections: [{ datasetId, inputVersionId, descriptionRevisionId: null }], conceptRefs: [], sapRefs: [], declarer: 'user', declaration: 'Retrospective with no control' });
+  const reportTarget = { kind: 'data-evidence' as const, projectId: f.project.id, citationId, attachmentIndex: null };
+  const history = f.cases.createCase({ operationId: randomUUID(), title: 'Synthetic cohort case' }), caseStoreId = f.cases.getStatus().storeId!;
+  f.cases.linkProject({ operationId: randomUUID(), caseId: history.id, projectId: f.project.id, expectedRevision: 1 });
+  const saved = f.cases.saveDecisionDraft({ operationId: randomUUID(), caseStoreId, caseId: history.id, expectedRevision: 0, kind: 'strategy',
+    payload: { title: 'Compare comparable cohorts', proposal: 'SYNTHETIC_CASE_PAST_STRATEGY', conditions: 'Equal time windows' },
+    references: [{ relation: 'background', note: null, target: { type: 'source', source: { type: 'citation', projectId: f.project.id, citationId, target: { type: 'report' } } } }] },
+    { actorKind: 'agent', projectId: f.project.id, taskId: f.taskId, requestId: randomUUID(), sessionId: 'synthetic-history-session', toolCallId: 'synthetic' });
+  const sources = createRequirementFrameworkSources({ semantic: () => f.service, experienceLearningEnabled: true });
+  const ungranted = sources.begin();
+  for (const target of [inputTarget, reportTarget, { kind: 'source', source: { type: 'citation', projectId: f.project.id, citationId, target: { type: 'report' } } }])
+    await assert.rejects(() => ungranted.read('read', { target }, toolContext()), /read_not_authorized/);
+  const catalog = await ungranted.read('find', { kinds: ['case-decision'], query: 'cohort' }, toolContext());
+  assert.match(catalog.content[0]!.text, /Compare comparable cohorts/);
+  const historyRead = await ungranted.read('trace', { target: { kind: 'case-decision', caseStoreId, caseId: history.id, recordId: saved.recordId, revision: 1 } }, toolContext());
+  assert.match(historyRead.content[0]!.text, /SYNTHETIC_CASE_PAST_STRATEGY/);
+  assert.doesNotMatch(historyRead.content[0]!.text, /SYNTHETIC_PRIVATE_REPORT/);
+  assert.match(historyRead.content[0]!.text, /forbidden/);
+
+  const approved = sources.begin({ approvedTargets: [inputTarget, reportTarget] });
+  const inputRead = await approved.read('read', { target: inputTarget }, toolContext());
+  assert.match(inputRead.content[0]!.text, /SYNTHETIC_AUTHORIZED_DATA/);
+  const reportRead = await approved.read('read', { target: reportTarget }, toolContext());
+  assert.match(reportRead.content[0]!.text, /SYNTHETIC_PRIVATE_REPORT/);
+  const refs = approved.references();
+  assert.equal(refs.length, 2);
+  assert.deepEqual(await sources.revalidate(refs), []);
+  assert.deepEqual(await sources.revalidate(refs, { approvedTargets: [inputTarget] }), [{ id: refs[1]!.id, status: 'unavailable' }]);
+  await f.projects.archive(f.project.id);
+  assert.deepEqual(await sources.revalidate(refs), refs.map(({ id }) => ({ id, status: 'unavailable' })));
+});
+
+test('RAF-A1/A4: retained memories use the original M4 authority and stop appearing after archive', async t => {
+  const f = await fixture(t);
+  const material = await f.enterprise.create({ title: 'Synthetic cohort memory', body: 'SYNTHETIC_RETAINED_MEMORY' });
+  const enabled = await f.enterprise.enable(material.material.id, material.material.version), revision = enabled.material.revisions[0]!;
+  const retention = new PersonalRetentionStore({ dataRoot: f.projects.dataRoot, materials: f.enterprise, readSource: async () => assert.fail('Memory references must not be read automatically.') });
+  const retained = await retention.retain(material.material.id, {
+    operationId: randomUUID(), expectedRevision: 0,
+    target: { type: 'revision', revisionId: revision.revisionId, expectedBodySha256: revision.bodySha256 },
+    metadata: { kind: 'experience', aliases: [], caution: 'Prior scope differs', sourceRefs: [] }, personalLabel: null,
+  });
+  const controls = new AgentCandidateControls({ dataRoot: f.projects.dataRoot, readTarget: async () => assert.fail('No candidate grant.') });
+  const personal = createPersonalContextReader({ projects: { list: async () => assert.fail('Directory must not scan project candidates.') }, retention, controls });
+  const semantic = new SemanticContextService({ ...f.service.options, personal });
+  const sources = createRequirementFrameworkSources({ semantic: () => semantic, experienceLearningEnabled: true }), operation = sources.begin();
+  const catalog = await operation.read('find', { kinds: ['personal'], query: 'cohort' }, toolContext());
+  assert.match(catalog.content[0]!.text, /Synthetic cohort memory/);
+  assert.doesNotMatch(catalog.content[0]!.text, /SYNTHETIC_RETAINED_MEMORY|frameworkSourceIds/);
+  assert.equal('items' in catalog.details ? catalog.details.items.length : 0, 1);
+  const target = 'items' in catalog.details ? catalog.details.items[0]!.target : assert.fail('Missing retained locator.');
+  const read = await operation.read('read', { target }, toolContext());
+  assert.match(read.content[0]!.text, /SYNTHETIC_RETAINED_MEMORY/);
+  assert.deepEqual(await sources.revalidate(operation.references()), []);
+  await retention.archive(material.material.id, { operationId: randomUUID(), expectedRevision: retained.item.revision, personalLabel: null });
+  assert.deepEqual(await sources.revalidate(operation.references()), [{ id: operation.references()[0]!.id, status: 'unavailable' }]);
+  const revoked = await sources.begin().read('read', { target }, toolContext());
+  assert.doesNotMatch(JSON.stringify(revoked), /SYNTHETIC_RETAINED_MEMORY|Synthetic cohort memory|frameworkSourceIds/);
+});
 
 test('L101/L109: exact fixed input remains readable after source edits without any semantic setup', async t => {
   const { projects, project, taskId, data, service } = await fixture(t);

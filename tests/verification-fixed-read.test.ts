@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { startTestHost } from './fixtures/host-process.ts';
+import { startLegacyTestHost as startTestHost } from './fixtures/host-process.ts'; // Explicit pre-cutover contract; default Host is tested separately.
 import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
 import { readJson } from './fixtures/joint-context.ts';
 

@@ -1,3 +1,4 @@
+import type { BoardItemRecord } from '../../extensions/business-plugins/decision-board/types.ts';
 import type { EnterpriseMaterialsStore } from './enterprise-materials-store.ts';
 import type { ProjectStore } from './project-store.ts';
 import type { ProjectDataContextStore } from './project-data-context-store.ts';
@@ -16,6 +17,7 @@ export type PersonalSourceDependencies = {
   projects: Pick<ProjectStore, 'get' | 'getTask'>;
   dataContext: Pick<ProjectDataContextStore, 'readCitationEvidence'>;
   board: Pick<ReturnType<typeof createDecisionBoardStore>, 'getTask' | 'getItem' | 'getFeedbackRevision'>;
+  assertBoardItemReadable?: (item: BoardItemRecord) => Promise<void>;
   candidates?: Pick<ReturnType<typeof createAgentCandidateReader>, 'read'>;
   readCaseSource?: (ref: CaseLearningSourceRef, options?: LearningSourceReadOptions) => Promise<PersonalSourceEvidence>;
 };
@@ -73,6 +75,7 @@ export function createPersonalSourceReader(deps: PersonalSourceDependencies): Re
     }
     if (ref.type === 'feedback') {
       const task = deps.board.getTask(ref.boardTaskId), item = deps.board.getItem(task.itemId);
+      if (item.sourceKind === 'report-confirmation') { if (!deps.assertBoardItemReadable) return fail('personal_source_unavailable', 409); await deps.assertBoardItemReadable(item); }
       if (item.projectId !== ref.sourceProjectId) return fail('personal_source_project_mismatch', 409);
       const revision = deps.board.getFeedbackRevision(ref.feedbackRevisionId);
       if (!revision) return fail('personal_source_feedback_missing', 404);

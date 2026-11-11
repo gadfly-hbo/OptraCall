@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 import { deflateSync } from 'node:zlib';
 import { ProjectAgent } from '../src/agent/project-runtime.ts';
 import { createProtectedExecutionScope } from '../src/agent/protected-tools.ts';
-import { startTestHost } from './fixtures/host-process.ts';
+import { startLegacyTestHost as startTestHost } from './fixtures/host-process.ts'; // Explicit pre-cutover contract; default Host is tested separately.
 import { readJson } from './fixtures/joint-context.ts';
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

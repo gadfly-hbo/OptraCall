@@ -3,10 +3,11 @@ import { lstat, mkdir, open, readdir, rename, link, unlink } from 'node:fs/promi
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import type { RunDiagnostic } from '../agent/run-diagnostics.ts';
+import { isConclusionReviewMetadata, parseConclusionReviewOutput, type ConclusionReviewMetadata, type ConclusionReviewOutput } from './conclusion-review-contract.ts';
 
 export type VerificationOwner = { projectId: string; taskId: string; verificationId: string };
 export type VerificationState = 'preparing' | 'ready' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'unknown';
-export type VerificationPhase = 'cold' | 'compare' | 'recheck';
+export type VerificationPhase = 'cold' | 'compare' | 'recheck' | 'review';
 export type VerificationSource = { kind: string; id?: string; version?: string; sha256?: string; confirmed?: boolean; note?: string };
 export type VerificationFileInput = { relativePath: string; bytes: Uint8Array; sha256?: string; sourcePath?: string };
 export type VerificationFile = { relativePath: string; sha256: string; bytes: number; snapshotPath: string; sourcePath?: string; observedAt: string };
@@ -16,6 +17,8 @@ export type VerificationResult = VerificationResultInput & { file: string; sha25
 export type VerificationIndependence = { status: 'observed' | 'informed' | 'unknown'; note?: string };
 export type VerificationAuthorRevision = { requestId: string; status: 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown'; reportText?: string; sessionFile?: string; files?: string[]; mode?: 'fixed-draft'; configuration?: VerificationConfiguration };
 export type CreateVerificationInput = VerificationOwner & {
+  mode?: 'conclusion-review';
+  review?: ConclusionReviewMetadata;
   question: string;
   selection: unknown;
   configuration: VerificationConfiguration;
@@ -27,6 +30,9 @@ export type CreateVerificationInput = VerificationOwner & {
   independence?: VerificationIndependence;
 };
 export type VerificationRecord = VerificationOwner & {
+  mode?: 'conclusion-review';
+  review?: ConclusionReviewMetadata & { providedTextSha256: string };
+  reviewResult?: VerificationResult & { output: ConclusionReviewOutput };
   formatVersion: 1;
   requestFingerprint: string;
   question: string;
@@ -166,7 +172,7 @@ export function createVerificationStore(options: { dataRoot: string }) {
     const record = value as VerificationRecord;
     const corrupt = (): never => fail('verification_record_corrupt');
     const timestamp = (text: unknown) => typeof text === 'string' && Number.isFinite(Date.parse(text)) && new Date(text).toISOString() === text;
-    if (record.formatVersion !== 1 || record.projectId !== owner.projectId || record.taskId !== owner.taskId || record.verificationId !== owner.verificationId || typeof record.requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(record.requestFingerprint) || !['preparing','ready','running','completed','failed','cancelled','interrupted','unknown'].includes(record.state) || !['cold','compare','recheck'].includes(record.phase) || record.workspace !== workspace(owner.verificationId) || record.sessionDirectory !== path.join(recordDirectory(owner), 'native') || !record.configuration || !record.semantics || !Array.isArray(record.dataFiles) || !Array.isArray(record.authorFiles)) corrupt();
+    if (record.formatVersion !== 1 || record.projectId !== owner.projectId || record.taskId !== owner.taskId || record.verificationId !== owner.verificationId || typeof record.requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(record.requestFingerprint) || !['preparing','ready','running','completed','failed','cancelled','interrupted','unknown'].includes(record.state) || !['cold','compare','recheck','review'].includes(record.phase) || record.workspace !== workspace(owner.verificationId) || record.sessionDirectory !== path.join(recordDirectory(owner), 'native') || !record.configuration || !record.semantics || !Array.isArray(record.dataFiles) || !Array.isArray(record.authorFiles)) corrupt();
     if (typeof record.question !== 'string' || !record.question.trim() || !timestamp(record.createdAt) || !timestamp(record.updatedAt) || typeof record.configuration.id !== 'string' || !Number.isSafeInteger(record.configuration.revision) || typeof record.configuration.provider !== 'string' || typeof record.configuration.model !== 'string' || typeof record.semantics.text !== 'string' || digest(record.semantics.text) !== record.semantics.sha256 || !Array.isArray(record.semantics.sources) || !record.independence || !['observed','informed','unknown'].includes(record.independence.status)) corrupt();
     if (record.preparedAt !== undefined && !timestamp(record.preparedAt) || ['ready','running','completed'].includes(record.state) && !record.preparedAt) corrupt();
     function entryValid(entry: VerificationFile, base: string) {
@@ -182,7 +188,15 @@ export function createVerificationStore(options: { dataRoot: string }) {
       if (!result || typeof result.text !== 'string' || !result.text.trim() || digest(result.text) !== result.sha256 || result.file !== path.join(recordDirectory(owner), 'evidence', `${phase}-result.md`) || !timestamp(result.savedAt) || !Array.isArray(result.files) || result.requestId !== undefined && typeof result.requestId !== 'string' || result.sessionFile !== undefined && typeof result.sessionFile !== 'string') corrupt();
       for (const file of result.files) entryValid(file, path.join(recordDirectory(owner), 'evidence', `${phase}-files`));
     }
-    if (record.authorRevealedAt !== undefined && (!timestamp(record.authorRevealedAt) || !record.coldResult) || record.phase !== 'cold' && !record.authorRevealedAt || record.comparisonResult && (!record.coldResult || !record.authorRevealedAt) || record.recheckResult && !record.comparisonResult || record.state === 'completed' && !(record.phase === 'recheck' ? record.recheckResult : record.comparisonResult)) corrupt();
+    const reviewing = record.mode === 'conclusion-review';
+    if (record.mode !== undefined && !reviewing || reviewing !== (record.phase === 'review') || reviewing && (!isConclusionReviewMetadata(record.review) || record.review.schemaVersion !== 1 || typeof record.review.providedText !== 'string' || !record.review.providedText.trim() || record.review.providedText.length > 65_536 || digest(record.review.providedText) !== record.review.providedTextSha256 || !record.review.report || record.authorFiles.length !== 1 || record.review.report.relativePath !== record.authorFiles[0]?.relativePath || record.review.report.sha256 !== record.authorFiles[0]?.sha256 || record.review.report.bytes !== record.authorFiles[0]?.bytes || !Array.isArray(record.review.materials) || record.coldResult || record.comparisonResult || record.recheckResult || record.authorRevealedAt || record.authorRevision || record.revisionCount || record.recheckCount)) corrupt();
+    if (record.reviewResult) {
+      const result = record.reviewResult;
+      if (!reviewing || typeof result.text !== 'string' || !result.text.trim() || digest(result.text) !== result.sha256 || result.file !== path.join(recordDirectory(owner), 'evidence', 'review-result.md') || !timestamp(result.savedAt) || !Array.isArray(result.files) || result.files.length || result.requestId !== undefined && typeof result.requestId !== 'string' || result.sessionFile !== undefined && typeof result.sessionFile !== 'string') corrupt();
+    }
+    if (!reviewing && (record.review || record.reviewResult)) corrupt();
+    if (!reviewing && (record.authorRevealedAt !== undefined && (!timestamp(record.authorRevealedAt) || !record.coldResult) || record.phase !== 'cold' && !record.authorRevealedAt || record.comparisonResult && (!record.coldResult || !record.authorRevealedAt) || record.recheckResult && !record.comparisonResult || record.state === 'completed' && !(record.phase === 'recheck' ? record.recheckResult : record.comparisonResult))) corrupt();
+    if (reviewing && record.state === 'completed' && !record.reviewResult) corrupt();
     return record;
   }
   const revisionWorkspace = (owner: VerificationOwner) => path.join(recordDirectory(owner), 'revision-workspace');
@@ -212,13 +226,13 @@ export function createVerificationStore(options: { dataRoot: string }) {
     } catch { fail('verification_native_scope_invalid'); }
   }
   async function checkNativeReferences(record: VerificationRecord) {
-    const pointers = [record.native?.sessionFile, record.coldResult?.sessionFile, record.comparisonResult?.sessionFile, record.recheckResult?.sessionFile].filter(value => value !== undefined);
+    const pointers = [record.native?.sessionFile, record.reviewResult?.sessionFile, record.coldResult?.sessionFile, record.comparisonResult?.sessionFile, record.recheckResult?.sessionFile].filter(value => value !== undefined);
     for (const file of new Set(pointers)) await checkNativeFile(record, file);
     // Legacy revisions may point at the original task history. Preserve those
     // bytes and references; only the new, explicitly tagged profile is ours.
     if (record.authorRevision?.mode === 'fixed-draft' && record.authorRevision.sessionFile !== undefined) await checkNativeFile(record, record.authorRevision.sessionFile, true);
   }
-  async function read(owner: VerificationOwner): Promise<VerificationRecord> {
+  async function readMetadata(owner: VerificationOwner): Promise<VerificationRecord> {
     const target = path.join(recordDirectory(owner), 'record.json');
     let value;
     try { value = JSON.parse((await bytes(target, true)).toString('utf8')); }
@@ -227,8 +241,19 @@ export function createVerificationStore(options: { dataRoot: string }) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return fail('verification_not_found', 404);
       return fail('verification_record_corrupt');
     }
-    const record = validateRecord(value, owner);
-    await checkNativeReferences(record);
+    return validateRecord(value, owner);
+  }
+  async function read(owner: VerificationOwner): Promise<VerificationRecord> {
+    const record = await readMetadata(owner);
+    // New sealed reviews never resume a saved native pointer. Its current
+    // availability is projected separately by the guarded evidence reader.
+    // An invalid journal cannot revoke the still-valid fixed report itself.
+    if (record.mode !== 'conclusion-review') await checkNativeReferences(record);
+    if (record.mode === 'conclusion-review' && record.reviewResult) {
+      const report = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(await checked(record.authorFiles[0]!));
+      try { if (canonical(parseConclusionReviewOutput(record.reviewResult.text, record.review!, report, { claimKinds: record.reviewResult.output.claims.some(claim => claim.kind !== undefined || claim.relatedClaimIds !== undefined) })) !== canonical(record.reviewResult.output)) fail('verification_record_corrupt'); } catch { fail('verification_record_corrupt'); }
+      if (digest(await bytes(record.reviewResult.file)) !== record.reviewResult.sha256) fail('verification_snapshot_changed');
+    }
     return record;
   }
   async function create(input: CreateVerificationInput): Promise<{ record: VerificationRecord; created: boolean }> {
@@ -236,7 +261,8 @@ export function createVerificationStore(options: { dataRoot: string }) {
     if (typeof input.question !== 'string' || !input.question.trim() || !input.configuration || typeof input.configuration.id !== 'string' || !Number.isSafeInteger(input.configuration.revision) || typeof input.configuration.provider !== 'string' || typeof input.configuration.model !== 'string') fail('invalid_verification_input', 400);
     if (input.retryOf !== undefined) id(input.retryOf);
     const data = files(input.dataFiles), author = files(input.authorFiles);
-    if (!data.length || !author.length) fail('verification_files_required', 400);
+    if (input.mode !== undefined && input.mode !== 'conclusion-review' || input.mode === 'conclusion-review' && (!isConclusionReviewMetadata(input.review) || author.length !== 1 || input.review.report.relativePath !== author[0]?.relativePath || input.review.report.sha256 !== author[0]?.sha256 || input.review.report.bytes !== author[0]?.bytes.length || !input.review.providedText.trim() || input.review.providedText.length > 65_536)) fail('invalid_conclusion_review_input', 400);
+    if ((!data.length && input.mode !== 'conclusion-review') || !author.length) fail('verification_files_required', 400);
     if (data.some(file => author.some(candidate => file.relativePath === candidate.relativePath || file.sha256 === candidate.sha256))) fail('verification_input_author_overlap', 400);
     const { id: configurationId, revision, provider, model, name, thinkingLevel } = input.configuration;
     const configuration: VerificationConfiguration = { id: configurationId, revision, provider, model, ...(name === undefined ? {} : { name }), ...(thinkingLevel === undefined ? {} : { thinkingLevel }) };
@@ -244,10 +270,10 @@ export function createVerificationStore(options: { dataRoot: string }) {
     if (typeof semanticText !== 'string') fail('invalid_verification_semantics', 400);
     const sources = json(input.semantics?.sources ?? []) as VerificationSource[];
     if (!Array.isArray(sources)) fail('invalid_verification_semantics', 400);
-    const fingerprint = digest(canonical(json({ question: input.question, selection, configuration, semantics: { text: semanticText, sources }, dataFiles: data.map(file => ({ relativePath: file.relativePath, sha256: file.sha256, sourcePath: file.sourcePath })), authorFiles: author.map(file => ({ relativePath: file.relativePath, sha256: file.sha256, sourcePath: file.sourcePath })), retryOf: input.retryOf, authorRequestId: input.authorRequestId, independence: input.independence })));
+    const fingerprint = digest(canonical(json({ ...(input.mode ? { mode: input.mode, review: input.review } : {}), question: input.question, selection, configuration, semantics: { text: semanticText, sources }, dataFiles: data.map(file => ({ relativePath: file.relativePath, sha256: file.sha256, sourcePath: file.sourcePath })), authorFiles: author.map(file => ({ relativePath: file.relativePath, sha256: file.sha256, sourcePath: file.sourcePath })), retryOf: input.retryOf, authorRequestId: input.authorRequestId, independence: input.independence })));
     const now = new Date().toISOString();
     const describe = (group: string, entries: ReturnType<typeof files>): VerificationFile[] => entries.map(file => ({ relativePath: file.relativePath, bytes: file.bytes.length, sha256: file.sha256, snapshotPath: path.join(home, group, file.relativePath), ...(file.sourcePath === undefined ? {} : { sourcePath: file.sourcePath }), observedAt: now }));
-    const record: VerificationRecord = { formatVersion: 1, projectId: input.projectId, taskId: input.taskId, verificationId: input.verificationId, question: input.question, selection, configuration, requestFingerprint: fingerprint, state: 'preparing', phase: 'cold', createdAt: now, updatedAt: now, workspace: cwd, sessionDirectory: path.join(home, 'native'), semantics: { text: semanticText, sha256: digest(semanticText), sources }, dataFiles: describe('data', data), authorFiles: describe('author', author), independence: input.independence ?? { status: 'unknown' }, ...(input.retryOf === undefined ? {} : { retryOf: input.retryOf }), ...(input.authorRequestId === undefined ? {} : { authorRequestId: input.authorRequestId }) };
+    const record: VerificationRecord = { ...(input.mode === 'conclusion-review' ? { mode: input.mode, review: { ...json(input.review!) as ConclusionReviewMetadata, providedTextSha256: digest(input.review!.providedText) } } : {}), formatVersion: 1, projectId: input.projectId, taskId: input.taskId, verificationId: input.verificationId, question: input.question, selection, configuration, requestFingerprint: fingerprint, state: 'preparing', phase: input.mode === 'conclusion-review' ? 'review' : 'cold', createdAt: now, updatedAt: now, workspace: cwd, sessionDirectory: path.join(home, 'native'), semantics: { text: semanticText, sha256: digest(semanticText), sources }, dataFiles: describe('data', data), authorFiles: describe('author', author), independence: input.independence ?? { status: 'unknown' }, ...(input.retryOf === undefined ? {} : { retryOf: input.retryOf }), ...(input.authorRequestId === undefined ? {} : { authorRequestId: input.authorRequestId }) };
     const claimed = await writeRecord(path.join(home, 'record.json'), record, true);
     if (!claimed) {
       const existing = await read(input);
@@ -280,17 +306,21 @@ export function createVerificationStore(options: { dataRoot: string }) {
       throw error instanceof VerificationStoreError ? error : new VerificationStoreError('verification_prepare_failed');
     }
   }
-  async function list(projectId: string, taskId?: string): Promise<VerificationRecord[]> {
+  async function list(projectId: string, taskId?: string, management = false): Promise<VerificationRecord[]> {
     const project = path.join(dataRoot, 'analysis-verifications', id(projectId));
     if (taskId === undefined) {
       if (!await directory(project, false, true)) return [];
       const tasks = (await readdir(project)).filter(isUUID);
-      return (await Promise.all(tasks.map(task => list(projectId, task)))).flat().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return (await Promise.all(tasks.map(task => list(projectId, task, management)))).flat().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
     const base = path.join(project, id(taskId));
     if (!await directory(base, false, true)) return [];
     const entries = await readdir(base);
-    const records = await Promise.all(entries.filter(isUUID).map(verificationId => read({ projectId, taskId, verificationId })));
+    const records = await Promise.all(entries.filter(isUUID).map(async verificationId => {
+      const owner = { projectId, taskId, verificationId };
+      if (management) { const metadata = await readMetadata(owner); if (metadata.mode === 'conclusion-review' && !['preparing','ready','running'].includes(metadata.state)) return metadata; }
+      return read(owner);
+    }));
     return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
   async function immutable(target: string, content: Uint8Array | string) {
@@ -339,7 +369,9 @@ export function createVerificationStore(options: { dataRoot: string }) {
     const allowed = new Set(['state', 'phase', 'independence', 'diagnostic', 'error', 'native', 'authorRevision', 'revisionCount', 'recheckCount', 'exportedFile']);
     if (!patch || typeof patch !== 'object' || Object.keys(patch).some(key => !allowed.has(key))) fail('invalid_verification_update', 400);
     if (patch.state !== undefined && !['preparing','ready','running','completed','failed','cancelled','interrupted','unknown'].includes(patch.state)) fail('invalid_verification_update', 400);
-    if (patch.phase !== undefined && !['cold','compare','recheck'].includes(patch.phase)) fail('invalid_verification_update', 400);
+    if (record.mode === 'conclusion-review' && (patch.phase !== undefined && patch.phase !== 'review' || ['authorRevision','revisionCount','recheckCount','exportedFile'].some(key => key in patch))) fail('conclusion_review_read_only');
+    if (record.mode !== 'conclusion-review' && patch.phase === 'review') fail('verification_phase_conflict');
+    if (patch.phase !== undefined && !['cold','compare','recheck','review'].includes(patch.phase)) fail('invalid_verification_update', 400);
     if (patch.independence !== undefined && !['observed','informed','unknown'].includes(patch.independence.status)) fail('invalid_verification_update', 400);
     if (patch.exportedFile !== undefined && !['compare','recheck'].some(phase => patch.exportedFile === `060_reports/verification-${record.verificationId}-${phase}.md`)) fail('invalid_verification_update', 400);
     if (patch.phase === 'compare' && !record.authorRevealedAt) fail('verification_author_not_revealed');
@@ -350,7 +382,7 @@ export function createVerificationStore(options: { dataRoot: string }) {
     if (patch.state !== undefined && patch.state !== record.state && ['completed', 'failed', 'cancelled', 'interrupted', 'unknown'].includes(record.state) && !(patch.state === 'running' && explicitRecheck)) fail('verification_terminal');
     if (patch.state === 'running' && !['ready','running'].includes(record.state) && !(record.state === 'completed' && phase === 'recheck' && (patch.authorRevision ?? record.authorRevision)?.status === 'completed' && !record.recheckResult)) fail('verification_terminal');
     if (patch.state === 'ready' && record.state !== 'ready') fail('verification_terminal');
-    if (patch.state === 'completed' && !(phase === 'recheck' ? record.recheckResult : record.comparisonResult)) fail('verification_result_required');
+    if (patch.state === 'completed' && !(phase === 'review' ? record.reviewResult : phase === 'recheck' ? record.recheckResult : record.comparisonResult)) fail('verification_result_required');
     for (const key of ['revisionCount', 'recheckCount'] as const) if (patch[key] !== undefined && (!Number.isInteger(patch[key]) || patch[key]! < (record[key] ?? 0) || patch[key]! > 1 || patch[key]! < 0)) fail('verification_followup_limit');
     if (patch.authorRevision !== undefined) {
       if (!patch.authorRevision || typeof patch.authorRevision.requestId !== 'string' || !patch.authorRevision.requestId || !['running', 'completed', 'failed', 'cancelled', 'unknown'].includes(patch.authorRevision.status)) fail('invalid_verification_update', 400);
@@ -358,7 +390,7 @@ export function createVerificationStore(options: { dataRoot: string }) {
       if (record.authorRevision && record.authorRevision.status !== 'running' && record.authorRevision.status !== patch.authorRevision.status) fail('verification_followup_limit');
     }
     const changed = { ...record, ...json(patch) as VerificationUpdate, updatedAt: new Date().toISOString() };
-    await checkNativeReferences(changed);
+    if (changed.mode !== 'conclusion-review' || patch.native !== undefined) await checkNativeReferences(changed);
     await writeRecord(path.join(recordDirectory(owner), 'record.json'), changed);
     return changed;
   }
@@ -381,6 +413,23 @@ export function createVerificationStore(options: { dataRoot: string }) {
     record.updatedAt = new Date().toISOString();
     await writeRecord(path.join(recordDirectory(owner), 'record.json'), record);
     return record;
+  }
+  async function saveReviewResult(owner: VerificationOwner, input: VerificationResultInput): Promise<VerificationRecord> {
+    const record = await read(owner);
+    if (record.mode !== 'conclusion-review' || !record.review) fail('conclusion_review_required');
+    if (record.reviewResult) {
+      if (record.reviewResult.text !== input.text || record.reviewResult.requestId !== input.requestId || record.reviewResult.sessionFile !== input.sessionFile) fail('verification_result_conflict');
+      return record;
+    }
+    if (record.state !== 'running') fail('verification_not_running');
+    if (input.sessionFile !== undefined) await checkNativeFile(record, input.sessionFile);
+    const report = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(await checked(record.authorFiles[0]!));
+    const output = parseConclusionReviewOutput(input.text, record.review!, report);
+    const file = path.join(recordDirectory(owner), 'evidence', 'review-result.md');
+    await immutable(file, input.text);
+    record.reviewResult = { ...input, output, file, sha256: digest(input.text), savedAt: new Date().toISOString(), files: [] };
+    record.updatedAt = new Date().toISOString();
+    await writeRecord(path.join(recordDirectory(owner), 'record.json'), record); return record;
   }
   async function revealAuthor(owner: VerificationOwner): Promise<VerificationRecord> {
     const record = await read(owner);
@@ -439,7 +488,7 @@ export function createVerificationStore(options: { dataRoot: string }) {
   }
   async function readAuthorFiles(owner: VerificationOwner): Promise<{ relativePath: string; sha256: string; bytes: Buffer }[]> {
     const record = await read(owner);
-    if (!record.authorRevealedAt) return [];
+    if (!record.authorRevealedAt && record.mode !== 'conclusion-review') return [];
     return Promise.all(record.authorFiles.map(async file => ({ relativePath: file.relativePath, sha256: file.sha256, bytes: await checked(file) })));
   }
   async function readFixedAuthor(owner: VerificationOwner, relativePath: string) {
@@ -457,7 +506,7 @@ export function createVerificationStore(options: { dataRoot: string }) {
     };
     // Paths come only from the validated owner record, never from a request.
     // Growing, missing or malformed observation logs remain unavailable.
-    const sessionFile = record.comparisonResult?.sessionFile;
+    const sessionFile = record.mode === 'conclusion-review' ? record.reviewResult?.sessionFile ?? record.native?.sessionFile : record.comparisonResult?.sessionFile;
     if (sessionFile) try { await checkNativeFile(record, sessionFile); native = { sessionFile, entries: await readEntries(sessionFile) }; } catch { /* No reconstruction from other sessions. */ }
     try { events = await readEntries(path.join(recordDirectory(record), 'events.jsonl')); } catch { /* Absence does not prove no reads. */ }
     return { ...(native ? { native } : {}), ...(events ? { events } : {}) };
@@ -468,7 +517,7 @@ export function createVerificationStore(options: { dataRoot: string }) {
   }
   async function verifyResultFiles(owner: VerificationOwner) {
     const record = await read(owner);
-    for (const result of [record.coldResult, record.comparisonResult]) {
+    for (const result of record.mode === 'conclusion-review' ? [record.reviewResult] : [record.coldResult, record.comparisonResult]) {
       if (!result || digest(await bytes(result.file)) !== result.sha256) fail('verification_snapshot_changed');
     }
   }
@@ -478,7 +527,7 @@ export function createVerificationStore(options: { dataRoot: string }) {
     const changed: VerificationRecord[] = [];
     for (const projectId of (await readdir(base)).filter(isUUID)) {
       const project = path.join(base, projectId); await directory(project);
-      for (const taskId of (await readdir(project)).filter(isUUID)) for (const record of await list(projectId, taskId)) {
+      for (const taskId of (await readdir(project)).filter(isUUID)) for (const record of await list(projectId, taskId, true)) {
         const patch: VerificationUpdate = {};
         if (['preparing', 'ready', 'running'].includes(record.state)) { patch.state = 'interrupted'; patch.error = 'host_restarted_before_confirmed_completion'; }
         if (record.authorRevision?.status === 'running') { patch.authorRevision = { ...record.authorRevision, status: 'unknown' }; patch.error ??= 'host_restarted_before_confirmed_author_revision'; }
@@ -490,8 +539,16 @@ export function createVerificationStore(options: { dataRoot: string }) {
   return {
     create,
     read,
+    // Host authority only: never deliver this record's unverified body. Confirmed
+    // Board text has its own original transaction; permissions can be checked
+    // even when the old private report bytes are no longer readable.
+    readConclusionAuthority: async (owner: VerificationOwner) => { const record = await readMetadata(owner); if (record.mode !== 'conclusion-review') fail('conclusion_review_not_found', 404); return record; },
     list,
+    // Identity/state enumeration for Host management only. Body delivery still
+    // calls read(): unavailable terminal review snapshots cannot block shutdown.
+    listForManagement: (projectId: string, taskId?: string) => list(projectId, taskId, true),
     update,
+    saveReviewResult,
     saveColdResult: (owner: VerificationOwner, input: VerificationResultInput) => saveResult(owner, input, 'cold'),
     saveComparisonResult: (owner: VerificationOwner, input: VerificationResultInput) => saveResult(owner, input, 'compare'),
     saveRecheckResult: (owner: VerificationOwner, input: VerificationResultInput) => saveResult(owner, input, 'recheck'),

@@ -6,12 +6,14 @@ import {
   buildRapPublication, canonicalYaml, isStale, parseInstance, upstreamDigest, upstreamFingerprint, upstreamOf,
   RequirementFault, type RequirementInstance, type RapDocument, type RapPublication, type Scene,
 } from '../contract/validate.ts';
+import { frameworkVersionPattern, type FrameworkConfirmation, type FrameworkMaterialTarget, type FrameworkProposalRecord, type FrameworkReviewState } from '../contract/framework-review.ts';
 
 export type RequirementReleaseEntry = Readonly<{
   id: string; version: string; scene: Scene; title: string;
   packageFingerprint: string; contentFingerprint: string;
   releasedAt: string; releasedBy: string;
   openQuestionCount: number; metricCount: number;
+  frameworkVersion?: string;
 }>;
 export type InstanceSummary = Readonly<{ id: string; title: string; scene: Scene; createdAt: string; updatedAt: string }>;
 export type RequirementFeedbackOrigin = { operationId: string; handoffId: string; requestHash: string };
@@ -52,6 +54,7 @@ function decodeReleaseEntry(value: unknown): RequirementReleaseEntry {
   if (!object(value) || !instanceIdPattern.test(String(value.id)) || !semverPattern.test(String(value.version))
     || !['daily', 'topic', 'recurring'].includes(String(value.scene)) || typeof value.title !== 'string' || !value.title.trim()
     || !fingerprintPattern.test(String(value.packageFingerprint)) || !fingerprintPattern.test(String(value.contentFingerprint))
+    || value.frameworkVersion !== undefined && !frameworkVersionPattern.test(String(value.frameworkVersion))
     || !isoDate(value.releasedAt) || typeof value.releasedBy !== 'string' || !value.releasedBy.trim() || value.releasedBy.length > 200
     || !Number.isSafeInteger(value.openQuestionCount) || (value.openQuestionCount as number) < 0
     || !Number.isSafeInteger(value.metricCount) || (value.metricCount as number) < 0) fail('REQ_STORE_CORRUPT');
@@ -144,6 +147,43 @@ export function createRequirementStore(directory: string) {
     return value as RequirementFeedbackOrigin;
   };
 
+  const reviewFile = (id: string) => path.join(instanceDirectory(id), 'framework-review.json');
+  const proposalFile = (id: string, version: string) => path.join(instanceDirectory(id), 'framework-proposals', version + '.json');
+  const readReviewJson = (file: string): unknown => {
+    if (!existsSync(file)) return undefined;
+    const stat = lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 2_000_000) fail('REQ_STORE_CORRUPT');
+    try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return fail('REQ_STORE_CORRUPT'); }
+  };
+  const readFrameworkState = (id: string): FrameworkReviewState | undefined => {
+    checkedId(id);
+    const raw = readReviewJson(reviewFile(id));
+    if (raw === undefined) return undefined;
+    if (!object(raw) || !object(raw.input) || !frameworkVersionPattern.test(String(raw.input.revision))
+      || raw.input.rapVersion !== undefined && !semverPattern.test(String(raw.input.rapVersion))
+      || raw.input.materialTargets !== undefined && !Array.isArray(raw.input.materialTargets)
+      || raw.current !== undefined && !frameworkVersionPattern.test(String(raw.current))
+      || !Array.isArray(raw.confirmations) || raw.confirmations.some(item => !object(item)
+        || !frameworkVersionPattern.test(String(item.version)) || !isoDate(item.confirmedAt) || typeof item.confirmedBy !== 'string')) return fail('REQ_STORE_CORRUPT');
+    return raw as unknown as FrameworkReviewState;
+  };
+  const writeFrameworkState = (id: string, state: FrameworkReviewState) => atomicWrite(reviewFile(id), Buffer.from(JSON.stringify(state)), 0o600);
+  const readFrameworkProposal = (id: string, version: string): FrameworkProposalRecord => {
+    checkedId(id);
+    if (!frameworkVersionPattern.test(version)) return fail('REQ_PROPOSAL_NOT_FOUND');
+    const dir = path.dirname(proposalFile(id, version));
+    if (!existsSync(dir)) return fail('REQ_PROPOSAL_NOT_FOUND');
+    const dirEntry = lstatSync(dir);
+    if (!dirEntry.isDirectory() || dirEntry.isSymbolicLink()) return fail('REQ_STORE_CORRUPT');
+    const raw = readReviewJson(proposalFile(id, version));
+    if (raw === undefined) return fail('REQ_PROPOSAL_NOT_FOUND');
+    if (!object(raw) || raw.version !== version || !frameworkVersionPattern.test(String(raw.inputRevision))
+      || !fingerprintPattern.test(String(raw.upstreamFingerprint)) || !fingerprintPattern.test(String(raw.draftFingerprint))
+      || !object(raw.framework) || !object(raw.assessment) || !Array.isArray(raw.sources)
+      || !object(raw.publicSearch) || raw.publicSearch.operationId !== version || !Array.isArray(raw.publicSearch.sources)) return fail('REQ_STORE_CORRUPT');
+    return raw as unknown as FrameworkProposalRecord;
+  };
+
   return {
     root,
     create(input: { title: string; scene: Scene }): RequirementInstance {
@@ -213,6 +253,40 @@ export function createRequirementStore(directory: string) {
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },
     read(id: string): RequirementInstance { return readInstance(id); },
+    readFrameworkState,
+    readFrameworkProposal,
+    selectFrameworkInput(id: string, rapVersion?: string, materialTargets?: readonly FrameworkMaterialTarget[]): FrameworkReviewState {
+      readInstance(id);
+      if (rapVersion !== undefined) this.readRelease(id, rapVersion);
+      const previous = readFrameworkState(id);
+      const targets = materialTargets ?? previous?.input.materialTargets ?? [];
+      if (previous && previous.input.rapVersion === rapVersion && canonicalYaml(previous.input.materialTargets ?? []) === canonicalYaml(targets)) return previous;
+      const state: FrameworkReviewState = {
+        ...previous,
+        input: { revision: randomUUID(), ...(rapVersion ? { rapVersion } : {}), ...(targets.length ? { materialTargets: targets } : {}) },
+        confirmations: previous?.confirmations ?? [],
+      };
+      writeFrameworkState(id, state);
+      return state;
+    },
+    saveFrameworkProposal(id: string, proposal: FrameworkProposalRecord): void {
+      const state = readFrameworkState(id);
+      if (!state || state.input.revision !== proposal.inputRevision) return fail('REQ_PROPOSAL_SOURCE_CHANGED');
+      const file = proposalFile(id, proposal.version);
+      ensureDirectory(path.dirname(file));
+      if (existsSync(file)) return fail('REQ_STORE_CORRUPT');
+      atomicWrite(file, Buffer.from(JSON.stringify(proposal)), 0o600);
+      writeFrameworkState(id, { ...state, current: proposal.version });
+    },
+    confirmFrameworkProposal(id: string, version: string, confirmedBy: string): FrameworkConfirmation {
+      const state = readFrameworkState(id);
+      if (!state || state.current !== version) return fail('REQ_PROPOSAL_SOURCE_CHANGED');
+      const previous = state.confirmations.find(item => item.version === version);
+      if (previous) return previous;
+      const confirmation = { version, confirmedAt: new Date().toISOString(), confirmedBy };
+      writeFrameworkState(id, { ...state, confirmations: [...state.confirmations, confirmation] });
+      return confirmation;
+    },
     save(instance: RequirementInstance): RequirementInstance {
       const previous = readInstance(instance.instance.id);
       // Identity and audit fields are store-owned; a save never forges a different instance.
@@ -237,15 +311,15 @@ export function createRequirementStore(directory: string) {
       return next.snapshot!;
     },
     /** Publishes the RAP 0.2 contract into the immutable release library. */
-    publish(id: string, version: string, releasedBy: string): RequirementReleaseEntry {
+    publish(id: string, version: string, releasedBy: string, frameworkVersion?: string): RequirementReleaseEntry {
       const instance = readInstance(id);
       let publication: RapPublication;
-      try { publication = buildRapPublication(instance, version, releasedBy); }
+      try { publication = buildRapPublication(frameworkVersion ? { ...instance, framework: readFrameworkProposal(id, frameworkVersion).framework } : instance, version, releasedBy); }
       catch (error) { if (error instanceof RequirementFault) throw new RequirementStoreFault(error.code); throw error; }
       const entries = loadReleaseIndex();
       const existing = entries.find(entry => entry.id === id && entry.version === version);
       if (existing) {
-        if (existing.packageFingerprint === publication.packageFingerprint && existing.contentFingerprint === publication.contentFingerprint) return existing;
+        if (existing.packageFingerprint === publication.packageFingerprint && existing.contentFingerprint === publication.contentFingerprint && existing.frameworkVersion === frameworkVersion) return existing;
         fail('REQ_VERSION_CONFLICT');
       }
       if (entries.some(entry => entry.id === id && entry.contentFingerprint === publication.contentFingerprint)) fail('REQ_SAME_CONTENT');
@@ -269,6 +343,7 @@ export function createRequirementStore(directory: string) {
         packageFingerprint: publication.packageFingerprint, contentFingerprint: publication.contentFingerprint,
         releasedAt: publication.rap.releasedAt, releasedBy: releasedBy.trim(),
         openQuestionCount: publication.rap.openQuestions.length, metricCount: publication.rap.metrics.length,
+        ...(frameworkVersion ? { frameworkVersion } : {}),
       };
       saveReleaseIndex([...entries, entry].sort((a, b) => a.id.localeCompare(b.id) || a.version.localeCompare(b.version)));
       return entry;

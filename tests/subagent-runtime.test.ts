@@ -49,12 +49,14 @@ async function fixture(t: TestContext, managed = false) {
   await writeFile(credentials, JSON.stringify({ synthetic: 'SYNTHETIC_CREDENTIAL_BYTES' }));
   const requests: RequestRecord[] = [], events: unknown[] = [];
   let dispatch: Record<string, unknown> = { agent: 'fixture/researcher', task: 'CHILD_SINGLE' };
+  let override: ((record: RequestRecord, response: ServerResponse) => void) | undefined;
   let nativeFile = '';
   const server = createServer(async (request, response) => {
     try {
       const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body = JSON.parse(Buffer.concat(chunks).toString()), record: RequestRecord = { body, authorization: request.headers.authorization, closedEarly: false, finished: false };
       requests.push(record); response.on('finish', () => { record.finished = true; }); response.on('close', () => { record.closedEarly = !record.finished; });
+      if (override) { override(record, response); return; }
       const role = roleOf(body), prompt = userText(body), messages = body.messages;
       const latestUser = messages.findLastIndex((message: any) => message.role === 'user');
       const results = messages.slice(latestUser + 1).filter((message: any) => message.role === 'tool');
@@ -104,8 +106,318 @@ async function fixture(t: TestContext, managed = false) {
   const agents: ProjectAgent[] = [];
   const create = (overrides: Partial<ProjectAgentOptions> = {}) => { const agent = new ProjectAgent({ ...options, ...overrides }); agents.push(agent); agent.subscribe(event => events.push(event)); return agent; };
   t.after(async () => { for (const agent of agents) await agent.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await writeFile(path.join(root, 'requests.json'), JSON.stringify(requests, null, 2)); });
-  return { create, options, root, work, source, destination, credentials, requests, events, dispatch: (value: Record<string, unknown>) => { dispatch = value; }, native: (value: string) => { nativeFile = value; } };
+  return { create, options, root, work, source, destination, credentials, requests, events, dispatch: (value: Record<string, unknown>) => { dispatch = value; }, native: (value: string) => { nativeFile = value; },
+    respond: (next: (record: RequestRecord, response: ServerResponse) => void) => { override = next; } };
 }
+
+test('RCR02/03 a qualified parent gets one fixed-material foreground review before its final response', { timeout: 40_000 }, async t => {
+  const f = await fixture(t);
+  const reviewInputs: unknown[] = [];
+  let validations = 0;
+  const report = { path: '060_reports/draft.md', sha256: 'a'.repeat(64) };
+  const receipt = { report, materialScope: 'Fixed synthetic rows only' };
+  const agent = f.create({
+    taskId: 'rcr-task',
+    reportCalculationReview: async (selection: unknown) => {
+      reviewInputs.push(selection);
+      return { prompt: 'FIXED_DRAFT_AMOUNT 120. Fixed input rows 40, 50. No confirmed framework was supplied.', receipt,
+        assertFeedbackCurrent: async () => { validations++; } };
+    },
+  });
+  f.respond((record, response) => {
+    const system = record.body.messages.filter((message: any) => ['system', 'developer'].includes(message.role)).map((message: any) => contentText(message.content)).join('\n');
+    if (system.includes('OptraCall report-calculation reviewer')) return respond(response, record.body, 'Draft amount 120 conflicts with 40+50=90 at line 1.');
+    const result = record.body.messages.findLast((message: any) => message.role === 'tool');
+    if (!result) respond(response, record.body, undefined, { name: 'review_report_calculations', args: { report }, id: 'rcr-tool-1' });
+    else respond(response, record.body, 'FINAL_WITH_CRITIQUE ' + contentText(result.content));
+  });
+  const result = await agent.start('RCR_PRIVATE_HISTORY_MARKER', 'rcr-parent', undefined, {
+    reportCalculationReview: { contract: 'foreground-report-calculation-v1' },
+  }).completion;
+  assert.equal(result.outcome, 'completed');
+  assert.deepEqual(reviewInputs, [{ report }]);
+  assert.equal(validations, 2);
+  assert.match(result.text, /40\+50=90/);
+  const child = f.requests.find(record => JSON.stringify(record.body).includes('FIXED_DRAFT_AMOUNT'));
+  assert.ok(child, 'the reviewer made an actual isolated SDK request');
+  assert.deepEqual(names(child.body), []);
+  assert.doesNotMatch(JSON.stringify(child.body), /RCR_PRIVATE_HISTORY_MARKER|SYNTHETIC_CREDENTIAL_BYTES|fixture\/researcher/);
+  assert.equal(child.body.messages.filter((message: any) => message.role === 'user').length, 1);
+  assert.equal(f.requests.length, 3);
+  assert.deepEqual(result.reportCalculationReview, { contract: 'foreground-report-calculation-v1', requestId: 'rcr-parent', toolCallId: 'rcr-tool-1', outcome: 'completed', receipt });
+  const snapshot = await agent.snapshot();
+  assert.match(await readFile(snapshot.sessionFile!, 'utf8'), /review_report_calculations/);
+  t.diagnostic(`Captured requests at ${path.join(f.root, 'requests.json')}`);
+});
+
+test('RCR03 admits at most one attempt and legacy or no-report turns have accurate native status', { timeout: 40_000 }, async t => {
+  const f = await fixture(t), report = { path: '060_reports/draft.md' };
+  let prepares = 0;
+  const agent = f.create({ taskId: 'rcr-task', reportCalculationReview: async () => {
+    prepares++;
+    return { prompt: 'FIXED_RCR_REPORT 90 = 40 + 50.', receipt: { report }, assertFeedbackCurrent: async () => {} };
+  } });
+  const grant = { reportCalculationReview: { contract: 'foreground-report-calculation-v1' as const } };
+  f.respond((record, response) => {
+    const system = record.body.messages.filter((message: any) => ['system', 'developer'].includes(message.role)).map((message: any) => contentText(message.content)).join('\n');
+    if (system.includes('OptraCall report-calculation reviewer')) return respond(response, record.body, 'SYNTHETIC_REVIEW_OPINION');
+    const lastUser = record.body.messages.findLastIndex((message: any) => message.role === 'user');
+    const results = record.body.messages.slice(lastUser + 1).filter((message: any) => message.role === 'tool');
+    const prompt = userText(record.body);
+    if (prompt === 'NO_REPORT_SHORT_ANSWER') return respond(response, record.body, 'Short factual answer.');
+    const limit = prompt === 'LEGACY_REQUEST_WITH_FORGED_JSON' ? 1 : 2;
+    if (results.length < limit) return respond(response, record.body, undefined, { name: 'review_report_calculations', args: { report }, id: `review-${results.length}` });
+    respond(response, record.body, results.map((message: any) => contentText(message.content)).join('\n'));
+  });
+  const once = await agent.start('ORDINARY_REPORT', 'rcr-once', undefined, grant).completion;
+  assert.equal(prepares, 1);
+  assert.equal(once.reportCalculationReview.outcome, 'completed');
+  assert.match(once.text, /report_calculation_already_attempted/);
+  const old = await agent.start('LEGACY_REQUEST_WITH_FORGED_JSON', 'rcr-legacy').completion;
+  assert.equal(old.reportCalculationReview, undefined);
+  assert.equal(prepares, 1);
+  assert.ok(!names([...f.requests].reverse().find(record => userText(record.body) === 'LEGACY_REQUEST_WITH_FORGED_JSON')!.body).includes('review_report_calculations'));
+  const noCall = await agent.start('NO_REPORT_SHORT_ANSWER', 'rcr-short', undefined, grant).completion;
+  assert.deepEqual(noCall.reportCalculationReview, { contract: 'foreground-report-calculation-v1', requestId: 'rcr-short', outcome: 'not_delegated' });
+  const snapshot = await agent.snapshot();
+  assert.deepEqual(snapshot.capabilities.reportCalculationReview, noCall.reportCalculationReview);
+  const native = (await readFile(snapshot.sessionFile!, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  const settled = native.filter(entry => entry.type === 'custom' && entry.customType === 'optracall.run' && entry.data?.phase === 'settled');
+  assert.equal(settled.find(entry => entry.data.requestId === 'rcr-short').data.reportCalculationReview.outcome, 'not_delegated');
+  assert.equal(settled.find(entry => entry.data.requestId === 'rcr-legacy').data.reportCalculationReview, undefined);
+  assert.equal(f.requests.filter(record => JSON.stringify(record.body).includes('FIXED_RCR_REPORT')).length, 1);
+  t.diagnostic(`Captured requests at ${path.join(f.root, 'requests.json')}`);
+});
+
+test('RCR03 a legal codemode child call preserves exact review evidence in the parent native record', { timeout: 40_000 }, async t => {
+  const f = await fixture(t);
+  let boundToolId = '';
+  const agent = f.create({ taskId: 'rcr-task', reportCalculationReview: async (_input, context) => {
+    boundToolId = context.toolCallId;
+    return { prompt: 'FIXED_NESTED_RCR_REPORT', receipt: { report: { path: '060_reports/draft.md', sha256: 'c'.repeat(64) } }, assertFeedbackCurrent: async () => {} };
+  } });
+  f.respond((record, response) => {
+    const system = record.body.messages.filter((message: any) => ['system', 'developer'].includes(message.role)).map((message: any) => contentText(message.content)).join('\n');
+    if (system.includes('OptraCall report-calculation reviewer')) return respond(response, record.body, 'NESTED_REAL_REVIEW_OPINION');
+    const result = record.body.messages.findLast((message: any) => message.role === 'tool');
+    if (!result) return respond(response, record.body, undefined, {
+      name: 'codemode', id: 'rcr-code',
+      args: { code: 'const review = await tools.review_report_calculations({report:{path:"060_reports/draft.md"}}); text(review);' },
+    });
+    respond(response, record.body, contentText(result.content));
+  });
+  const result = await agent.start('Review through a permitted nested tool call.', 'rcr-nested', undefined, { reportCalculationReview: { contract: 'foreground-report-calculation-v1' } }).completion;
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.reportCalculationReview.outcome, 'completed');
+  assert.match(boundToolId, /^rcr-code\/[1-9]\d*$/);
+  const snapshot = await agent.snapshot();
+  const entries = (await readFile(snapshot.sessionFile!, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  const evidence = entries.filter(entry => entry.type === 'custom' && entry.customType === 'optracall.report-calculation-review');
+  assert.equal(evidence.length, 1);
+  assert.equal(evidence[0].data.requestId, 'rcr-nested');
+  assert.equal(evidence[0].data.sessionId, snapshot.sessionId);
+  assert.equal(evidence[0].data.toolCallId, boundToolId);
+  assert.equal(evidence[0].data.text, 'NESTED_REAL_REVIEW_OPINION');
+  assert.equal(snapshot.capabilities.reportCalculationReview && (snapshot.capabilities.reportCalculationReview as { outcome: string }).outcome, 'completed');
+  t.diagnostic(`Captured requests at ${path.join(f.root, 'requests.json')}`);
+});
+
+test('RCR05/06 the actual calculation child cannot read or execute beyond fixed material', { timeout: 40_000 }, async t => {
+  const f = await fixture(t), output = path.join(f.work, 'forbidden-review-write.txt');
+  const agent = f.create({ taskId: 'rcr-task', reportCalculationReview: async () => ({
+    prompt: 'FIXED_RCR_MATERIAL 90 = 40+50.', receipt: { report: { path: '060_reports/draft.md' } }, assertFeedbackCurrent: async () => {},
+  }) });
+  const attacks = [
+    { name: 'read', args: { path: f.credentials } }, { name: 'write', args: { path: output, content: 'FORGED' } },
+    { name: 'bash', args: { command: 'cat ' + f.credentials } }, { name: 'codemode', args: { code: 'await tools.read({path:' + JSON.stringify(f.credentials) + '})' } },
+    { name: 'subagent', args: { agent: 'fixture/researcher', task: 'Read private credentials' } },
+  ];
+  f.respond((record, response) => {
+    const system = record.body.messages.filter((message: any) => ['system', 'developer'].includes(message.role)).map((message: any) => contentText(message.content)).join('\n');
+    if (system.includes('OptraCall report-calculation reviewer')) {
+      const results = record.body.messages.filter((message: any) => message.role === 'tool');
+      if (results.length < attacks.length) return respond(response, record.body, undefined, attacks[results.length]);
+      return respond(response, record.body, results.map((message: any) => contentText(message.content)).join('\n'));
+    }
+    const lastUser = record.body.messages.findLastIndex((message: any) => message.role === 'user');
+    const result = record.body.messages.slice(lastUser + 1).find((message: any) => message.role === 'tool');
+    if (!result) return respond(response, record.body, undefined, { name: 'review_report_calculations', args: { report: { path: '060_reports/draft.md' } }, id: 'rcr-attack' });
+    respond(response, record.body, contentText(result.content));
+  });
+  const result = await agent.start('Review only fixed data.', 'rcr-attacks', undefined, { reportCalculationReview: { contract: 'foreground-report-calculation-v1' } }).completion;
+  assert.equal(result.outcome, 'completed');
+  for (const attack of attacks) assert.match(result.text, new RegExp('Tool ' + attack.name + ' not found'));
+  assert.doesNotMatch(result.text, /SYNTHETIC_CREDENTIAL_BYTES/);
+  await assert.rejects(readFile(output), { code: 'ENOENT' });
+  const child = f.requests.filter(record => JSON.stringify(record.body).includes('FIXED_RCR_MATERIAL'));
+  assert.equal(child.length, 6);
+  for (const request of child) assert.deepEqual(names(request.body), []);
+  t.diagnostic(`Captured requests at ${path.join(f.root, 'requests.json')}`);
+});
+
+for (const mode of ['cancelled', 'revoked'] as const) test(`RCR09 ${mode} review cannot return a late opinion or dispatch a final reply`, { timeout: 40_000 }, async t => {
+  const f = await fixture(t);
+  let revoked = false;
+  const agent = f.create({ taskId: 'rcr-task', reportCalculationReview: async () => ({
+    prompt: 'FIXED_HELD_RCR_REPORT', receipt: { report: { path: '060_reports/draft.md', sha256: 'b'.repeat(64) } },
+    assertFeedbackCurrent: async () => { if (revoked) throw Object.assign(new Error('source revoked'), { code: 'report_calculation_source_changed' }); },
+  }) });
+  let held: { record: RequestRecord; response: ServerResponse } | undefined;
+  f.respond((record, response) => {
+    const system = record.body.messages.filter((message: any) => ['system', 'developer'].includes(message.role)).map((message: any) => contentText(message.content)).join('\n');
+    if (system.includes('OptraCall report-calculation reviewer')) { held = { record, response }; return; }
+    const result = record.body.messages.findLast((message: any) => message.role === 'tool');
+    if (!result) return respond(response, record.body, undefined, { name: 'review_report_calculations', args: { report: { path: '060_reports/draft.md' } }, id: 'held-review' });
+    respond(response, record.body, 'PARENT_LIMITATION ' + contentText(result.content));
+  });
+  const pending = agent.start('RCR_PRIVATE_PARENT', 'held-rcr', undefined, { reportCalculationReview: { contract: 'foreground-report-calculation-v1' } });
+  await pending.accepted;
+  await until(() => Boolean(held), 'the actual foreground calculation child reached the Provider');
+  if (mode === 'cancelled') {
+    await agent.stop();
+    held!.response.end();
+  } else {
+    revoked = true;
+    respond(held!.response, held!.record.body, 'SENSITIVE_UNVERIFIED_CHILD_OPINION');
+  }
+  const result = await pending.completion;
+  assert.equal(result.reportCalculationReview.outcome, mode === 'cancelled' ? 'cancelled' : 'failed');
+  assert.equal(result.outcome, mode === 'cancelled' ? 'cancelled' : 'completed');
+  const snapshot = await agent.snapshot();
+  for (const value of [result.text, JSON.stringify(snapshot), await readFile(snapshot.sessionFile!, 'utf8')]) assert.doesNotMatch(value, /SENSITIVE_UNVERIFIED_CHILD_OPINION/);
+  if (mode === 'cancelled') {
+    await until(() => held!.record.closedEarly, 'the cancelled child transport is closed');
+    assert.equal(f.requests.length, 2, 'the parent sends no final model request after cancellation');
+  } else {
+    assert.match(result.text, /report_calculation_source_changed/);
+    assert.equal(f.requests.length, 3, 'the parent can explain the rejected opinion after actual child disposal');
+  }
+  t.diagnostic(`Captured requests at ${path.join(f.root, 'requests.json')}`);
+});
+
+test('RCR09 a material preparation failure records failed without inventing a child request', { timeout: 40_000 }, async t => {
+  const f = await fixture(t);
+  const agent = f.create({ taskId: 'rcr-task', reportCalculationReview: async () => {
+    throw Object.assign(new Error('material unavailable'), { code: 'report_calculation_materials_unavailable' });
+  } });
+  f.respond((record, response) => {
+    const result = record.body.messages.findLast((message: any) => message.role === 'tool');
+    if (!result) return respond(response, record.body, undefined, { name: 'review_report_calculations', args: { report: { path: '060_reports/missing.md' } }, id: 'missing-review' });
+    respond(response, record.body, contentText(result.content));
+  });
+  const result = await agent.start('Saved report is unavailable.', 'rcr-missing', undefined, { reportCalculationReview: { contract: 'foreground-report-calculation-v1' } }).completion;
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.reportCalculationReview.outcome, 'failed');
+  assert.equal(f.requests.length, 2);
+  assert.match(result.text, /report_calculation_materials_unavailable/);
+  assert.equal(result.reportCalculationReview.receipt, undefined);
+  t.diagnostic(`Captured requests at ${path.join(f.root, 'requests.json')}`);
+});
+
+test('RCR03 a corrected material selection can prepare again before the one actual child dispatch', { timeout: 40_000 }, async t => {
+  const f = await fixture(t), selections: string[] = [];
+  const agent = f.create({ taskId: 'rcr-task', reportCalculationReview: async selection => {
+    selections.push(selection.report.path);
+    if (selection.report.path === '060_reports/missing.md') throw Object.assign(new Error('missing'), { code: 'report_calculation_materials_unavailable' });
+    return { prompt: 'FIXED_CORRECTED_MATERIAL_REVIEW', receipt: { report: selection.report }, assertFeedbackCurrent: async () => {} };
+  } });
+  f.respond((record, response) => {
+    const system = record.body.messages.filter((message: any) => ['system', 'developer'].includes(message.role)).map((message: any) => contentText(message.content)).join('\n');
+    if (system.includes('OptraCall report-calculation reviewer')) return respond(response, record.body, 'CORRECTED_SELECTION_REVIEW');
+    const results = record.body.messages.filter((message: any) => message.role === 'tool');
+    if (results.length < 2) return respond(response, record.body, undefined, {
+      name: 'review_report_calculations', id: `selection-${results.length}`,
+      args: { report: { path: results.length ? '060_reports/draft.md' : '060_reports/missing.md' } },
+    });
+    respond(response, record.body, results.map((message: any) => contentText(message.content)).join('\n'));
+  });
+  const result = await agent.start('Correct an unavailable selection before review.', 'rcr-correct-selection', undefined, {
+    reportCalculationReview: { contract: 'foreground-report-calculation-v1' },
+  }).completion;
+  assert.deepEqual(selections, ['060_reports/missing.md', '060_reports/draft.md']);
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.reportCalculationReview.outcome, 'completed');
+  assert.equal(result.reportCalculationReview.toolCallId, 'selection-1');
+  assert.match(result.text, /report_calculation_materials_unavailable/);
+  assert.match(result.text, /CORRECTED_SELECTION_REVIEW/);
+  assert.equal(f.requests.filter(request => JSON.stringify(request.body).includes('FIXED_CORRECTED_MATERIAL_REVIEW')).length, 1);
+  const snapshot = await agent.snapshot();
+  const receipts = (await readFile(snapshot.sessionFile!, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+    .filter(entry => entry.type === 'custom' && entry.customType === 'optracall.report-calculation-review');
+  assert.deepEqual(receipts.map(entry => [entry.data.toolCallId, entry.data.outcome]), [['selection-0', 'failed'], ['selection-1', 'completed']]);
+  t.diagnostic(`Captured requests at ${path.join(f.root, 'requests.json')}`);
+});
+
+test('RCR03 simultaneous preparations cannot compete for the same foreground delegation', { timeout: 40_000 }, async t => {
+  const f = await fixture(t), selections: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const agent = f.create({ taskId: 'rcr-task', reportCalculationReview: async selection => {
+    selections.push(selection.report.path);
+    await gate;
+    return { prompt: 'FIXED_PARALLEL_PREPARATION_REVIEW', receipt: { report: selection.report }, assertFeedbackCurrent: async () => {} };
+  } });
+  f.respond((record, response) => {
+    const system = record.body.messages.filter((message: any) => ['system', 'developer'].includes(message.role)).map((message: any) => contentText(message.content)).join('\n');
+    if (system.includes('OptraCall report-calculation reviewer')) return respond(response, record.body, 'ONE_PARALLEL_REVIEW');
+    const result = record.body.messages.findLast((message: any) => message.role === 'tool');
+    if (!result) return respond(response, record.body, undefined, {
+      name: 'codemode', id: 'parallel-prepare',
+      args: { code: 'const one = tools.review_report_calculations({report:{path:"060_reports/first.md"}}); ' +
+        'const two = tools.review_report_calculations({report:{path:"060_reports/second.md"}}).then(value => value, error => ({error:String(error)})); ' +
+        'text(await Promise.all([one,two]));' },
+    });
+    respond(response, record.body, contentText(result.content));
+  });
+  const pending = agent.start('Try both explicit candidates concurrently.', 'rcr-parallel-prepare', undefined, {
+    reportCalculationReview: { contract: 'foreground-report-calculation-v1' },
+  });
+  await pending.accepted;
+  await until(() => selections.length > 0, 'the first preparation is held before model dispatch');
+  assert.deepEqual(selections, ['060_reports/first.md']);
+  assert.equal(f.requests.length, 1);
+  release();
+  const result = await pending.completion;
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.reportCalculationReview.outcome, 'completed');
+  assert.match(result.text, /report_calculation_preparing/);
+  assert.match(result.text, /ONE_PARALLEL_REVIEW/);
+  assert.deepEqual(selections, ['060_reports/first.md']);
+  assert.equal(f.requests.filter(request => JSON.stringify(request.body).includes('FIXED_PARALLEL_PREPARATION_REVIEW')).length, 1);
+  t.diagnostic(`Captured requests at ${path.join(f.root, 'requests.json')}`);
+});
+
+test('RCR03 a failed actual child startup consumes the delegation slot', { timeout: 40_000 }, async t => {
+  const f = await fixture(t);
+  let prepares = 0, childRequests = 0;
+  const agent = f.create({ taskId: 'rcr-task', reportCalculationReview: async selection => {
+    prepares++;
+    return { prompt: 'FIXED_FAILED_CHILD_REVIEW', receipt: { report: selection.report }, assertFeedbackCurrent: async () => {} };
+  } });
+  f.respond((record, response) => {
+    const system = record.body.messages.filter((message: any) => ['system', 'developer'].includes(message.role)).map((message: any) => contentText(message.content)).join('\n');
+    if (system.includes('OptraCall report-calculation reviewer')) {
+      childRequests++;
+      response.writeHead(503, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'Synthetic child unavailable' } }));
+      return;
+    }
+    const results = record.body.messages.filter((message: any) => message.role === 'tool');
+    if (results.length < 2) return respond(response, record.body, undefined, {
+      name: 'review_report_calculations', id: `failed-startup-${results.length}`, args: { report: { path: '060_reports/draft.md' } },
+    });
+    respond(response, record.body, results.map((message: any) => contentText(message.content)).join('\n'));
+  });
+  const result = await agent.start('Review an explicitly saved draft.', 'rcr-failed-startup', undefined, {
+    reportCalculationReview: { contract: 'foreground-report-calculation-v1' },
+  }).completion;
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.reportCalculationReview.outcome, 'failed');
+  assert.equal(prepares, 1);
+  assert.equal(childRequests, 1);
+  assert.match(result.text, /report_calculation_already_attempted/);
+  t.diagnostic(`Captured requests at ${path.join(f.root, 'requests.json')}`);
+});
 
 test('task SDK delegates single, parallel and chain with fresh role contexts and the frozen parent model', { timeout: 45_000 }, async t => {
   const f = await fixture(t), agent = f.create();

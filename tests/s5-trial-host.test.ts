@@ -53,8 +53,9 @@ test('S5A03/05 taskless preparation closes before final Host; real POST fresh ow
   assert.match(task.id, /^[a-f0-9-]{36}$/); assert.equal(task.sessionFile, undefined); assert.equal(task.lastRun, undefined);
   const route = `/api/projects/${project.id}/tasks/${task.id}`;
   const fresh = await json(await final.request(route + '/automatic-verification/capabilities'));
-  if (process.platform === 'darwin') assert.equal(fresh.supported, true, JSON.stringify(fresh));
-  else assert.equal(fresh.supported, false, 'unsupported OS stays unsupported');
+  assert.equal(fresh.supported, false, 'the current product does not reopen the retired automatic entry');
+  assert.equal(fresh.retired, true);
+  assert.equal((await json(await final.request(route + '/conclusion-reviews/transition'))).state, 'ready');
   await assert.rejects(final.createTask(project.id, { name: 'must not create a sibling evaluation owner' }), /first task/);
   assert.equal((await json(await final.request(`/api/projects/${project.id}`))).project.tasks.length, 1);
   await final.close();

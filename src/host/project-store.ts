@@ -12,7 +12,7 @@ export interface ProjectConfiguration { id: string; revision: number; provider: 
 export interface ProjectRun { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic }
 export interface UploadedFile { id: string; originalName: string; path: string; bytes: number; sha256: string; uploadedAt: string; source: { kind: 'upload' | 'copy' | 'user-save-report'; from?: string } }
 export interface FeedbackTaskOrigin { handoffId: string; operationId: string; requestHash: string }
-export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin }
+export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin; reviewDraftIds?: string[] }
 export interface ProjectRecord { schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
 export class ProjectStoreFault extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
@@ -176,6 +176,10 @@ export class ProjectStore {
       if (input.tradeAreaTools !== undefined) { if (typeof input.tradeAreaTools !== 'boolean') return fail('invalid_project_metadata'); task.tradeAreaTools = input.tradeAreaTools; }
       if (input.modelTools !== undefined) { if (typeof input.modelTools !== 'boolean') return fail('invalid_project_metadata'); task.modelTools = input.modelTools; }
       if (input.feedbackOrigin !== undefined) task.feedbackOrigin = feedbackOrigin(input.feedbackOrigin);
+      if (input.reviewDraftIds !== undefined) {
+        if (!Array.isArray(input.reviewDraftIds) || input.reviewDraftIds.some(value => typeof value !== 'string' || !uuid.test(value)) || new Set(input.reviewDraftIds).size !== input.reviewDraftIds.length) fail('invalid_project_metadata');
+        task.reviewDraftIds = [...input.reviewDraftIds as string[]];
+      }
       tasks.push(task);
     }
     return { schemaVersion: 2, id, name, createdAt: value.createdAt, updatedAt: value.updatedAt, configuration, uploads, archivedAt: value.archivedAt as string | null, tasks };
@@ -285,6 +289,21 @@ export class ProjectStore {
   saveDraft(projectId: string, taskId: string, draft: string): Promise<TaskRecord> {
     if (typeof draft !== 'string' || draft.length > 20000) return Promise.reject(new ProjectStoreFault('invalid_draft'));
     return this.#updateTask(projectId, taskId, task => ({ ...task, draft }));
+  }
+  /** The draft and its review receipt share the same existing atomic project
+   * write, so refresh, repeat clicks and a later cleared draft cannot duplicate it. */
+  appendReviewToDraft(projectId: string, taskId: string, reviewId: string, text: string): Promise<{ task: TaskRecord; appended: boolean }> {
+    if (!uuid.test(reviewId) || typeof text !== 'string' || !text.trim()) return Promise.reject(new ProjectStoreFault('invalid_review_draft'));
+    return this.#mutation(async () => {
+      const project = await this.#read(projectId); this.#active(project);
+      const previous = this.#task(project, taskId);
+      if (previous.reviewDraftIds?.includes(reviewId)) return { task: this.#decorateTask(projectId, previous), appended: false };
+      const draft = previous.draft + (previous.draft ? '\n\n' : '') + text;
+      if (draft.length > 20_000) fail('review_draft_too_large');
+      const now = new Date().toISOString(), task = { ...previous, draft, reviewDraftIds: [...(previous.reviewDraftIds ?? []), reviewId], updatedAt: now };
+      await this.#write({ ...project, tasks: project.tasks.map(value => value.id === taskId ? task : value), updatedAt: now });
+      return { task: this.#decorateTask(projectId, task), appended: true };
+    });
   }
   setTaskCapability(projectId: string, taskId: string, capability: TaskCapability, enabled: boolean): Promise<TaskRecord> {
     if (!isTaskCapability(capability) || typeof enabled !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
