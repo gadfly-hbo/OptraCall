@@ -88,7 +88,12 @@ for (const explicitConfiguration of [false, true]) test(`AV01 public preset conf
   assert.equal(status.observation.requestId, requestId);
   assert.equal(status.observation.configuration.id, publicPresetId);
   assert.equal(status.observation.verificationConfiguration.id, publicPresetId);
-  assert.ok(f.provider.requests.some(request => request.stage === 'ordinary'));
+  const ordinaryRequests = f.provider.requests.filter(request => request.stage === 'ordinary');
+  assert.ok(ordinaryRequests.length > 0);
+  for (const request of ordinaryRequests) {
+    const tools = (request.body.tools ?? []) as { function?: { name?: string } }[];
+    assert.deepEqual(tools.filter(tool => ['write_report', 'read_input', 'read_catalog'].includes(tool.function?.name ?? '')), []);
+  }
   assert.ok(f.provider.requests.some(request => request.stage === 'cold'));
   assert.equal(await readFile(f.reportPath, 'utf8'), author);
 });

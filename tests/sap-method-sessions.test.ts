@@ -143,7 +143,9 @@ test('SAM11 source-reader cannot execute an unadvertised write or load user exte
   const result = await h.sessions.execute(h.input, async outcome => outcome.kind);
   assert.equal(result.outcome, 'completed'); assert.equal(result.result, 'none');
   await assert.rejects(readFile(marker), { code: 'ENOENT' });
-  assert.deepEqual(h.requests[0].tools.map((tool: any) => tool.function.name), ['read_sap_method_source']);
+  const tools: string[] = h.requests[0].tools.map((tool: any) => tool.function.name);
+  assert.deepEqual(tools.filter(name => ['write_report', 'read_input', 'read_catalog'].includes(name)), []);
+  assert.deepEqual(tools, ['read_sap_method_source']);
   assert.ok(h.requests[1].messages.some((message: any) => message.role === 'tool' && /not found|unknown|unavailable/i.test(message.content)));
 });
 

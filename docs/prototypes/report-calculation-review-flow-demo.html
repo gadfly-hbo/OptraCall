@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>OptraCall · 报告计算复核流程演示</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #faf9fc;
+  --paper: #ffffff;
+  --nav: #f4f3f7;
+  --line: #e4e0eb;
+  --ink: #302b3a;
+  --muted: #645c70;
+  --accent: #70539f;
+  --accent-soft: #f0eaf8;
+  --warning: #785316;
+  --warning-soft: #fbf2e3;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+h1, h2, h3, p, ol { margin: 0; }
+h1 { font-size: clamp(22px, 3vw, 32px); line-height: 1.25; letter-spacing: -.025em; }
+h2 { font-size: 16px; line-height: 1.4; }
+h3 { font-size: 14px; }
+p, li, button { overflow-wrap: anywhere; }
+button, select { font: inherit; color: inherit; }
+button, select, summary { cursor: pointer; }
+button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+button:disabled { cursor: not-allowed; opacity: .55; }
+.skip {
+  position: fixed; top: 8px; left: 8px; z-index: 2;
+  background: var(--paper); color: var(--accent);
+  padding: 8px 12px; transform: translateY(-140%);
+}
+.skip:focus { transform: translateY(0); }
+.shell { display: grid; grid-template-columns: 186px minmax(0, 1fr); min-height: 100dvh; }
+.sidebar { background: var(--nav); border-right: 1px solid var(--line); padding: 21px 14px; }
+.brand { display: flex; align-items: center; gap: 9px; padding: 0 4px; font-weight: 720; font-size: 17px; }
+.brand-mark {
+  display: grid; place-items: center; width: 30px; height: 30px;
+  border-radius: 8px; background: var(--accent); color: white;
+}
+.nav-label { margin: 30px 8px 6px; color: var(--muted); font-size: 12px; }
+.nav-current { padding: 7px 8px; border-radius: 7px; background: var(--accent-soft); color: #533580; font-weight: 650; }
+.topbar { padding: 13px clamp(14px, 3vw, 33px); background: var(--paper); border-bottom: 1px solid var(--line); color: var(--muted); }
+.topbar strong { color: var(--ink); }
+.demo-controls {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px;
+  align-items: center; padding: 9px clamp(14px, 3vw, 33px);
+  border-bottom: 1px solid var(--line); background: var(--accent-soft); color: #514167;
+}
+.demo-controls strong { display: block; }
+.demo-controls p { font-size: 12px; }
+.demo-fields { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+select, button {
+  border: 1px solid #d8d0e0; border-radius: 7px;
+  padding: 6px 11px; background: var(--paper); min-height: 34px;
+}
+select { max-width: 100%; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+.primary { background: var(--accent); color: white; border-color: var(--accent); font-weight: 650; }
+.primary:hover:not(:disabled) { background: #62458f; }
+.main { max-width: 1160px; margin: 0 auto; padding: clamp(14px, 3vw, 33px); }
+.main > header { margin: 4px 0 20px; }
+.main > header p { margin-top: 6px; color: var(--muted); }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(245px, .51fr); gap: 18px; align-items: start; }
+.chat, .files { min-width: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; }
+.panel-title { padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.messages { display: grid; align-content: start; gap: 17px; min-height: 202px; padding: 17px 16px; }
+.message { display: grid; grid-template-columns: 31px minmax(0, 1fr); gap: 10px; }
+.message strong { display: block; margin-bottom: 3px; }
+.avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; background: var(--nav); color: var(--muted); font-size: 12px; font-weight: 680; }
+.avatar.agent { background: var(--accent-soft); color: var(--accent); }
+.placeholder { color: var(--muted); }
+.notice { color: var(--warning); background: var(--warning-soft); border-radius: 6px; padding: 7px 10px; }
+.composer { display: grid; gap: 10px; padding: 13px 16px; border-top: 1px solid var(--line); }
+.composer p { min-height: 38px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--page); }
+.composer .actions { display: flex; justify-content: flex-end; }
+.file-list { display: grid; gap: 7px; padding: 13px 14px; }
+.file-list button { text-align: left; padding: 8px 10px; }
+.file-list small { display: block; color: var(--muted); }
+.files p { color: var(--muted); }
+.trace { margin-top: 14px; background: var(--nav); border: 1px solid var(--line); border-radius: 9px; }
+.trace summary { padding: 10px 13px; font-weight: 650; }
+.trace ol { display: grid; gap: 9px; padding: 0 15px 13px 30px; color: var(--muted); }
+.trace strong { color: var(--ink); }
+dialog { width: min(520px, calc(100% - 30px)); max-height: 85dvh; padding: 0; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); }
+dialog::backdrop { background: #2f263e73; }
+.dialog-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.dialog-body { display: grid; gap: 10px; padding: 16px; }
+.formula { font-variant-numeric: tabular-nums; padding: 10px 12px; background: var(--accent-soft); border-radius: 6px; color: #433257; font-size: 16px; font-weight: 640; }
+@media (max-width: 870px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { display: none; }
+}
+@media (max-width: 650px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .demo-controls { align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到任务内容</a>
+<div class="shell">
+  <aside class="sidebar" aria-label="工作区位置">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">O</span> OptraCall</div>
+    <p class="nav-label">项目任务</p>
+    <p class="nav-current">门店销售分析</p>
+  </aside>
+  <div>
+    <header class="topbar">OptraCall / 示例项目 / <strong>门店销售分析</strong></header>
+    <section class="demo-controls" aria-label="演示控制">
+      <div>
+        <strong>计算复核流程演示</strong>
+        <p>使用合成资料。下方沿用任务对话、停止和文件入口。</p>
+      </div>
+      <div class="demo-fields">
+        <label for="scenario">演示场景</label>
+        <select id="scenario">
+          <option value="correction">主 Agent 确认并修正</option>
+          <option value="rejection">主 Agent 核对后保留原判断</option>
+          <option value="missing">材料不足</option>
+          <option value="failure">复核失败</option>
+          <option value="stale">请求换版后收到旧结果</option>
+          <option value="unknown">子资源收尾状态未知</option>
+        </select>
+        <button type="button" id="reset">重置演示</button>
+      </div>
+    </section>
+    <main id="main" class="main" tabindex="-1">
+      <header>
+        <h1>门店销售分析</h1>
+        <p>示例任务比较同一门店的本期与上期销量。</p>
+      </header>
+      <div class="workspace">
+        <section class="chat" aria-labelledby="chat-title">
+          <div class="panel-title"><h2 id="chat-title">任务对话</h2></div>
+          <div class="messages">
+            <p class="placeholder" id="placeholder">发送后，适用的报告会自动进入计算复核。</p>
+            <div class="message" id="user-message" hidden>
+              <span class="avatar" aria-hidden="true">我</span>
+              <div><strong>你</strong><p>比较本期和上期销量，给我一份报告。</p></div>
+            </div>
+            <div class="message" id="agent-message" hidden>
+              <span class="avatar agent" aria-hidden="true">A</span>
+              <div>
+                <strong>OptraCall</strong>
+                <p id="reply" role="status" aria-live="polite"></p>
+              </div>
+            </div>
+          </div>
+          <div class="composer">
+            <p id="prompt">比较本期和上期销量，给我一份报告。</p>
+            <div class="actions">
+              <button type="button" class="primary" id="send">发送</button>
+              <button type="button" id="stop" hidden>停止</button>
+            </div>
+          </div>
+        </section>
+        <aside aria-label="文件和演示记录">
+          <section class="files" aria-labelledby="files-title">
+            <div class="panel-title"><h2 id="files-title">文件 / 060_reports</h2></div>
+            <div class="file-list" id="file-list"></div>
+          </section>
+          <details class="trace" id="trace">
+            <summary>演示记录</summary>
+            <ol id="events"><li>等待发送。</li></ol>
+          </details>
+        </aside>
+      </div>
+    </main>
+  </div>
+</div>
+<dialog id="preview" aria-labelledby="preview-title">
+  <div class="dialog-head">
+    <h2 id="preview-title">报告预览</h2>
+    <form method="dialog"><button type="submit">关闭</button></form>
+  </div>
+  <div class="dialog-body">
+    <p id="file-status"></p>
+    <p class="formula" id="formula"></p>
+    <p id="file-note"></p>
+  </div>
+</dialog>
+<script>
+const scenarios = {
+  correction: {
+    opinion: '子 Agent 指出初稿正文用成 ÷ 1。表格的 11.36% 与两期销量一致。',
+    handling: '主 Agent 回查同店两期销量 44、49，确认是出稿错误，修正正文及首答并另存修订稿。',
+    reply: '本期售出 49 件，上期 44 件，相对增幅 11.36%（49 / 44 − 1）。已保存修订稿，初稿仍可在文件区查看。',
+    revised: true
+  },
+  rejection: {
+    opinion: '子 Agent 建议将 5 / 44 改为 5 / 49。',
+    handling: '主 Agent 回查本轮以上期为基期的口径。5 / 44 正确，保留初稿与原结论。',
+    reply: '本期售出 49 件，上期 44 件，较上期增长 11.36%。以 44 件作为比较基期。',
+    initialFormula: '（49 − 44）/ 44 ≈ 11.36%'
+  },
+  missing: {
+    opinion: '提供给子 Agent 的授权资料只有本期销量，缺少可核实的上期销量。',
+    handling: '主 Agent 复查后仍无法核实比较基期，标明缺口并交付可确认的部分。',
+    reply: '可确认本期售出 49 件。上期原表未提供，本轮暂无法确认两期增幅。',
+    initialFormula: '本期销量 49 件；两期增幅待确认。',
+    warning: true
+  },
+  failure: {
+    opinion: '子调用失败，没有专业意见回交。子资源已确认收尾。',
+    handling: '原主 Agent 交付已确认的本期销量，说明复核未完成，已有文件仍可查看。',
+    reply: '本期售出 49 件。本次计算复核未完成，增幅请以上期原表核对后再使用。',
+    initialFormula: '本期销量 49 件；比较待核实。',
+    warning: true
+  },
+  stale: {
+    opinion: '父请求已换版，旧版本意见随后抵达。',
+    handling: '旧结果保留其原请求归属。现请求没有收到该意见或生成修订稿。',
+    reply: '原请求已结束。旧稿仍可查看。',
+    warning: true
+  },
+  unknown: {
+    opinion: '子资源的实际收尾无法确认。',
+    handling: '任务记录保留未知状态。已有初稿保留。',
+    reply: '复核收尾状态未知，已有初稿可在文件区查看。',
+    warning: true
+  }
+};
+
+const $ = (id) => document.getElementById(id);
+const scenario = $('scenario');
+const send = $('send');
+const stop = $('stop');
+const files = $('file-list');
+const preview = $('preview');
+let timeout;
+let currentRun = 0;
+let reportFiles = [];
+
+function writeLog(label, detail) {
+  const item = document.createElement('li');
+  const title = document.createElement('strong');
+  title.textContent = label;
+  item.append(title, '。' + detail);
+  $('events').append(item);
+}
+
+function openPreview(file) {
+  $('preview-title').textContent = file.name;
+  $('file-status').textContent = file.status;
+  $('formula').textContent = file.formula;
+  $('file-note').textContent = file.note;
+  preview.showModal();
+}
+
+function renderFiles() {
+  files.replaceChildren();
+  if (!reportFiles.length) {
+    const empty = document.createElement('p');
+    empty.textContent = '发送后，已保存的报告会出现在这里。';
+    files.append(empty);
+    return;
+  }
+  reportFiles.forEach((file) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    const caption = document.createElement('small');
+    caption.textContent = file.status;
+    button.append(file.name, caption);
+    button.addEventListener('click', () => openPreview(file));
+    files.append(button);
+  });
+}
+
+function reset() {
+  clearTimeout(timeout);
+  currentRun += 1;
+  if (preview.open) preview.close();
+  reportFiles = [];
+  renderFiles();
+  $('placeholder').hidden = false;
+  $('prompt').hidden = false;
+  $('user-message').hidden = true;
+  $('agent-message').hidden = true;
+  $('reply').textContent = '';
+  $('reply').className = '';
+  $('events').replaceChildren();
+  writeLog('等待发送', '演示以一条普通项目消息开始');
+  $('trace').open = false;
+  send.hidden = false;
+  send.disabled = false;
+  stop.hidden = true;
+}
+
+function showReply(message, warning = false) {
+  $('agent-message').hidden = false;
+  $('reply').textContent = message;
+  $('reply').className = warning ? 'notice' : '';
+}
+
+function afterDelay(run, callback, delay) {
+  timeout = setTimeout(() => {
+    if (currentRun === run) callback();
+  }, delay);
+}
+
+function complete(fixture) {
+  writeLog('复核回执', fixture.opinion);
+  writeLog('主 Agent 处置', fixture.handling);
+  if (fixture.revised) {
+    reportFiles.push({
+      name: '门店销售分析 · 修订稿.md',
+      status: '修订稿 v2',
+      formula: '49 / 44 − 1 ≈ 11.36%',
+      note: '主 Agent 自查后另存。子 Agent 的意见对应初稿 v1。'
+    });
+    renderFiles();
+  }
+  showReply(fixture.reply, fixture.warning);
+  stop.hidden = true;
+}
+
+function start() {
+  const fixture = scenarios[scenario.value];
+  const run = ++currentRun;
+  $('placeholder').hidden = true;
+  $('prompt').hidden = true;
+  $('user-message').hidden = false;
+  $('events').replaceChildren();
+  send.hidden = true;
+  stop.hidden = false;
+  showReply('正在分析两期销量…');
+  writeLog('原任务开始', '用户只发送一次消息');
+  afterDelay(run, () => {
+    reportFiles = [{
+      name: '门店销售分析 · 初稿.md',
+      status: '固定初稿 v1',
+      formula: fixture.initialFormula || '初稿正文写作 49 / 44 ÷ 1，表格列出 11.36%。',
+      note: '这是合成案例保存的初稿。复核意见与稿件版本分别记录。'
+    }];
+    renderFiles();
+    writeLog('保存初稿 v1', '主 Agent 指定本次复核对象，Host 固定稿件版本和本任务获准提供的销量资料');
+    writeLog('自动委派一次', '子 Agent 在同一任务内只读复核，意见回给原主 Agent');
+    showReply('初稿已保存，正在复核关键计算…');
+    afterDelay(run, () => complete(fixture), 1700);
+  }, 450);
+}
+
+send.addEventListener('click', start);
+stop.addEventListener('click', () => {
+  clearTimeout(timeout);
+  currentRun += 1;
+  stop.hidden = true;
+  showReply(reportFiles.length ? '已停止。本次复核已取消，已保存的初稿仍可查看。' : '已停止。本次尚未保存报告。', true);
+  writeLog('父请求停止', '子调用和后续交付随父请求停止；迟到结果不会进入对话');
+});
+scenario.addEventListener('change', reset);
+$('reset').addEventListener('click', reset);
+reset();
+</script>
+</body>
+</html>

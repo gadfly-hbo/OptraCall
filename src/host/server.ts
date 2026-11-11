@@ -15,6 +15,7 @@ import { ProjectRuntimeError, type ProjectSnapshot } from '../agent/project-runt
 import { ConfigurationStore, ConfigurationStoreError, TARGET_MODELS } from './config-store.ts';
 import { createWebSearch } from './web-search.ts';
 import { ProjectStore, ProjectStoreFault, type ProjectRecord, type TaskRecord } from './project-store.ts';
+import { createProjectFilesPort } from './project-files.ts';
 import { PROJECT_UPLOAD_JSON_MAX_BYTES } from './project-upload.ts';
 import { ModelPackStore } from './model-pack-store.ts';
 import { createModelPackRoutes } from './model-pack-routes.ts';
@@ -208,7 +209,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const semanticPort = createSemanticContextPort({ projectId: project.id, taskId: task.id, projects, data: projectDataContext, reader: semanticContext, mutate, isClosing: () => closing });
         const semanticContextRead = semanticGraph && (options.semanticGraph?.bindingFor(project.id, task.id) || options.studioPython && studio.availableForTask(project.id, task.id)) && (!protectedExecution || protectedExecution.profile === 'ordinary')
           ? createSemanticContextReadPort({ projectId: project.id, taskId: task.id, projects, legacy: semanticPort, graph: semanticGraph, graphOnly: Boolean(protectedExecution), isClosing: () => closing }) : undefined;
-        return { analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution } : { studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
+        const projectFiles = protectedExecution ? undefined : createProjectFilesPort({
+          projects, enterpriseMaterials, projectId: project.id, taskId: task.id,
+          assertOwner: async () => {
+            if (closing) throw new RequestFault(503, 'host_closing');
+            await pair(project.id, task.id, true);
+          },
+        });
+        return { analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution } : { projectFiles, studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
           context.signal.throwIfAborted();
           await pair(project.id, task.id, true);
           const result = action === 'find' ? await personalContext.find(input, { signal: context.signal }) : await personalContext.read(parsePersonalContextReadInput(input), { signal: context.signal });
