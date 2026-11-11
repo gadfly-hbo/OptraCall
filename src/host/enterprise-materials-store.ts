@@ -202,6 +202,13 @@ export class EnterpriseMaterialsStore {
     this.writeJson(this.directoryPath, this.catalog(index));
     return { storeId: index.storeId, directoryPath: this.directoryPath, materials: index.materials.map(material => ({ id: material.id, version: material.version, title: material.draft.title, category: material.draft.category, scope: material.draft.scope, updatedAt: material.updatedAt, enabled: material.enabled, activeRevisionId: material.activeRevisionId, revisionCount: material.revisions.length, bodyReadable: (material.revisions.find(revision => revision.revisionId === material.activeRevisionId) ?? material.draft).bodyBytes > 0 })) };
   }
+  readEnabledCatalog(): { storeId: string; path: string; bytes: Buffer } {
+    const index = this.load(true);
+    const bytes = this.safeRead(this.directoryPath);
+    const expected = Buffer.from(JSON.stringify(this.catalog(index), null, 2) + '\n');
+    if (!bytes.equals(expected)) fail('enterprise_storage_changed', 503);
+    return { storeId: index.storeId, path: this.directoryPath, bytes };
+  }
   async create(input: Partial<EnterpriseMaterialFields>): Promise<EnterpriseMaterialDetail> {
     const index = this.load(), fields = this.input(input);
     if (fields.sourceFileId !== null) fail('enterprise_source_not_found', 404);

@@ -27,7 +27,9 @@ test('fixed-draft worker refuses command RPC instead of restoring tools or execu
   const turn = agent.start('Complete fixed UTF-8 material: amount=10. Return new draft only.', randomUUID());
   await turn.accepted; assert.equal((await turn.completion).outcome, 'completed');
   assert.equal(provider.requests[0]!.body.tools?.length ?? 0, 0);
-  assert.deepEqual((await agent.snapshot()).tools, []);
+  const tools = (await agent.snapshot()).tools;
+  assert.deepEqual(tools.filter(name => ['write_report', 'read_input', 'read_catalog'].includes(name)), []);
+  assert.deepEqual(tools, []);
 });
 
 test('SM05/SM07: restored task rejects stale editor events and preserves native snapshot/UI event order', { timeout: 30_000 }, async t => {

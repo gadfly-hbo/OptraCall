@@ -50,6 +50,7 @@ const toolSdkConsumers = new Map([
   ['src/agent/protected-tool-process.ts', new Set(['createReadTool', 'createWriteTool', 'createEditTool', 'createBashTool', 'createGrepTool', 'createFindTool', 'createLsTool', 'createCodemodeExtension'])],
   // MO02: native-only file executor and exact SDK equivalence fixture; no session/model capability.
   ['src/agent/protected-file-process.ts', new Set(['createReadTool', 'createWriteTool', 'createEditTool', 'createLsTool'])],
+  ['src/agent/project-files.ts', new Set(['createReadTool', 'createWriteTool'])], // HPF: public file tool factories only, scoped Host operations.
   ['src/agent/protected-bash-operations.ts', new Set()], // Public operations type only; no SDK value capability.
   ['tests/protected-file-process.test.ts', new Set(['createReadTool'])],
   ['tests/protected-bash-operations.test.ts', new Set(['createBashTool'])],

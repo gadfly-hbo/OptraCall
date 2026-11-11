@@ -1,7 +1,7 @@
 import { readRunDiagnostic, type RunDiagnostic } from '../agent/run-diagnostics.ts';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { constants, lstatSync, unlinkSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { isProjectUploadName, PROJECT_TEXT_UPLOAD_EXTENSIONS, PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
 import { isTaskCapability, type TaskCapability } from './task-capabilities.ts';
@@ -493,6 +493,86 @@ export class ProjectStore {
     if (typeof text !== 'string') return fail('invalid_report_text');
     const prepared = this.#uploadInput(name, Buffer.from(text, 'utf8'));
     return this.#mutation(() => this.#upload(projectId, prepared, '060_reports', { kind: 'user-save-report' }));
+  }
+  async writeBoundReport(projectId: string, taskId: string, filename: string, content: string, context: {
+    signal: AbortSignal; requestId: string; sessionId: string; toolCallId: string; assertCurrent(): void;
+  }) {
+    if (typeof filename !== 'string' || !filename.trim() || filename === '.' || filename === '..' ||
+        Buffer.byteLength(filename, 'utf8') > 255 || /[\\/\u0000-\u001f\u007f]/u.test(filename)) fail('invalid_report_name');
+    if (typeof content !== 'string' || Buffer.from(content, 'utf8').toString('utf8') !== content) fail('invalid_report_text');
+    const bytes = Buffer.from(content, 'utf8');
+    if (bytes.length > PROJECT_UPLOAD_MAX_BYTES) fail('upload_too_large');
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const assertCurrent = () => { context.signal.throwIfAborted(); context.assertCurrent(); };
+    assertCurrent();
+    return this.#mutation(async () => {
+      assertCurrent();
+      const project = await this.#read(projectId);
+      this.#active(project); this.#task(project, taskId);
+      const relativePath = '060_reports/' + filename;
+      const target = await this.#safePath(projectId, relativePath, true);
+      const directory = path.dirname(target), identity = await fs.lstat(directory, { bigint: true });
+      const temporary = path.join(directory, '.optracall-report-' + randomUUID() + '.tmp');
+      const checkDirectory = async () => {
+        await this.#safePath(projectId, '060_reports');
+        const current = await fs.lstat(directory, { bigint: true });
+        if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino) fail('unsafe_directory');
+      };
+      assertCurrent();
+      const handle = await fs.open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+      let published = false, temporaryRemoved = false;
+      try {
+        const opened = await handle.stat({ bigint: true });
+        const matches = (current: typeof opened) => current.isFile() && current.dev === opened.dev && current.ino === opened.ino;
+        const checkStaging = async (size: number) => {
+          const staged = await fs.lstat(temporary, { bigint: true }).catch(() => fail('report_staging_unverified'));
+          if (!matches(staged) || staged.nlink !== 1n || staged.size !== BigInt(size)) fail('report_staging_unverified');
+        };
+        await checkDirectory();
+        await checkStaging(0);
+        assertCurrent();
+        await handle.writeFile(bytes); await handle.sync();
+        assertCurrent();
+        await checkDirectory();
+        await checkStaging(bytes.length);
+        assertCurrent();
+        try { await fs.link(temporary, target); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') fail('report_name_conflict'); throw error; }
+        published = true;
+        await checkDirectory();
+        const staged = lstatSync(temporary, { bigint: true }), linked = lstatSync(target, { bigint: true });
+        if (!matches(staged) || !matches(linked)) {
+          // Roll back only a new link that is still tied to the staging name.
+          // Preserve unrelated files and any name whose identity is uncertain.
+          if (staged.dev === linked.dev && staged.ino === linked.ino && linked.nlink > 1n) unlinkSync(target);
+          fail('report_publication_unverified');
+        }
+        await fs.unlink(temporary);
+        temporaryRemoved = true;
+        await this.#syncDirectory(directory);
+        await checkDirectory();
+        const saved = await this.observeFile(projectId, relativePath);
+        const installed = await fs.lstat(target, { bigint: true });
+        if (!matches(installed) || installed.nlink !== 1n || installed.size !== BigInt(bytes.length) ||
+            saved.sha256 !== sha256 || saved.bytes !== bytes.length) fail('report_publication_unverified');
+        assertCurrent();
+      } catch (error) {
+        if (published) fail('report_publication_unverified');
+        throw error;
+      } finally {
+        try {
+          if (!temporaryRemoved) {
+            const opened = await handle.stat({ bigint: true });
+            const staged = await fs.lstat(temporary, { bigint: true }).catch((error: NodeJS.ErrnoException) => {
+              if (error.code !== 'ENOENT') throw error;
+            });
+            if (staged?.isFile() && staged.dev === opened.dev && staged.ino === opened.ino) await fs.unlink(temporary);
+          }
+        } finally { await handle.close(); }
+      }
+      return { projectId, taskId, filename, path: target, relativePath, sha256,
+        bytes: bytes.length, requestId: context.requestId, sessionId: context.sessionId, toolCallId: context.toolCallId };
+    });
   }
   async close(): Promise<void> {
     await this.#gate; this.#ready = false;
