@@ -12,7 +12,7 @@ export async function checkCalculationReviewRecord(page, { path, initialText, re
   assert.ok((await details.innerText()).includes(path), 'The record identifies the reviewed initial draft');
   assert.ok((await details.innerText()).includes(requestId), 'The record binds the parent request');
   const read = page.waitForResponse(response => response.url().includes('/report-calculation-reviews/') && response.request().method() === 'GET');
-  await details.getByRole('button', { name: '查看被复核初稿', exact: true }).click();
+  await details.getByRole('button', { name: '查看固定初稿', exact: true }).click();
   const response = await read;
   assert.ok(response.ok(), await response.text());
   assert.equal(new URL(response.url()).searchParams.get('expectedReceiptSha256')?.length, 64, 'Historical draft read uses the exact receipt hash');

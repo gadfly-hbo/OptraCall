@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { startTestHost } from './fixtures/host-process.ts';
 import { providerMessageText, startToolProvider } from './fixtures/tool-provider.ts';
@@ -12,10 +12,51 @@ async function read(response: Response, expected = 200): Promise<any> {
   return response.json();
 }
 
+test('RCR04/09: a failure before child creation keeps preparation without claiming actual provision', { timeout: 30_000 }, async t => {
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  t.after(() => writeFile(path.join(host.scratch, 'review-provider-requests.json'), JSON.stringify(provider.requests, null, 2)));
+  t.diagnostic(`Prestart provider and native evidence: ${host.scratch}`);
+  await read(await host.request('/api/configuration', 'PUT', {
+    name: '复核准备失败', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-prestart', apiKey: 'synthetic-prestart-key',
+  }));
+  const { project } = await read(await host.request('/api/projects', 'POST', { name: '子资源创建前失败' }), 201);
+  const { task } = await read(await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: '保留固定初稿' }), 201);
+  const route = `/api/projects/${project.id}/tasks/${task.id}`;
+  await mkdir(task.sessionDirectory, { recursive: true });
+  await writeFile(path.join(task.sessionDirectory, '.report-calculation'), 'SYNTHETIC_DIRECTORY_OBSTRUCTION');
+  let children = 0;
+  provider.setResponder(({ messages, recentToolResults }) => {
+    const system = messages.filter(message => ['system', 'developer'].includes(message.role)).map(message => providerMessageText(message.content)).join('\n');
+    if (system.includes('OptraCall report-calculation reviewer')) { children++; return { text: 'UNEXPECTED_CHILD' }; }
+    if (!recentToolResults.length) return { calls: [{ name: 'write_report', arguments: { filename: 'initial.md', content: '# 固定初稿\n4+6=10。' } }] };
+    if (recentToolResults.length === 1) return { calls: [{ name: 'review_report_calculations', arguments: { report: { path: '060_reports/initial.md' } } }] };
+    return { text: '初稿已保存；复核未完成。' };
+  });
+  const events = await sessionEvents(host, project.id, task.id); t.after(() => events.close());
+  const requestId = randomUUID();
+  await read(await host.request(route + '/messages', 'POST', { text: '保存正式初稿并复核。', requestId }), 202);
+  await events.terminal;
+  const state = await read(await host.request(route));
+  const summary = state.snapshot.capabilities.reportCalculationReview;
+  assert.equal(children, 0);
+  assert.equal(summary.outcome, 'unknown');
+  assert.equal(summary.receipt.claim, 'fixed-packet-prepared');
+  const initial = summary.receipt.materials[0];
+  assert.equal(initial.state, 'provided'); // v1 records packet preparation, not SDK/provider delivery.
+  const fixed = await read(await host.request(`${route}/report-calculation-reviews/${requestId}/${summary.receipt.reviewId}/materials/report?expectedReceiptSha256=${summary.receipt.sha256}`));
+  assert.equal(fixed.text, '# 固定初稿\n4+6=10。');
+  const native = (await readFile(state.task.sessionFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(native.filter(entry => entry.type === 'custom' && entry.customType === 'optracall.report-calculation-review').length, 1);
+  assert.equal(provider.errors.length, 0);
+});
+
 test('RCR02/07/08: actual main Agent receives one fixed review and owns correction, rejection or evidence limits', { timeout: 60_000 }, async t => {
   for (const handling of ['correct', 'reject', 'insufficient'] as const) await t.test(handling, async t => {
     const provider = await startToolProvider(); t.after(() => provider.close());
     const host = await startTestHost(); t.after(() => host.close());
+    t.after(() => writeFile(path.join(host.scratch, 'review-provider-requests.json'), JSON.stringify(provider.requests, null, 2)));
+    t.diagnostic(`Actual child, fixed packet and native receipt: ${host.scratch}`);
     await read(await host.request('/api/configuration', 'PUT', {
       name: '前台计算复核', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-report-review', apiKey: 'synthetic-review-key',
     }));
@@ -67,6 +108,15 @@ test('RCR02/07/08: actual main Agent receives one fixed review and owns correcti
     assert.equal(receipt.outcome, 'completed');
     assert.equal(receipt.requestId, requestId);
     assert.equal(receipt.receipt.materials[0].sha256, createHash('sha256').update(original).digest('hex'));
+    const childRequest = provider.requests.find(record => JSON.stringify(record.body.messages).includes('OptraCall report-calculation reviewer'))!;
+    const childText = childRequest.body.messages!.filter(message => message.role === 'user').map(message => providerMessageText(message.content)).join('');
+    const fixedPacket = path.join(host.dataRoot, 'report-calculation-review', project.id, task.id, requestId, receipt.receipt.reviewId, 'provided.json');
+    assert.equal(childText, await readFile(fixedPacket, 'utf8'));
+    const { sha256: _receiptSha256, ...preparedReceipt } = receipt.receipt;
+    assert.deepEqual(JSON.parse(childText).receipt, preparedReceipt);
+    assert.equal(receipt.sessionId, state.snapshot.sessionId);
+    assert.equal(receipt.toolCallId, results[0].message.toolCallId);
+    assert.deepEqual(state.snapshot.capabilities.reportCalculationReview.receipt, receipt.receipt);
     assert.equal(await readFile(path.join(project.rootPath, '060_reports', 'draft.md'), 'utf8'), original);
     const fixed = receipt.receipt;
     const historyPath = route + '/report-calculation-reviews/' + requestId + '/' + fixed.reviewId + '/materials/' + fixed.materials[0].id;

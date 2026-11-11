@@ -10,11 +10,11 @@ const outcomeLabel: Record<ReportCalculationRunReceipt['outcome'], string> = {
   unknown: '复核状态未知',
 };
 const materialLabel: Record<ReportCalculationMaterial['state'], string> = {
-  provided: '已提供',
-  truncated: '部分提供',
-  unavailable: '未提供',
+  provided: '已准备',
+  truncated: '部分准备',
+  unavailable: '未准备',
   'version-conflict': '版本冲突',
-  metadata: '仅提供元数据',
+  metadata: '仅准备元数据',
 };
 type Summary = ReportCalculationRunReceipt & { sourceStatus?: 'unavailable' };
 type Receipt = ReportCalculationMaterialReceipt & { sha256: string };
@@ -78,7 +78,7 @@ function CalculationReviewRecord({ projectId, taskId, summary, receipt }: {
         mode: 'same-origin', credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal: controller.signal,
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.message ?? '被复核初稿当前无法读取。');
+      if (!response.ok) throw new Error(result.message ?? '固定初稿当前无法读取。');
       const checked = readReceipt(result.receipt, summary, projectId, taskId);
       if (!checked || checked.sha256 !== receipt.sha256 || checked.reviewId !== receipt.reviewId || result.material?.id !== report.id
         || result.text !== null && typeof result.text !== 'string') throw new Error('初稿身份未能核对，请重新读取。');
@@ -88,7 +88,7 @@ function CalculationReviewRecord({ projectId, taskId, summary, receipt }: {
         || result.continuationStart !== null && result.continuationStart !== range.end)) throw new Error('初稿回读范围未能核对。');
       if (!controller.signal.aborted) setPreview(result as MaterialRead);
     } catch (fault) {
-      if (!controller.signal.aborted) setError(fault instanceof Error ? fault.message : '被复核初稿当前无法读取。');
+      if (!controller.signal.aborted) setError(fault instanceof Error ? fault.message : '固定初稿当前无法读取。');
     } finally { if (!controller.signal.aborted) setLoading(false); }
   }
   return <details className="pdc-selected" onToggle={event => {
@@ -97,15 +97,16 @@ function CalculationReviewRecord({ projectId, taskId, summary, receipt }: {
     <summary>报告计算复核 · {outcomeLabel[summary.outcome]}</summary>
     <p className="pdc-help">父请求 {summary.requestId}</p>
     {!available ? <p className="pdc-help">原始材料当前不可读取，此版意见已隐藏。</p> : <>
-      {report && <p>被复核初稿 {materialPath(report)}</p>}
-      {receipt && <details><summary>实际提供的材料与范围</summary>
+      {report && <p>固定初稿 {materialPath(report)}</p>}
+      {receipt && <details><summary>已准备的材料与范围</summary>
+        <p className="pdc-help">此准备回执本身未核实实际提供范围。材料是否被阅读或理解未获证明。</p>
         <ul>{receipt.materials.map(material => <li key={material.id}>
           <p>{materialPath(material)} · {materialLabel[material.state]}</p>
           <p className="pdc-help">{rangeText(material.rangeUtf16)}</p>
           {material.limitations?.map((limitation, index) => <p className="pdc-help" key={index}>{limitation}</p>)}
         </li>)}</ul>
       </details>}
-      {report && receipt && !['unavailable', 'version-conflict'].includes(report.state) && <button type="button" className="text-button" disabled={loading} onClick={() => void readInitial()}>查看被复核初稿</button>}
+      {report && receipt && !['unavailable', 'version-conflict'].includes(report.state) && <button type="button" className="text-button" disabled={loading} onClick={() => void readInitial()}>查看固定初稿</button>}
       {loading && <p className="pdc-help" role="status">正在读取固定初稿…</p>}
       {error && <p className="field-error" role="alert">{error}</p>}
       {preview && <div>

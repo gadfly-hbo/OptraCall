@@ -26,6 +26,7 @@ export type ReportCalculationMaterial = {
   locator: Record<string, unknown>;
   sha256: string | null;
   bytes: number | null;
+  /** v1 names describe content in the prepared packet; they alone do not prove child delivery or reading. */
   state: 'provided' | 'truncated' | 'unavailable' | 'version-conflict' | 'metadata';
   rangeUtf16: { start: number; end: number; total: number } | null;
   observedAt?: string;

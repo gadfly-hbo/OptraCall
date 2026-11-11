@@ -25,6 +25,7 @@ export type ReportCalculationRunReceipt = {
   requestId: string;
   outcome: 'not_delegated' | 'completed' | 'failed' | 'cancelled' | 'unknown';
   toolCallId?: string;
+  /** Fixed packet preparation; this field alone does not prove native child delivery or reading. */
   receipt?: unknown;
 };
 export function readReportCalculationRunReceipt(value: unknown, requestId?: string): ReportCalculationRunReceipt | undefined {
