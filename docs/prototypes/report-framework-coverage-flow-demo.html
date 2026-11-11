@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>OptraCall · 报告框架覆盖复核流程演示</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #faf9fc;
+  --paper: #ffffff;
+  --nav: #f4f3f7;
+  --line: #e4e0eb;
+  --ink: #302b3a;
+  --muted: #645c70;
+  --accent: #70539f;
+  --accent-soft: #f0eaf8;
+  --warning: #785316;
+  --warning-soft: #fbf2e3;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+h1, h2, h3, p, ol { margin: 0; }
+h1 { font-size: clamp(22px, 3vw, 32px); line-height: 1.25; letter-spacing: -.025em; }
+h2 { font-size: 16px; line-height: 1.4; }
+h3 { font-size: 14px; }
+p, li, button { overflow-wrap: anywhere; }
+button, select { font: inherit; color: inherit; }
+button, select, summary { cursor: pointer; }
+button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+button:disabled { cursor: not-allowed; opacity: .55; }
+.skip {
+  position: fixed; top: 8px; left: 8px; z-index: 2;
+  background: var(--paper); color: var(--accent);
+  padding: 8px 12px; transform: translateY(-140%);
+}
+.skip:focus { transform: translateY(0); }
+.shell { display: grid; grid-template-columns: 186px minmax(0, 1fr); min-height: 100dvh; }
+.sidebar { background: var(--nav); border-right: 1px solid var(--line); padding: 21px 14px; }
+.brand { display: flex; align-items: center; gap: 9px; padding: 0 4px; font-weight: 720; font-size: 17px; }
+.brand-mark {
+  display: grid; place-items: center; width: 30px; height: 30px;
+  border-radius: 8px; background: var(--accent); color: white;
+}
+.nav-label { margin: 30px 8px 6px; color: var(--muted); font-size: 12px; }
+.nav-current { padding: 7px 8px; border-radius: 7px; background: var(--accent-soft); color: #533580; font-weight: 650; }
+.topbar { padding: 13px clamp(14px, 3vw, 33px); background: var(--paper); border-bottom: 1px solid var(--line); color: var(--muted); }
+.topbar strong { color: var(--ink); }
+.demo-controls {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px;
+  align-items: center; padding: 9px clamp(14px, 3vw, 33px);
+  border-bottom: 1px solid var(--line); background: var(--accent-soft); color: #514167;
+}
+.demo-controls strong { display: block; }
+.demo-controls p { font-size: 12px; }
+.demo-fields { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+select, button {
+  border: 1px solid #d8d0e0; border-radius: 7px;
+  padding: 6px 11px; background: var(--paper); min-height: 34px;
+}
+select { max-width: 100%; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+.primary { background: var(--accent); color: white; border-color: var(--accent); font-weight: 650; }
+.primary:hover:not(:disabled) { background: #62458f; }
+.main { max-width: 1160px; margin: 0 auto; padding: clamp(14px, 3vw, 33px); }
+.main > header { margin: 4px 0 20px; }
+.main > header p { margin-top: 6px; color: var(--muted); }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(245px, .51fr); gap: 18px; align-items: start; }
+.chat, .files { min-width: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; }
+.panel-title { padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.messages { display: grid; align-content: start; gap: 17px; min-height: 202px; padding: 17px 16px; }
+.message { display: grid; grid-template-columns: 31px minmax(0, 1fr); gap: 10px; }
+.message strong { display: block; margin-bottom: 3px; }
+.avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; background: var(--nav); color: var(--muted); font-size: 12px; font-weight: 680; }
+.avatar.agent { background: var(--accent-soft); color: var(--accent); }
+.placeholder { color: var(--muted); }
+.notice { color: var(--warning); background: var(--warning-soft); border-radius: 6px; padding: 7px 10px; }
+.composer { display: grid; gap: 10px; padding: 13px 16px; border-top: 1px solid var(--line); }
+.composer p { min-height: 38px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--page); }
+.composer .actions { display: flex; justify-content: flex-end; }
+.file-list { display: grid; gap: 7px; padding: 13px 14px; }
+.file-list button { text-align: left; padding: 8px 10px; }
+.file-list small { display: block; color: var(--muted); }
+.files p { color: var(--muted); }
+.trace { margin-top: 14px; background: var(--nav); border: 1px solid var(--line); border-radius: 9px; }
+.trace summary { padding: 10px 13px; font-weight: 650; }
+.trace ol { display: grid; gap: 9px; padding: 0 15px 13px 30px; color: var(--muted); }
+.trace strong { color: var(--ink); }
+dialog { width: min(520px, calc(100% - 30px)); max-height: 85dvh; padding: 0; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); }
+dialog::backdrop { background: #2f263e73; }
+.dialog-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.dialog-body { display: grid; gap: 10px; padding: 16px; }
+.formula { font-variant-numeric: tabular-nums; padding: 10px 12px; background: var(--accent-soft); border-radius: 6px; color: #433257; font-size: 16px; font-weight: 640; }
+@media (max-width: 870px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { display: none; }
+}
+@media (max-width: 650px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .demo-controls { align-items: flex-start; }
+}
+
+.source-label { color: var(--muted); font-size: 12px; }
+.report-sections { display: grid; gap: 9px; }
+.report-sections section { border-top: 1px solid var(--line); padding-top: 7px; }
+.report-sections h3 { margin-bottom: 3px; }
+.dialog-head h2 { overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到任务对话</a>
+<div class="shell">
+  <aside class="sidebar" aria-label="工作区位置">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">O</span> OptraCall</div>
+    <p class="nav-label">项目任务</p>
+    <p class="nav-current">服饰销量复盘</p>
+  </aside>
+  <div>
+    <header class="topbar">OptraCall / 服饰零售示例项目 / <strong>服饰销量复盘</strong></header>
+    <section class="demo-controls" aria-label="演示控制">
+      <div>
+        <strong>报告框架覆盖复核流程演示</strong>
+        <p>使用合成资料。演示控制与记录用于评审。</p>
+      </div>
+      <div class="demo-fields">
+        <label for="scenario">演示场景</label>
+        <select id="scenario">
+          <option value="omission">初稿遗漏品类拆解</option>
+          <option value="gap">初稿已说明待补证</option>
+          <option value="noFramework">本轮未实际送入框架</option>
+          <option value="cancel">复核中停止，保留初稿</option>
+        </select>
+        <button type="button" id="reset">重置演示</button>
+      </div>
+    </section>
+    <main id="main" class="main" tabindex="-1">
+      <header>
+        <h1>服饰销量复盘</h1>
+        <p>比较同一范围的两期销量，按本轮约定交付报告。</p>
+      </header>
+      <div class="workspace">
+        <section class="chat" aria-labelledby="chat-title">
+          <div class="panel-title"><h2 id="chat-title">任务对话</h2></div>
+          <div class="messages">
+            <p class="placeholder" id="placeholder">发送问题，生成本轮报告。</p>
+            <div class="message" id="user-message" hidden>
+              <span class="avatar" aria-hidden="true">我</span>
+              <div>
+                <strong>你</strong>
+                <p id="sent-prompt"></p>
+                <p class="source-label" id="sent-source"></p>
+              </div>
+            </div>
+            <div class="message" id="agent-message" hidden>
+              <span class="avatar agent" aria-hidden="true">A</span>
+              <div>
+                <strong>OptraCall</strong>
+                <p id="reply" role="status" aria-live="polite"></p>
+              </div>
+            </div>
+          </div>
+          <div class="composer">
+            <p id="prompt"></p>
+            <div class="actions">
+              <button type="button" class="primary" id="send">发送</button>
+              <button type="button" id="stop" hidden>停止</button>
+            </div>
+          </div>
+        </section>
+        <aside aria-label="文件和演示记录">
+          <section class="files" aria-labelledby="files-title">
+            <div class="panel-title"><h2 id="files-title">文件 / 060_reports</h2></div>
+            <div class="file-list" id="file-list"></div>
+          </section>
+          <details class="trace" id="trace">
+            <summary>演示记录</summary>
+            <ol id="events" aria-label="本次演示的模拟回执"></ol>
+          </details>
+        </aside>
+      </div>
+    </main>
+  </div>
+</div>
+<dialog id="preview" aria-labelledby="preview-title">
+  <div class="dialog-head">
+    <h2 id="preview-title">报告预览</h2>
+    <form method="dialog"><button type="submit">关闭</button></form>
+  </div>
+  <div class="dialog-body">
+    <p class="source-label" id="file-status"></p>
+    <p class="formula" id="formula"></p>
+    <div class="report-sections">
+      <section id="channel-section">
+        <h3>渠道拆解</h3>
+        <p id="channel-result"></p>
+      </section>
+      <section id="category-section">
+        <h3>品类拆解</h3>
+        <p id="category-result"></p>
+      </section>
+    </div>
+  </div>
+</dialog>
+<script>
+const framework = 'RAP v1.2 · 本轮已送入 §3.2，按渠道和品类拆解';
+const frameworkPrompt = '按本轮分析框架比较两期销量，给我一份报告。';
+const channelResult = '直播 18 → 21 件，线上店铺 26 → 28 件。';
+const categoryResult = '上衣 25 → 29 件，裤装 19 → 20 件。';
+const pendingCategory = '当前缺 SKU 到品类的映射。本轮可确认总体和渠道，品类增减待取得映射后再核。';
+const formula = '销量 44 → 49 件，增幅（49 − 44）÷ 44 ≈ 11.36%。';
+const scenarios = {
+  omission: {
+    prompt: frameworkPrompt,
+    source: framework,
+    channel: channelResult,
+    coverage: '渠道已回应。品类属于未说明的遗漏：§3.2 要求品类拆解，初稿缺少对应段落和限制说明。',
+    handling: '主 Agent 回查已授权的 SKU 明细及品类映射，补上品类表，再核对合计、正文和框架覆盖。保存修订稿 v2，子 Agent 回执仍对应 v1。',
+    reply: '本期 49 件，上期 44 件，增长 11.36%。按渠道看，直播净增 3 件；按品类看，上衣净增 4 件。已保存含两项拆解的修订稿，初稿也可查看。',
+    revise: true,
+  },
+  gap: {
+    prompt: frameworkPrompt,
+    source: framework,
+    channel: channelResult,
+    category: pendingCategory,
+    coverage: '渠道已回应。品类已说明待补证，初稿列明缺少 SKU 到品类映射，并说明当前不能判断各品类变化。',
+    handling: '主 Agent 核对可用资料，保留已写明的补证边界。',
+    reply: '本期 49 件，上期 44 件，增长 11.36%。报告已拆解渠道。品类变化需要补齐 SKU 到品类映射后核实。',
+    warning: true,
+  },
+  noFramework: {
+    prompt: '比较两期总销量，给我一份报告。',
+    source: '本次请求未送入分析框架',
+    coverage: '框架不可核对。本次请求的实际材料中没有框架，覆盖保持未核实。',
+    handling: '主 Agent 复查实际销量和增幅，沿原任务入口完成交付。',
+    reply: '本期 49 件，上期 44 件，增长 11.36%。报告已保存。本次没有实际送入分析框架，覆盖未核实。',
+    warning: true,
+  },
+  cancel: {
+    prompt: frameworkPrompt,
+    source: framework,
+    channel: channelResult,
+    pause: true,
+  },
+};
+
+const $ = id => document.getElementById(id);
+const scenario = $('scenario');
+const send = $('send');
+const stop = $('stop');
+const preview = $('preview');
+let files = [];
+let phase = 'idle';
+let generation = 0;
+let timer;
+
+function addEvent(title, detail) {
+  const event = document.createElement('li');
+  const name = document.createElement('strong');
+  const text = document.createElement('p');
+  name.textContent = title;
+  text.textContent = detail;
+  event.append(name, text);
+  $('events').append(event);
+}
+
+function renderFiles() {
+  const list = $('file-list');
+  list.replaceChildren();
+  if (!files.length) {
+    const empty = document.createElement('p');
+    empty.textContent = '已保存的报告会出现在这里。';
+    list.append(empty);
+    return;
+  }
+  for (const file of files) {
+    const button = document.createElement('button');
+    const caption = document.createElement('small');
+    button.type = 'button';
+    button.dataset.version = file.version;
+    caption.textContent = file.version + ' · ' + file.kind;
+    button.append(file.name, caption);
+    button.addEventListener('click', () => openPreview(file));
+    list.append(button);
+  }
+}
+
+function openPreview(file) {
+  $('preview-title').textContent = file.name;
+  $('file-status').textContent = file.version + ' · ' + file.kind;
+  $('formula').textContent = formula;
+  $('channel-section').hidden = !file.channel;
+  $('category-section').hidden = !file.category;
+  $('channel-result').textContent = file.channel || '';
+  $('category-result').textContent = file.category || '';
+  preview.showModal();
+}
+
+function showReply(message, warning = false) {
+  $('agent-message').hidden = false;
+  $('reply').classList.toggle('notice', warning);
+  $('reply').textContent = message;
+}
+
+function reset() {
+  clearTimeout(timer);
+  generation += 1;
+  phase = 'idle';
+  files = [];
+  if (preview.open) preview.close();
+  const fixture = scenarios[scenario.value];
+  $('prompt').textContent = fixture.prompt;
+  $('sent-prompt').textContent = fixture.prompt;
+  $('sent-source').textContent = fixture.source;
+  $('placeholder').hidden = false;
+  $('user-message').hidden = true;
+  $('agent-message').hidden = true;
+  $('reply').textContent = '';
+  $('events').replaceChildren();
+  addEvent('等待发送', '对话发出后，在同一任务中保存初稿与回交意见。');
+  $('trace').open = false;
+  send.hidden = false;
+  send.disabled = false;
+  stop.hidden = true;
+  scenario.disabled = false;
+  renderFiles();
+}
+
+function next(action, delay) {
+  const current = generation;
+  timer = setTimeout(() => {
+    if (generation === current && phase === 'running') action();
+  }, delay);
+}
+
+function finish(message, warning) {
+  phase = 'done';
+  showReply(message, warning);
+  stop.hidden = true;
+  send.hidden = false;
+  scenario.disabled = false;
+  $('reply').tabIndex = -1;
+  $('reply').focus();
+}
+
+function review(fixture) {
+  addEvent('同一次复核回执 · 初稿 v1', '计算核对：总销量和增幅可核对。' + fixture.coverage);
+  showReply('正在核对复核意见。');
+  next(() => {
+    if (fixture.revise) {
+      files.push({ name: '销量复盘-修订稿.md', version: 'v2', kind: '主 Agent 自查修订',
+        channel: channelResult, category: categoryResult });
+      renderFiles();
+    }
+    addEvent('主 Agent 处置', fixture.handling);
+    finish(fixture.reply, fixture.warning);
+  }, 650);
+}
+
+function run() {
+  if (phase !== 'idle') return;
+  const fixture = scenarios[scenario.value];
+  phase = 'running';
+  generation += 1;
+  $('placeholder').hidden = true;
+  $('user-message').hidden = false;
+  $('events').replaceChildren();
+  addEvent('父请求已发出', fixture.source + '。');
+  addEvent('按本轮实际材料复核', fixture.source === framework
+    ? '资料区另有 RAP v1.3。本轮已送入并固定的是 v1.2 的 §3.2。'
+    : '资料区有 RAP 可用，本轮请求中没有送入可核对的框架内容。');
+  showReply('正在分析两期销量。');
+  send.disabled = true;
+  send.hidden = true;
+  stop.hidden = false;
+  scenario.disabled = true;
+  stop.focus();
+
+  next(() => {
+    files.push({ name: '销量复盘-初稿.md', version: 'v1', kind: '初稿',
+      channel: fixture.channel, category: fixture.category });
+    renderFiles();
+    addEvent('保存初稿 v1', '文件已写入本项目的 060_reports。');
+    addEvent('主 Agent 发起一次委派', '计算复核与框架覆盖一并核对，意见交回本次父请求。');
+    showReply('初稿已保存，正在复核报告。');
+    if (fixture.pause) {
+      addEvent('等待停止', '此演示场景保持复核在途，点击原对话的「停止」。');
+      return;
+    }
+    next(() => review(fixture), 950);
+  }, 420);
+}
+
+function cancel() {
+  if (phase !== 'running') return;
+  clearTimeout(timer);
+  generation += 1;
+  addEvent('父请求已停止', files.length ? '子操作随父请求停止，保留原初稿，不接收迟到结果。'
+    : '本次尚未保存报告。');
+  finish(files.length ? '已停止。已保存的初稿仍可在文件区查看。' : '已停止。本次尚未保存报告。', true);
+}
+
+send.addEventListener('click', run);
+stop.addEventListener('click', cancel);
+scenario.addEventListener('change', reset);
+$('reset').addEventListener('click', reset);
+reset();
+</script>
+</body>
+</html>

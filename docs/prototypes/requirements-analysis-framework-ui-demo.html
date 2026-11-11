@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+  <title>需求梳理 · 分析框架 | OptraCall UI Demo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #f8f8fb;
+      --surface: #fff;
+      --nav: #f1f0f5;
+      --ink: #262337;
+      --muted: #625d70;
+      --line: #dfdce8;
+      --accent: #5842ad;
+      --accent-soft: #ede8fb;
+      --positive: #21654a;
+      --positive-soft: #eaf5ee;
+      --warning: #794c13;
+      --warning-soft: #faf1e2;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--ink); font: 15px/1.65 Geist, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    button, select { color: inherit; font: inherit; }
+    button, summary, select { cursor: pointer; }
+    button:disabled { cursor: default; opacity: .56; }
+    a { color: var(--accent); text-underline-offset: 3px; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+    [hidden] { display: none !important; }
+    h1, h2, h3, p, dl, dd { margin: 0; }
+    h1, h2, h3 { line-height: 1.35; }
+    p, dd { overflow-wrap: anywhere; }
+    .muted { color: var(--muted); }
+    .caption { font-size: 12px; }
+    .skip { position: absolute; top: 10px; left: 10px; z-index: 5; padding: 10px; background: var(--surface); transform: translateY(-150%); }
+    .skip:focus { transform: none; }
+    .shell { display: grid; grid-template-columns: 195px minmax(0, 1fr); min-height: 100dvh; }
+    .sidebar { background: var(--nav); border-right: 1px solid var(--line); padding: 24px 14px; }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; margin-bottom: 29px; font-size: 17px; font-weight: 680; }
+    .brand-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; color: white; background: var(--accent); }
+    .nav-section { margin: 18px 9px 5px; color: var(--muted); font-size: 12px; }
+    .nav-item { display: block; margin: 3px 0; padding: 7px 9px; border-radius: 6px; font-size: 14px; }
+    .nav-item[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px 14px; min-height: 53px; padding: 10px clamp(16px, 3vw, 36px); background: var(--surface); border-bottom: 1px solid var(--line); }
+    .crumb { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; color: var(--muted); font-size: 13px; }
+    .crumb strong { color: var(--ink); }
+    .demo-tools { position: relative; font-size: 12px; }
+    .demo-tools summary { color: var(--accent); font-weight: 650; }
+    .demo-controls { position: absolute; z-index: 2; right: 0; top: calc(100% + 8px); display: grid; gap: 6px; width: 248px; max-width: calc(100vw - 32px); padding: 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 6px 22px #25203814; }
+    .demo-controls select { width: 100%; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+    .workspace { max-width: 1270px; margin: 0 auto; padding: 25px clamp(16px, 3vw, 36px) 48px; }
+    .page-title { margin-bottom: 22px; }
+    h1 { font-size: clamp(24px, 3vw, 35px); letter-spacing: -.028em; }
+    .page-title p { margin-top: 6px; max-width: 62ch; }
+    .stages { list-style: none; padding: 0; margin: 0 0 21px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .stages li { padding: 9px 9px 8px; border-bottom: 2px solid var(--line); color: var(--muted); font-size: 13px; }
+    .stages li[aria-current] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+    .work-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 290px); gap: 19px; align-items: start; }
+    .paper, .evidence { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+    .paper > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 7px 14px; flex-wrap: wrap; padding: 18px 20px 15px; border-bottom: 1px solid var(--line); }
+    h2 { font-size: 18px; }
+    h3 { font-size: 15px; }
+    .paper > header p { margin-top: 4px; }
+    .status { border-radius: 5px; padding: 3px 8px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 650; }
+    .status[data-tone="positive"] { background: var(--positive-soft); color: var(--positive); }
+    .status[data-tone="warning"] { background: var(--warning-soft); color: var(--warning); }
+    .notice { margin: 15px 20px 0; padding: 10px 12px; background: var(--warning-soft); color: var(--warning); border-radius: 6px; font-size: 13px; }
+    .notice[data-tone="positive"] { background: var(--positive-soft); color: var(--positive); }
+    .notice[data-tone="neutral"] { background: var(--accent-soft); color: var(--accent); }
+    .assessment { display: grid; grid-template-columns: 1fr 1fr; margin: 18px 20px 0; border-top: 3px solid var(--accent); background: #f5f2fb; border-radius: 4px; }
+    .assessment section { padding: 12px 14px 14px; }
+    .assessment section + section { border-left: 1px solid var(--line); }
+    .assessment h3 { color: var(--accent); }
+    .assessment p { margin-top: 5px; font-size: 13px; }
+    .content-section { margin: 0 20px; padding: 17px 0; border-bottom: 1px solid var(--line); }
+    .content-section:last-child { border: 0; }
+    .content-section > p { margin-top: 6px; }
+    .scope { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 12px; margin-top: 8px; font-size: 13px; }
+    .scope dt { color: var(--muted); }
+    .questions { padding: 0 0 0 1.3em; margin: 7px 0 0; font-size: 13px; }
+    .questions li + li { margin-top: 6px; }
+    .missing { display: grid; gap: 5px; margin-top: 7px; font-size: 13px; }
+    .missing dt { font-weight: 650; }
+    .missing dd { margin-bottom: 5px; color: var(--muted); }
+    .evidence > header { padding: 16px 15px 11px; }
+    .evidence > header p { margin-top: 4px; }
+    .source { border-top: 1px solid var(--line); }
+    .source summary { padding: 10px 15px; color: var(--ink); font-size: 13px; font-weight: 650; }
+    .source summary:hover { color: var(--accent); }
+    .source > div { padding: 0 15px 12px; font-size: 12px; }
+    .source p + p { margin-top: 6px; }
+    .evidence .caption { margin-top: 3px; }
+    .actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 12px; align-items: center; padding: 13px 20px; border-top: 1px solid var(--line); }
+    .action-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .button { padding: 6px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 13px; font-weight: 650; }
+    .button:hover:not(:disabled) { border-color: var(--accent); }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: white; }
+    .button.primary:hover:not(:disabled) { background: #463390; }
+    .workspace-note { margin: 14px 0 0; color: var(--muted); font-size: 12px; }
+    @media (max-width: 1030px) {
+      .shell { grid-template-columns: 155px minmax(0, 1fr); }
+      .work-grid { grid-template-columns: minmax(0, 1fr) minmax(210px, 245px); }
+    }
+    @media (max-width: 810px) {
+      .shell, .work-grid { grid-template-columns: minmax(0, 1fr); }
+      .sidebar { display: none; }
+    }
+    @media (max-width: 460px) {
+      .workspace { padding-top: 17px; }
+      .stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .assessment { grid-template-columns: minmax(0, 1fr); }
+      .assessment section + section { border-left: 0; border-top: 1px solid var(--line); }
+      .content-section, .assessment { margin-left: 13px; margin-right: 13px; }
+      .paper > header, .actions { padding-left: 13px; padding-right: 13px; }
+      .notice { margin-left: 13px; margin-right: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">跳到分析框架</a>
+  <div class="shell">
+    <aside class="sidebar" aria-label="工作区位置">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">O</span> OptraCall</div>
+      <p class="nav-section">工作台</p>
+      <span class="nav-item">项目与任务</span>
+      <span class="nav-item" aria-current="page">需求梳理</span>
+      <span class="nav-item">决策看板</span>
+      <p class="nav-section">分析资产</p>
+      <span class="nav-item">SAP</span>
+      <span class="nav-item">企业资料</span>
+    </aside>
+    <div>
+      <header class="topbar">
+        <p class="crumb">需求梳理 <span aria-hidden="true">/</span> <strong>服饰零售</strong></p>
+        <details id="demo-tools" class="demo-tools">
+          <summary>合成演示 · 切换情景</summary>
+          <div class="demo-controls">
+            <label for="scenario">演示情景</label>
+            <select id="scenario">
+              <option value="normal">有公开案例可参考</option>
+              <option value="notSearched">本轮未调用搜索</option>
+              <option value="noResults">未找到可比案例</option>
+              <option value="unavailable">当前配置不支持搜索</option>
+              <option value="failedSearch">搜索失败</option>
+              <option value="stale">RAP 来源已更新</option>
+              <option value="workingDraft">从需求工作稿开始</option>
+            </select>
+            <p class="muted">情景切换重置演示。本页只使用预置内容和内存状态。</p>
+          </div>
+        </details>
+      </header>
+      <main id="main" class="workspace">
+        <header class="page-title">
+          <h1>9 月直播渠道退款率是否上升？</h1>
+          <p class="muted">决定下月是否调整促销活动，以及先查哪些品类。</p>
+        </header>
+        <ol class="stages" aria-label="现有需求梳理环节">
+          <li>诉求澄清</li>
+          <li>事实与假设</li>
+          <li aria-current="step">分析与报告框架</li>
+          <li>检查与发布</li>
+        </ol>
+        <div class="work-grid">
+          <article class="paper" aria-labelledby="framework-title">
+            <header>
+              <div>
+                <h2 id="framework-title">本轮分析框架</h2>
+                <p class="muted caption" id="version-summary">提案 v0.1 · 基于 RAP v1.2</p>
+              </div>
+              <span class="status" id="status" role="status">待确认</span>
+            </header>
+            <p class="notice" id="notice" hidden></p>
+            <div id="framework-content">
+              <div class="assessment">
+                <section aria-labelledby="worth-title">
+                  <h3 id="worth-title">建议先做定位分析</h3>
+                  <p>找出退款上升集中在哪些品类，再决定优先调整或核查哪些活动。</p>
+                </section>
+                <section aria-labelledby="feasibility-title">
+                  <h3 id="feasibility-title">现有材料支持描述和拆解</h3>
+                  <p>可以核实是否上升、变化集中在哪里。解释原因和判断措施效果仍需补证。</p>
+                </section>
+              </div>
+              <section class="content-section">
+                <h3>分析范围与口径</h3>
+                <dl class="scope">
+                  <dt>对象</dt><dd>直播渠道服饰订单，按品类拆分</dd>
+                  <dt>比较期</dt><dd>9 月 15–28 日与 9 月 1–14 日支付的订单，两组均观察支付后 14 天</dd>
+                  <dt>口径</dt><dd>已发布 SAP 退款率 v2.3，退款订单数除以已支付订单数，按订单去重</dd>
+                </dl>
+              </section>
+              <section class="content-section">
+                <h3>本轮要回答的问题</h3>
+                <ul class="questions">
+                  <li>用同一口径核对直播渠道退款率是否上升。</li>
+                  <li>比较各品类退款率和订单构成，找出对总体变化贡献较大的品类。</li>
+                </ul>
+                <p class="muted caption">交付总体与分品类对照表、主要变化及补证清单。</p>
+              </section>
+              <section class="content-section">
+                <h3>待验证的假设与证据缺口</h3>
+                <dl class="missing">
+                  <dt>待验证 · 商品结构变化可能拉高总体退款率</dt>
+                  <dd>如果主要品类占比稳定、品类内退款率普遍上升，应调整解释方向。</dd>
+                  <dt>缺退款原因与措施对照</dt>
+                  <dd>暂无法判断尺码问题是否为主要原因，也无法估计调整促销的效果。</dd>
+                </dl>
+              </section>
+            </div>
+            <footer class="actions">
+              <span class="muted caption" id="confirm-note">确认本轮范围后，可继续使用原有发布和送入入口。</span>
+              <div class="action-group">
+                <button class="button" id="generate" type="button">重新生成</button>
+                <button class="button" id="stop" type="button" hidden>停止生成</button>
+                <button class="button primary" id="confirm" type="button">确认分析框架</button>
+              </div>
+            </footer>
+          </article>
+          <aside class="evidence" aria-labelledby="sources-title">
+            <header>
+              <h2 id="sources-title">框架依据</h2>
+              <p class="muted caption">查看来源版本、采用范围和限制</p>
+            </header>
+            <details class="source" open>
+              <summary id="rap-summary">RAP v1.2</summary>
+              <div>
+                <p id="rap-body">《直播退款复盘》已发布版，提供本轮业务目标、渠道范围和分析约束。</p>
+                <p class="muted" id="rap-note">本提案引用原版本。</p>
+              </div>
+            </details>
+            <details class="source">
+              <summary>SAP · 退款率 v2.3</summary>
+              <div>
+                <p>已发布版本。给出退款定义、支付批次及观察窗，本轮两期使用同一口径。</p>
+                <p class="muted">本资产支持订单退款率，原因归类需另有编码规则。</p>
+              </div>
+            </details>
+            <details class="source">
+              <summary>数据、概念与知识</summary>
+              <div>
+                <p>数据 · 9 月订单与退款记录，观察截至 10 月 12 日，粒度为订单及退款事件。</p>
+                <p>概念 · 直播渠道、商品品类、退款事件与订单的关联。</p>
+                <p>知识 · 9 月促销日历已获准引用；退款原因编码规则未提供。</p>
+              </div>
+            </details>
+            <details class="source">
+              <summary>企业历史 · 6 月直播退款 Case</summary>
+              <div>
+                <p>记忆 · 当时问题集中于两款上衣。</p>
+                <p>假设 · 尺码说明可能影响退款，当时证据有限。</p>
+                <p>策略 · 团队实际更新了尺码指引。后续退款率下降，未记录同期对照，措施效果仍不确定。</p>
+              </div>
+            </details>
+            <details class="source" open>
+              <summary id="search-summary">公开行业案例 · 找到可参考做法</summary>
+              <div>
+                <p id="search-source">合成来源 · 栖云服饰《夏季直播售后复盘》，2026-07-09</p>
+                <p id="search-body">公开案例描述按品类跟踪退款及调整尺码说明，未披露调整效果。</p>
+                <p class="muted" id="search-limit">同为服饰直播，品类结构和指标口径未知。用来提出核查方向。</p>
+              </div>
+            </details>
+          </aside>
+        </div>
+        <p class="workspace-note">合成资料用于演示界面。发布、送入和正式分析沿用现有操作。</p>
+      </main>
+    </div>
+  </div>
+  <script>
+    const byId = (id) => document.getElementById(id);
+    const scenario = byId('scenario');
+    const status = byId('status');
+    const notice = byId('notice');
+    const generate = byId('generate');
+    const stop = byId('stop');
+    const confirm = byId('confirm');
+    const searchCases = {
+      normal: {
+        summary: '公开行业案例 · 找到可参考做法',
+        source: '合成来源 · 栖云服饰《夏季直播售后复盘》，2026-07-09',
+        body: '公开案例描述按品类跟踪退款及调整尺码说明，未披露调整效果。',
+        limit: '同为服饰直播，品类结构和指标口径未知。用来提出核查方向。',
+      },
+      notSearched: {
+        summary: '公开行业案例 · 本轮未调用搜索',
+        source: '',
+        body: '当前问题是核对内部订单变化，Agent 先用企业资料和已发布 SAP 确定分析范围。',
+        limit: '尚未调查行业做法。',
+      },
+      noResults: {
+        summary: '公开行业案例 · 未找到可比案例',
+        source: '',
+        body: '本轮检索覆盖服饰直播及售后公开资料，未找到同时披露可比口径和措施的案例。',
+        limit: '行业做法仍属未知。当前框架按可用的企业资料和已发布 SAP 划定范围。',
+      },
+      unavailable: {
+        summary: '公开行业案例 · 当前配置不支持搜索',
+        source: '',
+        body: '本轮没有取得公开案例。',
+        limit: '可继续评审有内部资料支持的部分。',
+      },
+      failedSearch: {
+        summary: '公开行业案例 · 搜索失败',
+        source: '',
+        body: '搜索服务未返回结果。本轮没有可引用的公开案例。',
+        limit: '可先评审内部证据，或在需要行业对照时另行生成提案。',
+      },
+    };
+    let state = 'pending';
+    let timer = null;
+    let sourceVersion = '1.2';
+    let proposalRevision = 1;
+
+    function showNotice(message, tone) {
+      notice.textContent = message;
+      notice.dataset.tone = tone;
+      notice.hidden = !message;
+    }
+
+    function showSources() {
+      const workingDraft = scenario.value === 'workingDraft';
+      const source = workingDraft ? '需求工作稿' : `RAP v${sourceVersion}`;
+      byId('rap-summary').textContent = source;
+      byId('rap-body').textContent = workingDraft
+        ? '本轮采用需求工作稿中已填写的业务目标、渠道范围和分析约束。'
+        : '《直播退款复盘》已发布版，提供本轮业务目标、渠道范围和分析约束。';
+      byId('rap-note').textContent = workingDraft
+        ? '当前未绑定已发布 RAP。工作稿仍可用于拟定本轮框架。'
+        : '本提案引用原版本。';
+      const searchCase = searchCases[scenario.value] ?? searchCases.normal;
+      byId('search-summary').textContent = searchCase.summary;
+      byId('search-source').textContent = searchCase.source;
+      byId('search-source').hidden = !searchCase.source;
+      byId('search-body').textContent = searchCase.body;
+      byId('search-limit').textContent = searchCase.limit;
+      byId('version-summary').textContent = `提案 v0.${proposalRevision} · 基于 ${source}`;
+    }
+
+    function render() {
+      const running = state === 'running';
+      const confirmed = state === 'confirmed';
+      const stale = state === 'stale';
+      const stopped = state === 'stopped';
+      status.textContent = { pending: '待确认', running: '生成中', confirmed: '已确认', stale: '来源已变更', stopped: '已停止' }[state];
+      status.dataset.tone = confirmed ? 'positive' : stale || stopped ? 'warning' : 'neutral';
+      generate.hidden = running || confirmed;
+      stop.hidden = !running;
+      confirm.hidden = confirmed;
+      confirm.disabled = state !== 'pending';
+      byId('confirm-note').textContent = confirmed
+        ? '已确认本轮范围。后续可通过原有入口发布或送入。'
+        : '确认本轮范围后，可继续使用原有发布和送入入口。';
+      generate.textContent = stopped ? '生成框架' : '重新生成';
+      showSources();
+
+      if (stale) {
+        showNotice('原提案依据 RAP v1.2。当前输入已切换为 v1.3，请重新生成再确认。', 'warning');
+      } else if (stopped) {
+        showNotice('本次生成已停止。下方保留原提案供查看。可重新生成后再确认。', 'warning');
+      } else if (running) {
+        showNotice('正在根据当前资料生成新提案。下方仍显示原提案。', 'neutral');
+      } else if (confirmed) {
+        showNotice('已确认本轮只做退款变化核实与品类拆解，原因与措施效果待补证。', 'positive');
+      } else {
+        showNotice('', 'neutral');
+      }
+    }
+
+    scenario.addEventListener('change', () => {
+      clearTimeout(timer);
+      sourceVersion = '1.2';
+      proposalRevision = 1;
+      state = scenario.value === 'stale' ? 'stale' : 'pending';
+      render();
+    });
+
+    generate.addEventListener('click', () => {
+      const updateSource = scenario.value === 'stale';
+      state = 'running';
+      render();
+      stop.focus();
+      timer = setTimeout(() => {
+        if (state !== 'running') return;
+        if (updateSource) {
+          scenario.value = 'normal';
+          sourceVersion = '1.3';
+        }
+        proposalRevision += 1;
+        state = 'pending';
+        const restoreFocus = document.activeElement === stop;
+        render();
+        if (restoreFocus) generate.focus();
+      }, 1700);
+    });
+
+    stop.addEventListener('click', () => {
+      clearTimeout(timer);
+      state = 'stopped';
+      render();
+      generate.focus();
+    });
+
+    confirm.addEventListener('click', () => {
+      if (state !== 'pending') return;
+      state = 'confirmed';
+      render();
+      notice.tabIndex = -1;
+      notice.focus();
+    });
+  </script>
+</body>
+</html>
