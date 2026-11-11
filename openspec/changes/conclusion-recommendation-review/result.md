@@ -1,11 +1,7 @@
-# 结论与建议审查结果与交付
+# 结论与建议审查结果与原位归档
 
-2026-11-11，本项CNR-A1至CNR-A5的适用本地实现与验收已完成，阶段检查、非作者结果、原FAIL/UNKNOWN与范围均见[实施记录](implementation.md)。
+**状态：ARCHIVED（工程Git交付；不代表运行采用或用户产品验收）。**
 
-## 集中Git交付
+本项适用本地验收、各阶段非作者结论与原FAIL/UNKNOWN见[实施记录](implementation.md)。用户授权本批集中单PR交付，实际head检查通过后已由[PR #62](https://github.com/gadfly-hbo/OptraCall/pull/62)squash为`dbdd96794d66d495e479b94ae27a44f76ccfd8a9`，本地main首次仅ff更新。实际受检head `938f9b86f72513e9406071312e65b5990ddb49f6`及[Check #163](https://github.com/gadfly-hbo/OptraCall/actions/runs/43000785366)、整批最终双轴、main push与归档收尾见[本批交付记录](../../../docs/analysis-decision-workflow-delivery.md)。
 
-用户已授权与其余四项集中一个PR，实际head CI通过后squash、快进main并原位归档。当前Git/CI进行中，尚未标归档；实际PR/head/CI/merge及回读以[本批交付记录](../../../docs/analysis-decision-workflow-delivery.md)核定。
-
-## 保全与验收边界
-
-[已审核spec](spec.md)及对应Demo保持原字节，不移动本目录或覆盖历史实施记录。原始日志、候选清单、失败与验收证据留本工作树.local，正式结果进入仓库。工程Git交付、运行采用、真实专业效果和用户产品验收分别记录，本轮不切换运行服务或更新MacBook。
+本目录[已审核spec](spec.md)及Demo/implementation保持原路径/字节，不迁移或重写历史。当前正式复核摘要进入仓库，原始日志、native、候选清单、失败与诊断现场仍在原工作树.local，不删除或公开原始资料。工程归档不扩大真实模型、业务数据、服务、MacBook或经营行动授权，专业与产品验收另核。

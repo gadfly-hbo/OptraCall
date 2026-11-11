@@ -39,7 +39,7 @@
 | 3 结论与建议审查 | CNR-A1至A5通过；固定稿逐主张只读审查、显式回交原草稿、旧入口安全交接。该阶段完整检查2,001通过/0失败/67条件跳过，双轴及受影响浏览器通过。 | [实施与证据](../openspec/changes/conclusion-recommendation-review/implementation.md) |
 | 5 报告结论确认与决策看板交接 | CBH-A1至A5通过；本版受支持结论与明确选择的关联建议原子入板、可信来源/条件/版本、回执去重及安全历史；确认0新增模型。最终整批完整检查2,024通过/0失败/67条件跳过，双轴及实际Chrome通过。 | [实施与证据](../openspec/changes/confirmed-conclusions-board-handoff/implementation.md) |
 
-最终检查绑定113件修复候选SHA `5894149a471da6a7af37f5d6809722b83e69aed962808b1125fd9e9f44ff038e`；候选、原WIP与批准原件均核回，完成标记后仅本进度及第5项实施记录变更。源码仍在本地未提交分支 `codex/data-analysis-flow`；集中Git/CI和OpenSpec交付收尾尚未执行。本轮仅工程合成路径，不切换运行服务或MacBook。
+最终检查绑定113件修复候选SHA `5894149a471da6a7af37f5d6809722b83e69aed962808b1125fd9e9f44ff038e`；候选、原WIP与批准原件均核回，完成标记后仅本进度及第5项实施记录变更。该本地阶段收尾时源码尚未提交，集中Git/CI和OpenSpec交付收尾当时未执行；后续已授权交付见下。本轮仅工程合成路径，不切换运行服务或MacBook。
 
 ## 文件 SHA-256
 
@@ -58,4 +58,6 @@ dd21a1ea3f86782694e45b2bc81509cc2bd407f49165f3c05b677eadefda53ab  openspec/chang
 
 ## 集中Git交付
 
-2026-11-11，用户已授权五项集中单PR、实际head CI通过后直接squash、快进main与原位归档；当前Git交付进行中，实际身份和收尾以[交付记录](analysis-decision-workflow-delivery.md)核定。原本地阶段及失败记录保留，服务和MacBook保持。
+2026-11-11，用户已授权五项集中单PR、实际head CI通过后直接squash、快进main与原位归档；已由[PR #62](https://github.com/gadfly-hbo/OptraCall/pull/62)按实际head CI与整批双轴通过后squash为`dbdd96794d66d495e479b94ae27a44f76ccfd8a9`，本地main首次安全快进，五个原目录result原位工程归档；实际身份、后续main CI及归档提交收尾以[交付记录](analysis-decision-workflow-delivery.md)核定。原本地阶段及失败记录保留，服务和MacBook保持。
+
+本批Git交付增加了RCR准备回执展示P2的最小修复，当前源码以实际受检head `938f9b86f72513e9406071312e65b5990ddb49f6`及其CI为准；上文五项本地阶段计数/原始候选、失败与专业限制保留。
