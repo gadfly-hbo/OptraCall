@@ -35,6 +35,15 @@ async (page) => {
   };
   const modelCalls = async () => (await (await page.request.get(new URL('/__qa', providerUrl).href)).json()).requestCount;
   const noOverflow = async () => assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Page must not overflow horizontally');
+  const fullWidth = async (selector, childSelector) => {
+    const dimensions = await page.locator(selector).evaluate((element, childSelector) => {
+      const rect = element.getBoundingClientRect(), workbench = document.querySelector('.workbench-view').getBoundingClientRect(), style = getComputedStyle(element);
+      return { page: rect.width, workbench: workbench.width, content: rect.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), child: childSelector ? element.querySelector(childSelector).getBoundingClientRect().width : null };
+    }, childSelector);
+    assert(Math.abs(dimensions.page - dimensions.workbench) < 1, `${selector} must fill the available workbench`);
+    if (childSelector) assert(Math.abs(dimensions.child - dimensions.content) < 1, `${childSelector} must not impose another page width cap`);
+    await noOverflow();
+  };
   const createProject = async name => {
     await page.getByRole('button', { name: '新建项目', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '新建项目', exact: true });
@@ -56,6 +65,8 @@ async (page) => {
   await page.reload();
   await page.getByRole('button', { name: '新建项目', exact: true }).waitFor();
   await createProject('目录回归项目 ' + Date.now());
+  const fixtureProjectId = new URL(page.url()).searchParams.get('project');
+  assert(fixtureProjectId, 'The isolated project must have a stable route identity');
   const draftInput = page.getByRole('textbox', { name: '消息', exact: true });
   await Promise.all([
     page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().endsWith('/draft') && response.ok()),
@@ -72,13 +83,32 @@ async (page) => {
   const beforeSettings = await modelCalls();
   await taskModelShortcut.click();
   await title('设置').waitFor();
-  await section('模型配置').waitFor();
+  await section('模型设置').waitFor();
   assert(await settingsTab('模型设置').getAttribute('aria-pressed') === 'true', 'The task shortcut opens model settings directly');
   await settingsTab('个人资料').focus();
   await page.keyboard.press('Enter');
   await section('个人资料').waitFor();
+  const candidatePath = '**/api/personal-retention/candidates/lookup?*';
+  const candidate = { status: 'available', reason: null, parentState: 'completed', ref: { projectId: fixtureProjectId, taskId: 'layout-task', originSessionId: 'layout-session', entryId: 'layout-entry', toolCallId: 'layout-call', expectedDetailsSha256: 'a'.repeat(64) }, details: { content: { title: '布局回归候选 · 合成资料', bodyMd: '核对统计范围、业务时间与资料来源，原候选正文应保持可阅读的正常行宽。'.repeat(3), kind: 'knowledge', scope: '隔离界面验证', aliases: [], caution: '合成内容，不代表已确认事实' }, createdAt: '2026-11-12T01:00:00.000Z', origin: { projectId: fixtureProjectId, taskId: 'layout-task' }, sourceRefs: [] }, locations: [{ savedPath: 'current' }], control: null };
+  await page.route(candidatePath, route => route.fulfill({ json: { rows: [candidate], issues: [], partial: false, nextCursor: null, controlsAvailable: true } }));
+  await page.locator('.ac-panel').getByRole('button', { name: '明确刷新候选', exact: true }).click();
+  const candidateCard = page.locator('.ac-panel .pr-result').filter({ hasText: candidate.details.content.title });
+  await candidateCard.waitFor();
+  assert(await candidateCard.getByRole('button', { name: /^加入当前任务/ }).count() === 1, 'Exercise the task-specific action column that originally squeezed the body');
+  for (const width of [1920, 1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await fullWidth('.settings-page', '.settings-personal > .pr-page');
+    const geometry = await candidateCard.evaluate(element => {
+      const body = element.firstElementChild.getBoundingClientRect(), actions = element.lastElementChild.getBoundingClientRect(), card = element.getBoundingClientRect();
+      return { bodyWidth: body.width, bodyBottom: body.bottom, actionsTop: actions.top, buttonsFit: [...element.lastElementChild.querySelectorAll('button')].every(button => button.getBoundingClientRect().right <= card.right + 1 && button.scrollWidth <= button.clientWidth + 1) };
+    });
+    assert(geometry.bodyWidth >= 200 && geometry.actionsTop >= geometry.bodyBottom - 1 && geometry.buttonsFit, `Candidate body and actions must remain readable at ${width}px`);
+  }
+  await page.unroute(candidatePath);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  passed.push('Candidate body retains usable width and task actions follow it; wide settings also remove the nested personal-page cap');
   assert(await settingsEntry.getAttribute('aria-current') === 'page' && await settingsTab('个人资料').getAttribute('aria-pressed') === 'true', 'The sidebar keeps settings selected on either tab');
-  assert(!await section('模型配置').isVisible(), 'Only the selected settings panel is visible');
+  assert(!await section('模型设置').isVisible(), 'Only the selected settings panel is visible');
   await page.getByRole('button', { name: '返回项目空间', exact: true }).click();
   assert(await draftInput.inputValue() === '页面切换保留的草稿', 'Returning from either settings tab preserves the task draft');
   await page.waitForFunction(() => document.activeElement?.matches('.model-button'));
@@ -106,11 +136,11 @@ async (page) => {
     await route.fulfill({ json: { order: storedOrder, configured: searchConfigured } });
   });
   await settingsEntry.click();
-  assert(JSON.stringify(await settingsTabs.getByRole('button').allTextContents()) === JSON.stringify(['模型设置', '个人资料', '网络搜索']), 'Settings has the three approved tabs');
+  assert(JSON.stringify(await settingsTabs.getByRole('button').allTextContents()) === JSON.stringify(['个人资料', '模型设置', '网络检索']), 'Settings has the three approved tabs');
   assert(searchReads === 0, 'Model settings does not load search settings');
-  await settingsTab('网络搜索').focus(); await page.keyboard.press('Enter');
-  await section('网络搜索').waitFor();
-  const readFailure = page.getByRole('alert').filter({ hasText: '未能读取网络搜索设置。' });
+  await settingsTab('网络检索').focus(); await page.keyboard.press('Enter');
+  await section('网络检索').waitFor();
+  const readFailure = page.getByRole('alert').filter({ hasText: '未能读取网络检索设置。' });
   await readFailure.waitFor();
   assert(!await searchOrder.isVisible(), 'Unavailable settings do not show a guessed order');
   await readFailure.getByRole('button', { name: '重新读取设置', exact: true }).click();
@@ -123,9 +153,9 @@ async (page) => {
   const fetchSettings = page.getByRole('region', { name: '网页读取 · DeepSeek Fetch', exact: true });
   assert(await fetchSettings.getByText(/URL.*Markdown/).isVisible() && await fetchSettings.getByText('未配置', { exact: true }).isVisible(), 'Fetch shows its independent DeepSeek credential status');
   await deepseekRoute.getByRole('button', { name: '前往模型设置配置 DeepSeek Flash 凭据', exact: true }).click();
-  await section('模型配置').waitFor();
+  await section('模型设置').waitFor();
   searchConfigured = { minimax: true, deepseek: true };
-  await settingsTab('网络搜索').click();
+  await settingsTab('网络检索').click();
   await deepseekRoute.getByText('已配置', { exact: true }).waitFor();
   await searchOrder.getByRole('button', { name: '下移 MiniMax', exact: true }).focus();
   await page.keyboard.press('Enter');
@@ -140,7 +170,7 @@ async (page) => {
   await searchOrder.getByText('搜索顺序已保存。', { exact: true }).waitFor();
   assert(searchWrites === 2 && JSON.stringify(storedOrder) === JSON.stringify(['deepseek', 'minimax']), 'The second save persists the retained draft');
   await page.reload();
-  await settingsEntry.click(); await settingsTab('网络搜索').click();
+  await settingsEntry.click(); await settingsTab('网络检索').click();
   await searchOrder.waitFor();
   assert(JSON.stringify(await searchProviders()) === JSON.stringify(['DeepSeek', 'MiniMax']), 'Refreshing reloads the stored order');
   await searchOrder.getByRole('button', { name: '恢复默认顺序', exact: true }).click();
@@ -152,7 +182,7 @@ async (page) => {
   await saveFailure.getByRole('button', { name: '重新读取设置', exact: true }).click();
   await searchOrder.getByText('已保存顺序：MiniMax → DeepSeek', { exact: true }).waitFor();
   storedOrder = ['deepseek', 'minimax'];
-  await settingsTab('模型设置').click(); await settingsTab('网络搜索').click();
+  await settingsTab('模型设置').click(); await settingsTab('网络检索').click();
   await searchOrder.getByText('已保存顺序：DeepSeek → MiniMax', { exact: true }).waitFor();
   assert(JSON.stringify(await searchProviders()) === JSON.stringify(['DeepSeek', 'MiniMax']) && await saveSearchOrder().isDisabled(), 'A confirmed draft no longer masks a later server change');
   await searchOrder.getByRole('button', { name: '恢复默认顺序', exact: true }).click();
@@ -233,6 +263,31 @@ async (page) => {
   await page.getByRole('button', { name: '返回业务插件 →', exact: true }).click(); await section('业务插件').waitFor();
   passed.push('Real metrics and requirements cards open existing pages and return to their owning categories');
   await openCategory('分析资产');
+  await page.getByRole('button', { name: '打开企业业务资料', exact: true }).click();
+  await title('企业业务资料').waitFor();
+  for (const width of [1920, 1440, 390, 320]) { await page.setViewportSize({ width, height: 1000 }); await fullWidth('.eb-page'); }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('button', { name: '返回分析资产 →', exact: true }).click();
+  await openCategory('业务插件');
+  await page.getByRole('button', { name: '打开PPT 逐页精修', exact: true }).click();
+  await page.locator('.refiner-page').waitFor();
+  for (const width of [1920, 1440, 390, 320]) { await page.setViewportSize({ width, height: 1000 }); await fullWidth('.refiner-page'); }
+  const postBoard = async (route, data) => { const response = await page.request.post(baseUrl + '/api/decision-board/' + route, { headers, data }); assert(response.ok(), 'Isolated feedback layout fixture must save'); return response.json(); };
+  const { item: layoutItem } = await postBoard('items', { projectId: fixtureProjectId, title: '宽度回归合成建议', rationale: '仅用于反馈复盘界面回归' });
+  await postBoard(`items/${layoutItem.id}/adopt`, {});
+  const actionTitle = '宽度回归行动 ' + Date.now();
+  const { task: layoutAction } = await postBoard(`items/${layoutItem.id}/tasks`, { title: actionTitle });
+  await postBoard(`tasks/${layoutAction.id}/status`, { status: 'doing' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mode('决策').click();
+  await page.locator('.board-task').filter({ hasText: actionTitle }).getByRole('button', { name: '基于此反馈复盘', exact: true }).click();
+  await title('准备反馈复盘').waitFor();
+  for (const width of [1920, 1440, 390, 320]) { await page.setViewportSize({ width, height: 1000 }); await fullWidth('.feedback-review'); }
+  await page.getByRole('button', { name: '返回决策看板 · 保留输入', exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mode('分析').click();
+  passed.push('Enterprise materials, PPT refiner and feedback review fill the available workbench at wide and narrow sizes');
+  await openCategory('分析资产');
   const initialAssetCount = await cards().count();
   const search = page.getByRole('textbox', { name: '搜索分析资产', exact: true });
   const tag = page.getByRole('combobox', { name: '业务标签', exact: true });
@@ -311,11 +366,11 @@ async (page) => {
     await noOverflow();
     await page.getByRole('button', { name: '展开侧栏', exact: true }).click();
     await settingsEntry.click();
-    await section('模型配置').waitFor(); await noOverflow();
+    await section('模型设置').waitFor(); await noOverflow();
     await settingsTab('个人资料').click();
     await section('个人资料').waitFor(); await noOverflow();
     assert(await page.getByRole('region', { name: '设置', exact: true }).evaluate(element => element.scrollWidth <= element.clientWidth), 'Personal settings fit the narrow viewport');
-    await settingsTab('网络搜索').click(); await searchOrder.waitFor(); await noOverflow();
+    await settingsTab('网络检索').click(); await searchOrder.waitFor(); await noOverflow();
     assert(await settingsTabs.evaluate(element => element.scrollWidth <= element.clientWidth)
       && await page.getByRole('region', { name: '设置', exact: true }).evaluate(element => element.scrollWidth <= element.clientWidth), 'All tabs and network search controls fit the narrow viewport');
     await page.getByRole('button', { name: '返回决策工作台', exact: true }).click(); await title('决策看板').waitFor();

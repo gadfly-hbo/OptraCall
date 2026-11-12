@@ -1,4 +1,4 @@
-.eb-page { flex: 1; min-height: 0; overflow-y: auto; width: 100%; max-width: 1240px; margin: 0 auto; padding: 30px 32px 48px; }
+.eb-page { flex: 1; min-height: 0; overflow-y: auto; width: 100%; padding: 30px 32px 48px; }
 .eb-page *, .eb-picker *, .eb-case-materials * { box-sizing: border-box; }
 .eb-intro, .eb-toolbar, .eb-actions, .eb-section-heading, .eb-source-file, .eb-lifecycle { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .eb-intro { justify-content: space-between; margin: -8px 0 24px; color: var(--muted); font-size: 12px; }

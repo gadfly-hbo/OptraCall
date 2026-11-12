@@ -1,4 +1,3 @@
-.feedback-review { max-width: 1320px; margin-inline: auto; }
 .feedback-heading, .feedback-section-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .feedback-heading h1 { margin: 6px 0 10px; font-size: 25px; }
 .feedback-heading p, .feedback-source p { color: var(--muted); font-size: 13px; line-height: 1.7; }

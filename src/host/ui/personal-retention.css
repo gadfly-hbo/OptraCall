@@ -89,6 +89,9 @@
 @media (prefers-reduced-motion: reduce) { .pr-page *, .pr-dialog * { scroll-behavior: auto !important; } }
 .pr-view-tabs { margin: 0 0 20px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 .ac-panel { margin-bottom: 28px; }
+.ac-panel .pr-result { grid-template-columns: minmax(0, 1fr); }
+.ac-panel .pr-result > .pr-row { min-width: 0; }
+.ac-panel .pr-result > .pr-row > button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .pr-manual-heading { padding-top: 8px; margin-bottom: 14px !important; }
 .ac-filters { align-items: flex-end; }
 .ac-filters > label:not(.ac-checkbox) { display: grid; gap: 5px; flex: 1 1 180px; max-width: 270px; }

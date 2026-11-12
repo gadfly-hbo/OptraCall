@@ -1,0 +1,75 @@
+{
+  "baseline": "0eb050ed4faef3950a2baddf5fc5952e7b2e6b33",
+  "files": [
+    {
+      "path": "docs/prototypes/trial-report-20261112-ui-demo.html",
+      "bytes": 13353,
+      "sha256": "27b2614a8fa608b7b1f0b864ebc3f0074647e4fe6b170cb057a725d41baec937"
+    },
+    {
+      "path": "docs/user-manual.md",
+      "bytes": 35480,
+      "sha256": "e005030a2135b1d7dbc4b149f39f5ab8bacd3b60e84f2504ffc80a42ccdc8aa1"
+    },
+    {
+      "path": "extensions/business-plugins/ppt-refiner/ui/refiner.css",
+      "bytes": 5710,
+      "sha256": "be8b3d18b6d30c3c4653d02c3e4536f568f019073697b697b970eada05ed8c9e"
+    },
+    {
+      "path": "openspec/changes/trial-report-20261112-repair/spec.md",
+      "bytes": 5623,
+      "sha256": "7e10a1d66f5f7d5f972331c0f2f8f054b56ce79017a08d94333b0fb9789990ab"
+    },
+    {
+      "path": "src/host/ui/App.tsx",
+      "bytes": 106476,
+      "sha256": "a9363511d37c9b966ef07a19daaaef1b0b5c510489e15e6e1b0a0399a3cf8265"
+    },
+    {
+      "path": "src/host/ui/ModelSettings.tsx",
+      "bytes": 11947,
+      "sha256": "ce99b8b5369602c07ff7feab0c66bd5dabd9805e08be48fb9115041798cb559f"
+    },
+    {
+      "path": "src/host/ui/WebSearchSettings.tsx",
+      "bytes": 7934,
+      "sha256": "8580e8fb6017aefd3284f6f82db8663e6986275843b8fd03cd1f994a1117f014"
+    },
+    {
+      "path": "src/host/ui/enterprise-materials.css",
+      "bytes": 7376,
+      "sha256": "6476ede369e93cc04b75754b202ae71055e9e8e7c9636957effce386952cc97b"
+    },
+    {
+      "path": "src/host/ui/feedback.css",
+      "bytes": 4207,
+      "sha256": "cf54866db90773d0a0da0448074d406585d686914ffd8fee4b8ba0fadc3dce80"
+    },
+    {
+      "path": "src/host/ui/help-content.ts",
+      "bytes": 39991,
+      "sha256": "da2b4bd12c3080677ecd3b29befd306d2319952c2512536eb30c511ab6b8dfda"
+    },
+    {
+      "path": "src/host/ui/personal-retention.css",
+      "bytes": 10804,
+      "sha256": "f964e9f516a0f0e35c462de42dcdd12acc5cf4388e8c24999f65202580a58380"
+    },
+    {
+      "path": "src/host/ui/styles.css",
+      "bytes": 67332,
+      "sha256": "470531189f6c116f3a6a6bae9a1f35f0cbced88ccf509aedb89610570883600d"
+    },
+    {
+      "path": "tests/browser-catalog.js",
+      "bytes": 38127,
+      "sha256": "454ed8654c0112ebb4a231ae6be5e68b285a46fc84de452cc79f10b23c63fd37"
+    },
+    {
+      "path": "tests/browser-smoke.js",
+      "bytes": 9700,
+      "sha256": "304903fb5e55d1411204975e4f57c81c76011273b4b70d1a4b850396365fea92"
+    }
+  ]
+}

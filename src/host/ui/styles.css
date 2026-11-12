@@ -97,13 +97,13 @@ button { color: inherit; }
 .secondary-button:hover { background: var(--hover); }.secondary-button:disabled { color: var(--muted); background: var(--subtle); }
 .text-button { display: inline-flex; align-items: center; gap: 7px; padding: 5px 0; background: transparent; border: 0; color: var(--accent); font-size: 12px; }
 .text-button:hover { text-decoration: underline; }.back-button { color: var(--muted); margin-bottom: 20px; }
-.settings-page { overflow-y: auto; width: 100%; padding: 15px max(32px, calc((100% - 800px) / 2)) 40px; }
+.settings-page { overflow-y: auto; width: 100%; padding: 28px 32px 48px; }
 .settings-page .settings-heading { margin-bottom: 12px; }
 .settings-heading .back-button { margin: 0; flex-shrink: 0; max-width: 48%; text-align: right; }
 .settings-page .settings-tabs button:focus-visible { outline-offset: -2px; }
 .settings-page .page-heading h2 { margin: 0 0 7px; font-size: 18px; font-weight: 550; }
 .settings-page .page-heading h2:focus { outline: none; }
-.settings-personal > .pr-page { padding: 0; overflow: visible; }
+.settings-personal > .pr-page { max-width: none; margin: 0; padding: 0; overflow: visible; }
 .settings-page .form-heading h3 { margin: 0; font-size: 15px; font-weight: 550; }
 .web-search-settings .page-heading h2:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .web-search-box { margin-bottom: 14px; padding: 16px; }
