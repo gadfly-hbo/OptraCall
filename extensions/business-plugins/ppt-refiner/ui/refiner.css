@@ -1,4 +1,4 @@
-.refiner-page { padding: 16px 24px 32px; max-width: 1440px; margin: 0 auto; }
+.refiner-page { width: 100%; padding: 16px 24px 32px; }
 .refiner-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 16px; }
 .refiner-header h1 { font-size: 18px; font-weight: 550; margin: 0; }
 .refiner-header .spacer, .stage-toolbar .spacer { flex: 1; }

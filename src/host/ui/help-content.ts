@@ -54,10 +54,10 @@ export const manualSections: HelpSection[] = [
   },
   {
     id: 'web-search',
-    title: '网络搜索',
+    title: '网络检索',
     summary: '沿用已配置的模型凭据，按顺序搜索公开网页。',
     blocks: [
-      { kind: 'text', text: '打开「设置 → 网络搜索」可调整并保存关键词搜索顺序。默认优先 MiniMax，线路失败或缺少凭据时尝试 DeepSeek。搜索正常返回空结果时，Agent 可以自行更换关键词。' },
+      { kind: 'text', text: '打开「设置 → 网络检索」可调整并保存关键词搜索顺序。默认优先 MiniMax，线路失败或缺少凭据时尝试 DeepSeek。搜索正常返回空结果时，Agent 可以自行更换关键词。' },
       { kind: 'text', text: 'MiniMax 和 DeepSeek 分别沿用 MiniMax M3.1 Flash 与 DeepSeek Flash 的凭据。DeepSeek Fetch 单独读取已知 URL 的网页正文。关键词和 URL 会发给对应的搜索或读取服务，请仅使用公开信息。' },
     ],
   },

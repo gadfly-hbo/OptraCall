@@ -105,7 +105,7 @@ async (page) => {
   await page.getByRole('button', { name: '展开侧栏', exact: true }).click();
   await page.getByRole('complementary', { name: '工作台导航' }).waitFor();
   await page.getByRole('button', { name: '模型设置', exact: true }).click();
-  await page.getByRole('heading', { name: '模型配置', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '模型设置', exact: true }).waitFor();
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'Narrow settings must not overflow');
   passed.push('Light/dark parity and narrow chat/settings');
   assert(await page.evaluate(() => localStorage.length === 0 && sessionStorage.length === 0), 'Demo must not persist configuration or key in web storage');

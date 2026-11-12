@@ -93,9 +93,9 @@ export function WebSearchSettings({ active, onModelSettings }: { active: boolean
     : null;
 
   return <div className="web-search-settings">
-    <div className="page-heading"><div><h2 ref={heading} tabIndex={-1}>网络搜索</h2><p>设置 Agent 发起关键词搜索时使用的服务顺序。</p></div></div>
-    {loading && <p className="host-status" role="status">正在读取网络搜索设置…</p>}
-    {readFailed && <div className="host-status" role="alert"><p>未能读取网络搜索设置。</p><button type="button" className="secondary-button" onClick={reloadSettings}>重新读取设置</button></div>}
+    <div className="page-heading"><div><h2 ref={heading} tabIndex={-1}>网络检索</h2><p>设置 Agent 发起关键词搜索时使用的服务顺序。</p></div></div>
+    {loading && <p className="host-status" role="status">正在读取网络检索设置…</p>}
+    {readFailed && <div className="host-status" role="alert"><p>未能读取网络检索设置。</p><button type="button" className="secondary-button" onClick={reloadSettings}>重新读取设置</button></div>}
     {settings && order && <section className="config-form web-search-box" aria-labelledby="web-search-order-title" aria-busy={busy}>
       <h3 id="web-search-order-title">搜索顺序</h3>
       <p>按已保存顺序处理搜索。首选缺少凭据或遇到线路错误时，尝试备用服务。</p>

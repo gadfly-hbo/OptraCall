@@ -555,13 +555,13 @@ export function App() {
       <div hidden={helpOpen} className={`workbench-content ${(view === 'chat' || view === 'studio') && filesOpen && active && conclusionOpenKey !== activeKey ? 'files-visible' : ''} ${view === 'chat' && conclusionOpenKey === activeKey ? 'conclusion-visible' : ''}`}><div className="workbench-view">
       {(inSettings || personalMounted || webSearchMounted) && <section className="settings-page" aria-labelledby="settings-title" hidden={!inSettings}>
         <header className="page-heading settings-heading">
-          <div><h1 id="settings-title">设置</h1><p>管理模型连接、个人资料和网络搜索。</p></div>
+          <div><h1 id="settings-title">设置</h1><p>管理个人资料、模型连接和网络检索。</p></div>
           <button type="button" className="text-button back-button" onClick={backFromSettings}><span aria-hidden="true">←</span>{settingsBackLabel}</button>
         </header>
         <div className="catalog-tabs settings-tabs" role="group" aria-label="设置分类">
-          <button type="button" className={view === 'settings' ? 'active' : undefined} aria-pressed={view === 'settings'} aria-controls="settings-model-panel" onClick={() => openSettingsView('settings')}><Icon name="settings" />模型设置</button>
           <button type="button" className={view === 'personal-materials' ? 'active' : undefined} aria-pressed={view === 'personal-materials'} aria-controls="settings-personal-panel" onClick={() => openSettingsView('personal-materials')}><Icon name="assets" />个人资料</button>
-          <button type="button" className={view === 'web-search-settings' ? 'active' : undefined} aria-pressed={view === 'web-search-settings'} aria-controls="settings-web-search-panel" onClick={() => openSettingsView('web-search-settings')}><Icon name="search" />网络搜索</button>
+          <button type="button" className={view === 'settings' ? 'active' : undefined} aria-pressed={view === 'settings'} aria-controls="settings-model-panel" onClick={() => openSettingsView('settings')}><Icon name="settings" />模型设置</button>
+          <button type="button" className={view === 'web-search-settings' ? 'active' : undefined} aria-pressed={view === 'web-search-settings'} aria-controls="settings-web-search-panel" onClick={() => openSettingsView('web-search-settings')}><Icon name="search" />网络检索</button>
         </div>
         <div id="settings-model-panel" hidden={view !== 'settings'}>
           {view === 'settings' && <ModelSettings configurations={configurations} selectedId={selectedId} hostStatus={hostStatus} onChange={refreshConfigurations} />}
