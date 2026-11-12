@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>OptraCall · 确认结论并带入看板</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #faf9fc;
+  --paper: #fff;
+  --nav: #f4f3f7;
+  --line: #e4e0eb;
+  --ink: #302b3a;
+  --muted: #645c70;
+  --accent: #70539f;
+  --accent-soft: #f0eaf8;
+  --green: #27684e;
+  --green-soft: #edf6ef;
+  --amber: #785316;
+  --amber-soft: #fbf2e3;
+  --red: #9b3443;
+  --red-soft: #fcf0f2;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+h1, h2, h3, p, ul, dl, dd { margin: 0; }
+h1 { font-size: clamp(23px, 3vw, 34px); line-height: 1.24; letter-spacing: -.035em; }
+h2 { font-size: 17px; line-height: 1.35; }
+h3 { font-size: 15px; line-height: 1.45; }
+p, dd, summary, button { overflow-wrap: anywhere; }
+button, input { font: inherit; color: inherit; }
+button, summary, label { cursor: pointer; }
+button, summary, input { scroll-margin: 13px; }
+button:focus-visible, summary:focus-visible, input:focus-visible, a:focus-visible, main:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+input { accent-color: var(--accent); width: 17px; height: 17px; margin: 3px 0 0; }
+input:disabled, label:has(input:disabled) { cursor: default; }
+button {
+  min-height: 36px;
+  padding: 6px 11px;
+  border: 1px solid #d8d0e0;
+  border-radius: 7px;
+  background: var(--paper);
+  font-weight: 640;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { cursor: not-allowed; opacity: .54; }
+button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+button.primary:hover:not(:disabled) { background: #62458f; }
+.skip { position: fixed; top: 8px; left: 8px; z-index: 2; background: var(--paper); color: var(--accent); padding: 7px 12px; transform: translateY(-140%); }
+.skip:focus { transform: translateY(0); }
+.shell { min-height: 100dvh; display: grid; grid-template-columns: 188px minmax(0, 1fr); }
+.sidebar { background: var(--nav); border-right: 1px solid var(--line); padding: 20px 13px; }
+.brand { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 730; margin: 0 4px 30px; }
+.brand-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: white; }
+nav { display: grid; gap: 6px; }
+nav button { text-align: left; border-color: transparent; background: transparent; color: var(--muted); }
+nav button[aria-current="page"] { background: var(--accent-soft); color: #533580; }
+.topbar { padding: 12px clamp(14px, 3vw, 33px); border-bottom: 1px solid var(--line); background: var(--paper); color: var(--muted); }
+.topbar strong { color: var(--ink); }
+.mobile-nav { display: none; }
+.demo-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px clamp(14px, 3vw, 33px);
+  background: var(--accent-soft); color: #514167; border-bottom: 1px solid var(--line);
+}
+.demo-bar p, .demo-bar button { font-size: 12px; }
+.demo-tools, .actions, .top-line, .finding-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.demo-tools label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.demo-tools input { margin: 0; width: 15px; height: 15px; }
+main { max-width: 1250px; margin: 0 auto; padding: clamp(15px, 3vw, 34px); }
+.view-head { display: grid; gap: 7px; margin: 4px 0 19px; }
+.caption, .muted { color: var(--muted); }
+.caption { font-size: 12px; }
+.view-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, .51fr); gap: 17px; align-items: start; }
+.paper { min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.panel-head { padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.panel-head p { margin-top: 5px; }
+.panel-body { padding: 15px 16px; }
+.panel-body > * + * { margin-top: 11px; }
+.finding { padding: 13px 16px; }
+.finding + .finding { border-top: 1px solid var(--line); }
+.pick { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 9px; align-items: start; }
+.finding-meta { margin: 4px 0 0; }
+.badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 720; }
+.badge.support { color: var(--green); background: var(--green-soft); }
+.badge.conditional { color: var(--amber); background: var(--amber-soft); }
+.badge.insufficient, .badge.quiet { color: #514864; background: #f1eef6; }
+.badge.conflict { color: var(--red); background: var(--red-soft); }
+.condition { display: block; font-size: 13px; color: var(--muted); margin-top: 4px; }
+details { font-size: 13px; }
+details summary { width: fit-content; color: var(--accent); font-weight: 650; }
+.finding details { margin: 7px 0 0 27px; }
+details dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; margin: 7px 0 0; }
+details dt { font-weight: 650; color: var(--muted); }
+.finding .return { min-height: 32px; margin: 8px 0 0 27px; font-size: 12px; }
+.notice { padding: 9px 11px; border-radius: 6px; color: var(--amber); background: var(--amber-soft); }
+.notice.error { color: var(--red); background: var(--red-soft); }
+.notice.success { color: var(--green); background: var(--green-soft); }
+.notice.quiet { color: #514864; background: #f1eef6; }
+.summary-actions { margin-top: 12px; }
+.summary-actions button { width: 100%; }
+.top-line { justify-content: space-between; }
+.board-conclusion { padding: 12px 0; }
+.board-conclusion + .board-conclusion { border-top: 1px solid var(--line); }
+.board-conclusion details { margin-top: 6px; }
+.board-action { display: grid; gap: 8px; }
+.board-action + .board-action { border-top: 1px solid var(--line); padding-top: 10px; }
+.board-action button { justify-self: start; }
+.stacked { display: grid; gap: 13px; }
+.review-empty { padding: 16px; }
+.review-empty p { margin: 5px 0 10px; }
+@media (max-width: 900px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { display: none; }
+  .mobile-nav { display: flex; flex-wrap: wrap; gap: 7px; padding: 5px 14px; border-bottom: 1px solid var(--line); background: var(--nav); }
+}
+@media (max-width: 685px) {
+  .view-grid { grid-template-columns: minmax(0, 1fr); }
+  .demo-tools { width: 100%; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到报告内容</a>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">O</span> OptraCall</div>
+    <nav aria-label="工作区">
+      <button type="button" data-view="review" aria-current="page">分析 · 审查结果</button>
+      <button type="button" data-view="board">决策看板</button>
+    </nav>
+  </aside>
+  <div>
+    <header class="topbar">OptraCall / 示例项目 / <strong id="breadcrumb">退款报告审查</strong></header>
+    <nav class="mobile-nav" aria-label="移动工作区">
+      <button type="button" data-view="review" aria-current="page">分析 · 审查结果</button>
+      <button type="button" data-view="board">决策看板</button>
+    </nav>
+    <section class="demo-bar" aria-label="演示控制">
+      <p><strong>交互演示</strong> · 使用合成报告与内存状态</p>
+      <div class="demo-tools">
+        <label><input type="checkbox" id="fail-next"> 下次提交失败</label>
+        <button type="button" id="change-version">模拟报告更新到 v3</button>
+        <button type="button" id="reset">重置演示</button>
+      </div>
+    </section>
+    <main id="main" tabindex="-1">
+      <section id="review-view" aria-labelledby="review-title">
+        <header class="view-head">
+          <h1 id="review-title">审查结论与建议</h1>
+          <p class="muted">退款报告 <span id="review-version">v2</span> · 选择本次决策要引用的结论。</p>
+        </header>
+        <div id="review-notice" class="notice" role="status" hidden></div>
+        <div class="view-grid" id="review-content" style="margin-top: 12px">
+          <section class="paper" id="finding-panel" aria-labelledby="findings-title">
+            <div class="panel-head"><h2 id="findings-title">逐条审查</h2></div>
+            <div id="finding-list"></div>
+          </section>
+          <section class="paper" id="selection-panel" aria-labelledby="selection-title">
+            <div class="panel-head"><h2 id="selection-title">带入决策看板</h2></div>
+            <div class="panel-body">
+              <p id="selection-summary" aria-live="polite">已选 0 条结论。</p>
+              <div>
+                <label class="pick" for="action">
+                  <input type="checkbox" id="action" disabled>
+                  <span><strong>一并带入行动建议</strong><br>先在自营 A 店试用尺码提示 <span class="badge conditional">有条件支持</span></span>
+                </label>
+                <p class="condition">选择「尺码问题」这条结论后可选。建议进入待采纳。</p>
+                <details>
+                  <summary>行动建议的审查依据</summary>
+                  <dl><dt>出处</dt><dd id="action-source">退款报告 v2 §4</dd><dt>条件</dt><dd>先确认触达权限和试点样本，可比较试点前后变化。效果有待观察。</dd><dt>审查来源</dt><dd id="action-review-source">独立审查 · 示例回执 R-v2</dd></dl>
+                </details>
+              </div>
+              <div class="summary-actions">
+                <button type="button" class="primary" id="confirm" disabled>确认并带入看板</button>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div class="paper review-empty" id="review-needed" hidden>
+          <h2>退款报告 v3 尚未审查</h2>
+          <p class="muted">v2 的已确认结论和建议仍可按原版本回看。完成新版审查后，再选择本轮要确认的条目。</p>
+          <div class="actions">
+            <button type="button" class="primary" id="review-new">开始审查 v3（演示）</button>
+            <button type="button" id="open-board-history">查看看板历史</button>
+          </div>
+        </div>
+        <details class="paper panel-body" id="draft-panel" style="margin-top: 12px" hidden>
+          <summary>原任务对话草稿</summary>
+          <ul id="draft-list"></ul>
+        </details>
+      </section>
+      <section id="board-view" aria-labelledby="board-title" hidden>
+        <header class="view-head">
+          <h1 id="board-title">决策看板</h1>
+          <div class="top-line"><p class="muted">报告详情 / 退款报告 <span id="board-version">v2</span></p><button type="button" id="back-to-review">返回审查结果</button></div>
+        </header>
+        <div id="board-notice" class="notice success" role="status" hidden></div>
+        <div class="view-grid" style="margin-top: 12px">
+          <div class="stacked">
+            <section class="paper" aria-labelledby="current-title">
+              <div class="panel-head"><h2 id="current-title">已确认结论</h2><p class="caption" id="current-version"></p></div>
+              <div id="current-conclusions" class="panel-body"></div>
+            </section>
+            <section class="paper" aria-labelledby="history-title" id="history-panel" hidden>
+              <div class="panel-head"><h2 id="history-title">旧版确认记录</h2></div>
+              <div id="historical-conclusions" class="panel-body"></div>
+            </section>
+          </div>
+          <section class="paper" aria-labelledby="suggestions-title">
+            <div class="panel-head"><h2 id="suggestions-title">待采纳建议</h2></div>
+            <div id="pending-actions" class="panel-body"></div>
+            <div id="adopted-panel" class="panel-head" hidden><h2>已采纳建议</h2><p id="adopted-actions" class="caption"></p></div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<script>
+const badges = { support: '证据支持', conditional: '有条件支持', insufficient: '证据不足', conflict: '与证据冲突' };
+const actionFixture = {
+  kind: 'action', title: '先在自营 A 店试用尺码提示', where: '§4 行动建议',
+  scope: '先确认触达权限和试点样本，可比较试点前后变化。效果有待观察。',
+  evidence: '退款原因表和自营 A 店试点记录，仅支持小范围试用。'
+};
+
+function reviewFixtures(version) {
+  const currentRate = version === 2 ? '9.7%' : '9.5%';
+  return [
+    {
+      id: 'rate', kind: 'support', title: '自营渠道退款率从 8.1% 升至 ' + currentRate,
+      where: '§2 退款变化',
+      scope: '自营渠道，活动周对比前一周，同一退款率口径。',
+      evidence: '020_clean/自营退款周表.csv · 自营汇总及两周订单量。'
+    },
+    {
+      id: 'size', kind: 'conditional', title: '在已登记原因的退款订单中，尺码问题占 42%',
+      where: '§3 退款原因',
+      scope: '只适用于有原因记录的订单。原因填报覆盖率为 76%。',
+      evidence: '020_clean/自营退款原因.csv · 已填报原因的订单。'
+    },
+    {
+      id: 'cause', kind: 'insufficient', title: '调整尺码表可以降低总体退款率',
+      where: '§4 可能解释',
+      scope: '待补证。现有资料缺少试点效果和同口径对照。',
+      evidence: '退款原因表支持描述原因分布；缺尺码表调整前后对照。'
+    },
+    {
+      id: 'all', kind: 'conflict', title: '各渠道退款率同步上升',
+      where: '§2 渠道比较',
+      scope: '需要回查渠道结论。平台 B 的退款率实际从 7.6% 降至 7.3%。',
+      evidence: '020_clean/渠道退款周表.csv · 平台 B 的两周对照。'
+    }
+  ];
+}
+
+const $ = (id) => document.getElementById(id);
+let version, reviewed, selected, records, submissions, actionSelected, actionAdopted, drafts, view, boardMessage;
+
+function create(tag, text, className) {
+  const element = document.createElement(tag);
+  if (text) element.textContent = text;
+  if (className) element.className = className;
+  return element;
+}
+
+function setNotice(id, text, variant) {
+  const element = $(id);
+  element.textContent = text;
+  element.className = 'notice' + (variant ? ' ' + variant : '');
+  element.hidden = !text;
+}
+
+function detailsFor(item, reportVersion) {
+  const details = create('details');
+  details.append(create('summary', '查看依据与定位'));
+  const definitions = create('dl');
+  for (const [label, text] of [
+    ['报告版本', '退款报告 v' + reportVersion + ' · ' + item.where],
+    ['证据来源', item.evidence],
+    ['适用范围', item.scope],
+    ['审查来源', '独立审查 · 示例回执 R-v' + reportVersion]
+  ]) {
+    definitions.append(create('dt', label), create('dd', text));
+  }
+  details.append(definitions);
+  return details;
+}
+
+function selectAction() {
+  actionSelected = $('action').checked;
+}
+
+function syncSelection() {
+  const linkedConclusion = selected.has('size');
+  if (!linkedConclusion) actionSelected = false;
+  $('action').checked = actionSelected;
+  $('action').disabled = !linkedConclusion;
+  $('confirm').disabled = selected.size === 0;
+  $('selection-summary').textContent = '已选 ' + selected.size + ' 条结论。';
+  $('action-source').textContent = '退款报告 v' + version + ' §4';
+  $('action-review-source').textContent = '独立审查 · 示例回执 R-v' + version;
+}
+
+function bringBack(item) {
+  const key = version + ':' + item.id;
+  if (!drafts.has(key)) {
+    drafts.set(key, '退款报告 v' + version + ' ' + item.where + ' · ' + item.title + '。' + item.scope);
+  }
+  $('draft-list').replaceChildren(...[...drafts.values()].map(text => create('li', text)));
+  $('draft-panel').hidden = false;
+  $('draft-panel').open = true;
+}
+
+function renderReview() {
+  $('review-version').textContent = 'v' + version;
+  $('review-content').hidden = !reviewed;
+  $('review-needed').hidden = reviewed;
+  if (!reviewed) return;
+  const list = $('finding-list');
+  list.replaceChildren();
+  for (const item of reviewFixtures(version)) {
+    const article = create('article', '', 'finding');
+    const label = create('label', '', 'pick');
+    const checkbox = create('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = selected.has(item.id);
+    checkbox.disabled = item.kind === 'insufficient' || item.kind === 'conflict';
+    checkbox.setAttribute('aria-label', item.title);
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) selected.add(item.id);
+      else selected.delete(item.id);
+      syncSelection();
+    });
+    const content = create('span');
+    const meta = create('span', '', 'finding-meta');
+    meta.append(create('span', badges[item.kind], 'badge ' + item.kind), create('span', item.where, 'caption'));
+    content.append(create('strong', item.title), meta, create('span', item.scope, 'condition'));
+    label.append(checkbox, content);
+    article.append(label, detailsFor(item, version));
+    if (checkbox.disabled) {
+      const button = create('button', '带回分析', 'return');
+      button.type = 'button';
+      button.addEventListener('click', () => bringBack(item));
+      article.append(button);
+    }
+    list.append(article);
+  }
+  syncSelection();
+}
+
+function conclusionNode(entry) {
+  const article = create('article', '', 'board-conclusion');
+  const meta = create('div', '', 'finding-meta');
+  meta.append(create('span', badges[entry.kind], 'badge ' + entry.kind), create('span', '退款报告 v' + entry.version + ' · 用户已确认', 'caption'));
+  article.append(create('h3', entry.title), meta, create('p', entry.scope, 'condition'), detailsFor(entry, entry.version));
+  return article;
+}
+
+function renderBoard() {
+  $('board-version').textContent = 'v' + version;
+  $('current-version').textContent = '退款报告当前版本 v' + version;
+  const current = [...records.values()].filter(item => item.version === version && item.kind !== 'action');
+  const old = [...records.values()].filter(item => item.version !== version);
+  $('current-conclusions').replaceChildren(...(current.length ? current.map(conclusionNode) : [create('p', '当前版本还没有已确认结论。', 'muted')]));
+  $('history-panel').hidden = old.length === 0;
+  $('historical-conclusions').replaceChildren(...old.map(item => {
+    if (item.kind !== 'action') return conclusionNode(item);
+    const entry = create('article', '', 'board-conclusion');
+    entry.append(
+      create('p', '退款报告 v' + item.version + ' · ' + item.title + (actionAdopted.has(item.version) ? '（已采纳）' : '（原待采纳）'), 'caption'),
+      detailsFor(item, item.version)
+    );
+    return entry;
+  }));
+  const action = records.get(version + ':action');
+  const pending = $('pending-actions');
+  pending.replaceChildren();
+  $('adopted-panel').hidden = !actionAdopted.has(version);
+  if (action && actionAdopted.has(version)) $('adopted-actions').textContent = action.title + ' · 尚未分派任务';
+  if (!action || actionAdopted.has(version)) {
+    pending.append(create('p', '当前版本没有待采纳建议。', 'muted'));
+  } else {
+    const card = create('div', '', 'board-action');
+    const button = create('button', '采纳');
+    button.type = 'button';
+    button.addEventListener('click', () => {
+      actionAdopted.add(version);
+      renderBoard();
+      $('adopted-panel').tabIndex = -1;
+      $('adopted-panel').focus();
+    });
+    const meta = create('div', '', 'finding-meta');
+    meta.append(create('span', badges.conditional, 'badge conditional'), create('span', '关联「尺码问题」结论', 'caption'));
+    card.append(create('h3', action.title), meta, create('p', action.scope, 'condition'), detailsFor(action, version), button);
+    pending.append(card);
+  }
+  setNotice('board-notice', boardMessage, 'success');
+}
+
+function showView(next, focus = true) {
+  view = next;
+  $('review-view').hidden = view !== 'review';
+  $('board-view').hidden = view !== 'board';
+  $('breadcrumb').textContent = view === 'review' ? '退款报告审查' : '决策看板 / 报告详情';
+  document.querySelectorAll('[data-view]').forEach(button => {
+    if (button.dataset.view === view) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  if (view === 'board') renderBoard();
+  if (focus) $('main').focus();
+}
+
+function confirmSelection() {
+  if (!reviewed || selected.size === 0) return;
+  if ($('fail-next').checked) {
+    $('fail-next').checked = false;
+    setNotice('review-notice', '本次提交失败，未带入看板。已选结论和建议已保留，可再次确认。', 'error');
+    return;
+  }
+  const key = [version, ...[...selected].sort(), actionSelected ? 'action' : ''].join(':');
+  if (submissions.has(key)) {
+    boardMessage = '已打开原确认记录。重复提交未生成新记录。';
+  } else {
+    submissions.add(key);
+    for (const item of reviewFixtures(version)) {
+      const itemKey = version + ':' + item.id;
+      if (selected.has(item.id) && !records.has(itemKey)) records.set(itemKey, { ...item, version });
+    }
+    const actionKey = version + ':action';
+    if (actionSelected && !records.has(actionKey)) {
+      records.set(actionKey, { ...actionFixture, version });
+    }
+    boardMessage = '退款报告 v' + version + ' 的确认已保存，可在此回看。';
+  }
+  setNotice('review-notice', '');
+  showView('board');
+}
+
+function changeVersion() {
+  version = 3;
+  reviewed = false;
+  selected = new Set();
+  actionSelected = false;
+  boardMessage = '';
+  $('change-version').disabled = true;
+  setNotice('review-notice', '报告已更新到 v3。原审查和确认仍归 v2。', 'quiet');
+  renderReview();
+  showView(view, false);
+}
+
+function reset() {
+  version = 2;
+  reviewed = true;
+  selected = new Set();
+  records = new Map();
+  submissions = new Set();
+  actionSelected = false;
+  actionAdopted = new Set();
+  drafts = new Map();
+  boardMessage = '';
+  $('change-version').disabled = false;
+  $('fail-next').checked = false;
+  $('draft-panel').hidden = true;
+  $('draft-panel').open = false;
+  $('draft-list').replaceChildren();
+  setNotice('review-notice', '');
+  renderReview();
+  showView('review', false);
+}
+
+document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
+$('action').addEventListener('change', selectAction);
+$('confirm').addEventListener('click', confirmSelection);
+$('change-version').addEventListener('click', changeVersion);
+$('reset').addEventListener('click', reset);
+$('review-new').addEventListener('click', () => {
+  reviewed = true;
+  setNotice('review-notice', '已载入 v3 的示例审查结果。请重新选择要确认的结论。', 'quiet');
+  renderReview();
+  $('main').focus();
+});
+$('open-board-history').addEventListener('click', () => showView('board'));
+$('back-to-review').addEventListener('click', () => showView('review'));
+reset();
+</script>
+</body>
+</html>

@@ -19,7 +19,7 @@ export function TaskWorkflow({ projectName, taskName, status, busy, hasMessages,
     { id: 'materials', title: '资料准备', note: '上传或查看项目文件', action: onFiles },
     { id: 'requirements', title: '需求梳理', note: requirementTitle ? '已附带需求' : '可选 · 整理分析目标', action: onRequirements },
     { id: 'analysis', title: '分析对话', note: busy ? '正在处理本次请求' : hasMessages ? '继续对话' : '可直接开始', action: onAnalyze },
-    { id: 'results', title: '结果与核算', note: hasReply ? '已有回复 · 按需核算' : '查看报告与核算记录', action: onResults },
+    { id: 'results', title: '结果与审查', note: hasReply ? '已有回复 · 按需审查' : '查看报告与审查记录', action: onResults },
   ];
   return <header className="task-workflow">
     <div className="task-workflow-heading"><div><p className="eyebrow">{projectName}</p><h1>{taskName}</h1></div><span className="task-workflow-status" role="status">{status}</span></div>

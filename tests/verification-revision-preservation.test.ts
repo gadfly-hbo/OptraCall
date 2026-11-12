@@ -31,7 +31,7 @@ async function fixture(t: TestContext, input: { data?: Buffer; author?: string; 
   });
   await new Promise<void>(resolve => provider.listen(0, '127.0.0.1', resolve));
   const addr = provider.address(); assert.ok(addr && typeof addr !== 'string');
-  let host = createHost({ cwd: process.cwd(), dataRoot, projectsRoot, uiPorts: [4183], transportVersion: 'synthetic-revision-preservation' });
+  let host = createHost({ reviewAdmission: 'legacy', cwd: process.cwd(), dataRoot, projectsRoot, uiPorts: [4183], transportVersion: 'synthetic-revision-preservation' });
   let baseUrl = '';
   async function listen() { await host.ready; await new Promise<void>(resolve => host.server.listen(0, '127.0.0.1', resolve)); const address = host.server.address(); assert.ok(address && typeof address !== 'string'); baseUrl = `http://127.0.0.1:${address.port}`; }
   await listen();
@@ -65,7 +65,7 @@ async function fixture(t: TestContext, input: { data?: Buffer; author?: string; 
   return { root, dataRoot, projectsRoot, project, task, original, native, taskRoute, owner, route, read, request, config, requests, verifierConfiguration,
     get host() { return host; },
     setHandler: (next: typeof handler) => { handler = next; }, reply, chunk,
-    reopen: async () => { if (host.server.listening) await host.close(); host = createHost({ cwd: process.cwd(), dataRoot, projectsRoot, uiPorts: [4183], transportVersion: 'synthetic-revision-preservation' }); await listen(); },
+    reopen: async () => { if (host.server.listening) await host.close(); host = createHost({ reviewAdmission: 'legacy', cwd: process.cwd(), dataRoot, projectsRoot, uiPorts: [4183], transportVersion: 'synthetic-revision-preservation' }); await listen(); },
   };
 }
 

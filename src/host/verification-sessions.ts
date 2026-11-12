@@ -11,6 +11,8 @@ import { OUTPUT_EVIDENCE_GUIDANCE } from '../agent/output-evidence.ts';
 import { authorContext, authorPreview, contextEvidence } from './verification-context.ts';
 import type { CreateVerificationInput, VerificationOwner, VerificationRecord, VerificationStore, VerificationAuthorRevision } from './verification-store.ts';
 import { VerificationStoreError } from './verification-store.ts';
+import { conclusionReviewContextEvidence } from './conclusion-review-context.ts';
+import { CONCLUSION_REVIEW_INSTRUCTIONS, type ConclusionReviewSelection, type ConclusionReviewRecord } from './conclusion-review-contract.ts';
 
 export type VerificationSelection = {
   verificationId: string; question: string; dataFiles: string[]; authorFiles: string[];
@@ -19,6 +21,11 @@ export type VerificationSelection = {
   configurationId?: string; retryOf?: string;
 };
 export function createVerificationSessions(options: {
+  conclusionReview?: {
+    prepare(projectId: string, taskId: string, selection: ConclusionReviewSelection, ifMatch?: string): Promise<CreateVerificationInput>;
+    assertAuthorized(record: VerificationRecord): void | Promise<void>;
+    admit(owner: VerificationOwner): void | Promise<void>;
+  };
   store: VerificationStore; codeRoot: string; resourceRoot: string; managementPorts(): number[];
   configuration(id: string, revision: number): Readonly<RuntimeModelConfiguration> | null | undefined;
   mutate<T>(operation: () => T | Promise<T>): Promise<T>; isClosing(): boolean;
@@ -39,9 +46,13 @@ export function createVerificationSessions(options: {
       key: owner => `${owner.projectId}/${owner.taskId}/${owner.verificationId}`,
       projectId: owner => owner.projectId,
       configuration: owner => options.configuration(owner.configuration.id, owner.configuration.revision),
-      admit: owner => options.admit(owner),
+      admit: async owner => { if (owner.mode === 'conclusion-review') { await reviewOptions().assertAuthorized(await store.read(owner)); } else await options.admit(owner); },
       agentOptions: async owner => {
         const record = await store.read(owner);
+        if (record.mode === 'conclusion-review') {
+          await reviewOptions().assertAuthorized(record);
+          return { projectId: record.projectId, workspace: { cwd: record.workspace, capabilityPolicy: 'text-only' as const, systemPrompt: CONCLUSION_REVIEW_INSTRUCTIONS }, sessionDirectory: record.sessionDirectory, codeRoot: options.codeRoot, resourceRoot: options.resourceRoot, managementPorts: options.managementPorts() };
+        }
         return { projectId: record.projectId, analysisPython: analysisPythonFor(options.codeRoot), workspace: { cwd: record.workspace, systemPrompt: [
           'You are an independent verification analyst in OptraCall. Choose methods yourself and actually execute code when needed. Use only the copied inputs and provided business facts. Keep assumptions, unconfirmed meanings and differences visible. Do not infer causality from a numerical match.',
           'Work and write only inside this verification workspace. inputs/ contains fixed copies: do not edit these files; save transformations to new files. Do not search parent directories, other projects, native session history, Host metadata or the original author files. This is a soft instruction, not a sandbox. Shared tools and resources do not grant additional data or business-action authority.',
@@ -52,7 +63,110 @@ export function createVerificationSessions(options: {
       }, capabilities: { ui: true },
     }, configurationSnapshot: options.configuration, mutate: options.mutate, isClosing: options.isClosing,
   });
+
+  const reviewOptions = () => options.conclusionReview ?? (() => { throw new VerificationStoreError('conclusion_review_unavailable'); })();
+  const asLegacy = (record: VerificationRecord): VerificationRecord => { if (record.mode === 'conclusion-review') throw new VerificationStoreError('verification_mode_mismatch', 404); return record; };
+  const legacyRecord = async (owner: VerificationOwner) => asLegacy(await store.read(owner));
+  const asReview = (record: VerificationRecord): ConclusionReviewRecord => { if (record.mode !== 'conclusion-review' || !record.review) throw new VerificationStoreError('conclusion_review_not_found', 404); return record as ConclusionReviewRecord; };
+  const ordered = (value: unknown): unknown => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered((value as Record<string, unknown>)[key])])) : value;
+  async function cancelReview(record: VerificationRecord) {
+    await domain.stop(domain.ref(record));
+    return options.mutate(async () => {
+      const current = asReview(await store.read(record));
+      return ['preparing','ready','running'].includes(current.state) ? store.update(record, { state: 'cancelled' }) : current;
+    });
+  }
+  async function readReview(owner: VerificationOwner): Promise<ConclusionReviewRecord> {
+    const record = asReview(await store.read(owner));
+    await reviewOptions().assertAuthorized(record);
+    const contextEvidence = conclusionReviewContextEvidence(record, await store.readRuntimeEvidence(record));
+    await reviewOptions().assertAuthorized(record);
+    return { ...record, contextEvidence };
+  }
+  async function initialReview(record: VerificationRecord) {
+    const ref = domain.ref(record);
+    const eventFile = await open(path.join(store.recordDirectory(record), 'events.jsonl'), 'wx', 0o600);
+    let writes = Promise.resolve();
+    const unsubscribe = domain.subscribe(ref, event => { writes = writes.then(() => eventFile.writeFile(JSON.stringify(event) + '\n')).then(() => {}); });
+    try {
+      await domain.withSession(ref, async lease => {
+        await options.mutate(async () => {
+          if (!lease.context.isCurrent()) return;
+          await reviewOptions().assertAuthorized(await store.read(record));
+          await store.update(record, { state: 'running' });
+        });
+        if (!lease.context.isCurrent()) return;
+        const requestId = record.verificationId;
+        const result = await lease.run({ requestId, text: record.review!.providedText,
+          verifyBeforeDispatch: async () => { await reviewOptions().assertAuthorized(await store.read(record)); } });
+        await writes;
+        if (!lease.context.isCurrent()) return;
+        await options.mutate(async () => {
+          if (!lease.context.isCurrent() || (await store.read(record)).state !== 'running') return;
+          await store.update(record, { native: nativeInput(result, requestId) });
+        });
+        if (!lease.context.isCurrent()) return;
+        if (result.outcome !== 'completed') { await terminal(record, result); return; }
+        await options.mutate(async () => {
+          if (!lease.context.isCurrent()) return;
+          const current = await store.read(record);
+          if (current.state !== 'running') return;
+          await reviewOptions().assertAuthorized(current);
+          await store.verifyWorkspaceInputs(record);
+          await store.readAuthorFiles(record);
+          await store.saveReviewResult(record, resultInput(result, requestId));
+          if (!lease.context.isCurrent()) return;
+          await store.update(record, { state: 'completed', native: nativeInput(result, requestId) });
+        });
+      });
+    } catch (error) {
+      await options.mutate(async () => { const current = await store.read(record); if (['preparing','ready','running'].includes(current.state)) await store.update(record, { state: (error as { code?: string })?.code === 'conclusion_review_result_invalid' ? 'failed' : 'unknown', diagnostic: runtimeDiagnostic(error), error: /^[A-Za-z0-9_-]{1,100}$/.test(String((error as { code?: unknown })?.code)) ? String((error as { code: unknown }).code) : 'conclusion_review_failed' }); }).catch(() => {});
+    } finally { unsubscribe(); await writes.catch(() => {}); await eventFile.close(); await domain.close(ref, { retryFailed: false }).catch(() => {}); }
+  }
+  async function startReview(projectId: string, taskId: string, selection: ConclusionReviewSelection, ifMatch?: string) {
+    reviewOptions();
+    const owner = { projectId, taskId, verificationId: selection.verificationId };
+    const prepared = await options.mutate(async () => {
+      try {
+        const previous = asReview(await store.read(owner));
+        if (JSON.stringify(ordered(previous.selection)) !== JSON.stringify(ordered(selection))) throw new VerificationStoreError('verification_selection_conflict');
+        await reviewOptions().assertAuthorized(previous);
+        return { record: previous, created: false };
+      } catch (error) { if (!(error instanceof VerificationStoreError) || error.code !== 'verification_not_found') throw error; }
+      if (options.isClosing()) throw new VerificationStoreError('host_closing', 503);
+      // The frozen business contract denies new work before resource admission.
+      // UNKNOWN legacy handoff remains pending while its public lease closes.
+      await reviewOptions().admit(owner);
+      if (domain.busyInScope({ projectId }, record => record.taskId === taskId) || (await store.listForManagement(projectId, taskId)).some(record => ['preparing','ready','running'].includes(record.state) || record.authorRevision?.status === 'running')) throw new VerificationStoreError('session_busy');
+      const input = await reviewOptions().prepare(projectId, taskId, selection, ifMatch);
+      if (input.mode !== 'conclusion-review') throw new VerificationStoreError('conclusion_review_required');
+      return store.create(input);
+    });
+    if (prepared.created) void initialReview(prepared.record).catch(async error => { await options.mutate(async () => { const current = await store.read(owner); if (['preparing','ready','running'].includes(current.state)) await store.update(owner, { state: 'unknown', diagnostic: runtimeDiagnostic(error) }); }).catch(() => {}); });
+    return { review: asReview(prepared.record), created: prepared.created };
+  }
+  async function stopReview(owner: VerificationOwner) {
+    const record = asReview(await store.read(owner));
+    await options.admit(owner);
+    if (['preparing','ready','running'].includes(record.state)) await cancelReview(record);
+    const current = asReview(await store.read(owner));
+    return { projectId: current.projectId, taskId: current.taskId, verificationId: current.verificationId, mode: current.mode, state: current.state };
+  }
+  async function listReviews(projectId: string, taskId?: string) {
+    const records = (await store.listForManagement(projectId, taskId)).filter(record => record.mode === 'conclusion-review');
+    const readable: ConclusionReviewRecord[] = [];
+    for (const record of records) try { readable.push(await readReview(record)); } catch (error) { if (error instanceof VerificationStoreError && ['verification_record_corrupt','verification_snapshot_changed'].includes(error.code)) throw error; }
+    return readable;
+  }
+  async function revalidateReviews() {
+    for (const projectId of await options.projectIds()) for (const record of await store.listForManagement(projectId)) {
+      if (record.mode !== 'conclusion-review' || !['preparing','ready','running'].includes(record.state)) continue;
+      try { await reviewOptions().assertAuthorized(record); } catch { await cancelReview(record); }
+    }
+  }
+
   const resultInput = (result: SessionResult, requestId: string) => ({ text: result.text, requestId, ...(typeof result.sessionFile === 'string' ? { sessionFile: result.sessionFile } : (result.snapshot as { sessionFile?: string } | undefined)?.sessionFile ? { sessionFile: (result.snapshot as { sessionFile: string }).sessionFile } : {}) });
+  const nativeInput = (result: SessionResult, requestId: string) => { const { text: _text, ...native } = resultInput(result, requestId); return native; };
   async function terminal(owner: VerificationOwner, result: SessionResult) {
     return options.mutate(() => store.update(owner, { state: result.outcome === 'cancelled' ? 'cancelled' : 'failed', ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}) }));
   }
@@ -110,7 +224,7 @@ export function createVerificationSessions(options: {
     const owner = { projectId, taskId, verificationId: selection.verificationId };
     // An existing accepted intent never re-reads changed sources or dispatches again.
     try {
-      const previous = await store.read(owner);
+      const previous = await legacyRecord(owner);
       const ordered = (value: unknown): unknown => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered((value as Record<string, unknown>)[key])])) : value;
       if (JSON.stringify(ordered(previous.selection)) !== JSON.stringify(ordered(selection))) throw new VerificationStoreError('verification_selection_conflict');
       return { verification: previous, created: false };
@@ -120,13 +234,13 @@ export function createVerificationSessions(options: {
     return { verification: prepared.record, created: prepared.created };
   }
   async function read(owner: VerificationOwner) {
-    const record = await store.read(owner), current = await domain.read(domain.ref(record));
+    const record = await legacyRecord(owner), current = await domain.read(domain.ref(record));
     const authorReports = (await store.readAuthorFiles(record)).map(file => authorPreview(file, record.workspace));
     const evidence = contextEvidence(record, await store.readRuntimeEvidence(record));
     return { ...record, id: record.verificationId, status: record.state, phase: record.phase === 'compare' ? 'comparison' : record.phase, model: record.configuration, independence: { ...record.independence, details: record.independence.note }, revision: record.authorRevision ? { ...record.authorRevision, text: record.authorRevision.reportText } : undefined, uiRequests: current.pendingUI.map(event => event.request), authorReports, contextEvidence: evidence };
   }
   async function stop(owner: VerificationOwner) {
-    const record = await store.read(owner);
+    const record = await legacyRecord(owner);
     if (record.authorRevision?.status === 'running') {
       await options.mutate(() => store.update(owner, { authorRevision: { ...record.authorRevision!, status: 'cancelled' } }));
       await options.stopAuthor(record); return read(owner);
@@ -138,7 +252,7 @@ export function createVerificationSessions(options: {
   }
   async function revise(owner: VerificationOwner, instructions = '') {
     const record = await options.mutate(async () => {
-      await options.admit(owner); await options.admitRevision(owner); const record = await store.read(owner);
+      await options.admit(owner); const record = await legacyRecord(owner); await options.admitRevision(owner);
       if (record.state !== 'completed' || !record.comparisonResult || record.revisionCount) throw new VerificationStoreError('verification_revision_unavailable');
       const metadata = await options.prepareRevision(record, instructions);
       return store.update(owner, { revisionCount: 1, authorRevision: { requestId: randomUUID(), status: 'running', ...metadata } });
@@ -163,7 +277,7 @@ export function createVerificationSessions(options: {
   }
   async function recheck(owner: VerificationOwner) {
     const record = await options.mutate(async () => {
-      await options.admit(owner); await options.admitRecheck(owner); const current = await store.read(owner);
+      await options.admit(owner); const current = await legacyRecord(owner); await options.admitRecheck(owner);
       if (current.recheckCount || current.authorRevision?.status !== 'completed' || !current.authorRevision.reportText) throw new VerificationStoreError('verification_recheck_unavailable');
       if (!options.configuration(current.configuration.id, current.configuration.revision)) throw new VerificationStoreError('configuration_required');
       await store.verifyWorkspaceInputs(owner);
@@ -183,7 +297,7 @@ export function createVerificationSessions(options: {
   }
   async function exportReport(owner: VerificationOwner) {
     return options.mutate(async () => {
-    const record = await store.read(owner);
+    const record = await legacyRecord(owner);
     if (!record.comparisonResult) throw new VerificationStoreError('verification_result_required');
     const text = `# 独立核算记录\n\n问题：${record.question}\n\n模型：${record.configuration.provider}/${record.configuration.model}\n\n独立性：${record.independence.status}；${record.independence.note ?? ''}\n\n## 首次独立结果\n\n${record.coldResult?.text ?? '未取得'}\n\n## 对照与分歧\n\n${record.comparisonResult.text}\n\n${record.recheckResult ? `## 修订复查\n\n${record.recheckResult.text}\n\n` : ''}本记录仅覆盖所列范围和固定输入，不表示业务采用、实际执行或效果验证。\n`;
     const exportedFile = await options.export(record, text);
@@ -194,7 +308,7 @@ export function createVerificationSessions(options: {
   async function closeAll(filter: { projectId?: string; provider?: string } = {}) {
     await domain.closeAll(filter);
     for (const projectId of filter.projectId ? [filter.projectId] : await options.projectIds()) {
-      for (const record of await store.list(projectId)) {
+      for (const record of await store.listForManagement(projectId)) {
         const verifierMatches = !filter.provider || record.configuration.provider === filter.provider;
         const revisionMatches = !filter.provider || record.authorRevision?.mode === 'fixed-draft' && record.authorRevision.configuration?.provider === filter.provider;
         if (!verifierMatches && !revisionMatches) continue;
@@ -207,32 +321,38 @@ export function createVerificationSessions(options: {
       }
     }
   }
-  return { start, read, stop, revise, recheck, exportReport, list: store.list, closeAll,
+  return { start, read, stop, revise, recheck, exportReport, list: async (projectId: string, taskId?: string) => (await store.listForManagement(projectId, taskId)).filter(record => record.mode !== 'conclusion-review'), closeAll,
+    readFixedAuthor: async (owner: VerificationOwner, relativePath: string) => { const record = await legacyRecord(owner); return store.readFixedAuthor(record, relativePath); },
+    startReview, readReview, stopReview, listReviews, revalidateReviews,
+    readFixedReviewReport: async (owner: VerificationOwner) => { const record = await readReview(owner); const report = await store.readFixedAuthor(record, record.review.report.relativePath); await reviewOptions().assertAuthorized(await store.read(owner)); return report; },
+    legacyState: async (projectId: string, taskId: string) => { const records = (await store.listForManagement(projectId, taskId)).filter(record => record.mode !== 'conclusion-review'); return { busy: records.some(record => domain.busy(domain.ref(record)) || ['preparing','ready','running'].includes(record.state) || record.authorRevision?.status === 'running'), unknown: records.some(record => ['unknown','interrupted'].includes(record.state) || record.authorRevision?.status === 'unknown') }; },
     /** Host-only automatic consumer of this same domain, never another runtime.
      * Its caller owns material/version records; the common lease owns resources. */
-    withAutomaticSession: <T>(record: VerificationRecord, use: (session: {
+    withAutomaticSession: async <T>(record: VerificationRecord, use: (session: {
       lease: SessionLease<VerificationRecord>;
       reopen(plan: SessionExecutionPlan): Promise<unknown>;
       read(): ReturnType<typeof domain.read>;
       subscribe(listener: (event: ProjectEvent) => void): () => void;
     }) => Promise<T>): Promise<T> => {
-      const ref = domain.ref(record);
+      const current = await legacyRecord(record);
+      const ref = domain.ref(current);
       return domain.withSession(ref, lease => use({ lease,
         reopen: plan => lease.reopen(domain.execution(ref, plan)),
         read: () => domain.read(ref),
         subscribe: listener => domain.subscribe(ref, event => listener(event)),
       }));
     },
-    stopAutomatic: async (owner: VerificationOwner) => domain.stop(domain.ref(await store.read(owner))),
+    stopAutomatic: async (owner: VerificationOwner) => domain.stop(domain.ref(await legacyRecord(owner))),
     closeAutomatic: async (owner: VerificationOwner, cleanup?: Partial<SessionCleanupRequest>) => domain.close(domain.ref(await store.read(owner)), cleanup),
-    registerAutomaticOrigin: (record: VerificationRecord) => domain.registerFresh(domain.ref(record)),
-    hasUnprovenProjectWriter: async (projectId: string) => (await store.list(projectId)).some(record => {
+    registerAutomaticOrigin: (record: VerificationRecord) => domain.registerFresh(domain.ref(asLegacy(record))),
+    hasUnprovenProjectWriter: async (projectId: string) => (await store.listForManagement(projectId)).some(record => {
+      if (record.mode === 'conclusion-review') return false;
       const state = domain.executionState(domain.ref(record));
       return state.unmanagedSeen || state.mode === 'unmanaged' || state.mode === 'unknown'
         || Boolean(record.native?.sessionFile && !state.freshRegistered);
     }),
-    automaticUI: async (owner: VerificationOwner) => (await domain.read(domain.ref(await store.read(owner)))).pendingUI.map(event => event.request),
-    busy: async (projectId: string) => (await store.list(projectId)).some(record => domain.busy(domain.ref(record)) || ['preparing','ready','running'].includes(record.state) || record.authorRevision?.status === 'running'),
-    respondUI: async (owner: VerificationOwner, input: { id: string; value?: string | boolean; cancelled?: boolean }) => domain.respondUI(domain.ref(await store.read(owner)), input),
+    automaticUI: async (owner: VerificationOwner) => (await domain.read(domain.ref(await legacyRecord(owner)))).pendingUI.map(event => event.request),
+    busy: async (projectId: string) => (await store.listForManagement(projectId)).some(record => domain.busy(domain.ref(record)) || ['preparing','ready','running'].includes(record.state) || record.authorRevision?.status === 'running'),
+    respondUI: async (owner: VerificationOwner, input: { id: string; value?: string | boolean; cancelled?: boolean }) => domain.respondUI(domain.ref(await legacyRecord(owner)), input),
   };
 }

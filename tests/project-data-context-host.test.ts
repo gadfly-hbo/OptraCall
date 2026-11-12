@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { startTestHost } from './fixtures/host-process.ts';
+import { startTestHost, startLegacyTestHost } from './fixtures/host-process.ts';
 import { readJson } from './fixtures/joint-context.ts';
 import { sessionEvents } from './fixtures/session-events.ts';
 import { providerMessageText, startToolProvider } from './fixtures/tool-provider.ts';
@@ -377,7 +377,7 @@ test('MC05/08 HTTP: a supplied description over 20,000 UTF-16 units refuses befo
 });
 
 test('MC08 SDK: project descriptions stay out of independent cold and fixed-draft resources, cancellation cannot publish new provenance', { timeout: 60_000 }, async t => {
-  const provider = await startToolProvider(), host = await startTestHost();
+  const provider = await startToolProvider(), host = await startLegacyTestHost();
   t.after(async () => { await host.close(); await provider.close(); });
   await readJson(await host.request('/api/configuration', 'PUT', { name: 'M2冷读隔离配置', provider: 'openai-compatible',
     baseUrl: provider.baseUrl, model: 'synthetic-m2-cold', apiKey: 'synthetic-only-m2-cold' }));

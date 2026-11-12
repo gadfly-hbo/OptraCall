@@ -6,8 +6,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { runtimeEnvironment, workspaceRoot } from '../../scripts/runtime-process.ts';
 
-export async function startTestHost(options: { timeoutMs?: number; uiPort?: number; dataRoot?: string; projectsRoot?: string; cwd?: string; disableCaseDecisions?: boolean; disableExperienceLearning?: boolean; semanticConfig?: string; studioPython?: string } = {}) {
-  const entry = fileURLToPath(new URL('../../scripts/host-entry.mjs', import.meta.url));
+type TestHostOptions = { timeoutMs?: number; uiPort?: number; dataRoot?: string; projectsRoot?: string; cwd?: string; disableCaseDecisions?: boolean; disableExperienceLearning?: boolean; semanticConfig?: string; studioPython?: string };
+export const startTestHost = (options: TestHostOptions = {}) => startHostFixture(options, false);
+/** Explicit pre-cutover contract for legacy continuation regressions. The
+ * application entry and default fixture always use the new admission. */
+export const startLegacyTestHost = (options: TestHostOptions = {}) => startHostFixture(options, true);
+async function startHostFixture(options: TestHostOptions, legacy: boolean) {
+  const entry = fileURLToPath(new URL(legacy ? './legacy-host-entry.mjs' : '../../scripts/host-entry.mjs', import.meta.url));
   const uiPort = options.uiPort ?? 4183;
   const scratch = await mkdtemp(path.join(os.tmpdir(), 'optracall-host-test-'));
   const dataRoot = options.dataRoot ?? path.join(scratch, 'host'), projectsRoot = options.projectsRoot ?? path.join(scratch, 'projects');

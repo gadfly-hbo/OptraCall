@@ -8,13 +8,14 @@ import { createMetricLibrary } from '../../extensions/business-plugins/metric-fa
 import { createSapMethodStore } from '../../extensions/business-plugins/metric-factory/methods/store.ts';
 import { preparePublication as prepareSapPublication } from '../../extensions/business-plugins/metric-factory/sap/validate.ts';
 import { createProjectEnablement } from '../../extensions/business-plugins/metric-factory/project/enablement.ts';
-import { createRequirementStore } from '../../extensions/business-plugins/requirements-elaboration/storage/store.ts';
+import { createRequirementStore, RequirementStoreFault } from '../../extensions/business-plugins/requirements-elaboration/storage/store.ts';
 import { fail, sourceRef, digest } from '../../extensions/business-plugins/studio/validation.ts';
 export interface StudioSourceRead { text: string; complete: boolean; governance?: unknown; ref: StudioSourceRef }
 export interface StudioSourceDependencies {
   dataRoot: string; projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore; studio: StudioStore;
   readTaskReply?: (projectId: string, taskId: string, selection: { sessionId: string; messageId: string }) => Promise<{ text: string }>;
   readOriginal?: (ref: StudioSourceRef, projectId: string, taskId?: string) => Promise<StudioSourceRead>;
+  readRequirementRelease?: (id: string, version: string, projectId: string) => Promise<ReturnType<ReturnType<typeof createRequirementStore>['readRelease']>>;
 }
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 const flatFiles = (nodes: FileNode[]): FileNode[] => nodes.flatMap(node => node.kind === 'file' ? [node] : flatFiles(node.children ?? []));
@@ -26,6 +27,17 @@ export function createStudioSources(deps: StudioSourceDependencies) {
   const metricLibrary = createMetricLibrary(path.join(deps.dataRoot, 'metric-assets'));
   const methodLibrary = createSapMethodStore(path.join(deps.dataRoot, 'metric-assets'));
   const requirements = createRequirementStore(path.join(deps.dataRoot, 'requirement-instances'));
+  async function readRap(ref: StudioSourceRef, projectId: string) {
+    try {
+      if (deps.readRequirementRelease) return await deps.readRequirementRelease(ref.id, ref.version, projectId);
+      const released = requirements.readRelease(ref.id, ref.version);
+      if (released.entry.frameworkVersion) fail('studio_source_unavailable', 409);
+      return released;
+    } catch (error) {
+      if (error instanceof RequirementStoreFault && error.code === 'REQ_PROPOSAL_SOURCE_CHANGED') fail('studio_source_unavailable', 409);
+      throw error;
+    }
+  }
   function readMethod(ref: StudioSourceRef, construction: boolean, systemId?: string, historical = false) {
     if (!/^[1-9]\d*$/.test(ref.version)) fail('studio_source_version_invalid');
     try {
@@ -97,7 +109,7 @@ export function createStudioSources(deps: StudioSourceDependencies) {
     }
     if (ref.authority === 'sap-metric') { await readMetric(ref, projectId, systemId, construction); return; }
     if (ref.authority === 'sap-method') { readMethod(ref, construction, systemId); return; }
-    if (ref.authority === 'rap') { const release = requirements.readRelease(ref.id, ref.version); exactHash(ref, release.entry.packageFingerprint.slice(7)); return; }
+    if (ref.authority === 'rap') { const release = await readRap(ref, projectId); exactHash(ref, release.entry.packageFingerprint.slice(7)); return; }
     if (ref.authority === 'studio-source') { await readStudio(ref, projectId, systemId, construction, seen); return; }
     return fail('studio_source_unsupported', 400);
   }
@@ -140,7 +152,7 @@ export function createStudioSources(deps: StudioSourceDependencies) {
       const method = readMethod(ref, options.construction === true, systemId, options.historical === true); return { text: JSON.stringify(method.version, null, 2), complete: true, governance: method.issue, ref: { ...ref, sha256: method.version.contentSha256 } };
     }
     if (ref.authority === 'rap') {
-      const release = requirements.readRelease(ref.id, ref.version); const digest = release.entry.packageFingerprint.slice(7); exactHash(ref, digest); return { text: JSON.stringify(release.rap, null, 2), complete: true, ref: { ...ref, sha256: digest } };
+      const release = await readRap(ref, projectId); const digest = release.entry.packageFingerprint.slice(7); exactHash(ref, digest); return { text: JSON.stringify(release.rap, null, 2), complete: true, ref: { ...ref, sha256: digest } };
     }
     if (ref.authority === 'studio-source') return readStudio(ref, projectId, systemId, options.construction === true, new Set(), options.historical === true);
     if (ref.authority === 'task' && !ref.locator?.startsWith('060_reports/')) {

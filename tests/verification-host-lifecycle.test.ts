@@ -7,13 +7,13 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
-import { startTestHost } from './fixtures/host-process.ts';
+import { startLegacyTestHost as startTestHost } from './fixtures/host-process.ts'; // Explicit pre-cutover contract; default Host is tested separately.
 import { startSyntheticProvider, type SyntheticMode } from './fixtures/synthetic-provider.ts';
 import { readJson } from './fixtures/joint-context.ts';
 import { runtimeEnvironment, workspaceRoot } from '../scripts/runtime-process.ts';
 
 async function crashableHost(dataRoot: string, projectsRoot: string) {
-  const entry = fileURLToPath(new URL('../scripts/host-entry.mjs', import.meta.url));
+  const entry = fileURLToPath(new URL('./fixtures/legacy-host-entry.mjs', import.meta.url));
   const child = spawn(process.execPath, [entry, '--port=0', '--ui-port=4183', '--connection-timeout-ms=2000', `--data-root=${dataRoot}`, `--projects-root=${projectsRoot}`], { cwd: workspaceRoot, env: runtimeEnvironment(), stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '', stderr = '';
   child.stdout.on('data', chunk => { stdout += String(chunk); }); child.stderr.on('data', chunk => { stderr += String(chunk); });

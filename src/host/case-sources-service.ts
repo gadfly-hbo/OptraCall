@@ -9,7 +9,7 @@ import { learningSourceRef } from './learning-source-validation.ts';
 import type { PersonalSourceEvidence } from './personal-retention-types.ts';
 import { createNativeSnapshotReadBudget } from './native-session-snapshot.ts';
 
-export type CaseSourcesReadOptions = LearningSourceReadOptions & { assertCurrent?: () => void };
+export type CaseSourcesReadOptions = LearningSourceReadOptions & { assertCurrent?: () => void; projectId?: string };
 export type CaseSourcesAgentContext = { projectId: string; taskId: string; signal: AbortSignal; assertCurrent: () => void };
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 const boundary = (text: string, position: number) => !(position > 0 && position < text.length && /[\uD800-\uDBFF]/.test(text[position - 1]!) && /[\uDC00-\uDFFF]/.test(text[position]!));

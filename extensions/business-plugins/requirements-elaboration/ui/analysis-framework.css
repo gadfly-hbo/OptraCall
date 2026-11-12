@@ -1,0 +1,183 @@
+.re-stage-body:has(.re-framework-input) {
+  container-type: inline-size;
+}
+
+.re-framework-input,
+.re-framework-layout,
+.re-framework-history {
+  margin-bottom: 16px;
+}
+
+.re-framework-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  margin: 12px 0;
+}
+
+.re-framework-input-row .re-field {
+  min-width: 0;
+  margin: 0;
+}
+
+.re-framework-topic,
+.re-framework-source {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  align-self: start;
+}
+
+.re-framework-topic summary,
+.re-framework-source summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.re-framework-topic summary:focus-visible,
+.re-framework-source summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.re-framework-topic[open] summary,
+.re-framework-source[open] summary {
+  margin-bottom: 10px;
+}
+
+.re-framework-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2.25fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.re-framework-paper,
+.re-framework-evidence,
+.re-framework-history {
+  overflow-wrap: anywhere;
+}
+
+.re-framework-paper p,
+.re-framework-evidence p {
+  margin: 4px 0;
+}
+
+.re-framework-paper h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.re-framework-paper li + li,
+.re-framework-evidence li + li,
+.re-framework-paper dl > div + div {
+  margin-top: 10px;
+}
+
+.re-framework-paper ul,
+.re-framework-evidence ul {
+  margin: 6px 0;
+  padding-inline-start: 18px;
+}
+
+.re-framework-paper dt {
+  font-weight: 600;
+}
+
+.re-framework-paper dd {
+  margin-inline-start: 0;
+}
+
+.re-framework-assessment {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.re-framework-assessment section {
+  padding: 14px;
+  background: var(--subtle);
+  border-radius: 8px;
+}
+
+.re-framework-section,
+.re-framework-actions {
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.re-framework-gaps {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.re-framework-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.re-framework-evidence .re-framework-source {
+  margin-top: 8px;
+}
+
+.re-framework-evidence a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+
+.re-framework-locator {
+  white-space: pre-wrap;
+}
+
+.re-framework-materials {
+  margin: 0 0 12px;
+}
+
+.re-framework-materials .re-framework-source + .re-framework-source {
+  margin-top: 8px;
+}
+
+.re-framework-material {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+
+.re-framework-material small {
+  display: block;
+  color: var(--muted);
+}
+
+@media (max-width: 600px) {
+  .re-page:has(.re-framework-input) {
+    padding-inline: 14px;
+  }
+
+  .re-page:has(.re-framework-input) .re-stage-stepper button {
+    flex-basis: 130px;
+  }
+}
+
+@container (max-width: 690px) {
+  .re-framework-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 460px) {
+  .re-framework-input-row,
+  .re-framework-assessment {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -4,7 +4,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { startTestHost } from './fixtures/host-process.ts';
+import { startLegacyTestHost as startTestHost } from './fixtures/host-process.ts'; // Explicit pre-cutover contract; default Host is tested separately.
 import { readJson } from './fixtures/joint-context.ts';
 import { AUTOMATIC_INITIAL_MARKER, AUTOMATIC_WARMUP_MARKER, startAutomaticProvider, type AutomaticSyntheticScenario, type AutomaticProviderRequest } from './fixtures/automatic-provider.ts';
 import type { AutomaticChain, AutomaticSettingsInput } from '../src/host/automatic-verification-types.ts';
@@ -29,7 +29,7 @@ async function fixture(scenario: AutomaticSyntheticScenario = 'repair', caseName
   const runRoot = path.resolve(engineeringRoot, randomUUID());
   await mkdir(runRoot, { recursive: true });
   const provider = await providerFactory({ scenario });
-  let host: Awaited<ReturnType<typeof startTestHost>>;
+  let host: Awaited<ReturnType<typeof startTestHost>>, nativeReadWindowRetries = 0;
   try { host = await startTestHost({ dataRoot: path.join(runRoot, 'host'), projectsRoot: path.join(runRoot, 'projects') }); }
   catch (error) { await provider.close(); throw error; }
   const close = async () => {
@@ -38,7 +38,7 @@ async function fixture(scenario: AutomaticSyntheticScenario = 'repair', caseName
       scope: 'SYNTHETIC_REAL_SDK_ENGINEERING_ONLY', scenario, caseName, savedAt: new Date().toISOString(),
       runRoot, dataRoot: host.dataRoot, projectsRoot: host.projectsRoot,
       model: 'synthetic-model', requests: provider.requests.map(({ method, path, body, stage, toolReply, closedEarly, lastUser }) => ({ method, path, stage, toolReply, closedEarly, lastUserPreview: lastUser.slice(0, 400), lastUserSha256: sha(lastUser), messageRoles: body.messages?.map(value => value.role) })),
-      modelRequestCount: provider.requests.length, shutdown: results.map(result => result.status),
+      nativeReadWindowRetries, modelRequestCount: provider.requests.length, shutdown: results.map(result => result.status),
       hostOutput: host.output(),
     }, null, 2));
     const failed = results.find(result => result.status === 'rejected'); if (failed?.status === 'rejected') throw failed.reason;
@@ -54,7 +54,17 @@ async function fixture(scenario: AutomaticSyntheticScenario = 'repair', caseName
   const send = async (text: string) => { const requestId = randomUUID(); await readJson(await host.request(`${taskRoute}/messages`, 'POST', { requestId, text }), 202); return requestId; };
   const writeReport = (relativePath: string, text = author) => send(`${AUTOMATIC_INITIAL_MARKER}\n${JSON.stringify({ reportPath: path.join(project.rootPath, relativePath), content: text })}\n请通过原生write工具写入这份合成报告；不是由测试进程写文件。`);
   const writeInitial = (text = author) => writeReport('060_reports/initial.md', text);
-  const readTask = () => host.request(taskRoute).then(readJson);
+  const readTask = async () => {
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      const response = await host.request(taskRoute);
+      // Only this same-owner GET can transiently fail while official SDK JSONL
+      // appends. Never resend work or treat other errors as an observation gap.
+      if (response.status !== 409 || (await response.clone().json()).code !== 'session_history_unavailable' || Date.now() >= deadline) return readJson(response);
+      nativeReadWindowRetries++;
+      await new Promise(resolve => setTimeout(resolve, 15));
+    }
+  };
   const warmup = async () => { const id = await send(AUTOMATIC_WARMUP_MARKER); const value = await until(readTask, result => result.task.lastRun?.id === id && result.task.lastRun.status === 'completed', 'warmup'); await until(async () => readJson(await host.request(`${route}/status`)), value => !value.busy, 'warmup resource close'); return { native: value.task.sessionFile as string, bytes: await readFile(value.task.sessionFile) }; };
   const list = async () => (await readJson(await host.request(`${route}/chains`))).chains as AutomaticChain[];
   const readChain = async (id: string) => (await readJson(await host.request(`${route}/chains/${id}`))).chain as AutomaticChain;
@@ -88,7 +98,12 @@ for (const explicitConfiguration of [false, true]) test(`AV01 public preset conf
   assert.equal(status.observation.requestId, requestId);
   assert.equal(status.observation.configuration.id, publicPresetId);
   assert.equal(status.observation.verificationConfiguration.id, publicPresetId);
-  assert.ok(f.provider.requests.some(request => request.stage === 'ordinary'));
+  const ordinaryRequests = f.provider.requests.filter(request => request.stage === 'ordinary');
+  assert.ok(ordinaryRequests.length > 0);
+  for (const request of ordinaryRequests) {
+    const tools = (request.body.tools ?? []) as { function?: { name?: string } }[];
+    assert.deepEqual(tools.filter(tool => ['write_report', 'read_input', 'read_catalog'].includes(tool.function?.name ?? '')), []);
+  }
   assert.ok(f.provider.requests.some(request => request.stage === 'cold'));
   assert.equal(await readFile(f.reportPath, 'utf8'), author);
 });
@@ -224,7 +239,9 @@ test('D16 actual Host and Pi deliver grounded feedback and a fitting full fixed 
   assert.equal(recheckPacket.version, 2); assert.equal(recheckPacket.sha256, final.sha256);
   assert.equal(sha(await readFile(recheckPacket.fixedPath)), final.sha256);
   assert.equal(await readFile(f.reportPath, 'utf8'), author);
-  const status = await readJson(await f.host.request(`${f.route}/status`));
+  // A saved terminal chain can precede the public lease's final resource close.
+  // Keep the idle assertion, but observe the actual lifecycle rather than racing it.
+  const status = await until(() => f.host.request(`${f.route}/status`).then(readJson), value => !value.busy, 'D16 resource close');
   assert.equal(status.busy, false);
   const verification = (await readJson(await f.host.request(`${f.taskRoute}/verifications/${chain.firstVerification!.verificationId}`))).verification;
   assert.equal(verification.projectId, f.project.id); assert.equal(verification.taskId, f.task.id);

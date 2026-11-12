@@ -1,0 +1,55 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createHash, randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { readHistoricalReportFrameworks } from '../src/host/report-framework-history.ts';
+import { ProjectStore } from '../src/host/project-store.ts';
+
+const sha = (value: string) => createHash('sha256').update(value).digest('hex');
+test('FCR02: native branch delivery requires an actual matching user turn, not a started claim, current publication or another branch', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'optracall-framework-history-'));
+  const projects = new ProjectStore({ dataRoot: path.join(root, 'data'), projectsRoot: path.join(root, 'projects') });
+  await projects.init();
+  t.after(async () => { await projects.close(); await fs.rm(root, { recursive: true, force: true }); });
+  const configuration = { id: 'synthetic', revision: 1, name: 'Synthetic', provider: 'synthetic', model: 'synthetic', baseUrl: 'http://127.0.0.1' };
+  const project = await projects.create({ name: '历史交付', configuration });
+  const task = await projects.createTask(project.id, { name: '当前分支', configuration });
+  await fs.mkdir(task.sessionDirectory, { recursive: true });
+  const file = path.join(task.sessionDirectory, 'synthetic.jsonl');
+  const timestamp = new Date().toISOString(), requestId = randomUUID(), sessionId = randomUUID();
+  const rap = { instanceId: 'req-synthetic-001', version: '1.0.0', text: 'EXACT_OLD_FRAMEWORK', basisSha256: sha('EXACT_OLD_FRAMEWORK') };
+  const text = rap.text + '\n原用户要求';
+  const started = { type: 'custom', id: 'started', parentId: null, timestamp, customType: 'optracall.run', data: { phase: 'started', requestId, sessionId, providedContext: { version: 1, rap, requestTextSha256: sha(text), providedAt: timestamp } } };
+  const user = { type: 'message', id: 'user', parentId: 'started', timestamp, message: { role: 'user', content: [{ type: 'text', text }], timestamp: Date.now() } };
+  const header = { type: 'session', version: 3, id: sessionId, timestamp, cwd: path.join(project.rootPath, '020_clean') };
+  const write = (entries: unknown[]) => fs.writeFile(file, entries.map(entry => JSON.stringify(entry)).join('\n') + '\n');
+  const saved = { ...task, sessionFile: file };
+  await write([header, started]);
+  assert.deepEqual(await readHistoricalReportFrameworks(project, saved, randomUUID()), [], 'a started receipt alone does not prove delivery');
+  await write([header, started, { ...user, message: { ...user.message, content: [{ type: 'text', text: 'unrelated' }] } }]);
+  assert.deepEqual(await readHistoricalReportFrameworks(project, saved, randomUUID()), [], 'claimed digest must match native user bytes');
+  await write([header, started, user]);
+  const delivered = await readHistoricalReportFrameworks(project, saved, randomUUID());
+  assert.equal(delivered.length, 1);
+  assert.deepEqual(delivered[0]!.rap, rap);
+  assert.equal(delivered[0]!.requestId, requestId);
+  assert.equal(delivered[0]!.entryId, user.id);
+  assert.deepEqual(await readHistoricalReportFrameworks(project, saved, requestId), [], 'current request is not represented as inherited delivery');
+  const repeated: unknown[] = [header, started, user];
+  let parentId = user.id;
+  for (let index = 0; index < 40; index++) {
+    const startId = 'repeat-start-' + index, userId = 'repeat-user-' + index;
+    repeated.push({ ...started, id: startId, parentId, data: { ...started.data, requestId: randomUUID() } }, { ...user, id: userId, parentId: startId });
+    parentId = userId;
+  }
+  await write(repeated);
+  const deduplicated = await readHistoricalReportFrameworks(project, saved, randomUUID());
+  assert.equal(deduplicated.length, 1, 'identical version and actual bytes need one delivery proof');
+  assert.equal(deduplicated[0]!.entryId, user.id);
+  await write([header, started, user, { type: 'message', id: 'other-branch', parentId: null, timestamp, message: { role: 'user', content: 'A separate native branch', timestamp: Date.now() } }]);
+  const bytes = await fs.readFile(file);
+  assert.deepEqual(await readHistoricalReportFrameworks(project, saved, randomUUID()), [], 'off-branch receipts cannot supply a framework');
+  assert.deepEqual(await fs.readFile(file), bytes);
+});

@@ -6,6 +6,7 @@ import type { ProjectSnapshot } from '../agent/project-runtime.ts';
 import { readRunDiagnostic } from '../agent/run-diagnostics.ts';
 import type { ProjectRecord, TaskRecord } from './project-store.ts';
 import { presentContextMessages } from '../agent/context-presentation.ts';
+import { readReportCalculationRunReceipt, type ReportCalculationRunReceipt } from '../agent/report-calculation-review.ts';
 
 export class ProjectHistoryError extends Error {
   readonly code: string;
@@ -20,6 +21,7 @@ export async function savedTaskHistory(project: ProjectRecord, task: TaskRecord,
   catch { throw new ProjectHistoryError('session_history_unavailable'); }
   let lastRun: ProjectSnapshot['lastRun'], activeRequestId: string | undefined;
   let providedContext: Record<string, unknown> | undefined;
+  let calculationReview: ReportCalculationRunReceipt | undefined;
   for (const entry of manager.getEntries()) {
     if (entry.type !== 'custom' || entry.customType !== 'optracall.run') continue;
     const data = entry.data as Record<string, unknown> | undefined;
@@ -30,13 +32,14 @@ export async function savedTaskHistory(project: ProjectRecord, task: TaskRecord,
     if (data.phase === 'started' || data.phase === undefined) {
       const supplied = data.providedContext;
       providedContext = supplied && typeof supplied === 'object' && !Array.isArray(supplied) && (supplied as Record<string, unknown>).version === 1 ? supplied as Record<string, unknown> : undefined;
-      activeRequestId = data.requestId; lastRun = { requestId: data.requestId }; continue;
+      activeRequestId = data.requestId; lastRun = { requestId: data.requestId }; calculationReview = undefined; continue;
     }
     if (data.phase !== 'settled' || typeof data.outcome !== 'string' || !['completed', 'cancelled', 'failed'].includes(data.outcome) || (activeRequestId !== undefined && activeRequestId !== data.requestId)) continue;
     const outcome = data.outcome as 'completed' | 'cancelled' | 'failed', diagnostic = readRunDiagnostic(data.diagnostic, outcome);
+    calculationReview = readReportCalculationRunReceipt(data.reportCalculationReview, data.requestId);
     lastRun = { requestId: data.requestId, outcome, ...(diagnostic ? { diagnostic } : {}) };
   }
-  return { sessionId: task.sessionFile ? manager.getSessionId() : task.id, sessionFile: task.sessionFile, messages: presentContextMessages(manager.buildSessionContext().messages, manager.getBranch(), manager.getSessionId()) as Record<string, any>[], tools: [], status: 'idle', sdkVersion, capabilities: { ...capabilities, ...(providedContext ? { semanticContext: providedContext } : {}) }, ...(lastRun ? { lastRun } : {}) };
+  return { sessionId: task.sessionFile ? manager.getSessionId() : task.id, sessionFile: task.sessionFile, messages: presentContextMessages(manager.buildSessionContext().messages, manager.getBranch(), manager.getSessionId()) as Record<string, any>[], tools: [], status: 'idle', sdkVersion, capabilities: { ...capabilities, ...(providedContext ? { semanticContext: providedContext } : {}), ...(calculationReview ? { reportCalculationReview: calculationReview } : {}) }, ...(lastRun ? { lastRun } : {}) };
 }
 
 /** Resolve an explicitly selected reply from this task's native ledger, never client text. */
@@ -94,17 +97,34 @@ export async function readSavedTaskEntry(project: ProjectRecord, task: TaskRecor
 }
 
 /** Lazy read projection of native records; never opens a worker or backfills a receipt. */
-export async function taskContextReceipts(project: ProjectRecord, task: TaskRecord) {
+export async function taskContextReceipts(project: ProjectRecord, task: TaskRecord, includeBranch = false) {
   if (!task.sessionFile) return [];
   let manager;
   try { manager = (await readNativeSessionSnapshot(task.sessionFile, task.sessionDirectory, path.join(project.rootPath, '020_clean'))).manager; }
   catch { throw new ProjectHistoryError('session_history_unavailable'); }
-  const receipts = new Map<string, { requestId: string; sessionId?: string; providedAt?: string; providedContext?: Record<string, unknown> }>();
-  for (const entry of manager.getEntries()) {
-    if (entry.type !== 'custom' || entry.customType !== 'optracall.run') continue;
+  const receipts = new Map<string, { requestId: string; sessionId?: string; providedAt?: string; providedContext?: Record<string, unknown>; reportCalculationReview?: ReportCalculationRunReceipt }>();
+  for (const entry of includeBranch ? manager.getBranch() : manager.getEntries()) {
+    if (entry.type !== 'custom' || !['optracall.run', 'optracall.report-calculation-review'].includes(entry.customType)) continue;
     const data = entry.data as Record<string, unknown> | undefined;
-    if (!data || typeof data.requestId !== 'string' || !data.requestId.trim() || (data.phase !== 'started' && data.phase !== undefined) ||
-      (data.sessionId !== undefined && data.sessionId !== manager.getSessionId())) continue;
+    if (!data || typeof data.requestId !== 'string' || !data.requestId.trim() ||
+      (!includeBranch && data.sessionId !== undefined && data.sessionId !== manager.getSessionId())) continue;
+    if (entry.customType === 'optracall.report-calculation-review') {
+      const review = readReportCalculationRunReceipt({ ...data, contract: 'foreground-report-calculation-v1' }, data.requestId);
+      if (data.version === 1 && typeof data.toolCallId === 'string' && review) {
+        receipts.set(data.requestId, {
+          ...receipts.get(data.requestId), requestId: data.requestId,
+          ...(typeof data.sessionId === 'string' ? { sessionId: data.sessionId } : {}),
+          reportCalculationReview: review,
+        });
+      }
+      continue;
+    }
+    if (data.phase === 'settled') {
+      const review = readReportCalculationRunReceipt(data.reportCalculationReview, data.requestId), previous = receipts.get(data.requestId);
+      if (previous && review) receipts.set(data.requestId, { ...previous, reportCalculationReview: review });
+      continue;
+    }
+    if (data.phase !== 'started' && data.phase !== undefined) continue;
     const raw = data.providedContext;
     const context = raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as Record<string, unknown>).version === 1 ? raw as Record<string, unknown> : undefined;
     receipts.set(data.requestId, { requestId: data.requestId, ...(typeof data.sessionId === 'string' ? { sessionId: data.sessionId } : {}),

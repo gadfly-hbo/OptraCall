@@ -1,7 +1,7 @@
 import { readRunDiagnostic, type RunDiagnostic } from '../agent/run-diagnostics.ts';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { constants, lstatSync, unlinkSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { isProjectUploadName, PROJECT_TEXT_UPLOAD_EXTENSIONS, PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
 import { isTaskCapability, type TaskCapability } from './task-capabilities.ts';
@@ -12,7 +12,7 @@ export interface ProjectConfiguration { id: string; revision: number; provider: 
 export interface ProjectRun { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic }
 export interface UploadedFile { id: string; originalName: string; path: string; bytes: number; sha256: string; uploadedAt: string; source: { kind: 'upload' | 'copy' | 'user-save-report'; from?: string } }
 export interface FeedbackTaskOrigin { handoffId: string; operationId: string; requestHash: string }
-export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin }
+export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin; reviewDraftIds?: string[] }
 export interface ProjectRecord { schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
 export class ProjectStoreFault extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
@@ -176,6 +176,10 @@ export class ProjectStore {
       if (input.tradeAreaTools !== undefined) { if (typeof input.tradeAreaTools !== 'boolean') return fail('invalid_project_metadata'); task.tradeAreaTools = input.tradeAreaTools; }
       if (input.modelTools !== undefined) { if (typeof input.modelTools !== 'boolean') return fail('invalid_project_metadata'); task.modelTools = input.modelTools; }
       if (input.feedbackOrigin !== undefined) task.feedbackOrigin = feedbackOrigin(input.feedbackOrigin);
+      if (input.reviewDraftIds !== undefined) {
+        if (!Array.isArray(input.reviewDraftIds) || input.reviewDraftIds.some(value => typeof value !== 'string' || !uuid.test(value)) || new Set(input.reviewDraftIds).size !== input.reviewDraftIds.length) fail('invalid_project_metadata');
+        task.reviewDraftIds = [...input.reviewDraftIds as string[]];
+      }
       tasks.push(task);
     }
     return { schemaVersion: 2, id, name, createdAt: value.createdAt, updatedAt: value.updatedAt, configuration, uploads, archivedAt: value.archivedAt as string | null, tasks };
@@ -285,6 +289,21 @@ export class ProjectStore {
   saveDraft(projectId: string, taskId: string, draft: string): Promise<TaskRecord> {
     if (typeof draft !== 'string' || draft.length > 20000) return Promise.reject(new ProjectStoreFault('invalid_draft'));
     return this.#updateTask(projectId, taskId, task => ({ ...task, draft }));
+  }
+  /** The draft and its review receipt share the same existing atomic project
+   * write, so refresh, repeat clicks and a later cleared draft cannot duplicate it. */
+  appendReviewToDraft(projectId: string, taskId: string, reviewId: string, text: string): Promise<{ task: TaskRecord; appended: boolean }> {
+    if (!uuid.test(reviewId) || typeof text !== 'string' || !text.trim()) return Promise.reject(new ProjectStoreFault('invalid_review_draft'));
+    return this.#mutation(async () => {
+      const project = await this.#read(projectId); this.#active(project);
+      const previous = this.#task(project, taskId);
+      if (previous.reviewDraftIds?.includes(reviewId)) return { task: this.#decorateTask(projectId, previous), appended: false };
+      const draft = previous.draft + (previous.draft ? '\n\n' : '') + text;
+      if (draft.length > 20_000) fail('review_draft_too_large');
+      const now = new Date().toISOString(), task = { ...previous, draft, reviewDraftIds: [...(previous.reviewDraftIds ?? []), reviewId], updatedAt: now };
+      await this.#write({ ...project, tasks: project.tasks.map(value => value.id === taskId ? task : value), updatedAt: now });
+      return { task: this.#decorateTask(projectId, task), appended: true };
+    });
   }
   setTaskCapability(projectId: string, taskId: string, capability: TaskCapability, enabled: boolean): Promise<TaskRecord> {
     if (!isTaskCapability(capability) || typeof enabled !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
@@ -493,6 +512,86 @@ export class ProjectStore {
     if (typeof text !== 'string') return fail('invalid_report_text');
     const prepared = this.#uploadInput(name, Buffer.from(text, 'utf8'));
     return this.#mutation(() => this.#upload(projectId, prepared, '060_reports', { kind: 'user-save-report' }));
+  }
+  async writeBoundReport(projectId: string, taskId: string, filename: string, content: string, context: {
+    signal: AbortSignal; requestId: string; sessionId: string; toolCallId: string; assertCurrent(): void;
+  }) {
+    if (typeof filename !== 'string' || !filename.trim() || filename === '.' || filename === '..' ||
+        Buffer.byteLength(filename, 'utf8') > 255 || /[\\/\u0000-\u001f\u007f]/u.test(filename)) fail('invalid_report_name');
+    if (typeof content !== 'string' || Buffer.from(content, 'utf8').toString('utf8') !== content) fail('invalid_report_text');
+    const bytes = Buffer.from(content, 'utf8');
+    if (bytes.length > PROJECT_UPLOAD_MAX_BYTES) fail('upload_too_large');
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const assertCurrent = () => { context.signal.throwIfAborted(); context.assertCurrent(); };
+    assertCurrent();
+    return this.#mutation(async () => {
+      assertCurrent();
+      const project = await this.#read(projectId);
+      this.#active(project); this.#task(project, taskId);
+      const relativePath = '060_reports/' + filename;
+      const target = await this.#safePath(projectId, relativePath, true);
+      const directory = path.dirname(target), identity = await fs.lstat(directory, { bigint: true });
+      const temporary = path.join(directory, '.optracall-report-' + randomUUID() + '.tmp');
+      const checkDirectory = async () => {
+        await this.#safePath(projectId, '060_reports');
+        const current = await fs.lstat(directory, { bigint: true });
+        if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino) fail('unsafe_directory');
+      };
+      assertCurrent();
+      const handle = await fs.open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+      let published = false, temporaryRemoved = false;
+      try {
+        const opened = await handle.stat({ bigint: true });
+        const matches = (current: typeof opened) => current.isFile() && current.dev === opened.dev && current.ino === opened.ino;
+        const checkStaging = async (size: number) => {
+          const staged = await fs.lstat(temporary, { bigint: true }).catch(() => fail('report_staging_unverified'));
+          if (!matches(staged) || staged.nlink !== 1n || staged.size !== BigInt(size)) fail('report_staging_unverified');
+        };
+        await checkDirectory();
+        await checkStaging(0);
+        assertCurrent();
+        await handle.writeFile(bytes); await handle.sync();
+        assertCurrent();
+        await checkDirectory();
+        await checkStaging(bytes.length);
+        assertCurrent();
+        try { await fs.link(temporary, target); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') fail('report_name_conflict'); throw error; }
+        published = true;
+        await checkDirectory();
+        const staged = lstatSync(temporary, { bigint: true }), linked = lstatSync(target, { bigint: true });
+        if (!matches(staged) || !matches(linked)) {
+          // Roll back only a new link that is still tied to the staging name.
+          // Preserve unrelated files and any name whose identity is uncertain.
+          if (staged.dev === linked.dev && staged.ino === linked.ino && linked.nlink > 1n) unlinkSync(target);
+          fail('report_publication_unverified');
+        }
+        await fs.unlink(temporary);
+        temporaryRemoved = true;
+        await this.#syncDirectory(directory);
+        await checkDirectory();
+        const saved = await this.observeFile(projectId, relativePath);
+        const installed = await fs.lstat(target, { bigint: true });
+        if (!matches(installed) || installed.nlink !== 1n || installed.size !== BigInt(bytes.length) ||
+            saved.sha256 !== sha256 || saved.bytes !== bytes.length) fail('report_publication_unverified');
+        assertCurrent();
+      } catch (error) {
+        if (published) fail('report_publication_unverified');
+        throw error;
+      } finally {
+        try {
+          if (!temporaryRemoved) {
+            const opened = await handle.stat({ bigint: true });
+            const staged = await fs.lstat(temporary, { bigint: true }).catch((error: NodeJS.ErrnoException) => {
+              if (error.code !== 'ENOENT') throw error;
+            });
+            if (staged?.isFile() && staged.dev === opened.dev && staged.ino === opened.ino) await fs.unlink(temporary);
+          }
+        } finally { await handle.close(); }
+      }
+      return { projectId, taskId, filename, path: target, relativePath, sha256,
+        bytes: bytes.length, requestId: context.requestId, sessionId: context.sessionId, toolCallId: context.toolCallId };
+    });
   }
   async close(): Promise<void> {
     await this.#gate; this.#ready = false;

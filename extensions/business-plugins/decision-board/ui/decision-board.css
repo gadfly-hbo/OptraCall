@@ -70,3 +70,17 @@
 .feedback-history-item h3 { font-size: 14px; margin: 0 0 8px; }
 .feedback-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.7; }
 .board-page :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.board-confirmed { flex-basis: 100%; min-width: 0; padding: 9px 0 0; border-top: 1px solid var(--line); }
+.board-confirmed summary { cursor: pointer; color: var(--accent); }
+.board-confirmed-claim { padding: 10px 0; overflow-wrap: anywhere; }
+.board-confirmed-claim + .board-confirmed-claim { border-top: 1px solid var(--line); }
+.board-confirmed-claim h4 { font-size: 13px; margin: 7px 0; }
+.board-confirmed code, .board-confirmed-evidence code, .board-evidence code { font-size: 11px; overflow-wrap: anywhere; }
+.board-confirmed-evidence { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.board-confirmed-evidence p { margin: 5px 0; }
+.board-confirmed-evidence details { margin: 8px 0; }
+.board-fixed-report { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.8; }
+@media (max-width: 600px) { .board-report-row .report-actions { margin-left: 0; flex-wrap: wrap; } }
+
+.board-report-list:has(.board-confirmed[open]) { max-height: none; }

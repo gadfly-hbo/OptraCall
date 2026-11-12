@@ -2,6 +2,8 @@
 
 开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.2](docs/OptraCall_产品讨论稿_v0.2.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
 
+开发前，按[任务目标执行清单与范围管理](docs/engineering-workflow.md#任务目标执行清单与范围管理)列出目标和阶段任务，执行中逐项更新并据此处理新发现的问题。
+
 编写或修改 OptraCall 分析类 Skill 本体时（含 `SKILL.md`、随包参考资料、脚本和模板），先读取项目根目录下的 [分析类 Skill 编写规范](docs/分析类Skill编写规范.md)，按规范编写并自检。仅做测评、只读审查、Host 接缝或接入时，沿用各自流程。
 
 本项目遵循四点产品原则：**Host 管环境、Agent 自主执行、优先复用 Pi 已有能力、减少人的操作**。准备或修改 spec／UI、开发及验收时，必须按[工程规范第2节](docs/engineering-workflow.md#四点产品原则)与[前置检查](docs/engineering-workflow.md#3-连续-sdd-与-tdd)核对实际职责、复用依据和最少用户操作路径，完成[专项最终检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；完整规则仅在工程规范维护。

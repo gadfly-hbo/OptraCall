@@ -1,6 +1,6 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import os from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
@@ -342,4 +342,37 @@ test('L1 wire: serialization projection preserves original schema identity and d
   assert.equal(semanticContextAnthropicPayload({ tools: [nativeSearch] }, mixed), undefined, 'never add an absent semantic tool');
   assert.equal(semanticContextAnthropicPayload({ tools: [{ type: 'function', function: { name: 'read_semantic_context', parameters: mixed } }] }, mixed), undefined, 'OpenAI payload stays untouched');
   assert.equal(semanticContextAnthropicPayload({ tools: [{ name: 'read_semantic_context', strict: true, input_schema: {} }] }, mixed), undefined, 'strict provider schemas stay untouched');
+});
+
+test('RAF-A1: Pi requirement source workspace can call only the authorized read tool with its actual run identity', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'optracall-raf-source-'));
+  const provider = await startToolProvider();
+  const workspace = path.join(root, 'workspace'), resourceRoot = path.join(root, 'pi');
+  await mkdir(workspace);
+  await mkdir(path.join(resourceRoot, 'extensions'), { recursive: true });
+  await writeFile(path.join(resourceRoot, 'extensions', 'private.ts'), 'export default () => { throw new Error("User extension loaded") }');
+  await writeFile(path.join(workspace, 'AGENTS.md'), 'PRIVATE_CONTEXT_NOT_IN_SOURCE_READER');
+  const target = { kind: 'sap', packageId: 'synthetic-rule', version: '1.0.0' };
+  provider.setResponder(({ requestNumber }) => requestNumber === 1
+    ? { calls: [{ name: 'read_semantic_context', arguments: { action: 'read', target } }] }
+    : { text: 'Synthetic framework completed.' });
+  const calls: unknown[] = [];
+  const agent = new ProjectAgent({ projectId: 'requirement:req-synthetic', workspace: { cwd: workspace, systemPrompt: ['Synthetic framework prompt'], capabilityPolicy: 'source-reader' }, codeRoot: process.cwd(), sessionDirectory: path.join(root, 'native'), resourceRoot, managementPorts: [],
+    configuration: { id: 'raf-synthetic', name: 'RAF synthetic', revision: 1, provider: 'synthetic', api: 'openai-completions', baseUrl: provider.baseUrl, model: 'raf-synthetic', apiKey: 'synthetic-raf-key' },
+    semanticContextRead: async (action, input, context) => {
+      context.assertCurrent();
+      calls.push({ action, input, requestId: context.requestId, sessionId: context.sessionId });
+      return { content: [{ type: 'text', text: 'SYNTHETIC_AUTHORIZED_PUBLISHED_RULE' }], details: { schemaVersion: 1, type: 'optracall.semantic-context-result', action: 'read', state: 'available', items: [], unknownTime: [], indexRevision: null, coverage: { complete: true, continuation: null, gaps: [] } } };
+    },
+  });
+  t.after(async () => { await agent.close(); await provider.close(); await rm(root, { recursive: true, force: true }); });
+  const opened = await agent.open();
+  assert.deepEqual(opened.tools, ['read_semantic_context']);
+  const run = await agent.start('Synthetic requirement', 'raf-private-operation').completion;
+  assert.equal(run.outcome, 'completed', JSON.stringify({ diagnostic: run.diagnostic, calls, capturedRequests: provider.requests.length }));
+  assert.deepEqual(calls, [{ action: 'read', input: { target }, requestId: 'raf-private-operation', sessionId: opened.sessionId }]);
+  assert.equal(provider.requests.length, 2);
+  const captured = JSON.stringify(provider.requests.map(request => request.body));
+  assert.match(captured, /SYNTHETIC_AUTHORIZED_PUBLISHED_RULE/);
+  assert.doesNotMatch(captured, /PRIVATE_CONTEXT_NOT_IN_SOURCE_READER|record_analysis_sources|sap_method_source|codemode|web_search/);
 });

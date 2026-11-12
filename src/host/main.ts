@@ -3,8 +3,9 @@ import { SDK_VERSION } from '../agent/runtime.ts';
 import path from 'node:path';
 import os from 'node:os';
 import { loadSemanticGraphConfiguration } from './semantic-graph-config.ts';
+import type { ReviewAdmissionContract } from './analysis-review-transition.ts';
 
-export async function runHost(transport: { version: string; close: () => Promise<void> }): Promise<void> {
+export async function runHost(transport: { version: string; close: () => Promise<void> }, admission: { reviewAdmission?: ReviewAdmissionContract } = {}): Promise<void> {
   const values = new Map(process.argv.slice(2).map(value => { const index = value.indexOf('='); return index < 0 ? [value, undefined] : [value.slice(0, index), value.slice(index + 1)]; }));
   if ([...values.keys()].some(key => !['--port', '--ui-port', '--connection-timeout-ms', '--data-root', '--projects-root', '--ui-root', '--instance-id', '--semantic-config', '--studio-python', '--disable-case-decisions', '--disable-experience-learning', '--disable-sap-methods'].includes(key ?? ''))) throw new Error('Unknown Host argument.');
   const port = Number(values.get('--port') ?? 4175), uiPort = Number(values.get('--ui-port') ?? 4173), timeout = Number(values.get('--connection-timeout-ms') ?? 15_000);
@@ -17,7 +18,7 @@ export async function runHost(transport: { version: string; close: () => Promise
   const studioPython = values.get('--studio-python'); if (values.has('--studio-python') && (!studioPython || !path.isAbsolute(studioPython) || studioPython.includes('\0'))) throw new Error('Invalid Studio Python path.');
   const semanticGraph = await loadSemanticGraphConfiguration({ file: values.get('--semantic-config'), codeRoot: process.cwd(), dataRoot: values.get('--data-root') ?? path.join(os.homedir(), '.optracall'), projectsRoot: values.get('--projects-root') ?? path.join(os.homedir(), 'OptraCallProjects') });
   const effectiveStudioPython = studioPython ?? semanticGraph?.python;
-  const host = createHost({ cwd: process.cwd(), uiPorts: [uiPort, uiPort === 4173 ? 4174 : uiPort], transportVersion: transport.version, connectionTimeoutMs: timeout, dataRoot: values.get('--data-root'), projectsRoot: values.get('--projects-root'), staticUiRoot: values.get('--ui-root'), instanceId, caseDecisionsEnabled: !values.has('--disable-case-decisions'), experienceLearningEnabled: !values.has('--disable-experience-learning'), sapMethodsEnabled: !values.has('--disable-sap-methods'), ...(effectiveStudioPython ? { studioPython: effectiveStudioPython } : {}), ...(semanticGraph ? { semanticGraph } : {}) });
+  const host = createHost({ cwd: process.cwd(), uiPorts: [uiPort, uiPort === 4173 ? 4174 : uiPort], transportVersion: transport.version, connectionTimeoutMs: timeout, dataRoot: values.get('--data-root'), projectsRoot: values.get('--projects-root'), staticUiRoot: values.get('--ui-root'), instanceId, caseDecisionsEnabled: !values.has('--disable-case-decisions'), experienceLearningEnabled: !values.has('--disable-experience-learning'), sapMethodsEnabled: !values.has('--disable-sap-methods'), ...admission, ...(effectiveStudioPython ? { studioPython: effectiveStudioPython } : {}), ...(semanticGraph ? { semanticGraph } : {}) });
   if ('ready' in host) await host.ready;
   await new Promise<void>((resolve, reject) => { host.server.once('error', reject); host.server.listen(port, '127.0.0.1', resolve); });
   const address = host.server.address();

@@ -1,3 +1,4 @@
+import type { BoardItemRecord } from '../../extensions/business-plugins/decision-board/types.ts';
 import { CaseStoreError, type CaseStore } from './case-store.ts';
 import type { CaseDecisionListOptions, CaseDecisionTarget, CaseDecisionRevision, CaseDecisionReference } from './case-decision-types.ts';
 import { caseDecisionFields, parseCaseDecisionTarget, parseCaseDecisionDraft, caseDecisionId, parseCaseDecisionRef, parseCaseDecisionGovernance, parseCaseStrategyChoice } from './case-decision-validation.ts';
@@ -11,6 +12,8 @@ import type { createRequirementStore } from '../../extensions/business-plugins/r
 import type { FeedbackHandoff } from './decision-feedback-types.ts';
 import type { LearningSourceReadOptions } from './learning-source-types.ts';
 
+type ReadRelease = ReturnType<ReturnType<typeof createRequirementStore>['readRelease']>;
+type DecisionSourceReadOptions = LearningSourceReadOptions & { projectId?: string };
 export type CaseDecisionServiceDependencies = {
   cases: CaseStore;
   projects: ProjectStore;
@@ -19,7 +22,8 @@ export type CaseDecisionServiceDependencies = {
   readSource?: ReadPersonalSource;
   personalContext?: Pick<ReturnType<typeof createPersonalContextReader>, 'read'>;
   board?: Pick<ReturnType<typeof createDecisionBoardStore>, 'getTask' | 'getItem' | 'getFeedbackRevision' | 'listTasks' | 'listFeedbackHistory'>;
-  requirements?: Pick<ReturnType<typeof createRequirementStore>, 'readRelease'>;
+  assertBoardItemReadable?: (item: BoardItemRecord) => Promise<void>;
+  requirements?: { readRelease: (id: string, version: string, projectId?: string) => ReadRelease | Promise<ReadRelease> };
   readHandoff?: (id: string) => FeedbackHandoff | null | Promise<FeedbackHandoff | null>;
 };
 
@@ -65,6 +69,7 @@ export function createCaseDecisionService(deps: CaseDecisionServiceDependencies)
     for (const task of deps.board.listTasks()) {
       const item = deps.board.getItem(task.itemId), project = projects.get(item.projectId);
       if (!project) continue;
+      if (item.sourceKind === 'report-confirmation') { try { if (!deps.assertBoardItemReadable) continue; await deps.assertBoardItemReadable(item); } catch { continue; } }
       actions.push({ target: { type: 'board-task' as const, projectId: project.id, itemId: item.id, taskId: task.id },
         title: task.title, projectName: project.name, projectArchived: project.archivedAt !== null, itemTitle: item.title,
         status: task.status, owner: task.owner, dueDate: task.dueDate, note: task.note, updatedAt: task.updatedAt,
@@ -74,7 +79,7 @@ export function createCaseDecisionService(deps: CaseDecisionServiceDependencies)
     }
     return { actions };
   }
-  async function resolveSource(caseId: string, target: CaseDecisionTarget, signal?: AbortSignal, continuation?: string | null, options: LearningSourceReadOptions = {}): Promise<CaseDecisionSourceView> {
+  async function resolveSource(caseId: string, target: CaseDecisionTarget, signal?: AbortSignal, continuation?: string | null, options: DecisionSourceReadOptions = {}): Promise<CaseDecisionSourceView> {
     signal?.throwIfAborted();
     const limitations = ['来源及关系是作者声明，不是Host的事实或因果核定；未代作人的选择或经营动作。'];
     let value: CaseDecisionSourceView;
@@ -94,7 +99,7 @@ export function createCaseDecisionService(deps: CaseDecisionServiceDependencies)
         current: { provided: result.details.items[0] ?? null } };
     } else if (target.type === 'rap') {
       if (!deps.requirements) throw new CaseStoreError('case_decision_source_unavailable', 503);
-      const released = deps.requirements.readRelease(target.instanceId, target.version);
+      const released = await deps.requirements.readRelease(target.instanceId, target.version, options.projectId);
       const text = JSON.stringify(released.rap, null, 2);
       value = { target, title: `${released.entry.title} · RAP ${released.entry.version}`, status: 'available', text, sha256: sha(text), current: { packageFingerprint: released.entry.packageFingerprint, contentFingerprint: released.entry.contentFingerprint },
         limitations: [...limitations, '原权威已校验的准确发布版JSON投影，不是YAML原字节；RAP方法假设不自动成为已检验业务假设。'] };
@@ -107,6 +112,7 @@ export function createCaseDecisionService(deps: CaseDecisionServiceDependencies)
       const taskId = target.type === 'board-task' ? target.taskId : target.boardTaskId;
       const projectId = target.type === 'board-task' ? target.projectId : target.sourceProjectId;
       const task = deps.board.getTask(taskId), item = deps.board.getItem(task.itemId);
+      if (item.sourceKind === 'report-confirmation') { if (!deps.assertBoardItemReadable) throw new CaseStoreError('confirmation_source_unavailable', 409); await deps.assertBoardItemReadable(item); }
       if (item.projectId !== projectId || target.type === 'board-task' && item.id !== target.itemId) throw new CaseStoreError('case_decision_source_project_mismatch', 409);
       await deps.projects.get(projectId);
       if (target.type === 'board-task') {
@@ -147,7 +153,7 @@ export function createCaseDecisionService(deps: CaseDecisionServiceDependencies)
     return { ...value, text: value.text.slice(start, end), range: { start, end, total: value.text.length }, partial,
       continuation: partial ? Buffer.from(JSON.stringify({ identity, contentSha, next: end })).toString('base64url') : null };
   }
-  async function source(caseId: string, input: unknown, signal?: AbortSignal, options: LearningSourceReadOptions = {}): Promise<CaseDecisionSourceView> {
+  async function source(caseId: string, input: unknown, signal?: AbortSignal, options: DecisionSourceReadOptions = {}): Promise<CaseDecisionSourceView> {
     deps.cases.getCase(caseId);
     caseDecisionFields(input, ['target', 'continuation'], ['target']);
     const target = parseCaseDecisionTarget(input.target), continuation = input.continuation;
@@ -185,6 +191,7 @@ export function createCaseDecisionService(deps: CaseDecisionServiceDependencies)
         if (replayed) { result.push(reference); continue; } // Store digest will reject a different original intent.
         if (!deps.board) throw new CaseStoreError('case_decision_board_unavailable', 503);
         const task = deps.board.getTask(target.taskId), item = deps.board.getItem(task.itemId);
+        if (item.sourceKind === 'report-confirmation') { if (!deps.assertBoardItemReadable) throw new CaseStoreError('confirmation_source_unavailable', 409); await deps.assertBoardItemReadable(item); }
         if (item.projectId !== target.projectId || item.id !== target.itemId) throw new CaseStoreError('case_decision_source_project_mismatch', 409);
         if (!deps.cases.listProjectLinks(caseId).some(link => link.projectId === target.projectId)) throw new CaseStoreError('project_not_linked', 409);
         const project = await deps.projects.get(target.projectId); signal?.throwIfAborted(); deps.assertActive(project);

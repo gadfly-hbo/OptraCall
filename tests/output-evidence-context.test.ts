@@ -20,7 +20,7 @@ async function fixture(t: TestContext) {
   const root = path.resolve('.local/agent-output-reliability/guidance', randomUUID());
   await mkdir(root, { recursive: true });
   const provider = await startToolProvider();
-  const host = createHost({ cwd: process.cwd(), dataRoot: path.join(root, 'host'), projectsRoot: path.join(root, 'projects'), uiPorts: [4183], transportVersion: 'synthetic-output-evidence' });
+  const host = createHost({ reviewAdmission: 'legacy', cwd: process.cwd(), dataRoot: path.join(root, 'host'), projectsRoot: path.join(root, 'projects'), uiPorts: [4183], transportVersion: 'synthetic-output-evidence' });
   await host.ready;
   await new Promise<void>(resolve => host.server.listen(0, '127.0.0.1', resolve));
   const address = host.server.address(); assert.ok(address && typeof address !== 'string');
