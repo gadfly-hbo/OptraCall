@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { StudioCreateInput, StudioStoreOptions, StudioSystem, StudioSaveAssetInput, StudioAsset, StudioAssetKind, StudioAssetRevision, StudioPublicationInput, StudioPublicationPreview, StudioPublication, StudioPublicationResult, StudioUpdateInput, StudioMaterial, StudioSourceRef, StudioWorkItemInput, StudioWorkItem, StudioFeedbackInput, StudioFeedback, StudioFeedbackUpdate, StudioUseRecord, StudioAdoption, StudioGraphState, StudioTopic, StudioPublishedAsset, StudioUseAssessmentInput, StudioContribution, StudioContributeInput, StudioContributionContent, StudioContributionRevision, StudioLinkContributionInput, StudioContributionLink, StudioContributionSnapshot, StudioPublicationItem } from './contracts.ts';
 import { fail, StudioError, text, identity, uuid, object, sources, checks, strings, positive, digest, sourceRef, feedbackOrigin } from './validation.ts';
 import { studioQuestionContext, studioExecutionOwner } from './contracts.ts';
+import { parseFoundationContent } from './foundation.ts';
 export { StudioError } from './validation.ts';
 
 type Index = { schemaVersion: 1; systems: StudioSystem[] };
@@ -205,6 +206,8 @@ export class StudioStore {
       const baseSystemRevision = input.baseSystemRevision === undefined ? system.revision : positive(input.baseSystemRevision);
       if (baseSystemRevision !== system.revision) fail('studio_contribution_base_conflict', 409);
       const content = this.contributionContent({ ...input, baseRefs: input.baseRefs ?? [], baseSystemRevision }, projectId, taskId), createdAt = now();
+      // Validate new task proposals without reinterpreting or rewriting historical contribution bodies.
+      if (parseFoundationContent(content.candidate.body).kind === 'invalid') fail('invalid_studio_foundation');
       const revision: StudioContributionRevision = { ...content, revision: (contribution?.revision ?? 0) + 1, sha256: digest(content), createdAt };
       if (!contribution) { contribution = { id: randomUUID(), revision: 0, sourceProjectId: projectId, sourceTaskId: taskId, scope: input.scope, revisions: [], createdAt, updatedAt: createdAt }; system.contributions.push(contribution); }
       contribution.revision = revision.revision; contribution.scope = revision.scope; contribution.revisions.push(revision); contribution.updatedAt = createdAt; return contribution;
@@ -278,6 +281,9 @@ export class StudioStore {
       else { if (input.expectedRevision !== undefined && input.expectedRevision !== 0) fail('studio_asset_conflict', 409); asset = { id: randomUUID(), kind: input.kind, topicId, revisions: [], candidateRevision: null, formalRevision: null }; system.assets.push(asset); }
       if (input.readyForPublication !== undefined && typeof input.readyForPublication !== 'boolean') fail('invalid_studio_publication_readiness');
       const content = { title: text(input.title, 500, false), body: text(input.body, 524_288, false), scope: text(input.scope, 20_000, false), sources: sources(input.sources), dependencies: sources(input.dependencies ?? []), checks: checks(input.checks ?? []), limitations: strings(input.limitations ?? []), readyForPublication: input.readyForPublication ?? false, reason: text(input.reason ?? '') };
+      const foundation = parseFoundationContent(content.body);
+      if (foundation.kind === 'invalid') fail('invalid_studio_foundation');
+      if (foundation.kind === 'unsupported' && content.readyForPublication) fail('unsupported_studio_foundation');
       const extraction = input.extraction ? { method: text(input.extraction.method, 200, false), sourceRefs: sources(input.extraction.sourceRefs), failures: strings(input.extraction.failures), fallbacks: strings(input.extraction.fallbacks), reviewed: input.extraction.reviewed === true } : undefined;
       const revision: StudioAssetRevision = { ...content, ...(extraction ? { extraction } : {}), revision: (asset.revisions.at(-1)?.revision ?? 0) + 1, sha256: digest({ ...content, ...(extraction ? { extraction } : {}) }), createdAt: now() };
       asset.revisions.push(revision); asset.candidateRevision = revision.revision; return asset;
@@ -291,6 +297,8 @@ export class StudioStore {
         const asset = system.assets.find(a => a.id === uuid(assetId)); if (!asset) fail('studio_asset_not_found', 404);
         const revision = asset.revisions.find(r => r.revision === (asset.candidateRevision ?? asset.formalRevision));
         if (!revision || !revision.readyForPublication || !revision.sources.length || revision.checks.some(c => c.status === 'fail' || c.status === 'unknown') || (revision.extraction && !revision.extraction.reviewed)) fail('studio_source_not_ready', 409);
+        const foundation = parseFoundationContent(revision.body);
+        if (foundation.kind === 'invalid' || foundation.kind === 'unsupported') fail('studio_source_not_ready', 409);
         return { assetId: asset.id, revision: revision.revision, sha256: revision.sha256, title: revision.title, kind: asset.kind };
       });
       const refs = sources(input.refs ?? []); if (!items.length && !refs.length) fail('empty_studio_publication');
