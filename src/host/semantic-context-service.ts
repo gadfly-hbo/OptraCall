@@ -22,6 +22,8 @@ export type SemanticContextServiceOptions = {
   metricLibrary?: Pick<ReturnType<typeof createMetricLibrary>, 'list' | 'read'> | (() => Pick<ReturnType<typeof createMetricLibrary>, 'list' | 'read'>);
   methodLibrary?: Pick<SapMethodStore, 'listPublished' | 'getPublished'>;
   readSource?: ReadPersonalSource;
+  /** Host-qualified enterprise/source association, shared with Studio; no shadow asset authority. */
+  sourceAllowed?: (projectId: string, target: SemanticTarget) => boolean | Promise<boolean>;
   personal?: { find(input: PersonalContextFindInput, options?: PersonalContextReadOptions): Promise<PersonalContextResult>; read(input: PersonalContextReadInput, options?: PersonalContextReadOptions): Promise<PersonalContextResult> };
 };
 export class SemanticContextFault extends Error {
@@ -90,6 +92,10 @@ export class SemanticContextService {
     if (input.target?.kind === 'source') input = { ...input, target: { kind: 'source', source: learningSourceRef(input.target.source) } };
     if (input.target?.kind === 'personal') input = { ...input, target: { kind: 'personal', target: parsePersonalContextReadInput({ target: input.target.target }).target } };
     const current = () => { options.signal?.throwIfAborted(); options.assertCurrent?.(); };
+    const sourceAllowed = async (target: SemanticTarget) => {
+      const allowed = projectId === null || !this.options.sourceAllowed || await this.options.sourceAllowed(projectId, target);
+      current(); return allowed;
+    };
     current();
     if (projectId !== null && typeof binding === 'string') { await this.options.projects.getTask(projectId, binding); current(); }
     const directoryGaps: string[] = [];
@@ -97,6 +103,7 @@ export class SemanticContextService {
     const index = projectId === null ? null : await this.options.data.getIndex(projectId).catch(error => { directoryGaps.push(errorCode(error)); return null; }); current();
     const items: SemanticItem[] = [];
     const resolve = async (target: SemanticTarget): Promise<SemanticItem> => {
+      if (!await sourceAllowed(target)) throw new SemanticContextFault('semantic_context_source_forbidden', 403);
       if ('projectId' in target && target.projectId !== projectId) throw new SemanticContextFault('semantic_context_owner_mismatch', 403);
       const item = blank(target);
       try {
@@ -114,6 +121,7 @@ export class SemanticContextService {
       } else if (target.kind === 'sap-method') {
         if (!this.options.methodLibrary) { item.state = 'unknown'; item.gaps.push('sap-method-library-unavailable'); return item; }
         const value = this.options.methodLibrary.getPublished(target.methodId, target.version);
+        if (options.audience === 'agent' && value.issue?.status === 'confirmed') return { ...item, state: 'disabled', gaps: ['known-error-not-current-evidence'] };
         if (target.publishedHash != null && target.publishedHash !== value.version.contentSha256) { item.state = 'hash-conflict'; item.code = 'semantic_context_sap_method_hash_conflict'; return item; }
         item.title = value.version.title; item.body = JSON.stringify(value.version, null, 2); item.sha256 = value.version.contentSha256;
         item.recordedAt = { field: 'publishedAt', value: value.publication.publishedAt };
@@ -125,9 +133,9 @@ export class SemanticContextService {
         const metadata = await this.options.enterprise.referenceIndex({ readOnly: true }); current();
         if (metadata.storeId !== target.storeId) throw new SemanticContextFault('semantic_context_store_mismatch', 403);
         const material = metadata.materials.find(item => item.materialId === target.materialId);
-        if (requirement && !material?.enabled) return { ...item, state: 'disabled', gaps: ['enterprise-material-unavailable'] };
+        if ((requirement || options.audience === 'agent') && !material?.enabled) return { ...item, state: 'disabled', gaps: ['enterprise-material-unavailable'] };
         const revision = await this.options.enterprise.readRevision(target.materialId, target.revisionId, { readOnly: true }); current();
-        if (requirement) {
+        if (requirement || options.audience === 'agent') {
           const latest = await this.options.enterprise.referenceIndex({ readOnly: true }); current();
           if (latest.storeId !== target.storeId || !latest.materials.some(current => current.materialId === target.materialId && current.enabled))
             return { ...item, state: 'disabled', gaps: ['enterprise-material-unavailable'] };
@@ -246,6 +254,7 @@ export class SemanticContextService {
         if (ref.target) {
           try {
             if ('projectId' in ref.target && ref.target.projectId !== projectId) throw new SemanticContextFault('semantic_context_owner_mismatch', 403);
+            if (!await sourceAllowed(ref.target)) throw new SemanticContextFault('semantic_context_source_forbidden', 403);
             if (requirement && !inRequirementScope(ref.target, requirement)) throw new SemanticContextFault('semantic_context_read_not_authorized', 403);
             if (ref.target.kind === 'source' && projectId !== null) assertSourceOwner(ref.target.source, projectId);
           } catch { ref.state = 'forbidden'; }
@@ -268,6 +277,7 @@ export class SemanticContextService {
         try {
           for (const entry of this.options.methodLibrary.listPublished()) {
             const value = this.options.methodLibrary.getPublished(entry.id, entry.publishedVersion!);
+            if (options.audience === 'agent' && value.issue?.status === 'confirmed') continue;
             if (matches(entry.title, value.version.content.conditions, value.version.content.logic)) {
               items.push({ ...blank({ kind: 'sap-method', methodId: entry.id, version: value.version.version, publishedHash: value.version.contentSha256 }),
                 title: value.version.title, sha256: value.version.contentSha256, recordedAt: { field: 'publishedAt', value: value.publication.publishedAt },
@@ -280,7 +290,7 @@ export class SemanticContextService {
         let metadata: Awaited<ReturnType<EnterpriseMaterialsStore['referenceIndex']>> | null = null;
         try { metadata = await this.options.enterprise.referenceIndex({ readOnly: true }); current(); }
         catch (error) { current(); directoryGaps.push(errorCode(error)); }
-        if (metadata) for (const material of metadata.materials) for (const revision of material.revisions) if ((!requirement || material.enabled) && matches(revision.title, revision.scope)) {
+        if (metadata) for (const material of metadata.materials) for (const revision of material.revisions) if ((!(requirement || options.audience === 'agent') || material.enabled) && matches(revision.title, revision.scope)) {
           items.push({ ...blank({ kind: 'enterprise', storeId: metadata.storeId, materialId: material.materialId, revisionId: revision.revisionId }), title: revision.title, sha256: revision.bodySha256,
             recordedAt: revision.createdAt ? { field: 'createdAt', value: revision.createdAt } : null,
             businessTime: revision.effectiveTime ? [{ text: revision.effectiveTime, source: 'effectiveTime' }] : [], governance: { enabled: material.enabled }, state: material.enabled ? 'available' : 'disabled' });
@@ -334,6 +344,11 @@ export class SemanticContextService {
         } catch (error) { current(); directoryGaps.push(errorCode(error), 'personal-original-reader-not-initialized-by-semantic-query'); }
       }
     }
+    if (input.action === 'find') {
+      // Filter before transport; an unassigned or foreign formal record is not
+      // made visible merely because it exists in a shared professional store.
+      for (let position = items.length - 1; position >= 0; position--) if (!await sourceAllowed(items[position]!.target)) items.splice(position, 1);
+    } else if (input.target && !await sourceAllowed(input.target)) throw new SemanticContextFault('semantic_context_source_forbidden', 403);
     current();
     const identity = typeof binding === 'string' ? { projectId, taskId: binding } : { projectId, requirement: binding };
     const result = semanticPage(input, items, { identity: sha(canonical({ ...identity, input: { ...input, continuation: null } })), version: sha(canonical({ items, indexRevision: index?.revision ?? null })) }, index?.revision ?? null);

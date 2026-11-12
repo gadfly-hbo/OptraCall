@@ -17,6 +17,9 @@ export type MetricFactoryRoutesOptions = {
   projectOverview: () => Promise<readonly { id: string; name: string; archivedAt: string | null }[]>;
   readProjectFile: (projectId: string, relativePath: string) => Promise<{ name: string; bytes: Buffer }>;
   readBody: (request: IncomingMessage) => Promise<Record<string, unknown>>;
+  canPublishTarget?: (projectId: string, packageId: string) => Promise<boolean>;
+  publicationPreviewRequired?: (projectId: string) => boolean;
+  publishedTarget?: (projectId: string, packageId: string) => void;
 };
 
 const packageIdPattern = /^[a-z][a-z0-9-]*$/;
@@ -39,19 +42,23 @@ export function createMetricFactoryRoutes(options: MetricFactoryRoutesOptions) {
   };
 
   const publishDraft = async (input: Record<string, unknown>, publish: boolean) => {
-    const { bytes } = await draftInput(input);
+    const { bytes, projectId } = await draftInput(input);
     const publishedBy = String(input.publishedBy ?? '');
     if (publish && (!publishedBy.trim() || publishedBy.length > 200)) throw new ApiFault(400, 'publisher_invalid', '请填写审核人后再发布。');
     try {
       const publication = preparePublication(bytes);
       if (!publish) return { status: 200, value: { document: publication.document, packageFingerprint: publication.packageFingerprint, contentFingerprint: publication.contentFingerprint } };
+      if (options.publicationPreviewRequired?.(projectId) && typeof input.expectedPackageFingerprint !== 'string') throw new ApiFault(409, 'publication_preview_required', '请先校验准确草稿，再审核发布。');
+      if (input.expectedPackageFingerprint !== undefined && input.expectedPackageFingerprint !== publication.packageFingerprint) throw new ApiFault(409, 'publication_preview_changed', '草稿已变化，请重新校验并审核准确版本。');
+      if (options.canPublishTarget && !(await options.canPublishTarget(projectId, publication.document.package.id))) throw new ApiFault(409, 'enterprise_assignment_conflict', '该指标已归属其他企业或范围冲突，未写入新版本。');
       try {
         const existing = library.read(publication.document.package.id, publication.document.package.version);
-        if (existing.entry.bytesSha256 === publication.bytesSha256) return { status: 200, value: { entry: existing.entry } };
+        if (existing.entry.bytesSha256 === publication.bytesSha256) { options.publishedTarget?.(projectId, existing.entry.id); return { status: 200, value: { entry: existing.entry } }; }
       } catch (error) {
         if (!(error instanceof MetricLibraryFault) || error.code !== 'LIBRARY_NOT_FOUND') throw error;
       }
       const entry = library.publish(publication, publishedBy);
+      options.publishedTarget?.(projectId, entry.id);
       return { status: 201, value: { entry } };
     } catch (error) {
       if (error instanceof SapFault) throw new ApiFault(422, error.code, `草稿未通过 SAP 0.2 校验（${error.code}）。`, error.path);

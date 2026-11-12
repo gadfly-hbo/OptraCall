@@ -2,11 +2,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { StudioStore, StudioError } from '../../extensions/business-plugins/studio/store.ts';
-import type { StudioMaterial, StudioSourceRef, StudioSaveAssetInput, StudioPublicationInput, StudioFeedbackInput, StudioSystem, StudioWorkItemInput, StudioUpdateInput, StudioFeedbackUpdate } from '../../extensions/business-plugins/studio/contracts.ts';
+import type { StudioMaterial, StudioSourceRef, StudioSaveAssetInput, StudioPublicationInput, StudioFeedbackInput, StudioSystem, StudioWorkItemInput, StudioUpdateInput, StudioFeedbackUpdate, StudioContributeInput } from '../../extensions/business-plugins/studio/contracts.ts';
 import type { ProjectStore, ProjectRecord, TaskRecord } from './project-store.ts';
 import type { EnterpriseMaterialsStore } from './enterprise-materials-store.ts';
 import type { ProjectSnapshot } from '../agent/project-runtime.ts';
 import type { StudioPort, StudioAction, StudioToolResult } from '../agent/studio.ts';
+import { STUDIO_READ_ACTIONS } from '../agent/studio.ts';
+import { studioExecutionOwner } from '../../extensions/business-plugins/studio/contracts.ts';
 import type { SemanticContextCallContext } from '../agent/semantic-context.ts';
 import { studioOperations } from './studio-operations.ts';
 import { studioExtractions, studioExtractionId, extractionSummary, extractionResponse, extractionPage, studioTextPage, studioJsonPage } from './studio-extractions.ts';
@@ -17,12 +19,16 @@ import { createProjectEnablement } from '../../extensions/business-plugins/metri
 import { createSapMethodStore } from '../../extensions/business-plugins/metric-factory/methods/store.ts';
 import { preparePublication as prepareSapPublication, SapFault } from '../../extensions/business-plugins/metric-factory/sap/validate.ts';
 import { SapMethodStoreError } from '../../extensions/business-plugins/metric-factory/methods/validate.ts';
+import { EnterpriseScopeStore } from './enterprise-scope-store.ts';
+import { createStudioEnterpriseCatalog } from './studio-enterprise-catalog.ts';
+import { CaseStoreError, type CaseStore } from './case-store.ts';
 
 function json(response: ServerResponse, status: number, value: unknown) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(JSON.stringify(value));
 }
 export type StudioHostOptions = {
   dataRoot: string; projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore;
+  cases?: CaseStore;
   readBody(request: IncomingMessage, limit?: number): Promise<Record<string, unknown>>;
   mutate<T>(operation: () => T | Promise<T>): Promise<T>;
   running(project: ProjectRecord, task: TaskRecord): boolean;
@@ -37,11 +43,15 @@ export type StudioHostOptions = {
 };
 export function createStudioFeature(options: StudioHostOptions) {
   const store = new StudioStore(options.dataRoot), operations = studioOperations(options.dataRoot);
+  const enterpriseScopes = new EnterpriseScopeStore(options.dataRoot);
+  const enterpriseCatalog = createStudioEnterpriseCatalog({ ...options, scopes: enterpriseScopes, studio: store });
+  const enterpriseScope = { active: () => enterpriseScopes.list().enterprises.length > 0, enterpriseIdForProject: (projectId: string) => enterpriseScopes.enterpriseIdForProject(projectId), sourceAllowed: enterpriseCatalog.sourceAllowed,
+    constructionSourceAllowed: async (projectId: string, ref: StudioSourceRef) => { await assertNativeEnterprise(ref.authority, ref.id, enterpriseScopes.enterpriseIdForProject(projectId)); return true; } };
   const extractions = studioExtractions(options.dataRoot);
-  const sources = createStudioSources({ ...options, studio: store });
+  const sources = createStudioSources({ ...options, studio: store, enterpriseScope });
   const library = createMetricLibrary(path.join(options.dataRoot, 'metric-assets')), methods = createSapMethodStore(path.join(options.dataRoot, 'metric-assets'));
   const workspace = async (id: string) => {
-    const system = store.get(id), project = await options.projects.get(system.projectId), task = await options.projects.getTask(system.projectId, system.taskId);
+    const system = store.get(id), owner = studioExecutionOwner(system), project = await options.projects.get(owner.projectId), task = await options.projects.getTask(owner.projectId, owner.taskId);
     if (options.taskSnapshot) {
       const snapshot = await options.taskSnapshot(project.id, task.id);
       const readMessages = snapshot.messages.filter(message => message.role === 'toolResult' && message.toolName === 'studio_assets' && message.details?.type === 'optracall.studio' && message.details?.action === 'read-source');
@@ -53,8 +63,21 @@ export function createStudioFeature(options: StudioHostOptions) {
     return { system, project, task, readOnly: project.archivedAt !== null, running: options.running(project, task) };
   };
   async function active(id: string) { const state = await workspace(id); if (state.readOnly) throw new StudioError('studio_project_read_only', 409); if (options.closing()) throw new StudioError('host_closing', 503); return state; }
-  const constructionFor = (projectId: string, taskId: string) => store.list().find(system => system.projectId === projectId && system.taskId === taskId);
-  const availableFor = (system: StudioSystem, projectId: string) => system.projectId === projectId || system.usageProjectIds.includes(projectId) || system.adoptions.some(item => item.projectId === projectId && item.status === 'succeeded') || system.uses.some(item => item.projectId === projectId);
+  const constructionFor = (projectId: string, taskId: string) => store.list().find(system => { const owner = studioExecutionOwner(system); return owner.projectId === projectId && owner.taskId === taskId; });
+  const availableFor = (system: StudioSystem, projectId: string) => system.enterpriseId
+    ? system.enterpriseId === enterpriseScopes.enterpriseIdForProject(projectId)
+    : system.projectId === projectId || studioExecutionOwner(system).projectId === projectId || system.usageProjectIds.includes(projectId) || system.adoptions.some(item => item.projectId === projectId && item.status === 'succeeded') || system.uses.some(item => item.projectId === projectId);
+  function assertProjectEnterprise(projectId: string, enterpriseId: string) {
+    const previous = enterpriseScopes.enterpriseIdForProject(projectId);
+    if (previous && previous !== enterpriseId) throw new StudioError('enterprise_assignment_conflict', 409);
+    if (options.cases?.getStatus().state === 'ready' && options.cases.listProjectLinks().some(link => link.projectId === projectId && enterpriseScopes.enterpriseIdForCase(link.caseId) && enterpriseScopes.enterpriseIdForCase(link.caseId) !== enterpriseId)) throw new StudioError('enterprise_assignment_conflict', 409);
+  }
+  async function assertNativeEnterprise(authority: string, id: string, enterpriseId?: string) {
+    for (const enterprise of enterpriseScopes.list().enterprises) {
+      const catalog = await enterpriseCatalog.catalog(enterprise.id);
+      if ([...catalog.items, ...catalog.unassigned].some(item => item.authority === authority && item.id === id && (item.status === 'conflict' || item.enterpriseId && item.enterpriseId !== enterpriseId))) throw new StudioError('enterprise_assignment_conflict', 409);
+    }
+  }
   async function selectedMaterials(value: unknown, projectId: string): Promise<StudioMaterial[]> {
     if (value === undefined) return [];
     if (!Array.isArray(value) || value.length > 100) throw new StudioError('invalid_studio_materials');
@@ -65,7 +88,7 @@ export function createStudioFeature(options: StudioHostOptions) {
       return exact;
     });
   }
-  async function validateSources(refs: StudioSourceRef[], system: StudioSystem, projectId = system.projectId, construction = true) {
+  async function validateSources(refs: StudioSourceRef[], system: StudioSystem, projectId = studioExecutionOwner(system).projectId, construction = true) {
     for (const ref of refs) await sources.validate(ref, projectId, system.id, { construction });
   }
   async function saveAsset(id: string, raw: Record<string, unknown>, agent: boolean, assertCurrent: () => void = () => {}) {
@@ -77,21 +100,24 @@ export function createStudioFeature(options: StudioHostOptions) {
   }
   const operationId = (parts: unknown[]) => { const hash = digest(parts); return `${hash.slice(0,8)}-${hash.slice(8,12)}-5${hash.slice(13,16)}-${(8 + (parseInt(hash[16]!, 16) & 3)).toString(16)}${hash.slice(17,20)}-${hash.slice(20,32)}`; };
   async function metricDraft(system: StudioSystem, ref: StudioSourceRef) {
-    if (!ref.locator || !/^020_clean\/.+\.ya?ml$/.test(ref.locator) || ref.projectId !== system.projectId) throw new StudioError('studio_metric_candidate_unavailable', 409);
-    const file = await options.projects.readFile(system.projectId, ref.locator), publication = prepareSapPublication(new Uint8Array(file.bytes));
+    const owner = studioExecutionOwner(system);
+    if (!ref.locator || !/^020_clean\/.+\.ya?ml$/.test(ref.locator) || ref.projectId !== owner.projectId) throw new StudioError('studio_metric_candidate_unavailable', 409);
+    const file = await options.projects.readFile(owner.projectId, ref.locator), publication = prepareSapPublication(new Uint8Array(file.bytes));
     if (publication.document.package.id !== ref.id || publication.document.package.version !== ref.version || publication.bytesSha256 !== ref.sha256) throw new StudioError('studio_publication_changed', 409);
     return publication;
   }
   async function validatePublicationRefs(system: StudioSystem, refs: StudioSourceRef[]) {
     for (const ref of refs) {
+      if (enterpriseScope.active() && ['sap-metric','sap-method'].includes(ref.authority)) await assertNativeEnterprise(ref.authority, ref.id, system.enterpriseId ?? enterpriseScopes.enterpriseIdForProject(studioExecutionOwner(system).projectId));
       if (ref.authority === 'sap-metric' && ref.locator?.startsWith('020_clean/')) await metricDraft(system, ref);
-      else await sources.validate(ref, system.projectId, system.id, { construction: true });
+      else await sources.validate(ref, studioExecutionOwner(system).projectId, system.id, { construction: true });
     }
   }
   async function publish(system: StudioSystem, previewId: string, fingerprint: string) {
     const preview = system.publications.find(value => value.preview.id === previewId)?.preview;
     if (!preview) throw new StudioError('studio_publication_not_found', 404);
     await validatePublicationRefs(system, preview.refs);
+    for (const contribution of preview.contributions ?? []) await qualifyContributionEvidence(system, contribution.sourceProjectId, contribution.sourceTaskId, contribution);
     const publication = store.confirmPublication(system.id, previewId, fingerprint);
     for (const ref of preview.refs.filter(item => ['sap-metric','sap-method'].includes(item.authority))) {
       const module = ref.authority as 'sap-metric' | 'sap-method';
@@ -136,6 +162,50 @@ export function createStudioFeature(options: StudioHostOptions) {
     if (target.kind === 'enterprise') return sourceRef({ authority: 'enterprise', id: target.materialId, version: target.revisionId, ...hashPart, locator: target.storeId });
     if (owner && ['data-input', 'data-description'].includes(String(target.kind))) return sourceRef({ authority: 'data', id: target.datasetId, version: target.kind === 'data-input' ? target.inputVersionId : target.descriptionRevisionId, ...hashPart, projectId: target.projectId, taskId: owner.taskId, locator: JSON.stringify(identity) });
     if (owner && ['case-decision', 'case-choice'].includes(String(target.kind))) return sourceRef({ authority: 'case', id: target.kind === 'case-decision' ? target.recordId : target.choiceId, version: target.kind === 'case-decision' ? String(target.revision) : '1', ...hashPart, projectId: owner.projectId, taskId: owner.taskId, locator: JSON.stringify(identity) });
+  }
+  async function qualifyContributionEvidence(system: StudioSystem, projectId: string, taskId: string, evidence: { report: StudioSourceRef; sourceRefs?: StudioSourceRef[]; baseRefs: StudioSourceRef[] }) {
+    for (const ref of [evidence.report, ...(evidence.sourceRefs ?? []), ...evidence.baseRefs]) await sources.validate(ref, projectId, system.id, { taskId });
+    const enterpriseId = enterpriseScopes.enterpriseIdForProject(projectId);
+    if (enterpriseId) {
+      const current = (await enterpriseCatalog.catalog(enterpriseId)).items.filter(item => item.eligible && item.ref);
+      for (const ref of evidence.baseRefs.filter(ref => ['enterprise','sap-metric','sap-method','studio-source'].includes(ref.authority))) if (!current.some(item => item.ref!.authority === ref.authority && item.ref!.id === ref.id && item.ref!.version === ref.version && (!item.ref!.sha256 || !ref.sha256 || item.ref!.sha256 === ref.sha256))) throw new StudioError('studio_contribution_base_conflict', 409);
+    }
+  }
+  async function qualifySelectedContributions(system: StudioSystem, input: Record<string, unknown>) {
+    const ids = Array.isArray(input.assetIds) ? input.assetIds : [], refs = parseSources(input.refs ?? []);
+    for (const contribution of system.contributions ?? []) {
+      const linked = contribution.linked;
+      if (linked && (linked.assetId ? ids.includes(linked.assetId) : linked.ref && refs.some(ref => digest(ref) === digest(linked.ref)))) await qualifyContributionEvidence(system, contribution.sourceProjectId, contribution.sourceTaskId, contribution.revisions.at(-1)!);
+    }
+  }
+  async function contributionInput(system: StudioSystem, payload: Record<string, unknown>, projectId: string, taskId: string): Promise<StudioContributeInput> {
+    const project = await options.projects.get(projectId); await options.projects.getTask(projectId, taskId);
+    if (project.archivedAt !== null) throw new StudioError('studio_project_read_only', 409);
+    if (!availableFor(system, projectId)) throw new StudioError('studio_owner_mismatch', 403);
+    let report: StudioSourceRef, refs = parseSources(payload.sourceRefs ?? []);
+    if (payload.origin !== undefined) {
+      if (payload.report !== undefined || !object(payload.origin)) throw new StudioError('invalid_studio_contribution_report');
+      const origin = payload.origin;
+      if (uuid(origin.projectId) !== projectId || uuid(origin.taskId) !== taskId) throw new StudioError('studio_contribution_owner_mismatch', 403);
+      const selection = { sessionId: text(origin.sessionId, 200, false), messageId: text(origin.messageId, 200, false) }, original = await options.readTaskReply(projectId, taskId, selection), sha256 = createHash('sha256').update(original.text).digest('hex');
+      report = sourceRef({ authority: 'task', id: taskId, projectId, taskId, version: sha256, sha256, locator: JSON.stringify({ kind: 'native-reply', ...selection }) });
+      if (options.taskSnapshot) {
+        const snapshot = await options.taskSnapshot(projectId, taskId), index = snapshot.messages.findIndex(message => message.role === 'assistant' && message.nativeSessionId === selection.sessionId && message.nativeEntryId === selection.messageId);
+        if (index < 0) throw new StudioError('studio_contribution_origin_unavailable', 409);
+        const turn: Record<string, any>[] = [];
+        for (let at = index - 1; at >= 0 && snapshot.messages[at]?.role !== 'user'; at--) turn.unshift(snapshot.messages[at]!);
+        for (const message of turn) {
+          if (message.role !== 'toolResult' || message.isError) continue;
+          if (message.toolName === 'studio_assets' && message.details?.type === 'optracall.studio' && ['read-source','read'].includes(message.details.action) && message.details.result?.ref) refs.push(sourceRef(message.details.result.ref));
+          if (message.details?.type === 'optracall.semantic-context-result' && ['read','trace'].includes(message.details.action)) for (const item of [...(message.details.items ?? []), ...(message.details.unknownTime ?? [])]) if (typeof item.body === 'string') { const ref = nativeSourceRef(item.target, item.sha256, { projectId, taskId }); if (ref) refs.push(ref); }
+          if (message.details?.type === 'optracall.semantic-graph-result') for (const target of [...[...(message.details.nodes ?? []), ...(message.details.edges ?? [])].flatMap(item => item.metadata?.sourceRefs ?? []), ...(message.details.sources ?? []).flatMap((source: Record<string, any>) => source.ref ? [source.ref] : [])]) { const ref = nativeSourceRef(target, undefined, { projectId, taskId }); if (ref) refs.push(ref); }
+        }
+      }
+    } else report = sourceRef(payload.report);
+    if (report.authority !== 'task' || report.id !== taskId || report.projectId !== projectId || report.taskId !== taskId || !report.sha256) throw new StudioError('studio_contribution_report_mismatch', 403);
+    refs = [...new Map(refs.map(ref => [digest(ref), ref])).values()]; const baseRefs = parseSources(payload.baseRefs ?? []);
+    await qualifyContributionEvidence(system, projectId, taskId, { report, sourceRefs: refs, baseRefs });
+    return { ...payload, sourceProjectId: projectId, sourceTaskId: taskId, report, sourceRefs: refs, baseRefs } as unknown as StudioContributeInput;
   }
   const reply = (action: string, value: unknown): StudioToolResult => {
     const text = JSON.stringify(value); if (text.length > 30_000) throw new StudioError('studio_result_too_large', 413);
@@ -202,7 +272,9 @@ export function createStudioFeature(options: StudioHostOptions) {
     body: 'Optional existing structured projection: save-asset body is a JSON string of {entities:[{key,text,label}],relationships:[{source,target,predicate,weak?:boolean}]}. entities is non-empty, with unique local keys and non-empty string key/text/label; relationships may be omitted or empty. source and target are local entity keys and predicate is a non-empty string.',
     meaning: 'A reviewed declared relation is directed source -> target with its exact predicate. Mark weak clues with weak:true; related_to/co_occurs/cooccurs remain weak clues even without that flag. Plain text is a legal statement source with no inferred asserted relation. The existing GraphBuilder projects declared relations and does not guess business direction or semantics. Choose structure only when supported by the actual sources; no all-page or structured-body requirement.',
   }, actions: {
-    'read': '{systemId,payload?:{assetId?,revision?,section?:assets|materials|workItems|feedback|uses|publications|topics|assetRefs,start?,length?}}; small replies keep original shape. If transport.complete=false follow its continuation. Construction format:json-text reads exact original JSON, optional assetId+revision or section+publicationId/topicId; no section selects whole own system. JSON-text ranges are unicode-codepoints, expectedJsonSha256 pins the value and continuation; no full-read gate. Ordinary analysis keeps formal-source qualification; read section:publications returns only currently relevant confirmed decisions and actual module receipts/project adoption, optional publicationId and format:json-text with pinned continuation. These are publication facts, not professional scores. read-source reads exact source body with explicit ranges',
+    'catalog': '{payload?:{start?,length?,expectedCatalogSha256?}}; bounded enterprise directory of system summaries and currently eligible native/source exact references. Follow the returned continuation; a changed catalog rejects the old continuation rather than silently mixing pages. Directory visibility is not actual source reading or use.',
+    'contribute': '{systemId,payload:{contributionId?,expectedRevision?,scope:enterprise|task,report:exact own task report SourceRef,sourceRefs:SourceRef[],baseRefs?:SourceRef[],baseSystemRevision?,candidate:{kind,title,body,scope,reason?}}}; source project/task are Host-bound. Saves only this task proposal, never a formal asset or publication. Enterprise integration separately validates the current construction owner, exact candidate and current bases. task scope stays task-local. read section:contributions lists only own proposals for ordinary tasks, or the construction workspace list; contributionId selects an exact proposal for bounded JSON-text recovery.',
+    'read': '{systemId,payload?:{assetId?,revision?,section?:assets|materials|workItems|feedback|uses|publications|topics|assetRefs|contributions,contributionId?,start?,length?}}; small replies keep original shape. If transport.complete=false follow its continuation. Construction format:json-text reads exact original JSON, optional assetId+revision or section+publicationId/topicId; no section selects whole own system. JSON-text ranges are unicode-codepoints, expectedJsonSha256 pins the value and continuation; no full-read gate. Ordinary analysis keeps formal-source qualification; read section:publications returns only currently relevant confirmed decisions and actual module receipts/project adoption, optional publicationId and format:json-text with pinned continuation. These are publication facts, not professional scores. read-source reads exact source body with explicit ranges',
     'add-topic': '{title,goal,scope}; creates a topic in this system without renaming or copying prior assets; update-topic currentTopicId then continues the same construction task',
     'update-topic': '{expectedRevision?,name?,currentTopicId?,topic?:{title?,goal?,scope?,progress?,status?,coverage?:string[],gaps?:string[]}}; topic fields must be nested in topic; bounded write receipt retains saved system revision and exact topic read continuation',
     'read-source': '{ref,start?:codepoint-offset,length?:1..20000}; complete=false requires continuation; reading is not business adoption',
@@ -218,10 +290,10 @@ export function createStudioFeature(options: StudioHostOptions) {
     'update-feedback': '{feedbackId,status,response,sources?,verification?:{sources,result}}; verified requires matching revised formal source versions, exact new use report+assessment report+used sources; accepted is not repair',
   }, note: 'Checks are author evidence, not Host business truth. Formal publication, adoption, graph refresh and use verification remain separate.' };
   const api = {
-    store, sources, workspace, constructionFor, availableFor,
-    availableForTask: (projectId: string, taskId: string) => store.list().some(system => system.projectId === projectId && system.taskId === taskId || system.usageTasks?.some(task => task.projectId === projectId && task.taskId === taskId)),
-    async prepareContext(projectId: string, taskId: string, selection?: unknown) {
-      const construction = constructionFor(projectId, taskId);
+    store, sources, workspace, constructionFor, availableFor, enterpriseScopes, enterpriseCatalog, enterpriseScope,
+    availableForTask: (projectId: string, taskId: string) => Boolean(enterpriseScopes.enterpriseIdForProject(projectId)) || Boolean(constructionFor(projectId, taskId)) || store.list().some(system => system.usageTasks?.some(task => task.projectId === projectId && task.taskId === taskId)),
+    async prepareContext(projectId: string, taskId: string, selection?: unknown, mode: { analysisOnly?: boolean } = {}) {
+      const construction = mode.analysisOnly ? undefined : constructionFor(projectId, taskId);
       let system = construction, purpose: 'construction' | 'analysis' = construction ? 'construction' : 'analysis';
       if (selection !== undefined) {
         if (!object(selection) || !['construction','analysis'].includes(String(selection.purpose))) throw new StudioError('invalid_studio_context');
@@ -244,19 +316,52 @@ export function createStudioFeature(options: StudioHostOptions) {
       if (body.length > 48_000) throw new StudioError('studio_context_too_large', 413);
       return { systemId: system.id, purpose, refs, text: `Studio来源与建设上下文（真实保存记录；不是新的企业事实或专业通过）：\n${body}\n你自主选择取材、工具、协作、核查及修订。沿studio_assets按需读准确来源和正文。候选仅供建设，不能作为普通分析正式规则；反馈记录不等于确错或已后台修复。普通分析不以体系建齐为前提。` };
     },
-    port(projectId: string, taskId: string): StudioPort {
+    port(projectId: string, taskId: string, mode: { analysisOnly?: boolean } = {}): StudioPort {
       return async (action: StudioAction, input, context) => {
         context.assertCurrent(); context.signal.throwIfAborted();
         const project = await options.projects.get(projectId); await options.projects.getTask(projectId, taskId);
         if (project.archivedAt !== null || options.closing()) throw new StudioError('studio_run_unavailable', 409);
-        const construction = constructionFor(projectId, taskId), payload = object(input.payload) ? input.payload : {};
-        if (action === 'catalog') return reply(action, { systems: store.list().filter(system => availableFor(system, projectId)).map(system => ({ id: system.id, name: system.name, projectId: system.projectId, taskId: system.taskId, topics: construction?.id === system.id ? system.topics : analysisTopics(system), construction: construction?.id === system.id })), contract: sourceContract });
+        if (mode.analysisOnly && !(STUDIO_READ_ACTIONS as readonly string[]).includes(action)) throw new StudioError('studio_read_only', 403);
+        const construction = mode.analysisOnly ? undefined : constructionFor(projectId, taskId), payload = object(input.payload) ? input.payload : {};
+        const assertCurrent = async () => { context.assertCurrent(); context.signal.throwIfAborted(); const latest = await options.projects.get(projectId); context.assertCurrent(); context.signal.throwIfAborted(); if (latest.archivedAt !== null || options.closing()) throw new StudioError('studio_run_unavailable', 409); };
+        if (action === 'catalog') {
+          const enterpriseId = enterpriseScopes.enterpriseIdForProject(projectId);
+          const systems = store.list().filter(system => availableFor(system, projectId)).map(system => ({ id: system.id, name: system.name, projectId: system.projectId, taskId: system.taskId, executionOwner: studioExecutionOwner(system), topics: system.topics.map(({ id, title }) => ({ id, title })), construction: construction?.id === system.id }));
+          const items = enterpriseId ? (await enterpriseCatalog.catalog(enterpriseId)).items.filter(item => item.eligible && item.ref) : [];
+          const directory = [...systems.map(system => ({ kind: 'system' as const, system })), ...items.map(item => ({ kind: 'source' as const, item }))];
+          const catalogSha256 = digest(directory);
+          if (payload.expectedCatalogSha256 !== undefined && payload.expectedCatalogSha256 !== catalogSha256) throw new StudioError('studio_catalog_changed', 409);
+          const start = payload.start === undefined ? 0 : Number(payload.start), length = payload.length === undefined ? 20 : Number(payload.length);
+          if (!Number.isSafeInteger(start) || start < 0 || start > directory.length || !Number.isSafeInteger(length) || length < 1 || length > 100) throw new StudioError('invalid_studio_source_range');
+          let end = Math.min(directory.length, start + length);
+          const page = () => { const selected = directory.slice(start, end); return { ...(enterpriseId ? { enterpriseId } : {}), systems: selected.flatMap(entry => entry.kind === 'system' ? [entry.system] : []), items: selected.flatMap(entry => entry.kind === 'source' ? [entry.item] : []), catalogSha256, range: { start, end, total: directory.length, unit: 'entries' }, complete: end === directory.length, continuation: end < directory.length ? { action: 'catalog', payload: { start: end, length, expectedCatalogSha256: catalogSha256 } } : null, contract: sourceContract }; };
+          while (end > start && JSON.stringify(page()).length > 28_000) end--;
+          if (end === start && start < directory.length) throw new StudioError('studio_result_too_large', 413);
+          await assertCurrent(); return reply(action, page());
+        }
         const id = input.systemId === undefined ? construction?.id : uuid(input.systemId);
+        if (!id && action === 'read-source') {
+          const ref = sourceRef(payload.ref);
+          if (!['enterprise','sap-metric','sap-method'].includes(ref.authority) || ref.locator?.startsWith('020_clean/')) throw new StudioError('studio_system_required');
+          return options.mutate(async () => { await assertCurrent(); const read = await sources.read(ref, projectId, undefined, { taskId }); context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503); const { text: body, ...metadata } = read, page = studioTextPage(body, { ...payload, length: payload.length === undefined ? 16_000 : payload.length }, metadata, {}); return reply(action, { ...page, complete: read.complete && page.complete }); });
+        }
         if (!id) throw new StudioError('studio_system_required');
         const system = store.get(id), isConstruction = construction?.id === id;
         if (!availableFor(system, projectId)) throw new StudioError('studio_owner_mismatch', 403);
-        const assertCurrent = async () => { context.assertCurrent(); context.signal.throwIfAborted(); const latest = await options.projects.get(projectId); context.assertCurrent(); context.signal.throwIfAborted(); if (latest.archivedAt !== null || options.closing()) throw new StudioError('studio_run_unavailable', 409); };
         if (action === 'read') {
+          if (payload.section === 'contributions') {
+            const list = (system.contributions ?? []).filter(item => isConstruction || item.sourceProjectId === projectId && item.sourceTaskId === taskId);
+            if (payload.contributionId !== undefined) {
+              const contributionId = uuid(payload.contributionId), contribution = list.find(item => item.id === contributionId); if (!contribution) throw new StudioError('studio_contribution_not_found', 404);
+              const selection = { section: 'contributions', contributionId };
+              if (payload.format === 'json-text') return reply(action, studioJsonPage(contribution, payload, { systemId: id, ...selection }, selection));
+              return boundedReply(action, contribution, { contribution: { id: contribution.id, revision: contribution.revision } }, id, { action: 'read', payload: jsonRead(contribution, selection) });
+            }
+            if (payload.format === 'json-text') return reply(action, studioJsonPage(list, payload, { systemId: id, section: 'contributions' }, { section: 'contributions' }));
+            const start = payload.start === undefined ? 0 : Number(payload.start), length = payload.length === undefined ? 10 : Number(payload.length);
+            if (!Number.isSafeInteger(start) || start < 0 || !Number.isSafeInteger(length) || length < 1 || length > 20) throw new StudioError('invalid_studio_source_range');
+            return boundedReply(action, { systemId: id, items: list.slice(start, start + length), range: { start, end: Math.min(list.length, start + length), total: list.length } }, { systemId: id, section: 'contributions', count: list.length }, id, { action: 'read', payload: jsonRead(list, { section: 'contributions' }) });
+          }
           if (!isConstruction && payload.section === 'publications') return options.mutate(async () => {
             await assertCurrent();
             const current = await analysisSupply(store.get(id), projectId, taskId);
@@ -299,6 +404,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           return reply(action, await api.prepareContext(projectId, taskId, { systemId: id, purpose: 'analysis' }));
         }
         if (action === 'read-source') { const ref = sourceRef(payload.ref); return options.mutate(async () => { await assertCurrent(); const read = await sources.read(ref, projectId, id, { construction: isConstruction, taskId }); context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503); const { text: body, ...metadata } = read, qualifications = !isConstruction ? { publications: publicationFacts(store.get(id), projectId, [read.ref]).map(publication => publicationIndex(id, publication)) } : {}, page = studioTextPage(body, { ...payload, length: payload.length === undefined ? 16_000 : payload.length }, { ...metadata, ...qualifications }, {}); return reply(action, { ...page, complete: read.complete && page.complete }); }); }
+        if (action === 'contribute') return options.mutate(async () => { await assertCurrent(); const prepared = await contributionInput(store.get(id), payload, projectId, taskId); context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503); const contribution = store.contribute(id, prepared); return boundedReply(action, { contribution, claim: 'task-owned-candidate-not-formal-publication-or-use' }, { contribution: { id: contribution.id, revision: contribution.revision, sourceProjectId: projectId, sourceTaskId: taskId } }, id, { action: 'read', payload: jsonRead(contribution, { section: 'contributions', contributionId: contribution.id }) }); });
         if (action === 'feedback') { const refs = parseSources(payload.sources ?? []); await validateSources(refs, system, projectId, isConstruction); return options.mutate(async () => { await assertCurrent(); const feedback = store.addFeedback(id, { ...payload, sources: refs, origin: undefined } as unknown as StudioFeedbackInput); return reply(action, { feedback, claim: 'recorded-not-repaired' }); }); }
         if (action === 'declare-use') {
           const report = sourceRef(payload.report), refs = parseSources(payload.sources ?? []);
@@ -364,6 +470,8 @@ export function createStudioFeature(options: StudioHostOptions) {
           await assertCurrent(); await active(id); context.assertCurrent(); context.signal.throwIfAborted();
           if (action === 'save-sap-method') {
             const refs = parseSources(payload.sources ?? []); await validateSources(refs, system); context.assertCurrent(); context.signal.throwIfAborted();
+            if (typeof payload.methodId === 'string' && enterpriseScope.active()) await assertNativeEnterprise('sap-method', payload.methodId, system.enterpriseId ?? enterpriseScopes.enterpriseIdForProject(projectId));
+            context.assertCurrent(); context.signal.throwIfAborted();
             const saved = methods.save({ requestId: operationId(['studio-method-save', projectId, taskId, context.requestId, context.sessionId, context.toolCallId]), origin: 'other', title: String(payload.title ?? ''), content: payload.content as { conditions: string; logic: string; judgment: string; limits: string }, sources: refs.map(ref => ({ type: 'manual', label: ref.title || ref.id, ref: JSON.stringify(ref), version: ref.version, sha256: ref.sha256 || null })), ...(typeof payload.methodId === 'string' ? { methodId: payload.methodId, baseVersion: Number(payload.baseVersion) } : {}), ...(payload.relation ? { relation: payload.relation as Parameters<typeof methods.save>[0]['relation'] } : {}) });
             const ref: StudioSourceRef = { authority: 'sap-method', id: saved.method.id, version: String(saved.version.version), sha256: saved.version.contentSha256, title: saved.version.title, locator: 'candidate' };
             store.addAssetRef(id, ref); return boundedReply(action, { ref, version: saved.version, status: 'saved-unpublished' }, { ref, version: { version: saved.version.version, contentSha256: saved.version.contentSha256 }, status: 'saved-unpublished' }, id, { action: 'read-source', payload: { ref, start: 0, length: 12_000 } });
@@ -372,6 +480,8 @@ export function createStudioFeature(options: StudioHostOptions) {
             const locator = text(payload.path, 1024, false);
             if (!/^020_clean\/.+\.ya?ml$/.test(locator)) throw new StudioError('studio_metric_candidate_unavailable');
             const file = await options.projects.readFile(projectId, locator), publication = prepareSapPublication(new Uint8Array(file.bytes)); context.assertCurrent(); context.signal.throwIfAborted();
+            if (enterpriseScope.active()) await assertNativeEnterprise('sap-metric', publication.document.package.id, system.enterpriseId ?? enterpriseScopes.enterpriseIdForProject(projectId));
+            context.assertCurrent(); context.signal.throwIfAborted();
             const ref: StudioSourceRef = { authority: 'sap-metric', id: publication.document.package.id, version: publication.document.package.version, sha256: publication.bytesSha256, projectId, locator, title: publication.document.package.id };
             store.addAssetRef(id, ref); return reply(action, { ref, status: 'project-candidate-not-published', checks: 'original SAP structural validation only; business review remains Agent responsibility' });
           }
@@ -381,7 +491,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           if (action === 'add-topic') return reply(action, { topic: store.addTopic(id, { title: text(payload.title, 200, false), goal: text(payload.goal, 20_000, false), scope: text(payload.scope, 20_000) }) });
           if (action === 'update-topic') { const saved = store.update(id, payload as unknown as StudioUpdateInput), topic = saved.topics.find(value => value.id === saved.currentTopicId)!; return boundedReply(action, { system: saved }, { system: { id: saved.id, revision: saved.revision, currentTopicId: saved.currentTopicId }, topic: { id: topic.id } }, id, { action: 'read', payload: jsonRead(topic, { section: 'topics', topicId: topic.id }) }); }
           if (action === 'attach-ref') { const ref = sourceRef(payload.ref); await sources.validate(ref, projectId, id, { construction: true }); context.assertCurrent(); context.signal.throwIfAborted(); return reply(action, { ref: store.addAssetRef(id, ref) }); }
-          if (action === 'prepare-publication') { await validatePublicationRefs(system, parseSources(payload.refs ?? [])); context.assertCurrent(); context.signal.throwIfAborted(); const preview = store.preparePublication(id, payload as unknown as StudioPublicationInput), publication = store.get(id).publications.find(value => value.preview.id === preview.id)!; return boundedReply(action, { preview, claim: 'prepared-not-approved' }, { preview: { id: preview.id, fingerprint: preview.fingerprint, systemRevision: preview.systemRevision, topicId: preview.topicId, itemCount: preview.items.length, refCount: preview.refs.length }, claim: 'prepared-not-approved' }, id, { action: 'read', payload: jsonRead(publication, { section: 'publications', publicationId: preview.id }) }); }
+          if (action === 'prepare-publication') { await validatePublicationRefs(system, parseSources(payload.refs ?? [])); await qualifySelectedContributions(system, payload); context.assertCurrent(); context.signal.throwIfAborted(); const preview = store.preparePublication(id, payload as unknown as StudioPublicationInput), publication = store.get(id).publications.find(value => value.preview.id === preview.id)!; return boundedReply(action, { preview, claim: 'prepared-not-approved' }, { preview: { id: preview.id, fingerprint: preview.fingerprint, systemRevision: preview.systemRevision, topicId: preview.topicId, itemCount: preview.items.length, refCount: preview.refs.length }, claim: 'prepared-not-approved' }, id, { action: 'read', payload: jsonRead(publication, { section: 'publications', publicationId: preview.id }) }); }
           if (action === 'mark-issue') { const refs = parseSources(payload.sources); if (!refs.length) throw new StudioError('studio_issue_evidence_required'); await validateSources(refs, system); context.assertCurrent(); context.signal.throwIfAborted(); const asset = system.assets.find(asset => asset.id === payload.assetId); if (!asset || asset.formalRevision !== payload.revision) throw new StudioError('studio_asset_conflict', 409); return reply(action, { asset: store.markAssetIssue(id, asset.id, text(payload.reason, 20_000, false)), evidence: refs, claim: 'construction-agent-explicit-governance-decision-not-automatic-feedback' }); }
           if (action === 'update-feedback') { if (payload.sources !== undefined) { await validateSources(parseSources(payload.sources), system); context.assertCurrent(); context.signal.throwIfAborted(); } if (payload.status === 'verified') { if (!object(payload.verification)) throw new StudioError('studio_use_verification_required', 409); const refs = parseSources(payload.verification.sources); for (const ref of refs) { if (ref.authority === 'task') { const owner = system.uses.find(use => digest(use.report) === digest(ref) || use.assessments?.some(assessment => digest(assessment.report) === digest(ref))); if (!owner) throw new StudioError('studio_use_verification_required', 409); await sources.validate(ref, owner.projectId, id); } else { const use = system.uses.find(use => use.sources.some(source => digest(source) === digest(ref))); await sources.validate(ref, use?.projectId ?? projectId, id, { construction: !use }); } } context.assertCurrent(); context.signal.throwIfAborted(); } return reply(action, { feedback: store.updateFeedback(id, uuid(payload.feedbackId), payload as unknown as StudioFeedbackUpdate) }); }
           throw new StudioError('studio_action_not_available', 409);
@@ -394,7 +504,56 @@ export function createStudioFeature(options: StudioHostOptions) {
     async handle(request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean> {
       if (!url.pathname.startsWith('/api/studio/')) return false;
       try {
-        if (url.pathname === '/api/studio/systems' && request.method === 'GET') { json(response, 200, { systems: store.list() }); return true; }
+        if (url.pathname === '/api/studio/enterprises' && request.method === 'GET') { json(response, 200, enterpriseScopes.list()); return true; }
+        if (url.pathname === '/api/studio/foundation' && request.method === 'GET') { json(response, 200, await enterpriseCatalog.catalog(uuid(url.searchParams.get('enterpriseId')))); return true; }
+        if (url.pathname === '/api/studio/enterprises' && request.method === 'POST') {
+          const input = await options.readBody(request), requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
+          const receipt = await options.mutate(() => operations.run(requestId, { path: url.pathname, input }, async () => {
+            if (options.closing()) throw new StudioError('host_closing', 503);
+            return { statusCode: 201, result: enterpriseScopes.create({ name: text(input.name, 200, false) }) as unknown as Record<string, unknown> };
+          }));
+          json(response, receipt.statusCode || 201, receipt.result); return true;
+        }
+        if (url.pathname === '/api/studio/enterprise-associations' && request.method === 'POST') {
+          const input = await options.readBody(request), requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
+          const receipt = await options.mutate(() => operations.run(requestId, { path: url.pathname, input }, async () => {
+            if (options.closing()) throw new StudioError('host_closing', 503);
+            if (input.kind === 'case') {
+              if (!options.cases) throw new StudioError('studio_case_unavailable', 503);
+              const record = options.cases.getCase(uuid(input.entityId));
+              if (input.expectedRevision !== undefined && input.expectedRevision !== record.revision) throw new StudioError('enterprise_source_conflict', 409);
+              const enterpriseId = uuid(input.enterpriseId); enterpriseScopes.get(enterpriseId);
+              if (options.cases.listProjectLinks(record.id).some(link => { const owner = enterpriseScopes.enterpriseIdForProject(link.projectId); return owner && owner !== enterpriseId; })) throw new StudioError('enterprise_assignment_conflict', 409);
+              return { result: enterpriseScopes.associateCase(record.id, enterpriseId) as unknown as Record<string, unknown> };
+            }
+            if (input.kind === 'asset') {
+              const authority = String(input.authority), id = text(input.entityId, 1000, false);
+              let current: string | number;
+              if (authority === 'enterprise') current = (await options.enterpriseMaterials.get(uuid(id))).material.version;
+              else if (authority === 'sap-method') {
+                const method = methods.list().find(item => item.id === id); if (!method) throw new StudioError('enterprise_source_not_found', 404); current = method.latestVersion;
+              } else if (authority === 'sap-metric') {
+                const entries = library.list().filter(item => item.id === id); if (!entries.length) throw new StudioError('enterprise_source_not_found', 404); current = entries.at(-1)!.version;
+              } else throw new StudioError('invalid_enterprise_asset_authority');
+              if (input.expectedRevision !== undefined && input.expectedRevision !== current) throw new StudioError('enterprise_source_conflict', 409);
+              await assertNativeEnterprise(authority, id, uuid(input.enterpriseId));
+              if (options.closing()) throw new StudioError('host_closing', 503);
+              return { result: enterpriseScopes.associateAsset(authority, id, uuid(input.enterpriseId)) as unknown as Record<string, unknown> };
+            }
+            if (input.kind !== 'project') throw new StudioError('invalid_enterprise_assignment');
+            const projectId = uuid(input.entityId), project = (await options.projects.list()).find(item => item.id === projectId);
+            if (!project) throw new StudioError('studio_project_not_found', 404);
+            if (project.archivedAt !== null) throw new StudioError('studio_project_read_only', 409);
+            assertProjectEnterprise(projectId, uuid(input.enterpriseId));
+            return { result: enterpriseScopes.associateProject(project.id, uuid(input.enterpriseId)) as unknown as Record<string, unknown> };
+          }));
+          json(response, receipt.statusCode || 200, receipt.result); return true;
+        }
+        if (url.pathname === '/api/studio/systems' && request.method === 'GET') {
+          const query = url.searchParams.get('projectId'); let systems = store.list();
+          if (query !== null) { const projectId = uuid(query); if (!(await options.projects.list()).some(project => project.id === projectId)) throw new StudioError('studio_project_not_found', 404); systems = systems.filter(system => availableFor(system, projectId)); }
+          json(response, 200, { systems }); return true;
+        }
         if (url.pathname === '/api/studio/materials' && request.method === 'GET') { json(response, 200, { materials: await sources.inventory(uuid(url.searchParams.get('projectId'))) }); return true; }
         const op = /^\/api\/studio\/operations\/([a-f0-9-]+)$/.exec(url.pathname);
         if (op && request.method === 'GET') { let receipt = operations.read(op[1]); if (!receipt) throw new StudioError('studio_operation_not_found', 404); if (receipt.status === 'unknown' && receipt.effect?.kind === 'graph' && options.inspectGraph) { try { const effect = receipt.effect, graph = await options.inspectGraph(effect.systemId, effect.snapshotId); receipt = await options.mutate(async () => { const latest = operations.read(op[1]); if (latest?.status !== 'unknown') return latest!; await active(effect.systemId); if (!store.get(effect.systemId).graphs.some(g => g.snapshotId === graph.snapshotId && g.status === 'succeeded')) store.recordGraph(effect.systemId, { ...graph, status: 'succeeded' }); return { ...latest, result: { system: store.get(effect.systemId), output: { status: 'succeeded', snapshotId: graph.snapshotId }, lifecycle: { status: 'unknown', detail: '只证明派生输出存在，公共资源收尾仍未知；不自动重放或绕过清理' } } }; }); } catch { /* Missing, partial or ineligible output remains UNKNOWN. */ } } json(response, 200, receipt); return true; }
@@ -402,11 +561,21 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (!route) throw new StudioError('studio_not_found', 404);
         const id = route[1], action = route[2];
         if (id && !action && request.method === 'GET') { json(response, 200, await workspace(id)); return true; }
+        if (id && action === 'contributions' && request.method === 'GET') {
+          const system = store.get(id), projectQuery = url.searchParams.get('projectId'), taskQuery = url.searchParams.get('taskId');
+          let items = system.contributions ?? [];
+          if (projectQuery !== null || taskQuery !== null) {
+            const projectId = uuid(projectQuery), taskId = uuid(taskQuery); await options.projects.getTask(projectId, taskId);
+            if (!availableFor(system, projectId)) throw new StudioError('studio_owner_mismatch', 403);
+            if (constructionFor(projectId, taskId)?.id !== id) items = items.filter(item => item.sourceProjectId === projectId && item.sourceTaskId === taskId);
+          }
+          json(response, 200, { items }); return true;
+        }
         const publicationRead = /^publications\/([a-f0-9-]+)\/result$/.exec(action || '');
         if (id && publicationRead && request.method === 'GET') { const publication = await options.mutate(() => reconcilePublication(id, publicationRead[1]!)); json(response, 200, { system: store.get(id), publication }); return true; }
         if (request.method !== 'POST') throw new StudioError('studio_not_found', 404);
         const input = await options.readBody(request, 512 * 1024);
-        if (id && action === 'sources/read') { const state = await workspace(id); json(response, 200, await sources.read(sourceRef(input.ref), state.system.projectId, id, { construction: true })); return true; }
+        if (id && action === 'sources/read') { const state = await workspace(id); json(response, 200, await sources.read(sourceRef(input.ref), state.project.id, id, { construction: true, taskId: state.task.id })); return true; }
         const requestId = uuid(input.requestId);
         if (id && action === 'graph-refresh') {
           // Reserve this exact request before work. The common resource domain
@@ -437,11 +606,75 @@ export function createStudioFeature(options: StudioHostOptions) {
             if (options.closing()) throw new StudioError('host_closing', 503);
             const projectId = uuid(input.projectId), project = await options.projects.get(projectId);
             if (project.archivedAt !== null) throw new StudioError('studio_project_read_only', 409);
-            const name = text(input.name, 200, false), goal = text(input.goal, 20000, false), topicTitle = text(input.topicTitle, 200, false), materials = await selectedMaterials(input.materials, projectId);
+            const name = text(input.name, 200, false), goal = text(input.goal, 20000, false), topicTitle = text(input.topicTitle, 200, false);
+            const enterpriseId = input.enterpriseId === undefined ? enterpriseScopes.enterpriseIdForProject(projectId) : uuid(input.enterpriseId);
+            if (enterpriseId) { enterpriseScopes.get(enterpriseId); assertProjectEnterprise(projectId, enterpriseId); enterpriseScopes.associateProject(projectId, enterpriseId); }
+            const materials = await selectedMaterials(input.materials, projectId);
             const task = await options.projects.createTask(projectId, { name: `Studio · ${name}` }); await options.projects.saveDraft(projectId, task.id, goal);
-            const system = store.create({ name, projectId, taskId: task.id, goal, topicTitle, materials }); return { statusCode: 201, result: { system }, systemId: system.id };
+            const system = store.create({ name, projectId, taskId: task.id, goal, topicTitle, materials, ...(enterpriseId ? { enterpriseId } : {}) }); return { statusCode: 201, result: { system }, systemId: system.id };
           }
           const state = await workspace(id), system = state.system;
+          if (action === 'contributions') {
+            const identity = object(input.origin) ? input.origin : object(input.report) ? input.report : {};
+            const projectId = uuid(identity.projectId), taskId = uuid(identity.taskId);
+            const prepared = await contributionInput(system, input, projectId, taskId);
+            if (options.closing()) throw new StudioError('host_closing', 503);
+            const contribution = store.contribute(id, prepared);
+            return { result: { system: store.get(id), contribution }, systemId: id };
+          }
+          const contributionLink = /^contributions\/([a-f0-9-]+)\/link$/.exec(action || '');
+          if (contributionLink) {
+            await active(id);
+            if (state.running) throw new StudioError('studio_task_busy', 409);
+            if (input.expectedRevision !== undefined && input.expectedRevision !== system.revision) throw new StudioError('studio_conflict', 409);
+            const contribution = system.contributions?.find(item => item.id === contributionLink[1]);
+            if (!contribution) throw new StudioError('studio_contribution_not_found', 404);
+            if (input.expectedContributionRevision !== contribution.revision) throw new StudioError('studio_contribution_conflict', 409);
+            if (contribution.scope !== 'enterprise') throw new StudioError('studio_contribution_task_local', 409);
+            if (!availableFor(system, contribution.sourceProjectId)) throw new StudioError('studio_owner_mismatch', 403);
+            const revision = contribution.revisions.at(-1)!;
+            await qualifyContributionEvidence(system, contribution.sourceProjectId, contribution.sourceTaskId, revision);
+            let ref: StudioSourceRef | undefined;
+            if (input.ref !== undefined) {
+              ref = sourceRef(input.ref);
+              const actual = await sources.read(ref, state.project.id, id, { construction: true, taskId: state.task.id });
+              let candidateBody = revision.candidate.body;
+              if (revision.candidate.kind === 'sap-method') { try { candidateBody = JSON.stringify(JSON.parse(candidateBody)); } catch { throw new StudioError('studio_contribution_target_changed', 409); } }
+              const actualBody = ref.authority === 'sap-method' ? JSON.stringify(JSON.parse(actual.text).content) : actual.text;
+              if (candidateBody !== actualBody) throw new StudioError('studio_contribution_target_changed', 409);
+            } else {
+              const asset = system.assets.find(item => item.id === input.assetId), candidate = asset?.revisions.find(item => item.revision === input.assetRevision);
+              if (!asset || !candidate || candidate.title !== revision.candidate.title || candidate.body !== revision.candidate.body || candidate.scope !== revision.candidate.scope) throw new StudioError('studio_contribution_target_changed', 409);
+            }
+            if (options.closing()) throw new StudioError('host_closing', 503);
+            const linked = store.linkContribution(id, { contributionId: contribution.id, expectedContributionRevision: contribution.revision, ...(ref ? { ref } : { assetId: uuid(input.assetId), assetRevision: Number(input.assetRevision) }) });
+            return { result: { system: store.get(id), contribution: linked }, systemId: id };
+          }
+          if (action === 'maintenance') {
+            if (options.closing()) throw new StudioError('host_closing', 503);
+            if (input.expectedRevision !== system.revision) throw new StudioError('studio_conflict', 409);
+            if (!system.enterpriseId) throw new StudioError('studio_enterprise_required', 409);
+            const projectId = uuid(input.projectId), target = await options.projects.get(projectId);
+            if (target.archivedAt !== null) throw new StudioError('studio_project_read_only', 409);
+            if (enterpriseScopes.enterpriseIdForProject(projectId) !== system.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
+            if (state.running) throw new StudioError('studio_task_busy', 409);
+            let task = input.taskId === undefined ? undefined : await options.projects.getTask(projectId, uuid(input.taskId));
+            if (task && (options.running(target, task) || constructionFor(projectId, task.id) && constructionFor(projectId, task.id)!.id !== id)) throw new StudioError('studio_task_busy', 409);
+            if (!task) { task = await options.projects.createTask(projectId, { name: `Studio · ${system.name}` }); await options.projects.saveDraft(projectId, task.id, system.topics.find(topic => topic.id === system.currentTopicId)!.goal); }
+            if (options.closing()) throw new StudioError('host_closing', 503);
+            return { result: { system: store.resumeMaintenance(id, { projectId, taskId: task.id, expectedRevision: system.revision }), project: await options.projects.get(projectId), task: await options.projects.getTask(projectId, task.id) }, systemId: id };
+          }
+          if (action === 'enterprise') {
+            if (input.expectedRevision !== system.revision) throw new StudioError('studio_conflict', 409);
+            if (state.running || options.closing()) throw new StudioError('studio_task_busy', 409);
+            const enterpriseId = uuid(input.enterpriseId); enterpriseScopes.get(enterpriseId);
+            if (system.enterpriseId && system.enterpriseId !== enterpriseId || enterpriseScopes.enterpriseIdForProject(state.project.id) && enterpriseScopes.enterpriseIdForProject(state.project.id) !== enterpriseId) throw new StudioError('enterprise_assignment_conflict', 409);
+            assertProjectEnterprise(state.project.id, enterpriseId);
+            for (const ref of [...system.materials.map(item => item.ref), ...system.assetRefs, ...system.assets.flatMap(asset => asset.revisions.flatMap(revision => [...revision.sources, ...revision.dependencies]))]) if (['enterprise','sap-metric','sap-method','studio-source'].includes(ref.authority)) await assertNativeEnterprise(ref.authority, ref.id, enterpriseId);
+            if (options.closing()) throw new StudioError('host_closing', 503);
+            enterpriseScopes.associateProject(state.project.id, enterpriseId);
+            return { result: { system: store.associateEnterprise(id, { enterpriseId, expectedRevision: system.revision }) }, systemId: id };
+          }
           if (action === 'feedback') {
             let refs = parseSources(input.sources ?? []);
             let capturedOrigin: import('../../extensions/business-plugins/studio/contracts.ts').StudioFeedbackOrigin | undefined;
@@ -484,11 +717,12 @@ export function createStudioFeature(options: StudioHostOptions) {
             return { result: { system: store.get(id) }, systemId: id };
           }
           await active(id);
-          if (action === 'materials') { for (const material of await selectedMaterials(input.materials, system.projectId)) store.updateMaterial(id, material); }
+          if (action === 'materials') { for (const material of await selectedMaterials(input.materials, state.project.id)) store.updateMaterial(id, material); }
           else if (action === 'assets') await saveAsset(id, input, false);
           else if (action === 'answers') store.answerWorkItem(id, uuid(input.workItemId), text(input.answer, 20_000, false), input.expectedQuestionContextSha256);
           else if (action === 'preview') {
             await validatePublicationRefs(system, parseSources(input.refs ?? []));
+            await qualifySelectedContributions(system, input);
             const preview = store.preparePublication(id, input as unknown as StudioPublicationInput); return { result: { system: store.get(id), preview }, systemId: id };
           }
           else if (action === 'publications') {
@@ -496,6 +730,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           }
           else if (action === 'adoptions') {
             const projectId = uuid(input.projectId), target = await options.projects.get(projectId); if (target.archivedAt !== null) throw new StudioError('studio_project_read_only', 409);
+            if (system.enterpriseId && enterpriseScopes.enterpriseIdForProject(projectId) !== system.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
             const packageId = text(input.packageId, 200, false), version = text(input.version, 50, false), read = library.read(packageId, version);
             createProjectEnablement(path.join(options.dataRoot, 'projects', projectId)).enable(packageId, version);
             store.recordAdoption(id, { projectId, refs: [{ authority: 'sap-metric', id: packageId, version, sha256: read.entry.bytesSha256 }], status: 'succeeded', detail: '原指标包准确项目采用已保存；其他项目不升级，SAP方法无逐项目启用' });
@@ -509,6 +744,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           }
           else if (action === 'use') {
             const projectId = uuid(input.projectId), target = await options.projects.get(projectId); if (target.archivedAt !== null) throw new StudioError('studio_project_read_only', 409);
+            if (system.enterpriseId && enterpriseScopes.enterpriseIdForProject(projectId) !== system.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
             const task = await options.projects.createTask(projectId, { name: `${system.name} · 分析` }); await options.projects.saveDraft(projectId, task.id, '请结合本项目获准资料与适用正式资产，分析当前业务问题。');
             store.linkUsageProject(id, projectId, task.id);
             return { result: { system: store.get(id), project: await options.projects.get(projectId), task }, systemId: id };
@@ -517,7 +753,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           return { result: { system: store.get(id) }, systemId: id };
         }));
         json(response, result.statusCode || 200, result.result); return true;
-      } catch (error) { if (error instanceof StudioError) { json(response, error.status, { code: error.code, message: error.code }); return true; } throw error; }
+      } catch (error) { if (error instanceof StudioError || error instanceof SapMethodStoreError || error instanceof MetricLibraryFault || error instanceof CaseStoreError) { const value = error as { status?: number; statusCode?: number; code: string }; json(response, value.status ?? value.statusCode ?? 409, { code: value.code, message: value.code }); return true; } throw error; }
     },
   };
   return api;

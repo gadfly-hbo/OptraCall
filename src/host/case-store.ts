@@ -8,7 +8,7 @@ import type { CaseDecisionDraftInput, CaseDecisionGovernanceInput, CaseDecisionO
 import { parseCaseDecisionDraft, parseCaseDecisionGovernance, parseCaseDecisionOrigin, parseCaseStrategyChoice } from './case-decision-validation.ts';
 import type {
   CaseStorageStatus, CaseRecord, CaseStatus, CaseProjectLink, ProjectWorkRecord, ProjectWorkInput,
-  CaseArtifactRecord, ArtifactInput, ArtifactAdoption, WorkEvent, WorkEventType, OperationReceipt, CaseContextSelection, CaseContextSnapshot,
+  CaseArtifactRecord, ArtifactInput, ArtifactAdoption, WorkEvent, WorkEventType, OperationReceipt, CaseContextSelection, CaseContextSnapshot, CaseEnterpriseScopeOptions,
 } from './case-types.ts';
 
 const DATABASE = 'decision-cases.sqlite3', MARKER = 'decision-cases-store.json';
@@ -44,6 +44,11 @@ function canonical(value: unknown): string {
   return `{${Object.keys(value).filter(key => (value as Row)[key] !== undefined).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Row)[key])}`).join(',')}}`;
 }
 function sha(value: string): string { return createHash('sha256').update(value).digest('hex'); }
+function operationResult(result: unknown, scope?: CaseEnterpriseScopeOptions): string {
+  if (scope?.enterpriseScopeIntent === undefined) return JSON.stringify(result);
+  const enterpriseScopeIntent = scope.enterpriseScopeIntent === null ? null : uuid(scope.enterpriseScopeIntent);
+  return JSON.stringify({ ...result as Row, enterpriseScopeIntent });
+}
 function changes(before: Row, after: Row): WorkEvent['changes'] {
   const result: WorkEvent['changes'] = {};
   for (const [key, value] of Object.entries(after)) if (canonical(before[key] ?? null) !== canonical(value)) result[key] = { before: before[key] ?? null, after: value };
@@ -277,13 +282,17 @@ export class CaseStore {
     if (!row) return null;
     const result = fromRow<OperationReceipt & { resultJson: string | null }>(row);
     const { resultJson, ...receipt } = result;
-    return { ...receipt, result: resultJson === null ? null : JSON.parse(resultJson) };
+    if (resultJson === null) return { ...receipt, result: null };
+    const parsed = JSON.parse(resultJson) as Row;
+    if (!Object.hasOwn(parsed, 'enterpriseScopeIntent')) return { ...receipt, result: parsed };
+    const { enterpriseScopeIntent, ...nativeResult } = parsed;
+    return { ...receipt, result: nativeResult, enterpriseScopeIntent: enterpriseScopeIntent === null ? null : uuid(enterpriseScopeIntent) };
   }
   listPendingProjectOperations(caseId: string): OperationReceipt[] {
     this.getCase(caseId);
     return this.database().prepare("SELECT operation_id FROM operation_receipts WHERE case_id=? AND kind='project_create_link' AND phase!='completed' ORDER BY created_at,operation_id").all(caseId).map(row => this.getOperation(String(row.operation_id))!);
   }
-  private operation<T>(kind: string, input: { operationId: string } & object, caseId: string | null, projectId: string | null, fn: () => T, options?: CaseDecisionWriteOptions & { decisions?: boolean }): T {
+  private operation<T>(kind: string, input: { operationId: string } & object, caseId: string | null, projectId: string | null, fn: () => T, options?: CaseDecisionWriteOptions & CaseEnterpriseScopeOptions & { decisions?: boolean }): T {
     uuid(input.operationId);
     const digest = sha(canonical({ kind, ...input }));
     let writes = false;
@@ -298,9 +307,9 @@ export class CaseStore {
       options?.assertWritable?.();
       if (options?.decisions) this.upgradeDecisionSchema();
       const time = now();
-      this.insert('operation_receipts', { operationId: input.operationId, kind, requestSha256: digest, caseId, projectId, phase: 'prepared', resultJson: null, createdAt: time, updatedAt: time });
+      this.insert('operation_receipts', { operationId: input.operationId, kind, requestSha256: digest, caseId, projectId, phase: 'prepared', resultJson: options?.enterpriseScopeIntent === undefined ? null : operationResult({}, options), createdAt: time, updatedAt: time });
       const result = fn();
-      this.database().prepare("UPDATE operation_receipts SET phase='completed',result_json=?,updated_at=? WHERE operation_id=?").run(JSON.stringify(result), now(), input.operationId);
+      this.database().prepare("UPDATE operation_receipts SET phase='completed',result_json=?,updated_at=? WHERE operation_id=?").run(operationResult(result, options), now(), input.operationId);
       return result;
     }, () => { if (writes) options?.assertWritable?.(); });
   }
@@ -548,7 +557,7 @@ export class CaseStore {
     this.put('cases', 'id', record); this.event('case', record.id, record.revision, eventType, operationId, delta, time, note);
     return record;
   }
-  createCase(input: { operationId: string; title: string; description?: string; judgement?: string; nextStep?: string; status?: CaseStatus }): CaseRecord {
+  createCase(input: { operationId: string; title: string; description?: string; judgement?: string; nextStep?: string; status?: CaseStatus }, scope?: CaseEnterpriseScopeOptions): CaseRecord {
     const clean = { operationId: input.operationId, title: text(input.title, 80, true, true, true), description: text(input.description ?? '', 20000), judgement: text(input.judgement ?? '', 20000), nextStep: text(input.nextStep ?? '', 5000), status: input.status ?? 'pending' };
     if (!(activeStatuses as readonly string[]).includes(clean.status)) fail('invalid_case_status');
     return this.operation('case_create', clean, null, null, () => {
@@ -558,7 +567,7 @@ export class CaseStore {
       this.database().prepare('UPDATE operation_receipts SET case_id=? WHERE operation_id=?').run(saved.id, clean.operationId);
       this.event('case', saved.id, 1, 'case_created', clean.operationId, changes({}, saved), time);
       return saved;
-    });
+    }, scope);
   }
   updateCase(input: Mutation & { title?: string; description?: string; judgement?: string; nextStep?: string; status?: CaseStatus }): CaseRecord {
     const clean: Mutation & Partial<CaseRecord> = { operationId: uuid(input.operationId), caseId: uuid(input.caseId), expectedRevision: revision(input.expectedRevision) };
@@ -616,7 +625,7 @@ export class CaseStore {
     const link = { caseId: before.id, projectId, linkedAt: now() }; this.insert('case_project_links', link);
     return { case: this.touchCase(before, 'project_linked', operationId, { projectLink: { before: null, after: link } }), link };
   }
-  linkProject(input: Mutation & { projectId: string; recoveryOf?: string }): { case: CaseRecord; link: CaseProjectLink } {
+  linkProject(input: Mutation & { projectId: string; recoveryOf?: string }, scope?: CaseEnterpriseScopeOptions): { case: CaseRecord; link: CaseProjectLink } {
     const clean = { operationId: uuid(input.operationId), caseId: uuid(input.caseId), projectId: uuid(input.projectId), expectedRevision: revision(input.expectedRevision), recoveryOf: input.recoveryOf === undefined ? undefined : uuid(input.recoveryOf) };
     return this.operation('project_link', clean, clean.caseId, clean.projectId, () => {
       const before = this.activeCase(clean.caseId, clean.expectedRevision);
@@ -626,9 +635,9 @@ export class CaseStore {
         if (!original || original.kind !== 'project_create_link' || original.caseId !== clean.caseId || original.projectId !== clean.projectId || original.phase !== 'project_created') fail('invalid_project_recovery', 409);
       }
       const result = this.addProjectLink(before, clean.projectId, clean.operationId);
-      if (original) this.database().prepare("UPDATE operation_receipts SET phase='completed',result_json=?,updated_at=? WHERE operation_id=?").run(JSON.stringify({ ...result, projectId: clean.projectId, recoveredByOperationId: clean.operationId }), now(), original.operationId);
+      if (original) this.database().prepare("UPDATE operation_receipts SET phase='completed',result_json=?,updated_at=? WHERE operation_id=?").run(operationResult({ ...result, projectId: clean.projectId, recoveredByOperationId: clean.operationId }, original), now(), original.operationId);
       return result;
-    });
+    }, scope);
   }
   unlinkProject(input: Mutation & { projectId: string }): { case: CaseRecord; link: null } {
     const clean = { operationId: uuid(input.operationId), caseId: uuid(input.caseId), projectId: uuid(input.projectId), expectedRevision: revision(input.expectedRevision) };
@@ -794,7 +803,7 @@ export class CaseStore {
     });
     return { snapshot, composedPrompt: compose(snapshot.contextText) };
   }
-  reserveProjectCreation(input: CreationInput): OperationReceipt {
+  reserveProjectCreation(input: CreationInput, scope?: CaseEnterpriseScopeOptions): OperationReceipt {
     if (!input.projectInput || Object.keys(input.projectInput).some(key => !['name', 'configurationId'].includes(key))) fail('invalid_project_creation_input');
     const clean = { operationId: uuid(input.operationId), caseId: uuid(input.caseId), projectId: uuid(input.projectId), expectedRevision: revision(input.expectedRevision), projectInput: { name: text(input.projectInput.name, 80, true, true, true), configurationId: text(input.projectInput.configurationId, 200, true, true) } };
     const digest = sha(canonical({ kind: 'project_create_link', ...clean }));
@@ -803,7 +812,7 @@ export class CaseStore {
       if (previous) { if (previous.kind !== 'project_create_link' || previous.requestSha256 !== digest) fail('operation_conflict', 409); return previous; }
       this.activeCase(clean.caseId, clean.expectedRevision);
       const time = now();
-      this.insert('operation_receipts', { operationId: clean.operationId, kind: 'project_create_link', requestSha256: digest, caseId: clean.caseId, projectId: clean.projectId, phase: 'prepared', resultJson: JSON.stringify({ projectId: clean.projectId, expectedRevision: clean.expectedRevision, projectInput: clean.projectInput }), createdAt: time, updatedAt: time });
+      this.insert('operation_receipts', { operationId: clean.operationId, kind: 'project_create_link', requestSha256: digest, caseId: clean.caseId, projectId: clean.projectId, phase: 'prepared', resultJson: operationResult({ projectId: clean.projectId, expectedRevision: clean.expectedRevision, projectInput: clean.projectInput }, scope), createdAt: time, updatedAt: time });
       return this.getOperation(clean.operationId)!;
     });
   }
@@ -825,7 +834,7 @@ export class CaseStore {
     return this.transaction(() => {
       const receipt = this.creationReceipt(operationId);
       if (receipt.phase === 'completed') fail('project_creation_already_completed', 409);
-      if (receipt.phase !== 'needs_review' || receipt.result?.reviewReason !== reviewReason) this.database().prepare("UPDATE operation_receipts SET phase='needs_review',result_json=?,updated_at=? WHERE operation_id=?").run(JSON.stringify({ ...receipt.result, reviewReason }), now(), operationId);
+      if (receipt.phase !== 'needs_review' || receipt.result?.reviewReason !== reviewReason) this.database().prepare("UPDATE operation_receipts SET phase='needs_review',result_json=?,updated_at=? WHERE operation_id=?").run(operationResult({ ...receipt.result, reviewReason }, receipt), now(), operationId);
       return this.getOperation(operationId)!;
     });
   }
@@ -836,7 +845,7 @@ export class CaseStore {
       if (receipt.phase !== 'project_created') fail(receipt.phase === 'needs_review' ? 'project_creation_needs_review' : 'project_creation_incomplete', 409);
       const before = this.activeCase(receipt.caseId!, revision(receipt.result?.expectedRevision));
       const result = { ...this.addProjectLink(before, receipt.projectId!, receipt.operationId), projectId: receipt.projectId! };
-      this.database().prepare("UPDATE operation_receipts SET phase='completed',result_json=?,updated_at=? WHERE operation_id=?").run(JSON.stringify(result), now(), operationId);
+      this.database().prepare("UPDATE operation_receipts SET phase='completed',result_json=?,updated_at=? WHERE operation_id=?").run(operationResult(result, receipt), now(), operationId);
       return result;
     });
   }

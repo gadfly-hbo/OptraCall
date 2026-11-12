@@ -39,7 +39,7 @@ export type EnterpriseMaterialProvision = EnterpriseMaterialRef & {
   start?: number; end?: number; providedText: string; providedAt: string; sourceFile?: EnterpriseSourceFile | null;
 };
 export type EnterpriseContextProvision = {
-  directory: { storeId: string; indexPath: string; providedAt: string; claim: 'directory-visible-not-read' };
+  directory: { storeId: string; indexPath?: string; enterpriseId?: string; summary?: string; providedAt: string; claim: 'directory-visible-not-read' };
   materials: EnterpriseMaterialProvision[];
   case?: EnterpriseCaseSelection & { supplements: EnterpriseCaseSupplement[]; providedAt: string };
 };

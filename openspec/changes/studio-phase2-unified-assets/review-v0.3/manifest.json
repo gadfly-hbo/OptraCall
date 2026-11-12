@@ -1,0 +1,66 @@
+{
+  "version": "0.3",
+  "status": "design-review-awaiting-user",
+  "source_head": "15f40455083c144a185bed4aef6715c7891085dd",
+  "created_at": "2026-11-12T03:57:45.536101+00:00",
+  "scope": "Design documents and synthetic standalone prototype only; no product implementation or real Pi/model calls.",
+  "preserved_v02_manifest_sha256": "062bb45773139da83e6b1360d999455a5d97a78d81e76409a5373c13ce83acba",
+  "files": [
+    {
+      "path": "docs/studio-phase2-proposal-v0.3.md",
+      "bytes": 23329,
+      "sha256": "d68dc6e04e17a9b033e6bc27e8cbd618925e947150d23a56128d9c55ccac51a3"
+    },
+    {
+      "path": "docs/prototypes/studio-phase2-v0.3/README.md",
+      "bytes": 4087,
+      "sha256": "9426d681b46f52e3b9f10cece78ebf6260ec53974ed290cd5f70fa6c1fde5362"
+    },
+    {
+      "path": "docs/prototypes/studio-phase2-v0.3/app.js",
+      "bytes": 62727,
+      "sha256": "67fd90a9ff7c863d4e86d176d6ea5e21f7923543e9a4a68556ccbf558a8a1f0b"
+    },
+    {
+      "path": "docs/prototypes/studio-phase2-v0.3/fixtures.js",
+      "bytes": 5291,
+      "sha256": "507b9dbf12cb5d7ad44ba9a34330e51c3865a3710dc6c8dfc4afae20accf2343"
+    },
+    {
+      "path": "docs/prototypes/studio-phase2-v0.3/index.html",
+      "bytes": 648,
+      "sha256": "1406e4b591c52ff3d2ae54e546ad00c2d42b21b26cb85f9b5ab17794bd1e22a6"
+    },
+    {
+      "path": "docs/prototypes/studio-phase2-v0.3/styles.css",
+      "bytes": 21027,
+      "sha256": "b69a230581e8f3bba703f1c886859a8196e99e60b8dd2c30e45d8de6fe2fd6f9"
+    },
+    {
+      "path": "docs/prototypes/studio-phase2-v0.3/usage.js",
+      "bytes": 40254,
+      "sha256": "b9d4fae83a0b547392a9b038c7e89b06e3356398c065278866a90c6e1b9f9deb"
+    },
+    {
+      "path": "openspec/changes/studio-phase2-unified-assets/review-v0.3/spec.md",
+      "bytes": 31884,
+      "sha256": "c2692a7df6b0dc5c833ace308564dec0c6d9a19a1e4aaebfdd3fc8fea2884fc2"
+    },
+    {
+      "path": "openspec/changes/studio-phase2-unified-assets/review-v0.3/interaction-states.md",
+      "bytes": 15519,
+      "sha256": "1f6c60dc770e96aed29895c4e095226ea24ec50c9316730e8757dd424ae42857"
+    },
+    {
+      "path": "openspec/changes/studio-phase2-unified-assets/review-v0.3/result.md",
+      "bytes": 9585,
+      "sha256": "f568387332bcc970c75e2094fd080ac32018c7c90f48d6cfa819932b5112bce9"
+    }
+  ],
+  "evidence": {
+    "independent_final": ".local/studio-phase2-usage-design/independent/recheck-final.json",
+    "independent_result": "37 PASS / 0 FAIL; design prototype only",
+    "browser_final": ".local/studio-phase2-usage-design/browser-final.json",
+    "browser_result": "17 initial + 7 first revision after assertion correction + 7 final browser assertions; see exact candidate hashes in each record"
+  }
+}

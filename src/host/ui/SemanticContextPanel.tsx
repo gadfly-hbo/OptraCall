@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { PersonalDialog } from './PersonalDialog.tsx';
+import type { AssetContextRecord, StudioContextEvidence } from './semantic-context-history.ts';
 import { readSemanticContext } from './semantic-context-client.ts';
 import type { SemanticContextReader, SemanticContextRecord, SemanticGraphResult, SemanticGraphMetadata, SemanticItem, SemanticQueryInput, SemanticQueryResult, SemanticSourceState, SemanticTarget } from './semantic-context-client.ts';
 import type { StudioSemanticGraphSourceRef } from '../../../extensions/business-plugins/semantic-context/graph.ts';
 import './semantic-context.css';
 
-export type SemanticContextPanelProps = { projectId: string; taskId: string; records?: SemanticContextRecord[]; readContext?: SemanticContextReader; onFollowup?: (draft: string) => void };
+export type SemanticContextPanelProps = { projectId: string; taskId: string; records?: AssetContextRecord[]; readContext?: SemanticContextReader; onFollowup?: (draft: string) => void };
 
 export function SemanticContextPanel(props: SemanticContextPanelProps) {
   return <SemanticContextOwner key={`${props.projectId}/${props.taskId}`} {...props} />;
@@ -32,7 +33,7 @@ function SemanticContextOwner({ projectId, taskId, records = [], readContext = r
     } finally { if (epoch === current.current) controller.current = null; }
   }
   const read = (target: SemanticTarget) => { void query({ action: 'read', target }); }, trace = (target: SemanticTarget) => { void query({ action: 'trace', target }); };
-  return <div className="semantic-context-entry"><button ref={trigger} className="text-button" type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>查看依据／前提变化</button>{open && <PersonalDialog drawer title="依据与前提变化" subtitle="原记录与现在回看分别展示；查看不启动模型" returnFocus={trigger.current} onClose={close}>
+  return <div className="semantic-context-entry"><button ref={trigger} className="text-button" type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>本次依据</button>{open && <PersonalDialog drawer title="本次依据与前提变化" subtitle="原记录与现在回看分别展示；查看不启动模型" returnFocus={trigger.current} onClose={close}>
     <nav className="sc-view-switch" aria-label="依据查看方式"><button className="text-button" type="button" aria-pressed={view === 'saved'} onClick={() => setView('saved')}>原稿与当时返回</button><button className="text-button" type="button" aria-pressed={view === 'current'} onClick={() => setView('current')}>现在回看</button></nav>
     <SemanticContextDetails records={records} view={view} lookup={lookup} onRead={read} onTrace={trace} onCancel={cancel} onFollowup={onFollowup ? draft => { close(); onFollowup(draft); } : undefined} onContinue={lookup.result?.coverage.continuation && input.current ? () => { void query({ ...input.current!, continuation: lookup.result!.coverage.continuation }); } : undefined} onContinueRecord={record => { if (record.input && record.result?.coverage.continuation) void query({ ...record.input, continuation: record.result.coverage.continuation }); }} />
   </PersonalDialog>}</div>;
@@ -65,7 +66,7 @@ function SemanticSource({ item, perspective, onRead, onTrace }: { item: Semantic
     {item.declaration ? <div className="sc-note"><strong>作者声明 · {item.declaration.actor}</strong><p>{item.declaration.text}</p></div> : <p className="sc-meta">{item.metadataFragment ? '当前片段未提供完整作者引用声明，其余原元数据仍待读取。' : '本项没有作者引用声明；已提供或检索命中不代表采用。'}</p>}
     {bodyAvailable && item.body !== null && ['excluded', 'disabled', 'unknown'].includes(item.state) && <p className="sc-note">沿原权限返回的准确历史原文，仅供核对；当前治理提示仍保留，不代表可重新供给 Agent。</p>}
     {!bodyAvailable || item.body === null ? <p className="sc-note">本次未返回可核定原文；正文未知，不用同名或最新版本替代。</p> : <><p className="sc-meta">{item.range ? `准确原文片段 [${item.range.start}, ${item.range.end}) / ${item.range.total} UTF-16；不代表全文` : '本次返回的原文'}</p><pre className="sc-paper">{item.body}</pre></>}
-    {item.relations.length > 0 && <section className="sc-relations"><h5>显式引用与关系</h5><p className="sc-meta">方向沿原记录；关系声明不证明事实或因果。</p>{item.relations.map((relation, index) => <div className="sc-relation" key={index}><p>{targetLabel(item.target)} → <strong>{relation.relation}</strong> → {relation.target ? targetLabel(relation.target) : '准确目标未知'}</p><p className="sc-meta">{relation.claim === 'author-declaration' ? '作者关系声明' : '原记录显式引用'}{relation.note ? ` · ${relation.note}` : ''}</p>{relation.target && onRead && <button className="text-button" type="button" onClick={() => onRead(relation.target!)}>按准确引用查看目标</button>}<details><summary>关系原始引用</summary><pre>{JSON.stringify(relation, null, 2)}</pre></details></div>)}</section>}
+    {item.relations.length > 0 && <section className="sc-relations"><h5>显式引用与关系</h5><p className="sc-meta">方向沿原记录；关系声明不证明事实或因果。</p>{item.relations.map((relation, index) => relation.state === 'forbidden' ? <div className="sc-relation" key={index}><p className="sc-note">关联来源超出当前可读范围，权限不足；不展示目标身份或原始关系定位。</p></div> : <div className="sc-relation" key={index}><p>{targetLabel(item.target)} → <strong>{relation.relation}</strong> → {relation.target ? targetLabel(relation.target) : '准确目标未知'}</p><p className="sc-meta">{relation.claim === 'author-declaration' ? '作者关系声明' : '原记录显式引用'}{relation.note ? ` · ${relation.note}` : ''}</p>{relation.target && onRead && <button className="text-button" type="button" onClick={() => onRead(relation.target!)}>按准确引用查看目标</button>}<details><summary>关系原始引用</summary><pre>{JSON.stringify(relation, null, 2)}</pre></details></div>)}</section>}
     {item.gaps.length > 0 && <ul className="sc-gaps">{item.gaps.map((gap, index) => <li key={index}>{gap}</li>)}</ul>}
     {item.metadataFragment && <details><summary>原始元数据片段</summary><p className="sc-meta">准确 JSON 原文片段 [{item.metadataFragment.range.start}, {item.metadataFragment.range.end}) / {item.metadataFragment.range.total} UTF-16；不解析为完整关系或声明，后续内容仍未知。</p><pre>{item.metadataFragment.text}</pre></details>}
     <details><summary>{perspective === 'current' ? '本次核对的治理' : '当时返回的治理'}</summary>{item.governance === null ? <p>{item.metadataFragment ? '当前片段未提供治理全文 · UNKNOWN' : '治理未记录 · UNKNOWN'}</p> : <pre>{JSON.stringify(item.governance, null, 2)}</pre>}</details>
@@ -126,8 +127,21 @@ export function SemanticGraphEvidence({ result }: { result: SemanticGraphResult 
   </div>;
 }
 
+function StudioEvidence({ evidence }: { evidence: StudioContextEvidence }) {
+  const label = evidence.stage === 'directory' ? '企业资产目录' : evidence.stage === 'source' ? '准确来源读取' : evidence.stage === 'declaration' ? '作者使用声明' : '准确资产信息';
+  const use = evidence.result.use && typeof evidence.result.use === 'object' && !Array.isArray(evidence.result.use) ? evidence.result.use as Record<string, unknown> : undefined;
+  return <section className="sc-source"><div className="sc-row"><h3>{label}</h3><span className="sc-status">{evidence.stage === 'directory' ? '目录提供' : evidence.declaration ? '作者声明' : evidence.complete === true ? '本次返回完整' : evidence.complete === false ? '部分正文／元数据' : '范围待核'}</span></div>
+    <p className="sc-note">{evidence.stage === 'directory' ? '目录命中不代表取得正文或采用资产。' : evidence.declaration ? '原 Studio 已保存作者明确声明的引用；不证明真实计算采用或专业正确。' : '这里只展示当时实际返回的内容；读取成功不代表正确应用，采用声明另列。'}独立核验：本记录未提供独立核验结果。</p>
+    {evidence.ref && <dl className="sc-metadata"><dt>来源权威</dt><dd>{evidence.ref.authority}</dd><dt>准确资产</dt><dd>{evidence.ref.id}</dd><dt>原版本</dt><dd>{evidence.ref.version}</dd>{evidence.ref.sha256 && <><dt>原内容摘要</dt><dd>{evidence.ref.sha256}</dd></>}</dl>}
+    {use && <p className="sc-meta">声明记录：{typeof use.id === 'string' ? use.id : '身份未记录'}；原记录的评估不自动等同于独立核验。</p>}
+    {evidence.body !== undefined && <><p className="sc-meta">{evidence.complete === false ? '部分正文，不能当作全文。' : evidence.complete === true ? '本次准确返回的正文。' : '实际返回片段，完整性未核定。'}{evidence.range && ` 范围 [${evidence.range.start}, ${evidence.range.end}) / ${evidence.range.total}。`}</p><pre className="sc-paper">{evidence.body}</pre></>}
+    {evidence.stage !== 'declaration' && <p className="sc-meta">本项未保存作者使用声明；计算与判断请结合原报告、实际计算记录及其他来源声明核对。</p>}
+    <details><summary>原 Studio 回执与准确引用</summary><pre>{JSON.stringify({ action: evidence.action, input: evidence.input, result: evidence.result }, null, 2)}</pre></details>
+  </section>;
+}
+
 export type SemanticContextLookup = { state: 'idle' | 'loading' | 'cancelled' | 'error' | 'done'; result?: SemanticQueryResult; error?: string };
-export function SemanticContextDetails({ records, view, lookup, onRead, onTrace, onCancel, onFollowup, onContinue, onContinueRecord }: { records: SemanticContextRecord[]; view: 'saved' | 'current'; lookup: SemanticContextLookup; onRead?: (target: SemanticTarget) => void; onTrace?: (target: SemanticTarget) => void; onCancel?: () => void; onFollowup?: (draft: string) => void; onContinue?: () => void; onContinueRecord?: (record: SemanticContextRecord) => void }) {
+export function SemanticContextDetails({ records, view, lookup, onRead, onTrace, onCancel, onFollowup, onContinue, onContinueRecord }: { records: AssetContextRecord[]; view: 'saved' | 'current'; lookup: SemanticContextLookup; onRead?: (target: SemanticTarget) => void; onTrace?: (target: SemanticTarget) => void; onCancel?: () => void; onFollowup?: (draft: string) => void; onContinue?: () => void; onContinueRecord?: (record: SemanticContextRecord) => void }) {
   return <div className="sc-content" aria-busy={view === 'current' && lookup.state === 'loading' || undefined}>
     {view === 'saved' ? <>
       <p className="sc-meta">以下按本条回复可核定的原工具结果展示。提供过、启用过与作者声明引用分别保留；不能重建当时全部已知信息。</p>
@@ -136,9 +150,10 @@ export function SemanticContextDetails({ records, view, lookup, onRead, onTrace,
         {record.issue && <p className="sc-error" role="status">{record.issue} 原稿引用与提供范围未知，原记录保持。</p>}
         {record.issue && record.input?.action === 'read' && record.input.target && onRead && <div className="sc-note"><p>当前回读只核对这份准确来源，不能补造历史子工具正文或保存回执。</p><button className="secondary-button" type="button" onClick={() => onRead(record.input!.target!)}>现在按原引用回读</button></div>}
         {record.result && <SemanticContextEvidence result={record.result} onRead={onRead} onTrace={onTrace} onContinue={record.input && onContinueRecord ? () => onContinueRecord(record) : undefined} />}
+        {record.studio && <StudioEvidence evidence={record.studio} />}
         {record.graphResult && <SemanticGraphEvidence result={record.graphResult} />}
         {record.receipt && <section className="sc-source"><h3>作者声明引用回执</h3><p className="sc-note">原 M2 已返回这份成果来源的保存回执；只代表作者明确声明引用，不证明真实计算采用或专业正确性。</p><dl className="sc-metadata"><dt>准确来源记录</dt><dd>{record.receipt.citationId}</dd><dt>原成果</dt><dd>{record.receipt.report.originalPath}</dd><dt>原操作</dt><dd>{record.receipt.operationId}</dd><dt>索引版本</dt><dd>{record.receipt.indexRevision}</dd></dl><p className="sc-meta">{record.receipt.replayed ? '回读原操作回执；没有重复创建引用。' : '本次原操作回执。'}</p>{onRead && <button className="secondary-button" type="button" onClick={() => onRead({ kind: 'data-citation', projectId: record.receipt!.projectId, citationId: record.receipt!.citationId })}>查看这份声明的准确来源</button>}<details><summary>原回执与校验信息</summary><pre>{JSON.stringify(record.receipt, null, 2)}</pre></details></section>}
-        {!record.result && !record.graphResult && !record.receipt && !record.issue && <p className="sc-note">这项原工具结果无法核定，引用与提供范围未知。</p>}
+        {!record.result && !record.graphResult && !record.receipt && !record.studio && !record.issue && <p className="sc-note">这项原工具结果无法核定，引用与提供范围未知。</p>}
         {record.native && <details><summary>原生记录身份</summary><dl className="sc-metadata"><dt>会话</dt><dd>{record.native.sessionId}</dd><dt>记录</dt><dd>{record.native.entryId}</dd>{record.native.toolCallId && <><dt>调用</dt><dd>{record.native.toolCallId}</dd></>}{record.native.recordedAt && <><dt>原生记录时间</dt><dd>{record.native.recordedAt}</dd></>}</dl></details>}
       </section>)}
     </> : <>

@@ -106,6 +106,8 @@ export interface StudioPublicationPreview {
   limitations: string[];
   excluded: string[];
   targetProjectIds: string[];
+  /** Frozen links reviewed with this exact publication, never a later mutable proposal lookup. */
+  contributions?: StudioContributionSnapshot[];
   createdAt: string;
   confirmedAt?: string;
 }
@@ -116,12 +118,57 @@ export interface StudioGraphState { snapshotId: string; status: StudioResultStat
 export interface StudioUseAssessmentInput { status: 'pass' | 'fail' | 'unknown'; report: StudioSourceRef; sources: StudioSourceRef[]; result: string }
 export interface StudioUseAssessment extends StudioUseAssessmentInput { at: string }
 export interface StudioUseRecord { id: string; projectId: string; taskId: string; sources: StudioSourceRef[]; graphSnapshotId?: string; report: StudioSourceRef; result: string; verification: 'not_assessed' | 'pass' | 'fail' | 'unknown'; assessments?: StudioUseAssessment[]; createdAt: string }
+export interface StudioExecutionOwner { projectId: string; taskId: string }
+export interface StudioMaintenanceRecord extends StudioExecutionOwner { previousOwner: StudioExecutionOwner; at: string }
+export type StudioContributionScope = 'enterprise' | 'task';
+export interface StudioContributionCandidate {
+  kind: StudioAssetKind | 'sap-metric' | 'sap-method'; title: string; body: string; scope: string; reason?: string;
+}
+export interface StudioContributionContent {
+  scope: StudioContributionScope;
+  report: StudioSourceRef;
+  sourceRefs: StudioSourceRef[];
+  baseRefs: StudioSourceRef[];
+  baseSystemRevision: number;
+  candidate: StudioContributionCandidate;
+}
+export interface StudioContributionRevision extends StudioContributionContent { revision: number; sha256: string; createdAt: string }
+export interface StudioContributionLink {
+  contributionRevision: number; assetId?: string; assetRevision?: number; ref?: StudioSourceRef; at: string;
+}
+export interface StudioContribution {
+  id: string; revision: number; sourceProjectId: string; sourceTaskId: string;
+  scope: StudioContributionScope; revisions: StudioContributionRevision[];
+  linked?: StudioContributionLink; linkHistory?: StudioContributionLink[];
+  createdAt: string; updatedAt: string;
+}
+export interface StudioContributeInput {
+  contributionId?: string; expectedRevision?: number; sourceProjectId: string; sourceTaskId: string;
+  scope: StudioContributionScope; report: StudioSourceRef; sourceRefs: StudioSourceRef[]; baseRefs?: StudioSourceRef[];
+  baseSystemRevision?: number; candidate: StudioContributionCandidate;
+}
+export interface StudioLinkContributionInput {
+  contributionId: string; expectedContributionRevision: number;
+  /** Exactly one target: a Studio candidate revision, or an already registered exact SAP candidate. */
+  assetId?: string; assetRevision?: number; ref?: StudioSourceRef;
+}
+export interface StudioContributionSnapshot {
+  contributionId: string; revision: number; sha256: string; sourceProjectId: string; sourceTaskId: string;
+  title: string; report: StudioSourceRef; baseRefs: StudioSourceRef[];
+  assetId?: string; assetRevision?: number; ref?: StudioSourceRef;
+}
 export interface StudioSystem {
   id: string;
   revision: number;
   name: string;
+  /** Explicit enterprise ownership; absence preserves a legacy unassigned foundation. */
+  enterpriseId?: string;
   projectId: string;
   taskId: string;
+  /** Current execution is independent of immutable original construction provenance. */
+  maintenanceOwner?: StudioExecutionOwner;
+  maintenanceHistory?: StudioMaintenanceRecord[];
+  contributions?: StudioContribution[];
   currentTopicId: string;
   usageProjectIds: string[];
   usageTasks?: { projectId: string; taskId: string }[];
@@ -139,7 +186,11 @@ export interface StudioSystem {
   createdAt: string;
   updatedAt: string;
 }
-export interface StudioCreateInput { name: string; projectId: string; taskId: string; goal: string; topicTitle: string; scope?: string; materials?: StudioMaterial[] }
+export function studioExecutionOwner(system: Pick<StudioSystem, 'projectId' | 'taskId' | 'maintenanceOwner'>): StudioExecutionOwner {
+  const owner = system.maintenanceOwner ?? system;
+  return { projectId: owner.projectId, taskId: owner.taskId };
+}
+export interface StudioCreateInput { name: string; projectId: string; taskId: string; goal: string; topicTitle: string; enterpriseId?: string; scope?: string; materials?: StudioMaterial[] }
 export interface StudioSaveAssetInput {
   assetId?: string;
   expectedRevision?: number;
