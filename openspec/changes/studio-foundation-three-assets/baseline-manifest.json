@@ -1,0 +1,71 @@
+{
+  "date": "2026-11-12",
+  "purpose": "preserve previous reference v0.1 and approved product baselines; new work is review artifacts only",
+  "files": [
+    {
+      "path": "docs/reference-templates/01-sportswear-industry.md",
+      "bytes": 9964,
+      "sha256": "c16ef1e4c599b3d3ffb1e1b70cf0c2b45688e01b90fd83342413e7a0777eada8"
+    },
+    {
+      "path": "docs/reference-templates/02-membership-domain.md",
+      "bytes": 13925,
+      "sha256": "64f36e472af42c0540705a459ea3ebf36f2a0d2c1df34d0c06bc355f4ffd5909"
+    },
+    {
+      "path": "docs/reference-templates/03-nike-enterprise-public.md",
+      "bytes": 7131,
+      "sha256": "6a3394e47b14a50ae0108b91e93810433c84a18d6a44370a0fadc829c09da822"
+    },
+    {
+      "path": "docs/reference-templates/04-nike-membership-public.md",
+      "bytes": 8846,
+      "sha256": "54a854f64e4942241f207e0ff35f33236e65baeecabeeb1d30a296f02cab9486"
+    },
+    {
+      "path": "docs/reference-templates/README.md",
+      "bytes": 10107,
+      "sha256": "33e43a9cfa7b82df9c825ee44b1f7e610c52068c43b649fa1a8b8138dbc0dc04"
+    },
+    {
+      "path": "docs/reference-templates/foundation-adjustment-v0.1.md",
+      "bytes": 13249,
+      "sha256": "0c6a73e9430e2bbcb827d77ce34ca3af8577a3d4b78d5c2e63162d9de0e50875"
+    },
+    {
+      "path": "docs/reference-templates/generic-reference-sources-v0.1.md",
+      "bytes": 17619,
+      "sha256": "168d3cdaef48f36b5a6c2500e5536e36d537996fe6f72dd834aa7561545ab28f"
+    },
+    {
+      "path": "docs/reference-templates/nike-public-reference-sources-v0.1.md",
+      "bytes": 16821,
+      "sha256": "785b9f668df5ec0f08f75da048b8ee3c2190a43e86a0f6feaadd074b0f4f8211"
+    },
+    {
+      "path": "docs/studio-phase2-initial-proposal.md",
+      "bytes": 14598,
+      "sha256": "ae7384c7380b9f0d8d5d299bcd4ad7be35753e0ae7a102d962c9bbfe1e4f10a4"
+    },
+    {
+      "path": "docs/studio-phase2-proposal-v0.2.md",
+      "bytes": 13228,
+      "sha256": "c91ea962d27e741bb93ccc23979f0585f1af51034be9132bd267216fe304c940"
+    },
+    {
+      "path": "docs/studio-phase2-proposal-v0.3.md",
+      "bytes": 23329,
+      "sha256": "d68dc6e04e17a9b033e6bc27e8cbd618925e947150d23a56128d9c55ccac51a3"
+    },
+    {
+      "path": "openspec/changes/studio-phase2-unified-assets/spec.md",
+      "bytes": 18241,
+      "sha256": "cf56ead84e526fa098aeab73d63e89cbde56413883b7b3c5c3f1c9139de31599"
+    },
+    {
+      "path": "openspec/changes/studio-phase2-unified-assets/tasks.md",
+      "bytes": 6690,
+      "sha256": "d60920bb5afdd4fcc6b5fc8103eafad9b386895e132548793eafa4a68949ce60"
+    }
+  ]
+}

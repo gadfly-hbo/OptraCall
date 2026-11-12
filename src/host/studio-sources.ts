@@ -11,7 +11,7 @@ import { preparePublication as prepareSapPublication } from '../../extensions/bu
 import { createProjectEnablement } from '../../extensions/business-plugins/metric-factory/project/enablement.ts';
 import { createRequirementStore, RequirementStoreFault } from '../../extensions/business-plugins/requirements-elaboration/storage/store.ts';
 import { fail, sourceRef, digest } from '../../extensions/business-plugins/studio/validation.ts';
-export interface StudioSourceRead { text: string; complete: boolean; governance?: unknown; ref: StudioSourceRef }
+export interface StudioSourceRead { assetKind?: import('../../extensions/business-plugins/studio/contracts.ts').StudioAssetKind; text: string; complete: boolean; governance?: unknown; ref: StudioSourceRef }
 export interface StudioSourceDependencies {
   dataRoot: string; projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore; studio: StudioStore;
   enterpriseScope?: {
@@ -165,7 +165,7 @@ export function createStudioSources(deps: StudioSourceDependencies) {
     if (issue && !construction && !historical) fail('studio_source_restricted', 409);
     exactHash(ref, revision.sha256);
     for (const dependency of [...revision.sources, ...revision.dependencies]) await checkDependency(dependency, projectId, sourceSystemId, new Set(seen), construction);
-    return { text: revision.body, complete: true, ...(issue ? { governance: issue } : {}), ref: { ...ref, sha256: revision.sha256 } };
+    return { text: revision.body, complete: true, assetKind: asset.kind, ...(issue ? { governance: issue } : {}), ref: { ...ref, sha256: revision.sha256 } };
   }
   async function read(raw: StudioSourceRef, projectId: string, systemId?: string, options: { construction?: boolean; historical?: boolean; taskId?: string } = {}): Promise<StudioSourceRead> {
     const ref = sourceRef(raw); await deps.projects.get(projectId);

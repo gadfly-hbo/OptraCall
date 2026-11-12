@@ -8,6 +8,15 @@ export class StudioRequestError extends HostRequestError {
 }
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const failureMessages: Record<string, string> = {
+  studio_foundation_dependency_not_shareable: '任务报告可作为准确核查证据保留，但尚不能充当这份共享结构的必需定义来源。请核定可正式供给的源资产，原稿与证据保持。',
+  studio_foundation_binding_type_mismatch: '指标关联的来源不是原数据映射资产。请核对准确 Binding 版本，不能用主数据或概念资产替代。',
+  invalid_studio_foundation: '三类资产结构存在缺失、重复条目或不匹配的关联。请核对当前内容约定，原稿和正式版保持。',
+  unsupported_studio_foundation: '当前内容约定尚不支持结构核验，可保留草稿，不能按已核验结构发布。',
+  studio_foundation_item_not_found: '准确源版本中没有这条引用项。请核对原引用与条目标识，不能改用最新版本代替。',
+  studio_foundation_metric_not_found: '原 SAP 准确包版本中没有这个指标。请回原指标区核对包版本和指标名。',
+  studio_foundation_dimension_not_found: '关联维度不在原 SAP 指标中，请回原指标区核对准确版本和维度。',
+  studio_foundation_scenario_not_found: '原 SAP 版本中没有对应的指标用途场景，请核对场景 ID、版本和指标关联。',
+  studio_foundation_source_incomplete: '当前来源正文未完整返回，尚不能核定该准确项或指标的结构关联。请先恢复原来源读取。',
   studio_project_read_only: '原建设项目已归档，原任务与历史只读保留；可选择新获准任务接续同一资产维护。',
   studio_asset_conflict: '这份资产已有新修订。请先核对准确版本，当前编辑保持。',
   studio_publication_changed: '预览中的内容、来源或版本已有变化。请核对后重新准备受影响预览。',
