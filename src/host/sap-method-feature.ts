@@ -32,7 +32,7 @@ type Options = {
   sourceBusy(project: ProjectRecord, task: TaskRecord): boolean;
   mutate<T>(use: () => T | Promise<T>): Promise<T>; isClosing(): boolean;
   personal(action: 'find' | 'read', input: Record<string, unknown>, signal: AbortSignal): Promise<PersonalContextResult>;
-  methods(projectId: string, taskId: string, action: 'find' | 'read', input: Record<string, unknown>, signal: AbortSignal): Promise<SemanticQueryResult>;
+  methods(projectId: string, taskId: string, action: 'find' | 'read', input: Record<string, unknown>, signal: AbortSignal, purpose?: 'human-fixed-preview'): Promise<SemanticQueryResult>;
   readBody(request: IncomingMessage): Promise<Record<string, unknown>>;
 };
 function failure(code: string, status = 409): never { throw new SapMethodStoreError(code, status); }
@@ -216,7 +216,7 @@ export function createSapMethodFeature(options: Options) {
         try {
           const signal = AbortSignal.timeout(15_000), input = value.locator.input;
           const current = value.locator.kind === 'memory' ? await options.personal('read', input, signal)
-            : await options.methods(record.projectId, record.taskId, 'read', input, signal);
+            : await options.methods(record.projectId, record.taskId, 'read', input, signal, 'human-fixed-preview');
           if ('coverage' in current && !current.items.some(item => item.body !== null && ['available', 'partial'].includes(item.state))) {
             return { label: source.label, text: '', complete: false, limitation: '原来源当前缺失、权限失效或内容身份变化；固定材料与引用保留，未改读其他版本或重新提供正文。' };
           }

@@ -8,7 +8,7 @@ export class StudioRequestError extends HostRequestError {
 }
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const failureMessages: Record<string, string> = {
-  studio_project_read_only: '建设归属项目已归档，原记录保留；恢复原项目后继续维护。',
+  studio_project_read_only: '原建设项目已归档，原任务与历史只读保留；可选择新获准任务接续同一资产维护。',
   studio_asset_conflict: '这份资产已有新修订。请先核对准确版本，当前编辑保持。',
   studio_publication_changed: '预览中的内容、来源或版本已有变化。请核对后重新准备受影响预览。',
   studio_source_not_ready: '相关成果尚未具备本轮发布资格，请核对来源、检查事实和适用范围。',
@@ -44,7 +44,8 @@ export async function studioRequest<T>(path: string, method: 'GET' | 'POST' = 'G
 }
 
 import type { StudioSystem, StudioMaterial, StudioSourceRef, StudioPublicationPreview, StudioPublication, StudioCreateInput, StudioSaveAssetInput, StudioPublicationInput, StudioWorkItem } from '../../../extensions/business-plugins/studio/contracts.ts';
-import { studioQuestionContext } from '../../../extensions/business-plugins/studio/contracts.ts';
+import { studioExecutionOwner, studioQuestionContext } from '../../../extensions/business-plugins/studio/contracts.ts';
+import type { StudioAuthority, StudioAssetKind, StudioContribution, StudioLinkContributionInput } from '../../../extensions/business-plugins/studio/contracts.ts';
 import type { ClientProject, ClientTask, SessionSnapshot } from './project-types.ts';
 export type { StudioSystem, StudioMaterial, StudioSourceRef, StudioPublicationPreview, StudioPublication, StudioSaveAssetInput };
 
@@ -62,19 +63,21 @@ export interface StudioOperationResult { requestId: string; status: 'succeeded' 
 export type StudioCreateRequest = Omit<StudioCreateInput, 'taskId'> & { requestId: string };
 const systemPath = (id: string) => `systems/${encodeURIComponent(id)}`;
 const mismatch = (uncertain = false) => new StudioRequestError('Studio 回执与请求归属不一致；原输入保持，请核对原记录。', 'studio_response_mismatch', 0, uncertain);
-export async function listStudioSystems(signal?: AbortSignal): Promise<StudioSystem[]> {
-  const value = await studioRequest<{ systems: StudioSystem[] }>('systems', 'GET', undefined, signal);
+export async function listStudioSystems(signal?: AbortSignal, projectId?: string): Promise<StudioSystem[]> {
+  const value = await studioRequest<{ systems: StudioSystem[] }>(`systems${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''}`, 'GET', undefined, signal);
   if (!object(value) || !Array.isArray(value.systems)) throw mismatch();
   return value.systems;
 }
 export async function readStudioWorkspace(id: string, signal?: AbortSignal): Promise<StudioWorkspace> {
   const value = await studioRequest<StudioWorkspace>(systemPath(id), 'GET', undefined, signal);
-  if (!object(value) || !object(value.system) || value.system.id !== id || !object(value.project) || value.project.id !== value.system.projectId || !object(value.task) || value.task.id !== value.system.taskId || typeof value.running !== 'boolean') throw mismatch();
+  if (!object(value) || !object(value.system) || value.system.id !== id || !object(value.project) || !object(value.task) || typeof value.running !== 'boolean') throw mismatch();
+  const owner = studioExecutionOwner(value.system);
+  if (value.project.id !== owner.projectId || value.task.id !== owner.taskId) throw mismatch();
   return value;
 }
 export async function createStudioSystem(input: StudioCreateRequest): Promise<StudioSystem> {
   const value = await studioRequest<{ system: StudioSystem }>('systems', 'POST', input);
-  if (!object(value) || !object(value.system) || value.system.projectId !== input.projectId || typeof value.system.id !== 'string') throw mismatch(true);
+  if (!object(value) || !object(value.system) || value.system.projectId !== input.projectId || typeof value.system.id !== 'string' || input.enterpriseId && value.system.enterpriseId !== input.enterpriseId) throw mismatch(true);
   return value.system;
 }
 export async function readStudioMaterials(projectId: string, signal?: AbortSignal): Promise<StudioMaterial[]> {
@@ -127,4 +130,61 @@ export function studioTaskUrl(current: string, projectId: string, taskId?: strin
   if (taskId) url.searchParams.set('task', taskId); else url.searchParams.delete('task');
   if (systemId) url.searchParams.set('studio', systemId); else url.searchParams.delete('studio');
   return url;
+}
+
+export interface StudioEnterprise { id: string; name: string; revision: number; createdAt: string }
+export interface StudioEnterpriseAssociation { enterpriseId: string; projectId?: string; caseId?: string; authority?: StudioAuthority; id?: string; entityId?: string }
+export interface StudioEnterpriseDirectory {
+  enterprises: StudioEnterprise[];
+  projectAssignments: StudioEnterpriseAssociation[];
+  caseAssignments: StudioEnterpriseAssociation[];
+  assetAssignments: StudioEnterpriseAssociation[];
+}
+export interface StudioFoundationItem {
+  authority: StudioAuthority; id: string; version: string; title: string; status: string;
+  ref?: StudioSourceRef; enterpriseId?: string; systemId?: string; kind?: StudioAssetKind;
+}
+export interface StudioFoundation {
+  enterprise: StudioEnterprise; systems: StudioSystem[]; items: StudioFoundationItem[]; unassigned: StudioFoundationItem[];
+}
+export async function listStudioEnterprises(signal?: AbortSignal): Promise<StudioEnterpriseDirectory> {
+  const value = await studioRequest<StudioEnterpriseDirectory>('enterprises', 'GET', undefined, signal);
+  if (!object(value) || !Array.isArray(value.enterprises) || !Array.isArray(value.projectAssignments) || !Array.isArray(value.caseAssignments) || !Array.isArray(value.assetAssignments)) throw mismatch();
+  return value;
+}
+export async function readStudioFoundation(enterpriseId: string, signal?: AbortSignal): Promise<StudioFoundation> {
+  const value = await studioRequest<StudioFoundation>(`foundation?enterpriseId=${encodeURIComponent(enterpriseId)}`, 'GET', undefined, signal);
+  if (!object(value) || value.enterprise?.id !== enterpriseId || !Array.isArray(value.systems) || !Array.isArray(value.items) || !Array.isArray(value.unassigned) || value.items.some(item => item.enterpriseId && item.enterpriseId !== enterpriseId) || value.systems.some(system => system.enterpriseId !== enterpriseId)) throw mismatch();
+  return value;
+}
+export async function resolveStudioProfessionalEnterprise(directory: StudioEnterpriseDirectory, target: { authority: 'enterprise' | 'sap-metric' | 'sap-method'; id: string; version?: string | number }, signal?: AbortSignal): Promise<string | undefined> {
+  const assignments = directory.assetAssignments.filter(item => item.authority === target.authority && (item.id || item.entityId) === target.id);
+  if (assignments.length) {
+    const owners = new Set(assignments.map(item => item.enterpriseId));
+    const owner = owners.size === 1 ? [...owners][0] : undefined;
+    return directory.enterprises.some(enterprise => enterprise.id === owner) ? owner : undefined;
+  }
+  const catalogs = await Promise.all(directory.enterprises.map(enterprise => readStudioFoundation(enterprise.id, signal)));
+  const owners = new Set(catalogs.filter(catalog => catalog.items.some(item => item.authority === target.authority && item.id === target.id
+    && (target.version === undefined || String(item.version) === String(target.version)) && item.enterpriseId === catalog.enterprise.id
+    && ['formal-current', 'formal-history', 'candidate', 'disabled', 'restricted', 'suspected'].includes(item.status))).map(catalog => catalog.enterprise.id));
+  return owners.size === 1 ? [...owners][0] : undefined;
+}
+export async function createStudioEnterprise(input: { name: string; requestId: string }): Promise<StudioEnterprise> {
+  const value = await studioRequest<StudioEnterprise>('enterprises', 'POST', input);
+  if (!object(value) || typeof value.id !== 'string' || value.name !== input.name) throw mismatch(true);
+  return value;
+}
+export async function associateStudioEnterprise(input: { requestId: string; kind: 'project' | 'case' | 'asset'; entityId: string; enterpriseId: string; authority?: StudioAuthority }): Promise<void> {
+  const value = await studioRequest<Record<string, unknown>>('enterprise-associations', 'POST', input);
+  const binding = object(value.binding) ? value.binding : value;
+  if (binding.enterpriseId !== input.enterpriseId) throw mismatch(true);
+}
+export async function readStudioContributions(systemId: string): Promise<StudioContribution[]> {
+  const value = await studioRequest<{ contributions: StudioContribution[] }>(`${systemPath(systemId)}/contributions`);
+  if (!object(value) || !Array.isArray(value.contributions)) throw mismatch();
+  return value.contributions;
+}
+export async function linkStudioContribution(systemId: string, contributionId: string, input: Omit<StudioLinkContributionInput, 'contributionId'> & { requestId: string }): Promise<StudioSystem> {
+  return writeStudioSystem(systemId, `contributions/${encodeURIComponent(contributionId)}/link`, input);
 }

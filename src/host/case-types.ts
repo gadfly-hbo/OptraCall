@@ -56,7 +56,10 @@ export type OperationReceipt = {
   operationId: string; kind: string; requestSha256: string; caseId: string | null; projectId: string | null;
   phase: 'prepared' | 'project_created' | 'completed' | 'needs_review'; result: Record<string, unknown> | null;
   createdAt: string; updatedAt: string;
+  /** Host's original association intent; null explicitly preserves an unresolved scope. */
+  enterpriseScopeIntent?: string | null;
 };
+export type CaseEnterpriseScopeOptions = { enterpriseScopeIntent?: string | null };
 export type CaseMutation = { operationId: string; expectedRevision: number };
 export type ProjectWorkInput = CaseMutation & {
   workStatus: ProjectWorkStatus | null; workScope: string; assignee: string | null; nextStep: string;

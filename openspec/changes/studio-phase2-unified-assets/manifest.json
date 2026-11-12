@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-12",
+  "status": "design-ready-user-review-pending",
+  "baseline_commit": "15f40455083c144a185bed4aef6715c7891085dd",
+  "prototype_app_sha256": "540819807a5b1ee9f6a8422a045663b786f9f8411ca071b81c89f45a5a96553d",
+  "preserved_v01_sha256": "ae7384c7380b9f0d8d5d299bcd4ad7be35753e0ae7a102d962c9bbfe1e4f10a4",
+  "tracked_files_unchanged": 1238,
+  "files": [
+    {
+      "path": "docs/studio-phase2-initial-proposal.md",
+      "bytes": 14598,
+      "sha256": "ae7384c7380b9f0d8d5d299bcd4ad7be35753e0ae7a102d962c9bbfe1e4f10a4"
+    },
+    {
+      "path": "docs/studio-phase2-proposal-v0.2.md",
+      "bytes": 13228,
+      "sha256": "c91ea962d27e741bb93ccc23979f0585f1af51034be9132bd267216fe304c940"
+    },
+    {
+      "path": "docs/prototypes/studio-phase2/README.md",
+      "bytes": 2850,
+      "sha256": "4054e4ba4c2348038325b9a4af07ab2273dff2390c450a48880c34acfdbe97d9"
+    },
+    {
+      "path": "docs/prototypes/studio-phase2/index.html",
+      "bytes": 564,
+      "sha256": "61a6103517538e43862d1b0ca97eafce09bd6746a847d09c793a890587445651"
+    },
+    {
+      "path": "docs/prototypes/studio-phase2/styles.css",
+      "bytes": 17477,
+      "sha256": "5040cd171f9964e04ac45dd52d8095aefb854270cb1e91cbd226887cea7e73fd"
+    },
+    {
+      "path": "docs/prototypes/studio-phase2/app.js",
+      "bytes": 60817,
+      "sha256": "540819807a5b1ee9f6a8422a045663b786f9f8411ca071b81c89f45a5a96553d"
+    },
+    {
+      "path": "openspec/changes/studio-phase2-unified-assets/spec.md",
+      "bytes": 18241,
+      "sha256": "cf56ead84e526fa098aeab73d63e89cbde56413883b7b3c5c3f1c9139de31599"
+    },
+    {
+      "path": "openspec/changes/studio-phase2-unified-assets/interaction-states.md",
+      "bytes": 8943,
+      "sha256": "2e6c10c2d59202ff07206b0a73ed70f0bd8aebc13811140655d2986f2fe2942a"
+    },
+    {
+      "path": "openspec/changes/studio-phase2-unified-assets/result.md",
+      "bytes": 7126,
+      "sha256": "0320e1941152666ad69cf537620a81bdae74708cb7833e5c46b49c8b423dfc5c"
+    }
+  ]
+}

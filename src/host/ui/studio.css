@@ -133,3 +133,44 @@
 .studio-conversation-content .chat-page .composer-area { padding: 12px 14px 0; max-width: none; width: 100%; }
 .studio-conversation-content .chat-page .workspace-footer { font-size: 10px; padding: 9px 14px; }
 .studio-conversation-content .chat-page .task-start-hint { padding: 25px 18px; }
+
+/* Enterprise foundation, task evolution and specialist editors share one Studio. */
+.studio-unified { min-width: 0; }
+.studio-unified > [hidden], .studio-professional-region[hidden] { display: none; }
+.studio-enterprise-picker { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 12px; min-width: 170px; }
+.studio-enterprise-picker select { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; max-width: 260px; }
+.studio-unified-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--line); margin: 0 0 24px; overflow-x: auto; }
+.studio-unified-tabs button { flex: none; background: transparent; color: var(--muted); border: 0; border-bottom: 2px solid transparent; padding: 0 0 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.studio-unified-tabs button[aria-pressed=true] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.studio-foundation-tools { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.studio-foundation-tools .studio-domains { margin: 0; }
+.studio-foundation-tools .studio-field { margin: 0; min-width: 230px; max-width: 440px; flex: 1; }
+.studio-foundation-table { min-width: 650px; }
+.studio-foundation-table td:first-child { min-width: 180px; }
+.studio-professional-region { min-width: 0; border-top: 1px solid var(--line); padding-top: 14px; }
+.studio-professional-region .eb-page, .studio-professional-region .mf-page, .studio-professional-region .sap-method-page { width: 100%; max-width: none; padding: 20px 0 0; overflow: visible; min-height: 0; }
+.studio-professional-region .page-heading h2, .studio-professional-region .sap-method-heading h2 { font-size: 20px; line-height: 1.4; margin: 0; }
+.studio-professional-region .eb-authority { display: none; }
+.studio-system-workbench { padding: 0; overflow: visible; min-height: 0; }
+.studio-system-workbench > .studio-heading h2 { font-size: 19px; }
+.studio-system-workbench.is-publication .studio-conversation { display: none; }
+.studio-system-workbench.is-publication .studio-workcolumns { grid-template-columns: minmax(0, 1fr); }
+.studio-system-workbench.is-publication .studio-tabs { display: none; }
+.studio-contribution-list { border: 1px solid var(--line); border-radius: 8px; padding: 18px; margin-bottom: 22px; background: var(--surface); }
+.studio-contribution-list h2 { margin-bottom: 14px; }
+.studio-contribution-list .studio-record:last-child { margin-bottom: 0; }
+.studio-unassigned { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 28px; }
+.studio-unassigned > summary { color: var(--muted); cursor: pointer; font-size: 13px; }
+.studio-unassigned .studio-record { padding: 14px 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 760px) {
+  .studio-unified { padding: 22px 16px 34px; }
+  .studio-unified > .studio-heading { flex-direction: column; }
+  .studio-unified > .studio-heading > .studio-actions { width: 100%; }
+  .studio-enterprise-picker { flex: 1; min-width: 0; }
+  .studio-enterprise-picker select { max-width: none; width: 100%; }
+  .studio-unified-tabs { gap: 20px; margin-bottom: 20px; }
+  .studio-foundation-tools { align-items: stretch; }
+  .studio-foundation-tools > .primary-button { align-self: flex-start; }
+  .studio-system-workbench .studio-workcolumns { grid-template-columns: minmax(0, 1fr); }
+  .studio-contribution-list { padding: 14px; }
+}

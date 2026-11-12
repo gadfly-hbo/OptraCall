@@ -1,4 +1,5 @@
 import { StudioError } from '../../extensions/business-plugins/studio/store.ts';
+import { studioExecutionOwner, type StudioSourceRef } from '../../extensions/business-plugins/studio/contracts.ts';
 import { analysisPythonFor } from '../agent/analysis-python.ts';
 import { createStudioFeature } from './studio-host.ts';
 import { createStudioGraph } from './studio-graph.ts';
@@ -110,7 +111,7 @@ import { createMetricLibrary } from '../../extensions/business-plugins/metric-fa
 import { createSapMethodStore } from '../../extensions/business-plugins/metric-factory/methods/store.ts';
 import { createSapMethodRoutes } from './sap-method-routes.ts';
 import { createSapMethodFeature } from './sap-method-feature.ts';
-import type { SemanticQueryInput } from '../../extensions/business-plugins/semantic-context/types.ts';
+import type { SemanticQueryInput, SemanticTarget } from '../../extensions/business-plugins/semantic-context/types.ts';
 import { PersonalContextError, parsePersonalContextReadInput, parsePersonalContextSelections } from './personal-context-validation.ts';
 
 class RequestFault extends Error {
@@ -166,6 +167,18 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     projectOverview: async () => (await projects.list()).map(({ id, name, archivedAt }) => ({ id, name, archivedAt })),
     readProjectFile: (projectId: string, relativePath: string) => projects.readFile(projectId, relativePath),
     readBody: (request: IncomingMessage) => body(request),
+    publicationPreviewRequired: () => studio.enterpriseScope.active(),
+    canPublishTarget: async (projectId, packageId) => {
+      if ((await projects.get(projectId)).archivedAt !== null) throw new StudioError('project_archived', 409);
+      if (!studio.enterpriseScope.active()) return true;
+      if (!studio.enterpriseScope.enterpriseIdForProject(projectId)) throw new StudioError('enterprise_scope_required', 409);
+      try { return await studio.enterpriseScope.constructionSourceAllowed(projectId, { authority: 'sap-metric', id: packageId, version: 'publication-target' }); }
+      catch (error) { if ((error as { code?: string }).code === 'enterprise_assignment_conflict') return false; throw error; }
+    },
+    publishedTarget: (projectId, packageId) => {
+      const enterpriseId = studio.enterpriseScopes.enterpriseIdForProject(projectId);
+      if (enterpriseId) studio.enterpriseScopes.associateAsset('sap-metric', packageId, enterpriseId);
+    },
   });
   const keyOf = (projectId: string, taskId: string) => `${projectId}/${taskId}`;
   const simLabRoutes = createSimLabRoutes({
@@ -178,21 +191,22 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
   const modelPackRoutes = createModelPackRoutes({store:modelPacks,readBody:body,mutate,isClosing:()=>closing});
   const sapMethods = createSapMethodStore(path.join(dataRoot, 'metric-assets'));
-  const studio = createStudioFeature({ dataRoot, projects, enterpriseMaterials, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
+  const studio = createStudioFeature({ dataRoot, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
     extract: async (system, ref, context) => {
       if (!studioSessions) throw new StudioError('studio_semantica_unavailable', 409);
-      const { task } = await pair(system.projectId, system.taskId, true);
+      const owner = studioExecutionOwner(system), { task } = await pair(owner.projectId, owner.taskId, true);
       const sessionConfiguration = availableStudioConfiguration(task.configuration.id, task.configuration.revision); if (!sessionConfiguration) throw new StudioError('studio_configuration_unavailable', 409);
-      const source = await studio.sources.read(ref, system.projectId, system.id, { construction: true });
+      const source = await studio.sources.read(ref, owner.projectId, system.id, { construction: true, taskId: owner.taskId });
       context.assertCurrent(); context.signal.throwIfAborted();
-      return studioSessions.extract({ projectId: system.projectId, taskId: system.taskId, systemId: system.id, jobId: randomUUID(), configuration: sessionConfiguration,
+      return studioSessions.extract({ projectId: owner.projectId, taskId: owner.taskId, systemId: system.id, jobId: randomUUID(), configuration: sessionConfiguration,
         source: { id: ref.id, revision: ref.version, sha256: createHash('sha256').update(source.text).digest('hex'), text: source.text, locator: ref.locator, ref } }, context);
     },
     refreshGraph: options.studioPython ? async (system, snapshotId, task) => {
       if (!studioSessions) throw new StudioError('studio_semantica_unavailable', 409);
       const sessionConfiguration = availableStudioConfiguration(task.configuration.id, task.configuration.revision); if (!sessionConfiguration) throw Object.assign(new StudioError('studio_configuration_unavailable', 409), { studioWorkerDispatched: false, studioCleanupPending: false });
       let sourceRefs: import('../../extensions/business-plugins/studio/contracts.ts').StudioSourceRef[] = [], excluded = 0;
-      const result = await studioSessions.buildPrepared({ projectId: system.projectId, taskId: system.taskId, systemId: system.id, jobId: snapshotId, configuration: sessionConfiguration }, async context => {
+      const executionOwner = studioExecutionOwner(system);
+      const result = await studioSessions.buildPrepared({ projectId: executionOwner.projectId, taskId: executionOwner.taskId, systemId: system.id, jobId: snapshotId, configuration: sessionConfiguration }, async context => {
         const prepared = await studioGraph.prepare(studio.store.get(system.id)); context.assertCurrent();
         const runRoot = studioGraph.runRoot(system.id); await mkdir(runRoot, { recursive: true, mode: 0o700 }); context.assertCurrent();
         if (await realpath(runRoot) !== path.resolve(runRoot)) throw new StudioError('studio_graph_unsafe_root', 409); context.assertCurrent();
@@ -203,9 +217,50 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     } : undefined,
     inspectGraph: (systemId, snapshotId) => studioGraph.inspect(systemId, snapshotId),
   });
+  async function enterpriseContextFor(projectId: string) {
+    let enterpriseId: string | undefined;
+    try {
+      if (!studio.enterpriseScope.active()) return undefined;
+      enterpriseId = studio.enterpriseScope.enterpriseIdForProject(projectId);
+      let summary = '本任务企业归属尚未核定：未默认提供全局企业目录或其他企业标准。可继续使用原授权任务资料，必要时集中澄清范围。';
+      if (enterpriseId) {
+        const catalog = await studio.enterpriseCatalog.catalog(enterpriseId);
+        const lines = [`当前企业：${catalog.enterprise.name}（${enterpriseId}）。以下只为可发现线索，不代表正文已读或本次采用。`];
+        for (const item of catalog.items.filter(item => item.eligible && item.ref)) {
+          const line = JSON.stringify({ authority: item.authority, id: item.id, version: item.version, title: item.title, ref: item.ref });
+          if (lines.join('\n').length + line.length > 8000) { lines.push('目录摘要未列全，请沿 studio_assets catalog 的实际分页继续按需发现。'); break; }
+          lines.push(line);
+        }
+        lines.push('使用 studio_assets 或 read_semantic_context 读取适用的准确来源；自行判断前提、选择方法、计算并解释。不要将候选、目录或作者声明当专业核验。');
+        summary = lines.join('\n');
+      }
+      return { enterpriseId, summary, sourceAllowed: (selected: { materialId: string; revisionId: string; storeId: string }) => studio.enterpriseScope.sourceAllowed(projectId, { authority: 'enterprise', id: selected.materialId, version: selected.revisionId, locator: selected.storeId }) };
+    } catch {
+      // Shared assets are optional to ordinary analysis. A failed directory is
+      // not permission to fall back to the global library or guess its scope.
+      return { enterpriseId, summary: '企业资产目录当前不可用，未提供企业标准正文或其他企业目录，也不代表没有相关资产。可继续原授权项目数据的独立分析；受影响的口径和结论须保留待核或明确临时依据。', sourceAllowed: () => false };
+    }
+  }
+  async function enterpriseMetricIndex(projectId: string): Promise<string | undefined> {
+    const context = await enterpriseContextFor(projectId);
+    return context ? context.summary : metricIndexText({ dataRoot, projectId });
+  }
+  function enterpriseSemanticSourceAllowed(projectId: string, target: SemanticTarget): boolean | Promise<boolean> {
+    let ref: StudioSourceRef | undefined;
+    if (target.kind === 'sap') ref = { authority: 'sap-metric', id: target.packageId, version: target.version };
+    else if (target.kind === 'sap-method') ref = { authority: 'sap-method', id: target.methodId, version: String(target.version) };
+    else if (target.kind === 'enterprise') ref = { authority: 'enterprise', id: target.materialId, version: target.revisionId, locator: target.storeId };
+    else if (target.kind === 'source' && target.source.type === 'enterprise') ref = { authority: 'enterprise', id: target.source.materialId, version: target.source.revisionId, locator: target.source.storeId };
+    else if (target.kind === 'case-decision' || target.kind === 'case-choice' || target.kind === 'source' && ['case-decision', 'case-choice'].includes(target.source.type)) {
+      const caseId = target.kind === 'source' ? (target.source as { caseId: string }).caseId : target.caseId;
+      const sourceScope = studio.enterpriseScopes.enterpriseIdForCase(caseId), projectScope = studio.enterpriseScope.enterpriseIdForProject(projectId);
+      return !sourceScope || sourceScope === projectScope;
+    }
+    return ref ? studio.enterpriseScope.sourceAllowed(projectId, ref) : true;
+  }
   const studioGraph = createStudioGraph({ dataRoot, codeRoot: options.cwd, python: options.studioPython, store: studio.store, sources: studio.sources, availableFor: studio.availableFor });
   const studioSessions = options.studioPython ? createStudioSessions({ executionRoot: path.join(dataRoot, 'studio-executions'), python: options.studioPython, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; }, configurationSnapshot: availableStudioConfiguration,
-    mutate, isClosing: () => closing, admit: async owner => { if (studioSessions?.busyOtherForTask(owner.projectId, owner.taskId, owner.jobId)) throw new StudioError('studio_task_operation_busy', 409); const system = studio.store.get(owner.systemId); if (system.projectId !== owner.projectId || system.taskId !== owner.taskId) throw new StudioError('studio_owner_mismatch', 403); const { task } = await pair(owner.projectId, owner.taskId, true); if (task.configuration.id !== owner.configuration.id || task.configuration.revision !== owner.configuration.revision) throw new StudioError('studio_configuration_changed', 409); },
+    mutate, isClosing: () => closing, admit: async owner => { if (studioSessions?.busyOtherForTask(owner.projectId, owner.taskId, owner.jobId)) throw new StudioError('studio_task_operation_busy', 409); const system = studio.store.get(owner.systemId); const current = studioExecutionOwner(system); if (current.projectId !== owner.projectId || current.taskId !== owner.taskId) throw new StudioError('studio_owner_mismatch', 403); const { task } = await pair(owner.projectId, owner.taskId, true); if (task.configuration.id !== owner.configuration.id || task.configuration.revision !== owner.configuration.revision) throw new StudioError('studio_configuration_changed', 409); },
   }) : undefined;
   function availableStudioConfiguration(id: string, revision: number) { return availableConfiguration(id, revision); }
   const sapMethodRoutes = createSapMethodRoutes({ store: sapMethods, enabled: options.sapMethodsEnabled !== false, readBody: request => body(request, 512 * 1024), mutate, isClosing: () => closing,
@@ -282,6 +337,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           ? createSemanticContextReadPort({ projectId: project.id, taskId: task.id, projects, legacy: semanticPort, graph: semanticGraph, graphOnly: Boolean(protectedExecution), isClosing: () => closing }) : undefined;
         const projectFiles = protectedExecution ? undefined : createProjectFilesPort({
           projects, enterpriseMaterials, projectId: project.id, taskId: task.id,
+          readScopedCatalog: async () => {
+            const scope = await enterpriseContextFor(project.id);
+            return scope ? { enterpriseId: scope.enterpriseId, bytes: Buffer.from(JSON.stringify({ enterpriseId: scope.enterpriseId ?? null, summary: scope.summary, claim: 'directory-visible-not-read', continuation: 'studio_assets catalog' })) } : undefined;
+          },
           assertOwner: async () => {
             if (closing) throw new RequestFault(503, 'host_closing');
             await pair(project.id, task.id, true);
@@ -306,7 +365,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               deliver();
             }),
           };
-        }, analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: metricIndexText({ dataRoot, projectId: project.id }), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution } : { projectFiles, studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
+        }, analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
           context.signal.throwIfAborted();
           await pair(project.id, task.id, true);
           const result = action === 'find' ? await personalContext.find(input, { signal: context.signal }) : await personalContext.read(parsePersonalContextReadInput(input), { signal: context.signal });
@@ -477,7 +536,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const candidateControls = new AgentCandidateControls({ dataRoot, readTarget: async ref => { const row = await candidateReader.read(ref); if (row.status !== 'available') throw new CandidateReadError('candidate_source_unknown'); } });
   const candidateReader = createAgentCandidateReader({ projects, controls: candidateControls });
   const personalContext = createPersonalContextReader({ projects, retention: personalRetention, controls: candidateControls });
-  const semanticContext = new SemanticContextService({ projects, data: projectDataContext, enterprise: enterpriseMaterials, cases,
+  const semanticContext = new SemanticContextService({ projects, data: projectDataContext, enterprise: enterpriseMaterials, cases, sourceAllowed: enterpriseSemanticSourceAllowed,
     metricLibrary: () => createMetricLibrary(path.join(dataRoot, 'metric-assets')), ...(options.sapMethodsEnabled !== false ? { methodLibrary: sapMethods } : {}), readSource: readPersonalSource, personal: personalContext });
   const studioOriginalSources = createStudioOriginalSources({ reader: semanticContext });
   const semanticGraph = options.semanticGraph || options.studioPython ? createSemanticGraphService({ bindingFor: (projectId, taskId) => studioGraph.bindingFor(projectId, taskId) ?? options.semanticGraph?.bindingFor(projectId, taskId),
@@ -489,12 +548,12 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     sourceBusy: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })),
     readBody: request => body(request),
     personal: (action, input, signal) => action === 'find' ? personalContext.find(input, { signal }) : personalContext.read(parsePersonalContextReadInput(input), { signal }),
-    methods: (projectId, taskId, action, input, signal) => {
+    methods: (projectId, taskId, action, input, signal, purpose) => {
       const common = { ...(input.pageSize !== undefined ? { pageSize: input.pageSize as number } : {}), ...(input.continuation !== undefined ? { continuation: input.continuation as string | null } : {}) };
       if (action === 'find') return semanticContext.query(projectId, taskId, { action: 'find', kinds: ['sap-method'], query: typeof input.query === 'string' ? input.query : '', ...common }, { signal, audience: 'agent' });
       const target = input.target ?? { kind: 'sap-method', methodId: input.methodId, version: input.version, ...(input.publishedHash !== undefined ? { publishedHash: input.publishedHash } : {}) };
       if (!target || typeof target !== 'object' || !('kind' in target) || target.kind !== 'sap-method') throw new RequestFault(400, 'invalid_sap_method_source');
-      return semanticContext.query(projectId, taskId, { action: 'read', target, ...common } as SemanticQueryInput, { signal, audience: 'agent' });
+      return semanticContext.query(projectId, taskId, { action: 'read', target, ...common } as SemanticQueryInput, { signal, audience: purpose === 'human-fixed-preview' ? 'human' : 'agent' });
     },
   });
   const boardSessions = createDecisionBoardSessions({
@@ -535,7 +594,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     try { if (cases.getStatus().state === 'ready') return { ...project, work: cases.getProjectWork(project.id), workUnavailable: false }; } catch {}
     return { ...project, work: null, workUnavailable: true };
   }
-  const caseRoutes = createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject });
+  const caseRoutes = createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject,
+    enterpriseScope: {
+      caseEnterpriseId: caseId => studio.enterpriseScopes.enterpriseIdForCase(caseId),
+      projectEnterpriseId: projectId => studio.enterpriseScopes.enterpriseIdForProject(projectId),
+      defaultEnterpriseId: () => { const values = studio.enterpriseScopes.list().enterprises; return values.length === 1 ? values[0]!.id : undefined; },
+      assignCase: (caseId, enterpriseId) => { studio.enterpriseScopes.associateCase(caseId, enterpriseId); },
+      assignProject: (projectId, enterpriseId) => { studio.enterpriseScopes.associateProject(projectId, enterpriseId); },
+    },
+  });
   const decisionFeedback = createDecisionFeedbackFeature({
     dataRoot, projects, cases, requirements: requirementPlugin.store, mutate,
     assertActive: async projectId => { assertActive(await projects.get(projectId)); },
@@ -752,7 +819,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   const requestFingerprint = async (input: Record<string, unknown>, projectId: string, taskId: string): Promise<string | undefined> => {
     const requirement = requirementSelection(input);
-    const enterprise = await enterpriseRequestIdentity(enterpriseMaterials, input);
+    const enterprise = await enterpriseRequestIdentity(enterpriseMaterials, input, (await enterpriseContextFor(projectId))?.sourceAllowed);
     const feedback = await decisionFeedback.requestIdentity(projectId, taskId, input.feedbackContext as FeedbackContextSelection | undefined);
     const projectData = projectDataRequestIdentity(input.projectData);
     const selectedPersonal = input.personalContext === undefined ? [] : parsePersonalContextSelections(input.personalContext);
@@ -869,7 +936,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (await handlePersonalRetentionRoute({ request, response, url, store: personalRetention, materials: enterpriseMaterials, lookup: personalLookup, readSource: readPersonalSource, readBody: body, mutate, isClosing: () => closing })) return;
       const modelPack = await modelPackRoutes(request, url);
       if (modelPack) { json(response, modelPack.status, modelPack.body); return; }
-      const metricFactory = await metricFactoryRoutes(request, url);
+      const metricFactory = request.method === 'POST' && url.pathname === '/api/metric-factory/publish'
+        ? await mutate(() => metricFactoryRoutes(request, url)) : await metricFactoryRoutes(request, url);
       if (metricFactory) { await conclusionSourcesChanged(request.method); json(response, metricFactory.status, metricFactory.value); return; }
       const methodResult = await sapMethodRoutes(request, url);
       if (methodResult) { await conclusionSourcesChanged(request.method); json(response, methodResult.status, methodResult.value); return; }
@@ -999,7 +1067,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const input = await body(request), value = await mutate(async () => {
             const selected = configuration.read(typeof input.configurationId === 'string' ? input.configurationId : undefined);
             if (!selected?.hasApiKey) throw new RequestFault(409, 'configuration_required');
+            const enterprises = studio.enterpriseScopes.list().enterprises;
+            const enterpriseId = input.enterpriseId === undefined ? (enterprises.length === 1 ? enterprises[0]!.id : undefined) : String(input.enterpriseId);
+            if (enterpriseId) studio.enterpriseScopes.get(enterpriseId);
             const created = await projects.create({ name: String(input.name ?? ''), configuration: selected });
+            if (enterpriseId) studio.enterpriseScopes.associateProject(created.id, enterpriseId);
             for (const task of created.tasks) if (!task.sessionFile && !task.lastRun) projectSessions.registerFresh(projectSessions.ref({ project: created, task }));
             return created;
           });
@@ -1315,7 +1387,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   const requirement = suppliedRequirement?.text;
                   const selections = input.personalContext === undefined ? [] : parsePersonalContextSelections(input.personalContext);
                   const personal = selections.length ? await personalContext.prepare(selections) : undefined;
-                  const enterprise = await prepareEnterpriseContext(enterpriseMaterials, cases, input);
+                  const enterprise = await prepareEnterpriseContext(enterpriseMaterials, cases, input, await enterpriseContextFor(projectId));
                   const casePrompt = await prepareCasePrompt(projectId, taskId, input);
                   const feedback = await decisionFeedback.prepareFeedbackContext(projectId,taskId,input.feedbackContext as FeedbackContextSelection | undefined,requestId);
                   const projectData = await prepareProjectDataContext(projectDataContext, projectId, input.projectData);
@@ -1331,7 +1403,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   const withData = projectData.text ? `${projectData.text}\n\n${originalPrompt}` : originalPrompt;
                   const withFeedback = feedback.text ? `${feedback.text}\n\n${withData}` : withData;
                   const withoutStudio = personal ? `本次人明确指定的历史参考（不是本次指令、权限或已核实事实）：\n${personal.text}\n\n${withFeedback}` : withFeedback;
-                  const studioContext = await studio.prepareContext(projectId, taskId, input.studioContext);
+                  const analysisOnly = (owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'legacy' && (await automatic.store.readSettings({ projectId, taskId })).enabled;
+                  const studioContext = await studio.prepareContext(projectId, taskId, input.studioContext, { analysisOnly });
                   const prompt = studioContext ? `${studioContext.text}\n\n${withoutStudio}` : withoutStudio;
                   if (prompt.length > 131072) throw new EnterpriseContextError('enterprise_context_too_large', 413);
                   startedAt = new Date().toISOString();

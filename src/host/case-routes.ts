@@ -14,11 +14,19 @@ export class CaseRouteError extends Error {
 }
 type RouteRequest = { pathname: string; method: string; input?: Record<string, unknown> };
 type RouteResult = { status?: number; body: unknown } | null;
+export interface CaseEnterpriseScopeHooks {
+  caseEnterpriseId(caseId: string): string | undefined;
+  projectEnterpriseId(projectId: string): string | undefined;
+  defaultEnterpriseId?(): string | undefined;
+  assignCase(caseId: string, enterpriseId: string): void | Promise<void>;
+  assignProject(projectId: string, enterpriseId: string): void | Promise<void>;
+}
 type Dependencies = {
   cases: CaseStore; projects: ProjectStore; configuration: ConfigurationStore;
   mutate: <T>(operation: () => T | Promise<T>) => Promise<T>;
   assertActive: (project: ProjectRecord) => void;
   decorateProject: (project: ProjectRecord) => unknown | Promise<unknown>;
+  enterpriseScope?: CaseEnterpriseScopeHooks;
 };
 function string(value: unknown): string {
   if (typeof value !== 'string') throw new CaseStoreError('invalid_text');
@@ -33,7 +41,27 @@ function nullableString(value: unknown): string | null { return value == null ? 
 function mutation(input: Record<string, unknown>) { return { operationId: string(input.operationId), expectedRevision: number(input.expectedRevision) }; }
 
 /** Case routes share the Host lifecycle queue; original project identity stays in ProjectStore. */
-export function createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject }: Dependencies) {
+export function createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject, enterpriseScope }: Dependencies) {
+  const enterpriseForLink = (caseId: string, projectId?: string, useDefault = false): string | undefined => {
+    if (!enterpriseScope) return undefined;
+    const known = [enterpriseScope.caseEnterpriseId(caseId), ...cases.listProjectLinks(caseId).map(link => enterpriseScope.projectEnterpriseId(link.projectId)), ...(projectId ? [enterpriseScope.projectEnterpriseId(projectId)] : [])].filter((id): id is string => id !== undefined);
+    const scopes = new Set(known);
+    if (scopes.size > 1) throw new CaseRouteError('case_enterprise_conflict', 409, { caseId, ...(projectId ? { projectId } : {}) });
+    return known[0] ?? (useDefault ? enterpriseScope.defaultEnterpriseId?.() : undefined);
+  };
+  const recordEnterprise = async (caseId: string, projectId: string | undefined, enterpriseId: string | undefined, details: Record<string, unknown>) => {
+    if (!enterpriseScope || !enterpriseId) return;
+    const before = enterpriseForLink(caseId, projectId);
+    if (before !== undefined && before !== enterpriseId) throw new CaseRouteError('case_enterprise_conflict', 409, { ...details, caseId, ...(projectId ? { projectId } : {}) });
+    try {
+      if (!enterpriseScope.caseEnterpriseId(caseId)) await enterpriseScope.assignCase(caseId, enterpriseId);
+      if (projectId && !enterpriseScope.projectEnterpriseId(projectId)) await enterpriseScope.assignProject(projectId, enterpriseId);
+    } catch { throw new CaseRouteError('case_enterprise_assignment_incomplete', 503, { ...details, caseId, ...(projectId ? { projectId } : {}) }); }
+    const actual = enterpriseForLink(caseId, projectId);
+    if (actual !== enterpriseId) throw new CaseRouteError('case_enterprise_conflict', 409, { ...details, caseId, ...(projectId ? { projectId } : {}) });
+    if (enterpriseScope.caseEnterpriseId(caseId) !== enterpriseId || projectId && enterpriseScope.projectEnterpriseId(projectId) !== enterpriseId)
+      throw new CaseRouteError('case_enterprise_assignment_incomplete', 503, { ...details, caseId, ...(projectId ? { projectId } : {}) });
+  };
   async function artifactView(artifact: CaseArtifactRecord, linked: Set<string>, adoption?: ArtifactAdoption): Promise<CaseArtifactView> {
     let project: ProjectRecord | undefined;
     try { project = await projects.get(artifact.projectId); } catch { /* A missing original project is a broken reference, never a new project. */ }
@@ -53,11 +81,14 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
     const common = mutation(input), projectInput = { name: string(input.name), configurationId: string(input.configurationId) };
     const previous = cases.getOperation(common.operationId), projectId = previous?.projectId ?? randomUUID();
     // Reserve validates the complete original payload even when replaying a completed operation.
-    let receipt = cases.reserveProjectCreation({ ...common, caseId, projectId, projectInput });
+    const scope = !previous && enterpriseScope ? { enterpriseScopeIntent: enterpriseForLink(caseId, projectId, true) ?? null } : undefined;
+    let receipt = cases.reserveProjectCreation({ ...common, caseId, projectId, projectInput }, scope);
     let project: ProjectRecord | null = null;
     if (receipt.phase === 'prepared') {
       const selected = configuration.read(projectInput.configurationId);
       if (!selected?.hasApiKey) throw new CaseRouteError('configuration_required', 409);
+      enterpriseForLink(caseId, projectId);
+      await recordEnterprise(caseId, undefined, receipt.enterpriseScopeIntent ?? undefined, { operationId: common.operationId, projectId, projectCreated: false });
       try {
         project = await projects.create({ name: projectInput.name, configuration: selected, reservedId: projectId });
       } catch (error) {
@@ -72,6 +103,11 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
     }
     if (!project) { try { project = await projects.get(projectId); } catch { /* Preserve the receipt and original identity. */ } }
     if (receipt.phase === 'project_created' && project) {
+      // Reconcile enterprise metadata against this exact reserved project before
+      // the original Case authority commits its link. A failed hook leaves the
+      // existing project_created receipt and identity available for inspection.
+      enterpriseForLink(caseId, projectId);
+      await recordEnterprise(caseId, projectId, receipt.enterpriseScopeIntent ?? undefined, { operationId: common.operationId, projectCreated: true });
       try {
         const result = cases.completeProjectCreation(common.operationId);
         return { project: await decorateProject(project), case: result.case, operationId: common.operationId, projectId, linked: true, phase: 'completed' };
@@ -84,6 +120,7 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
       cases.markProjectNeedsReview(common.operationId, 'created_project_unavailable');
       receipt = cases.getOperation(common.operationId)!;
     }
+    if (receipt.phase === 'completed' && project) await recordEnterprise(caseId, projectId, receipt.enterpriseScopeIntent ?? undefined, { operationId: common.operationId, projectCreated: true, linkCreated: true });
     return { project: project ? await decorateProject(project) : null, operationId: common.operationId, projectId, linked: receipt.phase === 'completed', phase: receipt.phase,
       ...(receipt.phase === 'completed' && receipt.result?.case ? { case: receipt.result.case } : {}) };
   }
@@ -116,7 +153,13 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
     if (pathname === '/api/cases/storage/initialize' && method === 'POST') return { body: await mutate(() => cases.initialize()) };
     if (pathname === '/api/cases') {
       if (method === 'GET') return { body: { cases: cases.listCases(), projectLinks: cases.listProjectLinks() } };
-      if (method === 'POST') return { status: 201, body: await mutate(() => ({ case: cases.createCase({ operationId: string(input.operationId), title: string(input.title), description: optionalString(input.description) }) })) };
+      if (method === 'POST') return { status: 201, body: await mutate(async () => {
+        const operationId = string(input.operationId), previous = cases.getOperation(operationId);
+        const scope = !previous && enterpriseScope ? { enterpriseScopeIntent: enterpriseScope.defaultEnterpriseId?.() ?? null } : undefined;
+        const record = cases.createCase({ operationId, title: string(input.title), description: optionalString(input.description) }, scope);
+        await recordEnterprise(record.id, undefined, cases.getOperation(operationId)?.enterpriseScopeIntent ?? undefined, { operationId, caseCreated: true });
+        return { case: record };
+      }) };
     }
     const operationMatch = /^\/api\/cases\/operations\/([a-f0-9-]+)$/.exec(pathname);
     if (operationMatch && method === 'GET') return { body: { operation: cases.getOperation(operationMatch[1]!) } };
@@ -156,7 +199,18 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
     }) };
     if (action === 'projects' && method === 'POST') return { body: await mutate(async () => {
       const projectId = string(input.projectId); await projects.get(projectId);
-      return cases.linkProject({ ...mutation(input), caseId, projectId, recoveryOf: optionalString(input.recoveryOfOperationId) });
+      const common = mutation(input), previous = cases.getOperation(common.operationId), recoveryOf = optionalString(input.recoveryOfOperationId);
+      // Native receipts validate replay payloads and retain the original scope.
+      // A retry repairs only that association, never guesses from later defaults.
+      const recoveryIntent = !previous && recoveryOf ? cases.getOperation(recoveryOf)?.enterpriseScopeIntent : undefined;
+      const scope = !previous && enterpriseScope ? { enterpriseScopeIntent: recoveryIntent ?? enterpriseForLink(caseId, projectId) ?? null } : undefined;
+      if (scope?.enterpriseScopeIntent) {
+        const current = enterpriseForLink(caseId, projectId);
+        if (current !== undefined && current !== scope.enterpriseScopeIntent) throw new CaseRouteError('case_enterprise_conflict', 409, { caseId, projectId });
+      }
+      const result = cases.linkProject({ ...common, caseId, projectId, recoveryOf }, scope);
+      await recordEnterprise(caseId, projectId, cases.getOperation(common.operationId)?.enterpriseScopeIntent ?? undefined, { operationId: common.operationId, linkCreated: true });
+      return result;
     }) };
     if (action === 'projects/create' && method === 'POST') return { status: 201, body: await mutate(() => createProjectAndLink(caseId, input)) };
     const projectMatch = /^projects\/([a-f0-9-]+)$/.exec(action ?? '');

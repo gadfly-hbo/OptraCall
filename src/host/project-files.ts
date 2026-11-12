@@ -13,6 +13,7 @@ function fault(code: string): never { throw Object.assign(new Error(code), { cod
 
 export function createProjectFilesPort(options: {
   projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore; projectId: string; taskId: string; assertOwner(): Promise<void>;
+  readScopedCatalog?(): Promise<{ bytes: Buffer; enterpriseId?: string } | undefined>;
 }): ProjectFilesPort {
   return async (action, input, context) => {
     const check = () => { context.signal.throwIfAborted(); context.assertCurrent(); };
@@ -37,11 +38,21 @@ export function createProjectFilesPort(options: {
     }
     if (action === 'read-catalog') {
       if (Object.keys(input).length !== 0) fault('invalid_catalog_arguments');
+      const scoped = await options.readScopedCatalog?.();
+      if (scoped) {
+        const result = await readProjectFileText({ bytes: scoped.bytes, signal: context.signal, toolCallId: context.toolCallId });
+        await owner(); const current = await options.readScopedCatalog?.();
+        if (!current || current.enterpriseId !== scoped.enterpriseId || !current.bytes.equals(scoped.bytes)) fault('enterprise_storage_changed');
+        return { content: result.content, details: { ...result.details, type: 'optracall.project-catalog-read', ...identity,
+          scope: 'enterprise-qualified-discovery-not-body-read', enterpriseId: scoped.enterpriseId,
+          sha256: createHash('sha256').update(scoped.bytes).digest('hex'), bytes: scoped.bytes.length } };
+      }
       const catalog = options.enterpriseMaterials.readEnabledCatalog();
       const result = await readProjectFileText({ bytes: catalog.bytes, signal: context.signal, toolCallId: context.toolCallId });
       await owner();
       const current = options.enterpriseMaterials.readEnabledCatalog();
       if (current.storeId !== catalog.storeId || !current.bytes.equals(catalog.bytes)) fault('enterprise_storage_changed');
+      if (await options.readScopedCatalog?.()) fault('enterprise_storage_changed');
       const content = result.details.truncation ? result.content.map(part => ({ ...part,
         text: part.text.replace(/Use offset=(\d+) to continue\./u, 'Use the ordinary authorized read tool with offset=$1 to continue.'),
       })) : result.content;
