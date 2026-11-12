@@ -1,0 +1,18 @@
+{
+  "result": "ARCHIVED_VERIFIED",
+  "utc": "2026-11-12T02:31:23Z",
+  "source": "/Users/huangbo/Dev/OptraCall-Test-And-Repair/待修复/OptraCall用户试用报告2026-11-12.pdf",
+  "target": "/Users/huangbo/Dev/OptraCall-Test-And-Repair/已修复/OptraCall用户试用报告2026-11-12.pdf",
+  "sourceAbsent": true,
+  "method": "same-volume link with no replacement, verify, unlink, readback",
+  "bytes": 378453,
+  "sha256": "51edbd0e33a83984904e98a325a16b67b84434d67c6a69f4f028ba7a1d9c84a2",
+  "independentReadback": {
+    "result": "PASS",
+    "sourceAbsent": true,
+    "target": "/Users/huangbo/Dev/OptraCall-Test-And-Repair/已修复/OptraCall用户试用报告2026-11-12.pdf",
+    "bytes": 378453,
+    "sha256": "51edbd0e33a83984904e98a325a16b67b84434d67c6a69f4f028ba7a1d9c84a2",
+    "regularFile": true
+  }
+}

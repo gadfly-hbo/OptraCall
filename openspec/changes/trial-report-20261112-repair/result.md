@@ -1,6 +1,6 @@
 # 2026-11-12 试用报告修复结果
 
-状态：本地修复与验证、非作者独立复核通过；提交后的 CI 与原报告归档待执行。
+状态：修复、适用验证、非作者独立复核、工作分支 Git/CI 与原报告归档完成；[PR #64](https://github.com/gadfly-hbo/OptraCall/pull/64) 待合并。
 
 ## 固定范围与实现
 
@@ -37,4 +37,12 @@
 
 长期 `Test-And-Repair` 保留。开工 `d039944` 与此前 main squash `df2f50c` 同树；普通合并最新 `origin/main ab06205` 为 `0eb050e`，合并结果精确等于 main 树 `fe248714bb3d7d981a02ff7ee0bae395f9b7f365`。准备交付再次 fetch，main 仍为 `ab06205`，远端长期分支仍为 `d039944`。
 
-待记录本轮候选/PR、实际 head CI 及 SSH 无覆盖归档回执。报告归档只标记本报告修复处理完成，代码合并、两端更新及用户验收分别记录。
+修复提交 `4785b96afd548355a288463350da16829b15da32` 已推送至长期分支并建立 [PR #64](https://github.com/gadfly-hbo/OptraCall/pull/64)。[Check #43141158209](https://github.com/gadfly-hbo/OptraCall/actions/runs/43141158209) PASS，已核对 pull_request 事件、Test-And-Repair 分支、实际 checkout SHA、2096项／1946通过／0失败／150平台条件跳过，以及构建与高危依赖审计成功。macOS本地和Ubuntu条件跳过数分别保留，不合并计数。
+
+2026-11-12 10:31:23（北京时间），SSH 用同卷无覆盖硬链接、核对同一文件及内容后解除源链接，将原件归入：
+
+`/Users/huangbo/Dev/OptraCall-Test-And-Repair/已修复/OptraCall用户试用报告2026-11-12.pdf`
+
+独立第二次 SSH 回读确认原待修路径不存在、目标为普通文件，378453字节及SHA-256与固定输入完全一致。完整 [归档回执](report-archive.json) 保留，原报告内容与原失败截图未改写。
+
+后续提交仅补记本结果、spec状态与归档回执，产品和测试源码与上述已验证修复提交一致；最终 PR Check 按当前实际 head 核对。报告归档只标记本报告修复处理完成，代码合并、两端更新及用户验收分别记录。
