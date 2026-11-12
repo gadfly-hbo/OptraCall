@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-13",
+  "branch": "codex/SAA_Studio_2",
+  "baseHead": "8cb7a058d085ad0373ad862ecf3d458588e72664",
+  "status": "local implementation verified; v2 professional narrative FAIL retained; stop before I08/M",
+  "productAndTests": [
+    {
+      "path": "extensions/business-plugins/studio/contracts.ts",
+      "bytes": 11067,
+      "sha256": "c0d2185fe27e5c847a0bfccbc10b35ec34c7772cf0ba629b3b1e2afa354e5081"
+    },
+    {
+      "path": "extensions/business-plugins/studio/foundation.ts",
+      "bytes": 27209,
+      "sha256": "f1bbb5cb2d038835af13c55dd4058ddd29f223473263dcfa2b3232c7f75f61b5"
+    },
+    {
+      "path": "extensions/business-plugins/studio/store.ts",
+      "bytes": 53573,
+      "sha256": "4153637052f4aa31a870d6df10440749dff41120c7b2927ec5c953b05cc1ab30"
+    },
+    {
+      "path": "scripts/fourbase_l2/studio_reason.py",
+      "bytes": 20942,
+      "sha256": "32d8b297f31a038613a85f45c006a2ba6170dad4b375f6558dd13b4180605149"
+    },
+    {
+      "path": "src/agent/project-session.ts",
+      "bytes": 83058,
+      "sha256": "9248d6c41b278b49e32bc41d4947bcaa74a2d41b9460264e75c8e5063470e27f"
+    },
+    {
+      "path": "src/agent/studio.ts",
+      "bytes": 3670,
+      "sha256": "270801b55fc3d8b69fc3dabe6fc591f3ecd40006ab6e89193ccab0511777f76a"
+    },
+    {
+      "path": "src/host/server.ts",
+      "bytes": 148029,
+      "sha256": "07a1f9bdb214b459027928593dfffe90d779f7729235b0c0dedfda3eb46c3981"
+    },
+    {
+      "path": "src/host/studio-foundation.ts",
+      "bytes": 9988,
+      "sha256": "20322d9de066e380cd1e1e7b8a8d8118b79eab41018c4ed00f12a4c529683f35"
+    },
+    {
+      "path": "src/host/studio-host.ts",
+      "bytes": 111237,
+      "sha256": "e91da870a5ab44bc43aaa143539d773e1428a72a5dd068dc063ae302b879ff95"
+    },
+    {
+      "path": "src/host/studio-rule-reasoning.ts",
+      "bytes": 12566,
+      "sha256": "8a384dd5fc5eba00a8d6d860472ce7a1a56ca757ed8b715357e822b9bd03c04a"
+    },
+    {
+      "path": "src/host/studio-semantic.ts",
+      "bytes": 11119,
+      "sha256": "0a277cdd9078b2b8b46e6b96b132aaff810aaafa29aaaad36bb58e6ee17577b5"
+    },
+    {
+      "path": "src/host/ui/SemanticContextPanel.tsx",
+      "bytes": 28036,
+      "sha256": "e6ee5093bc60af5eed65065dfcaaf4bb141c8b16d746b3f5a546cd85ca0c1db7"
+    },
+    {
+      "path": "src/host/ui/StudioFoundationView.tsx",
+      "bytes": 21834,
+      "sha256": "79153d31b39b89383a185849f06cfce71affef947a7d76b341a3fc601209346f"
+    },
+    {
+      "path": "src/host/ui/StudioPage.tsx",
+      "bytes": 128682,
+      "sha256": "224e876f1f4a25f666ea3402bf844284efe394639344615cb6c8bc23f2e0b302"
+    },
+    {
+      "path": "src/host/ui/StudioRuleExecutionView.tsx",
+      "bytes": 24387,
+      "sha256": "fc7248a019f84aaf72bd7270490fff1718a928dda1c3e18e82e92c41dbdb34e6"
+    },
+    {
+      "path": "src/host/ui/semantic-context-history.ts",
+      "bytes": 8112,
+      "sha256": "324d81bed78c23342ddd73f94da8996b4e188737a106878f023840b5d25ef35e"
+    },
+    {
+      "path": "src/host/ui/studio.css",
+      "bytes": 19391,
+      "sha256": "a69dd8a21289b50fa158cf0b262e5e94ece6ca589edd67ed8a7fe8e4aa06a693"
+    },
+    {
+      "path": "tests/fixtures/studio-rule.ts",
+      "bytes": 7482,
+      "sha256": "0dc6a73231903ed4f8255f6bfaa1fed187bb60b1f29db0ee58569a480753eb44"
+    },
+    {
+      "path": "tests/fourbase_l2/test_studio_reason.py",
+      "bytes": 20954,
+      "sha256": "8eb0132b73fb1f9f7c740ca416952d2a5d33855aa5dcf8cdbb601e55ce279837"
+    },
+    {
+      "path": "tests/studio-rule-content.test.ts",
+      "bytes": 12051,
+      "sha256": "2b1a343d322571b16b093970f894992f3d8ce69a6b174086ad959220cdff896a"
+    },
+    {
+      "path": "tests/studio-rule-host.test.ts",
+      "bytes": 17596,
+      "sha256": "a8cab9ede5022acd742c4bed302aa45badca9838f2d99100431ec8110efe4098"
+    },
+    {
+      "path": "tests/studio-rule-publication.test.ts",
+      "bytes": 13075,
+      "sha256": "a01da87952a1d2c9a4e3dce99cb62f22793f6ec07c1c7361301d949091c9a343"
+    },
+    {
+      "path": "tests/studio-rule-runtime.test.ts",
+      "bytes": 12541,
+      "sha256": "48a734d3befccd4eb6f9cd4bd87d80c0858b7725be575f87fa8b1f42237d52ac"
+    },
+    {
+      "path": "tests/studio-rule-ui.test.ts",
+      "bytes": 23541,
+      "sha256": "95d1d3961f19b3b3e33028b78af22fcf593cb35ac5b81aec6d2134c37e730ae1"
+    },
+    {
+      "path": "tests/studio-rule-worker.test.ts",
+      "bytes": 2444,
+      "sha256": "8b36c8289be78939155d095a70b4e188c4859e0b3c8b4d0f3f3754aea051765f"
+    }
+  ],
+  "validation": {
+    "fullCheck": {
+      "tests": 2261,
+      "pass": 2191,
+      "skip": 70,
+      "fail": 0
+    },
+    "actualSdkNode": {
+      "pass": 17,
+      "fail": 0,
+      "skip": 0
+    },
+    "pythonRules": {
+      "pass": 26
+    },
+    "independentCore": "PASS",
+    "v1Professional": "limited synthetic PASS",
+    "v2Professional": "calculations PASS; all 3 narrative versions FAIL"
+  },
+  "retainedFailures": [
+    "prior full-check historical read 409; original cause/causal attribution UNKNOWN",
+    "two initial model budget cancellations",
+    "v2 narrative B01/B02/B04 and B03 observation",
+    "revision1 output budget exceeded"
+  ],
+  "notRun": [
+    "Git commit/push/PR/CI/main",
+    "Mini/MacBook runtime adoption",
+    "target enterprise construction",
+    "user product acceptance"
+  ],
+  "evidence": "result.md; implementation.md; private .local/studio-rule-reasoning-implementation/",
+  "delivery": {
+    "authorization": "delivery-authorization.json",
+    "status": "Git/CI authorized; in progress; no main merge or runtime adoption",
+    "record": "delivery.md"
+  }
+}

@@ -24,6 +24,7 @@ import { SapMethodStoreError } from '../../extensions/business-plugins/metric-fa
 import { EnterpriseScopeStore } from './enterprise-scope-store.ts';
 import { createStudioEnterpriseCatalog } from './studio-enterprise-catalog.ts';
 import { CaseStoreError, type CaseStore } from './case-store.ts';
+import { reasonWithStudioSources, type StudioRuleCommand, type StudioRuleResult } from './studio-rule-reasoning.ts';
 
 function json(response: ServerResponse, status: number, value: unknown) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(JSON.stringify(value));
@@ -42,6 +43,7 @@ export type StudioHostOptions = {
   extract?(system: StudioSystem, ref: StudioSourceRef, context: SemanticContextCallContext): Promise<unknown>;
   refreshGraph?(system: StudioSystem, snapshotId: string, task: TaskRecord): Promise<{ snapshotId: string; sourceRefs: StudioSourceRef[]; detail: string }>;
   inspectGraph?(systemId: string, snapshotId: string): Promise<{ snapshotId: string; sourceRefs: StudioSourceRef[]; detail: string }>;
+  reason?(command: StudioRuleCommand, context: SemanticContextCallContext): Promise<StudioRuleResult>;
 };
 export function createStudioFeature(options: StudioHostOptions) {
   const store = new StudioStore(options.dataRoot), operations = studioOperations(options.dataRoot);
@@ -144,11 +146,27 @@ export function createStudioFeature(options: StudioHostOptions) {
       }
     }
   }
+  async function qualifyRulePublication(system: StudioSystem, input: Record<string, unknown>) {
+    if (!Array.isArray(input.purposes) || !input.purposes.includes('rule-execution')) return;
+    if (!options.taskSnapshot) throw new StudioError('studio_rule_execution_evidence_required', 409);
+    const owner = studioExecutionOwner(system), snapshot = await options.taskSnapshot(owner.projectId, owner.taskId);
+    const results = snapshot.messages.filter(message => message.role === 'toolResult' && !message.isError && message.toolName === 'studio_assets' && message.details?.type === 'optracall.studio' && message.details.action === 'reason').map(message => message.details!.result as any);
+    for (const id of Array.isArray(input.assetIds) ? input.assetIds : []) {
+      const asset = system.assets.find(asset => asset.id === id), revision = asset?.revisions.find(r => r.revision === (asset.candidateRevision ?? asset.formalRevision));
+      if (!asset || !revision) continue;
+      const parsed = parseFoundationContent(revision.body); if (parsed.kind !== 'supported' || !parsed.profile?.ruleExecution) continue;
+      const matching = results.find(result => result?.engineInvoked === true && result.completion === 'complete' && result.component?.name === 'semantica' && result.component.version === '0.7.0'
+        && result.identity?.projectId === owner.projectId && result.identity.taskId === owner.taskId && result.identity.ruleRef?.id === asset.id && result.identity.ruleRef.version === String(revision.revision) && result.identity.ruleRef.sha256 === revision.sha256
+        && Array.isArray(result.assessments) && !result.assessments.some((value: any) => value.state === 'conflict') && result.constraints?.conforms !== false);
+      if (!matching) throw new StudioError('studio_rule_execution_evidence_required', 409);
+      for (const ref of Array.isArray(matching.identity.sourceRefs) ? matching.identity.sourceRefs : []) await sources.read(sourceRef(ref), owner.projectId, system.id, { construction: true, taskId: owner.taskId });
+    }
+  }
   async function publish(system: StudioSystem, previewId: string, fingerprint: string) {
     const preview = system.publications.find(value => value.preview.id === previewId)?.preview;
     if (!preview) throw new StudioError('studio_publication_not_found', 404);
     await validatePublicationRefs(system, preview.refs);
-    if (!preview.confirmedAt) await qualifyFoundationSelection(system, preview.items.map(item => item.assetId), preview.refs);
+    if (!preview.confirmedAt) { await qualifyFoundationSelection(system, preview.items.map(item => item.assetId), preview.refs); await qualifyRulePublication(system, { assetIds: preview.items.map(item => item.assetId), purposes: preview.purposes }); }
     for (const contribution of preview.contributions ?? []) await qualifyContributionEvidence(system, contribution.sourceProjectId, contribution.sourceTaskId, contribution);
     const publication = store.confirmPublication(system.id, previewId, fingerprint);
     for (const ref of preview.refs.filter(item => ['sap-metric','sap-method'].includes(item.authority))) {
@@ -292,7 +310,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     const ref: StudioSourceRef = { authority: 'studio-source', id: asset.id, version: String(exact.revision), sha256: exact.sha256, projectId: system.projectId, locator: system.id };
     return { asset: { id: asset.id, kind: asset.kind, topicId: asset.topicId, candidateRevision: asset.candidateRevision, formalRevision: asset.formalRevision, revision: { revision: exact.revision, sha256: exact.sha256 } }, ref, exact };
   };
-  const sourceContract = { foundation: foundationContentContract, sourceRef: '{authority,id,version,sha256?,projectId?,taskId?,locator?}', originalRefs: 'Case/M2 use authority case/data, id=recordId|choiceId|datasetId, version=revision|choice1|descriptionRevisionId|inputVersionId, locator=JSON exact original semantic target without sourceHandle; M2 retains ownproject; read-semantic-context finds original identity, no duplicate source Store', saveAsset: '{assetId?,expectedRevision?,kind:business|concept|rule|ontology|binding|hypothesis|strategy,title,body,scope,sources:SourceRef[],dependencies?:SourceRef[],checks:[{name,status:pass|fail|unknown,detail}],limitations?:string[],readyForPublication?:boolean,reason?,extraction?:{method,sourceRefs:SourceRef[],failures:string[],fallbacks:string[],reviewed:boolean}}; save extraction fields only from actual extraction/review evidence: exact source refs, actual methods/failures/fallbacks, and reviewed=true only after Agent verifies the candidate against its sources. This is author evidence, not a Host business score.', workItem: '{id?,kind:task|question|gap|review,title,detail,impact,nextStep,sources:SourceRef[],status:open|waiting|in_progress|resolved}', publication: '{topicId?,assetIds:string[],refs?:SourceRef[],summary,scope,checks?,limitations?,excluded?,targetProjectIds?}; assetIds select Studio source assets; refs select professional outputs for their original publication authorities, such as registered sap-metric or saved sap-method refs. Input materials belong in asset sources/dependencies, not publication.refs; enterprise/data/RAP/Case material refs do not become new published professional outputs by appearing here.', sap0_2: {
+  const sourceContract = { foundation: foundationContentContract, sourceRef: '{authority,id,version,sha256?,projectId?,taskId?,locator?}', originalRefs: 'Case/M2 use authority case/data, id=recordId|choiceId|datasetId, version=revision|choice1|descriptionRevisionId|inputVersionId, locator=JSON exact original semantic target without sourceHandle; M2 retains ownproject; read-semantic-context finds original identity, no duplicate source Store', saveAsset: '{assetId?,expectedRevision?,kind:business|concept|rule|ontology|binding|hypothesis|strategy,title,body,scope,sources:SourceRef[],dependencies?:SourceRef[],checks:[{name,status:pass|fail|unknown,detail}],limitations?:string[],readyForPublication?:boolean,reason?,extraction?:{method,sourceRefs:SourceRef[],failures:string[],fallbacks:string[],reviewed:boolean}}; save extraction fields only from actual extraction/review evidence: exact source refs, actual methods/failures/fallbacks, and reviewed=true only after Agent verifies the candidate against its sources. This is author evidence, not a Host business score.', workItem: '{id?,kind:task|question|gap|review,title,detail,impact,nextStep,sources:SourceRef[],status:open|waiting|in_progress|resolved}', publication: '{topicId?,assetIds:string[],refs?:SourceRef[],summary,scope,checks?,limitations?,excluded?,targetProjectIds?,purposes?:[definition-reference|rule-execution|metric-calculation]}; assetIds select Studio source assets; refs select professional outputs for their original publication authorities, such as registered sap-metric or saved sap-method refs. Input materials belong in asset sources/dependencies, not publication.refs; enterprise/data/RAP/Case material refs do not become new published professional outputs by appearing here.', sap0_2: {
     source: 'Technical shape from the unchanged metric-factory/sap/validate.ts SapDocument/SapMetric/SapScenario contract; no business sample. Write project-local SAP0.2 YAML using authorized business materials; historical business files are not needed to learn this format.',
     SapDocument: { sap: 'literal string "0.2"', package: 'SapPackage', dimensions: 'unique non-empty identifier string[]', metrics: 'non-empty SapMetric[]', scenarios: 'SapScenario[] (may be empty)' },
     SapPackage: { id: 'string matching ^[a-z][a-z0-9-]*$', version: 'string matching ^\\d+\\.\\d+\\.\\d+$', namespace: 'literal mf.<package.id>', fingerprint: 'empty string or sha256:<64 lowercase hex>' },
@@ -317,6 +335,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     'save-sap-method': '{title,content:{conditions,logic,judgment,limits},sources:SourceRef[],methodId?,baseVersion?,relation?}; original SAP method library, unpublished; reply ref has authority:sap-method,id,version,sha256,locator:candidate. read-source {ref,start,length} recovers exact original candidate version, not a published method; Studio read section:assetRefs discovers attached refs',
     'register-sap-metric': '{path:020_clean/*.yaml}; Agent first writes original SAP0.2 YAML in its project; namespace=mf.<package.id>; original structural validator applies; Binding remains data mapping authority',
     'prepare-publication': '{topicId?,assetIds:string[],refs?:SourceRef[],summary:string,scope:string,checks?:[{name,status:pass|fail|unknown,detail}],limitations?:string[],excluded?:string[],targetProjectIds?:string[]}; assetIds select reviewed Studio source versions; refs select the exact professional outputs to publish in their original SAP authorities, using register-sap-metric/save-sap-method returned refs. Input source materials stay in each asset sources/dependencies and are not publication outputs. Empty assetIds is supported when refs selects outputs; at least one selected item/ref is required. Returns the real preview id/fingerprint or its exact read continuation, prepared-not-approved; user confirmation, actual module result, project adoption, graph refresh and use remain separate.',
+    'reason': '{ref:exact studio-source Ref,itemId,purpose,factsRef:exact current-project020 JSON Ref}; catalog.inputs provides these exact current-project data refs: copy input.ref unchanged (data.id is the path identity, version/sha256 identify file content; never invent either). systemId may be omitted for read-source/reason when the exact studio-source ref already has its locator; optional read-only deterministic execution, candidate only for construction owner, ordinary only for exact published rule-execution purpose. facts JSON contractVersion=studio-rule-facts/1,purpose (reason.payload.purpose must copy this exact value, NOT publication purpose rule-execution),facts:[{factId,statement,requirementId,sourceRefs,locator,kind:observed|external-computation,bindingRef}], targets:[{targetId,positive,negative?}], coverage:{complete,detail,cutoffAt:ISO,businessTime,missingRequirementIds:[]}. sourceRefs must include the exact requirement.sourceRef/calculationRefs plus actual observed inputs. No paths/SDK config/budget supplied. Official safe positive conjunctive acyclic atoms only; no business actions. Return original engine conclusions/premises, distinct missing/negative/not-derived/conflict, complete/incomplete/unsupported and exact identity. Facts are an Agent projection, not independently verified. Confidence is not business probability. For executable publication include purposes:[rule-execution], definition/mapping/computation readiness pass, revision check name=rule-execution pass, and a real successful current-revision reason receipt. prepare alone never approves.',
     'extract': '{ref}; official Semantica candidate, never an asset/publication. Small results retain original fields. Large results return extractionId and transport.complete=false; full exact JSON, actual methods/failures/provenance remain in Host technical receipt. Use read-extraction for needed sections and verify source before saving; do not repeat an already completed extraction merely to recover its output',
     'read-extraction': '{extractionId?,section?:metadata|entities|relations|result,start?:codepoint-offset,length?:1..20000}; construction owner only; current source eligibility rechecked. Exact JSON-text fragments with explicit ranges/continuation, metadata includes original sourceRef/owner and method/failure/fallback/provenance. Without extractionId lists up to 5 own-system receipt summaries (start/length items); read selected original result before considering another extraction. Partial pages are not complete. Choose relevant parts autonomously; no full-read gate',
     'mark-issue': '{assetId,revision,sources,reason}; construction Agent explicit, evidenced confirmed error governance; feedback alone never makes this decision',
@@ -364,18 +383,20 @@ export function createStudioFeature(options: StudioHostOptions) {
           const enterpriseId = enterpriseScopes.enterpriseIdForProject(projectId);
           const systems = store.list().filter(system => availableFor(system, projectId)).map(system => ({ id: system.id, name: system.name, projectId: system.projectId, taskId: system.taskId, executionOwner: studioExecutionOwner(system), topics: system.topics.map(({ id, title }) => ({ id, title })), construction: construction?.id === system.id }));
           const items = enterpriseId ? (await enterpriseCatalog.catalog(enterpriseId)).items.filter(item => item.eligible && item.ref) : [];
-          const directory = [...systems.map(system => ({ kind: 'system' as const, system })), ...items.map(item => ({ kind: 'source' as const, item }))];
+          const inputs = (await sources.inventory(projectId)).filter(item => item.ref.authority === 'data');
+          const directory = [...systems.map(system => ({ kind: 'system' as const, system })), ...items.map(item => ({ kind: 'source' as const, item })), ...inputs.map(input => ({ kind: 'input' as const, input }))];
           const catalogSha256 = digest(directory);
           if (payload.expectedCatalogSha256 !== undefined && payload.expectedCatalogSha256 !== catalogSha256) throw new StudioError('studio_catalog_changed', 409);
           const start = payload.start === undefined ? 0 : Number(payload.start), length = payload.length === undefined ? 20 : Number(payload.length);
           if (!Number.isSafeInteger(start) || start < 0 || start > directory.length || !Number.isSafeInteger(length) || length < 1 || length > 100) throw new StudioError('invalid_studio_source_range');
           let end = Math.min(directory.length, start + length);
-          const page = () => { const selected = directory.slice(start, end); return { ...(enterpriseId ? { enterpriseId } : {}), systems: selected.flatMap(entry => entry.kind === 'system' ? [entry.system] : []), items: selected.flatMap(entry => entry.kind === 'source' ? [entry.item] : []), catalogSha256, range: { start, end, total: directory.length, unit: 'entries' }, complete: end === directory.length, continuation: end < directory.length ? { action: 'catalog', payload: { start: end, length, expectedCatalogSha256: catalogSha256 } } : null, contract: sourceContract }; };
+          const page = () => { const selected = directory.slice(start, end); return { ...(enterpriseId ? { enterpriseId } : {}), systems: selected.flatMap(entry => entry.kind === 'system' ? [entry.system] : []), items: selected.flatMap(entry => entry.kind === 'source' ? [entry.item] : []), inputs: selected.flatMap(entry => entry.kind === 'input' ? [entry.input] : []), catalogSha256, range: { start, end, total: directory.length, unit: 'entries' }, complete: end === directory.length, continuation: end < directory.length ? { action: 'catalog', payload: { start: end, length, expectedCatalogSha256: catalogSha256 } } : null, contract: sourceContract }; };
           while (end > start && JSON.stringify(page()).length > 28_000) end--;
           if (end === start && start < directory.length) throw new StudioError('studio_result_too_large', 413);
           await assertCurrent(); return reply(action, page());
         }
-        const id = input.systemId === undefined ? construction?.id : uuid(input.systemId);
+        const exactSourceSystem = ['read-source', 'reason'].includes(action) && object(payload.ref) && payload.ref.authority === 'studio-source' ? payload.ref.locator : undefined;
+        const id = input.systemId === undefined ? exactSourceSystem === undefined ? construction?.id : uuid(exactSourceSystem) : uuid(input.systemId);
         if (!id && action === 'read-source') {
           const ref = sourceRef(payload.ref);
           if (!['enterprise','sap-metric','sap-method'].includes(ref.authority) || ref.locator?.startsWith('020_clean/')) throw new StudioError('studio_system_required');
@@ -384,6 +405,24 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (!id) throw new StudioError('studio_system_required');
         const system = store.get(id), isConstruction = construction?.id === id;
         if (!availableFor(system, projectId)) throw new StudioError('studio_owner_mismatch', 403);
+        if (action === 'reason') {
+          const ruleRef = sourceRef(payload.ref);
+          const executionQualified = () => {
+            const latest = store.get(id);
+            if (!availableFor(latest, projectId) || isConstruction && constructionFor(projectId, taskId)?.id !== id) throw new StudioError('studio_owner_mismatch', 403);
+            if (!isConstruction && !latest.publications.some(publication => publication.preview.confirmedAt && publication.preview.purposes?.includes('rule-execution') && publication.results.some(result => result.module === 'studio-source' && result.status === 'succeeded') && publication.preview.items.some(item => item.assetId === ruleRef.id && String(item.revision) === ruleRef.version && item.sha256 === ruleRef.sha256))) throw new StudioError('studio_rule_execution_not_published', 403);
+          };
+          executionQualified();
+          const result = await reasonWithStudioSources({ projectId, taskId, enterpriseId: enterpriseScopes.enterpriseIdForProject(projectId), construction: isConstruction,
+            read: async ref => { await assertCurrent(); return sources.read(ref, projectId, id, { construction: isConstruction, taskId }); }, execute: options.reason }, payload, context);
+          return options.mutate(async () => {
+            await assertCurrent(); executionQualified();
+            for (const ref of result.identity.sourceRefs) await sources.read(ref, projectId, id, { construction: isConstruction, taskId });
+            context.assertCurrent(); context.signal.throwIfAborted();
+            if (options.closing()) throw new StudioError('host_closing', 503);
+            return reply(action, result);
+          });
+        }
         if (action === 'read') {
           if (payload.section === 'contributions') {
             const list = (system.contributions ?? []).filter(item => isConstruction || item.sourceProjectId === projectId && item.sourceTaskId === taskId);
@@ -527,7 +566,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           if (action === 'add-topic') return reply(action, { topic: store.addTopic(id, { title: text(payload.title, 200, false), goal: text(payload.goal, 20_000, false), scope: text(payload.scope, 20_000) }) });
           if (action === 'update-topic') { const saved = store.update(id, payload as unknown as StudioUpdateInput), topic = saved.topics.find(value => value.id === saved.currentTopicId)!; return boundedReply(action, { system: saved }, { system: { id: saved.id, revision: saved.revision, currentTopicId: saved.currentTopicId }, topic: { id: topic.id } }, id, { action: 'read', payload: jsonRead(topic, { section: 'topics', topicId: topic.id }) }); }
           if (action === 'attach-ref') { const ref = sourceRef(payload.ref); await sources.validate(ref, projectId, id, { construction: true }); context.assertCurrent(); context.signal.throwIfAborted(); return reply(action, { ref: store.addAssetRef(id, ref) }); }
-          if (action === 'prepare-publication') { await qualifyFoundationSelection(system, payload.assetIds, parseSources(payload.refs ?? [])); await validatePublicationRefs(system, parseSources(payload.refs ?? [])); await qualifySelectedContributions(system, payload); context.assertCurrent(); context.signal.throwIfAborted(); const preview = store.preparePublication(id, payload as unknown as StudioPublicationInput), publication = store.get(id).publications.find(value => value.preview.id === preview.id)!; return boundedReply(action, { preview, claim: 'prepared-not-approved' }, { preview: { id: preview.id, fingerprint: preview.fingerprint, systemRevision: preview.systemRevision, topicId: preview.topicId, itemCount: preview.items.length, refCount: preview.refs.length }, claim: 'prepared-not-approved' }, id, { action: 'read', payload: jsonRead(publication, { section: 'publications', publicationId: preview.id }) }); }
+          if (action === 'prepare-publication') { await qualifyRulePublication(system, payload); await qualifyFoundationSelection(system, payload.assetIds, parseSources(payload.refs ?? [])); await validatePublicationRefs(system, parseSources(payload.refs ?? [])); await qualifySelectedContributions(system, payload); context.assertCurrent(); context.signal.throwIfAborted(); const preview = store.preparePublication(id, payload as unknown as StudioPublicationInput), publication = store.get(id).publications.find(value => value.preview.id === preview.id)!; return boundedReply(action, { preview, claim: 'prepared-not-approved' }, { preview: { id: preview.id, fingerprint: preview.fingerprint, systemRevision: preview.systemRevision, topicId: preview.topicId, itemCount: preview.items.length, refCount: preview.refs.length }, claim: 'prepared-not-approved' }, id, { action: 'read', payload: jsonRead(publication, { section: 'publications', publicationId: preview.id }) }); }
           if (action === 'mark-issue') { const refs = parseSources(payload.sources); if (!refs.length) throw new StudioError('studio_issue_evidence_required'); await validateSources(refs, system); context.assertCurrent(); context.signal.throwIfAborted(); const asset = system.assets.find(asset => asset.id === payload.assetId); if (!asset || asset.formalRevision !== payload.revision) throw new StudioError('studio_asset_conflict', 409); return reply(action, { asset: store.markAssetIssue(id, asset.id, text(payload.reason, 20_000, false)), evidence: refs, claim: 'construction-agent-explicit-governance-decision-not-automatic-feedback' }); }
           if (action === 'update-feedback') { if (payload.sources !== undefined) { await validateSources(parseSources(payload.sources), system); context.assertCurrent(); context.signal.throwIfAborted(); } if (payload.status === 'verified') { if (!object(payload.verification)) throw new StudioError('studio_use_verification_required', 409); const refs = parseSources(payload.verification.sources); for (const ref of refs) { if (ref.authority === 'task') { const owner = system.uses.find(use => digest(use.report) === digest(ref) || use.assessments?.some(assessment => digest(assessment.report) === digest(ref))); if (!owner) throw new StudioError('studio_use_verification_required', 409); await sources.validate(ref, owner.projectId, id); } else { const use = system.uses.find(use => use.sources.some(source => digest(source) === digest(ref))); await sources.validate(ref, use?.projectId ?? projectId, id, { construction: !use }); } } context.assertCurrent(); context.signal.throwIfAborted(); } return reply(action, { feedback: store.updateFeedback(id, uuid(payload.feedbackId), payload as unknown as StudioFeedbackUpdate) }); }
           throw new StudioError('studio_action_not_available', 409);
@@ -757,6 +796,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           else if (action === 'assets') await saveAsset(id, input, false);
           else if (action === 'answers') store.answerWorkItem(id, uuid(input.workItemId), text(input.answer, 20_000, false), input.expectedQuestionContextSha256);
           else if (action === 'preview') {
+            await qualifyRulePublication(system, input);
             await qualifyFoundationSelection(system, input.assetIds, parseSources(input.refs ?? []));
             await validatePublicationRefs(system, parseSources(input.refs ?? []));
             await qualifySelectedContributions(system, input);

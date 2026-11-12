@@ -1,3 +1,5 @@
+import type { FoundationFactRequirement, FoundationRuleExecution } from './foundation.ts';
+
 /** Studio keeps business associations and its semantic sources, never a second SAP library. */
 export type StudioAssetKind = 'business' | 'concept' | 'rule' | 'ontology' | 'binding' | 'hypothesis' | 'strategy';
 export type StudioAuthority = 'enterprise' | 'rap' | 'data' | 'sap-metric' | 'sap-method' | 'studio-source' | 'task' | 'case';
@@ -93,6 +95,12 @@ export interface StudioFeedback {
 }
 export type StudioResultStatus = 'succeeded' | 'failed' | 'unknown';
 export interface StudioPublicationItem { assetId: string; revision: number; sha256: string; title: string; kind: StudioAssetKind }
+export type StudioPublicationPurpose = 'definition-reference' | 'rule-execution' | 'metric-calculation';
+export interface StudioPublicationExecutionSummary {
+  assetId: string; revision: number; sha256: string;
+  contractVersion: FoundationRuleExecution['contractVersion']; engine: FoundationRuleExecution['engine'];
+  ruleItemIds: string[]; factRequirements: FoundationFactRequirement[];
+}
 export interface StudioPublicationPreview {
   id: string;
   fingerprint: string;
@@ -106,6 +114,10 @@ export interface StudioPublicationPreview {
   limitations: string[];
   excluded: string[];
   targetProjectIds: string[];
+  /** Absent on historical publications; no execution qualification is inferred from absence. */
+  purposes?: StudioPublicationPurpose[];
+  /** Derived from the exact selected source revisions, never supplied by the caller. */
+  executionSummaries?: StudioPublicationExecutionSummary[];
   /** Frozen links reviewed with this exact publication, never a later mutable proposal lookup. */
   contributions?: StudioContributionSnapshot[];
   createdAt: string;
@@ -207,7 +219,7 @@ export interface StudioSaveAssetInput {
   extraction?: StudioExtractionEvidence;
   reason?: string;
 }
-export interface StudioPublicationInput { topicId?: string; assetIds: string[]; refs?: StudioSourceRef[]; summary: string; scope: string; checks?: StudioCheck[]; limitations?: string[]; excluded?: string[]; targetProjectIds?: string[] }
+export interface StudioPublicationInput { topicId?: string; assetIds: string[]; refs?: StudioSourceRef[]; summary: string; scope: string; checks?: StudioCheck[]; limitations?: string[]; excluded?: string[]; targetProjectIds?: string[]; purposes?: StudioPublicationPurpose[] }
 export interface StudioFeedbackInput { origin?: StudioFeedbackOrigin; topicId?: string; title: string; problem: string; sources: StudioSourceRef[]; currentHandling?: string; impact?: string }
 export interface StudioStoreOptions { isReadOnly?: (projectId: string) => boolean }
 export interface StudioUpdateInput { expectedRevision?: number; name?: string; currentTopicId?: string; topic?: Partial<Omit<StudioTopic, 'id'>> }

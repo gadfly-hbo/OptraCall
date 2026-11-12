@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-13",
+  "instruction": "执行 Git／CI，完成后停住。",
+  "scope": [
+    "commit and push the approved implementation and review package",
+    "one pull request and CI on the exact PR head",
+    "record actual Git/CI outcome"
+  ],
+  "excluded": [
+    "merge the task into main",
+    "service cutover",
+    "MacBook update",
+    "target enterprise construction",
+    "new real-model experiments"
+  ],
+  "priorStop": "I01-I07 completed locally; I08 not started until this authorization",
+  "authority": "current user instruction"
+}

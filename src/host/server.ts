@@ -4,6 +4,7 @@ import { analysisPythonFor } from '../agent/analysis-python.ts';
 import { createStudioFeature } from './studio-host.ts';
 import { createStudioGraph } from './studio-graph.ts';
 import { createStudioSessions } from './studio-sessions.ts';
+import { runStudioRuleInference } from './studio-semantic.ts';
 import { createStudioOriginalSources } from './studio-original-sources.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
@@ -192,6 +193,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const modelPackRoutes = createModelPackRoutes({store:modelPacks,readBody:body,mutate,isClosing:()=>closing});
   const sapMethods = createSapMethodStore(path.join(dataRoot, 'metric-assets'));
   const studio = createStudioFeature({ dataRoot, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
+    reason: options.studioPython ? (command, context) => runStudioRuleInference({ python: options.studioPython!, codeRoot: options.cwd, command, signal: context.signal, assertCurrent: context.assertCurrent, registerCleanup: context.registerCleanup }) : undefined,
     extract: async (system, ref, context) => {
       if (!studioSessions) throw new StudioError('studio_semantica_unavailable', 409);
       const owner = studioExecutionOwner(system), { task } = await pair(owner.projectId, owner.taskId, true);

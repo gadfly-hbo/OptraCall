@@ -4,6 +4,8 @@ import type { AssetContextRecord, StudioContextEvidence } from './semantic-conte
 import { readSemanticContext } from './semantic-context-client.ts';
 import type { SemanticContextReader, SemanticContextRecord, SemanticGraphResult, SemanticGraphMetadata, SemanticItem, SemanticQueryInput, SemanticQueryResult, SemanticSourceState, SemanticTarget } from './semantic-context-client.ts';
 import type { StudioSemanticGraphSourceRef } from '../../../extensions/business-plugins/semantic-context/graph.ts';
+import { StudioRuleReceiptView } from './StudioRuleExecutionView.tsx';
+import { StudioFoundationContent } from './StudioFoundationView.tsx';
 import './semantic-context.css';
 
 export type SemanticContextPanelProps = { projectId: string; taskId: string; records?: AssetContextRecord[]; readContext?: SemanticContextReader; onFollowup?: (draft: string) => void };
@@ -128,13 +130,14 @@ export function SemanticGraphEvidence({ result }: { result: SemanticGraphResult 
 }
 
 function StudioEvidence({ evidence }: { evidence: StudioContextEvidence }) {
+  if (evidence.action === 'reason') return <StudioRuleReceiptView receipt={evidence.result} historical />;
   const label = evidence.stage === 'directory' ? '企业资产目录' : evidence.stage === 'source' ? '准确来源读取' : evidence.stage === 'declaration' ? '作者使用声明' : '准确资产信息';
   const use = evidence.result.use && typeof evidence.result.use === 'object' && !Array.isArray(evidence.result.use) ? evidence.result.use as Record<string, unknown> : undefined;
   return <section className="sc-source"><div className="sc-row"><h3>{label}</h3><span className="sc-status">{evidence.stage === 'directory' ? '目录提供' : evidence.declaration ? '作者声明' : evidence.complete === true ? '本次返回完整' : evidence.complete === false ? '部分正文／元数据' : '范围待核'}</span></div>
     <p className="sc-note">{evidence.stage === 'directory' ? '目录命中不代表取得正文或采用资产。' : evidence.declaration ? '原 Studio 已保存作者明确声明的引用；不证明真实计算采用或专业正确。' : '这里只展示当时实际返回的内容；读取成功不代表正确应用，采用声明另列。'}独立核验：本记录未提供独立核验结果。</p>
     {evidence.ref && <dl className="sc-metadata"><dt>来源权威</dt><dd>{evidence.ref.authority}</dd><dt>准确资产</dt><dd>{evidence.ref.id}</dd><dt>原版本</dt><dd>{evidence.ref.version}</dd>{evidence.ref.sha256 && <><dt>原内容摘要</dt><dd>{evidence.ref.sha256}</dd></>}</dl>}
     {use && <p className="sc-meta">声明记录：{typeof use.id === 'string' ? use.id : '身份未记录'}；原记录的评估不自动等同于独立核验。</p>}
-    {evidence.body !== undefined && <><p className="sc-meta">{evidence.complete === false ? '部分正文，不能当作全文。' : evidence.complete === true ? '本次准确返回的正文。' : '实际返回片段，完整性未核定。'}{evidence.range && ` 范围 [${evidence.range.start}, ${evidence.range.end}) / ${evidence.range.total}。`}</p><pre className="sc-paper">{evidence.body}</pre></>}
+    {evidence.body !== undefined && <>{evidence.complete === true && <StudioFoundationContent body={evidence.body} sourceRef={evidence.ref} />}<p className="sc-meta">{evidence.complete === false ? '部分正文，不能当作全文。' : evidence.complete === true ? '本次准确返回的正文。' : '实际返回片段，完整性未核定。'}{evidence.range && ` 范围 [${evidence.range.start}, ${evidence.range.end}) / ${evidence.range.total}。`}</p><pre className="sc-paper">{evidence.body}</pre></>}
     {evidence.stage !== 'declaration' && <p className="sc-meta">本项未保存作者使用声明；计算与判断请结合原报告、实际计算记录及其他来源声明核对。</p>}
     <details><summary>原 Studio 回执与准确引用</summary><pre>{JSON.stringify({ action: evidence.action, input: evidence.input, result: evidence.result }, null, 2)}</pre></details>
   </section>;

@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-12",
+  "status": "review-candidate; awaiting user; no implementation",
+  "files": [
+    {
+      "path": "docs/enterprise-foundation/foundation-proposal-v0.3.md",
+      "bytes": 11496,
+      "sha256": "dbccae35cea8c3c8693820b4e294cd17adf998c7b0d7408b512f056f8351ebac"
+    },
+    {
+      "path": "docs/prototypes/studio-rule-reasoning-v0.1/README.md",
+      "bytes": 4981,
+      "sha256": "7628421b69523bd14c5c70717b3905ff5d25c6307d4c84acfebd5561780581af"
+    },
+    {
+      "path": "docs/prototypes/studio-rule-reasoning-v0.1/app.js",
+      "bytes": 40431,
+      "sha256": "ad720d2d733cdf2b45228dd0326c0f8ae49fb177f6ebd4522db8041cf35927df"
+    },
+    {
+      "path": "docs/prototypes/studio-rule-reasoning-v0.1/index.html",
+      "bytes": 597,
+      "sha256": "ae01b5d6b3cea0277641709b801a8c06f5fc7e32fb3ad1f5a6a48e893bdc2bd9"
+    },
+    {
+      "path": "docs/prototypes/studio-rule-reasoning-v0.1/standalone.html",
+      "bytes": 53418,
+      "sha256": "68ff33126036efad4ffdb14ca923f69b17b9e934bbd81ecb05460f59f123782e"
+    },
+    {
+      "path": "docs/prototypes/studio-rule-reasoning-v0.1/styles.css",
+      "bytes": 12337,
+      "sha256": "53d6c6f0367119a3dc139462c91d121905cf8129f30e2a3b38551560bfc7bc16"
+    },
+    {
+      "path": "openspec/changes/studio-rule-reasoning/baseline-manifest.json",
+      "bytes": 10016,
+      "sha256": "aedfbfb4e7be40c035042a448b404be8c076c20988837215807eb3b370531dab"
+    },
+    {
+      "path": "openspec/changes/studio-rule-reasoning/interaction-states.md",
+      "bytes": 4649,
+      "sha256": "8e8cff949915010baa4e8352be642df0dfb74ef2dea25ac63bbbf78ae1ed2c17"
+    },
+    {
+      "path": "openspec/changes/studio-rule-reasoning/review.md",
+      "bytes": 5678,
+      "sha256": "14299350853fa19efe56e04dbf730c99d901fa86db5c90e3e15873d342405709"
+    },
+    {
+      "path": "openspec/changes/studio-rule-reasoning/spec.md",
+      "bytes": 14228,
+      "sha256": "c02d29dcbc9ff93b691de511d6fbb008e63dbe58df3e51a2512902c51a26743e"
+    },
+    {
+      "path": "openspec/changes/studio-rule-reasoning/tasks.md",
+      "bytes": 4815,
+      "sha256": "eb433923f52d3dff80f2ac4540ffed2a1392004ecc6795ff071346bf7994f516"
+    }
+  ],
+  "preservation": {
+    "files": 52,
+    "mismatches": []
+  },
+  "checks": {
+    "relativeLinks": 29,
+    "missingLinks": [],
+    "anchorWarnings": [],
+    "portableSourceExact": true,
+    "javascriptSyntaxExit": 0,
+    "trackedChanges": [],
+    "stagedChanges": [],
+    "trailingWhitespaceFiles": []
+  },
+  "browser": "author actual Chrome via CUA; desktop and Width390 light/dark; flows and fixes in review.md",
+  "notRun": [
+    "independent non-author review (side conversation forbids subagents)",
+    "product engineering tests",
+    "official SDK execution",
+    "real models",
+    "enterprise assets",
+    "Git/CI/delivery/device adoption"
+  ],
+  "manifestExcludesItself": true
+}

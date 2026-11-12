@@ -118,6 +118,20 @@
 .studio-history li { border: 1px solid var(--line); padding: 13px; border-radius: 6px; font-size: 12px; }
 .studio-history li p { margin: 6px 0; }
 .studio-source-text { padding: 14px!important; font-size: 13px!important; line-height: 1.9!important; max-height: none!important; }
+.studio-rule-execution, .studio-rule-receipt { min-width: 0; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.studio-rule-execution h4, .studio-rule-receipt h4 { font-size: 12px; margin: 14px 0 7px; }
+.studio-rule-definitions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr)); gap: 12px; margin: 14px 0; }
+.studio-rule-definition { border: 1px solid var(--line); border-radius: 6px; padding: 12px; min-width: 0; background: var(--surface); }
+.studio-rule-definition h4 { margin-top: 0; }
+.studio-rule-table { min-width: 580px; }
+.studio-rule-receipt .studio-rule-table[data-columns="2"] { min-width: 0; }
+.studio-rule-receipt .studio-rule-table[data-columns="2"] th:last-child, .studio-rule-receipt .studio-rule-table[data-columns="2"] td:last-child { width: 120px; }
+.studio-rule-sources .studio-meta { display: block; }
+.studio-rule-execution details, .studio-rule-receipt details { margin: 12px 0; min-width: 0; }
+.studio-rule-execution summary, .studio-rule-receipt summary { cursor: pointer; color: var(--muted); line-height: 1.8; }
+.studio-rule-execution pre, .studio-rule-receipt pre { background: var(--subtle); padding: 10px; font-size: 11px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.studio-rule-execution code, .studio-rule-receipt code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.studio-rule-execution :is(button, summary):focus-visible, .studio-rule-receipt :is(button, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .studio-result-section { padding: 14px 0; border-bottom: 1px solid var(--line); }
 .studio-result-section p { font-size: 13px; line-height: 1.85; }
 .studio-page button:focus-visible, .studio-page input:focus-visible, .studio-page select:focus-visible, .studio-page textarea:focus-visible, .studio-page summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

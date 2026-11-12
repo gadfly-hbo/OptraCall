@@ -1,10 +1,10 @@
 import { Type, type Static } from 'typebox';
 import type { SemanticContextCallContext } from './semantic-context.ts';
 
-export const STUDIO_ACTIONS = ['catalog', 'read', 'read-source', 'contribute', 'save-asset', 'work-item', 'material-status', 'update-topic', 'add-topic', 'attach-ref', 'prepare-publication', 'feedback', 'update-feedback', 'declare-use', 'assess-use', 'mark-issue', 'save-sap-method', 'register-sap-metric', 'extract', 'read-extraction'] as const;
+export const STUDIO_ACTIONS = ['catalog', 'read', 'read-source', 'reason', 'contribute', 'save-asset', 'work-item', 'material-status', 'update-topic', 'add-topic', 'attach-ref', 'prepare-publication', 'feedback', 'update-feedback', 'declare-use', 'assess-use', 'mark-issue', 'save-sap-method', 'register-sap-metric', 'extract', 'read-extraction'] as const;
 export type StudioAction = typeof STUDIO_ACTIONS[number];
 /** A separate Host grant for ordinary consumers; it conveys no construction or declaration writes. */
-export const STUDIO_READ_ACTIONS = ['catalog', 'read', 'read-source'] as const;
+export const STUDIO_READ_ACTIONS = ['catalog', 'read', 'read-source', 'reason'] as const;
 export type StudioReadAction = typeof STUDIO_READ_ACTIONS[number];
 export type StudioToolResult = { content: { type: 'text'; text: string }[]; details: Record<string, unknown> };
 export type StudioPort = (action: StudioAction, input: Record<string, unknown>, context: SemanticContextCallContext) => Promise<StudioToolResult>;
