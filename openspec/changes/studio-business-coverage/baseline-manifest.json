@@ -1,0 +1,185 @@
+{
+  "date": "2026-11-13",
+  "head": "e78d719955e90e46c82cc1d90bb883a5fe8f336d",
+  "deliveredMain": "a4eca5e1f0ff3aef738a888bffca594c1b5b9eba",
+  "tree": "f285c425ef53d9c6951682bf403fcc9d79d69311",
+  "status": "review preparation only; no development or target enterprise construction",
+  "allowedWrites": [
+    "docs/enterprise-foundation/studio-business-coverage-v0.2/",
+    "docs/prototypes/studio-business-coverage-v0.1/",
+    "openspec/changes/studio-business-coverage/"
+  ],
+  "protectedSource": {
+    "source": "/Users/huangbo/学习/AI语义及分析资产",
+    "files": [
+      {
+        "path": "OptraCall挂载补丁-v0.2README增补.md",
+        "bytes": 1727,
+        "sha256": "5ca769b3ac4f7b3def19f58ff31d910e3b4a32fdb1c91bcf7da6e3fb0c4e70de"
+      },
+      {
+        "path": "Zachman36格与OptraCall语义资产Studio结合评估.md",
+        "bytes": 12158,
+        "sha256": "5030e7f5c3e63e574f803064efe55996f1c26cfb59c8df350933c78d5ab2fc2c"
+      },
+      {
+        "path": "Zachman36格与Studio结合实施方案.md",
+        "bytes": 12516,
+        "sha256": "bac27aebdcc758cc2f14fb5fa9e5e5494e177e9d4834b55b250cbb688a32a5d0"
+      },
+      {
+        "path": "Zachman框架36格大表填写手册.md",
+        "bytes": 17906,
+        "sha256": "ce901a271b30cb9aad718e4d0781f19aa956e525dd227cf519fc4419a31b6084"
+      },
+      {
+        "path": "Zachman框架研究简报.md",
+        "bytes": 26062,
+        "sha256": "8860c0d030fa26615973daf1bd82998d1fb2a7e7c739dbb0cd2f04b732fb15ee"
+      },
+      {
+        "path": "Zachman框架鞋服行业落地案例.md",
+        "bytes": 14574,
+        "sha256": "b58ee1a53c7893de3713c9daa9df6d6cbd82de43035db8bcbe7a7688c850eacc"
+      },
+      {
+        "path": "lattice-map.md",
+        "bytes": 7830,
+        "sha256": "9d8d0b73c658957d89fa0568cf7cd70dc5b27815f03b2c7ab11943c87cd9423f"
+      },
+      {
+        "path": "survey-playbook.md",
+        "bytes": 5414,
+        "sha256": "3a632857c0d6d5dc1a2b1a9ec2029294b86bb6159ac2cdc901f6bcc0eee6d02a"
+      }
+    ]
+  },
+  "protectedProductAndTests": [
+    {
+      "path": "extensions/business-plugins/studio/contracts.ts",
+      "bytes": 11067,
+      "sha256": "c0d2185fe27e5c847a0bfccbc10b35ec34c7772cf0ba629b3b1e2afa354e5081"
+    },
+    {
+      "path": "extensions/business-plugins/studio/foundation.ts",
+      "bytes": 27209,
+      "sha256": "f1bbb5cb2d038835af13c55dd4058ddd29f223473263dcfa2b3232c7f75f61b5"
+    },
+    {
+      "path": "extensions/business-plugins/studio/store.ts",
+      "bytes": 53573,
+      "sha256": "4153637052f4aa31a870d6df10440749dff41120c7b2927ec5c953b05cc1ab30"
+    },
+    {
+      "path": "scripts/fourbase_l2/studio_reason.py",
+      "bytes": 20942,
+      "sha256": "32d8b297f31a038613a85f45c006a2ba6170dad4b375f6558dd13b4180605149"
+    },
+    {
+      "path": "src/agent/project-session.ts",
+      "bytes": 83058,
+      "sha256": "9248d6c41b278b49e32bc41d4947bcaa74a2d41b9460264e75c8e5063470e27f"
+    },
+    {
+      "path": "src/agent/studio.ts",
+      "bytes": 3670,
+      "sha256": "270801b55fc3d8b69fc3dabe6fc591f3ecd40006ab6e89193ccab0511777f76a"
+    },
+    {
+      "path": "src/host/server.ts",
+      "bytes": 148029,
+      "sha256": "07a1f9bdb214b459027928593dfffe90d779f7729235b0c0dedfda3eb46c3981"
+    },
+    {
+      "path": "src/host/studio-foundation.ts",
+      "bytes": 9988,
+      "sha256": "20322d9de066e380cd1e1e7b8a8d8118b79eab41018c4ed00f12a4c529683f35"
+    },
+    {
+      "path": "src/host/studio-host.ts",
+      "bytes": 111237,
+      "sha256": "e91da870a5ab44bc43aaa143539d773e1428a72a5dd068dc063ae302b879ff95"
+    },
+    {
+      "path": "src/host/studio-rule-reasoning.ts",
+      "bytes": 12566,
+      "sha256": "8a384dd5fc5eba00a8d6d860472ce7a1a56ca757ed8b715357e822b9bd03c04a"
+    },
+    {
+      "path": "src/host/studio-semantic.ts",
+      "bytes": 11119,
+      "sha256": "0a277cdd9078b2b8b46e6b96b132aaff810aaafa29aaaad36bb58e6ee17577b5"
+    },
+    {
+      "path": "src/host/ui/SemanticContextPanel.tsx",
+      "bytes": 28036,
+      "sha256": "e6ee5093bc60af5eed65065dfcaaf4bb141c8b16d746b3f5a546cd85ca0c1db7"
+    },
+    {
+      "path": "src/host/ui/StudioFoundationView.tsx",
+      "bytes": 21834,
+      "sha256": "79153d31b39b89383a185849f06cfce71affef947a7d76b341a3fc601209346f"
+    },
+    {
+      "path": "src/host/ui/StudioPage.tsx",
+      "bytes": 128682,
+      "sha256": "224e876f1f4a25f666ea3402bf844284efe394639344615cb6c8bc23f2e0b302"
+    },
+    {
+      "path": "src/host/ui/StudioRuleExecutionView.tsx",
+      "bytes": 24387,
+      "sha256": "fc7248a019f84aaf72bd7270490fff1718a928dda1c3e18e82e92c41dbdb34e6"
+    },
+    {
+      "path": "src/host/ui/semantic-context-history.ts",
+      "bytes": 8112,
+      "sha256": "324d81bed78c23342ddd73f94da8996b4e188737a106878f023840b5d25ef35e"
+    },
+    {
+      "path": "src/host/ui/studio.css",
+      "bytes": 19391,
+      "sha256": "a69dd8a21289b50fa158cf0b262e5e94ece6ca589edd67ed8a7fe8e4aa06a693"
+    },
+    {
+      "path": "tests/fixtures/studio-rule.ts",
+      "bytes": 7482,
+      "sha256": "0dc6a73231903ed4f8255f6bfaa1fed187bb60b1f29db0ee58569a480753eb44"
+    },
+    {
+      "path": "tests/fourbase_l2/test_studio_reason.py",
+      "bytes": 20954,
+      "sha256": "8eb0132b73fb1f9f7c740ca416952d2a5d33855aa5dcf8cdbb601e55ce279837"
+    },
+    {
+      "path": "tests/studio-rule-content.test.ts",
+      "bytes": 12051,
+      "sha256": "2b1a343d322571b16b093970f894992f3d8ce69a6b174086ad959220cdff896a"
+    },
+    {
+      "path": "tests/studio-rule-host.test.ts",
+      "bytes": 17596,
+      "sha256": "a8cab9ede5022acd742c4bed302aa45badca9838f2d99100431ec8110efe4098"
+    },
+    {
+      "path": "tests/studio-rule-publication.test.ts",
+      "bytes": 13075,
+      "sha256": "a01da87952a1d2c9a4e3dce99cb62f22793f6ec07c1c7361301d949091c9a343"
+    },
+    {
+      "path": "tests/studio-rule-runtime.test.ts",
+      "bytes": 12541,
+      "sha256": "48a734d3befccd4eb6f9cd4bd87d80c0858b7725be575f87fa8b1f42237d52ac"
+    },
+    {
+      "path": "tests/studio-rule-ui.test.ts",
+      "bytes": 23541,
+      "sha256": "95d1d3961f19b3b3e33028b78af22fcf593cb35ac5b81aec6d2134c37e730ae1"
+    },
+    {
+      "path": "tests/studio-rule-worker.test.ts",
+      "bytes": 2444,
+      "sha256": "8b36c8289be78939155d095a70b4e188c4859e0b3c8b4d0f3f3754aea051765f"
+    }
+  ],
+  "originalInputPrivateSnapshot": "/Users/bendandebaba/.codex/worktrees/e4e2/OptraCall/.local/zachman36-review-20261113/input"
+}

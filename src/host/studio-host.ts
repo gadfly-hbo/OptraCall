@@ -3,6 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { invalidateFoundationReadiness, parseFoundationContent } from '../../extensions/business-plugins/studio/foundation.ts';
 import { qualifyFoundationBody, selectFoundationSource, foundationContentContract } from './studio-foundation.ts';
+import { parseCoverageContent, coverageRefIdentity } from '../../extensions/business-plugins/studio/coverage.ts';
+import { qualifyCoverageBody, readCoverageView, coverageContentContract } from './studio-coverage.ts';
 import { StudioStore, StudioError } from '../../extensions/business-plugins/studio/store.ts';
 import type { StudioMaterial, StudioSourceRef, StudioSaveAssetInput, StudioPublicationInput, StudioFeedbackInput, StudioSystem, StudioWorkItemInput, StudioUpdateInput, StudioFeedbackUpdate, StudioContributeInput } from '../../extensions/business-plugins/studio/contracts.ts';
 import type { ProjectStore, ProjectRecord, TaskRecord } from './project-store.ts';
@@ -48,8 +50,8 @@ export type StudioHostOptions = {
 export function createStudioFeature(options: StudioHostOptions) {
   const store = new StudioStore(options.dataRoot), operations = studioOperations(options.dataRoot);
   const enterpriseScopes = new EnterpriseScopeStore(options.dataRoot);
-  const enterpriseCatalog = createStudioEnterpriseCatalog({ ...options, scopes: enterpriseScopes, studio: store });
-  const enterpriseScope = { active: () => enterpriseScopes.list().enterprises.length > 0, enterpriseIdForProject: (projectId: string) => enterpriseScopes.enterpriseIdForProject(projectId), sourceAllowed: enterpriseCatalog.sourceAllowed,
+  const enterpriseCatalog = createStudioEnterpriseCatalog({ ...options, scopes: enterpriseScopes, studio: store, qualifySource: async (ref, projectId) => { await sources.read(ref, projectId, ref.locator); } });
+  const enterpriseScope = { active: () => enterpriseScopes.list().enterprises.length > 0, enterpriseIdForProject: (projectId: string) => enterpriseScopes.enterpriseIdForProject(projectId), sourceAllowed: enterpriseCatalog.sourceAllowed, coverageSourceCurrent: enterpriseCatalog.coverageSourceCurrent,
     constructionSourceAllowed: async (projectId: string, ref: StudioSourceRef) => { await assertNativeEnterprise(ref.authority, ref.id, enterpriseScopes.enterpriseIdForProject(projectId)); return true; } };
   const extractions = studioExtractions(options.dataRoot);
   const sources = createStudioSources({ ...options, studio: store, enterpriseScope });
@@ -103,6 +105,9 @@ export function createStudioFeature(options: StudioHostOptions) {
     if (typeof input.body === 'string') {
       const embedded = await qualifyFoundationBody(input.body, ref => sources.read(ref, studioExecutionOwner(system).projectId, id, { construction: true }));
       input.dependencies = [...new Map([...parseSources(input.dependencies ?? []), ...embedded.dependencies].map(ref => [digest(ref), ref])).values()];
+      const coverage = await qualifyCoverageBody(input.body, ref => sources.readCoverage(ref, studioExecutionOwner(system).projectId, id, { construction: true }), system);
+      input.sources = [...new Map([...parseSources(input.sources), ...coverage.references].map(ref => [coverageRefIdentity(ref), ref])).values()];
+      input.dependencies = [...new Map([...input.dependencies, ...coverage.dependencies].map(ref => [coverageRefIdentity(ref), ref])).values()];
     }
     assertCurrent();
     return store.saveAsset(id, input);
@@ -130,14 +135,15 @@ export function createStudioFeature(options: StudioHostOptions) {
       return revision ? { authority: 'studio-source' as const, id: asset.id, version: String(revision.revision), sha256: revision.sha256, projectId: system.projectId, locator: system.id } : undefined;
     }).filter((ref): ref is NonNullable<typeof ref> => !!ref);
     const selected = [...selectedAssets, ...selectedRefs];
-    const structuredCombination = system.assets.some(asset => assetIds.includes(asset.id) && asset.revisions.some(revision => revision.revision === (asset.candidateRevision ?? asset.formalRevision) && parseFoundationContent(revision.body).kind === 'supported'));
+    const structuredCombination = system.assets.some(asset => assetIds.includes(asset.id) && asset.revisions.some(revision => revision.revision === (asset.candidateRevision ?? asset.formalRevision) && (parseFoundationContent(revision.body).kind === 'supported' || parseCoverageContent(revision.body).kind === 'supported')));
     const same = (a: StudioSourceRef, b: StudioSourceRef) => a.authority === b.authority && a.id === b.id && a.version === b.version && a.sha256 === b.sha256 && a.locator === b.locator && a.projectId === b.projectId;
     for (const assetId of assetIds) {
       const asset = system.assets.find(item => item.id === assetId);
       const revision = asset?.revisions.find(item => item.revision === (asset.candidateRevision ?? asset.formalRevision));
       if (!revision) continue;
       const qualified = await qualifyFoundationBody(revision.body, ref => sources.read(ref, owner.projectId, system.id, { construction: true }));
-      const dependencies = structuredCombination ? [...new Map([...revision.sources, ...revision.dependencies, ...qualified.dependencies].map(ref => [digest(ref), ref])).values()] : qualified.dependencies;
+      const coverage = await qualifyCoverageBody(revision.body, ref => sources.readCoverage(ref, owner.projectId, system.id, { construction: true }), system);
+      const dependencies = structuredCombination ? [...new Map([...revision.sources, ...revision.dependencies, ...qualified.dependencies, ...coverage.dependencies].map(ref => [digest(ref), ref])).values()] : qualified.dependencies;
       for (const ref of dependencies) {
         if (ref.authority === 'task') throw new StudioError('studio_foundation_dependency_not_shareable', 409);
         if (['studio-source', 'sap-metric', 'sap-method'].includes(ref.authority) && selected.some(item => same(item, ref))) continue;
@@ -217,7 +223,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     for (const ref of [evidence.report, ...(evidence.sourceRefs ?? []), ...evidence.baseRefs]) await sources.validate(ref, projectId, system.id, { taskId });
     const enterpriseId = enterpriseScopes.enterpriseIdForProject(projectId);
     if (enterpriseId) {
-      const current = (await enterpriseCatalog.catalog(enterpriseId)).items.filter(item => item.eligible && item.ref);
+      const current = (await enterpriseCatalog.catalog(enterpriseId, projectId)).items.filter(item => item.eligible && item.ref);
       for (const ref of evidence.baseRefs.filter(ref => ['enterprise','sap-metric','sap-method','studio-source'].includes(ref.authority))) if (!current.some(item => item.ref!.authority === ref.authority && item.ref!.id === ref.id && item.ref!.version === ref.version && (!item.ref!.sha256 || !ref.sha256 || item.ref!.sha256 === ref.sha256))) throw new StudioError('studio_contribution_base_conflict', 409);
     }
   }
@@ -310,7 +316,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     const ref: StudioSourceRef = { authority: 'studio-source', id: asset.id, version: String(exact.revision), sha256: exact.sha256, projectId: system.projectId, locator: system.id };
     return { asset: { id: asset.id, kind: asset.kind, topicId: asset.topicId, candidateRevision: asset.candidateRevision, formalRevision: asset.formalRevision, revision: { revision: exact.revision, sha256: exact.sha256 } }, ref, exact };
   };
-  const sourceContract = { foundation: foundationContentContract, sourceRef: '{authority,id,version,sha256?,projectId?,taskId?,locator?}', originalRefs: 'Case/M2 use authority case/data, id=recordId|choiceId|datasetId, version=revision|choice1|descriptionRevisionId|inputVersionId, locator=JSON exact original semantic target without sourceHandle; M2 retains ownproject; read-semantic-context finds original identity, no duplicate source Store', saveAsset: '{assetId?,expectedRevision?,kind:business|concept|rule|ontology|binding|hypothesis|strategy,title,body,scope,sources:SourceRef[],dependencies?:SourceRef[],checks:[{name,status:pass|fail|unknown,detail}],limitations?:string[],readyForPublication?:boolean,reason?,extraction?:{method,sourceRefs:SourceRef[],failures:string[],fallbacks:string[],reviewed:boolean}}; save extraction fields only from actual extraction/review evidence: exact source refs, actual methods/failures/fallbacks, and reviewed=true only after Agent verifies the candidate against its sources. This is author evidence, not a Host business score.', workItem: '{id?,kind:task|question|gap|review,title,detail,impact,nextStep,sources:SourceRef[],status:open|waiting|in_progress|resolved}', publication: '{topicId?,assetIds:string[],refs?:SourceRef[],summary,scope,checks?,limitations?,excluded?,targetProjectIds?,purposes?:[definition-reference|rule-execution|metric-calculation]}; assetIds select Studio source assets; refs select professional outputs for their original publication authorities, such as registered sap-metric or saved sap-method refs. Input materials belong in asset sources/dependencies, not publication.refs; enterprise/data/RAP/Case material refs do not become new published professional outputs by appearing here.', sap0_2: {
+  const sourceContract = { coverage: coverageContentContract, foundation: foundationContentContract, sourceRef: '{authority,id,version,sha256?,projectId?,taskId?,locator?}', originalRefs: 'Case/M2 use authority case/data, id=recordId|choiceId|datasetId, version=revision|choice1|descriptionRevisionId|inputVersionId, locator=JSON exact original semantic target without sourceHandle; M2 retains ownproject; read-semantic-context finds original identity, no duplicate source Store', saveAsset: '{assetId?,expectedRevision?,kind:business|concept|rule|ontology|binding|hypothesis|strategy,title,body,scope,sources:SourceRef[],dependencies?:SourceRef[],checks:[{name,status:pass|fail|unknown,detail}],limitations?:string[],readyForPublication?:boolean,reason?,extraction?:{method,sourceRefs:SourceRef[],failures:string[],fallbacks:string[],reviewed:boolean}}; save extraction fields only from actual extraction/review evidence: exact source refs, actual methods/failures/fallbacks, and reviewed=true only after Agent verifies the candidate against its sources. This is author evidence, not a Host business score.', workItem: '{id?,kind:task|question|gap|review,title,detail,impact,nextStep,sources:SourceRef[],status:open|waiting|in_progress|resolved}', publication: '{topicId?,assetIds:string[],refs?:SourceRef[],summary,scope,checks?,limitations?,excluded?,targetProjectIds?,purposes?:[definition-reference|rule-execution|metric-calculation]}; assetIds select Studio source assets; refs select professional outputs for their original publication authorities, such as registered sap-metric or saved sap-method refs. Input materials belong in asset sources/dependencies, not publication.refs; enterprise/data/RAP/Case material refs do not become new published professional outputs by appearing here.', sap0_2: {
     source: 'Technical shape from the unchanged metric-factory/sap/validate.ts SapDocument/SapMetric/SapScenario contract; no business sample. Write project-local SAP0.2 YAML using authorized business materials; historical business files are not needed to learn this format.',
     SapDocument: { sap: 'literal string "0.2"', package: 'SapPackage', dimensions: 'unique non-empty identifier string[]', metrics: 'non-empty SapMetric[]', scenarios: 'SapScenario[] (may be empty)' },
     SapPackage: { id: 'string matching ^[a-z][a-z0-9-]*$', version: 'string matching ^\\d+\\.\\d+\\.\\d+$', namespace: 'literal mf.<package.id>', fingerprint: 'empty string or sha256:<64 lowercase hex>' },
@@ -382,7 +388,7 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (action === 'catalog') {
           const enterpriseId = enterpriseScopes.enterpriseIdForProject(projectId);
           const systems = store.list().filter(system => availableFor(system, projectId)).map(system => ({ id: system.id, name: system.name, projectId: system.projectId, taskId: system.taskId, executionOwner: studioExecutionOwner(system), topics: system.topics.map(({ id, title }) => ({ id, title })), construction: construction?.id === system.id }));
-          const items = enterpriseId ? (await enterpriseCatalog.catalog(enterpriseId)).items.filter(item => item.eligible && item.ref) : [];
+          const items = enterpriseId ? (await enterpriseCatalog.catalog(enterpriseId, projectId)).items.filter(item => item.eligible && item.ref) : [];
           const inputs = (await sources.inventory(projectId)).filter(item => item.ref.authority === 'data');
           const directory = [...systems.map(system => ({ kind: 'system' as const, system })), ...items.map(item => ({ kind: 'source' as const, item })), ...inputs.map(input => ({ kind: 'input' as const, input }))];
           const catalogSha256 = digest(directory);
@@ -635,6 +641,12 @@ export function createStudioFeature(options: StudioHostOptions) {
         const route = /^\/api\/studio\/systems(?:\/([a-f0-9-]+)(?:\/(.*))?)?$/.exec(url.pathname);
         if (!route) throw new StudioError('studio_not_found', 404);
         const id = route[1], action = route[2];
+        if (id && action === 'coverage' && request.method === 'GET') {
+          const state = await workspace(id), assetId = uuid(url.searchParams.get('assetId')), revision = Number(url.searchParams.get('revision'));
+          if (!Number.isSafeInteger(revision) || revision < 1) throw new StudioError('invalid_studio_revision');
+          const result = await readCoverageView(state.system, assetId, revision, ref => sources.readCoverage(ref, state.project.id, id, { construction: true, taskId: state.task.id }));
+          json(response, 200, result); return true;
+        }
         if (id && !action && request.method === 'GET') { json(response, 200, await workspace(id)); return true; }
         if (id && action === 'contributions' && request.method === 'GET') {
           const system = store.get(id), projectQuery = url.searchParams.get('projectId'), taskQuery = url.searchParams.get('taskId');

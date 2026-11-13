@@ -1,0 +1,94 @@
+{
+  "reviewPackage": "studio-business-coverage-v0.2-ui-v0.1",
+  "date": "2026-11-13",
+  "status": "preparation complete; user review pending; no development",
+  "baseMain": "a4eca5e1f0ff3aef738a888bffca594c1b5b9eba",
+  "protectedProductTree": "f285c425ef53d9c6951682bf403fcc9d79d69311",
+  "candidateManifestSha256": "7947e8b0f567ada26eec972796d4c7f75f72943ec56971c231383b817e1a1cb3",
+  "changesAfterCandidate": [
+    "tasks.md and review.md status-only finalization",
+    "this final manifest"
+  ],
+  "files": [
+    {
+      "path": "docs/enterprise-foundation/studio-business-coverage-v0.2/README.md",
+      "bytes": 2834,
+      "sha256": "885b7a0608419eb3efad5ae793e9a66b6778d31adbf575e491fcb0b4898cce32"
+    },
+    {
+      "path": "docs/enterprise-foundation/studio-business-coverage-v0.2/implementation-plan.md",
+      "bytes": 11943,
+      "sha256": "dbc52566212db92468959b63a598f7224f713a1bbb15bf7409e3be982c7ab11b"
+    },
+    {
+      "path": "docs/enterprise-foundation/studio-business-coverage-v0.2/lattice-map.md",
+      "bytes": 9427,
+      "sha256": "3f45e498270ee1fe7d930d2088b1e71c29b2cbf7042b0db74eaddd78e0caca41"
+    },
+    {
+      "path": "docs/enterprise-foundation/studio-business-coverage-v0.2/optracall-readme-patch.md",
+      "bytes": 3962,
+      "sha256": "a5f64bfcfc8d792df2ae676b3ca71c344c2d455c4c5208048656c1a94894bbee"
+    },
+    {
+      "path": "docs/enterprise-foundation/studio-business-coverage-v0.2/survey-playbook.md",
+      "bytes": 7222,
+      "sha256": "b559c0477fd116c6545dbb7050ca556e8071e84b836e029b568b74f5f610272f"
+    },
+    {
+      "path": "docs/prototypes/studio-business-coverage-v0.1/README.md",
+      "bytes": 7388,
+      "sha256": "6f28f0ff2ecb70f008694cb9bd09d780d835b06747c8e7f604f7327f21fc8b7a"
+    },
+    {
+      "path": "docs/prototypes/studio-business-coverage-v0.1/app.js",
+      "bytes": 42904,
+      "sha256": "6e613ae90040a8a916702e20e71aaa79072b150b46cf004e1c31a123899e3cfc"
+    },
+    {
+      "path": "docs/prototypes/studio-business-coverage-v0.1/index.html",
+      "bytes": 577,
+      "sha256": "c991e1022fda0fc4bb9bbe593468942a19be6f5771225652cd39ff4180c5572d"
+    },
+    {
+      "path": "docs/prototypes/studio-business-coverage-v0.1/standalone.html",
+      "bytes": 59656,
+      "sha256": "f05b4f0b2cae1dcf6eafee1d8248d1058f14f18d10ab0e20547b5135a13e07c3"
+    },
+    {
+      "path": "docs/prototypes/studio-business-coverage-v0.1/styles.css",
+      "bytes": 16215,
+      "sha256": "b7be558825661765913a9135d4624e12cc1bd3425272d9c6185fa7e169a9a3e1"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/baseline-manifest.json",
+      "bytes": 6408,
+      "sha256": "4ea7b001ac0cc85033d959d6069b220ff15c6fc59066361dc41382e811f5bfb6"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/candidate-manifest.json",
+      "bytes": 3423,
+      "sha256": "7947e8b0f567ada26eec972796d4c7f75f72943ec56971c231383b817e1a1cb3"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/interaction-states.md",
+      "bytes": 3076,
+      "sha256": "d694bf12d42002fff2f0bdbacaaa917367c79f7fe47c30dfa6013de99b669a34"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/review.md",
+      "bytes": 4466,
+      "sha256": "9be26a7d3bad9b482bfcba718006c82fe72bb8ea16f6e68b3b116f60f0fa8f3f"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/spec.md",
+      "bytes": 19498,
+      "sha256": "d5b70951a1882b0b40a1c860f72602c6a6b722392ea06019cb402d6fd571bcb6"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/tasks.md",
+      "bytes": 3824,
+      "sha256": "5124886833542553cf017f602f3f5d665c09a87aa824b97d4dedebb5902d66c1"
+    }
+  ]
+}

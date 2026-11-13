@@ -1,0 +1,39 @@
+.studio-coverage-container,.studio-coverage-view,.studio-coverage-view>*{min-width:0;max-width:100%}
+.studio-coverage-report-picker{max-width:760px;margin-bottom:20px}
+.studio-coverage-report-picker select{width:100%;min-width:0}
+.studio-coverage-view p{font-size:12px;line-height:1.8;overflow-wrap:anywhere}
+.studio-coverage-view .studio-row{align-items:flex-start;flex-wrap:wrap}
+.studio-coverage-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:18px 0}
+.studio-coverage-summary>div{min-width:0;padding:14px;border-right:1px solid var(--line)}
+.studio-coverage-summary>div:last-child{border-right:0}
+.studio-coverage-summary span{display:block;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.studio-coverage-summary strong{display:block;font-size:17px;font-weight:550;margin:5px 0;overflow-wrap:anywhere}
+.studio-coverage-matrix-scroll{max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:7px;margin:15px 0}
+.studio-coverage-view .studio-table-wrap table.studio-coverage-matrix{min-width:1180px;width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px}
+.studio-coverage-matrix th,.studio-coverage-matrix td{padding:5px;border-bottom:1px solid var(--line);vertical-align:top}
+.studio-coverage-matrix thead th{font-size:12px;text-align:left;padding:12px 9px;background:var(--surface)}
+.studio-coverage-matrix th:first-child{width:150px}
+.studio-coverage-matrix th[scope=row]{position:sticky;left:0;z-index:1;background:var(--surface);text-align:left;padding:15px 10px;color:var(--muted)}
+.studio-coverage-matrix thead span{display:block;font-size:11px;color:var(--muted);font-weight:400}
+.studio-coverage-view button.studio-coverage-cell{display:flex;flex-direction:column;gap:3px;width:100%;min-height:112px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);text-align:left;color:var(--ink);white-space:normal}
+.studio-coverage-cell strong{font-size:13px;font-weight:550;line-height:1.5}
+.studio-coverage-cell span{font-size:10px;color:var(--muted);line-height:1.5}
+.studio-coverage-cell span:last-child{margin-top:auto}
+.studio-coverage-view button.studio-coverage-cell.is-first-reference{border:2px solid var(--accent);background:var(--accent-soft);padding:7px}
+.studio-coverage-cell.is-view-highlight .studio-coverage-code{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:2px}
+.studio-coverage-view button.studio-coverage-cell:hover{box-shadow:inset 0 0 0 1px var(--accent)}
+.studio-coverage-inventory{min-width:650px}
+.studio-coverage-view .studio-search{display:block;max-width:480px;margin:16px 0}
+.studio-coverage-view .studio-search input{width:100%}
+.studio-coverage-coordinate-links{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.studio-coverage-coordinate-links button{white-space:normal;text-align:left;font-size:11px}
+.studio-coverage-source{display:block;text-align:left;white-space:normal;overflow-wrap:anywhere;font-size:12px;max-width:100%}
+.studio-coverage-source span{display:block}
+.studio-coverage-observation{padding:16px 0;border-bottom:1px solid var(--line)}
+.studio-coverage-observation h4{font-size:13px;line-height:1.6;margin:0 0 9px}
+.studio-coverage-selection{padding:10px;border-left:2px solid var(--line);margin:10px 0}
+.studio-coverage-focus-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.studio-coverage-focus-options label{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:5px;padding:9px;font-size:12px}
+.studio-coverage-use-note{border-top:1px solid var(--line);padding-top:16px;margin-top:22px}
+@media(max-width:900px){.studio-coverage-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.studio-coverage-summary>div:nth-child(2){border-right:0}.studio-coverage-summary>div:nth-child(n+3){border-top:1px solid var(--line)}}
+@media(max-width:580px){.studio-coverage-view .studio-table-wrap table.studio-coverage-matrix{min-width:1070px}.studio-coverage-summary{grid-template-columns:1fr}.studio-coverage-summary>div{border-right:0}.studio-coverage-summary>div+div{border-top:1px solid var(--line)}.studio-coverage-focus-options{grid-template-columns:1fr}.studio-coverage-view .studio-actions{width:100%;flex-wrap:wrap}.studio-coverage-view .studio-actions button{white-space:normal}}

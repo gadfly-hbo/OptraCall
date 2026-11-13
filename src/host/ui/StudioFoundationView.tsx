@@ -3,11 +3,12 @@ import type { StudioAssetKind, StudioAssetRevision, StudioSourceRef, StudioUseRe
 import { parseFoundationContent } from '../../../extensions/business-plugins/studio/foundation.ts';
 import type { FoundationContent, FoundationTarget } from '../../../extensions/business-plugins/studio/foundation.ts';
 import type { StudioFoundation, StudioFoundationItem } from './studio-api.ts';
+import { StudioCoverageView } from './StudioCoverageView.tsx';
 import { StudioRuleExecutionView } from './StudioRuleExecutionView.tsx';
 import './StudioFoundationView.css';
 
-export type StudioFoundationSection = 'overview' | 'assets' | 'reference' | 'checks';
-const sections = [['overview', '体系总览'], ['assets', '三类资产'], ['reference', '参考与内化'], ['checks', '关联核验']] as const;
+export type StudioFoundationSection = 'coverage' | 'overview' | 'assets' | 'reference' | 'checks';
+const sections = [['coverage', '36格全景'], ['overview', '体系总览'], ['assets', '三类资产'], ['reference', '参考与内化'], ['checks', '关联核验']] as const;
 const states = [['definition', '定义'], ['mapping', '映射'], ['computation', '可计算'], ['use', '实际使用']] as const;
 const statusText = { pass: '通过', fail: '不通过', unknown: '未知', pending: '待核' };
 const itemKindText = { entity: '实体', attribute: '属性', key: '标识', 'value-domain': '值域', event: '事件', rule: '规则', dimension: '维度', time: '业务时间', concept: '概念' };
@@ -78,7 +79,8 @@ function foundationEntries(foundation?: StudioFoundation): FoundationEntry[] {
     return [{ systemId: system.id, assetId: asset.id, kind: asset.kind, revision, identity: (number === asset.candidateRevision && number !== asset.formalRevision ? '候选' : '正式') as FoundationEntry['identity'], ref: { authority: 'studio-source' as const, id: asset.id, version: String(number), sha256: revision.sha256, projectId: system.projectId, locator: system.id, title: revision.title }, uses: system.uses, restriction: issue?.reason }];
   }))) || [];
 }
-export function StudioFoundationView({ foundation, section, loading, catalogItems, onReadSource, onOpenAsset, onBuild, onRefresh }: { foundation?: StudioFoundation; section: StudioFoundationSection; loading?: boolean; catalogItems?: StudioFoundationItem[]; onReadSource: (systemId: string, ref: StudioSourceRef) => void; onOpenAsset: (systemId: string, assetId: string) => void; onBuild: () => void; onRefresh?: () => void }) {
+export function StudioFoundationView({ foundation, section, loading, catalogItems, onReadSource, onOpenAsset, onBuild, onRefresh, onOpenWorkItems, onOpenUsage, onModalChange }: { foundation?: StudioFoundation; section: StudioFoundationSection; loading?: boolean; catalogItems?: StudioFoundationItem[]; onReadSource: (systemId: string, ref: StudioSourceRef, returnFocus?: HTMLElement | null) => void; onOpenAsset: (systemId: string, assetId: string) => void; onBuild: (goal?: string, systemId?: string) => void; onRefresh?: () => void; onOpenWorkItems?: (systemId: string) => void; onOpenUsage?: (systemId?: string) => void; onModalChange?: (open: boolean) => void }) {
+  if (section === 'coverage') return <StudioCoverageView foundation={foundation} loading={loading} onReadSource={onReadSource} onBuild={onBuild} onRefresh={onRefresh} onOpenWorkItems={onOpenWorkItems} onOpenUsage={onOpenUsage} onModalChange={onModalChange} />;
   if (!foundation) return <section className="studio-foundation-view" aria-label={sections.find(([key]) => key === section)?.[1]} aria-busy={Boolean(loading)}>{loading ? <p role="status" className="studio-meta">正在读取本企业准确资产…</p> : <div className="studio-empty"><h2>尚未取得资产范围</h2><p>当前读取结果未知，不能据此判断企业没有资产或建设尚未开始。可重新读取原资产目录。</p><button type="button" className="secondary-button" disabled={!onRefresh} onClick={onRefresh}>重新读取资产</button></div>}</section>;
   const filtered = section === 'assets' && catalogItems !== undefined;
   const entries = foundationEntries(foundation).filter(entry => !filtered || catalogItems.some(item => item.authority === 'studio-source' && item.id === entry.assetId && (!(item.systemId || item.ref?.locator) || (item.systemId || item.ref?.locator) === entry.systemId)));
@@ -88,7 +90,7 @@ export function StudioFoundationView({ foundation, section, loading, catalogItem
     {section === 'overview' && <><div className="studio-foundation-summary">{[['主数据模型', '对象、身份、属性、粒度与业务时间'], ['数据分析指标体系', '体系索引关联原 SAP 准确指标'], ['本体', '关系类型、业务规则与约束']].map(([title, description], index) => <article key={title}><h2>{title}</h2><strong>{counts[index]}</strong><p>{description}</p><p className="studio-meta">结构条目记录数，候选与正式分别保留，不代表建设完成。</p></article>)}</div><p className="studio-note">先明确企业基础层的范围，同时建设主数据、指标体系和本体。普通分析 Agent 按需发现正式资产；实际使用、质量核验和后续修订保留各自依据。</p></>}
     {section === 'reference' && <><div className="studio-foundation-routes"><section><h2>行业 → 标杆企业 → 目标企业</h2><p>通用行业的主数据、指标体系与本体，结合有出处的标杆企业参考，再由目标企业获准资料核定。</p></section><section><h2>领域 → 标杆业务域 → 目标部门</h2><p>通用领域的主数据、指标体系与本体，结合标杆业务域参考，与行业路线交叉核定。</p></section></div><p className="studio-meta">以下只展示本企业真实引用和逐项差异。模板需作为获准来源关联；不会把知识参考自动登记为企业事实。</p></>}
     {section === 'checks' && <p className="studio-note">Host 负责结构、引用、版本与权限；Agent 核对业务和样本。结构可解析、作者记录、实际使用和独立核验分别显示，未记录的结论保持待核。</p>}
-    {!entries.length ? <div className="studio-empty"><h2>{filtered ? '没有匹配的结构资产' : '尚无显式的三类资产结构'}</h2>{filtered ? <p>可调整当前分类或搜索。企业资料、SAP 指标、方法与普通文本资产仍在下方原权威列表中查看。</p> : <><p>已有普通文本资产仍在“三类资产”的原资产列表中查看。建设可从企业范围与资料出发，无需先指定单个分析问题。</p><button type="button" className="secondary-button" onClick={onBuild}>表达建设目标</button></>}</div> : <div className="studio-foundation-entry-list">{entries.map(entry => {
+    {!entries.length ? <div className="studio-empty"><h2>{filtered ? '没有匹配的结构资产' : '尚无显式的三类资产结构'}</h2>{filtered ? <p>可调整当前分类或搜索。企业资料、SAP 指标、方法与普通文本资产仍在下方原权威列表中查看。</p> : <><p>已有普通文本资产仍在“三类资产”的原资产列表中查看。建设可从企业范围与资料出发，无需先指定单个分析问题。</p><button type="button" className="secondary-button" onClick={() => onBuild()}>表达建设目标</button></>}</div> : <div className="studio-foundation-entry-list">{entries.map(entry => {
       const parsed = parseFoundationContent(entry.revision.body), profile = parsed.profile;
       return <article className="studio-foundation-entry" key={`${entry.systemId}:${entry.assetId}:${entry.revision.revision}`}><div className="studio-row"><div><h2>{entry.revision.title}</h2><p className="studio-meta">{entry.assetId} · {entry.identity} r{entry.revision.revision} · 范围：{entry.revision.scope || '未记录'}{entry.kind === 'binding' ? ' · 数据映射原资产' : ''}</p></div><button type="button" className="text-button" onClick={() => onOpenAsset(entry.systemId, entry.assetId)}>在原体系查看修订与影响</button></div>
         {entry.restriction && <p className="studio-note is-warning">此准确版本已确认的问题：{entry.restriction}。原身份保留，相关用途依原资格限制核对。</p>}

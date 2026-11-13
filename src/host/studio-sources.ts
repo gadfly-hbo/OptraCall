@@ -11,6 +11,8 @@ import { preparePublication as prepareSapPublication } from '../../extensions/bu
 import { createProjectEnablement } from '../../extensions/business-plugins/metric-factory/project/enablement.ts';
 import { createRequirementStore, RequirementStoreFault } from '../../extensions/business-plugins/requirements-elaboration/storage/store.ts';
 import { fail, sourceRef, digest } from '../../extensions/business-plugins/studio/validation.ts';
+import { parseCoverageContent } from '../../extensions/business-plugins/studio/coverage.ts';
+import { qualifyCoverageBody } from './studio-coverage.ts';
 export interface StudioSourceRead { assetKind?: import('../../extensions/business-plugins/studio/contracts.ts').StudioAssetKind; text: string; complete: boolean; governance?: unknown; ref: StudioSourceRef }
 export interface StudioSourceDependencies {
   dataRoot: string; projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore; studio: StudioStore;
@@ -19,6 +21,7 @@ export interface StudioSourceDependencies {
     enterpriseIdForProject(projectId: string): string | undefined;
     sourceAllowed(projectId: string, ref: StudioSourceRef): boolean | Promise<boolean>;
     constructionSourceAllowed?(projectId: string, ref: StudioSourceRef): boolean | Promise<boolean>;
+    coverageSourceCurrent?(projectId: string, ref: StudioSourceRef, context: { construction?: boolean; systemId?: string }): boolean | Promise<boolean>;
   };
   readTaskReply?: (projectId: string, taskId: string, selection: { sessionId: string; messageId: string }) => Promise<{ text: string }>;
   readOriginal?: (ref: StudioSourceRef, projectId: string, taskId?: string) => Promise<StudioSourceRead>;
@@ -34,6 +37,9 @@ export function createStudioSources(deps: StudioSourceDependencies) {
   const metricLibrary = createMetricLibrary(path.join(deps.dataRoot, 'metric-assets'));
   const methodLibrary = createSapMethodStore(path.join(deps.dataRoot, 'metric-assets'));
   const requirements = createRequirementStore(path.join(deps.dataRoot, 'requirement-instances'));
+  async function coverageCurrent(ref: StudioSourceRef, projectId: string, systemId?: string, construction = false) {
+    if (deps.enterpriseScope?.coverageSourceCurrent && !await deps.enterpriseScope.coverageSourceCurrent(projectId, ref, { construction, systemId })) fail('studio_coverage_basis_changed', 409);
+  }
   async function enterpriseQualified(ref: StudioSourceRef, projectId: string, construction = false, systemId?: string): Promise<boolean> {
     if (!deps.enterpriseScope || deps.enterpriseScope.active?.() === false || !['enterprise', 'sap-metric', 'sap-method', 'studio-source'].includes(ref.authority)) return false;
     const enterpriseId = deps.enterpriseScope.enterpriseIdForProject(projectId);
@@ -165,6 +171,15 @@ export function createStudioSources(deps: StudioSourceDependencies) {
     if (issue && !construction && !historical) fail('studio_source_restricted', 409);
     exactHash(ref, revision.sha256);
     for (const dependency of [...revision.sources, ...revision.dependencies]) await checkDependency(dependency, projectId, sourceSystemId, new Set(seen), construction);
+    const coverage = parseCoverageContent(revision.body);
+    if ((coverage.kind === 'invalid' || coverage.kind === 'unsupported') && !construction) fail('studio_coverage_unavailable', 409);
+    if (coverage.kind === 'supported') {
+      if (asset.kind !== 'business' || coverage.report?.scope.topicId !== asset.topicId) fail('studio_coverage_scope_mismatch', 409);
+      await qualifyCoverageBody(revision.body, async ref => {
+        await coverageCurrent(ref, projectId, sourceSystemId, construction);
+        return ref.authority === 'studio-source' ? readStudio(ref, projectId, sourceSystemId, construction, new Set(seen)) : read(ref, projectId, sourceSystemId, { construction });
+      }, system);
+    }
     return { text: revision.body, complete: true, assetKind: asset.kind, ...(issue ? { governance: issue } : {}), ref: { ...ref, sha256: revision.sha256 } };
   }
   async function read(raw: StudioSourceRef, projectId: string, systemId?: string, options: { construction?: boolean; historical?: boolean; taskId?: string } = {}): Promise<StudioSourceRead> {
@@ -224,5 +239,10 @@ export function createStudioSources(deps: StudioSourceDependencies) {
     }
     return fail('studio_source_unsupported', 400);
   }
-  return { inventory, read, async validate(ref: StudioSourceRef, projectId: string, systemId?: string, options: { construction?: boolean; historical?: boolean; taskId?: string } = {}): Promise<void> { await read(ref, projectId, systemId, options); } };
+  return { inventory, read,
+    async readCoverage(ref: StudioSourceRef, projectId: string, systemId?: string, options: { construction?: boolean; taskId?: string } = {}) {
+      const result = await read(ref, projectId, systemId, options);
+      await coverageCurrent(ref, projectId, systemId, options.construction === true); return result;
+    },
+    async validate(ref: StudioSourceRef, projectId: string, systemId?: string, options: { construction?: boolean; historical?: boolean; taskId?: string } = {}): Promise<void> { await read(ref, projectId, systemId, options); } };
 }

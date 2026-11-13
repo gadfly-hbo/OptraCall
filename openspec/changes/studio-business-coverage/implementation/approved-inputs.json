@@ -1,0 +1,110 @@
+{
+  "date": "2026-11-13",
+  "authorization": "User confirms full36 candidate and authorizes product implementation, Git/CI/main merge and Mini service adoption, then stop; no asset construction.",
+  "head": "e78d719955e90e46c82cc1d90bb883a5fe8f336d",
+  "main": "a4eca5e1f0ff3aef738a888bffca594c1b5b9eba",
+  "approvedReviewManifestSha256": "4a170629f54c840f88cd154d98dde4b71b2e32268796d079bdccc7294bd341f9",
+  "files": [
+    {
+      "path": "docs/enterprise-foundation/studio-business-coverage-v0.3/README.md",
+      "bytes": 4811,
+      "sha256": "bea55bfa0a8d52bd43244c0e6f96a72ee69a56c3eff58ab0e7185b72b5dea4c6"
+    },
+    {
+      "path": "docs/enterprise-foundation/studio-business-coverage-v0.3/implementation-plan.md",
+      "bytes": 14948,
+      "sha256": "7132d7b17a33839c7c8bcc4bd63e67c51213d6bb53a9f952b1c9850246066f38"
+    },
+    {
+      "path": "docs/enterprise-foundation/studio-business-coverage-v0.3/lattice-map.md",
+      "bytes": 17850,
+      "sha256": "2dddf191173c420aecbd9580b68401f52fb0ce3241b38e54d8de895ff4f7e940"
+    },
+    {
+      "path": "docs/enterprise-foundation/studio-business-coverage-v0.3/optracall-readme-patch.md",
+      "bytes": 4995,
+      "sha256": "2c92fa8a79256e75d50dc115a75222a4b67ac6edef1b198bbc1b2896d7a513f7"
+    },
+    {
+      "path": "docs/enterprise-foundation/studio-business-coverage-v0.3/survey-playbook.md",
+      "bytes": 8932,
+      "sha256": "2b8ad9df8aeccaeecd87c07b7ff9af5714ed1721d58626d8ec739582e093ef5d"
+    },
+    {
+      "path": "docs/prototypes/studio-business-coverage-v0.2/README.md",
+      "bytes": 7207,
+      "sha256": "6fd0fc15a96d52c72131fc740c1988107ac779f88d6f630219c014497de6b8c5"
+    },
+    {
+      "path": "docs/prototypes/studio-business-coverage-v0.2/app.js",
+      "bytes": 47659,
+      "sha256": "a1f110b933c70b0beb234c33590e8d6416032db7904873bcdabe6acc15faf1f0"
+    },
+    {
+      "path": "docs/prototypes/studio-business-coverage-v0.2/fixtures.js",
+      "bytes": 13178,
+      "sha256": "33db4854f31ea85b8fd46d12fa71f12c37c97c95b50a514360c643ec01265104"
+    },
+    {
+      "path": "docs/prototypes/studio-business-coverage-v0.2/index.html",
+      "bytes": 608,
+      "sha256": "741a71812c1d3b889193f4efa2362d2ffa5b7d225631bc9990aebfe80d481287"
+    },
+    {
+      "path": "docs/prototypes/studio-business-coverage-v0.2/standalone.html",
+      "bytes": 80031,
+      "sha256": "91d6cd4ad4fd939f9c247bbd53d97b97609829ee7697df9e9f264224c7be7a10"
+    },
+    {
+      "path": "docs/prototypes/studio-business-coverage-v0.2/styles.css",
+      "bytes": 18647,
+      "sha256": "8920f613c090f9b5e22e8139b9282a75d06995926525334991762c291ac2d37b"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/amendments/36-cell-view-v0.2/baseline-manifest.json",
+      "bytes": 4064,
+      "sha256": "d51867a34ed18c03f2f13475cc2175d1a1f41c5c830518b2a8d3d14c9dda3f75"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/amendments/36-cell-view-v0.2/candidate-manifest.json",
+      "bytes": 3653,
+      "sha256": "6f9ea2de1678e6b1dfeed512e9567cb152d967dcf184764718ea0c5035fed35a"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/amendments/36-cell-view-v0.2/interaction-states.md",
+      "bytes": 1861,
+      "sha256": "03ded3148a063c3b8145344f02664a584833de6878e91e3bbb2e9c0bffe08914"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/amendments/36-cell-view-v0.2/review-manifest.json",
+      "bytes": 3946,
+      "sha256": "4a170629f54c840f88cd154d98dde4b71b2e32268796d079bdccc7294bd341f9"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/amendments/36-cell-view-v0.2/review.md",
+      "bytes": 4346,
+      "sha256": "9e8b9bb14e12b5676b0849beb3e7ecf82fd914735c55c8050afbcea7753fe2f8"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/amendments/36-cell-view-v0.2/spec.md",
+      "bytes": 11063,
+      "sha256": "c6a05131eb967c9c510b3a226d484c1b59742a600dfc59f719e8dfbcb19413e7"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/amendments/36-cell-view-v0.2/tasks.md",
+      "bytes": 2205,
+      "sha256": "01738ad76febdf7277d4724cdd76a52c5b3c2a0201c07a339298f1864d0ca5f4"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/spec.md",
+      "bytes": 19498,
+      "sha256": "d5b70951a1882b0b40a1c860f72602c6a6b722392ea06019cb402d6fd571bcb6"
+    },
+    {
+      "path": "openspec/changes/studio-business-coverage/tasks.md",
+      "bytes": 3824,
+      "sha256": "5124886833542553cf017f602f3f5d665c09a87aa824b97d4dedebb5902d66c1"
+    }
+  ],
+  "originalFilesRemainHistorical": "Unmodified approved plan/spec/demo; execution progress is implementation/tasks.md."
+}
