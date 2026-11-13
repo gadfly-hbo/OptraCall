@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>OptraCall · 36格全景审核 Demo v0.2</title>
+<style>
+/* Review-only. Neutral surfaces and purple actions follow the preserved Studio prototype. */
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color-scheme:light;--bg:#fff;--side:#f7f7f9;--surface:#fff;--subtle:#f5f5f8;--ink:#24232b;--muted:#686673;--line:#e6e5eb;--accent:#6550c9;--accent-soft:#eeebfb;--green:#23734f;--green-bg:#eef8f2;--amber:#85580f;--amber-bg:#fff6e5;--red:#a12b36;--red-bg:#fff2f3;--shadow:0 18px 70px #17132624}
+body.dark{color-scheme:dark;--bg:#1b1b20;--side:#16161b;--surface:#232329;--subtle:#292930;--ink:#eeeef2;--muted:#b2b0be;--line:#3d3b47;--accent:#b7a7ff;--accent-soft:#30294a;--green:#91d7b0;--green-bg:#173529;--amber:#edc887;--amber-bg:#372c1b;--red:#ffafb8;--red-bg:#39252b;--shadow:0 18px 70px #0008}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.65}button,input,textarea,select{font:inherit;color:inherit}button{cursor:pointer;border:0;background:none}button:disabled{opacity:.5;cursor:not-allowed}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}a{color:var(--accent)}input,textarea,select{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:9px 11px;max-width:100%}textarea{width:100%;resize:vertical;min-height:112px;line-height:1.8}p{margin:0 0 12px}h1,h2,h3{margin:0;font-weight:600;line-height:1.45}h1{font-size:25px;letter-spacing:-.3px}h2{font-size:17px}h3{font-size:14px}small,.muted{color:var(--muted)}small{font-size:12px}code,pre{font-size:12px;overflow-wrap:anywhere}pre{white-space:pre-wrap;line-height:1.8;margin:0;background:var(--subtle);border:1px solid var(--line);padding:15px;border-radius:7px}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.skip{position:fixed;top:-80px;left:15px;background:var(--surface);z-index:100;padding:12px}.skip:focus{top:8px}
+.shell{display:flex;min-height:100dvh}.sidebar{position:sticky;top:0;width:218px;flex:0 0 218px;height:100dvh;background:var(--side);border-right:1px solid var(--line);padding:28px 14px;display:flex;flex-direction:column}.brand{font-size:21px;font-weight:650;padding:0 12px 30px;letter-spacing:-.5px}.brand small{display:block;font-size:11px;font-weight:400;letter-spacing:0;margin-top:5px}.nav-label{font-size:11px;color:var(--muted);padding:12px}.nav{width:100%;min-height:44px;text-align:left;border-radius:7px;padding:10px 12px;color:var(--muted);margin-bottom:5px;font-size:13px}.nav.active{background:var(--accent-soft);color:var(--accent);font-weight:600}.sidebar-foot{margin-top:auto;padding:18px 12px 0;font-size:11px;color:var(--muted)}.workspace{flex:1;min-width:0}.topbar{min-height:66px;border-bottom:1px solid var(--line);padding:12px 30px;display:flex;align-items:center;justify-content:space-between;gap:16px}.breadcrumb{font-size:12px;color:var(--muted)}.top-actions{display:flex;align-items:center;gap:14px}.enterprise-label{display:flex;gap:10px;align-items:center;font-size:12px}.ribbon{padding:9px 30px;background:var(--subtle);color:var(--muted);font-size:12px;border-bottom:1px solid var(--line)}.ribbon strong{color:var(--ink);font-weight:550}.page{padding:30px;max-width:1510px;margin:0 auto}.heading{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:24px}.eyebrow{color:var(--muted);font-size:12px;margin-bottom:8px}.heading p{color:var(--muted);margin:9px 0 0;max-width:760px;font-size:13px}.actions{display:flex;flex-wrap:wrap;align-items:center;gap:9px}.primary,.secondary,.ghost{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:8px 13px;border-radius:6px;font-size:12px}.primary{background:var(--accent);color:#fff;font-weight:550}body.dark .primary{color:#211936}.secondary{border:1px solid var(--line);background:var(--surface)}.ghost{color:var(--accent);padding:6px 8px}.secondary:hover,.ghost:hover{background:var(--subtle)}.tabs{display:flex;gap:25px;border-bottom:1px solid var(--line);margin-bottom:24px;overflow-x:auto}.tab{flex-shrink:0;padding:12px 0;font-size:13px;border-bottom:2px solid transparent;color:var(--muted)}.tab.active{border-color:var(--accent);color:var(--accent);font-weight:600}.subtabs{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 22px}.filter{padding:7px 12px;font-size:12px;border-radius:6px;color:var(--muted);border:1px solid transparent}.filter.active{background:var(--accent-soft);color:var(--accent)}.panel{border:1px solid var(--line);border-radius:9px;background:var(--surface);min-width:0}.panel-head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:14px}.panel-head small{display:block;margin-top:5px}.panel-body{padding:21px}.section{margin-top:24px}.split{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:22px;align-items:start}.summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:22px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.summary>div{padding:20px}.summary>div+div{border-left:1px solid var(--line)}.summary strong{font-size:20px;display:block;margin:7px 0;font-weight:550}.summary p{font-size:12px;color:var(--muted);margin:0 0 8px}.readiness{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--subtle);border-radius:7px;margin:18px 0 22px}.readiness>div{padding:13px 15px;font-size:12px}.readiness small{display:block;margin-bottom:5px}.readiness>div+div{border-left:1px solid var(--line)}.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:5px;background:var(--subtle);font-size:11px;line-height:1.6;white-space:normal}.badge.green{color:var(--green);background:var(--green-bg)}.badge.amber{color:var(--amber);background:var(--amber-bg)}.badge.red{color:var(--red);background:var(--red-bg)}.badge.purple{color:var(--accent);background:var(--accent-soft)}.notice{padding:13px 16px;border-radius:7px;background:var(--subtle);font-size:12px;margin-bottom:19px;line-height:1.8}.notice.amber{color:var(--amber);background:var(--amber-bg)}.notice.red{color:var(--red);background:var(--red-bg)}.notice.green{color:var(--green);background:var(--green-bg)}.chain{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.chain button{border:1px solid var(--line);border-radius:7px;padding:17px 14px;text-align:left;background:var(--subtle);min-height:95px}.chain button:hover{border-color:var(--accent)}.chain strong,.chain small{display:block}.chain small{margin-top:6px;font-size:11px}.table-wrap{overflow-x:auto;width:100%}table{border-collapse:collapse;width:100%;text-align:left;font-size:12px}th,td{padding:13px 16px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:500;background:var(--subtle);font-size:11px}tbody tr:last-child td{border:0}td small{display:block;margin-top:3px;font-size:11px}td p{margin:5px 0 0;color:var(--muted);font-size:11px}.meta-list{display:grid;grid-template-columns:105px minmax(0,1fr);gap:10px 15px;margin:0;font-size:12px}.meta-list dt{color:var(--muted)}.meta-list dd{margin:0;overflow-wrap:anywhere}.route{padding:15px 0;border-bottom:1px solid var(--line)}.route:last-child{border:0}.route strong{font-size:13px}.route p{font-size:12px;color:var(--muted);margin:7px 0 0}.module-list{display:grid;grid-template-columns:1fr 1fr;gap:10px}.module{padding:11px 12px;border:1px solid var(--line);border-radius:6px;font-size:12px}.module small{display:block;font-size:11px}.quiet{font-size:12px;color:var(--muted);line-height:1.8}.form-label{font-size:12px;display:block;margin-bottom:9px}.stack>*+*{margin-top:17px}.trace{list-style:none;margin:0;padding:0}.trace li{padding:0 0 18px 21px;border-left:1px solid var(--line);position:relative;font-size:12px}.trace li:before{content:"";width:7px;height:7px;background:var(--accent);border-radius:50%;position:absolute;left:-4px;top:7px}.trace li:last-child{padding-bottom:0}.trace small{display:block;margin-top:5px;font-size:11px}.trace button{padding:3px 0}.result-big{font-size:21px;line-height:1.65;font-weight:550;letter-spacing:-.3px}.result-big b{color:var(--accent)}.empty{padding:45px 22px;text-align:center;max-width:660px;margin:auto}.empty p{color:var(--muted);font-size:13px;margin:12px 0 20px}.history{padding:14px 0;border-bottom:1px solid var(--line);font-size:12px}.history:last-child{border:0}.history strong{display:block}.history small{font-size:11px}.review{margin-top:35px;border-top:1px solid var(--line);padding-top:18px;font-size:12px;color:var(--muted)}.review summary{cursor:pointer;font-weight:500}.review label{display:flex;align-items:center;gap:12px;margin:14px 0}.footer{display:flex;justify-content:space-between;gap:16px;margin-top:26px;font-size:11px;color:var(--muted)}dialog{width:min(740px,calc(100vw - 28px));max-height:88dvh;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow);overflow:auto}dialog::backdrop{background:#11101a70}.dialog-head{padding:21px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:18px;align-items:flex-start}.dialog-head h2{font-size:19px}.dialog-body{padding:23px 24px}.dialog-actions{padding:16px 24px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:9px;justify-content:flex-end;background:var(--surface);position:sticky;bottom:0}.close{width:30px;min-height:30px;border-radius:5px;font-size:19px;flex-shrink:0}.close:hover{background:var(--subtle)}.dialog-body .panel{margin-top:18px}.dialog-body table{min-width:0}.dialog-body th,.dialog-body td{padding:10px}.dialog-body h3{margin:20px 0 10px}.dialog-body h3:first-child{margin-top:0}
+@media(max-width:1120px){.sidebar{width:185px;flex-basis:185px}.page{padding:25px}.topbar{padding:12px 25px}.split{grid-template-columns:minmax(0,1fr) 245px;gap:17px}.chain{grid-template-columns:repeat(2,minmax(0,1fr))}.summary>div{padding:17px}.summary strong{font-size:18px}}
+@media(max-width:900px){.sidebar{width:62px;flex-basis:62px;padding:24px 7px}.brand{padding:0 5px 30px;font-size:16px}.brand small,.nav-label,.sidebar-foot,.nav span{display:none}.nav{padding:10px 4px;text-align:center;font-size:17px}.split{grid-template-columns:1fr}.heading{flex-wrap:wrap}.readiness{grid-template-columns:repeat(2,minmax(0,1fr))}.readiness>div:nth-child(3){border-left:0;border-top:1px solid var(--line)}.readiness>div:nth-child(4){border-top:1px solid var(--line)}.topbar{flex-wrap:wrap}.top-actions{flex:1;justify-content:space-between}.summary strong{font-size:17px}}
+@media(max-width:580px){.shell{display:block}.sidebar{position:static;width:100%;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:10px 14px;flex-direction:row;align-items:center;gap:12px}.brand{padding:0;font-size:17px}.sidebar nav{margin-left:auto;display:flex;gap:6px}.nav{width:37px;margin:0;min-height:35px}.topbar{padding:10px 14px}.breadcrumb{display:none}.top-actions{gap:9px;min-width:0}.enterprise-label{min-width:0;flex:1;gap:6px}.enterprise-label select{min-width:0;width:100%;font-size:12px}.top-actions>.secondary{padding:6px 9px}.ribbon{font-size:11px;padding:9px 14px}.page{padding:22px 14px}.heading{gap:14px;margin-bottom:20px}.heading h1{font-size:22px}.heading p{font-size:12px}.tabs{gap:20px}.summary{grid-template-columns:1fr}.summary>div+div{border-left:0;border-top:1px solid var(--line)}.summary>div{padding:14px}.summary strong{font-size:18px}.chain{grid-template-columns:1fr}.chain button{min-height:74px}.panel-head,.panel-body{padding:16px}.table-wrap table{min-width:490px}.module-list{grid-template-columns:1fr}.footer{display:block}.footer span{display:block;margin-top:7px}.meta-list{grid-template-columns:85px minmax(0,1fr);gap:9px 10px}.dialog-head,.dialog-body{padding:18px}.dialog-actions{padding:14px 18px}.dialog-actions button{flex:1;white-space:normal}.review label{align-items:flex-start;flex-direction:column;gap:7px}.result-big{font-size:18px}.dialog-body .table-wrap table{min-width:440px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.enterprise-label{white-space:nowrap}
+
+/* Optional coverage surfaces inside the existing Studio shell. */
+.scope-line{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--line)}.scope-line:last-child{border:0}.scope-line>div{min-width:0}.scope-line strong{font-size:13px}.scope-line p{font-size:12px;color:var(--muted);margin:5px 0 0}.badge-line{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.question-code{display:block;color:var(--muted);font-size:11px;font-weight:400;margin-top:3px}.coverage-table{min-width:620px}.coverage-table th:first-child{width:22%}.row-link{padding:0;color:var(--accent);text-align:left;font-weight:550}.search-row{display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:16px}.search-row input{width:min(330px,100%)}.advanced{border-top:1px solid var(--line);margin-top:20px;padding-top:18px}.advanced summary{cursor:pointer;font-size:12px;color:var(--accent)}.matrix{min-width:680px;margin-top:16px}.matrix td{padding:8px;min-width:85px}.matrix button{display:block;width:100%;text-align:left;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:11px;min-height:58px;background:var(--surface)}.matrix button.focus{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}.matrix button span{display:block;color:var(--muted);margin-top:3px}.method{border-left:3px solid var(--accent);padding-left:13px}.method p{font-size:12px;color:var(--muted);margin:5px 0 10px}.method strong{font-size:13px}.row-actions{display:flex;gap:5px;flex-wrap:wrap}.step-note{font-size:12px;padding:10px 14px;background:var(--subtle);border-radius:6px;color:var(--muted);margin-top:12px}.check-card{padding:18px 0;border-bottom:1px solid var(--line)}.check-card:first-child{padding-top:0}.check-card:last-child{border:0;padding-bottom:0}.check-card h3{font-size:14px;margin-bottom:7px}.check-card p{font-size:12px;color:var(--muted)}.check-card .actions{margin-top:12px}.task-body{max-width:920px}.chat-message{border-left:3px solid var(--accent);padding:14px 18px;background:var(--subtle);font-size:13px;line-height:1.9;margin:20px 0}.scope-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:15px}.scope-filters label{display:flex;gap:7px;align-items:center;padding:9px 10px;border:1px solid var(--line);border-radius:5px;font-size:12px}.scope-filters input{margin:0}.aside-small{font-size:12px}.aside-small h3{margin-bottom:8px}.aside-small .route{padding:12px 0}.inline-title{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.history-current{border-top:1px solid var(--line);padding-top:14px;margin-top:16px}.review select{min-width:200px}.review select,.review button{max-width:100%}.tag-example{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}.cell-meaning{max-width:58ch}.result-note{color:var(--muted);font-size:12px}.mobile-only{display:none}@media(max-width:580px){.heading .actions{width:100%}.heading .actions button{flex:1}.scope-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.coverage-table{min-width:570px}.scope-line{gap:8px}.scope-line .ghost{padding-left:2px;padding-right:2px}.search-row{align-items:stretch}.search-row input{width:100%}.search-row .actions{width:100%}.matrix{min-width:670px}.matrix td{min-width:82px}.tab{padding-left:1px;padding-right:1px}.dialog-body .table-wrap .coverage-table{min-width:490px}.mobile-only{display:block}}
+
+/* Intrinsic table widths stay inside their scroll container at every shell width. */
+.split > *, .summary > *, .workspace, .page, .panel-body, .panel-head > *, .search-row > *, .heading > * { min-width:0; }
+.table-wrap { display:block; min-width:0; max-width:100%; }
+.panel-head { flex-wrap:wrap; }
+.heading .actions, .panel-head .actions, .search-row .actions { min-width:0; flex-wrap:wrap; }
+.top-actions > *, .topbar > * { min-width:0; }
+
+/* v0.2: full framework is the primary view; local scroll preserves six readable columns. */
+.matrix-legend{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:0 0 15px}
+.table-wrap table.matrix.panorama{min-width:1250px;table-layout:fixed}
+.panorama th:first-child{width:160px}
+.panorama th[scope="row"]{position:sticky;left:0;z-index:1;background:var(--subtle);text-align:left;vertical-align:top;padding:12px 10px}
+.panorama th[scope="row"] strong{display:block;color:var(--ink);font-size:13px}
+.panorama th[scope="row"] small{display:block;margin-top:7px;font-size:10px;overflow-wrap:anywhere}
+.panorama td{padding:5px;min-width:170px}
+.panorama .cell-button{min-height:108px;padding:8px;display:flex;flex-direction:column;gap:3px;border:1px solid var(--line);text-align:left;width:100%;border-radius:7px;background:var(--surface)}
+.panorama .cell-button strong{font-size:13px;color:var(--ink);line-height:1.45;font-weight:600}
+.panorama .cell-button .cell-code{font-size:11px;color:var(--muted);margin:0}
+.panorama .cell-button .cell-scope{font-size:10px;color:var(--muted);margin:0}
+.panorama .cell-button .cell-count{font-size:11px;color:var(--muted);line-height:1.6;margin:auto 0 0}
+.panorama .cell-button.first-focus{border:2px solid var(--accent);background:var(--accent-soft);padding:7px}
+.panorama .cell-button.first-focus .cell-scope{color:var(--accent)}
+.panorama .cell-button.view-focus .cell-code{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;color:var(--accent)}
+.panorama .cell-button:hover{box-shadow:inset 0 0 0 1px var(--accent)}
+.coordinate-links{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+.coordinate-links button{font-size:11px;text-align:left;white-space:normal}
+.fragment-record{padding:16px 0;border-bottom:1px solid var(--line);font-size:12px}
+.fragment-record:first-child{padding-top:8px}
+.fragment-record:last-child{border:0}
+.fragment-record strong,.fragment-record small{display:block;overflow-wrap:anywhere}
+.fragment-record small{margin:4px 0 9px;font-size:11px;color:var(--muted)}
+.fragment-record p{margin:7px 0}
+.inventory-table{min-width:680px}
+.dialog-body .fragment-record .coordinate-links{width:100%}
+@media(max-width:580px){.table-wrap table.matrix.panorama{min-width:1070px}.panorama th:first-child{width:145px}.matrix-legend{align-items:flex-start;gap:9px}.panorama .cell-button{min-height:108px}.summary p{overflow-wrap:anywhere}}
+
+</style>
+
+
+</head>
+<body>
+<a class="skip" href="#main-content">跳到主要内容</a>
+<div id="app"></div>
+<dialog id="overlay" aria-labelledby="dialog-title"></dialog>
+<div id="announce" class="sr-only" role="status" aria-live="polite"></div>
+<script>
+/* Synthetic review records only. Exact material versions and asset revisions are separate sets. */
+globalThis.COVERAGE_FIXTURE = Object.freeze({
+  columns: [['What','对象'],['How','运作'],['Where','分布'],['Who','参与与责任'],['When','时间'],['Why','目标与约束']],
+  rows: [
+    {name:'范围识别',english:'Identification',titles:['经营对象范围','经营活动范围','市场与渠道范围','参与者范围','经营节奏范围','目标与约束范围']},
+    {name:'业务定义',english:'Definition',titles:['业务对象与关系','业务过程与事件','业务分布与归属','业务角色与责任','业务周期与时序','业务目标与规则']},
+    {name:'逻辑表示',english:'Representation',titles:['逻辑数据模型','逻辑功能模型','逻辑分布模型','逻辑角色与权限','逻辑时间约束','规则与指标逻辑']},
+    {name:'技术规格',english:'Specification',titles:['技术数据规格','技术功能设计','网络与部署规格','身份权限技术规格','调度与时限规格','规则实现规格']},
+    {name:'具体配置',english:'Configuration',titles:['表字段与映射配置','程序与接口配置','节点与地址配置','角色权限配置','任务周期配置','规则与参数配置']},
+    {name:'运行实例',english:'Instantiation',titles:['实际业务对象记录','实际业务活动','实际分布实例','实际参与与责任记录','实际发生时间记录','实际决策与规则执行记录']}
+  ],
+  scope:'运动鞋服共享经营骨架＋会员运营核心',
+  focusCells:['R1:What','R1:How','R1:Where','R1:Who','R1:When','R1:Why','R2:What','R2:How','R2:Where','R2:Who','R2:When','R2:Why','R3:What','R3:Why'],
+  method:{id:'method.survey',version:'0.2',title:'资料盘点方法（合成引用）'},
+  sources:[
+    {id:'doc.scope',version:'1',title:'经营范围说明',period:'2026年度',nature:'企业资料（合成）'},
+    {id:'doc.product',version:'1',title:'商品对象字典',period:'2026年度',nature:'企业字典（合成）'},
+    {id:'doc.channel',version:'1',title:'门店与渠道字典',period:'2026年度',nature:'企业字典（合成）'},
+    {id:'doc.member',version:'1',title:'会员与账户说明',period:'2026年度',nature:'企业资料（合成）'},
+    {id:'doc.operations',version:'1',title:'业务过程说明',period:'2026年度',nature:'企业资料（合成）'},
+    {id:'doc.roles',version:'1',title:'岗位职责说明',period:'2026年度',nature:'企业资料（合成）'},
+    {id:'doc.calendar',version:'1',title:'业务日历说明',period:'2026年度',nature:'企业资料（合成）'},
+    {id:'doc.member-policy',version:'2025.1',title:'会员资格制度',period:'2025-01-01至2025-12-31',nature:'企业制度（合成、历史期间）'},
+    {id:'doc.member-policy',version:'2026.1',title:'会员资格制度',period:'2026-01-01起',nature:'企业制度（合成、当前期间）'},
+    {id:'doc.metrics',version:'1',title:'指标业务口径说明',period:'2026年度',nature:'企业资料（合成）'},
+    {id:'doc.mapping',version:'1',title:'实际字段映射说明',period:'2026样本',nature:'系统资料（合成）'},
+    {id:'doc.objectives',version:'1',title:'经营目标访谈记录',period:'2026年度',nature:'待核资料（合成）',unannotatedReason:'已收资料，尚未核定片段属于哪个视角；保留未标注，不为凑格自动分配。'},
+    {id:'doc.sample',version:'1',title:'获准运行样例记录',period:'观察时点2026-01-31',nature:'预置运行样例（非实际引擎回执）'}
+  ],
+  assets:[
+    {id:'asset.shared-model',version:'r1',title:'共享经营对象模型',kind:'主数据',sources:['doc.product@1','doc.channel@1'],meaning:'商品SKU、门店和渠道的准确对象身份。'},
+    {id:'asset.member-model',version:'r1',title:'会员身份模型',kind:'主数据',sources:['doc.member@1','doc.mapping@1'],meaning:'会员、账户和计划关系的定义与准确键。'},
+    {id:'sap.member-scope',version:'1.0.0',title:'会员规模指标体系',kind:'指标体系',sources:['doc.metrics@1','doc.member@1'],meaning:'统计对象和用途；准确公式继续归原SAP。'},
+    {id:'sap.benefit-use',version:'1.0.0',title:'权益参与指标体系',kind:'指标体系',sources:['doc.metrics@1','doc.operations@1'],meaning:'参与事件、时间与度量用途；不在此复制公式。'},
+    {id:'asset.event-ontology',version:'r1',title:'业务事件本体',kind:'本体',sources:['doc.operations@1','doc.calendar@1','doc.sample@1'],meaning:'交易、取消、退款等事件与时序。'},
+    {id:'asset.eligibility-rule',version:'r1',title:'资格与生效规则',kind:'本体',sources:['doc.member-policy@2025.1','doc.member-policy@2026.1','doc.roles@1','doc.calendar@1'],meaning:'资格与有效期按准确制度、期间和用途核定。'}
+  ],
+  fragments:[
+    {id:'P01',source:'doc.scope@1',locator:'第1节·经营对象',text:'本轮关注商品SKU、门店渠道、会员账户与交易；不以单一道分析题裁剪共享范围。',cells:['R1:What'],reason:'此片段界定经营对象的范围，不陈述具体对象模型。'},
+    {id:'P02',source:'doc.scope@1',locator:'第2节·业务链边界',text:'本轮包含入会、参与、交易、权益使用及退换退款的语义边界。',cells:['R1:How'],reason:'说明纳入哪些经营活动。'},
+    {id:'P03',source:'doc.scope@1',locator:'第3节·市场与目标',text:'以中国市场的直营、加盟及线上触点为首批范围，目标是共享口径和可核查使用。',cells:['R1:Where','R1:Why'],reason:'同一片段涉及市场范围及建设所服务的经营目标。'},
+    {id:'P04',source:'doc.product@1',locator:'表1·款色码定义',text:'商品款、色、尺码与可售SKU分别保留身份和关系；不能把款直接当SKU统计。',cells:['R2:What','R3:What'],reason:'同时支持业务对象关系和逻辑数据关系。'},
+    {id:'P05',source:'doc.channel@1',locator:'表2·渠道与归属',text:'直营、加盟、线上触点分开定义；门店与渠道归属随期间保留。',cells:['R2:Where','R3:Where'],reason:'分别关注业务归属和系统间所需的逻辑分布。'},
+    {id:'P06',source:'doc.channel@1',locator:'第1节·覆盖范围',text:'首批列出直营门店、加盟门店与线上触点三类经营节点。',cells:['R1:Where'],reason:'这是经营节点范围清单，不是每个节点的技术配置。'},
+    {id:'P07',source:'doc.member@1',locator:'第2节·身份关系',text:'会员、账户与计划关系分别保留身份，关联需要准确依据；本样例计划明确不经营储值业务。',cells:['R2:What','R3:What'],reason:'定义业务对象及其逻辑关联；储值账户不适用有明确样例范围依据。'},
+    {id:'P08',source:'doc.operations@1',locator:'第3节·业务完成条件',text:'交易完成、取消与退款分别记录；跨日取消的统计归属仍需补证据。',cells:['R2:How','R3:How'],reason:'此处描述过程边界和对应逻辑状态，不是实际运行事件。'},
+    {id:'P09',source:'doc.operations@1',locator:'第4节·事件顺序',text:'入会、交易、权益使用及退款事件需要保留先后条件，不能仅以最后状态替代。',cells:['R2:How','R3:When'],reason:'业务事件与逻辑时序是不同但相关的关注点。'},
+    {id:'P10',source:'doc.roles@1',locator:'第1、4节·参与者与维护责任',text:'运营团队维护会员制度，渠道团队解释渠道范围；特殊渠道例外由谁决定尚待核定。',cells:['R1:Who','R2:Who','R3:Who'],reason:'分别提供参与者范围、业务责任与逻辑角色的线索。'},
+    {id:'P11',source:'doc.calendar@1',locator:'第1节·三类时间',text:'发生、记录和制度生效时间分开；上市波段和经营日历按适用期间保留。',cells:['R1:When','R2:When','R3:When'],reason:'从时间范围到业务周期及逻辑时序，保留各自含义。'},
+    {id:'P12',source:'doc.member-policy@2025.1',locator:'第2节·2025资格',text:'2025期间按“正常＋宽限”解释资格；此历史期间规则不直接适用于2026。',cells:['R2:Why','R3:Why'],reason:'业务政策及其逻辑条件，保留历史适用期间。'},
+    {id:'P13',source:'doc.member-policy@2026.1',locator:'第2节·2026资格',text:'2026期间按“正常”解释资格；与2025版本的差异本身不构成同期间矛盾。',cells:['R2:Why','R3:Why'],reason:'同名不同准确版本分别关联，不按名称合并。'},
+    {id:'P14',source:'doc.metrics@1',locator:'第1节·统计对象与目标',text:'会员人数、账户数、计划关系数分别定义；度量服务会员经营目标，不互相替代。',cells:['R1:Why','R2:What','R3:Why'],reason:'指标的目标、统计对象与逻辑不是固定唯一一个格。'},
+    {id:'P15',source:'doc.metrics@1',locator:'第2节·权益参与',text:'权益参与指标关联原事件、时间与SAP准确版本，不能把目录父子当作可相加。',cells:['R2:How','R3:Why'],reason:'过程所需事件与指标逻辑的多视角关联。'},
+    {id:'P16',source:'doc.mapping@1',locator:'表A·物理字段',text:'member_id、account_id和event_time为样例字段；键、类型、粒度与Binding需按计算用途核定。',cells:['R3:What','R4:What'],reason:'一个映射片段可能同时关联逻辑对象与物理数据规格。'},
+    {id:'P17',source:'doc.mapping@1',locator:'表B·映射配置',text:'样例映射配置保留字段名、转换说明和准确来源；配置定义不是实际会员记录。',cells:['R5:What'],reason:'此片段描述具体字段映射配置。'},
+    {id:'P18',source:'doc.objectives@1',locator:'访谈待核摘要',text:'原访谈尚未形成可确认的经营目标或责任范围，先保留资料，不强制贴格。',cells:[],reason:'明确未标注；需后续证据，不能用词相似自动归类。'},
+    {id:'P19',source:'doc.sample@1',locator:'样例REL-01',text:'合成关系REL-01在观察时点记录状态“正常”；这不是实际企业数据或引擎执行结果。',cells:['R6:What','R6:When'],reason:'引用一条合成运行实例及其观察时间。'},
+    {id:'P20',source:'doc.sample@1',locator:'样例EVT-01',text:'合成事件EVT-01记录一次权益领取及发生时间；仅用于解释运行证据的落位。',cells:['R6:How','R6:When'],reason:'引用合成实际活动记录，不把流程定义充当运行实例。'},
+    {id:'P21',source:'doc.metrics@1',locator:'第3节·资格记录（待核）',text:'同为2026期间的操作说明写有“正常与宽限均符合”，与制度片段P13不同；尚需核定是否旧稿或合法例外。',cells:['R2:Why','R3:Why'],reason:'同范围同期间的疑点保留准确片段，先待核，不自动mark-issue或替企业裁决。'}
+  ],
+  cellAssets:{
+    'R1:What':['asset.shared-model@r1','asset.member-model@r1'],
+    'R1:How':['asset.event-ontology@r1'],
+    'R1:Where':['asset.shared-model@r1'],
+    'R1:Who':['asset.eligibility-rule@r1'],
+    'R1:When':['asset.event-ontology@r1'],
+    'R1:Why':['sap.member-scope@1.0.0','sap.benefit-use@1.0.0'],
+    'R2:What':['asset.shared-model@r1','asset.member-model@r1','sap.member-scope@1.0.0'],
+    'R2:How':['asset.event-ontology@r1','sap.benefit-use@1.0.0'],
+    'R2:Where':['asset.shared-model@r1'],
+    'R2:Who':['asset.eligibility-rule@r1'],
+    'R2:When':['asset.event-ontology@r1','asset.eligibility-rule@r1'],
+    'R2:Why':['asset.eligibility-rule@r1','sap.member-scope@1.0.0'],
+    'R3:What':['asset.shared-model@r1','asset.member-model@r1'],
+    'R3:How':['asset.event-ontology@r1'],
+    'R3:Where':['asset.shared-model@r1'],
+    'R3:Who':['asset.eligibility-rule@r1'],
+    'R3:When':['asset.event-ontology@r1'],
+    'R3:Why':['sap.member-scope@1.0.0','sap.benefit-use@1.0.0','asset.eligibility-rule@r1'],
+    'R4:What':['asset.shared-model@r1','asset.member-model@r1'],
+    'R5:What':['asset.member-model@r1'],
+    'R6:What':['asset.member-model@r1'],
+    'R6:How':['asset.event-ontology@r1'],
+    'R6:When':['asset.event-ontology@r1']
+  },
+  observations:{
+    'R2:What':['对象定义可独立查阅；本样例无储值业务，因此储值账户不适用。','需要实际计算时，仍核必需身份与Binding。'],
+    'R2:How':['跨日取消的统计归属证据待补；不因此宣称全部流程不完整。'],
+    'R2:Who':['特殊渠道的例外决定责任尚待核。'],
+    'R2:When':['实际历史覆盖仍待核；发生、记录、生效含义分开。'],
+    'R2:Why':['2025与2026制度期间不同，合法并存；若出现同期间相反断言再列待核。'],
+    'R3:What':['实际字段属于样例，不能据字段相似自动判定同人。'],
+    'R4:What':['本轮不建设技术架构，但可按准确片段引用字段规格。'],
+    'R5:What':['映射配置定义与运行实例分开。'],
+    'R6:What':['仅预置运行样例，不代表真实企业已接入或分析已执行。'],
+    'R6:How':['仅预置活动记录，不代表规则工具实跑。'],
+    'R6:When':['观察时间来自预置实例；当前没有独立业务核验。']
+  }
+});
+
+</script>
+<script>
+/* REVIEW PROTOTYPE — synthetic, memory-only. No product API, model, SDK or storage. */
+(() => {
+  'use strict';
+  const app = document.getElementById('app');
+  const overlay = document.getElementById('overlay');
+  const announce = document.getElementById('announce');
+  const fixture = globalThis.COVERAGE_FIXTURE;
+  const columns = fixture.columns;
+  const rows = fixture.rows.map(r=>r.name);
+  const defaultFocus = fixture.focusCells.slice();
+  const keyOf = record => record.id + '@' + record.version;
+  const unique = values => Array.from(new Set(values));
+  const sourcesByKey = new Map(fixture.sources.map(r=>[keyOf(r),r]));
+  const assetsByKey = new Map(fixture.assets.map(r=>[keyOf(r),r]));
+  const cells = fixture.rows.flatMap((row,r)=>columns.map((col,c)=>({coord:'R'+(r+1)+':'+col[0],row:r,column:col[0],title:row.titles[c]})));
+  const cellByCode = new Map(cells.map(cell=>[cell.coord,cell]));
+  const fragmentsFor = coord => fixture.fragments.filter(fragment=>fragment.cells.includes(coord));
+  const sourceKeysFor = coord => unique(fragmentsFor(coord).map(fragment=>fragment.source));
+  const assetKeysFor = coord => unique(fixture.cellAssets[coord] || []);
+  const coordsForSource = key => unique(fixture.fragments.filter(fragment=>fragment.source===key).flatMap(fragment=>fragment.cells));
+  const coordsForAsset = key => cells.filter(cell=>assetKeysFor(cell.coord).includes(key)).map(cell=>cell.coord);
+  const allSourceKeys = () => unique(fixture.sources.map(keyOf));
+  const allAssetKeys = () => unique(cells.flatMap(cell=>assetKeysFor(cell.coord)));
+  const kindCount = kind => allAssetKeys().filter(key=>assetsByKey.get(key).kind===kind).length;
+  const scenarios = [['normal','正常：正式与候选并存'],['none','没有盘点报告'],['candidate','仅有候选盘点报告'],['method','方法资料暂不可读'],['stale','依据已变化／历史查看'],['mapping','数据计算缺映射'],['dispute','同范围同期间有争议'],['emptySearch','资料搜索无结果'],['loading','读取中'],['error','读取失败'],['format','报告格式损坏'],['unsupported','未知报告版本'],['candidateInput','报告含候选输入']];
+  const initial = () => ({
+    tab:'coverage', inventoryTab:'sources', scenario:'normal', dark:false, query:'', selectedReport:1, formalReport:1, formalReadStatus:'ready', candidateReadStatus:'ready', candidateInputsEligible:true, methodReadStatus:'ready', historyStatus:'ready',
+    workItem:false, viewFocus:defaultFocus.slice(),
+    task:null, taskNumber:0, notice:'',
+    question:'请说明会员资格与权益的适用边界，并列出当前需要核定的事项。'
+  });
+  let state = initial(), returnFocus = null, modal = '';
+  const esc = x => String(x == null ? '' : x).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const badge = (t, tone='') => '<span class="badge ' + tone + '">' + esc(t) + '</span>';
+  const button = (action,label,cls='secondary',value='',disabled=false) => '<button type="button" class="' + cls + '" data-action="' + action + '" data-value="' + esc(value) + '"' + (disabled?' disabled':'') + '>' + label + '</button>';
+  const notice = (text,tone='') => '<div class="notice ' + tone + '" role="status">' + text + '</div>';
+  const table = (heads, data, cls='') => '<div class="table-wrap" tabindex="0" aria-label="可横向滚动的资料表格"><table class="' + cls + '"><thead><tr>' + heads.map(h=>'<th scope="col">' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' + data.map(r=>'<tr>' + r.map((c,i)=>(i===0 && cls.includes('panorama')?'<th scope="row">':'<td>') + c + (i===0 && cls.includes('panorama')?'</th>':'</td>')).join('') + '</tr>').join('') + '</tbody></table></div>';
+  const meta = data => '<dl class="meta-list">' + data.map(r=>'<dt>' + esc(r[0]) + '</dt><dd>' + r[1] + '</dd>').join('') + '</dl>';
+  const noReport = () => state.selectedReport === null;
+  const candidateOnly = () => state.formalReport === null && state.selectedReport !== null;
+  const reportFormal = () => !candidateOnly() && state.formalReport === state.selectedReport;
+  const usableCoverage = () => state.formalReport !== null && state.formalReadStatus === 'ready';
+  const selectedReadStatus = () => state.selectedReport === state.formalReport ? state.formalReadStatus : state.candidateReadStatus;
+  const canPublishCandidate = () => state.selectedReport === 2 && state.candidateReadStatus === 'ready' && state.candidateInputsEligible && state.methodReadStatus === 'ready';
+  const canViewEvidence = () => selectedReadStatus()==='ready' && state.methodReadStatus==='ready' && (state.selectedReport===state.formalReport || state.candidateInputsEligible);
+  const reportLabel = n => '盘点报告 r' + n;
+  const toast = text => { state.notice = text; announce.textContent = text; };
+  function capture(el) {
+    if (!el) return null;
+    if (el.id) return {id:el.id};
+    return {action:el.dataset.action,value:el.dataset.value || ''};
+  }
+  function restore(ref) {
+    if (!ref) return;
+    let el = ref.id ? document.getElementById(ref.id) : Array.from(document.querySelectorAll('[data-action]')).find(e=>e.dataset.action===ref.action && (e.dataset.value || '')===ref.value);
+    if (el) el.focus();
+  }
+  function show(title,body,actions,kind='') {
+    if (!overlay.open) returnFocus = capture(document.activeElement);
+    modal = kind;
+    overlay.innerHTML = '<div class="dialog-head"><h2 id="dialog-title">' + esc(title) + '</h2><button class="close" type="button" data-action="close" aria-label="关闭对话框">×</button></div><div class="dialog-body">' + body + '</div><div class="dialog-actions">' + (actions || button('close','返回','secondary')) + '</div>';
+    if (!overlay.open) overlay.showModal();
+  }
+  function close() {
+    const ref = returnFocus;
+    overlay.close();
+    modal = '';
+    requestAnimationFrame(()=>restore(ref));
+  }
+  function methodPanel() {
+    const fail = state.methodReadStatus !== 'ready';
+    return '<div class="method"><strong>本次建设方法</strong><p>资料盘点方法 v0.2 · 获准方法引用 method.survey@0.2（另计）<br>用途：范围检查与证据盘点，不是正式企业政策。</p>' + badge(fail?'暂不可读':'准确版本已指定',fail?'amber':'') + '<div class="actions section">' + button('method','查看来源与使用范围','ghost') + '</div></div>';
+  }
+  function summary() {
+    const available=canViewEvidence();
+    return '<div class="summary"><div><small>框架与首批范围</small><strong>'+cells.length+'格全景 · 首批参考'+unique(fixture.focusCells).length+'格</strong><p>14是首批关注建议；另22格保持可见。不是资料数量或完成进度。</p></div><div><small>本报告业务资料 · 方法另计</small><strong>'+(available?allSourceKeys().length+'个准确资料版本':'未知／尚不可展示')+'</strong><p>按资料身份＋版本去重，同名不同版本分开；一版多格只计一次。</p>'+button('inventory','查看资料版本清单','ghost','sources')+'</div><div><small>本报告三类关联资产 · 不与资料相加</small><strong>'+(available?allAssetKeys().length+'项准确资产修订':'未知／尚不可展示')+'</strong><p>'+(available?'主数据'+kindCount('主数据')+'／指标体系'+kindCount('指标体系')+'／本体'+kindCount('本体')+'；按资产身份＋版本去重。':'原资产和普通分析仍按原资格可用，不把不可读当作0。')+'</p>'+button('inventory','查看三类资产清单','ghost','assets')+'</div></div>';
+  }
+  function reportStateNotice() {
+    if(noReport())return notice('没有当前盘点报告。下方36格仅是框架解释，企业证据、资产关联和报告数量均未知；首批14格只作预置参考建议。','amber');
+    if(!canViewEvidence()){
+      const status=selectedReadStatus();
+      let actions='';
+      if(state.methodReadStatus!=='ready')actions=button('method','查看不可读的方法资料','secondary')+button('repair-help','查看修复边界','ghost');
+      else if(status==='error')actions=button('retry-read','重试读取（演示）','secondary');
+      else if(status==='loading')actions=button('load-success','查看演示读取成功','secondary');
+      else if(['corrupt','unsupported'].includes(status))actions=button('raw-report','查看报告原文（合成）','secondary')+button('repair-help','查看修复边界','ghost');
+      else actions=button('repair-help','查看修复边界','secondary');
+      return notice('当前查看 '+esc(reportLabel(state.selectedReport))+'，读取状态 '+esc(status)+'。未获得可展示的报告依据，格详情只解释框架含义，资料／资产数量显示未知。生成候选不恢复旧正式报告资格。','amber')+'<div class="actions section">'+actions+button('tab','继续普通任务','ghost','usage')+'</div>';
+    }
+    return notice('当前查看 '+esc(reportLabel(state.selectedReport))+' · '+(reportFormal()?'正式参考':'建设侧候选')+'。各格计数会重复引用同一资料或资产；全局合计按准确版本重新去重，不能逐格或逐列相加。');
+  }
+  function coverage() {
+    const data=fixture.rows.map((row,r)=>['<strong>R'+(r+1)+' '+esc(row.name)+'</strong><small>'+esc(row.english)+'</small>'].concat(columns.map(col=>{
+      const coord='R'+(r+1)+':'+col[0], cell=cellByCode.get(coord), first=fixture.focusCells.includes(coord), viewed=state.viewFocus.includes(coord);
+      const counts=canViewEvidence()?sourceKeysFor(coord).length+'资料版本 · '+assetKeysFor(coord).length+'资产':'资料未知 · 资产未知';
+      return '<button type="button" data-action="cell" data-value="'+coord+'" class="cell-button '+(first?'first-focus ':'')+(viewed?'view-focus':'')+'" aria-label="'+esc(coord+' '+cell.title)+'"><span class="cell-code">'+coord+'</span><strong>'+esc(cell.title)+'</strong><span class="cell-scope">'+(first?'首批参考关注':'本轮未重点建设')+'</span><span class="cell-count">'+counts+'</span></button>';
+    })));
+    return summary()+reportStateNotice()+'<section class="panel"><div class="panel-head"><div><h2>36格全景</h2><small>'+esc(fixture.scope)+'。每格可查看具体含义与本报告的逐格依据；框架解释不是企业事实。</small></div><div class="actions">'+button('focus','调整查看高亮','secondary')+button('report','报告身份与版本','ghost')+'</div></div><div class="panel-body"><div class="matrix-legend"><span>'+badge('首批参考关注 '+unique(fixture.focusCells).length+' 格','purple')+'</span><span>'+badge('当前查看高亮 '+unique(state.viewFocus).length+' 格')+'</span><span class="quiet">查看高亮不改首批范围；其余格未重点建设不代表不适用、缺资料或未完成。</span></div>'+table(['行视角'].concat(columns.map(c=>c[0]+' '+c[1])),data,'matrix panorama')+'<p class="quiet section">窄屏可在矩阵容器内横向滚动，保留完整6列。坐标解释依照不同具体化视角，R1／R2／R6同列不共用企业证据。</p><div class="actions">'+button('generate','生成盘点候选（演示）','primary')+button('contract','查看最小报告约定','ghost')+'</div></div></section>';
+  }
+  function sourceRows(keys) {
+    return keys.map(key=>{const r=sourcesByKey.get(key), related=coordsForSource(key);return [button('material',esc(r.title),'row-link',key)+'<small>'+esc(key)+'</small>',esc(r.period),related.length?related.map(c=>badge(c)).join(' '):badge('未标注'),button('material','查看片段与反向坐标','ghost',key)];});
+  }
+  function assetRows(keys) {
+    return keys.map(key=>{const r=assetsByKey.get(key);return [button('asset',esc(r.title),'row-link',key)+'<small>'+esc(key)+'</small>',esc(r.kind),coordsForAsset(key).map(c=>badge(c)).join(' '),button('asset','查看准确资产关联','ghost',key)];});
+  }
+  function inventory() {
+    const available=canViewEvidence(), q=state.query.toLowerCase();
+    const sourceMatches=allSourceKeys().filter(key=>{const r=sourcesByKey.get(key);return (key+r.title+r.period).toLowerCase().includes(q);});
+    const assetMatches=allAssetKeys().filter(key=>{const r=assetsByKey.get(key);return (key+r.title+r.kind).toLowerCase().includes(q);});
+    let content='';
+    if(!available)content='<div class="empty"><h3>本报告的资料与资产清单未知</h3><p>当前不能展示其证据、片段或计数。静态36格含义可查看，普通分析仍可沿原资产资格继续。</p>'+button('tab','查看框架全貌','secondary','coverage')+button('tab','进入普通任务','ghost','usage')+'</div>';
+    else if(state.inventoryTab==='sources')content='<p class="quiet">报告共'+allSourceKeys().length+'个资料准确版本；当前匹配'+sourceMatches.length+'个。资料多格复用不重复计入总数；建设方法 method.survey@0.2 另列，不算业务资料。</p>'+(sourceMatches.length?table(['资料准确版本','适用期间','已关联坐标','反向查看'],sourceRows(sourceMatches),'inventory-table'):'<div class="empty"><h3>没有匹配资料</h3><p>仅当前筛选为空，不代表报告没有资料。</p>'+button('clear-search','清除搜索','secondary')+'</div>');
+    else if(state.inventoryTab==='assets')content='<p class="quiet">报告关联'+allAssetKeys().length+'项准确资产修订，三类各'+kindCount('主数据')+'项。资产与资料是不同集合，不能相加成总资料数；当前匹配'+assetMatches.length+'项。</p>'+(assetMatches.length?table(['资产准确修订','类别','已关联坐标','反向查看'],assetRows(assetMatches),'inventory-table'):'<div class="empty"><h3>没有匹配资产</h3>'+button('clear-search','清除搜索','secondary')+'</div>');
+    else content='<p class="quiet">按六问汇总本报告的相关资料与资产。不同列会引用同一准确版本，各列计数不能相加为全局合计。</p>'+table(['关注问题','相关资料版本','相关资产修订','查看该列引用'],columns.map(col=>{const coords=cells.filter(c=>c.column===col[0]).map(c=>c.coord), sk=unique(coords.flatMap(sourceKeysFor)),ak=unique(coords.flatMap(assetKeysFor));return ['<strong>'+col[0]+' '+esc(col[1])+'</strong>',String(sk.length),String(ak.length),button('column','查看明确标注的引用','ghost',col[0])];}),'inventory-table');
+    return summary()+reportStateNotice()+'<section class="panel"><div class="panel-head"><div><h2>资料与资产</h2><small>准确版本、片段和坐标之间的显式对应；不按名称推断关联。</small></div>'+button('method','建设方法（另计）','secondary')+'</div><div class="panel-body"><div class="subtabs" aria-label="资料与资产类别">'+[['sources','资料版本'],['assets','三类资产'],['columns','六问摘要']].map(t=>button('inventory-tab',t[1],'filter '+(state.inventoryTab===t[0]?'active':''),t[0])).join('')+'</div><div class="search-row"><label class="sr-only" for="search">搜索准确资料或资产</label><input id="search" type="search" value="'+esc(state.query)+'" placeholder="搜索名称、准确版本或类别…" autocomplete="off"></div>'+content+'</div></section>';
+  }
+  function coordButtons(coords) {
+    return coords.length?'<div class="coordinate-links">'+coords.map(coord=>button('cell',esc(coord+' '+cellByCode.get(coord).title),'secondary',coord)).join('')+'</div>':badge('未标注；未自动补格');
+  }
+  function fragmentMarkup(fragments) {
+    return fragments.length?fragments.map(f=>{const source=sourcesByKey.get(f.source);return '<article class="fragment-record"><strong>'+esc(f.id+' · '+source.title+' @'+source.version)+'</strong><small>'+esc(f.locator)+'</small><p>'+esc(f.text)+'</p><p class="quiet">标注依据：'+esc(f.reason)+'</p><div class="row-actions">'+button('material','反查此资料准确版本','ghost',f.source)+coordButtons(f.cells)+'</div></article>';}).join(''):'<p class="quiet">本报告未标注此格证据。是否已调查、是否需要补资料尚未核定，不能推断企业不存在相关内容。</p>';
+  }
+  function cellDetail(coord) {
+    const cell=cellByCode.get(coord);if(!cell)return;
+    const phase=['界定纳入的要素清单与范围。','用业务语言明确经营含义。','描述不依赖具体技术选型的逻辑模型。','描述受到实现技术约束的规格。','描述可配置的部件与映射定义。','关联实际存在或实际发生的实例证据。'][cell.row];
+    let body=meta([['稳定坐标',esc(coord)],['具体含义',esc(cell.title)+'。'+phase],['本轮边界',fixture.focusCells.includes(coord)?'首批参考关注；不是单格完成或发布状态':'本轮未重点建设；仍可了解、登记或关联证据，不自动变不适用'],['当前查看',esc(reportLabel(state.selectedReport || '未知'))+'／'+esc(selectedReadStatus())]]);
+    if(!canViewEvidence())body+=notice('当前报告不可展示：本格资料、资产和数量均未知。以下不加载上次成功的企业证据。','amber');
+    else {
+      const sk=sourceKeysFor(coord),ak=assetKeysFor(coord),fr=fragmentsFor(coord);
+      body+='<h3>本格准确对应</h3><p class="quiet">'+sk.length+'个资料版本／'+fr.length+'个片段／'+ak.length+'项资产；都是本格显式标注，不按列名兜底。</p>'+fragmentMarkup(fr)+'<h3>三类关联资产</h3>'+(ak.length?table(['准确资产','类别','反查'],ak.map(key=>{const a=assetsByKey.get(key);return [esc(a.title)+'<small>'+esc(key)+'</small>',esc(a.kind),button('asset','查看此资产坐标','ghost',key)];})):'<p class="quiet">本报告未标注此格资产关联。</p>')+'<h3>并列观察与限制</h3><ul class="quiet">'+(fixture.observations[coord] || ['本报告未记录此格观察。调查状态和业务适用性仍未知。']).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul><p class="quiet">本格不设资产四维状态。定义、映射、可计算与实际使用须按关联资产的准确修订回原记录核定；本演示未核验，不能用格子或证据数量推断成熟度。</p>';
+    }
+    show(coord+' · '+cell.title,body);
+  }
+  function materialDetail(key) {
+    if(!canViewEvidence()){show('资料证据当前未知',notice('当前报告尚未可读，不展示缓存的资料、片段或数量。','amber'));return;}
+    const r=sourcesByKey.get(key);if(!r)return;
+    const fs=fixture.fragments.filter(f=>f.source===key),coords=coordsForSource(key),ak=allAssetKeys().filter(a=>assetsByKey.get(a).sources.includes(key));
+    show('资料：'+r.title+' @'+r.version,meta([['准确身份',esc(key)],['适用期间',esc(r.period)],['证据性质',esc(r.nature)],['计数口径','此准确版本全局计1次；多片段、多格不重复计入'],['标注状态',coords.length?'有显式坐标关联':esc(r.unannotatedReason || '未标注')]])+'<h3>反向关联坐标</h3>'+coordButtons(coords)+'<h3>本版本片段</h3>'+fragmentMarkup(fs)+'<h3>关联原资产</h3>'+(ak.length?assetRows(ak).map(row=>'<p>'+row[0]+' '+row[1]+'</p>').join(''):'<p class="quiet">本资料版本尚未标注与这6项资产的关系。</p>'));
+  }
+  function assetDetail(key) {
+    if(!canViewEvidence()){show('资产关联当前未知',notice('当前报告尚未可读，不展示缓存的资产或数量。','amber'));return;}
+    const a=assetsByKey.get(key);if(!a)return;
+    show('资产：'+a.title+' @'+a.version,meta([['准确身份',esc(key)],['三类归属',esc(a.kind)],['原权威',esc(a.meaning)],['治理身份','正式业务资产（合成；准确修订见上）；盘点候选不改变其资格'],['计数口径','同一资产修订关联多格，全局仍计1项']])+'<h3>反向关联坐标</h3>'+coordButtons(coordsForAsset(key))+'<h3>准确原资料</h3>'+table(['资料准确版本','适用期间','反查'],a.sources.map(sk=>{const r=sourcesByKey.get(sk);return [esc(r.title)+'<small>'+esc(sk)+'</small>',esc(r.period),button('material','查看片段与坐标','ghost',sk)];})));
+  }
+  function columnDetail(column) {
+    if(!canViewEvidence()){show(column+'：依据未知',notice('框架问题可以解释，当前报告证据和数量不可展示。','amber'));return;}
+    const coords=cells.filter(c=>c.column===column).map(c=>c.coord), sk=unique(coords.flatMap(sourceKeysFor)),ak=unique(coords.flatMap(assetKeysFor));
+    show(column+'：六问摘要',notice('以下仅汇总这些坐标明确标注的记录；单格请回到完整全景查看，不同视角不合并成同一证据。')+coordButtons(coords)+'<h3>'+sk.length+'个准确资料版本</h3>'+table(['资料','期间','反查'],sk.map(key=>{const r=sourcesByKey.get(key);return [esc(r.title)+'<small>'+esc(key)+'</small>',esc(r.period),button('material','查看准确版本','ghost',key)];}))+'<h3>'+ak.length+'项资产修订</h3>'+table(['资产','类别','反查'],ak.map(key=>{const a=assetsByKey.get(key);return [esc(a.title)+'<small>'+esc(key)+'</small>',esc(a.kind),button('asset','查看资产坐标','ghost',key)];})));
+  }
+  function checks() {
+    const same = state.scenario === 'dispute';
+    return notice('先核对依据和适用范围，再处理业务差异。资料疑点不会直接改变正式资产；人只处理资料无法裁定的实质决定。') + '<div class="split"><section class="panel"><div class="panel-head"><div><h2>联合核查</h2><small>沿现有工作项记录疑点，不自动改变正式源资格。</small></div>' + button('run-checks','查看预置核查（演示）','primary') + '</div><div class="panel-body"><article class="check-card"><div class="inline-title"><h3>渠道与期间差异</h3>' + badge('合法并存','green') + '</div><p>直营政策 A 和加盟政策 B 适用渠道不同；2025 与 2026 制度生效期间不同。各自准确来源和版本保持。</p><div class="actions">' + button('legal','对照适用范围与版本','secondary') + '</div></article><article class="check-card"><div class="inline-title"><h3>资格条件的两份断言</h3>' + badge(same?'同范围同期间待核':'1 项疑点待核','amber') + '</div><p>核定对象、渠道、生效期间和来源性质后，才判断是否真正矛盾。资料疑点先保留为核查事项。</p><div class="actions">' + button('dispute','查看两份原始依据','secondary') + button('work-item',state.workItem?'查看已记录工作项':'记录核查工作项（演示）','ghost') + '</div></article><article class="check-card"><div class="inline-title"><h3>概念定义与数据映射</h3>' + badge('按用途核','') + '</div><p>“会员计划关系”定义可作为参考；需要计算交易关联指标时，再核数据键、事件覆盖和 Binding。</p><div class="actions">' + button('binding','查看用途与缺口','secondary') + '</div></article><article class="check-card"><h3>来源与版本依赖</h3><p>本体项、SAP 指标和 Binding 沿原精确引用核对。资料缺失、版本已变与业务争议分别呈现。</p><div class="actions">' + button('source-chain','查看关联与依据','secondary') + '</div></article></div></section><aside class="panel aside-small"><div class="panel-head"><h2>当前处理</h2></div><div class="panel-body"><p>' + (state.workItem?badge('已记录演示工作项','green'):badge('疑点候选')) + '</p><p class="quiet">疑点记录不会自动调用 mark-issue，不撤回原正式资产，不产生企业政策决定。</p><div class="route"><strong>现有四项状态</strong><p>定义、映射、当前可计算、实际使用分别记录；候选／正式身份另列。</p></div><div class="actions">' + button('tab','查看普通任务如何使用','ghost','usage') + '</div></div></aside></div>';
+  }
+  function usage() {
+    const current = usableCoverage() ? '可选盘点参考：正式 r' + state.formalReport : '本次不供给盘点报告';
+    const t = state.task;
+    return '<section class="panel task-body"><div class="panel-head"><div><h2>普通分析任务</h2><small>沿原企业目录发现、准确读取与工具使用；无需先选格子或填完整表。</small></div>' + badge('普通只读消费') + '</div><div class="panel-body">' + notice('当前情景：' + current + '。正式模型、SAP 和规则继续按原资格可用。') + '<label class="form-label" for="question">业务问题</label><textarea id="question">' + esc(state.question) + '</textarea><div class="actions section">' + button('send','发送演示问题','primary') + button('history','查看原报告 R01','secondary') + '</div>' + (t ? '<div class="chat-message"><strong>预置答复 · 任务 T' + t.number + '</strong><p class="section">' + (t.scenario==='mapping'?'当前可解释正式概念和规则；交易关联数据尚未映射，本次不输出完整指标数值。':t.scenario==='dispute'?'两份同范围断言尚待核定。本次保留争议限制，不替企业选择政策，也不把疑点当作正式源已被撤回。':'可以按正式制度说明会员资格与权益的适用边界。渠道例外决定责任和历史覆盖仍需核定；本情景不推断尚无资料支持的业务事实。') + '</p><p class="result-note">这是一份合成预置答复，没有实际计算或模型输出，不代表专业或用户验收。</p></div><div class="readiness"><div><small>盘点报告</small>' + (t.coverage ? 'r' + t.coverage + ' · 正式参考' : '未读取') + '</div><div><small>正式业务规则</small>资格规则 r1</div><div><small>原 SAP</small>会员定义 1.0.0</div><div><small>使用证据</small>预置轨迹／未实跑</div></div><div class="actions">' + button('use-detail','查看本次来源与工具轨迹','secondary') + button('contribution','沿原任务贡献回补（演示）','ghost') + '</div>' : '<div class="step-note">发送后展示一个可能的 Agent 使用轨迹。其工具选择与顺序不是 Host 固定流水线。</div>') + '<div class="history-current"><h3>新版与历史</h3><p class="quiet">原报告 R01 始终引用盘点 r1／规则 r1／SAP1.0.0。生成新盘点或发布 r2 不回写旧报告。</p><div class="actions">' + button('generate','生成新盘点候选（演示）','secondary') + button('publication','查看原发布入口（演示）','secondary','',noReport()||candidateOnly()||state.selectedReport!==2||!canPublishCandidate()) + '</div></div></div></section>';
+  }
+  function render() {
+    document.body.classList.toggle('dark',state.dark);
+    const tabNames=[['coverage','36格全景'],['data','资料与资产'],['checks','联合核查'],['usage','普通使用']];
+    app.innerHTML = '<div class="shell"><aside class="sidebar"><div class="brand">OptraCall<small>分析与决策工作台</small></div><nav aria-label="主导航"><div class="nav-label">当前工作</div>' + button('tab','◈ <span>语义与分析资产</span>','nav active','coverage') + button('tab','▤ <span>项目与任务</span>','nav','usage') + button('method','▧ <span>资料与方法</span>','nav') + '</nav><div class="sidebar-foot">企业基础资产<br>现有 Studio 内的按需视图</div></aside><div class="workspace"><header class="topbar"><div class="breadcrumb">语义与分析资产 / 企业基础资产</div><div class="top-actions"><span class="enterprise-label">演示企业 A · 运动鞋服</span>' + button('theme',state.dark?'切换浅色':'切换深色','secondary') + '</div></header><div class="ribbon"><strong>合成资料 · 交互演示</strong>　全部状态仅在本页内存；未创建企业、调用模型、读取真实资料或发布产品资产。</div><main id="main-content" class="page" tabindex="-1"><div class="heading"><div><div class="eyebrow">企业基础资产 · 建设与演进</div><h1>企业语义与分析资产全景</h1><p>完整36格保持可见，首批重点与准确资料、三类资产各自有据；建设和普通使用沿原机制。</p></div><div class="actions">' + button('generate','生成盘点候选（演示）','primary') + '</div></div><div class="tabs" role="tablist" aria-label="业务覆盖工作区">' + tabNames.map(x=>'<button type="button" role="tab" id="tab-' + x[0] + '" class="tab ' + (state.tab===x[0]?'active':'') + '" aria-selected="' + (state.tab===x[0]) + '" data-action="tab" data-value="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' + (state.notice?notice(esc(state.notice),'green'):'') + (state.tab==='coverage'?coverage():state.tab==='data'?inventory():state.tab==='checks'?checks():usage()) + '<details class="review"><summary>评审情景（仅原型）</summary><label for="scenario">切换预置状态 <select id="scenario">' + scenarios.map(s=>'<option value="' + s[0] + '"' + (state.scenario===s[0]?' selected':'') + '>' + s[1] + '</option>').join('') + '</select></label><div class="actions">' + button('reset','重置本页演示','secondary') + '</div><p class="section">情景只初始化业务状态，动作在内存中演进。r1为预置正式参考，r2为候选；本版数字来自显式合成记录，未运行产品或模型。</p></details><footer class="footer"><span>审核候选 v0.2 · 配套方案 v0.3</span><span>当前未开发产品 · 企业基础层未启动</span></footer></main></div></div>';
+  }
+  function reportDetail() {
+    show('盘点报告的身份与范围',notice('36格是固定框架，首批参考14是预置建议；报告资料、资产和关注数须在可读报告中核定。')+meta([['报告',noReport()?'尚无当前报告':reportLabel(state.selectedReport)+'／合成身份'],['治理身份',noReport()?'未知':reportFormal()?'正式参考':'建设侧候选'],['当前读取',esc(selectedReadStatus())],['企业范围',esc(fixture.scope)],['报告关注集',canViewEvidence()?unique(fixture.focusCells).length+'格（合成报告）':'未知；参考建议仍可查看'],['业务资料版本',canViewEvidence()?String(allSourceKeys().length):'未知'],['三类资产修订',canViewEvidence()?String(allAssetKeys().length):'未知'],['临时查看高亮',state.viewFocus.length+'格，仅影响当前查看'],['方法输入','method.survey@0.2，另计；不是一份业务资料'],['版本与资格','生成候选不恢复旧正式读取状态、来源资格或供给。']]),button('close','返回','secondary')+(state.formalReport!==null && state.selectedReport!==state.formalReport?button('view-formal','查看原正式报告r'+state.formalReport,'secondary'):''));
+  }
+  function methodDetail() {
+    const missing=state.methodReadStatus!=='ready';
+    show('建设方法资料与授权范围',notice(missing?'指定方法版本暂不可读。保留准确引用和失败信息，不能假称已读；其他原有分析可继续。':'方法作为获准建设输入提供准确版本与可读引用；不要求用户维护机器路径。',missing?'amber':'') + meta([['资料身份','method.survey@0.2／资料盘点方法（合成）'],['原稿','研究原稿保留原位置；本页不读取任何个人设备目录'],['受管引用','method.survey@0.2／预置只读内容'],['用途','辅助经营范围、证据与缺口盘点；不规定工具调用顺序'],['责任','Host提供可读输入与权限；Agent自主判定内容和必要依赖'],['当前读取',missing?'不可读；未运行读取工具':'本 Demo 仅显示预置片段，实际读取次数未测']]) + '<h3>方法片段（预置）</h3><p class="quiet">先按获准范围查已有资料。缺少证据保持待核，合法范围差异分开记录；必要业务决定集中交人。无需按固定格子顺序或凑条目配额。</p>');
+  }
+  function generate() {
+    if (state.methodReadStatus!=='ready') {
+      show('方法输入暂不可读',notice('本情景没有生成盘点结果。先核方法准确版本与授权；Agent也可选择其他获准方法，普通分析仍可继续。','amber'),button('close','返回','secondary')+button('to-usage','继续普通任务','primary'));
+      return;
+    }
+    show('生成盘点候选（演示）','<p>沿原建设任务处理获准资料。Agent 自主盘点和查证；Host 不强制八步流程或逐格填写。</p><label class="form-label section" for="goal">建设目标</label><textarea id="goal">以运动鞋服共享经营骨架＋会员运营核心为范围，核清已有资料、三类资产关联和必要业务决定；无证据保持未知。</textarea><p class="quiet section">此操作只加载合成候选 r2。不会创建真实任务、读企业资料、调用模型或改正式资产。</p>',button('close','取消','secondary')+button('generate-confirm','查看演示候选','primary'),'generate');
+  }
+  function publication() {
+    if (state.selectedReport!==2 || noReport()) {
+      show('沿原发布机制核定','<p>先形成可核查的候选报告，再沿既有精确预览与必要发布决定。报告不产生业务资产的自动批准；没有报告也不阻断原分析。</p>');
+      return;
+    }
+    show('原发布预览入口（演示）',notice('本次只模拟盘点报告的定义参考用途；规则r1、SAP1.0.0和模型r1均不变。','amber')+meta([['候选','DEMO-COVERAGE r2'],['用途','范围及证据盘点参考；不赋予规则执行权'],['发布机制','复用原预览、来源资格和准确修订机制；未新增逐格审批'],['引用资格',!canPublishCandidate()?'输入/方法/候选读取状态尚未满足资格，不能借发布报告绕过':'本情景只引用合格模型r1、业务规则r1、SAP1.0.0；不借旧盘点报告作为输入，准确资格按原机制核'],['检查','本 Demo 为预置状态，未做真实业务核验'],['历史','原报告R01仍固定盘点r1，发布不改写其依据']]),button('close','取消','secondary')+button('publish-confirm','确认演示发布此报告','primary','',!canPublishCandidate()),'publication');
+  }
+  function legal() {
+    show('合法范围与历史版本并存',table(['依据','适用条件','本次判断'],[
+      ['doc.member-policy@2025.1','2025有效期间／片段P12','与2026版本期间不同，合法并存'],
+      ['doc.member-policy@2026.1','2026有效期间／片段P13','不因名称相同合并准确版本'],
+      ['doc.channel@1','渠道归属／片段P05','渠道差异应先核范围']
+    ].map(r=>r.map(esc)))+'<p class="quiet section">需同时核对象、地区／渠道、有效期间与断言含义；版本数量本身不产生 issue。</p>');
+  }
+  function dispute() {
+    show('同范围断言：先核资料','<p>以下两份合成资料声称同一企业、同一渠道、同一生效期间采用不同资格条件，需回源核实效力与例外。</p>'+table(['资料','定位','断言（合成）'],[['doc.member-policy@2026.1','第2节／片段P13','状态正常才符合'],['doc.metrics@1','第3节／片段P21','包含宽限，待核是否旧稿或例外']].map(r=>r.map(esc)))+notice('此处只形成疑点候选。没有调用 mark-issue、撤回来源或替企业选择政策。','amber'),button('close','返回','secondary')+button('work-item','查看或记录工作项（演示）','primary'));
+  }
+  function workItem() {
+    show(state.workItem?'演示工作项 W01':'记录核查工作项（演示）',meta([['种类','原工作项：待核问题／资料缺口'],['对象与范围','会员资格／演示企业A／同渠道同期间'],['依据','doc.member-policy@2026.1／P13、doc.metrics@1／P21'],['待核问题','操作表是否旧口径、是否属于合法例外？'],['影响','相关解释保留限制；原正式资产供给资格未自动改变'],['决定责任','由具备业务决定责任的人处理资料不能裁定的取舍'],['后续','若确认正式源有误，再沿原治理与修订机制处理']]),button('close','返回','secondary')+(state.workItem?'':button('save-work','保存演示工作项','primary')),'work');
+  }
+  function binding() {
+    show('映射检查按声明用途展开',table(['内容／用途','映射要求','当前状态'],[
+      ['会员计划关系：概念参考','无需把每个概念强制绑定数据字段','定义参考可独立使用'],
+      ['交易关联指标：数据计算','需要对象键、事件粒度、数据覆盖及Binding','本情景映射待补，计算用途受限'],
+      ['资格规则：规则执行','按原执行用途核准确规则、事实、Binding及真实回执','格坐标不赋予执行资格']
+    ].map(r=>r.map(esc)))+'<p class="quiet section">是否需要映射与映射是否完成分别表达；不将“采用了参考项”推成“必须有字段Binding”。</p>');
+  }
+  function chain() {
+    if(!canViewEvidence()){show('本报告的关联当前未知',notice('当前报告不可读，不展示其资产关联或数量。普通分析仍按原正式资产资格继续。','amber'));return;}
+    show('原三类资产关联与来源',notice('以下只展示本报告显式关联的准确资产；含义、公式和来源仍归原权威。')+table(['准确资产修订','类别','已关联坐标','反查'],assetRows(allAssetKeys()),'inventory-table'));
+  }
+  function history() {
+    show('原报告 R01：历史依据固定',notice('R01是预置历史。新盘点、新发布或当前来源变化均不回写原报告。')+meta([['报告身份','R01／合成历史'],['当时盘点','DEMO-COVERAGE r1／当时准确版本'],['业务依据','规则r1／模型r1／SAP1.0.0／Bindingr1'],['当时限制','例外责任与历史覆盖尚待核'],['当前盘点',(state.formalReport===null?'无当前正式报告':'正式r'+state.formalReport)+'；当前查看r'+(state.selectedReport || '无')],['r1当前读取边界',esc(state.formalReport===1?state.formalReadStatus:state.historyStatus)+'；历史元信息不是当前可读正文或供给证明'],['当前资格','按当前来源核新调用，不能借历史引用恢复失权资料'],['实际核验','未进行真实模型或专业验收']]));
+  }
+  function useDetail() {
+    const t=state.task;if(!t)return;
+    show('本次使用依据与预置轨迹',notice('以下是一个可能的 Agent 自主轨迹，不是真实调用记录或固定执行顺序。','amber')+meta([['任务','DEMO-T'+t.number+'／演示企业A／普通只读'],['问题',esc(t.question)],['盘点参考',t.coverage?'准确正式r'+t.coverage:'未读取；未发布／缺失／受限时不默认供给'],['业务源','模型r1／正式资格规则r1／原SAP1.0.0'],['格坐标','没有预先选格；未标注不会限制查读或规则调用'],['执行权','仍按原企业、owner、准确版本及执行用途准入']])+'<h3>预置轨迹</h3><ol class="trace"><li><strong>catalog：发现可用正式源</strong><small>候选报告不混入默认供给。</small></li><li><strong>read-source：读取准确业务定义</strong><small>资料与SAP仍由原权威提供；可选盘点参考只作为范围提示。</small></li><li><strong>reason：按需要核资格规则</strong><small>此Demo没有引擎调用；计算需要时仍由原获准工具完成。</small></li><li><strong>保存答复与限制</strong><small>准确版本固定，业务解释与独立核验分别表达。</small></li></ol>');
+  }
+  function action(name,value) {
+    if(name==='close')return close();
+    if(name==='tab'){state.tab=value;state.notice='';render();document.getElementById('tab-'+state.tab)?.focus();return;}
+    if(name==='theme'){const ref=capture(document.activeElement);state.dark=!state.dark;render();restore(ref);return;}
+    if(name==='clear-search'){state.query='';render();document.getElementById('search')?.focus();return;}
+    if(name==='column')return columnDetail(value);
+    if(name==='material')return materialDetail(value);
+    if(name==='asset')return assetDetail(value);
+    if(name==='inventory'){state.tab='data';state.inventoryTab=value;render();return;}
+    if(name==='inventory-tab'){state.inventoryTab=value;state.query='';render();return;}
+    if(name==='report')return reportDetail();
+    if(name==='view-formal'){if(state.formalReport===null)return;state.selectedReport=state.formalReport;close();render();return;}
+    if(name==='raw-report')return show('报告原文（合成）',notice('仅原文查看，不意味着格式核验或当前覆盖有效。')+'<pre>'+esc(selectedReadStatus()==='unsupported'?'{"reportProfile":"studio-coverage/9","note":"未知版本原文保留"}':'{"reportProfile":"studio-coverage/1","observations":"损坏示例：这里应为有界数组"}')+'</pre>');
+    if(name==='retry-read'){
+      if(selectedReadStatus()!=='error')return;
+      if(state.selectedReport===state.formalReport)state.formalReadStatus='loading';else state.candidateReadStatus='loading';
+      render();return;
+    }
+    if(name==='load-success'){
+      if(!['error','loading'].includes(selectedReadStatus()) || state.methodReadStatus!=='ready')return;
+      if(state.selectedReport===state.formalReport){state.formalReadStatus='ready';if(state.formalReport===1)state.historyStatus='ready';}
+      else state.candidateReadStatus='ready';
+      toast('仅模拟本次读取成功；没有实际读取服务，不更改其他报告或失效来源资格。');render();return;
+    }
+    if(name==='repair-help')return show('格式与资格的恢复边界','<p>损坏、未知版本或依据失效不会因生成候选、重试或“读取成功”恢复。应由Agent核定适当修复、新受支持修订与准确输入；需要共享时沿原机制发布新合格版本。旧报告与失败依据保留。</p>');
+    if(name==='method')return methodDetail();
+    if(name==='generate')return generate();
+    if(name==='generate-confirm'){if(state.methodReadStatus!=='ready')return;state.selectedReport=2;state.candidateReadStatus='ready';state.query='';close();toast('已加载演示盘点候选r2；旧正式报告的存在性、读取状态和供给资格均未改变。');render();return;}
+    if(name==='publication')return publication();
+    if(name==='publish-confirm'){if(!canPublishCandidate())return;if(state.formalReport===1)state.historyStatus=state.formalReadStatus;state.formalReport=2;state.formalReadStatus='ready';close();toast('仅模拟发布盘点报告r2；原报告R01和业务规则/SAP版本未改变。');render();return;}
+    if(name==='legal')return legal();
+    if(name==='dispute')return dispute();
+    if(name==='work-item')return workItem();
+    if(name==='save-work'){state.workItem=true;close();toast('已记录演示工作项W01；没有标记正式源issue、撤回或业务写回。');render();return;}
+    if(name==='binding')return binding();
+    if(name==='source-chain')return chain();
+    if(name==='run-checks')return show('预置联合核查',table(['检查','本情景观察','实际验证'],[['结构与准确引用','复用现有检查；无坐标也可读','未运行产品校验器'],['范围与时间','合法并存与同范围争议分开','Agent回源判断未实跑'],['用途依赖','按计算/执行用途核必要Mapping','未读取真实数据'],['治理副作用','疑点未自动mark-issue','无任何API调用']].map(r=>r.map(esc))));
+    if(name==='focus')return show('调整当前查看关注集','<p>这是本页的查看筛选，不修改已保存报告、原坐标、正式版本或发布资格。所有36个坐标均可选择。</p><div class="scope-filters">'+rows.flatMap((r,i)=>columns.map(c=>{const cell='R'+(i+1)+':'+c[0];return '<label><input type="checkbox" name="focus" value="'+cell+'"'+(state.viewFocus.includes(cell)?' checked':'')+'>'+cell+'</label>';})).join('')+'</div>',button('close','取消','secondary')+button('focus-save','应用查看筛选','primary'),'focus');
+    if(name==='focus-save'){state.viewFocus=Array.from(overlay.querySelectorAll('input[name="focus"]:checked')).map(e=>e.value);close();render();return;}
+    if(name==='cell')return cellDetail(value);
+    if(name==='contract')return show('派生盘点报告：待审最小约定',notice('此结构是拟议增量，当前产品尚未实现。')+meta([['保存位置','复用现有business类Studio资产body及准确修订'],['报告格式','可选 reportProfile: studio-coverage/1'],['内容','范围、关注集、片段准确引用、观察、问题及独立状态'],['保持原样','FoundationItem、studio-foundation/1与/2、SAP0.2及原SourceRef权威'],['非目标','不建全局坐标库，不在报告里另存可编辑业务定义或公式'],['兼容','没有报告、没有坐标的原资产与普通任务照常使用']]));
+    if(name==='to-usage'){close();state.tab='usage';render();return;}
+    if(name==='send'){state.question=document.getElementById('question').value;state.taskNumber+=1;state.task={number:state.taskNumber,question:state.question,coverage:usableCoverage()?state.formalReport:null,scenario:state.scenario};render();announce.textContent='已展示预置答复与来源轨迹；没有模型调用。';return;}
+    if(name==='history')return history();
+    if(name==='use-detail')return useDetail();
+    if(name==='contribution')return show('沿原任务贡献回补（演示）','<p>把本次问题、准确报告和来源作为贡献候选。沿原contribute及建设任务核定，不直接修改基础层正式定义。</p><p class="quiet">本原型未保存贡献、运行维护任务或改变企业政策。</p>');
+    if(name==='reset'){state=initial();close();render();return;}
+  }
+  document.addEventListener('click',e=>{const el=e.target.closest('[data-action]');if(el && !el.disabled)action(el.dataset.action,el.dataset.value || '');});
+  document.addEventListener('input',e=>{
+    if(e.target.id==='question')state.question=e.target.value;
+    if(e.target.id==='search'){
+      const pos=e.target.selectionStart;state.query=e.target.value;render();
+      const input=document.getElementById('search');if(input){input.focus();input.setSelectionRange(pos,pos);}
+    }
+  });
+  document.addEventListener('change',e=>{
+    if(e.target.id==='scenario'){
+      const dark=state.dark, chosen=e.target.value;state=initial();state.dark=dark;state.scenario=chosen;
+      const presets={
+        normal:{},
+        none:{selectedReport:null,formalReport:null,formalReadStatus:'missing',historyStatus:'missing'},
+        candidate:{selectedReport:2,formalReport:null,formalReadStatus:'missing',historyStatus:'missing'},
+        stale:{formalReadStatus:'stale',candidateInputsEligible:false,historyStatus:'stale'},
+        method:{formalReadStatus:'error',methodReadStatus:'error',candidateInputsEligible:false,historyStatus:'error'},
+        loading:{formalReadStatus:'loading',historyStatus:'loading'},
+        error:{formalReadStatus:'error',historyStatus:'error'},
+        format:{formalReadStatus:'corrupt',candidateInputsEligible:false,historyStatus:'corrupt'},
+        unsupported:{formalReadStatus:'unsupported',candidateInputsEligible:false,historyStatus:'unsupported'},
+        candidateInput:{selectedReport:2,candidateInputsEligible:false},
+        emptySearch:{query:'无匹配的合成视角'}
+      };
+      Object.assign(state,presets[chosen] || {});
+      if(chosen==='emptySearch')state.tab='data';
+      render();document.getElementById('scenario')?.focus();
+    }
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.target.getAttribute('role')==='tab' && ['ArrowLeft','ArrowRight'].includes(e.key)){
+      e.preventDefault();const tabs=['coverage','data','checks','usage'];let i=tabs.indexOf(state.tab);i=(i+(e.key==='ArrowRight'?1:-1)+4)%4;state.tab=tabs[i];render();document.getElementById('tab-'+state.tab).focus();
+    }
+  });
+  overlay.addEventListener('cancel',e=>{e.preventDefault();close();});
+  overlay.addEventListener('click',e=>{if(e.target===overlay){const r=overlay.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)close();}});
+  render();
+})();
+
+</script>
+</body>
+</html>

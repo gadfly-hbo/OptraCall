@@ -6,6 +6,7 @@ import path from 'node:path';
 import { createProjectEnablement } from '../../extensions/business-plugins/metric-factory/project/enablement.ts';
 import { createMetricLibrary } from '../../extensions/business-plugins/metric-factory/library/store.ts';
 import { createSapMethodStore } from '../../extensions/business-plugins/metric-factory/methods/store.ts';
+import { parseCoverageContent } from '../../extensions/business-plugins/studio/coverage.ts';
 
 const sharedAuthorities = new Set<StudioAuthority>(['enterprise', 'sap-metric', 'sap-method', 'studio-source']);
 const sameRef = (left: StudioSourceRef, right: StudioSourceRef) => left.authority === right.authority && left.id === right.id && left.version === right.version
@@ -23,7 +24,7 @@ export interface StudioEnterpriseCatalogItem {
 export interface StudioEnterpriseCatalog {
   enterprise: EnterpriseRecord; systems: StudioSystem[]; items: StudioEnterpriseCatalogItem[]; unassigned: StudioEnterpriseCatalogItem[];
 }
-export function createStudioEnterpriseCatalog(options: { dataRoot: string; scopes: EnterpriseScopeStore; studio: StudioStore; enterpriseMaterials: EnterpriseMaterialsStore }) {
+export function createStudioEnterpriseCatalog(options: { dataRoot: string; scopes: EnterpriseScopeStore; studio: StudioStore; enterpriseMaterials: EnterpriseMaterialsStore; qualifySource?: (ref: StudioSourceRef, projectId: string) => Promise<void> }) {
   const metrics = createMetricLibrary(path.join(options.dataRoot, 'metric-assets')), methods = createSapMethodStore(path.join(options.dataRoot, 'metric-assets'));
   const sourceSystems = (ref: StudioSourceRef, systems: StudioSystem[]) => systems.filter(system => (ref.locator === undefined || ref.locator === system.id)
     && (ref.projectId === undefined || ref.projectId === system.projectId || ref.projectId === system.maintenanceOwner?.projectId || system.maintenanceHistory?.some(owner => owner.projectId === ref.projectId))
@@ -54,8 +55,7 @@ export function createStudioEnterpriseCatalog(options: { dataRoot: string; scope
     return { ...(owners.size === 1 ? { enterpriseId: [...owners][0]! } : {}), conflict: owners.size > 1 };
   };
   const sourceEnterpriseId = (ref: StudioSourceRef): string | undefined => ownership(ref).enterpriseId;
-  return {
-    async catalog(enterpriseId: string): Promise<StudioEnterpriseCatalog> {
+  async function metadataCatalog(enterpriseId: string): Promise<StudioEnterpriseCatalog> {
       const enterprise = options.scopes.get(enterpriseId), allSystems = options.studio.list(), systems = allSystems.filter(system => system.enterpriseId === enterpriseId);
       const items: StudioEnterpriseCatalogItem[] = [], unassigned: StudioEnterpriseCatalogItem[] = [];
       const add = (item: StudioEnterpriseCatalogItem) => { if (item.enterpriseId === enterpriseId) items.push(item); else if (!item.enterpriseId) unassigned.push({ ...item, eligible: false }); };
@@ -123,6 +123,37 @@ export function createStudioEnterpriseCatalog(options: { dataRoot: string; scope
         add({ id: ref.id, authority: ref.authority, version: ref.version, title: ref.title ?? ref.id, status: owner.conflict ? 'conflict' : 'candidate', eligible: false, ref, ...(owner.enterpriseId ? { enterpriseId: owner.enterpriseId } : {}) });
       }
       return { enterprise, systems, items, unassigned };
+  }
+  return {
+    async catalog(enterpriseId: string, consumingProjectId?: string): Promise<StudioEnterpriseCatalog> {
+      const result = await metadataCatalog(enterpriseId);
+      for (const item of result.items) if (item.eligible && item.authority === 'studio-source' && item.ref) {
+        const system = result.systems.find(system => system.id === item.ref!.locator), asset = system?.assets.find(asset => asset.id === item.id), revision = asset?.revisions.find(revision => String(revision.revision) === item.version);
+        if (revision && parseCoverageContent(revision.body).kind !== 'legacy') {
+          try {
+            if (!options.qualifySource || !system) throw new Error('Coverage source qualification is unavailable');
+            await options.qualifySource(item.ref, consumingProjectId ?? system.projectId);
+          } catch { item.eligible = false; item.status = 'restricted'; }
+        }
+      }
+      return result;
+    },
+    /** Restricts coverage applicability only; it never grants a source read. */
+    async coverageSourceCurrent(projectId: string, ref: StudioSourceRef, context: { construction?: boolean; systemId?: string } = {}): Promise<boolean> {
+      if (!sharedAuthorities.has(ref.authority)) return true;
+      const enterpriseId = options.scopes.enterpriseIdForProject(projectId);
+      if (!enterpriseId) return false;
+      const metadata = await metadataCatalog(enterpriseId);
+      if (metadata.items.some(item => item.eligible && item.ref && sameRef(item.ref, ref))) return true;
+      if (context.construction && context.systemId) {
+        const system = metadata.systems.find(system => system.id === context.systemId);
+        const owner = system?.maintenanceOwner ?? system;
+        if (system && owner?.projectId === projectId) {
+          if (ref.authority === 'studio-source') return (ref.locator === undefined || ref.locator === system.id) && system.assets.some(asset => asset.id === ref.id && String(asset.candidateRevision) === ref.version && asset.revisions.some(revision => String(revision.revision) === ref.version && (ref.sha256 === undefined || ref.sha256 === revision.sha256)));
+          if (['sap-metric', 'sap-method'].includes(ref.authority)) return metadata.items.some(item => item.status === 'candidate' && item.ref && sameRef(item.ref, ref)) && system.assetRefs.some(saved => sameRef(saved, ref));
+        }
+      }
+      return false;
     },
     async sourceAllowed(projectId: string, ref: StudioSourceRef): Promise<boolean> {
       if (!options.scopes.list().enterprises.length) return true;

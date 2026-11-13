@@ -5,6 +5,7 @@ import type { StudioCreateInput, StudioStoreOptions, StudioSystem, StudioSaveAss
 import { fail, StudioError, text, identity, uuid, object, sources, checks, strings, positive, digest, sourceRef, feedbackOrigin } from './validation.ts';
 import { studioQuestionContext, studioExecutionOwner } from './contracts.ts';
 import { parseFoundationContent } from './foundation.ts';
+import { parseCoverageContent, coverageReferences, coverageRefIdentity } from './coverage.ts';
 export { StudioError } from './validation.ts';
 
 type Index = { schemaVersion: 1; systems: StudioSystem[] };
@@ -304,6 +305,17 @@ export class StudioStore {
       const foundation = parseFoundationContent(content.body);
       if (foundation.kind === 'invalid') fail('invalid_studio_foundation');
       if (foundation.kind === 'unsupported' && content.readyForPublication) fail('unsupported_studio_foundation');
+      const coverage = parseCoverageContent(content.body);
+      if (coverage.kind === 'invalid') fail('invalid_studio_coverage');
+      if (coverage.kind === 'unsupported' && content.readyForPublication) fail('unsupported_studio_coverage');
+      if (coverage.kind === 'supported' && coverage.report) {
+        if (asset.kind !== 'business') fail('studio_coverage_asset_kind');
+        const scope = coverage.report.scope;
+        if (scope.enterpriseId !== system.enterpriseId || scope.systemId !== system.id || scope.topicId !== asset.topicId) fail('studio_coverage_scope_mismatch', 409);
+        const embedded = coverageReferences(coverage.report);
+        content.sources = sources([...new Map([...content.sources, ...embedded].map(ref => [coverageRefIdentity(ref), ref])).values()]);
+        content.dependencies = sources([...new Map([...content.dependencies, ...embedded].map(ref => [coverageRefIdentity(ref), ref])).values()]);
+      }
       const extraction = input.extraction ? { method: text(input.extraction.method, 200, false), sourceRefs: sources(input.extraction.sourceRefs), failures: strings(input.extraction.failures), fallbacks: strings(input.extraction.fallbacks), reviewed: input.extraction.reviewed === true } : undefined;
       const revision: StudioAssetRevision = { ...content, ...(extraction ? { extraction } : {}), revision: (asset.revisions.at(-1)?.revision ?? 0) + 1, sha256: digest({ ...content, ...(extraction ? { extraction } : {}) }), createdAt: now() };
       asset.revisions.push(revision); asset.candidateRevision = revision.revision; return asset;
@@ -322,6 +334,8 @@ export class StudioStore {
         if (!revision || !revision.readyForPublication || !revision.sources.length || revision.checks.some(c => c.status === 'fail' || c.status === 'unknown') || (revision.extraction && !revision.extraction.reviewed)) fail('studio_source_not_ready', 409);
         const foundation = parseFoundationContent(revision.body);
         if (foundation.kind === 'invalid' || foundation.kind === 'unsupported') fail('studio_source_not_ready', 409);
+        const coverage = parseCoverageContent(revision.body);
+        if (coverage.kind === 'invalid' || coverage.kind === 'unsupported') fail('studio_source_not_ready', 409);
         const execution = executionSummary(asset.id, revision); if (execution) {
           executionSummaries.push(execution);
           if (selectedPurposes?.includes('rule-execution') && ((['definition', 'mapping', 'computation'] as const).some(key => foundation.profile?.readiness?.[key]?.status !== 'pass') || !revision.checks.some(check => check.name === 'rule-execution' && check.status === 'pass'))) fail('studio_rule_execution_not_ready', 409);

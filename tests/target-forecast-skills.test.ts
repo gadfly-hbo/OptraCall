@@ -12,7 +12,14 @@ async function json(response: Response, expected = 200): Promise<any> { assert.e
 async function settled(host: Awaited<ReturnType<typeof startTestHost>>, route: string, requestId: string) {
   const deadline = Date.now() + 60_000;
   for (;;) {
-    const state = await json(await host.request(route));
+    const response = await host.request(route);
+    // Managed closure can append its native receipt while this GET takes a safe snapshot.
+    if (response.status === 409 && (await response.clone().json())?.code === 'session_history_unavailable') {
+      if (Date.now() > deadline) assert.fail('Agent flow history remained unavailable before the deadline');
+      await new Promise(resolve => setTimeout(resolve, 30));
+      continue;
+    }
+    const state = await json(response);
     if (state.task.lastRun?.id === requestId && state.task.lastRun.status !== 'running') {
       assert.equal(state.task.lastRun.status, 'completed'); return state;
     }

@@ -1,0 +1,115 @@
+{
+  "date": "2026-11-13",
+  "candidate": "implementation-core-r2",
+  "head": "85a80920160bc102fbe023e03923688236aa80f6",
+  "approvedInputs": "approved-inputs.json",
+  "repairs": [
+    "F1 coordinate property-order duplicate",
+    "F2 source modal focus restore",
+    "TF01 settled exact transient history409 retry; initial precise cause remains UNKNOWN"
+  ],
+  "files": [
+    {
+      "path": "extensions/business-plugins/studio/coverage.ts",
+      "bytes": 11940,
+      "sha256": "eec80fc2d0f4b2f17f8098cc674fb346b8a44cac383a02c589a59bcd6a0dc939"
+    },
+    {
+      "path": "extensions/business-plugins/studio/store.ts",
+      "bytes": 54790,
+      "sha256": "b92cfaa354b96a94f6a776d6d88b60a8043d6020fe55b7c04ebcddd1d2ad4490"
+    },
+    {
+      "path": "src/host/studio-coverage.ts",
+      "bytes": 7460,
+      "sha256": "f138d73e3db68acf5a6939f0717ab26b004844c1ad16b80aedf31471ec1973af"
+    },
+    {
+      "path": "src/host/studio-enterprise-catalog.ts",
+      "bytes": 17642,
+      "sha256": "2fb851e35d7fbb5a389fbc570d1a249ea14c1a21ffde2ec3db4bc114de434bf3"
+    },
+    {
+      "path": "src/host/studio-host.ts",
+      "bytes": 112959,
+      "sha256": "af051b58553ab14e0b70f8b166730950290593fc1af5a93f1ea820c87ac30ba4"
+    },
+    {
+      "path": "src/host/studio-sources.ts",
+      "bytes": 23516,
+      "sha256": "8cc3a93d879279897332e41d8199a953c408044a5f95b8b2f207e785850b46d4"
+    },
+    {
+      "path": "src/host/ui/App.tsx",
+      "bytes": 106219,
+      "sha256": "cd1cc8fd027e4f8ee218d10fd2f9fbb472de1235ded70df73d1c84009caf54bd"
+    },
+    {
+      "path": "src/host/ui/StudioCoverageView.css",
+      "bytes": 4414,
+      "sha256": "ceb353ae603a75bb6c975b55a3036210de24538159c18a0aceccab67262e3b97"
+    },
+    {
+      "path": "src/host/ui/StudioCoverageView.tsx",
+      "bytes": 26557,
+      "sha256": "9058eeec26b7b478274ab0a805031e17142abfda1d939553319daa72c350177d"
+    },
+    {
+      "path": "src/host/ui/StudioFoundationView.tsx",
+      "bytes": 22449,
+      "sha256": "f40f5c27825e2ead32caf603b13dcde6511b7404b2124635a7780eb1b24daab6"
+    },
+    {
+      "path": "src/host/ui/StudioPage.tsx",
+      "bytes": 130879,
+      "sha256": "32238810b472a7bb5d7222745d9eb28675c7ff7d7fef9184d0def40b2925e957"
+    },
+    {
+      "path": "src/host/ui/studio-api.ts",
+      "bytes": 18774,
+      "sha256": "e84af929efeded103fc8138c0b790d2eaec3dd04560933f5180db30e173c0719"
+    },
+    {
+      "path": "src/host/ui/studio-coverage-view.ts",
+      "bytes": 7420,
+      "sha256": "75e3022311c17b06843532fc03712c061df9e916d70b95feadca08a40f56c5a1"
+    },
+    {
+      "path": "tests/fixtures/studio-coverage.ts",
+      "bytes": 6245,
+      "sha256": "7e0754dabe8a75a4d5eb9f0f336d2f33097be4f824885cb37896c348db41062c"
+    },
+    {
+      "path": "tests/studio-coverage-content.test.ts",
+      "bytes": 7739,
+      "sha256": "3bca877d41bac8e61a3dc2188606116d398a3975974721eec33f373affe617f6"
+    },
+    {
+      "path": "tests/studio-coverage-host.test.ts",
+      "bytes": 8077,
+      "sha256": "0ac102b92410e1f17c6c4863b0d3a1ed88e790817cff7a030fa6fd33cc8ae64a"
+    },
+    {
+      "path": "tests/studio-coverage-publication.test.ts",
+      "bytes": 8453,
+      "sha256": "8179ef12da1b63aa70cc809c8677f4b9e9b2277ef159d2e626b1e7951671d76a"
+    },
+    {
+      "path": "tests/studio-coverage-runtime.test.ts",
+      "bytes": 9007,
+      "sha256": "1b3864fa65313fcab6b6d18af5b0279509597818ac1b5c6f20902c02b2a17c6a"
+    },
+    {
+      "path": "tests/studio-coverage-ui.test.ts",
+      "bytes": 13039,
+      "sha256": "283a06d13e3c59277522b5ce094774788b58fb41d5ab630c3da68e636c6f3fa5"
+    },
+    {
+      "path": "tests/target-forecast-skills.test.ts",
+      "bytes": 11817,
+      "sha256": "d2ca4399525ac0839997389913cd62a32b5f2f5ca014928292f5303a2cc93f92"
+    }
+  ],
+  "baselineTree": "f285c425ef53d9c6951682bf403fcc9d79d69311",
+  "baselineIntegration": "e78d7199 and a4eca5e1 merged ancestry with identical base tree; source core hashes unchanged"
+}
