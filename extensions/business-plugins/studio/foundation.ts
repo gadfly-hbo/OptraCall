@@ -30,10 +30,27 @@ export interface FoundationBindingLink {
 }
 export type FoundationReadinessKey = 'definition' | 'mapping' | 'computation' | 'use';
 export interface FoundationReadiness { status: 'pass' | 'fail' | 'unknown' | 'pending'; detail: string; evidenceRefs: StudioSourceRef[]; scope?: string }
+export interface FoundationExecutionRule { ruleId: string; ruleItemId: string; conditions: string[]; conclusion: string }
+export interface FoundationExecutionPredicate {
+  predicate: string; namespace: string; itemId: string;
+  arguments: { name: string; itemId: string; valueType: string }[];
+}
+/** Requirements describe approved inputs; they do not assert independent fact verification. */
+export interface FoundationFactRequirement {
+  requirementId: string; predicate: string; sourceRef: StudioSourceRef; bindingRef: StudioSourceRef; fields: string[];
+  grain: string; unit: string; timeBasis: string; coverage: string;
+  kind: 'observed' | 'external-computation'; calculationRefs?: StudioSourceRef[];
+}
+export interface FoundationRuleExecution {
+  contractVersion: 'studio-rule-execution/1'; engine: { name: 'semantica'; version: '0.7.0' };
+  rules: FoundationExecutionRule[]; predicates: FoundationExecutionPredicate[]; factRequirements: FoundationFactRequirement[];
+  constraints?: { format: 'shacl-turtle'; shapes: string; sourceRefs: StudioSourceRef[] };
+}
 export interface FoundationContent {
-  contentProfile: 'studio-foundation/1'; items: FoundationItem[]; scope?: string;
+  contentProfile: 'studio-foundation/1' | 'studio-foundation/2'; items: FoundationItem[]; scope?: string;
   metricLinks?: FoundationMetricLink[]; relations?: FoundationRelation[]; adaptations?: FoundationAdaptation[];
   bindingLinks?: FoundationBindingLink[]; readiness?: Partial<Record<FoundationReadinessKey, FoundationReadiness>>;
+  ruleExecution?: FoundationRuleExecution;
 }
 export interface FoundationParseResult { kind: 'legacy' | 'unsupported' | 'invalid' | 'supported'; profile?: FoundationContent; issues: FoundationIssue[] }
 
@@ -121,8 +138,49 @@ class ContentValidator {
     else if (value.kind === 'metric') { this.object(value, path, ['kind', 'metricRef']); this.metricRef(value.metricRef, `${path}.metricRef`); }
     else this.issue('unknown_target_type', `${path}.kind`, '端点需要为本地项、准确外部项或SAP指标引用');
   }
+  execution(value: unknown, path: string, items: Map<string, FoundationItem>) {
+    if (!this.object(value, path, ['contractVersion', 'engine', 'rules', 'predicates', 'factRequirements', 'constraints'])) return;
+    this.choice(value.contractVersion, `${path}.contractVersion`, ['studio-rule-execution/1']);
+    if (this.object(value.engine, `${path}.engine`, ['name', 'version'])) {
+      this.choice(value.engine.name, `${path}.engine.name`, ['semantica']); this.choice(value.engine.version, `${path}.engine.version`, ['0.7.0']);
+    }
+    const ruleIds = new Set<unknown>(), predicates = new Set<unknown>(), requirements = new Set<unknown>();
+    this.array(value.rules, `${path}.rules`, false, (rule, at) => {
+      if (!this.object(rule, at, ['ruleId', 'ruleItemId', 'conditions', 'conclusion'])) return;
+      this.text(rule.ruleId, `${at}.ruleId`); this.local(rule.ruleItemId, `${at}.ruleItemId`, items, ['rule']);
+      if (ruleIds.has(rule.ruleId)) this.issue('duplicate_rule', `${at}.ruleId`, '执行规则标识重复'); ruleIds.add(rule.ruleId);
+      this.array(rule.conditions, `${at}.conditions`, false, (condition, at) => this.text(condition, at)); this.text(rule.conclusion, `${at}.conclusion`);
+      if (Array.isArray(rule.conditions) && !rule.conditions.length) this.issue('required_conditions', `${at}.conditions`, '首批执行规则需要明确的正向条件');
+    });
+    this.array(value.predicates, `${path}.predicates`, false, (predicate, at) => {
+      if (!this.object(predicate, at, ['predicate', 'namespace', 'itemId', 'arguments'])) return;
+      this.text(predicate.predicate, `${at}.predicate`); this.text(predicate.namespace, `${at}.namespace`); this.local(predicate.itemId, `${at}.itemId`, items);
+      if (predicates.has(predicate.predicate)) this.issue('duplicate_predicate', `${at}.predicate`, '同一引擎谓词只能声明一组准确命名空间和参数'); predicates.add(predicate.predicate);
+      const argumentsSeen = new Set<unknown>();
+      this.array(predicate.arguments, `${at}.arguments`, false, (argument, at) => {
+        if (!this.object(argument, at, ['name', 'itemId', 'valueType'])) return;
+        this.text(argument.name, `${at}.name`); this.local(argument.itemId, `${at}.itemId`, items); this.text(argument.valueType, `${at}.valueType`);
+        if (argumentsSeen.has(argument.name)) this.issue('duplicate_argument', `${at}.name`, '同一谓词参数名重复'); argumentsSeen.add(argument.name);
+      });
+    });
+    this.array(value.factRequirements, `${path}.factRequirements`, false, (requirement, at) => {
+      if (!this.object(requirement, at, ['requirementId', 'predicate', 'sourceRef', 'bindingRef', 'fields', 'grain', 'unit', 'timeBasis', 'coverage', 'kind', 'calculationRefs'])) return;
+      for (const key of ['requirementId', 'predicate', 'grain', 'unit', 'timeBasis', 'coverage']) this.text(requirement[key], `${at}.${key}`);
+      if (requirements.has(requirement.requirementId)) this.issue('duplicate_requirement', `${at}.requirementId`, '事实需求标识重复'); requirements.add(requirement.requirementId);
+      if (!predicates.has(requirement.predicate)) this.issue('missing_predicate', `${at}.predicate`, '事实需求需要引用已声明的准确谓词');
+      this.ref(requirement.sourceRef, `${at}.sourceRef`); this.ref(requirement.bindingRef, `${at}.bindingRef`, 'studio-source');
+      this.array(requirement.fields, `${at}.fields`, false, (field, at) => this.text(field, at));
+      if (Array.isArray(requirement.fields) && !requirement.fields.length) this.issue('required_fields', `${at}.fields`, '事实需求需要准确字段或事件定位');
+      this.choice(requirement.kind, `${at}.kind`, ['observed', 'external-computation']);
+      if (requirement.calculationRefs !== undefined) this.refs(requirement.calculationRefs, `${at}.calculationRefs`);
+      if (requirement.kind === 'external-computation' && (!Array.isArray(requirement.calculationRefs) || !requirement.calculationRefs.length)) this.issue('calculation_reference_required', `${at}.calculationRefs`, '外部计算事实必须保留计算依据及输入版本引用');
+    });
+    if (value.constraints !== undefined && this.object(value.constraints, `${path}.constraints`, ['format', 'shapes', 'sourceRefs'])) {
+      this.choice(value.constraints.format, `${path}.constraints.format`, ['shacl-turtle']); this.text(value.constraints.shapes, `${path}.constraints.shapes`); this.refs(value.constraints.sourceRefs, `${path}.constraints.sourceRefs`);
+    }
+  }
   validate(value: Record<string, unknown>) {
-    this.object(value, '$', ['contentProfile', 'items', 'scope', 'metricLinks', 'relations', 'adaptations', 'bindingLinks', 'readiness']); this.text(value.scope, '$.scope', true);
+    this.object(value, '$', ['contentProfile', 'items', 'scope', 'metricLinks', 'relations', 'adaptations', 'bindingLinks', 'readiness', ...(value.contentProfile === 'studio-foundation/2' ? ['ruleExecution'] : [])]); this.text(value.scope, '$.scope', true);
     const items = new Map<string, FoundationItem>();
     this.array(value.items, '$.items', false, (item, at) => {
       if (!this.object(item, at, ['itemId', 'kind', 'name', 'definition', 'sourceRef', 'grain', 'valueType', 'parentItemId', 'scope', 'validFrom', 'validTo', 'evidenceNature'])) return;
@@ -136,6 +194,7 @@ class ContentValidator {
       const visited = new Set<unknown>([item.itemId]); let parent = items.get(item.parentItemId as string);
       while (parent) { if (visited.has(parent.itemId)) { this.issue('cyclic_parent', `$.items[${index}].parentItemId`, '条目所属关系不能循环'); break; } visited.add(parent.itemId); parent = items.get(parent.parentItemId ?? ''); }
     } });
+    if (value.contentProfile === 'studio-foundation/2' && value.ruleExecution !== undefined) this.execution(value.ruleExecution, '$.ruleExecution', items);
     const metrics = new Set<string>();
     this.array(value.metricLinks, '$.metricLinks', true, (link, at) => {
       if (!this.object(link, at, ['metricRef', 'entityItemIds', 'eventItemIds', 'ruleItemIds', 'timeItemIds', 'dimensions', 'bindingRef'])) return;
@@ -194,7 +253,15 @@ export function parseFoundationContent(body: string): FoundationParseResult {
   }
   if (!record(value) || !Object.hasOwn(value, 'contentProfile')) return { kind: 'legacy', issues: [] };
   if (typeof value.contentProfile !== 'string' || !value.contentProfile.trim()) return { kind: 'invalid', issues: [{ code: 'invalid_profile', path: '$.contentProfile', detail: '显式内容约定需要非空版本标识' }] };
-  if (value.contentProfile !== 'studio-foundation/1') return { kind: 'unsupported', issues: [{ code: 'unsupported_profile', path: '$.contentProfile', detail: '当前内容约定未支持；不能作为已核验结构发布' }] };
+  if (!['studio-foundation/1', 'studio-foundation/2'].includes(value.contentProfile)) return { kind: 'unsupported', issues: [{ code: 'unsupported_profile', path: '$.contentProfile', detail: '当前内容约定未支持；不能作为已核验结构发布' }] };
+  if (value.contentProfile === 'studio-foundation/2' && record(value.ruleExecution)) {
+    const execution = value.ruleExecution, engine = execution.engine, constraints = execution.constraints;
+    const formats: [unknown, string, string][] = [[execution.contractVersion, 'studio-rule-execution/1', '$.ruleExecution.contractVersion']];
+    if (record(engine)) formats.push([engine.name, 'semantica', '$.ruleExecution.engine.name'], [engine.version, '0.7.0', '$.ruleExecution.engine.version']);
+    if (record(constraints)) formats.push([constraints.format, 'shacl-turtle', '$.ruleExecution.constraints.format']);
+    const unsupported = formats.find(([actual, expected]) => typeof actual === 'string' && !!actual.trim() && actual !== expected);
+    if (unsupported) return { kind: 'unsupported', issues: [{ code: 'unsupported_execution', path: unsupported[2], detail: '当前执行约定或官方组件版本未支持；仅保留原候选，不赋予执行资格' }] };
+  }
   const validator = new ContentValidator(); validator.validate(value); const issues = validator.issues;
   return issues.length ? { kind: 'invalid', issues } : { kind: 'supported', profile: value as unknown as FoundationContent, issues };
 }
@@ -215,6 +282,8 @@ export function foundationReferences(profile: FoundationContent): StudioSourceRe
   for (const adaptation of profile.adaptations ?? []) { if (adaptation.referenceRef) add(adaptation.referenceRef.sourceRef); adaptation.evidenceRefs.forEach(add); }
   for (const link of profile.bindingLinks ?? []) { add(link.sourceRef); link.evidenceRefs.forEach(add); }
   for (const state of Object.values(profile.readiness ?? {})) state?.evidenceRefs.forEach(add);
+  for (const requirement of profile.ruleExecution?.factRequirements ?? []) { add(requirement.sourceRef); add(requirement.bindingRef); requirement.calculationRefs?.forEach(add); }
+  profile.ruleExecution?.constraints?.sourceRefs.forEach(add);
   return [...refs.values()];
 }
 
@@ -228,6 +297,8 @@ export function foundationDependencyReferences(profile: FoundationContent): Stud
   for (const relation of profile.relations ?? []) { target(relation.from); target(relation.to); }
   for (const adaptation of profile.adaptations ?? []) if (adaptation.referenceRef) add(adaptation.referenceRef.sourceRef);
   for (const link of profile.bindingLinks ?? []) add(link.sourceRef);
+  for (const requirement of profile.ruleExecution?.factRequirements ?? []) { add(requirement.sourceRef); add(requirement.bindingRef); requirement.calculationRefs?.forEach(add); }
+  profile.ruleExecution?.constraints?.sourceRefs.forEach(add);
   return foundationReferences(profile).filter(ref => ref.authority !== 'task' || required.has(refIdentity(ref)));
 }
 

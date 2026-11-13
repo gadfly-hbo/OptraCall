@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import type { StudioCreateInput, StudioStoreOptions, StudioSystem, StudioSaveAssetInput, StudioAsset, StudioAssetKind, StudioAssetRevision, StudioPublicationInput, StudioPublicationPreview, StudioPublication, StudioPublicationResult, StudioUpdateInput, StudioMaterial, StudioSourceRef, StudioWorkItemInput, StudioWorkItem, StudioFeedbackInput, StudioFeedback, StudioFeedbackUpdate, StudioUseRecord, StudioAdoption, StudioGraphState, StudioTopic, StudioPublishedAsset, StudioUseAssessmentInput, StudioContribution, StudioContributeInput, StudioContributionContent, StudioContributionRevision, StudioLinkContributionInput, StudioContributionLink, StudioContributionSnapshot, StudioPublicationItem } from './contracts.ts';
+import type { StudioCreateInput, StudioStoreOptions, StudioSystem, StudioSaveAssetInput, StudioAsset, StudioAssetKind, StudioAssetRevision, StudioPublicationInput, StudioPublicationPreview, StudioPublication, StudioPublicationResult, StudioUpdateInput, StudioMaterial, StudioSourceRef, StudioWorkItemInput, StudioWorkItem, StudioFeedbackInput, StudioFeedback, StudioFeedbackUpdate, StudioUseRecord, StudioAdoption, StudioGraphState, StudioTopic, StudioPublishedAsset, StudioUseAssessmentInput, StudioContribution, StudioContributeInput, StudioContributionContent, StudioContributionRevision, StudioLinkContributionInput, StudioContributionLink, StudioContributionSnapshot, StudioPublicationItem, StudioPublicationExecutionSummary, StudioPublicationPurpose } from './contracts.ts';
 import { fail, StudioError, text, identity, uuid, object, sources, checks, strings, positive, digest, sourceRef, feedbackOrigin } from './validation.ts';
 import { studioQuestionContext, studioExecutionOwner } from './contracts.ts';
 import { parseFoundationContent } from './foundation.ts';
@@ -11,6 +11,16 @@ type Index = { schemaVersion: 1; systems: StudioSystem[] };
 const clone = <T>(value: T): T => structuredClone(value);
 const now = () => new Date().toISOString();
 const MAX_BYTES = 32 * 1024 * 1024;
+const publicationPurposes = (value: unknown): StudioPublicationPurpose[] | undefined => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || !value.length || value.length > 3 || new Set(value).size !== value.length || value.some(purpose => !['definition-reference', 'rule-execution', 'metric-calculation'].includes(purpose))) fail('invalid_studio_publication_purposes');
+  return [...value] as StudioPublicationPurpose[];
+};
+const executionSummary = (assetId: string, revision: StudioAssetRevision): StudioPublicationExecutionSummary | undefined => {
+  const foundation = parseFoundationContent(revision.body), execution = foundation.profile?.ruleExecution;
+  if (foundation.kind !== 'supported' || !execution) return undefined;
+  return { assetId, revision: revision.revision, sha256: revision.sha256, contractVersion: execution.contractVersion, engine: clone(execution.engine), ruleItemIds: [...new Set(execution.rules.map(rule => rule.ruleItemId))], factRequirements: clone(execution.factRequirements) };
+};
 
 /** Host-owned metadata and semantic source authority. SAP bodies remain in their original stores. */
 export class StudioStore {
@@ -120,6 +130,16 @@ export class StudioStore {
         const { fingerprint, confirmedAt, ...prepared } = publication.preview;
         uuid(prepared.id); if (digest(prepared) !== fingerprint || !topicIds.has(prepared.topicId) || !Array.isArray(prepared.items) || !Array.isArray(publication.results)) fail('invalid_studio_storage');
         for (const item of prepared.items) { const asset = system.assets.find(a => a.id === item.assetId); if (!asset || asset.revisions.find(r => r.revision === item.revision)?.sha256 !== item.sha256) fail('invalid_studio_storage'); }
+        publicationPurposes(prepared.purposes);
+        if (prepared.executionSummaries !== undefined) {
+          if (!Array.isArray(prepared.executionSummaries)) fail('invalid_studio_storage');
+          const expected = prepared.items.flatMap(item => {
+            const revision = system.assets.find(asset => asset.id === item.assetId)!.revisions.find(revision => revision.revision === item.revision)!;
+            const summary = executionSummary(item.assetId, revision); return summary ? [summary] : [];
+          });
+          if (digest(expected) !== digest(prepared.executionSummaries)) fail('invalid_studio_storage');
+        }
+        if (prepared.purposes?.includes('rule-execution') && !prepared.executionSummaries?.length) fail('invalid_studio_storage');
         if (prepared.contributions !== undefined) {
           if (!Array.isArray(prepared.contributions)) fail('invalid_studio_storage');
           for (const snapshot of prepared.contributions) {
@@ -291,19 +311,28 @@ export class StudioStore {
   }
   preparePublication(id: string, input: StudioPublicationInput): StudioPublicationPreview {
     if (!Array.isArray(input.assetIds) || input.assetIds.length > 200 || new Set(input.assetIds).size !== input.assetIds.length) fail('invalid_studio_publication_items');
+    const selectedPurposes = publicationPurposes(input.purposes);
+    if (Object.hasOwn(input, 'executionSummaries')) fail('invalid_studio_publication_execution_summaries');
     return this.mutate(id, system => {
       const topicId = input.topicId ?? system.currentTopicId; if (!system.topics.some(t => t.id === topicId)) fail('studio_topic_not_found', 404);
+      const executionSummaries: StudioPublicationExecutionSummary[] = [];
       const items = input.assetIds.map(assetId => {
         const asset = system.assets.find(a => a.id === uuid(assetId)); if (!asset) fail('studio_asset_not_found', 404);
         const revision = asset.revisions.find(r => r.revision === (asset.candidateRevision ?? asset.formalRevision));
         if (!revision || !revision.readyForPublication || !revision.sources.length || revision.checks.some(c => c.status === 'fail' || c.status === 'unknown') || (revision.extraction && !revision.extraction.reviewed)) fail('studio_source_not_ready', 409);
         const foundation = parseFoundationContent(revision.body);
         if (foundation.kind === 'invalid' || foundation.kind === 'unsupported') fail('studio_source_not_ready', 409);
+        const execution = executionSummary(asset.id, revision); if (execution) {
+          executionSummaries.push(execution);
+          if (selectedPurposes?.includes('rule-execution') && ((['definition', 'mapping', 'computation'] as const).some(key => foundation.profile?.readiness?.[key]?.status !== 'pass') || !revision.checks.some(check => check.name === 'rule-execution' && check.status === 'pass'))) fail('studio_rule_execution_not_ready', 409);
+        }
         return { assetId: asset.id, revision: revision.revision, sha256: revision.sha256, title: revision.title, kind: asset.kind };
       });
       const refs = sources(input.refs ?? []); if (!items.length && !refs.length) fail('empty_studio_publication');
       const contributions = this.publicationContributions(system, items, refs);
-      const content = { id: randomUUID(), systemRevision: system.revision, topicId, items, refs, ...(contributions.length ? { contributions } : {}), summary: text(input.summary, 20_000, false), scope: text(input.scope, 20_000, false), checks: checks(input.checks ?? []), limitations: strings(input.limitations ?? []), excluded: strings(input.excluded ?? []), targetProjectIds: (input.targetProjectIds ?? []).map(identity), createdAt: now() };
+      const purposes = selectedPurposes ?? (executionSummaries.length ? ['definition-reference' as const] : undefined);
+      if (purposes?.includes('rule-execution') && !executionSummaries.length) fail('studio_rule_execution_required', 409);
+      const content = { id: randomUUID(), systemRevision: system.revision, topicId, items, refs, ...(contributions.length ? { contributions } : {}), ...(purposes ? { purposes } : {}), ...(executionSummaries.length ? { executionSummaries } : {}), summary: text(input.summary, 20_000, false), scope: text(input.scope, 20_000, false), checks: checks(input.checks ?? []), limitations: strings(input.limitations ?? []), excluded: strings(input.excluded ?? []), targetProjectIds: (input.targetProjectIds ?? []).map(identity), createdAt: now() };
       if (content.checks.some(c => c.status !== 'pass')) fail('studio_publication_not_ready', 409);
       const preview = { ...content, fingerprint: digest(content) };
       system.publications.push({ preview, results: [] }); return preview;

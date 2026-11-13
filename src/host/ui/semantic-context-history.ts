@@ -13,19 +13,25 @@ function graphQuery(value: unknown): SemanticGraphQuery | undefined {
 }
 
 export type StudioContextEvidence = {
-  action: 'catalog' | 'read' | 'read-source' | 'declare-use';
+  action: 'catalog' | 'read' | 'read-source' | 'reason' | 'declare-use';
   stage: 'directory' | 'asset' | 'source' | 'declaration';
   result: Record<string, unknown>; input?: Record<string, unknown>;
   ref?: StudioSourceRef; body?: string; complete?: boolean;
   range?: { start: number; end: number; total: number }; declaration?: true;
 };
 export type AssetContextRecord = SemanticContextRecord & { studio?: StudioContextEvidence };
-const studioActions = ['catalog', 'read', 'read-source', 'declare-use'];
+const studioActions = ['catalog', 'read', 'read-source', 'reason', 'declare-use'];
 function studioEvidence(value: unknown, input: unknown, owner?: { projectId: string; taskId: string }): StudioContextEvidence | undefined {
   if (!object(value) || value.type !== 'optracall.studio' || !studioActions.includes(value.action) || !object(value.result)) return;
   if (object(input) && input.action !== value.action) return;
   const result = value.result, action = value.action as StudioContextEvidence['action'];
   const evidence: StudioContextEvidence = { action, stage: action === 'catalog' ? 'directory' : action === 'read-source' ? 'source' : action === 'declare-use' ? 'declaration' : 'asset', result, ...(object(input) ? { input } : {}) };
+  if (action === 'reason') {
+    if (!object(result.identity) || owner && (result.identity.projectId !== owner.projectId || result.identity.taskId !== owner.taskId)) return;
+    // Preserve the actual saved receipt; rendering validates its supported shape.
+    // A historical receipt never performs a current source read or reruns inference.
+    evidence.complete = result.completion === 'complete';
+  }
   if (action === 'declare-use') {
     if (result.claim !== 'author-declaration-not-professional-verification' || !object(result.use) || typeof result.use.id !== 'string'
       || owner && (result.use.projectId !== owner.projectId || result.use.taskId !== owner.taskId)) return;

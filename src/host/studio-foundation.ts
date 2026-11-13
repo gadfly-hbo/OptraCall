@@ -39,6 +39,10 @@ export async function qualifyFoundationBody(body: string, read: ReadSource): Pro
   for (const link of profile.bindingLinks ?? []) {
     if (link.sourceRef.authority !== 'data' && !(link.sourceRef.authority === 'studio-source' && source(link.sourceRef).assetKind === 'binding')) throw new StudioError('studio_foundation_binding_type_mismatch', 409);
   }
+  for (const requirement of profile.ruleExecution?.factRequirements ?? []) {
+    const ref = requirement.bindingRef;
+    if (ref.authority !== 'data' && !(ref.authority === 'studio-source' && source(ref).assetKind === 'binding')) throw new StudioError('studio_foundation_binding_type_mismatch', 409);
+  }
   for (const relation of profile.relations ?? []) for (const target of [relation.from, relation.to]) {
     if (target.kind === 'metric') metric(target.metricRef);
     if (target.kind === 'external-item') externalItem(target.itemRef);
@@ -71,8 +75,9 @@ export function selectFoundationSource(read: StudioSourceRead, payload: Record<s
 }
 
 export const foundationContentContract = {
-  contentProfile: 'studio-foundation/1',
-  body: 'Original Studio asset body remains the only editable authority. JSON: {contentProfile,items:[{itemId,kind,definition,sourceRef,name?,grain?,valueType?,parentItemId?,scope?,validFrom?,validTo?,evidenceNature?}],scope?,metricLinks?,relations?,adaptations?,bindingLinks?,readiness?}. Legacy text/JSON remains readable. Unknown profiles are draft-only.',
+  contentProfile: 'studio-foundation/2',
+  supportedProfiles: ['studio-foundation/1', 'studio-foundation/2'],
+  body: 'Original Studio asset body remains the only editable authority. JSON: {contentProfile,items:[{itemId,kind,definition,sourceRef,name?,grain?,valueType?,parentItemId?,scope?,validFrom?,validTo?,evidenceNature?}],scope?,metricLinks?,relations?,adaptations?,bindingLinks?,readiness?,ruleExecution?}. Choose /2 only to add optional ruleExecution; /1 keeps its original strict fields. Legacy text/JSON remains readable. Unknown profiles are draft-only.',
   itemKinds: ['entity','attribute','key','value-domain','event','rule','dimension','time','concept'],
   references: 'ItemRef={sourceRef:original SourceRef,itemId}; MetricRef={sourceRef:original sap-metric SourceRef,metricName,scenario?:id@version}. Preserve original locator, exact version and hash. Embedded sources are qualified by original readers. Required sources remain dependencies; task refs used only in evidenceRefs remain exact provenance in the original body, not a cross-project read grant or a mandatory consumption dependency. Do not copy evidence-only task receipts into dependencies. Task refs in required source roles remain required and currently block shared structural publication.',
   metricLinks: '[{metricRef,entityItemIds?,eventItemIds?,ruleItemIds?,timeItemIds?,dimensions?:[{name,itemId}],bindingRef?}]; references only; formulas, definitions and scenario metric usages stay in the exact original SAP package.',
@@ -80,4 +85,5 @@ export const foundationContentContract = {
   adaptations: '[{referenceRef?:ItemRef,targetItemId?,action:adopt|modify|exclude|add|pending,reason,evidenceRefs}]; input references are not a third enterprise layer.',
   bindingLinks: '[{sourceRef,field,itemId,grain,detail,evidenceRefs}]; sourceRef must resolve to an original studio-source kind:binding or authorized data input. Policy/report evidence belongs in evidenceRefs. No new execution engine.',
   readiness: '{definition?,mapping?,computation?,use?}; each={status:pass|fail|unknown|pending,detail,evidenceRefs,scope?}. Independent dimensions and author declarations; publication never means computation/use passed. Manual edits reset declarations pending.',
+  ruleExecution: 'Optional in /2 only: {contractVersion:studio-rule-execution/1,engine:{name:semantica,version:0.7.0},rules:[{ruleId,ruleItemId,conditions:string[],conclusion:string}],predicates:[{predicate,namespace:absolute-https-or-urn,itemId,arguments:[{name,itemId,valueType}]}],factRequirements:[{requirementId,predicate,sourceRef:exact-Ref,bindingRef:exact-studio-source-Binding-Ref,fields:string[],grain,unit,timeBasis,coverage,kind:observed|external-computation,calculationRefs?:exact-Ref[]}],constraints?:{format:shacl-turtle,shapes:in-memory-safe-Core-Turtle,sourceRefs:exact-Ref[]}}. ruleItemId must name a rule item; predicate and argument itemIds must exist in items. External-computation requires calculationRefs. Use official positive atoms such as Member(?m), Normal(?m) -> Eligible(?m), one condition per array entry. Variables in conclusions must be bound by conditions; all predicate names/arity must be declared. Finite positive conjunctions and acyclic dependency only; no recursion/negation/functions/callbacks/aggregation. External input fact predicates cannot also be rule conclusion predicates; same-call internal chaining is supported. Actual SDK subset/resource checks remain separate from shape validation. Multiple producers may merge premises: report native primary-rule/union limits, never invent complete proof paths. Rules<=32,facts<=256,returned conclusions<=512,iterations<=32; static binding/working-fact upper bounds<=8192; unsupported/incomplete is not a negative business conclusion. SHACL accepts bounded in-memory structural Core only, no paths/imports/SPARQL/JS. Formal rule-execution publication needs exact successful native execution evidence plus original checks/readiness and an explicit publication purpose; definition-only remains separate.',
 } satisfies Record<string, unknown>;
