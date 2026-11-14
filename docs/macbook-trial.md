@@ -48,4 +48,4 @@ Mac mini负责开发、工程测试和交付；GitHub main保存经复核及CI�
 
 首次部署只对确认空的指定文件夹执行 `git clone --depth 1 --single-branch --branch main`。若非空，先核对保留，不覆写已有内容。使用MacBook原生Node.js 25+及依赖；需要专用Node时放在 `~/Library/Application Support/OptraCall/runtime/node/`，不替换全局Node。Finder入口也可识别clone内 `.runtime/node/`、Homebrew和有效PATH中的Node；Python通过原生bash与本机PATH使用。
 
-反馈请附实际运行版本／提交、复现步骤、预期与实际、可安全提供的截图或日志；不要回传密钥或敏感业务资料。试用报告存放于MacBook的 `/Users/huangbo/Dev/OptraCall-Test-And-Repair/待修复`；Mac mini通过SSH读取，修复完成后移至同根目录的`已修复`，详见[报告读取与归档约定](engineering-workflow.md#试用报告读取与修复归档)。由Mac mini修复、经工程交付进入main，MacBook再通过更新入口接收。部署检查只证明产品安装和基本运行，用户试用及正式产品验收另行确认。
+新问题统一通过 [GitHub Issues 反馈表单](https://github.com/gadfly-hbo/OptraCall/issues/new?template=trial-feedback.yml)提交，可直接附上整份试用报告。请按已知信息附实际运行版本／提交、复现步骤、预期与实际及可公开的截图或日志；仓库公开，密钥和敏感业务资料保留本地。处理与关闭详见[问题收件与结案规则](engineering-workflow.md#github-issues-问题收件与结案)。旧 `/Users/huangbo/Dev/OptraCall-Test-And-Repair` 的 `待修复`／`已修复` 目录保留历史，不再接收新问题或作为常规 SSH 归档入口。由 Mac mini 修复、经工程交付进入 main，MacBook 再按获授权的更新安排接收。部署检查只证明产品安装和基本运行，用户试用及正式产品验收另行确认。
