@@ -29,6 +29,8 @@ import { createCaseDecisionService } from './case-decision-service.ts';
 import { createCaseDecisionRoutes } from './case-decision-routes.ts';
 import { createCaseSourcesService } from './case-sources-service.ts';
 import { createCaseSourcesRoutes } from './case-sources-routes.ts';
+import { createCaseRelationsService } from './case-relations-service.ts';
+import { createCaseRelationRoutes } from './case-relation-routes.ts';
 import type { CaseContextSelection } from './case-types.ts';
 import { loadStaticUi } from './static-ui.ts';
 import { createMetricFactoryRoutes } from '../../extensions/business-plugins/metric-factory/api/routes.ts';
@@ -144,9 +146,9 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
   response.once('close', clear); response.once('finish', clear);
 }
 
-export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; webSearchFetch?: typeof fetch; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; studioPython?: string; reviewAdmission?: ReviewAdmissionContract; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
+export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; webSearchFetch?: typeof fetch; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; caseRelationsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; studioPython?: string; reviewAdmission?: ReviewAdmissionContract; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
-  const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false });
+  const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false, relationsEnabled: options.caseRelationsEnabled !== false });
   const modelPacks = new ModelPackStore(path.join(dataRoot, 'models'));
   const enterpriseMaterials = new EnterpriseMaterialsStore(dataRoot);
   const projectDataReferences = createProjectDataContextReferences({ dataRoot, projects, enterpriseMaterials });
@@ -397,6 +399,18 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           }
           const saved = await caseDecisions.saveForAgent(input, authority); assertCurrent();
           return { content: [{ type: 'text', text: JSON.stringify(saved) }], details: { type: 'optracall.case-decision-save', ...saved } };
+        }, caseRelations: options.caseRelationsEnabled === false ? undefined : async (action, input, context) => {
+          context.assertCurrent();
+          await pair(project.id, task.id, action === 'save');
+          const receipt = cases.getOperation(context.caseOperationId), snapshot = receipt?.result;
+          if (context.caseOperationId !== contextOperationId(project.id, task.id, context.requestId) || receipt?.kind !== 'task_context_prepare' || receipt.phase !== 'completed' || receipt.projectId !== project.id || !snapshot || snapshot.projectId !== project.id || snapshot.taskId !== task.id || snapshot.caseId !== receipt.caseId) throw new RequestFault(409, 'case_relation_binding_unavailable');
+          const assertCurrent = () => { context.assertCurrent(); if (closing) throw new RequestFault(409, 'case_relation_run_unavailable'); };
+          const hex = createHash('sha256').update(JSON.stringify(['case_relation_tool', project.id, task.id, context.requestId, context.sessionId, context.toolCallId])).digest('hex');
+          const operationId = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20,32)}`;
+          const authority = { caseStoreId: cases.getStatus().storeId!, caseId: String(snapshot.caseId), projectId: project.id, taskId: task.id, requestId: context.requestId, sessionId: context.sessionId, toolCallId: context.toolCallId, operationId, signal: context.signal, assertCurrent };
+          const result = action === 'read' ? await caseRelations.readForAgent(input, authority) : await caseRelations.saveForAgent(input, authority);
+          assertCurrent();
+          return { content: [{ type: 'text', text: result.text }], details: result.details };
         } }) };
       },
       capabilities: { commands: true, ui: true, editor: true },
@@ -635,6 +649,21 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const caseDecisionRoutes = createCaseDecisionRoutes(caseDecisions);
   const caseSources = createCaseSourcesService({ cases, projects, assertActive, readReference: caseDecisions.source });
   const caseSourcesRoutes = createCaseSourcesRoutes(caseSources);
+  const caseRelations = createCaseRelationsService({ cases, projects, mutate, assertActive,
+    enterpriseScope: {
+      caseEnterpriseId: caseId => studio.enterpriseScopes.enterpriseIdForCase(caseId),
+      projectEnterpriseId: projectId => studio.enterpriseScopes.enterpriseIdForProject(projectId),
+    },
+    readArtifact: async (artifact, signal) => {
+      signal?.throwIfAborted();
+      const { bytes } = await projects.readFile(artifact.projectId, artifact.relativePath);
+      signal?.throwIfAborted();
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      try { return { text: new TextDecoder('utf-8', { fatal: true }).decode(bytes), sha256, status: 'available' as const }; }
+      catch { return { text: null, sha256, status: 'unknown' as const, limitations: ['当前文件不是可安全解码的UTF-8文本，保留真实字节哈希与原引用。'] }; }
+    },
+  });
+  const caseRelationRoutes = createCaseRelationRoutes(caseRelations);
   async function recordFeedbackDelivery(projectId: string, taskId: string, requestId: string, fingerprint: string | undefined) {
     const { project, task } = await pair(projectId, taskId);
     const supplied = (await taskContextReceipts(project, task)).find(value => value.requestId === requestId);
@@ -1053,6 +1082,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const result = await caseSourcesRoutes({ pathname: url.pathname, method: request.method ?? 'GET', searchParams: url.searchParams, ...(request.method === 'POST' ? { input: await body(request, 262_144) } : {}) });
         if (!result) throw new RequestFault(404, 'not_found');
         json(response, 200, result.body); return;
+      }
+      if (url.pathname === '/api/case-relations' || url.pathname.startsWith('/api/case-relations/') || /^\/api\/cases\/[a-f0-9-]+\/relations(?:\/|$)/.test(url.pathname)) {
+        const result = await caseRelationRoutes({ pathname: url.pathname, method: request.method ?? 'GET', searchParams: url.searchParams, ...(['POST', 'PATCH', 'DELETE'].includes(request.method ?? '') ? { input: await body(request, 64 * 1024) } : {}) });
+        if (!result) throw new RequestFault(404, 'not_found');
+        json(response, result.status ?? 200, result.body); return;
       }
       if (/^\/api\/cases\/[a-f0-9-]+\/decisions(?:\/|$)/.test(url.pathname)) {
         const result = await caseDecisionRoutes({ pathname: url.pathname, method: request.method ?? 'GET', searchParams: url.searchParams, ...(['POST', 'PATCH', 'DELETE'].includes(request.method ?? '') ? { input: await body(request, 262_144) } : {}) });
