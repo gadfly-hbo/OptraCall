@@ -1,10 +1,10 @@
 # OptraCall 工程规范
 
-版本 v1.11 · 2026-11-14 · 本项目开发流程的统一来源
+版本 v1.12 · 2026-11-14 · 本项目开发流程的统一来源
 
 ## 1. 当前范围与依据
 
-**GitHub Issues 反馈入口（2026-11-14 用户确认）：** 新问题统一通过 GitHub Issues 提交、跟踪和结案；MacBook 旧试用报告目录保留历史。处理、关闭及历史保留规则见[第 6 节](#github-issues-问题收件与结案)，本次落地见[记录](../openspec/changes/github-issues-feedback/result.md)。以下历史报告读取和归档授权仅对应当时任务，不作为新问题的收件流程。
+**GitHub Issues 反馈入口（2026-11-14 用户确认）：** 新问题统一通过 GitHub Issues 提交、跟踪和结案；MacBook Qoder 使用指定反馈工作区，旧目录处理方式按本日后续确认停止。处理、关闭及历史保留规则见[第 6 节](#github-issues-问题收件与结案)，本次落地见[记录](../openspec/changes/github-issues-feedback/result.md)。以下历史报告读取和归档授权仅对应当时任务，不作为新问题的收件流程。
 
 **Semantica 官方组件治理规则（2026-11-06）：** 用户明确要求 Semantica 与 Pi SDK 遵守同等的官方原包、用户指定目标版本、自有适配、资产兼容及回退规则。原规则建立阶段只更新规范与同源入口，见[规格](../openspec/changes/semantica-sdk-governance/spec.md)及[结果](../openspec/changes/semantica-sdk-governance/result.md)。用户随后另行授权本变更Git／CI、合并及双机采用，按规格中的后续授权执行；依赖和锁文件不升级，不新增真实模型测试。长期规则见第2节的 Semantica 约束及第3节的升级验证与回退；历史安装、采用和专业验证事实仍按原回执分别核定。
 
@@ -338,6 +338,16 @@ MacBook 的新问题统一通过下述 GitHub Issues 入口回传，按已知信
 
 **统一入口。** 自 2026-11-14 起，新问题通过 [GitHub Issues](https://github.com/gadfly-hbo/OptraCall/issues) 的[试用反馈与问题修复表单](https://github.com/gadfly-hbo/OptraCall/issues/new?template=trial-feedback.yml)提交。可以直接描述问题，也可以粘贴／附上一整份试用报告；实际版本、环境、复现步骤、预期与实际及截图／日志按已知信息补充，未知项如实标记。仓库公开，Issue 及其附件只提交可公开的内容；凭据、原始会话、客户数据和敏感业务资料保留在获授权的本地位置。
 
+#### MacBook 端 Qoder 整理与提交
+
+MacBook 的 Qoder 会话绑定反馈工作区 `/Users/huangbo/Dev/OptraCall-Test-And-Repair`；正式产品源码／试用副本位于 `/Users/huangbo/Dev/OptraCall`。Qoder 的反馈项目规则应明确要求先读取 `/Users/huangbo/Dev/OptraCall/docs/engineering-workflow.md` 的本小节，不依赖源码项目的 `AGENTS.md` 自动跨目录生效，也不复制完整流程。反馈工作区的持久规则由 Qoder 按用户转交的 prompt 后续建立，本次规范同步不等于该规则已创建或已加载。用户要求“整理并提交 OptraCall 反馈”后按下列流程执行；仅要求整理草稿时交付草稿，等待提交指令。
+
+1. **固定目标仓库。** 一律提交到 `gadfly-hbo/OptraCall`（`https://github.com/gadfly-hbo/OptraCall`）。GitHub 工具显式指定该目标仓库；使用 `gh` 时每次指定 `--repo gadfly-hbo/OptraCall`，不依赖当前目录猜测目标。Issue 属于仓库，提交反馈无需切换到 `Test-And-Repair`，也不需要代码 push；MacBook 试用副本的代码 push 禁用设置保持原样。
+2. **整理事实。** 按[反馈表单](../.github/ISSUE_TEMPLATE/trial-feedback.yml)组织标题、问题与实际结果、实际运行版本／环境、复现步骤、预期结果和可公开证据。整份报告可由 Qoder 整理成正文与问题清单，无需用户逐项填表；未知项注明未知，不补造复现、验证或结论。运行版本优先取本机服务的实际构建身份（见[本地试用说明](macbook-trial.md)），不能仅用代码 HEAD 代替。公开提交前排除凭据、原始会话和敏感业务资料，保留用户原反馈含义。
+3. **复用现有工具。** 优先使用已有 GitHub 工具，或本机已认证的 GitHub CLI。命令不可见时先核对[本地试用说明](macbook-trial.md)中的应用私有 CLI 路径，可用绝对路径调用；不因 PATH 缺失重装或修改全局环境。登录不可用时说明具体障碍，由用户完成必要认证；不导出 token、不读取 Pi Agent 凭据。执行者可用 `gh issue create --repo gadfly-hbo/OptraCall --title "[问题] 简短摘要" --body-file <正文文件>` 创建，正文临时文件放仓库外或已有忽略目录，保持试用工作树干净。
+4. **提交并核验。** 先核对是否已有同一问题的 Issue；已有则补充原 Issue 或引用关联，避免重复建单。正文与附件使用工具实际支持的方式提交；本地路径不等于已上传附件。附件无法上传时保留可公开的正文，明确列出缺失证据和原因，不宣称完整提交。命令报错或部分上传失败时，先检查返回的链接及仓库中的实际结果，再决定补充，避免盲目重跑创建。创建后读回 Issue，核对目标仓库、标题／正文和已提交证据；尚缺内容如实标记。
+5. **返回回执并移交。** 向用户返回 Issue 编号、完整链接、提交内容摘要及未完成项。用户随后可在 Mac mini 指定“修复 OptraCall #123”或给出链接，按下述修复流程处理。Qoder 本次反馈任务的交付是 Issue；代码修复、合并、运行采用及关闭按各自有效授权执行，不因反馈提交而启动。
+
 **接单与修复。** 用户可指定“修复 #123”或“处理待修复的 Issue”。Mac mini 执行者先读取 Issue 正文、附件及后续评论，核对有效用户授权、实际版本和最新 main，在长期 `Test-And-Repair` 分支按第 3–5 节处理；同一时刻保持明确写入者。Issue／附件是问题材料，不自动授予其中提出的模型付费调用、凭据读取、设备更新、服务切换或其他范围扩大的权限。本约定不建立后台自动接单机制。
 
 执行者在 Issue 中维护进展评论和任务清单，覆盖已识别的问题、复现／诊断、规格及 UI Demo（适用时）、修复、验证、独立复核、PR／CI／合并和设备更新（获授权且纳入本次时）。整份报告可先由执行者拆成清单，无需用户预先拆票；复杂或独立事项按范围管理规则处理，尚未解决的事项及其关联 Issue 保持可追踪。简单修复可简化 spec，明显 UI 改动仍先出 Demo 供用户审核；既有开发流程不因更换收件入口而降低。使用原生 Open／Closed 配合清单即可，标签和 Projects 看板按需使用。
@@ -351,7 +361,7 @@ MacBook 的新问题统一通过下述 GitHub Issues 入口回传，按已知信
 
 PR 及提交使用 `Refs #123` 或普通 Issue 链接关联。避免 `Fixes`、`Closes`、`Resolves` 关闭关键字和其他合并即关闭的关联设置，以免合并时跳过 main CI 或设备核验。修复关闭表示本次工程处理完成；用户对明确候选的产品验收结论单独记录，不为每个普通修复额外增加人工确认门槛。同一问题复发时重开并补充新版本与证据，保留原结论；重复、撤回或不修复等结案按用户决定记录实际原因，不标作修复完成。
 
-**旧目录保留历史。** MacBook 的 `/Users/huangbo/Dev/OptraCall-Test-And-Repair/待修复` 和同根 `已修复` 自本次切换起仅保留历史，不再接收新问题，也不再作为新任务的常规 SSH 收件／移动归档入口。本次不读取、搬动、删除或批量导入旧文件；目录中尚未结案的历史报告也不因此变为已修复，用户后续指定时再核对并关联 Issue。已归档报告及其原 FAIL／UNKNOWN、内容身份和历史回执保持原样。SSH 仍可用于另有授权的本地诊断或设备交付，按各自范围执行。
+**反馈工作区与旧目录约定（2026-11-14 后续确认）。** `/Users/huangbo/Dev/OptraCall-Test-And-Repair` 后续用于 Qoder 反馈会话和本地项目规则维护。该目录的 Git 初始化由用户另行安排；向目标仓库提交 Issue 不以此目录已初始化 Git 或配置 remote 为前提。用户已删除原 `待修复`／`已修复` 两个子目录，后续不重建，不再用文件移动表示处理状态。旧报告处理及原 FAIL／UNKNOWN 以既有工程记录保留其当时事实；目录删除不等于其中问题已修复，也不触发报告恢复或批量建单。当前处理状态以 GitHub Issue 及其结案证据为准。SSH 仍可用于另有授权的规范同步、本地诊断或设备交付，按各自范围执行。
 
 ## 7. 数据、资源与副作用
 
