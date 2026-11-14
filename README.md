@@ -65,6 +65,8 @@ docs/
 
 开发与工程测试集中在 Mac mini，MacBook 用于用户体验和问题反馈；MacBook按最新授权接收main浅克隆和本机凭据配置，只单向更新、试用与反馈。详细职责及交付以工程规范为准。
 
+新问题通过 [GitHub Issues 反馈表单](https://github.com/gadfly-hbo/OptraCall/issues/new?template=trial-feedback.yml)提交，支持附上试用报告。处理与关闭按[工程规范](docs/engineering-workflow.md#github-issues-问题收件与结案)执行；旧 MacBook 报告目录保留历史。
+
 ## 公开内容边界
 
 本仓库公开。提交内容应适合公开；凭据、客户数据、私有经营资料、原始会话及运行日志保留在授权的本地位置。`.gitignore` 只减少误提交，提交前仍需检查实际文件内容。
