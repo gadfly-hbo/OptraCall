@@ -119,7 +119,7 @@ Agent 通过系统提示词约定使用 `020_clean` 的分析资料，过程输�
 
 配置和原生会话保存在 `~/.optracall/`，项目文件默认保存在 `~/OptraCallProjects/`。本地 Host 将获准内容发送给所选模型或外部服务，使用前应核对相应数据授权。部署、更新与故障处理见[本地试用说明](docs/macbook-trial.md)。
 
-新问题通过 [GitHub Issues 反馈表单](https://github.com/gadfly-hbo/OptraCall/issues/new?template=trial-feedback.yml)提交，支持附上试用报告。处理与关闭按[工程规范](docs/engineering-workflow.md#github-issues-问题收件与结案)执行；旧 MacBook 报告目录保留历史。
+新问题通过 [GitHub Issues 反馈表单](https://github.com/gadfly-hbo/OptraCall/issues/new?template=trial-feedback.yml)提交，支持附上试用报告。处理与关闭按[工程规范](docs/engineering-workflow.md#github-issues-问题收件与结案)执行；MacBook Qoder 的反馈工作区及提交方式按同一规范执行。
 
 ## 开发
 

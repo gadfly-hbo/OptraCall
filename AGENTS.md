@@ -4,7 +4,9 @@
 
 开发前，按[任务目标执行清单与范围管理](docs/engineering-workflow.md#任务目标执行清单与范围管理)列出目标和阶段任务，执行中逐项更新并据此处理新发现的问题。
 
-接收新问题、执行 Issue 修复或准备关闭 Issue 时，先读[GitHub Issues 问题收件与结案规则](docs/engineering-workflow.md#github-issues-问题收件与结案)；新反馈统一走 Issues，旧 MacBook 报告目录保留历史。
+接收新问题、执行 Issue 修复或准备关闭 Issue 时，先读[GitHub Issues 问题收件与结案规则](docs/engineering-workflow.md#github-issues-问题收件与结案)；新反馈统一走 Issues。
+
+为 MacBook 上的 Qoder 编写或维护反馈项目规则时，先读取仓库文件 `docs/engineering-workflow.md` 的「MacBook 端 Qoder 整理与提交」小节；反馈会话工作区与产品源码目录分开，按该节的绝对路径读取约定接入同一规范。
 
 编写或修改 OptraCall 分析类 Skill 本体时（含 `SKILL.md`、随包参考资料、脚本和模板），先读取项目根目录下的 [分析类 Skill 编写规范](docs/分析类Skill编写规范.md)，按规范编写并自检。仅做测评、只读审查、Host 接缝或接入时，沿用各自流程。
 
