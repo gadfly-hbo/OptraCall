@@ -50,4 +50,6 @@ Mac mini负责开发、工程测试和交付；GitHub main保存经复核及CI�
 
 新问题统一通过 [GitHub Issues 反馈表单](https://github.com/gadfly-hbo/OptraCall/issues/new?template=trial-feedback.yml)提交，可直接附上整份试用报告。请按已知信息附实际运行版本／提交、复现步骤、预期与实际及可公开的截图或日志；仓库公开，密钥和敏感业务资料保留本地。处理与关闭详见[问题收件与结案规则](engineering-workflow.md#github-issues-问题收件与结案)。原 `待修复`／`已修复` 子目录已由用户删除，后续用 Issue 跟踪状态。由 Mac mini 修复、经工程交付进入 main，MacBook 再按获授权的更新安排接收。部署检查只证明产品安装和基本运行，用户试用及正式产品验收另行确认。
 
-MacBook 的 Qoder 反馈会话使用 `/Users/huangbo/Dev/OptraCall-Test-And-Repair` 工作区；产品源码／试用副本仍在 `/Users/huangbo/Dev/OptraCall`。用户将交接 prompt 转给 Qoder，在反馈工作区后续建立项目规则，明确读取 `/Users/huangbo/Dev/OptraCall/docs/engineering-workflow.md` 的[MacBook 端 Qoder 整理与提交](engineering-workflow.md#macbook-端-qoder-整理与提交)小节。规则建立后，可告诉 Qoder“按工程规范整理并提交这份 OptraCall 试用反馈”。Qoder 固定提交到 `gadfly-hbo/OptraCall` 并返回 Issue 编号和链接，后续在 Mac mini 指定该 Issue 开始修复。反馈工作区的 Git 初始化另行安排，提交 Issue 无需初始化 Git、切换修复分支或启用代码 push。
+MacBook 的 Qoder 反馈会话使用 `/Users/huangbo/Dev/OptraCall-Test-And-Repair` 工作区；产品源码／试用副本仍在 `/Users/huangbo/Dev/OptraCall`。用户将交接 prompt 转给 Qoder，在反馈工作区后续建立项目规则，明确读取文档参考副本 `/Users/huangbo/Dev/OptraCall-Test-And-Repair/.optracall-guidance/current/docs/engineering-workflow.md` 的[MacBook 端 Qoder 整理与提交](engineering-workflow.md#macbook-端-qoder-整理与提交)小节。规则建立后，可告诉 Qoder“按工程规范整理并提交这份 OptraCall 试用反馈”。Qoder 固定提交到 `gadfly-hbo/OptraCall` 并返回 Issue 编号和链接，后续在 Mac mini 指定该 Issue 开始修复。反馈工作区的 Git 初始化另行安排，提交 Issue 无需初始化 Git、切换修复分支或启用代码 push。
+
+反馈规范同步按该小节的文档参考副本约定执行，只交付文档并记录来源提交；不需要更新产品源码、安装构建、启停服务或检查产品项目和任务。产品版本更新仍按前述既有入口及其单独授权执行。

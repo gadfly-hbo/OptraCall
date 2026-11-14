@@ -340,7 +340,9 @@ MacBook 的新问题统一通过下述 GitHub Issues 入口回传，按已知信
 
 #### MacBook 端 Qoder 整理与提交
 
-MacBook 的 Qoder 会话绑定反馈工作区 `/Users/huangbo/Dev/OptraCall-Test-And-Repair`；正式产品源码／试用副本位于 `/Users/huangbo/Dev/OptraCall`。Qoder 的反馈项目规则应明确要求先读取 `/Users/huangbo/Dev/OptraCall/docs/engineering-workflow.md` 的本小节，不依赖源码项目的 `AGENTS.md` 自动跨目录生效，也不复制完整流程。反馈工作区的持久规则由 Qoder 按用户转交的 prompt 后续建立，本次规范同步不等于该规则已创建或已加载。用户要求“整理并提交 OptraCall 反馈”后按下列流程执行；仅要求整理草稿时交付草稿，等待提交指令。
+MacBook 的 Qoder 会话绑定反馈工作区 `/Users/huangbo/Dev/OptraCall-Test-And-Repair`；正式产品源码／试用副本位于 `/Users/huangbo/Dev/OptraCall`。工程规范唯一维护源为 `gadfly-hbo/OptraCall` 仓库的 `docs/engineering-workflow.md`。反馈项目规则应要求主动读取本机文档参考副本 `/Users/huangbo/Dev/OptraCall-Test-And-Repair/.optracall-guidance/current/docs/engineering-workflow.md` 的本小节；副本来源版本和内容身份按下段核对，不独立维护或复制完整流程到规则中。源码项目的 `AGENTS.md` 不自动跨目录生效。反馈工作区的持久规则由 Qoder 按用户转交的 prompt 后续建立，本次规范同步不等于该规则已创建或已加载。用户要求“整理并提交 OptraCall 反馈”后按下列流程执行；仅要求整理草稿时交付草稿，等待提交指令。
+
+**规范文件同步。** 仅交付规范／反馈规则时，在反馈工作区 `.optracall-guidance/snapshots/<提交SHA>/` 保存已交付版本的文档及必要参考文件，`source.json` 记录来源仓库、提交和文件摘要；验证后以 `current` 指向该版本，保留旧版本。副本仅包含本流程所需文件；其他引用按 `source.json` 的来源仓库与提交读取。副本按上游重新同步，内容不另行修改。此同步仅写入文档参考目录，不更新产品源码工作树、安装依赖、构建或启停服务，也不为此检查产品项目和任务；产品运行更新按另外明确的授权执行。此流程不创建反馈项目规则或初始化 Git。
 
 1. **固定目标仓库。** 一律提交到 `gadfly-hbo/OptraCall`（`https://github.com/gadfly-hbo/OptraCall`）。GitHub 工具显式指定该目标仓库；使用 `gh` 时每次指定 `--repo gadfly-hbo/OptraCall`，不依赖当前目录猜测目标。Issue 属于仓库，提交反馈无需切换到 `Test-And-Repair`，也不需要代码 push；MacBook 试用副本的代码 push 禁用设置保持原样。
 2. **整理事实。** 按[反馈表单](../.github/ISSUE_TEMPLATE/trial-feedback.yml)组织标题、问题与实际结果、实际运行版本／环境、复现步骤、预期结果和可公开证据。整份报告可由 Qoder 整理成正文与问题清单，无需用户逐项填表；未知项注明未知，不补造复现、验证或结论。运行版本优先取本机服务的实际构建身份（见[本地试用说明](macbook-trial.md)），不能仅用代码 HEAD 代替。公开提交前排除凭据、原始会话和敏感业务资料，保留用户原反馈含义。
