@@ -119,6 +119,8 @@ Agent 通过系统提示词约定使用 `020_clean` 的分析资料，过程输�
 
 配置和原生会话保存在 `~/.optracall/`，项目文件默认保存在 `~/OptraCallProjects/`。本地 Host 将获准内容发送给所选模型或外部服务，使用前应核对相应数据授权。部署、更新与故障处理见[本地试用说明](docs/macbook-trial.md)。
 
+新问题通过 [GitHub Issues 反馈表单](https://github.com/gadfly-hbo/OptraCall/issues/new?template=trial-feedback.yml)提交，支持附上试用报告。处理与关闭按[工程规范](docs/engineering-workflow.md#github-issues-问题收件与结案)执行；旧 MacBook 报告目录保留历史。
+
 ## 开发
 
 前端使用 React、TypeScript 和 Vite，Host 使用 Node.js，Agent Runtime 使用官方 Pi SDK。需要 Node.js 25 或更新版本，Agent 通过 bash 使用本机 Python。语义引擎采用独立的 Python 环境，具体依赖与准备方式见[语义环境说明](openspec/changes/fourbase-l2-rollout/formal-adoption-handoff.md)。
