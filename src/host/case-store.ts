@@ -6,6 +6,8 @@ import { CaseStoreError } from './case-types.ts';
 export { CaseStoreError } from './case-types.ts';
 import type { CaseDecisionDraftInput, CaseDecisionGovernanceInput, CaseDecisionOrigin, CaseDecisionRevision, CaseDecisionList, CaseDecisionListOptions, CaseDecisionWriteOptions, CaseStrategyChoice, CaseStrategyChoiceInput } from './case-decision-types.ts';
 import { parseCaseDecisionDraft, parseCaseDecisionGovernance, parseCaseDecisionOrigin, parseCaseStrategyChoice } from './case-decision-validation.ts';
+import type { CaseRelationList, CaseRelationListOptions, CaseRelationRevision, CaseRelationWriteInput, CaseRelationSource } from './case-relation-types.ts';
+import { parseCaseRelationWrite, parseCaseRelationSource } from './case-relation-validation.ts';
 import type {
   CaseStorageStatus, CaseRecord, CaseStatus, CaseProjectLink, ProjectWorkRecord, ProjectWorkInput,
   CaseArtifactRecord, ArtifactInput, ArtifactAdoption, WorkEvent, WorkEventType, OperationReceipt, CaseContextSelection, CaseContextSnapshot, CaseEnterpriseScopeOptions,
@@ -137,6 +139,29 @@ CREATE TABLE case_decision_revisions (
 CREATE INDEX decisions_case_record_revision ON case_decision_revisions(case_id,record_id,revision);
 `;
 const SCHEMA_V2 = SCHEMA.replace(tableDefinition('operation_receipts'), RECEIPTS_V2).replace(tableDefinition('work_events'), EVENTS_V2).replace('PRAGMA user_version=1;', `${DECISIONS_SCHEMA}\nPRAGMA user_version=2;`);
+const RECEIPTS_V3 = RECEIPTS_V2.replace("'case_strategy_choice'", "'case_strategy_choice','case_relation_save'");
+const RELATIONS_SCHEMA = `
+CREATE TABLE case_relation_revisions (
+ relation_id TEXT NOT NULL, revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>0),
+ from_case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE RESTRICT,
+ to_case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE RESTRICT,
+ kind TEXT NOT NULL CHECK(kind IN ('follows_up','supports')),
+ lifecycle TEXT NOT NULL CHECK(lifecycle IN ('active','unlinked')),
+ body_json TEXT NOT NULL, origin_json TEXT NOT NULL, created_at TEXT NOT NULL,
+ operation_id TEXT NOT NULL UNIQUE REFERENCES operation_receipts(operation_id) ON DELETE RESTRICT,
+ PRIMARY KEY(relation_id,revision), CHECK(from_case_id!=to_case_id)
+);
+CREATE INDEX relations_case_pair ON case_relation_revisions(from_case_id,to_case_id,kind,revision);
+CREATE TRIGGER case_relation_no_update BEFORE UPDATE ON case_relation_revisions BEGIN SELECT RAISE(ABORT,'case_relation_revision_immutable'); END;
+CREATE TRIGGER case_relation_no_delete BEFORE DELETE ON case_relation_revisions BEGIN SELECT RAISE(ABORT,'case_relation_revision_immutable'); END;
+CREATE TRIGGER case_relation_identity BEFORE INSERT ON case_relation_revisions
+ WHEN EXISTS (SELECT 1 FROM case_relation_revisions r WHERE
+ (r.relation_id=NEW.relation_id AND (r.from_case_id!=NEW.from_case_id OR r.to_case_id!=NEW.to_case_id OR r.kind!=NEW.kind)) OR
+ (r.from_case_id=NEW.from_case_id AND r.to_case_id=NEW.to_case_id AND r.kind=NEW.kind AND r.relation_id!=NEW.relation_id))
+ OR NEW.revision!=(SELECT COALESCE(MAX(revision),0)+1 FROM case_relation_revisions WHERE relation_id=NEW.relation_id)
+ BEGIN SELECT RAISE(ABORT,'case_relation_identity_mismatch'); END;
+`;
+const SCHEMA_V3 = SCHEMA_V2.replace(RECEIPTS_V2, RECEIPTS_V3).replace('PRAGMA user_version=2;', `${RELATIONS_SCHEMA}\nPRAGMA user_version=3;`);
 
 /** SQLite owns only Case metadata. Original Project JSON, sessions and files are never opened here.
  * The Host must hold its existing data-root lock and serialize cross-store mutations. */
@@ -146,8 +171,10 @@ export class CaseStore {
   private status: CaseStorageStatus = { state: 'uninitialized' };
   private uncertainReadsVerified = false;
   private readonly decisionsEnabled: boolean;
-  constructor(options: { dataRoot: string; decisionsEnabled?: boolean }) { this.dataRoot = canonicalRoot(options.dataRoot); this.decisionsEnabled = options.decisionsEnabled ?? true; }
+  private readonly relationsEnabled: boolean;
+  constructor(options: { dataRoot: string; decisionsEnabled?: boolean; relationsEnabled?: boolean }) { this.dataRoot = canonicalRoot(options.dataRoot); this.decisionsEnabled = options.decisionsEnabled ?? true; this.relationsEnabled = options.relationsEnabled ?? true; }
   isDecisionWritingEnabled(): boolean { return this.decisionsEnabled; }
+  isRelationWritingEnabled(): boolean { return this.relationsEnabled; }
   static hasOpenDatabase(dataRoot: string): boolean { return (openRoots.get(canonicalRoot(dataRoot)) ?? 0) > 0; }
   getStatus(): CaseStorageStatus { return { ...this.status }; }
   private get databasePath() { return path.join(this.dataRoot, DATABASE); }
@@ -183,13 +210,13 @@ export class CaseStore {
   private validateDatabase(marker: Marker) {
     const db = this.database();
     const version = db.prepare('PRAGMA user_version').get()?.user_version;
-    if (version !== 1 && version !== 2) fail('unsupported_case_schema', 503);
+    if (version !== 1 && version !== 2 && version !== 3) fail('unsupported_case_schema', 503);
     const normalizeSql = (sql: string) => sql.replace(/;$/, '').replace(/\s+/g, ' ').trim();
     const inventory = (database: DatabaseSync) => database.prepare('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name').all().map(row => ({ ...row, sql: row.sql === null ? null : normalizeSql(String(row.sql)) }));
     // Derive the complete allowed inventory, including SQLite's implicit indexes,
     // from the supported schema. Unknown triggers can mutate values behind receipts.
     const expected = new DatabaseSync(':memory:', { allowExtension: false });
-    try { expected.exec(version === 1 ? SCHEMA : SCHEMA_V2); if (canonical(inventory(db)) !== canonical(inventory(expected))) fail('unsupported_case_schema', 503); }
+    try { expected.exec(version === 1 ? SCHEMA : version === 2 ? SCHEMA_V2 : SCHEMA_V3); if (canonical(inventory(db)) !== canonical(inventory(expected))) fail('unsupported_case_schema', 503); }
     finally { expected.close(); }
     const metadata = db.prepare('SELECT store_id,initialized_at FROM store_metadata').all();
     if (metadata.length !== 1 || metadata[0]?.store_id !== marker.storeId || metadata[0]?.initialized_at !== marker.createdAt) fail('case_store_identity_mismatch', 503);
@@ -292,7 +319,7 @@ export class CaseStore {
     this.getCase(caseId);
     return this.database().prepare("SELECT operation_id FROM operation_receipts WHERE case_id=? AND kind='project_create_link' AND phase!='completed' ORDER BY created_at,operation_id").all(caseId).map(row => this.getOperation(String(row.operation_id))!);
   }
-  private operation<T>(kind: string, input: { operationId: string } & object, caseId: string | null, projectId: string | null, fn: () => T, options?: CaseDecisionWriteOptions & CaseEnterpriseScopeOptions & { decisions?: boolean }): T {
+  private operation<T>(kind: string, input: { operationId: string } & object, caseId: string | null, projectId: string | null, fn: () => T, options?: CaseDecisionWriteOptions & CaseEnterpriseScopeOptions & { decisions?: boolean; relations?: boolean }): T {
     uuid(input.operationId);
     const digest = sha(canonical({ kind, ...input }));
     let writes = false;
@@ -306,6 +333,7 @@ export class CaseStore {
       writes = true;
       options?.assertWritable?.();
       if (options?.decisions) this.upgradeDecisionSchema();
+      if (options?.relations) this.upgradeRelationSchema();
       const time = now();
       this.insert('operation_receipts', { operationId: input.operationId, kind, requestSha256: digest, caseId, projectId, phase: 'prepared', resultJson: options?.enterpriseScopeIntent === undefined ? null : operationResult({}, options), createdAt: time, updatedAt: time });
       const result = fn();
@@ -313,11 +341,11 @@ export class CaseStore {
       return result;
     }, () => { if (writes) options?.assertWritable?.(); });
   }
-  private upgradeDecisionSchema() {
-    if (!this.decisionsEnabled) fail('case_decisions_disabled', 409);
+  private upgradeDecisionSchema(forRelations = false) {
+    if (!this.decisionsEnabled && !forRelations) fail('case_decisions_disabled', 409);
     const db = this.database(), marker = this.readMarker();
     this.validateDatabase(marker);
-    if (db.prepare('PRAGMA user_version').get()?.user_version === 2) return;
+    if (Number(db.prepare('PRAGMA user_version').get()?.user_version) >= 2) return;
     // Only these two CHECK-constrained tables change. SQLite temporary staging
     // preserves every original SQL value without decoding/re-encoding JSON.
     db.exec(`CREATE TEMP TABLE m5_old_events AS SELECT * FROM work_events;
@@ -337,10 +365,186 @@ export class CaseStore {
     db.exec('DROP TABLE temp.m5_old_events; DROP TABLE temp.m5_old_receipts;');
     this.validateDatabase(marker);
   }
+  private upgradeRelationSchema() {
+    if (!this.relationsEnabled) fail('case_relations_disabled', 409);
+    const db = this.database(), marker = this.readMarker();
+    this.validateDatabase(marker);
+    if (db.prepare('PRAGMA user_version').get()?.user_version === 3) return;
+    this.upgradeDecisionSchema(true);
+    // Both child tables are staged before rebuilding their receipt parent. All
+    // old SQL values, including opaque JSON, are copied without re-encoding.
+    db.exec(`CREATE TEMP TABLE relation_old_events AS SELECT * FROM work_events;
+      CREATE TEMP TABLE relation_old_decisions AS SELECT * FROM case_decision_revisions;
+      CREATE TEMP TABLE relation_old_receipts AS SELECT * FROM operation_receipts;
+      DROP TABLE work_events; DROP TABLE case_decision_revisions;
+      ${RECEIPTS_V3.replace('"operation_receipts"', 'operation_receipts_relation')}
+      INSERT INTO operation_receipts_relation SELECT * FROM operation_receipts;
+      DROP TABLE operation_receipts;
+      ALTER TABLE operation_receipts_relation RENAME TO operation_receipts;
+      ${EVENTS_V2}
+      INSERT INTO work_events SELECT * FROM temp.relation_old_events;
+      ${DECISIONS_SCHEMA}
+      INSERT INTO case_decision_revisions SELECT * FROM temp.relation_old_decisions;
+      ${RELATIONS_SCHEMA}
+      PRAGMA user_version=3;`);
+    for (const [old, current] of [['relation_old_events', 'work_events'], ['relation_old_decisions', 'case_decision_revisions'], ['relation_old_receipts', 'operation_receipts']]) {
+      if (db.prepare(`SELECT * FROM temp.${old} EXCEPT SELECT * FROM ${current}`).all().length || db.prepare(`SELECT * FROM ${current} EXCEPT SELECT * FROM temp.${old}`).all().length) fail('case_migration_preservation_failed', 503);
+    }
+    db.exec('DROP TABLE temp.relation_old_events; DROP TABLE temp.relation_old_decisions; DROP TABLE temp.relation_old_receipts;');
+    this.validateDatabase(marker);
+  }
   private decisionStoreId(expected?: string): string {
     const storeId = this.readMarker().storeId;
     if (expected !== undefined && uuid(expected) !== storeId) fail('case_decision_store_mismatch', 409);
     return storeId;
+  }
+  /** A graph projection is a read: legacy stores stay at their current schema. */
+  listRelations(options: CaseRelationListOptions = {}): CaseRelationList {
+    const caseStoreId = this.decisionStoreId(), pageSize = options.pageSize ?? 50;
+    if (options.caseId !== undefined) this.getCase(options.caseId);
+    if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100 || options.kind !== undefined && !['follows_up', 'supports'].includes(options.kind) || options.includeUnlinked !== undefined && typeof options.includeUnlinked !== 'boolean') fail('invalid_case_relation_page');
+    const db = this.database();
+    if (Number(db.prepare('PRAGMA user_version').get()?.user_version) < 3) return { caseStoreId, items: [], continuation: null, hasMore: false };
+    const scope = JSON.stringify([options.caseId ?? null, options.kind ?? null, options.includeUnlinked === true]);
+    const marker = String(db.prepare('SELECT MAX(rowid) AS head FROM case_relation_revisions').get()?.head ?? 0);
+    let offset = 0;
+    if (options.continuation) {
+      try {
+        const cursor = JSON.parse(Buffer.from(options.continuation, 'base64url').toString('utf8'));
+        if (cursor.caseStoreId !== caseStoreId || cursor.scope !== scope || cursor.marker !== marker || !Number.isSafeInteger(cursor.offset) || cursor.offset < 0) fail('case_relation_continuation_changed', 409);
+        offset = cursor.offset;
+      } catch (error) { if (error instanceof CaseStoreError) throw error; fail('invalid_case_relation_page'); }
+    }
+    const rows = db.prepare(`SELECT r.* FROM case_relation_revisions r WHERE NOT EXISTS (SELECT 1 FROM case_relation_revisions newer WHERE newer.relation_id=r.relation_id AND newer.revision>r.revision)
+      AND (? IS NULL OR r.from_case_id=? OR r.to_case_id=?) AND (? IS NULL OR r.kind=?) ${options.includeUnlinked ? '' : "AND r.lifecycle='active'"}
+      ORDER BY r.relation_id LIMIT ? OFFSET ?`).all(options.caseId ?? null, options.caseId ?? null, options.caseId ?? null, options.kind ?? null, options.kind ?? null, pageSize + 1, offset);
+    const hasMore = rows.length > pageSize;
+    return { caseStoreId, items: rows.slice(0, pageSize).map(row => this.relationRow(row)), hasMore,
+      continuation: hasMore ? Buffer.from(JSON.stringify({ caseStoreId, scope, marker, offset: offset + pageSize })).toString('base64url') : null };
+  }
+  getRelation(relationId: string, exactRevision?: number): CaseRelationRevision {
+    uuid(relationId);
+    const db = this.database();
+    if (Number(db.prepare('PRAGMA user_version').get()?.user_version) < 3) fail('case_relation_not_found', 404);
+    const row = exactRevision === undefined
+      ? db.prepare('SELECT * FROM case_relation_revisions WHERE relation_id=? ORDER BY revision DESC LIMIT 1').get(relationId)
+      : db.prepare('SELECT * FROM case_relation_revisions WHERE relation_id=? AND revision=?').get(relationId, revision(exactRevision));
+    if (!row) fail('case_relation_not_found', 404);
+    return this.relationRow(row);
+  }
+  private relationRow(row: Row): CaseRelationRevision {
+    try {
+      const body = JSON.parse(String(row.body_json));
+      const clean = parseCaseRelationWrite({ ...body, operationId: row.operation_id, caseStoreId: this.decisionStoreId(), toCaseId: row.to_case_id, fromCaseId: row.from_case_id, relationId: row.relation_id, kind: row.kind, expectedRelationRevision: Number(row.revision) - 1 });
+      if (!['active', 'unlinked'].includes(String(row.lifecycle)) || !Number.isFinite(Date.parse(String(row.created_at)))) fail('corrupt_case_relation', 503);
+      return { caseStoreId: clean.caseStoreId, relationId: clean.relationId!, revision: Number(row.revision), fromCaseId: clean.fromCaseId!, toCaseId: clean.toCaseId, kind: clean.kind!, lifecycle: row.lifecycle as 'active' | 'unlinked',
+        explanation: clean.explanation!, targetScope: clean.targetScope ?? '', targetRef: clean.targetRef ?? null, sources: clean.sources ?? [], assertionNature: clean.assertionNature ?? 'explicit', changeReason: clean.changeReason ?? null,
+        origin: parseCaseDecisionOrigin(JSON.parse(String(row.origin_json))), createdAt: String(row.created_at), operationId: clean.operationId };
+    } catch { return fail('corrupt_case_relation', 503); }
+  }
+  /** Append-only business relation. Its target Case owns the write, not its source. */
+  saveRelation(raw: CaseRelationWriteInput, author: CaseDecisionOrigin, options: CaseDecisionWriteOptions = {}): CaseRelationRevision {
+    const input = parseCaseRelationWrite(raw), origin = parseCaseDecisionOrigin(author);
+    this.decisionStoreId(input.caseStoreId);
+    const intent = { ...input, origin };
+    return this.operation('case_relation_save', intent, input.toCaseId, origin.projectId, () => {
+      this.activeCase(input.toCaseId);
+      let previous: CaseRelationRevision | undefined;
+      if (input.relationId) previous = this.getRelation(input.relationId);
+      else if (input.fromCaseId && input.kind) {
+        const row = this.database().prepare('SELECT relation_id FROM case_relation_revisions WHERE from_case_id=? AND to_case_id=? AND kind=? LIMIT 1').get(input.fromCaseId, input.toCaseId, input.kind);
+        if (row) previous = this.getRelation(String(row.relation_id));
+      }
+      if (previous && (previous.toCaseId !== input.toCaseId || input.fromCaseId !== undefined && previous.fromCaseId !== input.fromCaseId || input.kind !== undefined && previous.kind !== input.kind)) fail('case_relation_identity_mismatch', 409);
+      if (previous && !input.relationId && previous.lifecycle === 'active' && input.expectedRelationRevision === 0 && input.action === 'save') return previous;
+      if ((previous?.revision ?? 0) !== input.expectedRelationRevision) fail('case_relation_revision_conflict', 409);
+      if (!previous && (!input.fromCaseId || !input.kind || input.action !== 'save')) fail('case_relation_not_found', 404);
+      if (previous?.lifecycle === 'unlinked' && input.action === 'save') fail('case_relation_restore_required', 409);
+      if (previous && (input.action === 'unlink' && previous.lifecycle === 'unlinked' || input.action === 'restore' && previous.lifecycle === 'active')) return previous;
+      if (previous && input.action !== 'save') {
+        for (const key of ['explanation', 'targetScope', 'targetRef', 'sources', 'assertionNature'] as const) {
+          if (input[key] !== undefined && canonical(input[key]) !== canonical(previous[key])) fail('case_relation_lifecycle_body_immutable', 409);
+        }
+      }
+      const fromCaseId = previous?.fromCaseId ?? input.fromCaseId!;
+      this.getCase(fromCaseId);
+      if (fromCaseId === input.toCaseId) fail('case_relation_self_link', 409);
+      const value: CaseRelationRevision = {
+        caseStoreId: input.caseStoreId, relationId: previous?.relationId ?? randomUUID(), revision: (previous?.revision ?? 0) + 1,
+        fromCaseId, toCaseId: input.toCaseId, kind: previous?.kind ?? input.kind!, lifecycle: input.action === 'unlink' ? 'unlinked' : 'active',
+        explanation: input.explanation ?? previous?.explanation ?? '', targetScope: input.targetScope ?? previous?.targetScope ?? '',
+        targetRef: input.targetRef === undefined ? previous?.targetRef ?? null : input.targetRef,
+        sources: input.sources ?? previous?.sources ?? [], assertionNature: input.assertionNature ?? previous?.assertionNature ?? 'explicit',
+        changeReason: input.changeReason ?? null, origin, createdAt: now(), operationId: input.operationId,
+      };
+      if (!value.explanation.trim()) fail('invalid_case_relation_explanation');
+      if (value.kind === 'supports' && (!value.sources.length || !value.targetScope.trim())) fail('case_relation_support_requires_source_and_target');
+      if (input.action !== 'unlink') this.validateRelationReferences(value, previous);
+      const { explanation, targetScope, targetRef, sources, assertionNature, changeReason } = value;
+      this.insert('case_relation_revisions', { relationId: value.relationId, revision: value.revision, fromCaseId, toCaseId: value.toCaseId, kind: value.kind, lifecycle: value.lifecycle,
+        bodyJson: JSON.stringify({ explanation, targetScope, targetRef, sources, assertionNature, changeReason }), originJson: JSON.stringify(origin), createdAt: value.createdAt, operationId: value.operationId });
+      return value;
+    }, { ...options, relations: true });
+  }
+  /** Read only original provenance metadata for scope checks; never open a card payload or native file. */
+  getRelationSourceProjectIds(raw: CaseRelationSource): string[] {
+    const source = parseCaseRelationSource(raw);
+    this.decisionStoreId(source.caseStoreId); this.getCase(source.caseId);
+    if (source.type === 'case-artifact') {
+      const row = this.database().prepare('SELECT project_id FROM case_artifact_links WHERE case_id=? AND id=?').get(source.caseId, source.artifactId);
+      if (!row) fail('case_relation_source_missing', 404);
+      return [uuid(row.project_id)];
+    }
+    if (source.type === 'case-choice') {
+      const choice = this.getStrategyChoice(source.caseId, source.choiceId);
+      return this.getRelationSourceProjectIds(choice.strategyRef);
+    }
+    if (Number(this.database().prepare('PRAGMA user_version').get()?.user_version) < 2) fail('case_decision_not_found', 404);
+    const rows = this.database().prepare("SELECT revision,json_extract(origin_json,'$.projectId') AS project_id FROM case_decision_revisions WHERE case_id=? AND record_id=? AND revision<=?").all(source.caseId, source.recordId, source.revision);
+    if (!rows.some(row => row.revision === source.revision)) fail('case_decision_not_found', 404);
+    // A human governance revision retains its original card's provenance even
+    // though that human declaration has no analysis-project origin of its own.
+    return [...new Set(rows.filter(row => row.project_id !== null).map(row => uuid(row.project_id)))];
+  }
+  private validateRelationReferences(value: CaseRelationRevision, previous?: CaseRelationRevision) {
+    if (value.targetRef) {
+      if (value.targetRef.caseStoreId !== value.caseStoreId || value.targetRef.caseId !== value.toCaseId) fail('case_relation_target_mismatch', 409);
+      this.getDecision(value.toCaseId, value.targetRef.recordId, value.targetRef.revision);
+    }
+    const identities = new Set<string>();
+    for (const source of value.sources) {
+      if (source.caseStoreId !== value.caseStoreId || source.caseId !== value.fromCaseId) fail('case_relation_source_mismatch', 409);
+      const identity = canonical(source);
+      if (identities.has(identity)) fail('case_relation_duplicate_source');
+      identities.add(identity);
+      if (source.type === 'case-decision' || source.type === 'case-choice') {
+        const exact = source.type === 'case-decision' ? this.getDecision(source.caseId, source.recordId, source.revision) : this.getStrategyChoice(source.caseId, source.choiceId);
+        if (source.excerpt) {
+          const body = JSON.stringify(exact, null, 2), { start, end } = source.excerpt;
+          const boundary = (position: number) => !(position > 0 && position < body.length && /[\uD800-\uDBFF]/.test(body[position - 1]!) && /[\uDC00-\uDFFF]/.test(body[position]!));
+          if (start < 0 || end <= start || end > body.length || !boundary(start) || !boundary(end)) fail('invalid_personal_excerpt');
+        }
+      } else {
+        const artifact = this.getArtifacts(source.caseId, { includeUnlinked: true }).find(item => item.id === source.artifactId);
+        if (!artifact) fail('case_relation_source_missing', 404);
+        if (!previous?.sources.some(ref => canonical(ref) === identity) && source.observedSha256 !== artifact.observedSha256) fail('case_relation_artifact_observation_mismatch', 409);
+      }
+    }
+  }
+  listRelationRevisions(relationId: string, options: { pageSize?: number; continuation?: string | null } = {}): { items: CaseRelationRevision[]; continuation: string | null; hasMore: boolean } {
+    const head = this.getRelation(relationId), pageSize = options.pageSize ?? 50;
+    if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100) fail('invalid_case_relation_page');
+    let before = head.revision + 1;
+    if (options.continuation) {
+      try {
+        const cursor = JSON.parse(Buffer.from(options.continuation, 'base64url').toString('utf8'));
+        if (cursor.relationId !== relationId || cursor.caseStoreId !== head.caseStoreId || !Number.isSafeInteger(cursor.before) || cursor.before < 2 || cursor.before > head.revision + 1) fail('invalid_case_relation_page');
+        before = cursor.before;
+      } catch { fail('invalid_case_relation_page'); }
+    }
+    const rows = this.database().prepare('SELECT * FROM case_relation_revisions WHERE relation_id=? AND revision<? ORDER BY revision DESC LIMIT ?').all(relationId, before, pageSize + 1);
+    const items = rows.slice(0, pageSize).map(row => this.relationRow(row)), hasMore = rows.length > pageSize;
+    return { items, hasMore, continuation: hasMore ? Buffer.from(JSON.stringify({ relationId, caseStoreId: head.caseStoreId, before: items.at(-1)!.revision })).toString('base64url') : null };
   }
   private decisionRow(row: Row): CaseDecisionRevision {
     try {

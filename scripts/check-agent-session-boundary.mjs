@@ -22,6 +22,7 @@ const projectAgentOwners = new Set([
   'tests/s4-runtime-sdk.test.ts', // D13: actual Pi SDK graph-only ordinary modes and cancellation proof only.
   'tests/experience-learning-runtime.test.ts', // M6 isolated ordinary cross-Case read/candidate qualification proof only.
   'tests/case-decision-runtime.test.ts', // M5 isolated SDK/Case callback scope proof; not a product runtime owner.
+  'tests/case-relations-agent.test.ts', // Case-Star-Map: isolated original ProjectAgent/SDK tools and call-local qualification proof only.
   'tests/model-http-environment.test.ts', // OR01/OR02: controlled SDK worker transport and safe native receipt boundary.
   'tests/requirement-runtime.test.ts',
   'tests/host-recovery.test.ts',
