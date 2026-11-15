@@ -34,10 +34,11 @@ async (page) => {
   await api(`projects/${p1.id}/tasks/${t1.id}/draft`, 'PATCH', { text: '原任务保留的草稿' });
   const uploaded = (await api(`projects/${p1.id}/files/upload`, 'POST', { name: 'case-ui-evidence.txt', directory: '020_clean', content: Buffer.from('synthetic case UI evidence').toString('base64') })).file;
   const beforeProvider = (await metrics()).requestCount;
-  await nav('Case 看板'); await board().getByRole('button', { name: '启用本机 Case 记录', exact: true }).click();
+  await nav('Decision Case'); await board().getByRole('button', { name: '启用本机 Case 记录', exact: true }).click();
+  await board().getByRole('button', { name: '常规模式', exact: true }).click();
   await board().getByRole('heading', { name: '从一件业务事项开始', exact: true }).waitFor();
   const navigation = await page.locator('.sidebar .nav-item').allTextContents();
-  assert(navigation.indexOf('Case 看板') < navigation.indexOf('项目看板'), 'Case navigation precedes Project board.');
+  assert(navigation.indexOf('Decision Case') < navigation.indexOf('Project Map'), 'Case navigation precedes Project board.');
   assert(await page.locator('.project-navigation .history-heading').filter({ hasText: /^项目空间/ }).count() > 0, 'Lower actual project list retains 项目空间 label.');
   assert((await metrics()).requestCount === beforeProvider, 'Config, project/task creation, file upload and explicit SQLite initialization make no Provider calls.');
   const createCase = async (title, description) => {
@@ -53,11 +54,11 @@ async (page) => {
   const caseHeights = await page.locator('.case-card').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
   assert(caseHeights.every(height => height === 360), 'All Case cards are exactly 360px despite different content.');
   await board().getByRole('button', { name: '列表', exact: true }).click();
-  await nav('项目看板'); assert(await board().getByRole('button', { name: '方块', exact: true }).getAttribute('aria-pressed') === 'true', 'Project view initially remains cards.');
+  await nav('Project Map'); assert(await board().getByRole('button', { name: '方块', exact: true }).getAttribute('aria-pressed') === 'true', 'Project view initially remains cards.');
   const projectHeights = await page.locator('.case-project-card').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
   assert(projectHeights.length >= 2 && projectHeights.every(height => height === 420), 'All Project cards are exactly 420px independent of task count.');
   assert(await page.locator('.case-project-card').filter({ hasText: p1.name }).locator('.case-project-tasks > button').count() === 2, 'Project card shows at most two original tasks.');
-  await board().getByRole('button', { name: '列表', exact: true }).click(); await nav('Case 看板');
+  await board().getByRole('button', { name: '列表', exact: true }).click(); await nav('Decision Case');
   assert(await board().getByRole('button', { name: '列表', exact: true }).getAttribute('aria-pressed') === 'true', 'Case list choice survives board navigation.');
   await detail(a.title);
   for (const nextStatus of ['analyzing', 'awaiting_confirmation', 'observing', 'pending']) {
@@ -131,7 +132,7 @@ async (page) => {
   await nav('模型设置'); await page.getByRole('button', { name: '返回项目空间', exact: true }).click();
   assert(await input.inputValue() === 'Case 后续草稿保留', 'Settings return retains original task draft.');
   checks.push('Artifact unknown origin, unlink history and original-file preservation; manual history source; context preview and one explicit synthetic SDK send on the original task.');
-  await nav('Case 看板'); await detail(a.title); await drawer().getByRole('button', { name: '更新状态', exact: true }).click();
+  await nav('Decision Case'); await detail(a.title); await drawer().getByRole('button', { name: '更新状态', exact: true }).click();
   let status = page.getByRole('dialog', { name: '更新 Case 状态', exact: true }); await status.getByLabel('状态', { exact: true }).selectOption('closed');
   await status.getByRole('button', { name: '保存状态', exact: true }).click();
   assert(await status.count() === 1, 'Close without a reason remains in the status form.');
@@ -141,7 +142,7 @@ async (page) => {
   assert(!(await api(`projects/${p1.id}`)).project.archivedAt, 'Closing Case never archives its project.');
   await drawer().getByRole('button', { name: '重新打开 Case', exact: true }).click(); status = page.getByRole('dialog', { name: '重新打开 Case', exact: true });
   await status.getByRole('button', { name: '重新打开', exact: true }).click(); await status.waitFor({ state: 'detached' }); await dismiss();
-  await nav('项目看板'); assert(await board().getByRole('button', { name: '列表', exact: true }).getAttribute('aria-pressed') === 'true', 'Project list choice survives Case routes.');
+  await nav('Project Map'); assert(await board().getByRole('button', { name: '列表', exact: true }).getAttribute('aria-pressed') === 'true', 'Project list choice survives Case routes.');
   let row = board().locator('tr').filter({ has: page.getByRole('button', { name: p1.name, exact: true }) }); await row.getByRole('button', { name: '归档', exact: true }).click();
   await board().getByLabel('归档状态', { exact: true }).selectOption('archived');
   row = board().locator('tr').filter({ has: page.getByRole('button', { name: p1.name, exact: true }) }); await row.waitFor();
@@ -167,7 +168,7 @@ async (page) => {
   assert(fromTask.projectLinks.length===1 && fromTask.projectLinks[0].projectId===p1.id, 'Task entry links the whole original Project, without a second task ownership layer.');
   assert((await api(`projects/${p1.id}`)).project.tasks.length===3, 'Task entry keeps every original task.');
   await dismiss();
-  await nav('Case 看板'); await board().getByRole('button', { name: '方块', exact: true }).click();
+  await nav('Decision Case'); await board().getByRole('button', { name: '方块', exact: true }).click();
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     if (width === 320) await page.getByRole('button', { name: '切换为深色', exact: true }).click();
@@ -178,7 +179,7 @@ async (page) => {
     await modal.press('Escape'); await modal.waitFor({ state: 'detached' });
     assert(await board().getByRole('button', { name: /新建 Case/ }).first().evaluate(element => element === document.activeElement), 'Escape restores Case creation trigger focus.');
   }
-  await page.setViewportSize({ width: 1720, height: 1000 }); await page.reload(); await nav('Case 看板');
+  await page.setViewportSize({ width: 1720, height: 1000 }); await page.reload(); await nav('Decision Case');
   assert((await api(`cases/${a.id}`)).events.some(event => event.eventType === 'case_closed') && (await api(`cases/${a.id}`)).events.some(event => event.eventType === 'case_reopened'), 'Close/reopen history persists across reload.');
   assert((await metrics()).requestCount === beforeProvider + 1, 'Reload does not replay saved task work.');
   assert(await page.getByRole('button', { name: /删除项目|删除 Case/ }).count() === 0, 'No destructive deletion entry introduced.');

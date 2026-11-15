@@ -26,6 +26,7 @@ page.on('request', request => { if (request.method() !== 'GET' && request.url().
 const checks = [];
 try {
   await page.goto(fixture.uiUrl);
+  await page.getByRole('button', { name: '常规模式', exact: true }).click();
   await page.getByRole('button', { name: fixture.author.case.title, exact: true }).click();
   const detail = page.getByRole('dialog', { name: fixture.author.case.title, exact: true });
   await detail.waitFor();
@@ -244,8 +245,8 @@ try {
     const original = JSON.parse(businessWrites.find(write => write.url.endsWith('/governance')).body);
     await source.getByRole('button', { name: '关闭来源与版本', exact: true }).click();
     await detail.getByRole('button', { name: `关闭${fixture.author.case.title}`, exact: true }).click();
-    await page.getByRole('button', { name: '项目看板', exact: true }).click();
-    await page.getByRole('button', { name: 'Case 看板', exact: true }).click();
+    await page.getByRole('button', { name: 'Project Map', exact: true }).click();
+    await page.getByRole('button', { name: 'Decision Case', exact: true }).click();
     await page.getByRole('button', { name: fixture.author.case.title, exact: true }).click();
     await card.getByRole('alert').getByText(`整理操作原意图已保留 · v${originalRevision}`, { exact: true }).waitFor();
     await card.getByRole('button', { name: '查询原整理结果', exact: true }).click();

@@ -54,8 +54,18 @@ try {
   const log = await open(path.join(directory, 'postgres.log'), 'a', 0o600);
   child = spawn(path.join(pgBin, 'postgres'), ['-D', data], { cwd: directory, env: environment, stdio: ['ignore', log.fd, log.fd] }); await log.close();
   closed = new Promise((resolve, reject) => { child.once('close', (code, signal) => resolve({ code, signal, at: new Date().toISOString() })); child.once('error', reject); });
-  for (let i = 0; i < 200; i++) { if (await portOpen()) break; if (child.exitCode !== null) throw new Error('fixture_postgres_exited'); await delay(25); }
-  if (!(await portOpen())) throw new Error('fixture_postgres_not_ready');
+  let ready = false;
+  const startupDeadline = Date.now() + 10000;
+  while (Date.now() < startupDeadline) {
+    if (child.exitCode !== null) throw new Error('fixture_postgres_exited');
+    // A listening socket can still return FATAL while PostgreSQL starts up.
+    // Use the official readiness probe before the fixture setup connection.
+    try {
+      await exec(path.join(pgBin, 'pg_isready'), ['-h', sockets, '-p', String(port), '-U', 'fixture_admin', '-d', 'postgres', '-t', '1'], { env: environment, timeout: 1500 });
+      ready = true; break;
+    } catch { await delay(25); }
+  }
+  if (!ready) throw new Error('fixture_postgres_not_ready');
   const adminBase = { host: sockets, port, user: 'fixture_admin', database: 'postgres' }, admin = new Client(adminBase); await admin.connect();
   try { await admin.query('CREATE DATABASE oc_pg_v05'); } finally { await admin.end(); }
   const password = randomBytes(24).toString('hex'), setup = new Client({ ...adminBase, database: 'oc_pg_v05' }); await setup.connect();

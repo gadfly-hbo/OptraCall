@@ -313,3 +313,5 @@ v0.3原规格32,475字节／SHA a126369cb4e852f34776ec12bca00b06c541a2f6595184ea
 ## PostgreSQL 一期交付授权（2026-11-15）
 
 用户本次要求Git／CI／合并和双端正式服务切换。当前按[交付清单](delivery.md)执行；原本地工程结果及未支持能力保持。本次已核原冻结候选零漂移，最新main为c62d682，含后续Case-Star-Map与文档变更，需要在保留feature提交后集成和重新验证；尚未据本授权宣称已经合并或采用。
+
+交付集成增量：已提交feature4d456cb并集成最新main c62d682，Case-Star-Map与db-link各自权限／owner／SDK接缝均保留。新完整检查2604项／2493PASS／0FAIL／111条件SKIP，真实PG25/25、非作者定向38/38及新全Host/Pi/PG/Case联合链通过。PR／实际head CI及双端采用按delivery记录继续，不由本地通过推定。

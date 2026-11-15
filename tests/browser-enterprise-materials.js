@@ -84,10 +84,11 @@ async (page) => {
   await page.getByText('工作稿已保存，尚未因此启用新修订。', { exact: true }).waitFor();
   checks.push('Explicit source-file-only registration remains body-unreadable and enables without invented facts');
 
-  await page.getByRole('button', { name: 'Case 看板', exact: true }).click();
+  await page.getByRole('button', { name: 'Decision Case', exact: true }).click();
   const initialize = page.getByRole('button', { name: '启用本机 Case 记录', exact: true });
   await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === '启用本机 Case 记录' || (button.textContent === '＋ 新建 Case' && !button.disabled)));
   if (await initialize.isVisible()) await initialize.click();
+  await page.getByRole('button', { name: '常规模式', exact: true }).click();
   await page.getByRole('button', { name: '＋ 新建 Case', exact: true }).click();
   const newCase = page.getByRole('dialog', { name: '新建 Case', exact: true });
   await newCase.getByRole('textbox', { name: 'Case 名称 必填', exact: true }).fill('资料引用 Case ' + name);
@@ -171,7 +172,7 @@ async (page) => {
   const linked = await api('/api/cases/' + caseRecord.id + '/projects', 'POST', { expectedRevision: caseRecord.revision, operationId: crypto.randomUUID(), projectId });
   let caseSource = await api('/api/cases/' + caseRecord.id + '/enterprise-materials');
   caseSource = await api('/api/cases/' + caseRecord.id + '/enterprise-materials', 'PUT', { caseRevision: linked.case.revision, expectedRevision: caseSource.revision, materials: caseSource.materials, supplements: [{ text: 'x'.repeat(19995), source: '合成长度边界', scope: '仅本测试', confirmation: '合成' }] });
-  await page.getByRole('button', { name: 'Case 看板', exact: true }).click(); await page.getByRole('button', { name: caseRecord.title, exact: true }).click();
+  await page.getByRole('button', { name: 'Decision Case', exact: true }).click(); await page.getByRole('button', { name: caseRecord.title, exact: true }).click();
   const linkedDialog = page.getByRole('dialog', { name: caseRecord.title, exact: true });
   await linkedDialog.getByRole('button', { name: '关联项目 1', exact: true }).click(); await linkedDialog.getByRole('button', { name: '按此 Case 继续', exact: true }).click();
   await page.getByRole('dialog', { name: '继续任务前核对背景', exact: true }).getByRole('button', { name: '打开任务并使用此背景', exact: true }).click();

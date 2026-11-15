@@ -72,7 +72,7 @@ async (page) => {
     page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().endsWith('/draft') && response.ok()),
     draftInput.fill('页面切换保留的草稿'),
   ]);
-  const expectedNavigation = ['Case 看板', '项目看板', 'Studio', '插件市场'];
+  const expectedNavigation = ['Decision Case', 'Project Map', 'Studio', '插件市场'];
   const navigation = page.getByRole('navigation', { name: '主导航', exact: true });
   assert(await navigation.getByRole('button').count() === expectedNavigation.length, 'The upper navigation must have four entries');
   for (const [index, name] of expectedNavigation.entries()) {
@@ -193,11 +193,12 @@ async (page) => {
   await page.getByRole('button', { name: '返回项目空间', exact: true }).click();
   assert(await draftInput.inputValue() === '页面切换保留的草稿' && await modelCalls() === beforeSettings, 'Search settings preserve the original draft and issue no model requests');
   passed.push('Network search: three tabs, read failure/retry, credential state and direct model settings, keyboard reorder, save failure and recovery, refresh, default restore and independent Fetch');
-  await primary('Case 看板').click(); await title('Case 看板').waitFor();
+  await primary('Decision Case').click(); await title('Decision Case').waitFor();
   await page.getByRole('button', { name: '启用本机 Case 记录', exact: true }).click();
+  await page.getByRole('button', { name: '常规模式', exact: true }).click();
   const boardView = name => page.locator('.case-view-switch').getByRole('button', { name, exact: true });
   await boardView('列表').click();
-  await primary('项目看板').click(); await title('项目看板').waitFor();
+  await primary('Project Map').click(); await title('Project Map').waitFor();
   assert(await boardView('方块').getAttribute('aria-pressed') === 'true', 'Case list preference must not change the project board');
   await openMarket();
   assert(await layout('方块').getAttribute('aria-pressed') === 'true', 'Market defaults to cards independently of the boards');
@@ -243,9 +244,9 @@ async (page) => {
   }
   assert(unexpectedWrites.length === 0 && await modelCalls() === initialModelCalls, 'Changing category/layout must remain read-only: ' + unexpectedWrites.join(', '));
   browsingMarket = false;
-  await primary('项目看板').click(); await title('项目看板').waitFor();
+  await primary('Project Map').click(); await title('Project Map').waitFor();
   assert(await boardView('方块').getAttribute('aria-pressed') === 'true', 'Market list preference must not change the project board');
-  await primary('Case 看板').click(); await title('Case 看板').waitFor();
+  await primary('Decision Case').click(); await title('Decision Case').waitFor();
   assert(await boardView('列表').getAttribute('aria-pressed') === 'true', 'Market display changes must not overwrite the Case board preference');
   await openMarket();
   assert(await layout('列表').getAttribute('aria-pressed') === 'true', 'Reopening the market keeps the shared window preference');
@@ -341,7 +342,7 @@ async (page) => {
   await openCategory('连接器');
   await settingsEntry.click();
   await page.getByRole('button', { name: '返回连接器', exact: true }).click(); await section('连接器').waitFor();
-  await page.getByRole('button', { name: '到项目任务使用商圈数据', exact: true }).click(); await title('项目看板').waitFor();
+  await page.getByRole('button', { name: '到项目任务使用商圈数据', exact: true }).click(); await title('Project Map').waitFor();
   assert(await modelCalls() === initialModelCalls, 'Opening an existing connector destination must not call a model');
   passed.push('Connected decision board card, last workspace return and settings return preserve original task state');
   await mode('分析').click();
