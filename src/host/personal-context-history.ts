@@ -5,7 +5,8 @@ import { createHash } from 'node:crypto';
 import { createNativeSnapshotReadBudget, readNativeSessionSnapshot, type NativeSnapshotReadBudget } from './native-session-snapshot.ts';
 import { parsePersonalContextTarget } from './personal-context-validation.ts';
 import type { PersonalContextTarget } from './personal-context-types.ts';
-import type { PersonalContextDelivery, PersonalContextDeliveryItem } from '../agent/personal-context.ts';
+import type { PersonalContextDelivery, PersonalContextDeliveryItem, PersonalSourceGovernance } from '../agent/personal-context.ts';
+import { sourceGovernanceText } from './personal-source-governance.ts';
 import type { ProjectRecord, TaskRecord } from './project-store.ts';
 
 export type PersonalContextCurrentStatus = { target: PersonalContextTarget; state: 'available' | 'excluded' | 'unknown'; governance?: PersonalContextDeliveryItem['governance']; issue?: string };
@@ -18,12 +19,29 @@ const object = (value: unknown): value is Record<string, unknown> => Boolean(val
 const toolAction = (name: unknown) => name === 'find_personal_context' ? 'find' : name === 'read_personal_context' ? 'read' : undefined;
 const code = (error: unknown) => object(error) && typeof error.code === 'string' ? error.code : 'personal_context_source_unknown';
 const actualText = (value: unknown): string | null => typeof value === 'string' ? value : Array.isArray(value) ? value.filter(part => object(part) && part.type === 'text' && typeof part.text === 'string').map(part => part.text).join('') : null;
+function validSourceGovernance(value: unknown): value is PersonalSourceGovernance {
+  const count = (n: unknown): n is number => Number.isSafeInteger(n) && Number(n) >= 0;
+  if (!object(value) || !count(value.totalReferences) || !value.totalReferences || !count(value.inspectedReferences) || !count(value.uncheckedReferences) || value.inspectedReferences + value.uncheckedReferences !== value.totalReferences || value.sourceBodyAvailability !== 'not-checked' || !Array.isArray(value.items) || value.items.length > 8 || value.items.length > value.inspectedReferences) return false;
+  return value.items.every(item => {
+    if (!object(item) || !count(item.sourceIndex) || !['known', 'no-controls', 'unknown'].includes(String(item.state)) || typeof item.correctionTruncated !== 'boolean' || !(item.correction === null || typeof item.correction === 'string' && item.correction.length <= 4000) || !(item.latestCorrectionOperationId === null || typeof item.latestCorrectionOperationId === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(item.latestCorrectionOperationId))) return false;
+    if (item.state === 'unknown') return ['ledger-unavailable', 'exact-reference-conflict'].includes(String(item.reason)) && item.excluded === null && item.targetRevision === null && item.latestCorrectionOperationId === null && item.correction === null;
+    if (item.reason !== null || !count(item.targetRevision)) return false;
+    if (item.state === 'no-controls') return item.targetRevision === 0 && item.excluded === null && item.latestCorrectionOperationId === null && item.correction === null;
+    return item.targetRevision > 0 && typeof item.excluded === 'boolean' && (!item.excluded || item.correction === null) && (item.correction === null || item.latestCorrectionOperationId !== null);
+  });
+}
 function delivery(value: unknown, action: 'find' | 'read'): PersonalContextDelivery | null {
   if (!object(value) || value.schemaVersion !== 1 || value.type !== 'optracall.personal-context-delivery' || value.action !== action || !Array.isArray(value.items) || value.items.length > 50 || typeof value.partial !== 'boolean' || !(value.continuation === null || typeof value.continuation === 'string') || !Array.isArray(value.issues)) return null;
   try {
+    let sourceReminderSize = 0;
     for (const item of value.items) {
       if (!object(item) || !['catalog', 'content', 'corrections', 'source'].includes(String(item.part)) || !['metadata', 'fragment', 'full'].includes(String(item.extent)) || typeof item.title !== 'string' || !['scope', 'effectiveTime', 'caution'].every(key => item[key] === null || typeof item[key] === 'string') || !Array.isArray(item.limitations) || !item.limitations.every(v => typeof v === 'string') || !object(item.governance) || typeof item.governance.archived !== 'boolean') return null;
       parsePersonalContextTarget(item.target);
+      if (item.sourceGovernance !== undefined) {
+        if (item.part !== 'content' || !object(item.target) || item.target.type !== 'retained' || !validSourceGovernance(item.sourceGovernance)) return null;
+        sourceReminderSize += sourceGovernanceText(item.sourceGovernance).length;
+        if (sourceReminderSize > 4096) return null;
+      }
       if (item.sourceRef !== undefined) learningSourceRef(item.sourceRef);
       if (item.range !== null && (!object(item.range) || !Number.isSafeInteger(item.range.start) || !Number.isSafeInteger(item.range.end) || Number(item.range.start) < 0 || Number(item.range.end) < Number(item.range.start))) return null;
     }

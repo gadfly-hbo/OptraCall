@@ -44,6 +44,7 @@ const projectAgentOwners = new Set([
 const sdkConsumers = new Set(['src/agent/project-session.ts', 'src/agent/runtime.ts', 'src/agent/browser-ui-context.ts']);
 // Exact native tool/resource helpers, without session/runtime constructors.
 const toolSdkConsumers = new Map([
+  ['tests/agent-candidate-sdk-proof.test.ts', new Set(['createAgentSession', 'createExtensionRuntime', 'ModelRuntime', 'SessionManager', 'SettingsManager', 'VERSION'])], // R1 isolated public-SDK persistence/composition probe only; exact symbols, no product owner.
   ['src/agent/tool-context-adapter.ts', new Set()], // R1 public types only; self-owned resource projection, no runtime constructors.
   ['src/agent/model-pack-tools.ts', new Set(['defineTool'])], // MP04/07: declarative tools only, no session constructors.
   ['src/host/native-session-snapshot.ts', new Set(['SessionManager', 'parseSessionEntries'])], // M3.1 guarded inMemory projection only; no open/create.

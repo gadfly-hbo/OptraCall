@@ -164,6 +164,8 @@ Host的`closeAll({ provider?, projectId? })`在注册域间协调，各域权威
 
 ## 个人资料按需复用（M4）
 
+R1 [候选嵌套整改](../openspec/changes/memory-candidate-nested/spec.md)保持 Interface v3、原 project-tasks 普通 unmanaged owner 和 Pi1.4.0。新 `record_agent_candidate` 的直接／合法 nested 调用统一使用公开 `appendCustomEntry` 保存同一 native 中的版本化候选正文，准确引用及 details hash 沿旧合同；工具只返回最小引用／状态。候选本身可用即启用现有 call-local 委托保护，不依赖 M4 等开关；Node AsyncLocalStorage 仅传递原父调用资格，在异步 hook 后子工具执行前再核，不新增生命周期账或会话树。SDK 原对象、参数、nested 元信息和脚本不改写。正文实际文件同步／精确回读成功后，复用同一无正文 receipt 追加确认元数据；reader 要求原 session、同 branch／run 与准确 ref/hash，没有确认仍 UNKNOWN。metadata 只证此前正文已成功核保存，不以自己的 append 返回自证耐久；错误／未知不重追加。候选保存与父任务终态分开，旧 toolResult 候选继续只读解码。安全 native 快照、fork occurrence 去重及原人工控制账复用，不批量迁移或新建正文库；本地证据与限制见[结果](../openspec/changes/memory-candidate-nested/result.md)。
+
 M4 v0.2沿Interface v3业务子集、原project-tasks owner和配置／lease；`ProjectAgentOptions.personalContext`为Host注入的只读find/read callback，不可从业务JSON或worker options自行注册，现有IPC只传启用标记与受限请求／回包。普通unmanaged真实项目任务可自主使用`find_personal_context`／`read_personal_context`，零调用正常；受管ordinary只接用户显式选择的固定文本。冷读、封闭文本和插件资源不因M4得到个人资料工具或材料。
 
 `ProvidedContextInput.personal`可选地携带准备好的文本及最小receipt；文本由原用户请求送SDK，原生`providedContext.personal`仅存schemaVersion／实际items元信息。请求fingerprint包含准确选择与范围，已接受的同ID请求先回读，不按今天源状态或纠正重送。没有第三声明工具、机器成果采用关系或新增持久消息／正文库。

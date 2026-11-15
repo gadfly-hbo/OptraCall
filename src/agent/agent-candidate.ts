@@ -2,8 +2,13 @@ import { Type } from 'typebox';
 import type { LearningSourceRef } from '../host/learning-source-types.ts';
 import { isLearningSourceRef, learningSourceRef } from '../host/learning-source-validation.ts';
 import { canonical, digest } from '../host/project-data-context-io.ts';
+import type { ExactCandidateRef } from '../host/agent-candidate-controls.ts';
 
 export const candidateToolName = 'record_agent_candidate';
+export const candidateCustomType = 'optracall.agent-candidate';
+export const candidateReceiptType = 'optracall.agent-candidate-receipt';
+export type AgentCandidateRecord = { recordVersion: 1; details: AgentCandidateDetails };
+export type AgentCandidateReceipt = { type: typeof candidateReceiptType; recordVersion: 1; status: 'saved'; candidate: ExactCandidateRef };
 export type AgentCandidateContent = { kind: 'knowledge' | 'experience'; title: string; bodyMd: string; aliases: string[]; scope: string | null; caution: string | null };
 export type AgentCandidateInput = { content: AgentCandidateContent; sourceRefs: LearningSourceRef[] };
 export type AgentCandidateDetails = AgentCandidateInput & {
@@ -65,3 +70,21 @@ export function parseAgentCandidateDetails(value: unknown): AgentCandidateDetail
 /** Canonical JSON preserves all text and array order, and sorts only object keys. */
 export const canonicalCandidateJson = canonical;
 export const agentCandidateDetailsSha256 = (details: AgentCandidateDetails): string => digest(canonicalCandidateJson(details));
+
+export function parseAgentCandidateRecord(value: unknown): AgentCandidateRecord {
+  if (!object(value)) throw new Error('invalid_agent_candidate_record');
+  fields(value, ['recordVersion', 'details']);
+  if (value.recordVersion !== 1) throw new Error('invalid_agent_candidate_record_version');
+  return { recordVersion: 1, details: parseAgentCandidateDetails(value.details) };
+}
+
+/** A receipt is not another candidate body or a legacy candidate occurrence. */
+export function isAgentCandidateReceipt(value: unknown): value is AgentCandidateReceipt {
+  if (!object(value)) return false;
+  try {
+    fields(value, ['type', 'recordVersion', 'status', 'candidate']);
+    if (value.type !== candidateReceiptType || value.recordVersion !== 1 || value.status !== 'saved') return false;
+    learningSourceRef({ type: 'agent-candidate', candidate: value.candidate });
+    return true;
+  } catch { return false; }
+}

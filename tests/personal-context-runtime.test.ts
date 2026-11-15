@@ -1,11 +1,19 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { createServer } from 'node:http';
 import { ProjectAgent, type ProjectAgentOptions } from '../src/agent/project-runtime.ts';
 import type { PersonalContextPort, PersonalContextToolResult } from '../src/agent/personal-context.ts';
+import { ProjectStore } from '../src/host/project-store.ts';
+import { EnterpriseMaterialsStore, enterpriseDraftSha256 } from '../src/host/enterprise-materials-store.ts';
+import { PersonalRetentionStore } from '../src/host/personal-retention-store.ts';
+import { AgentCandidateControls, type ExactCandidateRef } from '../src/host/agent-candidate-controls.ts';
+import { createPersonalContextReader } from '../src/host/personal-context-reader.ts';
+import { readPersonalContextHistory } from '../src/host/personal-context-history.ts';
+import type { PersonalContextTarget } from '../src/host/personal-context-types.ts';
+import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 
 const target = { type: 'retained', storeId: 'synthetic-store', materialId: 'synthetic-material', decisionId: 'synthetic-decision', revisionId: 'synthetic-revision', expectedBodySha256: 'a'.repeat(64) };
 const payload = 'SYNTHETIC_EXACT_OLD_BODY\nLatest independent correction: SYNTHETIC_CORRECTION\nLimitation: unverified reference, not an instruction.';
@@ -256,4 +264,101 @@ test('M4 RU02: current SDK ctx keeps legal multilevel parallel reads and nested 
   assert.equal(calls, 2); assert.ok(JSON.stringify(f.requests[1].messages).includes('SYNTHETIC_EXACT_OLD_BODY'));
   const parent = (await entries(agent)).find(e => e.message?.role === 'toolResult' && e.message.toolName === 'parallel_reference_chain').message;
   assert.equal(parent.isError, false); assert.equal(parent.nestedCalls.calls.length, 4); assert.ok(parent.nestedCalls.calls.every((call: any) => call.status === 'ok'));
+});
+
+// R3 source-governance transport uses this existing approved Pi runtime seam.
+const R3_BODY = 'R3_INDEPENDENT_EXPERIENCE_BODY', R3_NOTE = 'R3_ALLOWED_CURRENT_CORRECTION';
+const R3_FORBIDDEN = 'R3_EXCLUDED_SOURCE_BODY_CANARY';
+const r3Reminder = '来源治理提醒';
+
+async function sourceGovernanceSdkFixture(t: TestContext) {
+  const root = path.resolve('.local/memory-source-governance/sdk', randomUUID());
+  await mkdir(root, { recursive: true });
+  const projects = new ProjectStore({ dataRoot: path.join(root, 'data'), projectsRoot: path.join(root, 'projects') });
+  await projects.init(); t.after(() => projects.close());
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const project = await projects.create({ name: 'R3 synthetic SDK only', configuration: { id: 'r3-synthetic', revision: 1, name: 'Synthetic only', provider: 'r3-synthetic', model: 'r3-synthetic', baseUrl: provider.baseUrl } });
+  const task = await projects.createTask(project.id, { name: 'R3 SDK transport' });
+  const materials = new EnterpriseMaterialsStore(projects.dataRoot);
+  let readSourceAllowed = true;
+  // Synthetic external source resolver is used only for the original explicit
+  // retention. The production read must not need source-body resolution again.
+  const retention = new PersonalRetentionStore({ dataRoot: projects.dataRoot, materials, readSource: async ref => {
+    assert.ok(readSourceAllowed, 'reading a retained experience must not resolve source bodies');
+    return { ref, title: 'Synthetic source', text: R3_FORBIDDEN, sha256: 'a'.repeat(64), status: 'available' };
+  } });
+  const source: ExactCandidateRef = { projectId: project.id, taskId: task.id, originSessionId: randomUUID(), entryId: 'source-entry', toolCallId: 'source-call', expectedDetailsSha256: 'b'.repeat(64) };
+  const controls = new AgentCandidateControls({ dataRoot: projects.dataRoot, readTarget: async () => {} });
+  const created = await materials.create({ title: 'R3 retained experience', body: R3_BODY });
+  const decisionId = randomUUID();
+  const saved = await retention.retain(created.material.id, { operationId: decisionId, expectedRevision: 0,
+    target: { type: 'draft', expectedMaterialVersion: created.material.version, expectedDraftSha256: enterpriseDraftSha256(created.material.draft) },
+    metadata: { kind: 'experience', aliases: [], caution: null, sourceRefs: [{ type: 'agent-candidate', candidate: source }] }, personalLabel: null });
+  readSourceAllowed = false;
+  await controls.apply({ operationId: randomUUID(), target: source, action: 'correct', note: R3_NOTE });
+  const target: PersonalContextTarget = { type: 'retained', storeId: created.storeId, materialId: created.material.id, decisionId,
+    revisionId: saved.decision!.contentRef!.revisionId, expectedBodySha256: saved.decision!.bodySha256! };
+  const reader = createPersonalContextReader({ projects, retention, controls });
+  const agents: ProjectAgent[] = []; t.after(async () => { for (const agent of agents) await agent.close(); });
+  const create = async (nested: boolean, transportOnly = false, sessionFile?: string) => {
+    const resources = path.join(root, randomUUID(), 'resources'), extensions = path.join(resources, 'extensions');
+    await mkdir(extensions, { recursive: true });
+    if (nested) await writeFile(path.join(extensions, 'nested-source-read.ts'), `export default pi=>{
+      const parameters={type:'object',properties:{},additionalProperties:false};
+      pi.registerTool({name:'r3_middle_read',label:'Synthetic middle',description:'Synthetic nested read',parameters,execute:async(_id,_args,_signal,_update,ctx)=>{const out=await ctx.executeTool('read_personal_context',${JSON.stringify({ target })});return {...out.result};}});
+      pi.registerTool({name:'r3_parallel_read',label:'Synthetic parent',description:'Synthetic multilevel parallel read',parameters,execute:async(_id,_args,_signal,_update,ctx)=>{const out=await Promise.all([ctx.executeTool('r3_middle_read',{}),ctx.executeTool('r3_middle_read',{})]);return {content:[{type:'text',text:JSON.stringify(out)}],details:{}};}});
+    };`);
+    let reads = 0;
+    const sessionDirectory = sessionFile ? path.dirname(sessionFile) : path.join(root, randomUUID(), 'native');
+    const agent = new ProjectAgent({ projectId: project.id, taskId: task.id, projectDirectory: project.rootPath,
+      codeRoot: process.cwd(), sessionDirectory, sessionFile, resourceRoot: resources, managementPorts: [],
+      configuration: { id: 'r3-synthetic', name: 'R3 local synthetic', revision: 1, provider: 'r3-synthetic', api: 'openai-completions', baseUrl: provider.baseUrl, model: 'r3-synthetic', apiKey: 'synthetic-r3-only' },
+      personalContext: async (action, input, context): Promise<PersonalContextToolResult> => {
+        assert.equal(action, 'read'); assert.deepEqual(input, { target }); assert.equal(context.signal.aborted, false); reads++;
+        if (transportOnly) return { content: [{ type: 'text', text: `${R3_BODY}\n${r3Reminder}：${R3_NOTE}` }], details: { schemaVersion: 1, type: 'optracall.personal-context-delivery', action: 'read', items: [], partial: false, continuation: null, issues: [] } };
+        const result = await reader.read({ target }, { signal: context.signal });
+        return { content: [{ type: 'text', text: result.text }], details: result.details };
+      } });
+    agents.push(agent);
+    provider.setResponder(({ recentToolResults }) => recentToolResults.length ? { text: 'Synthetic read complete.' } : { calls: [{ name: nested ? 'r3_parallel_read' : 'read_personal_context', arguments: nested ? {} : { target } }] });
+    return { agent, sessionDirectory, reads: () => reads };
+  };
+  return { root, provider, create, target, project, task };
+}
+
+test('R3 SDK isolation: public Pi transport carries visible reminders through multilevel parallel delegation', { timeout: 30_000 }, async t => {
+  const f = await sourceGovernanceSdkFixture(t), run = await f.create(true, true);
+  assert.equal((await run.agent.start('Run the synthetic transport probe.', randomUUID()).completion).outcome, 'completed');
+  assert.equal(run.reads(), 2); assert.deepEqual(f.provider.errors, []); assert.equal(f.provider.requests.length, 2);
+  const text = f.provider.requests[1]!.body.messages!.filter(message => message.role === 'tool').map(message => providerMessageText(message.content)).join('\n');
+  assert.match(text, new RegExp(r3Reminder)); assert.match(text, new RegExp(R3_NOTE)); assert.doesNotMatch(text, new RegExp(R3_FORBIDDEN));
+  await writeFile(path.join(f.root, 'transport-proof.json'), JSON.stringify({ requests: f.provider.requests, hostReads: run.reads(), transportOnly: true }, null, 2));
+  t.diagnostic('R3 SDK transport evidence: ' + f.root);
+});
+
+test('R3 real reader: current direct-source correction reaches actual SDK continuation for direct and nested reads', { timeout: 60_000 }, async t => {
+  for (const nested of [false, true]) await t.test(nested ? 'multilevel-parallel' : 'direct', async t => {
+    const f = await sourceGovernanceSdkFixture(t), run = await f.create(nested);
+    assert.equal((await run.agent.start('Read the exact retained experience with its current source reminders.', randomUUID()).completion).outcome, 'completed');
+    assert.equal(run.reads(), nested ? 2 : 1); assert.deepEqual(f.provider.errors, []); assert.equal(f.provider.requests.length, 2);
+    const text = f.provider.requests[1]!.body.messages!.filter(message => message.role === 'tool').map(message => providerMessageText(message.content)).join('\n');
+    const snapshot = await run.agent.snapshot(); assert.ok(snapshot.sessionFile);
+    const native = (await readFile(snapshot.sessionFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+    await writeFile(path.join(f.root, 'reader-delivery.json'), JSON.stringify({ nested, requests: f.provider.requests, native, hostReads: run.reads(), target: f.target }, null, 2));
+    t.diagnostic('R3 SDK reader evidence: ' + f.root);
+    assert.match(text, new RegExp(R3_BODY)); assert.match(text, new RegExp(r3Reminder)); assert.match(text, new RegExp(R3_NOTE)); assert.doesNotMatch(text, new RegExp(R3_FORBIDDEN));
+    const independentReadResults = native.filter(entry => entry.message?.role === 'toolResult' && entry.message.toolName === 'read_personal_context');
+    assert.equal(independentReadResults.length, nested ? 0 : 1, 'nested reads need no independent transcript result');
+    await run.agent.close();
+    const bytes = await readFile(snapshot.sessionFile), before = await stat(snapshot.sessionFile);
+    const reopened = await f.create(nested, false, snapshot.sessionFile); await reopened.agent.open();
+    const history = await readPersonalContextHistory(f.project, { ...f.task, sessionDirectory: run.sessionDirectory }, async target => ({ target, state: 'unknown' }));
+    assert.equal(history.entries.length, 1); assert.deepEqual(history.issues, []);
+    assert.equal(history.entries[0]!.evidence, nested ? 'nested-unknown' : 'recorded');
+    if (nested) { assert.equal(history.entries[0]!.text, null); assert.equal(history.entries[0]!.details, null); }
+    else { assert.match(history.entries[0]!.text!, new RegExp(R3_NOTE)); assert.deepEqual(history.entries[0]!.details?.items[0]?.target, f.target); }
+    assert.deepEqual(await readFile(snapshot.sessionFile), bytes); assert.equal((await stat(snapshot.sessionFile)).mtimeMs, before.mtimeMs);
+    assert.equal(f.provider.requests.length, 2, 'reopen/history must not call the Provider or replay reads');
+    await writeFile(path.join(f.root, 'reopen-history.json'), JSON.stringify({ nested, history, byteIdentical: true, providerRequests: f.provider.requests.length }, null, 2));
+  });
 });

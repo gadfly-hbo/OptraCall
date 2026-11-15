@@ -3,12 +3,22 @@ import type { PersonalContextTarget, PersonalContextRange } from '../host/person
 import type { LearningSourceRef } from '../host/learning-source-types.ts';
 
 /** Business metadata only; actual visible text is owned by the Pi message. */
+export type PersonalSourceGovernance = {
+  totalReferences: number; inspectedReferences: number; uncheckedReferences: number;
+  sourceBodyAvailability: 'not-checked';
+  items: {
+    sourceIndex: number; state: 'known' | 'no-controls' | 'unknown'; excluded: boolean | null;
+    reason: 'ledger-unavailable' | 'exact-reference-conflict' | null;
+    targetRevision: number | null; latestCorrectionOperationId: string | null;
+    correction: string | null; correctionTruncated: boolean;
+  }[];
+};
 export type PersonalContextDeliveryItem = {
   target: PersonalContextTarget; part: 'catalog' | 'content' | 'corrections' | 'source';
   extent: 'metadata' | 'fragment' | 'full'; range: PersonalContextRange | null;
   title: string; scope: string | null; effectiveTime: string | null; caution: string | null;
   governance: { archived: boolean; enterpriseEnabled: boolean | null; sourceProjectArchived: boolean | null; targetRevision: number | null; latestCorrectionOperationId: string | null };
-  limitations: string[]; sourceRef?: LearningSourceRef;
+  limitations: string[]; sourceRef?: LearningSourceRef; sourceGovernance?: PersonalSourceGovernance;
 };
 export type PersonalContextDelivery = {
   schemaVersion: 1; type: 'optracall.personal-context-delivery'; action: 'find' | 'read';

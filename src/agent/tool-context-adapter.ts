@@ -1,4 +1,5 @@
 import type { Extension, ExtensionToolContext, LoadExtensionsResult, RegisteredCommand, RegisteredTool, ToolDefinition } from './sdk.ts';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 /** Own descriptors. No field allowlist or SDK registration writes. */
 function ownCopy<T extends object>(source: T, replacements: PropertyDescriptorMap = {}): T {
@@ -29,6 +30,9 @@ class RegistrationView<K, V> extends Map<K, V> {
 /** Bind to one real invocation using the existing owner/run/session lifecycle.
  * This supplies no registry, scheduling, analysis steps or persistent state. */
 export function createToolContextAdapter(qualify: (ctx: ExtensionToolContext, signal: AbortSignal | undefined) => () => boolean) {
+  // Carry the existing parent's qualification across SDK async hooks. This is
+  // call-local context, not an ID-derived tree or a second lifecycle registry.
+  const parentQualification = new AsyncLocalStorage<() => boolean>();
   function tool<T extends ToolDefinition<any, any, any>>(original: T): T {
     // These three hooks are invoked as definition methods by SDK 1.4.0.
     // Callbacks that Pi forwards (prepareArguments/reachesTools etc.) stay raw.
@@ -42,8 +46,9 @@ export function createToolContextAdapter(qualify: (ctx: ExtensionToolContext, si
     const execute: T['execute'] = async (toolCallId, parameters, signal, update, ctx) => {
       if (!ctx) return original.execute.call(original, toolCallId, parameters, signal, update, ctx);
       const isCurrent = qualify(ctx, signal);
+      const parentAvailable = parentQualification.getStore();
       let active = true;
-      const available = () => active && isCurrent();
+      const available = () => active && (!parentAvailable || parentAvailable()) && isCurrent();
       const denied = (name: string, args: unknown) => ({
         toolCall: { type: 'toolCall' as const, id: `${toolCallId}/0`, name, arguments: args as Record<string, unknown> },
         result: { content: [{ type: 'text' as const, text: 'personal_context_run_unavailable' }], details: {} }, isError: true,
@@ -53,11 +58,14 @@ export function createToolContextAdapter(qualify: (ctx: ExtensionToolContext, si
         ...Object.getOwnPropertyDescriptors(ctx),
         executeTool: { value: async (name: string, args: unknown, options?: Parameters<ExtensionToolContext['executeTool']>[2]) => {
           if (!available()) return denied(name, args);
-          const result = await ctx.executeTool(name, args, options);
+          const result = await parentQualification.run(available, () => ctx.executeTool(name, args, options));
           return available() ? result : denied(name, args);
         } },
       });
-      try { return await original.execute.call(original, toolCallId, parameters, signal, update, scoped); }
+      try {
+        if (!available()) throw new Error('personal_context_run_unavailable');
+        return await original.execute.call(original, toolCallId, parameters, signal, update, scoped);
+      }
       finally { active = false; }
     };
     const descriptor = Object.getOwnPropertyDescriptor(original, 'execute');
