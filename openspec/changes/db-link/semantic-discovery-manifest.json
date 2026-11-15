@@ -1,0 +1,17 @@
+{
+  "version": "semantic-discovery-v0.1-revision2",
+  "sourceHead": "ef3e7d0b8703a6e22023e8099a56c542d484a69d",
+  "scope": "design-addendum-review-only; not user approved; no implementation",
+  "files": [
+    {
+      "path": "openspec/changes/db-link/semantic-discovery.md",
+      "bytes": 22425,
+      "sha256": "dd55b553ea4bbc3e88a871e333c8b580efa1dc46bdae4ee0a2b5cb295f0e4e8a"
+    },
+    {
+      "path": "openspec/changes/db-link/semantic-discovery-decision.json",
+      "bytes": 876,
+      "sha256": "55b8f9cba219c35363ca0c9f561d8bc5be3cf1f0d663fca0649c0f6847985f1c"
+    }
+  ]
+}

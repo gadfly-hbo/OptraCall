@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-14",
+  "userStatement": "先不引入 auto-ontology，保留 MySQL／PostgreSQL 成熟驱动薄适配。把有价值的元数据发现、关系推断和语义候选经验补进 db-link 方案，明确与现有 Semantica、数据说明和 Studio 的分工，按四原则复核后交我确认，暂不开发。",
+  "confirmedDirection": {
+    "autoOntology": "Do not introduce at this stage",
+    "databaseTypes": ["MySQL", "PostgreSQL"],
+    "approach": "Mature official drivers with thin OptraCall adaptation"
+  },
+  "authorizedScope": "Prepare and review a design addendum for metadata discovery, relationship inference and semantic candidates; no implementation.",
+  "pendingConfirmation": [
+    "semantic-discovery.md design addendum",
+    "previous exact driver version and detailed contract proposal; not approved implicitly by this direction"
+  ]
+}

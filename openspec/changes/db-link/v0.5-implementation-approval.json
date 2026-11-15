@@ -1,0 +1,28 @@
+{
+  "date": "2026-11-15",
+  "userStatement": "spec v0.5 通过，按四原则和工程规范继续开发 db-link。先以 PostgreSQL 验证本地小库和企业分析账号，覆盖视图／RLS、大字段按需及停止／UNKNOWN。累计预算不设上限，不设SQL固定纠错次数，不扩权、不引入容器或代理；关键验证通过后再开放查询。",
+  "sourceHead": "ef3e7d0b8703a6e22023e8099a56c542d484a69d",
+  "branch": "OC｜db-link",
+  "approvedFiles": [
+    {
+      "path": "openspec/changes/db-link/spec.v0.5.md",
+      "bytes": 36683,
+      "sha256": "07576a28dcd97d26d2a28a6d846b7e614572eae30f5e2579d90e0046ff2ca76e"
+    },
+    {
+      "path": "openspec/changes/db-link/spec-v0.5-manifest.json",
+      "bytes": 8240,
+      "sha256": "e5c71f8c8e08ad086ee0cec565d21a4b319db8fcdfc71304e594638a756de246"
+    }
+  ],
+  "scope": "Implement approved v0.5 through existing public Host/driver/Pi seams; isolated synthetic PostgreSQL/local Provider only; keep queries closed until representative critical acceptance and independent review. No credentials expansion, SDK/dependency upgrade/modification, containers/proxy, real business/model/device/service/Git delivery inferred.",
+  "publicSeams": [
+    "validateDbLinkSql / approved public query admission",
+    "createDbLinkDriver.catalog/openQuery with official pg/cursor",
+    "createDbLinkHost public routes/owner port/results",
+    "ProjectAgent original Pi tool loop using isolated synthetic Provider",
+    "existing data-context/Studio/review file-set ports"
+  ],
+  "seamAuthorization": "Approved v0.5 A05-01..09 and T01..16 plus current development instruction authorize these existing seams; no per-slice reapproval required.",
+  "evidenceRoot": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation"
+}

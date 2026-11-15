@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-13",
+  "userStatement": "spec 和 UI Demo 通过，接下来讨论首批支持的数据库类型和连接组件选型，按四原则优先评估成熟方案，暂不开发。",
+  "approvedVersion": "v0.1",
+  "approvedManifestSha256": "e71840d7ebbc7fa0554bb89bcf75f6bdd1e5227d551702ae4dc1b28faae55ad1",
+  "approvedFiles": [
+    {
+      "path": "openspec/changes/db-link/spec.md",
+      "bytes": 19771,
+      "sha256": "73ddfa4457db42cc16744483c129a2c2b74223d37f3e5304b73c7e5aaabeec74"
+    },
+    {
+      "path": "openspec/changes/db-link/ui-spec.md",
+      "bytes": 7796,
+      "sha256": "e4aa9c8a7d3c524f699b2a91c0dc2e18cbad9b0037525fb1d57e7860b37a64b2"
+    },
+    {
+      "path": "openspec/changes/db-link/interaction-states.md",
+      "bytes": 5094,
+      "sha256": "182bbf9995b4c3711bcfe6dc7596bf1f251babbc9c84b247b2bc3fede65d9e34"
+    },
+    {
+      "path": "docs/prototypes/db-link-ui-demo.html",
+      "bytes": 75334,
+      "sha256": "364d8e942a0f5e49724cd21c4bb386fc5afee16d6e6ff1f0c7d1fbcc2ab29337"
+    }
+  ],
+  "scope": "Spec and UI design approval only; database/component selection discussion authorized; implementation not authorized."
+}

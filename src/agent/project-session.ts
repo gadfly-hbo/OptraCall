@@ -30,7 +30,8 @@ import { createModelPackTools } from './model-pack-tools.ts';
 import { createToolContextAdapter } from './tool-context-adapter.ts';
 import { createForegroundChildren } from './foreground-children.ts';
 import { PROJECT_FILE_TOOLS, type ProjectFileToolResult } from './project-files.ts';
-import { reportCalculationTool, reportCalculationToolName, reportCalculationSystemPrompt, reportCalculationGuidance, readReportCalculationRunReceipt, type ReportCalculationSelection, type ReportCalculationRunReceipt } from './report-calculation-review.ts';
+import { createDbLinkTools, DB_LINK_TOOL_NAMES, type DbLinkToolResult, type DbLinkToolName } from './db-link-tools.ts';
+import { reportCalculationTool, reportCalculationToolName, reportCalculationSystemPrompt, reportCalculationBundleSystemPrompt, reportCalculationBundleToolName, reportCalculationBundleReadParameters, parseReportCalculationBundleRead, reportCalculationGuidance, readReportCalculationRunReceipt, type ReportCalculationSelection, type ReportCalculationRunReceipt } from './report-calculation-review.ts';
 
 type Outcome = 'completed' | 'cancelled' | 'failed';
 type LastRun = { requestId: string; outcome?: Outcome; diagnostic?: RunDiagnostic; reportCalculationReview?: ReportCalculationRunReceipt };
@@ -334,6 +335,23 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     const graphReader = o.semanticContextReadEnabled && !o.workspace && (!o.protectedExecution || ordinaryManaged());
     const studioReader = o.studioReadEnabled && !o.workspace && (!o.protectedExecution || ordinaryManaged());
     const studioWriter = !o.protectedExecution && o.studioEnabled;
+    const dbLinkAvailable = Boolean(o.dbLinkEnabled && !o.workspace && (!o.protectedExecution || ordinaryManaged()) && o.projectId && o.taskId);
+    const createBoundDbLinkTools = (boundManager: SessionManager, allowed: readonly DbLinkToolName[] = DB_LINK_TOOL_NAMES,
+      qualify?: (ctx: ExtensionToolContext, signal: AbortSignal) => () => boolean, namespace = '') => {
+      const boundSessionId = boundManager.getSessionId();
+      return dbLinkAvailable ? createDbLinkTools(async (action, input, signal, toolCallId, rawContext) => {
+        const originalRun = run, parent = session, context = rawContext as ExtensionToolContext;
+        if (!parent) throw new Error('db_link_run_unavailable');
+        const qualified = qualify ? qualify(context, signal) : qualifyToolInvocation(parent, context, signal);
+        const assertCurrent = () => {
+          if (!qualified() || !originalRun || run !== originalRun || originalRun.kind !== 'prompt' || manager !== boundManager || parent.sessionManager !== boundManager || boundManager.getSessionId() !== boundSessionId) throw new Error('db_link_run_unavailable');
+        };
+        assertCurrent();
+        const value = await requestHostTool({ feature: 'db-link', action, input, toolCallId: namespace ? `${namespace}/${toolCallId}` : toolCallId, requestId: originalRun!.id, sessionId: boundSessionId }, signal, 'db_link_run_unavailable') as DbLinkToolResult;
+        assertCurrent();
+        return value;
+      }, allowed) : [];
+    };
     const createPersonalContextTools = (boundManager: SessionManager) => {
       const boundSessionId = boundManager.getSessionId();
       if (o.workspace && !sourceReader && !semanticSourceReader || o.protectedExecution && !graphReader && !studioReader || !o.projectId || !o.taskId && !semanticSourceReader) return [];
@@ -448,18 +466,30 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     async function runSubagent(parent: AgentSession, role: SubagentRole, task: string, signal?: AbortSignal) {
       const nativeNames = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls', 'powershell', 'codemode', 'tool_search'];
       const webTools = webSearch ? parent.getActiveToolNames().filter((name): name is WebSearchToolName => WEB_SEARCH_TOOL_NAMES.some(tool => tool === name)) : [];
-      const inherited = [...parent.getActiveToolNames().filter(name => nativeNames.includes(name)), ...webTools, ...(!webSearch && nativeSearchMode(o.configuration) ? ['web_search'] : [])];
+      const dbTools = dbLinkAvailable ? parent.getActiveToolNames().filter((name): name is DbLinkToolName => DB_LINK_TOOL_NAMES.some(tool => tool === name)) : [];
+      const inherited = [...parent.getActiveToolNames().filter(name => nativeNames.includes(name)), ...webTools, ...dbTools, ...(!webSearch && nativeSearchMode(o.configuration) ? ['web_search'] : [])];
       if (role.tools?.some(name => !inherited.includes(name))) throw new Error('subagent_tool_not_permitted');
       const allowed = role.tools ?? inherited;
       const childWebTools = webTools.filter(name => allowed.includes(name));
+      const childDbTools = dbTools.filter(name => allowed.includes(name));
       const clientTools = webSearch ? allowed : allowed.filter(name => name !== 'web_search');
       let childSearchFailure: string | undefined;
       const namespace = `subagent-${randomUUID()}`;
-      const customTools = protectedTools?.narrow(clientTools.filter(name => name !== 'tool_search' && !childWebTools.some(tool => tool === name)), namespace);
+      const customTools = protectedTools?.narrow(clientTools.filter(name => name !== 'tool_search' && !childWebTools.some(tool => tool === name) && !childDbTools.some(tool => tool === name)), namespace);
       return runForegroundChild(role.name, task, signal, () => createAgentSessionRuntime(async () => {
+        const parentRun = run;
+        let childSession: AgentSession;
+        const qualifyChild = (ctx: ExtensionToolContext, toolSignal?: AbortSignal) => {
+          const target = childSession, childManager = target?.sessionManager, sdkSignal = target?.agent.signal;
+          return () => Boolean(target && parentRun && run === parentRun && !parentRun.cancelled && !closing && !signal?.aborted && !toolSignal?.aborted && session === parent && manager === parent.sessionManager &&
+            [...children].some(child => child.session === target) && ctx?.sessionManager === childManager && target.sessionManager === childManager && sdkSignal && target.agent.signal === sdkSignal && !sdkSignal.aborted);
+        };
+        const contextAdapter = childDbTools.length ? createToolContextAdapter(qualifyChild) : undefined;
+        const databaseTools = createBoundDbLinkTools(parent.sessionManager, childDbTools, qualifyChild, namespace);
+        const childCustomTools = [...(customTools ?? []), ...(contextAdapter ? databaseTools.map(tool => contextAdapter.tool(tool)) : databaseTools)];
         const services = await createAgentSessionServices({ cwd, agentDir: o.resourceRoot, modelRuntime: models,
           settingsManager: SettingsManager.inMemory(parent.settingsManager.getSettings()),
-          resourceLoaderOptions: { noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
+          resourceLoaderOptions: { ...(contextAdapter ? { extensionsOverride: contextAdapter.extensionsOverride } : {}), noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
             disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
             extensionFactories: [...(webSearch ? [createWebSearchExtension(webSearch, childWebTools)] : allowed.includes('web_search') ? [createNativeSearchExtension(o.configuration, code => { childSearchFailure = code; })] : []), (pi => { pi.on('message_end', event => ({ message: redact(event.message) })); }) as ExtensionFactory, ...(!protectedTools && allowed.includes('codemode') ? [createCodemodeExtension({ mode: 'on' })] : []), ...(allowed.includes('tool_search') ? [createToolSearchExtension()] : [])],
             systemPrompt: parent.systemPrompt,
@@ -467,9 +497,10 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           } });
         const created = await createAgentSessionFromServices({ services, sessionManager: SessionManager.inMemory(cwd), model,
           thinkingLevel: parent.thinkingLevel, tools: clientTools, excludeTools: nativeNames.filter(name => !allowed.includes(name)),
-          ...(customTools ? { customTools } : {}),
+          ...(customTools || childCustomTools.length ? { customTools: childCustomTools } : {}),
         });
         if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
+        childSession = created.session;
         return { ...created, services, diagnostics: services.diagnostics };
       }, { cwd, agentDir: o.resourceRoot, sessionManager: SessionManager.inMemory(cwd) }), () => {
         if (childSearchFailure) throw new Error(childSearchFailure);
@@ -498,9 +529,9 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           current.reportReview = { contract: 'foreground-report-calculation-v1', requestId: current.id, toolCallId, outcome: 'unknown' };
           let stage: 'prepare' | 'child' | 'validate' = 'prepare';
           try {
-            const call = (action: 'prepare' | 'validate', input: Record<string, unknown>) => {
+            const call = (action: 'prepare' | 'validate' | 'read-db-bundle', input: Record<string, unknown>, readSignal = signal) => {
               assertCurrent();
-              return requestHostTool({ feature: 'report-calculation-review', action, input, toolCallId, requestId: current.id, sessionId }, signal, 'report_calculation_run_unavailable') as Promise<{ prompt?: string; receipt: unknown }>;
+              return requestHostTool({ feature: 'report-calculation-review', action, input, toolCallId, requestId: current.id, sessionId }, readSignal, 'report_calculation_run_unavailable') as Promise<{ prompt?: string; receipt: unknown; hasDbBundleReader?: boolean; value?: unknown }>;
             };
             const prepared = await call('prepare', selection as ReportCalculationSelection);
             assertCurrent();
@@ -514,17 +545,46 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
             mkdirSync(isolatedCwd, { recursive: true, mode: 0o700 });
             mkdirSync(isolatedResources, { mode: 0o700 });
             const outcome = await runForegroundChild('report-calculation-review', prepared.prompt, signal, () => createAgentSessionRuntime(async () => {
+              let reviewer: AgentSession | undefined;
+              const bundleReader = prepared.hasDbBundleReader === true ? defineTool({
+                name: reportCalculationBundleToolName, label: '读取固定数据库结果',
+                description: 'Read only a selected fixed DB-result bundle by logical selector and bounded row range, or exact base64 bytes of one fixed chunk. This does not read the live database or reveal author SQL. Follow continuation and state unread scope; fixed, provided, read and calculated coverage are different.',
+                parameters: reportCalculationBundleReadParameters,
+                async execute(_readerCallId, input, readerSignal, _update, readerContext) {
+                  assertCurrent();
+                  if (!reviewer || !readerSignal || !readerContext || readerContext.sessionManager !== reviewer.sessionManager || !reviewer.agent.signal || reviewer.agent.signal.aborted) throw new Error('report_calculation_run_unavailable');
+                  const sdkSignal = reviewer.agent.signal, manager = reviewer.sessionManager;
+                  const assertReaderCurrent = () => { assertCurrent(); readerSignal.throwIfAborted(); if (!reviewer || reviewer.sessionManager !== manager || reviewer.agent.signal !== sdkSignal || sdkSignal.aborted) throw new Error('report_calculation_run_unavailable'); };
+                  const range = parseReportCalculationBundleRead(input);
+                  const response = await call('read-db-bundle', range, AbortSignal.any([signal, readerSignal]));
+                  assertReaderCurrent();
+                  const value = redact(response.value), text = JSON.stringify(value);
+                  if (typeof text !== 'string' || Buffer.byteLength(text) > (range.maxBytes ?? 20_000)) throw new Error('report_calculation_materials_too_large');
+                  const details = { type: 'optracall.report-calculation-bundle-read', claim: 'native-child-tool-result', selector: range.selector, range,
+                    bytes: Buffer.byteLength(text), sha256: createHash('sha256').update(text).digest('hex'),
+                    coverage: value && typeof value === 'object' && 'coverage' in value ? value.coverage : null };
+                  return { content: [{ type: 'text' as const, text }], details };
+                },
+              }) : undefined;
               const services = await createAgentSessionServices({ cwd: isolatedCwd, agentDir: isolatedResources, modelRuntime: models,
                 settingsManager: SettingsManager.inMemory({ retry: { enabled: false } }),
                 resourceLoaderOptions: { noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
                   disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
-                  extensionFactories: [(pi => { pi.on('message_end', event => ({ message: redact(event.message) })); }) as ExtensionFactory],
-                  systemPrompt: reportCalculationSystemPrompt, appendSystemPrompt: [],
+                  extensionFactories: [(pi => { pi.on('message_end', event => {
+                    if (event.message.role === 'toolResult' && event.message.toolName === reportCalculationBundleToolName && !event.message.isError) {
+                      assertCurrent();
+                      nativeManager.appendCustomEntry('optracall.report-calculation-bundle-read', redact({ version: 1, requestId: current.id, toolCallId, sessionId, childToolCallId: event.message.toolCallId, ...event.message.details as object }));
+                    }
+                    return { message: redact(event.message) };
+                  }); }) as ExtensionFactory],
+                  systemPrompt: bundleReader ? reportCalculationBundleSystemPrompt : reportCalculationSystemPrompt, appendSystemPrompt: [],
                 } });
               const created = await createAgentSessionFromServices({ services, sessionManager: SessionManager.inMemory(isolatedCwd), model,
-                thinkingLevel: parent.thinkingLevel, tools: [], noTools: 'all', excludeTools: ['*'],
+                thinkingLevel: parent.thinkingLevel, noTools: 'all',
+                ...(bundleReader ? { customTools: [bundleReader], tools: [reportCalculationBundleToolName] } : { tools: [], excludeTools: ['*'] }),
               });
               if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
+              reviewer = created.session;
               return { ...created, services, diagnostics: services.diagnostics };
             }, { cwd: isolatedCwd, agentDir: isolatedResources, sessionManager: SessionManager.inMemory(isolatedCwd) }));
             assertCurrent();
@@ -550,12 +610,12 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         },
       });
     }
-    const scopeToolContexts = Boolean(o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
+    const scopeToolContexts = Boolean(dbLinkAvailable || o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
       let parent: AgentSession;
       const contextAdapter = scopeToolContexts ? createToolContextAdapter((ctx, signal) => qualifyToolInvocation(parent, ctx, signal)) : undefined;
       const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
-      const customTools = [...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager), ...(o.reportCalculationReviewEnabled ? [createReportReviewTool(() => parent)] : [])];
+      const customTools = [...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager), ...createBoundDbLinkTools(sessionManager), ...(o.reportCalculationReviewEnabled ? [createReportReviewTool(() => parent)] : [])];
       const delegation = !fixedInput() && !o.workspace && (!o.protectedExecution || ordinaryManaged());
       const searchGuidance: ExtensionFactory = pi => {
         pi.on('before_agent_start', event => {
@@ -591,7 +651,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           return enabled ? { systemPrompt: event.systemPrompt + '\n' + reportCalculationGuidance } : undefined;
         });
       }] : [];
-      const projectInstructions = () => [projectSystemPrompt(targetCwd, path.join(o.projectDirectory!, '060_reports')), OUTPUT_EVIDENCE_GUIDANCE];
+      const projectInstructions = () => [projectSystemPrompt(targetCwd, path.join(o.projectDirectory!, '060_reports'), dbLinkAvailable), OUTPUT_EVIDENCE_GUIDANCE];
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: { ...(contextAdapter ? { extensionsOverride: contextAdapter.extensionsOverride } : {}), ...(fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],

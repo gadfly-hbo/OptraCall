@@ -1,0 +1,25 @@
+{
+  "version": "db-link-spec-v0.2",
+  "sourceHead": "ef3e7d0b8703a6e22023e8099a56c542d484a69d",
+  "date": "2026-11-14",
+  "scope": "metadata-incomplete handling specification only; pending user approval; no implementation",
+  "userStatement": "把元数据不完备时的处理方式也补进 db-link spec：Agent 在授权内自主发现、核查并继续可做的分析，不强制先补齐元数据；关键缺口和结论限制明确说明。按四原则复核后交我确认，暂不开发。",
+  "files": [
+    {
+      "path": "openspec/changes/db-link/spec.md",
+      "bytes": 26969,
+      "sha256": "1c22efd9db47f389aebbbddff25234ea6666165926ab7854ff66aed850dff6a3"
+    }
+  ],
+  "previousApproval": {
+    "record": "openspec/changes/db-link/approval.json",
+    "recordSha256": "aca02ca7d7faa90b3748068199c0e41c1b36782ed47c877726b1b80ed634c1b5",
+    "manifest": "openspec/changes/db-link/candidate-manifest.json",
+    "manifestSha256": "e71840d7ebbc7fa0554bb89bcf75f6bdd1e5227d551702ae4dc1b28faae55ad1",
+    "approvedSpecPath": "openspec/changes/db-link/spec.md",
+    "preservedAt": "openspec/changes/db-link/spec.approved-v0.1.md",
+    "bytes": 19771,
+    "sha256": "73ddfa4457db42cc16744483c129a2c2b74223d37f3e5304b73c7e5aaabeec74",
+    "note": "Historical approval applies to preserved v0.1 bytes; current spec.md v0.2 is not approved."
+  }
+}

@@ -4,6 +4,7 @@ import type { ClientProject, FileNode, PublicModelConfiguration } from './projec
 import { copyToClean, downloadFile, HostRequestError, projectFiles, uploadFile } from './runtime-client.ts';
 import type { ProjectDataContextSelection } from '../project-data-context-types.ts';
 import { ProjectDataContextPanel } from './ProjectDataContextPanel.tsx';
+import { DbLinkProjectPanel } from './DbLinkProjectPanel.tsx';
 import type { PersonalRetentionEntry } from './personal-retention-client.ts';
 import { isProjectUploadName, PROJECT_UPLOAD_ACCEPT, PROJECT_UPLOAD_MAX_BYTES } from '../project-upload.ts';
 
@@ -28,7 +29,7 @@ export function NewProjectDialog({ configurations, selectedId, onCreate, onSetti
 }
 
 const folderNotes: Record<string, string> = { '010_draw': '上传原件归档', '020_clean': '分析资料与过程文件', '060_reports': '最终报告 · 可下载' };
-export function ProjectFiles({ project, taskId, refreshToken, onClose, onGeneratePptx, onRefinePptx, dataSelections = [], onDataSelect, onOpenConcepts, onOrganize, taskBusy = false }: { project: ClientProject; taskId?: string; refreshToken: number; onClose: () => void; onGeneratePptx?: (file: { name: string; path: string }) => void; onRefinePptx?: (file: { name: string; path: string }, reportPath: string) => void; dataSelections?: ProjectDataContextSelection[]; onDataSelect?: (selection: ProjectDataContextSelection) => void; onOpenConcepts?: () => void; onOrganize?: (entry: PersonalRetentionEntry) => void; taskBusy?: boolean }) {
+export function ProjectFiles({ project, taskId, refreshToken, onClose, onGeneratePptx, onRefinePptx, dataSelections = [], onDataSelect, onOpenConcepts, onOrganize, onManageConnections, taskBusy = false }: { project: ClientProject; taskId?: string; refreshToken: number; onClose: () => void; onGeneratePptx?: (file: { name: string; path: string }) => void; onRefinePptx?: (file: { name: string; path: string }, reportPath: string) => void; dataSelections?: ProjectDataContextSelection[]; onDataSelect?: (selection: ProjectDataContextSelection) => void; onOpenConcepts?: () => void; onOrganize?: (entry: PersonalRetentionEntry) => void; onManageConnections?: () => void; taskBusy?: boolean }) {
   const heading = useRef<HTMLHeadingElement>(null); const input = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<FileNode[]>([]); const [directory, setDirectory] = useState<'010_draw' | '020_clean'>('010_draw');
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
@@ -58,6 +59,7 @@ export function ProjectFiles({ project, taskId, refreshToken, onClose, onGenerat
   return <aside id="project-files" className="project-files" aria-label="项目文件">
     <div className="project-files-heading"><div><span className="eyebrow">项目空间</span><h2 ref={heading} tabIndex={-1}>项目文件</h2></div><button className="icon-button" aria-label="关闭项目文件栏" onClick={onClose}>✕</button></div>
     <div className="project-files-info"><FolderIcon /><div><strong>{project.name}</strong><span>本机项目 · 3 个默认文件夹</span></div></div>
+    {onManageConnections && <DbLinkProjectPanel project={project} taskId={taskId} refreshToken={refreshToken} modelTarget={project.tasks.find(task => task.id === taskId)?.configuration.id ?? project.configuration.id} onManageConnections={onManageConnections} onOpenDataContext={trigger => openDataContext(trigger)} onOpenStudio={onOpenConcepts} />}
     {project.archivedAt ? <p className="archive-file-note">项目已归档，可查看和下载文件；恢复后可继续上传和编辑。</p> : <div className="file-upload"><label htmlFor="upload-directory">上传位置</label><select id="upload-directory" value={directory} disabled={busy} onChange={event => setDirectory(event.target.value as '010_draw' | '020_clean')}><option value="010_draw">010_draw · 原件归档</option><option value="020_clean">020_clean · 分析资料与过程文件</option></select><button className="secondary-button" disabled={busy} onClick={() => input.current?.click()}>{busy ? '正在处理…' : '上传文件'}</button><input ref={input} type="file" multiple accept={PROJECT_UPLOAD_ACCEPT} hidden aria-label="选择上传文件" onChange={async event => {
       const selected = Array.from(event.target.files ?? []); event.target.value = ''; if (!selected.length) return;
       if (selected.length > 10 || selected.some(file => file.size > PROJECT_UPLOAD_MAX_BYTES)) { setError('每次最多 10 个文件，单文件不超过 50 MiB。'); return; }

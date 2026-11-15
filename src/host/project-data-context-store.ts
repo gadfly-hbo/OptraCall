@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { ProjectStore } from './project-store.ts';
 import type { DataContextSummary, ProjectDataContextIndex, FreezeProjectInput, InputVersionRecord, DataContextWriteResult, SaveDataDescription, DataDescriptionRevision, DataContextAnalysisCopy, ProjectDataContextSelection, ResolvedProjectDataContext, CreateDataCitation, DataCitationRecord, ValidateDataContextReferences, DataContextOperation, DataContextDataset } from './project-data-context-types.ts';
 import { ProjectDataContextFault, fail, object, id, hash, integer, text, date, digest, canonical, jsonBytes, exists, relative, directory, safePath, readBytes, parse, writeExclusive, atomicJson } from './project-data-context-io.ts';
-import { list, distinct, observation, statement, mapping, concept, sap, native } from './project-data-context-validation.ts';
+import { list, distinct, observation, statement, mapping, concept, sap, native, validateDatabaseLocationSource } from './project-data-context-validation.ts';
 import { INPUT_MAX_BYTES, INPUT_EXTENSIONS, EVIDENCE_FILE_MAX_BYTES, EVIDENCE_TOTAL_MAX_BYTES, EVIDENCE_EXTENSIONS, dataContextInputFormat } from './project-data-context-contract.ts';
 export { ProjectDataContextFault } from './project-data-context-io.ts';
 
@@ -158,7 +158,8 @@ export class ProjectDataContextStore {
     for (const part of parts.slice(0, -1)) { current = path.join(current, part); if (!await exists(current)) return null; await directory(current); }
     const file = path.join(current, parts.at(-1)!); return await exists(file) ? file : null;
   }
-  async freezeInput(projectId: string, input: FreezeProjectInput): Promise<DataContextWriteResult<InputVersionRecord>> {
+  async freezeInput(projectId: string, input: FreezeProjectInput, options: { assertWritable?: () => void } = {}): Promise<DataContextWriteResult<InputVersionRecord>> {
+    options.assertWritable?.();
     id(input.datasetId); id(input.inputVersionId); if (input.operationId !== input.inputVersionId) return fail('data_context_operation_target_mismatch');
     const normalized = projectDataInputRequest({ operationId: id(input.operationId), datasetId: input.datasetId, inputVersionId: input.inputVersionId, baseIndexRevision: integer(input.baseIndexRevision), name: text(input.name, 80).trim(), sourcePath: relative(input.sourcePath, ['020_clean'], this.writeVersion === 1 ? legacyInputExtensions : inputExtensions), expectedSha256: hash(input.expectedSha256), expectedBytes: integer(input.expectedBytes), uploadId: input.uploadId == null ? null : id(input.uploadId), sourceNote: input.sourceNote == null ? null : text(input.sourceNote) });
     if (!normalized.name || normalized.expectedBytes > (this.writeVersion === 1 ? maxFileBytes : INPUT_MAX_BYTES)) return fail('invalid_data_context_input');
@@ -175,6 +176,7 @@ export class ProjectDataContextStore {
           try { new TextDecoder('utf-8', { fatal: true }).decode(captured.bytes); } catch { return fail('data_context_requires_utf8'); }
         }
         const evidencePath = `datasets/${input.datasetId}/versions/${input.inputVersionId}/source${path.extname(normalized.sourcePath).toLowerCase()}`;
+        options.assertWritable?.();
         if (!await exists(this.#root(projectId))) await directory(this.#root(projectId), true);
         await writeExclusive(await safePath(this.#root(projectId), evidencePath, true), captured.bytes);
         return { schemaVersion: this.writeVersion, projectId, datasetId: input.datasetId, inputVersionId: input.inputVersionId, sourcePath: normalized.sourcePath, uploadId: normalized.uploadId, sourceNote: normalized.sourceNote, sha256: captured.sha256, bytes: captured.bytes.length, savedAt: now(), evidencePath, operationId: input.operationId, operationKind: 'freeze-input', requestFingerprint: digest(canonical(normalized)), baseIndexRevision: index.revision, resultRef: { projectId, datasetId: input.datasetId, inputVersionId: input.inputVersionId } };
@@ -183,7 +185,7 @@ export class ProjectDataContextStore {
         let dataset = index.datasets.find(item => item.datasetId === input.datasetId);
         if (!dataset) { dataset = { datasetId: input.datasetId, name: normalized.name, createdAt: record.savedAt, sourcePath: normalized.sourcePath, uploadId: normalized.uploadId, versions: [], descriptions: [], latestDescriptionByInputVersion: {} }; index.datasets.push(dataset); }
         dataset.name = normalized.name; dataset.sourcePath = normalized.sourcePath; dataset.uploadId = normalized.uploadId; dataset.versions.push({ inputVersionId: record.inputVersionId, recordSha256: recordHash });
-      }));
+      }, options.assertWritable));
   }
   async summary(projectId: string): Promise<DataContextSummary> {
     const index = await this.#loadIndex(projectId); if (!index) return { index: null, datasets: [], citations: [] };
@@ -211,13 +213,18 @@ export class ProjectDataContextStore {
     const format = dataContextInputFormat(version.sourcePath), kinds: Record<string, string> = { csv: 'csv-column', tsv: 'tsv-column', json: 'json-pointer', xlsx: 'xlsx-range', markdown: 'text-range' };
     const locations = [...description.observation.fields.map(field => field.location), ...description.statements.flatMap(item => item.location ? [item.location] : []), ...description.mappings.map(item => item.location)];
     if (!['unknown', 'unsupported'].includes(description.observation.format) && description.observation.format !== format || locations.some(item => item.kind !== kinds[format])) return fail('data_context_field_version_mismatch');
+    if (locations.some(item => item.kind === 'json-pointer' && item.database)) {
+      const original = parse(await this.#inputBytes(projectId, version));
+      for (const item of locations) if (item.kind === 'json-pointer' && item.database) validateDatabaseLocationSource(item, original, version);
+    }
     if (format !== 'markdown' || !locations.length) return;
     // ignoreBOM=true means preserve the BOM character in this decoder. Do not normalise CRLF or Unicode.
     let original: string; try { original = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(await this.#inputBytes(projectId, version)); } catch (error) { if (error instanceof ProjectDataContextFault) throw error; return fail('data_context_requires_utf8'); }
     const splitsPair = (offset: number) => offset > 0 && offset < original.length && original.charCodeAt(offset - 1) >= 0xd800 && original.charCodeAt(offset - 1) <= 0xdbff && original.charCodeAt(offset) >= 0xdc00 && original.charCodeAt(offset) <= 0xdfff;
     for (const item of locations) if (item.kind === 'text-range' && (item.end > original.length || splitsPair(item.start) || splitsPair(item.end))) return fail('invalid_data_context_text_range');
   }
-  async saveDescription(projectId: string, input: SaveDataDescription): Promise<DataContextWriteResult<DataDescriptionRevision>> {
+  async saveDescription(projectId: string, input: SaveDataDescription, options: { assertWritable?: () => void; validateDatabaseSource?: () => Promise<void> } = {}): Promise<DataContextWriteResult<DataDescriptionRevision>> {
+    options.assertWritable?.();
     id(input.datasetId); id(input.inputVersionId); id(input.descriptionRevisionId); if (input.operationId !== input.descriptionRevisionId) return fail('data_context_operation_target_mismatch');
     const statements = list(input.statements, item => statement(item, false, this.writeVersion)), mappings = list(input.mappings, item => mapping(item, false, this.writeVersion));
     distinct(statements.map(item => item.statementId)); distinct(mappings.map(item => item.mappingId));
@@ -225,6 +232,10 @@ export class ProjectDataContextStore {
     const baseDescriptionRevisionId = input.baseDescriptionRevisionId == null ? null : id(input.baseDescriptionRevisionId), confirmedBy = input.confirmedBy == null ? null : text(input.confirmedBy, 200);
     if (confirmStatementIds.some(selected => !statements.some(item => item.statementId === selected)) || confirmMappingIds.some(selected => !mappings.some(item => item.mappingId === selected)) || (confirmStatementIds.length + confirmMappingIds.length > 0 && (!baseDescriptionRevisionId || !confirmedBy?.trim()))) return fail('invalid_data_context_confirmation');
     const normalized = projectDataDescriptionRequest({ operationId: id(input.operationId), datasetId: input.datasetId, inputVersionId: input.inputVersionId, descriptionRevisionId: input.descriptionRevisionId, baseIndexRevision: integer(input.baseIndexRevision), baseDescriptionRevisionId, observation: observation(input.observation, this.writeVersion), statements, mappings, confirmStatementIds, confirmMappingIds, confirmedBy });
+    if ([...normalized.observation.fields.map(item => item.location), ...statements.flatMap(item => item.location ? [item.location] : []), ...mappings.map(item => item.location)].some(item => item.kind === 'json-pointer' && item.database)) {
+      if (!options.validateDatabaseSource) return fail('data_context_database_validation_unavailable');
+      await options.validateDatabaseSource(); options.assertWritable?.();
+    }
     return this.options.projects.withDataContextMutation(projectId, () => this.#publish(projectId, input, 'save-description', this.#descriptionPath(input.datasetId, input.descriptionRevisionId), normalized,
       index => index.datasets.find(dataset => dataset.datasetId === input.datasetId)?.descriptions.find(ref => ref.descriptionRevisionId === input.descriptionRevisionId)?.recordSha256 ?? null,
       value => this.#decodeDescription(value, projectId, input.datasetId, input.descriptionRevisionId),
@@ -245,7 +256,7 @@ export class ProjectDataContextStore {
         const createdAt = now(), confirm = (selected: boolean) => ({ confirmed: selected, confirmedAt: selected ? createdAt : null, confirmedBy: selected ? confirmedBy : null });
         return { schemaVersion: this.writeVersion, projectId, datasetId: input.datasetId, inputVersionId: input.inputVersionId, descriptionRevisionId: input.descriptionRevisionId, createdAt, baseDescriptionRevisionId, observation: normalized.observation, statements: statements.map(item => ({ ...item, ...confirm(confirmStatementIds.includes(item.statementId)) })), mappings: mappings.map(item => ({ ...item, ...confirm(confirmMappingIds.includes(item.mappingId)) })), operationId: input.operationId, operationKind: 'save-description', requestFingerprint: digest(canonical(normalized)), baseIndexRevision: index.revision, resultRef: { projectId, datasetId: input.datasetId, inputVersionId: input.inputVersionId, descriptionRevisionId: input.descriptionRevisionId } };
       },
-      (index, record, recordHash) => { const dataset = this.#dataset(index, input.datasetId); dataset.descriptions.push({ descriptionRevisionId: record.descriptionRevisionId, inputVersionId: record.inputVersionId, recordSha256: recordHash }); dataset.latestDescriptionByInputVersion[record.inputVersionId] = record.descriptionRevisionId; }));
+      (index, record, recordHash) => { const dataset = this.#dataset(index, input.datasetId); dataset.descriptions.push({ descriptionRevisionId: record.descriptionRevisionId, inputVersionId: record.inputVersionId, recordSha256: recordHash }); dataset.latestDescriptionByInputVersion[record.inputVersionId] = record.descriptionRevisionId; }, options.assertWritable));
   }
   async readDescription(projectId: string, datasetId: string, descriptionRevisionId: string): Promise<DataDescriptionRevision> {
     const index = await this.#loadIndex(projectId); if (!index) return fail('data_context_description_not_found'); const dataset = this.#dataset(index, datasetId), ref = dataset.descriptions.find(item => item.descriptionRevisionId === id(descriptionRevisionId)); if (!ref) return fail('data_context_description_not_found');

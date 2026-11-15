@@ -18,6 +18,8 @@ import { ConfigurationStore, ConfigurationStoreError, TARGET_MODELS } from './co
 import { createWebSearch } from './web-search.ts';
 import { ProjectStore, ProjectStoreFault, type ProjectRecord, type TaskRecord } from './project-store.ts';
 import { createProjectFilesPort } from './project-files.ts';
+import { createDbLinkHost } from './db-link-host.ts';
+import { createDbLinkReviewPort } from './db-link-review-port.ts';
 import { PROJECT_UPLOAD_JSON_MAX_BYTES } from './project-upload.ts';
 import { ModelPackStore } from './model-pack-store.ts';
 import { createModelPackRoutes } from './model-pack-routes.ts';
@@ -157,7 +159,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const instanceId = options.instanceId ?? randomUUID();
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
   if (!Number.isSafeInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 10) throw new Error('Invalid observer heartbeat interval.');
-  const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); await boardStore.init(); await decisionFeedback.init(); await verification.reconcileInterrupted(); await automatic.init(); });
+  const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); await dbLinks.init(); await boardStore.init(); await decisionFeedback.init(); await verification.reconcileInterrupted(); await automatic.init(); });
   type ProjectOwner = { project: ProjectRecord; task: TaskRecord; reviewAdmission?: ReviewAdmissionContract };
   const streams = new Map<string, Set<ServerResponse>>();
   const clearing = new Map<string, number>(), archiving = new Set<string>();
@@ -192,6 +194,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     saveReport: (projectId, name, text) => mutate(() => projects.saveReport(projectId, name, text)),
   });
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
+  const dbLinks = createDbLinkHost({ dataRoot, projects, data: projectDataContext, configurationSnapshot: (id, revision) => configuration.snapshot(id, revision) ?? undefined, mutate, isClosing: () => closing, readBody: body });
+  const dbReviewBundles = createDbLinkReviewPort({ privateRoot: path.resolve(dataRoot, 'db-link', 'review-bundles'), projects, configurationSnapshot: (id, revision) => configuration.snapshot(id, revision) ?? undefined, materialSource: dbLinks.materialSource, isClosing: () => closing });
   const modelPackRoutes = createModelPackRoutes({store:modelPacks,readBody:body,mutate,isClosing:()=>closing});
   const sapMethods = createSapMethodStore(path.join(dataRoot, 'metric-assets'));
   const studio = createStudioFeature({ dataRoot, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
@@ -307,7 +311,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     catch (error) { if (error instanceof ConfigurationStoreError) return null; throw error; }
   }, fetch: options.webSearchFetch });
   const calculationMaterials = createReportCalculationMaterials({
-    dataRoot, projects, enterpriseMaterials,
+    dataRoot, projects, enterpriseMaterials, dbBundles: dbReviewBundles,
     assertRapCurrent: async (rap, owner) => {
       if (rap.basisSha256 && createHash('sha256').update(rap.text).digest('hex') !== rap.basisSha256) throw new RequestFault(409, 'requirement_unavailable');
       if (rap.frameworkVersion) await requirementPlugin.review.assertFrameworkHistoryReadable(rap.instanceId, rap.frameworkVersion, owner.projectId);
@@ -350,7 +354,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             await pair(project.id, task.id, true);
           },
         });
-        return { reportCalculationReview: async (selection, context) => {
+        return { dbLink: dbLinks.port(project.id, task.id, _configuration), reportCalculationReview: async (selection, context) => {
           let historicalFrameworks: Awaited<ReturnType<typeof readHistoricalReportFrameworks>> = [], frameworkHistoryUnavailable: string | undefined;
           if (!context.providedContext?.rap) {
             try { historicalFrameworks = await readHistoricalReportFrameworks(project, (await pair(project.id, task.id)).task, context.requestId); }
@@ -359,7 +363,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           context.assertCurrent();
           const prepared = await calculationMaterials.prepare({
             projectId: project.id, taskId: task.id, requestId: context.requestId, sessionId: context.sessionId,
-          }, selection, { ...context, historicalFrameworks, frameworkHistoryUnavailable });
+          }, selection, { ...context, historicalFrameworks, frameworkHistoryUnavailable, configuration: { id: _configuration.id, revision: _configuration.revision } });
           return {
             ...prepared,
             withCurrentDelivery: (deliver: () => void) => mutate(async () => {
@@ -519,7 +523,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     if (project.archivedAt !== null) throw new RequestFault(409, 'project_archived');
     if (archiving.has(project.id)) throw new RequestFault(409, 'project_busy');
   }
-  const conclusionMaterials = createConclusionReviewMaterials({ dataRoot, projects, pair, availableConfiguration, cases, enterpriseMaterials,
+  const conclusionMaterials = createConclusionReviewMaterials({ dataRoot, projects, pair, availableConfiguration, cases, enterpriseMaterials, dbBundles: dbReviewBundles,
     requirementContext: (input, projectId) => requirementPrefix(input, projectId),
     assertRequirementAuthorized: async (selection, projectId) => {
       if (selection.frameworkVersion) await requirementPlugin.review.assertFrameworkHistoryReadable(selection.instanceId, selection.frameworkVersion, projectId);
@@ -959,6 +963,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         throw new RequestFault(404, 'not_found');
       }
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
+      const dbLink = await dbLinks.handle(request, url);
+      if (dbLink) { json(response, dbLink.status, dbLink.body); return; }
       if (await studio.handle(request, response, url)) return;
       if (await handleProjectDataContextRoute({ request, response, url, store: projectDataContext, projects, readBody: body, choices: projectDataReferences.choices, sourceStatuses: projectDataReferences.statuses, conceptSource: projectDataReferences.conceptSource, mutate, isClosing: () => closing })) return;
       if (url.pathname === '/api/connectors/trade-area' && request.method === 'GET') { json(response, 200, readTradeAreaStatus(dataRoot)); return; }

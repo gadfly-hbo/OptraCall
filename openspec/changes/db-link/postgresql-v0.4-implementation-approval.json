@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-14T08:48:03.168617+00:00",
+  "userStatement": "spec v0.4 通过，按四原则和工程规范继续开发 db-link，先以 PostgreSQL 完成软件约束、自主纠错和停止／UNKNOWN 验证。累计预算暂不设上限，不设 SQL 固定纠错次数，不引入容器或代理；关键反例验证通过后再开放查询。",
+  "sourceHead": "ef3e7d0b8703a6e22023e8099a56c542d484a69d",
+  "scope": "Implement approved PostgreSQL software constraints and autonomous correction/cancellation tests. No cumulative SQL correction budget or fixed correction count; no containers/proxy; query remains closed until key counterexamples proved. Synthetic private DB/Provider only. No real business/model/device/service/Git delivery inferred.",
+  "approvedFiles": [
+    {
+      "path": "openspec/changes/db-link/postgresql-software-constraints-spec.md",
+      "bytes": 42461,
+      "sha256": "dc49c5ed6e4fcf0fee1d6e65359205c39fd5ae55744ffea409ff0edf21d5af24"
+    },
+    {
+      "path": "openspec/changes/db-link/postgresql-software-constraints-manifest.json",
+      "bytes": 3793,
+      "sha256": "89883e282f6177381974147d1f25d4a1a7aae46232966f558e59c7cb344c27b3"
+    }
+  ],
+  "testSeams": [
+    "validateDbLinkSql public SQL technical admission and new PostgreSQL bounded output contract",
+    "createDbLinkDriver.catalog/openQuery with official pg/cursor and isolated PostgreSQL",
+    "createDbLinkHost port through original owner/context and result storage",
+    "ProjectAgent original Pi tools using isolated synthetic Provider; stop/UNKNOWN and consumers"
+  ],
+  "seamAuthorization": "Approved v0.4 PGS01-07/V01-17 and current instruction authorize these existing public seams. No per-cycle re-approval needed."
+}
