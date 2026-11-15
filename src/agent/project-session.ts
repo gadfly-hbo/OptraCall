@@ -7,7 +7,7 @@ import { readSemanticContextParameters, legacyReadSemanticContextParameters, sem
 import { candidateDetailsVersion } from './agent-candidate.ts';
 import { presentContextMessages } from './context-presentation.ts';
 import path from 'node:path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, renameSync, unlinkSync, constants, openSync, fstatSync, fsyncSync, closeSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, renameSync, unlinkSync, constants, openSync, fstatSync, fsyncSync, closeSync, readSync, lstatSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, SettingsManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, getDocsPath, VERSION, defineTool, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory, type ExtensionToolContext } from './sdk.ts';
 import type { ProjectAgentWireOptions, ProjectSnapshot, ProvidedContextInput } from './project-runtime.ts';
@@ -18,7 +18,7 @@ import { projectSystemPrompt } from './project-system-prompt.ts';
 import { createProtectedTools } from './protected-tools.ts';
 import { snapshotProtectedSkills } from './protected-skills.ts';
 import { createSimulationTools } from '../../extensions/business-plugins/sim-lab/tools/simulation-tools.ts';
-import { agentCandidateParameters, candidateToolName, parseAgentCandidateInput, type AgentCandidateDetails } from './agent-candidate.ts';
+import { agentCandidateParameters, candidateToolName, candidateCustomType, candidateReceiptType, parseAgentCandidateInput, agentCandidateDetailsSha256, type AgentCandidateDetails, type AgentCandidateReceipt } from './agent-candidate.ts';
 import { findPersonalContextParameters, readPersonalContextParameters, type PersonalContextToolResult } from './personal-context.ts';
 import { readCaseDecisionsParameters, saveCaseDecisionParameters, type CaseDecisionToolResult } from './case-decisions.ts';
 import { readCaseRelationsParameters, saveCaseRelationParameters } from './case-relations.ts';
@@ -303,29 +303,64 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       ? createModelPackTools({ ...o.modelPackTools, projectRoot: o.projectDirectory }) : undefined;
     // Only the Host's ordinary project-task options carry both real owner keys.
     // A business-plugin workspace, managed scope or sealed reader never gains it.
+    const candidateAvailable = Boolean(!o.workspace && !o.protectedExecution && o.projectId && o.taskId);
     const createCandidateTools = (boundManager: SessionManager) => {
       const boundSessionId = boundManager.getSessionId();
-      return !o.workspace && !o.protectedExecution && o.projectId && o.taskId ? [{
+      return candidateAvailable ? [{
       name: candidateToolName,
       label: '记录 Agent 候选',
-      description: '可自主留下值得以后参考的知识或经验候选（未人工确认）。是否记录、记什么、记几条由你判断；可以零条，不必逐任务总结。直接调用本工具，不在 codemode 内嵌套调用，确保有专属原生工具结果。正文由 Pi 原生工具结果保存，不是正式事实或自动注入新任务。scope 与 caution 未知时填 null；额外业务来源可不提供。',
+      description: '可自主留下值得以后参考的知识或经验候选（未人工确认）。是否记录、记什么、记几条由你判断；可以零条，不必逐任务总结。支持直接调用或合法嵌套组合。正文保存到本 Pi 原生会话，返回准确引用与保存状态，不是正式事实或自动注入新任务。scope 与 caution 未知时填 null；额外业务来源可不提供。保存失败或结果未知时不要自动重写同一候选。',
       parameters: agentCandidateParameters,
-      execute: async (toolCallId: string, parameters: unknown, signal: AbortSignal | undefined) => {
+      execute: async (toolCallId: string, parameters: unknown, signal: AbortSignal | undefined, _update: unknown, ctx: ExtensionToolContext) => {
         const originalRun = run, originalManager = boundManager, originalSessionId = boundSessionId;
+        const parent = session;
+        if (!parent || !ctx) throw new Error('agent_candidate_run_unavailable');
+        const qualified = qualifyToolInvocation(parent, ctx, signal);
         const assertCurrent = () => {
-          if (!originalRun || run !== originalRun || originalRun.kind !== 'prompt' || originalRun.cancelled || closing || signal?.aborted || !originalManager || manager !== originalManager || session?.sessionManager !== originalManager || originalManager.getSessionId() !== originalSessionId || !toolCallId.trim()) throw new Error('agent_candidate_run_unavailable');
-          if (!originalRun.last?.content.some(part => part.type === 'toolCall' && part.id === toolCallId && part.name === candidateToolName)) throw new Error('agent_candidate_native_tool_call_required');
+          if (!qualified() || !originalRun || run !== originalRun || originalRun.kind !== 'prompt' || originalRun.cancelled || closing || signal?.aborted || !originalManager || manager !== originalManager || session?.sessionManager !== originalManager || originalManager.getSessionId() !== originalSessionId || !toolCallId.trim()) throw new Error('agent_candidate_run_unavailable');
         };
         assertCurrent();
         const input = parseAgentCandidateInput(parameters);
         const version = candidateDetailsVersion(input);
         if (version === 2 && !o.experienceLearningEnabled) throw new Error('experience_learning_disabled');
         const details: AgentCandidateDetails = { schemaVersion: version, type: 'optracall.agent-candidate', claim: 'agent-generated-unconfirmed',
-          origin: { projectId: o.projectId, taskId: o.taskId!, sessionId: originalSessionId!, requestId: originalRun!.id, toolCallId }, createdAt: new Date().toISOString(), ...input };
+          origin: { projectId: o.projectId!, taskId: o.taskId!, sessionId: originalSessionId!, requestId: originalRun!.id, toolCallId }, createdAt: new Date().toISOString(), ...input };
         assertCurrent();
-        // No asynchronous gap after the final qualification check. The SDK owns
-        // the sole append; this return says accepted, never proves disk saved.
-        return { content: [{ type: 'text' as const, text: '候选已接受、待原生保存；个人资料页精确回读后才能称已记录。Agent 生成，未人工确认。' }], details };
+        // Pi is the sole writer. Verify its actual append synchronously before
+        // returning a saved receipt, without another cancellation/dispatch gap.
+        const appendConfirmed = (customType: string, data: unknown): string => {
+          const entryId = originalManager.appendCustomEntry(customType, data);
+          const file = originalManager.getSessionFile(), entry = originalManager.getEntry(entryId);
+          if (!file || !entry) throw new Error('candidate_native_missing');
+          const expected = Buffer.from(JSON.stringify(entry) + '\n');
+          const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+          try {
+            const before = fstatSync(fd);
+            if (!before.isFile() || before.nlink !== 1 || before.size < expected.length) throw new Error('candidate_native_unsafe');
+            fsyncSync(fd);
+            const bytes = Buffer.alloc(expected.length);
+            if (readSync(fd, bytes, 0, bytes.length, before.size - bytes.length) !== bytes.length || !bytes.equals(expected)) throw new Error('candidate_native_changed');
+            const after = fstatSync(fd), named = lstatSync(file);
+            if (after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs || named.ino !== before.ino || named.dev !== before.dev || !named.isFile() || named.nlink !== 1 || named.size !== before.size || named.mtimeMs !== before.mtimeMs || named.ctimeMs !== before.ctimeMs) throw new Error('candidate_native_changed');
+          } finally { closeSync(fd); }
+          return entryId;
+        };
+        let receipt: AgentCandidateReceipt;
+        try {
+          const entryId = appendConfirmed(candidateCustomType, { recordVersion: 1, details });
+          receipt = { type: candidateReceiptType, recordVersion: 1, status: 'saved', candidate: {
+            projectId: details.origin.projectId, taskId: details.origin.taskId, originSessionId: originalSessionId, entryId,
+            toolCallId, expectedDetailsSha256: agentCandidateDetailsSha256(details),
+          } };
+          // This metadata says the BODY was verified before this append. It is
+          // not a second body, nor a claim based only on its own returned ID.
+          appendConfirmed(candidateReceiptType, receipt);
+        } catch {
+          // Append may already have changed memory or disk. Do not append again
+          // or claim that no candidate exists when persistence is UNKNOWN.
+          throw new Error('agent_candidate_save_unknown: 候选保存失败或结果未知；不要自动重写，按原生记录核对。');
+        }
+        return { content: [{ type: 'text' as const, text: JSON.stringify(receipt) }], details: receipt };
       },
       }] : [];
     };
@@ -610,7 +645,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         },
       });
     }
-    const scopeToolContexts = Boolean(dbLinkAvailable || o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
+    const scopeToolContexts = Boolean(candidateAvailable || dbLinkAvailable || o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
       let parent: AgentSession;
       const contextAdapter = scopeToolContexts ? createToolContextAdapter((ctx, signal) => qualifyToolInvocation(parent, ctx, signal)) : undefined;

@@ -125,6 +125,14 @@ test('reviewed low-level paths are limited to their assigned capability', () => 
   assert.ok(inspectSessionSource('tests/arbitrary-new-plugin.test.ts', `import { ProjectAgent } from '../src/agent/project-runtime.ts';`).length > 0);
 });
 
+test('R1 SDK candidate probe grants only exact public test symbols, without widening other test owners', () => {
+  const file = 'tests/agent-candidate-sdk-proof.test.ts';
+  assert.deepEqual(inspectSessionSource(file, `import { createAgentSession, createExtensionRuntime, ModelRuntime, SessionManager, SettingsManager, VERSION } from '../src/agent/sdk.ts';`), []);
+  assert.ok(inspectSessionSource(file, `import { createAgentSessionRuntime } from '../src/agent/sdk.ts';`).length > 0);
+  assert.ok(inspectSessionSource('tests/arbitrary-new-plugin.test.ts', `import { createAgentSession } from '../src/agent/sdk.ts';`).length > 0);
+  assert.ok(inspectSessionSource(file, `import { createAgentSession } from '@earendil-works/pi-coding-agent';`).length > 0);
+});
+
 test('unparseable source fails closed instead of silently passing the boundary check', () => {
   const result = inspectSessionSource(plugin, 'import {');
   assert.equal(result.length, 1);

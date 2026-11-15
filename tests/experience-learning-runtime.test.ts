@@ -7,7 +7,7 @@ import { ProjectAgent, ProjectRuntimeError, type ProjectAgentOptions } from '../
 import { startToolProvider } from './fixtures/tool-provider.ts';
 import { readSavedTaskReply } from '../src/host/project-history.ts';
 import { createNativeSnapshotReadBudget } from '../src/host/native-session-snapshot.ts';
-import { parseAgentCandidateDetails, agentCandidateDetailsSha256 } from '../src/agent/agent-candidate.ts';
+import { parseAgentCandidateRecord, agentCandidateDetailsSha256, candidateCustomType, isAgentCandidateReceipt } from '../src/agent/agent-candidate.ts';
 
 async function fixture(t: TestContext) {
   const root = path.resolve('.local/fourbase-modules/m6/implementation/runtime', randomUUID()), projectDirectory = path.join(root, 'project');
@@ -43,16 +43,27 @@ test('M6 EL08 real native candidate chooses v2 only for new refs; feature-off ke
   f.provider.setResponder(({ recentToolResults }) => recentToolResults.length ? { text: '保存是工程回执，不是有效结论。' } : { calls: [{ name: 'record_agent_candidate', arguments: input }] });
   assert.equal((await agent.start('原格式', randomUUID()).completion).outcome, 'completed');
   let snapshot = await agent.snapshot();
-  const read = async () => (await readFile(snapshot.sessionFile!, 'utf8')).trim().split('\n').map(line => JSON.parse(line)).filter(e => e.message?.toolName === 'record_agent_candidate');
-  const first = (await read())[0], original = parseAgentCandidateDetails(first.message.details), originalHash = agentCandidateDetailsSha256(original); assert.equal(original.schemaVersion, 1);
+  const entries = async () => (await readFile(snapshot.sessionFile!, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  const read = async () => (await entries()).filter(e => e.type === 'custom' && e.customType === candidateCustomType);
+  const first = (await read())[0], original = parseAgentCandidateRecord(first.data).details, originalHash = agentCandidateDetailsSha256(original); assert.equal(original.schemaVersion, 1);
   input.sourceRefs = [{ type: 'case-decision', caseStoreId: randomUUID(), caseId: randomUUID(), recordId: randomUUID(), revision: 1 }];
   assert.equal((await agent.start('新增准确来源', randomUUID()).completion).outcome, 'completed');
-  const accepted = await read(); assert.equal(parseAgentCandidateDetails(accepted[1].message.details).schemaVersion, 2); assert.deepEqual(accepted[1].message.details.sourceRefs, input.sourceRefs); assert.equal(agentCandidateDetailsSha256(parseAgentCandidateDetails(accepted[0].message.details)), originalHash);
+  const accepted = await read(); assert.equal(accepted.length, 2);
+  assert.equal(parseAgentCandidateRecord(accepted[1].data).details.schemaVersion, 2); assert.deepEqual(accepted[1].data.details.sourceRefs, input.sourceRefs); assert.equal(agentCandidateDetailsSha256(parseAgentCandidateRecord(accepted[0].data).details), originalHash);
+  const receipts = (await entries()).filter(e => e.message?.toolName === 'record_agent_candidate'); assert.equal(receipts.length, 2);
+  for (const [index, entry] of receipts.entries()) {
+    assert.equal(entry.message.isError, false); assert.ok(isAgentCandidateReceipt(entry.message.details));
+    assert.equal(entry.message.details.candidate.entryId, accepted[index].id);
+    assert.equal(entry.message.details.candidate.expectedDetailsSha256, agentCandidateDetailsSha256(parseAgentCandidateRecord(accepted[index].data).details));
+    assert.ok(!JSON.stringify({ content: entry.message.content, details: entry.message.details }).includes(input.content.bodyMd), 'the tool result carries a minimal receipt; the custom entry is authoritative');
+  }
   snapshot = await agent.snapshot(); await agent.close();
   const disabled = f.create({ sessionFile: snapshot.sessionFile }); assert.ok(!(await disabled.open()).tools.includes('read_case_sources'));
   assert.equal((await disabled.start('兼容关闭不接受新增来源', randomUUID()).completion).outcome, 'completed');
-  const after = await read(); assert.equal(after.length, 3); assert.equal(after[2].message.isError, true); assert.ok(JSON.stringify(after[2]).includes('experience_learning_disabled')); assert.equal(after[2].message.details?.type, undefined);
-  assert.equal(agentCandidateDetailsSha256(parseAgentCandidateDetails(after[0].message.details)), originalHash); assert.equal(parseAgentCandidateDetails(after[1].message.details).schemaVersion, 2);
+  const after = await read(); assert.equal(after.length, 2); assert.deepEqual(after, accepted, 'feature-off cannot append a new candidate or rewrite either saved version');
+  const results = (await entries()).filter(e => e.message?.toolName === 'record_agent_candidate');
+  assert.equal(results.length, 3); assert.equal(results[2].message.isError, true); assert.ok(JSON.stringify(results[2]).includes('experience_learning_disabled')); assert.equal(results[2].message.details?.type, undefined);
+  assert.equal(agentCandidateDetailsSha256(parseAgentCandidateRecord(after[0].data).details), originalHash); assert.equal(parseAgentCandidateRecord(after[1].data).details.schemaVersion, 2);
 });
 
 test('M6 EL09 scope: plugin/sealed/managed/no-task resources never receive the new tool', async t => {
