@@ -824,7 +824,7 @@ test('AV02 successive explicit report paths create separate immutable chains and
     assert.ok(compact.lastUser.startsWith('<conversation>\n'));
     assert.equal(compact.body.tools?.length ?? 0, 0, 'SDK compaction is a summary request and cannot perform an extra report write');
   }
-  assert.equal(subsequent[1]!.toolReply, true);
+  assert.equal(subsequent.filter(value => value.stage === 'ordinary')[1]!.toolReply, true);
   const taskAfter = (await f.readTask()).task, nativeAfter = await readFile(taskAfter.sessionFile);
   assert.equal(taskAfter.sessionFile, taskBefore.sessionFile);
   assert.equal(JSON.parse(nativeAfter.toString().split('\n')[0]!).id, nativeId);

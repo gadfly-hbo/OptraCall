@@ -1,0 +1,13 @@
+{
+  "date": "2026-11-13",
+  "userStatement": "首批就定 MySQL 和 PostgreSQL，走成熟驱动薄适配。先细化具体驱动版本、连接权限、查询取消、结果精度和核算接缝，补充选型说明，按四原则复核后交我确认，暂不开发。",
+  "confirmed": {
+    "databaseTypes": ["MySQL", "PostgreSQL"],
+    "approach": "Mature official drivers with thin OptraCall adaptation"
+  },
+  "pendingConfirmation": [
+    "pg 8.23.1 + pg-cursor 2.22.1; mysql2 3.24.6",
+    "driver-selection.md contract for permissions, cancellation, precision and review integration"
+  ],
+  "scope": "Design addendum and review only; implementation, installation and runtime adoption not authorized."
+}

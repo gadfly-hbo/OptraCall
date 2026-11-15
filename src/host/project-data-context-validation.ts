@@ -1,4 +1,4 @@
-import type { DataContextFieldLocation, DataContextObservation, DataContextStatement, DataContextMapping, DataContextConceptRef, DataContextSapRef, DataContextNativeEvidence, DataContextArtifactEvidence, DataContextConfirmation } from './project-data-context-types.ts';
+import type { DataContextFieldLocation, DataContextDatabaseLocation, DataContextObservation, DataContextStatement, DataContextMapping, DataContextConceptRef, DataContextSapRef, DataContextNativeEvidence, DataContextArtifactEvidence, DataContextConfirmation } from './project-data-context-types.ts';
 import { fail, object, id, hash, integer, text, date, canonical, relative } from './project-data-context-io.ts';
 import { normalizeXlsxRange } from './project-data-context-contract.ts';
 export function list<T>(value: unknown, normalize: (item: unknown) => T, maximum = 1000): T[] { if (!Array.isArray(value) || value.length > maximum) return fail('invalid_data_context_list'); return value.map(normalize); }
@@ -6,7 +6,7 @@ export function distinct(values: string[]): void { if (new Set(values).size !== 
 export function location(value: unknown, schemaVersion: 1 | 2 = 2): DataContextFieldLocation {
   if (!object(value)) return fail('invalid_data_context_field_location');
   if (value.kind === 'csv-column') return { kind: 'csv-column', columnIndex: integer(value.columnIndex) };
-  if (value.kind === 'json-pointer') { const pointer = text(value.pointer, 1000); if (!pointer.startsWith('/') || /~(?![01])/.test(pointer)) return fail('invalid_data_context_field_location'); return { kind: 'json-pointer', pointer }; }
+  if (value.kind === 'json-pointer') { const pointer = text(value.pointer, 1000); if (!pointer.startsWith('/') || /~(?![01])/.test(pointer) || schemaVersion === 1 && (value.database !== undefined || value.queryExpression !== undefined)) return fail('invalid_data_context_field_location'); return { kind: 'json-pointer', pointer, ...(value.database === undefined ? {} : { database: databaseLocation(value.database) }), ...(value.queryExpression === undefined ? {} : { queryExpression: text(value.queryExpression, 2000) }) }; }
   if (schemaVersion === 2 && value.kind === 'tsv-column') return { kind: 'tsv-column', columnIndex: integer(value.columnIndex) };
   if (schemaVersion === 2 && value.kind === 'xlsx-range') {
     const sheetName = text(value.sheetName, 1000); if (!sheetName.length) return fail('invalid_data_context_field_location');
@@ -18,6 +18,40 @@ export function location(value: unknown, schemaVersion: 1 | 2 = 2): DataContextF
     return { kind: 'text-range', start, end };
   }
   return fail('invalid_data_context_field_location');
+}
+function databaseObject(value: unknown): NonNullable<DataContextDatabaseLocation['object']> {
+  if (!object(value)) return fail('invalid_data_context_database_location');
+  return { database: text(value.database, 1000), schema: text(value.schema, 1000), name: text(value.name, 1000), columns: list(value.columns, item => text(item, 1000)) };
+}
+export function databaseLocation(value: unknown): DataContextDatabaseLocation {
+  if (!object(value) || !['query-result', 'metadata-observation'].includes(String(value.sourceKind)) || integer(value.connectionRevision) < 1) return fail('invalid_data_context_database_location');
+  return { sourceKind: value.sourceKind as DataContextDatabaseLocation['sourceKind'], sourceId: id(value.sourceId), sourcePath: relative(value.sourcePath, ['020_clean'], ['.json']), sourceSha256: hash(value.sourceSha256), connectionId: text(value.connectionId, 100), connectionRevision: integer(value.connectionRevision), sourceIdentity: text(value.sourceIdentity, 1000), ...(value.object === undefined ? {} : { object: databaseObject(value.object) }), ...(value.relatedObject === undefined ? {} : { relatedObject: databaseObject(value.relatedObject) }) };
+}
+/** Derive technical positions only from the exact frozen Host source; never infer business joins. */
+export function databaseLocationFromSource(source: unknown, version: { projectId: string; sourcePath: string; sha256: string }, pointer: string): DataContextDatabaseLocation {
+  if (!object(source) || source.schema !== 1 || !object(source.owner) || source.owner.projectId !== version.projectId || !object(source.source)) return fail('data_context_database_source_mismatch');
+  const metadata = source.kind === 'db-link-metadata-observation';
+  const base = { sourceKind: metadata ? 'metadata-observation' as const : 'query-result' as const, sourceId: id(source.id), sourcePath: version.sourcePath, sourceSha256: version.sha256, connectionId: source.source.connectionId, connectionRevision: source.source.connectionRevision, sourceIdentity: source.source.sourceIdentity };
+  if (!metadata) {
+    const position = /^\/columns\/(0|[1-9]\d*)$/.exec(pointer);
+    if (!['complete', 'partial', 'failed', 'cancelled'].includes(String(source.status)) || !Array.isArray(source.columns) || !position || !object(source.columns[Number(position[1])])) return fail('data_context_database_field_mismatch');
+    return databaseLocation(base);
+  }
+  const position = /^\/objects\/(0|[1-9]\d*)(?:\/(columns|constraints)\/(0|[1-9]\d*))?$/.exec(pointer);
+  if (!position || !Array.isArray(source.objects)) return fail('data_context_database_field_mismatch');
+  const original = source.objects[Number(position[1])];
+  if (!object(original) || !Array.isArray(original.columns)) return fail('data_context_database_field_mismatch');
+  let columns = original.columns.map(value => object(value) ? text(value.name, 1000) : fail('data_context_database_field_mismatch')), relatedObject: DataContextDatabaseLocation['relatedObject'];
+  if (position[2] === 'columns') { const column = original.columns[Number(position[3])]; if (!object(column)) return fail('data_context_database_field_mismatch'); columns = [text(column.name, 1000)]; }
+  if (position[2] === 'constraints') {
+    const constraint = Array.isArray(original.constraints) ? original.constraints[Number(position[3])] : undefined;
+    if (!object(constraint)) return fail('data_context_database_field_mismatch'); columns = list(constraint.columns, value => text(value, 1000));
+    if (constraint.target !== undefined) { if (!object(constraint.target)) return fail('data_context_database_field_mismatch'); relatedObject = databaseObject({ ...constraint.target, name: constraint.target.object }); }
+  }
+  return databaseLocation({ ...base, object: { database: original.database, schema: original.schema, name: original.name, columns }, ...(relatedObject ? { relatedObject } : {}) });
+}
+export function validateDatabaseLocationSource(value: Extract<DataContextFieldLocation, { kind: 'json-pointer' }>, source: unknown, version: { projectId: string; sourcePath: string; sha256: string }): void {
+  if (value.database && canonical(value.database) !== canonical(databaseLocationFromSource(source, version, value.pointer))) fail('data_context_database_source_mismatch');
 }
 export function native(value: unknown): DataContextNativeEvidence | null {
   if (value == null) return null;

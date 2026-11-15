@@ -1,0 +1,188 @@
+{
+  "version": "db-link-spec-v0.5",
+  "date": "2026-11-15",
+  "status": "pending-user-confirmation",
+  "preparationStatus": "complete-documentation-only; pending user confirmation",
+  "userStatement": "按行业调研结论修订 db-link spec v0.5，优先满足本地小库和企业分析账号两个场景，采用可信数据源、最小权限和成熟驱动薄适配；大字段按需处理，明确视图／RLS、单次查询保护及停止／UNKNOWN边界。累计预算不设上限，不设SQL固定纠错次数，不扩权、不引入容器或代理。按四原则和工程规范复核后交我确认，暂不开发，查询入口保持关闭。",
+  "sourceHead": "ef3e7d0b8703a6e22023e8099a56c542d484a69d",
+  "branch": "OC｜db-link",
+  "scope": "Documentation preparation only. Existing product WIP retained. No development, installation, database/model/product tests, SDK changes, Git delivery or runtime/device adoption. Query remains closed.",
+  "allowedChanges": [
+    "openspec/changes/db-link/spec.v0.5.md",
+    "openspec/changes/db-link/spec-v0.5-manifest.json",
+    "openspec/changes/db-link/tasks.md",
+    "openspec/changes/db-link/result.md"
+  ],
+  "specification": {
+    "path": "openspec/changes/db-link/spec.v0.5.md",
+    "bytes": 36683,
+    "sha256": "07576a28dcd97d26d2a28a6d846b7e614572eae30f5e2579d90e0046ff2ca76e"
+  },
+  "approvedOriginals": [
+    {
+      "path": "openspec/changes/db-link/spec.md",
+      "bytes": 26969,
+      "sha256": "1c22efd9db47f389aebbbddff25234ea6666165926ab7854ff66aed850dff6a3"
+    },
+    {
+      "path": "openspec/changes/db-link/driver-selection.md",
+      "bytes": 26383,
+      "sha256": "2f3c75c66b97df0955ef7bd80d62d3a73764fcc41a6fd4965682de5f405a69b6"
+    },
+    {
+      "path": "openspec/changes/db-link/driver-versions.md",
+      "bytes": 11197,
+      "sha256": "e22308ff8b6c31184d49f8805b34909fa48ebae9a2a14b3f5480ed85ce490575"
+    },
+    {
+      "path": "openspec/changes/db-link/selection-research.md",
+      "bytes": 25175,
+      "sha256": "578cf93b6ab7ed659a0e5bb5814d6b5f7e8548bf4b1753cd075b29478537cc77"
+    },
+    {
+      "path": "openspec/changes/db-link/selection-decision.json",
+      "bytes": 711,
+      "sha256": "15c753c202291572c941fefaff69e7684ff97fca14fc5a16caf379760c1ae6c8"
+    },
+    {
+      "path": "openspec/changes/db-link/semantic-discovery.md",
+      "bytes": 22425,
+      "sha256": "dd55b553ea4bbc3e88a871e333c8b580efa1dc46bdae4ee0a2b5cb295f0e4e8a"
+    },
+    {
+      "path": "openspec/changes/db-link/semantic-discovery-decision.json",
+      "bytes": 876,
+      "sha256": "55b8f9cba219c35363ca0c9f561d8bc5be3cf1f0d663fca0649c0f6847985f1c"
+    },
+    {
+      "path": "openspec/changes/db-link/ui-spec.md",
+      "bytes": 7796,
+      "sha256": "e4aa9c8a7d3c524f699b2a91c0dc2e18cbad9b0037525fb1d57e7860b37a64b2"
+    },
+    {
+      "path": "openspec/changes/db-link/interaction-states.md",
+      "bytes": 5094,
+      "sha256": "182bbf9995b4c3711bcfe6dc7596bf1f251babbc9c84b247b2bc3fede65d9e34"
+    },
+    {
+      "path": "docs/prototypes/db-link-ui-demo.html",
+      "bytes": 75334,
+      "sha256": "364d8e942a0f5e49724cd21c4bb386fc5afee16d6e6ff1f0c7d1fbcc2ab29337"
+    },
+    {
+      "path": "openspec/changes/db-link/postgresql-software-constraints-spec.md",
+      "bytes": 42461,
+      "sha256": "dc49c5ed6e4fcf0fee1d6e65359205c39fd5ae55744ffea409ff0edf21d5af24"
+    },
+    {
+      "path": "openspec/changes/db-link/postgresql-software-constraints-manifest.json",
+      "bytes": 3793,
+      "sha256": "89883e282f6177381974147d1f25d4a1a7aae46232966f558e59c7cb344c27b3"
+    }
+  ],
+  "industryInputs": [
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-industry-research/research.md",
+      "bytes": 13545,
+      "sha256": "7f891f8270cc848779e5c97f841232b390a822a9814fdfa64970f88ff40d63bd"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-industry-research/bi.md",
+      "bytes": 8743,
+      "sha256": "27e8af6c298172ac0a8dcb7f0382279f99606ccc17aa7b529fef169e5208896b"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-industry-research/result-limits.md",
+      "bytes": 8638,
+      "sha256": "db0d27e8e6661774988410f10665d82c60b9198a3ff4d7e4d9eca902978aceb9"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-industry-research/cloud.md",
+      "bytes": 8616,
+      "sha256": "88db1a1c32f420ac4926a77379aa55420e13777085dfde506a242cf402a55aa5"
+    }
+  ],
+  "rules": {
+    "engineeringWorkflow": "v1.10",
+    "sessionInterface": 3,
+    "pi": "1.4.0",
+    "pg": "8.23.1",
+    "pgCursor": "2.22.1",
+    "mysql2Retained": "3.24.6",
+    "parser": "5.4.0",
+    "cumulativeCorrectionBudget": "uncapped",
+    "fixedSqlCorrectionCount": null,
+    "singleOperationSafety": "finite; actual scope and checks explicitly recorded",
+    "credentialsAndSDK": "no expansion or modification",
+    "queryGate": "queryQualified=false; not a runtime qualification"
+  },
+  "evidenceRoot": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-spec-v05",
+  "validation": {
+    "authorDocumentChecks": "PASS_DOCUMENTATION_SCOPE_ONLY; author-document-checks-02.json",
+    "independentReview": "PASS_DOCUMENTATION_PREPARATION_ONLY; two independent non-author candidate-02 rechecks",
+    "fourPrinciples": "PASS_DESIGN_SCOPE_ONLY; no runtime qualification",
+    "productTests": "NOT_RUN",
+    "databaseTests": "NOT_RUN",
+    "modelTests": "NOT_RUN",
+    "browserTests": "NOT_RUN",
+    "fullCheck": "NOT_RUN",
+    "CI": "NOT_RUN"
+  },
+  "approval": "This is a specification candidate, not user approval or authorization to resume development.",
+  "authorChecks": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-spec-v05/author-document-checks-02.json",
+  "preservedCandidate": "candidate-01; required P2 stop-scope ambiguity retained as original finding",
+  "independentReviews": [
+    {
+      "review": "contract",
+      "kind": "report",
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-spec-v05/independent-contract/review-02.md",
+      "bytes": 4348,
+      "sha256": "a9c050803dd31ba529045296b4d3dbb038be0e324a3f084e80c6090f333262ee"
+    },
+    {
+      "review": "contract",
+      "kind": "receipt",
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-spec-v05/independent-contract/review-02.json",
+      "bytes": 2202,
+      "sha256": "c485021ebfdd73041b39da4b559283ff9759f85146cf497d83c8899672ba6aef"
+    },
+    {
+      "review": "principles",
+      "kind": "report",
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-spec-v05/independent-principles/review-02.md",
+      "bytes": 5595,
+      "sha256": "f5f4274b561e9e22690a2d506c9f20d9afd98f0029c0d93b81428501cc132adb"
+    },
+    {
+      "review": "principles",
+      "kind": "receipt",
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-spec-v05/independent-principles/review-02.json",
+      "bytes": 11509,
+      "sha256": "24892cd2cf2ef375b017363daa20ffba5215c928e48692b8ca5004a1389a1dff"
+    }
+  ],
+  "closedDocumentationFindings": [
+    {
+      "id": "R01",
+      "priority": "P2",
+      "initialCandidate": "candidate-01 (not passed; retained)",
+      "finalCandidate": "candidate-02",
+      "status": "closed in specification only; not runtime verified",
+      "fix": "Distinguish parent cancellation from independent-source failure; no model/business continuation after parent stop; UNKNOWN release does not resurrect request."
+    }
+  ],
+  "reviewedCandidateManifest": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-spec-v05/candidate-02/manifest.json",
+  "closeout": "Only tasks/result status and manifest receipts updated after review; core specification bytes remain identical. Final four-file identities and scope checks are retained in evidenceRoot/final.",
+  "statusRecords": [
+    {
+      "path": "openspec/changes/db-link/tasks.md",
+      "bytes": 12029,
+      "sha256": "9380d78f4fd1ea578f7ea3fc6e5e26fe60565d12a561f3aaf166d2edc6f07940"
+    },
+    {
+      "path": "openspec/changes/db-link/result.md",
+      "bytes": 44480,
+      "sha256": "b68e03a2fb82ccefc3447399e4b7dd1690db5af57d6c6c37ebafe16d8f6e8462"
+    }
+  ]
+}

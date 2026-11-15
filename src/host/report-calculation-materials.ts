@@ -3,7 +3,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { ProjectStore } from './project-store.ts';
 import type { EnterpriseMaterialsStore } from './enterprise-materials-store.ts';
 import type { EnterpriseContextProvision } from './enterprise-materials-types.ts';
-import type { ReportCalculationSelection } from '../agent/report-calculation-review.ts';
+import type { ReportCalculationSelection, ReportCalculationBundleReadInput, ReportCalculationBundleReadContext } from '../agent/report-calculation-review.ts';
+import type { DbReviewBundleOwner, DbReviewBundleRef, DbReviewNeutralReceipt, DbReviewBundleReadResult } from './db-link-review-bundles.ts';
+import { parseReportCalculationBundleRead } from '../agent/report-calculation-review.ts';
 import { directory, id, object, readBytes, safePath, writeExclusive } from './project-data-context-io.ts';
 import { PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
 
@@ -19,10 +21,17 @@ export type ReportCalculationMaterialContext = {
   providedContext?: { rap?: ProvidedRap; originalUserText?: string; enterprise?: EnterpriseContextProvision; personal?: unknown; studio?: unknown };
   historicalFrameworks?: readonly HistoricalReportFramework[];
   frameworkHistoryUnavailable?: string;
+  configuration?: { id: string; revision: number };
+};
+export type FixedReviewBundleContext = ReportCalculationBundleReadContext & { configuration: { id: string; revision: number } };
+export type FixedReviewBundlePort = {
+  freeze(owner: DbReviewBundleOwner, input: { selector: string; purpose: 'rcr' | 'cnr' }, context: FixedReviewBundleContext & { maxTotalBytes: number; existingBytes: number }): Promise<{ ref: DbReviewBundleRef; neutralReceipt: DbReviewNeutralReceipt; logicalItems: 1; assertUnchanged(): Promise<void> }>;
+  read(owner: DbReviewBundleOwner, ref: DbReviewBundleRef, input: Omit<ReportCalculationBundleReadInput, 'selector'>, context: FixedReviewBundleContext): Promise<DbReviewBundleReadResult>;
+  verify(owner: DbReviewBundleOwner, ref: DbReviewBundleRef, context: FixedReviewBundleContext): Promise<void>;
 };
 export type ReportCalculationMaterial = {
   id: string;
-  kind: 'report' | 'data' | 'framework' | 'user-request' | 'enterprise' | 'personal' | 'studio';
+  kind: 'report' | 'data' | 'db-result' | 'framework' | 'user-request' | 'enterprise' | 'personal' | 'studio';
   locator: Record<string, unknown>;
   sha256: string | null;
   bytes: number | null;
@@ -42,7 +51,7 @@ export type ReportCalculationMaterialReceipt = {
   createdAt: string;
   materials: ReportCalculationMaterial[];
 };
-type Captured = { record: ReportCalculationMaterial; bytes?: Buffer; text: string | null; revalidate?: () => Promise<void> };
+type Captured = { record: ReportCalculationMaterial; bytes?: Buffer; text: string | null; revalidate?: () => Promise<void>; bundle?: DbReviewBundleRef };
 const maximumPrompt = 20_000;
 const maximumHistoryMetadata = 4_000;
 const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
@@ -74,6 +83,7 @@ export function createReportCalculationMaterials(options: {
   projects: ProjectStore;
   enterpriseMaterials?: EnterpriseMaterialsStore;
   assertRapCurrent?: (rap: ProvidedRap, owner: ReportCalculationMaterialOwner) => Promise<void>;
+  dbBundles?: FixedReviewBundlePort;
 }) {
   async function assertEnterpriseCurrent(locator: Record<string, unknown>, suppliedText: string, check: () => void) {
     const enterprise = options.enterpriseMaterials;
@@ -102,9 +112,14 @@ export function createReportCalculationMaterials(options: {
       failure('report_calculation_invalid_owner');
     if (!object(selection) || Object.keys(selection).some(key => !['report', 'materials'].includes(key))) failure('report_calculation_invalid_selection');
     const reportSelection = selectedFile(selection.report, '060_reports');
-    if (selection.materials !== undefined && !Array.isArray(selection.materials)) failure('report_calculation_invalid_materials');
-    const selected = (selection.materials ?? []).map(value => selectedFile(value, '020_clean'));
-    if (new Set(selected.map(value => value.path)).size !== selected.length) failure('report_calculation_duplicate_material');
+    if (selection.materials !== undefined && (!Array.isArray(selection.materials) || selection.materials.length > 24)) failure('report_calculation_invalid_materials');
+    const selected = (selection.materials ?? []).map(value => {
+      if (object(value) && 'selector' in value) { if (Object.keys(value).length !== 1 || typeof value.selector !== 'string' || !/^db-result:[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.selector)) failure('report_calculation_invalid_material_path'); return { selector: value.selector }; }
+      return selectedFile(value, '020_clean');
+    });
+    if (new Set(selected.map(value => 'selector' in value ? value.selector : value.path)).size !== selected.length) failure('report_calculation_duplicate_material');
+    const reviewId = randomUUID(), bundleOwner: DbReviewBundleOwner = { projectId: owner.projectId, taskId: owner.taskId, requestId: owner.requestId, reviewId };
+    const configuration = context.configuration ? { ...context.configuration } : undefined;
     const check = () => { context.signal.throwIfAborted(); context.assertCurrent(); };
     async function qualify() {
       check();
@@ -144,7 +159,37 @@ export function createReportCalculationMaterials(options: {
       }
     }
     captured.push(await captureFile(reportSelection, 'report', 'report'));
-    for (const [index, file] of selected.entries()) captured.push(await captureFile(file, `data-${index + 1}`, 'data'));
+    async function captureBundle(selector: string, materialId: string): Promise<Captured> {
+      const record: ReportCalculationMaterial = { id: materialId, kind: 'db-result', locator: { selector }, sha256: null, bytes: null, state: 'unavailable', rangeUtf16: null };
+      try {
+        await qualify();
+        if (!options.dbBundles || !configuration) failure('report_calculation_bundle_unavailable');
+        const port = options.dbBundles!, model = configuration!;
+        const fixed = await port.freeze(bundleOwner, { selector, purpose: 'rcr' }, { signal: context.signal, assertCurrent: check, configuration: model, maxTotalBytes: 2 * PROJECT_UPLOAD_MAX_BYTES, existingBytes: capturedBytes }); check();
+        if (fixed.logicalItems !== 1 || fixed.ref.selector !== selector || fixed.ref.kind !== 'db-result-bundle' || Object.entries(bundleOwner).some(([key, value]) => fixed.ref.owner[key as keyof DbReviewBundleOwner] !== value) || !Number.isSafeInteger(fixed.neutralReceipt.bytes) || fixed.neutralReceipt.bytes < 0 || fixed.neutralReceipt.bytes > PROJECT_UPLOAD_MAX_BYTES || fixed.neutralReceipt.bytes + capturedBytes > 2 * PROJECT_UPLOAD_MAX_BYTES) failure('report_calculation_material_bytes_limit');
+        const readContext = { signal: context.signal, assertCurrent: check, configuration: model };
+        let preview: DbReviewBundleReadResult;
+        try { preview = await port.read(bundleOwner, fixed.ref, { startRow: 0, maxRows: 100, maxBytes: maximumPrompt }, readContext); }
+        catch (error) {
+          check();
+          if (codeOf(error) !== 'db_review_bundle_row_too_large_use_chunk_range') throw error;
+          preview = await port.read(bundleOwner, fixed.ref, { chunkIndex: 0, startByte: 0, maxBytes: maximumPrompt }, readContext);
+        }
+        check();
+        const text = JSON.stringify(preview), bytes = Buffer.from(text);
+        if (bytes.length > maximumPrompt) failure('report_calculation_materials_too_large');
+        await port.verify(bundleOwner, fixed.ref, { signal: context.signal, assertCurrent: check, configuration: model }); check();
+        record.sha256 = fixed.ref.sha256; record.bytes = fixed.neutralReceipt.bytes;
+        record.locator = { selector, bundleRef: fixed.ref, configuration: model, previewSha256: hash(bytes), previewBytes: bytes.length };
+        record.limitations = [...fixed.neutralReceipt.limitations, '此 UTF-16 范围仅对应实际提供的有界预览，不代表完整结果已提供、读取或核算；可按需使用固定结果 reader。'];
+        capturedBytes += fixed.neutralReceipt.bytes;
+        return { record, text, bytes, bundle: fixed.ref, revalidate: async () => { await qualify(); await port.verify(bundleOwner, fixed.ref, { signal: context.signal, assertCurrent: check, configuration: model }); check(); } };
+      } catch (error) {
+        check(); const code = codeOf(error); if (/authorized|revoked|owner_unavailable|configuration_changed|run_unavailable|cancelled/.test(code)) throw error;
+        record.code = code; return { record, text: null };
+      }
+    }
+    for (const [index, file] of selected.entries()) captured.push('selector' in file ? await captureBundle(file.selector, `data-${index + 1}`) : await captureFile(file, `data-${index + 1}`, 'data'));
 
     const rap = context.providedContext?.rap;
     async function captureFramework(rap: ProvidedRap, materialId: string, delivery: Record<string, unknown>): Promise<Captured> {
@@ -251,7 +296,7 @@ export function createReportCalculationMaterials(options: {
     };
     // Future range objects/state must already count toward the transport budget.
     captured.forEach(initialize);
-    const receipt: ReportCalculationMaterialReceipt = { schemaVersion: 1, type: 'optracall.report-calculation-materials', claim: 'fixed-packet-prepared', reviewId: randomUUID(),
+    const receipt: ReportCalculationMaterialReceipt = { schemaVersion: 1, type: 'optracall.report-calculation-materials', claim: 'fixed-packet-prepared', reviewId,
       owner: { ...owner }, createdAt: new Date().toISOString(), materials: captured.map(value => value.record) };
     const pieces = captured.map(value => ({ id: value.record.id, text: '' }));
     let omittedCoverage: string | undefined;
@@ -347,7 +392,17 @@ export function createReportCalculationMaterials(options: {
       await qualify();
     }
     await assertFeedbackCurrent();
-    return { prompt, receipt: { ...receipt, sha256: receiptSha256 }, assertFeedbackCurrent };
+    const readDbBundle = captured.some(item => item.bundle) ? async (input: ReportCalculationBundleReadInput, readContext: ReportCalculationBundleReadContext) => {
+      const range = parseReportCalculationBundleRead(input), selected = captured.find(item => item.bundle && item.bundle.selector === range.selector);
+      if (!selected?.bundle || !options.dbBundles || !configuration) failure('report_calculation_bundle_not_selected');
+      const assertCurrent = () => { check(); readContext.signal.throwIfAborted(); readContext.assertCurrent(); };
+      assertCurrent(); await assertFeedbackCurrent(); assertCurrent();
+      const { selector: _selector, ...position } = range;
+      const response = await options.dbBundles!.read(bundleOwner, selected!.bundle!, position, { signal: readContext.signal, assertCurrent, configuration: configuration! });
+      if (Buffer.byteLength(JSON.stringify(response)) > (range.maxBytes ?? maximumPrompt)) failure('report_calculation_materials_too_large');
+      await assertFeedbackCurrent(); assertCurrent(); return response;
+    } : undefined;
+    return { prompt, receipt: { ...receipt, sha256: receiptSha256 }, assertFeedbackCurrent, readDbBundle };
   }
   async function readMaterial(owner: Omit<ReportCalculationMaterialOwner, 'sessionId'>, reviewId: string, materialId: string,
     readOptions: { start?: number; length?: number; signal?: AbortSignal; expectedReceiptSha256?: string } = {}) {
@@ -370,7 +425,7 @@ export function createReportCalculationMaterials(options: {
       receipt.type !== 'optracall.report-calculation-materials' || receipt.schemaVersion !== 1 || receipt.claim !== 'fixed-packet-prepared' ||
       receipt.owner.projectId !== owner.projectId || receipt.owner.taskId !== owner.taskId || receipt.owner.requestId !== owner.requestId || receipt.reviewId !== reviewId ||
       receipt.materials.some(value => !object(value) || typeof value.id !== 'string' || !object(value.locator) ||
-        !['report', 'data', 'framework', 'user-request', 'enterprise', 'personal', 'studio'].includes(value.kind as string) ||
+        !['report', 'data', 'db-result', 'framework', 'user-request', 'enterprise', 'personal', 'studio'].includes(value.kind as string) ||
         !['provided', 'truncated', 'unavailable', 'version-conflict', 'metadata'].includes(value.state as string)) ||
       new Set(receipt.materials.map(value => value.id)).size !== receipt.materials.length)
       failure('report_calculation_receipt_corrupt');
@@ -379,8 +434,15 @@ export function createReportCalculationMaterials(options: {
     if (material.state === 'unavailable' || material.state === 'version-conflict')
       return { receipt: { ...receipt, sha256: envelope.sha256 }, material, text: null, rangeUtf16: null, continuationStart: null };
     if (material.kind === 'report' || material.kind === 'data') selectedFile(material.locator, material.kind === 'report' ? '060_reports' : '020_clean');
+    if (material.kind === 'db-result') {
+      const locator = material.locator, ref = locator.bundleRef, model = locator.configuration;
+      if (!options.dbBundles || !object(ref) || !object(model) || typeof model.id !== 'string' || !Number.isSafeInteger(model.revision)) failure('report_calculation_receipt_corrupt');
+      const trustedOwner = { projectId: owner.projectId, taskId: owner.taskId, requestId: owner.requestId, reviewId };
+      await options.dbBundles!.verify(trustedOwner, ref as DbReviewBundleRef, { signal: readOptions.signal ?? new AbortController().signal, assertCurrent: check, configuration: model as { id: string; revision: number } }); check();
+    }
     const bytes = await readBytes(await safePath(options.dataRoot, relativeRoot + '/' + materialId + '.bin'), PROJECT_UPLOAD_MAX_BYTES);
-    if (bytes.length !== material.bytes || hash(bytes) !== material.sha256) failure('report_calculation_snapshot_changed');
+    const expectedBytes = material.kind === 'db-result' ? material.locator.previewBytes : material.bytes, expectedHash = material.kind === 'db-result' ? material.locator.previewSha256 : material.sha256;
+    if (bytes.length !== expectedBytes || hash(bytes) !== expectedHash) failure('report_calculation_snapshot_changed');
     const text = utf8(bytes);
     if (text === null) failure('report_calculation_material_requires_text');
     if (material.kind === 'framework') {

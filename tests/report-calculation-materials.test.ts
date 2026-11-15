@@ -8,6 +8,62 @@ import { ProjectStore } from '../src/host/project-store.ts';
 import { createReportCalculationMaterials } from '../src/host/report-calculation-materials.ts';
 import { EnterpriseMaterialsStore } from '../src/host/enterprise-materials-store.ts';
 import type { EnterpriseContextProvision } from '../src/host/enterprise-materials-types.ts';
+import type { FixedReviewBundlePort } from '../src/host/report-calculation-materials.ts';
+import { DbLinkResults } from '../src/host/db-link-results.ts';
+import { createDbLinkReviewBundles } from '../src/host/db-link-review-bundles.ts';
+
+test('RCR DB: a large cell keeps the fully fixed bundle available through exact chunk ranges', async t => {
+  const f = await fixture(t); await fs.writeFile(path.join(f.project.rootPath, '060_reports', 'main.md'), '# 固定初稿');
+  const sourceOwner = { projectId: f.owner.projectId, taskId: f.owner.taskId, requestId: randomUUID(), operationId: randomUUID() };
+  const results = new DbLinkResults({ dataRoot: f.dataRoot, projectDirectory: () => f.project.rootPath, assertAccess() {} });
+  const sink = await results.begin(sourceOwner, { connectionId: randomUUID(), connectionRevision: 1, engine: 'postgresql', sourceIdentity: 'synthetic', sql: 'AUTHOR_SQL', parameters: [], observedObjects: [], declaredObjects: ['AUTHOR_RELATION'], unknownObjects: [], startedAt: new Date().toISOString(), session: { timezone: 'UTC', encoding: 'UTF8', isolation: 'unknown' } }, [{ ordinal: 0, name: 'payload', databaseType: 'text', precision: null, scale: null }], { maxRows: 10, maxBytes: 200000, maxCellBytes: 100000, chunkBytes: 100000 });
+  const original = '固定😀'.repeat(6000); await sink.append([[original]]); const result = await sink.complete('1'), selector = `db-result:${result.id}`;
+  const bundles = createDbLinkReviewBundles({ privateRoot: path.join(f.dataRoot, 'private-bundles'), projects: f.projects, results, assertOwner() {} });
+  const materials = createReportCalculationMaterials({ dataRoot: f.dataRoot, projects: f.projects, dbBundles: {
+    freeze: (owner, input, context) => bundles.freeze(owner, input, { ...context, sourceOwner }),
+    read: (owner, ref, range, context) => bundles.read(owner, ref, { ...range, stage: 'cold', section: 'data' }, context), verify: bundles.verify,
+  } });
+  const prepared = await materials.prepare(f.owner, { report: { path: '060_reports/main.md' }, materials: [{ selector }] }, { ...f.context, configuration: { id: 'synthetic', revision: 1 } });
+  assert.equal(typeof prepared.readDbBundle, 'function'); assert.equal(prepared.receipt.materials[1].kind, 'db-result');
+  assert.notEqual(prepared.receipt.materials[1].state, 'unavailable'); assert.equal(prepared.receipt.materials[1].bytes, result.bytes);
+  const bytes: Buffer[] = []; let startByte = 0;
+  for (;;) {
+    const part = await prepared.readDbBundle!({ selector, chunkIndex: 0, startByte, maxBytes: 4000 }, f.context) as Awaited<ReturnType<typeof bundles.read>>;
+    assert.ok(Buffer.byteLength(JSON.stringify(part)) <= 4000); bytes.push(Buffer.from(part.chunk!.base64, 'base64'));
+    if (part.chunk!.continuationStartByte === null) break; startByte = part.chunk!.continuationStartByte;
+  }
+  assert.equal(JSON.parse(Buffer.concat(bytes).toString()).rows[0][0], original); assert.doesNotMatch(prepared.prompt, /AUTHOR_SQL|AUTHOR_RELATION/);
+});
+
+test('RCR DB: one result selector fixes an entire logical bundle and exposes only its bound range reader', async t => {
+  const f = await fixture(t), selector = `db-result:${randomUUID()}`;
+  await fs.writeFile(path.join(f.project.rootPath, '060_reports', 'main.md'), '# 固定初稿\n合计10');
+  let freezes = 0, reads = 0, verified = 0, allowed = true, denyOnRead = false;
+  const dbBundles: FixedReviewBundlePort = {
+    freeze: async (owner, input, context) => {
+      freezes++; assert.equal(owner.requestId, f.owner.requestId); assert.equal(input.selector, selector); assert.equal(context.maxTotalBytes, 100 * 1024 * 1024); assert.ok(context.existingBytes > 0);
+      return { logicalItems: 1, ref: { kind: 'db-result-bundle', selector, owner, sha256: 'a'.repeat(64) }, neutralReceipt: { resultId: selector.slice(10), connectionId: 'connection-a', connectionRevision: 2, sourceIdentity: 'native-a', columns: [], startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), receivedRows: 2, persistedRows: 2, serverRowCount: '2', chunkCount: 30, bytes: 1000, consistency: { isolation: 'unknown', snapshot: null, timezone: 'UTC', encoding: 'UTF8' }, dataNature: 'author-query-result', extractionCoverage: 'unverified', limitations: ['作者查询结果，不证明独立取数。'] }, assertUnchanged: async () => { verified++; } };
+    },
+    read: async (_owner, ref, range, context) => { context.assertCurrent(); reads++; assert.equal(ref.selector, selector); assert.ok(range.startRow === 0 || range.startRow === 1); if (denyOnRead) allowed = false; return { neutralReceipt: {} as any, rows: [['6.00']], coverage: { startRow: range.startRow!, providedRows: 1, resultRows: 2, providedBytes: 8, complete: false, verifiedChunks: 1, totalChunks: 30 }, continuationStartRow: null }; },
+    verify: async () => { verified++; if (!allowed) throw Object.assign(new Error('db_material_export_not_authorized'), { code: 'db_material_export_not_authorized' }); },
+  };
+  const materials = createReportCalculationMaterials({ dataRoot: f.dataRoot, projects: f.projects, dbBundles });
+  const bound = await materials.prepare(f.owner, { report: { path: '060_reports/main.md' }, materials: [{ selector }] }, { ...f.context, configuration: { id: 'synthetic', revision: 1 } });
+  assert.equal(freezes, 1); assert.equal(bound.receipt.materials.length, 2); assert.equal(bound.receipt.materials[1].kind, 'db-result');
+  assert.equal(bound.receipt.materials[1].bytes, 1000); assert.ok(bound.prompt.length <= 20000);
+  assert.equal(typeof bound.readDbBundle, 'function');
+  const response = await bound.readDbBundle!({ selector, startRow: 1 }, f.context) as { rows: unknown[] }; assert.deepEqual(response.rows, [['6.00']]); assert.equal(reads, 2);
+  await assert.rejects(bound.readDbBundle!({ selector: `db-result:${randomUUID()}` }, f.context), /bundle_not_selected/);
+  await assert.rejects(bound.readDbBundle!({ selector, stage: 'informed' } as any, f.context), /invalid_bundle_range/);
+  for (const value of [{ selector, privatePath: '/private/secret' }, { selector, owner: f.owner }, { selector, maxBytes: 20001 }, { selector, maxRows: 1001 }, { selector, startByte: 1 }])
+    await assert.rejects(bound.readDbBundle!(value as any, f.context), /invalid_bundle_range/);
+  await assert.rejects(materials.prepare(f.owner, { report: { path: '060_reports/main.md' }, materials: Array.from({ length: 25 }, () => ({ selector: `db-result:${randomUUID()}` })) }, f.context), /invalid_materials/);
+  await assert.rejects(materials.prepare(f.owner, { report: { path: '060_reports/main.md' }, materials: [{ selector }, { selector }] }, f.context), /duplicate_material/);
+  const historical = await materials.readMaterial(f.owner, bound.receipt.reviewId, 'data-1', { length: 1 }); assert.equal(typeof historical.text, 'string'); assert.ok(verified > 0);
+  denyOnRead = true;
+  await assert.rejects(bound.readDbBundle!({ selector, startRow: 1 }, f.context), /db_material_export_not_authorized/);
+  await assert.rejects(bound.assertFeedbackCurrent(), /db_material_export_not_authorized/);
+});
 
 const sha = (content: string | Buffer) => createHash('sha256').update(content).digest('hex');
 const configuration = { id: 'synthetic', revision: 1, name: 'Synthetic', provider: 'synthetic', model: 'synthetic', baseUrl: 'http://127.0.0.1' };

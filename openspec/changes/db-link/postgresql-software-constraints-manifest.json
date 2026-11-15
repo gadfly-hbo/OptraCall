@@ -1,0 +1,70 @@
+{
+  "version": "v0.4-supplement",
+  "date": "2026-11-14T08:43:34.448557+00:00",
+  "status": "pending-user-confirmation",
+  "scope": "Documentation only: Agent autonomous SQL correction in Pi normal tool loop; no fixed correction count; aggregate correction budget uncapped for now. Existing individual database operation safety retained.",
+  "sourceHead": "ef3e7d0b8703a6e22023e8099a56c542d484a69d",
+  "userStatement": "把 Agent 自主纠错和跨纠错累计预算补进 db-link spec，不另设 SQL 固定纠错次数，复用 Pi 正常工具调用循环，明确单次操作预算、停止及 UNKNOWN 边界。按四原则和工程规范复核后交我确认，暂不开发。（暂时预算无上限，不要设限制，后续有问题再调整）",
+  "reviewedSpec": {
+    "path": "openspec/changes/db-link/postgresql-software-constraints-spec.md",
+    "bytes": 42461,
+    "sha256": "dc49c5ed6e4fcf0fee1d6e65359205c39fd5ae55744ffea409ff0edf21d5af24"
+  },
+  "historicalSnapshots": [
+    {
+      "path": "openspec/changes/db-link/postgresql-software-constraints-spec.v0.3.md",
+      "bytes": 32475,
+      "sha256": "a126369cb4e852f34776ec12bca00b06c541a2f6595184ea2e69dc68b76fb980"
+    },
+    {
+      "path": "openspec/changes/db-link/postgresql-software-constraints-manifest.v0.3.json",
+      "bytes": 2187,
+      "sha256": "479a9635cf96a740854a538e3c105918509501875440b50f730794f91a62e19a"
+    }
+  ],
+  "approvedBaseline": "implementation-approval.json; preserve all 10 approved files",
+  "cumulativeCorrectionPolicy": "uncapped; no dedicated SQL attempt/time/token/cost/cross-attempt return threshold; existing request/tool events retain factual use where available",
+  "individualOperationPolicy": "existing finite per-operation deadlines, receive/transport/concurrency and true cleanup/UNKNOWN admission unchanged",
+  "gate": "queryQualified=false retained; no runtime qualification",
+  "productTests": "NOT_RUN",
+  "databaseTests": "NOT_RUN",
+  "evidenceRoot": "/Users/bendandebaba/.codex/visualizations/2026/11/14/db-link-pg-agent-correction-spec",
+  "authorization": "Specification preparation only. Await confirmation; no development, database/model access, dependencies, deployment, service/device changes or Git delivery.",
+  "statusRecords": [
+    {
+      "path": "openspec/changes/db-link/tasks.md",
+      "bytes": 8327,
+      "sha256": "895afd75a48410df7e95391b143c73c0ffab89d7e70905b977ab908971ccef5c"
+    },
+    {
+      "path": "openspec/changes/db-link/result.md",
+      "bytes": 39150,
+      "sha256": "de73c7329d36bad1bba1cc7276cae7cd2d927ac7a0c8cebbca49bae043b38547"
+    }
+  ],
+  "independentReview": {
+    "report": {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/14/db-link-pg-agent-correction-spec/independent/review-initial.md",
+      "bytes": 12331,
+      "sha256": "19d545770e00a5616a10535d3609426d2881eb0fa7b79fe17fa44cdcd4b23562"
+    },
+    "conclusion": "PASS for candidate-01 document preparation/four-principle review only; 0 required corrections",
+    "reviewedCandidateManifest": {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/14/db-link-pg-agent-correction-spec/candidate-01/manifest.json",
+      "bytes": 1337,
+      "sha256": "2f35139c383cccc6b5672bba8829398629de1ca5fd5d014dac2206f0227b4445"
+    },
+    "metadataCloseout": "Only tasks/result/manifest actual closeout status updated after review; specification technical bytes unchanged."
+  },
+  "validation": {
+    "authorDocumentChecks": "PASS",
+    "independentDocumentReview": "PASS within document preparation scope",
+    "fourPrinciples": "PASS within document preparation scope",
+    "productTests": "NOT_RUN",
+    "databaseTests": "NOT_RUN",
+    "modelTests": "NOT_RUN",
+    "browserTests": "NOT_RUN",
+    "fullCheck": "NOT_RUN",
+    "CI": "NOT_RUN"
+  }
+}

@@ -18,6 +18,7 @@ const projectAgentOwners = new Set([
   'tests/sdk-tool-context-runtime.test.ts', // R1 frozen-source/qualification proof through the existing ProjectAgent seam only.
   'tests/sdk-network-compat.test.ts', // R3 loopback MCP/controlled TLS through the unchanged worker/transport entry only.
   'tests/semantic-context-runtime.test.ts', // L1 isolated SDK callback/nested/cancellation/auxiliary-failure proof; no product runtime ownership.
+  'tests/db-link-tools.test.ts', // DB04/14/18 isolated SDK direct/nested tools, capability and cleanup proof; no product runtime ownership.
   'tests/s4-runtime-lifecycle.test.ts', // D13: synthetic same-Resource read-capability/reap/quarantine proof only.
   'tests/s4-runtime-sdk.test.ts', // D13: actual Pi SDK graph-only ordinary modes and cancellation proof only.
   'tests/experience-learning-runtime.test.ts', // M6 isolated ordinary cross-Case read/candidate qualification proof only.

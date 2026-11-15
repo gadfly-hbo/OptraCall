@@ -3,13 +3,16 @@ import type { ProvidedContextInput } from './project-runtime.ts';
 
 export type ReportCalculationSelection = {
   report: { path: string; sha256?: string };
-  materials?: { path: string; sha256?: string }[];
+  materials?: ({ path: string; sha256?: string } | { selector: string })[];
 };
+export type ReportCalculationBundleReadInput = { selector: string; startRow?: number; maxRows?: number; maxBytes?: number; chunkIndex?: number; startByte?: number };
+export type ReportCalculationBundleReadContext = { signal: AbortSignal; assertCurrent(): void };
 export type ReportCalculationPrepared = {
   prompt: string;
   receipt: unknown;
   assertFeedbackCurrent(): Promise<void>;
   withCurrentDelivery?(deliver: () => void): Promise<void>;
+  readDbBundle?(input: ReportCalculationBundleReadInput, context: ReportCalculationBundleReadContext): Promise<unknown>;
 };
 export type ReportCalculationCallContext = {
   signal: AbortSignal;
@@ -44,14 +47,30 @@ const file = Type.Object({
   path: Type.String({ minLength: 1, maxLength: 1024 }),
   sha256: Type.Optional(Type.String({ pattern: '^[a-f0-9]{64}$' })),
 }, { additionalProperties: false });
+const bundle = Type.Object({ selector: Type.String({ pattern: '^db-result:[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$' }) }, { additionalProperties: false });
+export const reportCalculationBundleToolName = 'read_fixed_db_result';
+export const reportCalculationBundleReadParameters = Type.Object({
+  selector: Type.String({ pattern: '^db-result:[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$' }),
+  startRow: Type.Optional(Type.Integer({ minimum: 0 })), maxRows: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
+  maxBytes: Type.Optional(Type.Integer({ minimum: 1, maximum: 20000 })), chunkIndex: Type.Optional(Type.Integer({ minimum: 0 })), startByte: Type.Optional(Type.Integer({ minimum: 0 })),
+}, { additionalProperties: false });
+export function parseReportCalculationBundleRead(value: unknown): ReportCalculationBundleReadInput {
+  const fail = (): never => { throw Object.assign(new Error('report_calculation_invalid_bundle_range'), { code: 'report_calculation_invalid_bundle_range' }); };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();
+  const input = value as Record<string, unknown>;
+  if (Object.keys(input).some(key => !['selector', 'startRow', 'maxRows', 'maxBytes', 'chunkIndex', 'startByte'].includes(key)) || typeof input.selector !== 'string' || !/^db-result:[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(input.selector)) return fail();
+  for (const key of ['startRow', 'maxRows', 'maxBytes', 'chunkIndex', 'startByte']) if (input[key] !== undefined && (!Number.isSafeInteger(input[key]) || Number(input[key]) < (key === 'maxRows' || key === 'maxBytes' ? 1 : 0))) return fail();
+  if (Number(input.maxRows ?? 100) > 1000 || Number(input.maxBytes ?? 20000) > 20000 || input.startByte !== undefined && input.chunkIndex === undefined) return fail();
+  return structuredClone(input) as ReportCalculationBundleReadInput;
+}
 
 export const reportCalculationToolName = 'review_report_calculations';
 export const reportCalculationTool = {
   name: reportCalculationToolName,
   label: '复核本版报告计算',
-  description: 'Before the final reply, delegate one foreground review of your explicitly selected saved main report when it contains consequential calculations. The same reviewer returns calculation and confirmed-framework coverage advice in one native tool result. Supply the report path and relevant authorized 020_clean material paths; the Host fixes exact versions and only framework text with verifiable actual delivery in the current request or native branch. Historical delivery does not prove renewed confirmation or present applicability. The reviewer has no execution or general file tools. You independently verify and handle the advice, self-check any revision against the same requirements and supplied materials, save it separately and preserve the original draft. At most one actual reviewer startup per parent request; there is no second automatic delegation, coverage score or item-by-item approval. Correct an invalid selection before startup if needed. Missing framework or unverifiable coverage does not prevent calculation review; missing or failed review does not establish correctness.',
+  description: 'Before the final reply, delegate one foreground review of your explicitly selected saved main report when it contains consequential calculations. The same reviewer returns calculation and confirmed-framework coverage advice in one native tool result. Supply the report path and relevant authorized 020_clean material paths or db-result:<result UUID> selectors; the Host fixes each complete result bundle as one material. Fixed author query results may be derived or aggregated and do not prove independent extraction or complete source coverage. The Host fixes exact versions and only framework text with verifiable actual delivery in the current request or native branch. Historical delivery does not prove renewed confirmation or present applicability. The reviewer has no execution or general file tools; selected DB bundles have only a bounded fixed-result reader. You independently verify and handle the advice, self-check any revision against the same requirements and supplied materials, save it separately and preserve the original draft. At most one actual reviewer startup per parent request; there is no second automatic delegation, coverage score or item-by-item approval. Correct an invalid selection before startup if needed. Missing framework or unverifiable coverage does not prevent calculation review; missing or failed review does not establish correctness.',
   defaultActive: false,
-  parameters: Type.Object({ report: file, materials: Type.Optional(Type.Array(file, { maxItems: 24 })) }, { additionalProperties: false }),
+  parameters: Type.Object({ report: file, materials: Type.Optional(Type.Array(Type.Union([file, bundle]), { maxItems: 24 })) }, { additionalProperties: false }),
 };
 
 export const reportCalculationSystemPrompt = [
@@ -62,5 +81,10 @@ export const reportCalculationSystemPrompt = [
   'Apply a user-confirmed scope adjustment only when evidenced in this request, and name the original questions moved out of scope. Distinguish that user scope adjustment from an Agent-proposed limitation caused by insufficient evidence; do not silently treat the latter as user approval or an answered question. For each important finding state the concrete original requirement, draft location or missing response, actual evidence and impact on report usability. Whether evidence supports conclusions and action recommendations belongs to the separate conclusion review, not this coverage opinion.',
   'The original main Agent owns all decisions and revisions. Offer advice it can independently verify, supplement, explain as limited or reject on evidence. It should record actual handling, self-check a revision against the same requirements and supplied materials, save a new version and preserve the original draft. This self-check is not a second automatic delegation or item-by-item release gate.',
 ].join('\n\n');
+
+export const reportCalculationBundleSystemPrompt = reportCalculationSystemPrompt.replace(
+  'You have no execution, file, network or delegation tools.',
+  'You have no execution, general file, network or delegation tools. Your sole tool read_fixed_db_result reads bounded ranges of the selected, fully frozen author-query-result bundles. A complete frozen bundle is distinct from a preview, a returned tool range, actual reading and completed calculation. The result may be author-derived or aggregated; fixed-result recalculation does not establish independent extraction or complete database coverage. Choose sufficient ranges yourself and state unread or uncomputed scope. The reader exposes no SQL, parameters or author source declarations.',
+);
 
 export const reportCalculationGuidance = 'When this ordinary request produces a saved formal report containing consequential calculations, explicitly select that main draft and its relevant authorized material, then call review_report_calculations before your final reply. Calculation and framework-coverage advice come from the same one foreground delegation. A framework alone, short answer, purely descriptive report or temporary process file does not require it. If material selection is rejected before reviewer startup, correct that selection and retry; once startup begins, this request has consumed its one delegation. Wait for its native advice and independently verify the findings. For coverage, use only the actually supplied confirmed requirements, verifiable user scope adjustments and evidence; distinguish an Agent limitation from user approval, and allow equivalent methods. Decide whether to supplement, revise, explain limits or retain a supported original, and record the actual disposition. After any revision, self-check against the same requirements and supplied materials; save a new version and preserve the original draft. There is no second automatic delegation, coverage score or item-by-item approval. Make the final response match the actually saved version and explain missing or incomplete review accurately. Missing or unreadable framework leaves coverage unverified while calculation review continues. The Host does not choose the main report or determine computational or business correctness.';
