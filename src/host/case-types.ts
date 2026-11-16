@@ -1,3 +1,4 @@
+import type { GoalRef } from './strategy-goals-types.ts';
 export class CaseStoreError extends Error {
   readonly statusCode: number;
   readonly code: string;
@@ -11,6 +12,8 @@ export type CaseRecord = {
   id: string; title: string; description: string; judgement: string; nextStep: string; status: CaseStatus;
   closeReason: string | null; closedAt: string | null; revision: number; createdAt: string; updatedAt: string;
 };
+export type CaseGoalBindingInput = { primary: GoalRef; related: GoalRef[] };
+export type CaseGoalBinding = CaseGoalBindingInput & { caseId: string; caseRevision: number; confirmedAt: string; operationId: string };
 export type CaseProjectLink = { caseId: string; projectId: string; linkedAt: string };
 export type ProjectWorkRecord = {
   projectId: string; workStatus: ProjectWorkStatus | null; workScope: string; assignee: string | null;
@@ -41,7 +44,7 @@ export type WorkEvent = {
 };
 export type CaseList = { cases: CaseRecord[]; projectLinks: CaseProjectLink[] };
 export type CaseDetail = {
-  case: CaseRecord; projectLinks: CaseProjectLink[]; artifacts: CaseArtifactView[];
+  case: CaseRecord; goalBinding?: CaseGoalBinding | null; projectLinks: CaseProjectLink[]; artifacts: CaseArtifactView[];
   events: WorkEvent[]; projectEvents: WorkEvent[]; pendingOperations: OperationReceipt[];
 };
 export type CaseContextSelection = {

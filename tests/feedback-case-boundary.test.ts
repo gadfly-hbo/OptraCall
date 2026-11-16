@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -10,7 +11,7 @@ test('FC17: associating a review file rejects archived project writes and preser
   const {project}=await readJson(await host.request('/api/projects','POST',{name:'Case反馈关联边界'}),201);
   await readJson(await host.request(`/api/projects/${project.id}/files/save-report`,'POST',{name:'复盘.md',text:'# 合成复盘\n效果未知。'}),201);
   await readJson(await host.request('/api/cases/storage/initialize','POST',{}));
-  let record=(await readJson(await host.request('/api/cases','POST',{operationId:randomUUID(),title:'合成Case',description:'不做经营动作'}),201)).case;
+  let record=(await readJson(await host.request('/api/cases','POST',await withCaseGoal(host, {operationId:randomUUID(),title:'合成Case',description:'不做经营动作'})),201)).case;
   record=(await readJson(await host.request(`/api/cases/${record.id}/projects`,'POST',{operationId:randomUUID(),expectedRevision:record.revision,projectId:project.id}))).case;
   const savedInput={operationId:randomUUID(),expectedRevision:record.revision,projectId:project.id,relativePath:'060_reports/复盘.md',taskId:null,role:'report',displayName:'合成复盘'};
   const saved=await readJson(await host.request(`/api/cases/${record.id}/artifacts`,'POST',savedInput));

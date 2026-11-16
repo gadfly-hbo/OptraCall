@@ -8,6 +8,8 @@ import type { SapMethodSources } from './sap-method-sources.ts';
 
 export type SapMethodExtractionInput = {
   projectId: string; taskId: string; extractionId: string; configuration: Readonly<RuntimeModelConfiguration>;
+  /** Host-only parent qualification; it is never serialized to the worker. */
+  parentContext?: unknown;
 };
 export type SapMethodOwner = SapMethodExtractionInput & { sources?: SapMethodSources };
 export type SapMethodOutcomeContext = {
@@ -76,6 +78,7 @@ export function createSapMethodSessions(options: SapMethodSessionsOptions) {
       }
     },
     stop: (owner: Pick<SapMethodOwner, 'projectId' | 'taskId' | 'extractionId'>) => domain.stop(lookup(owner)),
+    stopForTask: (projectId: string, taskId: string) => domain.closeAll({ projectId }, owner => owner.taskId === taskId),
     read: (owner: Pick<SapMethodOwner, 'projectId' | 'taskId' | 'extractionId'>) => domain.read(lookup(owner)),
     busy: (owner: Pick<SapMethodOwner, 'projectId' | 'taskId' | 'extractionId'>) => domain.busy(lookup(owner)),
     busyInScope: (filter: SessionFilter = {}) => domain.busyInScope(filter),

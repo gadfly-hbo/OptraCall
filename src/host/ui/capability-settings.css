@@ -1,0 +1,4 @@
+.capability-settings code { overflow-wrap: anywhere; word-break: break-word; }
+.capability-settings .detail-metadata dd { min-width: 0; }
+.task-capability-navigation { width: min(800px, calc(100% - 64px)); margin: 10px auto 0; flex-shrink: 0; }
+@media (max-width: 760px) { .task-capability-navigation { width: calc(100% - 32px); } }

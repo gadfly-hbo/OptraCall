@@ -1,3 +1,5 @@
+import type { UserQuoteProvenance } from '../../../src/agent/quoted-decisions.ts';
+
 export type EvidenceLevel = '数据支撑' | '多源佐证' | '逻辑推断' | '经验假设';
 export type Priority = 'high' | 'medium' | 'low';
 export type ItemStatus = 'suggested' | 'adopted' | 'dismissed';
@@ -57,8 +59,20 @@ export type TaskFeedbackRevision = TaskFeedbackRecord & {
   revisionId: string; revisionNumber: number; operationId: string | null; requestSha256: string | null;
   savedAt: string; origin: 'user-save' | 'legacy-current';
   legacyCreatedAt: string | null; legacyUpdatedAt: string | null;
+  quoteProvenance?: UserQuoteProvenance;
 };
-export type BoardTaskView = BoardTaskRecord & { feedback?: TaskFeedbackRevision };
+export type BoardAuthorizationSource = { caseStoreId: string; caseId: string; choiceId: string;
+  strategyRef: { type: 'case-decision'; caseStoreId: string; caseId: string; recordId: string; revision: number } };
+export type BoardActionAuthorizationInput = {
+  operationId: string; projectId: string; itemId: string; taskId: string; itemVersion: string; taskVersion: string;
+  expectedPreviousAuthorizationId: string | null; decision: 'authorize' | 'revoke'; scope: string;
+  source: BoardAuthorizationSource; quoteProvenance: UserQuoteProvenance;
+};
+export type BoardActionAuthorization = Omit<BoardActionAuthorizationInput, 'expectedPreviousAuthorizationId'> & {
+  authorizationId: string; revision: number; previousAuthorizationId: string | null; requestSha256: string;
+  itemSnapshot: BoardItemRecord; taskSnapshot: BoardTaskRecord; actorKind: 'user'; createdAt: string;
+};
+export type BoardTaskView = BoardTaskRecord & { feedback?: TaskFeedbackRevision; authorization?: Pick<BoardActionAuthorization, 'authorizationId' | 'revision' | 'decision' | 'scope' | 'source' | 'createdAt'> | null };
 export type BoardItemView = BoardItemRecord & { tasks: BoardTaskView[] };
 
 /** Validated extraction item shape produced by normalizeExtractionOutput. */

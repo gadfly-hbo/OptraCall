@@ -44,12 +44,15 @@ const basisPath = (value: unknown): string => databaseSelector(value) ? value : 
 
 /** Strict transport selection. No path, credential, source text or session authority is accepted from the client. */
 export function parseConclusionReviewSelection(input: unknown): ConclusionReviewSelection {
-  if (!object(input) || Object.keys(input).some(key => !['verificationId','report','basisFiles','configurationId','requirementContext','useCurrentSap','caseId','caseRevision','enterpriseMaterials'].includes(key)) || !uuid(input.verificationId) || !object(input.report) || Object.keys(input.report).some(key => !['relativePath','sha256'].includes(key))) return fail('invalid_conclusion_review_selection', 400);
+  if (!object(input) || Object.keys(input).some(key => !['verificationId','report','basisFiles','configurationId','requirementContext','useCurrentSap','caseId','caseRevision','enterpriseMaterials','basisVersions','projectPlan'].includes(key)) || !uuid(input.verificationId) || !object(input.report) || Object.keys(input.report).some(key => !['relativePath','sha256'].includes(key))) return fail('invalid_conclusion_review_selection', 400);
   const report = { relativePath: filePath(input.report.relativePath, true), ...(input.report.sha256 === undefined ? {} : { sha256: input.report.sha256 as string }) };
   if (report.sha256 !== undefined && (typeof report.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(report.sha256))) fail('invalid_conclusion_review_selection', 400);
   if (input.basisFiles !== undefined && (!Array.isArray(input.basisFiles) || input.basisFiles.length > 24)) fail('invalid_conclusion_review_selection', 400);
   const basisFiles = (input.basisFiles as unknown[] | undefined)?.map(basisPath);
   if (basisFiles && new Set(basisFiles).size !== basisFiles.length) fail('invalid_conclusion_review_selection', 400);
+  if (input.basisVersions !== undefined && (!Array.isArray(input.basisVersions) || input.basisVersions.length > 24 || input.basisVersions.some(ref => !object(ref) || Object.keys(ref).sort().join(',') !== 'relativePath,sha256' || typeof ref.relativePath !== 'string' || !basisFiles?.includes(ref.relativePath) || !/^[a-f0-9]{64}$/.test(String(ref.sha256))) || new Set(input.basisVersions.map(ref => ref.relativePath)).size !== input.basisVersions.length)) fail('invalid_conclusion_review_selection', 400);
+  if (input.projectPlan !== undefined && (!object(input.projectPlan) || Object.keys(input.projectPlan).sort().join(',') !== 'confirmationId,taskKey' || !uuid(input.projectPlan.confirmationId) || typeof input.projectPlan.taskKey !== 'string' || !input.projectPlan.taskKey.trim() || input.projectPlan.taskKey.length > 200)) fail('invalid_conclusion_review_selection', 400);
+
   if (input.configurationId !== undefined && (typeof input.configurationId !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(input.configurationId))) fail('invalid_conclusion_review_selection', 400);
   if (input.useCurrentSap !== undefined && typeof input.useCurrentSap !== 'boolean') fail('invalid_conclusion_review_selection', 400);
   if (input.requirementContext !== undefined) {
@@ -60,7 +63,7 @@ export function parseConclusionReviewSelection(input: unknown): ConclusionReview
   }
   if (input.caseId !== undefined && !uuid(input.caseId) || input.caseRevision !== undefined && (!Number.isSafeInteger(input.caseRevision) || Number(input.caseRevision) < 1) || input.caseId !== undefined && input.caseRevision === undefined || input.caseId === undefined && input.caseRevision !== undefined) fail('invalid_conclusion_review_selection', 400);
   const enterpriseMaterials = input.enterpriseMaterials === undefined ? undefined : parseEnterpriseSelection(input).materials;
-  return { verificationId: input.verificationId, report, ...(basisFiles === undefined ? {} : { basisFiles }),
+  return { verificationId: input.verificationId, report, ...(input.basisVersions ? { basisVersions: structuredClone(input.basisVersions) as ConclusionReviewSelection['basisVersions'] } : {}), ...(input.projectPlan ? { projectPlan: structuredClone(input.projectPlan) as ConclusionReviewSelection['projectPlan'] } : {}), ...(basisFiles === undefined ? {} : { basisFiles }),
     ...(input.configurationId === undefined ? {} : { configurationId: input.configurationId as string }),
     ...(input.requirementContext === undefined ? {} : { requirementContext: structuredClone(input.requirementContext) as ConclusionReviewSelection['requirementContext'] }),
     ...(input.useCurrentSap === undefined ? {} : { useCurrentSap: input.useCurrentSap as boolean }),
@@ -75,6 +78,8 @@ export type ConclusionReviewMaterialOptions = {
   availableConfiguration(id?: string, revision?: number): Readonly<VerificationConfiguration> | undefined;
   cases?: CaseStore;
   enterpriseMaterials?: EnterpriseMaterialsStore;
+  projectContract?(projectId: string, taskId: string, selection: NonNullable<ConclusionReviewSelection['projectPlan']>): Promise<string>;
+  assertProjectContractAuthorized?(projectId: string, taskId: string, selection: NonNullable<ConclusionReviewSelection['projectPlan']>): Promise<void>;
   requirementContext?(input: Record<string, unknown>, projectId?: string): string | undefined | Promise<string | undefined>;
   /** Read permission of the exact saved source, independent of today's draft freshness or composition. */
   assertRequirementAuthorized?(selection: NonNullable<ConclusionReviewSelection['requirementContext']>, projectId: string): void | Promise<void>;
@@ -171,7 +176,7 @@ export function createConclusionReviewMaterials(options: ConclusionReviewMateria
     return { reports, ...(chosen ? { preselected: { relativePath: chosen.relativePath, sha256: chosen.sha256! } } : {}), basisFiles,
       ...(reportFiles.length > 200 ? { limitations: ['报告候选超过目录展示限额，请按明确路径选择；未推断当前版本。'] } : {}) };
   }
-  async function optionalSources(projectId: string, selection: ConclusionReviewSelection): Promise<Captured[]> {
+  async function optionalSources(projectId: string, taskId: string, selection: ConclusionReviewSelection): Promise<Captured[]> {
     const result: Captured[] = [];
     const add = async (id: string, kind: string, locator: Record<string, unknown>, read: () => string | Promise<string>) => {
       const material: ConclusionReviewMaterial = { id, kind, locator: canonical(locator), state: 'unavailable' };
@@ -182,6 +187,7 @@ export function createConclusionReviewMaterials(options: ConclusionReviewMateria
         result.push({ material, text, assertUnchanged: async () => { if (digest(await read()) !== material.sha256) fail('conclusion_review_preview_changed'); } });
       } catch (error) { material.limitations = [`此来源未提供正文（${errorCode(error)}）；其依据覆盖未知。`]; result.push({ material }); }
     };
+    if (selection.projectPlan) await add('project-contract', 'project-contract', { ...selection.projectPlan }, async () => { if (!options.projectContract) return fail('conclusion_review_project_contract_unavailable'); return options.projectContract(projectId, taskId, selection.projectPlan!); });
     if (selection.requirementContext) await add('requirement', 'requirement', { ...selection.requirementContext }, async () => {
       const text = await options.requirementContext?.({ requirementContext: selection.requirementContext }, projectId);
       if (!text) fail('requirement_unavailable'); return text!;
@@ -292,9 +298,11 @@ export function createConclusionReviewMaterials(options: ConclusionReviewMateria
         continue;
       }
       const value = await capture(projectId, taskId, file, `basis-${index + 1}`, false, PROJECT_UPLOAD_MAX_BYTES - capturedBytes);
+      const expected = selection.basisVersions?.find(ref => ref.relativePath === file);
+      if (expected && value.material.sha256 !== expected.sha256) fail('conclusion_review_basis_changed');
       capturedBytes += value.file ? value.material.bytes! : 0; optional.push(value);
     }
-    optional.push(...await optionalSources(projectId, selection));
+    optional.push(...await optionalSources(projectId, taskId, selection));
     let fixedBytes = report.material.bytes!;
     for (const value of optional) {
       if (value.text === undefined) continue;
@@ -377,7 +385,10 @@ export function createConclusionReviewMaterials(options: ConclusionReviewMateria
       let locator: Record<string, unknown>;
       try { const parsed: unknown = JSON.parse(material.locator); if (!object(parsed)) fail('conclusion_review_material_identity_invalid'); locator = parsed as Record<string, unknown>; }
       catch { return fail('conclusion_review_material_identity_invalid'); }
-      if (material.kind === 'requirement') {
+      if (material.kind === 'project-contract') {
+        if (!options.assertProjectContractAuthorized) fail('conclusion_review_project_contract_unavailable');
+        await options.assertProjectContractAuthorized!(record.projectId, record.taskId, locator as NonNullable<ConclusionReviewSelection['projectPlan']>);
+      } else if (material.kind === 'requirement') {
         if (options.assertRequirementAuthorized) await options.assertRequirementAuthorized(locator as NonNullable<ConclusionReviewSelection['requirementContext']>, record.projectId);
         else if (!await options.requirementContext?.({ requirementContext: locator }, record.projectId)) fail('requirement_unavailable');
       } else if (material.kind === 'db-result') {

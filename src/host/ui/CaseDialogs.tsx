@@ -1,3 +1,5 @@
+import { CaseGoalPicker } from './CaseGoalPicker.tsx';
+import type { CaseGoalBindingInput, GoalRef } from './case-client.ts';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import type { ArtifactInput, CaseArtifactView, CaseRecord, CaseStatus, ProjectWorkInput, ProjectWorkRecord, ProjectWorkStatus, WorkEvent } from '../case-types.ts';
@@ -20,32 +22,38 @@ export function useOperationId() {
   const last = useRef<{ value: string; id: string } | null>(null);
   return (input: unknown) => { const value = JSON.stringify(input); if (last.current?.value !== value) last.current = { value, id: crypto.randomUUID() }; return last.current.id; };
 }
-export function CaseDialog({ title, subtitle, children, onClose, busy = false, className = '' }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void; busy?: boolean; className?: string }) {
+export function CaseDialog({ title, subtitle, children, onClose, busy = false, className = '', active = true }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void; busy?: boolean; className?: string; active?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null), titleId = useId();
   useEffect(() => {
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null, dialog = ref.current;
+    if (!active) { dialog?.close(); return; }
     if (!dialog?.open) dialog?.showModal();
     dialog?.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), select:not([disabled])')?.focus();
     return () => { dialog?.close(); if (trigger?.isConnected) trigger.focus({ preventScroll: true }); };
-  }, []);
+  }, [active]);
   return <dialog ref={ref} className={`case-dialog ${className}`} tabIndex={-1} aria-labelledby={titleId} onClickCapture={focusCaseButton} onKeyDown={event => { if (event.key !== 'Tab') return; const current = ref.current; if (!current) return; const targets = Array.from(current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), a[href], summary, [tabindex]:not([tabindex="-1"])')).filter(element => element.getClientRects().length > 0 && !element.closest('[hidden], [inert]')); const first = targets[0], last = targets.at(-1); if (!first) { event.preventDefault(); current.focus(); } else if (event.shiftKey && (document.activeElement === first || document.activeElement === current)) { event.preventDefault(); last?.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }} onCancel={event => { event.preventDefault(); event.stopPropagation(); if (!busy) onClose(); }}>
     <header className="case-dialog-heading"><div><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button type="button" className="icon-button" aria-label={`关闭${title}`} disabled={busy} onClick={onClose}>✕</button></header>{children}
   </dialog>;
 }
 export function CaseFormError({ error }: { error: string }) { return error ? <p className="case-message case-error" role="alert">{error}</p> : null; }
 function Actions({ busy, label, onClose, submitDisabled = false }: { busy: boolean; label: string; onClose: () => void; submitDisabled?: boolean }) { return <div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="primary-button" disabled={busy || submitDisabled}>{busy ? '正在保存…' : label}</button></div>; }
-type CaseFields = Pick<CaseRecord, 'title' | 'description' | 'judgement' | 'nextStep'>;
-export function CaseEditor({ value, onSave, onClose, showChangePreview = false }: { value?: CaseRecord; showChangePreview?: boolean; onSave: (fields: CaseFields, operationId: string) => Promise<void>; onClose: () => void }) {
+type CaseFields = Pick<CaseRecord, 'title' | 'description' | 'judgement' | 'nextStep'> & { goalBinding?: CaseGoalBindingInput };
+export function CaseEditor({ value, onSave, onClose, showChangePreview = false, initialGoal }: { value?: CaseRecord; showChangePreview?: boolean; initialGoal?: GoalRef; onSave: (fields: CaseFields, operationId: string) => Promise<void>; onClose: () => void }) {
   const [fields, setFields] = useState<CaseFields>({ title: value?.title ?? '', description: value?.description ?? '', judgement: value?.judgement ?? '', nextStep: value?.nextStep ?? '' });
   const [error, setError] = useState(''), [busy, setBusy] = useState(false); const id = useId(), operationId = useOperationId();
-  const change = (key: keyof CaseFields, text: string) => setFields(old => ({ ...old, [key]: text }));
-  return <CaseDialog title={value ? '编辑 Case' : '新建 Case'} subtitle="先记录一件值得持续推进的业务事项，其余信息可以逐步补充。" busy={busy} onClose={onClose}>
-    <form onSubmit={async event => { event.preventDefault(); if (!fields.title.trim() || Array.from(fields.title.trim()).length > 80) { setError('请输入 1–80 个字符的 Case 名称。'); return; } if (Array.from(fields.description).length > 20000 || Array.from(fields.judgement).length > 20000 || Array.from(fields.nextStep).length > 5000) { setError('问题背景和当前判断各最多 20000 个字符，下一步最多 5000 个字符。'); return; } setBusy(true); setError(''); try { await onSave({ ...fields, title: fields.title.trim() }, operationId(fields)); onClose(); } catch (error) { setError(caseError(error)); } finally { setBusy(false); } }}>
-      <div className="case-field"><label htmlFor={`${id}-title`}>Case 名称 <span>必填</span></label><input id={`${id}-title`} autoFocus value={fields.title} maxLength={160} required disabled={busy} placeholder="例如：会员复购率下滑 5%，是否需要干预？" onChange={event => change('title', event.target.value)} /></div>
-      <div className="case-field"><label htmlFor={`${id}-description`}>问题背景</label><textarea id={`${id}-description`} value={fields.description} maxLength={40000} rows={4} disabled={busy} onChange={event => change('description', event.target.value)} /></div>
-      {value && <><div className="case-field"><label htmlFor={`${id}-judgement`}>当前判断与未知</label><textarea id={`${id}-judgement`} value={fields.judgement} maxLength={40000} rows={4} disabled={busy} onChange={event => change('judgement', event.target.value)} /></div><div className="case-field"><label htmlFor={`${id}-next`}>下一步 / 等待条件</label><textarea id={`${id}-next`} value={fields.nextStep} maxLength={10000} rows={3} disabled={busy} onChange={event => change('nextStep', event.target.value)} /></div></>}
+  const [goalBinding, setGoalBinding] = useState<CaseGoalBindingInput | null>(initialGoal ? { primary: initialGoal, related: [] } : null), [goalBusy, setGoalBusy] = useState(false), [goalReady, setGoalReady] = useState(false);
+  const [creationAttempt, setCreationAttempt] = useState<{ fields: CaseFields; operationId: string } | null>(null);
+  const locked = busy || goalBusy || Boolean(creationAttempt);
+  const change = (key: Exclude<keyof CaseFields, 'goalBinding'>, text: string) => setFields(old => ({ ...old, [key]: text }));
+  return <CaseDialog title={value ? '编辑 Case' : '新建 Case'} subtitle="先记录一件值得持续推进的业务事项，其余信息可以逐步补充。" busy={busy || goalBusy} onClose={onClose}>
+    <form onSubmit={async event => { event.preventDefault(); if (!fields.title.trim() || Array.from(fields.title.trim()).length > 80) { setError('请输入 1–80 个字符的 Case 名称。'); return; } if (Array.from(fields.description).length > 20000 || Array.from(fields.judgement).length > 20000 || Array.from(fields.nextStep).length > 5000) { setError('问题背景和当前判断各最多 20000 个字符，下一步最多 5000 个字符。'); return; } if (!value && !creationAttempt && (!goalBinding || !goalReady)) { setError('请选择已采纳的主目标；没有适用目标时可在本表单准备并采纳候选。'); return; } setBusy(true); setError(''); const body: CaseFields = { ...fields, title: fields.title.trim(), ...(!value && goalBinding ? { goalBinding } : {}) }; const attempt = creationAttempt ?? { fields: body, operationId: operationId(body) }; if (!value) setCreationAttempt(attempt); try { await onSave(attempt.fields, attempt.operationId); onClose(); } catch (error) { if (!value && error instanceof CaseRequestError && error.status < 500 && error.code !== 'operation_conflict') setCreationAttempt(null); setError(`${!value && (!(error instanceof CaseRequestError) || error.status >= 500 || error.code === 'operation_conflict') ? '创建结果尚未确认，原输入与操作编号已保留。重试会核对同一请求，不会另建。' : ''}${caseError(error)}`); } finally { setBusy(false); } }}>
+      <div className="case-field"><label htmlFor={`${id}-title`}>Case 名称 <span>必填</span></label><input id={`${id}-title`} autoFocus value={fields.title} maxLength={160} required disabled={locked} placeholder="例如：会员复购率下滑 5%，是否需要干预？" onChange={event => change('title', event.target.value)} /></div>
+      <div className="case-field"><label htmlFor={`${id}-description`}>问题背景</label><textarea id={`${id}-description`} value={fields.description} maxLength={40000} rows={4} disabled={locked} onChange={event => change('description', event.target.value)} /></div>
+      {!value && <CaseGoalPicker value={goalBinding} onChange={setGoalBinding} disabled={locked} suggestedTitle={fields.title} onBusyChange={setGoalBusy} onValidityChange={setGoalReady} />}
+      {creationAttempt && <p className="case-help">原创建操作编号：{creationAttempt.operationId}</p>}
+      {value && <><div className="case-field"><label htmlFor={`${id}-judgement`}>当前判断与未知</label><textarea id={`${id}-judgement`} value={fields.judgement} maxLength={40000} rows={4} disabled={locked} onChange={event => change('judgement', event.target.value)} /></div><div className="case-field"><label htmlFor={`${id}-next`}>下一步 / 等待条件</label><textarea id={`${id}-next`} value={fields.nextStep} maxLength={10000} rows={3} disabled={locked} onChange={event => change('nextStep', event.target.value)} /></div></>}
       {showChangePreview && value && <details className="feedback-next" open><summary>本次当前判断变更预览 · Case v{value.revision}</summary><p className="case-help">保存只更新此 Case 字段，不自动关联报告或采用副本。</p><h3>原判断</h3><p className="case-prose">{value.judgement || '未填写'}</p><h3>拟保存判断</h3><p className="case-prose">{fields.judgement || '未填写'}</p><h3>下一步</h3><p className="case-prose">{value.nextStep || '未填写'} → {fields.nextStep || '未填写'}</p></details>}
-      <CaseFormError error={error} /><Actions busy={busy} label={value ? '保存修改' : '创建 Case'} onClose={onClose} />
+      <CaseFormError error={error} /><Actions busy={busy || goalBusy} submitDisabled={!value && !creationAttempt && !goalReady} label={value ? '保存修改' : creationAttempt ? '重试原创建并核对' : '创建 Case'} onClose={onClose} />
     </form>
   </CaseDialog>;
 }

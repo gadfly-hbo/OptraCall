@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -197,7 +198,7 @@ test('SV07 lifecycle: explicit author revision and one recheck export new report
 test('SV05 lifecycle: Case uses only confirmed prior description and rejects a stale revision', { timeout: 60_000 }, async t => {
   const f = await fixture(t, 'case-prior-background');
   await readJson(await f.host.request('/api/cases/storage/initialize', 'POST', {}));
-  let record = (await readJson(await f.host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '业务背景', description: 'CASE_PRIOR_DESCRIPTION_ONLY：本次分析前已知的会员定义。' }), 201)).case;
+  let record = (await readJson(await f.host.request('/api/cases', 'POST', await withCaseGoal(f.host, { operationId: randomUUID(), title: '业务背景', description: 'CASE_PRIOR_DESCRIPTION_ONLY：本次分析前已知的会员定义。' })), 201)).case;
   record = (await readJson(await f.host.request(`/api/cases/${record.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: record.revision, projectId: f.project.id }))).case;
   record = (await readJson(await f.host.request(`/api/cases/${record.id}`, 'PATCH', { operationId: randomUUID(), expectedRevision: record.revision, title: record.title, description: record.description, judgement: 'FORBIDDEN_CASE_JUDGEMENT_事后结论', nextStep: 'FORBIDDEN_CASE_NEXT_STEP_事后建议' }))).case;
   const valid = { ...f.selection, caseId: record.id, caseRevision: record.revision, caseBackgroundIsPrior: true };

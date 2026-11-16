@@ -8,12 +8,12 @@ import { readMetricPublicationAttempts, saveMetricPublicationAttempts, type Metr
 
 export { MODELING_GUIDE };
 
-type LibraryEntry = { id: string; version: string; namespace: string; packageFingerprint: string; contentFingerprint: string; bytesSha256: string; bytes: number; publishedAt: string; publishedBy: string; metricNames: string[]; scenarioIds: string[] };
+export type LibraryEntry = { id: string; version: string; namespace: string; packageFingerprint: string; contentFingerprint: string; bytesSha256: string; bytes: number; publishedAt: string; publishedBy: string; metricNames: string[]; scenarioIds: string[] };
 type EnablementRecord = { packageId: string; version: string; enabledAt: string; entry?: LibraryEntry };
 type PackageUsage = { projectId: string; projectName: string; archived: boolean; version?: string; enabledAt?: string; error?: string };
 type Tab = 'overview' | 'detail' | 'review' | 'enable';
 
-async function metricRequest<T>(path: string, method: string, body?: unknown): Promise<T> {
+export async function metricRequest<T>(path: string, method: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/metric-factory/${path}`, { method, mode: 'same-origin', credentials: 'omit', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   const value = await response.json();
   if (!response.ok) throw new HostRequestError(value.message ?? '指标资产请求未完成，请重试。', { ...(value.detail ? { detail: value.detail } : {}) }, value.code ?? 'metric_request_failed', undefined, undefined, response.status);

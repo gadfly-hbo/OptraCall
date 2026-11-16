@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startTestHost } from './fixtures/host-process.ts';
@@ -21,7 +22,7 @@ test('EL02 exact card reference uses original feedback and named handoff observa
   const { project } = await readJson(await host.request('/api/projects', 'POST', { name: '合成反馈来源' }), 201);
   const { task: sourceTask } = await readJson(await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: '原任务' }), 201);
   await readJson(await host.request('/api/cases/storage/initialize', 'POST', {}));
-  const { case: record } = await readJson(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '合成历史事项' }), 201);
+  const { case: record } = await readJson(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '合成历史事项' })), 201);
   await readJson(await host.request(`/api/cases/${record.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: record.revision, projectId: project.id }));
   const { item } = await readJson(await host.request('/api/decision-board/items', 'POST', { projectId: project.id, title: '历史建议', rationale: '只作合成工程验证' }), 201);
   await readJson(await host.request(`/api/decision-board/items/${item.id}/adopt`, 'POST', {}));

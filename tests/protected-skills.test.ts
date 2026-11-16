@@ -97,7 +97,7 @@ test('DA01: data-analysis loads without subagent roles and snapshots its scripts
   const destination = mkdtempSync(path.join(os.tmpdir(), 'optracall-da-snapshot-'));
   const result = snapshotProtectedSkills([skill], destination);
   assert.deepEqual(result.unavailable, []); assert.equal(result.skills.length, 1);
-  for (const relative of ['SKILL.md', 'scripts/calc.py', 'scripts/quality_check.py', 'references/method.md', 'references/sample-data.md', 'references/examples.md']) {
+  for (const relative of ['SKILL.md', 'scripts/calc.py', 'scripts/quality_check.py', 'references/method.md', 'references/sample-data.md', 'references/examples.md', 'references/delivery-contract.md', 'references/selfcheck-cases.md']) {
     assert.deepEqual(readFileSync(path.join(result.skills[0]!.baseDir, relative)), readFileSync(path.join(skill.baseDir, relative)), relative);
   }
 });

@@ -16,6 +16,7 @@ export type SessionCleanupRequest = { readonly retryFailed: boolean };
 type SessionCancelHandler = (request: SessionCleanupRequest) => void | Promise<void>;
 export type SessionLease<Owner> = {
   readonly context: SessionContext<Owner>; run(turn: SessionTurn): Promise<SessionResult>; start(turn: SessionTurn): SessionRun<Owner>;
+  recordAutomaticAction(data: Record<string, unknown>): Promise<void>;
   quiesce(): Promise<void>; reopen(execution: SessionExecution<Owner>): Promise<ProjectSnapshot>;
   onCancel(handler: SessionCancelHandler): () => void;
 };
@@ -26,6 +27,7 @@ export type SessionFilter = { provider?: string; projectId?: string };
 export type SessionRuntime = Pick<ProjectAgent, 'alive' | 'busy' | 'pendingUI' | 'open' | 'snapshot' | 'subscribe' | 'start' | 'stop' | 'close' | 'respondUI' | 'setEditorState'> & {
   startCommand(text: string, requestId: string): { requestId: string; accepted: Promise<void>; completion: Promise<any> };
   drain?(): Promise<void>;
+  recordAutomaticAction?(data: Record<string, unknown>): Promise<void>;
 };
 export type SessionProfile<Owner> = {
   key(owner: Owner): string;
@@ -64,7 +66,9 @@ export type AgentSessionDomain<Owner> = {
   /** Host-only read projection over the same authoritative operation/resource state. */
   busyInScope(filter?: SessionFilter, ownerMatches?: (owner: Owner) => boolean): boolean;
   live(ref: SessionRef<Owner>): boolean;
-  stop(ref: SessionRef<Owner>): Promise<boolean>;
+  stop(ref: SessionRef<Owner>, guard?: { expectedRequestId: string }): Promise<boolean>;
+  /** Read-only Host observation of the existing operation, without opening a resource. */
+  currentRequestId(ref: SessionRef<Owner>): string | undefined;
   close(ref: SessionRef<Owner>, cleanup?: Partial<SessionCleanupRequest>): Promise<void>;
   /** Host-only scope predicate; no new session or callback ownership. */
   closeAll(filter?: SessionFilter, ownerMatches?: (owner: Owner) => boolean): Promise<void>;
@@ -73,7 +77,7 @@ export type AgentSessionDomain<Owner> = {
 };
 /** Host injects business methods with its validated owner reference. Domain
  * registration, reference minting and cross-owner cleanup remain Host-only. */
-export type AgentSessionPort<Owner> = Omit<AgentSessionDomain<Owner>, 'name' | 'ref' | 'closeAll' | 'busyInScope' | 'execution' | 'owns' | 'registerFresh' | 'executionState'>;
+export type AgentSessionPort<Owner> = Omit<AgentSessionDomain<Owner>, 'name' | 'ref' | 'closeAll' | 'busyInScope' | 'execution' | 'owns' | 'registerFresh' | 'executionState' | 'currentRequestId'>;
 
 /** One implementation, instantiated by Host for separate business domains. */
 export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptions<Owner>): AgentSessionDomain<Owner> {
@@ -339,6 +343,13 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
       context: operationContext(slot, operation),
       start: turn => startTurn(slot, operation, turn),
       run: turn => startTurn(slot, operation, turn).completion,
+      async recordAutomaticAction(data) {
+        assertOperation(slot, operation);
+        if (operation.inFlight || operation.resource?.agent.busy) fail('session_busy');
+        if (!operation.requestId || data.requestId !== operation.requestId || !operation.resource?.agent.recordAutomaticAction) return fail('automatic_receipt_unavailable');
+        await operation.resource.agent.recordAutomaticAction(data);
+        assertOperation(slot, operation);
+      },
       quiesce: () => quiesce(slot, operation),
       async reopen(execution) {
         const permit = executions.get(execution);
@@ -477,9 +488,10 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
       return [...closingResources].some(resource => matches(resource.owner, resource.configuration));
     },
     live(ref) { const { key } = identity(ref); return Boolean(slots.get(key)?.resource?.agent.alive); },
-    async stop(ref) {
+    currentRequestId(ref) { const { key } = identity(ref); return slots.get(key)?.operation?.requestId; },
+    async stop(ref, guard) {
       const { key } = identity(ref), slot = slots.get(key);
-      if (!slot) return false;
+      if (!slot || guard && slot.operation?.requestId !== guard.expectedRequestId) return false;
       const operation = slot.operation, pending = slot.opening, resource = operation?.resource ?? slot.resource;
       const cancellation = operation ? cancelOperation(operation) : undefined;
       if (pending) { pending.cancelled = true; if (slot.opening === pending) slot.opening = undefined; if (pending.resource) await retire(pending.resource); }

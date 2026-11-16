@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startTestHost } from './fixtures/host-process.ts';
@@ -17,7 +18,7 @@ test('CASE-REL-HTTP-02: a continued Case stores one versioned relation and leave
   const { randomUUID } = await import('node:crypto');
   const host = await startTestHost(); t.after(() => host.close());
   await host.request('/api/cases/storage/initialize', 'POST', {});
-  const create = async (title: string) => (await (await host.request('/api/cases','POST',{operationId:randomUUID(),title})).json() as any).case;
+  const create = async (title: string) => (await (await host.request('/api/cases','POST',await withCaseGoal(host, {operationId:randomUUID(),title}))).json() as any).case;
   const source=await create('原业务问题'), target=await create('后续分析事项');
   const status=await (await host.request('/api/cases/storage')).json() as any;
   const command={operationId:randomUUID(),caseStoreId:status.storeId,fromCaseId:source.id,kind:'follows_up',expectedRelationRevision:0,explanation:'由原问题继续核对执行范围。'};

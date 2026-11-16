@@ -12,6 +12,7 @@ class Transport implements SessionRuntime {
   options: ProjectAgentOptions; calls: { text: string; id: string; kind: string }[] = [];
   openWait?: ReturnType<typeof deferred<void>>; closeWait?: ReturnType<typeof deferred<void>>; stopWait?: ReturnType<typeof deferred<void>>;
   closeError?: Error; closeCalls = 0; stopCalls = 0; editor?: string;
+  recordAutomaticAction?: (data: Record<string, unknown>) => Promise<void>;
   closed = deferred<void>(); closeTask?: Promise<void>;
   listeners = new Set<(event: ProjectEvent) => void>();
   active?: ReturnType<typeof deferred<SessionResult>>;
@@ -363,4 +364,31 @@ test('ER01: owner cancellation overrides stale failure diagnostics while preserv
     assert.equal(agent.calls.length, 1); assert.equal(agent.stopCalls, 1);
     await h.domain.closeAll();
   }
+});
+
+test('V020 exact stop observes the original request atomically; a stale preparation id cannot cancel a newer owned run', async t => {
+  const h = harness('exact-preparation-stop'), ref = h.domain.ref('p/preparation'); t.after(() => h.domain.closeAll());
+  const run = h.domain.start(ref, { text: 'new preparation', requestId: 'current-request' });
+  await run.accepted;
+  assert.equal(await h.domain.stop(ref, { expectedRequestId: 'earlier-request' }), false);
+  assert.equal(h.agents[0]!.stopCalls, 0);
+  assert.equal(h.domain.currentRequestId(ref), 'current-request');
+  assert.equal(await h.domain.stop(ref, { expectedRequestId: 'current-request' }), true);
+  assert.equal((await run.completion).outcome, 'cancelled');
+});
+
+test('V020 automatic receipt uses the original idle lease and cannot append after cancellation', async t => {
+  const h = harness('automatic-receipt'), ref = h.domain.ref('p/t'); t.after(() => h.domain.closeAll());
+  const appended: Record<string, unknown>[] = [];
+  await h.domain.withSession(ref, async lease => {
+    const run = lease.start({ text: 'original analysis', requestId: 'analysis-request' }); await run.accepted;
+    h.agents[0]!.recordAutomaticAction = async data => { appended.push(data); };
+    await assert.rejects(lease.recordAutomaticAction({ requestId: 'analysis-request', node: 'review', phase: 'started' }), { code: 'session_busy' });
+    h.agents[0]!.settle(); await run.completion;
+    await lease.recordAutomaticAction({ requestId: 'analysis-request', node: 'review', phase: 'started' });
+    assert.equal(appended.length, 1);
+    await h.domain.stop(ref);
+    await assert.rejects(lease.recordAutomaticAction({ requestId: 'analysis-request', node: 'ir', phase: 'started' }), { code: 'generation_cancelled' });
+    assert.equal(appended.length, 1);
+  });
 });

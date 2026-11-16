@@ -1,0 +1,76 @@
+.sap-assets-workspace { display:flex; flex:1; flex-direction:column; min-height:0; min-width:0; height:100%; }
+.sap-assets-workspace[hidden] { display:none; }
+.sap-assets-tabs { display:flex; flex-shrink:0; gap:20px; padding:0 28px; border-bottom:1px solid var(--line); background:var(--canvas); }
+.sap-assets-tabs button { border:0; border-bottom:2px solid transparent; background:transparent; padding:12px 2px; color:var(--muted); }
+.sap-assets-tabs button[aria-pressed="true"] { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.sap-method-page { flex:1; min-height:0; min-width:0; overflow:auto; padding:28px; color:var(--ink); background:var(--canvas); }
+.sap-method-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:24px; }
+.sap-method-heading h1 { font-size:23px; font-weight:600; margin:0 0 7px; overflow-wrap:anywhere; }
+.sap-method-heading p,.sap-method-muted { color:var(--muted); font-size:13px; margin:0; }
+.sap-method-page h2 { font-size:15px; font-weight:600; margin:0 0 10px; }
+.sap-method-heading button { flex-shrink:0; }
+.sap-method-filter { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px; margin-bottom:20px; }
+.sap-method-page .field { display:grid; gap:6px; min-width:0; }
+.sap-method-page .field label { font-size:13px; color:var(--ink); }
+.sap-method-page input,.sap-method-page select,.sap-method-page textarea,.sap-method-dialog input,.sap-method-dialog select,.sap-method-dialog textarea { max-width:100%; border:1px solid var(--line); border-radius:6px; background:var(--surface); color:var(--ink); padding:9px 11px; min-width:0; }
+.sap-method-filter input { width:280px; }
+.sap-method-filter select { min-width:130px; }
+.sap-method-table-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:7px; }
+.sap-method-table { width:100%; border-collapse:collapse; font-size:13px; min-width:670px; background:var(--surface); }
+.sap-method-table th { text-align:left; color:var(--muted); background:var(--subtle); font-weight:500; font-size:12px; }
+.sap-method-table th,.sap-method-table td { padding:14px 16px; border-bottom:1px solid var(--line); vertical-align:top; }
+.sap-method-table tr:last-child td { border-bottom:0; }
+.sap-method-table td>strong { display:block; font-weight:550; font-size:14px; max-width:290px; overflow-wrap:anywhere; }
+.sap-method-table td>.sap-method-muted { display:block; margin-top:5px; font-size:12px; }
+.sap-method-table td>.sap-method-badge { display:table; margin-top:4px; }
+.sap-method-badge { display:inline-flex; align-items:center; border:1px solid var(--line); background:var(--subtle); color:var(--muted); padding:2px 7px; border-radius:5px; font-size:12px; }
+.sap-method-badge.is-warning { color:var(--warning); background:var(--warning-bg); }
+.sap-method-badge.is-published { color:var(--accent); background:var(--accent-soft); }
+.sap-method-actions,.sap-method-badges { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.sap-method-actions { margin:15px 0; }
+.sap-method-note { padding:12px 15px; border:1px solid var(--line); background:var(--subtle); border-radius:7px; margin:16px 0; font-size:13px; overflow-wrap:anywhere; }
+.sap-method-note p { margin:6px 0; }
+.sap-method-note.is-warning { color:var(--warning); background:var(--warning-bg); }
+.sap-method-note.is-error,.sap-method-error-text { color:var(--error); }
+.sap-method-note.is-error { background:var(--error-bg); }
+.sap-method-reference { font-size:13px; color:var(--muted); }
+.sap-method-detail { display:grid; grid-template-columns:minmax(0,1fr) 250px; gap:30px; margin-top:24px; }
+.sap-method-detail article { min-width:0; }
+.sap-method-section { padding-bottom:23px; margin-bottom:23px; border-bottom:1px solid var(--line); }
+.sap-method-section p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.75; }
+.sap-method-version-panel { min-width:0; border-left:1px solid var(--line); padding-left:20px; }
+.sap-method-version { display:grid; gap:5px; width:100%; text-align:left; border:1px solid var(--line); border-radius:6px; padding:11px; background:var(--surface); color:var(--ink); margin:10px 0; }
+.sap-method-version.selected { background:var(--accent-soft); border-color:var(--accent); }
+.sap-method-version span { font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+.sap-method-version-panel>p { margin-top:22px; }
+.sap-method-page details { border:1px solid var(--line); border-radius:6px; padding:12px 14px; font-size:13px; }
+.sap-method-page summary { cursor:pointer; }
+.sap-method-page details[open]>summary { margin-bottom:12px; }
+.sap-method-sources ul { margin:0; padding-left:20px; }
+.sap-method-sources li { padding:10px 0; border-bottom:1px solid var(--line); }
+.sap-method-sources li:last-child { border-bottom:0; }
+.sap-method-sources li>p { margin:5px 0; }
+.sap-method-sources li details { margin-top:9px; }
+.sap-method-page pre,.sap-method-dialog pre { white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; font-size:12px; }
+.sap-method-editor { display:grid; gap:18px; max-width:850px; }
+.sap-method-editor .field input,.sap-method-editor .field textarea { width:100%; }
+.sap-method-editor textarea { resize:vertical; line-height:1.7; }
+.sap-method-empty { border:1px dashed var(--line); border-radius:7px; padding:45px 20px; text-align:center; }
+.sap-method-empty p { color:var(--muted); font-size:13px; }
+.sap-method-dialog { width:min(700px,calc(100vw - 32px)); max-height:85dvh; padding:22px; border:1px solid var(--line); border-radius:8px; color:var(--ink); background:var(--surface); overflow:auto; }
+.sap-method-dialog::backdrop { background:#11152280; }
+.sap-method-dialog-header { display:flex; gap:18px; justify-content:space-between; align-items:flex-start; border-bottom:1px solid var(--line); padding-bottom:16px; }
+.sap-method-dialog-header h2 { margin:0; font-size:18px; overflow-wrap:anywhere; }
+.sap-method-dialog-body { padding:16px 0; line-height:1.7; }
+.sap-method-dialog .field { display:grid; gap:6px; margin:14px 0; }
+.sap-method-dialog .field textarea { min-height:120px; resize:vertical; }
+.sap-method-mobile-hint { display:none; color:var(--muted); font-size:12px; }
+.sap-method-extraction { width:100%; border:1px solid var(--line); border-radius:7px; padding:18px; margin:20px 0; background:var(--surface); }
+.sap-method-extraction h3 { margin:0 0 7px; font-size:14px; }
+.sap-method-extraction p { font-size:13px; margin:7px 0; color:var(--muted); }
+.sap-method-extraction .sap-method-actions { margin-bottom:0; }
+.sap-method-extraction label { display:flex; gap:7px; align-items:center; color:var(--muted); font-size:12px; margin:10px 0; }
+.sap-method-extraction input { accent-color:var(--accent); }
+.sap-method-extraction .field-error { color:var(--error); }
+@media(max-width:1000px) { .sap-method-detail { grid-template-columns:minmax(0,1fr); gap:22px; }.sap-method-version-panel { border-left:0; border-top:1px solid var(--line); padding:20px 0 0; }.sap-method-version { max-width:500px; } }
+@media(max-width:700px) { .sap-method-page { padding:20px 16px; }.sap-assets-tabs { padding:0 16px; }.sap-method-heading { flex-wrap:wrap; gap:14px; }.sap-method-heading h1 { font-size:21px; }.sap-method-filter>.field:first-child { width:100%; flex:0 0 100%; }.sap-method-filter input { width:100%; }.sap-method-filter .field { flex:1; }.sap-method-filter select { width:100%; min-width:0; }.sap-method-mobile-hint { display:block; }.sap-method-dialog { padding:16px; }.sap-method-actions>button { min-height:36px; }.sap-method-extraction { padding:15px; } }

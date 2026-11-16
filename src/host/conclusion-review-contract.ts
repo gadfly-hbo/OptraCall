@@ -5,6 +5,8 @@ export type ConclusionReviewSelection = {
   verificationId: string;
   report: { relativePath: string; sha256?: string };
   basisFiles?: string[];
+  basisVersions?: { relativePath: string; sha256: string }[];
+  projectPlan?: { confirmationId: string; taskKey: string };
   configurationId?: string;
   requirementContext?: { instanceId: string; version?: string; frameworkVersion?: string };
   useCurrentSap?: boolean;
