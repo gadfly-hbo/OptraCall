@@ -14,6 +14,8 @@ import { DbLinkResults, type DbResultAcquisition, type DbResultOwner, type DbRes
 import { DbLinkSqlError, validateDbLinkSql } from './db-link-sql.ts';
 import { createDbLinkDataContext, type DbLinkMetadataObservation, type DbLinkMetadataReader, type DbLinkSaveDescriptionInput } from './db-link-data-context.ts';
 import { safePath, atomicJson, readBytes, digest, canonical, object, id } from './project-data-context-io.ts';
+import { dbLinkModelOutlet, projectDbLinkPlanningSources, type DbLinkPlanningOptions } from './db-link-planning.ts';
+export { dbLinkModelOutlet } from './db-link-planning.ts';
 
 export type DbLinkHostReply = { status: number; body: Record<string, unknown> };
 export type DbLinkHostOptions = {
@@ -27,7 +29,6 @@ export class DbLinkHostError extends Error { readonly code: string; constructor(
 const fail = (code: string): never => { throw new DbLinkHostError(code); };
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const exact = (value: unknown, keys: string[]): Record<string, unknown> => record(value) && Object.keys(value).every(key => keys.includes(key)) ? value : fail('invalid_db_request');
-export const dbLinkModelOutlet = (configuration: RuntimeModelConfiguration): string => 'outlet:' + createHash('sha256').update(JSON.stringify([configuration.id, configuration.provider, configuration.api, new URL(configuration.baseUrl).href, configuration.model])).digest('hex');
 const outlet = dbLinkModelOutlet;
 type Authority = { project: ProjectRecord; task?: TaskRecord };
 type SourceChange = { projectId?: string; connectionId: string; taskId?: string };
@@ -428,6 +429,9 @@ export function createDbLinkHost(options: DbLinkHostOptions) {
   }
   return {
     init: () => store.init(), request,
+    async planningSources(projectId: string, planning: DbLinkPlanningOptions = {}) {
+      return scoped(projectId, planning.taskId, async () => projectDbLinkPlanningSources(store.listProjectSources(projectId), planning.taskId ? store.listTaskSources(projectId, planning.taskId) : undefined, planning));
+    },
     async materialSource(projectId: string, taskId: string, resultId: string, configuration: RuntimeModelConfiguration, context: { signal?: AbortSignal; assertCurrent?: () => void }) {
       return scoped(projectId, taskId, async () => {
         const assertCurrent = () => { context.assertCurrent?.(); if (context.signal?.aborted) fail('db_query_stopped'); if (options.isClosing()) fail('host_closing'); };

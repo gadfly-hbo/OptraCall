@@ -218,6 +218,14 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
     const input = ['POST', 'PATCH', 'PUT'].includes(request.method ?? '') ? await options.readBody(request) : {};
     try {
       if (route === '' && request.method === 'GET') return { status: 200, value: await view() };
+      const arrangementOperation = /^arrangements\/operations\/([0-9a-f-]{36})$/.exec(route);
+      if (arrangementOperation && request.method === 'GET') {
+        return { status: 200, value: await options.mutate(async () => {
+          const operation = store.getArrangementOperation(arrangementOperation[1]!);
+          if (operation) for (const action of operation.actions) await readableTask(action.taskId);
+          return { operation };
+        }) };
+      }
       if (route === 'action-authorizations/history' && request.method === 'GET') {
         return { status: 200, value: await options.mutate(async () => {
           const task = await readableTask(url.searchParams.get('taskId') ?? '');

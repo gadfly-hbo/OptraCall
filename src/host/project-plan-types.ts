@@ -1,4 +1,5 @@
 import type { GoalRef } from './strategy-goals-types.ts';
+import type { DbLinkPlanningSource } from './db-link-planning.ts';
 
 export interface ProjectPlanCapabilityRef {
   kind: 'skill' | 'sap-method' | 'connector';
@@ -17,8 +18,10 @@ export interface ProjectPlanMaterialRef {
 export interface ProjectPlanCapabilities {
   skills: { id: string; title: string; version?: string; sha256?: string }[];
   methods: { id: string; title: string; version: string }[];
-  connectors: { id: string; title: string; enabled: boolean; requiresPermission: true; permissionRef?: string }[];
-  materials: (ProjectPlanMaterialRef & { title: string })[];
+  connectors: { id: string; title: string; enabled: boolean; requiresPermission: true; permissionRef?: string; version?: string; sha256?: string; taskId?: string }[];
+  materials: (ProjectPlanMaterialRef & { title: string; enabled?: boolean; taskId?: string })[];
+  /** Stored-source metadata only; Task entries retain their own effective authority. */
+  databaseSources?: DbLinkPlanningSource[];
   caseContexts: { caseId: string; title: string; primaryGoal: GoalRef; relatedGoals?: GoalRef[]; caseRevision?: number; projectWorkRevision?: number }[];
 }
 

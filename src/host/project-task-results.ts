@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createNativeSnapshotReadBudget } from './native-session-snapshot.ts';
-import type { ProjectTaskResultBinding, ProjectTaskResultDescriptor, ProjectTaskResultsContext, ProjectTaskResultsFindResult, ProjectTaskResultsOptions, ProjectTaskResultsPort, ProjectTaskResultsReadResult, ProjectTaskResultsScope, ProjectTaskResultsSourceReadOptions } from './project-task-results-types.ts';
+import type { ProjectTaskResultBinding, ProjectTaskNativeReplyBinding, ProjectTaskResultDescriptor, ProjectTaskResultsContext, ProjectTaskResultsFindResult, ProjectTaskResultsOptions, ProjectTaskResultsPort, ProjectTaskResultsReadResult, ProjectTaskResultsScope, ProjectTaskResultsSourceReadOptions, ProjectTaskResultSources } from './project-task-results-types.ts';
 
 export class ProjectTaskResultsError extends Error {
   readonly code: string;
@@ -27,7 +27,12 @@ function binding(value: ProjectTaskResultBinding, projectId: string, taskId: str
   if (value.nativeEntryId !== undefined && !identity(value.nativeEntryId)) fail('project_result_binding_unavailable');
   return { projectId, taskId, requestId: value.requestId, sessionId: value.sessionId, toolCallId: value.toolCallId, relativePath: value.relativePath, sha256: value.sha256, bytes: value.bytes, ...(value.nativeEntryId === undefined ? {} : { nativeEntryId: value.nativeEntryId }) };
 }
-function resultId(scope: ProjectTaskResultsScope, value: ProjectTaskResultBinding): string {
+function nativeBinding(value: ProjectTaskNativeReplyBinding, projectId: string, taskId: string): ProjectTaskNativeReplyBinding {
+  if (!object(value) || value.projectId !== projectId || value.taskId !== taskId || !identity(value.requestId) || !identity(value.sessionId) || !identity(value.messageId) || value.messageId.length > 200 || !/^[a-f0-9]{64}$/.test(value.sha256) || !Number.isSafeInteger(value.bytes) || value.bytes < 1 || value.bytes > PROJECT_UPLOAD_MAX_BYTES) fail('project_result_binding_unavailable');
+  return { projectId, taskId, requestId: value.requestId, sessionId: value.sessionId, messageId: value.messageId, sha256: value.sha256, bytes: value.bytes };
+}
+function resultId(scope: ProjectTaskResultsScope, value: ProjectTaskResultBinding | ProjectTaskNativeReplyBinding): string {
+  if ('messageId' in value) return digest(JSON.stringify([scope.projectId, scope.confirmationId, scope.planVersion, 'native-reply', value.projectId, value.taskId, value.requestId, value.sessionId, value.messageId, value.sha256, value.bytes]));
   const { nativeEntryId: _, ...source } = value;
   return digest(JSON.stringify([scope.projectId, scope.confirmationId, scope.planVersion, source.projectId, source.taskId, source.requestId, source.sessionId, source.toolCallId, source.relativePath, source.sha256, source.bytes]));
 }
@@ -61,6 +66,11 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
     const task = project.tasks.find(task => task.id === member.taskId);
     return [member.taskId, task?.updatedAt ?? null, task?.lastRun ?? null, task?.archivedAt ?? null, task?.sessionFile ?? null];
   })));
+  const readSources = async (taskId: string, readOptions: ProjectTaskResultsSourceReadOptions): Promise<ProjectTaskResultSources> => {
+    const sources = options.listResultSources ? await options.listResultSources(scope.projectId, taskId, readOptions) : { reports: await options.listBoundReports(scope.projectId, taskId, readOptions), replies: [] };
+    if (!object(sources) || !Array.isArray(sources.reports) || !Array.isArray(sources.replies) || sources.limitations !== undefined && (!Array.isArray(sources.limitations) || sources.limitations.some(code => typeof code !== 'string' || !/^[a-z][a-z0-9_]{0,120}$/.test(code)))) fail('project_result_binding_unavailable');
+    return sources;
+  };
   async function catalog(context: ProjectTaskResultsContext, selectedTaskId: string | undefined, readOptions: ProjectTaskResultsSourceReadOptions) {
     const project = await owner(context), results: ProjectTaskResultDescriptor[] = [], limitations: { taskId: string; code: string }[] = [], ids = new Set<string>();
     for (const member of members.filter(x => selectedTaskId === undefined || x.taskId === selectedTaskId)) {
@@ -69,14 +79,19 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
       if (!task) { limitations.push({ taskId: member.taskId, code: 'source_task_unavailable' }); continue; }
       try {
         await authorized(member.taskId, context);
-        const bindings = await options.listBoundReports(scope.projectId, member.taskId, readOptions); check(context);
-        if (!Array.isArray(bindings)) fail('project_result_binding_unavailable');
-        for (const raw of bindings) {
+        const sources = await readSources(member.taskId, readOptions); check(context);
+        for (const code of sources.limitations ?? []) limitations.push({ taskId: member.taskId, code });
+        const sourceReceipt = confirmation.tasks.find(x => x.taskId === member.taskId);
+        const confirmedRequestId = sourceReceipt?.startStatus === 'accepted' ? sourceReceipt.startRequestId : undefined;
+        const metadata = { confirmationId: scope.confirmationId, planVersion: scope.planVersion, taskKey: member.taskKey, taskName: task.name, taskState: task.archivedAt ? 'archived' : task.lastRun?.status ?? 'unknown', ...(confirmedRequestId ? { confirmedRequestId } : {}), limitations: ['正文尚未提供，读取时核对准确内容与当前权限。', '准确来源不单独证明Task完成、项目综合完成或专业结论成立。'] };
+        for (const raw of sources.reports) {
           const value = binding(raw, scope.projectId, member.taskId); await authorized(member.taskId, context, value.relativePath);
           const id = resultId(scope, value); if (ids.has(id)) continue; ids.add(id);
-          const sourceReceipt = confirmation.tasks.find(x => x.taskId === member.taskId);
-          const confirmedRequestId = sourceReceipt?.startStatus === 'accepted' ? sourceReceipt.startRequestId : undefined;
-          results.push({ ...value, id, confirmationId: scope.confirmationId, planVersion: scope.planVersion, taskKey: member.taskKey, taskName: task.name, taskState: task.archivedAt ? 'archived' : task.lastRun?.status ?? 'unknown', bindingState: 'saved-receipt-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', ...(confirmedRequestId ? { confirmedRequestId } : {}), limitations: ['正文尚未提供，读取时核对准确内容与当前权限。', '保存快照不单独证明Task完成、项目综合完成或专业结论成立。'] });
+          results.push({ ...value, ...metadata, id, kind: 'report', bindingState: 'saved-receipt-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', limitations: ['正文尚未提供，读取时核对准确内容与当前权限。', '保存快照不单独证明Task完成、项目综合完成或专业结论成立。'] });
+        }
+        for (const raw of sources.replies) {
+          const value = nativeBinding(raw, scope.projectId, member.taskId), id = resultId(scope, value); if (ids.has(id)) continue; ids.add(id);
+          results.push({ ...value, ...metadata, id, kind: 'native-reply', bindingState: 'native-reply-reference-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', source: { type: 'native-reply', projectId: value.projectId, taskId: value.taskId, sessionId: value.sessionId, messageId: value.messageId, expectedTextSha256: value.sha256 } });
         }
       } catch (error) {
         check(context);
@@ -105,20 +120,36 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
       const start = Number(offset), requested = Number(limit), id = input.id, found = await catalog(context, undefined, readOptions), result = found.results.find(x => x.id === id);
       if (!result) fail('project_result_reference_unavailable', 404);
       await authorized(result.taskId, context, result.relativePath);
-      let captured: Awaited<ReturnType<ProjectTaskResultsOptions['projects']['captureFeedbackFile']>>;
-      try { captured = await options.projects.captureFeedbackFile(scope.projectId, result.relativePath, PROJECT_UPLOAD_MAX_BYTES); }
-      catch { check(context); await authorized(result.taskId, context, result.relativePath); fail('project_result_unavailable'); }
-      check(context); await owner(context); await authorized(result.taskId, context, result.relativePath);
-      if (captured.sha256 !== result.sha256 || captured.bytes.length !== result.bytes || digest(captured.bytes) !== result.sha256) fail('project_result_changed');
-      let text: string;
-      try { text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(captured.bytes); if (text.includes('\0')) fail('project_result_requires_text'); }
-      catch { fail('project_result_requires_text'); }
-      const currentBindings = await options.listBoundReports(scope.projectId, result.taskId, readOptions); check(context);
-      if (!currentBindings.some(x => { try { return resultId(scope, binding(x, scope.projectId, result.taskId)) === result.id; } catch { return false; } })) fail('project_result_reference_unavailable');
+      let text: string, observedAt: string;
+      if (result.kind === 'native-reply') {
+        if (!options.readNativeReply) fail('project_result_unavailable');
+        let evidence;
+        try { evidence = await options.readNativeReply(result.source, readOptions); }
+        catch (error) { check(context); await authorized(result.taskId, context); if ((error as { code?: unknown })?.code === 'personal_source_text_changed') fail('project_result_changed'); fail('project_result_unavailable'); }
+        check(context); await owner(context); await authorized(result.taskId, context);
+        const ref = evidence.ref;
+        if (evidence.status !== 'available' || typeof evidence.text !== 'string') fail('project_result_unavailable');
+        if (ref.type !== 'native-reply' || ref.projectId !== result.projectId || ref.taskId !== result.taskId || ref.sessionId !== result.sessionId || ref.messageId !== result.messageId || ref.expectedTextSha256 !== result.sha256 || ref.excerpt !== undefined || evidence.sha256 !== result.sha256 || digest(evidence.text) !== result.sha256 || Buffer.byteLength(evidence.text) !== result.bytes) fail('project_result_changed');
+        text = evidence.text; observedAt = new Date().toISOString();
+      } else {
+        let captured: Awaited<ReturnType<ProjectTaskResultsOptions['projects']['captureFeedbackFile']>>;
+        try { captured = await options.projects.captureFeedbackFile(scope.projectId, result.relativePath, PROJECT_UPLOAD_MAX_BYTES); }
+        catch { check(context); await authorized(result.taskId, context, result.relativePath); fail('project_result_unavailable'); }
+        check(context); await owner(context); await authorized(result.taskId, context, result.relativePath);
+        if (captured.sha256 !== result.sha256 || captured.bytes.length !== result.bytes || digest(captured.bytes) !== result.sha256) fail('project_result_changed');
+        try { text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(captured.bytes); if (text.includes('\0')) fail('project_result_requires_text'); }
+        catch { fail('project_result_requires_text'); }
+        observedAt = captured.observedAt;
+      }
+      const currentSources = await readSources(result.taskId, readOptions); check(context);
+      const stillReferenced = result.kind === 'report'
+        ? currentSources.reports.some(x => { try { return resultId(scope, binding(x, scope.projectId, result.taskId)) === result.id; } catch { return false; } })
+        : currentSources.replies.some(x => { try { return resultId(scope, nativeBinding(x, scope.projectId, result.taskId)) === result.id; } catch { return false; } });
+      if (!stillReferenced) fail('project_result_reference_unavailable');
       await authorized(result.taskId, context, result.relativePath);
       if (start > text.length || boundary(text, start) !== start) fail('invalid_project_result_range', 400);
       const page = (end: number) => {
-        const details: ProjectTaskResultsReadResult = { schemaVersion: 1, type: 'optracall.project-task-results', action: 'read', scope: { ...scope }, result: { ...result, limitations: ['本次仅提供所示范围，未提供部分不能视为已读。', '保存快照不单独证明Task完成、项目综合完成或专业结论成立。'] }, contentState: 'exact-bytes-verified', observedAt: captured.observedAt, rangeUtf16: { start, end, total: text.length }, complete: start === 0 && end === text.length, ...(end < text.length ? { nextOffset: end } : {}) };
+        const details: ProjectTaskResultsReadResult = { schemaVersion: 1, type: 'optracall.project-task-results', action: 'read', scope: { ...scope }, result: { ...result, limitations: ['本次仅提供所示范围，未提供部分不能视为已读。', '准确来源不单独证明Task完成、项目综合完成或专业结论成立。'] }, contentState: result.kind === 'report' ? 'exact-bytes-verified' : 'exact-native-reply-verified', observedAt, rangeUtf16: { start, end, total: text.length }, complete: start === 0 && end === text.length, ...(end < text.length ? { nextOffset: end } : {}) };
         return { details, content: [{ type: 'text' as const, text: JSON.stringify({ ...details, text: text.slice(start, end) }) }] };
       };
       let end = boundary(text, Math.min(text.length, start + requested)), resultPage = page(end);

@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { lstat, readdir, realpath } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import type { ProjectRecord, TaskRecord } from './project-store.ts';
-import type { ProjectTaskResultBinding } from './project-task-results-types.ts';
+import type { ProjectTaskResultBinding, ProjectTaskNativeReplyBinding, ProjectTaskResultSources } from './project-task-results-types.ts';
 import { createNativeSnapshotReadBudget, nativeSnapshotLimit, readNativeSessionSnapshot, type NativeSnapshotReadBudget } from './native-session-snapshot.ts';
 import { PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
 
@@ -16,9 +17,41 @@ const text = (value: unknown): value is string => typeof value === 'string' && B
 const sourceKey = (source: ProjectTaskResultBinding) => JSON.stringify([source.sessionId, source.requestId, source.toolCallId]);
 const sourceValue = (source: ProjectTaskResultBinding) => JSON.stringify([source.projectId, source.taskId, source.sessionId, source.requestId, source.toolCallId, source.relativePath, source.sha256, source.bytes]);
 export interface TaskBoundReportsOptions { signal?: AbortSignal; budget?: NativeSnapshotReadBudget; assertCurrent?(): void }
+type NativeEntry = Awaited<ReturnType<typeof readNativeSessionSnapshot>>['entries'][number];
+
+/** Select only the final reply on the completed run's own ancestor chain. */
+function completedReply(entries: Map<string, NativeEntry>, terminal: NativeEntry, sessionId: string) {
+  if (terminal.type !== 'custom' || terminal.customType !== 'optracall.run' || !object(terminal.data) || terminal.data.phase !== 'settled' || terminal.data.outcome !== 'completed' || terminal.data.sessionId !== sessionId || !text(terminal.data.requestId)) return;
+  let parent = terminal.parentId, reply: NativeEntry | undefined;
+  while (parent !== null) {
+    const ancestor = entries.get(parent); if (!ancestor) return;
+    if (ancestor.type === 'custom' && ancestor.customType === 'optracall.run') {
+      if (!object(ancestor.data) || ancestor.data.phase !== 'started' || ancestor.data.sessionId !== sessionId || ancestor.data.requestId !== terminal.data.requestId || !reply || reply.type !== 'message' || reply.message.role !== 'assistant') return;
+      const content = reply.message.content;
+      if (reply.message.stopReason !== 'stop' || Array.isArray(content) && content.some(part => part.type === 'toolCall')) return;
+      const body = typeof content === 'string' ? content : content.filter(part => part.type === 'text').map(part => part.text).join('');
+      if (!body.trim() || !text(reply.id)) return;
+      return { requestId: terminal.data.requestId, sessionId, messageId: reply.id, sha256: createHash('sha256').update(body).digest('hex'), bytes: Buffer.byteLength(body) };
+    }
+    if (!reply && ancestor.type === 'message') {
+      if (ancestor.message.role !== 'assistant') return;
+      reply = ancestor;
+    }
+    parent = ancestor.parentId;
+  }
+}
 
 /** Read the existing native ledger without opening a worker, replaying a request, or inspecting report bodies. */
 export async function listTaskBoundReports(project: ProjectRecord, task: TaskRecord, options: TaskBoundReportsOptions = {}): Promise<ProjectTaskResultBinding[]> {
+  return (await scanTaskResultSources(project, task, options, false)).reports;
+}
+
+/** One bounded snapshot scan projects saved reports and exact no-file final-reply identities. */
+export async function listTaskResultSources(project: ProjectRecord, task: TaskRecord, options: TaskBoundReportsOptions = {}): Promise<ProjectTaskResultSources> {
+  return scanTaskResultSources(project, task, options, true);
+}
+
+async function scanTaskResultSources(project: ProjectRecord, task: TaskRecord, options: TaskBoundReportsOptions, includeReplies: boolean): Promise<ProjectTaskResultSources> {
   const check = () => { options.signal?.throwIfAborted(); options.assertCurrent?.(); };
   check();
   const member = project.tasks.find(x => x.id === task.id);
@@ -33,7 +66,7 @@ export async function listTaskBoundReports(project: ProjectRecord, task: TaskRec
   const files = (await readdir(task.sessionDirectory)).filter(name => name.endsWith('.jsonl')).sort(); check();
   if (files.length > 20) fail('project_result_native_budget_exceeded');
   if (task.sessionFile && (path.dirname(path.resolve(task.sessionFile)) !== path.resolve(task.sessionDirectory) || !files.includes(path.basename(task.sessionFile)))) fail();
-  const budget = options.budget ?? createNativeSnapshotReadBudget(), results = new Map<string, ProjectTaskResultBinding>();
+  const budget = options.budget ?? createNativeSnapshotReadBudget(), results = new Map<string, ProjectTaskResultBinding>(), replies = new Map<string, ProjectTaskNativeReplyBinding>(), ambiguousReplies = new Set<string>();
   let remainingBytes = nativeSnapshotLimit;
   for (const name of files) {
     check(); const file = path.join(task.sessionDirectory, name), stat = await lstat(file); check();
@@ -45,7 +78,8 @@ export async function listTaskBoundReports(project: ProjectRecord, task: TaskRec
     catch (error) { check(); if (error instanceof ProjectTaskResultSourceError) throw error; fail(); }
     check();
     const sessionId = snapshot.manager.getSessionId();
-    for (const entry of snapshot.manager.getEntries()) {
+    const entries = snapshot.manager.getEntries(), byId = new Map(entries.map(entry => [entry.id, entry]));
+    for (const entry of entries) {
       if (entry.type !== 'custom' || entry.customType !== 'optracall.project-report-write') continue;
       const data = entry.data;
       // An exported fork can carry its parent's entries. Those remain parent
@@ -59,6 +93,17 @@ export async function listTaskBoundReports(project: ProjectRecord, task: TaskRec
       if (previous && sourceValue(previous) !== sourceValue(value)) fail('project_result_native_binding_conflict');
       if (!previous) results.set(sourceKey(value), value);
     }
+    for (const entry of includeReplies ? entries : []) {
+      const reply = completedReply(byId, entry, sessionId); if (!reply) continue;
+      const key = JSON.stringify([reply.sessionId, reply.messageId]);
+      // The existing accurate reader rejects duplicate session/message sources,
+      // including byte-identical copies. Never advertise an ambiguous read.
+      if (replies.has(key)) ambiguousReplies.add(key);
+      replies.set(key, { projectId: project.id, taskId: task.id, ...reply });
+    }
   }
-  check(); return [...results.values()];
+  const reports = [...results.values()], reportRequests = new Set(reports.map(report => JSON.stringify([report.sessionId, report.requestId])));
+  const eligibleReplies = [...replies.entries()].filter(([, reply]) => !reportRequests.has(JSON.stringify([reply.sessionId, reply.requestId])));
+  const conflicted = eligibleReplies.some(([key]) => ambiguousReplies.has(key));
+  check(); return { reports, replies: eligibleReplies.filter(([key]) => !ambiguousReplies.has(key)).map(([, reply]) => reply), ...(conflicted ? { limitations: ['project_result_native_reply_conflict'] } : {}) };
 }

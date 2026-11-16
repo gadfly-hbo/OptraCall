@@ -5,7 +5,7 @@ import type { ProjectStore } from './project-store.ts';
 import type { CaseDecisionRef, CaseStrategyChoice, CaseStrategyChoiceValue } from './case-decision-types.ts';
 import { parseCaseDecisionRef } from './case-decision-validation.ts';
 import { boardRecordVersion, type createDecisionBoardStore } from '../../extensions/business-plugins/decision-board/storage/store.ts';
-import type { BoardItemRecord, BoardActionAuthorization, TaskFeedbackRevision, SaveFeedbackInput } from '../../extensions/business-plugins/decision-board/types.ts';
+import type { BoardItemRecord, BoardActionAuthorization, TaskFeedbackRevision, SaveFeedbackInput, BoardWorkContext, BoardAuthorizationSource, BoardArrangeAction, BoardArrangementReceipt } from '../../extensions/business-plugins/decision-board/types.ts';
 import type { StrategyGoalsStore } from './strategy-goals-store.ts';
 import type { GoalSourceRef } from './strategy-goals-types.ts';
 
@@ -13,6 +13,7 @@ export type QuotedDecisionHostContext = QuotedDecisionCallContext & {
   projectId: string; taskId: string; originalUserText: string;
   /** Supplied only from the current accepted Case context, never tool arguments. */
   caseContext: { caseStoreId: string; caseId: string; caseRevision: number; projectWorkRevision: number } | null;
+  workContext?: BoardWorkContext | null;
 };
 export class QuotedDecisionFault extends Error {
   code: string; status: number;
@@ -37,7 +38,7 @@ function replayProvenance(current: UserQuoteProvenance, prior?: UserQuoteProvena
 /** Binds existing business authorities to a qualified original Task tool call. No runtime ownership. */
 export function createQuotedDecisionAdapter(options: {
   cases: CaseStore; projects: Pick<ProjectStore, 'get' | 'getTask'>; board: ReturnType<typeof createDecisionBoardStore>;
-  goals?: Pick<StrategyGoalsStore, 'recordFeedback' | 'getOperation'>;
+  goals?: Pick<StrategyGoalsStore, 'recordFeedback' | 'getOperation'> & Partial<Pick<StrategyGoalsStore, 'read' | 'list' | 'recordArrangement'>>;
   assertBoardItemReadable?(item: BoardItemRecord): Promise<void>;
   mutate<T>(operation: () => T | Promise<T>): Promise<T>; isClosing(): boolean;
 }) {
@@ -101,6 +102,70 @@ export function createQuotedDecisionAdapter(options: {
   function result(details: Record<string, unknown>): QuotedDecisionToolResult {
     return { content: [{ type: 'text', text: JSON.stringify(details) }], details };
   }
+  async function projectOwner(context: QuotedDecisionHostContext, writable = false) {
+    check(context); const project = await options.projects.get(context.projectId); check(context);
+    const task = await options.projects.getTask(context.projectId, context.taskId); check(context);
+    if (writable && (project.archivedAt !== null || task.archivedAt != null)) fail('project_archived');
+  }
+  const arrangementReceipt = (receipt: BoardArrangementReceipt) => ({ operationId: receipt.operationId, projectId: receipt.projectId, source: receipt.source, scope: receipt.scope, title: receipt.title, checks: receipt.checks, actions: receipt.actions, requestSha256: receipt.requestSha256, createdAt: receipt.createdAt,
+    quoteSource: { projectId: receipt.quoteProvenance.projectId, taskId: receipt.quoteProvenance.taskId, requestId: receipt.quoteProvenance.requestId, sessionId: receipt.quoteProvenance.sessionId, toolCallId: receipt.quoteProvenance.toolCallId, originalUserTextSha256: receipt.quoteProvenance.originalUserTextSha256, rangeUtf16: { start: receipt.quoteProvenance.quote.start, end: receipt.quoteProvenance.quote.end } } });
+  async function readArrangement(operation: unknown, context: QuotedDecisionHostContext) {
+    if (typeof operation !== 'string') fail('invalid_quoted_decision', 400);
+    const prior = options.board.getArrangementOperation(operation as string);
+    if (!prior) return null;
+    if (prior.projectId !== context.projectId || prior.quoteProvenance.taskId !== context.taskId) fail('quoted_decision_scope_mismatch');
+    for (const action of prior.actions) await boardTarget(action, context);
+    return prior;
+  }
+  async function arrange(input: Record<string, unknown>, context: QuotedDecisionHostContext) {
+    await projectOwner(context); const supplied = provenance(input, context);
+    const id = operationId(['quoted-arrangement-v1', context.projectId, context.taskId, context.requestId, supplied.quote.start, supplied.quote.end]);
+    const prior = await readArrangement(id, context);
+    if (context.caseContext) await owner(context, !prior);
+    let source: BoardAuthorizationSource, goal = context.workContext?.goal;
+    if (input.strategyRef !== undefined || input.choiceId !== undefined) {
+      await owner(context, !prior); const ref = strategy(input, context, Boolean(prior)), choice = choiceSource(input, ref);
+      source = { caseStoreId: ref.caseStoreId, caseId: ref.caseId, choiceId: choice.choiceId, strategyRef: ref };
+      const event = options.cases.getEvents('case', choice.caseId).find(value => value.id === choice.choiceId);
+      goal = event ? options.cases.getGoalBindingHistory(choice.caseId).filter(value => value.caseRevision <= event.revision).at(-1)?.primary : undefined;
+    } else source = { kind: 'work', projectId: context.projectId, taskId: context.taskId, requestId: context.requestId, ...(context.workContext ? { workContext: context.workContext } : {}) };
+    if (!prior) {
+      await projectOwner(context, true);
+      if (!Array.isArray(input.actions)) fail('invalid_arrangement', 400);
+      for (const action of input.actions as BoardArrangeAction[]) {
+        if (action?.kind === 'reuse') await boardTarget(action, context);
+        else if (action?.kind === 'create' && action.itemId) {
+          const item = options.board.getItem(action.itemId); if (item.projectId !== context.projectId) fail('quoted_decision_scope_mismatch');
+          if (item.sourceKind === 'report-confirmation') await (options.assertBoardItemReadable ?? fail('confirmation_source_unavailable'))(item);
+        }
+      }
+    }
+    let authority: BoardArrangementReceipt;
+    try {
+      authority = await options.mutate(() => { check(context); return options.board.arrangeActions({ operationId: id, projectId: context.projectId, source,
+        quoteProvenance: replayProvenance(supplied, prior?.quoteProvenance), scope: input.scope as string, title: input.title as string, checks: input.checks as string[], actions: input.actions as BoardArrangeAction[] }, { assertWritable: () => check(context) }); });
+    } catch (error) {
+      const code = errorCode(error);
+      if ((error as { name?: string }).name === 'AbortError' || code === 'generation_cancelled' || /^(invalid_|authorization_|arrangement_operation_conflict|quoted_decision_|task_|item_)/.test(code)) throw error;
+      return result({ type: 'optracall.quoted-arrangement-record', operationId: id, status: 'unknown', code, authority: { status: 'unknown' }, management: { status: 'pending' }, claim: 'Original Board result requires readback; no management write or new intent was attempted.' });
+    }
+    let managementResult: Record<string, unknown> = { status: 'not-applicable', code: 'work_goal_missing' };
+    if (goal) {
+      const managementId = operationId([id, 'management-arrangement']);
+      try {
+        const saved = options.goals?.getOperation(managementId);
+        if (saved) { const reference = saved.result as import('./strategy-goals-types.ts').GoalActionArrangement; managementResult = { status: 'linked', reference: { id: reference.id, goal: reference.goal, boardOperationId: reference.boardOperationId } }; }
+        else {
+          if (!options.goals?.recordArrangement) fail('strategy_goals_unavailable', 503);
+          await projectOwner(context, true); check(context);
+          const reference = await options.mutate(() => { check(context); return options.goals!.recordArrangement!({ operationId: managementId, goal: goal!, projectId: context.projectId,
+            title: authority.title, scope: authority.scope, checks: authority.checks, actions: authority.actions, source: authority.source, boardOperationId: id, quoteProvenance: authority.quoteProvenance }, { assertWritable: () => check(context) }); });
+          managementResult = { status: 'linked', reference: { id: reference.id, goal: reference.goal, boardOperationId: reference.boardOperationId } };
+        }
+      } catch (error) { managementResult = { status: 'pending', code: errorCode(error) }; }
+    }
+    return result({ type: 'optracall.quoted-arrangement-record', operationId: id, status: managementResult.status === 'pending' ? 'partial' : 'completed', authority: arrangementReceipt(authority), management: managementResult, claim: 'arranged-not-executed-not-effect-verified' });
+  }
   function authorityReceipt(authority: CaseStrategyChoice | BoardActionAuthorization | TaskFeedbackRevision) {
     const quote = authority.quoteProvenance;
     const quoteSource = quote ? { projectId: quote.projectId, taskId: quote.taskId, requestId: quote.requestId, sessionId: quote.sessionId, toolCallId: quote.toolCallId,
@@ -110,14 +175,64 @@ export function createQuotedDecisionAdapter(options: {
       itemVersion: authority.itemVersion, taskVersion: authority.taskVersion, decision: authority.decision, source: authority.source, operationId: authority.operationId, actorKind: authority.actorKind, quoteSource };
     return { taskId: authority.taskId, revisionId: authority.revisionId, revisionNumber: authority.revisionNumber, operationId: authority.operationId, adopted: authority.adopted, effect: authority.effect, origin: authority.origin, quoteSource };
   }
+  async function revokeWork(input: Record<string, unknown>, context: QuotedDecisionHostContext) {
+    await projectOwner(context); const supplied = provenance(input, context);
+    if (typeof input.expectedPreviousAuthorizationId !== 'string' || typeof input.scope !== 'string' || !input.scope.trim() || typeof input.itemVersion !== 'string' || typeof input.taskVersion !== 'string' || input.choiceId !== undefined) fail('quoted_decision_clarification_required');
+    const target = await boardTarget(input, context), original = options.board.getActionAuthorization(input.expectedPreviousAuthorizationId as string) ?? fail('quoted_decision_scope_mismatch');
+    if (original.projectId !== context.projectId || original.itemId !== target.item.id || original.taskId !== target.task.id || !('kind' in original.source) || original.source.taskId !== context.taskId || canonical(original.source.workContext ?? null) !== canonical(context.workContext ?? null)) fail('quoted_decision_scope_mismatch');
+    const id = operationId(['quoted-work-revoke-v1', context.projectId, context.taskId, context.requestId, supplied.quote.start, supplied.quote.end, target.task.id]);
+    const prior = options.board.getActionAuthorizationOperation(id);
+    if (!prior) await projectOwner(context, true);
+    let authority: BoardActionAuthorization;
+    try {
+      authority = await options.mutate(() => { check(context); return options.board.recordActionAuthorization({ operationId: id, projectId: context.projectId, itemId: target.item.id, taskId: target.task.id,
+        itemVersion: input.itemVersion as string, taskVersion: input.taskVersion as string, expectedPreviousAuthorizationId: original.authorizationId, decision: 'revoke', scope: input.scope as string,
+        source: original.source, quoteProvenance: replayProvenance(supplied, prior?.quoteProvenance) }, { assertWritable: () => check(context) }); });
+    } catch (error) {
+      const code = errorCode(error), status = (error as { status?: number; statusCode?: number }).status ?? (error as { statusCode?: number }).statusCode;
+      if ((error as { name?: string }).name === 'AbortError' || code === 'generation_cancelled' || status !== undefined && status < 500 || /^(invalid_|authorization_|quoted_decision_)/.test(code)) throw error;
+      return result({ type: 'optracall.quoted-decision-record', operationId: id, status: 'unknown', code, authority: { status: 'unknown' }, management: { status: 'not-applicable' }, claim: 'Original Board result requires readback; no new operation id was attempted.' });
+    }
+    return result({ type: 'optracall.quoted-decision-record', operationId: id, status: 'completed', authority: authorityReceipt(authority), management: { status: 'not-applicable', code: 'original_board_authority' }, claim: 'authorization-revoked-execution-and-feedback-preserved' });
+  }
   return async (action: QuotedDecisionAction, input: Record<string, unknown>, context: QuotedDecisionHostContext): Promise<QuotedDecisionToolResult> => {
     if (!input || typeof input !== 'object' || Array.isArray(input)) fail('invalid_quoted_decision', 400);
     const allowed: Record<QuotedDecisionAction, string[]> = {
-      read: ['pageSize', 'actionContinuation', 'decisionContinuation'], 'choose-strategy': ['quote', 'strategyRef', 'choice', 'reason', 'expectedPreviousChoiceId', 'allowHistorical'],
+      read: ['pageSize', 'actionContinuation', 'decisionContinuation', 'operationId'], 'choose-strategy': ['quote', 'strategyRef', 'choice', 'reason', 'expectedPreviousChoiceId', 'allowHistorical'],
       'authorize-action': ['quote', 'strategyRef', 'choiceId', 'itemId', 'taskId', 'itemVersion', 'taskVersion', 'expectedPreviousAuthorizationId', 'decision', 'scope', 'allowHistorical'],
       'record-feedback': ['quote', 'strategyRef', 'choiceId', 'itemId', 'taskId', 'expectedLatestRevisionId', 'adopted', 'outcome', 'metricDelta', 'review', 'score', 'effect', 'allowHistorical'],
+      'arrange-actions': ['quote', 'scope', 'title', 'checks', 'actions', 'strategyRef', 'choiceId', 'allowHistorical'],
     };
     if (!allowed[action] || input.action !== undefined && input.action !== action || Object.keys(input).some(key => key !== 'action' && !allowed[action].includes(key))) fail('invalid_quoted_decision', 400);
+    if (action === 'arrange-actions') return arrange(input, context);
+    if (action === 'authorize-action' && input.decision === 'revoke' && input.strategyRef === undefined) return revokeWork(input, context);
+    if (action === 'read' && (input.operationId !== undefined || !context.caseContext)) {
+      await projectOwner(context);
+      if (input.operationId !== undefined) {
+        const operation = await readArrangement(input.operationId, context);
+        if (operation) return result({ type: 'optracall.quoted-arrangement-read', operation: arrangementReceipt(operation) });
+        const authorization = options.board.getActionAuthorizationOperation(input.operationId as string);
+        if (!authorization) return result({ type: 'optracall.quoted-arrangement-read', operation: null });
+        if (authorization.projectId !== context.projectId || authorization.quoteProvenance.taskId !== context.taskId) fail('quoted_decision_scope_mismatch');
+        await boardTarget(authorization, context);
+        return result({ type: 'optracall.quoted-authorization-read', authorization: authorityReceipt(authorization) });
+      }
+      const rows = [];
+      for (const task of options.board.listTasks()) {
+        const item = options.board.getItem(task.itemId); if (item.projectId !== context.projectId) continue;
+        try { await boardTarget({ itemId: item.id, taskId: task.id }, context); } catch { check(context); continue; }
+        const authorization = options.board.listActionAuthorizations(task.id).at(-1);
+        rows.push({ item: { id: item.id, title: item.title }, task: { id: task.id, title: task.title, owner: task.owner, dueDate: task.dueDate, status: task.status }, itemVersion: boardRecordVersion(item), taskVersion: boardRecordVersion(task), authorization: authorization?.authorizationId ?? null,
+          authorizations: authorization ? [authorityReceipt(authorization)] : [] });
+      }
+      const pageSize = input.pageSize === undefined ? 5 : Number(input.pageSize), version = sha(canonical(rows)); let offset = 0;
+      if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 5) fail('invalid_quoted_decision', 400);
+      if (input.actionContinuation !== undefined) {
+        try { const cursor = JSON.parse(Buffer.from(String(input.actionContinuation), 'base64url').toString('utf8')); if (cursor.version !== version || !Number.isSafeInteger(cursor.offset) || cursor.offset < 0 || cursor.offset >= rows.length) fail('quoted_decision_catalog_changed'); offset = cursor.offset; }
+        catch { fail('quoted_decision_catalog_changed'); }
+      }
+      return result({ type: 'optracall.quoted-decision-read', actions: rows.slice(offset, offset + pageSize), actionContinuation: offset + pageSize < rows.length ? Buffer.from(JSON.stringify({ version, offset: offset + pageSize })).toString('base64url') : null, claim: 'Observed original Board facts; no Case was inferred.' });
+    }
     const record = await owner(context);
     if (action === 'read') {
       const pageSize = input.pageSize === undefined ? 5 : Number(input.pageSize);
