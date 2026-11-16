@@ -1,4 +1,4 @@
-# v0.2.0 当前工程候选结果
+# v0.2.0 工程结果与原位归档
 
 2026-11-16。用户已批准当前spec/UI并授权开始实施。本轮在原产品上形成七模块工程候选。用户最新明确本次运营Skill免测、直接通过；固定八文件已接入，原A11等待条件解除，受影响检查与非作者增量见[接入记录](skill-adoption.md)。工程实现与真实模型专业表现、运行采用及用户产品验收分开核定。正式产品方向未重访，未缩成单Task产品分期。
 
@@ -49,3 +49,18 @@ Standards与Spec复核者均非任何实现作者、从无作者历史上下文�
 ## 本次授权接入增量
 
 上一固定候选f39e3e18…的完整检查、非作者结论和原A11待办保留为历史；本次按用户明确授权接入8文件并修正展示的准确身份绑定。受影响验证及新最终候选回执在`.local/overall-architecture-upgrade/development/skill-adoption/`。本次完整检查为2870项/2759 PASS/111 SKIP/0 FAIL，类型/边界/构建通过；两名新上下文非作者已完成确定性及实际SDK增量复核，最终身份在该根review报告固定。用户免测通过不等于实际模型测评已运行；A11原等待条件已经解除，不再索取pending或回执。
+
+## 合并交付与原位归档
+
+2026-11-16。用户明确授权 Git／CI、合并 main、设备与服务更新后，本轮按 196 个明确文件提交，未纳入原始日志、私有产品方案、业务数据或其他工作树 WIP。工作分支提交 `c1365d563afe865c021396a1ec9c824dc705ec52` 已推送；[PR #75](https://github.com/gadfly-hbo/OptraCall/pull/75) 获授权 squash 合并为 `39d3aa50e4162e193d8cae0b1507600f8fa2c86b`。合并 tree `a7d4c00f51eabf3020159973b3c33da90e1dba07` 与已复核 PR head 完全相同，本机 main 已安全快进并读回干净，功能分支保留。
+
+| 准确检查 | 结果 |
+| --- | --- |
+| [PR Check #198](https://github.com/gadfly-hbo/OptraCall/actions/runs/43836525565) | pull_request／attempt 1／head 与 checkout 均为 c1365d5；2870 项，2673 PASS、197 SKIP、0 FAIL、0 取消；边界、类型、构建及高危审计通过 |
+| [main Check #199](https://github.com/gadfly-hbo/OptraCall/actions/runs/43838668684) | push/main／attempt 1／head 与 checkout 均为 39d3aa5；同为 2870／2673 PASS／197 SKIP／0 FAIL／0 取消；所有步骤通过 |
+
+本地 111 SKIP 与 Ubuntu CI 197 SKIP 分别保留。原审计 2 项 moderate 与 Vite 大包提示保留，没有依此升级 SDK。首次 push 因已移除的旧 credential helper 路径失败，使用当前已安装 gh 的命令级 helper 后成功；未修改全局凭据配置。准确日志与机器回执在本轮 `delivery/git/`。
+
+本次原位归档包含三份工程文档与一项 CI 等待上限修正，按已观察到的 CI 耗时将 `Check` 的上限由 15 分钟调至 25 分钟：同一运行源码的 PR 测试耗时 704293ms，main 测试耗时 870141ms，后者全 job 约 14 分 57 秒。检查、平台、依赖、审计、断言与重试方式不变；归档提交仍须通过自身准确 main push CI 后才可被设备采用。148 项运行及测试文件保持已审 SHA，历史 FAIL／UNKNOWN／NOT_RUN 不改写。本目录原位保留规格、批准、实施、验收及交付记录；不复制外部产品基线，不另开功能 PR。
+
+两端停机前同机备份已复制并读回，复制期间、文件／链接、外部语义目标均零差异；Mini 10 个和 Book 5 个原项目均为 schema 2。该结果只覆盖备份阶段，设备切换及最终保全不提前写成通过。后续按 [delivery](delivery.md) 的已授权设备范围，在最终 main CI 成功后沿原 launcher／updater 采用；实际运行提交、备份差异及非执行者复核回执保存在 `.local/overall-architecture-upgrade/delivery/`。真实模型、专业正确、用户产品验收和经营效果继续分别报告。
