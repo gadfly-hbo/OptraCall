@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -21,9 +22,9 @@ async function fixture(t: TestContext, disabled = false) {
   const { project } = await json(await host.request('/api/projects', 'POST', { name: '合成原项目', configurationId: saved.configuration.id }), 201);
   const { task } = await json(await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: '合成原分析任务' }), 201);
   await json(await host.request('/api/cases/storage/initialize', 'POST', {}));
-  const { case: source } = await json(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '已结束的合成前项' }), 201);
+  const { case: source } = await json(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '已结束的合成前项' })), 201);
   const closed = await json(await host.request(`/api/cases/${source.id}/close`, 'POST', { operationId: randomUUID(), expectedRevision: source.revision, reason: '历史结论保留为待核参考' }));
-  const { case: target } = await json(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '当前合成目标事项' }), 201);
+  const { case: target } = await json(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '当前合成目标事项' })), 201);
   const linked = await json(await host.request(`/api/cases/${target.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: target.revision, projectId: project.id }));
   const route = `/api/projects/${project.id}/tasks/${task.id}`;
   return { root, provider, host, project, task, route, source: closed.case, target: linked.case,
@@ -65,7 +66,7 @@ test('SM07/A04 original HTTP task and real Pi can save/read a relation to its bo
 
 test('SM04/SM07 real Host artifact sources read the actual bounded text and keep changed bytes distinct from the historical observation', { timeout: 30_000 }, async t => {
   const f = await fixture(t), content = '合成明确来源🙂'.repeat(2600);
-  const { case: evidence } = await json(await f.host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '合成历史来源事项' }), 201);
+  const { case: evidence } = await json(await f.host.request('/api/cases', 'POST', await withCaseGoal(f.host, { operationId: randomUUID(), title: '合成历史来源事项' })), 201);
   const linked = await json(await f.host.request(`/api/cases/${evidence.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: evidence.revision, projectId: f.project.id }));
   const { file } = await json(await f.host.request(`/api/projects/${f.project.id}/files/upload`, 'POST', { name: 'relation-source.txt', directory: '020_clean', content: Buffer.from(content).toString('base64') }), 201);
   const saved = await json(await f.host.request(`/api/cases/${evidence.id}/artifacts`, 'POST', { operationId: randomUUID(), expectedRevision: linked.case.revision, projectId: f.project.id, relativePath: file.path, taskId: f.task.id, role: 'report' }));

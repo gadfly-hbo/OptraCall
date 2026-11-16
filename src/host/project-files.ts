@@ -1,3 +1,4 @@
+import type { ProjectTaskResultBinding } from './project-task-results-types.ts';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { readProjectFileText, writeProjectFileText, type ProjectFilesPort } from '../agent/project-files.ts';
@@ -13,6 +14,7 @@ function fault(code: string): never { throw Object.assign(new Error(code), { cod
 
 export function createProjectFilesPort(options: {
   projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore; projectId: string; taskId: string; assertOwner(): Promise<void>;
+  listBoundReports?(): Promise<ProjectTaskResultBinding[]>;
   readScopedCatalog?(): Promise<{ bytes: Buffer; enterpriseId?: string } | undefined>;
 }): ProjectFilesPort {
   return async (action, input, context) => {
@@ -30,11 +32,19 @@ export function createProjectFilesPort(options: {
     if (action === 'write-report') {
       if (Object.keys(input).length !== 2 || !filename(input.filename) || typeof input.content !== 'string') fault('invalid_report_arguments');
       const { filename: name, content } = input;
+      const sha256 = createHash('sha256').update(content).digest('hex'), relativePath = '060_reports/' + name;
+      const prior = (await options.listBoundReports?.())?.find(item => item.projectId === project.id && item.taskId === options.taskId && item.relativePath === relativePath && item.sha256 === sha256 && item.bytes === Buffer.byteLength(content));
+      if (prior) {
+        const captured = await options.projects.captureFeedbackFile(project.id, relativePath); await owner();
+        if (captured.sha256 !== prior.sha256 || captured.bytes.length !== prior.bytes) fault('report_name_conflict');
+        const details = { schemaVersion: 1, type: 'optracall.project-report-write', ...prior, path: path.join(project.rootPath, relativePath), filename: name, reused: true };
+        return { content: [{ type: 'text', text: `报告已存在且同源内容一致，复用准确原件：${JSON.stringify(details)}` }], details };
+      }
       const receipt = await writeProjectFileText({ content,
         signal: context.signal, toolCallId: context.toolCallId,
         write: () => options.projects.writeBoundReport(project.id, options.taskId, name, content, context) });
       check();
-      return { content: [{ type: 'text', text: `报告已保存到 ${receipt.path}` }], details: { schemaVersion: 1, type: 'optracall.project-report-write', ...receipt } };
+      return { content: [{ type: 'text', text: `报告已保存到 ${receipt.path}\n准确回执：${JSON.stringify(receipt)}` }], details: { schemaVersion: 1, type: 'optracall.project-report-write', ...receipt } };
     }
     if (action === 'read-catalog') {
       if (Object.keys(input).length !== 0) fault('invalid_catalog_arguments');

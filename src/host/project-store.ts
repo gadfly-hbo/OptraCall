@@ -12,7 +12,8 @@ export interface ProjectConfiguration { id: string; revision: number; provider: 
 export interface ProjectRun { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic }
 export interface UploadedFile { id: string; originalName: string; path: string; bytes: number; sha256: string; uploadedAt: string; source: { kind: 'upload' | 'copy' | 'user-save-report'; from?: string } }
 export interface FeedbackTaskOrigin { handoffId: string; operationId: string; requestHash: string }
-export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin; reviewDraftIds?: string[] }
+export interface PlanTaskOrigin { confirmationId: string; taskKey: string; requestHash: string }
+export interface TaskRecord { id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin; reviewDraftIds?: string[]; archivedAt?: string | null; planOrigin?: PlanTaskOrigin }
 export interface ProjectRecord { schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
 export class ProjectStoreFault extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
@@ -38,6 +39,10 @@ function projectName(value: unknown): string { if (typeof value !== 'string' || 
 function feedbackOrigin(value: unknown): FeedbackTaskOrigin {
   if (!object(value) || typeof value.handoffId !== 'string' || !uuid.test(value.handoffId) || typeof value.operationId !== 'string' || !uuid.test(value.operationId) || typeof value.requestHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.requestHash)) return fail('invalid_feedback_origin');
   return { handoffId: value.handoffId, operationId: value.operationId, requestHash: value.requestHash };
+}
+function planOrigin(value: unknown): PlanTaskOrigin {
+  if (!object(value) || typeof value.confirmationId !== 'string' || !uuid.test(value.confirmationId) || typeof value.taskKey !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(value.taskKey) || typeof value.requestHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.requestHash)) return fail('invalid_plan_origin');
+  return { confirmationId: value.confirmationId, taskKey: value.taskKey, requestHash: value.requestHash };
 }
 function validRun(value: unknown): ProjectRun {
   if (!object(value) || typeof value.id !== 'string' || !uuid.test(value.id) || typeof value.status !== 'string' || !runStates.has(value.status) || !isoDate(value.startedAt) || (value.status === 'running' ? value.settledAt !== undefined : !isoDate(value.settledAt))) return fail('invalid_run');
@@ -171,11 +176,13 @@ export class ProjectStore {
       await this.#assertTaskDirectory(id, task);
       if (input.sessionFile !== undefined) { if (typeof input.sessionFile !== 'string') fail('invalid_project_metadata'); await this.#validateSession(id, task, input.sessionFile as string); task.sessionFile = input.sessionFile as string; }
       if (input.lastRun !== undefined) task.lastRun = validRun(input.lastRun);
+      if (input.archivedAt !== undefined) { if (input.archivedAt !== null && !isoDate(input.archivedAt)) return fail('invalid_project_metadata'); task.archivedAt = input.archivedAt as string | null; }
       if (input.simulationTools !== undefined) { if (typeof input.simulationTools !== 'boolean') return fail('invalid_project_metadata'); task.simulationTools = input.simulationTools; }
       if (input.weatherTools !== undefined) { if (typeof input.weatherTools !== 'boolean') return fail('invalid_project_metadata'); task.weatherTools = input.weatherTools; }
       if (input.tradeAreaTools !== undefined) { if (typeof input.tradeAreaTools !== 'boolean') return fail('invalid_project_metadata'); task.tradeAreaTools = input.tradeAreaTools; }
       if (input.modelTools !== undefined) { if (typeof input.modelTools !== 'boolean') return fail('invalid_project_metadata'); task.modelTools = input.modelTools; }
       if (input.feedbackOrigin !== undefined) task.feedbackOrigin = feedbackOrigin(input.feedbackOrigin);
+      if (input.planOrigin !== undefined) task.planOrigin = planOrigin(input.planOrigin);
       if (input.reviewDraftIds !== undefined) {
         if (!Array.isArray(input.reviewDraftIds) || input.reviewDraftIds.some(value => typeof value !== 'string' || !uuid.test(value)) || new Set(input.reviewDraftIds).size !== input.reviewDraftIds.length) fail('invalid_project_metadata');
         task.reviewDraftIds = [...input.reviewDraftIds as string[]];
@@ -245,6 +252,27 @@ export class ProjectStore {
   }
   #task(project: StoredProject, taskId: string): StoredTask { this.#id(taskId); const task = project.tasks.find(task => task.id === taskId); if (!task) return fail('task_not_found'); return task; }
   async getTask(projectId: string, taskId: string): Promise<TaskRecord> { return this.#decorateTask(projectId, this.#task(await this.#read(projectId), taskId)); }
+  archiveTask(projectId: string, taskId: string, options: { isBusy?: () => boolean } = {}): Promise<TaskRecord> {
+    return this.#mutation(async () => {
+      const project = await this.#read(projectId); this.#active(project);
+      const previous = this.#task(project, taskId);
+      if (previous.archivedAt) return this.#decorateTask(projectId, previous);
+      if (previous.lastRun?.status === 'interrupted') return fail('task_outcome_unknown');
+      if (previous.lastRun?.status === 'running' || options.isBusy?.()) return fail('task_busy');
+      const now = new Date().toISOString(), task = { ...previous, archivedAt: now, updatedAt: now };
+      await this.#write({ ...project, tasks: project.tasks.map(item => item.id === taskId ? task : item), updatedAt: now });
+      return this.#decorateTask(projectId, task);
+    });
+  }
+  restoreTask(projectId: string, taskId: string): Promise<TaskRecord> {
+    return this.#mutation(async () => {
+      const project = await this.#read(projectId); this.#active(project);
+      const previous = this.#task(project, taskId); if (!previous.archivedAt) return this.#decorateTask(projectId, previous);
+      const now = new Date().toISOString(), task = { ...previous, archivedAt: null, updatedAt: now };
+      await this.#write({ ...project, tasks: project.tasks.map(item => item.id === taskId ? task : item), updatedAt: now });
+      return this.#decorateTask(projectId, task);
+    });
+  }
   createTask(projectId: string, input: { name: string; configuration?: ProjectConfiguration; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean }): Promise<TaskRecord> {
     const name = projectName(input.name);
     if (input.modelTools !== undefined && typeof input.modelTools !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
@@ -279,10 +307,31 @@ export class ProjectStore {
       await this.#write(next); return this.#decorateTask(projectId, task);
     });
   }
+  /** Host-only plan creation; a stable origin makes an uncertain create safe to read back. */
+  createTaskWithPlan(projectId: string, input: { taskId: string; name: string; draft?: string; planOrigin: PlanTaskOrigin; configuration?: ProjectConfiguration; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean }): Promise<TaskRecord> {
+    const name = projectName(input.name), origin = planOrigin(input.planOrigin), draft = input.draft ?? '';
+    for (const field of ['simulationTools', 'tradeAreaTools', 'weatherTools', 'modelTools'] as const) if (input[field] !== undefined && typeof input[field] !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
+    this.#id(input.taskId); if (typeof draft !== 'string' || draft.length > 20000) return Promise.reject(new ProjectStoreFault('invalid_draft'));
+    return this.#mutation(async () => {
+      const project = await this.#read(projectId), existing = project.tasks.find(task => task.id === input.taskId);
+      if (existing) {
+        if (!existing.planOrigin || JSON.stringify(existing.planOrigin) !== JSON.stringify(origin)) return fail('plan_origin_conflict');
+        return this.#decorateTask(projectId, existing);
+      }
+      this.#active(project);
+      const now = new Date().toISOString(), task: StoredTask = { id: input.taskId, name, createdAt: now, updatedAt: now, configuration: publicConfiguration(input.configuration ?? project.configuration), draft, sessionStorage: 'task', planOrigin: origin, ...(input.simulationTools ? { simulationTools: true } : {}), ...(input.tradeAreaTools ? { tradeAreaTools: true } : {}), ...(input.weatherTools ? { weatherTools: true } : {}), ...(input.modelTools ? { modelTools: true } : {}) };
+      const next = { ...project, tasks: [...project.tasks, task], updatedAt: now }; this.#metadataBytes(next);
+      const directory = path.join(this.dataRoot, 'projects', projectId, 'tasks');
+      await this.#directory(directory); await this.#directory(path.join(directory, task.id)); await this.#directory(this.#taskDirectory(projectId, task));
+      await this.#write(next); return this.#decorateTask(projectId, task);
+    });
+  }
+
   #updateTask(projectId: string, taskId: string, update: (task: StoredTask) => StoredTask | Promise<StoredTask>): Promise<TaskRecord> {
     return this.#mutation(async () => {
       const project = await this.#read(projectId); this.#active(project);
-      const previous = this.#task(project, taskId), now = new Date().toISOString(), task = { ...await update(previous), updatedAt: now };
+      const previous = this.#task(project, taskId); if (previous.archivedAt) return fail('task_archived');
+      const now = new Date().toISOString(), task = { ...await update(previous), updatedAt: now };
       await this.#write({ ...project, tasks: project.tasks.map(item => item.id === taskId ? task : item), updatedAt: now }); return this.#decorateTask(projectId, task);
     });
   }
@@ -298,6 +347,7 @@ export class ProjectStore {
       const project = await this.#read(projectId); this.#active(project);
       const previous = this.#task(project, taskId);
       if (previous.reviewDraftIds?.includes(reviewId)) return { task: this.#decorateTask(projectId, previous), appended: false };
+      if (previous.archivedAt) return fail('task_archived');
       const draft = previous.draft + (previous.draft ? '\n\n' : '') + text;
       if (draft.length > 20_000) fail('review_draft_too_large');
       const now = new Date().toISOString(), task = { ...previous, draft, reviewDraftIds: [...(previous.reviewDraftIds ?? []), reviewId], updatedAt: now };
@@ -527,7 +577,7 @@ export class ProjectStore {
     return this.#mutation(async () => {
       assertCurrent();
       const project = await this.#read(projectId);
-      this.#active(project); this.#task(project, taskId);
+      this.#active(project); if (this.#task(project, taskId).archivedAt) return fail('task_archived');
       const relativePath = '060_reports/' + filename;
       const target = await this.#safePath(projectId, relativePath, true);
       const directory = path.dirname(target), identity = await fs.lstat(directory, { bigint: true });

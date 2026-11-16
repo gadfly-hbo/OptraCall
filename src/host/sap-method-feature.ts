@@ -10,7 +10,7 @@ import { createSapMethodSessions, type SapMethodOwner } from './sap-method-sessi
 import { createSapMethodSources, type SapMethodAdditionalSources } from './sap-method-sources.ts';
 import { atomicJson, canonical, digest, exists, isMissing, jsonBytes, parse, readBytes, safePath, writeExclusive } from './project-data-context-io.ts';
 import type { SapMethodRouteResult, SapMethodSourceText } from './sap-method-routes.ts';
-import type { SessionFilter } from './agent-sessions.ts';
+import type { SessionFilter, SessionLease } from './agent-sessions.ts';
 import type { PersonalContextResult } from './personal-context-types.ts';
 import type { SemanticQueryResult } from '../../extensions/business-plugins/semantic-context/types.ts';
 import { readNativeSessionSnapshot } from './native-session-snapshot.ts';
@@ -30,6 +30,8 @@ type Options = {
   configurationSnapshot(id?: string, revision?: number): Readonly<RuntimeModelConfiguration> | null | undefined;
   pair(projectId: string, taskId: string, writable?: boolean): Promise<{ project: ProjectRecord; task: TaskRecord }>;
   sourceBusy(project: ProjectRecord, task: TaskRecord): boolean;
+  /** Only an exact live original lease may bypass its own source busy projection. */
+  parentAdmit?(projectId: string, taskId: string, parentContext: unknown): void | Promise<void>;
   mutate<T>(use: () => T | Promise<T>): Promise<T>; isClosing(): boolean;
   personal(action: 'find' | 'read', input: Record<string, unknown>, signal: AbortSignal): Promise<PersonalContextResult>;
   methods(projectId: string, taskId: string, action: 'find' | 'read', input: Record<string, unknown>, signal: AbortSignal, purpose?: 'human-fixed-preview'): Promise<SemanticQueryResult>;
@@ -64,7 +66,11 @@ export function createSapMethodFeature(options: Options) {
     const { project, task } = await options.pair(owner.projectId, owner.taskId, true);
     if (task.configuration.id !== owner.configuration.id || task.configuration.revision !== owner.configuration.revision) failure('METHOD_CONFIGURATION_CHANGED');
     if (!options.configurationSnapshot(owner.configuration.id, owner.configuration.revision)) failure('METHOD_CONFIGURATION_REQUIRED');
-    if (options.sourceBusy(project, task)) failure('METHOD_SOURCE_BUSY');
+    if (owner.parentContext !== undefined) {
+      if (!options.parentAdmit) failure('METHOD_PARENT_UNAVAILABLE');
+      await options.parentAdmit(owner.projectId, owner.taskId, owner.parentContext);
+      if (task.lastRun?.status !== 'completed') failure('METHOD_SOURCE_INCOMPLETE');
+    } else if (options.sourceBusy(project, task)) failure('METHOD_SOURCE_BUSY');
   };
   const archive = async (requestId: string, value: SourceArchive, key: string) => {
     const file = await safePath(options.dataRoot, `${extractionRelative(requestId)}/sources/${key}.json`, true);
@@ -118,9 +124,10 @@ export function createSapMethodFeature(options: Options) {
   });
   // These promises only flush business receipts on shutdown; they never grant execution or deduplicate runs.
   const settlements = new Set<{ owner: SapMethodExtractionRecord; promise: Promise<void> }>();
-  const run = (initial: SapMethodExtractionRecord, configuration: Readonly<RuntimeModelConfiguration>) => {
-    const operation = sessions.execute({ ...ownerOf(initial), configuration }, async (outcome, context) => options.mutate(async () => {
-      context.assertCurrent(); await admit({ ...ownerOf(initial), configuration }); context.assertCurrent();
+  const run = (initial: SapMethodExtractionRecord, configuration: Readonly<RuntimeModelConfiguration>, parentContext?: unknown) => {
+    const owner = { ...ownerOf(initial), configuration, ...(parentContext === undefined ? {} : { parentContext }) };
+    const operation = sessions.execute(owner, async (outcome, context) => options.mutate(async () => {
+      context.assertCurrent(); await admit(owner); context.assertCurrent();
       const current = await readRecord(initial.requestId);
       context.assertCurrent();
       if (!current || current.status !== 'running') failure('METHOD_EXTRACTION_NOT_CURRENT');
@@ -161,6 +168,7 @@ export function createSapMethodFeature(options: Options) {
     }).catch(() => { /* An unreadable receipt remains UNKNOWN on the next explicit read, never replayed. */ })
       .finally(() => { settlements.delete(pending); });
     settlements.add(pending);
+    return pending.promise;
   };
   const read = async (projectId: string, taskId: string, requestId: string) => {
     await options.pair(projectId, taskId);
@@ -175,7 +183,7 @@ export function createSapMethodFeature(options: Options) {
     }
     return record;
   };
-  const start = async (projectId: string, taskId: string, input: Record<string, unknown>) => options.mutate(async () => {
+  const start = async (projectId: string, taskId: string, input: Record<string, unknown>, parentContext?: unknown, onCreated?: () => void) => options.mutate(async () => {
     if (options.enabled === false) failure('METHOD_FEATURE_DISABLED');
     const requestId = id(input.requestId);
     if (Object.keys(input).some(key => !['requestId', 'incomplete'].includes(key)) || typeof input.incomplete !== 'boolean') failure('METHOD_INPUT_INVALID', 400);
@@ -183,7 +191,12 @@ export function createSapMethodFeature(options: Options) {
     if (existing) { checkOwner(existing, projectId, taskId); if (existing.incomplete !== input.incomplete) failure('METHOD_REQUEST_CONFLICT'); return existing; }
     const { project, task } = await options.pair(projectId, taskId, true);
     if (options.isClosing()) failure('METHOD_HOST_CLOSING');
-    if (options.sourceBusy(project, task) || sessions.busyForTask(projectId, taskId)) failure('METHOD_SOURCE_BUSY');
+    if (parentContext !== undefined) {
+      if (!options.parentAdmit) failure('METHOD_PARENT_UNAVAILABLE');
+      await options.parentAdmit(projectId, taskId, parentContext);
+      if (task.lastRun?.status !== 'completed') failure('METHOD_SOURCE_INCOMPLETE');
+    } else if (options.sourceBusy(project, task)) failure('METHOD_SOURCE_BUSY');
+    if (sessions.busyForTask(projectId, taskId)) failure('METHOD_SOURCE_BUSY');
     if (!task.sessionFile) failure('METHOD_SOURCE_SESSION_REQUIRED');
     if (!input.incomplete && task.lastRun?.status !== 'completed') failure('METHOD_SOURCE_INCOMPLETE');
     const configuration = options.configurationSnapshot(task.configuration.id, task.configuration.revision);
@@ -191,11 +204,31 @@ export function createSapMethodFeature(options: Options) {
     const record: SapMethodExtractionRecord = { schemaVersion: 1, requestId, projectId, taskId, incomplete: input.incomplete,
       status: 'running', configuration: { id: configuration.id, revision: configuration.revision, provider: configuration.provider }, createdAt: new Date().toISOString(), message: '正在按需查读来源并提炼；尚未保存或发布。' };
     await writeRecord(record);
-    run(record, configuration);
+    onCreated?.();
+    run(record, configuration, parentContext);
     return record;
   });
   return {
+    start: (projectId: string, taskId: string, input: Record<string, unknown>) => start(projectId, taskId, input),
+    read,
+    runForParent: async (projectId: string, taskId: string, input: Record<string, unknown>, parent: { context: unknown; onCancel: SessionLease<unknown>['onCancel'] }) => {
+      if (!options.parentAdmit) failure('METHOD_PARENT_UNAVAILABLE');
+      await options.parentAdmit(projectId, taskId, parent.context);
+      const requestId = id(input.requestId), owner = { projectId, taskId, extractionId: requestId };
+      let attached = false;
+      const unsubscribe = parent.onCancel(async () => { if (attached) await sessions.stop(owner); });
+      try {
+        const record = await start(projectId, taskId, input, parent.context, () => { attached = true; });
+        await [...settlements].find(entry => entry.owner.requestId === record.requestId)?.promise;
+        return read(projectId, taskId, record.requestId);
+      } finally { unsubscribe(); }
+    },
+    stopForTask: async (projectId: string, taskId: string) => {
+      await sessions.stopForTask(projectId, taskId);
+      await Promise.all([...settlements].filter(entry => entry.owner.projectId === projectId && entry.owner.taskId === taskId).map(entry => entry.promise));
+    },
     busyInScope: sessions.busyInScope,
+    busyForTask: sessions.busyForTask,
     closeAll: sessions.closeAll,
     flushReceipts: async (filter: SessionFilter = {}) => { await Promise.all([...settlements].filter(entry => (!filter.projectId || entry.owner.projectId === filter.projectId) && (!filter.provider || entry.owner.configuration.provider === filter.provider)).map(entry => entry.promise)); },
     readSource: async (methodId: string, version: number, index: number): Promise<SapMethodSourceText> => {

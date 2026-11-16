@@ -116,7 +116,9 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
   }
   function taskView(task: BoardTaskRecord, feedbackByTask: Map<string, TaskFeedbackRevision>): BoardTaskView {
     const feedback = feedbackByTask.get(task.id);
-    return feedback ? { ...task, feedback } : { ...task };
+    const last = store.listActionAuthorizations(task.id).at(-1);
+    const authorization = last ? { authorizationId: last.authorizationId, revision: last.revision, decision: last.decision, scope: last.scope, source: last.source, createdAt: last.createdAt } : null;
+    return { ...task, ...(feedback ? { feedback } : {}), authorization };
   }
 
   async function assertReadable(item: BoardItemRecord) {
@@ -216,6 +218,22 @@ export function createDecisionBoardRoutes(options: DecisionBoardRoutesOptions) {
     const input = ['POST', 'PATCH', 'PUT'].includes(request.method ?? '') ? await options.readBody(request) : {};
     try {
       if (route === '' && request.method === 'GET') return { status: 200, value: await view() };
+      if (route === 'action-authorizations/history' && request.method === 'GET') {
+        return { status: 200, value: await options.mutate(async () => {
+          const task = await readableTask(url.searchParams.get('taskId') ?? '');
+          return { authorizations: store.listActionAuthorizations(task.id) };
+        }) };
+      }
+      const authorizationOperation = /^action-authorizations\/operations\/([0-9a-f-]{36})$/.exec(route);
+      const authorizationExact = /^action-authorizations\/([0-9a-f-]{36})$/.exec(route);
+      if ((authorizationOperation || authorizationExact) && request.method === 'GET') {
+        return { status: 200, value: await options.mutate(async () => {
+          const authorization = authorizationOperation ? store.getActionAuthorizationOperation(authorizationOperation[1]!) : store.getActionAuthorization(authorizationExact![1]!);
+          if (!authorization && authorizationExact) throw new BoardRouteError(404, 'authorization_not_found', '未找到该行动授权记录。');
+          if (authorization) await readableTask(authorization.taskId);
+          return { authorization };
+        }) };
+      }
       if (route === 'feedback/history' && request.method === 'GET') {
         return { status: 200, value: await options.mutate(async () => {
           const task = await readableTask(url.searchParams.get('taskId') ?? '');

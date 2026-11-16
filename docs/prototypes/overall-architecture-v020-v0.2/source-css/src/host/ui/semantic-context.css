@@ -1,0 +1,34 @@
+.semantic-context-entry { min-width: 0; margin: 10px 0 0; }
+.semantic-context-entry > button { max-width: 100%; white-space: normal; text-align: left; }
+.sc-content, .sc-evidence, .sc-source, .sc-record { min-width: 0; color: var(--text); font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.sc-view-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.sc-view-switch button { min-height: 36px; border-radius: 6px; padding: 6px 10px; }
+.sc-view-switch button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.sc-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; min-width: 0; }
+.sc-source { margin: 16px 0 0; padding: 16px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+.sc-source h4, .sc-source h5 { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.7; }
+.sc-source h4 { flex: 1 1 180px; }
+.sc-status { display: inline-flex; border: 1px solid var(--line); background: var(--subtle); color: var(--muted); border-radius: 5px; padding: 2px 7px; font-size: 12px; }
+.sc-meta { font-size: 12px; line-height: 1.8; color: var(--muted); margin: 8px 0; }
+.sc-note, .sc-empty, .sc-error { margin: 12px 0; padding: 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--subtle); line-height: 1.8; }
+.sc-note p { margin: 4px 0; }
+.sc-empty { color: var(--muted); }
+.sc-error { color: var(--error); background: var(--error-bg); border-color: transparent; }
+.sc-metadata { display: grid; grid-template-columns: minmax(80px, .6fr) minmax(0, 2fr); gap: 8px 12px; margin: 14px 0; font-size: 12px; }
+.sc-metadata dt { color: var(--muted); }
+.sc-metadata dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.sc-metadata small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+.sc-content pre, .sc-paper { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflow: auto; margin: 8px 0; padding: 12px; background: var(--subtle); border: 1px solid var(--line); border-radius: 6px; font: 12px/1.85 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sc-content pre.sc-paper { font-family: inherit; font-size: 13px; color: var(--text); }
+.sc-content details { margin: 10px 0 0; }
+.sc-content summary { cursor: pointer; color: var(--muted); padding: 7px 0; font-size: 12px; }
+.sc-relations, .sc-unknown-time, .sc-followup { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.sc-relation + .sc-relation { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.sc-relation p { margin: 5px 0; }
+.sc-gaps { color: var(--muted); padding-left: 20px; margin: 12px 0; font-size: 12px; }
+.sc-record + .sc-record { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 12px; }
+.sc-actions { justify-content: flex-start; margin-top: 14px; }
+.sc-followup .sc-row { justify-content: flex-start; }
+.sc-content button { min-height: 36px; max-width: 100%; white-space: normal; }
+.sc-view-switch button:focus-visible, .sc-content :is(button, summary):focus-visible, .semantic-context-entry > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 480px) { .sc-source { padding: 12px; } .sc-metadata { grid-template-columns: minmax(0, 1fr); gap: 3px; } .sc-metadata dd { margin-bottom: 8px; } .sc-view-switch { gap: 4px; } .sc-view-switch button { flex: 1 1 120px; } }

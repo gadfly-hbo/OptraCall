@@ -1,0 +1,10 @@
+.pc-targets { display: grid; gap: 20px; }
+.pc-targets section { display: grid; gap: 10px; min-width: 0; }
+.pc-targets h3, .pc-targets small { overflow-wrap: anywhere; }
+.pc-target { white-space: normal; text-align: left; overflow-wrap: anywhere; }
+.pc-selection { display: grid; gap: 12px; }
+.pc-selection pre { max-width: 100%; overflow-wrap: anywhere; white-space: pre-wrap; }
+.pc-selection details { min-width: 0; width: 100%; }
+.pc-range { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.pc-range label { display: grid; gap: 5px; }
+.pc-range input { width: 7rem; max-width: 100%; }

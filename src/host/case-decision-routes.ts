@@ -9,6 +9,8 @@ export function createCaseDecisionRoutes(service: CaseDecisionService) {
     const match = /^\/api\/cases\/([a-f0-9-]+)\/decisions(?:\/(.*))?$/.exec(pathname);
     if (!match) return null;
     const caseId = match[1]!, action = match[2];
+    const exactChoice = /^choices\/([a-f0-9-]+)$/.exec(action ?? '');
+    if (exactChoice && method === 'GET') return { body: { choice: service.readChoice(caseId, exactChoice[1]!) } };
     if (action === 'links' && method === 'GET') return { body: await service.links(caseId) };
     if (action === 'source' && method === 'POST') return { body: await service.source(caseId, input) };
     const choice = /^([a-f0-9-]+)\/choice$/.exec(action ?? '');

@@ -52,13 +52,15 @@ const COMPARE_FIELDS = [
   { key: 'contribution', label: '贡献毛利（元）', format: money },
 ] as const;
 
-export function SimLabPage({ projects, onOpenTask, onBack, initialSelection }: {
+export function SimLabPage({ projects, onOpenTask, onBack, initialSelection, initialProjectId, backLabel = '返回能力目录' }: {
   projects: ClientProject[];
   onOpenTask: (project: ClientProject, task: ClientTask) => void;
   onBack: () => void;
   initialSelection?: FreezeSuggestion;
+  initialProjectId?: string;
+  backLabel?: string;
 }) {
-  const [projectId, setProjectId] = useState(() => initialSelection?.projectId ?? (projects.filter(p => !p.archivedAt).at(-1) ?? projects.at(-1))?.id ?? '');
+  const [projectId, setProjectId] = useState(() => initialSelection?.projectId ?? initialProjectId ?? (projects.filter(p => !p.archivedAt).at(-1) ?? projects.at(-1))?.id ?? '');
   const project = projects.find(p => p.id === projectId), archived = Boolean(project?.archivedAt);
   const [drafts, setDrafts] = useState<DraftRecord[]>([]), [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
   const [draftId, setDraftId] = useState(''), [loadedDraft, setDraft] = useState<DraftRecord>(), [runs, setRuns] = useState<RunRecord[]>([]);
@@ -218,7 +220,7 @@ export function SimLabPage({ projects, onOpenTask, onBack, initialSelection }: {
       <div className="plugin-heading-actions">
         <select aria-label="选择项目" value={projectId} disabled={busy} onChange={event => setProjectId(event.target.value)}>{projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.archivedAt ? '（已归档）' : ''}</option>)}</select>
         <span className="sim-chip">引擎 {ENGINE_VERSION}</span>
-        <button className="secondary-button" onClick={onBack}>返回能力目录</button>
+        <button className="secondary-button" onClick={onBack}>{backLabel}</button>
       </div>
     </header>
     {error && <div className="global-notice" role="alert"><span>{error}</span><button className="text-button" onClick={() => setError('')}>关闭提示</button></div>}

@@ -1,0 +1,14 @@
+.automatic-action-settings { max-width: 900px; color: var(--ink); }
+.automatic-action-settings h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.automatic-action-settings header > p { margin: 8px 0 22px; color: var(--muted); font-size: 13px; }
+.automatic-action-settings fieldset { margin: 0; padding: 18px 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-width: 0; }
+.automatic-action-settings legend { padding: 0 6px; font-size: 14px; font-weight: 600; }
+.automatic-action-total, .automatic-action-switch { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.6; cursor: pointer; }
+.automatic-action-total input, .automatic-action-switch input { width: 15px; height: 15px; margin: 3px 0 0; accent-color: var(--accent); flex: 0 0 auto; }
+.automatic-action-switch small { display: inline-block; margin-left: 8px; color: var(--muted); font-size: 11px; }
+.automatic-action-hint, .automatic-action-item > p { color: var(--muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.automatic-action-list { margin-top: 16px; }
+.automatic-action-item { border-top: 1px solid var(--line); padding: 16px 0 2px; margin-top: 12px; }
+.automatic-action-item > p { margin: 7px 0 10px 24px; }
+.automatic-action-error { padding: 10px 12px; border-radius: 6px; color: var(--error); background: var(--error-bg); font-size: 13px; }
+@media (max-width: 760px) { .automatic-action-settings fieldset { padding: 14px; }.automatic-action-switch small { display: block; margin-left: 0; } }

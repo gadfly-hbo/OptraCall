@@ -1,5 +1,5 @@
 import type { BoardProjectSummary, BoardReportView, BoardView } from '../api/routes.ts';
-import type { BoardItemRecord, BoardItemView, BoardTaskRecord, BoardTaskView, ExtractionRecord, TaskFeedbackRevision } from '../types.ts';
+import type { BoardItemRecord, BoardItemView, BoardTaskRecord, BoardTaskView, ExtractionRecord, TaskFeedbackRevision, BoardActionAuthorization } from '../types.ts';
 
 export type { BoardProjectSummary, BoardReportView, BoardView, BoardItemView, BoardTaskView };
 
@@ -44,3 +44,4 @@ export type FeedbackInput = { operationId: string; expectedLatestRevisionId: str
 export const saveFeedback = (taskId: string, input: FeedbackInput) => request<{ feedback: TaskFeedbackRevision }>(`tasks/${encodeURIComponent(taskId)}/feedback`, 'POST', input);
 export const feedbackHistory = (taskId: string) => request<{ revisions: TaskFeedbackRevision[] }>(`feedback/history?taskId=${encodeURIComponent(taskId)}`);
 export const feedbackOperation = (operationId: string) => request<{ feedback: TaskFeedbackRevision | null }>(`feedback/operations/${encodeURIComponent(operationId)}`);
+export const authorizationHistory = (taskId: string) => request<{ authorizations: BoardActionAuthorization[] }>(`action-authorizations/history?taskId=${encodeURIComponent(taskId)}`);

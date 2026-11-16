@@ -1,12 +1,12 @@
 import type { SkillEvaluation } from './skill-evaluation.ts';
 
-export const catalogCategories = ['assets', 'scenarios', 'connectors', 'plugins'] as const;
+export const catalogCategories = ['assets', 'connectors', 'plugins'] as const;
 export type CatalogCategory = typeof catalogCategories[number];
 export type CatalogEntry = 'metric' | 'requirement' | 'enterprise-materials' | 'decision' | 'refiner' | 'ppt-report' | 'simlab' | 'model-pack' | 'target-forecast' | 'coupon-forecast' | 'roi-forecast' | 'deep-research' | 'data-analysis' | 'trade-area-mcp' | 'weather-mcp' | 'db-link';
 export type CatalogItem = {
   id: string; category: CatalogCategory; name: string; description: string;
   tags: string[]; source: string; note: string;
-  skill?: { evaluation?: SkillEvaluation };
+  skill?: { evaluation?: SkillEvaluation; approval?: { date: string; version: string; candidateSha256: string; packageSha256: string; basis: 'user-approved-without-evaluation' } };
 } & ({ status: '已接入'; entry: CatalogEntry } | {
   status: '规划示例' | '预留接入'; entry?: never;
 });
@@ -34,7 +34,6 @@ const dataAnalysisEvaluation: SkillEvaluation = {
 };
 export const catalogMeta: Record<CatalogCategory, { label: string; description: string; symbol: string }> = {
   assets: { label: '分析资产', description: '复用业务定义、分析方法与表达规范，让每次分析都有依据。', symbol: '◈' },
-  scenarios: { label: '场景组合', description: '围绕一个业务问题，组合目标、所需能力与交付材料。', symbol: '◇' },
   connectors: { label: '连接器', description: '连接获准的数据与业务来源，保留来源和访问边界。', symbol: '⌘' },
   plugins: { label: '业务插件', description: '为具体问题提供专业能力，与统一 Agent 底座协同。', symbol: '▧' },
 };
@@ -47,16 +46,10 @@ export const catalogItems: CatalogItem[] = [
   { id: 'coupon-forecast', category: 'assets', skill: {}, name: '优惠券测算', description: '内置分析 skill，随 OptraCall 更新。在项目任务对话中使用。满减券四子模型情景测算：保留无券基线，比较回本所需转化提升、约束过滤与压力结果，确定性脚本随产品内置。', tags: ['优惠券', '营销测算'], source: 'OptraCall 分析资产 · coupon-forecast skill', note: '无需安装 skill：随产品分发，版本随 OptraCall 更新。使用入口＝项目任务对话，直接提出发券决策问题；Agent 按需使用 skill 与脚本，报告落 060_reports。脚本需要 Python，表格导入另需 openpyxl；允许不发券的结论。', status: '已接入', entry: 'coupon-forecast' },
   { id: 'roi-forecast', category: 'assets', skill: {}, name: '投放 ROI 测算', description: '内置分析 skill，随 OptraCall 更新。在项目任务对话中使用。多投放计划盈亏链路测算：保本转化率、情景敏感度、净贡献排名与跨档稳定性，确定性脚本随产品内置。', tags: ['投放 ROI', '盈亏测算'], source: 'OptraCall 分析资产 · roi-forecast skill', note: '无需安装 skill：随产品分发，版本随 OptraCall 更新。使用入口＝项目任务对话，直接提出投放盈亏问题；Agent 按需使用 skill 与脚本，报告落 060_reports。脚本需要 Python；测算属于情景推演，允许净亏损的结论。', status: '已接入', entry: 'roi-forecast' },
   { id: 'deep-research', category: 'assets', skill: { evaluation: deepResearchEvaluation }, name: '深度研究', description: '内置分析 skill，随 OptraCall 更新。在项目任务对话中开展多源研究与报告写作，按需委派调研、审稿子角色，保留来源引用与研究局限。', tags: ['深度研究', '研究报告'], source: 'OptraCall 分析资产 · deep-research skill', note: '使用入口＝项目任务对话，提出行业研究、竞品分析或专题调研问题，最终报告落 060_reports。检索取决于当前配置路线：MiniMax M3/M3.1-Flash、MiMo v2.6 系列接通原生检索；DeepSeek flash 路线未接通时如实声明，仅基于用户材料综述。没有可引用来源不等于路线未接通；重要决策请核验来源和结论。', status: '已接入', entry: 'deep-research' },
-  { id: 'data-analysis', category: 'assets', skill: { evaluation: dataAnalysisEvaluation }, name: '运营数据分析', description: '内置分析 skill，随 OptraCall 更新。在项目任务对话中支持业务数据的趋势对比、异常定位与指标变化拆解，配套复算脚本、报告格式检查和数据体检，辅助输出六段式报告。', tags: ['数据分析', '归因'], source: 'OptraCall 分析资产 · data-analysis skill', note: '使用入口＝项目任务对话，提出分析数据、看趋势或找异常类问题，最终报告落 060_reports。脚本需 python3（纯标准库）。不做目标测算、发券、投放与公开信息深度研究，对应各自 skill。本次测评 Token 用量约为不装 skill 的 40.1 倍。', status: '已接入', entry: 'data-analysis' },
+  { id: 'data-analysis', category: 'assets', skill: { evaluation: dataAnalysisEvaluation, approval: { date: '2026-11-16', version: '2.0.0-candidate.1', candidateSha256: 'f7fd87d384b197ed22913b4772ec3006c949c63bdd77053645448cdd309d7106', packageSha256: '05402899ac630de257799686828ae4b8a5f2ec1056427f711cc79a9eaf6ce0f6', basis: 'user-approved-without-evaluation' } }, name: '运营数据分析', description: '内置分析 skill，随 OptraCall 更新。在项目任务对话中支持业务数据的趋势对比、异常定位与指标变化拆解，配套复算脚本、报告格式检查和数据体检，保留适用完整报告与必要检查，区分诊断建议、正式行动计划及聊天摘要。', tags: ['数据分析', '归因'], source: 'OptraCall 分析资产 · data-analysis skill', note: '使用入口＝项目任务对话，提出分析数据、看趋势或找异常类问题，最终报告落 060_reports。脚本需 python3（纯标准库）。不做目标测算、发券、投放与公开信息深度研究，对应各自 skill。历史被测版 Token 用量约为不装 skill 的 40.1 倍，不表示当前版本实测成本。', status: '已接入', entry: 'data-analysis' },
   planned('assets', 'A03', '假设与策略资产包', '保留候选解释、反证要求和策略适用条件。', ['假设策略', '反证'], '候选假设不等于已确认事实，策略也不等于实际执行。'),
   planned('assets', 'A04', '实验与效果评估资产包', '明确实验单位、评价窗口与效果解释边界。', ['实验评估', '统计约定'], '未来需结合真实实验设计与数据质量判断适用性。'),
   planned('assets', 'A05', '报告与表达规范资产包', '复用经营复盘、实验报告的结构与证据表达要求。', ['报告模板', '表达规范'], '此处没有生成报告，模板是否生效需在接入任务中验证。'),
-  planned('scenarios', 'S01', '月度经营复盘', '围绕经营变化，组合指标、解释材料和行动候选。', ['经营复盘', '周期分析'], '场景仅组织目标与依赖，分析路线仍由 Agent 按上下文选择。'),
-  planned('scenarios', 'S02', '会员复购诊断', '围绕复购变化，组织 Cohort、人群与渠道调查材料。', ['会员经营', 'Cohort'], '未来需核对会员口径、观察窗口和数据覆盖。'),
-  planned('scenarios', 'S03', '优惠券效果评估', '连接发券前测算与执行后评估，区分预测和实际效果。', ['营销活动', '实验评估'], '此处没有发券或测算，也不代表存在增量效果。'),
-  planned('scenarios', 'S04', '目标与预测纠偏', '对照目标、预测和实际，组织差距判断与行动反馈。', ['目标管理', '预测反馈'], '场景组合不复制底层插件实现，也不建立独立 Runtime。'),
-  planned('scenarios', 'S05', '用户反馈诊断', '整理评论、工单主题，形成进一步调查的问题。', ['用户反馈', '文本分析'], '未来按授权读取资料，文本提及不能代表全体用户发生率。'),
-  planned('scenarios', 'S06', '门店空间经营分析', '组合门店与区域材料，支持覆盖和选址研究。', ['门店经营', '空间分析'], '此处没有地图计算，候选区域只作为示例。'),
   { id: 'trade-area-mcp', category: 'connectors', name: '商圈数据', description: '按省市、评级、关键词与指标筛选商圈，读取完整档案及来源、可信度，按自定义权重计算选址评分。数据快照在本机，连接器无网络外发。', tags: ['商圈', '选址', '本机数据'], source: 'OptraCall 连接器 · trade-area-mcp', note: '使用入口＝项目任务对话，任务级显式开启后由 Agent 自主查询，结果带数据版本。未公开字段如实保留；查询结果会进入所选任务模型上下文，不代表整段对话零数据外发。', status: '已接入', entry: 'trade-area-mcp' },
   { id: 'weather-mcp', category: 'connectors', name: '历史天气', description: '按城市或坐标和日期查询 Open-Meteo 历史日均温与降水，缺失不填零，结果标明来源、获取时间与缓存时效。', tags: ['天气', '历史日级', '外部网络'], source: 'OptraCall 连接器 · weather-mcp', note: '使用入口＝项目任务对话，需任务级开启。仅向 archive-api.open-meteo.com 发送坐标、日期、字段和时区，无密钥；免费 API 仅限非商业，按 Open-Meteo 条款使用。结果会进入所选模型上下文。', status: '已接入', entry: 'weather-mcp' },
   { id: 'db-link', category: 'connectors', name: '数据库与数据仓库', description: '配置 PostgreSQL / MySQL 共享连接，分项目明确范围与模型出口；任务继承来源，Agent 按问题自主发现与只读取数。', tags: ['数据库', '只读查询'], source: 'OptraCall 连接器 · db-link', note: '共享配置不共享项目权限或结果。先测试确切配置，再在项目资料区授权；连通不等于查询已准入，实际能力以来源权限、预算及所属取消核验为准。', status: '已接入', entry: 'db-link' },

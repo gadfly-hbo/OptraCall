@@ -1,3 +1,8 @@
+import { methodIssueTool } from './method-issue.ts';
+import { quotedDecisionTool } from './quoted-decisions.ts';
+import type { AnalysisDeliveryReceipt } from '../host/analysis-delivery.ts';
+import { ANALYSIS_DELIVERY_TOOL, ANALYSIS_DELIVERY_GUIDANCE } from './analysis-delivery.ts';
+import { PROJECT_TASK_RESULTS_TOOL } from './project-task-results.ts';
 import { prepareStudioArguments, studioParameters, studioReadParameters, STUDIO_ACTIONS, STUDIO_READ_ACTIONS, type StudioToolResult } from './studio.ts';
 import { inspectAnalysisPython, analysisPythonGuidance, type AnalysisPythonAvailability } from './analysis-python.ts';
 import { semanticContextAnthropicPayload } from './semantic-context-wire.ts';
@@ -18,7 +23,7 @@ import { projectSystemPrompt } from './project-system-prompt.ts';
 import { createProtectedTools } from './protected-tools.ts';
 import { snapshotProtectedSkills } from './protected-skills.ts';
 import { createSimulationTools } from '../../extensions/business-plugins/sim-lab/tools/simulation-tools.ts';
-import { agentCandidateParameters, candidateToolName, candidateCustomType, candidateReceiptType, parseAgentCandidateInput, agentCandidateDetailsSha256, type AgentCandidateDetails, type AgentCandidateReceipt } from './agent-candidate.ts';
+import { agentCandidateParameters, candidateToolName, candidateCustomType, candidateReceiptType, canonicalCandidateJson, parseAgentCandidateInput, agentCandidateDetailsSha256, type AgentCandidateDetails, type AgentCandidateReceipt } from './agent-candidate.ts';
 import { findPersonalContextParameters, readPersonalContextParameters, type PersonalContextToolResult } from './personal-context.ts';
 import { readCaseDecisionsParameters, saveCaseDecisionParameters, type CaseDecisionToolResult } from './case-decisions.ts';
 import { readCaseRelationsParameters, saveCaseRelationParameters } from './case-relations.ts';
@@ -43,6 +48,26 @@ const EXECUTION_ENTRY = 'optracall.execution';
 const PI_1_4_0_DEFAULT_ROLE = 'You are an expert coding assistant operating inside pi, a coding agent harness.';
 const PI_1_4_0_DEFAULT_PREAMBLE = `${PI_1_4_0_DEFAULT_ROLE} You help users by reading files, executing commands, editing code, and writing new files.\n\n`;
 const OPTRACALL_ROLE = "You are OptraCall's analysis and decision-support assistant running on Pi.";
+
+
+/** Confirm the original SDK append before returning a native save observation. */
+function appendConfirmed(nativeManager: SessionManager, customType: string, data: unknown): string {
+  const entryId = nativeManager.appendCustomEntry(customType, data);
+  const file = nativeManager.getSessionFile(), entry = nativeManager.getEntry(entryId);
+  if (!file || !entry) throw new Error('candidate_native_missing');
+  const expected = Buffer.from(JSON.stringify(entry) + '\n');
+  const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const before = fstatSync(fd);
+    if (!before.isFile() || before.nlink !== 1 || before.size < expected.length) throw new Error('candidate_native_unsafe');
+    fsyncSync(fd);
+    const bytes = Buffer.alloc(expected.length);
+    if (readSync(fd, bytes, 0, bytes.length, before.size - bytes.length) !== bytes.length || !bytes.equals(expected)) throw new Error('candidate_native_changed');
+    const after = fstatSync(fd), named = lstatSync(file);
+    if (after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs || named.ino !== before.ino || named.dev !== before.dev || !named.isFile() || named.nlink !== 1 || named.size !== before.size || named.mtimeMs !== before.mtimeMs || named.ctimeMs !== before.ctimeMs) throw new Error('candidate_native_changed');
+  } finally { closeSync(fd); }
+  return entryId;
+}
 
 export async function runProjectSession(transport: { close: () => Promise<void>; setHttpIdleTimeoutMs(value: number): void; settings(): Record<string, number>; observe(baseUrl: string, emit: (record: Record<string, unknown>) => void): () => void }) {
   let runtime: AgentSessionRuntime | undefined, session: AgentSession | undefined, manager: SessionManager | undefined;
@@ -328,33 +353,16 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         assertCurrent();
         // Pi is the sole writer. Verify its actual append synchronously before
         // returning a saved receipt, without another cancellation/dispatch gap.
-        const appendConfirmed = (customType: string, data: unknown): string => {
-          const entryId = originalManager.appendCustomEntry(customType, data);
-          const file = originalManager.getSessionFile(), entry = originalManager.getEntry(entryId);
-          if (!file || !entry) throw new Error('candidate_native_missing');
-          const expected = Buffer.from(JSON.stringify(entry) + '\n');
-          const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
-          try {
-            const before = fstatSync(fd);
-            if (!before.isFile() || before.nlink !== 1 || before.size < expected.length) throw new Error('candidate_native_unsafe');
-            fsyncSync(fd);
-            const bytes = Buffer.alloc(expected.length);
-            if (readSync(fd, bytes, 0, bytes.length, before.size - bytes.length) !== bytes.length || !bytes.equals(expected)) throw new Error('candidate_native_changed');
-            const after = fstatSync(fd), named = lstatSync(file);
-            if (after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs || named.ino !== before.ino || named.dev !== before.dev || !named.isFile() || named.nlink !== 1 || named.size !== before.size || named.mtimeMs !== before.mtimeMs || named.ctimeMs !== before.ctimeMs) throw new Error('candidate_native_changed');
-          } finally { closeSync(fd); }
-          return entryId;
-        };
         let receipt: AgentCandidateReceipt;
         try {
-          const entryId = appendConfirmed(candidateCustomType, { recordVersion: 1, details });
+          const entryId = appendConfirmed(originalManager, candidateCustomType, { recordVersion: 1, details });
           receipt = { type: candidateReceiptType, recordVersion: 1, status: 'saved', candidate: {
             projectId: details.origin.projectId, taskId: details.origin.taskId, originSessionId: originalSessionId, entryId,
             toolCallId, expectedDetailsSha256: agentCandidateDetailsSha256(details),
           } };
           // This metadata says the BODY was verified before this append. It is
           // not a second body, nor a claim based only on its own returned ID.
-          appendConfirmed(candidateReceiptType, receipt);
+          appendConfirmed(originalManager, candidateReceiptType, receipt);
         } catch {
           // Append may already have changed memory or disk. Do not append again
           // or claim that no candidate exists when persistence is UNKNOWN.
@@ -396,6 +404,10 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       // callbacks are a separate business capability, not a new session loop.
       const tools = [
         ...(legacy && o.projectFilesEnabled ? PROJECT_FILE_TOOLS : []),
+        ...(legacy && o.projectTaskResultsEnabled ? [PROJECT_TASK_RESULTS_TOOL] : []),
+        ...(legacy && o.analysisDeliveryEnabled ? [ANALYSIS_DELIVERY_TOOL] : []),
+        ...(legacy && o.quotedDecisionsEnabled ? [{ ...quotedDecisionTool, action: 'manage' }] : []),
+        ...(legacy && o.methodIssueEnabled ? [methodIssueTool] : []),
         ...(sourceReader ? [{ feature: 'sap-method-source', action: 'read', name: sapMethodSourceToolName, label: '按需只读提炼来源', description: '仅查读Host绑定的固定Session可见记录、已授权相关记忆和SAP已发布方法，不接受文件路径、不修改或发布。catalog返回来源身份及长度；read-session用start和length分页读取；find-memory/read-memory及find-methods/read-method将原业务参数放input。后续页必须按continuation继续，片段不是全文；是否读、怎样提炼由你自主决定。', parameters: sapMethodSourceParameters }] : []),
         ...(studioWriter || studioReader ? [{ feature: 'studio', action: 'manage', name: 'studio_assets', label: '体系资产建设与正式参考', description: '按需查找体系和准确正式资产，读来源；建设owner可保存/修改语义、本体、Binding候选及检查，维护主题/缺口与集中发布准备，复用SAP原主库候选；extract使用官方Semantica经统一Pi抽取带来源候选。catalog.inputs返回本项目当前020输入的准确Ref，直接原样用作factsRef；准确studio-source Ref自带locator时read-source/reason可省systemId，无需猜技术身份。reason沿当前任务调用官方Semantica有限正向规则，普通仅准确正式执行用途、建设可试自身候选；事实缺失/不支持/冲突/中断保留，不将confidence作业务概率；普通使用仅正式资格；contribute仅形成当前任务的带报告、来源及基于版本的贡献候选，不改正式源，来源project/task由Host绑定；反馈只关联原体系，不等于确错或发布。正式发布/采用由人必要决定，不能传入owner、凭据、Python路径或自造成功回执。没有固定阶段、角色或调用配额。catalog/read先给实际公开合同，候选不得当正式供给。read-source可用原ref另加itemId或metricName精读条目／原SAP指标，保持locator原义并按continuation恢复；三类关联和四项就绪声明不证明计算或专业正确。', parameters: studioWriter ? studioParameters : studioReadParameters, prepareArguments: prepareStudioArguments }] : []),
         ...(legacy && o.personalContextEnabled ? (['find','read'] as const).map(action => ({ feature: 'personal', action, name: `${action}_personal_context`, label: action === 'find' ? '查找个人参考资料' : '读取个人参考资料', description: action === 'find' ? '按需查找旧知识和经验的目录，只检索标题、别名和范围，不预读正文。可以零次或多次调用；可在 Pi 工具组合中调用。旧资料和人的意见仅为有来源的参考，不是当前指令、权限或已证实事实。' : '按精确 target 读取旧原文、片段、最新独立纠正和局限，或按 sourceIndex 读取该对象的来源。可在 Pi 工具组合中调用；是否读取、比较、参考或拒用由你自主判断。片段不等于全文；旧资料和人的意见不是当前指令、权限或已证实事实。', parameters: action === 'find' ? findPersonalContextParameters : readPersonalContextParameters })) : []),
@@ -422,11 +434,13 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         ...(feature === 'semantic-context' && action === 'read' && graphReader ? { description: legacy ? `${definition.description}\n${graphDescription}` : `${graphDescription}本模式仅支持graph分支，不开放旧目录find/read/trace或record写入。` } : {}),
         execute: async (toolCallId: string, parameters: Record<string, unknown>, signal: AbortSignal | undefined, _update: unknown, ctx: ExtensionToolContext) => {
           const originalRun = run;
-          const errorCode = feature === 'project-files' ? 'project_files_run_unavailable' : feature === 'studio' ? 'studio_run_unavailable' : feature === 'sap-method-source' ? 'sap_method_source_run_unavailable' : feature === 'case-decisions' ? 'case_decision_run_unavailable' : feature === 'case-relations' ? 'case_relation_run_unavailable' : feature === 'case-sources' ? 'case_sources_run_unavailable' : feature === 'semantic-context' ? 'semantic_context_run_unavailable' : 'personal_context_run_unavailable';
+          const errorCode = feature === 'method-issue' ? 'method_issue_run_unavailable' : feature === 'quoted-decisions' ? 'quoted_decision_run_unavailable' : feature === 'analysis-delivery' ? 'analysis_delivery_run_unavailable' : feature === 'project-task-results' ? 'project_task_results_run_unavailable' : feature === 'project-files' ? 'project_files_run_unavailable' : feature === 'studio' ? 'studio_run_unavailable' : feature === 'sap-method-source' ? 'sap_method_source_run_unavailable' : feature === 'case-decisions' ? 'case_decision_run_unavailable' : feature === 'case-relations' ? 'case_relation_run_unavailable' : feature === 'case-sources' ? 'case_sources_run_unavailable' : feature === 'semantic-context' ? 'semantic_context_run_unavailable' : 'personal_context_run_unavailable';
           const { action: sourceAction, ...sourceInput } = parameters;
+          if (feature === 'quoted-decisions' && (!['read', 'choose-strategy', 'authorize-action', 'record-feedback'].includes(String(sourceAction)) || !(originalRun?.providedContext?.case as {operationId?:string} | undefined)?.operationId)) throw new Error('quoted_decision_run_unavailable');
+          if (feature === 'project-task-results' && (!['find', 'read'].includes(String(sourceAction)) || !originalRun?.providedContext?.projectPlan)) throw new Error('project_task_results_run_unavailable');
           if (feature === 'case-sources' && !['find', 'read'].includes(String(sourceAction))) throw new Error('invalid_case_sources_action');
           if (feature === 'studio' && !((studioWriter ? STUDIO_ACTIONS : STUDIO_READ_ACTIONS) as readonly string[]).includes(String(sourceAction))) throw new Error('invalid_studio_action');
-          const hasInputAction = feature === 'studio' || feature === 'sap-method-source' || feature === 'case-sources' || feature === 'semantic-context' && action === 'read';
+          const hasInputAction = feature === 'quoted-decisions' || feature === 'project-task-results' || feature === 'studio' || feature === 'sap-method-source' || feature === 'case-sources' || feature === 'semantic-context' && action === 'read';
           if (feature === 'sap-method-source' && !['catalog','read-session','find-memory','read-memory','find-methods','read-method'].includes(String(sourceAction))) throw new Error('invalid_sap_method_source_action');
           if (feature === 'semantic-context' && action === 'read' && !(!legacy ? ['graph'] : ['find', 'read', 'trace', ...(graphReader ? ['graph'] : [])]).includes(String(sourceAction))) throw new Error('invalid_semantic_context_action');
           const assertCurrent = () => {
@@ -443,10 +457,27 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           const maximumContent = feature === 'project-files' ? 64 * 1024 : 32_768;
           if (Buffer.byteLength(JSON.stringify(value), 'utf8') > 256 * 1024 || !Array.isArray(value.content) || value.content.some(part => part.type !== 'text' || typeof part.text !== 'string') || value.content.reduce((n, part) => n + part.text.length, 0) > maximumContent) throw new Error('personal_context_payload_limit');
           if (feature === 'semantic-context' && sourceAction === 'graph' && value.content.reduce((bytes, part) => bytes + Buffer.byteLength(part.text, 'utf8'), 0) > 24 * 1024) throw new Error('semantic_graph_payload_limit');
+          if (feature === 'method-issue') boundManager.appendCustomEntry('optracall.method-issue', redact(value.details));
+          if (feature === 'quoted-decisions') boundManager.appendCustomEntry('optracall.quoted-decision', redact(value.details));
+          if (feature === 'analysis-delivery') {
+            const delivery = value.details as unknown as AnalysisDeliveryReceipt;
+            if (delivery?.type !== 'optracall.analysis-delivery') throw new Error('analysis_delivery_receipt_unavailable');
+            const reports = delivery.reports;
+            if (delivery.save?.status === 'saved' && Array.isArray(reports)) {
+              for (const report of reports) if (report.requestId === originalRun!.id && report.sessionId === boundSessionId && report.toolCallId === toolCallId) boundManager.appendCustomEntry('optracall.project-report-write', redact(report));
+            }
+            const data = JSON.parse(JSON.stringify(redact(value.details))) as AnalysisDeliveryReceipt;
+            try {
+              const entryId = appendConfirmed(boundManager, 'optracall.analysis-delivery', data);
+              appendConfirmed(boundManager, 'optracall.analysis-delivery-receipt', { schemaVersion: 1, type: 'optracall.analysis-delivery-receipt', status: 'saved', delivery: {
+                projectId: data.projectId, taskId: data.taskId, requestId: data.requestId, sessionId: data.sessionId, toolCallId: data.toolCallId, entryId, sha256: createHash('sha256').update(canonicalCandidateJson(data)).digest('hex'),
+              } });
+            } catch { throw new Error('analysis_delivery_save_unknown: 交付声明保存结果待核，请沿原生记录核对，不要自动重写。'); }
+          }
           if (feature === 'project-files' && action === 'write-report') {
             // Codemode projects nested tool results into the parent text. Keep the
             // Host receipt in the same native session without adding model context.
-            boundManager.appendCustomEntry('optracall.project-report-write', redact(value.details));
+            boundManager.appendCustomEntry((value.details as {reused?:boolean}).reused ? 'optracall.project-report-reuse' : 'optracall.project-report-write', redact(value.details));
           }
           return value;
         },
@@ -686,7 +717,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           return enabled ? { systemPrompt: event.systemPrompt + '\n' + reportCalculationGuidance } : undefined;
         });
       }] : [];
-      const projectInstructions = () => [projectSystemPrompt(targetCwd, path.join(o.projectDirectory!, '060_reports'), dbLinkAvailable), OUTPUT_EVIDENCE_GUIDANCE];
+      const projectInstructions = () => [projectSystemPrompt(targetCwd, path.join(o.projectDirectory!, '060_reports'), dbLinkAvailable), OUTPUT_EVIDENCE_GUIDANCE, ...(o.analysisDeliveryEnabled ? [ANALYSIS_DELIVERY_GUIDANCE] : [])];
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: { ...(contextAdapter ? { extensionsOverride: contextAdapter.extensionsOverride } : {}), ...(fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
@@ -820,7 +851,8 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     if (publicSearch() && input !== undefined) throw new Error('public_search_context_not_allowed');
     if (fixedInput() && (input?.enterprise || input?.feedback || input?.projectData || input?.personal)) throw new Error('fixed_draft_materials_not_allowed');
     if (input?.personal && (!options.projectId || !options.taskId || options.workspace || options.protectedExecution && !ordinaryManaged())) throw new Error('personal_context_profile_unavailable');
-    const providedContext = redact({ version: 1, claim: 'provided-not-adopted', providedAt: new Date().toISOString(), requestTextSha256: createHash('sha256').update(text).digest('hex'), ...(input?.rap ? { rap: input.rap } : {}), ...(input?.case ? { case: input.case } : {}), ...(input?.reportCalculationReview ? { reportCalculationReview: input.reportCalculationReview } : {}), ...(input?.enterprise ? { enterprise: input.enterprise } : {}), ...(input?.feedback ? { feedback: input.feedback } : {}), ...(input?.projectData ? { projectData: input.projectData } : {}), ...(input?.personal ? { personal: input.personal.receipt } : {}), ...(input?.studio ? { studio: { systemId: input.studio.systemId, purpose: input.studio.purpose, refs: input.studio.refs, claim: 'provided-not-used-or-verified' } } : {}), ...(typeof input?.originalUserText === 'string' ? { originalUserText: input.originalUserText } : {}), ...(sapProvision() ? { sap: sapProvision() } : {}) });
+    if (input?.projectPlan && (!options.projectId || !options.taskId || options.workspace || input.projectPlan.projectId !== options.projectId || input.projectPlan.taskId !== options.taskId)) throw new Error('project_plan_profile_unavailable');
+    const providedContext = redact({ version: 1, claim: 'provided-not-adopted', providedAt: new Date().toISOString(), requestTextSha256: createHash('sha256').update(text).digest('hex'), ...(input?.userQuoteEligible !== undefined ? { userQuoteEligible: input.userQuoteEligible } : {}), ...(input?.assetFindings ? { assetFindings: input.assetFindings } : {}), ...(input?.automaticSource ? { automaticSource: input.automaticSource } : {}), ...(input?.conclusionReviews ? { conclusionReviews: input.conclusionReviews } : {}), ...(input?.projectPlanPreparation ? { projectPlanPreparation: input.projectPlanPreparation } : {}), ...(input?.projectPlan ? { projectPlan: input.projectPlan } : {}), ...(input?.rap ? { rap: input.rap } : {}), ...(input?.case ? { case: input.case } : {}), ...(input?.reportCalculationReview ? { reportCalculationReview: input.reportCalculationReview } : {}), ...(input?.enterprise ? { enterprise: input.enterprise } : {}), ...(input?.feedback ? { feedback: input.feedback } : {}), ...(input?.projectData ? { projectData: input.projectData } : {}), ...(input?.personal ? { personal: input.personal.receipt } : {}), ...(input?.studio ? { studio: { systemId: input.studio.systemId, purpose: input.studio.purpose, refs: input.studio.refs, claim: 'provided-not-used-or-verified' } } : {}), ...(typeof input?.originalUserText === 'string' ? { originalUserText: input.originalUserText } : {}), ...(sapProvision() ? { sap: sapProvision() } : {}) });
     return execute(id, 'prompt', () => session!.prompt(text), requestFingerprint, providedContext);
   }
   async function command(text: string, id: string) {
@@ -876,6 +908,11 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       if (closing && message.method !== 'close') throw new Error('session_closing');
       if (message.method === 'open') result = await open(message.input);
       else if (message.method === 'snapshot') result = snapshot();
+      else if (message.method === 'record-automatic-action') {
+        const data = message.input;
+        if (run || operation || !manager || !options.projectId || !options.taskId || options.workspace || !data || typeof data !== 'object' || Array.isArray(data) || typeof data.requestId !== 'string' || lastRun()?.requestId !== data.requestId || Buffer.byteLength(JSON.stringify(data), 'utf8') > 64 * 1024) throw new Error('automatic_receipt_unavailable');
+        manager.appendCustomEntry('optracall.automatic-action', redact({ ...data, projectId: options.projectId, taskId: options.taskId, sessionId: manager.getSessionId(), recordedAt: new Date().toISOString(), claim: 'host-action-observation-not-professional-verdict' })); result = { recorded: true };
+      }
       else if (message.method === 'prompt' || message.method === 'command') {
         if (operation) throw new Error('session_busy');
         operation = message.method;

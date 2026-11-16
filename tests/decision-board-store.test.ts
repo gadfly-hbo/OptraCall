@@ -275,7 +275,8 @@ test('FC04/FC18: schema1 upgrade preserves original DDL/rows and one honest know
   assert.deepEqual(store.listFeedbackHistory(fixture.taskId), [baseline, next]);
   const db = new DatabaseSync(fixture.file, { readOnly: true });
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 3);
+    // Schema4 adds independent authorization history; all original rows remain exact.
+    assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 4);
     const expected = fixture.before.map(table => table.name !== 'board_items' ? table : {
       ...table,
       sql: Object.assign(Object.create(null), { sql: String(table.sql!.sql)

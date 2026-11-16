@@ -1,3 +1,20 @@
+import { createMethodIssueAdapter } from './method-issue-adapter.ts';
+import { projectSkillCatalog } from '../agent/skill-catalog.ts';
+import { createQuotedDecisionAdapter } from './quoted-decision-adapter.ts';
+import { readTaskAnalysisDelivery, qualifyAnalysisDeliverySource } from './task-analysis-delivery.ts';
+import { runAutomaticDeliveryActions } from './automatic-delivery-actions.ts';
+import { createStrategyGoalSources, validateStrategyGoalScope } from './strategy-goal-sources.ts';
+import { createProjectPlanPreparationHost, projectPlanPreparationDirectory, projectPlanPreparationOwner } from './project-plan-preparation-host.ts';
+import { createAnalysisDeliveryPort } from './analysis-delivery.ts';
+import { listTaskBoundReports } from './project-task-result-sources.ts';
+import { createProjectTaskResultsReader } from './project-task-results.ts';
+import { createProjectPlanFeature } from './project-plan-host.ts';
+import { createProjectPlanStore, ProjectPlanFault } from './project-plan-store.ts';
+import type { ProjectPlanContent, ProjectPlanDraftInput, ProjectPlanConfirmInput, ProjectPlanConfirmation, ProjectPlanTask } from './project-plan-types.ts';
+import { StrategyGoalsStore, StrategyGoalsError } from './strategy-goals-store.ts';
+import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
+import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
+import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
 import { StudioError } from '../../extensions/business-plugins/studio/store.ts';
 import { studioExecutionOwner, type StudioSourceRef } from '../../extensions/business-plugins/studio/contracts.ts';
 import { analysisPythonFor } from '../agent/analysis-python.ts';
@@ -151,6 +168,8 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
 export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; webSearchFetch?: typeof fetch; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; caseRelationsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; studioPython?: string; reviewAdmission?: ReviewAdmissionContract; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false, relationsEnabled: options.caseRelationsEnabled !== false });
+  const projectPlans = createProjectPlanStore({ dataRoot });
+  const strategyGoals = new StrategyGoalsStore(dataRoot), automaticActions = createAutomaticActionSettingsStore({ dataRoot });
   const modelPacks = new ModelPackStore(path.join(dataRoot, 'models'));
   const enterpriseMaterials = new EnterpriseMaterialsStore(dataRoot);
   const projectDataReferences = createProjectDataContextReferences({ dataRoot, projects, enterpriseMaterials });
@@ -294,10 +313,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       } catch { return { busy: false, unknown: true }; }
     },
   });
-  async function assertConclusionReady(owner: { projectId: string; taskId: string }) {
+  async function assertConclusionReady(owner: { projectId: string; taskId: string }, parentContext?: SessionContext<ProjectOwner>) {
     if ((await reviewTransition.status(owner)).state !== 'ready') throw new RequestFault(409, 'review_transition_pending');
     const original = await pair(owner.projectId, owner.taskId, true);
-    if (projectSessions.busy(projectSessions.ref(original)) || original.task.lastRun?.status === 'running') throw new RequestFault(409, 'session_busy');
+    if (parentContext !== undefined) { if (!projectSessions.owns(projectSessions.ref(original), parentContext) || original.task.lastRun?.status !== 'completed') throw new RequestFault(409, 'generation_cancelled'); }
+    else if (projectSessions.busy(projectSessions.ref(original)) || original.task.lastRun?.status === 'running') throw new RequestFault(409, 'session_busy');
   }
   function legacyEntryReplaced(response: ServerResponse, projectId: string, taskId: string) {
     if (reviewTransition.legacyAdmissionAllowed()) return false;
@@ -345,6 +365,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           ? createSemanticContextReadPort({ projectId: project.id, taskId: task.id, projects, legacy: semanticPort, graph: semanticGraph, graphOnly: Boolean(protectedExecution), isClosing: () => closing }) : undefined;
         const projectFiles = protectedExecution ? undefined : createProjectFilesPort({
           projects, enterpriseMaterials, projectId: project.id, taskId: task.id,
+          listBoundReports: async () => { const original = await pair(project.id, task.id); return listTaskBoundReports(original.project, original.task); },
           readScopedCatalog: async () => {
             const scope = await enterpriseContextFor(project.id);
             return scope ? { enterpriseId: scope.enterpriseId, bytes: Buffer.from(JSON.stringify({ enterpriseId: scope.enterpriseId ?? null, summary: scope.summary, claim: 'directory-visible-not-read', continuation: 'studio_assets catalog' })) } : undefined;
@@ -373,7 +394,25 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               deliver();
             }),
           };
-        }, analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
+        }, analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, methodIssue: async (input, context) => {
+          const operationId = stableActionId(['task-method-issue-v1', project.id, task.id, context.requestId, input.methodId, input.version, input.note, input.sources]);
+          return methodIssues(input, { ...context, operationId, projectId: project.id, taskId: task.id });
+        }, quotedDecisions: async (action, input, context) => {
+          context.assertCurrent(); await pair(project.id, task.id, action !== 'read');
+          const receipt = cases.getOperation(context.caseOperationId), supplied = receipt?.result;
+          if (context.caseOperationId !== contextOperationId(project.id, task.id, context.requestId) || receipt?.kind !== 'task_context_prepare' || receipt.phase !== 'completed' || receipt.projectId !== project.id || !supplied || supplied.projectId !== project.id || supplied.taskId !== task.id || supplied.caseId !== receipt.caseId) throw new RequestFault(409, 'quoted_decision_binding_unavailable');
+          return quotedDecisions(action, input, { ...context, projectId: project.id, taskId: task.id, caseContext: { caseStoreId: cases.getStatus().storeId!, caseId: String(supplied.caseId), caseRevision: Number(supplied.caseRevision), projectWorkRevision: Number(supplied.projectWorkRevision) } });
+        }, analysisDelivery: createAnalysisDeliveryPort({ projectId: project.id, taskId: task.id, projects, settings: automaticActions, projectFiles: projectFiles!, listBoundReports: async () => { const current = await pair(project.id, task.id); return listTaskBoundReports(current.project, current.task); }, assertOwner: async () => { if (closing) throw new RequestFault(503, 'host_closing'); await pair(project.id, task.id, true); } }), projectTaskResults: async (action, input, context) => {
+          context.assertCurrent(); await pair(project.id, task.id, true);
+          const fixed = context.projectPlan;
+          if (fixed.projectId !== project.id || fixed.taskId !== task.id) throw new RequestFault(409, 'project_result_scope_unavailable');
+          const state = await projectPlans.read(project.id), confirmation = state.history.find(item => item.id === fixed.confirmationId && item.planVersion === fixed.planVersion);
+          if (!confirmation) throw new RequestFault(409, 'project_result_scope_unavailable');
+          return createProjectTaskResultsReader({ projects, projectId: project.id, taskId: task.id, confirmation,
+            listBoundReports: async (projectId, sourceTaskId, read) => { const owner = await pair(projectId, sourceTaskId); return listTaskBoundReports(owner.project, owner.task, read ?? context); },
+            assertAuthorized: async () => { context.assertCurrent(); if (closing) throw new RequestFault(409, 'host_closing'); await pair(project.id, task.id, true); context.assertCurrent(); },
+          })(action, input, context);
+        }, studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
           context.signal.throwIfAborted();
           await pair(project.id, task.id, true);
           const result = action === 'find' ? await personalContext.find(input, { signal: context.signal }) : await personalContext.read(parsePersonalContextReadInput(input), { signal: context.signal });
@@ -456,8 +495,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     codeRoot: options.cwd,
     resourceRoot: path.join(dataRoot, 'pi'),
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
-    sessionDirectory: instanceId => requirementSessionDirectory(path.join(dataRoot, 'requirement-instances', instanceId)),
-    workspaceFor: instanceId => requirementWorkspace(path.join(dataRoot, 'requirement-instances', instanceId)),
+    sessionDirectory: instanceId => requirementSessionDirectory(instanceId.startsWith('req-plan-') ? projectPlanPreparationDirectory(dataRoot, instanceId.slice(9)) : path.join(dataRoot, 'requirement-instances', instanceId)),
+    workspaceFor: instanceId => requirementWorkspace(instanceId.startsWith('req-plan-') ? projectPlanPreparationDirectory(dataRoot, instanceId.slice(9)) : path.join(dataRoot, 'requirement-instances', instanceId)),
     configurationSnapshot: availableConfiguration,
     publish: publishRequirement,
     mutate,
@@ -505,7 +544,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       refinerSessions.closeAll(filter),
       sapMethodFeature.closeAll(filter),
       ...(studioSessions ? [studioSessions.closeAll(filter)] : []),
-      ...(!filter.projectId ? [requirementSessions.closeAll(filter)] : []),
+      requirementSessions.closeAll(filter),
     ]);
     for (const key of [...streams.keys()]) {
       const [projectId, taskId] = key.split('/');
@@ -524,6 +563,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     if (archiving.has(project.id)) throw new RequestFault(409, 'project_busy');
   }
   const conclusionMaterials = createConclusionReviewMaterials({ dataRoot, projects, pair, availableConfiguration, cases, enterpriseMaterials, dbBundles: dbReviewBundles,
+    projectContract: async (projectId, taskId, selection) => { const context = await projectPlanFeature.context(projectId, taskId, selection); if (!context) throw new RequestFault(409, 'project_plan_context_changed'); return context.text; },
+    assertProjectContractAuthorized: async (projectId, taskId, selection) => { await pair(projectId, taskId); const state = await projectPlans.read(projectId); if (!state.history.some(confirmation => confirmation.id === selection.confirmationId && confirmation.tasks.some(task => task.taskKey === selection.taskKey && task.taskId === taskId))) throw new RequestFault(409, 'project_plan_context_changed'); },
     requirementContext: (input, projectId) => requirementPrefix(input, projectId),
     assertRequirementAuthorized: async (selection, projectId) => {
       if (selection.frameworkVersion) await requirementPlugin.review.assertFrameworkHistoryReadable(selection.instanceId, selection.frameworkVersion, projectId);
@@ -535,7 +576,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     conclusionReview: {
       prepare: conclusionMaterials.prepare,
       assertAuthorized: record => conclusionMaterials.assertAuthorized(record, { active: ['preparing', 'ready', 'running'].includes(record.state) }),
-      admit: owner => assertConclusionReady(owner),
+      admit: (owner, parentContext) => assertConclusionReady(owner, parentContext),
     },
     availableConfiguration, mutate, isClosing: () => closing,
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
@@ -566,6 +607,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
     configurationSnapshot: availableConfiguration, pair, mutate, isClosing: () => closing,
     sourceBusy: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })),
+    parentAdmit: async (projectId, taskId, context) => { const owner = await pair(projectId, taskId, true); if (!projectSessions.owns(projectSessions.ref(owner), context as SessionContext<ProjectOwner>) || owner.task.lastRun?.status !== 'completed') throw new RequestFault(409, 'generation_cancelled'); },
     readBody: request => body(request),
     personal: (action, input, signal) => action === 'find' ? personalContext.find(input, { signal }) : personalContext.read(parsePersonalContextReadInput(input), { signal }),
     methods: (projectId, taskId, action, input, signal, purpose) => {
@@ -614,7 +656,46 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     try { if (cases.getStatus().state === 'ready') return { ...project, work: cases.getProjectWork(project.id), workUnavailable: false }; } catch {}
     return { ...project, work: null, workUnavailable: true };
   }
-  const caseRoutes = createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject,
+  const methodIssues = createMethodIssueAdapter({ methods: sapMethods, mutate,
+    admit: async context => { context.signal.throwIfAborted(); context.assertCurrent(); if (closing) throw new RequestFault(409, 'host_closing'); await pair(context.projectId, context.taskId, true); },
+    sourceAllowed: async (methodId, version, context) => !studio.enterpriseScope.active() || studio.enterpriseScope.sourceAllowed(context.projectId, { authority: 'sap-method', id: methodId, version: String(version) }),
+    qualifySources: async (sources, context) => {
+      const owner = await pair(context.projectId, context.taskId);
+      for (const source of sources) {
+        context.assertCurrent(); context.signal.throwIfAborted();
+        if (source.type === 'session') await qualifyAnalysisDeliverySource(owner.project, owner.task, source);
+        else if (source.type === 'report') {
+          const prefix = `project-report:${owner.project.id}:${owner.task.id}:`;
+          if (!source.ref.startsWith(prefix) || source.version !== source.sha256) throw new RequestFault(409, 'method_issue_source_unavailable');
+          const relativePath = source.ref.slice(prefix.length), bindings = await listTaskBoundReports(owner.project, owner.task, context);
+          const binding = bindings.find(item => item.relativePath === relativePath && item.sha256 === source.sha256);
+          if (!binding) throw new RequestFault(409, 'method_issue_source_unavailable');
+          const captured = await projects.captureFeedbackFile(owner.project.id, relativePath);
+          if (captured.sha256 !== binding.sha256 || captured.bytes.length !== binding.bytes) throw new RequestFault(409, 'method_issue_source_changed');
+        } else if (source.type === 'method') {
+          const version = Number(source.version), method = sapMethods.getPublished(source.ref, version);
+          if (method.publication.contentSha256 !== source.sha256 || studio.enterpriseScope.active() && !await studio.enterpriseScope.sourceAllowed(context.projectId, { authority: 'sap-method', id: source.ref, version: source.version! })) throw new RequestFault(409, 'method_issue_source_unavailable');
+        } else throw new RequestFault(409, 'method_issue_source_unavailable');
+        context.assertCurrent(); context.signal.throwIfAborted();
+      }
+    },
+  });
+  const quotedDecisions = createQuotedDecisionAdapter({ cases, projects, board: boardStore, goals: strategyGoals, mutate, isClosing: () => closing, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item) });
+  const strategyMetricLibrary = createMetricLibrary(path.join(dataRoot, 'metric-assets'));
+  const strategySources = createStrategyGoalSources({ cases, projects, board: boardStore, metrics: strategyMetricLibrary, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item) });
+  const strategyGoalRoutes = createStrategyGoalRoutes({ store: strategyGoals, mutate, isClosing: () => closing,
+    listSources: strategySources.list,
+    validateGoal: async input => {
+      validateStrategyGoalScope(input.scope, studio.enterpriseScopes);
+      if (input.source) await strategySources.validate(input.source);
+      if (input.measurement?.kind === 'quantitative') {
+        try { const metric = strategyMetricLibrary.read(input.measurement.sapMetric.id, input.measurement.sapMetric.version); if (!input.measurement.sapMetric.metricName || !metric.entry.metricNames.includes(input.measurement.sapMetric.metricName)) throw new Error('metric_name_required'); const scope = input.scope.kind === 'enterprise' ? input.scope.id : input.scope.enterpriseId; const metricScope = studio.enterpriseScopes.assetEnterpriseId('sap-metric', input.measurement.sapMetric.id); if (scope && metricScope !== scope) throw new Error('metric_scope_unavailable'); }
+        catch { throw new StrategyGoalsError('strategy_goal_metric_unavailable', 409); }
+      }
+    },
+    validateFeedbackSource: strategySources.validate,
+  });
+  const caseRoutes = createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject, goals: strategyGoals,
     enterpriseScope: {
       caseEnterpriseId: caseId => studio.enterpriseScopes.enterpriseIdForCase(caseId),
       projectEnterpriseId: projectId => studio.enterpriseScopes.enterpriseIdForProject(projectId),
@@ -732,8 +813,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     let canCarry = record.state === 'completed' && Boolean(record.reviewResult) && !project.archivedAt &&
       !projectSessions.busy(projectSessions.ref({ project, task })) && task.lastRun?.status !== 'running' && Boolean(availableConfiguration(task.configuration.id, task.configuration.revision));
     if (canCarry) try { await assertFrameworkContinuation(project.id, task.id); } catch { canCarry = false; }
-    return { ...record, reportChanged: reportCurrentStatus === 'same-path-updated', reportCurrentStatus, canCarry,
-      alreadyCarried: Boolean(task.reviewDraftIds?.includes(record.verificationId)) };
+    const deliveredToAuthor = (await taskContextReceipts(project, task, true)).some(receipt => Array.isArray(receipt.providedContext?.conclusionReviews) && receipt.providedContext.conclusionReviews.some((value: unknown) => value && typeof value === 'object' && 'reviewId' in value && value.reviewId === record.verificationId && 'reportSha256' in value && value.reportSha256 === record.review.report.sha256));
+    return { ...record, reportChanged: reportCurrentStatus === 'same-path-updated', reportCurrentStatus, canCarry: canCarry && !deliveredToAuthor,
+      deliveredToAuthor, alreadyCarried: deliveredToAuthor || Boolean(task.reviewDraftIds?.includes(record.verificationId)) };
   }
   async function conclusionReviewPresentation(owner: { projectId: string; taskId: string; verificationId: string }) {
     try { return await presentConclusionReview(await verification.conclusionReview.read(owner)); }
@@ -861,14 +943,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const personal = selectedPersonal.length ? selectedPersonal : undefined;
     const studioSelection = input.studioContext;
     if (studioSelection !== undefined && (!studioSelection || typeof studioSelection !== 'object' || Array.isArray(studioSelection) || Object.keys(studioSelection).some(key => !['systemId','purpose'].includes(key)) || !/^[a-f0-9-]{36}$/.test(String((studioSelection as any).systemId)) || !['construction','analysis'].includes(String((studioSelection as any).purpose)))) throw new StudioError('invalid_studio_context');
-    if (!requirement && !enterprise && feedback === undefined && projectData === undefined && personal === undefined && studioSelection === undefined) return undefined;
+    if (!requirement && !enterprise && feedback === undefined && projectData === undefined && personal === undefined && studioSelection === undefined && input.projectPlan === undefined) return undefined;
     const selection = input.caseContext as CaseContextSelection | undefined;
     const caseContext = selection && typeof selection === 'object' && !Array.isArray(selection) ? { caseId: selection.caseId, caseRevision: selection.caseRevision, projectWorkRevision: selection.projectWorkRevision, selectedReferenceIds: selection.selectedReferenceIds } : selection ?? null;
     const identity = personal ? ['optracall_request_personal_context_v1', projectId, taskId, input.text, caseContext, requirement ?? null, enterprise ?? null, feedback ?? null, projectData ?? null, personal]
       : projectData ? ['optracall_request_project_data_v1', projectId, taskId, input.text, caseContext, requirement ?? null, enterprise ?? null, feedback ?? null, projectData]
       : feedback !== undefined ? ['optracall_request_feedback_v1',projectId,taskId,input.text,caseContext,requirement ?? null,enterprise ?? null,feedback]
       : enterprise ? ['optracall_request_enterprise_v1', input.text, caseContext, requirement ?? null, enterprise] : ['optracall_request_v1', input.text, caseContext, requirement];
-    return createHash('sha256').update(JSON.stringify(studioSelection === undefined ? identity : ['optracall_request_studio_v1', identity, studioSelection])).digest('hex');
+    return createHash('sha256').update(JSON.stringify(input.projectPlan !== undefined ? ['optracall_request_project_plan_v1', identity, studioSelection ?? null, input.projectPlan] : studioSelection === undefined ? identity : ['optracall_request_studio_v1', identity, studioSelection])).digest('hex');
   };
   async function prepareCasePrompt(projectId: string, taskId: string, input: Record<string, unknown>, accepted = false) {    const operationId = contextOperationId(projectId, taskId, input.requestId as string);
     const existing = cases.getStatus().state === 'ready' ? cases.getOperation(operationId) : null;
@@ -894,12 +976,12 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   async function pair(projectId: string, taskId: string, writable = false) {
     const project = await projects.get(projectId), task = project.tasks.find(value => value.id === taskId);
     if (!task) throw new RequestFault(404, 'task_not_found');
-    if (writable) assertActive(project);
+    if (writable) { assertActive(project); if (task.archivedAt) throw new RequestFault(409, 'task_archived'); }
     return { project, task };
   }
   async function projectBusy(projectId: string) {
     const project = await projects.get(projectId);
-    return project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId) || boardSessions.busy(projectId) || refinerSessions.busyProject(projectId) || sapMethodFeature.busyInScope({ projectId }) || Boolean(studioSessions?.busyInScope({ projectId }));
+    return requirementSessions.busy(projectPlanPreparationOwner(projectId)) || project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId) || boardSessions.busy(projectId) || refinerSessions.busyProject(projectId) || sapMethodFeature.busyInScope({ projectId }) || Boolean(studioSessions?.busyInScope({ projectId }));
   }
   const priorRequest = priorTaskRequest;
   const savedHistory = (project: ProjectRecord, task: TaskRecord, capabilities: Record<string, unknown> = {}) => savedTaskHistory(project, task, SDK_VERSION, capabilities);
@@ -908,9 +990,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const ref = projectSessions.ref({ project, task });
     let current = await projectSessions.read(ref), snapshot: ProjectSnapshot;
     const interrupted = !current.live && !current.opening && (Boolean(current.context) || ['running', 'interrupted'].includes(task.lastRun?.status ?? ''));
-    if (activate) assertActive(project);
+    if (activate) { assertActive(project); if (task.archivedAt) throw new RequestFault(409, 'task_archived'); }
     try {
-      if (project.archivedAt !== null) snapshot = await savedHistory(project, task, { projectArchived: true });
+      if (project.archivedAt !== null || task.archivedAt) snapshot = await savedHistory(project, task, { projectArchived: true });
       else if (current.live && current.snapshot) snapshot = current.snapshot;
       else if (activate && !interrupted) {
         await projectSessions.open(ref); current = await projectSessions.read(ref);
@@ -949,6 +1031,266 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       await projects.markRun(project.id, task.id, { id: requestId, status: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'interrupted', startedAt, settledAt: new Date().toISOString(), ...(diagnostic ? { diagnostic } : {}) });
     });
   }
+  const stableActionId = (value: unknown) => { const hash = createHash('sha256').update(JSON.stringify(value)).digest('hex'); return `${hash.slice(0,8)}-${hash.slice(8,12)}-8${hash.slice(13,16)}-${((parseInt(hash[16]!,16)&3)|8).toString(16)}${hash.slice(17,20)}-${hash.slice(20,32)}`; };
+  async function completeNewDelivery(owner: ProjectOwner, lease: import('./agent-sessions.ts').SessionLease<ProjectOwner>, requestId: string, result: import('./agent-sessions.ts').SessionResult, input: Record<string, unknown>, providedContext?: import('../agent/project-runtime.ts').ProvidedContextInput) {
+    if (result.outcome !== 'completed') return { requestId, result };
+    let terminal = { requestId, result };
+    const currentOwner = await pair(owner.project.id, owner.task.id), delivery = await readTaskAnalysisDelivery(currentOwner.project, currentOwner.task, requestId);
+    if (!delivery) return terminal;
+    let currentDelivery: typeof delivery | undefined = delivery;
+    const assertCurrent = async () => { const latest = await pair(owner.project.id, owner.task.id, true); if (closing || !projectSessions.owns(projectSessions.ref(latest), lease.context) || latest.task.lastRun?.status !== 'completed') throw new RequestFault(409, 'generation_cancelled'); };
+    const runDeclaredContinuation = async (actionId: string, kind: 'case-feedback' | 'asset-findings', text: string, extra: import('../agent/project-runtime.ts').ProvidedContextInput = {}) => {
+      await assertCurrent();
+      const current = await pair(owner.project.id, owner.task.id), fingerprint = createHash('sha256').update(text).digest('hex');
+      const prior = await priorRequest(current.project, current.task, actionId, fingerprint);
+      if (prior) return { requestId: actionId, status: prior, deduplicated: true };
+      const startedAt = new Date().toISOString();
+      const run = lease.start({ requestId: actionId, text, requestFingerprint: fingerprint,
+        providedContext: { ...providedContext, case: undefined, originalUserText: '', userQuoteEligible: false, automaticSource: { kind, parentRequestId: requestId }, ...extra },
+        verifyBeforeDispatch: async () => { await assertCurrent(); await projects.markRun(owner.project.id, owner.task.id, { id: actionId, status: 'running', startedAt }); },
+      });
+      await run.accepted;
+      const settled = await run.completion; await settleProjectRun(owner, run.context, actionId, startedAt, settled);
+      terminal = { requestId: actionId, result: settled };
+      return { requestId: actionId, status: settled.outcome, claim: 'agent-output-not-formal-adoption-or-business-effect' };
+    };
+    await runAutomaticDeliveryActions({ delivery, getDelivery: () => currentDelivery, runResult: result, requestId, lease, assertCurrent,
+      readCurrent: async (node, facts) => automaticActions.readCurrent(node, facts),
+      record: async observation => { await assertCurrent(); const latest = await pair(owner.project.id, owner.task.id); await lease.recordAutomaticAction({ ...observation, actionRequestId: observation.requestId, requestId: latest.task.lastRun!.id }); },
+      notify: observation => { publish(owner.project.id, owner.task.id, { type: 'ui.notification', level: observation.outcome === 'unknown' ? 'warning' : 'info', message: `${({review:'成果审查',ir:'IR提炼',case:'Case反馈',assets:'资产整理'} as const)[observation.node]}：${observation.phase === 'decision' ? observation.decision?.allowed ? '开始（原权限内）' : '本次未自动处理' : observation.outcome === 'unknown' ? '结果待核，请读原记录' : '已取得原业务回执，专业及采用状态另核'}` }); },
+      review: { authorized: !reviewTransition.legacyAdmissionAllowed(), applicable: delivery.reports.length > 0, run: async () => {
+        const reviews: { reviewId: string; state: string; report: { relativePath: string; sha256: string } }[] = [];
+        // A resource ceiling bounds repeated author/reviewer exchanges; it is not a professional pass criterion.
+        for (let cycle = 0; cycle < 2; cycle++) {
+          const reviewedDelivery = currentDelivery;
+          if (!reviewedDelivery) return reviews;
+          const fixed: import('./conclusion-review-contract.ts').ConclusionReviewRecord[] = [];
+          for (const report of reviewedDelivery.reports) {
+            await assertCurrent();
+            if (!(await automaticActions.readCurrent('review', { authorized: true, applicable: true, cancelled: false })).allowed) return reviews;
+            const projectPlan = providedContext?.projectPlan ? { confirmationId: providedContext.projectPlan.confirmationId, taskKey: providedContext.projectPlan.taskKey } : undefined;
+            const id = stableActionId(['automatic-conclusion-review-v1', owner.project.id, owner.task.id, report.relativePath, report.sha256, projectPlan ?? null, reviewedDelivery.reviewBasis ?? [], input.caseContext ?? null, input.requirementContext ?? null, input.enterpriseMaterials ?? []]);
+            const selection = { verificationId: id, report: { relativePath: report.relativePath, sha256: report.sha256 }, ...(reviewedDelivery.reviewBasis ? { basisFiles: reviewedDelivery.reviewBasis.map(ref => ref.relativePath), basisVersions: reviewedDelivery.reviewBasis } : {}), ...(projectPlan ? { projectPlan } : {}), ...(input.requirementContext ? { requirementContext: input.requirementContext as import('./conclusion-review-contract.ts').ConclusionReviewSelection['requirementContext'] } : {}), ...(input.enterpriseMaterials ? { enterpriseMaterials: input.enterpriseMaterials as import('./conclusion-review-contract.ts').ConclusionReviewSelection['enterpriseMaterials'] } : {}), ...(input.caseContext ? { caseId: (input.caseContext as CaseContextSelection).caseId, caseRevision: (input.caseContext as CaseContextSelection).caseRevision } : {}) };
+            const reviewed = await verification.conclusionReview.runForParent(owner.project.id, owner.task.id, selection, lease);
+            reviews.push({ reviewId: id, state: reviewed.review.state, report: { relativePath: report.relativePath, sha256: report.sha256 } });
+            if (reviewed.review.state === 'completed' && reviewed.review.reviewResult) fixed.push(reviewed.review);
+          }
+          if (!fixed.length) return reviews;
+          await assertCurrent();
+          if (!(await automaticActions.readCurrent('review', { authorized: true, applicable: true, cancelled: false })).allowed) return reviews;
+          const feedback = fixed.map(conclusionReviewFeedback).join('\n\n');
+          const refs = fixed.map(record => ({ reviewId: record.verificationId, reportPath: record.review.report.relativePath, reportSha256: record.review.report.sha256, claim: 'provided-not-adopted' as const }));
+          const authorRequestId = stableActionId(['automatic-review-return-v1', owner.project.id, owner.task.id, refs]);
+          const text = `自动接回的准确稿件审查意见（不是人的经营决定）\n以下是针对所列准确稿件的独立意见，不是权威答案或经营授权。请自主核实、必要补证/复算/修订，或说明分歧及限制；不得机械接受意见，不预设必须改稿。实质修订另存并保留原稿，声明本次实际交付、准确来源及方法检查；不要把旧稿意见当新版已通过。无进展保留局限，不无限返修。\n${feedback}`;
+          const fingerprint = createHash('sha256').update(text).digest('hex');
+          const latest = await pair(owner.project.id, owner.task.id);
+          if (await priorRequest(latest.project, latest.task, authorRequestId, fingerprint)) return reviews;
+          const startedAt = new Date().toISOString();
+          const run = lease.start({ requestId: authorRequestId, text, requestFingerprint: fingerprint,
+            providedContext: { ...providedContext, case: undefined, originalUserText: '自动接回的准确稿件审查意见（原作者核实）', userQuoteEligible: false, automaticSource: { kind: 'review-feedback', parentRequestId: requestId }, conclusionReviews: refs },
+            verifyBeforeDispatch: async () => { await assertCurrent(); if (!(await automaticActions.readCurrent('review', { authorized: true, applicable: true, cancelled: false })).allowed) throw new RequestFault(409, 'automatic_action_disabled'); await projects.markRun(owner.project.id, owner.task.id, { id: authorRequestId, status: 'running', startedAt }); },
+          });
+          await run.accepted;
+          const revised = await run.completion; await settleProjectRun(owner, run.context, authorRequestId, startedAt, revised);
+          terminal = { requestId: authorRequestId, result: revised };
+          currentDelivery = undefined;
+          if (revised.outcome !== 'completed') return reviews;
+          await assertCurrent();
+          const after = await pair(owner.project.id, owner.task.id), next = await readTaskAnalysisDelivery(after.project, after.task, authorRequestId);
+          currentDelivery = next;
+          if (!next || !next.reports.length || next.reports.every(report => reviewedDelivery.reports.some(old => old.relativePath === report.relativePath && old.sha256 === report.sha256))) return reviews;
+          if (cycle === 1) publish(owner.project.id, owner.task.id, { type: 'ui.notification', level: 'warning', message: '本轮自动审查已到资源上限；新增稿保留为未审，不继承旧稿状态。可沿原审查入口明确继续。' });
+        }
+        return reviews;
+      } },
+      ir: { authorized: options.sapMethodsEnabled !== false, applicable: true, run: action => sapMethodFeature.runForParent(owner.project.id, owner.task.id, { requestId: action.requestId, incomplete: action.delivery.completion === 'organize-partial' }, lease) },
+      case: { authorized: Boolean(providedContext?.case && input.caseContext), applicable: declared => declared.reports.length > 0 || Boolean(declared.caseFindings?.length), run: async action => {
+        const delivery = action.delivery;
+        const original = input.caseContext as CaseContextSelection, artifacts = [];
+        if (!original) throw new RequestFault(409, 'case_delivery_not_declared');
+        const acceptedBinding = cases.getGoalBindingHistory(original.caseId).filter(binding => binding.caseRevision <= original.caseRevision).at(-1), currentBinding = cases.getGoalBinding(original.caseId);
+        const goalsOf = (binding: typeof currentBinding | undefined) => binding ? { primary: binding.primary, related: binding.related } : null;
+        if (JSON.stringify(goalsOf(acceptedBinding)) !== JSON.stringify(goalsOf(currentBinding))) throw new RequestFault(409, 'case_goal_scope_changed');
+        for (const report of delivery.reports) {
+          await assertCurrent();
+          const saved = await mutate(async () => {
+            await assertCurrent();
+            const record = cases.getCase(original.caseId), current = await projects.observeFile(owner.project.id, report.relativePath);
+            if (current.sha256 !== report.sha256 || current.bytes !== report.bytes) throw new RequestFault(409, 'analysis_delivery_report_changed');
+            const existing = cases.getArtifacts(record.id).find(item => item.projectId === owner.project.id && item.taskId === owner.task.id && item.relativePath === report.relativePath && item.observedSha256 === report.sha256 && !item.unlinkedAt);
+            if (existing) return existing;
+            const operationId = stableActionId(['automatic-case-report-v1', record.id, owner.project.id, owner.task.id, report.relativePath, report.sha256]);
+            return cases.saveArtifact({ operationId, caseId: record.id, expectedRevision: record.revision, projectId: owner.project.id, taskId: owner.task.id, relativePath: report.relativePath, role: 'report', displayName: path.basename(report.relativePath), observedSha256: current.sha256, observedBytes: current.bytes, observedAt: current.observedAt }).artifact;
+          }); artifacts.push({ id: saved.id, relativePath: saved.relativePath, sha256: saved.observedSha256 });
+        }
+        if (!delivery.caseFindings?.length) return { artifacts, claim: 'exact-reports-linked-no-invented-judgment-or-choice' };
+        await assertCurrent();
+        const record = cases.getCase(original.caseId), selection = { caseId: record.id, caseRevision: record.revision, projectWorkRevision: cases.getProjectWork(owner.project.id).revision, selectedReferenceIds: [] };
+        const prompt = `自动整理本轮已声明的Case发现，仅针对当前准确Case。通过原Case草案/说明入口保存已有判断、策略或观察及来源；不要创造新事实，不替人作取舍，不记录经营授权、发生或效果。原人的选择与原看板行动继续保留。无对应写权保留具体待办，不能改写其他Case。\n已声明发现：${JSON.stringify(delivery.caseFindings)}\n已关联的准确成果：${JSON.stringify(artifacts)}`;
+        const bound = { text: prompt, requestId: action.requestId, caseContext: selection };
+        const contextText = await mutate(() => prepareCasePrompt(owner.project.id, owner.task.id, bound));
+        return runDeclaredContinuation(action.requestId, 'case-feedback', contextText, { case: { operationId: contextOperationId(owner.project.id, owner.task.id, action.requestId) } });
+      } },
+      assets: { authorized: true, applicable: declared => Boolean(declared.assetFindings?.length), run: async action => {
+        const delivery = action.delivery, findings = delivery.assetFindings!;
+        const prompt = `自动整理本轮分析中已经发现的资产问题，仅处理以下准确清单及其明确来源。按实际写权复用原Studio贡献/反馈、记忆候选或SAP方法问题反馈；只形成候选或suspected线索，不作正式采用/发布/confirmed治理，不替人执行经营动作。此轮不是IR提炼，不回看会话或源目录提炼新方法/方法修订，不调用IR或构建另一方法库。IR关闭也不能绕道；已知方法问题仅沿原准确版本反馈。实际缺权/失读/未知须写明具体待办，已保留同一发现不重复保存。可按需查读该清单准确资产的当前治理，不扩大来源范围。\n已发现清单：${JSON.stringify(findings)}\n本轮交付声明准确来源：${JSON.stringify(delivery.source)}\n本轮准确报告来源：${JSON.stringify(delivery.reportSources)}`;
+        return runDeclaredContinuation(action.requestId, 'asset-findings', prompt, { assetFindings: findings });
+      } },
+    });
+    return terminal;
+  }
+  const projectPlanFeature = createProjectPlanFeature({ codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), plans: projectPlans, projects, cases, goals: strategyGoals, methods: sapMethods, mutate, isClosing: () => closing, startMessage: (projectId, taskId, input) => startProjectMessage(projectId, taskId, input, { userText: false }), registerFresh: async (projectId, taskId) => { const owner = await pair(projectId, taskId); projectSessions.registerFresh(projectSessions.ref(owner)); } });
+  const projectPlanPreparation = createProjectPlanPreparationHost({ dataRoot, projects, plans: projectPlans, sessions: requirementSessions, capabilities: projectPlanFeature.capabilities, validate: projectPlanFeature.validate, mutate, isClosing: () => closing });
+  type ProjectMessageReceipt = { requestId: string; status: unknown; deduplicated?: boolean };
+  async function startProjectMessage(projectId: string, taskId: string, input: Record<string, unknown>, origin: { userText: boolean } = { userText: true }): Promise<ProjectMessageReceipt> {
+    if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
+    const requestId = input.requestId, fingerprint = await requestFingerprint(input,projectId,taskId), owner: ProjectOwner = await pair(projectId, taskId, true);
+    const known = await priorRequest(owner.project, owner.task, requestId, fingerprint);
+    if (known) {
+      await mutate(async () => {
+        await prepareCasePrompt(projectId, taskId, input, true);
+        if (!requirementSelection(input)?.frameworkVersion) await requirementPrefix(input, projectId);
+      });
+      await mutate(() => recordFeedbackDelivery(projectId,taskId,requestId,fingerprint));
+      return { requestId, status: known, deduplicated: true };
+    }
+    let planSelection = input.projectPlan;
+    if (planSelection === undefined && !input.studioContext) {
+      const previous = (await taskContextReceipts(owner.project, owner.task, true)).at(-1)?.providedContext?.projectPlan as { confirmationId?: string; taskKey?: string } | undefined;
+      if (previous?.confirmationId && previous.taskKey) planSelection = { confirmationId: previous.confirmationId, taskKey: previous.taskKey };
+    }
+    const deliveredPlan = await projectPlanFeature.context(projectId, taskId, planSelection);
+    if (deliveredPlan && input.caseContext === undefined) {
+      const fixed = (await projectPlans.read(projectId)).history.find(value => value.id === deliveredPlan.confirmationId)?.plan.caseContext;
+      if (fixed) {
+        const record = cases.getCase(fixed.caseId), binding = cases.getGoalBinding(fixed.caseId);
+        if (!binding || JSON.stringify(binding.primary) !== JSON.stringify(fixed.primaryGoal) || JSON.stringify(binding.related) !== JSON.stringify(fixed.relatedGoals || [])) throw new RequestFault(409, 'project_plan_context_changed');
+        // Continue the confirmed goal scope using the original Case's current facts; explicit user selections retain their CAS checks.
+        input = { ...input, caseContext: { caseId: fixed.caseId, caseRevision: record.revision, projectWorkRevision: cases.getProjectWork(projectId).revision, selectedReferenceIds: [] } };
+      }
+    }
+    let accepted = false, terminalContext: SessionContext<ProjectOwner> | undefined, terminalRequestId = requestId;
+    let acknowledge!: (receipt: ProjectMessageReceipt) => void, rejectAcknowledgement!: (error: unknown) => void;
+    const acknowledged = new Promise<ProjectMessageReceipt>((resolve, reject) => { acknowledge = resolve; rejectAcknowledgement = reject; });
+    const completion = projectSessions.withSession(projectSessions.ref(owner), async lease => {
+      let startedAt: string | undefined, authorSettled = false;
+      try {
+        const prepared = await mutate(async () => {
+          const { project, task } = await pair(projectId, taskId, true), previous = await priorRequest(project, task, requestId, fingerprint);
+          if (previous) return { previous };
+          if (await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
+          await assertFrameworkContinuation(projectId, taskId);
+          if (input.caseContext) {
+            const selection = input.caseContext as CaseContextSelection, record = cases.getCase(selection.caseId);
+            if (record.status === 'closed') throw new CaseStoreError('case_closed', 409);
+            if (record.revision !== selection.caseRevision || cases.getProjectWork(projectId).revision !== selection.projectWorkRevision) throw new CaseStoreError('revision_conflict', 409);
+            if (!cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new CaseStoreError('project_not_linked', 409);
+          }
+          const suppliedRequirement = await prepareRequirement(input, projectId);
+          const requirement = suppliedRequirement?.text;
+          const selections = input.personalContext === undefined ? [] : parsePersonalContextSelections(input.personalContext);
+          const personal = selections.length ? await personalContext.prepare(selections) : undefined;
+          const enterprise = await prepareEnterpriseContext(enterpriseMaterials, cases, input, await enterpriseContextFor(projectId));
+          const casePrompt = await prepareCasePrompt(projectId, taskId, input);
+          const feedback = await decisionFeedback.prepareFeedbackContext(projectId,taskId,input.feedbackContext as FeedbackContextSelection | undefined,requestId);
+          const projectData = await prepareProjectDataContext(projectDataContext, projectId, input.projectData);
+          for (const supplied of projectData.provision ?? []) {
+            const description = supplied.description;
+            if (description) await projectDataReferences.validate(projectId, {
+              conceptRefs: description.mappings.flatMap(mapping => mapping.conceptRefs), sapRefs: description.mappings.flatMap(mapping => mapping.sapRefs),
+              nativeEvidence: description.observation.nativeEvidence ? [description.observation.nativeEvidence] : [],
+              artifactEvidence: description.observation.artifactEvidence ? [description.observation.artifactEvidence] : [],
+            });
+          }
+          const originalPrompt = `${enterprise.text}\n\n${requirement === undefined ? casePrompt : `${requirement}\n\n${casePrompt}`}`;
+          const withData = projectData.text ? `${projectData.text}\n\n${originalPrompt}` : originalPrompt;
+          const withFeedback = feedback.text ? `${feedback.text}\n\n${withData}` : withData;
+          const withoutStudio = personal ? `本次人明确指定的历史参考（不是本次指令、权限或已核实事实）：\n${personal.text}\n\n${withFeedback}` : withFeedback;
+          const analysisOnly = (owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'legacy' && (await automatic.store.readSettings({ projectId, taskId })).enabled;
+          const studioContext = await studio.prepareContext(projectId, taskId, input.studioContext, { analysisOnly });
+          const withPlan = deliveredPlan ? `${deliveredPlan.text}\n\n${withoutStudio}` : withoutStudio;
+          const prompt = studioContext ? `${studioContext.text}\n\n${withPlan}` : withPlan;
+          if (prompt.length > 131072) throw new EnterpriseContextError('enterprise_context_too_large', 413);
+          startedAt = new Date().toISOString();
+          const providedContext = {
+            originalUserText: input.text as string,
+            userQuoteEligible: origin.userText,
+            ...(deliveredPlan ? { projectPlan: deliveredPlan } : {}),
+            ...(studioContext ? { studio: studioContext } : {}),
+            ...(suppliedRequirement ? { rap: suppliedRequirement } : {}),
+            ...(input.caseContext ? { case: { operationId: contextOperationId(projectId, taskId, requestId) } } : {}),
+            ...(enterprise.provision ? { enterprise: enterprise.provision } : {}),
+            ...(feedback.receipt ? { feedback:feedback.receipt } : {}),
+            ...(projectData.provision ? { projectData: projectData.provision } : {}),
+            ...(personal ? { personal: { text: personal.text, receipt: { schemaVersion: 1 as const, items: personal.details.items } } } : {}),
+          };
+          let automaticObservation;
+          let calculationContract;
+          owner.reviewAdmission = reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion';
+          try {
+            if (owner.reviewAdmission === 'legacy') {
+              const legacy = await automatic.store.readSettings({ projectId, taskId });
+              automaticObservation = await automatic.admit({ project, task }, requestId, fingerprint ?? createHash('sha256').update(JSON.stringify(['automatic-request-v1', projectId, taskId, requestId, prompt])).digest('hex'));
+              calculationContract = reportCalculationContract({ ordinaryPrompt: (input.studioContext as { purpose?: string } | undefined)?.purpose !== 'construction', legacyEnabled: legacy.enabled, legacyAdmitted: Boolean(automaticObservation) });
+            } else if ((await reviewTransition.status({ projectId, taskId })).state === 'ready') {
+              calculationContract = reportCalculationContract({ ordinaryPrompt: (input.studioContext as { purpose?: string } | undefined)?.purpose !== 'construction', legacyEnabled: false, legacyAdmitted: false });
+            }
+          }
+          catch (error) { if (owner.reviewAdmission === 'legacy' && (await automatic.store.readSettings({ projectId, taskId })).enabled) throw error; publish(projectId, taskId, { type: 'ui.notification', level: 'warning', message: '复核准入尚不可核对，本次保留普通分析合同；未自动补派核算。' }); }
+          return { prompt, providedContext: { ...providedContext, ...(calculationContract ? { reportCalculationReview: calculationContract } : {}) }, automaticObservation };
+        });
+        if ('previous' in prepared) { acknowledge({ requestId, status: prepared.previous, deduplicated: true }); return; }
+        const suppliedRap = prepared.providedContext?.rap;
+        const run = lease.start({
+          text: prepared.prompt!, requestId, requestFingerprint: fingerprint, providedContext: prepared.providedContext,
+          verifyBeforeDispatch: async () => {
+            await assertFrameworkContinuation(projectId, taskId);
+            if (deliveredPlan) await projectPlanFeature.context(projectId, taskId, planSelection);
+          if (suppliedRap) {
+              const current = await prepareRequirement(input, projectId);
+              if (current?.text !== suppliedRap.text) throw new RequestFault(409, 'requirement_unavailable');
+            }
+            await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! });
+          },
+        });
+        terminalContext = run.context;
+        await run.accepted;
+        accepted = true; acknowledge({ requestId, status: 'running' });
+        await mutate(() => recordFeedbackDelivery(projectId,taskId,requestId,fingerprint)).catch(() => {
+          publish(projectId,taskId,{type:'ui.notification',level:'warning',message:'本轮发送已被接受，但独立交付记录待核对；请查看原生提供回执，未自动重发。'});
+        });
+        const result = await run.completion;
+        await settleProjectRun(owner, run.context, requestId, startedAt!, result);
+        authorSettled = true;
+        const followed = await automatic.complete(owner, lease, prepared.automaticObservation, result);
+        terminalRequestId = followed.requestId || requestId;
+        const automaticDelivery = await completeNewDelivery(owner, lease, followed.requestId || requestId, followed.result, input, prepared.providedContext);
+        terminalRequestId = automaticDelivery.requestId; terminalContext = lease.context;
+        return automaticDelivery.result;
+      } catch (error) {
+        if (startedAt && !authorSettled) await settleProjectRun(owner, lease.context, requestId, startedAt, { diagnostic: runtimeDiagnostic(error) }).catch(() => {});
+        throw error;
+      }
+    });
+    void completion.then(async result => {
+      if (!result || closing) return;
+      await automatic.operationFinished({ projectId, taskId }, requestId, result);
+      await mutate(async () => {
+        if (closing) return;
+        const latest = await pair(projectId, taskId);
+        if (latest.task.lastRun?.id === terminalRequestId && !projectSessions.busy(projectSessions.ref(latest))) publish(projectId, taskId, { type: 'run.settled', requestId: terminalRequestId, outcome: result.outcome, ...(result.diagnostic ? { diagnostic: readRunDiagnostic(result.diagnostic) } : {}) });
+        const state = await taskState(projectId, taskId, false, true);
+        publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot });
+      });
+    }).catch(async error => {
+      rejectAcknowledgement(error);
+      await automatic.operationFinished({ projectId, taskId }, requestId, undefined, error).catch(() => {});
+      if (!closing && accepted && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。', diagnostic: runtimeDiagnostic(error) });
+      if (!closing) await taskState(projectId, taskId).then(state => publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot })).catch(() => {});
+    });
+    return acknowledged;
+  }
+
   const server = createServer((request, response) => { void (async () => {
     try {
       await ready;
@@ -957,6 +1299,21 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const origin = request.headers.origin, allowed = [...options.uiPorts, address.port].flatMap(port => [`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
       if (origin && !allowed.includes(origin)) throw new RequestFault(403, 'origin_rejected');
       const url = new URL(request.url ?? '/', host);
+      if (url.pathname.startsWith('/api/strategy/')) {
+        const result = await strategyGoalRoutes(url.pathname, request.method ?? 'GET', ['POST', 'PATCH'].includes(request.method ?? '') ? await body(request) : {});
+        if (result) { json(response, result.status ?? 200, result.body); return; }
+      }
+      if (url.pathname === '/api/capabilities/skills' && request.method === 'GET') { const catalog = projectSkillCatalog(options.cwd, options.cwd, path.join(dataRoot, 'pi')); json(response, 200, { skills: catalog.skills.map(({ filePath, ...skill }) => ({ ...skill, source: filePath, bundled: path.resolve(filePath) === path.join(path.resolve(options.cwd), 'extensions/analysis-assets', skill.id, 'SKILL.md') })), diagnostics: catalog.diagnostics }); return; }
+      const automaticOperation = /^\/api\/automatic-actions\/settings\/operations\/([a-f0-9-]{36})$/.exec(url.pathname);
+      if (automaticOperation && request.method === 'GET') { json(response, 200, { operation: await automaticActions.readOperation(automaticOperation[1]!) }); return; }
+      if (url.pathname === '/api/automatic-actions/settings') {
+        if (request.method === 'GET') { json(response, 200, await automaticActions.read()); return; }
+        if (request.method === 'POST') {
+          const input = await body(request);
+          const result = await mutate(() => { if (closing) throw new RequestFault(409, 'host_closing'); return automaticActions.update(input as unknown as AutomaticActionSettingsUpdate); });
+          json(response, 200, result); return;
+        }
+      }
       if (url.pathname === '/api/health' && request.method === 'GET') { json(response, 200, { status: 'ready', studio: { semanticEngineConfigured: Boolean(options.studioPython) }, sdkVersion: SDK_VERSION, transportVersion: options.transportVersion, chatMode: 'live', credentials: 'host-persistent', filePolicy: 'soft-prompt-no-sensitive-data-isolation', ...(options.semanticGraph?.configuration ? { semanticGraph: { enabled: options.semanticGraph.configuration.enabled, configurationSha256: options.semanticGraph.configuration.configurationSha256, assets: options.semanticGraph.configuration.assets.map(({ projectId, snapshotId }) => ({ projectId, snapshotId })) } } : {}), ...(staticUi ? { runtime: { instanceId, pid: process.pid, codeRoot: path.resolve(options.cwd), version: staticUi.build.version, commit: staticUi.build.commit, tree: staticUi.build.tree, builtAt: staticUi.build.builtAt, dirty: staticUi.build.dirty } } : {}) }); return; }
       if (staticUi && !url.pathname.startsWith('/api/') && url.pathname !== '/api') {
         if (staticUi.serve(request, response, url)) return;
@@ -1123,6 +1480,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const match = /^\/api\/projects\/([a-f0-9-]+)(?:\/(.*))?$/.exec(url.pathname);
       if (match) {
         const projectId = match[1]!, action = match[2];
+        if (action === 'plan' || action?.startsWith('plan/')) {
+          const input = request.method === 'POST' ? await body(request, 262144) : {};
+          const result = await projectPlanPreparation.handle(projectId, action, request.method ?? 'GET', input) ?? await projectPlanFeature.handle(projectId, action, request.method ?? 'GET', input);
+          if (result) { json(response, 200, result.body); return; }
+        }
         if (!action && request.method === 'GET') { json(response, 200, { project: decorateProject(await projects.get(projectId)) }); return; }
         if (!action && request.method === 'PATCH') { const input = await body(request); json(response, 200, { project: decorateProject(await mutate(async () => { assertActive(await projects.get(projectId)); return projects.rename(projectId, String(input.name ?? '')); })) }); return; }
         if (action === 'archive' && request.method === 'POST') {
@@ -1171,6 +1533,18 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const taskRoute = /^tasks\/([a-f0-9-]+)(?:\/(.*))?$/.exec(action ?? '');
         if (taskRoute) {
           const taskId = taskRoute[1]!, operation = taskRoute[2], key = keyOf(projectId, taskId);
+          if ((operation === 'archive' || operation === 'restore') && request.method === 'POST') {
+            await body(request);
+            const task = await mutate(async () => {
+              const owner = await pair(projectId, taskId); assertActive(owner.project);
+              if (operation === 'restore') return projects.restoreTask(projectId, taskId);
+              const busy = () => projectSessions.busy(projectSessions.ref(owner)) || verification.busyForTask(projectId, taskId) || sapMethodFeature.busyForTask(projectId, taskId) || Boolean(studioSessions?.busyForTask(projectId, taskId));
+              if (busy() || await verification.busy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
+              await projectSessions.close(projectSessions.ref(owner));
+              return projects.archiveTask(projectId, taskId, { isBusy: busy });
+            });
+            json(response, 200, { task }); return;
+          }
           if (operation === 'conclusion-reviews/transition' && request.method === 'GET') {
             await pair(projectId, taskId);
             json(response, 200, { ...await reviewTransition.status({ projectId, taskId }), legacySettings: await automatic.store.readSettings({ projectId, taskId }) });
@@ -1396,136 +1770,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             return;
           }
           if (operation === 'messages' && request.method === 'POST') {
-            const input = await body(request, 262144);
-            if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
-            const requestId = input.requestId, fingerprint = await requestFingerprint(input,projectId,taskId), owner: ProjectOwner = await pair(projectId, taskId, true);
-            const known = await priorRequest(owner.project, owner.task, requestId, fingerprint);
-            if (known) {
-              await mutate(async () => {
-                await prepareCasePrompt(projectId, taskId, input, true);
-                if (!requirementSelection(input)?.frameworkVersion) await requirementPrefix(input, projectId);
-              });
-              await mutate(() => recordFeedbackDelivery(projectId,taskId,requestId,fingerprint));
-              json(response, 202, { requestId, status: known, deduplicated: true }); return;
-            }
-            let accepted = false, terminalContext: SessionContext<ProjectOwner> | undefined, terminalRequestId = requestId;
-            let acknowledge!: () => void, rejectAcknowledgement!: (error: unknown) => void;
-            const acknowledged = new Promise<void>((resolve, reject) => { acknowledge = resolve; rejectAcknowledgement = reject; });
-            const completion = projectSessions.withSession(projectSessions.ref(owner), async lease => {
-              let startedAt: string | undefined;
-              try {
-                const prepared = await mutate(async () => {
-                  const { project, task } = await pair(projectId, taskId, true), previous = await priorRequest(project, task, requestId, fingerprint);
-                  if (previous) return { previous };
-                  if (await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
-                  await assertFrameworkContinuation(projectId, taskId);
-                  if (input.caseContext) {
-                    const selection = input.caseContext as CaseContextSelection, record = cases.getCase(selection.caseId);
-                    if (record.status === 'closed') throw new CaseStoreError('case_closed', 409);
-                    if (record.revision !== selection.caseRevision || cases.getProjectWork(projectId).revision !== selection.projectWorkRevision) throw new CaseStoreError('revision_conflict', 409);
-                    if (!cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new CaseStoreError('project_not_linked', 409);
-                  }
-                  const suppliedRequirement = await prepareRequirement(input, projectId);
-                  const requirement = suppliedRequirement?.text;
-                  const selections = input.personalContext === undefined ? [] : parsePersonalContextSelections(input.personalContext);
-                  const personal = selections.length ? await personalContext.prepare(selections) : undefined;
-                  const enterprise = await prepareEnterpriseContext(enterpriseMaterials, cases, input, await enterpriseContextFor(projectId));
-                  const casePrompt = await prepareCasePrompt(projectId, taskId, input);
-                  const feedback = await decisionFeedback.prepareFeedbackContext(projectId,taskId,input.feedbackContext as FeedbackContextSelection | undefined,requestId);
-                  const projectData = await prepareProjectDataContext(projectDataContext, projectId, input.projectData);
-                  for (const supplied of projectData.provision ?? []) {
-                    const description = supplied.description;
-                    if (description) await projectDataReferences.validate(projectId, {
-                      conceptRefs: description.mappings.flatMap(mapping => mapping.conceptRefs), sapRefs: description.mappings.flatMap(mapping => mapping.sapRefs),
-                      nativeEvidence: description.observation.nativeEvidence ? [description.observation.nativeEvidence] : [],
-                      artifactEvidence: description.observation.artifactEvidence ? [description.observation.artifactEvidence] : [],
-                    });
-                  }
-                  const originalPrompt = `${enterprise.text}\n\n${requirement === undefined ? casePrompt : `${requirement}\n\n${casePrompt}`}`;
-                  const withData = projectData.text ? `${projectData.text}\n\n${originalPrompt}` : originalPrompt;
-                  const withFeedback = feedback.text ? `${feedback.text}\n\n${withData}` : withData;
-                  const withoutStudio = personal ? `本次人明确指定的历史参考（不是本次指令、权限或已核实事实）：\n${personal.text}\n\n${withFeedback}` : withFeedback;
-                  const analysisOnly = (owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'legacy' && (await automatic.store.readSettings({ projectId, taskId })).enabled;
-                  const studioContext = await studio.prepareContext(projectId, taskId, input.studioContext, { analysisOnly });
-                  const prompt = studioContext ? `${studioContext.text}\n\n${withoutStudio}` : withoutStudio;
-                  if (prompt.length > 131072) throw new EnterpriseContextError('enterprise_context_too_large', 413);
-                  startedAt = new Date().toISOString();
-                  const providedContext = {
-                    originalUserText: input.text as string,
-                    ...(studioContext ? { studio: studioContext } : {}),
-                    ...(suppliedRequirement ? { rap: suppliedRequirement } : {}),
-                    ...(input.caseContext ? { case: { operationId: contextOperationId(projectId, taskId, requestId) } } : {}),
-                    ...(enterprise.provision ? { enterprise: enterprise.provision } : {}),
-                    ...(feedback.receipt ? { feedback:feedback.receipt } : {}),
-                    ...(projectData.provision ? { projectData: projectData.provision } : {}),
-                    ...(personal ? { personal: { text: personal.text, receipt: { schemaVersion: 1 as const, items: personal.details.items } } } : {}),
-                  };
-                  let automaticObservation;
-                  let calculationContract;
-                  owner.reviewAdmission = reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion';
-                  try {
-                    if (owner.reviewAdmission === 'legacy') {
-                      const legacy = await automatic.store.readSettings({ projectId, taskId });
-                      automaticObservation = await automatic.admit({ project, task }, requestId, fingerprint ?? createHash('sha256').update(JSON.stringify(['automatic-request-v1', projectId, taskId, requestId, prompt])).digest('hex'));
-                      calculationContract = reportCalculationContract({ ordinaryPrompt: (input.studioContext as { purpose?: string } | undefined)?.purpose !== 'construction', legacyEnabled: legacy.enabled, legacyAdmitted: Boolean(automaticObservation) });
-                    } else if ((await reviewTransition.status({ projectId, taskId })).state === 'ready') {
-                      calculationContract = reportCalculationContract({ ordinaryPrompt: (input.studioContext as { purpose?: string } | undefined)?.purpose !== 'construction', legacyEnabled: false, legacyAdmitted: false });
-                    }
-                  }
-                  catch (error) { if (owner.reviewAdmission === 'legacy' && (await automatic.store.readSettings({ projectId, taskId })).enabled) throw error; publish(projectId, taskId, { type: 'ui.notification', level: 'warning', message: '复核准入尚不可核对，本次保留普通分析合同；未自动补派核算。' }); }
-                  return { prompt, providedContext: { ...providedContext, ...(calculationContract ? { reportCalculationReview: calculationContract } : {}) }, automaticObservation };
-                });
-                if ('previous' in prepared) { json(response, 202, { requestId, status: prepared.previous, deduplicated: true }); acknowledge(); return; }
-                const suppliedRap = prepared.providedContext?.rap;
-                const run = lease.start({
-                  text: prepared.prompt!, requestId, requestFingerprint: fingerprint, providedContext: prepared.providedContext,
-                  verifyBeforeDispatch: async () => {
-                    await assertFrameworkContinuation(projectId, taskId);
-                    if (suppliedRap) {
-                      const current = await prepareRequirement(input, projectId);
-                      if (current?.text !== suppliedRap.text) throw new RequestFault(409, 'requirement_unavailable');
-                    }
-                    await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! });
-                  },
-                });
-                terminalContext = run.context;
-                await run.accepted;
-                accepted = true; json(response, 202, { requestId, status: 'running' }); acknowledge();
-                await mutate(() => recordFeedbackDelivery(projectId,taskId,requestId,fingerprint)).catch(() => {
-                  publish(projectId,taskId,{type:'ui.notification',level:'warning',message:'本轮发送已被接受，但独立交付记录待核对；请查看原生提供回执，未自动重发。'});
-                });
-                const result = await run.completion;
-                await settleProjectRun(owner, run.context, requestId, startedAt!, result);
-                const followed = await automatic.complete(owner, lease, prepared.automaticObservation, result);
-                terminalRequestId = followed.requestId || requestId;
-                return followed.result;
-              } catch (error) {
-                if (startedAt) await settleProjectRun(owner, lease.context, requestId, startedAt, { diagnostic: runtimeDiagnostic(error) }).catch(() => {});
-                throw error;
-              }
-            });
-            void completion.then(async result => {
-              if (!result || closing) return;
-              await automatic.operationFinished({ projectId, taskId }, requestId, result);
-              await mutate(async () => {
-                if (closing) return;
-                const latest = await pair(projectId, taskId);
-                if (latest.task.lastRun?.id === terminalRequestId && !projectSessions.busy(projectSessions.ref(latest))) publish(projectId, taskId, { type: 'run.settled', requestId: terminalRequestId, outcome: result.outcome, ...(result.diagnostic ? { diagnostic: readRunDiagnostic(result.diagnostic) } : {}) });
-                const state = await taskState(projectId, taskId, false, true);
-                publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot });
-              });
-            }).catch(async error => {
-              rejectAcknowledgement(error);
-              await automatic.operationFinished({ projectId, taskId }, requestId, undefined, error).catch(() => {});
-              if (!closing && accepted && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。', diagnostic: runtimeDiagnostic(error) });
-              if (!closing) await taskState(projectId, taskId).then(state => publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot })).catch(() => {});
-            });
-            await acknowledged; return;
+            const result = await startProjectMessage(projectId, taskId, await body(request, 262144));
+            json(response, 202, result); return;
           }
           if (operation === 'stop' && request.method === 'POST') {
             await body(request); const owner = await pair(projectId, taskId, true);
             await projectSessions.stop(projectSessions.ref(owner));
-            await studioSessions?.stopForTask(projectId, taskId);
+            await Promise.all([verification.stopForTask(projectId, taskId), sapMethodFeature.stopForTask(projectId, taskId), studioSessions?.stopForTask(projectId, taskId)]);
             json(response, 200, { stopped: true }); return;
           }
           if (operation === 'ui-response' && request.method === 'POST') {
@@ -1585,6 +1836,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
+      if (error instanceof StrategyGoalsError || error instanceof AutomaticActionSettingsFault || error instanceof ProjectPlanFault) { json(response, error.status, { code: error.code, message: '目标或自动设置未保存，请保留输入并核对原版本和操作结果。' }); return; }
       if (error instanceof StudioError) { json(response, error.status, { code: error.code, accepted: false, message: '体系来源或操作未就绪；原请求、资料和历史保持，请核对准确版本。' }); return; }
       if (error instanceof PersonalContextError) {
         const unavailable = error.code === 'personal_context_selection_unavailable' && error.unavailableTargets?.length;

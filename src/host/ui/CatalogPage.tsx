@@ -19,13 +19,15 @@ function CatalogDetails({ item, onClose }: { item: PlannedCatalogItem; onClose: 
   </dialog>;
 }
 
-export function CatalogPage({ category, mode, onModeChange, onCategoryChange, onOpenEntry, onBack }: {
+export function CatalogPage({ category, mode, onModeChange, onCategoryChange, onOpenEntry, onBack, onManageSkills, onManageConnections }: {
   category: CatalogCategory;
   mode: 'cards' | 'list';
   onModeChange: (mode: 'cards' | 'list') => void;
   onCategoryChange: (category: CatalogCategory) => void;
   onOpenEntry: (entry: CatalogEntry) => void;
   onBack: () => void;
+  onManageSkills?: () => void;
+  onManageConnections?: () => void;
 }) {
   const tradeAreaStatus = useTradeAreaStatus();
   const [query, setQuery] = useState('');
@@ -40,7 +42,8 @@ export function CatalogPage({ category, mode, onModeChange, onCategoryChange, on
   const tags = ['全部', ...new Set(all.flatMap(item => item.tags))];
   useEffect(() => { setQuery(''); setTag('全部'); setSelected(null); title.current?.focus(); }, [category]);
   return <div className="catalog-page">
-    <div className="page-heading catalog-market-heading"><div><h1>插件市场</h1><p>查看工作台已有的能力入口与规划。</p></div></div>
+    <div className="page-heading catalog-market-heading"><div><h1>插件市场（过渡）</h1><p>原目录暂作兼容兜底。日常从项目需求、Task、成果及决策进入；全部使用、管理与异常路径核验后退出此页。</p></div></div>
+    <div className="report-action-row">{onManageSkills && <button type="button" className="text-button" onClick={onManageSkills}>查看实际 Skill 资料与依赖</button>}{onManageConnections && <button type="button" className="text-button" onClick={onManageConnections}>管理原共享连接配置</button>}</div>
     <div className="catalog-tabs" role="group" aria-label="插件市场分类">{catalogCategories.map(key => <button key={key} type="button" aria-pressed={category === key} className={category === key ? 'active' : ''} onClick={() => onCategoryChange(key)}><span aria-hidden="true">{catalogMeta[key].symbol}</span>{catalogMeta[key].label}</button>)}</div>
     <div className="catalog-module-heading"><div><h2 ref={title} tabIndex={-1}>{meta.label}</h2><p>{meta.description}</p></div><button type="button" className="text-button" onClick={onBack}>返回工作区 →</button></div>
     <div className="catalog-toolbar">
@@ -56,13 +59,13 @@ export function CatalogPage({ category, mode, onModeChange, onCategoryChange, on
         <div className="catalog-card-content">
           <h3>{item.name}</h3><p>{item.description}</p>
           <div className="catalog-tags">{item.tags.map(value => <span key={value}>{value}</span>)}</div>
-          {item.skill && <SkillEvaluationPanel name={item.name} evaluation={item.skill.evaluation} />}
+          {item.skill && <SkillEvaluationPanel name={item.name} evaluation={item.skill.evaluation} historical={Boolean(item.skill.approval)} />}
           {item.category === 'connectors' && item.status === '已接入' && <p className="connector-card-note">{item.note}</p>}
         </div>
         <div className="catalog-card-bottom">
           <span className={item.id === 'trade-area-mcp' ? 'connector-version-chip' : undefined}>{item.id === 'trade-area-mcp' ? tradeAreaVersionText(tradeAreaStatus) : item.id}</span>
           {item.status === '已接入'
-            ? <button type="button" className={`catalog-open-button${category === 'connectors' ? ' connector-open-button' : ''}`} aria-label={`${category === 'connectors' ? '到项目任务使用' : '打开'}${item.name}`} onClick={() => onOpenEntry(item.entry)}>{category === 'connectors' ? '到项目任务使用' : '打开'} <span aria-hidden="true">→</span></button>
+            ? <button type="button" className={`catalog-open-button${category === 'connectors' ? ' connector-open-button' : ''}`} aria-label={`${item.entry === 'db-link' ? '管理共享连接' : category === 'connectors' ? '到项目任务使用' : '打开'}${item.name}`} onClick={() => onOpenEntry(item.entry)}>{item.entry === 'db-link' ? '管理共享连接' : category === 'connectors' ? '到项目任务使用' : '打开'} <span aria-hidden="true">→</span></button>
             : <button type="button" aria-label={`查看${item.name}规划`} onClick={() => setSelected(item)}>查看规划 <span aria-hidden="true">↗</span></button>}
         </div>
       </article>

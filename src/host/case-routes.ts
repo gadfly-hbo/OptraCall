@@ -1,3 +1,5 @@
+import type { StrategyGoalsStore } from './strategy-goals-store.ts';
+import { assertAdoptedGoalRefs } from './strategy-goals-routes.ts';
 import { randomUUID } from 'node:crypto';
 import { CaseStore, CaseStoreError } from './case-store.ts';
 import type { ArtifactAdoption, CaseArtifactRecord, CaseArtifactView, CaseStatus, ProjectWorkStatus } from './case-types.ts';
@@ -26,7 +28,7 @@ type Dependencies = {
   mutate: <T>(operation: () => T | Promise<T>) => Promise<T>;
   assertActive: (project: ProjectRecord) => void;
   decorateProject: (project: ProjectRecord) => unknown | Promise<unknown>;
-  enterpriseScope?: CaseEnterpriseScopeHooks;
+  enterpriseScope?: CaseEnterpriseScopeHooks; goals?: StrategyGoalsStore;
 };
 function string(value: unknown): string {
   if (typeof value !== 'string') throw new CaseStoreError('invalid_text');
@@ -41,7 +43,7 @@ function nullableString(value: unknown): string | null { return value == null ? 
 function mutation(input: Record<string, unknown>) { return { operationId: string(input.operationId), expectedRevision: number(input.expectedRevision) }; }
 
 /** Case routes share the Host lifecycle queue; original project identity stays in ProjectStore. */
-export function createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject, enterpriseScope }: Dependencies) {
+export function createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject, enterpriseScope, goals }: Dependencies) {
   const enterpriseForLink = (caseId: string, projectId?: string, useDefault = false): string | undefined => {
     if (!enterpriseScope) return undefined;
     const known = [enterpriseScope.caseEnterpriseId(caseId), ...cases.listProjectLinks(caseId).map(link => enterpriseScope.projectEnterpriseId(link.projectId)), ...(projectId ? [enterpriseScope.projectEnterpriseId(projectId)] : [])].filter((id): id is string => id !== undefined);
@@ -155,8 +157,9 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
       if (method === 'GET') return { body: { cases: cases.listCases(), projectLinks: cases.listProjectLinks() } };
       if (method === 'POST') return { status: 201, body: await mutate(async () => {
         const operationId = string(input.operationId), previous = cases.getOperation(operationId);
-        const scope = !previous && enterpriseScope ? { enterpriseScopeIntent: enterpriseScope.defaultEnterpriseId?.() ?? null } : undefined;
-        const record = cases.createCase({ operationId, title: string(input.title), description: optionalString(input.description) }, scope);
+        const goalBinding = input.goalBinding === undefined && previous ? undefined : goals ? assertAdoptedGoalRefs(goals, input.goalBinding) : undefined;
+                const scope = !previous && enterpriseScope ? { enterpriseScopeIntent: enterpriseScope.defaultEnterpriseId?.() ?? null } : undefined;
+        const record = cases.createCase({ operationId, title: string(input.title), description: optionalString(input.description), ...(goalBinding ? { goalBinding } : {}) }, scope);
         await recordEnterprise(record.id, undefined, cases.getOperation(operationId)?.enterpriseScopeIntent ?? undefined, { operationId, caseCreated: true });
         return { case: record };
       }) };
@@ -187,7 +190,14 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
     if (!action && method === 'GET') {
       const record = cases.getCase(caseId), projectLinks = cases.listProjectLinks(caseId), linked = new Set(projectLinks.map(link => link.projectId));
       const adoptions = cases.getArtifactAdoptions(caseId);
-      return { body: { case: record, projectLinks, artifacts: await Promise.all(cases.getArtifacts(caseId, { includeUnlinked: true }).map(artifact => artifactView(artifact, linked, adoptions.get(artifact.id)))), pendingOperations: [...cases.listPendingProjectOperations(caseId), ...cases.listPendingArtifactAdoptions(caseId)], events: cases.getEvents('case', caseId), projectEvents: projectLinks.flatMap(link => cases.getEvents('project', link.projectId)) } };
+      return { body: { case: record, goalBinding: cases.getGoalBinding(caseId), projectLinks, artifacts: await Promise.all(cases.getArtifacts(caseId, { includeUnlinked: true }).map(artifact => artifactView(artifact, linked, adoptions.get(artifact.id)))), pendingOperations: [...cases.listPendingProjectOperations(caseId), ...cases.listPendingArtifactAdoptions(caseId)], events: cases.getEvents('case', caseId), projectEvents: projectLinks.flatMap(link => cases.getEvents('project', link.projectId)) } };
+    }
+    if (action === 'goals') {
+      if (method === 'GET') return { body: { binding: cases.getGoalBinding(caseId), history: cases.getGoalBindingHistory(caseId) } };
+      if (method === 'POST' && goals) return { body: await mutate(() => {
+        const binding = assertAdoptedGoalRefs(goals, input.goalBinding);
+        return { binding: cases.setGoalBinding({ ...mutation(input), caseId, ...binding }) };
+      }) };
     }
     if (!action && method === 'PATCH') return { body: await mutate(() => ({ case: cases.updateCase({ ...mutation(input), caseId, title: string(input.title), description: string(input.description), judgement: string(input.judgement), nextStep: string(input.nextStep) }) })) };
     if (method === 'POST' && ['status', 'close', 'reopen', 'notes'].includes(action ?? '')) return { body: await mutate(() => {

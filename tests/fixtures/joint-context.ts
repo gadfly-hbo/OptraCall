@@ -1,3 +1,4 @@
+import { withCaseGoal } from './case-goal.ts';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -45,9 +46,9 @@ export async function prepareJointContext(host: Host, providerUrl: string) {
   const { task } = await readJson(await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: '三类背景原任务' }), 201);
 
   await readJson(await host.request('/api/cases/storage/initialize', 'POST', {}));
-  let record = (await readJson(await host.request('/api/cases', 'POST', {
+  let record = (await readJson(await host.request('/api/cases', 'POST', await withCaseGoal(host, {
     operationId: randomUUID(), title: 'RR07_CASE_销售与毛利', description: 'RR07_CASE_SOURCE_合成事项背景',
-  }), 201)).case;
+  })), 201)).case;
   record = (await readJson(await host.request(`/api/cases/${record.id}/projects`, 'POST', {
     operationId: randomUUID(), expectedRevision: record.revision, projectId: project.id,
   }))).case;

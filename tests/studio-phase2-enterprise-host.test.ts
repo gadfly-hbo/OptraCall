@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
@@ -111,7 +112,7 @@ test('SU02/13: Case and SAP associations validate the original object and curren
   const a = await json(await host.request('/api/studio/enterprises', 'POST', { name: 'A' }), 201);
   const b = await json(await host.request('/api/studio/enterprises', 'POST', { name: 'B' }), 201);
   await json(await host.request('/api/cases/storage/initialize', 'POST', {}));
-  const { case: record } = await json(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '原Case保留' }), 201);
+  const { case: record } = await json(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '原Case保留' })), 201);
   const assign = (body: object, status = 200) => host.request('/api/studio/enterprise-associations', 'POST', { requestId: randomUUID(), enterpriseId: a.id, ...body }).then(response => json(response, status));
   await assign({ kind: 'case', entityId: record.id, expectedRevision: record.revision + 1 }, 409);
   assert.deepEqual(await assign({ kind: 'case', entityId: record.id, expectedRevision: record.revision }), { caseId: record.id, enterpriseId: a.id });

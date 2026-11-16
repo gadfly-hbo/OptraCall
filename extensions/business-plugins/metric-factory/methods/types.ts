@@ -41,7 +41,11 @@ export type SapMethodGovernance = {
   replacement: SapMethodRef | null;
   recordedAt: string;
   requestId: string;
+  origin?: SapMethodIssueOrigin;
+  sources?: SapMethodSource[];
 };
+export type SapMethodIssueOrigin = { actorKind: 'agent'; projectId: string; taskId: string; requestId: string; sessionId: string; toolCallId: string };
+export type SapMethodIssueWriteOptions = { origin: SapMethodIssueOrigin; sources: SapMethodSource[]; assertWritable?(): void };
 export type SapMethodSummary = {
   id: string;
   title: string;

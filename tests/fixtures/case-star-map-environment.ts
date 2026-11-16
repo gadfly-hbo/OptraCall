@@ -1,3 +1,4 @@
+import { withCaseGoal } from './case-goal.ts';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -32,7 +33,7 @@ try {
   await readJson(await host.request('/api/cases/storage/initialize', 'POST', {}));
   const createProject = async (name: string) => (await readJson(await host.request('/api/projects', 'POST', { name }), 201)).project;
   const createTask = async (projectId: string, name: string) => (await readJson(await host.request(`/api/projects/${projectId}/tasks`, 'POST', { name }), 201)).task;
-  const createCase = async (title: string) => (await readJson(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title }), 201)).case;
+  const createCase = async (title: string) => (await readJson(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title })), 201)).case;
   const p1 = await createProject('合成 · 门店经营诊断'), p2 = await createProject('合成 · 试行观察与复盘'), p3 = await createProject('合成 · 独立资料项目');
   const t1 = await createTask(p1.id, '可比门店销售结构'), t2 = await createTask(p1.id, '库存影响核查');
   const freshTask = await createTask(p2.id, '试行观察记录');

@@ -1,0 +1,54 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { CaseStore } from '../src/host/case-store.ts';
+
+test('A03: a Case records its exact primary and related goals in its original authority and reopens unchanged', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'optracall-case-goals-'));
+  const store = new CaseStore({ dataRoot: root });
+  t.after(async () => { store.close(); await fs.rm(root, { recursive: true, force: true }); });
+  await store.initialize();
+  const primary = { goalId: randomUUID(), version: 1 }, related = [{ goalId: randomUUID(), version: 2 }];
+  const input = { operationId: randomUUID(), title: '核对会员持续购买', goalBinding: { primary, related } };
+  const record = store.createCase(input);
+  const binding = store.getGoalBinding(record.id);
+  assert.deepEqual(binding?.primary, primary);
+  assert.deepEqual(binding?.related, related);
+  assert.equal(binding?.caseRevision, 1);
+  assert.ok(binding?.confirmedAt);
+  assert.deepEqual(store.createCase(input), record);
+  assert.equal(store.listCases().length, 1);
+  store.close();
+  await store.init();
+  assert.deepEqual(store.getGoalBinding(record.id), binding);
+  assert.deepEqual(store.getCase(record.id), record);
+});
+
+test('A03/A04: legacy Case goal reads never migrate; later explicit associations retain their real history and stale writes fail', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'optracall-case-goal-history-'));
+  const store = new CaseStore({ dataRoot: root });
+  t.after(async () => { store.close(); await fs.rm(root, { recursive: true, force: true }); });
+  await store.initialize();
+  const record = store.createCase({ operationId: randomUUID(), title: '既有Case' });
+  const before = await fs.readFile(path.join(root, 'decision-cases.sqlite3'));
+  assert.equal(store.getGoalBinding(record.id), null);
+  assert.deepEqual(await fs.readFile(path.join(root, 'decision-cases.sqlite3')), before);
+  const primary = { goalId: randomUUID(), version: 1 };
+  const first = { caseId: record.id, expectedRevision: 1, operationId: randomUUID(), primary, related: [] };
+  const bound = store.setGoalBinding(first);
+  assert.equal(bound.caseRevision, 2);
+  assert.deepEqual(store.setGoalBinding(first), bound);
+  assert.equal(store.getCase(record.id).revision, 2);
+  assert.equal(store.getGoalBindingHistory(record.id).length, 1);
+  assert.throws(() => store.setGoalBinding({ ...first, operationId: randomUUID(), primary: { ...primary, version: 2 } }), /revision_conflict/);
+  const revised = store.setGoalBinding({ ...first, operationId: randomUUID(), expectedRevision: 2, primary: { ...primary, version: 2 } });
+  assert.deepEqual(store.getGoalBindingHistory(record.id).map(x => x.primary.version), [1, 2]);
+  assert.equal(store.getGoalBinding(record.id)?.primary.version, 2);
+  assert.equal(store.getCase(record.id).createdAt, record.createdAt);
+  assert.equal(store.getEvents('case', record.id).length, 3);
+  assert.deepEqual(store.getGoalBindingHistory(record.id)[0], bound);
+  assert.ok(revised.confirmedAt >= bound.confirmedAt);
+});

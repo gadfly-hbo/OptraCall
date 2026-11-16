@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -22,7 +23,7 @@ test('SIM-EVIDENCE-01: authoritative frozen report links into Case and appears o
   assert.notEqual(first.file.path, second.file.path, 'export always saves a new file');
   assert.equal(await (await host.request(`/api/projects/${project.id}/files/content?path=${encodeURIComponent(first.file.path)}`)).text(), content);
   await json(await host.request('/api/cases/storage/initialize', 'POST', {}));
-  const { case: record } = await json(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '备货决策' }), 201);
+  const { case: record } = await json(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '备货决策' })), 201);
   const linked = await json(await host.request(`/api/cases/${record.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: record.revision, projectId: project.id }));
   const operation = { operationId: randomUUID(), expectedRevision: linked.case.revision, projectId: project.id, relativePath: first.file.path, expectedSha256: first.file.sha256, role: 'analysis_result', displayName: `经营推演 ${snapshot.id}` };
   assert.equal((await json(await host.request(`/api/cases/${record.id}/artifacts`, 'POST', { ...operation, expectedSha256: '0'.repeat(64) }), 409)).code, 'artifact_version_changed');

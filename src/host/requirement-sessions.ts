@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { ProjectRuntimeError, type ProjectEvent } from '../agent/project-runtime.ts';
+import { ProjectRuntimeError, type ProjectEvent, type ProvidedContextInput } from '../agent/project-runtime.ts';
 import { createAgentSessionDomain, type SessionLease } from './agent-sessions.ts';
 import type { RuntimeModelConfiguration } from './config-store.ts';
 import { readRunDiagnostic, type RunDiagnostic } from '../agent/run-diagnostics.ts';
@@ -26,7 +26,7 @@ export type RequirementSessionManagerOptions = {
   beginFrameworkSources?: (targets: readonly FrameworkMaterialTarget[], assertCurrent: () => void) => SourceAccess;
 };
 export type RequirementRunResult = { outcome: 'completed' | 'cancelled' | 'failed'; text: string; diagnostic?: RunDiagnostic };
-type GenerationSession = { run: (text: string, requestId: string, verifyBeforeDispatch?: () => Promise<void>) => Promise<RequirementRunResult> };
+type GenerationSession = { run: (text: string, requestId: string, verifyBeforeDispatch?: () => Promise<void>, providedContext?: ProvidedContextInput) => Promise<RequirementRunResult> };
 export type RequirementSessionLease = GenerationSession & {
   isCurrent: () => boolean;
   withFramework: <T>(operationId: string, publicTopic: string | undefined, targets: readonly FrameworkMaterialTarget[], assertInput: () => void, use: (session: GenerationSession, search: FrameworkPublicSearch, references: SourceAccess['references']) => Promise<T>) => Promise<T>;
@@ -41,6 +41,7 @@ export function createRequirementSessions(options: RequirementSessionManagerOpti
     name: 'requirements-elaboration',
     profile: {
       key: instanceId => instanceId,
+      projectId: instanceId => instanceId.startsWith('req-plan-') ? instanceId.slice(9) : undefined,
       configuration: () => options.configurationSnapshot(),
       agentOptions: instanceId => ({
         projectId: `requirement:${instanceId}`,
@@ -87,8 +88,8 @@ export function createRequirementSessions(options: RequirementSessionManagerOpti
 
   function generationSession<Owner>(lease: SessionLease<Owner>): GenerationSession {
     return {
-      async run(text, requestId, verifyBeforeDispatch) {
-        const result = await lease.run({ text, requestId, verifyBeforeDispatch });
+      async run(text, requestId, verifyBeforeDispatch, providedContext) {
+        const result = await lease.run({ text, requestId, verifyBeforeDispatch, providedContext });
         const diagnostic = readRunDiagnostic(result.diagnostic);
         return { outcome: result.outcome, text: result.text, ...(diagnostic ? { diagnostic } : {}) };
       },
@@ -128,9 +129,10 @@ export function createRequirementSessions(options: RequirementSessionManagerOpti
   return {
     withSession,
     run: (instanceId: string, text: string, requestId: string): Promise<RequirementRunResult> => withSession(instanceId, lease => lease.run(text, requestId)),
-    async stop(instanceId: string): Promise<boolean> {
+    currentRequestId: (instanceId: string) => domain.currentRequestId(domain.ref(instanceId)),
+    async stop(instanceId: string, guard?: { expectedRequestId: string }): Promise<boolean> {
       const ref = domain.ref(instanceId);
-      if (domain.executionState(ref).mode !== 'unknown') return domain.stop(ref);
+      if (guard || domain.executionState(ref).mode !== 'unknown') return domain.stop(ref, guard);
       await domain.close(ref);
       return true;
     },

@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -18,7 +19,7 @@ async function fixture(t: any) {
   const { task } = await json(await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: '人工关联任务' }), 201);
   const { file } = await json(await host.request(`/api/projects/${project.id}/files/upload`, 'POST', { name: 'analysis.md', directory: '020_clean', content: Buffer.from('原报告 v1').toString('base64') }), 201);
   await json(await host.request('/api/cases/storage/initialize', 'POST', {}));
-  const { case: record } = await json(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '采用版本合成Case' }), 201);
+  const { case: record } = await json(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '采用版本合成Case' })), 201);
   const linked = await json(await host.request(`/api/cases/${record.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: 1, projectId: project.id }));
   return { host, project, task, file, record: linked.case };
 }
@@ -111,7 +112,7 @@ test('ADOPT-ADMISSION: invalid task, stale/closed Case, unlinked or archived pro
   const command = { operationId: randomUUID(), expectedRevision: record.revision, projectId: project.id, relativePath: file.path, role: 'report' };
   assert.equal((await json(await host.request(`/api/cases/${record.id}/artifacts/adopt`, 'POST', { ...command, taskId: randomUUID() }), 404)).code, 'task_not_found');
   assert.equal((await json(await host.request(`/api/cases/${record.id}/artifacts/adopt`, 'POST', { ...command, expectedRevision: 1 }), 409)).code, 'case_revision_conflict');
-  const { case: second } = await json(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '未关联Case' }), 201);
+  const { case: second } = await json(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '未关联Case' })), 201);
   assert.equal((await json(await host.request(`/api/cases/${second.id}/artifacts/adopt`, 'POST', { ...command, expectedRevision: second.revision }), 409)).code, 'project_not_linked');
   await json(await host.request(`/api/cases/${record.id}/close`, 'POST', { operationId: randomUUID(), expectedRevision: record.revision, reason: '合成结束' }));
   assert.equal((await json(await host.request(`/api/cases/${record.id}/artifacts/adopt`, 'POST', { ...command, expectedRevision: record.revision + 1 }), 409)).code, 'case_closed');
