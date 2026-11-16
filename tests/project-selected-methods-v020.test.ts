@@ -76,15 +76,20 @@ test('A07/A09: one confirmation carries exact selected versions through Host/Pi;
   await writeFile(path.join(f.root, 'receipt.json'), JSON.stringify({ test: 'A07/A09 actual Host/Pi selected methods', selected: f.plan.tasks[0].capabilities, skillSource: f.skill.source, skillInstructionsSha256: hash(skillBytes), skillPackageSha256: f.skill.sha256, nativeSessionFile: settled.state.task.sessionFile, nativeSha256: settled.sha256, providedContextEntryId: started[0].id, actualReadEntryIds: [skillRead.id, methodRead.id], declarationEntryId: declaration.id, declaration: 'scripted-provider-declared-used', professionalCorrectness: 'NOT_RUN', actualLLMAdoption: 'NOT_RUN' }, null, 2));
 });
 
-test('A09: a selected exact SAP version confirmed erroneous before start is rejected even when another published version exists', { timeout: 30_000 }, async t => {
+test('A09/PG02: an exact SAP version confirmed erroneous before start receives its own failed receipt without adopting another published version', { timeout: 30_000 }, async t => {
   const f = await environment(t, 'method-issue', { seedMethod: true, newerMethod: true });
   const created = await f.request(f.base + '/confirm', 'POST', { operationId: randomUUID(), expectedRevision: f.saved.state.revision, mode: 'create' });
   const issue = await f.request(`/api/sap/methods/${f.method!.method.id}/issues`, 'POST', { requestId: randomUUID(), version: 1, expectedRevision: 0, status: 'confirmed', note: '合成治理反例：所选旧版确有问题，不静默采用新版', replacement: { methodId: f.method!.method.id, version: 2 } });
   assert.equal(issue.method.governance.at(-1).status, 'confirmed');
-  const blocked = await f.request(f.base + '/confirm', 'POST', { operationId: randomUUID(), expectedRevision: created.state.revision, mode: 'start' }, 409); assert.equal(blocked.code, 'project_plan_capability_changed');
+  // PG02 changes whole-plan HTTP rejection into an accurate affected-Task
+  // receipt. The original no-model-dispatch and exact-version protections stay.
+  const blocked = await f.request(f.base + '/confirm', 'POST', { operationId: randomUUID(), expectedRevision: created.state.revision, mode: 'start' });
+  const affected = blocked.confirmation.tasks[0];
+  assert.equal(affected.startStatus, 'failed'); assert.equal(affected.startCode, 'project_plan_method_unavailable'); assert.equal(affected.createStatus, 'created');
+  assert.equal(blocked.confirmation.id, created.confirmation.id); assert.equal(blocked.confirmation.authorizations[0].mode, 'create');
   const state = await f.request(f.base), original = await f.request(`/api/projects/${f.project.id}/tasks/${created.confirmation.tasks[0].taskId}`);
-  assert.equal(state.confirmed.mode, 'create'); assert.equal(state.confirmed.plan.tasks[0].capabilities.find((ref: any) => ref.kind === 'sap-method').version, '1'); assert.equal(original.task.lastRun, undefined); assert.equal(original.task.sessionFile, undefined); assert.equal(f.provider.requests.length, 0);
-  await writeFile(path.join(f.root, 'receipt.json'), JSON.stringify({ selectedMethod: f.method!.method.id, selectedVersion: 1, availableReplacementVersion: 2, confirmedIssueRevision: issue.method.governanceRevision, rejection: blocked.code, modelRequests: 0, originalConfirmationRetained: true }, null, 2));
+  assert.equal(state.confirmed.mode, 'start'); assert.equal(state.confirmed.plan.tasks[0].capabilities.find((ref: any) => ref.kind === 'sap-method').version, '1'); assert.equal(original.task.lastRun, undefined); assert.equal(original.task.sessionFile, undefined); assert.equal(f.provider.requests.length, 0);
+  await writeFile(path.join(f.root, 'receipt.json'), JSON.stringify({ selectedMethod: f.method!.method.id, selectedVersion: 1, availableReplacementVersion: 2, confirmedIssueRevision: issue.method.governanceRevision, rejection: affected.startCode, modelRequests: 0, originalConfirmationRetained: true, changedBehavior: 'whole-plan rejection replaced by per-Task start refusal' }, null, 2));
 });
 
 test('A09: changing only an isolated Skill script invalidates the selected package before start without changing SKILL.md or the official package', { timeout: 30_000 }, async t => {

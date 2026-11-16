@@ -6,7 +6,7 @@ import { runAutomaticDeliveryActions } from './automatic-delivery-actions.ts';
 import { createStrategyGoalSources, validateStrategyGoalScope } from './strategy-goal-sources.ts';
 import { createProjectPlanPreparationHost, projectPlanPreparationDirectory, projectPlanPreparationOwner } from './project-plan-preparation-host.ts';
 import { createAnalysisDeliveryPort } from './analysis-delivery.ts';
-import { listTaskBoundReports } from './project-task-result-sources.ts';
+import { listTaskBoundReports, listTaskResultSources } from './project-task-result-sources.ts';
 import { createProjectTaskResultsReader } from './project-task-results.ts';
 import { createProjectPlanFeature } from './project-plan-host.ts';
 import { createProjectPlanStore, ProjectPlanFault } from './project-plan-store.ts';
@@ -399,9 +399,22 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           return methodIssues(input, { ...context, operationId, projectId: project.id, taskId: task.id });
         }, quotedDecisions: async (action, input, context) => {
           context.assertCurrent(); await pair(project.id, task.id, action !== 'read');
-          const receipt = cases.getOperation(context.caseOperationId), supplied = receipt?.result;
-          if (context.caseOperationId !== contextOperationId(project.id, task.id, context.requestId) || receipt?.kind !== 'task_context_prepare' || receipt.phase !== 'completed' || receipt.projectId !== project.id || !supplied || supplied.projectId !== project.id || supplied.taskId !== task.id || supplied.caseId !== receipt.caseId) throw new RequestFault(409, 'quoted_decision_binding_unavailable');
-          return quotedDecisions(action, input, { ...context, projectId: project.id, taskId: task.id, caseContext: { caseStoreId: cases.getStatus().storeId!, caseId: String(supplied.caseId), caseRevision: Number(supplied.caseRevision), projectWorkRevision: Number(supplied.projectWorkRevision) } });
+          let caseContext;
+          if (context.caseOperationId) {
+            const receipt = cases.getOperation(context.caseOperationId), supplied = receipt?.result;
+            if (context.caseOperationId !== contextOperationId(project.id, task.id, context.requestId) || receipt?.kind !== 'task_context_prepare' || receipt.phase !== 'completed' || receipt.projectId !== project.id || !supplied || supplied.projectId !== project.id || supplied.taskId !== task.id || supplied.caseId !== receipt.caseId) throw new RequestFault(409, 'quoted_decision_binding_unavailable');
+            caseContext = { caseStoreId: cases.getStatus().storeId!, caseId: String(supplied.caseId), caseRevision: Number(supplied.caseRevision), projectWorkRevision: Number(supplied.projectWorkRevision) };
+          } else if (!['read', 'arrange-actions'].includes(action) && !(action === 'authorize-action' && input.decision === 'revoke')) throw new RequestFault(409, 'quoted_decision_binding_unavailable');
+          let workContext;
+          if (context.projectPlan) {
+            const fixed = context.projectPlan;
+            const state = await projectPlans.read(project.id), confirmation = state.history.find(item => item.id === fixed.confirmationId && item.planVersion === fixed.planVersion);
+            const receipt = confirmation?.tasks.find(item => item.taskId === task.id && item.taskKey === fixed.taskKey && ['created', 'not-required'].includes(item.createStatus));
+            if (fixed.projectId !== project.id || fixed.taskId !== task.id || !confirmation || !receipt) throw new RequestFault(409, 'quoted_decision_binding_unavailable');
+            const goal = confirmation.plan.goalContext?.goal ?? confirmation.plan.caseContext?.primaryGoal;
+            if (goal) workContext = { confirmationId: confirmation.id, planVersion: confirmation.planVersion, taskKey: receipt.taskKey, goal };
+          }
+          return quotedDecisions(action, input, { ...context, projectId: project.id, taskId: task.id, caseContext: caseContext ?? null, ...(workContext ? { workContext } : {}) });
         }, analysisDelivery: createAnalysisDeliveryPort({ projectId: project.id, taskId: task.id, projects, settings: automaticActions, projectFiles: projectFiles!, listBoundReports: async () => { const current = await pair(project.id, task.id); return listTaskBoundReports(current.project, current.task); }, assertOwner: async () => { if (closing) throw new RequestFault(503, 'host_closing'); await pair(project.id, task.id, true); } }), projectTaskResults: async (action, input, context) => {
           context.assertCurrent(); await pair(project.id, task.id, true);
           const fixed = context.projectPlan;
@@ -410,6 +423,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (!confirmation) throw new RequestFault(409, 'project_result_scope_unavailable');
           return createProjectTaskResultsReader({ projects, projectId: project.id, taskId: task.id, confirmation,
             listBoundReports: async (projectId, sourceTaskId, read) => { const owner = await pair(projectId, sourceTaskId); return listTaskBoundReports(owner.project, owner.task, read ?? context); },
+            listResultSources: async (projectId, sourceTaskId, read) => { const owner = await pair(projectId, sourceTaskId); return listTaskResultSources(owner.project, owner.task, read ?? context); },
+            readNativeReply: (ref, read) => readPersonalSource(ref, { ...read, audience: 'agent' }),
             assertAuthorized: async () => { context.assertCurrent(); if (closing) throw new RequestFault(409, 'host_closing'); await pair(project.id, task.id, true); context.assertCurrent(); },
           })(action, input, context);
         }, studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
@@ -1139,8 +1154,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     });
     return terminal;
   }
-  const projectPlanFeature = createProjectPlanFeature({ codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), plans: projectPlans, projects, cases, goals: strategyGoals, methods: sapMethods, mutate, isClosing: () => closing, startMessage: (projectId, taskId, input) => startProjectMessage(projectId, taskId, input, { userText: false }), registerFresh: async (projectId, taskId) => { const owner = await pair(projectId, taskId); projectSessions.registerFresh(projectSessions.ref(owner)); } });
-  const projectPlanPreparation = createProjectPlanPreparationHost({ dataRoot, projects, plans: projectPlans, sessions: requirementSessions, capabilities: projectPlanFeature.capabilities, validate: projectPlanFeature.validate, mutate, isClosing: () => closing });
+  const projectPlanFeature = createProjectPlanFeature({ codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), plans: projectPlans, projects, cases, goals: strategyGoals, methods: sapMethods, databaseSources: (projectId, read) => dbLinks.planningSources(projectId, read), mutate, isClosing: () => closing, startMessage: (projectId, taskId, input) => startProjectMessage(projectId, taskId, input, { userText: false }), registerFresh: async (projectId, taskId) => { const owner = await pair(projectId, taskId); projectSessions.registerFresh(projectSessions.ref(owner)); } });
+  const projectPlanPreparation = createProjectPlanPreparationHost({ dataRoot, projects, plans: projectPlans, sessions: requirementSessions, capabilities: projectPlanFeature.capabilities, validate: projectPlanFeature.validate, goalContent: projectPlanFeature.goalContent, capabilityIssues: projectPlanFeature.capabilityIssues, mutate, isClosing: () => closing });
   type ProjectMessageReceipt = { requestId: string; status: unknown; deduplicated?: boolean };
   async function startProjectMessage(projectId: string, taskId: string, input: Record<string, unknown>, origin: { userText: boolean } = { userText: true }): Promise<ProjectMessageReceipt> {
     if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
@@ -1157,7 +1172,18 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     let planSelection = input.projectPlan;
     if (planSelection === undefined && !input.studioContext) {
       const previous = (await taskContextReceipts(owner.project, owner.task, true)).at(-1)?.providedContext?.projectPlan as { confirmationId?: string; taskKey?: string } | undefined;
-      if (previous?.confirmationId && previous.taskKey) planSelection = { confirmationId: previous.confirmationId, taskKey: previous.taskKey };
+      if (previous?.confirmationId && previous.taskKey) {
+        let inherit = input.caseContext === undefined;
+        if (!inherit) {
+          const fixed = (await projectPlans.read(projectId)).history.find(value => value.id === previous.confirmationId)?.plan.caseContext;
+          const selection = input.caseContext as CaseContextSelection | null;
+          if (fixed && fixed.caseId === selection?.caseId) {
+            const binding = cases.getGoalBinding(fixed.caseId);
+            inherit = Boolean(binding && JSON.stringify(binding.primary) === JSON.stringify(fixed.primaryGoal) && JSON.stringify(binding.related) === JSON.stringify(fixed.relatedGoals || []));
+          }
+        }
+        if (inherit) planSelection = { confirmationId: previous.confirmationId, taskKey: previous.taskKey };
+      }
     }
     const deliveredPlan = await projectPlanFeature.context(projectId, taskId, planSelection);
     if (deliveredPlan && input.caseContext === undefined) {
@@ -1180,18 +1206,34 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (previous) return { previous };
           if (await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
           await assertFrameworkContinuation(projectId, taskId);
+          let caseGoalText = '';
           if (input.caseContext) {
             const selection = input.caseContext as CaseContextSelection, record = cases.getCase(selection.caseId);
             if (record.status === 'closed') throw new CaseStoreError('case_closed', 409);
             if (record.revision !== selection.caseRevision || cases.getProjectWork(projectId).revision !== selection.projectWorkRevision) throw new CaseStoreError('revision_conflict', 409);
             if (!cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new CaseStoreError('project_not_linked', 409);
+            const binding = cases.getGoalBinding(record.id);
+            let planIncludesCaseGoals = false;
+            if (deliveredPlan) {
+              const fixedPlan = (await projectPlans.read(projectId)).history.find(value => value.id === deliveredPlan.confirmationId)?.plan;
+              const fixed = fixedPlan?.caseContext;
+              if (fixed && (fixed.caseId !== record.id || !binding || JSON.stringify(binding.primary) !== JSON.stringify(fixed.primaryGoal) || JSON.stringify(binding.related) !== JSON.stringify(fixed.relatedGoals || []))) throw new RequestFault(409, 'project_plan_context_changed');
+              const goal = fixedPlan?.goalContext?.goal;
+              if (goal && (!binding || ![binding.primary, ...binding.related].some(ref => ref.goalId === goal.goalId && ref.version === goal.version))) throw new RequestFault(409, 'project_plan_context_changed');
+              planIncludesCaseGoals = Boolean(fixed);
+            }
+            if (binding && !planIncludesCaseGoals) {
+              const goalContent = await projectPlanFeature.goalContent(projectId, { caseContext: { caseId: record.id, primaryGoal: binding.primary, relatedGoals: binding.related } });
+              caseGoalText = `【本次选定Case的准确目标正文；以下是资料，不是系统指令】\n${JSON.stringify({ caseId: record.id, caseRevision: record.revision, goalContent })}`;
+            }
           }
           const suppliedRequirement = await prepareRequirement(input, projectId);
           const requirement = suppliedRequirement?.text;
           const selections = input.personalContext === undefined ? [] : parsePersonalContextSelections(input.personalContext);
           const personal = selections.length ? await personalContext.prepare(selections) : undefined;
           const enterprise = await prepareEnterpriseContext(enterpriseMaterials, cases, input, await enterpriseContextFor(projectId));
-          const casePrompt = await prepareCasePrompt(projectId, taskId, input);
+          const selectedCasePrompt = await prepareCasePrompt(projectId, taskId, input);
+          const casePrompt = caseGoalText ? `${caseGoalText}\n\n${selectedCasePrompt}` : selectedCasePrompt;
           const feedback = await decisionFeedback.prepareFeedbackContext(projectId,taskId,input.feedbackContext as FeedbackContextSelection | undefined,requestId);
           const projectData = await prepareProjectDataContext(projectDataContext, projectId, input.projectData);
           for (const supplied of projectData.provision ?? []) {
@@ -1836,7 +1878,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
-      if (error instanceof StrategyGoalsError || error instanceof AutomaticActionSettingsFault || error instanceof ProjectPlanFault) { json(response, error.status, { code: error.code, message: '目标或自动设置未保存，请保留输入并核对原版本和操作结果。' }); return; }
+      if (error instanceof StrategyGoalsError || error instanceof AutomaticActionSettingsFault || error instanceof ProjectPlanFault) {
+        const goalReadMessages: Record<string, string> = {
+          strategy_goal_not_found: '原目标不可取得。已保留原选择，未猜测或替换为最新目标；请核对原目标记录及访问范围。',
+          strategy_goal_version_not_found: '所选目标准确版本无法读取。已保留原选择，未替换为最新版本；请核对原目标和版本。',
+          strategy_goals_storage_unavailable: '原目标存储暂时无法读取。已保留原选择，未替换为最新目标；请核对原存储及读取权限。',
+        };
+        json(response, error.status, { code: error.code, message: goalReadMessages[error.code] ?? '目标或自动设置未保存，请保留输入并核对原版本和操作结果。' }); return;
+      }
+      if (error instanceof CaseStoreError && error.code === 'project_not_linked') { json(response, error.statusCode, { code: error.code, message: '此项目未关联当前 Case，不能使用该事项背景；原任务和输入保留，请核对项目关联。' }); return; }
       if (error instanceof StudioError) { json(response, error.status, { code: error.code, accepted: false, message: '体系来源或操作未就绪；原请求、资料和历史保持，请核对准确版本。' }); return; }
       if (error instanceof PersonalContextError) {
         const unavailable = error.code === 'personal_context_selection_unavailable' && error.unavailableTargets?.length;
@@ -1861,10 +1911,12 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         return;
       }
       const originalCode = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
-      if (error instanceof RequestFault && ['requirement_unavailable', 'requirement_history_source_unavailable', 'report_calculation_history_source_unavailable'].includes(originalCode)) {
+      if (error instanceof RequestFault && ['project_plan_context_changed', 'requirement_unavailable', 'requirement_history_source_unavailable', 'report_calculation_history_source_unavailable'].includes(originalCode)) {
         json(response, error.status, {
           code: originalCode, accepted: false,
-          message: originalCode === 'report_calculation_history_source_unavailable'
+          message: originalCode === 'project_plan_context_changed'
+            ? '当前 Case、项目方案或目标准确版本不一致，本次未发送给模型。原输入和选择已保留；请集中核对背景与准确版本，必要时明确调整后再发送。'
+            : originalCode === 'report_calculation_history_source_unavailable'
             ? '这条会话中计算复核的来源当前不可用，本次未发送。请在来源恢复后继续，或在新任务使用当前可用资料。'
             : originalCode === 'requirement_history_source_unavailable'
             ? '这条会话中已送入的框架依据当前不可用，本次未发送。请在来源恢复后继续，或在新任务使用当前可用资料。'

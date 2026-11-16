@@ -1,6 +1,7 @@
 import type { ProjectPlanConfirmation } from './project-plan-types.ts';
 import type { ProjectStore } from './project-store.ts';
 import type { NativeSnapshotReadBudget } from './native-session-snapshot.ts';
+import type { PersonalSourceRef, PersonalSourceEvidence } from './personal-retention-types.ts';
 
 /** A real saved-report receipt from the original native history, not inferred from directory contents. */
 export interface ProjectTaskResultBinding {
@@ -14,18 +15,37 @@ export interface ProjectTaskResultBinding {
   bytes: number;
   nativeEntryId?: string;
 }
-export interface ProjectTaskResultDescriptor extends ProjectTaskResultBinding {
+export type ProjectTaskNativeReplyRef = Extract<PersonalSourceRef, { type: 'native-reply' }>;
+/** A final original reply in the ancestry of an explicitly completed native run. */
+export interface ProjectTaskNativeReplyBinding {
+  projectId: string;
+  taskId: string;
+  requestId: string;
+  sessionId: string;
+  messageId: string;
+  sha256: string;
+  bytes: number;
+}
+export interface ProjectTaskResultSources {
+  reports: ProjectTaskResultBinding[];
+  replies: ProjectTaskNativeReplyBinding[];
+  limitations?: string[];
+}
+interface ProjectTaskResultMetadata {
   id: string;
   confirmationId: string;
   planVersion: number;
   taskKey: string;
   taskName: string;
   taskState: string;
-  bindingState: 'saved-receipt-only';
   requestRelation: 'confirmed-request' | 'other-saved-request';
   confirmedRequestId?: string;
   limitations: string[];
 }
+export type ProjectTaskResultDescriptor = ProjectTaskResultMetadata & (
+  | (ProjectTaskResultBinding & { kind: 'report'; bindingState: 'saved-receipt-only'; source?: never; messageId?: never })
+  | (ProjectTaskNativeReplyBinding & { kind: 'native-reply'; bindingState: 'native-reply-reference-only'; source: ProjectTaskNativeReplyRef; relativePath?: never; toolCallId?: never; nativeEntryId?: never })
+);
 export interface ProjectTaskResultsScope {
   projectId: string;
   taskId: string;
@@ -49,7 +69,7 @@ export interface ProjectTaskResultsReadResult {
   action: 'read';
   scope: ProjectTaskResultsScope;
   result: ProjectTaskResultDescriptor;
-  contentState: 'exact-bytes-verified';
+  contentState: 'exact-bytes-verified' | 'exact-native-reply-verified';
   observedAt: string;
   rangeUtf16: { start: number; end: number; total: number };
   complete: boolean;
@@ -68,5 +88,9 @@ export interface ProjectTaskResultsOptions {
   taskId: string;
   confirmation: ProjectPlanConfirmation;
   listBoundReports(projectId: string, sourceTaskId: string, options?: ProjectTaskResultsSourceReadOptions): Promise<ProjectTaskResultBinding[]>;
+  /** One native snapshot scan supplies both catalogs; legacy report-only consumers remain valid. */
+  listResultSources?(projectId: string, sourceTaskId: string, options?: ProjectTaskResultsSourceReadOptions): Promise<ProjectTaskResultSources>;
+  /** The Host injects the existing native-reply reader; no second body reader is created. */
+  readNativeReply?(ref: ProjectTaskNativeReplyRef, options: ProjectTaskResultsSourceReadOptions): Promise<PersonalSourceEvidence>;
   assertAuthorized?(scope: { projectId: string; taskId: string; sourceTaskId: string; relativePath?: string }, context: ProjectTaskResultsContext): Promise<void>;
 }

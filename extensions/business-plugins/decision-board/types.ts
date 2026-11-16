@@ -61,8 +61,17 @@ export type TaskFeedbackRevision = TaskFeedbackRecord & {
   legacyCreatedAt: string | null; legacyUpdatedAt: string | null;
   quoteProvenance?: UserQuoteProvenance;
 };
-export type BoardAuthorizationSource = { caseStoreId: string; caseId: string; choiceId: string;
+export type BoardCaseAuthorizationSource = { caseStoreId: string; caseId: string; choiceId: string;
   strategyRef: { type: 'case-decision'; caseStoreId: string; caseId: string; recordId: string; revision: number } };
+export type BoardWorkContext = { confirmationId: string; planVersion: number; taskKey: string; goal: { goalId: string; version: number } };
+export type BoardWorkAuthorizationSource = { kind: 'work'; projectId: string; taskId: string; requestId: string; workContext?: BoardWorkContext };
+export type BoardAuthorizationSource = BoardCaseAuthorizationSource | BoardWorkAuthorizationSource;
+export type BoardArrangeAction =
+  | { kind: 'create'; title: string; owner?: string; dueDate?: string; priority?: string; note?: string; itemId?: string; itemVersion?: string }
+  | { kind: 'reuse'; itemId: string; taskId: string; itemVersion: string; taskVersion: string; expectedPreviousAuthorizationId: string | null };
+export type BoardArrangedActionRef = { itemId: string; taskId: string; itemVersion: string; taskVersion: string; authorizationId: string; created: boolean };
+export type BoardArrangeActionsInput = { operationId: string; projectId: string; source: BoardAuthorizationSource; quoteProvenance: UserQuoteProvenance; scope: string; title: string; checks: string[]; actions: BoardArrangeAction[] };
+export type BoardArrangementReceipt = Omit<BoardArrangeActionsInput, 'actions'> & { requestSha256: string; actions: BoardArrangedActionRef[]; createdAt: string };
 export type BoardActionAuthorizationInput = {
   operationId: string; projectId: string; itemId: string; taskId: string; itemVersion: string; taskVersion: string;
   expectedPreviousAuthorizationId: string | null; decision: 'authorize' | 'revoke'; scope: string;

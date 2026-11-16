@@ -20,7 +20,7 @@ export function parseUserQuoteProvenance(input: unknown): UserQuoteProvenance {
     originalUserTextSha256: input.originalUserTextSha256, quote: { start: Number(quote.start), end: Number(quote.end), text: quote.text } };
 }
 
-export type QuotedDecisionAction = 'read' | 'choose-strategy' | 'authorize-action' | 'record-feedback';
+export type QuotedDecisionAction = 'read' | 'choose-strategy' | 'authorize-action' | 'record-feedback' | 'arrange-actions';
 export type QuotedDecisionToolResult = { content: { type: 'text'; text: string }[]; details: Record<string, unknown> };
 export type QuotedDecisionCallContext = { requestId: string; sessionId: string; toolCallId: string; signal: AbortSignal; assertCurrent(): void };
 export type QuotedDecisionPort = (action: QuotedDecisionAction, input: Record<string, unknown>, context: QuotedDecisionCallContext) => Promise<QuotedDecisionToolResult>;
@@ -28,7 +28,13 @@ const quote = Type.Object({ start: Type.Integer({ minimum: 0 }), end: Type.Integ
 const strategyRef = Type.Object({ type: Type.Literal('case-decision'), caseStoreId: Type.String(), caseId: Type.String(), recordId: Type.String(), revision: Type.Integer({ minimum: 1 }) }, { additionalProperties: false });
 const previous = Type.Union([Type.String(), Type.Null()]);
 export const quotedDecisionParameters = Type.Object({
-  action: Type.Union(['read', 'choose-strategy', 'authorize-action', 'record-feedback'].map(value => Type.Literal(value))),
+  action: Type.Union(['read', 'choose-strategy', 'authorize-action', 'record-feedback', 'arrange-actions'].map(value => Type.Literal(value))),
+  operationId: Type.Optional(Type.String()),
+  title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })), checks: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 2000 }), { maxItems: 20 })),
+  actions: Type.Optional(Type.Array(Type.Union([
+    Type.Object({ kind: Type.Literal('create'), title: Type.String({ minLength: 1, maxLength: 200 }), owner: Type.Optional(Type.String({ maxLength: 200 })), dueDate: Type.Optional(Type.String({ maxLength: 40 })), priority: Type.Optional(Type.Union(['low', 'medium', 'high'].map(value => Type.Literal(value)))), note: Type.Optional(Type.String({ maxLength: 2000 })), itemId: Type.Optional(Type.String()), itemVersion: Type.Optional(Type.String()) }, { additionalProperties: false }),
+    Type.Object({ kind: Type.Literal('reuse'), itemId: Type.String(), taskId: Type.String(), itemVersion: Type.String(), taskVersion: Type.String(), expectedPreviousAuthorizationId: previous }, { additionalProperties: false }),
+  ]), { minItems: 1, maxItems: 20 })),
   pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 5 })), actionContinuation: Type.Optional(Type.String({ maxLength: 2000 })), decisionContinuation: Type.Optional(Type.String({ maxLength: 2000 })),
   quote: Type.Optional(quote), strategyRef: Type.Optional(strategyRef),
   choice: Type.Optional(Type.Union(['trial', 'gather_evidence', 'defer', 'reject', 'no_action', 'continue', 'adjust', 'stop_considering'].map(value => Type.Literal(value)))),
@@ -42,5 +48,5 @@ export const quotedDecisionParameters = Type.Object({
 }, { additionalProperties: false });
 export const quotedDecisionTool = {
   feature: 'quoted-decisions', name: 'record_user_decision', label: '按用户原话记录决定', parameters: quotedDecisionParameters,
-  description: '在Host已绑定的当前Case内，按本轮真实用户原话代办明确选择或单独行动授权、反馈。read先查准确方案与看板行动、版本和CAS。写入给quote的UTF-16 [start,end)准确子串、strategyRef及相应上次记录ID；不得传originalUserText、身份或虚构原话。结合当前真实上下文自主解释用户指向；含糊时集中向用户澄清，不调用写入，不用clear标志替代解释。选择方案不代表发券、补货、调价或触达授权；authorize-action仅登记明确动作范围或撤回，不创建或执行动作。record-feedback只保留用户报告，不能从采纳/授权推定发生或效果验证。原草案仍用原Case工具。本工具返回原权威回执，UNKNOWN先读原记录，不换ID重放。',
+  description: '按本轮真实用户原话代办明确决定。read先查准确方案与看板行动、版本和CAS，可给operationId查原安排或授权回执。choose-strategy/record-feedback和新增authorize-action授权仍限Host绑定Case及准确strategyRef/choiceId。撤回原work授权可无Case：authorize-action给decision=revoke、准确itemId/taskId、当前itemVersion/taskVersion及expectedPreviousAuthorizationId，原work/Goal/Plan来源由Host核对，不造strategyRef/choiceId；不能用此分支新增授权。arrange-actions在本项目明确授权内创建或复用原看板待办，给title、scope、checks和actions（create含title及已知负责人/期限，reuse含准确item/task版本及上次授权ID）；Host绑定已有目标时自动保留GSA上层安排与多行动引用，已明确工作不强制Case，缺负责人/期限保持未知。不执行补货、调价、发券或触达。写入给quote的UTF-16 [start,end)准确子串，不得传originalUserText或身份。Agent自主解释用户指向；含糊或缺关键取舍时集中澄清，不用clear标志。仅选择方案时只记选择，不调用arrange-actions或推定行动授权。安排、授权、用户报告和效果验证分别留据。原草案仍用Case工具。UNKNOWN先read原operationId，不换ID重放；partial保留原Board成功，仅补尚缺GSA引用。',
 } as const;

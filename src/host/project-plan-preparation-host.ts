@@ -6,13 +6,31 @@ import { parseProjectPlanContent, ProjectPlanFault, createProjectPlanStore } fro
 import type { ProjectPlanDraftInput, ProjectPlanPreparationProjection, ProjectPlanCapabilities } from './project-plan-types.ts';
 import type { ProjectStore } from './project-store.ts';
 import type { createRequirementSessions } from './requirement-sessions.ts';
+import { canonicalDataContextValue } from './project-data-context-request.ts';
 function fail(code: string, status = 409): never { throw new ProjectPlanFault(code, status); }
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 export const projectPlanPreparationOwner = (projectId: string) => `req-plan-${projectId}`;
 export const projectPlanPreparationDirectory = (dataRoot: string, projectId: string) => path.join(dataRoot, 'project-plans', projectId, 'preparation');
+function databaseProjection(capabilities: ProjectPlanCapabilities) {
+  const rows = (kind: string, values: readonly { id: string; taskId?: string }[]) => values.map(value => ({ key: `${kind}:${value.taskId ?? 'project'}:${value.id}`, value: canonicalDataContextValue(JSON.parse(JSON.stringify(value))) }));
+  // These are exactly the DB fields serialized by the preparation prompt.
+  // Preserve the outgoing snapshot, rather than a global settings revision.
+  return [
+    ...rows('source', capabilities.databaseSources || []),
+    ...rows('connector', capabilities.connectors.filter(ref => ref.id.startsWith('db-link:')).map(({ id, title, enabled, requiresPermission, permissionRef, version, sha256, taskId }) => ({ id, title, enabled, requiresPermission, permissionRef, version, sha256, taskId }))),
+    ...rows('material', capabilities.materials.filter(ref => ref.kind === 'connector' && ref.id.startsWith('db-link:')).map(({ kind, id, version, sha256, permissionRef, title, enabled }) => ({ kind, id, version, sha256, permissionRef, title, ...(enabled === undefined ? {} : { enabled }) }))),
+  ];
+}
+function assertSelectedDatabaseSources(plan: ProjectPlanDraftInput['plan'], capabilities: ProjectPlanCapabilities) {
+  const visible = capabilities.databaseSources || [];
+  const allowed = (ref: { id: string; version?: string; sha256?: string; permissionRef?: string }, taskId?: string) => visible.some(source => source.taskId === taskId && source.id === ref.id && source.version === ref.version && source.sha256 === ref.sha256 && source.permissionRef === ref.permissionRef);
+  if (plan.materials.some(ref => ref.kind === 'connector' && ref.id.startsWith('db-link:') && !allowed(ref)) || plan.tasks.some(task => task.capabilities.some(ref => ref.kind === 'connector' && ref.id.startsWith('db-link:') && !allowed(ref, task.taskId)))) fail('project_plan_source_model_permission_required', 403);
+}
 export function createProjectPlanPreparationHost(options: {
   dataRoot: string; projects: ProjectStore; plans: ReturnType<typeof createProjectPlanStore>; sessions: ReturnType<typeof createRequirementSessions>;
-  capabilities(projectId: string): Promise<ProjectPlanCapabilities>; validate(projectId: string, plan: ProjectPlanDraftInput['plan']): Promise<void>;
+  capabilities(projectId: string, read?: { modelOutlet?: string }): Promise<ProjectPlanCapabilities>; validate(projectId: string, plan: ProjectPlanDraftInput['plan']): Promise<void>;
+  goalContent?(projectId: string, plan: ProjectPlanDraftInput['plan']): Promise<readonly import('./strategy-goals-types.ts').GoalVersion[]>;
+  capabilityIssues?(projectId: string, plan: ProjectPlanDraftInput['plan']): Promise<import('./project-plan-preparation.ts').ProjectPlanPreparationInput['capabilityIssues']>;
   mutate<T>(run: () => T | Promise<T>): Promise<T>; isClosing(): boolean;
 }) {
   async function receipts(projectId: string) {
@@ -64,10 +82,25 @@ export function createProjectPlanPreparationHost(options: {
     if (prior && prior.status !== 'completed') return { body: { state, preparation: { ...prior, text: undefined }, replayed: true } };
     if (state.revision !== request.expectedRevision) fail('project_plan_conflict');
     await options.validate(projectId, plan);
-    const seed = { projectId, projectName: project.name, plan, capabilities: await options.capabilities(projectId), existingTasks: project.tasks.map(({ id, name, archivedAt }) => ({ id, name, archivedAt })) };
-    const prompt = buildProjectPlanPreparationPrompt(seed);
     return { body: await options.sessions.withSession(projectPlanPreparationOwner(projectId), async lease => {
-      const result = prior ? { outcome: 'completed', text: prior.text || '' } : await lease.run(prompt, input.operationId as string, async () => { if (!lease.isCurrent()) fail('project_plan_preparation_cancelled'); await options.validate(projectId, plan); }, { projectPlanPreparation: { projectId, inputHash, expectedRevision: request.expectedRevision } });
+      const seed = { projectId, projectName: project.name, plan, goalContent: await options.goalContent?.(projectId, plan), capabilityIssues: await options.capabilityIssues?.(projectId, plan), capabilities: structuredClone(await options.capabilities(projectId, { modelOutlet: lease.modelIdentity.outlet })), existingTasks: project.tasks.map(({ id, name, archivedAt }) => ({ id, name, archivedAt })) };
+      // The local UI can see sources which this particular preparation model
+      // cannot. Check the original selected references too, before serializing
+      // any of them into a model request. Keep the user's selection unchanged.
+      assertSelectedDatabaseSources(plan, seed.capabilities);
+      const prompt = buildProjectPlanPreparationPrompt(seed);
+      const outgoingDatabase = databaseProjection(seed.capabilities);
+      const result = prior ? { outcome: 'completed', text: prior.text || '' } : await lease.run(prompt, input.operationId as string, async () => {
+        if (!lease.isCurrent()) fail('project_plan_preparation_cancelled');
+        // The original domain calls this inside its mutation gate, after worker
+        // opening and immediately before the first actual dispatch.
+        const current = await options.capabilities(projectId, { modelOutlet: lease.modelIdentity.outlet });
+        const currentDatabase = new Map(databaseProjection(current).map(row => [row.key, row.value]));
+        if (outgoingDatabase.some(row => currentDatabase.get(row.key) !== row.value)) fail('project_plan_source_permissions_changed', 403);
+        assertSelectedDatabaseSources(plan, current);
+        await options.validate(projectId, plan);
+        if (!lease.isCurrent()) fail('project_plan_preparation_cancelled');
+      }, { projectPlanPreparation: { projectId, inputHash, expectedRevision: request.expectedRevision } });
       if (result.outcome !== 'completed' || !lease.isCurrent()) { const current = await read(projectId); return { state: current, preparation: current.preparations?.find(item => item.operationId === input.operationId) || { operationId: input.operationId, inputHash, status: result.outcome }, replayed: !!prior }; }
       const output = parseProjectPlanPreparationResponse(result.text, seed); await options.validate(projectId, output.plan);
       const saved = await options.mutate(async () => { if (!lease.isCurrent() || options.isClosing()) fail('project_plan_preparation_cancelled'); return options.plans.savePreparedDraft(projectId, { ...request, plan: output.plan, requestHash: inputHash, mece: output.mece, limitations: output.limitations }); });

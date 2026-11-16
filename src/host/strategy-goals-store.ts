@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { parseUserQuoteProvenance } from '../agent/quoted-decisions.ts';
+import type { GoalActionArrangement, GoalArrangementInput } from './strategy-goals-types.ts';
 import type { GoalAdoptionInput, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRelationVersion, GoalRevisionInput, GoalSourceRef, GoalVersion, StrategyGoalRecord, StrategyGoalsIndex } from './strategy-goals-types.ts';
 
 export class StrategyGoalsError extends Error {
@@ -14,12 +16,36 @@ const text = (v: unknown, max = 4000): string => typeof v === 'string' && v.trim
 const uuid = (v: unknown): string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v) ? v : fail('invalid_strategy_goal_id');
 const positive = (v: unknown): number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : fail('invalid_strategy_goal_version');
 const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical).join(',')}]` : object(v) ? `{${Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}` : JSON.stringify(v);
-type StoredIndex = StrategyGoalsIndex & { schemaVersion: 1; operations: GoalOperationReceipt[] };
+type StoredIndex = StrategyGoalsIndex & { schemaVersion: 1 | 2; operations: GoalOperationReceipt[] };
 const empty = (): StoredIndex => ({ schemaVersion: 1, goals: [], relations: [], feedback: [], operations: [] });
 const MAX_BYTES = 4 * 1024 * 1024;
 function goalRef(value: GoalRef): GoalRef {
   if (!object(value)) fail('invalid_strategy_goal_reference');
   return { goalId: uuid(value.goalId), version: positive(value.version) };
+}
+function arrangementInput(input: GoalArrangementInput): GoalArrangementInput {
+  if (!object(input) || !Array.isArray(input.checks) || input.checks.length > 20 || !Array.isArray(input.actions) || input.actions.length < 1 || input.actions.length > 20 || !object(input.source)) fail('invalid_strategy_goal_arrangement');
+  const quoteProvenance = parseUserQuoteProvenance(input.quoteProvenance), projectId = uuid(input.projectId);
+  if (quoteProvenance.projectId !== projectId) fail('invalid_strategy_goal_arrangement');
+  const source = input.source;
+  if ('kind' in source) {
+    if (source.kind !== 'work' || source.projectId !== projectId || source.taskId !== quoteProvenance.taskId || source.requestId !== quoteProvenance.requestId) fail('invalid_strategy_goal_arrangement');
+    uuid(source.projectId); uuid(source.taskId); uuid(source.requestId);
+    if (source.workContext) {
+      uuid(source.workContext.confirmationId); positive(source.workContext.planVersion); text(source.workContext.taskKey, 200);
+      if (canonical(goalRef(source.workContext.goal)) !== canonical(goalRef(input.goal))) fail('invalid_strategy_goal_arrangement');
+    }
+  } else {
+    uuid(source.caseStoreId); uuid(source.caseId); uuid(source.choiceId);
+    if (!object(source.strategyRef) || source.strategyRef.type !== 'case-decision' || source.strategyRef.caseStoreId !== source.caseStoreId || source.strategyRef.caseId !== source.caseId) fail('invalid_strategy_goal_arrangement');
+    uuid(source.strategyRef.recordId); positive(source.strategyRef.revision);
+  }
+  const actions = input.actions.map(action => {
+    if (!object(action) || typeof action.created !== 'boolean' || !/^[a-f0-9]{64}$/.test(action.itemVersion) || !/^[a-f0-9]{64}$/.test(action.taskVersion)) fail('invalid_strategy_goal_arrangement');
+    return { itemId: uuid(action.itemId), taskId: uuid(action.taskId), itemVersion: action.itemVersion, taskVersion: action.taskVersion, authorizationId: uuid(action.authorizationId), created: action.created };
+  });
+  if (new Set(actions.map(action => action.taskId)).size !== actions.length) fail('invalid_strategy_goal_arrangement');
+  return { goal: goalRef(input.goal), projectId, title: text(input.title, 200), scope: text(input.scope), checks: input.checks.map(value => text(value, 2000)), actions, source: structuredClone(input.source), boardOperationId: uuid(input.boardOperationId), quoteProvenance };
 }
 function adopted(index: StoredIndex, ref: GoalRef): GoalVersion {
   const version = index.goals.find(x => x.id === ref.goalId)?.versions.find(x => x.version === ref.version);
@@ -111,7 +137,7 @@ export class StrategyGoalsStore {
       const bytes = fs.readFileSync(fd), after = fs.fstatSync(fd, { bigint: true }), current = fs.lstatSync(this.file, { bigint: true });
       if (BigInt(bytes.length) !== initial.size || after.mtimeNs !== initial.mtimeNs || after.ctimeNs !== initial.ctimeNs || current.ino !== initial.ino || current.dev !== initial.dev || current.nlink !== 1n) fail('strategy_goals_storage_changed', 503);
       const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-      if (!object(value) || value.schemaVersion !== 1 || !Array.isArray(value.goals) || !Array.isArray(value.relations) || !Array.isArray(value.feedback) || !Array.isArray(value.operations)) fail('invalid_strategy_goals_storage', 503);
+      if (!object(value) || value.schemaVersion !== 1 && value.schemaVersion !== 2 || !Array.isArray(value.goals) || !Array.isArray(value.relations) || !Array.isArray(value.feedback) || !Array.isArray(value.operations) || value.schemaVersion === 2 && !Array.isArray(value.arrangements)) fail('invalid_strategy_goals_storage', 503);
       const index = value as unknown as StoredIndex, ids = new Set<string>();
       for (const record of index.goals) {
         uuid(record.id); positive(record.currentVersion);
@@ -141,14 +167,23 @@ export class StrategyGoalsStore {
         feedbackIds.add(feedback.id);
       }
       const operationIds = new Set<string>();
+      const arrangementIds = new Set<string>();
+      for (const arrangement of index.arrangements ?? []) {
+        uuid(arrangement.id); arrangementInput(arrangement); adopted(index, arrangement.goal);
+        if (arrangementIds.has(arrangement.id) || !Number.isFinite(Date.parse(arrangement.createdAt))) fail('invalid_strategy_goals_storage', 503);
+        arrangementIds.add(arrangement.id);
+      }
       for (const operation of index.operations) {
         uuid(operation.operationId);
-        if (operationIds.has(operation.operationId) || !/^[a-f0-9]{64}$/.test(operation.requestHash) || !['create', 'revise', 'adopt', 'relate', 'revise-relation', 'feedback'].includes(operation.kind) || !Number.isFinite(Date.parse(operation.completedAt)) || !object(operation.result)) fail('invalid_strategy_goals_storage', 503);
+        if (operationIds.has(operation.operationId) || !/^[a-f0-9]{64}$/.test(operation.requestHash) || !['create', 'revise', 'adopt', 'relate', 'revise-relation', 'feedback', 'arrange'].includes(operation.kind) || !Number.isFinite(Date.parse(operation.completedAt)) || !object(operation.result)) fail('invalid_strategy_goals_storage', 503);
         operationIds.add(operation.operationId);
         if (['create', 'revise', 'adopt'].includes(operation.kind)) {
           const result = operation.result as GoalVersion; goalRef(result); draft(result);
           const current = index.goals.find(x => x.id === result.goalId)?.versions.find(x => x.version === result.version);
           if (!current || canonical(draft(current)) !== canonical(draft(result)) || current.createdAt !== result.createdAt || !['candidate', 'adopted'].includes(result.status)) fail('invalid_strategy_goals_storage', 503);
+        } else if (operation.kind === 'arrange') {
+          const current = index.arrangements?.find(x => x.id === (operation.result as GoalActionArrangement).id);
+          if (!current || canonical(current) !== canonical(operation.result)) fail('invalid_strategy_goals_storage', 503);
         } else if (operation.kind === 'feedback') {
           const current = index.feedback.find(x => x.id === (operation.result as GoalFeedback).id);
           if (!current || canonical(current) !== canonical(operation.result)) fail('invalid_strategy_goals_storage', 503);
@@ -199,6 +234,16 @@ export class StrategyGoalsStore {
     }
   }
   list(): StrategyGoalsIndex { const { schemaVersion: _, operations: __, ...value } = this.load(); return structuredClone(value); }
+  recordArrangement(input: GoalArrangementInput & GoalMutation, options?: { assertWritable?(): void }): GoalActionArrangement {
+    const body = arrangementInput(input);
+    return this.mutate(input.operationId, 'arrange', body, index => {
+      options?.assertWritable?.(); adopted(index, body.goal);
+      const existing = index.arrangements?.find(value => value.boardOperationId === body.boardOperationId);
+      if (existing) { if (canonical(arrangementInput(existing)) !== canonical(body)) fail('strategy_goal_operation_conflict', 409); return existing; }
+      const value = { ...body, id: randomUUID(), createdAt: new Date().toISOString() };
+      index.schemaVersion = 2; (index.arrangements ??= []).push(value); options?.assertWritable?.(); return value;
+    });
+  }
   getOperation(id: string): GoalOperationReceipt | null { return structuredClone(this.load().operations.find(x => x.operationId === uuid(id)) ?? null); }
   get(id: string): StrategyGoalRecord {
     const record = this.load().goals.find(x => x.id === uuid(id));

@@ -22,8 +22,18 @@ async function environment(t: TestContext, name: string, nodes: { ir?: boolean; 
   const { project } = await request('/api/projects', 'POST', { name: '准确原生交付' }, 201), { task } = await request(`/api/projects/${project.id}/tasks`, 'POST', { name: '原生交付任务' }, 201);
   const settings = await request('/api/automatic-actions/settings'); await request('/api/automatic-actions/settings', 'POST', { operationId: randomUUID(), expectedRevision: settings.revision, nodes: { ...settings.nodes, ...nodes } });
   const route = `/api/projects/${project.id}/tasks/${task.id}`, requestId = randomUUID();
-  const read = async () => { const state = await request(route); const native = state.task.sessionFile ? (await readFile(state.task.sessionFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line)) : []; return { state, native }; };
-  return { root, provider, host, request, project, task, route, requestId, read };
+  const readState = async (state: any) => { const native = state.task.sessionFile ? (await readFile(state.task.sessionFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line)) : []; return { state, native }; };
+  const read = async () => readState(await request(route));
+  let unavailableSnapshotReads = 0;
+  const pollRead = async () => {
+    const response = await host.request(route), state = await response.json();
+    // A fail-closed native snapshot can be unavailable while the owned run is
+    // still appending. This is an observation, never a successful source read.
+    if (response.status === 409 && state.code === 'session_history_unavailable') { unavailableSnapshotReads++; return undefined; }
+    assert.equal(response.status, 200, JSON.stringify(state));
+    return readState(state);
+  };
+  return { root, provider, host, request, project, task, route, requestId, read, pollRead, unavailableSnapshotReads: () => unavailableSnapshotReads };
 }
 for (const { nested, long } of [{ nested: false, long: false }, { nested: true, long: false }, { nested: false, long: true }, { nested: true, long: true }]) test(`actual Pi ${nested ? 'nested' : 'direct'} ${long ? '11KB' : 'short'} declaration retains the exact original receipt and dispatches one original IR follow-up`, { timeout: 25_000 }, async t => {
   const f = await environment(t, `${nested ? 'nested' : 'direct'}-${long ? 'long' : 'short'}`, { ir: true }); let irCalls = 0;
@@ -31,7 +41,8 @@ for (const { nested, long } of [{ nested: false, long: false }, { nested: true, 
   f.provider.setResponder(context => { if (context.availableTools.includes('read_sap_method_source')) { irCalls++; return { text: JSON.stringify({ kind: 'none', reason: '合成任务没有可迁移方法，不制造资产。' }) }; } return context.recentToolResults.length ? { text: '合成结束整理已明确，原状态分别保留。' } : { calls: [{ name: nested ? 'codemode' : 'declare_analysis_delivery', arguments: nested ? { code: `text(await tools.declare_analysis_delivery(${JSON.stringify(payload)}));` } : payload }] }; });
   await f.request(f.route + '/messages', 'POST', { requestId: f.requestId, text: '明确结束并整理此合成任务。' }, 202);
   let saved: Awaited<ReturnType<typeof f.read>> | undefined; const deadline = Date.now() + 6000;
-  do { saved = await f.read(); if (saved.state.task.lastRun?.status === 'completed' && saved.native.some(entry => entry.customType === 'optracall.automatic-action' && entry.data.node === 'assets' && entry.data.phase === 'decision')) break; await delay(20); } while (Date.now() < deadline);
+  do { const current = await f.pollRead(); if (current) saved = current; if (saved?.state.snapshot.status === 'idle' && saved.state.task.lastRun?.status === 'completed' && saved.native.some(entry => entry.customType === 'optracall.automatic-action' && entry.data.node === 'assets' && entry.data.phase === 'decision')) break; await delay(20); } while (Date.now() < deadline);
+  assert.equal(saved?.state.snapshot.status, 'idle', 'the original owner must finish within the unchanged observation deadline');
   assert.equal(saved!.state.task.lastRun?.status, 'completed'); assert.equal(irCalls, 1); assert.deepEqual(f.provider.errors, []);
   const exact = await readTaskAnalysisDelivery(saved!.state.project as ProjectRecord, saved!.state.task as TaskRecord, f.requestId); assert.ok(exact); assert.equal(exact.requestId, f.requestId); assert.equal(exact.projectId, f.project.id); assert.equal(exact.taskId, f.task.id);
   const custom = saved!.native.filter(entry => entry.customType === 'optracall.analysis-delivery'); assert.equal(custom.length, 1); assert.deepEqual(exact, custom[0].data);
@@ -70,7 +81,7 @@ for (const { nested, long } of [{ nested: false, long: false }, { nested: true, 
     }
   }
   await f.request(f.route + '/messages', 'POST', { requestId: f.requestId, text: '明确结束并整理此合成任务。' }, 202); assert.equal(irCalls, 1, 'original request replay must not rerun the nested declaration or its follow-up');
-  await writeFile(path.join(f.root, 'receipt.json'), JSON.stringify({ nested, long, native: saved!.state.task.sessionFile, projectId: exact.projectId, taskId: exact.taskId, requestId: exact.requestId, sessionId: exact.sessionId, toolCallId: exact.toolCallId, irCalls, sourceRetainedExactly: true, originalSavedConfirmation: confirmations[0].id, sdkArgumentsOmitted: nested && long, forgedCopiesRejected: nested ? long ? 6 : 10 : 0, professionalCorrectness: 'NOT_RUN' }, null, 2));
+  await writeFile(path.join(f.root, 'receipt.json'), JSON.stringify({ nested, long, native: saved!.state.task.sessionFile, projectId: exact.projectId, taskId: exact.taskId, requestId: exact.requestId, sessionId: exact.sessionId, toolCallId: exact.toolCallId, irCalls, sourceRetainedExactly: true, originalSavedConfirmation: confirmations[0].id, sdkArgumentsOmitted: nested && long, forgedCopiesRejected: nested ? long ? 6 : 10 : 0, unavailableSnapshotReads: f.unavailableSnapshotReads(), professionalCorrectness: 'NOT_RUN' }, null, 2));
 });
 
 test('a schema-valid over-budget declaration is rejected before saving; repeated rejection and a corrected same-request save leave one bound reusable original', { timeout: 25_000 }, async t => {

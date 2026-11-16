@@ -61,14 +61,29 @@ export interface StrategyGoalsIndex {
   goals: StrategyGoalRecord[];
   relations: GoalRelation[];
   feedback: GoalFeedback[];
+  arrangements?: GoalActionArrangement[];
 }
+export interface GoalActionArrangement {
+  id: string;
+  goal: GoalRef;
+  projectId: string;
+  title: string;
+  scope: string;
+  checks: string[];
+  actions: import('../../extensions/business-plugins/decision-board/types.ts').BoardArrangedActionRef[];
+  source: import('../../extensions/business-plugins/decision-board/types.ts').BoardAuthorizationSource;
+  boardOperationId: string;
+  quoteProvenance: import('../agent/quoted-decisions.ts').UserQuoteProvenance;
+  createdAt: string;
+}
+export type GoalArrangementInput = Omit<GoalActionArrangement, 'id' | 'createdAt'>;
 export interface GoalMutation { operationId: string }
 export interface GoalRevisionInput extends GoalDraftInput, GoalMutation { expectedVersion: number }
 export interface GoalAdoptionInput extends GoalMutation { expectedVersion: number; decision: string }
 export interface GoalOperationReceipt {
   operationId: string;
   requestHash: string;
-  kind: 'create' | 'revise' | 'adopt' | 'relate' | 'revise-relation' | 'feedback';
+  kind: 'create' | 'revise' | 'adopt' | 'relate' | 'revise-relation' | 'feedback' | 'arrange';
   completedAt: string;
-  result: GoalVersion | GoalRelation | GoalFeedback;
+  result: GoalVersion | GoalRelation | GoalFeedback | GoalActionArrangement;
 }
