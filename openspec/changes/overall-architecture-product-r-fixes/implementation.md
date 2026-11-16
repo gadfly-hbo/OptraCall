@@ -42,3 +42,13 @@
 用户接受建议并明确“执行1-4”，本轮开始Git/CI/合并、迁移与兼容回退准备、逐机采用和真实Agent联合验收。上文“未授权/未执行”为前一候选收尾时点事实，按本次[执行清单](delivery.md)继续；保留固定候选与全部历史，不重复打开已闭合工程差额。当前目标是交付准确版本并补真实使用/专业/运行证据，不预设用户验收或经营改善。执行中逐项更新该清单，正式采用与真实模型输入分别固定范围。
 
 本轮工程Git已集中PR76交付：准确head77da092及main f33a2c5两轮实际CI均2734 PASS/197 SKIP/0 FAIL、非作者逐项身份核对0未解决。Mini同机before备份与独立兼容1546a5a的原launcher读回已完成，正式切换尚待本归档提交自身main CI和停前重核；Book当前连通不足。真实模型三Task及原Task专业回应已启动，实际失败/修订和新发现不覆盖历史；后续清单状态集中在本轮`.local/overall-architecture-delivery-acceptance/execution-status.json`及原始分项回执，工程归档快照见[delivery](delivery.md)。
+
+## 2026-11-17 归档CI只读轮询观察修正
+
+准确归档main `f95de231baf238c1ab7326c8f526b1cd9403f38e` 的run43925378588实际失败：2931 tests、2733 PASS、197 SKIP、1 FAIL；构建未执行、audit跳过。原`project-files-host.test.ts`嵌套报告用例在`settled`轮询的单次Task GET收到409/`session_history_unavailable`即断言失败，尚未进入成果断言。原日志/非作者报告保存在本轮`preflight/review/archive-main-ci/`；底层具体snapshot拒绝原因未记录，不能认定与历史check-03同根或将原失败改判PASS。
+
+本次只修改该测试的本地观察助手：沿原HTTP请求路径，仅对该只读GET及准确409 code在原20秒期限内继续观察；持久不可读仍超时失败并保留最后拒绝，其他409/500立即失败。没有重放POST/模型/原生写入，没有改Host快照拒绝、SDK或任何报告绑定/原件/同名覆盖/取消断言。临时不稳定读不冒已读，成功仍须准确requestId终态idle及全部原成果断言。
+
+目标Host/原生SDK报告及只读快照8项通过；另用隔离虚拟时钟/受控响应核临时拒绝后成功、持久拒绝超时、其他409和500不重试4个观察契约反例（仅助手证据，不当真实SDK）。主main旧依赖缺pg导致的首次本地命令失败单列为环境失败；改在独立checkout使用已获准原锁定依赖的同版本副本，不改主开发依赖/正在服务SDK。记录在`.local/overall-architecture-delivery-acceptance/ci-read-poll-fix/`，普通工程纠错沿本记录，不另建spec/Demo/验证平台。
+
+该增量需要新源码/测试清单（原43项加此既有测试，共44项）、相称类型检查和非作者增量复核，随后核实际新main CI才能采用；f95红灯及全部历史失败保留。已关闭PM/R/E-01工程产品范围、原UI和运行代码均保持，不借修CI重新造功能或削弱保护。
