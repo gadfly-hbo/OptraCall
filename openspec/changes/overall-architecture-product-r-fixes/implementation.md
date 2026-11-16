@@ -40,3 +40,5 @@
 ## 2026-11-17 当前交付与采用授权
 
 用户接受建议并明确“执行1-4”，本轮开始Git/CI/合并、迁移与兼容回退准备、逐机采用和真实Agent联合验收。上文“未授权/未执行”为前一候选收尾时点事实，按本次[执行清单](delivery.md)继续；保留固定候选与全部历史，不重复打开已闭合工程差额。当前目标是交付准确版本并补真实使用/专业/运行证据，不预设用户验收或经营改善。执行中逐项更新该清单，正式采用与真实模型输入分别固定范围。
+
+本轮工程Git已集中PR76交付：准确head77da092及main f33a2c5两轮实际CI均2734 PASS/197 SKIP/0 FAIL、非作者逐项身份核对0未解决。Mini同机before备份与独立兼容1546a5a的原launcher读回已完成，正式切换尚待本归档提交自身main CI和停前重核；Book当前连通不足。真实模型三Task及原Task专业回应已启动，实际失败/修订和新发现不覆盖历史；后续清单状态集中在本轮`.local/overall-architecture-delivery-acceptance/execution-status.json`及原始分项回执，工程归档快照见[delivery](delivery.md)。

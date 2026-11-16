@@ -12,7 +12,7 @@
 
 ## 执行清单与完成条件
 
-- [ ] Git：确认准确暂存清单、工程文档增量与公开内容；提交/推送单一候选、集中PR，检查实际head CI及合并前最新main；通过后squash、安全快进本地主main，核main push CI。
+- [x] Git：确认准确暂存清单、工程文档增量与公开内容；提交/推送单一候选、集中PR，检查实际head CI及合并前最新main；通过后squash、安全快进本地主main，核main push CI。PR76准确head77da092、main f33a2c5的实际CI均通过，见下方归档快照；本记录自身的后续文档提交CI另核。
 - [ ] 采用准备：重核两机实际code/data/projects/state根、当前实例、工作树及忙闲；只在安全窗口经原launcher停止，不强杀新工作或自动重放旧Task。
 - [ ] 保全：各自设备同机备份最新dataRoot/projectsRoot及必要控制/入口；核副本可读与逐件hash。凭据和业务根不跨机搬运、不入公开Git；旧库不覆盖后来新增记录。
 - [ ] 迁移/回退：先副本验证当前Board4→5/GSA1→2实际延迟迁移边界和新增记录保全；无需写迁移时不强制升级。准备并实测能读取新结构的兼容代码回退包，旧96不能直接回退读取新结构。准备通过前不切正式服务。
@@ -30,3 +30,21 @@ Host负责准确环境/版本、权限、状态、原资料与成果持久化；
 本地证据及临时材料统一在`.local/overall-architecture-delivery-acceptance/`；同机备份/兼容回退包置各设备持久目录，准确路径与hash写回执。正式服务/数据和真实模型验证分别取证，不把环境安装、合成Provider、读取次数或报告格式当专业通过。
 
 本轮采用和模型验收回执随后按准确观察时点追加；本文件是执行授权与验收安排，不提前声明CI/合并/部署/迁移或产品验收已经完成。
+
+## 工程原位归档快照（2026-11-17）
+
+代码候选已以`77da092df7aba8b7470b8be4c33f0d1dbc07c931`交付[PR76](https://github.com/gadfly-hbo/OptraCall/pull/76)，合并前重新fetch确认main仍96，经squash为`f33a2c5f8312cfd6ee337c78428f4e1cd5617963`；两提交整树同为`74edd1c5c669caa5109a877b675a64c052650e15`，本地主main安全快进，原feature分支及其工作树保留。公开54件清单只比原53件增加本delivery记录，源码/测试仍原43件准确摘要。
+
+PR Check run`43919060490`与main push Check run`43921125268`均经非作者从官方原日志独立核对准确event/head/checkout/tree及终态：2931 tests、2734 PASS、197 SKIP、0 FAIL、0取消，会话边界/类型/构建与high门槛audit通过。两项moderate保留，不解释为网络/业务故障。本机2820/111另列；Linux跳过87个macOS/arm64/受管条件分支，同时执行Mac原跳过的平台反例1个，净多86，不曾改测试配置或断言。原日志及独立回执在`.local/overall-architecture-delivery-acceptance/preflight/review/{ci,main-ci}/`。
+
+采用准备已独立核到以下限定范围：Mini同机before备份`/Users/bendandebaba/.local/share/optracall/backups/product-gaps-20261117-before`，5817文件/12链接逐件核对，备份期间及源/副本/外部资产差异0；停前仍须再核并作stopped备份。实际Board为schema4且业务表0行，GSA索引不存在，不能冒称非空正式业务迁移通过。二级副本空Board4→5及合成GSA1→2、旧行/新记录、取消/幂等/重开均验证；缺失的原GSA迁移为NOT_APPLICABLE。
+
+独立兼容回退release为`/Users/bendandebaba/.local/share/optracall/releases/overall-gaps-compat-20261117-9607-storage`，本地提交`1546a5ad05016538b15ffaed3addf4ea4f7b826a`、tree`318c800f314252301cf45487fabbec92b7784f31`；从96只移植Board/GSA Store、类型及来源/GSA只读展示共6文件，源码干净、stamp准确、push禁用。SDK/锁文件不改，实际Pi/transport文件逐件与原96release相同。作者两套及非作者另套schema5/2副本均经原launcher start→HTTP/资源→stop，源及副本内容保持；正确原Store回归32/32。它保留新结构数据，旧业务runtime不含新Agent安排/无Case撤回等行为，不能当新功能完整回退；旧96不可直接读取5/2，不得恢复旧库覆盖新工作。包及独立限制见本轮`rollback-prep/`、`preflight/review/rollback/`。
+
+此归档时点正式服务尚未采用：Mini旧96仍运行；Book本次两次SSH超时，Tailscale只读状态为offline，未核其当前业务/运行或迁移，等待连通再同机保全。Mini原正式PPT解释器及LibreOffice依赖只读可见，正常渲染尚待真实调用，不改原隔离PPT FAIL。
+
+真实Agent联合验收在同机隔离合成根运行，准确选中MiniMax-M3.1-Flash/minimax-cn、anthropic线路、配置revision5，原生实际high；没有改变配置/SDK或发送真实业务资料。轻量准备首轮格式400保留，一次技术格式补正后由模型自行形成三Task方案，原确认创建/启动、所选Skill实际读/使用、文件/聊天发现及原作者计算审查/另存稿已有实际证据。独立专业复核发现真实解释错误并交回原Task回应/修订；原Provider500失败及一份未绑定中间稿删除/备份事件分别保留，不能用后稿恢复覆盖历史，也不外推旧正式业务损坏。专业复查、自动节点、完整资产纠错新任务复用及用户验收尚未完成；本轮不是重新测评用户免测Skill，不宣称专业增益或经营改善。
+
+本次归档增量只更新工程文档，不改变已审源码/测试或运行契约；做文档一致性/引用/非作者增量复核，实际最终main提交仍按原workflow运行CI。**正式采用只选择本归档记录所在main提交的成功push CI，不能把f33的CI冒作后来提交通过。**
+
+上方未完成框是归档时执行快照。后续执行清单与准确最终main/运行提交、停前备份、逐机采用、专业验收及原失败，由`.local/overall-architecture-delivery-acceptance/execution-status.json`、`execution-events.jsonl`和分项原始回执持续维护；不为回执自身提交递归更新运行服务，不将归档提交写成已经安装。最终工程/Git、模型采用、专业、运行、用户验收及经营效果分别结论。
