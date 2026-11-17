@@ -1,0 +1,24 @@
+{
+  "kind": "PM-V12-01 affected optional-background-scope UI Demo",
+  "baseCandidate": "dfeb5b6534723e5cf9e27c88112f828573df543a431db146276fd43deac995a3",
+  "productSources": [
+    {
+      "path": "src/host/ui/App.tsx",
+      "sha256": "72f81c6cf90dd40e9f1452fa3f5ad22fe86122eb8568e9d531f864792069691b"
+    },
+    {
+      "path": "src/host/ui/StrategyDiscussionPanel.tsx",
+      "sha256": "e15407f272cde0356571bf714b7512342d2fadc96b22c6b643dcc615a4a2b3f6"
+    },
+    {
+      "path": "src/host/ui/styles.css",
+      "sha256": "d3a4387a6e3c28e68b7b6b97590fde7083ebdaab79114b5e8be2213e3cac2e03"
+    },
+    {
+      "path": "src/host/ui/strategy-goals.css",
+      "sha256": "5c7c31208bcbfe8c0d1ebd8e72b286e9bfe2553989cd45c3bc60e95e031f5630"
+    }
+  ],
+  "sourceWrite": false,
+  "runtime": "browser stub only; no Host/Pi/Provider"
+}

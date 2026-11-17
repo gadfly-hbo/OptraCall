@@ -602,3 +602,21 @@ test('Host resolves exact model references before grant and exposes the same can
   const reread = await f.host.request('GET', f.sourcesPath); assert.deepEqual((reread!.body.sources as DbLinkSource[])[0].modelExport.targets, resolved!.body.canonicalTargets);
   const existing = await f.host.request('GET', `/api/projects/${f.project.id}/db-link/model-targets?target=${encodeURIComponent(dbLinkModelOutlet(configuration))}`); assert.deepEqual(existing?.body.targets, [dbLinkModelOutlet(configuration)]);
 });
+
+test('Host manifest-only source qualification reads original owner and export metadata without opening fixed row chunks', async t => {
+  const driver: DbLinkHostOptions['driver'] = { probe: async () => catalog.observation, catalog: async () => structuredClone(catalog), openQuery: async (_configuration, request) => { await request.onColumns(terminal().columns, catalog); await request.onRows([['123.4500']]); return terminal({ rowsReceived: 1, serverRowCount: '1' }); } };
+  const f = await fixture(t, { driver }), saved = await f.save(); await f.grant(saved.id);
+  const queried = await f.host.port(f.project.id, f.task.id, configuration)('query', { connectionId: saved.id, sql: 'select amount from public.orders' }, callContext()), resultId = queried.details.resultId as string;
+  const results = new DbLinkResults({ dataRoot: f.projects.dataRoot, projectDirectory: () => f.project.rootPath, assertAccess: () => {} });
+  const receipt = (await results.list({ projectId: f.project.id, taskId: f.task.id, requestId: 'metadata-test', operationId: 'metadata-test' })).find(value => value.id === resultId)!;
+  const loaded = await results.readSourceManifest(receipt.owner, resultId), chunk = path.join(f.project.rootPath, path.posix.dirname(receipt.relativePath), loaded.manifest.chunks[0]!.file);
+  await fs.rename(chunk, chunk + '.kept');
+  const metadata = await (f.host as any).resultManifestSource(f.project.id, f.task.id, resultId, configuration, callContext());
+  assert.equal(metadata.receipt.id, resultId); assert.equal(metadata.manifest.owner.taskId, f.task.id);
+  assert.equal(metadata.manifest.source.modelExport.results, true);
+  assert.equal('files' in metadata, false, 'this facet cannot expose row file bodies as metadata');
+  await assert.rejects(f.host.materialSource(f.project.id, f.task.id, resultId, configuration, callContext()), /ENOENT|db_result/);
+  await assert.rejects((f.host as any).resultManifestSource(f.project.id, f.task.id, resultId, { ...configuration, model: 'not-authorized' }, callContext()), /db_model_export_not_authorized/);
+  const other = await f.projects.createTask(f.project.id, { name: 'different original owner' });
+  await assert.rejects((f.host as any).resultManifestSource(f.project.id, other.id, resultId, configuration, callContext()), /db_result_foreign_owner/);
+});

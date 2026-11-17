@@ -123,7 +123,7 @@ test('enterprise and declared department scope use the original Studio enterpris
   validateStrategyGoalScope({ kind: 'department', id: 'member-team', name: '用户声明的会员部', enterpriseId: enterprise.id }, directory);
   validateStrategyGoalScope({ kind: 'personal', id: 'self', name: '个人职责' }, directory);
   assert.throws(() => validateStrategyGoalScope({ kind: 'enterprise', id: randomUUID(), name: '伪企业' }, directory), /strategy_goal_scope_unavailable/);
-  assert.throws(() => validateStrategyGoalScope({ kind: 'department', id: 'member-team', name: '脱离企业的部门' }, directory), /strategy_goal_scope_unavailable/);
+  validateStrategyGoalScope({ kind: 'department', id: 'member-team', name: '上层组织未知的部门' }, directory);
   assert.throws(() => validateStrategyGoalScope({ kind: 'department', id: 'member-team', name: '伪企业部门', enterpriseId: randomUUID() }, directory), /strategy_goal_scope_unavailable/);
   assert.equal(directory.list().enterprises.length, 1);
 });

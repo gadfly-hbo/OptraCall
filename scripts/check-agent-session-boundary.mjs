@@ -13,6 +13,7 @@ const projectAgentOwners = new Set([
   'tests/agent-sessions.test.ts',
   'tests/analysis-python.test.ts', // DB01/02/05: real Pi, synthetic provider and private environment/profile lifecycle.
   'tests/project-runtime.test.ts',
+  'tests/strategy-discussion-runtime.test.ts', // v1.2 isolated official Pi sealed-tool/native-resume proof only.
   'tests/agent-candidate-runtime.test.ts', // M3.1 isolated synthetic SDK proof only.
   'tests/personal-context-runtime.test.ts', // M4 isolated direct/nested SDK + callback transport proof only.
   'tests/sdk-tool-context-runtime.test.ts', // R1 frozen-source/qualification proof through the existing ProjectAgent seam only.
@@ -72,7 +73,7 @@ const historyReaders = new Set(['src/host/project-history.ts', 'tests/project-mi
 // decision-board extraction follows the same Host-owned adapter pattern.
 const domainRegistrars = new Set(['tests/automatic-delivery-actions.test.ts', // V020: original-domain lease/stop behavior only, no runtime constructor.
 'tests/attached-postprocessing-v020.test.ts', // V020: public parent cleanup retry; the original Host domain owns its lease, no SDK constructor.
-'src/host/server.ts', 'src/host/requirement-sessions.ts', 'src/host/requirement-public-search.ts', 'src/host/verification-sessions.ts', 'src/host/verification-host.ts', 'src/host/decision-board-sessions.ts', 'src/host/ppt-refiner-sessions.ts', 'src/host/sap-method-sessions.ts', 'src/host/studio-sessions.ts', 'tests/agent-sessions.test.ts', 'tests/agent-session-execution.test.ts', 'tests/subagent-runtime.test.ts']); // Exact Host domain registrations, never SDK runtime ownership.
+'src/host/server.ts', 'src/host/strategy-discussion-host.ts', 'src/host/requirement-sessions.ts', 'src/host/requirement-public-search.ts', 'src/host/verification-sessions.ts', 'src/host/verification-host.ts', 'src/host/decision-board-sessions.ts', 'src/host/ppt-refiner-sessions.ts', 'src/host/sap-method-sessions.ts', 'src/host/studio-sessions.ts', 'tests/agent-sessions.test.ts', 'tests/agent-session-execution.test.ts', 'tests/subagent-runtime.test.ts']); // Exact Host domain registrations, never SDK runtime ownership.
 const connectionProbeOwners = new Set(['src/host/server.ts', 'tests/fixtures/runtime-cases.mjs']);
 // Launcher/update tests load their isolated fixture checkout by absolute URL.
 const checkoutLoaders = new Set(['scripts/trial-launcher.mjs', 'tests/trial-launcher.test.ts', 'tests/trial-update.test.ts']);

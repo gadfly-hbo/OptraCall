@@ -1,3 +1,9 @@
+import type { UsageContext } from '../usage-context-types.ts';
+import { resolveNewUsageContext } from '../usage-context-types.ts';
+import { suggestProjectPlanUsage } from './project-plan-usage-context.ts';
+import * as goalApi from './strategy-goals-client.ts';
+import { UsageContextFields, usageKindLabels } from './UsageContextSettingsPage.tsx';
+import { readUsageContextSettings } from './usage-context-client.ts';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { GoalRef } from '../strategy-goals-types.ts';
 import type { DbLinkPlanningSource } from '../db-link-planning.ts';
@@ -14,6 +20,7 @@ import './project-plan.css';
 export interface ProjectPlanPageProps {
   project: ClientProject;
   initialGoal?: GoalRef;
+  initialUsageContext?: UsageContext;
   initialState?: ProjectPlanState;
   initialCapabilities?: ProjectPlanCapabilities;
   newTaskIntent?: string;
@@ -35,11 +42,11 @@ function initialPlan(project: ClientProject): ProjectPlanContent {
 }
 type Pending = { kind: 'draft' | 'prepare'; input: ProjectPlanDraftInput } | { kind: 'confirm'; input: ProjectPlanConfirmInput };
 const preparationLabel = { running: 'Agent 正在轻量梳理，尚未保存完成草稿。', completed: 'Agent 已完成轻量梳理，结果仍是待确认草稿。', cancelled: '本次梳理已取消，未据此确认或启动分析。', failed: '本次梳理失败，保留原方案与失败记录。', unknown: '本次梳理结果 UNKNOWN，先核对原操作，不自动重发。' };
-export function ProjectPlanPage({ project, initialGoal, initialState, initialCapabilities, newTaskIntent, onBack, onConfirmed, onOpenTask, onManageCapabilities }: ProjectPlanPageProps) {
+export function ProjectPlanPage({ project, initialGoal, initialUsageContext, initialState, initialCapabilities, newTaskIntent, onBack, onConfirmed, onOpenTask, onManageCapabilities }: ProjectPlanPageProps) {
   const id = useId(), scope = useRef(project.id), alive = useRef(true); scope.current = project.id;
   const [state, setState] = useState<ProjectPlanState | undefined>(initialState), [catalog, setCatalog] = useState(initialCapabilities || emptyCapabilities());
   const [catalogKnown, setCatalogKnown] = useState(!!initialCapabilities);
-  const [plan, setPlan] = useState<ProjectPlanContent>(() => structuredClone(initialState?.draft?.plan || initialPlan(project)));
+  const [plan, setPlan] = useState<ProjectPlanContent>(() => structuredClone(initialState?.draft?.plan || suggestProjectPlanUsage(initialPlan(project), initialUsageContext, 'goal')));
   const [entranceGoal, setEntranceGoal] = useState<GoalRef | undefined>(() => initialGoal ? structuredClone(initialGoal) : undefined);
   const loadedProject = useRef<string | undefined>(undefined);
   const [loading, setLoading] = useState(!initialState || !initialCapabilities), [busy, setBusy] = useState(false), [dirty, setDirty] = useState(!initialState?.draft), [pending, setPending] = useState<Pending>();
@@ -58,7 +65,7 @@ export function ProjectPlanPage({ project, initialGoal, initialState, initialCap
     alive.current = true; let active = true; const projectId = project.id;
     loadedProject.current = undefined; setEntranceGoal(initialGoal ? structuredClone(initialGoal) : undefined);
     setLoading(true); setError(''); setNotice(''); setRecovery(''); setPending(undefined); setBusy(false); setStopping(false);
-    setState(initialState?.projectId === projectId ? initialState : undefined); setPlan(structuredClone(initialState?.projectId === projectId && initialState.draft ? initialState.draft.plan : initialPlan(project))); setDirty(!initialState?.draft);
+    setState(initialState?.projectId === projectId ? initialState : undefined); setPlan(structuredClone(initialState?.projectId === projectId && initialState.draft ? initialState.draft.plan : suggestProjectPlanUsage(initialPlan(project), initialUsageContext, 'goal'))); setDirty(!initialState?.draft);
     setCaseDirectory([]); setCaseStorage(null); setSelectedCase(null); setCaseCreating(false); setCaseBusy(false); setCaseNotice(''); setConnectionStorageError('');
     try { connection.current = readPendingProjectCase(window.sessionStorage, projectId); setCaseConnection(connection.current); }
     catch { connection.current = null; setCaseConnection(null); setConnectionStorageError('原Case关联尝试暂存不可核对，未覆盖或另建。请保留浏览器记录，先核对原Case操作；查询和其他独立工作可继续。'); }
@@ -68,10 +75,10 @@ export function ProjectPlanPage({ project, initialGoal, initialState, initialCap
       if (directory.status === 'fulfilled') setCaseDirectory(directory.value.cases);
       else setCaseNotice('原Case目录暂不可读取；不会据此猜测或建立Case。');
     });
-    void Promise.allSettled([api.read(projectId), api.capabilities(projectId)]).then(results => {
+    void Promise.allSettled([api.read(projectId), api.capabilities(projectId), readUsageContextSettings()]).then(results => {
       if (!active || !current(projectId)) return;
-      const [saved, capabilities] = results;
-      if (saved.status === 'fulfilled') { setState(saved.value); if (saved.value.draft) { setPlan(structuredClone(saved.value.draft.plan)); setDirty(false); } }
+      const [saved, capabilities, defaultUsage] = results;
+      if (saved.status === 'fulfilled') { setState(saved.value); if (saved.value.draft) { setPlan(structuredClone(saved.value.draft.plan)); setDirty(false); } else if (saved.value.revision === 0 && !saved.value.confirmed && !saved.value.history.length) { const context = initialUsageContext || (defaultUsage.status === 'fulfilled' ? defaultUsage.value.context : undefined); if (context) setPlan(previous => suggestProjectPlanUsage(previous, context, initialUsageContext ? 'goal' : 'default')); } }
       if (capabilities.status === 'fulfilled') { setCatalog(capabilities.value); setCatalogKnown(true); }
       else { setCatalog(emptyCapabilities()); setCatalogKnown(false); }
       if (saved.status === 'rejected' || capabilities.status === 'rejected') setError(api.projectPlanError(saved.status === 'rejected' ? saved.reason : capabilities.status === 'rejected' ? capabilities.reason : undefined));
@@ -117,6 +124,16 @@ export function ProjectPlanPage({ project, initialGoal, initialState, initialCap
     setDirty(true); setNotice('已加入一条待确认的新任务草稿，原输入和已有选择保留；请核对所选任务与综合责任。');
   }, [loading, project.id, newTaskIntent, readonly]);
   const sourceGoal = plan.goalContext?.goal ?? entranceGoal;
+  useEffect(() => {
+    if (loading || plan.usageContextOrigin === 'explicit' || plan.usageContext && plan.usageContextOrigin === undefined) return;
+    let active = true; const projectId = project.id;
+    if (sourceGoal) void goalApi.list().then(index => {
+      const exact = index.goals.find(record => record.id === sourceGoal.goalId)?.versions.find(version => version.version === sourceGoal.version);
+      if (!exact) throw new Error('准确目标背景暂不可读取，原输入保留；未换用今日默认。');
+      if (active && current(projectId)) setPlan(value => suggestProjectPlanUsage(value, resolveNewUsageContext({ goal: exact }), 'goal'));
+    }).catch(fault => { if (active && current(projectId)) setError(fault instanceof Error ? fault.message : '准确目标背景暂不可读取，原输入保留。'); });
+    return () => { active = false; };
+  }, [loading, project.id, sourceGoal?.goalId, sourceGoal?.version, plan.usageContextOrigin]);
   const matchesSourceGoal = (binding: { primary: GoalRef; related?: GoalRef[] }) => !sourceGoal || [binding.primary, ...(binding.related || [])].some(goal => goal.goalId === sourceGoal.goalId && goal.version === sourceGoal.version);
   function problem(): string {
     if (!plan.request.trim()) return '请先说明本次诉求。';
@@ -288,6 +305,7 @@ export function ProjectPlanPage({ project, initialGoal, initialState, initialCap
     <div className="project-plan-tools"><button type="button" className="text-button" disabled={busy} onClick={() => { void inspect(); }}>只读核对原结果</button>{state?.draft && dirty && <button type="button" className="text-button" disabled={locked} onClick={() => { setPlan(structuredClone(state.draft!.plan)); setDirty(false); setNotice('已采用当前保存的草稿，原已确认版本保持独立。'); }}>采用已保存草稿 v{state.draft.version}</button>}<span className="case-help">{state?.draft ? `草稿 v${state.draft.version}${dirty ? ' · 本页有未保存修改' : ''}` : '本项目尚无方案草稿'}{confirmed ? ` · 已确认 v${confirmed.planVersion}` : ''}</span></div>
     {pending && <section className="project-plan-section project-plan-attention"><h2>先核对原操作</h2><p>原输入与操作保持不变。本页不会换编号自动重发，也不会因读取状态启动任务。</p><button type="button" className="secondary-button" disabled={busy} onClick={() => { void inspect(pending); }}>重新只读核对</button>{recovery === 'conflict' && <button type="button" className="text-button" disabled={busy} onClick={() => { setPending(undefined); setDirty(true); setRecovery(''); setNotice('原意图保留在原记录，本页修改需另存为新草稿；尚未执行。'); }}>将本页修改另存新稿</button>}</section>}
     <fieldset className="project-plan-editor" disabled={locked}>
+      <details className="project-plan-section"><summary>本次用途 · {plan.usageContext ? usageKindLabels[plan.usageContext.kind] : '尚未记录，可直接工作'}</summary><UsageContextFields id={`${id}-usage`} value={plan.usageContext || null} disabled={locked} onChange={context => edit(value => { const next = { ...value }; if (context) { next.usageContext = context; next.usageContextOrigin = 'explicit'; } else { delete next.usageContext; delete next.usageContextOrigin; } return next; })} /><p className="case-help">本次新方案的背景，不是资料权限；已确认版本和原任务仍保留当时范围。</p></details>
       <div className="project-plan-grid"><section className="project-plan-section"><h2>本次诉求与基本前提</h2><label htmlFor={`${id}-request`}>本次要解决什么问题</label><textarea id={`${id}-request`} value={plan.request} rows={4} onChange={event => edit(value => ({ ...value, request: event.target.value }))} />
         <label htmlFor={`${id}-premises`}>已有说明与基本前提（每行一项，可留空）</label><textarea id={`${id}-premises`} value={plan.premises.join('\n')} rows={3} onChange={event => edit(value => ({ ...value, premises: event.target.value.split('\n') }))} />
         <p className="case-help">这里只核诉求、清单、已有说明和基本前提，不提前全面读取明细、试算或归因。</p>

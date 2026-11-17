@@ -213,6 +213,13 @@ export class DbLinkResults {
     await this.tail;
     return structuredClone((await this.index()).filter(value => value.owner.projectId === owner.projectId));
   }
+  /** Host source-qualification metadata only. No row/value chunk is opened. */
+  async readSourceManifest(owner: DbResultOwner, id: string): Promise<{ receipt: DbResultReceipt; manifest: DbResultManifest }> {
+    const loaded = await this.readManifest(owner, id);
+    if (loaded.receipt.owner.taskId !== owner.taskId) throw new DbLinkResultError('db_result_foreign_owner');
+    await this.options.assertAccess(owner, 'read');
+    return structuredClone({ receipt: loaded.receipt, manifest: loaded.manifest });
+  }
   private async readManifest(owner: DbResultOwner, id: string): Promise<{ receipt: DbResultReceipt; manifest: DbResultManifest; directory: string; file: string; manifestBytes: number }> {
     validateOwner(owner); await this.options.assertAccess(owner, 'read'); await this.tail;
     if (!uuid(id)) throw new DbLinkResultError('db_result_not_found');

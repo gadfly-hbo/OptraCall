@@ -1,5 +1,6 @@
-import type { GoalRef } from './strategy-goals-types.ts';
+import type { GoalRef, GoalBasis } from './strategy-goals-types.ts';
 import type { DbLinkPlanningSource } from './db-link-planning.ts';
+import type { UsageContext, UsageContextOrigin } from './usage-context-types.ts';
 
 export interface ProjectPlanCapabilityRef {
   kind: 'skill' | 'sap-method' | 'connector';
@@ -44,6 +45,12 @@ export interface ProjectPlanCoverage {
 }
 export interface ProjectPlanContent {
   request: string;
+  /** Frozen background for this work; absence in older plans remains unknown. */
+  usageContext?: UsageContext;
+  /** Distinguishes a suggestion from a person's explicit current-work choice. */
+  usageContextOrigin?: UsageContextOrigin;
+  /** References to the original relationship/feedback revisions, never a new authority. */
+  goalBasis?: GoalBasis;
   premises: string[];
   materials: ProjectPlanMaterialRef[];
   coverage: ProjectPlanCoverage[];

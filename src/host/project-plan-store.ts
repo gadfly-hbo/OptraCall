@@ -2,6 +2,8 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalDataContextValue } from './project-data-context-request.ts';
 import { safePath, readBytes, atomicJson, directory, isMissing } from './project-data-context-io.ts';
+import { parseUsageContext, parseUsageContextOrigin, type UsageContext, type UsageContextOrigin } from './usage-context-types.ts';
+import { parseGoalBasis, type GoalBasis } from './strategy-goals-types.ts';
 import type { ProjectPlanState, ProjectPlanDraftInput, ProjectPlanPreparedDraftInput, ProjectPlanMeceReview, ProjectPlanDraftResult, ProjectPlanConfirmInput, ProjectPlanConfirmResult, ProjectPlanEffects, ProjectPlanTaskResultInput, ProjectPlanContent, ProjectPlanVersion, ProjectPlanConfirmation, ProjectPlanTaskReceipt } from './project-plan-types.ts';
 export class ProjectPlanFault extends Error {
   code: string; status: number;
@@ -19,7 +21,10 @@ const canonical = (value: unknown): string => canonicalDataContextValue(value, (
 const digest = (value: unknown): string => createHash('sha256').update(canonical(value)).digest('hex');
 const isGoal = (value: unknown): boolean => object(value) && known(value, ['goalId', 'version']) && uuid(value.goalId) && integer(value.version) && value.version > 0;
 export function parseProjectPlanContent(value: unknown): ProjectPlanContent {
-  if (!object(value) || !known(value, ['request', 'premises', 'materials', 'coverage', 'tasks', 'taskMode', 'summaryTaskKey', 'dependencies', 'caseContext', 'goalContext', 'requirementRef']) || !text(value.request) || !value.request.trim() || !Array.isArray(value.premises) || value.premises.some(item => !text(item)) || !Array.isArray(value.materials) || !Array.isArray(value.coverage) || !Array.isArray(value.tasks) || !Array.isArray(value.dependencies) || !['single', 'multi'].includes(value.taskMode as string) || !key(value.summaryTaskKey)) return fail('invalid_project_plan', 400);
+  if (!object(value) || !known(value, ['request', 'usageContext', 'usageContextOrigin', 'goalBasis', 'premises', 'materials', 'coverage', 'tasks', 'taskMode', 'summaryTaskKey', 'dependencies', 'caseContext', 'goalContext', 'requirementRef']) || !text(value.request) || !value.request.trim() || !Array.isArray(value.premises) || value.premises.some(item => !text(item)) || !Array.isArray(value.materials) || !Array.isArray(value.coverage) || !Array.isArray(value.tasks) || !Array.isArray(value.dependencies) || !['single', 'multi'].includes(value.taskMode as string) || !key(value.summaryTaskKey)) return fail('invalid_project_plan', 400);
+  if (value.usageContext !== undefined) { try { parseUsageContext(value.usageContext); } catch { return fail('invalid_project_plan_usage_context', 400); } }
+  if (value.usageContextOrigin !== undefined) { try { if (value.usageContext === undefined) throw new Error(); parseUsageContextOrigin(value.usageContextOrigin); } catch { return fail('invalid_project_plan_usage_context', 400); } }
+  if (value.goalBasis !== undefined) { try { parseGoalBasis(value.goalBasis); } catch { return fail('invalid_project_plan_goal_basis', 400); } }
   const validRef = (ref: unknown, capability = false): boolean => object(ref) && known(ref, ['kind', 'id', 'version', 'sha256', 'permissionRef']) && (capability ? ['skill', 'sap-method', 'connector'] : ['project-file', 'enterprise-material', 'connector', 'provided']).includes(ref.kind as string) && text(ref.id, 2000) && !!ref.id.trim() && (ref.version === undefined || text(ref.version, 2000) && !!ref.version.trim()) && (ref.sha256 === undefined || typeof ref.sha256 === 'string' && /^[a-f0-9]{64}$/.test(ref.sha256)) && (ref.permissionRef === undefined || text(ref.permissionRef, 2000)) && (ref.kind !== 'sap-method' || !!ref.version);
   if (!value.materials.every(ref => validRef(ref))) return fail('invalid_project_plan', 400);
   const taskKeys = new Set<string>(), taskIds = new Set<string>();
@@ -95,21 +100,27 @@ export function createProjectPlanStore(options: { dataRoot: string }) {
     await directory(root, true); const file = await safePath(root, `project-plans/${value.projectId}.json`, true); await atomicJson(file, value);
   }
   async function read(projectId: string): Promise<ProjectPlanState> { return serial(async () => view(await record(projectId))); }
-  async function saveDraft(projectId: string, input: ProjectPlanDraftInput): Promise<ProjectPlanDraftResult> {
+  async function saveDraft(projectId: string, input: ProjectPlanDraftInput, resolved?: { usageContext?: UsageContext; usageContextOrigin?: UsageContextOrigin; goalBasis?: GoalBasis }): Promise<ProjectPlanDraftResult> {
     if (!object(input) || !known(input, ['operationId', 'expectedRevision', 'plan']) || !uuid(input.operationId) || !integer(input.expectedRevision)) return fail('invalid_project_plan_mutation', 400);
-    return save(projectId, input, 'draft', digest(input));
+    return save(projectId, input, 'draft', digest(input), undefined, resolved);
   }
   async function savePreparedDraft(projectId: string, input: ProjectPlanPreparedDraftInput): Promise<ProjectPlanDraftResult> {
     if (!object(input) || !known(input, ['operationId', 'expectedRevision', 'plan', 'requestHash', 'mece', 'limitations']) || !uuid(input.operationId) || !integer(input.expectedRevision) || typeof input.requestHash !== 'string' || !/^[a-f0-9]{64}$/.test(input.requestHash) || !validMece(input.mece) || !Array.isArray(input.limitations) || !input.limitations.every(item => text(item) && !!item.trim())) return fail('invalid_project_plan_mutation', 400);
     return save(projectId, input, 'prepare', input.requestHash, { mece: input.mece, limitations: input.limitations });
   }
-  async function save(projectId: string, input: ProjectPlanDraftInput, kind: 'draft' | 'prepare', fingerprint: string, metadata?: { mece: ProjectPlanMeceReview; limitations: string[] }): Promise<ProjectPlanDraftResult> {
+  async function save(projectId: string, input: ProjectPlanDraftInput, kind: 'draft' | 'prepare', fingerprint: string, metadata?: { mece: ProjectPlanMeceReview; limitations: string[] }, resolved?: { usageContext?: UsageContext; usageContextOrigin?: UsageContextOrigin; goalBasis?: GoalBasis }): Promise<ProjectPlanDraftResult> {
     const plan = content(input.plan);
     return serial(async () => {
       const previous = await record(projectId), repeated = previous.operations.find(operation => operation.id === input.operationId);
       if (repeated) { if (repeated.kind !== kind || repeated.fingerprint !== fingerprint) return fail('project_plan_operation_conflict'); return { state: view(previous), draft: structuredClone(previous.drafts[repeated.version - 1]!), replayed: true }; }
       if (previous.revision !== input.expectedRevision) return fail('project_plan_conflict');
       const fixedPlan = structuredClone(plan);
+      if (resolved) {
+        delete fixedPlan.usageContext; delete fixedPlan.usageContextOrigin;
+        if (resolved.usageContext !== undefined) fixedPlan.usageContext = parseUsageContext(resolved.usageContext);
+        if (resolved.usageContextOrigin !== undefined) fixedPlan.usageContextOrigin = parseUsageContextOrigin(resolved.usageContextOrigin);
+      }
+      if (fixedPlan.goalBasis === undefined && resolved?.goalBasis !== undefined) fixedPlan.goalBasis = parseGoalBasis(resolved.goalBasis);
       for (const task of fixedPlan.tasks) if (!task.taskId) { const binding = previous.confirmations.flatMap(confirmation => confirmation.tasks).reverse().find(receipt => receipt.taskKey === task.key && ['created', 'not-required', 'pending', 'unknown'].includes(receipt.createStatus)); if (binding) task.taskId = binding.taskId; }
       const draft: ProjectPlanVersion = { version: previous.drafts.length + 1, createdAt: new Date().toISOString(), plan: fixedPlan };
       const next = { ...previous, revision: previous.revision + 1, drafts: [...previous.drafts, draft], operations: [...previous.operations, { id: input.operationId, kind, fingerprint, version: draft.version, ...(metadata ? structuredClone(metadata) : {}) }] };

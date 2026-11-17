@@ -1,0 +1,47 @@
+.demo-controls { --demo-bar-height: 46px; min-height: var(--demo-bar-height); padding: 7px 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid #d7d6e0; background: #f0eff5; color: #494652; font: 11px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; }
+.demo-controls strong { font-weight: 600; }
+.demo-controls label { display: inline-flex; align-items: center; gap: 5px; }
+.demo-controls select, .demo-controls button { font: inherit; border: 1px solid #c9c6d5; border-radius: 4px; padding: 3px 6px; color: #494652; background: #fff; }
+.demo-controls > span { color: #6c687b; }
+#root > .app { height: calc(100dvh - 46px); min-height: calc(100dvh - 46px); }
+.demo-state { position: fixed; z-index: 50; inset: 65px 5vw auto; width: 90vw; max-height: 80vh; overflow: auto; border: 1px solid #bbb6cd; padding: 20px; background: #fff; color: #292531; }
+.demo-state pre { overflow-wrap: anywhere; white-space: pre-wrap; font-size: 11px; }
+.v12-discussion { margin: 0 0 24px; }
+.v12-discussion > summary { font-size: 16px; font-weight: 600; cursor: pointer; }
+.v12-discussion-heading { margin: 0 0 8px; }
+.v12-discussion h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.v12-discussion .v12-lead { margin: 6px 0 14px; color: var(--muted); font-size: 13px; }
+.v12-purpose-line { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 12px; font-size: 12px; color: var(--muted); margin: 10px 0; }
+.v12-purpose-edit { border-left: 2px solid var(--line); padding: 1px 14px; margin-bottom: 16px; }
+.v12-purpose-edit .case-field { margin: 10px 0; }
+.v12-discussion .v12-messages { max-height: 360px; overflow-y: auto; margin: 14px 0; border-top: 1px solid var(--line); }
+.v12-discussion .v12-message { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.v12-message strong { font-size: 12px; color: var(--muted); }
+.v12-message p { margin: 7px 0 0; font-size: 13px; line-height: 1.8; white-space: pre-wrap; }
+.v12-message.user { padding-left: 14px; border-left: 2px solid var(--accent-soft); }
+.v12-discussion .v12-composer { border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); padding: 12px; }
+.v12-composer textarea { width: 100%; border: 0; min-height: 72px; resize: vertical; background: transparent; color: var(--ink); font: inherit; font-size: 13px; line-height: 1.7; }
+.v12-composer textarea:focus-visible { outline-offset: 1px; }
+.v12-methods { margin: 13px 0 0; font-size: 12px; }
+.v12-methods summary { color: var(--muted); cursor: pointer; }
+.v12-method-options { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 8px 20px; margin: 12px 0; }
+.v12-method-options label { display: flex; align-items: flex-start; gap: 7px; line-height: 1.7; }
+.v12-method-options input { margin-top: 4px; }
+.v12-candidate { background: var(--subtle); border: 1px solid var(--line); padding: 14px 16px; border-radius: 7px; margin-top: 16px; }
+.v12-candidate h3 { margin: 7px 0; font-size: 14px; }
+.v12-candidate p, .v12-candidate li { font-size: 12px; line-height: 1.8; }
+.v12-candidate details { margin: 10px 0; font-size: 12px; }
+.v12-optional-tools { margin-left: auto; position: relative; font-size: 12px; align-self: center; color: var(--muted); }
+.v12-optional-tools summary { cursor: pointer; padding: 8px 0; }
+.v12-optional-tools .text-button { min-height: 32px; }
+.v12-adoption-form .case-field { margin: 13px 0; }
+.v12-adoption-form input:not([type=checkbox]), .v12-adoption-form select, .v12-adoption-form textarea, .v12-purpose-edit select, .v12-purpose-edit textarea { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: var(--canvas); color: var(--ink); font: inherit; font-size: 13px; }
+.v12-adoption-form label { display: block; margin-bottom: 6px; font-size: 13px; }
+.v12-adoption-form .v12-confirm { display: flex; gap: 8px; align-items: flex-start; margin: 15px 0; }
+.v12-adoption-form .v12-confirm input { margin-top: 4px; }
+.v12-task-context { margin: 8px 20px; }
+.v12-task-context p { margin: 4px 0; }
+.v12-purpose-settings { max-width: 780px; }
+.v12-purpose-settings textarea { width: 100%; min-height: 96px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; color: var(--ink); background: var(--canvas); }
+@media(max-width: 1100px) { .demo-controls { min-height: 74px; gap: 5px 9px; } #root > .app { height: calc(100dvh - 74px); min-height: calc(100dvh - 74px); } }
+@media(max-width: 760px) { .demo-controls { min-height: 106px; } #root > .app { height: calc(100dvh - 106px); min-height: calc(100dvh - 106px); }.v12-method-options { grid-template-columns: 1fr; }.v12-optional-tools { margin-left: 0; }.v12-task-context { margin: 8px 16px; } }
