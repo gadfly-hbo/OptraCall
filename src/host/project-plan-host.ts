@@ -1,11 +1,10 @@
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { projectSkillCatalog } from '../agent/skill-catalog.ts';
 import type { ProjectStore, ProjectRecord } from './project-store.ts';
 import type { CaseStore } from './case-store.ts';
 import type { StrategyGoalsStore } from './strategy-goals-store.ts';
 import { createProjectPlanStore, parseProjectPlanContent, ProjectPlanFault } from './project-plan-store.ts';
-import type { ProjectPlanContent, ProjectPlanConfirmation, ProjectPlanDraftInput, ProjectPlanConfirmInput, ProjectPlanTask } from './project-plan-types.ts';
+import type { ProjectPlanContent, ProjectPlanDraftInput, ProjectPlanConfirmInput, ProjectPlanTask } from './project-plan-types.ts';
 import type { SapMethodStore } from '../../extensions/business-plugins/metric-factory/methods/store.ts';
 import type { GoalVersion } from './strategy-goals-types.ts';
 import type { DbLinkPlanningSource } from './db-link-planning.ts';

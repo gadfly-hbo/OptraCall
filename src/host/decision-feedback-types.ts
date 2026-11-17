@@ -45,7 +45,6 @@ export type FeedbackContextReceipt = {
 export type FeedbackDelivery = { schemaVersion: 1; deliveryId: string; handoffId: string; projectId: string; taskId: string; requestId: string; providedAt: string; requestFingerprint: string; nativeSessionId: string | null; receipt: FeedbackContextReceipt };
 export type FeedbackReplySelection = { kind: 'reply'; projectId: string; taskId: string; sessionId: string; messageId: string; start?: number; end?: number; expectedTextSha256: string };
 export type FeedbackReportSelection = { kind: 'file'; projectId: string; relativePath: string; start?: number; end?: number; expectedSha256: string };
-export type FeedbackFileInput = { operationId: string; selectedMaterialIds: string[]; caseSelection: FeedbackCaseSelection | null };
 export type FeedbackRequirementInput = { operationId: string; title: string; scene: 'daily' | 'topic' | 'recurring'; caseSelection: FeedbackCaseSelection | null; background?: string; sourceSelection: FeedbackReplySelection | FeedbackReportSelection };
 export type FeedbackRouteRequest = { pathname: string; method: string; input?: unknown };
 export type FeedbackRouteResult = { status: number; body: unknown } | null;

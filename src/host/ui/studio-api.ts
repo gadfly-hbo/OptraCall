@@ -58,7 +58,7 @@ export async function studioRequest<T>(path: string, method: 'GET' | 'POST' = 'G
 
 import type { StudioSystem, StudioMaterial, StudioSourceRef, StudioPublicationPreview, StudioPublication, StudioCreateInput, StudioSaveAssetInput, StudioPublicationInput, StudioWorkItem } from '../../../extensions/business-plugins/studio/contracts.ts';
 import { studioExecutionOwner, studioQuestionContext } from '../../../extensions/business-plugins/studio/contracts.ts';
-import type { StudioAuthority, StudioAssetKind, StudioContribution, StudioLinkContributionInput } from '../../../extensions/business-plugins/studio/contracts.ts';
+import type { StudioAuthority, StudioAssetKind, StudioLinkContributionInput } from '../../../extensions/business-plugins/studio/contracts.ts';
 import type { ClientProject, ClientTask, SessionSnapshot } from './project-types.ts';
 export type { StudioSystem, StudioMaterial, StudioSourceRef, StudioPublicationPreview, StudioPublication, StudioSaveAssetInput };
 
@@ -192,11 +192,6 @@ export async function associateStudioEnterprise(input: { requestId: string; kind
   const value = await studioRequest<Record<string, unknown>>('enterprise-associations', 'POST', input);
   const binding = object(value.binding) ? value.binding : value;
   if (binding.enterpriseId !== input.enterpriseId) throw mismatch(true);
-}
-export async function readStudioContributions(systemId: string): Promise<StudioContribution[]> {
-  const value = await studioRequest<{ contributions: StudioContribution[] }>(`${systemPath(systemId)}/contributions`);
-  if (!object(value) || !Array.isArray(value.contributions)) throw mismatch();
-  return value.contributions;
 }
 export async function linkStudioContribution(systemId: string, contributionId: string, input: Omit<StudioLinkContributionInput, 'contributionId'> & { requestId: string }): Promise<StudioSystem> {
   return writeStudioSystem(systemId, `contributions/${encodeURIComponent(contributionId)}/link`, input);

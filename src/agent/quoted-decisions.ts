@@ -23,7 +23,6 @@ export function parseUserQuoteProvenance(input: unknown): UserQuoteProvenance {
 export type QuotedDecisionAction = 'read' | 'choose-strategy' | 'authorize-action' | 'record-feedback' | 'arrange-actions';
 export type QuotedDecisionToolResult = { content: { type: 'text'; text: string }[]; details: Record<string, unknown> };
 export type QuotedDecisionCallContext = { requestId: string; sessionId: string; toolCallId: string; signal: AbortSignal; assertCurrent(): void };
-export type QuotedDecisionPort = (action: QuotedDecisionAction, input: Record<string, unknown>, context: QuotedDecisionCallContext) => Promise<QuotedDecisionToolResult>;
 const quote = Type.Object({ start: Type.Integer({ minimum: 0 }), end: Type.Integer({ minimum: 1 }), text: Type.String({ minLength: 1, maxLength: 20000 }) }, { additionalProperties: false });
 const strategyRef = Type.Object({ type: Type.Literal('case-decision'), caseStoreId: Type.String(), caseId: Type.String(), recordId: Type.String(), revision: Type.Integer({ minimum: 1 }) }, { additionalProperties: false });
 const previous = Type.Union([Type.String(), Type.Null()]);

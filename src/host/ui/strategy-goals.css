@@ -2,7 +2,6 @@
 .sg-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 20px; flex-wrap: wrap; }
 .sg-tabs > button { padding: 10px 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 13px; }
 .sg-tabs > button[aria-current=page] { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
-.sg-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin: 18px 0; }
 .sg-select { min-height: 36px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); padding: 7px 10px; font: inherit; font-size: 12px; max-width: 100%; }
 .sg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr)); gap: 18px; }
 .sg-panel { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); margin: 16px 0; }

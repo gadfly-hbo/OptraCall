@@ -345,4 +345,3 @@ export function createAutomaticVerificationStore(options: { dataRoot: string }) 
     saveResult: queued(saveResult), readResult: queued(readResult), prepareWorkDirectory: queued(prepareWorkDirectory),
   };
 }
-export type AutomaticVerificationStore = ReturnType<typeof createAutomaticVerificationStore>;

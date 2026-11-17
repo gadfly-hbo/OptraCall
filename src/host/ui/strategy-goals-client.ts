@@ -1,4 +1,4 @@
-import type { GoalAdoptionInput, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRevisionInput, GoalVersion, StrategyGoalRecord, StrategyGoalsIndex } from '../strategy-goals-types.ts';
+import type { GoalAdoptionInput, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRevisionInput, GoalVersion, StrategyGoalsIndex } from '../strategy-goals-types.ts';
 import type { StrategyGoalSourceDirectory } from '../strategy-goal-sources.ts';
 import { metricRequest, type LibraryEntry } from '../../../extensions/business-plugins/metric-factory/ui/MetricFactoryPage.tsx';
 export type { LibraryEntry } from '../../../extensions/business-plugins/metric-factory/ui/MetricFactoryPage.tsx';
@@ -35,7 +35,6 @@ export async function publishedMetrics(): Promise<LibraryEntry[]> {
   if (!Array.isArray(entries)) throw new StrategyGoalsRequestError('strategy_goal_metric_unavailable', 503);
   return entries;
 }
-export const get = (id: string) => request<{ goal: StrategyGoalRecord }>(goalPath(id));
 export const create = (input: GoalDraftInput & GoalMutation) => request<{ goal: GoalVersion }>('goals', 'POST', input);
 export const revise = (id: string, input: GoalRevisionInput) => request<{ goal: GoalVersion }>(`${goalPath(id)}/revisions`, 'POST', input);
 export const adopt = (ref: GoalRef, input: GoalAdoptionInput) => request<{ goal: GoalVersion }>(`${goalPath(ref.goalId)}/adopt`, 'POST', { ...input, version: ref.version });

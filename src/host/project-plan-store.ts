@@ -187,4 +187,3 @@ export function createProjectPlanStore(options: { dataRoot: string }) {
 
   return { read, saveDraft, savePreparedDraft, confirm, recordTaskResult };
 }
-export type ProjectPlanStore = ReturnType<typeof createProjectPlanStore>;

@@ -43,10 +43,6 @@ async function request<T>(route: string, method: 'GET' | 'POST' = 'GET', input?:
 /** 货架事实（只读）：全部注册表条目，含 stage 与随行训练指标。 */
 export const listModels = () => request<{ models: ModelRegistryEntry[] }>('models');
 
-/** 单条货架记录：仅按 name+version 解析，不接受任意路径（IN05）。 */
-export const getModel = (name: string, version: number) =>
-  request<{ model: ModelRegistryEntry }>(`models/${encodeURIComponent(name)}/${version}`);
-
 /** 原始 manifest 按需查读；旧 Host 缺少此字段时保持未知，不以货架记录重建。 */
 export const getModelDetails = (name: string, version: number) =>
   request<{ model: ModelRegistryEntry; manifest?: ModelPackManifest }>(`models/${encodeURIComponent(name)}/${version}`);

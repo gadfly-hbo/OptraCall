@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import type { ProjectStore } from './project-store.ts';
 import type { EnterpriseMaterialsStore } from './enterprise-materials-store.ts';

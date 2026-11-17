@@ -10,7 +10,6 @@ import { listTaskBoundReports, listTaskResultSources } from './project-task-resu
 import { createProjectTaskResultsReader } from './project-task-results.ts';
 import { createProjectPlanFeature } from './project-plan-host.ts';
 import { createProjectPlanStore, ProjectPlanFault } from './project-plan-store.ts';
-import type { ProjectPlanContent, ProjectPlanDraftInput, ProjectPlanConfirmInput, ProjectPlanConfirmation, ProjectPlanTask } from './project-plan-types.ts';
 import { StrategyGoalsStore, StrategyGoalsError } from './strategy-goals-store.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
