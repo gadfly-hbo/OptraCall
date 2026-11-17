@@ -4,7 +4,7 @@ import type { CaseDecisionAgentContext } from './case-decision-service.ts';
 import type { CaseArtifactRecord } from './case-types.ts';
 import type { CaseRelationListOptions, CaseRelationRevision, CaseRelationSource, CaseRelationSourceView, CaseRelationWriteInput, CaseRelationSourceCandidate } from './case-relation-types.ts';
 import { parseCaseRelationWrite, relationFields, relationWriteFields } from './case-relation-validation.ts';
-import { caseDecisionId, caseDecisionRevision, parseCaseDecisionRef } from './case-decision-validation.ts';
+import { caseDecisionId, caseDecisionRevision } from './case-decision-validation.ts';
 import { canonical } from './project-data-context-io.ts';
 import { createCaseSourcesService } from './case-sources-service.ts';
 import { createHash } from 'node:crypto';

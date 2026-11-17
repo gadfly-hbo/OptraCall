@@ -18,11 +18,6 @@ export interface AnalysisDeliveryReceipt {
   caseFindings?: DeclaredCaseFinding[]; assetFindings?: DeclaredAssetFinding[];
   reports: ProjectTaskResultBinding[]; save: { status: 'not-requested' | 'disabled' | 'saved' | 'reused' | 'unknown'; settingsRevision?: number; code?: string }; claim: 'declared-not-professionally-verified';
 }
-/** Small confirmation of the exact Pi-persisted declaration, not another body or action ledger. */
-export interface AnalysisDeliverySaveReceipt {
-  schemaVersion: 1; type: 'optracall.analysis-delivery-receipt'; status: 'saved';
-  delivery: { projectId: string; taskId: string; requestId: string; sessionId: string; toolCallId: string; entryId: string; sha256: string };
-}
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 function fail(code: string): never { throw Object.assign(new Error(code), { code }); }
 const list = (value: unknown, max: number): value is string[] => Array.isArray(value) && value.length <= max && value.every(item => typeof item === 'string' && item.length <= 2000);

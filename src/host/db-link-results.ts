@@ -1,6 +1,6 @@
 import type { DbLinkEngine, DbLinkModelExport } from './db-link-types.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, open, readFile, realpath, rename } from 'node:fs/promises';
+import { lstat, mkdir, open, realpath, rename } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 

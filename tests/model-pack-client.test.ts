@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   listModels,
-  getModel,
+  getModelDetails,
   importPack,
   promoteModel,
   ModelPackRequestError,
@@ -56,11 +56,11 @@ test('MP-CLIENT-01: listModels issues a same-origin GET with the client header',
   assert.equal(calls[0].cache, 'no-store');
 });
 
-test('MP-CLIENT-02: getModel targets a name+version path, never an arbitrary path', async t => {
+test('MP-CLIENT-02: getModelDetails targets a name+version path, never an arbitrary path', async t => {
   const restore = stubFetch();
   t.after(restore);
   respond = () => ({ ok: true, status: 200, body: { model: ENTRY } });
-  const result = await getModel('order-forecast', 2);
+  const result = await getModelDetails('order-forecast', 2);
   assert.equal(result.model.name, 'order-forecast');
   assert.equal(calls[0].url, '/api/model-pack/models/order-forecast/2');
   assert.equal(calls[0].method, 'GET');

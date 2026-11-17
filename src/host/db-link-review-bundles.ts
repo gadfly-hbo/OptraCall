@@ -5,7 +5,7 @@ import { chmod, lstat, mkdir, open, realpath, rename } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { canonical, digest, directory, exists, fail, hash, id, integer, object, parse, readBytes, safePath, writeExclusive } from './project-data-context-io.ts';
+import { canonical, digest, directory, exists, fail, hash, id, object, parse, readBytes, safePath, writeExclusive } from './project-data-context-io.ts';
 
 export type DbReviewBundleOwner = { projectId: string; taskId: string; requestId: string; reviewId: string };
 export type DbReviewBundlePurpose = 'rcr' | 'cnr' | 'db-independent';

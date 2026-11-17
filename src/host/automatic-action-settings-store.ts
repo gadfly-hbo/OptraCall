@@ -108,4 +108,3 @@ export function createAutomaticActionSettingsStore(options: { dataRoot: string }
   const readOperation = (id: string) => serial(async () => { if (!operationId(id)) return fail('invalid_automatic_action_settings_operation', 400); const receipt = (await readRecord()).operations.find(item => item.operationId === id); return receipt ? { ...receipt } : null; });
   return { read, update, readCurrent, readOperation };
 }
-export type AutomaticActionSettingsStore = ReturnType<typeof createAutomaticActionSettingsStore>;

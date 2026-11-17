@@ -6,7 +6,7 @@ import path from 'node:path';
 import { ProjectStore } from '../src/host/project-store.ts';
 import { ProjectDataContextStore } from '../src/host/project-data-context-store.ts';
 import type { CreateDataCitation, FreezeProjectInput, SaveDataDescription } from '../src/host/project-data-context-types.ts';
-import { parseObservationImport, projectDataProvisionEntries, readProjectDataEvidence, readProjectDataEvidenceBytes, readProjectDataWriteStatus, saveProjectDataDescription, ProjectDataContextRequestError, type PendingDataContextWrite } from '../src/host/ui/project-data-context-client.ts';
+import { parseObservationImport, projectDataProvisionEntries, projectDataEvidenceText, readProjectDataEvidenceBytes, readProjectDataWriteStatus, saveProjectDataDescription, ProjectDataContextRequestError, type PendingDataContextWrite } from '../src/host/ui/project-data-context-client.ts';
 
 const observed = {
   author: 'agent', format: 'xlsx', encoding: null,
@@ -46,7 +46,8 @@ test('DB04 UI fixed Markdown read preserves BOM, CRLF and emoji UTF-16 coordinat
     calls.push({ url: String(url), method: init.method ?? 'GET' });
     return new Response(new TextEncoder().encode(original));
   });
-  const actual = await readProjectDataEvidence('project/a', 'dataset/a', 'old/version');
+  const bytes = new TextEncoder().encode(original), expected = { bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+  const actual = projectDataEvidenceText(await readProjectDataEvidenceBytes('project/a', 'dataset/a', 'old/version', expected));
   assert.equal(actual, original);
   assert.equal(actual.slice(6, 8), '😀');
   assert.deepEqual(calls, [{ url: '/api/projects/project%2Fa/data-context/datasets/dataset%2Fa/versions/old%2Fversion/evidence', method: 'GET' }]);

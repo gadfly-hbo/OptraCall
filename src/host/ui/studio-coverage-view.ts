@@ -1,7 +1,7 @@
 import type { CoverageCell, CoverageReport } from '../../../extensions/business-plugins/studio/coverage.ts';
 import { coverageColumns, coverageReferences, coverageRefIdentity, parseCoverageContent } from '../../../extensions/business-plugins/studio/coverage.ts';
 import type { StudioSourceRef } from '../../../extensions/business-plugins/studio/contracts.ts';
-import type { CoverageReferenceMetadata, StudioCoverageView } from '../studio-coverage.ts';
+import type { StudioCoverageView } from '../studio-coverage.ts';
 import type { StudioFoundation } from './studio-api.ts';
 
 export type { CoverageReferenceMetadata } from '../studio-coverage.ts';
