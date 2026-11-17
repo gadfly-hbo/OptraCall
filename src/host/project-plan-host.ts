@@ -6,12 +6,18 @@ import type { StrategyGoalsStore } from './strategy-goals-store.ts';
 import { createProjectPlanStore, parseProjectPlanContent, ProjectPlanFault } from './project-plan-store.ts';
 import type { ProjectPlanContent, ProjectPlanDraftInput, ProjectPlanConfirmInput, ProjectPlanTask } from './project-plan-types.ts';
 import type { SapMethodStore } from '../../extensions/business-plugins/metric-factory/methods/store.ts';
-import type { GoalVersion } from './strategy-goals-types.ts';
+import type { GoalVersion, GoalBasis, GoalContextSnapshot, GoalRef } from './strategy-goals-types.ts';
 import type { DbLinkPlanningSource } from './db-link-planning.ts';
+import { parseUsageContext, parseUsageContextOrigin, resolveNewUsageContext, type UsageContext, type UsageContextOrigin } from './usage-context-types.ts';
 
 export interface ProjectPlanDelivery {
   projectId: string; taskId: string; confirmationId: string; planVersion: number; taskKey: string; summaryTaskId: string;
   methods: ProjectPlanTask['capabilities']; text: string;
+  usageContext?: UsageContext;
+  usageContextOrigin?: UsageContextOrigin;
+  goalBasis?: GoalBasis;
+  goalEvidence?: Pick<GoalContextSnapshot, 'relations' | 'feedback'>;
+  goalSourceRefs?: GoalRef[];
 }
 type Options = {
   codeRoot: string; resourceRoot: string; plans: ReturnType<typeof createProjectPlanStore>; projects: ProjectStore; cases: CaseStore; goals: StrategyGoalsStore; methods: SapMethodStore;
@@ -19,6 +25,7 @@ type Options = {
   startMessage(projectId: string, taskId: string, input: Record<string, unknown>): Promise<{ requestId: string; status: unknown; deduplicated?: boolean }>;
   registerFresh(projectId: string, taskId: string): Promise<void>;
   databaseSources?(projectId: string, options?: { taskId?: string; modelOutlet?: string }): Promise<DbLinkPlanningSource[]>;
+  defaultUsageContext?(): Promise<UsageContext | null>;
 };
 function fail(code: string, status = 409): never { throw new ProjectPlanFault(code, status); }
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -26,6 +33,44 @@ export function createProjectPlanFeature(options: Options) {
   const { plans, projects, cases, goals } = options;
   const writable = async (projectId: string) => { if (options.isClosing()) fail('host_closing'); const project = await projects.get(projectId); if (project.archivedAt) fail('project_archived'); return project; };
   const skillsFor = (project: ProjectRecord) => projectSkillCatalog(options.codeRoot, path.join(project.rootPath, '020_clean'), options.resourceRoot);
+  const goalRefs = (plan: Pick<ProjectPlanContent, 'goalContext' | 'caseContext'>) => {
+    const seen = new Set<string>();
+    return [plan.goalContext?.goal, plan.caseContext?.primaryGoal, ...(plan.caseContext?.relatedGoals || [])].filter(ref => ref !== undefined).filter(ref => { const key = `${ref.goalId}:${ref.version}`; if (seen.has(key)) return false; seen.add(key); return true; });
+  };
+  const usageSnapshot = (plan: ProjectPlanContent): Pick<ProjectPlanContent, 'usageContext' | 'usageContextOrigin'> => ({
+    ...(plan.usageContext === undefined ? {} : { usageContext: parseUsageContext(plan.usageContext) }),
+    ...(plan.usageContextOrigin === undefined ? {} : { usageContextOrigin: parseUsageContextOrigin(plan.usageContextOrigin) }),
+  });
+  async function resolveUsageSelection(projectId: string, plan: ProjectPlanContent): Promise<Pick<ProjectPlanContent, 'usageContext' | 'usageContextOrigin'>> {
+    // Missing origin on older explicit background retains its original meaning.
+    if (plan.usageContext !== undefined && (plan.usageContextOrigin === undefined || plan.usageContextOrigin === 'explicit')) return usageSnapshot(plan);
+    const state = await plans.read(projectId), previous = state.draft?.plan ?? state.confirmed?.plan;
+    const sameGoals = previous && equal(goalRefs(previous), goalRefs(plan));
+    if (previous) {
+      if (previous.usageContext !== undefined && (previous.usageContextOrigin === undefined || previous.usageContextOrigin === 'explicit')) return usageSnapshot(previous);
+      if (sameGoals && (previous.usageContext === undefined || state.confirmed?.planVersion === state.draft?.version)) return usageSnapshot(previous);
+    }
+    const ref = plan.goalContext?.goal ?? plan.caseContext?.primaryGoal, goal = ref ? goals.read(ref) : undefined;
+    if (goal && goal.status !== 'adopted') fail('project_plan_context_changed');
+    if (goal) return { usageContext: resolveNewUsageContext({ goal })!, usageContextOrigin: 'goal' };
+    if (previous) return usageSnapshot(previous);
+    const usageContext = resolveNewUsageContext({ defaultContext: await options.defaultUsageContext?.() });
+    return usageContext === undefined ? {} : { usageContext, usageContextOrigin: 'default' };
+  }
+  async function resolveUsageContext(projectId: string, plan: ProjectPlanContent): Promise<UsageContext | undefined> {
+    return (await resolveUsageSelection(projectId, plan)).usageContext;
+  }
+  async function prepareContext(projectId: string, plan: ProjectPlanContent): Promise<ProjectPlanContent> {
+    const selected = structuredClone(plan), usage = await resolveUsageSelection(projectId, plan);
+    delete selected.usageContext; delete selected.usageContextOrigin;
+    Object.assign(selected, usage);
+    const refs = goalRefs(plan), state = await plans.read(projectId), previous = state.draft?.plan ?? state.confirmed?.plan;
+    if (selected.goalBasis !== undefined) goals.readContext(refs, selected.goalBasis);
+    else if (previous && equal(goalRefs(previous), refs)) {
+      if (previous.goalBasis !== undefined) { goals.readContext(refs, previous.goalBasis); selected.goalBasis = structuredClone(previous.goalBasis); }
+    } else if (refs.length) selected.goalBasis = goals.readContext(refs).basis;
+    return selected;
+  }
   async function goalContent(projectId: string, plan: Pick<ProjectPlanContent, 'goalContext' | 'caseContext'>): Promise<GoalVersion[]> {
     await projects.get(projectId);
     const refs = [plan.goalContext?.goal, plan.caseContext?.primaryGoal, ...(plan.caseContext?.relatedGoals || [])].filter(ref => ref !== undefined);
@@ -36,6 +81,12 @@ export function createProjectPlanFeature(options: Options) {
       if (exact.status !== 'adopted') fail('project_plan_context_changed');
       return structuredClone(exact);
     });
+  }
+  async function goalEvidence(projectId: string, plan: ProjectPlanContent): Promise<Pick<GoalContextSnapshot, 'relations' | 'feedback'> | undefined> {
+    await projects.get(projectId);
+    if (plan.goalBasis === undefined) return undefined;
+    const captured = goals.readContext(goalRefs(plan), plan.goalBasis);
+    return { relations: captured.relations, feedback: captured.feedback };
   }
   async function validateTask(projectId: string, task: ProjectPlanTask, allowKnownMethodIssue = false) {
     const project = await writable(projectId), skills = skillsFor(project).skills;
@@ -88,6 +139,7 @@ export function createProjectPlanFeature(options: Options) {
       if (record.status === 'closed' || !binding || !equal(binding.primary, context.primaryGoal) || !equal(binding.related, context.relatedGoals || []) || context.caseRevision !== undefined && context.caseRevision !== record.revision || context.projectWorkRevision !== undefined && context.projectWorkRevision !== cases.getProjectWork(projectId).revision || !cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) fail('project_plan_context_changed');
       for (const ref of [context.primaryGoal, ...(context.relatedGoals || [])]) if (goals.read(ref).status !== 'adopted') fail('project_plan_context_changed');
     }
+    if (plan.goalBasis !== undefined) goals.readContext(goalRefs(plan), plan.goalBasis);
   }
   async function capabilities(projectId: string, read: { modelOutlet?: string } = {}) {
     const project = await projects.get(projectId), skills = skillsFor(project);
@@ -110,18 +162,27 @@ export function createProjectPlanFeature(options: Options) {
     if (!confirmation || !receipt || !['created', 'not-required'].includes(receipt.createStatus)) fail('project_plan_context_changed');
     const task = confirmation.plan.tasks.find(item => item.key === receipt.taskKey)!;
     const summary = confirmation.tasks.find(item => item.taskKey === confirmation.plan.summaryTaskKey)!;
-    const content = { projectId, confirmationId: confirmation.id, planVersion: confirmation.planVersion, request: confirmation.plan.request, goalContext: confirmation.plan.goalContext, goalContent: await goalContent(projectId, confirmation.plan), premises: confirmation.plan.premises, materials: confirmation.plan.materials, caseContext: confirmation.plan.caseContext, coverage: confirmation.plan.coverage, tasks: confirmation.tasks.map(item => ({ taskId: item.taskId, key: item.taskKey, scope: confirmation.plan.tasks.find(task => task.key === item.taskKey)!.scope, createStatus: item.createStatus, startStatus: item.startStatus })), currentTask: { id: taskId, key: task.key, scope: task.scope, capabilities: task.capabilities }, summaryTaskId: summary.taskId, dependencies: confirmation.plan.dependencies };
+    const usageContext = confirmation.plan.usageContext;
+    const usageContextOrigin = confirmation.plan.usageContextOrigin;
+    const goalBasis = confirmation.plan.goalBasis;
+    const goalSourceRefs = goalRefs(confirmation.plan);
+    const evidence = goalBasis === undefined ? undefined : goals.readContext(goalRefs(confirmation.plan), goalBasis);
+    const goalEvidence = evidence ? { relations: evidence.relations, feedback: evidence.feedback } : undefined;
+    const content = { projectId, confirmationId: confirmation.id, planVersion: confirmation.planVersion, request: confirmation.plan.request, usageContext, usageContextOrigin, goalContext: confirmation.plan.goalContext, goalContent: await goalContent(projectId, confirmation.plan), goalBasis, goalEvidence, premises: confirmation.plan.premises, materials: confirmation.plan.materials, caseContext: confirmation.plan.caseContext, coverage: confirmation.plan.coverage, tasks: confirmation.tasks.map(item => ({ taskId: item.taskId, key: item.taskKey, scope: confirmation.plan.tasks.find(task => task.key === item.taskKey)!.scope, createStatus: item.createStatus, startStatus: item.startStatus })), currentTask: { id: taskId, key: task.key, scope: task.scope, capabilities: task.capabilities }, summaryTaskId: summary.taskId, dependencies: confirmation.plan.dependencies };
     const skillMetadata = skillsFor(await projects.get(projectId)).skills;
     const selectedSkills = task.capabilities.filter(item => item.kind === 'skill').map(item => { const skill = skillMetadata.find(skill => skill.id === item.id && skill.sha256 === item.sha256); if (!skill) return fail('project_plan_capability_changed'); return { id: skill.id, path: skill.filePath, sha256: skill.sha256 }; });
     const text = `【已确认的项目约定与本任务责任】\n项目整体采用TOC/TP作为系统改善框架。具体树、工具、分析顺序及协作由你自主安排，可组合其他专业方法。实质使用本任务已选Skill/IR；先读取其准确指引并核适用性，不以目录可见代替采用。资料不足主动补证，说明具体缺口，继续有独立依据的部分；不伪造前提、根因或效果。\n综合责任由明确项目内Task承接，需核准确子成果、分歧、交叉影响和遗漏；下列依赖是已确认的业务关系，不是Host固定分析步骤。尚未取得的成果保留待核，不编造其他Task已完成。\n${JSON.stringify(content)}\n所选Skill准确入口：${JSON.stringify(selectedSkills)}`;
-    return { projectId, taskId, confirmationId: confirmation.id, planVersion: confirmation.planVersion, taskKey: task.key, summaryTaskId: summary.taskId, methods: task.capabilities, text };
+    return { projectId, taskId, confirmationId: confirmation.id, planVersion: confirmation.planVersion, taskKey: task.key, summaryTaskId: summary.taskId, methods: task.capabilities, ...(usageContext === undefined ? {} : { usageContext }), ...(usageContextOrigin === undefined ? {} : { usageContextOrigin }), ...(goalBasis === undefined ? {} : { goalBasis, goalEvidence }), ...(goalSourceRefs.length ? { goalSourceRefs } : {}), text };
   }
   async function handle(projectId: string, action: string, method: string, input: Record<string, unknown> = {}) {
     if (action === 'plan' && method === 'GET') { await projects.get(projectId); return { body: await plans.read(projectId) }; }
     if (action === 'plan/capabilities' && method === 'GET') return { body: await capabilities(projectId) };
     if (action === 'plan/draft' && method === 'POST') {
-      const plan = parseProjectPlanContent(input.plan); await validate(projectId, plan);
-      return { body: await options.mutate(() => plans.saveDraft(projectId, input as unknown as ProjectPlanDraftInput)) };
+      const plan = parseProjectPlanContent(input.plan);
+      if ((await plans.read(projectId)).operations?.some(operation => operation.operationId === input.operationId)) return { body: await options.mutate(() => plans.saveDraft(projectId, input as unknown as ProjectPlanDraftInput)) };
+      await validate(projectId, plan);
+      const resolved = await prepareContext(projectId, plan);
+      return { body: await options.mutate(() => plans.saveDraft(projectId, input as unknown as ProjectPlanDraftInput, { usageContext: resolved.usageContext, usageContextOrigin: resolved.usageContextOrigin, goalBasis: resolved.goalBasis })) };
     }
     if (action === 'plan/confirm' && method === 'POST') {
       await writable(projectId);
@@ -146,5 +207,5 @@ export function createProjectPlanFeature(options: Options) {
     }
     return null;
   }
-  return { handle, context, capabilities, validate, goalContent, capabilityIssues };
+  return { handle, context, capabilities, validate, goalContent, goalEvidence, capabilityIssues, resolveUsageContext, prepareContext };
 }

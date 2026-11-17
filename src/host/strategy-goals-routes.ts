@@ -1,7 +1,7 @@
 import { StrategyGoalsStore, StrategyGoalsError } from './strategy-goals-store.ts';
 import type { GoalDraftInput, GoalRef, GoalRevisionInput, GoalAdoptionInput, GoalRelationInput, GoalFeedbackInput, GoalSourceRef } from './strategy-goals-types.ts';
 
-export function createStrategyGoalRoutes(options: { store: StrategyGoalsStore; mutate: <T>(fn: () => T | Promise<T>) => Promise<T>; isClosing: () => boolean; validateGoal?: (input: GoalDraftInput) => void | Promise<void>; listSources?: () => Promise<unknown>; validateFeedbackSource?: (input: GoalSourceRef) => void | Promise<void> }) {
+export function createStrategyGoalRoutes(options: { store: StrategyGoalsStore; mutate: <T>(fn: () => T | Promise<T>) => Promise<T>; isClosing: () => boolean; validateGoal?: (input: GoalDraftInput) => void | Promise<void>; listSources?: () => Promise<unknown>; validateFeedbackSource?: (input: GoalSourceRef) => void | Promise<void>; validateAdoption?: (ref: GoalRef, input: GoalAdoptionInput) => void | Promise<void> }) {
   const { store } = options;
   const write = <T>(fn: () => T | Promise<T>) => options.mutate(() => { if (options.isClosing()) throw new StrategyGoalsError('host_closing', 409); return fn(); });
   return async (pathname: string, method: string, input: Record<string, unknown> = {}): Promise<{ status?: number; body: unknown } | null> => {
@@ -14,7 +14,15 @@ export function createStrategyGoalRoutes(options: { store: StrategyGoalsStore; m
     if (match) {
       const id = match[1]!;
       if (!match[2] && method === 'GET') return { body: { goal: store.get(id) } };
-      if (match[2] === 'adopt' && method === 'POST') return { body: await write(async () => { if (!store.getOperation(input.operationId as string)) await options.validateGoal?.(store.read({ goalId: id, version: input.version as number })); return { goal: store.adopt({ goalId: id, version: input.version as number }, input as unknown as GoalAdoptionInput) }; }) };
+      if (match[2] === 'adopt' && method === 'POST') return { body: await write(async () => {
+        const ref = { goalId: id, version: input.version as number };
+        if (!store.getOperation(input.operationId as string)) {
+          if (input.provenance !== undefined && !options.validateAdoption) throw new StrategyGoalsError('strategy_goal_adoption_provenance_unavailable', 409);
+          await options.validateGoal?.(store.read(ref));
+          await options.validateAdoption?.(ref, input as unknown as GoalAdoptionInput);
+        }
+        return { goal: store.adopt(ref, input as unknown as GoalAdoptionInput) };
+      }) };
       if (match[2] === 'revisions' && method === 'POST') return { status: 201, body: await write(async () => { if (!store.getOperation(input.operationId as string)) await options.validateGoal?.(input as unknown as GoalDraftInput); return { goal: store.revise(id, input as unknown as GoalRevisionInput) }; }) };
     }
     if (pathname === '/api/strategy/relations' && method === 'POST') return { status: 201, body: await write(() => ({ relation: store.relate(input as unknown as GoalRelationInput & { operationId: string }) })) };

@@ -9,6 +9,7 @@ export interface ProjectPlanPreparationInput {
   plan: ProjectPlanContent;
   capabilities: ProjectPlanCapabilities;
   goalContent?: readonly import('./strategy-goals-types.ts').GoalVersion[];
+  goalEvidence?: Pick<import('./strategy-goals-types.ts').GoalContextSnapshot, 'relations' | 'feedback'>;
   capabilityIssues?: readonly { taskKey: string; capability: import('./project-plan-types.ts').ProjectPlanCapabilityRef; code: string; reason: string; issue?: unknown }[];
   existingTasks: readonly { id: string; name: string; archivedAt?: string | null }[];
 }
@@ -35,12 +36,14 @@ export function buildProjectPlanPreparationPrompt(input: ProjectPlanPreparationI
 项目：${JSON.stringify({ id: input.projectId, name: input.projectName })}
 原轻量工作稿：${JSON.stringify(input.plan)}
 原目标权威的准确已选版本（仅本次适用目标，不要求重抄或扩展全组织梳理）：${JSON.stringify(input.goalContent || [])}
+原目标关系与三层反馈的准确固定依据（作者声明和实际事实不混同，不证明因果）：${JSON.stringify(input.goalEvidence ?? null)}
+本工作usageContext、usageContextOrigin及goalBasis由Host按已有准确背景固定；必须原样保留，不补猜、删除或改成今日默认；两者都不表示资料或行动权限。
 能力可用性问题（元信息）：${JSON.stringify(input.capabilityIssues || [])}
 已有任务（元信息）：${JSON.stringify(tasks)}
 数据库来源仅为原保存配置、授权和Task排除状态；未试连、未取数、未核数据质量。建议须沿准确版本、范围、permissionRef及Task，选择不扩大权限或模型出口。已有授权无需再次索取，改选不得静默扩大。
 实际能力及资料目录（元信息）：${JSON.stringify(catalog)}
 仅输出 JSON 对象，顶层严格为 {"plan":<完整 ProjectPlanContent>,"mece":{"sameLevel":"同层检查说明","coverage":"覆盖检查说明","boundaries":"边界检查说明","depth":"深度检查说明"},"limitations":["实际缺口或限制，可为空"]}。
-plan 沿原工作稿结构，必须包含 request、premises、materials、coverage、tasks、taskMode、summaryTaskKey、dependencies、caseContext；原 goalContext（{goal:{goalId,version},purpose:"query|asset-construction|assigned-work|case-investigation"}）和 requirementRef 若已存在必须准确保留，否则不得增加。coverage 每项为 {key,parentKey?,label,disposition:"focus|covered|deferred|unknown|out-of-scope",reason,taskKeys:[]}；tasks 每项为 {key,name,selected,taskId?,scope,capabilities:[]}。未选的新任务不能承接综合。所有 key 保持唯一；引用已有项须保留准确版本及 sha256/permissionRef，不输出目录标题字段到引用。`;
+plan 沿原工作稿结构，必须包含 request、premises、materials、coverage、tasks、taskMode、summaryTaskKey、dependencies、caseContext；原 usageContext、usageContextOrigin、goalBasis、goalContext（{goal:{goalId,version},purpose:"query|asset-construction|assigned-work|case-investigation"}）和 requirementRef 若已存在必须准确保留，否则不得增加。coverage 每项为 {key,parentKey?,label,disposition:"focus|covered|deferred|unknown|out-of-scope",reason,taskKeys:[]}；tasks 每项为 {key,name,selected,taskId?,scope,capabilities:[]}。未选的新任务不能承接综合。所有 key 保持唯一；引用已有项须保留准确版本及 sha256/permissionRef，不输出目录标题字段到引用。`;
 }
 export function parseProjectPlanPreparationResponse(reply: string, input: ProjectPlanPreparationInput): ProjectPlanPreparationOutput {
   const value = parseModelJson(reply);
@@ -51,7 +54,7 @@ export function parseProjectPlanPreparationResponse(reply: string, input: Projec
   if (!['sameLevel', 'coverage', 'boundaries', 'depth'].every(key => text(mece[key]))) throw new ProjectPlanFault('project_plan_preparation_invalid', 422);
   const plan = parseProjectPlanContent(value.plan);
   const equal = (left: unknown, right: unknown) => canonicalDataContextValue(left ?? null) === canonicalDataContextValue(right ?? null);
-  if (!equal(plan.goalContext, input.plan.goalContext) || !equal(plan.caseContext, input.plan.caseContext) || !equal(plan.requirementRef, input.plan.requirementRef)) throw new ProjectPlanFault('project_plan_preparation_context', 422);
+  if (!equal(plan.usageContext, input.plan.usageContext) || !equal(plan.usageContextOrigin, input.plan.usageContextOrigin) || !equal(plan.goalBasis, input.plan.goalBasis) || !equal(plan.goalContext, input.plan.goalContext) || !equal(plan.caseContext, input.plan.caseContext) || !equal(plan.requirementRef, input.plan.requirementRef)) throw new ProjectPlanFault('project_plan_preparation_context', 422);
   const identity = (ref: { kind: string; id: string; version?: string; sha256?: string; permissionRef?: string }) => canonicalDataContextValue({ kind: ref.kind, id: ref.id, ...(ref.version === undefined ? {} : { version: ref.version }), ...(ref.sha256 === undefined ? {} : { sha256: ref.sha256 }), ...(ref.permissionRef === undefined ? {} : { permissionRef: ref.permissionRef }) });
   const available = new Set([
     ...input.capabilities.skills.map(ref => identity({ ...ref, kind: 'skill' })),

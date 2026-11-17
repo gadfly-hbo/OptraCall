@@ -432,6 +432,22 @@ export function createDbLinkHost(options: DbLinkHostOptions) {
     async planningSources(projectId: string, planning: DbLinkPlanningOptions = {}) {
       return scoped(projectId, planning.taskId, async () => projectDbLinkPlanningSources(store.listProjectSources(projectId), planning.taskId ? store.listTaskSources(projectId, planning.taskId) : undefined, planning));
     },
+    /** Host-only qualification facet. It never opens fixed row/value chunks and
+     * is not registered as an Agent DB action or an HTTP result reader. */
+    async resultManifestSource(projectId: string, taskId: string, resultId: string, configuration: RuntimeModelConfiguration, context: { signal?: AbortSignal; assertCurrent?: () => void }) {
+      return scoped(projectId, taskId, async () => {
+        const assertCurrent = () => { context.assertCurrent?.(); if (context.signal?.aborted) fail('db_query_stopped'); if (options.isClosing()) fail('host_closing'); };
+        assertCurrent(); await refresh(true);
+        const receipts = await results.list({ projectId, taskId, requestId: 'source-metadata', operationId: 'source-metadata' }); assertCurrent();
+        const receipt = receipts.find(item => item.id === resultId); if (!receipt) return fail('db_result_not_found');
+        if (receipt.owner.taskId !== taskId) fail('db_result_foreign_owner');
+        const loaded = await results.readSourceManifest(receipt.owner, resultId); assertCurrent(); await refresh(true);
+        const permission = loaded.manifest.source.modelExport;
+        if (!permission) return fail('db_material_export_unbound');
+        if (!permission.results || !permission.targets.includes(outlet(configuration))) fail('db_model_export_not_authorized');
+        assertCurrent(); return { receipt: loaded.receipt, manifest: loaded.manifest };
+      });
+    },
     async materialSource(projectId: string, taskId: string, resultId: string, configuration: RuntimeModelConfiguration, context: { signal?: AbortSignal; assertCurrent?: () => void }) {
       return scoped(projectId, taskId, async () => {
         const assertCurrent = () => { context.assertCurrent?.(); if (context.signal?.aborted) fail('db_query_stopped'); if (options.isClosing()) fail('host_closing'); };

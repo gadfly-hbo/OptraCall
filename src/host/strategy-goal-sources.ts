@@ -3,9 +3,9 @@ import type { ProjectStore } from './project-store.ts';
 import type { createDecisionBoardStore } from '../../extensions/business-plugins/decision-board/storage/store.ts';
 import type { BoardItemRecord } from '../../extensions/business-plugins/decision-board/types.ts';
 import type { createMetricLibrary } from '../../extensions/business-plugins/metric-factory/library/store.ts';
-import type { GoalSourceRef, GoalScope } from './strategy-goals-types.ts';
+import type { GoalSourceRef, GoalScope, GoalDiscussionSourceRef } from './strategy-goals-types.ts';
 import type { EnterpriseScopeStore } from './enterprise-scope-store.ts';
-import { StrategyGoalsError } from './strategy-goals-store.ts';
+import { StrategyGoalsError, parseGoalSourceRef } from './strategy-goals-store.ts';
 import { createHash } from 'node:crypto';
 
 export interface StrategyGoalSourcesOptions {
@@ -14,12 +14,14 @@ export interface StrategyGoalSourcesOptions {
   board: Pick<ReturnType<typeof createDecisionBoardStore>, 'listItems' | 'getItem' | 'listTasks' | 'getTask' | 'listFeedbackHistory' | 'getFeedbackRevision' | 'getActionAuthorization' | 'listActionAuthorizations'>;
   metrics: Pick<ReturnType<typeof createMetricLibrary>, 'list' | 'read'>;
   assertBoardItemReadable(item: BoardItemRecord): Promise<void>;
+  /** Resolve only Host-owned discussion metadata/native paths, never a client sessionFile. */
+  readDiscussionSource?(source: GoalDiscussionSourceRef): Promise<void>;
 }
 export interface StrategyGoalSourceDirectory { sources: { label: string; ref: GoalSourceRef }[]; unavailable: { authority: GoalSourceRef['authority']; code: string }[] }
 function unavailable(): never { throw new StrategyGoalsError('strategy_goal_feedback_source_unavailable', 409); }
 function changed(): never { throw new StrategyGoalsError('strategy_goal_feedback_source_changed', 409); }
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-/** A department is an explicit responsibility declaration inside an existing enterprise, not a second organization directory. */
+/** A department may declare a known enterprise, or retain an unknown upper organization without inventing one. */
 export function validateStrategyGoalScope(scope: GoalScope, directory: Pick<EnterpriseScopeStore, 'get'>): void {
   try {
     if (!scope || !['enterprise', 'department', 'personal'].includes(scope.kind) || typeof scope.id !== 'string' || !scope.id.trim() || typeof scope.name !== 'string' || !scope.name.trim()) throw new Error();
@@ -29,12 +31,18 @@ export function validateStrategyGoalScope(scope: GoalScope, directory: Pick<Ente
       if (scope.enterpriseId !== undefined && scope.enterpriseId !== enterprise.id || scope.name !== enterprise.name) throw new Error();
       return;
     }
-    if (!scope.enterpriseId) throw new Error();
-    directory.get(scope.enterpriseId);
+    if (scope.enterpriseId !== undefined) directory.get(scope.enterpriseId);
   } catch { throw new StrategyGoalsError('strategy_goal_scope_unavailable', 409); }
 }
 export function createStrategyGoalSources(options: StrategyGoalSourcesOptions) {
   async function readSource(source: GoalSourceRef): Promise<void> {
+    if (source.authority === 'strategy-discussion') {
+      let ref: GoalDiscussionSourceRef;
+      try { ref = parseGoalSourceRef(source) as GoalDiscussionSourceRef; } catch { return unavailable(); }
+      if (!options.readDiscussionSource) return unavailable();
+      await options.readDiscussionSource(ref);
+      return;
+    }
     if (source.authority === 'case') {
       if (typeof source.version === 'string') {
         const choice = options.cases.getStrategyChoice(source.id, source.version), quote = choice.quoteProvenance;

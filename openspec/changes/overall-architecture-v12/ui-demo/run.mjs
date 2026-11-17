@@ -1,0 +1,15 @@
+import { createServer } from 'vite';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const codeRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+const file = path.join(codeRoot, '.local/v12-preparation/demo-runtime.json');
+const requested = process.argv.find(value => value.startsWith('--port='));
+const port = requested ? Number(requested.slice(7)) : 43127;
+if (!Number.isInteger(port) || port < 1024 || port > 65535 || [4173, 4174, 4175].includes(port)) throw new Error('Choose an isolated demo port, excluding product ports.');
+const server = await createServer({ configFile: fileURLToPath(new URL('./vite.config.ts', import.meta.url)), server: { host: '127.0.0.1', port, strictPort: true, proxy: {} } });
+await server.listen();
+const receipt = { kind: 'pure-ui-demo-no-host', pid: process.pid, host: '127.0.0.1', port, url: `http://127.0.0.1:${port}/`, baseline: `http://127.0.0.1:${port}/?baseline=1`, startedAt: new Date().toISOString(), codeRoot, productSourceModified: false, runtimeOrProviderStarted: false, stopCommand: `kill -TERM ${process.pid}` };
+fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(receipt, null, 2) + '\n');
+process.stdout.write(JSON.stringify(receipt) + '\n');
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => { await server.close(); fs.writeFileSync(file, JSON.stringify({ ...receipt, stoppedAt: new Date().toISOString() }, null, 2) + '\n'); process.exit(0); });

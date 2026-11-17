@@ -1,3 +1,11 @@
+import type {RuntimeModelConfiguration} from './config-store.ts';
+import {createStrategyDiscussionSources,StrategyDiscussionSourceFault} from './strategy-discussion-sources.ts';
+import {createStrategyDiscussionSourcePermissions} from './strategy-discussion-source-permissions.ts';
+import {createStrategyDiscussionHost} from './strategy-discussion-host.ts';
+import {StrategyDiscussionFault} from './strategy-discussion-store.ts';
+import {createUsageContextStore} from './usage-context-store.ts';
+import {createUsageContextRoutes} from './usage-context-routes.ts';
+import {UsageContextFault} from './usage-context-types.ts';
 import { createMethodIssueAdapter } from './method-issue-adapter.ts';
 import { projectSkillCatalog } from '../agent/skill-catalog.ts';
 import { createQuotedDecisionAdapter } from './quoted-decision-adapter.ts';
@@ -169,6 +177,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false, relationsEnabled: options.caseRelationsEnabled !== false });
   const projectPlans = createProjectPlanStore({ dataRoot });
   const strategyGoals = new StrategyGoalsStore(dataRoot), automaticActions = createAutomaticActionSettingsStore({ dataRoot });
+  const usageSettings=createUsageContextStore({dataRoot});
+  const usageRoutes=createUsageContextRoutes({store:usageSettings,mutate:fn=>mutate(fn),isClosing:()=>closing});
   const modelPacks = new ModelPackStore(path.join(dataRoot, 'models'));
   const enterpriseMaterials = new EnterpriseMaterialsStore(dataRoot);
   const projectDataReferences = createProjectDataContextReferences({ dataRoot, projects, enterpriseMaterials });
@@ -393,7 +403,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               deliver();
             }),
           };
-        }, analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, methodIssue: async (input, context) => {
+        }, analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, methodIssue: async (input, context) => {
           const operationId = stableActionId(['task-method-issue-v1', project.id, task.id, context.requestId, input.methodId, input.version, input.note, input.sources]);
           return methodIssues(input, { ...context, operationId, projectId: project.id, taskId: task.id });
         }, quotedDecisions: async (action, input, context) => {
@@ -559,6 +569,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       sapMethodFeature.closeAll(filter),
       ...(studioSessions ? [studioSessions.closeAll(filter)] : []),
       requirementSessions.closeAll(filter),
+      strategyDiscussions.closeAll(filter),
     ]);
     for (const key of [...streams.keys()]) {
       const [projectId, taskId] = key.split('/');
@@ -696,19 +707,48 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   });
   const quotedDecisions = createQuotedDecisionAdapter({ cases, projects, board: boardStore, goals: strategyGoals, mutate, isClosing: () => closing, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item) });
   const strategyMetricLibrary = createMetricLibrary(path.join(dataRoot, 'metric-assets'));
-  const strategySources = createStrategyGoalSources({ cases, projects, board: boardStore, metrics: strategyMetricLibrary, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item) });
-  const strategyGoalRoutes = createStrategyGoalRoutes({ store: strategyGoals, mutate, isClosing: () => closing,
-    listSources: strategySources.list,
-    validateGoal: async input => {
+  const strategySources = createStrategyGoalSources({ cases, projects, board: boardStore, metrics: strategyMetricLibrary, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item), readDiscussionSource:ref=>strategyDiscussions.readDiscussionSource(ref) });
+  const validateStrategyGoal=async(input:import('./strategy-goals-types.ts').GoalDraftInput)=>{
       validateStrategyGoalScope(input.scope, studio.enterpriseScopes);
       if (input.source) await strategySources.validate(input.source);
+      for(const source of [...(input.strategyContext?.sources??[]),...(input.strategyContext?.methods??[]).flatMap(m=>m.source?[m.source]:[])])await strategySources.validate(source);
       if (input.measurement?.kind === 'quantitative') {
-        try { const metric = strategyMetricLibrary.read(input.measurement.sapMetric.id, input.measurement.sapMetric.version); if (!input.measurement.sapMetric.metricName || !metric.entry.metricNames.includes(input.measurement.sapMetric.metricName)) throw new Error('metric_name_required'); const scope = input.scope.kind === 'enterprise' ? input.scope.id : input.scope.enterpriseId; const metricScope = studio.enterpriseScopes.assetEnterpriseId('sap-metric', input.measurement.sapMetric.id); if (scope && metricScope !== scope) throw new Error('metric_scope_unavailable'); }
+        try { const metric = strategyMetricLibrary.read(input.measurement.sapMetric.id, input.measurement.sapMetric.version); if (!input.measurement.sapMetric.metricName || !metric.entry.metricNames.includes(input.measurement.sapMetric.metricName)) throw new Error('metric_name_required'); const scope = input.scope.kind === 'enterprise' ? input.scope.id : input.scope.enterpriseId; const metricScope = studio.enterpriseScopes.assetEnterpriseId('sap-metric', input.measurement.sapMetric.id); if (scope ? metricScope !== scope : Boolean(metricScope) || studio.enterpriseScope.active()) throw new Error('metric_scope_unavailable'); }
         catch { throw new StrategyGoalsError('strategy_goal_metric_unavailable', 409); }
       }
-    },
+  };
+  const strategySourcePermissions=createStrategyDiscussionSourcePermissions({projects,data:projectDataContext,dbLinks,enterpriseSourceAllowed:enterpriseSemanticSourceAllowed,isClosing:()=>closing});
+  const discussionSourceReader=createStrategyDiscussionSources<Readonly<RuntimeModelConfiguration>>({projects,data:projectDataContext,methods:sapMethods,enterprise:enterpriseMaterials,readSource:readPersonalSource,listTaskSources:async(projectId,context,taskId)=>{
+    context.assertCurrent();const project=await projects.get(projectId),tasks=taskId?[await projects.getTask(projectId,taskId)]:project.tasks;
+    const reports:import('./project-task-results-types.ts').ProjectTaskResultBinding[]=[],replies:import('./project-task-results-types.ts').ProjectTaskNativeReplyBinding[]=[];
+    for(const task of tasks){context.assertCurrent();const found=await listTaskResultSources(project,task,context);reports.push(...found.reports);replies.push(...found.replies);}context.assertCurrent();return {reports,replies};
+  },assertReadable:strategySourcePermissions});
+  const discussionSourceContext=(owner:import('./strategy-discussion-types.ts').StrategyDiscussion)=>({assertCurrent:()=>{if(closing||!availableConfiguration(owner.configurationId,owner.configurationRevision))throw new StrategyDiscussionFault('strategy_discussion_context_changed');if(strategyDiscussions.store.get(owner.id).revision!==owner.revision)throw new StrategyDiscussionFault('strategy_discussion_context_changed');}});
+  const strategyDiscussions=createStrategyDiscussionHost({dataRoot,codeRoot:options.cwd,goals:strategyGoals,configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{offset:page?.offset,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}});
+  const strategyGoalRoutes = createStrategyGoalRoutes({ store: strategyGoals, mutate, isClosing: () => closing,
+    listSources: strategySources.list,
+    validateGoal:validateStrategyGoal,
     validateFeedbackSource: strategySources.validate,
   });
+  async function readTaskGoalContextSource(projectId:string,taskId:string,input:Record<string,unknown>,context:Parameters<import('../agent/goal-context-source.ts').GoalContextSourcePort>[1]){
+    context.assertCurrent();const owner=await pair(projectId,taskId,true);context.assertCurrent();
+    const ref={goalId:String(input.goalId),version:Number(input.version)};let refs=context.goalRefs;
+    if(!refs.some(item=>item.goalId===ref.goalId&&item.version===ref.version)){const receipts=await taskContextReceipts(owner.project,owner.task,true);refs=receipts.flatMap(receipt=>Array.isArray(receipt.providedContext?.goalSourceRefs)?receipt.providedContext.goalSourceRefs as import('./strategy-goals-types.ts').GoalRef[]:[]);}
+    if(!refs.some(item=>item.goalId===ref.goalId&&item.version===ref.version))throw new StrategyDiscussionFault('goal_context_source_not_delivered',403);
+    const goal=strategyGoals.read(ref),sources=[...(goal.source?[goal.source]:[]),...(goal.strategyContext?.sources??[]),...(goal.strategyContext?.methods??[]).flatMap(method=>method.source?[method.source]:[])];
+    const index=input.sourceIndex===undefined?0:Number(input.sourceIndex),source=sources[index];if(!Number.isSafeInteger(index)||index<0||source?.authority!=='strategy-discussion')throw new StrategyDiscussionFault('goal_context_source_unavailable');
+    const originalDiscussion=strategyDiscussions.store.get(source.id);
+    const originalProjection=await strategyDiscussions.sourceContext(source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef);
+    for(const projection of originalProjection.projections){if(!projection.sources.length)continue;
+      if(projection.projectId!==projectId)throw new StrategyDiscussionFault('goal_context_source_project_not_authorized',403);
+      const receivingConfiguration=availableConfiguration(owner.task.configuration.id,owner.task.configuration.revision);if(!receivingConfiguration)throw new StrategyDiscussionFault('configuration_changed');
+      // The read recipient is this actual Task/configuration, not the original discussion model.
+      const readScope={...originalDiscussion,projectId:projection.projectId,sources:projection.sources,configurationId:receivingConfiguration.id,configurationRevision:receivingConfiguration.revision};
+      await discussionSourceReader.verify(readScope,receivingConfiguration,{...context,...(projection.metadataOnly?{metadataOnly:true}:{}),receivingTask:{projectId,taskId}});context.assertCurrent();
+    }
+    const read=await strategyDiscussions.readSource(source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef,{offset:input.offset as number|undefined,limit:input.limit as number|undefined});context.assertCurrent();
+    return {content:[{type:'text' as const,text:JSON.stringify({...read,goal:ref,claim:'provided-not-used-or-verified'})}],details:{goal:ref,source:read.source,range:read.range,complete:read.complete}};
+  }
   const caseRoutes = createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject, goals: strategyGoals,
     enterpriseScope: {
       caseEnterpriseId: caseId => studio.enterpriseScopes.enterpriseIdForCase(caseId),
@@ -1153,8 +1193,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     });
     return terminal;
   }
-  const projectPlanFeature = createProjectPlanFeature({ codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), plans: projectPlans, projects, cases, goals: strategyGoals, methods: sapMethods, databaseSources: (projectId, read) => dbLinks.planningSources(projectId, read), mutate, isClosing: () => closing, startMessage: (projectId, taskId, input) => startProjectMessage(projectId, taskId, input, { userText: false }), registerFresh: async (projectId, taskId) => { const owner = await pair(projectId, taskId); projectSessions.registerFresh(projectSessions.ref(owner)); } });
-  const projectPlanPreparation = createProjectPlanPreparationHost({ dataRoot, projects, plans: projectPlans, sessions: requirementSessions, capabilities: projectPlanFeature.capabilities, validate: projectPlanFeature.validate, goalContent: projectPlanFeature.goalContent, capabilityIssues: projectPlanFeature.capabilityIssues, mutate, isClosing: () => closing });
+  const projectPlanFeature = createProjectPlanFeature({ codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), plans: projectPlans, projects, cases, goals: strategyGoals, defaultUsageContext:async()=> (await usageSettings.read()).context, methods: sapMethods, databaseSources: (projectId, read) => dbLinks.planningSources(projectId, read), mutate, isClosing: () => closing, startMessage: (projectId, taskId, input) => startProjectMessage(projectId, taskId, input, { userText: false }), registerFresh: async (projectId, taskId) => { const owner = await pair(projectId, taskId); projectSessions.registerFresh(projectSessions.ref(owner)); } });
+  const projectPlanPreparation = createProjectPlanPreparationHost({ dataRoot, projects, plans: projectPlans, sessions: requirementSessions, capabilities: projectPlanFeature.capabilities, validate: projectPlanFeature.validate, goalContent: projectPlanFeature.goalContent, prepareContext:projectPlanFeature.prepareContext, goalEvidence:projectPlanFeature.goalEvidence, capabilityIssues: projectPlanFeature.capabilityIssues, mutate, isClosing: () => closing });
   type ProjectMessageReceipt = { requestId: string; status: unknown; deduplicated?: boolean };
   async function startProjectMessage(projectId: string, taskId: string, input: Record<string, unknown>, origin: { userText: boolean } = { userText: true }): Promise<ProjectMessageReceipt> {
     if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
@@ -1205,13 +1245,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (previous) return { previous };
           if (await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
           await assertFrameworkContinuation(projectId, taskId);
-          let caseGoalText = '';
+          let caseGoalText = '';let caseGoalRefs:import('./strategy-goals-types.ts').GoalRef[]=[];
           if (input.caseContext) {
             const selection = input.caseContext as CaseContextSelection, record = cases.getCase(selection.caseId);
             if (record.status === 'closed') throw new CaseStoreError('case_closed', 409);
             if (record.revision !== selection.caseRevision || cases.getProjectWork(projectId).revision !== selection.projectWorkRevision) throw new CaseStoreError('revision_conflict', 409);
             if (!cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new CaseStoreError('project_not_linked', 409);
             const binding = cases.getGoalBinding(record.id);
+            if(binding)caseGoalRefs=[binding.primary,...binding.related];
             let planIncludesCaseGoals = false;
             if (deliveredPlan) {
               const fixedPlan = (await projectPlans.read(projectId)).history.find(value => value.id === deliveredPlan.confirmationId)?.plan;
@@ -1254,6 +1295,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (prompt.length > 131072) throw new EnterpriseContextError('enterprise_context_too_large', 413);
           startedAt = new Date().toISOString();
           const providedContext = {
+            goalSourceRefs:[...(deliveredPlan?.goalSourceRefs??[]),...caseGoalRefs],
             originalUserText: input.text as string,
             userQuoteEligible: origin.userText,
             ...(deliveredPlan ? { projectPlan: deliveredPlan } : {}),
@@ -1340,6 +1382,28 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const origin = request.headers.origin, allowed = [...options.uiPorts, address.port].flatMap(port => [`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
       if (origin && !allowed.includes(origin)) throw new RequestFault(403, 'origin_rejected');
       const url = new URL(request.url ?? '/', host);
+      if(url.pathname.startsWith('/api/settings/usage-context')){const result=await usageRoutes(url.pathname,request.method??'GET',request.method==='PUT'?await body(request):{});if(result){json(response,200,result.body);return;}}
+      if(url.pathname==='/api/strategy/discussions'){
+        if(request.method==='GET'){json(response,200,{discussions:strategyDiscussions.store.list()});return;}
+        if(request.method==='POST'){json(response,201,{discussion:await strategyDiscussions.create(await body(request))});return;}
+      }
+      const discussionRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})(?:\/(messages|events|sources|source|stop|close|adopt))?$/.exec(url.pathname);
+      if(discussionRoute){const id=discussionRoute[1]!,action=discussionRoute[2];
+        if(!action&&request.method==='GET'){json(response,200,await strategyDiscussions.detail(id));return;}
+        if(!action&&request.method==='PATCH'){json(response,200,{discussion:await strategyDiscussions.update(id,await body(request))});return;}
+        if(action==='messages'&&request.method==='POST'){json(response,202,await strategyDiscussions.send(id,await body(request)));return;}
+        if(action==='source'&&request.method==='GET'){const source={authority:'strategy-discussion' as const,id,version:url.searchParams.get('entryId')??'',sessionId:url.searchParams.get('sessionId')??'',sha256:url.searchParams.get('sha256')??'',entryType:url.searchParams.get('entryType') as 'message'|'tool-result'};json(response,200,await strategyDiscussions.readSource(source,{offset:Number(url.searchParams.get('offset')??0),limit:Number(url.searchParams.get('limit')??8192)}));return;}
+        if(action==='sources'&&request.method==='GET'){json(response,200,await strategyDiscussions.sources(id,url.searchParams.get('projectId')??undefined));return;}
+        if(action==='adopt'&&request.method==='POST'){json(response,200,await strategyDiscussions.adopt(id,await body(request)));return;}
+        if(action==='stop'&&request.method==='POST'){const input=await body(request);json(response,200,await strategyDiscussions.stop(id,input.expectedRequestId as string|undefined));return;}
+        if(action==='close'&&request.method==='POST'){json(response,200,await strategyDiscussions.close(id));return;}
+        if(action==='events'&&request.method==='GET'){
+          const d=await strategyDiscussions.detail(id);
+          response.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});
+          const unsubscribe=strategyDiscussions.subscribe(id,event=>{if(!response.destroyed&&!response.writableEnded)response.write(`data: ${JSON.stringify(event)}\n\n`);});
+          request.on('close',unsubscribe);response.write(`data: ${JSON.stringify({type:'snapshot',snapshot:d.snapshot})}\n\n`);return;
+        }
+      }
       if (url.pathname.startsWith('/api/strategy/')) {
         const result = await strategyGoalRoutes(url.pathname, request.method ?? 'GET', ['POST', 'PATCH'].includes(request.method ?? '') ? await body(request) : {});
         if (result) { json(response, result.status ?? 200, result.body); return; }
@@ -1877,7 +1941,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
-      if (error instanceof StrategyGoalsError || error instanceof AutomaticActionSettingsFault || error instanceof ProjectPlanFault) {
+      if(error instanceof StrategyDiscussionFault || error instanceof StrategyDiscussionSourceFault){json(response,error.status,{code:error.code,accepted:false,message:error.status===503?'战略讨论或保存结果尚未核实，原输入、选择和操作编号保留；请先只读核对原结果，不要重复创建或自动重试。':error.code==='strategy_discussion_history_scope_changed'?'已读取的历史资料与当前背景范围或排除项不一致，本次未发送给模型。原输入、选择和历史保留；请集中核对资料范围并明确调整，不能把旧会话视为已忘记资料。':error.code==='strategy_discussion_context_changed'?'当前讨论背景或准确版本已变化，本次未继续派发。原输入与选择保留，请集中核对后明确调整。':'战略讨论未完成，原输入和选择保留；请核对目标准确版本、资料权限、模型配置或原操作状态。'});return;}
+      if (error instanceof StrategyDiscussionFault || error instanceof UsageContextFault || error instanceof StrategyGoalsError || error instanceof AutomaticActionSettingsFault || error instanceof ProjectPlanFault) {
         const goalReadMessages: Record<string, string> = {
           strategy_goal_not_found: '原目标不可取得。已保留原选择，未猜测或替换为最新目标；请核对原目标记录及访问范围。',
           strategy_goal_version_not_found: '所选目标准确版本无法读取。已保留原选择，未替换为最新版本；请核对原目标和版本。',

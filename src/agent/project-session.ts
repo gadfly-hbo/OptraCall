@@ -1,3 +1,5 @@
+import {goalContextSourceTool} from './goal-context-source.ts';
+import { strategyDiscussionTool, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
 import { methodIssueTool } from './method-issue.ts';
 import { quotedDecisionTool } from './quoted-decisions.ts';
 import type { AnalysisDeliveryReceipt } from '../host/analysis-delivery.ts';
@@ -105,7 +107,8 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   let editorText: string | undefined;
   const publicSearch = () => options?.workspace?.capabilityPolicy === 'public-search';
   // Sealed profiles reuse the same no-execution resource path.
-  const fixedInput = () => publicSearch() || options?.workspace?.capabilityPolicy === 'fixed-draft' || options?.workspace?.capabilityPolicy === 'text-only' || options?.workspace?.capabilityPolicy === 'source-reader';
+  const strategyDiscussion = () => options?.workspace?.capabilityPolicy === 'strategy-discussion';
+  const fixedInput = () => strategyDiscussion() || publicSearch() || options?.workspace?.capabilityPolicy === 'fixed-draft' || options?.workspace?.capabilityPolicy === 'text-only' || options?.workspace?.capabilityPolicy === 'source-reader';
   const ordinaryManaged = () => Boolean(protectedTools && options.protectedExecution?.profile === 'ordinary');
   function syncExecutionJournal(target: SessionManager) {
     const file = target.getSessionFile(); if (!file) throw new Error('managed_native_file_required');
@@ -307,7 +310,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   async function open(o: ProjectAgentWireOptions) {
     if (runtime) throw new Error('session_already_open');
     options = o;
-    if (fixedInput() && o.sessionFile) throw new Error('fixed_draft_history_not_allowed');
+    if (fixedInput() && !strategyDiscussion() && o.sessionFile) throw new Error('fixed_draft_history_not_allowed');
     if (editorText === undefined) editorText = o.draft ?? '';
     analysisPython = o.analysisPython && !fixedInput() ? inspectAnalysisPython(o.analysisPython, o.codeRoot) : undefined;
     const cwd = o.workspace?.cwd ?? path.join(o.projectDirectory!, '020_clean');
@@ -676,12 +679,28 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         },
       });
     }
-    const scopeToolContexts = Boolean(candidateAvailable || dbLinkAvailable || o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
+    const scopeToolContexts = Boolean(o.goalContextSourceEnabled || strategyDiscussion() || candidateAvailable || dbLinkAvailable || o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
+    const createStrategyTools = (boundManager: SessionManager) => !strategyDiscussion() || !o.strategyDiscussionEnabled ? [] : [{
+      ...strategyDiscussionTool,
+      execute: async (toolCallId:string, parameters:Record<string,unknown>, signal:AbortSignal|undefined, _update:unknown, ctx:ExtensionToolContext) => {
+        const originalRun=run,boundSessionId=boundManager.getSessionId();
+        const assertCurrent=()=>{if(!originalRun || run!==originalRun || originalRun.cancelled || originalRun.kind!=='prompt' || closing || !signal || signal.aborted || manager!==boundManager || session?.sessionManager!==boundManager || ctx.sessionManager!==boundManager || !toolCallId.trim())throw new Error('strategy_discussion_run_unavailable');};
+        assertCurrent();
+        if(!(STRATEGY_DISCUSSION_ACTIONS as readonly unknown[]).includes(parameters.action))throw new Error('invalid_strategy_discussion_action');
+        const {action,...input}=parameters;
+        const result=await requestHostTool({feature:'strategy-discussion',action:String(action),input,toolCallId,requestId:originalRun!.id,sessionId:boundSessionId},signal!,'strategy_discussion_run_unavailable');
+        assertCurrent();return result as {content:{type:'text';text:string}[];details:Record<string,unknown>};
+      }
+    }];
+    const createGoalContextTools=(boundManager:SessionManager)=>!o.goalContextSourceEnabled || o.workspace || !o.projectId || !o.taskId || o.protectedExecution&&!ordinaryManaged()?[]:[{...goalContextSourceTool,execute:async(toolCallId:string,input:Record<string,unknown>,signal:AbortSignal|undefined,_update:unknown,ctx:ExtensionToolContext)=>{
+      const current=run,boundSessionId=boundManager.getSessionId();const assertCurrent=()=>{if(!current||run!==current||current.kind!=='prompt'||current.cancelled||closing||!signal||signal.aborted||manager!==boundManager||session?.sessionManager!==boundManager||ctx.sessionManager!==boundManager||!toolCallId.trim())throw new Error('goal_context_source_unavailable');};
+      assertCurrent();const result=await requestHostTool({feature:'goal-context-source',action:'read',input,toolCallId,requestId:current!.id,sessionId:boundSessionId},signal!,'goal_context_source_unavailable');assertCurrent();return result as {content:{type:'text';text:string}[];details:Record<string,unknown>};
+    }}];
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
       let parent: AgentSession;
       const contextAdapter = scopeToolContexts ? createToolContextAdapter((ctx, signal) => qualifyToolInvocation(parent, ctx, signal)) : undefined;
       const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
-      const customTools = [...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager), ...createBoundDbLinkTools(sessionManager), ...(o.reportCalculationReviewEnabled ? [createReportReviewTool(() => parent)] : [])];
+      const customTools = [...createGoalContextTools(sessionManager), ...createStrategyTools(sessionManager), ...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager), ...createBoundDbLinkTools(sessionManager), ...(o.reportCalculationReviewEnabled ? [createReportReviewTool(() => parent)] : [])];
       const delegation = !fixedInput() && !o.workspace && (!o.protectedExecution || ordinaryManaged());
       const searchGuidance: ExtensionFactory = pi => {
         pi.on('before_agent_start', event => {
@@ -751,7 +770,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       if (publicSearch()) services.settingsManager.applyOverrides({ retry: { enabled: false } });
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
-      const sourceToolNames = sourceWorkspace ? customTools.map(tool => tool.name) : [];
+      const sourceToolNames = sourceWorkspace || strategyDiscussion() ? customTools.map(tool => tool.name) : [];
       services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? sourceToolNames : protectedTools ? [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...webTools.map(tool => `+${tool}`), ...(subagent ? ['+subagent'] : [])] });
       // SDK modifiers append to either a plain workspace allowlist or inherited defaults.
       if (customTools.length) services.settingsManager.applyOverrides({ defaultTools: customTools.filter(tool => tool.name !== reportCalculationToolName).map(tool => `+${tool.name}`) });
@@ -852,7 +871,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     if (fixedInput() && (input?.enterprise || input?.feedback || input?.projectData || input?.personal)) throw new Error('fixed_draft_materials_not_allowed');
     if (input?.personal && (!options.projectId || !options.taskId || options.workspace || options.protectedExecution && !ordinaryManaged())) throw new Error('personal_context_profile_unavailable');
     if (input?.projectPlan && (!options.projectId || !options.taskId || options.workspace || input.projectPlan.projectId !== options.projectId || input.projectPlan.taskId !== options.taskId)) throw new Error('project_plan_profile_unavailable');
-    const providedContext = redact({ version: 1, claim: 'provided-not-adopted', providedAt: new Date().toISOString(), requestTextSha256: createHash('sha256').update(text).digest('hex'), ...(input?.userQuoteEligible !== undefined ? { userQuoteEligible: input.userQuoteEligible } : {}), ...(input?.assetFindings ? { assetFindings: input.assetFindings } : {}), ...(input?.automaticSource ? { automaticSource: input.automaticSource } : {}), ...(input?.conclusionReviews ? { conclusionReviews: input.conclusionReviews } : {}), ...(input?.projectPlanPreparation ? { projectPlanPreparation: input.projectPlanPreparation } : {}), ...(input?.projectPlan ? { projectPlan: input.projectPlan } : {}), ...(input?.rap ? { rap: input.rap } : {}), ...(input?.case ? { case: input.case } : {}), ...(input?.reportCalculationReview ? { reportCalculationReview: input.reportCalculationReview } : {}), ...(input?.enterprise ? { enterprise: input.enterprise } : {}), ...(input?.feedback ? { feedback: input.feedback } : {}), ...(input?.projectData ? { projectData: input.projectData } : {}), ...(input?.personal ? { personal: input.personal.receipt } : {}), ...(input?.studio ? { studio: { systemId: input.studio.systemId, purpose: input.studio.purpose, refs: input.studio.refs, claim: 'provided-not-used-or-verified' } } : {}), ...(typeof input?.originalUserText === 'string' ? { originalUserText: input.originalUserText } : {}), ...(sapProvision() ? { sap: sapProvision() } : {}) });
+    const providedContext = redact({ version: 1, claim: 'provided-not-adopted', providedAt: new Date().toISOString(), requestTextSha256: createHash('sha256').update(text).digest('hex'), ...(input?.userQuoteEligible !== undefined ? { userQuoteEligible: input.userQuoteEligible } : {}), ...(input?.assetFindings ? { assetFindings: input.assetFindings } : {}), ...(input?.automaticSource ? { automaticSource: input.automaticSource } : {}), ...(input?.conclusionReviews ? { conclusionReviews: input.conclusionReviews } : {}), ...(input?.goalSourceRefs ? {goalSourceRefs:input.goalSourceRefs}:{}), ...(input?.strategyDiscussion ? {strategyDiscussion:input.strategyDiscussion} : {}), ...(input?.projectPlanPreparation ? { projectPlanPreparation: input.projectPlanPreparation } : {}), ...(input?.projectPlan ? { projectPlan: input.projectPlan } : {}), ...(input?.rap ? { rap: input.rap } : {}), ...(input?.case ? { case: input.case } : {}), ...(input?.reportCalculationReview ? { reportCalculationReview: input.reportCalculationReview } : {}), ...(input?.enterprise ? { enterprise: input.enterprise } : {}), ...(input?.feedback ? { feedback: input.feedback } : {}), ...(input?.projectData ? { projectData: input.projectData } : {}), ...(input?.personal ? { personal: input.personal.receipt } : {}), ...(input?.studio ? { studio: { systemId: input.studio.systemId, purpose: input.studio.purpose, refs: input.studio.refs, claim: 'provided-not-used-or-verified' } } : {}), ...(typeof input?.originalUserText === 'string' ? { originalUserText: input.originalUserText } : {}), ...(sapProvision() ? { sap: sapProvision() } : {}) });
     return execute(id, 'prompt', () => session!.prompt(text), requestFingerprint, providedContext);
   }
   async function command(text: string, id: string) {

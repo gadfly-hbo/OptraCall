@@ -55,7 +55,8 @@ test('PG01: the same request carries each exact adopted goal version into lightw
       const text = providerMessageText([...context.messages].reverse().find(message => message.role === 'user')?.content);
       if (context.availableTools.length === 0) {
         prepareText = text;
-        return { text: JSON.stringify({ plan, mece: { sameLevel: '同层范围一致', coverage: '只覆盖已确认目标', boundaries: '不扩全组织目标', depth: '不读明细' }, limitations: [] }) };
+        const frozen = JSON.parse(text.split('\n').find(line => line.startsWith('原轻量工作稿：'))!.slice('原轻量工作稿：'.length));
+        return { text: JSON.stringify({ plan: { ...plan, ...(frozen.usageContext === undefined ? {} : { usageContext: frozen.usageContext }), ...(frozen.usageContextOrigin === undefined ? {} : { usageContextOrigin: frozen.usageContextOrigin }), ...(frozen.goalBasis === undefined ? {} : { goalBasis: frozen.goalBasis }) }, mece: { sameLevel: '同层范围一致', coverage: '只覆盖已确认目标', boundaries: '不扩全组织目标', depth: '不读明细' }, limitations: [] }) };
       }
       executionText = text;
       return { text: '依据已确认目标准确版本核对，合成输入不证明业务效果。' };

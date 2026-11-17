@@ -2,8 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseUserQuoteProvenance } from '../agent/quoted-decisions.ts';
+import { parseUsageContext } from './usage-context-types.ts';
+import { parseGoalBasis } from './strategy-goals-types.ts';
 import type { GoalActionArrangement, GoalArrangementInput } from './strategy-goals-types.ts';
-import type { GoalAdoptionInput, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRelationVersion, GoalRevisionInput, GoalSourceRef, GoalVersion, StrategyGoalRecord, StrategyGoalsIndex } from './strategy-goals-types.ts';
+import type { GoalAdoptionInput, GoalAdoptionProvenance, GoalBasis, GoalContextSnapshot, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRelationVersion, GoalRevisionInput, GoalSourceRef, GoalVersion, StrategyGoalRecord, StrategyGoalsIndex } from './strategy-goals-types.ts';
 
 export class StrategyGoalsError extends Error {
   readonly code: string;
@@ -16,7 +18,7 @@ const text = (v: unknown, max = 4000): string => typeof v === 'string' && v.trim
 const uuid = (v: unknown): string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v) ? v : fail('invalid_strategy_goal_id');
 const positive = (v: unknown): number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : fail('invalid_strategy_goal_version');
 const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical).join(',')}]` : object(v) ? `{${Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}` : JSON.stringify(v);
-type StoredIndex = StrategyGoalsIndex & { schemaVersion: 1 | 2; operations: GoalOperationReceipt[] };
+type StoredIndex = StrategyGoalsIndex & { schemaVersion: 1 | 2 | 3; operations: GoalOperationReceipt[] };
 const empty = (): StoredIndex => ({ schemaVersion: 1, goals: [], relations: [], feedback: [], operations: [] });
 const MAX_BYTES = 4 * 1024 * 1024;
 function goalRef(value: GoalRef): GoalRef {
@@ -59,13 +61,26 @@ function relationInput(input: GoalRelationInput): GoalRelationInput {
   if (from.goalId === to.goalId && from.version === to.version) fail('invalid_strategy_goal_relation');
   return { from, to, kind: input.kind, responsibility: text(input.responsibility), rationale: text(input.rationale) };
 }
-function sourceRef(input: GoalSourceRef): GoalSourceRef {
-  if (!object(input) || !['case', 'decision-board', 'project', 'task', 'sap-metric'].includes(input.authority)) fail('invalid_strategy_goal_source');
+export function parseGoalSourceRef(input: GoalSourceRef): GoalSourceRef {
+  if (!object(input) || !['case', 'decision-board', 'project', 'task', 'sap-metric', 'strategy-discussion'].includes(input.authority)) fail('invalid_strategy_goal_source');
   const version = typeof input.version === 'string' ? text(input.version, 200) : positive(input.version);
   if (['latest', 'current'].includes(String(version).toLowerCase())) fail('invalid_strategy_goal_source');
   const sha256 = input.sha256;
   if (sha256 !== undefined && (typeof sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(sha256))) fail('invalid_strategy_goal_source');
+  if (input.authority === 'strategy-discussion') {
+    if (typeof version !== 'string' || !sha256 || typeof input.sessionId !== 'string' || !input.sessionId.trim() || input.sessionId.length > 200 || !['message', 'tool-result'].includes(input.entryType ?? '') || input.projectId !== undefined || input.taskId !== undefined || Object.keys(input).some(key => !['authority', 'id', 'version', 'sha256', 'sessionId', 'entryType'].includes(key))) fail('invalid_strategy_goal_source');
+    return { authority: 'strategy-discussion', id: uuid(input.id), version, sessionId: input.sessionId, entryType: input.entryType, sha256 };
+  }
+  if (input.sessionId !== undefined || input.entryType !== undefined) fail('invalid_strategy_goal_source');
   return { authority: input.authority, id: text(input.id, 300), version, ...(input.projectId === undefined ? {} : { projectId: uuid(input.projectId) }), ...(input.taskId === undefined ? {} : { taskId: uuid(input.taskId) }), ...(sha256 === undefined ? {} : { sha256 }) };
+}
+const sourceRef = parseGoalSourceRef;
+function strategyContext(input: GoalDraftInput['strategyContext']): NonNullable<GoalDraftInput['strategyContext']> {
+  if (!object(input) || Object.keys(input).some(key => !['summary', 'methods', 'sources'].includes(key)) || input.methods !== undefined && (!Array.isArray(input.methods) || input.methods.length > 30) || input.sources !== undefined && (!Array.isArray(input.sources) || input.sources.length > 100)) fail('invalid_strategy_goal_context');
+  return { summary: text(input.summary), ...(input.methods === undefined ? {} : { methods: input.methods.map(method => {
+    if (!object(method) || Object.keys(method).some(key => !['id', 'name', 'source'].includes(key))) fail('invalid_strategy_goal_context');
+    return { id: text(method.id, 200), name: text(method.name, 300), ...(method.source === undefined ? {} : { source: sourceRef(method.source) }) };
+  }) }), ...(input.sources === undefined ? {} : { sources: input.sources.map(sourceRef) }) };
 }
 function feedbackInput(input: GoalFeedbackInput): GoalFeedbackInput {
   if (!object(input) || !['execution', 'strategy', 'strategic-assumption'].includes(input.level)) fail('invalid_strategy_goal_feedback');
@@ -106,9 +121,28 @@ function draft(input: GoalDraftInput): GoalDraftInput {
     ...(input.resources === undefined ? {} : { resources: list(input.resources) }),
     ...(input.necessaryConditions === undefined ? {} : { necessaryConditions: list(input.necessaryConditions) }),
     ...(input.source === undefined ? {} : { source: sourceRef(input.source) }),
+    ...(input.usageContext === undefined ? {} : { usageContext: parseUsageContext(input.usageContext) }),
+    ...(input.strategyContext === undefined ? {} : { strategyContext: strategyContext(input.strategyContext) }),
   };
   if (value.dueAt && !Number.isFinite(Date.parse(value.dueAt))) fail('invalid_strategy_goal_due_date');
   return value;
+}
+
+/** Hashes the exact GoalRef and business content, so adopting it does not change the seen-content identity. */
+export function goalContentSha256(value: GoalVersion): string {
+  return createHash('sha256').update(canonical({ ...goalRef(value), ...draft(value) })).digest('hex');
+}
+/** Structural decoding only; the discussion adapter must separately bind the real user request and lease. */
+export function parseGoalAdoptionProvenance(input: unknown): GoalAdoptionProvenance {
+  const invalid = (): never => fail('invalid_strategy_goal_adoption_provenance');
+  if (!object(input) || !['discussion-quote', 'ui-confirmation'].includes(input.kind as string) || Object.keys(input).some(key => !['kind', 'discussionId', 'sessionId', 'goalContentSha256', 'requestId', 'userEntryId', 'quoteStart', 'quoteEnd', 'quote', 'quoteSha256'].includes(key)) || typeof input.discussionId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(input.discussionId) || typeof input.sessionId !== 'string' || !input.sessionId.trim() || input.sessionId.length > 200 || typeof input.goalContentSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(input.goalContentSha256)) return invalid();
+  const base: GoalAdoptionProvenance = { kind: input.kind as GoalAdoptionProvenance['kind'], discussionId: input.discussionId, sessionId: input.sessionId, goalContentSha256: input.goalContentSha256 };
+  if (input.kind === 'ui-confirmation') {
+    if (['requestId', 'userEntryId', 'quoteStart', 'quoteEnd', 'quote', 'quoteSha256'].some(key => input[key] !== undefined)) return invalid();
+    return base;
+  }
+  if (typeof input.requestId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(input.requestId) || typeof input.userEntryId !== 'string' || !input.userEntryId.trim() || input.userEntryId.length > 200 || !Number.isSafeInteger(input.quoteStart) || Number(input.quoteStart) < 0 || !Number.isSafeInteger(input.quoteEnd) || Number(input.quoteEnd) <= Number(input.quoteStart) || typeof input.quote !== 'string' || !input.quote.trim() || input.quote.length > 20000 || Number(input.quoteEnd) - Number(input.quoteStart) !== input.quote.length || typeof input.quoteSha256 !== 'string' || input.quoteSha256 !== createHash('sha256').update(input.quote).digest('hex')) return invalid();
+  return { ...base, requestId: input.requestId, userEntryId: input.userEntryId, quoteStart: Number(input.quoteStart), quoteEnd: Number(input.quoteEnd), quote: input.quote, quoteSha256: input.quoteSha256 };
 }
 
 /** Goal versions are owned here; SAP measurement bodies and business facts stay in their original authorities. */
@@ -137,7 +171,7 @@ export class StrategyGoalsStore {
       const bytes = fs.readFileSync(fd), after = fs.fstatSync(fd, { bigint: true }), current = fs.lstatSync(this.file, { bigint: true });
       if (BigInt(bytes.length) !== initial.size || after.mtimeNs !== initial.mtimeNs || after.ctimeNs !== initial.ctimeNs || current.ino !== initial.ino || current.dev !== initial.dev || current.nlink !== 1n) fail('strategy_goals_storage_changed', 503);
       const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-      if (!object(value) || value.schemaVersion !== 1 && value.schemaVersion !== 2 || !Array.isArray(value.goals) || !Array.isArray(value.relations) || !Array.isArray(value.feedback) || !Array.isArray(value.operations) || value.schemaVersion === 2 && !Array.isArray(value.arrangements)) fail('invalid_strategy_goals_storage', 503);
+      if (!object(value) || ![1, 2, 3].includes(value.schemaVersion as number) || !Array.isArray(value.goals) || !Array.isArray(value.relations) || !Array.isArray(value.feedback) || !Array.isArray(value.operations) || value.schemaVersion !== 1 && !Array.isArray(value.arrangements)) fail('invalid_strategy_goals_storage', 503);
       const index = value as unknown as StoredIndex, ids = new Set<string>();
       for (const record of index.goals) {
         uuid(record.id); positive(record.currentVersion);
@@ -147,6 +181,7 @@ export class StrategyGoalsStore {
           if (version.goalId !== record.id || version.version !== i + 1 || !['candidate', 'adopted'].includes(version.status) || !Number.isFinite(Date.parse(version.createdAt))) fail('invalid_strategy_goals_storage', 503);
           draft(version);
           if (version.status === 'adopted' ? !Number.isFinite(Date.parse(version.adoptedAt!)) || !text(version.adoptionDecision) : version.adoptedAt !== undefined || version.adoptionDecision !== undefined) fail('invalid_strategy_goals_storage', 503);
+          if (version.adoptionProvenance !== undefined && (version.status !== 'adopted' || parseGoalAdoptionProvenance(version.adoptionProvenance).goalContentSha256 !== goalContentSha256(version))) fail('invalid_strategy_goals_storage', 503);
         }
         if (record.adoptedVersion !== null && !record.versions.some(v => v.version === record.adoptedVersion && v.status === 'adopted')) fail('invalid_strategy_goals_storage', 503);
       }
@@ -179,6 +214,7 @@ export class StrategyGoalsStore {
         operationIds.add(operation.operationId);
         if (['create', 'revise', 'adopt'].includes(operation.kind)) {
           const result = operation.result as GoalVersion; goalRef(result); draft(result);
+          if (result.adoptionProvenance !== undefined && (result.status !== 'adopted' || parseGoalAdoptionProvenance(result.adoptionProvenance).goalContentSha256 !== goalContentSha256(result))) fail('invalid_strategy_goals_storage', 503);
           const current = index.goals.find(x => x.id === result.goalId)?.versions.find(x => x.version === result.version);
           if (!current || canonical(draft(current)) !== canonical(draft(result)) || current.createdAt !== result.createdAt || !['candidate', 'adopted'].includes(result.status)) fail('invalid_strategy_goals_storage', 503);
         } else if (operation.kind === 'arrange') {
@@ -224,6 +260,10 @@ export class StrategyGoalsStore {
         return structuredClone(previous.result) as T;
       }
       const result = apply(index);
+      // Existing versions are never rewritten on read; the first v1.2 write
+      // marks the original authority's format and later writes never downgrade it.
+      const v12 = (value: unknown): boolean => object(value) && (value.usageContext !== undefined || value.strategyContext !== undefined || value.adoptionProvenance !== undefined || object(value.source) && value.source.authority === 'strategy-discussion');
+      if (v12(result)) { index.schemaVersion = 3; index.arrangements ??= []; }
       index.operations.push({ operationId, kind, requestHash, completedAt: new Date().toISOString(), result: structuredClone(result) });
       this.write(index); return structuredClone(result);
     } finally {
@@ -241,7 +281,8 @@ export class StrategyGoalsStore {
       const existing = index.arrangements?.find(value => value.boardOperationId === body.boardOperationId);
       if (existing) { if (canonical(arrangementInput(existing)) !== canonical(body)) fail('strategy_goal_operation_conflict', 409); return existing; }
       const value = { ...body, id: randomUUID(), createdAt: new Date().toISOString() };
-      index.schemaVersion = 2; (index.arrangements ??= []).push(value); options?.assertWritable?.(); return value;
+      if (index.schemaVersion === 1) index.schemaVersion = 2;
+      (index.arrangements ??= []).push(value); options?.assertWritable?.(); return value;
     });
   }
   getOperation(id: string): GoalOperationReceipt | null { return structuredClone(this.load().operations.find(x => x.operationId === uuid(id)) ?? null); }
@@ -252,6 +293,40 @@ export class StrategyGoalsStore {
   read(ref: GoalRef): GoalVersion {
     const value = this.get(ref.goalId).versions.find(x => x.version === positive(ref.version));
     return value ? structuredClone(value) : fail('strategy_goal_version_not_found', 404);
+  }
+  readContext(refs: readonly GoalRef[], frozenBasis?: GoalBasis): GoalContextSnapshot {
+    if (!Array.isArray(refs) || refs.length > 20) fail('invalid_strategy_goal_reference');
+    const selected = refs.map(goalRef), keys = new Set(selected.map(ref => `${ref.goalId}:${ref.version}`)), index = this.load();
+    const goals = [...new Map(selected.map(ref => {
+      const value = index.goals.find(goal => goal.id === ref.goalId)?.versions.find(version => version.version === ref.version);
+      if (!value) fail('strategy_goal_version_not_found', 404);
+      return [`${ref.goalId}:${ref.version}`, value] as const;
+    })).values()];
+    const matches = (ref: GoalRef) => keys.has(`${ref.goalId}:${ref.version}`);
+    const relationVersion = (id: string, value: GoalRelationVersion) => ({ id, ...relationInput(value), revision: value.revision, createdAt: value.createdAt });
+    const digest = (value: unknown) => createHash('sha256').update(canonical(value)).digest('hex');
+    let relations: GoalContextSnapshot['relations'], feedback: GoalFeedback[], basis: GoalBasis;
+    if (frozenBasis === undefined) {
+      relations = index.relations.filter(value => matches(value.from) || matches(value.to)).map(value => relationVersion(value.id, value));
+      feedback = index.feedback.filter(value => matches(value.goal));
+      basis = parseGoalBasis({ relations: relations.map(value => ({ id: value.id, revision: value.revision, sha256: digest(value) })), feedback: feedback.map(value => ({ id: value.id, createdAt: value.createdAt, sha256: digest(value) })) });
+    } else {
+      basis = parseGoalBasis(frozenBasis);
+      relations = basis.relations.map(ref => {
+        const relation = index.relations.find(value => value.id === ref.id), value = relation?.revision === ref.revision ? relation : relation?.history.find(value => value.revision === ref.revision);
+        if (!value) fail('strategy_goal_basis_unavailable', 409);
+        const result = relationVersion(ref.id, value);
+        if ((!matches(result.from) && !matches(result.to)) || digest(result) !== ref.sha256) fail('strategy_goal_basis_changed', 409);
+        return result;
+      });
+      feedback = basis.feedback.map(ref => {
+        const value = index.feedback.find(value => value.id === ref.id);
+        if (!value) fail('strategy_goal_basis_unavailable', 409);
+        if (!matches(value.goal) || value.createdAt !== ref.createdAt || digest(value) !== ref.sha256) fail('strategy_goal_basis_changed', 409);
+        return value;
+      });
+    }
+    return structuredClone({ goals, basis, relations, feedback });
   }
   relate(input: GoalRelationInput & GoalMutation): GoalRelation {
     const body = relationInput(input);
@@ -296,15 +371,17 @@ export class StrategyGoalsStore {
   }
   adopt(ref: GoalRef, input: GoalAdoptionInput): GoalVersion {
     uuid(input.operationId); positive(input.expectedVersion); uuid(ref.goalId); positive(ref.version);
-    const decision = text(input.decision);
-    return this.mutate(input.operationId, 'adopt', { ref, expectedVersion: input.expectedVersion, decision }, index => {
+    const decision = text(input.decision), provenance = input.provenance === undefined ? undefined : parseGoalAdoptionProvenance(input.provenance);
+    return this.mutate(input.operationId, 'adopt', { ref, expectedVersion: input.expectedVersion, decision, ...(provenance ? { provenance } : {}) }, index => {
       const record = index.goals.find(x => x.id === ref.goalId);
       if (!record) fail('strategy_goal_not_found', 404);
       if (record.currentVersion !== input.expectedVersion) fail('strategy_goal_conflict', 409);
       const version = record.versions.find(x => x.version === ref.version);
       if (!version) fail('strategy_goal_version_not_found', 404);
+      if (provenance && provenance.goalContentSha256 !== goalContentSha256(version)) fail('strategy_goal_content_changed', 409);
       if (version.status === 'adopted') return version;
       version.status = 'adopted'; version.adoptedAt = new Date().toISOString(); version.adoptionDecision = decision;
+      if (provenance) version.adoptionProvenance = provenance;
       record.adoptedVersion = version.version; return version;
     });
   }

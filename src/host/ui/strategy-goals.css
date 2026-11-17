@@ -35,3 +35,36 @@
 .sg-empty h2 { font-size: 18px; margin-top: 0; }
 .sg-empty p { color: var(--muted); font-size: 13px; line-height: 1.7; }
 @media (max-width: 760px) { .sg-tabs { gap: 16px; }.sg-panel { padding: 15px; }.sg-details { grid-template-columns: 86px minmax(0, 1fr); gap: 9px; }.sg-dialog .case-form-row { grid-template-columns: minmax(0, 1fr); gap: 0; }.sg-table { min-width: 560px; } }
+
+.sg-optional-tools { margin-left: auto; align-self: center; color: var(--muted); font-size: 12px; }
+.sg-optional-tools summary { cursor: pointer; padding: 8px 0; }
+.sg-optional-tools .text-button { min-height: 32px; }
+@media (max-width: 760px) { .sg-optional-tools { margin-left: 0; } }
+
+.usage-context-settings { max-width: 780px; }
+.usage-context-settings .field textarea { width: 100%; min-height: 96px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--canvas); color: var(--ink); }
+.strategy-discussion > .sg-row-between h2 { margin: 0; font-size: 16px; }
+.strategy-discussion .sg-row { margin: 10px 0; }
+.strategy-discussion-messages { max-height: 440px; overflow-y: auto; margin: 14px 0; border-top: 1px solid var(--line); }
+.strategy-discussion-message { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.strategy-discussion-message strong { color: var(--muted); font-size: 12px; }
+.strategy-discussion-message p { margin: 7px 0 0; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.strategy-discussion-message.user { padding-left: 14px; border-left: 2px solid var(--accent-soft); }
+.strategy-discussion-composer { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--canvas); }
+.strategy-discussion-composer textarea { display: block; width: 100%; min-height: 72px; border: 0; resize: vertical; background: transparent; color: var(--ink); font: inherit; font-size: 13px; line-height: 1.7; }
+.strategy-discussion-options { margin-top: 13px; font-size: 12px; }
+.strategy-discussion-options > summary { color: var(--muted); cursor: pointer; }
+.strategy-discussion-options .field textarea { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: var(--canvas); color: var(--ink); font: inherit; }
+.strategy-methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 18px; margin: 12px 0; }
+.strategy-methods label, .strategy-source-option { display: flex; align-items: flex-start; gap: 7px; line-height: 1.7; }
+.strategy-methods input, .strategy-source-option input { margin-top: 4px; }
+.strategy-source-option { margin-top: 10px; }
+.strategy-discussion-candidate { margin-top: 16px; border: 1px solid var(--line); border-radius: 7px; padding: 14px 16px; background: var(--subtle); }
+.strategy-discussion-candidate h3 { margin: 8px 0; font-size: 14px; }
+.strategy-discussion-candidate p, .strategy-discussion-candidate details { font-size: 12px; line-height: 1.8; }
+.strategy-discussion-candidate details { margin-bottom: 12px; }
+@media (max-width: 760px) { .strategy-methods { grid-template-columns: 1fr; } .strategy-discussion > .sg-row-between { flex-direction: column; } }
+
+.task-usage-context { margin: 8px 20px; font-size: 12px; }
+.task-usage-context-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; max-height: 320px; overflow: auto; }
+@media (max-width: 760px) { .task-usage-context { margin: 8px 16px; } }
