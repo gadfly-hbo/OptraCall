@@ -43,3 +43,5 @@ export const reviseRelation = (id: string, input: GoalRelationRevisionInput) => 
 export const feedback = (input: GoalFeedbackInput & GoalMutation) => request<{ feedback: GoalFeedback }>('feedback', 'POST', input);
 export const operation = (id: string) => request<{ operation: GoalOperationReceipt | null }>(`operations/${encodeURIComponent(id)}`);
 export const goalError = (error: unknown) => error instanceof StrategyGoalsRequestError ? error.message : '请求结果尚未核实，请保留输入并核对原操作。';
+
+export const versionArrangements = (goal: GoalRef) => request<{arrangements:import('../strategy-goals-types.ts').GoalArrangementView[]}>(goalPath(goal.goalId) + '/versions/' + goal.version + '/arrangements');

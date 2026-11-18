@@ -1,0 +1,100 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { randomUUID } from 'node:crypto';
+import { mkdir, mkdtemp } from 'node:fs/promises';
+import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+import { startTestHost } from './fixtures/host-process.ts';
+import { startToolProvider } from './fixtures/tool-provider.ts';
+import { withCaseGoal } from './fixtures/case-goal.ts';
+
+test('normal Host and Pi retain one issue from exact Plan and separate human authorization through board observation and Teach', { timeout: 90000 }, async t => {
+  const evidence = path.resolve('.local/product-v13/case');
+  await mkdir(evidence, { recursive: true });
+  const root = await mkdtemp(path.join(evidence,'cycle-')), dataRoot = path.join(root,'host'), projectsRoot = path.join(root,'projects');
+  let host = await startTestHost({dataRoot,projectsRoot}); const provider = await startToolProvider();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const call = async (route: string, method = 'GET', input?: unknown, status = 200) => {
+    const response = await host.request(route, method, input), body = await response.json(); assert.equal(response.status, status, JSON.stringify({ route, body })); return body;
+  };
+  await call('/api/configuration','PUT',{ name:'合成',provider:'openai-compatible',baseUrl:provider.baseUrl,model:'issue-cycle',apiKey:'synthetic-cycle' });
+  const {project} = await call('/api/projects','POST',{ name:'两案共享项目' },201);
+  await call('/api/cases/storage/initialize','POST',{});
+  async function create(title: string) {
+    const {case: record} = await call('/api/cases','POST',await withCaseGoal(host,{ operationId:randomUUID(), title }),201);
+    await call('/api/cases/'+record.id+'/projects','POST',{ projectId:project.id,expectedRevision:1,operationId:randomUUID() });
+    const path = '/api/cases/'+record.id+'/decisions/issues';
+    const {issue} = await call(path,'POST',{ title:'是否扩大试点',expectedRevision:2,operationId:randomUUID() },201);
+    return { record,issue,base:path+'/'+issue.id };
+  }
+  const a = await create('会员回访'), b = await create('另一独立经营问题');
+  const taskPath = '/api/projects/'+project.id+'/tasks';
+  async function run(type: 'teach'|'plan', text: string, choiceId?: string) {
+    provider.setResponder(() => ({text}));
+    const {task} = await call(taskPath,'POST',{ name:type+'经营任务',assignment:{ type, skill:null, issue:{ caseId:a.record.id,issueId:a.issue.id,choiceId } } },201);
+    await call(taskPath+'/'+task.id+'/messages','POST',{requestId:randomUUID(),text:'本次交付'},202);
+    for (let i=0;i<240;i++) {
+      const state = await call(taskPath+'/'+task.id);
+      if (state.task.lastRun?.status === 'failed') assert.fail(JSON.stringify(state.task.lastRun));
+      if (state.task.lastRun?.status === 'completed') break;
+      await delay(100);
+    }
+    const sources = await call(a.base+'/sources');
+    const found = sources.replies.find((r:any) => r.source.taskId === task.id); assert.ok(found, JSON.stringify(sources)); return found.source;
+  }
+  const plan = await run('plan','两店先试，店长回访，周五对照同店复购，若毛利下降则停止。');
+  await call(b.base+'/plans','POST',{source:plan,operationId:randomUUID()},409);
+  const {revision} = await call(a.base+'/plans','POST',{source:plan,operationId:randomUUID()});
+  const strategyRef = {type:'case-decision',caseId:a.record.id,caseStoreId:revision.caseStoreId,recordId:revision.recordId,revision:1};
+  const choose = (choice:string, before:string|null) => call('/api/cases/'+a.record.id+'/decisions/'+revision.recordId+'/choice','POST',{caseStoreId:revision.caseStoreId,strategyRef,issueId:a.issue.id,choice,expectedPreviousChoiceId:before,reason:'先核试点范围',operationId:randomUUID()});
+  const {choice} = await choose('trial',null);
+  const command = { title:'两店回访',scope:'仅该两店本周',projectId:project.id,choiceId:choice.choiceId,operationId:randomUUID() };
+  const {arrangement} = await call(a.base+'/authorize','POST',command);
+  assert.deepEqual((await call(a.base+'/authorize','POST',command)).arrangement,arrangement);
+  assert.equal(arrangement.caseConfirmation.issueId,a.issue.id);
+  assert.equal(arrangement.quoteProvenance,undefined);
+  const action = arrangement.actions[0], teach = await run('teach','观察期复购持平，保留原假设并缩小下一轮范围。',choice.choiceId);
+  const decisionBody = { expectedRevision:4,choiceId:choice.choiceId,source:teach,observation:'两店试点观察期复购持平',judgement:'原判断尚未证实',nextStep:'下期比较同店',operationId:randomUUID() };
+  await call(a.base+'/review','POST',decisionBody,409);
+  const {feedback} = await call('/api/decision-board/tasks/'+action.taskId+'/feedback','POST',{operationId:randomUUID(),expectedLatestRevisionId:null,adopted:true,outcome:'两店完成回访',metricDelta:'0',review:'未改善',score:null,effect:'none'});
+  await call(a.base+'/review','POST',{...decisionBody,feedbackRevisionId:feedback.revisionId});
+  const {choice: deferred} = await choose('defer',choice.choiceId);
+  const laterTeach = await run('teach','暂缓后观察到来店人数持平，待扩大样本再核。',deferred.choiceId);
+  await call(a.base+'/review','POST',{ ...decisionBody, source:laterTeach, choiceId:deferred.choiceId, expectedRevision:6,observation:'暂缓后客流持平',operationId:randomUUID() });
+  await host.close(); host = await startTestHost({ dataRoot,projectsRoot });
+  const view = await call(a.base); assert.equal(view.rounds.length,2); assert.equal(view.rounds[0].actions[0].feedback[0].effect,'none'); assert.deepEqual(view.rounds[0].review.reply,teach);
+  assert.deepEqual(view.rounds[1].review.reply,laterTeach); assert.equal(view.rounds[1].actions.length,0); assert.equal((await call(b.base)).rounds.length,0);
+  const {choice: stopped} = await choose('no_action',deferred.choiceId);
+  const finalTeach = await run('teach','此轮不行动。两店观察期来店持平，保留现状并结束复盘。',stopped.choiceId);
+  const finalReview = {...decisionBody,choiceId:stopped.choiceId,source:finalTeach,operationId:randomUUID(),expectedRevision:(await call('/api/cases/'+a.record.id)).case.revision};
+  await call(a.base+'/review','POST',{...finalReview,observation:''},400);
+  await call(a.base+'/review','POST',{...finalReview,observation:'两店来店人数持平',nextStep:'结束本轮观察'});
+  const end = (await call(a.base)).rounds.at(-1);
+  assert.equal(end.review.reply.messageId,finalTeach.messageId); assert.equal(end.actions.length,0);
+  const origin = {kind:'task', projectId:project.id,taskId:plan.taskId,reply:plan};
+  const newCase = await withCaseGoal(host,{operationId:randomUUID(),title:'从原任务承接的独立问题',creationSource:origin});
+  const {case:child} = await call('/api/cases','POST',newCase,201);
+  assert.deepEqual((await call('/api/cases/'+child.id)).creationSource,origin);
+  assert.match((await call('/api/cases/'+child.id+'/origin/reply')).text,/两店先试/);
+  const sameGoal = (await call('/api/cases/'+a.record.id)).goalBinding.primary.goalId;
+  const otherGoal = (await call('/api/cases/'+b.record.id)).goalBinding.primary.goalId;
+  const v1 = '/api/strategy/goals/'+sameGoal+'/versions/1';
+  const v2 = '/api/strategy/goals/'+sameGoal+'/versions/2';
+  assert.equal((await call(v1+'/arrangements')).arrangements[0].caseConfirmation.goal.strategy, '核对本次议题的原资料');
+  assert.match((await call(v1+'/export')).html, new RegExp(action.taskId));
+  assert.doesNotMatch((await call('/api/strategy/goals/'+otherGoal+'/versions/1/export')).html,new RegExp(action.taskId));
+  const {title,perspective,scope,measurement,baseline,responsible,strategies} = (await call('/api/strategy/goals/'+sameGoal)).goal.versions[0];
+  await call('/api/strategy/goals/'+sameGoal+'/revisions','POST',{operationId:randomUUID(),expectedVersion:1,title,perspective,scope,measurement,baseline,responsible,strategies,outcome:'仅复核下一季度的门店'},201);
+  assert.deepEqual((await call(v2+'/arrangements')).arrangements,[]);
+  assert.doesNotMatch((await call(v2+'/export')).html,new RegExp(action.taskId));
+  assert.match((await call(a.base+'/reply','POST',plan)).text,/两店先试/);
+  await call(b.base+'/reply','POST',plan,409);
+  await call('/api/cases/'+a.record.id+'/projects/'+project.id,'DELETE',{expectedRevision:(await call('/api/cases/'+a.record.id)).case.revision,operationId:randomUUID()});
+  await call(a.base+'/reply','POST',plan,409);
+  await call(v1+'/export','GET',undefined,409);
+  await call(v1+'/arrangements','GET',undefined,409);
+  assert.deepEqual((await call(v2+'/arrangements')).arrangements,[]);
+  await call('/api/cases/'+a.record.id+'/projects','POST',{projectId:project.id,expectedRevision:(await call('/api/cases/'+a.record.id)).case.revision,operationId:randomUUID()});
+  assert.equal((await call(v1+'/arrangements')).arrangements[0].actions[0].authorizationId,action.authorizationId);
+  t.diagnostic(root);
+});

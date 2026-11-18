@@ -10,7 +10,7 @@ import type { GoalDraftInput, GoalRef } from '../src/host/strategy-goals-types.t
 import type { ProjectPlanContent } from '../src/host/project-plan-types.ts';
 
 const draft = (kind: 'primary' | 'related', version: number): GoalDraftInput => ({
-  title: `R01_${kind}_目标`, outcome: '沿本事项的准确目标继续核对，不要求重抄', perspective: 'personal',
+  title: `R01_${kind}_目标`, strategies: ['按选定依据跟进'], outcome: '沿本事项的准确目标继续核对，不要求重抄', perspective: 'personal',
   scope: { kind: 'personal', id: `R01_${kind}_V${version}_SCOPE`, name: '合成责任范围' }, responsible: '合成负责人',
   measurement: { kind: 'deliverable', criterion: `R01_${kind}_V${version}_RESULT` },
   baseline: { state: 'known', description: `R01_${kind}_V${version}_BASELINE` },
@@ -56,7 +56,7 @@ async function fixture(t: TestContext) {
     return first.goalId as string;
   };
   const createCase = async (primary: GoalRef, related: GoalRef[] = [], linked = true) => {
-    let record = (await request('/api/cases', 'POST', { operationId: randomUUID(), title: '本次选定事项', description: '仅依据本事项已确认目标核对', goalBinding: { primary, related } }, 201)).case;
+    let record = (await request('/api/cases', 'POST', { operationId: randomUUID(), title: '本次选定事项', description: '仅依据本事项已确认目标核对', goalBinding: { strategy: '按选定依据跟进', primary, related } }, 201)).case;
     if (linked) record = (await request(`/api/cases/${record.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: record.revision, projectId: project.id })).case;
     return { record, selection: { caseId: record.id, caseRevision: record.revision, projectWorkRevision: 0, selectedReferenceIds: [] } };
   };

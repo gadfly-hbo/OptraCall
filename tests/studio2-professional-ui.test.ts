@@ -100,11 +100,9 @@ test('publication preserves the contribution snapshot as a preview fact rather t
 test('Studio presents enterprise foundation, task evolution and publication as one management space', async () => {
   const Page = await studio;
   const html = renderToStaticMarkup(createElement(Page, { projects: [], onOpenTask() {} }));
-  assert.match(html, /企业基础资产/);
-  assert.match(html, /建设与演进/);
-  assert.match(html, /发布与使用/);
-  assert.match(html, /当前企业/);
-  assert.match(html, /普通分析无需先进入/);
+  for (const label of ['语义资产工作视图','业务语义','数据映射','企业资料','体系工作台','当前企业']) assert.ok(html.includes(label),label);
+  const analytics=renderToStaticMarkup(createElement(Page,{projects:[],libraryArea:'analytics',onOpenTask(){}}));
+  for (const label of ['分析资产工作视图','分析指标','分析方法','体系工作台','当前企业']) assert.ok(analytics.includes(label),label);
 });
 
 test('enterprise materials can be managed inside Studio without another page heading or plugin return route', async () => {

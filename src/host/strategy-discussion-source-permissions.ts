@@ -19,7 +19,7 @@ export interface StrategyDiscussionSourcePermissionOptions {
 export function createStrategyDiscussionSourcePermissions(options: StrategyDiscussionSourcePermissionOptions) {
   const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
   const deny = (): never => { throw new StrategyDiscussionSourceFault('strategy_source_not_authorized', 403); };
-  return async (discussion: StrategyDiscussion, configuration: RuntimeModelConfiguration, target: Record<string, unknown>, context: StrategyDiscussionSourceContext): Promise<void> => {
+  return async <D extends Pick<StrategyDiscussion, 'projectId' | 'configurationId' | 'configurationRevision'>>(discussion: D, configuration: RuntimeModelConfiguration, target: Record<string, unknown>, context: StrategyDiscussionSourceContext): Promise<void> => {
     const check = () => { context.signal?.throwIfAborted(); context.assertCurrent(); if (options.isClosing()) deny(); };
     check();
     if (configuration.id !== discussion.configurationId || configuration.revision !== discussion.configurationRevision) deny();
@@ -126,6 +126,9 @@ export function createStrategyDiscussionSourcePermissions(options: StrategyDiscu
         // are checked by listTaskResultSources/readPersonalSource in the facet.
       } else if (target.kind === 'project-document') {
         if (!project.uploads.some(upload => upload.id === target.uploadId && upload.path === target.path)) deny();
+      } else if (target.kind === 'data-input') {
+        if (typeof target.datasetId !== 'string' || typeof target.inputVersionId !== 'string') deny();
+        await input(target.projectId as string, { datasetId: target.datasetId as string, inputVersionId: target.inputVersionId as string, descriptionRevisionId: null });
       } else if (target.kind === 'data-description') {
         if (typeof target.datasetId !== 'string' || typeof target.inputVersionId !== 'string' || typeof target.descriptionRevisionId !== 'string') deny();
         await input(target.projectId as string, { datasetId: target.datasetId as string, inputVersionId: target.inputVersionId as string, descriptionRevisionId: target.descriptionRevisionId as string });

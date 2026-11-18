@@ -253,3 +253,22 @@ test('waiting cannot enlarge the confirmed Task scope and a withdrawn source per
     assert.deepEqual(found.details.results, []); assert.equal(nativeReads, 1); assert.ok(found.details.limitations.some(value => value.code === 'project_result_permission_unavailable'));
   } finally { clearTimeout(timer); }
 });
+
+test('a manual handoff without a Plan exposes only the exact selected saved version to the receiving Task', async t => {
+  const { projects, project, tasks, save, bindings, context } = await fixture(t);
+  const source = tasks[0], receiver = tasks[2];
+  await save(source.id, '初稿.md', '准确初稿');
+  const base = { projects, projectId: project.id, listBoundReports: async (_: string, id: string) => bindings.filter(b => b.taskId === id) };
+  const browse = createProjectTaskResultsReader({ ...base, taskId: source.id, handoff: { mode: 'own-results' } });
+  const catalog = (await browse('find', {}, context)).details;
+  if (catalog.action !== 'find') assert.fail();
+  const key = catalog.results[0].id;
+  const reader = createProjectTaskResultsReader({ ...base, taskId: receiver.id, handoff: { mode: 'selected', sources: [{ taskId: source.id, key }] } });
+  await save(source.id, '另一次独立成果.md', '新稿不能自动提供');
+  const selected = (await reader('find', {}, context)).details;
+  if (selected.action !== 'find') assert.fail();
+  assert.deepEqual(selected.results.map(r => r.id), [key]);
+  assert.equal(selected.scope.confirmationId, undefined);
+  assert.equal(JSON.parse((await reader('read', { id: key }, context)).content[0].text).text, '准确初稿');
+  await assert.rejects(reader('find', { taskId: tasks[1].id }, context), /scope_forbidden/);
+});

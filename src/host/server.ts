@@ -1,8 +1,14 @@
+import { approvedTaskSkills, makeTaskAssignment, parseTaskAssignment, taskPurpose, type TaskAssignment, type TaskCaseIssue } from './task-assignment.ts';
+import type { ProjectTaskResultsContext, ProjectTaskResultsOptions } from './project-task-results-types.ts';
+import { createStrategyChoices, strategyDocument } from './strategy-choice-versions.ts';
+import { renderVersionDocument, versionFileName, gsaVersionDocument, type VersionDocument } from './management-documents.ts';
 import type {RuntimeModelConfiguration} from './config-store.ts';
 import {createStrategyDiscussionSources,StrategyDiscussionSourceFault} from './strategy-discussion-sources.ts';
 import {createStrategyDiscussionSourcePermissions} from './strategy-discussion-source-permissions.ts';
 import {createStrategyDiscussionHost} from './strategy-discussion-host.ts';
-import {StrategyDiscussionFault} from './strategy-discussion-store.ts';
+import {createBusinessRoleConversations} from './business-role-conversations.ts';
+import type {RoleContextReader} from './strategy-discussion-host.ts';
+import {StrategyDiscussionFault,discussionHash} from './strategy-discussion-store.ts';
 import {createUsageContextStore} from './usage-context-store.ts';
 import {createUsageContextRoutes} from './usage-context-routes.ts';
 import {UsageContextFault} from './usage-context-types.ts';
@@ -15,10 +21,10 @@ import { createStrategyGoalSources, validateStrategyGoalScope } from './strategy
 import { createProjectPlanPreparationHost, projectPlanPreparationDirectory, projectPlanPreparationOwner } from './project-plan-preparation-host.ts';
 import { createAnalysisDeliveryPort } from './analysis-delivery.ts';
 import { listTaskBoundReports, listTaskResultSources } from './project-task-result-sources.ts';
-import { createProjectTaskResultsReader } from './project-task-results.ts';
+import { ProjectTaskResultsError, createProjectTaskResultsReader } from './project-task-results.ts';
 import { createProjectPlanFeature } from './project-plan-host.ts';
 import { createProjectPlanStore, ProjectPlanFault } from './project-plan-store.ts';
-import { StrategyGoalsStore, StrategyGoalsError } from './strategy-goals-store.ts';
+import { StrategyGoalsStore, StrategyGoalsError, parseGoalRoleSuggestion } from './strategy-goals-store.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
@@ -102,7 +108,7 @@ import { createPptRefinerRoutes } from '../../extensions/business-plugins/ppt-re
 import { createPptRefinerSessions } from './ppt-refiner-sessions.ts';
 import { createPptRefinerAccess } from './ppt-refiner-access.ts';
 import { createAgentSessionDomain, type AgentSessionDomain, type SessionContext } from './agent-sessions.ts';
-import { savedTaskHistory, priorTaskRequest, taskContextReceipts, readSavedTaskReply, ProjectHistoryError } from './project-history.ts';
+import { savedTaskHistory, priorTaskRequest, taskContextReceipts, receivedTaskResultKeys, readSavedTaskReply, ProjectHistoryError } from './project-history.ts';
 import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
 import { createVerificationFeature, parseVerificationSelection } from './verification-host.ts';
 import { VerificationStoreError } from './verification-store.ts';
@@ -403,7 +409,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               deliver();
             }),
           };
-        }, analysisPython: analysisPythonFor(options.cwd), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, methodIssue: async (input, context) => {
+        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, methodIssue: async (input, context) => {
           const operationId = stableActionId(['task-method-issue-v1', project.id, task.id, context.requestId, input.methodId, input.version, input.note, input.sources]);
           return methodIssues(input, { ...context, operationId, projectId: project.id, taskId: task.id });
         }, quotedDecisions: async (action, input, context) => {
@@ -425,17 +431,17 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           }
           return quotedDecisions(action, input, { ...context, projectId: project.id, taskId: task.id, caseContext: caseContext ?? null, ...(workContext ? { workContext } : {}) });
         }, analysisDelivery: createAnalysisDeliveryPort({ projectId: project.id, taskId: task.id, projects, settings: automaticActions, projectFiles: projectFiles!, listBoundReports: async () => { const current = await pair(project.id, task.id); return listTaskBoundReports(current.project, current.task); }, assertOwner: async () => { if (closing) throw new RequestFault(503, 'host_closing'); await pair(project.id, task.id, true); } }), projectTaskResults: async (action, input, context) => {
-          context.assertCurrent(); await pair(project.id, task.id, true);
+          context.assertCurrent();
+          const current = await pair(project.id, task.id, true);
+          if (context.assignment?.sources?.length) {
+            if (JSON.stringify(current.task.assignment) !== JSON.stringify(context.assignment)) throw new RequestFault(409, 'task_assignment_changed');
+            return resultReader(current, { handoff: { mode: 'selected', sources: context.assignment.sources } })(action, input, context);
+          }
           const fixed = context.projectPlan;
-          if (fixed.projectId !== project.id || fixed.taskId !== task.id) throw new RequestFault(409, 'project_result_scope_unavailable');
+          if (!fixed || fixed.projectId !== project.id || fixed.taskId !== task.id) throw new RequestFault(409, 'project_result_scope_unavailable');
           const state = await projectPlans.read(project.id), confirmation = state.history.find(item => item.id === fixed.confirmationId && item.planVersion === fixed.planVersion);
           if (!confirmation) throw new RequestFault(409, 'project_result_scope_unavailable');
-          return createProjectTaskResultsReader({ projects, projectId: project.id, taskId: task.id, confirmation,
-            listBoundReports: async (projectId, sourceTaskId, read) => { const owner = await pair(projectId, sourceTaskId); return listTaskBoundReports(owner.project, owner.task, read ?? context); },
-            listResultSources: async (projectId, sourceTaskId, read) => { const owner = await pair(projectId, sourceTaskId); return listTaskResultSources(owner.project, owner.task, read ?? context); },
-            readNativeReply: (ref, read) => readPersonalSource(ref, { ...read, audience: 'agent' }),
-            assertAuthorized: async () => { context.assertCurrent(); if (closing) throw new RequestFault(409, 'host_closing'); await pair(project.id, task.id, true); context.assertCurrent(); },
-          })(action, input, context);
+          return resultReader(current, { confirmation })(action, input, context);
         }, studio: studio.port(project.id, task.id), personalContext: async (action, input, context) => {
           context.signal.throwIfAborted();
           await pair(project.id, task.id, true);
@@ -570,6 +576,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       ...(studioSessions ? [studioSessions.closeAll(filter)] : []),
       requirementSessions.closeAll(filter),
       strategyDiscussions.closeAll(filter),
+      businessDiscussions.closeAll(filter),
     ]);
     for (const key of [...streams.keys()]) {
       const [projectId, taskId] = key.split('/');
@@ -708,8 +715,30 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const quotedDecisions = createQuotedDecisionAdapter({ cases, projects, board: boardStore, goals: strategyGoals, mutate, isClosing: () => closing, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item) });
   const strategyMetricLibrary = createMetricLibrary(path.join(dataRoot, 'metric-assets'));
   const strategySources = createStrategyGoalSources({ cases, projects, board: boardStore, metrics: strategyMetricLibrary, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item), readDiscussionSource:ref=>strategyDiscussions.readDiscussionSource(ref) });
-  const validateStrategyGoal=async(input:import('./strategy-goals-types.ts').GoalDraftInput)=>{
+  const validateStrategyGoal=async(input:import('./strategy-goals-types.ts').GoalDraftInput,target?:import('./strategy-goals-types.ts').GoalRef|'create',recipient?:Readonly<RuntimeModelConfiguration>)=>{
+      if(input.roleSuggestion!==undefined){
+        const ref=parseGoalRoleSuggestion(input.roleSuggestion);
+        const original=await businessDiscussions.readGoalSuggestion(ref,recipient);
+        const owner=ref.owner;
+        if(discussionHash(original.draft.scope)!==discussionHash(input.scope))throw new StrategyGoalsError('goal_suggestion_scope_mismatch',403);
+        if(owner.role==='goal'){
+          if(target==='create'||target&&target.goalId!==owner.goalId)throw new StrategyGoalsError('goal_suggestion_owner_mismatch',403);
+          if(target&&owner.version!==target.version&&strategyGoals.read(target).roleSuggestion?.sha256!==ref.sha256)throw new StrategyGoalsError('goal_suggestion_version_mismatch',409);
+        }else {
+          if(owner.strategyChoice&&(owner.strategyChoice.discussionId!==input.strategyChoice?.discussionId||owner.strategyChoice.version!==input.strategyChoice?.version))throw new StrategyGoalsError('goal_suggestion_strategy_mismatch',403);
+          if(target&&target!=='create'&&strategyGoals.read(target).roleSuggestion?.discussionId!==ref.discussionId)throw new StrategyGoalsError('goal_suggestion_owner_mismatch',403);
+        }
+      }
       validateStrategyGoalScope(input.scope, studio.enterpriseScopes);
+      if(input.strategyChoice){
+        const ref=input.strategyChoice;
+        const {version}=await choices.read(ref.discussionId,ref.version);
+        const scope=version.destination?.scope;
+        const sources=[input.source,...(input.strategyContext?.sources??[])];
+        const hasOrigin=sources.some(s=>s?.authority==='strategy-discussion' && s.id===version.source.id && s.sessionId===version.source.sessionId && s.version===version.source.version && s.sha256===version.source.sha256);
+        if(!hasOrigin || !version.handedOffAt || version.contentSha256!==ref.contentSha256 || !scope || scope.kind!==input.scope.kind || scope.id!==input.scope.id || scope.enterpriseId!==input.scope.enterpriseId)
+          throw new StrategyGoalsError('strategy_handoff_scope_or_version_changed',409);
+      }
       if (input.source) await strategySources.validate(input.source);
       for(const source of [...(input.strategyContext?.sources??[]),...(input.strategyContext?.methods??[]).flatMap(m=>m.source?[m.source]:[])])await strategySources.validate(source);
       if (input.measurement?.kind === 'quantitative') {
@@ -724,7 +753,116 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     for(const task of tasks){context.assertCurrent();const found=await listTaskResultSources(project,task,context);reports.push(...found.reports);replies.push(...found.replies);}context.assertCurrent();return {reports,replies};
   },assertReadable:strategySourcePermissions});
   const discussionSourceContext=(owner:import('./strategy-discussion-types.ts').StrategyDiscussion)=>({assertCurrent:()=>{if(closing||!availableConfiguration(owner.configurationId,owner.configurationRevision))throw new StrategyDiscussionFault('strategy_discussion_context_changed');if(strategyDiscussions.store.get(owner.id).revision!==owner.revision)throw new StrategyDiscussionFault('strategy_discussion_context_changed');}});
-  const strategyDiscussions=createStrategyDiscussionHost({dataRoot,codeRoot:options.cwd,goals:strategyGoals,configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{offset:page?.offset,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}});
+  const discussionOptions: Parameters<typeof createStrategyDiscussionHost>[0]={dataRoot,codeRoot:options.cwd,goals:strategyGoals,configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{offset:page?.offset,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}};
+  const strategyDiscussions=createStrategyDiscussionHost(discussionOptions);
+  const readRoleContext:RoleContextReader = async (owner, cfg, writing) => {
+    if(closing)throw new StrategyDiscussionFault('host_closing');
+    if(owner.role==='goal-draft'){
+      validateStrategyGoalScope(owner.scope,studio.enterpriseScopes);
+      if(!owner.strategyChoice)return {scope:owner.scope};
+      const {discussionId,version}=owner.strategyChoice;
+      const handed=await choices.read(discussionId,version);
+      const scope=handed.version.destination?.scope;
+      if(!handed.version.handedOffAt||handed.version.destination?.draftId!==owner.draftId||!scope||
+          scope.kind!==owner.scope.kind||scope.id!==owner.scope.id||scope.name!==owner.scope.name||scope.enterpriseId!==owner.scope.enterpriseId)
+        throw new StrategyDiscussionFault('role_strategy_handoff_scope_mismatch',403);
+      if(!cfg)throw new StrategyDiscussionFault('role_source_model_unavailable',403);
+      await strategyDiscussions.verifyChoiceSource(handed.version.source,cfg);
+      return {scope:owner.scope,strategyChoice:handed};
+    }
+    if(owner.role==='project'){
+      const project=await projects.get(owner.projectId);
+      if(writing)assertActive(project);
+      const plan=await projectPlans.read(project.id);
+      const agreement=project.agreements?.at(-1);
+      return {project:{id:project.id,name:project.name,stage:project.stages?.at(-1)},tasks:project.tasks.map(t=>({id:t.id,name:t.name,type:t.assignment?.type,archivedAt:t.archivedAt})),
+        ...(agreement?{agreement}:plan.confirmed?{agreement:{version:plan.confirmed.planVersion,request:plan.confirmed.plan.request,premises:plan.confirmed.plan.premises}}:{})};
+    }
+    if(owner.role==='case'){
+      const record=cases.getCase(owner.caseId);
+      if(writing&&record.status==='closed')throw new StrategyDiscussionFault('case_closed');
+      const {issue,rounds}=await caseDecisions.issueTimeline(owner.caseId,owner.itemId);
+      const goalBinding=cases.getGoalBinding(owner.caseId);
+      const primary=goalBinding?strategyGoals.read(goalBinding.primary):undefined;
+      const history=rounds.map(({choice,actions,review})=>({
+        choice:{id:choice.choiceId,decision:choice.choice,reason:choice.reason,previous:choice.previousChoiceId,
+          date:choice.occurredAt,goalBinding:choice.goalBinding,proposed:choice.strategyRef},
+        actions:actions.map(a=>({projectId:a.projectId,itemId:a.itemId,taskId:a.taskId,title:a.title,status:a.status,
+          authorizations:a.authorizations.map(x=>({id:x.id,scope:x.scope,decision:x.decision,time:x.time})),
+          feedback:a.feedback.map(x=>({revisionId:x.revisionId,effect:x.effect,outcome:x.outcome,metricDelta:x.metricDelta,review:x.review}))})),
+        review:review?{id:review.operationId,when:review.createdAt,observation:review.observation,judgement:review.judgement,nextStep:review.nextStep}:null,
+      }));
+      return {case:record,issue,goalBinding,primaryGoal:primary?{id:primary.goalId,version:primary.version,title:primary.title,outcome:primary.outcome}:null,rounds:history,
+        sourceRights:history.flatMap(r=>r.actions.flatMap(a=>[a.projectId+'/'+a.itemId+'/'+a.taskId,...a.feedback.map(f=>f.revisionId)]))};
+    }
+    const goal=strategyGoals.read({goalId:owner.goalId,version:owner.version});
+    await validateStrategyGoal(goal,undefined,cfg);
+    const upstream=[];
+    for(const source of [goal.source,...(goal.strategyContext?.sources??[]),...(goal.strategyContext?.methods??[]).map(m=>m.source)]){
+      if(source?.authority!=='strategy-discussion')continue;
+      const ref=source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef;
+      if(!cfg)throw new StrategyDiscussionFault('role_source_model_unavailable',403);
+      await strategyDiscussions.verifyChoiceSource(ref,cfg);
+      upstream.push(await strategyDiscussions.readSource(ref,{limit:8192}));
+    }
+    const {arrangements}=await readGoalVersionPage(owner.goalId,owner.version);
+    const current=strategyGoals.get(owner.goalId);
+    return {goal,upstream,adoptedVersion:current.adoptedVersion,arrangements:arrangements.map(a=>({id:a.id,projectId:a.projectId,source:a.source,actions:a.actions,createdAt:a.createdAt})),
+      sourceRights:arrangements.flatMap(a=>a.actions.map(item=>a.projectId+'/'+item.itemId+'/'+item.taskId+'/'+item.authorizationId))};
+  };
+  const businessDiscussions=createStrategyDiscussionHost({...discussionOptions,roleContext:readRoleContext});
+  const businessRoleConversation=createBusinessRoleConversations({host:businessDiscussions,context:readRoleContext,configuration:availableConfiguration,mutate,
+    async initialConfiguration(owner) {
+      if(owner.role!=='project')return availableConfiguration();
+      const project=await projects.get(owner.projectId);
+      return availableConfiguration(project.configuration.id, project.configuration.revision);
+    },
+  });
+
+  const choices = createStrategyChoices(strategyDiscussions.store,strategyDiscussions.readChoiceReply,
+    id=>strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(strategyDiscussions.store.get(id))));
+  const downloadable = (document:VersionDocument) => ({filename:versionFileName(document),html:renderVersionDocument(document)});
+  async function readGoalVersionPage(goalId: string, version: number) {
+    const goal = strategyGoals.read({goalId,version});
+    await validateStrategyGoal(goal);
+    const sources = [goal.source, ...(goal.strategyContext?.sources ?? []), ...(goal.strategyContext?.methods ?? []).map(m => m.source)];
+    for (const source of sources) if (source?.authority === 'strategy-discussion') await strategyDiscussions.verifyChoiceSource(source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef);
+    const arrangements: import('./strategy-goals-types.ts').GoalArrangementView[] = (strategyGoals.list().arrangements ?? []).filter(a => a.goal.goalId === goalId && a.goal.version === version);
+    const unavailable = (): never => { throw new StrategyGoalsError('goal_arrangement_unavailable', 409); };
+    for (const receipt of boardStore.listGoalCaseArrangements(goalId, version)) {
+      const {source, caseConfirmation} = receipt;
+      if ('kind' in source || !caseConfirmation?.goal) return unavailable();
+      const choice = cases.getStrategyChoice(source.caseId,source.choiceId), binding = choice.goalBinding;
+      if (choice.issueId !== caseConfirmation.issueId || source.caseStoreId !== cases.getStatus().storeId ||
+          JSON.stringify(choice.strategyRef) !== JSON.stringify(source.strategyRef) ||
+          binding?.primary.goalId !== goalId || binding.primary.version !== version || !binding.strategy ||
+          binding.strategy !== caseConfirmation.goal.strategy || !goal.strategies?.includes(binding.strategy) ||
+          !cases.listProjectLinks(source.caseId).some(p=>p.projectId === receipt.projectId)) return unavailable();
+      const proposal = cases.getDecision(source.caseId,source.strategyRef.recordId,source.strategyRef.revision);
+      for (const ref of proposal.references) if (ref.target.type === 'source') {
+        const original = ref.target.source;
+        if (original.type === 'native-reply' && !cases.listProjectLinks(source.caseId).some(p=>p.projectId === original.projectId)) return unavailable();
+        const read=await readPersonalSource(ref.target.source,{audience:'human'}); if(read.status!=='available') return unavailable();
+      }
+      arrangements.push({goal:{goalId,version},id:receipt.operationId,boardOperationId:receipt.operationId,projectId:receipt.projectId,
+        source,caseConfirmation,actions:receipt.actions,title:receipt.title,scope:receipt.scope,checks:receipt.checks,createdAt:receipt.createdAt});
+    }
+    for(const a of arrangements){
+      const receipt=boardStore.getArrangementOperation(a.boardOperationId);
+      if(!receipt||receipt.projectId!==a.projectId||JSON.stringify(receipt.actions)!==JSON.stringify(a.actions)) return unavailable();
+      await projects.get(a.projectId);
+      for(const action of receipt.actions){
+        const task=boardStore.getTask(action.taskId),item=boardStore.getItem(action.itemId),auth=boardStore.getActionAuthorization(action.authorizationId);
+        if(!task||!item||task.itemId!==item.id||item.projectId!==a.projectId || !auth || auth.projectId!==a.projectId || auth.itemId!==action.itemId || auth.taskId!==action.taskId || auth.taskVersion!==action.taskVersion || auth.itemVersion!==action.itemVersion) return unavailable();
+        await conclusionHandoff.assertItemReadable(item);
+      }
+    }
+    return {goal,arrangements};
+  }
+  async function exportGoalVersion(goalId:string,version:number) {
+    const {goal,arrangements}=await readGoalVersionPage(goalId,version);
+    return downloadable(gsaVersionDocument(goal,strategyGoals.get(goalId).adoptedVersion===version,arrangements));
+  }
   const strategyGoalRoutes = createStrategyGoalRoutes({ store: strategyGoals, mutate, isClosing: () => closing,
     listSources: strategySources.list,
     validateGoal:validateStrategyGoal,
@@ -749,7 +887,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const read=await strategyDiscussions.readSource(source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef,{offset:input.offset as number|undefined,limit:input.limit as number|undefined});context.assertCurrent();
     return {content:[{type:'text' as const,text:JSON.stringify({...read,goal:ref,claim:'provided-not-used-or-verified'})}],details:{goal:ref,source:read.source,range:read.range,complete:read.complete}};
   }
-  const caseRoutes = createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject, goals: strategyGoals,
+  const caseRoutes = createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject, goals: strategyGoals, validateGoal: validateStrategyGoal, readSource: readPersonalSource,
     enterpriseScope: {
       caseEnterpriseId: caseId => studio.enterpriseScopes.enterpriseIdForCase(caseId),
       projectEnterpriseId: projectId => studio.enterpriseScopes.enterpriseIdForProject(projectId),
@@ -1035,7 +1173,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   async function projectBusy(projectId: string) {
     const project = await projects.get(projectId);
-    return requirementSessions.busy(projectPlanPreparationOwner(projectId)) || project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId) || boardSessions.busy(projectId) || refinerSessions.busyProject(projectId) || sapMethodFeature.busyInScope({ projectId }) || Boolean(studioSessions?.busyInScope({ projectId }));
+    return businessDiscussions.domain.busyInScope({projectId}) || requirementSessions.busy(projectPlanPreparationOwner(projectId)) || project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId) || boardSessions.busy(projectId) || refinerSessions.busyProject(projectId) || sapMethodFeature.busyInScope({ projectId }) || Boolean(studioSessions?.busyInScope({ projectId }));
   }
   const priorRequest = priorTaskRequest;
   const savedHistory = (project: ProjectRecord, task: TaskRecord, capabilities: Record<string, unknown> = {}) => savedTaskHistory(project, task, SDK_VERSION, capabilities);
@@ -1195,6 +1333,79 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   const projectPlanFeature = createProjectPlanFeature({ codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), plans: projectPlans, projects, cases, goals: strategyGoals, defaultUsageContext:async()=> (await usageSettings.read()).context, methods: sapMethods, databaseSources: (projectId, read) => dbLinks.planningSources(projectId, read), mutate, isClosing: () => closing, startMessage: (projectId, taskId, input) => startProjectMessage(projectId, taskId, input, { userText: false }), registerFresh: async (projectId, taskId) => { const owner = await pair(projectId, taskId); projectSessions.registerFresh(projectSessions.ref(owner)); } });
   const projectPlanPreparation = createProjectPlanPreparationHost({ dataRoot, projects, plans: projectPlans, sessions: requirementSessions, capabilities: projectPlanFeature.capabilities, validate: projectPlanFeature.validate, goalContent: projectPlanFeature.goalContent, prepareContext:projectPlanFeature.prepareContext, goalEvidence:projectPlanFeature.goalEvidence, capabilityIssues: projectPlanFeature.capabilityIssues, mutate, isClosing: () => closing });
+  function assertIssue(projectId: string, issue: TaskCaseIssue) {
+    const item = cases.getDecisionIssue(issue.caseId, issue.issueId);
+    const record = cases.getCase(issue.caseId);
+    if (record.status === 'closed' || !cases.listProjectLinks(record.id).some(link => link.projectId === projectId)) throw new RequestFault(403, 'task_issue_unavailable');
+    if (issue.choiceId && cases.getStrategyChoice(issue.caseId, issue.choiceId).issueId !== item.id) throw new RequestFault(403, 'task_issue_unavailable');
+    return { item, goal: cases.getGoalBinding(record.id), ...(issue.choiceId ? { choice: cases.getStrategyChoice(issue.caseId, issue.choiceId) } : {}) };
+  }
+  async function originalPlanAgreement(projectId: string, assignment: TaskAssignment, creating = false) {
+    const ref = assignment.planAgreement;
+    if (!ref) return;
+    const state = await projectPlans.read(projectId);
+    const fixed = state.history.find(row => row.id === ref.confirmationId && row.planVersion === ref.version);
+    if (!fixed || creating && state.confirmed?.id !== ref.confirmationId || fixed.plan.caseContext && fixed.plan.caseContext.caseId !== assignment.issue?.caseId) throw new RequestFault(409, 'project_agreement_changed');
+    await projectPlanFeature.validate(projectId, fixed.plan);
+    return { ...ref, request: fixed.plan.request, premises: fixed.plan.premises };
+  }
+  function checkAssignmentSkill(project: ProjectRecord, assignment: TaskAssignment) {
+    const skill = assignment.skill;
+    if (!skill) return;
+    const fixed = approvedTaskSkills[assignment.type];
+    if (fixed?.sha256 !== skill.sha256 || fixed.version !== skill.version) throw new RequestFault(409, 'task_skill_version_changed');
+    const catalog = projectSkillCatalog(options.cwd, path.join(project.rootPath, '020_clean'), path.join(dataRoot, 'pi'));
+    const chosen = catalog.skills.find(s => s.id === skill.id && s.sha256 === skill.sha256 && s.filePath === path.resolve(options.cwd, 'extensions/analysis-assets', skill.id, 'SKILL.md'));
+    if (!chosen) throw new RequestFault(409, 'task_skill_version_changed');
+  }
+  function resultReader(receiver: ProjectOwner, scope: Pick<ProjectTaskResultsOptions, 'confirmation' | 'handoff'>, destination?: { configuration: ProjectOwner['task']['configuration']; issue?: TaskCaseIssue }) {
+    const { project, task } = receiver;
+    const runs = new Map<string, Record<string, unknown>>();
+    const runKey = (taskId: string, sessionId: string, requestId: string) => JSON.stringify([taskId, sessionId, requestId]);
+    return createProjectTaskResultsReader({ projects, projectId: project.id, taskId: task.id, ...scope,
+      listBoundReports: async (projectId, taskId, read) => { const owner = await pair(projectId, taskId); return listTaskBoundReports(owner.project, owner.task, read); },
+      listResultSources: async (projectId, taskId, read) => { const owner = await pair(projectId, taskId); return listTaskResultSources(owner.project, owner.task, { ...read, onRunContext: (requestId, sessionId, provided) => runs.set(runKey(taskId, sessionId, requestId), provided) }); },
+      readNativeReply: (ref, read) => readPersonalSource(ref, { ...read, audience: 'agent' }),
+      assertAuthorized: async ({ sourceTaskId, sessionId, requestId }, context) => {
+        context.assertCurrent();
+        if (closing) throw new RequestFault(409, 'host_closing');
+        const current = await pair(project.id, task.id, true);
+        if (scope.handoff?.mode === 'selected' || destination) {
+          const source = await projects.getTask(project.id, sourceTaskId), assignment = current.task.assignment;
+          if ((!destination && (!assignment?.sources?.some(row => row.taskId === sourceTaskId) || JSON.stringify(assignment) !== JSON.stringify(task.assignment))) || source.archivedAt) throw new RequestFault(403, 'project_result_permission_unavailable');
+          const issue = destination ? destination.issue : assignment?.issue;
+          if (issue) assertIssue(project.id, issue);
+          if (source.assignment?.issue && (source.assignment.issue.caseId !== issue?.caseId || source.assignment.issue.issueId !== issue.issueId)) throw new RequestFault(403, 'project_result_permission_unavailable');
+          const recipient = destination?.configuration ?? current.task.configuration;
+          const cfg = availableConfiguration(recipient.id, recipient.revision);
+          if (!cfg) throw new RequestFault(403, 'project_result_permission_unavailable');
+          if (sessionId && requestId) {
+            const provided = runs.get(runKey(sourceTaskId, sessionId, requestId));
+            if (!provided) throw new RequestFault(403, 'project_result_permission_unavailable');
+            if (provided.case) {
+              if (cases.getStatus().state !== 'ready' || !issue) throw new RequestFault(403, 'project_result_permission_unavailable');
+              const original = cases.getOperation(contextOperationId(project.id, sourceTaskId, requestId));
+              if (!original || original.caseId !== issue.caseId || original.phase !== 'completed') throw new RequestFault(403, 'project_result_permission_unavailable');
+            }
+            const selected = (provided.projectData ?? []) as import('./project-data-context-context.ts').ProjectDataContextProvision[];
+            for (const { selection } of selected) {
+              await strategySourcePermissions({ projectId: project.id, configurationId: cfg.id, configurationRevision: cfg.revision }, cfg,
+                { kind: selection.descriptionRevisionId ? 'data-description' : 'data-input', projectId: project.id, ...selection },
+                { ...context, ...(!destination ? { receivingTask: { projectId: project.id, taskId: current.task.id } } : {}) });
+            }
+          }
+          await assertFrameworkContinuation(project.id, sourceTaskId);
+        }
+        context.assertCurrent();
+      },
+    });
+  }
+  const resultReadContext = (request: import('node:http').IncomingMessage): ProjectTaskResultsContext => ({
+    signal: AbortSignal.timeout(30000), assertCurrent() { if (closing || request.destroyed && !request.complete) throw new RequestFault(409, 'project_result_unavailable'); },
+  });
+  function readAssignment(input: unknown) {
+    try { return parseTaskAssignment(input); } catch { throw new RequestFault(400, 'invalid_task_assignment'); }
+  }
   type ProjectMessageReceipt = { requestId: string; status: unknown; deduplicated?: boolean };
   async function startProjectMessage(projectId: string, taskId: string, input: Record<string, unknown>, origin: { userText: boolean } = { userText: true }): Promise<ProjectMessageReceipt> {
     if (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) throw new RequestFault(400, 'invalid_message');
@@ -1202,13 +1413,20 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const known = await priorRequest(owner.project, owner.task, requestId, fingerprint);
     if (known) {
       await mutate(async () => {
-        await prepareCasePrompt(projectId, taskId, input, true);
+        if (owner.task.assignment?.issue && input.caseContext === undefined) {
+          const receipt = cases.getOperation(contextOperationId(projectId, taskId, requestId));
+          if (receipt?.phase !== 'completed' || receipt.caseId !== owner.task.assignment.issue.caseId || receipt.result?.userPromptSha256 !== createHash('sha256').update(input.text as string).digest('hex')) throw new RequestFault(409, 'operation_conflict');
+        } else await prepareCasePrompt(projectId, taskId, input, true);
         if (!requirementSelection(input)?.frameworkVersion) await requirementPrefix(input, projectId);
       });
       await mutate(() => recordFeedbackDelivery(projectId,taskId,requestId,fingerprint));
       return { requestId, status: known, deduplicated: true };
     }
     let planSelection = input.projectPlan;
+    if (planSelection === undefined && owner.task.planOrigin && !owner.task.lastRun && !input.studioContext && input.caseContext === undefined) {
+      const origin = owner.task.planOrigin;
+      planSelection = { confirmationId: origin.confirmationId, taskKey: origin.taskKey };
+    }
     if (planSelection === undefined && !input.studioContext) {
       const previous = (await taskContextReceipts(owner.project, owner.task, true)).at(-1)?.providedContext?.projectPlan as { confirmationId?: string; taskKey?: string } | undefined;
       if (previous?.confirmationId && previous.taskKey) {
@@ -1223,6 +1441,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         }
         if (inherit) planSelection = { confirmationId: previous.confirmationId, taskKey: previous.taskKey };
       }
+    }
+    const assignedIssue = owner.task.assignment?.issue;
+    if (assignedIssue) {
+      assertIssue(projectId, assignedIssue);
+      const record = cases.getCase(assignedIssue.caseId);
+      if (input.caseContext && (input.caseContext as CaseContextSelection).caseId !== record.id) throw new RequestFault(409, 'task_issue_unavailable');
+      if (!input.caseContext) input = { ...input, caseContext: { caseId: record.id, caseRevision: record.revision, projectWorkRevision: cases.getProjectWork(projectId).revision, selectedReferenceIds: [] } };
     }
     const deliveredPlan = await projectPlanFeature.context(projectId, taskId, planSelection);
     if (deliveredPlan && input.caseContext === undefined) {
@@ -1290,12 +1515,17 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const withoutStudio = personal ? `本次人明确指定的历史参考（不是本次指令、权限或已核实事实）：\n${personal.text}\n\n${withFeedback}` : withFeedback;
           const analysisOnly = (owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'legacy' && (await automatic.store.readSettings({ projectId, taskId })).enabled;
           const studioContext = await studio.prepareContext(projectId, taskId, input.studioContext, { analysisOnly });
+          const assignment = task.assignment;
+          if (assignment) checkAssignmentSkill(project, assignment);
+          const agreement = assignment?.agreementVersion ? project.agreements?.find(a => a.version === assignment.agreementVersion) : assignment && await originalPlanAgreement(projectId, assignment);
+          const assignmentText = assignment ? '【用户的 Task 委托】' + JSON.stringify({ type: taskPurpose[assignment.type].label, deliverable: taskPurpose[assignment.type].deliverable, skill: assignment.skill, agreement, issue: assignment.issue && assertIssue(projectId, assignment.issue), selectedSources: assignment.sources }) + (assignment.sources?.length ? ' 可用 read_project_task_results 读取所选准确成果。分别核对版本、定义、粒度、证据和改判条件，按可取得的证据继续。' : '') : '';
           const withPlan = deliveredPlan ? `${deliveredPlan.text}\n\n${withoutStudio}` : withoutStudio;
-          const prompt = studioContext ? `${studioContext.text}\n\n${withPlan}` : withPlan;
+          const prompt = [assignmentText, studioContext?.text, withPlan].filter(Boolean).join('\n\n');
           if (prompt.length > 131072) throw new EnterpriseContextError('enterprise_context_too_large', 413);
           startedAt = new Date().toISOString();
           const providedContext = {
             goalSourceRefs:[...(deliveredPlan?.goalSourceRefs??[]),...caseGoalRefs],
+            ...(assignment ? { taskAssignment: assignment } : {}),
             originalUserText: input.text as string,
             userQuoteEligible: origin.userText,
             ...(deliveredPlan ? { projectPlan: deliveredPlan } : {}),
@@ -1328,6 +1558,18 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           text: prepared.prompt!, requestId, requestFingerprint: fingerprint, providedContext: prepared.providedContext,
           verifyBeforeDispatch: async () => {
             await assertFrameworkContinuation(projectId, taskId);
+            if (owner.task.assignment) {
+              const current = await pair(projectId, taskId, true);
+              if (JSON.stringify(current.task.assignment) !== JSON.stringify(owner.task.assignment)) throw new RequestFault(409, 'task_assignment_changed');
+              checkAssignmentSkill(current.project, owner.task.assignment);
+              await originalPlanAgreement(projectId, owner.task.assignment);
+              if (owner.task.assignment.sources?.length) {
+                const delivered = await receivedTaskResultKeys(current.project, current.task);
+                const reader = resultReader(current, { handoff: { mode: 'selected', sources: owner.task.assignment.sources } });
+                for (const id of delivered) await reader('read', { id, limit: 128 }, { signal: AbortSignal.timeout(30000), assertCurrent() { if (closing) throw new RequestFault(409, 'host_closing'); } });
+              }
+              if (assignedIssue) assertIssue(projectId, assignedIssue);
+            }
             if (deliveredPlan) await projectPlanFeature.context(projectId, taskId, planSelection);
           if (suppliedRap) {
               const current = await prepareRequirement(input, projectId);
@@ -1383,9 +1625,44 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (origin && !allowed.includes(origin)) throw new RequestFault(403, 'origin_rejected');
       const url = new URL(request.url ?? '/', host);
       if(url.pathname.startsWith('/api/settings/usage-context')){const result=await usageRoutes(url.pathname,request.method??'GET',request.method==='PUT'?await body(request):{});if(result){json(response,200,result.body);return;}}
+      if(url.pathname==='/api/business-role'){
+        const action=url.searchParams.get('action');
+        if(action==='events'&&request.method==='GET'){
+          const view=await businessRoleConversation(url.searchParams.get('owner'),null,'GET',{});
+          if(!('discussion' in view)||!view.discussion||!('snapshot' in view))throw new StrategyDiscussionFault('role_discussion_not_found',404);
+          response.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});
+          const unsubscribe=businessDiscussions.subscribe(view.discussion.id,event=>{if(!response.destroyed&&!response.writableEnded)response.write(`data: ${JSON.stringify(event)}\n\n`);});
+          response.on('close',unsubscribe);
+          response.write(`data: ${JSON.stringify({type:'snapshot',snapshot:view.snapshot})}\n\n`);return;
+        }
+        const result=await businessRoleConversation(url.searchParams.get('owner'),action,request.method??'GET',request.method==='POST'?await body(request):{});
+        json(response,action==='messages'?202:200,result);return;
+      }
       if(url.pathname==='/api/strategy/discussions'){
         if(request.method==='GET'){json(response,200,{discussions:strategyDiscussions.store.list()});return;}
         if(request.method==='POST'){json(response,201,{discussion:await strategyDiscussions.create(await body(request))});return;}
+      }
+      const gsaExport=/^\/api\/strategy\/goals\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/(export|arrangements)$/.exec(url.pathname);
+      if(gsaExport && request.method==='GET'){ json(response,200,await mutate(async()=> gsaExport[3] === 'export' ? exportGoalVersion(gsaExport[1]!,Number(gsaExport[2])) : {arrangements:(await readGoalVersionPage(gsaExport[1]!,Number(gsaExport[2]))).arrangements})); return; }
+      const choiceRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/versions(?:\/([1-9]\d*)(?:\/(export|handoff))?)?$/.exec(url.pathname);
+      if(choiceRoute){
+        const id=choiceRoute[1]!,number=Number(choiceRoute[2]),action=choiceRoute[3];
+        if(strategyDiscussions.store.get(id).businessOwner)throw new StrategyDiscussionFault('strategy_discussion_not_found',404);
+        if(!choiceRoute[2] && request.method==='GET'){json(response,200,{versions:choices.list(id)});return;}
+        if(!choiceRoute[2] && request.method==='POST'){const input=await body(request);json(response,201,{version:await mutate(()=>choices.save(id,input))});return;}
+        if(choiceRoute[2] && request.method==='GET' && action!=='handoff'){
+          const result=await mutate(()=>choices.read(id,number));
+          json(response,200,action==='export'?downloadable(strategyDocument(result.version,result.reply)):result);return;
+        }
+        if(action==='handoff' && request.method==='POST'){const input=await body(request);const version=await mutate(async()=>{
+          const owner=strategyDiscussions.store.get(id);
+          const sourceGoal=owner.goal?strategyGoals.read(owner.goal):undefined;
+          const scope=(input.scope??sourceGoal?.scope??{kind:'personal',id:'self',name:'个人工作'}) as import('./strategy-goals-types.ts').GoalScope;
+          validateStrategyGoalScope(scope,studio.enterpriseScopes);
+          if(sourceGoal && (sourceGoal.scope.kind!==scope.kind || sourceGoal.scope.id!==scope.id || sourceGoal.scope.enterpriseId!==scope.enterpriseId))throw new StrategyDiscussionFault('strategy_handoff_scope_changed');
+          if(!sourceGoal && owner.usageContext && scope.kind!==({organization:'enterprise',department:'department',personal:'personal'} as const)[owner.usageContext.kind])throw new StrategyDiscussionFault('strategy_handoff_scope_changed');
+          return choices.handoff(id,number,input.expectedRevision,scope);
+        });json(response,200,{version});return;}
       }
       const discussionRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})(?:\/(messages|events|sources|source|stop|close|adopt))?$/.exec(url.pathname);
       if(discussionRoute){const id=discussionRoute[1]!,action=discussionRoute[2];
@@ -1610,6 +1887,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           }); json(response, 200, { project: decorateProject(project) }); return;
         }
         if (action === 'restore' && request.method === 'POST') { await body(request); json(response, 200, { project: decorateProject(await mutate(() => projects.restore(projectId))) }); return; }
+        if (action === 'stage' && request.method === 'POST') {
+          const input = await body(request);
+          json(response, 200, { stage: await mutate(() => projects.setStage(projectId, { expectedVersion: input.expectedVersion as number, operationId: input.operationId as string, goal: input.goal as string, condition: input.condition as string, done: input.done as boolean })) }); return;
+        }
+        if (action === 'agreements' && request.method === 'POST') {
+          const input = await body(request);
+          json(response, 200, { agreement: await mutate(() => projects.confirmAgreement(projectId, { expectedVersion: input.expectedVersion as number, operationId: input.operationId as string, text: input.text as string })) }); return;
+        }
         if (action === 'tasks' && request.method === 'POST') {
           const input = await body(request), task = await mutate(async () => {
             const project = await projects.get(projectId); assertActive(project);
@@ -1618,8 +1903,18 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             if (input.modelTools !== undefined && typeof input.modelTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
             if (input.weatherTools !== undefined && typeof input.weatherTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
             if (input.tradeAreaTools !== undefined && typeof input.tradeAreaTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
-            const created = await projects.createTask(projectId, { name: String(input.name ?? ''), configuration: selected, simulationTools: input.simulationTools === true, tradeAreaTools: input.tradeAreaTools === true, weatherTools: input.weatherTools === true, modelTools: input.modelTools === true });
-            projectSessions.registerFresh(projectSessions.ref({ project: await projects.get(projectId), task: created }));
+            const assignment = input.assignment === undefined ? undefined : readAssignment(input.assignment);
+            if (assignment) {
+              checkAssignmentSkill(project, assignment);
+              await originalPlanAgreement(projectId, assignment, !project.tasks.some(t => t.id === input.operationId));
+              if (assignment.issue) assertIssue(project.id, assignment.issue);
+              for (const ref of assignment.sources ?? []) {
+                const source = await projects.getTask(projectId, ref.taskId);
+                await resultReader({ project, task: source }, { handoff: { mode: 'own-results' } }, { configuration: selected, issue: assignment.issue })('read', { id: ref.key, limit: 128 }, resultReadContext(request));
+              }
+            }
+            const created = await projects.createTask(projectId, { assignment, operationId: input.operationId as string | undefined, name: String(input.name ?? ''), configuration: selected, simulationTools: input.simulationTools === true, tradeAreaTools: input.tradeAreaTools === true, weatherTools: input.weatherTools === true, modelTools: input.modelTools === true });
+            if (!project.tasks.some(prior => prior.id === created.id)) projectSessions.registerFresh(projectSessions.ref({ project: await projects.get(projectId), task: created }));
             return created;
           }); json(response, 201, { task }); return;
         }
@@ -1638,6 +1933,26 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const taskRoute = /^tasks\/([a-f0-9-]+)(?:\/(.*))?$/.exec(action ?? '');
         if (taskRoute) {
           const taskId = taskRoute[1]!, operation = taskRoute[2], key = keyOf(projectId, taskId);
+          if (operation === 'results' && request.method === 'GET') {
+            const source = await pair(projectId, taskId), action = url.searchParams.has('id') ? 'read' : 'find';
+            await assertFrameworkContinuation(projectId, taskId);
+            const cursor = url.searchParams.get('cursor'), resultId = url.searchParams.get('id');
+            json(response, 200, await resultReader(source, { handoff: { mode: 'own-results' } })(action, resultId ? { id: resultId, offset: Number(url.searchParams.get('offset') ?? 0) } : cursor ? { cursor } : {}, resultReadContext(request))); return;
+          }
+          if (operation === 'default-skill' && request.method === 'PUT') {
+            const input = await body(request);
+            const task = await mutate(async () => {
+              const owner = await pair(projectId, taskId, true), ref = projectSessions.ref(owner);
+              if (!owner.task.assignment || typeof input.enabled !== 'boolean') throw new RequestFault(400, 'invalid_task_assignment');
+              if (projectSessions.busy(ref) || await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
+              if (input.enabled && !approvedTaskSkills[owner.task.assignment.type]) throw new RequestFault(409, 'task_skill_unavailable');
+              const assignment = makeTaskAssignment(owner.task.assignment.type, input.enabled);
+              checkAssignmentSkill(owner.project, assignment);
+              if (JSON.stringify(assignment.skill) !== JSON.stringify(owner.task.assignment.skill)) await projectSessions.close(ref);
+              return projects.setTaskSkill(projectId, taskId, assignment.skill);
+            });
+            json(response, 200, { task }); return;
+          }
           if ((operation === 'archive' || operation === 'restore') && request.method === 'POST') {
             await body(request);
             const task = await mutate(async () => {
@@ -1942,6 +2257,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       throw new RequestFault(404, 'not_found');
     } catch (error) {
       if(error instanceof StrategyDiscussionFault || error instanceof StrategyDiscussionSourceFault){json(response,error.status,{code:error.code,accepted:false,message:error.status===503?'战略讨论或保存结果尚未核实，原输入、选择和操作编号保留；请先只读核对原结果，不要重复创建或自动重试。':error.code==='strategy_discussion_history_scope_changed'?'已读取的历史资料与当前背景范围或排除项不一致，本次未发送给模型。原输入、选择和历史保留；请集中核对资料范围并明确调整，不能把旧会话视为已忘记资料。':error.code==='strategy_discussion_context_changed'?'当前讨论背景或准确版本已变化，本次未继续派发。原输入与选择保留，请集中核对后明确调整。':'战略讨论未完成，原输入和选择保留；请核对目标准确版本、资料权限、模型配置或原操作状态。'});return;}
+      if (error instanceof ProjectTaskResultsError) { json(response, error.status, { code: error.code, accepted: false, message: '请核对该成果的原记录和当前权限。' }); return; }
       if (error instanceof StrategyDiscussionFault || error instanceof UsageContextFault || error instanceof StrategyGoalsError || error instanceof AutomaticActionSettingsFault || error instanceof ProjectPlanFault) {
         const goalReadMessages: Record<string, string> = {
           strategy_goal_not_found: '原目标不可取得。已保留原选择，未猜测或替换为最新目标；请核对原目标记录及访问范围。',

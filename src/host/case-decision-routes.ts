@@ -9,6 +9,18 @@ export function createCaseDecisionRoutes(service: CaseDecisionService) {
     const match = /^\/api\/cases\/([a-f0-9-]+)\/decisions(?:\/(.*))?$/.exec(pathname);
     if (!match) return null;
     const caseId = match[1]!, action = match[2];
+    if (action === 'issues') {
+      if (method === 'GET') return { body: { issues: service.issueList(caseId) } };
+      if (method === 'POST') return { status: 201, body: { issue: await service.createIssue(caseId, input as Record<string, unknown>) } };
+    }
+    const issue = /^issues\/([a-f0-9-]+)(?:\/(sources|reply|plans|authorize|review))?$/.exec(action ?? '');
+    if (issue) {
+      const id = issue[1]!, sub = issue[2];
+      if (method === 'GET' && !sub) return { body: await service.issueTimeline(caseId, id) };
+      if (method === 'GET' && sub === 'sources') return { body: await service.issueSources(caseId, id) };
+      if (method === 'POST' && sub === 'reply') return { body: await service.inspectIssueReply(caseId, id, input) };
+      if (method === 'POST' && sub && sub !== 'sources') return { body: await service.issueWrite(caseId, id, sub, input as Record<string, unknown>) };
+    }
     const exactChoice = /^choices\/([a-f0-9-]+)$/.exec(action ?? '');
     if (exactChoice && method === 'GET') return { body: { choice: service.readChoice(caseId, exactChoice[1]!) } };
     if (action === 'links' && method === 'GET') return { body: await service.links(caseId) };

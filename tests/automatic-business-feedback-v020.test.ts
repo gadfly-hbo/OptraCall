@@ -140,10 +140,10 @@ test('A04/A15 changing the accepted Case goal during author completion preserves
   await f.start('仅在当前Case原目标下整理本轮已有发现。', { caseContext: { caseId: record.id, caseRevision: initial.case.revision, projectWorkRevision: project.project.work.revision, selectedReferenceIds: [] } });
   await entered.promise; let adopted: any;
   try {
-    const { goal } = await f.request('/api/strategy/goals', 'POST', { operationId: randomUUID(), title: '用户明确改选的新目标', outcome: '新范围待另行分析', perspective: 'personal', scope: { kind: 'personal', id: 'synthetic-new-goal-scope', name: '合成用户' }, measurement: { kind: 'deliverable', criterion: '新目标有单独依据及限制' }, baseline: { state: 'pending', description: '新范围未核' }, responsible: '合成用户' }, 201);
+    const { goal } = await f.request('/api/strategy/goals', 'POST', { operationId: randomUUID(), title: '用户明确改选的新目标', outcome: '新范围待另行分析', perspective: 'personal', scope: { kind: 'personal', id: 'synthetic-new-goal-scope', name: '合成用户' }, measurement: { kind: 'deliverable', criterion: '新目标有单独依据及限制' }, baseline: { state: 'pending', description: '新范围未核' }, responsible: '合成用户', strategies:['按新目标核对'] }, 201);
     adopted = (await f.request(`/api/strategy/goals/${goal.goalId}/adopt`, 'POST', { operationId: randomUUID(), version: goal.version, expectedVersion: goal.version, decision: '用户明确采纳新目标，旧报告不得自动转作新依据。' })).goal;
     const current = await f.request(`/api/cases/${record.id}`);
-    await f.request(`/api/cases/${record.id}/goals`, 'POST', { operationId: randomUUID(), expectedRevision: current.case.revision, goalBinding: { primary: { goalId: adopted.goalId, version: adopted.version }, related: [] } });
+    await f.request(`/api/cases/${record.id}/goals`, 'POST', { operationId: randomUUID(), expectedRevision: current.case.revision, goalBinding: { primary: { goalId: adopted.goalId, version: adopted.version }, related: [], strategy:"按新目标核对" } });
   } finally { release.resolve(); }
   const result = await f.idle(), after = await f.request(`/api/cases/${record.id}`), catalog = await f.request(`/api/cases/${record.id}/decisions`);
   assert.equal(await readFile(path.join(f.project.rootPath, relativePath), 'utf8'), content);

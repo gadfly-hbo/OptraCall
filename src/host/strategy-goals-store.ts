@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseUserQuoteProvenance } from '../agent/quoted-decisions.ts';
+import { parseBusinessRoleOwner, businessRoleConversationId } from './business-role-conversations.ts';
 import { parseUsageContext } from './usage-context-types.ts';
 import { parseGoalBasis } from './strategy-goals-types.ts';
 import type { GoalActionArrangement, GoalArrangementInput } from './strategy-goals-types.ts';
@@ -98,6 +99,14 @@ function feedbackIdentity(input: GoalFeedbackInput): string {
   return canonical(body);
 }
 
+export function parseGoalRoleSuggestion(value: unknown): NonNullable<GoalDraftInput['roleSuggestion']> {
+  if(!object(value) || Object.keys(value).some(k=>!['owner','discussionId','sessionId','entryId','sha256'].includes(k))) fail('invalid_goal_role_suggestion');
+  const owner=parseBusinessRoleOwner(value.owner);
+  if((owner.role!=='goal'&&owner.role!=='goal-draft')||value.discussionId!==businessRoleConversationId(owner)||
+      typeof value.sha256!=='string'||!/^[0-9a-f]{64}$/.test(value.sha256)) fail('invalid_goal_role_suggestion');
+  return {owner,discussionId:uuid(value.discussionId),sessionId:uuid(value.sessionId),entryId:text(value.entryId,200),sha256:value.sha256};
+}
+export { draft as parseGoalDraft };
 function draft(input: GoalDraftInput): GoalDraftInput {
   if (!object(input) || !['profit', 'nonprofit', 'personal'].includes(input.perspective) || !object(input.scope) || !['enterprise', 'department', 'personal'].includes(input.scope.kind) || !object(input.measurement) || !object(input.baseline) || !['known', 'pending'].includes(input.baseline.state)) fail('invalid_strategy_goal');
   const measurement = input.measurement.kind === 'quantitative' ? (() => {
@@ -111,7 +120,11 @@ function draft(input: GoalDraftInput): GoalDraftInput {
     if (!Array.isArray(value) || value.length > 100) fail('invalid_strategy_goal');
     return value.map(x => text(x));
   };
+  const choice = input.strategyChoice;
+  if (choice !== undefined && (!object(choice) || typeof choice.contentSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(choice.contentSha256))) fail('invalid_strategy_goal_context');
   const value: GoalDraftInput = {
+    ...(input.roleSuggestion===undefined?{}:{roleSuggestion:parseGoalRoleSuggestion(input.roleSuggestion)}),
+    ...(choice ? {strategyChoice:{discussionId:uuid(choice.discussionId),version:positive(choice.version),contentSha256:choice.contentSha256}} : {}),
     title: text(input.title, 300), outcome: text(input.outcome), perspective: input.perspective,
     scope: { kind: input.scope.kind, id: text(input.scope.id, 300), name: text(input.scope.name, 300), ...(input.scope.enterpriseId === undefined ? {} : { enterpriseId: uuid(input.scope.enterpriseId) }) }, measurement,
     baseline: { state: input.baseline.state, description: text(input.baseline.description) }, responsible: text(input.responsible, 300),

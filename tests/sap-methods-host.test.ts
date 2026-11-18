@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { createHost } from '../src/host/server.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -220,4 +221,63 @@ test('SAM12: compatibility disable keeps exact method history readable and refus
   assert.equal(denied.code, 'METHOD_FEATURE_DISABLED');
   await json(await disabled.request(`/api/sap/methods/${saved.method.id}/publish`, 'POST', { requestId: randomUUID(), version: 1, expectedSha256: saved.version.contentSha256 }), 409);
   assert.equal((await json(await disabled.request('/api/sap/methods'))).methods.length, 1);
+});
+
+test('T4 two typed Analysis sessions read distinct published grains, reuse the same published method and reopen the exact first result', { timeout: 90_000 }, async t => {
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', { name: 'T4', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-t4', apiKey: 'synthetic-only' }));
+  const { project } = await json(await host.request('/api/projects', 'POST', { name: '跨口径复用' }), 201);
+  const { task: author } = await json(await host.request('/api/projects/' + project.id + '/tasks', 'POST', { name: '方法原分析', assignment: { type: 'analysis', skill: null } }), 201);
+  const authorRoute = '/api/projects/' + project.id + '/tasks/' + author.id;
+  provider.setResponder(context => {
+    if (!context.availableTools.includes('read_sap_method_source')) return { text: '判断前要核对对象、分母和观察窗口。' };
+    if (!context.recentToolResults.length) return { calls: [{ name: 'read_sap_method_source', arguments: { action: 'read-session', start: 0, length: 1500 } }] };
+    assert.match(providerMessageText(context.recentToolResults[0].content), /观察窗口/);
+    return { text: JSON.stringify({ kind: 'method', title: '窗口比较', content: { conditions: '统计对象和观察窗可比', logic: '分开窗口后再比较', judgment: '先核对分母', limits: '粒度改变须复核' } }) };
+  });
+  await json(await host.request(authorRoute + '/messages', 'POST', { requestId: randomUUID(), text: '如何比较复购变化？' }), 202);
+  await until(() => host.request(authorRoute).then(response => json(response)), value => value.task.lastRun?.status === 'completed' && value.snapshot.status === 'idle');
+  const requestId = randomUUID(), extraction = authorRoute + '/sap-method-extractions';
+  await json(await host.request(extraction, 'POST', { requestId, incomplete: false }), 202);
+  const fixed = await until(() => host.request(extraction + '/' + requestId).then(response => json(response)), value => ['saved', 'failed', 'cancelled'].includes(value.extraction.status));
+  assert.equal(fixed.extraction.status, 'saved');
+  const { method } = await json(await host.request('/api/sap/methods/' + fixed.extraction.methodId + '/versions/1'));
+  assert.equal(method.origin, 'ir'); assert.equal(method.versions[0].sources[0].type, 'session');
+  const methodRef = { kind: 'sap-method', methodId: method.id, version: 1, publishedHash: method.versions[0].contentSha256 };
+  await json(await host.request('/api/sap/methods/' + method.id + '/publish', 'POST', { requestId: randomUUID(), version: 1, expectedSha256: methodRef.publishedHash }));
+  const previousCalls = provider.requests.length;
+  const yaml = await fs.readFile('extensions/business-plugins/metric-factory/fixtures/membership-repurchase@1.0.0.draft.yaml', 'utf8');
+  const records = [];
+  for (const [version, grain] of [['1.0.0', '按会员按月'], ['1.1.0', '按家庭按季']] as const) {
+    const definition = yaml.replace('version: 1.0.0', 'version: ' + version).replace('指定时间窗口内', grain + '统计，指定时间窗口内');
+    await fs.writeFile(path.join(project.rootPath, '020_clean/t4.yaml'), definition);
+    const { entry } = await json(await host.request('/api/metric-factory/publish', 'POST', { projectId: project.id, path: '020_clean/t4.yaml', publishedBy: 'T4' }), 201);
+    await json(await host.request('/api/metric-factory/projects/' + project.id + '/enable', 'POST', { packageId: entry.id, version }));
+    const { task } = await json(await host.request('/api/projects/' + project.id + '/tasks', 'POST', { name: grain, assignment: { type: 'analysis', skill: null } }), 201);
+    const route = '/api/projects/' + project.id + '/tasks/' + task.id;
+    const target = { kind: 'sap', packageId: entry.id, version, metricName: 'repurchase_rate', publishedHash: entry.bytesSha256 };
+    provider.setResponder(context => {
+      assert.ok(context.availableTools.includes('read_semantic_context'));
+      if (!context.recentToolResults.length) return { calls: [{ name: 'read_semantic_context', arguments: { action: 'read', target } }] };
+      const semantic = JSON.parse(providerMessageText(context.recentToolResults[0].content));
+      assert.equal(semantic.items[0].target.version, version);
+      assert.ok(semantic.items[0].body.includes(grain));
+      if (context.recentToolResults.length === 1) return { calls: [{ name: 'read_semantic_context', arguments: { action: 'read', target: methodRef } }] };
+      const ir = JSON.parse(providerMessageText(context.recentToolResults[1].content));
+      assert.deepEqual(ir.items[0].target, methodRef); assert.ok(ir.items[0].body.includes('粒度改变须复核'));
+      return { text: grain + '，定义 ' + version + '，使用窗口比较 v1。' };
+    });
+    await json(await host.request(route + '/messages', 'POST', { requestId: randomUUID(), text: '请核对当前口径与已发布方法的应用条件。' }), 202);
+    await until(() => host.request(route).then(response => json(response)), value => value.task.lastRun?.status === 'completed' && value.snapshot.status === 'idle');
+    const catalog = await json(await host.request(route + '/results'));
+    assert.equal(catalog.details.results.length, 1);
+    records.push({ route, key: catalog.details.results[0].id, grain, version });
+  }
+  for (const record of records) {
+    const exact = await json(await host.request(record.route + '/results?id=' + record.key));
+    assert.equal(exact.details.result.id, record.key);
+    assert.ok(exact.content[0].text.includes(record.grain + '，定义 ' + record.version));
+  }
+  assert.equal(provider.requests.length - previousCalls, 6); assert.deepEqual(provider.errors, []);
 });

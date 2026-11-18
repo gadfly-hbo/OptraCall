@@ -1,14 +1,15 @@
 import { StrategyGoalsStore, StrategyGoalsError } from './strategy-goals-store.ts';
-import type { GoalDraftInput, GoalRef, GoalRevisionInput, GoalAdoptionInput, GoalRelationInput, GoalFeedbackInput, GoalSourceRef } from './strategy-goals-types.ts';
+import type { CaseGoalBindingInput } from './case-types.ts';
+import type { GoalVersion, GoalDraftInput, GoalRef, GoalRevisionInput, GoalAdoptionInput, GoalRelationInput, GoalFeedbackInput, GoalSourceRef } from './strategy-goals-types.ts';
 
-export function createStrategyGoalRoutes(options: { store: StrategyGoalsStore; mutate: <T>(fn: () => T | Promise<T>) => Promise<T>; isClosing: () => boolean; validateGoal?: (input: GoalDraftInput) => void | Promise<void>; listSources?: () => Promise<unknown>; validateFeedbackSource?: (input: GoalSourceRef) => void | Promise<void>; validateAdoption?: (ref: GoalRef, input: GoalAdoptionInput) => void | Promise<void> }) {
+export function createStrategyGoalRoutes(options: { store: StrategyGoalsStore; mutate: <T>(fn: () => T | Promise<T>) => Promise<T>; isClosing: () => boolean; validateGoal?: (input: GoalDraftInput, target?: GoalRef | 'create') => void | Promise<void>; listSources?: () => Promise<unknown>; validateFeedbackSource?: (input: GoalSourceRef) => void | Promise<void>; validateAdoption?: (ref: GoalRef, input: GoalAdoptionInput) => void | Promise<void> }) {
   const { store } = options;
   const write = <T>(fn: () => T | Promise<T>) => options.mutate(() => { if (options.isClosing()) throw new StrategyGoalsError('host_closing', 409); return fn(); });
   return async (pathname: string, method: string, input: Record<string, unknown> = {}): Promise<{ status?: number; body: unknown } | null> => {
     if (pathname === '/api/strategy/sources' && method === 'GET' && options.listSources) return { body: await options.listSources() };
     if (pathname === '/api/strategy/goals') {
       if (method === 'GET') return { body: store.list() };
-      if (method === 'POST') return { status: 201, body: await write(async () => { if (!store.getOperation(input.operationId as string)) await options.validateGoal?.(input as unknown as GoalDraftInput); return { goal: store.create(input as unknown as GoalDraftInput & { operationId: string }) }; }) };
+      if (method === 'POST') return { status: 201, body: await write(async () => { if (!store.getOperation(input.operationId as string)) await options.validateGoal?.(input as unknown as GoalDraftInput,'create'); return { goal: store.create(input as unknown as GoalDraftInput & { operationId: string }) }; }) };
     }
     const match = /^\/api\/strategy\/goals\/([a-f0-9-]+)(?:\/(adopt|revisions))?$/.exec(pathname);
     if (match) {
@@ -23,7 +24,7 @@ export function createStrategyGoalRoutes(options: { store: StrategyGoalsStore; m
         }
         return { goal: store.adopt(ref, input as unknown as GoalAdoptionInput) };
       }) };
-      if (match[2] === 'revisions' && method === 'POST') return { status: 201, body: await write(async () => { if (!store.getOperation(input.operationId as string)) await options.validateGoal?.(input as unknown as GoalDraftInput); return { goal: store.revise(id, input as unknown as GoalRevisionInput) }; }) };
+      if (match[2] === 'revisions' && method === 'POST') return { status: 201, body: await write(async () => { if (!store.getOperation(input.operationId as string)) await options.validateGoal?.(input as unknown as GoalDraftInput,{goalId:id,version:Number(input.expectedVersion)}); return { goal: store.revise(id, input as unknown as GoalRevisionInput) }; }) };
     }
     if (pathname === '/api/strategy/relations' && method === 'POST') return { status: 201, body: await write(() => ({ relation: store.relate(input as unknown as GoalRelationInput & { operationId: string }) })) };
     const relation = /^\/api\/strategy\/relations\/([a-f0-9-]+)\/revisions$/.exec(pathname);
@@ -38,12 +39,27 @@ export function createStrategyGoalRoutes(options: { store: StrategyGoalsStore; m
   };
 }
 
-export function assertAdoptedGoalRefs(store: StrategyGoalsStore, value: unknown): { primary: GoalRef; related: GoalRef[] } {
+export function assertAdoptedGoalRefs(store: StrategyGoalsStore, value: unknown, purpose: 'new-case' | 'binding' = 'binding'): CaseGoalBindingInput {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new StrategyGoalsError('case_primary_goal_required', 400);
   const input = value as { primary?: GoalRef; related?: GoalRef[] };
   if (!input.primary || !Array.isArray(input.related) || input.related.length > 20) throw new StrategyGoalsError('invalid_case_goal_binding');
   for (const ref of [input.primary, ...input.related]) {
     if (!ref || store.read(ref).status !== 'adopted') throw new StrategyGoalsError('goal_not_adopted', 409);
   }
-  return { primary: input.primary, related: input.related };
+  const raw = value as CaseGoalBindingInput;
+  const record = store.get(input.primary.goalId), adopted = store.read(input.primary);
+  if (purpose === 'new-case' || raw.strategy !== undefined || raw.effectiveFrom !== undefined) {
+    if (typeof raw.strategy !== 'string' || !raw.strategy.trim()) throw new StrategyGoalsError('case_strategy_required');
+    if (!adopted.strategies?.includes(raw.strategy)) throw new StrategyGoalsError('case_strategy_not_found', 409);
+    if (purpose === 'new-case') {
+      if (raw.effectiveFrom !== undefined) throw new StrategyGoalsError('invalid_case_effective_date');
+      const previous = record.versions.filter(v => v.status === 'adopted' && v.version < adopted.version).at(-1);
+      const normalize = (s: string) => s.normalize('NFKC').trim().replace(/\s+/g, ' ');
+      const goal = (v: GoalVersion) => JSON.stringify([normalize(v.outcome), v.measurement.kind === 'deliverable' ? normalize(v.measurement.criterion) : v.measurement, v.dueAt ?? '']);
+      if (previous && goal(adopted) === goal(previous) && previous.strategies?.some(s => normalize(s) === normalize(raw.strategy!))) {
+        throw new StrategyGoalsError('case_goal_strategy_unchanged', 409);
+      }
+    }
+  }
+  return { primary: input.primary, related: input.related, ...(raw.strategy !== undefined ? { strategy: raw.strategy } : {}), ...(raw.effectiveFrom !== undefined ? { effectiveFrom: raw.effectiveFrom } : {}) };
 }

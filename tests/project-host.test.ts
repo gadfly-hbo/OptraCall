@@ -366,3 +366,39 @@ test('EB10/11: read-only request receipts reopen older revisions and unknown leg
   assert.equal(provider.requests.length, 2);
   await json(await host.request(`/api/projects/${project.id}/tasks/${randomUUID()}/context-receipts`), 404);
 });
+
+test('v1.3 manual Task first send, shared agreement, Pi skill selection and no-Plan original reply handoff from public Host endpoints', { timeout: 60000 }, async t => {
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', { name: '合成经营任务', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-manual', apiKey: 'synthetic-only' }));
+  const { project } = await json(await host.request('/api/projects', 'POST', { name: '手工委托项目' }), 201);
+  const route = '/api/projects/' + project.id;
+  const { makeTaskAssignment } = await import('../src/host/task-assignment.ts');
+  await json(await host.request(route + '/agreements', 'POST', { operationId: randomUUID(), expectedVersion: 0, text: '合成口径：每位会员只计一次' }));
+  const { task: source } = await json(await host.request(route + '/tasks', 'POST', { name: '合成发现', assignment: { ...makeTaskAssignment('analysis', true), agreementVersion: 1 } }), 201);
+  const send = async (id: string, text: string) => {
+    const stream = await projectEvents(host, project.id, id);
+    try {
+      const requestId = randomUUID();
+      await json(await host.request(route + '/tasks/' + id + '/messages', 'POST', { requestId, text }), 202);
+      assert.equal((await stream.terminal(requestId)).outcome, 'completed');
+    } finally { await stream.close(); }
+  };
+  provider.setResponder(() => ({ text: '合成原回复：有需求证据，缺行动观察。' }));
+  await send(source.id, '核对原资料');
+  assert.match(JSON.stringify(provider.requests[0].body.messages), /合成口径：每位会员只计一次/);
+  const { receipts } = await json(await host.request(route + '/tasks/' + source.id + '/context-receipts'));
+  assert.equal(receipts[0].providedContext.taskAssignment.skill.version, '2.0.0-candidate.1');
+  const { details: catalog } = await json(await host.request(route + '/tasks/' + source.id + '/results'));
+  assert.equal(catalog.results[0].kind, 'native-reply');
+  const ref = { taskId: source.id, key: catalog.results[0].id };
+  const { task: receiver } = await json(await host.request(route + '/tasks', 'POST', { name: '经营行动方案', assignment: { ...makeTaskAssignment('plan', false), sources: [ref] } }), 201);
+  provider.setResponder(context => context.recentToolResults.length ? { text: '合成计划原稿' } : { calls: [{ name: 'read_project_task_results', arguments: { action: 'read', id: ref.key } }] });
+  await send(receiver.id, '从准确原回复核对经营方案');
+  assert.ok(provider.requests.some(request => request.body.messages?.some(m => m.role === 'tool' && providerMessageText(m.content).includes('合成原回复：有需求证据，缺行动观察。'))));
+  await json(await host.request(route + '/tasks/' + source.id + '/default-skill', 'PUT', { enabled: false }));
+  assert.equal((await json(await host.request(route + '/tasks/' + source.id))).task.assignment.skill, null);
+  const plan = await json(await host.request(route + '/plan'));
+  assert.equal(plan.revision, 0);
+  assert.deepEqual(plan.history, []);
+});

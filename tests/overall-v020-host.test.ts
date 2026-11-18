@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { startTestHost } from './fixtures/host-process.ts';
-const draft = (operationId = randomUUID()) => ({ operationId, title: '会员持续购买', outcome: '核清可比窗口内的变化并形成有依据的判断', perspective: 'profit', scope: { kind: 'personal', id: 'synthetic-owner', name: '合成个人职责' }, measurement: { kind: 'deliverable', criterion: '准确口径、限制与后续验证安排可回读' }, baseline: { state: 'pending', description: '历史窗口待补齐' }, responsible: '会员运营' });
+const draft = (operationId = randomUUID()) => ({ operationId, title: '会员持续购买', strategies: ['按选定依据跟进'], outcome: '核清可比窗口内的变化并形成有依据的判断', perspective: 'profit', scope: { kind: 'personal', id: 'synthetic-owner', name: '合成个人职责' }, measurement: { kind: 'deliverable', criterion: '准确口径、限制与后续验证安排可回读' }, baseline: { state: 'pending', description: '历史窗口待补齐' }, responsible: '会员运营' });
 
 test('A01/A03: a candidate goal requires an explicit adoption before a new Case can reference its exact version', async t => {
   const host = await startTestHost(); t.after(() => host.close());
@@ -16,11 +16,11 @@ test('A01/A03: a candidate goal requires an explicit adoption before a new Case 
   assert.equal(goal.status, 'candidate');
   const ref = { goalId: goal.goalId, version: 1 };
   await host.request('/api/cases/storage/initialize', 'POST', {});
-  const unadopted = await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '复购变化', goalBinding: { primary: ref, related: [] } });
+  const unadopted = await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '复购变化', goalBinding: { strategy: '按选定依据跟进', primary: ref, related: [] } });
   assert.equal(unadopted.status, 409, await unadopted.clone().text());
   const adoption = await host.request(`/api/strategy/goals/${goal.goalId}/adopt`, 'POST', { operationId: randomUUID(), expectedVersion: 1, version: 1, decision: '采用为本期目标；基线待补照实保留' });
   assert.equal(adoption.status, 200, await adoption.clone().text());
-  const caseInput = { operationId: randomUUID(), title: '复购变化', goalBinding: { primary: ref, related: [] } };
+  const caseInput = { operationId: randomUUID(), title: '复购变化', goalBinding: { strategy: '按选定依据跟进', primary: ref, related: [] } };
   const caseResponse = await host.request('/api/cases', 'POST', caseInput);
   assert.equal(caseResponse.status, 201, await caseResponse.clone().text());
   const { case: record } = await caseResponse.json();

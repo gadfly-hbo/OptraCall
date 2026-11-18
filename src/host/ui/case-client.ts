@@ -4,6 +4,7 @@ import type { ClientProject } from './project-types.ts';
 export type { GoalDraftInput, GoalOperationReceipt, GoalRef, GoalVersion, StrategyGoalsIndex, StrategyGoalRecord, ArtifactInput, CaseContextSelection, CaseDetail, CaseGoalBinding, CaseGoalBindingInput, CaseList, CaseMutation, CaseRecord, CaseStatus, CaseStorageStatus, OperationReceipt, ProjectWorkInput, ProjectWorkRecord, WorkEvent };
 
 const messages: Record<string, string> = {
+  case_new_issue_requires_new_case: '本期判断标准或管理范围已实质变化，请带回目标管理，采用对应 G／S 后建新 Case。', case_strategy_required: '请选此版目标中的具体策略 S。', case_strategy_not_found: '所选策略不属于该版目标，请重新核对。', case_goal_strategy_unchanged: '本版目标与所选策略均沿用上次采用内容。请回原 Case，或先针对本议题修订 G 或 S。', case_goal_strategy_already_used: '这项准确 G／S 已有 Case 承接，请回原 Case 查看。', case_continuity_confirmation_required: '请确认议题和判断标准是否延续。', case_round_waiting_for_feedback: '本轮仍待实际观察。请先在原看板回录。', case_issue_reply_unavailable: '所选原回复当前失读或内容已变化。', case_choice_not_actionable: '本次取舍未决定开展经营行动。', case_issue_source_scope_mismatch: '原成果的项目、任务或轮次与当前事项不一致。', case_effective_date_in_use: '此生效日已记录年度关系。', choice_already_arranged: '本次选择已有行动授权，请核对原看板。',
   strategy_goal_conflict: '目标已产生新版本，请保留输入并重新核对；未更改原目标关联。', goal_not_adopted: '此目标准确版本尚未采纳，先核对并明确采纳后再关联。', case_primary_goal_required: '请选择已采纳的主目标。', strategy_goals_unavailable: '目标记录暂不可读取，请保留输入并重试。', invalid_strategy_goal: '目标信息尚不完整，请核对名称、归属及成果要求。',
   revision_conflict: '记录已在其他窗口更新，请刷新并核对后再保存。', case_conflict: '事项已更新，请刷新并核对后再保存。',
   operation_conflict: '同一操作的内容已变化，请先核对原操作结果。', case_closed: '此 Case 已结束，请先重新打开。',
@@ -27,8 +28,9 @@ const projectPath = (id: string) => `projects/${encodeURIComponent(id)}/work`;
 export const status = () => request<CaseStorageStatus>('cases/storage');
 export const init = () => request<CaseStorageStatus>('cases/storage/initialize', 'POST', {});
 export const list = () => request<CaseList>('cases');
+export const originReply = (id: string) => request<{text: string}>(casePath(id)+'/origin/reply');
 export const detail = (id: string) => request<CaseDetail>(casePath(id));
-export const create = (input: { operationId: string; title: string; description?: string; goalBinding: CaseGoalBindingInput }) => request<{ case: CaseRecord }>('cases', 'POST', input);
+export const create = (input: { operationId: string; title: string; description?: string; goalBinding: CaseGoalBindingInput; creationSource?: import('../case-types.ts').CaseCreationSource }) => request<{ case: CaseRecord }>('cases', 'POST', input);
 export const update = (id: string, input: CaseMutation & { title: string; description: string; judgement: string; nextStep: string }) => request<{ case: CaseRecord }>(casePath(id), 'PATCH', input);
 export const setStatus = (id: string, input: CaseMutation & { status: Exclude<CaseStatus, 'closed'> }) => request<{ case: CaseRecord }>(`${casePath(id)}/status`, 'POST', input);
 export const close = (id: string, input: CaseMutation & { reason: string }) => request<{ case: CaseRecord }>(`${casePath(id)}/close`, 'POST', input);

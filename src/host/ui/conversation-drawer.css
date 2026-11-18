@@ -1,0 +1,137 @@
+.workspace-conversation {
+  min-width: 0;
+}
+.workspace-conversation-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 29px;
+}
+.workspace-conversation-toolbar button {
+  font-size: 12px;
+}
+.workspace-conversation-toolbar button:focus-visible,
+.workspace-conversation-heading button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.workspace-conversation-task,
+.workspace-conversation-task > .workspace-conversation-inline,
+.workspace-conversation-task > .workspace-conversation-inline > .workspace-conversation-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+.workspace-conversation-task > .workspace-conversation-toolbar {
+  width: min(800px, calc(100% - 32px));
+  align-self: center;
+  flex: 0 0 auto;
+}
+.workspace-conversation-task .chat-page.has-messages .composer-area {
+  flex-shrink: 0;
+}
+.workspace-conversation-dialog {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(100vw, 1040px);
+  max-width: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  overflow: hidden;
+  text-align: start;
+  box-shadow: 0 0 42px #15131f38;
+}
+.workspace-conversation-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.workspace-conversation-dialog::backdrop {
+  background: #17131f66;
+}
+.workspace-conversation-heading {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 17px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.workspace-conversation-heading h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.workspace-conversation-heading button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.workspace-conversation-expanded {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  padding: 18px 24px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.workspace-conversation-expanded .strategy-discussion-messages,
+.workspace-conversation-expanded .chat-log {
+  max-height: none;
+  overflow-y: visible;
+}
+.workspace-conversation-expanded .chat-log p,
+.workspace-conversation-expanded .detail-summary p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.workspace-conversation-task .workspace-conversation-expanded {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.workspace-conversation-task .workspace-conversation-expanded > .workspace-conversation-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.workspace-conversation-task .workspace-conversation-expanded > .workspace-conversation-content > .chat-page {
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+}
+.workspace-conversation-task .workspace-conversation-expanded .has-messages .message-scroll {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
+}
+.workspace-conversation-task .workspace-conversation-expanded .chat-page.has-messages .composer-area {
+  max-height: none;
+  overflow: visible;
+}
+.workspace-conversation-task .workspace-conversation-expanded .task-workflow,
+.workspace-conversation-task .workspace-conversation-expanded .task-results,
+.workspace-conversation-task .workspace-conversation-expanded .workspace-footer {
+  display: none;
+}
+@media (max-width: 760px) {
+  .workspace-conversation-heading,
+  .workspace-conversation-expanded {
+    padding: 14px 16px;
+  }
+  .workspace-conversation-heading button {
+    width: auto;
+  }
+}

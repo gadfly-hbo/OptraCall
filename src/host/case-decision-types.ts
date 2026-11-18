@@ -41,7 +41,7 @@ export type CaseDecisionImpact = { target: CaseDecisionRef; explanation: string 
 export type CaseDecisionRevision = {
   caseStoreId: string; caseId: string; recordId: string; revision: number; kind: CaseDecisionKind;
   payload: CaseDecisionPayload; references: CaseDecisionReference[]; impactNotes: CaseDecisionImpact[];
-  changeReason: string | null; lifecycle: 'active' | 'archived'; origin: CaseDecisionOrigin;
+  issueId?: string; changeReason: string | null; lifecycle: 'active' | 'archived'; origin: CaseDecisionOrigin;
   createdAt: string; operationId: string;
 };
 export type CaseDecisionDraftInput = {
@@ -53,14 +53,18 @@ export type CaseDecisionGovernanceInput = {
   operationId: string; caseStoreId: string; caseId: string; recordId: string; expectedRevision: number;
   action: 'archive' | 'restore' | 'add_reference' | 'remove_reference'; reference?: CaseDecisionReference;
 };
+export type CaseDecisionIssue = { id: string; caseId: string; title: string; createdAt: string };
+export type CaseIssueReply = Extract<PersonalSourceRef, { type: 'native-reply' }>;
+export type CaseIssueReview = { caseId: string; issueId: string; choiceId: string; operationId: string; createdAt: string; reply: CaseIssueReply;
+  judgement: string; nextStep: string; observation: string; feedback?: { projectId: string; boardTaskId: string; feedbackRevisionId: string }; };
 export type CaseStrategyChoiceValue = 'trial' | 'gather_evidence' | 'defer' | 'reject' | 'no_action' | 'continue' | 'adjust' | 'stop_considering';
 export type CaseStrategyChoiceInput = {
   operationId: string; caseStoreId: string; caseId: string; strategyRef: CaseDecisionRef;
   choice: CaseStrategyChoiceValue; reason?: string | null; expectedPreviousChoiceId: string | null;
-  allowHistorical?: boolean;
+  allowHistorical?: boolean; issueId?: string;
 };
 export type CaseStrategyChoice = {
-  choiceId: string; caseId: string; strategyRef: CaseDecisionRef; choice: CaseStrategyChoiceValue;
+  choiceId: string; caseId: string; issueId?: string; goalBinding?: import('./case-types.ts').CaseGoalBinding | null; strategyRef: CaseDecisionRef; choice: CaseStrategyChoiceValue;
   reason: string | null; previousChoiceId: string | null; operationId: string; occurredAt: string; actorKind: 'user';
   quoteProvenance?: UserQuoteProvenance;
 };

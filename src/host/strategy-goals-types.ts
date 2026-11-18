@@ -38,7 +38,17 @@ export interface GoalAdoptionProvenance {
 export type GoalMeasurement =
   | { kind: 'quantitative'; sapMetric: { authority: 'sap-metric'; id: string; version: string; metricName?: string }; target?: string }
   | { kind: 'deliverable'; criterion: string };
+export interface StrategyChoiceRef { discussionId: string; version: number; contentSha256: string }
+export interface GoalRoleSuggestionRef {
+  owner: Extract<import('./business-role-types.ts').BusinessRoleOwner, {role:'goal'|'goal-draft'}>;
+  discussionId: string;
+  sessionId: string;
+  entryId: string;
+  sha256: string;
+}
 export interface GoalDraftInput {
+  roleSuggestion?: GoalRoleSuggestionRef;
+  strategyChoice?: StrategyChoiceRef;
   title: string;
   outcome: string;
   perspective: GoalPerspective;
@@ -133,6 +143,10 @@ export interface GoalActionArrangement {
   quoteProvenance: import('../agent/quoted-decisions.ts').UserQuoteProvenance;
   createdAt: string;
 }
+export type GoalArrangementView = Omit<GoalActionArrangement, 'quoteProvenance'> & {
+  quoteProvenance?: GoalActionArrangement['quoteProvenance'];
+  caseConfirmation?: import('../../extensions/business-plugins/decision-board/types.ts').BoardConfirmation;
+};
 export type GoalArrangementInput = Omit<GoalActionArrangement, 'id' | 'createdAt'>;
 export interface GoalMutation { operationId: string }
 export interface GoalRevisionInput extends GoalDraftInput, GoalMutation { expectedVersion: number }

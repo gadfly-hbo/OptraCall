@@ -46,3 +46,16 @@ export type GovernanceRequest = Omit<CaseDecisionGovernanceInput, 'caseId' | 're
 export function saveCaseDecisionGovernance(caseId: string, recordId: string, input: GovernanceRequest) {
   return request<{ revision: CaseDecisionRevision }>(`${path(caseId)}/${encodeURIComponent(recordId)}/governance`, 'POST', input);
 }
+
+export const caseIssues = (id: string) => request<{ issues: import('../case-decision-types.ts').CaseDecisionIssue[] }>(path(id) + '/issues');
+export const createCaseIssue = (id: string, input: { operationId: string; expectedRevision: number; title: string }) =>
+  request<{ issue: import('../case-decision-types.ts').CaseDecisionIssue }>(path(id) + '/issues', 'POST', input);
+export const caseIssueTimeline = (id: string, issue: string) =>
+  request<Awaited<ReturnType<CaseDecisionService['issueTimeline']>>>(path(id) + '/issues/' + issue);
+export const caseIssueSources = (id: string, issue: string) =>
+  request<Awaited<ReturnType<CaseDecisionService['issueSources']>>>(path(id) + '/issues/' + issue + '/sources');
+export const writeCaseIssue = (id: string, issue: string, action: 'plans' | 'review' | 'authorize', input: Record<string, unknown>) =>
+  request(path(id) + '/issues/' + issue + '/' + action, 'POST', input);
+
+export const inspectIssueReply = (id: string, issue: string, source: import('../case-decision-types.ts').CaseIssueReply) =>
+  request<{title: string; text: string}>(path(id) + '/issues/' + issue + '/reply', 'POST', source);

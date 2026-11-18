@@ -11,9 +11,9 @@ async function fixture(t: { after(fn: () => Promise<void>): void }) {
   await host.request('/api/cases/storage/initialize', 'POST', {});
   const configured = await (await host.request('/api/configuration', 'PUT', { name: '合成配置', provider: 'openai-compatible', baseUrl: 'http://127.0.0.1:1/v1', model: 'synthetic', apiKey: 'synthetic' })).json();
   const { project } = await (await host.request('/api/projects', 'POST', { name: '原项目', configurationId: configured.configuration.id })).json();
-  const { goal } = await (await host.request('/api/strategy/goals', 'POST', { operationId: randomUUID(), title: '持续观察', outcome: '明确可核依据', perspective: 'personal', scope: { kind: 'personal', id: 'self', name: '个人职责' }, measurement: { kind: 'deliverable', criterion: '可回查报告' }, baseline: { state: 'pending', description: '待补基线' }, responsible: '合成责任人' })).json();
+  const { goal } = await (await host.request('/api/strategy/goals', 'POST', { operationId: randomUUID(), title: '持续观察', strategies: ['按选定依据跟进'], outcome: '明确可核依据', perspective: 'personal', scope: { kind: 'personal', id: 'self', name: '个人职责' }, measurement: { kind: 'deliverable', criterion: '可回查报告' }, baseline: { state: 'pending', description: '待补基线' }, responsible: '合成责任人' })).json();
   await host.request(`/api/strategy/goals/${goal.goalId}/adopt`, 'POST', { operationId: randomUUID(), expectedVersion: 1, version: 1, decision: '用户明确采用' });
-  const goalBinding = { primary: { goalId: goal.goalId, version: 1 }, related: [] };
+  const goalBinding = { strategy: '按选定依据跟进', primary: { goalId: goal.goalId, version: 1 }, related: [] };
   const intent: ProjectPlanCaseConnection = { projectId: project.id, goalBinding, create: { operationId: randomUUID(), title: '持续推进的业务事项', description: '用户明确的问题', goalBinding }, linkOperationId: randomUUID() };
   return { host, project, intent };
 }

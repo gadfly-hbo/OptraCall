@@ -63,7 +63,7 @@ export function ModelPackImportStep({ step }: { step: ImportStep }) {
   </div>;
 }
 
-export function ModelRegistryPage({ onBack, backLabel = '返回能力目录' }: { onBack: () => void; backLabel?: string }) {
+export function ModelRegistryPage({ onBack, backLabel = '返回能力目录', embedded = false }: { onBack: () => void; backLabel?: string; embedded?: boolean }) {
   const [models, setModels] = useState<ModelRegistryEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -157,6 +157,10 @@ export function ModelRegistryPage({ onBack, backLabel = '返回能力目录' }: 
   const importBusy = importOutcome.kind === 'busy';
 
   return <div className="model-pack-page">
+    {embedded ? <header className="page-heading">
+      <div><h2>业务模型包</h2><p>查看已导入的模型及版本，管理测试版和生产版。</p></div>
+      <button type="button" className="primary-button" onClick={openImport}>导入模型包…</button>
+    </header> :
     <header className="plugin-page-heading">
       <div>
         <p className="eyebrow">OPTRACALL · 模型包</p>
@@ -167,7 +171,8 @@ export function ModelRegistryPage({ onBack, backLabel = '返回能力目录' }: 
         <button className="primary-button" onClick={openImport}>导入模型包…</button>
         <button className="secondary-button" onClick={onBack}>{backLabel}</button>
       </div>
-    </header>
+    </header>}
+
 
     {error && <div className="global-notice" role="alert"><span>{error}</span><button className="text-button" onClick={() => setError('')}>关闭提示</button></div>}
     {notice && <p className="project-notice" role="status">{notice}</p>}

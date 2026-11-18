@@ -558,13 +558,15 @@ export function createDecisionBoardStore(options: { root: string }) {
     getTask(taskId);
     return database().prepare('SELECT record_json FROM action_authorizations WHERE task_id=? ORDER BY revision').all(taskId).map(row => JSON.parse(String(row.record_json)) as BoardActionAuthorization);
   }
-  function cleanAuthorization(input: BoardActionAuthorizationInput): BoardActionAuthorizationInput {
+  function cleanAuthorization(input: BoardActionAuthorizationInput, caseForm = false): BoardActionAuthorizationInput {
     if (!input || !['authorize', 'revoke'].includes(input.decision) || !/^[a-f0-9]{64}$/.test(input.itemVersion) || !/^[a-f0-9]{64}$/.test(input.taskVersion)) fail('invalid_action_authorization');
-    const quoteProvenance = parseUserQuoteProvenance(input.quoteProvenance);
+    const quoteProvenance = caseForm ? undefined : parseUserQuoteProvenance(input.quoteProvenance);
+    const confirmed = caseForm && input.caseConfirmation && !('kind' in input.source) ? { entry: 'case-form' as const, issueId: uuid(input.caseConfirmation.issueId), ...(input.caseConfirmation.goal ? {goal:input.caseConfirmation.goal} : {}) } : undefined;
+    if (!quoteProvenance && !confirmed) fail('invalid_action_authorization');
     const clean = { operationId: uuid(input.operationId), projectId: uuid(input.projectId), itemId: uuid(input.itemId), taskId: uuid(input.taskId),
       itemVersion: input.itemVersion, taskVersion: input.taskVersion, expectedPreviousAuthorizationId: input.expectedPreviousAuthorizationId === null ? null : uuid(input.expectedPreviousAuthorizationId),
-      decision: input.decision, scope: text(input.scope, 4000, true), source: authorizationSource(input.source), quoteProvenance };
-    if (quoteProvenance.projectId !== clean.projectId || 'kind' in clean.source && (clean.source.projectId !== clean.projectId || clean.source.taskId !== quoteProvenance.taskId || clean.decision === 'authorize' && clean.source.requestId !== quoteProvenance.requestId)) fail('authorization_scope_mismatch');
+      decision: input.decision, scope: text(input.scope, 4000, true), source: authorizationSource(input.source), ...(confirmed ? { caseConfirmation: confirmed } : { quoteProvenance }) };
+    if (quoteProvenance && (quoteProvenance.projectId !== clean.projectId || 'kind' in clean.source && (clean.source.projectId !== clean.projectId || clean.source.taskId !== quoteProvenance.taskId || clean.decision === 'authorize' && clean.source.requestId !== quoteProvenance.requestId))) fail('authorization_scope_mismatch');
     return clean;
   }
   function saveAuthorization(clean: BoardActionAuthorizationInput, assertWritable?: () => void): BoardActionAuthorization {
@@ -596,18 +598,26 @@ export function createDecisionBoardStore(options: { root: string }) {
     const row = database().prepare('SELECT receipt_json FROM arrangement_operations WHERE operation_id=?').get(operationId);
     return row ? JSON.parse(String(row.receipt_json)) as BoardArrangementReceipt : null;
   }
-  function arrangeActions(input: BoardArrangeActionsInput, options?: { assertWritable?(): void }): BoardArrangementReceipt {
-    const quoteProvenance = parseUserQuoteProvenance(input.quoteProvenance), source = authorizationSource(input.source);
-    const clean: BoardArrangeActionsInput = { operationId: uuid(input.operationId), projectId: uuid(input.projectId), source, quoteProvenance,
+  function listGoalCaseArrangements(goalId: string, version: number): BoardArrangementReceipt[] {
+    const db = database();
+    if (Number(db.prepare('PRAGMA user_version').get()?.user_version) < 5) return [];
+    return db.prepare("SELECT receipt_json FROM arrangement_operations WHERE json_extract(receipt_json,'$.caseConfirmation.goal.goalId')=? AND json_extract(receipt_json,'$.caseConfirmation.goal.version')=? ORDER BY rowid").all(uuid(goalId), version).map(row => JSON.parse(String(row.receipt_json)) as BoardArrangementReceipt);
+  }
+  function arrangeActions(input: BoardArrangeActionsInput, options?: { assertWritable?(): void; confirmedIssueId?: string; goal?: import('../types.ts').BoardConfirmation['goal'] }): BoardArrangementReceipt {
+    const source = authorizationSource(input.source);
+    const caseConfirmation = options?.confirmedIssueId && !('kind' in source) ? { issueId: uuid(options.confirmedIssueId), entry: 'case-form' as const, ...(options.goal ? {goal:{goalId:uuid(options.goal.goalId),version:options.goal.version,strategy:text(options.goal.strategy,4000,true)}} : {}) } : undefined;
+    const quoteProvenance = caseConfirmation ? undefined : parseUserQuoteProvenance(input.quoteProvenance);
+    const clean: BoardArrangeActionsInput = { operationId: uuid(input.operationId), projectId: uuid(input.projectId), source, ...(caseConfirmation ? { caseConfirmation } : { quoteProvenance }),
       scope: text(input.scope, 4000, true), title: text(input.title, 200, true), checks: boundedChecks(input.checks), actions: cleanArrangeActions(input.actions) };
     if (clean.scope.length + clean.title.length + clean.checks.reduce((length, value) => length + value.length, 0) > 8000) fail('invalid_arrangement');
-    if (quoteProvenance.projectId !== clean.projectId || 'kind' in source && (source.projectId !== clean.projectId || source.taskId !== quoteProvenance.taskId || source.requestId !== quoteProvenance.requestId)) fail('authorization_scope_mismatch');
+    if (quoteProvenance && (quoteProvenance.projectId !== clean.projectId || 'kind' in source && (source.projectId !== clean.projectId || source.taskId !== quoteProvenance.taskId || source.requestId !== quoteProvenance.requestId))) fail('authorization_scope_mismatch');
     const digest = createHash('sha256').update(canonical(clean)).digest('hex'); let writes = false;
     return transaction(database(), () => {
       const prior = getArrangementOperation(clean.operationId);
       if (prior) { if (prior.requestSha256 !== digest) fail('arrangement_operation_conflict'); return prior; }
       options?.assertWritable?.();
       if ((database().prepare('PRAGMA user_version').get() as { user_version: number }).user_version < 5) database().exec(ARRANGEMENT_SCHEMA);
+      if (caseConfirmation && !('kind' in source) && database().prepare("SELECT 1 FROM arrangement_operations WHERE json_extract(receipt_json,'$.source.choiceId')=? LIMIT 1").get(source.choiceId)) fail('choice_already_arranged');
       const actions: BoardArrangementReceipt['actions'] = [];
       let newItem: BoardItemRecord | undefined;
       for (const action of clean.actions) {
@@ -626,7 +636,7 @@ export function createDecisionBoardStore(options: { root: string }) {
         const itemVersion = action.kind === 'reuse' ? action.itemVersion : boardRecordVersion(owner), taskVersion = action.kind === 'reuse' ? action.taskVersion : boardRecordVersion(target);
         const authorization = saveAuthorization(cleanAuthorization({ operationId: targetOperationId(clean.operationId, actions.length), projectId: clean.projectId, itemId: owner.id, taskId: target.id,
           itemVersion, taskVersion, expectedPreviousAuthorizationId: action.kind === 'reuse' ? action.expectedPreviousAuthorizationId : null,
-          decision: 'authorize', scope: clean.scope, source: clean.source, quoteProvenance }), options?.assertWritable);
+          decision: 'authorize', scope: clean.scope, source: clean.source, quoteProvenance, caseConfirmation }, Boolean(caseConfirmation)), options?.assertWritable);
         actions.push({ itemId: owner.id, taskId: target.id, itemVersion, taskVersion, authorizationId: authorization.authorizationId, created: action.kind === 'create' });
       }
       const receipt: BoardArrangementReceipt = { ...clean, actions, requestSha256: digest, createdAt: now() };
@@ -670,5 +680,5 @@ export function createDecisionBoardStore(options: { root: string }) {
   }
   const listFeedback = (): TaskFeedbackRevision[] => database().prepare('SELECT f.* FROM feedback_revisions f WHERE NOT EXISTS (SELECT 1 FROM feedback_revisions n WHERE n.task_id=f.task_id AND n.revision_number>f.revision_number) ORDER BY f.saved_at,f.task_id').all().map(feedback);
 
-  return { init, close, confirmReportConclusions, getConfirmationOperation, listConfirmedConclusions, registerReport, getReport, listReports, createExtraction, readExtraction, listExtractions, runningExtractionForReport, finishExtraction, listItems, getItem, addManualItem, decideItem, addTask, getTask, listTasks, setTaskStatus, saveFeedback, listFeedback, listFeedbackHistory, getFeedbackRevision, getFeedbackOperation, recordActionAuthorization, listActionAuthorizations, getActionAuthorizationOperation, getActionAuthorization, arrangeActions, getArrangementOperation };
+  return { init, close, confirmReportConclusions, getConfirmationOperation, listConfirmedConclusions, registerReport, getReport, listReports, createExtraction, readExtraction, listExtractions, runningExtractionForReport, finishExtraction, listItems, getItem, addManualItem, decideItem, addTask, getTask, listTasks, setTaskStatus, saveFeedback, listFeedback, listFeedbackHistory, getFeedbackRevision, getFeedbackOperation, recordActionAuthorization, listActionAuthorizations, getActionAuthorizationOperation, getActionAuthorization, arrangeActions, getArrangementOperation, listGoalCaseArrangements };
 }

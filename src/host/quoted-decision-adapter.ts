@@ -108,12 +108,12 @@ export function createQuotedDecisionAdapter(options: {
     if (writable && (project.archivedAt !== null || task.archivedAt != null)) fail('project_archived');
   }
   const arrangementReceipt = (receipt: BoardArrangementReceipt) => ({ operationId: receipt.operationId, projectId: receipt.projectId, source: receipt.source, scope: receipt.scope, title: receipt.title, checks: receipt.checks, actions: receipt.actions, requestSha256: receipt.requestSha256, createdAt: receipt.createdAt,
-    quoteSource: { projectId: receipt.quoteProvenance.projectId, taskId: receipt.quoteProvenance.taskId, requestId: receipt.quoteProvenance.requestId, sessionId: receipt.quoteProvenance.sessionId, toolCallId: receipt.quoteProvenance.toolCallId, originalUserTextSha256: receipt.quoteProvenance.originalUserTextSha256, rangeUtf16: { start: receipt.quoteProvenance.quote.start, end: receipt.quoteProvenance.quote.end } } });
+    quoteSource: receipt.quoteProvenance ? { projectId: receipt.quoteProvenance.projectId, taskId: receipt.quoteProvenance.taskId, requestId: receipt.quoteProvenance.requestId, sessionId: receipt.quoteProvenance.sessionId, toolCallId: receipt.quoteProvenance.toolCallId, originalUserTextSha256: receipt.quoteProvenance.originalUserTextSha256, rangeUtf16: { start: receipt.quoteProvenance.quote.start, end: receipt.quoteProvenance.quote.end } } : undefined });
   async function readArrangement(operation: unknown, context: QuotedDecisionHostContext) {
     if (typeof operation !== 'string') fail('invalid_quoted_decision', 400);
     const prior = options.board.getArrangementOperation(operation as string);
     if (!prior) return null;
-    if (prior.projectId !== context.projectId || prior.quoteProvenance.taskId !== context.taskId) fail('quoted_decision_scope_mismatch');
+    if (prior.projectId !== context.projectId || prior.quoteProvenance?.taskId !== context.taskId) fail('quoted_decision_scope_mismatch');
     for (const action of prior.actions) await boardTarget(action, context);
     return prior;
   }
@@ -159,7 +159,7 @@ export function createQuotedDecisionAdapter(options: {
           if (!options.goals?.recordArrangement) fail('strategy_goals_unavailable', 503);
           await projectOwner(context, true); check(context);
           const reference = await options.mutate(() => { check(context); return options.goals!.recordArrangement!({ operationId: managementId, goal: goal!, projectId: context.projectId,
-            title: authority.title, scope: authority.scope, checks: authority.checks, actions: authority.actions, source: authority.source, boardOperationId: id, quoteProvenance: authority.quoteProvenance }, { assertWritable: () => check(context) }); });
+            title: authority.title, scope: authority.scope, checks: authority.checks, actions: authority.actions, source: authority.source, boardOperationId: id, quoteProvenance: authority.quoteProvenance ?? fail('quoted_decision_scope_mismatch') }, { assertWritable: () => check(context) }); });
           managementResult = { status: 'linked', reference: { id: reference.id, goal: reference.goal, boardOperationId: reference.boardOperationId } };
         }
       } catch (error) { managementResult = { status: 'pending', code: errorCode(error) }; }
@@ -213,7 +213,7 @@ export function createQuotedDecisionAdapter(options: {
         if (operation) return result({ type: 'optracall.quoted-arrangement-read', operation: arrangementReceipt(operation) });
         const authorization = options.board.getActionAuthorizationOperation(input.operationId as string);
         if (!authorization) return result({ type: 'optracall.quoted-arrangement-read', operation: null });
-        if (authorization.projectId !== context.projectId || authorization.quoteProvenance.taskId !== context.taskId) fail('quoted_decision_scope_mismatch');
+        if (authorization.projectId !== context.projectId || authorization.quoteProvenance?.taskId !== context.taskId) fail('quoted_decision_scope_mismatch');
         await boardTarget(authorization, context);
         return result({ type: 'optracall.quoted-authorization-read', authorization: authorityReceipt(authorization) });
       }

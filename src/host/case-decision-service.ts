@@ -1,3 +1,4 @@
+import { createCaseIssueService } from './case-issues.ts';
 import type { BoardItemRecord } from '../../extensions/business-plugins/decision-board/types.ts';
 import { CaseStoreError, type CaseStore } from './case-store.ts';
 import type { CaseDecisionListOptions, CaseDecisionTarget, CaseDecisionRevision, CaseDecisionReference } from './case-decision-types.ts';
@@ -21,7 +22,7 @@ export type CaseDecisionServiceDependencies = {
   assertActive: (project: ProjectRecord) => void;
   readSource?: ReadPersonalSource;
   personalContext?: Pick<ReturnType<typeof createPersonalContextReader>, 'read'>;
-  board?: Pick<ReturnType<typeof createDecisionBoardStore>, 'getTask' | 'getItem' | 'getFeedbackRevision' | 'listTasks' | 'listFeedbackHistory'>;
+  board?: Pick<ReturnType<typeof createDecisionBoardStore>, 'getTask' | 'getItem' | 'getFeedbackRevision' | 'listTasks' | 'listFeedbackHistory'> & Partial<Pick<ReturnType<typeof createDecisionBoardStore>, 'arrangeActions' | 'listActionAuthorizations'>>;
   assertBoardItemReadable?: (item: BoardItemRecord) => Promise<void>;
   requirements?: { readRelease: (id: string, version: string, projectId?: string) => ReadRelease | Promise<ReadRelease> };
   readHandoff?: (id: string) => FeedbackHandoff | null | Promise<FeedbackHandoff | null>;
@@ -257,7 +258,7 @@ export function createCaseDecisionService(deps: CaseDecisionServiceDependencies)
     });
   }
   async function choose(caseId: string, recordId: string, input: unknown) {
-    caseDecisionFields(input, ['operationId', 'caseStoreId', 'strategyRef', 'choice', 'reason', 'expectedPreviousChoiceId', 'allowHistorical'], ['operationId', 'caseStoreId', 'strategyRef', 'choice', 'expectedPreviousChoiceId']);
+    caseDecisionFields(input, ['operationId', 'caseStoreId', 'strategyRef', 'choice', 'reason', 'expectedPreviousChoiceId', 'allowHistorical', 'issueId'], ['operationId', 'caseStoreId', 'strategyRef', 'choice', 'expectedPreviousChoiceId']);
     const target = parseCaseDecisionRef(input.strategyRef);
     if (target.caseId !== caseId || target.recordId !== recordId) throw new CaseStoreError('case_decision_scope_mismatch', 409);
     // This global Case endpoint does not write a Project. An unrelated archived
@@ -285,7 +286,7 @@ export function createCaseDecisionService(deps: CaseDecisionServiceDependencies)
       return deps.cases.reviseDecisionByUser(command);
     });
   }
-  return { list, read, readChoice: (caseId: string, choiceId: string) => deps.cases.getStrategyChoice(caseId, choiceId), links, source, readForAgent, saveForAgent, choose, govern };
+  return { ...createCaseIssueService(deps), list, read, readChoice: (caseId: string, choiceId: string) => deps.cases.getStrategyChoice(caseId, choiceId), links, source, readForAgent, saveForAgent, choose, govern };
 }
 
 export type CaseDecisionService = ReturnType<typeof createCaseDecisionService>;
