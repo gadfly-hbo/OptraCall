@@ -245,13 +245,19 @@ test('an already saved report returns immediately despite a long requested wait 
 
 test('waiting cannot enlarge the confirmed Task scope and a withdrawn source permission remains an explicit gap', async t => {
   const { projects, project, tasks, confirmation, context } = await fixture(t); let allowed = true, nativeReads = 0;
-  const reader = createProjectTaskResultsReader({ projects, projectId: project.id, taskId: tasks[2].id, confirmation, assertAuthorized: async () => { if (!allowed) throw new Error('original source permission withdrawn'); }, listBoundReports: async () => { nativeReads++; return []; } });
+  const reader = createProjectTaskResultsReader({
+    projects, projectId: project.id, taskId: tasks[2].id, confirmation,
+    assertAuthorized: async () => { if (!allowed) throw new Error('original source permission withdrawn'); },
+    listBoundReports: async () => {
+      nativeReads++;
+      // Revoke after the first authorized scan so the next lookup during the wait must refuse it.
+      allowed = false;
+      return [];
+    }
+  });
   await assert.rejects(reader('find', { taskId: randomUUID(), waitMs: 30000 }, context), /project_result_scope_forbidden/); assert.equal(nativeReads, 0);
-  const timer = setTimeout(() => { allowed = false; }, 20);
-  try {
-    const found = await reader('find', { taskId: tasks[0].id, waitMs: 120 }, context); if (found.details.action !== 'find') assert.fail('expected discovery');
-    assert.deepEqual(found.details.results, []); assert.equal(nativeReads, 1); assert.ok(found.details.limitations.some(value => value.code === 'project_result_permission_unavailable'));
-  } finally { clearTimeout(timer); }
+  const found = await reader('find', { taskId: tasks[0].id, waitMs: 120 }, context); if (found.details.action !== 'find') assert.fail('expected discovery');
+  assert.deepEqual(found.details.results, []); assert.equal(nativeReads, 1); assert.ok(found.details.limitations.some(value => value.code === 'project_result_permission_unavailable'));
 });
 
 test('a manual handoff without a Plan exposes only the exact selected saved version to the receiving Task', async t => {

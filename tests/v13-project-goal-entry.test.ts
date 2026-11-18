@@ -206,5 +206,83 @@ test('Goal derived from the exact upstream Teach review can enter only a project
     await api(c+'/projects/'+choiceProject.id,'DELETE',{expectedRevision:(await api(c)).case.revision,operationId:randomUUID()});
     await api(choiceRole,'GET',undefined,403);
 
+    // The native reply is reused without a new strategy version, as in older records.
+    const {discussion}=await api('/api/strategy/discussions','POST',{operationId:randomUUID(),goal:{goalId:sourced.goalId,version:1}},201);
+    const domain='/api/strategy/discussions/'+discussion.id, marker='仅所选第二轮原方案';
+    provider.setResponder(()=>({text:marker}));
+    await api(domain+'/messages','POST',{requestId:randomUUID(),text:'讨论所选取舍',expectedRevision:discussion.revision},202);
+    let fixed;
+    for(let i=0;i<300;i++){
+      const state=await api(domain);
+      fixed=state.replies.find((r:{text:string})=>r.text===marker)?.source;
+      if(fixed&&!state.busy)break;
+      await delay(25);
+    }
+    assert.ok(fixed);
+    const nested=(await api('/api/strategy/goals','POST',{...draft,title:'经战略原回复的取舍',source:fixed,operationId:randomUUID()},201)).goal;
+    await api('/api/strategy/goals/'+nested.goalId+'/adopt','POST',{version:1,expectedVersion:1,operationId:randomUUID(),decision:'采用'});
+    const incoming=(await api('/api/projects','POST',{name:'承接两层原方案',goalOrigin:{goal:{goalId:nested.goalId,version:1}}},201)).project;
+    const nestedRole='/api/business-role?owner='+encodeURIComponent(JSON.stringify({role:'project',projectId:incoming.id}));
+    await api(nestedRole+'&action=origin','GET',undefined,403);
+    const linkProject=async(projectId:string,on:boolean)=>api(c+'/projects'+(on?'':'/'+projectId),on?'POST':'DELETE',{projectId,expectedRevision:(await api(c)).case.revision,operationId:randomUUID()});
+    await linkProject(incoming.id,true);
+    assert.equal((await api(nestedRole+'&action=origin')).origin.goal.evidence[0].body,marker);
+    const list='/api/projects/'+incoming.id+'/tasks';
+    const manual=(await api(list,'POST',{name:'核对第二轮依据',assignment:{type:'requirement',skill:null}},201)).task;
+    const path=list+'/'+manual.id;
+    await api(path+'/messages','POST',{requestId:randomUUID(),text:'读回准确的战略原回复'},202);
+    for(let i=0;i<300;i++){if((await api(path)).task.lastRun?.status==='completed')break;await delay(25);}
+    assert.equal((await api(path)).task.lastRun.status,'completed');
+    assert.ok(provider.requests.at(-1)!.body.messages!.some(m=>providerMessageText(m.content).includes(marker)));
+    const originalProject=(receipt.plan as {projectId:string}).projectId;
+    await linkProject(originalProject,false);
+    const sends=provider.requests.length;
+    for(const result of [await host.request(nestedRole+'&action=origin'),await host.request(path+'/messages','POST',{requestId:randomUUID(),text:'原项目已经解除关联'})]) {
+      assert.ok([403,409].includes(result.status),await result.text());
+    }
+    assert.equal(provider.requests.length,sends);
+    await linkProject(originalProject,true);
+    assert.equal((await api(nestedRole+'&action=origin')).origin.goal.evidence[0].body,marker);
+
   });
+});
+
+test('two strategic replies preserve the case grant through frozen candidate goals and unversioned-handoff records', {timeout:90000}, async t=>{
+  const {call,goal,role,provider,run,request}=await fixture(t);
+  const initial=await goal('接收范围');
+  await call('/api/cases/storage/initialize','POST',{});
+  const {case:original}=await call('/api/cases','POST',{title:'原案',description:'固定原案依据',operationId:randomUUID(),
+    goalBinding:{primary:initial.ref,related:[],strategy:initial.base.strategies[0]}},201);
+  const candidate=async(title:string,source:unknown)=>{
+    const {goal:created}=await call('/api/strategy/goals','POST',{...initial.base,title,outcome:title,source,operationId:randomUUID()},201);
+    return {goalId:created.goalId,version:created.version as number};
+  };
+  const derive=async(ref:typeof initial.ref, marker:string)=>{
+    const {discussion}=await call('/api/strategy/discussions','POST',{operationId:randomUUID(),goal:ref},201);
+    const route='/api/strategy/discussions/'+discussion.id;
+    provider.setResponder(()=>({text:marker}));
+    await call(route+'/messages','POST',{text:'根据所选候选目标核对',requestId:randomUUID(),expectedRevision:discussion.revision},202);
+    for(let n=0;n<300;n++){
+      const state=await call(route);
+      const reply=state.replies.find((r:{text:string})=>r.text===marker);
+      if(!state.busy&&reply)return reply.source;
+      await delay(25);
+    }
+    assert.fail('missing exact assistant reply');
+  };
+  const first=await candidate('原案候选',{authority:'case',id:original.id,version:1});
+  const intermediate=await candidate('中间候选',await derive(first,'首次原回复'));
+  const last=await candidate('交给项目的目标',await derive(intermediate,'二次原回复'));
+  await call('/api/strategy/goals/'+last.goalId+'/adopt','POST',{...last,expectedVersion:1,operationId:randomUUID(),decision:'采用'});
+  const {project}=await call('/api/projects','POST',{name:'两次转交',goalOrigin:{goal:last}},201);
+  const owner=role(project.id),links='/api/cases/'+original.id+'/projects';
+  const count=provider.requests.length;
+  assert.equal((await request(owner+'&action=origin')).status,403);
+  assert.equal((await request(owner+'&action=messages','POST',{requestId:randomUUID(),expectedRevision:0,text:'核当前资格'})).status,403);
+  assert.equal(provider.requests.length,count);
+  await call(links,'POST',{operationId:randomUUID(),expectedRevision:original.revision,projectId:project.id});
+  assert.match((await run(owner,true)).prompt,/二次原回复/);
+  const rev=(await call('/api/cases/'+original.id)).case.revision;
+  await call(links+'/'+project.id,'DELETE',{operationId:randomUUID(),expectedRevision:rev});
+  assert.equal((await request(owner+'&action=origin')).status,403);
 });

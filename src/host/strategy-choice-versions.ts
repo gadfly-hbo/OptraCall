@@ -19,7 +19,7 @@ function payload(input: Record<string,unknown>): StrategyChoiceDraft {
 function identity(version: StrategyChoiceDraft & Pick<StrategyChoiceVersion,'source'|'title'|'scope'>) {
   return discussionHash([version.title,version.scope,version.source,...fields.map(key=>version[key])]);
 }
-export function createStrategyChoices(store: StrategyDiscussionStore, readReply: (id:string, source:GoalDiscussionSourceRef)=>Promise<string>, busy:(id:string)=>boolean) {
+export function createStrategyChoices(store: StrategyDiscussionStore, readReply: (id:string, source:GoalDiscussionSourceRef, verifySource?:(source:GoalDiscussionSourceRef)=>Promise<void>)=>Promise<string>, busy:(id:string)=>boolean) {
   function writable(id:string, expected:unknown) {
     const owner=store.get(id);
     if(busy(id) || owner.revision!==expected) throw new StrategyDiscussionFault('strategy_discussion_context_changed');
@@ -31,9 +31,9 @@ export function createStrategyChoices(store: StrategyDiscussionStore, readReply:
     if(identity(version)!==version.contentSha256) throw new StrategyDiscussionFault('strategy_version_corrupt',503);
     return version;
   }
-  async function read(id:string, number:number) {
+  async function read(id:string, number:number, verifySource?:(source:GoalDiscussionSourceRef)=>Promise<void>) {
     const version=find(id,number);
-    const reply=await readReply(id,version.source);
+    const reply=await readReply(id,version.source,verifySource);
     return {version,reply};
   }
   async function save(id:string,input:Record<string,unknown>) {

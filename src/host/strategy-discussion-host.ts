@@ -167,7 +167,7 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
    if(!options.verifyGoalContext)fail('goal_context_source_permissions_unknown');
    await options.verifyGoalContext(snapshot,recipient);
  }
- async function verifyChoiceSource(ref:GoalDiscussionSourceRef, recipient?: Readonly<RuntimeModelConfiguration>){
+ async function verifyChoiceSource(ref:GoalDiscussionSourceRef, recipient?: Readonly<RuntimeModelConfiguration>, verifyGoal = checkGoalContext){
   const owner=store.get(ref.id);
   const history=await sourceContext(ref);
   const dependencies=history.projections.filter(group=>group.sources.length);
@@ -176,7 +176,7 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
   const check=()=>{
     if(options.isClosing()||store.get(owner.id).revision!==owner.revision||configuration&&!options.configuration(configuration.id,configuration.revision))throw new StrategyDiscussionFault('strategy_discussion_context_changed');
   };
-  for(const snapshot of history.goalContexts)await checkGoalContext(snapshot,recipient);
+  for(const snapshot of history.goalContexts)await verifyGoal(snapshot,recipient);
   for(const group of dependencies){
     if(!configuration)throw new StrategyDiscussionFault('configuration_changed',409);
     if(!options.sources||owner.projectId!==group.projectId||group.sources.some(s=>isDiscussionSourceExcluded(owner,s)||
@@ -184,10 +184,11 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
     await options.sources.verify({...owner,configurationId:configuration.id,configurationRevision:configuration.revision,sources:group.sources},configuration,{assertCurrent:check,metadataOnly:group.metadataOnly});
   }
   check();
+  return history;
  }
- async function readChoiceReply(id:string,source:GoalDiscussionSourceRef){
+ async function readChoiceReply(id:string,source:GoalDiscussionSourceRef,verifySource:(ref:GoalDiscussionSourceRef)=>Promise<unknown>=verifyChoiceSource){
   if(source.id!==id||source.authority!=='strategy-discussion'||source.entryType!=='message')throw new StrategyDiscussionFault('invalid_strategy_choice_source',400);
-  await verifyChoiceSource(source);
+  await verifySource(source);
   const snapshot=await native(store.get(id));
   const entry=snapshot?.entries.find(e=>e.id===source.version);
   if(!snapshot||snapshot.manager.getSessionId()!==source.sessionId||!entry||!snapshot.branchIds.has(entry.id)||entry.type!=='message'||entry.message.role!=='assistant'||discussionHash(sourceBody(entry.message))!==source.sha256||!textOf(entry.message).trim())throw new StrategyDiscussionFault('strategy_discussion_source_changed');

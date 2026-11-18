@@ -7,6 +7,12 @@ import { createNativeSnapshotReadBudget, NativeSnapshotError } from './native-se
 
 const fail = (code: string, status = 409): never => { throw new CaseStoreError(code, status); };
 type QualifyReply = (source: CaseIssueReply, requestId: string) => Promise<void>;
+interface IssueRoundSelection {
+  choiceId?: string;
+  feedbackRevisionId?: string;
+  execution?: { authorizationId: string; projectId: string };
+  reviewId?: string;
+}
 const noAction = new Set(['defer', 'reject', 'no_action', 'stop_considering', 'gather_evidence']);
 function replyReference(input: unknown) {
   const target = parseCaseDecisionTarget({ type: 'source', source: input });
@@ -157,22 +163,24 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
       if (!roundSourceKeys(round,issueId).some(key=>missing.has(key))) continue;
       // Recheck the original Plan against the actual recipient. Only the current
       // turn's context is sent to Pi; the historical bodies stay in their owner.
-      const evidence = await issueModelContext(caseId,issueId,qualify,round.choice.choiceId);
+      const evidence = await issueModelContext(caseId,issueId,qualify,{choiceId:round.choice.choiceId});
       for (const key of evidence.sourceRights) missing.delete(key);
       if (!missing.size) return;
     }
     if (missing.size) fail('role_history_source_no_longer_readable',403);
   }
-  async function issueModelContext(caseId: string, issueId: string, qualify: QualifyReply, teachChoiceId?: string, feedbackRevisionId?:string, execution?:{authorizationId:string;projectId:string}, reviewId?:string) {
+  async function issueModelContext(caseId: string, issueId: string, qualify: QualifyReply, selection: IssueRoundSelection = {}) {
+    const {choiceId, execution, reviewId} = selection;
+    let {feedbackRevisionId} = selection;
     const timeline = await issueTimeline(caseId,issueId);
-    const action = execution && teachChoiceId ? authorizedAction(timeline, teachChoiceId, execution.authorizationId, execution.projectId) : undefined;
-    const rounds = teachChoiceId ? timeline.rounds.filter(r => r.choice.choiceId === teachChoiceId) : timeline.rounds;
+    const action = execution && choiceId ? authorizedAction(timeline, choiceId, execution.authorizationId, execution.projectId) : undefined;
+    const rounds = choiceId ? timeline.rounds.filter(r => r.choice.choiceId === choiceId) : timeline.rounds;
     if (reviewId) {
       const review=rounds[0]?.review;
-      if (!teachChoiceId || !review || review.operationId!==reviewId || execution) return fail('case_round_review_unavailable');
+      if (!choiceId || !review || review.operationId!==reviewId || execution) return fail('case_round_review_unavailable');
       feedbackRevisionId=review.feedback?.feedbackRevisionId;
     }
-    if (teachChoiceId && !rounds.length) return fail('case_issue_scope_mismatch');
+    if (choiceId && !rounds.length) return fail('case_issue_scope_mismatch');
     if (feedbackRevisionId && !rounds.some(r=>r.actions.some(a=>a.feedback.some(f=>f.revisionId===feedbackRevisionId)))) return fail('case_round_feedback_unavailable');
     const rights = new Set<string>(), replies = new Map<string,{source:CaseIssueReply;requestId:string;text:string}>();
     async function exactReply(source:CaseIssueReply,type:'plan'|'teach',choiceId?:string) {
@@ -188,7 +196,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     function addProposal(p:CaseDecisionRevision) { revisions.set(p.recordId+'/'+p.revision,p); }
     for (const round of rounds) addProposal(round.strategy);
     // A handed Plan is available for discussion before the user makes the first choice.
-    if (!teachChoiceId) {
+    if (!choiceId) {
       let continuation: string | null = null;
       do {
         const page = cases.listDecisions(caseId,{pageSize:50,continuation});
@@ -218,7 +226,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
         rights.add(action.projectId+'/'+action.itemId+'/'+action.taskId);
         for(const f of action.feedback) rights.add(f.revisionId);
       }
-      const recorded = (!teachChoiceId || reviewId) && review ? {...review,reply:await exactReply(review.reply,'teach',choice.choiceId)} : null;
+      const recorded = (!choiceId || reviewId) && review ? {...review,reply:await exactReply(review.reply,'teach',choice.choiceId)} : null;
       history.push({choice:{id:choice.choiceId,decision:choice.choice,reason:choice.reason,previous:choice.previousChoiceId,
           date:choice.occurredAt,goalBinding:choice.goalBinding,proposed:choice.strategyRef},actions,review:recorded});
     }
