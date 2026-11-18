@@ -25,7 +25,7 @@ export interface TaskAssignment {
 export interface ProjectStage { version: number; operationId: string; goal: string; condition: string; done: boolean; recordedAt: string }
 export interface ProjectStageInput { expectedVersion: number; operationId: string; goal: string; condition: string; done: boolean }
 export interface ProjectAgreement { version: number; text: string; operationId: string; confirmedAt: string }
-export type TaskCreateIntent = Partial<TaskCaseIssue> & { type?: TaskType; sources?: TaskSourceSelection[] };
+export type TaskCreateIntent = Partial<TaskCaseIssue> & { type?: TaskType; sources?: TaskSourceSelection[]; roundSummary?: string };
 const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(value);
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 export function makeTaskAssignment(type: unknown, enabled: unknown): TaskAssignment {

@@ -126,7 +126,16 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
         </div>)}
         {r.reviewObservationLimited && <p>本轮已保存的复盘引用了归属待核的观察。请核对原看板记录。</p>}
         {r.historyLimited && <p>历史记录有限，当前无法读取原行动或观察。请核对项目关联与原资料权限。</p>}
-        {!r.actions.length && !r.historyLimited && <p>{r.review ? '已记录实际观察' : !caseChoicePermitsAction(r.choice.choice) ? '等待本轮实际观察' : '尚未授权行动'}</p>}
+        {!r.actions.length && !r.historyLimited && <p>
+          {r.review ? '已记录实际观察' : !caseChoicePermitsAction(r.choice.choice) ? '等待本轮实际观察' : '尚未授权行动'}
+          {!r.reviewSaved && record.status !== 'closed' && r.choice.choiceId !== current?.choice.choiceId &&
+            (r.choice.choice === 'defer' || r.choice.choice === 'no_action') &&
+            <button type="button" className="text-button" disabled={disabled || !project || Boolean(project.archivedAt)}
+              onClick={() => project && onCreate(project, {
+                type: 'teach', caseId: record.id, issueId, choiceId: r.choice.choiceId,
+                roundSummary: [timeline.issue.title, choiceName[r.choice.choice], r.strategy.payload.title + ' v' + r.strategy.revision, r.choice.reason].filter(Boolean).join(' · '),
+              })}>按本轮取舍准备 Teach</button>}
+        </p>}
         {r.review && <><p>实际观察 · {r.review.observation}</p><p>复盘判断 · {r.review.judgement}</p><p>下一步或结束理由 · {r.review.nextStep}</p><button className="text-button" onClick={() => void showSource(r.review!.reply)}>查看 Teach 原回复</button></>}
         {!r.reviewSaved && record.status !== 'closed' && <RoundReview round={r} replies={sources?.replies ?? []} disabled={disabled}
           inspect={showSource} submit={fields => void write('review', {expectedRevision:record.revision,...fields})}/>}
