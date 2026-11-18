@@ -1,5 +1,7 @@
 # OptraCall v1.2 增量规格 · 已确认实施
 
+**交付采用接续（2026-11-18）：** 用户已授权依次完成Git/CI/合并、最新资料保全与兼容回退验证、双机采用及用户验收准备。PR #80已交付`d05a7b3`；Mac mini和MacBook已完成实际采用核验。设备版本、验证范围及原位归档统一见[交付记录](delivery.md)。下文开工时的“未授权”仅对应历史阶段，不再阻断本轮已覆盖动作；真实模型/业务实验、SDK升级及用户最终产品验收不外推。
+
 2026-11-17。准备基线 `3a529a0e381bf67b998f2b1debd242a5eed38884`（tree `182bd1f9f3a98940d82ec65c446d621bf7e8b67a`），分支 `codex/v12-strategy-purpose`。本规格承接已上线 v1.1，只实施 v1.2 新增或改变的行为，不重做七模块、不重开历史差额。
 
 产品基线在仓库外：`/Users/bendandebaba/.codex/plans/optracall-architecture-product-v1.2/OptraCall_Overall_Architecture_Product_Plan_v1.2.md`，SHA256 `e3ca18ace644bb28524e70ef50d9106b892a638a786c241e1d1423f13a221694`。v1.1 溯源 SHA256 `98461897225f0e69d3d6619e93dc6ef02fdf5912d685d11fe7f5ad08157cd5f5`。第10节/附录B仅为历史；文末原 PM“不开发”不覆盖本轮新工程授权。
@@ -10,7 +12,7 @@
 
 用户已启动本轮增量工程；当前阶段完成盘点、此规格、[任务清单](tasks.md)、[验收](acceptance.md)和[原App上的Demo](ui-demo/README.md)。工程规范第3节要求新增/实质UI及关键交互先确认。**用户已批准准备候选7fe8b908及本次UI/关键交互，并授权持续实施，见[确认记录](approval.md)。** 原方向不重新访谈；普通技术修正自主进行。确认后按本规格连续TDD/集成/非作者复核推进，不逐Task或逐模块重复审批。
 
-本轮未授权Git提交/推送/远端CI/合并、正式迁移/双机服务更新、SDK升级、真实Provider/业务资料。可独立完成的隔离工程、合成Provider和UI检查继续推进；不将缺少真实模型验证解释成缺功能。data-analysis原免测决定有效，本轮不改其本体，也不将免测扩到其他Skill。
+开工时未授权Git提交/推送/远端CI/合并、正式迁移/双机服务更新、SDK升级、真实Provider/业务资料；后来交付采用授权按页首记录及delivery执行。真实模型/业务资料与SDK升级仍不由一般交付授权启动；不将缺少真实模型验证解释成缺功能。data-analysis原免测决定有效，本轮不改其本体，也不将免测扩到其他Skill。
 
 ## 2. 增量与实际复用
 
