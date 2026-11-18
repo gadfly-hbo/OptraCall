@@ -127,10 +127,13 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     const events = cases.getEvents('case', caseId), board = deps.board;
     const unresolvedObservations = new Set<string>();
     const observationKey = (choiceId:string, projectId:string, taskId:string, revisionId:string) => [choiceId,projectId,taskId,revisionId].join('/');
-    const rounds = choices.map(choice => ({ choice, historyLimited:false, reviewObservationLimited:false, strategy: cases.getDecision(caseId, choice.strategyRef.recordId, choice.strategyRef.revision),
-      review: events.map(e => e.changes.issueReview?.after as CaseIssueReview | undefined).find(r => r?.choiceId === choice.choiceId) ?? null,
+    const reviews = events.flatMap(e => e.changes.issueReview ? [e.changes.issueReview.after as CaseIssueReview] : []);
+    const rounds = choices.map(choice => {
+      const review = reviews.find(r => r.choiceId === choice.choiceId) ?? null;
+      return { choice, reviewSaved: Boolean(review), historyLimited:false, reviewObservationLimited:false, strategy: cases.getDecision(caseId, choice.strategyRef.recordId, choice.strategyRef.revision), review,
       actions: [] as { projectId: string; itemId: string; taskId: string; title: string; status: string; currentAuthorizationId?: string; authorizations: { id: string; scope: string; decision: string; time: string }[]; observationTimeLimited?: boolean; quotedFeedbackLimited?: boolean;
-        feedback: { revisionId: string; observedAt: string; authorizationId: string; actionTitle: string; effect: string; outcome: string; metricDelta: string; review: string }[] }[] }));
+        feedback: { revisionId: string; observedAt: string; authorizationId: string; actionTitle: string; effect: string; outcome: string; metricDelta: string; review: string }[] }[] };
+    });
     if (board && rounds.length) {
       const matchesOriginalCall = quotedFeedbackMatches(deps.projects);
       const linked = new Set(cases.listProjectLinks(caseId).map(p => p.projectId));
@@ -295,6 +298,18 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     }
     return {issue:timeline.issue,proposals,replies:[...replies.values()],rounds:history,sourceRights:[...rights]};
   }
+  async function checkSavedReviewFeedback(caseId: string, feedback: NonNullable<CaseIssueReview['feedback']>) {
+    await linkedProject(caseId, feedback.projectId);
+    const board = deps.board;
+    const observation = board?.getFeedbackRevision(feedback.feedbackRevisionId);
+    if (!board || !observation || observation.taskId !== feedback.boardTaskId) return fail('case_round_feedback_unavailable');
+    const item = board.getItem(board.getTask(observation.taskId).itemId);
+    if (item.projectId !== feedback.projectId) return fail('case_round_feedback_unavailable');
+    if (item.sourceKind === 'report-confirmation') {
+      if (!deps.assertBoardItemReadable) return fail('confirmation_source_unavailable');
+      await deps.assertBoardItemReadable(item);
+    }
+  }
   async function issueWrite(caseId: string, issueId: string, action: string, input: Record<string, unknown>) {
     const operationId = caseDecisionId(input.operationId);
     return deps.mutate(async () => {
@@ -321,18 +336,32 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
       }
       caseDecisionFields(input, ['operationId', 'expectedRevision', 'choiceId', 'source', 'observation', 'judgement', 'nextStep', 'feedbackRevisionId'], ['source', 'observation', 'judgement', 'nextStep']);
       const source = replyReference(input.source);
+      const command = { caseId, issueId, choiceId: choice.choiceId, operationId, expectedRevision: caseDecisionRevision(input.expectedRevision), reply: source,
+        observation: caseDecisionText(input.observation, 4000, true), judgement: caseDecisionText(input.judgement, 4000, true), nextStep: caseDecisionText(input.nextStep, 4000, true) };
+      const prior = cases.getOperation(operationId);
+      if (prior) {
+        const saved = cases.getEvents('case', caseId).find(e => e.operationId === operationId)?.changes.issueReview?.after as CaseIssueReview | undefined;
+        if (prior.kind !== 'case_update' || prior.phase !== 'completed' || prior.caseId !== caseId || !saved || saved.operationId !== operationId ||
+            saved.issueId !== issueId || saved.choiceId !== choice.choiceId || prior.projectId !== saved.reply.projectId ||
+            saved.feedback?.feedbackRevisionId !== input.feedbackRevisionId) return fail('operation_conflict');
+        const feedback = saved.feedback && { projectId: saved.feedback.projectId, boardTaskId: saved.feedback.boardTaskId, feedbackRevisionId: saved.feedback.feedbackRevisionId };
+        // The existing store verifies the original command digest, including the displayed revision.
+        // This human readback never supplies an observation to a new review or model.
+        const review = cases.saveIssueReview({ ...command, ...(feedback ? {feedback} : {}) });
+        await readReply(caseId, issueId, saved.reply, 'teach', choice.choiceId);
+        if (feedback) await checkSavedReviewFeedback(caseId, feedback);
+        return { review };
+      }
+      issue(caseId,issueId,true);
       const round = (await issueTimeline(caseId, issueId)).rounds.find(r => r.choice.choiceId === choice.choiceId)!;
-      const replay = round.review?.operationId === operationId;
-      if (!replay) issue(caseId,issueId,true);
       const selected = round.actions.find(a => a.feedback.some(f => f.revisionId === input.feedbackRevisionId));
       if (!selected && (caseChoicePermitsAction(choice.choice) || input.feedbackRevisionId !== undefined)) return fail('case_round_waiting_for_feedback');
       const original = selected?.feedback.find(f=>f.revisionId===input.feedbackRevisionId);
       const observation = selected && original ? {projectId:selected.projectId,taskId:selected.taskId,authorizationId:original.authorizationId,feedbackRevisionId:original.revisionId} : undefined;
-      const teach = await readReply(caseId, issueId, source, 'teach', choice.choiceId, undefined, replay ? undefined : observation);
+      const teach = await readReply(caseId, issueId, source, 'teach', choice.choiceId, undefined, observation);
       if (teach.feedbackRevisionId && teach.feedbackRevisionId !== input.feedbackRevisionId) return fail('case_round_feedback_unavailable');
       const feedback = selected ? { projectId: selected.projectId, boardTaskId: selected.taskId, feedbackRevisionId: caseDecisionId(input.feedbackRevisionId) } : undefined;
-      return { review: cases.saveIssueReview({ caseId, issueId, choiceId: choice.choiceId, operationId, expectedRevision: caseDecisionRevision(input.expectedRevision), reply: source,
-        observation: caseDecisionText(input.observation, 4000, true), judgement: caseDecisionText(input.judgement, 4000, true), nextStep: caseDecisionText(input.nextStep, 4000, true), ...(feedback ? { feedback } : {}) }, original?.authorizationId) };
+      return { review: cases.saveIssueReview({ ...command, ...(feedback ? { feedback } : {}) }, original?.authorizationId) };
     });
   }
   return {verifyPriorProjectRoundRights, checkDoAuthorization, checkPlan, currentTeachRights, issueModelContext, issueTimeline, issueSources, inspectIssueReply, issueWrite, issueList: (caseId: string) => cases.listDecisionIssues(caseId),
