@@ -37,7 +37,7 @@ function resultId(scope: ProjectTaskResultsScope, value: ProjectTaskResultBindin
   return digest(JSON.stringify([scope.projectId, scope.confirmationId, scope.planVersion, source.projectId, source.taskId, source.requestId, source.sessionId, source.toolCallId, source.relativePath, source.sha256, source.bytes]));
 }
 
-function confirmedMembers(options: ProjectTaskResultsOptions) {
+export function confirmedProjectPlanMembers(options: Pick<ProjectTaskResultsOptions, 'projectId' | 'taskId' | 'confirmation'>) {
   const { confirmation } = options;
   if (!uuid(options.projectId) || !uuid(options.taskId) || !confirmation || confirmation.projectId !== options.projectId || !uuid(confirmation.id) || !Number.isSafeInteger(confirmation.planVersion) || confirmation.planVersion < 1 || !Array.isArray(confirmation.plan?.tasks) || !Array.isArray(confirmation.tasks)) fail('project_result_scope_unavailable');
   if (!['single', 'multi'].includes(confirmation.plan.taskMode) || !confirmation.plan.tasks.some(x => x.key === confirmation.plan.summaryTaskKey) || new Set(confirmation.tasks.map(x => x.taskKey)).size !== confirmation.tasks.length) fail('project_result_scope_unavailable');
@@ -57,7 +57,7 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
   if (!uuid(options.projectId) || !uuid(options.taskId) || Boolean(confirmation) === Boolean(handoff)) fail('project_result_scope_unavailable');
   const selected = handoff?.mode === 'selected' ? handoff.sources : undefined;
   if (selected && (!Array.isArray(selected) || selected.length > 32 || selected.some(source => !source || !uuid(source.taskId) || typeof source.key !== 'string' || !/^[0-9a-f]{64}$/.test(source.key)))) fail('project_result_scope_unavailable');
-  const members = handoff ? [...new Set(selected?.map(source => source.taskId) ?? [options.taskId])].map(taskId => ({ taskId, taskKey: taskId })) : confirmedMembers({ ...options, confirmation });
+  const members = handoff ? [...new Set(selected?.map(source => source.taskId) ?? [options.taskId])].map(taskId => ({ taskId, taskKey: taskId })) : confirmedProjectPlanMembers({ ...options, confirmation });
   const selectedKeys = selected && new Set(selected.map(source => source.taskId + '/' + source.key));
   const scope: ProjectTaskResultsScope = { projectId: options.projectId, taskId: options.taskId, ...(confirmation ? { confirmationId: confirmation.id, planVersion: confirmation.planVersion } : {}) };
   const authorized = async (sourceTaskId: string, context: ProjectTaskResultsContext, relativePath?: string, result?: ProjectTaskResultDescriptor) => {

@@ -7,14 +7,15 @@ import { BusinessRoleConversation } from './BusinessRoleConversation.tsx';
 import { CaseFormError, caseError, useOperationId } from './CaseDialogs.tsx';
 import { caseIssues, caseIssueSources, caseIssueTimeline, createCaseIssue, readCaseDecisions, inspectIssueReply, saveCaseStrategyChoice, writeCaseIssue } from './case-decisions-client.ts';
 
-type Props = { record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
+type IssueRef = { caseId: string; issueId: string };
+type Props = { initialIssueId?: string; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
 const choiceName: Record<CaseStrategyChoiceValue, string> = { trial: '试行', adjust: '调整', continue: '继续', defer: '暂缓', no_action: '本次不行动', gather_evidence: '补证', reject: '不采用', stop_considering: '停止考虑' };
 
 export function CaseIssuePanel(props: Props) {
   const { record } = props;
-  const [issues, setIssues] = useState<CaseDecisionIssue[]>([]), [selected, setSelected] = useState(''), [title, setTitle] = useState(''), [error,setError] = useState(''), [busy,setBusy] = useState(false);
+  const [issues, setIssues] = useState<CaseDecisionIssue[]>([]), [selected, setSelected] = useState(props.initialIssueId ?? ''), [title, setTitle] = useState(''), [error,setError] = useState(''), [busy,setBusy] = useState(false);
   const operation = useOperationId();
-  useEffect(() => { let active = true; void caseIssues(record.id).then(r => { if (active) { setIssues(r.issues); setSelected(id => r.issues.some(i => i.id === id) ? id : r.issues[0]?.id ?? ''); } }, e => { if (active) setError(caseError(e)); }); return () => { active = false; }; }, [record.id, record.revision]);
+  useEffect(() => { let active = true; void caseIssues(record.id).then(r => { if (active) { setIssues(r.issues); setSelected(id => r.issues.some(i => i.id === id) ? id : props.initialIssueId ? '' : r.issues[0]?.id ?? ''); if (props.initialIssueId && !r.issues.some(i => i.id === props.initialIssueId)) setError('原事项暂不可读取，请核对当前 Case。'); } }, e => { if (active) setError(caseError(e)); }); return () => { active = false; }; }, [record.id, record.revision, props.initialIssueId]);
   async function add() {
     setBusy(true); setError('');
     try { const fields = { expectedRevision: record.revision, title }; const { issue } = await createCaseIssue(record.id, { ...fields, operationId: operation(fields) }); setIssues(old => old.some(i => i.id === issue.id) ? old : [...old, issue]); setSelected(issue.id); setTitle(''); props.onChange(); }
@@ -89,7 +90,7 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
     </details>
     <label>关联项目<select value={project?.id ?? ''} onChange={e => setProjectId(e.target.value)}><option value="">请选择项目</option>{projects.filter(p => !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
     {!!feedbacks.length && <label>原看板观察<select value={selectedFeedback} onChange={e=>setFeedback(e.target.value)}><option value="">本轮当前可读观察</option>{feedbacks.map(f=><option key={f.revisionId} value={f.revisionId}>{f.outcome} · {f.revisionId.slice(0,8)}</option>)}</select></label>}
-    <div className="case-inline-actions">{onOpenProject && project && <button onClick={() => onOpenProject(project)}>回关联项目协作</button>}<button disabled={disabled || !project} onClick={() => task('plan')}>准备 Plan Task</button><button disabled={disabled || !project || !current} onClick={() => task('teach')}>准备 Teach Task</button></div>
+    <div className="case-inline-actions">{onOpenProject && project && <button onClick={() => onOpenProject(project, { caseId: record.id, issueId })}>回关联项目协作</button>}<button disabled={disabled || !project} onClick={() => task('plan')}>准备 Plan Task</button><button disabled={disabled || !project || !current} onClick={() => task('teach')}>准备 Teach Task</button></div>
     <details><summary>交接与依据</summary><label>准确 Task 原回复<select value={sourceId} onChange={e => { setSourceId(e.target.value); setPreview(''); }}><option value="">选择原条目</option>{sources?.replies.filter(r => r.type === 'plan' || r.choiceId === current?.choice.choiceId).map(r => <option key={key(r.source)} value={key(r.source)}>{r.name} · {r.source.messageId}</option>)}</select></label>{!!sources?.limitations.length && <p>部分原条目暂不可读取。</p>}
       <button disabled={!reply} onClick={() => reply && void showSource(reply.source)}>核对原回复</button><button disabled={disabled || reply?.type !== 'plan'} onClick={() => reply && void write('plans',{ source: reply.source })}>将 Plan 候选交回事项</button></details>
     <details><summary>记录本次取舍</summary><label>准确方案<select value={planId} onChange={e => setPlanId(e.target.value)}><option value="">选择方案版本</option>{plans.map(p => <option key={p.recordId} value={p.recordId}>{p.payload.title} v{p.revision}</option>)}</select></label>

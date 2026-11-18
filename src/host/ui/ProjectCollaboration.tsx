@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { caseIssues } from './case-decisions-client.ts';
+import { list as listCases, status as caseStorage } from './case-client.ts';
 import { BusinessRoleConversation } from './BusinessRoleConversation.tsx';
 import { confirmProjectAgreement, setProjectStage, setDefaultTaskSkill, taskResults } from './runtime-client.ts';
 import { approvedTaskSkills, taskPurpose, type TaskCreateIntent, type ProjectStageInput, type TaskSourceSelection } from '../task-assignment.ts';
@@ -7,6 +9,7 @@ import type { ClientProject, ClientTask } from './project-types.ts';
 
 const failure = (error: unknown) => error instanceof Error ? error.message : '读取失败，请核对原记录。';
 type Create = (intent?: TaskCreateIntent) => void;
+type IssueScope = { caseId: string; issueId: string };
 
 function ResultPicker({ project, sourceTask, onCreate }: { project: ClientProject; sourceTask?: ClientTask; onCreate: Create }) {
   const [taskId, setTaskId] = useState(sourceTask?.id ?? '');
@@ -109,7 +112,25 @@ function StagePanel({ project, onRefresh }: { project: ClientProject; onRefresh:
   </section>;
 }
 
-export function ProjectCollaboration({ project, onCreate, onRefresh, onHistory }: { project: ClientProject; onCreate: Create; onRefresh: () => Promise<void>; onHistory: () => void }) {
+export function ProjectCollaboration({ project, issue, onChangeScope, onReturnIssue, onCreate, onRefresh, onHistory }: { project: ClientProject; issue?: IssueScope; onChangeScope: (issue?: IssueScope) => void; onReturnIssue: (issue: IssueScope) => void; onCreate: Create; onRefresh: () => Promise<void>; onHistory: () => void }) {
+  const [linkedIssues, setLinkedIssues] = useState<(IssueScope & {title:string})[]>([]);
+  useEffect(() => {
+    let current = true;
+    async function loadIssues() {
+      if ((await caseStorage()).state !== 'ready') return;
+      const { projectLinks } = await listCases();
+      const links = projectLinks.filter(link => link.projectId === project.id);
+      const results = await Promise.allSettled(links.map(link => caseIssues(link.caseId)));
+      if (current) setLinkedIssues(results.flatMap(result => result.status === 'fulfilled' ? result.value.issues.map(row => ({caseId:row.caseId,issueId:row.id,title:row.title})) : []));
+    }
+    void loadIssues().catch(() => { if (current) setLinkedIssues([]); });
+    return () => { current = false; };
+  }, [project.id]);
+  const scopes = new Map<string, IssueScope & {title?:string}>();
+  for (const scope of [issue, ...linkedIssues]) if (scope) scopes.set(scope.caseId + '/' + scope.issueId, scope);
+  const scopedTasks = project.tasks.filter(task => !task.assignment?.issue || task.assignment.issue.caseId === issue?.caseId && task.assignment.issue.issueId === issue.issueId);
+  const create: Create = intent => onCreate({ ...issue, ...intent });
+
   const [tab, setTab] = useState<'work' | 'terms' | 'results' | 'stage'>('work');
   const [draft, setDraft] = useState<{ text: string; expectedVersion: number; operationId: string }>();
   const [saving, setSaving] = useState(false), [error, setError] = useState('');
@@ -122,14 +143,17 @@ export function ProjectCollaboration({ project, onCreate, onRefresh, onHistory }
     finally { setSaving(false); }
   }
   return <section className="project-plan-page" aria-label="项目协作">
-    <header className="case-board-heading"><div><p className="eyebrow">项目空间</p><h1>{project.name}</h1></div><button className="primary-button" type="button" onClick={() => onCreate()}>{project.tasks.length ? '新建任务' : '新建第一个任务'}</button></header>
+    <header className="case-board-heading"><div><p className="eyebrow">项目空间</p><h1>{project.name}</h1></div><button className="primary-button" type="button" onClick={() => create()}>{project.tasks.length ? '新建任务' : '新建第一个任务'}</button></header>
     <nav className="case-project-actions" aria-label="项目协作栏目">{([['work','Project Agent'], ['terms','共用约定'], ['results','成果交接'], ['stage','阶段目标']] as const).map(([value, label]) => <button type="button" key={value} className={tab === value ? 'primary-button' : 'secondary-button'} aria-pressed={tab === value} onClick={() => setTab(value)}>{label}</button>)}</nav>
-    <div hidden={tab !== 'work'}><BusinessRoleConversation owner={{ role: 'project', projectId: project.id }}/></div>
+    {!!scopes.size && <div className="case-inline-actions"><label>项目工作范围 <select value={issue ? issue.caseId + '/' + issue.issueId : ''} onChange={event => onChangeScope(scopes.get(event.target.value))}>
+      <option value="">独立项目工作</option>{[...scopes].map(([key, value]) => <option key={key} value={key}>{value.title ?? '原事项'} · {value.caseId.slice(0,8)} / {value.issueId.slice(0,8)}</option>)}</select></label>
+      {issue && <button type="button" className="text-button" onClick={() => onReturnIssue(issue)}>返回原 Case 事项</button>}</div>}
+    <div hidden={tab !== 'work'}><BusinessRoleConversation owner={{ role: 'project', projectId: project.id, ...(issue ? {issue} : {}) }}/></div>
     {tab === 'terms' && <section className="project-plan-section"><h2>共用约定</h2>{!latest && <p>多个任务需要相同口径、范围或前提时，可在这里共同确定。</p>}
       {project.agreements?.map(item => <p key={item.version}><strong>v{item.version}</strong> · {item.text}</p>)}
       {draft ? <><label>待确认内容<textarea maxLength={8000} value={draft.text} disabled={saving} onChange={event => setDraft({ ...draft, text: event.target.value, operationId: crypto.randomUUID() })}/></label><button className="primary-button" type="button" disabled={!draft.text.trim() || saving || draft.text.trim() === latest?.text} onClick={() => void save()}>确认共用约定</button><button className="text-button" type="button" disabled={saving} onClick={() => { setDraft(undefined); setError(''); }}>取消</button></> : <button className="secondary-button" type="button" onClick={() => setDraft({ text: latest?.text ?? '', expectedVersion: latest?.version ?? 0, operationId: crypto.randomUUID() })}>{latest ? '调整共用约定' : '拟定共用约定'}</button>}
       {error && <p role="alert">{error}</p>}<button type="button" className="text-button" onClick={onHistory}>查看原项目方案与历史回执</button></section>}
     {tab === 'stage' && <StagePanel project={project} onRefresh={onRefresh}/>}
-    {tab === 'results' && <ResultPicker project={project} onCreate={onCreate}/>}
+    {tab === 'results' && <ResultPicker project={{ ...project, tasks: scopedTasks }} onCreate={create}/>}
   </section>;
 }

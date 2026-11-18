@@ -28,3 +28,15 @@
 Case 补齐了取舍前的 Plan、取舍后的 Plan／Teach 原文，以及按明确选定反馈版本建立 Teach 的原行动和观察。目标管理按 Case 修订或所选 Task 原回复重新核读取资格。Project 与跨 Task 来源沿原生分支祖先、由工具实际交付的上游成果及当前接收模型检查授权，另有同项目无关来源的正例。正常产品入口、反例、准确材料和来源见 [Case](case.md)、[目标角色](agents.md)及 [Project](project.md)。
 
 修正后联合测试中，Goal 进行中的 GET 曾返回 HTTP 500，保留在 `.local/product-v13/joint-handoff-check.log`。并行隔离复现得到 `native_snapshot_changed`，即 Pi 在读取边界核对文件大小、身份和更新时间之间追加了原生记录。该问题计入最终候选复验。
+
+### Pi 嵌套读取 Task 成果的复验
+
+合成用例在 `tests/project-host.test.ts:481`，走真实 Host、Pi SDK 与本地协议端。直接调用和 `codemode` 子调用读了同一手选准确成果，并在仍授权时交接给下游。原候选的嵌套父记录确实保存成功子调用及输入，撤权后却仍能重开这个接收会话；失败见 `.local/product-v13/case/nested-result-red.log`。
+
+修复后，原生子调用与一条 Host 来源收据按原生会话、请求、Project、Task、子调用及准确来源身份匹配。收据未复制正文。撤回原企业材料后，直接接收、嵌套接收以及再次接手该成果的下游均拒绝重开、续发和再次交接；同样预选过该材料、仅实际读取另一独立成果的会话仍可继续。新用例和原 Project 权限用例联合 2/2，退出码 0，见 `.local/product-v13/case/nested-result-green.log`。原生父子及回执行身份摘录见同目录 `nested-result-native-evidence.json`。
+
+## 第二轮固定差异
+
+两位原非作者复核 `d7169e974e93fb32d11db774ed91ee870fc0a6a7`。规范轴确认角色消息恢复、Case 原方案两项关闭；直接读取和 DB 出口核验通过，指出合法 Pi 嵌套读取以及直接 Goal／个人资料的来源依然需要覆盖。规格轴确认 Case Agent、Teach、Goal 原来源和 Project 反向权限示例；其独立单项目、单 Case、单事项样本发现，回到 Project 的正向综合因缺少准确事项身份而看不到已获准 Plan。两轴均保留未通过的初审与此轮记录。
+
+忙态读回的原始失败包含首次 HTTP 500、定位后的 `native_snapshot_changed` 和一次 Goal 显示终态时正文仍来自较早快照。修复期间的完整集成运行 `.local/product-v13/check-d7169e9.log` 记录了 11 项失败，执行期间同时有后续改动。涉及的六个测试文件随后单列重跑 28/28。最终整仓结果须按最终固定候选核对。

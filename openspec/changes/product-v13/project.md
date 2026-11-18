@@ -37,3 +37,11 @@
 - 联合 Case/Goal 用例中 Case 闭环通过。Goal 的 Case 来源用例在 Task 创建前轮询运行中的原生会话时收到一次 `native_snapshot_changed` 409，首轮失败保存在 `task-lineage-case-dependent.log`，已告知 Goal 负责人。此次独立重查通过，另存 `task-lineage-goal-recheck.log`。Goal 负责人另已复现，最终候选结论以其修订后的回归及总复核为准。
 
 本次检查覆盖原生记录可定位的材料、工具结果和权限。自由模型的专业结论，以及 SDK 之外由用户自行转录或工具写入但没有原生来源回执的业务血缘，未纳入证明。
+
+## 二审后的 Project 事项范围与原生读取
+
+- 普通 Task 在 Pi 追加原生会话时，原先的严格快照检查偶发 HTTP 500。合成测试在文件首次检查与打开之间追加一条合法记录，稳定重现首轮错误。现只对原生文件确有变更的读取最多检查五次，每次重取接收任务、模型及派发材料并完整核权。重复变更返回 409，损坏的原生内容在第一次读取时即停止。测试通过公开 Task GET 发起，使用独立合成账本，无须在测试中直接引入 SDK。RED 与诊断分别见 `.local/product-v13/task-native-poll-red.log`、`task-native-poll-diagnostic.log`。
+- 角色完成时，Host 核对原生回复权限并再次读取 owner 的版本、原生文件、请求及最后运行状态。源材料核对期间由在途变为完成，会重新取同一归属的已核权回复。确定性用例覆盖 owner 修订号相同、回复在核验时刚完成的情况，验得两次权限核查和新的最后回复。保留过渡阶段的 Goal 失败记录 `task-native-poll-compat.log`。
+- Case 具体事项的“回关联项目协作”把项目、Case 和事项传到 Project 角色。同项目的独立工作、同一个 Case 的不同事项及不同 Case 均沿各自的原生会话工作。成果查找、正文阅读和重开沿原模型、当前关联与准确事项核验；原生 Pi 在正常工具入口读到本事项 Plan 和 Teach。相同项目的其他 Case 及同 Case 另一事项的成果目录不含这些原件，错配 Case 与事项的入口得到 404。初次 RED 在 `task-issue-collaboration-red.log`；联测 `task-case-project-final.log` 通过 5/5。
+- 真实隔离 Chrome 从同 Case 的第二项进入项目，刷新项目页，在独立项目工作和原事项间切换，再返回正确的原 Case 和事项并刷新。请求中的角色三元归属与所选事项一致。可重复运行 `node tests/browser-v13-project-issue.mjs`，见 `.local/product-v13/task-case-project-browser-final.log`。本项使用回环 Host、合成模型配置与合成提案，无真实业务资料。
+- 普通 Task 原生读取、项目文件、Analysis 交付、自动反馈与复核、PM01 数据边界及来源发现的受影响回归 38/38，通过记录在 `task-native-poll-affected.log`。联合 TypeScript 和 SDK 会话接缝分别见 `task-case-project-ts.log`、`task-native-poll-boundary.log`。工程结果只覆盖上述路径，用户产品验收、实际部署及自由模型专业结果另记。

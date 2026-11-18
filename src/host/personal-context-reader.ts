@@ -1,3 +1,4 @@
+import type { PersonalQualificationItem } from './personal-context-history.ts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -241,5 +242,28 @@ export function createPersonalContextReader(options: { projects: Pick<ProjectSto
     if (unavailableTargets.length) throw new PersonalContextError('personal_context_selection_unavailable', 409, unavailableTargets);
     abort(context); return { text: texts.join('\n\n'), details };
   }
-  return { find, read, prepare };
+  /** Recheck a recorded delivery without broadening it into a new search or source read. */
+  async function verifyDelivery(item: PersonalQualificationItem, readOptions: PersonalContextReadOptions = {}) {
+    const context = operation(readOptions), current = await resolve(item.target, context);
+    const denied = (): never => { throw new PersonalContextError('personal_context_delivery_no_longer_readable', 403); };
+    if (item.sourceRef) {
+      const exact = current.sourceRefs.find(ref => canonicalCandidateJson(ref) === canonicalCandidateJson(item.sourceRef));
+      if (item.part !== 'source' || !exact) return denied();
+      const evidence = await source(exact, context);
+      if (evidence.status === 'excluded' || evidence.status === 'governance-unknown' || item.extent !== 'metadata' && evidence.text === null) return denied();
+    } else if (item.part === 'source') return denied();
+
+    if (item.part === 'catalog' && current.item.governance.archived && !item.governance.archived) return denied();
+    if (item.sourceGovernance) {
+      const actual = await context.sources.read(current.sourceRefs);
+      for (const earlier of item.sourceGovernance.items) {
+        // The supplied reminder can include the original candidate's governed correction.
+        if (earlier.correction === null) continue;
+        const now = actual?.items.find(entry => entry.sourceIndex === earlier.sourceIndex);
+        if (!now || now.state !== 'known' || now.excluded !== false || now.latestCorrectionOperationId !== earlier.latestCorrectionOperationId) return denied();
+      }
+    }
+    abort(context);
+  }
+  return { find, read, prepare, verifyDelivery };
 }

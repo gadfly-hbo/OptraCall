@@ -80,6 +80,40 @@ test('normal Host and Pi retain one issue from exact Plan and separate human aut
   assert.ok(!frozenTeachRequest.includes(laterFeedback.revisionId)); assert.ok(!frozenTeachRequest.includes('后续不同采样的观察'));
   await call(a.base+'/review','POST',{...decisionBody,source:teach,feedbackRevisionId:laterFeedback.revisionId},409);
   await call(a.base+'/review','POST',{...decisionBody,source:teach,feedbackRevisionId:feedback.revisionId});
+  const scoped = (caseId:string,issueId:string,projectId=project.id) => '/api/business-role?owner=' + encodeURIComponent(JSON.stringify({role:'project',projectId,issue:{caseId,issueId}}));
+  const scopeA = scoped(a.record.id,a.issue.id), scopeB = scoped(b.record.id,b.issue.id);
+  await call(scoped(a.record.id,b.issue.id),'GET',undefined,404);
+  assert.equal((await call(scopeB)).discussion,null);
+  let delivered = false;
+  provider.setResponder(turn => {
+    const reads=turn.recentToolResults.map(row=>providerMessageText(row.content));
+    if(!reads.length)return {calls:[{name:'strategy_goals',arguments:{action:'find-sources',query:'经营任务'}}]};
+    const rows=JSON.parse(reads[0]).sources;
+    const allowedPlan=rows.find((r:any)=>r.target.taskId===plan.taskId);
+    const allowedTeach=rows.find((r:any)=>r.target.taskId===pendingTeach.taskId);
+    assert.ok(allowedPlan);assert.ok(allowedTeach);
+    if(reads.length===1)return {calls:[{name:'strategy_goals',arguments:{action:'read-source',sourceId:allowedPlan.id}}]};
+    if(reads.length===2)return {calls:[{name:'strategy_goals',arguments:{action:'read-source',sourceId:allowedTeach.id}}]};
+    assert.match(reads[1],/若毛利下降则停止/);assert.match(reads[2],/保留原假设/);delivered=true;return {text:'已综合该事项准确方案与反馈。'};
+  });
+  await call(scopeA+'&action=messages','POST',{text:'综合该事项方案和阶段反馈',requestId:randomUUID(),expectedRevision:0},202);
+  for(let i=0;i<250;i++){const value=await call(scopeA);if(!value.busy&&value.discussion?.lastRun?.status==='completed')break;await delay(30);}
+  assert.equal(delivered,true);
+  assert.equal((await call(scopeB)).discussion,null);
+  const general='/api/business-role?owner='+encodeURIComponent(JSON.stringify({role:'project',projectId:project.id}));
+  assert.equal((await call(general)).discussion,null);
+  async function assertScopeExcludesPlanAndTeach(scope: string) {
+    let separated=false;
+    provider.setResponder(turn=>{
+    if(!turn.recentToolResults.length)return {calls:[{name:'strategy_goals',arguments:{action:'find-sources',query:'经营任务'}}]};
+    const rows=JSON.parse(providerMessageText(turn.recentToolResults[0].content)).sources;
+    assert.ok(!rows.some((row:any)=>[plan.taskId,pendingTeach.taskId].includes(row.target.taskId)));separated=true;return {text:'当前事项没有这些原件。'};
+    });
+    await call(scope+'&action=messages','POST',{text:'核对本事项是否有方案成果',requestId:randomUUID(),expectedRevision:0},202);
+    for(let i=0;i<250;i++){const value=await call(scope);if(!value.busy&&value.discussion?.lastRun?.status==='completed')break;await delay(30);}
+    assert.equal(separated,true);
+  }
+  await assertScopeExcludesPlanAndTeach(scopeB);
   const {choice: deferred} = await choose('defer',choice.choiceId);
   const laterTeach = await run('teach','暂缓后观察到来店人数持平，待扩大样本再核。',deferred.choiceId);
   await call(a.base+'/review','POST',{ ...decisionBody, source:laterTeach, choiceId:deferred.choiceId, expectedRevision:6,observation:'暂缓后客流持平',operationId:randomUUID() });
@@ -93,6 +127,8 @@ test('normal Host and Pi retain one issue from exact Plan and separate human aut
   await call(a.base+'/review','POST',{...finalReview,observation:'两店来店人数持平',nextStep:'结束本轮观察'});
   const end = (await call(a.base)).rounds.at(-1);
   assert.equal(end.review.reply.messageId,finalTeach.messageId); assert.equal(end.actions.length,0);
+  const {issue:sibling}=await call('/api/cases/'+a.record.id+'/decisions/issues','POST',{title:'同 Case 的其他事项',expectedRevision:(await call('/api/cases/'+a.record.id)).case.revision,operationId:randomUUID()},201);
+  await assertScopeExcludesPlanAndTeach(scoped(a.record.id,sibling.id));
   const origin = {kind:'task', projectId:project.id,taskId:plan.taskId,reply:plan};
   const newCase = await withCaseGoal(host,{operationId:randomUUID(),title:'从原任务承接的独立问题',creationSource:origin});
   const {case:child} = await call('/api/cases','POST',newCase,201);

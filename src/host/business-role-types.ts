@@ -5,7 +5,7 @@ export type BusinessRoleOwner =
   | {role: 'goal'; caseSource?:CaseCreationSource; goalId: string; version: number}
   | {role: 'goal-draft'; caseSource?:CaseCreationSource; draftId: string; scope: GoalScope; strategyChoice?: {discussionId:string;version:number}}
   | {role: 'case'; caseId: string; itemId: string}
-  | {role: 'project'; projectId: string};
+  | {role: 'project'; projectId: string; issue?: { caseId: string; issueId: string }};
 
 export const businessRoleNames = {
   strategy: '战略选择 Agent',

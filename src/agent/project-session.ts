@@ -1,3 +1,4 @@
+import { taskSourceDeliveryType, taskSourceDeliveryDetails, tracksTaskSource } from './task-source-delivery.ts';
 import { packageIdentity } from './skill-catalog.ts';
 import { taskPurpose, approvedTaskSkills } from '../host/task-assignment.ts';
 import {goalContextSourceTool} from './goal-context-source.ts';
@@ -384,6 +385,11 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     const studioReader = o.studioReadEnabled && !o.workspace && (!o.protectedExecution || ordinaryManaged());
     const studioWriter = !o.protectedExecution && o.studioEnabled;
     const dbLinkAvailable = Boolean(o.dbLinkEnabled && !o.workspace && (!o.protectedExecution || ordinaryManaged()) && o.projectId && o.taskId);
+    const recordSourceDelivery = (native:SessionManager, current:ActiveRun, name:string, toolCallId:string, details:unknown) => {
+      if (!o.taskId || o.workspace || !tracksTaskSource(name)) return;
+      native.appendCustomEntry(taskSourceDeliveryType, {version:1,projectId:o.projectId,taskId:o.taskId,
+        sessionId:native.getSessionId(),requestId:current.id,toolCallId,name,details:taskSourceDeliveryDetails(name,details)});
+    };
     const createBoundDbLinkTools = (boundManager: SessionManager, allowed: readonly DbLinkToolName[] = DB_LINK_TOOL_NAMES,
       qualify?: (ctx: ExtensionToolContext, signal: AbortSignal) => () => boolean, namespace = '') => {
       const boundSessionId = boundManager.getSessionId();
@@ -397,6 +403,8 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         assertCurrent();
         const value = await requestHostTool({ feature: 'db-link', action, input, toolCallId: namespace ? `${namespace}/${toolCallId}` : toolCallId, requestId: originalRun!.id, sessionId: boundSessionId }, signal, 'db_link_run_unavailable') as DbLinkToolResult;
         assertCurrent();
+        const dbNames = {'sources':'db_sources','describe':'db_describe','query':'db_query','read-result':'db_result','save-description':'db_save_description'} as const;
+        recordSourceDelivery(boundManager,originalRun!,dbNames[action],namespace ? namespace+'/'+toolCallId : toolCallId,value.details);
         return value;
       }, allowed) : [];
     };
@@ -462,6 +470,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           const maximumContent = feature === 'project-files' ? 64 * 1024 : 32_768;
           if (Buffer.byteLength(JSON.stringify(value), 'utf8') > 256 * 1024 || !Array.isArray(value.content) || value.content.some(part => part.type !== 'text' || typeof part.text !== 'string') || value.content.reduce((n, part) => n + part.text.length, 0) > maximumContent) throw new Error('personal_context_payload_limit');
           if (feature === 'semantic-context' && sourceAction === 'graph' && value.content.reduce((bytes, part) => bytes + Buffer.byteLength(part.text, 'utf8'), 0) > 24 * 1024) throw new Error('semantic_graph_payload_limit');
+          recordSourceDelivery(boundManager,originalRun!,definition.name,toolCallId,value.details);
           if (feature === 'method-issue') boundManager.appendCustomEntry('optracall.method-issue', redact(value.details));
           if (feature === 'quoted-decisions') boundManager.appendCustomEntry('optracall.quoted-decision', redact(value.details));
           if (feature === 'analysis-delivery') {
@@ -696,7 +705,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     }];
     const createGoalContextTools=(boundManager:SessionManager)=>!o.goalContextSourceEnabled || o.workspace || !o.projectId || !o.taskId || o.protectedExecution&&!ordinaryManaged()?[]:[{...goalContextSourceTool,execute:async(toolCallId:string,input:Record<string,unknown>,signal:AbortSignal|undefined,_update:unknown,ctx:ExtensionToolContext)=>{
       const current=run,boundSessionId=boundManager.getSessionId();const assertCurrent=()=>{if(!current||run!==current||current.kind!=='prompt'||current.cancelled||closing||!signal||signal.aborted||manager!==boundManager||session?.sessionManager!==boundManager||ctx.sessionManager!==boundManager||!toolCallId.trim())throw new Error('goal_context_source_unavailable');};
-      assertCurrent();const result=await requestHostTool({feature:'goal-context-source',action:'read',input,toolCallId,requestId:current!.id,sessionId:boundSessionId},signal!,'goal_context_source_unavailable');assertCurrent();return result as {content:{type:'text';text:string}[];details:Record<string,unknown>};
+      assertCurrent();const result=await requestHostTool({feature:'goal-context-source',action:'read',input,toolCallId,requestId:current!.id,sessionId:boundSessionId},signal!,'goal_context_source_unavailable');assertCurrent();recordSourceDelivery(boundManager,current!,goalContextSourceTool.name,toolCallId,(result as {details:unknown}).details);return result as {content:{type:'text';text:string}[];details:Record<string,unknown>};
     }}];
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
       let parent: AgentSession;
@@ -833,7 +842,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   }
   function attachRunManager(target: SessionManager) {
     if (!run || run.managers.has(target)) return;
-    target.appendCustomEntry(RUN_ENTRY, { phase: 'started', requestId: run.id, sessionId: target.getSessionId(), kind: run.kind, ...(run.requestFingerprint === undefined ? {} : { requestFingerprint: run.requestFingerprint }), ...(run.providedContext ? { providedContext: run.providedContext } : {}) });
+    target.appendCustomEntry(RUN_ENTRY, { phase: 'started', ...(!options.workspace && options.taskId ? {taskSourceReceiptVersion:1} : {}), requestId: run.id, sessionId: target.getSessionId(), kind: run.kind, ...(run.requestFingerprint === undefined ? {} : { requestFingerprint: run.requestFingerprint }), ...(run.providedContext ? { providedContext: run.providedContext } : {}) });
     run.managers.add(target);
     if (session?.sessionManager === target) materializeNewSession(session);
   }

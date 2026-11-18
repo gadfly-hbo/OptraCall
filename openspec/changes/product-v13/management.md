@@ -17,3 +17,5 @@
 固定首审代码的独立根再次完成六项导航、两种文稿各两版下载及旧版复读、目标/项目/任务/PPT/Studio 原输入节点与草稿的展开收起，见 `fixed-navigation.log`、`fixed-downloads.log`、`fixed-drawers.log`。战略对话的原草稿在同次下载检查中展开、收起后发送。Case 事项抽屉在 `case/browser-case-drawer.log` 验同一输入、草稿、焦点和零写入。七个入口均指向原会话。战略原生依据移出时，两版战略导出及其下游 GSA 导出均拒绝，原 owner 字节不变；恢复同一依据后原版可读。见 `export-source-loss.log`。Case 对应看板权限解除时的 GSA 导出拒绝及恢复证据见 Case 分项。
 
 另核独立折叠状态：同时切换主导航、项目空间及已归档项目，另外两组的开关状态保持（`nav-three-groups.log`）。在普通 Task 抽屉中点「打开项目文件上传」会收起抽屉并打开原项目文件栏，原 Task 草稿保留（`drawer-file-return.log`）。GSA 表包含 Goal Agent 字段建议所对应的讨论、原生会话、条目与 SHA，见 `goal-export-suggestion-red.log`、`goal-export-suggestion-green.log`。
+
+语义资产、分析资产均从正常侧栏选择同一企业，进入体系工作台后核对了同一体系 ID。语义原文的已保存指标链接准确打开 membership-repurchase@1.0.0，即使库内已有 1.1.0。Chrome 无页面错误，相关 Studio 回归 19/19，分别见 `.local/product-v13/studio-scope/receipt.json` 和 `related-regression.log`。

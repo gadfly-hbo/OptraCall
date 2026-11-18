@@ -477,3 +477,97 @@ test('a later Task reply retains its earlier Case ancestry while unrelated proje
   const {sources}=await req('/api/strategy/discussions/'+discussion.id+'/sources');
   assert.ok(sources.some((r:any)=>r.target.taskId===other.id));assert.ok(!sources.some((r:any)=>r.target.taskId===source.id));
 });
+
+test('Pi direct and codemode reads of the same selected Task result remain attributable through handoff and revocation', {timeout:90000}, async t => {
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  const req = async (route:string,method='GET',body?:unknown,status=200) => json(await host.request(route,method,body),status);
+  await req('/api/configuration','PUT',{name:'合成工具来源',provider:'openai-compatible',model:'synthetic-nested-lineage',baseUrl:provider.baseUrl,apiKey:'synthetic-only'});
+  const {project} = await req('/api/projects','POST',{name:'嵌套来源权限点验'},201);
+  const form='/api/projects/'+project.id+'/tasks';
+  type Selected = {taskId:string;key:string};
+  const create = async (name:string,sources:Selected[]=[]) => (await req(form,'POST',{name,assignment:{type:'analysis',skill:null,...(sources.length ? {sources} : {})}},201)).task.id as string;
+  const send = async (id:string,extra:Record<string,unknown>={}) => {
+    const requestId=randomUUID(), stream=await projectEvents(host,project.id,id);
+    try {
+      await req(form+'/'+id+'/messages','POST',{requestId,text:'核对当前委托的准确经营材料。',...extra},202);
+      assert.equal((await stream.terminal(requestId)).outcome,'completed',JSON.stringify(provider.errors));
+    } finally {await stream.close();}
+    return requestId;
+  };
+  async function selected(taskId:string,requestId:string):Promise<Selected> {
+    const rows=(await req(form+'/'+taskId+'/results')).details.results;
+    const exact=rows.find((r:{requestId:string})=>r.requestId===requestId);
+    assert.ok(exact,'expected the exact received result to remain qualified for handoff '+JSON.stringify({taskId,requestId,rows}));
+    return {taskId,key:exact.id};
+  }
+  const directory=await req('/api/enterprise-materials','POST',{title:'合成季节性口径',body:'示例基线只覆盖第 42 周。'},201);
+  const material=await req('/api/enterprise-materials/'+directory.material.id+'/enable','POST',{expectedVersion:directory.material.version});
+  const source=await create('受限经营来源'),other=await create('独立经营来源');
+  const restricted='SYNTHETIC-OBSERVATION-42',independent='SYNTHETIC-INDEPENDENT-97';
+  provider.setResponder(()=>({text:restricted}));
+  const first=await selected(source,await send(source,{enterpriseMaterials:[{storeId:material.storeId,materialId:material.material.id,revisionId:material.material.activeRevisionId,mode:'full'}]}));
+  provider.setResponder(()=>({text:independent}));
+  const second=await selected(other,await send(other));
+  const observed: {kind:string;receiver:string;requestId:string;key:string;parent?:string;child?:string;nativeFile:string}[]=[];
+  async function consume(kind:'direct'|'nested',receiver:string,source:Selected,body:string,answer:string) {
+    const args={action:'read',id:source.key}; let read=false;
+    provider.setResponder(ctx=>{
+      if(ctx.recentToolResults.length===0) return {calls:[kind==='direct' ? {name:'read_project_task_results',arguments:args} : {
+        name:'codemode',arguments:{code:'const original = await tools.read_project_task_results('+JSON.stringify(args)+'); text(original);'}
+      }]};
+      const actual=providerMessageText(ctx.recentToolResults.at(-1)!.content);
+      assert.ok(actual.includes(body)&&actual.includes(source.key),actual);
+      read=true;return {text:answer};
+    });
+    const requestId=await send(receiver); assert.equal(read,true);
+    const state=(await req(form+'/'+receiver)).task;
+    const native=String(await fs.readFile(state.sessionFile,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
+    const direct=native.filter(row=>row.message?.role==='toolResult'&&row.message.toolName==='read_project_task_results');
+    if(kind==='direct') {
+      assert.ok(direct.some(row=>!row.message.isError&&row.message.details.result.id===source.key));
+      observed.push({kind,receiver,requestId,key:source.key,nativeFile:state.sessionFile});
+    } else {
+      assert.equal(direct.length,0);
+      const parent=native.find(row=>row.message?.role==='toolResult'&&row.message.toolName==='codemode'&&
+        row.message.nestedCalls?.calls.some((call:{name:string;arguments?:{id:string}})=>call.name==='read_project_task_results'&&call.arguments?.id===source.key));
+      assert.ok(parent); const call=parent.message.nestedCalls.calls.find((c:{name:string})=>c.name==='read_project_task_results');
+      assert.equal(parent.message.isError,false);assert.equal(call.status,'ok');assert.deepEqual(call.arguments,args);
+      const receipts=native.filter(row=>row.type==='custom' && row.customType==='optracall.task-source-delivery' && row.data.requestId===requestId && row.data.toolCallId===call.id);
+      assert.equal(receipts.length,1,'each real nested result has one source receipt');
+      const receipt=receipts[0].data;
+      assert.equal(receipt.version,1);assert.equal(receipt.projectId,project.id);assert.equal(receipt.taskId,receiver);
+      assert.equal(receipt.sessionId,native.find(row=>row.type==='session').id);
+      assert.equal(receipt.name,call.name);assert.equal(receipt.details.scope.taskId,receiver);
+      assert.equal(receipt.details.result.id,source.key);assert.equal(receipt.details.result.taskId,source.taskId);
+      assert.equal(receipt.details.action,'read');assert.ok(!JSON.stringify(receipt).includes(body),'receipt keeps only source identities');
+      observed.push({kind,receiver,requestId,key:source.key,parent:parent.message.toolCallId,child:call.id,nativeFile:state.sessionFile});
+    }
+    return requestId;
+  }
+  const direct=await create('直接核对',[first]), nested=await create('嵌套核对',[first]), unread=await create('仅核另一条',[first,second]);
+  const directRun=await consume('direct',direct,first,restricted,'DIRECT-RECEIVED');
+  const nestedRun=await consume('nested',nested,first,restricted,'NESTED-RECEIVED');
+  const unreadRun=await consume('nested',unread,second,independent,'INDEPENDENT-RECEIVED');
+  t.diagnostic(JSON.stringify({scratch:host.scratch,observed}));
+  const directRef=await selected(direct,directRun),nestedRef=await selected(nested,nestedRun),independentRef=await selected(unread,unreadRun);
+  const further=await create('继续接手嵌套成果',[nestedRef]);
+  const furtherRun=await consume('direct',further,nestedRef,'NESTED-RECEIVED','FURTHER-RECEIVED');
+  await selected(further,furtherRun);
+  await req('/api/enterprise-materials/'+material.material.id+'/disable','POST',{expectedVersion:material.material.version});
+  const count=provider.requests.length;
+  for(const id of [direct,nested,further]) {
+    assert.ok([403,409].includes((await host.request(form+'/'+id+'/open','POST',{})).status),id);
+    assert.ok([403,409].includes((await host.request(form+'/'+id+'/messages','POST',{requestId:randomUUID(),text:'继续原委托。'})).status),id);
+    assert.deepEqual((await req(form+'/'+id+'/results')).details.results,[]);
+  }
+  for(const source of [directRef,nestedRef]){
+    const denied=await host.request(form,'POST',{name:'来源已撤回',assignment:{type:'plan',skill:null,sources:[source]}});
+    assert.ok([403,404,409].includes(denied.status));
+  }
+  assert.equal(provider.requests.length,count);
+  assert.deepEqual(await selected(unread,unreadRun),independentRef);
+  await create('继续使用独立经营观测',[independentRef]);
+  provider.setResponder(()=>({text:'INDEPENDENT-STILL-READABLE'}));
+  await send(unread);assert.deepEqual(provider.errors,[]);
+});

@@ -106,7 +106,9 @@ test('RU06: exact candidate consumption supplies latest independent correction, 
   assert.match(provided.text, /最新独立意见/);
   assert.doesNotMatch(provided.text, /旧的独立意见/);
   assert.equal(provided.details.items[0]?.governance.latestCorrectionOperationId, note2.event.operationId);
+  await f.reader.verifyDelivery(provided.details.items[0]!);
   await f.controls.apply({ operationId: randomUUID(), target: c.ref, action: 'exclude', note: null, expectedTargetRevision: note2.state.targetRevision });
+  await assert.rejects(f.reader.verifyDelivery(provided.details.items[0]!), { code: 'personal_context_excluded' });
   await assert.rejects(f.reader.read({ target: c.target }), { code: 'personal_context_excluded' });
   assert.equal((await f.reader.find()).details.items.length, 0);
   const state = await f.controls.readState(c.ref);

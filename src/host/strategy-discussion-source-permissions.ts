@@ -26,7 +26,7 @@ export function createStrategyDiscussionSourcePermissions(options: StrategyDiscu
     if (configuration.id !== discussion.configurationId || configuration.revision !== discussion.configurationRevision) deny();
     const projectId = discussion.projectId;
     const businessOwner = discussion.businessOwner;
-    const issue = businessOwner?.role === 'case' ? { caseId: businessOwner.caseId, issueId: businessOwner.itemId } : undefined;
+    const issue = businessOwner?.role === 'case' ? { caseId: businessOwner.caseId, issueId: businessOwner.itemId } : businessOwner?.role === 'project' ? businessOwner.issue : undefined;
     const owner = async (id: string, taskId?: string) => {
       if (!projectId || id !== projectId) deny();
       const project = await options.projects.get(id); check(); if (project.archivedAt !== null) deny();

@@ -266,9 +266,20 @@ export function createStrategyDiscussionHost(options:{roleContext?:RoleContextRe
   if(!proposal)fail('goal_suggestion_source_changed',409);
   return proposal;
  }
- async function detail(id:string, originalRequestId?:string, checked?:{snapshot:Awaited<ReturnType<typeof native>>}):Promise<StrategyDiscussionDetail>{
-  let {owner,ref}=own(id);const live=await domain.read(ref);owner=store.get(id);let n:Awaited<ReturnType<typeof native>>;if(checked)n=checked.snapshot;
-  else try{n=await native(owner);}catch(e){if(!live.busy)throw e;n=null;}
+ async function detail(id:string, originalRequestId?:string, checked = false):Promise<StrategyDiscussionDetail>{
+  let {owner,ref}=own(id);
+  let live=await domain.read(ref), n:Awaited<ReturnType<typeof native>>;
+  owner=store.get(id);
+  if(checked){
+   for(let attempt=0;;attempt++){
+    const before=owner;
+    n=await verifyRoleHistory(id);
+    live=await domain.read(ref);
+    owner=store.get(id);
+    if(owner.revision===before.revision && owner.sessionFile===before.sessionFile && owner.lastRun?.id===before.lastRun?.id && owner.lastRun?.status===before.lastRun?.status)break;
+    if(attempt>=4)fail('strategy_discussion_context_changed',409);
+   }
+  }else try{n=await native(owner);}catch(e){if(!live.busy)throw e;n=null;}
   const goals=ownGoals(owner),replies:StrategyDiscussionDetail['replies']=[];
   if(n&&!owner.businessOwner)for(const e of n.entries)if(e.type==='message'&&e.message.role==='assistant'&&n.branchIds.has(e.id)&&textOf(e.message).trim())replies.push({text:textOf(e.message),source:{authority:'strategy-discussion',id,version:e.id,sessionId:n.manager.getSessionId(),entryType:'message',sha256:discussionHash(sourceBody(e.message))}});
   const session=live.snapshot??{sessionId:n?.manager.getSessionId()??'',...(owner.sessionFile?{sessionFile:owner.sessionFile}:{}),messages:n?presentContextMessages(n.manager.buildSessionContext().messages,n.manager.getBranch(),n.manager.getSessionId()):[],tools:[],status:'idle' as const,sdkVersion:'1.4.0',capabilities:{}};

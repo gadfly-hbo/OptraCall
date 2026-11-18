@@ -55,3 +55,17 @@
 
 - 独立端口 4377 的 Chrome 从“决策星图 → Case → 带原依据到目标管理”和“项目 → Task → 带这条原回复核对目标”两条正常界面发送。实际 Pi 1.4.0 收到 Case 原描述 `CASE_BUSINESS_BASIS` 及所选 Task 的 `TASK_INSPECT_EXACT`，跨来源未混入先前正文。Case 绑定 Goal v1，Task 原文 entry 为 `2b7f9c70`，内容哈希 `d827981a0ecd30612a91060e546d71688477ecc5613c1e2afc6f34c290ba3525`。两项通过，浏览器无 page error。原始收据 `.local/product-v13/roles/origin-browser-receipt.json`，SHA-256 `38d90a181813ca2c35f6ad97108c91d75b7494709be74ce089a89388ab7ff86c`。
 - `tests/goal-origin-role-v13.test.ts` 使用合成 Provider 和真实 Pi 验证原 Case 升到 v2 后按 v1 取当时正文，错误原文 hash 被拒，归档原 Task 后角色读回、再次派发均被拒，Provider 请求数无增。与四角色及原战略恢复回归共 7/7，见 `.local/product-v13/roles/origin-plus-role-final.log`。TypeScript 检查通过，见 `.local/product-v13/roles/origin-tsc-final.log`。
+
+## Task 回复向目标管理交付时的直接来源核权
+
+原 Task 通过 `read_goal_context_source` 取得详细来源时，再次交付其回复会核对已送入原 Task 的 Goal 版本、该版本引用的战略原生记录，以及当时供应的资料和当前排除项。Host 对原 Task 的项目、模型与实际接收项目、模型分别核权。如有实际接收 Task，还会检查其资料和模型出口范围。
+
+用户显式选入的个人材料、`find_personal_context` 的目录项和 `read_personal_context` 的读取分别按当次准确身份复查。沿用已有个人资料治理、企业归属、Case 事项、反馈、引用数据及模型出口校验。个人候选排除后停止转交。原生内容与引用的候选仍由同一次祖先核查按准确会话、条目和摘要读取。
+
+| 真实 Host 与 Pi 在隔离根中的检查 | 结果 |
+| --- | --- |
+| 战略读取合成原文件、形成 Goal 建议、由人采用。项目 Task 按需取得原文，目标管理接收其指定回复。随后移除并排除战略来源，再预览、派发同一回复。 | 有权时收到准确 Task 原文。撤权后两次访问均被拒，合成 Provider 请求数不增。 |
+| 三个 Task 各自从明确选材、查目录、读正文取得同一准确个人材料。分别以目标管理的正式来源接口读取指定 Task 回复，再将材料归入接收者无权的企业。 | 三个来源原先均可读。归属变化后三个来源的预览和派发均被拒，Provider 请求数不增。 |
+| 候选已有纠正记录、随后由人排除。旧目录归档与人工按准确版本读取历史。 | 明确候选在排除前通过交付复查，排除后拒绝复用。归档及指定历史版本沿 M4 既定语义。 |
+
+对应检查见 `tests/strategy-goal-source-boundary.test.ts`、`tests/personal-context-host.test.ts` 和 `tests/personal-context-reader.test.ts`。与项目结果祖先、战略来源授权的联合回归共 32/32 通过，记录在 `.local/product-v13/roles/direct-lineage-joint-final.log`。全仓 TypeScript 检查通过，见 `.local/product-v13/roles/direct-lineage-tsc-final2.log`。Pi 通过真实 SDK 连至本机合成 Provider，使用临时业务根和合成材料。外部模型输出质量未在此项验证。开发期间保留了首次夹具凭据错误以及精简个人交付收据未能解析时的失败日志。

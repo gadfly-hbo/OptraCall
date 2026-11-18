@@ -19,7 +19,12 @@ export function parseBusinessRoleOwner(input: unknown): BusinessRoleOwner {
       keys(input,['role','caseId','itemId']);
       return {role:'case',caseId:discussionId(input.caseId),itemId:discussionId(input.itemId)};
     case 'project':
-      keys(input,['role','projectId']);
+      keys(input,['role','projectId','issue']);
+      if (input.issue !== undefined) {
+        if (!object(input.issue)) return invalid();
+        keys(input.issue, ['caseId','issueId']);
+        return {role:'project',projectId:discussionId(input.projectId),issue:{caseId:discussionId(input.issue.caseId),issueId:discussionId(input.issue.issueId)}};
+      }
       return {role:'project',projectId:discussionId(input.projectId)};
     case 'goal-draft': {
       keys(input,['role','draftId','scope','strategyChoice','caseSource']);
@@ -81,7 +86,7 @@ export function createBusinessRoleConversations(options:{
         await options.context(owner,initial??undefined,false);
         return {discussion:null,busy:false,configurationId:initial?.id};
       }
-      const snapshot=await host.verifyRoleHistory(id);return host.detail(id,requestId,{snapshot});
+      return host.detail(id,requestId,true);
     }
     if (action==='configuration'&&method==='POST'&&record){
       keys(input,['configurationId','expectedRevision']);
