@@ -1,10 +1,15 @@
-import test, { after } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
-let loaded: Promise<Record<string, unknown>> | undefined;
-async function render(name: string, props: Record<string, unknown>) {
+import './fixtures/register-ui.ts';
+const modules = {
+  ...await import('../src/host/ui/CapabilitySettings.tsx'),
+  ...await import('../src/host/ui/StudioPage.tsx'),
+  ...await import('../extensions/business-plugins/sim-lab/ui/SimLabPage.tsx'),
+  ...await import('../extensions/business-plugins/model-pack/ui/ModelRegistryPage.tsx'),
+};
+async function render(name: keyof typeof modules, props: Record<string, unknown>) {
   const [React, Dom] = await Promise.all([import('react'), import('react-dom/server')]);
-  loaded ??= (async () => { const [vite, react] = await Promise.all([import('vite'), import('@vitejs/plugin-react')]); const server = await vite.createServer({ configFile: false, plugins: [react.default()], server: { middlewareMode: true, hmr: false, watch: null }, logLevel: 'silent' }); after(() => server.close()); return { ...await server.ssrLoadModule('/src/host/ui/CapabilitySettings.tsx'), ...await server.ssrLoadModule('/src/host/ui/StudioPage.tsx'), ...await server.ssrLoadModule('/extensions/business-plugins/sim-lab/ui/SimLabPage.tsx'), ...await server.ssrLoadModule('/extensions/business-plugins/model-pack/ui/ModelRegistryPage.tsx') }; })();
-  const module = await loaded; return Dom.renderToStaticMarkup(React.createElement(module[name] as React.ComponentType<never>, props as never));
+  return Dom.renderToStaticMarkup(React.createElement(modules[name] as React.ComponentType<never>, props as never));
 }
 test('Skill low-frequency settings show exact source/version, declared dependencies and original evaluation without presenting availability as execution', async () => {
   const html = await render('SkillCapabilitySettings', { initial: { skills: [{ id: 'data-analysis', title: '准确安装的运营分析', description: '当前SDK元信息', version: 'sha256:fixed-version', sha256: 'a'.repeat(64), source: 'bundled:data-analysis/SKILL.md' }], diagnostics: [] }, onProject() {}, onModelSettings() {} });
@@ -20,9 +25,8 @@ test('Task business navigation reaches original report, RAP, comparison, model a
   assert.doesNotMatch(html, /插件市场|启动分析|自动开启/);
 });
 test('an exact Studio URL target is never replaced by another system when missing, unassigned or no longer visible', async () => {
-  await render('TaskCapabilityNavigation', { onOpen() {} });
-  const module = await loaded, resolve = module!.resolveStudioSystemLocation as (id: string | undefined, systems: { id: string; enterpriseId?: string }[], directory: { enterprises: { id: string }[] } | undefined) => unknown;
-  const systems = [{ id: 'original', enterpriseId: 'enterprise' }, { id: 'other', enterpriseId: 'other-enterprise' }, { id: 'legacy-unassigned' }], directory = { enterprises: [{ id: 'enterprise' }] };
+  const resolve = modules.resolveStudioSystemLocation;
+  const systems = [{ id: 'original', enterpriseId: 'enterprise' }, { id: 'other', enterpriseId: 'other-enterprise' }, { id: 'legacy-unassigned' }], directory = { enterprises: [{ id: 'enterprise', name: '原企业', revision: 1, createdAt: '2026-11-16T00:00:00Z' }] };
   assert.deepEqual(resolve('original', systems, directory), { status: 'available', systemId: 'original', enterpriseId: 'enterprise' });
   assert.deepEqual(resolve('missing', systems, directory), { status: 'unavailable', systemId: 'missing' });
   assert.deepEqual(resolve('other', systems, directory), { status: 'unavailable', systemId: 'other' });
@@ -38,7 +42,7 @@ test('an unresolved Studio target remains visible without opening a different wo
   const models = await render('ModelRegistryPage', { backLabel: '返回原任务', onBack() {} }); assert.match(models, /返回原任务/); assert.doesNotMatch(models, /返回能力目录/);
 });
 test('the actual Skill metadata endpoint is a read-only environment query and failures retain original resources', async () => {
-  await render('TaskCapabilityNavigation', { onOpen() {} }); const module = await loaded, read = module!.readSkillCapabilities as () => Promise<unknown>;
+  const read = modules.readSkillCapabilities;
   const original = globalThis.fetch, calls: { url: string; init?: RequestInit }[] = [];
   try {
     globalThis.fetch = async (url, init) => { calls.push({ url: String(url), init }); return new Response(JSON.stringify({ skills: [], diagnostics: [] }), { status: 200 }); };

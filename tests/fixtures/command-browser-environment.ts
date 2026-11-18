@@ -27,10 +27,10 @@ const provider = await startSyntheticProvider();
 const control = createServer(async(request,response)=>{const url=new URL(request.url??'/', 'http://127.0.0.1');if(url.pathname==='/arm-startup')await writeFile(path.join(dataRoot,'pi','qa-startup-once'),'synthetic-only');const mode=url.searchParams.get('mode');if(mode&&['success','failure','slow'].includes(mode))provider.setMode(mode as 'success'|'failure'|'slow');response.writeHead(200,{'Content-Type':'application/json'});response.end(JSON.stringify({requests:provider.requests.map(r=>({model:r.body.model,messages:r.body.messages,closedEarly:r.closedEarly})),mode}));});
 await new Promise<void>(resolve=>control.listen(0,'127.0.0.1',resolve));const address=control.address();if(!address||typeof address==='string')throw new Error('control');
 const host = await startTestHost({ uiPort: 4183, dataRoot, projectsRoot });
-const vite = spawn(process.execPath,[path.join(codeRoot,'node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port','4183','--strictPort'],{cwd:codeRoot,env:{...process.env,OPTRACALL_HOST_PORT:String(host.port)},stdio:['ignore','pipe','pipe']});
+const frontend = spawn(process.execPath,[path.join(codeRoot,'scripts/frontend.mjs'),'dev','--host','127.0.0.1','--port','4183','--strictPort'],{cwd:codeRoot,env:{...process.env,OPTRACALL_HOST_PORT:String(host.port)},stdio:['ignore','pipe','pipe']});
 let buffer='',ready=false,closing=false;
-vite.stdout.on('data',chunk=>{buffer+=chunk.toString();if(!ready&&buffer.includes('http://127.0.0.1:4183/')){ready=true;console.log(JSON.stringify({kind:'qa-ready',uiUrl:'http://127.0.0.1:4183/',providerUrl:provider.baseUrl,controlUrl:'http://127.0.0.1:'+address.port,hostPort:host.port,scratch,pid:process.pid,vitePid:vite.pid}));}});
-vite.stderr.on('data',chunk=>process.stderr.write(chunk));
-async function close(){if(closing)return;closing=true;vite.kill('SIGTERM');await host.close();await provider.close();await new Promise<void>(resolve=>control.close(()=>resolve()));process.exit(0);}
+frontend.stdout.on('data',chunk=>{buffer+=chunk.toString();if(!ready&&buffer.includes('http://127.0.0.1:4183/')){ready=true;console.log(JSON.stringify({kind:'qa-ready',uiUrl:'http://127.0.0.1:4183/',providerUrl:provider.baseUrl,controlUrl:'http://127.0.0.1:'+address.port,hostPort:host.port,scratch,pid:process.pid,vitePid:frontend.pid}));}});
+frontend.stderr.on('data',chunk=>process.stderr.write(chunk));
+async function close(){if(closing)return;closing=true;frontend.kill('SIGTERM');await host.close();await provider.close();await new Promise<void>(resolve=>control.close(()=>resolve()));process.exit(0);}
 for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{void close().catch(()=>process.exit(1));});
-vite.on('exit',()=>{if(!closing)void close();});
+frontend.on('exit',()=>{if(!closing)void close();});

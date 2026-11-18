@@ -123,7 +123,7 @@ Agent 通过系统提示词约定使用 `020_clean` 的分析资料，过程输�
 
 ## 开发
 
-前端使用 React、TypeScript 和 Vite，Host 使用 Node.js，Agent Runtime 使用官方 Pi SDK。需要 Node.js 25 或更新版本，Agent 通过 bash 使用本机 Python。语义引擎采用独立的 Python 环境，具体依赖与准备方式见[语义环境说明](openspec/changes/fourbase-l2-rollout/formal-adoption-handoff.md)。
+前端使用 React、TypeScript 和 esbuild，Host 使用 Node.js，Agent Runtime 使用官方 Pi SDK。需要 Node.js 25 或更新版本，Agent 通过 bash 使用本机 Python。开发时更改 JS／TSX 会刷新整个页面，单独更改样式会尽量保留当前页面状态。语义引擎采用独立的 Python 环境，具体依赖与准备方式见[语义环境说明](openspec/changes/fourbase-l2-rollout/formal-adoption-handoff.md)。
 
 ```sh
 npm ci --ignore-scripts

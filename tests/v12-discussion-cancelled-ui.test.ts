@@ -8,7 +8,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { once } from 'node:events';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
 import { createStrategyDiscussionHost } from '../src/host/strategy-discussion-host.ts';
 import { StrategyGoalsStore } from '../src/host/strategy-goals-store.ts';
 import { readStrategyDiscussion, canPrepareDiscussionReplacement, discussionJournal } from '../src/host/ui/strategy-discussion-client.ts';
@@ -33,8 +33,7 @@ test('a real pre-dispatch cancelled discussion keeps its original input and offe
   assert.equal(detail.discussion.lastRun?.status, 'cancelled'); assert.equal(detail.busy, false); assert.equal(detail.requestReceipt, undefined); assert.equal(detail.snapshot.messages.length, 0); assert.deepEqual(detail.discussion.pendingInput, input);
   const memory = new Map<string, string>(), journal = discussionJournal({ getItem: key => memory.get(key) || null, setItem: (key, value) => { memory.set(key, value); }, removeItem: key => { memory.delete(key); } });
   const pending = { kind: 'message' as const, discussionId: owner.id, input }; journal.remember(pending);
-  const renderer = await createServer({ configFile: false, logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } }); t.after(() => renderer.close());
-  const { StrategyDiscussionRecoveryActions } = await renderer.ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const { StrategyDiscussionRecoveryActions } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   let dispatched = 0; const html = renderToStaticMarkup(createElement(StrategyDiscussionRecoveryActions, { pending, detail, busy: false, onRecover() {}, onPrepare() { dispatched++; } }));
   const evidence = path.resolve('.local/v12-implementation/ui/cancelled-recovery'); await mkdir(evidence, { recursive: true }); await writeFile(path.join(evidence, 'host-client-renderer.json'), JSON.stringify({ input, detail, html, readCalls }, null, 2));
   assert.equal(canPrepareDiscussionReplacement(detail, input), true); assert.match(html, /保留输入，准备新的请求/); assert.equal(dispatched, 0); assert.deepEqual(journal.read(), pending); assert.deepEqual(readCalls, ['GET']);

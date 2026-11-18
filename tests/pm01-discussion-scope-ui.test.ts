@@ -1,10 +1,10 @@
-import test, { after } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createElement, isValidElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
 import { createStrategyDiscussion, readStrategyDiscussion, updateStrategyDiscussion, discussionJournal, StrategyDiscussionRequestError } from '../src/host/ui/strategy-discussion-client.ts';
 import type { StrategyDiscussionBackgroundSelection } from '../src/host/ui/StrategyDiscussionPanel.tsx';
 import type { StrategyDiscussionSource } from '../src/host/strategy-discussion-types.ts';
@@ -16,8 +16,6 @@ const evidence = await (async () => {
   await mkdir(parent, { recursive: true });
   return mkdtemp(path.join(parent, 'scope-ui-'));
 })();
-const renderer = createServer({ configFile: false, cacheDir: path.join(evidence, 'vite-cache'), logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
-after(async () => { await (await renderer).close(); });
 
 function native(tree: unknown, type: string, id: string): any {
   if (Array.isArray(tree)) return tree.map(item => native(item, type, id)).find(Boolean);
@@ -27,7 +25,7 @@ function native(tree: unknown, type: string, id: string): any {
 }
 
 test('PM-V12-01: the real discussion Panel distinguishes an absent project from an explicitly selected background range', async t => {
-  const { StrategyDiscussionPanel } = await (await renderer).ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const { StrategyDiscussionPanel } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   const html = renderToStaticMarkup(createElement(StrategyDiscussionPanel, {
     active: false, projects: [], configurations: [], onReviewCandidate() {}, async onGoalsChanged() {}, onSettings() {},
   }));
@@ -39,7 +37,7 @@ test('PM-V12-01: the real discussion Panel distinguishes an absent project from 
 });
 
 test('PM-V12-01: choosing an explicit project for a new discussion sends and reopens project-background with no hand-picked sources', async t => {
-  const { StrategyDiscussionBackground } = await (await renderer).ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const { StrategyDiscussionBackground } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   let selection: StrategyDiscussionBackgroundSelection = { projectId: '', sources: [] };
   const tree = StrategyDiscussionBackground({ id: 'background', selection, projects: [], locked: false, isExistingDiscussion: false, onChange(value: StrategyDiscussionBackgroundSelection) { selection = value; }, onList() {} });
   native(tree, 'select', 'background-project').props.onChange({ target: { value: 'project-member-repeat' } });
@@ -63,7 +61,7 @@ const originalPlan: StrategyDiscussionSource = { id: 'plan-v1', title: '经营�
 const changedPlan: StrategyDiscussionSource = { ...originalPlan, id: 'plan-v2', sha256: 'b'.repeat(64), version: 2 };
 
 test('PM-V12-01: explicit exclusion removes a preferred resource, preserves its full exact ref and still excludes its later version', async () => {
-  const { StrategyDiscussionBackground } = await (await renderer).ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const { StrategyDiscussionBackground } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   let selection: StrategyDiscussionBackgroundSelection = { projectId: 'project-member-repeat', sources: [originalPlan], sourceScope: { mode: 'project-background' } };
   const render = (source: StrategyDiscussionSource) => StrategyDiscussionBackground({ id: 'background', selection, projects: [], availableSources: [source], locked: false, isExistingDiscussion: true, onChange(value: StrategyDiscussionBackgroundSelection) { selection = value; }, onList() {} });
   const before = render(originalPlan);
@@ -82,7 +80,7 @@ test('PM-V12-01: explicit exclusion removes a preferred resource, preserves its 
 });
 
 test('PM-V12-01: selected-only with an empty list stays empty, while mode changes preserve exact preferences and exclusions', async () => {
-  const { StrategyDiscussionBackground } = await (await renderer).ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const { StrategyDiscussionBackground } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   const excluded: StrategyDiscussionSource = { id: 'excluded-note', title: '排除的访谈', target: { kind: 'project-document', projectId: 'project-member-repeat', path: '020_clean/访谈.md' }, sha256: 'c'.repeat(64), version: 7 };
   let selection: StrategyDiscussionBackgroundSelection = { projectId: 'project-member-repeat', sources: [originalPlan], sourceScope: { mode: 'project-background', excludedSources: [excluded] } };
   let directoryReads = 0;
@@ -100,7 +98,7 @@ test('PM-V12-01: selected-only with an empty list stays empty, while mode change
 });
 
 test('PM-V12-01: hand picking remains optional preference in project-background and becomes the only list after explicit selected-only', async () => {
-  const { StrategyDiscussionBackground } = await (await renderer).ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const { StrategyDiscussionBackground } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   let selection: StrategyDiscussionBackgroundSelection = { projectId: 'project-member-repeat', sources: [], sourceScope: { mode: 'project-background' } };
   const props = () => ({ id: 'background', selection, projects: [], availableSources: [originalPlan], locked: false, onChange(value: StrategyDiscussionBackgroundSelection) { selection = value; }, onList() {} });
   native(StrategyDiscussionBackground(props()), 'input', 'background-use-0').props.onChange({ target: { checked: true } });
@@ -114,7 +112,7 @@ test('PM-V12-01: hand picking remains optional preference in project-background 
 });
 
 test('PM-V12-01: an old discussion without sourceScope stays selected-only on reopen and project changes do not widen it', async t => {
-  const { StrategyDiscussionBackground } = await (await renderer).ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const { StrategyDiscussionBackground } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   const calls: string[] = [];
   t.mock.method(globalThis, 'fetch', async (_resource: RequestInfo | URL, init?: RequestInit) => { calls.push(init?.method || 'GET'); return Response.json({ discussion: { id: 'legacy-discussion', projectId: 'old-project', sources: [originalPlan] } }); });
   const readback = await readStrategyDiscussion('legacy-discussion');
@@ -134,7 +132,7 @@ test('PM-V12-01: an old discussion without sourceScope stays selected-only on re
 });
 
 test('PM-V12-01: a lost CAS scope update keeps its original full-ref journal and recovery only reads the same operation', async t => {
-  const { StrategyDiscussionBackground } = await (await renderer).ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const { StrategyDiscussionBackground } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   let selection: StrategyDiscussionBackgroundSelection = { projectId: 'project-member-repeat', sources: [], sourceScope: { mode: 'project-background', excludedSources: [originalPlan] } };
   const tree = StrategyDiscussionBackground({ id: 'background', selection, projects: [], locked: false, onChange(value: StrategyDiscussionBackgroundSelection) { selection = value; }, onList() {} });
   native(tree, 'select', 'background-source-mode').props.onChange({ target: { value: 'selected-only' } });
@@ -165,7 +163,7 @@ test('PM-V12-01: a lost CAS scope update keeps its original full-ref journal and
 });
 
 test('PM-V12-01: pending or running controls cannot edit the project, mode or source choices', async () => {
-  const { StrategyDiscussionBackground } = await (await renderer).ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const { StrategyDiscussionBackground } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   const selection: StrategyDiscussionBackgroundSelection = { projectId: 'project-member-repeat', sources: [originalPlan], sourceScope: { mode: 'selected-only' } };
   const tree = StrategyDiscussionBackground({ id: 'background', selection, projects: [], availableSources: [originalPlan], locked: true, onChange() { assert.fail('no control is dispatched by rendering'); }, onList() { assert.fail('no read is dispatched by rendering'); } });
   for (const [type, id] of [['select', 'background-project'], ['select', 'background-source-mode'], ['input', 'background-use-0'], ['input', 'background-exclude-0']]) assert.equal(native(tree, type, id).props.disabled, true);

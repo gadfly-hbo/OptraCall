@@ -9,7 +9,7 @@ import { createQuotedDecisionAdapter } from '../src/host/quoted-decision-adapter
 import { createDecisionBoardStore, boardRecordVersion } from '../extensions/business-plugins/decision-board/storage/store.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
 
 async function fixture(t: import('node:test').TestContext) {
   const directory = path.resolve('.local/overall-architecture-product-r-fixes/r02'); await mkdir(directory, { recursive: true });
@@ -38,9 +38,16 @@ test('R02: exact Goal/Plan work revocation appends original authority once and G
   assert.equal(latest.quoteProvenance.requestId, f.revokeContext.requestId); assert.deepEqual(f.board.getTask(f.task.id), f.task); assert.deepEqual(f.goals.list().arrangements, arrangements); assert.equal(f.cases.listCases().length, 0);
   f.board.close(); await f.board.init(); assert.equal(f.board.listActionAuthorizations(f.task.id).length, 2);
   const read = await f.port('read', { operationId: saved.details.operationId }, f.revokeContext); assert.equal((read.details.authorization as any).authorizationId, latest.authorizationId);
-  const server = await createServer({ configFile: false, logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } }); t.after(() => server.close());
-  const gsa = await server.ssrLoadModule('/src/host/ui/StrategyGoalsPage.tsx'), authority = await server.ssrLoadModule('/extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx');
-  const board = { items: [{ ...f.item, tasks: [{ ...f.task, authorization: latest }] }] };
+  const gsa = await import('../src/host/ui/StrategyGoalsPage.tsx'), authority = await import('../extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx');
+  const board = {
+    projects: [], reports: [],
+    stats: {
+      reports: 0, suggested: 0, dismissed: 0, highPrioritySuggested: 0, runningExtractions: 0,
+      adopted: f.board.listItems().filter(item => item.status === 'adopted').length, manual: f.board.listItems().length,
+    },
+    items: [{ ...f.item, tasks: [{ ...f.task, authorization: latest }] }],
+  };
+  assert.ok(arrangements);
   const html = renderToStaticMarkup(createElement(gsa.GoalArrangements, { arrangements, board })); assert.match(html, /当前行动授权：已撤回/); assert.match(html, /效果未独立验证/);
   const history = renderToStaticMarkup(createElement(authority.ActionAuthorityHistory, { task: f.task, initialHistory: f.board.listActionAuthorizations(f.task.id) }));
   assert.match(history, /已记录撤回授权/); assert.match(history, /明确行动授权/); assert.match(history, /撤回行动授权/); assert.match(history, /原目标 v1/);
