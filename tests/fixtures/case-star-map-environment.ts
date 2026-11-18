@@ -17,11 +17,11 @@ const evidence = path.join(evidenceRoot, randomUUID());
 await mkdir(evidence, { recursive: true });
 const provider = await startToolProvider();
 const host = await startTestHost({ uiPort: 4191, dataRoot: path.join(evidence, 'host'), projectsRoot: path.join(evidence, 'projects') });
-let vite: ReturnType<typeof spawn> | undefined, closing = false;
+let frontend: ReturnType<typeof spawn> | undefined, closing = false;
 const close = async () => {
   if (closing) return;
   closing = true;
-  vite?.kill('SIGTERM');
+  frontend?.kill('SIGTERM');
   await writeFile(path.join(evidence, 'provider-observations.json'), JSON.stringify({ requestCount: provider.requests.length, errors: provider.errors }, null, 2));
   await host.close();
   await provider.close();
@@ -64,18 +64,18 @@ try {
   await writeFile(path.join(evidenceRoot, 'latest.json'), JSON.stringify({ evidence, hostPort: host.port, runnerPid: process.pid }, null, 2));
   await writeFile(path.join(evidence, 'provider-observations.json'), JSON.stringify({ requestCount: provider.requests.length, errors: provider.errors }, null, 2));
   provider.setResponder(() => ({ text: '合成固定回复；没有真实模型请求。' }));
-  vite = spawn(process.execPath, [fileURLToPath(new URL('../../node_modules/vite/bin/vite.js', import.meta.url)), '--host', '127.0.0.1', '--port', '4191', '--strictPort'], { cwd: workspaceRoot, env: { ...runtimeEnvironment(), OPTRACALL_HOST_PORT: String(host.port) }, stdio: ['ignore', 'pipe', 'pipe'] });
+  frontend = spawn(process.execPath, [fileURLToPath(new URL('../../scripts/frontend.mjs', import.meta.url)), 'dev', '--host', '127.0.0.1', '--port', '4191', '--strictPort'], { cwd: workspaceRoot, env: { ...runtimeEnvironment(), OPTRACALL_HOST_PORT: String(host.port) }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '', ready = false;
-  vite.stdout?.on('data', chunk => {
+  frontend.stdout?.on('data', chunk => {
     output += chunk.toString();
     if (!ready && output.includes('http://127.0.0.1:4191/')) {
       ready = true;
       process.stdout.write(`${JSON.stringify({ kind: 'case-map-qa-ready', uiUrl: 'http://127.0.0.1:4191/', hostPort: host.port, runnerPid: process.pid, evidence, providerCallsBeforeBrowsing: provider.requests.length })}\n`);
     }
   });
-  vite.stderr?.on('data', chunk => process.stderr.write(chunk));
-  vite.on('exit', () => { if (!closing) void close(); });
-  vite.on('error', error => { process.stderr.write(`${error.message}\n`); void close(); });
+  frontend.stderr?.on('data', chunk => process.stderr.write(chunk));
+  frontend.on('exit', () => { if (!closing) void close(); });
+  frontend.on('error', error => { process.stderr.write(`${error.message}\n`); void close(); });
   // Persist protocol counters without exposing a new product endpoint.
   const observations = setInterval(() => { if (!closing) void writeFile(path.join(evidence, 'provider-observations.json'), JSON.stringify({ requestCount: provider.requests.length, errors: provider.errors }, null, 2)); }, 1000);
   observations.unref();

@@ -1,0 +1,26 @@
+{
+  "v12": {
+    "port": 43127,
+    "directory": "v12-preparation/demo-dist",
+    "files": {
+      "openspec/changes/overall-architecture-v12/ui-demo/index.html": "380f915474a13f6ab1224e7c376fcfbd7cb7e341fe6cf1686aff0a194e293b7a",
+      "assets/index-CZCMOvCQ.css": "d19787a1a1049d4f7d96a223a5865fa03cbc74d0ce29943857527c91d880c68c",
+      "assets/main-CEnwc20X.css": "ad3f4f1f931d908aa4b52ef7ba37a2626c4102790edec4a35f6bfb7805aeb409",
+      "assets/index-CJK0Av40.js": "0c4d2732565d385688e191ff6be368e0d335b3f80e5528dde281a573801f7e0f",
+      "assets/jsx-runtime-Bk3oGq7B.js": "2f285a3ebb55c156f6c9037bf4a93e4f4bcbf9e88da1474bd995e7b27c36b802",
+      "assets/main-D_HrYhHU.js": "990e797613ecf7b0c0e80068639fcd25174a323482a961cee15a8437d2a880e7"
+    }
+  },
+  "pm01": {
+    "port": 43131,
+    "directory": "v12-pm01-fix/ui-preparation/build",
+    "files": {
+      "openspec/changes/overall-architecture-v12/pm01-ui-demo/index.html": "28bd82b61a04dcd00a0c1be87d014353285c2ccbe0f829d312071d00d9684473",
+      "assets/index-D-TuQRAj.css": "8a53f66fd2138878ee96615a1f2fa0692900ea28ab03ec785a0f77c0a67ce753",
+      "assets/main-BQULKv7o.css": "56652d5755e1fe030bddc605e629de11dbb226541594ea7e77aaddb721871997",
+      "assets/index-l9tpg64C.js": "1e15c9116e8e1c24b93e2f92b72cf2dc19e3b64e0329a7bd3b10d551947c3783",
+      "assets/scope-BK2LuHkx.js": "129c645ab78645e72aa0836a5edde90dd417df2acc8b6b2a8b9e896d6566660a",
+      "assets/main-BgzVeee4.js": "554f24757a13fa05cc14b51a3d709f94c725aae9c198099ded39b05e948b732e"
+    }
+  }
+}

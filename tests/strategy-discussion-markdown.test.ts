@@ -1,15 +1,12 @@
 import assert from 'node:assert/strict';
-import test, { after } from 'node:test';
+import test from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
 import type { NativeMessage } from '../src/host/ui/project-types.ts';
 
-const server = createServer({ configFile: false, logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
-after(async () => { await (await server).close(); });
-
 async function transcript(messages: NativeMessage[], streaming?: string) {
-  const { StrategyDiscussionTranscript } = await (await server).ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const { StrategyDiscussionTranscript } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   return renderToStaticMarkup(createElement(StrategyDiscussionTranscript, { messages, streaming }));
 }
 

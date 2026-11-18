@@ -1,18 +1,11 @@
 import assert from 'node:assert/strict';
-import { test, after } from 'node:test';
+import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { startTestHost } from './fixtures/host-process.ts';
+import './fixtures/register-ui.ts';
 import type { ProjectPlanCaseConnection } from '../src/host/ui/project-plan-case-client.ts';
-let modulePromise: Promise<Record<string, any>> | undefined;
-async function client() {
-  modulePromise ??= (async () => {
-    const vite = await import('vite');
-    const server = await vite.createServer({ configFile: false, cacheDir: '.local/overall-architecture-upgrade/development/goal-project/ssr-cache', logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
-    after(() => server.close());
-    return server.ssrLoadModule('/src/host/ui/project-plan-case-client.ts');
-  })();
-  return modulePromise;
-}
+const api = await import('../src/host/ui/project-plan-case-client.ts');
+
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const host = await startTestHost(); t.after(() => host.close());
   await host.request('/api/cases/storage/initialize', 'POST', {});
@@ -26,7 +19,7 @@ async function fixture(t: { after(fn: () => Promise<void>): void }) {
 }
 
 test('the project plan creates a real Case through original HTTP authorities, links this exact Project and adopts its precise goal context without starting Tasks', async t => {
-  const { host, project, intent } = await fixture(t), api = await client(), original = globalThis.fetch, calls: { path: string; method: string }[] = [];
+  const { host, project, intent } = await fixture(t), original = globalThis.fetch, calls: { path: string; method: string }[] = [];
   globalThis.fetch = (input, init) => { const path = String(input); calls.push({ path, method: init?.method || 'GET' }); return original(host.baseUrl + path, { ...init, headers: { ...host.headers, ...init?.headers } }); };
   try {
     const context = await api.connectProjectPlanCase(intent);
@@ -42,7 +35,7 @@ test('the project plan creates a real Case through original HTTP authorities, li
 });
 
 test('pending Case connection reload keeps its original intent and operation IDs while unknown stored records are not erased', async t => {
-  const { intent } = await fixture(t), api = await client(), values = new Map<string, string>();
+  const { intent } = await fixture(t), values = new Map<string, string>();
   const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
   intent.createAttempted = true;
   api.savePendingProjectCase(storage, intent);
@@ -54,7 +47,7 @@ test('pending Case connection reload keeps its original intent and operation IDs
 });
 
 test('a pending connection cannot replace its original creation fields while retaining the same operation IDs', async t => {
-  const { intent } = await fixture(t), api = await client(), values = new Map<string, string>();
+  const { intent } = await fixture(t), values = new Map<string, string>();
   const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
   intent.createAttempted = true; api.savePendingProjectCase(storage, intent);
   const before = [...values.entries()], altered = structuredClone(intent); altered.create!.title = '另一经营事项';
@@ -63,17 +56,17 @@ test('a pending connection cannot replace its original creation fields while ret
 });
 
 test('pending Case recovery preserves the user chosen direct goal purpose rather than silently changing it after reopening the page', async t => {
-  const { intent } = await fixture(t), api = await client(), values = new Map<string, string>();
+  const { intent } = await fixture(t), values = new Map<string, string>();
   const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
   intent.goalContext = { goal: intent.goalBinding.primary, purpose: 'query' }; intent.createAttempted = true;
-  api.savePendingProjectCase(storage, intent); assert.deepEqual(api.readPendingProjectCase(storage, intent.projectId).goalContext, intent.goalContext);
+  api.savePendingProjectCase(storage, intent); assert.deepEqual(api.readPendingProjectCase(storage, intent.projectId)?.goalContext, intent.goalContext);
   const altered = structuredClone(intent); altered.goalContext!.purpose = 'assigned-work';
   assert.throws(() => api.savePendingProjectCase(storage, altered), { code: 'project_plan_case_pending_unavailable' });
-  assert.equal(api.readPendingProjectCase(storage, intent.projectId).goalContext.purpose, 'query');
+  assert.equal(api.readPendingProjectCase(storage, intent.projectId)?.goalContext?.purpose, 'query');
 });
 
 for (const lostStage of ['create', 'link'] as const) test(`a lost ${lostStage} response is recovered by exact read-only receipts without repeating either POST`, async t => {
-  const { host, intent } = await fixture(t), api = await client(), original = globalThis.fetch, writes: string[] = []; let lost = false;
+  const { host, intent } = await fixture(t), original = globalThis.fetch, writes: string[] = []; let lost = false;
   globalThis.fetch = async (input, init) => {
     const route = String(input), response = await original(host.baseUrl + route, { ...init, headers: { ...host.headers, ...init?.headers } });
     if (init?.method === 'POST') {
@@ -98,7 +91,7 @@ for (const lostStage of ['create', 'link'] as const) test(`a lost ${lostStage} r
 });
 
 test('an explicitly selected existing Case is linked once and a later changed goal or Case revision is not substituted into its saved intent', async t => {
-  const { host, intent } = await fixture(t), api = await client(), original = globalThis.fetch;
+  const { host, intent } = await fixture(t), original = globalThis.fetch;
   const created = await (await host.request('/api/cases', 'POST', intent.create)).json();
   const existing: ProjectPlanCaseConnection = { projectId: intent.projectId, caseId: created.case.id, caseRevision: created.case.revision, goalBinding: intent.goalBinding, linkOperationId: randomUUID() };
   const writes: string[] = [];

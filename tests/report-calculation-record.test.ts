@@ -1,17 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
 
-const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)), configFile: false,
-  cacheDir: path.join(tmpdir(), 'optracall-report-calculation-ui-cache'), optimizeDeps: { noDiscovery: true },
-  server: { middlewareMode: true, watch: null }, appType: 'custom', oxc: { jsx: { runtime: 'automatic' } },
-});
-const { ReportCalculationReview } = await server.ssrLoadModule('/src/host/ui/ReportCalculationReview.tsx').finally(() => server.close());
+const { ReportCalculationReview } = await import('../src/host/ui/ReportCalculationReview.tsx');
 
 function render(outcome: string, states = ['provided'], sourceStatus?: string) {
   return renderToStaticMarkup(createElement(ReportCalculationReview, { projectId: 'project', taskId: 'task', value: {

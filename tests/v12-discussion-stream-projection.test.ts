@@ -5,7 +5,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
+import type { NativeMessage } from '../src/host/ui/project-types.ts';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider } from './fixtures/tool-provider.ts';
 import * as client from '../src/host/ui/strategy-discussion-client.ts';
@@ -13,9 +14,9 @@ import { projectDiscussionSnapshot, projectDiscussionStreaming } from '../src/ho
 import type { ProjectEvent, ProjectSnapshot } from '../src/agent/project-runtime.ts';
 
 test('two real Pi turns keep both legitimate identical replies while snapshot and stream render no extra copy', { timeout: 65000 }, async t => {
-  const host = await startTestHost(), provider = await startToolProvider(), renderer = await createServer({ configFile: false, logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
+  const host = await startTestHost(), provider = await startToolProvider();
   let stopWatching = () => {};
-  t.after(async () => { stopWatching(); await renderer.close(); await host.close(); await provider.close(); });
+  t.after(async () => { stopWatching(); await host.close(); await provider.close(); });
   const originalFetch = globalThis.fetch, reply = '合成同文回复必须按两个原生条目保留。';
   const req = async (route: string, method = 'GET', body?: unknown) => { const response = await originalFetch(host.baseUrl + route, { method, headers: host.headers, ...(body ? { body: JSON.stringify(body) } : {}) }); assert.ok(response.ok, `${route}: ${response.status}`); return response.json(); };
   await req('/api/configuration', 'PUT', { name: 'Stream projection fixture', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-stream-projection', apiKey: 'synthetic-projection-only' });
@@ -24,8 +25,8 @@ test('two real Pi turns keep both legitimate identical replies while snapshot an
   t.mock.method(globalThis, 'fetch', (resource: RequestInfo | URL, init?: RequestInit) => { const route = String(resource); return originalFetch(route.startsWith('/api/') ? host.baseUrl + route : resource, { ...init, headers: route.startsWith('/api/') ? { ...init?.headers, ...host.headers } : init?.headers }); });
   let detail = await client.readStrategyDiscussion(id), snapshot: ProjectSnapshot = detail.snapshot, streaming = '';
   const events: ProjectEvent[] = [], projection: { label: string; messages: number; streaming: string; count: number }[] = [];
-  const { StrategyDiscussionTranscript } = await renderer.ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
-  const render = () => renderToStaticMarkup(createElement(StrategyDiscussionTranscript, { messages: snapshot.messages.filter(message => message.role === 'user' || message.role === 'assistant'), streaming }));
+  const { StrategyDiscussionTranscript } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
+  const render = () => renderToStaticMarkup(createElement(StrategyDiscussionTranscript, { messages: snapshot.messages.filter((message): message is NativeMessage => message.role === 'user' || message.role === 'assistant'), streaming }));
   const apply = (event: ProjectEvent, label: string = event.type) => { const previousSnapshot = snapshot; snapshot = projectDiscussionSnapshot(snapshot, event); streaming = projectDiscussionStreaming(streaming, event, previousSnapshot); projection.push({ label, messages: snapshot.messages.length, streaming, count: render().split(reply).length - 1 }); };
   let disconnectAfterFinalSnapshot = false, disconnectedBeforeSettled = false;
   const controllers: AbortController[] = [], watches: Promise<void>[] = [];

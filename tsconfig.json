@@ -10,7 +10,7 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node", "vite/client"]
+    "types": ["node"]
   },
-  "include": ["src", "tests", "vite.config.ts"]
+  "include": ["src", "tests"]
 }

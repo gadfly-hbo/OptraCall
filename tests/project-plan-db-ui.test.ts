@@ -1,6 +1,6 @@
-import test, { after } from 'node:test';
+import './fixtures/register-ui.ts';
+import test from 'node:test';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import type { DbLinkPlanningSource } from '../src/host/db-link-planning.ts';
 
 const taskId = '00000000-0000-4000-8000-000000000002';
@@ -9,18 +9,12 @@ const taskSource: DbLinkPlanningSource = { ...source, taskId, scope: { objects: 
 const reference = (value: DbLinkPlanningSource) => ({ kind: 'connector', id: value.id, version: value.version, sha256: value.sha256, permissionRef: value.permissionRef });
 const plan = { request: '核对已授权来源', premises: [], materials: [], coverage: [], tasks: [{ key: 'existing', name: '原分析任务', taskId, selected: true, scope: '', capabilities: [reference(taskSource)] }], taskMode: 'single', summaryTaskKey: 'existing', dependencies: [], caseContext: null };
 const project = { schemaVersion: 2, id: '00000000-0000-4000-8000-000000000001', name: '合成来源确认项目', rootPath: '/synthetic/project', archivedAt: null, configuration: { id: 'synthetic', revision: 1 }, tasks: [{ id: taskId, name: '原分析任务', archivedAt: null, configuration: { id: 'synthetic', revision: 1 } }] };
-let page: Promise<unknown> | undefined;
 async function rendered(sources: DbLinkPlanningSource[], chosenPlan = plan) {
   const [React, ReactDom] = await Promise.all([import('react'), import('react-dom/server')]);
-  page ??= (async () => {
-    const [vite, plugin] = await Promise.all([import('vite'), import('@vitejs/plugin-react')]);
-    const server = await vite.createServer({ configFile: false, plugins: [plugin.default()], cacheDir: path.resolve('.local/overall-architecture-product-gaps/pm05/ui-ssr-cache'), logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
-    after(() => server.close());
-    return (await server.ssrLoadModule('/src/host/ui/ProjectPlanPage.tsx')).ProjectPlanPage;
-  })();
+  const { ProjectPlanPage } = await import('../src/host/ui/ProjectPlanPage.tsx');
   const catalog = { skills: [], methods: [], connectors: sources.map(value => ({ ...reference(value), title: value.title, enabled: value.enabled, requiresPermission: true, ...(value.taskId ? { taskId: value.taskId } : {}) })), databaseSources: sources, materials: [], caseContexts: [] };
   const props = { project, initialState: { formatVersion: 1, projectId: project.id, revision: 1, draft: { version: 1, createdAt: '2026-11-16T00:00:00.000Z', plan: chosenPlan }, history: [] }, initialCapabilities: catalog, onBack() {}, onConfirmed() {}, onOpenTask() {}, onManageCapabilities() {} };
-  return ReactDom.renderToStaticMarkup(React.createElement(await page as React.ComponentType<never>, props as never));
+  return ReactDom.renderToStaticMarkup(React.createElement(ProjectPlanPage as React.ComponentType<never>, props as never));
 }
 
 test('PG05 UI: the existing Task selects its exact narrowed database reference and shows only its effective scope', async () => {
