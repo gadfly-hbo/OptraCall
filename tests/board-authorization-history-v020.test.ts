@@ -1,11 +1,11 @@
-import test, { after } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
 import { createDecisionBoardRoutes } from '../extensions/business-plugins/decision-board/api/routes.ts';
 import { boardRecordVersion, createDecisionBoardStore } from '../extensions/business-plugins/decision-board/storage/store.ts';
 
@@ -32,12 +32,9 @@ test('A16 original Board HTTP returns exact read-only authorization history, ori
   assert.equal(f.store.getTask(f.task.id).status, 'todo'); assert.equal(f.store.listFeedbackHistory(f.task.id).length, 0);
 });
 
-let server: ReturnType<typeof createServer> | undefined;
-after(async () => { await (await server)?.close(); });
 test('A16 readonly Task history separates choice, action authorization, user report and effect validation', async t => {
   const f = await fixture(t);
-  server ??= createServer({ configFile: false, logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
-  const module = await (await server).ssrLoadModule('/extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx');
+  const module = await import('../extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx');
   const html = renderToStaticMarkup(createElement(module.ActionAuthorityHistory, { task: f.task, initialHistory: [f.authorization] }));
   for (const label of ['方案选择', '行动授权', '用户报告发生', '效果验证', '未独立验证', '只授权门店甲本周小范围发券', 'v2', '查看原方案与选择']) assert.ok(html.includes(label), label);
   assert.doesNotMatch(html, /<button[^>]*>执行|<button[^>]*>开始经营/);

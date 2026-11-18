@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
 import { catalogItems } from '../src/host/ui/catalog-data.ts';
 import { formatAssertionGain, formatMetricValue, formatRate, formatRelativeChange } from '../src/host/ui/skill-evaluation.ts';
 
@@ -23,10 +23,8 @@ test('the historical deep-research receipt remains bound to its tested revision 
   assert.equal(catalogItems.find(item => item.id === 'coupon-forecast')?.skill?.evaluation, undefined);
 });
 
-test('an explicitly covered engineering revision keeps its provisional verdict without requesting another user evaluation', async t => {
-  const server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null }, logLevel: 'silent' });
-  t.after(() => server.close());
-  const { SkillEvaluationPanel } = await server.ssrLoadModule('/src/host/ui/SkillEvaluation.tsx');
+test('an explicitly covered engineering revision keeps its provisional verdict without requesting another user evaluation', async () => {
+  const { SkillEvaluationPanel } = await import('../src/host/ui/SkillEvaluation.tsx');
   const historical = catalogItems.find(item => item.id === 'deep-research')!.skill!.evaluation!;
   const evaluation = { ...historical, coversEngineeringRevisions: true, provisional: true, limitations: '有效但昂贵；1/30 baseline 超时，仍计入分母。' };
   const html = renderToStaticMarkup(createElement(SkillEvaluationPanel, { name: '合成样本', evaluation }));
@@ -46,7 +44,7 @@ test('an explicitly covered engineering revision keeps its provisional verdict w
   assert.doesNotMatch(legacyHtml, /覆盖本轮工程修正后的交付版|暂定/);
 });
 
-test('the data-analysis card exposes the approved receipt with unrounded assertion gain and the actual cost and judgment denominators', async t => {
+test('the data-analysis card exposes the approved receipt with unrounded assertion gain and the actual cost and judgment denominators', async () => {
   const item = catalogItems.find(item => item.id === 'data-analysis');
   assert.ok(item, 'The delivered skill must be available in the analysis assets catalog');
   assert.equal(item.category, 'assets');
@@ -67,9 +65,7 @@ test('the data-analysis card exposes the approved receipt with unrounded asserti
   assert.equal(formatRelativeChange(evaluation.seconds), '约 +335%');
   assert.equal(formatRelativeChange(evaluation.tokens), '约 +3912%');
 
-  const server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null }, logLevel: 'silent' });
-  t.after(() => server.close());
-  const { SkillEvaluationPanel } = await server.ssrLoadModule('/src/host/ui/SkillEvaluation.tsx');
+  const { SkillEvaluationPanel } = await import('../src/host/ui/SkillEvaluation.tsx');
   const html = renderToStaticMarkup(createElement(SkillEvaluationPanel, { name: item.name, evaluation }));
   assert.match(html, /78\.6%（11\/14）/);
   assert.match(html, /25\.2 秒 → 109\.7 秒/);

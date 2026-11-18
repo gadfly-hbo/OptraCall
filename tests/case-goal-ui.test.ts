@@ -1,21 +1,16 @@
 import assert from 'node:assert/strict';
-import test, { after } from 'node:test';
-import { createServer } from 'vite';
+import test from 'node:test';
+import './fixtures/register-ui.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-const root = new URL('../', import.meta.url);
-const server = createServer({ root: root.pathname, configFile: false, logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
-after(async () => { await (await server).close(); });
-const modules = server.then(async value => {
-  // Load the actual component graph once before asking for its shared modules.
-  const editors = await value.ssrLoadModule('/src/host/ui/CaseDialogs.tsx');
-  const picker = await value.ssrLoadModule('/src/host/ui/CaseGoalPicker.tsx');
-  const panel = await value.ssrLoadModule('/src/host/ui/CaseGoalsPanel.tsx');
-  const client = await value.ssrLoadModule('/src/host/ui/case-client.ts');
-  return { editors, picker, panel, client };
-});
-const editors = modules.then(value => value.editors);
+import type { GoalVersion } from '../src/host/strategy-goals-types.ts';
+import type { CaseRecord } from '../src/host/case-types.ts';
+
+const editors = import('../src/host/ui/CaseDialogs.tsx');
+const picker = import('../src/host/ui/CaseGoalPicker.tsx');
+const panel = import('../src/host/ui/CaseGoalsPanel.tsx');
+const client = import('../src/host/ui/case-client.ts');
 
 test('A03: creating a Case requires an explicit primary goal inside the original Case form', async () => {
   const { CaseEditor } = await editors;
@@ -26,12 +21,9 @@ test('A03: creating a Case requires an explicit primary goal inside the original
   assert.match(html, /尚未选择主目标|请选择.*主目标/);
 });
 
-const picker = modules.then(value => value.picker);
-const panel = modules.then(value => value.panel);
-const client = modules.then(value => value.client);
 const goalId = '00000000-0000-4000-8000-000000000001';
-const version = (number: number, title: string, status: string = 'adopted') => ({ goalId, version: number, title, status, outcome: '核清适用窗口与有据改善方向', perspective: 'profit', scope: { kind: 'enterprise', id: 'enterprise-one', name: '测试企业' }, measurement: { kind: 'deliverable', criterion: '可核的阶段结论及限制' }, baseline: { state: 'pending', description: '历史待补' }, responsible: '运营', createdAt: '2026-11-16T00:00:00Z' });
-const record = { id: 'case-one', title: '原Case', description: '', judgement: '', nextStep: '', status: 'analyzing', closeReason: null, closedAt: null, revision: 3, createdAt: '2026-11-15T00:00:00Z', updatedAt: '2026-11-16T00:00:00Z' };
+const version = (number: number, title: string, status: GoalVersion['status'] = 'adopted'): GoalVersion => ({ goalId, version: number, title, status, outcome: '核清适用窗口与有据改善方向', perspective: 'profit', scope: { kind: 'enterprise', id: 'enterprise-one', name: '测试企业' }, measurement: { kind: 'deliverable', criterion: '可核的阶段结论及限制' }, baseline: { state: 'pending', description: '历史待补' }, responsible: '运营', createdAt: '2026-11-16T00:00:00Z' });
+const record: CaseRecord = { id: 'case-one', title: '原Case', description: '', judgement: '', nextStep: '', status: 'analyzing', closeReason: null, closedAt: null, revision: 3, createdAt: '2026-11-15T00:00:00Z', updatedAt: '2026-11-16T00:00:00Z' };
 
 test('A03: goal picker exposes only adopted exact versions and never selects an unrelated default goal', async () => {
   const { CaseGoalPicker } = await picker;

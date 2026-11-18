@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
 import fs from 'node:fs/promises';
 import { manualSections } from '../src/host/ui/help-content.ts';
 import { manualMarkdown } from '../src/host/ui/help-document.ts';
@@ -13,9 +13,8 @@ test('HELP-01: the existing topbar exposes a semantic help action', async t => {
     location: { href: 'http://127.0.0.1:4173/?project=render-only' }, innerWidth: 1440,
     matchMedia: () => ({ matches: false }),
   } });
-  const server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null }, logLevel: 'silent' });
-  t.after(async () => { await server.close(); if (original) Object.defineProperty(globalThis, 'window', original); else Reflect.deleteProperty(globalThis, 'window'); });
-  const { App } = await server.ssrLoadModule('/src/host/ui/App.tsx');
+  t.after(() => { if (original) Object.defineProperty(globalThis, 'window', original); else Reflect.deleteProperty(globalThis, 'window'); });
+  const { App } = await import('../src/host/ui/App.tsx');
   const html = renderToStaticMarkup(createElement(App));
   const topbar = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
   assert.match(topbar, /<button[^>]*aria-label="帮助"[^>]*>.*?帮助<\/button>/s);

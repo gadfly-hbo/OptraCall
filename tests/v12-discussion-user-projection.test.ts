@@ -5,7 +5,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
+import type { NativeMessage } from '../src/host/ui/project-types.ts';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 import type { GoalDiscussionSourceRef } from '../src/host/strategy-goals-types.ts';
@@ -13,8 +14,7 @@ import { readStrategyDiscussion, closeStrategyDiscussion, canSettleDiscussionMes
 
 test('Host → real discussion client → transcript shows original user words while native context remains intact', { timeout: 65000 }, async t => {
   const host = await startTestHost(), provider = await startToolProvider();
-  const renderer = await createServer({ configFile: false, logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
-  t.after(async () => { await renderer.close(); await host.close(); await provider.close(); });
+  t.after(async () => { await host.close(); await provider.close(); });
   const originalFetch = globalThis.fetch;
   const req = async (path: string, method = 'GET', body?: unknown) => { const response = await originalFetch(host.baseUrl + path, { method, headers: host.headers, ...(body ? { body: JSON.stringify(body) } : {}) }); assert.ok(response.ok, `${path}: ${response.status}`); return response.json(); };
   await req('/api/configuration', 'PUT', { name: 'Projection fixture', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-projection', apiKey: 'synthetic-user-projection-only' });
@@ -32,8 +32,8 @@ test('Host → real discussion client → transcript shows original user words w
   const userMessage = detail.snapshot.messages.find(message => message.role === 'user');
   assert.ok(userMessage); assert.equal(userMessage.originalUserText, userText);
   const nativeBody = providerMessageText(userMessage.content); assert.match(nativeBody, /usageContext/); assert.match(nativeBody, /Playing to Win/);
-  const { StrategyDiscussionTranscript } = await renderer.ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
-  const html = renderToStaticMarkup(createElement(StrategyDiscussionTranscript, { messages: detail.snapshot.messages.filter(message => message.role === 'user' || message.role === 'assistant') }));
+  const { StrategyDiscussionTranscript } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
+  const html = renderToStaticMarkup(createElement(StrategyDiscussionTranscript, { messages: detail.snapshot.messages.filter((message): message is NativeMessage => message.role === 'user' || message.role === 'assistant') }));
   const evidence = new URL('../.local/v12-implementation/ui/user-projection/', import.meta.url); await mkdir(evidence, { recursive: true });
   await writeFile(new URL('host-client-ssr.json', evidence), JSON.stringify({ discussionId: id, userText, nativeUiMessage: userMessage, nativeBody, html, providerRequests: provider.requests.length }, null, 2));
   assert.match(html, new RegExp(`<p>${userText}</p>`));
@@ -44,8 +44,7 @@ test('Host → real discussion client → transcript shows original user words w
 
 test('a Goal source opens its exact durable tool-call carrier through the real client and source renderer', { timeout: 65000 }, async t => {
   const host = await startTestHost(), provider = await startToolProvider();
-  const renderer = await createServer({ configFile: false, logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
-  t.after(async () => { await renderer.close(); await host.close(); await provider.close(); });
+  t.after(async () => { await host.close(); await provider.close(); });
   const originalFetch = globalThis.fetch;
   const req = async (path: string, method = 'GET', body?: unknown) => { const response = await originalFetch(host.baseUrl + path, { method, headers: host.headers, ...(body ? { body: JSON.stringify(body) } : {}) }); assert.ok(response.ok, `${path}: ${response.status}`); return response.json(); };
   await req('/api/configuration', 'PUT', { name: 'Source fixture', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-source', apiKey: 'synthetic-source-only' });
@@ -62,7 +61,7 @@ test('a Goal source opens its exact durable tool-call carrier through the real c
   const { readStrategyDiscussionSource } = await import('../src/host/ui/strategy-discussion-client.ts');
   assert.ok(source.sessionId); assert.ok(source.entryType); const nativeSource = source as GoalDiscussionSourceRef;
   const receipt = await readStrategyDiscussionSource(nativeSource);
-  const { StrategyDiscussionSourceBody } = await renderer.ssrLoadModule('/src/host/ui/StrategyDiscussionSourceView.tsx');
+  const { StrategyDiscussionSourceBody } = await import('../src/host/ui/StrategyDiscussionSourceView.tsx');
   const html = renderToStaticMarkup(createElement(StrategyDiscussionSourceBody, { detail: receipt }));
   assert.match(receipt.body, /toolCall/); assert.match(receipt.body, /propose-goal/); assert.match(receipt.body, /兼顾事业与家庭/);
   assert.match(html, /准确原生载体/); assert.match(html, /toolCall/); assert.match(html, /不是补写的 Agent 报告/);
@@ -71,8 +70,7 @@ test('a Goal source opens its exact durable tool-call carrier through the real c
 
 test('adoption refreshes the parent authority and the same discussion card without another adoption or model request', { timeout: 65000 }, async t => {
   const host = await startTestHost(), provider = await startToolProvider();
-  const renderer = await createServer({ configFile: false, logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
-  t.after(async () => { await renderer.close(); await host.close(); await provider.close(); });
+  t.after(async () => { await host.close(); await provider.close(); });
   const originalFetch = globalThis.fetch;
   const req = async (route: string, method = 'GET', body?: unknown) => { const response = await originalFetch(host.baseUrl + route, { method, headers: host.headers, ...(body ? { body: JSON.stringify(body) } : {}) }); assert.ok(response.ok, `${route}: ${response.status}`); return response.json(); };
   await req('/api/configuration', 'PUT', { name: 'Adoption refresh fixture', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-adoption-refresh', apiKey: 'synthetic-refresh-only' });
@@ -86,7 +84,7 @@ test('adoption refreshes the parent authority and the same discussion card witho
   let detail = await client.readStrategyDiscussion(id);
   for (let attempt = 0; attempt < 400 && (detail.busy || !['completed', 'failed', 'cancelled'].includes(detail.discussion.lastRun?.status || '')); attempt++) { await delay(25); detail = await client.readStrategyDiscussion(id); }
   assert.equal(detail.discussion.lastRun?.status, 'completed'); const candidate = detail.goals[0]; assert.equal(candidate.status, 'candidate');
-  const panel = await renderer.ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const panel = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   const before = renderToStaticMarkup(createElement(panel.StrategyDiscussionCandidates, { goals: detail.goals, discussionId: id, locked: false, onReview() {} }));
   assert.match(before, /原目标候选 · 待采用/); assert.match(before, /核对并采用/);
   await client.adoptDiscussionGoal(id, { operationId: randomUUID(), goalId: candidate.goalId, version: candidate.version, expectedVersion: candidate.version, goalContentSha256: detail.goalContentHashes[`${candidate.goalId}:${candidate.version}`], decision: '明确采用本次集中核对目标，保留前提；不授权经营执行。' });
