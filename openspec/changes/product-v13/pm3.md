@@ -1,5 +1,15 @@
 # 无看板历史轮次的 Teach
 
+## PM 结案（2026-11-19）
+
+**P2 已关闭。** PM 确认固定候选 `01b7820` 满足上次约定的四项验收条件，v1.3 决策闭环可进入隔离候选的用户验收。上轮四项差额和六个修正场景维持原结论，本轮无新增工程修正项。
+
+PM 交叉核对了两份实际 Pi 请求、原生回复和 Case 保存记录。会员召回进入 B 轮后，用户仍能从无看板行动的 A 轮发起 Teach。暂缓例的「未见改善」与不行动例的「效果未知」分别保存回 A，重开可找回准确原回复，B 的取舍、授权和复盘保持原样。结案时 Mini 正式服务运行 `69e766f`。五份专业 Skill 的独立测评与确版、真实模型专业质量、正式运行采用和用户最终验收继续单列。
+
+已核对报告 SHA-256 为 `c1017f9722a0993800e2d20d229220e542eeea38b9ab64b3e791c897bb032e00`。[PM 独立产品复核报告](/Users/bendandebaba/.codex/plans/optracall-architecture-product-v1.3/product-review/OptraCall_v1.3_PM_Historical_Teach_Closure_01b7820_2026-11-19.md)
+
+## 工程任务与回交记录
+
 原 PM 已关闭产品提交 `abe1d16` 的四项差额和六个修正场景。本轮目标是让用户在同一事项进入 B 轮之后，仍能依 A 轮的暂缓或不行动取舍启动 Teach，提交后来取得的观察，并在重开后回看。产品依据为框架 v0.8 C7/C12、规格 v0.3 §3 与 T3。PM 报告 SHA-256 为 `ca9439a531455754b762635bab74a4b4b001f5d34588d0e7b7acf52a97acdf40`。[原 PM 复核报告](/Users/bendandebaba/.codex/plans/optracall-architecture-product-v1.3/product-review/OptraCall_v1.3_PM_Repair_Product_Review_abe1d16_2026-11-19.md)
 
 沿用 Case 的取舍及原依据、人工建 Task 表单、Interface v3 的 project/task owner、现有普通任务 profile 与官方 Pi 1.4.0。Host 负责交付选中的轮次、校验权限及保存身份。用户确认是否建 Task 和保存复盘，Teach 负责解释实际观察。继续由看板保存实际行动和授权。
