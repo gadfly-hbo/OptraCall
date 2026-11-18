@@ -1,5 +1,11 @@
 # OptraCall v1.3 工程回交
 
+## Git 交付与原位归档
+
+本目录保留 v1.3 从初次回交到 PM 结案的完整记录。最终受审产品为 `01b7820cd7ceffb4d2f7f78f9c0ab4cbbd1c8793`。PM 已关闭最后一项历史 Teach P2，决策闭环可进入隔离候选的用户验收。[逐轮修正](pm2-review.md) · [PM 结案与最终证据](pm3.md)
+
+工作分支 `OC｜upgrade-v0.3.0` 通过同一个 PR 交付到 `main`。该 PR 记录交付 head、squash 提交以及各自的 CI 运行。此次授权限于 Git 与 CI。正式服务采用、五份专业 Skill 的独立测评及确版、真实模型专业质量和用户最终验收沿各自记录核定。[Git 交付及 CI 回执（PR #85）](https://github.com/gadfly-hbo/OptraCall/pull/85)
+
 PM 开发包已确认框架、规格、角色／Skill 补充及 Demo。完整目录、清单与启动前状态见 [任务清单](spec.md)。本轮的交付位置是 Mac mini 独立工作树 `/Users/bendandebaba/.codex/worktrees/67e5/OptraCall` 的 `OC｜upgrade-v0.3.0`。验证资料均为隔离的合成资料。正式数据根、原生会话与试用服务沿用原版本。
 
 ## 固定候选与回交状态
