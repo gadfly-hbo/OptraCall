@@ -125,7 +125,9 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     const selected = issue(caseId, issueId);
     const choices = cases.getStrategyChoices(caseId).filter(c => c.issueId === issueId);
     const events = cases.getEvents('case', caseId), board = deps.board;
-    const rounds = choices.map(choice => ({ choice, historyLimited:false, strategy: cases.getDecision(caseId, choice.strategyRef.recordId, choice.strategyRef.revision),
+    const unresolvedObservations = new Set<string>();
+    const observationKey = (choiceId:string, projectId:string, taskId:string, revisionId:string) => [choiceId,projectId,taskId,revisionId].join('/');
+    const rounds = choices.map(choice => ({ choice, historyLimited:false, reviewObservationLimited:false, strategy: cases.getDecision(caseId, choice.strategyRef.recordId, choice.strategyRef.revision),
       review: events.map(e => e.changes.issueReview?.after as CaseIssueReview | undefined).find(r => r?.choiceId === choice.choiceId) ?? null,
       actions: [] as { projectId: string; itemId: string; taskId: string; title: string; status: string; currentAuthorizationId?: string; authorizations: { id: string; scope: string; decision: string; time: string }[]; observationTimeLimited?: boolean; quotedFeedbackLimited?: boolean;
         feedback: { revisionId: string; observedAt: string; authorizationId: string; actionTitle: string; effect: string; outcome: string; metricDelta: string; review: string }[] }[] }));
@@ -149,7 +151,10 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
           let quotedFeedbackLimited=false;
           const observations = await Promise.all(board.listFeedbackHistory(task.id).map(async feedback => {
             let match=authorityAtFeedback(all,feedback);
+            const identity = observationKey(round.choice.choiceId,item.projectId,task.id,feedback.revisionId);
+            if (match === undefined) unresolvedObservations.add(identity);
             if (match && ours(match.authority) && !await matchesOriginalCall(feedback,match.authority)) {
+              unresolvedObservations.add(identity);
               quotedFeedbackLimited=true;
               match=null;
             }
@@ -169,7 +174,9 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     for (const round of rounds) {
       const feedback = round.review?.feedback;
       if (feedback && !round.actions.some(a => a.taskId === feedback.boardTaskId && a.feedback.some(f => f.revisionId === feedback.feedbackRevisionId && (!feedback.authorizationId || f.authorizationId === feedback.authorizationId)))) {
-        round.historyLimited = true;
+        const identity = observationKey(round.choice.choiceId,feedback.projectId,feedback.boardTaskId,feedback.feedbackRevisionId);
+        if (unresolvedObservations.has(identity)) round.reviewObservationLimited=true;
+        else round.historyLimited=true;
         round.review = null;
       }
     }

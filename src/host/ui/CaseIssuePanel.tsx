@@ -124,10 +124,11 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
             <button className="text-button" disabled={disabled || !project} onClick={()=>project && onCreate(project,{type:'teach',caseId:record.id,issueId,choiceId:r.choice.choiceId,feedbackRevisionId:f.revisionId})}>按此观察准备 Teach</button></p>) :
             <p>{a.observationTimeLimited || a.quotedFeedbackLimited ? '观察与授权的对应关系待核' : a.currentAuthorizationId ? '待反馈' : '原行动授权已撤回或由后续授权取代'} {onBoard && <button className="text-button" onClick={() => onBoard({openOriginal:true,boardTaskId:a.taskId,feedbackRevisionId:null,draftKey:a.taskId})}>查看原看板行动</button>}</p>}
         </div>)}
+        {r.reviewObservationLimited && <p>本轮已保存的复盘引用了归属待核的观察。请核对原看板记录。</p>}
         {r.historyLimited && <p>历史记录有限，当前无法读取原行动或观察。请核对项目关联与原资料权限。</p>}
         {!r.actions.length && !r.historyLimited && <p>{r.review ? '已记录实际观察' : !caseChoicePermitsAction(r.choice.choice) ? '等待本轮实际观察' : '尚未授权行动'}</p>}
         {r.review && <><p>实际观察 · {r.review.observation}</p><p>复盘判断 · {r.review.judgement}</p><p>下一步或结束理由 · {r.review.nextStep}</p><button className="text-button" onClick={() => void showSource(r.review!.reply)}>查看 Teach 原回复</button></>}
-        {!r.review && record.status !== 'closed' && <RoundReview round={r} replies={sources?.replies ?? []} disabled={disabled}
+        {!r.review && !r.reviewObservationLimited && record.status !== 'closed' && <RoundReview round={r} replies={sources?.replies ?? []} disabled={disabled}
           inspect={showSource} submit={fields => void write('review', {expectedRevision:record.revision,...fields})}/>}
         {r.review&&onTeachReview&&(r.choice.goalBinding?.strategy ? <div className="case-inline-actions">{(['goal','strategy'] as const).map(role=>
           <button key={role} type="button" className="text-button" onClick={()=>onTeachReview({role,...r.choice.goalBinding!.primary,teachReview:{caseId:record.id,issueId,choiceId:r.choice.choiceId,reviewId:r.review!.operationId}})}>{role==='goal'?'提交策略复核':'提交战略假设复核'}</button>)}</div> : <p>原轮次的目标或具体策略待核。</p>)}

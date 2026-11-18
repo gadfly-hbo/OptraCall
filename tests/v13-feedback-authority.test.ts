@@ -26,6 +26,8 @@ test('uncertain observation time stays on the original board and cannot be prese
     const limited=(await f.api(f.issuePath)).rounds[0];
     assert.equal(limited.actions[0].observationTimeLimited,true);
     assert.deepEqual(limited.actions[0].feedback,[]);assert.equal(limited.review,null);
+    assert.equal(limited.reviewObservationLimited,true);
+    assert.equal(limited.historyLimited,false);
     const board=await f.api('/api/decision-board/feedback/history?taskId='+action.taskId);
     assert.ok(JSON.stringify(board).includes(original.revisionId));
     const post=await f.host.request(f.taskPath,'POST',{name:'待核观察交接',operationId:randomUUID(),assignment:{type:'teach',skill:null,issue}});
