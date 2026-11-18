@@ -47,8 +47,23 @@
 .strategy-discussion .sg-row { margin: 10px 0; }
 .strategy-discussion-messages { max-height: 440px; overflow-y: auto; margin: 14px 0; border-top: 1px solid var(--line); }
 .strategy-discussion-message { padding: 14px 0; border-bottom: 1px solid var(--line); }
-.strategy-discussion-message strong { color: var(--muted); font-size: 12px; }
-.strategy-discussion-message p { margin: 7px 0 0; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.strategy-discussion-message > strong { color: var(--muted); font-size: 12px; }
+.strategy-discussion-message > p { margin: 7px 0 0; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.strategy-discussion-reply { min-width: 0; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.strategy-discussion-reply p { margin: 8px 0; }
+.strategy-discussion-reply :is(h3, h4, h5, h6) { margin: 14px 0 8px; font-size: 14px; line-height: 1.45; }
+.strategy-discussion-reply h3 { font-size: 16px; }
+.strategy-discussion-reply :is(ul, ol) { margin: 7px 0 12px; padding-inline-start: 22px; }
+.strategy-discussion-reply li { margin: 3px 0; }
+.strategy-discussion-reply .sg-table-scroll { margin: 5px 0 8px; }
+.strategy-discussion-reply .sg-table { min-width: 0; }
+.strategy-discussion-reply .sg-table :is(th, td) { min-width: 118px; padding: 8px 10px; }
+.strategy-discussion-reply .sg-table th { color: var(--ink); }
+.strategy-discussion-reply pre { overflow-x: auto; padding: 9px 11px; border-radius: 5px; background: var(--subtle); }
+.strategy-discussion-reply code { font-size: .94em; }
+.strategy-discussion-reply blockquote { margin: 8px 0; padding-inline-start: 12px; border-inline-start: 2px solid var(--line); }
+.strategy-discussion-reply a { color: var(--accent); }
+.strategy-discussion-reply .strategy-discussion-literal { white-space: pre-wrap; }
 .strategy-discussion-message.user { padding-left: 14px; border-left: 2px solid var(--accent-soft); }
 .strategy-discussion-composer { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--canvas); }
 .strategy-discussion-composer textarea { display: block; width: 100%; min-height: 72px; border: 0; resize: vertical; background: transparent; color: var(--ink); font: inherit; font-size: 13px; line-height: 1.7; }
