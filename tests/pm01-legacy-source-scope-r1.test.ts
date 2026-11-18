@@ -1,11 +1,11 @@
-import test, { after, type TestContext } from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { isValidElement } from 'react';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 import { readStrategyDiscussion, updateStrategyDiscussion } from '../src/host/ui/strategy-discussion-client.ts';
@@ -15,9 +15,6 @@ import type { StrategyDiscussionBackgroundSelection } from '../src/host/ui/Strat
 // actual Host/Pi/Provider/native. No old fixed-output test or shared dependency.
 const parent = path.resolve('.local/v12-pm01-r1/author');
 await mkdir(parent, { recursive: true });
-const renderRoot = await mkdtemp(path.join(parent, 'component-'));
-const renderer = createServer({ configFile: false, cacheDir: path.join(renderRoot, 'vite-cache'), logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
-after(async () => { await (await renderer).close(); });
 const sha = (value: Uint8Array | string) => createHash('sha256').update(value).digest('hex');
 const missingScope = (owner: unknown) => !Object.hasOwn(owner as object, 'sourceScope');
 function input(tree: unknown, id: string): any {
@@ -83,7 +80,7 @@ async function fixture(t: TestContext, first: 'read' | 'refs' | 'catalog' = 'rea
 
 test('R1: cancelling a truly read legacy selection through the real background component and original client prevents native redispatch', { timeout: 60000 }, async t => {
   const f = await fixture(t);
-  const { StrategyDiscussionBackground } = await (await renderer).ssrLoadModule('/src/host/ui/StrategyDiscussionPanel.tsx');
+  const { StrategyDiscussionBackground } = await import('../src/host/ui/StrategyDiscussionPanel.tsx');
   let selection: StrategyDiscussionBackgroundSelection = { projectId: f.project.id, sources: f.detail.discussion.sources, sourceScope: undefined };
   const tree = StrategyDiscussionBackground({ id: 'legacy', selection, projects: [f.project], locked: false, isExistingDiscussion: true, onChange(value: StrategyDiscussionBackgroundSelection) { selection = value; }, onList() {} });
   const checkbox = input(tree, 'legacy-use-0'); assert.equal(checkbox.props.checked, true);

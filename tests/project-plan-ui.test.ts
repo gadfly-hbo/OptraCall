@@ -1,4 +1,5 @@
-import test, { after } from 'node:test';
+import './fixtures/register-ui.ts';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as api from '../src/host/ui/project-plan-client.ts';
 import type { ProjectPlanContent } from '../src/host/project-plan-types.ts';
@@ -64,19 +65,10 @@ test('read-only recovery matches the original operation hash and rejects edited 
   } finally { globalThis.fetch = original; }
 });
 
-let pageModule: Promise<{ ProjectPlanPage: unknown }> | undefined;
 async function renderedPage(props: Record<string, unknown>): Promise<string> {
   const [React, ReactDom] = await Promise.all([import('react'), import('react-dom/server')]);
-  pageModule ??= (async () => {
-    const [{ mkdir }, path, vite, plugin] = await Promise.all([import('node:fs/promises'), import('node:path'), import('vite'), import('@vitejs/plugin-react')]);
-    const evidence = path.resolve('.local/overall-architecture-upgrade/development/project-plan-ui'); await mkdir(evidence, { recursive: true });
-    const server = await vite.createServer({ configFile: false, plugins: [plugin.default()], cacheDir: path.join(evidence, 'ssr-cache'), logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } });
-    after(() => server.close());
-    const module = await server.ssrLoadModule('/src/host/ui/ProjectPlanPage.tsx');
-    return { ProjectPlanPage: module.ProjectPlanPage };
-  })();
-  const module = await pageModule;
-  return ReactDom.renderToStaticMarkup(React.createElement(module.ProjectPlanPage as React.ComponentType<never>, props as never));
+  const { ProjectPlanPage } = await import('../src/host/ui/ProjectPlanPage.tsx');
+  return ReactDom.renderToStaticMarkup(React.createElement(ProjectPlanPage as React.ComponentType<never>, props as never));
 }
 
 const project = { schemaVersion: 2, id: '00000000-0000-4000-8000-000000000001', name: '已有项目工作区', rootPath: '/synthetic/project', createdAt: '2026-11-16T00:00:00.000Z', updatedAt: '2026-11-16T00:00:00.000Z', archivedAt: null, configuration: { id: 'synthetic', revision: 1, name: 'Synthetic', provider: 'synthetic', model: 'synthetic', baseUrl: 'http://127.0.0.1:1' }, tasks: [{ id: '00000000-0000-4000-8000-000000000002', name: '原Task', draft: '', createdAt: '2026-11-16T00:00:00.000Z', updatedAt: '2026-11-16T00:00:00.000Z', sessionStorage: 'task', configuration: { id: 'synthetic', revision: 1, name: 'Synthetic', provider: 'synthetic', model: 'synthetic', baseUrl: 'http://127.0.0.1:1' } }] };

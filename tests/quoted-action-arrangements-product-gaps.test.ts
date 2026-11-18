@@ -9,7 +9,7 @@ import { createQuotedDecisionAdapter } from '../src/host/quoted-decision-adapter
 import { createDecisionBoardStore, boardRecordVersion } from '../extensions/business-plugins/decision-board/storage/store.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
+import './fixtures/register-ui.ts';
 
 async function fixture(t: import('node:test').TestContext) {
   const evidence = path.resolve('.local/overall-architecture-product-gaps/pm03'); await mkdir(evidence, { recursive: true });
@@ -98,13 +98,21 @@ test('PG03: no Goal creates no fake GSA or Case, and cancellation/false quote/cr
 test('PG03 UI: original GSA shows checks and live Board facts, Goal-based and legacy Case authorization displays remain separate', async t => {
   const f = await fixture(t); await f.port('arrange-actions', f.input, f.context);
   const first = f.board.listTasks()[0]; f.board.setTaskStatus(first.id, 'doing');
-  const server = await createServer({ configFile: false, logLevel: 'silent', server: { middlewareMode: true, hmr: false, watch: null } }); t.after(() => server.close());
-  const gsa = await server.ssrLoadModule('/src/host/ui/StrategyGoalsPage.tsx'), authority = await server.ssrLoadModule('/extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx');
-  const board = { items: f.board.listItems().map(item => ({ ...item, tasks: f.board.listTasks().filter(task => task.itemId === item.id) })) };
-  const html = renderToStaticMarkup(createElement(gsa.GoalArrangements, { arrangements: f.goals.list().arrangements, board, onOpenBoard() {} }));
+  const gsa = await import('../src/host/ui/StrategyGoalsPage.tsx'), authority = await import('../extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx');
+  const board = {
+    projects: [], reports: [],
+    stats: {
+      reports: 0, suggested: 0, dismissed: 0, highPrioritySuggested: 0, runningExtractions: 0,
+      adopted: f.board.listItems().filter(item => item.status === 'adopted').length, manual: f.board.listItems().length,
+    },
+    items: f.board.listItems().map(item => ({ ...item, tasks: f.board.listTasks().filter(task => task.itemId === item.id) })),
+  };
+  const { arrangements } = f.goals.list();
+  assert.ok(arrangements);
+  const html = renderToStaticMarkup(createElement(gsa.GoalArrangements, { arrangements, board, onOpenBoard() {} }));
   for (const value of ['上层行动与检查安排', '五店核查安排', '核查窗口与资料来源', '核清会员窗口', '核清供给事实', '进行中', '到原看板维护行动', first.id]) assert.ok(html.includes(value), value);
   assert.equal('status' in f.goals.list().arrangements![0].actions[0], false);
-  const unknown = renderToStaticMarkup(createElement(gsa.GoalArrangements, { arrangements: f.goals.list().arrangements })); assert.match(unknown, /原行动暂不可读取/);
+  const unknown = renderToStaticMarkup(createElement(gsa.GoalArrangements, { arrangements })); assert.match(unknown, /原行动暂不可读取/);
   const goalHistory = renderToStaticMarkup(createElement(authority.ActionAuthorityHistory, { task: first, initialHistory: f.board.listActionAuthorizations(first.id) }));
   assert.match(goalHistory, /原目标 v1/); assert.match(goalHistory, /查看原目标准确版本/); assert.doesNotMatch(goalHistory, /查看原方案与选择/);
   const noGoal = await f.port('arrange-actions', f.input, { ...f.context, requestId: randomUUID(), workContext: null });
