@@ -20,6 +20,8 @@
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.4.0",
     "@modelcontextprotocol/sdk": "1.32.2",
+    "marked": "18.0.11",
+    "marked-cjk-friendly": "0.1.2",
     "mysql2": "3.24.6",
     "node-sql-parser": "5.4.0",
     "pg": "8.23.1",
