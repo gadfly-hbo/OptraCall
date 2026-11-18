@@ -1,11 +1,12 @@
 import { CaseStoreError } from './case-types.ts';
 import { caseDecisionFields, caseDecisionId, caseDecisionRevision, caseDecisionText, parseCaseDecisionTarget } from './case-decision-validation.ts';
-import type { CaseIssueReply, CaseIssueReview } from './case-decision-types.ts';
+import type { CaseDecisionRevision, CaseIssueReply, CaseIssueReview } from './case-decision-types.ts';
 import type { CaseDecisionServiceDependencies } from './case-decision-service.ts';
 import { listTaskResultSources } from './project-task-result-sources.ts';
 import { createNativeSnapshotReadBudget } from './native-session-snapshot.ts';
 
 const fail = (code: string, status = 409): never => { throw new CaseStoreError(code, status); };
+type QualifyReply = (source: CaseIssueReply, requestId: string) => Promise<void>;
 const noAction = new Set(['defer', 'reject', 'no_action', 'stop_considering', 'gather_evidence']);
 function replyReference(input: unknown) {
   const target = parseCaseDecisionTarget({ type: 'source', source: input });
@@ -26,16 +27,18 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     if (!cases.listProjectLinks(caseId).some(link => link.projectId === projectId)) return fail('project_not_linked');
     const project = await deps.projects.get(projectId); deps.assertActive(project); return project;
   }
-  async function readReply(caseId: string, issueId: string, source: CaseIssueReply, type: 'plan' | 'teach', choiceId?: string) {
+  async function readReply(caseId: string, issueId: string, source: CaseIssueReply, type: 'plan' | 'teach', choiceId?: string, qualify?: QualifyReply) {
     const project = await linkedProject(caseId, source.projectId);
     const task = project.tasks.find(t => t.id === source.taskId && !t.archivedAt);
     const owner = task?.assignment?.issue;
     if (!task || task.assignment?.type !== type || owner?.caseId !== caseId || owner.issueId !== issueId || owner.choiceId !== choiceId) return fail('case_issue_source_scope_mismatch');
     const bindings = await listTaskResultSources(project, task);
-    if (!bindings.replies.some(r => r.sessionId === source.sessionId && r.messageId === source.messageId && r.sha256 === source.expectedTextSha256)) return fail('case_issue_reply_unavailable');
-    const actual = await deps.readSource?.(source, { audience: 'human' });
+    const exact = bindings.replies.find(r => r.sessionId === source.sessionId && r.messageId === source.messageId && r.sha256 === source.expectedTextSha256);
+    if (!exact) return fail('case_issue_reply_unavailable');
+    await qualify?.(source,exact.requestId);
+    const actual = await deps.readSource?.(source, { audience: qualify ? 'agent' : 'human' });
     if (actual?.status !== 'available' || !actual.text || actual.sha256 !== source.expectedTextSha256) return fail('case_issue_reply_unavailable');
-    return { title: task.name, text: actual.text };
+    return { title: task.name, text: actual.text, requestId:exact.requestId, feedbackRevisionId: owner.feedbackRevisionId };
   }
   async function inspectIssueReply(caseId: string, issueId: string, input: unknown) {
     issue(caseId, issueId);
@@ -91,6 +94,70 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     }
     return { issue: selected, rounds };
   }
+  function replyKey(source:CaseIssueReply) {return JSON.stringify([source.projectId,source.taskId,source.sessionId,source.messageId,source.expectedTextSha256]);}
+  async function currentTeachRights(caseId:string,issueId:string,choiceId:string,feedbackRevisionId?:string) {
+    const view=await issueTimeline(caseId,issueId), round=view.rounds.find(r=>r.choice.choiceId===choiceId);
+    if (!round) return fail('case_issue_scope_mismatch');
+    const rights = [round.strategy.recordId+'/'+round.strategy.revision];
+    for(const ref of round.strategy.references) if(round.strategy.issueId===issueId && ref.relation==='derived_from' && ref.target.type==='source' && ref.target.source.type==='native-reply') rights.push(replyKey(ref.target.source));
+    for(const a of round.actions) {
+      rights.push(a.projectId+'/'+a.itemId+'/'+a.taskId);
+      for(const f of a.feedback) if (!feedbackRevisionId || f.revisionId===feedbackRevisionId) rights.push(f.revisionId);
+    }
+    return rights;
+  }
+  async function issueModelContext(caseId: string, issueId: string, qualify: QualifyReply, teachChoiceId?: string, feedbackRevisionId?:string) {
+    const timeline = await issueTimeline(caseId,issueId);
+    const rounds = teachChoiceId ? timeline.rounds.filter(r => r.choice.choiceId === teachChoiceId) : timeline.rounds;
+    if (teachChoiceId && !rounds.length) return fail('case_issue_scope_mismatch');
+    if (feedbackRevisionId && !rounds.some(r=>r.actions.some(a=>a.feedback.some(f=>f.revisionId===feedbackRevisionId)))) return fail('case_round_feedback_unavailable');
+    const rights = new Set<string>(), replies = new Map<string,{source:CaseIssueReply;requestId:string;text:string}>();
+    async function exactReply(source:CaseIssueReply,type:'plan'|'teach',choiceId?:string) {
+      const id=replyKey(source);
+      if (!replies.has(id)) {
+        const read = await readReply(caseId,issueId,source,type,choiceId,qualify);
+        replies.set(id,{source,requestId:read.requestId,text:read.text});
+        rights.add(id);
+      }
+      return source;
+    }
+    const revisions = new Map<string,CaseDecisionRevision>();
+    function addProposal(p:CaseDecisionRevision) { revisions.set(p.recordId+'/'+p.revision,p); }
+    for (const round of rounds) addProposal(round.strategy);
+    // A handed Plan is available for discussion before the user makes the first choice.
+    if (!teachChoiceId) {
+      let continuation: string | null = null;
+      do {
+        const page = cases.listDecisions(caseId,{pageSize:50,continuation});
+        for (const p of page.items) if (p.issueId === issueId && p.kind === 'strategy') addProposal(p);
+        continuation = page.continuation;
+      } while (continuation);
+    }
+    const proposals = [];
+    for (const [key,strategy] of revisions) {
+      if (strategy.issueId && strategy.issueId !== issueId) return fail('case_issue_scope_mismatch');
+      if (strategy.origin.projectId) await linkedProject(caseId,strategy.origin.projectId);
+      const planReplies:CaseIssueReply[]=[];
+      for (const ref of strategy.references) {
+        if (ref.relation === 'derived_from' && ref.target.type === 'source' && ref.target.source.type === 'native-reply' && strategy.issueId === issueId)
+          planReplies.push(await exactReply(ref.target.source,'plan'));
+      }
+      rights.add(key);
+      proposals.push({recordId:strategy.recordId,revision:strategy.revision,caseStoreId:strategy.caseStoreId,payload:strategy.payload,planReplies});
+    }
+    const history=[];
+    for(const {choice,actions:allActions,review} of rounds) {
+      const actions=feedbackRevisionId ? allActions.map(a=>({...a,feedback:a.feedback.filter(f=>f.revisionId===feedbackRevisionId)})) : allActions;
+      for(const action of actions) {
+        rights.add(action.projectId+'/'+action.itemId+'/'+action.taskId);
+        for(const f of action.feedback) rights.add(f.revisionId);
+      }
+      const recorded = !teachChoiceId && review ? {...review,reply:await exactReply(review.reply,'teach',choice.choiceId)} : null;
+      history.push({choice:{id:choice.choiceId,decision:choice.choice,reason:choice.reason,previous:choice.previousChoiceId,
+          date:choice.occurredAt,goalBinding:choice.goalBinding,proposed:choice.strategyRef},actions,review:recorded});
+    }
+    return {issue:timeline.issue,proposals,replies:[...replies.values()],rounds:history,sourceRights:[...rights]};
+  }
   async function issueWrite(caseId: string, issueId: string, action: string, input: Record<string, unknown>) {
     const operationId = caseDecisionId(input.operationId);
     return deps.mutate(async () => {
@@ -113,7 +180,8 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
       }
       caseDecisionFields(input, ['operationId', 'expectedRevision', 'choiceId', 'source', 'observation', 'judgement', 'nextStep', 'feedbackRevisionId'], ['source', 'observation', 'judgement', 'nextStep']);
       const source = replyReference(input.source);
-      await readReply(caseId, issueId, source, 'teach', choice.choiceId);
+      const teach = await readReply(caseId, issueId, source, 'teach', choice.choiceId);
+      if (teach.feedbackRevisionId && teach.feedbackRevisionId !== input.feedbackRevisionId) return fail('case_round_feedback_unavailable');
       const round = (await issueTimeline(caseId, issueId)).rounds.find(r => r.choice.choiceId === choice.choiceId)!;
       const selected = round.actions.find(a => a.feedback.some(f => f.revisionId === input.feedbackRevisionId));
       if (!selected && (!noAction.has(choice.choice) || input.feedbackRevisionId !== undefined)) return fail('case_round_waiting_for_feedback');
@@ -122,6 +190,6 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
         observation: caseDecisionText(input.observation, 4000, true), judgement: caseDecisionText(input.judgement, 4000, true), nextStep: caseDecisionText(input.nextStep, 4000, true), ...(feedback ? { feedback } : {}) }) };
     });
   }
-  return { issueTimeline, issueSources, inspectIssueReply, issueWrite, issueList: (caseId: string) => cases.listDecisionIssues(caseId),
+  return { currentTeachRights, issueModelContext, issueTimeline, issueSources, inspectIssueReply, issueWrite, issueList: (caseId: string) => cases.listDecisionIssues(caseId),
     createIssue: (caseId: string, input: Record<string, unknown>) => deps.mutate(() => cases.createDecisionIssue({ caseId, operationId: caseDecisionId(input.operationId), expectedRevision: caseDecisionRevision(input.expectedRevision), title: caseDecisionText(input.title, 240, true) })) };
 }

@@ -1,8 +1,9 @@
+import { parseCaseCreationSource, readCaseOriginRevision } from './case-creation-source.ts';
 import type { StrategyGoalsStore } from './strategy-goals-store.ts';
 import { assertAdoptedGoalRefs } from './strategy-goals-routes.ts';
 import { randomUUID } from 'node:crypto';
 import { CaseStore, CaseStoreError } from './case-store.ts';
-import { caseDecisionId, caseDecisionRevision, parseCaseDecisionTarget } from './case-decision-validation.ts';
+import { caseDecisionId } from './case-decision-validation.ts';
 import type { CaseCreationSource, ArtifactAdoption, CaseArtifactRecord, CaseArtifactView, CaseStatus, ProjectWorkStatus } from './case-types.ts';
 import type { ConfigurationStore } from './config-store.ts';
 import { ProjectStore, type ProjectRecord } from './project-store.ts';
@@ -67,17 +68,6 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
     if (enterpriseScope.caseEnterpriseId(caseId) !== enterpriseId || projectId && enterpriseScope.projectEnterpriseId(projectId) !== enterpriseId)
       throw new CaseRouteError('case_enterprise_assignment_incomplete', 503, { ...details, caseId, ...(projectId ? { projectId } : {}) });
   };
-  function sourceIdentity(value: unknown): CaseCreationSource {
-    if (!value || typeof value !== 'object') throw new CaseRouteError('invalid_case_origin', 400);
-    const fields = value as Record<string, unknown>;
-    if (fields.kind === 'case') return { kind: 'case', caseId: caseDecisionId(fields.caseId), caseRevision: caseDecisionRevision(fields.caseRevision) };
-    if (fields.kind !== 'task') throw new CaseRouteError('invalid_case_origin', 400);
-    const projectId = caseDecisionId(fields.projectId), taskId = caseDecisionId(fields.taskId);
-    if (!fields.reply) return { kind: 'task', projectId, taskId };
-    const parsed = parseCaseDecisionTarget({ type: 'source', source: fields.reply });
-    if (parsed.type !== 'source' || parsed.source.type !== 'native-reply' || parsed.source.excerpt || parsed.source.projectId !== projectId || parsed.source.taskId !== taskId) throw new CaseRouteError('invalid_case_origin', 400);
-    return { kind: 'task', projectId, taskId, reply: parsed.source };
-  }
   async function sourceEnterprise(source: CaseCreationSource) {
     if (source.kind === 'case') {
       if (cases.getCase(source.caseId).revision !== source.caseRevision) throw new CaseRouteError('case_revision_conflict', 409);
@@ -193,7 +183,7 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
       if (method === 'POST') return { status: 201, body: await mutate(async () => {
         const operationId = string(input.operationId), previous = cases.getOperation(operationId);
         const goalBinding = previous ? input.goalBinding as import('./case-types.ts').CaseGoalBindingInput | undefined : goals ? assertAdoptedGoalRefs(goals, input.goalBinding, 'new-case') : undefined;
-        const creationSource = input.creationSource === undefined ? undefined : sourceIdentity(input.creationSource);
+        const creationSource = input.creationSource === undefined ? undefined : parseCaseCreationSource(input.creationSource);
         const sourceScope = !previous && creationSource ? await sourceEnterprise(creationSource) : undefined;
         const enterprise = !previous && goalBinding ? await bindingEnterprise(goalBinding, sourceScope) : sourceScope;
         const scope = !previous && enterpriseScope ? { enterpriseScopeIntent: enterprise ?? enterpriseScope.defaultEnterpriseId?.() ?? null } : undefined;
@@ -230,6 +220,11 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
     const match = /^\/api\/cases\/([a-f0-9-]+)(?:\/(.*))?$/.exec(pathname);
     if (!match) return null;
     const caseId = match[1]!, action = match[2];
+    const boundRevision=/^goals\/revisions\/([1-9]\d*)$/.exec(action??'');
+    if(boundRevision&&method==='GET'){
+      const original=readCaseOriginRevision(cases,{kind:'case',caseId,caseRevision:Number(boundRevision[1])});
+      return {body:{goalBinding:original.goalBinding??null}};
+    }
     if (action === 'origin/reply' && method === 'GET') {
       cases.getCase(caseId);
       const origin = cases.getEvents('case',caseId).find(e => e.eventType === 'case_created')?.changes.creationSource?.after as CaseCreationSource | undefined;

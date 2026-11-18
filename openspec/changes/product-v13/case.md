@@ -26,3 +26,16 @@ Case 继续使用原 SQLite 事务、目标关系及原操作／事件表。没�
 本轮工程回退可停止隔离候选，重新使用原服务和原资料根。如将来获准原地采用，采用前需保留整个可恢复数据快照（包括 Case、看板、Goal、Project 与原会话）。回退旧程序应指向采用前快照，同时独立保留新版产生的材料和凭据。本轮未在正式资料上切换程序或演练灾难恢复。
 
 上述 Pi 点验使用受控本机协议端，验证角色来源、原生消息与 Host 行为；真实模型对经营判断的专业质量、Mini 正式运行采用及用户产品验收另记。三轮实际样本覆盖试行无改善、暂缓及本次不行动；独立“负改善”样本未单列专业测评。非作者复核与全仓结果见总记录。
+
+## 规格复核 P1 修正
+
+初审固定候选 `928ca47` 的原测试先让 Teach 回答，再登记看板反馈；这不能证明本轮观察到达模型。补测改为在同一看板先写两版不同观察，再由用户选择第一版新建 Teach。修复前的真实 Pi 协议请求缺七项材料，包括原方案、原授权、反馈身份及 Case Agent 应收到的 Plan／Teach 原文。失败输出保留在 `.local/product-v13/case/role-teach-red.log`。
+
+- **Case Agent。** 当前事项交回尚待取舍的 Plan 和已选准确方案分别纳入上下文。历史每轮引用当时方案版、选择及反馈，另行读取用户保存的准确 Teach 原回复。Host 对原 Task、完成请求、原生会话、消息 ID 和正文摘要作精确核验，发送前按接收模型及当前来源权限复核。曾向原会话提供的来源撤权后，读取旧角色会话和继续发送均拒绝。
+- **Teach。** Case 内可从某轮的一条实际观察打开原建 Task 表单，带入准确的 Case、事项、选择及看板反馈版本。手工创建后在实际 Pi 派发时读取该次原方案、授权、行动及当时所选的观察；用户备注与原回复仍分开。测试中的用户首条消息只有“本次交付”。在登记了第二版“负变化”反馈后，选择第一版仍只交付第一版；错误 Case、错误反馈及不匹配的复盘回存均遭拒绝。未选择具体版本的工作在同一次取舍的可读实际记录内核对。
+- **隔离点验。** `tests/v13-case-cycle.test.ts` 的协议回执保存在每个合成根内 `case-role-teach-receipt.json`，含所选方案、原回复、反馈、授权与模型实收输入摘要。`tests/browser-v13-case-cycle.mjs` 从原观察打开 Teach 表单，核原反馈 UUID 后取消。浏览器输出见 `.local/product-v13/case/role-teach-browser.log`。此前固定候选的额外 Case 抽屉点验见 `browser-case-drawer.log`，三次 DOM 身份比对均为同一实际输入节点，抽屉中续写的草稿回到原位，焦点复归，零 API 写入和页面异常。
+
+
+最终联跑覆盖两个已关联项目内由 A 的 Plan 给 B 的 Teach 提供同一选择的准确方案与反馈。撤销 A 与原 Case 的关联后，两端 Teach 的后续请求及 Case 角色的原历史读取都被拒绝，协议端请求数保持原值。Case／角色／任务身份及来源祖先联合回归 11/11，类型检查通过；原始输出为 `.local/product-v13/case/role-teach-crossproject.log`、`role-teach-compile.log`，本次原生收据为 `.local/product-v13/case/cycle-GZfWWL/case-role-teach-receipt.json`。Chrome 的 Teach 表单点验退出码 0。
+
+修正位置包括 `src/host/case-issues.ts:30`（精确原回复）、`:98`（已向 Teach 交付的权限）、`:109`（原事项资料）；`src/host/server.ts:827`（Case 角色）、`:1393`（Teach 原轮次）、`:1661`（Task 实际派发）；`src/host/ui/CaseIssuePanel.tsx:83` 与 `src/host/ui/ProjectDialogs.tsx:37`（携带原观察的用户建 Task 表单）；`src/host/task-assignment.ts:55`（身份核验）。联跑随后仍需接受非作者复核。

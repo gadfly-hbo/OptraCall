@@ -38,6 +38,7 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
   const [error,setError] = useState(''), [busy,setBusy] = useState(false), [writing,setWriting] = useState(false), lock = useRef(false), operation = useOperationId();
   const current = timeline?.rounds.at(-1), project = projects.find(p => p.id === projectId) ?? projects.find(p => !p.archivedAt), plan = plans.find(p => p.recordId === planId), reply = sources?.replies.find(r => key(r.source) === sourceId);
   const feedbacks = current?.actions.flatMap(a => a.feedback) ?? [];
+  const selectedFeedback = feedbacks.find(f => f.revisionId === feedback)?.revisionId ?? (feedbacks.length === 1 ? feedbacks[0]!.revisionId : '');
   const passive = !!current && ['defer','reject','no_action','stop_considering','gather_evidence'].includes(current.choice.choice);
   function key(ref: CaseIssueReply) { return JSON.stringify([ref.projectId, ref.taskId, ref.sessionId, ref.messageId, ref.expectedTextSha256]); }
   useEffect(() => {
@@ -64,7 +65,7 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
     setPreview(''); setError(''); try { const read = await inspectIssueReply(record.id,issueId,source); setPreview(read.text); } catch (e) { setError(caseError(e)); }
   }
   const write = (action:'plans'|'authorize'|'review', fields:Record<string,unknown>) => save(action, fields, operationId => writeCaseIssue(record.id,issueId,action,{ ...fields, operationId }));
-  const task = (type:'plan'|'teach') => { if (project) onCreate(project,{ type, caseId: record.id, issueId, ...(type === 'teach' && current ? { choiceId: current.choice.choiceId } : {}) }); };
+  const task = (type:'plan'|'teach') => { if (project) onCreate(project,{ type, caseId: record.id, issueId, ...(type === 'teach' && current ? { choiceId: current.choice.choiceId, ...(selectedFeedback ? { feedbackRevisionId:selectedFeedback } : {}) } : {}) }); };
   return <div className="case-issue-work">
     <button className="secondary-button" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? '收起协作' : '与决策 Agent 协作'}</button>
     <div hidden={!open}><BusinessRoleConversation owner={{ role:'case',caseId:record.id,itemId:issueId }}/></div>
@@ -78,7 +79,8 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
         })}
         {r.actions.map(a => <div key={a.taskId}><p>{a.title} · {a.authorizations.at(-1)?.scope} · {a.status === 'done' ? '完成' : a.status === 'doing' ? '进行中' : '待办'}</p>
           {a.feedback.length ? a.feedback.map(f => <p key={f.revisionId}>{f.outcome} · {f.metricDelta} · {f.review || '效果待核'}
-            {onBoard && <button className="text-button" onClick={() => onBoard({openOriginal:true,boardTaskId:a.taskId,feedbackRevisionId:f.revisionId,draftKey:f.revisionId})}>查看原看板反馈</button>}</p>) :
+            {onBoard && <button className="text-button" onClick={() => onBoard({openOriginal:true,boardTaskId:a.taskId,feedbackRevisionId:f.revisionId,draftKey:f.revisionId})}>查看原看板反馈</button>}
+            <button className="text-button" disabled={disabled || !project} onClick={()=>project && onCreate(project,{type:'teach',caseId:record.id,issueId,choiceId:r.choice.choiceId,feedbackRevisionId:f.revisionId})}>按此观察准备 Teach</button></p>) :
             <p>待反馈 {onBoard && <button className="text-button" onClick={() => onBoard({openOriginal:true,boardTaskId:a.taskId,feedbackRevisionId:null,draftKey:a.taskId})}>查看原看板行动</button>}</p>}
         </div>)}
         {!r.actions.length && <p>{r.review ? '已记录实际观察' : '待反馈'}</p>}{r.review && <><p>实际观察 · {r.review.observation}</p><p>复盘判断 · {r.review.judgement}</p><p>下一步或结束理由 · {r.review.nextStep}</p><button className="text-button" onClick={() => void showSource(r.review!.reply)}>查看 Teach 原回复</button></>}
@@ -86,6 +88,7 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
       <button className="text-button" onClick={() => setRefresh(n => n+1)}>刷新原记录</button>{onBoard && <button className="text-button" onClick={()=>onBoard()}>打开原行动看板</button>}
     </details>
     <label>关联项目<select value={project?.id ?? ''} onChange={e => setProjectId(e.target.value)}><option value="">请选择项目</option>{projects.filter(p => !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+    {!!feedbacks.length && <label>原看板观察<select value={selectedFeedback} onChange={e=>setFeedback(e.target.value)}><option value="">本轮当前可读观察</option>{feedbacks.map(f=><option key={f.revisionId} value={f.revisionId}>{f.outcome} · {f.revisionId.slice(0,8)}</option>)}</select></label>}
     <div className="case-inline-actions">{onOpenProject && project && <button onClick={() => onOpenProject(project)}>回关联项目协作</button>}<button disabled={disabled || !project} onClick={() => task('plan')}>准备 Plan Task</button><button disabled={disabled || !project || !current} onClick={() => task('teach')}>准备 Teach Task</button></div>
     <details><summary>交接与依据</summary><label>准确 Task 原回复<select value={sourceId} onChange={e => { setSourceId(e.target.value); setPreview(''); }}><option value="">选择原条目</option>{sources?.replies.filter(r => r.type === 'plan' || r.choiceId === current?.choice.choiceId).map(r => <option key={key(r.source)} value={key(r.source)}>{r.name} · {r.source.messageId}</option>)}</select></label>{!!sources?.limitations.length && <p>部分原条目暂不可读取。</p>}
       <button disabled={!reply} onClick={() => reply && void showSource(reply.source)}>核对原回复</button><button disabled={disabled || reply?.type !== 'plan'} onClick={() => reply && void write('plans',{ source: reply.source })}>将 Plan 候选交回事项</button></details>
@@ -93,9 +96,9 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
       <label>取舍<select value={choice} onChange={e => setChoice(e.target.value as CaseStrategyChoiceValue)}>{Object.entries(choiceName).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label><label>依据与理由<textarea value={reason} onChange={e => setReason(e.target.value)} /></label>
       <button disabled={disabled || !plan || !reason.trim()} onClick={() => { if (!plan) return; const fields = { caseStoreId: plan.caseStoreId, strategyRef: { type: 'case-decision' as const, caseStoreId:plan.caseStoreId,caseId:record.id,recordId:plan.recordId,revision:plan.revision }, issueId, choice, reason, expectedPreviousChoiceId: current?.choice.choiceId ?? null }; void save('choice',fields, operationId => saveCaseStrategyChoice(record.id,{...fields, operationId})); }}>确认取舍</button></details>
     {current && !passive && !current.actions.length && <details><summary>授权本次行动</summary><label>看板行动<input value={title} onChange={e => setTitle(e.target.value)}/></label><label>授权范围<textarea value={scope} onChange={e => setScope(e.target.value)}/></label><button disabled={disabled || !project || !title.trim() || !scope.trim()} onClick={() => project && void write('authorize',{ projectId:project.id, choiceId: current.choice.choiceId,title,scope })}>确认授权并进入看板</button></details>}
-    {current && !current.review && <details><summary>本轮复盘</summary>{!!feedbacks.length && <label>原看板观察<select value={feedback} onChange={e=>setFeedback(e.target.value)}><option value="">选择准确反馈版</option>{feedbacks.map(f=><option key={f.revisionId} value={f.revisionId}>{f.outcome} · {f.revisionId.slice(0,8)}</option>)}</select></label>}
+    {current && !current.review && <details><summary>本轮复盘</summary>
       <label>实际观察<textarea value={observation} onChange={e=>setObservation(e.target.value)}/></label><label>原判断怎样保留或修订<textarea value={judgement} onChange={e=>setJudgement(e.target.value)}/></label><label>下一步或结束理由<textarea value={next} onChange={e=>setNext(e.target.value)}/></label><p>在「交接与依据」选择本轮 Teach 原回复。</p>
-      <button disabled={disabled || reply?.type !== 'teach' || reply.choiceId !== current.choice.choiceId || !observation.trim() || !judgement.trim() || !next.trim() || !passive && !feedback} onClick={()=>reply && void write('review',{ expectedRevision:record.revision,choiceId:current.choice.choiceId,source:reply.source,observation,judgement,nextStep:next,...(feedback ? { feedbackRevisionId:feedback } : {}) })}>保存本轮复盘</button></details>}
+      <button disabled={disabled || reply?.type !== 'teach' || reply.choiceId !== current.choice.choiceId || !observation.trim() || !judgement.trim() || !next.trim() || !passive && !selectedFeedback} onClick={()=>reply && void write('review',{ expectedRevision:record.revision,choiceId:current.choice.choiceId,source:reply.source,observation,judgement,nextStep:next,...(selectedFeedback ? { feedbackRevisionId:selectedFeedback } : {}) })}>保存本轮复盘</button></details>}
     {preview && <details open><summary>准确原回复</summary><p className="case-prose">{preview}</p></details>}<CaseFormError error={error}/>
   </div>;
 }

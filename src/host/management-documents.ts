@@ -77,6 +77,10 @@ export function gsaVersionDocument(goal: GoalVersion, currentAdopted: boolean, a
         ['采用时间', goal.adoptedAt ? dateText(goal.adoptedAt) : '尚未采用'], ['采用说明', goal.adoptionDecision ?? '尚未记录'],
         ['战略背景', goal.strategyContext?.summary ?? '尚未记录'],
         ...(goal.strategyChoice ? [['战略选择表',goal.strategyChoice.discussionId+' · v'+goal.strategyChoice.version+' · '+goal.strategyChoice.contentSha256]] : []),
+        ...(goal.roleSuggestion ? [['目标管理建议原件', [
+          '讨论 '+goal.roleSuggestion.discussionId, '会话 '+goal.roleSuggestion.sessionId,
+          '条目 '+goal.roleSuggestion.entryId, 'SHA-256 '+goal.roleSuggestion.sha256,
+        ].join(' · ')]] : []),
         ['参考方法', entries(goal.strategyContext?.methods?.map(method => method.name))],
         ['准确来源', entries(sources.map(formatSource))],
       ]},

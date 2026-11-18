@@ -96,19 +96,6 @@ export async function readSavedTaskEntry(project: ProjectRecord, task: TaskRecor
   if (!found) throw new ProjectHistoryError('reply_not_found');
 }
 
-/** Only successful exact reads on the current Pi branch can carry source text into a later send. */
-export async function receivedTaskResultKeys(project: ProjectRecord, task: TaskRecord) {
-  if (!task.sessionFile || !task.assignment?.sources?.length) return [];
-  const { manager } = await readNativeSessionSnapshot(task.sessionFile, task.sessionDirectory, path.join(project.rootPath, '020_clean'));
-  const provided = new Set<string>();
-  for (const entry of manager.getBranch()) {
-    if (entry.type !== 'message' || entry.message.role !== 'toolResult' || entry.message.toolName !== 'read_project_task_results' || entry.message.isError) continue;
-    const details = entry.message.details as Partial<import('./project-task-results-types.ts').ProjectTaskResultsReadResult> | undefined;
-    if (details?.type === 'optracall.project-task-results' && details.action === 'read' && details.result && task.assignment.sources.some(ref => ref.taskId === details.result?.taskId && ref.key === details.result?.id)) provided.add(details.result.id);
-  }
-  return [...provided];
-}
-
 /** Lazy read projection of native records; never opens a worker or backfills a receipt. */
 export async function taskContextReceipts(project: ProjectRecord, task: TaskRecord, includeBranch = false) {
   if (!task.sessionFile) return [];

@@ -1,3 +1,4 @@
+import {parseCaseCreationSource} from './case-creation-source.ts';
 import { discussionHash, discussionId, StrategyDiscussionFault } from './strategy-discussion-store.ts';
 import { businessRoleNames, type BusinessRoleOwner } from './business-role-types.ts';
 import type { createStrategyDiscussionHost, RoleContextReader } from './strategy-discussion-host.ts';
@@ -11,9 +12,9 @@ export function parseBusinessRoleOwner(input: unknown): BusinessRoleOwner {
   if (!object(input)) return invalid();
   switch(input.role) {
     case 'goal':
-      keys(input,['role','goalId','version']);
+      keys(input,['role','goalId','version','caseSource']);
       if(!Number.isSafeInteger(input.version)||Number(input.version)<1) return invalid();
-      return {role:'goal',goalId:discussionId(input.goalId),version:Number(input.version)};
+      return {role:'goal',goalId:discussionId(input.goalId),version:Number(input.version),...(input.caseSource===undefined?{}:{caseSource:parseCaseCreationSource(input.caseSource)})};
     case 'case':
       keys(input,['role','caseId','itemId']);
       return {role:'case',caseId:discussionId(input.caseId),itemId:discussionId(input.itemId)};
@@ -21,7 +22,7 @@ export function parseBusinessRoleOwner(input: unknown): BusinessRoleOwner {
       keys(input,['role','projectId']);
       return {role:'project',projectId:discussionId(input.projectId)};
     case 'goal-draft': {
-      keys(input,['role','draftId','scope','strategyChoice']);
+      keys(input,['role','draftId','scope','strategyChoice','caseSource']);
       let strategyChoice;
       if(input.strategyChoice!==undefined){
         if(!object(input.strategyChoice))return invalid();
@@ -34,7 +35,7 @@ export function parseBusinessRoleOwner(input: unknown): BusinessRoleOwner {
       const scope=input.scope;keys(scope,['kind','id','name','enterpriseId']);
       const kind=scope.kind;
       if(kind!=='enterprise'&&kind!=='department'&&kind!=='personal') return invalid();
-      return {role:'goal-draft',draftId:discussionId(input.draftId),...(strategyChoice?{strategyChoice}:{}),scope:{kind,id:shortText(scope.id),name:shortText(scope.name),...(scope.enterpriseId===undefined?{}:{enterpriseId:shortText(scope.enterpriseId)})}};
+      return {role:'goal-draft',draftId:discussionId(input.draftId),...(input.caseSource===undefined?{}:{caseSource:parseCaseCreationSource(input.caseSource)}),...(strategyChoice?{strategyChoice}:{}),scope:{kind,id:shortText(scope.id),name:shortText(scope.name),...(scope.enterpriseId===undefined?{}:{enterpriseId:shortText(scope.enterpriseId)})}};
     }
     default: return invalid();
   }
@@ -66,13 +67,21 @@ export function createBusinessRoleConversations(options:{
       keys(input,[]);
       return record ? host.close(id) : {closed:true};
     }
+    if(action==='origin'&&method==='GET'){
+      if((owner.role!=='goal'&&owner.role!=='goal-draft')||!owner.caseSource)invalid();
+      const config=record?options.configuration(record.configurationId,record.configurationRevision):await options.initialConfiguration(owner);
+      const context=await options.context(owner,config??undefined,false);
+      if(!object(context)||!object(context.caseOrigin))throw new StrategyDiscussionFault('goal_origin_unavailable',409);
+      return {origin:context.caseOrigin};
+    }
     if(!action&&method==='GET'){
+      const requestId = input.requestId === undefined ? undefined : discussionId(input.requestId);
       if(!record){
         const initial=await options.initialConfiguration(owner);
         await options.context(owner,initial??undefined,false);
         return {discussion:null,busy:false,configurationId:initial?.id};
       }
-      await host.verifyRoleHistory(id);return host.detail(id);
+      const snapshot=await host.verifyRoleHistory(id);return host.detail(id,requestId,{snapshot});
     }
     if (action==='configuration'&&method==='POST'&&record){
       keys(input,['configurationId','expectedRevision']);

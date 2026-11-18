@@ -818,11 +818,11 @@ export class CaseStore {
     this.database().exec(`${GOALS_SCHEMA} PRAGMA user_version=4;`);
     this.validateDatabase(this.readMarker());
   }
-  getGoalBinding(caseId: string, asOf = new Date()): CaseGoalBinding | null {
+  getGoalBinding(caseId: string, asOf = new Date(), throughRevision = Infinity): CaseGoalBinding | null {
     // Local business dates follow the same timezone as the Host's date input.
     const day = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
     const start = (binding: CaseGoalBinding) => binding.effectiveFrom ?? day(new Date(binding.confirmedAt));
-    const usable = this.getGoalBindingHistory(caseId).filter(binding => start(binding) <= day(asOf));
+    const usable = this.getGoalBindingHistory(caseId).filter(binding => binding.caseRevision <= throughRevision && start(binding) <= day(asOf));
     return usable.sort((a, b) => start(a).localeCompare(start(b)) || a.caseRevision - b.caseRevision).at(-1) ?? null;
   }
   getGoalBindingHistory(caseId: string): CaseGoalBinding[] {

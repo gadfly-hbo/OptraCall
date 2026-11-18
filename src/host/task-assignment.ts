@@ -12,7 +12,7 @@ export const taskPurpose: Record<TaskType, { label: string; skill: string; deliv
 export const approvedTaskSkills: Partial<Record<TaskType, { id: string; version: string; sha256: string }>> = {
   analysis: { id: 'data-analysis', version: '2.0.0-candidate.1', sha256: '05402899ac630de257799686828ae4b8a5f2ec1056427f711cc79a9eaf6ce0f6' },
 };
-export interface TaskCaseIssue { caseId: string; issueId: string; choiceId?: string }
+export interface TaskCaseIssue { caseId: string; issueId: string; choiceId?: string; feedbackRevisionId?: string }
 export interface TaskSourceSelection { taskId: string; key: string }
 export interface TaskAssignment {
   type: TaskType;
@@ -52,7 +52,8 @@ export function parseTaskAssignment(value: unknown): TaskAssignment {
   if (value.issue !== undefined) {
     const issue = value.issue;
     if (!object(issue) || !uuid(issue.caseId) || !uuid(issue.issueId) || (issue.choiceId !== undefined && !uuid(issue.choiceId))) throw new Error('invalid_task_issue');
-    assignment.issue = { caseId: issue.caseId, issueId: issue.issueId, ...(issue.choiceId ? { choiceId: issue.choiceId as string } : {}) };
+    if (issue.feedbackRevisionId !== undefined && (assignment.type !== 'teach' || !uuid(issue.choiceId) || !uuid(issue.feedbackRevisionId))) throw new Error('invalid_task_issue');
+    assignment.issue = { ...(issue.feedbackRevisionId ? { feedbackRevisionId: issue.feedbackRevisionId as string } : {}), caseId: issue.caseId, issueId: issue.issueId, ...(issue.choiceId ? { choiceId: issue.choiceId as string } : {}) };
   }
   if (value.sources !== undefined) {
     if (!Array.isArray(value.sources) || value.sources.length > 32 || !value.sources.every(s => object(s) && uuid(s.taskId) && typeof s.key === 'string' && /^[a-f0-9]{64}$/.test(s.key)) || new Set(value.sources.map(s => s.key)).size !== value.sources.length) throw new Error('invalid_task_sources');

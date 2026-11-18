@@ -32,10 +32,11 @@ function ScopedConversation({owner,ownerKey,onGoalDraft}:ConversationProps & {ow
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[stream,setStream]=useState('');
   const [configs,setConfigs]=useState<PublicModelConfiguration[]>([]);
   const [model,setModel]=useState('');
-  const [retryOf,setRetryOf]=useState<string>();
+  const [retryOf,setRetryOf]=useState<string|undefined>(()=>sessionStorage.getItem(storage+'.replace')??undefined);
+  const [checked,setChecked]=useState<string>();
   const onError=(reason:unknown)=>{if(alive.current)setError(reason instanceof Error?reason.message:'对话读取失败。');};
-  const call=useCallback(async(action:string, method:string, payload?:unknown, signal?:AbortSignal)=>{
-    const response=await fetch(base+(action?'&action='+action:''),{method,signal,credentials:'omit',cache:'no-store',headers:{'content-type':'application/json','x-optracall-client':'1'},...(payload!==undefined?{body:JSON.stringify(payload)}:{})});
+  const call=useCallback(async(action:string, method:string, payload?:unknown, signal?:AbortSignal, originalId?:string)=>{
+    const response=await fetch(base+(action?'&action='+action:'')+(originalId?'&requestId='+encodeURIComponent(originalId):''),{method,signal,credentials:'omit',cache:'no-store',headers:{'content-type':'application/json','x-optracall-client':'1'},...(payload!==undefined?{body:JSON.stringify(payload)}:{})});
     const value=await response.json();
     if(!response.ok)throw Object.assign(new Error(value.message||'本轮操作未完成，请核对原记录。'),{accepted:value.accepted,status:response.status});
     return value;
@@ -46,13 +47,18 @@ function ScopedConversation({owner,ownerKey,onGoalDraft}:ConversationProps & {ow
   },[storage]);
   const load=useCallback(async(signal?:AbortSignal)=>{
     const ticket=++seq.current;
-    const next:RoleView=await call('','GET',undefined,signal);
+    const request=pendingRef.current;
+    const next:RoleView=await call('','GET',undefined,signal,request?.requestId);
     if(!alive.current||ticket!==seq.current)return;
     setView(next);if(next.discussion)setModel(next.discussion.configurationId);
-    const request=pendingRef.current;
+    setChecked(request?.requestId);
     if(next.discussion&&request&&canSettleDiscussionMessage(next,request)){
-      remember();sessionStorage.removeItem(storage+'.draft');setText('');setRetryOf(undefined);
+      remember();sessionStorage.removeItem(storage+'.draft');sessionStorage.removeItem(storage+'.replace');setText('');setRetryOf(undefined);
+    } else if(!request && next.discussion?.pendingInput && next.discussion.pendingInput.requestId !== sessionStorage.getItem(storage+'.replace')){
+      const original=next.discussion.pendingInput;
+      remember(original);setText(original.text);sessionStorage.setItem(storage+'.draft',original.text);
     }
+    return next;
   },[call,remember,storage]);
   useEffect(()=>{
     alive.current=true;
@@ -76,13 +82,30 @@ function ScopedConversation({owner,ownerKey,onGoalDraft}:ConversationProps & {ow
   },[id,base,load]);
   async function send(){
     if(busy||!text.trim()||!view||pendingRef.current)return;
-    setBusy(true);setError('');
     const input={requestId:crypto.randomUUID(),text:text.trim(),expectedRevision:view.discussion?.revision??0,...(retryOf?{replacePendingRequestId:retryOf}:{})};
     remember(input);
-    try{await call('messages','POST',input);await load();}
-    catch(f){onError(f);if(alive.current){try{await load();}catch(e){onError(e);}
-      if((f as {accepted?:boolean;status?:number}).accepted===false&&Number((f as {status?:number}).status)<500&&alive.current)remember();
-    }}finally{if(alive.current)setBusy(false);}
+    await dispatch(input);
+  }
+  async function dispatch(input:StrategyDiscussionMessage){
+    setBusy(true);setError('');setChecked(undefined);
+    try{
+      await call('messages','POST',input);
+      await load();
+    } catch(f){
+      onError(f);
+      try {
+        const fresh=await load();
+        const rejection=f as {accepted?:boolean;status?:number};
+        if (fresh && rejection.accepted===false && Number(rejection.status)<500 &&
+            fresh.discussion?.pendingInput?.requestId!==input.requestId &&
+            fresh.discussion?.lastRun?.id!==input.requestId && pendingRef.current?.requestId===input.requestId) remember();
+      } catch(e){onError(e);}
+    } finally{if(alive.current)setBusy(false);}
+  }
+  function prepareReplacement(originalId?:string){
+    if(originalId)sessionStorage.setItem(storage+'.replace',originalId);
+    else sessionStorage.removeItem(storage+'.replace');
+    setRetryOf(originalId);remember();
   }
   async function act(operation:()=>Promise<unknown>){
     setBusy(true);setError('');
@@ -91,6 +114,10 @@ function ScopedConversation({owner,ownerKey,onGoalDraft}:ConversationProps & {ow
   const recorded=view?.discussion;
   const defaultModel=view&&!view.discussion?view.configurationId:undefined;
   const running=Boolean(view?.busy);
+  const checkedAbsent = pending && checked===pending.requestId && view && !running &&
+    recorded?.lastRun?.id!==pending.requestId && recorded?.pendingInput?.requestId!==pending.requestId;
+  const sameRevision = pending && (!recorded ? pending.expectedRevision===0 :
+    recorded.revision===pending.expectedRevision || (pending.expectedRevision===0 && recorded.revision===1 && !recorded.lastRun));
   return <ConversationDrawer title={title}><section className="strategy-discussion-panel" aria-label={title}>
     <h3>{title}</h3>
     {view?.snapshot?.messages.filter(m=>m.role==='user'||m.role==='assistant').map((m,index)=>{
@@ -107,7 +134,9 @@ function ScopedConversation({owner,ownerKey,onGoalDraft}:ConversationProps & {ow
     <div className="sg-actions"><button type="button" disabled={!view||!text.trim()||busy||running||!!pending} onClick={()=>void send()}>发送</button>
     {recorded&&running&&<button type="button" disabled={busy} onClick={()=>void act(()=>call('stop','POST',{expectedRequestId:recorded.lastRun?.id}))}>停止</button>}
     {(pending||error||recorded?.lastRun?.status==='unknown')&&<button type="button" disabled={busy} onClick={()=>void act(()=>Promise.resolve())}>核对原操作</button>}
-    {pending&&recorded?.lastRun?.id===pending.requestId&&!running&&['failed','cancelled'].includes(recorded.lastRun.status)&&<button type="button" onClick={()=>{setRetryOf(pending.requestId);remember();}}>保留原话另行发送</button>}</div>
+    {checkedAbsent && sameRevision && <button type="button" disabled={busy} onClick={()=>void dispatch(pending)}>按原编号发送</button>}
+    {checkedAbsent && !sameRevision && <button type="button" disabled={busy} onClick={()=>prepareReplacement()}>保留原话并核对新的会话状态</button>}
+    {pending&&recorded?.lastRun?.id===pending.requestId&&!running&&['failed','cancelled'].includes(recorded.lastRun.status)&&<button type="button" onClick={()=>prepareReplacement(pending.requestId)}>保留原话另行发送</button>}</div>
     {recorded&&configs.length>0&&<label>会话模型<select value={model} disabled={busy||running||!!pending} onChange={e=>void act(()=>call('configuration','POST',{configurationId:e.target.value,expectedRevision:recorded.revision}))}>{configs.filter(c=>c.hasApiKey||c.id===model).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
     {!recorded&&defaultModel&&<small>会话模型 · {configs.find(c=>c.id===defaultModel)?.name??defaultModel}</small>}
     {error&&<p role="alert">{error}</p>}

@@ -13,3 +13,7 @@
 原始证据位于工作树 `.local/product-v13/`。导航的首个 RED 为缺少「战略选择」；`navigation-current.log` 为实际导航、设置、资产入口的 GREEN。`exports-red.log` 的两个 API 均返回 404；`exports-green.log` 验证补齐后响应。`gsa-source-red.log`、`gsa-source-green.log` 是战略准确稿进入 Goal 存储的增量。`downloads-run1.log`、`downloads/` 保存离线结果。`ui-regression.log` 保留 31 项界面回归。`check-first.log` 保存开发阶段完整检查的五个初次失败，须与最终固定候选结果分读。
 
 五个专业候选已放入既有 MacBook skill-eval 仓库的 pending/，文件逐个按 SHA-256 回读，见 `skill-eval-pending.json` 及现有 CLI 的 `skill-eval-directory.json`。传送范围仅五个测评候选，不变更产品试用目录或服务。独立测评及用户确认的回执另记。
+
+固定首审代码的独立根再次完成六项导航、两种文稿各两版下载及旧版复读、目标/项目/任务/PPT/Studio 原输入节点与草稿的展开收起，见 `fixed-navigation.log`、`fixed-downloads.log`、`fixed-drawers.log`。战略对话的原草稿在同次下载检查中展开、收起后发送。Case 事项抽屉在 `case/browser-case-drawer.log` 验同一输入、草稿、焦点和零写入。七个入口均指向原会话。战略原生依据移出时，两版战略导出及其下游 GSA 导出均拒绝，原 owner 字节不变；恢复同一依据后原版可读。见 `export-source-loss.log`。Case 对应看板权限解除时的 GSA 导出拒绝及恢复证据见 Case 分项。
+
+另核独立折叠状态：同时切换主导航、项目空间及已归档项目，另外两组的开关状态保持（`nav-three-groups.log`）。在普通 Task 抽屉中点「打开项目文件上传」会收起抽屉并打开原项目文件栏，原 Task 草稿保留（`drawer-file-return.log`）。GSA 表包含 Goal Agent 字段建议所对应的讨论、原生会话、条目与 SHA，见 `goal-export-suggestion-red.log`、`goal-export-suggestion-green.log`。

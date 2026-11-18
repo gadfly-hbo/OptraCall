@@ -52,6 +52,7 @@ export const strategyGoals = () => request<StrategyGoalsIndex>('strategy/goals')
 export const createGoalCandidate = (input: GoalDraftInput & { operationId: string }) => request<{ goal: GoalVersion }>('strategy/goals', 'POST', input);
 export const adoptGoalCandidate = (ref: GoalRef, input: { operationId: string; expectedVersion: number; decision: string }) => request<{ goal: GoalVersion }>(`strategy/goals/${encodeURIComponent(ref.goalId)}/adopt`, 'POST', { ...input, version: ref.version });
 export const goalRecord = (id: string) => request<{ goal: StrategyGoalRecord }>(`strategy/goals/${encodeURIComponent(id)}`);
+export const caseGoalAtRevision = (id:string,revision:number) => request<{goalBinding:CaseGoalBinding|null}>(casePath(id)+'/goals/revisions/'+revision);
 export const caseGoals = (id: string) => request<{ goalBinding: CaseGoalBinding | null; history: CaseGoalBinding[] }>(`${casePath(id)}/goals`);
 export const setCaseGoals = (id: string, input: CaseMutation & { goalBinding: CaseGoalBindingInput }) => request<{ goalBinding: CaseGoalBinding }>(`${casePath(id)}/goals`, 'POST', input);
 export const goalEnterprises = () => request<{ enterprises: { id: string; name: string }[] }>('studio/enterprises');

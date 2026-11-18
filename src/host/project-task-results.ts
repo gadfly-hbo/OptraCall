@@ -60,9 +60,9 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
   const members = handoff ? [...new Set(selected?.map(source => source.taskId) ?? [options.taskId])].map(taskId => ({ taskId, taskKey: taskId })) : confirmedMembers({ ...options, confirmation });
   const selectedKeys = selected && new Set(selected.map(source => source.taskId + '/' + source.key));
   const scope: ProjectTaskResultsScope = { projectId: options.projectId, taskId: options.taskId, ...(confirmation ? { confirmationId: confirmation.id, planVersion: confirmation.planVersion } : {}) };
-  const authorized = async (sourceTaskId: string, context: ProjectTaskResultsContext, relativePath?: string, result?: { requestId: string; sessionId: string }) => {
+  const authorized = async (sourceTaskId: string, context: ProjectTaskResultsContext, relativePath?: string, result?: ProjectTaskResultDescriptor) => {
     check(context);
-    try { await options.assertAuthorized?.({ projectId: scope.projectId, taskId: scope.taskId, sourceTaskId, ...(result ? { requestId: result.requestId, sessionId: result.sessionId } : {}), ...(relativePath ? { relativePath } : {}) }, context); }
+    try { await options.assertAuthorized?.({ projectId: scope.projectId, taskId: scope.taskId, sourceTaskId, ...(result ? { source: result, requestId: result.requestId, sessionId: result.sessionId } : {}), ...(relativePath ? { relativePath } : {}) }, context); }
     catch { check(context); fail('project_result_permission_unavailable', 403); }
     check(context);
   };

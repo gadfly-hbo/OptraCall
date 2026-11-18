@@ -187,4 +187,42 @@ test('PM-V12-01: actual receiving Task DB exclusion requalifies an autonomously 
   observations.finalSourcePolicy = finalSourcePolicy;
   const providerText = JSON.stringify(provider.requests);
   for (const credential of ['SYNTHETIC_DB_ONLY', 'pm01-db.synthetic.invalid', 'synthetic-reader']) assert.ok(!providerText.includes(credential), 'DB connection credentials or host must not be exported with the background');
+  await t.test('v1.3 real Project role model switch and Task creation recheck the original DB outlet of a later summary', async () => {
+    const root = '/api/projects/' + project.id + '/tasks';
+    const writer = (await request(root,'POST',{name:'双轮数据库摘要',assignment:{type:'analysis',skill:null}},201)).task;
+    const route = root + '/' + writer.id;
+    const summary = randomUUID();
+    provider.setResponder(() => ({text:'综合先前窗口说明。'}));
+    async function sendTask(requestId:string, extra:Record<string,unknown>) {
+      await request(route+'/messages','POST',{requestId,text:'核对上一个观察窗口',...extra},202);
+      for(let i=0;i<300;i++){const state=await request(route); if(state.task.lastRun?.id===requestId && state.task.lastRun.status==='completed')return; await delay(20);}
+      assert.fail('source Task did not settle');
+    }
+    const {datasetId,inputVersionId,descriptionRevisionId}=expectedSource.target;
+    await request('/api/projects/'+project.id+'/data-context/prepare','POST',{datasetId,inputVersionId});
+    await sendTask(randomUUID(),{projectData:[{datasetId,inputVersionId,descriptionRevisionId}]});
+    await sendTask(summary,{});
+    const authorized=(await request(route+'/results')).details.results.find((r:any)=>r.requestId===summary);
+    assert.ok(authorized);
+    const role='/api/business-role?owner='+encodeURIComponent(JSON.stringify({role:'project',projectId:project.id}));
+    provider.setResponder(ctx=>{
+      const replies=ctx.recentToolResults.map(entry=>providerMessageText(entry.content));
+      if(!replies.length)return {calls:[{name:'strategy_goals',arguments:{action:'find-sources',query:'双轮数据库摘要'}}]};
+      if(replies.length===1){const exact=JSON.parse(replies[0]).sources.find((source:any)=>source.target.requestId===summary);assert.ok(exact);return {calls:[{name:'strategy_goals',arguments:{action:'read-source',sourceId:exact.id}}]};}
+      assert.match(replies[1],/综合先前窗口说明/);return {text:'获准模型收到准确摘要。'};
+    });
+    await request(role+'&action=messages','POST',{requestId:randomUUID(),expectedRevision:0,text:'阅读双轮数据库摘要'},202);
+    let current:any;
+    for(let i=0;i<300;i++){current=await request(role);if(current.discussion?.lastRun?.status==='completed')break;await delay(20);}
+    assert.equal(current.discussion.lastRun.status,'completed');
+    const other = (await request('/api/configuration','PUT',{name:'另一合成模型',provider:'openai-compatible',baseUrl:provider.baseUrl,model:'synthetic-other-outlet',apiKey:fakeKey})).configuration;
+    const priorCalls=provider.requests.length;
+    const refused=await host!.request(role+'&action=configuration','POST',{expectedRevision:current.discussion.revision,configurationId:other.id});assert.equal(refused.status,403,await refused.text());
+    const taskRef=[{taskId:writer.id,key:authorized.id}];
+    const create=await host!.request(root,'POST',{name:'另一出口的接收 Task',configurationId:other.id,assignment:{type:'analysis',skill:null,sources:taskRef}});
+    assert.equal(create.status,404,await create.text());
+    assert.equal(provider.requests.length,priorCalls);
+    assert.equal((await request(role)).discussion.configurationId,selected.id);
+  });
+
 });

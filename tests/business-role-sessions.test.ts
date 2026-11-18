@@ -179,7 +179,8 @@ test('a handed strategy version reaches the Goal system turn, whose native edita
   await req('/api/strategy/goals','POST',{...linked,operationId:randomUUID(),roleSuggestion:{...suggestion.source,sha256:'0'.repeat(64)}},409);
   const {goal}=await req('/api/strategy/goals','POST',{...linked,operationId:randomUUID()},201);
   assert.equal(goal.title,linked.title);assert.equal(goal.status,'candidate');assert.deepEqual(goal.roleSuggestion,suggestion.source);
-  await req('/api/strategy/goals/'+goal.goalId+'/versions/1/export');
+  const exported=await req('/api/strategy/goals/'+goal.goalId+'/versions/1/export');
+  assert.ok(exported.html.includes(suggestion.source.entryId) && exported.html.includes(suggestion.source.sha256));
   provider.setResponder(ctx=>{const input=ctx.messages.filter(m=>m.role==='user').map(m=>providerMessageText(m.content)).join(' ');
     assert.match(input,/用户修改后的观察安排/);assert.match(input,/NATIVE_STRATEGY_OPTION/);return {text:'已按正式记录的第一版核对'};});
   const goalRoute=role({role:'goal',goalId:goal.goalId,version:1});

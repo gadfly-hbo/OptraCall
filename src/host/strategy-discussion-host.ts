@@ -1,3 +1,4 @@
+import {setTimeout as delay} from 'node:timers/promises';
 import {businessRoleSystemPrompt, businessRoleVersion} from './business-role-types.ts';
 import type {BusinessRoleOwner} from './business-role-types.ts';
 import {createRequirementPublicSearch} from './requirement-public-search.ts';
@@ -12,7 +13,7 @@ import type { GoalDraftInput, GoalSourceRef, GoalDiscussionSourceRef, GoalAdopti
 import { StrategyGoalsStore, goalContentSha256, parseGoalDraft } from './strategy-goals-store.ts';
 import { createAgentSessionDomain, type SessionContext } from './agent-sessions.ts';
 import { discussionSourceMode, isDiscussionSourceExcluded } from './strategy-discussion-source-scope.ts';
-import { readNativeSessionSnapshot } from './native-session-snapshot.ts';
+import { readNativeSessionSnapshot, NativeSnapshotError } from './native-session-snapshot.ts';
 import { StrategyDiscussionStore, StrategyDiscussionFault, discussionHash, discussionId } from './strategy-discussion-store.ts';
 import type { StrategyDiscussion, StrategyDiscussionCreate, StrategyDiscussionUpdate, StrategyDiscussionDetail, StrategyDiscussionSource } from './strategy-discussion-types.ts';
 import type { ProjectEvent, ProjectSnapshot } from '../agent/project-runtime.ts';
@@ -260,17 +261,21 @@ export function createStrategyDiscussionHost(options:{roleContext?:RoleContextRe
  async function readGoalSuggestion(source:import('./strategy-goals-types.ts').GoalRoleSuggestionRef,recipient?:Readonly<RuntimeModelConfiguration>){
   const owner=store.get(source.discussionId);
   if(!owner.businessOwner||discussionHash(owner.businessOwner)!==discussionHash(source.owner))fail('goal_suggestion_owner_mismatch',403);
-  await verifyRoleHistory(owner.id,recipient);
-  const proposal=goalSuggestions(owner,await native(owner)).find(item=>item.source.sessionId===source.sessionId&&item.source.entryId===source.entryId&&item.source.sha256===source.sha256);
+  const checked=await verifyRoleHistory(owner.id,recipient);
+  const proposal=goalSuggestions(owner,checked).find(item=>item.source.sessionId===source.sessionId&&item.source.entryId===source.entryId&&item.source.sha256===source.sha256);
   if(!proposal)fail('goal_suggestion_source_changed',409);
   return proposal;
  }
- async function detail(id:string):Promise<StrategyDiscussionDetail>{
-  let {owner,ref}=own(id);const live=await domain.read(ref);owner=store.get(id);let n:Awaited<ReturnType<typeof native>>;try{n=await native(owner);}catch(e){if(!live.busy)throw e;n=null;}const goals=ownGoals(owner),replies:StrategyDiscussionDetail['replies']=[];
+ async function detail(id:string, originalRequestId?:string, checked?:{snapshot:Awaited<ReturnType<typeof native>>}):Promise<StrategyDiscussionDetail>{
+  let {owner,ref}=own(id);const live=await domain.read(ref);owner=store.get(id);let n:Awaited<ReturnType<typeof native>>;if(checked)n=checked.snapshot;
+  else try{n=await native(owner);}catch(e){if(!live.busy)throw e;n=null;}
+  const goals=ownGoals(owner),replies:StrategyDiscussionDetail['replies']=[];
   if(n&&!owner.businessOwner)for(const e of n.entries)if(e.type==='message'&&e.message.role==='assistant'&&n.branchIds.has(e.id)&&textOf(e.message).trim())replies.push({text:textOf(e.message),source:{authority:'strategy-discussion',id,version:e.id,sessionId:n.manager.getSessionId(),entryType:'message',sha256:discussionHash(sourceBody(e.message))}});
-  const snapshot=live.snapshot??{sessionId:n?.manager.getSessionId()??'',...(owner.sessionFile?{sessionFile:owner.sessionFile}:{}),messages:n?presentContextMessages(n.manager.buildSessionContext().messages,n.manager.getBranch(),n.manager.getSessionId()):[],tools:[],status:'idle' as const,sdkVersion:'1.4.0',capabilities:{}};
+  const session=live.snapshot??{sessionId:n?.manager.getSessionId()??'',...(owner.sessionFile?{sessionFile:owner.sessionFile}:{}),messages:n?presentContextMessages(n.manager.buildSessionContext().messages,n.manager.getBranch(),n.manager.getSessionId()):[],tools:[],status:'idle' as const,sdkVersion:'1.4.0',capabilities:{}};
+  const snapshot=checked?{...session,messages:n?presentContextMessages(n.manager.buildSessionContext().messages,n.manager.getBranch(),n.manager.getSessionId()):[]}:session;
   let discussion:StrategyDiscussion=owner;if(!live.busy&&owner.lastRun?.status==='accepted')discussion={...owner,lastRun:{...owner.lastRun,status:'unknown'}};
-  return {discussion,busy:live.busy,snapshot,goals,...(owner.businessOwner?{goalDrafts:goalSuggestions(owner,n)}:{}),goalContentHashes:Object.fromEntries(goals.map(g=>[g.goalId+':'+g.version,goalContentSha256(g)])),replies,...(requestReceipt(n,owner.lastRun?.id)?{requestReceipt:requestReceipt(n,owner.lastRun?.id)}:{})};
+  const receipt=requestReceipt(n,originalRequestId ?? owner.lastRun?.id);
+  return {discussion,busy:live.busy,snapshot,goals,...(owner.businessOwner?{goalDrafts:goalSuggestions(owner,n)}:{}),goalContentHashes:Object.fromEntries(goals.map(g=>[g.goalId+':'+g.version,goalContentSha256(g)])),replies,...(receipt && {requestReceipt:receipt})};
  }
  async function send(id:string,input:Record<string,unknown>){
   if(Object.keys(input).some(k=>!['requestId','text','expectedRevision','replacePendingRequestId'].includes(k))||typeof input.text!=='string'||!input.text.trim()||input.text.length>20000)fail('invalid_strategy_message',400);
@@ -326,11 +331,26 @@ export function createStrategyDiscussionHost(options:{roleContext?:RoleContextRe
   if(typeof input.decision!=='string'||!input.decision.trim()||input.decision.length>4000)fail('strategy_goal_decision_required',400);
   return options.mutate(async()=>{const operationId=discussionId(input.operationId);if(!options.goals.getOperation(operationId))await options.validateGoal(goal);return {goal:options.goals.adopt(goal,{operationId,expectedVersion:Number(input.expectedVersion),decision:input.decision as string,provenance:{kind:'ui-confirmation',discussionId:id,sessionId:n.manager.getSessionId(),goalContentSha256:String(input.goalContentSha256)}})};});
  }
+ async function stableRoleSnapshot(owner:StrategyDiscussion){
+  for(let attempt=0;;attempt++){
+   try{return await native(owner);}
+   catch(error){
+    // Pi may append between lstat and the bounded read. Retry only this
+    // identified race; every attempt revalidates the complete original file.
+    if(error instanceof NativeSnapshotError){
+     if(error.code==='native_snapshot_changed'&&attempt<4){await delay(5*(attempt+1));continue;}
+     fail(error.code);
+    }
+    if((error as NodeJS.ErrnoException)?.code==='ENOENT')fail('role_native_file_unavailable');
+    throw error;
+   }
+  }
+ }
  async function verifyRoleHistory(id:string,recipient?:Readonly<RuntimeModelConfiguration>){
   const owner=store.get(id);if(!owner.businessOwner || !options.roleContext)fail('role_owner_unavailable',403);
   const cfg=recipient??options.configuration(owner.configurationId,owner.configurationRevision);
-  const roleContext = await options.roleContext(owner.businessOwner,cfg??undefined,false);
-  const original=await native(owner);
+  const original=await stableRoleSnapshot(owner);
+  const roleContext=await options.roleContext(owner.businessOwner,cfg??undefined,false);
   assertRoleHistory(original,roleContext);
   const history=sourceAccesses(original,undefined,undefined,false);
   for(const group of history.projections){
@@ -339,6 +359,7 @@ export function createStrategyDiscussionHost(options:{roleContext?:RoleContextRe
    const assertCurrent=()=>{if(options.isClosing()||!options.configuration(cfg.id,cfg.revision))fail('role_sources_unavailable',403);};
    await options.sources.verify({...owner,projectId:group.projectId,sources:group.sources,configurationId:cfg.id,configurationRevision:cfg.revision},cfg,{assertCurrent,metadataOnly:group.metadataOnly});
   }
+  return original;
  }
  return {store,domain,detail,send,adopt,readGoalSuggestion,readChoiceReply,verifyChoiceSource,readDiscussionSource,readSource,sourceContext,verifyRoleHistory,
   async create(raw:Record<string,unknown>){validatePatch(raw,true);const configuration=options.configuration(raw.configurationId as string|undefined);if(!configuration)fail('configuration_required');return options.mutate(()=>store.create(raw as unknown as StrategyDiscussionCreate,configuration));},

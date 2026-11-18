@@ -46,3 +46,12 @@
 - 模型专业判断与内容质量未作真实供应商评估。独立复核、合并、运行更新及产品验收由总交付分别登记。回退时使用旧产品候选和升级前备份。新增角色目录、Goal 可选字段及原生记录保留，不清理、重写或重放历史。
 
 本轮浏览器回执 SHA-256 为 `882bfbd73841eb58d16d64b8cce403410a542962e777265c68ed07bbfd10e962`，Goal 建议来源原生 entry 为 `1294e937`，其 session 为 `01a1ef61-18cc-7376-b8ad-83f7434f6a27`。
+
+## 原 Case 与 Task 转入目标管理的复核修正
+
+11 月 19 日复核指出原入口只交接标识，目标 Agent 缺少准确业务正文。现从原 Case 回到当时有效的主目标版本，Case 自身的标题、描述、判断与下一步按原事件修订还原。来自项目 Task 时可带任务身份，或在指定助手原回复上选择“带这条原回复核对目标”。若原 Task 已绑定 Case 事项，重新核对真实项目关联、事项和目标。无绑定时按来源项目的企业或个人范围进入独立草稿。用户可在目标管理展开同一份原依据。来源身份进入目标角色的 owner，单独切换来源、目标或草稿后保留原会话。
+
+原生回复使用原项目、Task、session、entry 和文本 SHA-256，沿原 Pi 存储读回。Host 在查看、发送、重开与换模型时检查原 Task、项目、当前材料权限和实际接收模型，通过项目结果共用入口 `assertTaskResultAccess` 核对准确回复的祖先授权。归档或来源完整性失效后停止提供。用户明确带入建议后保存的 `roleSuggestion` 同时固定业务来源身份。
+
+- 独立端口 4377 的 Chrome 从“决策星图 → Case → 带原依据到目标管理”和“项目 → Task → 带这条原回复核对目标”两条正常界面发送。实际 Pi 1.4.0 收到 Case 原描述 `CASE_BUSINESS_BASIS` 及所选 Task 的 `TASK_INSPECT_EXACT`，跨来源未混入先前正文。Case 绑定 Goal v1，Task 原文 entry 为 `2b7f9c70`，内容哈希 `d827981a0ecd30612a91060e546d71688477ecc5613c1e2afc6f34c290ba3525`。两项通过，浏览器无 page error。原始收据 `.local/product-v13/roles/origin-browser-receipt.json`，SHA-256 `38d90a181813ca2c35f6ad97108c91d75b7494709be74ce089a89388ab7ff86c`。
+- `tests/goal-origin-role-v13.test.ts` 使用合成 Provider 和真实 Pi 验证原 Case 升到 v2 后按 v1 取当时正文，错误原文 hash 被拒，归档原 Task 后角色读回、再次派发均被拒，Provider 请求数无增。与四角色及原战略恢复回归共 7/7，见 `.local/product-v13/roles/origin-plus-role-final.log`。TypeScript 检查通过，见 `.local/product-v13/roles/origin-tsc-final.log`。

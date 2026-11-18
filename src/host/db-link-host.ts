@@ -33,6 +33,10 @@ const outlet = dbLinkModelOutlet;
 type Authority = { project: ProjectRecord; task?: TaskRecord };
 type SourceChange = { projectId?: string; connectionId: string; taskId?: string };
 const affectsSource = (change: SourceChange, projectId: string, taskId: string, connectionId: string) => (!change.projectId || change.projectId === projectId) && change.connectionId === connectionId && (!change.taskId || change.taskId === taskId);
+export function dbNativeOwner(projectId: string, taskId: string, context: Pick<DbLinkCallContext, 'sessionId' | 'requestId' | 'toolCallId'>): DbResultOwner {
+  return { projectId, taskId, requestId: context.requestId, operationId: createHash('sha256').update([context.sessionId, context.requestId, context.toolCallId].join('\0')).digest('hex') };
+}
+
 export function createDbLinkHost(options: DbLinkHostOptions) {
   const authority = new AsyncLocalStorage<Authority>(), changes = new EventEmitter(); changes.setMaxListeners(0);
   const driver = options.driver ?? createDbLinkDriver();
@@ -159,7 +163,7 @@ export function createDbLinkHost(options: DbLinkHostOptions) {
   } });
   function checkContext(context: DbLinkCallContext): void { context.assertCurrent(); if (context.signal.aborted) fail('db_query_stopped'); if (options.isClosing()) fail('host_closing'); }
   function boundOwner(projectId: string, taskId: string, context: DbLinkCallContext, operationId?: string): DbResultOwner {
-    return { projectId, taskId, requestId: context.requestId, operationId: operationId ?? createHash('sha256').update(`${context.sessionId}\0${context.requestId}\0${context.toolCallId}`).digest('hex') };
+    return { ...dbNativeOwner(projectId, taskId, context), ...(operationId ? { operationId } : {}) };
   }
   const metadataReader: DbLinkMetadataReader = { async read(owner, observationRef) {
     return scoped(owner.projectId, owner.taskId, async () => {

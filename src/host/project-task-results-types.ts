@@ -93,5 +93,5 @@ export interface ProjectTaskResultsOptions {
   listResultSources?(projectId: string, sourceTaskId: string, options?: ProjectTaskResultsSourceReadOptions): Promise<ProjectTaskResultSources>;
   /** The Host injects the existing native-reply reader; no second body reader is created. */
   readNativeReply?(ref: ProjectTaskNativeReplyRef, options: ProjectTaskResultsSourceReadOptions): Promise<PersonalSourceEvidence>;
-  assertAuthorized?(scope: { projectId: string; taskId: string; sourceTaskId: string; requestId?: string; sessionId?: string; relativePath?: string }, context: ProjectTaskResultsContext): Promise<void>;
+  assertAuthorized?(scope: { projectId: string; taskId: string; sourceTaskId: string; source?: ProjectTaskResultDescriptor; requestId?: string; sessionId?: string; relativePath?: string }, context: ProjectTaskResultsContext): Promise<void>;
 }

@@ -1,8 +1,9 @@
+import type { CaseCreationSource } from './case-types.ts';
 import type { GoalScope } from './strategy-goals-types.ts';
 
 export type BusinessRoleOwner =
-  | {role: 'goal'; goalId: string; version: number}
-  | {role: 'goal-draft'; draftId: string; scope: GoalScope; strategyChoice?: {discussionId:string;version:number}}
+  | {role: 'goal'; caseSource?:CaseCreationSource; goalId: string; version: number}
+  | {role: 'goal-draft'; caseSource?:CaseCreationSource; draftId: string; scope: GoalScope; strategyChoice?: {discussionId:string;version:number}}
   | {role: 'case'; caseId: string; itemId: string}
   | {role: 'project'; projectId: string};
 

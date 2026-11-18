@@ -28,7 +28,11 @@ try {
   await work.getByRole('button',{name:'查看 Teach 原回复'}).nth(1).click();
   await work.getByText('暂缓后观察到来店人数持平，待扩大样本再核。',{exact:true}).waitFor();
   await page.screenshot({path:path.resolve('.local/product-v13/case/cycle-browser.png')});
-  await work.getByRole('button',{name:'查看原看板反馈'}).click(); await page.getByRole('heading',{name:'已保存反馈历史'}).waitFor(); await page.getByText('两店完成回访',{exact:true}).waitFor();
+  const observed=work.locator('p').filter({hasText:'两店完成回访'}).filter({has:page.getByRole('button',{name:'查看原看板反馈'})}).first();
+  await observed.getByRole('button',{name:'按此观察准备 Teach'}).click();
+  const taskForm=page.getByRole('dialog',{name:'新建任务'});await taskForm.getByText(/原看板反馈 [a-f0-9-]{36}/).waitFor();
+  await taskForm.getByRole('button',{name:'取消',exact:true}).click();
+  await observed.getByRole('button',{name:'查看原看板反馈'}).click(); await page.getByRole('heading',{name:'已保存反馈历史'}).waitFor(); await page.getByText('两店完成回访',{exact:true}).waitFor();
   const close=page.getByRole('dialog').getByRole('button',{name:/^关闭/});await close.first().click();
   await nav.getByRole('button',{name:'决策星图',exact:true}).click();
   await board.getByRole('button',{name:'＋ 新建 Case',exact:true}).click();
@@ -54,5 +58,5 @@ try {
   let posts=0,lookups=0;page.on('request',r=>{if(r.method()==='GET' && new URL(r.url()).pathname.startsWith('/api/cases/operations/'))lookups++});
   await page.route('**/api/cases',async route=>{if(route.request().method()!=='POST')return route.continue();posts++;if(posts===1){const r=await route.fetch();assert.equal(r.status(),201);await route.abort('failed')}else await route.continue()});
   await form.getByRole('button',{name:'创建 Case',exact:true}).click();await form.getByRole('button',{name:'核对原创建结果'}).click();await dialog.getByRole('heading',{name:title,exact:true}).waitFor();
-  assert.equal(posts,1);assert.equal(lookups,1);assert.deepEqual(errors,[]);console.log(JSON.stringify({root,uiPort,observations:['星图到常规','选择同一事项','原看板准确反馈','Plan与Teach原回复','新建Case到目标管理','版本与反馈同版有行动异版无','两个GSA版本实际下载，离线复核表格','已采用G/S建Case失答只读恢复'],posts,lookups,errors}));
+  assert.equal(posts,1);assert.equal(lookups,1);assert.deepEqual(errors,[]);console.log(JSON.stringify({root,uiPort,observations:['星图到常规','选择同一事项','查原看板准确反馈，带该版本到用户Teach表单','Plan与Teach原回复','新建Case到目标管理','版本与反馈同版有行动异版无','两个GSA版本实际下载，离线复核表格','已采用G/S建Case失答只读恢复'],posts,lookups,errors}));
 } finally { await browser?.close();ui.kill('SIGTERM');await host.close(); }

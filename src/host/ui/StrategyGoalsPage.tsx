@@ -1,3 +1,5 @@
+import {GoalOrigin} from './GoalOrigin.tsx';
+import type {BusinessRoleOwner} from '../business-role-types.ts';
 import { AnnualCases } from './AnnualCases.tsx';
 import type { CaseCreationSource } from '../case-types.ts';
 import { BusinessRoleConversation } from './BusinessRoleConversation.tsx';
@@ -13,7 +15,7 @@ import type { GoalDiscussionSourceRef, GoalRoleSuggestionRef, GoalDraftInput, Go
 import type { CaseRecord } from '../case-types.ts';
 import { CaseDialog, CaseFormError, caseDate, useOperationId } from './CaseDialogs.tsx';
 import * as api from './strategy-goals-client.ts';
-import { list as listCases } from './case-client.ts';
+import { list as listCases, caseGoals, caseGoalAtRevision } from './case-client.ts';
 import { listStudioEnterprises } from './studio-api.ts';
 import type { StudioEnterpriseDirectory } from './studio-api.ts';
 import './strategy-goals.css';
@@ -236,6 +238,8 @@ export function GoalArrangements({ arrangements, board, onOpenBoard }: { arrange
 
 export function StrategyGoalsPage({ caseSource,clearCaseSource,onInspectCase,management, onStage, active = true, onOpenCase, onStartProject, onManageMetrics, onOpenBoard, feedbackSources = [], projects = [], configurations = [], selectedConfigurationId, onSettings = onManageMetrics }: StrategyGoalsPageProps) {
   const [goalsLoaded,setGoalsLoaded]=useState(false);
+  const [enterpriseDirectory,setEnterpriseDirectory]=useState<StudioEnterpriseDirectory>();
+  const [resolvedOrigin,setResolvedOrigin]=useState('');
   const [index, setIndex] = useState<StrategyGoalsIndex>(empty), [cases, setCases] = useState<CaseRecord[]>([]), [enterprises, setEnterprises] = useState<StudioEnterpriseDirectory['enterprises']>([]);
   const [originalSources, setOriginalSources] = useState<GoalFeedbackSource[]>([]), [sourceNotice, setSourceNotice] = useState('');
   const [metrics, setMetrics] = useState<api.LibraryEntry[]>([]), [metricsKnown, setMetricsKnown] = useState(false);
@@ -257,7 +261,7 @@ export function StrategyGoalsPage({ caseSource,clearCaseSource,onInspectCase,man
     if (goals.status === 'fulfilled') { setGoalsLoaded(true); setIndex(goals.value); setSelectedId(old => goals.value.goals.some(x => x.id === old) ? old : goals.value.goals[0]?.id ?? ''); }
     else setError(api.goalError(goals.reason));
     if (caseResult.status === 'fulfilled') setCases(caseResult.value.cases); else setCases([]);
-    if (enterpriseResult.status === 'fulfilled') setEnterprises(enterpriseResult.value.enterprises); else setEnterprises([]);
+    if (enterpriseResult.status === 'fulfilled') {setEnterprises(enterpriseResult.value.enterprises);setEnterpriseDirectory(enterpriseResult.value);} else {setEnterprises([]);setEnterpriseDirectory(undefined);}
     if (metricResult.status === 'fulfilled') { setMetrics(metricResult.value); setMetricsKnown(true); } else { setMetrics([]); setMetricsKnown(false); }
     setBoard(boardResult.status === 'fulfilled' ? boardResult.value : undefined);
     if (sourceResult.status === 'fulfilled') {
@@ -284,15 +288,39 @@ export function StrategyGoalsPage({ caseSource,clearCaseSource,onInspectCase,man
     ...index.goals.map(g=>current(g).scope),personalScope,
   ].map(scope=>[scopeKey(scope),scope])).values());
   const draftScope=scopes.find(s=>scopeKey(s)===draftScopeKey)??(scopes.length===2&&enterprises.length===1?scopes[0]!:personalScope);
+  const originKey=caseSource?JSON.stringify(caseSource):'';
+  useEffect(()=>{
+    if(!caseSource){setResolvedOrigin('');return;}
+    if(!active||!goalsLoaded||!enterpriseDirectory||resolvedOrigin===originKey)return;
+    let current=true;
+    async function receive(source:CaseCreationSource){
+      const task=source.kind==='task'?projects.find(p=>p.id===source.projectId)?.tasks.find(t=>t.id===source.taskId):undefined;
+      const caseId=source.kind==='case'?source.caseId:task?.assignment?.issue?.caseId;
+      const binding=source.kind==='case'?(await caseGoalAtRevision(source.caseId,source.caseRevision)).goalBinding:caseId?(await caseGoals(caseId)).goalBinding:undefined;
+      const originEnterprise=source.kind==='case'?enterpriseDirectory!.caseAssignments.find(a=>a.caseId===source.caseId):enterpriseDirectory!.projectAssignments.find(a=>a.projectId===source.projectId);
+      const entity=enterpriseDirectory!.enterprises.find(e=>e.id===originEnterprise?.enterpriseId);
+      if(!current)return;
+      setHandoff(undefined);
+      if(binding){setPerspective('all');setSelectedId(binding.primary.goalId);setSelectedVersion(binding.primary.version);setDraftScopeKey('');}
+      else setDraftScopeKey(scopeKey(entity?{kind:'enterprise',id:entity.id,name:entity.name}:personalScope));
+      setResolvedOrigin(originKey);
+    }
+    void receive(caseSource).catch(f=>{if(current)setError(api.goalError(f));});
+    return ()=>{current=false;};
+  },[active,goalsLoaded,originKey,enterpriseDirectory,projects,resolvedOrigin]);
   const standaloneDraft=Boolean(draftScopeKey)||!value;
   const roleGoal=!handoff&&!standaloneDraft?value:undefined;
   const stableDraftId=(scope:GoalScope)=>{
     if(typeof window==='undefined')return '';
-    const key='optracall.gsa.draft:'+scopeKey(scope);
+    const key='optracall.gsa.draft:'+scopeKey(scope)+(caseSource?':'+JSON.stringify(caseSource):'');
     const previous=localStorage.getItem(key);
     if(previous)return previous;
     const id=crypto.randomUUID();localStorage.setItem(key,id);return id;
   };
+  const goalOwner:BusinessRoleOwner|undefined=goalsLoaded&&resolvedOrigin===originKey&&active&&area==='gsa'?{...(
+    handoff?{role:'goal-draft' as const,draftId:handoff.destination.draftId,scope:handoff.destination.scope,strategyChoice:{discussionId:handoff.discussionId,version:handoff.version}}:
+    roleGoal?{role:'goal' as const,goalId:roleGoal.goalId,version:roleGoal.version}:{role:'goal-draft' as const,draftId:stableDraftId(draftScope),scope:draftScope}
+  ),...(caseSource?{caseSource}:{})}:undefined;
   const ready = value?.status === 'adopted';
   const [suggestion,setSuggestion]=useState<GoalDraftInput>();
   const openEditor = (mode: typeof editor, fromRole?:GoalDraftInput) => { setSuggestion(fromRole); setEditorGoal(value && record ? structuredClone({ value, record }) : null); if (mode === 'feedback') setEditorSources(structuredClone(sources)); setEditor(mode); };
@@ -300,16 +328,16 @@ export function StrategyGoalsPage({ caseSource,clearCaseSource,onInspectCase,man
   const relationTable = <div className="sg-table-scroll"><table className="sg-table"><thead><tr><th>目标关系</th><th>职责与协同</th><th>依据／必要条件</th><th>版本</th></tr></thead><tbody>{relations.map(x => <tr key={x.id}><td>{goalName(index, x.from)}<br /><strong>{relationLabels[x.kind]}</strong> → {goalName(index, x.to)}</td><td>{x.responsibility}</td><td>{x.rationale}</td><td>关系 v{x.revision}<br /><button type="button" className="text-button" onClick={() => openRelation(x)}>修订关系</button>{x.history.length > 0 && <details><summary>历史</summary>{x.history.map(v => <p key={v.revision}>v{v.revision} · {goalName(index, v.from)} → {goalName(index, v.to)}<br />{v.responsibility}<br />{v.rationale}</p>)}</details>}</td></tr>)}</tbody></table>{!relations.length && <p className="sg-muted">此准确目标版本尚无已记录关系，不据此推断业务上没有贡献或必要条件。</p>}</div>;
   return <section className="case-board strategy-goals-page workspace-management-page" aria-labelledby={id+'-heading'}><header className="case-board-heading"><div><h1 id={id+'-heading'}>{managementTitle(management)}</h1><p>{area === 'strategy' ? '梳理可选方向，核对依据，再把选定方向交给目标管理。' : '核对目标和策略，再承接年度决策事项。'}</p></div>{area==='gsa' && <button type="button" className="primary-button" disabled={loading} onClick={() => openEditor('create')}>＋ 新建候选目标</button>}</header>
     <CaseFormError error={error} />{notice && <p className="case-notice" role="status">{notice}</p>}{sourceNotice && <p className="case-notice" role="status">{sourceNotice}</p>}
-    {area==='gsa' && caseSource && <aside className="sg-panel"><strong>新增 Case 的原来源</strong><p>{caseSource.kind==='task'?'项目 '+caseSource.projectId+' · Task '+caseSource.taskId:'Case '+caseSource.caseId+' · v'+caseSource.caseRevision}</p><button className="text-button" onClick={clearCaseSource}>移除本次来源</button></aside>}
+    {area==='gsa' && caseSource && <aside className="sg-panel"><strong>新增 Case 的原来源</strong>{goalOwner&&<GoalOrigin key={JSON.stringify(goalOwner)} owner={goalOwner}/>}{stage!=='goals'&&<button className="text-button" onClick={()=>onStage('goals')}>与目标管理 Agent 核对</button>}<p>{caseSource.kind==='task'?'项目 '+caseSource.projectId+' · Task '+caseSource.taskId:'Case '+caseSource.caseId+' · v'+caseSource.caseRevision}</p><button className="text-button" onClick={clearCaseSource}>移除本次来源</button></aside>}
     <ManagementTabs route={management} onStage={onStage} />
-    <div hidden={area!=="strategy" || stage==="bsc"}><StrategyDiscussionPanel getGoalScope={ref => versionFor(index,ref)?.scope} scopes={scopes} onHandoff={v=>{setHandoff(v);onStage('goals');}} stage={stage} onStage={onStage} active={active && area==='strategy'} focusRequest={discussionFocus} selectedGoal={value} projects={projects} configurations={configurations} selectedConfigurationId={selectedConfigurationId} onSettings={onSettings} onGoalsChanged={refresh} onReviewCandidate={(goal, discussionId, reload) => { void refresh().then(() => setDiscussionCandidate({ goal: structuredClone(goal), discussionId, reload })); }} /></div>
+    <div hidden={area!=="strategy" || stage==="bsc"}><StrategyDiscussionPanel getGoalScope={ref => versionFor(index,ref)?.scope} scopes={scopes} onHandoff={v=>{clearCaseSource?.();setHandoff(v);onStage('goals');}} stage={stage} onStage={onStage} active={active && area==='strategy'} focusRequest={discussionFocus} selectedGoal={value} projects={projects} configurations={configurations} selectedConfigurationId={selectedConfigurationId} onSettings={onSettings} onGoalsChanged={refresh} onReviewCandidate={(goal, discussionId, reload) => { void refresh().then(() => setDiscussionCandidate({ goal: structuredClone(goal), discussionId, reload })); }} /></div>
     {stage === 'compare' && <button className="text-button" onClick={() => onStage('bsc')}>BSC／战略目标关系（按需）</button>}
     {stage === 'bsc' && <button className="text-button" onClick={() => onStage('compare')}>← 返回比较与核对</button>}
     {area==='gsa' && handoff && <aside className="sg-panel"><strong>已交接的战略选择表 · v{handoff.version}</strong><p>{handoff.summary}</p><button type="button" className="secondary-button" onClick={()=>openEditor('create')}>沿此版建立目标候选</button> <button className="text-button" onClick={()=>setHandoff(undefined)}>返回现有目标</button></aside>}
     {!handoff && goalsLoaded && area==='gsa' && stage==='goals' && <label>目标管理对话 <select value={standaloneDraft?scopeKey(draftScope):''} onChange={e=>setDraftScopeKey(e.target.value)}>
       {value&&<option value="">所选目标 · {value.title} v{value.version}</option>}
       {scopes.map(scope=><option key={scopeKey(scope)} value={scopeKey(scope)}>独立草稿 · {scope.name}</option>)}</select></label>}
-    {goalsLoaded && active && area==='gsa'  && stage==='goals' && <BusinessRoleConversation onGoalDraft={(draft:GoalDraftInput,source:GoalRoleSuggestionRef)=>openEditor(roleGoal?'revise':'create',{...draft,roleSuggestion:source})} owner={handoff?{role:'goal-draft',draftId:handoff.destination.draftId,scope:handoff.destination.scope,strategyChoice:{discussionId:handoff.discussionId,version:handoff.version}}:roleGoal?{role:'goal',goalId:roleGoal.goalId,version:roleGoal.version}:{role:'goal-draft',draftId:stableDraftId(draftScope),scope:draftScope}}/>}
+    {goalOwner && stage==='goals' && <BusinessRoleConversation onGoalDraft={(draft:GoalDraftInput,source:GoalRoleSuggestionRef)=>openEditor(roleGoal?'revise':'create',{...draft,roleSuggestion:source})} owner={goalOwner}/>}
     {(area==='gsa' || stage==='bsc') && <>
     <div className="case-board-toolbar"><div className="case-board-filters"><label htmlFor={`${id}-perspective`}>适用视角</label><select id={`${id}-perspective`} value={perspective} onChange={e => setPerspective(e.target.value as typeof perspective)}><option value="all">全部视角</option>{Object.entries(perspectiveLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><button type="button" className="text-button" disabled={loading} onClick={() => { void refresh(); }}>刷新目标与来源</button></div><span className="sg-muted">{index.goals.length}个目标 · 候选与已采纳版本分别保留</span></div>
     {loading && !index.goals.length ? <p className="case-message" role="status">正在读取目标记录…</p> : !visible.length ? <div className="sg-empty"><h2>{index.goals.length ? '此视角尚无已记录目标' : '从一个适用目标开始'}</h2><p>可以复用已有目标，也可先保存候选。无需先编完整组织层级或填满全部BSC维度。</p><button type="button" className="secondary-button" onClick={() => openEditor('create')}>新建候选目标</button></div> : <div className="sg-grid" aria-label="目标列表">{visible.map(x => { const v = current(x); return <button type="button" className="sg-goal-choice" key={x.id} aria-pressed={x.id === selectedId} onClick={() => select(x.id)}><span className={`sg-badge ${v.status === 'candidate' ? 'pending' : ''}`}>{v.status === 'candidate' ? '候选待采纳' : '已采纳'} · v{v.version}</span><strong>{v.title}</strong><small>{scopeLabels[v.scope.kind]} · {v.scope.name} · {v.responsible}</small><small>{v.baseline.state === 'pending' ? '基线待补' : '已有基线说明'}{x.adoptedVersion !== null && x.adoptedVersion !== v.version ? ` · 正式采用仍为v${x.adoptedVersion}` : ''}</small></button>; })}</div>}

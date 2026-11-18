@@ -16,7 +16,8 @@ const object = (value: unknown): value is Record<string, unknown> => value !== n
 const text = (value: unknown): value is string => typeof value === 'string' && Boolean(value.trim()) && value.length <= 300 && !/[\u0000-\u001f\u007f]/u.test(value);
 const sourceKey = (source: ProjectTaskResultBinding) => JSON.stringify([source.sessionId, source.requestId, source.toolCallId]);
 const sourceValue = (source: ProjectTaskResultBinding) => JSON.stringify([source.projectId, source.taskId, source.sessionId, source.requestId, source.toolCallId, source.relativePath, source.sha256, source.bytes]);
-export interface TaskBoundReportsOptions { signal?: AbortSignal; budget?: NativeSnapshotReadBudget; assertCurrent?(): void; onRunContext?(requestId: string, sessionId: string, provided: Record<string, unknown>): void }
+export type ResultSessionSnapshot = Awaited<ReturnType<typeof readNativeSessionSnapshot>>;
+export interface TaskBoundReportsOptions { signal?: AbortSignal; budget?: NativeSnapshotReadBudget; assertCurrent?(): void; onSession?(snapshot: ResultSessionSnapshot): void }
 type NativeEntry = Awaited<ReturnType<typeof readNativeSessionSnapshot>>['entries'][number];
 
 /** Select only the final reply on the completed run's own ancestor chain. */
@@ -77,12 +78,10 @@ async function scanTaskResultSources(project: ProjectRecord, task: TaskRecord, o
     try { snapshot = await readNativeSessionSnapshot(file, task.sessionDirectory, path.join(project.rootPath, '020_clean'), stat.size, { ...options, budget }); }
     catch (error) { check(); if (error instanceof ProjectTaskResultSourceError) throw error; fail(); }
     check();
+    options.onSession?.(snapshot);
     const sessionId = snapshot.manager.getSessionId();
     const entries = snapshot.manager.getEntries(), byId = new Map(entries.map(entry => [entry.id, entry]));
     for (const entry of entries) {
-      if (options.onRunContext && entry.type === 'custom' && entry.customType === 'optracall.run' && object(entry.data) && entry.data.phase === 'started' && entry.data.sessionId === sessionId && text(entry.data.requestId)) {
-        options.onRunContext(entry.data.requestId, sessionId, object(entry.data.providedContext) ? entry.data.providedContext : {});
-      }
       if (entry.type !== 'custom' || entry.customType !== 'optracall.project-report-write') continue;
       const data = entry.data;
       // An exported fork can carry its parent's entries. Those remain parent

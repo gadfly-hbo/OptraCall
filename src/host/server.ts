@@ -1,3 +1,4 @@
+import {readCaseOriginRevision} from './case-creation-source.ts';
 import { approvedTaskSkills, makeTaskAssignment, parseTaskAssignment, taskPurpose, type TaskAssignment, type TaskCaseIssue } from './task-assignment.ts';
 import type { ProjectTaskResultsContext, ProjectTaskResultsOptions } from './project-task-results-types.ts';
 import { createStrategyChoices, strategyDocument } from './strategy-choice-versions.ts';
@@ -21,6 +22,7 @@ import { createStrategyGoalSources, validateStrategyGoalScope } from './strategy
 import { createProjectPlanPreparationHost, projectPlanPreparationDirectory, projectPlanPreparationOwner } from './project-plan-preparation-host.ts';
 import { createAnalysisDeliveryPort } from './analysis-delivery.ts';
 import { listTaskBoundReports, listTaskResultSources } from './project-task-result-sources.ts';
+import { hasReceivedTaskResults, verifyTaskResultLineage } from './project-result-lineage.ts';
 import { ProjectTaskResultsError, createProjectTaskResultsReader } from './project-task-results.ts';
 import { createProjectPlanFeature } from './project-plan-host.ts';
 import { createProjectPlanStore, ProjectPlanFault } from './project-plan-store.ts';
@@ -48,7 +50,7 @@ import { ConfigurationStore, ConfigurationStoreError, TARGET_MODELS } from './co
 import { createWebSearch } from './web-search.ts';
 import { ProjectStore, ProjectStoreFault, type ProjectRecord, type TaskRecord } from './project-store.ts';
 import { createProjectFilesPort } from './project-files.ts';
-import { createDbLinkHost } from './db-link-host.ts';
+import { createDbLinkHost, dbNativeOwner, dbLinkModelOutlet } from './db-link-host.ts';
 import { createDbLinkReviewPort } from './db-link-review-port.ts';
 import { PROJECT_UPLOAD_JSON_MAX_BYTES } from './project-upload.ts';
 import { ModelPackStore } from './model-pack-store.ts';
@@ -108,7 +110,7 @@ import { createPptRefinerRoutes } from '../../extensions/business-plugins/ppt-re
 import { createPptRefinerSessions } from './ppt-refiner-sessions.ts';
 import { createPptRefinerAccess } from './ppt-refiner-access.ts';
 import { createAgentSessionDomain, type AgentSessionDomain, type SessionContext } from './agent-sessions.ts';
-import { savedTaskHistory, priorTaskRequest, taskContextReceipts, receivedTaskResultKeys, readSavedTaskReply, ProjectHistoryError } from './project-history.ts';
+import { savedTaskHistory, priorTaskRequest, taskContextReceipts, readSavedTaskReply, ProjectHistoryError } from './project-history.ts';
 import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
 import { createVerificationFeature, parseVerificationSelection } from './verification-host.ts';
 import { VerificationStoreError } from './verification-store.ts';
@@ -746,7 +748,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         catch { throw new StrategyGoalsError('strategy_goal_metric_unavailable', 409); }
       }
   };
-  const strategySourcePermissions=createStrategyDiscussionSourcePermissions({projects,data:projectDataContext,dbLinks,enterpriseSourceAllowed:enterpriseSemanticSourceAllowed,isClosing:()=>closing});
+  const strategySourcePermissions=createStrategyDiscussionSourcePermissions({projects,data:projectDataContext,dbLinks,enterpriseSourceAllowed:enterpriseSemanticSourceAllowed,isClosing:()=>closing,taskResultAllowed:assertTaskResultAccess});
   const discussionSourceReader=createStrategyDiscussionSources<Readonly<RuntimeModelConfiguration>>({projects,data:projectDataContext,methods:sapMethods,enterprise:enterpriseMaterials,readSource:readPersonalSource,listTaskSources:async(projectId,context,taskId)=>{
     context.assertCurrent();const project=await projects.get(projectId),tasks=taskId?[await projects.getTask(projectId,taskId)]:project.tasks;
     const reports:import('./project-task-results-types.ts').ProjectTaskResultBinding[]=[],replies:import('./project-task-results-types.ts').ProjectTaskNativeReplyBinding[]=[];
@@ -755,11 +757,51 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const discussionSourceContext=(owner:import('./strategy-discussion-types.ts').StrategyDiscussion)=>({assertCurrent:()=>{if(closing||!availableConfiguration(owner.configurationId,owner.configurationRevision))throw new StrategyDiscussionFault('strategy_discussion_context_changed');if(strategyDiscussions.store.get(owner.id).revision!==owner.revision)throw new StrategyDiscussionFault('strategy_discussion_context_changed');}});
   const discussionOptions: Parameters<typeof createStrategyDiscussionHost>[0]={dataRoot,codeRoot:options.cwd,goals:strategyGoals,configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{offset:page?.offset,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}};
   const strategyDiscussions=createStrategyDiscussionHost(discussionOptions);
+  async function readGoalOrigin(owner:Extract<import('./business-role-types.ts').BusinessRoleOwner,{role:'goal'|'goal-draft'}>,scope:import('./strategy-goals-types.ts').GoalScope,cfg?:Readonly<RuntimeModelConfiguration>){
+    const origin=owner.caseSource;
+    if(!origin)return {};
+    const denied=():never=>{throw new StrategyDiscussionFault('goal_origin_not_readable',403);};
+    const check=()=>{if(closing||!cfg||!availableConfiguration(cfg.id,cfg.revision))denied();};
+    check();
+    const enterprise=scope.kind==='enterprise'?scope.id:scope.enterpriseId;
+    const match=(actual?:string)=>{if(actual!==enterprise)denied();};
+    if(origin.kind==='case'){
+      const record=readCaseOriginRevision(cases,origin);
+      const enterprises=new Set([studio.enterpriseScopes.enterpriseIdForCase(origin.caseId),...cases.listProjectLinks(origin.caseId).map(p=>studio.enterpriseScopes.enterpriseIdForProject(p.projectId))].filter((id):id is string=>!!id));
+      const bound=record.goalBinding?strategyGoals.read(record.goalBinding.primary):undefined;
+      const boundEnterprise=bound?.scope.kind==='enterprise'?bound.scope.id:bound?.scope.enterpriseId;
+      if(boundEnterprise)enterprises.add(boundEnterprise);
+      if(enterprises.size>1)denied();
+      match([...enterprises][0]);
+      return {caseOrigin:{source:origin,record}};
+    }
+    const project=await projects.get(origin.projectId),task=await projects.getTask(project.id,origin.taskId);
+    if(project.archivedAt||task.archivedAt)denied();
+    match(studio.enterpriseScopes.enterpriseIdForProject(project.id));
+    const issue=task.assignment?.issue;
+    if(issue){
+      assertIssue(project.id,issue);
+      const binding=cases.getGoalBinding(issue.caseId);
+      const bound=binding?strategyGoals.read(binding.primary):undefined;
+      if(!bound||bound.scope.kind!==scope.kind||bound.scope.id!==scope.id||bound.scope.enterpriseId!==scope.enterpriseId)denied();
+      if(owner.role==='goal'&&(owner.goalId!==bound!.goalId||owner.version!==bound!.version))denied();
+    }
+    const taskOrigin={source:origin,project:{id:project.id,name:project.name},task:{id:task.id,name:task.name,type:task.assignment?.type,issue}};
+    if(!origin.reply)return {caseOrigin:taskOrigin};
+    const ref=origin.reply;
+    const target={kind:'task-native-reply' as const,projectId:project.id,taskId:task.id,sessionId:ref.sessionId,messageId:ref.messageId,sha256:ref.expectedTextSha256};
+    await assertTaskResultAccess(target,cfg!,{assertCurrent:check},issue);
+    const result=await readPersonalSource(ref,{audience:'agent'});
+    if(result.status!=='available'||result.text===null||result.sha256!==ref.expectedTextSha256)denied();
+    check();
+    return {caseOrigin:{...taskOrigin,reply:{text:result.text,sha256:result.sha256}}};
+  }
   const readRoleContext:RoleContextReader = async (owner, cfg, writing) => {
     if(closing)throw new StrategyDiscussionFault('host_closing');
     if(owner.role==='goal-draft'){
       validateStrategyGoalScope(owner.scope,studio.enterpriseScopes);
-      if(!owner.strategyChoice)return {scope:owner.scope};
+      const original=await readGoalOrigin(owner,owner.scope,cfg);
+      if(!owner.strategyChoice)return {scope:owner.scope,...original};
       const {discussionId,version}=owner.strategyChoice;
       const handed=await choices.read(discussionId,version);
       const scope=handed.version.destination?.scope;
@@ -768,7 +810,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         throw new StrategyDiscussionFault('role_strategy_handoff_scope_mismatch',403);
       if(!cfg)throw new StrategyDiscussionFault('role_source_model_unavailable',403);
       await strategyDiscussions.verifyChoiceSource(handed.version.source,cfg);
-      return {scope:owner.scope,strategyChoice:handed};
+      return {scope:owner.scope,strategyChoice:handed,...original};
     }
     if(owner.role==='project'){
       const project=await projects.get(owner.projectId);
@@ -781,19 +823,12 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     if(owner.role==='case'){
       const record=cases.getCase(owner.caseId);
       if(writing&&record.status==='closed')throw new StrategyDiscussionFault('case_closed');
-      const {issue,rounds}=await caseDecisions.issueTimeline(owner.caseId,owner.itemId);
+      const issue={caseId:owner.caseId,issueId:owner.itemId};
+      const materials=await caseDecisions.issueModelContext(issue.caseId,issue.issueId,qualifyIssueReply(issue,cfg));
       const goalBinding=cases.getGoalBinding(owner.caseId);
       const primary=goalBinding?strategyGoals.read(goalBinding.primary):undefined;
-      const history=rounds.map(({choice,actions,review})=>({
-        choice:{id:choice.choiceId,decision:choice.choice,reason:choice.reason,previous:choice.previousChoiceId,
-          date:choice.occurredAt,goalBinding:choice.goalBinding,proposed:choice.strategyRef},
-        actions:actions.map(a=>({projectId:a.projectId,itemId:a.itemId,taskId:a.taskId,title:a.title,status:a.status,
-          authorizations:a.authorizations.map(x=>({id:x.id,scope:x.scope,decision:x.decision,time:x.time})),
-          feedback:a.feedback.map(x=>({revisionId:x.revisionId,effect:x.effect,outcome:x.outcome,metricDelta:x.metricDelta,review:x.review}))})),
-        review:review?{id:review.operationId,when:review.createdAt,observation:review.observation,judgement:review.judgement,nextStep:review.nextStep}:null,
-      }));
-      return {case:record,issue,goalBinding,primaryGoal:primary?{id:primary.goalId,version:primary.version,title:primary.title,outcome:primary.outcome}:null,rounds:history,
-        sourceRights:history.flatMap(r=>r.actions.flatMap(a=>[a.projectId+'/'+a.itemId+'/'+a.taskId,...a.feedback.map(f=>f.revisionId)]))};
+      if(primary)await validateStrategyGoal(primary,undefined,cfg);
+      return {case:record,...materials,goalBinding,primaryGoal:primary?{id:primary.goalId,version:primary.version,title:primary.title,outcome:primary.outcome}:null};
     }
     const goal=strategyGoals.read({goalId:owner.goalId,version:owner.version});
     await validateStrategyGoal(goal,undefined,cfg);
@@ -807,7 +842,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     }
     const {arrangements}=await readGoalVersionPage(owner.goalId,owner.version);
     const current=strategyGoals.get(owner.goalId);
-    return {goal,upstream,adoptedVersion:current.adoptedVersion,arrangements:arrangements.map(a=>({id:a.id,projectId:a.projectId,source:a.source,actions:a.actions,createdAt:a.createdAt})),
+    return {goal,upstream,...await readGoalOrigin(owner,goal.scope,cfg),adoptedVersion:current.adoptedVersion,arrangements:arrangements.map(a=>({id:a.id,projectId:a.projectId,source:a.source,actions:a.actions,createdAt:a.createdAt})),
       sourceRights:arrangements.flatMap(a=>a.actions.map(item=>a.projectId+'/'+item.itemId+'/'+item.taskId+'/'+item.authorizationId))};
   };
   const businessDiscussions=createStrategyDiscussionHost({...discussionOptions,roleContext:readRoleContext});
@@ -1179,6 +1214,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const savedHistory = (project: ProjectRecord, task: TaskRecord, capabilities: Record<string, unknown> = {}) => savedTaskHistory(project, task, SDK_VERSION, capabilities);
   async function taskState(projectId: string, taskId: string, activate = false, inMutation = false) {
     let { project, task } = await pair(projectId, taskId);
+    await checkReceivedHistory({ project, task }, { signal: AbortSignal.timeout(30000), assertCurrent() { if (closing) throw new RequestFault(409, 'host_closing'); } });
     const ref = projectSessions.ref({ project, task });
     let current = await projectSessions.read(ref), snapshot: ProjectSnapshot;
     const interrupted = !current.live && !current.opening && (Boolean(current.context) || ['running', 'interrupted'].includes(task.lastRun?.status ?? ''));
@@ -1333,6 +1369,38 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   const projectPlanFeature = createProjectPlanFeature({ codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), plans: projectPlans, projects, cases, goals: strategyGoals, defaultUsageContext:async()=> (await usageSettings.read()).context, methods: sapMethods, databaseSources: (projectId, read) => dbLinks.planningSources(projectId, read), mutate, isClosing: () => closing, startMessage: (projectId, taskId, input) => startProjectMessage(projectId, taskId, input, { userText: false }), registerFresh: async (projectId, taskId) => { const owner = await pair(projectId, taskId); projectSessions.registerFresh(projectSessions.ref(owner)); } });
   const projectPlanPreparation = createProjectPlanPreparationHost({ dataRoot, projects, plans: projectPlans, sessions: requirementSessions, capabilities: projectPlanFeature.capabilities, validate: projectPlanFeature.validate, goalContent: projectPlanFeature.goalContent, prepareContext:projectPlanFeature.prepareContext, goalEvidence:projectPlanFeature.goalEvidence, capabilityIssues: projectPlanFeature.capabilityIssues, mutate, isClosing: () => closing });
+  function qualifyIssueReply(issue:TaskCaseIssue,cfg:Readonly<RuntimeModelConfiguration>|undefined,receivingTask?:{projectId:string;taskId:string}) {
+    return async (source:import('./case-decision-types.ts').CaseIssueReply,requestId:string) => {
+      if (!cfg) throw new RequestFault(403,'role_source_model_unavailable');
+      const assertCurrent = () => {
+        if (closing || !availableConfiguration(cfg.id,cfg.revision)) throw new RequestFault(409,'configuration_changed');
+        if (!cases.listProjectLinks(issue.caseId).some(p=>p.projectId===source.projectId)) throw new RequestFault(403,'task_issue_unavailable');
+      };
+      assertCurrent();
+      await assertTaskResultAccess({kind:'task-native-reply',projectId:source.projectId,taskId:source.taskId,sessionId:source.sessionId,
+        messageId:source.messageId,sha256:source.expectedTextSha256,requestId},cfg,{assertCurrent,receivingTask},issue);
+      assertCurrent();
+    };
+  }
+  async function assertTeachSourceRights(task:ProjectOwner['task'],provided:Record<string,unknown>) {
+    const original=provided.teachSourceRights;
+    if(original===undefined)return;
+    const assignment=task.assignment, issue=assignment?.issue;
+    if(assignment?.type!=='teach'||!issue?.choiceId||!Array.isArray(original)||!Array.isArray(provided.teachSources))throw new RequestFault(403,'task_issue_source_unavailable');
+    const rights=await caseDecisions.currentTeachRights(issue.caseId,issue.issueId,issue.choiceId,issue.feedbackRevisionId);
+    if(original.some(id=>!rights.includes(id)))throw new RequestFault(403,'task_issue_source_unavailable');
+  }
+  async function readTeachRound(project:ProjectRecord,task:ProjectOwner['task']) {
+    const assignment=task.assignment, issue=assignment?.issue;
+    if(assignment?.type!=='teach'||!issue?.choiceId)return undefined;
+    const cfg=availableConfiguration(task.configuration.id,task.configuration.revision);
+    const result=await caseDecisions.issueModelContext(issue.caseId,issue.issueId,qualifyIssueReply(issue,cfg??undefined,{projectId:project.id,taskId:task.id}),issue.choiceId,issue.feedbackRevisionId);
+    for(const receipt of await taskContextReceipts(project,task,true)) {
+      const prior=receipt.providedContext?.teachSourceRights;
+      if(prior!==undefined&&(!Array.isArray(prior)||prior.some(id=>!result.sourceRights.includes(id)))) throw new RequestFault(403,'task_issue_source_unavailable');
+    }
+    return result;
+  }
   function assertIssue(projectId: string, issue: TaskCaseIssue) {
     const item = cases.getDecisionIssue(issue.caseId, issue.issueId);
     const record = cases.getCase(issue.caseId);
@@ -1358,44 +1426,135 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const chosen = catalog.skills.find(s => s.id === skill.id && s.sha256 === skill.sha256 && s.filePath === path.resolve(options.cwd, 'extensions/analysis-assets', skill.id, 'SKILL.md'));
     if (!chosen) throw new RequestFault(409, 'task_skill_version_changed');
   }
+  async function assertTaskResultAccess(target: Record<string, unknown>, cfg: Readonly<RuntimeModelConfiguration>, context: import('./strategy-discussion-sources.ts').StrategyDiscussionSourceContext, issue?: { caseId: string; issueId?: string; choiceId?: string }) {
+    const deny = (): never => { throw new RequestFault(403, 'project_result_permission_unavailable'); };
+    if (typeof target.projectId !== 'string') return deny();
+    const project = await projects.get(target.projectId);
+    const assertCurrent = () => { context.assertCurrent(); context.signal?.throwIfAborted(); if (closing || !availableConfiguration(cfg.id, cfg.revision)) deny(); };
+    assertCurrent();
+    const receiver = context.receivingTask;
+    const receivingProject = receiver ? await projects.get(receiver.projectId) : project;
+    const receivingTask = receiver && receivingProject.tasks.find(t => t.id === receiver.taskId && !t.archivedAt);
+    if (receiver && (!receivingTask || receivingProject.archivedAt)) deny();
+    const allowedIssue = issue ?? receivingTask?.assignment?.issue;
+    function checkCase(caseId: string, issueId: string | undefined, sourceProject: ProjectRecord) {
+      if (cases.getStatus().state !== 'ready' || allowedIssue?.caseId !== caseId || issueId && allowedIssue.issueId !== issueId) return deny();
+      const links = cases.listProjectLinks(caseId);
+      if (![sourceProject.id, receivingProject.id].every(id => links.some(link => link.projectId === id))) return deny();
+      if (issueId) cases.getDecisionIssue(caseId, issueId);
+    }
+    if (receiver && receiver.projectId !== project.id) {
+      const bound = receivingTask?.assignment?.issue;
+      if (!issue?.issueId || bound?.caseId !== issue.caseId || bound.issueId !== issue.issueId) return deny();
+      checkCase(issue.caseId, issue.issueId, project);
+    }
+    const source = async (project: ProjectRecord, task: TaskRecord, ref: Record<string, unknown>) => {
+      if (['enterprise','sap','sap-method'].includes(String(ref.kind))) {
+        const read = await semanticContext.query(project.id, task.id, { action:'read', target:ref as SemanticTarget }, { audience:'agent', signal:context.signal, assertCurrent });
+        if (!read.items.some(item => item.state === 'available' || item.state === 'partial')) deny();
+        if (receivingProject.id !== project.id && !await enterpriseSemanticSourceAllowed(receivingProject.id, ref as SemanticTarget)) deny();
+      }
+      await strategySourcePermissions({ projectId: project.id, configurationId: cfg.id, configurationRevision: cfg.revision }, cfg, ref, { ...context, metadataOnly: false, assertCurrent });
+    };
+    await verifyTaskResultLineage(project, target, { signal: context.signal, current: assertCurrent,
+      teachProject: async (id, task) => {
+        const sourceProject = await projects.get(id), teachIssue = task.assignment?.issue;
+        if (!teachIssue || sourceProject.archivedAt) return deny();
+        checkCase(teachIssue.caseId, teachIssue.issueId, sourceProject); return sourceProject;
+      },
+      report: async (project, file, sha256, bytes) => { const saved = await projects.observeFile(project.id, file); if (saved.sha256 !== sha256 || saved.bytes !== bytes) deny(); },
+      run: async (project, task, requestId, provided) => {
+        const original = provided as import('../agent/project-runtime.ts').ProvidedContextInput;
+        const from = original.taskAssignment?.issue ?? task.assignment?.issue;
+        if (from) checkCase(from.caseId, from.issueId, project);
+        if (original.case) {
+          if (cases.getStatus().state !== 'ready' || original.case.operationId !== contextOperationId(project.id, task.id, requestId)) deny();
+          const receipt = cases.getOperation(original.case.operationId);
+          if (receipt?.kind !== 'task_context_prepare' || receipt.phase !== 'completed' || !receipt.caseId || receipt.projectId !== project.id) return deny();
+          checkCase(receipt.caseId, undefined, project);
+        }
+        if (original.projectPlan) {
+          const fixed = (await projectPlans.read(project.id)).history.find(row => row.id === original.projectPlan!.confirmationId && row.planVersion === original.projectPlan!.planVersion);
+          if (!fixed) return deny();
+          if (fixed.plan.caseContext) checkCase(fixed.plan.caseContext.caseId, undefined, project);
+        }
+        if (provided.teachSourceRights) await assertTeachSourceRights(task, provided);
+        if (original.enterprise?.case) checkCase(original.enterprise.case.caseId, undefined, project);
+        for (const material of original.enterprise?.materials ?? []) await source(project, task, { kind: 'enterprise', storeId: original.enterprise!.directory.storeId, materialId: material.materialId, revisionId: material.revisionId });
+        for (const { selection } of original.projectData ?? []) await source(project, task, { kind: selection.descriptionRevisionId ? 'data-description' : 'data-input', projectId: project.id, ...selection });
+        const rap = provided.rap as Record<string, unknown> | undefined;
+        if (rap?.basisSha256) {
+          if (typeof rap.instanceId !== 'string') return deny();
+          if (typeof rap.frameworkVersion === 'string') await requirementPlugin.review.assertFrameworkHistoryReadable(rap.instanceId, rap.frameworkVersion, project.id);
+          else if (typeof rap.version === 'string') await requirementPlugin.review.assertReleaseReadable(rap.instanceId, rap.version, project.id);
+          else deny();
+        }
+      },
+      tool: async (project, task, name, details, origin) => {
+        if (!details || typeof details !== 'object') return;
+        const saved = details as Record<string, unknown>;
+        if (name === 'read_semantic_context' && Array.isArray(saved.items)) for (const item of saved.items) {
+          if (!item?.target || !['available','partial'].includes(item.state)) continue;
+          const ref = item.target as Record<string, unknown>;
+          if (ref.kind === 'case-decision' || ref.kind === 'case-choice') checkCase(String(ref.caseId), undefined, project);
+          else if (ref.kind === 'data-citation' || ref.kind === 'data-evidence') await source(project, task, { ...ref, kind: 'citation-report' });
+          else if (['enterprise','sap','sap-method','data-input','data-description'].includes(String(ref.kind))) await source(project, task, ref);
+          else if (!(ref.kind === 'source' && (ref.source as {type?:string})?.type === 'native-reply')) return deny();
+        }
+        if (name.startsWith('db_') && saved.status !== 'rejected') {
+          if (typeof saved.resultId === 'string') {
+            const material = await dbLinks.resultManifestSource(project.id, task.id, saved.resultId, cfg, context);
+            await source(project, task, { kind: 'db-link-structure-source', projectId: project.id, owner: material.manifest.owner, source: material.manifest.source, sourceKind: 'query-result', sourceId: saved.resultId });
+          } else if (name === 'db_describe' && typeof saved.observationRef === 'string' && origin) {
+            const { observation } = await dbLinks.metadataReader.read(dbNativeOwner(project.id, task.id, origin), saved.observationRef);
+            await source(project, task, { kind:'db-link-structure-source', projectId:project.id, owner:observation.owner, source:observation.source, sourceKind:'metadata-observation', sourceId:observation.id });
+          } else if (name === 'db_save_description' && saved.inputVersion && saved.description) {
+            const version = saved.inputVersion as { datasetId:string; inputVersionId:string }, description = saved.description as { descriptionRevisionId:string };
+            await source(project, task, { kind:'data-description', projectId:project.id, datasetId:version.datasetId, inputVersionId:version.inputVersionId, descriptionRevisionId:description.descriptionRevisionId });
+          } else if (name === 'db_sources' && Array.isArray(saved.sources)) {
+            if (receiver && receiver.projectId !== project.id && saved.sources.length) deny();
+            for (const taskId of new Set([task.id, receiver?.taskId])) {
+              const available = await dbLinks.planningSources(project.id, { taskId, modelOutlet:dbLinkModelOutlet(cfg) });
+              for (const entry of saved.sources) {
+                const live = available.find(row => row.id === 'db-link:' + entry.connectionId && row.enabled);
+                if (!live || !live.modelExport.structure || entry.scope?.objects?.some((name:string) => !live.scope?.objects.includes('*') && !live.scope?.objects.includes(name))) deny();
+              }
+            }
+          } else if (!['failed','cancelled','unknown'].includes(String(saved.status))) deny();
+        }
+      },
+    });
+    if (receiver && receivingTask) {
+      const current = await projects.get(receiver.projectId), owner = current.tasks.find(t => t.id === receiver.taskId);
+      if (current.archivedAt || !owner || owner.archivedAt || owner.configuration.id !== receivingTask.configuration.id || owner.configuration.revision !== receivingTask.configuration.revision || JSON.stringify(owner.assignment) !== JSON.stringify(receivingTask.assignment)) return deny();
+    }
+    assertCurrent();
+  }
+  async function checkReceivedHistory(current: ProjectOwner, context: import('./strategy-discussion-sources.ts').StrategyDiscussionSourceContext) {
+    if (!current.task.sessionFile || !await hasReceivedTaskResults(current.project, current.task)) return;
+    const cfg = availableConfiguration(current.task.configuration.id, current.task.configuration.revision);
+    if (!cfg) throw new RequestFault(403, 'project_result_permission_unavailable');
+    await assertTaskResultAccess({ kind: 'task-history', projectId: current.project.id, taskId: current.task.id }, cfg,
+      { ...context, receivingTask: { projectId: current.project.id, taskId: current.task.id } }, current.task.assignment?.issue);
+  }
   function resultReader(receiver: ProjectOwner, scope: Pick<ProjectTaskResultsOptions, 'confirmation' | 'handoff'>, destination?: { configuration: ProjectOwner['task']['configuration']; issue?: TaskCaseIssue }) {
     const { project, task } = receiver;
-    const runs = new Map<string, Record<string, unknown>>();
-    const runKey = (taskId: string, sessionId: string, requestId: string) => JSON.stringify([taskId, sessionId, requestId]);
     return createProjectTaskResultsReader({ projects, projectId: project.id, taskId: task.id, ...scope,
       listBoundReports: async (projectId, taskId, read) => { const owner = await pair(projectId, taskId); return listTaskBoundReports(owner.project, owner.task, read); },
-      listResultSources: async (projectId, taskId, read) => { const owner = await pair(projectId, taskId); return listTaskResultSources(owner.project, owner.task, { ...read, onRunContext: (requestId, sessionId, provided) => runs.set(runKey(taskId, sessionId, requestId), provided) }); },
+      listResultSources: async (projectId, taskId, read) => { const owner = await pair(projectId, taskId); return listTaskResultSources(owner.project, owner.task, read); },
       readNativeReply: (ref, read) => readPersonalSource(ref, { ...read, audience: 'agent' }),
-      assertAuthorized: async ({ sourceTaskId, sessionId, requestId }, context) => {
+      assertAuthorized: async ({ sourceTaskId, source }, context) => {
         context.assertCurrent();
         if (closing) throw new RequestFault(409, 'host_closing');
         const current = await pair(project.id, task.id, true);
-        if (scope.handoff?.mode === 'selected' || destination) {
-          const source = await projects.getTask(project.id, sourceTaskId), assignment = current.task.assignment;
-          if ((!destination && (!assignment?.sources?.some(row => row.taskId === sourceTaskId) || JSON.stringify(assignment) !== JSON.stringify(task.assignment))) || source.archivedAt) throw new RequestFault(403, 'project_result_permission_unavailable');
-          const issue = destination ? destination.issue : assignment?.issue;
-          if (issue) assertIssue(project.id, issue);
-          if (source.assignment?.issue && (source.assignment.issue.caseId !== issue?.caseId || source.assignment.issue.issueId !== issue.issueId)) throw new RequestFault(403, 'project_result_permission_unavailable');
-          const recipient = destination?.configuration ?? current.task.configuration;
-          const cfg = availableConfiguration(recipient.id, recipient.revision);
-          if (!cfg) throw new RequestFault(403, 'project_result_permission_unavailable');
-          if (sessionId && requestId) {
-            const provided = runs.get(runKey(sourceTaskId, sessionId, requestId));
-            if (!provided) throw new RequestFault(403, 'project_result_permission_unavailable');
-            if (provided.case) {
-              if (cases.getStatus().state !== 'ready' || !issue) throw new RequestFault(403, 'project_result_permission_unavailable');
-              const original = cases.getOperation(contextOperationId(project.id, sourceTaskId, requestId));
-              if (!original || original.caseId !== issue.caseId || original.phase !== 'completed') throw new RequestFault(403, 'project_result_permission_unavailable');
-            }
-            const selected = (provided.projectData ?? []) as import('./project-data-context-context.ts').ProjectDataContextProvision[];
-            for (const { selection } of selected) {
-              await strategySourcePermissions({ projectId: project.id, configurationId: cfg.id, configurationRevision: cfg.revision }, cfg,
-                { kind: selection.descriptionRevisionId ? 'data-description' : 'data-input', projectId: project.id, ...selection },
-                { ...context, ...(!destination ? { receivingTask: { projectId: project.id, taskId: current.task.id } } : {}) });
-            }
-          }
-          await assertFrameworkContinuation(project.id, sourceTaskId);
-        }
+        if (scope.handoff?.mode === 'selected' && (!current.task.assignment?.sources?.some(row => row.taskId === sourceTaskId) || JSON.stringify(current.task.assignment) !== JSON.stringify(task.assignment))) throw new RequestFault(403, 'project_result_permission_unavailable');
+        if (!source) return;
+        const recipient = destination?.configuration ?? current.task.configuration;
+        const cfg = availableConfiguration(recipient.id, recipient.revision);
+        if (!cfg) throw new RequestFault(403, 'project_result_permission_unavailable');
+        const caseId = scope.confirmation?.plan.caseContext?.caseId;
+        const issue = destination ? destination.issue : current.task.assignment?.issue ?? (caseId ? { caseId } : undefined);
+        await assertTaskResultAccess({ ...source }, cfg, { ...context, ...(!destination ? { receivingTask: { projectId: project.id, taskId: current.task.id } } : {}) }, issue);
         context.assertCurrent();
       },
     });
@@ -1518,7 +1677,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const assignment = task.assignment;
           if (assignment) checkAssignmentSkill(project, assignment);
           const agreement = assignment?.agreementVersion ? project.agreements?.find(a => a.version === assignment.agreementVersion) : assignment && await originalPlanAgreement(projectId, assignment);
-          const assignmentText = assignment ? '【用户的 Task 委托】' + JSON.stringify({ type: taskPurpose[assignment.type].label, deliverable: taskPurpose[assignment.type].deliverable, skill: assignment.skill, agreement, issue: assignment.issue && assertIssue(projectId, assignment.issue), selectedSources: assignment.sources }) + (assignment.sources?.length ? ' 可用 read_project_task_results 读取所选准确成果。分别核对版本、定义、粒度、证据和改判条件，按可取得的证据继续。' : '') : '';
+          const teachRound = await readTeachRound(project,task);
+          const assignmentText = assignment ? '【用户的 Task 委托】' + JSON.stringify({ type: taskPurpose[assignment.type].label, deliverable: taskPurpose[assignment.type].deliverable, skill: assignment.skill, agreement, issue: assignment.issue && assertIssue(projectId, assignment.issue), teachRound, selectedSources: assignment.sources }) + (assignment.sources?.length ? ' 可用 read_project_task_results 读取所选准确成果。分别核对版本、定义、粒度、证据和改判条件，按可取得的证据继续。' : '') : '';
           const withPlan = deliveredPlan ? `${deliveredPlan.text}\n\n${withoutStudio}` : withoutStudio;
           const prompt = [assignmentText, studioContext?.text, withPlan].filter(Boolean).join('\n\n');
           if (prompt.length > 131072) throw new EnterpriseContextError('enterprise_context_too_large', 413);
@@ -1526,6 +1686,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const providedContext = {
             goalSourceRefs:[...(deliveredPlan?.goalSourceRefs??[]),...caseGoalRefs],
             ...(assignment ? { taskAssignment: assignment } : {}),
+            ...(teachRound ? {teachSourceRights:teachRound.sourceRights,teachSources:teachRound.replies.map(({source,requestId})=>({
+              kind:'task-native-reply',projectId:source.projectId,taskId:source.taskId,sessionId:source.sessionId,messageId:source.messageId,sha256:source.expectedTextSha256,requestId
+            }))} : {}),
             originalUserText: input.text as string,
             userQuoteEligible: origin.userText,
             ...(deliveredPlan ? { projectPlan: deliveredPlan } : {}),
@@ -1550,7 +1713,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             }
           }
           catch (error) { if (owner.reviewAdmission === 'legacy' && (await automatic.store.readSettings({ projectId, taskId })).enabled) throw error; publish(projectId, taskId, { type: 'ui.notification', level: 'warning', message: '复核准入尚不可核对，本次保留普通分析合同；未自动补派核算。' }); }
-          return { prompt, providedContext: { ...providedContext, ...(calculationContract ? { reportCalculationReview: calculationContract } : {}) }, automaticObservation };
+          return { prompt, teachContextHash:teachRound && discussionHash(teachRound), providedContext: { ...providedContext, ...(calculationContract ? { reportCalculationReview: calculationContract } : {}) }, automaticObservation };
         });
         if ('previous' in prepared) { acknowledge({ requestId, status: prepared.previous, deduplicated: true }); return; }
         const suppliedRap = prepared.providedContext?.rap;
@@ -1558,17 +1721,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           text: prepared.prompt!, requestId, requestFingerprint: fingerprint, providedContext: prepared.providedContext,
           verifyBeforeDispatch: async () => {
             await assertFrameworkContinuation(projectId, taskId);
+            await checkReceivedHistory(await pair(projectId, taskId, true), { signal: AbortSignal.timeout(30000), assertCurrent() { if (closing) throw new RequestFault(409, 'host_closing'); } });
             if (owner.task.assignment) {
               const current = await pair(projectId, taskId, true);
               if (JSON.stringify(current.task.assignment) !== JSON.stringify(owner.task.assignment)) throw new RequestFault(409, 'task_assignment_changed');
               checkAssignmentSkill(current.project, owner.task.assignment);
               await originalPlanAgreement(projectId, owner.task.assignment);
-              if (owner.task.assignment.sources?.length) {
-                const delivered = await receivedTaskResultKeys(current.project, current.task);
-                const reader = resultReader(current, { handoff: { mode: 'selected', sources: owner.task.assignment.sources } });
-                for (const id of delivered) await reader('read', { id, limit: 128 }, { signal: AbortSignal.timeout(30000), assertCurrent() { if (closing) throw new RequestFault(409, 'host_closing'); } });
-              }
               if (assignedIssue) assertIssue(projectId, assignedIssue);
+              if(prepared.teachContextHash && discussionHash(await readTeachRound(current.project,current.task))!==prepared.teachContextHash)
+                throw new RequestFault(409,'task_issue_context_changed');
             }
             if (deliveredPlan) await projectPlanFeature.context(projectId, taskId, planSelection);
           if (suppliedRap) {
@@ -1635,7 +1796,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           response.on('close',unsubscribe);
           response.write(`data: ${JSON.stringify({type:'snapshot',snapshot:view.snapshot})}\n\n`);return;
         }
-        const result=await businessRoleConversation(url.searchParams.get('owner'),action,request.method??'GET',request.method==='POST'?await body(request):{});
+        const readInput = url.searchParams.has('requestId') ? {requestId:url.searchParams.get('requestId')} : {};
+        const result=await businessRoleConversation(url.searchParams.get('owner'),action,request.method??'GET',request.method==='POST'?await body(request):readInput);
         json(response,action==='messages'?202:200,result);return;
       }
       if(url.pathname==='/api/strategy/discussions'){
@@ -1907,7 +2069,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             if (assignment) {
               checkAssignmentSkill(project, assignment);
               await originalPlanAgreement(projectId, assignment, !project.tasks.some(t => t.id === input.operationId));
-              if (assignment.issue) assertIssue(project.id, assignment.issue);
+              if (assignment.issue) {
+                const identity=assignment.issue;
+                assertIssue(project.id,identity);
+                if (identity.feedbackRevisionId) {
+                  const view=await caseDecisions.issueTimeline(identity.caseId,identity.issueId);
+                  if (!view.rounds.find(r=>r.choice.choiceId===identity.choiceId)?.actions.some(a=>a.feedback.some(f=>f.revisionId===identity.feedbackRevisionId)))
+                    throw new RequestFault(409,'case_round_feedback_unavailable');
+                }
+              }
               for (const ref of assignment.sources ?? []) {
                 const source = await projects.getTask(projectId, ref.taskId);
                 await resultReader({ project, task: source }, { handoff: { mode: 'own-results' } }, { configuration: selected, issue: assignment.issue })('read', { id: ref.key, limit: 128 }, resultReadContext(request));

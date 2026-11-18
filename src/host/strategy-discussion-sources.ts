@@ -239,9 +239,13 @@ export function createStrategyDiscussionSources<Configuration>(options: Strategy
           result.push(value);
         }
       }
-      for (const value of result) await qualify(discussion, configuration, value.target, context);
+      const authorized: StrategyDiscussionSource[] = [];
+      for (const value of result) {
+        try { await qualify(discussion, configuration, value.target, context); authorized.push(value); }
+        catch (error) { if (!(error instanceof StrategyDiscussionSourceFault && error.status === 403)) throw error; }
+      }
       await qualify(discussion, configuration, { kind: 'project-catalog', projectId }, context);
-      return result;
+      return authorized;
     },
     async read(value: StrategyDiscussionSource, discussion: StrategyDiscussion, configuration: Configuration, context: StrategyDiscussionSourceContext, page: { offset?: number; limit?: number } = {}): Promise<StrategyDiscussionSourceRead> {
       check(context);
