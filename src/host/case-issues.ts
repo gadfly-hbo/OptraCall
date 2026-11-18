@@ -127,7 +127,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     const events = cases.getEvents('case', caseId), board = deps.board;
     const rounds = choices.map(choice => ({ choice, historyLimited:false, strategy: cases.getDecision(caseId, choice.strategyRef.recordId, choice.strategyRef.revision),
       review: events.map(e => e.changes.issueReview?.after as CaseIssueReview | undefined).find(r => r?.choiceId === choice.choiceId) ?? null,
-      actions: [] as { projectId: string; itemId: string; taskId: string; title: string; status: string; currentAuthorizationId?: string; authorizations: { id: string; scope: string; decision: string; time: string }[]; observationTimeLimited?: boolean;
+      actions: [] as { projectId: string; itemId: string; taskId: string; title: string; status: string; currentAuthorizationId?: string; authorizations: { id: string; scope: string; decision: string; time: string }[]; observationTimeLimited?: boolean; quotedFeedbackLimited?: boolean;
         feedback: { revisionId: string; observedAt: string; authorizationId: string; actionTitle: string; effect: string; outcome: string; metricDelta: string; review: string }[] }[] }));
     if (board && rounds.length) {
       const matchesOriginalCall = quotedFeedbackMatches(deps.projects);
@@ -146,10 +146,11 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
           }
           const latest = all.at(-1);
           const currentAuthorizationId = latest && ours(latest) && latest.decision === 'authorize' ? latest.authorizationId : undefined;
+          let quotedFeedbackLimited=false;
           const observations = await Promise.all(board.listFeedbackHistory(task.id).map(async feedback => {
             let match=authorityAtFeedback(all,feedback);
             if (match && ours(match.authority) && !await matchesOriginalCall(feedback,match.authority)) {
-              round.historyLimited=true;
+              quotedFeedbackLimited=true;
               match=null;
             }
             return { feedback, match };
@@ -159,6 +160,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
             actionTitle:match.authority.taskSnapshot?.title ?? task.id, effect:f.effect, outcome:f.outcome, metricDelta:f.metricDelta, review:f.review,
           }] : []);
           round.actions.push({ currentAuthorizationId, projectId: item.projectId, itemId: item.id, taskId: task.id, title: task.title, status: task.status,
+            ...(quotedFeedbackLimited ? {quotedFeedbackLimited:true} : {}),
             ...(observations.some(o => o.match === undefined) ? {observationTimeLimited:true} : {}),
             authorizations: authority.map(a => ({ id: a.authorizationId, scope: a.scope, decision: a.decision, time: a.createdAt })), feedback });
         }
