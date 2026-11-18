@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { parseUserQuoteProvenance, type QuotedDecisionAction, type QuotedDecisionCallContext, type QuotedDecisionToolResult, type UserQuoteProvenance } from '../agent/quoted-decisions.ts';
 import type { CaseStore } from './case-store.ts';
-import { assertActionableCaseChoice } from './case-issues.ts';
+import { quotedFeedbackMatches } from './quoted-feedback-origins.ts';
+import { assertActionableCaseChoice, authorityAtFeedback } from './case-issues.ts';
 import type { ProjectStore } from './project-store.ts';
 import type { CaseDecisionRef, CaseStrategyChoice, CaseStrategyChoiceValue } from './case-decision-types.ts';
 import { parseCaseDecisionRef } from './case-decision-validation.ts';
@@ -250,6 +251,13 @@ export function createQuotedDecisionAdapter(options: {
         }
         if (context.caseContext) {
           await owner(context);
+          const feedback = options.board.getFeedbackOperation(input.operationId as string);
+          if (feedback) {
+            if (feedback.quoteProvenance?.projectId !== context.projectId || feedback.quoteProvenance.taskId !== context.taskId) fail('quoted_decision_scope_mismatch');
+            const boardTask = options.board.getTask(feedback.taskId);
+            await boardTarget({ itemId:boardTask.itemId, taskId:boardTask.id }, context);
+            return result({ type:'optracall.quoted-feedback-read', feedback:authorityReceipt(feedback) });
+          }
           const prior = options.cases.getOperation(input.operationId as string);
           if (prior?.kind === 'case_strategy_choice' && prior.phase === 'completed') {
             const choice = prior.result as unknown as CaseStrategyChoice;
@@ -371,9 +379,28 @@ export function createQuotedDecisionAdapter(options: {
         if (!Object.hasOwn(input, 'expectedLatestRevisionId') || typeof input.adopted !== 'boolean' || ['outcome', 'metricDelta', 'review'].some(key => typeof input[key] !== 'string') || !Object.hasOwn(input, 'score')) fail('quoted_decision_clarification_required');
         const prior = options.board.getFeedbackOperation(id), quoteProvenance = replayProvenance(supplied, prior?.quoteProvenance);
         authority = await options.mutate(async () => {
-          if (!options.board.getFeedbackOperation(id)) await checkTarget();
+          const saved = options.board.getFeedbackOperation(id);
+          if (!saved) await checkTarget();
+          const assertFeedbackRound = () => {
+            check(context);
+            const original = options.board.getFeedbackOperation(id);
+            const authorizations = options.board.listActionAuthorizations(target.task.id);
+            const basis = original ? authorityAtFeedback(authorizations, original)?.authority : authorizations.at(-1);
+            // A late report can belong to an earlier choice while the original action still belongs to it.
+            if (choice.issueId || (basis && !('kind' in basis.source))) {
+              if (!basis || 'kind' in basis.source || basis.source.choiceId !== choice.choiceId ||
+                  basis.source.caseStoreId !== ref.caseStoreId || basis.source.caseId !== ref.caseId ||
+                  canonical(basis.source.strategyRef) !== canonical(ref)) fail('case_feedback_round_mismatch');
+            }
+            return basis;
+          };
+          if (saved) {
+            const original = assertFeedbackRound();
+            if (choice.issueId && (!original || !await quotedFeedbackMatches(options.projects)(saved,original))) fail('case_feedback_round_mismatch');
+            check(context);
+          }
           return options.board.saveFeedback(target.task.id, { operationId: id, expectedLatestRevisionId: input.expectedLatestRevisionId, adopted: input.adopted, outcome: input.outcome,
-          metricDelta: input.metricDelta, review: input.review, score: input.score, effect: input.effect ?? 'unknown' } as SaveFeedbackInput, { quoteProvenance, assertWritable: () => check(context) });
+          metricDelta: input.metricDelta, review: input.review, score: input.score, effect: input.effect ?? 'unknown' } as SaveFeedbackInput, { quoteProvenance, assertWritable: assertFeedbackRound });
         });
         source = { authority: 'decision-board', id: target.task.id, version: authority.revisionId, projectId: context.projectId, taskId: target.task.id };
       }

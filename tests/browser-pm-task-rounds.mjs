@@ -5,7 +5,6 @@ import {spawn} from 'node:child_process';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {chromium} from 'playwright';
-import {providerMessageText} from './fixtures/tool-provider.ts';
 import {startTaskRounds} from './fixtures/pm-task-rounds.ts';
 
 async function browserRounds(t) {
@@ -65,15 +64,7 @@ test('Chrome hands over the unique current action from the project Decision and 
   for(const part of [b.choiceId,b.source.messageId,'新乙方案原文','新乙取舍理由','乙店授权范围'])assert.ok(prompt.includes(part),part);
   assert.ok(!prompt.includes('旧甲方案原文'));assert.equal(f.provider.requests.length,count+1);
   const operator=await f.create('decision','登记行动授权',f.owner);
-  async function record(text,command) {
-    await f.send(operator.id,text,turn=>{
-      if(!turn.recentToolResults.length)return {calls:[{name:'record_user_decision',arguments:{action:'read'}}]};
-      const actual=JSON.parse(providerMessageText(turn.recentToolResults.at(-1).content));
-      if(actual.type==='optracall.quoted-decision-read')return {calls:[{name:'record_user_decision',arguments:{
-        strategyRef:b.strategyRef,choiceId:b.choiceId,quote:{start:0,end:text.length,text},...command(actual)}}]};
-      assert.equal(actual.status,'completed',JSON.stringify(actual));return {text:'已登记授权状态'};
-    });
-  }
+  const record=(text,command)=>f.recordDecision(operator.id,b,text,command);
   await record('请另行授权乙店外场核对。',()=>({action:'arrange-actions',title:'乙店外场',scope:'乙店外场授权范围',checks:[],actions:[{kind:'create',title:'乙店外场核对'}]}));
   const alternate=(await f.api(f.issuePath)).rounds.at(-1).actions.find(a=>a.title==='乙店外场核对');
   const alternateId=alternate.currentAuthorizationId;
@@ -109,17 +100,32 @@ test('Chrome returns a late Teach to the old observed round and its two upstream
   const f=await browserRounds(t);
   const a=await f.choose('先行甲'),action=await f.authorize(a.choiceId,'甲店');
   const observed=await f.observe(action.taskId,'甲店');
+  const decision=await f.create('decision','改变授权范围',f.owner), later='观察后扩至四十店',other='同一轮的另一行动范围';
+  await f.recordDecision(decision.id,a,'原单店观察已归档，扩至四十店核查。',read=>{
+    const row=read.actions.find(entry=>entry.task.id===action.taskId);
+    return {action:'authorize-action',decision:'authorize',itemId:row.item.id,taskId:row.task.id,itemVersion:row.itemVersion,
+      taskVersion:row.taskVersion,expectedPreviousAuthorizationId:action.authorizationId,scope:later};
+  });
+  const subsequent=(await f.api('/api/decision-board/tasks/'+action.taskId+'/feedback','POST',{operationId:randomUUID(),expectedLatestRevisionId:observed.revisionId,
+    adopted:true,outcome:'全市后续观察',metricDelta:'2',review:'另核全市',score:null,effect:'none'})).feedback;
+  await f.recordDecision(decision.id,a,'另行授权外场核查。',()=>({action:'arrange-actions',title:'外场',scope:other,checks:[],actions:[{kind:'create',title:'外场行动'}]}));
+  const extra=(await f.api(f.issuePath)).rounds.at(-1).actions.find(act=>act.title==='外场行动');
+  const extraFeedback=await f.observe(extra.taskId,'外场');
+  const excluded=[later,other,subsequent.revisionId,extraFeedback.revisionId,extra.taskId,'随后乙方案原文'];
   const b=await f.choose('随后乙',a.choiceId), savedB=(await f.api(f.issuePath)).rounds.at(-1);
   await f.openCase();
   const row=f.work.locator('article').filter({hasText:'先行甲取舍理由'});
   const next=f.work.locator('article').filter({hasText:'随后乙取舍理由'});
-  await row.getByRole('button',{name:'按此观察准备 Teach'}).click();
+  const original=row.locator('p').filter({hasText:'甲店原观察'}).filter({has:f.page.getByRole('button',{name:'按此观察准备 Teach'})});
+  await original.getByRole('button',{name:'按此观察准备 Teach'}).click();
   const {task,prompt,requestId}=await f.createAndSend('迟到的甲店复盘','迟到的甲店复盘原文');
   assert.equal(task.assignment.issue.choiceId,a.choiceId);assert.equal(task.assignment.issue.feedbackRevisionId,observed.revisionId);
-  for(const marker of ['先行甲方案原文','甲店原观察',observed.revisionId])assert.ok(prompt.includes(marker),marker);
-  assert.ok(!prompt.includes('随后乙方案原文'));
+  for(const marker of ['先行甲方案原文','甲店原观察','甲店授权范围',action.authorizationId,observed.revisionId])assert.ok(prompt.includes(marker),marker);
+  for(const marker of excluded)assert.ok(!prompt.includes(marker),marker);
   await f.openCase();
   await row.getByText('本轮复盘',{exact:true}).click();
+  await original.getByText('观察时授权范围 · 甲店授权范围',{exact:true}).waitFor();
+  await row.getByLabel('原看板观察').selectOption(observed.revisionId);
   const source=row.getByLabel('准确 Teach 原回复');
   const value=await source.locator('option').filter({hasText:'迟到的甲店复盘'}).getAttribute('value');
   await source.selectOption(value);
@@ -141,7 +147,8 @@ test('Chrome returns a late Teach to the old observed round and its two upstream
     await panel.getByRole('textbox').fill('核对原观察和复盘');await panel.getByRole('button',{name:'发送',exact:true}).click();
     await panel.getByText('上游收到甲店复盘-'+role,{exact:true}).first().waitFor();
     const message=f.prompt();for(const m of [a.choiceId,observed.revisionId,body.review.reply.messageId,'迟到的甲店复盘原文','甲店原观察'])assert.ok(message.includes(m),m);
-    assert.ok(!message.includes('随后乙方案原文'));actual.push({role,requestId:(await sending).postDataJSON().requestId,choiceId:a.choiceId,messageId:body.review.reply.messageId,feedbackRevisionId:observed.revisionId,checkedText:['迟到的甲店复盘原文','甲店原观察']});
+    for(const m of excluded)assert.ok(!message.includes(m),m);assert.ok(message.includes(action.authorizationId));
+    const display=f.page.locator('main');await display.getByText('观察时授权范围 · 甲店授权范围',{exact:true}).waitFor();assert.ok(!(await display.innerText()).includes(later));actual.push({role,requestId:(await sending).postDataJSON().requestId,choiceId:a.choiceId,messageId:body.review.reply.messageId,feedbackRevisionId:observed.revisionId,checkedText:['迟到的甲店复盘原文','甲店原观察']});
     await f.page.getByRole('button',{name:'返回原事项'}).click();await row.getByText('复盘判断 · 原判断仍待核',{exact:true}).waitFor();
   }
   assert.deepEqual((await f.api(f.issuePath)).rounds.at(-1),savedB);
@@ -157,5 +164,5 @@ test('Chrome returns a late Teach to the old observed round and its two upstream
   await f.api(f.casePath+'/close','POST',{operationId:randomUUID(),expectedRevision:await f.revision(),reason:'已核对原轮次'});
   await f.api(f.issuePath+'/review','POST',{...command,operationId:randomUUID(),expectedRevision:await f.revision()},409);
   assert.deepEqual((await f.api(f.issuePath)).rounds.at(-1),savedB);
-  t.diagnostic(JSON.stringify({owner:f.owner,oldChoice:a.choiceId,newChoice:b.choiceId,taskId:task.id,requestId,reviewOperation:body.review.operationId,duplicateReadback:200,missingObservation:waiting.code,closedNewReview:409,actual}));
+  t.diagnostic(JSON.stringify({owner:f.owner,oldChoice:a.choiceId,newChoice:b.choiceId,taskId:task.id,requestId,reviewOperation:body.review.operationId,duplicateReadback:200,missingObservation:waiting.code,closedNewReview:409,originalAuthorization:action.authorizationId,omittedFromThreeRecipients:excluded,actual}));
 });

@@ -12,7 +12,7 @@ export interface TaskRoundReceipts {
 type Round = {sourceRights:string[]; replies:{source:CaseIssueReply;requestId:string}[]};
 const object=(v:unknown):v is Record<string,unknown>=>typeof v==='object'&&v!==null&&!Array.isArray(v);
 const unavailable=():never=>{throw Error('project_result_lineage_unavailable');};
-export function taskRoundReceiptKind(assignment:unknown) {
+export function taskRoundReceiptKind(assignment:unknown):'do'|'teach'|undefined {
   if(!object(assignment)||!object(assignment.issue)||!assignment.issue.choiceId)return;
   if(assignment.type==='teach'||assignment.type==='do'&&assignment.issue.authorizationId)return assignment.type;
 }
@@ -21,7 +21,7 @@ export function taskRoundReceipts(kind:'do'|'teach',round:Round):TaskRoundReceip
   return kind==='do' ? {doSourceRights:round.sourceRights,doSources:sources} : {teachSourceRights:round.sourceRights,teachSources:sources};
 }
 /** Older Hosts put the exact receipt in the first, Host-written JSON line, and persisted the complete native prompt hash. */
-export function historicalTaskRoundReceipts(assignment:TaskAssignment, nativeText:string, requestSha:unknown):TaskRoundReceipts {
+function historicalRound(assignment:TaskAssignment, nativeText:string, requestSha:unknown) {
   const kind=taskRoundReceiptKind(assignment),issue=assignment.issue;
   if(!kind||!issue||createHash('sha256').update(nativeText).digest('hex')!==requestSha)return unavailable();
   const prefix='【用户的 Task 委托】', first=nativeText.split('\n',1)[0]!;
@@ -36,5 +36,22 @@ export function historicalTaskRoundReceipts(assignment:TaskAssignment, nativeTex
     !Array.isArray(round.sourceRights)||!round.sourceRights.every(r=>typeof r==='string')||
     !Array.isArray(round.replies)||!round.replies.every(r=>object(r)&&typeof r.requestId==='string'&&object(r.source)&&r.source.type==='native-reply'&&
       ['projectId','taskId','sessionId','messageId','expectedTextSha256'].every(k=>typeof (r.source as Record<string,unknown>)[k]==='string')))return unavailable();
+  return {kind,round};
+}
+
+export function historicalTaskRoundReceipts(assignment:TaskAssignment, nativeText:string, requestSha:unknown):TaskRoundReceipts {
+  const {kind,round}=historicalRound(assignment,nativeText,requestSha);
   return taskRoundReceipts(kind,round as Round);
+}
+
+export interface ObservedAction { projectId:string; taskId:string; authorizationId:string; feedbackRevisionId:string }
+export function matchesOriginalObservation(assignment:TaskAssignment,text:string,sha:unknown,target:ObservedAction):boolean {
+  const {kind,round}=historicalRound(assignment,text,sha);
+  if(kind!=='teach' || !Array.isArray(round.rounds) || round.rounds.length!==1) return false;
+  const actions=round.rounds[0]?.actions;
+  if(!Array.isArray(actions) || actions.length!==1) return false;
+  const action=actions[0];
+  return action.projectId===target.projectId && action.taskId===target.taskId &&
+    action.authorizations?.length===1 && action.authorizations[0]?.id===target.authorizationId &&
+    action.feedback?.length===1 && action.feedback[0]?.revisionId===target.feedbackRevisionId;
 }

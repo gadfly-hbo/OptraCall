@@ -110,18 +110,20 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
           const source = ref.target.source;
           return <button key={i} className="text-button" onClick={() => void showSource(source)}>查看准确方案原回复</button>;
         })}
-        {r.actions.map(a => <div key={a.taskId}><p>{a.title} · {a.authorizations.at(-1)?.scope} · {a.status === 'done' ? '完成' : a.status === 'doing' ? '进行中' : '待办'}</p>
+        {r.actions.map(a => <div key={a.taskId}><p>{a.title} · 最近授权记录：{a.authorizations.at(-1)?.scope} · {a.status === 'done' ? '完成' : a.status === 'doing' ? '进行中' : '待办'}</p>
+          {a.observationTimeLimited && <p>部分观察的原时间或授权先后待核。{onBoard && <button className="text-button" onClick={()=>onBoard({openOriginal:true,boardTaskId:a.taskId,feedbackRevisionId:null,draftKey:a.taskId})}>查看原看板记录</button>}</p>}
           {
             current?.choice.choiceId === r.choice.choiceId && a.currentAuthorizationId && <button className="text-button" disabled={disabled || !projects.some(p=>p.id===a.projectId&&!p.archivedAt)} onClick={()=>{
               const target=projects.find(p=>p.id===a.projectId&&!p.archivedAt);
               if(target)onCreate(target,{type:'do',caseId:record.id,issueId,choiceId:r.choice.choiceId,authorizationId:a.currentAuthorizationId});
             }}>交接已授权的 Do Task</button>
           }{a.feedback.length ? a.feedback.map(f => <p key={f.revisionId}>{f.outcome} · {f.metricDelta} · {f.review || '效果待核'}
+            {a.authorizations.filter(auth => auth.id === f.authorizationId).map(auth => <small key={auth.id}>{auth.decision === 'revoke' ? '观察时授权已撤回' : '观察时授权范围'} · {auth.scope}</small>)}
             {onBoard && <button className="text-button" onClick={() => onBoard({openOriginal:true,boardTaskId:a.taskId,feedbackRevisionId:f.revisionId,draftKey:f.revisionId})}>查看原看板反馈</button>}
             <button className="text-button" disabled={disabled || !project} onClick={()=>project && onCreate(project,{type:'teach',caseId:record.id,issueId,choiceId:r.choice.choiceId,feedbackRevisionId:f.revisionId})}>按此观察准备 Teach</button></p>) :
-            <p>{a.currentAuthorizationId ? '待反馈' : '原行动授权已撤回或由后续授权取代'} {onBoard && <button className="text-button" onClick={() => onBoard({openOriginal:true,boardTaskId:a.taskId,feedbackRevisionId:null,draftKey:a.taskId})}>查看原看板行动</button>}</p>}
+            <p>{a.observationTimeLimited ? '观察与授权的对应关系待核' : a.currentAuthorizationId ? '待反馈' : '原行动授权已撤回或由后续授权取代'} {onBoard && <button className="text-button" onClick={() => onBoard({openOriginal:true,boardTaskId:a.taskId,feedbackRevisionId:null,draftKey:a.taskId})}>查看原看板行动</button>}</p>}
         </div>)}
-        {r.historyLimited && <p>历史记录有限，当前无法读取原行动或观察。请核对项目关联与原资料权限。</p>}
+        {r.historyLimited && <p>历史记录有限，部分行动或观察的归属待核。请核对原看板记录、项目关联和资料权限。</p>}
         {!r.actions.length && !r.historyLimited && <p>{r.review ? '已记录实际观察' : !caseChoicePermitsAction(r.choice.choice) ? '等待本轮实际观察' : '尚未授权行动'}</p>}
         {r.review && <><p>实际观察 · {r.review.observation}</p><p>复盘判断 · {r.review.judgement}</p><p>下一步或结束理由 · {r.review.nextStep}</p><button className="text-button" onClick={() => void showSource(r.review!.reply)}>查看 Teach 原回复</button></>}
         {!r.review && record.status !== 'closed' && <RoundReview round={r} replies={sources?.replies ?? []} disabled={disabled}

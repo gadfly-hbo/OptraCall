@@ -329,6 +329,33 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
   }
   return fail('invalid_strategy_discussion_action',400);
  }
+ function observedActionSignature(context:unknown) {
+  if (!object(context) || !object(context.teachReview) || !object(context.teachReview.review) || !context.teachReview.review.feedback) return;
+  const actions=context.teachReview.actions;
+  if (!Array.isArray(actions)) return fail('case_teach_observation_unverified');
+  return discussionHash(actions.map(a=>{
+   if (!object(a) || typeof a.projectId!=='string' || typeof a.itemId!=='string' || typeof a.taskId!=='string' ||
+       !Array.isArray(a.authorizations) || !a.authorizations.every(auth=>object(auth)&&typeof auth.id==='string') ||
+       !Array.isArray(a.feedback) || !a.feedback.every(f=>object(f)&&typeof f.revisionId==='string')) return fail('case_teach_observation_unverified');
+   return [a.projectId,a.itemId,a.taskId,a.authorizations.map(auth=>auth.id),a.feedback.map(f=>f.revisionId)];
+  }));
+ }
+ function checkTeachReviewContinuation(n:Awaited<ReturnType<typeof native>>, current:unknown) {
+  const expected=observedActionSignature(current);
+  if (!expected) return;
+  let hash:unknown;
+  for (const entry of n?.manager.getBranch()??[]) {
+   if (entry.type==='custom' && entry.customType==='optracall.run' && object(entry.data) && entry.data.phase==='started') {
+    const provided=entry.data.providedContext;
+    hash=object(provided)&&object(provided.businessRole)?provided.businessRole.contextSha256:undefined;
+   }
+   if (entry.type!=='message' || entry.message.role!=='user') continue;
+   const body=entry.message.content, text=typeof body==='string'?body:body.flatMap(part=>part.type==='text'?[part.text]:[]).join('');
+   let original;
+   try {original=JSON.parse(text.split('\n',1)[0]!).roleContext;} catch {return fail('case_teach_observation_unverified');}
+   if (!object(original) || discussionHash(original)!==hash || observedActionSignature(original)!==expected) return fail('case_teach_observation_unverified');
+  }
+ }
  async function assertRoleHistory(n:Awaited<ReturnType<typeof native>>, roleContext:unknown, owner:BusinessRoleOwner, cfg?:Readonly<RuntimeModelConfiguration>) {
   const current = object(roleContext) && Array.isArray(roleContext.sourceRights) ? roleContext.sourceRights : [];
   const missing = new Set<string>();
@@ -419,6 +446,7 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
   if(!cfg)fail('configuration_changed');
   const roleContext = owner.businessOwner ? await options.roleContext!(owner.businessOwner,cfg,true) : undefined;
   const sourceRights = owner.businessOwner ? await assertRoleHistory(n,roleContext,owner.businessOwner,cfg) : [];
+  if (owner.businessOwner && 'teachReview' in owner.businessOwner && owner.businessOwner.teachReview) checkTeachReviewContinuation(n,roleContext);
   const context=owner.goal && !owner.businessOwner ? options.goals.readContext([owner.goal]):undefined;
   const prompt=JSON.stringify({...(owner.businessOwner?{owner:owner.businessOwner,roleContext,roleVersion:businessRoleVersion}:{}),usageContext:owner.usageContext,methods:owner.methods,goalContext:context,sources:owner.sources,sourceScope:owner.sourceScope,claim:'accurate-context-not-professional-judgement'})+'\n\n用户本轮原话：\n'+originalUserText;
   if(prompt.length>65536)fail('strategy_discussion_materials_too_large',413);

@@ -17,3 +17,9 @@
 Host 在原 Task 的模型工具入口绑定事项。Case 表单与原话工具复用当轮可行动检查，取舍仍写既有 Case 事件，行动仍写既有看板。撤回必须引用原授权的同一行动和来源，后续授权、原始用户授权范围、负责人和发生事实各自保有既有历史。原话工具可以读当前轮次、自己原请求的操作号。[Task 绑定](../../../src/host/server.ts) · [Case 检查](../../../src/host/case-issues.ts) · [原话适配](../../../src/host/quoted-decision-adapter.ts) · [看板撤回](../../../extensions/business-plugins/decision-board/storage/store.ts)
 
 涉及项联合回归 39/39，类型检查和统一会话边界检查退出码均为 0。本专项只核合成实例的原话及经营记录，真实商业模型表述质量、经营行动效果和用户产品验收仍待相应验证。兼容回退沿原软件候选、既有 Case/看板存储与操作号，新增字段为可选，不需要迁移或重放用户操作。[回归](../../../.local/product-v13/pm2/decision/closed.log) · [类型](../../../.local/product-v13/pm2/decision/types-closed.log) · [边界](../../../.local/product-v13/pm2/decision/boundary-closed.log)
+
+## 非作者发现的反馈归属
+
+固定中间候选 `c4f5ecb` 中，同一看板行动先属 A，后来经原话授权转给 B。用户明确补报 A 时，原工具写入成功，A 为空，B 出现 A 的「无改善」。在修正后的正常 Pi 入口，原话反馈在看板事务内核所指取舍、准确方案、行动和原授权。A 的历史报告仍按原操作读取；显式补报 A 到已归 B 的同一行动返回 `case_feedback_round_mismatch`。B 的正常报告成功，读回 A、B 各有自己的原观察。仅改判、原行动仍归 A 时，继续沿 A 核真实发生的反馈。存量原件按原样保留；过往误记需要依据原始资料核对。独立操作、无事项旧记录、取舍和授权各沿既有入口。[原失败](../../../.local/product-v13/pm2/decision/feedback-round-red.log) · [修正后的联检](../../../.local/product-v13/pm2/decision/feedback-round-final.log)
+
+用中间候选原程序实际写过的同一数据根重开，另核了这类已存在的错配。看板仍按原号返回原报告。在 Case 交付观察给 Teach 前，沿原生 Task、会话、请求、工具调用和原引语验证当初指向的选择。原来错归 B 的 A 原话现在退出 B 的正式观察，正确的旧 A 和 B 两条均留下。原件缺失或无法核对时保留有限提示。没有重写既有反馈。[原根兼容结果](../../../.local/product-v13/pm2/decision/old-quote-green.log)

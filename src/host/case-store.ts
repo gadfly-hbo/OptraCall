@@ -753,7 +753,7 @@ export class CaseStore {
       return issue;
     }, { decisions: true });
   }
-  saveIssueReview(input: Omit<CaseIssueReview, 'createdAt'> & { expectedRevision: number }): CaseIssueReview {
+  saveIssueReview(input: Omit<CaseIssueReview, 'createdAt'> & { expectedRevision: number }, observedAuthorizationId?: string): CaseIssueReview {
     const clean = { ...input, judgement: text(input.judgement, 4000, true, true), nextStep: text(input.nextStep, 4000, true, true), observation: text(input.observation, 4000, true, true) };
     const request = { ...clean, action: 'review-decision-round' };
     return this.operation('case_update', request, input.caseId, input.reply.projectId, () => {
@@ -762,7 +762,8 @@ export class CaseStore {
       const choice = this.getStrategyChoice(input.caseId, input.choiceId);
       if (choice.issueId !== input.issueId || !this.linked(before.id, input.reply.projectId)) fail('case_issue_scope_mismatch', 409);
       if (this.getEvents('case', before.id).some(e => (e.changes.issueReview?.after as CaseIssueReview | undefined)?.choiceId === choice.choiceId)) fail('case_round_already_reviewed', 409);
-      const { expectedRevision: _, ...fields } = clean, review = { ...fields, createdAt };
+      const { expectedRevision: _, ...fields } = clean;
+      const review = { ...fields, createdAt, ...(fields.feedback && observedAuthorizationId ? {feedback:{...fields.feedback,authorizationId:uuid(observedAuthorizationId)}} : {}) };
       const after = { ...before, revision: before.revision + 1, updatedAt: createdAt };
       this.put('cases', 'id', after);
       this.event('case', before.id, after.revision, 'case_updated', input.operationId, { issueReview: { before: null, after: review } }, createdAt);

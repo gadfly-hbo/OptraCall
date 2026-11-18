@@ -117,14 +117,14 @@ import { createPptRefinerRoutes } from '../../extensions/business-plugins/ppt-re
 import { createPptRefinerSessions } from './ppt-refiner-sessions.ts';
 import { createPptRefinerAccess } from './ppt-refiner-access.ts';
 import { createAgentSessionDomain, type AgentSessionDomain, type SessionContext } from './agent-sessions.ts';
-import { savedTaskHistory, priorTaskRequest, taskContextReceipts, readSavedTaskReply, ProjectHistoryError } from './project-history.ts';
+import { checkTeachObservationHistory, savedTaskHistory, priorTaskRequest, taskContextReceipts, readSavedTaskReply, ProjectHistoryError } from './project-history.ts';
 import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
 import { createVerificationFeature, parseVerificationSelection } from './verification-host.ts';
 import { VerificationStoreError } from './verification-store.ts';
 import { EnterpriseMaterialsStore, EnterpriseMaterialsError } from './enterprise-materials-store.ts';
 import { handleEnterpriseMaterialsRoute } from './enterprise-materials-routes.ts';
 import { EnterpriseContextError, enterpriseRequestIdentity, prepareEnterpriseContext } from './enterprise-materials-context.ts';
-import { createDecisionBoardStore } from '../../extensions/business-plugins/decision-board/storage/store.ts';
+import { createDecisionBoardStore, DecisionBoardFault } from '../../extensions/business-plugins/decision-board/storage/store.ts';
 import { createConclusionBoardHandoff } from './conclusion-board-handoff.ts';
 import { createDecisionBoardRoutes } from '../../extensions/business-plugins/decision-board/api/routes.ts';
 import { createDecisionBoardSessions } from './decision-board-sessions.ts';
@@ -1712,6 +1712,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       choiceId:issue.choiceId, feedbackRevisionId:issue.feedbackRevisionId,
       execution:issue.authorizationId?{authorizationId:issue.authorizationId,projectId:project.id}:undefined
     });
+    if (assignment.type==='teach' && issue.feedbackRevisionId) {
+      const action=result.rounds[0]?.actions[0], feedback=action?.feedback[0];
+      if (!action || !feedback) throw new RequestFault(409,'case_round_feedback_unavailable');
+      await checkTeachObservationHistory(project,task,{projectId:action.projectId,taskId:action.taskId,feedbackRevisionId:feedback.revisionId,authorizationId:feedback.authorizationId});
+    }
     for(const receipt of await taskContextReceipts(project,task,true)) {
       const prior=receipt.providedContext?.teachSourceRights ?? receipt.providedContext?.doSourceRights;
       if(prior!==undefined&&(!Array.isArray(prior)||prior.some(id=>!result.sourceRights.includes(id)))) throw new RequestFault(403,'task_issue_source_unavailable');
@@ -2870,8 +2875,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       throw new RequestFault(404, 'not_found');
     } catch (error) {
       if(error instanceof StrategyDiscussionFault || error instanceof StrategyDiscussionSourceFault){json(response,error.status,{code:error.code,accepted:false,message:error.status===503?'战略讨论或保存结果尚未核实，原输入、选择和操作编号保留；请先只读核对原结果，不要重复创建或自动重试。':error.code==='strategy_discussion_history_scope_changed'?'已读取的历史资料与当前背景范围或排除项不一致，本次未发送给模型。原输入、选择和历史保留；请集中核对资料范围并明确调整，不能把旧会话视为已忘记资料。':error.code==='strategy_discussion_context_changed'?'当前讨论背景或准确版本已变化，本次未继续派发。原输入与选择保留，请集中核对后明确调整。':'战略讨论未完成，原输入和选择保留；请核对目标准确版本、资料权限、模型配置或原操作状态。'});return;}
+      if (error instanceof DecisionBoardFault && ['choice_already_arranged', 'arrangement_operation_conflict'].includes(error.code)) {
+        const message = error.code === 'choice_already_arranged' ? '本次取舍已有行动安排，请核对原看板。' : '该操作编号已用于另一份行动安排，请核对原操作。';
+        json(response, 409, { code:error.code, message }); return;
+      }
       if (error instanceof NativeSnapshotError) { json(response, 409, { code:error.code, accepted:false, message:'请重新核对原任务记录。' }); return; }
       if (error instanceof ProjectTaskResultsError) { json(response, error.status, { code: error.code, accepted: false, message: '请核对该成果的原记录和当前权限。' }); return; }
+      if ((error instanceof ProjectHistoryError || error instanceof StrategyDiscussionFault) && error.code === 'case_teach_observation_unverified') {
+        json(response,409,{code:error.code,message:'原会话收到的依据与这一条观察不能准确对应。原记录可回看，本次精确交接未发送。'});return;
+      }
       if (error instanceof StrategyDiscussionFault || error instanceof UsageContextFault || error instanceof StrategyGoalsError || error instanceof AutomaticActionSettingsFault || error instanceof ProjectPlanFault) {
         const goalReadMessages: Record<string, string> = {
           strategy_goal_not_found: '原目标不可取得。已保留原选择，未猜测或替换为最新目标；请核对原目标记录及访问范围。',
@@ -2880,6 +2892,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         };
         json(response, error.status, { code: error.code, message: goalReadMessages[error.code] ?? '目标或自动设置未保存，请保留输入并核对原版本和操作结果。' }); return;
       }
+
       if ((error instanceof CaseStoreError || error instanceof RequestFault) && ['case_do_authorization_unavailable','case_do_round_changed'].includes(error.code)) {
         json(response,409,{code:error.code,message:error.code==='case_do_round_changed'?'原取舍已换轮。请回该事项查看当前取舍和行动授权。':'本轮的准确行动授权当前不可用。请核对原看板授权和项目关联。'});return;
       }

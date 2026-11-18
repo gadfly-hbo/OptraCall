@@ -57,9 +57,18 @@ export async function startTaskRounds(t: TestContext, uiPort?: number) {
     const result=await api(issuePath+'/authorize','POST',{operationId:id(),projectId:project.id,choiceId,title:label+'行动',scope:label+'授权范围'});
     return result.arrangement.actions[0];
   }
+  async function recordDecision(taskId:string,choice:{choiceId:string;strategyRef:unknown},text:string,command:(read:any)=>Record<string,unknown>) {
+    return send(taskId,text,turn => {
+      if (!turn.recentToolResults.length) return {calls:[{name:'record_user_decision',arguments:{action:'read'}}]};
+      const actual=JSON.parse(providerMessageText(turn.recentToolResults.at(-1)!.content));
+      if (actual.type==='optracall.quoted-decision-read') return {calls:[{name:'record_user_decision',arguments:{
+        strategyRef:choice.strategyRef,choiceId:choice.choiceId,quote:{start:0,end:text.length,text},...command(actual)}}]};
+      assert.equal(actual.status,'completed',JSON.stringify(actual));return {text:'已登记授权状态'};
+    });
+  }
   async function observe(taskId:string,label:string) {
     return (await api('/api/decision-board/tasks/'+taskId+'/feedback','POST',{operationId:id(),expectedLatestRevisionId:null,
       adopted:true,outcome:label+'原观察',metricDelta:'0',review:label+'效果待核',score:null,effect:'none'})).feedback;
   }
-  return {host,provider,api,project,owner,casePath,taskPath,issuePath,revision,create,send,prompt,choose,authorize,observe};
+  return {host,provider,api,project,owner,casePath,taskPath,issuePath,revision,create,send,prompt,choose,authorize,observe,recordDecision};
 }

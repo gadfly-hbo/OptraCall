@@ -1,3 +1,6 @@
+import { checkTeachObservationHistory } from './project-history.ts';
+import type { BoardActionAuthorization, TaskFeedbackRevision } from '../../extensions/business-plugins/decision-board/types.ts';
+import { quotedFeedbackMatches } from './quoted-feedback-origins.ts';
 import { caseChoicePermitsAction } from './case-decision-types.ts';
 import { CaseStoreError } from './case-types.ts';
 import { caseDecisionFields, caseDecisionId, caseDecisionRevision, caseDecisionText, parseCaseDecisionTarget } from './case-decision-validation.ts';
@@ -28,6 +31,26 @@ function replyReference(input: unknown) {
   return target.source;
 }
 
+// Board authorizations are ordered by their immutable per-action revision. A feedback
+// migration's savedAt is the import time, so use the original edit time for that row.
+export function authorityAtFeedback(rows: BoardActionAuthorization[], feedback: TaskFeedbackRevision) {
+  const observedAt = feedback.origin === 'legacy-current' ? feedback.legacyUpdatedAt : feedback.savedAt;
+  const when = observedAt ? Date.parse(observedAt) : NaN;
+  if (!Number.isFinite(when)) return undefined;
+  let before = -1, after = rows.length, previous = -Infinity;
+  for (const [index, row] of rows.entries()) {
+    const time = Date.parse(row.createdAt);
+    if (!Number.isFinite(time)) continue;
+    if (time < previous || time === when) return undefined;
+    previous = time;
+    if (time < when) before = index;
+    else if (after === rows.length) after = index;
+  }
+  // Missing times outside these two bracketing revisions cannot change the answer.
+  if (after !== before + 1) return undefined;
+  return before < 0 ? null : { authority:rows[before]!, observedAt:observedAt! };
+}
+
 /** Issue identity belongs to Case. Sources, human authorizations, actions and observations keep their original owners. */
 export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
   const { cases } = deps;
@@ -48,7 +71,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
       throw error;
     }
   }
-  async function readReply(caseId: string, issueId: string, source: CaseIssueReply, type: 'plan' | 'teach', choiceId?: string, qualify?: QualifyReply) {
+  async function readReply(caseId: string, issueId: string, source: CaseIssueReply, type: 'plan' | 'teach', choiceId?: string, qualify?: QualifyReply, observation?:import('./task-round-receipts.ts').ObservedAction) {
     const project = await linkedProject(caseId, source.projectId);
     const task = project.tasks.find(t => t.id === source.taskId && !t.archivedAt);
     const owner = task?.assignment?.issue;
@@ -57,6 +80,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     const exact = bindings.replies.find(r => r.sessionId === source.sessionId && r.messageId === source.messageId && r.sha256 === source.expectedTextSha256);
     if (!exact) return fail('case_issue_reply_unavailable');
     await qualify?.(source,exact.requestId);
+    if (observation) await checkTeachObservationHistory(project,task,observation,source.messageId);
     const actual = await deps.readSource?.(source, { audience: qualify ? 'agent' : 'human' });
     if (actual?.status !== 'available' || !actual.text || actual.sha256 !== source.expectedTextSha256) return fail('case_issue_reply_unavailable');
     return { title: task.name, text: actual.text, requestId:exact.requestId, feedbackRevisionId: owner.feedbackRevisionId };
@@ -103,9 +127,10 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     const events = cases.getEvents('case', caseId), board = deps.board;
     const rounds = choices.map(choice => ({ choice, historyLimited:false, strategy: cases.getDecision(caseId, choice.strategyRef.recordId, choice.strategyRef.revision),
       review: events.map(e => e.changes.issueReview?.after as CaseIssueReview | undefined).find(r => r?.choiceId === choice.choiceId) ?? null,
-      actions: [] as { projectId: string; itemId: string; taskId: string; title: string; status: string; currentAuthorizationId?: string; authorizations: { id: string; scope: string; decision: string; time: string }[];
-        feedback: { revisionId: string; effect: string; outcome: string; metricDelta: string; review: string }[] }[] }));
+      actions: [] as { projectId: string; itemId: string; taskId: string; title: string; status: string; currentAuthorizationId?: string; authorizations: { id: string; scope: string; decision: string; time: string }[]; observationTimeLimited?: boolean;
+        feedback: { revisionId: string; observedAt: string; authorizationId: string; actionTitle: string; effect: string; outcome: string; metricDelta: string; review: string }[] }[] }));
     if (board && rounds.length) {
+      const matchesOriginalCall = quotedFeedbackMatches(deps.projects);
       const linked = new Set(cases.listProjectLinks(caseId).map(p => p.projectId));
       for (const task of board.listTasks()) {
         const item = board.getItem(task.itemId);
@@ -121,16 +146,27 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
           }
           const latest = all.at(-1);
           const currentAuthorizationId = latest && ours(latest) && latest.decision === 'authorize' ? latest.authorizationId : undefined;
-          const feedback = board.listFeedbackHistory(task.id).filter(f => { const a = all.filter(a => a.createdAt <= f.savedAt).at(-1); return a && ours(a); });
+          const observations = await Promise.all(board.listFeedbackHistory(task.id).map(async feedback => {
+            let match=authorityAtFeedback(all,feedback);
+            if (match && ours(match.authority) && !await matchesOriginalCall(feedback,match.authority)) {
+              round.historyLimited=true;
+              match=null;
+            }
+            return { feedback, match };
+          }));
+          const feedback = observations.flatMap(({ feedback:f, match }) => match && ours(match.authority) ? [{
+            revisionId:f.revisionId, observedAt:match.observedAt, authorizationId:match.authority.authorizationId,
+            actionTitle:match.authority.taskSnapshot?.title ?? task.id, effect:f.effect, outcome:f.outcome, metricDelta:f.metricDelta, review:f.review,
+          }] : []);
           round.actions.push({ currentAuthorizationId, projectId: item.projectId, itemId: item.id, taskId: task.id, title: task.title, status: task.status,
-            authorizations: authority.map(a => ({ id: a.authorizationId, scope: a.scope, decision: a.decision, time: a.createdAt })),
-            feedback: feedback.map(f => ({ revisionId: f.revisionId, effect: f.effect, outcome: f.outcome, metricDelta: f.metricDelta, review: f.review })) });
+            ...(observations.some(o => o.match === undefined) ? {observationTimeLimited:true} : {}),
+            authorizations: authority.map(a => ({ id: a.authorizationId, scope: a.scope, decision: a.decision, time: a.createdAt })), feedback });
         }
       }
     }
     for (const round of rounds) {
       const feedback = round.review?.feedback;
-      if (feedback && !round.actions.some(a => a.taskId === feedback.boardTaskId && a.feedback.some(f => f.revisionId === feedback.feedbackRevisionId))) {
+      if (feedback && !round.actions.some(a => a.taskId === feedback.boardTaskId && a.feedback.some(f => f.revisionId === feedback.feedbackRevisionId && (!feedback.authorizationId || f.authorizationId === feedback.authorizationId)))) {
         round.historyLimited = true;
         round.review = null;
       }
@@ -150,19 +186,22 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     const action = authorizedAction(timeline,choiceId,authorizationId,projectId);
     return action;
   }
-  function roundSourceKeys(round:Awaited<ReturnType<typeof issueTimeline>>['rounds'][number], issueId:string, feedbackRevisionId?:string) {
+  function roundSourceKeys(round:Awaited<ReturnType<typeof issueTimeline>>['rounds'][number], issueId:string) {
     const rights = [round.strategy.recordId+'/'+round.strategy.revision];
     for(const ref of round.strategy.references) if(round.strategy.issueId===issueId && ref.relation==='derived_from' && ref.target.type==='source' && ref.target.source.type==='native-reply') rights.push(replyKey(ref.target.source));
     for(const a of round.actions) {
       rights.push(a.projectId+'/'+a.itemId+'/'+a.taskId);
-      for(const f of a.feedback) if (!feedbackRevisionId || f.revisionId===feedbackRevisionId) rights.push(f.revisionId);
+      for (const f of a.feedback) rights.push(f.revisionId, f.authorizationId);
     }
     return rights;
   }
   async function currentTeachRights(caseId:string,issueId:string,choiceId:string,feedbackRevisionId?:string) {
     const view=await issueTimeline(caseId,issueId), round=view.rounds.find(r=>r.choice.choiceId===choiceId);
     if (!round) return fail('case_issue_scope_mismatch');
-    return roundSourceKeys(round,issueId,feedbackRevisionId);
+    if (feedbackRevisionId && !round.actions.some(a=>a.feedback.some(f=>f.revisionId===feedbackRevisionId))) return fail('case_round_feedback_unavailable');
+    // Old native inputs included all then-readable actions. Qualify those actual
+    // sources for original history, even when a new handoff is scoped more narrowly.
+    return roundSourceKeys(round,issueId);
   }
   async function verifyPriorProjectRoundRights(caseId:string, issueId:string, prior:ReadonlySet<string>, qualify:QualifyReply) {
     const missing = new Set(prior);
@@ -191,10 +230,10 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     if (choiceId && !rounds.length) return fail('case_issue_scope_mismatch');
     if (feedbackRevisionId && !rounds.some(r=>r.actions.some(a=>a.feedback.some(f=>f.revisionId===feedbackRevisionId)))) return fail('case_round_feedback_unavailable');
     const rights = new Set<string>(), replies = new Map<string,{source:CaseIssueReply;requestId:string;text:string}>();
-    async function exactReply(source:CaseIssueReply,type:'plan'|'teach',choiceId?:string) {
+    async function exactReply(source:CaseIssueReply,type:'plan'|'teach',choiceId?:string,observation?:import('./task-round-receipts.ts').ObservedAction) {
       const id=replyKey(source);
       if (!replies.has(id)) {
-        const read = await readReply(caseId,issueId,source,type,choiceId,qualify);
+        const read = await readReply(caseId,issueId,source,type,choiceId,qualify,observation);
         replies.set(id,{source,requestId:read.requestId,text:read.text});
         rights.add(id);
       }
@@ -226,15 +265,22 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     }
     const history=[];
     for(const {choice,actions:allActions,review} of rounds) {
-      const selectedActions=reviewId ? allActions.filter(action=>review?.feedback?.boardTaskId===action.taskId&&review.feedback.projectId===action.projectId)
-        .map(action=>({...action,authorizations:action.authorizations.filter(a=>a.time<=review!.createdAt)})) : allActions;
-      const actions=action ? [action] : feedbackRevisionId ? selectedActions.map(a=>({...a,feedback:a.feedback.filter(f=>f.revisionId===feedbackRevisionId)})) : selectedActions;
+      const actions = action ? [action] : feedbackRevisionId ? allActions.flatMap(a => {
+        const f = a.feedback.find(value => value.revisionId === feedbackRevisionId);
+        if (!f) return [];
+        const original = a.authorizations.find(value => value.id === f.authorizationId);
+        if (!original) return fail('case_round_feedback_unavailable');
+        return [{projectId:a.projectId,itemId:a.itemId,taskId:a.taskId,title:f.actionTitle,authorizations:[original],feedback:[f]}];
+      }) : reviewId ? [] : allActions;
       if (execution) rights.add(execution.authorizationId);
       for(const action of actions) {
         rights.add(action.projectId+'/'+action.itemId+'/'+action.taskId);
-        for(const f of action.feedback) rights.add(f.revisionId);
+        for(const f of action.feedback) { rights.add(f.revisionId); rights.add(f.authorizationId); }
       }
-      const recorded = (!choiceId || reviewId) && review ? {...review,reply:await exactReply(review.reply,'teach',choice.choiceId)} : null;
+      const observed = feedbackRevisionId && actions.find(a=>a.feedback.some(f=>f.revisionId===feedbackRevisionId));
+      const selected = observed && observed.feedback.find(f=>f.revisionId===feedbackRevisionId);
+      const observation = observed && selected ? {projectId:observed.projectId,taskId:observed.taskId,authorizationId:selected.authorizationId,feedbackRevisionId:selected.revisionId} : undefined;
+      const recorded = (!choiceId || reviewId) && review ? {...review,reply:await exactReply(review.reply,'teach',choice.choiceId,observation)} : null;
       history.push({choice:{id:choice.choiceId,decision:choice.choice,reason:choice.reason,previous:choice.previousChoiceId,
           date:choice.occurredAt,goalBinding:choice.goalBinding,proposed:choice.strategyRef},actions,review:recorded});
     }
@@ -243,7 +289,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
   async function issueWrite(caseId: string, issueId: string, action: string, input: Record<string, unknown>) {
     const operationId = caseDecisionId(input.operationId);
     return deps.mutate(async () => {
-      if (action !== 'authorize') issue(caseId, issueId, true);
+      if (action !== 'authorize') issue(caseId, issueId, action !== 'review');
       if (action === 'plans') {
         caseDecisionFields(input, ['operationId', 'source'], ['source']);
         const source = replyReference(input.source), actual = await readReply(caseId, issueId, source, 'plan');
@@ -266,14 +312,18 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
       }
       caseDecisionFields(input, ['operationId', 'expectedRevision', 'choiceId', 'source', 'observation', 'judgement', 'nextStep', 'feedbackRevisionId'], ['source', 'observation', 'judgement', 'nextStep']);
       const source = replyReference(input.source);
-      const teach = await readReply(caseId, issueId, source, 'teach', choice.choiceId);
-      if (teach.feedbackRevisionId && teach.feedbackRevisionId !== input.feedbackRevisionId) return fail('case_round_feedback_unavailable');
       const round = (await issueTimeline(caseId, issueId)).rounds.find(r => r.choice.choiceId === choice.choiceId)!;
+      const replay = round.review?.operationId === operationId;
+      if (!replay) issue(caseId,issueId,true);
       const selected = round.actions.find(a => a.feedback.some(f => f.revisionId === input.feedbackRevisionId));
       if (!selected && (caseChoicePermitsAction(choice.choice) || input.feedbackRevisionId !== undefined)) return fail('case_round_waiting_for_feedback');
+      const original = selected?.feedback.find(f=>f.revisionId===input.feedbackRevisionId);
+      const observation = selected && original ? {projectId:selected.projectId,taskId:selected.taskId,authorizationId:original.authorizationId,feedbackRevisionId:original.revisionId} : undefined;
+      const teach = await readReply(caseId, issueId, source, 'teach', choice.choiceId, undefined, replay ? undefined : observation);
+      if (teach.feedbackRevisionId && teach.feedbackRevisionId !== input.feedbackRevisionId) return fail('case_round_feedback_unavailable');
       const feedback = selected ? { projectId: selected.projectId, boardTaskId: selected.taskId, feedbackRevisionId: caseDecisionId(input.feedbackRevisionId) } : undefined;
       return { review: cases.saveIssueReview({ caseId, issueId, choiceId: choice.choiceId, operationId, expectedRevision: caseDecisionRevision(input.expectedRevision), reply: source,
-        observation: caseDecisionText(input.observation, 4000, true), judgement: caseDecisionText(input.judgement, 4000, true), nextStep: caseDecisionText(input.nextStep, 4000, true), ...(feedback ? { feedback } : {}) }) };
+        observation: caseDecisionText(input.observation, 4000, true), judgement: caseDecisionText(input.judgement, 4000, true), nextStep: caseDecisionText(input.nextStep, 4000, true), ...(feedback ? { feedback } : {}) }, original?.authorizationId) };
     });
   }
   return {verifyPriorProjectRoundRights, checkDoAuthorization, checkPlan, currentTeachRights, issueModelContext, issueTimeline, issueSources, inspectIssueReply, issueWrite, issueList: (caseId: string) => cases.listDecisionIssues(caseId),
