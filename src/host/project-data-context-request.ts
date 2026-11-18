@@ -13,7 +13,7 @@ export function canonicalDataContextValue(value: unknown, invalid: () => never =
 function location(value: DataContextFieldLocation): DataContextFieldLocation {
   switch (value.kind) {
     case 'csv-column': case 'tsv-column': return { kind: value.kind, columnIndex: value.columnIndex };
-    case 'json-pointer': return { kind: value.kind, pointer: value.pointer };
+    case 'json-pointer': return { kind: value.kind, pointer: value.pointer, ...(value.database === undefined ? {} : { database: structuredClone(value.database) }), ...(value.queryExpression === undefined ? {} : { queryExpression: value.queryExpression }) };
     case 'xlsx-range': return { kind: value.kind, sheetName: value.sheetName, range: value.range };
     case 'text-range': return { kind: value.kind, start: value.start, end: value.end };
   }

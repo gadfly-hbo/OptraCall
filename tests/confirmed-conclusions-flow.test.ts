@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -341,7 +342,7 @@ test('CBH-A3: source withdrawal redacts confirmed history and rejects cached adv
     outcome: 'WITHDRAWN_BOARD_FEEDBACK_MARKER', metricDelta: '', review: '真实效果未知。', score: null };
   const { feedback } = await f.request(`/api/decision-board/tasks/${task.id}/feedback`, 'POST', feedbackInput);
   await f.request('/api/cases/storage/initialize', 'POST', {});
-  const { case: caseRecord } = await f.request('/api/cases', 'POST', { operationId: randomUUID(), title: '合成交接Case', description: '仅测试撤权传播。' }, 201);
+  const { case: caseRecord } = await f.request('/api/cases', 'POST', await withCaseGoal(f.host, { operationId: randomUUID(), title: '合成交接Case', description: '仅测试撤权传播。' }), 201);
   await f.request(`/api/cases/${caseRecord.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: caseRecord.revision, projectId: f.project.id });
   const caseRoute = `/api/cases/${caseRecord.id}/decisions`;
   const actionTarget = { type: 'board-task', projectId: f.project.id, itemId: item.id, taskId: task.id };

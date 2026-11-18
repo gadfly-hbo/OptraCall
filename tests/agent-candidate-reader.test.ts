@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { ProjectStore, type ProjectRecord, type TaskRecord } from '../src/host/project-store.ts';
 import { AgentCandidateControls } from '../src/host/agent-candidate-controls.ts';
 import { createAgentCandidateReader } from '../src/host/agent-candidate-reader.ts';
-import { candidateToolName, type AgentCandidateDetails } from '../src/agent/agent-candidate.ts';
+import { agentCandidateDetailsSha256, candidateToolName, type AgentCandidateDetails } from '../src/agent/agent-candidate.ts';
 import { nativeSnapshotLimit } from '../src/host/native-session-snapshot.ts';
 
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
@@ -36,6 +36,130 @@ function native(project: ProjectRecord, task: TaskRecord, title: string, options
   return { sessionId, requestId, timestamp, details, lines, bytes: Buffer.from(lines.map(line => JSON.stringify(line)).join('\n') + '\n') };
 }
 async function save(task: TaskRecord, name: string, bytes: Buffer) { const file = path.join(task.sessionDirectory, name + '.jsonl'); await fs.writeFile(file, bytes); return file; }
+const encode = (lines: Record<string, unknown>[]) => Buffer.from(lines.map(line => JSON.stringify(line)).join('\n') + '\n');
+function customNative(project: ProjectRecord, task: TaskRecord, title: string, options: { nested?: boolean; outcome?: 'completed' | 'cancelled' | 'failed' | null; body?: string; confirmed?: boolean } = {}) {
+  const original = native(project, task, title, { outcome: null }), details = original.details;
+  details.origin.toolCallId = options.nested ? 'opaque-nested-invocation' : 'direct-invocation';
+  if (options.body) details.content.bodyMd = options.body;
+  const lines = original.lines.slice(0, 2);
+  lines.push({ type: 'message', id: 'call', parentId: 'started', timestamp: original.timestamp, message: { role: 'assistant', content: [{ type: 'toolCall', id: options.nested ? 'opaque-parent' : details.origin.toolCallId, name: options.nested ? 'codemode' : candidateToolName, arguments: options.nested ? { code: 'await tools.composeCandidate();' } : { content: details.content, sourceRefs: details.sourceRefs } }] } });
+  lines.push({ type: 'custom', id: 'record', parentId: 'call', timestamp: original.timestamp, customType: 'optracall.agent-candidate', data: { recordVersion: 1, details } });
+  const receipt = { type: 'optracall.agent-candidate-receipt', recordVersion: 1, status: 'saved', candidate: { projectId: project.id, taskId: task.id, originSessionId: original.sessionId, entryId: 'record', toolCallId: details.origin.toolCallId, expectedDetailsSha256: agentCandidateDetailsSha256(details) } };
+  if (options.confirmed !== false) lines.push({ type: 'custom', id: 'confirmation', parentId: 'record', timestamp: original.timestamp, customType: 'optracall.agent-candidate-receipt', data: receipt });
+  lines.push({ type: 'message', id: 'receipt', parentId: options.confirmed === false ? 'record' : 'confirmation', timestamp: original.timestamp, message: { role: 'toolResult', toolName: options.nested ? 'codemode' : candidateToolName, toolCallId: options.nested ? 'opaque-parent' : details.origin.toolCallId, content: [{ type: 'text', text: '候选已记录' }], details: options.nested ? {} : receipt, isError: false, timestamp: Date.parse(original.timestamp) } });
+  if (options.outcome !== null) lines.push({ type: 'custom', id: 'settled', parentId: 'receipt', timestamp: original.timestamp, customType: 'optracall.run', data: { phase: 'settled', requestId: original.requestId, sessionId: original.sessionId, outcome: options.outcome ?? 'completed' } });
+  return { ...original, lines, bytes: encode(lines) };
+}
+
+test('custom body bytes without an exact same-run native save confirmation remain UNKNOWN', async t => {
+  const f = await fixture(t), n = customNative(f.project, f.task, '未确认保存的候选', { nested: true, outcome: 'cancelled', confirmed: false });
+  const validReceipt = { type: 'optracall.agent-candidate-receipt', recordVersion: 1, status: 'saved', candidate: { projectId: f.project.id, taskId: f.task.id, originSessionId: n.sessionId, entryId: 'record', toolCallId: n.details.origin.toolCallId, expectedDetailsSha256: agentCandidateDetailsSha256(n.details) } };
+  const variants: { name: string; prepare: (lines: Record<string, unknown>[]) => void }[] = [
+    { name: 'bare custom body', prepare: () => {} },
+    { name: 'tool result receipt alone', prepare: lines => { const message = lines[4]!.message as Record<string, unknown>; message.toolName = candidateToolName; message.toolCallId = n.details.origin.toolCallId; message.details = validReceipt; } },
+    { name: 'wrong hash confirmation', prepare: lines => { lines.splice(4, 0, { type: 'custom', id: 'confirmation', parentId: 'record', timestamp: n.timestamp, customType: 'optracall.agent-candidate-receipt', data: { ...validReceipt, candidate: { ...validReceipt.candidate, expectedDetailsSha256: '0'.repeat(64) } } }); } },
+    { name: 'wrong reference confirmation', prepare: lines => { lines.splice(4, 0, { type: 'custom', id: 'confirmation', parentId: 'record', timestamp: n.timestamp, customType: 'optracall.agent-candidate-receipt', data: { ...validReceipt, candidate: { ...validReceipt.candidate, entryId: 'not-the-record' } } }); } },
+    { name: 'other branch confirmation', prepare: lines => { lines.splice(4, 0, { type: 'custom', id: 'confirmation', parentId: 'call', timestamp: n.timestamp, customType: 'optracall.agent-candidate-receipt', data: validReceipt }); } },
+    { name: 'later run confirmation', prepare: lines => { lines.splice(4, 0, { type: 'custom', id: 'other-start', parentId: 'record', timestamp: n.timestamp, customType: 'optracall.run', data: { phase: 'started', requestId: randomUUID(), sessionId: n.sessionId, kind: 'prompt' } }, { type: 'custom', id: 'confirmation', parentId: 'other-start', timestamp: n.timestamp, customType: 'optracall.agent-candidate-receipt', data: validReceipt }); } },
+    { name: 'settled run confirmation', prepare: lines => { lines.splice(4, 0, { type: 'custom', id: 'early-settled', parentId: 'record', timestamp: n.timestamp, customType: 'optracall.run', data: { phase: 'settled', requestId: n.requestId, sessionId: n.sessionId, outcome: 'cancelled' } }, { type: 'custom', id: 'confirmation', parentId: 'early-settled', timestamp: n.timestamp, customType: 'optracall.agent-candidate-receipt', data: validReceipt }); } },
+  ];
+  const file = await save(f.task, 'unconfirmed_' + n.sessionId, n.bytes);
+  for (const variant of variants) {
+    const lines = structuredClone(n.lines); variant.prepare(lines); const bytes = encode(lines); await fs.writeFile(file, bytes);
+    const page = await f.reader.lookup(); assert.equal(page.rows.length, 1, variant.name);
+    const row = page.rows[0]!; assert.equal(row.status, 'unknown', variant.name); assert.equal(row.reason, 'candidate_save_unconfirmed', variant.name);
+    assert.equal(row.details, null, variant.name); assert.equal(row.parentState, 'cancelled', variant.name); assert.ok(row.ref, variant.name);
+    assert.equal((await f.reader.read(row.ref)).status, 'unknown', variant.name); assert.deepEqual(await fs.readFile(file), bytes);
+  }
+});
+
+test('a save confirmation found only in a fork does not upgrade its unconfirmed original occurrence', async t => {
+  const f = await fixture(t), n = customNative(f.project, f.task, '只在分叉有确认', { confirmed: false });
+  await save(f.task, 'origin_' + n.sessionId, n.bytes);
+  const fork = structuredClone(n.lines), forkId = randomUUID(); fork[0] = { ...fork[0], id: forkId };
+  const receipt = (fork[4]!.message as { details: Record<string, unknown> }).details;
+  fork.splice(4, 0, { type: 'custom', id: 'confirmation', parentId: 'record', timestamp: n.timestamp, customType: 'optracall.agent-candidate-receipt', data: receipt });
+  fork[5]!.parentId = 'confirmation';
+  const forkFile = await save(f.task, 'fork_' + forkId, encode(fork)); await f.projects.setSession(f.project.id, f.task.id, forkFile);
+  const page = await f.reader.lookup(); assert.equal(page.rows.length, 1);
+  assert.equal(page.rows[0]?.status, 'unknown'); assert.equal(page.rows[0]?.reason, 'candidate_save_unconfirmed'); assert.equal(page.rows[0]?.details, null);
+});
+
+test('direct and nested custom candidates share the authority record and do not duplicate their minimal receipt', async t => {
+  const f = await fixture(t);
+  const direct = customNative(f.project, f.task, '直接候选', { outcome: 'cancelled' });
+  const nested = customNative(f.project, f.task, '多层嵌套候选', { nested: true, outcome: 'failed', body: '嵌套正文'.repeat(3000) });
+  const directFile = await save(f.task, 'direct_' + direct.sessionId, direct.bytes), nestedFile = await save(f.task, 'nested_' + nested.sessionId, nested.bytes);
+  const page = await f.reader.lookup();
+  assert.equal(page.rows.length, 2);
+  assert.deepEqual(new Set(page.rows.map(row => row.details?.content.title)), new Set(['直接候选', '多层嵌套候选']));
+  for (const row of page.rows) {
+    assert.equal(row.status, 'available'); assert.equal(row.ref?.entryId, 'record');
+    assert.equal(row.ref?.expectedDetailsSha256, agentCandidateDetailsSha256(row.details!));
+    assert.deepEqual((await f.reader.read(row.ref!)).details, row.details);
+  }
+  assert.equal(page.rows.find(row => row.details?.content.title === '直接候选')?.parentState, 'cancelled');
+  const nestedRow = page.rows.find(row => row.details?.content.title === '多层嵌套候选');
+  assert.equal(nestedRow?.parentState, 'failed'); assert.equal(nestedRow?.details?.content.bodyMd.length, 12000);
+  assert.deepEqual((await f.reader.lookup({ view: 'anomalies' })).rows, []);
+  assert.deepEqual(await fs.readFile(directFile), direct.bytes); assert.deepEqual(await fs.readFile(nestedFile), nested.bytes);
+});
+
+test('custom candidate envelopes still reject invalid versions, ownership and run binding', async t => {
+  const f = await fixture(t), n = customNative(f.project, f.task, 'custom身份测试', { nested: true });
+  const file = await save(f.task, 'custom_identity_' + n.sessionId, n.bytes);
+  const variants: { reason: string; mutate: (lines: Record<string, unknown>[]) => void }[] = [
+    { reason: 'native_history_unknown', mutate: lines => { (lines[3]!.data as Record<string, unknown>).recordVersion = 2; } },
+    { reason: 'candidate_owner_mismatch', mutate: lines => { (lines[3]!.data as { details: AgentCandidateDetails }).details.origin.taskId = randomUUID(); } },
+    { reason: 'candidate_original_unknown', mutate: lines => { (lines[3]!.data as { details: AgentCandidateDetails }).details.origin.sessionId = randomUUID(); } },
+    { reason: 'candidate_run_mismatch', mutate: lines => { (lines[1]!.data as Record<string, unknown>).requestId = randomUUID(); } },
+  ];
+  for (const variant of variants) {
+    const lines = structuredClone(n.lines); variant.mutate(lines); const bytes = encode(lines); await fs.writeFile(file, bytes);
+    assert.deepEqual((await f.reader.lookup()).rows, [], variant.reason);
+    const anomalies = await f.reader.lookup({ view: 'anomalies' });
+    assert.equal(anomalies.rows.length, 1); assert.equal(anomalies.rows[0]?.reason, variant.reason); assert.equal(anomalies.rows[0]?.details, null);
+    assert.deepEqual(await fs.readFile(file), bytes);
+  }
+});
+
+test('legacy and custom candidates retain their exact controls and changed custom bodies cannot rebind them', async t => {
+  const f = await fixture(t), old = native(f.project, f.task, '旧工具结果候选'), current = customNative(f.project, f.task, '新原生候选');
+  const oldFile = await save(f.task, 'legacy_' + old.sessionId, old.bytes), currentFile = await save(f.task, 'custom_' + current.sessionId, current.bytes);
+  const page = await f.reader.lookup(); assert.equal(page.rows.length, 2);
+  const row = page.rows.find(row => row.details?.content.title === '新原生候选')!; assert.ok(row.ref);
+  await f.controls.apply({ operationId: randomUUID(), target: row.ref, action: 'bookmark', note: null, expectedTargetRevision: 0 });
+  await f.controls.apply({ operationId: randomUUID(), target: row.ref, action: 'correct', note: '独立人工纠正，不改原文' });
+  await f.controls.apply({ operationId: randomUUID(), target: row.ref, action: 'exclude', note: null, expectedTargetRevision: 2 });
+  assert.deepEqual((await f.reader.lookup()).rows.map(item => item.details?.content.title), ['旧工具结果候选']);
+  const excluded = (await f.reader.lookup({ view: 'excluded' })).rows[0]!;
+  assert.equal(excluded.status, 'available'); assert.equal(excluded.control?.notes[0]?.note, '独立人工纠正，不改原文');
+  await f.controls.apply({ operationId: randomUUID(), target: row.ref, action: 'restore', note: null, expectedTargetRevision: 3 });
+  assert.equal((await f.reader.lookup()).rows.length, 2);
+  assert.deepEqual(await fs.readFile(oldFile), old.bytes); assert.deepEqual(await fs.readFile(currentFile), current.bytes);
+  const changed = structuredClone(current.lines); (changed[3]!.data as { details: AgentCandidateDetails }).details.content.bodyMd = '外部改动的新候选正文';
+  const changedBytes = encode(changed); await fs.writeFile(currentFile, changedBytes);
+  const unknown = await f.reader.read(row.ref);
+  assert.equal(unknown.status, 'unknown'); assert.equal(unknown.details, null); assert.equal(unknown.control?.bookmarked, true);
+  assert.deepEqual(unknown.ref, row.ref); assert.equal((await f.reader.lookup({ view: 'anomalies' })).rows[0]?.reason, 'candidate_hash_inconsistent');
+  assert.deepEqual(await fs.readFile(currentFile), changedBytes); assert.deepEqual(await fs.readFile(oldFile), old.bytes);
+});
+
+test('custom fork copies deduplicate exact occurrences while independent calls with the same body remain distinct', async t => {
+  const f = await fixture(t), origin = customNative(f.project, f.task, '相同正文候选'), independent = customNative(f.project, f.task, '相同正文候选');
+  await save(f.task, 'origin_' + origin.sessionId, origin.bytes); await save(f.task, 'independent_' + independent.sessionId, independent.bytes);
+  const fork = structuredClone(origin.lines), forkId = randomUUID(); fork[0] = { ...fork[0], id: forkId, parentSession: '/never/follow/this.jsonl' };
+  const forkFile = await save(f.task, 'fork_' + forkId, encode(fork)); await f.projects.setSession(f.project.id, f.task.id, forkFile);
+  const page = await f.reader.lookup(); assert.equal(page.rows.length, 2);
+  const row = page.rows.find(row => row.ref?.originSessionId === origin.sessionId)!;
+  assert.equal(row.status, 'available'); assert.deepEqual(row.locations.map(location => location.savedPath).sort(), ['current', 'other']);
+  assert.equal(page.rows.find(item => item.ref?.originSessionId === independent.sessionId)?.locations.length, 1);
+  await f.controls.apply({ operationId: randomUUID(), target: row.ref!, action: 'exclude', note: null, expectedTargetRevision: 0 });
+  assert.deepEqual((await f.reader.lookup()).rows.map(item => item.ref?.originSessionId), [independent.sessionId]);
+  const changed = structuredClone(fork); (changed[3]!.data as { details: AgentCandidateDetails }).details.content.bodyMd = '被改变的分叉副本'; await fs.writeFile(forkFile, encode(changed));
+  const excluded = (await f.reader.lookup({ view: 'excluded' })).rows[0]!;
+  assert.equal(excluded.status, 'unknown'); assert.equal(excluded.reason, 'candidate_copy_changed'); assert.equal(excluded.details, null);
+});
 
 test('reader processes at most 20 files per query and resumes explicitly, while rejecting changed or invalid cursors', async t => {
   const f = await fixture(t);

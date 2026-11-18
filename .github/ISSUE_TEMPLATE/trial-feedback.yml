@@ -1,0 +1,46 @@
+name: 试用反馈与问题修复
+description: 提交 OptraCall 使用问题，也可附上整份试用报告。
+title: "[问题] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请描述遇到的问题，或粘贴／附上试用报告，其他信息按已知情况填写。
+        **本仓库公开**：只提交可公开的内容。密钥、客户数据、原始会话和敏感业务资料请保留本地。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述／实际结果
+      description: 遇到了什么问题？可直接粘贴报告，或简述问题并在下方附上报告。
+      placeholder: 例如：在……页面执行……后，出现……
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 运行版本与环境
+      description: 已知时填写；暂时不知道可留空或写“未知”。
+      placeholder: MacBook / macOS 版本 / OptraCall 版本或提交号
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      description: 若报告已有步骤可留空；偶发问题可说明出现时的操作。
+      placeholder: |
+        1. 打开……
+        2. 执行……
+        3. 出现……
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+      description: 希望执行这些操作后得到什么结果？报告中已写明可留空。
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 试用报告／截图／日志
+      description: 可拖入 PDF、截图或其他 GitHub 支持的文件，也可粘贴脱敏日志与公开链接。
+  - type: markdown
+    attributes:
+      value: |
+        提交后由执行者整理修复清单并维护进展。处理与关闭遵循[工程规范](https://github.com/gadfly-hbo/OptraCall/blob/main/docs/engineering-workflow.md#github-issues-问题收件与结案)。

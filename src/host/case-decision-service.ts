@@ -285,7 +285,7 @@ export function createCaseDecisionService(deps: CaseDecisionServiceDependencies)
       return deps.cases.reviseDecisionByUser(command);
     });
   }
-  return { list, read, links, source, readForAgent, saveForAgent, choose, govern };
+  return { list, read, readChoice: (caseId: string, choiceId: string) => deps.cases.getStrategyChoice(caseId, choiceId), links, source, readForAgent, saveForAgent, choose, govern };
 }
 
 export type CaseDecisionService = ReturnType<typeof createCaseDecisionService>;

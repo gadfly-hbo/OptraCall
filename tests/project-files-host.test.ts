@@ -25,7 +25,7 @@ async function startHost(root: string) {
   const address = host.server.address();
   assert(address && typeof address === 'object');
   const baseUrl = `http://127.0.0.1:${address.port}`;
-  async function request(route: string, method = 'GET', body?: unknown, status = 200): Promise<any> {
+  async function observe(route: string, method = 'GET', body?: unknown) {
     const response = await fetch(baseUrl + route, {
       method,
       signal: AbortSignal.timeout(10_000),
@@ -33,10 +33,14 @@ async function startHost(root: string) {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const text = await response.text();
-    assert.equal(response.status, status, `${method} ${route}: ${text}`);
-    return JSON.parse(text);
+    return { status: response.status, text };
   }
-  return { request, close: host.close };
+  async function request(route: string, method = 'GET', body?: unknown, status = 200): Promise<any> {
+    const response = await observe(route, method, body);
+    assert.equal(response.status, status, `${method} ${route}: ${response.text}`);
+    return JSON.parse(response.text);
+  }
+  return { request, readTaskResponse: (route: string) => observe(route), close: host.close };
 }
 
 type Host = Awaited<ReturnType<typeof startHost>>;
@@ -66,14 +70,23 @@ async function fixture(t: TestContext) {
 
 async function settled(host: Host, route: string, requestId: string) {
   const deadline = Date.now() + 20_000;
+  let lastUnavailable: string | undefined;
   do {
-    const state = await host.request(route);
-    if (state.task.lastRun?.id === requestId
-      && state.task.lastRun.status !== 'running'
-      && state.snapshot.status === 'idle') return state;
+    const response = await host.readTaskResponse(route);
+    if (response.status === 409 && JSON.parse(response.text).code === 'session_history_unavailable') {
+      // The native writer may still be appending. Only this GET is observed
+      // again; a persistent refusal still exhausts the original deadline.
+      lastUnavailable = response.text;
+    } else {
+      assert.equal(response.status, 200, `GET ${route}: ${response.text}`);
+      const state = JSON.parse(response.text);
+      if (state.task.lastRun?.id === requestId
+        && state.task.lastRun.status !== 'running'
+        && state.snapshot.status === 'idle') return state;
+    }
     await delay(25);
   } while (Date.now() < deadline);
-  assert.fail('The synthetic bound-files Host task did not settle.');
+  assert.fail(`The synthetic bound-files Host task did not settle.${lastUnavailable ? ` Last unavailable history: ${lastUnavailable}` : ''}`);
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;

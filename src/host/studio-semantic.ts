@@ -3,6 +3,7 @@ import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child
 import { join } from 'node:path';
 import type { SemanticGraphCleanup } from './semantic-graph-process.ts';
 import type { SemanticGraphSourceRef } from '../../extensions/business-plugins/semantic-context/graph.ts';
+import type { StudioRuleCommand, StudioRuleResult } from './studio-rule-reasoning.ts';
 
 export type StudioSemanticSource = { id: string; revision: string; sha256: string; text: string; locator?: string; ref?: import('../../extensions/business-plugins/studio/contracts.ts').StudioSourceRef };
 export type StudioSemanticCompletion = { kind: 'entities' | 'relations'; format: 'typed' | 'structured'; prompt: string; schema?: Record<string, unknown> };
@@ -27,7 +28,7 @@ export async function runStudioSemanticExtraction(options: StudioSemanticOptions
 }
 
 
-type WorkerOptions = Omit<StudioSemanticOptions, 'source'> & { checkMany?: StudioGraphBuildOptions['checkMany']; worker: 'studio_extract' | 'studio_build'; command: Record<string, unknown> };
+type WorkerOptions = Omit<StudioSemanticOptions, 'source'> & { checkMany?: StudioGraphBuildOptions['checkMany']; worker: 'studio_extract' | 'studio_build' | 'studio_reason'; command: Record<string, unknown> };
 const fault = (code: string) => Object.assign(new Error(`studio_semantic_${code}`), { code: `studio_semantic_${code}` });
 
 /** A trusted, bounded tool process. Its model callback belongs to the caller's
@@ -132,4 +133,11 @@ export async function buildStudioSemanticSnapshot(options: StudioGraphBuildOptio
   if (Buffer.byteLength(JSON.stringify(command)) > 2 * 1024 * 1024) throw fault('request_limit');
   try { return await runStudioWorker<StudioGraphBuildResult>({ ...options, complete: async () => { throw fault('build_cannot_generate'); }, worker: 'studio_build', command }); }
   catch (error) { if (error && typeof error === 'object') Object.assign(error, { snapshotId }); throw error; }
+}
+
+/** Deterministic work under the existing parent tool operation, with no new session. */
+export async function runStudioRuleInference(options: Omit<StudioSemanticOptions, 'source' | 'complete'> & { command: StudioRuleCommand }): Promise<StudioRuleResult> {
+  if (Buffer.byteLength(JSON.stringify(options.command)) > 512 * 1024) throw fault('request_limit');
+  const signal = AbortSignal.any([options.signal, AbortSignal.timeout(20_000)]);
+  return runStudioWorker<StudioRuleResult>({ ...options, signal, complete: async () => { throw fault('reason_cannot_generate'); }, worker: 'studio_reason', command: options.command });
 }

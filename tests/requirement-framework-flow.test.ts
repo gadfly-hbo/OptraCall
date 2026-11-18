@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -137,7 +138,7 @@ test('RAF-A4: withdrawing a source protects reviewed RAP, Case reads, task recei
   await events.terminal;
   assert.match(JSON.stringify(await read(await host.request(taskRoute + '/context-receipts'))), new RegExp(marker));
   await read(await host.request('/api/cases/storage/initialize', 'POST', {}));
-  const { case: record } = await read(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '历史规则' }), 201);
+  const { case: record } = await read(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '历史规则' })), 201);
   const readCase = () => host.request(`/api/cases/${record.id}/decisions/source`, 'POST', { target: { type: 'rap', instanceId: id, version: '1.0.0' } });
   assert.match(JSON.stringify(await read(await readCase())), new RegExp(marker));
 

@@ -367,7 +367,7 @@ export function ConclusionReviewPanel({ project, task, configurations, taskBusy,
             {output && !archived && <button type="button" className="primary-button" disabled={carrying || posting || taskBusy || current.canCarry !== true} onClick={() => void carry()}>{carrying ? '正在带回…' : '带回分析'}</button>}
             {!inProgress && !pending && !archived && <button type="button" className="secondary-button" onClick={() => { setForm(true); setError(''); setNotice(''); }}>{updated ? '选择新版报告' : '另选报告版本'}</button>}
           </div>
-          {output && <p className="cnr-caption">意见追加到原任务草稿，由你核对后使用原发送入口。</p>}
+          {output && <p className="cnr-caption">{current?.deliveredToAuthor ? '本稿意见已自动接回原作者会话；实际核实、修订及新稿审查状态分别保留。' : '手动带回会追加到原任务草稿，核对后可发送；自动接续按当前全局设置办理。'}</p>}
         </>}
       </>}
     </div>

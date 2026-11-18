@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
@@ -14,7 +15,7 @@ async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const { project } = await readJson(await host.request('/api/projects', 'POST', { name: 'M5合成项目' }), 201);
   const { task } = await readJson(await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: 'Case继续工作' }), 201);
   await readJson(await host.request('/api/cases/storage/initialize', 'POST', {}));
-  const { case: record } = await readJson(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '合成门店缺货', description: '不代表真实经营资料。' }), 201);
+  const { case: record } = await readJson(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '合成门店缺货', description: '不代表真实经营资料。' })), 201);
   await readJson(await host.request(`/api/cases/${record.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: record.revision, projectId: project.id }));
   return { host, project, task, record, route: `/api/cases/${record.id}/decisions` };
 }

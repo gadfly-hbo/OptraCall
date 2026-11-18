@@ -1,0 +1,219 @@
+{
+  "sourceCommit": "3ebaa01d2fd6d81a6605f408f9f414a4b8bd7a19",
+  "css": [
+    {
+      "source": "src/host/ui/styles.css",
+      "asset": "source-css/src/host/ui/styles.css",
+      "sha256": "470531189f6c116f3a6a6bae9a1f35f0cbced88ccf509aedb89610570883600d",
+      "assetSha256": "470531189f6c116f3a6a6bae9a1f35f0cbced88ccf509aedb89610570883600d"
+    },
+    {
+      "source": "extensions/business-plugins/decision-board/ui/decision-board.css",
+      "asset": "source-css/extensions/business-plugins/decision-board/ui/decision-board.css",
+      "sha256": "4fb8566291303d5f0d05975b61bfaec7905bfb2c662f37a3ee16409224f6b007",
+      "assetSha256": "4fb8566291303d5f0d05975b61bfaec7905bfb2c662f37a3ee16409224f6b007"
+    },
+    {
+      "source": "extensions/business-plugins/model-pack/ui/model-pack.css",
+      "asset": "source-css/extensions/business-plugins/model-pack/ui/model-pack.css",
+      "sha256": "478a83eb3663559ac6e6bf1d94daae0a30a232dde8a3d5250630790ad9946fa7",
+      "assetSha256": "478a83eb3663559ac6e6bf1d94daae0a30a232dde8a3d5250630790ad9946fa7"
+    },
+    {
+      "source": "extensions/business-plugins/ppt-refiner/ui/refiner.css",
+      "asset": "source-css/extensions/business-plugins/ppt-refiner/ui/refiner.css",
+      "sha256": "be8b3d18b6d30c3c4653d02c3e4536f568f019073697b697b970eada05ed8c9e",
+      "assetSha256": "be8b3d18b6d30c3c4653d02c3e4536f568f019073697b697b970eada05ed8c9e"
+    },
+    {
+      "source": "extensions/business-plugins/requirements-elaboration/ui/analysis-framework.css",
+      "asset": "source-css/extensions/business-plugins/requirements-elaboration/ui/analysis-framework.css",
+      "sha256": "cdb4bd403f34971b06dd071806a8a760c809b5634d3132bfeaa4f7f6b206a8a4",
+      "assetSha256": "cdb4bd403f34971b06dd071806a8a760c809b5634d3132bfeaa4f7f6b206a8a4"
+    },
+    {
+      "source": "extensions/business-plugins/sim-lab/ui/simlab.css",
+      "asset": "source-css/extensions/business-plugins/sim-lab/ui/simlab.css",
+      "sha256": "58051faabbff482e54ec6b9b0245e84e0cfce4d3a11df0d97c580f3a7b2245ee",
+      "assetSha256": "58051faabbff482e54ec6b9b0245e84e0cfce4d3a11df0d97c580f3a7b2245ee"
+    },
+    {
+      "source": "src/host/ui/StudioCoverageView.css",
+      "asset": "source-css/src/host/ui/StudioCoverageView.css",
+      "sha256": "ceb353ae603a75bb6c975b55a3036210de24538159c18a0aceccab67262e3b97",
+      "assetSha256": "ceb353ae603a75bb6c975b55a3036210de24538159c18a0aceccab67262e3b97"
+    },
+    {
+      "source": "src/host/ui/StudioFoundationView.css",
+      "asset": "source-css/src/host/ui/StudioFoundationView.css",
+      "sha256": "7a8c35cfd178ef882a1abee92380804f2ff9f5e8501b290a038046fc875b81aa",
+      "assetSha256": "7a8c35cfd178ef882a1abee92380804f2ff9f5e8501b290a038046fc875b81aa"
+    },
+    {
+      "source": "src/host/ui/automatic-verification.css",
+      "asset": "source-css/src/host/ui/automatic-verification.css",
+      "sha256": "fb7db991292d0aed9a8e6940d5f0cfec5289d555a3cc6bf94de679a93357554f",
+      "assetSha256": "fb7db991292d0aed9a8e6940d5f0cfec5289d555a3cc6bf94de679a93357554f"
+    },
+    {
+      "source": "src/host/ui/case-board.css",
+      "asset": "source-css/src/host/ui/case-board.css",
+      "sha256": "70f81d4e0b5ea925334c6aff9a78779638a6299687444bf937cd6bf5d9cb601b",
+      "assetSha256": "70f81d4e0b5ea925334c6aff9a78779638a6299687444bf937cd6bf5d9cb601b"
+    },
+    {
+      "source": "src/host/ui/case-decisions.css",
+      "asset": "source-css/src/host/ui/case-decisions.css",
+      "sha256": "14ebf241d5258c157b2668de1c09b132bb472d063673a81f473d9bd13ed18ae0",
+      "assetSha256": "14ebf241d5258c157b2668de1c09b132bb472d063673a81f473d9bd13ed18ae0"
+    },
+    {
+      "source": "src/host/ui/case-star-map.css",
+      "asset": "source-css/src/host/ui/case-star-map.css",
+      "sha256": "f9ffc8dbf6cbc8c7cfc18af38dbb4429f2ca717f52438cb722b46e2c0ef37794",
+      "assetSha256": "f9ffc8dbf6cbc8c7cfc18af38dbb4429f2ca717f52438cb722b46e2c0ef37794"
+    },
+    {
+      "source": "src/host/ui/conclusion-review.css",
+      "asset": "source-css/src/host/ui/conclusion-review.css",
+      "sha256": "7407b5176701ab2df72c88af8c07751504e199577016bb4d6f9064a71d1c0b76",
+      "assetSha256": "7407b5176701ab2df72c88af8c07751504e199577016bb4d6f9064a71d1c0b76"
+    },
+    {
+      "source": "src/host/ui/db-link.css",
+      "asset": "source-css/src/host/ui/db-link.css",
+      "sha256": "aa4cb0aa881d2627b00a7babf7e4af4327b5720bde3d0af85d0115a8d06ae55a",
+      "assetSha256": "aa4cb0aa881d2627b00a7babf7e4af4327b5720bde3d0af85d0115a8d06ae55a"
+    },
+    {
+      "source": "src/host/ui/enterprise-materials.css",
+      "asset": "source-css/src/host/ui/enterprise-materials.css",
+      "sha256": "6476ede369e93cc04b75754b202ae71055e9e8e7c9636957effce386952cc97b",
+      "assetSha256": "6476ede369e93cc04b75754b202ae71055e9e8e7c9636957effce386952cc97b"
+    },
+    {
+      "source": "src/host/ui/feedback.css",
+      "asset": "source-css/src/host/ui/feedback.css",
+      "sha256": "cf54866db90773d0a0da0448074d406585d686914ffd8fee4b8ba0fadc3dce80",
+      "assetSha256": "cf54866db90773d0a0da0448074d406585d686914ffd8fee4b8ba0fadc3dce80"
+    },
+    {
+      "source": "src/host/ui/help-page.css",
+      "asset": "source-css/src/host/ui/help-page.css",
+      "sha256": "77f986ab66bee3f9453fcb31f770c427646518ff016200de9d885a5fb7c3155f",
+      "assetSha256": "77f986ab66bee3f9453fcb31f770c427646518ff016200de9d885a5fb7c3155f"
+    },
+    {
+      "source": "src/host/ui/personal-context.css",
+      "asset": "source-css/src/host/ui/personal-context.css",
+      "sha256": "0c299f53a0295e88a61dcc25069e9e3de6f7a3bf72b3a3810ea2339e512e16e7",
+      "assetSha256": "0c299f53a0295e88a61dcc25069e9e3de6f7a3bf72b3a3810ea2339e512e16e7"
+    },
+    {
+      "source": "src/host/ui/personal-retention.css",
+      "asset": "source-css/src/host/ui/personal-retention.css",
+      "sha256": "f964e9f516a0f0e35c462de42dcdd12acc5cf4388e8c24999f65202580a58380",
+      "assetSha256": "f964e9f516a0f0e35c462de42dcdd12acc5cf4388e8c24999f65202580a58380"
+    },
+    {
+      "source": "src/host/ui/project-data-context.css",
+      "asset": "source-css/src/host/ui/project-data-context.css",
+      "sha256": "8b5b8eff73a21fc835c3a75b02495003f1515fb2afe7e3f8cb81a11258190fda",
+      "assetSha256": "8b5b8eff73a21fc835c3a75b02495003f1515fb2afe7e3f8cb81a11258190fda"
+    },
+    {
+      "source": "src/host/ui/sap-methods.css",
+      "asset": "source-css/src/host/ui/sap-methods.css",
+      "sha256": "0c8e434dd0613da51e5d6122ab0146a4a518942c2bba2b9ff9ee30df5f50d3de",
+      "assetSha256": "0c8e434dd0613da51e5d6122ab0146a4a518942c2bba2b9ff9ee30df5f50d3de"
+    },
+    {
+      "source": "src/host/ui/semantic-context.css",
+      "asset": "source-css/src/host/ui/semantic-context.css",
+      "sha256": "6f34ea6b2035218b82abbcee3fa6c9ad2ab2e9d12305c4a2a72252f0d91dddda",
+      "assetSha256": "6f34ea6b2035218b82abbcee3fa6c9ad2ab2e9d12305c4a2a72252f0d91dddda"
+    },
+    {
+      "source": "src/host/ui/studio.css",
+      "asset": "source-css/src/host/ui/studio.css",
+      "sha256": "a69dd8a21289b50fa158cf0b262e5e94ece6ca589edd67ed8a7fe8e4aa06a693",
+      "assetSha256": "a69dd8a21289b50fa158cf0b262e5e94ece6ca589edd67ed8a7fe8e4aa06a693"
+    },
+    {
+      "source": "src/host/ui/verification-panel.css",
+      "asset": "source-css/src/host/ui/verification-panel.css",
+      "sha256": "40affebdc7e30379adbcb75fc01658011a2d351b1976fdb18211fd299f3a5df7",
+      "assetSha256": "40affebdc7e30379adbcb75fc01658011a2d351b1976fdb18211fd299f3a5df7"
+    }
+  ],
+  "markupSources": [
+    "src/host/ui/App.tsx",
+    "src/host/ui/ProjectNavigation.tsx",
+    "src/host/ui/CaseBoard.tsx",
+    "src/host/ui/ProjectBoard.tsx",
+    "src/host/ui/TaskWorkflow.tsx",
+    "src/host/ui/StudioPage.tsx",
+    "src/host/ui/ConclusionReviewPanel.tsx",
+    "extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx"
+  ],
+  "scope": "synthetic offline review prototype; original CSS verbatim frozen; original markup structure adapted, no product runtime",
+  "cssLoadOrder": [
+    "source-css/extensions/business-plugins/decision-board/ui/decision-board.css",
+    "source-css/extensions/business-plugins/model-pack/ui/model-pack.css",
+    "source-css/extensions/business-plugins/ppt-refiner/ui/refiner.css",
+    "source-css/extensions/business-plugins/requirements-elaboration/ui/analysis-framework.css",
+    "source-css/extensions/business-plugins/sim-lab/ui/simlab.css",
+    "source-css/src/host/ui/StudioCoverageView.css",
+    "source-css/src/host/ui/StudioFoundationView.css",
+    "source-css/src/host/ui/automatic-verification.css",
+    "source-css/src/host/ui/case-board.css",
+    "source-css/src/host/ui/case-decisions.css",
+    "source-css/src/host/ui/case-star-map.css",
+    "source-css/src/host/ui/conclusion-review.css",
+    "source-css/src/host/ui/db-link.css",
+    "source-css/src/host/ui/enterprise-materials.css",
+    "source-css/src/host/ui/feedback.css",
+    "source-css/src/host/ui/help-page.css",
+    "source-css/src/host/ui/personal-context.css",
+    "source-css/src/host/ui/personal-retention.css",
+    "source-css/src/host/ui/project-data-context.css",
+    "source-css/src/host/ui/sap-methods.css",
+    "source-css/src/host/ui/semantic-context.css",
+    "source-css/src/host/ui/studio.css",
+    "source-css/src/host/ui/verification-panel.css",
+    "source-css/src/host/ui/styles.css",
+    "demo.css"
+  ],
+  "prototypeFiles": [
+    {
+      "path": "README.md",
+      "sha256": "ee6656035ccf276002850a1a4961916aab18ef10baca21cb5b0800e3af4e49a4"
+    },
+    {
+      "path": "base.js",
+      "sha256": "4d480604debe3a6b5391dc1b6deef506715e01d4cd3abbbb5918c1e72c2fb999"
+    },
+    {
+      "path": "catalog-data.js",
+      "sha256": "7fad8a33088606b06dcd9e1c959eedac5a324963daef66c414a6ac36ac48f73d"
+    },
+    {
+      "path": "demo.css",
+      "sha256": "93587be20d4cf8364a5f8861301fc5844842654caaeac47c8ccec455586151b0"
+    },
+    {
+      "path": "extras.js",
+      "sha256": "7d8ea1e1856a4d6311312776b1c49ba77d0478ad286b476a9a6074c1f52592e6"
+    },
+    {
+      "path": "index.html",
+      "sha256": "398c68894a815da78bf33a1ff59c1a89394114012be629845358ac3a40b7c52d"
+    },
+    {
+      "path": "views.js",
+      "sha256": "c8a41465e49324dce6f8529f37ae634269ed9f5c9a9f68dba924423ca9153e8c"
+    }
+  ],
+  "catalogSource": "src/host/ui/catalog-data.ts",
+  "catalogPolicy": "Preserve original non-scenario catalog items and status; remove scenario-combination six-item display only"
+}

@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -11,7 +12,7 @@ test('CASE-CONTEXT: reject changed Case before runtime/model, pin selected backg
  const {project}=await read(await host.request('/api/projects','POST',{name:'Original project'}),201);
  const {task}=await read(await host.request(`/api/projects/${project.id}/tasks`,'POST',{name:'Original task'}),201);
  await read(await host.request('/api/cases/storage/initialize','POST',{}));
- let record=(await read(await host.request('/api/cases','POST',{operationId:randomUUID(),title:'复购率下滑5%'}),201)).case;
+ let record=(await read(await host.request('/api/cases','POST',await withCaseGoal(host, {operationId:randomUUID(),title:'复购率下滑5%'})),201)).case;
  record=(await read(await host.request(`/api/cases/${record.id}/projects`,'POST',{operationId:randomUUID(),expectedRevision:record.revision,projectId:project.id}))).case;
  const stale={caseId:record.id,caseRevision:record.revision,projectWorkRevision:0,selectedReferenceIds:[]};
  record=(await read(await host.request(`/api/cases/${record.id}`,'PATCH',{operationId:randomUUID(),expectedRevision:record.revision,title:record.title,description:'合成背景',judgement:'未确定原因',nextStep:'核对人群'}))).case;
@@ -47,7 +48,7 @@ test('CASE-LIFECYCLE: closing a Case preserves an already accepted native run an
  const host=await startTestHost();t.after(()=>host.close());
  await read(await host.request('/api/configuration','PUT',{name:'Lifecycle fixture',provider:'openai-compatible',baseUrl:provider.baseUrl,model:'synthetic-lifecycle',apiKey:'synthetic-only'}));
  const {project}=await read(await host.request('/api/projects','POST',{name:'原项目'}),201),{task}=await read(await host.request(`/api/projects/${project.id}/tasks`,'POST',{name:'原任务'}),201);
- await read(await host.request('/api/cases/storage/initialize','POST',{}));let record=(await read(await host.request('/api/cases','POST',{operationId:randomUUID(),title:'持续运行事项'}),201)).case;
+ await read(await host.request('/api/cases/storage/initialize','POST',{}));let record=(await read(await host.request('/api/cases','POST',await withCaseGoal(host, {operationId:randomUUID(),title:'持续运行事项'})),201)).case;
  record=(await read(await host.request(`/api/cases/${record.id}/projects`,'POST',{operationId:randomUUID(),expectedRevision:record.revision,projectId:project.id}))).case;
  const selection={caseId:record.id,caseRevision:record.revision,projectWorkRevision:0,selectedReferenceIds:[]},stream=await sessionEvents(host,project.id,task.id);t.after(()=>stream.close());
  await read(await host.request(`/api/projects/${project.id}/tasks/${task.id}/messages`,'POST',{requestId:randomUUID(),text:'持续执行合成请求',caseContext:selection}),202);await provider.waitForRequests(1);
@@ -59,7 +60,7 @@ test('CASE-LIFECYCLE: closing a Case preserves an already accepted native run an
 });
 test('CASE-BOUNDS: legal Chinese fields fit the public API limits together',async t=>{
  const host=await startTestHost();t.after(()=>host.close());await read(await host.request('/api/cases/storage/initialize','POST',{}));
- let record=(await read(await host.request('/api/cases','POST',{operationId:randomUUID(),title:'字段边界'}),201)).case;
+ let record=(await read(await host.request('/api/cases','POST',await withCaseGoal(host, {operationId:randomUUID(),title:'字段边界'})),201)).case;
  const description='背'.repeat(20000),judgement='判'.repeat(20000),nextStep='下'.repeat(5000);
  record=(await read(await host.request(`/api/cases/${record.id}`,'PATCH',{operationId:randomUUID(),expectedRevision:record.revision,title:record.title,description,judgement,nextStep}))).case;
  assert.equal(record.description,description);assert.equal(record.judgement,judgement);assert.equal(record.nextStep,nextStep);

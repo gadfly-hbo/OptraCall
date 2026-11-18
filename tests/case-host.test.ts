@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -31,8 +32,8 @@ test('CASE-HTTP: two Cases share original projects, global work revisions and or
   const { task } = await json(await host.request(`/api/projects/${p.id}/tasks`, 'POST', { name: '原任务' }), 201);
   const originalMetadata = await fs.readFile(path.join(host.dataRoot, 'projects', p.id, 'project.json'));
   assert.equal((await json(await host.request('/api/cases/storage/initialize', 'POST', {}))).state, 'ready');
-  const { case: a } = await json(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '会员复购下降' }), 201);
-  const { case: b } = await json(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '会员召回' }), 201);
+  const { case: a } = await json(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '会员复购下降' })), 201);
+  const { case: b } = await json(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '会员召回' })), 201);
   const linkedA = await json(await host.request(`/api/cases/${a.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: 1, projectId: p.id }));
   await json(await host.request(`/api/cases/${b.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: 1, projectId: p.id }));
   const empty = (await json(await host.request(`/api/projects/${p.id}/work`))).work;
@@ -65,7 +66,7 @@ test('CASE-HTTP: artifact references record observed original sources and expose
   const { task } = await json(await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: '相关任务' }), 201);
   const { file } = await json(await host.request(`/api/projects/${project.id}/files/upload`, 'POST', { name: 'report.txt', directory: '020_clean', content: Buffer.from('合成报告 v1').toString('base64') }), 201);
   await json(await host.request('/api/cases/storage/initialize', 'POST', {}));
-  const { case: c } = await json(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '合成产物观察' }), 201);
+  const { case: c } = await json(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '合成产物观察' })), 201);
   const linked = await json(await host.request(`/api/cases/${c.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: 1, projectId: project.id }));
   const request = { operationId: randomUUID(), expectedRevision: linked.case.revision, projectId: project.id, relativePath: file.path, taskId: task.id, role: 'report' };
   const saved = await json(await host.request(`/api/cases/${c.id}/artifacts`, 'POST', request));
@@ -135,7 +136,7 @@ test('CASE-HTTP: archived original projects stay readable but cannot accept new 
   const command = { operationId: randomUUID(), expectedRevision: 0, workStatus: 'completed', workScope: '', assignee: null, nextStep: '', statusReason: '已完成合成核对' };
   const first = await json(await host.request(`/api/projects/${project.id}/work`, 'PATCH', command));
   await json(await host.request(`/api/projects/${project.id}/archive`, 'POST', {}));
-  const { case: c } = await json(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '查阅归档项目' }), 201);
+  const { case: c } = await json(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '查阅归档项目' })), 201);
   await json(await host.request(`/api/cases/${c.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: 1, projectId: project.id }));
   assert.equal((await json(await host.request(`/api/projects/${project.id}/work`))).work.workStatus, 'completed');
   assert.equal((await json(await host.request(`/api/projects/${project.id}/work`, 'PATCH', { ...command, operationId: randomUUID(), expectedRevision: 1, nextStep: '不能保存' }), 409)).code, 'project_archived');

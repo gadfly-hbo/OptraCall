@@ -77,6 +77,6 @@ test('nested graph metadata remains UNKNOWN in the same panel and the ordinary o
   const unknown = renderToStaticMarkup(createElement(SemanticContextDetails, { records: [{ graphInput: { action: 'graph', operation: 'source', sourceHandle: 'saved-run-only-source' }, issue: '子工具正文未记录 · UNKNOWN' }], view: 'saved', lookup: { state: 'idle' } }));
   assert.match(unknown, /UNKNOWN/); assert.doesNotMatch(unknown, /saved-run-only-source|现在按原引用回读|继续读取本次查询/);
   const entry = renderToStaticMarkup(createElement(SemanticContextPanel, { projectId: 'project', taskId: 'task', records: [{ graphResult: graph }] }));
-  assert.match(entry, /查看依据／前提变化/); assert.doesNotMatch(entry, /<dialog|<form|<input|<select/);
+  assert.match(entry, /本次依据/); assert.doesNotMatch(entry, /<dialog|<form|<input|<select/);
   assert.equal(fetches, 0);
 });

@@ -1,3 +1,5 @@
+import type { UserQuoteProvenance } from '../../../src/agent/quoted-decisions.ts';
+
 export type EvidenceLevel = '数据支撑' | '多源佐证' | '逻辑推断' | '经验假设';
 export type Priority = 'high' | 'medium' | 'low';
 export type ItemStatus = 'suggested' | 'adopted' | 'dismissed';
@@ -57,8 +59,29 @@ export type TaskFeedbackRevision = TaskFeedbackRecord & {
   revisionId: string; revisionNumber: number; operationId: string | null; requestSha256: string | null;
   savedAt: string; origin: 'user-save' | 'legacy-current';
   legacyCreatedAt: string | null; legacyUpdatedAt: string | null;
+  quoteProvenance?: UserQuoteProvenance;
 };
-export type BoardTaskView = BoardTaskRecord & { feedback?: TaskFeedbackRevision };
+export type BoardCaseAuthorizationSource = { caseStoreId: string; caseId: string; choiceId: string;
+  strategyRef: { type: 'case-decision'; caseStoreId: string; caseId: string; recordId: string; revision: number } };
+export type BoardWorkContext = { confirmationId: string; planVersion: number; taskKey: string; goal: { goalId: string; version: number } };
+export type BoardWorkAuthorizationSource = { kind: 'work'; projectId: string; taskId: string; requestId: string; workContext?: BoardWorkContext };
+export type BoardAuthorizationSource = BoardCaseAuthorizationSource | BoardWorkAuthorizationSource;
+export type BoardArrangeAction =
+  | { kind: 'create'; title: string; owner?: string; dueDate?: string; priority?: string; note?: string; itemId?: string; itemVersion?: string }
+  | { kind: 'reuse'; itemId: string; taskId: string; itemVersion: string; taskVersion: string; expectedPreviousAuthorizationId: string | null };
+export type BoardArrangedActionRef = { itemId: string; taskId: string; itemVersion: string; taskVersion: string; authorizationId: string; created: boolean };
+export type BoardArrangeActionsInput = { operationId: string; projectId: string; source: BoardAuthorizationSource; quoteProvenance: UserQuoteProvenance; scope: string; title: string; checks: string[]; actions: BoardArrangeAction[] };
+export type BoardArrangementReceipt = Omit<BoardArrangeActionsInput, 'actions'> & { requestSha256: string; actions: BoardArrangedActionRef[]; createdAt: string };
+export type BoardActionAuthorizationInput = {
+  operationId: string; projectId: string; itemId: string; taskId: string; itemVersion: string; taskVersion: string;
+  expectedPreviousAuthorizationId: string | null; decision: 'authorize' | 'revoke'; scope: string;
+  source: BoardAuthorizationSource; quoteProvenance: UserQuoteProvenance;
+};
+export type BoardActionAuthorization = Omit<BoardActionAuthorizationInput, 'expectedPreviousAuthorizationId'> & {
+  authorizationId: string; revision: number; previousAuthorizationId: string | null; requestSha256: string;
+  itemSnapshot: BoardItemRecord; taskSnapshot: BoardTaskRecord; actorKind: 'user'; createdAt: string;
+};
+export type BoardTaskView = BoardTaskRecord & { feedback?: TaskFeedbackRevision; authorization?: Pick<BoardActionAuthorization, 'authorizationId' | 'revision' | 'decision' | 'scope' | 'source' | 'createdAt'> | null };
 export type BoardItemView = BoardItemRecord & { tasks: BoardTaskView[] };
 
 /** Validated extraction item shape produced by normalizeExtractionOutput. */

@@ -1,0 +1,166 @@
+{
+  "baselineCommit": "3a529a0e381bf67b998f2b1debd242a5eed38884",
+  "worktree": "/Users/bendandebaba/.codex/worktrees/optracall-v12/OptraCall",
+  "kind": "review-only actual App plus synthetic browser transport",
+  "productDiskWrites": false,
+  "baseline": "Original render paths with synthetic state, original GSA/BSC behavior; diagnostic initial Goal page and outside controls",
+  "proposed": "Same App and CSS; only App and StrategyGoalsPage guarded in-memory transforms plus demo-only components",
+  "sourceFiles": [
+    {
+      "path": "src/host/ui/main.tsx",
+      "sha256": "2039c03830330f07523fcb6a574ffb0504b2f157df7fa65108a941c82b139938",
+      "bytes": 227,
+      "role": "Unmodified true UI entry and App mount",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/App.tsx",
+      "sha256": "9f6928b8a0fb5733ad35b7153e8269d27049fbfb9cb73dfcfe8a0fa35f085129",
+      "bytes": 118447,
+      "role": "True App shell; guarded memory transform for proposed additions and demo initial navigation",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/StrategyGoalsPage.tsx",
+      "sha256": "85b1bfb18859806a82253aba8bc412cb184335e13473e1013b72222a6f0ebe2d",
+      "bytes": 45341,
+      "role": "True Goal/GSA/BSC/history page; guarded memory transform for proposed additions",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/ProjectPlanPage.tsx",
+      "sha256": "39f5d33ccf475a7dbb6d0435c9e42ede422dae3cee56e48469eab6505e433ec1",
+      "bytes": 56513,
+      "role": "Unmodified Project planning, existing two confirmation paths",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/ProjectBoard.tsx",
+      "sha256": "0c8150ef43dcdc7538cc22a893cc7067a5c370fb140f49931c731b3b1e257ad1",
+      "bytes": 16496,
+      "role": "Unmodified project list/cards and detail",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/ProjectSpace.tsx",
+      "sha256": "565bfdf4b987b5c77e4a3da1d10865da15b65a82000c3a9de037d43feec3785f",
+      "bytes": 17514,
+      "role": "Unmodified NewProjectDialog and shared project files",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/CaseBoard.tsx",
+      "sha256": "5aa95d1b4783e730e2c74937e47a75eab1d9980581ec82384f68226c0c93836e",
+      "bytes": 49411,
+      "role": "Unmodified original Case surface",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/CaseDialogs.tsx",
+      "sha256": "5b543a31de5aa32495a29f11e644732403efa2c18f33a8c8debf08f4114d67e0",
+      "bytes": 32660,
+      "role": "Unmodified existing Dialog lifecycle and Case forms",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/StudioPage.tsx",
+      "sha256": "a87ccdf38069d2017d8def0804541ca5dea4ff805211add68937191753261455",
+      "bytes": 133011,
+      "role": "Unmodified original Studio surface",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/strategy-goals-client.ts",
+      "sha256": "92efc341038540cbc30728a5bbc69efaba4e28f73e0c28bf5b6b643ea4a07d88",
+      "bytes": 4553,
+      "role": "Unmodified original Goal API client",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/styles.css",
+      "sha256": "d3a4387a6e3c28e68b7b6b97590fde7083ebdaab79114b5e8be2213e3cac2e03",
+      "bytes": 60383,
+      "role": "Original application tokens, theme, shell, buttons, forms",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/case-board.css",
+      "sha256": "70f81d4e0b5ea925334c6aff9a78779638a6299687444bf937cd6bf5d9cb601b",
+      "bytes": 22109,
+      "role": "Original business page and dialogs",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/strategy-goals.css",
+      "sha256": "4d8afd6dfb16e5a3c6e5c45c0dd492cc022a8ca9b2c5635a60e4ffa7e0e39d74",
+      "bytes": 3610,
+      "role": "Original Goal/GSA/BSC styling",
+      "diskModified": false
+    },
+    {
+      "path": "src/host/ui/project-plan.css",
+      "sha256": "a258d023e6df81f5a49de5fc584d9ff8fe289ab13697f864125c07183c5ce3b9",
+      "bytes": 3446,
+      "role": "Original Project plan styling",
+      "diskModified": false
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "071920cbf3e28ddbe2860276c6803d72beff12f1ce36ee5083b8f6d88e754f55",
+      "bytes": 149655,
+      "role": "Unchanged exact lock identity",
+      "diskModified": false
+    }
+  ],
+  "demoFilesExcludingThisManifest": [
+    {
+      "path": "openspec/changes/overall-architecture-v12/ui-demo/README.md",
+      "sha256": "b5981265f094a0ad4aaa8caca2d4885ac00e123b07ce4d93f2a27b0878bb008c",
+      "bytes": 11236
+    },
+    {
+      "path": "openspec/changes/overall-architecture-v12/ui-demo/context.ts",
+      "sha256": "e430679b39ec328b734a68de631efadecbfba983d7c7b49f617c3a47aa1dfb6c",
+      "bytes": 1781
+    },
+    {
+      "path": "openspec/changes/overall-architecture-v12/ui-demo/demo.css",
+      "sha256": "1b49d788411cb88d002f59ba203a467316fcfe404fb384ff47f75a2efda7f852",
+      "bytes": 4755
+    },
+    {
+      "path": "openspec/changes/overall-architecture-v12/ui-demo/index.html",
+      "sha256": "bb8f8d69d8412124d83ae932cc70a6379651e549c6f7203359b30badc9ce43e3",
+      "bytes": 413
+    },
+    {
+      "path": "openspec/changes/overall-architecture-v12/ui-demo/main.tsx",
+      "sha256": "ec54f5ca980b634410cb2e2f013cd9ae759b0be2451098b6312616c05ecf5b7e",
+      "bytes": 2676
+    },
+    {
+      "path": "openspec/changes/overall-architecture-v12/ui-demo/run.mjs",
+      "sha256": "a42f48baee816e16c6a0917a588216296a50632583596bc9cf6ea4a5f46df05f",
+      "bytes": 1530
+    },
+    {
+      "path": "openspec/changes/overall-architecture-v12/ui-demo/stub.ts",
+      "sha256": "d9decfe481bc31ae490fd5d5e5ac6396940008ca8203520c1ed8710a898f6de7",
+      "bytes": 37747
+    },
+    {
+      "path": "openspec/changes/overall-architecture-v12/ui-demo/v12-ui.tsx",
+      "sha256": "10fac49f549800349ff2e108be41fb09210d15768892aba3060c96dc51d69f29",
+      "bytes": 32169
+    },
+    {
+      "path": "openspec/changes/overall-architecture-v12/ui-demo/vite.config.ts",
+      "sha256": "243452ebc7ee9c4fc64838c45f8b0b2a64d14ec11ca4887ea2a7ebcc6d45deb4",
+      "bytes": 10426
+    }
+  ],
+  "transforms": [
+    ".local/v12-preparation/demo-transform-App.tsx.json",
+    ".local/v12-preparation/demo-transform-StrategyGoalsPage.tsx.json"
+  ]
+}

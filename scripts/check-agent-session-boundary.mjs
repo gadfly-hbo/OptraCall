@@ -13,15 +13,18 @@ const projectAgentOwners = new Set([
   'tests/agent-sessions.test.ts',
   'tests/analysis-python.test.ts', // DB01/02/05: real Pi, synthetic provider and private environment/profile lifecycle.
   'tests/project-runtime.test.ts',
+  'tests/strategy-discussion-runtime.test.ts', // v1.2 isolated official Pi sealed-tool/native-resume proof only.
   'tests/agent-candidate-runtime.test.ts', // M3.1 isolated synthetic SDK proof only.
   'tests/personal-context-runtime.test.ts', // M4 isolated direct/nested SDK + callback transport proof only.
   'tests/sdk-tool-context-runtime.test.ts', // R1 frozen-source/qualification proof through the existing ProjectAgent seam only.
   'tests/sdk-network-compat.test.ts', // R3 loopback MCP/controlled TLS through the unchanged worker/transport entry only.
   'tests/semantic-context-runtime.test.ts', // L1 isolated SDK callback/nested/cancellation/auxiliary-failure proof; no product runtime ownership.
+  'tests/db-link-tools.test.ts', // DB04/14/18 isolated SDK direct/nested tools, capability and cleanup proof; no product runtime ownership.
   'tests/s4-runtime-lifecycle.test.ts', // D13: synthetic same-Resource read-capability/reap/quarantine proof only.
   'tests/s4-runtime-sdk.test.ts', // D13: actual Pi SDK graph-only ordinary modes and cancellation proof only.
   'tests/experience-learning-runtime.test.ts', // M6 isolated ordinary cross-Case read/candidate qualification proof only.
   'tests/case-decision-runtime.test.ts', // M5 isolated SDK/Case callback scope proof; not a product runtime owner.
+  'tests/case-relations-agent.test.ts', // Case-Star-Map: isolated original ProjectAgent/SDK tools and call-local qualification proof only.
   'tests/model-http-environment.test.ts', // OR01/OR02: controlled SDK worker transport and safe native receipt boundary.
   'tests/requirement-runtime.test.ts',
   'tests/host-recovery.test.ts',
@@ -42,6 +45,9 @@ const projectAgentOwners = new Set([
 const sdkConsumers = new Set(['src/agent/project-session.ts', 'src/agent/runtime.ts', 'src/agent/browser-ui-context.ts']);
 // Exact native tool/resource helpers, without session/runtime constructors.
 const toolSdkConsumers = new Map([
+  ['tests/project-task-result-sources.test.ts', new Set(['SessionManager'])], // V020 A12: isolated public native-history builder only; no Agent/session execution owner.
+  ['src/agent/skill-catalog.ts', new Set(['loadSkills', 'getAgentDir'])], // V020 A07: official SDK metadata only; no session, resource activation or Runtime constructor.
+  ['tests/agent-candidate-sdk-proof.test.ts', new Set(['createAgentSession', 'createExtensionRuntime', 'ModelRuntime', 'SessionManager', 'SettingsManager', 'VERSION'])], // R1 isolated public-SDK persistence/composition probe only; exact symbols, no product owner.
   ['src/agent/tool-context-adapter.ts', new Set()], // R1 public types only; self-owned resource projection, no runtime constructors.
   ['src/agent/model-pack-tools.ts', new Set(['defineTool'])], // MP04/07: declarative tools only, no session constructors.
   ['src/host/native-session-snapshot.ts', new Set(['SessionManager', 'parseSessionEntries'])], // M3.1 guarded inMemory projection only; no open/create.
@@ -65,7 +71,9 @@ const historyReaders = new Set(['src/host/project-history.ts', 'tests/project-mi
 // Extensions still receive only owner-bound ports and cannot register domains.
 // The verification Host also owns the separate, no-execution draft profile.
 // decision-board extraction follows the same Host-owned adapter pattern.
-const domainRegistrars = new Set(['src/host/server.ts', 'src/host/requirement-sessions.ts', 'src/host/requirement-public-search.ts', 'src/host/verification-sessions.ts', 'src/host/verification-host.ts', 'src/host/decision-board-sessions.ts', 'src/host/ppt-refiner-sessions.ts', 'src/host/sap-method-sessions.ts', 'src/host/studio-sessions.ts', 'tests/agent-sessions.test.ts', 'tests/agent-session-execution.test.ts', 'tests/subagent-runtime.test.ts']); // Exact Host domain registrations, never SDK runtime ownership.
+const domainRegistrars = new Set(['tests/automatic-delivery-actions.test.ts', // V020: original-domain lease/stop behavior only, no runtime constructor.
+'tests/attached-postprocessing-v020.test.ts', // V020: public parent cleanup retry; the original Host domain owns its lease, no SDK constructor.
+'src/host/server.ts', 'src/host/strategy-discussion-host.ts', 'src/host/requirement-sessions.ts', 'src/host/requirement-public-search.ts', 'src/host/verification-sessions.ts', 'src/host/verification-host.ts', 'src/host/decision-board-sessions.ts', 'src/host/ppt-refiner-sessions.ts', 'src/host/sap-method-sessions.ts', 'src/host/studio-sessions.ts', 'tests/agent-sessions.test.ts', 'tests/agent-session-execution.test.ts', 'tests/subagent-runtime.test.ts']); // Exact Host domain registrations, never SDK runtime ownership.
 const connectionProbeOwners = new Set(['src/host/server.ts', 'tests/fixtures/runtime-cases.mjs']);
 // Launcher/update tests load their isolated fixture checkout by absolute URL.
 const checkoutLoaders = new Set(['scripts/trial-launcher.mjs', 'tests/trial-launcher.test.ts', 'tests/trial-update.test.ts']);

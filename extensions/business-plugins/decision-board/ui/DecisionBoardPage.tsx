@@ -8,6 +8,7 @@ import { downloadFile } from '../../../../src/host/ui/runtime-client.ts';
 import { PersonalDialog } from '../../../../src/host/ui/PersonalDialog.tsx';
 import { readConclusionReport } from '../../../../src/host/ui/conclusion-review-client.ts';
 import type { PersonalRetentionEntry } from '../../../../src/host/ui/personal-retention-client.ts';
+import { ActionAuthorityHistory } from './ActionAuthorityHistory.tsx';
 
 const EVIDENCE_CLASS: Record<string, string> = { '数据支撑': 'ev-data', '多源佐证': 'ev-multi', '逻辑推断': 'ev-logic', '经验假设': 'ev-exp' };
 const PRIORITY_LABEL: Record<string, string> = { high: '高优', medium: '中优', low: '低优' };
@@ -165,6 +166,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
           : reviewTasks.map(({ task, item }) => <article className="decision-card" key={task.id}>
             <div className="board-card-top"><span className="board-chip">任务{TASK_STATUS_LABEL[task.status]}</span>{task.feedback && <span className="board-chip run">反馈 v{task.feedback.revisionNumber} · {task.feedback.score == null ? '未评分' : `${task.feedback.score}/5（主观）`}</span>}</div>
             <h4>{task.title}</h4>
+            <ActionAuthorityHistory task={task} />
             <p className="card-source">所属：{item.title} · {projectName(item.projectId)}{task.owner ? ` · 负责人 ${task.owner}` : ''}{task.dueDate ? ` · 截止 ${task.dueDate}` : ''}</p>
             {task.feedback ? <div className="board-task-feedback">
               <p>用户回录：{task.feedback.adopted ? '按建议执行' : '未按原建议执行'}{task.feedback.outcome ? ` · ${task.feedback.outcome}` : ''}{task.feedback.metricDelta ? ` · 指标变化 ${task.feedback.metricDelta}` : ''}</p>
@@ -285,6 +287,7 @@ function ItemCard({ item, report, projectName: name, disabled, onAdopt, onDismis
     </details>
     {onAddTask && item.tasks.length > 0 && <div className="board-tasks">{openTasks.map(task => <div className="board-task" key={task.id}>
       <p className="task-title">{task.title}</p>
+      <ActionAuthorityHistory task={task} />
       <p className="task-meta">{TASK_STATUS_LABEL[task.status]}{task.owner ? ` · ${task.owner}` : ''}{task.dueDate ? ` · 截止 ${task.dueDate}` : ''}</p>
       <div className="task-actions">
         {task.status === 'todo' && <button disabled={disabled} onClick={() => onTaskStatus?.(task.id, 'doing')}>开始</button>}

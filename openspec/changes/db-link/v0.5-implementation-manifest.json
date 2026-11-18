@@ -1,0 +1,789 @@
+{
+  "version": "db-link-v0.5-engineering-candidate-02",
+  "date": "2026-11-15",
+  "status": "local-engineering-complete; ordinary verified PG18.1 query capability open; no Git or runtime adoption",
+  "repository": "/Users/bendandebaba/.codex/worktrees/48da/OptraCall",
+  "branch": "OC｜db-link",
+  "head": "ef3e7d0b8703a6e22023e8099a56c542d484a69d",
+  "build": "0.1.0-mvp.4 ef3e7d0+local-changes",
+  "interface": "v3",
+  "environment": {
+    "client": "macOS Darwin25.3.0 arm64",
+    "node": "25.9.0",
+    "postgresql": "18.1 / 180001",
+    "isolatedSyntheticOnly": true
+  },
+  "queryScope": {
+    "temporaryHostGate": "removed after critical native acceptance and independent review; no override exists",
+    "nativeQualification": "actual minimal read-only role, native controls, authorization and original resource facts remain required per operation",
+    "supportedServerVersionNum": "180001",
+    "otherPostgresVersions": "reachable metadata only; query not qualified",
+    "mysql": "query not qualified",
+    "segmentRead": "unsupported; ordinary explicit SQL prefixes are independent",
+    "strongCancellation": "not claimed; stop withdraws dispatch and waits original technical facts",
+    "managedDbIndependentChain": "NOT_IMPLEMENTED / NOT_PROVED; fixed complete-file existing review path remains"
+  },
+  "principles": {
+    "host": "environment, source/grants/owner/export, finite per-operation control and real cleanup facts only",
+    "agent": "original official Pi autonomous discovery/query/correction/save; no fixed SQL retry count",
+    "reuse": "unchanged official Pi1.4.0 pg8.23.1 pg-cursor2.22.1 mysql2 3.24.6 node-sql-parser5.4.0; no SDK patch or new Runtime",
+    "humanOperations": "one named connection, per-project authorization and inherited task grants; no per-query approval or metadata completion gate",
+    "cumulativeBudget": "no upper limit; no new cumulative budget ledger"
+  },
+  "verification": {
+    "finalCommand": "npm run check",
+    "exitCode": 0,
+    "tests": 2560,
+    "passed": 2449,
+    "failed": 0,
+    "conditionalSkipped": 111,
+    "nativePostgresSeparate": {
+      "tests": 25,
+      "passed": 25,
+      "failed": 0,
+      "suites": {
+        "driverLifecycleComments": 16,
+        "publicHost": 9
+      }
+    },
+    "actualUi": {
+      "twoProjectsShareOneConnection": true,
+      "projectResultsAndDescriptionsSeparate": true,
+      "crossProjectResultStatus": 404,
+      "officialPiSyntheticProviderRequests": 14,
+      "providerErrors": 0,
+      "completedRequests": 2,
+      "actualInitialTechnicalRejectAndAutonomousCorrection": true,
+      "studioMaterialRefsPerProject": 3,
+      "professionalModelQualityClaim": false,
+      "responsive": "390px light/dark document390px dialog356px, exact values; Esc focus real RED to GREEN"
+    },
+    "independent": "fresh nonauthor standards/spec/four-principles plus post-focus UI delta; final docs/hash readback separately closes this exact manifest",
+    "sdkIntegrity": {
+      "officialPackages": 11,
+      "matchedArchiveMembers": 2824,
+      "lockSRI": true
+    }
+  },
+  "retention": {
+    "beforeGitVisibleFiles": 1499,
+    "missingBeforeFiles": [],
+    "modifiedBeforePaths": [
+      "openspec/changes/db-link/implementation.md",
+      "openspec/changes/db-link/result.md",
+      "openspec/changes/db-link/tasks.md",
+      "src/agent/db-link-tools.ts",
+      "src/agent/project-runtime.ts",
+      "src/host/db-link-data-context.ts",
+      "src/host/db-link-driver.ts",
+      "src/host/db-link-host.ts",
+      "src/host/db-link-pg-policy.ts",
+      "src/host/db-link-results.ts",
+      "src/host/db-link-review-bundles.ts",
+      "src/host/db-link-sql.ts",
+      "src/host/db-link-store.ts",
+      "src/host/db-link-types.ts",
+      "src/host/project-data-context-validation.ts",
+      "src/host/ui/DbLinkConnections.tsx",
+      "src/host/ui/DbLinkProjectPanel.tsx",
+      "src/host/ui/db-link-client.ts",
+      "tests/db-link-data-context.test.ts",
+      "tests/db-link-driver.test.ts",
+      "tests/db-link-host.test.ts",
+      "tests/db-link-pg-comments-native.test.ts",
+      "tests/db-link-pg-lifecycle-native.test.ts",
+      "tests/db-link-pg-lifecycle.test.ts",
+      "tests/db-link-pg-transport.test.ts",
+      "tests/db-link-results.test.ts",
+      "tests/db-link-review-bundles.test.ts",
+      "tests/db-link-store.test.ts",
+      "tests/db-link-tools.test.ts"
+    ],
+    "newPathsBeforeThisManifest": [
+      "openspec/changes/db-link/v0.5-implementation-approval.json",
+      "scripts/db-link-pg-v05-fixture.mjs",
+      "tests/db-link-driver-v05-native.test.ts",
+      "tests/db-link-host-pg-v05-native.test.ts",
+      "tests/db-link-recovery-store.test.ts",
+      "tests/db-link-sql-v05.test.ts"
+    ],
+    "approvedFiles": 14,
+    "approvedAllUnchanged": true,
+    "noHistoricalFailureErased": true,
+    "initialSelectedByteCopies": 73,
+    "modifiedOriginalsRetained": {
+      "total": 29,
+      "initialSelectedCopies": 24,
+      "historicalExactCopies": 4,
+      "lateExactRecoveredCopies": 1,
+      "lateRecoveredPath": "src/host/ui/DbLinkProjectPanel.tsx",
+      "lateRecoveredOriginalSha256": "57c8dfb2571f0259f28abf2f20f86f394d9e89a26b1ff785c72e41669bfaca8c",
+      "scopeNote": "1499 is the initial identity inventory, not a full byte-copy count; one omitted UI source was recovered at closure by reversing root changes and exactly matching pre-edit bytes/hash. Original candidate-01 retained."
+    }
+  },
+  "teardown": "all own isolated Host/Provider/PostgreSQL/Vite/browser stopped; pre-stop unfinished Store facts zero; actual receipts bound below",
+  "notPerformed": [
+    "git stage/commit/push/CI/merge",
+    "formal service or MacBook update",
+    "real business database/provider access",
+    "enterprise cloud endpoint or other native-version/platform acceptance",
+    "Studio publication/adoption/graph refresh",
+    "managed live database independent review capability",
+    "user product acceptance"
+  ],
+  "independentReviewPaths": [
+    "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/evidence/final-review/review.md",
+    "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/evidence/final-review/ui-focus-review.md"
+  ],
+  "evidenceRoot": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation",
+  "evidence": [
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/full-check.log",
+      "bytes": 300840,
+      "sha256": "2bf4949d7f547fd8e32676448df8f33e5cfeba72e9ae7b7a893aa8157e5464dd"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/full-check-final-ui.log",
+      "bytes": 300731,
+      "sha256": "b2a7dd0a631fcb0c05e3949b1db24b4d20fd788090c0a3aac319147cfca49e3b"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/full-check-skips.json",
+      "bytes": 1456,
+      "sha256": "d17913bf392dcab0f344b6efa87514e832927af8d666c4e99a5527be1decdadb"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/native-critical-final-closed.log",
+      "bytes": 2402,
+      "sha256": "a7f0587350d004f5026868f237b497c6177e3a9b92b01e615e31ff224cc9bbc6"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/native-host-after-release-cast-green.log",
+      "bytes": 1202,
+      "sha256": "c31149251b04ab44307ac25bfe4e4d3f575fdec52db8847da1891ed55b8bd38e"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/host-after-release-final.log",
+      "bytes": 4761,
+      "sha256": "73baf262737f424a14b57b93bde9c9c01fd3442c2b39ca29b21220b772ce2d87"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/sdk-integrity-final.json",
+      "bytes": 5358,
+      "sha256": "6148b59f5b1deb8e38b94993cba575d62990ff75d7bcb3563ac1a8cbba8cdfb6"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/approved-retention-final.json",
+      "bytes": 2937,
+      "sha256": "f2f33aa7e052494e3170416bcd345e95d861ea38fc795cc4e298e5926f7e3166"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/teardown-final.json",
+      "bytes": 1009,
+      "sha256": "0b5d2f8032b780550bce311134e1a962085f1324b0c711bb26d93497d806f590"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/pg-substring-native-overload.json",
+      "bytes": 265,
+      "sha256": "9841c0e97febbb7a577b2a05cf6dbc70a83ee686015acf92b2747d2d292c4ec2"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/browser-before-release.json",
+      "bytes": 225,
+      "sha256": "47cc9d947f2c22e763077510cc02dd0e9f0944be9d545cf281905dbb8c1c2ffa"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/browser-after-release.json",
+      "bytes": 188,
+      "sha256": "83a9fce14d9371a9b85fbb25e03f3910a0a6054762a3041f2f962bee37fd1e1b"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/browser-result-detail.txt",
+      "bytes": 1677,
+      "sha256": "5a14db48b54fdc6b689adb5db290eb4c009d028a6ac116f324740cf9e1979bda"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/browser-data-description.txt",
+      "bytes": 2385,
+      "sha256": "7832bb25f97cd99737b87c40103ad47a936cdd6dada039b01a06cb11dbb5b23f"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/browser-second-project-before-grant.txt",
+      "bytes": 541,
+      "sha256": "e72ec4dfee315ec21130861a5c77d6626330fa12295d0b4d5281246bc5053c91"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/browser-second-project-after-query.txt",
+      "bytes": 655,
+      "sha256": "788d3379ebad6423bd1c85bce8328a43c98558fa4b08536e380f5dbf670f5b1d"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/browser-focus-event-before.json",
+      "bytes": 629,
+      "sha256": "6009378356e45faeb8a9be7cac17917a9e52046e526647111325f696bfc2b83e"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/browser-390-dark-green.json",
+      "bytes": 144,
+      "sha256": "dd300435030087fbefee497a454ac004402ea989d8f5abaeb52d37dce266d084"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/browser-390-light-green.json",
+      "bytes": 145,
+      "sha256": "593d0855cd1dee80a288254121dbb861cbd1ba20bbc9621b1a82017ea597e55d"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/browser-escape-focus-green.json",
+      "bytes": 60,
+      "sha256": "011c1833d684f49fac516a04f6c3a545e836e7a730731df88594ca36ba1e8f04"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/full-ui/run-2026-11-15T02-39-03-032Z-bc382570/acceptance-manifest.json",
+      "bytes": 2202,
+      "sha256": "c67646be9cfe73e5cc3affe294a239e7d18ae4b03c327b75ef2c8b539443df3b"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/preservation-recovery/before-copy-index.json",
+      "bytes": 11122,
+      "sha256": "2e481e68622e5903d8439d75619c3c7cde4f78ae3df53b4277bd13c8b64df552"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/preservation-recovery/receipt.json",
+      "bytes": 1016,
+      "sha256": "873b8c5c050c5caa307fa22928d9e0533aa00a80ac888e1bd07eb921fb4315f4"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/preservation-recovery/DbLinkProjectPanel.before-recovered.tsx",
+      "bytes": 20101,
+      "sha256": "57c8dfb2571f0259f28abf2f20f86f394d9e89a26b1ff785c72e41669bfaca8c"
+    },
+    {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/15/db-link-v05-implementation/before.json",
+      "bytes": 273142,
+      "sha256": "70a76fa381d85ecf708b82f82f97e41d2956ed5fa430340e245ced7fac6f77b0"
+    }
+  ],
+  "candidateFiles": [
+    {
+      "path": "docs/prototypes/db-link-ui-demo.html",
+      "bytes": 75334,
+      "sha256": "364d8e942a0f5e49724cd21c4bb386fc5afee16d6e6ff1f0c7d1fbcc2ab29337"
+    },
+    {
+      "path": "openspec/changes/db-link/approval.json",
+      "bytes": 1171,
+      "sha256": "aca02ca7d7faa90b3748068199c0e41c1b36782ed47c877726b1b80ed634c1b5"
+    },
+    {
+      "path": "openspec/changes/db-link/auto-ontology-research.md",
+      "bytes": 32179,
+      "sha256": "e8702f14e717e4795eab9397156e1e5bddd8546a52f59757cb72107506621093"
+    },
+    {
+      "path": "openspec/changes/db-link/candidate-manifest.json",
+      "bytes": 825,
+      "sha256": "e71840d7ebbc7fa0554bb89bcf75f6bdd1e5227d551702ae4dc1b28faae55ad1"
+    },
+    {
+      "path": "openspec/changes/db-link/driver-selection-manifest.json",
+      "bytes": 934,
+      "sha256": "ab833c37034b54f819cc546010375d7573deada0a0c0b5b906c25196100cf9d4"
+    },
+    {
+      "path": "openspec/changes/db-link/driver-selection.md",
+      "bytes": 26383,
+      "sha256": "2f3c75c66b97df0955ef7bd80d62d3a73764fcc41a6fd4965682de5f405a69b6"
+    },
+    {
+      "path": "openspec/changes/db-link/driver-versions.md",
+      "bytes": 11197,
+      "sha256": "e22308ff8b6c31184d49f8805b34909fa48ebae9a2a14b3f5480ed85ce490575"
+    },
+    {
+      "path": "openspec/changes/db-link/execution-resource-decision.md",
+      "bytes": 3840,
+      "sha256": "3b38804c0b44fec6d05253cc0084b9cddac7c076955241674662debfe76e94d7"
+    },
+    {
+      "path": "openspec/changes/db-link/execution-safety-decision.md",
+      "bytes": 4923,
+      "sha256": "658449623e19918c97259e77c2c1bc6ce42980dc518a0e9a8da1b26611f4f705"
+    },
+    {
+      "path": "openspec/changes/db-link/implementation-approval.json",
+      "bytes": 3330,
+      "sha256": "19eaf1775b0c51b9390fa7f1378a05a612dadc905563c513b14a32657914945c"
+    },
+    {
+      "path": "openspec/changes/db-link/implementation.md",
+      "bytes": 25581,
+      "sha256": "14467dd3ac6423f32670d1a74da13872f8fb979f30811be1bf798e19cc6869c4"
+    },
+    {
+      "path": "openspec/changes/db-link/interaction-states.md",
+      "bytes": 5094,
+      "sha256": "182bbf9995b4c3711bcfe6dc7596bf1f251babbc9c84b247b2bc3fede65d9e34"
+    },
+    {
+      "path": "openspec/changes/db-link/native-process-limits-os-results.md",
+      "bytes": 11440,
+      "sha256": "2a425c113f035fa98f67526356b20a7cc08b7b1245b698bbb372f883d0acecf3"
+    },
+    {
+      "path": "openspec/changes/db-link/native-process-limits-pg-plan.md",
+      "bytes": 19448,
+      "sha256": "a7515929b08db40bad204cea10afc92093ee0eb51501ba3ae8a2c4ebd10294ff"
+    },
+    {
+      "path": "openspec/changes/db-link/native-process-limits-pg-results.md",
+      "bytes": 10840,
+      "sha256": "da7d53c01f20841242261da3c58fb0567bb20cc51a86a4e75652181e183dd20c"
+    },
+    {
+      "path": "openspec/changes/db-link/native-process-limits-result.md",
+      "bytes": 6865,
+      "sha256": "b7fa122c7b1d52a392b4031ff0014e8d977927f3df1d4f1c54692cb883f613fd"
+    },
+    {
+      "path": "openspec/changes/db-link/native-process-limits-validation.md",
+      "bytes": 5546,
+      "sha256": "2792635994cc8facbbf5c7b3205e42441a5da97254cf7f735e4611df5d902ad9"
+    },
+    {
+      "path": "openspec/changes/db-link/postgresql-software-constraints-manifest.json",
+      "bytes": 3793,
+      "sha256": "89883e282f6177381974147d1f25d4a1a7aae46232966f558e59c7cb344c27b3"
+    },
+    {
+      "path": "openspec/changes/db-link/postgresql-software-constraints-manifest.v0.3.json",
+      "bytes": 2187,
+      "sha256": "479a9635cf96a740854a538e3c105918509501875440b50f730794f91a62e19a"
+    },
+    {
+      "path": "openspec/changes/db-link/postgresql-software-constraints-spec.md",
+      "bytes": 42461,
+      "sha256": "dc49c5ed6e4fcf0fee1d6e65359205c39fd5ae55744ffea409ff0edf21d5af24"
+    },
+    {
+      "path": "openspec/changes/db-link/postgresql-software-constraints-spec.v0.3.md",
+      "bytes": 32475,
+      "sha256": "a126369cb4e852f34776ec12bca00b06c541a2f6595184ea2e69dc68b76fb980"
+    },
+    {
+      "path": "openspec/changes/db-link/postgresql-v0.4-implementation-approval.json",
+      "bytes": 1735,
+      "sha256": "7d03113a36fb5d68902266d00acf43e16c77220e9cecb46bf92f308b3f14f35b"
+    },
+    {
+      "path": "openspec/changes/db-link/remote-deadline-research.md",
+      "bytes": 24102,
+      "sha256": "53dc0d93ad770c612bf82db64337c4691ccf2a75fbc0c653c7a995245ada677d"
+    },
+    {
+      "path": "openspec/changes/db-link/resource-isolation-assessment.md",
+      "bytes": 4824,
+      "sha256": "42aa78ff80c4e73434c5a6e16a6e9f4becf0bd688dfc4ecf00c48518222a46f0"
+    },
+    {
+      "path": "openspec/changes/db-link/resource-isolation-research.md",
+      "bytes": 23637,
+      "sha256": "99998774ac14d774bfe97d3f058e2044d659e835b3d16d72c2e6645ff6a16512"
+    },
+    {
+      "path": "openspec/changes/db-link/result.md",
+      "bytes": 50115,
+      "sha256": "0c3ef802774a2d9cda5abfb561f1758d9f651a30d88fbf2e9c4a5a9566bb81d0"
+    },
+    {
+      "path": "openspec/changes/db-link/selection-decision.json",
+      "bytes": 711,
+      "sha256": "15c753c202291572c941fefaff69e7684ff97fca14fc5a16caf379760c1ae6c8"
+    },
+    {
+      "path": "openspec/changes/db-link/selection-research.md",
+      "bytes": 25175,
+      "sha256": "578cf93b6ab7ed659a0e5bb5814d6b5f7e8548bf4b1753cd075b29478537cc77"
+    },
+    {
+      "path": "openspec/changes/db-link/semantic-discovery-decision.json",
+      "bytes": 876,
+      "sha256": "55b8f9cba219c35363ca0c9f561d8bc5be3cf1f0d663fca0649c0f6847985f1c"
+    },
+    {
+      "path": "openspec/changes/db-link/semantic-discovery-manifest.json",
+      "bytes": 583,
+      "sha256": "8333b0a101613a1d3c0be760621741645d2e4213e9ab30a6c7ff74527c7bc533"
+    },
+    {
+      "path": "openspec/changes/db-link/semantic-discovery.md",
+      "bytes": 22425,
+      "sha256": "dd55b553ea4bbc3e88a871e333c8b580efa1dc46bdae4ee0a2b5cb295f0e4e8a"
+    },
+    {
+      "path": "openspec/changes/db-link/spec-v0.2-manifest.json",
+      "bytes": 1353,
+      "sha256": "62bcad6e4a7cf88e54de9f14becfb4b8288d3bd70169cc97774174083e9bbd21"
+    },
+    {
+      "path": "openspec/changes/db-link/spec-v0.5-manifest.json",
+      "bytes": 8240,
+      "sha256": "e5c71f8c8e08ad086ee0cec565d21a4b319db8fcdfc71304e594638a756de246"
+    },
+    {
+      "path": "openspec/changes/db-link/spec.approved-v0.1.md",
+      "bytes": 19771,
+      "sha256": "73ddfa4457db42cc16744483c129a2c2b74223d37f3e5304b73c7e5aaabeec74"
+    },
+    {
+      "path": "openspec/changes/db-link/spec.md",
+      "bytes": 26969,
+      "sha256": "1c22efd9db47f389aebbbddff25234ea6666165926ab7854ff66aed850dff6a3"
+    },
+    {
+      "path": "openspec/changes/db-link/spec.v0.5.md",
+      "bytes": 36683,
+      "sha256": "07576a28dcd97d26d2a28a6d846b7e614572eae30f5e2579d90e0046ff2ca76e"
+    },
+    {
+      "path": "openspec/changes/db-link/tasks.md",
+      "bytes": 14427,
+      "sha256": "161c15669de1149cd4629f8aa241895a412d7bdba3a73c98b1a927c2b8864ccd"
+    },
+    {
+      "path": "openspec/changes/db-link/ui-spec.md",
+      "bytes": 7796,
+      "sha256": "e4aa9c8a7d3c524f699b2a91c0dc2e18cbad9b0037525fb1d57e7860b37a64b2"
+    },
+    {
+      "path": "openspec/changes/db-link/v0.5-implementation-approval.json",
+      "bytes": 1808,
+      "sha256": "97b0e35d05a7d107b23e61149125033c0a68d050254a508f3b2d7319ab44cc25"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 149655,
+      "sha256": "071920cbf3e28ddbe2860276c6803d72beff12f1ce36ee5083b8f6d88e754f55"
+    },
+    {
+      "path": "package.json",
+      "bytes": 1513,
+      "sha256": "f4a395bf66ae1b366fb4b064c3be8dc65443202910254fb4b206936c8d854458"
+    },
+    {
+      "path": "scripts/check-agent-session-boundary.mjs",
+      "bytes": 20761,
+      "sha256": "73ae21d3f90f66ac7d2fbe2d3e9dda3192854510a90c817b86cc04c5b5af8717"
+    },
+    {
+      "path": "scripts/db-link-native-fixtures.mjs",
+      "bytes": 14352,
+      "sha256": "8a82579919be75b83e72827dfd3f31fd12ef4e729eb019c1051511924519bce7"
+    },
+    {
+      "path": "scripts/db-link-pg-v04-fixture.mjs",
+      "bytes": 10241,
+      "sha256": "d0369bf685bf310e13516fd5abacb1e5a063248ca1b354af8f8ea18e038a1860"
+    },
+    {
+      "path": "scripts/db-link-pg-v05-fixture.mjs",
+      "bytes": 12419,
+      "sha256": "ccec140a4f9d258a6f73edadd9eff13fb6a5a67a21b83b5dc8e1b33a6dc1b2c5"
+    },
+    {
+      "path": "src/agent/db-link-tools.ts",
+      "bytes": 12794,
+      "sha256": "bcb34ef42fcb5307072a3c14abb800bba0bc1efbb959546a9f855e5209db27c5"
+    },
+    {
+      "path": "src/agent/project-runtime.ts",
+      "bytes": 37061,
+      "sha256": "517da0d821553327b3f3c0020cd95a6897b53cb86caa76635b09805d82af52e0"
+    },
+    {
+      "path": "src/agent/project-session.ts",
+      "bytes": 89600,
+      "sha256": "a1921a97c61c0bc33a0af7703d28b679e4bbb8c9db153f10b970ef1c6c515a6d"
+    },
+    {
+      "path": "src/agent/project-system-prompt.ts",
+      "bytes": 5170,
+      "sha256": "9ebd23d05d657d217089b6bc709e9a54d79b30f18fa5ed0baaa073da066607f7"
+    },
+    {
+      "path": "src/agent/report-calculation-review.ts",
+      "bytes": 11691,
+      "sha256": "a5b8d520d9ff286b3ede01ee246da0ee0d4c4ba7301360281a798ae221716696"
+    },
+    {
+      "path": "src/host/conclusion-review-materials.ts",
+      "bytes": 34389,
+      "sha256": "6224531786c66ef80f4c01345337807436d260f36b1a47fa9fc3ee688c286ec0"
+    },
+    {
+      "path": "src/host/db-link-data-context.ts",
+      "bytes": 16021,
+      "sha256": "8c76c97ab14cf3e24d0dea5a0a91142842157c4c4ac461fc242a646eeab4f741"
+    },
+    {
+      "path": "src/host/db-link-driver.ts",
+      "bytes": 68053,
+      "sha256": "93add4193a1bf6290130587f6b9d15ffc09dc63bcdcf5a011d125c9ff2852689"
+    },
+    {
+      "path": "src/host/db-link-host.ts",
+      "bytes": 46775,
+      "sha256": "cda87431382aea0a7cb3a2167fb0b9cf75374675b93b2eb18ac78997185f9520"
+    },
+    {
+      "path": "src/host/db-link-pg-policy.ts",
+      "bytes": 19562,
+      "sha256": "0ceacf210f57c3902d0681a2fb451cc08f96397faffa516c18be5473211d109b"
+    },
+    {
+      "path": "src/host/db-link-pg-transport.ts",
+      "bytes": 3945,
+      "sha256": "ed63fbe00724b5837b3b9459c751e0e089ff02ce6fcea3db7bef76a6f8515eab"
+    },
+    {
+      "path": "src/host/db-link-results.ts",
+      "bytes": 41970,
+      "sha256": "c0f43b61ee28d87089307dee518b96a4797ff72988b7249d44af5f2cde2bdd7e"
+    },
+    {
+      "path": "src/host/db-link-review-bundles.ts",
+      "bytes": 26753,
+      "sha256": "75f67d203a83cdf62f5adf80676ef929337f37d6ad6bc1c9705b2821dbd946c9"
+    },
+    {
+      "path": "src/host/db-link-review-port.ts",
+      "bytes": 4371,
+      "sha256": "e251e30573d5c82a6b27b35fe98f53aa7a41cfc575fa984cbb0a745f3fd8dc2b"
+    },
+    {
+      "path": "src/host/db-link-sql.ts",
+      "bytes": 19234,
+      "sha256": "11af742b467d9ebbdfa9207410fb793f4f63b418fad3945ceb1d949b84169fcb"
+    },
+    {
+      "path": "src/host/db-link-store.ts",
+      "bytes": 33589,
+      "sha256": "fa06d618c2429deae767fa4f6a82a0a1f476948347470a11374f6cfe1ff27211"
+    },
+    {
+      "path": "src/host/db-link-types.ts",
+      "bytes": 3322,
+      "sha256": "40ce7301bf9e5c0a3799f718cde9d5e992819a4bbb0e5ccc3f0709ff0d2b589c"
+    },
+    {
+      "path": "src/host/project-data-context-request.ts",
+      "bytes": 6058,
+      "sha256": "972ad372b08057f2aa1aa6f10168ea7441d38f21fb7f095133b1f1c2186a647f"
+    },
+    {
+      "path": "src/host/project-data-context-store.ts",
+      "bytes": 46048,
+      "sha256": "443944aa0eb2e7addf607e595dd8f743bb17ac30054080c6b90441322656a1ca"
+    },
+    {
+      "path": "src/host/project-data-context-types.ts",
+      "bytes": 7363,
+      "sha256": "5a3c859ccbcfeaf32a24d7b7febc3813f493092fa0861b10439f5428f4b393e9"
+    },
+    {
+      "path": "src/host/project-data-context-validation.ts",
+      "bytes": 13821,
+      "sha256": "e88ad77476b428754c21de30974d907c83fcfd2ec52f9cd31406f47c19ce4ce5"
+    },
+    {
+      "path": "src/host/report-calculation-materials.ts",
+      "bytes": 36066,
+      "sha256": "fab016ae6fbec9dc314985a01dc10bbc7f084849a75aab04b584cf9f24324fa3"
+    },
+    {
+      "path": "src/host/server.ts",
+      "bytes": 149011,
+      "sha256": "faaa39d9fbdd18dd2be7bf9c92f9ac329c57e27db9bf134a4dd401495fc82129"
+    },
+    {
+      "path": "src/host/ui/App.tsx",
+      "bytes": 106896,
+      "sha256": "3435d3b5e5a58540817f9f377801203df67239bd4b3b61e1526959cab0fdee12"
+    },
+    {
+      "path": "src/host/ui/DbLinkConnections.tsx",
+      "bytes": 13973,
+      "sha256": "063526832cc6abb5a6164602752407e33cc731730dd7be4f7bc6407ca18fb394"
+    },
+    {
+      "path": "src/host/ui/DbLinkProjectPanel.tsx",
+      "bytes": 21369,
+      "sha256": "3a5b778da0c5faf04b5bc016848ab39013f2cf8e977f3123c341b1ae2d7f90bf"
+    },
+    {
+      "path": "src/host/ui/ProjectSpace.tsx",
+      "bytes": 17514,
+      "sha256": "565bfdf4b987b5c77e4a3da1d10865da15b65a82000c3a9de037d43feec3785f"
+    },
+    {
+      "path": "src/host/ui/catalog-data.ts",
+      "bytes": 16941,
+      "sha256": "f2f41ee2945129c88a6769ba30e5ac83181525fbabadf06396cbe4396cb85836"
+    },
+    {
+      "path": "src/host/ui/db-link-client.ts",
+      "bytes": 13336,
+      "sha256": "65d426af42f375bb1ae348f936cf18b89c5944b067a386ea70aa87b8afee1e1c"
+    },
+    {
+      "path": "src/host/ui/db-link.css",
+      "bytes": 5288,
+      "sha256": "aa4cb0aa881d2627b00a7babf7e4af4327b5720bde3d0af85d0115a8d06ae55a"
+    },
+    {
+      "path": "tests/automatic-verification-flow.test.ts",
+      "bytes": 71772,
+      "sha256": "05b62a3ecf6e80f29e2946037f507bb1cbde53a1085bbfe70b43d4e0c2b85b1d"
+    },
+    {
+      "path": "tests/db-link-client.test.ts",
+      "bytes": 6327,
+      "sha256": "88790e01674f47d84e15ab54002d62fdc96b85546de8257a72512a7ece6251b1"
+    },
+    {
+      "path": "tests/db-link-conclusion-review.test.ts",
+      "bytes": 9277,
+      "sha256": "ad37bbcf7df045dfc4435949eb78dcae18fa8f9fbfd1d420f04e57ffa8fc15a7"
+    },
+    {
+      "path": "tests/db-link-data-context.test.ts",
+      "bytes": 25855,
+      "sha256": "30488f44ca8a2da5d2716a0e0d33acbacef20dd6d53379b7c1b66493e3b3961d"
+    },
+    {
+      "path": "tests/db-link-driver-v05-native.test.ts",
+      "bytes": 22096,
+      "sha256": "c895690f216913ab8d0e31fc28ef61e227a7ecc0cc4e48533fcfa0597d821025"
+    },
+    {
+      "path": "tests/db-link-driver.test.ts",
+      "bytes": 31925,
+      "sha256": "d748cc5d47becd442bfe56b62bafd1f9dbe58b015283370204db2a5d54bd5123"
+    },
+    {
+      "path": "tests/db-link-host-pg-native.test.ts",
+      "bytes": 11805,
+      "sha256": "ee03903bb111161e21ffc0ac52d0d36ddbf03c865f28ddc440c2a480c55cc37a"
+    },
+    {
+      "path": "tests/db-link-host-pg-v05-native.test.ts",
+      "bytes": 17766,
+      "sha256": "7debab75252dbd0364b3b4b65a95d037f5b5585109252e09ed5358dcc688636b"
+    },
+    {
+      "path": "tests/db-link-host.test.ts",
+      "bytes": 66200,
+      "sha256": "3fdea86e562304fa6bf45882625669909957b035167593b146428ff3a509e532"
+    },
+    {
+      "path": "tests/db-link-native.test.ts",
+      "bytes": 10144,
+      "sha256": "23f0cd7ba53444393f55da0d5acd3d5b7d1a36bdf67894b0b2a240114c51de4a"
+    },
+    {
+      "path": "tests/db-link-pg-comments-native.test.ts",
+      "bytes": 2966,
+      "sha256": "7882853b2cf25f169806563929fe1a9fe7aad7f5ea888b9ae274bd0d41e7fa6b"
+    },
+    {
+      "path": "tests/db-link-pg-lifecycle-native.test.ts",
+      "bytes": 4623,
+      "sha256": "8b150b050ca4300804fdfea8bbd779b966410b5b47254f4cbd2f52b3165c636a"
+    },
+    {
+      "path": "tests/db-link-pg-lifecycle.test.ts",
+      "bytes": 23219,
+      "sha256": "2bbc697ce63b72b49e1d1e4d64933766d53f2ff46f4f43f73899dfe00290659f"
+    },
+    {
+      "path": "tests/db-link-pg-policy-native.test.ts",
+      "bytes": 8759,
+      "sha256": "1aa04cbd44b6f1ac25eb3081050b1af2169dc9997b1335abb185c62281181e7c"
+    },
+    {
+      "path": "tests/db-link-pg-policy.test.ts",
+      "bytes": 13198,
+      "sha256": "a69fed8758e89cff9826887c881ecc5b7ae3c6c5bc985b65b9fa145bf399f706"
+    },
+    {
+      "path": "tests/db-link-pg-transport-native.test.ts",
+      "bytes": 4748,
+      "sha256": "43b070d54118d144f059b24e5647a9e5fd21ca0d3005439862f10032c8dd605a"
+    },
+    {
+      "path": "tests/db-link-pg-transport.test.ts",
+      "bytes": 4651,
+      "sha256": "37151998b3fc558cb190def71c87d684824117c18b3b514d725545457742bbcd"
+    },
+    {
+      "path": "tests/db-link-recovery-store.test.ts",
+      "bytes": 21511,
+      "sha256": "6609e321ac2fc62625a85bda6b5ca5871cdab2c43893c78e422ed0431da55709"
+    },
+    {
+      "path": "tests/db-link-results.test.ts",
+      "bytes": 21267,
+      "sha256": "f965040d73abb807535086f75345b53ed2091a57f173193499f8ef6e9033ab8a"
+    },
+    {
+      "path": "tests/db-link-review-bundles.test.ts",
+      "bytes": 24757,
+      "sha256": "2764d96d59bb582aa09b9e6afb2d9f09c8cebd9a29a1c8bcc3fda1cd28180ad8"
+    },
+    {
+      "path": "tests/db-link-review-port.test.ts",
+      "bytes": 4454,
+      "sha256": "2d1a862dceba39dad28971c54e338870f8505d6ccee0a6ce86e45008729aa833"
+    },
+    {
+      "path": "tests/db-link-segment-boundaries.test.ts",
+      "bytes": 17238,
+      "sha256": "e9cb9a649bd648e25f7e8ce853e9774302af30ba28dfd2f3959620ee366d90f0"
+    },
+    {
+      "path": "tests/db-link-server.test.ts",
+      "bytes": 1021,
+      "sha256": "64f36643b5a99fdda5e6bb52686e66a42e9718448d497501ad6866433a682dd7"
+    },
+    {
+      "path": "tests/db-link-sql-v05.test.ts",
+      "bytes": 6021,
+      "sha256": "d0f0624f47decb28ec5d23bd0a51b028b7a85621edf1f6c203b2361e2445d7b7"
+    },
+    {
+      "path": "tests/db-link-sql.test.ts",
+      "bytes": 8797,
+      "sha256": "f55933e4ea73278f1ee01df586e1689a06f6f572f489b2c81ced19bb44a8509f"
+    },
+    {
+      "path": "tests/db-link-store.test.ts",
+      "bytes": 16860,
+      "sha256": "2e3d9c5de23262271d03e4906dbd03c586ac637dca01b02624246bd8c211c320"
+    },
+    {
+      "path": "tests/db-link-tools.test.ts",
+      "bytes": 36874,
+      "sha256": "5ca674099dff178919087aac7b329657e25808981dff8e8cd28fbbb45cc35b2f"
+    },
+    {
+      "path": "tests/report-calculation-materials.test.ts",
+      "bytes": 47388,
+      "sha256": "ab38f144f393319d5908ac2decefb6c6273da363072fbf9354c5ba2220f80d4a"
+    },
+    {
+      "path": "tests/report-framework-coverage-runtime.test.ts",
+      "bytes": 18714,
+      "sha256": "24fb70840be2b3158ec059a902562e2e970182714a6b433725c41097fed73d21"
+    }
+  ],
+  "selfIdentity": "this manifest intentionally excludes its own hash; final external freeze receipt binds it"
+}

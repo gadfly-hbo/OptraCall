@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-12",
+  "branch": "codex/SAA_Studio_2",
+  "baseHead": "87eef1db50667e3e69c827f6f897bf7d57ccb03a",
+  "status": "local-implementation-verified; stop before I08 and M stages",
+  "productAndTests": [
+    {
+      "path": "extensions/business-plugins/studio/foundation.ts",
+      "bytes": 19827,
+      "sha256": "3a587a47f4292f4fd9c521032d9b734ca4c2800e687a1dab40043186cd92100b"
+    },
+    {
+      "path": "extensions/business-plugins/studio/store.ts",
+      "bytes": 50656,
+      "sha256": "07b1cbbb3cbb676f358b94c90e1d8973af39375dde3ecea94e284992367d8c6a"
+    },
+    {
+      "path": "src/agent/project-session.ts",
+      "bytes": 82531,
+      "sha256": "6e152f80f4a8af2690a2789932f84d456bf5c8e95164ed1495b1e2827420242f"
+    },
+    {
+      "path": "src/agent/studio.ts",
+      "bytes": 3650,
+      "sha256": "e57aa872038c610cd88018227d271b69caf9a34d0a9ceebcba476416da33550b"
+    },
+    {
+      "path": "src/host/studio-foundation.ts",
+      "bytes": 7723,
+      "sha256": "3856ade4b24aa1aa750e3215848ef7ec95d40f6fdaf3ff7b29b8382eafcdfa04"
+    },
+    {
+      "path": "src/host/studio-host.ts",
+      "bytes": 104881,
+      "sha256": "63b7adc369fa3d23965439978e323b57b2bea53ecb909254d005c1d4802fa9ef"
+    },
+    {
+      "path": "src/host/studio-sources.ts",
+      "bytes": 21861,
+      "sha256": "97f00fe6f3f9b2843d08adee268f9fd6a2a2129118d5c87468904b5290a5750d"
+    },
+    {
+      "path": "src/host/ui/StudioPage.tsx",
+      "bytes": 127498,
+      "sha256": "b095099321bc38adb4b35cb6d2f2c4bfa04132fa11086e346141242dbecb8da6"
+    },
+    {
+      "path": "src/host/ui/StudioFoundationView.tsx",
+      "bytes": 21449,
+      "sha256": "20edbfe850aae7bd33134a3a30e516582954b7b982280095fd7f31bb96edcff0"
+    },
+    {
+      "path": "src/host/ui/StudioFoundationView.css",
+      "bytes": 3261,
+      "sha256": "7a8c35cfd178ef882a1abee92380804f2ff9f5e8501b290a038046fc875b81aa"
+    },
+    {
+      "path": "src/host/ui/studio-api.ts",
+      "bytes": 16459,
+      "sha256": "55639dfa11049618a179a621999e116244e53d58227e99bed218ccc1e2374f2d"
+    },
+    {
+      "path": "tests/studio-foundation-content.test.ts",
+      "bytes": 13487,
+      "sha256": "b2398c1e5e4526f05fa2923a21b2449346ea2f6cf6cbbc894751b998a8953028"
+    },
+    {
+      "path": "tests/studio-foundation-host.test.ts",
+      "bytes": 25309,
+      "sha256": "6794943564d6ef06f255ff6085ee77d610c0120ff03aff07b88d0504e690d988"
+    },
+    {
+      "path": "tests/studio-foundation-runtime.test.ts",
+      "bytes": 12868,
+      "sha256": "72153cdc78d8e728fe840e1bb2b1cfc9769d5bdc4c119c386cd48d0a623d6d68"
+    },
+    {
+      "path": "tests/studio-foundation-ui.test.ts",
+      "bytes": 11823,
+      "sha256": "ec1ae3437e0a4158f8027c9ed8d298e7417cd66f73ebcd2934fc2c5280afff38"
+    }
+  ],
+  "approvedReviewFileCount": 21,
+  "approvedFilesChangedForExecutionTracking": [
+    "openspec/changes/studio-foundation-three-assets/tasks.md"
+  ],
+  "preservedBaselineFiles": 13,
+  "verification": {
+    "npmRunCheck": {
+      "exitCode": 0,
+      "tests": 2222,
+      "pass": 2155,
+      "fail": 0,
+      "skip": 67,
+      "durationMs": 226824.144792,
+      "log": ".local/studio-foundation-implementation/full-check.log"
+    },
+    "independentCore": {
+      "openP1": 0,
+      "openP2": 0,
+      "closedP2": 4,
+      "focusedPass": 21,
+      "regressionPass": 30
+    },
+    "independentUi": {
+      "openP1": 0,
+      "openP2": 0,
+      "closedP2": 2,
+      "assertions": 12
+    },
+    "browser": {
+      "path": ".local/studio-foundation-implementation/ui/browser-evidence.json",
+      "bytes": 1491,
+      "sha256": "a71683093f0074dc2cd5bfdfffa56fcd2232db1484e4d60e974f9df4c049aeaf"
+    },
+    "screenshot": {
+      "path": "output/playwright/studio-foundation/implemented-overview.jpg",
+      "bytes": 61591,
+      "sha256": "3f6b40078be0d263a74b6d07dab33ea2fe1f03d6d1774f7cafe4225bd9b428ed"
+    },
+    "finalFoundationCheck": {
+      "exitCode": 0,
+      "tests": 29,
+      "pass": 29,
+      "fail": 0,
+      "skip": 0,
+      "log": ".local/studio-foundation-implementation/final-foundation-check.log"
+    },
+    "isolatedUiCleanup": {
+      "testUiPort": 62915,
+      "testHostPort": 55547,
+      "listeningAfterStop": false,
+      "regularServiceAndMacBookTouched": false
+    }
+  },
+  "notRun": [
+    "I08 Git/remote CI/merge/archive/adoption/device service changes",
+    "M01-M05 enterprise foundation construction",
+    "real-model business quality",
+    "new-profile graph projection",
+    "user Product Acceptance"
+  ]
+}

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { agentCandidateDetailsSha256, canonicalCandidateJson, candidateToolName, parseAgentCandidateDetails, parseAgentCandidateInput, type AgentCandidateDetails } from '../agent/agent-candidate.ts';
+import { agentCandidateDetailsSha256, canonicalCandidateJson, candidateCustomType, candidateReceiptType, candidateToolName, isAgentCandidateReceipt, parseAgentCandidateDetails, parseAgentCandidateInput, parseAgentCandidateRecord, type AgentCandidateDetails } from '../agent/agent-candidate.ts';
 import { readNativeSessionSnapshot, nativeSnapshotLimit, type NativeSnapshotReadBudget } from './native-session-snapshot.ts';
 import { candidateOccurrenceKey as candidateRefKey, parseExactCandidateRef as validateCandidateRef, candidateControlState, type AgentCandidateControls, type CandidateControlState, type ExactCandidateRef } from './agent-candidate-controls.ts';
 import type { ProjectRecord, ProjectStore, TaskRecord } from './project-store.ts';
@@ -23,6 +23,29 @@ const object = (v: unknown): v is Record<string, unknown> => Boolean(v && typeof
 type Location = { project: ProjectRecord; task: TaskRecord; file: string };
 type Snapshot = Awaited<ReturnType<typeof readNativeSessionSnapshot>> & Location & { primary: boolean };
 const sameRef = (a: ExactCandidateRef, b: ExactCandidateRef) => canonicalCandidateJson(a) === canonicalCandidateJson(b);
+type NativeEntry = Snapshot['entries'][number];
+function isCandidateEntry(entry: NativeEntry): boolean {
+  if (entry.type === 'custom') return entry.customType === candidateCustomType;
+  return entry.type === 'message' && entry.message.role === 'toolResult' && entry.message.toolName === candidateToolName && (entry.message.isError || !isAgentCandidateReceipt(entry.message.details));
+}
+function readCandidateEntry(entry: NativeEntry): { format: 'custom' | 'legacy'; details: AgentCandidateDetails } {
+  if (entry.type === 'custom' && entry.customType === candidateCustomType) return { format: 'custom', details: parseAgentCandidateRecord(entry.data).details };
+  if (entry.type !== 'message' || entry.message.role !== 'toolResult' || entry.message.toolName !== candidateToolName) throw new CandidateReadError('candidate_original_changed');
+  if (entry.message.isError) throw new CandidateReadError('candidate_tool_error');
+  const details = parseAgentCandidateDetails(entry.message.details);
+  if (details.origin.toolCallId !== entry.message.toolCallId) throw new CandidateReadError('candidate_owner_mismatch');
+  return { format: 'legacy', details };
+}
+function hasSaveConfirmation(snapshot: Snapshot, ref: ExactCandidateRef, runMarkerId: string): boolean {
+  const bodyIndex = snapshot.entries.findIndex(entry => entry.id === ref.entryId);
+  return snapshot.entries.some((entry, index) => {
+    if (index <= bodyIndex || entry.type !== 'custom' || entry.customType !== candidateReceiptType || !isAgentCandidateReceipt(entry.data) || !sameRef(entry.data.candidate, ref)) return false;
+    const branch = snapshot.manager.getBranch(entry.id);
+    if (!branch.slice(0, -1).some(ancestor => ancestor.id === ref.entryId)) return false;
+    const marker = [...branch.slice(0, -1)].reverse().find(ancestor => ancestor.type === 'custom' && ancestor.customType === 'optracall.run');
+    return marker?.id === runMarkerId;
+  });
+}
 
 /** Bounded on-demand read model. It owns neither sessions nor candidate bodies. */
 export function createAgentCandidateReader(options: { projects: Pick<ProjectStore, 'list'>; controls: AgentCandidateControls }) {
@@ -88,7 +111,10 @@ export function createAgentCandidateReader(options: { projects: Pick<ProjectStor
       const snapshot = loaded.get(location.file);
       // Only an original occurrence emits a row. Also inspect the persisted canonical
       // file within the SAME budget so a current fork in a different page is labelled.
-      const hasOriginal = snapshot?.entries.some(e => e.type === 'message' && e.message.role === 'toolResult' && e.message.toolName === candidateToolName && object(e.message.details) && object(e.message.details.origin) && e.message.details.origin.sessionId === snapshot.manager.getSessionId());
+      const hasOriginal = snapshot?.entries.some(entry => {
+        if (!isCandidateEntry(entry)) return false;
+        try { return readCandidateEntry(entry).details.origin.sessionId === snapshot.manager.getSessionId(); } catch { return false; }
+      });
       const canonical = hasOriginal && location.task.sessionFile && catalog.result.find(l => l.file === location.task.sessionFile && l.project.id === location.project.id && l.task.id === location.task.id);
       if (canonical && canonical.file !== location.file && !await load(canonical, false)) issues.push({ file: `${location.project.id}/${location.task.id}/${path.basename(canonical.file)}`, code: 'candidate_saved_path_outside_budget' });
     }
@@ -98,16 +124,14 @@ export function createAgentCandidateReader(options: { projects: Pick<ProjectStor
     for (const event of records?.events ?? []) knownRefs.set(candidateRefKey(event.target), event.target);
     const controlFor = async (ref: ExactCandidateRef) => controlsAvailable ? candidateControlState(records, ref) : null;
     for (const snapshot of snapshots) for (const entry of snapshot.entries) {
-      if (entry.type !== 'message' || entry.message.role !== 'toolResult') continue;
-      const message = entry.message;
-      if (message.toolName !== candidateToolName || exactTarget && entry.id !== exactTarget.entryId) continue;
+      if (!isCandidateEntry(entry) || exactTarget && entry.id !== exactTarget.entryId) continue;
       let ref: ExactCandidateRef | null = null, details: AgentCandidateDetails | null = null;
       let reason: string | null = null;
       try {
-        if (message.isError) throw new CandidateReadError('candidate_tool_error');
-        details = parseAgentCandidateDetails(message.details);
-        if (details.origin.projectId !== snapshot.project.id || details.origin.taskId !== snapshot.task.id || details.origin.toolCallId !== message.toolCallId) throw new CandidateReadError('candidate_owner_mismatch');
-        ref = { projectId: details.origin.projectId, taskId: details.origin.taskId, originSessionId: details.origin.sessionId, entryId: entry.id, toolCallId: message.toolCallId, expectedDetailsSha256: agentCandidateDetailsSha256(details) };
+        const candidate = readCandidateEntry(entry);
+        details = candidate.details;
+        if (details.origin.projectId !== snapshot.project.id || details.origin.taskId !== snapshot.task.id) throw new CandidateReadError('candidate_owner_mismatch');
+        ref = { projectId: details.origin.projectId, taskId: details.origin.taskId, originSessionId: details.origin.sessionId, entryId: entry.id, toolCallId: details.origin.toolCallId, expectedDetailsSha256: agentCandidateDetailsSha256(details) };
         const origins = snapshots.filter(s => s.project.id === snapshot.project.id && s.task.id === snapshot.task.id && s.manager.getSessionId() === details!.origin.sessionId);
         if (snapshot.manager.getSessionId() !== details.origin.sessionId) {
           if (origins.length === 0 && (nextOffset < catalog.result.length || offset > 0)) { issues.push({ file: `${snapshot.project.id}/${snapshot.task.id}/${path.basename(snapshot.file)}`, code: 'candidate_original_outside_batch' }); continue; }
@@ -116,13 +140,17 @@ export function createAgentCandidateReader(options: { projects: Pick<ProjectStor
         if (!snapshot.primary) continue;
         if (origins.length !== 1) throw new CandidateReadError('candidate_original_unknown');
         const original = origins[0]!, exact = original.manager.getEntry(entry.id);
-        if (!exact || exact.type !== 'message' || exact.message.role !== 'toolResult' || exact.message.toolName !== candidateToolName || exact.message.isError || exact.message.toolCallId !== ref.toolCallId || agentCandidateDetailsSha256(parseAgentCandidateDetails(exact.message.details)) !== ref.expectedDetailsSha256) throw new CandidateReadError('candidate_original_changed');
+        if (!exact || !isCandidateEntry(exact)) throw new CandidateReadError('candidate_original_changed');
+        const exactCandidate = readCandidateEntry(exact);
+        if (exactCandidate.format !== candidate.format || exactCandidate.details.origin.toolCallId !== ref.toolCallId || agentCandidateDetailsSha256(exactCandidate.details) !== ref.expectedDetailsSha256) throw new CandidateReadError('candidate_original_changed');
         const branch = original.manager.getBranch(entry.id);
         const ancestors = branch.slice(0, -1);
         const marker = [...ancestors].reverse().find(e => e.type === 'custom' && e.customType === 'optracall.run');
         if (!marker || marker.type !== 'custom' || !object(marker.data) || marker.data.phase !== 'started' || marker.data.kind !== 'prompt' || marker.data.requestId !== details.origin.requestId || marker.data.sessionId !== details.origin.sessionId) throw new CandidateReadError('candidate_run_mismatch');
-        const call = ancestors.slice(ancestors.indexOf(marker) + 1).flatMap(e => e.type === 'message' && e.message.role === 'assistant' && Array.isArray(e.message.content) ? e.message.content : []).filter(p => p.type === 'toolCall' && p.id === ref!.toolCallId && p.name === candidateToolName);
-        if (call.length !== 1 || call[0]?.type !== 'toolCall' || canonicalCandidateJson(parseAgentCandidateInput(call[0].arguments)) !== canonicalCandidateJson({ content: details.content, sourceRefs: details.sourceRefs })) throw new CandidateReadError('candidate_tool_call_mismatch');
+        if (candidate.format === 'legacy') {
+          const call = ancestors.slice(ancestors.indexOf(marker) + 1).flatMap(e => e.type === 'message' && e.message.role === 'assistant' && Array.isArray(e.message.content) ? e.message.content : []).filter(p => p.type === 'toolCall' && p.id === ref!.toolCallId && p.name === candidateToolName);
+          if (call.length !== 1 || call[0]?.type !== 'toolCall' || canonicalCandidateJson(parseAgentCandidateInput(call[0].arguments)) !== canonicalCandidateJson({ content: details.content, sourceRefs: details.sourceRefs })) throw new CandidateReadError('candidate_tool_call_mismatch');
+        }
         const known = knownRefs.get(candidateRefKey(ref));
         if (known && !sameRef(known, ref)) throw new CandidateReadError('candidate_hash_inconsistent');
         const key = candidateRefKey(ref), prior = byKey.get(key);
@@ -140,15 +168,16 @@ export function createAgentCandidateReader(options: { projects: Pick<ProjectStor
         for (const copy of snapshots) {
           if (copy === original || copy.project.id !== original.project.id || copy.task.id !== original.task.id) continue;
           const copied = copy.manager.getEntry(entry.id);
-          if (!copied || copied.type !== 'message' || copied.message.role !== 'toolResult' || copied.message.toolName !== candidateToolName) continue;
+          if (!copied || !isCandidateEntry(copied)) continue;
           try {
-            const copiedDetails = parseAgentCandidateDetails(copied.message.details);
+            const copiedCandidate = readCandidateEntry(copied), copiedDetails = copiedCandidate.details;
             if (copiedDetails.origin.sessionId !== ref.originSessionId || copiedDetails.origin.toolCallId !== ref.toolCallId) continue;
-            if (copied.message.isError || copied.message.toolCallId !== ref.toolCallId || agentCandidateDetailsSha256(copiedDetails) !== ref.expectedDetailsSha256) throw new CandidateReadError('candidate_copy_changed');
+            if (copiedCandidate.format !== candidate.format || agentCandidateDetailsSha256(copiedDetails) !== ref.expectedDetailsSha256) throw new CandidateReadError('candidate_copy_changed');
             copies.push({ sessionId: copy.manager.getSessionId(), entryId: entry.id, savedPath: copy.task.sessionFile === copy.file && copy.branchIds.has(entry.id) ? 'current' : 'other' });
           } catch (e) { copyConflict = true; issues.push({ file: `${copy.project.id}/${copy.task.id}/${path.basename(copy.file)}`, code: codeOf(e) }); }
         }
-        const row: CandidateRow = { ref, details: copyConflict ? null : details, status: copyConflict ? 'unknown' : 'available', reason: copyConflict ? 'candidate_copy_changed' : null, parentState: copyConflict ? 'unknown' : parentState, locations: copyConflict ? [] : copies, control: await controlFor(ref) };
+        const confirmed = candidate.format === 'legacy' || hasSaveConfirmation(original, ref, marker.id);
+        const row: CandidateRow = { ref, details: copyConflict || !confirmed ? null : details, status: copyConflict || !confirmed ? 'unknown' : 'available', reason: copyConflict ? 'candidate_copy_changed' : !confirmed ? 'candidate_save_unconfirmed' : null, parentState: copyConflict ? 'unknown' : parentState, locations: copyConflict || !confirmed ? [] : copies, control: await controlFor(ref) };
         byKey.set(key, row); rows.push(row);
       } catch (e) { reason = codeOf(e); rows.push({ ref, details: null, status: 'anomaly', reason, parentState: 'unknown', locations: [], control: null }); }
     }

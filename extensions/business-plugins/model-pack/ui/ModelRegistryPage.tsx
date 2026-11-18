@@ -63,7 +63,7 @@ export function ModelPackImportStep({ step }: { step: ImportStep }) {
   </div>;
 }
 
-export function ModelRegistryPage({ onBack }: { onBack: () => void }) {
+export function ModelRegistryPage({ onBack, backLabel = '返回能力目录' }: { onBack: () => void; backLabel?: string }) {
   const [models, setModels] = useState<ModelRegistryEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -165,7 +165,7 @@ export function ModelRegistryPage({ onBack }: { onBack: () => void }) {
       </div>
       <div className="plugin-heading-actions">
         <button className="primary-button" onClick={openImport}>导入模型包…</button>
-        <button className="secondary-button" onClick={onBack}>返回能力目录</button>
+        <button className="secondary-button" onClick={onBack}>{backLabel}</button>
       </div>
     </header>
 

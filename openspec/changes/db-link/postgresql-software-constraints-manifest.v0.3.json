@@ -1,0 +1,49 @@
+{
+  "version": "v0.3-supplement",
+  "date": "2026-11-14T08:15:36.702132+00:00",
+  "status": "pending-user-confirmation",
+  "scope": "PostgreSQL software constraints specification preparation only. No development, containers or proxy.",
+  "sourceHead": "ef3e7d0b8703a6e22023e8099a56c542d484a69d",
+  "approvedBaseline": "implementation-approval.json; all 10 approved files byte-preserved",
+  "reviewedSpec": {
+    "path": "openspec/changes/db-link/postgresql-software-constraints-spec.md",
+    "bytes": 32475,
+    "sha256": "a126369cb4e852f34776ec12bca00b06c541a2f6595184ea2e69dc68b76fb980"
+  },
+  "statusRecords": [
+    {
+      "path": "openspec/changes/db-link/tasks.md",
+      "bytes": 6517,
+      "sha256": "4dc38ab5ab9b871efb01f5f93101014110cd7debe0f020edca70c30e22ec4022"
+    },
+    {
+      "path": "openspec/changes/db-link/result.md",
+      "bytes": 35099,
+      "sha256": "83ec3042646f9e3ff693f4e850192a0e2235bc2a4adef0dd6aa0844c174e50bf"
+    }
+  ],
+  "independentReview": {
+    "initial": {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/14/db-link-pg-software-spec/independent/review-initial.md",
+      "bytes": 11064,
+      "sha256": "3c972ddec16a3a9b932418660ffcc9496bdbc93d9941eaa404edb76fbf5cf823"
+    },
+    "final": {
+      "path": "/Users/bendandebaba/.codex/visualizations/2026/11/14/db-link-pg-software-spec/independent/review-final.md",
+      "bytes": 7315,
+      "sha256": "5906f256c7489831c810f186e781a98aa8851ac89a8ca27325c6c66ca1e46fe4"
+    },
+    "conclusion": "PASS for candidate-02 document preparation only; R01 closed; no remaining required corrections"
+  },
+  "evidenceRoot": "/Users/bendandebaba/.codex/visualizations/2026/11/14/db-link-pg-software-spec",
+  "gate": "queryQualified=false retained; no new runtime qualification",
+  "validation": {
+    "documentChecks": "PASS",
+    "fourPrinciples": "PASS within document scope",
+    "productTests": "NOT_RUN",
+    "databaseTests": "NOT_RUN",
+    "modelTests": "NOT_RUN",
+    "browserTests": "NOT_RUN"
+  },
+  "authorization": "Await user confirmation. Confirmation does not automatically authorize development, dependency upgrade, real database access, Git delivery or runtime adoption."
+}

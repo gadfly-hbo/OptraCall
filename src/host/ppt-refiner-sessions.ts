@@ -33,12 +33,6 @@ type PptRefinerOwner = {
   configuration?: { id: string; revision: number };
 };
 
-/** Legacy metadata may use its Host-verified project's fixed configuration, never the global selection. */
-export function refinerConfiguration(meta: { configuration?: { id: string; revision?: number } }, snapshot: (id?: string, revision?: number) => Readonly<RuntimeModelConfiguration> | null | undefined, projectConfiguration?: { id: string; revision: number }) {
-  const configuration = meta.configuration ?? projectConfiguration;
-  return configuration ? snapshot(configuration.id, configuration.revision) : undefined;
-}
-
 /** Refinement business profile: deck workspace + md anchor, unified lifecycle. */
 export function createPptRefinerSessions(options: PptRefinerSessionManagerOptions) {
   const fail = (code: string): never => { throw new ProjectRuntimeError(code); };

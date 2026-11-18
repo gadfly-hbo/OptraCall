@@ -1,0 +1,74 @@
+{
+  "date": "2026-11-14",
+  "userStatement": "spec v0.2 通过，驱动选型和语义补充方案一并确认。按四原则和工程规范开始开发 db-link，首批支持 MySQL／PostgreSQL，不引入 auto-ontology。",
+  "sourceHead": "ef3e7d0b8703a6e22023e8099a56c542d484a69d",
+  "branch": "OC｜db-link",
+  "scope": "Implement the approved complete db-link contracts and approved UI, run scoped synthetic engineering validation and independent review. No auto-ontology, SDK modification/upgrade, real business database or model access, service/device adoption or Git delivery inferred.",
+  "approvedDriverTuple": {
+    "pg": "8.23.1",
+    "pg-cursor": "2.22.1",
+    "mysql2": "3.24.6"
+  },
+  "approvedFiles": [
+    {
+      "path": "openspec/changes/db-link/spec.md",
+      "bytes": 26969,
+      "sha256": "1c22efd9db47f389aebbbddff25234ea6666165926ab7854ff66aed850dff6a3"
+    },
+    {
+      "path": "openspec/changes/db-link/driver-selection.md",
+      "bytes": 26383,
+      "sha256": "2f3c75c66b97df0955ef7bd80d62d3a73764fcc41a6fd4965682de5f405a69b6"
+    },
+    {
+      "path": "openspec/changes/db-link/driver-versions.md",
+      "bytes": 11197,
+      "sha256": "e22308ff8b6c31184d49f8805b34909fa48ebae9a2a14b3f5480ed85ce490575"
+    },
+    {
+      "path": "openspec/changes/db-link/selection-research.md",
+      "bytes": 25175,
+      "sha256": "578cf93b6ab7ed659a0e5bb5814d6b5f7e8548bf4b1753cd075b29478537cc77"
+    },
+    {
+      "path": "openspec/changes/db-link/selection-decision.json",
+      "bytes": 711,
+      "sha256": "15c753c202291572c941fefaff69e7684ff97fca14fc5a16caf379760c1ae6c8"
+    },
+    {
+      "path": "openspec/changes/db-link/semantic-discovery.md",
+      "bytes": 22425,
+      "sha256": "dd55b553ea4bbc3e88a871e333c8b580efa1dc46bdae4ee0a2b5cb295f0e4e8a"
+    },
+    {
+      "path": "openspec/changes/db-link/semantic-discovery-decision.json",
+      "bytes": 876,
+      "sha256": "55b8f9cba219c35363ca0c9f561d8bc5be3cf1f0d663fca0649c0f6847985f1c"
+    },
+    {
+      "path": "openspec/changes/db-link/ui-spec.md",
+      "bytes": 7796,
+      "sha256": "e4aa9c8a7d3c524f699b2a91c0dc2e18cbad9b0037525fb1d57e7860b37a64b2"
+    },
+    {
+      "path": "openspec/changes/db-link/interaction-states.md",
+      "bytes": 5094,
+      "sha256": "182bbf9995b4c3711bcfe6dc7596bf1f251babbc9c84b247b2bc3fede65d9e34"
+    },
+    {
+      "path": "docs/prototypes/db-link-ui-demo.html",
+      "bytes": 75334,
+      "sha256": "364d8e942a0f5e49724cd21c4bb386fc5afee16d6e6ff1f0c7d1fbcc2ab29337"
+    }
+  ],
+  "additionalComponentDecision": {
+    "date": "2026-11-14",
+    "question": "是否允许追加未经修改的 node-sql-parser@5.4.0，仅用于 SQL 技术语法和执行权限检查？批准稿原先禁止自行增加 parser，因此需要这项明确决定。它不改写业务 SQL，也不能替代原生权限、预算和取消验证；连接／授权／留存工作会继续。",
+    "userAnswer": "允许追加 5.4.0（推荐）",
+    "package": "node-sql-parser",
+    "version": "5.4.0",
+    "scope": "Unmodified upstream public AST validation only; native permissions, server budgets, source qualification and actual cancellation/UNKNOWN contracts remain required.",
+    "proposal": "execution-safety-decision.md",
+    "proposalSha256": "658449623e19918c97259e77c2c1bc6ce42980dc518a0e9a8da1b26611f4f705"
+  }
+}

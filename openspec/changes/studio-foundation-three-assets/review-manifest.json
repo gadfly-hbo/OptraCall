@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-12",
+  "status": "awaiting-user-review",
+  "scope": "documents-and-clickable-prototype-only",
+  "source": {
+    "branch": "codex/SAA_Studio_2",
+    "head": "87eef1db50667e3e69c827f6f897bf7d57ccb03a"
+  },
+  "approval": {
+    "directionRecognized": true,
+    "specificSpecApproved": false,
+    "specificUiApproved": false,
+    "productImplementationAuthorized": false,
+    "targetEnterpriseConstructionStarted": false
+  },
+  "verification": {
+    "preservedBaselineFiles": 13,
+    "baselineMatches": true,
+    "prototypeStaticIndependentReview": "passed within review scope",
+    "browser": "normal and key controlled states verified; no Host/model/business execution",
+    "productEngineering": "NOT_RUN",
+    "realModelProfessionalAcceptance": "NOT_RUN"
+  },
+  "files": [
+    {
+      "path": "docs/prototypes/studio-foundation-v0.2/README.md",
+      "bytes": 5094,
+      "sha256": "6e0103c9765b920e5f94c59cf02519b180bb5a6aa941a813b2a38e92c58b54b8"
+    },
+    {
+      "path": "docs/prototypes/studio-foundation-v0.2/app.js",
+      "bytes": 56467,
+      "sha256": "89083289a38914f52f079b6bdd25be7e0267577f6e1bbcc211086fc592b9195e"
+    },
+    {
+      "path": "docs/prototypes/studio-foundation-v0.2/fixtures.js",
+      "bytes": 5015,
+      "sha256": "844ab269be49ad0bfdbb952219c2ef37e9ac467ada026032a37b8954fc2b7397"
+    },
+    {
+      "path": "docs/prototypes/studio-foundation-v0.2/index.html",
+      "bytes": 640,
+      "sha256": "063dd9150d1c107c6ef378d621dbfa4080b617dff6f33160bab5743fff598d74"
+    },
+    {
+      "path": "docs/prototypes/studio-foundation-v0.2/screenshots/desktop-dark.jpg",
+      "bytes": 59900,
+      "sha256": "705e389807077a75f6b7fa0d5e6a7736697665b95137b072bf34a0764712e23f"
+    },
+    {
+      "path": "docs/prototypes/studio-foundation-v0.2/screenshots/desktop-light.jpg",
+      "bytes": 62000,
+      "sha256": "56a5942d067297b05f5d4c22f10705dcbb03a4e49b73d05a972c8331d993ba2a"
+    },
+    {
+      "path": "docs/prototypes/studio-foundation-v0.2/screenshots/desktop-light.png",
+      "bytes": 198756,
+      "sha256": "ebd9d4a6f6b62217452b61f589409bc68e1ff6c462d60507af45a493d3ed6af7"
+    },
+    {
+      "path": "docs/prototypes/studio-foundation-v0.2/screenshots/mobile-dark.jpg",
+      "bytes": 28056,
+      "sha256": "517e45957e320da7219aa7bca51290ce4483b5bb35a2b6b5689623d1b5c0fa77"
+    },
+    {
+      "path": "docs/prototypes/studio-foundation-v0.2/screenshots/review-overview.jpg",
+      "bytes": 42157,
+      "sha256": "a1d8241d6ca2be7d1abab5f2eb3353a37514b94b9d0de6a55a3f751ad4008b27"
+    },
+    {
+      "path": "docs/prototypes/studio-foundation-v0.2/styles.css",
+      "bytes": 27231,
+      "sha256": "c6013ef443927ff05870e7d8549e7abdc84f59d8448f0bf0897af89774d90a3b"
+    },
+    {
+      "path": "docs/reference-templates/v0.2/01-sportswear-industry.md",
+      "bytes": 17487,
+      "sha256": "c57fa4810c111cf5ea8c92842924d340c6a6c4b85747f9e311ea9eae04ee1c98"
+    },
+    {
+      "path": "docs/reference-templates/v0.2/02-membership-domain.md",
+      "bytes": 23105,
+      "sha256": "05565ff6bdfde20c6429a5f4d05fea57ac0b236b03a48e76846f47e0b743cfe0"
+    },
+    {
+      "path": "docs/reference-templates/v0.2/03-nike-enterprise-public.md",
+      "bytes": 13296,
+      "sha256": "8c64c78a30876c8607c5c32af78bed38e7b662b26354828dd3cd1097a15b4895"
+    },
+    {
+      "path": "docs/reference-templates/v0.2/04-nike-membership-public.md",
+      "bytes": 16698,
+      "sha256": "49a33bfc8f6be8d21df4b9a1140f1d966705c0554f83c03aefa1fb85a87200b7"
+    },
+    {
+      "path": "docs/reference-templates/v0.2/README.md",
+      "bytes": 8178,
+      "sha256": "bab3a7c3c452aba4bfeff998baf19dd66073dfb6094c317c329ddd6d48a81ecf"
+    },
+    {
+      "path": "docs/reference-templates/v0.2/foundation-proposal.md",
+      "bytes": 10375,
+      "sha256": "f94b85215bc7679ef44293a9217c6e174f06313003a228fbfa1d32c079b442d0"
+    },
+    {
+      "path": "openspec/changes/studio-foundation-three-assets/baseline-manifest.json",
+      "bytes": 2550,
+      "sha256": "32481b246bd877a79ba372f53d01a5863535da1adc759eb03ee3fefea27b7791"
+    },
+    {
+      "path": "openspec/changes/studio-foundation-three-assets/interaction-states.md",
+      "bytes": 7580,
+      "sha256": "8a3b3bfb289e53adbb40a8636397d17929fe21615ca98eca3bdc8043168506b9"
+    },
+    {
+      "path": "openspec/changes/studio-foundation-three-assets/review.md",
+      "bytes": 7941,
+      "sha256": "47a86db330c494a235b5a3ad45933027b7c45baf6b944f3584908a8df53b9ec7"
+    },
+    {
+      "path": "openspec/changes/studio-foundation-three-assets/spec.md",
+      "bytes": 20796,
+      "sha256": "c6cc920c992611a67973ae82cb4ea289b22a3f785ff67526a3419dc7a18f2267"
+    },
+    {
+      "path": "openspec/changes/studio-foundation-three-assets/tasks.md",
+      "bytes": 6890,
+      "sha256": "5f1207ba03c74b937239bf5b81bff5965e9e1263c31a97777400f5439ed86d02"
+    }
+  ]
+}

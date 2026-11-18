@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
@@ -15,7 +16,7 @@ test('M5 D07 public compatible rollback: CLI disables M5 on schema2, preserves n
   await readJson(await first.request('/api/configuration','PUT',{name:'M5回退合成',provider:'openai-compatible',baseUrl:provider.baseUrl,model:'synthetic',apiKey:'synthetic-rollback-only'}));
   await readJson(await first.request('/api/cases/storage/initialize','POST',{}));
   const {project}=await readJson(await first.request('/api/projects','POST',{name:'保留升级后的工作'}),201);const {task}=await readJson(await first.request(`/api/projects/${project.id}/tasks`,'POST',{name:'普通任务'}),201);
-  let {case:record}=await readJson(await first.request('/api/cases','POST',{operationId:randomUUID(),title:'升级后原Case'}),201);
+  let {case:record}=await readJson(await first.request('/api/cases','POST',await withCaseGoal(first, {operationId:randomUUID(),title:'升级后原Case'})),201);
   await readJson(await first.request(`/api/cases/${record.id}/projects`,'POST',{operationId:randomUUID(),expectedRevision:record.revision,projectId:project.id}));record=(await readJson(await first.request(`/api/cases/${record.id}`))).case;await first.close();
   const store=new CaseStore({dataRoot});await store.init();const caseStoreId=store.getStatus().storeId!;
   const references=Array.from({length:32},(_,i)=>({relation:'background' as const,target:{type:'rap' as const,instanceId:`req-compatible-${i}`,version:'1.0.0'},note:'x'.repeat(7800)}));

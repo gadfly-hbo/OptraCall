@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 """运营数据分析 · 格式与数据门禁（OptraCall 自研，纯标准库）
 
-定位：calc.py 验数字，本脚本验格式——六段契约是否齐全、红线是否触发、数据是否带病。
+定位：calc.py 验适用数字，本脚本按交付/建议声明验有限格式与红线，并核CSV疑点。
+完整报告与聊天摘要分别检查；正式计划的字段检查不证明真实确认、经营授权或文件存在。
 只做可判定的规则检查，不判断内容好坏；检查器本身须对坏样例命中、对好样例通过（--self-test 对抗验证）。
 
 用法：
-  python quality_check.py --report report.md     # 校验六段结构与红线
+  python quality_check.py --report report.md     # 按完整报告/摘要、诊断/正式计划声明检查
   python quality_check.py --data table.csv [--key 门店] [--key 月份]   # CSV 体检
   python quality_check.py --self-test            # 内置正反样例对抗验证
 
@@ -22,7 +23,7 @@ import re
 import sys
 from decimal import Decimal, InvalidOperation
 
-VERSION = "optracall-data-quality-1"
+VERSION = "optracall-data-quality-2-candidate"
 
 SECTIONS = ["口径", "趋势", "异常", "拆解", "洞察", "行动"]
 INCOMPLETE_MARK = "输入不完整"
@@ -61,6 +62,9 @@ def heading_lines(text):
     found = []
     for m in re.finditer(r"^[ \t]{0,3}#{1,6}[ \t]+.*$", text, re.MULTILINE):
         line = m.group(0)
+        if "诊断建议" in line:
+            found.append((m.start(), "行动", line))
+            continue
         for kw in SECTIONS:
             if kw in line:
                 found.append((m.start(), kw, line))
@@ -92,12 +96,25 @@ def check_report(text):
     def add(cid, level, hit, detail):
         checks.append({"id": cid, "level": level, "hit": bool(hit), "detail": detail})
 
-    direct = DIRECT_MODE in text[:400]
+    prefix = text[:400]
+    direct = bool(re.search(r"(?m)^输出形态[：:][ \t]*直答[ \t]*$", prefix))
+    delivery_values = re.findall(r"(?m)^交付形态[：:][ \t]*(.*)$", prefix)
+    advice_values = re.findall(r"(?m)^建议类型[：:][ \t]*(.*)$", prefix)
+    delivery = delivery_values[0].strip() if delivery_values else ("直答" if direct else "完整报告")
+    advice_kind = advice_values[0].strip() if advice_values else "旧版行动建议"
+    invalid_mode = (len(delivery_values) > 1 or len(advice_values) > 1 or
+                    bool(delivery_values) and delivery not in {"完整报告", "聊天摘要"} or
+                    bool(advice_values) and advice_kind not in {"诊断建议", "正式行动计划"} or
+                    direct and bool(delivery_values) and delivery != "聊天摘要")
+    if invalid_mode:
+        add("F0", "error", True, "交付形态/建议类型声明重复、未知或冲突，请按本次实际约定明确一种；不能据冲突声明跳过完整检查")
+    concise = direct or delivery == "聊天摘要"
+    diagnostic = advice_kind == "诊断建议"
     headings = heading_lines(text)
     order = [kw for _, kw, _ in headings]
 
-    if direct:
-        add("F0", "ok", True, "声明输出形态：直答，只跑红线检查，不强制六段")
+    if concise:
+        add("F0", "ok", True, "直答/聊天摘要按实际任务简述结论，不强制重复完整六段；专业红线仍检查")
     else:
         seq = [SECTIONS.index(k) for k in order if k in SECTIONS]
         strictly_increasing = all(a < b for a, b in zip(seq, seq[1:]))
@@ -142,7 +159,9 @@ def check_report(text):
     action_text = without_fenced_code(text) if not direct else ""
     action_headings = heading_lines(action_text)
     action = next((heading for heading in action_headings if heading[1] == "行动"), None)
-    if action:
+    if diagnostic:
+        add("R2", "ok", False, "诊断建议允许提出建议角色、试点期限和待确认事项，不强制编造执行责任或承诺")
+    elif action:
         pos, _, action_heading = action
         level = len(action_heading.lstrip().split()[0])
         end = next((p for p, _, line in action_headings
@@ -157,15 +176,32 @@ def check_report(text):
                   if not re.fullmatch(r"-{3,}", paragraph.strip())
                   for item in re.split(r"(?m)(?=^[ \t]{0,3}(?:[-*+]|\d+[.、])[ \t]+)", paragraph)
                   if item.strip()]
-        bad = [ln for ln in advice
-               if not (re.search(r"责任人|负责[人人]", ln) and re.search(r"时限|日前|天内|周内|月底前|季度内", ln))]
-        add("R2", "error", bool(bad),
-            "行动建议须四要素（做什么+谁做+何时完成+什么指标验证）；以下 %d 条缺责任人或时限：%s"
-            % (len(bad), " ｜ ".join(ln.strip()[:40] for ln in bad[:3])))
-        if advice and not bad:
-            add("R2", "ok", False, "行动建议均含责任人与时限")
-    elif not direct:
+        if advice_kind == "正式行动计划":
+            fields = [r"(?:责任人|负责人)[：:]([^；;\n]+)", r"时限[：:]([^；;\n]+)",
+                      r"授权(?:依据|范围)[：:]([^；;\n]+)", r"(?:跟踪指标|验证依据)[：:]([^；;\n]+)"]
+            def confirmed_fields(line):
+                values = [re.search(pattern, line) for pattern in fields]
+                return all(value and value.group(1).strip() and
+                           not re.search(r"待确认|待定|未知|未授权|尚未确认|建议人选", value.group(1))
+                           for value in values)
+            bad = [line for line in advice if not confirmed_fields(line)]
+            add("R2", "error", not advice or bool(bad),
+                "正式行动计划须列真实确认的责任人、时限、授权依据/范围和跟踪指标；以下 %d 条缺字段或仍待确认：%s"
+                % (len(bad), " ｜ ".join(line.strip()[:80] for line in bad[:3])))
+            if advice and not bad:
+                add("R2", "ok", False, "正式计划字段已呈现；本检查只核存在性，真实性和经营授权须回原记录核实")
+        else:
+            bad = [ln for ln in advice
+                   if not (re.search(r"责任人|负责[人人]", ln) and re.search(r"时限|日前|天内|周内|月底前|季度内", ln))]
+            add("R2", "error", bool(bad),
+                "行动建议须四要素（做什么+谁做+何时完成+什么指标验证）；以下 %d 条缺责任人或时限：%s"
+                % (len(bad), " ｜ ".join(ln.strip()[:40] for ln in bad[:3])))
+            if advice and not bad:
+                add("R2", "ok", False, "行动建议均含责任人与时限")
+    elif not concise:
         add("R2", "error", True, "未找到行动段，无法核建议四要素")
+    elif advice_kind == "正式行动计划":
+        add("R2", "warning", True, "当前只检查计划的聊天摘要，未重复完整计划；正式计划字段及真实确认须在准确原成果和原授权记录另核，摘要PASS不代替计划通过")
 
     corr = re.search(r"相关系数|r\s*=|ρ\s*=|皮尔逊|斯皮尔曼", text)
     guarded = any(w in text for w in CAUSAL_GUARD)
@@ -184,8 +220,8 @@ def check_report(text):
 
     errors = [c for c in checks if c["level"] == "error" and c["hit"]]
     warnings = [c for c in checks if c["level"] == "warning" and c["hit"]]
-    return {"engine": VERSION, "mode": "report", "form": "直答" if direct else "六段",
-            "checks": checks, "error_count": len(errors), "warning_count": len(warnings),
+    return {"engine": VERSION, "mode": "report", "form": "直答" if direct else ("摘要" if concise else "六段"),
+            "delivery": delivery, "advice": advice_kind, "checks": checks, "error_count": len(errors), "warning_count": len(warnings),
             "verdict": "PASS" if not errors else "FAIL"}
 
 
@@ -309,13 +345,13 @@ GOOD_REPORT = """# 门店销售额分析
 统计期间：2026-02-01~2026-02-28 与 2026-03-01~2026-03-31。来源：门店系统导出（2026-04-01）。样本量：12（<30，仅供参考）。
 口径：销售额=系统导出月度值（含税口径待确认）；客流=到店人次。缺失值未插补，仅标注。
 ## 二、趋势与结构
-销售额按天对齐后日均下降 9.68%（calc.py compare 复算）。
+销售额按天对齐后日均下降 9.17%（calc.py compare 复算）。
 ## 三、异常识别
 IQR 法（n=12）未检出越界门店，方法与偏离度已写明。
 ## 四、指标拆解
-销售额=客流×客单价；效应之和精确闭合（calc.py decompose 复算，剥离顺序：客流→客单价）。
+销售额=成交笔数×客单价；效应之和精确闭合（calc.py decompose 复算，剥离顺序：成交笔数→客单价）。
 ## 五、洞察结论
-客流下降是日均下滑主因（贡献见第四段）；客单价相关系数 r = 0.3，未做因果检验，相关性不等于因果。
+客流变化是待核线索，数学拆解不直接证明因果；客单价相关系数 r = 0.3，未做因果检验，相关性不等于因果。
 ## 六、行动建议与跟踪指标
 - 由门店运营负责人在两周内核对 3 家门店客流计数设备，跟踪指标：日均客流回复率。
 - 由数据组负责人在月底前确认含税口径，跟踪指标：口径差异金额。
@@ -430,6 +466,41 @@ def run_selftest():
     check("报告·插补 R5 命中", any(c["id"] == "R5" and c["hit"] for c in r["checks"]))
     r = check_report(GOOD_REPORT.replace("缺失值未插补，仅标注。", "缺失值未做插补，仅标注。"))
     check("报告·「未做插补」不误报 R5", r["verdict"] == "PASS")
+
+    # v2候选：交付载体与建议类型独立，保留专业红线与旧报告兼容。
+    diagnostic = ("交付形态：完整报告\n建议类型：诊断建议\n" +
+                  GOOD_REPORT.split("## 六、")[0] +
+                  "## 六、诊断建议与跟踪指标\n- 建议先核对计数口径，建议角色与试点期限待确认；跟踪日均客流。\n")
+    r = check_report(diagnostic)
+    check("契约·完整诊断不编造责任时限", r["verdict"] == "PASS" and r["advice"] == "诊断建议")
+    summary = """交付形态：聊天摘要
+建议类型：诊断建议
+统计期间：2026年2月与3月，按天对齐。来源：合成门店月表。样本量：12，仅供参考。口径：同一含税销售额。
+总量增长0.57%，日均下降9.17%，原因尚未确定；完整成果为060_reports/合成报告-v1.md的示例引用，未宣称本次已保存。
+"""
+    r = check_report(summary)
+    check("契约·摘要不重复六段全文", r["verdict"] == "PASS" and r["form"] == "摘要")
+    formal = diagnostic.replace("建议类型：诊断建议", "建议类型：正式行动计划").replace(
+        "- 建议先核对计数口径，建议角色与试点期限待确认；跟踪日均客流。",
+        "- 核对计数设备；责任人：已确认的门店运营负责人；时限：2026-04-15日前；授权依据：合成确认U-01，仅核设备；跟踪指标：计数偏差率。")
+    r = check_report(formal)
+    check("契约·正式计划保留已确认字段", r["verdict"] == "PASS")
+    r = check_report(formal.replace("；授权依据：合成确认U-01，仅核设备", ""))
+    check("契约·正式计划缺授权拒绝", any(c["id"] == "R2" and c["hit"] and c["level"] == "error" for c in r["checks"]))
+    r = check_report(formal.replace("责任人：已确认的门店运营负责人", "责任人：待确认"))
+    check("契约·待确认不冒充正式计划", r["verdict"] == "FAIL")
+    r = check_report(summary.replace("建议类型：诊断建议", "建议类型：正式行动计划"))
+    check("契约·计划摘要不代完整计划通过", r["verdict"] == "PASS" and any(c["id"] == "R2" and c["level"] == "warning" and c["hit"] for c in r["checks"]))
+    r = check_report("交付形态：完整报告\n" + summary)
+    check("契约·冲突声明拒绝", any(c["id"] == "F0" and c["level"] == "error" and c["hit"] for c in r["checks"]))
+    r = check_report(summary.replace("建议类型：诊断建议", "建议类型：看情况"))
+    check("契约·未知建议类型拒绝", r["verdict"] == "FAIL")
+    r = check_report(summary + "\n相关系数r = 0.8。")
+    check("契约·摘要仍核相关因果R3", any(c["id"] == "R3" and c["hit"] for c in r["checks"]))
+    r = check_report(summary + "\n本月至今环比上升5%。")
+    check("契约·摘要仍核未对齐R1", any(c["id"] == "R1" and c["hit"] for c in r["checks"]))
+    r = check_report("交付形态：聊天摘要\n建议类型：诊断建议\n输入不完整：首购历史缺失，只交已核窗口内描述；其余待补。")
+    check("契约·缺证可受限交付并提示", r["verdict"] == "PASS" and any(c["id"] == "F2" and c["level"] == "warning" and c["hit"] for c in r["checks"]))
 
     # 数据·好样例通过
     tmp = tempfile.mkdtemp(prefix="qc-selftest-")

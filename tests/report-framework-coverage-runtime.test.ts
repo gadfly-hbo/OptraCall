@@ -5,6 +5,68 @@ import path from 'node:path';
 import { ProjectAgent } from '../src/agent/project-runtime.ts';
 import type { ReportCalculationReviewPort } from '../src/agent/report-calculation-review.ts';
 import { providerMessageText, startToolProvider } from './fixtures/tool-provider.ts';
+import { randomUUID } from 'node:crypto';
+
+test('RCR DB SDK: only the prepared fixed-result reader is registered in the same single foreground review', { timeout: 30000 }, async t => {
+  const selector = `db-result:${randomUUID()}`, receipt = { bundle: selector }; let reads = 0, preparations = 0;
+  const f = await fixture(t, async (selection, context) => {
+    preparations++; assert.deepEqual(selection.materials, [{ selector }]); assert.equal(context.requestId, 'db-reader-parent');
+    return { prompt: 'FIXED_DRAFT: total=10; one author-query-result bundle is fixed, extraction coverage unverified.', receipt, assertFeedbackCurrent: async () => {}, readDbBundle: async (range, current) => { current.assertCurrent(); assert.equal(current.signal.aborted, false); assert.equal(range.selector, selector); reads++; return { rows: [['4.00'], ['6.00']], coverage: { providedRows: 2, complete: true }, continuationStartRow: null }; } };
+  });
+  f.provider.setResponder(({ messages, recentToolResults, availableTools }) => {
+    if (systemText(messages).includes('OptraCall report-calculation reviewer')) {
+      assert.deepEqual(availableTools, ['read_fixed_db_result']);
+      if (!recentToolResults.length) return { calls: [{ name: 'read_fixed_db_result', arguments: { selector, startRow: 0, maxRows: 10 } }] };
+      assert.match(providerMessageText(recentToolResults[0].content), /4.00/); assert.match(providerMessageText(recentToolResults[0].content), /6.00/);
+      return { text: 'DB_READER_ADVICE: fixed rows support 4+6=10; extraction completeness remains unverified.' };
+    }
+    if (!recentToolResults.length) return { calls: [{ name: 'review_report_calculations', arguments: { report, materials: [{ selector }] } }] };
+    if (recentToolResults.length === 1) return { calls: [{ name: 'review_report_calculations', arguments: { report, materials: [{ selector }] } }] };
+    return { text: 'Original author received one DB_READER_ADVICE and kept extraction unknown.' };
+  });
+  const result = await f.agent.start('PARENT_PRIVATE_HISTORY', 'db-reader-parent', undefined, grant).completion;
+  assert.equal(result.outcome, 'completed'); assert.equal(reads, 1); assert.equal(preparations, 1);
+  const childRequests = f.provider.requests.filter(request => systemText(request.body.messages ?? []).includes('OptraCall report-calculation reviewer'));
+  assert.equal(childRequests.length, 2); assert.doesNotMatch(JSON.stringify(childRequests), /PARENT_PRIVATE_HISTORY/); assert.equal(f.provider.errors.length, 0);
+  const native = (await readFile((await f.agent.snapshot()).sessionFile!, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(native.filter(entry => entry.type === 'custom' && entry.customType === 'optracall.report-calculation-review').length, 1);
+  const readEntries = native.filter(entry => entry.type === 'custom' && entry.customType === 'optracall.report-calculation-bundle-read');
+  assert.equal(readEntries.length, 1); assert.equal(readEntries[0].data.claim, 'native-child-tool-result'); assert.equal(readEntries[0].data.selector, selector);
+  assert.equal(readEntries[0].data.requestId, 'db-reader-parent'); assert.equal(readEntries[0].data.coverage.providedRows, 2);
+  assert.match(JSON.stringify(native), /report_calculation_already_attempted/);
+});
+
+test('RCR DB SDK: forged owner, stage and private path never reach the prepared reader', { timeout: 30000 }, async t => {
+  const selector = `db-result:${randomUUID()}`; let reads = 0;
+  const f = await fixture(t, async () => ({ prompt: 'FIXED_DRAFT; fixed bundle has unread ranges.', receipt: { selector }, assertFeedbackCurrent: async () => {}, readDbBundle: async () => { reads++; return {}; } }));
+  f.provider.setResponder(({ messages, recentToolResults }) => {
+    if (systemText(messages).includes('OptraCall report-calculation reviewer')) {
+      if (!recentToolResults.length) return { calls: [{ name: 'read_fixed_db_result', arguments: { selector, owner: { taskId: 'foreign' }, stage: 'informed', privatePath: '/private/secret' } }] };
+      assert.doesNotMatch(JSON.stringify(recentToolResults), /AUTHOR_SECRET/); return { text: 'Material remained unread; no calculation claim.' };
+    }
+    return recentToolResults.length ? { text: 'Unverified scope retained.' } : { calls: [{ name: 'review_report_calculations', arguments: { report, materials: [{ selector }] } }] };
+  });
+  const result = await f.agent.start('Check fixed material.', 'db-reader-forgery', undefined, grant).completion;
+  assert.equal(result.outcome, 'completed'); assert.equal(reads, 0); assert.equal(f.provider.errors.length, 0);
+  const native = await readFile((await f.agent.snapshot()).sessionFile!, 'utf8'); assert.doesNotMatch(native, /"customType":"optracall.report-calculation-bundle-read"/);
+});
+
+test('RCR DB SDK: cancellation during the original reader prevents late private bytes and replacement review', { timeout: 30000 }, async t => {
+  const selector = `db-result:${randomUUID()}`; let enter!: () => void, release!: () => void;
+  const entered = new Promise<void>(resolve => { enter = resolve; }), held = new Promise<void>(resolve => { release = resolve; });
+  const f = await fixture(t, async () => ({ prompt: 'FIXED_DRAFT; range not yet read.', receipt: { selector }, assertFeedbackCurrent: async () => {}, readDbBundle: async (_range, context) => {
+    context.signal.addEventListener('abort', release, { once: true }); enter(); await held; return { rows: [['LATE_PRIVATE_DB_CELL']] };
+  } }));
+  f.provider.setResponder(({ messages, recentToolResults }) => {
+    if (systemText(messages).includes('OptraCall report-calculation reviewer')) return { calls: [{ name: 'read_fixed_db_result', arguments: { selector } }] };
+    return recentToolResults.length ? { text: 'No replacement review.' } : { calls: [{ name: 'review_report_calculations', arguments: { report, materials: [{ selector }] } }] };
+  });
+  const running = f.agent.start('Check fixed material.', 'db-reader-cancel', undefined, grant);
+  await entered; await f.agent.stop(); const result = await running.completion;
+  assert.equal(result.outcome, 'cancelled'); assert.equal(f.provider.requests.filter(request => systemText(request.body.messages ?? []).includes('OptraCall report-calculation reviewer')).length, 1);
+  assert.doesNotMatch(JSON.stringify(f.provider.requests), /LATE_PRIVATE_DB_CELL/);
+  const native = await readFile((await f.agent.snapshot()).sessionFile!, 'utf8'); assert.doesNotMatch(native, /LATE_PRIVATE_DB_CELL|"customType":"optracall.report-calculation-bundle-read"/); assert.equal(f.provider.errors.length, 0);
+});
 
 const grant = { reportCalculationReview: { contract: 'foreground-report-calculation-v1' as const } };
 const report = { path: '060_reports/draft.md', sha256: 'a'.repeat(64) };

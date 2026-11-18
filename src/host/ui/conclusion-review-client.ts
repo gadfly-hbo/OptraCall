@@ -7,7 +7,7 @@ import type { ClientTask } from './project-types.ts';
 export type { ConclusionReviewSelection };
 export type ConclusionReviewRecord = StoredConclusionReviewRecord & {
   reportChanged?: boolean; reportCurrentStatus?: 'same-path-unchanged' | 'same-path-updated' | 'unavailable';
-  canCarry?: boolean; alreadyCarried?: boolean; sourceStatus?: 'unavailable';
+  canCarry?: boolean; alreadyCarried?: boolean; deliveredToAuthor?: boolean; sourceStatus?: 'unavailable';
 };
 export type ConclusionCandidates = {
   reports: ConclusionReviewReportCandidate[];

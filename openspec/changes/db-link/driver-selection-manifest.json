@@ -1,0 +1,27 @@
+{
+  "version": "driver-selection-v0.1-revision3",
+  "sourceHead": "ef3e7d0b8703a6e22023e8099a56c542d484a69d",
+  "scope": "documentation-selection-review-only; not approved; no implementation",
+  "files": [
+    {
+      "path": "openspec/changes/db-link/driver-selection.md",
+      "bytes": 26383,
+      "sha256": "2f3c75c66b97df0955ef7bd80d62d3a73764fcc41a6fd4965682de5f405a69b6"
+    },
+    {
+      "path": "openspec/changes/db-link/driver-versions.md",
+      "bytes": 11197,
+      "sha256": "e22308ff8b6c31184d49f8805b34909fa48ebae9a2a14b3f5480ed85ce490575"
+    },
+    {
+      "path": "openspec/changes/db-link/selection-research.md",
+      "bytes": 25175,
+      "sha256": "578cf93b6ab7ed659a0e5bb5814d6b5f7e8548bf4b1753cd075b29478537cc77"
+    },
+    {
+      "path": "openspec/changes/db-link/selection-decision.json",
+      "bytes": 711,
+      "sha256": "15c753c202291572c941fefaff69e7684ff97fca14fc5a16caf379760c1ae6c8"
+    }
+  ]
+}

@@ -28,13 +28,14 @@ const PUBLIC_RESEARCH_PROMPT = '你负责查证用户明确许可公开检索的
 
 export function createRequirementPublicSearch(options: {
   codeRoot: string;
+  domain?: { name:string; projectPrefix:string };
   sessionDirectory: (instanceId: string) => string;
   configurationSnapshot: (id: string, revision: number) => Readonly<RuntimeModelConfiguration> | null | undefined;
   mutate: <T>(operation: () => T | Promise<T>) => Promise<T>;
   isClosing: () => boolean;
 }) {
   const domain = createAgentSessionDomain<SearchOwner>({
-    name: 'requirement-public-search',
+    name: options.domain?.name ?? 'requirement-public-search',
     profile: {
       key: owner => owner.instanceId,
       configuration: owner => options.configurationSnapshot(owner.configuration.id, owner.configuration.revision),
@@ -43,7 +44,7 @@ export function createRequirementPublicSearch(options: {
         const cwd = path.join(directory, 'workspace');
         await mkdir(cwd, { recursive: true, mode: 0o700 });
         return {
-          projectId: `requirement-public:${owner.instanceId}`,
+          projectId: `${options.domain?.projectPrefix ?? 'requirement-public'}:${owner.instanceId}`,
           workspace: { cwd, systemPrompt: [PUBLIC_RESEARCH_PROMPT], capabilityPolicy: 'public-search' },
           sessionDirectory: path.join(directory, 'native'),
           resourceRoot: path.join(directory, 'resources'),

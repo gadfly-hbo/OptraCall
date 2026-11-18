@@ -269,14 +269,17 @@ test('controlled schema2 migration preserves all original row values, task and f
   await store.init(); const task = store.getTask(taskId), feedback = store.listFeedbackHistory(taskId), item = store.getItem(itemId);
   assert.equal(item.sourceKind,'manual'); assert.equal(item.status,'adopted'); assert.equal(item.reportConfirmation,undefined);
   assert.equal(task.status,'doing'); assert.equal(feedback[0]!.outcome,'  保留新修订\n'); assert.equal(store.listConfirmedConclusions().length,0);
-  store.close(); await store.init(); assert.deepEqual(store.getTask(taskId),task); assert.deepEqual(store.listFeedbackHistory(taskId),feedback); store.close();
+  assert.equal(feedback.length,1); assert.equal(feedback[0]!.quoteProvenance,undefined); assert.deepEqual(store.listActionAuthorizations(taskId),[]);
+  store.close(); await store.init(); assert.deepEqual(store.getTask(taskId),task); assert.deepEqual(store.listFeedbackHistory(taskId),feedback); assert.deepEqual(store.listActionAuthorizations(taskId),[]); store.close();
   const db = new DatabaseSync(file, { readOnly:true });
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get()!.user_version,3);
+    assert.equal(db.prepare('PRAGMA user_version').get()!.user_version,4);
     assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[]);
+    assert.deepEqual(db.prepare('SELECT * FROM action_authorizations').all(),[]);
     for (const [name,before] of Object.entries(rows)) {
       const after = db.prepare(`SELECT * FROM ${name}`).all();
-      assert.deepEqual(after, name === 'board_items' ? before.map(row => Object.assign(Object.create(null),row,{report_confirmation_json:null})) : before);
+      const added = name === 'board_items' ? {report_confirmation_json:null} : name === 'feedback_revisions' ? {quote_provenance_json:null} : undefined;
+      assert.deepEqual(after, added ? before.map(row => Object.assign(Object.create(null),row,added)) : before);
     }
   } finally { db.close(); }
 });

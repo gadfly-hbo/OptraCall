@@ -1,0 +1,12 @@
+import { createServer } from 'vite';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import fs from 'node:fs';
+const root = fileURLToPath(new URL('../../../../', import.meta.url)), evidence = path.join(root, '.local/v12-pm01-fix/ui-preparation');
+const arg = process.argv.find(item => item.startsWith('--port=')), port = arg ? Number(arg.slice(7)) : 43131;
+if (!Number.isInteger(port) || port < 1024 || port > 65535 || [4173,4174,4175].includes(port)) throw new Error('Use an isolated demo port');
+const server = await createServer({ configFile: fileURLToPath(new URL('./vite.config.ts', import.meta.url)), server: { host: '127.0.0.1', port, strictPort: true, proxy: {} } });
+await server.listen();
+const receipt = { startedAt: new Date().toISOString(), pid: process.pid, port, url: `http://127.0.0.1:${port}/`, kind: 'pure UI scope preview, no Host/Pi/Provider', productFilesWritten: false, stop: `kill -TERM ${process.pid}` };
+fs.mkdirSync(evidence,{recursive:true});fs.writeFileSync(path.join(evidence,'runtime.json'),JSON.stringify(receipt,null,2)+'\n');process.stdout.write(JSON.stringify(receipt)+'\n');
+for(const signal of ['SIGTERM','SIGINT'])process.once(signal,async()=>{await server.close();fs.writeFileSync(path.join(evidence,'stop.json'),JSON.stringify({...receipt,stoppedAt:new Date().toISOString()},null,2)+'\n');process.exit(0);});

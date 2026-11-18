@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -15,7 +16,7 @@ test('M5 CD01/02/08 actual Host→Pi→Provider saves an author-bound draft from
   await readJson(await host.request('/api/cases/storage/initialize','POST',{}));
   const {project}=await readJson(await host.request('/api/projects','POST',{name:'M5同任务合成'}),201);
   const {task}=await readJson(await host.request(`/api/projects/${project.id}/tasks`,'POST',{name:'同一普通任务'}),201);
-  let {case:record}=await readJson(await host.request('/api/cases','POST',{operationId:randomUUID(),title:'M5合成缺货事项'}),201);
+  let {case:record}=await readJson(await host.request('/api/cases','POST',await withCaseGoal(host, {operationId:randomUUID(),title:'M5合成缺货事项'})),201);
   await readJson(await host.request(`/api/cases/${record.id}/projects`,'POST',{operationId:randomUUID(),expectedRevision:record.revision,projectId:project.id}));
   record=(await readJson(await host.request(`/api/cases/${record.id}`))).case;
   const input={kind:'hypothesis',expectedRevision:0,payload:{title:'执行路径待核',statement:'已有权限仍可能没有实际执行；并非已证实结论。'}};

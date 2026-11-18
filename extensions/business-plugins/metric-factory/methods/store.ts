@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import type { SapMethodSaveInput, SapMethodWriteResult, SapMethodListOptions, SapMethodSummary, SapMethodDetail, SapMethodVersion, SapMethodPublication, SapMethodGovernance, SapMethodPublishInput, SapMethodPublishedRead, SapMethodOperation, SapMethodOperationState, SapMethodIssueInput } from './types.ts';
 import { fail, id, object, positive, saveInput, shaPattern, uuidPattern } from './validate.ts';
+import type { SapMethodIssueWriteOptions } from './types.ts';
 export { SapMethodStoreError } from './validate.ts';
 
 type VersionEntry = { version: number; bytesSha256: string; requestId: string; savedAt: string };
@@ -16,6 +17,15 @@ const validSha = (value: unknown) => typeof value === 'string' && shaPattern.tes
 const validVersion = (value: unknown) => Number.isSafeInteger(value) && Number(value) > 0;
 const validTime = (value: unknown) => typeof value === 'string' && Number.isFinite(Date.parse(value));
 const validRef = (value: unknown) => object(value) && validId(value.methodId) && validVersion(value.version);
+const validIssueEvidence = (value: Record<string, unknown>): boolean => {
+  if (value.origin === undefined && value.sources === undefined) return true;
+  const origin = value.origin;
+  if (!object(origin) || origin.actorKind !== 'agent') return false;
+  return ['projectId', 'taskId', 'requestId'].every(key => validId(origin[key])) &&
+    ['sessionId', 'toolCallId'].every(key => typeof origin[key] === 'string' && Boolean(String(origin[key]).trim()) && String(origin[key]).length <= 200) &&
+    Array.isArray(value.sources) && value.sources.length > 0 && value.sources.length <= 32 && value.sources.every(source => object(source) && ['session', 'memory', 'report', 'method', 'manual'].includes(String(source.type)) &&
+      typeof source.label === 'string' && source.label.length <= 500 && typeof source.ref === 'string' && Boolean(source.ref.trim()) && source.ref.length <= 8000 && (source.version === null || typeof source.version === 'string' && Boolean(source.version.trim()) && source.version.length <= 500) && (source.sha256 === null || validSha(source.sha256)));
+};
 const validIndex = (value: unknown): value is Index => {
   if (!object(value) || value.schemaVersion !== 1 || !Array.isArray(value.methods)) return false;
   const seen = new Set<string>();
@@ -28,7 +38,7 @@ const validIndex = (value: unknown): value is Index => {
       if (!object(item) || !validVersion(item.version) || Number(item.version) > total || published.has(Number(item.version)) || !validSha(item.contentSha256) || !validTime(item.publishedAt) || !validId(item.requestId)) return false;
       published.add(Number(item.version)); return true;
     })) return false;
-    return entry.governance.every((item, index) => object(item) && item.revision === index + 1 && validVersion(item.version) && Number(item.version) <= total && ['suspected', 'confirmed'].includes(String(item.status)) && typeof item.note === 'string' && Boolean(item.note.trim()) && (item.replacement === null || validRef(item.replacement)) && validTime(item.recordedAt) && validId(item.requestId));
+    return entry.governance.every((item, index) => object(item) && item.revision === index + 1 && validVersion(item.version) && Number(item.version) <= total && ['suspected', 'confirmed'].includes(String(item.status)) && typeof item.note === 'string' && Boolean(item.note.trim()) && (item.replacement === null || validRef(item.replacement)) && validTime(item.recordedAt) && validId(item.requestId) && validIssueEvidence(item));
   });
 };
 
@@ -217,12 +227,14 @@ export function createSapMethodStore(libraryRoot: string) {
       if (record.contentSha256 !== publication.contentSha256) fail('METHOD_STORE_CORRUPT', 409);
       return { version: record, publication: structuredClone(publication), issue: structuredClone(entry.governance.filter(item => item.version === version).at(-1) ?? null) };
     },
-    markIssue(methodId: string, input: SapMethodIssueInput): SapMethodDetail {
+    markIssue(methodId: string, input: SapMethodIssueInput, options?: SapMethodIssueWriteOptions): SapMethodDetail {
       methodId = id(methodId);
       if (!object(input) || !['suspected', 'confirmed'].includes(input.status) || typeof input.note !== 'string' || !input.note.trim() || input.note.length > 20_000 || !Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) fail('METHOD_INPUT_INVALID');
       const requestId = id(input.requestId), version = positive(input.version);
       const replacement = input.replacement == null ? null : { methodId: id(input.replacement.methodId), version: positive(input.replacement.version) };
-      const fingerprint = digest(JSON.stringify({ kind: 'issue', methodId, requestId, version, expectedRevision: input.expectedRevision, status: input.status, note: input.note.trim(), replacement }));
+      if (options && !validIssueEvidence(options as unknown as Record<string, unknown>)) fail('METHOD_SOURCE_INVALID');
+      const evidence = options ? { origin: structuredClone(options.origin), sources: structuredClone(options.sources) } : {};
+      const fingerprint = digest(JSON.stringify({ kind: 'issue', methodId, requestId, version, expectedRevision: input.expectedRevision, status: input.status, note: input.note.trim(), replacement, ...evidence }));
       const prior = matchingOperation(requestId, 'issue', fingerprint), index = loadIndex(), entry = entryFor(index, methodId), record = readVersion(entry, version);
       if (prior && committed(prior, index)) return detail(entry, version);
       if (entry.governance.length !== input.expectedRevision) fail('METHOD_GOVERNANCE_CONFLICT', 409);
@@ -231,9 +243,11 @@ export function createSapMethodStore(libraryRoot: string) {
         if (replacement.methodId === methodId && replacement.version === version) fail('METHOD_RELATION_INVALID');
         readVersion(entryFor(index, replacement.methodId), replacement.version);
       }
+      options?.assertWritable?.();
       ensureRoot();
       const operation = reserveOperation({ schemaVersion: 1, requestId, kind: 'issue', fingerprint, contentSha256: record.contentSha256, methodId, version, recordedAt: new Date().toISOString() });
-      entry.governance.push({ version, revision: entry.governance.length + 1, status: input.status, note: input.note.trim(), replacement, recordedAt: operation.recordedAt, requestId });
+      entry.governance.push({ version, revision: entry.governance.length + 1, status: input.status, note: input.note.trim(), replacement, recordedAt: operation.recordedAt, requestId, ...evidence });
+      options?.assertWritable?.();
       saveIndex(index);
       return detail(entry, version);
     },

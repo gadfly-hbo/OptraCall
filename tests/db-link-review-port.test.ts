@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { ProjectStore } from '../src/host/project-store.ts';
+import { DbLinkResults } from '../src/host/db-link-results.ts';
+import { createDbLinkReviewPort } from '../src/host/db-link-review-port.ts';
+import { dbLinkModelOutlet } from '../src/host/db-link-host.ts';
+
+test('DB11/15: review readers use the fixed export grant and exact private bytes after live database revocation or 020 changes', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'optracall-db-review-port-'));
+  const dataRoot = path.join(root, 'data'), projects = new ProjectStore({ dataRoot, projectsRoot: path.join(root, 'projects') });
+  await projects.init(); t.after(async () => { await projects.close(); await rm(root, { recursive: true, force: true }); });
+  let configuration = { id: 'synthetic', revision: 1, name: 'Synthetic', provider: 'openai-compatible', api: 'openai-completions' as const, model: 'synthetic', baseUrl: 'http://127.0.0.1/v1', apiKey: 'synthetic-not-exported' };
+  const project = await projects.create({ name: 'Owner', configuration }), task = await projects.createTask(project.id, { name: 'Task', configuration });
+  const owner = { projectId: project.id, taskId: task.id, requestId: randomUUID(), operationId: randomUUID() };
+  const results = new DbLinkResults({ dataRoot, projectDirectory: () => project.rootPath, assertAccess: () => {} });
+  const sink = await results.begin(owner, { connectionId: randomUUID(), connectionRevision: 1, engine: 'postgresql', sourceIdentity: 'synthetic-instance', sql: 'SELECT amount FROM public.orders', parameters: [], observedObjects: ['public.orders'], declaredObjects: [], unknownObjects: [], startedAt: '2026-11-14T00:00:00Z', session: { timezone: 'UTC', encoding: 'UTF8', isolation: 'read committed' }, modelExport: { targets: [dbLinkModelOutlet(configuration)], results: true, queryText: false, structure: false, comments: false } }, [{ ordinal: 0, name: 'amount', databaseType: 'numeric', precision: 20, scale: 2 }], { maxRows: 10, maxBytes: 100_000, maxCellBytes: 1000, chunkBytes: 1000 });
+  await sink.append([['9007199254740993.01']]); const receipt = await sink.complete('1');
+  let captures = 0, cancelled = false;
+  const port = createDbLinkReviewPort({ privateRoot: path.join(dataRoot, 'reviews'), projects, configurationSnapshot: () => configuration,
+    materialSource: async (p, q, id) => { captures++; assert.equal(p, owner.projectId); assert.equal(q, owner.taskId); return results.materialFiles(owner, id); }, isClosing: () => false });
+  const reviewOwner = { projectId: project.id, taskId: task.id, requestId: randomUUID(), reviewId: randomUUID() };
+  const context = { configuration: { id: configuration.id, revision: 1 }, signal: new AbortController().signal, assertCurrent() { if (cancelled) throw new Error('cancelled'); } };
+  const selection = { selector: `db-result:${receipt.id}`, purpose: 'rcr' as const };
+  const fixed = await port.freeze(reviewOwner, selection, { ...context, maxTotalBytes: 100 * 1024 * 1024, existingBytes: 0 });
+  assert.equal(fixed.logicalItems, 1); const afterFreeze = captures;
+  await writeFile(path.join(project.rootPath, `020_clean/db-link/${receipt.id}/rows-000001.json`), 'changed live 020');
+  const again = await port.freeze(reviewOwner, selection, { ...context, maxTotalBytes: 100 * 1024 * 1024, existingBytes: 0 });
+  assert.deepEqual(again.ref, fixed.ref); assert.equal(captures, afterFreeze, 'existing private snapshots never refreeze live material');
+  const read = await port.read(reviewOwner, fixed.ref, {}, context);
+  assert.deepEqual(read.rows, [['9007199254740993.01']]); assert.ok(!JSON.stringify(read).includes('SELECT amount')); assert.ok(!JSON.stringify(read).includes('synthetic-not-exported'));
+  configuration = { ...configuration, apiKey: 'rotated-key' }; await port.verify(reviewOwner, fixed.ref, context);
+  configuration = { ...configuration, baseUrl: 'http://127.0.0.1/changed-endpoint' };
+  await assert.rejects(port.read(reviewOwner, fixed.ref, {}, context), { code: 'db_material_export_not_authorized' });
+  configuration = { ...configuration, baseUrl: 'http://127.0.0.1/v1' }; cancelled = true;
+  await assert.rejects(port.read(reviewOwner, fixed.ref, {}, context), /cancelled/);
+});

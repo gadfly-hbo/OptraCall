@@ -7,7 +7,13 @@ export interface DataContextDataset { datasetId: string; name: string; createdAt
 export interface ProjectDataContextIndex { schemaVersion: 1 | 2; projectId: string; revision: number; datasets: DataContextDataset[]; citations: { citationId: string; recordSha256: string }[] }
 export interface InputVersionRecord extends DataContextOperation { schemaVersion: 1 | 2; projectId: string; datasetId: string; inputVersionId: string; sourcePath: string; uploadId: string | null; sourceNote: string | null; sha256: string; bytes: number; savedAt: string; evidencePath: string }
 export type DataContextProvenance = 'user-statement' | 'agent-inference' | 'unknown';
-export type DataContextFieldLocation = { kind: 'csv-column' | 'tsv-column'; columnIndex: number } | { kind: 'json-pointer'; pointer: string } | { kind: 'xlsx-range'; sheetName: string; range: string } | { kind: 'text-range'; start: number; end: number };
+export interface DataContextDatabaseLocation {
+  sourceKind: 'query-result' | 'metadata-observation'; sourceId: string; sourcePath: string; sourceSha256: string;
+  connectionId: string; connectionRevision: number; sourceIdentity: string;
+  object?: { database: string; schema: string; name: string; columns: string[] };
+  relatedObject?: { database: string; schema: string; name: string; columns: string[] };
+}
+export type DataContextFieldLocation = { kind: 'csv-column' | 'tsv-column'; columnIndex: number } | { kind: 'json-pointer'; pointer: string; database?: DataContextDatabaseLocation; /** Author-declared expression, never Host-verified SQL lineage. */ queryExpression?: string } | { kind: 'xlsx-range'; sheetName: string; range: string } | { kind: 'text-range'; start: number; end: number };
 export interface DataContextNativeEvidence { taskId: string; nativeSessionId: string; entryId: string }
 export interface DataContextArtifactEvidence { path: string; sha256: string }
 export interface DataContextObservation { author: 'user' | 'agent' | 'unknown'; format: 'csv' | 'tsv' | 'json' | 'xlsx' | 'markdown' | 'unsupported' | 'unknown'; encoding: string | null; recordRule: string | null; coverage: 'complete' | 'partial' | 'unobserved'; scannedRows: number | null; totalRows: number | null; fields: { location: DataContextFieldLocation; originalName: string; observedType: string }[]; limitations: string; generatedAt: string | null; nativeEvidence: DataContextNativeEvidence | null; artifactEvidence: DataContextArtifactEvidence | null }

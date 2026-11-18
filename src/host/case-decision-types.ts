@@ -1,5 +1,6 @@
 import type { PersonalSourceRef } from './personal-retention-types.ts';
 import type { PersonalContextTarget } from './personal-context-types.ts';
+import type { UserQuoteProvenance } from '../agent/quoted-decisions.ts';
 
 export type CaseDecisionKind = 'hypothesis' | 'strategy';
 export type CaseDecisionRef = { type: 'case-decision'; caseStoreId: string; caseId: string; recordId: string; revision: number };
@@ -61,6 +62,7 @@ export type CaseStrategyChoiceInput = {
 export type CaseStrategyChoice = {
   choiceId: string; caseId: string; strategyRef: CaseDecisionRef; choice: CaseStrategyChoiceValue;
   reason: string | null; previousChoiceId: string | null; operationId: string; occurredAt: string; actorKind: 'user';
+  quoteProvenance?: UserQuoteProvenance;
 };
 export type CaseDecisionListOptions = { includeArchived?: boolean; history?: boolean; pageSize?: number; continuation?: string | null };
 export type CaseDecisionList = {

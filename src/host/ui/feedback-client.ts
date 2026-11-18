@@ -9,7 +9,7 @@ const messages: Record<string, string> = {
   feedback_needs_review: '原操作部分结果待核对，请先查询原操作，不要重复创建。',
   feedback_operation_needs_review: '原操作部分结果待核对，请先查询原操作，不要重复创建。',
   project_archived: '项目已归档，请恢复后继续；当前输入仍保留。',
-  case_closed: '所选 Case 已结束，请先在 Case 看板重开，或明确改选无 Case。',
+  case_closed: '所选 Case 已结束，请先在 Decision Case重开，或明确改选无 Case。',
   revision_conflict: 'Case 修订已变化，请重新读取并预览。',
   feedback_material_limit: '正文或材料数量超过传输限制，请明确减少选材或选择片段。',
 };

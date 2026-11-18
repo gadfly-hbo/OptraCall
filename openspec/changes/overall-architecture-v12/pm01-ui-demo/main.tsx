@@ -1,0 +1,8 @@
+import { createRoot } from 'react-dom/client';
+import { useState } from 'react';
+import { installScopeDemo, scopeDemoState } from './stub.ts';
+import './preview.css';
+installScopeDemo();
+function PreviewControls() { const params = new URL(location.href).searchParams; const [inspect, setInspect] = useState(false), [state, setState] = useState<unknown>(); const nav = (key: string, value: string) => { const url = new URL(location.href); url.searchParams.set(key, value); location.href = url.href; }; return <aside className="pm01-preview-bar" aria-label="PM-V12-01演示控制"><strong>PM-V12-01 · 资料范围交互预览</strong><span>原App/原CSS；仅浏览器合成替身，无Host/Pi/真实模型</span><label>对照<select aria-label="修正前后对照" value={params.get('before') || '0'} onChange={event => nav('before', event.target.value)}><option value="0">拟修正资料范围</option><option value="1">当前候选（原限手选）</option></select></label><label>场景<select aria-label="资料场景" value={params.get('scopeScenario') || 'normal'} onChange={event => nav('scopeScenario', event.target.value)}><option value="normal">已有项目背景</option><option value="empty">无可用背景</option><option value="legacy">原讨论保留限选</option><option value="selected-empty">明确空限选</option></select></label><button type="button" onClick={() => { setState(scopeDemoState()); setInspect(!inspect); }}>查看合成目录/实际读回范围</button>{inspect && <dialog open><button type="button" onClick={() => setInspect(false)}>关闭状态</button><p>这些是内存演示投影，不是真实调用或专业验收证据。</p><pre>{JSON.stringify(state, null, 2)}</pre></dialog>}</aside>; }
+createRoot(document.getElementById('pm01-preview-controls')!).render(<PreviewControls />);
+await import('../../../../src/host/ui/main.tsx');

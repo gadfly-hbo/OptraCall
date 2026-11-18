@@ -448,15 +448,3 @@ test('deck store: difference record confidence is a strict optional boolean', ()
     assert.throws(() => store.versions(), (error: unknown) => error instanceof DeckFault && error.code === 'DECK_CORRUPT');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
-
-test('refinerConfiguration: deck-bound or explicit project configuration only, never global fallback', async () => {
-  const { refinerConfiguration } = await import('../src/host/ppt-refiner-sessions.ts');
-  const calls: (string | number | undefined)[][] = [];
-  const snapshot = (id?: string, revision?: number) => { calls.push([id, revision]); return { model: id ?? 'current' } as never; };
-  const project = { id: 'project-a', revision: 2 };
-  assert.deepEqual(refinerConfiguration({ configuration: { id: 'minimax-m3', revision: 1 } }, snapshot, project), { model: 'minimax-m3' });
-  assert.deepEqual(refinerConfiguration({}, snapshot, project), { model: 'project-a' });
-  assert.equal(refinerConfiguration({}, snapshot), undefined);
-  assert.equal(refinerConfiguration({ configuration: { id: 'missing', revision: 3 } }, (id, revision) => { calls.push([id, revision]); return undefined; }, project), undefined);
-  assert.deepEqual(calls, [['minimax-m3', 1], ['project-a', 2], ['missing', 3]]);
-});

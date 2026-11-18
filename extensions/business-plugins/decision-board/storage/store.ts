@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { parseUserQuoteProvenance, type UserQuoteProvenance } from '../../../../src/agent/quoted-decisions.ts';
+import type { BoardActionAuthorization, BoardActionAuthorizationInput, BoardAuthorizationSource, BoardArrangeAction, BoardArrangeActionsInput, BoardArrangementReceipt } from '../types.ts';
 import { EVIDENCE_CONFIDENCE, PRIORITIES, EVIDENCE_LEVELS, type ConfirmReportConclusionsInput, type ConfirmedConclusionRecord, type ConfirmedReviewClaim, type ConfirmedReviewEvidence, type ReportConfirmationReceipt, type ReportConfirmationSource, type BoardItemRecord, type BoardTaskRecord, type Evidence, type EvidenceLevel, type ExtractionConfiguration, type ExtractionRecord, type FeedbackEffect, type NormalizedItem, type Priority, type ReportRecord, type SaveFeedbackInput, type TaskFeedbackRevision } from '../types.ts';
 
 export class DecisionBoardFault extends Error {
@@ -14,6 +16,9 @@ const DATABASE = 'decision-board.sqlite3';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const openRoots = new Map<string, number>();
 const now = () => new Date().toISOString();
+const canonical = (value: unknown): string => JSON.stringify(value, (_key, entry) => entry && typeof entry === 'object' && !Array.isArray(entry)
+  ? Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left.localeCompare(right))) : entry);
+export const boardRecordVersion = (value: BoardItemRecord | BoardTaskRecord): string => createHash('sha256').update(canonical(value)).digest('hex');
 
 const SCHEMA = `
 CREATE TABLE reports (
@@ -101,6 +106,27 @@ CREATE TABLE feedback_revisions (
 );
 `;
 
+const AUTHORIZATION_SCHEMA = `
+CREATE TABLE action_authorizations (
+ authorization_id TEXT PRIMARY KEY,
+ operation_id TEXT NOT NULL UNIQUE,
+ task_id TEXT NOT NULL REFERENCES board_tasks(id) ON DELETE RESTRICT,
+ revision INTEGER NOT NULL CHECK(revision>0),
+ request_sha256 TEXT NOT NULL CHECK(length(request_sha256)=64),
+ record_json TEXT NOT NULL,
+ UNIQUE(task_id,revision)
+);
+ALTER TABLE feedback_revisions ADD COLUMN quote_provenance_json TEXT;
+PRAGMA user_version=4;
+`;
+
+const ARRANGEMENT_SCHEMA = `
+CREATE TABLE arrangement_operations (
+ operation_id TEXT PRIMARY KEY, request_sha256 TEXT NOT NULL, receipt_json TEXT NOT NULL
+);
+PRAGMA user_version=5;
+`;
+
 // SQLite cannot ALTER a CHECK constraint. Replace only board_items inside the
 // migration transaction; all original columns and row values are copied intact.
 const CONFIRMATION_ITEMS_SCHEMA = SCHEMA.slice(SCHEMA.indexOf('CREATE TABLE board_items ('), SCHEMA.indexOf('CREATE TABLE board_tasks ('))
@@ -147,8 +173,9 @@ const extraction = (row: Record<string, unknown>): ExtractionRecord => {
   return { ...value, configuration: JSON.parse(String(row.configuration_json)) as ExtractionConfiguration, truncated: Number(row.truncated) === 1 };
 };
 const feedback = (row: Record<string, unknown>): TaskFeedbackRevision => {
-  const record = camel(row) as unknown as TaskFeedbackRevision;
-  return { ...record, adopted: Number(row.adopted) === 1, createdAt: record.legacyCreatedAt ?? record.savedAt, updatedAt: record.legacyUpdatedAt ?? record.savedAt };
+  const record = strip(camel(row), ['quoteProvenanceJson']) as unknown as TaskFeedbackRevision;
+  return { ...record, adopted: Number(row.adopted) === 1, createdAt: record.legacyCreatedAt ?? record.savedAt, updatedAt: record.legacyUpdatedAt ?? record.savedAt,
+    ...(row.quote_provenance_json == null ? {} : { quoteProvenance: parseUserQuoteProvenance(JSON.parse(String(row.quote_provenance_json))) }) };
 };
 
 function text(value: unknown, max: number, required = false): string {
@@ -160,14 +187,48 @@ function text(value: unknown, max: number, required = false): string {
 function optional(value: unknown, max: number): string | null { return value == null || String(value).trim() === '' ? null : text(value, max); }
 function priority(value: unknown, fallback: Priority = 'medium'): Priority { return value === undefined || value === null || value === '' ? fallback : PRIORITIES.includes(value as Priority) ? value as Priority : fail('invalid_text'); }
 function uuid(value: string) { if (!UUID.test(value)) fail('invalid_text'); return value; }
+function authorizationSource(value: BoardAuthorizationSource): BoardAuthorizationSource {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('invalid_action_authorization');
+  if ('kind' in value) {
+    if (value.kind !== 'work') fail('invalid_action_authorization');
+    const work = value.workContext;
+    if (work && (!Number.isSafeInteger(work.planVersion) || work.planVersion < 1 || !work.goal || !Number.isSafeInteger(work.goal.version) || work.goal.version < 1)) fail('invalid_action_authorization');
+    return { kind: 'work', projectId: uuid(value.projectId), taskId: uuid(value.taskId), requestId: uuid(value.requestId), ...(work ? { workContext: { confirmationId: uuid(work.confirmationId), planVersion: work.planVersion, taskKey: text(work.taskKey, 200, true), goal: { goalId: uuid(work.goal.goalId), version: work.goal.version } } } : {}) };
+  }
+  const ref = value.strategyRef;
+  if (!ref || ref.type !== 'case-decision' || ref.caseId !== value.caseId || ref.caseStoreId !== value.caseStoreId || !Number.isSafeInteger(ref.revision) || ref.revision < 1) fail('invalid_action_authorization');
+  return { caseStoreId: uuid(value.caseStoreId), caseId: uuid(value.caseId), choiceId: uuid(value.choiceId), strategyRef: { type: 'case-decision', caseStoreId: uuid(ref.caseStoreId), caseId: uuid(ref.caseId), recordId: uuid(ref.recordId), revision: ref.revision } };
+}
+function boundedChecks(value: string[]): string[] {
+  if (!Array.isArray(value) || value.length > 20) fail('invalid_arrangement');
+  return value.map(check => text(check, 2000, true));
+}
+function cleanArrangeActions(value: BoardArrangeAction[]): BoardArrangeAction[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 20) fail('invalid_arrangement');
+  const hash = (v: string) => /^[a-f0-9]{64}$/.test(v) ? v : fail('invalid_arrangement');
+  const seen = new Set<string>();
+  return value.map(action => {
+    if (!action || typeof action !== 'object' || !['create', 'reuse'].includes(action.kind)) fail('invalid_arrangement');
+    if (action.kind === 'reuse') {
+      if (seen.has(action.taskId)) fail('invalid_arrangement'); seen.add(action.taskId);
+      return { kind: 'reuse', itemId: uuid(action.itemId), taskId: uuid(action.taskId), itemVersion: hash(action.itemVersion), taskVersion: hash(action.taskVersion), expectedPreviousAuthorizationId: action.expectedPreviousAuthorizationId === null ? null : uuid(action.expectedPreviousAuthorizationId) };
+    }
+    return { kind: 'create', title: text(action.title, 200, true), ...(action.owner === undefined ? {} : { owner: text(action.owner, 200) }), ...(action.dueDate === undefined ? {} : { dueDate: text(action.dueDate, 40) }),
+      ...(action.note === undefined ? {} : { note: text(action.note, 2000) }), priority: priority(action.priority), ...(action.itemId === undefined ? {} : { itemId: uuid(action.itemId), itemVersion: hash(action.itemVersion!) }) };
+  });
+}
+function targetOperationId(parent: string, index: number): string {
+  const hex = createHash('sha256').update(`${parent}/authorization/${index}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${((parseInt(hex[16], 16) & 3) | 8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
 function relativeReportPath(value: unknown): string {
   const result = text(value, 4096), pieces = result.split('/');
   if (pieces.length < 2 || pieces[0] !== '060_reports' || pieces.some(piece => !piece || piece === '.' || piece === '..') || /[\\\x00-\x1f\x7f]/.test(result)) fail('invalid_report_path');
   return result;
 }
-function transaction<T>(db: DatabaseSync, operation: () => T, immediate = false): T {
+function transaction<T>(db: DatabaseSync, operation: () => T, immediate = false, beforeCommit?: () => void): T {
   db.exec(immediate ? 'BEGIN IMMEDIATE' : 'BEGIN');
-  try { const result = operation(); db.exec('COMMIT'); return result; }
+  try { const result = operation(); beforeCommit?.(); db.exec('COMMIT'); return result; }
   catch (error) { db.exec('ROLLBACK'); throw error; }
 }
 
@@ -179,7 +240,9 @@ function validateSchema(db: DatabaseSync, version: number): void {
   try {
     if (version > 0) expected.exec(SCHEMA);
     if (version >= 2) expected.exec(FEEDBACK_SCHEMA);
-    if (version === 3) migrateConfirmations(expected);
+    if (version >= 3) migrateConfirmations(expected);
+    if (version >= 4) expected.exec(AUTHORIZATION_SCHEMA);
+    if (version >= 5) expected.exec(ARRANGEMENT_SCHEMA);
     if (JSON.stringify(schemaInventory(db)) !== JSON.stringify(schemaInventory(expected))) fail('unsupported_board_schema');
   } finally { expected.close(); }
   if (db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok' || db.prepare('PRAGMA foreign_key_check').all().length) fail('invalid_board_database');
@@ -248,7 +311,7 @@ export function createDecisionBoardStore(options: { root: string }) {
       if (!after.isFile() || after.isSymbolicLink() || after.nlink !== 1 || stat.ino !== after.ino || stat.dev !== after.dev) fail('unsafe_board_storage');
       db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=1000;');
       const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-      if (![0, 1, 2, 3].includes(version)) fail('unsupported_board_schema');
+      if (![0, 1, 2, 3, 4, 5].includes(version)) fail('unsupported_board_schema');
       validateSchema(db, version);
       db.exec('PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;');
       if (db.prepare('PRAGMA journal_mode').get()?.journal_mode !== 'delete' || db.prepare('PRAGMA synchronous').get()?.synchronous !== 2 || db.prepare('PRAGMA foreign_keys').get()?.foreign_keys !== 1) fail('unsafe_board_storage');
@@ -268,6 +331,11 @@ export function createDecisionBoardStore(options: { root: string }) {
           migrateConfirmations(database());
         });
         db.exec('PRAGMA foreign_keys=ON;');
+        upgrading = false;
+      }
+      if (version < 4) {
+        upgrading = true;
+        transaction(database(), () => database().exec(AUTHORIZATION_SCHEMA), true);
         upgrading = false;
       }
       // A running row can only come from a previous process; it never resumes silently.
@@ -478,10 +546,99 @@ export function createDecisionBoardStore(options: { root: string }) {
     if (result.changes === 0) fail('task_not_found');
     return task(database().prepare('SELECT * FROM board_tasks WHERE id=?').get(taskId) as Record<string, unknown>);
   }
-  function saveFeedback(taskId: string, input: SaveFeedbackInput): TaskFeedbackRevision {
+  function getActionAuthorizationOperation(operationId: string): BoardActionAuthorization | null {
+    const row = database().prepare('SELECT record_json FROM action_authorizations WHERE operation_id=?').get(uuid(operationId));
+    return row ? JSON.parse(String(row.record_json)) as BoardActionAuthorization : null;
+  }
+  function getActionAuthorization(authorizationId: string): BoardActionAuthorization | null {
+    const row = database().prepare('SELECT record_json FROM action_authorizations WHERE authorization_id=?').get(uuid(authorizationId));
+    return row ? JSON.parse(String(row.record_json)) as BoardActionAuthorization : null;
+  }
+  function listActionAuthorizations(taskId: string): BoardActionAuthorization[] {
+    getTask(taskId);
+    return database().prepare('SELECT record_json FROM action_authorizations WHERE task_id=? ORDER BY revision').all(taskId).map(row => JSON.parse(String(row.record_json)) as BoardActionAuthorization);
+  }
+  function cleanAuthorization(input: BoardActionAuthorizationInput): BoardActionAuthorizationInput {
+    if (!input || !['authorize', 'revoke'].includes(input.decision) || !/^[a-f0-9]{64}$/.test(input.itemVersion) || !/^[a-f0-9]{64}$/.test(input.taskVersion)) fail('invalid_action_authorization');
+    const quoteProvenance = parseUserQuoteProvenance(input.quoteProvenance);
+    const clean = { operationId: uuid(input.operationId), projectId: uuid(input.projectId), itemId: uuid(input.itemId), taskId: uuid(input.taskId),
+      itemVersion: input.itemVersion, taskVersion: input.taskVersion, expectedPreviousAuthorizationId: input.expectedPreviousAuthorizationId === null ? null : uuid(input.expectedPreviousAuthorizationId),
+      decision: input.decision, scope: text(input.scope, 4000, true), source: authorizationSource(input.source), quoteProvenance };
+    if (quoteProvenance.projectId !== clean.projectId || 'kind' in clean.source && (clean.source.projectId !== clean.projectId || clean.source.taskId !== quoteProvenance.taskId || clean.decision === 'authorize' && clean.source.requestId !== quoteProvenance.requestId)) fail('authorization_scope_mismatch');
+    return clean;
+  }
+  function saveAuthorization(clean: BoardActionAuthorizationInput, assertWritable?: () => void): BoardActionAuthorization {
+    const digest = createHash('sha256').update(canonical(clean)).digest('hex'), prior = getActionAuthorizationOperation(clean.operationId);
+    if (prior) { if (prior.requestSha256 !== digest) fail('authorization_operation_conflict'); return prior; }
+    assertWritable?.();
+    const taskSnapshot = getTask(clean.taskId), itemSnapshot = getItem(clean.itemId);
+    if (taskSnapshot.itemId !== itemSnapshot.id || itemSnapshot.projectId !== clean.projectId) fail('authorization_scope_mismatch');
+    if (boardRecordVersion(itemSnapshot) !== clean.itemVersion || boardRecordVersion(taskSnapshot) !== clean.taskVersion) fail('authorization_source_changed');
+    if (clean.decision === 'authorize' && itemSnapshot.status !== 'adopted') fail('authorization_requires_adopted_item');
+    const previous = listActionAuthorizations(clean.taskId).at(-1);
+    if ((previous?.authorizationId ?? null) !== clean.expectedPreviousAuthorizationId) fail('authorization_revision_conflict');
+    // Preserve the historical work source and record the later withdrawal quote.
+    if ('kind' in clean.source && clean.decision === 'revoke' && (!previous || previous.decision !== 'authorize' || canonical(previous.source) !== canonical(clean.source))) fail('authorization_scope_mismatch');
+    const { expectedPreviousAuthorizationId, ...body } = clean;
+    const record: BoardActionAuthorization = { ...body, authorizationId: randomUUID(), revision: (previous?.revision ?? 0) + 1, previousAuthorizationId: expectedPreviousAuthorizationId,
+      requestSha256: digest, itemSnapshot, taskSnapshot, actorKind: 'user', createdAt: now() };
+    database().prepare('INSERT INTO action_authorizations (authorization_id,operation_id,task_id,revision,request_sha256,record_json) VALUES (?,?,?,?,?,?)')
+      .run(record.authorizationId, record.operationId, record.taskId, record.revision, digest, JSON.stringify(record));
+    return record;
+  }
+  function recordActionAuthorization(input: BoardActionAuthorizationInput, options?: { assertWritable?(): void }): BoardActionAuthorization {
+    const clean = cleanAuthorization(input); let writes = false;
+    return transaction(database(), () => saveAuthorization(clean, () => { options?.assertWritable?.(); writes = true; }), true, () => { if (writes) options?.assertWritable?.(); });
+  }
+  function getArrangementOperation(operationId: string): BoardArrangementReceipt | null {
+    uuid(operationId);
+    if ((database().prepare('PRAGMA user_version').get() as { user_version: number }).user_version < 5) return null;
+    const row = database().prepare('SELECT receipt_json FROM arrangement_operations WHERE operation_id=?').get(operationId);
+    return row ? JSON.parse(String(row.receipt_json)) as BoardArrangementReceipt : null;
+  }
+  function arrangeActions(input: BoardArrangeActionsInput, options?: { assertWritable?(): void }): BoardArrangementReceipt {
+    const quoteProvenance = parseUserQuoteProvenance(input.quoteProvenance), source = authorizationSource(input.source);
+    const clean: BoardArrangeActionsInput = { operationId: uuid(input.operationId), projectId: uuid(input.projectId), source, quoteProvenance,
+      scope: text(input.scope, 4000, true), title: text(input.title, 200, true), checks: boundedChecks(input.checks), actions: cleanArrangeActions(input.actions) };
+    if (clean.scope.length + clean.title.length + clean.checks.reduce((length, value) => length + value.length, 0) > 8000) fail('invalid_arrangement');
+    if (quoteProvenance.projectId !== clean.projectId || 'kind' in source && (source.projectId !== clean.projectId || source.taskId !== quoteProvenance.taskId || source.requestId !== quoteProvenance.requestId)) fail('authorization_scope_mismatch');
+    const digest = createHash('sha256').update(canonical(clean)).digest('hex'); let writes = false;
+    return transaction(database(), () => {
+      const prior = getArrangementOperation(clean.operationId);
+      if (prior) { if (prior.requestSha256 !== digest) fail('arrangement_operation_conflict'); return prior; }
+      options?.assertWritable?.();
+      if ((database().prepare('PRAGMA user_version').get() as { user_version: number }).user_version < 5) database().exec(ARRANGEMENT_SCHEMA);
+      const actions: BoardArrangementReceipt['actions'] = [];
+      let newItem: BoardItemRecord | undefined;
+      for (const action of clean.actions) {
+        let target: BoardTaskRecord, owner: BoardItemRecord;
+        if (action.kind === 'reuse') { owner = getItem(action.itemId); target = getTask(action.taskId); }
+        else {
+          if (action.itemId) {
+            owner = getItem(action.itemId);
+            if (owner.projectId !== clean.projectId || boardRecordVersion(owner) !== action.itemVersion) fail('authorization_source_changed');
+          } else {
+            if (!newItem) { newItem = addManualItem({ projectId: clean.projectId, title: clean.title, rationale: clean.scope }); newItem = decideItem(newItem.id, { status: 'adopted' }); }
+            owner = newItem;
+          }
+          target = addTask(owner.id, action);
+        }
+        const itemVersion = action.kind === 'reuse' ? action.itemVersion : boardRecordVersion(owner), taskVersion = action.kind === 'reuse' ? action.taskVersion : boardRecordVersion(target);
+        const authorization = saveAuthorization(cleanAuthorization({ operationId: targetOperationId(clean.operationId, actions.length), projectId: clean.projectId, itemId: owner.id, taskId: target.id,
+          itemVersion, taskVersion, expectedPreviousAuthorizationId: action.kind === 'reuse' ? action.expectedPreviousAuthorizationId : null,
+          decision: 'authorize', scope: clean.scope, source: clean.source, quoteProvenance }), options?.assertWritable);
+        actions.push({ itemId: owner.id, taskId: target.id, itemVersion, taskVersion, authorizationId: authorization.authorizationId, created: action.kind === 'create' });
+      }
+      const receipt: BoardArrangementReceipt = { ...clean, actions, requestSha256: digest, createdAt: now() };
+      database().prepare('INSERT INTO arrangement_operations (operation_id,request_sha256,receipt_json) VALUES (?,?,?)').run(clean.operationId, digest, JSON.stringify(receipt));
+      writes = true; return receipt;
+    }, true, () => { if (writes) options?.assertWritable?.(); });
+  }
+  function saveFeedback(taskId: string, input: SaveFeedbackInput, options?: { quoteProvenance?: UserQuoteProvenance; assertWritable?(): void }): TaskFeedbackRevision {
     uuid(taskId);
-    const clean = feedbackInput(taskId, input);
+    const clean = { ...feedbackInput(taskId, input), ...(options?.quoteProvenance === undefined ? {} : { quoteProvenance: parseUserQuoteProvenance(options.quoteProvenance) }) };
     const digest = createHash('sha256').update(JSON.stringify(clean)).digest('hex');
+    let writes = false;
     return transaction(database(), () => {
       getTask(taskId);
       const prior = getFeedbackOperation(clean.operationId);
@@ -489,13 +646,15 @@ export function createDecisionBoardStore(options: { root: string }) {
         if (prior.requestSha256 !== digest) fail('feedback_operation_conflict');
         return prior;
       }
+      options?.assertWritable?.();
       const latest = database().prepare('SELECT revision_id,revision_number FROM feedback_revisions WHERE task_id=? ORDER BY revision_number DESC LIMIT 1').get(taskId);
       if ((latest?.revision_id ?? null) !== clean.expectedLatestRevisionId) fail('feedback_revision_conflict');
       const revisionId = randomUUID();
-      database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'user-save',NULL,NULL)`)
-        .run(revisionId, taskId, Number(latest?.revision_number ?? 0) + 1, clean.operationId, digest, clean.adopted ? 1 : 0, clean.outcome, clean.metricDelta, clean.review, clean.score, clean.effect, now());
+      database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at,quote_provenance_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'user-save',NULL,NULL,?)`)
+        .run(revisionId, taskId, Number(latest?.revision_number ?? 0) + 1, clean.operationId, digest, clean.adopted ? 1 : 0, clean.outcome, clean.metricDelta, clean.review, clean.score, clean.effect, now(), clean.quoteProvenance ? JSON.stringify(clean.quoteProvenance) : null);
+      writes = true;
       return getFeedbackRevision(revisionId)!;
-    });
+    }, false, () => { if (writes) options?.assertWritable?.(); });
   }
   function listFeedbackHistory(taskId: string): TaskFeedbackRevision[] {
     getTask(taskId);
@@ -511,5 +670,5 @@ export function createDecisionBoardStore(options: { root: string }) {
   }
   const listFeedback = (): TaskFeedbackRevision[] => database().prepare('SELECT f.* FROM feedback_revisions f WHERE NOT EXISTS (SELECT 1 FROM feedback_revisions n WHERE n.task_id=f.task_id AND n.revision_number>f.revision_number) ORDER BY f.saved_at,f.task_id').all().map(feedback);
 
-  return { init, close, confirmReportConclusions, getConfirmationOperation, listConfirmedConclusions, registerReport, getReport, listReports, createExtraction, readExtraction, listExtractions, runningExtractionForReport, finishExtraction, listItems, getItem, addManualItem, decideItem, addTask, getTask, listTasks, setTaskStatus, saveFeedback, listFeedback, listFeedbackHistory, getFeedbackRevision, getFeedbackOperation };
+  return { init, close, confirmReportConclusions, getConfirmationOperation, listConfirmedConclusions, registerReport, getReport, listReports, createExtraction, readExtraction, listExtractions, runningExtractionForReport, finishExtraction, listItems, getItem, addManualItem, decideItem, addTask, getTask, listTasks, setTaskStatus, saveFeedback, listFeedback, listFeedbackHistory, getFeedbackRevision, getFeedbackOperation, recordActionAuthorization, listActionAuthorizations, getActionAuthorizationOperation, getActionAuthorization, arrangeActions, getArrangementOperation };
 }

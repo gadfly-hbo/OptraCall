@@ -1,15 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import type { StudioCreateInput, StudioStoreOptions, StudioSystem, StudioSaveAssetInput, StudioAsset, StudioAssetKind, StudioAssetRevision, StudioPublicationInput, StudioPublicationPreview, StudioPublication, StudioPublicationResult, StudioUpdateInput, StudioMaterial, StudioSourceRef, StudioWorkItemInput, StudioWorkItem, StudioFeedbackInput, StudioFeedback, StudioFeedbackUpdate, StudioUseRecord, StudioAdoption, StudioGraphState, StudioTopic, StudioPublishedAsset, StudioUseAssessmentInput } from './contracts.ts';
+import type { StudioCreateInput, StudioStoreOptions, StudioSystem, StudioSaveAssetInput, StudioAsset, StudioAssetKind, StudioAssetRevision, StudioPublicationInput, StudioPublicationPreview, StudioPublication, StudioPublicationResult, StudioUpdateInput, StudioMaterial, StudioSourceRef, StudioWorkItemInput, StudioWorkItem, StudioFeedbackInput, StudioFeedback, StudioFeedbackUpdate, StudioUseRecord, StudioAdoption, StudioGraphState, StudioTopic, StudioPublishedAsset, StudioUseAssessmentInput, StudioContribution, StudioContributeInput, StudioContributionContent, StudioContributionRevision, StudioLinkContributionInput, StudioContributionLink, StudioContributionSnapshot, StudioPublicationItem, StudioPublicationExecutionSummary, StudioPublicationPurpose } from './contracts.ts';
 import { fail, StudioError, text, identity, uuid, object, sources, checks, strings, positive, digest, sourceRef, feedbackOrigin } from './validation.ts';
-import { studioQuestionContext } from './contracts.ts';
+import { studioQuestionContext, studioExecutionOwner } from './contracts.ts';
+import { parseFoundationContent } from './foundation.ts';
+import { parseCoverageContent, coverageReferences, coverageRefIdentity } from './coverage.ts';
 export { StudioError } from './validation.ts';
 
 type Index = { schemaVersion: 1; systems: StudioSystem[] };
 const clone = <T>(value: T): T => structuredClone(value);
 const now = () => new Date().toISOString();
 const MAX_BYTES = 32 * 1024 * 1024;
+const publicationPurposes = (value: unknown): StudioPublicationPurpose[] | undefined => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || !value.length || value.length > 3 || new Set(value).size !== value.length || value.some(purpose => !['definition-reference', 'rule-execution', 'metric-calculation'].includes(purpose))) fail('invalid_studio_publication_purposes');
+  return [...value] as StudioPublicationPurpose[];
+};
+const executionSummary = (assetId: string, revision: StudioAssetRevision): StudioPublicationExecutionSummary | undefined => {
+  const foundation = parseFoundationContent(revision.body), execution = foundation.profile?.ruleExecution;
+  if (foundation.kind !== 'supported' || !execution) return undefined;
+  return { assetId, revision: revision.revision, sha256: revision.sha256, contractVersion: execution.contractVersion, engine: clone(execution.engine), ruleItemIds: [...new Set(execution.rules.map(rule => rule.ruleItemId))], factRequirements: clone(execution.factRequirements) };
+};
 
 /** Host-owned metadata and semantic source authority. SAP bodies remain in their original stores. */
 export class StudioStore {
@@ -54,6 +66,42 @@ export class StudioStore {
     for (const system of index.systems) {
       uuid(system.id); if (systemIds.has(system.id)) fail('invalid_studio_storage'); systemIds.add(system.id);
       positive(system.revision); text(system.name, 200, false); identity(system.projectId); identity(system.taskId);
+      if (system.enterpriseId !== undefined) identity(system.enterpriseId);
+      if (system.maintenanceOwner !== undefined) {
+        identity(system.maintenanceOwner.projectId); identity(system.maintenanceOwner.taskId);
+        if (!Array.isArray(system.maintenanceHistory) || !system.maintenanceHistory.length) fail('invalid_studio_storage');
+      }
+      if (system.maintenanceHistory !== undefined) {
+        if (!Array.isArray(system.maintenanceHistory)) fail('invalid_studio_storage');
+        let previous = { projectId: system.projectId, taskId: system.taskId };
+        for (const entry of system.maintenanceHistory) {
+          identity(entry.projectId); identity(entry.taskId); identity(entry.previousOwner.projectId); identity(entry.previousOwner.taskId);
+          if (digest(entry.previousOwner) !== digest(previous) || !Number.isFinite(Date.parse(entry.at))) fail('invalid_studio_storage');
+          previous = { projectId: entry.projectId, taskId: entry.taskId };
+        }
+        if (system.maintenanceHistory.length && digest(previous) !== digest(system.maintenanceOwner)) fail('invalid_studio_storage');
+      }
+      if (system.contributions !== undefined) {
+        if (!Array.isArray(system.contributions)) fail('invalid_studio_storage');
+        const ids = new Set<string>();
+        for (const contribution of system.contributions) {
+          uuid(contribution.id); if (ids.has(contribution.id)) fail('invalid_studio_storage'); ids.add(contribution.id);
+          identity(contribution.sourceProjectId); identity(contribution.sourceTaskId);
+          if (!Array.isArray(contribution.revisions) || !contribution.revisions.length || contribution.revision !== contribution.revisions.length || contribution.scope !== contribution.revisions.at(-1)!.scope) fail('invalid_studio_storage');
+          for (const [offset, revision] of contribution.revisions.entries()) {
+            const { revision: number, sha256, createdAt, ...content } = revision;
+            if (number !== offset + 1 || digest(content) !== sha256 || !Number.isFinite(Date.parse(createdAt))) fail('invalid_studio_storage');
+            this.contributionContent(content, contribution.sourceProjectId, contribution.sourceTaskId);
+          }
+          for (const link of [...(contribution.linkHistory ?? []), ...(contribution.linked ? [contribution.linked] : [])]) {
+            this.contributionLink(link);
+            if (!contribution.revisions.some(revision => revision.revision === link.contributionRevision)) fail('invalid_studio_storage');
+            if (link.ref ? !system.assetRefs.some(ref => digest(ref) === digest(link.ref)) : !system.assets.some(asset => asset.id === link.assetId && asset.revisions.some(revision => revision.revision === link.assetRevision))) fail('invalid_studio_storage');
+          }
+          if (contribution.linkHistory !== undefined && !Array.isArray(contribution.linkHistory)) fail('invalid_studio_storage');
+          if (!Number.isFinite(Date.parse(contribution.createdAt)) || !Number.isFinite(Date.parse(contribution.updatedAt))) fail('invalid_studio_storage');
+        }
+      }
       if (!Array.isArray(system.usageProjectIds)) fail('invalid_studio_storage'); system.usageProjectIds.forEach(identity);
       if (system.usageTasks !== undefined) { if (!Array.isArray(system.usageTasks)) fail('invalid_studio_storage'); for (const owner of system.usageTasks) { identity(owner.projectId); identity(owner.taskId); if (!system.usageProjectIds.includes(owner.projectId)) fail('invalid_studio_storage'); } }
       if (!Array.isArray(system.topics) || !system.topics.length || !['materials', 'assets', 'assetRefs', 'workItems', 'feedback', 'publications', 'adoptions', 'graphs', 'uses'].every(k => Array.isArray((system as unknown as Record<string, unknown>)[k]))) fail('invalid_studio_storage');
@@ -83,6 +131,24 @@ export class StudioStore {
         const { fingerprint, confirmedAt, ...prepared } = publication.preview;
         uuid(prepared.id); if (digest(prepared) !== fingerprint || !topicIds.has(prepared.topicId) || !Array.isArray(prepared.items) || !Array.isArray(publication.results)) fail('invalid_studio_storage');
         for (const item of prepared.items) { const asset = system.assets.find(a => a.id === item.assetId); if (!asset || asset.revisions.find(r => r.revision === item.revision)?.sha256 !== item.sha256) fail('invalid_studio_storage'); }
+        publicationPurposes(prepared.purposes);
+        if (prepared.executionSummaries !== undefined) {
+          if (!Array.isArray(prepared.executionSummaries)) fail('invalid_studio_storage');
+          const expected = prepared.items.flatMap(item => {
+            const revision = system.assets.find(asset => asset.id === item.assetId)!.revisions.find(revision => revision.revision === item.revision)!;
+            const summary = executionSummary(item.assetId, revision); return summary ? [summary] : [];
+          });
+          if (digest(expected) !== digest(prepared.executionSummaries)) fail('invalid_studio_storage');
+        }
+        if (prepared.purposes?.includes('rule-execution') && !prepared.executionSummaries?.length) fail('invalid_studio_storage');
+        if (prepared.contributions !== undefined) {
+          if (!Array.isArray(prepared.contributions)) fail('invalid_studio_storage');
+          for (const snapshot of prepared.contributions) {
+            const contribution = system.contributions?.find(item => item.id === snapshot.contributionId), revision = contribution?.revisions.find(item => item.revision === snapshot.revision);
+            if (!contribution || !revision || snapshot.sha256 !== revision.sha256 || snapshot.sourceProjectId !== contribution.sourceProjectId || snapshot.sourceTaskId !== contribution.sourceTaskId || snapshot.title !== revision.candidate.title || digest(snapshot.report) !== digest(revision.report) || digest(snapshot.baseRefs) !== digest(revision.baseRefs)) fail('invalid_studio_storage');
+            if (snapshot.assetId ? !prepared.items.some(item => item.assetId === snapshot.assetId && item.revision === snapshot.assetRevision) : !snapshot.ref || !prepared.refs.some(ref => digest(ref) === digest(snapshot.ref))) fail('invalid_studio_storage');
+          }
+        }
         sources(prepared.refs); checks(prepared.checks); strings(prepared.limitations); strings(prepared.excluded); prepared.targetProjectIds.forEach(identity); text(prepared.summary, 20_000, false); text(prepared.scope, 20_000, false);
         if (confirmedAt !== undefined && !Number.isFinite(Date.parse(confirmedAt))) fail('invalid_studio_storage');
         for (const result of publication.results) { if (!['studio-source', 'sap-metric', 'sap-method'].includes(result.module) || !['succeeded', 'failed', 'unknown'].includes(result.status)) fail('invalid_studio_storage'); text(result.detail); sources(result.refs); }
@@ -104,7 +170,7 @@ export class StudioStore {
     try { fs.renameSync(temporary, this.file); const dir = fs.openSync(this.root, 'r'); try { fs.fsyncSync(dir); } finally { fs.closeSync(dir); } } catch (error) { try { fs.unlinkSync(temporary); } catch {} throw error; }
   }
   private requireSystem(index: Index, id: string): StudioSystem { const found = index.systems.find(s => s.id === uuid(id)); return found || fail('studio_not_found', 404); }
-  private writable(system: StudioSystem) { if (this.options.isReadOnly?.(system.projectId)) fail('studio_project_read_only', 409); }
+  private writable(system: StudioSystem) { if (this.options.isReadOnly?.(studioExecutionOwner(system).projectId)) fail('studio_project_read_only', 409); }
   private mutate<T>(id: string, change: (system: StudioSystem) => T, feedbackOnly = false): T {
     const index = this.load(); const system = this.requireSystem(index, id); if (!feedbackOnly) this.writable(system);
     const result = change(system); system.revision++; system.updatedAt = now(); this.save(index); return clone(result);
@@ -112,9 +178,118 @@ export class StudioStore {
   create(input: StudioCreateInput): StudioSystem {
     const index = this.load(); const createdAt = now(); const topicId = randomUUID();
     const system: StudioSystem = { id: randomUUID(), revision: 1, name: text(input.name, 200, false), projectId: identity(input.projectId), taskId: identity(input.taskId), currentTopicId: topicId, usageProjectIds: [], usageTasks: [],
+      ...(input.enterpriseId === undefined ? {} : { enterpriseId: identity(input.enterpriseId) }),
       topics: [{ id: topicId, title: text(input.topicTitle, 200, false), goal: text(input.goal, 20_000, false), scope: text(input.scope ?? ''), status: 'building', progress: '', coverage: [], gaps: [] }],
       materials: (input.materials ?? []).map(m => this.material(m)), assets: [], assetRefs: [], workItems: [], feedback: [], publications: [], adoptions: [], graphs: [], uses: [], createdAt, updatedAt: createdAt };
     this.writable(system); index.systems.push(system); this.save(index); return clone(system);
+  }
+  associateEnterprise(id: string, input: { enterpriseId: string; expectedRevision: number }): StudioSystem {
+    return this.mutate(id, system => {
+      if (positive(input.expectedRevision) !== system.revision) fail('studio_conflict', 409);
+      const enterpriseId = identity(input.enterpriseId);
+      if (system.enterpriseId !== undefined && system.enterpriseId !== enterpriseId) fail('studio_enterprise_conflict', 409);
+      system.enterpriseId = enterpriseId; return system;
+    });
+  }
+  /** Host verifies the new owner and enterprise before saving this business association. */
+  resumeMaintenance(id: string, input: { projectId: string; taskId: string; expectedRevision: number }): StudioSystem {
+    return this.mutate(id, system => {
+      if (positive(input.expectedRevision) !== system.revision) fail('studio_conflict', 409);
+      const owner = { projectId: identity(input.projectId), taskId: identity(input.taskId) };
+      if (this.options.isReadOnly?.(owner.projectId)) fail('studio_project_read_only', 409);
+      const previousOwner = studioExecutionOwner(system);
+      system.maintenanceHistory ??= [];
+      system.maintenanceHistory.push({ ...owner, previousOwner, at: now() });
+      system.maintenanceOwner = owner; return system;
+    }, true);
+  }
+  private contributionContent(input: StudioContributionContent, projectId: string, taskId: string): StudioContributionContent {
+    if (!['enterprise', 'task'].includes(input.scope)) fail('invalid_studio_contribution_scope');
+    const report = sourceRef(input.report);
+    if (!['task', 'data'].includes(report.authority) || report.projectId !== projectId || report.taskId !== taskId) fail('studio_contribution_report_mismatch', 403);
+    const candidate = input.candidate;
+    if (!object(candidate) || !['business', 'concept', 'rule', 'ontology', 'binding', 'hypothesis', 'strategy', 'sap-metric', 'sap-method'].includes(candidate.kind)) fail('invalid_studio_contribution_candidate');
+    return { scope: input.scope, report, sourceRefs: sources(input.sourceRefs), baseRefs: sources(input.baseRefs), baseSystemRevision: positive(input.baseSystemRevision),
+      candidate: { kind: candidate.kind, title: text(candidate.title, 500, false), body: text(candidate.body, 524_288, false), scope: text(candidate.scope, 20_000, false), ...(candidate.reason === undefined ? {} : { reason: text(candidate.reason) }) } };
+  }
+  /** A task-owned proposal can be retained while construction is archived; it never writes a formal asset. */
+  contribute(id: string, input: StudioContributeInput): StudioContribution {
+    return this.mutate(id, system => {
+      const projectId = identity(input.sourceProjectId), taskId = identity(input.sourceTaskId);
+      if (this.options.isReadOnly?.(projectId)) fail('studio_project_read_only', 409);
+      system.contributions ??= [];
+      let contribution = input.contributionId ? system.contributions.find(item => item.id === uuid(input.contributionId)) : undefined;
+      if (input.contributionId && !contribution) fail('studio_contribution_not_found', 404);
+      if (contribution) {
+        if (contribution.sourceProjectId !== projectId || contribution.sourceTaskId !== taskId) fail('studio_contribution_owner_mismatch', 403);
+        if (input.expectedRevision !== contribution.revision) fail('studio_contribution_conflict', 409);
+      } else if (input.expectedRevision !== undefined && input.expectedRevision !== 0) fail('studio_contribution_conflict', 409);
+      const baseSystemRevision = input.baseSystemRevision === undefined ? system.revision : positive(input.baseSystemRevision);
+      if (baseSystemRevision !== system.revision) fail('studio_contribution_base_conflict', 409);
+      const content = this.contributionContent({ ...input, baseRefs: input.baseRefs ?? [], baseSystemRevision }, projectId, taskId), createdAt = now();
+      // Validate new task proposals without reinterpreting or rewriting historical contribution bodies.
+      if (parseFoundationContent(content.candidate.body).kind === 'invalid') fail('invalid_studio_foundation');
+      const revision: StudioContributionRevision = { ...content, revision: (contribution?.revision ?? 0) + 1, sha256: digest(content), createdAt };
+      if (!contribution) { contribution = { id: randomUUID(), revision: 0, sourceProjectId: projectId, sourceTaskId: taskId, scope: input.scope, revisions: [], createdAt, updatedAt: createdAt }; system.contributions.push(contribution); }
+      contribution.revision = revision.revision; contribution.scope = revision.scope; contribution.revisions.push(revision); contribution.updatedAt = createdAt; return contribution;
+    }, true);
+  }
+  private contributionLink(input: StudioContributionLink): StudioContributionLink {
+    if (!Number.isFinite(Date.parse(input.at))) fail('invalid_studio_contribution_link');
+    if (input.ref !== undefined) {
+      if (input.assetId !== undefined || input.assetRevision !== undefined) fail('invalid_studio_contribution_target');
+      const ref = sourceRef(input.ref);
+      if (!['sap-metric', 'sap-method'].includes(ref.authority) || ref.sha256 === undefined) fail('invalid_studio_contribution_target');
+      return { contributionRevision: positive(input.contributionRevision), ref, at: input.at };
+    }
+    if (input.assetId === undefined || input.assetRevision === undefined) fail('invalid_studio_contribution_target');
+    return { contributionRevision: positive(input.contributionRevision), assetId: uuid(input.assetId), assetRevision: positive(input.assetRevision), at: input.at };
+  }
+  private contributionBase(system: StudioSystem, revision: StudioContributionRevision): void {
+    for (const ref of revision.baseRefs.filter(ref => ref.authority === 'studio-source')) {
+      let authority = system;
+      if (ref.locator !== undefined && ref.locator !== system.id) {
+        try { authority = this.get(ref.locator); } catch { fail('studio_contribution_base_conflict', 409); }
+        if (!system.enterpriseId || authority.enterpriseId !== system.enterpriseId) fail('studio_contribution_base_conflict', 409);
+      }
+      const asset = authority.assets.find(asset => asset.id === ref.id), formal = asset?.revisions.find(item => item.revision === asset.formalRevision);
+      if (!formal || ref.projectId !== undefined && ref.projectId !== authority.projectId || ref.version !== String(formal.revision) || ref.sha256 !== formal.sha256
+        || asset?.issue?.affectedRevision === formal.revision || asset?.issueHistory?.some(issue => issue.affectedRevision === formal.revision)
+        || !authority.publications.some(publication => publication.preview.confirmedAt && publication.preview.items.some(item => item.assetId === ref.id && item.revision === formal.revision && item.sha256 === formal.sha256))) fail('studio_contribution_base_conflict', 409);
+    }
+  }
+  linkContribution(id: string, input: StudioLinkContributionInput): StudioContribution {
+    return this.mutate(id, system => {
+      const contribution = system.contributions?.find(item => item.id === uuid(input.contributionId));
+      if (!contribution) fail('studio_contribution_not_found', 404);
+      if (contribution.revision !== positive(input.expectedContributionRevision)) fail('studio_contribution_conflict', 409);
+      if (contribution.scope !== 'enterprise') fail('studio_contribution_task_local', 409);
+      if (!system.enterpriseId) fail('studio_enterprise_required', 409);
+      const revision = contribution.revisions.at(-1)!, link = this.contributionLink({ contributionRevision: contribution.revision, assetId: input.assetId, assetRevision: input.assetRevision, ...(input.ref ? { ref: input.ref } : {}), at: now() });
+      if (link.ref) {
+        if (revision.candidate.kind !== link.ref.authority || !system.assetRefs.some(ref => digest(ref) === digest(link.ref))) fail('studio_contribution_target_changed', 409);
+      } else {
+        const asset = system.assets.find(asset => asset.id === link.assetId);
+        if (!asset || asset.candidateRevision !== link.assetRevision || asset.kind !== revision.candidate.kind) fail('studio_contribution_target_changed', 409);
+        if (asset.formalRevision !== null && !revision.baseRefs.some(ref => ref.authority === 'studio-source' && (ref.locator === undefined || ref.locator === system.id) && ref.id === asset.id && ref.version === String(asset.formalRevision))) fail('studio_contribution_base_conflict', 409);
+      }
+      this.contributionBase(system, revision);
+      if (contribution.linked) { contribution.linkHistory ??= []; contribution.linkHistory.push(contribution.linked); }
+      contribution.linked = link; contribution.updatedAt = now(); return contribution;
+    });
+  }
+  private publicationContributions(system: StudioSystem, items: StudioPublicationItem[], refs: StudioSourceRef[]): StudioContributionSnapshot[] {
+    const snapshots: StudioContributionSnapshot[] = [];
+    for (const contribution of system.contributions ?? []) {
+      const link = contribution.linked;
+      if (!link || !(link.assetId ? items.some(item => item.assetId === link.assetId && item.revision === link.assetRevision) : link.ref && refs.some(ref => digest(ref) === digest(link.ref)))) continue;
+      const revision = contribution.revisions.at(-1)!;
+      if (contribution.scope !== 'enterprise' || link.contributionRevision !== contribution.revision) fail('studio_contribution_changed', 409);
+      this.contributionBase(system, revision);
+      snapshots.push({ contributionId: contribution.id, revision: revision.revision, sha256: revision.sha256, sourceProjectId: contribution.sourceProjectId, sourceTaskId: contribution.sourceTaskId, title: revision.candidate.title, report: revision.report, baseRefs: revision.baseRefs,
+        ...(link.assetId ? { assetId: link.assetId, assetRevision: link.assetRevision } : { ref: link.ref }) });
+    }
+    return snapshots;
   }
   saveAsset(id: string, input: StudioSaveAssetInput): StudioAsset {
     const kinds: StudioAssetKind[] = ['business', 'concept', 'rule', 'ontology', 'binding', 'hypothesis', 'strategy'];
@@ -127,6 +302,20 @@ export class StudioStore {
       else { if (input.expectedRevision !== undefined && input.expectedRevision !== 0) fail('studio_asset_conflict', 409); asset = { id: randomUUID(), kind: input.kind, topicId, revisions: [], candidateRevision: null, formalRevision: null }; system.assets.push(asset); }
       if (input.readyForPublication !== undefined && typeof input.readyForPublication !== 'boolean') fail('invalid_studio_publication_readiness');
       const content = { title: text(input.title, 500, false), body: text(input.body, 524_288, false), scope: text(input.scope, 20_000, false), sources: sources(input.sources), dependencies: sources(input.dependencies ?? []), checks: checks(input.checks ?? []), limitations: strings(input.limitations ?? []), readyForPublication: input.readyForPublication ?? false, reason: text(input.reason ?? '') };
+      const foundation = parseFoundationContent(content.body);
+      if (foundation.kind === 'invalid') fail('invalid_studio_foundation');
+      if (foundation.kind === 'unsupported' && content.readyForPublication) fail('unsupported_studio_foundation');
+      const coverage = parseCoverageContent(content.body);
+      if (coverage.kind === 'invalid') fail('invalid_studio_coverage');
+      if (coverage.kind === 'unsupported' && content.readyForPublication) fail('unsupported_studio_coverage');
+      if (coverage.kind === 'supported' && coverage.report) {
+        if (asset.kind !== 'business') fail('studio_coverage_asset_kind');
+        const scope = coverage.report.scope;
+        if (scope.enterpriseId !== system.enterpriseId || scope.systemId !== system.id || scope.topicId !== asset.topicId) fail('studio_coverage_scope_mismatch', 409);
+        const embedded = coverageReferences(coverage.report);
+        content.sources = sources([...new Map([...content.sources, ...embedded].map(ref => [coverageRefIdentity(ref), ref])).values()]);
+        content.dependencies = sources([...new Map([...content.dependencies, ...embedded].map(ref => [coverageRefIdentity(ref), ref])).values()]);
+      }
       const extraction = input.extraction ? { method: text(input.extraction.method, 200, false), sourceRefs: sources(input.extraction.sourceRefs), failures: strings(input.extraction.failures), fallbacks: strings(input.extraction.fallbacks), reviewed: input.extraction.reviewed === true } : undefined;
       const revision: StudioAssetRevision = { ...content, ...(extraction ? { extraction } : {}), revision: (asset.revisions.at(-1)?.revision ?? 0) + 1, sha256: digest({ ...content, ...(extraction ? { extraction } : {}) }), createdAt: now() };
       asset.revisions.push(revision); asset.candidateRevision = revision.revision; return asset;
@@ -134,16 +323,30 @@ export class StudioStore {
   }
   preparePublication(id: string, input: StudioPublicationInput): StudioPublicationPreview {
     if (!Array.isArray(input.assetIds) || input.assetIds.length > 200 || new Set(input.assetIds).size !== input.assetIds.length) fail('invalid_studio_publication_items');
+    const selectedPurposes = publicationPurposes(input.purposes);
+    if (Object.hasOwn(input, 'executionSummaries')) fail('invalid_studio_publication_execution_summaries');
     return this.mutate(id, system => {
       const topicId = input.topicId ?? system.currentTopicId; if (!system.topics.some(t => t.id === topicId)) fail('studio_topic_not_found', 404);
+      const executionSummaries: StudioPublicationExecutionSummary[] = [];
       const items = input.assetIds.map(assetId => {
         const asset = system.assets.find(a => a.id === uuid(assetId)); if (!asset) fail('studio_asset_not_found', 404);
         const revision = asset.revisions.find(r => r.revision === (asset.candidateRevision ?? asset.formalRevision));
         if (!revision || !revision.readyForPublication || !revision.sources.length || revision.checks.some(c => c.status === 'fail' || c.status === 'unknown') || (revision.extraction && !revision.extraction.reviewed)) fail('studio_source_not_ready', 409);
+        const foundation = parseFoundationContent(revision.body);
+        if (foundation.kind === 'invalid' || foundation.kind === 'unsupported') fail('studio_source_not_ready', 409);
+        const coverage = parseCoverageContent(revision.body);
+        if (coverage.kind === 'invalid' || coverage.kind === 'unsupported') fail('studio_source_not_ready', 409);
+        const execution = executionSummary(asset.id, revision); if (execution) {
+          executionSummaries.push(execution);
+          if (selectedPurposes?.includes('rule-execution') && ((['definition', 'mapping', 'computation'] as const).some(key => foundation.profile?.readiness?.[key]?.status !== 'pass') || !revision.checks.some(check => check.name === 'rule-execution' && check.status === 'pass'))) fail('studio_rule_execution_not_ready', 409);
+        }
         return { assetId: asset.id, revision: revision.revision, sha256: revision.sha256, title: revision.title, kind: asset.kind };
       });
       const refs = sources(input.refs ?? []); if (!items.length && !refs.length) fail('empty_studio_publication');
-      const content = { id: randomUUID(), systemRevision: system.revision, topicId, items, refs, summary: text(input.summary, 20_000, false), scope: text(input.scope, 20_000, false), checks: checks(input.checks ?? []), limitations: strings(input.limitations ?? []), excluded: strings(input.excluded ?? []), targetProjectIds: (input.targetProjectIds ?? []).map(identity), createdAt: now() };
+      const contributions = this.publicationContributions(system, items, refs);
+      const purposes = selectedPurposes ?? (executionSummaries.length ? ['definition-reference' as const] : undefined);
+      if (purposes?.includes('rule-execution') && !executionSummaries.length) fail('studio_rule_execution_required', 409);
+      const content = { id: randomUUID(), systemRevision: system.revision, topicId, items, refs, ...(contributions.length ? { contributions } : {}), ...(purposes ? { purposes } : {}), ...(executionSummaries.length ? { executionSummaries } : {}), summary: text(input.summary, 20_000, false), scope: text(input.scope, 20_000, false), checks: checks(input.checks ?? []), limitations: strings(input.limitations ?? []), excluded: strings(input.excluded ?? []), targetProjectIds: (input.targetProjectIds ?? []).map(identity), createdAt: now() };
       if (content.checks.some(c => c.status !== 'pass')) fail('studio_publication_not_ready', 409);
       const preview = { ...content, fingerprint: digest(content) };
       system.publications.push({ preview, results: [] }); return preview;
@@ -159,6 +362,7 @@ export class StudioStore {
       const publication = system.publications.find(p => p.preview.id === previewId)!;
       const { fingerprint: savedFingerprint, confirmedAt: _confirmedAt, ...prepared } = publication.preview;
       if (savedFingerprint !== fingerprint || digest(prepared) !== fingerprint) fail('studio_publication_changed', 409);
+      if (digest(this.publicationContributions(system, prepared.items, prepared.refs)) !== digest(prepared.contributions ?? [])) fail('studio_contribution_changed', 409);
       for (const item of publication.preview.items) {
         const asset = system.assets.find(a => a.id === item.assetId);
         const revision = asset?.revisions.find(r => r.revision === item.revision);

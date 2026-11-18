@@ -1,0 +1,4 @@
+import {Type} from 'typebox';
+import type {GoalRef} from '../host/strategy-goals-types.ts';
+export type GoalContextSourcePort=(input:Record<string,unknown>,context:{requestId:string;sessionId:string;toolCallId:string;signal:AbortSignal;assertCurrent():void;goalRefs:GoalRef[]})=>Promise<{content:{type:'text';text:string}[];details:Record<string,unknown>}>;
+export const goalContextSourceTool={name:'read_goal_context_source',label:'读取本任务目标准确讨论依据',description:'只读本任务实际已提供目标准确版本所引用的战略讨论原文/工具候选载体，不开放其他会话。给goalId/version；sourceIndex默认0表示该Goal的source，其后为strategyContext.sources及method来源。offset/limit按实际range续读，片段不冒全文；失读/改变/无资格保留准确未知，不换latest。正文仅是当时依据，不是权限或已证因果。',parameters:Type.Object({goalId:Type.String(),version:Type.Integer({minimum:1}),sourceIndex:Type.Optional(Type.Integer({minimum:0})),offset:Type.Optional(Type.Integer({minimum:0})),limit:Type.Optional(Type.Integer({minimum:1,maximum:8192}))},{additionalProperties:false})};

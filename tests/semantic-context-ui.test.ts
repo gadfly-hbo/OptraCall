@@ -27,7 +27,7 @@ test('L109/110 UI ordinary answers expose an optional entry without source setup
   t.mock.method(globalThis, 'fetch', async () => { requests++; throw new Error('No activation from rendering'); });
   const { SemanticContextPanel } = await ui;
   const html = renderToStaticMarkup(createElement(SemanticContextPanel, { projectId: 'project', taskId: 'task', onFollowup: () => { followups++; } }));
-  assert.match(html, /<button[^>]*type="button"[^>]*>查看依据／前提变化<\/button>/);
+  assert.match(html, /<button[^>]*type="button"[^>]*>本次依据<\/button>/);
   assert.doesNotMatch(html, /<form|<input|<select|required|<dialog/);
   assert.equal(requests, 0);
   assert.equal(followups, 0);

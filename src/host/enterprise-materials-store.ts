@@ -220,7 +220,7 @@ export class EnterpriseMaterialsStore {
   async referenceIndex(options: { readOnly?: boolean } = {}) {
     const index = this.load(options.readOnly);
     return { storeId: index.storeId, materials: index.materials.map(material => ({
-      materialId: material.id, enabled: material.enabled,
+      materialId: material.id, enabled: material.enabled, title: material.draft.title, activeRevisionId: material.activeRevisionId,
       revisions: material.revisions.map(revision => ({ revisionId: revision.revisionId, number: revision.number, title: revision.title, scope: revision.scope, effectiveTime: revision.effectiveTime, bodySha256: revision.bodySha256, ...(options.readOnly ? { createdAt: revision.createdAt } : {}) })),
     })) };
   }

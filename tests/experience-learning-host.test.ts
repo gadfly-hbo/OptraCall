@@ -1,3 +1,4 @@
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -26,7 +27,7 @@ test('M6 actual Host/Pi/native/business stores: closed historical sources, optio
   await readJson(await host.request('/api/cases/storage/initialize', 'POST', {}));
   const { project: oldProject } = await readJson(await host.request('/api/projects', 'POST', { name: '原历史合成项目' }), 201);
   const { task: oldTask } = await readJson(await host.request(`/api/projects/${oldProject.id}/tasks`, 'POST', { name: '原任务' }), 201);
-  let { case: oldCase } = await readJson(await host.request('/api/cases', 'POST', { operationId: randomUUID(), title: 'M6合成历史事项' }), 201);
+  let { case: oldCase } = await readJson(await host.request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: 'M6合成历史事项' })), 201);
   await readJson(await host.request(`/api/cases/${oldCase.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: oldCase.revision, projectId: oldProject.id }));
   oldCase = (await readJson(await host.request(`/api/cases/${oldCase.id}`))).case;
   provider.setResponder(({ recentToolResults }) => recentToolResults.length ? { text: '有限策略并非已执行。' } : { calls: [{ name: 'save_case_decision_draft', arguments: { kind: 'strategy', expectedRevision: 0, payload: { title: '先核时点', proposal: 'M6_EXACT_HISTORICAL_STRATEGY，效果未验证。' } } }] });
@@ -90,7 +91,7 @@ test('S6 fixed L2 evidence survives working-file changes and reaches Case, human
   await writeFile(metadataPath, JSON.stringify(metadata, null, 2) + '\n');
   await f.restart();
   await readJson(await f.request('/api/cases/storage/initialize', 'POST', {}));
-  let { case: decisionCase } = await readJson(await f.request('/api/cases', 'POST', { operationId: randomUUID(), title: 'S6合成口径复核' }), 201);
+  let { case: decisionCase } = await readJson(await f.request('/api/cases', 'POST', await withCaseGoal(f, { operationId: randomUUID(), title: 'S6合成口径复核' })), 201);
   await readJson(await f.request(`/api/cases/${decisionCase.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: decisionCase.revision, projectId: f.projectId }));
   decisionCase = (await readJson(await f.request(`/api/cases/${decisionCase.id}`))).case;
   const reportPath = '060_reports/s6-fixed.md', attachmentPath = '020_clean/s6-basis.json';

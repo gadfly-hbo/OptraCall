@@ -6,7 +6,7 @@ import type { ProjectStore, ProjectRecord, TaskRecord } from './project-store.ts
 import { ProjectStoreFault } from './project-store.ts';
 import type { CaseStore } from './case-store.ts';
 import type { ConfigurationStore, RuntimeModelConfiguration } from './config-store.ts';
-import { createAgentSessionDomain, type AgentSessionDomain, type SessionContext } from './agent-sessions.ts';
+import { createAgentSessionDomain, type AgentSessionDomain, type SessionContext, type SessionLease } from './agent-sessions.ts';
 import { createMetricLibrary } from '../../extensions/business-plugins/metric-factory/library/store.ts';
 import { createProjectEnablement } from '../../extensions/business-plugins/metric-factory/project/enablement.ts';
 import type { ConclusionReviewSelection } from './conclusion-review-contract.ts';
@@ -18,7 +18,7 @@ export function createVerificationFeature(options: {
   conclusionReview?: {
     prepare(projectId: string, taskId: string, selection: ConclusionReviewSelection, ifMatch?: string): Promise<CreateVerificationInput>;
     assertAuthorized(record: VerificationRecord): void | Promise<void>;
-    admit(owner: VerificationOwner): void | Promise<void>;
+    admit(owner: VerificationOwner, parentContext?: SessionContext<Owner>): void | Promise<void>;
   };
   dataRoot: string; codeRoot: string; projects: ProjectStore; cases: CaseStore; configuration: ConfigurationStore;
   projectSessions: AgentSessionDomain<Owner>;
@@ -104,7 +104,10 @@ export function createVerificationFeature(options: {
     if (text.length > 20_000) fail('verification_revision_materials_too_large', 400);
     return text;
   }
-  const registration: Parameters<typeof createVerificationSessions>[0] = { conclusionReview: options.conclusionReview, store, codeRoot: options.codeRoot, resourceRoot: path.join(dataRoot, 'pi'),
+  const registration: Parameters<typeof createVerificationSessions>[0] = { conclusionReview: options.conclusionReview ? {
+    ...options.conclusionReview,
+    admit: (owner, parentContext) => options.conclusionReview!.admit(owner, parentContext as SessionContext<Owner> | undefined),
+  } : undefined, store, codeRoot: options.codeRoot, resourceRoot: path.join(dataRoot, 'pi'),
     managementPorts: options.managementPorts, configuration: options.availableConfiguration, mutate, isClosing: options.isClosing,
     admit: async owner => { if (options.isClosing()) fail('host_closing', 503); await pair(owner.projectId, owner.taskId, true); },
     admitRevision: async owner => { const original = await pair(owner.projectId, owner.taskId, true); if (projectSessions.busy(projectSessions.ref(original)) || original.task.lastRun?.status === 'running') fail('session_busy'); if (!options.availableConfiguration(original.task.configuration.id, original.task.configuration.revision)) fail('configuration_required'); await assertFixedSources(owner); },
@@ -225,6 +228,15 @@ export function createVerificationFeature(options: {
   return { ...feature, assertAvailable,
     conclusionReview: {
       start: async (projectId: string, taskId: string, selection: ConclusionReviewSelection, ifMatch?: string) => { assertAvailable(); return feature.startReview(projectId, taskId, selection, ifMatch); },
+      runForParent: async (projectId: string, taskId: string, selection: ConclusionReviewSelection, parent: Pick<SessionLease<Owner>, 'context' | 'onCancel'>, ifMatch?: string) => {
+        assertAvailable();
+        const assertCurrent = async () => {
+          const original = await pair(projectId, taskId, true);
+          if (!projectSessions.owns(projectSessions.ref(original), parent.context)) fail('generation_cancelled');
+          if (original.task.lastRun?.status !== 'completed') fail('conclusion_review_parent_incomplete');
+        };
+        return feature.runReviewForParent(projectId, taskId, selection, { context: parent.context, onCancel: parent.onCancel, assertCurrent }, ifMatch);
+      },
       read: feature.readReview, list: feature.listReviews, stop: feature.stopReview, readFixedReport: feature.readFixedReviewReport, revalidateActive: feature.revalidateReviews,
       legacyState: async (projectId: string, taskId: string) => {
         const state = await feature.legacyState(projectId, taskId);
@@ -253,7 +265,16 @@ export function createVerificationFeature(options: {
     readFixedAuthor: feature.readFixedAuthor,
     revisionBusy: async (projectId: string, taskId: string) => !storageUnavailable && (await store.list(projectId, taskId)).some(record => record.authorRevision?.status === 'running'),
     reconcileInterrupted: async () => { try { return await store.reconcileInterrupted(); } catch { storageUnavailable = true; return []; } },
-    busy: async (projectId: string) => storageUnavailable ? false : feature.busy(projectId),
+    busy: async (projectId: string, taskId?: string) => storageUnavailable ? false : feature.busy(projectId, taskId),
+    stopForTask: async (projectId: string, taskId: string) => {
+      await pair(projectId, taskId);
+      const results = await Promise.allSettled([
+        revisionDomain.closeAll({ projectId }, record => record.taskId === taskId),
+        feature.stopForTask(projectId, taskId),
+      ]);
+      const failed = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+      if (failed.length) throw new AggregateError(failed.map(result => result.reason), 'verification_stop_failed');
+    },
     closeAll: async (filter: { projectId?: string; provider?: string } = {}) => {
       if (storageUnavailable) return;
       const results = await Promise.allSettled([revisionDomain.closeAll(filter), feature.closeAll(filter)]);

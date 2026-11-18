@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-12T13:04:13.380615+00:00",
+  "instruction": "完成 Git／CI／main 交付，并切换服务及更新 MacBook。目标企业基础层建设仍不启动，等我提供资料后再推进。",
+  "scope": [
+    "I08 Git/CI/main delivery",
+    "Mac mini service adoption",
+    "MacBook main update and adoption"
+  ],
+  "excluded": [
+    "M01-M05 enterprise foundation construction",
+    "real-model business experiments",
+    "SDK upgrade or modification"
+  ],
+  "baseHead": "87eef1db50667e3e69c827f6f897bf7d57ccb03a",
+  "fetchedMain": "e0d41043594fb96e4d6e0d0d665467fd40ba137a",
+  "candidateFilesVerified": 15,
+  "syncTargetsConfigured": false
+}

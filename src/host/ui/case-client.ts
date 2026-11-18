@@ -1,8 +1,10 @@
-import type { ArtifactInput, CaseContextSelection, CaseDetail, CaseList, CaseMutation, CaseRecord, CaseStatus, CaseStorageStatus, OperationReceipt, ProjectWorkInput, ProjectWorkRecord, WorkEvent } from '../case-types.ts';
+import type { GoalDraftInput, GoalOperationReceipt, GoalRef, GoalVersion, StrategyGoalsIndex, StrategyGoalRecord } from '../strategy-goals-types.ts';
+import type { ArtifactInput, CaseContextSelection, CaseDetail, CaseGoalBinding, CaseGoalBindingInput, CaseList, CaseMutation, CaseRecord, CaseStatus, CaseStorageStatus, OperationReceipt, ProjectWorkInput, ProjectWorkRecord, WorkEvent } from '../case-types.ts';
 import type { ClientProject } from './project-types.ts';
-export type { ArtifactInput, CaseContextSelection, CaseDetail, CaseList, CaseMutation, CaseRecord, CaseStatus, CaseStorageStatus, OperationReceipt, ProjectWorkInput, ProjectWorkRecord, WorkEvent };
+export type { GoalDraftInput, GoalOperationReceipt, GoalRef, GoalVersion, StrategyGoalsIndex, StrategyGoalRecord, ArtifactInput, CaseContextSelection, CaseDetail, CaseGoalBinding, CaseGoalBindingInput, CaseList, CaseMutation, CaseRecord, CaseStatus, CaseStorageStatus, OperationReceipt, ProjectWorkInput, ProjectWorkRecord, WorkEvent };
 
 const messages: Record<string, string> = {
+  strategy_goal_conflict: '目标已产生新版本，请保留输入并重新核对；未更改原目标关联。', goal_not_adopted: '此目标准确版本尚未采纳，先核对并明确采纳后再关联。', case_primary_goal_required: '请选择已采纳的主目标。', strategy_goals_unavailable: '目标记录暂不可读取，请保留输入并重试。', invalid_strategy_goal: '目标信息尚不完整，请核对名称、归属及成果要求。',
   revision_conflict: '记录已在其他窗口更新，请刷新并核对后再保存。', case_conflict: '事项已更新，请刷新并核对后再保存。',
   operation_conflict: '同一操作的内容已变化，请先核对原操作结果。', case_closed: '此 Case 已结束，请先重新打开。',
   project_archived: '项目已归档，请先恢复后继续操作。', case_store_uninitialized: '请先启用 Case 记录。',
@@ -26,7 +28,7 @@ export const status = () => request<CaseStorageStatus>('cases/storage');
 export const init = () => request<CaseStorageStatus>('cases/storage/initialize', 'POST', {});
 export const list = () => request<CaseList>('cases');
 export const detail = (id: string) => request<CaseDetail>(casePath(id));
-export const create = (input: { operationId: string; title: string; description?: string }) => request<{ case: CaseRecord }>('cases', 'POST', input);
+export const create = (input: { operationId: string; title: string; description?: string; goalBinding: CaseGoalBindingInput }) => request<{ case: CaseRecord }>('cases', 'POST', input);
 export const update = (id: string, input: CaseMutation & { title: string; description: string; judgement: string; nextStep: string }) => request<{ case: CaseRecord }>(casePath(id), 'PATCH', input);
 export const setStatus = (id: string, input: CaseMutation & { status: Exclude<CaseStatus, 'closed'> }) => request<{ case: CaseRecord }>(`${casePath(id)}/status`, 'POST', input);
 export const close = (id: string, input: CaseMutation & { reason: string }) => request<{ case: CaseRecord }>(`${casePath(id)}/close`, 'POST', input);
@@ -43,3 +45,13 @@ export const projectNote = (projectId: string, input: CaseMutation & { note: str
 export type ArtifactSelectionInput = ArtifactInput & { saveVersion?: boolean; expectedSha256?: string };
 export const saveArtifact = (id: string, input: CaseMutation & ArtifactSelectionInput) => request<{ case: CaseRecord }>(`${casePath(id)}/artifacts${input.saveVersion ? '/adopt' : ''}`, 'POST', input);
 export const unlinkArtifact = (id: string, artifactId: string, input: CaseMutation) => request<{ case: CaseRecord }>(`${casePath(id)}/artifacts/${encodeURIComponent(artifactId)}`, 'DELETE', input);
+
+export const strategyGoals = () => request<StrategyGoalsIndex>('strategy/goals');
+export const createGoalCandidate = (input: GoalDraftInput & { operationId: string }) => request<{ goal: GoalVersion }>('strategy/goals', 'POST', input);
+export const adoptGoalCandidate = (ref: GoalRef, input: { operationId: string; expectedVersion: number; decision: string }) => request<{ goal: GoalVersion }>(`strategy/goals/${encodeURIComponent(ref.goalId)}/adopt`, 'POST', { ...input, version: ref.version });
+export const goalRecord = (id: string) => request<{ goal: StrategyGoalRecord }>(`strategy/goals/${encodeURIComponent(id)}`);
+export const caseGoals = (id: string) => request<{ goalBinding: CaseGoalBinding | null; history: CaseGoalBinding[] }>(`${casePath(id)}/goals`);
+export const setCaseGoals = (id: string, input: CaseMutation & { goalBinding: CaseGoalBindingInput }) => request<{ goalBinding: CaseGoalBinding }>(`${casePath(id)}/goals`, 'POST', input);
+export const goalEnterprises = () => request<{ enterprises: { id: string; name: string }[] }>('studio/enterprises');
+
+export const goalOperation = (id: string) => request<{ operation: GoalOperationReceipt | null }>(`strategy/operations/${encodeURIComponent(id)}`);
