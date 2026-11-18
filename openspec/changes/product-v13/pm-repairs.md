@@ -15,6 +15,8 @@ PM 原报告位于 `/Users/bendandebaba/.codex/plans/optracall-architecture-prod
 
 五个 Skill 的独立测评、确版和启用另记；沿用已批准的 Analysis。本轮验证使用合成资料及本地协议端，保留真实业务、用户验收和正式运行采用边界。
 
+固定产品候选为 `36bd1c96a42b3d8ff56a4593fead6af7aae3545f`。本轮整仓 2,943 项通过、111 项跳过、0 项失败。规范轴和规格轴已对同一提交复验。118 份工程及复核回执已按 SHA-256 读回核对。[固定候选与回退](pm-review.md) · [原始回执索引](pm-verification.json)
+
 ## 逐项结果索引
 
 | 编号 | 普通用户操作和应回看的原记录 | 分项核验 |
