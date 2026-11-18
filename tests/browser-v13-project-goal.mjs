@@ -14,11 +14,11 @@ try{
   const api=async(route,method='GET',body)=>{const r=await host.request(route,method,body);const result=await r.json();assert.ok(r.ok,JSON.stringify(result));return result;};
   await api('/api/configuration','PUT',{name:'合成模型',provider:'openai-compatible',model:'only-browser-fixture',baseUrl:provider.baseUrl,apiKey:'synthetic-only'});
   provider.setResponder(()=>({text:'已收到选择的原目标。'}));
-  const draft={title:'测试季度完成目标',outcome:'按第一版营业日定义',strategies:['两家试点门店'],scope:{kind:'personal',id:'synthetic',name:'试点负责人'},perspective:'personal',usageContext:{kind:'personal',background:'旧版本的分店核对用途'},measurement:{kind:'deliverable',criterion:'原始日报'},baseline:{state:'pending',description:'差额待核'},responsible:'负责人'};
+  const draft={title:'测试季度完成目标',dueAt:'2027-01-14',resources:['北区旧版工时表'],necessaryConditions:['先核旧年度收货日'],outcome:'按第一版营业日定义',strategies:['两家试点门店'],scope:{kind:'personal',id:'synthetic',name:'试点负责人'},perspective:'personal',usageContext:{kind:'personal',background:'旧版本的分店核对用途'},measurement:{kind:'deliverable',criterion:'原始日报'},baseline:{state:'pending',description:'差额待核'},responsible:'负责人'};
   const {goal}=await api('/api/strategy/goals','POST',{...draft,operationId:randomUUID()});
   const route='/api/strategy/goals/'+goal.goalId;
   await api(route+'/adopt','POST',{operationId:randomUUID(),version:1,expectedVersion:1,decision:'采用第一版'});
-  await api(route+'/revisions','POST',{...draft,outcome:'第二版新区域口径',expectedVersion:1,operationId:randomUUID()});
+  await api(route+'/revisions','POST',{...draft,outcome:'第二版新区域口径',dueAt:'2028-02-16',resources:['南区新版资源'],necessaryConditions:['改用新版收货日'],expectedVersion:1,operationId:randomUUID()});
   await api(route+'/adopt','POST',{operationId:randomUUID(),version:2,expectedVersion:2,decision:'采用第二版'});
   browser=await chromium.launch({channel:'chrome',headless:true});
   const page=await browser.newPage({viewport:{width:1420,height:940}});page.setDefaultTimeout(10000);
@@ -36,7 +36,7 @@ try{
   await page.reload();
   const basis=page.getByRole('region',{name:'项目承接依据'});
   await basis.getByText(draft.outcome,{exact:true}).waitFor();await basis.getByText(draft.usageContext.background,{exact:true}).waitFor();
-  assert.ok(!(await basis.innerText()).includes('第二版新区域口径'));
+  const reopenedBasis=await basis.innerText();assert.ok(!reopenedBasis.includes('第二版新区域口径'));
   await work.getByRole('textbox',{name:/向.*提问/}).fill('核对准确旧目标');await click('发送',work);
   await work.getByText('已收到选择的原目标。',{exact:true}).waitFor();
   await click('新建第一个任务',work);
@@ -46,6 +46,10 @@ try{
   const prompts=provider.requests.map(r=>r.body.messages.filter(m=>m.role==='user').map(m=>providerMessageText(m.content)).join('\n'));
   assert.equal(prompts.length,2);
   for(const prompt of prompts){assert.ok(prompt.includes(draft.outcome));assert.ok(prompt.includes(draft.usageContext.background));assert.ok(!prompt.includes('第二版新区域口径'));}
+  for(const delivered of [...prompts,reopenedBasis]){
+    for(const selected of [draft.dueAt,...draft.resources,...draft.necessaryConditions])assert.ok(delivered.includes(selected),'所选 v1 缺少 '+selected);
+    for(const other of ['2028-02-16','南区新版资源','改用新版收货日'])assert.ok(!delivered.includes(other),'误用 v2 '+other);
+  }
   const projects=(await api('/api/projects')).projects;assert.equal(projects.length,1);assert.equal(projects[0].tasks.length,1);assert.equal(projects[0].goalOrigin.goal.version,1);
   const firstTask=projects[0].tasks[0],root='/api/projects/'+projects[0].id;
   const drawerPanel=page.locator('details.harness-panel').filter({hasText:'交接与依据'});
@@ -74,5 +78,5 @@ try{
   await dialog.getByLabel('默认任务模型').selectOption(config.id);await click('创建项目',dialog);await dialog.waitFor({state:'hidden'});
   const independent=(await api('/api/projects')).projects.find(p=>p.name==='独立项目无目标来源');
   assert.ok(independent);assert.equal(independent.goalOrigin,undefined);
-  assert.deepEqual(errors,[]);console.log(JSON.stringify({result:'PASS',goal:projects[0].goalOrigin,project:projects[0].id,task:projects[0].tasks[0].id,independent:independent.id,actualPiRequests:prompts.length,replayedCreation:writes[0].operationId,errors}));
+  assert.deepEqual(errors,[]);console.log(JSON.stringify({result:'PASS',goal:projects[0].goalOrigin,project:projects[0].id,task:projects[0].tasks[0].id,independent:independent.id,selectedRequirements:[draft.dueAt,...draft.resources,...draft.necessaryConditions],actualPiRequests:prompts.length,replayedCreation:writes[0].operationId,errors}));
 }finally{await browser?.close();vite.kill();await host.close();await provider.close();}

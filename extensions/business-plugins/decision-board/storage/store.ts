@@ -579,8 +579,8 @@ export function createDecisionBoardStore(options: { root: string }) {
     if (clean.decision === 'authorize' && itemSnapshot.status !== 'adopted') fail('authorization_requires_adopted_item');
     const previous = listActionAuthorizations(clean.taskId).at(-1);
     if ((previous?.authorizationId ?? null) !== clean.expectedPreviousAuthorizationId) fail('authorization_revision_conflict');
-    // Preserve the historical work source and record the later withdrawal quote.
-    if ('kind' in clean.source && clean.decision === 'revoke' && (!previous || previous.decision !== 'authorize' || canonical(previous.source) !== canonical(clean.source))) fail('authorization_scope_mismatch');
+    // A withdrawal identifies the original active authorization and its source.
+    if (clean.decision === 'revoke' && (!previous || previous.decision !== 'authorize' || canonical(previous.source) !== canonical(clean.source))) fail('authorization_scope_mismatch');
     const { expectedPreviousAuthorizationId, ...body } = clean;
     const record: BoardActionAuthorization = { ...body, authorizationId: randomUUID(), revision: (previous?.revision ?? 0) + 1, previousAuthorizationId: expectedPreviousAuthorizationId,
       requestSha256: digest, itemSnapshot, taskSnapshot, actorKind: 'user', createdAt: now() };

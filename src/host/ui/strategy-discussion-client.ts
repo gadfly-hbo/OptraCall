@@ -40,7 +40,12 @@ export async function readStrategyDiscussionSource(source: GoalDiscussionSourceR
 export const readStrategyDiscussionSources = (id: string, projectId: string) => request<{ sources: StrategyDiscussionSource[] }>(`${path(id)}/sources?projectId=${encodeURIComponent(projectId)}`);
 export const stopStrategyDiscussion = (id: string, expectedRequestId?: string) => request<{ stopped: boolean }>(`${path(id)}/stop`, 'POST', { ...(expectedRequestId ? { expectedRequestId } : {}) });
 export const closeStrategyDiscussion = (id: string) => request<{ closed: true }>(`${path(id)}/close`, 'POST', {});
-export interface DiscussionAdoptionInput { operationId: string; goalId: string; version: number; expectedVersion: number; goalContentSha256: string; decision: string }
+export const discussionAdoptionKey = (id:string, ref:Pick<GoalVersion,'goalId'|'version'>) =>
+  `optracall.discussion-goal-adoption.v1:${id}:${ref.goalId}:${ref.version}`;
+export function hasPendingDiscussionAdoption(id:string, ref:GoalVersion) {
+  try { return Boolean(sessionStorage.getItem(discussionAdoptionKey(id,ref))); } catch { return false; }
+}
+export interface DiscussionAdoptionInput { operationId: string; goalId: string; version: number; expectedVersion: number; expectedAdoptedVersion?: number | null; goalContentSha256: string; decision: string }
 export async function adoptDiscussionGoal(id: string, input: DiscussionAdoptionInput) { const result = await request<{ goal: GoalVersion }>(`${path(id)}/adopt`, 'POST', input); if (result.goal?.goalId !== input.goalId || result.goal?.version !== input.version || result.goal?.status !== 'adopted') throw new StrategyDiscussionRequestError('strategy_discussion_goal_mismatch', 409, true); return result; }
 export async function watchStrategyDiscussion(id: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal, endpoint = `/api/strategy/discussions${path(id)}/events`): Promise<void> {
   const response = await fetch(endpoint, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal });

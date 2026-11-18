@@ -139,3 +139,67 @@ test('a saved strategic reply supplied with an exact local Goal and frozen basis
   } finally {await writeFile(goalFile,bytes);}
   assert.equal(provider.requests.length,checks);
 });
+
+for (const operation of ['empty','local Goal'] as const) {
+  test('version exports after a local strategy operation lookup: '+operation,{timeout:60000},async t=>{
+    const provider=await startToolProvider(),host=await startTestHost();
+    t.after(async()=>{await host.close();await provider.close();});
+    const api=async(route:string,method='GET',input?:unknown,status=200)=>{
+      const response=await host.request(route,method,input),body=await response.json();
+      assert.equal(response.status,status,JSON.stringify({route,body}));return body;
+    };
+    const model={name:'合成本地',provider:'openai-compatible',baseUrl:provider.baseUrl,model:'local-receipt',apiKey:'synthetic-only'};
+    const configuration=(await api('/api/configuration','PUT',model)).configuration;
+    const operationId=randomUUID(),draft={title:'本地原目标',outcome:'留存一次合成观察',perspective:'personal',scope:{kind:'personal',id:'self',name:'本人'},
+      measurement:{kind:'deliverable',criterion:'可回看'},baseline:{state:'pending',description:'待核'},responsible:'本人'};
+    if(operation==='local Goal')await api('/api/strategy/goals','POST',{...draft,operationId},201);
+    const discussionId=randomUUID(),route='/api/strategy/discussions/'+discussionId;
+    await api('/api/strategy/discussions','POST',{operationId:discussionId},201);
+    const text='已按原记录整理本地策略。';
+    let returned=false;
+    provider.setResponder(turn=>{
+      if(!turn.recentToolResults.length)return {calls:[{name:'strategy_goals',arguments:{action:'operation',operationId}}]};
+      const result=JSON.parse(String(turn.recentToolResults.at(-1)!.content));
+      assert.equal(result.operation?.result?.title??null,operation==='empty'?null:draft.title);returned=true;
+      return {text};
+    });
+    await api(route+'/messages','POST',{requestId:randomUUID(),text:'查询指定操作，整理本地策略',expectedRevision:1},202);
+    let state;
+    for(let i=0;i<300;i++){state=await api(route);if(!state.busy&&state.replies.some((r:{text:string})=>r.text===text))break;await wait(25);}
+    const source=state.replies.find((r:{text:string})=>r.text===text)?.source;assert.ok(source&&returned);
+    const choice={expectedRevision:state.discussion.revision,source,options:'沿用当时记录',choice:'本地观察',rationale:'准确回查',assumptions:'待更新',unknowns:'后续待核'};
+    await api(route+'/versions','POST',choice,201);
+    const {goal}=await api('/api/strategy/goals','POST',{...draft,title:'交接本地稿',operationId:randomUUID(),source},201);
+    // A later use of this id must not turn the historical null into a new body.
+    if(operation==='empty')await api('/api/strategy/goals','POST',{...draft,title:'之后才写入的目标',operationId},201);
+    const version=route+'/versions/1',goalExport='/api/strategy/goals/'+goal.goalId+'/versions/1/export';
+    const count=provider.requests.length;
+    await api('/api/configuration','PUT',{...model,id:configuration.id,model:'next-model'});
+    for(const step of ['replaced','cleared']) {
+      if(step==='cleared')await api('/api/configuration','DELETE');
+      assert.equal((await api(version)).reply,text);
+      assert.ok((await api(version+'/export')).html.includes(text));
+      assert.ok((await api(goalExport)).html.includes('交接本地稿'));
+    }
+    const owner=JSON.parse(await readFile(path.join(host.dataRoot,'strategy-discussions',discussionId,'owner.json'),'utf8'));
+    const original=await readFile(owner.sessionFile);
+    const rows=()=>original.toString().trimEnd().split('\n').map(line=>JSON.parse(line));
+    const legacy=rows(),tool=legacy.find(row=>row.message?.role==='toolResult'&&row.message.toolName==='strategy_goals');
+    assert.ok(tool);
+    delete tool.message.details;
+    try {
+      await writeFile(owner.sessionFile,legacy.map(row=>JSON.stringify(row)).join('\n')+'\n');
+      assert.ok((await api(version+'/export')).html.includes(text));
+      const assistant=legacy.find(row=>row.message?.role==='assistant'&&row.message.content.some((part:{type:string;name?:string})=>part.type==='toolCall'&&part.name==='strategy_goals'));
+      const lookup=assistant.message.content.find((part:{type:string})=>part.type==='toolCall');
+      delete lookup.arguments.operationId;
+      await writeFile(owner.sessionFile,legacy.map(row=>JSON.stringify(row)).join('\n')+'\n');
+      const missing=await host.request(version+'/export');assert.equal(missing.ok,false);
+      assert.equal((await missing.json()).html,undefined);
+    } finally { await writeFile(owner.sessionFile,original); }
+    assert.equal((await api(version)).reply,text);
+    assert.deepEqual(await readFile(owner.sessionFile),original);
+    assert.equal(provider.requests.length,count);
+    t.diagnostic(JSON.stringify({operation,operationId,discussionId,source,goalId:goal.goalId,providerRequests:count}));
+  });
+}

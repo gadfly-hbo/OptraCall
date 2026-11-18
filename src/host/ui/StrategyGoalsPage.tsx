@@ -97,7 +97,7 @@ function GoalEditor({ active, handoff, suggestion, initial, record, index, enter
   suggestion?:GoalDraftInput; handoff?:ChoiceHandoff; initial?: GoalVersion; record?: StrategyGoalRecord; index: StrategyGoalsIndex; enterprises: StudioEnterpriseDirectory['enterprises'];
   metrics: api.LibraryEntry[]; metricsKnown: boolean;
   onSaved: () => Promise<void>; onClose: () => void; onManageMetrics: () => void;
-  confirmation?: { busy: boolean; locked: boolean; notice: ReactNode; onSubmit: (input: GoalDraftInput) => void };
+  confirmation?: { busy: boolean; locked: boolean; notice: ReactNode; compare: (input: GoalDraftInput) => ReactNode; onSubmit: (input: GoalDraftInput) => void };
 }) {
   const id = useId();
   const proposed = suggestion && initial ? { ...initial, ...suggestion } : suggestion ?? initial;
@@ -118,28 +118,28 @@ function GoalEditor({ active, handoff, suggestion, initial, record, index, enter
   const selectedMetric = metricOptions.find(metric => metric.id === fields.metricId && metric.version === fields.metricVersion && metric.metricName === fields.metricName);
   const change = <K extends keyof EditorFields>(key: K, value: EditorFields[K]) => setFields(old => ({ ...old, [key]: value }));
   const knownScopes = [...new Map(index.goals.map(x => current(x).scope).filter(x => x.kind === fields.scopeKind && (x.kind !== 'department' || x.enterpriseId === fields.enterpriseId)).map(x => [x.id, x])).values()];
+  const knownScope = fields.scopeKind === 'enterprise' ? enterprises.find(x => x.id === fields.scopeId) : knownScopes.find(x => x.id === fields.scopeId);
+  const scope: GoalScope = { kind: fields.scopeKind, id: knownScope?.id ?? (fields.scopeKind === 'personal' ? 'self' : fields.scopeId.trim()), name: knownScope?.name ?? fields.scopeName.trim(), ...(fields.scopeKind === 'department' && fields.enterpriseId ? { enterpriseId: fields.enterpriseId } : {}) };
+  const input: GoalDraftInput = {
+    title: fields.title.trim(), outcome: fields.outcome.trim(), perspective: fields.perspective, scope, responsible: fields.responsible.trim(),
+    measurement: fields.measureKind === 'quantitative' ? { kind: 'quantitative', sapMetric: { authority: 'sap-metric', id: fields.metricId, version: fields.metricVersion, metricName: fields.metricName }, ...(fields.target.trim() ? { target: fields.target.trim() } : {}) } : { kind: 'deliverable', criterion: fields.criterion.trim() },
+    baseline: { state: fields.baselineState, description: fields.baseline.trim() }, ...(fields.bsc.trim() ? { bscPerspective: fields.bsc.trim() } : {}), ...(fields.dueAt ? { dueAt: proposed?.dueAt?.slice(0,10) === fields.dueAt ? proposed.dueAt : fields.dueAt } : {}),
+    strategies: lines(fields.strategies), resources: lines(fields.resources), necessaryConditions: lines(fields.conditions),
+    ...(proposed?.usageContext && { usageContext: proposed.usageContext }),
+    ...(proposed?.roleSuggestion && { roleSuggestion: proposed.roleSuggestion }),
+    ...(proposed?.strategyChoice && { strategyChoice: proposed.strategyChoice }),
+    ...(proposed?.source && { source: proposed.source }),
+    ...(proposed?.strategyContext && { strategyContext: proposed.strategyContext }),
+    ...(handoff && {
+      strategyChoice: { discussionId: handoff.discussionId, version: handoff.version, contentSha256: handoff.contentSha256 },
+      source: handoff.source,
+      strategyContext: { ...proposed?.strategyContext, summary: proposed?.strategyContext?.summary || handoff.summary },
+    }),
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    const knownScope = fields.scopeKind === 'enterprise' ? enterprises.find(x => x.id === fields.scopeId) : knownScopes.find(x => x.id === fields.scopeId);
     if (fields.scopeKind === 'enterprise' && !knownScope) return;
     if (fields.scopeKind === 'department' && fields.enterpriseId && !enterprises.some(x => x.id === fields.enterpriseId)) return;
-    const scope: GoalScope = { kind: fields.scopeKind, id: knownScope?.id ?? (fields.scopeKind === 'personal' ? 'self' : fields.scopeId.trim()), name: knownScope?.name ?? fields.scopeName.trim(), ...(fields.scopeKind === 'department' && fields.enterpriseId ? { enterpriseId: fields.enterpriseId } : {}) };
-    const input: GoalDraftInput = {
-      title: fields.title.trim(), outcome: fields.outcome.trim(), perspective: fields.perspective, scope, responsible: fields.responsible.trim(),
-      measurement: fields.measureKind === 'quantitative' ? { kind: 'quantitative', sapMetric: { authority: 'sap-metric', id: fields.metricId, version: fields.metricVersion, metricName: fields.metricName }, ...(fields.target.trim() ? { target: fields.target.trim() } : {}) } : { kind: 'deliverable', criterion: fields.criterion.trim() },
-      baseline: { state: fields.baselineState, description: fields.baseline.trim() }, ...(fields.bsc.trim() ? { bscPerspective: fields.bsc.trim() } : {}), ...(fields.dueAt ? { dueAt: fields.dueAt } : {}),
-      strategies: lines(fields.strategies), resources: lines(fields.resources), necessaryConditions: lines(fields.conditions),
-      ...(proposed?.usageContext && { usageContext: proposed.usageContext }),
-      ...(proposed?.roleSuggestion && { roleSuggestion: proposed.roleSuggestion }),
-      ...(proposed?.strategyChoice && { strategyChoice: proposed.strategyChoice }),
-      ...(proposed?.source && { source: proposed.source }),
-      ...(proposed?.strategyContext && { strategyContext: proposed.strategyContext }),
-      ...(handoff && {
-        strategyChoice: { discussionId: handoff.discussionId, version: handoff.version, contentSha256: handoff.contentSha256 },
-        source: handoff.source,
-        strategyContext: { ...proposed?.strategyContext, summary: proposed?.strategyContext?.summary || handoff.summary },
-      }),
-    };
     if (confirmation) { confirmation.onSubmit(input); return; }
     void state.save(initial ? 'revise' : 'create', input, operationId => initial && record ? api.revise(record.id, { ...input, expectedVersion: record.currentVersion, operationId }) : api.create({ ...input, operationId }));
   };
@@ -155,7 +155,7 @@ function GoalEditor({ active, handoff, suggestion, initial, record, index, enter
     {fields.measureKind === 'deliverable' ? <Field id={`${id}-criterion`} label="成果核对标准"><textarea id={`${id}-criterion`} required rows={3} maxLength={4000} disabled={disabled} value={fields.criterion} onChange={e => change('criterion', e.target.value)} /></Field> : <><p className="case-help">从原Studio正式发布目录选择具体指标及准确包版本；定义和口径沿原SAP，选择不代表效果已经验证。<button type="button" className="text-button" disabled={disabled} onClick={onManageMetrics}>查看原SAP指标管理</button></p><Field id={`${id}-metric`} label="准确SAP指标与发布包版本"><select id={`${id}-metric`} required disabled={disabled} value={selectedMetric ? metricKey(selectedMetric) : ''} onChange={e => { const metric = metricOptions.find(value => metricKey(value) === e.target.value); setFields(old => ({ ...old, metricId: metric?.id ?? '', metricVersion: metric?.version ?? '', metricName: metric?.metricName ?? '' })); }}><option value="">请选择原目录中准确已发布的具体指标</option>{metricOptions.map(metric => <option key={metricKey(metric)} value={metricKey(metric)}>{metric.label}</option>)}</select>{!metricsKnown && <p className="case-help">原SAP发布目录暂不可读取，请在原Studio核对；未据此判定没有指标。</p>}{metricsKnown && !metricOptions.length && <p className="case-help">原目录尚无可选发布指标，可先在原Studio建设，或明确可核对的成果标准。</p>}{fields.metricId && !selectedMetric && <p className="case-help">旧准确引用保留：{fields.metricId} @ {fields.metricVersion} / {fields.metricName || '旧版尚未明确具体指标'}。本次新稿需从原目录明确选择；不会自动跟随最新版。</p>}</Field><Field id={`${id}-target`} label="当期衡量要求（可选）"><textarea id={`${id}-target`} rows={2} maxLength={4000} disabled={disabled} value={fields.target} onChange={e => change('target', e.target.value)} /></Field></>}
     <Field id={`${id}-baseline-state`} label="基线状态"><select id={`${id}-baseline-state`} disabled={disabled} value={fields.baselineState} onChange={e => change('baselineState', e.target.value as 'known' | 'pending')}><option value="pending">待补可比基线</option><option value="known">已有可核基线</option></select></Field><Field id={`${id}-baseline`} label={fields.baselineState === 'pending' ? '待补内容及影响' : '基线及来源说明'}><textarea id={`${id}-baseline`} required rows={2} maxLength={4000} disabled={disabled} value={fields.baseline} onChange={e => change('baseline', e.target.value)} /></Field>
     <details><summary>策略、资源与必要条件</summary>{([['strategies', '策略安排'], ['resources', '资源与约束'], ['conditions', '必要条件／待验证前提']] as const).map(([key, label]) => <Field key={key} id={`${id}-${key}`} label={`${label}（每行一项，可选）`}><textarea id={`${id}-${key}`} rows={3} maxLength={20000} disabled={disabled} value={fields[key]} onChange={e => change(key, e.target.value)} /></Field>)}</details>
-    {confirmation ? <><p className="case-help">本次确认只采用所见目标与GSA；不证明因果成立，不授权实际经营执行。</p>{confirmation.notice}<div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={confirmation.busy} onClick={onClose}>返回讨论</button><button type="submit" className="primary-button" disabled={disabled}>{confirmation.busy ? '正在保存…' : '确认采用目标／GSA'}</button></div></> : <><MutationNotice state={state} /><Actions state={state} label={initial ? '保存修订候选' : '保存候选目标'} onClose={onClose} /></>}
+    {confirmation ? <>{confirmation.compare(input)}<p className="case-help">本次确认只采用所见目标与GSA；不证明因果成立，不授权实际经营执行。</p>{confirmation.notice}<div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={confirmation.busy} onClick={onClose}>返回讨论</button><button type="submit" className="primary-button" disabled={disabled}>{confirmation.busy ? '正在保存…' : '确认采用目标／GSA'}</button></div></> : <><MutationNotice state={state} /><Actions state={state} label={initial ? '保存修订候选' : '保存候选目标'} onClose={onClose} /></>}
   </form></CaseDialog>;
 }
 
@@ -216,11 +216,13 @@ function DiscussionCandidateAdoption({ active, candidate, discussionId, index, e
   active: boolean; candidate: GoalVersion; discussionId: string; index: StrategyGoalsIndex; enterprises: StudioEnterpriseDirectory['enterprises']; metrics: api.LibraryEntry[]; metricsKnown: boolean;
   onManageMetrics: () => void; onClose: () => void; onAdopted: (ref: GoalRef) => Promise<void>;
 }) {
-  type Intent = { input: GoalDraftInput; draftId: string; adoptId: string; expectedVersion: number; phase: 'revise' | 'adopt'; target: GoalVersion };
-  const key = `optracall.discussion-goal-adoption.v1:${discussionId}:${candidate.goalId}:${candidate.version}`;
+  type Intent = { input: GoalDraftInput; draftId: string; adoptId: string; expectedVersion: number; expectedAdoptedVersion?: number | null; phase: 'revise' | 'adopt'; target: GoalVersion };
+  const key = discussionApi.discussionAdoptionKey(discussionId,candidate);
   const [restore] = useState(() => { try { const raw = sessionStorage.getItem(key); return { intent: raw ? JSON.parse(raw) as Intent : undefined, error: '' }; } catch { return { intent: undefined, error: '原采用请求暂存不可读取，请保留记录，暂不能重新提交。' }; } });
   const intent = useRef<Intent | undefined>(restore.intent), [busy, setBusy] = useState(false), [pending, setPending] = useState(Boolean(restore.intent)), [error, setError] = useState(restore.error);
-  const record = index.goals.find(item => item.id === candidate.goalId), alive = useRef(true);
+  const [record,setRecord] = useState(() => index.goals.find(item => item.id === candidate.goalId));
+  const [base,setBase] = useState(() => restore.intent?.target ?? candidate);
+  const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const preserve = () => sessionStorage.setItem(key, JSON.stringify(intent.current));
   const complete = async (goal: GoalVersion) => { if (goal.goalId !== candidate.goalId || goal.status !== 'adopted') throw new Error('采用回执的目标身份不一致，原请求保持。'); sessionStorage.removeItem(key); setPending(false); await onAdopted(refOf(goal)); };
@@ -229,26 +231,62 @@ function DiscussionCandidateAdoption({ active, candidate, discussionId, index, e
     const hash = detail.goalContentHashes[refKey(original.target)];
     if (!target || !hash || canonicalDraft(draftBody(target)) !== canonicalDraft(draftBody(original.target))) throw new Error('原候选内容或准确讨论来源未能核对，输入与原编号保持，没有采用其他版本。');
     original.phase = 'adopt'; preserve();
-    const result = await discussionApi.adoptDiscussionGoal(discussionId, { operationId: original.adoptId, goalId: target.goalId, version: target.version, expectedVersion: original.expectedVersion, goalContentSha256: hash, decision: '明确采用本次集中核对的目标与GSA内容，保留待验证前提；不授权实际经营执行。' });
+    const result = await discussionApi.adoptDiscussionGoal(discussionId, { operationId: original.adoptId, goalId: target.goalId, version: target.version, expectedVersion: original.expectedVersion, expectedAdoptedVersion:original.expectedAdoptedVersion, goalContentSha256: hash, decision: '明确采用本次集中核对的目标与GSA内容，保留待验证前提；不授权实际经营执行。' });
     await complete(result.goal);
   };
   const failed = (fault: unknown) => { if (alive.current) { setPending(Boolean(intent.current)); setError(fault instanceof Error ? fault.message : '采用结果尚未核实，原输入与操作编号保留。'); } };
+  const recompare = async (fault:unknown) => {
+    const original=intent.current;
+    const changed=(fault instanceof discussionApi.StrategyDiscussionRequestError || fault instanceof api.StrategyGoalsRequestError) &&
+      ['strategy_goal_adoption_changed','strategy_goal_conflict'].includes(fault.code);
+    if(!changed || !original) {failed(fault);return;}
+    // A revised candidate can already exist even though the adoption was definitively rejected.
+    // Keep its exact version and the editable fields when the user compares again.
+    if(original.phase==='adopt')setBase(original.target);
+    sessionStorage.removeItem(key); intent.current=undefined; setPending(false);
+    const latest=await api.readGoal(candidate.goalId).catch(()=>undefined);
+    if(alive.current) {
+      if(latest)setRecord(latest.goal);
+      setError('正式采用或候选版本已变化，请核对当前 G 与 S 后再确认。');
+    }
+  };
   const submit = async (input: GoalDraftInput) => {
     if (busy || pending || !record || restore.error) return; setBusy(true); setError('');
     try {
-      const edited = canonicalDraft(draftBody(input)) !== canonicalDraft(draftBody(candidate));
-      intent.current = { input: structuredClone(input), draftId: crypto.randomUUID(), adoptId: crypto.randomUUID(), expectedVersion: record.currentVersion, phase: edited ? 'revise' : 'adopt', target: structuredClone(candidate) }; preserve();
+      const edited = canonicalDraft(draftBody(input)) !== canonicalDraft(draftBody(base));
+      intent.current = { input: structuredClone(input), draftId: crypto.randomUUID(), adoptId: crypto.randomUUID(), expectedVersion: record.currentVersion, expectedAdoptedVersion:record.adoptedVersion, phase: edited ? 'revise' : 'adopt', target: structuredClone(base) }; preserve();
       if (edited) { const result = await api.revise(candidate.goalId, { ...input, operationId: intent.current.draftId, expectedVersion: record.currentVersion }); intent.current.target = result.goal; intent.current.expectedVersion = result.goal.version; intent.current.phase = 'adopt'; preserve(); }
       await adopt();
-    } catch (fault) { failed(fault); } finally { if (alive.current) setBusy(false); }
+    } catch (fault) { await recompare(fault); } finally { if (alive.current) setBusy(false); }
   };
   const recover = async () => {
     if (!intent.current || busy) return; setBusy(true); setError('');
-    try { const original = intent.current, id = original.phase === 'revise' ? original.draftId : original.adoptId; const { operation } = await api.operation(id); if (!operation || !('goalId' in operation.result)) throw new Error('原操作尚未核对完成，输入与编号保留；没有换编号重建候选。'); const target = operation.result as GoalVersion; if (target.goalId !== candidate.goalId) throw new Error('原操作归属不一致，未采用其他目标。'); if (original.phase === 'adopt') { if (!sameRef(target, original.target)) throw new Error('原采用回执版本不一致。'); await complete(target); } else { original.target = target; original.expectedVersion = target.version; original.phase = 'adopt'; preserve(); await adopt(); } }
-    catch (fault) { failed(fault); } finally { if (alive.current) setBusy(false); }
+    try {
+      const original=intent.current, revising=original.phase==='revise';
+      const {operation}=await api.operation(revising ? original.draftId : original.adoptId);
+      if(!operation || operation.kind!==(revising?'revise':'adopt') || !('goalId' in operation.result))throw new Error('原操作尚未核对完成，输入与编号保留。');
+      const target=operation.result as GoalVersion;
+      if(target.goalId!==candidate.goalId)throw new Error('原操作归属不一致。');
+      if(!revising){
+        if(!sameRef(target,original.target))throw new Error('原采用回执版本不一致。');
+        await complete(target);
+      } else {
+        original.target=target; original.expectedVersion=target.version; original.phase='adopt'; preserve();
+        if(original.expectedAdoptedVersion===undefined){
+          // Older pending edits did not record the user's comparison. Read the saved edit, then ask on the current comparison.
+          await recompare(new api.StrategyGoalsRequestError('strategy_goal_adoption_changed',409));
+        } else await adopt();
+      }
+    } catch (fault) { await recompare(fault); } finally { if (alive.current) setBusy(false); }
+  };
+  const compare = (input:GoalDraftInput) => {
+    if(!record)return null;
+    const edited=canonicalDraft(draftBody(input))!==canonicalDraft(draftBody(base));
+    const preview:GoalVersion={...input,goalId:base.goalId,createdAt:base.createdAt,status:'candidate',version:edited?record.currentVersion+1:base.version};
+    return <GoalAdoptionComparison candidate={preview} adopted={record.versions.find(v=>v.version===record.adoptedVersion)} />;
   };
   const notice = <>{!record && <p className="case-error" role="alert">原目标目录尚未核对，候选与输入保持，请返回后刷新原记录。</p>}{error && <p className="case-error" role="alert">{error}</p>}{pending && <div className="sg-unknown"><p>原采用操作结果待核，输入、版本与编号保留；未重发模型或另建目标。</p><button type="button" className="secondary-button" disabled={busy} onClick={() => { void recover(); }}>核对原保存／采用结果</button><details><summary>原操作编号</summary><code>{intent.current?.phase === 'revise' ? intent.current?.draftId : intent.current?.adoptId}</code></details></div>}</>;
-  return <GoalEditor active={active} initial={intent.current ? { ...candidate, ...intent.current.input } : candidate} record={record} index={index} enterprises={enterprises} metrics={metrics} metricsKnown={metricsKnown} onManageMetrics={onManageMetrics} onSaved={async () => {}} onClose={onClose} confirmation={{ busy, locked: pending || Boolean(restore.error) || !record, notice, onSubmit: input => { void submit(input); } }} />;
+  return <GoalEditor active={active} initial={intent.current ? { ...base, ...intent.current.input } : base} record={record} index={index} enterprises={enterprises} metrics={metrics} metricsKnown={metricsKnown} onManageMetrics={onManageMetrics} onSaved={async () => {}} onClose={onClose} confirmation={{ busy, locked: pending || Boolean(restore.error) || !record, notice, compare, onSubmit: input => { void submit(input); } }} />;
 }
 
 function RelationEditor({ active, index, selected, initial, onSaved, onClose }: { active: boolean; index: StrategyGoalsIndex; selected: GoalVersion; initial?: GoalRelation; onSaved: () => Promise<void>; onClose: () => void }) {

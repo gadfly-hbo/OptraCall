@@ -1,3 +1,4 @@
+import type {GoalOperationReceipt,GoalActionArrangement} from './strategy-goals-types.ts';
 import {setTimeout as delay} from 'node:timers/promises';
 import {businessRoleSystemPrompt, businessRoleVersion} from './business-role-types.ts';
 import type {BusinessRoleOwner} from './business-role-types.ts';
@@ -40,7 +41,7 @@ export interface StrategyDiscussionSourcePort {
  verify(discussion:StrategyDiscussion,configuration:Readonly<RuntimeModelConfiguration>,context?:{signal?:AbortSignal;assertCurrent():void;metadataOnly?:boolean}):Promise<void>;
 }
 export type RoleContextReader = (owner: BusinessRoleOwner, configuration: Readonly<RuntimeModelConfiguration> | undefined, writing: boolean, localRead?: boolean) => Promise<unknown>;
-export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:BusinessRoleOwner,configuration:Readonly<RuntimeModelConfiguration>,rights:ReadonlySet<string>)=>Promise<void>;roleContext?:RoleContextReader;verifyGoalContext?(context:GoalContextSnapshot,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;dataRoot:string;codeRoot:string;goals:StrategyGoalsStore;configuration(id?:string,revision?:number):Readonly<RuntimeModelConfiguration>|null|undefined;defaultUsageContext():Promise<UsageContext|null>;mutate<T>(fn:()=>T|Promise<T>):Promise<T>;isClosing():boolean;sources?:StrategyDiscussionSourcePort;validateGoal(input:GoalDraftInput):void|Promise<void>}){
+export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:BusinessRoleOwner,configuration:Readonly<RuntimeModelConfiguration>,rights:ReadonlySet<string>)=>Promise<void>;roleContext?:RoleContextReader;verifyGoalContext?(context:GoalContextSnapshot,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;verifyArrangement?(ref:GoalActionArrangement,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;dataRoot:string;codeRoot:string;goals:StrategyGoalsStore;configuration(id?:string,revision?:number):Readonly<RuntimeModelConfiguration>|null|undefined;defaultUsageContext():Promise<UsageContext|null>;mutate<T>(fn:()=>T|Promise<T>):Promise<T>;isClosing():boolean;sources?:StrategyDiscussionSourcePort;validateGoal(input:GoalDraftInput):void|Promise<void>}){
  const namespace = options.roleContext ? 'business-role-discussions' : 'strategy-discussions';
  const store=new StrategyDiscussionStore(options.dataRoot, namespace);
  const publicSearch=createRequirementPublicSearch({codeRoot:options.codeRoot,domain:{name:'strategy-public-search',projectPrefix:'strategy-public'},sessionDirectory:id=>store.directory(id),configurationSnapshot:(id,revision)=>options.configuration(id,revision),mutate:options.mutate,isClosing:options.isClosing});
@@ -86,16 +87,18 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
   const accesses:{requestId:string;projectId?:string;sessionId:string;toolCallId:string;entryId:string;kind:'catalog'|'read';sources:StrategyDiscussionSource[];range?:{start:number;end:number;total:number};complete?:boolean}[]=[];
   let hasAdditionalSources=false;
   const goalContexts = new Map<string,GoalContextSnapshot>();
+  const arrangements=new Map<string,GoalActionArrangement>();
   let pendingGoal: { ref:GoalRef; basis:GoalBasis; userText:string; promptHash:string }|undefined;
   function addGoals(snapshot:GoalContextSnapshot) {
     if(!object(snapshot)||!Array.isArray(snapshot.goals)||!Array.isArray(snapshot.feedback)||!Array.isArray(snapshot.relations))fail('goal_context_source_permissions_unknown');
     parseGoalBasis(snapshot.basis);
     goalContexts.set(discussionHash(snapshot),snapshot);
   }
-  if(!n)return {projections:[...groups.values()],accesses,hasAdditionalSources,goalContexts:[...goalContexts.values()]};
+  if(!n)return {projections:[...groups.values()],accesses,hasAdditionalSources,goalContexts:[...goalContexts.values()],arrangements:[...arrangements.values()]};
   const entries=entryId?(()=>{const byId=new Map(n.entries.map(entry=>[entry.id,entry]));let cursor:string|null=entryId;const chain:typeof n.entries=[];while(cursor){const entry=byId.get(cursor);if(!entry)break;chain.push(entry);cursor=entry.parentId;}return chain.reverse();})():n.manager.getBranch();
   let current:{requestId:string;projectId?:string}|undefined;
   const calls=new Map<string,{action:string;sourceId?:unknown;requestId:string;projectId?:string;entryId:string}>();
+  const operations=new Map<string,{id:string;requestId:string;entryId:string}>();
   const otherReads=new Map<string,string>();
   const add=(projectId:string|undefined,sources:StrategyDiscussionSource[],metadataOnly=false)=>{
    const key=JSON.stringify([projectId??null,metadataOnly]);let group=groups.get(key);if(!group){group={projectId,sources:[],...(metadataOnly?{metadataOnly:true}:{})};groups.set(key,group);}
@@ -118,8 +121,19 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
      current={requestId:marker.requestId,projectId:context.projectId};add(current.projectId,context.sources,true);
     }
    }
-   if(!current||entry.type!=='message')continue;
+   if(entry.type!=='message')continue;
    const message=entry.message as any;
+   const strategicResult=message.role==='toolResult'&&message.toolName==='strategy_goals';
+   let resultBody:unknown;
+   if(strategicResult && !message.isError){
+     try { resultBody=JSON.parse(textOf(message)); } catch { /* Older results may be unreadable. */ }
+   }
+   const operationResult=strategicResult && !message.isError && (object(resultBody)&&Object.hasOwn(resultBody,'operation') || object(message.details)&&Object.hasOwn(message.details,'operation'));
+   if(!current){
+     const operationCall=message.role==='assistant' && Array.isArray(message.content) && message.content.some((p:any)=>p.type==='toolCall'&&p.name==='strategy_goals'&&p.arguments?.action==='operation');
+     if(strict && !requestFilter && (operationCall || operationResult))fail('goal_context_source_permissions_unknown');
+     continue;
+   }
    if(message.role==='user'&&pendingGoal){
      const {ref,basis,userText,promptHash}=pendingGoal, prompt=textOf(message),suffix='\n\n用户本轮原话：\n'+userText;
      if(discussionHash(prompt)!==promptHash||!prompt.endsWith(suffix))fail('goal_context_source_permissions_unknown');
@@ -129,8 +143,37 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
      addGoals(snapshot);pendingGoal=undefined;
    }
    if(message.role==='assistant'&&Array.isArray(message.content))for(const part of message.content){
-    if(part.type==='toolCall'&&part.name==='strategy_goals'&&['read-goals','operation','public-search'].includes(part.arguments?.action))otherReads.set(part.id,part.arguments.action);
+    if(part.type==='toolCall'&&part.name==='strategy_goals'&&['read-goals','public-search'].includes(part.arguments?.action))otherReads.set(part.id,part.arguments.action);
+    if(part.type==='toolCall'&&part.name==='strategy_goals'&&part.arguments?.action==='operation'){
+      if(typeof part.id!=='string' || !part.id || operations.has(part.id))fail('goal_context_source_permissions_unknown');
+      operations.set(part.id,{id:part.arguments.operationId,requestId:current.requestId,entryId:entry.id});
+    }
     if(part.type==='toolCall'&&part.name==='strategy_goals'&&['find-sources','read-source'].includes(part.arguments?.action))calls.set(part.id,{...current,action:part.arguments.action,sourceId:part.arguments.sourceId,entryId:entry.id});
+   }
+   if(strategicResult){
+     const call=operations.get(message.toolCallId);
+     operations.delete(message.toolCallId);
+     if(call && call.requestId!==current.requestId)fail('goal_context_source_permissions_unknown');
+     if(!message.isError){
+       const value=resultBody;
+       // Older Pi records may omit details; the exact native call and result body still bind the lookup.
+       if(call || operationResult){
+         if(!call || !Array.isArray(message.content) || message.content.length!==1 || message.content[0]?.type!=='text' ||
+           !object(value) || Object.keys(value).length!==1 || !Object.hasOwn(value,'operation') ||
+           message.details!==undefined && discussionHash(message.details)!==discussionHash(value))fail('goal_context_source_permissions_unknown');
+         let id:string;try { id=discussionId(call.id); } catch { return fail('goal_context_source_permissions_unknown'); }
+         if(value.operation===null) {
+           // A future operation may use this id. Its body was not part of the earlier empty lookup.
+           const later=message.details===undefined ? options.goals.getOperation(id) : null;
+           if(later && !(Date.parse(later.completedAt)>Date.parse(entry.timestamp)))fail('goal_context_source_permissions_unknown');
+         } else {
+           if(!object(value.operation)||value.operation.operationId!==id)fail('goal_context_source_permissions_unknown');
+           const receipt=value.operation as unknown as GoalOperationReceipt;
+           for(const snapshot of options.goals.operationContext(receipt))addGoals(snapshot);
+           if(receipt.kind==='arrange')arrangements.set(receipt.operationId,receipt.result as GoalActionArrangement);
+         }
+       }
+     }
    }
    if(message.role==='toolResult'&&message.toolName==='strategy_goals'&&!message.isError&&otherReads.has(message.toolCallId)){
      if(otherReads.get(message.toolCallId)==='read-goals'){
@@ -156,9 +199,9 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
   // The cited assistant entry may itself start parallel tools; their future
   // results cannot have contributed to that earlier entry. Older missing
   // results remain UNKNOWN rather than inventing a successful read.
-  if(strict&&[...calls.values()].some(call=>call.entryId!==entryId))fail('goal_context_source_permissions_unknown');
+  if(strict&&[...calls.values(),...operations.values()].some(call=>call.entryId!==entryId))fail('goal_context_source_permissions_unknown');
   if(strict&&pendingGoal)fail('goal_context_source_permissions_unknown');
-  return {projections:[...groups.values()],accesses,hasAdditionalSources,goalContexts:[...goalContexts.values()]};
+  return {projections:[...groups.values()],accesses,hasAdditionalSources,goalContexts:[...goalContexts.values()],arrangements:[...arrangements.values()]};
  }
  async function sourceContext(ref:GoalDiscussionSourceRef){
   await readDiscussionSource(ref);const n=await native(store.get(ref.id));if(!n)fail('strategy_discussion_source_unavailable');const result=sourceAccesses(n,String(ref.version));if(!result.projections.length)fail('goal_context_source_permissions_unknown');return result;
@@ -167,7 +210,11 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
    if(!options.verifyGoalContext)fail('goal_context_source_permissions_unknown');
    await options.verifyGoalContext(snapshot,recipient);
  }
- async function verifyChoiceSource(ref:GoalDiscussionSourceRef, recipient?: Readonly<RuntimeModelConfiguration>, verifyGoal = checkGoalContext){
+ async function checkArrangement(ref:GoalActionArrangement,configuration?:Readonly<RuntimeModelConfiguration>){
+   if(!options.verifyArrangement)fail('goal_context_source_permissions_unknown');
+   await options.verifyArrangement(ref,configuration);
+ }
+ async function verifyChoiceSource(ref:GoalDiscussionSourceRef, recipient?: Readonly<RuntimeModelConfiguration>, verifyGoal = checkGoalContext, verifyArrangement=checkArrangement){
   const owner=store.get(ref.id);
   const history=await sourceContext(ref);
   const dependencies=history.projections.filter(group=>group.sources.length);
@@ -177,6 +224,7 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
     if(options.isClosing()||store.get(owner.id).revision!==owner.revision||configuration&&!options.configuration(configuration.id,configuration.revision))throw new StrategyDiscussionFault('strategy_discussion_context_changed');
   };
   for(const snapshot of history.goalContexts)await verifyGoal(snapshot,recipient);
+  for(const ref of history.arrangements)await verifyArrangement(ref,recipient);
   for(const group of dependencies){
     if(!configuration)throw new StrategyDiscussionFault('configuration_changed',409);
     if(!options.sources||owner.projectId!==group.projectId||group.sources.some(s=>isDiscussionSourceExcluded(owner,s)||
@@ -254,7 +302,14 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
    const result=await publicSearch.run({instanceId:o.id,operationId:stableId([o.id,context.requestId,context.toolCallId]),topic:input.query,configuration:{id:configuration.id,revision:configuration.revision},parent:{context:{owner:o.id,isCurrent:()=>{try{context.assertCurrent();return !context.signal.aborted;}catch{return false;}}},onCancel(handler){const cancel=()=>{void Promise.resolve(handler({retryFailed:false})).catch(()=>{});};context.signal.addEventListener('abort',cancel,{once:true});context.registerCleanup?.(opts=>Promise.resolve(handler({retryFailed:opts.retryFailed===true})));return()=>context.signal.removeEventListener('abort',cancel);}}});
    context.assertCurrent();return payload(result);
   }
-  if(action==='operation'){discussionId(input.operationId);return payload({operation:options.goals.getOperation(input.operationId as string)});}
+  if(action==='operation'){
+   const operation=options.goals.getOperation(discussionId(input.operationId));
+   if(operation){
+     for(const snapshot of options.goals.operationContext(operation))await checkGoalContext(snapshot,configuration);
+     if(operation.kind==='arrange')await checkArrangement(operation.result as GoalActionArrangement,configuration);
+   }
+   context.assertCurrent();return payload({operation});
+  }
   if(action==='propose-goal'){
    if(!object(input.draft)||'roleSuggestion' in input.draft||'strategyChoice' in input.draft)fail('invalid_strategy_goal_draft',400);
    const source=await candidateSource(o,context);context.assertCurrent();
@@ -370,6 +425,7 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
    const verificationAbort=new AbortController();lease.onCancel(()=>verificationAbort.abort());
    const verify=async()=>{if(!lease.context.isCurrent())fail('strategy_discussion_run_unavailable');const current=store.get(id);if(current.revision!==owner.revision)fail('strategy_discussion_context_changed');const cfg=options.configuration(owner.configurationId,owner.configurationRevision);if(!cfg)fail('configuration_changed');
     for(const snapshot of previousAccesses.goalContexts)await checkGoalContext(snapshot,cfg);
+    for(const ref of previousAccesses.arrangements)await checkArrangement(ref,cfg);
     if(context)await checkGoalContext(context,cfg);
     if(owner.businessOwner) {
       const checked = await options.roleContext!(owner.businessOwner,cfg,true);
@@ -399,7 +455,9 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
   const goal=options.goals.read({goalId:String(input.goalId),version:Number(input.version)});if(!ownGoals(owner).some(g=>g.goalId===goal.goalId&&g.version===goal.version))fail('strategy_goal_not_in_discussion',403);
   const n=await native(owner);if(!n||!goal.source||goal.source.authority!=='strategy-discussion')fail('strategy_discussion_source_unavailable');await readDiscussionSource(goal.source as GoalDiscussionSourceRef);
   if(typeof input.decision!=='string'||!input.decision.trim()||input.decision.length>4000)fail('strategy_goal_decision_required',400);
-  return options.mutate(async()=>{const operationId=discussionId(input.operationId);if(!options.goals.getOperation(operationId))await options.validateGoal(goal);return {goal:options.goals.adopt(goal,{operationId,expectedVersion:Number(input.expectedVersion),decision:input.decision as string,provenance:{kind:'ui-confirmation',discussionId:id,sessionId:n.manager.getSessionId(),goalContentSha256:String(input.goalContentSha256)}})};});
+  const compared=input.expectedAdoptedVersion;
+  if(compared!==undefined && compared!==null && (typeof compared!=='number'||!Number.isSafeInteger(compared)||compared<1))fail('invalid_strategy_goal_version',400);
+  return options.mutate(async()=>{const operationId=discussionId(input.operationId);if(!options.goals.getOperation(operationId))await options.validateGoal(goal);return {goal:options.goals.adopt(goal,{operationId,expectedVersion:Number(input.expectedVersion),expectedAdoptedVersion:compared,decision:input.decision as string,provenance:{kind:'ui-confirmation',discussionId:id,sessionId:n.manager.getSessionId(),goalContentSha256:String(input.goalContentSha256)}})};});
  }
  async function stableRoleSnapshot(owner:StrategyDiscussion){
   for(let attempt=0;;attempt++){

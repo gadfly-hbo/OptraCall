@@ -1,6 +1,7 @@
+import { caseChoicePermitsAction } from './case-decision-types.ts';
 import { CaseStoreError } from './case-types.ts';
 import { caseDecisionFields, caseDecisionId, caseDecisionRevision, caseDecisionText, parseCaseDecisionTarget } from './case-decision-validation.ts';
-import type { CaseDecisionRef, CaseDecisionRevision, CaseIssueReply, CaseIssueReview } from './case-decision-types.ts';
+import type { CaseDecisionRef, CaseDecisionRevision, CaseIssueReply, CaseIssueReview, CaseStrategyChoice } from './case-decision-types.ts';
 import type { CaseDecisionServiceDependencies } from './case-decision-service.ts';
 import { listTaskResultSources, ProjectTaskResultSourceError, type TaskBoundReportsOptions } from './project-task-result-sources.ts';
 import { createNativeSnapshotReadBudget, NativeSnapshotError } from './native-session-snapshot.ts';
@@ -13,7 +14,14 @@ interface IssueRoundSelection {
   execution?: { authorizationId: string; projectId: string };
   reviewId?: string;
 }
-const noAction = new Set(['defer', 'reject', 'no_action', 'stop_considering', 'gather_evidence']);
+/** An issue has one current choice. Historical choices without an issue are sequenced per strategy. */
+export function assertActionableCaseChoice(cases: CaseDecisionServiceDependencies['cases'], choice: CaseStrategyChoice) {
+  if (!caseChoicePermitsAction(choice.choice)) return fail('case_choice_not_actionable');
+  const current = cases.getStrategyChoices(choice.caseId).filter(row => choice.issueId
+    ? row.issueId === choice.issueId
+    : !row.issueId && row.strategyRef.recordId === choice.strategyRef.recordId).at(-1);
+  if (current?.choiceId !== choice.choiceId) return fail('case_choice_conflict');
+}
 function replyReference(input: unknown) {
   const target = parseCaseDecisionTarget({ type: 'source', source: input });
   if (target.type !== 'source' || target.source.type !== 'native-reply' || target.source.excerpt) return fail('invalid_case_issue_reply');
@@ -73,7 +81,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
   }
   async function issueSources(caseId: string, issueId: string) {
     issue(caseId, issueId);
-    const replies: { name: string; type: 'plan' | 'teach'; choiceId?: string; source: CaseIssueReply }[] = [];
+    const replies: { name: string; type: 'plan' | 'teach'; choiceId?: string; feedbackRevisionId?: string; source: CaseIssueReply }[] = [];
     const budget = createNativeSnapshotReadBudget(), limitations: string[] = [];
     for (const { projectId } of cases.listProjectLinks(caseId)) {
       const project = await deps.projects.get(projectId);
@@ -83,7 +91,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
         if (task.archivedAt || assignment?.issue?.caseId !== caseId || assignment.issue.issueId !== issueId || !['plan', 'teach'].includes(assignment.type)) continue;
         const sources = await availableReplies(project, task, { budget });
         limitations.push(...(sources.limitations ?? []));
-        for (const r of sources.replies) replies.push({ name: task.name, type: assignment.type as 'plan' | 'teach', choiceId: assignment.issue.choiceId,
+        for (const r of sources.replies) replies.push({ name: task.name, type: assignment.type as 'plan' | 'teach', choiceId: assignment.issue.choiceId, feedbackRevisionId: assignment.issue.feedbackRevisionId,
           source: { type: 'native-reply', projectId, taskId: task.id, sessionId: r.sessionId, messageId: r.messageId, expectedTextSha256: r.sha256 } });
       }
     }
@@ -132,7 +140,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
   function replyKey(source:CaseIssueReply) {return JSON.stringify([source.projectId,source.taskId,source.sessionId,source.messageId,source.expectedTextSha256]);}
   function authorizedAction(timeline: Awaited<ReturnType<typeof issueTimeline>>, choiceId: string, authorizationId: string, projectId: string) {
     const round = timeline.rounds.at(-1);
-    if (!round || round.choice.choiceId !== choiceId || noAction.has(round.choice.choice)) return fail('case_do_round_changed');
+    if (!round || round.choice.choiceId !== choiceId || !caseChoicePermitsAction(round.choice.choice)) return fail('case_do_round_changed');
     const action = round.actions.find(a => a.currentAuthorizationId === authorizationId && a.projectId === projectId);
     if (!action) return fail('case_do_authorization_unavailable');
     return { ...action, authorizations: action.authorizations.filter(a => a.id === authorizationId), feedback: [] };
@@ -250,8 +258,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
         if (!deps.board.getArrangementOperation?.(operationId)) {
           issue(caseId, issueId, true);
           await linkedProject(caseId, projectId);
-          if (noAction.has(choice.choice)) return fail('case_choice_not_actionable');
-          if (cases.getStrategyChoices(caseId).filter(c => c.issueId === issueId).at(-1)?.choiceId !== choice.choiceId) return fail('case_choice_conflict');
+          assertActionableCaseChoice(cases, choice);
           await checkPlan(choice.strategyRef);
         }
         return { arrangement: deps.board.arrangeActions({ operationId, projectId, title, scope, source: { caseId, caseStoreId: choice.strategyRef.caseStoreId, choiceId: choice.choiceId, strategyRef: choice.strategyRef },
@@ -263,7 +270,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
       if (teach.feedbackRevisionId && teach.feedbackRevisionId !== input.feedbackRevisionId) return fail('case_round_feedback_unavailable');
       const round = (await issueTimeline(caseId, issueId)).rounds.find(r => r.choice.choiceId === choice.choiceId)!;
       const selected = round.actions.find(a => a.feedback.some(f => f.revisionId === input.feedbackRevisionId));
-      if (!selected && (!noAction.has(choice.choice) || input.feedbackRevisionId !== undefined)) return fail('case_round_waiting_for_feedback');
+      if (!selected && (caseChoicePermitsAction(choice.choice) || input.feedbackRevisionId !== undefined)) return fail('case_round_waiting_for_feedback');
       const feedback = selected ? { projectId: selected.projectId, boardTaskId: selected.taskId, feedbackRevisionId: caseDecisionId(input.feedbackRevisionId) } : undefined;
       return { review: cases.saveIssueReview({ caseId, issueId, choiceId: choice.choiceId, operationId, expectedRevision: caseDecisionRevision(input.expectedRevision), reply: source,
         observation: caseDecisionText(input.observation, 4000, true), judgement: caseDecisionText(input.judgement, 4000, true), nextStep: caseDecisionText(input.nextStep, 4000, true), ...(feedback ? { feedback } : {}) }) };

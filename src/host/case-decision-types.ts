@@ -58,6 +58,10 @@ export type CaseIssueReply = Extract<PersonalSourceRef, { type: 'native-reply' }
 export type CaseIssueReview = { caseId: string; issueId: string; choiceId: string; operationId: string; createdAt: string; reply: CaseIssueReply;
   judgement: string; nextStep: string; observation: string; feedback?: { projectId: string; boardTaskId: string; feedbackRevisionId: string }; };
 export type CaseStrategyChoiceValue = 'trial' | 'gather_evidence' | 'defer' | 'reject' | 'no_action' | 'continue' | 'adjust' | 'stop_considering';
+export function caseChoicePermitsAction(value: CaseStrategyChoiceValue): boolean {
+  return value === 'trial' || value === 'adjust' || value === 'continue';
+}
+
 export type CaseStrategyChoiceInput = {
   operationId: string; caseStoreId: string; caseId: string; strategyRef: CaseDecisionRef;
   choice: CaseStrategyChoiceValue; reason?: string | null; expectedPreviousChoiceId: string | null;

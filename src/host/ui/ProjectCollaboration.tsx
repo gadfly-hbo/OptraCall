@@ -114,7 +114,7 @@ function StagePanel({ project, onRefresh }: { project: ClientProject; onRefresh:
 }
 
 function ProjectWorkBasis({projectId,issue,version}:{projectId:string;issue?:IssueScope;version?:number}) {
-  const [basis,setBasis]=useState<{goal?:{title:string;goal:{version:number};outcome:string;usageContext:{background:string};scope:{name:string};strategies?:string[];source?:{authority:string;id:string;version:string|number};evidence?:{original?:{description?:string}}[]};case?:{description?:string};strategy?:string;decision?:{reason?:string}}>();
+  const [basis,setBasis]=useState<{goal?:{title:string;goal:{version:number};outcome:string;usageContext:{background:string};scope:{name:string};strategies?:string[];dueAt?:string;resources?:string[];necessaryConditions?:string[];source?:{authority:string;id:string;version:string|number};evidence?:{original?:{description?:string}}[]};case?:{description?:string};strategy?:string;decision?:{reason?:string}}>();
   const [error,setError]=useState('');
   const owner=JSON.stringify({role:'project',projectId,...(issue?{issue}:{})});
   useEffect(()=>{
@@ -128,6 +128,9 @@ function ProjectWorkBasis({projectId,issue,version}:{projectId:string;issue?:Iss
   return <section className="project-plan-section" aria-label="项目承接依据"><h2>{issue?'事项依据':'来源 GSA'}{version ? ' · v'+version : ''}</h2>
     {basis?.goal && <><p>{basis.goal.title} · v{basis.goal.goal.version} · {basis.goal.scope.name}</p><p>{basis.goal.outcome}</p>
       {basis.goal.strategies?.map(strategy=><p key={strategy}>{strategy}</p>)}<p>{basis.goal.usageContext.background}</p>
+      {basis.goal.dueAt && <p>截止日期 · {basis.goal.dueAt}</p>}
+      {Boolean(basis.goal.resources?.length) && <p>资源 · {basis.goal.resources?.join('、')}</p>}
+      {Boolean(basis.goal.necessaryConditions?.length) && <p>必要条件 · {basis.goal.necessaryConditions?.join('、')}</p>}
       {basis.goal.source && <p>原依据 · {basis.goal.source.authority} · {basis.goal.source.id} · v{basis.goal.source.version}</p>}
       {basis.goal.evidence?.map((item,index)=>item.original?.description && <p key={index}>{item.original.description}</p>)}</>}
     {basis?.case?.description && <p>{basis.case.description}</p>}{basis?.decision?.reason && <p>{basis.decision.reason}</p>}{error && <p role="alert">{error}</p>}</section>;
