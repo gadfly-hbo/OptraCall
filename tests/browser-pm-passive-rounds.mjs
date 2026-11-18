@@ -53,14 +53,15 @@ for(const [index,scenario] of [
   assert.ok(!editable.flat().some(text=>text.includes(a.choiceId)));
   if(root) await f.taskDialog.screenshot({path:path.join(root,'generic-bound-to-B.png')});
   await f.taskDialog.getByRole('button',{name:'取消',exact:true}).click();
-  let projectForm;
-  if(root) {
-    await f.work.getByRole('button',{name:'回关联项目协作'}).click();
-    await f.page.getByRole('region',{name:'项目协作'}).getByRole('button',{name:'新建任务',exact:true}).click();
-    await f.taskDialog.getByLabel('Task 类型').selectOption('teach');
-    projectForm=await f.taskDialog.innerText();
-    await f.taskDialog.getByRole('button',{name:'取消',exact:true}).click();await f.openCase();
-  }
+  await f.work.getByRole('button',{name:'回关联项目协作'}).click();
+  await f.page.getByRole('region',{name:'项目协作'}).getByRole('button',{name:'新建任务',exact:true}).click();
+  await f.taskDialog.getByLabel('Task 类型').selectOption('teach');
+  const projectForm=await f.taskDialog.innerText();
+  assert.ok(projectForm.includes(f.owner.issueId));
+  assert.ok(!projectForm.includes(a.choiceId) && !projectForm.includes(b.choiceId));
+  await f.taskDialog.getByRole('button',{name:'取消',exact:true}).click();
+  await f.openCase();
+  await old.waitFor();
   const initial={projectForm,issueTitle:'会员召回',decision:scenario.decision,owner:f.owner,caseProject:f.project.id,oldChoice:a.choiceId,currentChoice:b.choiceId,
     originalPlan:a.strategyRef,originalPlanReply:a.source.messageId,oldRoundVisibleButtons:rowButtons,usableHistoricalEntry:await prepare.count(),
     existingOldTeachReplies:0,oldBoardActions:0,genericDialog:generic,genericEditableOptions:editable,protectedCurrentReview:before[1].review.operationId};
