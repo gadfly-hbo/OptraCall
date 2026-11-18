@@ -39,3 +39,11 @@ Case 继续使用原 SQLite 事务、目标关系及原操作／事件表。没�
 最终联跑覆盖两个已关联项目内由 A 的 Plan 给 B 的 Teach 提供同一选择的准确方案与反馈。撤销 A 与原 Case 的关联后，两端 Teach 的后续请求及 Case 角色的原历史读取都被拒绝，协议端请求数保持原值。Case／角色／任务身份及来源祖先联合回归 11/11，类型检查通过；原始输出为 `.local/product-v13/case/role-teach-crossproject.log`、`role-teach-compile.log`，本次原生收据为 `.local/product-v13/case/cycle-GZfWWL/case-role-teach-receipt.json`。Chrome 的 Teach 表单点验退出码 0。
 
 修正位置包括 `src/host/case-issues.ts:30`（精确原回复）、`:98`（已向 Teach 交付的权限）、`:109`（原事项资料）；`src/host/server.ts:827`（Case 角色）、`:1393`（Teach 原轮次）、`:1661`（Task 实际派发）；`src/host/ui/CaseIssuePanel.tsx:83` 与 `src/host/ui/ProjectDialogs.tsx:37`（携带原观察的用户建 Task 表单）；`src/host/task-assignment.ts:55`（身份核验）。联跑随后仍需接受非作者复核。
+
+## 既有确认计划的 Case 资格
+
+原无 Case 的 A12 在集成工作区轮询综合 Task 时出现过 403，见 `.local/product-v13/check-d7169e9.log`。取出提交 `d7169e9` 原样运行，同一步轮询返回 500。仅在副本增加日志后，四个并发隔离实例有三个捕获核对前后同一份 Pi 原生文件的 SHA-256 已因追加而改变，一个通过；相应文件为 `.local/product-v13/case/a12-base-trace-{1,2,3,4}.log`。首次 403 没有内部栈。公共读取修复后，无 Case 正例四个并发实例均通过，见同目录 `a12-active-{1,2,3,4}.log`。
+
+另以同一真实 Pi 用例让用户建立 Case、关联 Project、确认两个成员 Task。综合 Task 成功读取维度报告后，合法的历史读取稳定返回 403，见 `.local/product-v13/case/a12-case-before.log`。Host 现对原生运行中的 Project、Task、确认编号、方案版本和任务键复用原计划的成员核验。读取自身历史及成果时，原成员沿该次确认核对 Case 与当前项目关联；另一个接收者仍按其自身资格核对来源。
+
+`tests/project-plan-runtime.test.ts` 的合成正例核对了维度稿原文和准确哈希、原综合会话重开、原成员的成果清单。未经该 Case 授权的新 Task 无法接手同一份准确成果。撤回项目关联后，原综合会话重开获 403、续发获 409，维度成果不再列出，本地协议端请求数未增长。与 `tests/project-native-poll.test.ts` 联跑 6/6，退出码 0，见 `.local/product-v13/case/a12-case-integrated.log`；TypeScript 检查退出码 0。
