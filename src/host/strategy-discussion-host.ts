@@ -9,7 +9,8 @@ import { createHash } from 'node:crypto';
 import type { RuntimeModelConfiguration } from './config-store.ts';
 import type { UsageContext } from './usage-context-types.ts';
 import { parseUsageContext, resolveNewUsageContext } from './usage-context-types.ts';
-import type { GoalDraftInput, GoalSourceRef, GoalDiscussionSourceRef, GoalAdoptionInput } from './strategy-goals-types.ts';
+import type { GoalBasis, GoalContextSnapshot, GoalRef, GoalDraftInput, GoalSourceRef, GoalDiscussionSourceRef, GoalAdoptionInput } from './strategy-goals-types.ts';
+import { parseGoalBasis } from './strategy-goals-types.ts';
 import { StrategyGoalsStore, goalContentSha256, parseGoalDraft } from './strategy-goals-store.ts';
 import { createAgentSessionDomain, type SessionContext } from './agent-sessions.ts';
 import { discussionSourceMode, isDiscussionSourceExcluded } from './strategy-discussion-source-scope.ts';
@@ -38,15 +39,15 @@ export interface StrategyDiscussionSourcePort {
  read(source:StrategyDiscussionSource,discussion:StrategyDiscussion,configuration:Readonly<RuntimeModelConfiguration>,context?:{signal:AbortSignal;assertCurrent():void},page?:{offset?:number;limit?:number}):Promise<unknown>;
  verify(discussion:StrategyDiscussion,configuration:Readonly<RuntimeModelConfiguration>,context?:{signal?:AbortSignal;assertCurrent():void;metadataOnly?:boolean}):Promise<void>;
 }
-export type RoleContextReader = (owner: BusinessRoleOwner, configuration: Readonly<RuntimeModelConfiguration> | undefined, writing: boolean) => Promise<unknown>;
-export function createStrategyDiscussionHost(options:{roleContext?:RoleContextReader;dataRoot:string;codeRoot:string;goals:StrategyGoalsStore;configuration(id?:string,revision?:number):Readonly<RuntimeModelConfiguration>|null|undefined;defaultUsageContext():Promise<UsageContext|null>;mutate<T>(fn:()=>T|Promise<T>):Promise<T>;isClosing():boolean;sources?:StrategyDiscussionSourcePort;validateGoal(input:GoalDraftInput):void|Promise<void>}){
+export type RoleContextReader = (owner: BusinessRoleOwner, configuration: Readonly<RuntimeModelConfiguration> | undefined, writing: boolean, localRead?: boolean) => Promise<unknown>;
+export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:BusinessRoleOwner,configuration:Readonly<RuntimeModelConfiguration>,rights:ReadonlySet<string>)=>Promise<void>;roleContext?:RoleContextReader;verifyGoalContext?(context:GoalContextSnapshot,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;dataRoot:string;codeRoot:string;goals:StrategyGoalsStore;configuration(id?:string,revision?:number):Readonly<RuntimeModelConfiguration>|null|undefined;defaultUsageContext():Promise<UsageContext|null>;mutate<T>(fn:()=>T|Promise<T>):Promise<T>;isClosing():boolean;sources?:StrategyDiscussionSourcePort;validateGoal(input:GoalDraftInput):void|Promise<void>}){
  const namespace = options.roleContext ? 'business-role-discussions' : 'strategy-discussions';
  const store=new StrategyDiscussionStore(options.dataRoot, namespace);
  const publicSearch=createRequirementPublicSearch({codeRoot:options.codeRoot,domain:{name:'strategy-public-search',projectPrefix:'strategy-public'},sessionDirectory:id=>store.directory(id),configurationSnapshot:(id,revision)=>options.configuration(id,revision),mutate:options.mutate,isClosing:options.isClosing});
  const domain=createAgentSessionDomain<StrategyDiscussion>({name:options.roleContext ? 'business-role-discussion' : 'strategy-discussion',profile:{key:o=>o.id,projectId:o=>o.projectId,configuration:o=>options.configuration(o.configurationId,o.configurationRevision),capabilities:{commands:false,ui:false,editor:false},agentOptions(o,configuration){
    mkdirSync(store.workspace(o.id),{recursive:true,mode:0o700});
    const role = o.businessOwner?.role;
-   const tools = role !== 'case';
+   const tools = role !== 'case' && role !== 'strategy';
    const discussionTools = role === 'project' ? 'project-sources' as const : role === 'goal' || role === 'goal-draft' ? 'goal-draft' as const : undefined;
    return {projectId:(o.businessOwner ? 'business-role' : 'strategy-discussion')+':'+o.id,workspace:{cwd:store.workspace(o.id),...(discussionTools?{discussionTools}:{}),systemPrompt:o.businessOwner ? businessRoleSystemPrompt(o.businessOwner.role) : STRATEGY_CONTRACT,capabilityPolicy:'strategy-discussion'},sessionDirectory:store.nativeDirectory(o.id),sessionFile:o.sessionFile,resourceRoot:path.join(store.directory(o.id),'resources'),codeRoot:options.codeRoot,managementPorts:[],strategyDiscussion:tools ? (action,input,context)=>tool(o,configuration,action,input,context) : undefined};
  }},configurationSnapshot:(id,revision)=>options.configuration(id,revision),mutate:options.mutate,isClosing:options.isClosing,publish(o,event,context){
@@ -83,10 +84,19 @@ export function createStrategyDiscussionHost(options:{roleContext?:RoleContextRe
  function sourceAccesses(n:Awaited<ReturnType<typeof native>>,entryId?:string,requestFilter?:string,strict=true){
   const groups=new Map<string,{projectId?:string;sources:StrategyDiscussionSource[];metadataOnly?:boolean}>();
   const accesses:{requestId:string;projectId?:string;sessionId:string;toolCallId:string;entryId:string;kind:'catalog'|'read';sources:StrategyDiscussionSource[];range?:{start:number;end:number;total:number};complete?:boolean}[]=[];
-  if(!n)return {projections:[...groups.values()],accesses};
+  let hasAdditionalSources=false;
+  const goalContexts = new Map<string,GoalContextSnapshot>();
+  let pendingGoal: { ref:GoalRef; basis:GoalBasis; userText:string; promptHash:string }|undefined;
+  function addGoals(snapshot:GoalContextSnapshot) {
+    if(!object(snapshot)||!Array.isArray(snapshot.goals)||!Array.isArray(snapshot.feedback)||!Array.isArray(snapshot.relations))fail('goal_context_source_permissions_unknown');
+    parseGoalBasis(snapshot.basis);
+    goalContexts.set(discussionHash(snapshot),snapshot);
+  }
+  if(!n)return {projections:[...groups.values()],accesses,hasAdditionalSources,goalContexts:[...goalContexts.values()]};
   const entries=entryId?(()=>{const byId=new Map(n.entries.map(entry=>[entry.id,entry]));let cursor:string|null=entryId;const chain:typeof n.entries=[];while(cursor){const entry=byId.get(cursor);if(!entry)break;chain.push(entry);cursor=entry.parentId;}return chain.reverse();})():n.manager.getBranch();
   let current:{requestId:string;projectId?:string}|undefined;
   const calls=new Map<string,{action:string;sourceId?:unknown;requestId:string;projectId?:string;entryId:string}>();
+  const otherReads=new Map<string,string>();
   const add=(projectId:string|undefined,sources:StrategyDiscussionSource[],metadataOnly=false)=>{
    const key=JSON.stringify([projectId??null,metadataOnly]);let group=groups.get(key);if(!group){group={projectId,sources:[],...(metadataOnly?{metadataOnly:true}:{})};groups.set(key,group);}
    for(const source of sources)if(!group.sources.some(existing=>discussionHash(existing)===discussionHash(source)))group.sources.push(source);
@@ -94,17 +104,42 @@ export function createStrategyDiscussionHost(options:{roleContext?:RoleContextRe
   for(const entry of entries){
    if(entry.type==='custom'&&entry.customType==='optracall.run'&&(entry.data as any)?.phase==='started'){
     const marker=entry.data as any,context=marker.providedContext?.strategyDiscussion;current=undefined;
+    if(pendingGoal&&strict)fail('goal_context_source_permissions_unknown');
+    pendingGoal=undefined;
     if(context&&(!requestFilter||marker.requestId===requestFilter)){
      if(typeof marker.requestId!=='string'||!Array.isArray(context.sources))fail('goal_context_source_permissions_unknown');
      // The request supplied references, not their bodies. Only successful
      // read-source native results below establish a body dependency.
+     if(context.methods?.some((m:import('./strategy-discussion-types.ts').StrategyMethodSelection)=>m.source))hasAdditionalSources=true;
+     if(context.goal && !marker.providedContext.businessRole){
+       if(!context.goalBasis||typeof marker.providedContext.originalUserText!=='string'||typeof marker.providedContext.requestTextSha256!=='string')fail('goal_context_source_permissions_unknown');
+       pendingGoal={ref:context.goal,basis:parseGoalBasis(context.goalBasis),userText:marker.providedContext.originalUserText,promptHash:marker.providedContext.requestTextSha256};
+     }
      current={requestId:marker.requestId,projectId:context.projectId};add(current.projectId,context.sources,true);
     }
    }
    if(!current||entry.type!=='message')continue;
    const message=entry.message as any;
+   if(message.role==='user'&&pendingGoal){
+     const {ref,basis,userText,promptHash}=pendingGoal, prompt=textOf(message),suffix='\n\n用户本轮原话：\n'+userText;
+     if(discussionHash(prompt)!==promptHash||!prompt.endsWith(suffix))fail('goal_context_source_permissions_unknown');
+     let body;try{body=JSON.parse(prompt.slice(0,-suffix.length));}catch{fail('goal_context_source_permissions_unknown');}
+     const snapshot=body?.goalContext;
+     if(snapshot?.goals?.length!==1||snapshot.goals[0].goalId!==ref.goalId||snapshot.goals[0].version!==ref.version||discussionHash(snapshot.basis)!==discussionHash(basis))fail('goal_context_source_permissions_unknown');
+     addGoals(snapshot);pendingGoal=undefined;
+   }
    if(message.role==='assistant'&&Array.isArray(message.content))for(const part of message.content){
+    if(part.type==='toolCall'&&part.name==='strategy_goals'&&['read-goals','operation','public-search'].includes(part.arguments?.action))otherReads.set(part.id,part.arguments.action);
     if(part.type==='toolCall'&&part.name==='strategy_goals'&&['find-sources','read-source'].includes(part.arguments?.action))calls.set(part.id,{...current,action:part.arguments.action,sourceId:part.arguments.sourceId,entryId:entry.id});
+   }
+   if(message.role==='toolResult'&&message.toolName==='strategy_goals'&&!message.isError&&otherReads.has(message.toolCallId)){
+     if(otherReads.get(message.toolCallId)==='read-goals'){
+       let result;try{result=JSON.parse(textOf(message));}catch{fail('goal_context_source_permissions_unknown');}
+       if(result?.claim!=='provided-not-adopted'||!Array.isArray(result.candidates))fail('goal_context_source_permissions_unknown');
+       if(result.context)addGoals(result.context);
+       // The returned candidate list consists of fixed Goal bodies and no relationship or feedback text.
+       for(const goal of result.candidates)addGoals({goals:[goal],basis:{relations:[],feedback:[]},relations:[],feedback:[]});
+     }else hasAdditionalSources=true;
    }
    const call=message.role==='toolResult'&&message.toolName==='strategy_goals'?calls.get(message.toolCallId):undefined;
    if(!call)continue;calls.delete(message.toolCallId);if(message.isError)continue;
@@ -122,18 +157,28 @@ export function createStrategyDiscussionHost(options:{roleContext?:RoleContextRe
   // results cannot have contributed to that earlier entry. Older missing
   // results remain UNKNOWN rather than inventing a successful read.
   if(strict&&[...calls.values()].some(call=>call.entryId!==entryId))fail('goal_context_source_permissions_unknown');
-  return {projections:[...groups.values()],accesses};
+  if(strict&&pendingGoal)fail('goal_context_source_permissions_unknown');
+  return {projections:[...groups.values()],accesses,hasAdditionalSources,goalContexts:[...goalContexts.values()]};
  }
  async function sourceContext(ref:GoalDiscussionSourceRef){
   await readDiscussionSource(ref);const n=await native(store.get(ref.id));if(!n)fail('strategy_discussion_source_unavailable');const result=sourceAccesses(n,String(ref.version));if(!result.projections.length)fail('goal_context_source_permissions_unknown');return result;
  }
+ async function checkGoalContext(snapshot:GoalContextSnapshot,recipient?:Readonly<RuntimeModelConfiguration>) {
+   if(!options.verifyGoalContext)fail('goal_context_source_permissions_unknown');
+   await options.verifyGoalContext(snapshot,recipient);
+ }
  async function verifyChoiceSource(ref:GoalDiscussionSourceRef, recipient?: Readonly<RuntimeModelConfiguration>){
-  const owner=store.get(ref.id), configuration=recipient??options.configuration(owner.configurationId,owner.configurationRevision);
-  if(!configuration)throw new StrategyDiscussionFault('configuration_changed',409);
-  const check=()=>{if(options.isClosing()||!options.configuration(configuration.id,configuration.revision)||store.get(owner.id).revision!==owner.revision)throw new StrategyDiscussionFault('strategy_discussion_context_changed');};
+  const owner=store.get(ref.id);
   const history=await sourceContext(ref);
-  for(const group of history.projections){
-    if(!group.sources.length)continue;
+  const dependencies=history.projections.filter(group=>group.sources.length);
+  const configuration=recipient??(dependencies.length||history.hasAdditionalSources?options.configuration(owner.configurationId,owner.configurationRevision):undefined);
+  if(history.hasAdditionalSources&&!configuration)throw new StrategyDiscussionFault('configuration_changed',409);
+  const check=()=>{
+    if(options.isClosing()||store.get(owner.id).revision!==owner.revision||configuration&&!options.configuration(configuration.id,configuration.revision))throw new StrategyDiscussionFault('strategy_discussion_context_changed');
+  };
+  for(const snapshot of history.goalContexts)await checkGoalContext(snapshot,recipient);
+  for(const group of dependencies){
+    if(!configuration)throw new StrategyDiscussionFault('configuration_changed',409);
     if(!options.sources||owner.projectId!==group.projectId||group.sources.some(s=>isDiscussionSourceExcluded(owner,s)||
         (discussionSourceMode(owner)==='selected-only' && !owner.sources.some(original=>discussionHash(original)===discussionHash(s)))))throw new StrategyDiscussionFault('strategy_source_not_authorized',403);
     await options.sources.verify({...owner,configurationId:configuration.id,configurationRevision:configuration.revision,sources:group.sources},configuration,{assertCurrent:check,metadataOnly:group.metadataOnly});
@@ -228,16 +273,23 @@ export function createStrategyDiscussionHost(options:{roleContext?:RoleContextRe
   }
   return fail('invalid_strategy_discussion_action',400);
  }
- function assertRoleHistory(n:Awaited<ReturnType<typeof native>>, roleContext:unknown) {
-  const rights = object(roleContext) && Array.isArray(roleContext.sourceRights) ? roleContext.sourceRights : [];
+ async function assertRoleHistory(n:Awaited<ReturnType<typeof native>>, roleContext:unknown, owner:BusinessRoleOwner, cfg?:Readonly<RuntimeModelConfiguration>) {
+  const current = object(roleContext) && Array.isArray(roleContext.sourceRights) ? roleContext.sourceRights : [];
+  const missing = new Set<string>();
   for(const entry of n?.manager.getBranch()??[]){
-   if(entry.type!=='custom'||entry.customType!=='optracall.run'||!object(entry.data))continue;
-   const provided=entry.data.providedContext;
-   if(!object(provided)||!object(provided.businessRole))continue;
-   const prior=provided.businessRole.sourceRights;
-   if(prior!==undefined&&(!Array.isArray(prior)||prior.some(key=>!rights.includes(key))))fail('role_history_source_no_longer_readable',403);
+    if(entry.type!=='custom'||entry.customType!=='optracall.run'||!object(entry.data))continue;
+    const provided=entry.data.providedContext;
+    if(!object(provided)||!object(provided.businessRole))continue;
+    const prior=provided.businessRole.sourceRights;
+    if(prior===undefined)continue;
+    if(!Array.isArray(prior)||prior.some(key=>typeof key!=='string'))fail('role_history_source_no_longer_readable',403);
+    for(const key of prior) if(!current.includes(key)) missing.add(key);
   }
-  return rights.filter((key):key is string=>typeof key==='string');
+  if(missing.size) {
+    if(owner.role!=='project'||!cfg||!options.verifyPriorRights)fail('role_history_source_no_longer_readable',403);
+    await options.verifyPriorRights(owner,cfg,missing);
+  }
+  return current.filter((key):key is string=>typeof key==='string');
  }
  function requestReceipt(n:Awaited<ReturnType<typeof native>>,requestId?:string):StrategyDiscussionDetail['requestReceipt']{
   if(!n||!requestId)return;let provided:any;
@@ -261,7 +313,7 @@ export function createStrategyDiscussionHost(options:{roleContext?:RoleContextRe
  async function readGoalSuggestion(source:import('./strategy-goals-types.ts').GoalRoleSuggestionRef,recipient?:Readonly<RuntimeModelConfiguration>){
   const owner=store.get(source.discussionId);
   if(!owner.businessOwner||discussionHash(owner.businessOwner)!==discussionHash(source.owner))fail('goal_suggestion_owner_mismatch',403);
-  const checked=await verifyRoleHistory(owner.id,recipient);
+  const checked=await verifyRoleHistory(owner.id,recipient,!recipient);
   const proposal=goalSuggestions(owner,checked).find(item=>item.source.sessionId===source.sessionId&&item.source.entryId===source.entryId&&item.source.sha256===source.sha256);
   if(!proposal)fail('goal_suggestion_source_changed',409);
   return proposal;
@@ -310,13 +362,19 @@ export function createStrategyDiscussionHost(options:{roleContext?:RoleContextRe
   const cfg = options.configuration(owner.configurationId,owner.configurationRevision);
   if(!cfg)fail('configuration_changed');
   const roleContext = owner.businessOwner ? await options.roleContext!(owner.businessOwner,cfg,true) : undefined;
-  const sourceRights = owner.businessOwner ? assertRoleHistory(n,roleContext) : [];
+  const sourceRights = owner.businessOwner ? await assertRoleHistory(n,roleContext,owner.businessOwner,cfg) : [];
   const context=owner.goal && !owner.businessOwner ? options.goals.readContext([owner.goal]):undefined;
   const prompt=JSON.stringify({...(owner.businessOwner?{owner:owner.businessOwner,roleContext,roleVersion:businessRoleVersion}:{}),usageContext:owner.usageContext,methods:owner.methods,goalContext:context,sources:owner.sources,sourceScope:owner.sourceScope,claim:'accurate-context-not-professional-judgement'})+'\n\n用户本轮原话：\n'+originalUserText;
   if(prompt.length>65536)fail('strategy_discussion_materials_too_large',413);
    const verificationAbort=new AbortController();lease.onCancel(()=>verificationAbort.abort());
    const verify=async()=>{if(!lease.context.isCurrent())fail('strategy_discussion_run_unavailable');const current=store.get(id);if(current.revision!==owner.revision)fail('strategy_discussion_context_changed');const cfg=options.configuration(owner.configurationId,owner.configurationRevision);if(!cfg)fail('configuration_changed');
-    if(owner.businessOwner && discussionHash(await options.roleContext!(owner.businessOwner,cfg,true))!==discussionHash(roleContext))fail('strategy_discussion_context_changed');
+    for(const snapshot of previousAccesses.goalContexts)await checkGoalContext(snapshot,cfg);
+    if(context)await checkGoalContext(context,cfg);
+    if(owner.businessOwner) {
+      const checked = await options.roleContext!(owner.businessOwner,cfg,true);
+      if(discussionHash(checked)!==discussionHash(roleContext))fail('strategy_discussion_context_changed');
+      await assertRoleHistory(n,checked,owner.businessOwner,cfg);
+    }
     if(owner.sources.length&&!options.sources)fail('strategy_discussion_sources_unavailable');const sourceContext={signal:verificationAbort.signal,assertCurrent:()=>{if(!lease.context.isCurrent()||verificationAbort.signal.aborted)fail('strategy_discussion_run_unavailable');}};
     // A native session retains previously delivered bodies. Narrowing the
     // current scope cannot make the SDK forget them or silently resend them.
@@ -357,12 +415,14 @@ export function createStrategyDiscussionHost(options:{roleContext?:RoleContextRe
    }
   }
  }
- async function verifyRoleHistory(id:string,recipient?:Readonly<RuntimeModelConfiguration>){
+ async function verifyRoleHistory(id:string,recipient?:Readonly<RuntimeModelConfiguration>,localRead=false){
   const owner=store.get(id);if(!owner.businessOwner || !options.roleContext)fail('role_owner_unavailable',403);
-  const cfg=recipient??options.configuration(owner.configurationId,owner.configurationRevision);
+  const role=owner.businessOwner;
+  const localGoal=localRead&&(role.role==='goal'||role.role==='goal-draft')&&!role.caseSource&&!('teachReview' in role&&role.teachReview);
+  const cfg=recipient??(localGoal?undefined:options.configuration(owner.configurationId,owner.configurationRevision));
   const original=await stableRoleSnapshot(owner);
-  const roleContext=await options.roleContext(owner.businessOwner,cfg??undefined,false);
-  assertRoleHistory(original,roleContext);
+  const roleContext=await options.roleContext(owner.businessOwner,cfg??undefined,false,localGoal);
+  await assertRoleHistory(original,roleContext,owner.businessOwner,cfg??undefined);
   const history=sourceAccesses(original,undefined,undefined,false);
   for(const group of history.projections){
    if(!group.sources.length)continue;

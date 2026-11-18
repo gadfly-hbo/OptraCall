@@ -39,6 +39,7 @@ function replayProvenance(current: UserQuoteProvenance, prior?: UserQuoteProvena
 export function createQuotedDecisionAdapter(options: {
   cases: CaseStore; projects: Pick<ProjectStore, 'get' | 'getTask'>; board: ReturnType<typeof createDecisionBoardStore>;
   goals?: Pick<StrategyGoalsStore, 'recordFeedback' | 'getOperation'> & Partial<Pick<StrategyGoalsStore, 'read' | 'list' | 'recordArrangement'>>;
+  checkPlan?(ref: CaseDecisionRef): Promise<void>;
   assertBoardItemReadable?(item: BoardItemRecord): Promise<void>;
   mutate<T>(operation: () => T | Promise<T>): Promise<T>; isClosing(): boolean;
 }) {
@@ -142,7 +143,9 @@ export function createQuotedDecisionAdapter(options: {
     }
     let authority: BoardArrangementReceipt;
     try {
-      authority = await options.mutate(() => { check(context); return options.board.arrangeActions({ operationId: id, projectId: context.projectId, source,
+      authority = await options.mutate(async () => {
+        if (!('kind' in source) && !options.board.getArrangementOperation(id)) await options.checkPlan?.(source.strategyRef);
+        check(context); return options.board.arrangeActions({ operationId: id, projectId: context.projectId, source,
         quoteProvenance: replayProvenance(supplied, prior?.quoteProvenance), scope: input.scope as string, title: input.title as string, checks: input.checks as string[], actions: input.actions as BoardArrangeAction[] }, { assertWritable: () => check(context) }); });
     } catch (error) {
       const code = errorCode(error);
@@ -291,9 +294,11 @@ export function createQuotedDecisionAdapter(options: {
       if (action === 'authorize-action') {
         if (!input.decision || typeof input.scope !== 'string' || !input.scope.trim() || typeof input.itemVersion !== 'string' || typeof input.taskVersion !== 'string' || !Object.hasOwn(input, 'expectedPreviousAuthorizationId')) fail('quoted_decision_clarification_required');
         const prior = options.board.getActionAuthorizationOperation(id), quoteProvenance = replayProvenance(supplied, prior?.quoteProvenance);
-        authority = await options.mutate(() => options.board.recordActionAuthorization({ operationId: id, projectId: context.projectId, itemId: target.item.id, taskId: target.task.id,
+        authority = await options.mutate(async () => {
+          if (input.decision === 'authorize' && !options.board.getActionAuthorizationOperation(id)) await options.checkPlan?.(ref);
+          return options.board.recordActionAuthorization({ operationId: id, projectId: context.projectId, itemId: target.item.id, taskId: target.task.id,
           itemVersion: input.itemVersion as string, taskVersion: input.taskVersion as string, expectedPreviousAuthorizationId: input.expectedPreviousAuthorizationId as string | null, decision: input.decision as 'authorize' | 'revoke', scope: input.scope as string,
-          source: { caseStoreId: ref.caseStoreId, caseId: ref.caseId, strategyRef: ref, choiceId: choice.choiceId }, quoteProvenance }, { assertWritable: () => check(context) }));
+          source: { caseStoreId: ref.caseStoreId, caseId: ref.caseId, strategyRef: ref, choiceId: choice.choiceId }, quoteProvenance }, { assertWritable: () => check(context) }); });
         source = { authority: 'decision-board', id: target.task.id, version: authority.authorizationId, projectId: context.projectId, taskId: target.task.id };
       } else {
         if (!Object.hasOwn(input, 'expectedLatestRevisionId') || typeof input.adopted !== 'boolean' || ['outcome', 'metricDelta', 'review'].some(key => typeof input[key] !== 'string') || !Object.hasOwn(input, 'score')) fail('quoted_decision_clarification_required');

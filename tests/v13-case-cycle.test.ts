@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { checkTeachUpstream } from './fixtures/teach-upstream.ts';
 import test from 'node:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
@@ -79,7 +80,10 @@ test('normal Host and Pi retain one issue from exact Plan and separate human aut
   const frozenTeachRequest = provider.requests.at(-1)!.body.messages!.filter(m => m.role === 'user').map(m=>providerMessageText(m.content)).join(' ');
   assert.ok(!frozenTeachRequest.includes(laterFeedback.revisionId)); assert.ok(!frozenTeachRequest.includes('后续不同采样的观察'));
   await call(a.base+'/review','POST',{...decisionBody,source:teach,feedbackRevisionId:laterFeedback.revisionId},409);
+  const reviewRelation={from:(await call('/api/cases/'+a.record.id)).goalBinding.primary,to:(await call('/api/cases/'+b.record.id)).goalBinding.primary,kind:'strategy',responsibility:'主管核对',rationale:'原轮当时的目标关系依据'};
+  const {relation}=await call('/api/strategy/relations','POST',{...reviewRelation,operationId:randomUUID()},201);
   await call(a.base+'/review','POST',{...decisionBody,source:teach,feedbackRevisionId:feedback.revisionId});
+  await call('/api/strategy/relations/'+relation.id+'/revisions','POST',{...reviewRelation,expectedRevision:1,rationale:'后来另行调整的关系',operationId:randomUUID()},201);
   const scoped = (caseId:string,issueId:string,projectId=project.id) => '/api/business-role?owner=' + encodeURIComponent(JSON.stringify({role:'project',projectId,issue:{caseId,issueId}}));
   const scopeA = scoped(a.record.id,a.issue.id), scopeB = scoped(b.record.id,b.issue.id);
   await call(scoped(a.record.id,b.issue.id),'GET',undefined,404);
@@ -166,8 +170,10 @@ test('normal Host and Pi retain one issue from exact Plan and separate human aut
     proposal:strategyRef,plan,teach,selectedFeedback:feedback.revisionId,excludedFeedback:laterFeedback.revisionId,boardAuthorization:action.authorizationId,
     caseSession:roleState.snapshot.sessionId,caseRequest:roleState.requestReceipt?.requestId,casePromptSha256:digest(frozenCaseRequest),
     teachPromptSha256:digest(frozenTeachRequest),verified:expected.map(([name,,marker])=>({name,marker})),roleProvider:'local protocol fixture'},null,2));
+  const checkRevokedReview=await checkTeachUpstream(host,provider,view.rounds[0],[deferred.choiceId,stopped.choiceId,laterFeedback.revisionId]);
   const providerCount=provider.requests.length;
   await call('/api/cases/'+a.record.id+'/projects/'+project.id,'DELETE',{expectedRevision:(await call('/api/cases/'+a.record.id)).case.revision,operationId:randomUUID()});
+  await checkRevokedReview();
   const deniedRead=await host.request(rolePath),deniedSend=await host.request(rolePath+'&action=messages','POST',{requestId:randomUUID(),expectedRevision:roleState.discussion.revision,text:'重新发送旧上下文'});
   assert.ok([403,409].includes(deniedRead.status));assert.ok([403,409].includes(deniedSend.status));
   assert.ok([403,409].includes((await host.request(taskPath+'/'+teach.taskId+'/messages','POST',{requestId:randomUUID(),text:'继续复盘原反馈'})).status));

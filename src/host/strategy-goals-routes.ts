@@ -1,6 +1,7 @@
+import { normalizeGoalText, sameGoalRequirement } from './strategy-goals-types.ts';
 import { StrategyGoalsStore, StrategyGoalsError } from './strategy-goals-store.ts';
 import type { CaseGoalBindingInput } from './case-types.ts';
-import type { GoalVersion, GoalDraftInput, GoalRef, GoalRevisionInput, GoalAdoptionInput, GoalRelationInput, GoalFeedbackInput, GoalSourceRef } from './strategy-goals-types.ts';
+import type { GoalDraftInput, GoalRef, GoalRevisionInput, GoalAdoptionInput, GoalRelationInput, GoalFeedbackInput, GoalSourceRef } from './strategy-goals-types.ts';
 
 export function createStrategyGoalRoutes(options: { store: StrategyGoalsStore; mutate: <T>(fn: () => T | Promise<T>) => Promise<T>; isClosing: () => boolean; validateGoal?: (input: GoalDraftInput, target?: GoalRef | 'create') => void | Promise<void>; listSources?: () => Promise<unknown>; validateFeedbackSource?: (input: GoalSourceRef) => void | Promise<void>; validateAdoption?: (ref: GoalRef, input: GoalAdoptionInput) => void | Promise<void> }) {
   const { store } = options;
@@ -54,9 +55,7 @@ export function assertAdoptedGoalRefs(store: StrategyGoalsStore, value: unknown,
     if (purpose === 'new-case') {
       if (raw.effectiveFrom !== undefined) throw new StrategyGoalsError('invalid_case_effective_date');
       const previous = record.versions.filter(v => v.status === 'adopted' && v.version < adopted.version).at(-1);
-      const normalize = (s: string) => s.normalize('NFKC').trim().replace(/\s+/g, ' ');
-      const goal = (v: GoalVersion) => JSON.stringify([normalize(v.outcome), v.measurement.kind === 'deliverable' ? normalize(v.measurement.criterion) : v.measurement, v.dueAt ?? '']);
-      if (previous && goal(adopted) === goal(previous) && previous.strategies?.some(s => normalize(s) === normalize(raw.strategy!))) {
+      if (previous && sameGoalRequirement(adopted, previous) && previous.strategies?.some(s => normalizeGoalText(s) === normalizeGoalText(raw.strategy!))) {
         throw new StrategyGoalsError('case_goal_strategy_unchanged', 409);
       }
     }

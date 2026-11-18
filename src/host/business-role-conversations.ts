@@ -11,10 +11,20 @@ function shortText(value:unknown):string { if(typeof value!=='string'||!value.tr
 export function parseBusinessRoleOwner(input: unknown): BusinessRoleOwner {
   if (!object(input)) return invalid();
   switch(input.role) {
-    case 'goal':
-      keys(input,['role','goalId','version','caseSource']);
+    case 'strategy':
+    case 'goal':{
+      keys(input,['role','goalId','version','caseSource','teachReview']);
       if(!Number.isSafeInteger(input.version)||Number(input.version)<1) return invalid();
+      if(input.teachReview!==undefined){
+        if(input.caseSource || !object(input.teachReview))return invalid();
+        const review=input.teachReview;keys(review,['caseId','issueId','choiceId','reviewId']);
+        return {role:input.role,goalId:discussionId(input.goalId),version:Number(input.version),teachReview:{
+          caseId:discussionId(review.caseId),issueId:discussionId(review.issueId),choiceId:discussionId(review.choiceId),reviewId:discussionId(review.reviewId),
+        }};
+      }
+      if(input.role==='strategy')return invalid();
       return {role:'goal',goalId:discussionId(input.goalId),version:Number(input.version),...(input.caseSource===undefined?{}:{caseSource:parseCaseCreationSource(input.caseSource)})};
+    }
     case 'case':
       keys(input,['role','caseId','itemId']);
       return {role:'case',caseId:discussionId(input.caseId),itemId:discussionId(input.itemId)};
@@ -73,9 +83,12 @@ export function createBusinessRoleConversations(options:{
       return record ? host.close(id) : {closed:true};
     }
     if(action==='origin'&&method==='GET'){
-      if((owner.role!=='goal'&&owner.role!=='goal-draft')||!owner.caseSource)invalid();
+      const review='teachReview' in owner&&owner.teachReview;
+      if(owner.role!=='project'&&!review&&((owner.role!=='goal'&&owner.role!=='goal-draft')||!owner.caseSource))invalid();
       const config=record?options.configuration(record.configurationId,record.configurationRevision):await options.initialConfiguration(owner);
       const context=await options.context(owner,config??undefined,false);
+      if(owner.role==='project'){if(!object(context)||!object(context.workBasis))throw new StrategyDiscussionFault('project_goal_scope_unavailable',409);return {origin:context.workBasis};}
+      if(review&&object(context)&&object(context.teachReview))return {origin:context.teachReview};
       if(!object(context)||!object(context.caseOrigin))throw new StrategyDiscussionFault('goal_origin_unavailable',409);
       return {origin:context.caseOrigin};
     }

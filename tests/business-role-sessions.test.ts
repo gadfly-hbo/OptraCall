@@ -186,5 +186,10 @@ test('a handed strategy version reaches the Goal system turn, whose native edita
   const goalRoute=role({role:'goal',goalId:goal.goalId,version:1});
   await req(goalRoute+'&action=messages','POST',{requestId:randomUUID(),text:'核对准确目标',expectedRevision:0},202);
   assert.equal(providerMessageText((await settle(goalRoute)).snapshot.messages.at(-1).content),'已按正式记录的第一版核对');
+  const requests=provider.requests.length;
+  await req('/api/configuration','DELETE');
+  const local=await req('/api/strategy/goals/'+goal.goalId+'/versions/1/export');
+  assert.ok(local.html.includes(suggestion.source.entryId)&&local.html.includes(suggestion.source.sha256));
+  assert.equal(provider.requests.length,requests);
   assert.deepEqual(provider.errors,[]);
 });

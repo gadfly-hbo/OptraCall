@@ -75,6 +75,7 @@ export function TaskAssignmentPanel({ project, task, busy, onUpdated, onCreate }
         const enabled = event.target.checked; setSaving(true); setError('');
         try { onUpdated(await setDefaultTaskSkill(project.id, task.id, enabled)); } catch (reason) { setError(failure(reason)); } finally { setSaving(false); }
       }}/> {taskPurpose[choice.type].skill} {choice.skill?.version ?? (approvedTaskSkills[choice.type] ? '（已取消）' : '（等待独立测评确认）')}</label></>}
+    {project.goalOrigin && !choice?.issue && <p>项目承接 GSA · 目标准确版 v{project.goalOrigin.goal.version} · {project.goalOrigin.goal.goalId}</p>}
     {agreement && <p>本任务共用约定 v{agreement.version} · {agreement.text}</p>}
     {choice?.planAgreement && <p>本任务复用原确认方案 v{choice.planAgreement.version} · {choice.planAgreement.confirmationId}</p>}
     {choice?.issue && <p>Case {choice.issue.caseId} · 事项 {choice.issue.issueId}{choice.issue.choiceId && ' · 取舍 ' + choice.issue.choiceId}</p>}
@@ -102,14 +103,34 @@ function StagePanel({ project, onRefresh }: { project: ClientProject; onRefresh:
     finally { setSaving(false); }
   }
   return <section className="project-plan-section"><h2>阶段目标</h2>
-    {latest && <p>{latest.goal} · {latest.condition} · {latest.done ? '已结束' : '进行中'}</p>}
+    {latest && <p>{[latest.goal, latest.condition].filter(Boolean).join(' · ')} · {latest.done ? '已结束' : '进行中'}</p>}
     {draft ? <><label>阶段目标<textarea maxLength={2000} value={draft.goal} disabled={saving || draft.done} onChange={e => setDraft({ ...draft, goal: e.target.value, operationId: crypto.randomUUID() })}/></label>
       <label>结束条件<textarea maxLength={2000} value={draft.condition} disabled={saving || draft.done} onChange={e => setDraft({ ...draft, condition: e.target.value, operationId: crypto.randomUUID() })}/></label>
-      <button type="button" className="primary-button" disabled={saving || !draft.goal.trim() || !draft.condition.trim()} onClick={() => void save()}>{draft.done ? '确认结束阶段' : '保存阶段目标'}</button> <button type="button" disabled={saving} className="text-button" onClick={() => setDraft(undefined)}>取消</button></> :
+      <button type="button" className="primary-button" disabled={saving || !(draft.goal.trim() || draft.condition.trim())} onClick={() => void save()}>{draft.done ? '确认结束阶段' : '保存阶段目标'}</button> <button type="button" disabled={saving} className="text-button" onClick={() => setDraft(undefined)}>取消</button></> :
       <><button type="button" className="secondary-button" onClick={() => edit(false)}>{latest && !latest.done ? '调整阶段目标' : '设置阶段目标'}</button> {latest && !latest.done && <button type="button" className="text-button" onClick={() => edit(true)}>结束本阶段</button>}</>}
-    {!!project.stages?.length && <details><summary>阶段记录</summary>{project.stages.map(row => <p key={row.version}>v{row.version} · {row.goal} · {row.condition} · {row.done ? '已结束' : '进行中'}</p>)}</details>}
+    {!!project.stages?.length && <details><summary>阶段记录</summary>{project.stages.map(row => <p key={row.version}>v{row.version} · {[row.goal, row.condition].filter(Boolean).join(' · ')} · {row.done ? '已结束' : '进行中'}</p>)}</details>}
     {error && <p role="alert">{error}</p>}
   </section>;
+}
+
+function ProjectWorkBasis({projectId,issue,version}:{projectId:string;issue?:IssueScope;version?:number}) {
+  const [basis,setBasis]=useState<{goal?:{title:string;goal:{version:number};outcome:string;usageContext:{background:string};scope:{name:string};strategies?:string[];source?:{authority:string;id:string;version:string|number};evidence?:{original?:{description?:string}}[]};case?:{description?:string};strategy?:string;decision?:{reason?:string}}>();
+  const [error,setError]=useState('');
+  const owner=JSON.stringify({role:'project',projectId,...(issue?{issue}:{})});
+  useEffect(()=>{
+    const controller=new AbortController();
+    void fetch('/api/business-role?'+ new URLSearchParams({owner,action:'origin'}),{signal:controller.signal,credentials:'omit',cache:'no-store',headers:{'x-optracall-client':'1'}}).then(async response=>{
+      if(!response.ok)throw Error('原目标或事项依据当前不可读，请核对权限及准确来源。');
+      const value=await response.json();if(!controller.signal.aborted)setBasis(value.origin);
+    }).catch(reason=>{if(!controller.signal.aborted){setBasis(undefined);setError(failure(reason));}});
+    return ()=>controller.abort();
+  },[owner]);
+  return <section className="project-plan-section" aria-label="项目承接依据"><h2>{issue?'事项依据':'来源 GSA'}{version ? ' · v'+version : ''}</h2>
+    {basis?.goal && <><p>{basis.goal.title} · v{basis.goal.goal.version} · {basis.goal.scope.name}</p><p>{basis.goal.outcome}</p>
+      {basis.goal.strategies?.map(strategy=><p key={strategy}>{strategy}</p>)}<p>{basis.goal.usageContext.background}</p>
+      {basis.goal.source && <p>原依据 · {basis.goal.source.authority} · {basis.goal.source.id} · v{basis.goal.source.version}</p>}
+      {basis.goal.evidence?.map((item,index)=>item.original?.description && <p key={index}>{item.original.description}</p>)}</>}
+    {basis?.case?.description && <p>{basis.case.description}</p>}{basis?.decision?.reason && <p>{basis.decision.reason}</p>}{error && <p role="alert">{error}</p>}</section>;
 }
 
 export function ProjectCollaboration({ project, issue, onChangeScope, onReturnIssue, onCreate, onRefresh, onHistory }: { project: ClientProject; issue?: IssueScope; onChangeScope: (issue?: IssueScope) => void; onReturnIssue: (issue: IssueScope) => void; onCreate: Create; onRefresh: () => Promise<void>; onHistory: () => void }) {
@@ -148,6 +169,7 @@ export function ProjectCollaboration({ project, issue, onChangeScope, onReturnIs
     {!!scopes.size && <div className="case-inline-actions"><label>项目工作范围 <select value={issue ? issue.caseId + '/' + issue.issueId : ''} onChange={event => onChangeScope(scopes.get(event.target.value))}>
       <option value="">独立项目工作</option>{[...scopes].map(([key, value]) => <option key={key} value={key}>{value.title ?? '原事项'} · {value.caseId.slice(0,8)} / {value.issueId.slice(0,8)}</option>)}</select></label>
       {issue && <button type="button" className="text-button" onClick={() => onReturnIssue(issue)}>返回原 Case 事项</button>}</div>}
+    {tab==='work' && (issue||project.goalOrigin) && <ProjectWorkBasis projectId={project.id} issue={issue} version={issue?undefined:project.goalOrigin?.goal.version}/>}
     <div hidden={tab !== 'work'}><BusinessRoleConversation owner={{ role: 'project', projectId: project.id, ...(issue ? {issue} : {}) }}/></div>
     {tab === 'terms' && <section className="project-plan-section"><h2>共用约定</h2>{!latest && <p>多个任务需要相同口径、范围或前提时，可在这里共同确定。</p>}
       {project.agreements?.map(item => <p key={item.version}><strong>v{item.version}</strong> · {item.text}</p>)}

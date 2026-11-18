@@ -72,6 +72,16 @@ export interface GoalVersion extends GoalDraftInput, GoalRef {
   adoptionDecision?: string;
   adoptionProvenance?: GoalAdoptionProvenance;
 }
+export const normalizeGoalText = (text: string) => text.normalize('NFKC').trim().replace(/\s+/g, ' ');
+
+/** G is the outcome, its measure and the deadline, as used when admitting a new Case. */
+export function sameGoalRequirement(a: GoalVersion, b: GoalVersion): boolean {
+  const measure = (m: GoalMeasurement) => m.kind === 'deliverable' ? normalizeGoalText(m.criterion) :
+    JSON.stringify([m.sapMetric.id, m.sapMetric.version, m.sapMetric.metricName ?? '', m.target ?? '']);
+  return normalizeGoalText(a.outcome) === normalizeGoalText(b.outcome) &&
+    a.measurement.kind === b.measurement.kind && measure(a.measurement) === measure(b.measurement) && (a.dueAt ?? '') === (b.dueAt ?? '');
+}
+
 export interface StrategyGoalRecord {
   id: string;
   currentVersion: number;
@@ -150,7 +160,7 @@ export type GoalArrangementView = Omit<GoalActionArrangement, 'quoteProvenance'>
 export type GoalArrangementInput = Omit<GoalActionArrangement, 'id' | 'createdAt'>;
 export interface GoalMutation { operationId: string }
 export interface GoalRevisionInput extends GoalDraftInput, GoalMutation { expectedVersion: number }
-export interface GoalAdoptionInput extends GoalMutation { expectedVersion: number; decision: string; provenance?: GoalAdoptionProvenance }
+export interface GoalAdoptionInput extends GoalMutation { expectedVersion: number; expectedAdoptedVersion?: number | null; decision: string; provenance?: GoalAdoptionProvenance }
 export interface GoalOperationReceipt {
   operationId: string;
   requestHash: string;

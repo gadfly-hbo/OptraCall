@@ -1,3 +1,6 @@
+import type { BusinessRoleOwner } from './business-role-types.ts';
+import { readCaseIssueOrigin } from './case-creation-source.ts';
+import {taskRoundReceipts} from './task-round-receipts.ts';
 import {discussionSourceMode,isDiscussionSourceExcluded} from './strategy-discussion-source-scope.ts';
 import {readCaseOriginRevision} from './case-creation-source.ts';
 import { approvedTaskSkills, makeTaskAssignment, parseTaskAssignment, taskPurpose, type TaskAssignment, type TaskCaseIssue } from './task-assignment.ts';
@@ -13,7 +16,7 @@ import type {RoleContextReader} from './strategy-discussion-host.ts';
 import {StrategyDiscussionFault,discussionHash} from './strategy-discussion-store.ts';
 import {createUsageContextStore} from './usage-context-store.ts';
 import {createUsageContextRoutes} from './usage-context-routes.ts';
-import {UsageContextFault} from './usage-context-types.ts';
+import {resolveNewUsageContext,UsageContextFault} from './usage-context-types.ts';
 import { createMethodIssueAdapter } from './method-issue-adapter.ts';
 import { projectSkillCatalog } from '../agent/skill-catalog.ts';
 import { createQuotedDecisionAdapter } from './quoted-decision-adapter.ts';
@@ -29,7 +32,8 @@ import { hasReceivedTaskResults, verifyTaskResultLineage } from './project-resul
 import { ProjectTaskResultsError, confirmedProjectPlanMembers, createProjectTaskResultsReader } from './project-task-results.ts';
 import { createProjectPlanFeature } from './project-plan-host.ts';
 import { createProjectPlanStore, ProjectPlanFault } from './project-plan-store.ts';
-import { StrategyGoalsStore, StrategyGoalsError, parseGoalRoleSuggestion } from './strategy-goals-store.ts';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { StrategyGoalsStore, StrategyGoalsError, goalContentSha256, parseGoalRoleSuggestion } from './strategy-goals-store.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
@@ -717,7 +721,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
     },
   });
-  const quotedDecisions = createQuotedDecisionAdapter({ cases, projects, board: boardStore, goals: strategyGoals, mutate, isClosing: () => closing, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item) });
+  const quotedDecisions = createQuotedDecisionAdapter({ cases, projects, board: boardStore, checkPlan:ref=>caseDecisions.checkPlan(ref), goals: strategyGoals, mutate, isClosing: () => closing, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item) });
   const strategyMetricLibrary = createMetricLibrary(path.join(dataRoot, 'metric-assets'));
   const strategySources = createStrategyGoalSources({ cases, projects, board: boardStore, metrics: strategyMetricLibrary, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item), readDiscussionSource:ref=>strategyDiscussions.readDiscussionSource(ref) });
   const validateStrategyGoal=async(input:import('./strategy-goals-types.ts').GoalDraftInput,target?:import('./strategy-goals-types.ts').GoalRef|'create',recipient?:Readonly<RuntimeModelConfiguration>)=>{
@@ -758,7 +762,46 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     for(const task of tasks){context.assertCurrent();const found=await listTaskResultSources(project,task,context);reports.push(...found.reports);replies.push(...found.replies);}context.assertCurrent();return {reports,replies};
   },assertReadable:strategySourcePermissions});
   const discussionSourceContext=(owner:import('./strategy-discussion-types.ts').StrategyDiscussion)=>({assertCurrent:()=>{if(closing||!availableConfiguration(owner.configurationId,owner.configurationRevision))throw new StrategyDiscussionFault('strategy_discussion_context_changed');if(strategyDiscussions.store.get(owner.id).revision!==owner.revision)throw new StrategyDiscussionFault('strategy_discussion_context_changed');}});
-  const discussionOptions: Parameters<typeof createStrategyDiscussionHost>[0]={dataRoot,codeRoot:options.cwd,goals:strategyGoals,configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{offset:page?.offset,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}};
+  const goalSourcePath = new AsyncLocalStorage<{snapshots:readonly string[];budget:{remaining:number}}>();
+  async function verifyFrozenGoalContext(snapshot:import('./strategy-goals-types.ts').GoalContextSnapshot,recipient?:Readonly<RuntimeModelConfiguration>,receiver?:{projectId:string;context:import('./strategy-discussion-sources.ts').StrategyDiscussionSourceContext}):Promise<void> {
+    const denied=():never=>{throw new StrategyDiscussionFault('goal_context_source_changed',409);};
+    // Goal feedback and Goal sources can lead back to earlier, accurate strategic entries.
+    // Keep the active traversal per operation so independent local readers never share a grant.
+    const key=discussionHash(snapshot), ancestors=goalSourcePath.getStore();
+    const budget=ancestors?.budget??{remaining:1024};
+    if(--budget.remaining<0 || ancestors?.snapshots.includes(key) || (ancestors?.snapshots.length??0)>=64)return denied();
+    await goalSourcePath.run({snapshots:[...(ancestors?.snapshots??[]),key],budget}, async()=>{
+      const fixed=strategyGoals.readContext(snapshot.goals.map(({goalId,version})=>({goalId,version})),snapshot.basis);
+      if(discussionHash(fixed.relations)!==discussionHash(snapshot.relations)||discussionHash(fixed.feedback)!==discussionHash(snapshot.feedback))return denied();
+      const assertSource=async(source:import('./strategy-goals-types.ts').GoalSourceRef)=>{
+        await strategySources.validate(source);
+        if(receiver && (source.projectId && source.projectId!==receiver.projectId || source.authority==='project' && source.id!==receiver.projectId))return denied();
+        if(source.authority==='strategy-discussion'){
+          const exact=source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef;
+          if(receiver&&recipient)await qualifyGoalSource(exact,receiver.projectId,recipient,receiver.context);
+          else await strategyDiscussions.verifyChoiceSource(exact,recipient);
+        }
+      };
+      const goals=new Map(fixed.goals.map(goal=>[goal.goalId+'/'+goal.version,goal]));
+      for(const seen of snapshot.goals){
+        const current=goals.get(seen.goalId+'/'+seen.version);
+        if(!current||!['candidate','adopted'].includes(seen.status)||goalContentSha256(seen)!==goalContentSha256(current)||seen.createdAt!==current.createdAt)return denied();
+        if(seen.status==='adopted'&&(current.status!==seen.status||seen.adoptedAt!==current.adoptedAt||seen.adoptionDecision!==current.adoptionDecision||discussionHash(seen.adoptionProvenance??null)!==discussionHash(current.adoptionProvenance??null)))return denied();
+      }
+      for(const relation of fixed.relations)for(const ref of [relation.from,relation.to]){
+        const key=ref.goalId+'/'+ref.version;
+        if(!goals.has(key))goals.set(key,strategyGoals.read(ref));
+      }
+      for(const goal of goals.values()) {
+        await validateStrategyGoal(goal,undefined,recipient);
+        for(const ref of [goal.source,...(goal.strategyContext?.sources??[]),...(goal.strategyContext?.methods??[]).map(m=>m.source)]){
+          if(ref&&(receiver||ref.authority==='strategy-discussion'))await assertSource(ref);
+        }
+      }
+      for(const feedback of fixed.feedback)await assertSource(feedback.source);
+    });
+  }
+  const discussionOptions: Parameters<typeof createStrategyDiscussionHost>[0]={dataRoot,codeRoot:options.cwd,goals:strategyGoals,configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,verifyGoalContext:verifyFrozenGoalContext,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{offset:page?.offset,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}};
   const strategyDiscussions=createStrategyDiscussionHost(discussionOptions);
   async function readGoalOrigin(owner:Extract<import('./business-role-types.ts').BusinessRoleOwner,{role:'goal'|'goal-draft'}>,scope:import('./strategy-goals-types.ts').GoalScope,cfg?:Readonly<RuntimeModelConfiguration>){
     const origin=owner.caseSource;
@@ -799,7 +842,77 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     check();
     return {caseOrigin:{...taskOrigin,reply:{text:result.text,sha256:result.sha256}}};
   }
-  const readRoleContext:RoleContextReader = async (owner, cfg, writing) => {
+  async function projectGoalBasis(ref: import('./strategy-goals-types.ts').GoalRef, projectId:string, cfg:Readonly<RuntimeModelConfiguration>|undefined, caseId?:string, taskId?:string, issueId?:string) {
+    const deny=():never=>{throw new RequestFault(403,'project_goal_scope_unavailable');};
+    const current=()=>{if(closing||!cfg||!availableConfiguration(cfg.id,cfg.revision))deny();};
+    current();
+    const goal=strategyGoals.read(ref);
+    const enterprise=goal.scope.kind==='enterprise' ? goal.scope.id : goal.scope.enterpriseId;
+    if(goal.status!=='adopted'||enterprise && studio.enterpriseScopes.enterpriseIdForProject(projectId)!==enterprise)deny();
+    await validateStrategyGoal(goal,undefined,cfg);
+    const sourceRefs=[goal.source,...(goal.strategyContext?.sources??[]),...(goal.strategyContext?.methods??[]).map(method=>method.source)].filter(source=>!!source);
+    const evidence:unknown[]=[];
+    const linkedCase=(id:string)=> (!caseId || id===caseId) && cases.listProjectLinks(id).some(link=>link.projectId===projectId);
+    for(const source of sourceRefs) {
+      if(source.authority==='case'){
+        if(!linkedCase(source.id))deny();
+        if(typeof source.version==='number'){
+          evidence.push({source,original:readCaseOriginRevision(cases,{kind:'case',caseId:source.id,caseRevision:source.version})});
+        } else {
+          const choice=cases.getStrategyChoice(source.id,source.version);
+          const proposal=cases.getDecision(source.id,choice.strategyRef.recordId,choice.strategyRef.revision);
+          if(choice.strategyRef.caseStoreId!==cases.getStatus().storeId || issueId && choice.issueId!==issueId || proposal.issueId!==choice.issueId)deny();
+          if(choice.issueId){
+            const issue={caseId:source.id,issueId:choice.issueId},receiver=taskId?{projectId,taskId}:undefined;
+            const actual=await caseDecisions.issueModelContext(issue.caseId,issue.issueId,qualifyIssueReply(issue,cfg,receiver,projectId,ref),choice.choiceId);
+            evidence.push({source,choice:{id:choice.choiceId,decision:choice.choice,reason:choice.reason,issue},proposal:choice.strategyRef,proposals:actual.proposals,replies:actual.replies});
+          }else {
+            // Older choices have no issue identity. Keep their exact choice and proposal reference.
+            for(const reference of proposal.references){
+              const read=await caseDecisions.source(source.id,{target:reference.target},undefined,{audience:'agent',projectId});
+              if(read.status!=='available')deny();
+              if(reference.target.type==='source'&&reference.target.source.type==='native-reply'){
+                const original=reference.target.source;
+                if(original.projectId!==projectId)deny();
+                await assertTaskResultAccess({kind:'task-native-reply',projectId,taskId:original.taskId,sessionId:original.sessionId,messageId:original.messageId,sha256:original.expectedTextSha256},cfg!,
+                  {assertCurrent:current,receivingProjectId:projectId,...(taskId?{receivingTask:{projectId,taskId}}:{})});
+              }
+            }
+            evidence.push({source,choice:{id:choice.choiceId,decision:choice.choice,reason:choice.reason},proposal:choice.strategyRef});
+          }
+        }
+      }
+      if(source.authority==='project' && source.id!==projectId || source.projectId && source.projectId!==projectId)deny();
+      if(source.authority==='strategy-discussion'){
+        const fixed=source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef;
+        await strategyDiscussions.verifyChoiceSource(fixed,cfg);
+        const assertSource=await qualifyGoalSource(fixed,projectId,cfg!,{assertCurrent:current,...(taskId?{receivingTask:{projectId,taskId}}:{})});
+        evidence.push(await strategyDiscussions.readSource(fixed,{limit:8192}));
+        assertSource();
+      }
+    }
+    const roleOrigin=goal.roleSuggestion?.owner.caseSource;
+    if(roleOrigin?.kind==='case' && !linkedCase(roleOrigin.caseId) || roleOrigin?.kind==='task' && roleOrigin.projectId!==projectId)deny();
+    const suggestion=goal.roleSuggestion?.owner;
+    const upstreamReview=suggestion?.role==='goal' ? suggestion.teachReview : undefined;
+    if(upstreamReview){
+      if(!linkedCase(upstreamReview.caseId) || issueId && issueId!==upstreamReview.issueId)return deny();
+      const receiver=taskId ? {projectId,taskId} : undefined;
+      await caseDecisions.issueModelContext(upstreamReview.caseId,upstreamReview.issueId,
+        qualifyIssueReply(upstreamReview,cfg,receiver,projectId,ref),upstreamReview.choiceId,undefined,undefined,upstreamReview.reviewId);
+    }
+    if(roleOrigin?.kind==='task' && roleOrigin.reply){
+      const reply=roleOrigin.reply,originalTask=await projects.getTask(roleOrigin.projectId,roleOrigin.taskId),issue=originalTask.assignment?.issue;
+      if(issue && (!linkedCase(issue.caseId)||issueId && issueId!==issue.issueId))return deny();
+      await assertTaskResultAccess({kind:'task-native-reply',projectId:reply.projectId,taskId:reply.taskId,sessionId:reply.sessionId,messageId:reply.messageId,sha256:reply.expectedTextSha256},cfg!,
+        {assertCurrent:current,receivingProjectId:projectId,...(taskId?{receivingTask:{projectId,taskId}}:{})},issue);
+    }
+    current();
+    return {goal:ref,title:goal.title,outcome:goal.outcome,scope:goal.scope,usageContext:resolveNewUsageContext({goal}),strategies:goal.strategies,
+      measurement:goal.measurement,baseline:goal.baseline,responsible:goal.responsible,source:goal.source,strategyContext:goal.strategyContext,evidence,
+      ...(goal.strategyChoice?{strategyChoice:goal.strategyChoice}:{}),...(goal.roleSuggestion?{roleSuggestion:goal.roleSuggestion}:{})};
+  }
+  const readRoleContext:RoleContextReader = async (owner, cfg, writing,localRead=false) => {
     if(closing)throw new StrategyDiscussionFault('host_closing');
     if(owner.role==='goal-draft'){
       validateStrategyGoalScope(owner.scope,studio.enterpriseScopes);
@@ -811,7 +924,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if(!handed.version.handedOffAt||handed.version.destination?.draftId!==owner.draftId||!scope||
           scope.kind!==owner.scope.kind||scope.id!==owner.scope.id||scope.name!==owner.scope.name||scope.enterpriseId!==owner.scope.enterpriseId)
         throw new StrategyDiscussionFault('role_strategy_handoff_scope_mismatch',403);
-      if(!cfg)throw new StrategyDiscussionFault('role_source_model_unavailable',403);
+      if(!cfg&&!localRead)throw new StrategyDiscussionFault('role_source_model_unavailable',403);
       await strategyDiscussions.verifyChoiceSource(handed.version.source,cfg);
       return {scope:owner.scope,strategyChoice:handed,...original};
     }
@@ -821,12 +934,30 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const issue=owner.issue && cases.getDecisionIssue(owner.issue.caseId,owner.issue.issueId);
       if(issue && !cases.listProjectLinks(issue.caseId).some(link=>link.projectId===project.id))throw new StrategyDiscussionFault('project_issue_scope_unavailable',403);
       if(issue && writing && cases.getCase(issue.caseId).status==='closed')throw new StrategyDiscussionFault('case_closed',409);
+      const binding=issue ? cases.getGoalBinding(issue.caseId) : null;
+      const ref=issue ? binding?.primary : project.goalOrigin?.goal;
+      const goal=ref && await projectGoalBasis(ref,project.id,cfg,issue?.caseId,undefined,issue?.id);
+      const original=issue && readCaseIssueOrigin(cases,issue.caseId,issue.id);
+      let decision;
+      let sourceRights:string[]=[];
+      if(issue){
+        const timeline=await caseDecisions.issueTimeline(issue.caseId,issue.id);
+        const latest=timeline.rounds.at(-1);
+        if(latest){
+          const evidence=await caseDecisions.issueModelContext(issue.caseId,issue.id,qualifyIssueReply({caseId:issue.caseId,issueId:issue.id},cfg,undefined,project.id),latest.choice.choiceId);
+          sourceRights=evidence.sourceRights;
+          decision={choice:latest.choice.choiceId,reason:latest.choice.reason,proposal:latest.choice.strategyRef,proposals:evidence.proposals,replies:evidence.replies};
+        }
+      }
+      const workBasis=goal||issue ? {goal:goal && {...goal,...(issue ? {strategies:binding?.strategy?[binding.strategy]:[]} : {})},
+        ...(issue ? {case:{id:issue.caseId,initialRevision:original?.revision,title:original?.title,description:original?.description,judgement:original?.judgement,nextStep:original?.nextStep},issue,strategy:binding?.strategy,decision} : {})} : undefined;
+      if(goal)sourceRights.push('goal/'+goal.goal.goalId+'/'+goal.goal.version);
       const plan=await projectPlans.read(project.id);
       const agreement=project.agreements?.at(-1);
       const tasks=project.tasks.filter(t => !t.assignment?.issue || t.assignment.issue.caseId === issue?.caseId && t.assignment.issue.issueId === issue.id);
       const former=plan.confirmed;
       const allowedFormer=former && (!former.plan.caseContext || former.plan.caseContext.caseId===issue?.caseId);
-      return {project:{id:project.id,name:project.name,stage:project.stages?.at(-1)},...(issue?{issue:{id:issue.id,caseId:issue.caseId,title:issue.title}}:{}),tasks:tasks.map(t=>({id:t.id,name:t.name,type:t.assignment?.type,archivedAt:t.archivedAt})),
+      return {...(workBasis ? {workBasis,sourceRights} : {}),project:{id:project.id,name:project.name,stage:project.stages?.at(-1)},...(issue?{issue:{id:issue.id,caseId:issue.caseId,title:issue.title}}:{}),tasks:tasks.map(t=>({id:t.id,name:t.name,type:t.assignment?.type,archivedAt:t.archivedAt})),
         ...(agreement?{agreement}:allowedFormer?{agreement:{version:former.planVersion,request:former.plan.request,premises:former.plan.premises}}:{})};
     }
     if(owner.role==='case'){
@@ -845,16 +976,65 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     for(const source of [goal.source,...(goal.strategyContext?.sources??[]),...(goal.strategyContext?.methods??[]).map(m=>m.source)]){
       if(source?.authority!=='strategy-discussion')continue;
       const ref=source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef;
-      if(!cfg)throw new StrategyDiscussionFault('role_source_model_unavailable',403);
+      if(!cfg&&!localRead)throw new StrategyDiscussionFault('role_source_model_unavailable',403);
       await strategyDiscussions.verifyChoiceSource(ref,cfg);
       upstream.push(await strategyDiscussions.readSource(ref,{limit:8192}));
     }
+    if(owner.teachReview) {
+      const ref=owner.teachReview;
+      const deny=():never=>{throw new StrategyDiscussionFault('teach_review_source_unavailable',403);};
+      if(!cfg)return deny();
+      const data=await caseDecisions.issueModelContext(ref.caseId,ref.issueId,qualifyIssueReply(ref,cfg),ref.choiceId,undefined,undefined,ref.reviewId);
+      const round=data.rounds[0], review=round?.review, binding=round?.choice.goalBinding;
+      if(!review || !binding?.strategy || binding.primary.goalId!==goal.goalId || binding.primary.version!==goal.version ||
+        !goal.strategies?.includes(binding.strategy)) return deny();
+      const enterprise=goal.scope.kind==='enterprise'?goal.scope.id:goal.scope.enterpriseId;
+      const caseScope=studio.enterpriseScopes.enterpriseIdForCase(ref.caseId);
+      if(caseScope && caseScope!==enterprise)return deny();
+      for(const projectId of new Set([...data.replies.map(r=>r.source.projectId),...round.actions.map(a=>a.projectId)])) {
+        if(studio.enterpriseScopes.enterpriseIdForProject(projectId)!==enterprise)return deny();
+      }
+      const relations=[];
+      if(owner.role==='strategy')for(const relation of strategyGoals.list().relations){
+        const historical=[relation,...relation.history].filter(row=>row.createdAt<=review.createdAt).sort((a,b)=>b.revision-a.revision)[0];
+        if(!historical)continue;
+        const matches=(r:typeof historical.from)=>r.goalId===goal.goalId&&r.version===goal.version;
+        if(!matches(historical.from)&&!matches(historical.to))continue;
+        const other=strategyGoals.read(matches(historical.from)?historical.to:historical.from);
+        const otherEnterprise=other.scope.kind==='enterprise'?other.scope.id:other.scope.enterpriseId;
+        if(otherEnterprise!==enterprise)continue;
+        await validateStrategyGoal(other,undefined,cfg);
+        for(const source of [other.source,...(other.strategyContext?.sources??[]),...(other.strategyContext?.methods??[]).map(m=>m.source)]){
+          if(source?.authority==='strategy-discussion')await strategyDiscussions.verifyChoiceSource(source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef,cfg);
+        }
+        relations.push({id:relation.id,revision:historical.revision,from:historical.from,to:historical.to,kind:historical.kind,responsibility:historical.responsibility,rationale:historical.rationale});
+      }
+      const actions=round.actions.map(a=>({projectId:a.projectId,itemId:a.itemId,taskId:a.taskId,title:a.title,authorizations:a.authorizations,feedback:a.feedback}));
+      return {teachReview:{source:ref,caseTitle:cases.getCase(ref.caseId).title,issue:data.issue,goal,upstream,strategy:binding.strategy,
+        relations,proposal:data.proposals,choice:round.choice,actions,review,replies:data.replies},
+        sourceRights:[...data.sourceRights,...relations.map(r=>r.id+'/'+r.revision)]};
+    }
+    if(owner.role==='strategy')throw new StrategyDiscussionFault('teach_review_source_unavailable',403);
     const {arrangements}=await readGoalVersionPage(owner.goalId,owner.version);
     const current=strategyGoals.get(owner.goalId);
     return {goal,upstream,...await readGoalOrigin(owner,goal.scope,cfg),adoptedVersion:current.adoptedVersion,arrangements:arrangements.map(a=>({id:a.id,projectId:a.projectId,source:a.source,actions:a.actions,createdAt:a.createdAt})),
       sourceRights:arrangements.flatMap(a=>a.actions.map(item=>a.projectId+'/'+item.itemId+'/'+item.taskId+'/'+item.authorizationId))};
   };
-  const businessDiscussions=createStrategyDiscussionHost({...discussionOptions,roleContext:readRoleContext});
+  async function verifyPriorProjectRights(owner:BusinessRoleOwner, cfg:Readonly<RuntimeModelConfiguration>, prior:ReadonlySet<string>) {
+    if(owner.role!=='project'||!owner.issue)throw new StrategyDiscussionFault('role_history_source_no_longer_readable',403);
+    const {caseId,issueId}=owner.issue;
+    if(!cases.listProjectLinks(caseId).some(link=>link.projectId===owner.projectId))throw new StrategyDiscussionFault('project_issue_scope_unavailable',403);
+    const roundRights=new Set(prior);
+    for(const key of prior) {
+      if(!key.startsWith('goal/'))continue;
+      const binding=cases.getGoalBindingHistory(caseId).find(b=>key==='goal/'+b.primary.goalId+'/'+b.primary.version);
+      if(!binding)throw new StrategyDiscussionFault('role_history_source_no_longer_readable',403);
+      await projectGoalBasis(binding.primary,owner.projectId,cfg,caseId,undefined,issueId);
+      roundRights.delete(key);
+    }
+    if(roundRights.size)await caseDecisions.verifyPriorProjectRoundRights(caseId,issueId,roundRights,qualifyIssueReply(owner.issue,cfg,undefined,owner.projectId));
+  }
+  const businessDiscussions=createStrategyDiscussionHost({...discussionOptions,roleContext:readRoleContext,verifyPriorRights:verifyPriorProjectRights});
   const businessRoleConversation=createBusinessRoleConversations({host:businessDiscussions,context:readRoleContext,configuration:availableConfiguration,mutate,
     async initialConfiguration(owner) {
       if(owner.role!=='project')return availableConfiguration();
@@ -926,6 +1106,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
     };
     const history = await strategyDiscussions.sourceContext(source);
+    for(const snapshot of history.goalContexts)await verifyFrozenGoalContext(snapshot,configuration,{projectId,context});
     for (const group of history.projections) {
       if (!group.sources.length) continue;
       if (group.projectId !== projectId) throw new StrategyDiscussionFault('goal_context_source_project_not_authorized', 403);
@@ -989,7 +1170,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           reportExcerpt: extraction?.reportExcerpt ?? null, truncated: extraction?.truncated ?? null } : null };
     },
   });
-  const caseDecisions = createCaseDecisionService({ cases, projects, mutate, assertActive, readSource: readPersonalSource, personalContext, board: boardStore, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item), requirements: { readRelease: requirementPlugin.review.assertReleaseReadable }, readHandoff: id => decisionFeedback.store.getHandoff(id) });
+  const caseDecisions = createCaseDecisionService({ cases, projects, mutate, assertActive,
+    qualifyPlanReply: async (caseId,issueId,source,requestId) => {
+      const { task } = await pair(source.projectId,source.taskId);
+      await qualifyIssueReply({caseId,issueId},availableConfiguration(task.configuration.id,task.configuration.revision) ?? undefined,{projectId:source.projectId,taskId:source.taskId})(source,requestId);
+    }, readSource: readPersonalSource, personalContext, board: boardStore, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item), requirements: { readRelease: requirementPlugin.review.assertReleaseReadable }, readHandoff: id => decisionFeedback.store.getHandoff(id) });
   const caseDecisionRoutes = createCaseDecisionRoutes(caseDecisions);
   const caseSources = createCaseSourcesService({ cases, projects, assertActive, readReference: caseDecisions.source });
   const caseSourcesRoutes = createCaseSourcesRoutes(caseSources);
@@ -1401,7 +1586,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   const projectPlanFeature = createProjectPlanFeature({ codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), plans: projectPlans, projects, cases, goals: strategyGoals, defaultUsageContext:async()=> (await usageSettings.read()).context, methods: sapMethods, databaseSources: (projectId, read) => dbLinks.planningSources(projectId, read), mutate, isClosing: () => closing, startMessage: (projectId, taskId, input) => startProjectMessage(projectId, taskId, input, { userText: false }), registerFresh: async (projectId, taskId) => { const owner = await pair(projectId, taskId); projectSessions.registerFresh(projectSessions.ref(owner)); } });
   const projectPlanPreparation = createProjectPlanPreparationHost({ dataRoot, projects, plans: projectPlans, sessions: requirementSessions, capabilities: projectPlanFeature.capabilities, validate: projectPlanFeature.validate, goalContent: projectPlanFeature.goalContent, prepareContext:projectPlanFeature.prepareContext, goalEvidence:projectPlanFeature.goalEvidence, capabilityIssues: projectPlanFeature.capabilityIssues, mutate, isClosing: () => closing });
-  function qualifyIssueReply(issue:TaskCaseIssue,cfg:Readonly<RuntimeModelConfiguration>|undefined,receivingTask?:{projectId:string;taskId:string}) {
+  function qualifyIssueReply(issue:TaskCaseIssue,cfg:Readonly<RuntimeModelConfiguration>|undefined,receivingTask?:{projectId:string;taskId:string},receivingProjectId?:string,receivingGoal?:import('./strategy-goals-types.ts').GoalRef) {
     return async (source:import('./case-decision-types.ts').CaseIssueReply,requestId:string) => {
       if (!cfg) throw new RequestFault(403,'role_source_model_unavailable');
       const assertCurrent = () => {
@@ -1410,25 +1595,29 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       };
       assertCurrent();
       await assertTaskResultAccess({kind:'task-native-reply',projectId:source.projectId,taskId:source.taskId,sessionId:source.sessionId,
-        messageId:source.messageId,sha256:source.expectedTextSha256,requestId},cfg,{assertCurrent,receivingTask},issue);
+        messageId:source.messageId,sha256:source.expectedTextSha256,requestId},cfg,{assertCurrent,receivingTask,receivingProjectId,receivingGoal},issue);
       assertCurrent();
     };
   }
-  async function assertTeachSourceRights(task:ProjectOwner['task'],provided:Record<string,unknown>) {
-    const original=provided.teachSourceRights;
-    if(original===undefined)return;
+  async function assertRoundSourceRights(project:ProjectRecord, task:ProjectOwner['task'], provided:Record<string,unknown>) {
     const assignment=task.assignment, issue=assignment?.issue;
-    if(assignment?.type!=='teach'||!issue?.choiceId||!Array.isArray(original)||!Array.isArray(provided.teachSources))throw new RequestFault(403,'task_issue_source_unavailable');
-    const rights=await caseDecisions.currentTeachRights(issue.caseId,issue.issueId,issue.choiceId,issue.feedbackRevisionId);
-    if(original.some(id=>!rights.includes(id)))throw new RequestFault(403,'task_issue_source_unavailable');
+    if (provided.doSourceRights !== undefined) {
+      if (assignment?.type !== 'do' || !issue?.choiceId || !issue.authorizationId || !Array.isArray(provided.doSources) || !Array.isArray(provided.doSourceRights) || !provided.doSourceRights.includes(issue.authorizationId)) throw new RequestFault(403,'task_issue_source_unavailable');
+      await caseDecisions.checkDoAuthorization(issue.caseId,issue.issueId,issue.choiceId,issue.authorizationId,project.id);
+    }
+    if (provided.teachSourceRights !== undefined) {
+      if(assignment?.type!=='teach'||!issue?.choiceId||!Array.isArray(provided.teachSourceRights)||!Array.isArray(provided.teachSources))throw new RequestFault(403,'task_issue_source_unavailable');
+      const rights=await caseDecisions.currentTeachRights(issue.caseId,issue.issueId,issue.choiceId,issue.feedbackRevisionId);
+      if(provided.teachSourceRights.some(id=>!rights.includes(id)))throw new RequestFault(403,'task_issue_source_unavailable');
+    }
   }
-  async function readTeachRound(project:ProjectRecord,task:ProjectOwner['task']) {
+  async function readAssignedRound(project:ProjectRecord,task:ProjectOwner['task']) {
     const assignment=task.assignment, issue=assignment?.issue;
-    if(assignment?.type!=='teach'||!issue?.choiceId)return undefined;
+    if(!assignment || !issue?.choiceId || (assignment.type!=='teach' && !(assignment.type==='do' && issue.authorizationId)))return undefined;
     const cfg=availableConfiguration(task.configuration.id,task.configuration.revision);
-    const result=await caseDecisions.issueModelContext(issue.caseId,issue.issueId,qualifyIssueReply(issue,cfg??undefined,{projectId:project.id,taskId:task.id}),issue.choiceId,issue.feedbackRevisionId);
+    const result=await caseDecisions.issueModelContext(issue.caseId,issue.issueId,qualifyIssueReply(issue,cfg??undefined,{projectId:project.id,taskId:task.id}),issue.choiceId,issue.feedbackRevisionId,issue.authorizationId?{authorizationId:issue.authorizationId,projectId:project.id}:undefined);
     for(const receipt of await taskContextReceipts(project,task,true)) {
-      const prior=receipt.providedContext?.teachSourceRights;
+      const prior=receipt.providedContext?.teachSourceRights ?? receipt.providedContext?.doSourceRights;
       if(prior!==undefined&&(!Array.isArray(prior)||prior.some(id=>!result.sourceRights.includes(id)))) throw new RequestFault(403,'task_issue_source_unavailable');
     }
     return result;
@@ -1465,7 +1654,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const assertCurrent = () => { context.assertCurrent(); context.signal?.throwIfAborted(); if (closing || !availableConfiguration(cfg.id, cfg.revision)) deny(); };
     assertCurrent();
     const receiver = context.receivingTask;
-    const receivingProject = receiver ? await projects.get(receiver.projectId) : project;
+    const outletProjectId=receiver?.projectId ?? context.receivingProjectId;
+    const receivingProject = outletProjectId ? await projects.get(outletProjectId) : project;
+    if (context.receivingProjectId && (receivingProject.archivedAt || receivingProject.id!==context.receivingProjectId))return deny();
     const receivingTask = receiver && receivingProject.tasks.find(t => t.id === receiver.taskId && !t.archivedAt);
     if (receiver && (!receivingTask || receivingProject.archivedAt)) deny();
     const allowedIssue = issue ?? receivingTask?.assignment?.issue;
@@ -1475,12 +1666,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (![sourceProject.id, receivingProject.id].every(id => links.some(link => link.projectId === id))) return deny();
       if (issueId) cases.getDecisionIssue(caseId, issueId);
     }
-    if (receiver && receiver.projectId !== project.id) {
+    if (receivingProject.id !== project.id) {
       const bound = receivingTask?.assignment?.issue;
-      if (!issue?.issueId || bound?.caseId !== issue.caseId || bound.issueId !== issue.issueId) return deny();
+      const fromGoal=!bound && context.receivingGoal && receivingProject.goalOrigin && discussionHash(context.receivingGoal)===discussionHash(receivingProject.goalOrigin.goal);
+      if (!issue?.issueId || receiver && !fromGoal && (bound?.caseId !== issue.caseId || bound.issueId !== issue.issueId)) return deny();
       checkCase(issue.caseId, issue.issueId, project);
     }
     const source = async (project: ProjectRecord, task: TaskRecord, ref: Record<string, unknown>) => {
+      if (context.receivingProjectId && receivingProject.id!==project.id && !['enterprise','sap','sap-method'].includes(String(ref.kind)))return deny();
       if (['enterprise','sap','sap-method'].includes(String(ref.kind))) {
         const read = await semanticContext.query(project.id, task.id, { action:'read', target:ref as SemanticTarget }, { audience:'agent', signal:context.signal, assertCurrent });
         if (!read.items.some(item => item.state === 'available' || item.state === 'partial')) deny();
@@ -1550,6 +1743,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       run: async (project, task, requestId, provided) => {
         if(provided.personal!==undefined)await checkPersonal(project,task,provided.personal,'provided');
         const original = provided as import('../agent/project-runtime.ts').ProvidedContextInput;
+        if(original.projectGoalOrigin) {
+          if(!project.goalOrigin || discussionHash(original.projectGoalOrigin)!==discussionHash(project.goalOrigin.goal))return deny();
+          for(const outlet of audiences(project,task))await projectGoalBasis(original.projectGoalOrigin,outlet.project.id,outlet.configuration,undefined,outlet.taskId);
+        }
         const from = original.taskAssignment?.issue ?? task.assignment?.issue;
         if (from) checkCase(from.caseId, from.issueId, project);
         let runCaseScope = allowedIssue?.caseId;
@@ -1571,7 +1768,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (receipt?.kind !== 'task_context_prepare' || receipt.phase !== 'completed' || !receipt.caseId || receipt.projectId !== project.id) return deny();
           checkCase(receipt.caseId, undefined, project, runCaseScope);
         }
-        if (provided.teachSourceRights) await assertTeachSourceRights(task, provided);
+        if (provided.teachSourceRights || provided.doSourceRights) await assertRoundSourceRights(project, task, provided);
         if (original.enterprise?.case) checkCase(original.enterprise.case.caseId, undefined, project);
         for (const material of original.enterprise?.materials ?? []) await source(project, task, { kind: 'enterprise', storeId: original.enterprise!.directory.storeId, materialId: material.materialId, revisionId: material.revisionId });
         for (const { selection } of original.projectData ?? []) await source(project, task, { kind: selection.descriptionRevisionId ? 'data-description' : 'data-input', projectId: project.id, ...selection });
@@ -1610,7 +1807,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const version = saved.inputVersion as { datasetId:string; inputVersionId:string }, description = saved.description as { descriptionRevisionId:string };
             await source(project, task, { kind:'data-description', projectId:project.id, datasetId:version.datasetId, inputVersionId:version.inputVersionId, descriptionRevisionId:description.descriptionRevisionId });
           } else if (name === 'db_sources' && Array.isArray(saved.sources)) {
-            if (receiver && receiver.projectId !== project.id && saved.sources.length) deny();
+            if (receivingProject.id !== project.id && saved.sources.length) deny();
             for (const taskId of new Set([task.id, receiver?.taskId])) {
               const available = await dbLinks.planningSources(project.id, { taskId, modelOutlet:dbLinkModelOutlet(cfg) });
               for (const entry of saved.sources) {
@@ -1674,6 +1871,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       },
     });
   }
+  async function qualifySelectedTaskInputs(owner:ProjectOwner) {
+    const selections=owner.task.assignment?.sources;
+    // After the first run the native branch proves which optional sources actually entered the conversation.
+    if(owner.task.lastRun || !selections?.length)return;
+    const read=resultReader(owner,{handoff:{mode:'selected',sources:selections}});
+    const context={signal:AbortSignal.timeout(30000),assertCurrent(){if(closing)throw new RequestFault(409,'host_closing');}};
+    for(const selected of selections)await read('read',{id:selected.key,limit:1},context);
+  }
   const resultReadContext = (request: import('node:http').IncomingMessage): ProjectTaskResultsContext => ({
     signal: AbortSignal.timeout(30000), assertCurrent() { if (closing || request.destroyed && !request.complete) throw new RequestFault(409, 'project_result_unavailable'); },
   });
@@ -1716,6 +1921,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if (inherit) planSelection = { confirmationId: previous.confirmationId, taskKey: previous.taskKey };
       }
     }
+    await qualifySelectedTaskInputs(owner);
     const assignedIssue = owner.task.assignment?.issue;
     if (assignedIssue) {
       assertIssue(projectId, assignedIssue);
@@ -1792,18 +1998,18 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const assignment = task.assignment;
           if (assignment) checkAssignmentSkill(project, assignment);
           const agreement = assignment?.agreementVersion ? project.agreements?.find(a => a.version === assignment.agreementVersion) : assignment && await originalPlanAgreement(projectId, assignment);
-          const teachRound = await readTeachRound(project,task);
-          const assignmentText = assignment ? '【用户的 Task 委托】' + JSON.stringify({ type: taskPurpose[assignment.type].label, deliverable: taskPurpose[assignment.type].deliverable, skill: assignment.skill, agreement, issue: assignment.issue && assertIssue(projectId, assignment.issue), teachRound, selectedSources: assignment.sources }) + (assignment.sources?.length ? ' 可用 read_project_task_results 读取所选准确成果。分别核对版本、定义、粒度、证据和改判条件，按可取得的证据继续。' : '') : '';
+          const round = await readAssignedRound(project,task);
+          const projectGoal = project.goalOrigin && !assignment?.issue && !input.caseContext && await projectGoalBasis(project.goalOrigin.goal,projectId,availableConfiguration(task.configuration.id,task.configuration.revision)??undefined,undefined,taskId);
+          const assignmentText = assignment ? '【用户的 Task 委托】' + JSON.stringify({ type: taskPurpose[assignment.type].label, deliverable: taskPurpose[assignment.type].deliverable, skill: assignment.skill, agreement, issue: assignment.issue && assertIssue(projectId, assignment.issue), ...(round ? { [assignment.type === 'do' ? 'authorizedDo' : 'teachRound']: round } : {}), selectedSources: assignment.sources }) + (assignment.sources?.length ? ' 可用 read_project_task_results 读取所选准确成果。分别核对版本、定义、粒度、证据和改判条件，按可取得的证据继续。' : '') : '';
           const withPlan = deliveredPlan ? `${deliveredPlan.text}\n\n${withoutStudio}` : withoutStudio;
-          const prompt = [assignmentText, studioContext?.text, withPlan].filter(Boolean).join('\n\n');
+          const prompt = [assignmentText, projectGoal && '【项目明确承接的 GSA 准确版本与用途】'+JSON.stringify(projectGoal), studioContext?.text, withPlan].filter(Boolean).join('\n\n');
           if (prompt.length > 131072) throw new EnterpriseContextError('enterprise_context_too_large', 413);
           startedAt = new Date().toISOString();
           const providedContext = {
-            goalSourceRefs:[...(deliveredPlan?.goalSourceRefs??[]),...caseGoalRefs],
+            goalSourceRefs:[...(deliveredPlan?.goalSourceRefs??[]),...caseGoalRefs,...(projectGoal ? [projectGoal.goal] : [])],
+            ...(projectGoal ? {projectGoalOrigin:projectGoal.goal} : {}),
             ...(assignment ? { taskAssignment: assignment } : {}),
-            ...(teachRound ? {teachSourceRights:teachRound.sourceRights,teachSources:teachRound.replies.map(({source,requestId})=>({
-              kind:'task-native-reply',projectId:source.projectId,taskId:source.taskId,sessionId:source.sessionId,messageId:source.messageId,sha256:source.expectedTextSha256,requestId
-            }))} : {}),
+            ...(round ? taskRoundReceipts(assignment!.type==='do'?'do':'teach',round) : {}),
             originalUserText: input.text as string,
             userQuoteEligible: origin.userText,
             ...(deliveredPlan ? { projectPlan: deliveredPlan } : {}),
@@ -1828,7 +2034,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             }
           }
           catch (error) { if (owner.reviewAdmission === 'legacy' && (await automatic.store.readSettings({ projectId, taskId })).enabled) throw error; publish(projectId, taskId, { type: 'ui.notification', level: 'warning', message: '复核准入尚不可核对，本次保留普通分析合同；未自动补派核算。' }); }
-          return { prompt, teachContextHash:teachRound && discussionHash(teachRound), providedContext: { ...providedContext, ...(calculationContract ? { reportCalculationReview: calculationContract } : {}) }, automaticObservation };
+          return { prompt, roundContextHash:round && discussionHash(round), providedContext: { ...providedContext, ...(calculationContract ? { reportCalculationReview: calculationContract } : {}) }, automaticObservation };
         });
         if ('previous' in prepared) { acknowledge({ requestId, status: prepared.previous, deduplicated: true }); return; }
         const suppliedRap = prepared.providedContext?.rap;
@@ -1837,13 +2043,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           verifyBeforeDispatch: async () => {
             await assertFrameworkContinuation(projectId, taskId);
             await checkReceivedHistory(await pair(projectId, taskId, true), { signal: AbortSignal.timeout(30000), assertCurrent() { if (closing) throw new RequestFault(409, 'host_closing'); } });
+            const ref=prepared.providedContext?.projectGoalOrigin;
+            if(ref)await projectGoalBasis(ref,projectId,availableConfiguration(owner.task.configuration.id,owner.task.configuration.revision)??undefined,undefined,taskId);
             if (owner.task.assignment) {
               const current = await pair(projectId, taskId, true);
               if (JSON.stringify(current.task.assignment) !== JSON.stringify(owner.task.assignment)) throw new RequestFault(409, 'task_assignment_changed');
+              await qualifySelectedTaskInputs(current);
               checkAssignmentSkill(current.project, owner.task.assignment);
               await originalPlanAgreement(projectId, owner.task.assignment);
               if (assignedIssue) assertIssue(projectId, assignedIssue);
-              if(prepared.teachContextHash && discussionHash(await readTeachRound(current.project,current.task))!==prepared.teachContextHash)
+              if(prepared.roundContextHash && discussionHash(await readAssignedRound(current.project,current.task))!==prepared.roundContextHash)
                 throw new RequestFault(409,'task_issue_context_changed');
             }
             if (deliveredPlan) await projectPlanFeature.context(projectId, taskId, planSelection);
@@ -2126,9 +2335,18 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const selected = configuration.read(typeof input.configurationId === 'string' ? input.configurationId : undefined);
             if (!selected?.hasApiKey) throw new RequestFault(409, 'configuration_required');
             const enterprises = studio.enterpriseScopes.list().enterprises;
-            const enterpriseId = input.enterpriseId === undefined ? (enterprises.length === 1 ? enterprises[0]!.id : undefined) : String(input.enterpriseId);
+            const origin=input.goalOrigin as ProjectRecord['goalOrigin'];
+            if(input.goalOrigin!==undefined && (!origin?.goal || typeof origin.goal.goalId!=='string' || !Number.isSafeInteger(origin.goal.version)))throw new RequestFault(400,'invalid_project_goal_origin');
+            const goal = origin && strategyGoals.read(origin.goal);
+            if (goal) {
+              if (goal.status!=='adopted') throw new RequestFault(409,'goal_not_adopted');
+              await validateStrategyGoal(goal);
+            }
+            const goalEnterprise=goal?.scope.kind==='enterprise' ? goal.scope.id : goal?.scope.enterpriseId;
+            const enterpriseId = input.enterpriseId === undefined ? (goal ? goalEnterprise : enterprises.length === 1 ? enterprises[0]!.id : undefined) : String(input.enterpriseId);
+            if (goal && enterpriseId!==goalEnterprise) throw new RequestFault(403,'project_goal_scope_unavailable');
             if (enterpriseId) studio.enterpriseScopes.get(enterpriseId);
-            const created = await projects.create({ name: String(input.name ?? ''), configuration: selected });
+            const created = await projects.create({ name: String(input.name ?? ''), configuration: selected, ...(goal ? {goalOrigin:{goal:{goalId:goal.goalId,version:goal.version}}} : {}) });
             if (enterpriseId) studio.enterpriseScopes.associateProject(created.id, enterpriseId);
             for (const task of created.tasks) if (!task.sessionFile && !task.lastRun) projectSessions.registerFresh(projectSessions.ref({ project: created, task }));
             return created;
@@ -2174,19 +2392,31 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         }
         if (action === 'tasks' && request.method === 'POST') {
           const input = await body(request), task = await mutate(async () => {
-            const project = await projects.get(projectId); assertActive(project);
-            const selected = typeof input.configurationId === 'string' ? configuration.read(input.configurationId) : project.configuration;
-            if (!selected || !configuration.snapshot(selected.id, selected.revision)) throw new RequestFault(409, 'configuration_required');
-            if (input.modelTools !== undefined && typeof input.modelTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
-            if (input.weatherTools !== undefined && typeof input.weatherTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
-            if (input.tradeAreaTools !== undefined && typeof input.tradeAreaTools !== 'boolean') throw new RequestFault(400, 'invalid_task_capability');
+            const project = await projects.get(projectId);
             const assignment = input.assignment === undefined ? undefined : readAssignment(input.assignment);
+            for (const key of ['modelTools','weatherTools','tradeAreaTools','simulationTools'])
+              if (input[key] !== undefined && typeof input[key] !== 'boolean') throw new RequestFault(400,'invalid_task_capability');
+            const creation = { assignment, operationId: input.operationId as string | undefined, name: String(input.name ?? ''), simulationTools: input.simulationTools === true, tradeAreaTools: input.tradeAreaTools === true, weatherTools: input.weatherTools === true, modelTools: input.modelTools === true };
+            const createRequestFingerprint = creation.operationId && discussionHash({projectId,configurationId:input.configurationId ?? null,...creation});
+            const existing = creation.operationId && project.tasks.find(task => task.id === creation.operationId);
+            if (existing && existing.createRequestFingerprint) {
+              if (existing.createRequestFingerprint !== createRequestFingerprint) throw new RequestFault(409,'task_creation_changed');
+              return existing;
+            }
+            const selected = typeof input.configurationId === 'string' ? configuration.read(input.configurationId) : project.configuration;
+            if (existing && selected) return projects.createTask(projectId,{...creation,configuration:selected});
+            assertActive(project);
+            if (!selected || !configuration.snapshot(selected.id, selected.revision)) throw new RequestFault(409, 'configuration_required');
             if (assignment) {
               checkAssignmentSkill(project, assignment);
               await originalPlanAgreement(projectId, assignment, !project.tasks.some(t => t.id === input.operationId));
               if (assignment.issue) {
                 const identity=assignment.issue;
                 assertIssue(project.id,identity);
+                if (assignment.type === 'do' && identity.choiceId) {
+                  if (!identity.authorizationId) throw new RequestFault(409,'case_do_authorization_unavailable');
+                  await caseDecisions.issueModelContext(identity.caseId,identity.issueId,qualifyIssueReply(identity,availableConfiguration(selected.id,selected.revision)??undefined),identity.choiceId,undefined,{authorizationId:identity.authorizationId,projectId:project.id});
+                }
                 if (identity.feedbackRevisionId) {
                   const view=await caseDecisions.issueTimeline(identity.caseId,identity.issueId);
                   if (!view.rounds.find(r=>r.choice.choiceId===identity.choiceId)?.actions.some(a=>a.feedback.some(f=>f.revisionId===identity.feedbackRevisionId)))
@@ -2198,7 +2428,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                 await resultReader({ project, task: source }, { handoff: { mode: 'own-results' } }, { configuration: selected, issue: assignment.issue })('read', { id: ref.key, limit: 128 }, resultReadContext(request));
               }
             }
-            const created = await projects.createTask(projectId, { assignment, operationId: input.operationId as string | undefined, name: String(input.name ?? ''), configuration: selected, simulationTools: input.simulationTools === true, tradeAreaTools: input.tradeAreaTools === true, weatherTools: input.weatherTools === true, modelTools: input.modelTools === true });
+            const created = await projects.createTask(projectId, { ...creation, createRequestFingerprint, configuration: selected });
             if (!project.tasks.some(prior => prior.id === created.id)) projectSessions.registerFresh(projectSessions.ref({ project: await projects.get(projectId), task: created }));
             return created;
           }); json(response, 201, { task }); return;
@@ -2551,6 +2781,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           strategy_goals_storage_unavailable: '原目标存储暂时无法读取。已保留原选择，未替换为最新目标；请核对原存储及读取权限。',
         };
         json(response, error.status, { code: error.code, message: goalReadMessages[error.code] ?? '目标或自动设置未保存，请保留输入并核对原版本和操作结果。' }); return;
+      }
+      if ((error instanceof CaseStoreError || error instanceof RequestFault) && ['case_do_authorization_unavailable','case_do_round_changed'].includes(error.code)) {
+        json(response,409,{code:error.code,message:error.code==='case_do_round_changed'?'原取舍已换轮。请回该事项查看当前取舍和行动授权。':'本轮的准确行动授权当前不可用。请核对原看板授权和项目关联。'});return;
       }
       if (error instanceof CaseStoreError && error.code === 'project_not_linked') { json(response, error.statusCode, { code: error.code, message: '此项目未关联当前 Case，不能使用该事项背景；原任务和输入保留，请核对项目关联。' }); return; }
       if (error instanceof StudioError) { json(response, error.status, { code: error.code, accepted: false, message: '体系来源或操作未就绪；原请求、资料和历史保持，请核对准确版本。' }); return; }

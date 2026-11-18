@@ -137,9 +137,9 @@ export function ProjectDataContextPanel({ project, taskId, file, files, selectio
   </section>;
 }
 
-export function ProjectDataSelectionNotice({ value, disabled, onRemove, onOpen }: { value: ProjectDataContextSelection[]; disabled: boolean; onRemove: (key: string) => void; onOpen: () => void }) {
+export function ProjectDataSelectionNotice({ value, disabled, onRemove, onOpen }: { value: ProjectDataContextSelection[]; disabled: boolean; onRemove: (key: string) => void; onOpen: (trigger: HTMLButtonElement) => void }) {
   if (!value.length) return null;
-  return <details className="pdc-selected"><summary>本轮项目数据 · {value.length} 项</summary><p>发送时提供这些精确版本的说明与 020 分析副本位置；这不是成果采用声明。</p>{value.map(item => <div className="pdc-record" key={api.projectDataSelectionKey(item)}><span>输入 {short(item.inputVersionId)} · {item.descriptionRevisionId ? `说明 ${short(item.descriptionRevisionId)}` : '无说明'}</span><button className="text-button" type="button" disabled={disabled} aria-label={`移除本轮数据 ${short(item.inputVersionId)} ${item.descriptionRevisionId ? short(item.descriptionRevisionId) : '无说明'}`} onClick={() => onRemove(api.projectDataSelectionKey(item))}>移除</button></div>)}<button type="button" className="text-button" onClick={onOpen}>查看项目数据说明</button></details>;
+  return <details className="pdc-selected"><summary>本轮项目数据 · {value.length} 项</summary><p>发送时提供这些精确版本的说明与 020 分析副本位置；这不是成果采用声明。</p>{value.map(item => <div className="pdc-record" key={api.projectDataSelectionKey(item)}><span>输入 {short(item.inputVersionId)} · {item.descriptionRevisionId ? `说明 ${short(item.descriptionRevisionId)}` : '无说明'}</span><button className="text-button" type="button" disabled={disabled} aria-label={`移除本轮数据 ${short(item.inputVersionId)} ${item.descriptionRevisionId ? short(item.descriptionRevisionId) : '无说明'}`} onClick={() => onRemove(api.projectDataSelectionKey(item))}>移除</button></div>)}<button type="button" className="text-button" data-return-to-workspace onClick={e => onOpen(e.currentTarget)}>查看项目数据说明</button></details>;
 }
 
 

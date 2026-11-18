@@ -14,8 +14,8 @@ export interface ProjectRun { id: string; status: 'running' | 'completed' | 'can
 export interface UploadedFile { id: string; originalName: string; path: string; bytes: number; sha256: string; uploadedAt: string; source: { kind: 'upload' | 'copy' | 'user-save-report'; from?: string } }
 export interface FeedbackTaskOrigin { handoffId: string; operationId: string; requestHash: string }
 export interface PlanTaskOrigin { confirmationId: string; taskKey: string; requestHash: string }
-export interface TaskRecord { createFingerprint?: string; assignment?: TaskAssignment; id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin; reviewDraftIds?: string[]; archivedAt?: string | null; planOrigin?: PlanTaskOrigin }
-export interface ProjectRecord { stages?: ProjectStage[]; agreements?: ProjectAgreement[]; schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
+export interface TaskRecord { createRequestFingerprint?: string; createFingerprint?: string; assignment?: TaskAssignment; id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin; reviewDraftIds?: string[]; archivedAt?: string | null; planOrigin?: PlanTaskOrigin }
+export interface ProjectRecord { goalOrigin?: {goal: import('./strategy-goals-types.ts').GoalRef}; stages?: ProjectStage[]; agreements?: ProjectAgreement[]; schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
 export class ProjectStoreFault extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
 
@@ -182,6 +182,10 @@ export class ProjectStore {
       if (input.weatherTools !== undefined) { if (typeof input.weatherTools !== 'boolean') return fail('invalid_project_metadata'); task.weatherTools = input.weatherTools; }
       if (input.tradeAreaTools !== undefined) { if (typeof input.tradeAreaTools !== 'boolean') return fail('invalid_project_metadata'); task.tradeAreaTools = input.tradeAreaTools; }
       if (input.modelTools !== undefined) { if (typeof input.modelTools !== 'boolean') return fail('invalid_project_metadata'); task.modelTools = input.modelTools; }
+      if (input.createRequestFingerprint !== undefined) {
+        if (typeof input.createRequestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(input.createRequestFingerprint)) return fail('invalid_project_metadata');
+        task.createRequestFingerprint = input.createRequestFingerprint;
+      }
       if (input.createFingerprint !== undefined) {
         if (typeof input.createFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(input.createFingerprint)) return fail('invalid_project_metadata');
         task.createFingerprint = input.createFingerprint;
@@ -208,7 +212,13 @@ export class ProjectStore {
       if (!Array.isArray(value.stages) || !value.stages.every((item, index) => object(item) && item.version === index + 1 && typeof item.goal === 'string' && item.goal.length <= 2000 && typeof item.condition === 'string' && item.condition.length <= 2000 && typeof item.done === 'boolean' && typeof item.operationId === 'string' && uuid.test(item.operationId) && isoDate(item.recordedAt)) || new Set(value.stages.map(item => item.operationId)).size !== value.stages.length) return fail('invalid_project_metadata');
       stages = value.stages as ProjectStage[];
     }
-    return { ...(stages ? { stages } : {}), ...(agreements ? { agreements } : {}), schemaVersion: 2, id, name, createdAt: value.createdAt, updatedAt: value.updatedAt, configuration, uploads, archivedAt: value.archivedAt as string | null, tasks };
+    let goalOrigin: ProjectRecord['goalOrigin'];
+    if (value.goalOrigin !== undefined) {
+      const origin=value.goalOrigin;
+      if (!object(origin) || !object(origin.goal) || typeof origin.goal.goalId !== 'string' || !uuid.test(origin.goal.goalId) || !Number.isSafeInteger(origin.goal.version) || Number(origin.goal.version)<1) return fail('invalid_project_metadata');
+      goalOrigin={goal:{goalId:origin.goal.goalId,version:Number(origin.goal.version)}};
+    }
+    return { ...(goalOrigin ? {goalOrigin} : {}), ...(stages ? { stages } : {}), ...(agreements ? { agreements } : {}), schemaVersion: 2, id, name, createdAt: value.createdAt, updatedAt: value.updatedAt, configuration, uploads, archivedAt: value.archivedAt as string | null, tasks };
   }
   async #migrate(id: string, legacy: Record<string, unknown>, original: Buffer): Promise<void> {
     const task = { id: randomUUID(), name: '原有任务', createdAt: legacy.createdAt, updatedAt: legacy.updatedAt, configuration: legacy.configuration, draft: legacy.draft, sessionStorage: 'legacy', ...(legacy.sessionFile === undefined ? {} : { sessionFile: legacy.sessionFile }), ...(legacy.lastRun === undefined ? {} : { lastRun: legacy.lastRun }) };
@@ -226,7 +236,7 @@ export class ProjectStore {
     await fs.chmod(backup, 0o600); await this.#syncDirectory(path.dirname(backup));
     await this.#write(migrated);
   }
-  async create(input: { name: string; configuration: ProjectConfiguration; reservedId?: string }): Promise<ProjectRecord> {
+  async create(input: { name: string; configuration: ProjectConfiguration; reservedId?: string; goalOrigin?: ProjectRecord['goalOrigin'] }): Promise<ProjectRecord> {
     const name = projectName(input.name), configuration = publicConfiguration(input.configuration);
     return this.#mutation(async () => {
       const id = input.reservedId === undefined ? randomUUID() : this.#id(input.reservedId), now = new Date().toISOString();
@@ -237,7 +247,7 @@ export class ProjectStore {
       await fs.mkdir(path.join(this.dataRoot, 'projects', id), { mode: 0o700 }); await this.#directory(this.sessionDirectory(id));
       await fs.mkdir(this.projectDirectory(id), { mode: 0o700 });
       for (const directory of PROJECT_DIRECTORIES) await this.#directory(path.join(this.projectDirectory(id), directory));
-      return this.#write({ schemaVersion: 2, id, name, configuration, uploads: [], archivedAt: null, tasks: [], createdAt: now, updatedAt: now });
+      return this.#write({ ...(input.goalOrigin ? {goalOrigin:input.goalOrigin} : {}), schemaVersion: 2, id, name, configuration, uploads: [], archivedAt: null, tasks: [], createdAt: now, updatedAt: now });
     });
   }
   async list(): Promise<ProjectRecord[]> {
@@ -328,7 +338,7 @@ export class ProjectStore {
       return agreement;
     });
   }
-  createTask(projectId: string, input: { operationId?: string; assignment?: TaskAssignment; name: string; configuration?: ProjectConfiguration; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean }): Promise<TaskRecord> {
+  createTask(projectId: string, input: { createRequestFingerprint?: string; operationId?: string; assignment?: TaskAssignment; name: string; configuration?: ProjectConfiguration; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean }): Promise<TaskRecord> {
     const name = projectName(input.name);
     if (input.modelTools !== undefined && typeof input.modelTools !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
     if (input.weatherTools !== undefined && typeof input.weatherTools !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
@@ -345,7 +355,7 @@ export class ProjectStore {
       }
       if (assignment?.agreementVersion && assignment.agreementVersion !== project.agreements?.at(-1)?.version) return fail('project_agreement_changed');
       const configuration = publicConfiguration(input.configuration ?? project.configuration), id = input.operationId ?? randomUUID(), now = new Date().toISOString();
-      const task: StoredTask = { ...(fingerprint ? { createFingerprint: fingerprint } : {}), ...(assignment ? { assignment } : {}), id, name, createdAt: now, updatedAt: now, configuration, draft: '', sessionStorage: 'task', ...(input.simulationTools ? { simulationTools: true } : {}), ...(input.tradeAreaTools ? { tradeAreaTools: true } : {}), ...(input.weatherTools ? { weatherTools: true } : {}), ...(input.modelTools ? { modelTools: true } : {}) };
+      const task: StoredTask = { ...(input.createRequestFingerprint ? {createRequestFingerprint:input.createRequestFingerprint} : {}), ...(fingerprint ? { createFingerprint: fingerprint } : {}), ...(assignment ? { assignment } : {}), id, name, createdAt: now, updatedAt: now, configuration, draft: '', sessionStorage: 'task', ...(input.simulationTools ? { simulationTools: true } : {}), ...(input.tradeAreaTools ? { tradeAreaTools: true } : {}), ...(input.weatherTools ? { weatherTools: true } : {}), ...(input.modelTools ? { modelTools: true } : {}) };
       const next = { ...project, tasks: [...project.tasks, task], updatedAt: now }; this.#metadataBytes(next);
       const tasks = path.join(this.dataRoot, 'projects', projectId, 'tasks');
       await this.#directory(tasks); await this.#directory(path.join(tasks, id)); await this.#directory(this.#taskDirectory(projectId, task));

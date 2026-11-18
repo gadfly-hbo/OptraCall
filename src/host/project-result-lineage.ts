@@ -1,3 +1,5 @@
+import {historicalTaskRoundReceipts,taskRoundReceiptKind} from './task-round-receipts.ts';
+import type {TaskAssignment} from './task-assignment.ts';
 import { taskSourceDeliveryType, tracksTaskSource } from '../agent/task-source-delivery.ts';
 import { agentCandidateDetailsSha256, candidateCustomType, candidateToolName, parseAgentCandidateRecord, parseAgentCandidateDetails } from '../agent/agent-candidate.ts';
 import type { ProjectRecord, TaskRecord } from './project-store.ts';
@@ -58,10 +60,11 @@ export async function hasReceivedTaskResults(project: ProjectRecord, task: TaskR
     entry.data.taskSourceReceiptVersion!==1 && record(entry.data.providedContext) &&
     (entry.data.providedContext.projectPlan || record(entry.data.providedContext.taskAssignment) && Array.isArray(entry.data.providedContext.taskAssignment.sources) && entry.data.providedContext.taskAssignment.sources.length));
   return branch.some(entry =>
+    entry.type === 'custom' && entry.customType === 'optracall.run' && record(entry.data) && record(entry.data.providedContext) && !!entry.data.providedContext.projectGoalOrigin ||
     entry.type === 'message' && entry.message.role === 'toolResult' && entry.message.toolName === 'read_project_task_results' && !entry.message.isError ||
     entry.type === 'custom' && entry.customType===taskSourceDeliveryType && record(entry.data) && entry.data.name==='read_project_task_results' ||
     entry.type === 'message' && entry.message.role==='toolResult' && 'nestedCalls' in entry.message && (entry.message.nestedCalls?.calls.some(call=>call.name==='read_project_task_results' && call.status!=='error') || oldRunWithResults && entry.message.nestedCalls?.complete===false) ||
-    entry.type === 'custom' && entry.customType === 'optracall.run' && record(entry.data) && record(entry.data.providedContext) && !!entry.data.providedContext.teachSourceRights);
+    entry.type === 'custom' && entry.customType === 'optracall.run' && record(entry.data) && record(entry.data.providedContext) && !!(entry.data.providedContext.teachSourceRights || entry.data.providedContext.doSourceRights || taskRoundReceiptKind(entry.data.providedContext.taskAssignment)));
 }
 
 /** A fresh traversal for one receiver/outlet. Nothing is stored with a source or reused as a grant. */
@@ -140,6 +143,15 @@ export async function verifyTaskResultLineage(project: ProjectRecord, target: Re
       if(marker)for(const entry of path)markers.set(entry,marker);
       return marker;
     }
+    const legacyPrompts=new Map<Record<string,unknown>,string>();
+    for(const entry of entries) {
+      if(entry.type!=='message'||entry.message.role!=='user')continue;
+      const run=runAt(entry.id);
+      if(!run||!record(run.providedContext)||!taskRoundReceiptKind(run.providedContext.taskAssignment)||run.providedContext.taskRoundReceiptVersion)continue;
+      const content=entry.message.content;
+      const text=typeof content==='string'?content:content.filter(part=>part.type==='text').map(part=>part.text).join('');
+      if(createHash('sha256').update(text).digest('hex')===run.providedContext.requestTextSha256)legacyPrompts.set(run,text);
+    }
     const deliveries = new Set<string>();
     const identity = (request:unknown,name:string,call:string)=>JSON.stringify([request,name,call]);
     for(const entry of entries){
@@ -196,12 +208,23 @@ export async function verifyTaskResultLineage(project: ProjectRecord, target: Re
       }
       if (entry.type === 'custom' && entry.customType === 'optracall.run' && record(entry.data) && (entry.data.phase === 'started' || entry.data.phase === undefined)) {
         if (typeof entry.data.requestId !== 'string') return deny();
-        const provided = record(entry.data.providedContext) ? entry.data.providedContext : {};
+        let provided = record(entry.data.providedContext) ? entry.data.providedContext : {};
+        const kind=taskRoundReceiptKind(provided.taskAssignment);
+        if(kind){
+          const rights=kind==='do'?'doSourceRights':'teachSourceRights',sources=kind==='do'?'doSources':'teachSources';
+          if(provided.taskRoundReceiptVersion!==undefined && provided.taskRoundReceiptVersion!==1)return deny();
+          if(provided.taskRoundReceiptVersion===1 || provided[rights]!==undefined || provided[sources]!==undefined){
+            if(!Array.isArray(provided[rights])||!Array.isArray(provided[sources]))return deny();
+          } else if(legacyPrompts.has(entry.data)){
+            provided={...provided,...historicalTaskRoundReceipts(provided.taskAssignment as TaskAssignment,legacyPrompts.get(entry.data)!,provided.requestTextSha256)};
+          } else if(leaf!==entry.id || ref.kind!=='task-history')return deny();
+        }
         await checks.run(project, task, entry.data.requestId, provided);
         if(record(provided.personal))await personalAncestors(provided.personal);
-        if (provided.teachSourceRights) {
-          if (!Array.isArray(provided.teachSources)) return deny();
-          for (const ref of provided.teachSources) {
+        if (provided.teachSourceRights || provided.doSourceRights) {
+          const sources = provided.doSourceRights ? provided.doSources : provided.teachSources;
+          if (!Array.isArray(sources)) return deny();
+          for (const ref of sources) {
             if (!record(ref) || typeof ref.projectId !== 'string') return deny();
             const source = ref.projectId === project.id ? project : await checks.teachProject(ref.projectId, task);
             await visit(ref, source);

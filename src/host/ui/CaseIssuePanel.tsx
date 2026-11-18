@@ -1,3 +1,4 @@
+import type { TeachReviewOwner } from '../business-role-types.ts';
 import { useEffect, useRef, useState } from 'react';
 import type { CaseDecisionIssue, CaseDecisionRevision, CaseIssueReply, CaseStrategyChoiceValue } from '../case-decision-types.ts';
 import type { CaseRecord } from '../case-types.ts';
@@ -8,7 +9,7 @@ import { CaseFormError, caseError, useOperationId } from './CaseDialogs.tsx';
 import { caseIssues, caseIssueSources, caseIssueTimeline, createCaseIssue, readCaseDecisions, inspectIssueReply, saveCaseStrategyChoice, writeCaseIssue } from './case-decisions-client.ts';
 
 type IssueRef = { caseId: string; issueId: string };
-type Props = { initialIssueId?: string; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
+type Props = { onTeachReview?(owner:TeachReviewOwner):void; initialIssueId?: string; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
 const choiceName: Record<CaseStrategyChoiceValue, string> = { trial: '试行', adjust: '调整', continue: '继续', defer: '暂缓', no_action: '本次不行动', gather_evidence: '补证', reject: '不采用', stop_considering: '停止考虑' };
 
 export function CaseIssuePanel(props: Props) {
@@ -29,7 +30,7 @@ export function CaseIssuePanel(props: Props) {
   </section>;
 }
 
-function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreate, issueId }: Props & { issueId: string }) {
+function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreate, onTeachReview, issueId }: Props & { issueId: string }) {
   const [open,setOpen] = useState(false), [refresh,setRefresh] = useState(0);
   const [timeline,setTimeline] = useState<Awaited<ReturnType<typeof caseIssueTimeline>>>();
   const [sources,setSources] = useState<Awaited<ReturnType<typeof caseIssueSources>>>();
@@ -79,12 +80,21 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
           return <button key={i} className="text-button" onClick={() => void showSource(source)}>查看准确方案原回复</button>;
         })}
         {r.actions.map(a => <div key={a.taskId}><p>{a.title} · {a.authorizations.at(-1)?.scope} · {a.status === 'done' ? '完成' : a.status === 'doing' ? '进行中' : '待办'}</p>
-          {a.feedback.length ? a.feedback.map(f => <p key={f.revisionId}>{f.outcome} · {f.metricDelta} · {f.review || '效果待核'}
+          {
+            current?.choice.choiceId === r.choice.choiceId && a.currentAuthorizationId && <button className="text-button" disabled={disabled || !projects.some(p=>p.id===a.projectId&&!p.archivedAt)} onClick={()=>{
+              const target=projects.find(p=>p.id===a.projectId&&!p.archivedAt);
+              if(target)onCreate(target,{type:'do',caseId:record.id,issueId,choiceId:r.choice.choiceId,authorizationId:a.currentAuthorizationId});
+            }}>交接已授权的 Do Task</button>
+          }{a.feedback.length ? a.feedback.map(f => <p key={f.revisionId}>{f.outcome} · {f.metricDelta} · {f.review || '效果待核'}
             {onBoard && <button className="text-button" onClick={() => onBoard({openOriginal:true,boardTaskId:a.taskId,feedbackRevisionId:f.revisionId,draftKey:f.revisionId})}>查看原看板反馈</button>}
             <button className="text-button" disabled={disabled || !project} onClick={()=>project && onCreate(project,{type:'teach',caseId:record.id,issueId,choiceId:r.choice.choiceId,feedbackRevisionId:f.revisionId})}>按此观察准备 Teach</button></p>) :
-            <p>待反馈 {onBoard && <button className="text-button" onClick={() => onBoard({openOriginal:true,boardTaskId:a.taskId,feedbackRevisionId:null,draftKey:a.taskId})}>查看原看板行动</button>}</p>}
+            <p>{a.currentAuthorizationId ? '待反馈' : '原行动授权已撤回或由后续授权取代'} {onBoard && <button className="text-button" onClick={() => onBoard({openOriginal:true,boardTaskId:a.taskId,feedbackRevisionId:null,draftKey:a.taskId})}>查看原看板行动</button>}</p>}
         </div>)}
-        {!r.actions.length && <p>{r.review ? '已记录实际观察' : '待反馈'}</p>}{r.review && <><p>实际观察 · {r.review.observation}</p><p>复盘判断 · {r.review.judgement}</p><p>下一步或结束理由 · {r.review.nextStep}</p><button className="text-button" onClick={() => void showSource(r.review!.reply)}>查看 Teach 原回复</button></>}
+        {r.historyLimited && <p>历史记录有限，当前无法读取原行动或观察。请核对项目关联与原资料权限。</p>}
+        {!r.actions.length && !r.historyLimited && <p>{r.review ? '已记录实际观察' : ['defer','reject','no_action','stop_considering','gather_evidence'].includes(r.choice.choice) ? '等待本轮实际观察' : '尚未授权行动'}</p>}
+        {r.review && <><p>实际观察 · {r.review.observation}</p><p>复盘判断 · {r.review.judgement}</p><p>下一步或结束理由 · {r.review.nextStep}</p><button className="text-button" onClick={() => void showSource(r.review!.reply)}>查看 Teach 原回复</button></>}
+        {r.review&&onTeachReview&&(r.choice.goalBinding?.strategy ? <div className="case-inline-actions">{(['goal','strategy'] as const).map(role=>
+          <button key={role} type="button" className="text-button" onClick={()=>onTeachReview({role,...r.choice.goalBinding!.primary,teachReview:{caseId:record.id,issueId,choiceId:r.choice.choiceId,reviewId:r.review!.operationId}})}>{role==='goal'?'提交策略复核':'提交战略假设复核'}</button>)}</div> : <p>原轮次的目标或具体策略待核。</p>)}
       </article>)}
       <button className="text-button" onClick={() => setRefresh(n => n+1)}>刷新原记录</button>{onBoard && <button className="text-button" onClick={()=>onBoard()}>打开原行动看板</button>}
     </details>
@@ -96,7 +106,7 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
     <details><summary>记录本次取舍</summary><label>准确方案<select value={planId} onChange={e => setPlanId(e.target.value)}><option value="">选择方案版本</option>{plans.map(p => <option key={p.recordId} value={p.recordId}>{p.payload.title} v{p.revision}</option>)}</select></label>
       <label>取舍<select value={choice} onChange={e => setChoice(e.target.value as CaseStrategyChoiceValue)}>{Object.entries(choiceName).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label><label>依据与理由<textarea value={reason} onChange={e => setReason(e.target.value)} /></label>
       <button disabled={disabled || !plan || !reason.trim()} onClick={() => { if (!plan) return; const fields = { caseStoreId: plan.caseStoreId, strategyRef: { type: 'case-decision' as const, caseStoreId:plan.caseStoreId,caseId:record.id,recordId:plan.recordId,revision:plan.revision }, issueId, choice, reason, expectedPreviousChoiceId: current?.choice.choiceId ?? null }; void save('choice',fields, operationId => saveCaseStrategyChoice(record.id,{...fields, operationId})); }}>确认取舍</button></details>
-    {current && !passive && !current.actions.length && <details><summary>授权本次行动</summary><label>看板行动<input value={title} onChange={e => setTitle(e.target.value)}/></label><label>授权范围<textarea value={scope} onChange={e => setScope(e.target.value)}/></label><button disabled={disabled || !project || !title.trim() || !scope.trim()} onClick={() => project && void write('authorize',{ projectId:project.id, choiceId: current.choice.choiceId,title,scope })}>确认授权并进入看板</button></details>}
+    {current && !passive && !current.actions.length && !current.historyLimited && <details><summary>授权本次行动</summary><label>看板行动<input value={title} onChange={e => setTitle(e.target.value)}/></label><label>授权范围<textarea value={scope} onChange={e => setScope(e.target.value)}/></label><button disabled={disabled || !project || !title.trim() || !scope.trim()} onClick={() => project && void write('authorize',{ projectId:project.id, choiceId: current.choice.choiceId,title,scope })}>确认授权并进入看板</button></details>}
     {current && !current.review && <details><summary>本轮复盘</summary>
       <label>实际观察<textarea value={observation} onChange={e=>setObservation(e.target.value)}/></label><label>原判断怎样保留或修订<textarea value={judgement} onChange={e=>setJudgement(e.target.value)}/></label><label>下一步或结束理由<textarea value={next} onChange={e=>setNext(e.target.value)}/></label><p>在「交接与依据」选择本轮 Teach 原回复。</p>
       <button disabled={disabled || reply?.type !== 'teach' || reply.choiceId !== current.choice.choiceId || !observation.trim() || !judgement.trim() || !next.trim() || !passive && !selectedFeedback} onClick={()=>reply && void write('review',{ expectedRevision:record.revision,choiceId:current.choice.choiceId,source:reply.source,observation,judgement,nextStep:next,...(selectedFeedback ? { feedbackRevisionId:selectedFeedback } : {}) })}>保存本轮复盘</button></details>}

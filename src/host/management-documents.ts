@@ -55,7 +55,7 @@ const entries = (values?: readonly string[]) => values?.length ? values.join('\n
 
 export function gsaVersionDocument(goal: GoalVersion, currentAdopted: boolean, arrangements: readonly GoalArrangementView[]): VersionDocument {
   const measurement = goal.measurement.kind === 'deliverable' ? goal.measurement.criterion :
-    [goal.measurement.sapMetric.metricName ?? goal.measurement.sapMetric.id,
+    ['SAP 指标包 '+goal.measurement.sapMetric.id, goal.measurement.sapMetric.metricName ?? '',
       '指标版本 ' + goal.measurement.sapMetric.version, goal.measurement.target ?? '目标值尚未记录'].join(' · ');
   const exact = arrangements.filter(item => item.goal.goalId === goal.goalId && item.goal.version === goal.version);
   const actions = exact.map(item => [item.title, ...(item.caseConfirmation?.goal ? ['对应策略 · '+item.caseConfirmation.goal.strategy, '原决策事项 '+item.caseConfirmation.issueId] : []), item.scope, entries(item.checks),

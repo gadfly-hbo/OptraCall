@@ -32,3 +32,13 @@ export function readCaseOriginRevision(cases:CaseStore,source:Extract<CaseCreati
   return {id:head.id,revision:event.revision,recordedAt:event.occurredAt,...facts,
     ...(event.note?{note:event.note}:{}),...(binding?{goalBinding:binding}:{})};
 }
+
+/** The issue event pins the business facts in force when the user opened that issue. */
+export function readCaseIssueOrigin(cases: CaseStore, caseId: string, issueId: string) {
+  const created = cases.getEvents('case',caseId).find(event => {
+    const issue = event.changes.decisionIssue?.after as {id?: string} | undefined;
+    return issue?.id === issueId;
+  });
+  if (!created) throw new CaseStoreError('case_origin_revision_unavailable',409);
+  return readCaseOriginRevision(cases,{kind:'case',caseId,caseRevision:created.revision});
+}

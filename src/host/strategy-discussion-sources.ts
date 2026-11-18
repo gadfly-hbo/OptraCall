@@ -17,6 +17,8 @@ export interface StrategyDiscussionSourceContext {
   metadataOnly?: boolean;
   /** Actual downstream owner, supplied by Host rather than a source locator. */
   receivingTask?: { projectId: string; taskId: string };
+  receivingProjectId?: string;
+  receivingGoal?: import('./strategy-goals-types.ts').GoalRef;
 }
 export interface StrategyDiscussionSourceRead { source: StrategyDiscussionSource; text: string; range: { start: number; end: number; total: number }; complete: boolean }
 export class StrategyDiscussionSourceFault extends Error {

@@ -384,11 +384,13 @@ export class StrategyGoalsStore {
   }
   adopt(ref: GoalRef, input: GoalAdoptionInput): GoalVersion {
     uuid(input.operationId); positive(input.expectedVersion); uuid(ref.goalId); positive(ref.version);
+    if(input.expectedAdoptedVersion!==undefined && input.expectedAdoptedVersion!==null)positive(input.expectedAdoptedVersion);
     const decision = text(input.decision), provenance = input.provenance === undefined ? undefined : parseGoalAdoptionProvenance(input.provenance);
-    return this.mutate(input.operationId, 'adopt', { ref, expectedVersion: input.expectedVersion, decision, ...(provenance ? { provenance } : {}) }, index => {
+    return this.mutate(input.operationId, 'adopt', { ref, expectedVersion: input.expectedVersion, ...(input.expectedAdoptedVersion!==undefined ? {expectedAdoptedVersion:input.expectedAdoptedVersion} : {}), decision, ...(provenance ? { provenance } : {}) }, index => {
       const record = index.goals.find(x => x.id === ref.goalId);
       if (!record) fail('strategy_goal_not_found', 404);
       if (record.currentVersion !== input.expectedVersion) fail('strategy_goal_conflict', 409);
+      if(input.expectedAdoptedVersion!==undefined && record.adoptedVersion!==input.expectedAdoptedVersion)fail('strategy_goal_adoption_changed',409);
       const version = record.versions.find(x => x.version === ref.version);
       if (!version) fail('strategy_goal_version_not_found', 404);
       if (provenance && provenance.goalContentSha256 !== goalContentSha256(version)) fail('strategy_goal_content_changed', 409);

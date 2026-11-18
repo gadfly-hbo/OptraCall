@@ -121,7 +121,7 @@
   max-height: none;
   overflow: visible;
 }
-.workspace-conversation-task .workspace-conversation-expanded .task-workflow,
+.workspace-conversation-task .workspace-conversation-expanded div.task-workflow,
 .workspace-conversation-task .workspace-conversation-expanded .task-results,
 .workspace-conversation-task .workspace-conversation-expanded .workspace-footer {
   display: none;

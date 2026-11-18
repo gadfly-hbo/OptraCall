@@ -1,3 +1,5 @@
+import { TeachReviewPanel } from './TeachReviewPanel.tsx';
+import { normalizeGoalText, sameGoalRequirement } from '../strategy-goals-types.ts';
 import {GoalOrigin} from './GoalOrigin.tsx';
 import type {BusinessRoleOwner} from '../business-role-types.ts';
 import { AnnualCases } from './AnnualCases.tsx';
@@ -25,6 +27,7 @@ import type { GoalActionArrangement } from '../strategy-goals-types.ts';
 
 export interface GoalFeedbackSource { label: string; ref: GoalSourceRef }
 export interface StrategyGoalsPageProps {
+  teachReview?:import('../business-role-types.ts').TeachReviewOwner; onReturnReview?():void; clearTeachReview?():void;
   caseSource?:CaseCreationSource;clearCaseSource?:()=>void;onInspectCase?:(id:string)=>void;
   management: ManagementRoute; onStage: (stage: ManagementStage) => void;
   active?: boolean;
@@ -156,9 +159,53 @@ function GoalEditor({ active, handoff, suggestion, initial, record, index, enter
   </form></CaseDialog>;
 }
 
+function GoalAdoptionComparison({ candidate, adopted }: { candidate: GoalVersion; adopted?: GoalVersion }) {
+  const before = adopted?.strategies ?? [], after = candidate.strategies ?? [];
+  const includes = (items: string[], strategy: string) => items.some(text => normalizeGoalText(text) === normalizeGoalText(strategy));
+  const added = after.filter(text => !includes(before, text)), removed = before.filter(text => !includes(after, text));
+  const changedG = adopted && !sameGoalRequirement(adopted, candidate), changedS = added.length + removed.length > 0;
+  let summary = '首次采用';
+  if (adopted) {
+    if (changedG && changedS) summary = 'G 和 S 均变化';
+    else if (changedG) summary = '仅 G 变化';
+    else if (changedS) summary = '仅 S 变化';
+    else summary = 'G 和 S 均沿用';
+  }
+  function details(goal: GoalVersion, label: string) {
+    const measure = goal.measurement;
+    return <fieldset><legend>{label} v{goal.version}</legend><dl className="sg-details">
+      <dt>目标 G</dt><dd>{goal.outcome}</dd>
+      <dt>衡量要求</dt><dd>{measure.kind === 'deliverable' ? measure.criterion :
+        <>{measure.sapMetric.metricName} · {measure.sapMetric.id} @ {measure.sapMetric.version}{measure.target && <p>{measure.target}</p>}</>}</dd>
+      {goal.dueAt && <><dt>期限</dt><dd>{goal.dueAt.slice(0,10)}</dd></>}
+      <dt>策略 S</dt><dd>{goal.strategies?.length ? <ul>{goal.strategies.map((text,i) => <li key={i}>{text}</li>)}</ul> : '尚未记录'}</dd>
+    </dl></fieldset>;
+  }
+  return <section aria-label="G 与 S 采用对照"><p><strong>{summary}</strong></p>
+    {adopted && changedS && <dl className="sg-details">{removed.map((text,i) => <div key={'r'+i}><dt>移出策略</dt><dd>{text}</dd></div>)}
+      {added.map((text,i) => <div key={'a'+i}><dt>加入策略</dt><dd>{text}</dd></div>)}</dl>}
+    <div className="sg-grid">{adopted && details(adopted,'当前采用')}{details(candidate,'本次候选')}</div>
+  </section>;
+}
+
 function GoalAdoptionDialog({ active, value, record, onSaved, onClose }: { active: boolean; value: GoalVersion; record: StrategyGoalRecord; onSaved: () => Promise<void>; onClose: () => void }) {
   const id = useId(), [decision, setDecision] = useState(''), state = useGoalMutation(onSaved);
-  return <CaseDialog active={active} title="采纳此目标版本" subtitle={`${value.title} · v${value.version}`} busy={state.busy} onClose={onClose}><form onSubmit={e => { e.preventDefault(); void state.save('adopt', { ref: refOf(value), expectedVersion: record.currentVersion, decision }, operationId => api.adopt(value, { expectedVersion: record.currentVersion, decision, operationId })); }}><p className="case-prose">{value.outcome}</p><p className="case-help">采纳后可作为Case主目标或关联目标。已有Case、项目方案与报告继续引用当时版本，本操作不会替你作经营选择或启动任务。</p><Field id={`${id}-decision`} label="本次明确决定"><textarea id={`${id}-decision`} required rows={3} maxLength={4000} disabled={state.busy || Boolean(state.pending)} value={decision} onChange={e => setDecision(e.target.value)} placeholder="说明本次采用的目标及仍待补的条件" /></Field><MutationNotice state={state} /><Actions state={state} label="确认采纳此版本" onClose={onClose} /></form></CaseDialog>;
+  const [comparison,setComparison] = useState(record);
+  return <CaseDialog active={active} title="采纳此目标版本" subtitle={`${value.title} · v${value.version}`} busy={state.busy} onClose={onClose}><form onSubmit={e => {
+    e.preventDefault();
+    const input={expectedVersion:comparison.currentVersion,expectedAdoptedVersion:comparison.adoptedVersion,decision};
+    void state.save('adopt',{ref:refOf(value),...input},async operationId => {
+      try { await api.adopt(value,{...input,operationId}); }
+      catch(error) {
+        if(error instanceof api.StrategyGoalsRequestError && (error.code==='strategy_goal_adoption_changed'||error.code==='strategy_goal_conflict')) {
+          // The write was rejected even if the follow-up read loses connectivity.
+          const updated=await api.readGoal(value.goalId).catch(()=>undefined);
+          if(updated)setComparison(updated.goal);
+        }
+        throw error;
+      }
+    });
+  }}><GoalAdoptionComparison candidate={value} adopted={comparison.versions.find(v => v.version === comparison.adoptedVersion)} /><p className="case-help">采纳后可作为Case主目标或关联目标。已有Case、项目方案与报告继续引用当时版本，本操作不会替你作经营选择或启动任务。</p><Field id={`${id}-decision`} label="本次明确决定"><textarea id={`${id}-decision`} required rows={3} maxLength={4000} disabled={state.busy || Boolean(state.pending)} value={decision} onChange={e => setDecision(e.target.value)} placeholder="说明本次采用的目标及仍待补的条件" /></Field><MutationNotice state={state} /><Actions state={state} label="确认采纳此版本" onClose={onClose} /></form></CaseDialog>;
 }
 
 function draftBody(value: GoalDraftInput): GoalDraftInput {
@@ -236,7 +283,7 @@ export function GoalArrangements({ arrangements, board, onOpenBoard }: { arrange
   })}</ul>{onOpenBoard && <button type="button" className="text-button" onClick={onOpenBoard}>到原看板维护行动</button>}<details><summary>准确安排来源</summary><p>{'kind' in arrangement.source ? `原确认 ${arrangement.source.workContext?.confirmationId ?? '无项目方案确认，仅本轮明确工作'}` : `Case ${arrangement.source.caseId} · 原选择 ${arrangement.source.choiceId}`}</p>{arrangement.quoteProvenance ? <><blockquote>{arrangement.quoteProvenance.quote.text}</blockquote><p>原请求 {arrangement.quoteProvenance.requestId} · 原会话 {arrangement.quoteProvenance.sessionId}</p></> : <p>原事项确认 · {arrangement.caseConfirmation?.issueId} · {arrangement.caseConfirmation?.goal?.strategy}</p>}</details><p className="sg-muted">目标 v{arrangement.goal.version} · 原安排 {arrangement.boardOperationId}</p></article>) : <p className="sg-muted">此准确目标版本尚无已记录的上层行动安排，不据此推断没有行动。</p>}</section>;
 }
 
-export function StrategyGoalsPage({ caseSource,clearCaseSource,onInspectCase,management, onStage, active = true, onOpenCase, onStartProject, onManageMetrics, onOpenBoard, feedbackSources = [], projects = [], configurations = [], selectedConfigurationId, onSettings = onManageMetrics }: StrategyGoalsPageProps) {
+export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,caseSource,clearCaseSource,onInspectCase,management, onStage, active = true, onOpenCase, onStartProject, onManageMetrics, onOpenBoard, feedbackSources = [], projects = [], configurations = [], selectedConfigurationId, onSettings = onManageMetrics }: StrategyGoalsPageProps) {
   const [goalsLoaded,setGoalsLoaded]=useState(false);
   const [enterpriseDirectory,setEnterpriseDirectory]=useState<StudioEnterpriseDirectory>();
   const [resolvedOrigin,setResolvedOrigin]=useState('');
@@ -326,6 +373,9 @@ export function StrategyGoalsPage({ caseSource,clearCaseSource,onInspectCase,man
   const openEditor = (mode: typeof editor, fromRole?:GoalDraftInput) => { setSuggestion(fromRole); setEditorGoal(value && record ? structuredClone({ value, record }) : null); if (mode === 'feedback') setEditorSources(structuredClone(sources)); setEditor(mode); };
   const openRelation = (initial?: GoalRelation) => { setRelationEditor(initial); openEditor('relation'); };
   const relationTable = <div className="sg-table-scroll"><table className="sg-table"><thead><tr><th>目标关系</th><th>职责与协同</th><th>依据／必要条件</th><th>版本</th></tr></thead><tbody>{relations.map(x => <tr key={x.id}><td>{goalName(index, x.from)}<br /><strong>{relationLabels[x.kind]}</strong> → {goalName(index, x.to)}</td><td>{x.responsibility}</td><td>{x.rationale}</td><td>关系 v{x.revision}<br /><button type="button" className="text-button" onClick={() => openRelation(x)}>修订关系</button>{x.history.length > 0 && <details><summary>历史</summary>{x.history.map(v => <p key={v.revision}>v{v.revision} · {goalName(index, v.from)} → {goalName(index, v.to)}<br />{v.responsibility}<br />{v.rationale}</p>)}</details>}</td></tr>)}</tbody></table>{!relations.length && <p className="sg-muted">此准确目标版本尚无已记录关系，不据此推断业务上没有贡献或必要条件。</p>}</div>;
+  if(teachReview&&onReturnReview)return <TeachReviewPanel key={JSON.stringify(teachReview)} owner={teachReview} onReturn={onReturnReview}
+    onGoal={()=>{setSelectedId(teachReview.goalId);setSelectedVersion(teachReview.version);setHandoff(undefined);setDraftScopeKey('');setPerspective('all');clearTeachReview?.();onStage('history');}}
+    onStrategy={source=>{setDiscussionFocus({source,id:crypto.randomUUID()});clearTeachReview?.();onStage('direction');}}/>;
   return <section className="case-board strategy-goals-page workspace-management-page" aria-labelledby={id+'-heading'}><header className="case-board-heading"><div><h1 id={id+'-heading'}>{managementTitle(management)}</h1><p>{area === 'strategy' ? '梳理可选方向，核对依据，再把选定方向交给目标管理。' : '核对目标和策略，再承接年度决策事项。'}</p></div>{area==='gsa' && <button type="button" className="primary-button" disabled={loading} onClick={() => openEditor('create')}>＋ 新建候选目标</button>}</header>
     <CaseFormError error={error} />{notice && <p className="case-notice" role="status">{notice}</p>}{sourceNotice && <p className="case-notice" role="status">{sourceNotice}</p>}
     {area==='gsa' && caseSource && <aside className="sg-panel"><strong>新增 Case 的原来源</strong>{goalOwner&&<GoalOrigin key={JSON.stringify(goalOwner)} owner={goalOwner}/>}{stage!=='goals'&&<button className="text-button" onClick={()=>onStage('goals')}>与目标管理 Agent 核对</button>}<p>{caseSource.kind==='task'?'项目 '+caseSource.projectId+' · Task '+caseSource.taskId:'Case '+caseSource.caseId+' · v'+caseSource.caseRevision}</p><button className="text-button" onClick={clearCaseSource}>移除本次来源</button></aside>}
