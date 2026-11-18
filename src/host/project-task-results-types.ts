@@ -33,8 +33,8 @@ export interface ProjectTaskResultSources {
 }
 interface ProjectTaskResultMetadata {
   id: string;
-  confirmationId: string;
-  planVersion: number;
+  confirmationId?: string;
+  planVersion?: number;
   taskKey: string;
   taskName: string;
   taskState: string;
@@ -49,8 +49,8 @@ export type ProjectTaskResultDescriptor = ProjectTaskResultMetadata & (
 export interface ProjectTaskResultsScope {
   projectId: string;
   taskId: string;
-  confirmationId: string;
-  planVersion: number;
+  confirmationId?: string;
+  planVersion?: number;
 }
 export interface ProjectTaskResultsFindResult {
   schemaVersion: 1;
@@ -86,11 +86,12 @@ export interface ProjectTaskResultsOptions {
   projects: Pick<ProjectStore, 'get' | 'getTask' | 'captureFeedbackFile'>;
   projectId: string;
   taskId: string;
-  confirmation: ProjectPlanConfirmation;
+  confirmation?: ProjectPlanConfirmation;
+  handoff?: { mode: 'own-results' } | { mode: 'selected'; sources: import('./task-assignment.ts').TaskSourceSelection[] };
   listBoundReports(projectId: string, sourceTaskId: string, options?: ProjectTaskResultsSourceReadOptions): Promise<ProjectTaskResultBinding[]>;
   /** One native snapshot scan supplies both catalogs; legacy report-only consumers remain valid. */
   listResultSources?(projectId: string, sourceTaskId: string, options?: ProjectTaskResultsSourceReadOptions): Promise<ProjectTaskResultSources>;
   /** The Host injects the existing native-reply reader; no second body reader is created. */
   readNativeReply?(ref: ProjectTaskNativeReplyRef, options: ProjectTaskResultsSourceReadOptions): Promise<PersonalSourceEvidence>;
-  assertAuthorized?(scope: { projectId: string; taskId: string; sourceTaskId: string; relativePath?: string }, context: ProjectTaskResultsContext): Promise<void>;
+  assertAuthorized?(scope: { projectId: string; taskId: string; sourceTaskId: string; source?: ProjectTaskResultDescriptor; requestId?: string; sessionId?: string; relativePath?: string }, context: ProjectTaskResultsContext): Promise<void>;
 }

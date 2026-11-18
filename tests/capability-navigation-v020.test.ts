@@ -15,13 +15,13 @@ test('Skill low-frequency settings show exact source/version, declared dependenc
   const html = await render('SkillCapabilitySettings', { initial: { skills: [{ id: 'data-analysis', title: '准确安装的运营分析', description: '当前SDK元信息', version: 'sha256:fixed-version', sha256: 'a'.repeat(64), source: 'bundled:data-analysis/SKILL.md' }], diagnostics: [] }, onProject() {}, onModelSettings() {} });
   assert.match(html, /bundled:data-analysis\/SKILL.md/); assert.match(html, /sha256:fixed-version/); assert.match(html, /未在此执行依赖检查/); assert.match(html, /项目方案中查看与改选/); assert.doesNotMatch(html, /已启用|实际已采用|安装全部|业务插件/);
 });
-test('planning settings preserve only the remaining planning state and do not become a renamed full market', async () => {
+test('domain asset pack keeps the approved empty settings panel', async () => {
   const html = await render('CapabilityPlansSettings', { onProject() {} });
-  assert.match(html, /尚未接入/); assert.match(html, /数据质量与业务对账/); assert.doesNotMatch(html, /月度经营复盘|会员复购诊断|S01|PPT 逐页精修|经营推演/);
+  assert.match(html, /领域资产包/); assert.doesNotMatch(html,/接入规划|数据质量与业务对账/); assert.doesNotMatch(html, /月度经营复盘|会员复购诊断|S01|PPT 逐页精修|经营推演/);
 });
 test('Task business navigation reaches original report, RAP, comparison, model and authorization work without a market', async () => {
   const html = await render('TaskCapabilityNavigation', { onOpen() {} });
-  for (const label of ['项目方案与 Skill 改选', '局部需求与 RAP', '报告与 PPT 生成', 'PPT 精修与原版本', '方案比较与经营推演', '预测模型与原注册表', '任务能力与显式启用', '项目资料与连接授权']) assert.ok(html.includes(label), label);
+  for (const label of ['查看项目共用约定', '局部需求与 RAP', '报告与 PPT 生成', 'PPT 精修与原版本', '方案比较与经营推演', '预测模型与原注册表', '任务能力与显式启用', '项目资料与连接授权']) assert.ok(html.includes(label), label);
   assert.doesNotMatch(html, /插件市场|启动分析|自动开启/);
 });
 test('an exact Studio URL target is never replaced by another system when missing, unassigned or no longer visible', async () => {

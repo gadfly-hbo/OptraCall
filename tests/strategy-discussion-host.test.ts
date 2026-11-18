@@ -38,6 +38,22 @@ test('v1.2 direct strategy discussion persists exact purpose, native candidate a
  let taskState:any;for(let n=0;n<300;n++){taskState=await req(`/api/projects/${project.id}/tasks/${task.taskId}`);if(taskState.task.lastRun?.status==='completed'&&taskState.snapshot.status==='idle')break;await delay(20);}
  assert.equal(taskState.task.lastRun.status,'completed');assert.ok(taskSource.includes('兼顾事业与家庭'),'actual Task reads the accurate durable discussion source through the bound narrow tool');assert.ok(taskSource.includes(goal.source.sha256));
  assert.ok(detail.replies.every((x:any)=>x.source.sessionId&&x.source.sha256));assert.deepEqual(provider.errors,[]);
+ // The human confirmation in the same discussion pins the effective adoption as well as the latest candidate.
+ const goalRoute='/api/strategy/goals/'+goal.goalId;
+ for(const version of [2,3])await req(goalRoute+'/revisions','POST',{...draft,source:goal.source,strategies:['第'+version+'版策略'],expectedVersion:version-1,operationId:randomUUID()},201);
+ const latest=await req(base);
+ const confirmation={goalId:goal.goalId,version:3,expectedVersion:3,expectedAdoptedVersion:1,
+   goalContentSha256:latest.goalContentHashes[goal.goalId+':3'],decision:'采用所见候选',operationId:randomUUID()};
+ await req(goalRoute+'/adopt','POST',{version:2,expectedVersion:3,operationId:randomUUID(),decision:'另一人选用第二版'});
+ assert.equal((await req(base+'/adopt','POST',confirmation,409)).code,'strategy_goal_adoption_changed');
+ assert.equal((await req(goalRoute)).goal.adoptedVersion,2);
+ const reviewed={...confirmation,operationId:randomUUID(),expectedAdoptedVersion:2};
+ const written=await req(base+'/adopt','POST',reviewed);
+ assert.equal(written.goal.adoptionProvenance.kind,'ui-confirmation');
+ assert.deepEqual((await req(base+'/adopt','POST',reviewed)).goal,written.goal);
+ assert.equal((await req(base+'/adopt','POST',{...reviewed,decision:'更改该笔操作的理由'},409)).code,'strategy_goal_operation_conflict');
+ assert.equal((await req(goalRoute)).goal.versions.length,3);
+
  t.diagnostic(host.scratch);
 });
 

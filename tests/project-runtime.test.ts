@@ -667,3 +667,20 @@ for (const kind of ['prompt', 'command'] as const) for (const recovered of [fals
   assert.ok(!JSON.stringify(result.diagnostic).includes('synthetic-private-rate-limit-detail'));
   assert.deepEqual((await agent.snapshot()).lastRun?.diagnostic, result.diagnostic);
 });
+
+test('typed task default and cancellation use the real Pi skill resource selection', async t => {
+  const f = await fixture(t);
+  const { makeTaskAssignment } = await import('../src/host/task-assignment.ts');
+  for (const enabled of [false, true]) {
+    const agent = new ProjectAgent({ ...f.options, taskId: randomUUID(), assignment: makeTaskAssignment('analysis', enabled) });
+    try {
+      await agent.open();
+      const catalog = await agent.command('/skills');
+      assert.equal(catalog.result.skills.some((s: { name: string }) => s.name === 'data-analysis'), enabled);
+      await agent.start('请核对合成任务范围。', randomUUID()).completion;
+      const request = f.provider.requests.at(-1)!.body;
+      assert.match(messageText(request.messages!), /分析 Analysis/);
+      assert.equal(messageText(request.messages!).includes('2.0.0-candidate.1'), enabled);
+    } finally { await agent.close(); }
+  }
+});

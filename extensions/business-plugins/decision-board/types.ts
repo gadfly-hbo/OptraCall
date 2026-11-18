@@ -70,12 +70,13 @@ export type BoardArrangeAction =
   | { kind: 'create'; title: string; owner?: string; dueDate?: string; priority?: string; note?: string; itemId?: string; itemVersion?: string }
   | { kind: 'reuse'; itemId: string; taskId: string; itemVersion: string; taskVersion: string; expectedPreviousAuthorizationId: string | null };
 export type BoardArrangedActionRef = { itemId: string; taskId: string; itemVersion: string; taskVersion: string; authorizationId: string; created: boolean };
-export type BoardArrangeActionsInput = { operationId: string; projectId: string; source: BoardAuthorizationSource; quoteProvenance: UserQuoteProvenance; scope: string; title: string; checks: string[]; actions: BoardArrangeAction[] };
+export type BoardConfirmation = { issueId: string; entry: 'case-form'; goal?: {goalId: string; version: number; strategy: string} };
+export type BoardArrangeActionsInput = { operationId: string; projectId: string; source: BoardAuthorizationSource; quoteProvenance?: UserQuoteProvenance; caseConfirmation?: BoardConfirmation; scope: string; title: string; checks: string[]; actions: BoardArrangeAction[] };
 export type BoardArrangementReceipt = Omit<BoardArrangeActionsInput, 'actions'> & { requestSha256: string; actions: BoardArrangedActionRef[]; createdAt: string };
 export type BoardActionAuthorizationInput = {
   operationId: string; projectId: string; itemId: string; taskId: string; itemVersion: string; taskVersion: string;
   expectedPreviousAuthorizationId: string | null; decision: 'authorize' | 'revoke'; scope: string;
-  source: BoardAuthorizationSource; quoteProvenance: UserQuoteProvenance;
+  source: BoardAuthorizationSource; quoteProvenance?: UserQuoteProvenance; caseConfirmation?: BoardConfirmation;
 };
 export type BoardActionAuthorization = Omit<BoardActionAuthorizationInput, 'expectedPreviousAuthorizationId'> & {
   authorizationId: string; revision: number; previousAuthorizationId: string | null; requestSha256: string;

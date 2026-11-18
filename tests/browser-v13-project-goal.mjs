@@ -1,0 +1,82 @@
+// Run the approved GSA project entry against an ephemeral synthetic Host and the normal React UI.
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {chromium} from 'playwright';
+import {startTestHost} from './fixtures/host-process.ts';
+import {startToolProvider,providerMessageText} from './fixtures/tool-provider.ts';
+const port=Number(process.env.OPTRACALL_PM_PROJECT_PORT||4379);
+const host=await startTestHost({uiPort:port}),provider=await startToolProvider();
+const vite=spawn(process.execPath,['scripts/frontend.mjs','dev','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe'],env:{...process.env,OPTRACALL_HOST_PORT:String(host.port)}});
+let browser;
+try{
+  await new Promise((resolve,reject)=>{vite.stdout.on('data',b=>{if(b.toString().includes(':'+port+'/'))resolve();});vite.on('exit',c=>reject(Error('UI exit '+c)));});
+  const api=async(route,method='GET',body)=>{const r=await host.request(route,method,body);const result=await r.json();assert.ok(r.ok,JSON.stringify(result));return result;};
+  await api('/api/configuration','PUT',{name:'合成模型',provider:'openai-compatible',model:'only-browser-fixture',baseUrl:provider.baseUrl,apiKey:'synthetic-only'});
+  provider.setResponder(()=>({text:'已收到选择的原目标。'}));
+  const draft={title:'测试季度完成目标',dueAt:'2027-01-14',resources:['北区旧版工时表'],necessaryConditions:['先核旧年度收货日'],outcome:'按第一版营业日定义',strategies:['两家试点门店'],scope:{kind:'personal',id:'synthetic',name:'试点负责人'},perspective:'personal',usageContext:{kind:'personal',background:'旧版本的分店核对用途'},measurement:{kind:'deliverable',criterion:'原始日报'},baseline:{state:'pending',description:'差额待核'},responsible:'负责人'};
+  const {goal}=await api('/api/strategy/goals','POST',{...draft,operationId:randomUUID()});
+  const route='/api/strategy/goals/'+goal.goalId;
+  await api(route+'/adopt','POST',{operationId:randomUUID(),version:1,expectedVersion:1,decision:'采用第一版'});
+  await api(route+'/revisions','POST',{...draft,outcome:'第二版新区域口径',dueAt:'2028-02-16',resources:['南区新版资源'],necessaryConditions:['改用新版收货日'],expectedVersion:1,operationId:randomUUID()});
+  await api(route+'/adopt','POST',{operationId:randomUUID(),version:2,expectedVersion:2,decision:'采用第二版'});
+  browser=await chromium.launch({channel:'chrome',headless:true});
+  const page=await browser.newPage({viewport:{width:1420,height:940}});page.setDefaultTimeout(10000);
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const click=(label,root=page)=>root.getByRole('button',{name:label,exact:true}).click();
+  await page.goto('http://127.0.0.1:'+port);
+  await click('目标管理',page.getByRole('navigation',{name:'主导航',exact:true}));await click('核对与采用');
+  await page.getByRole('button',{name:new RegExp(draft.title)}).click();
+  await page.getByLabel('查看准确版本').selectOption('1');
+  await click('从此目标开始项目');
+  const dialog=page.getByRole('dialog',{name:'新建项目'});await dialog.getByRole('textbox',{name:'项目名称'}).fill('看旧版目标的项目');
+  await dialog.locator('button[type=submit]').click();
+  const work=page.getByRole('region',{name:'项目协作'});
+  await work.getByRole('heading',{name:'看旧版目标的项目'}).waitFor();
+  await page.reload();
+  const basis=page.getByRole('region',{name:'项目承接依据'});
+  await basis.getByText(draft.outcome,{exact:true}).waitFor();await basis.getByText(draft.usageContext.background,{exact:true}).waitFor();
+  const reopenedBasis=await basis.innerText();assert.ok(!reopenedBasis.includes('第二版新区域口径'));
+  await work.getByRole('textbox',{name:/向.*提问/}).fill('核对准确旧目标');await click('发送',work);
+  await work.getByText('已收到选择的原目标。',{exact:true}).waitFor();
+  await click('新建第一个任务',work);
+  const task=page.getByRole('dialog',{name:'新建任务'});await task.getByLabel('任务名称').fill('首项需求核查');await task.getByLabel('Task 类型').selectOption('requirement');await click('创建任务',task);
+  const composer=page.getByRole('form',{name:'发送消息'});await composer.getByRole('textbox',{name:'消息',exact:true}).fill('人工首发，确认来源');await composer.locator('button[type=submit]').click();
+  await page.waitForFunction(()=>document.body.innerText.includes('已收到选择的原目标。'));
+  const prompts=provider.requests.map(r=>r.body.messages.filter(m=>m.role==='user').map(m=>providerMessageText(m.content)).join('\n'));
+  assert.equal(prompts.length,2);
+  for(const prompt of prompts){assert.ok(prompt.includes(draft.outcome));assert.ok(prompt.includes(draft.usageContext.background));assert.ok(!prompt.includes('第二版新区域口径'));}
+  for(const delivered of [...prompts,reopenedBasis]){
+    for(const selected of [draft.dueAt,...draft.resources,...draft.necessaryConditions])assert.ok(delivered.includes(selected),'所选 v1 缺少 '+selected);
+    for(const other of ['2028-02-16','南区新版资源','改用新版收货日'])assert.ok(!delivered.includes(other),'误用 v2 '+other);
+  }
+  const projects=(await api('/api/projects')).projects;assert.equal(projects.length,1);assert.equal(projects[0].tasks.length,1);assert.equal(projects[0].goalOrigin.goal.version,1);
+  const firstTask=projects[0].tasks[0],root='/api/projects/'+projects[0].id;
+  const drawerPanel=page.locator('details.harness-panel').filter({hasText:'交接与依据'});
+  await drawerPanel.locator('summary').click();await click('交给下一 Task',drawerPanel);
+  await drawerPanel.getByRole('checkbox',{name:/原会话回复/}).first().check();
+  await click('核对输入并新建 Task',drawerPanel);
+  await task.getByLabel('任务名称').fill('失答后核对原操作');
+  const writes=[];await page.route('**'+root+'/tasks',async r=>{
+    if(r.request().method()!=='POST')return r.continue();
+    writes.push(r.request().postDataJSON());
+    if(writes.length>1)return r.continue();
+    const saved=await r.fetch();assert.equal(saved.status(),201);await r.abort('failed');
+  });
+  await click('创建任务',task);await task.getByRole('alert').waitFor();
+  await api(root+'/tasks/'+firstTask.id+'/archive','POST',{});
+  await click('创建任务',task);await task.waitFor({state:'hidden'});
+  const checked=(await api(root)).project;
+  assert.equal(writes.length,2);assert.deepEqual(writes[0],writes[1]);
+  assert.equal(checked.tasks.length,2);assert.equal(checked.tasks.filter(t=>t.id===writes[0].operationId).length,1);
+  assert.equal(provider.requests.length,2);
+  await click('目标管理',page.getByRole('navigation',{name:'主导航',exact:true}));await click('核对与采用');
+  await page.getByRole('button',{name:new RegExp(draft.title)}).click();await page.getByLabel('查看准确版本').selectOption('1');
+  await click('从此目标开始项目');await dialog.getByLabel('默认任务模型').selectOption('');await click('前往模型设置',dialog);await dialog.waitFor({state:'hidden'});
+  await click('新建项目');await dialog.getByLabel('项目名称').fill('独立项目无目标来源');
+  const config=(await api('/api/configuration')).configuration;
+  await dialog.getByLabel('默认任务模型').selectOption(config.id);await click('创建项目',dialog);await dialog.waitFor({state:'hidden'});
+  const independent=(await api('/api/projects')).projects.find(p=>p.name==='独立项目无目标来源');
+  assert.ok(independent);assert.equal(independent.goalOrigin,undefined);
+  assert.deepEqual(errors,[]);console.log(JSON.stringify({result:'PASS',goal:projects[0].goalOrigin,project:projects[0].id,task:projects[0].tasks[0].id,independent:independent.id,selectedRequirements:[draft.dueAt,...draft.resources,...draft.necessaryConditions],actualPiRequests:prompts.length,replayedCreation:writes[0].operationId,errors}));
+}finally{await browser?.close();vite.kill();await host.close();await provider.close();}

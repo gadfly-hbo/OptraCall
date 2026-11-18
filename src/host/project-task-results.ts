@@ -37,9 +37,8 @@ function resultId(scope: ProjectTaskResultsScope, value: ProjectTaskResultBindin
   return digest(JSON.stringify([scope.projectId, scope.confirmationId, scope.planVersion, source.projectId, source.taskId, source.requestId, source.sessionId, source.toolCallId, source.relativePath, source.sha256, source.bytes]));
 }
 
-/** Supplies original saved material; it does not synthesize, classify causes, or decide whether work is complete. */
-export function createProjectTaskResultsReader(options: ProjectTaskResultsOptions): ProjectTaskResultsPort {
-  const confirmation = structuredClone(options.confirmation);
+export function confirmedProjectPlanMembers(options: Pick<ProjectTaskResultsOptions, 'projectId' | 'taskId' | 'confirmation'>) {
+  const { confirmation } = options;
   if (!uuid(options.projectId) || !uuid(options.taskId) || !confirmation || confirmation.projectId !== options.projectId || !uuid(confirmation.id) || !Number.isSafeInteger(confirmation.planVersion) || confirmation.planVersion < 1 || !Array.isArray(confirmation.plan?.tasks) || !Array.isArray(confirmation.tasks)) fail('project_result_scope_unavailable');
   if (!['single', 'multi'].includes(confirmation.plan.taskMode) || !confirmation.plan.tasks.some(x => x.key === confirmation.plan.summaryTaskKey) || new Set(confirmation.tasks.map(x => x.taskKey)).size !== confirmation.tasks.length) fail('project_result_scope_unavailable');
   const planned = confirmation.plan.tasks.filter(x => x.selected || x.key === confirmation.plan.summaryTaskKey);
@@ -49,10 +48,21 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
     return receipt && uuid(receipt.taskId) && ['created', 'not-required'].includes(receipt.createStatus) ? { taskKey: task.key, taskId: receipt.taskId } : null;
   }).filter((x): x is { taskKey: string; taskId: string } => Boolean(x));
   if (!members.some(x => x.taskId === options.taskId) || new Set(members.map(x => x.taskId)).size !== members.length || new Set(members.map(x => x.taskKey)).size !== members.length || confirmation.plan.taskMode === 'single' && (members.length !== 1 || members[0]!.taskKey !== confirmation.plan.summaryTaskKey)) fail('project_result_scope_unavailable');
-  const scope: ProjectTaskResultsScope = { projectId: options.projectId, taskId: options.taskId, confirmationId: confirmation.id, planVersion: confirmation.planVersion };
-  const authorized = async (sourceTaskId: string, context: ProjectTaskResultsContext, relativePath?: string) => {
+  return members;
+}
+
+/** Supplies original saved material; it does not synthesize, classify causes, or decide whether work is complete. */
+export function createProjectTaskResultsReader(options: ProjectTaskResultsOptions): ProjectTaskResultsPort {
+  const confirmation = structuredClone(options.confirmation), handoff = structuredClone(options.handoff);
+  if (!uuid(options.projectId) || !uuid(options.taskId) || Boolean(confirmation) === Boolean(handoff)) fail('project_result_scope_unavailable');
+  const selected = handoff?.mode === 'selected' ? handoff.sources : undefined;
+  if (selected && (!Array.isArray(selected) || selected.length > 32 || selected.some(source => !source || !uuid(source.taskId) || typeof source.key !== 'string' || !/^[0-9a-f]{64}$/.test(source.key)))) fail('project_result_scope_unavailable');
+  const members = handoff ? [...new Set(selected?.map(source => source.taskId) ?? [options.taskId])].map(taskId => ({ taskId, taskKey: taskId })) : confirmedProjectPlanMembers({ ...options, confirmation });
+  const selectedKeys = selected && new Set(selected.map(source => source.taskId + '/' + source.key));
+  const scope: ProjectTaskResultsScope = { projectId: options.projectId, taskId: options.taskId, ...(confirmation ? { confirmationId: confirmation.id, planVersion: confirmation.planVersion } : {}) };
+  const authorized = async (sourceTaskId: string, context: ProjectTaskResultsContext, relativePath?: string, result?: ProjectTaskResultDescriptor) => {
     check(context);
-    try { await options.assertAuthorized?.({ projectId: scope.projectId, taskId: scope.taskId, sourceTaskId, ...(relativePath ? { relativePath } : {}) }, context); }
+    try { await options.assertAuthorized?.({ projectId: scope.projectId, taskId: scope.taskId, sourceTaskId, ...(result ? { source: result, requestId: result.requestId, sessionId: result.sessionId } : {}), ...(relativePath ? { relativePath } : {}) }, context); }
     catch { check(context); fail('project_result_permission_unavailable', 403); }
     check(context);
   };
@@ -81,16 +91,16 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
         await authorized(member.taskId, context);
         const sources = await readSources(member.taskId, readOptions); check(context);
         for (const code of sources.limitations ?? []) limitations.push({ taskId: member.taskId, code });
-        const sourceReceipt = confirmation.tasks.find(x => x.taskId === member.taskId);
+        const sourceReceipt = confirmation?.tasks.find(x => x.taskId === member.taskId);
         const confirmedRequestId = sourceReceipt?.startStatus === 'accepted' ? sourceReceipt.startRequestId : undefined;
         const metadata = { confirmationId: scope.confirmationId, planVersion: scope.planVersion, taskKey: member.taskKey, taskName: task.name, taskState: task.archivedAt ? 'archived' : task.lastRun?.status ?? 'unknown', ...(confirmedRequestId ? { confirmedRequestId } : {}), limitations: ['正文尚未提供，读取时核对准确内容与当前权限。', '准确来源不单独证明Task完成、项目综合完成或专业结论成立。'] };
         for (const raw of sources.reports) {
-          const value = binding(raw, scope.projectId, member.taskId); await authorized(member.taskId, context, value.relativePath);
-          const id = resultId(scope, value); if (ids.has(id)) continue; ids.add(id);
+          const value = binding(raw, scope.projectId, member.taskId);
+          const id = resultId(scope, value); if (ids.has(id) || selectedKeys && !selectedKeys.has(member.taskId + '/' + id)) continue; ids.add(id);
           results.push({ ...value, ...metadata, id, kind: 'report', bindingState: 'saved-receipt-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', limitations: ['正文尚未提供，读取时核对准确内容与当前权限。', '保存快照不单独证明Task完成、项目综合完成或专业结论成立。'] });
         }
         for (const raw of sources.replies) {
-          const value = nativeBinding(raw, scope.projectId, member.taskId), id = resultId(scope, value); if (ids.has(id)) continue; ids.add(id);
+          const value = nativeBinding(raw, scope.projectId, member.taskId), id = resultId(scope, value); if (ids.has(id) || selectedKeys && !selectedKeys.has(member.taskId + '/' + id)) continue; ids.add(id);
           results.push({ ...value, ...metadata, id, kind: 'native-reply', bindingState: 'native-reply-reference-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', source: { type: 'native-reply', projectId: value.projectId, taskId: value.taskId, sessionId: value.sessionId, messageId: value.messageId, expectedTextSha256: value.sha256 } });
         }
       } catch (error) {
@@ -100,12 +110,12 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
       }
     }
     await owner(context);
-    for (const taskId of new Set(results.map(x => x.taskId))) {
-      try { for (const result of results.filter(x => x.taskId === taskId)) await authorized(taskId, context, result.relativePath); }
+    for (let index = results.length - 1; index >= 0; index--) {
+      const result = results[index]!;
+      try { await authorized(result.taskId, context, result.relativePath, result); }
       catch (error) {
-        check(context);
-        for (let i = results.length - 1; i >= 0; i--) if (results[i]!.taskId === taskId) results.splice(i, 1);
-        limitations.push({ taskId, code: error instanceof ProjectTaskResultsError ? error.code : 'source_bindings_unavailable' });
+        check(context); results.splice(index, 1);
+        if (!limitations.some(row => row.taskId === result.taskId && row.code === 'project_result_permission_unavailable')) limitations.push({ taskId: result.taskId, code: error instanceof ProjectTaskResultsError ? error.code : 'source_bindings_unavailable' });
       }
     }
     return { results: results.sort((a, b) => a.id.localeCompare(b.id)), limitations, metadataVersion: sourceMetadata(project, selectedTaskId) };
@@ -119,14 +129,14 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
       if (!Number.isSafeInteger(offset) || Number(offset) < 0 || !Number.isSafeInteger(limit) || Number(limit) < 1 || Number(limit) > MAX_READ_UTF16) fail('invalid_project_result_range', 400);
       const start = Number(offset), requested = Number(limit), id = input.id, found = await catalog(context, undefined, readOptions), result = found.results.find(x => x.id === id);
       if (!result) fail('project_result_reference_unavailable', 404);
-      await authorized(result.taskId, context, result.relativePath);
+      await authorized(result.taskId, context, result.relativePath, result);
       let text: string, observedAt: string;
       if (result.kind === 'native-reply') {
         if (!options.readNativeReply) fail('project_result_unavailable');
         let evidence;
         try { evidence = await options.readNativeReply(result.source, readOptions); }
-        catch (error) { check(context); await authorized(result.taskId, context); if ((error as { code?: unknown })?.code === 'personal_source_text_changed') fail('project_result_changed'); fail('project_result_unavailable'); }
-        check(context); await owner(context); await authorized(result.taskId, context);
+        catch (error) { check(context); await authorized(result.taskId, context, result.relativePath, result); if ((error as { code?: unknown })?.code === 'personal_source_text_changed') fail('project_result_changed'); fail('project_result_unavailable'); }
+        check(context); await owner(context); await authorized(result.taskId, context, result.relativePath, result);
         const ref = evidence.ref;
         if (evidence.status !== 'available' || typeof evidence.text !== 'string') fail('project_result_unavailable');
         if (ref.type !== 'native-reply' || ref.projectId !== result.projectId || ref.taskId !== result.taskId || ref.sessionId !== result.sessionId || ref.messageId !== result.messageId || ref.expectedTextSha256 !== result.sha256 || ref.excerpt !== undefined || evidence.sha256 !== result.sha256 || digest(evidence.text) !== result.sha256 || Buffer.byteLength(evidence.text) !== result.bytes) fail('project_result_changed');
@@ -134,8 +144,8 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
       } else {
         let captured: Awaited<ReturnType<ProjectTaskResultsOptions['projects']['captureFeedbackFile']>>;
         try { captured = await options.projects.captureFeedbackFile(scope.projectId, result.relativePath, PROJECT_UPLOAD_MAX_BYTES); }
-        catch { check(context); await authorized(result.taskId, context, result.relativePath); fail('project_result_unavailable'); }
-        check(context); await owner(context); await authorized(result.taskId, context, result.relativePath);
+        catch { check(context); await authorized(result.taskId, context, result.relativePath, result); fail('project_result_unavailable'); }
+        check(context); await owner(context); await authorized(result.taskId, context, result.relativePath, result);
         if (captured.sha256 !== result.sha256 || captured.bytes.length !== result.bytes || digest(captured.bytes) !== result.sha256) fail('project_result_changed');
         try { text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(captured.bytes); if (text.includes('\0')) fail('project_result_requires_text'); }
         catch { fail('project_result_requires_text'); }
@@ -146,7 +156,7 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
         ? currentSources.reports.some(x => { try { return resultId(scope, binding(x, scope.projectId, result.taskId)) === result.id; } catch { return false; } })
         : currentSources.replies.some(x => { try { return resultId(scope, nativeBinding(x, scope.projectId, result.taskId)) === result.id; } catch { return false; } });
       if (!stillReferenced) fail('project_result_reference_unavailable');
-      await authorized(result.taskId, context, result.relativePath);
+      await authorized(result.taskId, context, result.relativePath, result);
       if (start > text.length || boundary(text, start) !== start) fail('invalid_project_result_range', 400);
       const page = (end: number) => {
         const details: ProjectTaskResultsReadResult = { schemaVersion: 1, type: 'optracall.project-task-results', action: 'read', scope: { ...scope }, result: { ...result, limitations: ['本次仅提供所示范围，未提供部分不能视为已读。', '准确来源不单独证明Task完成、项目综合完成或专业结论成立。'] }, contentState: result.kind === 'report' ? 'exact-bytes-verified' : 'exact-native-reply-verified', observedAt, rangeUtf16: { start, end, total: text.length }, complete: start === 0 && end === text.length, ...(end < text.length ? { nextOffset: end } : {}) };

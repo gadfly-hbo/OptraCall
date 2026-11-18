@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { withCaseGoal } from './fixtures/case-goal.ts';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 
@@ -46,13 +47,23 @@ for (const count of [1, 3]) test(`A07/A09: one confirmation starts ${count} exac
   assert.deepEqual(provider.errors, []);
 });
 
-test('A12: the synthesis Task reads an exact dimension report through actual Pi and excludes unbound project files', { timeout: 40_000 }, async t => {
+for (const caseBound of [false, true]) test('A12: the synthesis Task reads an exact dimension report through actual Pi and excludes unbound project files' + (caseBound ? ' with its confirmed Case' : ''), { timeout: 40_000 }, async t => {
   const provider = await startToolProvider(); t.after(() => provider.close());
   const host = await startTestHost(); t.after(() => host.close());
   const request = async (route: string, method = 'GET', body?: unknown, status = 200) => { const response = await host.request(route, method, body); assert.equal(response.status, status, await response.clone().text()); return response.json(); };
   await request('/api/configuration', 'PUT', { name: '合成综合模型', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-results', apiKey: 'synthetic-results-only' });
   const { project } = await request('/api/projects', 'POST', { name: '准确子成果' }, 201);
-  const plan = { request: '核对两类事实，保留分歧', premises: [], materials: [], coverage: [], tasks: [{ key: 'dimension', name: '维度核查', selected: true, scope: '核对原始事实', capabilities: [] }, { key: 'summary', name: '项目综合', selected: true, scope: '综合并保留冲突', capabilities: [] }], taskMode: 'multi', summaryTaskKey: 'summary', dependencies: [{ from: 'dimension', to: 'summary', reason: '有据综合' }], caseContext: null };
+  let caseContext = null;
+  if (caseBound) {
+    await request('/api/cases/storage/initialize', 'POST', {});
+    const { case: record } = await request('/api/cases', 'POST', await withCaseGoal(host, { operationId: randomUUID(), title: '确认计划采用的准确 Case' }), 201);
+    await request('/api/cases/' + record.id + '/projects', 'POST', { operationId: randomUUID(), expectedRevision: record.revision, projectId: project.id });
+    const catalog = await request('/api/projects/' + project.id + '/plan/capabilities');
+    const original = catalog.caseContexts.find((value: {caseId: string}) => value.caseId === record.id);
+    assert.ok(original);
+    caseContext = { caseId: original.caseId, primaryGoal: original.primaryGoal, relatedGoals: original.relatedGoals, caseRevision: original.caseRevision, projectWorkRevision: original.projectWorkRevision };
+  }
+  const plan = { request: '核对两类事实，保留分歧', premises: [], materials: [], coverage: [], tasks: [{ key: 'dimension', name: '维度核查', selected: true, scope: '核对原始事实', capabilities: [] }, { key: 'summary', name: '项目综合', selected: true, scope: '综合并保留冲突', capabilities: [] }], taskMode: 'multi', summaryTaskKey: 'summary', dependencies: [{ from: 'dimension', to: 'summary', reason: '有据综合' }], caseContext };
   const base = `/api/projects/${project.id}/plan`;
   const draft = await request(base + '/draft', 'POST', { operationId: randomUUID(), expectedRevision: 0, plan });
   const created = await request(base + '/confirm', 'POST', { operationId: randomUUID(), expectedRevision: draft.state.revision, mode: 'create' });
@@ -84,6 +95,23 @@ test('A12: the synthesis Task reads an exact dimension report through actual Pi 
   const read = native.find(entry => entry.message?.role === 'toolResult' && entry.message.details?.action === 'read');
   assert.equal(read.message.details.result.id, sourceId);
   assert.equal(read.message.details.scope.confirmationId, created.confirmation.id);
+  if (caseContext) {
+    const tasksPath = '/api/projects/' + project.id + '/tasks';
+    await request(tasksPath + '/' + summary.taskId + '/open', 'POST', {});
+    const count = provider.requests.length;
+    const listed = (await request(tasksPath + '/' + dimension.taskId + '/results')).details.results;
+    const report = listed.find((row: {relativePath?: string}) => row.relativePath === '060_reports/dimension.md');
+    assert.equal(report.sha256, observed.result.sha256);
+    const unbound = await host.request(tasksPath, 'POST', { name: '未参与确认的下游', assignment: { type: 'analysis', skill: null, sources: [{ taskId: dimension.taskId, key: report.id }] } });
+    assert.ok([403, 404, 409].includes(unbound.status));
+    const originalCase = '/api/cases/' + caseContext.caseId;
+    await request(originalCase + '/projects/' + project.id, 'DELETE', { expectedRevision: (await request(originalCase)).case.revision, operationId: randomUUID() });
+    await request(tasksPath + '/' + summary.taskId + '/open', 'POST', {}, 403);
+    const stopped = await request(tasksPath + '/' + summary.taskId + '/messages', 'POST', { requestId: randomUUID(), text: '继续原综合' }, 409);
+    assert.equal(stopped.code, 'project_not_linked');
+    assert.deepEqual((await request(tasksPath + '/' + dimension.taskId + '/results')).details.results, []);
+    assert.equal(provider.requests.length, count);
+  }
   assert.deepEqual(provider.errors, []);
 });
 

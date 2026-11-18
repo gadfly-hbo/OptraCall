@@ -38,7 +38,17 @@ export interface GoalAdoptionProvenance {
 export type GoalMeasurement =
   | { kind: 'quantitative'; sapMetric: { authority: 'sap-metric'; id: string; version: string; metricName?: string }; target?: string }
   | { kind: 'deliverable'; criterion: string };
+export interface StrategyChoiceRef { discussionId: string; version: number; contentSha256: string }
+export interface GoalRoleSuggestionRef {
+  owner: Extract<import('./business-role-types.ts').BusinessRoleOwner, {role:'goal'|'goal-draft'}>;
+  discussionId: string;
+  sessionId: string;
+  entryId: string;
+  sha256: string;
+}
 export interface GoalDraftInput {
+  roleSuggestion?: GoalRoleSuggestionRef;
+  strategyChoice?: StrategyChoiceRef;
   title: string;
   outcome: string;
   perspective: GoalPerspective;
@@ -62,6 +72,16 @@ export interface GoalVersion extends GoalDraftInput, GoalRef {
   adoptionDecision?: string;
   adoptionProvenance?: GoalAdoptionProvenance;
 }
+export const normalizeGoalText = (text: string) => text.normalize('NFKC').trim().replace(/\s+/g, ' ');
+
+/** G is the outcome, its measure and the deadline, as used when admitting a new Case. */
+export function sameGoalRequirement(a: GoalVersion, b: GoalVersion): boolean {
+  const measure = (m: GoalMeasurement) => m.kind === 'deliverable' ? normalizeGoalText(m.criterion) :
+    JSON.stringify([m.sapMetric.id, m.sapMetric.version, m.sapMetric.metricName ?? '', m.target ?? '']);
+  return normalizeGoalText(a.outcome) === normalizeGoalText(b.outcome) &&
+    a.measurement.kind === b.measurement.kind && measure(a.measurement) === measure(b.measurement) && (a.dueAt ?? '') === (b.dueAt ?? '');
+}
+
 export interface StrategyGoalRecord {
   id: string;
   currentVersion: number;
@@ -133,10 +153,14 @@ export interface GoalActionArrangement {
   quoteProvenance: import('../agent/quoted-decisions.ts').UserQuoteProvenance;
   createdAt: string;
 }
+export type GoalArrangementView = Omit<GoalActionArrangement, 'quoteProvenance'> & {
+  quoteProvenance?: GoalActionArrangement['quoteProvenance'];
+  caseConfirmation?: import('../../extensions/business-plugins/decision-board/types.ts').BoardConfirmation;
+};
 export type GoalArrangementInput = Omit<GoalActionArrangement, 'id' | 'createdAt'>;
 export interface GoalMutation { operationId: string }
 export interface GoalRevisionInput extends GoalDraftInput, GoalMutation { expectedVersion: number }
-export interface GoalAdoptionInput extends GoalMutation { expectedVersion: number; decision: string; provenance?: GoalAdoptionProvenance }
+export interface GoalAdoptionInput extends GoalMutation { expectedVersion: number; expectedAdoptedVersion?: number | null; decision: string; provenance?: GoalAdoptionProvenance }
 export interface GoalOperationReceipt {
   operationId: string;
   requestHash: string;

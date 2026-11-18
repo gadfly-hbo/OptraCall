@@ -22,11 +22,11 @@ test('S4: a saved default draft follows a later exact Case Goal through reopen, 
   const initial = await request(base + '/draft', 'POST', { operationId: randomUUID(), expectedRevision: 0, plan });
   assert.equal(initial.draft.plan.usageContext.kind, 'organization');
   const usage = { kind: 'personal', background: 'S4_EXACT_PERSONAL_FAMILY_GOAL' };
-  const { goal } = await request('/api/strategy/goals', 'POST', { operationId: randomUUID(), title: '本人的家庭目标', outcome: '核对家庭安排', perspective: 'personal', scope: { kind: 'personal', id: 'self', name: '本人家庭' }, measurement: { kind: 'deliverable', criterion: '可核对的安排' }, baseline: { state: 'pending', description: '待补充' }, responsible: '本人', usageContext: usage });
+  const { goal } = await request('/api/strategy/goals', 'POST', { operationId: randomUUID(), title: '本人的家庭目标', strategies: ['按选定依据跟进'], outcome: '核对家庭安排', perspective: 'personal', scope: { kind: 'personal', id: 'self', name: '本人家庭' }, measurement: { kind: 'deliverable', criterion: '可核对的安排' }, baseline: { state: 'pending', description: '待补充' }, responsible: '本人', usageContext: usage });
   await request(`/api/strategy/goals/${goal.goalId}/adopt`, 'POST', { operationId: randomUUID(), expectedVersion: 1, version: 1, decision: '明确采用家庭目标v1' });
   await request('/api/cases/storage/initialize', 'POST', {});
   const primary = { goalId: goal.goalId, version: 1 };
-  const { case: current } = await request('/api/cases', 'POST', { operationId: randomUUID(), title: '家庭安排持续事项', description: '本人明确的持续问题', goalBinding: { primary, related: [] } });
+  const { case: current } = await request('/api/cases', 'POST', { operationId: randomUUID(), title: '家庭安排持续事项', description: '本人明确的持续问题', goalBinding: { strategy: '按选定依据跟进', primary, related: [] } });
   await request(`/api/cases/${current.id}/projects`, 'POST', { operationId: randomUUID(), expectedRevision: current.revision, projectId: project.id });
   const context = (await request(base + '/capabilities')).caseContexts.find((item: any) => item.caseId === current.id);
   const selected = { ...initial.draft.plan, goalContext: { goal: primary, purpose: 'case-investigation' }, caseContext: { caseId: current.id, primaryGoal: primary, relatedGoals: [], caseRevision: context.caseRevision, projectWorkRevision: context.projectWorkRevision } };
@@ -62,7 +62,7 @@ test('S4: an unconfirmed Goal-derived draft follows a new exact department Goal 
   await request('/api/settings/usage-context', 'PUT', { operationId: randomUUID(), expectedRevision: 0, context: { kind: 'organization', background: 'S4_DIRECT_DEFAULT' } });
   const goal = async (kind: 'personal' | 'department') => {
     const usageContext = { kind, background: `S4_EXACT_${kind.toUpperCase()}_WORK` };
-    const { goal } = await request('/api/strategy/goals', 'POST', { operationId: randomUUID(), title: kind + '准确目标', outcome: '核清工作安排', perspective: 'personal', scope: { kind, id: kind, name: kind + '适用范围' }, measurement: { kind: 'deliverable', criterion: '准确工作依据' }, baseline: { state: 'pending', description: '待补' }, responsible: '用户明确责任人', usageContext });
+    const { goal } = await request('/api/strategy/goals', 'POST', { operationId: randomUUID(), title: kind + '准确目标', strategies: ['按选定依据跟进'], outcome: '核清工作安排', perspective: 'personal', scope: { kind, id: kind, name: kind + '适用范围' }, measurement: { kind: 'deliverable', criterion: '准确工作依据' }, baseline: { state: 'pending', description: '待补' }, responsible: '用户明确责任人', usageContext });
     await request(`/api/strategy/goals/${goal.goalId}/adopt`, 'POST', { operationId: randomUUID(), expectedVersion: 1, version: 1, decision: '采用准确第一版' });
     return { ref: { goalId: goal.goalId, version: 1 }, usageContext };
   };

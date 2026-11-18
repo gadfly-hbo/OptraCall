@@ -2,7 +2,7 @@ import path from 'node:path';
 import { readFileSync, readdirSync, lstatSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { loadSkills, getAgentDir } from './sdk.ts';
-function packageIdentity(filePath: string) {
+export function packageIdentity(filePath: string) {
   const root = path.dirname(filePath), entries: [string, string][] = []; let bytes = 0;
   const visit = (directory: string) => {
     for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {

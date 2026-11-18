@@ -12,7 +12,10 @@ export type CaseRecord = {
   id: string; title: string; description: string; judgement: string; nextStep: string; status: CaseStatus;
   closeReason: string | null; closedAt: string | null; revision: number; createdAt: string; updatedAt: string;
 };
-export type CaseGoalBindingInput = { primary: GoalRef; related: GoalRef[] };
+export type CaseCreationSource =
+  | { kind: 'task'; projectId: string; taskId: string; reply?: import('./case-decision-types.ts').CaseIssueReply }
+  | { kind: 'case'; caseId: string; caseRevision: number };
+export type CaseGoalBindingInput = { primary: GoalRef; related: GoalRef[]; strategy?: string; effectiveFrom?: string };
 export type CaseGoalBinding = CaseGoalBindingInput & { caseId: string; caseRevision: number; confirmedAt: string; operationId: string };
 export type CaseProjectLink = { caseId: string; projectId: string; linkedAt: string };
 export type ProjectWorkRecord = {
@@ -44,7 +47,7 @@ export type WorkEvent = {
 };
 export type CaseList = { cases: CaseRecord[]; projectLinks: CaseProjectLink[] };
 export type CaseDetail = {
-  case: CaseRecord; goalBinding?: CaseGoalBinding | null; projectLinks: CaseProjectLink[]; artifacts: CaseArtifactView[];
+  case: CaseRecord; creationSource?: CaseCreationSource; goalBinding?: CaseGoalBinding | null; projectLinks: CaseProjectLink[]; artifacts: CaseArtifactView[];
   events: WorkEvent[]; projectEvents: WorkEvent[]; pendingOperations: OperationReceipt[];
 };
 export type CaseContextSelection = {

@@ -83,7 +83,7 @@ export function createStrategyGoalSources(options: StrategyGoalSourcesOptions) {
       const record = authorization ?? feedback;
       if (!record || record.taskId !== source.id || source.taskId !== undefined && source.taskId !== record.taskId) return unavailable();
       const task = options.board.getTask(record.taskId), item = options.board.getItem(task.itemId);
-      if (item.projectId !== source.projectId || authorization && (authorization.projectId !== item.projectId || authorization.itemId !== item.id || authorization.quoteProvenance.projectId !== item.projectId)) return unavailable();
+      if (item.projectId !== source.projectId || authorization && (authorization.projectId !== item.projectId || authorization.itemId !== item.id || (authorization.quoteProvenance ? authorization.quoteProvenance.projectId !== item.projectId : !authorization.caseConfirmation))) return unavailable();
       if (source.sha256 && source.sha256 !== hash(record)) return changed();
       await options.projects.get(item.projectId); await options.assertBoardItemReadable(item);
       const reread = authorization ? options.board.getActionAuthorization(source.version) : options.board.getFeedbackRevision(source.version);

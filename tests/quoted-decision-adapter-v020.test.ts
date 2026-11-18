@@ -127,3 +127,24 @@ test('A16 readback after a strategy revision preserves the old human choice inst
   assert.equal(f.cases.listDecisions(f.record.id).choices.length, 1); assert.equal(f.cases.listDecisions(f.record.id).choices[0].strategyRef.revision, 1);
   assert.equal(f.goals.list().feedback[0].goal.goalId, f.goal.goalId);
 });
+
+test('a Task can still withdraw its own historical unscoped authorization after its issue starts governing new decisions', async t => {
+  const f = await fixture(t), quote = '选择原方案用于小范围试行。', original = f.context(quote);
+  const selected = await f.port('choose-strategy', f.choose(quote), original);
+  const choice = selected.details.authority as {choiceId:string};
+  const row = (await f.port('read', {}, original)).details.actions as {itemVersion:string;taskVersion:string}[];
+  const text = '原授权仅用于北店试行。';
+  const authorization = {strategyRef:f.strategyRef,choiceId:choice.choiceId,itemId:f.item.id,taskId:f.task.id,itemVersion:row[0].itemVersion,taskVersion:row[0].taskVersion,scope:'北店试行'};
+  const granted = await f.port('authorize-action',{...authorization,decision:'authorize',quote:f.quote(text),expectedPreviousAuthorizationId:null},f.context(text));
+  const id = (granted.details.authority as {authorizationId:string}).authorizationId;
+  const issue = f.cases.createDecisionIssue({caseId:f.record.id,expectedRevision:f.cases.getCase(f.record.id).revision,operationId:randomUUID(),title:'历史北店试行'});
+  const context = (message:string) => ({...f.context(message),caseContext:{...original.caseContext,issueId:issue.id}});
+  const revoke = '撤回我当时给北店的原授权。';
+  const command = {...authorization,decision:'revoke',quote:f.quote(revoke),expectedPreviousAuthorizationId:id};
+  await assert.rejects(f.port('authorize-action', {...command,decision:'authorize'},context(revoke)),/case_issue_scope_mismatch/);
+  await assert.rejects(f.port('authorize-action', command,{...context(revoke),taskId:randomUUID()}),/case_issue_scope_mismatch/);
+  const saved = await f.port('authorize-action', command,context(revoke));
+  assert.equal((saved.details.authority as {previousAuthorizationId:string}).previousAuthorizationId,id);
+  const read = await f.port('read',{operationId:selected.details.operationId},context('查原操作'));
+  assert.equal((read.details.choice as {choiceId:string}).choiceId,choice.choiceId);
+});

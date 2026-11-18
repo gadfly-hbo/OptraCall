@@ -7,7 +7,7 @@ export interface SkillCapabilityMetadata { id: string; title: string; descriptio
 export interface SkillCapabilitiesSnapshot { skills: SkillCapabilityMetadata[]; diagnostics: { type: string; message: string }[] }
 export type TaskCapabilityDestination = 'plan' | 'requirement' | 'reports' | 'refiner' | 'simlab' | 'model-pack' | 'permissions' | 'connections';
 export function TaskCapabilityNavigation({ onOpen }: { onOpen(destination: TaskCapabilityDestination): void }) {
-  const entries: { destination: TaskCapabilityDestination; label: string }[] = [{ destination: 'plan', label: '项目方案与 Skill 改选' }, { destination: 'requirement', label: '局部需求与 RAP' }, { destination: 'reports', label: '报告与 PPT 生成' }, { destination: 'refiner', label: 'PPT 精修与原版本' }, { destination: 'simlab', label: '方案比较与经营推演' }, { destination: 'model-pack', label: '预测模型与原注册表' }, { destination: 'permissions', label: '任务能力与显式启用' }, { destination: 'connections', label: '项目资料与连接授权' }];
+  const entries: { destination: TaskCapabilityDestination; label: string }[] = [{ destination: 'plan', label: '查看项目共用约定' }, { destination: 'requirement', label: '局部需求与 RAP' }, { destination: 'reports', label: '报告与 PPT 生成' }, { destination: 'refiner', label: 'PPT 精修与原版本' }, { destination: 'simlab', label: '方案比较与经营推演' }, { destination: 'model-pack', label: '预测模型与原注册表' }, { destination: 'permissions', label: '任务能力与显式启用' }, { destination: 'connections', label: '项目资料与连接授权' }];
   return <details className="task-context-options task-capability-navigation"><summary>报告、方案比较与专业能力</summary><nav className="report-action-row" aria-label="任务业务与能力入口">{entries.map(entry => <button type="button" className="text-button" key={entry.destination} onClick={() => onOpen(entry.destination)}>{entry.label}</button>)}</nav><p className="case-help">打开原工作位置不会发送分析请求，也不授予额外权限。已有记录、版本和待核状态沿原页面保留。</p></details>;
 }
 export async function readSkillCapabilities(): Promise<SkillCapabilitiesSnapshot> {
@@ -34,8 +34,8 @@ export function ConnectorCapabilitySettings({ onSharedConnections, onProjectSour
     <section className="project-plan-section"><h3>历史天气</h3><p>沿原 Open-Meteo 历史日级连接，无密钥或账号配置。本页不发天气请求，网络与服务可用性尚未核实。</p><p>在任务空闲时显式启用；原出境说明和使用条件仍在任务能力入口展示，结果进入所选模型上下文。</p><button type="button" className="text-button" onClick={onProjectSources}>到原任务核对启用与范围</button></section>
   </section>;
 }
-export function CapabilityPlansSettings({ onProject }: { onProject(): void }) {
-  return <section className="case-board" aria-labelledby="capability-plans-title"><header className="case-board-heading"><div><h2 id="capability-plans-title">能力接入规划</h2><p>只保留原有未接入事项的说明，不安装、不运行，也不将规划转成建设任务。</p></div><button type="button" className="text-button" onClick={onProject}>提出本项目实际诉求</button></header>
-    {catalogItems.filter(item => item.status !== '已接入').map(item => <details key={item.id} className="project-plan-section"><summary>{item.id} · {item.name} · {item.status} · 尚未接入</summary><p>{item.description}</p><p>{item.note}</p><p className="case-help">原参考来源：{item.source}</p></details>)}
+export function CapabilityPlansSettings() {
+  return <section aria-labelledby="settings-domain-pack-title">
+    <div className="page-heading"><div><h2 id="settings-domain-pack-title">领域资产包</h2></div></div>
   </section>;
 }

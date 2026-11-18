@@ -6,7 +6,7 @@ type Props = {
   hasMessages: boolean;
   hasReply: boolean;
   requirementTitle?: string;
-  onFiles: () => void;
+  onFiles: (trigger: HTMLButtonElement) => void;
   onRequirements: () => void;
   onAnalyze: () => void;
   onResults: () => void;
@@ -24,7 +24,7 @@ export function TaskWorkflow({ projectName, taskName, status, busy, hasMessages,
   return <header className="task-workflow">
     <div className="task-workflow-heading"><div><p className="eyebrow">{projectName}</p><h1>{taskName}</h1></div><span className="task-workflow-status" role="status">{status}</span></div>
     <nav aria-label="分析任务步骤"><ol>{steps.map((step, index) => <li key={step.id}>
-      <button type="button" aria-current={current === step.id ? 'step' : undefined} onClick={step.action}>
+      <button type="button" aria-current={current === step.id ? 'step' : undefined} data-return-to-workspace={step.id !== 'analysis' ? true : undefined} onClick={e => step.action(e.currentTarget)}>
         <span className="task-step-number" aria-hidden="true">{index + 1}</span><span><strong>{step.title}</strong><small>{step.note}</small></span>
       </button>
     </li>)}</ol></nav>

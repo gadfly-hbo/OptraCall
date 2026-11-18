@@ -1,0 +1,156 @@
+{
+  "repository": "OptraCall",
+  "candidate": "c2d5aa5f2f4b4dcffa441090400767c96ed1c6a9",
+  "base": "69e766f10c1034cb335bdbb7b22540a0b26cd074",
+  "sourceTree": "ea45668d324c92248e8093cce06cbe867fa96671",
+  "branch": "OC｜upgrade-v0.3.0",
+  "check": {
+    "tests": 3040,
+    "pass": 2929,
+    "fail": 0,
+    "skipped": 111,
+    "cancelled": 0
+  },
+  "records": [
+    {
+      "path": ".local/product-v13/check-c2d5aa5.log",
+      "sha256": "49130460bc29c9a4d08f3c7ccd182867a90cfaf972d06dd86a7fe72ed30b476c"
+    },
+    {
+      "path": ".local/product-v13/official-pi-comparison.json",
+      "sha256": "f44ff701f1ab7c3c0166296dc26d228290ab4c95c474c9dd81c9b758f23ae65e"
+    },
+    {
+      "path": ".local/product-v13/skill-eval-pending.json",
+      "sha256": "abad272fdf549d22192bd46586e53500b92c5d0d8426da421c988703dc130dd1"
+    },
+    {
+      "path": ".local/product-v13/skill-eval-directory.json",
+      "sha256": "82520a9515fa1038e0772609a4bbc56ab159ca02bd77d7a66fe84abe29013e87"
+    },
+    {
+      "path": ".local/product-v13/roles/browser-receipt.json",
+      "sha256": "882bfbd73841eb58d16d64b8cce403410a542962e777265c68ed07bbfd10e962"
+    },
+    {
+      "path": ".local/product-v13/roles/origin-browser-receipt.json",
+      "sha256": "38d90a181813ca2c35f6ad97108c91d75b7494709be74ce089a89388ab7ff86c"
+    },
+    {
+      "path": ".local/product-v13/task-browser/http.json",
+      "sha256": "0119b60baeca24cc589e95b85dba652bd5f06cc49a1ea7634f502621efedeff3"
+    },
+    {
+      "path": ".local/product-v13/nav-final.log",
+      "sha256": "fe2e7590dd539c703ee799f68356ebb9b7f0c5c91892b2da947499089e969b80"
+    },
+    {
+      "path": ".local/product-v13/drawers-final.log",
+      "sha256": "87dee9bc86d34bb1163865cd4f11d9114ad057ad900fbc6050394e7829c9ad8d"
+    },
+    {
+      "path": ".local/product-v13/downloads-final.log",
+      "sha256": "a70890342f8a02cc20fd528c5e2617cf1d4795eb69e832e002deda34fe2b83a9"
+    },
+    {
+      "path": ".local/product-v13/case/browser-case-drawer.log",
+      "sha256": "5bacfb1e0cfadf7886d94bc079e35c4ca82b1e8ddf01c003cb5bbb2a13487058"
+    },
+    {
+      "path": ".local/product-v13/case/role-teach-browser.log",
+      "sha256": "55c64982a25873a28954b9239e861e7099f328d25b9168ea3d7b32f3caf18c57"
+    },
+    {
+      "path": ".local/product-v13/studio-scope/receipt.json",
+      "sha256": "f96097ba9e9822b7d5d36ed7c13ab7aee816bad255f06fc6460fe2d62bd4f190"
+    },
+    {
+      "path": ".local/product-v13/case/nested-result-native-evidence.json",
+      "sha256": "c39bda6f782cd7da5cf02fe3c08e9ccecb20f3c521cfaf8e84671303341afde3"
+    },
+    {
+      "path": ".local/product-v13/roles/direct-goal-test2.log",
+      "sha256": "5d142ae90976b8c4797f8464c67c3c44c3d5372e5f61db9328562def2a417d26"
+    },
+    {
+      "path": ".local/product-v13/roles/direct-personal-test2.log",
+      "sha256": "dbc44d32fdedd3d5bd36de156b113726bff38c5c257194946d7408108ed1b3cf"
+    },
+    {
+      "path": ".local/product-v13/task-both-native-races.log",
+      "sha256": "f77cf259f56ed9a581456aa086c3c27bfdf66c0cd2764aec69703616c687b10a"
+    },
+    {
+      "path": ".local/product-v13/task-case-project-browser.log",
+      "sha256": "24c5c244c4e3c8e04b7dafa04bb500d927420a8d9da837d5040193ac094cef05"
+    },
+    {
+      "path": ".local/product-v13/nested-legacy.log",
+      "sha256": "8a9f67db3436067b54653feb18c303bc4bb9a6d73822f6b76751e94e9c98f2af"
+    },
+    {
+      "path": ".local/product-v13/rollback-review-fixes.log",
+      "sha256": "46e5574648fb50fc4148b17a6ec791403af89ce3aed61c31e5ce5b833cf62635"
+    },
+    {
+      "path": ".local/product-v13/browser-role-c2d5aa5.log",
+      "sha256": "714088b766fd80d91a30cae4a135be5c052b2ce32608e03fa25a2c987c611f0d"
+    },
+    {
+      "path": ".local/product-v13/nav-c2d5aa5.log",
+      "sha256": "fe2e7590dd539c703ee799f68356ebb9b7f0c5c91892b2da947499089e969b80"
+    },
+    {
+      "path": ".local/product-v13/downloads-c2d5aa5.log",
+      "sha256": "891b296bf65fdfcc9db070babe0c0030a9fbbb0cce4ea750e0a901995322b03d"
+    },
+    {
+      "path": ".local/product-v13/drawers-c2d5aa5.log",
+      "sha256": "bbc51d06f6a102adf5c93c13ede891a39efba716f4a56f760d65ab152c5b1f6a"
+    },
+    {
+      "path": ".local/product-v13/rollback-c2d5aa5.log",
+      "sha256": "ee44151d0df27c3c8248bc1f5a0210b5a3b72555a982ccc30e974d2008adc5dd"
+    },
+    {
+      "path": ".local/product-v13/task-case-project-browser-final.log",
+      "sha256": "24c5c244c4e3c8e04b7dafa04bb500d927420a8d9da837d5040193ac094cef05"
+    },
+    {
+      "path": ".local/product-v13/case/cycle-8IPAUR/case-role-teach-receipt.json",
+      "sha256": "41611e98d0925c6bb613baff8c9eacdd1cfaaab95f1418a4847a16ef629ec47a"
+    },
+    {
+      "path": ".local/product-v13/case/a12-case-integrated.log",
+      "sha256": "7bd42c39c263324bfca31ff6e62a7d8d9341f53189fec9a539dd223778968be6"
+    },
+    {
+      "path": ".local/product-v13/roles/direct-lineage-joint-final.log",
+      "sha256": "840a2f585eac71f59f11696ef7e02532e13e2c07417f68dabdc5bdde6b698e8d"
+    },
+    {
+      "path": ".local/product-v13/case/nested-result-green.log",
+      "sha256": "be4c14271cd69163854fa44b87dcfef7700ae2f6139fb64282cd47302334d7e5"
+    },
+    {
+      "path": ".local/product-v13/case/nested-result-red.log",
+      "sha256": "cb76f7b5f81437a8c19e57b3b3802aba18ac0aeee4727bc99d42c650bdb46371"
+    },
+    {
+      "path": ".local/product-v13/check-first.log",
+      "sha256": "c7a1cfa1beacbe345132dbe3b44e8b9845a7f8bbfd6bbd96b55e6e711c4a0afd"
+    },
+    {
+      "path": ".local/product-v13/check-integrated3.log",
+      "sha256": "b72434472b8daf72384afe76a80714605165febfc13e3ce48b963db83526489f"
+    },
+    {
+      "path": ".local/product-v13/check-d7169e9.log",
+      "sha256": "a080887541e37ed5eec9decc0520c5ebe9093e440ac89da34198e12f55870d5c"
+    },
+    {
+      "path": ".local/product-v13/skill-eval-recheck.log",
+      "sha256": "e82702dbe1020741d6258cb53a5df9e6f78407ac54d4ac8183a30d39467aa262"
+    }
+  ]
+}

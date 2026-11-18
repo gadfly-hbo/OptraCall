@@ -59,15 +59,21 @@ export class ProjectPlanCaseConnectionError extends Error {
 }
 function fail(code?: string): never { throw new ProjectPlanCaseConnectionError(code); }
 const hash = async (value: unknown) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalDataContextValue(value))))].map(x => x.toString(16).padStart(2, '0')).join('');
-/** Advance one explicit UI intent through the original Case operations. Inspection never writes or retries a POST. */
-export async function connectProjectPlanCase(intent: ProjectPlanCaseConnection, options: { readOnly?: boolean; changed?(intent: ProjectPlanCaseConnection): void } = {}): Promise<ProjectPlanCaseContext | null> {
-  const changed = () => options.changed?.(structuredClone(intent));
-  async function receipt(operationId: string, kind: string, request: Record<string, unknown>) {
+async function receipt(operationId: string, kind: string, request: Record<string, unknown>) {
     const { operation } = await cases.operation(operationId);
     if (!operation || operation.phase !== 'completed' || !operation.result) return fail();
     if (operation.operationId !== operationId || operation.kind !== kind || operation.requestSha256 !== await hash({ kind, ...request })) return fail('project_plan_case_operation_conflict');
     return operation;
   }
+export async function inspectCreatedCase(input: {operationId:string;title:string;description:string;goalBinding:CaseGoalBindingInput;creationSource?:import('../case-types.ts').CaseCreationSource}) {
+  const saved = await receipt(input.operationId, 'case_create', { ...input, title: input.title.trim(), judgement:'', nextStep:'', status:'pending' });
+  const record = saved.result!;
+  if (typeof record.id !== 'string' || !Number.isSafeInteger(record.revision) || saved.caseId !== record.id) return fail();
+  return {id:record.id,revision:Number(record.revision)};
+}
+/** Advance one explicit UI intent through the original Case operations. Inspection never writes or retries a POST. */
+export async function connectProjectPlanCase(intent: ProjectPlanCaseConnection, options: { readOnly?: boolean; changed?(intent: ProjectPlanCaseConnection): void } = {}): Promise<ProjectPlanCaseContext | null> {
+  const changed = () => options.changed?.(structuredClone(intent));
   if (!intent.caseId) {
     const input = intent.create; if (!input) return fail();
     if (!intent.createAttempted) {
@@ -76,10 +82,8 @@ export async function connectProjectPlanCase(intent: ProjectPlanCaseConnection, 
       try { await cases.create(input); }
       catch (error) { if (error instanceof cases.CaseRequestError && error.status < 500 && error.code !== 'operation_conflict') { intent.createAttempted = false; intent.failure = error.code; changed(); throw error; } return fail(); }
     }
-    const saved = await receipt(input.operationId, 'case_create', { ...input, title: input.title.trim(), judgement: '', nextStep: '', status: 'pending' });
-    const record = saved.result!;
-    if (typeof record.id !== 'string' || !Number.isSafeInteger(record.revision) || saved.caseId !== record.id) return fail();
-    intent.caseId = record.id; intent.caseRevision = Number(record.revision); changed();
+    const record = await inspectCreatedCase(input);
+    intent.caseId = record.id; intent.caseRevision = record.revision; changed();
   }
   if (intent.linkedRevision === undefined) {
     if (!intent.caseRevision) return fail();
@@ -96,6 +100,6 @@ export async function connectProjectPlanCase(intent: ProjectPlanCaseConnection, 
     intent.linkedRevision = Number(record.revision); changed();
   }
   const catalog = await plans.capabilities(intent.projectId), context = catalog.caseContexts.find(value => value.caseId === intent.caseId);
-  if (!context || context.caseRevision !== intent.linkedRevision || canonicalDataContextValue({ primary: context.primaryGoal, related: context.relatedGoals || [] }) !== canonicalDataContextValue(intent.goalBinding)) return fail('project_plan_case_context_changed');
+  if (!context || context.caseRevision !== intent.linkedRevision || canonicalDataContextValue({ primary: context.primaryGoal, related: context.relatedGoals || [] }) !== canonicalDataContextValue({ primary: intent.goalBinding.primary, related: intent.goalBinding.related })) return fail('project_plan_case_context_changed');
   return structuredClone(context);
 }

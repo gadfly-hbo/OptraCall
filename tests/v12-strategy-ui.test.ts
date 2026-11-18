@@ -5,11 +5,12 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 test('V12-05 daily Goal view uses GSA while BSC remains a collapsed optional tool', async () => {
   const { StrategyGoalsPage } = await import('../src/host/ui/StrategyGoalsPage.tsx');
-  const html = renderToStaticMarkup(createElement(StrategyGoalsPage, { active: false, onOpenCase() {}, onStartProject() {}, onManageMetrics() {} }));
-  assert.match(html, /aria-current="page"[^>]*>GSA承接/);
-  assert.match(html, /<details[^>]*>[\s\S]*?<summary>按需工具/);
-  assert.doesNotMatch(html, /<details[^>]*open[^>]*>[\s\S]*?<summary>按需工具/);
-  assert.match(html, /BSC／战略目标关系/);
+  const html = renderToStaticMarkup(createElement(StrategyGoalsPage, { active: false, management:{area:'gsa',stage:'goals'}, onStage() {}, onOpenCase() {}, onStartProject() {}, onManageMetrics() {} }));
+  assert.match(html, /aria-current="page"[^>]*>目标与策略/);
+  assert.match(html, /年度决策事项/);
+  assert.doesNotMatch(html, /BSC 目标与关系/);
+  const compare = renderToStaticMarkup(createElement(StrategyGoalsPage, {active:false,management:{area:'strategy',stage:'compare'},onStage(){},onOpenCase(){},onStartProject(){},onManageMetrics(){}}));
+  assert.match(compare, /BSC／战略目标关系（按需）/);
 });
 test('V12-01 Task background displays only its recorded personal context and keeps missing history unknown', async () => {
   const { TaskUsageContextReceipt } = await import('../src/host/ui/TaskUsageContext.tsx');
