@@ -401,7 +401,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    const source=await currentUserSource(o,context.requestId);context.assertCurrent();
    const operationId=typeof input.operationId==='string'?discussionId(input.operationId):stableId([o.id,context.requestId,action,input]);
    const adoption:GoalAdoptionInput={operationId,expectedVersion:Number(input.expectedVersion),decision:q.text,provenance:{kind:'discussion-quote',discussionId:o.id,sessionId:context.sessionId,requestId:context.requestId,userEntryId:String(source.version),quoteStart:Number(q.start),quoteEnd:Number(q.end),quote:q.text,quoteSha256:discussionHash(q.text),goalContentSha256:String(input.goalContentSha256)}};
-   const adopted=await options.mutate(async()=>{context.assertCurrent();await options.validateGoal(goal);context.assertCurrent();return options.goals.adopt(goal,adoption);});return payload({goal:adopted,claim:'goal-adoption-not-action-authorization'});
+   const adopted=await options.mutate(async()=>{context.assertCurrent();await options.validateGoal(goal);context.assertCurrent();return options.goals.adopt(goal,adoption);});return payload(goalWriteResult(adopted,operationId,'goal-adoption-not-action-authorization'));
   }
   return fail('invalid_strategy_discussion_action',400);
  }

@@ -176,6 +176,15 @@ test('project-free strategy discussions discover authorized scopes, correct prop
     const reconstructed = JSON.parse(text);
     for (const [field, value] of Object.entries(longDraft)) assert.deepEqual(reconstructed[field], value, field);
     assert.deepEqual(await storeBytes(), stored, 'Reading all pages and the operation must not alter the candidate');
+
+    const decision = '确认采用这份完整候选目标。';
+    const adopted = await runTool({
+      action: 'adopt-goal', goalId, version, expectedVersion: version, goalContentSha256: receipt.goalContentSha256,
+      quote: { start: 0, end: decision.length, text: decision },
+    }, decision);
+    assert.equal(adopted.error, false, adopted.text);
+    assert.equal(JSON.parse(adopted.text).goal.status, 'adopted');
+    assert.equal((await api('/api/strategy/goals/' + goalId)).goal.adoptedVersion, version);
   });
 
   await t.test('an organizational discussion uses its single registered enterprise', async () => {
