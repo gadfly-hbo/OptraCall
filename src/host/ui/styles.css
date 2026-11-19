@@ -115,6 +115,7 @@ button { color: inherit; }
 .web-search-badge.is-missing { color: var(--warning); background: var(--warning-bg); border-color: transparent; }
 .web-search-route-actions > button { width: auto; white-space: nowrap; }
 .web-search-save { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 11px; margin-bottom: 9px; }
+.web-search-save .primary-button:disabled { border-color: var(--line); background: var(--subtle); color: var(--muted); filter: none; }
 @media (max-width: 760px) {
   .settings-page .settings-tabs { gap: 15px; }
   .settings-page .settings-tabs button { gap: 5px; white-space: nowrap; }

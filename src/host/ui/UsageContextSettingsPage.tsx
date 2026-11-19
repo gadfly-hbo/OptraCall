@@ -35,5 +35,23 @@ export function UsageContextSettingsPage() {
     catch (fault) { if (alive.current) { if (fault instanceof UsageContextRequestError && !fault.uncertain && !fault.code.includes('operation_conflict')) { journal.value.settle(input.operationId); setPending(undefined); } setError(fault instanceof Error ? fault.message : '设置保存结果未知。'); } }
     finally { if (alive.current) setBusy(false); }
   };
-  return <section className="usage-context-settings" aria-labelledby={`${id}-title`}><div className="page-heading"><div><h2 id={`${id}-title`}>使用用途</h2><p>保存默认讨论对象与背景，当前工作可以明确不同用途。</p></div></div>{!settings && !error && <p role="status">正在读取默认用途…</p>}<form className="config-form" onSubmit={event => { event.preventDefault(); void save(); }}><UsageContextFields id={id} value={draft} disabled={!settings || busy || Boolean(pending)} onChange={value => { dirty.current = true; setDraft(value); setNotice(''); }} /><p className="field-help">用途不代表身份、组织职级或资源权限。未设置不阻断工作；切换默认只影响新背景，不改写历史目标、Case、授权或已确认项目方案。</p><button type="submit" className="primary-button" disabled={!settings || busy || Boolean(pending)}>{busy ? '正在保存…' : '保存默认用途'}</button>{pending && <div className="sg-unknown"><p>原设置操作结果待核，选择保持，未自动重发。</p><button type="button" className="secondary-button" disabled={busy} onClick={() => { void refresh(); }}>核对原保存结果</button><details><summary>原操作编号</summary><code>{pending.operationId}</code></details></div>}{notice && <p className="case-notice" role="status">{notice}</p>}{error && <p className="case-error" role="alert">{error}</p>}<button type="button" className="text-button" disabled={busy} onClick={() => { void refresh(); }}>重新读取默认用途</button></form></section>;
+  return <section className="usage-context-settings" aria-labelledby={`${id}-title`}>
+    <div className="page-heading"><div><h2 id={`${id}-title`}>使用用途</h2><p>保存默认讨论对象与背景，当前工作可以明确不同用途。</p></div></div>
+    {!settings && !error && <p role="status">正在读取默认用途…</p>}
+    <form className="config-form" onSubmit={event => { event.preventDefault(); void save(); }}>
+      <UsageContextFields id={id} value={draft} disabled={!settings || busy || Boolean(pending)} onChange={value => { dirty.current = true; setDraft(value); setNotice(''); }} />
+      <p className="field-help">用途不代表身份、组织职级或资源权限。未设置不阻断工作；切换默认只影响新背景，不改写历史目标、Case、授权或已确认项目方案。</p>
+      <div className="sg-row">
+        <button type="submit" className="primary-button" disabled={!settings || busy || Boolean(pending)}>{busy ? '正在保存…' : '保存默认用途'}</button>
+        <button type="button" className="text-button" disabled={busy} onClick={() => { void refresh(); }}>重新读取默认用途</button>
+      </div>
+      {pending && <div className="sg-unknown">
+        <p>原设置操作结果待核，选择保持，未自动重发。</p>
+        <button type="button" className="secondary-button" disabled={busy} onClick={() => { void refresh(); }}>核对原保存结果</button>
+        <details><summary>原操作编号</summary><code>{pending.operationId}</code></details>
+      </div>}
+      {notice && <p className="case-notice" role="status">{notice}</p>}
+      {error && <p className="case-error" role="alert">{error}</p>}
+    </form>
+  </section>;
 }
