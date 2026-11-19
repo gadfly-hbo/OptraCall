@@ -6,19 +6,18 @@ import {createRequirementPublicSearch} from './requirement-public-search.ts';
 import path from 'node:path';
 import {presentContextMessages} from '../agent/context-presentation.ts';
 import { mkdirSync } from 'node:fs';
-import { createHash } from 'node:crypto';
 import type { RuntimeModelConfiguration } from './config-store.ts';
 import type { UsageContext } from './usage-context-types.ts';
 import { parseUsageContext, resolveNewUsageContext } from './usage-context-types.ts';
-import type { GoalBasis, GoalContextSnapshot, GoalRef, GoalDraftInput, GoalSourceRef, GoalDiscussionSourceRef, GoalAdoptionInput } from './strategy-goals-types.ts';
+import type { GoalBasis, GoalContextSnapshot, GoalRef, GoalDraftInput, GoalDiscussionSourceRef, GoalAdoptionInput } from './strategy-goals-types.ts';
 import { parseGoalBasis } from './strategy-goals-types.ts';
 import { StrategyGoalsStore, goalContentSha256, parseGoalDraft } from './strategy-goals-store.ts';
-import { createAgentSessionDomain, type SessionContext } from './agent-sessions.ts';
+import { createAgentSessionDomain } from './agent-sessions.ts';
 import { discussionSourceMode, isDiscussionSourceExcluded } from './strategy-discussion-source-scope.ts';
 import { readNativeSessionSnapshot, NativeSnapshotError } from './native-session-snapshot.ts';
 import { StrategyDiscussionStore, StrategyDiscussionFault, discussionHash, discussionId } from './strategy-discussion-store.ts';
 import type { StrategyDiscussion, StrategyDiscussionCreate, StrategyDiscussionUpdate, StrategyDiscussionDetail, StrategyDiscussionSource } from './strategy-discussion-types.ts';
-import type { ProjectEvent, ProjectSnapshot } from '../agent/project-runtime.ts';
+import type { ProjectEvent } from '../agent/project-runtime.ts';
 import type { StrategyDiscussionAction, StrategyDiscussionToolContext } from '../agent/strategy-discussion.ts';
 
 const object=(x:unknown):x is Record<string,unknown>=>!!x&&typeof x==='object'&&!Array.isArray(x);
@@ -521,7 +520,7 @@ export function createStrategyDiscussionHost(options:{verifyPriorRights?:(owner:
  }
  return {store,domain,detail,send,adopt,readGoalSuggestion,readChoiceReply,verifyChoiceSource,readDiscussionSource,readSource,sourceContext,verifyRoleHistory,
   async create(raw:Record<string,unknown>){validatePatch(raw,true);const configuration=options.configuration(raw.configurationId as string|undefined);if(!configuration)fail('configuration_required');return options.mutate(()=>store.create(raw as unknown as StrategyDiscussionCreate,configuration));},
-  async update(id:string,raw:Record<string,unknown>){validatePatch(raw);const {owner,ref}=own(id);if(domain.busy(ref))fail('session_busy');if(raw.configurationId!==undefined){await domain.close(ref);const config=options.configuration(String(raw.configurationId));if(!config)fail('configuration_required');return options.mutate(()=>store.update(id,raw as unknown as StrategyDiscussionUpdate,config));}return options.mutate(()=>store.update(id,raw as unknown as StrategyDiscussionUpdate));},
+  async update(id:string,raw:Record<string,unknown>){validatePatch(raw);const {ref}=own(id);if(domain.busy(ref))fail('session_busy');if(raw.configurationId!==undefined){await domain.close(ref);const config=options.configuration(String(raw.configurationId));if(!config)fail('configuration_required');return options.mutate(()=>store.update(id,raw as unknown as StrategyDiscussionUpdate,config));}return options.mutate(()=>store.update(id,raw as unknown as StrategyDiscussionUpdate));},
   async sources(id:string,projectId?:string){return {sources:await options.sources?.list(store.get(id),projectId)??[]};},
   subscribe(id:string,fn:(event:ProjectEvent)=>void){return domain.subscribe(domain.ref(store.get(id)),fn);},
   async stop(id:string,expectedRequestId?:string){const {ref}=own(id);return {stopped:await domain.stop(ref,expectedRequestId?{expectedRequestId}:undefined)};},

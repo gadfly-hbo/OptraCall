@@ -32,11 +32,6 @@ const dataAnalysisEvaluation: SkillEvaluation = {
   tokens: { baseline: 7_048, variant: 282_738 },
   limitations: '有效但昂贵；暂定（provisional）：1/30 baseline 超时，仍计入分母。被测模型 MiniMax-M3.1-Flash，评委 mimo-v2.6-flash；回执给出的增益区间为 [50.8, 68.5] 个百分点。无负向样例，误触发不可测。原始断言：baseline 38/142、variant 139/159；Token 用量约 40.1 倍，不等于账单费用。',
 };
-export const catalogMeta: Record<CatalogCategory, { label: string; description: string; symbol: string }> = {
-  assets: { label: '分析资产', description: '复用业务定义、分析方法与表达规范，让每次分析都有依据。', symbol: '◈' },
-  connectors: { label: '连接器', description: '连接获准的数据与业务来源，保留来源和访问边界。', symbol: '⌘' },
-  plugins: { label: '业务插件', description: '为具体问题提供专业能力，与统一 Agent 底座协同。', symbol: '▧' },
-};
 function planned(category: CatalogCategory, id: string, name: string, description: string, tags: string[], note: string): CatalogItem {
   return { category, id, name, description, tags, note: `尚未接入 OptraCall。${note}`, source: `JuanerAI 候选规划 v0.1 · ${id}`, status: '规划示例' };
 }
@@ -69,10 +64,3 @@ export const catalogItems: CatalogItem[] = [
   { id: 'sim-lab', category: 'plugins', name: '经营推演', description: '把备货与促销假设展开成可审计的逐日账本：多方案对比、自定义扰动、固化不可变快照作为决策证据；页面直接推演，也可在任务中由 Agent 工具化推演。', tags: ['经营仿真', '决策证据'], source: 'OptraCall 业务插件 · sim-lab', note: '确定性假设模型，不是预测；探索自由、固化由用户确认。Agent 工具需在任务级显式开启。', status: '已接入', entry: 'simlab' },
   { id: 'model-pack', category: 'plugins', name: '模型包', description: '导入训练产出的可执行模型资产，查看版本、留出指标与数据指纹，在本机沙箱执行预测、无网络外发；训练在 MPS（Model Pack Studio）完成。', tags: ['模型预测', '版本注册表', '本机执行'], source: 'OptraCall 业务插件 · model-pack', note: '注册表管理导入与晋级；任务级开启模型预测工具后，由 Agent 自主发现、选版本、备数与解读。预测结果和出处会进入所选任务模型上下文，不代表整段对话零数据外发。', status: '已接入', entry: 'model-pack' },
 ];
-
-export function filterCatalog(category: CatalogCategory, query: string, tag: string): CatalogItem[] {
-  const needle = query.trim().toLocaleLowerCase('zh-CN');
-  return catalogItems.filter(item => item.category === category
-    && (tag === '全部' || item.tags.includes(tag))
-    && (!needle || [item.name, item.description, item.id, ...item.tags].join(' ').toLocaleLowerCase('zh-CN').includes(needle)));
-}
