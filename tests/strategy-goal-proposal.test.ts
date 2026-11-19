@@ -118,6 +118,15 @@ test('project-free strategy discussions discover authorized scopes, correct prop
   assert.equal(absent.error, true);
   assert.match(absent.text, /\bdraft\b/);
   assert.deepEqual(await storeBytes(), bytesWithGoal);
+  for (const [extra, field] of [
+    [{ operationId: 'v0.4', draft: { ...draft, scope } }, 'operationId'],
+    [{ draft: { ...draft, scope, strategyContext: { summary: '引用原资料', sources: [{ authority: 'project', id: randomUUID(), version: 1 }] } } }, 'strategyContext.sources'],
+  ] as const) {
+    const result = await runTool({ action: 'propose-goal', ...extra }, '核对候选输入。');
+    assert.equal(result.error, true);
+    assert.ok(result.text.includes(field), result.text);
+    assert.deepEqual(await storeBytes(), bytesWithGoal);
+  }
   const revision = { action: 'propose-goal', goalId: goal.id, expectedVersion: 1, draft: { ...draft, title: '核对后修订的会员候选' } };
   const other = await api('/api/strategy/discussions', 'POST', { operationId: randomUUID(), title: '另一独立讨论' }, 201);
   const unrelated = await runTool(revision, '核对外部给定的目标编号。', '/api/strategy/discussions/' + other.discussion.id);
@@ -131,6 +140,44 @@ test('project-free strategy discussions discover authorized scopes, correct prop
   assert.deepEqual(versions[0], saved);
   assert.deepEqual(versions[1].scope, saved.scope);
   assert.equal(versions[1].title, revision.draft.title);
+  await t.test('a long candidate returns a receipt and its entire body remains readable', async () => {
+    const operationId = randomUUID();
+    const longDraft = { ...draft, scope, strategies: Array.from({ length: 9 }, (_, i) => String(i) + 'x'.repeat(3899)) };
+    const proposal = await runTool({ action: 'propose-goal', draft: longDraft, operationId }, '请按已核对范围保存完整长稿。');
+    assert.equal(proposal.error, false, proposal.text);
+    const receipt = JSON.parse(proposal.text);
+    assert.equal(receipt.bodyIncluded, false);
+    assert.equal(receipt.operationId, operationId);
+    const { goalId, version } = receipt.goal;
+    const exact = (await api('/api/strategy/goals/' + goalId)).goal.versions[0];
+    assert.deepEqual(exact.strategies, longDraft.strategies);
+    const stored = await storeBytes();
+
+    const listed = await runTool({ action: 'read-goals' }, '核对原候选目录。');
+    assert.equal(listed.error, false, listed.text);
+    assert.ok(JSON.parse(listed.text).candidateRefs.some((ref: {goalId: string; goalContentSha256: string}) =>
+      ref.goalId === goalId && ref.goalContentSha256 === receipt.goalContentSha256));
+    const operation = await runTool({ action: 'operation', operationId }, '核对原操作回执。');
+    assert.equal(operation.error, false, operation.text);
+    assert.equal(JSON.parse(operation.text).operation.result.goalId, goalId);
+
+    let text = '';
+    for (;;) {
+      const chunk = await runTool({ action: 'read-goals', goalId, version, offset: text.length, limit: 8192 }, '继续核对原版本。');
+      assert.equal(chunk.error, false, chunk.text);
+      const page = JSON.parse(chunk.text).candidatePage;
+      assert.equal(page.goalContentSha256, receipt.goalContentSha256);
+      assert.equal(page.range.start, text.length);
+      assert.ok(page.text.length > 0, 'Each page must make progress');
+      text += page.text;
+      if (page.complete) { assert.equal(text.length, page.range.total); break; }
+      assert.equal(page.nextOffset, text.length);
+    }
+    const reconstructed = JSON.parse(text);
+    for (const [field, value] of Object.entries(longDraft)) assert.deepEqual(reconstructed[field], value, field);
+    assert.deepEqual(await storeBytes(), stored, 'Reading all pages and the operation must not alter the candidate');
+  });
+
   await t.test('an organizational discussion uses its single registered enterprise', async () => {
     const { discussion } = await api('/api/strategy/discussions', 'POST', {
       operationId: randomUUID(), title: '已有组织用途', usageContext: { kind: 'organization', background: '本企业的经营目标' },

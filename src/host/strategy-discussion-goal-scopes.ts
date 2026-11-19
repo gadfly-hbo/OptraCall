@@ -37,7 +37,13 @@ function sameIdentity(a: GoalScope, b: GoalScope): boolean {
 /** Scope records are environment metadata. Page them without adding business records to the prompt. */
 export function pageDiscussionGoalScopes(scopes: GoalScopes, query = '', offset = 0) {
   const matches = query ? scopes.choices.filter(s => s.name.includes(query) || s.id === query) : scopes.choices;
-  const choices = matches.slice(offset, offset + 20);
+  const choices: GoalScope[] = [];
+  let size = 0;
+  for (const scope of matches.slice(offset, offset + 20)) {
+    size += JSON.stringify(scope).length;
+    if (size > 12000) break;
+    choices.push(scope);
+  }
   return { ...scopes, choices, ...(offset + choices.length < matches.length ? { nextOffset: offset + choices.length } : {}) };
 }
 
@@ -54,10 +60,17 @@ export function selectDiscussionGoalScope(scopes: GoalScopes, input: unknown, us
   const known = scopes.choices.find(s => sameIdentity(s, scope));
   if (known) {
     // Older clients called the same personal identity “本人”. Persist Host metadata.
-    if (known.name === scope.name || known.kind === 'personal' && known.id === 'self') return known;
-    return fail();
+    if (known.name === scope.name || known.kind === 'personal' && known.id === 'self' && ['本人', personal.name].includes(scope.name)) return known;
+    throw new StrategyDiscussionFault('strategy_goal_scope_name_mismatch', 409);
   }
-  if (scopes.bound || scope.kind !== 'department' || scope.enterpriseId !== undefined && !scopes.choices.some(s => s.kind === 'enterprise' && s.id === scope.enterpriseId)) return fail();
+  if (scopes.bound) return fail();
+  if (scope.kind !== 'department') {
+    const sameId = scopes.choices.some(s => s.kind === scope.kind && s.id === scope.id);
+    throw new StrategyDiscussionFault(sameId ? 'strategy_goal_scope_enterprise_mismatch' : 'strategy_goal_scope_id_unknown', 409);
+  }
+  if (scope.enterpriseId !== undefined && !scopes.choices.some(s => s.kind === 'enterprise' && s.id === scope.enterpriseId)) {
+    throw new StrategyDiscussionFault('strategy_goal_scope_enterprise_mismatch', 409);
+  }
   // A new department can be declared from the user's own words; an upper enterprise is optional.
   if (scopes.choices.some(s => s.kind === 'department' && s.name === scope.name && s.enterpriseId === scope.enterpriseId)) return fail();
   if (scope.id !== scope.name || scope.name !== scope.name.trim() || scope.name.length > 300 || !userDeclared(scope.name)) {
