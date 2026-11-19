@@ -8,15 +8,7 @@
   margin-top: 0;
   margin-bottom: 18px;
 }
-.workspace-native-goals {
-  margin-top: 16px;
-}
-.workspace-native-goals > summary {
-  font-weight: 550;
-}
-.workspace-native-goals > div {
-  margin-top: 16px;
-}
+
 .sidebar-bottom.workspace-sidebar-bottom {
   display: flex;
   align-items: center;
@@ -75,25 +67,7 @@
 .workspace-studio-options > summary {
   cursor: pointer;
 }
-.workspace-version-panel {
-  margin: 14px 0;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.workspace-version-panel .sg-muted {
-  margin: 4px 0;
-}
-.workspace-version-table {
-  margin-top: 12px;
-}
-.workspace-version-table h3 {
-  margin-bottom: 6px;
-}
-.workspace-version-table td {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
+
 .workspace-saved-choice-preview {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

@@ -10,7 +10,7 @@ import { resolveNewUsageContext } from '../usage-context-types.ts';
 import { isDiscussionSourceExcluded } from '../strategy-discussion-source-scope.ts';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { GoalRef, GoalVersion, GoalDiscussionSourceRef } from '../strategy-goals-types.ts';
-import type { StrategyDiscussion, StrategyDiscussionDetail, StrategyDiscussionUpdate, StrategyDiscussionSource, StrategyDiscussionSourceScope, StrategyMethodSelection } from '../strategy-discussion-types.ts';
+import type { StrategyDiscussion, StrategyDiscussionDetail, StrategyDiscussionSource, StrategyDiscussionSourceScope, StrategyMethodSelection } from '../strategy-discussion-types.ts';
 import type { ClientProject, PublicModelConfiguration, NativeMessage } from './project-types.ts';
 import { messageText } from './project-types.ts';
 import * as api from './strategy-discussion-client.ts';

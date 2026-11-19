@@ -36,11 +36,6 @@
 .sg-empty p { color: var(--muted); font-size: 13px; line-height: 1.7; }
 @media (max-width: 760px) { .sg-tabs { gap: 16px; }.sg-panel { padding: 15px; }.sg-details { grid-template-columns: 86px minmax(0, 1fr); gap: 9px; }.sg-dialog .case-form-row { grid-template-columns: minmax(0, 1fr); gap: 0; }.sg-table { min-width: 560px; } }
 
-.sg-optional-tools { margin-left: auto; align-self: center; color: var(--muted); font-size: 12px; }
-.sg-optional-tools summary { cursor: pointer; padding: 8px 0; }
-.sg-optional-tools .text-button { min-height: 32px; }
-@media (max-width: 760px) { .sg-optional-tools { margin-left: 0; } }
-
 .usage-context-settings { max-width: 780px; }
 .usage-context-settings .field textarea { width: 100%; min-height: 96px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--canvas); color: var(--ink); }
 .strategy-discussion > .sg-row-between h2 { margin: 0; font-size: 16px; }

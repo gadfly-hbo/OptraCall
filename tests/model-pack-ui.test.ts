@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterCatalog } from '../src/host/ui/catalog-data.ts';
+import { catalogItems } from '../src/host/ui/catalog-data.ts';
 import { createTask, setTaskCapability } from '../src/host/ui/runtime-client.ts';
 import * as modelClient from '../extensions/business-plugins/model-pack/ui/model-pack-client.ts';
 import { registerHooks } from 'node:module';
@@ -11,15 +11,16 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { transformSync } from 'rolldown/utils';
 
 test('MP08: model packs are a connected business plugin with truthful execution and training boundaries', () => {
-  const items = filterCatalog('plugins', '模型包', '全部');
+  const items = catalogItems.filter(item => item.id === 'model-pack');
   assert.equal(items.length, 1);
   const item = items[0];
   assert.equal(item.id, 'model-pack');
+  assert.equal(item.category, 'plugins');
   assert.equal(item.status, '已接入');
   assert.equal(item.entry, 'model-pack');
   const copy = item.description + item.note;
   for (const expected of ['本机', '无网络外发', 'MPS', '模型上下文']) assert.ok(copy.includes(expected), expected);
-  assert.equal(filterCatalog('assets', '模型包', '全部').length, 0);
+  assert.equal(catalogItems.some(item => item.category === 'assets' && item.id === 'model-pack'), false);
 });
 
 test('MP04: task creation transmits modelTools independently and keeps other capability choices', async t => {
