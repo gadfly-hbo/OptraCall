@@ -1,6 +1,6 @@
 import { caseChoicePermitsAction } from '../case-decision-types.ts';
 import type { TeachReviewOwner } from '../business-role-types.ts';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { CaseDecisionIssue, CaseDecisionRevision, CaseIssueReply, CaseStrategyChoiceValue } from '../case-decision-types.ts';
 import type { CaseRecord } from '../case-types.ts';
 import type { TaskCreateIntent } from '../task-assignment.ts';
@@ -13,22 +13,74 @@ type IssueRef = { caseId: string; issueId: string };
 type Props = { onTeachReview?(owner:TeachReviewOwner):void; initialIssueId?: string; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
 const choiceName: Record<CaseStrategyChoiceValue, string> = { trial: '试行', adjust: '调整', continue: '继续', defer: '暂缓', no_action: '本次不行动', gather_evidence: '补证', reject: '不采用', stop_considering: '停止考虑' };
 
-export function CaseIssuePanel(props: Props) {
-  const { record } = props;
-  const [issues, setIssues] = useState<CaseDecisionIssue[]>([]), [selected, setSelected] = useState(props.initialIssueId ?? ''), [title, setTitle] = useState(''), [error,setError] = useState(''), [busy,setBusy] = useState(false);
+export function CaseIssuePanel({ children, ...props }: Props & { children?: ReactNode }) {
+  const { record, initialIssueId } = props;
+  const [issues, setIssues] = useState<CaseDecisionIssue[]>(), [selected, setSelected] = useState('');
+  const [title, setTitle] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const conversationId = useId();
+  const issueSelectId = useId(), newIssueId = useId();
   const operation = useOperationId();
-  useEffect(() => { let active = true; void caseIssues(record.id).then(r => { if (active) { setIssues(r.issues); setSelected(id => r.issues.some(i => i.id === id) ? id : props.initialIssueId ? '' : r.issues[0]?.id ?? ''); if (props.initialIssueId && !r.issues.some(i => i.id === props.initialIssueId)) setError('原事项暂不可读取，请核对当前 Case。'); } }, e => { if (active) setError(caseError(e)); }); return () => { active = false; }; }, [record.id, record.revision, props.initialIssueId]);
+  const closed = record.status === 'closed';
+  useEffect(() => {
+    let active = true;
+    void caseIssues(record.id).then(({issues: current}) => {
+      if (!active) return;
+      setIssues(current);
+      setSelected(id => current.some(i => i.id === id) ? id
+        : initialIssueId ? current.find(i => i.id === initialIssueId)?.id ?? '' : current[0]?.id ?? '');
+      setError(initialIssueId && !current.some(i => i.id === initialIssueId) ? '原事项暂不可读取，请核对当前 Case。' : '');
+    }, e => { if (active) setError(caseError(e)); });
+    return () => { active = false; };
+  }, [record.id, record.revision, initialIssueId]);
   async function add() {
     setBusy(true); setError('');
-    try { const fields = { expectedRevision: record.revision, title }; const { issue } = await createCaseIssue(record.id, { ...fields, operationId: operation(fields) }); setIssues(old => old.some(i => i.id === issue.id) ? old : [...old, issue]); setSelected(issue.id); setTitle(''); props.onChange(); }
+    try {
+      const fields = { expectedRevision: record.revision, title };
+      const { issue } = await createCaseIssue(record.id, { ...fields, operationId: operation(fields) });
+      setIssues(old => old?.some(i => i.id === issue.id) ? old : [...(old ?? []), issue]);
+      setSelected(issue.id); setTitle(''); props.onChange();
+    }
     catch (e) { setError(caseError(e)); } finally { setBusy(false); }
   }
-  return <section className="case-detail-text"><h3>独立决策事项</h3>
-    {!!issues.length && <label>当前事项<select value={selected} onChange={e => setSelected(e.target.value)}>{issues.map(i => <option key={i.id} value={i.id}>{i.title}</option>)}</select></label>}
-    {record.status !== 'closed' && <details><summary>新增独立事项</summary><label>需要取舍的经营问题<input maxLength={240} value={title} onChange={e => setTitle(e.target.value)} /></label><button className="secondary-button" disabled={busy || !title.trim()} onClick={add}>创建事项</button></details>}
-    {!issues.length && <p>历史取舍可在持续工作记录中回看，所属事项待核。</p>}
-    <CaseFormError error={error}/>{selected && <IssueWork key={selected} issueId={selected} {...props}/>}
-  </section>;
+  return <>
+    <section className="case-detail-text case-agent-entry">
+      <div className="case-section-heading">
+        <h3>Decision Case Agent</h3>
+        <button type="button" className="secondary-button" aria-expanded={open} aria-controls={conversationId} onClick={() => setOpen(!open)}>
+          {open ? '收起协作' : '与决策 Agent 协作'}
+        </button>
+      </div>
+      {!!issues?.length && <div className="case-field">
+        <label htmlFor={issueSelectId}>当前事项</label>
+        <select id={issueSelectId} value={selected} onChange={e => setSelected(e.target.value)}>
+          {!selected && <option value="">选择独立决策事项</option>}
+          {issues.map(i => <option key={i.id} value={i.id}>{i.title}</option>)}
+        </select>
+      </div>}
+      <div id={conversationId} hidden={!open}>
+        {selected && <BusinessRoleConversation owner={{ role:'case', caseId:record.id, itemId:selected }} readOnly={closed} showInlineTitle={false}/>}
+        {issues?.length === 0 && <p className="case-help">{closed
+          ? '此 Case 已关闭，尚无独立决策事项可供查看。'
+          : '此 Case 尚无独立决策事项。创建事项后即可开始对话。'}</p>}
+        {!issues && !error && <p role="status" className="case-help">正在读取决策事项…</p>}
+      </div>
+      {issues && !closed && <details open={open && !issues.length || undefined}>
+        <summary>新增独立事项</summary>
+        <div className="case-field">
+          <label htmlFor={newIssueId}>需要取舍的经营问题</label>
+          <input id={newIssueId} maxLength={240} value={title} onChange={e => setTitle(e.target.value)}/>
+        </div>
+        <button type="button" className="secondary-button" disabled={busy || !title.trim()} onClick={add}>创建事项</button>
+      </details>}
+      <CaseFormError error={error}/>
+    </section>
+    {children}
+    <section className="case-detail-text"><h3>独立决策事项</h3>
+      {issues?.length === 0 && <p>历史取舍可在持续工作记录中回看，所属事项待核。</p>}
+      {selected && <IssueWork key={selected} issueId={selected} {...props}/>}
+    </section>
+  </>;
 }
 
 type IssueRound = Awaited<ReturnType<typeof caseIssueTimeline>>['rounds'][number];
@@ -63,7 +115,7 @@ function RoundReview({ round, replies, disabled, inspect, submit }: {
 }
 
 function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreate, onTeachReview, issueId }: Props & { issueId: string }) {
-  const [open,setOpen] = useState(false), [refresh,setRefresh] = useState(0);
+  const [refresh,setRefresh] = useState(0);
   const [timeline,setTimeline] = useState<Awaited<ReturnType<typeof caseIssueTimeline>>>();
   const [sources,setSources] = useState<Awaited<ReturnType<typeof caseIssueSources>>>();
   const [plans,setPlans] = useState<CaseDecisionRevision[]>([]), [planId,setPlanId] = useState(''), [sourceId,setSourceId] = useState(''), [preview,setPreview] = useState('');
@@ -100,8 +152,6 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
   const write = (action:'plans'|'authorize'|'review', fields:Record<string,unknown>) => save(action, fields, operationId => writeCaseIssue(record.id,issueId,action,{ ...fields, operationId }));
   const task = (type:'plan'|'teach') => { if (project) onCreate(project,{ type, caseId: record.id, issueId, ...(type === 'teach' && current ? { choiceId: current.choice.choiceId, ...(selectedFeedback ? { feedbackRevisionId:selectedFeedback } : {}) } : {}) }); };
   return <div className="case-issue-work">
-    <button className="secondary-button" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? '收起协作' : '与决策 Agent 协作'}</button>
-    <div hidden={!open}><BusinessRoleConversation owner={{ role:'case',caseId:record.id,itemId:issueId }}/></div>
     <details open><summary>历次取舍与实际反馈</summary>
       {timeline && !timeline.rounds.length && <p>尚无取舍。</p>}
       {timeline?.rounds.map(r => <article key={r.choice.choiceId}><h4>{choiceName[r.choice.choice]} · {r.strategy.payload.title} v{r.strategy.revision}</h4><p>{r.choice.reason} · {r.choice.occurredAt}</p>

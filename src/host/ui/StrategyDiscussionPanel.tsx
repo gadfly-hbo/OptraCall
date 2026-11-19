@@ -4,7 +4,8 @@ import { StrategyChoicePanel,type ChoiceHandoff } from './StrategyChoicePanel.ts
 import { ConversationDrawer } from "./ConversationDrawer.tsx";
 import type { ProjectSnapshot } from '../../agent/project-runtime.ts';
 import { projectDiscussionSnapshot, projectDiscussionStreaming } from './strategy-discussion-projection.ts';
-import { StrategyDiscussionReply } from './StrategyDiscussionReply.tsx';
+import { StrategyDiscussionTranscript } from './StrategyDiscussionReply.tsx';
+export { StrategyDiscussionTranscript } from './StrategyDiscussionReply.tsx';
 import { StrategyDiscussionSourceView } from './StrategyDiscussionSourceView.tsx';
 import { resolveNewUsageContext } from '../usage-context-types.ts';
 import { isDiscussionSourceExcluded } from '../strategy-discussion-source-scope.ts';
@@ -12,7 +13,6 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { GoalRef, GoalVersion, GoalDiscussionSourceRef } from '../strategy-goals-types.ts';
 import type { StrategyDiscussion, StrategyDiscussionDetail, StrategyDiscussionUpdate, StrategyDiscussionSource, StrategyDiscussionSourceScope, StrategyMethodSelection } from '../strategy-discussion-types.ts';
 import type { ClientProject, PublicModelConfiguration, NativeMessage } from './project-types.ts';
-import { messageText } from './project-types.ts';
 import * as api from './strategy-discussion-client.ts';
 import { readUsageContextSettings } from './usage-context-client.ts';
 import type { UsageContext } from './usage-context-client.ts';
@@ -29,15 +29,6 @@ const saveDraft = (text: string, id?: string) => { sessionStorage.setItem(draftK
 const replacementKey = (id: string) => `optracall.strategy-discussion.replace.v1:${id}`;
 const readReplacement = (id?: string): string | undefined => { try { return id ? sessionStorage.getItem(replacementKey(id)) || undefined : undefined; } catch { return undefined; } };
 const goalPurpose = (goal: GoalVersion): UsageContext => resolveNewUsageContext({ goal })!;
-export function StrategyDiscussionTranscript({ messages, streaming }: { messages: NativeMessage[]; streaming?: string }) {
-  return <div className="strategy-discussion-messages" role="log" aria-label="战略讨论记录">
-    {messages.map((message, index) => <article className={`strategy-discussion-message ${message.role}`} key={message.nativeEntryId || index}>
-      <strong>{message.role === 'user' ? '你' : 'Agent'}</strong>
-      {message.role === 'assistant' ? <StrategyDiscussionReply text={messageText(message)} /> : <p>{messageText(message)}</p>}
-    </article>)}
-    {streaming && <article className="strategy-discussion-message assistant"><strong>Agent</strong><StrategyDiscussionReply text={streaming} /></article>}
-  </div>;
-}
 export function StrategyDiscussionRecoveryActions({ pending, detail, busy, onRecover, onPrepare }: { pending: api.DiscussionPending; detail?: StrategyDiscussionDetail; busy: boolean; onRecover(): void; onPrepare(): void }) {
   return <div className="sg-unknown"><p>原操作结果待核，输入、选择与原编号保持；未重发模型或另建讨论。</p><button type="button" className="secondary-button" disabled={busy} onClick={onRecover}>核对原操作结果</button>{pending.kind === 'message' && api.canPrepareDiscussionReplacement(detail, pending.input) && <button type="button" className="text-button" disabled={busy} onClick={onPrepare}>保留输入，准备新的请求</button>}</div>;
 }

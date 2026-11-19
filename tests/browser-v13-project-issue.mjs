@@ -28,11 +28,27 @@ try {
   await page.goto('http://127.0.0.1:'+uiPort);
   await page.getByRole('navigation',{name:'主导航',exact:true}).getByRole('button',{name:'决策星图',exact:true}).click();
   const board=page.locator('.case-board');await board.getByRole('button',{name:'常规',exact:true}).click();
+  const widths = [1500, 960, 390];
+  async function headingInsets(region) {
+    const insets = [];
+    for (const width of widths) {
+      await page.setViewportSize({width, height: 960});
+      const heading = await region.getByRole('heading', {level: 1}).boundingBox();
+      const panel = await region.boundingBox();
+      assert.ok(heading && panel);
+      insets.push(heading.x - panel.x);
+    }
+    await page.setViewportSize({width: widths[0], height: 960});
+    return insets;
+  }
+  const boardInsets = await headingInsets(board);
+  assert.ok(boardInsets.every(inset => inset > 0));
   await board.getByRole('button',{name:c.title,exact:true}).click();
   await board.getByLabel('当前事项').selectOption(issue.id);
   await board.getByRole('button',{name:'回关联项目协作'}).click();
   const work=page.getByRole('region',{name:'项目协作'});
   await work.getByRole('heading',{name:project.name,exact:true}).waitFor();
+  assert.deepEqual(await headingInsets(work), boardInsets, 'Project and Case pages share responsive content insets');
   const key=c.id+'/'+issue.id;assert.equal(await work.getByLabel('项目工作范围').inputValue(),key);
   const url=new URL(page.url());assert.equal(url.searchParams.get('project'),project.id);assert.equal(url.searchParams.get('projectIssue'),issue.id);
   await page.reload();await work.getByRole('heading',{name:project.name,exact:true}).waitFor();assert.equal(await work.getByLabel('项目工作范围').inputValue(),key);

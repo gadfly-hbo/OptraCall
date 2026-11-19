@@ -110,12 +110,13 @@ async function files(){
   const flows=[];
   for(const width of [1320,390]){
     await page.setViewportSize({width,height:915});
-    for(const entry of [/资料准备/,/打开项目文件上传/]){
-      await launch.click();const dialog=page.getByRole('dialog',{name:'任务对话 · '+task.name});
-      const opener=dialog.getByRole('button',{name:entry});await opener.click();
+    const dialog=page.getByRole('dialog',{name:'任务对话 · '+task.name});
+    for(const [entry,location] of [[/资料准备/,page],[/打开项目文件上传/,dialog]]){
+      if(location===dialog) await launch.click();
+      const opener=location.getByRole('button',{name:entry});await opener.click();
       await dialog.waitFor({state:'hidden'});const files=page.getByRole('complementary',{name:'项目文件'});await button('刷新文件',files).click();
       await button('关闭项目文件栏',files).click();await files.waitFor({state:'hidden'});const back=page.getByRole('button',{name:entry});
-      await page.waitForFunction(()=>document.activeElement?.matches('button')&&document.activeElement.closest('.workspace-conversation-task'));
+      await page.waitForFunction(el=>document.activeElement===el,await back.elementHandle());
       assert.equal(await back.evaluate(el=>el===document.activeElement),true);assert.equal(await box.inputValue(),'保留未发的草稿 '+name);flows.push([width,String(entry)]);
     }
   }
@@ -141,7 +142,7 @@ async function native() {
   await modal.waitFor();await button('稍后回应',modal).click();await modal.waitFor({state:'hidden'});
   const drawer=page.getByRole('dialog',{name:'任务对话 · '+task.name});await drawer.waitFor();
   await input.fill('下一轮的草稿');
-  await drawer.getByRole('button',{name:/资料准备/}).click();await drawer.waitFor({state:'hidden'});
+  await drawer.getByRole('button',{name:'打开项目文件上传'}).click();await drawer.waitFor({state:'hidden'});
   const sidebar=page.getByRole('complementary',{name:'项目文件'});await button('刷新文件',sidebar).click();await button('关闭项目文件栏',sidebar).click();
   assert.equal(await input.inputValue(),'下一轮的草稿');
   await enlarge.click();await button('回应 Pi',drawer).click();await modal.waitFor();

@@ -1,3 +1,4 @@
+import { messageText, type NativeMessage } from './project-types.ts';
 import { Marked } from 'marked';
 import type { MarkedToken, Token, Tokens } from 'marked';
 import markedCjkFriendly from 'marked-cjk-friendly';
@@ -75,3 +76,13 @@ export const StrategyDiscussionReply = memo(function StrategyDiscussionReply({ t
     return <p>{text}</p>;
   }
 });
+
+export function StrategyDiscussionTranscript({ messages, streaming, label = '战略讨论记录' }: { messages: NativeMessage[]; streaming?: string; label?: string }) {
+  return <div className="strategy-discussion-messages" role="log" aria-label={label}>
+    {messages.map((message, index) => <article className={`strategy-discussion-message ${message.role}`} key={message.nativeEntryId || index}>
+      <strong>{message.role === 'user' ? '你' : 'Agent'}</strong>
+      {message.role === 'assistant' ? <StrategyDiscussionReply text={messageText(message)} /> : <p>{messageText(message)}</p>}
+    </article>)}
+    {streaming && <article className="strategy-discussion-message assistant"><strong>Agent</strong><StrategyDiscussionReply text={streaming} /></article>}
+  </div>;
+}

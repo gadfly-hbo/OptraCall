@@ -6,6 +6,7 @@ type ConversationDrawerProps = {
   title: string;
   children: ReactNode;
   className?: string;
+  showInlineTitle?: boolean;
 };
 
 type ScrollPosition = {item: HTMLElement; left: number; top: number};
@@ -21,7 +22,7 @@ function restoreScrollPositions(positions: ScrollPosition[]) {
   }
 }
 
-export function ConversationDrawer({ title, children, className }: ConversationDrawerProps) {
+export function ConversationDrawer({ title, children, className, showInlineTitle }: ConversationDrawerProps) {
   const id = useId();
   const [expanded, setExpanded] = useState(false);
   const [content] = useState(() => {
@@ -72,6 +73,7 @@ export function ConversationDrawer({ title, children, className }: ConversationD
       if (expanded && event.target instanceof Element && event.target.closest('[data-return-to-workspace]')) setExpanded(false);
     }}>
     <div className="workspace-conversation-toolbar">
+      {showInlineTitle && <h3>{title}</h3>}
       <button type="button" className="text-button" ref={launch} aria-haspopup="dialog" aria-controls={id}
         aria-expanded={expanded} onClick={() => setExpanded(true)}>放大对话</button>
     </div>

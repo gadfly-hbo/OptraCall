@@ -1,5 +1,6 @@
 .project-plan-page { max-width: 1400px; width: 100%; }
 .project-plan-page .case-board-heading { gap: 20px; }
+.project-plan-page > nav.case-project-actions { margin-bottom: 16px; }
 .project-plan-tools, .project-plan-actions, .project-plan-task-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .project-plan-tools { margin: 0 0 16px; }
 .project-plan-editor { border: 0; padding: 0; margin: 0; min-width: 0; }

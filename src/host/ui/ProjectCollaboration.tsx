@@ -166,7 +166,7 @@ export function ProjectCollaboration({ project, issue, onChangeScope, onReturnIs
     catch (reason) { setError(failure(reason)); await onRefresh().catch(() => {}); }
     finally { setSaving(false); }
   }
-  return <section className="project-plan-page" aria-label="项目协作">
+  return <section className="case-board project-plan-page" aria-label="项目协作">
     <header className="case-board-heading"><div><p className="eyebrow">项目空间</p><h1>{project.name}</h1></div><button className="primary-button" type="button" onClick={() => create()}>{project.tasks.length ? '新建任务' : '新建第一个任务'}</button></header>
     <nav className="case-project-actions" aria-label="项目协作栏目">{([['work','Project Agent'], ['terms','共用约定'], ['results','成果交接'], ['stage','阶段目标']] as const).map(([value, label]) => <button type="button" key={value} className={tab === value ? 'primary-button' : 'secondary-button'} aria-pressed={tab === value} onClick={() => setTab(value)}>{label}</button>)}</nav>
     {!!scopes.size && <div className="case-inline-actions"><label>项目工作范围 <select value={issue ? issue.caseId + '/' + issue.issueId : ''} onChange={event => onChangeScope(scopes.get(event.target.value))}>
