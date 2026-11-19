@@ -2,7 +2,7 @@ import { taskSourceDeliveryType, taskSourceDeliveryDetails, tracksTaskSource } f
 import { packageIdentity } from './skill-catalog.ts';
 import { taskPurpose, approvedTaskSkills } from '../host/task-assignment.ts';
 import {goalContextSourceTool} from './goal-context-source.ts';
-import { strategyDiscussionTool, projectDiscussionSourceTool, editableGoalTool, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
+import { strategyDiscussionTool, projectDiscussionSourceTool, editableGoalTool, explainGoalProposalError, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
 import { methodIssueTool } from './method-issue.ts';
 import { quotedDecisionTool } from './quoted-decisions.ts';
 import type { AnalysisDeliveryReceipt } from '../host/analysis-delivery.ts';
@@ -699,8 +699,14 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         assertCurrent();
         if(!(STRATEGY_DISCUSSION_ACTIONS as readonly unknown[]).includes(parameters.action))throw new Error('invalid_strategy_discussion_action');
         const {action,...input}=parameters;
-        const result=await requestHostTool({feature:'strategy-discussion',action:String(action),input,toolCallId,requestId:originalRun!.id,sessionId:boundSessionId},signal!,'strategy_discussion_run_unavailable');
-        assertCurrent();return result as {content:{type:'text';text:string}[];details:Record<string,unknown>};
+        try {
+          const result = await requestHostTool({feature:'strategy-discussion',action:String(action),input,toolCallId,requestId:originalRun!.id,sessionId:boundSessionId},signal!,'strategy_discussion_run_unavailable');
+          assertCurrent();
+          return result as {content:{type:'text';text:string}[];details:Record<string,unknown>};
+        } catch (error) {
+          if (action === 'propose-goal' && o.workspace?.discussionTools !== 'goal-draft') throw explainGoalProposalError(error);
+          throw error;
+        }
       }
     }];
     const createGoalContextTools=(boundManager:SessionManager)=>!o.goalContextSourceEnabled || o.workspace || !o.projectId || !o.taskId || o.protectedExecution&&!ordinaryManaged()?[]:[{...goalContextSourceTool,execute:async(toolCallId:string,input:Record<string,unknown>,signal:AbortSignal|undefined,_update:unknown,ctx:ExtensionToolContext)=>{
