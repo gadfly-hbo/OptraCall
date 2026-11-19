@@ -3,11 +3,84 @@ export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-sou
 export type StrategyDiscussionToolContext = { requestId:string; sessionId:string; toolCallId:string; signal:AbortSignal; assertCurrent():void; originalUserText:string; userQuoteEligible:boolean; goalBasis?:import('../host/strategy-goals-types.ts').GoalBasis; registerCleanup?:(cleanup:(options:{retryFailed?:boolean})=>Promise<void>)=>void };
 export type StrategyDiscussionPort = (action:StrategyDiscussionAction,input:Record<string,unknown>,context:StrategyDiscussionToolContext)=>Promise<{content:{type:'text';text:string}[];details:Record<string,unknown>}>;
 export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','propose-goal','adopt-goal','operation','public-search'] as const;
+const exact = { additionalProperties: false };
+const nonblank = (maxLength = 4000) => Type.String({ minLength: 1, maxLength, pattern: '\\S' });
+const textList = Type.Array(nonblank(), { maxItems: 100 });
+const fixedVersion = Type.String({ minLength: 1, maxLength: 200, pattern: '\\S', description: '引用具体的已发布版本；latest 和 current 不能标识固定版本。' });
+const sourceRef = Type.Object({
+  authority: Type.Union(['case', 'decision-board', 'project', 'task', 'sap-metric', 'strategy-discussion'].map(x => Type.Literal(x))),
+  id: nonblank(300), version: Type.Union([fixedVersion, Type.Integer({ minimum: 1 })]),
+  projectId: Type.Optional(nonblank()), taskId: Type.Optional(nonblank()),
+  sha256: Type.Optional(Type.String({ pattern: '^[a-f0-9]{64}$' })), sessionId: Type.Optional(nonblank(200)),
+  entryType: Type.Optional(Type.Union([Type.Literal('message'), Type.Literal('tool-result')])),
+}, exact);
+
+// Pi validates the submitted business fields. The Host resolves scope and binds the native source.
+const proposalDraft = Type.Object({
+  title: nonblank(300), outcome: nonblank(), responsible: nonblank(300),
+  perspective: Type.Union([Type.Literal('profit'), Type.Literal('nonprofit'), Type.Literal('personal')]),
+  scope: Type.Optional(Type.Object({
+    kind: Type.Union([Type.Literal('enterprise'), Type.Literal('department'), Type.Literal('personal')]),
+    id: nonblank(300), name: nonblank(300), enterpriseId: Type.Optional(nonblank()),
+  }, { ...exact, description: '当 goalScopes.bound 或 defaultScope 已明确时可省略。需要选择时使用 Host 提供的 choices，并按用户声明核对部门职责。' })),
+  baseline: Type.Object({ state: Type.Union([Type.Literal('known'), Type.Literal('pending')]), description: nonblank() }, exact),
+  measurement: Type.Union([
+    Type.Object({ kind: Type.Literal('deliverable'), criterion: nonblank() }, exact),
+    Type.Object({
+      kind: Type.Literal('quantitative'),
+      sapMetric: Type.Object({ authority: Type.Literal('sap-metric'), id: nonblank(300), version: fixedVersion, metricName: nonblank(200) }, exact),
+      target: Type.Optional(nonblank()),
+    }, exact),
+  ]),
+  dueAt: Type.Optional(nonblank(100)), bscPerspective: Type.Optional(nonblank(300)),
+  strategies: Type.Optional(textList), resources: Type.Optional(textList), necessaryConditions: Type.Optional(textList),
+  strategyContext: Type.Optional(Type.Object({
+    summary: nonblank(),
+    methods: Type.Optional(Type.Array(Type.Object({ id: nonblank(200), name: nonblank(300), source: Type.Optional(sourceRef) }, exact), { maxItems: 30 })),
+    sources: Type.Optional(Type.Array(sourceRef, { maxItems: 100 })),
+  }, exact)),
+}, exact);
+
 export const strategyDiscussionTool = {
-  name:'strategy_goals',label:'战略讨论与目标准确承接',
-  description:'read-goals读取本轮准确目标及原关系/反馈；find-sources查获准背景资料目录，read-source按准确sourceId读取，public-search仅发送公开查询且须已有检索配置。propose-goal把已充分明确的draft保存为原Goal候选，可给goalId及expectedVersion修订原目标；采用前继续保留未知，不编负责人/指标/上级。adopt-goal仅按本轮真实用户明确原话给quote(start/end/text)、准确goalId/version/expectedVersion及goalContentSha256采用；普通讨论和有意思不等于采用。operation给原operationId查回执，未知先读不换编号重做。目标采用不授权经营执行。方法/工具与分析顺序由你决定。',
-  parameters:Type.Object({action:Type.Union(STRATEGY_DISCUSSION_ACTIONS.map(x=>Type.Literal(x))),sourceId:Type.Optional(Type.String()),offset:Type.Optional(Type.Integer({minimum:0})),limit:Type.Optional(Type.Integer({minimum:1,maximum:8192})),query:Type.Optional(Type.String({maxLength:2000})),goalId:Type.Optional(Type.String()),version:Type.Optional(Type.Integer({minimum:1})),expectedVersion:Type.Optional(Type.Integer({minimum:1})),goalContentSha256:Type.Optional(Type.String()),operationId:Type.Optional(Type.String()),draft:Type.Optional(Type.Record(Type.String(),Type.Unknown())),quote:Type.Optional(Type.Object({start:Type.Integer({minimum:0}),end:Type.Integer({minimum:1}),text:Type.String({minLength:1,maxLength:20000})},{additionalProperties:false}))},{additionalProperties:false}),
+  name: 'strategy_goals', label: '战略讨论与目标准确承接',
+  description: [
+    'read-goals 读取本轮目标、关系、反馈及 Host 核对的 goalScopes。find-sources 查获准背景目录，read-source 按 sourceId 读取，public-search 仅发送公开查询且须已有检索配置。',
+    'propose-goal 保存完整候选。draft 必填 title（标题）、outcome（预期结果）、perspective（profit/nonprofit/personal）、responsible（负责人）、baseline（状态及说明）、measurement（成果核对标准或已发布 SAP 指标及固定版本）。',
+    'goalScopes.bound 或 defaultScope 已明确时可省略 draft.scope；有多种适用范围时按用户明确意图选用，归属仍有歧义时询问。基线待补用 pending，目标依据不足时继续讨论。修订原候选须给 goalId 和 expectedVersion。',
+    'adopt-goal 仅按本轮用户明确原话给 quote(start/end/text)、准确 goalId/version/expectedVersion 和 goalContentSha256 采用。目标采用不授权经营执行。operation 给原 operationId 查回执，未知先核对原操作。',
+  ].join(' '),
+  parameters: Type.Object({
+    action: Type.Union(STRATEGY_DISCUSSION_ACTIONS.map(x => Type.Literal(x))),
+    sourceId: Type.Optional(Type.String()), offset: Type.Optional(Type.Integer({ minimum: 0 })), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 8192 })),
+    query: Type.Optional(Type.String({ maxLength: 2000 })), goalId: Type.Optional(Type.String()), version: Type.Optional(Type.Integer({ minimum: 1 })),
+    expectedVersion: Type.Optional(Type.Integer({ minimum: 1 })), goalContentSha256: Type.Optional(Type.String()), operationId: Type.Optional(Type.String()),
+    draft: Type.Optional(proposalDraft),
+    quote: Type.Optional(Type.Object({ start: Type.Integer({ minimum: 0 }), end: Type.Integer({ minimum: 1 }), text: Type.String({ minLength: 1, maxLength: 20000 }) }, exact)),
+  }, exact),
 };
+
+// Only explain known Host codes. Cancellation, permission and storage errors keep their original identity.
+const proposalErrorReasons: Readonly<Record<string, string>> = {
+  strategy_goal_draft_required: 'draft 必须是包含目标正文的对象；请按工具列出的必填字段提交。',
+  invalid_strategy_goal_draft: 'draft 只接收工具定义的候选字段，来源与版本身份由 Host 绑定。',
+  strategy_goal_scope_required: 'draft.scope 尚未确定；请按用户明确意图从 read-goals 的 goalScopes.choices 选用，或按实际声明提供部门。归属有歧义时先核对。',
+  strategy_goal_scope_mismatch: 'draft.scope 与绑定范围或可用记录不一致。请重新读取 goalScopes，并按准确 kind、id、name 和已知 enterpriseId 提交。',
+  strategy_goal_scope_unavailable: 'draft.scope 不能通过范围核对。请核对目录中的企业 id 与名称，以及部门所引用的 enterpriseId。',
+  strategy_goal_department_unconfirmed: 'draft.scope.id 和 name 应使用用户明确声明的同一部门名称。enterpriseId 只可引用 Host 给出的上级企业，上级未知时省略。',
+  strategy_goal_expected_version_required: '修订 goalId 时须同时提供 expectedVersion。请用 read-goals 核对原目标的准确正整数版本。',
+  strategy_goal_not_in_discussion: 'goalId 不能作为本讨论的修订目标。请从 read-goals 核对原目标和准确版本。',
+  strategy_goal_metric_unavailable: 'draft.measurement.sapMetric 应引用该范围可用的已发布指标，请核对 id、固定 version 和 metricName。',
+  invalid_strategy_goal_metric: 'draft.measurement.sapMetric 需要已发布指标的准确 id、固定 version 和 metricName。',
+  invalid_strategy_goal_source: 'draft.strategyContext 中的来源需要准确 authority、id、version 及其对应的来源标识。',
+  invalid_strategy_goal_due_date: 'draft.dueAt 需要可识别的日期，例如 2027-03-31。',
+  invalid_strategy_goal_version: 'expectedVersion 需要原候选的正整数版本。请用 read-goals 核对。',
+  strategy_goal_conflict: 'expectedVersion 与当前版本不一致。请重读目标再核对修订内容。',
+};
+
+export function explainGoalProposalError(error: unknown): unknown {
+  if (!(error instanceof Error) || !Object.hasOwn(proposalErrorReasons, error.message)) return error;
+  return new Error(error.message + '：' + proposalErrorReasons[error.message]);
+}
 
 export const projectDiscussionSourceTool = {
   name: strategyDiscussionTool.name,
