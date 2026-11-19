@@ -319,7 +319,8 @@ export function App() {
     const previous = draftQueues.current.get(key) ?? Promise.resolve(), next = previous.catch(() => {}).then(() => { if ((draftEpochs.current.get(key) ?? 0) === epoch) return saveDraft(projectId, taskId, text); }); draftQueues.current.set(key, next);
     void next.then(() => { if (draftQueues.current.get(key) === next) { draftQueues.current.delete(key); changeUI(key, old => ({ ...old, draftSaving: false })); } }, () => { if (draftQueues.current.get(key) === next) { draftQueues.current.delete(key); changeUI(key, old => ({ ...old, draftSaving: false, error: '草稿尚未保存，请检查本地服务后继续。' })); } }); return next;
   };
-  const openWorkspace = (next: 'chat' | 'decision' | 'cases' | 'projects' | 'studio' | 'goals') => { setHelpOpen(false); if (next === 'decision') setBoardReportFocus(undefined); lastWorkspace.current = next; if (next === 'cases') { setCaseFocus(undefined); setCaseIssueFocus(undefined); } setView(next); if (next === 'chat') requestAnimationFrame(() => textarea.current?.focus()); };
+  const focusComposerOnEntry = () => { requestAnimationFrame(() => textarea.current?.focus()); };
+  const openWorkspace = (next: 'chat' | 'decision' | 'cases' | 'projects' | 'studio' | 'goals') => { setHelpOpen(false); if (next === 'decision') setBoardReportFocus(undefined); lastWorkspace.current = next; if (next === 'cases') { setCaseFocus(undefined); setCaseIssueFocus(undefined); } setView(next, next === 'chat' ? focusComposerOnEntry : undefined); };
   const openStudioLibrary = (area: StudioLibraryArea) => {
     const enter = () => setView('studio', () => { setStudioLibraryArea(area); setStudioLibraryRequest({area}); setStudioProfessionalTarget(undefined); setStudioFocus(''); setFilesOpen(false); setHelpOpen(false); lastWorkspace.current = 'studio'; if (window.innerWidth <= 760) setSidebarOpen(false); });
     if (view !== 'studio' || !studioLeave.current) { enter(); return; }
@@ -401,7 +402,20 @@ export function App() {
     const studioNavigationAllowed = view === 'studio' && destination !== 'studio' && !settledNavigation && studioLeave.current ? await studioLeave.current() : false;
     if (view === 'studio' && destination !== 'studio' && !settledNavigation && studioLeave.current && !studioNavigationAllowed) return;
     if (destination === 'chat') setCaseContexts(previous => { const next = { ...previous }; if (context) next[taskKey(project.id, task.id)] = context; else delete next[taskKey(project.id, task.id)]; return next; });
-    const key = taskKey(project.id, task.id); selectContext(project.id, task.id, destination === 'studio' ? studioSystemId : undefined); setGlobalError(''); if (destination === 'studio') { setStudioMounted(true); setViewState('studio'); } else if (settledNavigation || studioNavigationAllowed) { lastWorkspace.current = 'chat'; setViewState('chat'); } else openWorkspace('chat'); if (window.innerWidth <= 760) setSidebarOpen(false);
+    const key = taskKey(project.id, task.id);
+    selectContext(project.id, task.id, destination === 'studio' ? studioSystemId : undefined);
+    setGlobalError('');
+    if (destination === 'studio') {
+      setStudioMounted(true);
+      setViewState('studio');
+    } else if (settledNavigation || studioNavigationAllowed) {
+      lastWorkspace.current = 'chat';
+      setViewState('chat');
+      focusComposerOnEntry();
+    } else {
+      openWorkspace('chat');
+    }
+    if (window.innerWidth <= 760) setSidebarOpen(false);
     if (project.archivedAt || task.archivedAt) { const value = await readTask(project.id, task.id); mergeProject(value.project); applySnapshot(key, value.snapshot); return; }
     try { if (activate) changeUI(key, old => ({ ...old, opening: true })); await connect(project.id, task.id); if (activate) {
       // Browsing a new task must not execute untrusted startup resources before
@@ -409,7 +423,7 @@ export function App() {
       const value = task.sessionFile || task.lastRun ? await openTask(project.id, task.id) : await readTask(project.id, task.id);
       mergeProject(value.project); applySnapshot(key, value.snapshot);
     } } catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) changeUI(key, old => ({ ...old, error: safeError(error) })); } finally { if (activate) changeUI(key, old => ({ ...old, opening: false })); }
-    requestAnimationFrame(() => textarea.current?.focus());
+    if (destination === 'studio' && visibleTask.current === key) focusComposerOnEntry();
   };
   const reconnect = async (projectId: string, taskId: string) => { const key = taskKey(projectId, taskId); streams.current.get(key)?.controller.abort(); streams.current.delete(key); changeUI(key, old => ({ ...old, error: undefined })); try { await refreshConfigurations(); if (projects.find(project => project.id === projectId)?.archivedAt) { await refreshTask(projectId, taskId); changeUI(key, old => ({ ...old, connected: true, observation: undefined })); return; } await connect(projectId, taskId); await refreshTask(projectId, taskId); } catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) changeUI(key, old => ({ ...old, error: safeError(error) })); } };
   const taskArchiveAction = async (restore = false) => {
@@ -665,7 +679,7 @@ export function App() {
       const key = taskKey(project.id, task.id), choice = personalChoice;
       if (uiRef.current[key]?.uncertainPersonalSend) { setGlobalError('该任务有发送状态 UNKNOWN，先核对原请求；选择与原问题保持。'); return; }
       setPersonalContexts(previous => ({ ...previous, [key]: [...(previous[key] ?? []).filter(item => JSON.stringify(item.selection) !== JSON.stringify(choice.selection)), choice] }));
-      setPersonalChoice(undefined); void chooseTask(project, task, false); requestAnimationFrame(() => textarea.current?.focus());
+      setPersonalChoice(undefined); void chooseTask(project, task, false);
     }} />}
     <a className="skip-link" href="#main-content">跳到主内容</a>
     {sidebarOpen && <aside id="sidebar" className="sidebar" aria-label="工作台导航">
