@@ -140,6 +140,7 @@ export function checkedStudioAnalysisTarget(value: unknown, systemId: string, pr
 /** Keep the current task's view explicit when moving out of a Studio deep link. */
 export function studioTaskUrl(current: string, projectId: string, taskId?: string, systemId?: string): URL {
   const url = new URL(current); url.searchParams.set('project', projectId);
+  for (const key of ['projectCase','projectIssue','returnCase','returnIssue']) url.searchParams.delete(key);
   if (taskId) url.searchParams.set('task', taskId); else url.searchParams.delete('task');
   if (systemId) url.searchParams.set('studio', systemId); else url.searchParams.delete('studio');
   return url;

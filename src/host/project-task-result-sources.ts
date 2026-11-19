@@ -3,7 +3,7 @@ import { lstat, readdir, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import type { ProjectRecord, TaskRecord } from './project-store.ts';
 import type { ProjectTaskResultBinding, ProjectTaskNativeReplyBinding, ProjectTaskResultSources } from './project-task-results-types.ts';
-import { createNativeSnapshotReadBudget, nativeSnapshotLimit, readNativeSessionSnapshot, type NativeSnapshotReadBudget } from './native-session-snapshot.ts';
+import { createNativeSnapshotReadBudget, NativeSnapshotError, nativeSnapshotLimit, readNativeSessionSnapshot, type NativeSnapshotReadBudget } from './native-session-snapshot.ts';
 import { PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
 
 export class ProjectTaskResultSourceError extends Error {
@@ -16,7 +16,8 @@ const object = (value: unknown): value is Record<string, unknown> => value !== n
 const text = (value: unknown): value is string => typeof value === 'string' && Boolean(value.trim()) && value.length <= 300 && !/[\u0000-\u001f\u007f]/u.test(value);
 const sourceKey = (source: ProjectTaskResultBinding) => JSON.stringify([source.sessionId, source.requestId, source.toolCallId]);
 const sourceValue = (source: ProjectTaskResultBinding) => JSON.stringify([source.projectId, source.taskId, source.sessionId, source.requestId, source.toolCallId, source.relativePath, source.sha256, source.bytes]);
-export interface TaskBoundReportsOptions { signal?: AbortSignal; budget?: NativeSnapshotReadBudget; assertCurrent?(): void }
+export type ResultSessionSnapshot = Awaited<ReturnType<typeof readNativeSessionSnapshot>>;
+export interface TaskBoundReportsOptions { signal?: AbortSignal; budget?: NativeSnapshotReadBudget; assertCurrent?(): void; onSession?(snapshot: ResultSessionSnapshot): void }
 type NativeEntry = Awaited<ReturnType<typeof readNativeSessionSnapshot>>['entries'][number];
 
 /** Select only the final reply on the completed run's own ancestor chain. */
@@ -72,11 +73,12 @@ async function scanTaskResultSources(project: ProjectRecord, task: TaskRecord, o
     check(); const file = path.join(task.sessionDirectory, name), stat = await lstat(file); check();
     if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) fail();
     if (stat.size > remainingBytes) fail('project_result_native_budget_exceeded');
-    remainingBytes -= stat.size;
     let snapshot;
-    try { snapshot = await readNativeSessionSnapshot(file, task.sessionDirectory, path.join(project.rootPath, '020_clean'), stat.size, { ...options, budget }); }
-    catch (error) { check(); if (error instanceof ProjectTaskResultSourceError) throw error; fail(); }
+    try { snapshot = await readNativeSessionSnapshot(file, task.sessionDirectory, path.join(project.rootPath, '020_clean'), remainingBytes, { ...options, budget }); }
+    catch (error) { check(); if (error instanceof ProjectTaskResultSourceError || error instanceof NativeSnapshotError && error.code === 'native_snapshot_changed') throw error; fail(); }
     check();
+    remainingBytes -= snapshot.bytes;
+    options.onSession?.(snapshot);
     const sessionId = snapshot.manager.getSessionId();
     const entries = snapshot.manager.getEntries(), byId = new Map(entries.map(entry => [entry.id, entry]));
     for (const entry of entries) {

@@ -76,5 +76,25 @@ test('PG03 public Host/Pi: no-Case user work arranges original Board actions, th
   assert.equal((await request('/api/decision-board')).items.flatMap((item: any) => item.tasks).find((task: any) => task.id === ref.taskId).status, 'doing');
   assert.equal('status' in (await request('/api/strategy/goals')).arrangements[0].actions[0], false);
   assert.ok(withGoal.entries.some(entry => entry.customType === 'optracall.quoted-decision'));
+  const index=JSON.parse(await readFile(path.join(host.dataRoot,'strategy-goals','index.json'),'utf8'));
+  const operation=index.operations.find((row:{kind:string;result:{id:string}})=>row.kind==='arrange' && row.result.id===goals.arrangements[0].id);
+  assert.ok(operation);
+  const discussionId=randomUUID(),discussion='/api/strategy/discussions/'+discussionId;
+  await request('/api/strategy/discussions','POST',{operationId:discussionId},201);
+  let received=false;const answer='已核对既有安排的原看板回执';
+  provider.setResponder(turn=>{
+    if(!turn.recentToolResults.length)return {calls:[{name:'strategy_goals',arguments:{action:'operation',operationId:operation.operationId}}]};
+    const body=JSON.parse(providerMessageText(turn.recentToolResults.at(-1)?.content));assert.equal(body.operation.result.boardOperationId,arranged.operationId);
+    received=true;return {text:answer};
+  });
+  await request(discussion+'/messages','POST',{requestId:randomUUID(),text:'核对指定的原安排回执',expectedRevision:1},202);
+  let sourced;
+  for(let i=0;i<300;i++){
+    const state=await request(discussion);
+    sourced=state.replies.find((entry:{text:string})=>entry.text===answer)?.source;
+    if(!state.busy&&sourced)break;
+    await delay(25);
+  }
+  assert.ok(received&&sourced);
   assert.deepEqual(provider.errors, []);
 });

@@ -35,7 +35,7 @@ test('R02: exact Goal/Plan work revocation appends original authority once and G
   assert.equal((await f.port('authorize-action', f.input, { ...f.revokeContext, toolCallId: 'retry' })).details.operationId, saved.details.operationId);
   assert.deepEqual(f.board.listActionAuthorizations(f.task.id).map(entry => entry.decision), ['authorize', 'revoke']);
   const latest = f.board.listActionAuthorizations(f.task.id)[1]; assert.deepEqual(latest.source, f.original.source); assert.equal(latest.previousAuthorizationId, f.original.authorizationId);
-  assert.equal(latest.quoteProvenance.requestId, f.revokeContext.requestId); assert.deepEqual(f.board.getTask(f.task.id), f.task); assert.deepEqual(f.goals.list().arrangements, arrangements); assert.equal(f.cases.listCases().length, 0);
+  assert.equal(latest.quoteProvenance!.requestId, f.revokeContext.requestId); assert.deepEqual(f.board.getTask(f.task.id), f.task); assert.deepEqual(f.goals.list().arrangements, arrangements); assert.equal(f.cases.listCases().length, 0);
   f.board.close(); await f.board.init(); assert.equal(f.board.listActionAuthorizations(f.task.id).length, 2);
   const read = await f.port('read', { operationId: saved.details.operationId }, f.revokeContext); assert.equal((read.details.authorization as any).authorizationId, latest.authorizationId);
   const gsa = await import('../src/host/ui/StrategyGoalsPage.tsx'), authority = await import('../extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx');

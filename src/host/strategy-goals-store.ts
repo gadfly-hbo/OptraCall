@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseUserQuoteProvenance } from '../agent/quoted-decisions.ts';
+import { parseBusinessRoleOwner, businessRoleConversationId } from './business-role-conversations.ts';
 import { parseUsageContext } from './usage-context-types.ts';
 import { parseGoalBasis } from './strategy-goals-types.ts';
 import type { GoalActionArrangement, GoalArrangementInput } from './strategy-goals-types.ts';
@@ -98,6 +99,14 @@ function feedbackIdentity(input: GoalFeedbackInput): string {
   return canonical(body);
 }
 
+export function parseGoalRoleSuggestion(value: unknown): NonNullable<GoalDraftInput['roleSuggestion']> {
+  if(!object(value) || Object.keys(value).some(k=>!['owner','discussionId','sessionId','entryId','sha256'].includes(k))) fail('invalid_goal_role_suggestion');
+  const owner=parseBusinessRoleOwner(value.owner);
+  if((owner.role!=='goal'&&owner.role!=='goal-draft')||value.discussionId!==businessRoleConversationId(owner)||
+      typeof value.sha256!=='string'||!/^[0-9a-f]{64}$/.test(value.sha256)) fail('invalid_goal_role_suggestion');
+  return {owner,discussionId:uuid(value.discussionId),sessionId:uuid(value.sessionId),entryId:text(value.entryId,200),sha256:value.sha256};
+}
+export { draft as parseGoalDraft };
 function draft(input: GoalDraftInput): GoalDraftInput {
   if (!object(input) || !['profit', 'nonprofit', 'personal'].includes(input.perspective) || !object(input.scope) || !['enterprise', 'department', 'personal'].includes(input.scope.kind) || !object(input.measurement) || !object(input.baseline) || !['known', 'pending'].includes(input.baseline.state)) fail('invalid_strategy_goal');
   const measurement = input.measurement.kind === 'quantitative' ? (() => {
@@ -111,7 +120,11 @@ function draft(input: GoalDraftInput): GoalDraftInput {
     if (!Array.isArray(value) || value.length > 100) fail('invalid_strategy_goal');
     return value.map(x => text(x));
   };
+  const choice = input.strategyChoice;
+  if (choice !== undefined && (!object(choice) || typeof choice.contentSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(choice.contentSha256))) fail('invalid_strategy_goal_context');
   const value: GoalDraftInput = {
+    ...(input.roleSuggestion===undefined?{}:{roleSuggestion:parseGoalRoleSuggestion(input.roleSuggestion)}),
+    ...(choice ? {strategyChoice:{discussionId:uuid(choice.discussionId),version:positive(choice.version),contentSha256:choice.contentSha256}} : {}),
     title: text(input.title, 300), outcome: text(input.outcome), perspective: input.perspective,
     scope: { kind: input.scope.kind, id: text(input.scope.id, 300), name: text(input.scope.name, 300), ...(input.scope.enterpriseId === undefined ? {} : { enterpriseId: uuid(input.scope.enterpriseId) }) }, measurement,
     baseline: { state: input.baseline.state, description: text(input.baseline.description) }, responsible: text(input.responsible, 300),
@@ -243,7 +256,7 @@ export class StrategyGoalsStore {
     catch { fail('strategy_goals_write_unknown', 503); }
     finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
   }
-  private mutate<T extends GoalOperationReceipt['result']>(operationId: string, kind: GoalOperationReceipt['kind'], request: unknown, apply: (index: StoredIndex) => T): T {
+  private mutate<T extends GoalOperationReceipt['result']>(operationId: string, kind: GoalOperationReceipt['kind'], request: unknown, apply: (index: StoredIndex) => T, previousRequests: readonly unknown[] = []): T {
     uuid(operationId);
     this.directory(this.dataRoot, true); this.directory(this.root, true);
     const lock = path.join(this.root, '.write.lock'), token = randomUUID();
@@ -253,10 +266,12 @@ export class StrategyGoalsStore {
     const lockStat = fs.fstatSync(fd);
     try {
       fs.writeFileSync(fd, token); fs.fsyncSync(fd);
-      const index = this.load(true), requestHash = createHash('sha256').update(canonical({ kind, request })).digest('hex');
+      const index = this.load(true);
+      const fingerprint = (request: unknown) => createHash('sha256').update(canonical({ kind, request })).digest('hex');
+      const requestHash = fingerprint(request);
       const previous = index.operations.find(x => x.operationId === operationId);
       if (previous) {
-        if (previous.requestHash !== requestHash || previous.kind !== kind) fail('strategy_goal_operation_conflict', 409);
+        if (previous.kind !== kind || (previous.requestHash !== requestHash && !previousRequests.some(value => fingerprint(value) === previous.requestHash))) fail('strategy_goal_operation_conflict', 409);
         return structuredClone(previous.result) as T;
       }
       const result = apply(index);
@@ -286,6 +301,26 @@ export class StrategyGoalsStore {
     });
   }
   getOperation(id: string): GoalOperationReceipt | null { return structuredClone(this.load().operations.find(x => x.operationId === uuid(id)) ?? null); }
+  /** Resolve only the bodies actually returned by the immutable operation. */
+  operationContext(receipt:GoalOperationReceipt):GoalContextSnapshot[] {
+    const original=this.getOperation(receipt.operationId);
+    if(!original || canonical(receipt)!==canonical(original))return fail('strategy_goal_operation_changed',409);
+    const empty:GoalBasis={relations:[],feedback:[]};
+    const digest=(value:unknown)=>createHash('sha256').update(canonical(value)).digest('hex');
+    if(original.kind==='feedback'){
+      const feedback=original.result as GoalFeedback;
+      return [this.readContext([feedback.goal],{relations:[],feedback:[{id:feedback.id,createdAt:feedback.createdAt,sha256:digest(feedback)}]})];
+    }
+    if(original.kind==='relate' || original.kind==='revise-relation'){
+      const relation=original.result as GoalRelation;
+      return [...relation.history,relation].map(row=>{
+        const value={id:relation.id,...relationInput(row),revision:row.revision,createdAt:row.createdAt};
+        return this.readContext([row.from,row.to],{feedback:[],relations:[{id:value.id,revision:value.revision,sha256:digest(value)}]});
+      });
+    }
+    if(original.kind==='arrange')return [this.readContext([(original.result as GoalActionArrangement).goal],empty)];
+    return [{goals:[original.result as GoalVersion],basis:empty,relations:[],feedback:[]}];
+  }
   get(id: string): StrategyGoalRecord {
     const record = this.load().goals.find(x => x.id === uuid(id));
     return record ? structuredClone(record) : fail('strategy_goal_not_found', 404);
@@ -371,11 +406,20 @@ export class StrategyGoalsStore {
   }
   adopt(ref: GoalRef, input: GoalAdoptionInput): GoalVersion {
     uuid(input.operationId); positive(input.expectedVersion); uuid(ref.goalId); positive(ref.version);
+    if(input.expectedAdoptedVersion!==undefined && input.expectedAdoptedVersion!==null)positive(input.expectedAdoptedVersion);
     const decision = text(input.decision), provenance = input.provenance === undefined ? undefined : parseGoalAdoptionProvenance(input.provenance);
-    return this.mutate(input.operationId, 'adopt', { ref, expectedVersion: input.expectedVersion, decision, ...(provenance ? { provenance } : {}) }, index => {
+    const request = { ref: goalRef(ref), expectedVersion: input.expectedVersion, expectedAdoptedVersion: input.expectedAdoptedVersion, decision, provenance };
+    // Older discussion receipts fingerprinted the whole version as it was before the write.
+    const previousRequests: unknown[] = [];
+    if ('status' in ref) {
+      const { adoptedAt, adoptionDecision, adoptionProvenance, ...version } = ref as GoalVersion;
+      previousRequests.push({ ...request, ref }, { ...request, ref: { ...version, status: 'candidate' } });
+    }
+    return this.mutate(input.operationId, 'adopt', request, index => {
       const record = index.goals.find(x => x.id === ref.goalId);
       if (!record) fail('strategy_goal_not_found', 404);
       if (record.currentVersion !== input.expectedVersion) fail('strategy_goal_conflict', 409);
+      if(input.expectedAdoptedVersion!==undefined && record.adoptedVersion!==input.expectedAdoptedVersion)fail('strategy_goal_adoption_changed',409);
       const version = record.versions.find(x => x.version === ref.version);
       if (!version) fail('strategy_goal_version_not_found', 404);
       if (provenance && provenance.goalContentSha256 !== goalContentSha256(version)) fail('strategy_goal_content_changed', 409);
@@ -383,7 +427,7 @@ export class StrategyGoalsStore {
       version.status = 'adopted'; version.adoptedAt = new Date().toISOString(); version.adoptionDecision = decision;
       if (provenance) version.adoptionProvenance = provenance;
       record.adoptedVersion = version.version; return version;
-    });
+    }, previousRequests);
   }
   revise(id: string, input: GoalRevisionInput): GoalVersion {
     uuid(id); uuid(input.operationId); positive(input.expectedVersion);

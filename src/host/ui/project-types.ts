@@ -4,6 +4,7 @@ import type { RunDiagnostic } from '../../agent/run-diagnostics.ts';
 export type { PublicModelConfiguration };
 export type ProjectConfiguration = Omit<PublicModelConfiguration, 'hasApiKey'>;
 export type ClientTask = {
+  assignment?: import('../task-assignment.ts').TaskAssignment;
   id: string; name: string; draft: string; configuration: ProjectConfiguration;
   createdAt: string; updatedAt: string; sessionStorage: 'legacy' | 'task'; sessionFile?: string;
   archivedAt?: string | null;
@@ -17,6 +18,9 @@ export type ClientTask = {
   lastRun?: { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic };
 };
 export type ClientProject = {
+  goalOrigin?: {goal: import('../strategy-goals-types.ts').GoalRef};
+  stages?: import('../task-assignment.ts').ProjectStage[];
+  agreements?: import('../task-assignment.ts').ProjectAgreement[];
   schemaVersion: 2; id: string; name: string; configuration: ProjectConfiguration;
   rootPath: string; createdAt: string; updatedAt: string; archivedAt: string | null; tasks: ClientTask[];
   work?: ProjectWorkRecord | null; workUnavailable?: boolean;

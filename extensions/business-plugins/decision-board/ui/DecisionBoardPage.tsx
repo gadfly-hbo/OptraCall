@@ -47,7 +47,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
   const title = useRef<HTMLHeadingElement>(null);
   useEffect(() => { title.current?.focus(); }, []);
   useEffect(() => { if (initialReport) setProjectFilter(initialReport.projectId); }, [initialReport?.projectId, initialReport?.relativePath, initialReport?.reportSha256]);
-  useEffect(() => { if (initialReview) setReviewTarget({ taskId: initialReview.boardTaskId, revisionId: initialReview.feedbackRevisionId, selectedFile: initialReview.selectedFile, draftKey: initialReview.draftKey }); }, [initialReview?.draftKey]);
+  useEffect(() => { if (initialReview && !initialReview.openOriginal) setReviewTarget({ taskId: initialReview.boardTaskId, revisionId: initialReview.feedbackRevisionId, selectedFile: initialReview.selectedFile, draftKey: initialReview.draftKey }); }, [initialReview?.draftKey]);
 
   const load = useCallback(async () => {
     try { setBoard(await readBoard()); setLoadError(null); }
@@ -69,6 +69,22 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
     if (dismissTarget && !visibleItems.has(dismissTarget.id)) setDismissTarget(null);
     setFeedbackDrafts(old => Object.keys(old).some(id => !visibleTasks.has(id)) ? Object.fromEntries(Object.entries(old).filter(([id]) => visibleTasks.has(id))) : old);
   }, [board, feedbackTask, historyTask, taskTarget, dismissTarget]);
+
+  const openedOrigin = useRef('');
+  const [originalRevision,setOriginalRevision] = useState<string>();
+  useEffect(() => {
+    if (!board || !initialReview?.openOriginal || openedOrigin.current === initialReview.draftKey) return;
+    const item = board.items.find(i => i.tasks.some(t => t.id === initialReview.boardTaskId));
+    const task = item?.tasks.find(t => t.id === initialReview.boardTaskId);
+    openedOrigin.current = initialReview.draftKey;
+    if (!item || !task) { setError('原看板行动当前不可读。'); return; }
+    setProjectFilter(item.projectId);
+    if (initialReview.feedbackRevisionId) {
+      setOriginalRevision(initialReview.feedbackRevisionId); setHistoryTask(task);
+    } else {
+      requestAnimationFrame(() => document.getElementById('board-task-'+task.id)?.focus());
+    }
+  },[board,initialReview]);
 
   const run = async (key: string, operation: () => Promise<unknown>) => {
     if (pending) return;
@@ -94,7 +110,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
   const reviewTasks = adopted.flatMap(item => item.tasks.filter(task => task.status === 'done').map(task => ({ task, item })));
 
   const editFeedback = (task: BoardTaskView, item: BoardItemView) => { setFeedbackDrafts(old => old[task.id] ? old : { ...old, [task.id]: feedbackDraft(task) }); setFeedbackTask({ task, item }); };
-  const review = (task: BoardTaskView, revisionId: string | null = task.feedback?.revisionId ?? null) => { setReviewTarget({ taskId: task.id, revisionId }); setHistoryTask(null); };
+  const review = (task: BoardTaskView, revisionId: string | null = task.feedback?.revisionId ?? null) => { setReviewTarget({ taskId: task.id, revisionId }); setHistoryTask(null); setOriginalRevision(undefined); };
   if (reviewTarget) return <FeedbackReview key={reviewTarget.draftKey ?? `${reviewTarget.taskId}/${reviewTarget.revisionId ?? 'none'}`} boardTaskId={reviewTarget.taskId} feedbackRevisionId={reviewTarget.revisionId} selectedFile={reviewTarget.selectedFile} draftKey={reviewTarget.draftKey} onBack={() => setReviewTarget(null)} onOpenTask={onOpenFeedbackTask} />;
 
   return <div className="decision-page board-page">
@@ -163,7 +179,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
       <div className="decision-lane feedback">
         <div className="decision-lane-heading"><h3><span aria-hidden="true">↻</span>结果复盘</h3><span>{reviewTasks.length} 项任务已完成</span></div>
         {!reviewTasks.length ? <div className="board-lane-empty">可在执行中或完成后回录反馈；评分选填，效果未知也可复盘。</div>
-          : reviewTasks.map(({ task, item }) => <article className="decision-card" key={task.id}>
+          : reviewTasks.map(({ task, item }) => <article className="decision-card" key={task.id} id={'board-task-'+task.id} tabIndex={-1}>
             <div className="board-card-top"><span className="board-chip">任务{TASK_STATUS_LABEL[task.status]}</span>{task.feedback && <span className="board-chip run">反馈 v{task.feedback.revisionNumber} · {task.feedback.score == null ? '未评分' : `${task.feedback.score}/5（主观）`}</span>}</div>
             <h4>{task.title}</h4>
             <ActionAuthorityHistory task={task} />
@@ -180,7 +196,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
     {dismissTarget && <DismissDialog item={dismissTarget} error={error} onClose={() => setDismissTarget(null)} onSubmit={reason => run(`dismiss:${dismissTarget.id}`, async () => { await dismissItem(dismissTarget.id, reason); setDismissTarget(null); })} />}
     {taskTarget && <TaskDialog item={taskTarget} error={error} onClose={() => setTaskTarget(null)} onSubmit={input => run(`addtask:${taskTarget.id}`, async () => { await addTask(taskTarget.id, input); setTaskTarget(null); })} />}
     {feedbackTask && <FeedbackDialog busy={pending === `feedback:${feedbackTask.task.id}`} task={feedbackTask.task} draft={feedbackDrafts[feedbackTask.task.id]!} error={error} unknownOperation={unknownFeedback} onChange={draft => setFeedbackDrafts(old => ({ ...old, [feedbackTask.task.id]: draft }))} onClose={() => setFeedbackTask(null)} onAsk={() => { const task = feedbackTask.task; setFeedbackTask(null); review(task, null); }} onQuery={async () => { try { const result = await feedbackOperation(unknownFeedback!); if (result.feedback) { setFeedbackDrafts(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); setUnknownFeedbacks(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); setFeedbackTask(null); await load(); } else { setError('尚未查到原保存结果，输入与原意图保留。可明确继续同一保存，不会创建重复修订。'); setUnknownFeedbacks(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); } } catch { setError('原保存结果仍未知，请保留输入，不要另建保存意图。'); } }} onSubmit={async input => { if (pending) return; setPending(`feedback:${feedbackTask.task.id}`); setError(null); try { await saveFeedback(feedbackTask.task.id, input); setFeedbackDrafts(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); setFeedbackTask(null); await load(); } catch (caught) { if (!(caught instanceof BoardRequestError)) setUnknownFeedbacks(old => ({ ...old, [feedbackTask.task.id]: input.operationId })); setError(caught instanceof BoardRequestError ? caught.message : '保存结果未知。请先查询原保存意图，当前输入保留。'); } finally { setPending(null); } }} />}
-    {historyTask && <FeedbackHistory task={historyTask} onClose={() => setHistoryTask(null)} onReview={revisionId => review(historyTask, revisionId)} onOrganize={onOrganize ? (revisionId, kind) => { const item = board?.items.find(item => item.tasks.some(task => task.id === historyTask.id)); if (item) onOrganize({ ref: { type: 'feedback', sourceProjectId: item.projectId, boardTaskId: historyTask.id, feedbackRevisionId: revisionId }, kind }); } : undefined} disabled={projectArchived(items.find(item => item.tasks.some(task => task.id === historyTask.id))?.projectId ?? '')} />}
+    {historyTask && <FeedbackHistory task={historyTask} originalRevision={originalRevision} onClose={() => {setOriginalRevision(undefined); setHistoryTask(null);}} onReview={revisionId => review(historyTask, revisionId)} onOrganize={onOrganize ? (revisionId, kind) => { const item = board?.items.find(item => item.tasks.some(task => task.id === historyTask.id)); if (item) onOrganize({ ref: { type: 'feedback', sourceProjectId: item.projectId, boardTaskId: historyTask.id, feedbackRevisionId: revisionId }, kind }); } : undefined} disabled={projectArchived(items.find(item => item.tasks.some(task => task.id === historyTask.id))?.projectId ?? '')} />}
     {manualOpen && board && <ManualDialog error={error} projects={projects.filter(project => project.archivedAt === null)} onClose={() => setManualOpen(false)} onSubmit={input => run('manual', async () => { await addManualItem(input); setManualOpen(false); })} />}
   </div>;
 }
@@ -285,7 +301,7 @@ function ItemCard({ item, report, projectName: name, disabled, onAdopt, onDismis
         <p className="reasoning">{manual ? '补充说明' : '模型推导'}：{item.evidence.reasoning}</p>
       </> : <p className="reasoning">未记录证据与推导。</p>)}
     </details>
-    {onAddTask && item.tasks.length > 0 && <div className="board-tasks">{openTasks.map(task => <div className="board-task" key={task.id}>
+    {onAddTask && item.tasks.length > 0 && <div className="board-tasks">{openTasks.map(task => <div className="board-task" key={task.id} id={'board-task-'+task.id} tabIndex={-1}>
       <p className="task-title">{task.title}</p>
       <ActionAuthorityHistory task={task} />
       <p className="task-meta">{TASK_STATUS_LABEL[task.status]}{task.owner ? ` · ${task.owner}` : ''}{task.dueDate ? ` · 截止 ${task.dueDate}` : ''}</p>
@@ -359,9 +375,12 @@ function FeedbackDialog({ task, draft, error, busy, unknownOperation, onChange, 
   </BoardDialog>;
 }
 
-function FeedbackHistory({ task, disabled, onClose, onReview, onOrganize }: { task: BoardTaskView; disabled: boolean; onClose: () => void; onReview: (revisionId: string) => void; onOrganize?: (revisionId: string, kind: 'knowledge' | 'experience') => void }) {
+function FeedbackHistory({ task, originalRevision, disabled, onClose, onReview, onOrganize }: { task: BoardTaskView; originalRevision?: string; disabled: boolean; onClose: () => void; onReview: (revisionId: string) => void; onOrganize?: (revisionId: string, kind: 'knowledge' | 'experience') => void }) {
   const [revisions, setRevisions] = useState<TaskFeedbackRevision[]>([]), [error, setError] = useState<string | null>(null);
-  useEffect(() => { let live = true; void feedbackHistory(task.id).then(value => { if (live) setRevisions(value.revisions); }, fault => { if (live) setError(fault instanceof Error ? fault.message : '反馈历史暂未读取。'); }); return () => { live = false; }; }, [task.id]);
+  useEffect(() => { let live = true; void feedbackHistory(task.id).then(value => { if (live) {
+    const rows = originalRevision ? value.revisions.filter(r => r.revisionId === originalRevision) : value.revisions;
+    setRevisions(rows); if (originalRevision && !rows.length) setError('原反馈版本当前不可读。');
+  } }, fault => { if (live) setError(fault instanceof Error ? fault.message : '反馈历史暂未读取。'); }); return () => { live = false; }; }, [task.id, originalRevision]);
   return <BoardDialog title="已保存反馈历史" error={error} onClose={onClose}><p className="board-context-note">{task.title} · 旧覆盖内容不可恢复；首个已知版本不能证明更早没有反馈。</p><div className="feedback-history">{!revisions.length && !error && <p role="status">正在读取反馈历史…</p>}{[...revisions].reverse().map(value => <article key={value.revisionId} className="feedback-history-item"><h3>反馈 v{value.revisionNumber} · {value.adopted ? '按建议执行' : '未按原建议执行'}</h3><p className="board-context-note">{value.savedAt} · {effectLabel(value.effect)} · 主观评分 {value.score == null ? '未填' : `${value.score}/5`}（不代表验证）</p><p className="feedback-text">{value.outcome || '执行记录未提供'}</p><p className="feedback-text">{value.metricDelta || '指标变化未提供'}</p><p className="feedback-text">{value.review || '说明未提供'}</p>{value.origin === 'legacy-current' && <p className="board-context-note">旧系统首个已知版本。首次记录与当前正文时间可能不同，更早修订未知。</p>}<button type="button" className="secondary-button" disabled={disabled} onClick={() => onReview(value.revisionId)}>用此版本准备复盘</button>{onOrganize && <><button type="button" className="text-button" onClick={() => onOrganize(value.revisionId, 'knowledge')}>将此版本整理为知识</button><button type="button" className="text-button" onClick={() => onOrganize(value.revisionId, 'experience')}>将此版本整理为经验</button></>}</article>)}</div></BoardDialog>;
 }
 

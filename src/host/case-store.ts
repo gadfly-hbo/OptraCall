@@ -4,13 +4,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { CaseStoreError } from './case-types.ts';
 export { CaseStoreError } from './case-types.ts';
-import type { CaseDecisionDraftInput, CaseDecisionGovernanceInput, CaseDecisionOrigin, CaseDecisionRevision, CaseDecisionList, CaseDecisionListOptions, CaseDecisionWriteOptions, CaseStrategyChoice, CaseStrategyChoiceInput } from './case-decision-types.ts';
+import type { CaseDecisionIssue, CaseIssueReview, CaseIssueReply, CaseDecisionDraftInput, CaseDecisionGovernanceInput, CaseDecisionOrigin, CaseDecisionRevision, CaseDecisionList, CaseDecisionListOptions, CaseDecisionWriteOptions, CaseStrategyChoice, CaseStrategyChoiceInput } from './case-decision-types.ts';
 import { parseCaseDecisionDraft, parseCaseDecisionGovernance, parseCaseDecisionOrigin, parseCaseStrategyChoice } from './case-decision-validation.ts';
 import { parseUserQuoteProvenance, type UserQuoteProvenance } from '../agent/quoted-decisions.ts';
 import type { CaseRelationList, CaseRelationListOptions, CaseRelationRevision, CaseRelationWriteInput, CaseRelationSource } from './case-relation-types.ts';
 import { parseCaseRelationWrite, parseCaseRelationSource } from './case-relation-validation.ts';
 import type {
-  CaseStorageStatus, CaseRecord, CaseStatus, CaseGoalBindingInput, CaseGoalBinding, CaseProjectLink, ProjectWorkRecord, ProjectWorkInput,
+  CaseCreationSource, CaseStorageStatus, CaseRecord, CaseStatus, CaseGoalBindingInput, CaseGoalBinding, CaseProjectLink, ProjectWorkRecord, ProjectWorkInput,
   CaseArtifactRecord, ArtifactInput, ArtifactAdoption, WorkEvent, WorkEventType, OperationReceipt, CaseContextSelection, CaseContextSnapshot, CaseEnterpriseScopeOptions,
 } from './case-types.ts';
 
@@ -19,7 +19,10 @@ function goalBindingInput(value: CaseGoalBindingInput): CaseGoalBindingInput {
   const ref = (input: CaseGoalBindingInput['primary']) => ({ goalId: uuid(input?.goalId), version: revision(input?.version) });
   const primary = ref(value.primary), related = value.related.map(ref);
   if (new Set([primary, ...related].map(item => item.goalId)).size !== related.length + 1) fail('duplicate_case_goal');
-  return { primary, related };
+  const strategy = value.strategy === undefined ? undefined : text(value.strategy, 4000, true, true);
+  if (value.effectiveFrom !== undefined && (!/^\d{4}-\d{2}-\d{2}$/.test(value.effectiveFrom) ||
+      !Number.isFinite(Date.parse(value.effectiveFrom)) || new Date(value.effectiveFrom).toISOString().slice(0, 10) !== value.effectiveFrom)) fail('invalid_case_effective_date');
+  return { primary, related, ...(strategy ? { strategy } : {}), ...(value.effectiveFrom ? { effectiveFrom: value.effectiveFrom } : {}) };
 }
 const DATABASE = 'decision-cases.sqlite3', MARKER = 'decision-cases-store.json';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -574,7 +577,7 @@ export class CaseStore {
       const clean = parseCaseDecisionDraft({ operationId: row.operation_id, caseStoreId: this.decisionStoreId(), caseId: row.case_id, recordId: row.record_id, expectedRevision: Number(row.revision) - 1, kind: row.kind, payload: content.payload, references: JSON.parse(String(row.refs_json)), impactNotes: content.impactNotes, changeReason: content.changeReason }, lineage, 'record');
       if (!['active', 'archived'].includes(String(row.lifecycle)) || !Number.isFinite(Date.parse(String(row.created_at)))) fail('corrupt_case_decision', 503);
       const { expectedRevision: _expected, ...stored } = clean;
-      return { ...stored, payload: clean.payload as CaseDecisionRevision['payload'], recordId: String(row.record_id), revision: Number(row.revision), lifecycle: row.lifecycle as 'active' | 'archived', origin, createdAt: String(row.created_at) };
+      return { ...stored, ...(content.issueId === undefined ? {} : { issueId: uuid(content.issueId) }), payload: clean.payload as CaseDecisionRevision['payload'], recordId: String(row.record_id), revision: Number(row.revision), lifecycle: row.lifecycle as 'active' | 'archived', origin, createdAt: String(row.created_at) };
     } catch { return fail('corrupt_case_decision', 503); }
   }
   getDecision(caseId: string, recordId: string, exactRevision?: number): CaseDecisionRevision {
@@ -672,12 +675,22 @@ export class CaseStore {
     for (const impact of value.impactNotes) exact(impact.target);
   }
   saveDecisionDraft(input: CaseDecisionDraftInput, author: CaseDecisionOrigin, options?: CaseDecisionWriteOptions): CaseDecisionRevision {
+    if (author.actorKind !== 'agent') fail('agent_case_draft_required');
+    return this.writeDecisionDraft(input, author, options);
+  }
+  acceptIssuePlan(input: { caseId: string; issueId: string; operationId: string; source: CaseIssueReply; title: string; proposal: string }): CaseDecisionRevision {
+    const ref = input.source;
+    return this.writeDecisionDraft({ caseId: input.caseId, caseStoreId: this.decisionStoreId(), operationId: input.operationId, kind: 'strategy', expectedRevision: 0,
+      payload: { title: input.title, proposal: input.proposal }, references: [{ relation: 'derived_from', target: { type: 'source', source: ref }, note: null }] },
+      { actorKind: 'user', projectId: ref.projectId, taskId: ref.taskId, sessionId: ref.sessionId, requestId: null, toolCallId: null }, undefined, input.issueId);
+  }
+  private writeDecisionDraft(input: CaseDecisionDraftInput, author: CaseDecisionOrigin, options?: CaseDecisionWriteOptions, issueId?: string): CaseDecisionRevision {
     const clean = parseCaseDecisionDraft(input), origin = parseCaseDecisionOrigin(author);
-    if (origin.actorKind !== 'agent') fail('agent_case_draft_required');
-    const request = { ...clean, origin };
+    const request = { ...clean, origin, ...(issueId ? { issueId } : {}) };
     return this.operation('case_decision_save', request, clean.caseId, origin.projectId, () => {
       const caseStoreId = this.decisionStoreId(clean.caseStoreId); this.activeCase(clean.caseId);
       if (!this.linked(clean.caseId, origin.projectId!)) fail('project_not_linked', 409);
+      if (issueId) this.getDecisionIssue(clean.caseId, issueId);
       let recordId: string;
       if (clean.expectedRevision === 0) {
         if (clean.recordId !== undefined) fail('new_case_decision_id_is_host_owned');
@@ -688,12 +701,12 @@ export class CaseStore {
         if (before.revision !== clean.expectedRevision) fail('case_decision_revision_conflict', 409);
         if (before.kind !== clean.kind) fail('case_decision_kind_immutable', 409);
         if (before.lifecycle === 'archived') fail('case_decision_archived', 409);
-        recordId = before.recordId;
+        recordId = before.recordId; issueId = before.issueId;
       }
       const { expectedRevision: _expected, ...stored } = clean;
-      const result: CaseDecisionRevision = { ...stored, payload: clean.payload as CaseDecisionRevision['payload'], caseStoreId, recordId, revision: clean.expectedRevision + 1, lifecycle: 'active', origin, createdAt: now() };
+      const result: CaseDecisionRevision = { ...stored, ...(issueId ? { issueId } : {}), payload: clean.payload as CaseDecisionRevision['payload'], caseStoreId, recordId, revision: clean.expectedRevision + 1, lifecycle: 'active', origin, createdAt: now() };
       this.validateDecisionReferences(result);
-      this.insert('case_decision_revisions', { recordId, revision: result.revision, caseId: result.caseId, kind: result.kind, payloadJson: JSON.stringify({ payload: result.payload, impactNotes: result.impactNotes, changeReason: result.changeReason }), refsJson: JSON.stringify(result.references), originJson: JSON.stringify(origin), lifecycle: result.lifecycle, createdAt: result.createdAt, operationId: result.operationId });
+      this.insert('case_decision_revisions', { recordId, revision: result.revision, caseId: result.caseId, kind: result.kind, payloadJson: JSON.stringify({ issueId: result.issueId, payload: result.payload, impactNotes: result.impactNotes, changeReason: result.changeReason }), refsJson: JSON.stringify(result.references), originJson: JSON.stringify(origin), lifecycle: result.lifecycle, createdAt: result.createdAt, operationId: result.operationId });
       return result;
     }, { ...options, decisions: true });
   }
@@ -716,20 +729,57 @@ export class CaseStore {
       const normalized = parseCaseDecisionDraft({ operationId: clean.operationId, caseStoreId: clean.caseStoreId, caseId: clean.caseId, recordId: before.recordId, expectedRevision: before.revision, kind: before.kind, payload: before.payload, references, impactNotes: before.impactNotes, changeReason: reason }, lineage, 'record');
       const result: CaseDecisionRevision = { ...before, operationId: clean.operationId, revision: before.revision + 1, references: normalized.references, changeReason: reason, origin: { actorKind: 'user', projectId: null, taskId: null, requestId: null, sessionId: null, toolCallId: null }, lifecycle: clean.action === 'archive' ? 'archived' : 'active', createdAt: now() };
       this.validateDecisionReferences(result);
-      this.insert('case_decision_revisions', { recordId: result.recordId, revision: result.revision, caseId: result.caseId, kind: result.kind, payloadJson: JSON.stringify({ payload: result.payload, impactNotes: result.impactNotes, changeReason: result.changeReason }), refsJson: JSON.stringify(result.references), originJson: JSON.stringify(result.origin), lifecycle: result.lifecycle, createdAt: result.createdAt, operationId: result.operationId });
+      this.insert('case_decision_revisions', { recordId: result.recordId, revision: result.revision, caseId: result.caseId, kind: result.kind, payloadJson: JSON.stringify({ issueId: result.issueId, payload: result.payload, impactNotes: result.impactNotes, changeReason: result.changeReason }), refsJson: JSON.stringify(result.references), originJson: JSON.stringify(result.origin), lifecycle: result.lifecycle, createdAt: result.createdAt, operationId: result.operationId });
       return result;
     }, { ...options, decisions: true });
+  }
+  listDecisionIssues(caseId: string): CaseDecisionIssue[] {
+    this.getCase(caseId);
+    return this.getEvents('case', caseId).flatMap(event => event.changes.decisionIssue ? [event.changes.decisionIssue.after as CaseDecisionIssue] : []);
+  }
+  getDecisionIssue(caseId: string, issueId: string): CaseDecisionIssue {
+    const id = uuid(issueId);
+    return this.listDecisionIssues(caseId).find(issue => issue.id === id) ?? fail('case_issue_not_found', 404);
+  }
+  createDecisionIssue(input: Mutation & { title: string }): CaseDecisionIssue {
+    const clean = { operationId: uuid(input.operationId), caseId: uuid(input.caseId), expectedRevision: revision(input.expectedRevision), title: text(input.title, 240, true, true) };
+    const request = { ...clean, action: 'create-decision-issue' };
+    return this.operation('case_update', request, clean.caseId, null, () => {
+      const before = this.activeCase(clean.caseId, clean.expectedRevision), createdAt = now();
+      const issue = { id: randomUUID(), caseId: before.id, title: clean.title, createdAt };
+      const after = { ...before, revision: before.revision + 1, updatedAt: createdAt };
+      this.put('cases', 'id', after);
+      this.event('case', before.id, after.revision, 'case_updated', clean.operationId, { decisionIssue: { before: null, after: issue } }, createdAt);
+      return issue;
+    }, { decisions: true });
+  }
+  saveIssueReview(input: Omit<CaseIssueReview, 'createdAt'> & { expectedRevision: number }, observedAuthorizationId?: string): CaseIssueReview {
+    const clean = { ...input, judgement: text(input.judgement, 4000, true, true), nextStep: text(input.nextStep, 4000, true, true), observation: text(input.observation, 4000, true, true) };
+    const request = { ...clean, action: 'review-decision-round' };
+    return this.operation('case_update', request, input.caseId, input.reply.projectId, () => {
+      const before = this.activeCase(input.caseId, input.expectedRevision), createdAt = now();
+      this.getDecisionIssue(input.caseId, input.issueId);
+      const choice = this.getStrategyChoice(input.caseId, input.choiceId);
+      if (choice.issueId !== input.issueId || !this.linked(before.id, input.reply.projectId)) fail('case_issue_scope_mismatch', 409);
+      if (this.getEvents('case', before.id).some(e => (e.changes.issueReview?.after as CaseIssueReview | undefined)?.choiceId === choice.choiceId)) fail('case_round_already_reviewed', 409);
+      const { expectedRevision: _, ...fields } = clean;
+      const review = { ...fields, createdAt, ...(fields.feedback && observedAuthorizationId ? {feedback:{...fields.feedback,authorizationId:uuid(observedAuthorizationId)}} : {}) };
+      const after = { ...before, revision: before.revision + 1, updatedAt: createdAt };
+      this.put('cases', 'id', after);
+      this.event('case', before.id, after.revision, 'case_updated', input.operationId, { issueReview: { before: null, after: review } }, createdAt);
+      return review;
+    }, { decisions: true });
   }
   private strategyChoiceEvent(caseId: string, event: WorkEvent): CaseStrategyChoice {
       try {
         const after = event.changes.choice?.after as Record<string, unknown>, before = event.changes.choice?.before as Record<string, unknown> | null;
-        const parsed = parseCaseStrategyChoice({ operationId: event.operationId, caseStoreId: this.decisionStoreId(), caseId, strategyRef: after.strategyRef, choice: after.choice, reason: after.reason, expectedPreviousChoiceId: before?.choiceId ?? null });
+        const parsed = parseCaseStrategyChoice({ operationId: event.operationId, caseStoreId: this.decisionStoreId(), caseId, strategyRef: after.strategyRef, choice: after.choice, reason: after.reason, issueId: after.issueId, expectedPreviousChoiceId: before?.choiceId ?? null });
         if (event.actorKind !== 'user' || parsed.strategyRef.caseId !== caseId || parsed.strategyRef.caseStoreId !== parsed.caseStoreId) fail('corrupt_case_choice', 503);
         const quoteProvenance = after.quoteProvenance === undefined ? undefined : parseUserQuoteProvenance(after.quoteProvenance);
-        return { choiceId: event.id, caseId, strategyRef: parsed.strategyRef, choice: parsed.choice, reason: parsed.reason, previousChoiceId: parsed.expectedPreviousChoiceId, operationId: event.operationId, occurredAt: event.occurredAt, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
+        return { choiceId: event.id, caseId, ...(parsed.issueId ? { issueId: parsed.issueId, goalBinding: after.goalBinding as CaseGoalBinding | null } : {}), strategyRef: parsed.strategyRef, choice: parsed.choice, reason: parsed.reason, previousChoiceId: parsed.expectedPreviousChoiceId, operationId: event.operationId, occurredAt: event.occurredAt, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
       } catch { return fail('corrupt_case_choice', 503); }
   }
-  private getStrategyChoices(caseId: string): CaseStrategyChoice[] {
+  getStrategyChoices(caseId: string): CaseStrategyChoice[] {
     return this.getEvents('case', caseId).filter(event => event.eventType === 'case_strategy_choice').map(event => this.strategyChoiceEvent(caseId, event));
   }
   chooseStrategy(input: CaseStrategyChoiceInput, options?: CaseDecisionWriteOptions & { quoteProvenance?: UserQuoteProvenance }): CaseStrategyChoice {
@@ -742,16 +792,19 @@ export class CaseStore {
       const exact = this.getDecision(clean.caseId, target.recordId, target.revision), current = this.getDecision(clean.caseId, target.recordId);
       if (exact.kind !== 'strategy') fail('case_choice_requires_strategy');
       if (current.lifecycle === 'archived') fail('case_decision_archived', 409);
-      const previous = this.getStrategyChoices(clean.caseId).filter(choice => choice.strategyRef.recordId === target.recordId).at(-1) ?? null;
+      if (clean.issueId) this.getDecisionIssue(clean.caseId, clean.issueId);
+      if (exact.issueId && exact.issueId !== clean.issueId) fail('case_issue_scope_mismatch', 409);
+      const ownership = clean.issueId ? { issueId: clean.issueId, goalBinding: this.getGoalBinding(clean.caseId) } : {};
+      const previous = this.getStrategyChoices(clean.caseId).filter(choice => clean.issueId ? choice.issueId === clean.issueId : !choice.issueId && choice.strategyRef.recordId === target.recordId).at(-1) ?? null;
       if ((previous?.choiceId ?? null) !== clean.expectedPreviousChoiceId) fail('case_choice_conflict', 409);
       if (!clean.allowHistorical && current.revision !== exact.revision) fail('case_decision_revision_conflict', 409);
       const time = now(), core = { ...before, revision: before.revision + 1, updatedAt: time };
       this.put('cases', 'id', core);
       const choiceId = this.event('case', core.id, core.revision, 'case_strategy_choice', clean.operationId, {
         choice: { before: previous ? { choiceId: previous.choiceId, strategyRef: previous.strategyRef, choice: previous.choice, reason: previous.reason } : null,
-          after: { strategyRef: target, choice: clean.choice, reason: clean.reason, ...(quoteProvenance ? { quoteProvenance } : {}) } },
+          after: { ...ownership, strategyRef: target, choice: clean.choice, reason: clean.reason, ...(quoteProvenance ? { quoteProvenance } : {}) } },
       }, time);
-      return { choiceId, caseId: core.id, strategyRef: target, choice: clean.choice, reason: clean.reason, previousChoiceId: previous?.choiceId ?? null, operationId: clean.operationId, occurredAt: time, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
+      return { choiceId, caseId: core.id, ...ownership, strategyRef: target, choice: clean.choice, reason: clean.reason, previousChoiceId: previous?.choiceId ?? null, operationId: clean.operationId, occurredAt: time, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
     }, { ...options, decisions: true });
   }
   private event(subjectType: 'case' | 'project', subjectId: string, revisionNumber: number, eventType: WorkEventType, operationId: string, delta: WorkEvent['changes'], time: string, note: Note | null = null, originCaseId: string | null = null) {
@@ -766,12 +819,12 @@ export class CaseStore {
     this.database().exec(`${GOALS_SCHEMA} PRAGMA user_version=4;`);
     this.validateDatabase(this.readMarker());
   }
-  getGoalBinding(caseId: string): CaseGoalBinding | null {
-    this.getCase(caseId);
-    if (Number(this.database().prepare('PRAGMA user_version').get()?.user_version) < 4) return null;
-    const row = this.database().prepare('SELECT * FROM case_goal_bindings WHERE case_id=? ORDER BY case_revision DESC LIMIT 1').get(caseId);
-    if (!row) return null;
-    return { ...goalBindingInput(JSON.parse(String(row.binding_json))), caseId, caseRevision: Number(row.case_revision), confirmedAt: String(row.confirmed_at), operationId: String(row.operation_id) };
+  getGoalBinding(caseId: string, asOf = new Date(), throughRevision = Infinity): CaseGoalBinding | null {
+    // Local business dates follow the same timezone as the Host's date input.
+    const day = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+    const start = (binding: CaseGoalBinding) => binding.effectiveFrom ?? day(new Date(binding.confirmedAt));
+    const usable = this.getGoalBindingHistory(caseId).filter(binding => binding.caseRevision <= throughRevision && start(binding) <= day(asOf));
+    return usable.sort((a, b) => start(a).localeCompare(start(b)) || a.caseRevision - b.caseRevision).at(-1) ?? null;
   }
   getGoalBindingHistory(caseId: string): CaseGoalBinding[] {
     this.getCase(caseId);
@@ -782,7 +835,8 @@ export class CaseStore {
     const binding = goalBindingInput(input), clean = { operationId: uuid(input.operationId), caseId: uuid(input.caseId), expectedRevision: revision(input.expectedRevision), ...binding };
     return this.operation('case_update', clean, clean.caseId, null, () => {
       const before = this.activeCase(clean.caseId, clean.expectedRevision), previous = this.getGoalBinding(clean.caseId);
-      if (previous && canonical({ primary: previous.primary, related: previous.related }) === canonical(binding)) return previous;
+      if (binding.effectiveFrom && this.getGoalBindingHistory(clean.caseId).some(item => item.effectiveFrom === binding.effectiveFrom)) fail('case_effective_date_in_use', 409);
+      if (previous && canonical(goalBindingInput(previous)) === canonical(binding)) return previous;
       const time = now(), updated = { ...before, revision: before.revision + 1, updatedAt: time };
       this.put('cases', 'id', updated);
       this.writeGoalBinding(before.id, updated.revision, binding, time, clean.operationId);
@@ -816,18 +870,19 @@ export class CaseStore {
     this.put('cases', 'id', record); this.event('case', record.id, record.revision, eventType, operationId, delta, time, note);
     return record;
   }
-  createCase(input: { operationId: string; title: string; description?: string; judgement?: string; nextStep?: string; status?: CaseStatus; goalBinding?: CaseGoalBindingInput }, scope?: CaseEnterpriseScopeOptions): CaseRecord {
+  createCase(input: { operationId: string; title: string; description?: string; judgement?: string; nextStep?: string; status?: CaseStatus; goalBinding?: CaseGoalBindingInput; creationSource?: CaseCreationSource }, scope?: CaseEnterpriseScopeOptions): CaseRecord {
     const clean = { operationId: input.operationId, title: text(input.title, 80, true, true, true), description: text(input.description ?? '', 20000), judgement: text(input.judgement ?? '', 20000), nextStep: text(input.nextStep ?? '', 5000), status: input.status ?? 'pending' };
     if (!(activeStatuses as readonly string[]).includes(clean.status)) fail('invalid_case_status');
     const binding = input.goalBinding === undefined ? undefined : goalBindingInput(input.goalBinding);
-    const request = binding ? { ...clean, goalBinding: binding } : clean;
+    const request = { ...clean, ...(binding ? { goalBinding: binding } : {}), ...(input.creationSource ? { creationSource: input.creationSource } : {}) };
     return this.operation('case_create', request, null, null, () => {
+      if (binding?.strategy && this.database().prepare("SELECT 1 FROM case_goal_bindings WHERE json_extract(binding_json,'$.primary.goalId')=? AND json_extract(binding_json,'$.primary.version')=? AND json_extract(binding_json,'$.strategy')=? LIMIT 1").get(binding.primary.goalId, binding.primary.version, binding.strategy)) fail('case_goal_strategy_already_used', 409);
       const time = now(), record: CaseRecord = { id: randomUUID(), ...clean, closeReason: null, closedAt: null, revision: 1, createdAt: time, updatedAt: time };
       const { operationId: _operationId, ...saved } = record as CaseRecord & { operationId: string };
       this.insert('cases', saved);
       if (binding) this.writeGoalBinding(saved.id, 1, binding, time, clean.operationId);
       this.database().prepare('UPDATE operation_receipts SET case_id=? WHERE operation_id=?').run(saved.id, clean.operationId);
-      this.event('case', saved.id, 1, 'case_created', clean.operationId, changes({}, binding ? { ...saved, goalBinding: binding } : saved), time);
+      this.event('case', saved.id, 1, 'case_created', clean.operationId, changes({}, { ...saved, ...(binding ? { goalBinding: binding } : {}), ...(input.creationSource ? { creationSource: input.creationSource } : {}) }), time);
       return saved;
     }, { ...scope, goals: Boolean(binding) });
   }

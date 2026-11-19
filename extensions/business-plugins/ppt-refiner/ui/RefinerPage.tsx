@@ -1,3 +1,4 @@
+import { ConversationDrawer } from "../../../../src/host/ui/ConversationDrawer.tsx";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VersionEntry } from '../types.ts';
 import { createDeck, listDecks, readDeck, setPageLock, revertDeck, exportDeck, runTurn, stopPendingTurn, renderDeck, readImage, RefinerRequestError, type DeckSummary, type DeckView, type RefinerSource, type TurnResult } from './refiner-client.ts';
@@ -242,7 +243,7 @@ function RefinerWorkbench({ view, refresh, onBack, onNavigationGuard }: {
       setBusy(true); try { await readBack(); } catch (reason) { setError('后台状态尚未确认：' + errorText(reason)); } finally { setBusy(false); }
     }}>核对后台状态</button></div>}
     {!imageInputSupported && <p className="refiner-note" role="status">项目模型不支持图像输入，视觉自检不可用。{!contentBlocked && '仍可进行文字编辑和只读文本检查。'}</p>}
-    {error && <p className="refiner-error" role="alert">{error}</p>}
+
     {exportInfo && <p className="refiner-export-info" role="status">{exportInfo}</p>}
     <div className="refiner-body">
       <aside className="refiner-grid" aria-label="页网格">
@@ -264,6 +265,8 @@ function RefinerWorkbench({ view, refresh, onBack, onNavigationGuard }: {
         <p className="refiner-note">锚点报告：{view.meta.sourceReport.split('/').at(-1)} · 不自动改写</p>
       </section>
       <section className="refiner-chat" aria-label="精修对话">
+        <ConversationDrawer title="PPT 精修 Agent" className="workspace-refiner-conversation">
+    {error && <p className="refiner-error" role="alert">{error}</p>}
         <div className="chat-log" role="log" aria-live="polite">{chat.map((message, index) => <div key={index} className={'msg ' + message.who}><span className="who">{message.who === 'user' ? '我' : 'Agent · 精修会话'}</span><p>{message.text}</p>{message.note && <p className="msg-note">{message.note}</p>}</div>)}</div>
         {locked && <p className="refiner-note" id="refiner-lock-help">本页已锁定，本次仅作只读问答或检查；修改前请先解锁。</p>}
         <form className="chat-input-row" onSubmit={event => { event.preventDefault(); executeTurn(input, locked || inspectOnly ? 'inspect' : 'edit'); }}>
@@ -272,6 +275,7 @@ function RefinerWorkbench({ view, refresh, onBack, onNavigationGuard }: {
           {running && <button type="button" className="secondary-button" disabled={stopping} onClick={() => { void stop(); }}>{stopping ? '正在停止…' : '停止'}</button>}
         </form>
         <label className="refiner-inspect-option"><input type="checkbox" checked={locked || inspectOnly} disabled={writeBusy || contentBlocked || locked} onChange={event => setInspectOnly(event.target.checked)} />只读检查，不修改内容</label>
+        </ConversationDrawer>
         <div className="diff-panel"><h2>历史改动记录</h2><p className="refiner-note">包含历史版本；终版实际采用范围以导出差异清单为准。</p>{diffs.length ? diffs.map((diff, index) => <div key={index} className="diff-item"><strong>P{diff.page}</strong><span>v{diff.version} · {diff.kind} · {diff.summary}（锚点 {diff.anchor}）</span></div>) : <p className="refiner-note">暂无已记录差异；旧历史未核定不代表无差异。</p>}</div>
       </section>
     </div>

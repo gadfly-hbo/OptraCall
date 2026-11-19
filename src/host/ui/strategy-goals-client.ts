@@ -1,9 +1,10 @@
-import type { GoalAdoptionInput, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRevisionInput, GoalVersion, StrategyGoalsIndex } from '../strategy-goals-types.ts';
+import type { GoalAdoptionInput, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRevisionInput, GoalVersion, StrategyGoalsIndex, StrategyGoalRecord } from '../strategy-goals-types.ts';
 import type { StrategyGoalSourceDirectory } from '../strategy-goal-sources.ts';
 import { metricRequest, type LibraryEntry } from '../../../extensions/business-plugins/metric-factory/ui/MetricFactoryPage.tsx';
 export type { LibraryEntry } from '../../../extensions/business-plugins/metric-factory/ui/MetricFactoryPage.tsx';
 
 const messages: Record<string, string> = {
+  strategy_goal_adoption_changed: '当前采用版已改变，请核对最新 G 与 S 后再确认。',
   strategy_goal_conflict: '目标已有新版本，请保留输入，刷新核对后再修订。',
   strategy_goal_relation_conflict: '目标关系已更新，请刷新并核对当前职责和依据。',
   strategy_goal_operation_conflict: '原操作内容不一致，请先核对已保存结果。',
@@ -28,6 +29,7 @@ async function request<T>(route = '', method = 'GET', input?: unknown): Promise<
   return value as T;
 }
 const goalPath = (id: string) => `goals/${encodeURIComponent(id)}`;
+export const readGoal = (id:string) => request<{goal:StrategyGoalRecord}>(goalPath(id));
 export const list = () => request<StrategyGoalsIndex>('goals');
 export const feedbackSources = () => request<StrategyGoalSourceDirectory>('sources');
 export async function publishedMetrics(): Promise<LibraryEntry[]> {
@@ -43,3 +45,5 @@ export const reviseRelation = (id: string, input: GoalRelationRevisionInput) => 
 export const feedback = (input: GoalFeedbackInput & GoalMutation) => request<{ feedback: GoalFeedback }>('feedback', 'POST', input);
 export const operation = (id: string) => request<{ operation: GoalOperationReceipt | null }>(`operations/${encodeURIComponent(id)}`);
 export const goalError = (error: unknown) => error instanceof StrategyGoalsRequestError ? error.message : '请求结果尚未核实，请保留输入并核对原操作。';
+
+export const versionArrangements = (goal: GoalRef) => request<{arrangements:import('../strategy-goals-types.ts').GoalArrangementView[]}>(goalPath(goal.goalId) + '/versions/' + goal.version + '/arrangements');

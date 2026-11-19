@@ -17,6 +17,8 @@ export interface StrategyDiscussionSourceContext {
   metadataOnly?: boolean;
   /** Actual downstream owner, supplied by Host rather than a source locator. */
   receivingTask?: { projectId: string; taskId: string };
+  receivingProjectId?: string;
+  receivingGoal?: import('./strategy-goals-types.ts').GoalRef;
 }
 export interface StrategyDiscussionSourceRead { source: StrategyDiscussionSource; text: string; range: { start: number; end: number; total: number }; complete: boolean }
 export class StrategyDiscussionSourceFault extends Error {
@@ -239,9 +241,13 @@ export function createStrategyDiscussionSources<Configuration>(options: Strategy
           result.push(value);
         }
       }
-      for (const value of result) await qualify(discussion, configuration, value.target, context);
+      const authorized: StrategyDiscussionSource[] = [];
+      for (const value of result) {
+        try { await qualify(discussion, configuration, value.target, context); authorized.push(value); }
+        catch (error) { if (!(error instanceof StrategyDiscussionSourceFault && error.status === 403)) throw error; }
+      }
       await qualify(discussion, configuration, { kind: 'project-catalog', projectId }, context);
-      return result;
+      return authorized;
     },
     async read(value: StrategyDiscussionSource, discussion: StrategyDiscussion, configuration: Configuration, context: StrategyDiscussionSourceContext, page: { offset?: number; limit?: number } = {}): Promise<StrategyDiscussionSourceRead> {
       check(context);

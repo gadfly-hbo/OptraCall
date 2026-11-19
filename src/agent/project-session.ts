@@ -1,5 +1,8 @@
+import { taskSourceDeliveryType, taskSourceDeliveryDetails, tracksTaskSource } from './task-source-delivery.ts';
+import { packageIdentity } from './skill-catalog.ts';
+import { taskPurpose, approvedTaskSkills } from '../host/task-assignment.ts';
 import {goalContextSourceTool} from './goal-context-source.ts';
-import { strategyDiscussionTool, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
+import { strategyDiscussionTool, projectDiscussionSourceTool, editableGoalTool, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
 import { methodIssueTool } from './method-issue.ts';
 import { quotedDecisionTool } from './quoted-decisions.ts';
 import type { AnalysisDeliveryReceipt } from '../host/analysis-delivery.ts';
@@ -382,6 +385,11 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     const studioReader = o.studioReadEnabled && !o.workspace && (!o.protectedExecution || ordinaryManaged());
     const studioWriter = !o.protectedExecution && o.studioEnabled;
     const dbLinkAvailable = Boolean(o.dbLinkEnabled && !o.workspace && (!o.protectedExecution || ordinaryManaged()) && o.projectId && o.taskId);
+    const recordSourceDelivery = (native:SessionManager, current:ActiveRun, name:string, toolCallId:string, details:unknown) => {
+      if (!o.taskId || o.workspace || !tracksTaskSource(name)) return;
+      native.appendCustomEntry(taskSourceDeliveryType, {version:1,projectId:o.projectId,taskId:o.taskId,
+        sessionId:native.getSessionId(),requestId:current.id,toolCallId,name,details:taskSourceDeliveryDetails(name,details)});
+    };
     const createBoundDbLinkTools = (boundManager: SessionManager, allowed: readonly DbLinkToolName[] = DB_LINK_TOOL_NAMES,
       qualify?: (ctx: ExtensionToolContext, signal: AbortSignal) => () => boolean, namespace = '') => {
       const boundSessionId = boundManager.getSessionId();
@@ -395,6 +403,8 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         assertCurrent();
         const value = await requestHostTool({ feature: 'db-link', action, input, toolCallId: namespace ? `${namespace}/${toolCallId}` : toolCallId, requestId: originalRun!.id, sessionId: boundSessionId }, signal, 'db_link_run_unavailable') as DbLinkToolResult;
         assertCurrent();
+        const dbNames = {'sources':'db_sources','describe':'db_describe','query':'db_query','read-result':'db_result','save-description':'db_save_description'} as const;
+        recordSourceDelivery(boundManager,originalRun!,dbNames[action],namespace ? namespace+'/'+toolCallId : toolCallId,value.details);
         return value;
       }, allowed) : [];
     };
@@ -440,7 +450,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           const errorCode = feature === 'method-issue' ? 'method_issue_run_unavailable' : feature === 'quoted-decisions' ? 'quoted_decision_run_unavailable' : feature === 'analysis-delivery' ? 'analysis_delivery_run_unavailable' : feature === 'project-task-results' ? 'project_task_results_run_unavailable' : feature === 'project-files' ? 'project_files_run_unavailable' : feature === 'studio' ? 'studio_run_unavailable' : feature === 'sap-method-source' ? 'sap_method_source_run_unavailable' : feature === 'case-decisions' ? 'case_decision_run_unavailable' : feature === 'case-relations' ? 'case_relation_run_unavailable' : feature === 'case-sources' ? 'case_sources_run_unavailable' : feature === 'semantic-context' ? 'semantic_context_run_unavailable' : 'personal_context_run_unavailable';
           const { action: sourceAction, ...sourceInput } = parameters;
           if (feature === 'quoted-decisions' && (!['read', 'choose-strategy', 'authorize-action', 'record-feedback', 'arrange-actions'].includes(String(sourceAction)) || !['read', 'arrange-actions'].includes(String(sourceAction)) && !(sourceAction === 'authorize-action' && sourceInput.decision === 'revoke') && !(originalRun?.providedContext?.case as {operationId?:string} | undefined)?.operationId)) throw new Error('quoted_decision_run_unavailable');
-          if (feature === 'project-task-results' && (!['find', 'read'].includes(String(sourceAction)) || !originalRun?.providedContext?.projectPlan)) throw new Error('project_task_results_run_unavailable');
+          if (feature === 'project-task-results' && (!['find', 'read'].includes(String(sourceAction)) || !(originalRun?.providedContext?.projectPlan || (originalRun?.providedContext?.taskAssignment as ProvidedContextInput['taskAssignment'])?.sources?.length))) throw new Error('project_task_results_run_unavailable');
           if (feature === 'case-sources' && !['find', 'read'].includes(String(sourceAction))) throw new Error('invalid_case_sources_action');
           if (feature === 'studio' && !((studioWriter ? STUDIO_ACTIONS : STUDIO_READ_ACTIONS) as readonly string[]).includes(String(sourceAction))) throw new Error('invalid_studio_action');
           const hasInputAction = feature === 'quoted-decisions' || feature === 'project-task-results' || feature === 'studio' || feature === 'sap-method-source' || feature === 'case-sources' || feature === 'semantic-context' && action === 'read';
@@ -460,6 +470,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           const maximumContent = feature === 'project-files' ? 64 * 1024 : 32_768;
           if (Buffer.byteLength(JSON.stringify(value), 'utf8') > 256 * 1024 || !Array.isArray(value.content) || value.content.some(part => part.type !== 'text' || typeof part.text !== 'string') || value.content.reduce((n, part) => n + part.text.length, 0) > maximumContent) throw new Error('personal_context_payload_limit');
           if (feature === 'semantic-context' && sourceAction === 'graph' && value.content.reduce((bytes, part) => bytes + Buffer.byteLength(part.text, 'utf8'), 0) > 24 * 1024) throw new Error('semantic_graph_payload_limit');
+          recordSourceDelivery(boundManager,originalRun!,definition.name,toolCallId,value.details);
           if (feature === 'method-issue') boundManager.appendCustomEntry('optracall.method-issue', redact(value.details));
           if (feature === 'quoted-decisions') boundManager.appendCustomEntry('optracall.quoted-decision', redact(value.details));
           if (feature === 'analysis-delivery') {
@@ -681,7 +692,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     }
     const scopeToolContexts = Boolean(o.goalContextSourceEnabled || strategyDiscussion() || candidateAvailable || dbLinkAvailable || o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
     const createStrategyTools = (boundManager: SessionManager) => !strategyDiscussion() || !o.strategyDiscussionEnabled ? [] : [{
-      ...strategyDiscussionTool,
+      ...(o.workspace?.discussionTools === 'project-sources' ? projectDiscussionSourceTool : o.workspace?.discussionTools === 'goal-draft' ? editableGoalTool : strategyDiscussionTool),
       execute: async (toolCallId:string, parameters:Record<string,unknown>, signal:AbortSignal|undefined, _update:unknown, ctx:ExtensionToolContext) => {
         const originalRun=run,boundSessionId=boundManager.getSessionId();
         const assertCurrent=()=>{if(!originalRun || run!==originalRun || originalRun.cancelled || originalRun.kind!=='prompt' || closing || !signal || signal.aborted || manager!==boundManager || session?.sessionManager!==boundManager || ctx.sessionManager!==boundManager || !toolCallId.trim())throw new Error('strategy_discussion_run_unavailable');};
@@ -694,7 +705,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     }];
     const createGoalContextTools=(boundManager:SessionManager)=>!o.goalContextSourceEnabled || o.workspace || !o.projectId || !o.taskId || o.protectedExecution&&!ordinaryManaged()?[]:[{...goalContextSourceTool,execute:async(toolCallId:string,input:Record<string,unknown>,signal:AbortSignal|undefined,_update:unknown,ctx:ExtensionToolContext)=>{
       const current=run,boundSessionId=boundManager.getSessionId();const assertCurrent=()=>{if(!current||run!==current||current.kind!=='prompt'||current.cancelled||closing||!signal||signal.aborted||manager!==boundManager||session?.sessionManager!==boundManager||ctx.sessionManager!==boundManager||!toolCallId.trim())throw new Error('goal_context_source_unavailable');};
-      assertCurrent();const result=await requestHostTool({feature:'goal-context-source',action:'read',input,toolCallId,requestId:current!.id,sessionId:boundSessionId},signal!,'goal_context_source_unavailable');assertCurrent();return result as {content:{type:'text';text:string}[];details:Record<string,unknown>};
+      assertCurrent();const result=await requestHostTool({feature:'goal-context-source',action:'read',input,toolCallId,requestId:current!.id,sessionId:boundSessionId},signal!,'goal_context_source_unavailable');assertCurrent();recordSourceDelivery(boundManager,current!,goalContextSourceTool.name,toolCallId,(result as {details:unknown}).details);return result as {content:{type:'text';text:string}[];details:Record<string,unknown>};
     }}];
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
       let parent: AgentSession;
@@ -736,7 +747,21 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           return enabled ? { systemPrompt: event.systemPrompt + '\n' + reportCalculationGuidance } : undefined;
         });
       }] : [];
-      const projectInstructions = () => [projectSystemPrompt(targetCwd, path.join(o.projectDirectory!, '060_reports'), dbLinkAvailable), OUTPUT_EVIDENCE_GUIDANCE, ...(o.analysisDeliveryEnabled ? [ANALYSIS_DELIVERY_GUIDANCE] : [])];
+      const selectedTaskSkills = (skills: Parameters<typeof snapshotProtectedSkills>[0]) => {
+        if (!o.assignment) return [...skills];
+        const { type, skill } = o.assignment;
+        const matching = skills.filter(item => item.name === taskPurpose[type].skill);
+        if (!skill) return skills.filter(item => item.name !== taskPurpose[type].skill);
+        const fixed = approvedTaskSkills[type];
+        if (!fixed || fixed.sha256 !== skill.sha256 || fixed.version !== skill.version || matching.length !== 1 || path.resolve(matching[0]!.filePath) !== path.join(analysisAssetsDir, skill.id, 'SKILL.md') || packageIdentity(matching[0]!.filePath) !== skill.sha256) throw new Error('task_skill_version_changed');
+        return [...skills];
+      };
+      const taskInstruction = () => {
+        if (!o.assignment) return [];
+        const { type, skill } = o.assignment, purpose = taskPurpose[type];
+        return ['当前委托为' + purpose.label + ' Task。按业务需要交付' + purpose.deliverable + '。' + (skill ? '当前用户启用 ' + skill.id + ' ' + skill.version + '，请从 Pi 提供的准确入口读取并按适用契约工作。' : '本任务未启用类型默认 Skill。')];
+      };
+      const projectInstructions = () => [...taskInstruction(), projectSystemPrompt(targetCwd, path.join(o.projectDirectory!, '060_reports'), dbLinkAvailable), OUTPUT_EVIDENCE_GUIDANCE, ...(o.analysisDeliveryEnabled ? [ANALYSIS_DELIVERY_GUIDANCE] : [])];
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: { ...(contextAdapter ? { extensionsOverride: contextAdapter.extensionsOverride } : {}), ...(fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
@@ -751,7 +776,8 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         extensionFactories: [createToolSearchExtension(), ...searchExtensions, ...reportReviewExtensions, environmentExtension],
         additionalSkillPaths: [analysisAssetsDir],
         skillsOverride: (base: { skills: Parameters<typeof snapshotProtectedSkills>[0]; diagnostics: any[] }) => {
-          const snapshot = o.protectedExecution?.skillRoot ? snapshotProtectedSkills(base.skills, o.protectedExecution.skillRoot) : { skills: [], unavailable: [] };
+          const snapshot = o.protectedExecution?.skillRoot ? snapshotProtectedSkills(selectedTaskSkills(base.skills), o.protectedExecution.skillRoot) : { skills: [], unavailable: [] };
+          if (o.assignment?.skill && !snapshot.skills.some(skill => skill.name === o.assignment!.skill!.id)) throw new Error('task_skill_unavailable');
           unavailableSkills = snapshot.unavailable;
           return { skills: snapshot.skills, diagnostics: [...base.diagnostics, ...snapshot.unavailable.map(name => ({ type: 'warning' as const, message: `Skill unavailable in protected execution: ${name}` }))] };
         },
@@ -760,6 +786,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       } : {
         extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), mcpExtension!, ...searchExtensions, ...reportReviewExtensions, environmentExtension],
         additionalSkillPaths: [analysisAssetsDir],
+        ...(o.assignment ? { skillsOverride: (base: { skills: Parameters<typeof snapshotProtectedSkills>[0]; diagnostics: any[] }) => ({ ...base, skills: selectedTaskSkills(base.skills) }) } : {}),
         appendSystemPrompt: o.workspace ? [...o.workspace.systemPrompt] : [
           ...projectInstructions(),
           ...(o.semanticContextEnabled ? ['If this session supports SAP method lookup and a business definition or analytical convention could affect the result, you may use `read_semantic_context` to find a published `sap-method` using one short metric term per query (search additional terms separately) and read the exact version when useful. Assess its fit, decide whether to use, adapt, or skip it, and cite the version and convention you apply.'] : []),
@@ -815,7 +842,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   }
   function attachRunManager(target: SessionManager) {
     if (!run || run.managers.has(target)) return;
-    target.appendCustomEntry(RUN_ENTRY, { phase: 'started', requestId: run.id, sessionId: target.getSessionId(), kind: run.kind, ...(run.requestFingerprint === undefined ? {} : { requestFingerprint: run.requestFingerprint }), ...(run.providedContext ? { providedContext: run.providedContext } : {}) });
+    target.appendCustomEntry(RUN_ENTRY, { phase: 'started', ...(!options.workspace && options.taskId ? {taskSourceReceiptVersion:1} : {}), requestId: run.id, sessionId: target.getSessionId(), kind: run.kind, ...(run.requestFingerprint === undefined ? {} : { requestFingerprint: run.requestFingerprint }), ...(run.providedContext ? { providedContext: run.providedContext } : {}) });
     run.managers.add(target);
     if (session?.sessionManager === target) materializeNewSession(session);
   }
@@ -871,7 +898,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     if (fixedInput() && (input?.enterprise || input?.feedback || input?.projectData || input?.personal)) throw new Error('fixed_draft_materials_not_allowed');
     if (input?.personal && (!options.projectId || !options.taskId || options.workspace || options.protectedExecution && !ordinaryManaged())) throw new Error('personal_context_profile_unavailable');
     if (input?.projectPlan && (!options.projectId || !options.taskId || options.workspace || input.projectPlan.projectId !== options.projectId || input.projectPlan.taskId !== options.taskId)) throw new Error('project_plan_profile_unavailable');
-    const providedContext = redact({ version: 1, claim: 'provided-not-adopted', providedAt: new Date().toISOString(), requestTextSha256: createHash('sha256').update(text).digest('hex'), ...(input?.userQuoteEligible !== undefined ? { userQuoteEligible: input.userQuoteEligible } : {}), ...(input?.assetFindings ? { assetFindings: input.assetFindings } : {}), ...(input?.automaticSource ? { automaticSource: input.automaticSource } : {}), ...(input?.conclusionReviews ? { conclusionReviews: input.conclusionReviews } : {}), ...(input?.goalSourceRefs ? {goalSourceRefs:input.goalSourceRefs}:{}), ...(input?.strategyDiscussion ? {strategyDiscussion:input.strategyDiscussion} : {}), ...(input?.projectPlanPreparation ? { projectPlanPreparation: input.projectPlanPreparation } : {}), ...(input?.projectPlan ? { projectPlan: input.projectPlan } : {}), ...(input?.rap ? { rap: input.rap } : {}), ...(input?.case ? { case: input.case } : {}), ...(input?.reportCalculationReview ? { reportCalculationReview: input.reportCalculationReview } : {}), ...(input?.enterprise ? { enterprise: input.enterprise } : {}), ...(input?.feedback ? { feedback: input.feedback } : {}), ...(input?.projectData ? { projectData: input.projectData } : {}), ...(input?.personal ? { personal: input.personal.receipt } : {}), ...(input?.studio ? { studio: { systemId: input.studio.systemId, purpose: input.studio.purpose, refs: input.studio.refs, claim: 'provided-not-used-or-verified' } } : {}), ...(typeof input?.originalUserText === 'string' ? { originalUserText: input.originalUserText } : {}), ...(sapProvision() ? { sap: sapProvision() } : {}) });
+    const providedContext = redact({ version: 1, claim: 'provided-not-adopted', providedAt: new Date().toISOString(), requestTextSha256: createHash('sha256').update(text).digest('hex'), ...(input?.userQuoteEligible !== undefined ? { userQuoteEligible: input.userQuoteEligible } : {}), ...(input?.assetFindings ? { assetFindings: input.assetFindings } : {}), ...(input?.automaticSource ? { automaticSource: input.automaticSource } : {}), ...(input?.conclusionReviews ? { conclusionReviews: input.conclusionReviews } : {}), ...(input?.doSourceRights ? {taskRoundReceiptVersion:1,doSourceRights:input.doSourceRights,doSources:input.doSources}:{}), ...(input?.teachSourceRights ? {taskRoundReceiptVersion:1,teachSourceRights:input.teachSourceRights,teachSources:input.teachSources}:{}), ...(input?.projectGoalOrigin ? {projectGoalOrigin:input.projectGoalOrigin}:{}), ...(input?.goalSourceRefs ? {goalSourceRefs:input.goalSourceRefs}:{}), ...(input?.strategyDiscussion ? {strategyDiscussion:input.strategyDiscussion} : {}), ...(input?.businessRole ? {businessRole:input.businessRole} : {}), ...(input?.projectPlanPreparation ? { projectPlanPreparation: input.projectPlanPreparation } : {}), ...(input?.taskAssignment ? { taskAssignment: input.taskAssignment } : {}), ...(input?.projectPlan ? { projectPlan: input.projectPlan } : {}), ...(input?.rap ? { rap: input.rap } : {}), ...(input?.case ? { case: input.case } : {}), ...(input?.reportCalculationReview ? { reportCalculationReview: input.reportCalculationReview } : {}), ...(input?.enterprise ? { enterprise: input.enterprise } : {}), ...(input?.feedback ? { feedback: input.feedback } : {}), ...(input?.projectData ? { projectData: input.projectData } : {}), ...(input?.personal ? { personal: input.personal.receipt } : {}), ...(input?.studio ? { studio: { systemId: input.studio.systemId, purpose: input.studio.purpose, refs: input.studio.refs, claim: 'provided-not-used-or-verified' } } : {}), ...(typeof input?.originalUserText === 'string' ? { originalUserText: input.originalUserText } : {}), ...(sapProvision() ? { sap: sapProvision() } : {}) });
     return execute(id, 'prompt', () => session!.prompt(text), requestFingerprint, providedContext);
   }
   async function command(text: string, id: string) {

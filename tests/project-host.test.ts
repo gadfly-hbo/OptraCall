@@ -366,3 +366,208 @@ test('EB10/11: read-only request receipts reopen older revisions and unknown leg
   assert.equal(provider.requests.length, 2);
   await json(await host.request(`/api/projects/${project.id}/tasks/${randomUUID()}/context-receipts`), 404);
 });
+
+test('v1.3 manual Task first send, shared agreement, Pi skill selection and no-Plan original reply handoff from public Host endpoints', { timeout: 60000 }, async t => {
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', { name: '合成经营任务', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-manual', apiKey: 'synthetic-only' }));
+  const { project } = await json(await host.request('/api/projects', 'POST', { name: '手工委托项目' }), 201);
+  const route = '/api/projects/' + project.id;
+  const { makeTaskAssignment } = await import('../src/host/task-assignment.ts');
+  await json(await host.request(route + '/agreements', 'POST', { operationId: randomUUID(), expectedVersion: 0, text: '合成口径：每位会员只计一次' }));
+  const { task: source } = await json(await host.request(route + '/tasks', 'POST', { name: '合成发现', assignment: { ...makeTaskAssignment('analysis', true), agreementVersion: 1 } }), 201);
+  const send = async (id: string, text: string) => {
+    const stream = await projectEvents(host, project.id, id);
+    try {
+      const requestId = randomUUID();
+      await json(await host.request(route + '/tasks/' + id + '/messages', 'POST', { requestId, text }), 202);
+      assert.equal((await stream.terminal(requestId)).outcome, 'completed');
+    } finally { await stream.close(); }
+  };
+  provider.setResponder(() => ({ text: '合成原回复：有需求证据，缺行动观察。' }));
+  await send(source.id, '核对原资料');
+  assert.match(JSON.stringify(provider.requests[0].body.messages), /合成口径：每位会员只计一次/);
+  const { receipts } = await json(await host.request(route + '/tasks/' + source.id + '/context-receipts'));
+  assert.equal(receipts[0].providedContext.taskAssignment.skill.version, '2.0.0-candidate.1');
+  const { details: catalog } = await json(await host.request(route + '/tasks/' + source.id + '/results'));
+  assert.equal(catalog.results[0].kind, 'native-reply');
+  const ref = { taskId: source.id, key: catalog.results[0].id };
+  const { task: receiver } = await json(await host.request(route + '/tasks', 'POST', { name: '经营行动方案', assignment: { ...makeTaskAssignment('plan', false), sources: [ref] } }), 201);
+  provider.setResponder(context => context.recentToolResults.length ? { text: '合成计划原稿' } : { calls: [{ name: 'read_project_task_results', arguments: { action: 'read', id: ref.key } }] });
+  await send(receiver.id, '从准确原回复核对经营方案');
+  assert.ok(provider.requests.some(request => request.body.messages?.some(m => m.role === 'tool' && providerMessageText(m.content).includes('合成原回复：有需求证据，缺行动观察。'))));
+  await json(await host.request(route + '/tasks/' + source.id + '/default-skill', 'PUT', { enabled: false }));
+  assert.equal((await json(await host.request(route + '/tasks/' + source.id))).task.assignment.skill, null);
+  const plan = await json(await host.request(route + '/plan'));
+  assert.equal(plan.revision, 0);
+  assert.deepEqual(plan.history, []);
+});
+
+test('manual handoff and Project Agent requalify the antecedents of the selected reply and retain independent sources', { timeout: 90000 }, async t => {
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200) => json(await host.request(route, method, body), status);
+  const { configuration } = await req('/api/configuration', 'PUT', { name: '来源模型', provider:'openai-compatible', model:'synthetic-lineage',baseUrl:provider.baseUrl,apiKey:'synthetic-only' });
+  const { project } = await req('/api/projects', 'POST', { name: '原始来源权限' },201);
+  const root = '/api/projects/' + project.id, form = root + '/tasks';
+  const create = async (name:string, sources?:{taskId:string;key:string}[]) => (await req(form,'POST',{name,assignment:{type:'analysis',skill:null,...(sources?{sources}:{})}},201)).task;
+  const send = async(taskId:string,text:string,extra:Record<string,unknown>={})=>{
+    const stream=await projectEvents(host,project.id,taskId),requestId=randomUUID();
+    try {await req(form+'/'+taskId+'/messages','POST',{text,requestId,...extra},202); assert.equal((await stream.terminal(requestId)).outcome,'completed');} finally {await stream.close();}
+    return requestId;
+  };
+  const material = await req('/api/enterprise-materials','POST',{title:'合成窗口说明',body:'窗口 42 周，仅合成'},201);
+  const enabled = await req('/api/enterprise-materials/'+material.material.id+'/enable','POST',{expectedVersion:material.material.version});
+  const ref = {storeId:enabled.storeId,materialId:enabled.material.id,revisionId:enabled.material.activeRevisionId,mode:'full'};
+  const author = await create('受原说明约束'), independent = await create('独立事实');
+  provider.setResponder(()=>({text:'供本次试验核验原结论。'}));
+  await send(author.id,'按已选资料工作',{enterpriseMaterials:[ref]});
+  const derived = await send(author.id,'用自己的话归纳前轮结论');
+  await send(independent.id,'处理另一个独立事实');
+  const own = await req(form+'/'+author.id+'/results'), result=own.details.results.find((r:any)=>r.requestId===derived);
+  assert.ok(result);
+  const selection=[{taskId:author.id,key:result.id}], receiver=await create('下游接收',selection);
+  provider.setResponder(ctx=>!ctx.recentToolResults.length?{calls:[{name:'read_project_task_results',arguments:{action:'read',id:result.id}}]}:{text:'已经获得本次允许的准确上游正文。'});
+  const used=await send(receiver.id,'读取指定来源，综合结论。');
+  const downstream=(await req(form+'/'+receiver.id+'/results')).details.results.find((r:any)=>r.requestId===used);assert.ok(downstream);
+  const roleRoute='/api/business-role?owner='+encodeURIComponent(JSON.stringify({role:'project',projectId:project.id}));
+  provider.setResponder(ctx=>{
+    const results=ctx.recentToolResults.map(row=>providerMessageText(row.content));
+    if(!results.length)return {calls:[{name:'strategy_goals',arguments:{action:'find-sources',query:'下游接收'}}]};
+    if(results.length===1){const list=JSON.parse(results[0]).sources;assert.equal(list.length,1);return {calls:[{name:'strategy_goals',arguments:{action:'read-source',sourceId:list[0].id}}]};}
+    assert.match(results[1],/上游正文/);return {text:'项目综合已用到已准入的下游回复'};
+  });
+  await req(roleRoute+'&action=messages','POST',{requestId:randomUUID(),expectedRevision:0,text:'请读下游接收的原成果'},202);
+  let role:any;
+  for(let i=0;i<300;i++){role=await req(roleRoute);if(role.discussion?.lastRun?.status==='completed')break;await new Promise(resolve=>setTimeout(resolve,20));}
+  assert.equal(role.discussion.lastRun.status,'completed');
+  await req(roleRoute+'&action=close','POST',{});
+  await req('/api/enterprise-materials/'+enabled.material.id+'/disable','POST',{expectedVersion:enabled.material.version});
+  const count=provider.requests.length;
+  const declared=await req(form+'/'+author.id+'/results');assert.equal(declared.details.results.length,0);
+  assert.equal((await req(form+'/'+independent.id+'/results')).details.results.length,1);
+  assert.ok((await host.request(form+'/'+receiver.id+'/open','POST',{})).status>=400);
+  assert.ok((await host.request(form,'POST',{name:'被撤回的来源',assignment:{type:'plan',skill:null,sources:selection}})).status>=400);
+  assert.ok((await host.request(form,'POST',{name:'被撤回的上游',assignment:{type:'plan',skill:null,sources:[{taskId:receiver.id,key:downstream.id}]}})).status>=400);
+  assert.ok((await host.request(roleRoute)).status>=400);
+  assert.ok((await host.request(roleRoute+'&action=configuration','POST',{configurationId:configuration.id,expectedRevision:role.discussion.revision})).status>=400);
+  assert.ok((await host.request(roleRoute+'&action=messages','POST',{requestId:randomUUID(),expectedRevision:role.discussion.revision,text:'继续综合'})).status>=400);
+  assert.equal(provider.requests.length,count);assert.deepEqual(provider.errors,[]);
+});
+
+test('a later Task reply retains its earlier Case ancestry while unrelated project work remains accessible', {timeout:45_000},async t=>{
+  const provider=await startToolProvider();t.after(()=>provider.close());
+  const host=await startTestHost();t.after(()=>host.close());
+  const req=async(path:string,method='GET',input?:unknown,status=200)=>json(await host.request(path,method,input),status);
+  const { withCaseGoal }=await import('./fixtures/case-goal.ts');
+  await req('/api/configuration','PUT',{name:'仅合成Case权限',provider:'openai-compatible',baseUrl:provider.baseUrl,model:'synthetic-lineage-case',apiKey:'synthetic-only'});
+  const {project}=await req('/api/projects','POST',{name:'合成经营项目'},201);
+  const form='/api/projects/'+project.id+'/tasks',create=async(name:string)=>(await req(form,'POST',{name,assignment:{type:'analysis',skill:null}},201)).task;
+  const source=await create('经营事项原任务'),other=await create('独立事项');
+  await req('/api/cases/storage/initialize','POST',{});
+  const {case:record}=await req('/api/cases','POST',await withCaseGoal(host,{operationId:randomUUID(),title:'合成授权范围'}),201);
+  const linked=await req('/api/cases/'+record.id+'/projects','POST',{operationId:randomUUID(),expectedRevision:record.revision,projectId:project.id});
+  provider.setResponder(()=>({text:'合成记录'}));
+  async function send(id:string, extra:Record<string,unknown>={}){const stream=await projectEvents(host,project.id,id),requestId=randomUUID();try{await req(form+'/'+id+'/messages','POST',{requestId,text:'请归纳原事项',...extra},202);assert.equal((await stream.terminal(requestId)).outcome,'completed');}finally{await stream.close();}}
+  await send(source.id,{caseContext:{caseId:record.id,caseRevision:linked.case.revision,projectWorkRevision:0,selectedReferenceIds:[]}});
+  await send(source.id);await send(other.id);
+  assert.deepEqual((await req(form+'/'+source.id+'/results')).details.results,[]);
+  assert.equal((await req(form+'/'+other.id+'/results')).details.results.length,1);
+  const {discussion}=await req('/api/strategy/discussions','POST',{operationId:randomUUID(),projectId:project.id},201);
+  const {sources}=await req('/api/strategy/discussions/'+discussion.id+'/sources');
+  assert.ok(sources.some((r:any)=>r.target.taskId===other.id));assert.ok(!sources.some((r:any)=>r.target.taskId===source.id));
+});
+
+test('Pi direct and codemode reads of the same selected Task result remain attributable through handoff and revocation', {timeout:90000}, async t => {
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  const req = async (route:string,method='GET',body?:unknown,status=200) => json(await host.request(route,method,body),status);
+  await req('/api/configuration','PUT',{name:'合成工具来源',provider:'openai-compatible',model:'synthetic-nested-lineage',baseUrl:provider.baseUrl,apiKey:'synthetic-only'});
+  const {project} = await req('/api/projects','POST',{name:'嵌套来源权限点验'},201);
+  const form='/api/projects/'+project.id+'/tasks';
+  type Selected = {taskId:string;key:string};
+  const create = async (name:string,sources:Selected[]=[]) => (await req(form,'POST',{name,assignment:{type:'analysis',skill:null,...(sources.length ? {sources} : {})}},201)).task.id as string;
+  const send = async (id:string,extra:Record<string,unknown>={}) => {
+    const requestId=randomUUID(), stream=await projectEvents(host,project.id,id);
+    try {
+      await req(form+'/'+id+'/messages','POST',{requestId,text:'核对当前委托的准确经营材料。',...extra},202);
+      assert.equal((await stream.terminal(requestId)).outcome,'completed',JSON.stringify(provider.errors));
+    } finally {await stream.close();}
+    return requestId;
+  };
+  async function selected(taskId:string,requestId:string):Promise<Selected> {
+    const rows=(await req(form+'/'+taskId+'/results')).details.results;
+    const exact=rows.find((r:{requestId:string})=>r.requestId===requestId);
+    assert.ok(exact,'expected the exact received result to remain qualified for handoff '+JSON.stringify({taskId,requestId,rows}));
+    return {taskId,key:exact.id};
+  }
+  const directory=await req('/api/enterprise-materials','POST',{title:'合成季节性口径',body:'示例基线只覆盖第 42 周。'},201);
+  const material=await req('/api/enterprise-materials/'+directory.material.id+'/enable','POST',{expectedVersion:directory.material.version});
+  const source=await create('受限经营来源'),other=await create('独立经营来源');
+  const restricted='SYNTHETIC-OBSERVATION-42',independent='SYNTHETIC-INDEPENDENT-97';
+  provider.setResponder(()=>({text:restricted}));
+  const first=await selected(source,await send(source,{enterpriseMaterials:[{storeId:material.storeId,materialId:material.material.id,revisionId:material.material.activeRevisionId,mode:'full'}]}));
+  provider.setResponder(()=>({text:independent}));
+  const second=await selected(other,await send(other));
+  const observed: {kind:string;receiver:string;requestId:string;key:string;parent?:string;child?:string;nativeFile:string}[]=[];
+  async function consume(kind:'direct'|'nested',receiver:string,source:Selected,body:string,answer:string) {
+    const args={action:'read',id:source.key}; let read=false;
+    provider.setResponder(ctx=>{
+      if(ctx.recentToolResults.length===0) return {calls:[kind==='direct' ? {name:'read_project_task_results',arguments:args} : {
+        name:'codemode',arguments:{code:'const original = await tools.read_project_task_results('+JSON.stringify(args)+'); text(original);'}
+      }]};
+      const actual=providerMessageText(ctx.recentToolResults.at(-1)!.content);
+      assert.ok(actual.includes(body)&&actual.includes(source.key),actual);
+      read=true;return {text:answer};
+    });
+    const requestId=await send(receiver); assert.equal(read,true);
+    const state=(await req(form+'/'+receiver)).task;
+    const native=String(await fs.readFile(state.sessionFile,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
+    const direct=native.filter(row=>row.message?.role==='toolResult'&&row.message.toolName==='read_project_task_results');
+    if(kind==='direct') {
+      assert.ok(direct.some(row=>!row.message.isError&&row.message.details.result.id===source.key));
+      observed.push({kind,receiver,requestId,key:source.key,nativeFile:state.sessionFile});
+    } else {
+      assert.equal(direct.length,0);
+      const parent=native.find(row=>row.message?.role==='toolResult'&&row.message.toolName==='codemode'&&
+        row.message.nestedCalls?.calls.some((call:{name:string;arguments?:{id:string}})=>call.name==='read_project_task_results'&&call.arguments?.id===source.key));
+      assert.ok(parent); const call=parent.message.nestedCalls.calls.find((c:{name:string})=>c.name==='read_project_task_results');
+      assert.equal(parent.message.isError,false);assert.equal(call.status,'ok');assert.deepEqual(call.arguments,args);
+      const receipts=native.filter(row=>row.type==='custom' && row.customType==='optracall.task-source-delivery' && row.data.requestId===requestId && row.data.toolCallId===call.id);
+      assert.equal(receipts.length,1,'each real nested result has one source receipt');
+      const receipt=receipts[0].data;
+      assert.equal(receipt.version,1);assert.equal(receipt.projectId,project.id);assert.equal(receipt.taskId,receiver);
+      assert.equal(receipt.sessionId,native.find(row=>row.type==='session').id);
+      assert.equal(receipt.name,call.name);assert.equal(receipt.details.scope.taskId,receiver);
+      assert.equal(receipt.details.result.id,source.key);assert.equal(receipt.details.result.taskId,source.taskId);
+      assert.equal(receipt.details.action,'read');assert.ok(!JSON.stringify(receipt).includes(body),'receipt keeps only source identities');
+      observed.push({kind,receiver,requestId,key:source.key,parent:parent.message.toolCallId,child:call.id,nativeFile:state.sessionFile});
+    }
+    return requestId;
+  }
+  const direct=await create('直接核对',[first]), nested=await create('嵌套核对',[first]), unread=await create('仅核另一条',[first,second]);
+  const directRun=await consume('direct',direct,first,restricted,'DIRECT-RECEIVED');
+  const nestedRun=await consume('nested',nested,first,restricted,'NESTED-RECEIVED');
+  const unreadRun=await consume('nested',unread,second,independent,'INDEPENDENT-RECEIVED');
+  t.diagnostic(JSON.stringify({scratch:host.scratch,observed}));
+  const directRef=await selected(direct,directRun),nestedRef=await selected(nested,nestedRun),independentRef=await selected(unread,unreadRun);
+  const further=await create('继续接手嵌套成果',[nestedRef]);
+  const furtherRun=await consume('direct',further,nestedRef,'NESTED-RECEIVED','FURTHER-RECEIVED');
+  await selected(further,furtherRun);
+  await req('/api/enterprise-materials/'+material.material.id+'/disable','POST',{expectedVersion:material.material.version});
+  const count=provider.requests.length;
+  for(const id of [direct,nested,further]) {
+    assert.ok([403,409].includes((await host.request(form+'/'+id+'/open','POST',{})).status),id);
+    assert.ok([403,409].includes((await host.request(form+'/'+id+'/messages','POST',{requestId:randomUUID(),text:'继续原委托。'})).status),id);
+    assert.deepEqual((await req(form+'/'+id+'/results')).details.results,[]);
+  }
+  for(const source of [directRef,nestedRef]){
+    const denied=await host.request(form,'POST',{name:'来源已撤回',assignment:{type:'plan',skill:null,sources:[source]}});
+    assert.ok([403,404,409].includes(denied.status));
+  }
+  assert.equal(provider.requests.length,count);
+  assert.deepEqual(await selected(unread,unreadRun),independentRef);
+  await create('继续使用独立经营观测',[independentRef]);
+  provider.setResponder(()=>({text:'INDEPENDENT-STILL-READABLE'}));
+  await send(unread);assert.deepEqual(provider.errors,[]);
+});

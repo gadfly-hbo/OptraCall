@@ -44,14 +44,14 @@ export async function importCredentials(credentials: unknown, signal?: AbortSign
 export async function clearConfiguration(provider?: string, signal?: AbortSignal): Promise<void> { await request(`configuration${provider ? `?provider=${encodeURIComponent(provider)}` : ''}`, 'DELETE', undefined, signal); }
 export function testConnection(revision: number, signal?: AbortSignal): Promise<{ ok: boolean; revision: number; reply: string; message: string }> { return request('connection-test', 'POST', { revision }, signal); }
 export async function listProjects(signal?: AbortSignal): Promise<ClientProject[]> { return (await request<{ projects: ClientProject[] }>('projects', 'GET', undefined, signal)).projects; }
-export async function createProject(name: string, configurationId: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>('projects', 'POST', { name, configurationId })).project; }
+export async function createProject(name: string, configurationId: string, goalOrigin?:ClientProject['goalOrigin']): Promise<ClientProject> { return (await request<{ project: ClientProject }>('projects', 'POST', { name, configurationId,goalOrigin })).project; }
 export async function renameProject(id: string, name: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}`, 'PATCH', { name })).project; }
 export async function archiveProject(id: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}/archive`, 'POST', {})).project; }
 export async function restoreProject(id: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}/restore`, 'POST', {})).project; }
 const taskPath = (projectId: string, taskId: string) => `projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`;
 export async function archiveTask(projectId: string, taskId: string): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`${taskPath(projectId, taskId)}/archive`, 'POST', {})).task; }
 export async function restoreTask(projectId: string, taskId: string): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`${taskPath(projectId, taskId)}/restore`, 'POST', {})).task; }
-export async function createTask(projectId: string, name: string, configurationId?: string, capabilities: TaskCapabilities | boolean = {}): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`projects/${encodeURIComponent(projectId)}/tasks`, 'POST', { name, ...(configurationId ? { configurationId } : {}), ...(typeof capabilities === 'boolean' ? { simulationTools: capabilities } : capabilities) })).task; }
+export async function createTask(projectId: string, name: string, configurationId?: string, capabilities: TaskCapabilities | boolean = {}, assignment?: import('../task-assignment.ts').TaskAssignment, operationId?: string): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`projects/${encodeURIComponent(projectId)}/tasks`, 'POST', { name, ...(configurationId ? { configurationId } : {}), ...(typeof capabilities === 'boolean' ? { simulationTools: capabilities } : capabilities), assignment, operationId })).task; }
 export async function setTaskCapability(projectId: string, taskId: string, capability: TaskCapability, enabled: boolean): Promise<ClientTask> { return (await request<{ task: ClientTask }>(`${taskPath(projectId, taskId)}/capabilities`, 'PUT', { capability, enabled })).task; }
 export function readTradeAreaStatus(signal?: AbortSignal): Promise<TradeAreaStatus> { return request('connectors/trade-area', 'GET', undefined, signal); }
 export function readTask(projectId: string, taskId: string, signal?: AbortSignal): Promise<TaskState> { return request(taskPath(projectId, taskId), 'GET', undefined, signal); }
@@ -177,4 +177,18 @@ export async function observeTask(projectId: string, taskId: string, onEvent: (e
     report({ state: 'recovering', requestId, message: `${message} 正在恢复实时观察。` });
     await waitForObservation(observationBackoff[attempt]!, signal);
   }
+}
+
+export function confirmProjectAgreement(projectId: string, input: { operationId: string; expectedVersion: number; text: string }) {
+  return request<{ agreement: import('../task-assignment.ts').ProjectAgreement }>('projects/' + encodeURIComponent(projectId) + '/agreements', 'POST', input);
+}
+export async function setDefaultTaskSkill(projectId: string, taskId: string, enabled: boolean) {
+  return (await request<{ task: ClientTask }>(taskPath(projectId, taskId) + '/default-skill', 'PUT', { enabled })).task;
+}
+export function taskResults(projectId: string, taskId: string, options: { id?: string; cursor?: string; offset?: string }, signal?: AbortSignal) {
+  return request<import('../project-task-results-types.ts').ProjectTaskResultsToolResult>(taskPath(projectId, taskId) + '/results?' + new URLSearchParams(options), 'GET', undefined, signal);
+}
+
+export function setProjectStage(projectId: string, input: import('../task-assignment.ts').ProjectStageInput) {
+  return request<{ stage: import('../task-assignment.ts').ProjectStage }>('projects/' + encodeURIComponent(projectId) + '/stage', 'POST', input);
 }

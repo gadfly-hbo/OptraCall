@@ -40,10 +40,15 @@ export async function readStrategyDiscussionSource(source: GoalDiscussionSourceR
 export const readStrategyDiscussionSources = (id: string, projectId: string) => request<{ sources: StrategyDiscussionSource[] }>(`${path(id)}/sources?projectId=${encodeURIComponent(projectId)}`);
 export const stopStrategyDiscussion = (id: string, expectedRequestId?: string) => request<{ stopped: boolean }>(`${path(id)}/stop`, 'POST', { ...(expectedRequestId ? { expectedRequestId } : {}) });
 export const closeStrategyDiscussion = (id: string) => request<{ closed: true }>(`${path(id)}/close`, 'POST', {});
-export interface DiscussionAdoptionInput { operationId: string; goalId: string; version: number; expectedVersion: number; goalContentSha256: string; decision: string }
+export const discussionAdoptionKey = (id:string, ref:Pick<GoalVersion,'goalId'|'version'>) =>
+  `optracall.discussion-goal-adoption.v1:${id}:${ref.goalId}:${ref.version}`;
+export function hasPendingDiscussionAdoption(id:string, ref:GoalVersion) {
+  try { return Boolean(sessionStorage.getItem(discussionAdoptionKey(id,ref))); } catch { return false; }
+}
+export interface DiscussionAdoptionInput { operationId: string; goalId: string; version: number; expectedVersion: number; expectedAdoptedVersion?: number | null; goalContentSha256: string; decision: string }
 export async function adoptDiscussionGoal(id: string, input: DiscussionAdoptionInput) { const result = await request<{ goal: GoalVersion }>(`${path(id)}/adopt`, 'POST', input); if (result.goal?.goalId !== input.goalId || result.goal?.version !== input.version || result.goal?.status !== 'adopted') throw new StrategyDiscussionRequestError('strategy_discussion_goal_mismatch', 409, true); return result; }
-export async function watchStrategyDiscussion(id: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal): Promise<void> {
-  const response = await fetch(`/api/strategy/discussions${path(id)}/events`, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal });
+export async function watchStrategyDiscussion(id: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal, endpoint = `/api/strategy/discussions${path(id)}/events`): Promise<void> {
+  const response = await fetch(endpoint, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal });
   if (!response.ok || !response.body) throw new StrategyDiscussionRequestError('strategy_discussion_events_unavailable', response.status);
   const reader = response.body.getReader(), decoder = new TextDecoder(); let pending = '';
   try { while (!signal.aborted) { const chunk = await reader.read(); if (chunk.done) break; pending += decoder.decode(chunk.value, { stream: true }); pending = pending.replace(/\r\n/g, '\n'); let boundary: number; while ((boundary = pending.indexOf('\n\n')) >= 0) { const block = pending.slice(0, boundary); pending = pending.slice(boundary + 2); const data = block.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n'); if (data && !signal.aborted) onEvent(JSON.parse(data)); } } }
@@ -55,3 +60,6 @@ export function discussionJournal(storage: Pick<Storage, 'getItem' | 'setItem' |
   const read = (): DiscussionPending | undefined => { const raw = storage.getItem(journalKey); if (!raw) return; const value = JSON.parse(raw); if (!value?.input || !['create', 'message', 'update'].includes(value.kind) || typeof (value.kind === 'create' ? value.input.operationId : value.kind === 'message' ? value.input.requestId : value.discussionId) !== 'string') throw new Error('原讨论请求暂存不可核对，原记录保留，未创建另一讨论。'); return value; };
   return { read, remember(value: DiscussionPending) { const old = read(); if (old && JSON.stringify(old) !== JSON.stringify(value)) throw new Error('原讨论请求结果待核，输入保持，未覆盖原操作。'); storage.setItem(journalKey, JSON.stringify(value)); }, settle(value: DiscussionPending) { if (JSON.stringify(read()) === JSON.stringify(value)) storage.removeItem(journalKey); } };
 }
+
+export const strategyVersionRequest = <T,>(id:string,suffix='',method='GET',input?:unknown) =>
+  request<T>(path(id)+'/versions'+suffix,method,input);

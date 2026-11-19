@@ -1,3 +1,4 @@
+import { matchesOriginalObservation, type ObservedAction } from './task-round-receipts.ts';
 import { readdir, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { SessionManager } from '../agent/sdk.ts';
@@ -165,4 +166,31 @@ export async function priorTaskRequest(project: ProjectRecord, task: TaskRecord,
   }
   if (previous !== undefined && fingerprint !== undefined && !identityMatched) throw new ProjectHistoryError('operation_conflict');
   return previous;
+}
+
+// A new handoff may describe one exact observation only if the original Teach
+// branch received that observation alone. Historical reads keep the original bytes.
+export async function checkTeachObservationHistory(project:ProjectRecord, task:TaskRecord, target:ObservedAction, leaf?:string) {
+  if (!task.sessionFile || !task.assignment) {
+    if (leaf) throw new ProjectHistoryError('case_teach_observation_unverified');
+    return;
+  }
+  const {manager} = await readNativeSessionSnapshot(task.sessionFile,task.sessionDirectory,path.join(project.rootPath,'020_clean'));
+  const branch = manager.getBranch(leaf);
+  if (leaf && branch.at(-1)?.id !== leaf) throw new ProjectHistoryError('case_teach_observation_unverified');
+  let marker: Record<string,unknown>|undefined, matched=false;
+  for (const entry of branch) {
+    if (entry.type==='custom' && entry.customType==='optracall.run') {
+      const run=entry.data as {phase?: string;providedContext?:Record<string,unknown>};
+      if (run.phase==='started') marker=run.providedContext;
+    }
+    if (entry.type!=='message' || entry.message.role!=='user') continue;
+    const body=entry.message.content;
+    const text=typeof body==='string' ? body : body.flatMap(part=>part.type==='text'?[part.text]:[]).join('');
+    let exact=false;
+    try { exact=!!marker && matchesOriginalObservation(task.assignment,text,marker.requestTextSha256,target); } catch { /* Unverified in the original native input. */ }
+    if (!exact) throw new ProjectHistoryError('case_teach_observation_unverified');
+    matched=true;
+  }
+  if (leaf && !matched) throw new ProjectHistoryError('case_teach_observation_unverified');
 }

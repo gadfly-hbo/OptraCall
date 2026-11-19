@@ -19,6 +19,7 @@ import { catalogItems } from './catalog-data.ts';
 import './project-plan.css';
 export interface ProjectPlanPageProps {
   project: ClientProject;
+  historyOnly?: boolean;
   initialGoal?: GoalRef;
   initialUsageContext?: UsageContext;
   initialState?: ProjectPlanState;
@@ -42,7 +43,29 @@ function initialPlan(project: ClientProject): ProjectPlanContent {
 }
 type Pending = { kind: 'draft' | 'prepare'; input: ProjectPlanDraftInput } | { kind: 'confirm'; input: ProjectPlanConfirmInput };
 const preparationLabel = { running: 'Agent 正在轻量梳理，尚未保存完成草稿。', completed: 'Agent 已完成轻量梳理，结果仍是待确认草稿。', cancelled: '本次梳理已取消，未据此确认或启动分析。', failed: '本次梳理失败，保留原方案与失败记录。', unknown: '本次梳理结果 UNKNOWN，先核对原操作，不自动重发。' };
-export function ProjectPlanPage({ project, initialGoal, initialUsageContext, initialState, initialCapabilities, newTaskIntent, onBack, onConfirmed, onOpenTask, onManageCapabilities }: ProjectPlanPageProps) {
+function PlanHistory({ project, onBack, onOpenTask }: Pick<ProjectPlanPageProps, 'project' | 'onBack' | 'onOpenTask'>) {
+  const [state, setState] = useState<ProjectPlanState>(), [error, setError] = useState('');
+  useEffect(() => {
+    let current = true;
+    setState(undefined); setError('');
+    void api.read(project.id).then(record => { if (current) setState(record); })
+      .catch(reason => { if (current) setError(reason instanceof Error ? reason.message : '无法读取原方案'); });
+    return () => { current = false; };
+  }, [project.id]);
+  return <section className="project-plan-page"><header className="case-board-heading"><h1>{project.name} · 原方案与历史回执</h1><button type="button" className="text-button" onClick={onBack}>返回项目</button></header>
+    {error && <p role="alert">{error}</p>}
+    {state && !state.history.length && !state.draft && <p>本项目没有原方案记录。</p>}
+    {state?.draft && <details><summary>原草稿 v{state.draft.version}</summary><pre>{JSON.stringify(state.draft.plan, null, 2)}</pre></details>}
+    {state?.history.map(entry => <section key={entry.id} className="project-plan-section"><h2>确认方案 v{entry.planVersion}</h2><p>{entry.plan.request}</p>
+      <ul>{entry.plan.premises.map((text, i) => <li key={i}>{text}</li>)}</ul>
+      {entry.tasks.map(task => <div key={task.taskKey}>{entry.plan.tasks.find(row => row.key === task.taskKey)?.name} · {statusLabel[task.createStatus]} · {statusLabel[task.startStatus]} {project.tasks.some(row => row.id === task.taskId) && <button type="button" className="text-button" onClick={() => onOpenTask(task.taskId)}>打开原任务</button>}</div>)}
+      <details><summary>准确方案及授权历史</summary><pre>{JSON.stringify(entry, null, 2)}</pre></details></section>)}
+  </section>;
+}
+export function ProjectPlanPage(props: ProjectPlanPageProps) {
+  return props.historyOnly ? <PlanHistory {...props}/> : <LegacyPlanEditor {...props}/>;
+}
+function LegacyPlanEditor({ project, initialGoal, initialUsageContext, initialState, initialCapabilities, newTaskIntent, onBack, onConfirmed, onOpenTask, onManageCapabilities }: ProjectPlanPageProps) {
   const id = useId(), scope = useRef(project.id), alive = useRef(true); scope.current = project.id;
   const [state, setState] = useState<ProjectPlanState | undefined>(initialState), [catalog, setCatalog] = useState(initialCapabilities || emptyCapabilities());
   const [catalogKnown, setCatalogKnown] = useState(!!initialCapabilities);

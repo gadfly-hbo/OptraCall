@@ -1,0 +1,119 @@
+.workspace-management-page .case-board-heading {
+  margin-bottom: 12px;
+}
+.workspace-management-page .case-board-heading h1 {
+  margin-bottom: 6px;
+}
+.workspace-management-tabs {
+  margin-top: 0;
+  margin-bottom: 18px;
+}
+.workspace-native-goals {
+  margin-top: 16px;
+}
+.workspace-native-goals > summary {
+  font-weight: 550;
+}
+.workspace-native-goals > div {
+  margin-top: 16px;
+}
+.sidebar-bottom.workspace-sidebar-bottom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.workspace-sidebar-bottom .nav-item {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 34px;
+}
+.workspace-sidebar-bottom .workspace-locale {
+  flex: 0 0 auto;
+  min-height: 27px;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: default;
+}
+.sidebar .workspace-sidebar-disclosure {
+  align-items: center;
+  min-height: 32px;
+  padding: 5px 12px !important;
+  border-radius: 6px;
+}
+.sidebar .workspace-sidebar-disclosure:hover {
+  background: var(--hover);
+}
+.sidebar .workspace-sidebar-disclosure:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.sidebar .workspace-project-space-heading {
+  margin-top: 8px;
+}
+#workspace-primary-links[hidden],
+#workspace-project-space-list[hidden] {
+  display: none;
+}
+.workspace-studio-tabs {
+  margin-bottom: 18px;
+}
+.workspace-studio-workbench {
+  margin-bottom: 20px;
+}
+.workspace-studio-workbench .studio-foundation-nav {
+  margin-top: 12px;
+}
+.workspace-studio-options {
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.workspace-studio-options > summary {
+  cursor: pointer;
+}
+.workspace-version-panel {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.workspace-version-panel .sg-muted {
+  margin: 4px 0;
+}
+.workspace-version-table {
+  margin-top: 12px;
+}
+.workspace-version-table h3 {
+  margin-bottom: 6px;
+}
+.workspace-version-table td {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.workspace-saved-choice-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .workspace-management-tabs {
+    gap: 6px 15px;
+  }
+  .workspace-management-tabs > button {
+    white-space: nowrap;
+  }
+}
+#settings-model-pack-panel > .model-pack-page {
+  padding: 0;
+}
+
+#settings-model-pack-panel .page-heading {
+  flex-wrap: wrap;
+}
+
+#settings-model-pack-panel .page-heading > button {
+  flex-shrink: 0;
+}

@@ -172,3 +172,35 @@ test('RU06 Host→SDK automatically supplies latest candidate correction without
   const after = await readJson(await f.host.request(f.route + '/personal-context'));
   assert.equal(after.entries.length, 1); assert.equal(after.entries[0].text, history.entries[0].text);
 });
+
+test('Task result forwarding rechecks each selected, catalogued and read personal item against the current receiving scope', {timeout:60000},async t=>{
+  const provider=await startToolProvider();t.after(()=>provider.close());
+  const f=await fixture(t,provider.baseUrl), original=await retained(f.host,'PERSONAL_SCOPE_RESTRICTED');
+  const routes:string[]=[];
+  for(const mode of ['provided','find','read'] as const){
+    const {task}=await readJson(await f.host.request('/api/projects/'+f.project.id+'/tasks','POST',{name:mode}),201);
+    const route='/api/projects/'+f.project.id+'/tasks/'+task.id, text='PERSONAL_REPLY_'+mode;
+    provider.setResponder(ctx=>{
+      if(mode!=='provided'&&!ctx.recentToolResults.length)return {calls:[{name:mode+'_personal_context',arguments:mode==='find'?{query:'旧口径'}:{target:original.target}}]};
+      const delivered=ctx.messages.map(m=>providerMessageText(m.content)).join(' ');
+      assert.ok(delivered.includes(mode==='find'?'M4旧口径知识':'PERSONAL_SCOPE_RESTRICTED'));return {text};
+    });
+    await turn({...f,task,route},{requestId:randomUUID(),text:'核对明确选择的资料',...(mode==='provided'?{personalContext:[{target:original.target}]}:{})});
+    const {snapshot}=await readJson(await f.host.request(route));
+    const msg=snapshot.messages.find((m:any)=>m.role==='assistant'&&providerMessageText(m.content)===text);
+    assert.ok(msg?.nativeEntryId);
+    const owner={role:'goal-draft',draftId:randomUUID(),scope:{kind:'personal',id:'self',name:'原范围'},caseSource:{kind:'task',projectId:f.project.id,taskId:task.id,reply:{type:'native-reply',projectId:f.project.id,taskId:task.id,sessionId:msg.nativeSessionId,messageId:msg.nativeEntryId,expectedTextSha256:digest(text)}}};
+    const forwarded='/api/business-role?owner='+encodeURIComponent(JSON.stringify(owner));
+    const response=await f.host.request(forwarded+'&action=origin');
+    const value=await readJson(response);assert.equal(value.origin.reply.text,text);routes.push(forwarded);
+  }
+  const enterprise=await readJson(await f.host.request('/api/studio/enterprises','POST',{name:'独立企业'}),201);
+  await readJson(await f.host.request('/api/studio/enterprise-associations','POST',{kind:'asset',authority:'enterprise',entityId:original.created.material.id,enterpriseId:enterprise.id}));
+  const count=provider.requests.length;
+  for(const route of routes){
+    const rejected=await f.host.request(route+'&action=origin');assert.ok([403,409].includes(rejected.status),await rejected.clone().text());
+    assert.ok(!(await rejected.text()).includes('PERSONAL_REPLY_'));
+    const denied=await f.host.request(route+'&action=messages','POST',{expectedRevision:0,requestId:randomUUID(),text:'沿用先前的回复'});assert.ok([403,409].includes(denied.status),await denied.clone().text());
+  }
+  assert.equal(provider.requests.length,count);
+});

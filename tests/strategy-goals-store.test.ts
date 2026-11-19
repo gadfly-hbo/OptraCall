@@ -85,7 +85,11 @@ test('a relationship revision preserves its old responsibility and exact target 
   for (const ref of [a, b]) store.adopt(ref, { expectedVersion: 1, operationId: randomUUID(), decision: '采用当前职责目标' });
   const initial = store.relate({ from: b, to: a, kind: 'contribution', responsibility: '核会员资格', rationale: '按实际职责贡献', operationId: randomUUID() });
   const original = store.readRelation(initial.id, 1);
-  const next = store.reviseRelation(initial.id, { from: b, to: a, kind: 'contribution', responsibility: '核会员资格并说明观察窗口', rationale: '按新增资料责任调整', expectedRevision: 1, operationId: randomUUID() });
+  const operationId=randomUUID();
+  const next = store.reviseRelation(initial.id, { from: b, to: a, kind: 'contribution', responsibility: '核会员资格并说明观察窗口', rationale: '按新增资料责任调整', expectedRevision: 1, operationId });
+  const snapshots=store.operationContext(store.getOperation(operationId)!);
+  assert.deepEqual(snapshots.map(s=>s.relations[0]?.revision),[1,2]);
+  assert.deepEqual(snapshots.map(s=>s.feedback),[[],[]]);
   assert.equal(next.revision, 2);
   assert.equal(next.responsibility, '核会员资格并说明观察窗口');
   assert.deepEqual(store.readRelation(initial.id, 1), original);

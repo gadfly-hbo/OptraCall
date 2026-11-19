@@ -30,12 +30,20 @@ function validSourceGovernance(value: unknown): value is PersonalSourceGovernanc
     return item.targetRevision > 0 && typeof item.excluded === 'boolean' && (!item.excluded || item.correction === null) && (item.correction === null || item.latestCorrectionOperationId !== null);
   });
 }
-function delivery(value: unknown, action: 'find' | 'read'): PersonalContextDelivery | null {
+export type PersonalQualificationItem = Pick<PersonalContextDeliveryItem, 'target' | 'part' | 'extent' | 'range' | 'governance' | 'sourceRef' | 'sourceGovernance'>;
+type QualificationReceipt = Omit<PersonalContextDelivery, 'items'> & { items: PersonalQualificationItem[] };
+
+export function parsePersonalDelivery(value: unknown, action: 'find' | 'read'): PersonalContextDelivery | null;
+export function parsePersonalDelivery(value: unknown, action: 'find' | 'read', qualificationOnly: true): QualificationReceipt | null;
+export function parsePersonalDelivery(value: unknown, action: 'find' | 'read', qualificationOnly = false): QualificationReceipt | null {
   if (!object(value) || value.schemaVersion !== 1 || value.type !== 'optracall.personal-context-delivery' || value.action !== action || !Array.isArray(value.items) || value.items.length > 50 || typeof value.partial !== 'boolean' || !(value.continuation === null || typeof value.continuation === 'string') || !Array.isArray(value.issues)) return null;
   try {
     let sourceReminderSize = 0;
     for (const item of value.items) {
-      if (!object(item) || !['catalog', 'content', 'corrections', 'source'].includes(String(item.part)) || !['metadata', 'fragment', 'full'].includes(String(item.extent)) || typeof item.title !== 'string' || !['scope', 'effectiveTime', 'caution'].every(key => item[key] === null || typeof item[key] === 'string') || !Array.isArray(item.limitations) || !item.limitations.every(v => typeof v === 'string') || !object(item.governance) || typeof item.governance.archived !== 'boolean') return null;
+      if (!object(item) || !['catalog', 'content', 'corrections', 'source'].includes(String(item.part)) ||
+          !['metadata', 'fragment', 'full'].includes(String(item.extent)) || !object(item.governance) || typeof item.governance.archived !== 'boolean') return null;
+      if (!qualificationOnly && (typeof item.title !== 'string' || !['scope', 'effectiveTime', 'caution'].every(key => item[key] === null || typeof item[key] === 'string') ||
+          !Array.isArray(item.limitations) || !item.limitations.every(v => typeof v === 'string'))) return null;
       parsePersonalContextTarget(item.target);
       if (item.sourceGovernance !== undefined) {
         if (item.part !== 'content' || !object(item.target) || item.target.type !== 'retained' || !validSourceGovernance(item.sourceGovernance)) return null;
@@ -45,7 +53,7 @@ function delivery(value: unknown, action: 'find' | 'read'): PersonalContextDeliv
       if (item.sourceRef !== undefined) learningSourceRef(item.sourceRef);
       if (item.range !== null && (!object(item.range) || !Number.isSafeInteger(item.range.start) || !Number.isSafeInteger(item.range.end) || Number(item.range.start) < 0 || Number(item.range.end) < Number(item.range.start))) return null;
     }
-    return value as PersonalContextDelivery;
+    return value as QualificationReceipt;
   } catch { return null; }
 }
 
@@ -90,14 +98,14 @@ export async function readPersonalContextHistory(project: ProjectRecord, task: T
           if (!object(data) || data.phase !== 'started' || data.sessionId !== undefined && data.sessionId !== snapshot.manager.getSessionId() || text === null) continue;
           const supplied = data.providedContext;
           if (!object(supplied) || supplied.version !== 1 || supplied.requestTextSha256 !== createHash('sha256').update(text).digest('hex') || !object(supplied.personal) || supplied.personal.schemaVersion !== 1 || !Array.isArray(supplied.personal.items) || supplied.personal.items.length > 8) continue;
-          const details = delivery({ schemaVersion: 1, type: 'optracall.personal-context-delivery', action: 'read', items: supplied.personal.items, partial: false, continuation: null, issues: [] }, 'read');
+          const details = parsePersonalDelivery({ schemaVersion: 1, type: 'optracall.personal-context-delivery', action: 'read', items: supplied.personal.items, partial: false, continuation: null, issues: [] }, 'read');
           if (details) result.entries.push({ sessionId: snapshot.manager.getSessionId(), entryId: entry.id, action: 'provided', text, details, evidence: 'recorded', current: [] });
           continue;
         }
         if (message.role !== 'toolResult') continue;
         const action = toolAction(message.toolName);
         if (action && !message.isError && hasCall(entry.parentId, message.toolCallId, message.toolName)) {
-          const details = delivery(message.details, action), text = actualText(message.content);
+          const details = parsePersonalDelivery(message.details, action), text = actualText(message.content);
           if (details && text !== null) result.entries.push({ sessionId: snapshot.manager.getSessionId(), entryId: entry.id, toolCallId: message.toolCallId, action, text, details, evidence: 'recorded', current: [] });
           else result.issues.push({ code: 'personal_context_body_not_recorded', file: name });
         }

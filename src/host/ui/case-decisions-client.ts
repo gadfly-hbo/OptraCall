@@ -3,7 +3,10 @@ import type { CaseDecisionSourceView, CaseDecisionService } from '../case-decisi
 import { CaseRequestError } from './case-client.ts';
 
 const messages: Record<string, string> = {
+  case_teach_observation_unverified: '原 Teach 会话的依据与这一条观察不能准确对应。请保留原文，从所选观察发起新的 Teach。',
   case_decision_revision_conflict: '这条记录已更新，当前输入保留，请先查看变化。',
+  project_result_permission_unavailable: '原 Plan 使用的资料当前无法读取。请核对原权限或改选有独立依据的方案。',
+  role_source_model_unavailable: '原 Plan 使用的模型配置当前不可核对。请保留取舍输入并核对来源。',
   case_choice_conflict: '这项策略已有新选择，当前取舍与理由保留，请先核对。',
   case_decision_archived: '这条记录已归档，历史仍可读；只有人明确恢复后才能继续修改。',
   case_decisions_disabled: '当前版本未开放 Case 决策写入，已有记录保留。',
@@ -46,3 +49,16 @@ export type GovernanceRequest = Omit<CaseDecisionGovernanceInput, 'caseId' | 're
 export function saveCaseDecisionGovernance(caseId: string, recordId: string, input: GovernanceRequest) {
   return request<{ revision: CaseDecisionRevision }>(`${path(caseId)}/${encodeURIComponent(recordId)}/governance`, 'POST', input);
 }
+
+export const caseIssues = (id: string) => request<{ issues: import('../case-decision-types.ts').CaseDecisionIssue[] }>(path(id) + '/issues');
+export const createCaseIssue = (id: string, input: { operationId: string; expectedRevision: number; title: string }) =>
+  request<{ issue: import('../case-decision-types.ts').CaseDecisionIssue }>(path(id) + '/issues', 'POST', input);
+export const caseIssueTimeline = (id: string, issue: string) =>
+  request<Awaited<ReturnType<CaseDecisionService['issueTimeline']>>>(path(id) + '/issues/' + issue);
+export const caseIssueSources = (id: string, issue: string) =>
+  request<Awaited<ReturnType<CaseDecisionService['issueSources']>>>(path(id) + '/issues/' + issue + '/sources');
+export const writeCaseIssue = (id: string, issue: string, action: 'plans' | 'review' | 'authorize', input: Record<string, unknown>) =>
+  request(path(id) + '/issues/' + issue + '/' + action, 'POST', input);
+
+export const inspectIssueReply = (id: string, issue: string, source: import('../case-decision-types.ts').CaseIssueReply) =>
+  request<{title: string; text: string}>(path(id) + '/issues/' + issue + '/reply', 'POST', source);

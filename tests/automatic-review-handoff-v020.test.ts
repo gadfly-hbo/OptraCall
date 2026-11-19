@@ -167,11 +167,11 @@ test('A05/A07/J02 ordinary followup retains its confirmed Plan after automatic r
   const continued = await f.idle();
   const started = continued.entries.find(entry => entry.customType === 'optracall.run' && entry.data?.phase === 'started' && entry.data.requestId === followupId);
   assert.equal(started?.data?.providedContext?.projectPlan?.confirmationId, confirmed.confirmation.id);
-  const { goal } = await f.request<{ goal: GoalVersion }>('/api/strategy/goals', 'POST', { operationId: randomUUID(), title: '明确新增合成目标', outcome: '不同目标需要另有准确安排', perspective: 'personal', scope: { kind: 'personal', id: 'synthetic-scope-change', name: '合成用户' }, measurement: { kind: 'deliverable', criterion: '独立核对新范围' }, baseline: { state: 'pending', description: '合成基线待核' }, responsible: '合成用户' }, 201);
+  const { goal } = await f.request<{ goal: GoalVersion }>('/api/strategy/goals', 'POST', { operationId: randomUUID(), title: '明确新增合成目标', outcome: '不同目标需要另有准确安排', perspective: 'personal', scope: { kind: 'personal', id: 'synthetic-scope-change', name: '合成用户' }, measurement: { kind: 'deliverable', criterion: '独立核对新范围' }, baseline: { state: 'pending', description: '合成基线待核' }, responsible: '合成用户', strategies:['按新目标核对'] }, 201);
   const adopted = (await f.request<{ goal: GoalVersion }>(`/api/strategy/goals/${goal.goalId}/adopt`, 'POST', { operationId: randomUUID(), version: goal.version, expectedVersion: goal.version, decision: '用户明确采纳不同合成目标，不授权变更旧Plan。' })).goal;
   const ref: GoalRef = { goalId: adopted.goalId, version: adopted.version };
   const calls = f.provider.requests.length;
-  for (const binding of [{ primary: c.detail.goalBinding!.primary, related: [ref] }, { primary: ref, related: [] }]) {
+  for (const binding of [{ primary: c.detail.goalBinding!.primary, related: [ref], strategy:c.detail.goalBinding!.strategy }, { primary: ref, related: [], strategy:"按新目标核对" }]) {
     const current = await f.request<CaseDetail>(`/api/cases/${c.selection.caseId}`);
     await f.request(`/api/cases/${c.selection.caseId}/goals`, 'POST', { operationId: randomUUID(), expectedRevision: current.case.revision, goalBinding: binding });
     await f.request(f.route + '/messages', 'POST', { requestId: randomUUID(), text: 'FOLLOWUP-PROBE 目标已变，不得隐式改绑原方案。' }, 409);
