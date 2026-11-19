@@ -3,7 +3,6 @@ import type { StrategyGoalsStore } from './strategy-goals-store.ts';
 import { assertAdoptedGoalRefs } from './strategy-goals-routes.ts';
 import { randomUUID } from 'node:crypto';
 import { CaseStore, CaseStoreError } from './case-store.ts';
-import { caseDecisionId } from './case-decision-validation.ts';
 import type { CaseCreationSource, ArtifactAdoption, CaseArtifactRecord, CaseArtifactView, CaseStatus, ProjectWorkStatus } from './case-types.ts';
 import type { ConfigurationStore } from './config-store.ts';
 import { ProjectStore, type ProjectRecord } from './project-store.ts';

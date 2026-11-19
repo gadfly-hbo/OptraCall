@@ -23,7 +23,6 @@ import type { StudioEnterpriseDirectory } from './studio-api.ts';
 import './strategy-goals.css';
 import { readBoard } from '../../../extensions/business-plugins/decision-board/ui/decision-board-client.ts';
 import type { BoardView } from '../../../extensions/business-plugins/decision-board/api/routes.ts';
-import type { GoalActionArrangement } from '../strategy-goals-types.ts';
 
 export interface GoalFeedbackSource { label: string; ref: GoalSourceRef }
 export interface StrategyGoalsPageProps {
