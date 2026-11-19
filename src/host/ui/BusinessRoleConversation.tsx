@@ -1,28 +1,36 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useId, useRef, useState} from 'react';
 import {businessRoleNames, type BusinessRoleOwner} from '../business-role-types.ts';
 import type {StrategyDiscussionDetail,StrategyDiscussionMessage} from '../strategy-discussion-types.ts';
 import type {GoalDraftInput,GoalRoleSuggestionRef} from '../strategy-goals-types.ts';
 import {ConversationDrawer} from './ConversationDrawer.tsx';
-import {StrategyDiscussionReply} from './StrategyDiscussionReply.tsx';
+import {StrategyDiscussionTranscript} from './StrategyDiscussionReply.tsx';
 import {canSettleDiscussionMessage, watchStrategyDiscussion} from './strategy-discussion-client.ts';
 import {projectDiscussionStreaming} from './strategy-discussion-projection.ts';
 import {readConfigurations} from './runtime-client.ts';
-import type {PublicModelConfiguration} from './project-types.ts';
+import {messageText, type NativeMessage, type PublicModelConfiguration} from './project-types.ts';
+import './business-role-conversation.css';
 
 type RoleView = StrategyDiscussionDetail | {discussion:null;busy:false;snapshot?:undefined;configurationId?:string};
-function messageText(message:{content?:unknown;originalUserText?:string}){
-  if(message.originalUserText!==undefined)return message.originalUserText;
-  if(typeof message.content==='string')return message.content;
-  return Array.isArray(message.content)?message.content.filter(p=>p?.type==='text').map(p=>p.text).join(''):'';
-}
-type ConversationProps = {owner:BusinessRoleOwner;onGoalDraft?:(draft:GoalDraftInput,source:GoalRoleSuggestionRef)=>void};
-export function BusinessRoleConversation({owner,onGoalDraft}:ConversationProps){
+const roleQuestions = {
+  goal: '想梳理哪一个目标或策略？',
+  case: '想讨论当前事项的哪项取舍？',
+  project: '这个项目接下来要推进什么？',
+  strategy: '想讨论什么战略问题？',
+};
+type ConversationProps = {
+  owner: BusinessRoleOwner;
+  readOnly?: boolean;
+  showInlineTitle?: boolean;
+  onGoalDraft?: (draft: GoalDraftInput, source: GoalRoleSuggestionRef) => void;
+};
+export function BusinessRoleConversation({owner,readOnly,showInlineTitle,onGoalDraft}:ConversationProps){
   const key=JSON.stringify(owner);
-  return <ScopedConversation key={key} owner={owner} ownerKey={key} onGoalDraft={onGoalDraft}/>;
+  return <ScopedConversation key={key} owner={owner} ownerKey={key} readOnly={readOnly} showInlineTitle={showInlineTitle} onGoalDraft={onGoalDraft}/>;
 }
-function ScopedConversation({owner,ownerKey,onGoalDraft}:ConversationProps & {ownerKey:string}){
+function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,onGoalDraft}:ConversationProps & {ownerKey:string}){
   const base='/api/business-role?'+new URLSearchParams({owner:ownerKey});
   const title=businessRoleNames[owner.role];
+  const inputId=useId();
   const storage='optracall.role-discussion.v1.'+ownerKey;
   const [text,setText]=useState(()=>sessionStorage.getItem(storage+'.draft')??'');
   const [pending,setPending]=useState<StrategyDiscussionMessage|undefined>(()=>{try{return JSON.parse(sessionStorage.getItem(storage+'.request')??'null')??undefined;}catch{return undefined;}});
@@ -81,7 +89,7 @@ function ScopedConversation({owner,ownerKey,onGoalDraft}:ConversationProps & {ow
     return ()=>controller.abort();
   },[id,base,load]);
   async function send(){
-    if(busy||!text.trim()||!view||pendingRef.current)return;
+    if(readOnly||busy||!text.trim()||!view||pendingRef.current)return;
     const input={requestId:crypto.randomUUID(),text:text.trim(),expectedRevision:view.discussion?.revision??0,...(retryOf?{replacePendingRequestId:retryOf}:{})};
     remember(input);
     await dispatch(input);
@@ -118,29 +126,43 @@ function ScopedConversation({owner,ownerKey,onGoalDraft}:ConversationProps & {ow
     recorded?.lastRun?.id!==pending.requestId && recorded?.pendingInput?.requestId!==pending.requestId;
   const sameRevision = pending && (!recorded ? pending.expectedRevision===0 :
     recorded.revision===pending.expectedRevision || (pending.expectedRevision===0 && recorded.revision===1 && !recorded.lastRun));
-  return <ConversationDrawer title={title}><section className="strategy-discussion-panel" aria-label={title}>
-    <h3>{title}</h3>
-    {view?.snapshot?.messages.filter(m=>m.role==='user'||m.role==='assistant').map((m,index)=>{
-      const body=messageText(m);return body?<div key={m.nativeEntryId??index}>{m.role==='assistant'?<StrategyDiscussionReply text={body}/>:<p>{body}</p>}</div>:null;
-    })}
-    {onGoalDraft&&view?.discussion&&view.goalDrafts?.map(item=><button type="button" data-return-to-workspace key={item.source.entryId} disabled={busy||running} onClick={()=>void act(async()=>{
+  const messages = view?.snapshot?.messages
+    .filter((message): message is NativeMessage => message.role === 'user' || message.role === 'assistant')
+    .filter(message => messageText(message)) ?? [];
+  const prompt = roleQuestions[owner.role === 'goal-draft' ? 'goal' : owner.role];
+  return <ConversationDrawer title={title} showInlineTitle={showInlineTitle} className="role-conversation"><section className="strategy-discussion-panel role-discussion" aria-label={title}>
+    {(messages.length > 0 || stream) && <StrategyDiscussionTranscript messages={messages} streaming={stream} label={title+' 对话记录'} />}
+    {onGoalDraft&&view?.discussion&&view.goalDrafts?.map(item=><button className="secondary-button" type="button" data-return-to-workspace key={item.source.entryId} disabled={busy||running} onClick={()=>void act(async()=>{
       const original:StrategyDiscussionDetail=await call('','GET');
       const fresh=original.goalDrafts?.find(entry=>entry.source.entryId===item.source.entryId&&entry.source.sessionId===item.source.sessionId&&entry.source.sha256===item.source.sha256);
       if(!fresh)throw Error('原建议已不可读。');
       onGoalDraft(fresh.draft,fresh.source);
     })}>带入目标表单 · {item.draft.title}</button>)}
-    {stream&&<StrategyDiscussionReply text={stream}/>}
-    <label>消息<textarea aria-label={'向'+title+'提问'} value={text} disabled={Boolean(pending)} onChange={e=>{setText(e.target.value);sessionStorage.setItem(storage+'.draft',e.target.value);}}/></label>
-    <div className="sg-actions"><button type="button" disabled={!view||!text.trim()||busy||running||!!pending} onClick={()=>void send()}>发送</button>
-    {recorded&&running&&<button type="button" disabled={busy} onClick={()=>void act(()=>call('stop','POST',{expectedRequestId:recorded.lastRun?.id}))}>停止</button>}
-    {(pending||error||recorded?.lastRun?.status==='unknown')&&<button type="button" disabled={busy} onClick={()=>void act(()=>Promise.resolve())}>核对原操作</button>}
-    {checkedAbsent && sameRevision && <button type="button" disabled={busy} onClick={()=>void dispatch(pending)}>按原编号发送</button>}
-    {checkedAbsent && !sameRevision && <button type="button" disabled={busy} onClick={()=>prepareReplacement()}>保留原话并核对新的会话状态</button>}
-    {pending&&recorded?.lastRun?.id===pending.requestId&&!running&&['failed','cancelled'].includes(recorded.lastRun.status)&&<button type="button" onClick={()=>prepareReplacement(pending.requestId)}>保留原话另行发送</button>}</div>
-    {recorded&&configs.length>0&&<label>会话模型<select value={model} disabled={busy||running||!!pending} onChange={e=>void act(()=>call('configuration','POST',{configurationId:e.target.value,expectedRevision:recorded.revision}))}>{configs.filter(c=>c.hasApiKey||c.id===model).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
-    {!recorded&&defaultModel&&<small>会话模型 · {configs.find(c=>c.id===defaultModel)?.name??defaultModel}</small>}
-    {error&&<p role="alert">{error}</p>}
-    {running&&<p role="status">正在回复…</p>}
-    {recorded?.lastRun?.status==='unknown'&&<p role="status">上次操作结果待核，原会话已保留。</p>}
+    {readOnly ? <p className="sg-muted">Case 已关闭，可阅读原对话。</p> : <>
+      <form className="strategy-discussion-composer role-composer" onSubmit={event => {event.preventDefault(); void send();}}>
+        <label className="role-question" htmlFor={inputId}>{prompt}</label>
+        <textarea id={inputId} aria-label={'向'+title+'提问'} rows={3} value={text} disabled={Boolean(pending)}
+          onChange={event=>{setText(event.target.value);sessionStorage.setItem(storage+'.draft',event.target.value);}}/>
+        <div className="role-composer-actions">
+          {recorded && configs.length > 0 && <label className="role-model">会话模型
+            <select className="sg-select" value={model} disabled={busy||running||!!pending} onChange={event=>void act(()=>call('configuration','POST',{configurationId:event.target.value,expectedRevision:recorded.revision}))}>
+              {configs.filter(c=>c.hasApiKey||c.id===model).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>}
+          {!recorded && defaultModel && <span className="sg-muted">会话模型 · {configs.find(c=>c.id===defaultModel)?.name??defaultModel}</span>}
+          <div className="role-send-actions">
+            {recorded&&running&&<button type="button" className="secondary-button" disabled={busy} onClick={()=>void act(()=>call('stop','POST',{expectedRequestId:recorded.lastRun?.id}))}>停止</button>}
+            <button type="submit" className="primary-button" disabled={!view||!text.trim()||busy||running||!!pending}>发送</button>
+          </div>
+        </div>
+      </form>
+      {checkedAbsent && sameRevision && <button type="button" className="secondary-button" disabled={busy} onClick={()=>void dispatch(pending)}>按原编号发送</button>}
+      {checkedAbsent && !sameRevision && <button type="button" className="secondary-button" disabled={busy} onClick={()=>prepareReplacement()}>保留原话并核对新的会话状态</button>}
+      {pending&&recorded?.lastRun?.id===pending.requestId&&!running&&['failed','cancelled'].includes(recorded.lastRun.status)&&<button type="button" className="secondary-button" onClick={()=>prepareReplacement(pending.requestId)}>保留原话另行发送</button>}
+    </>}
+    {(pending||error||recorded?.lastRun?.status==='unknown')&&<button type="button" className="text-button" disabled={busy} onClick={()=>void act(()=>Promise.resolve())}>核对原操作</button>}
+    {error&&<p className="case-error" role="alert">{error}</p>}
+    {running&&<p className="sg-muted" role="status">正在回复…</p>}
+    {recorded?.lastRun?.status==='unknown'&&<p className="sg-muted" role="status">上次操作结果待核，原会话已保留。</p>}
   </section></ConversationDrawer>;
 }

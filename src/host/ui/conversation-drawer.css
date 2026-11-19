@@ -25,12 +25,22 @@
   width: 100%;
 }
 .workspace-conversation-task > .workspace-conversation-toolbar {
-  width: min(800px, calc(100% - 32px));
+  width: min(800px, calc(100% - 64px));
   align-self: center;
   flex: 0 0 auto;
 }
-.workspace-conversation-task .chat-page.has-messages .composer-area {
+.task-workspace-tools {
+  width: min(800px, calc(100% - 64px));
+  margin: 0 auto;
+}
+.chat-page > .workspace-conversation-task {
+  flex: 1 0 auto;
+}
+.workspace-conversation-task .composer-area {
   flex-shrink: 0;
+}
+.workspace-conversation-task > .workspace-conversation-inline .message-scroll {
+  max-height: 60dvh;
 }
 .workspace-conversation-dialog {
   box-sizing: border-box;
@@ -106,27 +116,26 @@
   flex-direction: column;
   min-height: 0;
 }
-.workspace-conversation-task .workspace-conversation-expanded > .workspace-conversation-content > .chat-page {
-  height: auto;
+.workspace-conversation-task .workspace-conversation-expanded .message-scroll {
+  flex: 1 1 0;
   min-height: 0;
-  max-height: none;
-  overflow: auto;
+  overflow-y: auto;
 }
-.workspace-conversation-task .workspace-conversation-expanded .has-messages .message-scroll {
-  flex: 0 0 auto;
+.workspace-conversation-task .workspace-conversation-expanded .task-start-hint {
+  flex: 1 1 0;
+}
+.workspace-conversation-task .workspace-conversation-expanded .composer-area {
+  flex: 0 1 auto;
   min-height: 0;
-  overflow: visible;
-}
-.workspace-conversation-task .workspace-conversation-expanded .chat-page.has-messages .composer-area {
-  max-height: none;
-  overflow: visible;
-}
-.workspace-conversation-task .workspace-conversation-expanded div.task-workflow,
-.workspace-conversation-task .workspace-conversation-expanded .task-results,
-.workspace-conversation-task .workspace-conversation-expanded .workspace-footer {
-  display: none;
+  max-height: 65%;
+  margin: 12px auto 16px;
+  overflow-y: auto;
 }
 @media (max-width: 760px) {
+  .workspace-conversation-task > .workspace-conversation-toolbar,
+  .task-workspace-tools {
+    width: calc(100% - 32px);
+  }
   .workspace-conversation-heading,
   .workspace-conversation-expanded {
     padding: 14px 16px;
