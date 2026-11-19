@@ -78,6 +78,7 @@ button { color: inherit; }
 .message-author > span:last-child:not(.user-mark) { color: var(--muted); font-size: 11px; }
 .user-mark { display: grid; place-items: center; height: 28px; width: 28px; border-radius: 50%; background: var(--subtle); font-size: 11px; color: var(--muted); }
 .message-content { padding-left: 37px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.85; }
+.analysis-chat-page .strategy-discussion-reply { white-space: normal; }
 .message.user .message-content { color: var(--ink); }
 .message-meta { color: var(--muted); font-size: 11px; padding-left: 37px; }
 .has-messages .composer-area { margin-top: 12px; flex: 0 1 auto; min-height: 0; max-height: 50%; overflow-y: auto; scrollbar-gutter: stable; }
@@ -374,6 +375,7 @@ button { color: inherit; }
 }
 
 .report-action-row { margin-top: 12px; display: flex; justify-content: flex-end; }
+.analysis-chat-page .message.assistant > .report-action-row { flex-wrap: wrap; gap: 4px 14px; }
 .report-action-row:empty { display: none; }
 .report-action-row > button { font-size: 11px; min-height: 32px; }
 
