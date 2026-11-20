@@ -1,4 +1,5 @@
-.case-board { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 24px 28px 36px; }
+.case-board { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding-block: 24px 36px; }
+.case-board, .workspace-page-gutter { padding-inline: 28px; }
 .case-board-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 26px; }
 .case-board-heading h1 { margin: 0 0 8px; font-size: 25px; line-height: 1.4; font-weight: 600; letter-spacing: -.4px; }
 .case-board-heading .eyebrow { margin: 0 0 5px; }
@@ -201,9 +202,16 @@
 .case-context-banner details p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; color: var(--muted); margin: 7px 0; }
 @media (min-width: 1900px) { .case-card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 1400px) { .case-lanes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 1000px) { .case-board { padding: 20px; }.case-card-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }.case-project-grid { grid-template-columns: repeat(auto-fill, minmax(285px, 1fr)); } }
+@media (max-width: 1000px) {
+  .case-board, .workspace-page-gutter { padding-inline: 20px; }
+  .case-board { padding-block: 20px; }
+  .case-card-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .case-project-grid { grid-template-columns: repeat(auto-fill, minmax(285px, 1fr)); }
+}
 @media (max-width: 760px) {
-  .case-board { padding: 16px; }.case-board-heading { gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }.case-board-heading h1 { font-size: 23px; }.case-board-heading > button { margin-top: 0; width: auto; }
+  .case-board, .workspace-page-gutter { padding-inline: 16px; }
+  .case-board { padding-block: 16px; }
+  .case-board-heading { gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }.case-board-heading h1 { font-size: 23px; }.case-board-heading > button { margin-top: 0; width: auto; }
   .case-lanes { grid-template-columns: minmax(0, 1fr); }
   .case-context-banner { margin: 0 12px 10px; gap: 8px; flex-wrap: wrap; }.case-context-banner > button { margin-left: auto; }
   .case-board-toolbar { align-items: flex-start; }.case-board-filters { gap: 8px; width: 100%; }.case-board-filters input { flex: 1; min-width: 140px; width: 100%; }.case-board-filters select { max-width: 55%; }.case-card-grid, .case-project-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); }
