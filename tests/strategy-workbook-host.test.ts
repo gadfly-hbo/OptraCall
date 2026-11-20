@@ -126,3 +126,50 @@ test('重排无稳定编号的工作簿，目标与地图都不能按原行修�
   const fresh=(await post(ep+'commit',{...input,target:'goals',destination:dest,bytes:reordered})).goals;
   assert.notEqual(fresh[0].goalId,g.goalId);assert.equal(fresh[0].title,'服务');
 });
+
+test('人工清空地图指标字段后，重开 v2 可交接目标并保留两版原值',async t=>{
+  let host=await startTestHost();
+  t.after(()=>host.close());
+  async function api(route:string,method='GET',body?:unknown,status=200){
+    const response=await host.request(route,method,body),result=await response.json();
+    assert.equal(response.status,status,JSON.stringify({route,result}));return result;
+  }
+  await api('/api/configuration','PUT',{name:'地图交接',provider:'openai-compatible',baseUrl:'http://127.0.0.1:14998/v1',model:'synthetic',apiKey:'synthetic-local'});
+  const discussionId=randomUUID(),mapId=randomUUID(),route='/api/strategy/discussions/'+discussionId+'/maps';
+  await api('/api/strategy/discussions','POST',{operationId:discussionId,title:'地图手工修订'},201);
+  const primary={metric:'复购率',baseline:'0',target:'12%',unit:'%',period:'90天',baselineKind:'实测'};
+  const secondary={metric:'覆盖率',baseline:'9%',target:'待定',unit:'%',period:'上月',baselineKind:'实测'};
+  const node={id:'G1',kind:'goal',title:'会员经营',...primary,metrics:[secondary]};
+  const draft={title:'会员试点',template:'table',nodes:[node],edges:[]};
+  const save=(expectedVersion:number,nodes:typeof draft.nodes)=>api(route,'POST',{mapId,operationId:randomUUID(),expectedVersion,reason:'人工修订指标',draft:{...draft,nodes}},201);
+  const other={...node,id:'G2',title:'新店咨询',metric:'咨询量',metrics:[]};
+  const first=(await save(0,[node,other])).version;
+  const edited={...node,period:'',baselineKind:'  ',metrics:[{...secondary,baseline:'',target:'',unit:' ',baselineKind:'',period:''},
+    {...secondary,metric:'到店率',target:'待定',baseline:'0%',period:'年度'}]};
+  const second=(await save(1,[edited,{...other,baseline:' ',baselineKind:'',target:'',unit:'',period:''}])).version;
+  assert.equal(second.version,2);
+  assert.equal(first.nodes[0].period,'90天');
+  assert.equal(second.nodes[0].period,'');
+  assert.equal(second.nodes[1].baseline,' ');
+  const {dataRoot,projectsRoot}=host;
+  await host.close();host=await startTestHost({dataRoot,projectsRoot});
+  const {versions}=await api(route);
+  assert.deepEqual(versions.find((map:any)=>map.version===1),first);
+  assert.deepEqual(versions.find((map:any)=>map.version===2),second);
+  const map={discussionId,mapId,version:2,sha256:second.contentSha256};
+  const {goals}=await api('/api/strategy/workbooks/handoff','POST',{map,selected:['G1','G2'],scope:{kind:'personal',id:'self',name:'个人工作'},perspective:'personal'});
+  const {goal}=await api('/api/strategy/goals/'+goals[0].goalId);
+  const saved=goal.versions[0];
+  assert.deepEqual(saved.structured.map,map);
+  assert.deepEqual(saved.structured.metrics,[
+    {metric:'复购率',baseline:'0',target:'12%',unit:'%'},
+    {metric:'覆盖率'},
+    {...edited.metrics[1]}
+  ]);
+  assert.equal(saved.baseline.state,'known');
+  assert.match(saved.measurement.criterion,/覆盖率 目标值待定/);
+  const pending=(await api('/api/strategy/goals/'+goals[1].goalId)).goal.versions[0];
+  assert.deepEqual(pending.structured.metrics,[{metric:'咨询量'}]);
+  assert.deepEqual(pending.baseline,{state:'pending',description:'基线待补'});
+  assert.deepEqual((await api(route)).versions,versions);
+});

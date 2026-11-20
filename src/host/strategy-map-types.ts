@@ -28,11 +28,23 @@ export function mapDraft(version:StrategyMapVersion):StrategyMapDraft {
   return {title,template,choice,excluded,assumptions,unknowns,nodes,edges,...(scenarioModel&&{scenarioModel}),...(importSource&&{importSource})};
 }
 
+const optionalMetricFields = ['baseline', 'baselineKind', 'target', 'unit', 'period'] as const;
+
+function metricValues(name: string, fields: Partial<StrategyMapMetric>): StrategyMapMetric {
+  const result: StrategyMapMetric = { metric: name.trim() };
+  for (const field of optionalMetricFields) {
+    const value = fields[field]?.trim();
+    if (value) result[field] = value;
+  }
+  return result;
+}
+
 /** Workbook imports may supply only the list. Manual edits may also define a primary metric. */
-export function mapNodeMetrics(node:StrategyMapNode):StrategyMapMetric[] {
-  const additional=node.metrics??[];
-  if(!node.metric)return additional;
-  const {metric,baseline,baselineKind,target,unit,period}=node;
-  const primary={metric,baseline,baselineKind,target,unit,period};
-  return [primary,...additional.filter(m=>m.metric!==metric || m.baseline!==baseline || m.baselineKind!==baselineKind || m.target!==target || m.unit!==unit || m.period!==period)];
+export function mapNodeMetrics(node: StrategyMapNode): StrategyMapMetric[] {
+  const additional = (node.metrics ?? []).map(row => metricValues(row.metric, row));
+  if (!node.metric?.trim()) return additional;
+  const primary = metricValues(node.metric, node);
+  return [primary, ...additional.filter(row =>
+    row.metric !== primary.metric || optionalMetricFields.some(field => row[field] !== primary[field])
+  )];
 }

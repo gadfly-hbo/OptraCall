@@ -48,3 +48,42 @@ test('设备服务在相同工单量和单位成本下，备件可用率改变�
   }
   assert.equal(compareStrategyScenarios(models,{populationSize:1000,coverage:80}).kind,'qualitative');
 });
+
+test('固定覆盖方案仅需要人数，可变覆盖与配件模型保留零与未填的区别',()=>{
+  const fixedZero={...a,liftPoints:5,coverage:0};
+  const result=compareStrategyScenarios([a,fixedZero],{populationSize:1000});
+  assert.deepEqual(result,{kind:'quantitative',rows:[{increment:20},{increment:0}],crossings:[]});
+  assert.equal(compareStrategyScenarios([a,fixedZero],{populationSize:0}).kind,'qualitative');
+  assert.equal(compareStrategyScenarios([a,b],{populationSize:1000}).kind,'qualitative');
+  const zero=compareStrategyScenarios([a,b],{populationSize:1000,coverage:0});
+  assert.equal(zero.kind,'quantitative');
+  if(zero.kind==='quantitative')assert.deepEqual(zero.rows.map(r=>r.increment),[20,0]);
+  const service={...shared,model:'repeat-visits-v1' as const,remote:10,parts:20,fixed:2};
+  assert.equal(compareStrategyScenarios([service,service],{populationSize:1000,unitCost:0}).kind,'qualitative');
+  const serviceZero=compareStrategyScenarios([service,service],{populationSize:1000,unitCost:0,coverage:0});
+  assert.equal(serviceZero.kind,'quantitative');
+  if(serviceZero.kind==='quantitative')assert.deepEqual(serviceZero.rows.map(r=>r.increment),[-2,-2]);
+});
+
+test('固定覆盖的两版地图只提交人数，真实 HTTP 试算记录可原样重开',async t=>{
+  const {startTestHost}=await import('./fixtures/host-process.ts'),{randomUUID}=await import('node:crypto');
+  const host=await startTestHost();t.after(()=>host.close());
+  const api=async (route:string,method='GET',body?:unknown,status=200)=>{
+    const response=await host.request(route,method,body);
+    assert.equal(response.status,status,await response.clone().text());return response.json();
+  };
+  await api('/api/configuration','PUT',{name:'本地测试',provider:'openai-compatible',baseUrl:'http://127.0.0.1:14998/v1',model:'synthetic',apiKey:'synthetic-local'});
+  const id=randomUUID(),base='/api/strategy/discussions/'+id;
+  await api('/api/strategy/discussions','POST',{operationId:id,title:'固定覆盖对照'},201);
+  const maps=[];
+  for(const [i,model] of [a,{...a,coverage:0,liftPoints:3}].entries()){
+    const {version}=await api(base+'/maps','POST',{mapId:randomUUID(),operationId:randomUUID(),expectedVersion:0,reason:'固定覆盖',
+      draft:{title:'方向 '+i,template:'table',nodes:[{id:'G1',title:'二购',kind:'goal'}],edges:[],scenarioModel:model}},201);
+    maps.push({mapId:version.mapId,version:version.version,contentSha256:version.contentSha256});
+  }
+  const record={name:'固定覆盖对照',operationId:randomUUID(),mode:'conditions',maps,conditions:{populationSize:1500}};
+  const {trial}=await api(base+'/simulations','POST',record);
+  assert.deepEqual(trial.conditions,{populationSize:1500});
+  assert.deepEqual((await api(base+'/simulations')).trials,[trial]);
+  assert.deepEqual(await api(base+'/simulations','POST',record),{trial});
+});

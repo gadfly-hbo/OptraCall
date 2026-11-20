@@ -15,7 +15,7 @@ const versionRef=z.object({mapId:z.string().uuid(),version:z.number().int().posi
 const trialSchema=z.strictObject({
   mode:z.enum(['conditions','assumptions']).optional(),operationId:z.string().uuid(),name:z.string().trim().min(1).max(200),
   maps:z.array(versionRef.extend({contentSha256:z.string().regex(/^[0-9a-f]{64}$/),liftPoints:z.number().finite().optional(),service:z.strictObject({remote:z.number().min(0).max(100),parts:z.number().min(0).max(100),fixed:z.number().nonnegative()}).optional()}).strict()).min(2),
-  conditions:z.strictObject({populationSize:z.number().int().positive(),coverage:z.number().min(0).max(100),unitCost:z.number().finite().nonnegative().optional(),baselineRate:z.number().min(0).max(100).optional()}).optional(),
+  conditions:z.strictObject({populationSize:z.number().int().positive(),coverage:z.number().min(0).max(100).optional(),unitCost:z.number().finite().nonnegative().optional(),baselineRate:z.number().min(0).max(100).optional()}).optional(),
   edge:versionRef.extend({edgeId:z.string().min(1).max(300)}).strict().optional(),
 });
 

@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import type {StrategyMapVersion} from '../strategy-map-types.ts';
-import {compareStrategyScenarios, parseStrategyScenarioModel} from '../strategy-simulation.ts';
+import {compareStrategyScenarios, parseStrategyScenarioModel, usesScenarioCoverage} from '../strategy-simulation.ts';
 import type {StrategyTrial, StrategyTrialInput} from '../strategy-trials.ts';
 import {StrategyAttachmentEvidence} from './StrategyAttachmentEvidence.tsx';
 import {strategyWorkbenchRequest} from './strategy-discussion-client.ts';
@@ -43,8 +43,9 @@ export function StrategySimulationPanel({discussionId,versions,origin,onReturn}:
     const value=lifts[keyOf(v)];
     try{return parseStrategyScenarioModel(value===undefined?v.scenarioModel:{...v.scenarioModel,liftPoints:value===''?NaN:Number(value)});}catch{return undefined;}
   };
-  const conditions={populationSize:Number(size),coverage:coverage===''?NaN:Number(coverage),...(service && {unitCost:unitCost===''?NaN:Number(unitCost),...(baseRate!=='' && {baselineRate:Number(baseRate)})})};
   const models=maps.map(modelFor);
+  const needsCoverage=usesScenarioCoverage(models);
+  const conditions={populationSize:Number(size),...(needsCoverage && coverage!=='' && {coverage:Number(coverage)}),...(service && {unitCost:unitCost===''?NaN:Number(unitCost),...(baseRate!=='' && {baselineRate:Number(baseRate)})})};
   const comparison=compareStrategyScenarios(models,conditions);
   const eligible=maps.length>=2 && maps.every((v,i)=>v.scenarioModel && models[i]);
   const sameBasis=eligible && compareStrategyScenarios(models,{populationSize:1,coverage:100,...(service && {unitCost:1})}).kind==='quantitative';
@@ -54,7 +55,7 @@ export function StrategySimulationPanel({discussionId,versions,origin,onReturn}:
     setSelected(r.maps.map(keyOf));setLifts(Object.fromEntries(r.maps.filter(m=>m.liftPoints!==undefined).map(m=>[keyOf(m),String(m.liftPoints)])));
     setServices(Object.fromEntries(r.maps.filter(m=>m.service).map(m=>[keyOf(m),Object.fromEntries(Object.entries(m.service!).map(([k,x])=>[k,String(x)]))])));
     setUnitCost(r.conditions?.unitCost===undefined?'':String(r.conditions.unitCost));setBaseRate(r.conditions?.baselineRate===undefined?'':String(r.conditions.baselineRate));
-    setSize(r.conditions?String(r.conditions.populationSize):'');setCoverage(r.conditions?String(r.conditions.coverage):'100');
+    setSize(r.conditions?String(r.conditions.populationSize):'');setCoverage(r.conditions?.coverage===undefined?'':String(r.conditions.coverage));
     setEdge(r.edge);setMode(r.mode??(r.conditions?'conditions':'assumptions'));setName(r.name);setNotice('已恢复当时的版本和条件');setError('');
   }
   async function save(){
@@ -80,7 +81,7 @@ export function StrategySimulationPanel({discussionId,versions,origin,onReturn}:
     <div className="sg-row" aria-label="模拟方式">{([['conditions','经营情景'],['assumptions','战略假设']] as const).map(([key,title])=><button className="secondary-button" type="button" key={key} aria-pressed={mode===key} onClick={()=>setMode(key)}>{title}</button>)}</div>
     {selected.length>maps.length && <p role="status">有参与比较的版本当前不可读取，<button className="text-button" onClick={()=>setSelected(maps.map(keyOf))}>仅保留当前可读版本</button></p>}
     {mode==='conditions' && <>
-      {sameBasis && <fieldset className="wb-fields"><legend>共同经营条件</legend><p>{models[0]!.population} · {models[0]!.period} · {models[0]!.metric}，基线 {models[0]!.baselineRate}%</p><label>{service?'同期工单量':'人群规模'}<input type="number" min="1" step="1" value={size} onChange={e=>setSize(e.target.value)}/></label><label>{service?'配件可用率（%）':'可变方案的有效覆盖率（%）'}<input type="number" min="0" max="100" step="any" value={coverage} onChange={e=>setCoverage(e.target.value)}/></label>{service && <><label>每次重复上门成本<input type="number" min="0" step="any" value={unitCost} onChange={e=>setUnitCost(e.target.value)}/></label><label>首次修复率（%）<input type="number" min="0" max="100" step="any" value={baseRate} placeholder={String(models[0]!.baselineRate)} onChange={e=>setBaseRate(e.target.value)}/></label></>}</fieldset>}
+      {sameBasis && <fieldset className="wb-fields"><legend>共同经营条件</legend><p>{models[0]!.population} · {models[0]!.period} · {models[0]!.metric}，基线 {models[0]!.baselineRate}%</p><label>{service?'同期工单量':'人群规模'}<input type="number" min="1" step="1" value={size} onChange={e=>setSize(e.target.value)}/></label>{needsCoverage && <label>{service?'配件可用率（%）':'可变方案的有效覆盖率（%）'}<input type="number" min="0" max="100" step="any" value={coverage} onChange={e=>setCoverage(e.target.value)}/></label>}{service && <><label>每次重复上门成本<input type="number" min="0" step="any" value={unitCost} onChange={e=>setUnitCost(e.target.value)}/></label><label>首次修复率（%）<input type="number" min="0" max="100" step="any" value={baseRate} placeholder={String(models[0]!.baselineRate)} onChange={e=>setBaseRate(e.target.value)}/></label></>}</fieldset>}
       {comparison.kind==='qualitative' && <p className="sg-muted">定性比较 · {comparison.reason}</p>}
       <div className="wb-table-wrap"><table><caption>各版经营假设与结果</caption><thead><tr><th>方案</th><th>选择与依据</th><th>各版试调参数</th><th>{service?'预计净节省':'预计增量'}</th></tr></thead><tbody>{maps.map((v,i)=><tr key={keyOf(v)}><th scope="row">{label(v)}</th><td>{v.choice || '待补'}{v.scenarioModel && <details><summary>模型依据与覆盖口径</summary>{v.scenarioModel.basis}<br/>{v.scenarioModel.model==='repeat-visits-v1'?'按同期工单和单次成本试算':v.scenarioModel.coverageAdjustable?'随共同覆盖率试调':'固定覆盖 '+v.scenarioModel.coverage+'%'}</details>}</td><td>{v.scenarioModel?.model==='repeat-visits-v1'?([['remote','分流可避免比例（%）'],['parts','有配件时可避免比例（%）'],['fixed','每期固定投入']] as const).map(([field,title])=>{
         const m=v.scenarioModel;if(m?.model!=='repeat-visits-v1')return null;
