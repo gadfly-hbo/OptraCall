@@ -134,10 +134,16 @@ test('Pi cannot resume with a different readable map after its original context 
     await api(base+'/messages','POST',{requestId:randomUUID(),text:'比较候选方向。',mapRef:{mapId:choice.mapId,version:1},expectedRevision:owner.revision},202);
     let state=await api(base);for(let n=0;n<400 && state.busy;n++){await delay(20);state=await api(base);}
     assert.equal(state.discussion.lastRun.status,'completed');
+    // The original handoff reuses an exact assistant source, so it has the
+    // same dependencies even if the user is currently looking at another map.
+    await api(base+'/versions','POST',{expectedRevision:state.discussion.revision,source:state.replies.at(-1).source,
+      options:'两个方向',choice:'待核',rationale:'参照原讨论',assumptions:'待试点',unknowns:'待核'},201);
+    state=await api(base);
     const before=provider.requests.length;
     const file=join(host.dataRoot,'strategy-workbooks','discussion-'+id,workbookMap.importSource!.sha256+'.xlsx');
     await rename(file,file+'.unavailable');
     assert.ok((await api(base+'/maps')).versions.some((v:StrategyMapVersion)=>v.mapId===ordinary.mapId),'the newly selected alternative remains readable');
+    if(mode!=='unseen')await api(base+'/versions/1/handoff','POST',{expectedRevision:state.discussion.revision,scope:{id:'self',kind:'personal',name:'个人工作'}},409);
     const response=await host.request(base+'/messages','POST',{requestId:randomUUID(),text:'换另一个方向继续。',mapRef:{mapId:ordinary.mapId,version:1},expectedRevision:state.discussion.revision});
     if(mode==='unseen'){
       assert.equal(response.status,202,'a version never sent or read cannot become a history dependency');
