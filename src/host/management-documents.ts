@@ -66,6 +66,7 @@ export function gsaVersionDocument(goal: GoalVersion, currentAdopted: boolean, a
     kind: 'GSA 表', title: goal.title, version: goal.version, scope: goal.scope.name, createdAt: goal.createdAt, identity: goal.goalId,
     status: goal.status === 'candidate' ? '候选稿 · 待采用' : currentAdopted ? '当前采用版' : '历史采用版',
     tables: [
+      ...(goal.structured?[{title:'目标项与指标',columns:['目标编号','目标项','指标','基线','基线性质','目标值','单位','周期 / 口径'],rows:goal.structured.metrics.map(m=>[goal.structured!.nodeId,goal.title,m.metric,m.baseline??'待建',m.baselineKind??'待核',m.target??'待定',m.unit??'—',m.period??'待核'])}]:[]),
       {title: '目标、策略与行动', columns: ['条目', '本版正文'], rows: [
         ['G · 目标', goal.outcome], ['成果标准或指标', measurement],
         ['基线', (goal.baseline.state === 'pending' ? '待核 · ' : '') + goal.baseline.description],
@@ -81,6 +82,8 @@ export function gsaVersionDocument(goal: GoalVersion, currentAdopted: boolean, a
           '讨论 '+goal.roleSuggestion.discussionId, '会话 '+goal.roleSuggestion.sessionId,
           '条目 '+goal.roleSuggestion.entryId, 'SHA-256 '+goal.roleSuggestion.sha256,
         ].join(' · ')]] : []),
+        ...(goal.structured?.map?[['战略地图',goal.structured.planTitle+' · '+goal.structured.map.mapId+' · v'+goal.structured.map.version+' · '+goal.structured.map.sha256]]:[]),
+        ...(goal.structured?.workbook?[['Excel 原件',goal.structured.workbook.fileName+' · '+goal.structured.workbook.sha256+' · '+goal.structured.workbook.rows.map(row=>row.sheet+'!'+row.row).join('、')]]:[]),
         ['参考方法', entries(goal.strategyContext?.methods?.map(method => method.name))],
         ['准确来源', entries(sources.map(formatSource))],
       ]},

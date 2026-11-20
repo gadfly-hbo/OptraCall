@@ -20,7 +20,7 @@ export interface StrategyDiscussionSourcePermissionOptions {
 export function createStrategyDiscussionSourcePermissions(options: StrategyDiscussionSourcePermissionOptions) {
   const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
   const deny = (): never => { throw new StrategyDiscussionSourceFault('strategy_source_not_authorized', 403); };
-  return async <D extends Pick<StrategyDiscussion, 'projectId' | 'configurationId' | 'configurationRevision'>>(discussion: D & { businessOwner?: StrategyDiscussion['businessOwner'] }, configuration: RuntimeModelConfiguration, target: Record<string, unknown>, context: StrategyDiscussionSourceContext): Promise<void> => {
+  return async <D extends Pick<StrategyDiscussion, 'projectId' | 'configurationId' | 'configurationRevision'>>(discussion: D & { id?:string; businessOwner?: StrategyDiscussion['businessOwner'] }, configuration: RuntimeModelConfiguration, target: Record<string, unknown>, context: StrategyDiscussionSourceContext): Promise<void> => {
     const check = () => { context.signal?.throwIfAborted(); context.assertCurrent(); if (options.isClosing()) deny(); };
     check();
     if (configuration.id !== discussion.configurationId || configuration.revision !== discussion.configurationRevision) deny();
@@ -108,6 +108,17 @@ export function createStrategyDiscussionSourcePermissions(options: StrategyDiscu
       for (const ref of record.conceptRefs) await shared({ kind: 'enterprise', ...ref }, id);
       for (const ref of record.sapRefs) await shared({ kind: 'sap', ...ref }, id);
     };
+    if(target.kind==='strategy-attachment'){
+      if(businessOwner)deny();
+      if(target.projectId===undefined){
+        if(projectId || !discussion.id || discussion.id!==target.discussionId || context.receivingTask || context.receivingProjectId)deny();
+      }else{
+        if(typeof target.projectId!=='string'||(context.receivingProjectId&&context.receivingProjectId!==target.projectId)||(context.receivingTask&&context.receivingTask.projectId!==target.projectId))deny();
+        const project=await owner(target.projectId as string);
+        if(!project.uploads.some(upload=>upload.id===target.uploadId&&upload.path===target.path&&/^(020_clean|060_reports)\//.test(upload.path)))deny();
+      }
+      check(); return;
+    }
     if (target.kind === 'source') {
       if (!object(target.source)) deny();
       const source = target.source as Record<string, unknown>;
@@ -140,6 +151,8 @@ export function createStrategyDiscussionSourcePermissions(options: StrategyDiscu
       } else if (target.kind === 'citation-report') {
         if (typeof target.citationId !== 'string') deny();
         await citation(target.projectId as string, target.citationId as string, target.taskId as string | undefined);
+      } else if(target.kind==='case-teach-review'){
+        if(businessOwner||context.receivingProjectId&&context.receivingProjectId!==projectId||context.receivingTask&&context.receivingTask.projectId!==projectId)deny();
       } else if (target.kind !== 'project-catalog') deny();
     }
     check();

@@ -78,3 +78,12 @@
 .task-usage-context { margin: 8px 20px; font-size: 12px; }
 .task-usage-context-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; max-height: 320px; overflow: auto; }
 @media (max-width: 760px) { .task-usage-context { margin: 8px 16px; } }
+
+.sg-workbook-dialog { width: min(56rem, 94vw); }
+.sg-workbook-dialog fieldset { min-width: 0; border: 1px solid var(--line); border-radius: .6rem; margin-block: .8rem; padding: .8rem; }
+.sg-workbook-dialog select, .sg-workbook-dialog input { max-width: 100%; }
+.sg-workbook-fields { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(13rem,100%),1fr)); gap: .65rem; }
+.sg-workbook-fields label, .sg-workbook-goal { display: flex; align-items: center; gap: .5rem; margin-block: .35rem; }
+.sg-workbook-goal small, .sg-goal-item small { display: block; font-weight: normal; color: var(--muted); }
+.sg-workbook-dialog .sg-table-scroll { max-height: 20rem; overflow: auto; }
+.sg-goal-item { text-align: start; }

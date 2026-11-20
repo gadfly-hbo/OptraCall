@@ -62,16 +62,20 @@ export async function stopTask(projectId: string, taskId: string): Promise<void>
 export function runCommand(projectId: string, taskId: string, text: string, requestId: string = crypto.randomUUID()): Promise<{ result: unknown; snapshot: SessionSnapshot; outcome?: 'completed' | 'failed' | 'cancelled' }> { return request(`${taskPath(projectId, taskId)}/commands`, 'POST', { text, requestId }); }
 export async function answerInteraction(projectId: string, taskId: string, response: BrowserUIResponse): Promise<void> { await request(`${taskPath(projectId, taskId)}/ui-response`, 'POST', response); }
 export async function projectFiles(id: string): Promise<FileNode[]> { return (await request<{ files: FileNode[] }>(`projects/${encodeURIComponent(id)}/files`, 'GET')).files; }
-export async function uploadFile(id: string, file: File, directory: '010_draw' | '020_clean'): Promise<void> {
-  if (file.size > PROJECT_UPLOAD_MAX_BYTES) throw new HostRequestError('单文件不超过 50 MiB。', {}, 'upload_too_large');
-  if (!isProjectUploadName(file.name)) throw new HostRequestError('请选择支持的文档、网页、演示文稿、表格或文本文件。', {}, 'invalid_upload_name');
-  const content = await new Promise<string>((resolve, reject) => {
+export function fileBase64(file:File){
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new HostRequestError('文件读取失败，请重新选择。'));
     reader.onabort = () => reject(new HostRequestError('文件读取已取消。'));
     reader.onload = () => { const result = String(reader.result), comma = result.indexOf(','); if (comma < 0) reject(new HostRequestError('文件读取失败，请重新选择。')); else resolve(result.slice(comma + 1)); };
     reader.readAsDataURL(file);
   });
+}
+
+export async function uploadFile(id: string, file: File, directory: '010_draw' | '020_clean'): Promise<void> {
+  if (file.size > PROJECT_UPLOAD_MAX_BYTES) throw new HostRequestError('单文件不超过 50 MiB。', {}, 'upload_too_large');
+  if (!isProjectUploadName(file.name)) throw new HostRequestError('请选择支持的文档、网页、演示文稿、表格或文本文件。', {}, 'invalid_upload_name');
+  const content = await fileBase64(file);
   await request(`projects/${encodeURIComponent(id)}/files/upload`, 'POST', { name: file.name, content, directory });
 }
 export async function copyToClean(id: string, path: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/files/copy-to-clean`, 'POST', { path }); }
@@ -192,3 +196,5 @@ export function taskResults(projectId: string, taskId: string, options: { id?: s
 export function setProjectStage(projectId: string, input: import('../task-assignment.ts').ProjectStageInput) {
   return request<{ stage: import('../task-assignment.ts').ProjectStage }>('projects/' + encodeURIComponent(projectId) + '/stage', 'POST', input);
 }
+
+export const projectAttachmentLibrary=(id:string)=>request<{sources:import('../strategy-discussion-types.ts').StrategyDiscussionSource[]}>(`projects/${encodeURIComponent(id)}/strategy-attachments`,'GET');

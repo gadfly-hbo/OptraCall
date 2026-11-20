@@ -1,3 +1,5 @@
+import { attachmentPage } from './strategy-attachment-document.ts';
+import type { StrategyAttachments } from './strategy-attachments.ts';
 import type { ProjectStore } from './project-store.ts';
 import type { ProjectDataContextStore } from './project-data-context-store.ts';
 import type { SapMethodStore } from '../../extensions/business-plugins/metric-factory/methods/store.ts';
@@ -8,7 +10,7 @@ import type { StrategyDiscussion, StrategyDiscussionSource } from './strategy-di
 import { createHash } from 'node:crypto';
 import { PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
 import type { ProjectTaskResultSources } from './project-task-results-types.ts';
-import { discussionSourceMode, isDiscussionSourceExcluded } from './strategy-discussion-source-scope.ts';
+import { discussionSourceMode, isDiscussionSourceExcluded, isDiscussionSourceSelected } from './strategy-discussion-source-scope.ts';
 
 export interface StrategyDiscussionSourceContext {
   signal?: AbortSignal;
@@ -28,6 +30,8 @@ export class StrategyDiscussionSourceFault extends Error {
 export interface StrategyDiscussionSourcesOptions<Configuration> {
   projects: Pick<ProjectStore, 'get' | 'tree' | 'captureFeedbackFile'>;
   data: Pick<ProjectDataContextStore, 'getIndex' | 'readDescription' | 'readCitationManifest' | 'readCitationEvidenceFile'>;
+  attachments?: StrategyAttachments;
+  teach?:ReturnType<typeof import('./strategy-teach-sources.ts').strategyTeachSources<Configuration>>;
   methods?: Pick<SapMethodStore, 'listPublished' | 'getPublished'>;
   enterprise?: Pick<EnterpriseMaterialsStore, 'referenceIndex' | 'readRevision'>;
   readSource?: ReadPersonalSource;
@@ -74,6 +78,14 @@ export function createStrategyDiscussionSources<Configuration>(options: Strategy
   const same = (actual: StrategyDiscussionSource, selected: StrategyDiscussionSource) => { if (canonical(actual) !== canonical(selected)) return fault('strategy_source_changed'); };
   async function resolve(value: StrategyDiscussionSource, discussion: StrategyDiscussion, configuration: Configuration, context: StrategyDiscussionSourceContext, verifying = false): Promise<{ source: StrategyDiscussionSource; text: string; fragment?: boolean }> {
     valid(value); await qualify(discussion, configuration, value.target, context);
+    if(value.target.kind==='case-teach-review'&&options.teach){
+      const found=await options.teach.read(discussion,configuration,context,value.target);check(context);same(found.source,value);
+      return found;
+    }
+    if(value.target.kind==='strategy-attachment'&&options.attachments){
+      await options.attachments.bytes(discussion,value);check(context);
+      return {source:value,text:''};
+    }
     if (value.target.kind === 'task-report' || value.target.kind === 'task-native-reply') {
       const target = value.target, report = target.kind === 'task-report';
       keys(target, report ? ['kind', 'projectId', 'taskId', 'requestId', 'sessionId', 'toolCallId', 'relativePath', 'sha256', 'bytes', 'nativeEntryId'] : ['kind', 'projectId', 'taskId', 'requestId', 'sessionId', 'messageId', 'sha256', 'bytes']);
@@ -241,6 +253,7 @@ export function createStrategyDiscussionSources<Configuration>(options: Strategy
           result.push(value);
         }
       }
+      if(options.teach)result.push(...await options.teach.list(discussion,configuration,context));
       const authorized: StrategyDiscussionSource[] = [];
       for (const value of result) {
         try { await qualify(discussion, configuration, value.target, context); authorized.push(value); }
@@ -249,10 +262,10 @@ export function createStrategyDiscussionSources<Configuration>(options: Strategy
       await qualify(discussion, configuration, { kind: 'project-catalog', projectId }, context);
       return authorized;
     },
-    async read(value: StrategyDiscussionSource, discussion: StrategyDiscussion, configuration: Configuration, context: StrategyDiscussionSourceContext, page: { offset?: number; limit?: number } = {}): Promise<StrategyDiscussionSourceRead> {
+    async read(value: StrategyDiscussionSource, discussion: StrategyDiscussion, configuration: Configuration, context: StrategyDiscussionSourceContext, page: { offset?: number; limit?: number; locator?: string } = {}): Promise<StrategyDiscussionSourceRead> {
       check(context);
       if (isDiscussionSourceExcluded(discussion, value)) return fault('strategy_source_excluded', 403);
-      if (!discussion.sources.some(selected => canonical(selected) === canonical(value))) {
+      if (!(value.target.kind==='strategy-attachment' ? isDiscussionSourceSelected(discussion,value) : discussion.sources.some(selected => canonical(selected) === canonical(value)))) {
         if (discussionSourceMode(discussion) !== 'project-background' || !discussion.projectId) return fault('strategy_source_not_selected', 403);
         valid(value);
         await qualify(discussion, configuration, value.target, context);
@@ -263,6 +276,12 @@ export function createStrategyDiscussionSources<Configuration>(options: Strategy
       }
       const offset = page.offset ?? 0, limit = page.limit ?? 8192;
       if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 32768) return fault('strategy_source_page_invalid', 400);
+      if(value.target.kind==='strategy-attachment'&&options.attachments){
+        valid(value);await qualify(discussion,configuration,value.target,context);
+        const notes=await options.attachments.notes(discussion,value);
+        await qualify(discussion,configuration,value.target,context);
+        return attachmentPage(value,notes,page);
+      }
       const resolved = await resolve(value, discussion, configuration, context), end = Math.min(offset + limit, resolved.text.length);
       if (offset > resolved.text.length) return fault('strategy_source_page_invalid', 400);
       return { source: resolved.source, text: resolved.text.slice(offset, end), range: { start: offset, end, total: resolved.text.length }, complete: !resolved.fragment && offset === 0 && end === resolved.text.length };
@@ -273,6 +292,7 @@ export function createStrategyDiscussionSources<Configuration>(options: Strategy
         if (context.metadataOnly) {
           valid(value);
           await qualify(discussion, configuration, value.target, context);
+          if(value.target.kind==='case-teach-review')await resolve(value,discussion,configuration,context,true);
         } else await resolve(value, discussion, configuration, context, true);
       }
       check(context);

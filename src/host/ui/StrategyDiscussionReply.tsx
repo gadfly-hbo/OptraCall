@@ -1,3 +1,5 @@
+import { StrategyAttachmentEvidence } from './StrategyAttachmentEvidence.tsx';
+import type { StrategyAttachmentReplyReferences } from '../strategy-attachment-types.ts';
 import { messageText, type NativeMessage } from './project-types.ts';
 import { Marked } from 'marked';
 import type { MarkedToken, Token, Tokens } from 'marked';
@@ -77,12 +79,16 @@ export const StrategyDiscussionReply = memo(function StrategyDiscussionReply({ t
   }
 });
 
-export function StrategyDiscussionTranscript({ messages, streaming, label = '战略讨论记录' }: { messages: NativeMessage[]; streaming?: string; label?: string }) {
+export function StrategyDiscussionTranscript({ messages, streaming, discussionId,references,label = '战略讨论记录' }: { messages: NativeMessage[]; streaming?: string; discussionId?:string; references?:StrategyAttachmentReplyReferences[]; label?: string }) {
   return <div className="strategy-discussion-messages" role="log" aria-label={label}>
-    {messages.map((message, index) => <article className={`strategy-discussion-message ${message.role}`} key={message.nativeEntryId || index}>
+    {messages.map((message, index) => {
+      const cited=references?.find(ref=>ref.entryId===message.nativeEntryId)?.citations??[];
+      const text=cited.reduce((s,c)=>s.replaceAll('[[资料:'+c.token+']]','〔'+c.locator+'〕'),messageText(message));
+      return <article className={`strategy-discussion-message ${message.role}`} key={message.nativeEntryId || index}>
       <strong>{message.role === 'user' ? '你' : 'Agent'}</strong>
-      {message.role === 'assistant' ? <StrategyDiscussionReply text={messageText(message)} /> : <p>{messageText(message)}</p>}
-    </article>)}
+      {message.role === 'assistant' ? <StrategyDiscussionReply text={text} /> : <p>{messageText(message)}</p>}
+      {discussionId&&cited.length>0&&<div className="sg-row" aria-label="本回复引用的资料">{cited.map(c=><StrategyAttachmentEvidence key={c.token} discussionId={discussionId} citation={c}/>)}</div>}
+    </article>;})}
     {streaming && <article className="strategy-discussion-message assistant"><strong>Agent</strong><StrategyDiscussionReply text={streaming} /></article>}
   </div>;
 }
