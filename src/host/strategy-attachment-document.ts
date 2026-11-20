@@ -25,7 +25,15 @@ export async function parseAttachment(name:string,bytes:Buffer):Promise<Strategy
     if(extension==='.pdf'){
       const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');
       const pdfRoot=path.dirname(fileURLToPath(import.meta.resolve('pdfjs-dist/package.json')));
-      const loading=getDocument({data:new Uint8Array(bytes),cMapUrl:path.join(pdfRoot,'cmaps')+path.sep,cMapPacked:true,standardFontDataUrl:path.join(pdfRoot,'standard_fonts')+path.sep,useSystemFonts:false,isEvalSupported:false,disableFontFace:true,useWorkerFetch:false});
+      const loading = getDocument({
+        data: new Uint8Array(bytes),
+        cMapUrl: path.join(pdfRoot, 'cmaps') + path.sep,
+        cMapPacked: true,
+        standardFontDataUrl: path.join(pdfRoot, 'standard_fonts') + path.sep,
+        useSystemFonts: false,
+        disableFontFace: true,
+        useWorkerFetch: false,
+      });
       try{
         const pdf=await loading.promise;
         if(pdf.numPages>1000)fail('strategy_attachment_text_limit',413);
