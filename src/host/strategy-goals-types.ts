@@ -47,6 +47,7 @@ export interface GoalRoleSuggestionRef {
   sha256: string;
 }
 export interface GoalDraftInput {
+  structured?: import('./structured-goal.ts').StructuredGoal;
   roleSuggestion?: GoalRoleSuggestionRef;
   strategyChoice?: StrategyChoiceRef;
   title: string;
@@ -135,6 +136,7 @@ export interface GoalContextSnapshot {
   feedback: GoalFeedback[];
 }
 export interface StrategyGoalsIndex {
+  unavailableGoalSources?:string[];
   goals: StrategyGoalRecord[];
   relations: GoalRelation[];
   feedback: GoalFeedback[];

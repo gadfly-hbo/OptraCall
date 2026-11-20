@@ -31,7 +31,7 @@ async function strategy(){
     await api(route+'/versions','POST',{source,expectedRevision:(await api(route)).discussion.revision,options:'两个窗口',choice,rationale:'保留原比较依据',assumptions:'咨询量保持',unknowns:'晚间量待核'});
   }
   await page.reload();await button('战略选择',nav).click();await page.locator('label').filter({hasText:/^原讨论/}).locator('select').selectOption(discussion);
-  await button('版本与导出').click();
+  await button('版本与来源').click();
   const selectVersion=page.getByLabel('已保存版本');await selectVersion.selectOption('2');await page.getByText('延时窗口',{exact:true}).waitFor();
   const readV1='**/api/'+route+'/versions/1';
   await page.route(readV1,r=>r.fulfill({status:403,json:{code:'strategy_source_not_authorized'}}));
@@ -44,7 +44,7 @@ async function strategy(){
   await button('将此版带入 GSA').click();await page.getByRole('navigation',{name:'目标管理工作视图'}).waitFor();
   const after=(await api(route+'/versions/1')).version, other=(await api(route+'/versions/2')).version;
   assert.deepEqual(after.source,source);assert.equal(after.contentSha256,before.contentSha256);assert.equal(after.choice,'预约窗口');assert.ok(after.destination?.scope);assert.ok(!other.destination);assert.equal((await api(route+'/versions')).versions.length,2);
-  await button('战略选择',nav).click();await page.locator('label').filter({hasText:/^原讨论/}).locator('select').selectOption(discussion);await button('版本与导出').click();await page.getByLabel('已保存版本').selectOption('1');await button('打开已交接的目标草稿').click();
+  await button('战略选择',nav).click();await page.locator('label').filter({hasText:/^原讨论/}).locator('select').selectOption(discussion);await button('版本与来源').click();await page.getByLabel('已保存版本').selectOption('1');await button('打开已交接的目标草稿').click();
   const repeated=await api(route+'/versions/1/handoff','POST',{expectedRevision:previousRevision,scope:after.destination.scope});
   assert.deepEqual(repeated.version,after);
   assert.deepEqual((await api(route+'/versions/1')).version,after);

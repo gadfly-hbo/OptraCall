@@ -819,6 +819,11 @@ export class CaseStore {
     this.database().exec(`${GOALS_SCHEMA} PRAGMA user_version=4;`);
     this.validateDatabase(this.readMarker());
   }
+  caseForGoalStrategy(ref:{goalId:string;version:number},strategy:string):string|null {
+    if(this.getStatus().state==='uninitialized'||Number(this.database().prepare('PRAGMA user_version').get()?.user_version)<4)return null;
+    const row=this.database().prepare("SELECT case_id FROM case_goal_bindings WHERE json_extract(binding_json,'$.primary.goalId')=? AND json_extract(binding_json,'$.primary.version')=? AND json_extract(binding_json,'$.strategy')=? ORDER BY case_revision LIMIT 1").get(ref.goalId,ref.version,strategy);
+    return row?String(row.case_id):null;
+  }
   getGoalBinding(caseId: string, asOf = new Date(), throughRevision = Infinity): CaseGoalBinding | null {
     // Local business dates follow the same timezone as the Host's date input.
     const day = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
@@ -876,7 +881,7 @@ export class CaseStore {
     const binding = input.goalBinding === undefined ? undefined : goalBindingInput(input.goalBinding);
     const request = { ...clean, ...(binding ? { goalBinding: binding } : {}), ...(input.creationSource ? { creationSource: input.creationSource } : {}) };
     return this.operation('case_create', request, null, null, () => {
-      if (binding?.strategy && this.database().prepare("SELECT 1 FROM case_goal_bindings WHERE json_extract(binding_json,'$.primary.goalId')=? AND json_extract(binding_json,'$.primary.version')=? AND json_extract(binding_json,'$.strategy')=? LIMIT 1").get(binding.primary.goalId, binding.primary.version, binding.strategy)) fail('case_goal_strategy_already_used', 409);
+      if (binding?.strategy && this.caseForGoalStrategy(binding.primary,binding.strategy)) fail('case_goal_strategy_already_used', 409);
       const time = now(), record: CaseRecord = { id: randomUUID(), ...clean, closeReason: null, closedAt: null, revision: 1, createdAt: time, updatedAt: time };
       const { operationId: _operationId, ...saved } = record as CaseRecord & { operationId: string };
       this.insert('cases', saved);

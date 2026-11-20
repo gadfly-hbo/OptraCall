@@ -1,0 +1,19 @@
+.strategy-workbench {min-width:0}
+.strategy-workbench:empty {display:none}
+.strategy-workbench :is(input:not([type=checkbox]),select,textarea),.wb-methods select {max-width:100%;padding:.48rem .65rem;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:var(--surface)}
+.strategy-workbench :is(h3,h4),.wb-methods summary {overflow-wrap:anywhere}
+.wb-table-wrap {max-width:100%;overflow-x:auto}
+.wb-table-wrap table {width:100%;border-collapse:collapse;font-size:.91rem}
+.wb-table-wrap caption {text-align:left;font-weight:600;padding:1rem 0 .5rem}
+.wb-table-wrap th,.wb-table-wrap td {text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:.6rem .75rem;overflow-wrap:anywhere}
+.wb-table-wrap th {font-weight:600}
+.wb-table-wrap input[type=number] {width:6rem}
+.wb-simulation,.wb-history,.wb-candidate {padding-block:.75rem}
+.wb-choices,.wb-fields {display:flex;gap:.7rem 1.4rem;flex-wrap:wrap;border:1px solid var(--line);border-radius:.5rem;padding:1rem;margin:.7rem 0 1rem}
+.wb-fields p {flex-basis:100%;margin:0}
+.wb-fields label,.wb-choices label {display:inline-flex;gap:.5rem;align-items:center}
+.wb-fields input {width:8rem}
+.wb-simulation button[aria-pressed=true] {border-color:var(--accent);color:var(--accent)}
+.wb-methods {margin:.75rem 0}
+.wb-methods button {text-align:left}
+@media(max-width:650px){.wb-table-wrap table {min-width:30rem}.wb-fields label {flex-wrap:wrap}.wb-simulation>.sg-row {flex-wrap:wrap}}
