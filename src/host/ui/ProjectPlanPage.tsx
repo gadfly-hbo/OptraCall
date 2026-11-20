@@ -52,7 +52,7 @@ function PlanHistory({ project, onBack, onOpenTask }: Pick<ProjectPlanPageProps,
       .catch(reason => { if (current) setError(reason instanceof Error ? reason.message : '无法读取原方案'); });
     return () => { current = false; };
   }, [project.id]);
-  return <section className="project-plan-page"><header className="case-board-heading"><h1>{project.name} · 原方案与历史回执</h1><button type="button" className="text-button" onClick={onBack}>返回项目</button></header>
+  return <section className="case-board project-plan-page"><header className="case-board-heading"><h1>{project.name} · 原方案与历史回执</h1><button type="button" className="text-button" onClick={onBack}>返回项目</button></header>
     {error && <p role="alert">{error}</p>}
     {state && !state.history.length && !state.draft && <p>本项目没有原方案记录。</p>}
     {state?.draft && <details><summary>原草稿 v{state.draft.version}</summary><pre>{JSON.stringify(state.draft.plan, null, 2)}</pre></details>}
