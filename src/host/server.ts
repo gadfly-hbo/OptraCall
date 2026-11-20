@@ -1,7 +1,7 @@
 import type { BusinessRoleOwner } from './business-role-types.ts';
 import { readCaseIssueOrigin } from './case-creation-source.ts';
 import {taskRoundReceipts} from './task-round-receipts.ts';
-import {discussionSourceMode,isDiscussionSourceExcluded} from './strategy-discussion-source-scope.ts';
+import {discussionSourceMode,isDiscussionSourceExcluded,isDiscussionSourceSelected} from './strategy-discussion-source-scope.ts';
 import {readCaseOriginRevision} from './case-creation-source.ts';
 import { approvedTaskSkills, makeTaskAssignment, parseTaskAssignment, taskPurpose, type TaskAssignment, type TaskCaseIssue } from './task-assignment.ts';
 import type { ProjectTaskResultsContext, ProjectTaskResultsOptions } from './project-task-results-types.ts';
@@ -10,10 +10,16 @@ import { renderVersionDocument, versionFileName, gsaVersionDocument, type Versio
 import type {RuntimeModelConfiguration} from './config-store.ts';
 import {createStrategyDiscussionSources,StrategyDiscussionSourceFault} from './strategy-discussion-sources.ts';
 import {createStrategyDiscussionSourcePermissions} from './strategy-discussion-source-permissions.ts';
+import {createStrategyTrials} from './strategy-trials.ts';
+import {strategyMapDocument} from './strategy-map-document.ts';
 import {createStrategyDiscussionHost} from './strategy-discussion-host.ts';
 import {createBusinessRoleConversations} from './business-role-conversations.ts';
 import type {RoleContextReader} from './strategy-discussion-host.ts';
-import {StrategyDiscussionFault,discussionHash} from './strategy-discussion-store.ts';
+import { strategyTeachSources } from './strategy-teach-sources.ts';
+import { attachmentErrors } from './strategy-attachment-types.ts';
+import { StrategyAttachments } from './strategy-attachments.ts';
+import { strategyAttachmentRoutes } from './strategy-attachment-routes.ts';
+import {StrategyDiscussionFault,discussionHash,StrategyDiscussionStore} from './strategy-discussion-store.ts';
 import {createUsageContextStore} from './usage-context-store.ts';
 import {createUsageContextRoutes} from './usage-context-routes.ts';
 import {resolveNewUsageContext,UsageContextFault} from './usage-context-types.ts';
@@ -34,6 +40,7 @@ import { createProjectPlanFeature } from './project-plan-host.ts';
 import { createProjectPlanStore, ProjectPlanFault } from './project-plan-store.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { StrategyGoalsStore, StrategyGoalsError, goalContentSha256, parseGoalRoleSuggestion } from './strategy-goals-store.ts';
+import { strategyWorkbookRoutes,checkWorkbookSource } from './strategy-workbook-routes.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
@@ -728,6 +735,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const strategyMetricLibrary = createMetricLibrary(path.join(dataRoot, 'metric-assets'));
   const strategySources = createStrategyGoalSources({ cases, projects, board: boardStore, metrics: strategyMetricLibrary, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item), readDiscussionSource:ref=>strategyDiscussions.readDiscussionSource(ref) });
   const validateStrategyGoal=async(input:import('./strategy-goals-types.ts').GoalDraftInput,target?:import('./strategy-goals-types.ts').GoalRef|'create',recipient?:Readonly<RuntimeModelConfiguration>,verifyChoice?: (source:import('./strategy-goals-types.ts').GoalDiscussionSourceRef)=>Promise<void>)=>{
+      const prior=target&&target!=='create'?strategyGoals.read(target):undefined;
+      const structured=input.structured??prior?.structured;
+      if(structured){
+        if(target && (!prior?.structured || discussionHash(prior.structured)!==discussionHash(structured) || discussionHash(input.scope)!==discussionHash(prior.scope)))throw new StrategyGoalsError('strategy_goal_table_origin_mismatch',409);
+        if(structured.map){
+          const ref=structured.map, version=await strategyDiscussions.readMapVersion(ref.discussionId,ref.mapId,ref.version,recipient);
+          if(version.contentSha256!==ref.sha256)throw new StrategyGoalsError('strategy_map_version_conflict',409);
+        }
+        await checkWorkbookSource(dataRoot,input.scope,structured);
+      }
       if(input.roleSuggestion!==undefined){
         const ref=parseGoalRoleSuggestion(input.roleSuggestion);
         const original=await businessDiscussions.readGoalSuggestion(ref,recipient);
@@ -759,7 +776,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
   };
   const strategySourcePermissions=createStrategyDiscussionSourcePermissions({projects,data:projectDataContext,dbLinks,enterpriseSourceAllowed:enterpriseSemanticSourceAllowed,isClosing:()=>closing,taskResultAllowed:assertTaskResultAccess});
-  const discussionSourceReader=createStrategyDiscussionSources<Readonly<RuntimeModelConfiguration>>({projects,data:projectDataContext,methods:sapMethods,enterprise:enterpriseMaterials,readSource:readPersonalSource,listTaskSources:async(projectId,context,taskId)=>{
+  const strategyAttachments = new StrategyAttachments(new StrategyDiscussionStore(dataRoot),projects);
+  const strategyTeach=strategyTeachSources<Readonly<RuntimeModelConfiguration>>(cases,async(ref,projectId,cfg,context)=>{
+    const round=await caseDecisions.issueModelContext(ref.caseId,ref.issueId,
+      qualifyIssueReply(ref,cfg,context.receivingTask,context.receivingProjectId??projectId,context.receivingGoal),
+      {choiceId:ref.choiceId,reviewId:ref.operationId});
+    const review=round.rounds[0]?.review,reply=review&&round.replies.find(r=>discussionHash(r.source)===discussionHash(review.reply));
+    if(!review||!reply)throw new StrategyDiscussionFault('strategy_teach_source_unavailable',403);
+    return {review,text:reply.text};
+  });
+  const discussionSourceReader=createStrategyDiscussionSources<Readonly<RuntimeModelConfiguration>>({teach:strategyTeach,attachments:strategyAttachments,projects,data:projectDataContext,methods:sapMethods,enterprise:enterpriseMaterials,readSource:readPersonalSource,listTaskSources:async(projectId,context,taskId)=>{
     context.assertCurrent();const project=await projects.get(projectId),tasks=taskId?[await projects.getTask(projectId,taskId)]:project.tasks;
     const reports:import('./project-task-results-types.ts').ProjectTaskResultBinding[]=[],replies:import('./project-task-results-types.ts').ProjectTaskNativeReplyBinding[]=[];
     for(const task of tasks){context.assertCurrent();const found=await listTaskResultSources(project,task,context);reports.push(...found.reports);replies.push(...found.replies);}context.assertCurrent();return {reports,replies};
@@ -837,8 +863,17 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const directory=studio.enterpriseScopes.list();
       const assigned=projectId&&directory.projectAssignments.find(link=>link.projectId===projectId)?.enterpriseId;
       return directory.enterprises.filter(enterprise=>!assigned||enterprise.id===assigned);
-    },configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,verifyGoalContext:verifyFrozenGoalContext,verifyArrangement:verifyGoalOperationArrangement,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{offset:page?.offset,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}};
+    },configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,verifyGoalContext:verifyFrozenGoalContext,verifyArrangement:verifyGoalOperationArrangement,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{...page,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}};
   const strategyDiscussions=createStrategyDiscussionHost(discussionOptions);
+  const attachmentRoutes=strategyAttachmentRoutes({files:strategyAttachments,owner:id=>strategyDiscussions.store.get(id),mutate,
+    writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
+    verifySource:async(source,owner)=>{
+      const cfg=availableConfiguration(owner.configurationId,owner.configurationRevision);
+      if(!cfg)throw new StrategyDiscussionFault('configuration_changed',403);
+      const ctx=discussionSourceContext(owner);
+      await discussionSourceReader.verify(owner,cfg,ctx,[source]);ctx.assertCurrent();
+    },
+  });
   async function readGoalOrigin(owner:Extract<import('./business-role-types.ts').BusinessRoleOwner,{role:'goal'|'goal-draft'}>,scope:import('./strategy-goals-types.ts').GoalScope,cfg?:Readonly<RuntimeModelConfiguration>){
     const origin=owner.caseSource;
     if(!origin)return {};
@@ -1102,6 +1137,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     },
   });
 
+  const strategyTrials = createStrategyTrials(strategyDiscussions.store,(id,mapId,version)=>strategyDiscussions.readMapVersion(id,mapId,version));
   const choices = createStrategyChoices(strategyDiscussions.store,strategyDiscussions.readChoiceReply,
     id=>strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(strategyDiscussions.store.get(id))));
   const downloadable = (document:VersionDocument) => ({filename:versionFileName(document),html:renderVersionDocument(document)});
@@ -1172,6 +1208,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const {goal,arrangements}=await readGoalVersionPage(goalId,version);
     return downloadable(gsaVersionDocument(goal,strategyGoals.get(goalId).adoptedVersion===version,arrangements));
   }
+  const workbookRoutes=strategyWorkbookRoutes({goals:strategyGoals,mapMetadata:strategyDiscussions.mapMetadata,readMap:strategyDiscussions.readMapVersion,saveMap:strategyDiscussions.saveMapVersion,
+    mutate,isClosing:()=>closing,validateScope:scope=>validateStrategyGoalScope(scope,studio.enterpriseScopes),verifyGoal:goal=>validateStrategyGoal(goal)});
   const strategyGoalRoutes = createStrategyGoalRoutes({ store: strategyGoals, mutate, isClosing: () => closing,
     listSources: strategySources.list,
     validateGoal:validateStrategyGoal,
@@ -1197,7 +1235,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (group.projectId !== projectId) throw new StrategyDiscussionFault('goal_context_source_project_not_authorized', 403);
       const selectedOnly = discussionSourceMode(discussion) === 'selected-only';
       if (group.sources.some(ref => isDiscussionSourceExcluded(discussion, ref) ||
-          selectedOnly && !discussion.sources.some(selected => discussionHash(selected) === discussionHash(ref)))) {
+          selectedOnly && !(ref.target.kind==='strategy-attachment' ? isDiscussionSourceSelected(discussion,ref) : discussion.sources.some(selected=>discussionHash(selected)===discussionHash(ref))))) {
         throw new StrategyDiscussionFault('strategy_source_not_authorized', 403);
       }
       await discussionSourceReader.verify({
@@ -2231,9 +2269,37 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const result=await businessRoleConversation(url.searchParams.get('owner'),action,request.method??'GET',request.method==='POST'?await body(request):readInput);
         json(response,action==='messages'?202:200,result);return;
       }
+      const trialRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/simulations$/.exec(url.pathname);
+      if(trialRoute && request.method==='GET'){json(response,200,await mutate(()=>strategyTrials.list(trialRoute[1]!)));return;}
+      if(trialRoute && request.method==='POST'){
+        const input=await body(request);
+        json(response,200,{trial:await mutate(()=>strategyTrials.save(trialRoute[1]!,input))});return;
+      }
+      const mapDocumentRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/maps\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/(export|handoffs)$/.exec(url.pathname);
+      if(mapDocumentRoute && request.method==='GET'){
+        const [,id,mapId,revision,action]=mapDocumentRoute;
+        json(response,200,await mutate(async()=>{
+          const version=await strategyDiscussions.readMapVersion(id!,mapId!,Number(revision));
+          if(action==='handoffs') return {goals:strategyGoals.mapHandoffs(id!,mapId!,Number(revision),version.contentSha256)};
+          return downloadable(strategyMapDocument(version,strategyDiscussions.store.get(id!).title));
+        }));return;
+      }
+      const projectAttachmentLibrary=/^\/api\/projects\/([a-f0-9-]{36})\/strategy-attachments$/.exec(url.pathname);
+      if(projectAttachmentLibrary&&request.method==='GET'){json(response,200,{sources:await strategyAttachments.projectLibrary(projectAttachmentLibrary[1])});return;}
+      const attachmentRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/attachments(?:\/(excerpt))?$/.exec(url.pathname);
+      if(attachmentRoute){json(response,200,await attachmentRoutes(attachmentRoute,request.method??'GET',limit=>body(request,limit)));return;}
       if(url.pathname==='/api/strategy/discussions'){
         if(request.method==='GET'){json(response,200,{discussions:strategyDiscussions.store.list()});return;}
         if(request.method==='POST'){json(response,201,{discussion:await strategyDiscussions.create(await body(request))});return;}
+      }
+      const strategyMapRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/maps$/.exec(url.pathname);
+      if(strategyMapRoute){
+        const id=strategyMapRoute[1]!;
+        if(request.method==='GET'){json(response,200,await strategyDiscussions.mapCatalog(id));return;}
+        if(request.method==='POST'){
+          const input=await body(request, 1024*1024);
+          json(response,201,{version:await mutate(()=>strategyDiscussions.saveMapVersion(id,input,'user'))});return;
+        }
       }
       const gsaExport=/^\/api\/strategy\/goals\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/(export|arrangements)$/.exec(url.pathname);
       if(gsaExport && request.method==='GET'){ json(response,200,await mutate(async()=> gsaExport[3] === 'export' ? exportGoalVersion(gsaExport[1]!,Number(gsaExport[2])) : {arrangements:(await readGoalVersionPage(gsaExport[1]!,Number(gsaExport[2]))).arrangements})); return; }
@@ -2273,6 +2339,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const unsubscribe=strategyDiscussions.subscribe(id,event=>{if(!response.destroyed&&!response.writableEnded)response.write(`data: ${JSON.stringify(event)}\n\n`);});
           request.on('close',unsubscribe);response.write(`data: ${JSON.stringify({type:'snapshot',snapshot:d.snapshot})}\n\n`);return;
         }
+      }
+      const workbookRoute=/^\/api\/strategy\/workbooks\/(preview|commit|handoff|map-source|goal-source)$/.exec(url.pathname);
+      if(workbookRoute && request.method==='POST'){
+        const data=await workbookRoutes(workbookRoute[1]!,await body(request,12*1024*1024));
+        json(response,200,data);return;
       }
       if (url.pathname.startsWith('/api/strategy/')) {
         const result = await strategyGoalRoutes(url.pathname, request.method ?? 'GET', ['POST', 'PATCH'].includes(request.method ?? '') ? await body(request) : {});
@@ -2879,7 +2950,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
-      if(error instanceof StrategyDiscussionFault || error instanceof StrategyDiscussionSourceFault){json(response,error.status,{code:error.code,accepted:false,message:error.status===503?'战略讨论或保存结果尚未核实，原输入、选择和操作编号保留；请先只读核对原结果，不要重复创建或自动重试。':error.code==='strategy_discussion_history_scope_changed'?'已读取的历史资料与当前背景范围或排除项不一致，本次未发送给模型。原输入、选择和历史保留；请集中核对资料范围并明确调整，不能把旧会话视为已忘记资料。':error.code==='strategy_discussion_context_changed'?'当前讨论背景或准确版本已变化，本次未继续派发。原输入与选择保留，请集中核对后明确调整。':'战略讨论未完成，原输入和选择保留；请核对目标准确版本、资料权限、模型配置或原操作状态。'});return;}
+      if(error instanceof StrategyDiscussionFault || error instanceof StrategyDiscussionSourceFault){json(response,error.status,{code:error.code,accepted:false,message:attachmentErrors[error.code]??(error.status===503?'战略讨论或保存结果尚未核实，原输入、选择和操作编号保留；请先只读核对原结果，不要重复创建或自动重试。':error.code==='strategy_discussion_history_scope_changed'?'已读取的历史资料与当前背景范围或排除项不一致，本次未发送给模型。原输入、选择和历史保留；请集中核对资料范围并明确调整，不能把旧会话视为已忘记资料。':error.code==='strategy_discussion_context_changed'?'当前讨论背景或准确版本已变化，本次未继续派发。原输入与选择保留，请集中核对后明确调整。':'战略讨论未完成，原输入和选择保留；请核对目标准确版本、资料权限、模型配置或原操作状态。')});return;}
       if (error instanceof DecisionBoardFault && ['choice_already_arranged', 'arrangement_operation_conflict'].includes(error.code)) {
         const message = error.code === 'choice_already_arranged' ? '本次取舍已有行动安排，请核对原看板。' : '该操作编号已用于另一份行动安排，请核对原操作。';
         json(response, 409, { code:error.code, message }); return;

@@ -1,8 +1,10 @@
+import {privateAttachmentHistory} from './strategy-discussion-source-scope.ts';
 import path from 'node:path';
 import { constants, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import type { StrategyDiscussion, StrategyDiscussionCreate, StrategyDiscussionUpdate, StrategyChoiceVersion } from './strategy-discussion-types.ts';
-export class StrategyDiscussionFault extends Error { readonly code:string; readonly status:number; constructor(code:string,status=409){super(code);this.code=code;this.status=status;} }
+import { StrategyDiscussionFault } from './strategy-discussion-fault.ts';
+export { StrategyDiscussionFault } from './strategy-discussion-fault.ts';
 const canonical=(x:unknown):unknown=>Array.isArray(x)?x.map(canonical):x&&typeof x==='object'?Object.fromEntries(Object.entries(x).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>[k,canonical(v)])):x;
 export const discussionHash=(x:unknown):string=>createHash('sha256').update(typeof x==='string'?x:JSON.stringify(canonical(x))).digest('hex');
 const uuid=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
@@ -54,6 +56,6 @@ export class StrategyDiscussionStore {
  }
  update(id:string,input:StrategyDiscussionUpdate,configuration?:{id:string;revision:number}):StrategyDiscussion{
   const old=this.get(id);if(old.revision!==input.expectedRevision)throw new StrategyDiscussionFault('strategy_discussion_context_changed');
-  const {expectedRevision,configurationId,...patch}=input;const value={...old,...patch,goal:patch.goal===null?undefined:patch.goal??old.goal,projectId:patch.projectId===null?undefined:patch.projectId??old.projectId,...(configuration?{configurationId:configuration.id,configurationRevision:configuration.revision}:{}),revision:old.revision+1,updatedAt:new Date().toISOString()};this.write(value);return structuredClone(value);
+  const {expectedRevision,configurationId,...patch}=input;const value={...old,...patch,privateAttachmentHistory:patch.projectId||old.projectId?undefined:patch.sources?privateAttachmentHistory(old,patch.sources):old.privateAttachmentHistory,goal:patch.goal===null?undefined:patch.goal??old.goal,projectId:patch.projectId===null?undefined:patch.projectId??old.projectId,...(configuration?{configurationId:configuration.id,configurationRevision:configuration.revision}:{}),revision:old.revision+1,updatedAt:new Date().toISOString()};this.write(value);return structuredClone(value);
  }
 }

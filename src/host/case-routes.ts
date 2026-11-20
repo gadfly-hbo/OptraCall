@@ -177,6 +177,12 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
   return async function handle({ pathname, method, input = {} }: RouteRequest): Promise<RouteResult> {
     if (pathname === '/api/cases/storage' && method === 'GET') return { body: cases.getStatus() };
     if (pathname === '/api/cases/storage/initialize' && method === 'POST') return { body: await mutate(() => cases.initialize()) };
+    if(pathname==='/api/cases/goal-match' && method==='POST' && goals){
+      const binding=assertAdoptedGoalRefs(goals,{primary:input.primary,related:[],strategy:input.strategy},'binding');
+      if(!binding.strategy)throw new CaseRouteError('case_strategy_required',400);
+      await bindingEnterprise(binding);
+      return {body:{caseId:cases.caseForGoalStrategy(binding.primary,binding.strategy)}};
+    }
     if (pathname === '/api/cases') {
       if (method === 'GET') return { body: { cases: cases.listCases(), projectLinks: cases.listProjectLinks() } };
       if (method === 'POST') return { status: 201, body: await mutate(async () => {

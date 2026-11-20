@@ -1,21 +1,33 @@
 import { normalizeGoalText, sameGoalRequirement } from './strategy-goals-types.ts';
 import { StrategyGoalsStore, StrategyGoalsError } from './strategy-goals-store.ts';
 import type { CaseGoalBindingInput } from './case-types.ts';
-import type { GoalDraftInput, GoalRef, GoalRevisionInput, GoalAdoptionInput, GoalRelationInput, GoalFeedbackInput, GoalSourceRef } from './strategy-goals-types.ts';
+import type { GoalDraftInput, GoalRef, GoalRevisionInput, GoalAdoptionInput, GoalRelationInput, GoalFeedbackInput, GoalSourceRef, StrategyGoalRecord } from './strategy-goals-types.ts';
 
 export function createStrategyGoalRoutes(options: { store: StrategyGoalsStore; mutate: <T>(fn: () => T | Promise<T>) => Promise<T>; isClosing: () => boolean; validateGoal?: (input: GoalDraftInput, target?: GoalRef | 'create') => void | Promise<void>; listSources?: () => Promise<unknown>; validateFeedbackSource?: (input: GoalSourceRef) => void | Promise<void>; validateAdoption?: (ref: GoalRef, input: GoalAdoptionInput) => void | Promise<void> }) {
   const { store } = options;
   const write = <T>(fn: () => T | Promise<T>) => options.mutate(() => { if (options.isClosing()) throw new StrategyGoalsError('host_closing', 409); return fn(); });
+  async function checkRecord(record:StrategyGoalRecord){
+    for(const goal of record.versions)if(goal.structured)await options.validateGoal?.(goal);
+    return record;
+  }
   return async (pathname: string, method: string, input: Record<string, unknown> = {}): Promise<{ status?: number; body: unknown } | null> => {
     if (pathname === '/api/strategy/sources' && method === 'GET' && options.listSources) return { body: await options.listSources() };
     if (pathname === '/api/strategy/goals') {
-      if (method === 'GET') return { body: store.list() };
+      if (method === 'GET') {
+        const index=store.list(), hidden=new Set<string>(), reasons:string[]=[];
+        for(const record of index.goals)try{await checkRecord(record);}catch(error){
+          hidden.add(record.id);reasons.push(error instanceof Error?error.message:'strategy_goal_source_unavailable');
+        }
+        if(!hidden.size)return {body:index};
+        return {body:{...index,goals:index.goals.filter(g=>!hidden.has(g.id)),relations:index.relations.filter(r=>![r,...r.history].some(v=>hidden.has(v.from.goalId)||hidden.has(v.to.goalId))),
+          feedback:index.feedback.filter(f=>!hidden.has(f.goal.goalId)),arrangements:index.arrangements?.filter(a=>!hidden.has(a.goal.goalId)),unavailableGoalSources:[...new Set(reasons)]}};
+      }
       if (method === 'POST') return { status: 201, body: await write(async () => { if (!store.getOperation(input.operationId as string)) await options.validateGoal?.(input as unknown as GoalDraftInput,'create'); return { goal: store.create(input as unknown as GoalDraftInput & { operationId: string }) }; }) };
     }
     const match = /^\/api\/strategy\/goals\/([a-f0-9-]+)(?:\/(adopt|revisions))?$/.exec(pathname);
     if (match) {
       const id = match[1]!;
-      if (!match[2] && method === 'GET') return { body: { goal: store.get(id) } };
+      if (!match[2] && method === 'GET') return { body: { goal: await checkRecord(store.get(id)) } };
       if (match[2] === 'adopt' && method === 'POST') return { body: await write(async () => {
         const ref = { goalId: id, version: input.version as number };
         if (!store.getOperation(input.operationId as string)) {
@@ -35,7 +47,11 @@ export function createStrategyGoalRoutes(options: { store: StrategyGoalsStore; m
       return { feedback: store.recordFeedback(input as unknown as GoalFeedbackInput & { operationId: string }) };
     }) };
     const operation = /^\/api\/strategy\/operations\/([a-f0-9-]+)$/.exec(pathname);
-    if (operation && method === 'GET') return { body: { operation: store.getOperation(operation[1]!) } };
+    if (operation && method === 'GET') {
+      const receipt=store.getOperation(operation[1]!);
+      if(receipt)for(const context of store.operationContext(receipt))for(const goal of context.goals)if(goal.structured)await options.validateGoal?.(goal);
+      return {body:{operation:receipt}};
+    }
     return null;
   };
 }

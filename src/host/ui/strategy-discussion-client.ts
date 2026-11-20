@@ -63,3 +63,10 @@ export function discussionJournal(storage: Pick<Storage, 'getItem' | 'setItem' |
 
 export const strategyVersionRequest = <T,>(id:string,suffix='',method='GET',input?:unknown) =>
   request<T>(path(id)+'/versions'+suffix,method,input);
+
+export const strategyWorkbenchRequest = <T,>(id:string,suffix:string,method='GET',input?:unknown,signal?:AbortSignal) =>
+  request<T>(path(id)+suffix,method,input,signal);
+
+export const saveStrategyMap = (id:string,input:unknown) => request<{version:import('../strategy-map-types.ts').StrategyMapVersion}>(path(id)+'/maps','POST',input);
+
+export const strategyAttachmentRequest=<T,>(id:string,action='',method='GET',input?:unknown)=>request<T>(path(id)+'/attachments'+action,method,input);
