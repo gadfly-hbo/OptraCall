@@ -166,6 +166,7 @@ export function ProjectCollaboration({ project, issue, onChangeScope, onReturnIs
     catch (reason) { setError(failure(reason)); await onRefresh().catch(() => {}); }
     finally { setSaving(false); }
   }
+  const historyButton = <button type="button" className="text-button" onClick={onHistory}>查看原项目方案与历史回执</button>;
   return <section className="case-board project-plan-page" aria-label="项目协作">
     <header className="case-board-heading"><div><p className="eyebrow">项目空间</p><h1>{project.name}</h1></div><button className="primary-button" type="button" onClick={() => create()}>{project.tasks.length ? '新建任务' : '新建第一个任务'}</button></header>
     <nav className="case-project-actions" aria-label="项目协作栏目">{([['work','Project Agent'], ['terms','共用约定'], ['results','成果交接'], ['stage','阶段目标']] as const).map(([value, label]) => <button type="button" key={value} className={tab === value ? 'primary-button' : 'secondary-button'} aria-pressed={tab === value} onClick={() => setTab(value)}>{label}</button>)}</nav>
@@ -176,8 +177,17 @@ export function ProjectCollaboration({ project, issue, onChangeScope, onReturnIs
     <div hidden={tab !== 'work'}><BusinessRoleConversation owner={{ role: 'project', projectId: project.id, ...(issue ? {issue} : {}) }}/></div>
     {tab === 'terms' && <section className="project-plan-section"><h2>共用约定</h2>{!latest && <p>多个任务需要相同口径、范围或前提时，可在这里共同确定。</p>}
       {project.agreements?.map(item => <p key={item.version}><strong>v{item.version}</strong> · {item.text}</p>)}
-      {draft ? <><label>待确认内容<textarea maxLength={8000} value={draft.text} disabled={saving} onChange={event => setDraft({ ...draft, text: event.target.value, operationId: crypto.randomUUID() })}/></label><button className="primary-button" type="button" disabled={!draft.text.trim() || saving || draft.text.trim() === latest?.text} onClick={() => void save()}>确认共用约定</button><button className="text-button" type="button" disabled={saving} onClick={() => { setDraft(undefined); setError(''); }}>取消</button></> : <button className="secondary-button" type="button" onClick={() => setDraft({ text: latest?.text ?? '', expectedVersion: latest?.version ?? 0, operationId: crypto.randomUUID() })}>{latest ? '调整共用约定' : '拟定共用约定'}</button>}
-      {error && <p role="alert">{error}</p>}<button type="button" className="text-button" onClick={onHistory}>查看原项目方案与历史回执</button></section>}
+      {draft ? <>
+        <label>待确认内容<textarea maxLength={8000} value={draft.text} disabled={saving} onChange={event => setDraft({ ...draft, text: event.target.value, operationId: crypto.randomUUID() })}/></label>
+        <div className="case-inline-actions">
+          <button className="primary-button" type="button" disabled={!draft.text.trim() || saving || draft.text.trim() === latest?.text} onClick={() => void save()}>确认共用约定</button>
+          <button className="text-button" type="button" disabled={saving} onClick={() => { setDraft(undefined); setError(''); }}>取消</button>
+          {historyButton}
+        </div>
+      </> : <button className="secondary-button" type="button" onClick={() => setDraft({ text: latest?.text ?? '', expectedVersion: latest?.version ?? 0, operationId: crypto.randomUUID() })}>{latest ? '调整共用约定' : '拟定共用约定'}</button>}
+      {error && <p role="alert">{error}</p>}
+      {!draft && historyButton}
+    </section>}
     {tab === 'stage' && <StagePanel project={project} onRefresh={onRefresh}/>}
     {tab === 'results' && <ResultPicker project={{ ...project, tasks: scopedTasks }} onCreate={create}/>}
   </section>;
