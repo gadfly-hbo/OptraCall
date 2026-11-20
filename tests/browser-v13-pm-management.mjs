@@ -101,6 +101,55 @@ async function stage(){
   const {projects}=await api('projects');const history=projects.find(p=>p.id===project.id).stages;
   assert.deepEqual(history.map(({goal,condition,done})=>({goal,condition,done})),entries);result.history=history.map(s=>[s.version,s.done]);
 }
+async function agreements() {
+  const { project } = await api('projects', 'POST', { name });
+  const terms = page.getByRole('region', { name: '项目协作', exact: true });
+  const editor = terms.getByRole('textbox', { name: '待确认内容', exact: true });
+  const confirm = button('确认共用约定', terms);
+  const cancel = button('取消', terms);
+  const history = button('查看原项目方案与历史回执', terms);
+  const boxes = async () => {
+    await history.waitFor();
+    const bounds = await Promise.all([confirm, cancel, history].map(control => control.boundingBox()));
+    assert.ok(bounds.every(Boolean), 'All agreement editor actions must be visible');
+    return bounds;
+  };
+  const horizontalGaps = bounds => bounds.slice(1).map((next, index) => next.x - (bounds[index].x + bounds[index].width));
+  const saved = '合成口径：每位会员只计一次';
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.reload();
+  await button(name).click();
+  await button('共用约定', terms).click();
+  await button('拟定共用约定', terms).click();
+  await editor.waitFor();
+  assert.ok(await confirm.isDisabled(), 'Empty agreement cannot be confirmed');
+  const draftGaps = horizontalGaps(await boxes());
+  await editor.fill(saved);
+  await confirm.click();
+  await button('调整共用约定', terms).click();
+  assert.equal(await editor.inputValue(), saved);
+  assert.ok(await confirm.isDisabled(), 'An unchanged agreement cannot be confirmed again');
+  const editGaps = horizontalGaps(await boxes());
+  await editor.fill('取消后应丢弃的合成改动');
+  await cancel.click();
+  await editor.waitFor({ state: 'hidden' });
+  await button('调整共用约定', terms).click();
+  assert.equal(await editor.inputValue(), saved);
+  const { projects } = await api('projects');
+  assert.deepEqual(projects.find(item => item.id === project.id).agreements.map(item => item.text), [saved]);
+
+  const narrowWidth = 390;
+  await page.setViewportSize({ width: narrowWidth, height: 900 });
+  const narrow = await boxes();
+  await history.click();
+  await page.getByRole('heading', { name: name + ' · 原方案与历史回执', exact: true }).waitFor();
+  for (const [entry, gaps] of [['拟定共用约定', draftGaps], ['调整共用约定', editGaps]]) {
+    assert.ok(gaps.every(gap => gap >= 10 && gap <= 12), `${entry} should have action gaps of 10–12 px: ${JSON.stringify({ draftGaps, editGaps })}`);
+  }
+  assert.ok(narrow.every(box => box.x >= 0 && box.x + box.width <= narrowWidth), 'Narrow editor controls must fit the viewport');
+  assert.ok(narrow.slice(1).every((next, index) => next.x >= narrow[index].x + narrow[index].width || next.y >= narrow[index].y + narrow[index].height), 'Narrow editor actions must not overlap');
+  Object.assign(result, { draftGaps, editGaps, narrowWidth, historyOpened: true });
+}
 async function files(){
   const {project}=await api('projects','POST',{name});const {task}=await api('projects/'+project.id+'/tasks','POST',{name:'资料步骤 '+name});
   await page.reload();await button(name).click();
@@ -167,6 +216,6 @@ async function registry() {
   Object.assign(result,{name:model.name,version:model.version,stage:model.stage});
 }
 try{
-  await page.goto(base);const actions={strategy,adoption,stage,files,native,registry};assert.ok(actions[scenario]);await actions[scenario]();
+  await page.goto(base);const actions={strategy,adoption,stage,agreements,files,native,registry};assert.ok(actions[scenario]);await actions[scenario]();
   assert.deepEqual(errors,[]);console.log(JSON.stringify({scenario,...result,errors}));
 }catch(error){console.error((await page.locator('body').ariaSnapshot()).slice(-9000));throw error;}finally{await browser.close();}
