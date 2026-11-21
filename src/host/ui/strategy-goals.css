@@ -39,6 +39,9 @@
 .usage-context-settings { max-width: 780px; }
 .usage-context-settings .field textarea { width: 100%; min-height: 96px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--canvas); color: var(--ink); }
 .strategy-discussion > .sg-row-between h2 { margin: 0; font-size: 16px; }
+.strategy-discussion > .sg-row-between > .sg-row, .strategy-discussion > .sg-row-between label { min-width: 0; max-width: 100%; }
+.strategy-discussion > .sg-row-between label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.strategy-discussion > .sg-row-between .sg-select { min-width: 0; max-width: 100%; }
 .strategy-discussion .sg-row { margin: 10px 0; }
 .strategy-discussion-messages { max-height: 440px; overflow-y: auto; margin: 14px 0; border-top: 1px solid var(--line); }
 .strategy-discussion-message { padding: 14px 0; border-bottom: 1px solid var(--line); }
@@ -60,10 +63,13 @@
 .strategy-discussion-reply a { color: var(--accent); }
 .strategy-discussion-reply .strategy-discussion-literal { white-space: pre-wrap; }
 .strategy-discussion-message.user { padding-left: 14px; border-left: 2px solid var(--accent-soft); }
+.strategy-discussion-context-bar { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--subtle); font-size: 12px; }
 .strategy-discussion-composer { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--canvas); }
 .strategy-discussion-composer textarea { display: block; width: 100%; min-height: 72px; border: 0; resize: vertical; background: transparent; color: var(--ink); font: inherit; font-size: 13px; line-height: 1.7; }
-.strategy-discussion-options { margin-top: 13px; font-size: 12px; }
-.strategy-discussion-options > summary { color: var(--muted); cursor: pointer; }
+.strategy-discussion-options { margin-top: 13px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); font-size: 12px; }
+.strategy-discussion-options > summary { color: var(--ink); font-weight: 500; cursor: pointer; }
+.strategy-settings-group { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.strategy-settings-group > h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--ink); }
 .strategy-discussion-options .field textarea { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: var(--canvas); color: var(--ink); font: inherit; }
 .strategy-methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 18px; margin: 12px 0; }
 .strategy-methods label, .strategy-source-option { display: flex; align-items: flex-start; gap: 7px; line-height: 1.7; }

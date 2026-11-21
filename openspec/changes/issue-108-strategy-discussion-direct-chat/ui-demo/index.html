@@ -1,0 +1,1805 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OptraCall · #108 重排战略共创对话区 UI Demo（设计待审）</title>
+  <style>
+    :root {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-synthesis: none;
+      color-scheme: light dark;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: #14131a; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; color: inherit; }
+    button:disabled { cursor: not-allowed; }
+    button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+      outline: 3px solid var(--focus, #a397e0);
+      outline-offset: 3px;
+    }
+
+    /* Reviewer simulation control bar (outside product shell) */
+    .demo-review-bar {
+      background: #1e1c29;
+      color: #eeeef2;
+      border-bottom: 1px solid #38344c;
+      padding: 8px 16px;
+      font-size: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 14px;
+      z-index: 20;
+    }
+    .demo-review-bar[hidden] { display: none; }
+    .demo-review-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .demo-review-badge {
+      background: #6550c9;
+      color: #fff;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .demo-pill {
+      border: 1px solid #494463;
+      background: #282538;
+      color: #e4e2f0;
+      border-radius: 5px;
+      padding: 4px 9px;
+      font-size: 12px;
+      min-height: 28px;
+    }
+    .demo-pill:hover { background: #35314a; }
+    .demo-pill[aria-pressed="true"] {
+      background: #6550c9;
+      border-color: #8f7ce6;
+      color: #fff;
+      font-weight: 500;
+    }
+    .demo-counter {
+      background: #252334;
+      border: 1px solid #433e5c;
+      border-radius: 5px;
+      padding: 3px 8px;
+      color: #cfcbe2;
+      font-size: 11px;
+    }
+    .demo-reopen-bar {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      z-index: 30;
+      background: #6550c9;
+      color: #fff;
+      border: 0;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Viewport frame wrapper for narrow/wide simulation */
+    .demo-stage-wrap {
+      display: flex;
+      justify-content: center;
+      width: 100%;
+      min-height: calc(100dvh - 45px);
+      background: #14131a;
+    }
+    .demo-stage-wrap.is-narrow {
+      padding: 12px 0;
+    }
+    .demo-stage-wrap.is-narrow .app {
+      width: 390px;
+      max-width: 100%;
+      height: 844px;
+      min-height: 844px;
+      border: 1px solid #3d3b47;
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    }
+
+    /* Authentic OptraCall Product Shell & Tokens (from src/host/ui/styles.css) */
+    .app {
+      width: 100%;
+      color-scheme: light;
+      --canvas: #fff;
+      --sidebar: #f7f7f9;
+      --surface: #fff;
+      --subtle: #f5f5f8;
+      --hover: #ececf2;
+      --ink: #24232b;
+      --muted: #6c6b78;
+      --faint: #777580;
+      --line: #e6e5eb;
+      --accent: #6550c9;
+      --accent-soft: #eeebfb;
+      --focus: #a397e0;
+      --warning: #80530c;
+      --warning-bg: #fff7e8;
+      --error: #a12b36;
+      --error-bg: #fff4f4;
+      display: flex;
+      min-height: calc(100dvh - 45px);
+      height: calc(100dvh - 45px);
+      overflow: hidden;
+      color: var(--ink);
+      background: var(--canvas);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .app.full-height {
+      min-height: 100dvh;
+      height: 100dvh;
+    }
+    .app[data-theme="dark"] {
+      color-scheme: dark;
+      --canvas: #1b1b20;
+      --sidebar: #16161b;
+      --surface: #232329;
+      --subtle: #292930;
+      --hover: #32323a;
+      --ink: #eeeef2;
+      --muted: #b2b0be;
+      --faint: #a7a5b2;
+      --line: #3d3b47;
+      --accent: #b7a7ff;
+      --accent-soft: #30294a;
+      --focus: #c4b7ff;
+      --warning: #edc887;
+      --warning-bg: #372c1b;
+      --error: #ffafb8;
+      --error-bg: #39252b;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      clip: rect(0,0,0,0);
+      overflow: hidden;
+      white-space: nowrap;
+      border: 0;
+    }
+    .sidebar {
+      width: 248px;
+      flex: 0 0 248px;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 14px 14px;
+      background: var(--sidebar);
+      border-right: 1px solid var(--line);
+      min-height: 0;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 0 10px 20px;
+    }
+    .brand strong { display: block; font-size: 19px; font-weight: 600; letter-spacing: -.3px; }
+    .brand div > span { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
+    .brand-mark { width: 38px; height: 38px; display: inline-flex; position: relative; color: var(--accent); flex-shrink: 0; }
+    .brand-mark span { position: absolute; inset: 3px; border: 3px solid currentColor; border-radius: 50%; }
+    .brand-mark i { position: absolute; width: 14px; height: 14px; right: 0; bottom: 0; border: 3px solid currentColor; border-radius: 50%; background: var(--canvas); }
+    .new-chat, .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      height: 38px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      text-align: left;
+      font-size: 13px;
+    }
+    .new-chat {
+      margin-bottom: 10px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      font-weight: 500;
+    }
+    .new-chat:hover, .nav-item:hover { background: var(--hover); }
+    .nav-item.selected { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+    .sidebar-bottom { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); }
+
+    .main {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 58px;
+      padding: 10px 26px;
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .topbar-context, .topbar-actions { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .topbar-title { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .workspace-switch {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--subtle);
+      flex-shrink: 0;
+    }
+    .workspace-switch button {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 4px 16px;
+      border-radius: 5px;
+      font-size: 12px;
+      min-height: 28px;
+    }
+    .workspace-switch button[aria-pressed="true"] {
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: 0 1px 3px #0000000a;
+      font-weight: 500;
+    }
+
+    .page-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 24px 28px 48px;
+    }
+    .page-heading {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .page-heading h1 { font-size: 22px; line-height: 1.4; margin: 0 0 4px; font-weight: 550; }
+    .page-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .primary-button, .secondary-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      min-height: 36px;
+      padding: 7px 14px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .primary-button { border: 1px solid var(--accent); background: var(--accent); color: var(--canvas); font-weight: 500; }
+    .primary-button:hover:not(:disabled) { filter: brightness(.93); }
+    .primary-button:disabled { opacity: 0.55; }
+    .secondary-button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+    .secondary-button:hover:not(:disabled) { background: var(--hover); }
+    .secondary-button:disabled { color: var(--muted); background: var(--subtle); }
+    .text-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 0;
+      background: transparent;
+      border: 0;
+      color: var(--accent);
+      font-size: 12px;
+    }
+    .text-button:hover:not(:disabled) { text-decoration: underline; }
+    .text-button:disabled { color: var(--faint); }
+
+    /* strategy-goals.css & strategy-workbench.css */
+    .strategy-goals-page { min-width: 0; max-width: 980px; }
+    .sg-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 18px; flex-wrap: wrap; }
+    .sg-tabs > button { padding: 10px 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 13px; }
+    .sg-tabs > button[aria-current="page"] { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .sg-select {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      padding: 7px 10px;
+      font: inherit;
+      font-size: 12px;
+      max-width: 100%;
+    }
+    .sg-panel {
+      min-width: 0;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface);
+      margin: 12px 0;
+    }
+    .sg-panel > h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+    .sg-panel > h3 { margin: 0 0 10px; font-size: 14px; }
+    .sg-panel p { overflow-wrap: anywhere; }
+    .sg-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .sg-row-between { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+    .sg-muted { color: var(--muted); font-size: 12px; line-height: 1.7; }
+    .sg-badge { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); background: var(--accent-soft); font-size: 11px; padding: 3px 8px; border-radius: 4px; }
+    .sg-badge.pending { color: var(--muted); background: var(--subtle); }
+    .sg-table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; }
+    .sg-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .sg-table th, .sg-table td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: 10px 12px; line-height: 1.65; min-width: 110px; }
+    .sg-table th { font-weight: 550; color: var(--muted); background: var(--subtle); }
+    .sg-history { list-style: none; padding: 0; margin: 0; }
+    .sg-history > li { border-bottom: 1px solid var(--line); padding: 12px 0; }
+    .sg-history > li:last-child { border-bottom: 0; }
+    .sg-unknown { border-left: 3px solid var(--accent); padding: 12px 14px; background: var(--subtle); line-height: 1.7; margin-top: 10px; }
+
+    .strategy-discussion > .sg-row-between h2 { margin: 0; font-size: 16px; }
+    .strategy-discussion .sg-row { margin: 10px 0; }
+    .strategy-discussion-header-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 14px;
+    }
+    .strategy-discussion-refresh-group {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .strategy-discussion-lead {
+      margin: 8px 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    /* Single Prompt Examples collapsible entry on first screen */
+    .wb-methods { margin: 10px 0; }
+    .wb-methods > summary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 0;
+      user-select: none;
+    }
+    .wb-methods > summary:hover { text-decoration: underline; }
+    .wb-example-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--subtle);
+    }
+    .wb-example-button {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--ink);
+      border-radius: 6px;
+      padding: 5px 11px;
+      font-size: 12px;
+      min-height: 30px;
+      text-align: left;
+    }
+    .wb-example-button:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    /* Candidate summary card in StrategyWorkbench */
+    .wb-candidate {
+      padding: 12px 14px;
+      margin: 10px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--subtle);
+    }
+    .wb-candidate h3 { margin: 0; font-size: 13px; font-weight: 600; }
+    .wb-table-wrap { max-width: 100%; overflow-x: auto; margin-top: 8px; }
+    .wb-table-wrap table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .wb-table-wrap th, .wb-table-wrap td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: 7px 10px; overflow-wrap: anywhere; }
+
+    /* Transcript messages */
+    .strategy-discussion-messages { max-height: 400px; overflow-y: auto; margin: 12px 0; border-top: 1px solid var(--line); }
+    .strategy-discussion-message { padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .strategy-discussion-message > strong { color: var(--muted); font-size: 12px; }
+    .strategy-discussion-message > p { margin: 7px 0 0; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .strategy-discussion-message.user { padding-left: 14px; border-left: 2px solid var(--accent-soft); }
+    .strategy-discussion-reply { min-width: 0; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+    .strategy-discussion-reply p { margin: 8px 0; }
+    .strategy-discussion-reply h4 { margin: 12px 0 6px; font-size: 14px; }
+    .strategy-discussion-reply ul { margin: 6px 0 10px; padding-inline-start: 20px; }
+
+    /* Bound context bar right near the input box */
+    .strategy-discussion-context-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 14px;
+      margin: 8px 0;
+      padding: 8px 12px;
+      border-radius: 7px;
+      background: var(--subtle);
+      border: 1px solid var(--line);
+      font-size: 12px;
+    }
+
+    /* Composer */
+    .strategy-discussion-composer {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: var(--canvas);
+    }
+    .strategy-discussion-composer:focus-within {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+    }
+    .strategy-discussion-composer textarea {
+      display: block;
+      width: 100%;
+      min-height: 76px;
+      border: 0;
+      resize: vertical;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .strategy-discussion-composer textarea:focus { outline: 0; }
+    .strategy-discussion-composer textarea::placeholder { color: var(--faint); }
+
+    /* Notices & Alerts */
+    .case-notice {
+      margin: 10px 0 0;
+      padding: 9px 12px;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      color: var(--ink);
+      border-left: 3px solid var(--accent);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .case-error {
+      margin: 10px 0 0;
+      padding: 9px 12px;
+      border-radius: 6px;
+      background: var(--error-bg);
+      color: var(--error);
+      border: 1px solid color-mix(in srgb, var(--error) 30%, var(--line));
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .case-help {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.65;
+      margin: 6px 0;
+    }
+
+    /* Unified Discussion Settings (Optional) below composer */
+    .strategy-discussion-options {
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 14px;
+      background: var(--subtle);
+      font-size: 12px;
+    }
+    .strategy-discussion-options > summary {
+      color: var(--ink);
+      font-weight: 500;
+      cursor: pointer;
+      user-select: none;
+      line-height: 1.6;
+    }
+    .strategy-discussion-options > summary > .summary-purpose {
+      color: var(--accent);
+      font-weight: 500;
+      margin-left: 6px;
+    }
+    .strategy-settings-group {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+    .strategy-settings-group > h3 {
+      margin: 0 0 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .field { margin: 12px 0; }
+    .field label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; margin-bottom: 6px; }
+    .field input:not([type="checkbox"]), .field select, .field textarea {
+      border: 1px solid var(--line);
+      background: var(--canvas);
+      color: var(--ink);
+      border-radius: 6px;
+      width: 100%;
+      min-height: 36px;
+      padding: 7px 10px;
+      font-size: 12px;
+    }
+    .field textarea { min-height: 68px; resize: vertical; }
+    .strategy-methods {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px 16px;
+      margin: 10px 0;
+    }
+    .strategy-methods label, .strategy-source-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      line-height: 1.65;
+    }
+    .strategy-methods input, .strategy-source-option input { margin-top: 3px; }
+
+    /* ConversationDrawer & Attachment modal */
+    .workspace-conversation-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      min-height: 26px;
+    }
+    .workspace-conversation-dialog, .demo-modal {
+      box-sizing: border-box;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--ink);
+      padding: 0;
+      max-width: min(92vw, 860px);
+      width: 100%;
+      box-shadow: 0 12px 42px rgba(0, 0, 0, 0.28);
+    }
+    .workspace-conversation-dialog::backdrop, .demo-modal::backdrop {
+      background: rgba(23, 19, 31, 0.45);
+    }
+    .workspace-conversation-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    .workspace-conversation-heading h2 { margin: 0; font-size: 15px; }
+    .workspace-conversation-expanded { padding: 16px 20px; max-height: 80dvh; overflow-y: auto; }
+
+    /* Responsive narrow viewport rules */
+    @media (max-width: 760px) {
+      .app { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        flex: 0 0 auto;
+        max-height: 150px;
+        padding: 10px 12px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        overflow-y: auto;
+      }
+      .brand { padding-bottom: 8px; }
+      .page-scroll { padding: 14px 16px 32px; }
+      .sg-panel { padding: 14px; }
+      .strategy-methods { grid-template-columns: 1fr; }
+      .strategy-discussion > .sg-row-between { flex-direction: column; align-items: stretch; }
+    }
+    .demo-stage-wrap.is-narrow .app { flex-direction: column; }
+    .demo-stage-wrap.is-narrow .sidebar {
+      width: 100%;
+      flex: 0 0 auto;
+      max-height: 136px;
+      padding: 10px 12px;
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+      overflow-y: auto;
+    }
+    .demo-stage-wrap.is-narrow .brand { padding-bottom: 6px; }
+    .demo-stage-wrap.is-narrow .page-scroll { padding: 14px 16px 28px; }
+    .demo-stage-wrap.is-narrow .sg-panel { padding: 14px; }
+    .demo-stage-wrap.is-narrow .strategy-methods { grid-template-columns: 1fr; }
+    .demo-stage-wrap.is-narrow .strategy-discussion > .sg-row-between { flex-direction: column; align-items: stretch; }
+  </style>
+</head>
+<body>
+  <!-- Reviewer Control Bar (Collapsible) -->
+  <aside class="demo-review-bar" id="demo-review-bar" aria-label="设计评审模拟控制栏">
+    <div class="demo-review-group">
+      <span class="demo-review-badge">Issue #108 设计待审 Demo</span>
+      <button type="button" class="demo-pill" data-scenario="new" aria-pressed="true">1. 首次开聊（新讨论）</button>
+      <button type="button" class="demo-pill" data-scenario="existing" aria-pressed="false">2. 继续已有讨论（含地图/目标绑定）</button>
+      <button type="button" class="demo-pill" data-scenario="refresh-disconnect" aria-pressed="false">3. 刷新：记录成功但实时连接断开</button>
+      <button type="button" class="demo-pill" data-scenario="refresh-error" aria-pressed="false">4. 刷新：记录读取失败</button>
+      <button type="button" class="demo-pill" data-scenario="settings-open" aria-pressed="false">5. 按需展开「讨论设置（选填）」</button>
+    </div>
+    <div class="demo-review-group">
+      <label class="demo-counter">
+        刷新模拟结果：
+        <select id="sim-refresh-mode" style="background:transparent;color:inherit;border:0;font-size:11px;">
+          <option value="ok">记录成功 + 实时连接恢复</option>
+          <option value="stream-fail">记录成功 + 实时连接未恢复</option>
+          <option value="read-fail">记录读取失败</option>
+        </select>
+      </label>
+      <span class="demo-counter" id="agent-dispatch-counter">Agent 发送触发次数：0</span>
+      <button type="button" class="demo-pill" id="btn-toggle-baseline" aria-pressed="false">对照旧版基线 (8f6bec2)</button>
+      <button type="button" class="demo-pill" id="btn-toggle-narrow" aria-pressed="false">窄屏 (390px)</button>
+      <button type="button" class="demo-pill" id="btn-toggle-theme" aria-pressed="false">深色模式</button>
+      <button type="button" class="demo-pill" id="btn-hide-review-bar">收起评审栏</button>
+    </div>
+  </aside>
+  <button type="button" class="demo-reopen-bar" id="btn-show-review-bar" hidden>展开 #108 评审栏</button>
+
+  <div class="demo-stage-wrap" id="demo-stage-wrap">
+    <div class="app" id="product-app" data-theme="light">
+      <!-- Authentic 248px Sidebar -->
+      <aside class="sidebar" aria-label="主导航">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"><span></span><i></i></div>
+          <div>
+            <strong>OptraCall</strong>
+            <span>持续做出更好的决策</span>
+          </div>
+        </div>
+        <button type="button" class="new-chat">＋ 新建项目</button>
+        <nav class="primary-nav" aria-label="工作台模块">
+          <button type="button" class="nav-item selected">战略选择</button>
+          <button type="button" class="nav-item">目标管理</button>
+          <button type="button" class="nav-item">Decision Case</button>
+          <button type="button" class="nav-item">Project Map</button>
+          <button type="button" class="nav-item">语义与分析资产 Studio</button>
+        </nav>
+        <div class="sidebar-bottom">
+          <button type="button" class="nav-item" id="nav-settings-btn">设置</button>
+        </div>
+      </aside>
+
+      <!-- Main Workspace -->
+      <div class="main">
+        <header class="topbar">
+          <div class="topbar-context">
+            <span class="topbar-title" id="topbar-title">战略选择 · 战略共创</span>
+          </div>
+          <div class="topbar-actions">
+            <div class="workspace-switch" role="group" aria-label="工作模式">
+              <button type="button" aria-pressed="false">分析</button>
+              <button type="button" aria-pressed="true">决策</button>
+            </div>
+            <button type="button" class="secondary-button" id="topbar-theme-btn" style="min-height:30px;padding:4px 10px;font-size:12px;">深色</button>
+            <button type="button" class="secondary-button" style="min-height:30px;padding:4px 10px;font-size:12px;">帮助</button>
+          </div>
+        </header>
+
+        <main class="page-scroll">
+          <div class="strategy-goals-page">
+            <div class="page-heading">
+              <div>
+                <h1>战略选择</h1>
+                <p>围绕当前业务问题直接开聊，按需形成战略地图候选、比较假设并承接到目标管理。</p>
+              </div>
+              <div class="sg-row">
+                <button type="button" class="secondary-button" id="btn-toggle-browsed-goal" style="min-height:32px;font-size:12px;">
+                  模拟页内正在浏览目标
+                </button>
+              </div>
+            </div>
+
+            <!-- 战略选择 4 Tabs -->
+            <nav class="sg-tabs workspace-management-tabs" aria-label="战略选择工作视图">
+              <button type="button" data-stage="direction" aria-current="page">战略共创</button>
+              <button type="button" data-stage="compare">战略地图</button>
+              <button type="button" data-stage="handoff">战略模拟</button>
+              <button type="button" data-stage="strategy-versions">版本与来源</button>
+            </nav>
+
+            <!-- Old Baseline Notice (only shown when user toggles "对照旧版基线") -->
+            <section class="sg-panel" id="baseline-comparison-panel" hidden>
+              <h2>旧版基线对照（8f6bec2e977e783d8075c0425db3c9598c790d37）</h2>
+              <p class="sg-muted">直接说明问题，已有战略与 GSA 可以沿用；重要选择集中确认，普通讨论与补证由 Agent 推进。</p>
+              <div class="sg-row">
+                <span class="sg-muted">本次：未设置，仍可工作</span>
+                <button type="button" class="text-button" disabled>重读原讨论（旧版在回复中禁用）</button>
+              </div>
+              <details class="wb-methods" open>
+                <summary>复盘、调研与诊断（旧版咨询术语）</summary>
+                <div class="sg-row">
+                  <button type="button" class="text-button">上期复盘</button>
+                  <button type="button" class="text-button">行业与竞品</button>
+                  <button type="button" class="text-button">SWOT 分析</button>
+                  <button type="button" class="text-button">五力分析</button>
+                </div>
+              </details>
+              <div class="sg-row wb-methods">
+                <label>地图模板 <select class="sg-select"><option>沿用当前地图或由 Agent 整理</option></select></label>
+              </div>
+              <p class="case-help">▲ 上方为旧版首屏在输入框前平铺的多行状态、术语入口与地图模板下拉框；下方为本次 Issue #108 重排后的「战略共创」对话区。</p>
+            </section>
+
+            <!-- Stage: 战略地图 preview (for testing map context roundtrip) -->
+            <section class="sg-panel" id="stage-map-panel" hidden>
+              <div class="sg-row-between">
+                <h2>战略地图 · 会员二购与拓新平衡地图 (v2)</h2>
+                <div class="sg-row">
+                  <button type="button" class="secondary-button" id="btn-map-back-discussion">继续原讨论（带入地图 v2）</button>
+                  <button type="button" class="text-button" id="btn-map-inspect-edge">在原讨论审查连线 e1</button>
+                </div>
+              </div>
+              <p class="sg-muted">在对话中请 Agent 整理或修改后，可在此查看条目表、目标与策略树或平衡计分卡（BSC），也可随时带回「战略共创」输入框附近。</p>
+              <div class="sg-table-scroll">
+                <table class="sg-table">
+                  <thead>
+                    <tr><th>条目</th><th>类型</th><th>指标</th><th>基线</th><th>目标值</th><th>关联连线</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>G1 · 提高新客 90 天二购率</strong></td>
+                      <td>目标</td>
+                      <td>90 天二购率</td>
+                      <td>9%（合成复盘）</td>
+                      <td>15%</td>
+                      <td>e1: S1 → G1（因果假设）</td>
+                    </tr>
+                    <tr>
+                      <td><strong>S1 · 首购后 60–90 天分层回访</strong></td>
+                      <td>策略</td>
+                      <td>有效触达覆盖率</td>
+                      <td>待核</td>
+                      <td>80%</td>
+                      <td>支撑 G1 · 待核前提：导购工时充足</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <!-- Stage: 战略共创 (StrategyDiscussionPanel - Proposed #108 Layout) -->
+            <section class="sg-panel strategy-discussion" id="strategy-discussion-panel" aria-labelledby="sd-title">
+              <!-- 1. Header Row: Title + Current Discussion Selector + Refresh Record & Brief Explanation -->
+              <div class="sg-row-between">
+                <h2 id="sd-title">战略选择 Agent</h2>
+                <div class="strategy-discussion-header-controls">
+                  <label>
+                    原讨论
+                    <select class="sg-select" id="discussion-select">
+                      <option value="">新的战略讨论</option>
+                      <option value="disc-member-repeat">会员首购后二购率与拓新取舍</option>
+                      <option value="disc-east-store">华东门店旺季排班与客单优化（正在回复中）</option>
+                    </select>
+                  </label>
+                  <div class="strategy-discussion-refresh-group" id="refresh-controls" hidden>
+                    <button type="button" class="secondary-button" id="btn-refresh-discussion" style="min-height:32px;padding:4px 10px;font-size:12px;">
+                      刷新讨论记录
+                    </button>
+                    <span class="sg-muted" id="refresh-explanation">读取当前讨论的消息和状态，并尝试接回实时回复</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2. Clear Lead Copy for First-Time Users -->
+              <p class="strategy-discussion-lead" id="lead-copy">说说你正在考虑的战略问题。可以从比较两个方向开始。</p>
+
+              <!-- Optional Candidate Map Summary when existing discussion has a map version -->
+              <section class="wb-candidate" id="candidate-map-card" hidden>
+                <div class="sg-row-between">
+                  <h3>当前候选 · 会员二购与拓新平衡地图</h3>
+                  <button type="button" class="text-button" id="btn-open-map-tab">打开战略地图 · v2</button>
+                </div>
+                <div class="wb-table-wrap">
+                  <table>
+                    <thead><tr><th>战略选择</th><th>支撑目标</th></tr></thead>
+                    <tbody>
+                      <tr>
+                        <th scope="row">S1 · 首购后 60–90 天分层回访</th>
+                        <td>G1 · 提高新客 90 天二购率（待验证）</td>
+                      </tr>
+                      <tr>
+                        <th scope="row">S2 · 季末全场满减普发券</th>
+                        <td>G2 · 短期拉动门店当月客流</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <!-- 3. Single Visible Prompt Examples Entry on First Screen -->
+              <details class="wb-methods" id="prompt-examples-details">
+                <summary>提问示例</summary>
+                <div class="wb-example-pills" role="group" aria-label="提问示例列表">
+                  <button type="button" class="wb-example-button" data-example="复盘上期" data-prompt="对照上期战略、实际行动与结果。哪些选择值得延续，哪些仍缺观察？">复盘上期</button>
+                  <button type="button" class="wb-example-button" data-example="看看行业变化" data-prompt="行业和竞品的哪些变化影响这次选择？请说明资料来源和适用范围。">看看行业变化</button>
+                  <button type="button" class="wb-example-button" data-example="找机会与风险" data-prompt="结合我们已有的优势、短板、机会与威胁，有哪些可供比较的行动？">找机会与风险</button>
+                  <button type="button" class="wb-example-button" data-example="看看竞争压力" data-prompt="从客户、供应商、竞争者、替代品和新进入者看，哪些压力会改变这次战略取舍？">看看竞争压力</button>
+                </div>
+              </details>
+
+              <!-- 4. Conversation Area & Priority Composer -->
+              <div class="workspace-conversation workspace-strategy-conversation" id="conversation-container">
+                <div class="workspace-conversation-toolbar">
+                  <button type="button" class="text-button" id="btn-expand-drawer" aria-haspopup="dialog">放大对话</button>
+                </div>
+
+                <div id="conversation-mount">
+                  <div id="conversation-live-content">
+                    <!-- Transcript Log (shown when messages or streaming exist) -->
+                    <div class="strategy-discussion-messages" id="transcript-log" role="log" aria-label="战略讨论记录" hidden></div>
+
+                    <!-- Running status -->
+                    <p class="sg-muted" id="running-activity" role="status" hidden>Agent 正在讨论与核对…</p>
+
+                    <!-- Bound Goal / Browsed Goal / Bound Map Version or Edge (Visible right near the input box) -->
+                    <div class="strategy-discussion-context-bar" id="near-composer-context" hidden>
+                      <div class="sg-row" id="browsed-goal-item" hidden style="margin:0;">
+                        <span class="sg-muted">当前浏览目标：2026 Q4 会员复购与客单提升 · v1</span>
+                        <button type="button" class="text-button" id="btn-bind-browsed-goal">围绕此目标讨论</button>
+                      </div>
+                      <span class="sg-badge" id="bound-goal-badge" hidden></span>
+                      <span class="sg-row" id="bound-map-badge" hidden style="margin:0;">
+                        <span class="sg-badge" id="bound-map-text"></span>
+                        <button type="button" class="text-button" id="btn-reset-map-context">回到当前版本</button>
+                      </span>
+                    </div>
+
+                    <!-- Composer Form (Input box + Add Materials + Send Discussion immediately visible) -->
+                    <form class="strategy-discussion-composer" id="discussion-composer-form">
+                      <label class="sr-only" for="discussion-textarea">战略讨论问题</label>
+                      <textarea
+                        id="discussion-textarea"
+                        rows="3"
+                        placeholder="下季度该优先拓新客，还是提高复购？"
+                      ></textarea>
+
+                      <div class="sg-row" id="chosen-attachments-row" aria-label="本轮所选资料" hidden></div>
+
+                      <div class="sg-row-between" style="margin-top:8px;">
+                        <button type="button" class="text-button" id="btn-open-attachments">＋ 添加资料</button>
+                        <div class="sg-row" style="margin:0;">
+                          <button type="button" class="secondary-button" id="btn-stop-discussion" hidden>停止本轮讨论</button>
+                          <button type="submit" class="primary-button" id="btn-send-discussion" disabled>发送讨论</button>
+                        </div>
+                      </div>
+                    </form>
+
+                    <!-- In-place Status & Error Feedback (Distinguishing Record Read vs Live Connection Recovery) -->
+                    <p class="case-notice" id="discussion-notice" role="status" hidden></p>
+                    <p class="case-error" id="discussion-error" role="alert" hidden></p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5. Single Default-Collapsed「讨论设置（选填）」Below the Input Box -->
+              <details class="strategy-discussion-options" id="discussion-settings-details">
+                <summary id="discussion-settings-summary">
+                  <span>讨论设置（选填）</span><span class="summary-purpose" id="summary-purpose-tag"></span>
+                </summary>
+
+                <!-- 5.1 讨论用途（选填） -->
+                <section class="strategy-settings-group" aria-labelledby="heading-setting-purpose">
+                  <h3 id="heading-setting-purpose">讨论用途（选填）</h3>
+                  <p class="case-help">说明组织、部门／业务模块、个人和可选背景，供当前讨论的后续回复参考，可直接留空。只更新本次讨论的后续背景，不修改全局默认、旧目标或已确认方案，不增加资料权限。</p>
+                  <div class="field">
+                    <label for="setting-usage-kind">使用用途</label>
+                    <select id="setting-usage-kind">
+                      <option value="">暂不设置 · 仍可直接工作</option>
+                      <option value="organization">组织</option>
+                      <option value="department">部门／业务模块</option>
+                      <option value="personal">个人</option>
+                    </select>
+                  </div>
+                  <div class="field" id="setting-usage-bg-wrap" hidden>
+                    <label for="setting-usage-bg">背景（可选）</label>
+                    <textarea id="setting-usage-bg" rows="2" maxlength="4000" placeholder="说明本次讨论对象或已有背景，不要求填完整规划。"></textarea>
+                  </div>
+                </section>
+
+                <!-- 5.2 地图输出格式（选填） -->
+                <section class="strategy-settings-group" aria-labelledby="heading-setting-map-format">
+                  <h3 id="heading-setting-map-format">地图输出格式（选填）</h3>
+                  <p class="case-help">格式是后续发送时的地图整理偏好。可以在对话中请 Agent 整理，完成后到「战略地图」查看。</p>
+                  <div class="field">
+                    <label for="setting-map-template">地图输出格式</label>
+                    <select id="setting-map-template">
+                      <option value="">自动（沿用当前地图或由 Agent 整理）</option>
+                      <option value="table">条目表</option>
+                      <option value="tree">目标与策略树</option>
+                      <option value="bsc">平衡计分卡（BSC）</option>
+                    </select>
+                  </div>
+                </section>
+
+                <!-- 5.3 指定参考方法（选填） -->
+                <section class="strategy-settings-group" aria-labelledby="heading-setting-methods">
+                  <h3 id="heading-setting-methods">
+                    指定参考方法（选填） · <span id="methods-summary-label" style="font-weight:400;color:var(--muted);">优先参考战略选择框架</span>
+                  </h3>
+                  <p class="case-help">指定参考方法是分析偏好，不代表已安装或测评的 Skill。默认方法策略沿用现有行为（优先参考战略选择框架）；换选、组合或补充会保留原消息、资料和目标准确版，Agent 根据问题实质使用并说明限制。</p>
+                  <div class="strategy-methods" id="builtin-methods-list">
+                    <label><input type="checkbox" value="playing-to-win" data-name="战略选择框架 / Playing to Win" />战略选择框架 / Playing to Win</label>
+                    <label><input type="checkbox" value="rumelt" data-name="Rumelt 战略内核" />Rumelt 战略内核</label>
+                    <label><input type="checkbox" value="mckinsey" data-name="麦肯锡战略构建要素" />麦肯锡战略构建要素</label>
+                    <label><input type="checkbox" value="bcg" data-name="BCG 战略调色板" />BCG 战略调色板</label>
+                    <label><input type="checkbox" value="bain" data-name="贝恩核心业务与相邻增长" />贝恩核心业务与相邻增长</label>
+                    <label><input type="checkbox" value="bsc" data-name="BSC／战略地图" />BSC／战略地图</label>
+                  </div>
+                  <div class="sg-row">
+                    <label class="sr-only" for="custom-method-input">其他参考方法</label>
+                    <input class="sg-select" id="custom-method-input" maxlength="300" placeholder="可补充其他方法" />
+                    <button type="button" class="text-button" id="btn-add-custom-method" disabled>加入本次参考</button>
+                  </div>
+                  <div id="custom-methods-tags"></div>
+                </section>
+
+                <!-- 5.4 模型与资料范围 -->
+                <section class="strategy-settings-group" aria-labelledby="heading-setting-model-sources">
+                  <h3 id="heading-setting-model-sources">模型与资料范围</h3>
+                  <div class="field">
+                    <label for="setting-model">本次模型</label>
+                    <select id="setting-model">
+                      <option value="">沿已选择模型（DeepSeek V3.2）</option>
+                      <option value="cfg-deepseek">DeepSeek V3.2</option>
+                      <option value="cfg-mimo">MiMo Pro</option>
+                      <option value="cfg-minimax">MiniMax M3.1 · 待配置</option>
+                    </select>
+                    <button type="button" class="text-button" id="btn-goto-model-settings" style="margin-top:4px;">前往模型设置</button>
+                  </div>
+
+                  <div class="field">
+                    <label for="setting-project">资料所在项目（可选）</label>
+                    <select id="setting-project">
+                      <option value="">无项目，直接围绕已知背景讨论</option>
+                      <option value="proj-member">会员复购与渠道分析</option>
+                      <option value="proj-east">华东门店经营诊断 · 已归档</option>
+                    </select>
+                  </div>
+
+                  <div class="field">
+                    <label for="setting-source-mode">本次背景使用范围</label>
+                    <select id="setting-source-mode" disabled>
+                      <option value="project-background">在本项目获准背景内自主查找</option>
+                      <option value="selected-only" selected>仅使用我手选的资料</option>
+                    </select>
+                    <p class="case-help" id="setting-source-help">尚未明确资料项目：不开放项目背景，仍可围绕当前说明与准确目标讨论。</p>
+                  </div>
+
+                  <div class="sg-row">
+                    <button type="button" class="secondary-button" id="btn-list-project-sources" disabled>查看可选背景资料</button>
+                    <button type="button" class="text-button" id="btn-close-session" hidden>关闭会话，保留历史</button>
+                  </div>
+                  <ul class="sg-history" id="project-sources-list" hidden></ul>
+                  <p class="sg-muted" id="project-sources-summary">本次仅限 0 份手选背景。明确排除 0 项，同一资料后续换版仍保持排除。</p>
+                </section>
+              </details>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- Expanded Conversation Drawer Dialog -->
+  <dialog class="workspace-conversation-dialog" id="expanded-conversation-dialog" aria-labelledby="expanded-dialog-title">
+    <header class="workspace-conversation-heading">
+      <h2 id="expanded-dialog-title">战略选择 Agent</h2>
+      <button type="button" class="secondary-button" id="btn-collapse-drawer">收起对话</button>
+    </header>
+    <div class="workspace-conversation-expanded" id="expanded-conversation-dock"></div>
+  </dialog>
+
+  <!-- Attachment Picker Modal -->
+  <dialog class="demo-modal" id="attachment-modal" aria-labelledby="attachment-modal-title">
+    <header class="workspace-conversation-heading">
+      <h2 id="attachment-modal-title">添加讨论资料</h2>
+      <button type="button" class="secondary-button" id="btn-close-attachment-modal">取消</button>
+    </header>
+    <div class="workspace-conversation-expanded">
+      <p class="sg-muted">可选择合成示例资料加入本轮讨论（每份附件最多 8 MiB，不会自动触发模型发送）：</p>
+      <div class="field">
+        <label><input type="checkbox" class="demo-att-check" value="att-1" data-title="2026Q3_会员首购90天复购统计.xlsx" checked /> 2026Q3_会员首购90天复购统计.xlsx · 020_clean</label>
+        <label><input type="checkbox" class="demo-att-check" value="att-2" data-title="门店导购回访工时与转化复盘.pdf" /> 门店导购回访工时与转化复盘.pdf · 020_clean</label>
+        <label><input type="checkbox" class="demo-att-check" value="att-3" data-title="行业竞品会员权益对比简报.md" /> 行业竞品会员权益对比简报.md · 本机讨论目录</label>
+      </div>
+      <div class="sg-row-between" style="margin-top:16px;">
+        <span class="sg-muted">添加后显示在输入框内，随下次点击「发送讨论」一并提交。</span>
+        <button type="button" class="primary-button" id="btn-confirm-attachments">加入本次讨论</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    (function () {
+      const usageLabels = {
+        organization: '组织',
+        department: '部门／业务模块',
+        personal: '个人'
+      };
+
+      const syntheticProjectSources = [
+        { id: 'src-plan-v2', title: '2026下半年会员经营计划.md', version: 2, sha256: '8f12c9a0' },
+        { id: 'src-cohort-v1', title: '首购会员90天留存分层基线.csv', version: 1, sha256: '4b91e3d2' }
+      ];
+
+      // Per-discussion state in memory (simulating sessionStorage draft & Host discussion detail)
+      const discussions = {
+        '': {
+          id: '',
+          title: '新的战略讨论',
+          busy: false,
+          usageContext: null,
+          mapTemplate: '',
+          methods: [],
+          customMethods: [],
+          projectId: '',
+          sourceMode: 'selected-only',
+          selectedSources: [],
+          excludedSources: [],
+          boundGoal: null,
+          mapContext: null,
+          attachments: [],
+          messages: [],
+          streaming: ''
+        },
+        'disc-member-repeat': {
+          id: 'disc-member-repeat',
+          title: '会员首购后二购率与拓新取舍',
+          busy: false,
+          usageContext: { kind: 'department', background: '零售会员运营部，重点评估 Q4 预算在拓新客与首购 90 天复购之间的分配。' },
+          mapTemplate: 'bsc',
+          methods: ['playing-to-win', 'bsc'],
+          customMethods: [],
+          projectId: 'proj-member',
+          sourceMode: 'project-background',
+          selectedSources: ['src-plan-v2'],
+          excludedSources: [],
+          boundGoal: { goalId: 'goal-repeat-90d', version: 1, title: '提高新客 90 天二购率' },
+          mapContext: { mapId: 'map-member-v2', version: 2, edgeId: 'e1' },
+          attachments: [],
+          messages: [
+            {
+              role: 'user',
+              text: '下季度该优先拓新客，还是提高复购？目前新客 90 天二购率只有 9%，预算有限。'
+            },
+            {
+              role: 'assistant',
+              html: `
+                <div class="strategy-discussion-reply">
+                  <h4>两项方向的初步比较与关键前提</h4>
+                  <p>结合已提供的首购复盘基线（90 天二购率约 <strong>9%</strong>），建议在决定预算倾斜前先比较以下两个具名候选方向：</p>
+                  <div class="sg-table-scroll" role="region" aria-label="回复表格" tabindex="0">
+                    <table class="sg-table">
+                      <thead>
+                        <tr><th>候选方向</th><th>核心策略 (S)</th><th>支撑目标 (G)</th><th>必须成立的前提 / 待核未知</th></tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td><strong>方向 A：深耕首购复购</strong></td>
+                          <td>S1 · 首购后 60–90 天导购分层回访</td>
+                          <td>G1 · 新客 90 天二购率由 9% 提升至 15%</td>
+                          <td>门店导购日均回访工时可覆盖 80% 首购客群；需排除自然高意愿客群偏误</td>
+                        </tr>
+                        <tr>
+                          <td><strong>方向 B：季末促销拓新</strong></td>
+                          <td>S2 · 季末全场满减普发券拉新</td>
+                          <td>G2 · 当季新客首单量增长 20%</td>
+                          <td>获客成本不高于首年毛利贡献；若复购仍为 9%，次季留存可能快速衰减</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <ul>
+                    <li>已将上述两个方向的因果假设更新至候选战略地图 <strong>v2</strong>（当前聚焦连线 <code>e1: S1 → G1</code>）。</li>
+                    <li>你可以直接追问具体前提，或在下方「讨论设置（选填）」中调整后续地图输出格式与参考方法偏好。</li>
+                  </ul>
+                </div>
+              `
+            }
+          ],
+          streaming: ''
+        },
+        'disc-east-store': {
+          id: 'disc-east-store',
+          title: '华东门店旺季排班与客单优化（正在回复中）',
+          busy: true,
+          usageContext: { kind: 'organization', background: '华东区 6 家直营门店 Q4 旺季经营讨论' },
+          mapTemplate: 'tree',
+          methods: ['rumelt'],
+          customMethods: [],
+          projectId: 'proj-member',
+          sourceMode: 'selected-only',
+          selectedSources: ['src-plan-v2'],
+          excludedSources: [],
+          boundGoal: { goalId: 'goal-east-q4', version: 2, title: '华东六店旺季毛利额企稳' },
+          mapContext: { mapId: 'map-east-v1', version: 1 },
+          attachments: [],
+          messages: [
+            {
+              role: 'user',
+              text: '对照上期战略、实际行动与结果。哪些选择值得延续，哪些仍缺观察？'
+            }
+          ],
+          streaming: '正在对照华东六店上期排班与促销记录：1. 晚高峰预约分流在 3 家核心店已观察到连带率回升；2. 仍缺观察的是非周末时段的导购固定排班成本…'
+        }
+      };
+
+      const drafts = {
+        '': '',
+        'disc-member-repeat': '关于连线 e1：如果门店人手受限，有效回访覆盖率降到 30%，方向 A 是否还优于普发券？',
+        'disc-east-store': '补充追问：周末与工作日的排班口径请分开列示（未发送草稿）'
+      };
+
+      let currentId = '';
+      let browsedGoalVisible = false;
+      let agentDispatchCount = 0;
+      let refreshCount = 0;
+
+      // DOM elements
+      const appEl = document.getElementById('product-app');
+      const stageWrapEl = document.getElementById('demo-stage-wrap');
+      const selectEl = document.getElementById('discussion-select');
+      const refreshControlsEl = document.getElementById('refresh-controls');
+      const btnRefreshEl = document.getElementById('btn-refresh-discussion');
+      const candidateCardEl = document.getElementById('candidate-map-card');
+      const promptExamplesEl = document.getElementById('prompt-examples-details');
+      const transcriptEl = document.getElementById('transcript-log');
+      const runningActivityEl = document.getElementById('running-activity');
+      const nearContextEl = document.getElementById('near-composer-context');
+      const browsedGoalItemEl = document.getElementById('browsed-goal-item');
+      const boundGoalBadgeEl = document.getElementById('bound-goal-badge');
+      const boundMapBadgeEl = document.getElementById('bound-map-badge');
+      const boundMapTextEl = document.getElementById('bound-map-text');
+      const textareaEl = document.getElementById('discussion-textarea');
+      const attachmentsRowEl = document.getElementById('chosen-attachments-row');
+      const btnSendEl = document.getElementById('btn-send-discussion');
+      const btnStopEl = document.getElementById('btn-stop-discussion');
+      const noticeEl = document.getElementById('discussion-notice');
+      const errorEl = document.getElementById('discussion-error');
+      const settingsDetailsEl = document.getElementById('discussion-settings-details');
+      const summaryPurposeTagEl = document.getElementById('summary-purpose-tag');
+      const usageKindEl = document.getElementById('setting-usage-kind');
+      const usageBgWrapEl = document.getElementById('setting-usage-bg-wrap');
+      const usageBgEl = document.getElementById('setting-usage-bg');
+      const mapTemplateEl = document.getElementById('setting-map-template');
+      const methodsSummaryLabelEl = document.getElementById('methods-summary-label');
+      const customMethodInputEl = document.getElementById('custom-method-input');
+      const btnAddCustomMethodEl = document.getElementById('btn-add-custom-method');
+      const customMethodsTagsEl = document.getElementById('custom-methods-tags');
+      const projectSelectEl = document.getElementById('setting-project');
+      const sourceModeSelectEl = document.getElementById('setting-source-mode');
+      const sourceHelpEl = document.getElementById('setting-source-help');
+      const btnListSourcesEl = document.getElementById('btn-list-project-sources');
+      const btnCloseSessionEl = document.getElementById('btn-close-session');
+      const sourcesListEl = document.getElementById('project-sources-list');
+      const sourcesSummaryEl = document.getElementById('project-sources-summary');
+      const simRefreshModeEl = document.getElementById('sim-refresh-mode');
+      const dispatchCounterEl = document.getElementById('agent-dispatch-counter');
+
+      function updateDispatchCounter() {
+        dispatchCounterEl.textContent = 'Agent 发送触发次数：' + agentDispatchCount;
+      }
+
+      function clearFeedback() {
+        noticeEl.hidden = true;
+        noticeEl.textContent = '';
+        errorEl.hidden = true;
+        errorEl.textContent = '';
+      }
+
+      function showNotice(msg) {
+        errorEl.hidden = true;
+        errorEl.textContent = '';
+        noticeEl.textContent = msg;
+        noticeEl.hidden = false;
+      }
+
+      function showError(msg) {
+        noticeEl.hidden = true;
+        noticeEl.textContent = '';
+        errorEl.textContent = msg;
+        errorEl.hidden = false;
+      }
+
+      function renderTranscript(disc) {
+        if (!disc.messages.length && !disc.streaming) {
+          transcriptEl.hidden = true;
+          transcriptEl.innerHTML = '';
+          return;
+        }
+        transcriptEl.hidden = false;
+        let html = '';
+        for (const msg of disc.messages) {
+          if (msg.role === 'user') {
+            const safe = msg.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            html += `<article class="strategy-discussion-message user"><strong>你</strong><p>${safe}</p></article>`;
+          } else {
+            html += `<article class="strategy-discussion-message assistant"><strong>Agent</strong>${msg.html || `<div class="strategy-discussion-reply"><p>${msg.text}</p></div>`}</article>`;
+          }
+        }
+        if (disc.streaming) {
+          const safeStream = disc.streaming.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          html += `<article class="strategy-discussion-message assistant"><strong>Agent（实时回复中）</strong><div class="strategy-discussion-reply"><p>${safeStream}</p></div></article>`;
+        }
+        transcriptEl.innerHTML = html;
+      }
+
+      function renderNearComposerContext(disc) {
+        const hasBrowsed = browsedGoalVisible;
+        const hasGoal = Boolean(disc.boundGoal);
+        const hasMap = Boolean(disc.mapContext);
+        nearContextEl.hidden = !(hasBrowsed || hasGoal || hasMap);
+        browsedGoalItemEl.hidden = !hasBrowsed;
+
+        if (hasGoal) {
+          boundGoalBadgeEl.hidden = false;
+          boundGoalBadgeEl.textContent = `已绑定目标：${disc.boundGoal.title} · 目标准确版 v${disc.boundGoal.version}`;
+        } else {
+          boundGoalBadgeEl.hidden = true;
+        }
+
+        if (hasMap) {
+          boundMapBadgeEl.hidden = false;
+          boundMapTextEl.textContent = `围绕地图 v${disc.mapContext.version}${disc.mapContext.edgeId ? ' · 连线 ' + disc.mapContext.edgeId : ''}`;
+        } else {
+          boundMapBadgeEl.hidden = true;
+        }
+      }
+
+      function renderAttachments(disc) {
+        if (!disc.attachments.length) {
+          attachmentsRowEl.hidden = true;
+          attachmentsRowEl.innerHTML = '';
+          return;
+        }
+        attachmentsRowEl.hidden = false;
+        attachmentsRowEl.innerHTML = disc.attachments.map(att =>
+          `<span class="sg-badge">${att.title} · 待发送 <button type="button" class="text-button" data-remove-att="${att.id}" aria-label="移除 ${att.title}">×</button></span>`
+        ).join('');
+      }
+
+      function renderSettings(disc) {
+        // Summary purpose tag
+        if (disc.usageContext && disc.usageContext.kind) {
+          summaryPurposeTagEl.textContent = `· 已设用途：${usageLabels[disc.usageContext.kind]}`;
+        } else {
+          summaryPurposeTagEl.textContent = '';
+        }
+
+        usageKindEl.value = disc.usageContext?.kind || '';
+        if (disc.usageContext?.kind) {
+          usageBgWrapEl.hidden = false;
+          usageBgEl.value = disc.usageContext.background || '';
+        } else {
+          usageBgWrapEl.hidden = true;
+          usageBgEl.value = '';
+        }
+
+        mapTemplateEl.value = disc.mapTemplate || '';
+
+        // Builtin methods
+        const checkboxes = document.querySelectorAll('#builtin-methods-list input[type="checkbox"]');
+        const selectedNames = [];
+        checkboxes.forEach(cb => {
+          cb.checked = disc.methods.includes(cb.value);
+          if (cb.checked) selectedNames.push(cb.getAttribute('data-name'));
+        });
+        disc.customMethods.forEach(m => selectedNames.push(m));
+        methodsSummaryLabelEl.textContent = selectedNames.length ? selectedNames.join(' ＋ ') : '优先参考战略选择框架';
+
+        // Custom methods tags
+        customMethodsTagsEl.innerHTML = disc.customMethods.map((m, idx) =>
+          `<p class="sg-muted" style="margin:6px 0;">${m} <button type="button" class="text-button" data-remove-custom-method="${idx}">移除本次参考</button></p>`
+        ).join('');
+
+        // Project & source scope
+        projectSelectEl.value = disc.projectId || '';
+        sourceModeSelectEl.disabled = !disc.projectId;
+        sourceModeSelectEl.value = disc.projectId ? disc.sourceMode : 'selected-only';
+        btnListSourcesEl.disabled = !disc.projectId;
+        btnCloseSessionEl.hidden = !disc.id;
+
+        if (!disc.projectId) {
+          sourceHelpEl.textContent = '尚未明确资料项目：不开放项目背景，仍可围绕当前说明与准确目标讨论。';
+        } else if (disc.sourceMode === 'project-background') {
+          sourceHelpEl.textContent = 'Agent 可在本次明确的项目背景与原权限内发现并按需读取。手选是优先参考或补充，不是逐项读取审批。';
+        } else {
+          sourceHelpEl.textContent = '仅限下方明确手选的资料；空清单表示本次不使用项目背景，不自动转为项目范围。';
+        }
+
+        const count = disc.selectedSources.length;
+        const exCount = disc.excludedSources.length;
+        sourcesSummaryEl.textContent = (disc.sourceMode === 'selected-only'
+          ? `本次仅限 ${count} 份手选背景。`
+          : `手选优先参考 ${count} 份；未手选不等于排除。`) + `明确排除 ${exCount} 项，同一资料后续换版仍保持排除。`;
+      }
+
+      function updateSendButtonState() {
+        const disc = discussions[currentId];
+        const hasText = textareaEl.value.trim().length > 0;
+        const hasAtt = disc.attachments.length > 0;
+        btnSendEl.disabled = disc.busy || (!hasText && !hasAtt);
+        btnStopEl.hidden = !disc.busy;
+      }
+
+      function renderAll() {
+        const disc = discussions[currentId];
+        selectEl.value = currentId;
+        refreshControlsEl.hidden = !disc.id;
+        // Notice: refresh button stays enabled even when disc.busy === true ("正在回复时仍可刷新")
+        btnRefreshEl.disabled = false;
+        candidateCardEl.hidden = disc.id !== 'disc-member-repeat';
+        runningActivityEl.hidden = !disc.busy;
+
+        textareaEl.value = drafts[currentId] || '';
+        renderTranscript(disc);
+        renderNearComposerContext(disc);
+        renderAttachments(disc);
+        renderSettings(disc);
+        updateSendButtonState();
+      }
+
+      // Switch discussion
+      selectEl.addEventListener('change', () => {
+        drafts[currentId] = textareaEl.value;
+        currentId = selectEl.value;
+        clearFeedback();
+        renderAll();
+      });
+
+      // Textarea draft input
+      textareaEl.addEventListener('input', () => {
+        drafts[currentId] = textareaEl.value;
+        updateSendButtonState();
+      });
+
+      // Prompt example buttons: append to draft and focus textarea, never auto-send
+      document.querySelectorAll('.wb-example-button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const prompt = btn.getAttribute('data-prompt') || '';
+          const currentText = textareaEl.value.trim();
+          const next = currentText ? (textareaEl.value + '\n' + prompt) : prompt;
+          textareaEl.value = next;
+          drafts[currentId] = next;
+          updateSendButtonState();
+          textareaEl.focus();
+          showNotice(`已将「${btn.getAttribute('data-example')}」示例追加到草稿并聚焦输入框；请按需编辑后点击「发送讨论」。`);
+        });
+      });
+
+      // Refresh discussion record button: distinguish record read vs live stream recovery
+      btnRefreshEl.addEventListener('click', () => {
+        const disc = discussions[currentId];
+        if (!disc.id) return;
+        // Preserve current draft
+        drafts[currentId] = textareaEl.value;
+        refreshCount++;
+        const mode = simRefreshModeEl.value;
+
+        if (mode === 'read-fail') {
+          showError('刷新讨论记录未完成（模拟服务响应超时 503）。原未决请求、已显示记录与输入框未发送草稿均已保留；没有重发消息。');
+          return;
+        }
+
+        if (mode === 'stream-fail') {
+          if (disc.busy) {
+            disc.streaming = '正在对照华东六店上期排班与促销记录：1. 晚高峰预约分流在 3 家核心店已观察到连带率回升；2. 已读取到服务端最新落盘片段（刷新 #' + refreshCount + '）…';
+            renderTranscript(disc);
+          }
+          showError('已读取最新讨论记录与状态，但实时回复连接尚未恢复（SSE 连接中断）。输入框未发送草稿与原请求编号保留，未重发消息；可稍后再点「刷新讨论记录」接回实时回复。');
+          return;
+        }
+
+        // mode === 'ok'
+        if (disc.busy) {
+          disc.streaming = '正在对照华东六店上期排班与促销记录：1. 晚高峰预约分流在 3 家核心店已观察到连带率回升；2. 实时回复流已重新接回（刷新 #' + refreshCount + '）…';
+          renderTranscript(disc);
+          showNotice('已刷新讨论记录，并接回本轮实时回复（未重发消息，输入框未发送草稿已保留）。');
+        } else {
+          showNotice('已刷新讨论记录，消息与状态已同步，实时回复连接正常（未重发消息，未发送草稿已保留）。');
+        }
+      });
+
+      // Send discussion message (explicit user submit only)
+      document.getElementById('discussion-composer-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const disc = discussions[currentId];
+        const text = textareaEl.value.trim();
+        if (disc.busy || (!text && !disc.attachments.length)) return;
+
+        agentDispatchCount++;
+        updateDispatchCounter();
+
+        // If on "new discussion", create & switch to it or append message
+        const sentText = text || '（已提交所选讨论资料）';
+        disc.messages.push({ role: 'user', text: sentText });
+        const formatPref = mapTemplateEl.options[mapTemplateEl.selectedIndex]?.text || '自动';
+        const purposePref = disc.usageContext?.kind ? usageLabels[disc.usageContext.kind] : '未指定（直接讨论）';
+        disc.messages.push({
+          role: 'assistant',
+          html: `<div class="strategy-discussion-reply">
+            <p>已收到你的问题。本轮携带偏好：<strong>用途=${purposePref}</strong>、<strong>地图输出格式=${formatPref}</strong>。</p>
+            <p>建议从两个方向展开比较：① 优先夯实首购后 60–90 天复购触达；② 控制高补贴普发券比例并做同店对照观察。如需生成或更新战略地图，我可在整理后同步至「战略地图」页签。</p>
+          </div>`
+        });
+        textareaEl.value = '';
+        drafts[currentId] = '';
+        disc.attachments = [];
+        renderAll();
+        showNotice('已发送本轮讨论（合成演示回复已生成）。');
+      });
+
+      // Stop active discussion
+      btnStopEl.addEventListener('click', () => {
+        const disc = discussions[currentId];
+        disc.busy = false;
+        if (disc.streaming) {
+          disc.messages.push({ role: 'assistant', text: disc.streaming + '（已请求停止，已保存记录保留）' });
+          disc.streaming = '';
+        }
+        renderAll();
+        showNotice('已请求停止，已保存记录与输入框未发送草稿保留；实际收尾以当前状态为准。');
+      });
+
+      // Browsed goal & map context near composer
+      document.getElementById('btn-toggle-browsed-goal').addEventListener('click', () => {
+        browsedGoalVisible = !browsedGoalVisible;
+        renderNearComposerContext(discussions[currentId]);
+      });
+
+      document.getElementById('btn-bind-browsed-goal').addEventListener('click', () => {
+        const disc = discussions[currentId];
+        disc.boundGoal = { goalId: 'goal-q4-browsed', version: 1, title: '2026 Q4 会员复购与客单提升' };
+        if (!disc.usageContext) {
+          disc.usageContext = { kind: 'department', background: '沿所选目标 v1 的职责范围' };
+        }
+        renderNearComposerContext(disc);
+        renderSettings(disc);
+        showNotice('已选择准确目标；原目标与历史未改写，本轮范围将随下次消息保存。');
+      });
+
+      document.getElementById('btn-reset-map-context').addEventListener('click', () => {
+        const disc = discussions[currentId];
+        disc.mapContext = null;
+        renderNearComposerContext(disc);
+        showNotice('已解除特定地图版本／连线锁定，回到当前版本；未触发 Agent 请求。');
+      });
+
+      // Settings interactions (NEVER trigger Agent or map output)
+      usageKindEl.addEventListener('change', () => {
+        const disc = discussions[currentId];
+        const kind = usageKindEl.value;
+        disc.usageContext = kind ? { kind, background: disc.usageContext?.background || '' } : null;
+        renderSettings(disc);
+      });
+
+      usageBgEl.addEventListener('input', () => {
+        const disc = discussions[currentId];
+        if (disc.usageContext) disc.usageContext.background = usageBgEl.value;
+      });
+
+      mapTemplateEl.addEventListener('change', () => {
+        const disc = discussions[currentId];
+        disc.mapTemplate = mapTemplateEl.value;
+      });
+
+      document.querySelectorAll('#builtin-methods-list input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const disc = discussions[currentId];
+          if (cb.checked) {
+            if (!disc.methods.includes(cb.value)) disc.methods.push(cb.value);
+          } else {
+            disc.methods = disc.methods.filter(x => x !== cb.value);
+          }
+          renderSettings(disc);
+        });
+      });
+
+      customMethodInputEl.addEventListener('input', () => {
+        btnAddCustomMethodEl.disabled = !customMethodInputEl.value.trim();
+      });
+
+      btnAddCustomMethodEl.addEventListener('click', () => {
+        const val = customMethodInputEl.value.trim();
+        if (!val) return;
+        const disc = discussions[currentId];
+        disc.customMethods.push(val);
+        customMethodInputEl.value = '';
+        btnAddCustomMethodEl.disabled = true;
+        renderSettings(disc);
+      });
+
+      customMethodsTagsEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-remove-custom-method]');
+        if (!btn) return;
+        const idx = Number(btn.getAttribute('data-remove-custom-method'));
+        discussions[currentId].customMethods.splice(idx, 1);
+        renderSettings(discussions[currentId]);
+      });
+
+      projectSelectEl.addEventListener('change', () => {
+        const disc = discussions[currentId];
+        disc.projectId = projectSelectEl.value;
+        disc.selectedSources = [];
+        disc.sourceMode = disc.projectId ? (disc.id ? 'selected-only' : 'project-background') : 'selected-only';
+        sourcesListEl.hidden = true;
+        renderSettings(disc);
+      });
+
+      sourceModeSelectEl.addEventListener('change', () => {
+        const disc = discussions[currentId];
+        disc.sourceMode = sourceModeSelectEl.value;
+        renderSettings(disc);
+      });
+
+      btnListSourcesEl.addEventListener('click', () => {
+        const disc = discussions[currentId];
+        if (!disc.projectId) return;
+        sourcesListEl.hidden = false;
+        const useLabel = disc.sourceMode === 'selected-only' ? '本次使用' : '优先参考';
+        sourcesListEl.innerHTML = syntheticProjectSources.map(src => {
+          const used = disc.selectedSources.includes(src.id);
+          const excluded = disc.excludedSources.includes(src.id);
+          return `<li>
+            <div class="sg-row-between">
+              <div>
+                <strong>${src.title}</strong>
+                <p class="sg-muted">准确版 v${src.version} · SHA ${src.sha256} · 目录项，尚不代表已读取</p>
+              </div>
+              <div class="sg-row">
+                <label class="strategy-source-option">
+                  <input type="checkbox" data-src-use="${src.id}" ${used && !excluded ? 'checked' : ''} ${excluded ? 'disabled' : ''} />
+                  ${useLabel}
+                </label>
+                <label class="strategy-source-option">
+                  <input type="checkbox" data-src-exclude="${src.id}" ${excluded ? 'checked' : ''} />
+                  排除
+                </label>
+              </div>
+            </div>
+          </li>`;
+        }).join('');
+      });
+
+      sourcesListEl.addEventListener('change', (e) => {
+        const disc = discussions[currentId];
+        const useId = e.target.getAttribute('data-src-use');
+        const exId = e.target.getAttribute('data-src-exclude');
+        if (useId) {
+          if (e.target.checked) disc.selectedSources.push(useId);
+          else disc.selectedSources = disc.selectedSources.filter(x => x !== useId);
+        }
+        if (exId) {
+          if (e.target.checked) {
+            disc.excludedSources.push(exId);
+            disc.selectedSources = disc.selectedSources.filter(x => x !== exId);
+          } else {
+            disc.excludedSources = disc.excludedSources.filter(x => x !== exId);
+          }
+          btnListSourcesEl.click();
+        }
+        renderSettings(disc);
+      });
+
+      btnCloseSessionEl.addEventListener('click', () => {
+        showNotice('会话资源已关闭，原生历史保留，可从原讨论续接。');
+      });
+
+      // Attachment modal
+      const attModal = document.getElementById('attachment-modal');
+      document.getElementById('btn-open-attachments').addEventListener('click', () => {
+        attModal.showModal();
+      });
+      document.getElementById('btn-close-attachment-modal').addEventListener('click', () => {
+        attModal.close();
+      });
+      document.getElementById('btn-confirm-attachments').addEventListener('click', () => {
+        const disc = discussions[currentId];
+        const checks = document.querySelectorAll('.demo-att-check:checked');
+        checks.forEach(ch => {
+          if (!disc.attachments.some(a => a.id === ch.value)) {
+            disc.attachments.push({ id: ch.value, title: ch.getAttribute('data-title') });
+          }
+        });
+        attModal.close();
+        renderAttachments(disc);
+        updateSendButtonState();
+      });
+      attachmentsRowEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-remove-att]');
+        if (!btn) return;
+        const id = btn.getAttribute('data-remove-att');
+        discussions[currentId].attachments = discussions[currentId].attachments.filter(a => a.id !== id);
+        renderAttachments(discussions[currentId]);
+        updateSendButtonState();
+      });
+
+      // ConversationDrawer expand / collapse (preserving live DOM node & input focus/scroll)
+      const drawerDialog = document.getElementById('expanded-conversation-dialog');
+      const liveContent = document.getElementById('conversation-live-content');
+      const inlineMount = document.getElementById('conversation-mount');
+      const expandedDock = document.getElementById('expanded-conversation-dock');
+      const btnExpand = document.getElementById('btn-expand-drawer');
+      const btnCollapse = document.getElementById('btn-collapse-drawer');
+
+      btnExpand.addEventListener('click', () => {
+        expandedDock.appendChild(liveContent);
+        drawerDialog.showModal();
+        btnCollapse.focus();
+      });
+      function collapseDrawer() {
+        inlineMount.appendChild(liveContent);
+        if (drawerDialog.open) drawerDialog.close();
+        btnExpand.focus();
+      }
+      btnCollapse.addEventListener('click', collapseDrawer);
+      drawerDialog.addEventListener('cancel', (e) => {
+        e.preventDefault();
+        collapseDrawer();
+      });
+      drawerDialog.addEventListener('close', () => {
+        if (liveContent.parentElement !== inlineMount) {
+          inlineMount.appendChild(liveContent);
+          btnExpand.focus();
+        }
+      });
+      drawerDialog.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          collapseDrawer();
+        }
+      });
+
+      // Stage tab switching (战略共创 <-> 战略地图)
+      const stageTabs = document.querySelectorAll('.sg-tabs > button[data-stage]');
+      const discussionPanelEl = document.getElementById('strategy-discussion-panel');
+      const mapPanelEl = document.getElementById('stage-map-panel');
+      function switchStage(stage) {
+        stageTabs.forEach(btn => {
+          if (btn.getAttribute('data-stage') === stage) btn.setAttribute('aria-current', 'page');
+          else btn.removeAttribute('aria-current');
+        });
+        if (stage === 'compare') {
+          discussionPanelEl.hidden = true;
+          mapPanelEl.hidden = false;
+        } else {
+          discussionPanelEl.hidden = false;
+          mapPanelEl.hidden = true;
+        }
+      }
+      stageTabs.forEach(btn => {
+        btn.addEventListener('click', () => switchStage(btn.getAttribute('data-stage')));
+      });
+      document.getElementById('btn-open-map-tab').addEventListener('click', () => switchStage('compare'));
+      document.getElementById('btn-map-back-discussion').addEventListener('click', () => {
+        discussions[currentId].mapContext = { mapId: 'map-member-v2', version: 2 };
+        switchStage('direction');
+        renderNearComposerContext(discussions[currentId]);
+        textareaEl.focus();
+      });
+      document.getElementById('btn-map-inspect-edge').addEventListener('click', () => {
+        discussions[currentId].mapContext = { mapId: 'map-member-v2', version: 2, edgeId: 'e1' };
+        switchStage('direction');
+        renderNearComposerContext(discussions[currentId]);
+        textareaEl.focus();
+      });
+
+      // Reviewer Bar Scenario Presets
+      const scenarioBtns = document.querySelectorAll('[data-scenario]');
+      function activateScenario(name) {
+        scenarioBtns.forEach(b => b.setAttribute('aria-pressed', String(b.getAttribute('data-scenario') === name)));
+        switchStage('direction');
+        clearFeedback();
+
+        if (name === 'new') {
+          currentId = '';
+          browsedGoalVisible = false;
+          promptExamplesEl.open = false;
+          settingsDetailsEl.open = false;
+          simRefreshModeEl.value = 'ok';
+          renderAll();
+        } else if (name === 'existing') {
+          currentId = 'disc-member-repeat';
+          browsedGoalVisible = false;
+          promptExamplesEl.open = false;
+          settingsDetailsEl.open = false;
+          simRefreshModeEl.value = 'ok';
+          renderAll();
+          btnRefreshEl.click();
+        } else if (name === 'refresh-disconnect') {
+          currentId = 'disc-east-store';
+          browsedGoalVisible = false;
+          promptExamplesEl.open = false;
+          settingsDetailsEl.open = false;
+          simRefreshModeEl.value = 'stream-fail';
+          renderAll();
+          btnRefreshEl.click();
+        } else if (name === 'refresh-error') {
+          currentId = 'disc-member-repeat';
+          browsedGoalVisible = false;
+          promptExamplesEl.open = false;
+          settingsDetailsEl.open = false;
+          simRefreshModeEl.value = 'read-fail';
+          renderAll();
+          btnRefreshEl.click();
+        } else if (name === 'settings-open') {
+          currentId = 'disc-member-repeat';
+          browsedGoalVisible = false;
+          promptExamplesEl.open = false;
+          settingsDetailsEl.open = true;
+          renderAll();
+        }
+      }
+      scenarioBtns.forEach(btn => {
+        btn.addEventListener('click', () => activateScenario(btn.getAttribute('data-scenario')));
+      });
+
+      // Baseline comparison toggle
+      const btnToggleBaseline = document.getElementById('btn-toggle-baseline');
+      const baselinePanel = document.getElementById('baseline-comparison-panel');
+      btnToggleBaseline.addEventListener('click', () => {
+        const next = baselinePanel.hidden;
+        baselinePanel.hidden = !next;
+        btnToggleBaseline.setAttribute('aria-pressed', String(next));
+      });
+
+      // Narrow viewport toggle (390px)
+      const btnToggleNarrow = document.getElementById('btn-toggle-narrow');
+      btnToggleNarrow.addEventListener('click', () => {
+        const isNarrow = stageWrapEl.classList.toggle('is-narrow');
+        btnToggleNarrow.setAttribute('aria-pressed', String(isNarrow));
+      });
+
+      // Theme toggle (light / dark)
+      const btnToggleTheme = document.getElementById('btn-toggle-theme');
+      const topbarThemeBtn = document.getElementById('topbar-theme-btn');
+      function toggleTheme() {
+        const isDark = appEl.getAttribute('data-theme') !== 'dark';
+        appEl.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        btnToggleTheme.setAttribute('aria-pressed', String(isDark));
+        topbarThemeBtn.textContent = isDark ? '浅色' : '深色';
+      }
+      btnToggleTheme.addEventListener('click', toggleTheme);
+      topbarThemeBtn.addEventListener('click', toggleTheme);
+
+      // Hide / Show review bar
+      const reviewBarEl = document.getElementById('demo-review-bar');
+      const btnShowReviewBar = document.getElementById('btn-show-review-bar');
+      document.getElementById('btn-hide-review-bar').addEventListener('click', () => {
+        reviewBarEl.hidden = true;
+        btnShowReviewBar.hidden = false;
+        appEl.classList.add('full-height');
+      });
+      btnShowReviewBar.addEventListener('click', () => {
+        reviewBarEl.hidden = false;
+        btnShowReviewBar.hidden = true;
+        appEl.classList.remove('full-height');
+      });
+
+      // Initial render: Scenario 1 (First-time chat)
+      renderAll();
+    })();
+  </script>
+</body>
+</html>
