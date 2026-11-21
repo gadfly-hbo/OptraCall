@@ -2308,6 +2308,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           json(response,201,{version:await mutate(()=>strategyDiscussions.saveMapVersion(id,input,'user'))});return;
         }
       }
+      const strategyMapDraftDismissRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/map-drafts\/([^/]+)\/dismiss$/.exec(url.pathname);
+      if(strategyMapDraftDismissRoute && request.method==='POST'){
+        const id=strategyMapDraftDismissRoute[1]!, entryId=decodeURIComponent(strategyMapDraftDismissRoute[2]!);
+        json(response,200,await mutate(()=>strategyDiscussions.dismissMapImportDraft(id,entryId)));return;
+      }
       const gsaExport=/^\/api\/strategy\/goals\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/(export|arrangements)$/.exec(url.pathname);
       if(gsaExport && request.method==='GET'){ json(response,200,await mutate(async()=> gsaExport[3] === 'export' ? exportGoalVersion(gsaExport[1]!,Number(gsaExport[2])) : {arrangements:(await readGoalVersionPage(gsaExport[1]!,Number(gsaExport[2]))).arrangements})); return; }
       const choiceRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/versions(?:\/([1-9]\d*)(?:\/(export|handoff))?)?$/.exec(url.pathname);

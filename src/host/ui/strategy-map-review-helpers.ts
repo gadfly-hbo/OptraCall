@@ -1,11 +1,45 @@
-import type {
-  StrategyMapDraft,
-  StrategyMapEdge,
-  StrategyMapNode,
-  StrategyMapSourceLocation,
+import {
+  mapTemplates,
+  type StrategyMapDraft,
+  type StrategyMapEdge,
+  type StrategyMapNode,
+  type StrategyMapSourceLocation,
 } from '../strategy-map-types.ts';
 
+export type DraftTopLevelField =
+  | 'title'
+  | 'template'
+  | 'choice'
+  | 'excluded'
+  | 'assumptions'
+  | 'unknowns'
+  | 'scenarioModel';
+
+export type DraftTopLevelPatch = Partial<Pick<StrategyMapDraft, DraftTopLevelField>>;
+
+const draftFieldLabels: Record<DraftTopLevelField, string> = {
+  title: '方案名称',
+  template: '地图模板',
+  choice: '本版选择',
+  excluded: '放弃的方向',
+  assumptions: '成立条件',
+  unknowns: '待核依据',
+  scenarioModel: '情景模拟模型',
+};
+
+const formatDraftFieldValue = (key: DraftTopLevelField, val: unknown): string => {
+  if (key === 'template' && typeof val === 'string' && val in mapTemplates) {
+    return mapTemplates[val as keyof typeof mapTemplates];
+  }
+  if (key === 'scenarioModel') {
+    return val ? '已配置情景模型' : '已清除情景模型';
+  }
+  const str = String(val ?? '').trim();
+  return str.length > 24 ? `${str.slice(0, 24)}…` : str || '空';
+};
+
 export interface ManualEditOverlay {
+  draftFields: DraftTopLevelPatch;
   nodeFields: Record<string, Partial<StrategyMapNode>>;
   addedNodes: Record<string, StrategyMapNode>;
   deletedNodeIds: string[];
@@ -15,6 +49,7 @@ export interface ManualEditOverlay {
 }
 
 export const emptyManualEditOverlay = (): ManualEditOverlay => ({
+  draftFields: {},
   nodeFields: {},
   addedNodes: {},
   deletedNodeIds: [],
@@ -24,6 +59,7 @@ export const emptyManualEditOverlay = (): ManualEditOverlay => ({
 });
 
 export const hasManualEdits = (o: ManualEditOverlay): boolean =>
+  Object.keys(o.draftFields).length > 0 ||
   Object.keys(o.nodeFields).length > 0 ||
   Object.keys(o.addedNodes).length > 0 ||
   o.deletedNodeIds.length > 0 ||
@@ -32,6 +68,7 @@ export const hasManualEdits = (o: ManualEditOverlay): boolean =>
   o.deletedEdgeIds.length > 0;
 
 export type ManualEditRecord =
+  | { kind: 'draft-patch'; patch: DraftTopLevelPatch }
   | { kind: 'node-patch'; id: string; patch: Partial<StrategyMapNode> }
   | { kind: 'node-add'; node: StrategyMapNode }
   | { kind: 'node-delete'; id: string }
@@ -43,6 +80,7 @@ export type ManualEditRecord =
 
 export function applyManualEditRecord(overlay: ManualEditOverlay, rec: ManualEditRecord): ManualEditOverlay {
   const next: ManualEditOverlay = {
+    draftFields: { ...overlay.draftFields },
     nodeFields: { ...overlay.nodeFields },
     addedNodes: { ...overlay.addedNodes },
     deletedNodeIds: [...overlay.deletedNodeIds],
@@ -50,7 +88,9 @@ export function applyManualEditRecord(overlay: ManualEditOverlay, rec: ManualEdi
     addedEdges: { ...overlay.addedEdges },
     deletedEdgeIds: [...overlay.deletedEdgeIds],
   };
-  if (rec.kind === 'node-patch') {
+  if (rec.kind === 'draft-patch') {
+    next.draftFields = { ...next.draftFields, ...rec.patch };
+  } else if (rec.kind === 'node-patch') {
     next.nodeFields[rec.id] = { ...(next.nodeFields[rec.id] ?? {}), ...rec.patch };
     if (next.addedNodes[rec.id]) next.addedNodes[rec.id] = { ...next.addedNodes[rec.id]!, ...rec.patch };
   } else if (rec.kind === 'node-add') {
@@ -89,7 +129,8 @@ export function applyManualEditRecord(overlay: ManualEditOverlay, rec: ManualEdi
 
 /**
  * Deterministically merges an incoming Agent reread draft with the user's unsaved manual edits.
- * Untouched nodes/edges take the Agent's reread updates; user-edited fields/deletions/additions are preserved.
+ * Untouched fields/nodes/edges take the Agent's reread updates; user-edited top-level fields,
+ * node/edge edits, deletions, and additions are preserved with explicit conflict notices.
  */
 export function mergeRereadDraftWithManualEdits(
   incomingDraft: StrategyMapDraft,
@@ -104,6 +145,22 @@ export function mergeRereadDraftWithManualEdits(
   let preservedCount = 0;
   const notices: string[] = [];
 
+  for (const key of Object.keys(overlay.draftFields) as DraftTopLevelField[]) {
+    const val = overlay.draftFields[key];
+    const incomingVal = base[key];
+    if (JSON.stringify(incomingVal) !== JSON.stringify(val)) {
+      notices.push(
+        `已保留「${draftFieldLabels[key]}」的手工修改（当前：${formatDraftFieldValue(key, val)}；重读返回：${formatDraftFieldValue(key, incomingVal)}）`,
+      );
+    }
+    if (key === 'scenarioModel' && val === undefined) {
+      delete base.scenarioModel;
+    } else {
+      (base as unknown as Record<string, unknown>)[key] = structuredClone(val);
+    }
+    preservedCount++;
+  }
+
   const mergedNodes: StrategyMapNode[] = [];
   for (const node of base.nodes) {
     if (deletedNodes.has(node.id)) {
@@ -114,7 +171,7 @@ export function mergeRereadDraftWithManualEdits(
     if (patch) {
       for (const [k, val] of Object.entries(patch)) {
         const incomingVal = (node as unknown as Record<string, unknown>)[k];
-        if (incomingVal !== val && k !== 'reviewState' && k !== 'ambiguityReason') {
+        if (JSON.stringify(incomingVal) !== JSON.stringify(val) && k !== 'reviewState' && k !== 'ambiguityReason') {
           notices.push(`已保留条目 ${node.id} 的手工修改（${k}: ${String(val ?? '')}）`);
         }
       }
@@ -139,6 +196,14 @@ export function mergeRereadDraftWithManualEdits(
       continue;
     }
     const patch = overlay.edgeFields[edge.id];
+    if (patch) {
+      for (const [k, val] of Object.entries(patch)) {
+        const incomingVal = (edge as unknown as Record<string, unknown>)[k];
+        if (JSON.stringify(incomingVal) !== JSON.stringify(val) && k !== 'reviewState' && k !== 'ambiguityReason') {
+          notices.push(`已保留连线 ${edge.id} 的手工修改（${k}: ${String(val ?? '')}）`);
+        }
+      }
+    }
     const nextEdge = patch ? { ...edge, ...patch } : edge;
     if (patch) preservedCount++;
     if (nextEdge.from !== nextEdge.to && validNodeIds.has(nextEdge.from) && validNodeIds.has(nextEdge.to)) {
@@ -176,6 +241,83 @@ export function matchesSourcePage(
   if (loc.sourceId !== activeSourceId) return false;
   if (loc.page !== undefined && loc.page !== activePage) return false;
   return true;
+}
+
+export interface EmbeddedImageRef {
+  id: string;
+  name: string;
+  objectId?: string;
+}
+
+/**
+ * Resolves the 1-based embedded image index on a multi-image worksheet/page for a sourceLocation.
+ */
+export function resolveEmbeddedImageIndex(
+  loc: StrategyMapSourceLocation | undefined,
+  embeddedImages: readonly EmbeddedImageRef[] | undefined,
+): number | undefined {
+  if (!loc || !embeddedImages || embeddedImages.length <= 1) return undefined;
+  const objId = loc.objectId?.trim();
+  if (objId) {
+    const objLower = objId.toLowerCase();
+    for (let i = 0; i < embeddedImages.length; i++) {
+      const img = embeddedImages[i]!;
+      if ((img.objectId && img.objectId === objId) || img.id === objId) return i + 1;
+    }
+    for (let i = 0; i < embeddedImages.length; i++) {
+      const img = embeddedImages[i]!;
+      const imgObj = img.objectId?.toLowerCase();
+      const imgId = img.id.toLowerCase();
+      const imgName = img.name.toLowerCase();
+      if (
+        (imgObj && (objLower === imgObj || objLower.startsWith(`${imgObj}:`) || objLower.startsWith(`${imgObj}#`))) ||
+        objLower === imgId ||
+        objLower.startsWith(`${imgId}:`) ||
+        objLower.startsWith(`${imgId}#`) ||
+        objLower === imgName
+      ) {
+        return i + 1;
+      }
+    }
+  }
+  const label = loc.label?.trim();
+  if (label) {
+    const labelLower = label.toLowerCase();
+    const matchedIndices: number[] = [];
+    for (let i = 0; i < embeddedImages.length; i++) {
+      const img = embeddedImages[i]!;
+      const tokens = [img.objectId, img.id, img.name].filter((t): t is string => Boolean(t && t.trim().length >= 2));
+      if (tokens.some(t => labelLower.includes(t.toLowerCase()))) {
+        matchedIndices.push(i + 1);
+      }
+    }
+    if (matchedIndices.length === 1) return matchedIndices[0];
+    const numMatch = /(?:图\s*|image\s*#?\s*)(\d+)/i.exec(label);
+    if (numMatch) {
+      const idx = Number(numMatch[1]);
+      if (Number.isInteger(idx) && idx >= 1 && idx <= embeddedImages.length) return idx;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Strict sourceId + page + same-sheet embedded image isolation.
+ * On a worksheet with multiple embedded images, hotspots bound to Image 2 never render on Image 1 and vice versa.
+ */
+export function matchesSourcePageAndImage(
+  loc: StrategyMapSourceLocation | undefined,
+  activeSourceId: string,
+  activePage: number,
+  activeImageIndex: number,
+  embeddedImages: readonly EmbeddedImageRef[] | undefined,
+): boolean {
+  if (!matchesSourcePage(loc, activeSourceId, activePage)) return false;
+  if (!embeddedImages || embeddedImages.length <= 1) return true;
+  const resolved = resolveEmbeddedImageIndex(loc, embeddedImages);
+  if (resolved !== undefined) return resolved === activeImageIndex;
+  if (loc?.objectId?.trim()) return false;
+  return activeImageIndex === 1;
 }
 
 export interface DuplicateCandidatePair {

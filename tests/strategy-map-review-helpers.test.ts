@@ -142,3 +142,55 @@ test('findSafeDuplicateCandidates preserves parenthetical business qualifiers an
   assert.ok(!merged.nodes.some(n => n.id === 'G1_DUP'));
   assert.ok(merged.edges.some(e => e.from === 'S1' && e.to === 'G1' && e.kind === 'supports'));
 });
+
+test('Round-2 Item 3: mergeRereadDraftWithManualEdits preserves top-level draft fields (title, template, choice, unknowns) with conflict notices', async () => {
+  const { mergeRereadDraftWithManualEdits: mergeFn } = await import('../src/host/ui/strategy-map-review-helpers.ts');
+  const initial = sampleDraft();
+  let overlay = emptyManualEditOverlay();
+  overlay = applyManualEditRecord(overlay, { kind: 'draft-patch', patch: { title: '用户修订方案标题' } });
+  overlay = applyManualEditRecord(overlay, { kind: 'draft-patch', patch: { template: 'tree' } });
+  overlay = applyManualEditRecord(overlay, { kind: 'draft-patch', patch: { choice: '先稳老客再扩新客', unknowns: '待核门店执行人手' } });
+  overlay = applyManualEditRecord(overlay, { kind: 'node-patch', id: 'G1', patch: { baseline: '15%' } });
+
+  // Incoming reread returns old title, bsc template, old choice, baseline 9%, and updated edge E1
+  const incoming: StrategyMapDraft = {
+    ...initial,
+    title: '模型重读旧标题',
+    template: 'bsc',
+    choice: '旧选择',
+    unknowns: '',
+    edges: [{ ...initial.edges[0]!, kind: 'supports', reviewState: 'clear' }],
+  };
+
+  const { merged, notices } = mergeFn(incoming, overlay);
+  assert.equal(merged.title, '用户修订方案标题');
+  assert.equal(merged.template, 'tree');
+  assert.equal(merged.choice, '先稳老客再扩新客');
+  assert.equal(merged.unknowns, '待核门店执行人手');
+  assert.equal(merged.nodes.find(n => n.id === 'G1')?.baseline, '15%');
+  assert.equal(merged.edges.find(e => e.id === 'E1')?.kind, 'supports');
+  assert.ok(notices.some(n => n.includes('方案名称') && n.includes('用户修订方案标题')));
+  assert.ok(notices.some(n => n.includes('地图模板') && n.includes('目标与策略树')));
+  assert.ok(notices.some(n => n.includes('G1') && n.includes('15%')));
+});
+
+test('Round-2 Item 6: matchesSourcePageAndImage and resolveEmbeddedImageIndex isolate Red and Blue images on the same worksheet', async () => {
+  const { matchesSourcePageAndImage, resolveEmbeddedImageIndex } = await import('../src/host/ui/strategy-map-review-helpers.ts');
+  const sheetImages = [
+    { id: 'p2-img-1', objectId: 'pic-red', name: '红图战略板.png' },
+    { id: 'p2-img-2', objectId: 'pic-blue', name: '蓝图战略板.png' },
+  ];
+  const locRed = { sourceId: 'xlsx-1', page: 2, objectId: 'pic-red', bbox: [100, 100, 300, 200] as [number, number, number, number], label: '策略页 · 红图' };
+  const locBlue = { sourceId: 'xlsx-1', page: 2, objectId: 'pic-blue', bbox: [500, 300, 300, 200] as [number, number, number, number], label: '策略页 · 蓝图' };
+
+  assert.equal(resolveEmbeddedImageIndex(locRed, sheetImages), 1);
+  assert.equal(resolveEmbeddedImageIndex(locBlue, sheetImages), 2);
+
+  // Viewing Red image (index 1): ONLY Red hotspot matches, Blue MUST NOT appear
+  assert.equal(matchesSourcePageAndImage(locRed, 'xlsx-1', 2, 1, sheetImages), true);
+  assert.equal(matchesSourcePageAndImage(locBlue, 'xlsx-1', 2, 1, sheetImages), false);
+
+  // Viewing Blue image (index 2): ONLY Blue hotspot matches, Red MUST NOT appear
+  assert.equal(matchesSourcePageAndImage(locRed, 'xlsx-1', 2, 2, sheetImages), false);
+  assert.equal(matchesSourcePageAndImage(locBlue, 'xlsx-1', 2, 2, sheetImages), true);
+});

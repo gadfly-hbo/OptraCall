@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   mapEdgeKinds,
   type StrategyMapDraft,
@@ -15,7 +15,9 @@ import {
 import {
   findSafeDuplicateCandidates,
   matchesSourcePage,
+  matchesSourcePageAndImage,
   mergeDuplicatePairInDraft,
+  resolveEmbeddedImageIndex,
   type DuplicateCandidatePair,
   type ManualEditRecord,
 } from './strategy-map-review-helpers.ts';
@@ -56,6 +58,7 @@ export function StrategyMapReviewPane({
   const [mobilePane, setMobilePane] = useState<'source' | 'candidate'>('candidate');
   const [rereadText, setRereadText] = useState('');
   const [dupCandidates, setDupCandidates] = useState<DuplicateCandidatePair[] | null>(null);
+  const pendingImageSyncRef = useRef<{ sourceId: string; page: number; loc: StrategyMapNode['sourceLocation'] } | null>(null);
 
   // Sync active sourceId if sources list changed (e.g. new draft arrived)
   useEffect(() => {
@@ -70,24 +73,55 @@ export function StrategyMapReviewPane({
     }
   }, [sources.map(s => s.sourceId).join(',')]);
 
-  // Auto-sync left page/source when user clicks a node or edge with sourceLocation
+  // Auto-sync left source/page/same-sheet embedded image ONLY when user selects a node or edge
   useEffect(() => {
     const node = draft.nodes.find(n => n.id === selectedNodeId);
     const edge = draft.edges.find(e => e.id === selectedEdgeId);
     const loc = selectedEdgeId ? edge?.sourceLocation : node?.sourceLocation;
-    if (loc?.sourceId && sources.some(s => s.sourceId === loc.sourceId)) {
-      if (loc.sourceId !== sourceId) {
-        setSourceId(loc.sourceId);
-        setImageIndex(1);
-      }
+    if (!loc) {
+      pendingImageSyncRef.current = null;
+      return;
     }
-    if (loc?.page && loc.page >= 1) {
-      if (loc.page !== page) {
-        setPage(loc.page);
-        setImageIndex(1);
-      }
+    const targetSourceId = loc.sourceId && sources.some(s => s.sourceId === loc.sourceId) ? loc.sourceId : sourceId;
+    const targetPage = loc.page && loc.page >= 1 ? loc.page : page;
+    let switched = false;
+    if (targetSourceId && targetSourceId !== sourceId) {
+      setSourceId(targetSourceId);
+      setImageIndex(1);
+      switched = true;
+    }
+    if (targetPage !== page) {
+      setPage(targetPage);
+      setImageIndex(1);
+      switched = true;
+    }
+    if (
+      !switched &&
+      preview &&
+      preview.source.sourceId === targetSourceId &&
+      preview.currentPage.page === targetPage &&
+      preview.currentPage.embeddedImages &&
+      preview.currentPage.embeddedImages.length > 1
+    ) {
+      const targetImg = resolveEmbeddedImageIndex(loc, preview.currentPage.embeddedImages);
+      if (targetImg !== undefined && targetImg !== imageIndex) setImageIndex(targetImg);
+      pendingImageSyncRef.current = null;
+    } else if (targetSourceId) {
+      pendingImageSyncRef.current = { sourceId: targetSourceId, page: targetPage, loc };
     }
   }, [selectedNodeId, selectedEdgeId]);
+
+  // Complete deferred same-sheet image switch once target page preview loads (never overrides manual switches)
+  useEffect(() => {
+    const pending = pendingImageSyncRef.current;
+    if (!pending || !preview) return;
+    if (preview.source.sourceId !== pending.sourceId || preview.currentPage.page !== pending.page) return;
+    pendingImageSyncRef.current = null;
+    if (preview.currentPage.embeddedImages && preview.currentPage.embeddedImages.length > 1) {
+      const targetImg = resolveEmbeddedImageIndex(pending.loc, preview.currentPage.embeddedImages);
+      if (targetImg !== undefined && targetImg !== imageIndex) setImageIndex(targetImg);
+    }
+  }, [preview?.source.sourceId, preview?.currentPage.page, preview?.currentPage.embeddedImages?.length]);
 
   useEffect(() => {
     if (!sourceId) return;
@@ -230,10 +264,15 @@ export function StrategyMapReviewPane({
 
   const visibleNodes = onlyNeedsReview ? draft.nodes.filter(n => n.reviewState === 'needs-review') : draft.nodes;
   const visibleEdges = onlyNeedsReview ? draft.edges.filter(e => e.reviewState === 'needs-review') : draft.edges;
-  // Strict sourceId + page hotspot isolation: hotspots from source B page 1 NEVER bleed onto source A page 1
-  const pageNodes = draft.nodes.filter(n => matchesSourcePage(n.sourceLocation, sourceId, page));
-  const pageEdges = draft.edges.filter(e => matchesSourcePage(e.sourceLocation, sourceId, page));
+  // Strict sourceId + page + same-sheet embedded image hotspot isolation
   const sheetImages = preview?.currentPage.embeddedImages ?? [];
+  const pageNodes = draft.nodes.filter(n => matchesSourcePage(n.sourceLocation, sourceId, page));
+  const overlayNodes = draft.nodes.filter(n =>
+    matchesSourcePageAndImage(n.sourceLocation, sourceId, page, imageIndex, sheetImages),
+  );
+  const overlayEdges = draft.edges.filter(e =>
+    matchesSourcePageAndImage(e.sourceLocation, sourceId, page, imageIndex, sheetImages),
+  );
 
   return (
     <div className="map-review-workspace">
@@ -255,6 +294,7 @@ export function StrategyMapReviewPane({
                   onChange={e => {
                     const nextId = e.target.value;
                     const nextSrc = sources.find(s => s.sourceId === nextId);
+                    pendingImageSyncRef.current = null;
                     setSourceId(nextId);
                     setPage(nextSrc?.selectedPages?.[0] ?? 1);
                     setImageIndex(1);
@@ -282,7 +322,7 @@ export function StrategyMapReviewPane({
                   key={p.page}
                   type="button"
                   className={p.page === page ? 'primary-button' : 'secondary-button'}
-                  onClick={() => { setPage(p.page); setImageIndex(1); }}
+                  onClick={() => { pendingImageSyncRef.current = null; setPage(p.page); setImageIndex(1); }}
                 >
                   P{p.page}
                 </button>
@@ -296,8 +336,10 @@ export function StrategyMapReviewPane({
                 <button
                   key={img.id}
                   type="button"
+                  data-sheet-image-index={idx + 1}
+                  aria-pressed={imageIndex === idx + 1}
                   className={imageIndex === idx + 1 ? 'primary-button' : 'secondary-button'}
-                  onClick={() => setImageIndex(idx + 1)}
+                  onClick={() => { pendingImageSyncRef.current = null; setImageIndex(idx + 1); }}
                 >
                   图 {idx + 1} · {img.name}
                 </button>
@@ -316,8 +358,8 @@ export function StrategyMapReviewPane({
                     alt={`${preview.source.fileName} 第 ${page} 页`}
                     className="map-source-img"
                   />
-                  <svg className="map-source-overlay" viewBox="0 0 1000 1000" preserveAspectRatio="none">
-                    {pageNodes.filter(n => n.sourceLocation?.bbox).map(n => {
+                  <svg className="map-source-overlay" data-active-image-index={imageIndex} viewBox="0 0 1000 1000" preserveAspectRatio="none">
+                    {overlayNodes.filter(n => n.sourceLocation?.bbox).map(n => {
                       const [x, y, w, h] = n.sourceLocation!.bbox!;
                       const isSel = selectedNode?.id === n.id || selectedEdge?.from === n.id || selectedEdge?.to === n.id;
                       return (
@@ -335,7 +377,7 @@ export function StrategyMapReviewPane({
                         />
                       );
                     })}
-                    {pageEdges.filter(e => e.sourceLocation?.arrowBbox).map(e => {
+                    {overlayEdges.filter(e => e.sourceLocation?.arrowBbox).map(e => {
                       const [x, y, w, h] = e.sourceLocation!.arrowBbox!;
                       const isSel = selectedEdge?.id === e.id;
                       return (

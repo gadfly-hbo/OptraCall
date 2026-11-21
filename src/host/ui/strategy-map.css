@@ -38,4 +38,5 @@
 .map-import-thumb-meta{display:grid;gap:2px;min-width:0}
 .map-pending-draft-bar{padding:12px 14px;margin-bottom:12px;border-radius:8px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));background:var(--accent-soft)}
 .map-pending-draft-bar p{margin:6px 0 0;font-size:12.5px}
+.map-draft-switcher{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid color-mix(in srgb,var(--accent) 25%,var(--line))}
 @media(max-width:1140px){.map-mobile-pane-tabs{display:flex}.map-review-split{grid-template-columns:1fr}.map-review-split[data-mobile-pane=source] .map-candidate-pane{display:none}.map-review-split[data-mobile-pane=candidate] .map-source-pane{display:none}}

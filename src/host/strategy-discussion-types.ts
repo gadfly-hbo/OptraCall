@@ -21,6 +21,8 @@ export interface StrategyDiscussionCreate { operationId:string; title?:string; c
 export interface StrategyDiscussionUpdate { expectedRevision:number; title?:string; configurationId?:string; usageContext?:UsageContext|null; methods?:StrategyMethodSelection[]; goal?:GoalRef|null; projectId?:string|null; sources?:StrategyDiscussionSource[]; sourceScope?:StrategyDiscussionSourceScope }
 export interface StrategyMapImportDraftReceipt {
   entryId: string;
+  draftGroupId: string;
+  supersedesEntryId?: string;
   requestId?: string;
   sessionId: string;
   sha256: string;
@@ -32,7 +34,7 @@ export interface StrategyMapImportDraftReceipt {
   source?: import('./strategy-goals-types.ts').GoalDiscussionSourceRef;
 }
 export interface StrategyDiscussionDetail { attachmentReferences?:import('./strategy-attachment-types.ts').StrategyAttachmentReplyReferences[]; discussion:StrategyDiscussion; busy:boolean; goalDrafts?:{draft:import('./strategy-goals-types.ts').GoalDraftInput;source:import('./strategy-goals-types.ts').GoalRoleSuggestionRef}[]; mapImportDrafts?:StrategyMapImportDraftReceipt[]; unavailableMapImportDrafts?:{entryId:string;reason:string}[]; snapshot:ProjectSnapshot; goals:GoalVersion[]; goalContentHashes:Record<string,string>; replies:{text:string;source:GoalSourceRef}[]; requestReceipt?:{requestId:string;originalUserText:string;nativeEntryId:string;sessionId:string} }
-export interface StrategyDiscussionMessage { attachmentIds?:string[]; importSourceIds?:string[]; selectedImportPages?:Record<string,number[]>; importMode?:'review-draft'; workingMapDraft?:import('./strategy-map-types.ts').StrategyMapDraft; mapTemplate?:'table'|'tree'|'bsc'; mapRef?:import('./strategy-map-types.ts').StrategyMapRef & {edgeId?:string}; requestId:string; text:string; expectedRevision:number; replacePendingRequestId?:string }
+export interface StrategyDiscussionMessage { attachmentIds?:string[]; importSourceIds?:string[]; selectedImportPages?:Record<string,number[]>; importMode?:'review-draft'; supersedesDraftEntryId?:string; workingMapDraft?:import('./strategy-map-types.ts').StrategyMapDraft; mapTemplate?:'table'|'tree'|'bsc'; mapRef?:import('./strategy-map-types.ts').StrategyMapRef & {edgeId?:string}; requestId:string; text:string; expectedRevision:number; replacePendingRequestId?:string }
 
 export interface StrategyDiscussionSourceDetail { source:import('./strategy-goals-types.ts').GoalDiscussionSourceRef; role:string; body:string; range:{start:number;end:number;total:number}; complete:boolean }
 

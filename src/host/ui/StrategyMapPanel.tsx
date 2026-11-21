@@ -87,6 +87,7 @@ import {
 
 export interface StrategyMapRereadRequest {
   baseRef?: StrategyMapRef;
+  supersedesDraftEntryId?: string;
   currentDraft: StrategyMapDraft;
   prompt: string;
   importSourceIds: string[];
@@ -94,7 +95,12 @@ export interface StrategyMapRereadRequest {
 }
 
 type Props={
-  discussionId:string;versions:StrategyMapVersion[];selected?:StrategyMapRef;pendingDraft?:StrategyMapImportDraftReceipt;onDismissPendingDraft?:(entryId:string)=>void;focusEdgeId?:string;
+  discussionId:string;versions:StrategyMapVersion[];selected?:StrategyMapRef;
+  pendingDrafts?:StrategyMapImportDraftReceipt[];pendingDraft?:StrategyMapImportDraftReceipt;
+  onSelectPendingDraft?:(draftGroupId:string)=>void;
+  onDismissPendingDraft?:(entryId:string)=>Promise<void>|void;
+  onDraftConflictRefresh?:()=>Promise<void>|void;
+  focusEdgeId?:string;
   onSelect:(ref:StrategyMapRef)=>void;onSaved:(version:StrategyMapVersion,settledDraftEntryId?:string)=>void|Promise<void>;
   onDiscuss:(ref?:StrategyMapRef,edgeId?:string)=>void;onSimulate:(ref:StrategyMapRef,edgeId:string)=>void;onHandoff?:(version:StrategyMapVersion)=>void;
   onOpenImport?:()=>void;onReread?:(req:StrategyMapRereadRequest)=>void;onRevoked?:()=>void;
@@ -107,7 +113,16 @@ export function StrategyMapPanel(props:Props){
   const latest=active?props.versions.filter(v=>v.mapId===active.mapId).reduce((a,b)=>a.version>b.version?a:b):undefined;
   return <MapView key={props.discussionId} {...props} active={active} latest={latest}/>;
 }
-function MapView({active,latest,pendingDraft,onDismissPendingDraft,discussionId,versions,onSelect,onDiscuss,onSimulate,onSaved,onHandoff,onOpenImport,onReread,onRevoked,focusEdgeId}:Props & {active?:StrategyMapVersion;latest?:StrategyMapVersion}){
+
+type GroupDraftWorkState = {
+  edit?: StrategyMapDraft;
+  manualEdits: ManualEditOverlay;
+  mergeNotices: string[];
+  reason: string;
+  draftMapId?: string;
+};
+
+function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,onDismissPendingDraft,onDraftConflictRefresh,discussionId,versions,onSelect,onDiscuss,onSimulate,onSaved,onHandoff,onOpenImport,onReread,onRevoked,focusEdgeId}:Props & {active?:StrategyMapVersion;latest?:StrategyMapVersion}){
   const isPendingMode=Boolean(pendingDraft);
   const baseDraft=pendingDraft?pendingDraft.draft:mapDraft(active!);
   const [picked,setPicked]=useState(baseDraft.nodes[0]?.id??'');
@@ -124,11 +139,13 @@ function MapView({active,latest,pendingDraft,onDismissPendingDraft,discussionId,
   const opener=useRef<HTMLButtonElement>(null),review=useRef<HTMLDetailsElement>(null),edgeButtons=useRef(new Map<string,HTMLButtonElement>());
   const pending=useRef<{fingerprint:string;operationId:string}|undefined>(undefined);
   const draftMapIdRef=useRef<string|undefined>(undefined);
+  const groupWorkRef=useRef<Map<string,GroupDraftWorkState>>(new Map());
+  const lastPendingGroupIdRef=useRef<string|undefined>(pendingDraft?.draftGroupId);
   const lastPendingEntryIdRef=useRef<string|undefined>(pendingDraft?.entryId);
   const activeKey=active?versionKey(active):undefined;
   const lastActiveKeyRef=useRef<string|undefined>(activeKey);
 
-  function resetManualState(){
+  function resetManualState(clearGroupId?:string){
     const empty=emptyManualEditOverlay();
     manualEditsRef.current=empty;
     setManualEdits(empty);
@@ -137,28 +154,85 @@ function MapView({active,latest,pendingDraft,onDismissPendingDraft,discussionId,
     setReason('');
     setError('');
     pending.current=undefined;
+    if(clearGroupId)groupWorkRef.current.delete(clearGroupId);
   }
 
-  // Merge incoming reread/extracted pendingDraft deterministically with any unsaved manual edits
+  // Handle switching between pending draft groups (e.g. Plan A <-> Plan B) and merging reread within the same group
   useEffect(()=>{
+    const nextGroupId=pendingDraft?.draftGroupId;
     const nextEntryId=pendingDraft?.entryId;
-    if(nextEntryId===lastPendingEntryIdRef.current)return;
+    const prevGroupId=lastPendingGroupIdRef.current;
+    const prevEntryId=lastPendingEntryIdRef.current;
+    if(nextGroupId===prevGroupId && nextEntryId===prevEntryId)return;
+
+    // Save outgoing group's work state if we are switching to a different pending group
+    if(prevGroupId && prevGroupId!==nextGroupId){
+      groupWorkRef.current.set(prevGroupId,{
+        edit,
+        manualEdits:manualEditsRef.current,
+        mergeNotices,
+        reason,
+        draftMapId:draftMapIdRef.current,
+      });
+    }
+
+    lastPendingGroupIdRef.current=nextGroupId;
     lastPendingEntryIdRef.current=nextEntryId;
-    if(!pendingDraft)return;
+    if(!pendingDraft){
+      resetManualState();
+      draftMapIdRef.current=undefined;
+      if(active){
+        setReviewOpen(Boolean(active.importSources?.length));
+        setPicked(active.nodes[0]?.id??'');
+        setPickedEdge(undefined);
+      }
+      return;
+    }
+
     setReviewOpen(true);
     setError('');
-    if(hasManualEdits(manualEditsRef.current)){
-      const {merged,notices}=mergeRereadDraftWithManualEdits(pendingDraft.draft,manualEditsRef.current);
-      setEdit(merged);
-      setMergeNotices(notices);
-      if(!merged.nodes.some(n=>n.id===picked))setPicked(merged.nodes[0]?.id??'');
+    pending.current=undefined;
+
+    if(nextGroupId===prevGroupId){
+      // Same group received a new reread draft entry -> merge deterministically with this group's manual edits
+      if(hasManualEdits(manualEditsRef.current)){
+        const {merged,notices}=mergeRereadDraftWithManualEdits(pendingDraft.draft,manualEditsRef.current);
+        setEdit(merged);
+        setMergeNotices(notices);
+        if(!merged.nodes.some(n=>n.id===picked))setPicked(merged.nodes[0]?.id??'');
+      }else{
+        setEdit(undefined);
+        setMergeNotices([]);
+        setPicked(pendingDraft.draft.nodes[0]?.id??'');
+        setPickedEdge(undefined);
+      }
     }else{
-      setEdit(undefined);
-      setMergeNotices([]);
-      setPicked(pendingDraft.draft.nodes[0]?.id??'');
-      setPickedEdge(undefined);
+      // Switched to a different pending group (or newly opened draft) -> restore that group's saved edits if any
+      const savedGroup=groupWorkRef.current.get(pendingDraft.draftGroupId);
+      if(savedGroup){
+        manualEditsRef.current=savedGroup.manualEdits;
+        setManualEdits(savedGroup.manualEdits);
+        draftMapIdRef.current=savedGroup.draftMapId;
+        setReason(savedGroup.reason);
+        if(hasManualEdits(savedGroup.manualEdits)){
+          const {merged,notices}=mergeRereadDraftWithManualEdits(pendingDraft.draft,savedGroup.manualEdits);
+          setEdit(savedGroup.edit ?? merged);
+          setMergeNotices(savedGroup.mergeNotices.length?savedGroup.mergeNotices:notices);
+          setPicked((savedGroup.edit ?? merged).nodes[0]?.id??'');
+        }else{
+          setEdit(savedGroup.edit);
+          setMergeNotices(savedGroup.mergeNotices);
+          setPicked((savedGroup.edit ?? pendingDraft.draft).nodes[0]?.id??'');
+        }
+        setPickedEdge(undefined);
+      }else{
+        resetManualState();
+        draftMapIdRef.current=undefined;
+        setPicked(pendingDraft.draft.nodes[0]?.id??'');
+        setPickedEdge(undefined);
+      }
     }
-  },[pendingDraft?.entryId]);
+  },[pendingDraft?.draftGroupId,pendingDraft?.entryId]);
 
   // Preserve manual edits if an updated saved version of the same map arrives while editing; reset on manual version switch
   useEffect(()=>{
@@ -197,12 +271,33 @@ function MapView({active,latest,pendingDraft,onDismissPendingDraft,discussionId,
       setManualEdits(updated);
     }
   }
-  function cancel(){
+  function patchTopLevel<K extends 'title'|'template'|'choice'|'excluded'|'assumptions'|'unknowns'>(key:K,value:StrategyMapDraft[K]){
+    const current=edit??structuredClone(baseDraft);
+    applyDraftChange(
+      {...current,[key]:value},
+      {kind:'draft-patch',patch:{[key]:value}},
+    );
+  }
+  async function cancel(){
     if(busy)return;
     if(isPendingMode&&pendingDraft){
-      draftMapIdRef.current=undefined;
-      resetManualState();
-      onDismissPendingDraft?.(pendingDraft.entryId);
+      const targetEntryId=pendingDraft.entryId;
+      const targetGroupId=pendingDraft.draftGroupId;
+      setBusy(true);setError('');
+      try{
+        await onDismissPendingDraft?.(targetEntryId);
+        draftMapIdRef.current=undefined;
+        resetManualState(targetGroupId);
+      }catch(e){
+        if(e instanceof StrategyDiscussionRequestError && (e.code==='strategy_map_import_draft_already_saved'||e.code==='strategy_map_import_draft_dismissed')){
+          draftMapIdRef.current=undefined;
+          resetManualState(targetGroupId);
+          setError(e.code==='strategy_map_import_draft_already_saved'?'这份导入草稿已在另一标签页保存过，已同步最新状态。':'这份导入草稿已被放弃，已同步最新状态。');
+          await onDraftConflictRefresh?.();
+        }else{
+          setError(e instanceof Error?e.message:'放弃草稿未完成，请重试。');
+        }
+      }finally{setBusy(false);}
       return;
     }
     resetManualState();
@@ -225,7 +320,10 @@ function MapView({active,latest,pendingDraft,onDismissPendingDraft,discussionId,
   function updateModel(model:StrategyScenarioModel|undefined){
     const current=edit??structuredClone(baseDraft);
     const {scenarioModel:_,...rest}=current;
-    setEdit(model?{...rest,scenarioModel:model}:rest);
+    applyDraftChange(
+      model?{...rest,scenarioModel:model}:rest,
+      {kind:'draft-patch',patch:{scenarioModel:model}},
+    );
   }
   function addNode(kind:StrategyMapNode['kind']){
     const current=edit??structuredClone(baseDraft);
@@ -251,6 +349,7 @@ function MapView({active,latest,pendingDraft,onDismissPendingDraft,discussionId,
     let expectedVersion:number;
     let saveReason:string;
     let importDraftEntryId:string|undefined;
+    const settledGroupId=isPendingMode?pendingDraft?.draftGroupId:undefined;
     if(isPendingMode&&pendingDraft){
       importDraftEntryId=pendingDraft.entryId;
       if(pendingDraft.mapId){
@@ -276,18 +375,45 @@ function MapView({active,latest,pendingDraft,onDismissPendingDraft,discussionId,
       const {version}=await saveStrategyMap(discussionId,{...update,operationId:pending.current!.operationId});
       const settledId=importDraftEntryId;
       draftMapIdRef.current=undefined;
-      resetManualState();
+      resetManualState(settledGroupId);
       await onSaved(version,settledId);
       onSelect(version);
     }catch(e){
-      setError(e instanceof StrategyDiscussionRequestError&&e.code.includes('version_conflict')?'此版已由另一位协作者修订。当前输入已保留，请与最新版本核对后再修改。':e instanceof StrategyDiscussionRequestError?(e.message||e.code):'地图保存失败，请重试。');
+      if(e instanceof StrategyDiscussionRequestError && (e.code==='strategy_map_import_draft_already_saved'||e.code==='strategy_map_import_draft_dismissed')){
+        draftMapIdRef.current=undefined;
+        resetManualState(settledGroupId);
+        setError(e.code==='strategy_map_import_draft_already_saved'?'这份导入草稿已在另一标签页保存过，不会重复创建版本；已同步最新列表。':'这份导入草稿已被放弃，不会落盘保存；已同步最新列表。');
+        await onDraftConflictRefresh?.();
+      }else{
+        setError(e instanceof StrategyDiscussionRequestError&&e.code.includes('version_conflict')?'此版已由另一位协作者修订。当前输入已保留，请与最新版本核对后再修改。':e instanceof StrategyDiscussionRequestError?(e.message||e.code):'地图保存失败，请重试。');
+      }
     }finally{setBusy(false);}
   }
   const editing=Boolean(edit||isPendingMode);
   const button=(label:string,click:()=>void)=><button type="button" className="secondary-button" onClick={click} disabled={busy}>{label}</button>;
-  return <section className="sg-panel strategy-map" aria-label="战略地图" onKeyDown={e=>{if(e.key==='Escape'&&edit&&!isPendingMode){e.preventDefault();cancel();}}}>
+  return <section className="sg-panel strategy-map" aria-label="战略地图" onKeyDown={e=>{if(e.key==='Escape'&&edit&&!isPendingMode){e.preventDefault();void cancel();}}}>
     {isPendingMode&&pendingDraft&&(
       <div className="map-pending-draft-bar" role="status">
+        {pendingDrafts && pendingDrafts.length > 1 && (
+          <div className="map-draft-switcher" role="tablist" aria-label="待核对导入草稿切换">
+            <span className="sg-muted">待核对草稿（共 {pendingDrafts.length} 份）：</span>
+            {pendingDrafts.map((item, idx) => (
+              <button
+                key={item.draftGroupId}
+                type="button"
+                role="tab"
+                data-pending-draft-group={item.draftGroupId}
+                aria-selected={item.draftGroupId === pendingDraft.draftGroupId}
+                aria-pressed={item.draftGroupId === pendingDraft.draftGroupId}
+                className={item.draftGroupId === pendingDraft.draftGroupId ? 'primary-button' : 'secondary-button'}
+                disabled={busy}
+                onClick={() => onSelectPendingDraft?.(item.draftGroupId)}
+              >
+                草稿 {idx + 1} · {item.draft.title}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="sg-row-between">
           <div>
             <span className="sg-badge pending">待核对导入草稿 · 尚未保存为地图版本</span>
@@ -295,7 +421,7 @@ function MapView({active,latest,pendingDraft,onDismissPendingDraft,discussionId,
           </div>
           <div className="sg-row">
             <button type="button" className="primary-button" disabled={busy} onClick={()=>void save()}>保存候选版本</button>
-            <button type="button" className="secondary-button" disabled={busy} onClick={cancel}>放弃本次草稿</button>
+            <button type="button" className="secondary-button" disabled={busy} onClick={()=>void cancel()}>放弃本次草稿</button>
           </div>
         </div>
       </div>
@@ -327,7 +453,8 @@ function MapView({active,latest,pendingDraft,onDismissPendingDraft,discussionId,
         onSelectEdge={id=>setPickedEdge(id)}
         onChangeDraft={applyDraftChange}
         onReread={onReread?(prompt,ids,selectedPagesBySource)=>onReread({
-          baseRef:pendingDraft?.mapId&&pendingDraft.expectedVersion?{mapId:pendingDraft.mapId,version:pendingDraft.expectedVersion}:active,
+          baseRef:isPendingMode?(pendingDraft?.mapId&&pendingDraft.expectedVersion?{mapId:pendingDraft.mapId,version:pendingDraft.expectedVersion}:undefined):active,
+          supersedesDraftEntryId:isPendingMode?pendingDraft?.entryId:undefined,
           currentDraft:map,
           prompt,
           importSourceIds:ids,
@@ -336,9 +463,9 @@ function MapView({active,latest,pendingDraft,onDismissPendingDraft,discussionId,
         onRevoked={onRevoked}
       />
     )}
-    {editing&&<div className="map-edit-grid"><label>方案名称<input value={map.title} onChange={e=>setEdit({...map,title:e.target.value})}/></label>
-      <label>地图模板<select value={map.template} onChange={e=>setEdit({...map,template:e.target.value as StrategyMapDraft['template']})}>{Object.entries(mapTemplates).map(([k,v])=><option value={k} key={k}>{v}</option>)}</select></label>
-      {([['choice','本版选择'],['excluded','放弃的方向'],['assumptions','成立条件'],['unknowns','待核依据']] as const).map(([k,label])=><label key={k}>{label}<textarea value={map[k]} onChange={e=>setEdit({...map,[k]:e.target.value})}/></label>)}</div>}
+    {editing&&<div className="map-edit-grid"><label>方案名称<input value={map.title} onChange={e=>patchTopLevel('title',e.target.value)}/></label>
+      <label>地图模板<select value={map.template} onChange={e=>patchTopLevel('template',e.target.value as StrategyMapDraft['template'])}>{Object.entries(mapTemplates).map(([k,v])=><option value={k} key={k}>{v}</option>)}</select></label>
+      {([['choice','本版选择'],['excluded','放弃的方向'],['assumptions','成立条件'],['unknowns','待核依据']] as const).map(([k,label])=><label key={k}>{label}<textarea value={map[k]} onChange={e=>patchTopLevel(k,e.target.value)}/></label>)}</div>}
     <MapDrawing map={map} selected={picked} onSelect={id=>{setPicked(id);setPickedEdge(undefined);}}/>
     {node&&<div className="map-item"><h3>{node.id} · {node.title||'新条目'}</h3>
       {editing?<div className="map-edit-grid">{([['title','条目名称'],['perspective','视角 / 分层'],['detail','说明'],['metric','指标'],['baseline','基线'],['baselineKind','基线性质'],['target','目标值'],['unit','单位'],['period','时段 / 口径'],['owner','负责人']] as const).map(([k,label])=><label key={k}>{label}<input value={node[k]??''} onChange={e=>patchNode(k,e.target.value)}/></label>)}</div>:
@@ -351,7 +478,7 @@ function MapView({active,latest,pendingDraft,onDismissPendingDraft,discussionId,
       {editing&&<div className="sg-row map-edge-form">{([['起点',newFrom,setNewFrom],['终点',newTo,setNewTo]] as const).map(([label,val,set])=><label key={label}>{label}<select value={val} onChange={e=>set(e.target.value)}><option value="">选择条目</option>{map.nodes.map(n=><option value={n.id} key={n.id}>{n.id} · {n.title}</option>)}</select></label>)}
       <label>关系<select value={newKind} onChange={e=>setNewKind(e.target.value as StrategyMapEdge['kind'])}>{Object.entries(mapEdgeKinds).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>{button('添加连线',addEdge)}</div>}</details>
     {editing&&<StrategyScenarioEditor model={map.scenarioModel} onChange={updateModel}/>}
-    {editing?<><label className="map-change">本次修改说明<input value={reason} onChange={e=>setReason(e.target.value)} placeholder={isPendingMode?'例如：核对并保存战略地图导入版本':'例如：补充复购观察周期'}/></label><div className="sg-row"><button type="button" className="primary-button" disabled={busy} onClick={()=>void save()}>{isPendingMode?'保存候选版本':'保存为新版本'}</button>{button(isPendingMode?'放弃本次草稿':'取消修改',cancel)}</div></>:
+    {editing?<><label className="map-change">本次修改说明<input value={reason} onChange={e=>setReason(e.target.value)} placeholder={isPendingMode?'例如：核对并保存战略地图导入版本':'例如：补充复购观察周期'}/></label><div className="sg-row"><button type="button" className="primary-button" disabled={busy} onClick={()=>void save()}>{isPendingMode?'保存候选版本':'保存为新版本'}</button>{button(isPendingMode?'放弃本次草稿':'取消修改',()=>{void cancel();})}</div></>:
       active&&<details ref={review} className="map-review"><summary>因果链审查</summary>
         {active.edges.some(e=>e.kind==='hypothesis')?<div className="map-review-layout"><div className="map-review-nav">{active.edges.filter(e=>e.kind==='hypothesis').map(e=><button key={e.id} ref={el=>{if(el)edgeButtons.current.set(e.id,el);else edgeButtons.current.delete(e.id);}} className="sg-goal-choice" aria-pressed={e.id===edgeId} onClick={()=>setEdgeId(e.id)}>{nodeText(map.nodes,e.from)} → {nodeText(map.nodes,e.to)}</button>)}</div>{edge&&<section>
           {edge.review?<><strong>{edge.review.summary}</strong><dl className="sg-details">{(Object.keys(reviewFields) as (keyof typeof reviewFields)[]).filter(k=>k!=='summary').map(k=><div className="map-dl-row" key={k}><dt>{reviewFields[k]}</dt><dd>{edge.review![k]}</dd></div>)}</dl></>:<p>这条因果假设在 v{active.version} 尚待审查。</p>}

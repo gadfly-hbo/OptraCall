@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
 import { deflateSync } from 'node:zlib';
@@ -1179,4 +1182,446 @@ test('Items 6A/6B & 7C: review-draft leaves 0 versions until one-click save, wor
   }, 201)).version as StrategyMapVersion;
   assert.equal(savedZero.nodes.length, 0);
   assert.match(savedZero.unknowns, /纯文本模型无法识别/);
+});
+
+test('Round-2 Items 1 & 2: selectedPages omitted by Agent is backfilled by Host, and workingMapDraft-only history is blocked after revocation', { timeout: 60_000 }, async t => {
+  const host = await startTestHost();
+  const provider = await startToolProvider();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const api = async (route: string, method = 'GET', body?: unknown, status = 200) => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, `${method} ${route}: ${await r.clone().text()}`);
+    return r.json();
+  };
+
+  await api('/api/configuration', 'PUT', {
+    name: '选页回填与草稿撤权模型',
+    provider: 'openai-compatible',
+    baseUrl: provider.baseUrl,
+    model: 'synthetic',
+    apiKey: 'synthetic-only',
+  });
+  const { discussion } = await api('/api/strategy/discussions', 'POST', { operationId: randomUUID(), title: '选页回填与草稿撤权' }, 201);
+  const base = `/api/strategy/discussions/${discussion.id}`;
+
+  const regA = await api(`${base}/map-imports`, 'POST', {
+    kind: 'upload',
+    fileName: '四页汇报.pptx',
+    bytes: (await makeMemberOpsPptx()).toString('base64'),
+  });
+  const srcA = regA.source.sourceId as string;
+
+  // Part 1A: Agent calls propose-map-draft OMITTING draft.importSources[0].selectedPages during a turn scoped to page [4]
+  let turn1Step = 0;
+  provider.setResponder(() => {
+    turn1Step++;
+    if (turn1Step === 1) {
+      return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-import-source', importSourceId: srcA, page: 4 } }] };
+    }
+    if (turn1Step === 2) {
+      return {
+        calls: [{
+          name: 'strategy_goals',
+          arguments: {
+            action: 'propose-map-draft',
+            reason: '省略 selectedPages 的待核草稿',
+            mapDraft: {
+              title: '第 4 页策略方案',
+              template: 'bsc',
+              choice: '聚焦第 4 页策略',
+              nodes: [{ id: 'G1', kind: 'goal', title: '新客二购率', baseline: '9%', target: '18%', sourceLocation: { sourceId: srcA, page: 4, label: '第4页' } }],
+              edges: [],
+              importSources: [{ sourceId: srcA, format: 'pptx', fileName: '四页汇报.pptx', sha256: regA.source.sha256, origin: 'upload' }],
+            },
+          },
+        }],
+      };
+    }
+    return { text: '已生成草稿。' };
+  });
+
+  const d0 = await api(base);
+  const req1 = randomUUID();
+  await api(`${base}/messages`, 'POST', {
+    requestId: req1,
+    expectedRevision: d0.discussion.revision,
+    text: '仅提取第 4 页',
+    importSourceIds: [srcA],
+    selectedImportPages: { [srcA]: [4] },
+    importMode: 'review-draft',
+  }, 202);
+  const done1 = await waitForRun(api, base, req1);
+  assert.equal(done1.discussion.lastRun.status, 'completed');
+  const draft1 = done1.mapImportDrafts?.[0];
+  assert.ok(draft1, 'expected pending draft');
+  assert.deepEqual(draft1.draft.importSources[0].selectedPages, [4], 'Host MUST backfill selectedPages=[4] into draft receipt');
+
+  // Subsequent reread omitting selectedImportPages MUST still stay scoped to [4] (page 1 -> 403)
+  let rereadToolErr = '';
+  let turn2Step = 0;
+  provider.setResponder(({ messages }) => {
+    const lastTool = messages.filter(m => m.role === 'tool').at(-1);
+    if (turn2Step === 1 && lastTool) rereadToolErr = providerMessageText(lastTool.content);
+    turn2Step++;
+    if (turn2Step === 1) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-import-source', importSourceId: srcA, page: 1 } }] };
+    if (turn2Step === 2) {
+      return {
+        calls: [{
+          name: 'strategy_goals',
+          arguments: {
+            action: 'propose-map-draft',
+            reason: '重读修订草稿',
+            mapDraft: {
+              ...draft1.draft,
+              importSources: [{ sourceId: srcA, format: 'pptx', fileName: '四页汇报.pptx', sha256: regA.source.sha256, origin: 'upload' }],
+            },
+          },
+        }],
+      };
+    }
+    return { text: '重读完成。' };
+  });
+  const req2 = randomUUID();
+  await api(`${base}/messages`, 'POST', {
+    requestId: req2,
+    expectedRevision: done1.discussion.revision,
+    text: '重读本草稿',
+    importSourceIds: [srcA],
+    importMode: 'review-draft',
+    supersedesDraftEntryId: draft1.entryId,
+    workingMapDraft: { ...draft1.draft, importSources: [{ sourceId: srcA, format: 'pptx', fileName: '四页汇报.pptx', sha256: regA.source.sha256, origin: 'upload' }] },
+  }, 202);
+  const done2 = await waitForRun(api, base, req2);
+  assert.equal(done2.discussion.lastRun.status, 'completed');
+  assert.match(rereadToolErr, /strategy_map_import_page_not_authorized/, 'omitting selectedImportPages on reread MUST NOT widen to page 1');
+  assert.equal(done2.mapImportDrafts.length, 1, 'reread with supersedesDraftEntryId replaces latest in same draftGroup');
+  assert.deepEqual(done2.mapImportDrafts[0].draft.importSources[0].selectedPages, [4]);
+
+  // Saving even with selectedPages omitted in payload MUST persist selectedPages=[4]
+  const savedV1 = (await api(`${base}/maps`, 'POST', {
+    mapId: randomUUID(),
+    operationId: randomUUID(),
+    expectedVersion: 0,
+    reason: '核对后保存',
+    importDraftEntryId: done2.mapImportDrafts[0].entryId,
+    draft: { ...done2.mapImportDrafts[0].draft, importSources: [{ sourceId: srcA, format: 'pptx', fileName: '四页汇报.pptx', sha256: regA.source.sha256, origin: 'upload' }] },
+  }, 201)).version as StrategyMapVersion;
+  assert.deepEqual(savedV1.importSources?.[0]?.selectedPages, [4], 'saved version MUST preserve Host-known selectedPages=[4]');
+
+  // Part 1B: Second discussion where a source enters native history ONLY via workingMapDraft (ZERO read-import-source calls)
+  const { discussion: discB } = await api('/api/strategy/discussions', 'POST', { operationId: randomUUID(), title: '纯 workingMapDraft 撤权拦截' }, 201);
+  const baseB = `/api/strategy/discussions/${discB.id}`;
+  const regOnlyDraft = await api(`${baseB}/map-imports`, 'POST', {
+    kind: 'upload',
+    fileName: '仅草稿引用.png',
+    bytes: TINY_PNG.toString('base64'),
+  });
+  const srcOnly = regOnlyDraft.source.sourceId as string;
+
+  provider.setResponder(() => ({ text: '已阅读用户传入的 workingMapDraft，未调用任何 read-import-source 工具。' }));
+  const dB0 = await api(baseB);
+  const reqB1 = randomUUID();
+  await api(`${baseB}/messages`, 'POST', {
+    requestId: reqB1,
+    expectedRevision: dB0.discussion.revision,
+    text: '请评审我传入的草稿',
+    workingMapDraft: {
+      title: '纯草稿引用方案',
+      template: 'table',
+      choice: '测试草稿',
+      nodes: [{ id: 'G1', kind: 'goal', title: '目标1', sourceLocation: { sourceId: srcOnly, page: 1, label: '图1' } }],
+      edges: [],
+      importSources: [{ sourceId: srcOnly, format: 'image', fileName: '仅草稿引用.png', sha256: regOnlyDraft.source.sha256, origin: 'upload', selectedPages: [1] }],
+    },
+  }, 202);
+  const doneB1 = await waitForRun(api, baseB, reqB1);
+  assert.equal(doneB1.discussion.lastRun.status, 'completed');
+
+  // Revoke srcOnly -> ordinary follow-up chat MUST be blocked BEFORE dispatch (0 new Provider requests)
+  await api(`${baseB}/map-imports/${srcOnly}/revoke`, 'POST', {});
+  const countBefore = provider.requests.length;
+  const reqB2 = randomUUID();
+  const followUpRes = await host.request(`${baseB}/messages`, 'POST', {
+    requestId: reqB2,
+    expectedRevision: doneB1.discussion.revision,
+    text: '继续普通追问（不附带任何导入参数）',
+  });
+  assert.equal(followUpRes.status, 403, `expected 403 after workingMapDraft source revocation, got ${followUpRes.status}: ${await followUpRes.clone().text()}`);
+  assert.match(await followUpRes.text(), /strategy_map_import_revoked/);
+  assert.equal(provider.requests.length, countBefore, 'blocked follow-up MUST make 0 new Provider requests');
+});
+
+test('Round-2 Items 2, 4 & 5: standalone draft reread does not bind older saved map; multi-plan drafts survive save/dismiss; dual-tab single-save lock and persistent dismissal across restart', { timeout: 60_000 }, async t => {
+  const dataRoot = mkdtempSync(path.join(os.tmpdir(), 'optracall-r2-persist-'));
+  const provider = await startToolProvider();
+  let host = await startTestHost({ dataRoot });
+  t.after(async () => {
+    await host.close();
+    await provider.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+  const api = async (route: string, method = 'GET', body?: unknown, status = 200) => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, `${method} ${route}: ${await r.clone().text()}`);
+    return r.json();
+  };
+
+  await api('/api/configuration', 'PUT', {
+    name: '多方案与并发锁模型',
+    provider: 'openai-compatible',
+    baseUrl: provider.baseUrl,
+    model: 'synthetic',
+    apiKey: 'synthetic-only',
+  });
+  const { discussion } = await api('/api/strategy/discussions', 'POST', { operationId: randomUUID(), title: '多方案与双标签锁' }, 201);
+  const base = `/api/strategy/discussions/${discussion.id}`;
+
+  // Seed an older unrelated saved map v1 in this discussion
+  const oldMapId = randomUUID();
+  const oldMap = (await api(`${base}/maps`, 'POST', {
+    mapId: oldMapId,
+    operationId: randomUUID(),
+    expectedVersion: 0,
+    reason: '历史已保存方案',
+    draft: {
+      title: '旧版门店扩张地图',
+      template: 'bsc',
+      choice: '旧版选择',
+      nodes: [{ id: 'G0', kind: 'goal', title: '旧目标' }],
+      edges: [],
+    },
+  }, 201)).version as StrategyMapVersion;
+  assert.equal(oldMap.version, 1);
+
+  const reg = await api(`${base}/map-imports`, 'POST', {
+    kind: 'upload',
+    fileName: '双方案原稿.pptx',
+    bytes: (await makeMemberOpsPptx()).toString('base64'),
+  });
+  const srcId = reg.source.sourceId as string;
+  const importSrc = { sourceId: srcId, format: 'pptx' as const, fileName: '双方案原稿.pptx', sha256: reg.source.sha256, origin: 'upload' as const, selectedPages: [4] };
+
+  // Turn 1: Agent proposes TWO standalone plans (Plan A & Plan B) in ONE turn
+  let t1 = 0;
+  provider.setResponder(() => {
+    t1++;
+    if (t1 === 1) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-import-source', importSourceId: srcId, page: 4 } }] };
+    if (t1 === 2) {
+      return {
+        calls: [
+          {
+            name: 'strategy_goals',
+            arguments: {
+              action: 'propose-map-draft',
+              reason: '方案 A 待核草稿',
+              mapDraft: {
+                title: '方案 A · 会员留存',
+                template: 'bsc',
+                choice: '聚焦老客留存',
+                nodes: [{ id: 'GA1', kind: 'goal', title: '老客复购率', baseline: '18%', target: '26%', sourceLocation: { sourceId: srcId, page: 4, label: '第4页' } }],
+                edges: [],
+                importSources: [importSrc],
+              },
+            },
+          },
+          {
+            name: 'strategy_goals',
+            arguments: {
+              action: 'propose-map-draft',
+              reason: '方案 B 待核草稿',
+              mapDraft: {
+                title: '方案 B · 新客培育',
+                template: 'bsc',
+                choice: '聚焦新客二购',
+                nodes: [{ id: 'GB1', kind: 'goal', title: '新客二购率', baseline: '9%', target: '18%', sourceLocation: { sourceId: srcId, page: 4, label: '第4页' } }],
+                edges: [],
+                importSources: [importSrc],
+              },
+            },
+          },
+        ],
+      };
+    }
+    return { text: '已提取方案 A 与方案 B 两份待核草稿。' };
+  });
+
+  const d0 = await api(base);
+  const req1 = randomUUID();
+  await api(`${base}/messages`, 'POST', {
+    requestId: req1,
+    expectedRevision: d0.discussion.revision,
+    text: '请分别整理方案 A 和方案 B 两份待核草稿',
+    importSourceIds: [srcId],
+    selectedImportPages: { [srcId]: [4] },
+    importMode: 'review-draft',
+  }, 202);
+  const done1 = await waitForRun(api, base, req1);
+  assert.equal(done1.discussion.lastRun.status, 'completed');
+  assert.equal(done1.mapImportDrafts?.length, 2, 'BOTH Plan A and Plan B MUST remain accessible');
+  const planA = done1.mapImportDrafts.find((d: any) => d.draft.title.includes('方案 A'));
+  const planB = done1.mapImportDrafts.find((d: any) => d.draft.title.includes('方案 B'));
+  assert.ok(planA && planB);
+  assert.notEqual(planA.draftGroupId, planB.draftGroupId);
+
+  // Reread standalone Plan B (without mapRef): Provider prompt MUST NOT attach oldMapId / 旧版门店扩张地图
+  let t2 = 0;
+  provider.setResponder(() => {
+    t2++;
+    if (t2 === 1) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-import-source', importSourceId: srcId, page: 4 } }] };
+    if (t2 === 2) {
+      return {
+        calls: [{
+          name: 'strategy_goals',
+          arguments: {
+            action: 'propose-map-draft',
+            reason: '方案 B 局部重读修订',
+            mapDraft: {
+              ...planB.draft,
+              title: '方案 B · 新客培育（修订）',
+              template: 'tree',
+              nodes: [{ ...planB.draft.nodes[0], baseline: '15%' }],
+            },
+          },
+        }],
+      };
+    }
+    return { text: '方案 B 局部重读完毕。' };
+  });
+  const offset2 = provider.requests.length;
+  const req2 = randomUUID();
+  await api(`${base}/messages`, 'POST', {
+    requestId: req2,
+    expectedRevision: done1.discussion.revision,
+    text: '局部重读方案 B',
+    importSourceIds: [srcId],
+    selectedImportPages: { [srcId]: [4] },
+    importMode: 'review-draft',
+    supersedesDraftEntryId: planB.entryId,
+    workingMapDraft: { ...planB.draft, title: '方案 B · 新客培育（修订）', template: 'tree', nodes: [{ ...planB.draft.nodes[0], baseline: '15%' }] },
+  }, 202);
+  const done2 = await waitForRun(api, base, req2);
+  assert.equal(done2.discussion.lastRun.status, 'completed');
+  const rereadPromptText = providerMessageText(provider.requests[offset2]!.body.messages?.filter(m => m.role === 'user').at(-1)?.content);
+  assert.equal(rereadPromptText.includes(oldMapId), false, 'standalone draft reread MUST NOT attach unrelated older saved mapId');
+  assert.equal(rereadPromptText.includes('旧版门店扩张地图'), false, 'standalone draft reread MUST NOT inject unrelated older map body');
+  assert.equal(done2.mapImportDrafts.length, 2, 'Plan A and updated Plan B MUST both remain active');
+  const planB2 = done2.mapImportDrafts.find((d: any) => d.draftGroupId === planB.draftGroupId);
+  assert.ok(planB2 && planB2.entryId !== planB.entryId);
+
+  // Dual-tab concurrent/sequential save on Plan B: Tab 1 succeeds 201 (new mapId !== oldMapId), Tab 2 fails 409 strategy_map_import_draft_already_saved
+  const tab1MapId = randomUUID();
+  const tab1OpId = randomUUID();
+  const tab2MapId = randomUUID();
+  const tab2OpId = randomUUID();
+  const [res1, res2] = await Promise.all([
+    host.request(`${base}/maps`, 'POST', {
+      mapId: tab1MapId, operationId: tab1OpId, expectedVersion: 0, reason: '标签页1保存方案B',
+      importDraftEntryId: planB2.entryId, draft: planB2.draft,
+    }),
+    host.request(`${base}/maps`, 'POST', {
+      mapId: tab2MapId, operationId: tab2OpId, expectedVersion: 0, reason: '标签页2重复保存方案B',
+      importDraftEntryId: planB2.entryId, draft: planB2.draft,
+    }),
+  ]);
+  const statuses = [res1.status, res2.status].sort((a, b) => a - b);
+  assert.deepEqual(statuses, [201, 409], 'dual-tab save MUST return one 201 and one 409 conflict');
+  const conflictRes = res1.status === 409 ? res1 : res2;
+  const winnerRes = res1.status === 201 ? res1 : res2;
+  const winnerOpId = res1.status === 201 ? tab1OpId : tab2OpId;
+  const winnerMapId = res1.status === 201 ? tab1MapId : tab2MapId;
+  assert.match(await conflictRes.text(), /strategy_map_import_draft_already_saved/);
+  const winnerVer = (await winnerRes.json()).version as StrategyMapVersion;
+  assert.equal(winnerVer.version, 1);
+  assert.notEqual(winnerVer.mapId, oldMapId, 'standalone Plan B MUST create a new mapId, leaving oldMapId at v1');
+
+  // Exact same operationId retry remains idempotent
+  const replay = await api(`${base}/maps`, 'POST', {
+    mapId: winnerMapId, operationId: winnerOpId, expectedVersion: 0,
+    reason: res1.status === 201 ? '标签页1保存方案B' : '标签页2重复保存方案B',
+    importDraftEntryId: planB2.entryId, draft: planB2.draft,
+  }, 201);
+  assert.equal(replay.version.mapId, winnerMapId);
+  assert.equal(replay.version.version, 1);
+
+  // Also verify older superseded entryId of Plan B cannot be saved either
+  await api(`${base}/maps`, 'POST', {
+    mapId: randomUUID(), operationId: randomUUID(), expectedVersion: 0, reason: '旧入口重存',
+    importDraftEntryId: planB.entryId, draft: planB.draft,
+  }, 409);
+
+  // Plan A MUST still be active after Plan B is saved!
+  const afterSaveB = await api(base);
+  assert.equal(afterSaveB.mapImportDrafts?.length, 1, 'Plan A MUST remain active after Plan B is saved');
+  assert.equal(afterSaveB.mapImportDrafts[0].draftGroupId, planA.draftGroupId);
+
+  // Dismiss Plan A via Host persistent endpoint -> disappears immediately, blocks save with 409, AND stays dismissed after Host restart!
+  await api(`${base}/map-drafts/${encodeURIComponent(planA.entryId)}/dismiss`, 'POST', {});
+  const afterDismissA = await api(base);
+  assert.equal(afterDismissA.mapImportDrafts, undefined, 'no active pending drafts after Plan A dismissed');
+  await api(`${base}/maps`, 'POST', {
+    mapId: randomUUID(), operationId: randomUUID(), expectedVersion: 0, reason: '尝试保存已放弃草稿',
+    importDraftEntryId: planA.entryId, draft: planA.draft,
+  }, 409);
+
+  // Restart Host on the same dataRoot -> dismissed Plan A MUST NOT reappear, and catalog has ONLY oldMap v1 + Plan B v1 (2 versions total)
+  await host.close();
+  host = await startTestHost({ dataRoot });
+  const afterRestart = await api(base);
+  assert.equal(afterRestart.mapImportDrafts, undefined, 'dismissed draft MUST NOT reopen after Host restart');
+  const catalogAfterRestart = await api(`${base}/maps`);
+  assert.equal(catalogAfterRestart.versions.length, 2, 'exactly 2 saved maps (oldMap v1 + Plan B v1)');
+  assert.equal(catalogAfterRestart.versions.filter((v: StrategyMapVersion) => v.mapId === oldMapId).length, 1);
+
+  // Explicit revision of oldMapId WITH mapRef DOES attach oldMapId and creates v2
+  let t3 = 0;
+  provider.setResponder(() => {
+    t3++;
+    if (t3 === 1) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-import-source', importSourceId: srcId, page: 4 } }] };
+    if (t3 === 2) {
+      return {
+        calls: [{
+          name: 'strategy_goals',
+          arguments: {
+            action: 'propose-map-draft',
+            mapId: oldMapId,
+            expectedVersion: 1,
+            reason: '基于旧地图 v1 修订',
+            mapDraft: {
+              title: '旧版门店扩张地图（修订）',
+              template: 'bsc',
+              choice: '修订选择',
+              nodes: [{ id: 'G0', kind: 'goal', title: '旧目标更新' }],
+              edges: [],
+              importSources: [importSrc],
+            },
+          },
+        }],
+      };
+    }
+    return { text: '已生成旧版地图的 v2 修订草稿。' };
+  });
+  const offset3 = provider.requests.length;
+  const req3 = randomUUID();
+  await api(`${base}/messages`, 'POST', {
+    requestId: req3,
+    expectedRevision: afterRestart.discussion.revision,
+    text: '对照原稿修订旧版门店扩张地图 v1',
+    importSourceIds: [srcId],
+    selectedImportPages: { [srcId]: [4] },
+    importMode: 'review-draft',
+    mapRef: { mapId: oldMapId, version: 1 },
+  }, 202);
+  const done3 = await waitForRun(api, base, req3);
+  assert.equal(done3.discussion.lastRun.status, 'completed');
+  const revPromptText = providerMessageText(provider.requests[offset3]!.body.messages?.filter(m => m.role === 'user').at(-1)?.content);
+  assert.equal(revPromptText.includes(oldMapId), true, 'explicit mapRef revision MUST attach oldMapId');
+  const revDraft = done3.mapImportDrafts?.[0];
+  assert.equal(revDraft?.mapId, oldMapId);
+  assert.equal(revDraft?.expectedVersion, 1);
+  const savedV2 = (await api(`${base}/maps`, 'POST', {
+    mapId: oldMapId, operationId: randomUUID(), expectedVersion: 1, reason: '保存旧地图修订 v2',
+    importDraftEntryId: revDraft.entryId, draft: revDraft.draft,
+  }, 201)).version as StrategyMapVersion;
+  assert.equal(savedV2.mapId, oldMapId);
+  assert.equal(savedV2.version, 2);
 });

@@ -496,3 +496,136 @@ test('StrategyMapImportStore preserves immutable bytes, supports same-name repla
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+async function makeSmartArtPptx(opts: { includeDrawingXml: boolean }): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file(
+    '[Content_Types].xml',
+    `<?xml version="1.0" encoding="UTF-8"?>
+    <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+      <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+      <Default Extension="xml" ContentType="application/xml"/>
+    </Types>`,
+  );
+  zip.file(
+    'ppt/presentation.xml',
+    `<?xml version="1.0" encoding="UTF-8"?>
+    <p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>
+      <p:sldSz cx="10000000" cy="10000000"/>
+    </p:presentation>`,
+  );
+  zip.file(
+    'ppt/_rels/presentation.xml.rels',
+    `<?xml version="1.0" encoding="UTF-8"?>
+    <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+      <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>
+    </Relationships>`,
+  );
+  zip.file(
+    'ppt/slides/slide1.xml',
+    `<?xml version="1.0" encoding="UTF-8"?>
+    <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <p:cSld><p:spTree>
+        <p:graphicFrame>
+          <p:nvGraphicFramePr><p:cNvPr id="5" name="SmartArt Diagram 1"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+          <p:xfrm><a:off x="0" y="650000"/><a:ext cx="6820000" cy="8700000"/></p:xfrm>
+          <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram">
+            <dgm:relIds r:dm="rIdData1"/>
+          </a:graphicData></a:graphic>
+        </p:graphicFrame>
+      </p:spTree></p:cSld>
+    </p:sld>`,
+  );
+  zip.file(
+    'ppt/slides/_rels/slide1.xml.rels',
+    `<?xml version="1.0" encoding="UTF-8"?>
+    <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+      <Relationship Id="rIdData1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData" Target="../diagrams/data1.xml"/>
+      ${opts.includeDrawingXml ? '<Relationship Id="rIdDraw1" Type="http://schemas.microsoft.com/office/2007/relationships/diagramDrawing" Target="../diagrams/drawing1.xml"/>' : ''}
+    </Relationships>`,
+  );
+  zip.file(
+    'ppt/diagrams/data1.xml',
+    `<?xml version="1.0" encoding="UTF-8"?>
+    <dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram">
+      <dgm:ptLst>
+        <dgm:pt modelId="{ROOT}" type="doc"/>
+        <dgm:pt modelId="{NODE-A}" type="node"><dgm:t><a:p><a:r><a:t>abc</a:t></a:r></a:p></dgm:t></dgm:pt>
+        <dgm:pt modelId="{NODE-B}" type="node"><dgm:t><a:p><a:r><a:t>def</a:t></a:r></a:p></dgm:t></dgm:pt>
+        <dgm:pt modelId="{NODE-C}" type="node"><dgm:t><a:p><a:r><a:t>ghi</a:t></a:r></a:p></dgm:t></dgm:pt>
+      </dgm:ptLst>
+      <dgm:extLst>
+        <a:ext uri="http://schemas.microsoft.com/office/drawing/2008/diagram">
+          <dsp:dataModelExt relId="rIdDraw1"/>
+        </a:ext>
+      </dgm:extLst>
+    </dgm:dataModel>`,
+  );
+  if (opts.includeDrawingXml) {
+    zip.file(
+      'ppt/diagrams/drawing1.xml',
+      `<?xml version="1.0" encoding="UTF-8"?>
+      <dsp:drawing xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <dsp:spTree>
+          <dsp:sp modelId="{NODE-A}">
+            <dsp:nvSpPr><dsp:cNvPr id="101" name="Node A"/><dsp:cNvSpPr/></dsp:nvSpPr>
+            <dsp:spPr><a:xfrm><a:off x="200000" y="300000"/><a:ext cx="6000000" cy="2000000"/></a:xfrm></dsp:spPr>
+            <dsp:txBody><a:p><a:r><a:t>abc</a:t></a:r></a:p></dsp:txBody>
+          </dsp:sp>
+          <dsp:sp modelId="{NODE-B}">
+            <dsp:nvSpPr><dsp:cNvPr id="102" name="Node B"/><dsp:cNvSpPr/></dsp:nvSpPr>
+            <dsp:spPr><a:xfrm><a:off x="200000" y="3000000"/><a:ext cx="6000000" cy="2000000"/></a:xfrm></dsp:spPr>
+            <dsp:txBody><a:p><a:r><a:t>def</a:t></a:r></a:p></dsp:txBody>
+          </dsp:sp>
+          <dsp:sp modelId="{NODE-C}">
+            <dsp:nvSpPr><dsp:cNvPr id="103" name="Node C"/><dsp:cNvSpPr/></dsp:nvSpPr>
+            <dsp:spPr><a:xfrm><a:off x="200000" y="5700000"/><a:ext cx="6000000" cy="2000000"/></a:xfrm></dsp:spPr>
+            <dsp:txBody><a:p><a:r><a:t>ghi</a:t></a:r></a:p></dsp:txBody>
+          </dsp:sp>
+        </dsp:spTree>
+      </dsp:drawing>`,
+    );
+  }
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+test('Round-2 Item 7: PPTX SmartArt resolves per-child bboxes from drawing1.xml and sets needsVisualReview=true', async () => {
+  const withDrawing = await makeSmartArtPptx({ includeDrawingXml: true });
+  const parsed = await decodeStrategyMapImportFile('smartart-simple.pptx', withDrawing);
+  assert.equal(parsed.pages.length, 1);
+  const p1 = parsed.pages[0]!;
+  assert.equal(p1.needsVisualReview, true, 'SmartArt slide MUST set needsVisualReview=true');
+
+  const smartShapes = p1.shapes.filter(s => s.kind === 'smartart');
+  assert.equal(smartShapes.length, 3);
+  const a = smartShapes.find(s => s.text === 'abc')!;
+  const b = smartShapes.find(s => s.text === 'def')!;
+  const c = smartShapes.find(s => s.text === 'ghi')!;
+  assert.ok(a && b && c);
+  assert.equal(a.positionPrecision, 'item');
+  assert.equal(b.positionPrecision, 'item');
+  assert.equal(c.positionPrecision, 'item');
+  // Frame y=650000 + child y=300000 / 3000000 / 5700000 -> distinct y coordinates 95, 365, 635 (NOT outer frame [0,65,682,870])
+  assert.deepEqual(a.bbox, [20, 95, 600, 200]);
+  assert.deepEqual(b.bbox, [20, 365, 600, 200]);
+  assert.deepEqual(c.bbox, [20, 635, 600, 200]);
+  assert.notDeepEqual(a.bbox, b.bbox);
+  assert.notDeepEqual(b.bbox, c.bbox);
+});
+
+test('Round-2 Item 7: PPTX SmartArt without drawing.xml emits single group-level provenance instead of duplicating frame bbox onto every child', async () => {
+  const withoutDrawing = await makeSmartArtPptx({ includeDrawingXml: false });
+  const parsed = await decodeStrategyMapImportFile('smartart-no-drawing.pptx', withoutDrawing);
+  const p1 = parsed.pages[0]!;
+  assert.equal(p1.needsVisualReview, true, 'SmartArt slide MUST set needsVisualReview=true even without drawing.xml');
+
+  const smartShapes = p1.shapes.filter(s => s.kind === 'smartart');
+  assert.equal(smartShapes.length, 1, 'must NOT duplicate the outer graphicFrame bbox onto 3 separate child shapes');
+  assert.equal(smartShapes[0]!.positionPrecision, 'group');
+  assert.deepEqual(smartShapes[0]!.bbox, [0, 65, 682, 870]);
+  assert.match(smartShapes[0]!.text, /abc/);
+  assert.match(smartShapes[0]!.text, /def/);
+  assert.match(smartShapes[0]!.text, /ghi/);
+  assert.ok(p1.notes?.some(n => n.includes('图组') && n.includes('needs-review')));
+});
