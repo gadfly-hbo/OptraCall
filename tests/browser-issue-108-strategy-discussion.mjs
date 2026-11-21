@@ -1,6 +1,7 @@
-// Run against an isolated, configured Host serving the stamped product UI.
+// Run against an isolated Host serving the stamped product UI.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+import { startSyntheticProvider } from './fixtures/synthetic-provider.ts';
 
 const base = process.argv[2];
 const uid = () => crypto.randomUUID();
@@ -18,12 +19,22 @@ async function api(path, method = 'GET', body) {
   return r.json();
 }
 
+let provider;
 (async () => {
+  provider = await startSyntheticProvider();
+  const { configuration } = await api('/api/configuration', 'PUT', {
+    name: '合成战略共创回归',
+    provider: 'openai-compatible',
+    model: 'synthetic',
+    baseUrl: provider.baseUrl,
+    apiKey: 'synthetic-only',
+  });
   const id = uid();
   const route = '/api/strategy/discussions/' + id;
   await api('/api/strategy/discussions', 'POST', {
     title: 'Issue 108 战略共创直达开聊点验',
     operationId: id,
+    configurationId: configuration.id,
     usageContext: { kind: 'department', background: '合成会员运营模块' },
   });
 
@@ -73,7 +84,11 @@ async function api(path, method = 'GET', body) {
 
   const browser = await chromium.launch({ channel: 'chrome' });
   try {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
+    await context.route('**/*', intercepted => {
+      return new URL(intercepted.request().url()).origin === base ? intercepted.continue() : intercepted.abort();
+    });
+    const page = await context.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     page.setDefaultTimeout(8000);
@@ -151,6 +166,76 @@ async function api(path, method = 'GET', body) {
     await page.keyboard.press('Escape');
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), '放大对话');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+    assert.equal(provider.requests.length, 0, 'Examples, settings and record refresh must not send');
+    await page.setViewportSize({ width: 1280, height: 900 });
+
+    // Losing the stream before its first event does not establish a live connection.
+    await page.route(eventsRoute, intercepted => intercepted.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: '',
+    }));
+    const emptyStream = page.waitForResponse(response => new URL(response.url()).pathname === route + '/events');
+    await button('刷新讨论记录').click();
+    await (await emptyStream).finished();
+    const painted = () => page.evaluate(() => new Promise(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    }));
+    await painted();
+    const disconnected = await page.getByRole('alert').filter({ hasText: /实时回复连接尚未恢复/ }).isVisible();
+    await page.unroute(eventsRoute);
+
+    // The wire trims edge whitespace, but acknowledgement must clear the original draft.
+    const paddedQuestion = '  合成问题：下一阶段如何选择？  ';
+    await input.fill(paddedQuestion);
+    const message = page.waitForRequest(request => {
+      return request.method() === 'POST' && new URL(request.url()).pathname === route + '/messages';
+    });
+    await button('发送讨论').click();
+    assert.equal((await message).postDataJSON().text, paddedQuestion.trim());
+    await provider.waitForRequests(1);
+    await page.getByText('SDK 合成回复', { exact: true }).waitFor();
+    const remainingDraft = await input.inputValue();
+
+    // Resolve a refresh after the user has switched to a new discussion.
+    const { promise: held, resolve: hold } = Promise.withResolvers();
+    const { promise: released, resolve: release } = Promise.withResolvers();
+    const previousDiscussion = url => url.pathname === route;
+    await page.route(previousDiscussion, async intercepted => {
+      const oldResponse = await intercepted.fetch();
+      hold();
+      await released;
+      await intercepted.fulfill({ response: oldResponse });
+    });
+    const picker = page.locator('label').filter({ hasText: /^原讨论/ }).locator('select');
+    try {
+      await button('刷新讨论记录').click();
+      await held;
+      await picker.selectOption('');
+      await input.fill('新讨论的未发送草稿');
+      const delayed = page.waitForResponse(response => new URL(response.url()).pathname === route);
+      release();
+      await (await delayed).finished();
+      await painted();
+      const observed = {
+        disconnected,
+        remainingDraft,
+        previousDiscussionReopened: await picker.inputValue() === id,
+        newDraft: await input.inputValue(),
+        modelRequests: provider.requests.length,
+      };
+      console.log(JSON.stringify(observed));
+      assert.deepEqual(observed, {
+        disconnected: true,
+        remainingDraft: '',
+        previousDiscussionReopened: false,
+        newDraft: '新讨论的未发送草稿',
+        modelRequests: 1,
+      });
+    } finally {
+      release();
+      await page.unroute(previousDiscussion);
+    }
     assert.deepEqual(errors, []);
     console.log('PASS Issue #108 browser verification');
   } finally {
@@ -159,4 +244,4 @@ async function api(path, method = 'GET', body) {
 })().catch(e => {
   console.error(e);
   process.exitCode = 1;
-});
+}).finally(() => provider?.close());

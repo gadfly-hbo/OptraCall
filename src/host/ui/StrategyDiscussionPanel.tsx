@@ -106,7 +106,9 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
   const [focusedSource, setFocusedSource] = useState<GoalDiscussionSourceRef>();
   const [goal, setGoal] = useState<GoalRef>(), [projectId, setProjectId] = useState(''), [sources, setSources] = useState<StrategyDiscussionSource[]>([]), [sourceScope, setSourceScope] = useState<StrategyDiscussionSourceScope>(), [availableSources, setAvailableSources] = useState<StrategyDiscussionSource[]>();
   const [busy, setBusy] = useState(false), [refreshing, setRefreshing] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState(''), [pending, setPending] = useState<api.DiscussionPending>(), [connection, setConnection] = useState(0), [replacementRequestId, setReplacementRequestId] = useState<string>();
-  const refreshReconnect = useRef<{ discussionId: string; busy: boolean } | undefined>(undefined);
+  const [refreshFeedback, setRefreshFeedback] = useState<{ role: 'status' | 'alert'; text: string }>();
+  const refreshRequest = useRef<AbortController | undefined>(undefined);
+  const refreshReconnect = useRef<{ discussionId: string; afterEpoch: number } | undefined>(undefined);
   const [journal] = useState(() => { try { return { value: api.discussionJournal(window.sessionStorage), error: '' }; } catch { return { value: undefined, error: '无法保留原讨论请求编号，请核对浏览器存储权限。' }; } });
   const restoreMessageContext=(discussionId:string,input:api.StrategyDiscussionMessage)=>{
     setMapContext(input.mapRef);setMapTemplate(input.mapTemplate);
@@ -119,38 +121,79 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
     const original = journal.value?.read();
     if (original?.kind === 'message' && original.discussionId === next.discussion.id && api.canSettleDiscussionMessage(next, original.input)) {
       journal.value!.settle(original); setPending(undefined); saveAttachmentDraft(next.discussion.id,[]); sessionStorage.removeItem(draftKey()); sessionStorage.removeItem(replacementKey(next.discussion.id)); setReplacementRequestId(undefined);
-      setText(current => { const nextDraft = current && current !== original.input.text ? current : ''; saveDraft(nextDraft, next.discussion.id); return nextDraft; });
+      const savedDraft = readDraft(next.discussion.id);
+      const remainingDraft = !original.input.importMode && savedDraft.trim() === original.input.text.trim() ? '' : savedDraft;
+      saveDraft(remainingDraft, next.discussion.id);
+      setText(remainingDraft);
     } else if (!original && next.discussion.pendingInput && !api.canSettleDiscussionMessage(next, next.discussion.pendingInput) && readReplacement(next.discussion.id) !== next.discussion.pendingInput.requestId) {
       const restored: api.DiscussionPending = { kind: 'message', discussionId: next.discussion.id, input: next.discussion.pendingInput };
-      journal.value?.remember(restored); setPending(restored); saveDraft(restored.input.text, next.discussion.id); setText(restored.input.text);
+      journal.value?.remember(restored); setPending(restored);
+      if (!readDraft(next.discussion.id)) {
+        saveDraft(restored.input.text, next.discussion.id);
+        setText(restored.input.text);
+      }
     }
 
     if (choices) { const discussion = next.discussion; setAttachmentIds(readAttachmentDraft(discussion.id)); setPurpose(discussion.usageContext); dirtyPurpose.current = false; setMethods(discussion.methods); setGoal(discussion.goal); setConfigurationId(discussion.configurationId); setProjectId(discussion.projectId || ''); setSources(discussion.sources); setSourceScope(discussion.sourceScope); setAvailableSources(undefined); }
-    else if (next.discussion.goal) { setGoal(next.discussion.goal); }
     if(choices && next.discussion.pendingInput && readReplacement(next.discussion.id)===next.discussion.pendingInput.requestId){
       restoreMessageContext(next.discussion.id,next.discussion.pendingInput);
     }
   };
   const readSeq = useRef(0);
   const list = async () => { const result = await api.listStrategyDiscussions(); if (live.current) setDirectory(result.discussions); };
-  const read = async (discussionId = owner.current, choices = false) => { if (!discussionId) return; const seq = ++readSeq.current; const next = await api.readStrategyDiscussion(discussionId); if (live.current && seq === readSeq.current && (!owner.current || owner.current === discussionId)) apply(next, choices); return next; };
+  const read = async (discussionId = owner.current, choices = false, signal?: AbortSignal) => {
+    if (!discussionId) return;
+    const seq = ++readSeq.current;
+    const next = await api.readStrategyDiscussion(discussionId, signal);
+    if (!live.current || signal?.aborted || owner.current !== discussionId) return;
+    if (seq !== readSeq.current) {
+      const latest = detailRef.current;
+      return latest?.discussion.id === discussionId ? latest : undefined;
+    }
+    apply(next, choices);
+    return next;
+  };
+  const cancelRefresh = () => {
+    refreshRequest.current?.abort();
+    refreshRequest.current = undefined;
+    refreshReconnect.current = undefined;
+    setRefreshing(false);
+    setRefreshFeedback(undefined);
+  };
   const refreshDiscussion = async () => {
-    const discussionId = owner.current || detail?.discussion.id;
-    if (!discussionId || refreshing) return;
-    setRefreshing(true); setError(''); setNotice('');
+    const discussionId = owner.current;
+    if (!discussionId || busy || refreshRequest.current) return;
+    const request = new AbortController();
+    refreshRequest.current = request;
+    refreshReconnect.current = undefined;
+    setRefreshing(true);
+    setRefreshFeedback(undefined);
     try {
-      const next = await read(discussionId, false);
-      if (!live.current || owner.current !== discussionId || !next) return;
-      refreshReconnect.current = { discussionId, busy: next.busy };
-      setNotice(next.busy ? '已刷新讨论记录，正在接回本轮实时回复…' : '已刷新讨论记录，消息与状态已同步。');
+      const next = await read(discussionId, false, request.signal);
+      if (!next) {
+        if (live.current && !request.signal.aborted && owner.current === discussionId) {
+          setRefreshFeedback({ role: 'status', text: '讨论状态正在更新，可稍后再试「刷新讨论记录」。' });
+        }
+        return;
+      }
+      refreshReconnect.current = { discussionId, afterEpoch: epoch.current };
+      setRefreshFeedback({ role: 'status', text: next.busy ? '已刷新讨论记录，正在接回本轮实时回复…' : '已刷新讨论记录，消息与状态已同步。' });
       setConnection(value => value + 1);
     } catch (fault) {
-      if (live.current && owner.current === discussionId) setError(`刷新讨论记录未完成，原输入与记录保留；未重发消息。${errorText(fault)}`);
+      if (live.current && !request.signal.aborted && owner.current === discussionId) {
+        setRefreshFeedback({ role: 'alert', text: `刷新讨论记录未完成，原输入与记录保留；未重发消息。${errorText(fault)}` });
+      }
     } finally {
-      if (live.current) setRefreshing(false);
+      if (live.current && refreshRequest.current === request) {
+        refreshRequest.current = undefined;
+        setRefreshing(false);
+      }
     }
   };
-  useEffect(() => { live.current = true; return () => { live.current = false; epoch.current++; }; }, []);
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; refreshRequest.current?.abort(); epoch.current++; };
+  }, []);
   useEffect(() => { if (!active) return; void list().catch(fault => { if (live.current) setError(errorText(fault)); }); if (owner.current) void read().catch(fault => { if (live.current) setError(errorText(fault)); }); }, [active]);
   useEffect(() => {
     const refreshDefault = () => { if (owner.current || dirtyPurpose.current || goal) return; void readUsageContextSettings().then(value => { if (live.current && !owner.current && !dirtyPurpose.current) setPurpose(value.context); }).catch(fault => { if (live.current) setNotice(`默认用途暂不可读取，可直接讨论或明确本次背景。${errorText(fault)}`); }); };
@@ -168,15 +211,30 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
 
   useEffect(() => {
     if (!active || !detail?.discussion.id) return; const discussionId = detail.discussion.id, ticket = ++epoch.current, controller = new AbortController();
+    let observedRunning = false;
+    const isCurrent = () => live.current && !controller.signal.aborted && owner.current === discussionId && ticket === epoch.current;
+    const onStreamFailure = (fault?: unknown) => {
+      if (!isCurrent()) return;
+      const refresh = refreshReconnect.current;
+      const errorSuffix = fault === undefined ? '' : errorText(fault);
+      if (refresh?.discussionId === discussionId) {
+        if (ticket <= refresh.afterEpoch) return;
+        refreshReconnect.current = undefined;
+        setRefreshFeedback({ role: 'alert', text: `已读取最新讨论记录，但实时回复连接尚未恢复；未重发消息，可稍后再试「刷新讨论记录」。${errorSuffix}` });
+      } else if (fault !== undefined || observedRunning) {
+        setRefreshFeedback({ role: 'alert', text: `实时连接未能核对，可刷新讨论记录；没有重发消息。${errorSuffix}` });
+      }
+    };
     void api.watchStrategyDiscussion(discussionId, event => {
-      if (!live.current || controller.signal.aborted || owner.current !== discussionId || ticket !== epoch.current) return;
+      if (!isCurrent()) return;
       const previousSnapshot = presentedSnapshot.current;
       if (event.type === 'snapshot') {
+        observedRunning = event.snapshot.status === 'running';
         presentedSnapshot.current = event.snapshot;
-        if (refreshReconnect.current?.discussionId === discussionId) {
+        const refresh = refreshReconnect.current;
+        if (refresh?.discussionId === discussionId && ticket > refresh.afterEpoch) {
           refreshReconnect.current = undefined;
-          setError('');
-          setNotice(event.snapshot.status === 'running' ? '已刷新讨论记录，并接回本轮实时回复。' : '已刷新讨论记录，消息与状态已同步。');
+          setRefreshFeedback({ role: 'status', text: event.snapshot.status === 'running' ? '已刷新讨论记录，并接回本轮实时回复。' : '已刷新讨论记录，消息与状态已同步。' });
         }
       }
       setStreaming(old => projectDiscussionStreaming(old, event, previousSnapshot));
@@ -192,20 +250,11 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
       }
       if (event.type === 'native' && event.event.type === 'tool_execution_start') setActivity(`正在使用 ${event.event.toolName || '已获准工具'}`);
       if (event.type === 'native' && event.event.type === 'tool_execution_end') setActivity('');
-      if (event.type === 'run.settled') { setStreaming(''); setActivity(''); if (event.outcome === 'failed') setError(event.error || '本轮讨论未完成，已保存的记录保留。'); void read(discussionId).then(() => onGoalsChanged()).catch(fault => { if (live.current) setError(errorText(fault)); }); void list().catch(() => {}); }
-    }, controller.signal).catch(fault => {
-      if (!controller.signal.aborted && live.current && owner.current === discussionId) {
-        const afterRefresh = refreshReconnect.current?.discussionId === discussionId;
-        refreshReconnect.current = undefined;
-        setNotice('');
-        setError(afterRefresh
-          ? `已读取最新讨论记录，但实时回复连接尚未恢复；未重发消息，可稍后再试「刷新讨论记录」。${errorText(fault)}`
-          : `实时连接未能核对，可刷新讨论记录；没有重发消息。${errorText(fault)}`);
-      }
-    });
+      if (event.type === 'run.settled') { observedRunning = false; setStreaming(''); setActivity(''); if (event.outcome === 'failed') setError(event.error || '本轮讨论未完成，已保存的记录保留。'); void read(discussionId).then(() => onGoalsChanged()).catch(fault => { if (live.current) setError(errorText(fault)); }); void list().catch(() => {}); }
+    }, controller.signal).then(() => onStreamFailure(), onStreamFailure);
     return () => { controller.abort(); ++epoch.current; };
   }, [active, detail?.discussion.id, connection]);
-  const locked = busy || Boolean(detail?.busy) || Boolean(pending);
+  const locked = busy || refreshing || Boolean(detail?.busy) || Boolean(pending);
   const ensure = async (): Promise<StrategyDiscussion> => {
     if (owner.current) return detail?.discussion.id === owner.current ? detail.discussion : (await api.readStrategyDiscussion(owner.current)).discussion;
     if (!journal.value) throw new Error(journal.error);
@@ -267,7 +316,13 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
       const result = await api.readStrategyDiscussion(discussionId);
       if (original.kind === 'update') { const input = original.input, actual = result.discussion; const matches = actual.revision === input.expectedRevision + 1 && Object.entries(input).filter(([key]) => key !== 'expectedRevision').every(([key, value]) => same((actual as unknown as Record<string, unknown>)[key] ?? null, value)); if (!matches) throw new Error('原背景更新尚不能按内容与版本核对，选择保持；未派发模型。'); }
       if (original.kind === 'message' && !api.canSettleDiscussionMessage(result, original.input)) { apply(result); throw new Error('尚未核对到原话已写入原生会话；输入与原编号保留，未自动重发。'); }
-      journal.value!.settle(original); setPending(undefined); apply(result, original.kind === 'create'); if (original.kind === 'message') { saveDraft('', discussionId); saveAttachmentDraft(discussionId,[]); sessionStorage.removeItem(replacementKey(discussionId)); setReplacementRequestId(undefined); setText(''); } setConnection(value => value + 1); setNotice('已核对原讨论请求，历史与当前状态已重读。'); await list();
+      if (original.kind === 'message') {
+        apply(result);
+      } else {
+        journal.value!.settle(original); setPending(undefined);
+        apply(result, original.kind === 'create');
+      }
+      setConnection(value => value + 1); setNotice('已核对原讨论请求，历史与当前状态已重读。'); await list();
     } catch (fault) { setError(errorText(fault)); } finally { setBusy(false); }
   };
   const prepareNewRequest = () => {
@@ -275,12 +330,15 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
     restoreMessageContext(pending.discussionId,pending.input);saveDraft(pending.input.text, pending.discussionId); sessionStorage.setItem(replacementKey(pending.discussionId), pending.input.requestId); setReplacementRequestId(pending.input.requestId); setText(pending.input.text); journal.value?.settle(pending); setPending(undefined); setNotice('原请求已停止或失败，且未核对到原生原话；输入已保留。下次明确发送会使用新请求编号；不会自动重发。');
   };
   const choose = async (discussionId: string) => {
-    if (busy || pending) return; refreshReconnect.current = undefined; setSentMapRequest(undefined);setWorkspaceEpoch(n=>n+1);setMapContext(undefined);setMapTemplate(undefined);saveDraft(text, owner.current); setError(''); setNotice(''); setText(readDraft(discussionId || undefined));setAttachmentIds(discussionId?readAttachmentDraft(discussionId):[]); setStreaming(''); setFocusedSource(undefined); setDetail(undefined); presentedSnapshot.current = undefined; owner.current = discussionId || undefined; setReplacementRequestId(readReplacement(discussionId));
+    if (busy || pending) return;
+    ++readSeq.current;
+    cancelRefresh();
+    setSentMapRequest(undefined);setWorkspaceEpoch(n=>n+1);setMapContext(undefined);setMapTemplate(undefined);saveDraft(text, owner.current); setError(''); setNotice(''); setText(readDraft(discussionId || undefined));setAttachmentIds(discussionId?readAttachmentDraft(discussionId):[]); setStreaming(''); setFocusedSource(undefined); setDetail(undefined); presentedSnapshot.current = undefined; owner.current = discussionId || undefined; setReplacementRequestId(readReplacement(discussionId));
     if (!discussionId) { setDetail(undefined); setGoal(undefined); setMethods([]); setSources([]); setSourceScope(undefined); setAvailableSources(undefined); setProjectId(''); dirtyPurpose.current = false; setConfigurationId(selectedConfigurationId || ''); setPurpose((await readUsageContextSettings()).context); return; }
     setBusy(true); try { apply(await api.readStrategyDiscussion(discussionId), true); } catch (fault) { setError(errorText(fault)); } finally { setBusy(false); }
   };
   const sourceList = async () => { if (!projectId || locked) return; setBusy(true); setError(''); try { const discussion = await update(await ensure()); setAvailableSources((await api.readStrategyDiscussionSources(discussion.id, projectId)).sources); } catch (fault) { if (fault instanceof api.StrategyDiscussionRequestError && !fault.uncertain) { const original = journal.value?.read(); if (original) journal.value?.settle(original); setPending(undefined); } setError(errorText(fault)); } finally { setBusy(false); } };
-  const control = async (action: 'stop' | 'close') => { if (!detail || busy) return; setBusy(true); try { if (action === 'stop') await api.stopStrategyDiscussion(detail.discussion.id, detail.discussion.lastRun?.id); else await api.closeStrategyDiscussion(detail.discussion.id); await read(); setNotice(action === 'stop' ? '已请求停止，已保存记录保留；实际收尾以当前状态为准。' : '会话资源已关闭，原生历史保留，可从原讨论续接。'); } catch (fault) { setError(errorText(fault)); } finally { setBusy(false); } };
+  const control = async (action: 'stop' | 'close') => { if (!detail || busy) return; cancelRefresh(); setBusy(true); try { if (action === 'stop') await api.stopStrategyDiscussion(detail.discussion.id, detail.discussion.lastRun?.id); else await api.closeStrategyDiscussion(detail.discussion.id); await read(); setNotice(action === 'stop' ? '已请求停止，已保存记录保留；实际收尾以当前状态为准。' : '会话资源已关闭，原生历史保留，可从原讨论续接。'); } catch (fault) { setError(errorText(fault)); } finally { setBusy(false); } };
   useEffect(() => { if (!focusRequest) return; if (busy || pending) { setNotice('当前请求尚待核对，原讨论与定位保持；处理后可再从准确来源打开。'); return; } void choose(focusRequest.source.id).then(() => { if (owner.current === focusRequest.source.id) setFocusedSource(focusRequest.source); }).catch(fault => setError(errorText(fault))); }, [focusRequest?.id]);
   const [mapImportOpen,setMapImportOpen]=useState(false);
   const dispatchMapImport = async (opts: { prompt: string; importSourceIds: string[]; selectedImportPages?: Record<string, number[]>; importMode?: 'review-draft'; supersedesDraftEntryId?: string; workingMapDraft?: StrategyMapDraft; mapTemplate?: keyof typeof mapTemplates; mapRef?: StrategyMapRef }) => {
@@ -318,18 +376,20 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
     } finally { if (live.current) setBusy(false); }
   };
   const messages = detail?.snapshot.messages.filter((message): message is NativeMessage => message.role === 'user' || message.role === 'assistant') || [];
-  return <section className="sg-panel strategy-discussion" aria-labelledby={`${id}-title`}><div className="sg-row-between"><h2 id={`${id}-title`}>战略选择 Agent</h2><div className="sg-row"><label>原讨论 <select className="sg-select" disabled={busy || Boolean(pending)} value={detail?.discussion.id || ''} onChange={event => { void choose(event.target.value).catch(fault => setError(errorText(fault))); }}><option value="">新的战略讨论</option>{directory.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>{detail && <><button type="button" className="secondary-button" disabled={refreshing} onClick={() => { void refreshDiscussion(); }}>刷新讨论记录</button><span className="sg-muted">读取当前讨论的消息和状态，并尝试接回实时回复</span></>}</div></div><p className="sg-muted">说说你正在考虑的战略问题。可以从比较两个方向开始。</p>
+  return <section className="sg-panel strategy-discussion" aria-labelledby={`${id}-title`}><div className="sg-row-between"><h2 id={`${id}-title`}>战略选择 Agent</h2><div className="sg-row"><label>原讨论 <select className="sg-select" disabled={busy || Boolean(pending)} value={detail?.discussion.id || ''} onChange={event => { void choose(event.target.value).catch(fault => setError(errorText(fault))); }}><option value="">新的战略讨论</option>{directory.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>{detail && <><button type="button" className="secondary-button" disabled={busy || refreshing} onClick={() => { void refreshDiscussion(); }}>刷新讨论记录</button><span className="sg-muted">读取当前讨论的消息和状态，并尝试接回实时回复</span></>}</div></div>
+    {refreshFeedback && <p className={refreshFeedback.role === 'alert' ? 'case-error' : 'case-notice'} role={refreshFeedback.role}>{refreshFeedback.text}</p>}
+    <p className="sg-muted">说说你正在考虑的战略问题。可以从比较两个方向开始。</p>
     {onStage && <StrategyWorkbench key={workspaceEpoch} detail={detail} active={active} stage={stage} scopes={scopes} sentRequest={sentMapRequest} onReconciled={()=>setSentMapRequest(undefined)} onSelectContext={v=>{setMapContext({mapId:v.mapId,version:v.version});setMapTemplate(undefined);}} onStage={onStage} onGoalsChanged={onGoalsChanged} ensureDiscussionId={async()=>(await ensure()).id} importDialogOpen={mapImportOpen} onImportDialogOpenChange={setMapImportOpen} onRefreshDiscussion={async()=>{await read().catch(()=>{});}} onExtractMapImport={async req=>{await dispatchMapImport({prompt:req.prompt,importSourceIds:[req.sourceId],selectedImportPages:{[req.sourceId]:req.selectedPages},importMode:'review-draft',mapTemplate:req.template});}} onRereadMap={req=>{const refNote=req.baseRef?`（关联地图 v${req.baseRef.version}，mapId=${req.baseRef.mapId}，expectedVersion=${req.baseRef.version}）`:'（新建独立待核草稿，不要关联已有地图的 mapId）';void dispatchMapImport({prompt:`请严格以随本轮传入的 workingMapDraft 为用户当前已编辑草稿${refNote}，仅在授权原稿与选页范围内调用 read-import-source 局部重读：${req.prompt}。必须保留用户未提及的全部手工修改，并调用 propose-map-draft 返回修订后的待核草稿（不要直接调用 save-map）。`,importSourceIds:req.importSourceIds,selectedImportPages:req.selectedImportPages,importMode:'review-draft',supersedesDraftEntryId:req.supersedesDraftEntryId,workingMapDraft:req.currentDraft,mapRef:req.baseRef}).catch(()=>{});}} onDiscuss={(ref,edgeId,source)=>{
       setMapContext(ref?{mapId:ref.mapId,version:ref.version,...(edgeId?{edgeId}:{})}:undefined);
       setFocusedSource(source);onStage('direction');requestAnimationFrame(()=>document.getElementById(id+'-text')?.focus());
     }}/>}
     <div hidden={stage!=='direction'}>
-    <details className="wb-methods"><summary>提问示例</summary><div className="sg-row">{coCreationQuestions.map(([title,prompt])=><button key={title} type="button" className="text-button" disabled={locked} onClick={()=>{const next=text.trim()?text+'\n'+prompt:prompt;setText(next);saveDraft(next,owner.current);document.getElementById(id+'-text')?.focus();}}>{title}</button>)}</div></details>
+    <details className="wb-methods"><summary>提问示例</summary><p className="case-help">点选后加入输入框，可编辑后发送。</p><div className="sg-row">{coCreationQuestions.map(([title,prompt])=><button key={title} type="button" className="text-button" disabled={locked} onClick={()=>{const next=text.trim()?text+'\n'+prompt:prompt;setText(next);saveDraft(next,owner.current);document.getElementById(id+'-text')?.focus();}}>{title}</button>)}</div></details>
     <ConversationDrawer title="战略选择 Agent" className="workspace-strategy-conversation">
     {focusedSource && <StrategyDiscussionSourceView source={focusedSource} />}{(messages.length > 0 || Boolean(streaming)) && <StrategyDiscussionTranscript messages={messages} streaming={streaming} discussionId={detail?.discussion.id} references={detail?.attachmentReferences}/>}{detail?.busy && <p className="sg-muted" role="status">{activity || 'Agent 正在讨论与核对…'}</p>}
     {(selectedGoal || goal || mapContext) && <div className="sg-row strategy-discussion-context-bar">{selectedGoal && <span className="sg-row"><span className="sg-muted">当前浏览目标：{selectedGoal.title} · v{selectedGoal.version}</span><button type="button" className="text-button" disabled={locked} onClick={() => { setGoal({ goalId: selectedGoal.goalId, version: selectedGoal.version }); if (!detail && !dirtyPurpose.current) setPurpose(goalPurpose(selectedGoal)); setNotice('已选择准确目标；原目标与历史未改写，本轮范围将随下次消息保存。'); }}>围绕此目标讨论</button></span>}{goal && <span className="sg-badge">已绑定目标：目标准确版 v{goal.version}</span>}{mapContext && <span className="sg-row"><span>围绕地图 v{mapContext.version}{mapContext.edgeId?' · 连线 '+mapContext.edgeId:''}</span><button type="button" className="text-button" onClick={()=>setMapContext(undefined)}>回到当前版本</button></span>}</div>}
     <form className="strategy-discussion-composer" onSubmit={event => { event.preventDefault(); void send(); }}><label className="sr-only" htmlFor={`${id}-text`}>战略讨论问题</label><textarea id={`${id}-text`} rows={3} value={text} disabled={busy || Boolean(pending)} onChange={event => { setText(event.target.value); try { saveDraft(event.target.value, owner.current); } catch { setError('当前草稿暂未保存到浏览器，请保留输入后核对存储权限。'); } }} placeholder="下季度该优先拓新客，还是提高复购？" />{attachmentIds.length>chosenAttachments.length && detail && <p role="status">所选资料中有来源当前不可读。<button className="text-button" type="button" onClick={()=>saveAttachmentDraft(detail.discussion.id,chosenAttachments.map(s=>s.id))}>从本轮移除失读资料</button></p>}{chosenAttachments.length>0&&<div className="sg-row" aria-label="本轮所选资料">{chosenAttachments.map(s=><span key={s.id} className="sg-badge" title={s.sha256}>{s.title} · 待发送<button type="button" className="text-button" aria-label={'移除 '+s.title} disabled={locked} onClick={()=>void removeAttachment(s.id)}>×</button></span>)}</div>}<div className="sg-row-between"><div className="sg-row"><StrategyAttachmentPicker locked={locked} projectId={projectId} onList={async()=>((await projectAttachmentLibrary(projectId)).sources).filter(s=>!isDiscussionSourceExcluded({sourceScope,projectAttachmentLineages:detail?.discussion.projectAttachmentLineages},s))} onAdd={attach}/>{onStage&&<button type="button" className="secondary-button" disabled={locked} onClick={()=>setMapImportOpen(true)}>导入战略图</button>}</div>{detail?.busy ? <button type="button" className="secondary-button" disabled={busy} onClick={() => { void control('stop'); }}>停止本轮讨论</button> : <button type="submit" className="primary-button" disabled={(!text.trim()&&!chosenAttachments.length) || locked}>发送讨论</button>}</div></form>
-    {pending && <StrategyDiscussionRecoveryActions pending={pending} detail={detail} busy={busy} onRecover={() => { void recover(); }} onPrepare={prepareNewRequest} />}{notice && <p className="case-notice" role="status">{notice}</p>}{error && <p className="case-error" role="alert">{error}</p>}
+    {pending && <StrategyDiscussionRecoveryActions pending={pending} detail={detail} busy={busy || refreshing} onRecover={() => { void recover(); }} onPrepare={prepareNewRequest} />}{notice && <p className="case-notice" role="status">{notice}</p>}{error && <p className="case-error" role="alert">{error}</p>}
     </ConversationDrawer>
     <details className="strategy-discussion-options"><summary>讨论设置（选填）{purpose ? ` · 已设用途：${usageKindLabels[purpose.kind]}` : ''}</summary>
       <section className="strategy-settings-group"><h3 id={`${id}-purpose-title`}>讨论用途（选填）</h3><p className="case-help">说明组织、部门／业务模块、个人和可选背景，供当前讨论的后续回复参考，可直接留空。只更新本次讨论的后续背景，不修改全局默认、旧目标或已确认方案，不增加资料权限。</p><UsageContextFields id={`${id}-usage`} value={purpose || null} disabled={locked} onChange={value => { dirtyPurpose.current = true; setPurpose(value); }} /></section>
