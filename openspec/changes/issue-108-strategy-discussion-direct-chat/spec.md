@@ -17,17 +17,17 @@
 
 - **本轮任务目标**：交付经用户确认的「战略选择 → 战略共创」对话区重排规格与可点击 UI Demo（阶段一），并在获得用户确认后完成 TDD 实现、隔离合成验证与分支移交（阶段二）。
 - **预期交付结果**：
-  - 阶段一（当前阶段）：`openspec/changes/issue-108-strategy-discussion-direct-chat/spec.md` 与离线单文件可点击 Demo `openspec/changes/issue-108-strategy-discussion-direct-chat/ui-demo/index.html`，在 Issue #108 提交「设计待审」回执。
-  - 阶段二（待用户确认后启动）：`StrategyDiscussionPanel.tsx` 及相关样式、回归测试更新，通过 `npm run check` 与真实浏览器合成点验，在 Issue #108 提交「实现交付」回执交回 Codex。
+  - 阶段一（已完成并获用户确认）：`openspec/changes/issue-108-strategy-discussion-direct-chat/spec.md` 与离线单文件可点击 Demo `openspec/changes/issue-108-strategy-discussion-direct-chat/ui-demo/index.html`（设计候选提交 `7c281736e07fdace692c3912c1775c0c0ae1e648`，[设计待审回执](https://github.com/gadfly-hbo/OptraCall/issues/108#issuecomment-7060445860)；2026-11-21 用户明确确认「spec和UI demo通过审核，进入开发」）。
+  - 阶段二（当前完成）：`StrategyDiscussionPanel.tsx` 及 `strategy-goals.css`、回归测试与浏览器端到端验证更新，详见 [工程验收与结果记录](result.md)。
 
 | 阶段 | 任务项 | 完成条件 / 对应验收 | 当前状态 |
 | --- | --- | --- | --- |
 | 阶段一：设计与可点击 Demo | 1.1 核对基线 `origin/main` 与现有 `StrategyDiscussionPanel` 契约并领取 `#108` | 核实基线 `8f6bec2e977e783d8075c0425db3c9598c790d37`，创建独立分支并在 `#108` 留言领取回读（[领取评论](https://github.com/gadfly-hbo/OptraCall/issues/108#issuecomment-7060261600)） | [x] 已完成 |
 | 阶段一：设计与可点击 Demo | 1.2 编写变更规格 `spec.md`（含验收条款、前后差异、IN01–IN07 与四原则前置检查） | 覆盖 `#108` 全部五项验收要求，明确不改动产品源码/测试/依赖的阶段一边界 | [x] 已完成 |
 | 阶段一：设计与可点击 Demo | 1.3 构建离线可点击 Demo `ui-demo/index.html` 并用无头 Chromium 点验 | 从现有页面和组件样式出发，使用合成资料演示新讨论、已有讨论、提问示例、讨论设置、刷新成功／断连／读取失败以及宽屏、窄屏（390px）和深色模式 | [x] 已完成 |
-| 阶段一：设计与可点击 Demo | 1.4 推送设计分支并在 `#108` 提交「设计待审」回执 | 远端分支可读回精确 SHA，Issue `#108` 留下含精确 SHA、路径、演示入口与复现命令的「设计待审」回执 | [x] 已完成 |
-| 阶段二：确认后实施及移交 | 2.1 取得用户对本版 Demo 与规格的明确确认后，按 RED→GREEN TDD 实施正式界面 | 覆盖 SD01–SD03 全部交互与状态，仅调整用途／格式／方法不触发 Agent，刷新期间无额外发送 | [ ] 待用户确认后启动 |
-| 阶段二：确认后实施及移交 | 2.2 运行 `npm run check` 及隔离 Host + Chromium 回归并在 `#108` 提交「实现交付」回执 | 全部适用检查与浏览器回归通过，回执完整 SHA 与回退说明并交回 Codex | [ ] 待用户确认后启动 |
+| 阶段一：设计与可点击 Demo | 1.4 推送设计分支并在 `#108` 提交「设计待审」回执 | 远端分支可读回精确 SHA，Issue `#108` 留下含精确 SHA、路径、演示入口与复现命令的「设计待审」回执（`7c281736e07fdace692c3912c1775c0c0ae1e648`） | [x] 已完成 |
+| 阶段二：确认后实施及移交 | 2.1 取得用户对本版 Demo 与规格的明确确认后，按 RED→GREEN TDD 实施正式界面 | 覆盖 SD01–SD03 全部交互与状态，仅调整用途／格式／方法不触发 Agent，刷新期间无额外发送 | [x] 已完成 |
+| 阶段二：确认后实施及移交 | 2.2 运行适用检查及隔离 Host + Chromium 回归并在 `#108` 提交「实现交付」回执 | 全部适用检查与浏览器回归通过，回执完整 SHA 与回退说明并交回 Codex | [x] 已完成 |
 
 ---
 
