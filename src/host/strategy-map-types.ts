@@ -60,6 +60,7 @@ export type StrategyMapAuthor = 'user'|'agent'|'import';
 export interface StrategyMapVersion extends StrategyMapDraft, StrategyMapRef {
   discussionId:string; contentSha256:string; createdAt:string; author:StrategyMapAuthor; reason:string;
   requestId?:string; source?:GoalDiscussionSourceRef; replySource?:GoalDiscussionSourceRef; citations:StrategyAttachmentCitation[]; operationId:string;
+  importDraftEntryId?:string; importDraftGroupId?:string;
 }
 export function mapDraft(version:StrategyMapVersion):StrategyMapDraft {
   const {title,template,choice,excluded,assumptions,unknowns,nodes,edges,scenarioModel,importSource,importSources}=version;

@@ -24,7 +24,7 @@ const draftSchema=z.strictObject({title:label,template:z.enum(['table','tree','b
   nodes:z.array(node).max(1000),edges:z.array(edge).max(3000),importSource:importSource.optional(),importSources:z.array(multiImportSource).max(20).optional(),scenarioModel:z.unknown().optional()});
 const saveSchema=z.strictObject({operationId:uuid,mapId:uuid,expectedVersion:z.number().int().nonnegative(),reason:label,draft:draftSchema});
 const fault=(message:string,status=400):never=>{throw new StrategyDiscussionFault(message,status);};
-type Provenance=Pick<StrategyMapVersion,'source'> & Partial<Pick<StrategyMapVersion,'citations'|'requestId'>>;
+type Provenance=Pick<StrategyMapVersion,'source'> & Partial<Pick<StrategyMapVersion,'citations'|'requestId'|'importDraftEntryId'|'importDraftGroupId'>>;
 type Stored=StrategyMapVersion & {requestHash:string};
 function checked<T>(schema:z.ZodType<T>,value:unknown):T {
   const parsed=schema.safeParse(value);
@@ -138,7 +138,7 @@ export class StrategyMapStore {
     for(const citation of provenance.citations??[])if(!citations.some(c=>c.token===citation.token))citations.push(citation);
     for(const e of draft.edges)if(e.citationTokens?.some(t=>!citations.some(c=>c.token===t)))fault('strategy_map_citation_unavailable');
     const requestId=author==='agent'&&provenance.requestId?discussionId(provenance.requestId):undefined;
-    const version=expectedVersion+1,record={...(requestId&&{requestId}),...draft,discussionId:id,mapId,version,reason,operationId,requestHash,author,createdAt:new Date().toISOString(),citations,...((provenance.source??previous?.source)&&{source:provenance.source??previous?.source})};
+    const version=expectedVersion+1,record={...(requestId&&{requestId}),...draft,discussionId:id,mapId,version,reason,operationId,requestHash,author,createdAt:new Date().toISOString(),citations,...((provenance.source??previous?.source)&&{source:provenance.source??previous?.source}),...(provenance.importDraftEntryId&&{importDraftEntryId:provenance.importDraftEntryId}),...(provenance.importDraftGroupId&&{importDraftGroupId:provenance.importDraftGroupId})};
     const file=await safePath(this.owner(id),'maps/'+mapId+'/'+version+'.json',true);
     assertCurrent?.();
     await atomicJson(file,{...record,contentSha256:discussionHash(record)});

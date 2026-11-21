@@ -53,6 +53,7 @@ const errorMessages: Readonly<Record<string, string>> = {
   strategy_map_import_page_not_authorized: '所请求页码不在本轮勾选允许读取的页范围内。',
   strategy_map_import_draft_required: '当前处于原稿核对草稿阶段，请先生成待核草稿并由用户核对后一次保存。',
   strategy_map_import_draft_already_saved: '这份导入草稿已在另一标签页或窗口保存过，请刷新查看已保存版本，不会重复生成新版本。',
+  strategy_map_import_draft_superseded: '这份导入草稿已有更新的局部重读结果，旧标签页中的过期草稿未保存；已为你同步最新草稿，请核对后再保存。',
   strategy_map_import_draft_dismissed: '这份导入草稿已被放弃，不会再落盘保存。',
   strategy_map_import_draft_not_found: '未找到对应的待核导入草稿，请刷新讨论状态。',
   strategy_map_import_source_changed: '原文件指纹已变化，请重新核对原件。',

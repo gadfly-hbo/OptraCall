@@ -51,6 +51,7 @@ export function StrategyMapReviewPane({
   const [imageIndex, setImageIndex] = useState<number>(1);
   const [zoom, setZoom] = useState(1);
   const [preview, setPreview] = useState<MapImportPreviewResponse>();
+  const [loadedKey, setLoadedKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
@@ -58,7 +59,18 @@ export function StrategyMapReviewPane({
   const [mobilePane, setMobilePane] = useState<'source' | 'candidate'>('candidate');
   const [rereadText, setRereadText] = useState('');
   const [dupCandidates, setDupCandidates] = useState<DuplicateCandidatePair[] | null>(null);
+  const [locateSeq, setLocateSeq] = useState(0);
   const pendingImageSyncRef = useRef<{ sourceId: string; page: number; loc: StrategyMapNode['sourceLocation'] } | null>(null);
+  const activePreviewKey = `${discussionId}:${sourceId}:${page}:${imageIndex}`;
+
+  function focusNode(id: string) {
+    onSelectNode(id);
+    setLocateSeq(s => s + 1);
+  }
+  function focusEdge(id: string) {
+    onSelectEdge(id);
+    setLocateSeq(s => s + 1);
+  }
 
   // Sync active sourceId if sources list changed (e.g. new draft arrived)
   useEffect(() => {
@@ -73,7 +85,7 @@ export function StrategyMapReviewPane({
     }
   }, [sources.map(s => s.sourceId).join(',')]);
 
-  // Auto-sync left source/page/same-sheet embedded image ONLY when user selects a node or edge
+  // Auto-sync left source/page/same-sheet embedded image when user selects or re-clicks a node or edge
   useEffect(() => {
     const node = draft.nodes.find(n => n.id === selectedNodeId);
     const edge = draft.edges.find(e => e.id === selectedEdgeId);
@@ -109,7 +121,7 @@ export function StrategyMapReviewPane({
     } else if (targetSourceId) {
       pendingImageSyncRef.current = { sourceId: targetSourceId, page: targetPage, loc };
     }
-  }, [selectedNodeId, selectedEdgeId]);
+  }, [selectedNodeId, selectedEdgeId, locateSeq]);
 
   // Complete deferred same-sheet image switch once target page preview loads (never overrides manual switches)
   useEffect(() => {
@@ -126,11 +138,12 @@ export function StrategyMapReviewPane({
   useEffect(() => {
     if (!sourceId) return;
     const controller = new AbortController();
+    const requestKey = `${discussionId}:${sourceId}:${page}:${imageIndex}`;
     setLoading(true);
     setError('');
     readMapImportPreview(discussionId, sourceId, page, true, controller.signal, imageIndex > 1 ? { imageIndex } : undefined)
-      .then(res => { if (!controller.signal.aborted) setPreview(res); })
-      .catch(e => { if (!controller.signal.aborted) { setPreview(undefined); setError(e instanceof Error ? e.message : '原稿预览暂不可用。'); } })
+      .then(res => { if (!controller.signal.aborted) { setPreview(res); setLoadedKey(requestKey); } })
+      .catch(e => { if (!controller.signal.aborted) { setPreview(undefined); setLoadedKey(''); setError(e instanceof Error ? e.message : '原稿预览暂不可用。'); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [discussionId, sourceId, page, imageIndex]);
@@ -348,9 +361,9 @@ export function StrategyMapReviewPane({
           )}
 
           <div className="map-source-canvas">
-            {loading && <p role="status" className="sg-muted">正在读取原稿预览…</p>}
+            {(loading || (preview && loadedKey !== activePreviewKey)) && <p role="status" className="sg-muted">正在读取原稿预览…</p>}
             {error && <p role="alert" className="case-error">{error}</p>}
-            {!loading && !error && preview && (
+            {!loading && !error && preview && loadedKey === activePreviewKey && (
               preview.image.available && preview.image.base64 ? (
                 <div className="map-source-img-wrap" style={{ transform: `scale(${zoom})` }}>
                   <img
@@ -496,7 +509,7 @@ export function StrategyMapReviewPane({
                     <tr
                       key={n.id}
                       className={`${selectedNode?.id === n.id ? 'map-row-selected' : ''} ${n.reviewState === 'needs-review' ? 'map-row-review' : ''}`}
-                      onClick={() => onSelectNode(n.id)}
+                      onClick={() => focusNode(n.id)}
                     >
                       <td><strong>{n.id} · {n.title}</strong></td>
                       <td>{nodeKindLabels[n.kind]}</td>
@@ -517,7 +530,7 @@ export function StrategyMapReviewPane({
                   <li
                     key={e.id}
                     className={`${selectedEdge?.id === e.id ? 'map-row-selected' : ''} ${e.reviewState === 'needs-review' ? 'map-row-review' : ''}`}
-                    onClick={() => onSelectEdge(e.id)}
+                    onClick={() => focusEdge(e.id)}
                   >
                     <span><strong>{e.from} → {e.to}</strong> · {mapEdgeKinds[e.kind]}</span>
                     <small>{e.sourceLocation?.label ?? ''} · {e.reviewState === 'needs-review' ? '待核' : e.reviewState === 'confirmed' ? '已确认' : '清楚'}</small>

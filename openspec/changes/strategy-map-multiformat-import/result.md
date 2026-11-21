@@ -144,3 +144,39 @@
   2. 全仓 433 个测试文件全量 CI（由 Codex 在 PR CI / Mac mini 执行）；
   3. macOS 本机 LibreOffice + `pypdfium2` 整页渲染阳性对照（云端 Linux VM 未安装 `soffice`/`pdftoppm`）；
   4. Codex 第三轮非作者复核、最新 `main` 集成、PR/CI、获授权合并与 Mac mini / MacBook 服务切换。
+
+---
+
+## 8. 第三轮复核退回记录与逐项修复复验证据（对应 Codex 回执 `issuecomment-7060114706`）
+
+### 8.1 保留第三轮复核 FAIL 事实
+- **第三轮候选（`11f171aae8efe3dde149f9b6ea7dd7d50c0307ce`）复核结果：FAIL（退回返工）**。Codex 于 [issuecomment-7060114706](https://github.com/gadfly-hbo/OptraCall/issues/106#issuecomment-7060114706) 确认 Mac mini 隔离环境构建、`check:agent-sessions`、245/245 专项回归、`npm audit`、macOS 本机 LibreOffice+`pypdfium2` 4/4 页渲染送图、真实 Apache POI `smartart-simple.pptx` 3 子节点定位与无 `drawing.xml` 降级、省略 `selectedPages` 回填、仅 `workingMapDraft` 撤权、新建草稿重读不绑旧图、单份草稿顶层字段与 `9%→15%` 保留、A/B 放弃持久化、双标签 201/409 单次保存锁及红/蓝图热点隔离与反向点选均已实测通过；同时检出 **5 项剩余问题**，保持 Issue #106 开放，未进入远端 PR/CI、合并与双端服务切换。本轮与前两轮（`9794c23`、`d739f67`）三份 FAIL 事实完整保留，不覆盖或改写。
+
+### 8.2 针对 Codex 第三轮 5 项剩余问题的逐项修复与复验证据
+
+| 第三轮 Codex 编号 | 修复内容与修改路径 | 可重复复验证据 |
+| --- | --- | --- |
+| **1. 同来源显式传入 `selectedPages` 扩大页范围上限收口** | `src/host/strategy-discussion-host.ts`：新增 `mergeFixedImportSources()` 并加固 `verifyDraftImportSources()`、`send()` 与 `saveMapVersion()`，无论请求方是否显式提供非空 `selectedImportPages` / `workingMapDraft.importSources[].selectedPages` / 保存载荷 `draft.importSources[].selectedPages`，Host 均以原草稿或固定已保存地图版本的 per-source `selectedPages` 为不可逾越上限：允许缩小（如 `[2, 4] → [4]`，且缩页后读第 2 页仍 `403`），任何扩大尝试（如 `[2, 4] → [1, 2, 4]` 或修订 `B v2` 时 `[1, 4]`）均在派发/写盘前直接 `403 strategy_map_import_page_not_authorized`（0 写盘、0 Provider 请求）。同时在 `readMapImportDrafts()` 加载已保存底图的 `importSources` 合并为 `previousSources`，确保缩小页码局部重读多页已保存地图后刷新讨论列表不误报 403。 | [`tests/strategy-map-import-host.test.ts`](../../../tests/strategy-map-import-host.test.ts)（`Round-3 Items 1, 2 & 5`）：**PASS**（`[2,4] → [1,2,4]` 扩大 `selectedImportPages` / `workingMapDraft` / `POST /maps` 均返回 `403`、Provider 请求增量 **0**、落盘版本 **0**；缩小至 `[4]` 放行且读第 2 页被 `403` 阻断；修订 `B v2` 扩大至 `[1,4]` 亦返回 `403`） |
+| **2 & 3. 修订已保存地图（`B v1`）固定绑定原 `mapId` 且重读后保留手工标题** | 1) 后端（`src/agent/strategy-discussion.ts`、`src/agent/project-runtime.ts`、`src/host/strategy-discussion-host.ts`）：将当前轮次固定目标 `targetMapRef: { mapId, version }` 经 `providedContext.strategyDiscussion` 与工具上下文传给 `propose-map-draft`；从已保存 `B v1` 发起局部重读时，即使 Agent 省略可选 `mapId`/`expectedVersion`，Host 仍确定性将草稿绑定到 `B v1`（错传其他 `mapId` 或保存时改传不同 `mapId` 均 `409` 拒止），保存仅产生 `B v2` 绝不另建第二份 `v1`；独立新建导入草稿无 `targetMapRef`，保持不绑定旧图；2) 前端（`src/host/ui/StrategyMapPanel.tsx`）：在从编辑已保存 `B v1`（`prevGroupId === undefined && active.mapId === pendingDraft.mapId`）切入修订草稿时保留 `manualEditsRef.current` 并通过 `mergeRereadDraftWithManualEdits` 合并，不再调用 `resetManualState()` 清空人工标题。 | [`tests/strategy-map-import-host.test.ts`](../../../tests/strategy-map-import-host.test.ts)（`Round-3 Items 1, 2 & 5`：Agent 省略 `mapId`/`expectedVersion` 修订 `B v1` → 草稿绑定 `mapBId/1`、误建新 `v1` 被 `409` 拦截、正常保存生成 `mapBId v2`）+ 真实 Chrome 端到端验证（`B v1` 点「编辑地图」改标题「方案 B · v2 人工标题」→ 局部重读 Agent 省略 `mapId` 且返回旧标题 → 前端保留人工标题并一次保存为 `B v2`，同 `mapId` 共 2 版）：**PASS** |
+| **4. 多方案切换期间完成重读合并最新边与双方人工标题** | `src/host/ui/StrategyMapPanel.tsx`：`GroupDraftWorkState` 新增 `entryId?: string`，切离某草稿组时记录当前 `entryId`；切回该草稿组时，若 `savedGroup.entryId !== pendingDraft.entryId`（代表切走期间新重读结果已落回），强制用最新 `pendingDraft.draft` 与 `savedGroup.manualEdits` 合并（不再优先使用切离前缓存的旧 `savedGroup.edit`），从而同时保留 A/B 各自人工标题并合并最新 `S1 → G1 / supports`。 | 真实 Chrome 端到端验证（在 Provider 门控挂起 B 重读期间切到 A、确认 A 人工标题、释放门控等 B 完成重读后切回 B → B 同时保留「方案 B · 人工标题」/`tree`/`15%` 与最新连线 `S1 → G1 / 支持`，保存 `B v1` 后 A 仍保留「方案 A · 人工标题」）：**PASS** |
+| **5. 旧标签过期草稿保存/放弃 `409` 与崩溃落盘恢复无双 `v1`** | 1) **5A 过期草稿拦截**：`src/host/strategy-discussion-host.ts` 在 `saveMapVersion()`、`dismissMapImportDraft()` 与 `send()`（`supersedesDraftEntryId`）中核对 `group.latest.entryId === entryId`，旧标签持有已过期的 `entryB1` 点击保存或放弃时直接返回 `409 strategy_map_import_draft_superseded`（0 写盘，最新 `entryB2` 保持待核），`src/host/ui/strategy-map-import-client.ts` 与 `StrategyMapPanel.tsx` 展示明确中文提示并刷新至最新草稿；2) **5B 崩溃恢复**：`src/host/strategy-map-types.ts`、`src/host/strategy-map-store.ts` 将 `importDraftEntryId` 与 `importDraftGroupId` 随地图版本原子写入 `StrategyMapVersion`；`strategy-discussion-host.ts` 新增 `readSettledDraftsFromMaps()` 并在 `readMapImportDrafts()` 与 `findExistingDraftDisposition()` 中同时核对已保存地图元数据与 `map-import-draft-dispositions.json`——即使进程在 `maps.save` 后、写账本前崩溃，重启 Host 后草稿绝不重新弹出，新标签再保存必返回 `409 strategy_map_import_draft_already_saved`（全库仅存 1 份 `v1`，原 `operationId` 重试仍幂等）。 | [`tests/strategy-map-import-host.test.ts`](../../../tests/strategy-map-import-host.test.ts)（`Round-3 Items 1, 2 & 5`：过期 `entryB1` 保存/放弃均 `409 superseded` 且 `entryB2` 保持待核；保存 `entryB2` 后删除 `map-import-draft-dispositions.json` 并重启 Host → 待核列表为空、新标签再保存 `409 already_saved`、原 `operationId` 幂等返回原 `v1`、全库仅 1 份 `v1`）+ 真实 Chrome 双上下文验证（阻断 SSE 的旧 Tab 2 点击保存收到「已有更新的局部重读结果」且 0 写盘）：**PASS** |
+| **6. 浏览同工作表另一幅图后重点击当前已选条目单次跳回** | `src/host/ui/StrategyMapReviewPane.tsx`：新增 `locateSeq` 计数器与 `focusNode()`/`focusEdge()` 包装点击事件，并将 `[selectedNodeId, selectedEdgeId, locateSeq]` 作为原稿定位 effect 依赖——人工切到红图（`图 1`）并确认不回弹后，直接再次点击已选中的 `S1` 行即可 1 次跳回蓝图（`图 2`）；同时引入 `loadedKey` 守卫（`discussionId:sourceId:page:imageIndex`），确保切图瞬间绝不将旧图像素与新图热点框错位渲染一帧。 | 真实 Chrome 端到端验证（点 `S1` 切图 2 蓝图仅画 `S1` → 手动点 `图 1` 红图仅画 `G2` 且 250ms 不回弹 → 直接再点当前已选中的 `S1` 行 1 次跳回图 2 蓝图并仅画 `S1` → 反向点击红图 `G2` 框选中 `G2`）：**PASS** |
+
+### 8.3 第三轮返工实跑验证汇总（严格区分 PASS / FAIL / NOT_RUN）
+- **统一会话边界检查**（`npm run check:agent-sessions`）：**PASS**
+- **类型检查与产品前端构建**（`npm run build`）：**PASS**
+- **高危依赖审计**（`npm audit --audit-level=high`）：**PASS**（退出码 0；0 高危、0 严重；`package.json` / `package-lock.json` / `App.tsx` 均未变更）
+- **专项单测与全链路集成测试（含官方 Pi SDK `1.4.0` + 回环合成 Provider）**：
+  - `tests/strategy-map-import-parser.test.ts`：**9/9 PASS**
+  - `tests/strategy-map-review-helpers.test.ts`：**5/5 PASS**
+  - `tests/strategy-map-import-host.test.ts`：**9/9 PASS**（新增 `Round-3 Items 1, 2 & 5` 全链路单测覆盖扩大选页 403、缩页放行、过期 `entryId` 409 superseded、删账本重启崩溃恢复、省略 `mapId` 修订 `B v1 → B v2`）
+- **全量受影响战略、统一会话、Runtime 与 SDK 回归套件**（`node --test --test-concurrency=2 tests/*strategy*.test.ts tests/agent-session-boundary.test.ts tests/agent-session-execution.test.ts tests/agent-sessions.test.ts tests/project-runtime.test.ts tests/project-session-guards.test.ts tests/sdk-runtime.test.ts tests/sdk-sessions.test.ts tests/session-compatibility.test.ts`）：**246 项中 245 PASS / 0 FAIL / 1 SKIP**（唯一跳过项为 Linux 云主机无 macOS 受保护执行能力导致的既有 `PP01/02` 跳过，退出码 0，耗时 `266.9s`）。
+- **真实无头 Google Chrome + 隔离 Host（托管 `dist/`）+ 官方 Pi SDK `1.4.0` + 合成 Provider 端到端验证**：**连续 2 次 PASS（0 pageerrors）**。完整覆盖：同工作表红/蓝双图隔离 + 手动浏览红图不回弹 + 直接再点已选中 `S1` 1 次跳回蓝图 + 反向点红图 `G2`；门控重读期间 A↔B 切换合并最新 `S1 → G1 / 支持` 且保留 A/B 各自人工标题；阻断 SSE 的旧 Tab 2 点击保存返回 `409 superseded` 提示且 0 写盘；保存 `B v1`、放弃 `A`；打开已保存 `B v1` 改标题后局部重读（Agent 省略 `mapId`）保留人工标题并保存为 `B v2`（同 `mapId`）；多来源同页隔离与手动切来源不回弹；390px 窄屏深色零溢出。同步更新仓库内 [`tests/browser-strategy-map-import.mjs`](../../../tests/browser-strategy-map-import.mjs)。
+- **本轮真实测试中额外拦截并修复的 2 项边界问题**：
+  1. `readMapImportDrafts()` 在缩小选页局部重读多页已保存地图（如 `B v1 [2, 4]` 缩页 `[4]`）时需合并已保存底图的 `importSources` 上限，否则刷新讨论详情会误报 `403 strategy_map_import_page_not_authorized`；已修复并由 `Round-3 Items 1, 2 & 5` 验证通过。
+  2. `StrategyMapReviewPane.tsx` 切换同工作表嵌入图时新增 `loadedKey` 匹配守卫，且 `StrategyWorkbench.tsx` 的 `dismissPendingDraft` 改为先完成 `onRefreshDiscussion()` 再展示「已放弃」提示，消除切图与放弃瞬间的旧帧错位。
+- **仍未验证项（`NOT_RUN`）**：
+  1. 真实商业视觉大模型的首稿识图准确率（云端 VM 无商业视觉凭据与调用授权）；
+  2. 全仓 433 个测试文件全量 CI（由 Codex 在 PR CI / Mac mini 执行）；
+  3. macOS 本机 LibreOffice + `pypdfium2` 整页渲染阳性对照（云端 Linux VM 未安装 `soffice`/`pdftoppm`；Codex 已于第三轮在 Mac mini 实测通过 4/4 页）；
+  4. Codex 第四轮非作者复核、最新 `main` 集成、PR/CI、获授权合并与 Mac mini / MacBook 服务切换。

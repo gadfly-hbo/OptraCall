@@ -1625,3 +1625,304 @@ test('Round-2 Items 2, 4 & 5: standalone draft reread does not bind older saved 
   assert.equal(savedV2.mapId, oldMapId);
   assert.equal(savedV2.version, 2);
 });
+
+test('Round-3 Items 1, 2 & 5: per-source selectedPages upper bound rejects widening with 0 writes; Host binds B v1 even when Agent omits mapId; stale entry returns 409 superseded; crash-before-disposition recovers without duplicate v1', { timeout: 90_000 }, async t => {
+  const dataRoot = mkdtempSync(path.join(os.tmpdir(), 'optracall-r3-host-'));
+  const provider = await startToolProvider();
+  let host = await startTestHost({ dataRoot });
+  t.after(async () => {
+    await host.close();
+    await provider.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+  const api = async (route: string, method = 'GET', body?: unknown, status = 200) => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, `${method} ${route}: ${await r.clone().text()}`);
+    return r.json();
+  };
+
+  await api('/api/configuration', 'PUT', {
+    name: '三轮主机门禁验证模型',
+    provider: 'openai-compatible',
+    baseUrl: provider.baseUrl,
+    model: 'synthetic',
+    apiKey: 'synthetic-only',
+  });
+  const { discussion } = await api('/api/strategy/discussions', 'POST', { operationId: randomUUID(), title: '三轮选页与恢复验证' }, 201);
+  const base = `/api/strategy/discussions/${discussion.id}`;
+
+  const reg = await api(`${base}/map-imports`, 'POST', {
+    kind: 'upload',
+    fileName: '四页战略材料.pptx',
+    bytes: (await makeMemberOpsPptx()).toString('base64'),
+  });
+  const srcId = reg.source.sourceId as string;
+  const baseImportSrc = { sourceId: srcId, format: 'pptx' as const, fileName: '四页战略材料.pptx', sha256: reg.source.sha256, origin: 'upload' as const };
+
+  // Turn 1: Initial extract scoped to pages [2, 4] -> produces entryB1 (unknown, 9%)
+  let t1 = 0;
+  provider.setResponder(() => {
+    t1++;
+    if (t1 === 1) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-import-source', importSourceId: srcId, page: 4 } }] };
+    if (t1 === 2) {
+      return {
+        calls: [{
+          name: 'strategy_goals',
+          arguments: {
+            action: 'propose-map-draft',
+            reason: '首轮待核草稿 B1',
+            mapDraft: {
+              title: '方案 B · 初始草稿',
+              template: 'bsc',
+              choice: '初版',
+              nodes: [
+                { id: 'G1', kind: 'goal', title: '新客二购率', baseline: '9%', target: '18%', sourceLocation: { sourceId: srcId, page: 2, label: '第2页' } },
+                { id: 'S1', kind: 'strategy', title: '分层培育', sourceLocation: { sourceId: srcId, page: 4, label: '第4页' } },
+              ],
+              edges: [{ id: 'e1', from: 'G1', to: 'S1', kind: 'unknown', reviewState: 'needs-review', sourceLocation: { sourceId: srcId, page: 4, label: '第4页' } }],
+              importSources: [{ ...baseImportSrc, selectedPages: [2, 4] }],
+            },
+          },
+        }],
+      };
+    }
+    return { text: '首轮草稿已生成。' };
+  });
+  const d0 = await api(base);
+  const req1 = randomUUID();
+  await api(`${base}/messages`, 'POST', {
+    requestId: req1,
+    expectedRevision: d0.discussion.revision,
+    text: '提取第 2、4 页',
+    importSourceIds: [srcId],
+    selectedImportPages: { [srcId]: [2, 4] },
+    importMode: 'review-draft',
+  }, 202);
+  const done1 = await waitForRun(api, base, req1);
+  assert.equal(done1.discussion.lastRun.status, 'completed');
+  const entryB1 = done1.mapImportDrafts[0];
+  assert.deepEqual(entryB1.draft.importSources[0].selectedPages, [2, 4]);
+
+  // Item 1 NEGATIVE: Widening selectedImportPages [1, 2, 4] on reread of entryB1 -> 403 with 0 Provider calls & 0 writes!
+  const provCountBeforeWiden = provider.requests.length;
+  const revBeforeWiden = done1.discussion.revision;
+  await api(`${base}/messages`, 'POST', {
+    requestId: randomUUID(),
+    expectedRevision: revBeforeWiden,
+    text: '试图扩大到第 1 页',
+    importSourceIds: [srcId],
+    selectedImportPages: { [srcId]: [1, 2, 4] },
+    importMode: 'review-draft',
+    supersedesDraftEntryId: entryB1.entryId,
+    workingMapDraft: entryB1.draft,
+  }, 403);
+  // Item 1 NEGATIVE: Widening workingMapDraft.importSources[0].selectedPages to [1, 2, 4] -> 403!
+  await api(`${base}/messages`, 'POST', {
+    requestId: randomUUID(),
+    expectedRevision: revBeforeWiden,
+    text: '工作草稿试图扩大到第 1 页',
+    importSourceIds: [srcId],
+    selectedImportPages: { [srcId]: [4] },
+    importMode: 'review-draft',
+    supersedesDraftEntryId: entryB1.entryId,
+    workingMapDraft: { ...entryB1.draft, importSources: [{ ...baseImportSrc, selectedPages: [1, 2, 4] }] },
+  }, 403);
+  // Item 1 NEGATIVE: Widening POST /maps save payload selectedPages to [1, 2, 4] -> 403 with 0 saved versions!
+  await api(`${base}/maps`, 'POST', {
+    mapId: randomUUID(),
+    operationId: randomUUID(),
+    expectedVersion: 0,
+    reason: '试图扩大选页保存',
+    importDraftEntryId: entryB1.entryId,
+    draft: { ...entryB1.draft, importSources: [{ ...baseImportSrc, selectedPages: [1, 2, 4] }] },
+  }, 403);
+  assert.equal(provider.requests.length, provCountBeforeWiden, 'widening attempts MUST make 0 Provider calls');
+  assert.equal((await api(`${base}/maps`)).versions.length, 0, 'widening save MUST write 0 map versions');
+
+  // Item 1 POSITIVE (shrinking): Reread entryB1 shrinking selectedImportPages to [4] ONLY -> ALLOWED; page 2 read blocked 403, page 4 succeeds -> produces entryB2 (supports, 15%)
+  let shrinkPage2Err = '';
+  let t2 = 0;
+  provider.setResponder(({ messages }) => {
+    const lastTool = messages.filter(m => m.role === 'tool').at(-1);
+    if (t2 === 1 && lastTool) shrinkPage2Err = providerMessageText(lastTool.content);
+    t2++;
+    if (t2 === 1) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-import-source', importSourceId: srcId, page: 2 } }] };
+    if (t2 === 2) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-import-source', importSourceId: srcId, page: 4 } }] };
+    if (t2 === 3) {
+      return {
+        calls: [{
+          name: 'strategy_goals',
+          arguments: {
+            action: 'propose-map-draft',
+            reason: '缩小至第 4 页重读后草稿 B2',
+            mapDraft: {
+              ...entryB1.draft,
+              nodes: [
+                { ...entryB1.draft.nodes[0], baseline: '15%' },
+                entryB1.draft.nodes[1],
+              ],
+              edges: [{ ...entryB1.draft.edges[0], from: 'S1', to: 'G1', kind: 'supports', reviewState: 'clear' }],
+            },
+          },
+        }],
+      };
+    }
+    return { text: '已仅重读第 4 页并更新连线 e1。' };
+  });
+  const req2 = randomUUID();
+  await api(`${base}/messages`, 'POST', {
+    requestId: req2,
+    expectedRevision: revBeforeWiden,
+    text: '只重读第 4 页连线',
+    importSourceIds: [srcId],
+    selectedImportPages: { [srcId]: [4] },
+    importMode: 'review-draft',
+    supersedesDraftEntryId: entryB1.entryId,
+    workingMapDraft: { ...entryB1.draft, nodes: [{ ...entryB1.draft.nodes[0], baseline: '15%' }, entryB1.draft.nodes[1]] },
+  }, 202);
+  const done2 = await waitForRun(api, base, req2);
+  assert.equal(done2.discussion.lastRun.status, 'completed');
+  assert.match(shrinkPage2Err, /strategy_map_import_page_not_authorized/, 'shrunk reread [4] MUST block reading page 2');
+  assert.equal(done2.mapImportDrafts.length, 1);
+  const entryB2 = done2.mapImportDrafts[0];
+  assert.notEqual(entryB2.entryId, entryB1.entryId);
+  assert.equal(entryB2.draftGroupId, entryB1.draftGroupId);
+
+  // Item 5A (Stale tab): Saving or dismissing stale entryB1 AFTER entryB2 arrived -> 409 strategy_map_import_draft_superseded; 0 maps written; entryB2 stays active!
+  const staleSaveRes = await host.request(`${base}/maps`, 'POST', {
+    mapId: randomUUID(),
+    operationId: randomUUID(),
+    expectedVersion: 0,
+    reason: '旧标签保存过期 B1',
+    importDraftEntryId: entryB1.entryId,
+    draft: entryB1.draft,
+  });
+  assert.equal(staleSaveRes.status, 409);
+  assert.match(await staleSaveRes.text(), /strategy_map_import_draft_superseded/);
+  const staleDismissRes = await host.request(`${base}/map-drafts/${encodeURIComponent(entryB1.entryId)}/dismiss`, 'POST', {});
+  assert.equal(staleDismissRes.status, 409);
+  assert.match(await staleDismissRes.text(), /strategy_map_import_draft_superseded/);
+  assert.equal((await api(`${base}/maps`)).versions.length, 0, 'stale tab save MUST NOT write unknown/9% to disk');
+  assert.equal((await api(base)).mapImportDrafts.length, 1, 'entryB2 MUST stay pending after stale tab 409');
+
+  // Save latest entryB2 -> writes mapB v1 (with importDraftGroupId & importDraftEntryId atomically persisted on the map version!)
+  const mapBId = randomUUID();
+  const mapBOpId = randomUUID();
+  const mapBV1 = (await api(`${base}/maps`, 'POST', {
+    mapId: mapBId,
+    operationId: mapBOpId,
+    expectedVersion: 0,
+    reason: '确认最新 B2',
+    importDraftEntryId: entryB2.entryId,
+    draft: entryB2.draft,
+  }, 201)).version as StrategyMapVersion;
+  assert.equal(mapBV1.version, 1);
+  assert.equal(mapBV1.importDraftGroupId, entryB2.draftGroupId);
+  assert.equal(mapBV1.importDraftEntryId, entryB2.entryId);
+
+  // Item 5B (Crash-before-disposition recovery): Delete map-import-draft-dispositions.json and restart Host on same dataRoot!
+  const dispFile = path.join(dataRoot, 'strategy-discussions', discussion.id, 'map-import-draft-dispositions.json');
+  rmSync(dispFile, { force: true });
+  await host.close();
+  host = await startTestHost({ dataRoot });
+
+  // After restart: draft MUST NOT reopen as pending, a new-tab save with different mapId/operationId MUST fail 409, and exact operationId retry is idempotent!
+  const afterCrashRestart = await api(base);
+  assert.equal(afterCrashRestart.mapImportDrafts, undefined, 'saved draft MUST NOT reappear even if disposition file was lost before crash');
+  const dupAfterCrash = await host.request(`${base}/maps`, 'POST', {
+    mapId: randomUUID(),
+    operationId: randomUUID(),
+    expectedVersion: 0,
+    reason: '重启后新标签误再保存',
+    importDraftEntryId: entryB2.entryId,
+    draft: entryB2.draft,
+  });
+  assert.equal(dupAfterCrash.status, 409);
+  assert.match(await dupAfterCrash.text(), /strategy_map_import_draft_already_saved/);
+  const idempotentRetry = await api(`${base}/maps`, 'POST', {
+    mapId: mapBId,
+    operationId: mapBOpId,
+    expectedVersion: 0,
+    reason: '确认最新 B2',
+    importDraftEntryId: entryB2.entryId,
+    draft: entryB2.draft,
+  }, 201);
+  assert.equal(idempotentRetry.version.mapId, mapBId);
+  assert.equal(idempotentRetry.version.version, 1);
+  assert.equal((await api(`${base}/maps`)).versions.length, 1, 'exactly ONE v1 exists after crash recovery + retry + new-tab conflict');
+
+  // Item 2 (Saved map revision where Agent OMITS mapId/expectedVersion): Host MUST bind mapBId v1 and Save MUST produce mapB v2!
+  let t3 = 0;
+  provider.setResponder(() => {
+    t3++;
+    if (t3 === 1) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-import-source', importSourceId: srcId, page: 4 } }] };
+    if (t3 === 2) {
+      return {
+        calls: [{
+          name: 'strategy_goals',
+          arguments: {
+            action: 'propose-map-draft',
+            // Intentionally OMIT mapId and expectedVersion!
+            reason: '修订 B v1 但 Agent 省略 mapId',
+            mapDraft: {
+              ...entryB2.draft,
+              title: 'Agent返回的旧标题',
+              edges: [{ ...entryB2.draft.edges[0], kind: 'hypothesis', reviewState: 'confirmed' }],
+            },
+          },
+        }],
+      };
+    }
+    return { text: '已局部重读 B v1。' };
+  });
+  const req3 = randomUUID();
+  await api(`${base}/messages`, 'POST', {
+    requestId: req3,
+    expectedRevision: afterCrashRestart.discussion.revision,
+    text: '基于 B v1 重读第 4 页 e1',
+    importSourceIds: [srcId],
+    selectedImportPages: { [srcId]: [4] },
+    importMode: 'review-draft',
+    mapRef: { mapId: mapBId, version: 1 },
+    workingMapDraft: { ...entryB2.draft, title: 'B v1 人工新标题' },
+  }, 202);
+  const done3 = await waitForRun(api, base, req3);
+  assert.equal(done3.discussion.lastRun.status, 'completed');
+  const revDraftOmitted = done3.mapImportDrafts?.[0];
+  assert.equal(revDraftOmitted?.mapId, mapBId, 'Host MUST bind mapBId even when Agent omits optional mapId');
+  assert.equal(revDraftOmitted?.expectedVersion, 1, 'Host MUST bind expectedVersion=1 even when Agent omits it');
+
+  // Trying to save this bound revision draft under a DIFFERENT mapId MUST be rejected 409!
+  await api(`${base}/maps`, 'POST', {
+    mapId: randomUUID(),
+    operationId: randomUUID(),
+    expectedVersion: 0,
+    reason: '错误另建 v1',
+    importDraftEntryId: revDraftOmitted.entryId,
+    draft: revDraftOmitted.draft,
+  }, 409);
+
+  // Saving under mapBId creates B v2 (NOT a second v1)!
+  const mapBV2 = (await api(`${base}/maps`, 'POST', {
+    mapId: mapBId,
+    operationId: randomUUID(),
+    expectedVersion: 1,
+    reason: '保存 B v2 修订',
+    importDraftEntryId: revDraftOmitted.entryId,
+    draft: { ...revDraftOmitted.draft, title: 'B v1 人工新标题' },
+  }, 201)).version as StrategyMapVersion;
+  assert.equal(mapBV2.mapId, mapBId);
+  assert.equal(mapBV2.version, 2);
+  assert.equal(mapBV2.title, 'B v1 人工新标题');
+  // Item 1 NEGATIVE against fixed saved map B v2: widening selectedImportPages to [1, 4] on revision of B v2 -> 403!
+  const dAfterV2 = await api(base);
+  await api(`${base}/messages`, 'POST', {
+    requestId: randomUUID(),
+    expectedRevision: dAfterV2.discussion.revision,
+    text: '试图修订 B v2 时扩大到第 1 页',
+    importSourceIds: [srcId],
+    selectedImportPages: { [srcId]: [1, 4] },
+    importMode: 'review-draft',
+    mapRef: { mapId: mapBId, version: 2 },
+  }, 403);
+});

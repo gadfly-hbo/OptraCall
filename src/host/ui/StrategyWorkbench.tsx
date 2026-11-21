@@ -97,8 +97,8 @@ export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDisc
   async function dismissPendingDraft(entryId:string){
     if(!id)return;
     await dismissStrategyMapImportDraft(id,entryId);
-    setStatus('已放弃本次导入草稿，未写入新的战略地图版本。');
     await onRefreshDiscussion?.();
+    setStatus('已放弃本次导入草稿，未写入新的战略地图版本。');
   }
   function select(ref:StrategyMapRef){setSelected(ref);onSelectContext(ref);setHandoff(undefined);setReturnEdge(undefined);}
   const versionOptions=catalog.versions.map(v=><option key={keyOf(v)} value={keyOf(v)}>{v.title} · v{v.version}</option>);

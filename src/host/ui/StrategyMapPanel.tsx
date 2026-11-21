@@ -115,6 +115,7 @@ export function StrategyMapPanel(props:Props){
 }
 
 type GroupDraftWorkState = {
+  entryId?: string;
   edit?: StrategyMapDraft;
   manualEdits: ManualEditOverlay;
   mergeNotices: string[];
@@ -132,6 +133,7 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
   const manualEditsRef=useRef<ManualEditOverlay>(manualEdits);
   manualEditsRef.current=manualEdits;
   const [mergeNotices,setMergeNotices]=useState<string[]>([]);
+  const [conflictBanner,setConflictBanner]=useState('');
   const [reason,setReason]=useState('');
   const [reviewOpen,setReviewOpen]=useState(Boolean(baseDraft.importSources?.length));
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[edgeId,setEdgeId]=useState(focusEdgeId??active?.edges.find(e=>e.kind==='hypothesis')?.id);
@@ -157,7 +159,7 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
     if(clearGroupId)groupWorkRef.current.delete(clearGroupId);
   }
 
-  // Handle switching between pending draft groups (e.g. Plan A <-> Plan B) and merging reread within the same group
+  // Handle switching between pending draft groups (e.g. Plan A <-> Plan B), revising a saved map, and merging reread within the same group
   useEffect(()=>{
     const nextGroupId=pendingDraft?.draftGroupId;
     const nextEntryId=pendingDraft?.entryId;
@@ -168,6 +170,7 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
     // Save outgoing group's work state if we are switching to a different pending group
     if(prevGroupId && prevGroupId!==nextGroupId){
       groupWorkRef.current.set(prevGroupId,{
+        entryId:prevEntryId,
         edit,
         manualEdits:manualEditsRef.current,
         mergeNotices,
@@ -206,6 +209,12 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
         setPicked(pendingDraft.draft.nodes[0]?.id??'');
         setPickedEdge(undefined);
       }
+    }else if(!prevGroupId && active && pendingDraft.mapId && pendingDraft.mapId===active.mapId && hasManualEdits(manualEditsRef.current)){
+      // User was editing saved map B v1 and triggered a local reread -> preserve B v1's manual edits on the incoming revision draft!
+      const {merged,notices}=mergeRereadDraftWithManualEdits(pendingDraft.draft,manualEditsRef.current);
+      setEdit(merged);
+      setMergeNotices(notices);
+      if(!merged.nodes.some(n=>n.id===picked))setPicked(merged.nodes[0]?.id??'');
     }else{
       // Switched to a different pending group (or newly opened draft) -> restore that group's saved edits if any
       const savedGroup=groupWorkRef.current.get(pendingDraft.draftGroupId);
@@ -214,11 +223,19 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
         setManualEdits(savedGroup.manualEdits);
         draftMapIdRef.current=savedGroup.draftMapId;
         setReason(savedGroup.reason);
-        if(hasManualEdits(savedGroup.manualEdits)){
-          const {merged,notices}=mergeRereadDraftWithManualEdits(pendingDraft.draft,savedGroup.manualEdits);
-          setEdit(savedGroup.edit ?? merged);
-          setMergeNotices(savedGroup.mergeNotices.length?savedGroup.mergeNotices:notices);
-          setPicked((savedGroup.edit ?? merged).nodes[0]?.id??'');
+        const arrivedWhileAway=savedGroup.entryId!==pendingDraft.entryId;
+        if(arrivedWhileAway){
+          // A newer reread draft arrived for this group while user was viewing another plan -> merge latest reread with this group's manual edits!
+          if(hasManualEdits(savedGroup.manualEdits)){
+            const {merged,notices}=mergeRereadDraftWithManualEdits(pendingDraft.draft,savedGroup.manualEdits);
+            setEdit(merged);
+            setMergeNotices(notices);
+            setPicked(merged.nodes[0]?.id??'');
+          }else{
+            setEdit(undefined);
+            setMergeNotices([]);
+            setPicked(pendingDraft.draft.nodes[0]?.id??'');
+          }
         }else{
           setEdit(savedGroup.edit);
           setMergeNotices(savedGroup.mergeNotices);
@@ -265,6 +282,7 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
   function applyDraftChange(next:StrategyMapDraft,record?:ManualEditRecord){
     setEdit(next);
     setError('');
+    setConflictBanner('');
     if(record){
       const updated=applyManualEditRecord(manualEditsRef.current,record);
       manualEditsRef.current=updated;
@@ -283,17 +301,18 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
     if(isPendingMode&&pendingDraft){
       const targetEntryId=pendingDraft.entryId;
       const targetGroupId=pendingDraft.draftGroupId;
-      setBusy(true);setError('');
+      setBusy(true);setError('');setConflictBanner('');
       try{
         await onDismissPendingDraft?.(targetEntryId);
         draftMapIdRef.current=undefined;
         resetManualState(targetGroupId);
       }catch(e){
-        if(e instanceof StrategyDiscussionRequestError && (e.code==='strategy_map_import_draft_already_saved'||e.code==='strategy_map_import_draft_dismissed')){
+        if(e instanceof StrategyDiscussionRequestError && (e.code==='strategy_map_import_draft_already_saved'||e.code==='strategy_map_import_draft_dismissed'||e.code==='strategy_map_import_draft_superseded')){
           draftMapIdRef.current=undefined;
           resetManualState(targetGroupId);
-          setError(e.code==='strategy_map_import_draft_already_saved'?'这份导入草稿已在另一标签页保存过，已同步最新状态。':'这份导入草稿已被放弃，已同步最新状态。');
+          const msg=e.code==='strategy_map_import_draft_already_saved'?'这份导入草稿已在另一标签页保存过，已同步最新状态。':e.code==='strategy_map_import_draft_superseded'?'这份导入草稿已有更新的局部重读结果，旧标签页中的过期草稿未放弃；已同步最新草稿。':'这份导入草稿已被放弃，已同步最新状态。';
           await onDraftConflictRefresh?.();
+          setConflictBanner(msg);
         }else{
           setError(e instanceof Error?e.message:'放弃草稿未完成，请重试。');
         }
@@ -370,7 +389,7 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
     const update={mapId:targetMapId,expectedVersion,reason:saveReason,draft:draftToSave,...(importDraftEntryId?{importDraftEntryId}:{})};
     const fingerprint=JSON.stringify(update);
     if(pending.current?.fingerprint!==fingerprint)pending.current={fingerprint,operationId:crypto.randomUUID()};
-    setBusy(true);setError('');
+    setBusy(true);setError('');setConflictBanner('');
     try{
       const {version}=await saveStrategyMap(discussionId,{...update,operationId:pending.current!.operationId});
       const settledId=importDraftEntryId;
@@ -379,11 +398,12 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
       await onSaved(version,settledId);
       onSelect(version);
     }catch(e){
-      if(e instanceof StrategyDiscussionRequestError && (e.code==='strategy_map_import_draft_already_saved'||e.code==='strategy_map_import_draft_dismissed')){
+      if(e instanceof StrategyDiscussionRequestError && (e.code==='strategy_map_import_draft_already_saved'||e.code==='strategy_map_import_draft_dismissed'||e.code==='strategy_map_import_draft_superseded')){
         draftMapIdRef.current=undefined;
         resetManualState(settledGroupId);
-        setError(e.code==='strategy_map_import_draft_already_saved'?'这份导入草稿已在另一标签页保存过，不会重复创建版本；已同步最新列表。':'这份导入草稿已被放弃，不会落盘保存；已同步最新列表。');
+        const msg=e.code==='strategy_map_import_draft_already_saved'?'这份导入草稿已在另一标签页保存过，不会重复创建版本；已同步最新列表。':e.code==='strategy_map_import_draft_superseded'?'这份导入草稿已有更新的局部重读结果，旧标签页中的过期草稿未保存；已为你同步最新草稿，请核对后再保存。':'这份导入草稿已被放弃，不会落盘保存；已同步最新列表。';
         await onDraftConflictRefresh?.();
+        setConflictBanner(msg);
       }else{
         setError(e instanceof StrategyDiscussionRequestError&&e.code.includes('version_conflict')?'此版已由另一位协作者修订。当前输入已保留，请与最新版本核对后再修改。':e instanceof StrategyDiscussionRequestError?(e.message||e.code):'地图保存失败，请重试。');
       }
@@ -485,6 +505,7 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
           {active.citations.filter(c=>edge.citationTokens?.includes(c.token)).map(c=><StrategyAttachmentEvidence key={c.token} discussionId={discussionId} citation={c}/>)}
           <div className="sg-row">{button('在原讨论审查此线',()=>onDiscuss(active,edge.id))}{button('带入战略模拟',()=>onSimulate(active,edge.id))}</div></section>}</div>:<p>本版没有声明因果假设。可在原讨论补充机制，或编辑地图添加对应连线。</p>}
       </details>}
+    {conflictBanner&&<p role="alert">{conflictBanner}</p>}
     {error&&<p role="alert">{error}</p>}
   </section>;
 }
