@@ -120,7 +120,11 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
     owner.current = next.discussion.id; setDetail(next); setReplacementRequestId(readReplacement(next.discussion.id));
     const original = journal.value?.read();
     if (original?.kind === 'message' && original.discussionId === next.discussion.id && api.canSettleDiscussionMessage(next, original.input)) {
-      journal.value!.settle(original); setPending(undefined); saveAttachmentDraft(next.discussion.id,[]); sessionStorage.removeItem(draftKey()); sessionStorage.removeItem(replacementKey(next.discussion.id)); setReplacementRequestId(undefined);
+      journal.value!.settle(original); setPending(undefined); sessionStorage.removeItem(replacementKey(next.discussion.id)); setReplacementRequestId(undefined);
+      const sentAttachments = original.input.attachmentIds;
+      if (sentAttachments?.length) {
+        saveAttachmentDraft(next.discussion.id, readAttachmentDraft(next.discussion.id).filter(id => !sentAttachments.includes(id)));
+      }
       const savedDraft = readDraft(next.discussion.id);
       const remainingDraft = !original.input.importMode && savedDraft.trim() === original.input.text.trim() ? '' : savedDraft;
       saveDraft(remainingDraft, next.discussion.id);
@@ -128,7 +132,7 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
     } else if (!original && next.discussion.pendingInput && !api.canSettleDiscussionMessage(next, next.discussion.pendingInput) && readReplacement(next.discussion.id) !== next.discussion.pendingInput.requestId) {
       const restored: api.DiscussionPending = { kind: 'message', discussionId: next.discussion.id, input: next.discussion.pendingInput };
       journal.value?.remember(restored); setPending(restored);
-      if (!readDraft(next.discussion.id)) {
+      if (!restored.input.importMode && !readDraft(next.discussion.id)) {
         saveDraft(restored.input.text, next.discussion.id);
         setText(restored.input.text);
       }
@@ -203,7 +207,7 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
   useEffect(() => {
     try { const original = journal.value?.read(); if (!original) return; setPending(original);
       const discussionId = original.kind === 'create' ? original.input.operationId : original.discussionId;
-      owner.current = discussionId; if (original.kind === 'message') setText(original.input.text);
+      owner.current = discussionId; if (original.kind === 'message') setText(readDraft(discussionId) || (original.input.importMode ? '' : original.input.text));
       if (original.kind === 'create') { setProjectId(original.input.projectId || ''); setSources(original.input.sources || []); setSourceScope(original.input.sourceScope); }
       void read(discussionId, true).then(result => { if (original.kind === 'update' && result) { const input = original.input; if (input.usageContext !== undefined) setPurpose(input.usageContext); if (input.methods) setMethods(input.methods); if (input.goal !== undefined) setGoal(input.goal || undefined); if (input.projectId !== undefined) setProjectId(input.projectId || ''); if (input.sources) setSources(input.sources); if (input.sourceScope) setSourceScope(input.sourceScope); if (input.configurationId) setConfigurationId(input.configurationId); } }).catch(() => setError('原操作尚未核对，输入与编号保留。'));
     } catch (fault) { setError(errorText(fault)); }
@@ -260,7 +264,7 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
     if (!journal.value) throw new Error(journal.error);
     const input = { operationId: crypto.randomUUID(), title: text.trim().slice(0, 100) || '战略讨论', ...(configurationId ? { configurationId } : {}), ...(purpose !== undefined ? { usageContext: purpose } : {}), methods, ...(goal ? { goal } : {}), ...(projectId ? { projectId } : {}), sources, sourceScope: sourceScope ?? { mode: 'selected-only' as const } };
     const original: api.DiscussionPending = { kind: 'create', input }; journal.value.remember(original); setPending(original);
-    const result = await api.createStrategyDiscussion(input); saveDraft(text, result.discussion.id); owner.current = result.discussion.id; journal.value.settle(original); setPending(undefined); apply(await api.readStrategyDiscussion(result.discussion.id)); await list(); return result.discussion;
+    const result = await api.createStrategyDiscussion(input); saveDraft(text, result.discussion.id); sessionStorage.removeItem(draftKey()); owner.current = result.discussion.id; journal.value.settle(original); setPending(undefined); apply(await api.readStrategyDiscussion(result.discussion.id)); await list(); return result.discussion;
   };
   const update = async (discussion: StrategyDiscussion, selectedSources=sources) => {
     const fields = { configurationId: configurationId || discussion.configurationId, usageContext: purpose ?? null, methods, goal: goal || null, projectId: projectId || null, sources:selectedSources, sourceScope: sourceScope ?? discussion.sourceScope };
