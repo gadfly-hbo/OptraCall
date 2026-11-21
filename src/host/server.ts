@@ -19,6 +19,7 @@ import { strategyTeachSources } from './strategy-teach-sources.ts';
 import { attachmentErrors } from './strategy-attachment-types.ts';
 import { StrategyAttachments } from './strategy-attachments.ts';
 import { strategyAttachmentRoutes } from './strategy-attachment-routes.ts';
+import { createStrategyMapImportService } from './strategy-map-import-routes.ts';
 import {StrategyDiscussionFault,discussionHash,StrategyDiscussionStore} from './strategy-discussion-store.ts';
 import {createUsageContextStore} from './usage-context-store.ts';
 import {createUsageContextRoutes} from './usage-context-routes.ts';
@@ -858,13 +859,17 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       for(const feedback of fixed.feedback)await assertSource(feedback.source);
     });
   }
-  const discussionOptions: Parameters<typeof createStrategyDiscussionHost>[0]={dataRoot,codeRoot:options.cwd,goals:strategyGoals,
+  let strategyMapImports: ReturnType<typeof createStrategyMapImportService> | undefined;
+  const discussionOptions: Parameters<typeof createStrategyDiscussionHost>[0]={dataRoot,codeRoot:options.cwd,goals:strategyGoals,mapImports:()=>strategyMapImports,
     goalEnterprises:projectId=>{
       const directory=studio.enterpriseScopes.list();
       const assigned=projectId&&directory.projectAssignments.find(link=>link.projectId===projectId)?.enterpriseId;
       return directory.enterprises.filter(enterprise=>!assigned||enterprise.id===assigned);
     },configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,verifyGoalContext:verifyFrozenGoalContext,verifyArrangement:verifyGoalOperationArrangement,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{...page,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}};
   const strategyDiscussions=createStrategyDiscussionHost(discussionOptions);
+  strategyMapImports=createStrategyMapImportService({dataRoot,codeRoot:options.cwd,attachments:strategyAttachments,projects,owner:id=>strategyDiscussions.store.get(id),configuration:(id,revision)=>availableConfiguration(id,revision),mutate,
+    writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
+  });
   const attachmentRoutes=strategyAttachmentRoutes({files:strategyAttachments,owner:id=>strategyDiscussions.store.get(id),mutate,
     writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
     verifySource:async(source,owner)=>{
@@ -2288,6 +2293,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if(projectAttachmentLibrary&&request.method==='GET'){json(response,200,{sources:await strategyAttachments.projectLibrary(projectAttachmentLibrary[1])});return;}
       const attachmentRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/attachments(?:\/(excerpt))?$/.exec(url.pathname);
       if(attachmentRoute){json(response,200,await attachmentRoutes(attachmentRoute,request.method??'GET',limit=>body(request,limit)));return;}
+      const mapImportRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/map-imports(?:\/([a-zA-Z0-9_-]{4,80})\/(preview|download|revoke))?$/.exec(url.pathname);
+      if(mapImportRoute && strategyMapImports){json(response,200,await strategyMapImports.route(mapImportRoute,request.method??'GET',url.searchParams,limit=>body(request,limit)));return;}
       if(url.pathname==='/api/strategy/discussions'){
         if(request.method==='GET'){json(response,200,{discussions:strategyDiscussions.store.list()});return;}
         if(request.method==='POST'){json(response,201,{discussion:await strategyDiscussions.create(await body(request))});return;}
@@ -2300,6 +2307,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const input=await body(request, 1024*1024);
           json(response,201,{version:await mutate(()=>strategyDiscussions.saveMapVersion(id,input,'user'))});return;
         }
+      }
+      const strategyMapDraftDismissRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/map-drafts\/([^/]+)\/dismiss$/.exec(url.pathname);
+      if(strategyMapDraftDismissRoute && request.method==='POST'){
+        const id=strategyMapDraftDismissRoute[1]!, entryId=decodeURIComponent(strategyMapDraftDismissRoute[2]!);
+        json(response,200,await mutate(()=>strategyDiscussions.dismissMapImportDraft(id,entryId)));return;
       }
       const gsaExport=/^\/api\/strategy\/goals\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/(export|arrangements)$/.exec(url.pathname);
       if(gsaExport && request.method==='GET'){ json(response,200,await mutate(async()=> gsaExport[3] === 'export' ? exportGoalVersion(gsaExport[1]!,Number(gsaExport[2])) : {arrangements:(await readGoalVersionPage(gsaExport[1]!,Number(gsaExport[2]))).arrangements})); return; }
@@ -2334,10 +2346,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(action==='stop'&&request.method==='POST'){const input=await body(request);json(response,200,await strategyDiscussions.stop(id,input.expectedRequestId as string|undefined));return;}
         if(action==='close'&&request.method==='POST'){json(response,200,await strategyDiscussions.close(id));return;}
         if(action==='events'&&request.method==='GET'){
-          const d=await strategyDiscussions.detail(id);
+          let ready=false;
+          const queued:unknown[]=[];
+          const writeEvent=(event:unknown)=>{if(!response.destroyed&&!response.writableEnded)response.write(`data: ${JSON.stringify(event)}\n\n`);};
+          const unsubscribe=strategyDiscussions.subscribe(id,event=>{if(!ready)queued.push(event);else writeEvent(event);});
+          let d:Awaited<ReturnType<typeof strategyDiscussions.detail>>;
+          try{d=await strategyDiscussions.detail(id);}catch(e){unsubscribe();throw e;}
+          if(request.destroyed||response.destroyed){unsubscribe();return;}
           response.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});
-          const unsubscribe=strategyDiscussions.subscribe(id,event=>{if(!response.destroyed&&!response.writableEnded)response.write(`data: ${JSON.stringify(event)}\n\n`);});
-          request.on('close',unsubscribe);response.write(`data: ${JSON.stringify({type:'snapshot',snapshot:d.snapshot})}\n\n`);return;
+          request.on('close',unsubscribe);
+          writeEvent({type:'snapshot',snapshot:d.snapshot});
+          ready=true;
+          for(const event of queued)writeEvent(event);
+          return;
         }
       }
       const workbookRoute=/^\/api\/strategy\/workbooks\/(preview|commit|handoff|map-source|goal-source)$/.exec(url.pathname);

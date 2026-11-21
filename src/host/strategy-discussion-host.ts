@@ -1,7 +1,7 @@
 import {nativeMapExposure,promptMapExposure} from './strategy-map-exposure.ts';
 import {readWorkbookOriginal} from './strategy-workbook-source.ts';
-import { StrategyMapStore } from './strategy-map-store.ts';
-import type { StrategyMapVersion } from './strategy-map-types.ts';
+import { StrategyMapStore, validateStrategyMapDraft } from './strategy-map-store.ts';
+import type { StrategyMapDraft, StrategyMapMultiImportSource, StrategyMapVersion } from './strategy-map-types.ts';
 import { discussionAttachmentReads, discussionAttachmentCitations } from './strategy-attachment-citations.ts';
 import type {GoalOperationReceipt,GoalActionArrangement} from './strategy-goals-types.ts';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -11,6 +11,7 @@ import {createRequirementPublicSearch} from './requirement-public-search.ts';
 import path from 'node:path';
 import {presentContextMessages} from '../agent/context-presentation.ts';
 import { mkdirSync } from 'node:fs';
+import { atomicJson, exists, readBytes, safePath } from './project-data-context-io.ts';
 import type { RuntimeModelConfiguration } from './config-store.ts';
 import type { UsageContext } from './usage-context-types.ts';
 import { parseUsageContext, resolveNewUsageContext } from './usage-context-types.ts';
@@ -23,7 +24,7 @@ import { discussionGoalScopes, pageDiscussionGoalScopes, selectDiscussionGoalSco
 import { discussionSourceMode, isDiscussionSourceSelected, isDiscussionSourceExcluded } from './strategy-discussion-source-scope.ts';
 import { readNativeSessionSnapshot, NativeSnapshotError } from './native-session-snapshot.ts';
 import { StrategyDiscussionStore, StrategyDiscussionFault, discussionHash, discussionId } from './strategy-discussion-store.ts';
-import type { StrategyDiscussion, StrategyDiscussionCreate, StrategyDiscussionUpdate, StrategyDiscussionDetail, StrategyDiscussionSource } from './strategy-discussion-types.ts';
+import type { StrategyDiscussion, StrategyDiscussionCreate, StrategyDiscussionUpdate, StrategyDiscussionDetail, StrategyDiscussionSource, StrategyMapImportDraftReceipt } from './strategy-discussion-types.ts';
 import type { ProjectEvent } from '../agent/project-runtime.ts';
 import type { StrategyDiscussionAction, StrategyDiscussionToolContext } from '../agent/strategy-discussion.ts';
 
@@ -44,6 +45,7 @@ const STRATEGY_CONTRACT=[
  '战略共创可以从一句问题、上期复盘或线下战略开始。按实际需要区分未执行、未见改善与观察未满；运用 SWOT、五力等诊断说明证据怎样改变备选方向；需综合调研、重算或 Case/Teach 观察时沿已有授权和原成果查证。专业问题可以直接回答。不要自动建 Task。附件按 read-source 查读；需要确切页、表行、正文段时 query 填具体 locator。实际采用的内容用读取结果的 [[资料:<token>]] 引用。选中或列出不能作为已读证据。',
  '形成候选时使用 save-map。按业务方向命名，区分选择、放弃的方向、成立条件和未知项。currentMap 是 Host 提供的所见版本，mapCandidates 是同讨论的不同候选；普通对话保持原图，明确要求修改时读取准确版和用户手工值，保留无关节点与关系，按 expectedVersion 修订。切换 BSC、目标树或条目表保留稳定编号。过期先读回并比对改动。场景数据只有指标、单位、人群、周期、基线和依据已知时才填 scenarioModel。',
  '按选中的因果连线进行审查时使用 TOC/TP，说明机制、必要条件、其他解释、负面分支、证据范围和可检验的观察方法。仅 hypothesis 边携带 review；分解或支持本身不能证明因果。引用的依据附 citationTokens。重要取舍由用户决定，保存地图不会采用目标。',
+ '用户导入线下战略图（Excel/PPT/PDF/图片）或发起局部重读时，仅在本轮授权的 importSourceIds 与 selectedImportPages 范围内调用 read-import-source 读取原生结构、表格或渲染图面，再调用 propose-map-draft 返回带精确 sourceLocation、reviewState（clear/needs-review）与 importSources 的待核草稿（不要直接调用 save-map 写入正式版本，由用户对照原稿核对后一次保存）。严格区分 decomposition（分解）、supports（支持）、upstream（上游）、hypothesis（待验证因果）与 unknown（未知/遮挡），可见箭头不等于因果；准确区分基线与目标、估计与实测、数值 0 与待定及单位。源表与图上数值不一致时在 sourceConflicts 并列原值；箭头遮挡、局部低清或跨页同名时仅标该处 needs-review 并写明 ambiguityReason，清楚项标 clear；纯文本模型看不清扫描图时允许 nodes 为空并在 unknowns 说明原因。多页不同方案保留各自边界；局部重读时须以 workingMapDraft 为准，仅修订用户指定处并完整保留用户的手工修改。',
  '当前轮 goalScopes 和 read-goals 提供目标的准确范围，可用 query 名称、offset 续查其 choices。绑定目标或修订时由 Host 准确绑定，可省略 draft.scope。新候选可省略 draft.scope 沿用已知的 defaultScope；suggestedKind 只是用途背景，另有明确意图时按用户意思选准确范围，归属不明才简短询问。部门用途不能从企业目录推定本部门或上级。新部门可按用户原话声明，id 与 name 同为用户声明的部门名；上级未知可省略 enterpriseId。不得自行编造或改换范围。',
  '长候选的成功回执 bodyIncluded:false 仍已保存。read-goals 用 goalId/version、offset/limit 读取 candidatePage.text，每段接 nextOffset，完整拼回准确目标 JSON；目录 candidateRefs 如有 nextCandidateOffset 用 offset 继续。operationId 可核对原保存回执，不复制或重发同一操作。',
  '形成完整候选可用strategy_goals propose-goal实写原GoalStore；已有目标给goalId和expectedVersion追加候选，不重复建立。早期字段不足继续讨论，不强存或发明承诺。采用须用户明确决定，工具adopt-goal按原话精确范围、所见Goal内容hash与CAS；继续讨论/有意思不等于采用。目标采用不授权经营行动。正式明细分析/执行工具沿原项目方案两种确认与真实Task，不以本讨论越过权限。',
@@ -55,7 +57,7 @@ export interface StrategyDiscussionSourcePort {
  verify(discussion:StrategyDiscussion,configuration:Readonly<RuntimeModelConfiguration>,context?:{signal?:AbortSignal;assertCurrent():void;metadataOnly?:boolean}):Promise<void>;
 }
 export type RoleContextReader = (owner: BusinessRoleOwner, configuration: Readonly<RuntimeModelConfiguration> | undefined, writing: boolean, localRead?: boolean) => Promise<unknown>;
-export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId?:string):{id:string;name:string}[];verifyPriorRights?:(owner:BusinessRoleOwner,configuration:Readonly<RuntimeModelConfiguration>,rights:ReadonlySet<string>)=>Promise<void>;roleContext?:RoleContextReader;verifyGoalContext?(context:GoalContextSnapshot,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;verifyArrangement?(ref:GoalActionArrangement,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;dataRoot:string;codeRoot:string;goals:StrategyGoalsStore;configuration(id?:string,revision?:number):Readonly<RuntimeModelConfiguration>|null|undefined;defaultUsageContext():Promise<UsageContext|null>;mutate<T>(fn:()=>T|Promise<T>):Promise<T>;isClosing():boolean;sources?:StrategyDiscussionSourcePort;validateGoal(input:GoalDraftInput):void|Promise<void>}){
+export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId?:string):{id:string;name:string}[];verifyPriorRights?:(owner:BusinessRoleOwner,configuration:Readonly<RuntimeModelConfiguration>,rights:ReadonlySet<string>)=>Promise<void>;roleContext?:RoleContextReader;verifyGoalContext?(context:GoalContextSnapshot,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;verifyArrangement?(ref:GoalActionArrangement,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;mapImports?:()=>import('./strategy-map-import-routes.ts').StrategyMapImportService|undefined;dataRoot:string;codeRoot:string;goals:StrategyGoalsStore;configuration(id?:string,revision?:number):Readonly<RuntimeModelConfiguration>|null|undefined;defaultUsageContext():Promise<UsageContext|null>;mutate<T>(fn:()=>T|Promise<T>):Promise<T>;isClosing():boolean;sources?:StrategyDiscussionSourcePort;validateGoal(input:GoalDraftInput):void|Promise<void>}){
  const namespace = options.roleContext ? 'business-role-discussions' : 'strategy-discussions';
  const store=new StrategyDiscussionStore(options.dataRoot, namespace);
  const maps=new StrategyMapStore(store);
@@ -103,16 +105,24 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   let hasAdditionalSources=false;
   const goalContexts = new Map<string,GoalContextSnapshot>();
   const arrangements=new Map<string,GoalActionArrangement>();
+  const importReads=new Map<string,{sourceId:string;sha256:string}>();
+  const workingDraftImportSources=new Map<string,{sourceId:string;sha256:string;selectedPages?:number[]}>();
   let pendingGoal: { ref:GoalRef; basis:GoalBasis; userText:string; promptHash:string }|undefined;
   function addGoals(snapshot:GoalContextSnapshot) {
     if(!object(snapshot)||!Array.isArray(snapshot.goals)||!Array.isArray(snapshot.feedback)||!Array.isArray(snapshot.relations))fail('goal_context_source_permissions_unknown');
     parseGoalBasis(snapshot.basis);
     goalContexts.set(discussionHash(snapshot),snapshot);
   }
-  if(!n)return {mapHistory:nativeMapExposure([]),projections:[...groups.values()],accesses,hasAdditionalSources,goalContexts:[...goalContexts.values()],arrangements:[...arrangements.values()]};
+  const addWorkingDraftImportSource=(item:unknown)=>{
+    if(!object(item)||typeof item.sourceId!=='string'||!item.sourceId.trim()||typeof item.sha256!=='string'||!/^[a-f0-9]{64}$/.test(item.sha256))return;
+    const pages=Array.isArray(item.selectedPages)&&item.selectedPages.every(p=>Number.isInteger(p)&&Number(p)>=1)?(item.selectedPages as number[]):undefined;
+    workingDraftImportSources.set(`${item.sourceId}:${item.sha256}`,{sourceId:item.sourceId,sha256:item.sha256,...(pages?.length?{selectedPages:pages}:{})});
+  };
+  if(!n)return {mapHistory:nativeMapExposure([]),projections:[...groups.values()],accesses,importReads:[...importReads.values()],workingDraftImportSources:[...workingDraftImportSources.values()],hasAdditionalSources,goalContexts:[...goalContexts.values()],arrangements:[...arrangements.values()]};
   const entries=entryId?(()=>{const byId=new Map(n.entries.map(entry=>[entry.id,entry]));let cursor:string|null=entryId;const chain:typeof n.entries=[];while(cursor){const entry=byId.get(cursor);if(!entry)break;chain.push(entry);cursor=entry.parentId;}return chain.reverse();})():n.manager.getBranch();
   let current:{requestId:string;projectId?:string}|undefined;
   const calls=new Map<string,{action:string;sourceId?:unknown;requestId:string;projectId?:string;entryId:string}>();
+  const importCalls=new Map<string,{importSourceId:unknown;requestId:string;entryId:string}>();
   const operations=new Map<string,{id:string;requestId:string;entryId:string}>();
   const otherReads=new Map<string,Record<string,unknown>>();
   const add=(projectId:string|undefined,sources:StrategyDiscussionSource[],metadataOnly=false)=>{
@@ -129,6 +139,9 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
      // The request supplied references, not their bodies. Only successful
      // read-source native results below establish a body dependency.
      if(context.methods?.some((m:import('./strategy-discussion-types.ts').StrategyMethodSelection)=>m.source))hasAdditionalSources=true;
+     if(Array.isArray(context.workingDraftImportSources)){
+       for(const s of context.workingDraftImportSources)addWorkingDraftImportSource(s);
+     }
      if(context.goal && !marker.providedContext.businessRole){
        if(!context.goalBasis||typeof marker.providedContext.originalUserText!=='string'||typeof marker.providedContext.requestTextSha256!=='string')fail('goal_context_source_permissions_unknown');
        pendingGoal={ref:context.goal,basis:parseGoalBasis(context.goalBasis),userText:marker.providedContext.originalUserText,promptHash:marker.providedContext.requestTextSha256};
@@ -148,6 +161,18 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
      const operationCall=message.role==='assistant' && Array.isArray(message.content) && message.content.some((p:any)=>p.type==='toolCall'&&p.name==='strategy_goals'&&p.arguments?.action==='operation');
      if(strict && !requestFilter && (operationCall || operationResult))fail('goal_context_source_permissions_unknown');
      continue;
+   }
+   if(message.role==='user'){
+     const prompt=textOf(message);
+     const splitIdx=prompt.indexOf('\n\n用户本轮原话：\n');
+     if(splitIdx>0){
+       try{
+         const header=JSON.parse(prompt.slice(0,splitIdx));
+         if(object(header)&&object(header.workingMapDraft)&&Array.isArray(header.workingMapDraft.importSources)){
+           for(const s of header.workingMapDraft.importSources)addWorkingDraftImportSource(s);
+         }
+       }catch{/* ignore non-JSON user prompt prefixes */}
+     }
    }
    if(message.role==='user'&&pendingGoal){
      const {ref,basis,userText,promptHash}=pendingGoal, prompt=textOf(message),suffix='\n\n用户本轮原话：\n'+userText;
@@ -170,8 +195,18 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
       operations.set(part.id,{id:part.arguments.operationId,requestId:current.requestId,entryId:entry.id});
     }
     if(part.type==='toolCall'&&part.name==='strategy_goals'&&['find-sources','read-source'].includes(part.arguments?.action))calls.set(part.id,{...current,action:part.arguments.action,sourceId:part.arguments.sourceId,entryId:entry.id});
+    if(part.type==='toolCall'&&part.name==='strategy_goals'&&part.arguments?.action==='read-import-source')importCalls.set(part.id,{importSourceId:part.arguments.importSourceId,requestId:current.requestId,entryId:entry.id});
    }
    if(strategicResult){
+     const importCall=importCalls.get(message.toolCallId);
+     if(importCall){
+       importCalls.delete(message.toolCallId);
+       if(!message.isError){
+         const src=object(resultBody)&&object(resultBody.source)?resultBody.source:object(message.details)&&object((message.details as any).source)?(message.details as any).source:undefined;
+         if(!src||typeof src.sourceId!=='string'||src.sourceId!==importCall.importSourceId||typeof src.sha256!=='string'||!/^[a-f0-9]{64}$/.test(src.sha256))fail('strategy_map_history_source_unverified',409);
+         importReads.set(`${src.sourceId}:${src.sha256}`,{sourceId:src.sourceId,sha256:src.sha256});
+       }
+     }
      const call=operations.get(message.toolCallId);
      operations.delete(message.toolCallId);
      if(call && call.requestId!==current.requestId)fail('goal_context_source_permissions_unknown');
@@ -241,9 +276,9 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   // The cited assistant entry may itself start parallel tools; their future
   // results cannot have contributed to that earlier entry. Older missing
   // results remain UNKNOWN rather than inventing a successful read.
-  if(strict&&[...calls.values(),...operations.values()].some(call=>call.entryId!==entryId))fail('goal_context_source_permissions_unknown');
+  if(strict&&[...calls.values(),...operations.values(),...importCalls.values()].some(call=>call.entryId!==entryId))fail('goal_context_source_permissions_unknown');
   if(strict&&pendingGoal)fail('goal_context_source_permissions_unknown');
-  return {mapHistory:nativeMapExposure(requestFilter||!strict?[]:entries),projections:[...groups.values()],accesses,hasAdditionalSources,goalContexts:[...goalContexts.values()],arrangements:[...arrangements.values()]};
+  return {mapHistory:nativeMapExposure(requestFilter||!strict?[]:entries),projections:[...groups.values()],accesses,importReads:[...importReads.values()],workingDraftImportSources:[...workingDraftImportSources.values()],hasAdditionalSources,goalContexts:[...goalContexts.values()],arrangements:[...arrangements.values()]};
  }
  async function sourceContext(ref:GoalDiscussionSourceRef){
   await readDiscussionSource(ref);const n=await native(store.get(ref.id));if(!n)fail('strategy_discussion_source_unavailable');const result=sourceAccesses(n,String(ref.version));if(!result.projections.length)fail('goal_context_source_permissions_unknown');return result;
@@ -260,6 +295,16 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   const owner=store.get(ref.id);
   const history=await sourceContext(ref);
   await verifyMapHistory(owner,history.mapHistory,recipient);
+  if(history.importReads.length){
+    const importer=options.mapImports?.();
+    if(!importer)throw new StrategyDiscussionFault('strategy_map_import_source_unavailable',403);
+    await importer.verifySources(owner,history.importReads);
+  }
+  if(history.workingDraftImportSources.length){
+    const importer=options.mapImports?.();
+    if(!importer)throw new StrategyDiscussionFault('strategy_map_import_source_unavailable',403);
+    await importer.verifySources(owner,history.workingDraftImportSources);
+  }
   const dependencies=history.projections.filter(group=>group.sources.length);
   const configuration=recipient??(dependencies.length||history.hasAdditionalSources?options.configuration(owner.configurationId,owner.configurationRevision):undefined);
   if(history.hasAdditionalSources&&!configuration)throw new StrategyDiscussionFault('configuration_changed',409);
@@ -299,6 +344,90 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    }
   }
  }
+ function mergeFixedImportSources(
+  primary?: StrategyMapMultiImportSource[],
+  secondary?: StrategyMapMultiImportSource[],
+): StrategyMapMultiImportSource[] {
+  const byId = new Map<string, StrategyMapMultiImportSource>();
+  for (const src of [...(secondary ?? []), ...(primary ?? [])]) {
+    const prev = byId.get(src.sourceId);
+    if (!prev) {
+      byId.set(src.sourceId, { ...src, ...(src.selectedPages ? { selectedPages: [...src.selectedPages] } : {}) });
+    } else if (prev.selectedPages?.length && src.selectedPages?.length) {
+      const common = src.selectedPages.filter(p => prev.selectedPages!.includes(p));
+      byId.set(src.sourceId, { ...src, selectedPages: common.length ? common : [...prev.selectedPages] });
+    } else if (prev.selectedPages?.length) {
+      byId.set(src.sourceId, { ...src, selectedPages: [...prev.selectedPages] });
+    } else {
+      byId.set(src.sourceId, { ...src, ...(src.selectedPages ? { selectedPages: [...src.selectedPages] } : {}) });
+    }
+  }
+  return [...byId.values()];
+ }
+ async function verifyDraftImportSources(
+  owner: StrategyDiscussion,
+  draft: StrategyMapDraft,
+  opts: {
+    turnSourceIds?: string[];
+    turnSelectedPages?: Record<string, number[]>;
+    previousSources?: StrategyMapMultiImportSource[];
+    requireTurnScope?: boolean;
+  } = {},
+ ) {
+  if (!draft.importSources?.length) return;
+  const importer = options.mapImports?.();
+  if (!importer) fail('strategy_map_import_source_unavailable', 403);
+  const prevById = new Map((opts.previousSources ?? []).map(s => [s.sourceId, s]));
+  // Deterministically enforce Host-fixed per-source selectedPages upper bound (never widen beyond original draft/map or turn scope)
+  for (const src of draft.importSources) {
+    const turnPages = opts.turnSelectedPages?.[src.sourceId];
+    const prevPages = prevById.get(src.sourceId)?.selectedPages;
+    const upperBound = prevPages?.length ? prevPages : turnPages;
+    if (upperBound?.length) {
+      if (!src.selectedPages?.length) {
+        src.selectedPages = [...upperBound];
+      } else if (src.selectedPages.some(p => !upperBound.includes(p))) {
+        fail('strategy_map_import_page_not_authorized', 403);
+      }
+    }
+    if (turnPages?.length && !prevPages?.length && src.selectedPages?.some(p => !turnPages.includes(p))) {
+      fail('strategy_map_import_page_not_authorized', 403);
+    }
+  }
+  const verifiedMap = await importer!.verifySources(owner, draft.importSources);
+  const sourceById = new Map(draft.importSources.map(s => [s.sourceId, s]));
+  const checkPage = (loc: import('./strategy-map-types.ts').StrategyMapSourceLocation | undefined, itemLabel: string) => {
+    if (!loc || loc.page === undefined) return;
+    const stored = verifiedMap.get(loc.sourceId);
+    if (!stored || loc.page < 1 || loc.page > stored.pageCount) {
+      fail(`strategy_map_import_page_invalid: ${itemLabel} 页码超出原文件页数范围`, 400);
+    }
+    const srcPages = sourceById.get(loc.sourceId)?.selectedPages;
+    if (srcPages?.length && !srcPages.includes(loc.page)) {
+      fail(`invalid_strategy_map: ${itemLabel} 的 sourceLocation.page（${loc.page}）超出所选页范围`, 400);
+    }
+    const prevPages = prevById.get(loc.sourceId)?.selectedPages;
+    const effectiveBound = prevPages?.length ? prevPages : opts.turnSelectedPages?.[loc.sourceId];
+    if (effectiveBound?.length && !effectiveBound.includes(loc.page)) {
+      fail('strategy_map_import_page_not_authorized', 403);
+    }
+  };
+  for (const n of draft.nodes) checkPage(n.sourceLocation, `节点 ${n.id}`);
+  for (const e of draft.edges) checkPage(e.sourceLocation, `连线 ${e.id}`);
+  if (opts.requireTurnScope) {
+    for (const src of draft.importSources) {
+      const prev = prevById.get(src.sourceId);
+      const unchangedFromPrev = Boolean(prev && discussionHash(prev) === discussionHash(src));
+      if (!unchangedFromPrev && !opts.turnSourceIds?.includes(src.sourceId)) {
+        fail('strategy_map_import_not_authorized', 403);
+      }
+      const effectiveBound = prev?.selectedPages?.length ? prev.selectedPages : opts.turnSelectedPages?.[src.sourceId];
+      if (effectiveBound?.length && src.selectedPages?.some(p => !effectiveBound.includes(p))) {
+        fail('strategy_map_import_page_not_authorized', 403);
+      }
+    }
+  }
+ }
  async function verifyMapMaterials(owner:StrategyDiscussion,map:StrategyMapVersion,recipient?:Readonly<RuntimeModelConfiguration>){
   if(map.citations.length){
    const cfg=recipient??options.configuration(owner.configurationId,owner.configurationRevision);
@@ -308,6 +437,9 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    await options.sources.verify({...owner,sources},cfg);
   }
   if(map.importSource)await readWorkbookOriginal(options.dataRoot,'discussion-'+owner.id,map.importSource.sha256);
+  if(map.importSources?.length){
+   await verifyDraftImportSources(owner,map);
+  }
  }
  async function verifyMapHistory(owner:StrategyDiscussion,history:ReturnType<typeof nativeMapExposure>,recipient?:Readonly<RuntimeModelConfiguration>){
   const checked=new Map<string,StrategyMapVersion>();
@@ -336,7 +468,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    const replySource=await finalMapReply(map.source);
    if(replySource){
     try{await verifyChoiceSource(replySource,recipient);return {...map,replySource};}
-    catch(e){if(!(e instanceof Error)||!/source|permission|configuration|scope_changed|attachment/.test(e.message))throw e;}
+    catch(e){if(!(e instanceof Error)||!/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized/.test(e.message))throw e;}
    }
   }
   return map;
@@ -346,17 +478,101 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   for(const row of await maps.list(id)){
    try {versions.push(await readMapVersion(id,row.mapId,row.version,recipient));}
    catch(e){
-    if(!(e instanceof Error) || !/source|permission|configuration|scope_changed|attachment/.test(e.message))throw e;
+    if(!(e instanceof Error) || !/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized/.test(e.message))throw e;
     unavailable.push({mapId:row.mapId,version:row.version,reason:e.message});
    }
   }
   return {versions,unavailable};
  }
  const readMapVersions=async(id:string,recipient?:Readonly<RuntimeModelConfiguration>)=>(await mapCatalog(id,recipient)).versions;
+ type DraftDisposition =
+  | { status: 'saved'; mapId: string; version: number; operationId: string; settledAt: string }
+  | { status: 'dismissed'; settledAt: string };
+ type DraftDispositionLedger = { version: 1; entries: Record<string, DraftDisposition> };
+ async function readDraftDispositions(id:string):Promise<DraftDispositionLedger>{
+  const file=await safePath(store.directory(id),'map-import-draft-dispositions.json',false);
+  if(!await exists(file))return {version:1,entries:{}};
+  const parsed=JSON.parse((await readBytes(file,2*1024*1024)).toString('utf8')) as Partial<DraftDispositionLedger>;
+  return {version:1,entries:object(parsed?.entries)?(parsed.entries as Record<string,DraftDisposition>):{}};
+ }
+ async function readSettledDraftsFromMaps(id:string):Promise<Map<string, Extract<DraftDisposition,{status:'saved'}>>>{
+  const byKey=new Map<string, Extract<DraftDisposition,{status:'saved'}>>();
+  for(const v of await maps.list(id)){
+   if(!v.importDraftGroupId && !v.importDraftEntryId)continue;
+   const rec:Extract<DraftDisposition,{status:'saved'}>={status:'saved',mapId:v.mapId,version:v.version,operationId:v.operationId,settledAt:v.createdAt};
+   if(v.importDraftGroupId)byKey.set(v.importDraftGroupId,rec);
+   if(v.importDraftEntryId)byKey.set(v.importDraftEntryId,rec);
+  }
+  return byKey;
+ }
+ async function findExistingDraftDisposition(id:string,keys:string[]):Promise<DraftDisposition|undefined>{
+  const fromMaps=await readSettledDraftsFromMaps(id);
+  for(const k of keys){const hit=fromMaps.get(k);if(hit)return hit;}
+  const ledger=await readDraftDispositions(id);
+  for(const k of keys){const hit=ledger.entries[k];if(hit)return hit;}
+ }
+ async function writeDraftDisposition(id:string,keys:string[],disposition:DraftDisposition){
+  const ledger=await readDraftDispositions(id);
+  const next:DraftDispositionLedger={version:1,entries:{...ledger.entries}};
+  for(const k of keys)if(k)next.entries[k]=disposition;
+  const file=await safePath(store.directory(id),'map-import-draft-dispositions.json',true);
+  await atomicJson(file,next);
+ }
+ async function dismissMapImportDraft(id:string,entryId:string){
+  if(options.isClosing())fail('host_closing',503);
+  if(typeof entryId!=='string'||!entryId.trim()||entryId.length>120)fail('strategy_map_import_draft_not_found',404);
+  const owner=store.get(id);
+  if(owner.businessOwner)fail('strategy_discussion_not_found',404);
+  const n=await native(owner);
+  const {groupsByEntryId}=await readMapImportDrafts(owner,n,{includeSettled:true});
+  const group=groupsByEntryId.get(entryId);
+  if(!group)fail('strategy_map_import_draft_not_found',404);
+  const allKeys=[...new Set([group.draftGroupId,...group.entryIds])];
+  const existing=await findExistingDraftDisposition(id,allKeys);
+  if(existing?.status==='saved')fail('strategy_map_import_draft_already_saved',409);
+  if(existing?.status==='dismissed')return {dismissed:true as const,entryId,draftGroupId:group.draftGroupId};
+  if(group.latest.entryId!==entryId)fail('strategy_map_import_draft_superseded',409);
+  await writeDraftDisposition(id,allKeys,{status:'dismissed',settledAt:new Date().toISOString()});
+  return {dismissed:true as const,entryId,draftGroupId:group.draftGroupId};
+ }
  async function saveMapVersion(id:string,input:Record<string,unknown>,author:'user'|'import'){
   if(options.isClosing())fail('host_closing',503);
-  if(Number(input.expectedVersion)>0)await readMapVersion(id,String(input.mapId),Number(input.expectedVersion));
-  return maps.save(id,input,author);
+  const {importDraftEntryId,...saveInput}=input;
+  let provenance:Pick<StrategyMapVersion,'source'> & Partial<Pick<StrategyMapVersion,'citations'|'importDraftEntryId'|'importDraftGroupId'>>={};
+  let matchedDraft:StrategyMapImportDraftReceipt|undefined;
+  let matchedGroupKeys:string[]=[];
+  if(importDraftEntryId!==undefined){
+   if(author!=='user'||typeof importDraftEntryId!=='string'||!importDraftEntryId.trim())fail('invalid_strategy_map',400);
+   const owner=store.get(id);
+   const n=await native(owner);
+   const {groupsByEntryId}=await readMapImportDrafts(owner,n,{includeSettled:true});
+   const group=groupsByEntryId.get(importDraftEntryId);
+   if(!group)fail('strategy_map_import_draft_not_found',404);
+   matchedGroupKeys=[...new Set([group.draftGroupId,...group.entryIds])];
+   const existing=await findExistingDraftDisposition(id,matchedGroupKeys);
+   if(existing?.status==='dismissed')fail('strategy_map_import_draft_dismissed',409);
+   if(existing?.status==='saved'){
+    if(typeof saveInput.operationId!=='string'||saveInput.operationId!==existing.operationId){
+     fail('strategy_map_import_draft_already_saved',409);
+    }
+   }else if(group.latest.entryId!==importDraftEntryId){
+    fail('strategy_map_import_draft_superseded',409);
+   }
+   matchedDraft=group.byEntryId.get(importDraftEntryId)??group.latest;
+   if(matchedDraft.mapId && saveInput.mapId!==matchedDraft.mapId){
+    fail('strategy_map_version_conflict',409);
+   }
+   provenance={...(matchedDraft.source?{source:matchedDraft.source}:{}),...(matchedDraft.citations.length?{citations:matchedDraft.citations}:{}),importDraftEntryId:matchedDraft.entryId,importDraftGroupId:group.draftGroupId};
+  }
+  const previous=Number(saveInput.expectedVersion)>0?await readMapVersion(id,String(saveInput.mapId),Number(saveInput.expectedVersion)):undefined;
+  const validatedDraft=validateStrategyMapDraft(saveInput.draft,{previous,author});
+  const fixedPrevSources=mergeFixedImportSources(matchedDraft?.draft.importSources,previous?.importSources);
+  await verifyDraftImportSources(store.get(id),validatedDraft,{previousSources:fixedPrevSources.length?fixedPrevSources:undefined});
+  const savedVersion=await maps.save(id,{...saveInput,draft:validatedDraft},author,provenance);
+  if(matchedGroupKeys.length){
+   await writeDraftDisposition(id,matchedGroupKeys,{status:'saved',mapId:savedVersion.mapId,version:savedVersion.version,operationId:savedVersion.operationId,settledAt:savedVersion.createdAt});
+  }
+  return savedVersion;
  }
  const mapRef=(v:StrategyMapVersion)=>({mapId:v.mapId,version:v.version,title:v.title,contentSha256:v.contentSha256});
  function nativeToolSources(n:Awaited<ReturnType<typeof native>>,requestId:string):StrategyDiscussionSource[]{
@@ -416,7 +632,59 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    const end=Math.min(start+limit,body.length);
    return payload({ref:mapRef(map),text:body.slice(start,end),range:{start,end,total:body.length},nextOffset:end<body.length?end:null});
   }
+  if(action==='read-import-source'){
+   const importer=options.mapImports?.();
+   if(!importer || typeof input.importSourceId!=='string' || !input.importSourceId.trim())fail('strategy_map_import_not_found',404);
+   // Strictly bound to this turn's authorized importSourceIds and selectedImportPages
+   if(!context.importSourceIds?.includes(input.importSourceId))fail('strategy_map_import_not_authorized',403);
+   const allowedPages=context.selectedImportPages?.[input.importSourceId];
+   const result=await importer!.readForAgent(o,configuration,input.importSourceId,{
+    page:input.page!==undefined?Number(input.page):undefined,
+    includeImage:input.includeImage!==false,
+    imageIndex:input.imageIndex!==undefined?Number(input.imageIndex):undefined,
+    allowedPages,
+   });
+   context.assertCurrent();
+   return result;
+  }
+  if(action==='propose-map-draft'){
+   const {source}=await candidateSource(o,context);
+   const n=await native(o);
+   const reads=discussionAttachmentReads(n?.manager.getBranch()??[],context.requestId);
+   const tokens=input.citationTokens??[];
+   if(!Array.isArray(tokens)||tokens.some(t=>typeof t!=='string'))fail('invalid_strategy_map_citations',400);
+   const citations=tokens.map(token=>reads.find(c=>c.token===token)??fail('strategy_map_citation_unread',403));
+   let previous:StrategyMapVersion|undefined;
+   let mapId:string|undefined;
+   let expectedVersion:number|undefined;
+   if(context.targetMapRef){
+    if(input.mapId!==undefined && discussionId(input.mapId)!==context.targetMapRef.mapId)fail('strategy_map_version_conflict',409);
+    if(input.expectedVersion!==undefined && Number(input.expectedVersion)!==context.targetMapRef.version)fail('strategy_map_version_conflict',409);
+    mapId=context.targetMapRef.mapId;
+    expectedVersion=context.targetMapRef.version;
+    if(expectedVersion>0)previous=await readMapVersion(o.id,mapId,expectedVersion,configuration);
+   }else if(context.importMode!=='review-draft' && input.mapId!==undefined){
+    mapId=discussionId(input.mapId);
+    expectedVersion=Number(input.expectedVersion??0);
+    if(!Number.isSafeInteger(expectedVersion)||expectedVersion<0)fail('invalid_strategy_map_version',400);
+    if(expectedVersion>0)previous=await readMapVersion(o.id,mapId,expectedVersion,configuration);
+   }
+   let supersededSources:StrategyMapMultiImportSource[]|undefined;
+   if(context.supersedesDraftEntryId){
+    const {groupsByEntryId}=await readMapImportDrafts(o,n,{includeSettled:true});
+    const prevDraft=groupsByEntryId.get(context.supersedesDraftEntryId)?.byEntryId.get(context.supersedesDraftEntryId);
+    supersededSources=prevDraft?.draft.importSources;
+   }
+   const draft=validateStrategyMapDraft(input.mapDraft,{previous,author:'agent'});
+   const mergedPreviousSources=mergeFixedImportSources(supersededSources,previous?.importSources);
+   await verifyDraftImportSources(o,draft,{turnSourceIds:context.importSourceIds,turnSelectedPages:context.selectedImportPages,previousSources:mergedPreviousSources.length?mergedPreviousSources:undefined,requireTurnScope:true});
+   await verifyChoiceSource(source,configuration);
+   context.assertCurrent();context.signal.throwIfAborted();
+   const reason=typeof input.reason==='string'&&input.reason.trim()?input.reason.trim().slice(0,300):'多格式战略图提取草稿（待核对）';
+   return payload({claim:'editable-map-import-draft',requestId:context.requestId,reason,...(context.draftGroupId?{draftGroupId:context.draftGroupId}:{}),...(context.supersedesDraftEntryId?{supersedesEntryId:context.supersedesDraftEntryId}:{}),...(mapId?{mapId,expectedVersion}:{}),draft,citations,source});
+  }
   if(action==='save-map'){
+   if(context.importMode==='review-draft')fail('strategy_map_import_draft_required',409);
    const {source}=await candidateSource(o,context);
    const operationId=input.operationId===undefined?stableId([o.id,context.requestId,action,input]):discussionId(input.operationId);
    const newId=input.mapId===undefined?stableId([o.id,operationId,'map']):discussionId(input.mapId);
@@ -427,9 +695,11 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    const citations=tokens.map(token=>reads.find(c=>c.token===token)??fail('strategy_map_citation_unread',403));
    const saved=await options.mutate(async()=>{
     context.assertCurrent();
-    if(input.mapId!==undefined)await readMapVersion(o.id,newId,Number(input.expectedVersion),configuration);
+    const previous=input.mapId!==undefined?await readMapVersion(o.id,newId,Number(input.expectedVersion),configuration):undefined;
+    const validatedDraft=validateStrategyMapDraft(input.mapDraft,{previous,author:'agent'});
+    await verifyDraftImportSources(o,validatedDraft,{turnSourceIds:context.importSourceIds,turnSelectedPages:context.selectedImportPages,previousSources:previous?.importSources,requireTurnScope:true});
     await verifyChoiceSource(source,configuration);
-    return maps.save(o.id,{mapId:newId,operationId,expectedVersion:input.expectedVersion??0,reason:input.reason,draft:input.mapDraft},'agent',{source,citations,requestId:context.requestId},()=>{context.assertCurrent();context.signal.throwIfAborted();});
+    return maps.save(o.id,{mapId:newId,operationId,expectedVersion:input.expectedVersion??0,reason:input.reason,draft:validatedDraft},'agent',{source,citations,requestId:context.requestId},()=>{context.assertCurrent();context.signal.throwIfAborted();});
    });
    return payload({map:mapRef(saved),operationId,claim:'candidate-not-adopted'});
   }
@@ -596,6 +866,89 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   if(!proposal)fail('goal_suggestion_source_changed',409);
   return proposal;
  }
+ type MapImportDraftGroup = {
+  draftGroupId: string;
+  entryIds: string[];
+  byEntryId: Map<string, StrategyMapImportDraftReceipt>;
+  latest: StrategyMapImportDraftReceipt;
+ };
+ async function readMapImportDrafts(owner:StrategyDiscussion,n:Awaited<ReturnType<typeof native>>,opts:{includeSettled?:boolean}={}):Promise<{drafts:StrategyMapImportDraftReceipt[];unavailable:{entryId:string;reason:string}[];groupsByEntryId:Map<string,MapImportDraftGroup>}>{
+  if(!n||owner.businessOwner)return {drafts:[],unavailable:[],groupsByEntryId:new Map()};
+  const groupsByGroupId=new Map<string,MapImportDraftGroup>();
+  const groupsByEntryId=new Map<string,MapImportDraftGroup>();
+  const unavailable:{entryId:string;reason:string}[]=[];
+  const baseMapSourcesCache=new Map<string,StrategyMapMultiImportSource[]>();
+  let currentTurnSelectedPages:Record<string,number[]>|undefined;
+  let currentTurnTargetMapRef:{mapId:string;version:number}|undefined;
+  for(const entry of n.manager.getBranch()){
+   if(entry.type==='custom'&&entry.customType==='optracall.run'&&object(entry.data)&&entry.data.phase==='started'){
+    const provided=entry.data.providedContext;
+    const sd=object(provided)&&object(provided.strategyDiscussion)?provided.strategyDiscussion:undefined;
+    currentTurnSelectedPages=sd&&object(sd.selectedImportPages)?sd.selectedImportPages as Record<string,number[]>:undefined;
+    currentTurnTargetMapRef=sd&&object(sd.targetMapRef)&&typeof sd.targetMapRef.mapId==='string'&&typeof sd.targetMapRef.version==='number'?{mapId:sd.targetMapRef.mapId,version:sd.targetMapRef.version}:undefined;
+    continue;
+   }
+   if(entry.type!=='message'||entry.message.role!=='toolResult'||entry.message.toolName!=='strategy_goals'||entry.message.isError)continue;
+   const text=textOf(entry.message);
+   let value:any;try{value=JSON.parse(text);}catch{continue;}
+   if(value?.claim!=='editable-map-import-draft'||!object(value.draft))continue;
+   const supersededGroup=typeof value.supersedesEntryId==='string'?groupsByEntryId.get(value.supersedesEntryId):undefined;
+   const draftGroupId=supersededGroup?.draftGroupId ?? (typeof value.draftGroupId==='string'&&value.draftGroupId.trim()?value.draftGroupId.trim():entry.id);
+   const existingGroup=groupsByGroupId.get(draftGroupId);
+   const resolvedMapId=currentTurnTargetMapRef?.mapId ?? (typeof value.mapId==='string'?value.mapId:undefined) ?? existingGroup?.latest.mapId;
+   const resolvedExpectedVersion=currentTurnTargetMapRef?.version ?? (typeof value.expectedVersion==='number'?value.expectedVersion:undefined) ?? existingGroup?.latest.expectedVersion;
+   let baseMapSources:StrategyMapMultiImportSource[]|undefined;
+   if(resolvedMapId && resolvedExpectedVersion!==undefined && resolvedExpectedVersion>0){
+    const cacheKey=`${resolvedMapId}:${resolvedExpectedVersion}`;
+    if(!baseMapSourcesCache.has(cacheKey)){
+     try{baseMapSourcesCache.set(cacheKey,(await maps.read(owner.id,resolvedMapId,resolvedExpectedVersion)).importSources??[]);}
+     catch{baseMapSourcesCache.set(cacheKey,[]);}
+    }
+    baseMapSources=baseMapSourcesCache.get(cacheKey);
+   }
+   const mergedPrevSources=mergeFixedImportSources(existingGroup?.latest.draft.importSources,baseMapSources);
+   try{
+    const validated=validateStrategyMapDraft(value.draft,{author:'agent'});
+    await verifyDraftImportSources(owner,validated,{turnSelectedPages:currentTurnSelectedPages,previousSources:mergedPrevSources.length?mergedPrevSources:undefined});
+    if(value.source)await verifyChoiceSource(value.source);
+    const receipt:StrategyMapImportDraftReceipt={
+     entryId:entry.id,
+     draftGroupId,
+     ...(typeof value.supersedesEntryId==='string'?{supersedesEntryId:value.supersedesEntryId}:{}),
+     ...(typeof value.requestId==='string'?{requestId:value.requestId}:{}),
+     sessionId:n.manager.getSessionId(),
+     sha256:discussionHash(text),
+     reason:typeof value.reason==='string'?value.reason:'多格式战略图提取草稿（待核对）',
+     ...(resolvedMapId?{mapId:resolvedMapId}:{}),
+     ...(resolvedExpectedVersion!==undefined?{expectedVersion:resolvedExpectedVersion}:{}),
+     draft:validated,
+     citations:Array.isArray(value.citations)?value.citations:[],
+     ...(value.source?{source:value.source}:{}),
+    };
+    const group:MapImportDraftGroup=existingGroup ?? {draftGroupId,entryIds:[],byEntryId:new Map(),latest:receipt};
+    group.entryIds.push(entry.id);
+    group.byEntryId.set(entry.id,receipt);
+    group.latest=receipt;
+    groupsByGroupId.set(draftGroupId,group);
+    groupsByEntryId.set(entry.id,group);
+   }catch(e){
+    const reason=e instanceof Error?e.message:'strategy_map_import_source_unavailable';
+    if(!/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized|import_page_not_authorized|invalid_strategy_map/.test(reason))throw e;
+    unavailable.push({entryId:entry.id,reason});
+   }
+  }
+  const ledger=opts.includeSettled?null:await readDraftDispositions(owner.id);
+  const savedFromMaps=opts.includeSettled?null:await readSettledDraftsFromMaps(owner.id);
+  const drafts:StrategyMapImportDraftReceipt[]=[];
+  for(const group of groupsByGroupId.values()){
+   if(ledger || savedFromMaps){
+    const allKeys=[group.draftGroupId,...group.entryIds];
+    if(allKeys.some(k=>Boolean(ledger?.entries[k])||Boolean(savedFromMaps?.get(k))))continue;
+   }
+   drafts.push(group.latest);
+  }
+  return {drafts,unavailable,groupsByEntryId};
+ }
  async function detail(id:string, originalRequestId?:string, checked = false):Promise<StrategyDiscussionDetail>{
   let {owner,ref}=own(id);
   let live=await domain.read(ref), n:Awaited<ReturnType<typeof native>>;
@@ -616,10 +969,15 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   const snapshot=checked?{...session,messages:n?presentContextMessages(n.manager.buildSessionContext().messages,n.manager.getBranch(),n.manager.getSessionId()):[]}:session;
   let discussion:StrategyDiscussion=owner;if(!live.busy&&owner.lastRun?.status==='accepted')discussion={...owner,lastRun:{...owner.lastRun,status:'unknown'}};
   const receipt=requestReceipt(n,originalRequestId ?? owner.lastRun?.id);
-  return {discussion,busy:live.busy,snapshot,goals,...(!owner.businessOwner && {attachmentReferences:discussionAttachmentCitations(n?.manager.getBranch()??[])}),...(owner.businessOwner?{goalDrafts:goalSuggestions(owner,n)}:{}),goalContentHashes:Object.fromEntries(goals.map(g=>[g.goalId+':'+g.version,goalContentSha256(g)])),replies,...(receipt && {requestReceipt:receipt})};
+  let importDraftState:{drafts:StrategyMapImportDraftReceipt[];unavailable:{entryId:string;reason:string}[]}={drafts:[],unavailable:[]};
+  if(!owner.businessOwner&&n){
+   try{importDraftState=await readMapImportDrafts(owner,n);}
+   catch(e){if(!live.busy||!(e instanceof NativeSnapshotError&&e.code==='native_snapshot_changed'))throw e;}
+  }
+  return {discussion,busy:live.busy,snapshot,goals,...(!owner.businessOwner && {attachmentReferences:discussionAttachmentCitations(n?.manager.getBranch()??[]),...(importDraftState.drafts.length?{mapImportDrafts:importDraftState.drafts}:{}),...(importDraftState.unavailable.length?{unavailableMapImportDrafts:importDraftState.unavailable}:{})}),...(owner.businessOwner?{goalDrafts:goalSuggestions(owner,n)}:{}),goalContentHashes:Object.fromEntries(goals.map(g=>[g.goalId+':'+g.version,goalContentSha256(g)])),replies,...(receipt && {requestReceipt:receipt})};
  }
  async function send(id:string,input:Record<string,unknown>){
-  if(Object.keys(input).some(k=>!['requestId','text','expectedRevision','replacePendingRequestId','mapRef','mapTemplate','attachmentIds'].includes(k))||typeof input.text!=='string'||(!input.text.trim()&&!(Array.isArray(input.attachmentIds)&&input.attachmentIds.length))||input.text.length>20000)fail('invalid_strategy_message',400);
+  if(Object.keys(input).some(k=>!['requestId','text','expectedRevision','replacePendingRequestId','mapRef','mapTemplate','attachmentIds','importSourceIds','selectedImportPages','importMode','workingMapDraft','supersedesDraftEntryId'].includes(k))||typeof input.text!=='string'||(!input.text.trim()&&!(Array.isArray(input.attachmentIds)&&input.attachmentIds.length)&&!(Array.isArray(input.importSourceIds)&&input.importSourceIds.length))||input.text.length>20000)fail('invalid_strategy_message',400);
   const requestId=discussionId(input.requestId),originalUserText=input.text;
   let owner=store.get(id);const fingerprint=discussionHash(input);
   if(owner.lastRun?.id===requestId){if(owner.lastRun.fingerprint!==fingerprint)fail('strategy_discussion_operation_conflict');return {discussion:owner,requestId,replayed:true};}
@@ -630,6 +988,13 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    if(ids.some(id=>!owner.sources.some(s=>s.id===id&&s.target.kind==='strategy-attachment'&&!isDiscussionSourceExcluded(owner,s))))fail('strategy_attachment_not_authorized',403);
    selectedAttachmentIds=ids as string[];
   }
+  const importMode=input.importMode;
+  if(importMode!==undefined&&(owner.businessOwner||importMode!=='review-draft'))fail('invalid_strategy_map_import_selection',400);
+  let supersedesDraftEntryId:string|undefined;
+  if(input.supersedesDraftEntryId!==undefined){
+   if(owner.businessOwner||typeof input.supersedesDraftEntryId!=='string'||!input.supersedesDraftEntryId.trim()||input.supersedesDraftEntryId.length>120)fail('invalid_strategy_map_import_selection',400);
+   supersedesDraftEntryId=input.supersedesDraftEntryId.trim();
+  }
   const template=input.mapTemplate;
   if(template!==undefined && (owner.businessOwner || (template!=='bsc' && template!=='tree' && template!=='table')))fail('invalid_strategy_map_template',400);
   const selected=input.mapRef;
@@ -638,8 +1003,89 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
     if(owner.businessOwner || !object(selected) || !Number.isSafeInteger(selected.version) || Number(selected.version)<1 || (selected.edgeId!==undefined && (typeof selected.edgeId!=='string' || !selected.edgeId || selected.edgeId.length>300)))fail('invalid_strategy_map_ref',400);
     selectedMap={mapId:discussionId(selected.mapId),version:Number(selected.version),...(typeof selected.edgeId==='string'?{edgeId:selected.edgeId}:{})};
   }
+  const n=await native(owner);
+  let draftGroupId:string|undefined;
+  let supersededDraft:StrategyMapImportDraftReceipt|undefined;
+  if(supersedesDraftEntryId){
+   const {groupsByEntryId}=await readMapImportDrafts(owner,n,{includeSettled:true});
+   const group=groupsByEntryId.get(supersedesDraftEntryId);
+   if(!group)fail('strategy_map_import_draft_not_found',404);
+   const existing=await findExistingDraftDisposition(owner.id,[group.draftGroupId,...group.entryIds]);
+   if(existing?.status==='dismissed')fail('strategy_map_import_draft_dismissed',409);
+   if(existing?.status==='saved')fail('strategy_map_import_draft_already_saved',409);
+   if(group.latest.entryId!==supersedesDraftEntryId)fail('strategy_map_import_draft_superseded',409);
+   draftGroupId=group.draftGroupId;
+   supersededDraft=group.byEntryId.get(supersedesDraftEntryId)??group.latest;
+  }
+  const targetMapRef:{mapId:string;version:number}|undefined=selectedMap
+   ? {mapId:selectedMap.mapId,version:selectedMap.version}
+   : (supersededDraft?.mapId && supersededDraft.expectedVersion!==undefined ? {mapId:supersededDraft.mapId,version:supersededDraft.expectedVersion} : undefined);
+  let selectedMapVersion:StrategyMapVersion|undefined;
+  if(targetMapRef && targetMapRef.version>0 && (input.importSourceIds!==undefined || input.workingMapDraft!==undefined || importMode==='review-draft')){
+   selectedMapVersion=await readMapVersion(id,targetMapRef.mapId,targetMapRef.version);
+  }
+  const fixedPreviousSources=mergeFixedImportSources(supersededDraft?.draft.importSources,selectedMapVersion?.importSources);
+  const fixedPagesBySource=new Map<string,number[]>();
+  for(const src of fixedPreviousSources){
+   if(src.selectedPages?.length)fixedPagesBySource.set(src.sourceId,[...src.selectedPages].sort((a,b)=>a-b));
+  }
+  let workingMapDraft:StrategyMapDraft|undefined;
+  if(input.workingMapDraft!==undefined){
+   if(owner.businessOwner)fail('invalid_strategy_map',400);
+   workingMapDraft=validateStrategyMapDraft(input.workingMapDraft,{author:'user'});
+   if(JSON.stringify(workingMapDraft).length>28000)fail('strategy_discussion_materials_too_large',413);
+  }
+  let selectedImportSourceIds:string[]|undefined;
+  let selectedImportPages:Record<string,number[]>|undefined;
+  let importSourcesMeta:Array<{sourceId:string;format:string;fileName:string;sha256:string;origin:string;pageCount:number;selectedPages?:number[]}>|undefined;
+  if(input.importSourceIds!==undefined){
+   const ids=input.importSourceIds;
+   if(owner.businessOwner||!Array.isArray(ids)||ids.length>10||ids.some(sid=>typeof sid!=='string'||!sid.trim())||new Set(ids).size!==ids.length)fail('invalid_strategy_map_import_selection',400);
+   const importer=options.mapImports?.();
+   if(!importer)fail('strategy_map_import_source_unavailable',403);
+   if(input.selectedImportPages!==undefined){
+    if(!object(input.selectedImportPages))fail('invalid_strategy_map_import_selection',400);
+    selectedImportPages={};
+    for(const [sid,pages] of Object.entries(input.selectedImportPages)){
+     if(!ids.includes(sid)||!Array.isArray(pages)||!pages.length||pages.length>200||new Set(pages).size!==pages.length||pages.some(p=>!Number.isInteger(p)||Number(p)<1))fail('invalid_strategy_map_import_selection',400);
+     const sorted=(pages as number[]).slice().sort((a,b)=>a-b);
+     const fixedUpper=fixedPagesBySource.get(sid);
+     if(fixedUpper?.length && sorted.some(p=>!fixedUpper.includes(p)))fail('strategy_map_import_page_not_authorized',403);
+     selectedImportPages[sid]=sorted;
+    }
+    for(const sid of ids as string[]){
+     if(!selectedImportPages[sid]){
+      const fixedUpper=fixedPagesBySource.get(sid);
+      if(fixedUpper?.length)selectedImportPages[sid]=[...fixedUpper];
+     }
+    }
+   }else{
+    const inherited:Record<string,number[]>={};
+    for(const sid of ids as string[]){
+     const fixedUpper=fixedPagesBySource.get(sid);
+     if(fixedUpper?.length)inherited[sid]=[...fixedUpper];
+    }
+    if(importMode==='review-draft'){
+     for(const src of workingMapDraft?.importSources??[]){
+      if(ids.includes(src.sourceId)&&src.selectedPages?.length&&!inherited[src.sourceId]){
+       inherited[src.sourceId]=[...src.selectedPages].sort((a,b)=>a-b);
+      }
+     }
+    }
+    if(Object.keys(inherited).length)selectedImportPages=inherited;
+   }
+   const verifiedMap=await importer!.verifySources(owner,(ids as string[]).map(sourceId=>({sourceId,...(selectedImportPages?.[sourceId]?{selectedPages:selectedImportPages[sourceId]}:{})})));
+   importSourcesMeta=(ids as string[]).map(sid=>{
+    const item=verifiedMap.get(sid)!;
+    return {sourceId:item.sourceId,format:item.format,fileName:item.fileName,sha256:item.sha256,origin:item.origin,pageCount:item.pageCount,...(selectedImportPages?.[sid]?.length?{selectedPages:selectedImportPages[sid]}:{})};
+   });
+   selectedImportSourceIds=ids as string[];
+  }
+  if(workingMapDraft){
+   await verifyDraftImportSources(owner,workingMapDraft,{turnSelectedPages:selectedImportPages,previousSources:fixedPreviousSources.length?fixedPreviousSources:undefined});
+  }
   if(owner.pendingInput&&owner.pendingInput.requestId!==requestId&&(input.replacePendingRequestId!==owner.pendingInput.requestId||!['failed','cancelled'].includes(owner.lastRun?.status??'')))fail('strategy_discussion_pending_request');
-  const n=await native(owner);if(n?.entries.some(e=>e.type==='custom'&&e.customType==='optracall.run'&&(e.data as any)?.requestId===requestId))fail('strategy_discussion_request_already_recorded');
+  if(n?.entries.some(e=>e.type==='custom'&&e.customType==='optracall.run'&&(e.data as any)?.requestId===requestId))fail('strategy_discussion_request_already_recorded');
   if(owner.revision!==input.expectedRevision)fail('strategy_discussion_context_changed');
   const ref=domain.ref(owner);if(domain.busy(ref))fail('session_busy');
   if(owner.usageContext===undefined){
@@ -647,7 +1093,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    owner.usageContext=resolveNewUsageContext({goal,defaultContext:owner.businessOwner?null:await options.defaultUsageContext()})??null;
   }
   const previousAccesses=sourceAccesses(n),previousProjections=previousAccesses.projections;
-  owner={...owner,revision:owner.revision+1,updatedAt:new Date().toISOString(),lastRun:{id:requestId,fingerprint,status:'accepted'},pendingInput:{requestId,text:originalUserText,expectedRevision:Number(input.expectedRevision),...(selectedAttachmentIds&&{attachmentIds:selectedAttachmentIds}),...(selectedMap&&{mapRef:selectedMap}),...(template&&{mapTemplate:template})}};
+  owner={...owner,revision:owner.revision+1,updatedAt:new Date().toISOString(),lastRun:{id:requestId,fingerprint,status:'accepted'},pendingInput:{requestId,text:originalUserText,expectedRevision:Number(input.expectedRevision),...(selectedAttachmentIds&&{attachmentIds:selectedAttachmentIds}),...(selectedImportSourceIds&&{importSourceIds:selectedImportSourceIds}),...(selectedImportPages&&{selectedImportPages}),...(importMode&&{importMode}),...(supersedesDraftEntryId&&{supersedesDraftEntryId}),...(workingMapDraft&&{workingMapDraft}),...(selectedMap&&{mapRef:selectedMap}),...(template&&{mapTemplate:template})}};
   await options.mutate(()=>{const latest=store.get(id);if(latest.revision!==Number(input.expectedRevision))fail('strategy_discussion_context_changed');store.write({...owner,createFingerprint:latest.createFingerprint});});
   let accept!:(value:any)=>void,reject!:(e:unknown)=>void;const ack=new Promise<any>((resolve,fail)=>{accept=resolve;reject=fail;});
   let sdkAccepted=false;
@@ -668,9 +1114,11 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
     if(!currentMap.edges.some(edge=>edge.id===selectedMap!.edgeId))fail('invalid_strategy_map_edge',400);
     selectedEdge=selectedMap.edgeId;
    }
-  }else currentMap=catalog.filter(v=>heads.includes(v)).at(-1);
+  }else if(importMode!=='review-draft'){
+   currentMap=catalog.filter(v=>heads.includes(v)).at(-1);
+  }
   const mapContext=currentMap?{mapCandidates:heads.map(mapRef),currentMap:JSON.stringify(currentMap).length<28000?currentMap:{...mapRef(currentMap),bodyIncluded:false},...(selectedEdge&&{selectedEdge})}:{};
-  const roleFields=owner.businessOwner?{owner:owner.businessOwner,roleContext,roleVersion:businessRoleVersion}:{goalScopes:pageDiscussionGoalScopes(scopeDirectory(owner,ownGoals(owner))),...mapContext,...(selectedAttachmentIds&&{selectedAttachmentIds}),...(unavailable.length&&{unavailableMaps:unavailable}),...(input.mapTemplate!==undefined&&{preferredMapTemplate:input.mapTemplate})};
+  const roleFields=owner.businessOwner?{owner:owner.businessOwner,roleContext,roleVersion:businessRoleVersion}:{goalScopes:pageDiscussionGoalScopes(scopeDirectory(owner,ownGoals(owner))),...mapContext,...(selectedAttachmentIds&&{selectedAttachmentIds}),...(importSourcesMeta&&{importSources:importSourcesMeta}),...(importMode&&{importMode}),...(workingMapDraft&&{workingMapDraft}),...(unavailable.length&&{unavailableMaps:unavailable}),...(input.mapTemplate!==undefined&&{preferredMapTemplate:input.mapTemplate})};
   const composePrompt=(goalContext:unknown)=>JSON.stringify({...roleFields,usageContext:owner.usageContext,methods:owner.methods,goalContext,sources:owner.sources,sourceScope:owner.sourceScope,claim:'accurate-context-not-professional-judgement'})+'\n\n用户本轮原话：\n'+originalUserText;
   let prompt=composePrompt(context);
   if(prompt.length>65536 && context)prompt=composePrompt({bodyIncluded:false,goal:goalReceipt(context.goals[0]!),basisSha256:discussionHash(context.basis)});
@@ -681,6 +1129,22 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
     for(const ref of previousAccesses.arrangements)await checkArrangement(ref,cfg);
     await verifyMapHistory(owner,previousAccesses.mapHistory,cfg);
     for(const ref of promptMapExposure(mapContext))await readMapVersion(id,ref.mapId,ref.version,cfg);
+    if(previousAccesses.importReads.length){
+     const importer=options.mapImports?.();
+     if(!importer)fail('strategy_map_import_source_unavailable',403);
+     await importer!.verifySources(owner,previousAccesses.importReads);
+    }
+    if(previousAccesses.workingDraftImportSources.length){
+     const importer=options.mapImports?.();
+     if(!importer)fail('strategy_map_import_source_unavailable',403);
+     await importer!.verifySources(owner,previousAccesses.workingDraftImportSources);
+    }
+    if(importSourcesMeta?.length){
+     const importer=options.mapImports?.();
+     if(!importer)fail('strategy_map_import_source_unavailable',403);
+     await importer!.verifySources(owner,importSourcesMeta);
+    }
+    if(workingMapDraft)await verifyDraftImportSources(owner,workingMapDraft,{turnSelectedPages:selectedImportPages,previousSources:fixedPreviousSources.length?fixedPreviousSources:undefined});
     if(context)await checkGoalContext(context,cfg);
     if(owner.businessOwner) {
       const checked = await options.roleContext!(owner.businessOwner,cfg,true);
@@ -695,7 +1159,8 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
      if(isDiscussionSourceExcluded(owner,source)||((discussionSourceMode(owner)==='selected-only'||source.target.kind==='strategy-attachment')&&!permitsHistoricalSource(owner,source))||(discussionSourceMode(owner)==='project-background'&&access.projectId!==owner.projectId))fail('strategy_discussion_history_scope_changed');
     }
     for(const projection of [...previousProjections,{projectId:owner.projectId,sources:owner.sources}]){if(projection.sources.length&&!options.sources)fail('strategy_discussion_sources_unavailable');await options.sources?.verify({...owner,projectId:projection.projectId,sources:projection.sources},cfg,{...sourceContext,...('metadataOnly' in projection&&projection.metadataOnly?{metadataOnly:true}:{})});} };
-   const run=lease.start({requestId,text:prompt,requestFingerprint:discussionHash(prompt),providedContext:{userQuoteEligible:true,originalUserText,...(owner.businessOwner?{businessRole:{owner:owner.businessOwner,version:businessRoleVersion,contextSha256:discussionHash(roleContext),...(sourceRights.length?{sourceRights}:{})}}:{}),strategyDiscussion:{discussionId:id,...(currentMap&&{mapExposure:promptMapExposure(mapContext)}),...(selectedAttachmentIds&&{attachmentIds:selectedAttachmentIds}),usageContext:owner.usageContext,methods:owner.methods,sources:owner.sources,...(owner.sourceScope?{sourceScope:owner.sourceScope}:{}),...(owner.projectId?{projectId:owner.projectId}:{}),...(context?{goalBasis:context.basis}:{}),...(owner.goal?{goal:owner.goal}:{})}},verifyBeforeDispatch:verify});
+   const workingDraftImportSources=workingMapDraft?.importSources?.length?workingMapDraft.importSources.map(s=>({sourceId:s.sourceId,sha256:s.sha256,...(s.selectedPages?.length?{selectedPages:s.selectedPages}:{})})):undefined;
+   const run=lease.start({requestId,text:prompt,requestFingerprint:discussionHash(prompt),providedContext:{userQuoteEligible:true,originalUserText,...(owner.businessOwner?{businessRole:{owner:owner.businessOwner,version:businessRoleVersion,contextSha256:discussionHash(roleContext),...(sourceRights.length?{sourceRights}:{})}}:{}),strategyDiscussion:{discussionId:id,...(currentMap&&{mapExposure:promptMapExposure(mapContext)}),...(selectedAttachmentIds&&{attachmentIds:selectedAttachmentIds}),...(selectedImportSourceIds&&{importSourceIds:selectedImportSourceIds}),...(selectedImportPages&&{selectedImportPages}),...(importMode&&{importMode}),...(draftGroupId&&{draftGroupId}),...(supersedesDraftEntryId&&{supersedesDraftEntryId}),...(targetMapRef&&{targetMapRef}),...(workingDraftImportSources&&{workingDraftImportSources}),usageContext:owner.usageContext,methods:owner.methods,sources:owner.sources,...(owner.sourceScope?{sourceScope:owner.sourceScope}:{}),...(owner.projectId?{projectId:owner.projectId}:{}),...(context?{goalBasis:context.basis}:{}),...(owner.goal?{goal:owner.goal}:{})}},verifyBeforeDispatch:verify});
    await run.accepted;sdkAccepted=true;
    const opened=(await domain.read(domain.ref(owner))).snapshot;
    if(!opened?.sessionFile)fail('strategy_discussion_persistence_unknown',503);
@@ -746,7 +1211,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   }
   return original;
  }
- return {store,domain,detail,send,adopt,mapMetadata:(id:string)=>maps.list(id),readMapVersion,readMapVersions,mapCatalog,saveMapVersion,readGoalSuggestion,readChoiceReply,verifyChoiceSource,readDiscussionSource,readSource,sourceContext,verifyRoleHistory,
+ return {store,domain,detail,send,adopt,mapMetadata:(id:string)=>maps.list(id),readMapVersion,readMapVersions,mapCatalog,saveMapVersion,dismissMapImportDraft,readGoalSuggestion,readChoiceReply,verifyChoiceSource,readDiscussionSource,readSource,sourceContext,verifyRoleHistory,
   async create(raw:Record<string,unknown>){validatePatch(raw,true);const configuration=options.configuration(raw.configurationId as string|undefined);if(!configuration)fail('configuration_required');return options.mutate(()=>store.create(raw as unknown as StrategyDiscussionCreate,configuration));},
   async update(id:string,raw:Record<string,unknown>){validatePatch(raw);const {ref}=own(id);if(domain.busy(ref))fail('session_busy');if(raw.configurationId!==undefined){await domain.close(ref);const config=options.configuration(String(raw.configurationId));if(!config)fail('configuration_required');return options.mutate(()=>store.update(id,raw as unknown as StrategyDiscussionUpdate,config));}return options.mutate(()=>store.update(id,raw as unknown as StrategyDiscussionUpdate));},
   async sources(id:string,projectId?:string){return {sources:await options.sources?.list(store.get(id),projectId)??[]};},
