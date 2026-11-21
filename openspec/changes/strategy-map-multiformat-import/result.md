@@ -280,3 +280,17 @@
   1. 云端 Linux VM 未安装 Node `playwright` 包，原样 `node tests/browser-strategy-map-import.mjs` 需由 Codex 在 Mac mini 实跑（已通过 `node --check` 语法检查并以 1:1 Python Playwright 镜像在真实 Chrome 连续 3/3 通过）；
   2. 真实商业视觉大模型的首稿识图准确率（云端 VM 无商业视觉凭据与调用授权）；
   3. 全仓 433 个测试文件全量 CI、macOS 本机 LibreOffice + `pypdfium2` 整页渲染对照（Codex 已在 Mac mini 实测通过）、Codex 第七轮非作者复核、最新 `main` 集成、PR/CI、获授权合并与 Mac mini / MacBook 服务切换。
+
+## 12. Codex 非作者复核与交付索引
+
+固定实现为 `fc76847c95f3744cc22689ed819075c055166ba7`。Codex 从 origin 核对该提交，在独立工作树、隔离 Host 和合成 Provider 上，用真实 Chrome 分别保存并重新读取同一张图的版本。工程记录在此原位归档。[第六轮原始反例](https://github.com/gadfly-hbo/OptraCall/issues/106#issuecomment-7061918106) · [对应返工回执](https://github.com/gadfly-hbo/OptraCall/issues/106#issuecomment-7062144319)
+
+| 用户操作 | 独立读取的结果 |
+| --- | --- |
+| 已删 G2，只重读 e1，直接保存 | e1 更新为 S1→G1 / supports，e2 保持 S1→G1 / unknown。若建议把 e1 自身改接 G2，原有的 e1 也保留。 |
+| 只恢复 G2 并保存 | G2 出现在下一版，e2 仍为 S1→G1 / unknown。 |
+| 恢复 G2，再点 e2 的「改用重读值」并保存 | e2 更新为 S1→G2 / supports，历史版本仍可读。 |
+
+仓库自带的浏览器脚本在未修改夹具的情况下通过，包含跨讨论切换、过时标签页的 409、人工基线和空值、暗色及窄屏。会话边界检查与构建通过。标准轴与产品规格轴复核均通过。本次修正由界面保护已保存版本，由原战略 Agent 在同一 Pi 会话重读原稿；现有节点及连线只对需要人作取舍的差异提供操作。官方 SDK 与依赖锁延用原版。
+
+已集成基线 `8f6bec2e977e783d8075c0425db3c9598c790d37`。各轮发现及修复保留于本文件与原 Issue。实际 PR、远端 CI、main 和两端运行版本以[原 Issue 的发布回执](https://github.com/gadfly-hbo/OptraCall/issues/106)为准。商业视觉模型在真实原图上的提取准确率及用户最终产品验收另记。回退及旧版写回的限制见第 5 节。
