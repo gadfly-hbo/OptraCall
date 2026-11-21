@@ -1,0 +1,1394 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OptraCall · 战略地图多格式导入可点击 Demo（Issue #106）</title>
+<style>
+  :root {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --canvas: #ffffff;
+    --sidebar: #f7f7f9;
+    --surface: #ffffff;
+    --subtle: #f5f5f8;
+    --hover: #ececf2;
+    --ink: #24232b;
+    --muted: #6c6b78;
+    --faint: #777580;
+    --line: #e6e5eb;
+    --accent: #6550c9;
+    --accent-soft: #eeebfb;
+    --focus: #a397e0;
+    --ok: #1b6e46;
+    --ok-bg: #eaf7f0;
+    --warning: #8a5607;
+    --warning-bg: #fff6e5;
+    --warning-border: #e8b861;
+    --error: #a12b36;
+    --error-bg: #fff2f3;
+    --shadow: 0 4px 18px rgba(24, 18, 46, 0.06);
+  }
+  [data-theme="dark"] {
+    --canvas: #1b1b20;
+    --sidebar: #16161b;
+    --surface: #232329;
+    --subtle: #292930;
+    --hover: #32323a;
+    --ink: #eeeef2;
+    --muted: #b2b0be;
+    --faint: #9896a5;
+    --line: #3d3b47;
+    --accent: #b7a7ff;
+    --accent-soft: #30294a;
+    --focus: #c4b7ff;
+    --ok: #7be0ad;
+    --ok-bg: #1b3428;
+    --warning: #f0c97e;
+    --warning-bg: #372c1b;
+    --warning-border: #9a742b;
+    --error: #ffafb8;
+    --error-bg: #39252b;
+    --shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font-size: 14px; line-height: 1.5; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  /* Demo banner */
+  .demo-banner {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 16px; background: var(--accent-soft); border-bottom: 1px solid var(--line); font-size: 12px;
+  }
+  .demo-banner strong { color: var(--accent); }
+  .demo-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .demo-controls label { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+  .demo-controls select, .btn-xs {
+    border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 3px 8px; font-size: 12px;
+  }
+
+  /* App shell */
+  .topbar {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--surface);
+  }
+  .brand-row { display: flex; align-items: center; gap: 10px; }
+  .brand-dot {
+    width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid var(--accent); position: relative; flex-shrink: 0;
+  }
+  .brand-dot::after {
+    content: ""; position: absolute; width: 9px; height: 9px; right: -2px; bottom: -2px;
+    border-radius: 50%; border: 2px solid var(--accent); background: var(--surface);
+  }
+  .tabs { display: flex; gap: 4px; background: var(--subtle); padding: 3px; border-radius: 8px; }
+  .tab-btn {
+    border: 0; background: transparent; padding: 6px 12px; border-radius: 6px; font-size: 13px; color: var(--muted);
+  }
+  .tab-btn.active { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+
+  .btn {
+    border: 1px solid var(--line); background: var(--surface); padding: 6px 12px; border-radius: 7px; font-size: 13px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover:not(:disabled) { background: var(--hover); }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 500; }
+  [data-theme="dark"] .btn-primary { color: #161420; }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.06); background: var(--accent); }
+  .btn-ok { background: var(--ok-bg); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); font-weight: 500; }
+  .btn-warn { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-border); }
+  .btn-danger { color: var(--error); border-color: color-mix(in srgb, var(--error) 35%, transparent); background: var(--error-bg); }
+  .btn-ghost { border-color: transparent; background: transparent; color: var(--accent); padding: 4px 8px; }
+
+  .container { max-width: 1460px; margin: 0 auto; padding: 14px 18px 28px; }
+
+  /* Format switcher bar */
+  .format-bar {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 14px; background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px;
+  }
+  .format-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill {
+    border: 1px solid var(--line); background: var(--surface); padding: 6px 11px; border-radius: 999px; font-size: 12.5px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .pill.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .badge {
+    display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  }
+  .badge-clear { background: var(--ok-bg); color: var(--ok); }
+  .badge-review { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+  .badge-accent { background: var(--accent-soft); color: var(--accent); }
+  .badge-muted { background: var(--subtle); color: var(--muted); border: 1px solid var(--line); }
+
+  /* Notice alerts */
+  .alert {
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .alert-warn { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+  .alert-error { background: var(--error-bg); color: var(--error); border: 1px solid color-mix(in srgb, var(--error) 40%, transparent); }
+  .alert-ok { background: var(--ok-bg); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent); }
+
+  /* Split workspace */
+  .mobile-pane-tabs { display: none; gap: 6px; margin-bottom: 10px; }
+  .workspace {
+    display: grid; grid-template-columns: minmax(360px, 47%) minmax(0, 53%); gap: 14px; align-items: start;
+  }
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .panel-head {
+    padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--subtle);
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .panel-head h2 { margin: 0; font-size: 14px; }
+  .panel-body { padding: 12px 14px; }
+
+  /* Source viewer (left) */
+  .page-strip {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px;
+    border-bottom: 1px solid var(--line); background: var(--canvas); font-size: 12px;
+  }
+  .page-chip {
+    display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line);
+    border-radius: 6px; padding: 3px 8px; background: var(--subtle); cursor: pointer;
+  }
+  .page-chip.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .source-canvas-wrap {
+    position: relative; background: var(--subtle); border-bottom: 1px solid var(--line);
+    overflow: auto; padding: 12px; min-height: 360px; display: flex; justify-content: center; align-items: center;
+  }
+  .source-svg {
+    width: 100%; height: auto; max-width: 680px; border-radius: 6px; background: #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08); transition: transform 0.15s ease; transform-origin: top center;
+  }
+  [data-theme="dark"] .source-svg { background: #26262e; }
+  .hotspot { cursor: pointer; transition: opacity 0.15s, stroke-width 0.15s; }
+  .hotspot:hover { filter: brightness(0.96); }
+  .hotspot.selected rect, .hotspot.selected path.hit-outline {
+    stroke: var(--accent) !important; stroke-width: 3.5 !important;
+  }
+  .source-meta {
+    padding: 10px 14px; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between;
+  }
+
+  /* Candidate panel (right) */
+  .summary-strip {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--canvas);
+  }
+  .stats { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; }
+  .view-switch { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { padding: 8px 9px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { background: var(--subtle); color: var(--muted); font-weight: 600; white-space: nowrap; }
+  tr.row-item { cursor: pointer; }
+  tr.row-item:hover { background: var(--hover); }
+  tr.row-item.selected { background: var(--accent-soft); }
+  tr.row-item.needs-review { background: color-mix(in srgb, var(--warning-bg) 55%, var(--surface)); }
+  tr.row-item.needs-review.selected { background: var(--accent-soft); }
+
+  /* Tree & BSC views */
+  .tree-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  .tree-card, .bsc-card {
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; background: var(--surface); cursor: pointer;
+  }
+  .tree-card.selected, .bsc-card.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .tree-card.needs-review, .bsc-card.needs-review { border-color: var(--warning-border); background: var(--warning-bg); }
+  .tree-children { list-style: none; padding-left: 18px; margin: 6px 0 0; border-left: 2px solid var(--line); display: grid; gap: 6px; }
+  .bsc-lanes { display: grid; gap: 8px; }
+  .bsc-lane {
+    display: grid; grid-template-columns: 92px 1fr; gap: 10px; padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); align-items: start;
+  }
+  .bsc-lane h4 { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+  .bsc-lane-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+
+  /* Edges list */
+  .edge-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+  .edge-item {
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer;
+  }
+  .edge-item.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .edge-item.needs-review { border-color: var(--warning-border); background: var(--warning-bg); }
+
+  /* Inspector editor */
+  .inspector {
+    margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--subtle);
+  }
+  .inspector h3 { margin: 0 0 8px; font-size: 13.5px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; }
+  .form-grid label { display: grid; gap: 3px; font-size: 11.5px; color: var(--muted); }
+  .form-grid input, .form-grid select {
+    border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 8px; font-size: 13px;
+  }
+  .conflict-box {
+    margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: var(--warning-bg); border: 1px solid var(--warning-border); font-size: 12.5px;
+  }
+  .conflict-opts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+  /* Natural language reread bar */
+  .reread-box {
+    margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas);
+  }
+  .reread-row { display: flex; gap: 8px; margin-top: 6px; }
+  .reread-row input { flex: 1; border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 7px 10px; }
+  .quick-prompts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+  /* Discussion & Versions tabs */
+  .chat-card {
+    max-width: 900px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px;
+  }
+  .msg { padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid var(--line); }
+  .msg.user { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+  .msg.agent { background: var(--subtle); }
+  .msg small { display: block; color: var(--muted); margin-bottom: 4px; font-size: 11.5px; }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(15, 14, 24, 0.45); display: none;
+    align-items: center; justify-content: center; padding: 16px; z-index: 40;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    width: min(640px, 100%); max-height: 88vh; overflow: auto; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; box-shadow: 0 12px 38px rgba(0,0,0,0.24);
+  }
+  .modal h3 { margin: 0 0 6px; font-size: 16px; }
+  .source-list { display: grid; gap: 8px; margin: 12px 0; }
+  .source-option {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); cursor: pointer;
+  }
+  .source-option:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+  @media (max-width: 920px) {
+    .mobile-pane-tabs { display: flex; }
+    .workspace { grid-template-columns: 1fr; }
+    .workspace[data-mobile-pane="source"] .candidate-panel { display: none; }
+    .workspace[data-mobile-pane="candidate"] .source-panel { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app" data-theme="light">
+  <!-- Top Demo Boundary Banner -->
+  <div class="demo-banner">
+    <div>
+      <strong>交互评审 Demo · Issue #106</strong> · 使用合成资料与内存状态演示交互边界（不调用真实模型/Host；视觉识别质量与工程接线在正式开发阶段分别验证）
+    </div>
+    <div class="demo-controls">
+      <label>模型能力
+        <select id="modelModeSelect">
+          <option value="vision">视觉模型（支持图文 · 默认）</option>
+          <option value="text">纯文本模型（仅文字/原生结构）</option>
+        </select>
+      </label>
+      <label>异常边界模拟
+        <select id="edgeCaseSelect">
+          <option value="normal">正常授权</option>
+          <option value="revoked">模拟撤权（停止后续读取）</option>
+          <option value="conflict">模拟版本冲突（CAS 保护人工修改）</option>
+        </select>
+      </label>
+      <button class="btn-xs" id="themeToggle" type="button">切换深色</button>
+    </div>
+  </div>
+
+  <!-- App Header -->
+  <header class="topbar">
+    <div class="brand-row">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <div>
+        <strong>OptraCall · 战略选择</strong>
+        <div style="font-size:12px;color:var(--muted)">战略讨论「2026 会员与渠道增长复盘」· 关联项目：零售会员研究</div>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="战略工作台页签">
+      <button class="tab-btn" data-tab="discussion" type="button">战略共创（原讨论）</button>
+      <button class="tab-btn active" data-tab="map" type="button">战略地图 · 多格式导入核对</button>
+      <button class="tab-btn" data-tab="versions" type="button">版本与来源</button>
+    </nav>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" id="openPickerBtn" type="button">＋ 导入战略图（选附件/项目文件）</button>
+      <button class="btn btn-primary" id="saveVersionBtn" type="button">保存候选地图</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Global status / alert area -->
+    <div id="globalAlerts"></div>
+
+    <!-- TAB 1: Discussion -->
+    <section id="tab-discussion" style="display:none">
+      <div class="chat-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+          <div>
+            <h2 style="margin:0;font-size:16px">战略共创 · 原讨论会话</h2>
+            <div style="font-size:12px;color:var(--muted)">普通「＋ 添加资料」保持原参考附件用途；导入线下战略图可直接使用已有附件或项目文件，免重复上传。</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn" type="button" onclick="openPicker('discussion')">从讨论发起导入战略图</button>
+            <button class="btn" type="button" onclick="switchTab('map')">回到地图核对</button>
+          </div>
+        </div>
+        <div id="discussionFeed"></div>
+        <div style="border-top:1px solid var(--line);padding-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="chatDraft" type="text" placeholder="在原讨论继续提问，例如：基于刚保存的人工修订版，检查 S1→G1 的必要条件…" style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:7px;padding:7px 10px;background:var(--surface)" />
+          <button class="btn" type="button" onclick="toast('普通「＋ 添加资料」仅作为讨论参考附件，不会触发战略地图导入。')">＋ 添加资料</button>
+          <button class="btn btn-primary" type="button" id="sendChatBtn">发送</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: Strategy Map Multi-Format Import & Side-by-Side Review -->
+    <section id="tab-map">
+      <div class="format-bar">
+        <div class="format-pills" role="tablist" aria-label="四种输入格式合成样例">
+          <button class="pill active" data-scenario="pptx" type="button">PPTX · 会员运营战略图（第4页清楚样例）</button>
+          <button class="pill" data-scenario="xlsx" type="button">XLSX · 混排工作簿（表/图数值冲突）</button>
+          <button class="pill" data-scenario="pdf" type="button">PDF · 图文混合/扫描页</button>
+          <button class="pill" data-scenario="image" type="button">PNG · 线下白板照片</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted)">
+          <span id="scenarioOriginTag"></span>
+          <button class="btn-xs" id="openHandoffBtn" type="button">带入目标管理（预览）</button>
+        </div>
+      </div>
+
+      <!-- Narrow screen pane toggle -->
+      <div class="mobile-pane-tabs">
+        <button class="btn btn-primary" id="mobileShowSource" type="button" style="flex:1;justify-content:center">查看原稿</button>
+        <button class="btn" id="mobileShowCandidate" type="button" style="flex:1;justify-content:center">核对候选</button>
+      </div>
+
+      <div class="workspace" id="workspace" data-mobile-pane="candidate">
+        <!-- LEFT: Source Preview & Bidirectional Highlight -->
+        <section class="panel source-panel" aria-label="原稿对照视图">
+          <div class="panel-head">
+            <h2 id="sourcePanelTitle">原稿预览</h2>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button class="btn-xs" id="zoomOutBtn" type="button">－</button>
+              <span id="zoomLabel" style="font-size:12px;color:var(--muted)">100%</span>
+              <button class="btn-xs" id="zoomInBtn" type="button">＋</button>
+            </div>
+          </div>
+          <div class="page-strip" id="pageStrip"></div>
+          <div class="source-canvas-wrap" id="sourceCanvasWrap"></div>
+          <div class="source-meta" id="sourceMeta"></div>
+        </section>
+
+        <!-- RIGHT: Editable Candidate & Review Controls -->
+        <section class="panel candidate-panel" aria-label="Agent 提取候选与核对">
+          <div class="summary-strip">
+            <div class="stats" id="reviewStats"></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-ok" id="acceptClearBtn" type="button">一键保留全部清楚项</button>
+              <button class="btn" id="filterReviewBtn" type="button">仅看待核项</button>
+            </div>
+          </div>
+
+          <div class="panel-body">
+            <!-- Excel fast column-mapping toggle (#98 compatibility) -->
+            <div id="excelModeBar" style="display:none;margin-bottom:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--subtle);justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-size:12.5px">检测到结构化工作表 + 绘图形状：可沿用 #98 快速列映射，或由 Agent 合并核对表与图。</span>
+              <button class="btn-xs" id="toggleExcelFastBtn" type="button">查看 #98 结构化表快速映射</button>
+            </div>
+            <div id="excelFastPreview" style="display:none;margin-bottom:10px;padding:10px;border:1px dashed var(--accent);border-radius:8px;background:var(--accent-soft);font-size:12.5px">
+              <strong>#98 既有结构化 Excel 列映射（保留可用）</strong>：工作表 <code>目标表</code> · 表头第 1 行 · A=编号 / B=类型 / C=标题 / D=目标值 / E=单位。本工作簿同时含绘图形状，当前由 Agent 补充读取形状与连线，并并列标出 <code>目标表!D4 (18%)</code> 与 <code>形状#3 (15%)</code> 的差异。
+            </div>
+
+            <div class="view-switch">
+              <div class="tabs" role="tablist" aria-label="地图视图模板">
+                <button class="tab-btn active" data-view="table" type="button">条目表</button>
+                <button class="tab-btn" data-view="tree" type="button">目标与策略树</button>
+                <button class="tab-btn" data-view="bsc" type="button">BSC（可选）</button>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn-xs" id="addNodeBtn" type="button">＋ 手工补条目</button>
+                <button class="btn-xs" id="dedupeBtn" type="button">去重检查</button>
+              </div>
+            </div>
+
+            <!-- Main candidate view -->
+            <div id="candidateView"></div>
+
+            <!-- Edges section -->
+            <div style="margin-top:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                <strong style="font-size:13px">提取连线（点击高亮原稿两端与箭头；可见箭头 ≠ 因果）</strong>
+                <span style="font-size:11.5px;color:var(--muted)" id="edgeCountLabel"></span>
+              </div>
+              <ul class="edge-list" id="edgeList"></ul>
+            </div>
+
+            <!-- Selected node / edge inspector -->
+            <div class="inspector" id="inspector"></div>
+
+            <!-- Natural language reread -->
+            <div class="reread-box">
+              <div style="font-size:12.5px;font-weight:600">用自然语言让原战略 Agent 重读一页或一条线（保护已人工修改的字段）</div>
+              <div class="reread-row">
+                <input id="rereadInput" type="text" placeholder="例如：重读第 4 页 S3 到 G1 被遮挡的箭头，说明能看清的部分…" />
+                <button class="btn btn-primary" id="rereadBtn" type="button">局部重读</button>
+              </div>
+              <div class="quick-prompts" id="quickPrompts"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- TAB 3: Versions & Provenance -->
+    <section id="tab-versions" style="display:none">
+      <div class="chat-card">
+        <h2 style="margin:0 0 8px;font-size:16px">版本与来源记录</h2>
+        <p style="margin:0 0 12px;font-size:12.5px;color:var(--muted)">每次保存均随版保留原文件指纹（SHA-256）、本机归属、选定页/表/区域与人工修改原因。保存的是候选，不会自动采用目标或创建 Case。</p>
+        <div id="versionsList"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Source Picker Modal -->
+  <div class="modal-backdrop" id="pickerModal" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+    <div class="modal">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 id="pickerTitle">选择战略图来源</h3>
+        <button class="btn-xs" type="button" onclick="closeModal('pickerModal')">关闭</button>
+      </div>
+      <p style="margin:4px 0 10px;font-size:12.5px;color:var(--muted)">可直接复用本讨论已获准附件或关联项目文件，免重复上传；支持 <code>.xlsx</code>、<code>.pptx</code>、<code>.pdf</code>、<code>.png/.jpg</code>。</p>
+      <div class="source-list">
+        <div class="source-option" onclick="selectScenarioFromModal('pptx')">
+          <div><strong>会员运营复盘_2026Q1.pptx</strong><div style="font-size:12px;color:var(--muted)">来源：已关联项目「零售会员研究 · 020_clean」（免重复上传）· 5 页</div></div>
+          <span class="badge badge-accent">选择</span>
+        </div>
+        <div class="source-option" onclick="selectScenarioFromModal('xlsx')">
+          <div><strong>渠道毛利战略图_混排.xlsx</strong><div style="font-size:12px;color:var(--muted)">来源：原战略讨论已有附件（免重复上传）· 含结构化表 + 形状图</div></div>
+          <span class="badge badge-accent">选择</span>
+        </div>
+        <div class="source-option" onclick="selectScenarioFromModal('pdf')">
+          <div><strong>华东区域拓展规划_扫描合集.pdf</strong><div style="font-size:12px;color:var(--muted)">来源：本地新上传（模拟）· 2 页（文字页 + 扫描图页）</div></div>
+          <span class="badge badge-accent">选择</span>
+        </div>
+        <div class="source-option" onclick="selectScenarioFromModal('image')">
+          <div><strong>线下战略白板_20260318.png</strong><div style="font-size:12px;color:var(--muted)">来源：本地新上传（模拟）· 1920×1080 · 方向 0°</div></div>
+          <span class="badge badge-accent">选择</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Handoff Preview Modal -->
+  <div class="modal-backdrop" id="handoffModal" role="dialog" aria-modal="true" aria-labelledby="handoffTitle">
+    <div class="modal">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 id="handoffTitle">带入目标管理（承接预览）</h3>
+        <button class="btn-xs" type="button" onclick="closeModal('handoffModal')">关闭</button>
+      </div>
+      <p style="margin:6px 0 10px;font-size:12.5px;color:var(--muted)">沿用 #98 承接规则：此处仅预览将生成的目标草稿，<strong>正式采用目标</strong>与<strong>按具体 G/S 创建 Case</strong>仍需在各自入口独立确认。</p>
+      <div id="handoffBody"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button class="btn" type="button" onclick="closeModal('handoffModal')">取消</button>
+        <button class="btn btn-primary" type="button" onclick="closeModal('handoffModal');toast('演示提示：目标草稿已预览，正式采用与建 Case 沿用各自独立入口（无自动写入）。')">确认仅预览</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const EDGE_KINDS = {
+  supports: '支持 / 贡献',
+  decomposition: '分解 / 归属',
+  upstream: '上游策略',
+  hypothesis: '待验证因果',
+  unknown: '未知关系（待核）'
+};
+const NODE_KINDS = { goal: '目标 (G)', strategy: '策略 (S)', other: '其他 (N)' };
+
+function clone(x) { return JSON.parse(JSON.stringify(x)); }
+
+const INITIAL_SCENARIOS = {
+  pptx: {
+    id: 'pptx',
+    format: 'pptx',
+    fileName: '会员运营复盘_2026Q1.pptx',
+    origin: '关联项目 · 零售会员研究 / 020_clean（免重复上传）',
+    sha256: '8f31c9a2e4b017d8a5c2940f73e1b6c8d2a9f4017b3e6c5a9120f84d7e3c1a22',
+    renderEnv: '原生形状/连接符 XML + LibreOffice/pypdfium2 页图渲染',
+    pages: [
+      { num: 1, title: '封面', hasMap: false, selected: false },
+      { num: 2, title: '客群现状', hasMap: false, selected: false },
+      { num: 3, title: '复盘摘要', hasMap: false, selected: false },
+      { num: 4, title: '会员增长地图（方案A）', hasMap: true, selected: true, planBoundary: '方案 A · 会员分层培育' },
+      { num: 5, title: '门店直促备选（方案B）', hasMap: true, selected: true, planBoundary: '方案 B · 门店直促（独立边界）' }
+    ],
+    activePage: 4,
+    quickPrompts: [
+      '重读第 4 页 S3 到 G1 被遮挡的箭头',
+      '核对第 4 页「约 9%」是基线还是年度目标',
+      '检查第 5 页与第 4 页同名「提高新客 90 天二购率」的边界'
+    ],
+    nodes: [
+      {
+        id: 'G1', kind: 'goal', title: '提高新客 90 天二购率', perspective: '客户',
+        metric: '新客 90 天二购率', baseline: '9%', baselineKind: '估计基线', target: '', unit: '%', period: '2026 年度',
+        reviewState: 'clear', page: 4, locationLabel: '第 4 页 · 形状#1 (右上目标框)',
+        bbox: [365, 36, 225, 86], editedByUser: false
+      },
+      {
+        id: 'S1', kind: 'strategy', title: '首购后 60–90 天分层培育', perspective: '内部流程',
+        metric: '60–90 天触达完成率', baseline: '', baselineKind: '待定', target: '', unit: '%', period: '季度',
+        reviewState: 'clear', page: 4, locationLabel: '第 4 页 · 形状#2 (左侧策略框)',
+        bbox: [36, 44, 215, 76], editedByUser: false
+      },
+      {
+        id: 'G2', kind: 'goal', title: '提升年度复购频次', perspective: '财务',
+        metric: '年度复购频次', baseline: '2.1', baselineKind: '实测基线', target: '2.6', unit: '次/年', period: '2026 年度',
+        reviewState: 'clear', page: 4, locationLabel: '第 4 页 · 形状#4 (右下目标框)',
+        bbox: [365, 198, 225, 82], editedByUser: false
+      },
+      {
+        id: 'S2', kind: 'strategy', title: '会员权益分层与积分唤醒', perspective: '内部流程',
+        metric: '积分核销率', baseline: '14%', baselineKind: '实测基线', target: '22%', unit: '%', period: '2026 年度',
+        reviewState: 'clear', page: 4, locationLabel: '第 4 页 · 形状#5 (左下策略框)',
+        bbox: [36, 202, 215, 74], editedByUser: false
+      },
+      {
+        id: 'S3', kind: 'strategy', title: '门店企微 1v1 触达', perspective: '学习与成长',
+        metric: '企微加粉率', baseline: '0', baselineKind: '实测基线', target: '35%', unit: '%', period: '2026 Q2',
+        reviewState: 'clear', page: 4, locationLabel: '第 4 页 · 形状#6 (中下策略框)',
+        bbox: [150, 128, 170, 56], editedByUser: false
+      },
+      {
+        id: 'G1_B', kind: 'goal', title: '提高新客 90 天二购率（方案 B 同名）', perspective: '客户',
+        metric: '新客 90 天二购率', baseline: '9%', baselineKind: '估计基线', target: '13%', unit: '%', period: '2026 Q2',
+        reviewState: 'needs-review', page: 5, locationLabel: '第 5 页 · 方案 B 形状#1',
+        ambiguityReason: '跨页同名节点：第 5 页属于「方案 B · 门店直促」，与第 4 页「方案 A」保留各自边界，请核对是否保持拆分或合并。',
+        bbox: [350, 62, 230, 82], editedByUser: false
+      }
+    ],
+    edges: [
+      {
+        id: 'E1', from: 'S1', to: 'G1', kind: 'supports', reviewState: 'clear', page: 4,
+        locationLabel: '第 4 页 · 连接符#1 (S1 → G1)', arrowBbox: [251, 74, 114, 16]
+      },
+      {
+        id: 'E2', from: 'S2', to: 'G2', kind: 'supports', reviewState: 'clear', page: 4,
+        locationLabel: '第 4 页 · 连接符#2 (S2 → G2)', arrowBbox: [251, 230, 114, 16]
+      },
+      {
+        id: 'E3', from: 'S3', to: 'G1', kind: 'unknown', reviewState: 'needs-review', page: 4,
+        locationLabel: '第 4 页 · 右侧遮挡区 (S3 ↔ G1)',
+        ambiguityReason: '箭头端点被原稿贴纸「待补充样本」遮挡，无法确认是指向 G1 还是反向约束，请核对方向与关系类型。',
+        arrowBbox: [315, 108, 66, 46]
+      }
+    ]
+  },
+
+  xlsx: {
+    id: 'xlsx',
+    format: 'xlsx',
+    fileName: '渠道毛利战略图_混排.xlsx',
+    origin: '原战略讨论已有附件（免重复上传）',
+    sha256: '3c90a1d4f7b82210e9a4c6128d5f3b0e1174c89a2f6d04b5e8123a7c9f01d4e6',
+    renderEnv: 'xlsx 单元格读取 + xl/drawings 形状 XML + 图表/嵌入图对照',
+    pages: [
+      { num: 1, title: '目标表 + 战略图形状混排', hasMap: true, selected: true, planBoundary: '工作表：目标表 & 战略图' }
+    ],
+    activePage: 1,
+    quickPrompts: [
+      '重读目标表!D4 与战略图形状#3 的毛利率差异',
+      '核对是否存在重复的渠道策略条目'
+    ],
+    nodes: [
+      {
+        id: 'G1', kind: 'goal', title: '提升直营渠道毛利率', perspective: '财务',
+        metric: '直营毛利率', baseline: '12.5%', baselineKind: '实测基线', target: '18%', unit: '%', period: '2026 年度',
+        reviewState: 'needs-review', page: 1, locationLabel: '目标表!D4 与 战略图·形状#3',
+        ambiguityReason: '源表单元格与战略图形状上的目标值不一致，已并列保留原值供核对。',
+        sourceConflicts: [
+          {
+            field: 'target',
+            values: [
+              { value: '18%', label: '18%（源表）', locationLabel: '目标表!D4（公式缓存值）' },
+              { value: '15%', label: '15%（图上）', locationLabel: '战略图 · 绘图形状#3' }
+            ]
+          }
+        ],
+        bbox: [360, 40, 220, 86], editedByUser: false
+      },
+      {
+        id: 'S1', kind: 'strategy', title: '缩减低毛利满减档位', perspective: '内部流程',
+        metric: '促销折扣率', baseline: '11%', baselineKind: '实测基线', target: '7.5%', unit: '%', period: '2026 H2',
+        reviewState: 'clear', page: 1, locationLabel: '目标表!B5 / 形状#1',
+        bbox: [42, 48, 210, 74], editedByUser: false
+      },
+      {
+        id: 'S2', kind: 'strategy', title: '高毛利组合装陈列优化', perspective: '客户',
+        metric: '组合装占比', baseline: '19%', baselineKind: '估计基线', target: '28%', unit: '%', period: '2026 年度',
+        reviewState: 'clear', page: 1, locationLabel: '目标表!B6 / 形状#2',
+        bbox: [42, 186, 210, 74], editedByUser: false
+      },
+      {
+        id: 'S2_DUP', kind: 'strategy', title: '高毛利组合装陈列（图中重复框）', perspective: '客户',
+        metric: '组合装占比', baseline: '19%', baselineKind: '估计基线', target: '28%', unit: '%', period: '2026 年度',
+        reviewState: 'needs-review', page: 1, locationLabel: '战略图 · 形状#4（疑似与 S2 重复）',
+        ambiguityReason: '工作表与嵌入图中均出现相似策略，可用「去重检查」或直接删除误项。',
+        bbox: [360, 188, 220, 72], editedByUser: false
+      }
+    ],
+    edges: [
+      { id: 'EX1', from: 'S1', to: 'G1', kind: 'hypothesis', reviewState: 'clear', page: 1, locationLabel: '形状连接符#1 (标注：降折扣→提毛利)', arrowBbox: [252, 78, 108, 16] },
+      { id: 'EX2', from: 'S2', to: 'G1', kind: 'supports', reviewState: 'clear', page: 1, locationLabel: '形状连接符#2 (S2 → G1)', arrowBbox: [252, 145, 108, 45] }
+    ]
+  },
+
+  pdf: {
+    id: 'pdf',
+    format: 'pdf',
+    fileName: '华东区域拓展规划_扫描合集.pdf',
+    origin: '本地上传（保留原字节与 SHA-256）',
+    sha256: 'a17f2b90c4e81239d0f561a8b7c4e2910d3f5a6b8c9e0123f456a789b0c1d2e3',
+    renderEnv: 'pdfjs-dist 文字层（第1页）+ 页图视觉读取（第2页扫描图）',
+    pages: [
+      { num: 1, title: '第 1 页 · 文字摘要', hasMap: true, selected: true, planBoundary: '文字层可直接核对' },
+      { num: 2, title: '第 2 页 · 扫描战略图', hasMap: true, selected: true, planBoundary: '扫描页 · 左下局部低清' }
+    ],
+    activePage: 2,
+    quickPrompts: [
+      '重读第 2 页左下低清区域的数字与单位',
+      '对照第 1 页文字层核对开店目标值'
+    ],
+    nodes: [
+      {
+        id: 'G1', kind: 'goal', title: '华东新开 12 家标准店', perspective: '财务',
+        metric: '净新开门店数', baseline: '3', baselineKind: '实测基线', target: '12', unit: '家', period: '2026 年度',
+        reviewState: 'clear', page: 2, locationLabel: '第 2 页 · 区域 (58%, 12%) / 第 1 页第 3 段',
+        bbox: [350, 38, 225, 80], editedByUser: false
+      },
+      {
+        id: 'S1', kind: 'strategy', title: '核心商圈选址评分卡前置', perspective: '内部流程',
+        metric: '选址通过率', baseline: '', baselineKind: '待定', target: '80%', unit: '%', period: '2026 Q2',
+        reviewState: 'clear', page: 2, locationLabel: '第 2 页 · 区域 (6%, 16%)',
+        bbox: [40, 44, 210, 74], editedByUser: false
+      },
+      {
+        id: 'S2', kind: 'strategy', title: '店长储备营（局部裁边待核）', perspective: '学习与成长',
+        metric: '合格储备店长', baseline: '?', baselineKind: '待定', target: '15?', unit: '人', period: '2026 Q3',
+        reviewState: 'needs-review', page: 2, locationLabel: '第 2 页 · 左下低清/裁边区域',
+        ambiguityReason: '扫描页左下角裁边且字迹低清，「15 人」末尾数字模糊，请对照原件核实。',
+        bbox: [40, 194, 215, 78], editedByUser: false
+      }
+    ],
+    edges: [
+      { id: 'EP1', from: 'S1', to: 'G1', kind: 'supports', reviewState: 'clear', page: 2, locationLabel: '第 2 页 · 实线箭头 (S1 → G1)', arrowBbox: [250, 74, 100, 16] },
+      { id: 'EP2', from: 'S2', to: 'G1', kind: 'supports', reviewState: 'needs-review', page: 2, locationLabel: '第 2 页 · 虚线斜箭头 (低清)', ambiguityReason: '线条在扫描折叠处中断，请确认是否指向 G1。', arrowBbox: [255, 130, 95, 70] }
+    ]
+  },
+
+  image: {
+    id: 'image',
+    format: 'image',
+    fileName: '线下战略白板_20260318.png',
+    origin: '本地上传 · 原始像素 1920×1080 · EXIF 方向 0°（原字节保留）',
+    sha256: '5d2e8f109a4c7b31e6d2f8091a3c5b7d9e1f2a4c6b8d0e2f4a6c8b0d2e4f6a8c',
+    renderEnv: '原始像素只读保留 + 视觉模型区域框提取',
+    pages: [
+      { num: 1, title: '原图（1920×1080）', hasMap: true, selected: true, planBoundary: '单张白板图' }
+    ],
+    activePage: 1,
+    quickPrompts: [
+      '重读白板右上角客单价目标值',
+      '检查手写连线「套餐升级 → 客单价」的方向'
+    ],
+    nodes: [
+      {
+        id: 'G1', kind: 'goal', title: '提升会员平均客单价', perspective: '财务',
+        metric: '会员客单价', baseline: '168', baselineKind: '实测基线', target: '195', unit: '元', period: '2026 Q3',
+        reviewState: 'clear', page: 1, locationLabel: '原图区域 [x:1140, y:140, 620×240]',
+        bbox: [360, 44, 220, 82], editedByUser: false
+      },
+      {
+        id: 'S1', kind: 'strategy', title: '主推季节限定组合套餐', perspective: '客户',
+        metric: '套餐渗透率', baseline: '12%', baselineKind: '估计基线', target: '25%', unit: '%', period: '2026 Q3',
+        reviewState: 'clear', page: 1, locationLabel: '原图区域 [x:130, y:160, 580×220]',
+        bbox: [42, 48, 210, 76], editedByUser: false
+      },
+      {
+        id: 'S2', kind: 'strategy', title: '收银台加购话术培训', perspective: '学习与成长',
+        metric: '加购转化率', baseline: '4.2%', baselineKind: '估计基线', target: '', unit: '%', period: '2026 Q3',
+        reviewState: 'needs-review', page: 1, locationLabel: '原图区域 [x:140, y:620, 560×210]',
+        ambiguityReason: '白板右下反光，目标值未写明（暂置待定），请核对是否补充。',
+        bbox: [42, 196, 210, 74], editedByUser: false
+      }
+    ],
+    edges: [
+      { id: 'EI1', from: 'S1', to: 'G1', kind: 'supports', reviewState: 'clear', page: 1, locationLabel: '原图手绘箭头 (S1 → G1)', arrowBbox: [252, 78, 108, 16] },
+      { id: 'EI2', from: 'S2', to: 'G1', kind: 'hypothesis', reviewState: 'clear', page: 1, locationLabel: '原图手绘虚线箭头 (标注：假设提客单)', arrowBbox: [252, 145, 108, 52] }
+    ]
+  }
+};
+
+const state = {
+  tab: 'map',
+  scenarioId: 'pptx',
+  scenarios: clone(INITIAL_SCENARIOS),
+  view: 'table',
+  onlyNeedsReview: false,
+  selected: { type: 'edge', id: 'E3' },
+  zoom: 1,
+  modelMode: 'vision',
+  edgeCase: 'normal',
+  mobilePane: 'candidate',
+  excelFastOpen: false,
+  versions: [
+    {
+      version: 1,
+      title: '会员运营复盘_2026Q1 · 初稿',
+      format: 'pptx',
+      fileName: '会员运营复盘_2026Q1.pptx',
+      sha256: INITIAL_SCENARIOS.pptx.sha256,
+      author: 'Agent 提取（演示基线）',
+      reason: '首次从第 4–5 页提取候选，保留 1 处遮挡连线与 1 处跨页同名待核',
+      createdAt: '2026-11-20 19:40',
+      summary: '6 个条目 · 3 条连线 · 仅候选未采用'
+    }
+  ],
+  messages: [
+    { role: 'user', time: '19:38', text: '我把线下讨论好的「会员运营复盘_2026Q1.pptx」放在项目 020_clean 了，先帮我把第 4 页的战略图提取成可编辑候选。' },
+    { role: 'agent', time: '19:40', text: '已读取项目授权文件「会员运营复盘_2026Q1.pptx」（SHA-256 8f31c9a2…），重点解析了第 4 页（方案 A）与第 5 页（方案 B）。第 4 页的「首购后 60–90 天分层培育 → 提高新客 90 天二购率」及「约 9%（估计基线，年度目标待定）」已直接生成可编辑条目；仅 S3 与 G1 之间箭头被贴纸遮挡，已标为「待核对」，其余清楚项可一键保留。' }
+  ],
+  toastMsg: ''
+};
+
+function currentScenario() { return state.scenarios[state.scenarioId]; }
+
+function toast(msg, kind = 'ok') {
+  state.toastMsg = { msg, kind };
+  renderAlerts();
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => { state.toastMsg = ''; renderAlerts(); }, 4500);
+}
+
+function switchTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll('.topbar .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('tab-discussion').style.display = tab === 'discussion' ? '' : 'none';
+  document.getElementById('tab-map').style.display = tab === 'map' ? '' : 'none';
+  document.getElementById('tab-versions').style.display = tab === 'versions' ? '' : 'none';
+  if (tab === 'discussion') renderDiscussion();
+  if (tab === 'versions') renderVersions();
+}
+
+function openPicker() { document.getElementById('pickerModal').classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function selectScenarioFromModal(id) {
+  closeModal('pickerModal');
+  switchScenario(id);
+  switchTab('map');
+  toast(`已载入「${currentScenario().fileName}」（${currentScenario().origin}）`);
+}
+
+function switchScenario(id) {
+  state.scenarioId = id;
+  const sc = currentScenario();
+  const firstReviewEdge = sc.edges.find(e => e.reviewState === 'needs-review');
+  const firstReviewNode = sc.nodes.find(n => n.reviewState === 'needs-review');
+  state.selected = firstReviewEdge ? { type: 'edge', id: firstReviewEdge.id }
+    : firstReviewNode ? { type: 'node', id: firstReviewNode.id }
+    : { type: 'node', id: sc.nodes[0]?.id };
+  state.onlyNeedsReview = false;
+  state.excelFastOpen = false;
+  state.zoom = 1;
+  renderAll();
+}
+
+function renderAlerts() {
+  const el = document.getElementById('globalAlerts');
+  const sc = currentScenario();
+  const alerts = [];
+  if (state.modelMode === 'text') {
+    const isVisualOnly = sc.format === 'image' || (sc.format === 'pdf' && sc.activePage === 2);
+    alerts.push(`<div class="alert alert-warn">
+      <div><strong>当前模型仅支持纯文本</strong>：${isVisualOnly
+        ? '当前页为图片/扫描图，无可读文字层。请切换已配置且获准的视觉模型重读，或直接对照左侧原稿手工核对。'
+        : '已优先读取可核对的文字层、单元格与原生形状/连接符形成初稿；遮挡/图面视觉区域需切换已配置且获准的视觉模型重读，或直接手工核对。'}</div>
+      <button class="btn-xs" type="button" onclick="document.getElementById('modelModeSelect').value='vision';state.modelMode='vision';renderAll();toast('已切换为获准视觉模型（演示）');">切换视觉模型</button>
+    </div>`);
+  }
+  if (state.edgeCase === 'revoked') {
+    alerts.push(`<div class="alert alert-error">
+      <div><strong>来源已撤权</strong>：已立即停止后续文件读取与发往模型（自然语言重读与重新解析已禁用）；已保存的历史版本保留只读记录。</div>
+      <button class="btn-xs" type="button" onclick="document.getElementById('edgeCaseSelect').value='normal';state.edgeCase='normal';renderAll();">恢复授权（演示）</button>
+    </div>`);
+  }
+  if (state.edgeCase === 'conflict') {
+    alerts.push(`<div class="alert alert-warn">
+      <div><strong>版本冲突保护（CAS）</strong>：检测到后台有过期结果到达或版本已更新。您当前手工修改的字段已全部保留，不会静默覆盖；请核对后再次保存。</div>
+      <button class="btn-xs" type="button" onclick="document.getElementById('edgeCaseSelect').value='normal';state.edgeCase='normal';renderAll();toast('已核对最新基线，可安全保存为新版本');">标记已核对</button>
+    </div>`);
+  }
+  if (state.toastMsg) {
+    alerts.push(`<div class="alert ${state.toastMsg.kind === 'error' ? 'alert-error' : 'alert-ok'}"><div>${state.toastMsg.msg}</div></div>`);
+  }
+  el.innerHTML = alerts.join('');
+}
+
+function renderSourceSVG(sc) {
+  const page = sc.activePage;
+  const pageNodes = sc.nodes.filter(n => n.page === page);
+  const pageEdges = sc.edges.filter(e => e.page === page);
+  const sel = state.selected;
+  const selectedEdge = sel?.type === 'edge' ? sc.edges.find(e => e.id === sel.id) : null;
+
+  const isNodeHighlighted = (n) => (sel?.type === 'node' && sel.id === n.id) || (selectedEdge && (selectedEdge.from === n.id || selectedEdge.to === n.id));
+  const isEdgeHighlighted = (e) => sel?.type === 'edge' && sel.id === e.id;
+
+  const bgLabel = sc.format === 'pptx' ? `PowerPoint · 第 ${page} 页：${sc.pages.find(p => p.num === page)?.title || ''}`
+    : sc.format === 'xlsx' ? 'Excel · 混排视图（左：结构化目标表摘要 · 右：绘图形状区）'
+    : sc.format === 'pdf' ? `PDF · 第 ${page} 页（${page === 1 ? '纯文字层' : '扫描图页'}）`
+    : 'PNG 原图 · 线下战略白板（1920×1080 · 方向 0°）';
+
+  if (sc.format === 'pdf' && page === 1) {
+    return `<svg class="source-svg" viewBox="0 0 640 330" style="transform:scale(${state.zoom})">
+      <rect x="0" y="0" width="640" height="330" fill="#fcfcfe" stroke="#e2e1ea" />
+      <text x="24" y="34" font-size="13" font-weight="700" fill="#4f46a5">${bgLabel}</text>
+      <text x="24" y="68" font-size="12" fill="#333">1. 区域拓展背景：2026 年华东区计划从现有 3 家标准店扩展至 12 家标准店。</text>
+      <text x="24" y="96" font-size="12" fill="#333">2. 关键策略：先落地核心商圈选址评分卡（目标通过率 80%），同步推进店长储备营。</text>
+      <rect x="20" y="114" width="596" height="44" rx="6" fill="#eeebfb" stroke="#6550c9" stroke-dasharray="4 3" />
+      <text x="32" y="140" font-size="12" fill="#6550c9">文字层已由 pdfjs-dist 提取（第 1 页第 3 段），第 2 页为扫描版战略图，请切到第 2 页核对图形区域。</text>
+    </svg>`;
+  }
+
+  let extraDecor = '';
+  if (sc.format === 'pptx' && page === 4) {
+    // Occlusion sticker on S3->G1 arrow
+    extraDecor = `
+      <g>
+        <rect x="316" y="110" width="64" height="40" rx="5" fill="#fff1d6" stroke="#d99429" stroke-width="1.5" stroke-dasharray="4 2" />
+        <text x="348" y="128" text-anchor="middle" font-size="10" font-weight="700" fill="#8a5607">贴纸遮挡</text>
+        <text x="348" y="142" text-anchor="middle" font-size="9" fill="#8a5607">箭头不明</text>
+      </g>
+      <text x="478" y="106" text-anchor="middle" font-size="11" fill="#6550c9" font-weight="600">原稿标注：约 9%（年度目标待定）</text>`;
+  } else if (sc.format === 'xlsx') {
+    extraDecor = `
+      <rect x="24" y="276" width="592" height="40" rx="6" fill="#fff6e5" stroke="#e8b861" />
+      <text x="36" y="300" font-size="11.5" fill="#8a5607" font-weight="600">源表目标表!D4 = 18%  ≠  形状#3 标注 = 15%（已并列原值，点击右侧 G1 一键核对）</text>`;
+  } else if (sc.format === 'pdf' && page === 2) {
+    extraDecor = `
+      <rect x="34" y="190" width="226" height="86" rx="6" fill="rgba(255,240,210,0.45)" stroke="#d99429" stroke-dasharray="5 3" />
+      <text x="147" y="294" text-anchor="middle" font-size="10.5" fill="#8a5607">扫描件左下角局部低清 / 轻微裁边</text>`;
+  }
+
+  const edgesSvg = pageEdges.map(e => {
+    const a = pageNodes.find(n => n.id === e.from);
+    const b = pageNodes.find(n => n.id === e.to);
+    if (!a || !b) return '';
+    const ax = a.bbox[0] + a.bbox[2], ay = a.bbox[1] + a.bbox[3] / 2;
+    const bx = b.bbox[0], by = b.bbox[1] + b.bbox[3] / 2;
+    const hi = isEdgeHighlighted(e);
+    const review = e.reviewState === 'needs-review';
+    const color = hi ? '#6550c9' : review ? '#d98a1c' : '#5b5970';
+    const dash = (e.kind === 'hypothesis' || e.kind === 'unknown' || review) ? '6 4' : '';
+    const mx = (ax + bx) / 2, my = (ay + by) / 2 - 8;
+    return `<g class="hotspot ${hi ? 'selected' : ''}" onclick="selectItem('edge','${e.id}')">
+      <line x1="${ax}" y1="${ay}" x2="${bx - 6}" y2="${by}" stroke="transparent" stroke-width="18" />
+      <line x1="${ax}" y1="${ay}" x2="${bx - 6}" y2="${by}" stroke="${color}" stroke-width="${hi ? 3.2 : 2}" stroke-dasharray="${dash}" marker-end="url(#arrow-${hi ? 'hi' : review ? 'warn' : 'norm'})" />
+      <rect x="${mx - 44}" y="${my - 12}" width="88" height="19" rx="9" fill="${hi ? '#6550c9' : review ? '#fff6e5' : '#f3f2f8'}" stroke="${color}" stroke-width="1" />
+      <text x="${mx}" y="${my + 1}" text-anchor="middle" font-size="9.5" font-weight="600" fill="${hi ? '#fff' : color}">${EDGE_KINDS[e.kind].split(' ')[0]}</text>
+    </g>`;
+  }).join('');
+
+  const nodesSvg = pageNodes.map(n => {
+    const [x, y, w, h] = n.bbox;
+    const hi = isNodeHighlighted(n);
+    const review = n.reviewState === 'needs-review';
+    const confirmed = n.reviewState === 'confirmed';
+    const fill = hi ? '#eeebfb' : review ? '#fff6e5' : confirmed ? '#eaf7f0' : '#f9f9fc';
+    const stroke = hi ? '#6550c9' : review ? '#d98a1c' : confirmed ? '#1b6e46' : '#8b88a8';
+    const metricLine = n.metric ? `${n.metric}: ${n.baseline || '待补'} → ${n.target === '' ? '待定' : n.target}${n.unit ? ' ' + n.unit : ''}` : '';
+    return `<g class="hotspot ${hi ? 'selected' : ''}" onclick="selectItem('node','${n.id}')">
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" stroke="${stroke}" stroke-width="${hi ? 3 : 1.6}" stroke-dasharray="${review ? '5 3' : ''}" />
+      <text x="${x + 10}" y="${y + 20}" font-size="10.5" font-weight="700" fill="${stroke}">${n.id} · ${NODE_KINDS[n.kind]} ${review ? '⚠待核' : confirmed ? '✓已确认' : '●清楚'}</text>
+      <text x="${x + 10}" y="${y + 40}" font-size="12.5" font-weight="600" fill="#24232b">${escapeHtml(n.title.slice(0, 16))}${n.title.length > 16 ? '…' : ''}</text>
+      <text x="${x + 10}" y="${y + 60}" font-size="10.5" fill="#5e5d6b">${escapeHtml(metricLine.slice(0, 28))}</text>
+    </g>`;
+  }).join('');
+
+  return `<svg class="source-svg" viewBox="0 0 640 330" style="transform:scale(${state.zoom})">
+    <defs>
+      <marker id="arrow-norm" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,1 L7,4 L0,7 Z" fill="#5b5970" /></marker>
+      <marker id="arrow-hi" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,1 L7,4 L0,7 Z" fill="#6550c9" /></marker>
+      <marker id="arrow-warn" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,1 L7,4 L0,7 Z" fill="#d98a1c" /></marker>
+    </defs>
+    <rect x="0" y="0" width="640" height="330" fill="#fcfcfe" stroke="#e2e1ea" />
+    <text x="18" y="22" font-size="11.5" font-weight="600" fill="#6c6b78">${escapeHtml(bgLabel)}</text>
+    ${edgesSvg}
+    ${nodesSvg}
+    ${extraDecor}
+  </svg>`;
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function selectItem(type, id) {
+  state.selected = { type, id };
+  const sc = currentScenario();
+  const item = type === 'node' ? sc.nodes.find(n => n.id === id) : sc.edges.find(e => e.id === id);
+  if (item && item.page && item.page !== sc.activePage) sc.activePage = item.page;
+  renderAll();
+}
+
+function renderSourcePanel() {
+  const sc = currentScenario();
+  document.getElementById('sourcePanelTitle').textContent = `原稿对照 · ${sc.fileName}`;
+  document.getElementById('scenarioOriginTag').textContent = sc.origin;
+  document.getElementById('zoomLabel').textContent = Math.round(state.zoom * 100) + '%';
+
+  const pageStrip = document.getElementById('pageStrip');
+  pageStrip.innerHTML = `<span style="color:var(--muted)">页/区选择：</span>` + sc.pages.map(p => {
+    const active = p.num === sc.activePage;
+    return `<label class="page-chip ${active ? 'active' : ''}">
+      ${sc.pages.length > 1 ? `<input type="checkbox" ${p.selected ? 'checked' : ''} onchange="togglePageSelected(${p.num}, this.checked)" />` : ''}
+      <span onclick="setActivePage(${p.num})">P${p.num} ${escapeHtml(p.title)}</span>
+    </label>`;
+  }).join('');
+
+  document.getElementById('sourceCanvasWrap').innerHTML = renderSourceSVG(sc);
+  document.getElementById('sourceMeta').innerHTML = `
+    <span>指纹 SHA-256：<code>${sc.sha256.slice(0, 16)}…</code></span>
+    <span>解析方式：${escapeHtml(sc.renderEnv)}</span>
+  `;
+}
+
+function togglePageSelected(num, checked) {
+  const sc = currentScenario();
+  const p = sc.pages.find(x => x.num === num);
+  if (p) p.selected = checked;
+  toast(checked ? `已勾选第 ${num} 页纳入本次导入范围` : `已取消第 ${num} 页（仅导入含战略图的页）`);
+}
+function setActivePage(num) {
+  currentScenario().activePage = num;
+  renderAll();
+}
+
+function renderCandidatePanel() {
+  const sc = currentScenario();
+  const allItems = [...sc.nodes, ...sc.edges];
+  const clearCount = allItems.filter(x => x.reviewState === 'clear').length;
+  const reviewCount = allItems.filter(x => x.reviewState === 'needs-review').length;
+  const confirmedCount = allItems.filter(x => x.reviewState === 'confirmed').length;
+
+  document.getElementById('reviewStats').innerHTML = `
+    <span class="badge badge-muted">共 ${sc.nodes.length} 条目 · ${sc.edges.length} 连线</span>
+    <span class="badge badge-clear">清楚 ${clearCount} · 已确认 ${confirmedCount}</span>
+    <span class="badge badge-review">待核对 ${reviewCount}</span>
+  `;
+  const acceptBtn = document.getElementById('acceptClearBtn');
+  acceptBtn.disabled = clearCount === 0;
+  acceptBtn.textContent = clearCount > 0 ? `一键保留全部清楚项（${clearCount}）` : '清楚项已全部保留 ✓';
+
+  const filterBtn = document.getElementById('filterReviewBtn');
+  filterBtn.classList.toggle('btn-warn', state.onlyNeedsReview);
+  filterBtn.textContent = state.onlyNeedsReview ? `显示全部（当前仅看待核 ${reviewCount}）` : `仅看待核项（${reviewCount}）`;
+
+  // Excel fast mode toggle
+  document.getElementById('excelModeBar').style.display = sc.format === 'xlsx' ? 'flex' : 'none';
+  document.getElementById('excelFastPreview').style.display = (sc.format === 'xlsx' && state.excelFastOpen) ? 'block' : 'none';
+
+  // Sync view tabs
+  document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
+
+  const visibleNodes = state.onlyNeedsReview ? sc.nodes.filter(n => n.reviewState === 'needs-review') : sc.nodes;
+  const visibleEdges = state.onlyNeedsReview ? sc.edges.filter(e => e.reviewState === 'needs-review') : sc.edges;
+  const viewEl = document.getElementById('candidateView');
+
+  if (state.view === 'table') {
+    viewEl.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>编号与标题</th><th>类型</th><th>指标与数值口径</th><th>出处</th><th>核对状态</th></tr></thead>
+      <tbody>${visibleNodes.length ? visibleNodes.map(n => {
+        const sel = state.selected?.type === 'node' && state.selected.id === n.id;
+        const baseStr = n.baseline === '' ? '待定' : `${n.baseline}${n.unit && !String(n.baseline).endsWith(n.unit) ? ' ' + n.unit : ''}`;
+        const tgtStr = n.target === '' ? '待定' : `${n.target}${n.unit && !String(n.target).endsWith(n.unit) ? ' ' + n.unit : ''}`;
+        const stBadge = n.reviewState === 'needs-review' ? '<span class="badge badge-review">待核</span>'
+          : n.reviewState === 'confirmed' ? '<span class="badge badge-clear">已确认</span>'
+          : '<span class="badge badge-accent">清楚</span>';
+        return `<tr class="row-item ${sel ? 'selected' : ''} ${n.reviewState === 'needs-review' ? 'needs-review' : ''}" onclick="selectItem('node','${n.id}')">
+          <td><strong>${escapeHtml(n.id)} · ${escapeHtml(n.title)}</strong>${n.editedByUser ? ' <span class="badge badge-muted">人工改</span>' : ''}</td>
+          <td>${NODE_KINDS[n.kind]}</td>
+          <td>${escapeHtml(n.metric || '—')}<div style="font-size:11.5px;color:var(--muted)">基线：${escapeHtml(baseStr)}（${escapeHtml(n.baselineKind || '待定')}）→ 目标：${escapeHtml(tgtStr)}</div></td>
+          <td style="font-size:11.5px;color:var(--muted)">${escapeHtml(n.locationLabel)}</td>
+          <td>${stBadge}</td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">当前筛选下没有待核条目 ✓</td></tr>'}</tbody>
+    </table></div>`;
+  } else if (state.view === 'tree') {
+    const goals = visibleNodes.filter(n => n.kind === 'goal');
+    const others = visibleNodes.filter(n => n.kind !== 'goal');
+    viewEl.innerHTML = `<ul class="tree-list">${goals.map(g => {
+      const linked = sc.edges.filter(e => e.to === g.id).map(e => ({ edge: e, node: sc.nodes.find(x => x.id === e.from) })).filter(x => x.node);
+      const sel = state.selected?.type === 'node' && state.selected.id === g.id;
+      return `<li>
+        <div class="tree-card ${sel ? 'selected' : ''} ${g.reviewState === 'needs-review' ? 'needs-review' : ''}" onclick="selectItem('node','${g.id}')">
+          <div style="display:flex;justify-content:space-between;gap:8px"><strong>${g.id} · ${escapeHtml(g.title)}</strong><span class="badge ${g.reviewState === 'needs-review' ? 'badge-review' : 'badge-clear'}">${g.reviewState === 'needs-review' ? '待核' : '目标'}</span></div>
+          <div style="font-size:12px;color:var(--muted)">${escapeHtml(g.metric)} · 基线 ${escapeHtml(g.baseline || '待定')}（${escapeHtml(g.baselineKind)}）→ 目标 ${escapeHtml(g.target === '' ? '待定' : g.target)}</div>
+        </div>
+        ${linked.length ? `<ul class="tree-children">${linked.map(({ edge, node }) => `<li>
+          <div class="tree-card ${state.selected?.id === node.id ? 'selected' : ''} ${edge.reviewState === 'needs-review' ? 'needs-review' : ''}" onclick="selectItem('node','${node.id}')">
+            <strong>${node.id} · ${escapeHtml(node.title)}</strong>
+            <span style="font-size:11.5px;color:var(--muted);margin-left:6px">（${EDGE_KINDS[edge.kind]} → ${g.id}）</span>
+          </div>
+        </li>`).join('')}</ul>` : ''}
+      </li>`;
+    }).join('')}${!goals.length && others.length ? others.map(n => `<li><div class="tree-card" onclick="selectItem('node','${n.id}')">${n.id} · ${escapeHtml(n.title)}</div></li>`).join('') : ''}</ul>`;
+  } else {
+    const dims = ['财务', '客户', '内部流程', '学习与成长'];
+    viewEl.innerHTML = `<div class="bsc-lanes">${dims.map(d => {
+      const items = visibleNodes.filter(n => (n.perspective || '内部流程') === d);
+      return `<div class="bsc-lane"><h4>${d}</h4><div class="bsc-lane-cards">${items.length ? items.map(n => `
+        <div class="bsc-card ${state.selected?.id === n.id ? 'selected' : ''} ${n.reviewState === 'needs-review' ? 'needs-review' : ''}" onclick="selectItem('node','${n.id}')">
+          <div style="font-size:11px;color:var(--muted)">${n.id} · ${NODE_KINDS[n.kind]}</div>
+          <strong>${escapeHtml(n.title)}</strong>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:3px">${escapeHtml(n.baseline || '待定')} → ${escapeHtml(n.target === '' ? '待定' : n.target)}</div>
+        </div>`).join('') : '<span style="font-size:12px;color:var(--faint)">本维度暂无条目</span>'}</div></div>`;
+    }).join('')}</div>`;
+  }
+
+  // Edges list
+  document.getElementById('edgeCountLabel').textContent = `显示 ${visibleEdges.length}/${sc.edges.length} 条`;
+  document.getElementById('edgeList').innerHTML = visibleEdges.length ? visibleEdges.map(e => {
+    const sel = state.selected?.type === 'edge' && state.selected.id === e.id;
+    const fromN = sc.nodes.find(n => n.id === e.from);
+    const toN = sc.nodes.find(n => n.id === e.to);
+    return `<li class="edge-item ${sel ? 'selected' : ''} ${e.reviewState === 'needs-review' ? 'needs-review' : ''}" onclick="selectItem('edge','${e.id}')">
+      <div>
+        <strong>${escapeHtml(e.from)}（${escapeHtml(fromN?.title || '?')}） → ${escapeHtml(e.to)}（${escapeHtml(toN?.title || '?')}）</strong>
+        <div style="font-size:11.5px;color:var(--muted)">${escapeHtml(EDGE_KINDS[e.kind])} · 出处：${escapeHtml(e.locationLabel)}</div>
+      </div>
+      <div>${e.reviewState === 'needs-review' ? '<span class="badge badge-review">待核</span>' : e.reviewState === 'confirmed' ? '<span class="badge badge-clear">已确认</span>' : '<span class="badge badge-accent">清楚</span>'}</div>
+    </li>`;
+  }).join('') : '<li style="font-size:12.5px;color:var(--muted);padding:6px">当前筛选下没有待核连线 ✓</li>';
+
+  // Quick prompts
+  document.getElementById('quickPrompts').innerHTML = sc.quickPrompts.map(q =>
+    `<button class="btn-xs" type="button" onclick="runReread('${escapeHtml(q)}')">${escapeHtml(q)}</button>`
+  ).join('');
+
+  renderInspector();
+}
+
+function renderInspector() {
+  const sc = currentScenario();
+  const el = document.getElementById('inspector');
+  const sel = state.selected;
+  if (!sel) { el.innerHTML = '<div style="color:var(--muted);font-size:12.5px">点击左侧原稿框或右侧任意条目/连线进行局部核对与纠正。</div>'; return; }
+
+  if (sel.type === 'node') {
+    const n = sc.nodes.find(x => x.id === sel.id);
+    if (!n) return;
+    const conflictHtml = (n.sourceConflicts || []).map(c => `
+      <div class="conflict-box">
+        <strong>源表与图上数值不一致（已并列原值）：</strong>
+        <div class="conflict-opts">
+          ${c.values.map(v => `<button class="btn-xs" type="button" onclick="adoptConflict('${n.id}','${c.field}','${escapeHtml(v.value)}','${escapeHtml(v.locationLabel)}')">采用 ${escapeHtml(v.label)} · ${escapeHtml(v.locationLabel)}</button>`).join('')}
+        </div>
+      </div>`).join('');
+
+    el.innerHTML = `
+      <h3>
+        <span>核对条目：${escapeHtml(n.id)} · <small style="font-weight:400;color:var(--muted)">${escapeHtml(n.locationLabel)}</small></span>
+        <div style="display:flex;gap:6px">
+          ${n.reviewState !== 'confirmed' ? `<button class="btn-xs btn-ok" type="button" onclick="confirmSelected()">确认此项</button>` : '<span class="badge badge-clear">已确认 ✓</span>'}
+          <button class="btn-xs btn-danger" type="button" onclick="deleteNode('${n.id}')">删除误项</button>
+        </div>
+      </h3>
+      ${n.ambiguityReason ? `<div class="conflict-box"><strong>待核原因：</strong>${escapeHtml(n.ambiguityReason)}</div>` : ''}
+      ${conflictHtml}
+      <div class="form-grid">
+        <label>名称<input value="${escapeHtml(n.title)}" oninput="updateNode('${n.id}','title',this.value)" /></label>
+        <label>类型<select onchange="updateNode('${n.id}','kind',this.value)">
+          ${Object.entries(NODE_KINDS).map(([k, v]) => `<option value="${k}" ${n.kind === k ? 'selected' : ''}>${v}</option>`).join('')}
+        </select></label>
+        <label>BSC 维度<select onchange="updateNode('${n.id}','perspective',this.value)">
+          ${['财务', '客户', '内部流程', '学习与成长'].map(d => `<option ${n.perspective === d ? 'selected' : ''}>${d}</option>`).join('')}
+        </select></label>
+        <label>指标名<input value="${escapeHtml(n.metric || '')}" oninput="updateNode('${n.id}','metric',this.value)" /></label>
+        <label>基线值（支持 0）<input value="${escapeHtml(n.baseline ?? '')}" placeholder="留空表示待定" oninput="updateNode('${n.id}','baseline',this.value)" /></label>
+        <label>基线性质<select onchange="updateNode('${n.id}','baselineKind',this.value)">
+          ${['实测基线', '估计基线', '待定'].map(k => `<option ${n.baselineKind === k ? 'selected' : ''}>${k}</option>`).join('')}
+        </select></label>
+        <label>目标值（留空=待定）<input value="${escapeHtml(n.target ?? '')}" placeholder="待定" oninput="updateNode('${n.id}','target',this.value)" /></label>
+        <label>单位<input value="${escapeHtml(n.unit || '')}" oninput="updateNode('${n.id}','unit',this.value)" /></label>
+      </div>`;
+  } else {
+    const e = sc.edges.find(x => x.id === sel.id);
+    if (!e) return;
+    el.innerHTML = `
+      <h3>
+        <span>核对连线：${escapeHtml(e.from)} → ${escapeHtml(e.to)} · <small style="font-weight:400;color:var(--muted)">${escapeHtml(e.locationLabel)}</small></span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn-xs" type="button" onclick="flipEdge('${e.id}')">⇄ 翻转方向</button>
+          ${e.reviewState !== 'confirmed' ? `<button class="btn-xs btn-ok" type="button" onclick="confirmSelected()">确认此连线</button>` : '<span class="badge badge-clear">已确认 ✓</span>'}
+          <button class="btn-xs btn-danger" type="button" onclick="deleteEdge('${e.id}')">删除连线</button>
+        </div>
+      </h3>
+      ${e.ambiguityReason ? `<div class="conflict-box"><strong>待核原因：</strong>${escapeHtml(e.ambiguityReason)}</div>` : ''}
+      <div class="form-grid">
+        <label>起点<select onchange="updateEdge('${e.id}','from',this.value)">${sc.nodes.map(n => `<option value="${n.id}" ${e.from === n.id ? 'selected' : ''}>${n.id} · ${escapeHtml(n.title)}</option>`).join('')}</select></label>
+        <label>终点<select onchange="updateEdge('${e.id}','to',this.value)">${sc.nodes.map(n => `<option value="${n.id}" ${e.to === n.id ? 'selected' : ''}>${n.id} · ${escapeHtml(n.title)}</option>`).join('')}</select></label>
+        <label>关系类型（可见箭头 ≠ 因果）<select onchange="updateEdge('${e.id}','kind',this.value)">
+          ${Object.entries(EDGE_KINDS).map(([k, v]) => `<option value="${k}" ${e.kind === k ? 'selected' : ''}>${v}</option>`).join('')}
+        </select></label>
+      </div>`;
+  }
+}
+
+function updateNode(id, key, val) {
+  const n = currentScenario().nodes.find(x => x.id === id);
+  if (!n) return;
+  n[key] = val;
+  n.editedByUser = true;
+  renderSourcePanel();
+  // Lightweight refresh of list without killing input focus
+  const sc = currentScenario();
+  const clearCount = [...sc.nodes, ...sc.edges].filter(x => x.reviewState === 'clear').length;
+  const reviewCount = [...sc.nodes, ...sc.edges].filter(x => x.reviewState === 'needs-review').length;
+  const confirmedCount = [...sc.nodes, ...sc.edges].filter(x => x.reviewState === 'confirmed').length;
+  document.getElementById('reviewStats').innerHTML = `
+    <span class="badge badge-muted">共 ${sc.nodes.length} 条目 · ${sc.edges.length} 连线</span>
+    <span class="badge badge-clear">清楚 ${clearCount} · 已确认 ${confirmedCount}</span>
+    <span class="badge badge-review">待核对 ${reviewCount}</span>`;
+}
+function adoptConflict(id, field, val, loc) {
+  const n = currentScenario().nodes.find(x => x.id === id);
+  if (!n) return;
+  n[field] = val;
+  n.editedByUser = true;
+  n.reviewState = 'confirmed';
+  n.ambiguityReason = `已由人工采纳 ${val}（出处：${loc}），原冲突记录随版保留。`;
+  renderAll();
+  toast(`已采纳 ${val}（${loc}）`);
+}
+function updateEdge(id, key, val) {
+  const e = currentScenario().edges.find(x => x.id === id);
+  if (!e) return;
+  e[key] = val;
+  if (key === 'kind' && val !== 'unknown') e.reviewState = 'confirmed';
+  renderAll();
+}
+function flipEdge(id) {
+  const e = currentScenario().edges.find(x => x.id === id);
+  if (!e) return;
+  [e.from, e.to] = [e.to, e.from];
+  e.reviewState = 'confirmed';
+  e.ambiguityReason = '方向已由人工翻转确认。';
+  renderAll();
+  toast(`已翻转连线方向：${e.from} → ${e.to}`);
+}
+function confirmSelected() {
+  const sc = currentScenario();
+  const sel = state.selected;
+  const item = sel.type === 'node' ? sc.nodes.find(x => x.id === sel.id) : sc.edges.find(x => x.id === sel.id);
+  if (!item) return;
+  item.reviewState = 'confirmed';
+  if (sel.type === 'edge' && item.kind === 'unknown') item.kind = 'supports';
+  renderAll();
+  toast(`已确认 ${item.id}`);
+}
+function deleteNode(id) {
+  const sc = currentScenario();
+  sc.nodes = sc.nodes.filter(n => n.id !== id);
+  sc.edges = sc.edges.filter(e => e.from !== id && e.to !== id);
+  state.selected = sc.nodes[0] ? { type: 'node', id: sc.nodes[0].id } : null;
+  renderAll();
+  toast(`已删除误项 ${id}`);
+}
+function deleteEdge(id) {
+  const sc = currentScenario();
+  sc.edges = sc.edges.filter(e => e.id !== id);
+  state.selected = sc.edges[0] ? { type: 'edge', id: sc.edges[0].id } : null;
+  renderAll();
+  toast(`已删除连线 ${id}`);
+}
+
+function runReread(promptText) {
+  if (state.edgeCase === 'revoked') {
+    toast('来源已撤权，Host 已拒绝向模型发送重读请求。', 'error');
+    return;
+  }
+  const text = (promptText || document.getElementById('rereadInput').value).trim();
+  if (!text) return;
+  document.getElementById('rereadInput').value = '';
+  const sc = currentScenario();
+  if (sc.id === 'pptx' && text.includes('S3')) {
+    const e3 = sc.edges.find(e => e.id === 'E3');
+    if (e3) {
+      e3.kind = 'supports';
+      e3.ambiguityReason = 'Agent 局部重读第 4 页：贴纸左侧可见细线从 S3 伸向 G1 底部，建议标为「支持 / 贡献」，但箭头头部仍被遮挡，待您最终确认。';
+      state.selected = { type: 'edge', id: 'E3' };
+    }
+  } else if (sc.id === 'xlsx') {
+    state.selected = { type: 'node', id: 'G1' };
+  }
+  state.messages.push({ role: 'user', time: '刚刚', text: `【局部重读】${text}` });
+  state.messages.push({ role: 'agent', time: '刚刚', text: `已按指令局部重读「${sc.fileName}」指定区域，保留您已人工修改的所有字段，仅更新待核说明供确认。` });
+  renderAll();
+  toast('Agent 已完成局部重读（已保护人工修改字段）');
+}
+
+function renderDiscussion() {
+  const latest = state.versions[state.versions.length - 1];
+  document.getElementById('discussionFeed').innerHTML = `
+    <div class="alert alert-ok" style="margin-bottom:12px">
+      <div><strong>当前可见战略地图版本：</strong>${escapeHtml(latest.title)} · v${latest.version}（${escapeHtml(latest.summary)}）</div>
+      <button class="btn-xs" type="button" onclick="switchTab('map')">查看并编辑此版</button>
+    </div>
+    ${state.messages.map(m => `<div class="msg ${m.role}"><small>${m.role === 'user' ? '用户' : '原战略 Agent'} · ${m.time}</small>${escapeHtml(m.text)}</div>`).join('')}
+  `;
+}
+
+function renderVersions() {
+  document.getElementById('versionsList').innerHTML = [...state.versions].reverse().map(v => `
+    <div style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;background:var(--subtle)">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <strong>${escapeHtml(v.title)} · v${v.version}</strong>
+        <span class="badge badge-muted">${escapeHtml(v.format.toUpperCase())} · ${escapeHtml(v.createdAt)}</span>
+      </div>
+      <div style="font-size:12.5px;margin-top:4px">${escapeHtml(v.reason)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">原文件：${escapeHtml(v.fileName)} · SHA-256 <code>${v.sha256.slice(0, 16)}…</code> · ${escapeHtml(v.summary)}</div>
+    </div>
+  `).join('');
+}
+
+function renderAll() {
+  document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.scenario === state.scenarioId));
+  document.getElementById('workspace').dataset.mobilePane = state.mobilePane;
+  document.getElementById('rereadBtn').disabled = state.edgeCase === 'revoked';
+  renderAlerts();
+  renderSourcePanel();
+  renderCandidatePanel();
+  if (state.tab === 'discussion') renderDiscussion();
+  if (state.tab === 'versions') renderVersions();
+}
+
+// Event bindings
+document.querySelectorAll('.topbar .tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+document.querySelectorAll('.pill').forEach(p => p.addEventListener('click', () => switchScenario(p.dataset.scenario)));
+document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { state.view = b.dataset.view; renderCandidatePanel(); }));
+
+document.getElementById('openPickerBtn').addEventListener('click', openPicker);
+document.getElementById('themeToggle').addEventListener('click', (e) => {
+  const root = document.getElementById('app');
+  const dark = root.dataset.theme === 'dark';
+  root.dataset.theme = dark ? 'light' : 'dark';
+  e.target.textContent = dark ? '切换深色' : '切换浅色';
+});
+document.getElementById('modelModeSelect').addEventListener('change', (e) => { state.modelMode = e.target.value; renderAll(); });
+document.getElementById('edgeCaseSelect').addEventListener('change', (e) => { state.edgeCase = e.target.value; renderAll(); });
+document.getElementById('zoomInBtn').addEventListener('click', () => { state.zoom = Math.min(1.5, +(state.zoom + 0.15).toFixed(2)); renderSourcePanel(); });
+document.getElementById('zoomOutBtn').addEventListener('click', () => { state.zoom = Math.max(0.75, +(state.zoom - 0.15).toFixed(2)); renderSourcePanel(); });
+document.getElementById('toggleExcelFastBtn').addEventListener('click', () => { state.excelFastOpen = !state.excelFastOpen; renderCandidatePanel(); });
+
+document.getElementById('acceptClearBtn').addEventListener('click', () => {
+  const sc = currentScenario();
+  let n = 0;
+  [...sc.nodes, ...sc.edges].forEach(item => { if (item.reviewState === 'clear') { item.reviewState = 'confirmed'; n++; } });
+  renderAll();
+  toast(`已一键保留 ${n} 项清楚内容，请集中核对剩余标黄歧义项。`);
+});
+document.getElementById('filterReviewBtn').addEventListener('click', () => { state.onlyNeedsReview = !state.onlyNeedsReview; renderCandidatePanel(); });
+document.getElementById('addNodeBtn').addEventListener('click', () => {
+  const sc = currentScenario();
+  const id = 'N' + (sc.nodes.length + 1);
+  sc.nodes.push({
+    id, kind: 'strategy', title: '人工补充策略', perspective: '内部流程', metric: '', baseline: '', baselineKind: '待定', target: '', unit: '', period: '',
+    reviewState: 'confirmed', page: sc.activePage, locationLabel: '人工手工补充', bbox: [220, 260, 175, 56], editedByUser: true
+  });
+  state.selected = { type: 'node', id };
+  renderAll();
+});
+document.getElementById('dedupeBtn').addEventListener('click', () => {
+  const sc = currentScenario();
+  const dup = sc.nodes.find(n => n.id === 'S2_DUP');
+  if (dup) {
+    sc.nodes = sc.nodes.filter(n => n.id !== 'S2_DUP');
+    state.selected = { type: 'node', id: 'S2' };
+    renderAll();
+    toast('已合并重复条目 S2_DUP → S2（保留原工作表与形状双出处）。');
+  } else {
+    toast('未发现高相似重复条目。');
+  }
+});
+document.getElementById('rereadBtn').addEventListener('click', () => runReread());
+document.getElementById('saveVersionBtn').addEventListener('click', () => {
+  if (state.edgeCase === 'conflict') {
+    toast('CAS 版本冲突：已保留当前人工修改，请先核对最新基线后再保存。', 'error');
+    return;
+  }
+  const sc = currentScenario();
+  const nextVer = state.versions.length + 1;
+  const reviewLeft = [...sc.nodes, ...sc.edges].filter(x => x.reviewState === 'needs-review').length;
+  state.versions.push({
+    version: nextVer,
+    title: sc.fileName.replace(/\.[^.]+$/, ''),
+    format: sc.format,
+    fileName: sc.fileName,
+    sha256: sc.sha256,
+    author: '用户核对保存',
+    reason: `核对 ${sc.fileName} 后保存为候选 v${nextVer}（剩余待核 ${reviewLeft} 项）`,
+    createdAt: '刚刚',
+    summary: `${sc.nodes.length} 条目 · ${sc.edges.length} 连线 · 仅候选未采用`
+  });
+  state.messages.push({
+    role: 'agent', time: '刚刚',
+    text: `已保存战略地图候选 v${nextVer}（来源：${sc.fileName}，含您的人工修订）。后续在原讨论中将直接读取 v${nextVer} 的最新数值与连线；正式目标采用与创建 Case 仍需您在各自入口确认。`
+  });
+  renderAll();
+  toast(`已保存候选地图 v${nextVer}！可切到「战略共创（原讨论）」或「版本与来源」回读。`);
+});
+document.getElementById('openHandoffBtn').addEventListener('click', () => {
+  const sc = currentScenario();
+  const goals = sc.nodes.filter(n => n.kind === 'goal');
+  document.getElementById('handoffBody').innerHTML = goals.map(g => `
+    <div style="border:1px solid var(--line);border-radius:7px;padding:8px 10px;margin-bottom:6px;background:var(--subtle)">
+      <strong>${g.id} · ${escapeHtml(g.title)}</strong>
+      <div style="font-size:12px;color:var(--muted)">指标：${escapeHtml(g.metric || '待补')} · 基线：${escapeHtml(g.baseline || '待定')}（${escapeHtml(g.baselineKind)}）→ 目标：${escapeHtml(g.target === '' ? '待定' : g.target)} ${escapeHtml(g.unit || '')}</div>
+    </div>`).join('');
+  document.getElementById('handoffModal').classList.add('open');
+});
+document.getElementById('sendChatBtn').addEventListener('click', () => {
+  const input = document.getElementById('chatDraft');
+  const txt = input.value.trim();
+  if (!txt) return;
+  input.value = '';
+  const latest = state.versions[state.versions.length - 1];
+  state.messages.push({ role: 'user', time: '刚刚', text: txt });
+  state.messages.push({ role: 'agent', time: '刚刚', text: `（演示回复）已读取当前可见的战略地图候选 v${latest.version} 及您的人工修改内容；正式接入后将由原 Pi 会话实时回应。` });
+  renderDiscussion();
+});
+document.getElementById('mobileShowSource').addEventListener('click', () => {
+  state.mobilePane = 'source';
+  document.getElementById('mobileShowSource').classList.add('btn-primary');
+  document.getElementById('mobileShowCandidate').classList.remove('btn-primary');
+  renderAll();
+});
+document.getElementById('mobileShowCandidate').addEventListener('click', () => {
+  state.mobilePane = 'candidate';
+  document.getElementById('mobileShowCandidate').classList.add('btn-primary');
+  document.getElementById('mobileShowSource').classList.remove('btn-primary');
+  renderAll();
+});
+
+renderAll();
+</script>
+</body>
+</html>
