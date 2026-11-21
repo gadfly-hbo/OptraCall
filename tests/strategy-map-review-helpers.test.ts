@@ -341,3 +341,84 @@ test('Round-5 Item 2: prompt mentioning S1/G1, deleted G2 + cleared G1 target, a
   assert.deepEqual(afterAdoptG2.merged.nodes.map(n => n.id), ['G1', 'S1', 'G2']);
   assert.ok(!afterAdoptG2.conflicts.some(c => c.id === 'saved-node-add:G2'));
 });
+
+test('Round-6 Item 2: saved edges are never silently dropped when reread suggests an unadopted/deleted endpoint (e2 or e1 itself); explicit restore then adopt applies cleanly', async () => {
+  const { mergeSavedBaseWithRereadDraft } = await import('../src/host/ui/strategy-map-review-helpers.ts');
+
+  // v1: user deleted G2, kept G1 & S1 and TWO valid edges: e1 = G1->S1 (unknown), e2 = S1->G1 (unknown)
+  const savedV1: StrategyMapDraft = {
+    title: '方案 B · 人工确认名称',
+    template: 'tree',
+    choice: '优先导购回访',
+    excluded: '',
+    assumptions: '',
+    unknowns: '',
+    nodes: [
+      { id: 'G1', kind: 'goal', title: '复购率（新客）', baseline: '15%', target: '18%', reviewState: 'clear' },
+      { id: 'S1', kind: 'strategy', title: '导购回访', baseline: '60%', reviewState: 'needs-review' },
+    ],
+    edges: [
+      { id: 'e1', from: 'G1', to: 'S1', kind: 'unknown', reviewState: 'needs-review' },
+      { id: 'e2', from: 'S1', to: 'G1', kind: 'unknown', reviewState: 'needs-review' },
+    ],
+  };
+
+  // Incoming reread resolves e1 to S1->G1/supports, AND suggests moving e2 to deleted G2 (S1->G2/supports)
+  const incomingReread: StrategyMapDraft = {
+    ...savedV1,
+    nodes: [
+      ...savedV1.nodes,
+      { id: 'G2', kind: 'goal', title: '复购率（老客）', baseline: '18%', target: '25%', reviewState: 'clear' },
+    ],
+    edges: [
+      { id: 'e1', from: 'S1', to: 'G1', kind: 'supports', reviewState: 'clear' },
+      { id: 'e2', from: 'S1', to: 'G2', kind: 'supports', reviewState: 'clear' },
+    ],
+  };
+
+  // Step 1: User has NOT restored G2 -> e1 updates cleanly, e2 MUST remain S1->G1/unknown (NEVER dropped!), G2 stays deleted!
+  const step1 = mergeSavedBaseWithRereadDraft(savedV1, incomingReread, { version: 1 });
+  assert.deepEqual(step1.merged.nodes.map(n => n.id), ['G1', 'S1']);
+  assert.deepEqual(step1.merged.edges.map(e => e.id), ['e1', 'e2']);
+  assert.equal(step1.merged.edges.find(e => e.id === 'e1')?.from, 'S1');
+  assert.equal(step1.merged.edges.find(e => e.id === 'e1')?.to, 'G1');
+  assert.equal(step1.merged.edges.find(e => e.id === 'e1')?.kind, 'supports');
+  const keptE2 = step1.merged.edges.find(e => e.id === 'e2');
+  assert.equal(keptE2?.from, 'S1');
+  assert.equal(keptE2?.to, 'G1');
+  assert.equal(keptE2?.kind, 'unknown');
+  const e2Conflict1 = step1.conflicts.find(c => c.id === 'saved-edge:e2');
+  assert.ok(e2Conflict1, 'expected explicit conflict for e2 pointing to unadopted G2');
+  assert.deepEqual(e2Conflict1.blockedByMissingNodes, ['G2']);
+  assert.match(e2Conflict1.incomingDisplay, /需先恢复节点 G2/);
+
+  // Step 2: User explicitly restores G2 -> G2 is added, e2 STILL stays S1->G1/unknown until explicitly adopted, and e2 conflict is now unblocked!
+  const addG2Conflict = step1.conflicts.find(c => c.id === 'saved-node-add:G2')!;
+  const overlayWithG2 = applyManualEditRecord(emptyManualEditOverlay(), addG2Conflict.adoptRecord);
+  const step2 = mergeSavedBaseWithRereadDraft(savedV1, incomingReread, { version: 1, overlay: overlayWithG2 });
+  assert.deepEqual(step2.merged.nodes.map(n => n.id), ['G1', 'S1', 'G2']);
+  assert.equal(step2.merged.edges.find(e => e.id === 'e2')?.to, 'G1', 'restoring G2 alone must not silently move e2');
+  const e2Conflict2 = step2.conflicts.find(c => c.id === 'saved-edge:e2');
+  assert.ok(e2Conflict2);
+  assert.equal(e2Conflict2.blockedByMissingNodes, undefined, 'after G2 is restored, adopting e2 must be unblocked');
+
+  // Step 3: User explicitly adopts e2 -> e2 moves to S1->G2/supports and conflict clears!
+  const overlayWithG2AndE2 = applyManualEditRecord(overlayWithG2, e2Conflict2.adoptRecord);
+  const step3 = mergeSavedBaseWithRereadDraft(savedV1, incomingReread, { version: 1, overlay: overlayWithG2AndE2 });
+  assert.equal(step3.merged.edges.find(e => e.id === 'e2')?.to, 'G2');
+  assert.equal(step3.merged.edges.find(e => e.id === 'e2')?.kind, 'supports');
+  assert.ok(!step3.conflicts.some(c => c.id === 'saved-edge:e2'));
+
+  // Independent control: e1 ITSELF is suggested to point to excluded G2 -> e1 MUST stay G1->S1/unknown (1 edge, NOT 0 edges!)
+  const savedOnlyE1: StrategyMapDraft = { ...savedV1, edges: [savedV1.edges[0]!] };
+  const incomingE1ToG2: StrategyMapDraft = {
+    ...incomingReread,
+    edges: [{ id: 'e1', from: 'S1', to: 'G2', kind: 'supports', reviewState: 'clear' }],
+  };
+  const resOnlyE1 = mergeSavedBaseWithRereadDraft(savedOnlyE1, incomingE1ToG2, { version: 1 });
+  assert.deepEqual(resOnlyE1.merged.edges.map(e => e.id), ['e1']);
+  assert.equal(resOnlyE1.merged.edges[0]?.from, 'G1');
+  assert.equal(resOnlyE1.merged.edges[0]?.to, 'S1');
+  assert.equal(resOnlyE1.merged.edges[0]?.kind, 'unknown');
+  assert.deepEqual(resOnlyE1.conflicts.find(c => c.id === 'saved-edge:e1')?.blockedByMissingNodes, ['G2']);
+});

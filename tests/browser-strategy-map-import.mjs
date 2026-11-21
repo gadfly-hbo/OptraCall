@@ -208,7 +208,8 @@ async function startSyntheticProvider(oldMapId) {
       }
       calls = [{ name: 'strategy_goals', arguments: { action: 'read-import-source', importSourceId: src.sourceId, page: mode !== 'extract_two_plans' ? 2 : 1 } }];
     } else if (recentTools.length === 1 && src) {
-      const isReread = mode === 'reread_plan_b_delayed' || mode === 'revise_saved_b_omit_id';
+      const isReread = mode === 'reread_plan_b_delayed' || mode === 'revise_saved_b_omit_id' || mode === 'revise_saved_b_e2_missing_g2';
+      const e2ToG2 = mode === 'revise_saved_b_e2_missing_g2';
       const planBDraft = {
         title: '方案 B · 新客培育',
         template: 'bsc',
@@ -231,17 +232,17 @@ async function startSyntheticProvider(oldMapId) {
           },
           {
             id: 'e2',
-            from: 'G2',
-            to: 'S1',
-            kind: 'unknown',
-            reviewState: 'needs-review',
-            ambiguityReason: '另一条待核连线 e2，方向与关系待人工确认',
+            from: e2ToG2 ? 'S1' : 'G2',
+            to: e2ToG2 ? 'G2' : 'S1',
+            kind: e2ToG2 ? 'supports' : 'unknown',
+            reviewState: e2ToG2 ? 'clear' : 'needs-review',
+            ambiguityReason: e2ToG2 ? '' : '另一条待核连线 e2，方向与关系待人工确认',
             sourceLocation: { sourceId: src.sourceId, fileName: src.fileName, page: 2, objectId: '11', arrowBbox: [200, 310, 80, 90], label: '策略图示页 · 红图 · 连线 e2' },
           },
         ],
       };
       if (isReread) {
-        calls = [{ name: 'strategy_goals', arguments: { action: 'propose-map-draft', reason: mode === 'revise_saved_b_omit_id' ? '修订 B v1 重读 e1' : '局部重读方案 B 连线 e1', mapDraft: planBDraft } }];
+        calls = [{ name: 'strategy_goals', arguments: { action: 'propose-map-draft', reason: mode === 'reread_plan_b_delayed' ? '局部重读方案 B 连线 e1' : '修订 B v1 重读 e1', mapDraft: planBDraft } }];
       } else {
         const planADraft = {
           title: '方案 A · 会员留存',
@@ -329,6 +330,34 @@ async function startSyntheticProvider(oldMapId) {
           { id: 'G2', kind: 'goal', title: '来源B目标', reviewState: 'clear', sourceLocation: { sourceId: regB.source.sourceId, fileName: '白板B.png', page: 1, bbox: [550, 450, 260, 140], label: 'B第1页' } },
         ],
         edges: [],
+      },
+    });
+
+    const r5aId = uid();
+    const r5aRoute = `/api/strategy/discussions/${r5aId}`;
+    await api('/api/strategy/discussions', 'POST', { title: '五轮对照A_提示含G1与翻转e2', operationId: r5aId, configurationId: synCfg.id, usageContext: { kind: 'personal', background: '五轮局部重读对照' } });
+
+    const r5bId = uid();
+    const r5bRoute = `/api/strategy/discussions/${r5bId}`;
+    await api('/api/strategy/discussions', 'POST', { title: '五轮对照B_删G2清目标待定', operationId: r5bId, configurationId: synCfg.id, usageContext: { kind: 'personal', background: '五轮删除与留空对照' } });
+
+    const r6Id = uid();
+    const r6Route = `/api/strategy/discussions/${r6Id}`;
+    await api('/api/strategy/discussions', 'POST', { title: '六轮对照_未采纳新端点保留原线e2', operationId: r6Id, configurationId: synCfg.id, usageContext: { kind: 'personal', background: '六轮丢线防护对照' } });
+    const r6Reg = await api(`${r6Route}/map-imports`, 'POST', { kind: 'upload', fileName: 'Q4战略图_双表双图.xlsx', bytes: (await buildTwoSheetTwoImageXlsx()).toString('base64') });
+    await api(`${r6Route}/maps`, 'POST', {
+      mapId: uid(), operationId: uid(), expectedVersion: 0, reason: '删除G2保留e1与e2的v1',
+      draft: {
+        title: '方案 B · 人工保留双线', template: 'tree', choice: '保留两条有效线',
+        importSources: [{ sourceId: r6Reg.source.sourceId, fileName: 'Q4战略图_双表双图.xlsx', format: 'xlsx', sha256: r6Reg.source.sha256, origin: 'upload', selectedPages: [1, 2] }],
+        nodes: [
+          { id: 'G1', kind: 'goal', title: '复购率（新客）', baseline: '15%', target: '18%', reviewState: 'clear', sourceLocation: { sourceId: r6Reg.source.sourceId, fileName: 'Q4战略图_双表双图.xlsx', page: 1, bbox: [100, 100, 320, 180], label: '总览表' } },
+          { id: 'S1', kind: 'strategy', title: '导购回访（待核指标）', baseline: '60%', reviewState: 'needs-review', sourceLocation: { sourceId: r6Reg.source.sourceId, fileName: 'Q4战略图_双表双图.xlsx', page: 2, objectId: '12', bbox: [480, 420, 340, 200], label: '策略图示页' } },
+        ],
+        edges: [
+          { id: 'e1', from: 'G1', to: 'S1', kind: 'unknown', reviewState: 'needs-review', sourceLocation: { sourceId: r6Reg.source.sourceId, fileName: 'Q4战略图_双表双图.xlsx', page: 2, objectId: '12', arrowBbox: [240, 290, 80, 110], label: '连线 e1' } },
+          { id: 'e2', from: 'S1', to: 'G1', kind: 'unknown', reviewState: 'needs-review', sourceLocation: { sourceId: r6Reg.source.sourceId, fileName: 'Q4战略图_双表双图.xlsx', page: 2, objectId: '12', arrowBbox: [200, 310, 80, 90], label: '连线 e2' } },
+        ],
       },
     });
 
@@ -451,9 +480,6 @@ async function startSyntheticProvider(oldMapId) {
     await page.getByText('已放弃本次导入草稿').waitFor();
 
     // Round-5 Item 2 Control A & C (Prompt mentioning S1/G1 + manually flipped e2 still unknown) + Control B (positive 9% adoption)
-    const r5aId = uid();
-    const r5aRoute = `/api/strategy/discussions/${r5aId}`;
-    await api('/api/strategy/discussions', 'POST', { title: '五轮对照A_提示含G1与翻转e2', operationId: r5aId, configurationId: synCfg.id, usageContext: { kind: 'personal', background: '五轮局部重读对照' } });
     await page.locator('label').filter({ hasText: /^原讨论/ }).locator('select').selectOption(r5aId);
     await button('战略共创').click();
     await button('导入战略图').click();
@@ -495,7 +521,6 @@ async function startSyntheticProvider(oldMapId) {
     await page.locator('.map-reread-bar input').fill('请只核对 S1 到 G1 的连线 e1 方向，其余保持原样；保留 G1 的人工基线不变');
     await page.locator('.map-reread-bar').getByRole('button', { name: '局部重读', exact: true }).click();
     await page.locator('.map-pending-draft-bar').waitFor({ timeout: 25000 });
-    // e1 directly updated to S1 -> G1 / 支持; G1 baseline stays 15%; flipped e2 stays S1 -> G2 / 未知关系 with explicit conflict diffs!
     assert.equal(await page.locator('.strategy-map .map-edit-grid label').filter({ hasText: '方案名称' }).locator('input').inputValue(), '方案 B · 人工确认名称');
     await page.getByLabel('候选核对').locator('tbody').getByText('G1 · 复购率（新客）').click();
     assert.equal(await page.locator('.map-inspector label').filter({ hasText: '基线' }).first().locator('input').inputValue(), '15%');
@@ -528,9 +553,6 @@ async function startSyntheticProvider(oldMapId) {
     assert.equal(r5aV3.edges.find(e => e.id === 'e2')?.from, 'S1');
 
     // Round-5 Item 2 Control D: Delete false node G2 + clear G1 target to '' (待定) -> Save v1 -> FULL PAGE RELOAD -> reread e1 -> G2 does NOT reappear & G1 target stays '' with explicit conflict diffs -> Save v2!
-    const r5bId = uid();
-    const r5bRoute = `/api/strategy/discussions/${r5bId}`;
-    await api('/api/strategy/discussions', 'POST', { title: '五轮对照B_删G2清目标待定', operationId: r5bId, configurationId: synCfg.id, usageContext: { kind: 'personal', background: '五轮删除与留空对照' } });
     await page.locator('label').filter({ hasText: /^原讨论/ }).locator('select').selectOption(r5bId);
     await button('战略共创').click();
     await button('导入战略图').click();
@@ -578,6 +600,45 @@ async function startSyntheticProvider(oldMapId) {
     assert.ok(!r5bV2.nodes.find(n => n.id === 'G1')?.target);
     assert.equal(r5bV2.edges.find(e => e.id === 'e1')?.kind, 'supports');
 
+    // Round-6 Item 2 Control E: v1 deleted G2 and kept e1=G1->S1/unknown + e2=S1->G1/unknown; reread resolves e1 AND suggests moving e2 to deleted G2 -> v2 preserves e2 without resurrecting G2; then explicit G2 restore + e2 adopt saves v3!
+    await page.locator('label').filter({ hasText: /^原讨论/ }).locator('select').selectOption(r6Id);
+    await button('战略地图').click();
+    provider.state.mode = 'revise_saved_b_e2_missing_g2';
+    await page.locator('.map-reread-bar input').fill('请只重读第 2 页连线 e1');
+    await page.locator('.map-reread-bar').getByRole('button', { name: '局部重读', exact: true }).click();
+    await page.locator('.map-pending-draft-bar').waitFor({ timeout: 25000 });
+    assert.equal(await page.getByLabel('候选核对').locator('tbody').getByText('G2 · 复购率（老客）').count(), 0);
+    await page.locator('[data-merge-conflict="saved-edge:e2"][data-missing-nodes="G2"]').waitFor();
+    assert.equal(await page.locator('[data-merge-conflict="saved-edge:e2"] button').isDisabled(), true);
+    await page.locator('.map-pending-draft-bar').getByRole('button', { name: '保存候选版本', exact: true }).click();
+    await page.getByText(/已保存 方案 B · 人工保留双线 · v2/).waitFor();
+    const r6Versions2 = (await api(`${r6Route}/maps`)).versions;
+    assert.equal(r6Versions2.length, 2);
+    const r6V2 = r6Versions2[1];
+    assert.deepEqual(r6V2.nodes.map(n => n.id), ['G1', 'S1']);
+    assert.deepEqual(r6V2.edges.map(e => e.id), ['e1', 'e2']);
+    assert.equal(r6V2.edges.find(e => e.id === 'e1')?.kind, 'supports');
+    assert.equal(r6V2.edges.find(e => e.id === 'e2')?.from, 'S1');
+    assert.equal(r6V2.edges.find(e => e.id === 'e2')?.to, 'G1');
+    assert.equal(r6V2.edges.find(e => e.id === 'e2')?.kind, 'unknown');
+
+    // Explicit two-step adoption: restore G2 first -> e2 conflict unblocks -> explicitly adopt e2 -> save v3!
+    await page.locator('.map-reread-bar input').fill('再次重读以确认恢复G2并改接e2');
+    await page.locator('.map-reread-bar').getByRole('button', { name: '局部重读', exact: true }).click();
+    await page.locator('[data-merge-conflict="saved-node-add:G2"]').waitFor({ timeout: 25000 });
+    await page.locator('[data-merge-conflict="saved-node-add:G2"]').getByRole('button', { name: '改用重读值' }).click();
+    assert.equal(await page.locator('[data-merge-conflict="saved-edge:e2"] button').isDisabled(), false);
+    await page.locator('[data-merge-conflict="saved-edge:e2"]').getByRole('button', { name: '改用重读值' }).click();
+    await page.locator('.map-pending-draft-bar').getByRole('button', { name: '保存候选版本', exact: true }).click();
+    await page.getByText(/已保存 方案 B · 人工保留双线 · v3/).waitFor();
+    const r6V3 = (await api(`${r6Route}/maps`)).versions.at(-1);
+    assert.equal(r6V3.version, 3);
+    assert.deepEqual(r6V3.nodes.map(n => n.id), ['G1', 'S1', 'G2']);
+    assert.equal(r6V3.edges.find(e => e.id === 'e1')?.kind, 'supports');
+    assert.equal(r6V3.edges.find(e => e.id === 'e2')?.from, 'S1');
+    assert.equal(r6V3.edges.find(e => e.id === 'e2')?.to, 'G2');
+    assert.equal(r6V3.edges.find(e => e.id === 'e2')?.kind, 'supports');
+
     // Multi-source isolation + mobile/dark
     await page.locator('label').filter({ hasText: /^原讨论/ }).locator('select').selectOption(multiId);
     await button('战略地图').click();
@@ -596,7 +657,7 @@ async function startSyntheticProvider(oldMapId) {
 
     await ctx2.close();
     await ctx1.close();
-    console.log('PASS browser-strategy-map-import Round-5 (0ms A->B edit zero bleed, stale-tab 409 preserves manual title, post-reload reread preserves G1 15% even when prompt mentions S1/G1, keeps flipped unknown e2, keeps deleted G2 & cleared G1 target, positive 9% adoption works, mobile/dark, 0 pageerrors)');
+    console.log('PASS browser-strategy-map-import Round-6 (all fixtures pre-created before navigation, 0ms A->B edit zero bleed, stale-tab 409 preserves manual title, post-reload reread preserves G1 15% & flipped e2 & deleted G2 & cleared target & valid e2 when reread suggests missing G2, explicit G2 restore + e2 adopt works, positive 9% adoption works, mobile/dark, 0 pageerrors)');
   } finally {
     await browser.close();
     if (prevConfigs.selectedId) {

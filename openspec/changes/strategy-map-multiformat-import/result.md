@@ -246,3 +246,37 @@
   2. 全仓 433 个测试文件全量 CI（由 Codex 在 PR CI / Mac mini 执行）；
   3. macOS 本机 LibreOffice + `pypdfium2` 整页渲染阳性对照（云端 Linux VM 未安装 `soffice`/`pdftoppm`；Codex 已在 Mac mini 实测通过）；
   4. Codex 第六轮非作者复核、最新 `main` 集成、PR/CI、获授权合并与 Mac mini / MacBook 服务切换。
+
+---
+
+## 11. 第六轮复核退回记录与未采纳新端点原线保护复验证据（对应 Codex 回执 `issuecomment-7061918106`）
+
+### 11.1 保留第六轮复核事实
+- **第六轮候选（`b692787cbafe193abf7f5445f9d1c6be4e766394`）复核结果：上轮四组对照全部通过，剩一处静默删线问题及测试夹具目录刷新时序问题**。Codex 于 [issuecomment-7061918106](https://github.com/gadfly-hbo/OptraCall/issues/106#issuecomment-7061918106) 确认 Mac mini 上 `check:agent-sessions`、构建、`git diff --check`、**248/248** 项受影响回归（0 跳过）及上轮四组对照（提示提及 `G1`、已删 `G2` 与留空目标、手工翻转 `e2`、主动采纳 9% 及先恢复 `G2` 再采纳新增连线）全部通过；同时在真实产品入口复现出：当 `v1` 删除了 `G2`、保留有效连线 `e1`/`e2`，刷新重读后 Agent 建议将 `e2`（或 `e1` 本身）接到未恢复的 `G2` 时，因 `canAutoMergeEdge` 未前置校验新端点有效性与端点集合一致，进入自动合入分支后因 `validNodeIds.has('G2') === false` 将原线整条丢弃。另记录随提交的 Chrome 脚本在进入页面后再由 API 创建夹具讨论导致下拉目录未刷新而超时（手工刷新目录后全套通过）。本轮与前五轮（`9794c23`、`d739f67`、`11f171a`、`d40380a`、`6a4cc51`、`b692787`）全部历史事实完整保留。
+
+### 11.2 针对第六轮两项记录的修复与同图 `v1`/`v2`/`v3` 证据
+
+1. **未采纳新端点时保留原线并明示依赖节点**（[`src/host/ui/strategy-map-review-helpers.ts`](../../../src/host/ui/strategy-map-review-helpers.ts)、[`src/host/ui/StrategyMapPanel.tsx`](../../../src/host/ui/StrategyMapPanel.tsx)）：
+   - `MergeConflictItem` 新增可选 `blockedByMissingNodes?: string[]`。
+   - `mergeSavedBaseWithRereadDraft()` 将 `incomingEndpointsValid`（全部建议端点均已在 `validNodeIds` 中）与 `sameEndpointSet`（仅同端点集合解析方向/关系，不跨节点改接）前置为 `canAutoMergeEdge` 必要条件；凡新端点尚未恢复或提议改接其他节点的连线，一律保留 `v1` 原线（绝不静默删线），并在差异中注明 `（需先恢复节点 G2）` 与 `blockedByMissingNodes: ['G2']`；同时保护 `overlayEdgePatch` 仅在 `incomingEndpointsValid` 时改写端点。
+   - `StrategyMapPanel.tsx` 在存在 `blockedByMissingNodes` 时禁用该连线差异的「改用重读值」按钮并显示「先恢复 G2」；待用户显式点击「改用重读值」恢复 `G2` 后，原线仍保持不自动跳变，同时连线差异按钮解锁为可点击，再由用户显式采纳后才改接至 `G2`。
+2. **修复仓库 Chrome 测试脚本夹具创建时机**（[`tests/browser-strategy-map-import.mjs`](../../../tests/browser-strategy-map-import.mjs)）：
+   - 将全部夹具讨论（`id`、`multiId`、`r5aId`、`r5bId` 及新增第六轮对照 `r6Id`）统一在 `await page.goto(base)` 之前创建，确保页面初次加载讨论目录即包含全部夹具；同时将第六轮对照完整写入原样脚本。
+
+| 同图版本 / 操作 | 实际节点、连线与采纳结果 | 复验证据 |
+| --- | --- | --- |
+| **`v1`（初始已保存）** | `nodes: ['G1', 'S1']`（已删 `G2`）；`edges: [e1: G1→S1 / unknown, e2: S1→G1 / unknown]` | [`tests/strategy-map-review-helpers.test.ts`](../../../tests/strategy-map-review-helpers.test.ts)（`Round-6 Item 2`）+ 真实 Chrome 端到端：**PASS** |
+| **刷新重读 `e1`（Agent 同时建议 `e2: S1→G2 / supports`）→ 保存 `v2`** | `G2` 仍未恢复；`e1` 直接更新为 `S1→G1 / supports`；**`e2` 完整保留为 `S1→G1 / unknown`**；界面展示 `saved-edge:e2[data-missing-nodes="G2"]`（按钮禁用「先恢复 G2」）与 `saved-node-add:G2`。回读 `v2`：`nodes: ['G1', 'S1']`、`edges: [e1: S1→G1/supports, e2: S1→G1/unknown]`；独立对照（`e1` 本身指向未恢复 `G2`）同样保留 `e1: G1→S1/unknown`（1 条线而非 0 条线）。 | 单测（含 `e2→G2` 与 `e1→G2` 双对照）+ 连续 3/3 真实 Chrome：**PASS** |
+| **用户先显式恢复 `G2`，再显式采纳 `e2` → 保存 `v3`** | 点击 `saved-node-add:G2` 的「改用重读值」恢复 `G2` 后，`e2` 仍停留在 `S1→G1/unknown` 且 `saved-edge:e2` 按钮解锁；点击 `saved-edge:e2` 的「改用重读值」并保存 `v3`。回读 `v3`：`nodes: ['G1', 'S1', 'G2']`、`edges: [e1: S1→G1/supports, e2: S1→G2/supports]`。 | 单测 + 连续 3/3 真实 Chrome：**PASS** |
+
+### 11.3 第六轮返工实跑验证汇总（严格区分 PASS / FAIL / NOT_RUN）
+- **统一会话边界检查**（`npm run check:agent-sessions`）：**PASS**
+- **类型检查与产品前端构建**（`npm run build`）：**PASS**
+- **浏览器测试脚本语法与空白检查**（`node --check tests/browser-strategy-map-import.mjs && git diff --check`）：**PASS**
+- **高危依赖审计**（`npm audit --audit-level=high`）：**PASS**（退出码 0；0 高危、0 严重；本轮仅改动 4 个前端/合并纯函数与测试文件）
+- **专项单测与全量受影响回归套件**（`node --test --test-concurrency=2 tests/*strategy*.test.ts tests/agent-session-boundary.test.ts tests/agent-session-execution.test.ts tests/agent-sessions.test.ts tests/project-runtime.test.ts tests/project-session-guards.test.ts tests/sdk-runtime.test.ts tests/sdk-sessions.test.ts tests/session-compatibility.test.ts`）：**249 项中 248 PASS / 0 FAIL / 1 SKIP**（其中 `strategy-map-review-helpers.test.ts` **8/8 PASS**、`strategy-map-import-host.test.ts` **9/9 PASS**、`strategy-map-import-parser.test.ts` **9/9 PASS**；唯一跳过项为 Linux 云主机无 macOS 受保护执行能力的既有 `PP01/02`，退出码 0，耗时 `276.2s`）。
+- **真实无头 Google Chrome + 隔离 Host（托管 `dist/`）+ 官方 Pi SDK `1.4.0` + 合成 Provider 端到端验证**：**连续 3/3 次 PASS（3 份全新隔离数据根，`0 pageerrors`）**，覆盖第五轮 4 组阳性对照 + 第六轮未采纳 `G2` 保留 `e2` (`v2`) 与显式两步恢复/采纳 (`v3`)，全部夹具在 `page.goto` 前创建，已 1:1 同步至 [`tests/browser-strategy-map-import.mjs`](../../../tests/browser-strategy-map-import.mjs)。
+- **仍未验证项（`NOT_RUN`）**：
+  1. 云端 Linux VM 未安装 Node `playwright` 包，原样 `node tests/browser-strategy-map-import.mjs` 需由 Codex 在 Mac mini 实跑（已通过 `node --check` 语法检查并以 1:1 Python Playwright 镜像在真实 Chrome 连续 3/3 通过）；
+  2. 真实商业视觉大模型的首稿识图准确率（云端 VM 无商业视觉凭据与调用授权）；
+  3. 全仓 433 个测试文件全量 CI、macOS 本机 LibreOffice + `pypdfium2` 整页渲染对照（Codex 已在 Mac mini 实测通过）、Codex 第七轮非作者复核、最新 `main` 集成、PR/CI、获授权合并与 Mac mini / MacBook 服务切换。

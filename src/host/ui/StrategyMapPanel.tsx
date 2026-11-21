@@ -574,9 +574,17 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
         {mergeConflicts.length>0?(
           <ul className="map-conflict-list">
             {mergeConflicts.map(c=>(
-              <li key={c.id} data-merge-conflict={c.id}>
+              <li key={c.id} data-merge-conflict={c.id} data-missing-nodes={c.blockedByMissingNodes?.join(',')||undefined}>
                 <span>「{c.label}」当前保留：{c.keptDisplay}（重读返回：{c.incomingDisplay}）</span>
-                <button type="button" className="text-button" disabled={busy} onClick={()=>adoptConflictValue(c)}>改用重读值</button>
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={busy||Boolean(c.blockedByMissingNodes?.length)}
+                  title={c.blockedByMissingNodes?.length?`请先恢复节点 ${c.blockedByMissingNodes.join('、')} 后再采纳此连线变更`:undefined}
+                  onClick={()=>{if(!c.blockedByMissingNodes?.length)adoptConflictValue(c);}}
+                >
+                  {c.blockedByMissingNodes?.length?`先恢复 ${c.blockedByMissingNodes.join('、')}`:'改用重读值'}
+                </button>
               </li>
             ))}
           </ul>

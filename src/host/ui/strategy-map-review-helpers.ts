@@ -134,6 +134,7 @@ export interface MergeConflictItem {
   keptDisplay: string;
   incomingDisplay: string;
   adoptRecord: ManualEditRecord;
+  blockedByMissingNodes?: string[];
 }
 
 const nodeFieldLabels: Record<string, string> = {
@@ -474,12 +475,20 @@ export function mergeSavedBaseWithRereadDraft(
     const incomingResolved = incomingEdge.kind !== 'unknown' && incomingEdge.reviewState !== 'needs-review';
     const wasManuallyFlipped = /已由人工翻转|连线方向已翻转/.test(savedEdge.ambiguityReason ?? '');
     const reversesSavedDirection = incomingEdge.from === savedEdge.to && incomingEdge.to === savedEdge.from;
-    const canAutoMergeEdge = savedUnresolved && incomingResolved && !(wasManuallyFlipped && reversesSavedDirection);
+    const missingEndpoints = [...new Set([incomingEdge.from, incomingEdge.to].filter(id => !validNodeIds.has(id)))];
+    const incomingEndpointsValid = incomingEdge.from !== incomingEdge.to && missingEndpoints.length === 0;
+    const sameEndpointSet =
+      (incomingEdge.from === savedEdge.from && incomingEdge.to === savedEdge.to) ||
+      (incomingEdge.from === savedEdge.to && incomingEdge.to === savedEdge.from);
+    const canAutoMergeEdge =
+      savedUnresolved &&
+      incomingResolved &&
+      incomingEndpointsValid &&
+      sameEndpointSet &&
+      !(wasManuallyFlipped && reversesSavedDirection);
 
     if (canAutoMergeEdge) {
-      if (incomingEdge.from !== incomingEdge.to && validNodeIds.has(incomingEdge.from) && validNodeIds.has(incomingEdge.to)) {
-        mergedEdges.push(structuredClone(incomingEdge));
-      }
+      mergedEdges.push(structuredClone(incomingEdge));
     } else {
       const nextEdge = structuredClone(savedEdge);
       const edgeDiffers =
@@ -488,13 +497,15 @@ export function mergeSavedBaseWithRereadDraft(
         incomingEdge.kind !== savedEdge.kind;
       if (!overlayEdgePatch && edgeDiffers) {
         const keptDisplay = formatEdgeSummary(savedEdge);
-        const incomingDisplay = formatEdgeSummary(incomingEdge);
+        const missingNote = missingEndpoints.length ? `（需先恢复节点 ${missingEndpoints.join('、')}）` : '';
+        const incomingDisplay = `${formatEdgeSummary(incomingEdge)}${missingNote}`;
         notices.push(`已保留${versionTag}连线 ${savedEdge.id}（当前：${keptDisplay}；重读返回：${incomingDisplay}）`);
         conflicts.push({
           id: `saved-edge:${savedEdge.id}`,
           label: `连线 ${savedEdge.id}`,
           keptDisplay,
           incomingDisplay,
+          ...(missingEndpoints.length ? { blockedByMissingNodes: missingEndpoints } : {}),
           adoptRecord: {
             kind: 'edge-patch',
             id: savedEdge.id,
@@ -508,8 +519,8 @@ export function mergeSavedBaseWithRereadDraft(
           },
         });
         preservedCount++;
-      } else if (overlayEdgePatch) {
-        // Defer to overlay comparison against incomingEdge
+      } else if (overlayEdgePatch && incomingEndpointsValid) {
+        // Defer to overlay comparison against incomingEdge only when incoming endpoints are valid
         nextEdge.from = incomingEdge.from;
         nextEdge.to = incomingEdge.to;
         nextEdge.kind = incomingEdge.kind;
