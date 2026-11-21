@@ -148,7 +148,6 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
   const [workByScope,setWorkByScope]=useState<Record<string,ScopeWorkState>>({});
   const workByScopeRef=useRef<Record<string,ScopeWorkState>>(workByScope);
   workByScopeRef.current=workByScope;
-  const lastRereadPromptRef=useRef<string>('');
   const [conflictBanner,setConflictBanner]=useState('');
   const [reviewOpen,setReviewOpen]=useState(Boolean(baseDraft.importSources?.length));
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[edgeId,setEdgeId]=useState(focusEdgeId??active?.edges.find(e=>e.kind==='hypothesis')?.id);
@@ -173,10 +172,8 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
       const reason=stored?.reason??inheritedSavedWork?.reason??'';
       const draftMapId=stored?.draftMapId;
       if(baseSavedVersion){
-        const targetHint=[pendingDraft.reason,lastRereadPromptRef.current].filter(Boolean).join(' ');
         const res=mergeSavedBaseWithRereadDraft(mapDraft(baseSavedVersion),pendingDraft.draft,{
           version:baseSavedVersion.version,
-          targetHint,
           overlay:effectiveOverlay,
         });
         return {
@@ -387,6 +384,10 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
       applyDraftTransform(cur=>({...cur,nodes:cur.nodes.map(n=>n.id===rec.id?{...n,...rec.patch}:n)}),rec);
     }else if(rec.kind==='edge-patch'){
       applyDraftTransform(cur=>({...cur,edges:cur.edges.map(e=>e.id===rec.id?{...e,...rec.patch}:e)}),rec);
+    }else if(rec.kind==='node-add'){
+      applyDraftTransform(cur=>cur.nodes.some(n=>n.id===rec.node.id)?cur:{...cur,nodes:[...cur.nodes,structuredClone(rec.node)]},rec);
+    }else if(rec.kind==='edge-add'){
+      applyDraftTransform(cur=>cur.edges.some(e=>e.id===rec.edge.id)?cur:{...cur,edges:[...cur.edges,structuredClone(rec.edge)]},rec);
     }
   }
 
@@ -611,17 +612,14 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
         onSelectNode={id=>{setPicked(id);setPickedEdge(undefined);}}
         onSelectEdge={id=>setPickedEdge(id)}
         onChangeDraft={applyDraftChange}
-        onReread={onReread?(prompt,ids,selectedPagesBySource)=>{
-          lastRereadPromptRef.current=prompt;
-          onReread({
-            baseRef:isPendingMode?(pendingDraft?.mapId&&pendingDraft.expectedVersion?{mapId:pendingDraft.mapId,version:pendingDraft.expectedVersion}:undefined):active,
-            supersedesDraftEntryId:isPendingMode?pendingDraft?.entryId:undefined,
-            currentDraft:resolveScopeView(workByScopeRef.current).map,
-            prompt,
-            importSourceIds:ids,
-            selectedImportPages:selectedPagesBySource,
-          });
-        }:undefined}
+        onReread={onReread?(prompt,ids,selectedPagesBySource)=>onReread({
+          baseRef:isPendingMode?(pendingDraft?.mapId&&pendingDraft.expectedVersion?{mapId:pendingDraft.mapId,version:pendingDraft.expectedVersion}:undefined):active,
+          supersedesDraftEntryId:isPendingMode?pendingDraft?.entryId:undefined,
+          currentDraft:resolveScopeView(workByScopeRef.current).map,
+          prompt,
+          importSourceIds:ids,
+          selectedImportPages:selectedPagesBySource,
+        }):undefined}
         onRevoked={onRevoked}
       />
     )}

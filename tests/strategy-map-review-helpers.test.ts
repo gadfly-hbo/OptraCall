@@ -238,3 +238,106 @@ test('Round-4 Item 2: mergeSavedBaseWithRereadDraft preserves confirmed v1 title
   assert.equal(afterAdopt.merged.title, '方案 B · 人工确认名称');
   assert.ok(!afterAdopt.conflicts.some(c => c.label.includes('基线')));
 });
+
+test('Round-5 Item 2: prompt mentioning S1/G1, deleted G2 + cleared G1 target, and manually flipped unknown e2 are ALL preserved across reload reread with explicit adoptable conflicts', async () => {
+  const { mergeSavedBaseWithRereadDraft } = await import('../src/host/ui/strategy-map-review-helpers.ts');
+
+  // 1) Prompt explicitly mentions S1 & G1 ("请只核对 S1 到 G1 的连线 e1 方向，其余保持原样") + manually flipped e2 (S1 -> G2, still unknown)
+  const savedV1WithFlippedE2: StrategyMapDraft = {
+    title: '方案 B · 人工确认名称',
+    template: 'tree',
+    choice: '优先导购回访',
+    excluded: '',
+    assumptions: '',
+    unknowns: '',
+    nodes: [
+      { id: 'G1', kind: 'goal', title: '复购率（新客）', baseline: '15%', target: '18%', reviewState: 'clear' },
+      { id: 'G2', kind: 'goal', title: '复购率（老客）', baseline: '18%', target: '25%', reviewState: 'clear' },
+      { id: 'S1', kind: 'strategy', title: '导购回访', baseline: '60%', reviewState: 'needs-review' },
+    ],
+    edges: [
+      { id: 'e1', from: 'G1', to: 'S1', kind: 'unknown', reviewState: 'needs-review', ambiguityReason: '箭头被遮挡' },
+      { id: 'e2', from: 'S1', to: 'G2', kind: 'unknown', reviewState: 'needs-review', ambiguityReason: '连线方向已翻转；关系类型仍为未知，请明确选择关系类型后再确认。' },
+    ],
+  };
+  const incomingReread: StrategyMapDraft = {
+    ...savedV1WithFlippedE2,
+    title: '方案 B · 新客培育',
+    template: 'bsc',
+    nodes: [
+      { id: 'G1', kind: 'goal', title: '复购率（新客）', baseline: '9%', target: '18%', reviewState: 'clear' },
+      { id: 'G2', kind: 'goal', title: '复购率（老客）', baseline: '18%', target: '25%', reviewState: 'clear' },
+      { id: 'S1', kind: 'strategy', title: '导购回访', baseline: '60%', reviewState: 'needs-review' },
+    ],
+    edges: [
+      { id: 'e1', from: 'S1', to: 'G1', kind: 'supports', reviewState: 'clear', ambiguityReason: '' },
+      { id: 'e2', from: 'G2', to: 'S1', kind: 'unknown', reviewState: 'needs-review', ambiguityReason: '方向待核' },
+    ],
+  };
+
+  const res1 = mergeSavedBaseWithRereadDraft(savedV1WithFlippedE2, incomingReread, {
+    version: 1,
+    targetHint: '请只核对 S1 到 G1 的连线 e1 方向，其余保持原样；保留 G1 的人工基线不变',
+  });
+  // e1 clearly resolved -> directly merged without extra confirmation
+  assert.equal(res1.merged.edges.find(e => e.id === 'e1')?.from, 'S1');
+  assert.equal(res1.merged.edges.find(e => e.id === 'e1')?.to, 'G1');
+  assert.equal(res1.merged.edges.find(e => e.id === 'e1')?.kind, 'supports');
+  // G1 baseline 15% MUST NOT be overwritten despite G1/S1 appearing in prompt!
+  assert.equal(res1.merged.nodes.find(n => n.id === 'G1')?.baseline, '15%');
+  assert.ok(res1.conflicts.some(c => c.id === 'saved-node:G1:baseline' && c.keptDisplay === '15%' && c.incomingDisplay === '9%'));
+  // Manually flipped e2 (still unknown) MUST stay S1 -> G2 with explicit conflict diff!
+  const mergedE2 = res1.merged.edges.find(e => e.id === 'e2');
+  assert.equal(mergedE2?.from, 'S1');
+  assert.equal(mergedE2?.to, 'G2');
+  assert.equal(mergedE2?.kind, 'unknown');
+  assert.ok(res1.conflicts.some(c => c.id === 'saved-edge:e2' && c.keptDisplay.includes('S1→G2') && c.incomingDisplay.includes('G2→S1')));
+
+  // Even if incoming reread attempts to BOTH resolve and reverse a user-flipped e2, manual flip is STILL protected!
+  const incomingReversingFlippedE2: StrategyMapDraft = {
+    ...incomingReread,
+    edges: [
+      incomingReread.edges[0]!,
+      { id: 'e2', from: 'G2', to: 'S1', kind: 'supports', reviewState: 'clear' },
+    ],
+  };
+  const resFlipProtected = mergeSavedBaseWithRereadDraft(savedV1WithFlippedE2, incomingReversingFlippedE2, { version: 1 });
+  assert.equal(resFlipProtected.merged.edges.find(e => e.id === 'e2')?.from, 'S1');
+  assert.equal(resFlipProtected.merged.edges.find(e => e.id === 'e2')?.to, 'G2');
+  assert.ok(resFlipProtected.conflicts.some(c => c.id === 'saved-edge:e2'));
+
+  // 2) User deleted false node G2 and cleared G1 target to '' (待定) in saved v1 -> reload -> reread e1
+  const savedV1DeletedG2ClearedTarget: StrategyMapDraft = {
+    ...savedV1WithFlippedE2,
+    nodes: [
+      { id: 'G1', kind: 'goal', title: '复购率（新客）', baseline: '15%', target: '', reviewState: 'clear' },
+      { id: 'S1', kind: 'strategy', title: '导购回访', baseline: '60%', reviewState: 'needs-review' },
+    ],
+    edges: [
+      { id: 'e1', from: 'G1', to: 'S1', kind: 'unknown', reviewState: 'needs-review' },
+    ],
+  };
+  const res2 = mergeSavedBaseWithRereadDraft(savedV1DeletedG2ClearedTarget, incomingReread, { version: 1 });
+  // e1 directly updates
+  assert.equal(res2.merged.edges.find(e => e.id === 'e1')?.kind, 'supports');
+  // Deleted G2 MUST NOT silently reappear, AND surfaces an adoptable conflict proposal!
+  assert.deepEqual(res2.merged.nodes.map(n => n.id), ['G1', 'S1']);
+  const addG2Conflict = res2.conflicts.find(c => c.id === 'saved-node-add:G2');
+  assert.ok(addG2Conflict, 'expected explicit adoptable conflict for omitted/deleted node G2');
+  assert.equal(addG2Conflict.adoptRecord.kind, 'node-add');
+  // Cleared G1 target MUST stay '' (待定), AND surfaces an adoptable conflict (待定 vs 18%)!
+  assert.equal(res2.merged.nodes.find(n => n.id === 'G1')?.target, '');
+  const targetConflict = res2.conflicts.find(c => c.id === 'saved-node:G1:target');
+  assert.ok(targetConflict, 'expected explicit conflict for cleared G1 target');
+  assert.equal(targetConflict.keptDisplay, '待定');
+  assert.equal(targetConflict.incomingDisplay, '18%');
+
+  // Adopting G2 via node-add adoptRecord cleanly restores G2 and removes the saved-node-add:G2 conflict
+  const adoptedG2Overlay = applyManualEditRecord(emptyManualEditOverlay(), addG2Conflict.adoptRecord);
+  const afterAdoptG2 = mergeSavedBaseWithRereadDraft(savedV1DeletedG2ClearedTarget, incomingReread, {
+    version: 1,
+    overlay: adoptedG2Overlay,
+  });
+  assert.deepEqual(afterAdoptG2.merged.nodes.map(n => n.id), ['G1', 'S1', 'G2']);
+  assert.ok(!afterAdoptG2.conflicts.some(c => c.id === 'saved-node-add:G2'));
+});

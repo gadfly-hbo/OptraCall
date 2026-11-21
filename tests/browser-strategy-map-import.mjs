@@ -162,7 +162,10 @@ async function startSyntheticProvider(oldMapId) {
       startedPromise = new Promise(resolve => { signalStarted = resolve; });
       gatePromise = new Promise(resolve => { releaseGate = resolve; });
     },
-    waitStarted: () => startedPromise,
+    waitStarted: (ms = 15000) => Promise.race([
+      startedPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`waitStarted timed out after ${ms}ms`)), ms)),
+    ]),
     release: () => releaseGate(),
   };
   const server = createServer(async (req, res) => {
@@ -179,12 +182,9 @@ async function startSyntheticProvider(oldMapId) {
 
     if (mode === 'reread_plan_b_delayed' && userText.includes('workingMapDraft')) {
       if (userText.includes('"baseline":"15%"')) state.rereadSaw15 = true;
-      if (userText.includes('方案 B · 人工标题')) state.rereadSawEditedTitle = true;
+      if (userText.includes('方案 B · 人工确认名称')) state.rereadSawEditedTitle = true;
       if (userText.includes('"template":"tree"')) state.rereadSawTreeTemplate = true;
       if (userText.includes(oldMapId) || userText.includes('旧版门店扩张地图')) state.rereadLeakedOldMapId = true;
-    }
-    if (mode === 'revise_saved_b_omit_id' && userText.includes('workingMapDraft')) {
-      if (userText.includes('方案 B · v2 人工标题')) state.reviseSawV2Title = true;
     }
 
     let src = null;
@@ -224,10 +224,19 @@ async function startSyntheticProvider(oldMapId) {
             id: 'e1',
             from: isReread ? 'S1' : 'G1',
             to: isReread ? 'G1' : 'S1',
-            kind: mode === 'revise_saved_b_omit_id' ? 'hypothesis' : isReread ? 'supports' : 'unknown',
+            kind: isReread ? 'supports' : 'unknown',
             reviewState: isReread ? 'clear' : 'needs-review',
             ambiguityReason: isReread ? '' : '箭头被水印遮挡，待确认方向与关系',
             sourceLocation: { sourceId: src.sourceId, fileName: src.fileName, page: 2, objectId: '12', arrowBbox: [240, 290, 80, 110], label: '策略图示页 · 蓝图 · 连线 e1' },
+          },
+          {
+            id: 'e2',
+            from: 'G2',
+            to: 'S1',
+            kind: 'unknown',
+            reviewState: 'needs-review',
+            ambiguityReason: '另一条待核连线 e2，方向与关系待人工确认',
+            sourceLocation: { sourceId: src.sourceId, fileName: src.fileName, page: 2, objectId: '11', arrowBbox: [200, 310, 80, 90], label: '策略图示页 · 红图 · 连线 e2' },
           },
         ],
       };
@@ -348,6 +357,10 @@ async function startSyntheticProvider(oldMapId) {
     await page.getByRole('button', { name: '由原战略 Agent 提取候选' }).click();
     await page.locator('.map-draft-switcher').waitFor({ timeout: 25000 });
     assert.equal(await page.locator('.map-draft-switcher button').count(), 2);
+    for (let i = 0; i < 80; i++) {
+      if (!(await api(route)).busy) break;
+      await new Promise(r => setTimeout(r, 100));
+    }
 
     // Open stale Tab 2 holding initial entryB1 (block SSE so Tab 2 remains on stale entryB1 after reread)
     const ctx2 = await browser.newContext({ viewport: { width: 1360, height: 900 } });
@@ -361,7 +374,6 @@ async function startSyntheticProvider(oldMapId) {
     await tab2.getByRole('button', { name: '战略地图', exact: true }).click();
     await tab2.locator('.map-draft-switcher button').filter({ hasText: '方案 B' }).click();
     await tab2.locator('.strategy-map h2').filter({ hasText: '方案 B · 新客培育' }).waitFor();
-    // Round-4 Item 3: Hand-edit title in stale Tab 2 BEFORE Tab 1's reread completes!
     await tab2.locator('.strategy-map .map-edit-grid label').filter({ hasText: '方案名称' }).locator('input').fill('人工修订：为沉睡会员调整目标');
 
     // Item 6: Same-sheet Red & Blue isolation + re-click already-selected S1 after manually browsing Red
@@ -414,7 +426,7 @@ async function startSyntheticProvider(oldMapId) {
     assert.ok(await page.locator('.map-review-edges').getByText('支持').count() >= 1);
     assert.equal(provider.state.rereadLeakedOldMapId, false);
 
-    // Round-4 Item 3: Stale Tab 2 (with hand-edited title '人工修订：为沉睡会员调整目标') clicks Save BEFORE Tab 1 -> 409 superseded, 0 new maps written, AND Tab 2 preserves its manual title + conflict diff + shows latest S1->G1/支持!
+    // Round-4 Item 3: Stale Tab 2 (with hand-edited title) gets 409 superseded, 0 new maps, preserves manual title + conflict diff + latest S1->G1/支持!
     await tab2.locator('.map-pending-draft-bar').getByRole('button', { name: '保存候选版本', exact: true }).click();
     await tab2.getByText(/已有更新的局部重读结果/).waitFor({ timeout: 15000 });
     assert.equal((await api(`${route}/maps`)).versions.length, 1);
@@ -423,7 +435,7 @@ async function startSyntheticProvider(oldMapId) {
     await tab2.locator('.map-import-notice').getByText(/人工修订：为沉睡会员调整目标/).waitFor();
     await tab2.locator('.map-import-notice').getByText(/方案 B · 新客培育/).waitFor();
 
-    // Tab 1 saves latest Plan B -> v1 with 方案 B · 人工确认名称 + tree + 15% + S1->G1/supports + ALL 3 nodes G1/G2/S1!
+    // Tab 1 saves latest Plan B -> v1, dismisses Plan A
     await page.locator('.map-pending-draft-bar').getByRole('button', { name: '保存候选版本', exact: true }).click();
     await page.getByText(/已保存 方案 B · 人工确认名称 · v1/).waitFor();
     const mapsAfterB1 = (await api(`${route}/maps`)).versions;
@@ -433,44 +445,138 @@ async function startSyntheticProvider(oldMapId) {
     assert.equal(planBV1.template, 'tree');
     assert.deepEqual(planBV1.nodes.map(n => n.id), ['G1', 'G2', 'S1']);
     assert.equal(planBV1.nodes.find(n => n.id === 'G1')?.baseline, '15%');
-    assert.equal(planBV1.edges[0].from, 'S1');
-    assert.equal(planBV1.edges[0].kind, 'supports');
-
-    // Plan A still preserves its manual title and GA1 -> dismiss Plan A
+    assert.equal(planBV1.edges.find(e => e.id === 'e1')?.kind, 'supports');
     assert.equal(await page.locator('.strategy-map .map-edit-grid label').filter({ hasText: '方案名称' }).locator('input').inputValue(), '方案 A · 人工标题');
     await page.locator('.map-pending-draft-bar').getByRole('button', { name: '放弃本次草稿', exact: true }).click();
     await page.getByText('已放弃本次导入草稿').waitFor();
 
-    // Round-4 Item 2: FULL PAGE RELOAD -> reopen saved Plan B v1 -> reread ONLY e1 WITHOUT re-editing title or 15% -> preserves confirmed v1 title & 15% + conflict diffs + updates e1 -> saves B v2 on same mapId!
+    // Round-5 Item 2 Control A & C (Prompt mentioning S1/G1 + manually flipped e2 still unknown) + Control B (positive 9% adoption)
+    const r5aId = uid();
+    const r5aRoute = `/api/strategy/discussions/${r5aId}`;
+    await api('/api/strategy/discussions', 'POST', { title: '五轮对照A_提示含G1与翻转e2', operationId: r5aId, configurationId: synCfg.id, usageContext: { kind: 'personal', background: '五轮局部重读对照' } });
+    await page.locator('label').filter({ hasText: /^原讨论/ }).locator('select').selectOption(r5aId);
+    await button('战略共创').click();
+    await button('导入战略图').click();
+    await page.locator('input[type="file"]').setInputFiles(xlsxPath);
+    await page.locator('.map-import-thumb-card').first().waitFor();
+    provider.state.mode = 'extract_two_plans';
+    await page.getByRole('button', { name: '由原战略 Agent 提取候选' }).click();
+    await page.locator('.map-draft-switcher').waitFor({ timeout: 25000 });
+    for (let i = 0; i < 80; i++) {
+      if (!(await api(r5aRoute)).busy) break;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    await page.locator('.map-draft-switcher button').filter({ hasText: '方案 B' }).click();
+    await page.locator('.strategy-map .map-edit-grid label').filter({ hasText: '方案名称' }).locator('input').fill('方案 B · 人工确认名称');
+    await page.locator('.strategy-map .map-edit-grid label').filter({ hasText: '地图模板' }).locator('select').selectOption('tree');
+    await page.getByLabel('候选核对').locator('tbody').getByText('G1 · 复购率（新客）').click();
+    await page.locator('.map-inspector label').filter({ hasText: '基线' }).first().locator('input').fill('15%');
+    // Manually flip e2 (G2 -> S1 becomes S1 -> G2) while keeping kind='unknown', leave e1 as unknown -> Save v1!
+    await page.locator('.map-review-edges').getByText('G2 → S1').click();
+    await page.locator('.map-inspector').getByRole('button', { name: '⇄ 翻转方向' }).click();
+    await page.locator('.map-review-edges').getByText('S1 → G2').waitFor();
+    await page.locator('.map-pending-draft-bar').getByRole('button', { name: '保存候选版本', exact: true }).click();
+    await page.getByText(/已保存 方案 B · 人工确认名称 · v1/).waitFor();
+    await page.locator('.map-pending-draft-bar').getByRole('button', { name: '放弃本次草稿', exact: true }).click();
+    await page.getByText('已放弃本次导入草稿').waitFor();
+    const r5aV1 = (await api(`${r5aRoute}/maps`)).versions[0];
+    assert.equal(r5aV1.nodes.find(n => n.id === 'G1')?.baseline, '15%');
+    assert.equal(r5aV1.edges.find(e => e.id === 'e1')?.kind, 'unknown');
+    assert.equal(r5aV1.edges.find(e => e.id === 'e2')?.from, 'S1');
+    assert.equal(r5aV1.edges.find(e => e.id === 'e2')?.to, 'G2');
+    assert.equal(r5aV1.edges.find(e => e.id === 'e2')?.kind, 'unknown');
+
+    // FULL PAGE RELOAD -> prompt explicitly mentions S1 & G1 -> reread e1!
     await page.reload();
     await button('战略选择').click();
-    await page.locator('label').filter({ hasText: /^原讨论/ }).locator('select').selectOption(id);
+    await page.locator('label').filter({ hasText: /^原讨论/ }).locator('select').selectOption(r5aId);
     await button('战略地图').click();
-    await page.locator('.strategy-map select').first().selectOption(`${planBV1.mapId}#1`);
+    provider.state.mode = 'revise_saved_b_omit_id';
+    await page.locator('.map-reread-bar input').fill('请只核对 S1 到 G1 的连线 e1 方向，其余保持原样；保留 G1 的人工基线不变');
+    await page.locator('.map-reread-bar').getByRole('button', { name: '局部重读', exact: true }).click();
+    await page.locator('.map-pending-draft-bar').waitFor({ timeout: 25000 });
+    // e1 directly updated to S1 -> G1 / 支持; G1 baseline stays 15%; flipped e2 stays S1 -> G2 / 未知关系 with explicit conflict diffs!
+    assert.equal(await page.locator('.strategy-map .map-edit-grid label').filter({ hasText: '方案名称' }).locator('input').inputValue(), '方案 B · 人工确认名称');
+    await page.getByLabel('候选核对').locator('tbody').getByText('G1 · 复购率（新客）').click();
+    assert.equal(await page.locator('.map-inspector label').filter({ hasText: '基线' }).first().locator('input').inputValue(), '15%');
+    await page.locator('.map-review-edges').getByText('S1 → G1').waitFor();
+    await page.locator('.map-review-edges').getByText('S1 → G2').waitFor();
+    await page.locator('[data-merge-conflict="saved-node:G1:baseline"]').waitFor();
+    await page.locator('[data-merge-conflict="saved-edge:e2"]').waitFor();
+    await page.locator('.map-pending-draft-bar').getByRole('button', { name: '保存候选版本', exact: true }).click();
+    await page.getByText(/已保存 方案 B · 人工确认名称 · v2/).waitFor();
+    const r5aVersions = (await api(`${r5aRoute}/maps`)).versions;
+    assert.equal(r5aVersions.length, 2);
+    assert.equal(r5aVersions[1].nodes.find(n => n.id === 'G1')?.baseline, '15%');
+    assert.equal(r5aVersions[1].edges.find(e => e.id === 'e1')?.kind, 'supports');
+    assert.equal(r5aVersions[1].edges.find(e => e.id === 'e2')?.from, 'S1');
+    assert.equal(r5aVersions[1].edges.find(e => e.id === 'e2')?.to, 'G2');
+    assert.equal(r5aVersions[1].edges.find(e => e.id === 'e2')?.kind, 'unknown');
+
+    // Positive control: user explicitly clicks [改用重读值] on G1 baseline -> adopts 9% and saves v3!
+    await page.locator('.map-reread-bar input').fill('再次核对并对比基线');
+    await page.locator('.map-reread-bar').getByRole('button', { name: '局部重读', exact: true }).click();
+    await page.locator('[data-merge-conflict="saved-node:G1:baseline"]').waitFor({ timeout: 25000 });
+    await page.locator('[data-merge-conflict="saved-node:G1:baseline"]').getByRole('button', { name: '改用重读值' }).click();
+    await page.getByLabel('候选核对').locator('tbody').getByText('G1 · 复购率（新客）').click();
+    assert.equal(await page.locator('.map-inspector label').filter({ hasText: '基线' }).first().locator('input').inputValue(), '9%');
+    await page.locator('.map-pending-draft-bar').getByRole('button', { name: '保存候选版本', exact: true }).click();
+    await page.getByText(/已保存 方案 B · 人工确认名称 · v3/).waitFor();
+    const r5aV3 = (await api(`${r5aRoute}/maps`)).versions.at(-1);
+    assert.equal(r5aV3.version, 3);
+    assert.equal(r5aV3.nodes.find(n => n.id === 'G1')?.baseline, '9%');
+    assert.equal(r5aV3.edges.find(e => e.id === 'e2')?.from, 'S1');
+
+    // Round-5 Item 2 Control D: Delete false node G2 + clear G1 target to '' (待定) -> Save v1 -> FULL PAGE RELOAD -> reread e1 -> G2 does NOT reappear & G1 target stays '' with explicit conflict diffs -> Save v2!
+    const r5bId = uid();
+    const r5bRoute = `/api/strategy/discussions/${r5bId}`;
+    await api('/api/strategy/discussions', 'POST', { title: '五轮对照B_删G2清目标待定', operationId: r5bId, configurationId: synCfg.id, usageContext: { kind: 'personal', background: '五轮删除与留空对照' } });
+    await page.locator('label').filter({ hasText: /^原讨论/ }).locator('select').selectOption(r5bId);
+    await button('战略共创').click();
+    await button('导入战略图').click();
+    await page.locator('input[type="file"]').setInputFiles(xlsxPath);
+    await page.locator('.map-import-thumb-card').first().waitFor();
+    provider.state.mode = 'extract_two_plans';
+    await page.getByRole('button', { name: '由原战略 Agent 提取候选' }).click();
+    await page.locator('.map-draft-switcher').waitFor({ timeout: 25000 });
+    for (let i = 0; i < 80; i++) {
+      if (!(await api(r5bRoute)).busy) break;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    await page.locator('.map-draft-switcher button').filter({ hasText: '方案 B' }).click();
+    await page.getByLabel('候选核对').locator('tbody').getByText('G2 · 复购率（老客）').click();
+    await page.locator('.map-inspector').getByRole('button', { name: '删除误项' }).click();
+    await page.getByLabel('候选核对').locator('tbody').getByText('G1 · 复购率（新客）').click();
+    await page.locator('.map-inspector label').filter({ hasText: '目标值' }).first().locator('input').fill('');
+    await page.locator('.map-pending-draft-bar').getByRole('button', { name: '保存候选版本', exact: true }).click();
+    await page.getByText(/已保存 方案 B · 新客培育 · v1/).waitFor();
+    await page.locator('.map-pending-draft-bar').getByRole('button', { name: '放弃本次草稿', exact: true }).click();
+    await page.getByText('已放弃本次导入草稿').waitFor();
+    const r5bV1 = (await api(`${r5bRoute}/maps`)).versions[0];
+    assert.deepEqual(r5bV1.nodes.map(n => n.id), ['G1', 'S1']);
+    assert.ok(!r5bV1.nodes.find(n => n.id === 'G1')?.target);
+
+    await page.reload();
+    await button('战略选择').click();
+    await page.locator('label').filter({ hasText: /^原讨论/ }).locator('select').selectOption(r5bId);
+    await button('战略地图').click();
     provider.state.mode = 'revise_saved_b_omit_id';
     await page.locator('.map-reread-bar input').fill('请只重读第 2 页连线 e1');
     await page.locator('.map-reread-bar').getByRole('button', { name: '局部重读', exact: true }).click();
     await page.locator('.map-pending-draft-bar').waitFor({ timeout: 25000 });
-    assert.equal(await page.locator('.strategy-map .map-edit-grid label').filter({ hasText: '方案名称' }).locator('input').inputValue(), '方案 B · 人工确认名称');
-    assert.equal(await page.locator('.strategy-map .map-edit-grid label').filter({ hasText: '地图模板' }).locator('select').inputValue(), 'tree');
+    await page.locator('.map-review-edges').getByText('S1 → G1').waitFor();
+    assert.equal(await page.getByLabel('候选核对').locator('tbody').getByText('G2 · 复购率（老客）').count(), 0);
+    await page.locator('[data-merge-conflict="saved-node-add:G2"]').waitFor();
+    await page.locator('[data-merge-conflict="saved-node:G1:target"]').waitFor();
     await page.getByLabel('候选核对').locator('tbody').getByText('G1 · 复购率（新客）').click();
-    assert.equal(await page.locator('.map-inspector label').filter({ hasText: '基线' }).first().locator('input').inputValue(), '15%');
-    await page.locator('.map-import-notice').getByText(/方案 B · 人工确认名称/).waitFor();
-    await page.locator('.map-import-notice').getByText(/15%.*9%|9%.*15%/).waitFor();
-    assert.ok(await page.locator('.map-review-edges').getByText('因果假设').count() >= 1);
+    assert.equal(await page.locator('.map-inspector label').filter({ hasText: '目标值' }).first().locator('input').inputValue(), '');
     await page.locator('.map-pending-draft-bar').getByRole('button', { name: '保存候选版本', exact: true }).click();
-    await page.getByText(/已保存 方案 B · 人工确认名称 · v2/).waitFor();
-    const planBVersions = (await api(`${route}/maps`)).versions.filter(v => v.mapId === planBV1.mapId);
-    assert.equal(planBVersions.length, 2);
-    assert.equal(planBVersions[0].version, 1);
-    assert.equal(planBVersions[0].title, '方案 B · 人工确认名称');
-    assert.equal(planBVersions[0].nodes.find(n => n.id === 'G1')?.baseline, '15%');
-    assert.equal(planBVersions[1].version, 2);
-    assert.equal(planBVersions[1].title, '方案 B · 人工确认名称');
-    assert.equal(planBVersions[1].template, 'tree');
-    assert.deepEqual(planBVersions[1].nodes.map(n => n.id), ['G1', 'G2', 'S1']);
-    assert.equal(planBVersions[1].nodes.find(n => n.id === 'G1')?.baseline, '15%');
-    assert.equal(planBVersions[1].edges[0].kind, 'hypothesis');
+    await page.getByText(/已保存 方案 B · 新客培育 · v2/).waitFor();
+    const r5bV2 = (await api(`${r5bRoute}/maps`)).versions.at(-1);
+    assert.equal(r5bV2.version, 2);
+    assert.deepEqual(r5bV2.nodes.map(n => n.id), ['G1', 'S1']);
+    assert.ok(!r5bV2.nodes.find(n => n.id === 'G1')?.target);
+    assert.equal(r5bV2.edges.find(e => e.id === 'e1')?.kind, 'supports');
 
     // Multi-source isolation + mobile/dark
     await page.locator('label').filter({ hasText: /^原讨论/ }).locator('select').selectOption(multiId);
@@ -490,7 +596,7 @@ async function startSyntheticProvider(oldMapId) {
 
     await ctx2.close();
     await ctx1.close();
-    console.log('PASS browser-strategy-map-import Round-4 (0ms A->B edit zero bleed, stale-tab 409 superseded preserves manual title + conflict diff + latest S1->G1/supports, post-reload saved B v1 reread preserves title & 15% with conflict diffs & updates e1 -> B v2, re-click Blue S1 after Red, mobile/dark)');
+    console.log('PASS browser-strategy-map-import Round-5 (0ms A->B edit zero bleed, stale-tab 409 preserves manual title, post-reload reread preserves G1 15% even when prompt mentions S1/G1, keeps flipped unknown e2, keeps deleted G2 & cleared G1 target, positive 9% adoption works, mobile/dark, 0 pageerrors)');
   } finally {
     await browser.close();
     if (prevConfigs.selectedId) {

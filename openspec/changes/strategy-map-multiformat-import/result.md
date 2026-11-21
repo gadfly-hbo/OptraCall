@@ -211,3 +211,38 @@
   2. 全仓 433 个测试文件全量 CI（由 Codex 在 PR CI / Mac mini 执行）；
   3. macOS 本机 LibreOffice + `pypdfium2` 整页渲染阳性对照（云端 Linux VM 未安装 `soffice`/`pdftoppm`；Codex 已于第三、四轮在 Mac mini 实测通过）；
   4. Codex 第五轮非作者复核、最新 `main` 集成、PR/CI、获授权合并与 Mac mini / MacBook 服务切换。
+
+---
+
+## 10. 第五轮复核退回记录与局部重读基准收口复验证据（对应 Codex 回执 `issuecomment-7061672032`）
+
+### 10.1 保留第五轮复核事实
+- **第五轮候选（`6a4cc519391cc00ba905c43e882a1ef4e0ecb464`）复核结果：两项通过，一项仍需返工（仅第 2 项局部重读）**。Codex 于 [issuecomment-7061672032](https://github.com/gadfly-hbo/OptraCall/issues/106#issuecomment-7061672032) 确认 Mac mini 上 `check:agent-sessions`、构建、`git diff --check`、**247/247** 项受影响回归（0 跳过）、第 1 项（A/B 快速切换立即保存及多次来回切换）与第 3 项（旧标签 409 保留人工输入、再次确认单 `v1`）均已完全通过；第 2 项在简单提示下及主动点「改用重读值」采纳 9% 通过，但在三种反例对照（提示提及 `S1`/`G1`、删除误项 `G2` 且清空 `G1` 目标值为待定、手工翻转另一条未知连线 `e2`）下，启发式合并仍会静默覆盖范围外已确认内容。本轮与前四轮（`9794c23`、`d739f67`、`11f171a`、`d40380a`、`6a4cc51`）全部历史事实完整保留，不覆盖或改写。
+
+### 10.2 针对第五轮第 2 项 3 组反例与阳性对照的根因修复与证据
+
+- **核心重构**（[`src/host/ui/strategy-map-review-helpers.ts`](../../../src/host/ui/strategy-map-review-helpers.ts)、[`src/host/ui/StrategyMapPanel.tsx`](../../../src/host/ui/StrategyMapPanel.tsx)）：彻底移除 `hintMentionsId` 自然语言节点编号匹配、`!isNonEmptyValue` 空值自动回填、静默恢复 `v1` 未收录条目/连线，以及对仍未解决连线（`unknown → unknown`）的直接覆盖，改为**严格以已保存 `v1` 为权威基准**进行结构化比对：
+  1. **顶层字段与所有既有节点字段**：一律保留 `v1` 的值（包含明确清空为 `""` / 待定的字段，不受自然语言提示是否提及 `S1`/`G1` 影响）；若重读返回了不同的非空值，则生成结构化 `MergeConflictItem` 并列展示「当前保留值 vs 重读返回值」及一键「改用重读值」按钮。
+  2. **`v1` 中已删除/未收录的条目或连线**（如 `G2`）：绝不静默插回草稿；生成 `saved-node-add:${id}` / `saved-edge-add:${id}` 结构化建议项，`StrategyMapPanel.tsx` 的 `adoptConflictValue()` 新增 `node-add` 与 `edge-add` 支持，仅在用户主动点击「改用重读值」时合入。
+  3. **连线合入边界**：仅当 `v1` 中该连线原为未解决状态（`kind === 'unknown' || reviewState === 'needs-review'`）、重读明确给出了具体已解决关系（`kind !== 'unknown' && reviewState !== 'needs-review'`）、且未逆转用户已手工翻转的方向时，才直接合入（如 `e1` 从 `G1→S1 / unknown` 直接更新为 `S1→G1 / supports`，无需逐项确认）；其余情形（包括手工翻转且仍为 `unknown` 的 `e2`）一律保留 `v1` 并展示可一键采纳的连线差异。
+  4. **浏览器脚本防挂起加固**（[`tests/browser-strategy-map-import.mjs`](../../../tests/browser-strategy-map-import.mjs)）：为 `waitStarted()` 增加 15s 超时并在首轮提取后等待 `busy === false` 再进入后续操作，消除首次偶发等待超时风险，并完整纳入以下 4 组真实 Chrome `v1`/`v2`（及 `v3`）对照。
+
+| 第五轮对照项 | 已确认 `v1`（及刷新后操作） | 实际保存结果与复验证据 |
+| --- | --- | --- |
+| **反例 1：提示提及 `S1`/`G1`** | `v1` 含人工标题「方案 B · 人工确认名称」、`tree`、`G1` 基线 `15%`、`e1` 为 `unknown`；整页刷新后发送「请只核对 S1 到 G1 的连线 e1 方向，其余保持原样；保留 G1 的人工基线不变」 | `e1` 直接更新为 `S1 → G1 / supports`；`v2` 完整保留人工标题、`tree` 与 `G1` 基线 `15%`，界面展示 `saved-node:G1:baseline`（`15% vs 9%`）差异对照；`v1` 保持可读。单测 + 3/3 真实 Chrome：**PASS** |
+| **反例 2：删误项 `G2` + 清空 `G1` 目标为待定** | 在待核稿点击「删除误项」移除 `G2`、将 `G1` 目标值 `18%` 清空为 `""`，保存 `v1`（节点仅 `['G1','S1']`、`G1.target` 为空），整页刷新后重读 `e1` | `e1` 直接更新为 `S1 → G1 / supports`；`v2` 节点仍仅 `['G1','S1']`（`G2` 不复活）、`G1.target` 仍为空/待定，界面明确展示 `saved-node-add:G2` 与 `saved-node:G1:target`（`待定 vs 18%`）差异对照。单测 + 3/3 真实 Chrome：**PASS** |
+| **反例 3：手工翻转另一条未知连线 `e2`** | 点击「⇄ 翻转方向」将 `e2` 翻为 `S1 → G2`（关系仍保持 `unknown`），保存 `v1`，整页刷新后只重读 `e1` | `e1` 直接更新为 `S1 → G1 / supports`；`v2` 完整保留 `e2` 为 `S1 → G2 / unknown`（绝不翻回 `G2 → S1`），界面明确展示 `saved-edge:e2`（`S1→G2` vs `G2→S1`）差异对照。单测 + 3/3 真实 Chrome：**PASS** |
+| **阳性对照：主动点击「改用重读值」采纳 `9%`** | 在 `saved-node:G1:baseline` 冲突项点击「改用重读值」后保存 `v3` | `G1` 基线变为 `9%` 并消除该冲突项，`v3` 落盘 `G1.baseline === '9%'`，且人工标题与 `e2 (S1→G2)` 仍保持不变。单测 + 3/3 真实 Chrome：**PASS** |
+
+### 10.3 第五轮返工实跑验证汇总（严格区分 PASS / FAIL / NOT_RUN）
+- **统一会话边界检查**（`npm run check:agent-sessions`）：**PASS**
+- **类型检查与产品前端构建**（`npm run build`）：**PASS**
+- **浏览器脚本语法与空白检查**（`node --check tests/browser-strategy-map-import.mjs && git diff --check`）：**PASS**
+- **高危依赖审计**（`npm audit --audit-level=high`）：**PASS**（退出码 0；0 高危、0 严重；本轮仅改动 4 个前端/辅助函数与测试文件）
+- **专项单测与全量受影响回归套件**（`node --test --test-concurrency=2 tests/*strategy*.test.ts tests/agent-session-boundary.test.ts tests/agent-session-execution.test.ts tests/agent-sessions.test.ts tests/project-runtime.test.ts tests/project-session-guards.test.ts tests/sdk-runtime.test.ts tests/sdk-sessions.test.ts tests/session-compatibility.test.ts`）：**248 项中 247 PASS / 0 FAIL / 1 SKIP**（其中 `strategy-map-review-helpers.test.ts` **7/7 PASS**、`strategy-map-import-host.test.ts` **9/9 PASS**、`strategy-map-import-parser.test.ts` **9/9 PASS**；唯一跳过项为 Linux 云主机无 macOS 受保护执行能力的既有 `PP01/02`，退出码 0，耗时 `256.2s`）。
+- **真实无头 Google Chrome + 隔离 Host（托管 `dist/`）+ 官方 Pi SDK `1.4.0` + 合成 Provider 端到端验证**：**连续 5/5 次 PASS（5 份全新隔离数据根，`0 pageerrors`）**（3 次第五轮全量 4 组 `v1/v2/v3` 对照 + 2 次第四轮直测回归：0ms A→B 立即改名保存、旧标签 409 保留人工标题并确认单 `v1`），已同步更新 [`tests/browser-strategy-map-import.mjs`](../../../tests/browser-strategy-map-import.mjs)。
+- **仍未验证项（`NOT_RUN`）**：
+  1. 真实商业视觉大模型的首稿识图准确率（云端 VM 无商业视觉凭据与调用授权）；
+  2. 全仓 433 个测试文件全量 CI（由 Codex 在 PR CI / Mac mini 执行）；
+  3. macOS 本机 LibreOffice + `pypdfium2` 整页渲染阳性对照（云端 Linux VM 未安装 `soffice`/`pdftoppm`；Codex 已在 Mac mini 实测通过）；
+  4. Codex 第六轮非作者复核、最新 `main` 集成、PR/CI、获授权合并与 Mac mini / MacBook 服务切换。
