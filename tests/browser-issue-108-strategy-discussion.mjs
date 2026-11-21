@@ -203,19 +203,21 @@ let provider;
     const previousDiscussion = url => url.pathname === route;
     await page.route(previousDiscussion, async intercepted => {
       const oldResponse = await intercepted.fetch();
-      hold();
+      hold({ request: intercepted.request(), originalDiscussionId: (await oldResponse.json()).discussion.id });
       await released;
       await intercepted.fulfill({ response: oldResponse });
     });
     const picker = page.locator('label').filter({ hasText: /^原讨论/ }).locator('select');
     try {
       await button('刷新讨论记录').click();
-      await held;
+      const delayed = await held;
+      assert.equal(delayed.originalDiscussionId, id);
       await picker.selectOption('');
       await input.fill('新讨论的未发送草稿');
-      const delayed = page.waitForResponse(response => new URL(response.url()).pathname === route);
       release();
-      await (await delayed).finished();
+      const delayedResponse = await delayed.request.response();
+      if (delayedResponse) await delayedResponse.finished();
+      else assert.equal(delayed.request.failure()?.errorText, 'net::ERR_ABORTED');
       await painted();
       const observed = {
         disconnected,
