@@ -702,7 +702,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         try {
           const result = await requestHostTool({feature:'strategy-discussion',action:String(action),input,toolCallId,requestId:originalRun!.id,sessionId:boundSessionId},signal!,'strategy_discussion_run_unavailable');
           assertCurrent();
-          return result as {content:{type:'text';text:string}[];details:Record<string,unknown>};
+          return result as {content:({type:'text';text:string}|{type:'image';data:string;mimeType:string})[];details:Record<string,unknown>};
         } catch (error) {
           if (action === 'propose-goal' && o.workspace?.discussionTools !== 'goal-draft') throw explainGoalProposalError(error);
           throw error;

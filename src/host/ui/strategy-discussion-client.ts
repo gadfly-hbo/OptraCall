@@ -69,4 +69,7 @@ export const strategyWorkbenchRequest = <T,>(id:string,suffix:string,method='GET
 
 export const saveStrategyMap = (id:string,input:unknown) => request<{version:import('../strategy-map-types.ts').StrategyMapVersion}>(path(id)+'/maps','POST',input);
 
+export const dismissStrategyMapImportDraft = (id:string,entryId:string) =>
+  request<{dismissed:true;entryId:string;draftGroupId:string}>(`${path(id)}/map-drafts/${encodeURIComponent(entryId)}/dismiss`,'POST',{});
+
 export const strategyAttachmentRequest=<T,>(id:string,action='',method='GET',input?:unknown)=>request<T>(path(id)+'/attachments'+action,method,input);
