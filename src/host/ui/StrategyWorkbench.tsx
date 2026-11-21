@@ -91,8 +91,9 @@ export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDisc
   async function saved(v:StrategyMapVersion){
     ++fetched.current;setLoading(false);
     setCatalog(old=>({...old,versions:[...old.versions.filter(x=>keyOf(x)!==keyOf(v)),v]}));
-    setSelected(v);onSelectContext(v);setReturnEdge(undefined);setStatus('已保存 '+v.title+' · v'+v.version);setRefresh(n=>n+1);
+    setSelected(v);onSelectContext(v);setReturnEdge(undefined);setRefresh(n=>n+1);
     await onRefreshDiscussion?.();
+    setStatus('已保存 '+v.title+' · v'+v.version);
   }
   async function dismissPendingDraft(entryId:string){
     if(!id)return;

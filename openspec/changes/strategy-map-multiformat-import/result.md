@@ -180,3 +180,34 @@
   2. 全仓 433 个测试文件全量 CI（由 Codex 在 PR CI / Mac mini 执行）；
   3. macOS 本机 LibreOffice + `pypdfium2` 整页渲染阳性对照（云端 Linux VM 未安装 `soffice`/`pdftoppm`；Codex 已于第三轮在 Mac mini 实测通过 4/4 页）；
   4. Codex 第四轮非作者复核、最新 `main` 集成、PR/CI、获授权合并与 Mac mini / MacBook 服务切换。
+
+---
+
+## 9. 第四轮复核退回记录与逐项修复复验证据（对应 Codex 回执 `issuecomment-7060509132`）
+
+### 9.1 保留第四轮复核 FAIL 事实
+- **第四轮候选（`d40380a3a3a7aceae7542a8caf8d8a9837716850`）复核结果：FAIL（退回返工）**。Codex 于 [issuecomment-7060509132](https://github.com/gadfly-hbo/OptraCall/issues/106#issuecomment-7060509132) 确认 Mac mini 上 `check:agent-sessions`、构建、**246/246** 项受影响回归（0 跳过）、固定原选页上限校验与缩页放行、修订 `B v1` 生成同图 `v2`、B 重读中途切 A 再切回合并、过期旧标签 409 拒写与删账本重启单 `v1` 恢复、Excel 红/蓝双图单击跳回与 7 次官方 Pi 回环送图均已复验通过；同时在真实 Chrome 端到端与产品交互中定位出 **3 项与人工核对有关的阻断问题**（随提交的 Chrome 套件在两份隔离数据根均停在第 382 行），保持 Issue #106 开放，未进入远端 PR/CI、合并与双端服务切换。本轮与前三轮（`9794c23`、`d739f67`、`11f171a`）四份 FAIL 事实完整保留，不覆盖或改写。
+
+### 9.2 针对 Codex 第四轮 3 项产品阻断问题的逐项修复与复验证据
+
+| 第四轮 Codex 阻断项 | 根因、修复内容与改动路径 | 可重复复验证据 |
+| --- | --- | --- |
+| **1. A/B 切换后立即编辑会串稿** | **根因**：`StrategyMapPanel.tsx` 旧实现以扁平 `edit` 状态配合 `useEffect([draftGroupId])` 异步切稿，点击切换 B 后首帧 `pendingDraft` 已是 B 而 `edit` 仍保留 A 的 `GA1`，立即输入标题/模板或点击保存就会把 A 的 `GA1` 覆盖写回 B 并以 B 回执落盘。<br>**修复**：`src/host/ui/StrategyMapPanel.tsx` 重构为按 `currentScopeKey`（`pending:${draftGroupId}` / `saved:${activeKey}`）隔离的 `workByScope` 状态映射（同步镜像 `workByScopeRef`），通过纯渲染派生 `resolveScopeView()` 在切换首帧即隔离目标方案草稿与 `effectivePicked`，所有编辑回调（`applyDraftTransform` / `applyDraftChange` / `save`）严格在当前 `scopeKey` 上执行，并为 `StrategyMapReviewPane` 绑定按组隔离的 `key`，从结构上消除任何 A↔B 串稿窗口。 | 真实无头 Chrome 端到端验证（0ms 零等待：先核对 B → 切 A 改标题 → 立即切 B 改标题/模板）：1) 3 次全链路验证（`G1/G2/S1` 完整保留、`GA1` 计数 0、落盘 `B v1` 节点为 `['G1','G2','S1']`，A 仍保留待核与「方案 A · 人工标题」）；2) 2 次直测验证（A→B→立即改名→立即保存，无中间重读，落盘 `B v1` 节点为 `['G1','G2','S1']`，A 仍可继续核对）：**5/5 PASS（0 pageerrors）** |
+| **2. 保存并刷新后，局部重读会撤销已确认的人工修订** | **根因**：保存 `B v1` 并整页刷新后，浏览器内存中的 `manualEdits` 已清空；此前仅在存在内存 `manualEdits` 时才合并重读，导致 Agent 沿用源图旧值（旧标题、`bsc`、`9%`）返回 `e1` 重读稿时直接覆写已确认的 `v1` 修订。<br>**修复**：`src/host/ui/strategy-map-review-helpers.ts` 新增 `MergeConflictItem` 与 `mergeSavedBaseWithRereadDraft()`；`StrategyMapPanel.tsx` 在渲染待核修订草稿（`pendingDraft.mapId` 指向已保存版本）时，从 `versions` 解析 `baseSavedVersion`（跨刷新依然可用）并执行合并：保留范围外已确认的 `v1` 顶层字段与 `clear/confirmed` 节点字段（如人工标题、`tree`、`G1` 基线 `15%`），放行目标连线 `e1` 或待核项更新，并在 `.map-import-notice` 中逐项并列展示「当前保留值 vs 重读返回值」及一键「改用重读值」按钮（`src/host/ui/strategy-map.css` 补充 `.map-conflict-list` 排版）。 | 1) [`tests/strategy-map-review-helpers.test.ts`](../../../tests/strategy-map-review-helpers.test.ts)（`Round-4 Item 2`）：**6/6 PASS**（验证空内存 overlay 下保留 `v1` 标题/`tree`/`15%`、更新 `E1`、生成标题与基线结构化冲突项、点击 `adoptRecord` 一键采纳重读值并消除冲突）；<br>2) 真实无头 Chrome 全链路验证（保存 `B v1` 后执行完整 `page.reload()` → 不重输任何字段直接重读 `e1` → 界面保留「方案 B · 人工确认名称」/`tree`/`15%` 并显示标题与 `15% vs 9%` 冲突对照、`e1` 更新为「因果假设」 → 保存 `B v2` 并回读核对同图 `v1` 与 `v2`）：**3/3 PASS** |
+| **3. 旧标签正确收到 409，但丢了本标签的人工输入** | **根因**：`StrategyMapPanel.tsx` 在 `save()` 与 `cancel()` 捕获 `409 strategy_map_import_draft_superseded` 时错误调用了 `resetManualState(settledGroupId)`，清空了该标签页的人工编辑记录。<br>**修复**：`StrategyMapPanel.tsx` 仅在草稿已终态结案（`already_saved` / `dismissed`）时清理 `scopeKey`；遇到 `409 strategy_map_import_draft_superseded` 时保留该 `scopeKey` 的 `workByScope` 人工修改并仅重置 `pending` 操作号，随后调用 `onDraftConflictRefresh()` 同步最新 `entryId`；`resolveScopeView()` 检测到 `stored.baseEntryId !== pendingDraft.entryId` 即自动与最新草稿合并，同时呈现最新重读连线（`S1 → G1 / 支持`）、本标签人工标题及同字段差异对比（含一键「改用重读值」），用户核对确认后再保存。 | 1) 3 次全链路 Chrome 验证（阻断 SSE 的旧 Tab 2 手改标题「人工修订：为沉睡会员调整目标」→ Tab 1 完成 `e1` 重读 → Tab 2 点击保存收到 `409`、0 写盘、界面同步 `S1 → G1 / 支持` 且标题输入框仍保留「人工修订：为沉睡会员调整目标」并展示与「方案 B · 新客培育」的差异对照）；<br>2) 2 次直测 Chrome 验证（旧 Tab 2 收到 `409` 保留人工标题后，用户确认再次点击保存 → `201` 写入唯一 `v1` 含人工标题与 `S1 → G1 / 支持`，随后 Tab 1 再点保存收到 `409 already_saved`、全库仍仅 1 份 `v1`）：**5/5 PASS** |
+
+### 9.3 第四轮返工实跑验证汇总（严格区分 PASS / FAIL / NOT_RUN）
+- **统一会话边界检查**（`npm run check:agent-sessions`）：**PASS**
+- **类型检查与产品前端构建**（`npm run build`）：**PASS**
+- **浏览器脚本语法检查**（`node --check tests/browser-strategy-map-import.mjs`）：**PASS**
+- **高危依赖审计**（`npm audit --audit-level=high`）：**PASS**（退出码 0；0 高危、0 严重；`package.json` / `package-lock.json` / `App.tsx` 与全部后端持久化/SDK 文件均未变更）
+- **专项单测与全量受影响回归套件**（`node --test --test-concurrency=2 tests/*strategy*.test.ts tests/agent-session-boundary.test.ts tests/agent-session-execution.test.ts tests/agent-sessions.test.ts tests/project-runtime.test.ts tests/project-session-guards.test.ts tests/sdk-runtime.test.ts tests/sdk-sessions.test.ts tests/session-compatibility.test.ts`）：**247 项中 246 PASS / 0 FAIL / 1 SKIP**（其中 `strategy-map-review-helpers.test.ts` **6/6 PASS**、`strategy-map-import-host.test.ts` **9/9 PASS**、`strategy-map-import-parser.test.ts` **9/9 PASS**；唯一跳过项为 Linux 云主机无 macOS 受保护执行能力的既有 `PP01/02`，退出码 0，耗时 `244.1s`）。
+- **真实无头 Google Chrome + 隔离 Host（托管 `dist/`）+ 官方 Pi SDK `1.4.0` + 合成 Provider 端到端验证**：**连续 5/5 次 PASS（5 份全新隔离数据根，`0 pageerrors`）**（3 次全链路 + 2 次第四轮直测场景），并已同步更新 [`tests/browser-strategy-map-import.mjs`](../../../tests/browser-strategy-map-import.mjs)。
+- **本轮连续压测中额外定位并修复的 2 项时序竞态**：
+  1. `src/host/ui/StrategyDiscussionPanel.tsx` 为 `read()` 新增单调序号 `readSeq` 并令 `dispatchMapImport()` 经由 `read()` 刷新，防止早先发出的 `busy: true` 读请求晚于 `run.settled` 返回而把界面锁死在「Agent 正在讨论与核对…」；同时在 `locked` 时显式提示错误而不再静默吞掉。
+  2. `src/host/ui/StrategyWorkbench.tsx` 的 `saved()` 改为先 `await onRefreshDiscussion()` 再更新「已保存」提示，确保提示出现时剩余待核草稿（如方案 A）已同步就绪。
+- **仍未验证项（`NOT_RUN`）**：
+  1. 真实商业视觉大模型的首稿识图准确率（云端 VM 无商业视觉凭据与调用授权）；
+  2. 全仓 433 个测试文件全量 CI（由 Codex 在 PR CI / Mac mini 执行）；
+  3. macOS 本机 LibreOffice + `pypdfium2` 整页渲染阳性对照（云端 Linux VM 未安装 `soffice`/`pdftoppm`；Codex 已于第三、四轮在 Mac mini 实测通过）；
+  4. Codex 第五轮非作者复核、最新 `main` 集成、PR/CI、获授权合并与 Mac mini / MacBook 服务切换。

@@ -194,3 +194,47 @@ test('Round-2 Item 6: matchesSourcePageAndImage and resolveEmbeddedImageIndex is
   assert.equal(matchesSourcePageAndImage(locRed, 'xlsx-1', 2, 2, sheetImages), false);
   assert.equal(matchesSourcePageAndImage(locBlue, 'xlsx-1', 2, 2, sheetImages), true);
 });
+
+test('Round-4 Item 2: mergeSavedBaseWithRereadDraft preserves confirmed v1 title & 15% baseline after page reload while updating reread edge e1 and emitting adoptable conflicts', async () => {
+  const { mergeSavedBaseWithRereadDraft } = await import('../src/host/ui/strategy-map-review-helpers.ts');
+  const savedV1: StrategyMapDraft = {
+    ...sampleDraft(),
+    title: '方案 B · 人工确认名称',
+    template: 'tree',
+    nodes: sampleDraft().nodes.map(n => (n.id === 'G1' ? { ...n, baseline: '15%' } : n)),
+    edges: [{ id: 'E1', from: 'G1', to: 'S1', kind: 'unknown', reviewState: 'needs-review' }],
+  };
+  // After full page reload, overlay is empty; user rereads only E1; Agent returns source's original title/bsc/9% + resolved E1
+  const incomingReread: StrategyMapDraft = {
+    ...sampleDraft(),
+    title: '方案 B · 新客培育',
+    template: 'bsc',
+    edges: [{ id: 'E1', from: 'S1', to: 'G1', kind: 'supports', reviewState: 'clear' }],
+  };
+  const res = mergeSavedBaseWithRereadDraft(savedV1, incomingReread, { version: 1, targetHint: '请只重读连线 E1' });
+  assert.equal(res.merged.title, '方案 B · 人工确认名称');
+  assert.equal(res.merged.template, 'tree');
+  assert.equal(res.merged.nodes.find(n => n.id === 'G1')?.baseline, '15%');
+  assert.equal(res.merged.edges.find(e => e.id === 'E1')?.from, 'S1');
+  assert.equal(res.merged.edges.find(e => e.id === 'E1')?.to, 'G1');
+  assert.equal(res.merged.edges.find(e => e.id === 'E1')?.kind, 'supports');
+  const titleConflict = res.conflicts.find(c => c.id === 'saved-draft:title');
+  const baselineConflict = res.conflicts.find(c => c.id === 'saved-node:G1:baseline');
+  assert.ok(titleConflict, 'expected conflict diff for title');
+  assert.equal(titleConflict.keptDisplay, '方案 B · 人工确认名称');
+  assert.equal(titleConflict.incomingDisplay, '方案 B · 新客培育');
+  assert.ok(baselineConflict, 'expected conflict diff for G1 baseline');
+  assert.equal(baselineConflict.keptDisplay, '15%');
+  assert.equal(baselineConflict.incomingDisplay, '9%');
+
+  // Adopting the reread value via adoptRecord updates G1 baseline to 9% and clears that conflict
+  const adoptedOverlay = applyManualEditRecord(emptyManualEditOverlay(), baselineConflict.adoptRecord);
+  const afterAdopt = mergeSavedBaseWithRereadDraft(savedV1, incomingReread, {
+    version: 1,
+    targetHint: '请只重读连线 E1',
+    overlay: adoptedOverlay,
+  });
+  assert.equal(afterAdopt.merged.nodes.find(n => n.id === 'G1')?.baseline, '9%');
+  assert.equal(afterAdopt.merged.title, '方案 B · 人工确认名称');
+  assert.ok(!afterAdopt.conflicts.some(c => c.label.includes('基线')));
+});

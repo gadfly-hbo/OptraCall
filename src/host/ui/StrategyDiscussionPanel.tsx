@@ -128,8 +128,9 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
       restoreMessageContext(next.discussion.id,next.discussion.pendingInput);
     }
   };
+  const readSeq = useRef(0);
   const list = async () => { const result = await api.listStrategyDiscussions(); if (live.current) setDirectory(result.discussions); };
-  const read = async (discussionId = owner.current, choices = false) => { if (!discussionId) return; const next = await api.readStrategyDiscussion(discussionId); if (live.current && (!owner.current || owner.current === discussionId)) apply(next, choices); return next; };
+  const read = async (discussionId = owner.current, choices = false) => { if (!discussionId) return; const seq = ++readSeq.current; const next = await api.readStrategyDiscussion(discussionId); if (live.current && seq === readSeq.current && (!owner.current || owner.current === discussionId)) apply(next, choices); return next; };
   useEffect(() => { live.current = true; return () => { live.current = false; epoch.current++; }; }, []);
   useEffect(() => { if (!active) return; void list().catch(fault => { if (live.current) setError(errorText(fault)); }); if (owner.current) void read().catch(fault => { if (live.current) setError(errorText(fault)); }); }, [active]);
   useEffect(() => {
@@ -247,7 +248,7 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
   useEffect(() => { if (!focusRequest) return; if (busy || pending) { setNotice('当前请求尚待核对，原讨论与定位保持；处理后可再从准确来源打开。'); return; } void choose(focusRequest.source.id).then(() => { if (owner.current === focusRequest.source.id) setFocusedSource(focusRequest.source); }).catch(fault => setError(errorText(fault))); }, [focusRequest?.id]);
   const [mapImportOpen,setMapImportOpen]=useState(false);
   const dispatchMapImport = async (opts: { prompt: string; importSourceIds: string[]; selectedImportPages?: Record<string, number[]>; importMode?: 'review-draft'; supersedesDraftEntryId?: string; workingMapDraft?: StrategyMapDraft; mapTemplate?: keyof typeof mapTemplates; mapRef?: StrategyMapRef }) => {
-    if (locked) throw new Error('请等本轮讨论结束后再发起导入或重读。');
+    if (locked) { const msg = '请等本轮讨论结束后再发起导入或重读。'; setError(msg); throw new Error(msg); }
     setBusy(true); setError(''); setNotice('');
     try {
       let discussion = await ensure(); discussion = await update(discussion);
@@ -267,7 +268,7 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
       journal.value!.remember(original); setPending(original); setSentMapRequest(input.requestId);
       await api.sendStrategyDiscussionMessage(discussion.id, input);
       setStreaming('');
-      apply(await api.readStrategyDiscussion(discussion.id));
+      await read(discussion.id);
       setConnection(value => value + 1);
       onStage?.('compare');
       setNotice('已交给原战略 Agent 生成待核草稿（尚未落盘正式版本），完成后请在战略地图对照原稿核对并一次保存。');

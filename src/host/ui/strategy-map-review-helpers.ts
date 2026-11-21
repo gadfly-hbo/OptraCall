@@ -127,31 +127,74 @@ export function applyManualEditRecord(overlay: ManualEditOverlay, rec: ManualEdi
   return next;
 }
 
+export interface MergeConflictItem {
+  id: string;
+  label: string;
+  keptDisplay: string;
+  incomingDisplay: string;
+  adoptRecord: ManualEditRecord;
+}
+
+const nodeFieldLabels: Record<string, string> = {
+  title: '条目名称',
+  kind: '类型',
+  perspective: '视角 / 分层',
+  detail: '说明',
+  metric: '指标',
+  baseline: '基线',
+  baselineKind: '基线性质',
+  target: '目标值',
+  unit: '单位',
+  period: '时段 / 口径',
+  owner: '负责人',
+  metrics: '补充指标',
+};
+
+const edgeFieldLabels: Record<string, string> = {
+  from: '起点',
+  to: '终点',
+  kind: '关系类型',
+};
+
+const formatNodeFieldValue = (field: string, val: unknown): string => {
+  if (field === 'metrics' && Array.isArray(val)) return `${val.length} 项补充指标`;
+  const str = String(val ?? '').trim();
+  return str.length > 28 ? `${str.slice(0, 28)}…` : str || '空';
+};
+
 /**
  * Deterministically merges an incoming Agent reread draft with the user's unsaved manual edits.
  * Untouched fields/nodes/edges take the Agent's reread updates; user-edited top-level fields,
- * node/edge edits, deletions, and additions are preserved with explicit conflict notices.
+ * node/edge edits, deletions, and additions are preserved with explicit conflict notices and structured diffs.
  */
 export function mergeRereadDraftWithManualEdits(
   incomingDraft: StrategyMapDraft,
   overlay: ManualEditOverlay,
-): { merged: StrategyMapDraft; preservedCount: number; notices: string[] } {
+): { merged: StrategyMapDraft; preservedCount: number; notices: string[]; conflicts: MergeConflictItem[] } {
   if (!hasManualEdits(overlay)) {
-    return { merged: structuredClone(incomingDraft), preservedCount: 0, notices: [] };
+    return { merged: structuredClone(incomingDraft), preservedCount: 0, notices: [], conflicts: [] };
   }
   const base = structuredClone(incomingDraft);
   const deletedNodes = new Set(overlay.deletedNodeIds);
   const deletedEdges = new Set(overlay.deletedEdgeIds);
   let preservedCount = 0;
   const notices: string[] = [];
+  const conflicts: MergeConflictItem[] = [];
 
   for (const key of Object.keys(overlay.draftFields) as DraftTopLevelField[]) {
     const val = overlay.draftFields[key];
     const incomingVal = base[key];
     if (JSON.stringify(incomingVal) !== JSON.stringify(val)) {
-      notices.push(
-        `已保留「${draftFieldLabels[key]}」的手工修改（当前：${formatDraftFieldValue(key, val)}；重读返回：${formatDraftFieldValue(key, incomingVal)}）`,
-      );
+      const keptDisplay = formatDraftFieldValue(key, val);
+      const incomingDisplay = formatDraftFieldValue(key, incomingVal);
+      notices.push(`已保留「${draftFieldLabels[key]}」的手工修改（当前：${keptDisplay}；重读返回：${incomingDisplay}）`);
+      conflicts.push({
+        id: `draft:${key}`,
+        label: draftFieldLabels[key],
+        keptDisplay,
+        incomingDisplay,
+        adoptRecord: { kind: 'draft-patch', patch: { [key]: structuredClone(incomingVal) } as DraftTopLevelPatch },
+      });
     }
     if (key === 'scenarioModel' && val === undefined) {
       delete base.scenarioModel;
@@ -172,7 +215,17 @@ export function mergeRereadDraftWithManualEdits(
       for (const [k, val] of Object.entries(patch)) {
         const incomingVal = (node as unknown as Record<string, unknown>)[k];
         if (JSON.stringify(incomingVal) !== JSON.stringify(val) && k !== 'reviewState' && k !== 'ambiguityReason') {
-          notices.push(`已保留条目 ${node.id} 的手工修改（${k}: ${String(val ?? '')}）`);
+          const keptDisplay = formatNodeFieldValue(k, val);
+          const incomingDisplay = formatNodeFieldValue(k, incomingVal);
+          const fieldLabel = nodeFieldLabels[k] ?? k;
+          notices.push(`已保留条目 ${node.id} 的手工修改（${k}: ${keptDisplay}；重读返回：${incomingDisplay}）`);
+          conflicts.push({
+            id: `node:${node.id}:${k}`,
+            label: `${node.id} · ${fieldLabel}`,
+            keptDisplay,
+            incomingDisplay,
+            adoptRecord: { kind: 'node-patch', id: node.id, patch: { [k]: structuredClone(incomingVal) } as Partial<StrategyMapNode> },
+          });
         }
       }
       mergedNodes.push({ ...node, ...patch });
@@ -200,7 +253,17 @@ export function mergeRereadDraftWithManualEdits(
       for (const [k, val] of Object.entries(patch)) {
         const incomingVal = (edge as unknown as Record<string, unknown>)[k];
         if (JSON.stringify(incomingVal) !== JSON.stringify(val) && k !== 'reviewState' && k !== 'ambiguityReason') {
-          notices.push(`已保留连线 ${edge.id} 的手工修改（${k}: ${String(val ?? '')}）`);
+          const keptDisplay = String(val ?? '');
+          const incomingDisplay = String(incomingVal ?? '');
+          const fieldLabel = edgeFieldLabels[k] ?? k;
+          notices.push(`已保留连线 ${edge.id} 的手工修改（${k}: ${keptDisplay}；重读返回：${incomingDisplay}）`);
+          conflicts.push({
+            id: `edge:${edge.id}:${k}`,
+            label: `连线 ${edge.id} · ${fieldLabel}`,
+            keptDisplay,
+            incomingDisplay,
+            adoptRecord: { kind: 'edge-patch', id: edge.id, patch: { [k]: incomingVal } as Partial<StrategyMapEdge> },
+          });
         }
       }
     }
@@ -226,7 +289,239 @@ export function mergeRereadDraftWithManualEdits(
     merged: { ...base, nodes: mergedNodes, edges: mergedEdges },
     preservedCount,
     notices,
+    conflicts,
   };
+}
+
+const hintMentionsId = (hint: string, id: string): boolean => {
+  if (!hint || !id) return false;
+  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^A-Za-z0-9_])${escaped}($|[^A-Za-z0-9_])`, 'i').test(hint);
+};
+
+const isNonEmptyValue = (val: unknown): boolean => {
+  if (val === undefined || val === null) return false;
+  if (typeof val === 'string') return val.trim().length > 0;
+  if (Array.isArray(val)) return val.length > 0;
+  return true;
+};
+
+const savedNodeTrackedFields = [
+  'title',
+  'kind',
+  'perspective',
+  'detail',
+  'metric',
+  'baseline',
+  'baselineKind',
+  'target',
+  'unit',
+  'period',
+  'owner',
+  'metrics',
+] as const;
+
+const savedTopLevelFields: readonly DraftTopLevelField[] = [
+  'title',
+  'template',
+  'choice',
+  'excluded',
+  'assumptions',
+  'unknowns',
+  'scenarioModel',
+];
+
+/**
+ * Merges a reread revision draft against its confirmed saved map version (e.g. B v1 after page refresh)
+ * plus any current-session manual edits.
+ * - Confirmed top-level fields and already-clear/confirmed nodes outside the reread target keep saved v1 values
+ *   and surface explicit conflict diffs against differing reread values (with 1-click adoptRecord).
+ * - Unresolved (`needs-review` / `unknown`) items and items explicitly named in `targetHint` (e.g. `e1`) take
+ *   the reread update cleanly.
+ * - Fresh current-session `overlay` edits always win on top.
+ */
+export function mergeSavedBaseWithRereadDraft(
+  savedBase: StrategyMapDraft,
+  incomingDraft: StrategyMapDraft,
+  opts: { version?: number; targetHint?: string; overlay?: ManualEditOverlay } = {},
+): { merged: StrategyMapDraft; preservedCount: number; notices: string[]; conflicts: MergeConflictItem[] } {
+  const versionTag = opts.version ? `原 v${opts.version}` : '已保存版本';
+  const hint = opts.targetHint ?? '';
+  const overlay = opts.overlay;
+  const merged = structuredClone(incomingDraft);
+  let preservedCount = 0;
+  const notices: string[] = [];
+  const conflicts: MergeConflictItem[] = [];
+
+  for (const key of savedTopLevelFields) {
+    if (overlay && key in overlay.draftFields) continue;
+    const savedVal = savedBase[key];
+    const incomingVal = incomingDraft[key];
+    if (!isNonEmptyValue(savedVal)) continue;
+    if (key === 'scenarioModel') {
+      merged.scenarioModel = structuredClone(savedBase.scenarioModel);
+    } else {
+      (merged as unknown as Record<string, unknown>)[key] = structuredClone(savedVal);
+    }
+    if (isNonEmptyValue(incomingVal) && JSON.stringify(incomingVal) !== JSON.stringify(savedVal)) {
+      const keptDisplay = formatDraftFieldValue(key, savedVal);
+      const incomingDisplay = formatDraftFieldValue(key, incomingVal);
+      notices.push(`已保留${versionTag}「${draftFieldLabels[key]}」（当前：${keptDisplay}；重读返回：${incomingDisplay}）`);
+      conflicts.push({
+        id: `saved-draft:${key}`,
+        label: draftFieldLabels[key],
+        keptDisplay,
+        incomingDisplay,
+        adoptRecord: { kind: 'draft-patch', patch: { [key]: structuredClone(incomingVal) } as DraftTopLevelPatch },
+      });
+      preservedCount++;
+    }
+  }
+
+  const incomingNodesById = new Map(incomingDraft.nodes.map(n => [n.id, n]));
+  const mergedNodes: StrategyMapNode[] = [];
+  const seenNodeIds = new Set<string>();
+  for (const savedNode of savedBase.nodes) {
+    seenNodeIds.add(savedNode.id);
+    const incomingNode = incomingNodesById.get(savedNode.id);
+    if (!incomingNode) {
+      mergedNodes.push(structuredClone(savedNode));
+      preservedCount++;
+      continue;
+    }
+    const nodeTargeted =
+      hintMentionsId(hint, savedNode.id) ||
+      (savedNode.reviewState === 'needs-review' && incomingNode.reviewState !== 'needs-review');
+    if (nodeTargeted) {
+      const nextNode = structuredClone(incomingNode);
+      for (const f of savedNodeTrackedFields) {
+        if (!isNonEmptyValue(nextNode[f]) && isNonEmptyValue(savedNode[f])) {
+          (nextNode as unknown as Record<string, unknown>)[f] = structuredClone(savedNode[f]);
+        }
+      }
+      mergedNodes.push(nextNode);
+    } else {
+      const nextNode = structuredClone(savedNode);
+      const overlayNodePatch = overlay?.nodeFields[savedNode.id];
+      if (!nextNode.sourceLocation && incomingNode.sourceLocation) {
+        nextNode.sourceLocation = structuredClone(incomingNode.sourceLocation);
+      }
+      for (const f of savedNodeTrackedFields) {
+        if (overlayNodePatch && f in overlayNodePatch) {
+          // Defer to current-session overlay so mergeRereadDraftWithManualEdits compares against incomingNode
+          (nextNode as unknown as Record<string, unknown>)[f] = structuredClone(incomingNode[f]);
+          continue;
+        }
+        const sVal = savedNode[f];
+        const iVal = incomingNode[f];
+        if (!isNonEmptyValue(sVal)) {
+          if (isNonEmptyValue(iVal)) {
+            (nextNode as unknown as Record<string, unknown>)[f] = structuredClone(iVal);
+          }
+          continue;
+        }
+        if (isNonEmptyValue(iVal) && JSON.stringify(iVal) !== JSON.stringify(sVal)) {
+          const keptDisplay = formatNodeFieldValue(f, sVal);
+          const incomingDisplay = formatNodeFieldValue(f, iVal);
+          const fieldLabel = nodeFieldLabels[f] ?? f;
+          notices.push(`已保留${versionTag}条目 ${savedNode.id} 的「${fieldLabel}」（当前：${keptDisplay}；重读返回：${incomingDisplay}）`);
+          conflicts.push({
+            id: `saved-node:${savedNode.id}:${f}`,
+            label: `${savedNode.id} · ${fieldLabel}`,
+            keptDisplay,
+            incomingDisplay,
+            adoptRecord: { kind: 'node-patch', id: savedNode.id, patch: { [f]: structuredClone(iVal) } as Partial<StrategyMapNode> },
+          });
+          preservedCount++;
+        }
+      }
+      mergedNodes.push(nextNode);
+    }
+  }
+  for (const incomingNode of incomingDraft.nodes) {
+    if (!seenNodeIds.has(incomingNode.id)) {
+      mergedNodes.push(structuredClone(incomingNode));
+    }
+  }
+
+  const validNodeIds = new Set(mergedNodes.map(n => n.id));
+  const incomingEdgesById = new Map(incomingDraft.edges.map(e => [e.id, e]));
+  const mergedEdges: StrategyMapEdge[] = [];
+  const seenEdgeIds = new Set<string>();
+  for (const savedEdge of savedBase.edges) {
+    seenEdgeIds.add(savedEdge.id);
+    const incomingEdge = incomingEdgesById.get(savedEdge.id);
+    if (!incomingEdge) {
+      if (savedEdge.from !== savedEdge.to && validNodeIds.has(savedEdge.from) && validNodeIds.has(savedEdge.to)) {
+        mergedEdges.push(structuredClone(savedEdge));
+        preservedCount++;
+      }
+      continue;
+    }
+    const edgeTargeted =
+      hintMentionsId(hint, savedEdge.id) ||
+      savedEdge.reviewState === 'needs-review' ||
+      savedEdge.kind === 'unknown';
+    if (edgeTargeted) {
+      if (incomingEdge.from !== incomingEdge.to && validNodeIds.has(incomingEdge.from) && validNodeIds.has(incomingEdge.to)) {
+        mergedEdges.push(structuredClone(incomingEdge));
+      }
+    } else {
+      const overlayEdgePatch = overlay?.edgeFields[savedEdge.id];
+      const nextEdge = structuredClone(savedEdge);
+      if (
+        !overlayEdgePatch &&
+        (incomingEdge.from !== savedEdge.from || incomingEdge.to !== savedEdge.to || incomingEdge.kind !== savedEdge.kind)
+      ) {
+        const keptDisplay = `${savedEdge.from}→${savedEdge.to} (${savedEdge.kind})`;
+        const incomingDisplay = `${incomingEdge.from}→${incomingEdge.to} (${incomingEdge.kind})`;
+        notices.push(`已保留${versionTag}连线 ${savedEdge.id}（当前：${keptDisplay}；重读返回：${incomingDisplay}）`);
+        conflicts.push({
+          id: `saved-edge:${savedEdge.id}`,
+          label: `连线 ${savedEdge.id}`,
+          keptDisplay,
+          incomingDisplay,
+          adoptRecord: {
+            kind: 'edge-patch',
+            id: savedEdge.id,
+            patch: {
+              from: incomingEdge.from,
+              to: incomingEdge.to,
+              kind: incomingEdge.kind,
+              reviewState: incomingEdge.reviewState,
+              ambiguityReason: incomingEdge.ambiguityReason,
+            },
+          },
+        });
+        preservedCount++;
+      }
+      if (nextEdge.from !== nextEdge.to && validNodeIds.has(nextEdge.from) && validNodeIds.has(nextEdge.to)) {
+        mergedEdges.push(nextEdge);
+      }
+    }
+  }
+  for (const incomingEdge of incomingDraft.edges) {
+    if (
+      !seenEdgeIds.has(incomingEdge.id) &&
+      incomingEdge.from !== incomingEdge.to &&
+      validNodeIds.has(incomingEdge.from) &&
+      validNodeIds.has(incomingEdge.to)
+    ) {
+      mergedEdges.push(structuredClone(incomingEdge));
+    }
+  }
+
+  const baseMerged: StrategyMapDraft = { ...merged, nodes: mergedNodes, edges: mergedEdges };
+  if (overlay && hasManualEdits(overlay)) {
+    const step2 = mergeRereadDraftWithManualEdits(baseMerged, overlay);
+    return {
+      merged: step2.merged,
+      preservedCount: preservedCount + step2.preservedCount,
+      notices: [...notices, ...step2.notices],
+      conflicts: [...conflicts, ...step2.conflicts],
+    };
+  }
+  return { merged: baseMerged, preservedCount, notices, conflicts };
 }
 
 /**
