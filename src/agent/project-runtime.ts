@@ -210,7 +210,9 @@ export class ProjectAgent {
         assertCurrent();
         // The entire envelope is bounded before crossing IPC. Model content has
         // its separate SDK-side character and graph-byte bounds.
-        if (Buffer.byteLength(JSON.stringify(result), 'utf8') > 256 * 1024) throw new ProjectRuntimeError('personal_context_payload_limit');
+        const hasStrategyImage = isStrategyDiscussion && raw.action === 'read-import-source' && result && typeof result === 'object' && 'content' in result && Array.isArray((result as { content?: unknown[] }).content) && (result as { content: Array<{ type?: string }> }).content.some(part => part?.type === 'image');
+        const payloadLimit = hasStrategyImage ? 12 * 1024 * 1024 : 256 * 1024;
+        if (Buffer.byteLength(JSON.stringify(result), 'utf8') > payloadLimit) throw new ProjectRuntimeError('personal_context_payload_limit');
         response = { result };
       } catch (error) {
         const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && (/^[a-z0-9_]{1,100}$/.test(error.code) || isMethodIssue && /^METHOD_[A-Z0-9_]{1,100}$/.test(error.code)) ? error.code : 'personal_context_read_failed';

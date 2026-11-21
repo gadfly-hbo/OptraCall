@@ -74,19 +74,24 @@ function MapDrawing({map,selected,onSelect}:{map:StrategyMapDraft;selected:strin
   return <ul className="map-tree">{forest}</ul>;
 }
 
+import {StrategyMapReviewPane} from './StrategyMapReviewPane.tsx';
+
 type Props={
   discussionId:string;versions:StrategyMapVersion[];selected?:StrategyMapRef;focusEdgeId?:string;
   onSelect:(ref:StrategyMapRef)=>void;onSaved:(version:StrategyMapVersion)=>void|Promise<void>;
   onDiscuss:(ref?:StrategyMapRef,edgeId?:string)=>void;onSimulate:(ref:StrategyMapRef,edgeId:string)=>void;onHandoff?:(version:StrategyMapVersion)=>void;
+  onOpenImport?:()=>void;onReread?:(ref:StrategyMapRef,prompt:string,importSourceIds:string[])=>void;onRevoked?:()=>void;
 };
 export function StrategyMapPanel(props:Props){
   const active=props.selected?props.versions.find(v=>versionKey(v)===versionKey(props.selected!)):props.versions.at(-1);
-  if(!active)return <section className="sg-panel"><h2>战略地图</h2><p>可以在原讨论里整理第一个候选方向，也可以导入已有的战略地图。</p><button className="secondary-button" onClick={()=>props.onDiscuss()}>继续原讨论</button></section>;
+  if(!active)return <section className="sg-panel"><h2>战略地图</h2><p>可以在原讨论里整理第一个候选方向，也可以导入已有的线下战略地图（Excel / PPT / PDF / 图片）。</p><div className="sg-row"><button className="secondary-button" onClick={()=>props.onDiscuss()}>继续原讨论</button>{props.onOpenImport&&<button className="primary-button" onClick={props.onOpenImport}>导入战略图</button>}</div></section>;
   const latest=props.versions.filter(v=>v.mapId===active.mapId).reduce((a,b)=>a.version>b.version?a:b);
   return <MapView key={versionKey(active)} {...props} active={active} latest={latest}/>;
 }
-function MapView({active,latest,discussionId,versions,onSelect,onDiscuss,onSimulate,onSaved,onHandoff,focusEdgeId}:Props & {active:StrategyMapVersion;latest:StrategyMapVersion}){
-  const [picked,setPicked]=useState(active.nodes[0]?.id??''),[edit,setEdit]=useState<StrategyMapDraft>(),[reason,setReason]=useState('');
+function MapView({active,latest,discussionId,versions,onSelect,onDiscuss,onSimulate,onSaved,onHandoff,onOpenImport,onReread,onRevoked,focusEdgeId}:Props & {active:StrategyMapVersion;latest:StrategyMapVersion}){
+  const hasMultiImport=Boolean(active.importSources?.length);
+  const [picked,setPicked]=useState(active.nodes[0]?.id??''),[pickedEdge,setPickedEdge]=useState<string|undefined>(undefined),[edit,setEdit]=useState<StrategyMapDraft>(),[reason,setReason]=useState('');
+  const [reviewOpen,setReviewOpen]=useState(hasMultiImport);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[edgeId,setEdgeId]=useState(focusEdgeId??active.edges.find(e=>e.kind==='hypothesis')?.id);
   const [newKind,setNewKind]=useState<StrategyMapEdge['kind']>('supports'),[newFrom,setNewFrom]=useState(''),[newTo,setNewTo]=useState('');
   const opener=useRef<HTMLButtonElement>(null),review=useRef<HTMLDetailsElement>(null),edgeButtons=useRef(new Map<string,HTMLButtonElement>());
@@ -130,12 +135,13 @@ function MapView({active,latest,discussionId,versions,onSelect,onDiscuss,onSimul
       <label className="sg-row">所见版本<select className="sg-select" disabled={!!edit} value={versionKey(active)} onChange={e=>{const v=versions.find(v=>versionKey(v)===e.target.value);if(v)onSelect(v);}}>{[...versions].reverse().map(v=><option key={versionKey(v)} value={versionKey(v)}>{v.title} · v{v.version}</option>)}</select></label></div>
     {map.choice&&<p>{map.choice}</p>}
     <details><summary>取舍与成立条件</summary><dl className="sg-details">{([['放弃的方向',map.excluded],['成立条件',map.assumptions],['待核依据',map.unknowns]] as const).map(([k,v])=><div className="map-dl-row" key={k}><dt>{k}</dt><dd>{v||'待核'}</dd></div>)}</dl></details>
-    <div className="sg-row map-toolbar">{button('继续原讨论',()=>onDiscuss(active))}{!edit&&active.version===latest.version&&<button className="secondary-button" ref={opener} onClick={()=>{setEdit(structuredClone(mapDraft(active)));setError('');}}>编辑地图</button>}
+    <div className="sg-row map-toolbar">{button('继续原讨论',()=>onDiscuss(active))}{onOpenImport&&button('导入战略图',onOpenImport)}{hasMultiImport&&<button type="button" className="secondary-button" aria-pressed={reviewOpen} onClick={()=>setReviewOpen(v=>!v)}>{reviewOpen?'收起原稿对照':'对照原稿核对'}</button>}{!edit&&active.version===latest.version&&<button className="secondary-button" ref={opener} onClick={()=>{setEdit(structuredClone(mapDraft(active)));setError('');}}>编辑地图</button>}
     {onHandoff&&button('将此版带入目标管理',()=>onHandoff(active))}</div>
+    {hasMultiImport&&reviewOpen&&<StrategyMapReviewPane discussionId={discussionId} active={active} draft={edit??mapDraft(active)} selectedNodeId={picked} selectedEdgeId={pickedEdge} onSelectNode={id=>{setPicked(id);setPickedEdge(undefined);}} onSelectEdge={id=>setPickedEdge(id)} onChangeDraft={next=>{setEdit(next);setError('');}} onReread={onReread?(prompt,ids)=>onReread(active,prompt,ids):undefined} onRevoked={onRevoked}/>}
     {edit&&<div className="map-edit-grid"><label>方案名称<input value={edit.title} onChange={e=>setEdit({...edit,title:e.target.value})}/></label>
       <label>地图模板<select value={edit.template} onChange={e=>setEdit({...edit,template:e.target.value as StrategyMapDraft['template']})}>{Object.entries(mapTemplates).map(([k,v])=><option value={k} key={k}>{v}</option>)}</select></label>
       {([['choice','本版选择'],['excluded','放弃的方向'],['assumptions','成立条件'],['unknowns','待核依据']] as const).map(([k,label])=><label key={k}>{label}<textarea value={edit[k]} onChange={e=>setEdit({...edit,[k]:e.target.value})}/></label>)}</div>}
-    <MapDrawing map={map} selected={picked} onSelect={setPicked}/>
+    <MapDrawing map={map} selected={picked} onSelect={id=>{setPicked(id);setPickedEdge(undefined);}}/>
     {node&&<div className="map-item"><h3>{node.id} · {node.title||'新条目'}</h3>
       {edit?<div className="map-edit-grid">{([['title','条目名称'],['perspective','视角 / 分层'],['detail','说明'],['metric','指标'],['baseline','基线'],['baselineKind','基线性质'],['target','目标值'],['unit','单位'],['period','时段 / 口径'],['owner','负责人']] as const).map(([k,label])=><label key={k}>{label}<input value={node[k]??''} onChange={e=>patchNode(k,e.target.value)}/></label>)}</div>:
         <dl className="sg-details">{([['说明',node.detail],['指标',node.metric],['基线',node.baseline],['性质',node.baselineKind],['目标值',node.target],['单位',node.unit],['时段 / 口径',node.period]] as const).filter(([,v])=>Boolean(v)).map(([k,v])=><div key={k} className="map-dl-row"><dt>{k}</dt><dd>{v}</dd></div>)}</dl>}

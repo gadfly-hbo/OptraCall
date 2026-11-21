@@ -17,6 +17,7 @@ export function strategyMapDocument(v:StrategyMapVersion,scope:string):VersionDo
       ...(v.replySource?[['原生回复',[v.replySource.sessionId,v.replySource.version,v.replySource.sha256].join(' · ')]]:[]),
       ...v.citations.map(c=>[c.source.title,'v'+c.source.version+' · '+c.locator+' · '+c.source.sha256]),
       ...(v.importSource?[[v.importSource.fileName,v.importSource.sha256],...v.importSource.rows.map(r=>[r.nodeId,r.sheet+' · 第 '+r.row+' 行'])]:[]),
+      ...(v.importSources?v.importSources.map(s=>[s.fileName,[s.format.toUpperCase(),s.origin,s.selectedPages?.length?'选页 '+s.selectedPages.join(','):'',s.sha256].filter(Boolean).join(' · ')]):[]),
     ]},
   ];
   if(v.scenarioModel){

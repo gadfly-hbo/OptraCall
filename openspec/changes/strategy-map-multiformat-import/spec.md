@@ -1,11 +1,11 @@
 # 战略地图多格式导入：Agent 主动提取与原稿对照核对（OpenSpec）
 
 - **关联 Issue**：[#106](https://github.com/gadfly-hbo/OptraCall/issues/106)（参考已交付基线 [#98](https://github.com/gadfly-hbo/OptraCall/issues/98)）
-- **当前阶段**：第一阶段 · 设计与界面待审（Spec + 可点击 Demo，尚未实施产品代码）
+- **当前阶段**：第二阶段 · 正式产品开发与隔离验证已完成，待提交远端分支并回执交回 Codex（用户已确认 v0.2 Spec、D01–D06 全部推荐项 A 与全前端融合 Demo `58469b4879f89c987ed31d2d781e7a8fea22a9f1`）
 - **任务分支**：`work/antigravity/issue-106-strategy-map-import`
 - **基线提交**：`4b8ad9b0b74390b55b580d92fdf69c292f90d0f8`
 - **依据规范**：`AGENTS.md`、`docs/engineering-workflow.md`（v1.12）、`docs/agent-session-integration.md`（Interface v3）、锁定官方 Pi SDK `1.4.0`
-- **可点击 Demo**：[`clickable/index.html`](clickable/index.html)（离线单文件，合成资料与内存状态演示）
+- **可点击 Demo**：[`clickable/index.html`](clickable/index.html)（v0.2 离线单文件，SHA-256 `757f4a7a95beffa006e3ac0966301f5aa9f9ce17bd21f3fc8e7e4b47da2f84df`）
 
 ---
 
@@ -129,16 +129,15 @@
 
 ---
 
-## 7. 允许修改路径（第二阶段获确认后）
+## 7. 实际修改与新增路径（第二阶段获确认后）
 
-- `src/host/strategy-map-types.ts`、`src/host/strategy-map-store.ts`
-- `src/host/strategy-workbook-routes.ts`、`src/host/strategy-workbook-source.ts`、`src/host/strategy-workbook.ts`
-- `src/host/strategy-discussion-host.ts`、`src/host/strategy-discussion-sources.ts`、`src/host/strategy-attachment-*.ts`
-- 新增战略多格式解析/渲染/路由薄层：`src/host/strategy-map-import-*.ts`
-- `src/agent/strategy-discussion.ts`、`src/agent/strategy-map-schema.ts`
-- `src/host/ui/StrategyWorkbench.tsx`、`src/host/ui/StrategyMapPanel.tsx`、`src/host/ui/StrategyWorkbookImport.tsx`、`src/host/ui/StrategyDiscussionPanel.tsx` 及新增对照核对子组件与样式
-- 对应测试：`tests/strategy-map-import*.test.ts` 与既有 `tests/strategy-*.test.ts` 回归
-- 规格与结果文档：`openspec/changes/strategy-map-multiformat-import/`
+- `src/host/strategy-map-types.ts`、`src/host/strategy-map-store.ts`、`src/host/strategy-map-document.ts`
+- `src/host/strategy-discussion-types.ts`、`src/host/strategy-discussion-host.ts`、`src/host/server.ts`
+- 新增战略多格式解析/存储/路由薄层：`src/host/strategy-map-import.ts`、`src/host/strategy-map-import-store.ts`、`src/host/strategy-map-import-routes.ts`
+- `src/agent/strategy-discussion.ts`、`src/agent/strategy-map-schema.ts`、`src/agent/project-session.ts`、`src/agent/project-runtime.ts`（仅 `strategy-discussion` 的 `read-import-source` 图文内容放宽有界 12 MiB IPC 负载，其余工具维持 256 KiB）
+- `src/host/ui/StrategyWorkbench.tsx`、`src/host/ui/StrategyMapPanel.tsx`、`src/host/ui/StrategyWorkbookImport.tsx`、`src/host/ui/StrategyDiscussionPanel.tsx`、`src/host/ui/strategy-map.css`，及新增 `src/host/ui/strategy-map-import-client.ts`、`src/host/ui/StrategyMapImportDialog.tsx`、`src/host/ui/StrategyMapReviewPane.tsx`
+- 对应测试：`tests/strategy-map-import-parser.test.ts`、`tests/strategy-map-import-host.test.ts`、`tests/browser-strategy-map-import.mjs` 与既有 `tests/strategy-*.test.ts` 回归
+- 规格与结果文档：`openspec/changes/strategy-map-multiformat-import/spec.md`、`result.md`
 
 ---
 
@@ -148,14 +147,14 @@
 
 | 阶段 | 任务项 | 完成条件 / 对应 Issue #106 验收 | 状态 |
 | --- | --- | --- | --- |
-| **阶段一（当前）** | T1.1 读取规范与基线，按规范认领 #106 并建独立任务分支 | #106 唯一有效认领评论回读确认；分支基于 `4b8ad9b0b74390b55b580d92fdf69c292f90d0f8` | [x] 已完成 |
-| **阶段一（当前）** | T1.2 编写 OpenSpec、四原则前置检查、IN01–IN07 契约与待确认决定 D01–D06 | 本文件完整覆盖四类格式、语义口径、边界与清单 | [x] 已完成 |
-| **阶段一（当前）** | T1.3 制作全前端融合可点击 Demo v0.2 并核验脚本语法与离线自包含 | 融合 OptraCall 248px 侧栏、顶栏、战略选择四页签、目标管理承接与双栏对照核对（v0.2 Demo SHA-256 `757f4a7a95beffa006e3ac0966301f5aa9f9ce17bd21f3fc8e7e4b47da2f84df`） | [x] 已完成 |
-| **阶段一（当前）** | T1.4 推送设计提交并在 #106 提交设计回执，等待用户确认 | #106 回执含分支名、完整 SHA、spec 链接与 Demo 打开方式；**获确认前不修改产品源码** | [ ] 待完成 |
-| **阶段二（确认后）** | T2.1 Host 多格式只读解析、来源指纹归属、撤权校验与按需页图渲染（TDD） | 覆盖 `.xlsx` / `.pptx` / `.pdf` / `.png|.jpg` 合成样例、同名换版、撤权阻断与渲染环境降级 | [ ] 待确认后开工 |
-| **阶段二（确认后）** | T2.2 统一 Pi 会话工具扩展与候选地图版本存储（Interface v3 / Pi 1.4.0） | 复用 `strategy-discussion`；支持图文/纯文本降级、幂等重试、CAS 冲突与人工修改保护 | [ ] 待确认后开工 |
-| **阶段二（确认后）** | T2.3 对照核对 UI（双入口、双向定位、批量保留清楚项、局部纠偏、自然语言重读） | 桌面与窄屏隔离浏览器点验；保存重开后在原讨论可读人工修改；目标/Case 无自动写入 | [ ] 待确认后开工 |
-| **阶段二（确认后）** | T2.4 完整回归、质量记录与实现回执交回 Codex | `npm run check` 全绿；分别记录合成 Provider 工程验证与真实视觉模型首轮表现（或未授权项）；推送并回执 #106 | [ ] 待确认后开工 |
+| **阶段一** | T1.1 读取规范与基线，按规范认领 #106 并建独立任务分支 | #106 唯一有效认领评论回读确认；分支基于 `4b8ad9b0b74390b55b580d92fdf69c292f90d0f8` | [x] 已完成 |
+| **阶段一** | T1.2 编写 OpenSpec、四原则前置检查、IN01–IN07 契约与待确认决定 D01–D06 | 本文件完整覆盖四类格式、语义口径、边界与清单 | [x] 已完成 |
+| **阶段一** | T1.3 制作全前端融合可点击 Demo v0.2 并核验脚本语法与离线自包含 | 融合 OptraCall 248px 侧栏、顶栏、战略选择四页签、目标管理承接与双栏对照核对（v0.2 Demo SHA-256 `757f4a7a95beffa006e3ac0966301f5aa9f9ce17bd21f3fc8e7e4b47da2f84df`） | [x] 已完成 |
+| **阶段一** | T1.4 推送设计提交并在 #106 提交设计回执，等待用户确认 | #106 设计回执（`58469b4879f89c987ed31d2d781e7a8fea22a9f1`）已获用户明确确认并授权开工 | [x] 已完成 |
+| **阶段二** | T2.1 Host 多格式只读解析、来源指纹归属、撤权校验与按需页图渲染（TDD） | 覆盖 `.xlsx` / `.pptx` / `.pdf` / `.png|.jpg` 合成样例、同名换版、撤权阻断与渲染环境降级 | [x] 已完成 |
+| **阶段二** | T2.2 统一 Pi 会话工具扩展与候选地图版本存储（Interface v3 / Pi 1.4.0） | 复用 `strategy-discussion`；支持图文/纯文本降级、幂等重试、CAS 冲突、取消零半成品与重启恢复 | [x] 已完成 |
+| **阶段二** | T2.3 对照核对 UI（双入口、双向定位、批量保留清楚项、局部纠偏、自然语言重读） | 桌面与窄屏隔离浏览器点验；保存重开后在原讨论可读人工修改；目标/Case 无自动写入 | [x] 已完成 |
+| **阶段二** | T2.4 完整回归、质量记录与实现回执交回 Codex | 工程边界、构建、回归与隔离浏览器验证记录入 `result.md`；如实区分已验证与未验证项；推送并回执 #106 | [x] 已完成 |
 
 ---
 

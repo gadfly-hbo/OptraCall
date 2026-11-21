@@ -33,18 +33,27 @@ function MapHandoffs({version}:{version:StrategyMapVersion}){
   if(!goals)return null;
   return goals.length?<details><summary>已交接 {goals.length} 项目标</summary><ul>{goals.map(g=><li key={g.goalId+':'+g.version}>{g.nodeId} · {g.title} · {g.scope} · v{g.version} · {g.status==='candidate'?'待采用':'已有采用记录'}</li>)}</ul></details>:<p className="sg-muted">此版尚无目标交接记录。</p>;
 }
-export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDiscussionId,onDiscuss,onGoalsChanged,onSelectContext,sentRequest,onReconciled}:{
+import {StrategyMapImportDialog,type StrategyMapExtractRequest} from './StrategyMapImportDialog.tsx';
+
+export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDiscussionId,onDiscuss,onGoalsChanged,onSelectContext,sentRequest,onReconciled,importDialogOpen,onImportDialogOpenChange,onExtractMapImport,onRereadMap}:{
  detail?:StrategyDiscussionDetail;stage:ManagementStage;active:boolean;scopes:GoalScope[];
  onStage:(stage:ManagementStage)=>void;ensureDiscussionId:()=>Promise<string>;
  sentRequest?:string;onReconciled:()=>void;onSelectContext:(ref:StrategyMapRef)=>void;
  onDiscuss:(ref?:StrategyMapRef,edgeId?:string,source?:GoalDiscussionSourceRef)=>void;onGoalsChanged:(goals?:GoalVersion[])=>Promise<void>;
+ importDialogOpen?:boolean;onImportDialogOpenChange?:(open:boolean)=>void;
+ onExtractMapImport?:(req:StrategyMapExtractRequest)=>Promise<void>;
+ onRereadMap?:(ref:StrategyMapRef,prompt:string,importSourceIds:string[])=>void;
 }){
   const id=detail?.discussion.id;
   const [catalog,setCatalog]=useState<Catalog>({versions:[]}), [selected,setSelected]=useState<StrategyMapRef>();
+  const [localImportOpen,setLocalImportOpen]=useState(false);
+  const [excelImportReq,setExcelImportReq]=useState(0);
   const [simulationEdge,setSimulationEdge]=useState<StrategyEdgeLocation>(),[returnEdge,setReturnEdge]=useState<StrategyEdgeLocation>();
   const [handoff,setHandoff]=useState<StrategyMapRef>(), [error,setError]=useState(''),[loading,setLoading]=useState(false),[refresh,setRefresh]=useState(0);
   const [status,setStatus]=useState(''),[simulationVisit,setSimulationVisit]=useState(0);
   const fetched=useRef(0);
+  const openImport=importDialogOpen!==undefined?importDialogOpen:localImportOpen;
+  const setOpenImport=(next:boolean)=>{if(onImportDialogOpenChange)onImportDialogOpenChange(next);else setLocalImportOpen(next);};
   const version=selected?catalog.versions.find(v=>keyOf(v)===keyOf(selected)):catalog.versions.at(-1);
   const handoffMap=catalog.versions.find(v=>handoff && keyOf(v)===keyOf(handoff));
   useEffect(()=>{
@@ -71,15 +80,15 @@ export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDisc
   function select(ref:StrategyMapRef){setSelected(ref);onSelectContext(ref);setHandoff(undefined);setReturnEdge(undefined);}
   const versionOptions=catalog.versions.map(v=><option key={keyOf(v)} value={keyOf(v)}>{v.title} · v{v.version}</option>);
   const picker=Boolean(catalog.versions.length) && <label>地图版本 <select value={version?keyOf(version):''} onChange={e=>{const v=catalog.versions.find(x=>keyOf(x)===e.target.value);if(v)select(v);}}>{!version && <option value="">所选版本不可读 · 选择其他版本</option>}{versionOptions}</select></label>;
-  const importer=<StrategyWorkbookImport discussionId={id} current={version} ensureDiscussionId={ensureDiscussionId} onSaved={result=>{if(result.version){saved(result.version);onStage('compare');}}}/>;
+  const importer=<StrategyWorkbookImport discussionId={id} current={version} ensureDiscussionId={ensureDiscussionId} openRequest={excelImportReq} onOpenHandled={()=>setExcelImportReq(0)} onSaved={result=>{if(result.version){saved(result.version);onStage('compare');}}}/>;
   return <div className="strategy-workbench">
     {error && <p role="alert">{error} <button className="text-button" onClick={()=>setRefresh(n=>n+1)}>重新读取地图</button></p>}
     {Boolean(catalog.unavailable?.length) && <details><summary>{catalog.unavailable!.length} 个版本的来源当前不可读取</summary>{catalog.unavailable!.map(v=><p key={keyOf(v)}>{v.mapId} · v{v.version} · {v.reason}</p>)}</details>}
     {stage==='direction' && version && <section className="wb-candidate"><div className="sg-row-between"><h3>当前候选 · {version.title}</h3><button className="text-button" onClick={()=>onStage('compare')}>打开战略地图 · v{version.version}</button></div><CandidateChoices version={version}/></section>}
     {stage==='compare' && <>
       {selected && !version && picker}
-      {id && <StrategyMapPanel discussionId={id} versions={catalog.versions} selected={selected??version} onSelect={select} onSaved={saved} onDiscuss={onDiscuss} onSimulate={(ref,edgeId)=>{setSimulationEdge({mapId:ref.mapId,version:ref.version,edgeId});setSimulationVisit(v=>v+1);onStage('handoff');}} onHandoff={v=>{select(v);setHandoff(v);}} focusEdgeId={returnEdge && version && keyOf(version)===keyOf(returnEdge)?returnEdge.edgeId:undefined}/>}
-      {!id && <p>可从原战略讨论形成候选，或导入线下整理的地图。</p>}{importer}
+      {id && <StrategyMapPanel discussionId={id} versions={catalog.versions} selected={selected??version} onSelect={select} onSaved={saved} onDiscuss={onDiscuss} onOpenImport={onExtractMapImport?()=>setOpenImport(true):undefined} onReread={onRereadMap} onRevoked={()=>setRefresh(n=>n+1)} onSimulate={(ref,edgeId)=>{setSimulationEdge({mapId:ref.mapId,version:ref.version,edgeId});setSimulationVisit(v=>v+1);onStage('handoff');}} onHandoff={v=>{select(v);setHandoff(v);}} focusEdgeId={returnEdge && version && keyOf(version)===keyOf(returnEdge)?returnEdge.edgeId:undefined}/>}
+      {!id && <div className="sg-row"><p>可从原战略讨论形成候选，或导入线下整理的战略图。</p>{onExtractMapImport&&<button type="button" className="primary-button" onClick={()=>setOpenImport(true)}>导入战略图</button>}</div>}{importer}
     </>}
     {stage==='handoff' && (id && (catalog.versions.length || !loading) ? <StrategySimulationPanel key={id+':'+simulationVisit} discussionId={id} versions={catalog.versions} origin={simulationEdge} onReturn={e=>{setSelected(e);setReturnEdge(e);onStage('compare');}}/>:<p>{loading?'正在读取可比较的版本…':'选择原讨论后，可比较其中的候选版本。'}</p>)}
     {stage==='strategy-versions' && <section className="wb-history"><div className="sg-row-between"><h3>地图修订记录</h3>{picker}</div>
@@ -87,8 +96,10 @@ export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDisc
         <div className="sg-row"><button className="secondary-button" onClick={()=>{setSelected(version);onStage('compare');}}>查看此版地图</button><button className="text-button" onClick={()=>onDiscuss(version,undefined,version.replySource??version.source)}>返回原讨论</button><DownloadVersion key={keyOf(version)} route={'/api/strategy/discussions/'+id+'/maps/'+version.mapId+'/versions/'+version.version+'/export'}/><button className="text-button" onClick={()=>setHandoff(version)}>带入目标管理</button></div>
         <MapHandoffs key={keyOf(version)} version={version}/>{version.citations.map(c=><StrategyAttachmentEvidence key={c.token} discussionId={id!} citation={c}/>)}
         {version.importSource && <details><summary>{version.importSource.fileName} · 导入工作表</summary><DownloadWorkbook version={version}/><p>SHA-256 {version.importSource.sha256}</p>{version.importSource.rows.map((r,i)=><p key={i}>{r.nodeId} · {r.sheet} · 第 {r.row} 行</p>)}</details>}
+        {version.importSources?.map(src=><details key={src.sourceId}><summary>{src.fileName} · 多格式导入原稿（{src.format.toUpperCase()}）</summary><p>来源：{src.origin} · SHA-256 {src.sha256}{src.selectedPages?.length?` · 选页 ${src.selectedPages.join('、')}`:''}</p></details>)}
       </>:<p>{loading?'正在读取地图版本…':'这段讨论尚无可读取的地图修订。'}</p>}
     </section>}
+    {onExtractMapImport && <StrategyMapImportDialog open={openImport} discussionId={id} busy={Boolean(detail?.busy)} ensureDiscussionId={ensureDiscussionId} onClose={()=>setOpenImport(false)} onExtract={onExtractMapImport} onOpenExcelFast={()=>{onStage('compare');setExcelImportReq(n=>n+1);}}/>}
     {handoffMap && (stage==='compare' || stage==='strategy-versions') && <MapGoalHandoff key={keyOf(handoffMap)} version={handoffMap} scopes={scopes} openOnMount={true} onClose={()=>setHandoff(undefined)} onSaved={goals=>{void onGoalsChanged(goals).then(()=>onStage('goals')).catch(e=>setError(String(e)));}}/>}
     {status && <p role="status">{status}</p>}
   </div>;

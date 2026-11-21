@@ -1,9 +1,10 @@
 import { strategyMapDraftSchema } from './strategy-map-schema.ts';
 import { Type } from 'typebox';
-export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map';
+export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map';
 export type StrategyDiscussionToolContext = { requestId:string; sessionId:string; toolCallId:string; signal:AbortSignal; assertCurrent():void; originalUserText:string; userQuoteEligible:boolean; goalBasis?:import('../host/strategy-goals-types.ts').GoalBasis; registerCleanup?:(cleanup:(options:{retryFailed?:boolean})=>Promise<void>)=>void };
-export type StrategyDiscussionPort = (action:StrategyDiscussionAction,input:Record<string,unknown>,context:StrategyDiscussionToolContext)=>Promise<{content:{type:'text';text:string}[];details:Record<string,unknown>}>;
-export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','propose-goal','adopt-goal','operation','public-search','read-map','save-map'] as const;
+export type StrategyDiscussionToolContent = {type:'text';text:string} | {type:'image';data:string;mimeType:string};
+export type StrategyDiscussionPort = (action:StrategyDiscussionAction,input:Record<string,unknown>,context:StrategyDiscussionToolContext)=>Promise<{content:StrategyDiscussionToolContent[];details:Record<string,unknown>}>;
+export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-goal','adopt-goal','operation','public-search','read-map','save-map'] as const;
 const exact = { additionalProperties: false };
 const nonblank = (maxLength = 4000) => Type.String({ minLength: 1, maxLength, pattern: '\\S' });
 const textList = Type.Array(nonblank(), { maxItems: 100 });
@@ -46,6 +47,7 @@ export const strategyDiscussionTool = {
   name: 'strategy_goals', label: '战略讨论与目标准确承接',
   description: [
     'read-map 查本讨论地图，按准确 mapId、version 读取，长正文可用 offset/limit 分页。save-map 用 mapDraft 保存完整候选或修订，修订带 mapId 和 expectedVersion，不改动无关节点。新建可省略 mapId；reason 概述本轮变化。citationTokens 只列本轮实际读取且用于此版的附件引用。',
+    'read-import-source 按 importSourceId 与可选 page（1-based）读取本讨论获准的多格式战略图原稿（.xlsx/.pptx/.pdf/.png/.jpg），返回结构化文字/形状/连接符，并在当前模型支持视觉时附带该页图像；纯文本模型时请用可读结构起稿并将遮挡或扫描盲区标为 reviewState="needs-review"。',
     'read-goals 读取本轮目标、关系、反馈及 Host 核对的 goalScopes。find-sources 查获准背景目录，read-source 按 sourceId 读取，public-search 仅发送公开查询且须已有检索配置。',
     'propose-goal 保存完整候选。draft 必填 title（标题）、outcome（预期结果）、perspective（profit/nonprofit/personal）、responsible（负责人）、baseline（状态及说明）、measurement（成果核对标准或已发布 SAP 指标及固定版本）。',
     'goalScopes.bound 或 defaultScope 已明确时可省略 draft.scope；有多种适用范围时按用户明确意图选用，归属仍有歧义时询问。基线待补用 pending，目标依据不足时继续讨论。修订原候选须给 goalId 和 expectedVersion。',
@@ -54,6 +56,7 @@ export const strategyDiscussionTool = {
   parameters: Type.Object({
     action: Type.Union(STRATEGY_DISCUSSION_ACTIONS.map(x => Type.Literal(x))),
     mapId:Type.Optional(nonblank(100)),mapDraft:Type.Optional(strategyMapDraftSchema),reason:Type.Optional(nonblank(300)),citationTokens:Type.Optional(Type.Array(nonblank(300))),
+    importSourceId:Type.Optional(nonblank(120)),page:Type.Optional(Type.Integer({minimum:1,maximum:200})),includeImage:Type.Optional(Type.Boolean()),
     sourceId: Type.Optional(Type.String()), offset: Type.Optional(Type.Integer({ minimum: 0 })), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 8192 })),
     query: Type.Optional(Type.String({ maxLength: 2000 })), goalId: Type.Optional(Type.String()), version: Type.Optional(Type.Integer({ minimum: 1 })),
     expectedVersion: Type.Optional(Type.Integer({ minimum: 1 })), goalContentSha256: Type.Optional(Type.String()), operationId: Type.Optional(Type.String({ pattern: '^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$', description: '原操作的 UUID，查询或重试时沿用。' })),

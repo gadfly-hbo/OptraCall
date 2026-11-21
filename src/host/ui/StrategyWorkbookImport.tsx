@@ -50,12 +50,13 @@ export function MapGoalHandoff({version,scopes,onSaved,openOnMount=false,onClose
     {error&&<p role="alert">{error}</p>}<div className="case-dialog-actions"><button className="secondary-button" disabled={busy} onClick={close}>取消</button><button className="primary-button" disabled={busy||!index||!scope||!selected.length} onClick={()=>void submit()}>保存目标候选</button></div>
   </CaseDialog>}</>;
 }
-export function StrategyWorkbookImport({discussionId,current,target='map',scopes=[],ensureDiscussionId,onSaved}:{discussionId?:string;current?:StrategyMapVersion;target?:WorkbookTarget;scopes?:GoalScope[];ensureDiscussionId?:()=>Promise<string>;onSaved?:(result:Result)=>void}){
+export function StrategyWorkbookImport({discussionId,current,target='map',scopes=[],ensureDiscussionId,onSaved,openRequest,onOpenHandled}:{discussionId?:string;current?:StrategyMapVersion;target?:WorkbookTarget;scopes?:GoalScope[];ensureDiscussionId?:()=>Promise<string>;onSaved?:(result:Result)=>void;openRequest?:number;onOpenHandled?:()=>void}){
   const [open,setOpen]=useState(false),[book,setBook]=useState<StrategyWorkbook>(),[bytes,setBytes]=useState(''),[selection,setSelection]=useState<WorkbookSelection>({});
   const [title,setTitle]=useState(''),[template,setTemplate]=useState<keyof typeof mapTemplates>('table'),[revise,setRevise]=useState(false);
   const [scope,setScope]=useState<GoalScope>(),[perspective,setPerspective]=useState<'profit'|'nonprofit'|'personal'>('profit'),[group,setGroup]=useState('');
   const [index,setIndex]=useState<StrategyGoalsIndex>(),[busy,setBusy]=useState(false),[error,setError]=useState(''),[imageOnly,setImageOnly]=useState(false);
   const seq=useRef(0),id=useId();
+  useEffect(()=>{if(openRequest){onOpenHandled?.();void begin();}},[openRequest]);
   const mapped=book?mapStrategyWorkbook(book,selection):undefined;
   const matchingGroups=new Map((index?.goals??[]).flatMap(g=>{const v=g.versions.at(-1)!;return scope&&v.structured?.workbook&&!v.structured.map&&groupScopeKey(v.scope)===groupScopeKey(scope)?[[v.structured.groupId,v.structured.planTitle] as const]:[];}));
   const previousNodes=target==='map'&&revise?current?.nodes.map(n=>({...n,metrics:mapNodeMetrics(n),sha:current.importSource?.sha256})):target==='goals'&&group?(index?.goals??[]).flatMap(g=>{const v=g.versions.at(-1)!;return v.structured?.groupId===group?[{id:v.structured.nodeId,title:v.title,metrics:v.structured.metrics,sha:v.structured.workbook?.sha256}]:[];}):undefined;
