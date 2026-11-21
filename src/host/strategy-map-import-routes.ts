@@ -3,9 +3,10 @@ import { modelSupportsImages } from '../agent/runtime.ts';
 import type { RuntimeModelConfiguration } from './config-store.ts';
 import type { ProjectStore, UploadedFile } from './project-store.ts';
 import type { StrategyAttachments } from './strategy-attachments.ts';
+import { createStrategyDiscussionSource } from './strategy-discussion-sources.ts';
 import { StrategyDiscussionFault, discussionHash } from './strategy-discussion-store.ts';
-import { isDiscussionSourceExcluded } from './strategy-discussion-source-scope.ts';
-import type { StrategyDiscussion, StrategyDiscussionSource } from './strategy-discussion-types.ts';
+import { isDiscussionSourceExcluded, isDiscussionSourceSelected } from './strategy-discussion-source-scope.ts';
+import type { StrategyDiscussion } from './strategy-discussion-types.ts';
 import {
   STRATEGY_MAP_IMPORT_EXTENSIONS,
   STRATEGY_MAP_IMPORT_MAX_BYTES,
@@ -16,6 +17,9 @@ import {
   type RenderedPageImageResult,
 } from './strategy-map-import.ts';
 import { StrategyMapImportStore, type StoredMapImportSource } from './strategy-map-import-store.ts';
+
+// Covers the full supported 16 MiB raw import limit encoded as base64 (~21.33 MiB), safely inside the 24 MiB IPC bound.
+const MODEL_IMAGE_BASE64_LIMIT = Math.ceil(STRATEGY_MAP_IMPORT_MAX_BYTES / 3) * 4;
 
 export interface StrategyMapImportCandidateFile {
   kind: 'discussion-attachment' | 'project-file';
@@ -62,13 +66,42 @@ const mimeByFormat = (fileName: string): string => {
   return 'image/jpeg';
 };
 
+/** Unified project-file exclusion check (exact ID, resource path, and projectAttachmentLineages). */
+function isProjectUploadExcluded(owner: StrategyDiscussion, projectId: string, upload: UploadedFile): boolean {
+  const docSource = createStrategyDiscussionSource(
+    upload.originalName,
+    { kind: 'project-document', projectId, uploadId: upload.id, path: upload.path },
+    upload.sha256,
+    upload.uploadedAt,
+  );
+  const attSource = createStrategyDiscussionSource(
+    upload.originalName,
+    { kind: 'strategy-attachment', projectId, fileId: upload.id, uploadId: upload.id, path: upload.path },
+    upload.sha256,
+    upload.uploadedAt,
+  );
+  const legacyAttSource = createStrategyDiscussionSource(
+    upload.originalName,
+    { kind: 'strategy-attachment', projectId, fileId: discussionHash([projectId, upload.originalName]), uploadId: upload.id, path: upload.path },
+    upload.sha256,
+    upload.uploadedAt,
+  );
+  return (
+    isDiscussionSourceExcluded(owner, docSource) ||
+    isDiscussionSourceExcluded(owner, attSource) ||
+    isDiscussionSourceExcluded(owner, legacyAttSource)
+  );
+}
+
 export function createStrategyMapImportService(options: StrategyMapImportServiceOptions) {
   const store = new StrategyMapImportStore(options.dataRoot);
 
   async function resolveExternalBytes(owner: StrategyDiscussion, source: StoredMapImportSource): Promise<Buffer> {
     if (source.origin === 'discussion-attachment') {
       const att = owner.sources.find(s => s.id === source.attachmentSourceId && s.target.kind === 'strategy-attachment');
-      if (!att || isDiscussionSourceExcluded(owner, att)) fault('strategy_map_import_revoked', 403);
+      if (!att || isDiscussionSourceExcluded(owner, att) || !isDiscussionSourceSelected(owner, att)) {
+        fault('strategy_map_import_revoked', 403);
+      }
       return options.attachments.bytes(owner, att!);
     }
     if (source.origin === 'project-file') {
@@ -79,14 +112,7 @@ export function createStrategyMapImportService(options: StrategyMapImportService
       if (project.archivedAt !== null) fault('strategy_map_import_revoked', 403);
       const upload = project.uploads.find(f => f.id === source.uploadId && f.path === source.projectPath && isEligibleProjectUpload(f));
       if (!upload) fault('strategy_map_import_source_unavailable', 404);
-      const pseudoSource: StrategyDiscussionSource = {
-        id: 'project-check',
-        title: upload!.originalName,
-        target: { kind: 'strategy-attachment', projectId: project.id, uploadId: upload!.id, path: upload!.path },
-        sha256: upload!.sha256,
-        version: upload!.uploadedAt,
-      };
-      if (isDiscussionSourceExcluded(owner, pseudoSource)) fault('strategy_map_import_revoked', 403);
+      if (isProjectUploadExcluded(owner, project.id, upload!)) fault('strategy_map_import_revoked', 403);
       const captured = await options.projects.captureFeedbackFile(project.id, upload!.path, STRATEGY_MAP_IMPORT_MAX_BYTES);
       return captured.bytes;
     }
@@ -136,11 +162,8 @@ export function createStrategyMapImportService(options: StrategyMapImportService
         if (project.archivedAt === null) {
           for (const upload of project.uploads) {
             if (!isEligibleProjectUpload(upload)) continue;
+            if (isProjectUploadExcluded(owner, project.id, upload)) continue;
             if (reusable.some(r => r.sha256 === upload.sha256 && r.fileName === upload.originalName)) continue;
-            const excluded = owner.sourceScope?.excludedSources?.some(
-              ex => ex.target.projectId === project.id && (ex.target.uploadId === upload.id || ex.target.path === upload.path),
-            );
-            if (excluded) continue;
             reusable.push({
               kind: 'project-file',
               id: `project-file:${upload.id}`,
@@ -189,7 +212,9 @@ export function createStrategyMapImportService(options: StrategyMapImportService
     if (kind === 'attachment') {
       const attachmentSourceId = typeof input.attachmentSourceId === 'string' ? input.attachmentSourceId : '';
       const att = owner.sources.find(s => s.id === attachmentSourceId && s.target.kind === 'strategy-attachment');
-      if (!att || isDiscussionSourceExcluded(owner, att)) fault('strategy_map_import_not_authorized', 403);
+      if (!att || isDiscussionSourceExcluded(owner, att) || !isDiscussionSourceSelected(owner, att)) {
+        fault('strategy_map_import_not_authorized', 403);
+      }
       const bytes = await options.attachments.bytes(owner, att!);
       const saved = await options.mutate(async () => {
         const latest = options.owner(owner.id);
@@ -212,10 +237,7 @@ export function createStrategyMapImportService(options: StrategyMapImportService
       if (project.archivedAt !== null) fault('strategy_map_import_not_authorized', 403);
       const upload = project.uploads.find(u => u.id === uploadId && isEligibleProjectUpload(u));
       if (!upload) fault('strategy_map_import_not_found', 404);
-      const excluded = owner.sourceScope?.excludedSources?.some(
-        ex => ex.target.projectId === project.id && (ex.target.uploadId === upload!.id || ex.target.path === upload!.path),
-      );
-      if (excluded) fault('strategy_map_import_not_authorized', 403);
+      if (isProjectUploadExcluded(owner, project.id, upload!)) fault('strategy_map_import_not_authorized', 403);
       const captured = await options.projects.captureFeedbackFile(project.id, upload!.path, STRATEGY_MAP_IMPORT_MAX_BYTES);
       const saved = await options.mutate(async () => {
         const latest = options.owner(owner.id);
@@ -247,18 +269,29 @@ export function createStrategyMapImportService(options: StrategyMapImportService
     return { source, bytes, decoded };
   }
 
-  async function readPreview(owner: StrategyDiscussion, sourceId: string, pageNumber = 1, includeImage = true) {
+  async function readPreview(
+    owner: StrategyDiscussion,
+    sourceId: string,
+    pageNumber = 1,
+    includeImage = true,
+    thumbnail = false,
+    imageIndex?: number,
+  ) {
     const { source, bytes, decoded } = await readDecodedAndBytes(owner, sourceId);
-    const safePage = Number.isInteger(pageNumber) && pageNumber >= 1 && pageNumber <= decoded.pages.length ? pageNumber : 1;
-    const page = decoded.pages[safePage - 1]!;
+    if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > decoded.pages.length) {
+      fault('strategy_map_import_page_invalid', 400);
+    }
+    const page = decoded.pages[pageNumber - 1]!;
     let image: RenderedPageImageResult = { available: false, reason: '未请求图像渲染' };
     if (includeImage) {
       image = await renderImportPageImage({
         fileName: source.fileName,
         format: source.format,
         bytes,
-        page: safePage,
+        page: pageNumber,
         codeRoot: options.codeRoot,
+        thumbnail,
+        imageIndex,
       });
     }
     const cfg = options.configuration(owner.configurationId, owner.configurationRevision);
@@ -272,11 +305,12 @@ export function createStrategyMapImportService(options: StrategyMapImportService
         needsVisualReview: p.needsVisualReview,
         shapeCount: p.shapes.length,
         connectorCount: p.connectors.length,
+        embeddedImageCount: p.embeddedImages?.length ?? 0,
       })),
       currentPage: page,
       image,
       imageMeta: decoded.imageMeta,
-      embeddedImages: decoded.embeddedImages,
+      embeddedImages: page.embeddedImages ?? [],
       hasDrawings: decoded.hasDrawings,
       workbook: decoded.workbook,
       vision: await visionCapability(cfg),
@@ -287,100 +321,248 @@ export function createStrategyMapImportService(options: StrategyMapImportService
     owner: StrategyDiscussion,
     configuration: Readonly<RuntimeModelConfiguration>,
     sourceId: string,
-    pageNumber?: number,
-    includeImage = true,
+    readOpts: { page?: number; includeImage?: boolean; imageIndex?: number; allowedPages?: number[] } = {},
   ): Promise<{
     content: ({ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string })[];
     details: Record<string, unknown>;
   }> {
     const { source, bytes, decoded } = await readDecodedAndBytes(owner, sourceId);
     const vision = await visionCapability(configuration);
-    const requestedPage = pageNumber !== undefined && Number.isInteger(pageNumber) && pageNumber >= 1 && pageNumber <= decoded.pages.length
-      ? pageNumber
-      : undefined;
+    const includeImage = readOpts.includeImage !== false;
 
-    const selectedPages = requestedPage ? [decoded.pages[requestedPage - 1]!] : decoded.pages;
-    const summaryPayload: Record<string, unknown> = {
-      source: {
-        sourceId: source.sourceId,
-        format: source.format,
-        fileName: source.fileName,
-        sha256: source.sha256,
-        origin: source.origin,
-        pageCount: decoded.pages.length,
-        ...(decoded.imageMeta ? { imageMeta: decoded.imageMeta } : {}),
-      },
-      pages: selectedPages.map(p => ({
-        page: p.page,
-        title: p.title,
-        hasTextLayer: p.hasTextLayer,
-        needsVisualReview: p.needsVisualReview,
-        text: p.text.slice(0, 12000),
-        shapes: p.shapes.slice(0, 80),
-        connectors: p.connectors.slice(0, 120),
-        ...(p.notes ? { notes: p.notes } : {}),
-      })),
-      ...(decoded.embeddedImages?.length ? { embeddedImages: decoded.embeddedImages } : {}),
-      vision,
-      claim: 'provided-source-not-adopted',
+    const allValidPages = decoded.pages.map(p => p.page);
+    const hasRestrictedPages = Array.isArray(readOpts.allowedPages) && readOpts.allowedPages.length > 0;
+    const effectiveAllowedPages = hasRestrictedPages
+      ? [...new Set(readOpts.allowedPages!.filter(p => Number.isInteger(p) && p >= 1 && p <= decoded.pages.length))].sort((a, b) => a - b)
+      : allValidPages;
+    if (!effectiveAllowedPages.length) {
+      fault('strategy_map_import_page_not_authorized', 403);
+    }
+
+    if (readOpts.page !== undefined) {
+      if (!Number.isInteger(readOpts.page) || readOpts.page < 1 || readOpts.page > decoded.pages.length) {
+        fault('strategy_map_import_page_invalid', 400);
+      }
+      if (hasRestrictedPages && !effectiveAllowedPages.includes(readOpts.page)) {
+        fault('strategy_map_import_page_not_authorized', 403);
+      }
+    }
+
+    // Strict page scoping:
+    // - Explicit page: read that exact page only
+    // - Omitted page & single allowed page: read that single allowed page only
+    // - Omitted page & multiple allowed pages: return allowed-page directory ONLY (never dump full-file text!)
+    const directoryOnly = readOpts.page === undefined && effectiveAllowedPages.length > 1;
+    const targetPageNum = readOpts.page ?? (effectiveAllowedPages.length === 1 ? effectiveAllowedPages[0]! : undefined);
+    const targetPage = targetPageNum !== undefined ? decoded.pages[targetPageNum - 1]! : undefined;
+
+    const sourceSummary = {
+      sourceId: source.sourceId,
+      format: source.format,
+      fileName: source.fileName,
+      sha256: source.sha256,
+      origin: source.origin,
+      pageCount: decoded.pages.length,
+      allowedPages: effectiveAllowedPages,
+      ...(decoded.imageMeta ? { imageMeta: decoded.imageMeta } : {}),
     };
 
-    const content: ({ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string })[] = [];
+    const deliveredBlocks: Array<{ type: 'image'; data: string; mimeType: string }> = [];
+    let imageDelivery: Record<string, unknown>;
 
-    const pageToRender = requestedPage ?? 1;
-    let renderedImage: RenderedPageImageResult | undefined;
-    if (includeImage && vision.supportsImages) {
-      renderedImage = await renderImportPageImage({
+    if (directoryOnly) {
+      imageDelivery = {
+        delivered: false,
+        count: 0,
+        reason: 'page-required-for-multipage',
+        guidance: `本轮允许读取第 ${effectiveAllowedPages.join('、')} 页；请传入具体 page 逐页读取正文、形状与图像。`,
+      };
+    } else if (!includeImage) {
+      imageDelivery = { delivered: false, count: 0, page: targetPage!.page, reason: 'image-not-requested' };
+    } else if (!vision.supportsImages) {
+      imageDelivery = {
+        delivered: false,
+        count: 0,
+        page: targetPage!.page,
+        reason: 'text-only-model',
+        guidance: '当前模型仅支持纯文本。请优先使用上方可读文字、单元格与原生形状/连接符提取候选；若页面为纯扫描或纯图且无可读节点，允许在 propose-map-draft 中传 nodes: [] 并在 unknowns 说明需视觉模型或人工补录。',
+      };
+    } else {
+      const renderedImage = await renderImportPageImage({
         fileName: source.fileName,
         format: source.format,
         bytes,
-        page: pageToRender,
+        page: targetPage!.page,
         codeRoot: options.codeRoot,
+        imageIndex: readOpts.imageIndex,
+        includeAllSheetImages: readOpts.imageIndex === undefined,
       });
-      summaryPayload.imageDelivery = renderedImage.available
-        ? { delivered: true, page: pageToRender, mimeType: renderedImage.mimeType, renderer: renderedImage.renderer }
-        : { delivered: false, page: pageToRender, reason: renderedImage.reason };
-    } else if (includeImage && !vision.supportsImages) {
-      summaryPayload.imageDelivery = {
-        delivered: false,
-        page: pageToRender,
-        reason: 'text-only-model',
-        guidance: '当前模型仅支持纯文本。请优先使用上方可读文字、单元格与原生形状/连接符提取候选；无法看清的视觉/扫描区域请标为 reviewState="needs-review" 并说明需视觉模型或人工核对。',
-      };
-    }
 
-    const serialized = JSON.stringify(summaryPayload);
-    content.push({ type: 'text', text: serialized.length > 60000 ? serialized.slice(0, 60000) : serialized });
+      if (!renderedImage.available || !renderedImage.base64 || !renderedImage.mimeType) {
+        imageDelivery = {
+          delivered: false,
+          count: 0,
+          page: targetPage!.page,
+          reason: renderedImage.reason ?? 'render-unavailable',
+          guidance: '本页未能生成可送达模型的图像，请仅依据结构化文字/形状起稿并将视觉盲区标为 needs-review。',
+        };
+      } else {
+        const candidates: Array<{ data: string; mimeType: string; name?: string; width?: number; height?: number }> = [
+          {
+            data: renderedImage.base64,
+            mimeType: renderedImage.mimeType,
+            name: renderedImage.imageName,
+            width: renderedImage.width,
+            height: renderedImage.height,
+          },
+          ...(renderedImage.extraImages ?? []).map(extra => ({
+            data: extra.base64,
+            mimeType: extra.mimeType,
+            name: extra.imageName,
+            width: extra.width,
+            height: extra.height,
+          })),
+        ];
+        let usedBase64 = 0;
+        const deliveredMeta: Array<{ name?: string; mimeType: string; width?: number; height?: number; base64Length: number }> = [];
+        const omittedMeta: Array<{ name?: string; reason: string }> = [];
 
-    if (renderedImage?.available && renderedImage.base64 && renderedImage.mimeType) {
-      // Bound raw image payload to 8 MiB encoded to stay safely within IPC limits
-      if (renderedImage.base64.length <= 8 * 1024 * 1024) {
-        content.push({
-          type: 'image',
-          data: renderedImage.base64,
-          mimeType: renderedImage.mimeType,
-        });
+        for (const cand of candidates) {
+          if (usedBase64 + cand.data.length <= MODEL_IMAGE_BASE64_LIMIT) {
+            deliveredBlocks.push({ type: 'image', data: cand.data, mimeType: cand.mimeType });
+            usedBase64 += cand.data.length;
+            deliveredMeta.push({
+              ...(cand.name ? { name: cand.name } : {}),
+              mimeType: cand.mimeType,
+              ...(cand.width ? { width: cand.width } : {}),
+              ...(cand.height ? { height: cand.height } : {}),
+              base64Length: cand.data.length,
+            });
+          } else {
+            omittedMeta.push({
+              ...(cand.name ? { name: cand.name } : {}),
+              reason: 'image-payload-exceeds-limit',
+            });
+          }
+        }
+
+        if (deliveredBlocks.length > 0) {
+          imageDelivery = {
+            delivered: true,
+            count: deliveredBlocks.length,
+            page: targetPage!.page,
+            mimeType: deliveredBlocks[0]!.mimeType,
+            renderer: renderedImage.renderer,
+            images: deliveredMeta,
+            ...(omittedMeta.length ? { omittedImages: omittedMeta } : {}),
+            ...(renderedImage.totalSheetImages !== undefined ? { totalSheetImages: renderedImage.totalSheetImages } : {}),
+          };
+        } else {
+          imageDelivery = {
+            delivered: false,
+            count: 0,
+            page: targetPage!.page,
+            reason: 'image-payload-exceeds-limit',
+            guidance: '该页图像体积超出模型视觉单次传输上限，未向模型送达图像；请仅依据结构化文字起稿或请用户压缩图片后重试。',
+          };
+        }
       }
     }
+
+    const summaryPayload: Record<string, unknown> = directoryOnly
+      ? {
+          source: sourceSummary,
+          directoryOnly: true,
+          pages: effectiveAllowedPages.map(pNum => {
+            const p = decoded.pages[pNum - 1]!;
+            return {
+              page: p.page,
+              title: p.title,
+              hasTextLayer: p.hasTextLayer,
+              needsVisualReview: p.needsVisualReview,
+              shapeCount: p.shapes.length,
+              connectorCount: p.connectors.length,
+              embeddedImageCount: p.embeddedImages?.length ?? 0,
+            };
+          }),
+          imageDelivery,
+          vision,
+          claim: 'provided-source-not-adopted',
+        }
+      : {
+          source: sourceSummary,
+          directoryOnly: false,
+          pages: [
+            {
+              page: targetPage!.page,
+              title: targetPage!.title,
+              ...(targetPage!.sheetName ? { sheetName: targetPage!.sheetName } : {}),
+              hasTextLayer: targetPage!.hasTextLayer,
+              needsVisualReview: targetPage!.needsVisualReview,
+              text: targetPage!.text.slice(0, 12000),
+              shapes: targetPage!.shapes.slice(0, 80),
+              connectors: targetPage!.connectors.slice(0, 120),
+              ...(targetPage!.embeddedImages?.length ? { embeddedImages: targetPage!.embeddedImages } : {}),
+              ...(targetPage!.notes ? { notes: targetPage!.notes } : {}),
+            },
+          ],
+          imageDelivery,
+          vision,
+          claim: 'provided-source-not-adopted',
+        };
+
+    const serialized = JSON.stringify(summaryPayload);
+    const content: ({ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string })[] = [
+      { type: 'text', text: serialized.length > 60000 ? serialized.slice(0, 60000) : serialized },
+      ...deliveredBlocks,
+    ];
 
     return {
       content,
       details: {
-        source: summaryPayload.source,
-        page: requestedPage ?? null,
-        imageDelivered: content.some(c => c.type === 'image'),
+        source: sourceSummary,
+        page: targetPage?.page ?? null,
+        pagesRead: directoryOnly ? [] : [targetPage!.page],
+        allowedPages: effectiveAllowedPages,
+        imageDelivered: deliveredBlocks.length > 0,
+        deliveredImageCount: deliveredBlocks.length,
         visionSupportsImages: vision.supportsImages,
-        contentSha256: discussionHash(summaryPayload.source),
+        contentSha256: discussionHash(sourceSummary),
       },
     };
   }
 
-  async function verifySources(owner: StrategyDiscussion, refs: Array<{ sourceId: string; sha256?: string }>) {
+  async function verifySources(
+    owner: StrategyDiscussion,
+    refs: Array<{
+      sourceId: string;
+      sha256?: string;
+      fileName?: string;
+      format?: string;
+      origin?: string;
+      selectedPages?: number[];
+    }>,
+  ): Promise<Map<string, StoredMapImportSource>> {
+    const verified = new Map<string, StoredMapImportSource>();
     for (const ref of refs) {
       const item = await store.assertActive(owner.id, ref.sourceId);
       if (ref.sha256 && item.sha256 !== ref.sha256) fault('strategy_map_import_source_changed', 409);
+      if (ref.fileName && item.fileName !== ref.fileName) fault('strategy_map_import_source_changed', 409);
+      if (ref.format && item.format !== ref.format) fault('strategy_map_import_source_changed', 409);
+      if (ref.origin && item.origin !== ref.origin) fault('strategy_map_import_source_changed', 409);
+      if (ref.selectedPages) {
+        if (
+          !Array.isArray(ref.selectedPages) ||
+          new Set(ref.selectedPages).size !== ref.selectedPages.length ||
+          ref.selectedPages.some(p => !Number.isInteger(p) || p < 1 || p > item.pageCount)
+        ) {
+          fault('strategy_map_import_page_invalid', 400);
+        }
+      }
       await store.readBytes(owner.id, ref.sourceId, ext => resolveExternalBytes(owner, ext));
+      verified.set(item.sourceId, item);
     }
+    return verified;
   }
 
   async function revoke(owner: StrategyDiscussion, sourceId: string) {
@@ -424,7 +606,10 @@ export function createStrategyMapImportService(options: StrategyMapImportService
     if (sourceId && action === 'preview' && method === 'GET') {
       const page = Number(searchParams.get('page') ?? '1');
       const includeImage = searchParams.get('includeImage') !== '0';
-      return readPreview(owner, sourceId, page, includeImage);
+      const thumbnail = searchParams.get('thumbnail') === '1';
+      const rawIdx = searchParams.get('imageIndex');
+      const imageIndex = rawIdx !== null ? Number(rawIdx) : undefined;
+      return readPreview(owner, sourceId, page, includeImage, thumbnail, imageIndex);
     }
     if (sourceId && action === 'download' && method === 'GET') {
       return downloadOriginal(owner, sourceId);

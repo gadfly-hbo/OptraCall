@@ -5,7 +5,7 @@ const field=Type.String({maxLength:6000});
 const optionalField=Type.Optional(field);
 const metricFields={baseline:optionalField,baselineKind:optionalField,target:optionalField,unit:optionalField,period:optionalField};
 const exact={additionalProperties:false};
-const bbox=Type.Array(Type.Number(),{minItems:4,maxItems:4});
+const bbox=Type.Array(Type.Number({minimum:0,maximum:1000}),{minItems:4,maxItems:4});
 const sourceLocation=Type.Object({sourceId:title,fileName:Type.Optional(title),page:Type.Optional(Type.Integer({minimum:1})),sheet:Type.Optional(title),row:Type.Optional(Type.Integer({minimum:1})),cell:Type.Optional(title),objectId:Type.Optional(title),label:title,bbox:Type.Optional(bbox),fromBbox:Type.Optional(bbox),toBbox:Type.Optional(bbox),arrowBbox:Type.Optional(bbox)},exact);
 const reviewState=Type.Union(['clear','needs-review','confirmed'].map(x=>Type.Literal(x)));
 const sourceConflict=Type.Object({field:title,values:Type.Array(Type.Object({value:field,label:title,locationLabel:title},exact),{minItems:1,maxItems:10})},exact);
@@ -20,4 +20,4 @@ const coverageModel=Type.Object({population:title,metric:title,unit:title,period
 const repeatVisitsModel=Type.Object({model:Type.Literal('repeat-visits-v1'),population:title,metric:title,unit:title,period:title,baselineRate:Type.Number(),remote:Type.Number(),parts:Type.Number(),fixed:Type.Number(),basis:field},exact);
 const model=Type.Union([coverageModel,repeatVisitsModel]);
 export const strategyMapDraftSchema=Type.Object({title,template:Type.Union(['table','tree','bsc'].map(x=>Type.Literal(x))),choice:optionalField,
-  excluded:optionalField,assumptions:optionalField,unknowns:optionalField,nodes:Type.Array(node,{minItems:1}),edges:Type.Array(edge),importSources:Type.Optional(Type.Array(multiImportSource,{maxItems:20})),scenarioModel:Type.Optional(model)},exact);
+  excluded:optionalField,assumptions:optionalField,unknowns:optionalField,nodes:Type.Array(node,{minItems:0,maxItems:1000}),edges:Type.Array(edge),importSources:Type.Optional(Type.Array(multiImportSource,{maxItems:20})),scenarioModel:Type.Optional(model)},exact);

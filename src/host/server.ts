@@ -2341,10 +2341,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(action==='stop'&&request.method==='POST'){const input=await body(request);json(response,200,await strategyDiscussions.stop(id,input.expectedRequestId as string|undefined));return;}
         if(action==='close'&&request.method==='POST'){json(response,200,await strategyDiscussions.close(id));return;}
         if(action==='events'&&request.method==='GET'){
-          const d=await strategyDiscussions.detail(id);
+          let ready=false;
+          const queued:unknown[]=[];
+          const writeEvent=(event:unknown)=>{if(!response.destroyed&&!response.writableEnded)response.write(`data: ${JSON.stringify(event)}\n\n`);};
+          const unsubscribe=strategyDiscussions.subscribe(id,event=>{if(!ready)queued.push(event);else writeEvent(event);});
+          let d:Awaited<ReturnType<typeof strategyDiscussions.detail>>;
+          try{d=await strategyDiscussions.detail(id);}catch(e){unsubscribe();throw e;}
+          if(request.destroyed||response.destroyed){unsubscribe();return;}
           response.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});
-          const unsubscribe=strategyDiscussions.subscribe(id,event=>{if(!response.destroyed&&!response.writableEnded)response.write(`data: ${JSON.stringify(event)}\n\n`);});
-          request.on('close',unsubscribe);response.write(`data: ${JSON.stringify({type:'snapshot',snapshot:d.snapshot})}\n\n`);return;
+          request.on('close',unsubscribe);
+          writeEvent({type:'snapshot',snapshot:d.snapshot});
+          ready=true;
+          for(const event of queued)writeEvent(event);
+          return;
         }
       }
       const workbookRoute=/^\/api\/strategy\/workbooks\/(preview|commit|handoff|map-source|goal-source)$/.exec(url.pathname);

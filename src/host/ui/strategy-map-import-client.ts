@@ -1,4 +1,4 @@
-import type { DecodedStrategyMapImport, ParsedImportPage, RenderedPageImageResult } from '../strategy-map-import.ts';
+import type { DecodedStrategyMapImport, ParsedEmbeddedImage, ParsedImportPage, RenderedPageImageResult } from '../strategy-map-import.ts';
 import type { StoredMapImportSource } from '../strategy-map-import-store.ts';
 import type { StrategyMapImportCandidateFile } from '../strategy-map-import-routes.ts';
 import { StrategyDiscussionRequestError } from './strategy-discussion-client.ts';
@@ -32,10 +32,12 @@ export interface MapImportPreviewResponse {
     needsVisualReview: boolean;
     shapeCount: number;
     connectorCount: number;
+    embeddedImageCount?: number;
   }>;
   currentPage: ParsedImportPage;
   image: RenderedPageImageResult;
   imageMeta?: { width: number; height: number; orientation: number; mimeType: 'image/png' | 'image/jpeg' };
+  embeddedImages?: ParsedEmbeddedImage[];
   vision: MapImportVisionCapability;
 }
 
@@ -47,6 +49,9 @@ const errorMessages: Readonly<Record<string, string>> = {
   strategy_map_import_pdf_unreadable: 'PDF 无法读取，请检查是否加密或损坏。',
   strategy_map_import_revoked: '此导入来源已撤权，已停止后续读取与发送。',
   strategy_map_import_not_authorized: '当前讨论无权读取此来源，请核对项目归属或讨论权限。',
+  strategy_map_import_page_invalid: '请求的页码超出原文件有效范围。',
+  strategy_map_import_page_not_authorized: '所请求页码不在本轮勾选允许读取的页范围内。',
+  strategy_map_import_draft_required: '当前处于原稿核对草稿阶段，请先生成待核草稿并由用户核对后一次保存。',
   strategy_map_import_source_changed: '原文件指纹已变化，请重新核对原件。',
   strategy_map_import_source_unavailable: '原文件当前不可读取，请核对存储位置。',
   session_busy: '当前讨论正在运行，请等待本轮完成或停止后再操作。',
@@ -107,14 +112,22 @@ export const readMapImportPreview = (
   page = 1,
   includeImage = true,
   signal?: AbortSignal,
-) =>
-  mapImportRequest<MapImportPreviewResponse>(
+  opts?: { thumbnail?: boolean; imageIndex?: number },
+) => {
+  const params = new URLSearchParams({
+    page: String(page),
+    includeImage: includeImage ? '1' : '0',
+    ...(opts?.thumbnail ? { thumbnail: '1' } : {}),
+    ...(opts?.imageIndex !== undefined ? { imageIndex: String(opts.imageIndex) } : {}),
+  });
+  return mapImportRequest<MapImportPreviewResponse>(
     discussionId,
-    `/${encodeURIComponent(sourceId)}/preview?page=${page}&includeImage=${includeImage ? '1' : '0'}`,
+    `/${encodeURIComponent(sourceId)}/preview?${params.toString()}`,
     'GET',
     undefined,
     signal,
   );
+};
 
 export const revokeMapImportSource = (discussionId: string, sourceId: string) =>
   mapImportRequest<{ source: StoredMapImportSource }>(discussionId, `/${encodeURIComponent(sourceId)}/revoke`, 'POST', {});

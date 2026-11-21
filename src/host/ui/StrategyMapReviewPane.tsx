@@ -5,7 +5,6 @@ import {
   type StrategyMapEdge,
   type StrategyMapMultiImportSource,
   type StrategyMapNode,
-  type StrategyMapVersion,
 } from '../strategy-map-types.ts';
 import {
   downloadMapImportOriginal,
@@ -13,12 +12,18 @@ import {
   revokeMapImportSource,
   type MapImportPreviewResponse,
 } from './strategy-map-import-client.ts';
+import {
+  findSafeDuplicateCandidates,
+  matchesSourcePage,
+  mergeDuplicatePairInDraft,
+  type DuplicateCandidatePair,
+  type ManualEditRecord,
+} from './strategy-map-review-helpers.ts';
 
 const nodeKindLabels = { goal: '目标', strategy: '策略', other: '其他条目' } as const;
 
 export function StrategyMapReviewPane({
   discussionId,
-  active,
   draft,
   selectedNodeId,
   selectedEdgeId,
@@ -29,19 +34,19 @@ export function StrategyMapReviewPane({
   onRevoked,
 }: {
   discussionId: string;
-  active: StrategyMapVersion;
   draft: StrategyMapDraft;
   selectedNodeId: string;
   selectedEdgeId?: string;
   onSelectNode: (id: string) => void;
   onSelectEdge: (id: string) => void;
-  onChangeDraft: (next: StrategyMapDraft) => void;
-  onReread?: (prompt: string, importSourceIds: string[]) => void;
+  onChangeDraft: (next: StrategyMapDraft, editRecord?: ManualEditRecord) => void;
+  onReread?: (prompt: string, importSourceIds: string[], selectedPagesBySource?: Record<string, number[]>) => void;
   onRevoked?: () => void;
 }) {
-  const sources: StrategyMapMultiImportSource[] = draft.importSources ?? active.importSources ?? [];
+  const sources: StrategyMapMultiImportSource[] = draft.importSources ?? [];
   const [sourceId, setSourceId] = useState(sources[0]?.sourceId ?? '');
   const [page, setPage] = useState(sources[0]?.selectedPages?.[0] ?? 1);
+  const [imageIndex, setImageIndex] = useState<number>(1);
   const [zoom, setZoom] = useState(1);
   const [preview, setPreview] = useState<MapImportPreviewResponse>();
   const [loading, setLoading] = useState(false);
@@ -50,14 +55,38 @@ export function StrategyMapReviewPane({
   const [onlyNeedsReview, setOnlyNeedsReview] = useState(false);
   const [mobilePane, setMobilePane] = useState<'source' | 'candidate'>('candidate');
   const [rereadText, setRereadText] = useState('');
+  const [dupCandidates, setDupCandidates] = useState<DuplicateCandidatePair[] | null>(null);
 
-  // Auto-sync left page when user clicks a node or edge with sourceLocation.page
+  // Sync active sourceId if sources list changed (e.g. new draft arrived)
+  useEffect(() => {
+    if (!sources.length) {
+      setSourceId('');
+      return;
+    }
+    if (!sources.some(s => s.sourceId === sourceId)) {
+      setSourceId(sources[0]!.sourceId);
+      setPage(sources[0]!.selectedPages?.[0] ?? 1);
+      setImageIndex(1);
+    }
+  }, [sources.map(s => s.sourceId).join(',')]);
+
+  // Auto-sync left page/source when user clicks a node or edge with sourceLocation
   useEffect(() => {
     const node = draft.nodes.find(n => n.id === selectedNodeId);
     const edge = draft.edges.find(e => e.id === selectedEdgeId);
     const loc = selectedEdgeId ? edge?.sourceLocation : node?.sourceLocation;
-    if (loc?.sourceId && sources.some(s => s.sourceId === loc.sourceId)) setSourceId(loc.sourceId);
-    if (loc?.page && loc.page >= 1) setPage(loc.page);
+    if (loc?.sourceId && sources.some(s => s.sourceId === loc.sourceId)) {
+      if (loc.sourceId !== sourceId) {
+        setSourceId(loc.sourceId);
+        setImageIndex(1);
+      }
+    }
+    if (loc?.page && loc.page >= 1) {
+      if (loc.page !== page) {
+        setPage(loc.page);
+        setImageIndex(1);
+      }
+    }
   }, [selectedNodeId, selectedEdgeId]);
 
   useEffect(() => {
@@ -65,12 +94,12 @@ export function StrategyMapReviewPane({
     const controller = new AbortController();
     setLoading(true);
     setError('');
-    readMapImportPreview(discussionId, sourceId, page, true, controller.signal)
+    readMapImportPreview(discussionId, sourceId, page, true, controller.signal, imageIndex > 1 ? { imageIndex } : undefined)
       .then(res => { if (!controller.signal.aborted) setPreview(res); })
       .catch(e => { if (!controller.signal.aborted) { setPreview(undefined); setError(e instanceof Error ? e.message : '原稿预览暂不可用。'); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [discussionId, sourceId, page]);
+  }, [discussionId, sourceId, page, imageIndex]);
 
   const allItems = [...draft.nodes, ...draft.edges];
   const clearCount = allItems.filter(item => item.reviewState === 'clear').length;
@@ -81,61 +110,94 @@ export function StrategyMapReviewPane({
   const selectedNode = !selectedEdge ? draft.nodes.find(n => n.id === selectedNodeId) : undefined;
 
   function acceptAllClear() {
-    onChangeDraft({
-      ...draft,
-      nodes: draft.nodes.map(n => (n.reviewState === 'clear' ? { ...n, reviewState: 'confirmed' } : n)),
-      edges: draft.edges.map(e => (e.reviewState === 'clear' ? { ...e, reviewState: 'confirmed' } : e)),
-    });
+    const clearNodeIds = draft.nodes.filter(n => n.reviewState === 'clear').map(n => n.id);
+    const clearEdgeIds = draft.edges.filter(e => e.reviewState === 'clear').map(e => e.id);
+    onChangeDraft(
+      {
+        ...draft,
+        nodes: draft.nodes.map(n => (n.reviewState === 'clear' ? { ...n, reviewState: 'confirmed' } : n)),
+        edges: draft.edges.map(e => (e.reviewState === 'clear' ? { ...e, reviewState: 'confirmed' } : e)),
+      },
+      { kind: 'batch-confirm-clear', nodeIds: clearNodeIds, edgeIds: clearEdgeIds },
+    );
     setStatus(`已批量保留 ${clearCount} 项清楚内容，请集中核对剩余待核项。`);
   }
 
   function updateNodeField(id: string, patch: Partial<StrategyMapNode>) {
-    onChangeDraft({
-      ...draft,
-      nodes: draft.nodes.map(n => (n.id === id ? { ...n, ...patch } : n)),
-    });
+    onChangeDraft(
+      {
+        ...draft,
+        nodes: draft.nodes.map(n => (n.id === id ? { ...n, ...patch } : n)),
+      },
+      { kind: 'node-patch', id, patch },
+    );
+  }
+
+  function addManualNode(kind: StrategyMapNode['kind']) {
+    const prefix = { goal: 'G', strategy: 'S', other: 'N' }[kind];
+    let idx = 1;
+    while (draft.nodes.some(n => n.id === `${prefix}${idx}`)) idx++;
+    const newNode: StrategyMapNode = {
+      id: `${prefix}${idx}`,
+      kind,
+      title: kind === 'goal' ? '手工补录目标' : kind === 'strategy' ? '手工补录策略' : '手工补录条目',
+      reviewState: 'confirmed',
+      ...(sourceId ? { sourceLocation: { sourceId, page, label: `人工补录 · 第 ${page} 页` } } : {}),
+    };
+    onChangeDraft({ ...draft, nodes: [...draft.nodes, newNode] }, { kind: 'node-add', node: newNode });
+    onSelectNode(newNode.id);
   }
 
   function updateEdgeField(id: string, patch: Partial<StrategyMapEdge>) {
-    onChangeDraft({
-      ...draft,
-      edges: draft.edges.map(e => (e.id === id ? { ...e, ...patch } : e)),
-    });
+    onChangeDraft(
+      {
+        ...draft,
+        edges: draft.edges.map(e => (e.id === id ? { ...e, ...patch } : e)),
+      },
+      { kind: 'edge-patch', id, patch },
+    );
   }
 
   function flipEdge(edge: StrategyMapEdge) {
-    updateEdgeField(edge.id, {
+    // Flipping direction never silently reclassifies an 'unknown' relation as 'supports'
+    const patch: Partial<StrategyMapEdge> = {
       from: edge.to,
       to: edge.from,
-      reviewState: 'confirmed',
-      ambiguityReason: '连线方向已由人工翻转确认。',
-    });
-    setStatus(`已翻转连线：${edge.to} → ${edge.from}`);
+      ...(edge.kind === 'unknown'
+        ? { reviewState: 'needs-review', ambiguityReason: '连线方向已翻转；关系类型仍为未知，请明确选择关系类型后再确认。' }
+        : { reviewState: 'confirmed', ambiguityReason: '连线方向已由人工翻转确认。' }),
+    };
+    updateEdgeField(edge.id, patch);
+    setStatus(`已翻转连线：${edge.to} → ${edge.from}${edge.kind === 'unknown' ? '（关系类型仍待选择）' : ''}`);
   }
 
-  function dedupeSimilarNodes() {
-    const seen = new Map<string, string>();
-    const duplicates = new Set<string>();
-    const remap = new Map<string, string>();
-    for (const n of draft.nodes) {
-      const key = `${n.kind}:${n.title.trim().replace(/（.*?）|\(.*?\)/g, '').toLowerCase()}`;
-      if (seen.has(key)) {
-        duplicates.add(n.id);
-        remap.set(n.id, seen.get(key)!);
-      } else {
-        seen.set(key, n.id);
-      }
-    }
-    if (!duplicates.size) {
-      setStatus('未发现高相似重复条目。');
+  function runSafeDedupeCheck() {
+    const pairs = findSafeDuplicateCandidates(draft.nodes);
+    if (!pairs.length) {
+      setDupCandidates(null);
+      setStatus('未发现重复条目（分客群、分方案或不同口径条目均已保留）。');
       return;
     }
-    const nextNodes = draft.nodes.filter(n => !duplicates.has(n.id));
-    const nextEdges = draft.edges
-      .map(e => ({ ...e, from: remap.get(e.from) ?? e.from, to: remap.get(e.to) ?? e.to }))
-      .filter((e, idx, arr) => e.from !== e.to && arr.findIndex(x => x.from === e.from && x.to === e.to && x.kind === e.kind) === idx);
-    onChangeDraft({ ...draft, nodes: nextNodes, edges: nextEdges });
-    setStatus(`已合并 ${duplicates.size} 个重复条目。`);
+    setDupCandidates(pairs);
+    setStatus(`发现 ${pairs.length} 组疑似重复条目，请逐项确认合并或分别保留。`);
+  }
+
+  function confirmMergePair(pair: DuplicateCandidatePair) {
+    const next = mergeDuplicatePairInDraft(draft, pair.keep.id, pair.duplicate.id);
+    onChangeDraft(next, { kind: 'merge-duplicate', keepId: pair.keep.id, dropId: pair.duplicate.id });
+    setDupCandidates(old => {
+      const rest = (old ?? []).filter(p => p.duplicate.id !== pair.duplicate.id && p.keep.id !== pair.duplicate.id);
+      return rest.length ? rest : null;
+    });
+    setStatus(`已按你的确认合并 ${pair.duplicate.id} 到 ${pair.keep.id}。`);
+  }
+
+  function dismissDuplicatePair(pair: DuplicateCandidatePair) {
+    setDupCandidates(old => {
+      const rest = (old ?? []).filter(p => !(p.keep.id === pair.keep.id && p.duplicate.id === pair.duplicate.id));
+      return rest.length ? rest : null;
+    });
+    setStatus(`已保留 ${pair.keep.id} 与 ${pair.duplicate.id} 为独立条目。`);
   }
 
   async function handleDownload() {
@@ -168,8 +230,10 @@ export function StrategyMapReviewPane({
 
   const visibleNodes = onlyNeedsReview ? draft.nodes.filter(n => n.reviewState === 'needs-review') : draft.nodes;
   const visibleEdges = onlyNeedsReview ? draft.edges.filter(e => e.reviewState === 'needs-review') : draft.edges;
-  const pageNodes = draft.nodes.filter(n => !n.sourceLocation?.page || n.sourceLocation.page === page);
-  const pageEdges = draft.edges.filter(e => !e.sourceLocation?.page || e.sourceLocation.page === page);
+  // Strict sourceId + page hotspot isolation: hotspots from source B page 1 NEVER bleed onto source A page 1
+  const pageNodes = draft.nodes.filter(n => matchesSourcePage(n.sourceLocation, sourceId, page));
+  const pageEdges = draft.edges.filter(e => matchesSourcePage(e.sourceLocation, sourceId, page));
+  const sheetImages = preview?.currentPage.embeddedImages ?? [];
 
   return (
     <div className="map-review-workspace">
@@ -184,7 +248,18 @@ export function StrategyMapReviewPane({
           <div className="sg-row-between map-pane-head">
             <div className="sg-row">
               {sources.length > 1 ? (
-                <select className="sg-select" value={sourceId} onChange={e => { setSourceId(e.target.value); setPage(1); }}>
+                <select
+                  className="sg-select"
+                  aria-label="切换原稿来源"
+                  value={sourceId}
+                  onChange={e => {
+                    const nextId = e.target.value;
+                    const nextSrc = sources.find(s => s.sourceId === nextId);
+                    setSourceId(nextId);
+                    setPage(nextSrc?.selectedPages?.[0] ?? 1);
+                    setImageIndex(1);
+                  }}
+                >
                   {sources.map(s => <option key={s.sourceId} value={s.sourceId}>{s.fileName}</option>)}
                 </select>
               ) : (
@@ -207,9 +282,24 @@ export function StrategyMapReviewPane({
                   key={p.page}
                   type="button"
                   className={p.page === page ? 'primary-button' : 'secondary-button'}
-                  onClick={() => setPage(p.page)}
+                  onClick={() => { setPage(p.page); setImageIndex(1); }}
                 >
                   P{p.page}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {sheetImages.length > 1 && (
+            <div className="sg-row map-page-strip" aria-label="本工作表嵌入图片切换">
+              {sheetImages.map((img, idx) => (
+                <button
+                  key={img.id}
+                  type="button"
+                  className={imageIndex === idx + 1 ? 'primary-button' : 'secondary-button'}
+                  onClick={() => setImageIndex(idx + 1)}
+                >
+                  图 {idx + 1} · {img.name}
                 </button>
               ))}
             </div>
@@ -233,6 +323,8 @@ export function StrategyMapReviewPane({
                       return (
                         <rect
                           key={n.id}
+                          data-hotspot-node={n.id}
+                          data-hotspot-source={n.sourceLocation!.sourceId}
                           x={x} y={y} width={w} height={h}
                           fill={isSel ? 'rgba(101,80,201,0.18)' : n.reviewState === 'needs-review' ? 'rgba(229,190,116,0.22)' : 'rgba(101,80,201,0.06)'}
                           stroke={isSel ? '#6550c9' : n.reviewState === 'needs-review' ? '#c98212' : '#7a7890'}
@@ -249,6 +341,8 @@ export function StrategyMapReviewPane({
                       return (
                         <rect
                           key={e.id}
+                          data-hotspot-edge={e.id}
+                          data-hotspot-source={e.sourceLocation!.sourceId}
                           x={x} y={y} width={w} height={h}
                           fill={isSel ? 'rgba(101,80,201,0.25)' : 'rgba(229,190,116,0.25)'}
                           stroke={isSel ? '#6550c9' : '#c98212'}
@@ -265,24 +359,24 @@ export function StrategyMapReviewPane({
                 <div className="map-source-fallback">
                   {preview.image.reason && <p className="sg-muted">{preview.image.reason}</p>}
                   {preview.currentPage.shapes.length > 0 ? (
-                    <svg className="map-source-svg" viewBox="0 0 1000 720" style={{ transform: `scale(${zoom})` }}>
+                    <svg className="map-source-svg" viewBox="0 0 1000 1000" style={{ transform: `scale(${zoom})` }}>
                       {preview.currentPage.shapes.map((sh, idx) => {
-                        const [x, y, w, h] = sh.bbox ?? [40 + (idx % 2) * 480, 40 + Math.floor(idx / 2) * 140, 420, 110];
+                        const [x, y, w, h] = sh.bbox ?? [40 + (idx % 2) * 480, 40 + Math.floor(idx / 2) * 180, 420, 130];
                         const linked = pageNodes.find(n => n.sourceLocation?.objectId === sh.objectId);
                         const isSel = linked && (selectedNode?.id === linked.id || selectedEdge?.from === linked.id || selectedEdge?.to === linked.id);
                         return (
-                          <g key={sh.objectId} style={{ cursor: linked ? 'pointer' : 'default' }} onClick={() => linked && onSelectNode(linked.id)}>
+                          <g key={sh.objectId} data-fallback-shape={sh.objectId} style={{ cursor: linked ? 'pointer' : 'default' }} onClick={() => linked && onSelectNode(linked.id)}>
                             <rect
-                              x={x} y={Math.min(590, Math.round(y * 0.7))} width={Math.max(180, w)} height={Math.max(90, Math.round(h * 0.7))}
+                              x={x} y={y} width={Math.max(120, w)} height={Math.max(80, h)}
                               rx="10"
-                              fill={isSel ? '#eeebfb' : '#f8f8fb'}
-                              stroke={isSel ? '#6550c9' : '#9c9ab0'}
-                              strokeWidth={isSel ? 5 : 2}
+                              fill={isSel ? '#eeebfb' : sh.kind === 'chart' ? '#fff7e6' : '#f8f8fb'}
+                              stroke={isSel ? '#6550c9' : sh.kind === 'chart' ? '#c98212' : '#9c9ab0'}
+                              strokeWidth={isSel ? 6 : 3}
                             />
-                            <text x={x + 14} y={Math.min(590, Math.round(y * 0.7)) + 30} fontSize="22" fontWeight="600" fill="#24232b">
+                            <text x={x + 14} y={y + 34} fontSize="24" fontWeight="600" fill="#24232b">
                               {sh.text.slice(0, 26)}
                             </text>
-                            <text x={x + 14} y={Math.min(590, Math.round(y * 0.7)) + 60} fontSize="18" fill="#6c6b78">
+                            <text x={x + 14} y={y + 68} fontSize="20" fill="#6c6b78">
                               {sh.name} {linked ? `→ ${linked.id}` : ''}
                             </text>
                           </g>
@@ -319,11 +413,37 @@ export function StrategyMapReviewPane({
               <button type="button" className="secondary-button" onClick={() => setOnlyNeedsReview(v => !v)}>
                 {onlyNeedsReview ? '显示全部' : `仅看待核 (${reviewCount})`}
               </button>
-              <button type="button" className="text-button" onClick={dedupeSimilarNodes}>去重检查</button>
+              <button type="button" className="text-button" onClick={runSafeDedupeCheck}>去重检查</button>
             </div>
           </div>
 
           <div className="map-review-list">
+            {dupCandidates && dupCandidates.length > 0 && (
+              <div className="map-conflict-box" role="region" aria-label="疑似重复条目确认">
+                <strong>发现 {dupCandidates.length} 组疑似重复条目（由你决定合并或分别保留）：</strong>
+                {dupCandidates.map(pair => (
+                  <div key={`${pair.keep.id}:${pair.duplicate.id}`} className="sg-row-between" style={{ marginTop: 6 }}>
+                    <span>{pair.keep.id}（{pair.keep.title}）与 {pair.duplicate.id}（{pair.duplicate.title}）· {pair.reason}</span>
+                    <span className="sg-row">
+                      <button type="button" className="secondary-button" onClick={() => confirmMergePair(pair)}>合并为 {pair.keep.id}</button>
+                      <button type="button" className="text-button" onClick={() => dismissDuplicatePair(pair)}>保留两项</button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {draft.nodes.length === 0 && (
+              <div className="map-conflict-box" role="status">
+                <strong>当前草稿暂无自动识别出的节点（待核草稿）：</strong>
+                <p style={{ margin: '4px 0 8px' }}>{draft.unknowns || '原稿无文字层或当前模型未能识别节点，请切换视觉模型重读，或对照左侧原稿手工补录。'}</p>
+                <div className="sg-row">
+                  <button type="button" className="secondary-button" onClick={() => addManualNode('goal')}>＋ 手工补录目标</button>
+                  <button type="button" className="secondary-button" onClick={() => addManualNode('strategy')}>＋ 手工补录策略</button>
+                </div>
+              </div>
+            )}
+
             <div className="sg-table-scroll">
               <table className="sg-table">
                 <thead>
@@ -342,7 +462,7 @@ export function StrategyMapReviewPane({
                       <td>{n.sourceLocation?.label ?? '—'} · {n.reviewState === 'needs-review' ? '待核' : n.reviewState === 'confirmed' ? '已确认' : '清楚'}</td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={4} className="sg-muted">当前筛选下已无待核条目。</td></tr>
+                    <tr><td colSpan={4} className="sg-muted">{draft.nodes.length === 0 ? '尚无节点，可点击上方按钮手工补录或先保存待核草稿。' : '当前筛选下已无待核条目。'}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -377,11 +497,14 @@ export function StrategyMapReviewPane({
                       type="button"
                       className="text-button"
                       onClick={() => {
-                        onChangeDraft({
-                          ...draft,
-                          nodes: draft.nodes.filter(x => x.id !== selectedNode.id),
-                          edges: draft.edges.filter(x => x.from !== selectedNode.id && x.to !== selectedNode.id),
-                        });
+                        onChangeDraft(
+                          {
+                            ...draft,
+                            nodes: draft.nodes.filter(x => x.id !== selectedNode.id),
+                            edges: draft.edges.filter(x => x.from !== selectedNode.id && x.to !== selectedNode.id),
+                          },
+                          { kind: 'node-delete', id: selectedNode.id },
+                        );
                       }}
                     >
                       删除误项
@@ -442,11 +565,38 @@ export function StrategyMapReviewPane({
                   <div className="sg-row">
                     <button type="button" className="secondary-button" onClick={() => flipEdge(selectedEdge)}>⇄ 翻转方向</button>
                     {selectedEdge.reviewState !== 'confirmed' && (
-                      <button type="button" className="secondary-button" onClick={() => updateEdgeField(selectedEdge.id, { reviewState: 'confirmed', ...(selectedEdge.kind === 'unknown' ? { kind: 'supports' } : {}) })}>确认此连线</button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={selectedEdge.kind === 'unknown'}
+                        title={selectedEdge.kind === 'unknown' ? '请先在下方明确选择具体关系类型，系统不会自动把未知关系改为支持' : undefined}
+                        onClick={() => {
+                          if (selectedEdge.kind === 'unknown') return;
+                          updateEdgeField(selectedEdge.id, { reviewState: 'confirmed' });
+                        }}
+                      >
+                        确认此连线
+                      </button>
                     )}
-                    <button type="button" className="text-button" onClick={() => onChangeDraft({ ...draft, edges: draft.edges.filter(x => x.id !== selectedEdge.id) })}>删除连线</button>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() =>
+                        onChangeDraft(
+                          { ...draft, edges: draft.edges.filter(x => x.id !== selectedEdge.id) },
+                          { kind: 'edge-delete', id: selectedEdge.id },
+                        )
+                      }
+                    >
+                      删除连线
+                    </button>
                   </div>
                 </div>
+                {selectedEdge.kind === 'unknown' && (
+                  <p className="map-conflict-box">
+                    当前连线关系仍为「未知关系（待核）」，请先在下方“关系类型”明确选择具体关系后再确认（系统不会自动改为支持）。
+                  </p>
+                )}
                 {selectedEdge.ambiguityReason && <p className="map-conflict-box">待核原因：{selectedEdge.ambiguityReason}</p>}
                 <div className="map-edit-grid">
                   <label>起点
@@ -460,7 +610,16 @@ export function StrategyMapReviewPane({
                     </select>
                   </label>
                   <label>关系类型（可见箭头 ≠ 因果）
-                    <select value={selectedEdge.kind} onChange={e => updateEdgeField(selectedEdge.id, { kind: e.target.value as StrategyMapEdge['kind'], ...(e.target.value !== 'unknown' ? { reviewState: 'confirmed' } : {}) })}>
+                    <select
+                      value={selectedEdge.kind}
+                      onChange={e => {
+                        const nextKind = e.target.value as StrategyMapEdge['kind'];
+                        updateEdgeField(selectedEdge.id, {
+                          kind: nextKind,
+                          reviewState: nextKind === 'unknown' ? 'needs-review' : 'confirmed',
+                        });
+                      }}
+                    >
                       {Object.entries(mapEdgeKinds).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                     </select>
                   </label>
@@ -472,7 +631,7 @@ export function StrategyMapReviewPane({
             {onReread && sources.length > 0 && (
               <div className="map-reread-bar">
                 <label>
-                  用自然语言让原战略 Agent 重读一页或一条线（保留已人工修改内容）
+                  用自然语言让原战略 Agent 重读一页或一条线（保留你当前全部手工修改）
                   <div className="sg-row">
                     <input
                       value={rereadText}
@@ -484,7 +643,15 @@ export function StrategyMapReviewPane({
                       className="primary-button"
                       disabled={!rereadText.trim()}
                       onClick={() => {
-                        onReread(rereadText.trim(), sources.map(s => s.sourceId));
+                        const pagesBySource: Record<string, number[]> = {};
+                        for (const s of sources) {
+                          if (s.selectedPages?.length) pagesBySource[s.sourceId] = s.selectedPages;
+                        }
+                        onReread(
+                          rereadText.trim(),
+                          sources.map(s => s.sourceId),
+                          Object.keys(pagesBySource).length ? pagesBySource : undefined,
+                        );
                         setRereadText('');
                       }}
                     >

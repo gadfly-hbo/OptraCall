@@ -1,7 +1,7 @@
 import {nativeMapExposure,promptMapExposure} from './strategy-map-exposure.ts';
 import {readWorkbookOriginal} from './strategy-workbook-source.ts';
-import { StrategyMapStore } from './strategy-map-store.ts';
-import type { StrategyMapVersion } from './strategy-map-types.ts';
+import { StrategyMapStore, validateStrategyMapDraft } from './strategy-map-store.ts';
+import type { StrategyMapDraft, StrategyMapMultiImportSource, StrategyMapVersion } from './strategy-map-types.ts';
 import { discussionAttachmentReads, discussionAttachmentCitations } from './strategy-attachment-citations.ts';
 import type {GoalOperationReceipt,GoalActionArrangement} from './strategy-goals-types.ts';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -23,7 +23,7 @@ import { discussionGoalScopes, pageDiscussionGoalScopes, selectDiscussionGoalSco
 import { discussionSourceMode, isDiscussionSourceSelected, isDiscussionSourceExcluded } from './strategy-discussion-source-scope.ts';
 import { readNativeSessionSnapshot, NativeSnapshotError } from './native-session-snapshot.ts';
 import { StrategyDiscussionStore, StrategyDiscussionFault, discussionHash, discussionId } from './strategy-discussion-store.ts';
-import type { StrategyDiscussion, StrategyDiscussionCreate, StrategyDiscussionUpdate, StrategyDiscussionDetail, StrategyDiscussionSource } from './strategy-discussion-types.ts';
+import type { StrategyDiscussion, StrategyDiscussionCreate, StrategyDiscussionUpdate, StrategyDiscussionDetail, StrategyDiscussionSource, StrategyMapImportDraftReceipt } from './strategy-discussion-types.ts';
 import type { ProjectEvent } from '../agent/project-runtime.ts';
 import type { StrategyDiscussionAction, StrategyDiscussionToolContext } from '../agent/strategy-discussion.ts';
 
@@ -44,7 +44,7 @@ const STRATEGY_CONTRACT=[
  '战略共创可以从一句问题、上期复盘或线下战略开始。按实际需要区分未执行、未见改善与观察未满；运用 SWOT、五力等诊断说明证据怎样改变备选方向；需综合调研、重算或 Case/Teach 观察时沿已有授权和原成果查证。专业问题可以直接回答。不要自动建 Task。附件按 read-source 查读；需要确切页、表行、正文段时 query 填具体 locator。实际采用的内容用读取结果的 [[资料:<token>]] 引用。选中或列出不能作为已读证据。',
  '形成候选时使用 save-map。按业务方向命名，区分选择、放弃的方向、成立条件和未知项。currentMap 是 Host 提供的所见版本，mapCandidates 是同讨论的不同候选；普通对话保持原图，明确要求修改时读取准确版和用户手工值，保留无关节点与关系，按 expectedVersion 修订。切换 BSC、目标树或条目表保留稳定编号。过期先读回并比对改动。场景数据只有指标、单位、人群、周期、基线和依据已知时才填 scenarioModel。',
  '按选中的因果连线进行审查时使用 TOC/TP，说明机制、必要条件、其他解释、负面分支、证据范围和可检验的观察方法。仅 hypothesis 边携带 review；分解或支持本身不能证明因果。引用的依据附 citationTokens。重要取舍由用户决定，保存地图不会采用目标。',
- '用户导入线下战略图（Excel/PPT/PDF/图片）时，使用 read-import-source 按 importSourceId 与页号读取原生结构、表格或渲染图面，再通过 save-map 生成带精确 sourceLocation、reviewState（clear/needs-review）与 importSources 的可编辑候选。严格区分 decomposition（分解）、supports（支持）、upstream（上游）、hypothesis（待验证因果）与 unknown（未知/遮挡），可见箭头不等于因果；准确区分基线与目标、估计与实测、数值 0 与待定及单位。源表与图上数值不一致时在 sourceConflicts 并列原值；箭头遮挡、局部低清或跨页同名时仅标该处 needs-review 并写明 ambiguityReason，清楚项标 clear。多页不同方案保留各自边界；用户自然语言要求局部重读一页或一条线时，按 expectedVersion 仅修订指定处并保留人工修改。',
+ '用户导入线下战略图（Excel/PPT/PDF/图片）或发起局部重读时，仅在本轮授权的 importSourceIds 与 selectedImportPages 范围内调用 read-import-source 读取原生结构、表格或渲染图面，再调用 propose-map-draft 返回带精确 sourceLocation、reviewState（clear/needs-review）与 importSources 的待核草稿（不要直接调用 save-map 写入正式版本，由用户对照原稿核对后一次保存）。严格区分 decomposition（分解）、supports（支持）、upstream（上游）、hypothesis（待验证因果）与 unknown（未知/遮挡），可见箭头不等于因果；准确区分基线与目标、估计与实测、数值 0 与待定及单位。源表与图上数值不一致时在 sourceConflicts 并列原值；箭头遮挡、局部低清或跨页同名时仅标该处 needs-review 并写明 ambiguityReason，清楚项标 clear；纯文本模型看不清扫描图时允许 nodes 为空并在 unknowns 说明原因。多页不同方案保留各自边界；局部重读时须以 workingMapDraft 为准，仅修订用户指定处并完整保留用户的手工修改。',
  '当前轮 goalScopes 和 read-goals 提供目标的准确范围，可用 query 名称、offset 续查其 choices。绑定目标或修订时由 Host 准确绑定，可省略 draft.scope。新候选可省略 draft.scope 沿用已知的 defaultScope；suggestedKind 只是用途背景，另有明确意图时按用户意思选准确范围，归属不明才简短询问。部门用途不能从企业目录推定本部门或上级。新部门可按用户原话声明，id 与 name 同为用户声明的部门名；上级未知可省略 enterpriseId。不得自行编造或改换范围。',
  '长候选的成功回执 bodyIncluded:false 仍已保存。read-goals 用 goalId/version、offset/limit 读取 candidatePage.text，每段接 nextOffset，完整拼回准确目标 JSON；目录 candidateRefs 如有 nextCandidateOffset 用 offset 继续。operationId 可核对原保存回执，不复制或重发同一操作。',
  '形成完整候选可用strategy_goals propose-goal实写原GoalStore；已有目标给goalId和expectedVersion追加候选，不重复建立。早期字段不足继续讨论，不强存或发明承诺。采用须用户明确决定，工具adopt-goal按原话精确范围、所见Goal内容hash与CAS；继续讨论/有意思不等于采用。目标采用不授权经营行动。正式明细分析/执行工具沿原项目方案两种确认与真实Task，不以本讨论越过权限。',
@@ -104,16 +104,18 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   let hasAdditionalSources=false;
   const goalContexts = new Map<string,GoalContextSnapshot>();
   const arrangements=new Map<string,GoalActionArrangement>();
+  const importReads=new Map<string,{sourceId:string;sha256:string}>();
   let pendingGoal: { ref:GoalRef; basis:GoalBasis; userText:string; promptHash:string }|undefined;
   function addGoals(snapshot:GoalContextSnapshot) {
     if(!object(snapshot)||!Array.isArray(snapshot.goals)||!Array.isArray(snapshot.feedback)||!Array.isArray(snapshot.relations))fail('goal_context_source_permissions_unknown');
     parseGoalBasis(snapshot.basis);
     goalContexts.set(discussionHash(snapshot),snapshot);
   }
-  if(!n)return {mapHistory:nativeMapExposure([]),projections:[...groups.values()],accesses,hasAdditionalSources,goalContexts:[...goalContexts.values()],arrangements:[...arrangements.values()]};
+  if(!n)return {mapHistory:nativeMapExposure([]),projections:[...groups.values()],accesses,importReads:[...importReads.values()],hasAdditionalSources,goalContexts:[...goalContexts.values()],arrangements:[...arrangements.values()]};
   const entries=entryId?(()=>{const byId=new Map(n.entries.map(entry=>[entry.id,entry]));let cursor:string|null=entryId;const chain:typeof n.entries=[];while(cursor){const entry=byId.get(cursor);if(!entry)break;chain.push(entry);cursor=entry.parentId;}return chain.reverse();})():n.manager.getBranch();
   let current:{requestId:string;projectId?:string}|undefined;
   const calls=new Map<string,{action:string;sourceId?:unknown;requestId:string;projectId?:string;entryId:string}>();
+  const importCalls=new Map<string,{importSourceId:unknown;requestId:string;entryId:string}>();
   const operations=new Map<string,{id:string;requestId:string;entryId:string}>();
   const otherReads=new Map<string,Record<string,unknown>>();
   const add=(projectId:string|undefined,sources:StrategyDiscussionSource[],metadataOnly=false)=>{
@@ -171,8 +173,18 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
       operations.set(part.id,{id:part.arguments.operationId,requestId:current.requestId,entryId:entry.id});
     }
     if(part.type==='toolCall'&&part.name==='strategy_goals'&&['find-sources','read-source'].includes(part.arguments?.action))calls.set(part.id,{...current,action:part.arguments.action,sourceId:part.arguments.sourceId,entryId:entry.id});
+    if(part.type==='toolCall'&&part.name==='strategy_goals'&&part.arguments?.action==='read-import-source')importCalls.set(part.id,{importSourceId:part.arguments.importSourceId,requestId:current.requestId,entryId:entry.id});
    }
    if(strategicResult){
+     const importCall=importCalls.get(message.toolCallId);
+     if(importCall){
+       importCalls.delete(message.toolCallId);
+       if(!message.isError){
+         const src=object(resultBody)&&object(resultBody.source)?resultBody.source:object(message.details)&&object((message.details as any).source)?(message.details as any).source:undefined;
+         if(!src||typeof src.sourceId!=='string'||src.sourceId!==importCall.importSourceId||typeof src.sha256!=='string'||!/^[a-f0-9]{64}$/.test(src.sha256))fail('strategy_map_history_source_unverified',409);
+         importReads.set(`${src.sourceId}:${src.sha256}`,{sourceId:src.sourceId,sha256:src.sha256});
+       }
+     }
      const call=operations.get(message.toolCallId);
      operations.delete(message.toolCallId);
      if(call && call.requestId!==current.requestId)fail('goal_context_source_permissions_unknown');
@@ -242,9 +254,9 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   // The cited assistant entry may itself start parallel tools; their future
   // results cannot have contributed to that earlier entry. Older missing
   // results remain UNKNOWN rather than inventing a successful read.
-  if(strict&&[...calls.values(),...operations.values()].some(call=>call.entryId!==entryId))fail('goal_context_source_permissions_unknown');
+  if(strict&&[...calls.values(),...operations.values(),...importCalls.values()].some(call=>call.entryId!==entryId))fail('goal_context_source_permissions_unknown');
   if(strict&&pendingGoal)fail('goal_context_source_permissions_unknown');
-  return {mapHistory:nativeMapExposure(requestFilter||!strict?[]:entries),projections:[...groups.values()],accesses,hasAdditionalSources,goalContexts:[...goalContexts.values()],arrangements:[...arrangements.values()]};
+  return {mapHistory:nativeMapExposure(requestFilter||!strict?[]:entries),projections:[...groups.values()],accesses,importReads:[...importReads.values()],hasAdditionalSources,goalContexts:[...goalContexts.values()],arrangements:[...arrangements.values()]};
  }
  async function sourceContext(ref:GoalDiscussionSourceRef){
   await readDiscussionSource(ref);const n=await native(store.get(ref.id));if(!n)fail('strategy_discussion_source_unavailable');const result=sourceAccesses(n,String(ref.version));if(!result.projections.length)fail('goal_context_source_permissions_unknown');return result;
@@ -261,6 +273,11 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   const owner=store.get(ref.id);
   const history=await sourceContext(ref);
   await verifyMapHistory(owner,history.mapHistory,recipient);
+  if(history.importReads.length){
+    const importer=options.mapImports?.();
+    if(!importer)throw new StrategyDiscussionFault('strategy_map_import_source_unavailable',403);
+    await importer.verifySources(owner,history.importReads);
+  }
   const dependencies=history.projections.filter(group=>group.sources.length);
   const configuration=recipient??(dependencies.length||history.hasAdditionalSources?options.configuration(owner.configurationId,owner.configurationRevision):undefined);
   if(history.hasAdditionalSources&&!configuration)throw new StrategyDiscussionFault('configuration_changed',409);
@@ -300,6 +317,48 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    }
   }
  }
+ async function verifyDraftImportSources(
+  owner: StrategyDiscussion,
+  draft: StrategyMapDraft,
+  opts: {
+    turnSourceIds?: string[];
+    turnSelectedPages?: Record<string, number[]>;
+    previousSources?: StrategyMapMultiImportSource[];
+    requireTurnScope?: boolean;
+  } = {},
+ ) {
+  if (!draft.importSources?.length) return;
+  const importer = options.mapImports?.();
+  if (!importer) fail('strategy_map_import_source_unavailable', 403);
+  const verifiedMap = await importer!.verifySources(owner, draft.importSources);
+  const checkPage = (loc: import('./strategy-map-types.ts').StrategyMapSourceLocation | undefined, itemLabel: string) => {
+    if (!loc || loc.page === undefined) return;
+    const stored = verifiedMap.get(loc.sourceId);
+    if (!stored || loc.page < 1 || loc.page > stored.pageCount) {
+      fail(`strategy_map_import_page_invalid: ${itemLabel} 页码超出原文件页数范围`, 400);
+    }
+    const allowedPages = opts.turnSelectedPages?.[loc.sourceId];
+    if (opts.requireTurnScope && allowedPages?.length && !allowedPages.includes(loc.page)) {
+      fail('strategy_map_import_page_not_authorized', 403);
+    }
+  };
+  for (const n of draft.nodes) checkPage(n.sourceLocation, `节点 ${n.id}`);
+  for (const e of draft.edges) checkPage(e.sourceLocation, `连线 ${e.id}`);
+  if (opts.requireTurnScope) {
+    const prevById = new Map((opts.previousSources ?? []).map(s => [s.sourceId, s]));
+    for (const src of draft.importSources) {
+      const prev = prevById.get(src.sourceId);
+      const unchangedFromPrev = Boolean(prev && discussionHash(prev) === discussionHash(src));
+      if (!unchangedFromPrev && !opts.turnSourceIds?.includes(src.sourceId)) {
+        fail('strategy_map_import_not_authorized', 403);
+      }
+      const allowedPages = opts.turnSelectedPages?.[src.sourceId];
+      if (allowedPages?.length && src.selectedPages?.some(p => !allowedPages.includes(p))) {
+        fail('strategy_map_import_page_not_authorized', 403);
+      }
+    }
+  }
+ }
  async function verifyMapMaterials(owner:StrategyDiscussion,map:StrategyMapVersion,recipient?:Readonly<RuntimeModelConfiguration>){
   if(map.citations.length){
    const cfg=recipient??options.configuration(owner.configurationId,owner.configurationRevision);
@@ -310,9 +369,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   }
   if(map.importSource)await readWorkbookOriginal(options.dataRoot,'discussion-'+owner.id,map.importSource.sha256);
   if(map.importSources?.length){
-   const importer=options.mapImports?.();
-   if(!importer)fail('strategy_map_import_source_unavailable',403);
-   await importer!.verifySources(owner,map.importSources);
+   await verifyDraftImportSources(owner,map);
   }
  }
  async function verifyMapHistory(owner:StrategyDiscussion,history:ReturnType<typeof nativeMapExposure>,recipient?:Readonly<RuntimeModelConfiguration>){
@@ -342,7 +399,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    const replySource=await finalMapReply(map.source);
    if(replySource){
     try{await verifyChoiceSource(replySource,recipient);return {...map,replySource};}
-    catch(e){if(!(e instanceof Error)||!/source|permission|configuration|scope_changed|attachment|import_revoked/.test(e.message))throw e;}
+    catch(e){if(!(e instanceof Error)||!/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized/.test(e.message))throw e;}
    }
   }
   return map;
@@ -352,7 +409,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   for(const row of await maps.list(id)){
    try {versions.push(await readMapVersion(id,row.mapId,row.version,recipient));}
    catch(e){
-    if(!(e instanceof Error) || !/source|permission|configuration|scope_changed|attachment|import_revoked/.test(e.message))throw e;
+    if(!(e instanceof Error) || !/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized/.test(e.message))throw e;
     unavailable.push({mapId:row.mapId,version:row.version,reason:e.message});
    }
   }
@@ -361,8 +418,21 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
  const readMapVersions=async(id:string,recipient?:Readonly<RuntimeModelConfiguration>)=>(await mapCatalog(id,recipient)).versions;
  async function saveMapVersion(id:string,input:Record<string,unknown>,author:'user'|'import'){
   if(options.isClosing())fail('host_closing',503);
-  if(Number(input.expectedVersion)>0)await readMapVersion(id,String(input.mapId),Number(input.expectedVersion));
-  return maps.save(id,input,author);
+  const {importDraftEntryId,...saveInput}=input;
+  let provenance:Pick<StrategyMapVersion,'source'> & Partial<Pick<StrategyMapVersion,'citations'>>={};
+  if(importDraftEntryId!==undefined){
+   if(author!=='user'||typeof importDraftEntryId!=='string'||!importDraftEntryId.trim())fail('invalid_strategy_map',400);
+   const owner=store.get(id);
+   const n=await native(owner);
+   const {drafts}=await readMapImportDrafts(owner,n);
+   const matched=drafts.find(d=>d.entryId===importDraftEntryId);
+   if(!matched)fail('strategy_map_import_draft_not_found',404);
+   provenance={...(matched.source?{source:matched.source}:{}),...(matched.citations.length?{citations:matched.citations}:{})};
+  }
+  const previous=Number(saveInput.expectedVersion)>0?await readMapVersion(id,String(saveInput.mapId),Number(saveInput.expectedVersion)):undefined;
+  const validatedDraft=validateStrategyMapDraft(saveInput.draft,{previous,author});
+  await verifyDraftImportSources(store.get(id),validatedDraft);
+  return maps.save(id,saveInput,author,provenance);
  }
  const mapRef=(v:StrategyMapVersion)=>({mapId:v.mapId,version:v.version,title:v.title,contentSha256:v.contentSha256});
  function nativeToolSources(n:Awaited<ReturnType<typeof native>>,requestId:string):StrategyDiscussionSource[]{
@@ -425,11 +495,43 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   if(action==='read-import-source'){
    const importer=options.mapImports?.();
    if(!importer || typeof input.importSourceId!=='string' || !input.importSourceId.trim())fail('strategy_map_import_not_found',404);
-   const result=await importer!.readForAgent(o,configuration,input.importSourceId,input.page!==undefined?Number(input.page):undefined,input.includeImage!==false);
+   // Strictly bound to this turn's authorized importSourceIds and selectedImportPages
+   if(!context.importSourceIds?.includes(input.importSourceId))fail('strategy_map_import_not_authorized',403);
+   const allowedPages=context.selectedImportPages?.[input.importSourceId];
+   const result=await importer!.readForAgent(o,configuration,input.importSourceId,{
+    page:input.page!==undefined?Number(input.page):undefined,
+    includeImage:input.includeImage!==false,
+    imageIndex:input.imageIndex!==undefined?Number(input.imageIndex):undefined,
+    allowedPages,
+   });
    context.assertCurrent();
    return result;
   }
+  if(action==='propose-map-draft'){
+   const {source}=await candidateSource(o,context);
+   const n=await native(o);
+   const reads=discussionAttachmentReads(n?.manager.getBranch()??[],context.requestId);
+   const tokens=input.citationTokens??[];
+   if(!Array.isArray(tokens)||tokens.some(t=>typeof t!=='string'))fail('invalid_strategy_map_citations',400);
+   const citations=tokens.map(token=>reads.find(c=>c.token===token)??fail('strategy_map_citation_unread',403));
+   let previous:StrategyMapVersion|undefined;
+   let mapId:string|undefined;
+   let expectedVersion:number|undefined;
+   if(input.mapId!==undefined){
+    mapId=discussionId(input.mapId);
+    expectedVersion=Number(input.expectedVersion??0);
+    if(!Number.isSafeInteger(expectedVersion)||expectedVersion<0)fail('invalid_strategy_map_version',400);
+    if(expectedVersion>0)previous=await readMapVersion(o.id,mapId,expectedVersion,configuration);
+   }
+   const draft=validateStrategyMapDraft(input.mapDraft,{previous,author:'agent'});
+   await verifyDraftImportSources(o,draft,{turnSourceIds:context.importSourceIds,turnSelectedPages:context.selectedImportPages,previousSources:previous?.importSources,requireTurnScope:true});
+   await verifyChoiceSource(source,configuration);
+   context.assertCurrent();context.signal.throwIfAborted();
+   const reason=typeof input.reason==='string'&&input.reason.trim()?input.reason.trim().slice(0,300):'多格式战略图提取草稿（待核对）';
+   return payload({claim:'editable-map-import-draft',requestId:context.requestId,reason,...(mapId?{mapId,expectedVersion}:{}),draft,citations,source});
+  }
   if(action==='save-map'){
+   if(context.importMode==='review-draft')fail('strategy_map_import_draft_required',409);
    const {source}=await candidateSource(o,context);
    const operationId=input.operationId===undefined?stableId([o.id,context.requestId,action,input]):discussionId(input.operationId);
    const newId=input.mapId===undefined?stableId([o.id,operationId,'map']):discussionId(input.mapId);
@@ -438,14 +540,11 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    const tokens=input.citationTokens??[];
    if(!Array.isArray(tokens)||tokens.some(t=>typeof t!=='string'))fail('invalid_strategy_map_citations',400);
    const citations=tokens.map(token=>reads.find(c=>c.token===token)??fail('strategy_map_citation_unread',403));
-   if(object(input.mapDraft)&&Array.isArray(input.mapDraft.importSources)&&input.mapDraft.importSources.length){
-    const importer=options.mapImports?.();
-    if(!importer)fail('strategy_map_import_source_unavailable',403);
-    await importer!.verifySources(o,input.mapDraft.importSources as Array<{sourceId:string;sha256?:string}>);
-   }
    const saved=await options.mutate(async()=>{
     context.assertCurrent();
-    if(input.mapId!==undefined)await readMapVersion(o.id,newId,Number(input.expectedVersion),configuration);
+    const previous=input.mapId!==undefined?await readMapVersion(o.id,newId,Number(input.expectedVersion),configuration):undefined;
+    const validatedDraft=validateStrategyMapDraft(input.mapDraft,{previous,author:'agent'});
+    await verifyDraftImportSources(o,validatedDraft,{turnSourceIds:context.importSourceIds,turnSelectedPages:context.selectedImportPages,previousSources:previous?.importSources,requireTurnScope:true});
     await verifyChoiceSource(source,configuration);
     return maps.save(o.id,{mapId:newId,operationId,expectedVersion:input.expectedVersion??0,reason:input.reason,draft:input.mapDraft},'agent',{source,citations,requestId:context.requestId},()=>{context.assertCurrent();context.signal.throwIfAborted();});
    });
@@ -614,6 +713,39 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   if(!proposal)fail('goal_suggestion_source_changed',409);
   return proposal;
  }
+ async function readMapImportDrafts(owner:StrategyDiscussion,n:Awaited<ReturnType<typeof native>>):Promise<{drafts:StrategyMapImportDraftReceipt[];unavailable:{entryId:string;reason:string}[]}>{
+  if(!n||owner.businessOwner)return {drafts:[],unavailable:[]};
+  const drafts:StrategyMapImportDraftReceipt[]=[];
+  const unavailable:{entryId:string;reason:string}[]=[];
+  for(const entry of n.manager.getBranch()){
+   if(entry.type!=='message'||entry.message.role!=='toolResult'||entry.message.toolName!=='strategy_goals'||entry.message.isError)continue;
+   const text=textOf(entry.message);
+   let value:any;try{value=JSON.parse(text);}catch{continue;}
+   if(value?.claim!=='editable-map-import-draft'||!object(value.draft))continue;
+   try{
+    const validated=validateStrategyMapDraft(value.draft,{author:'agent'});
+    await verifyDraftImportSources(owner,validated);
+    if(value.source)await verifyChoiceSource(value.source);
+    drafts.push({
+     entryId:entry.id,
+     ...(typeof value.requestId==='string'?{requestId:value.requestId}:{}),
+     sessionId:n.manager.getSessionId(),
+     sha256:discussionHash(text),
+     reason:typeof value.reason==='string'?value.reason:'多格式战略图提取草稿（待核对）',
+     ...(typeof value.mapId==='string'?{mapId:value.mapId}:{}),
+     ...(typeof value.expectedVersion==='number'?{expectedVersion:value.expectedVersion}:{}),
+     draft:validated,
+     citations:Array.isArray(value.citations)?value.citations:[],
+     ...(value.source?{source:value.source}:{}),
+    });
+   }catch(e){
+    const reason=e instanceof Error?e.message:'strategy_map_import_source_unavailable';
+    if(!/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized|invalid_strategy_map/.test(reason))throw e;
+    unavailable.push({entryId:entry.id,reason});
+   }
+  }
+  return {drafts,unavailable};
+ }
  async function detail(id:string, originalRequestId?:string, checked = false):Promise<StrategyDiscussionDetail>{
   let {owner,ref}=own(id);
   let live=await domain.read(ref), n:Awaited<ReturnType<typeof native>>;
@@ -634,10 +766,15 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   const snapshot=checked?{...session,messages:n?presentContextMessages(n.manager.buildSessionContext().messages,n.manager.getBranch(),n.manager.getSessionId()):[]}:session;
   let discussion:StrategyDiscussion=owner;if(!live.busy&&owner.lastRun?.status==='accepted')discussion={...owner,lastRun:{...owner.lastRun,status:'unknown'}};
   const receipt=requestReceipt(n,originalRequestId ?? owner.lastRun?.id);
-  return {discussion,busy:live.busy,snapshot,goals,...(!owner.businessOwner && {attachmentReferences:discussionAttachmentCitations(n?.manager.getBranch()??[])}),...(owner.businessOwner?{goalDrafts:goalSuggestions(owner,n)}:{}),goalContentHashes:Object.fromEntries(goals.map(g=>[g.goalId+':'+g.version,goalContentSha256(g)])),replies,...(receipt && {requestReceipt:receipt})};
+  let importDraftState:{drafts:StrategyMapImportDraftReceipt[];unavailable:{entryId:string;reason:string}[]}={drafts:[],unavailable:[]};
+  if(!owner.businessOwner&&n){
+   try{importDraftState=await readMapImportDrafts(owner,n);}
+   catch(e){if(!live.busy||!(e instanceof NativeSnapshotError&&e.code==='native_snapshot_changed'))throw e;}
+  }
+  return {discussion,busy:live.busy,snapshot,goals,...(!owner.businessOwner && {attachmentReferences:discussionAttachmentCitations(n?.manager.getBranch()??[]),...(importDraftState.drafts.length?{mapImportDrafts:importDraftState.drafts}:{}),...(importDraftState.unavailable.length?{unavailableMapImportDrafts:importDraftState.unavailable}:{})}),...(owner.businessOwner?{goalDrafts:goalSuggestions(owner,n)}:{}),goalContentHashes:Object.fromEntries(goals.map(g=>[g.goalId+':'+g.version,goalContentSha256(g)])),replies,...(receipt && {requestReceipt:receipt})};
  }
  async function send(id:string,input:Record<string,unknown>){
-  if(Object.keys(input).some(k=>!['requestId','text','expectedRevision','replacePendingRequestId','mapRef','mapTemplate','attachmentIds','importSourceIds','selectedImportPages'].includes(k))||typeof input.text!=='string'||(!input.text.trim()&&!(Array.isArray(input.attachmentIds)&&input.attachmentIds.length)&&!(Array.isArray(input.importSourceIds)&&input.importSourceIds.length))||input.text.length>20000)fail('invalid_strategy_message',400);
+  if(Object.keys(input).some(k=>!['requestId','text','expectedRevision','replacePendingRequestId','mapRef','mapTemplate','attachmentIds','importSourceIds','selectedImportPages','importMode','workingMapDraft'].includes(k))||typeof input.text!=='string'||(!input.text.trim()&&!(Array.isArray(input.attachmentIds)&&input.attachmentIds.length)&&!(Array.isArray(input.importSourceIds)&&input.importSourceIds.length))||input.text.length>20000)fail('invalid_strategy_message',400);
   const requestId=discussionId(input.requestId),originalUserText=input.text;
   let owner=store.get(id);const fingerprint=discussionHash(input);
   if(owner.lastRun?.id===requestId){if(owner.lastRun.fingerprint!==fingerprint)fail('strategy_discussion_operation_conflict');return {discussion:owner,requestId,replayed:true};}
@@ -648,6 +785,8 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    if(ids.some(id=>!owner.sources.some(s=>s.id===id&&s.target.kind==='strategy-attachment'&&!isDiscussionSourceExcluded(owner,s))))fail('strategy_attachment_not_authorized',403);
    selectedAttachmentIds=ids as string[];
   }
+  const importMode=input.importMode;
+  if(importMode!==undefined&&(owner.businessOwner||importMode!=='review-draft'))fail('invalid_strategy_map_import_selection',400);
   let selectedImportSourceIds:string[]|undefined;
   let selectedImportPages:Record<string,number[]>|undefined;
   let importSourcesMeta:Array<{sourceId:string;format:string;fileName:string;sha256:string;origin:string;pageCount:number;selectedPages?:number[]}>|undefined;
@@ -660,17 +799,23 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
     if(!object(input.selectedImportPages))fail('invalid_strategy_map_import_selection',400);
     selectedImportPages={};
     for(const [sid,pages] of Object.entries(input.selectedImportPages)){
-     if(!ids.includes(sid)||!Array.isArray(pages)||pages.length>200||pages.some(p=>!Number.isInteger(p)||Number(p)<1))fail('invalid_strategy_map_import_selection',400);
-     selectedImportPages[sid]=pages as number[];
+     if(!ids.includes(sid)||!Array.isArray(pages)||!pages.length||pages.length>200||new Set(pages).size!==pages.length||pages.some(p=>!Number.isInteger(p)||Number(p)<1))fail('invalid_strategy_map_import_selection',400);
+     selectedImportPages[sid]=(pages as number[]).slice().sort((a,b)=>a-b);
     }
    }
-   await importer!.verifySources(owner,(ids as string[]).map(sourceId=>({sourceId})));
-   const allRegistered=await importer!.store.list(owner.id);
+   const verifiedMap=await importer!.verifySources(owner,(ids as string[]).map(sourceId=>({sourceId,...(selectedImportPages?.[sourceId]?{selectedPages:selectedImportPages[sourceId]}:{})})));
    importSourcesMeta=(ids as string[]).map(sid=>{
-    const item=allRegistered.find(x=>x.sourceId===sid)!;
+    const item=verifiedMap.get(sid)!;
     return {sourceId:item.sourceId,format:item.format,fileName:item.fileName,sha256:item.sha256,origin:item.origin,pageCount:item.pageCount,...(selectedImportPages?.[sid]?.length?{selectedPages:selectedImportPages[sid]}:{})};
    });
    selectedImportSourceIds=ids as string[];
+  }
+  let workingMapDraft:StrategyMapDraft|undefined;
+  if(input.workingMapDraft!==undefined){
+   if(owner.businessOwner)fail('invalid_strategy_map',400);
+   workingMapDraft=validateStrategyMapDraft(input.workingMapDraft,{author:'user'});
+   if(JSON.stringify(workingMapDraft).length>28000)fail('strategy_discussion_materials_too_large',413);
+   await verifyDraftImportSources(owner,workingMapDraft);
   }
   const template=input.mapTemplate;
   if(template!==undefined && (owner.businessOwner || (template!=='bsc' && template!=='tree' && template!=='table')))fail('invalid_strategy_map_template',400);
@@ -689,7 +834,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    owner.usageContext=resolveNewUsageContext({goal,defaultContext:owner.businessOwner?null:await options.defaultUsageContext()})??null;
   }
   const previousAccesses=sourceAccesses(n),previousProjections=previousAccesses.projections;
-  owner={...owner,revision:owner.revision+1,updatedAt:new Date().toISOString(),lastRun:{id:requestId,fingerprint,status:'accepted'},pendingInput:{requestId,text:originalUserText,expectedRevision:Number(input.expectedRevision),...(selectedAttachmentIds&&{attachmentIds:selectedAttachmentIds}),...(selectedImportSourceIds&&{importSourceIds:selectedImportSourceIds}),...(selectedImportPages&&{selectedImportPages}),...(selectedMap&&{mapRef:selectedMap}),...(template&&{mapTemplate:template})}};
+  owner={...owner,revision:owner.revision+1,updatedAt:new Date().toISOString(),lastRun:{id:requestId,fingerprint,status:'accepted'},pendingInput:{requestId,text:originalUserText,expectedRevision:Number(input.expectedRevision),...(selectedAttachmentIds&&{attachmentIds:selectedAttachmentIds}),...(selectedImportSourceIds&&{importSourceIds:selectedImportSourceIds}),...(selectedImportPages&&{selectedImportPages}),...(importMode&&{importMode}),...(workingMapDraft&&{workingMapDraft}),...(selectedMap&&{mapRef:selectedMap}),...(template&&{mapTemplate:template})}};
   await options.mutate(()=>{const latest=store.get(id);if(latest.revision!==Number(input.expectedRevision))fail('strategy_discussion_context_changed');store.write({...owner,createFingerprint:latest.createFingerprint});});
   let accept!:(value:any)=>void,reject!:(e:unknown)=>void;const ack=new Promise<any>((resolve,fail)=>{accept=resolve;reject=fail;});
   let sdkAccepted=false;
@@ -712,7 +857,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    }
   }else currentMap=catalog.filter(v=>heads.includes(v)).at(-1);
   const mapContext=currentMap?{mapCandidates:heads.map(mapRef),currentMap:JSON.stringify(currentMap).length<28000?currentMap:{...mapRef(currentMap),bodyIncluded:false},...(selectedEdge&&{selectedEdge})}:{};
-  const roleFields=owner.businessOwner?{owner:owner.businessOwner,roleContext,roleVersion:businessRoleVersion}:{goalScopes:pageDiscussionGoalScopes(scopeDirectory(owner,ownGoals(owner))),...mapContext,...(selectedAttachmentIds&&{selectedAttachmentIds}),...(importSourcesMeta&&{importSources:importSourcesMeta}),...(unavailable.length&&{unavailableMaps:unavailable}),...(input.mapTemplate!==undefined&&{preferredMapTemplate:input.mapTemplate})};
+  const roleFields=owner.businessOwner?{owner:owner.businessOwner,roleContext,roleVersion:businessRoleVersion}:{goalScopes:pageDiscussionGoalScopes(scopeDirectory(owner,ownGoals(owner))),...mapContext,...(selectedAttachmentIds&&{selectedAttachmentIds}),...(importSourcesMeta&&{importSources:importSourcesMeta}),...(importMode&&{importMode}),...(workingMapDraft&&{workingMapDraft}),...(unavailable.length&&{unavailableMaps:unavailable}),...(input.mapTemplate!==undefined&&{preferredMapTemplate:input.mapTemplate})};
   const composePrompt=(goalContext:unknown)=>JSON.stringify({...roleFields,usageContext:owner.usageContext,methods:owner.methods,goalContext,sources:owner.sources,sourceScope:owner.sourceScope,claim:'accurate-context-not-professional-judgement'})+'\n\n用户本轮原话：\n'+originalUserText;
   let prompt=composePrompt(context);
   if(prompt.length>65536 && context)prompt=composePrompt({bodyIncluded:false,goal:goalReceipt(context.goals[0]!),basisSha256:discussionHash(context.basis)});
@@ -723,11 +868,17 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
     for(const ref of previousAccesses.arrangements)await checkArrangement(ref,cfg);
     await verifyMapHistory(owner,previousAccesses.mapHistory,cfg);
     for(const ref of promptMapExposure(mapContext))await readMapVersion(id,ref.mapId,ref.version,cfg);
+    if(previousAccesses.importReads.length){
+     const importer=options.mapImports?.();
+     if(!importer)fail('strategy_map_import_source_unavailable',403);
+     await importer!.verifySources(owner,previousAccesses.importReads);
+    }
     if(importSourcesMeta?.length){
      const importer=options.mapImports?.();
      if(!importer)fail('strategy_map_import_source_unavailable',403);
      await importer!.verifySources(owner,importSourcesMeta);
     }
+    if(workingMapDraft)await verifyDraftImportSources(owner,workingMapDraft);
     if(context)await checkGoalContext(context,cfg);
     if(owner.businessOwner) {
       const checked = await options.roleContext!(owner.businessOwner,cfg,true);
@@ -742,7 +893,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
      if(isDiscussionSourceExcluded(owner,source)||((discussionSourceMode(owner)==='selected-only'||source.target.kind==='strategy-attachment')&&!permitsHistoricalSource(owner,source))||(discussionSourceMode(owner)==='project-background'&&access.projectId!==owner.projectId))fail('strategy_discussion_history_scope_changed');
     }
     for(const projection of [...previousProjections,{projectId:owner.projectId,sources:owner.sources}]){if(projection.sources.length&&!options.sources)fail('strategy_discussion_sources_unavailable');await options.sources?.verify({...owner,projectId:projection.projectId,sources:projection.sources},cfg,{...sourceContext,...('metadataOnly' in projection&&projection.metadataOnly?{metadataOnly:true}:{})});} };
-   const run=lease.start({requestId,text:prompt,requestFingerprint:discussionHash(prompt),providedContext:{userQuoteEligible:true,originalUserText,...(owner.businessOwner?{businessRole:{owner:owner.businessOwner,version:businessRoleVersion,contextSha256:discussionHash(roleContext),...(sourceRights.length?{sourceRights}:{})}}:{}),strategyDiscussion:{discussionId:id,...(currentMap&&{mapExposure:promptMapExposure(mapContext)}),...(selectedAttachmentIds&&{attachmentIds:selectedAttachmentIds}),...(selectedImportSourceIds&&{importSourceIds:selectedImportSourceIds}),usageContext:owner.usageContext,methods:owner.methods,sources:owner.sources,...(owner.sourceScope?{sourceScope:owner.sourceScope}:{}),...(owner.projectId?{projectId:owner.projectId}:{}),...(context?{goalBasis:context.basis}:{}),...(owner.goal?{goal:owner.goal}:{})}},verifyBeforeDispatch:verify});
+   const run=lease.start({requestId,text:prompt,requestFingerprint:discussionHash(prompt),providedContext:{userQuoteEligible:true,originalUserText,...(owner.businessOwner?{businessRole:{owner:owner.businessOwner,version:businessRoleVersion,contextSha256:discussionHash(roleContext),...(sourceRights.length?{sourceRights}:{})}}:{}),strategyDiscussion:{discussionId:id,...(currentMap&&{mapExposure:promptMapExposure(mapContext)}),...(selectedAttachmentIds&&{attachmentIds:selectedAttachmentIds}),...(selectedImportSourceIds&&{importSourceIds:selectedImportSourceIds}),...(selectedImportPages&&{selectedImportPages}),...(importMode&&{importMode}),usageContext:owner.usageContext,methods:owner.methods,sources:owner.sources,...(owner.sourceScope?{sourceScope:owner.sourceScope}:{}),...(owner.projectId?{projectId:owner.projectId}:{}),...(context?{goalBasis:context.basis}:{}),...(owner.goal?{goal:owner.goal}:{})}},verifyBeforeDispatch:verify});
    await run.accepted;sdkAccepted=true;
    const opened=(await domain.read(domain.ref(owner))).snapshot;
    if(!opened?.sessionFile)fail('strategy_discussion_persistence_unknown',503);

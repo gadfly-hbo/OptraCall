@@ -3,7 +3,7 @@ import type {ManagementStage} from './ManagementTabs.tsx';
 import {mapTemplates, type StrategyMapRef, type StrategyMapVersion} from '../strategy-map-types.ts';
 import type {GoalDiscussionSourceRef,GoalScope,GoalVersion} from '../strategy-goals-types.ts';
 import type {StrategyDiscussionDetail} from '../strategy-discussion-types.ts';
-import {StrategyMapPanel} from './StrategyMapPanel.tsx';
+import {StrategyMapPanel, type StrategyMapRereadRequest} from './StrategyMapPanel.tsx';
 import {StrategySimulationPanel,type StrategyEdgeLocation} from './StrategySimulationPanel.tsx';
 import {StrategyWorkbookImport,MapGoalHandoff,DownloadWorkbook} from './StrategyWorkbookImport.tsx';
 import {StrategyAttachmentEvidence} from './StrategyAttachmentEvidence.tsx';
@@ -11,6 +11,23 @@ import {DownloadVersion} from './StrategyChoicePanel.tsx';
 import {strategyWorkbenchRequest} from './strategy-discussion-client.ts';
 
 const keyOf=(r:StrategyMapRef)=>r.mapId+':'+r.version;
+const settledDraftKey=(id:string)=>`optracall.strategy-map-drafts-settled.v1:${id}`;
+function readSettledDrafts(id?:string):string[]{
+  if(!id)return [];
+  try{
+    const raw=JSON.parse(sessionStorage.getItem(settledDraftKey(id))??'[]');
+    return Array.isArray(raw)?raw.filter((s):s is string=>typeof s==='string'):[];
+  }catch{return [];}
+}
+function saveSettledDrafts(id:string,ids:string[]){
+  try{
+    if(ids.length)sessionStorage.setItem(settledDraftKey(id),JSON.stringify(ids));
+    else sessionStorage.removeItem(settledDraftKey(id));
+  }catch{/* ignore storage failures */}
+}
+const sameSource=(a?:GoalDiscussionSourceRef,b?:GoalDiscussionSourceRef)=>
+  Boolean(a && b && a.sessionId===b.sessionId && String(a.version)===String(b.version) && a.sha256===b.sha256);
+
 type UnreadableMap = StrategyMapRef & {reason:string};
 interface Catalog {versions:StrategyMapVersion[];unavailable?:UnreadableMap[]}
 function CandidateChoices({version}:{version:StrategyMapVersion}){
@@ -35,17 +52,19 @@ function MapHandoffs({version}:{version:StrategyMapVersion}){
 }
 import {StrategyMapImportDialog,type StrategyMapExtractRequest} from './StrategyMapImportDialog.tsx';
 
-export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDiscussionId,onDiscuss,onGoalsChanged,onSelectContext,sentRequest,onReconciled,importDialogOpen,onImportDialogOpenChange,onExtractMapImport,onRereadMap}:{
+export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDiscussionId,onDiscuss,onGoalsChanged,onSelectContext,sentRequest,onReconciled,importDialogOpen,onImportDialogOpenChange,onExtractMapImport,onRereadMap,onRefreshDiscussion}:{
  detail?:StrategyDiscussionDetail;stage:ManagementStage;active:boolean;scopes:GoalScope[];
  onStage:(stage:ManagementStage)=>void;ensureDiscussionId:()=>Promise<string>;
  sentRequest?:string;onReconciled:()=>void;onSelectContext:(ref:StrategyMapRef)=>void;
  onDiscuss:(ref?:StrategyMapRef,edgeId?:string,source?:GoalDiscussionSourceRef)=>void;onGoalsChanged:(goals?:GoalVersion[])=>Promise<void>;
  importDialogOpen?:boolean;onImportDialogOpenChange?:(open:boolean)=>void;
  onExtractMapImport?:(req:StrategyMapExtractRequest)=>Promise<void>;
- onRereadMap?:(ref:StrategyMapRef,prompt:string,importSourceIds:string[])=>void;
+ onRereadMap?:(req:StrategyMapRereadRequest)=>void;
+ onRefreshDiscussion?:()=>void;
 }){
   const id=detail?.discussion.id;
   const [catalog,setCatalog]=useState<Catalog>({versions:[]}), [selected,setSelected]=useState<StrategyMapRef>();
+  const [settledDraftIds,setSettledDraftIds]=useState<string[]>(()=>readSettledDrafts(id));
   const [localImportOpen,setLocalImportOpen]=useState(false);
   const [excelImportReq,setExcelImportReq]=useState(0);
   const [simulationEdge,setSimulationEdge]=useState<StrategyEdgeLocation>(),[returnEdge,setReturnEdge]=useState<StrategyEdgeLocation>();
@@ -56,6 +75,25 @@ export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDisc
   const setOpenImport=(next:boolean)=>{if(onImportDialogOpenChange)onImportDialogOpenChange(next);else setLocalImportOpen(next);};
   const version=selected?catalog.versions.find(v=>keyOf(v)===keyOf(selected)):catalog.versions.at(-1);
   const handoffMap=catalog.versions.find(v=>handoff && keyOf(v)===keyOf(handoff));
+
+  useEffect(()=>{setSettledDraftIds(readSettledDrafts(id));},[id]);
+
+  const latestDraft=detail?.mapImportDrafts?.at(-1);
+  const pendingDraft=latestDraft &&
+    !settledDraftIds.includes(latestDraft.entryId) &&
+    !catalog.versions.some(v=>sameSource(v.source,latestDraft.source))
+      ? latestDraft
+      : undefined;
+
+  function markDraftSettled(entryId:string){
+    if(!id)return;
+    setSettledDraftIds(prev=>{
+      const next=prev.includes(entryId)?prev:[...prev,entryId];
+      saveSettledDrafts(id,next);
+      return next;
+    });
+  }
+
   useEffect(()=>{
     if(!active || !id)return;
     const controller=new AbortController(),ticket=++fetched.current;
@@ -71,11 +109,17 @@ export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDisc
     }).catch(e=>{if(!controller.signal.aborted && fetched.current===ticket){setCatalog({versions:[]});setError(e.message);}})
       .finally(()=>{if(!controller.signal.aborted && fetched.current===ticket)setLoading(false);});
     return ()=>controller.abort();
-  },[active,id,detail?.discussion.revision,detail?.discussion.lastRun?.status,sentRequest,stage,refresh]);
-  function saved(v:StrategyMapVersion){
+  },[active,id,detail?.discussion.revision,detail?.discussion.lastRun?.status,detail?.mapImportDrafts?.length,sentRequest,stage,refresh]);
+
+  function saved(v:StrategyMapVersion,settledDraftEntryId?:string){
     ++fetched.current;setLoading(false);
+    if(settledDraftEntryId)markDraftSettled(settledDraftEntryId);
     setCatalog(old=>({...old,versions:[...old.versions.filter(x=>keyOf(x)!==keyOf(v)),v]}));
     setSelected(v);onSelectContext(v);setReturnEdge(undefined);setStatus('已保存 '+v.title+' · v'+v.version);setRefresh(n=>n+1);
+  }
+  function dismissPendingDraft(entryId:string){
+    markDraftSettled(entryId);
+    setStatus('已放弃本次导入草稿，未写入新的战略地图版本。');
   }
   function select(ref:StrategyMapRef){setSelected(ref);onSelectContext(ref);setHandoff(undefined);setReturnEdge(undefined);}
   const versionOptions=catalog.versions.map(v=><option key={keyOf(v)} value={keyOf(v)}>{v.title} · v{v.version}</option>);
@@ -84,10 +128,12 @@ export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDisc
   return <div className="strategy-workbench">
     {error && <p role="alert">{error} <button className="text-button" onClick={()=>setRefresh(n=>n+1)}>重新读取地图</button></p>}
     {Boolean(catalog.unavailable?.length) && <details><summary>{catalog.unavailable!.length} 个版本的来源当前不可读取</summary>{catalog.unavailable!.map(v=><p key={keyOf(v)}>{v.mapId} · v{v.version} · {v.reason}</p>)}</details>}
+    {Boolean(detail?.unavailableMapImportDrafts?.length) && <details><summary>{detail!.unavailableMapImportDrafts!.length} 份导入草稿的原稿当前不可读取（已撤权或不可用）</summary>{detail!.unavailableMapImportDrafts!.map(d=><p key={d.entryId}>{d.entryId} · {d.reason}</p>)}</details>}
+    {stage==='direction' && pendingDraft && <section className="wb-candidate"><div className="sg-row-between"><h3>待核对导入草稿 · {pendingDraft.draft.title}（尚未保存）</h3><button className="primary-button" onClick={()=>onStage('compare')}>前往对照原稿核对</button></div></section>}
     {stage==='direction' && version && <section className="wb-candidate"><div className="sg-row-between"><h3>当前候选 · {version.title}</h3><button className="text-button" onClick={()=>onStage('compare')}>打开战略地图 · v{version.version}</button></div><CandidateChoices version={version}/></section>}
     {stage==='compare' && <>
       {selected && !version && picker}
-      {id && <StrategyMapPanel discussionId={id} versions={catalog.versions} selected={selected??version} onSelect={select} onSaved={saved} onDiscuss={onDiscuss} onOpenImport={onExtractMapImport?()=>setOpenImport(true):undefined} onReread={onRereadMap} onRevoked={()=>setRefresh(n=>n+1)} onSimulate={(ref,edgeId)=>{setSimulationEdge({mapId:ref.mapId,version:ref.version,edgeId});setSimulationVisit(v=>v+1);onStage('handoff');}} onHandoff={v=>{select(v);setHandoff(v);}} focusEdgeId={returnEdge && version && keyOf(version)===keyOf(returnEdge)?returnEdge.edgeId:undefined}/>}
+      {id && <StrategyMapPanel discussionId={id} versions={catalog.versions} selected={selected??version} pendingDraft={pendingDraft} onDismissPendingDraft={dismissPendingDraft} onSelect={select} onSaved={saved} onDiscuss={onDiscuss} onOpenImport={onExtractMapImport?()=>setOpenImport(true):undefined} onReread={onRereadMap} onRevoked={()=>{setRefresh(n=>n+1);onRefreshDiscussion?.();}} onSimulate={(ref,edgeId)=>{setSimulationEdge({mapId:ref.mapId,version:ref.version,edgeId});setSimulationVisit(v=>v+1);onStage('handoff');}} onHandoff={v=>{select(v);setHandoff(v);}} focusEdgeId={returnEdge && version && keyOf(version)===keyOf(returnEdge)?returnEdge.edgeId:undefined}/>}
       {!id && <div className="sg-row"><p>可从原战略讨论形成候选，或导入线下整理的战略图。</p>{onExtractMapImport&&<button type="button" className="primary-button" onClick={()=>setOpenImport(true)}>导入战略图</button>}</div>}{importer}
     </>}
     {stage==='handoff' && (id && (catalog.versions.length || !loading) ? <StrategySimulationPanel key={id+':'+simulationVisit} discussionId={id} versions={catalog.versions} origin={simulationEdge} onReturn={e=>{setSelected(e);setReturnEdge(e);onStage('compare');}}/>:<p>{loading?'正在读取可比较的版本…':'选择原讨论后，可比较其中的候选版本。'}</p>)}

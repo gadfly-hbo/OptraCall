@@ -1,7 +1,7 @@
 import { StrategyAttachmentPicker } from './StrategyAttachmentPicker.tsx';
 import { fileBase64,projectAttachmentLibrary } from './runtime-client.ts';
 import {StrategyWorkbench} from './StrategyWorkbench.tsx';
-import {mapTemplates,type StrategyMapRef} from '../strategy-map-types.ts';
+import {mapTemplates,type StrategyMapDraft,type StrategyMapRef} from '../strategy-map-types.ts';
 import type { ManagementStage } from './ManagementTabs.tsx';
 import type { GoalScope } from '../strategy-goals-types.ts';
 import { StrategyChoicePanel,type ChoiceHandoff } from './StrategyChoicePanel.tsx';
@@ -91,6 +91,7 @@ export interface StrategyDiscussionPanelProps {
 export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],getGoalScope,onHandoff,active, focusRequest, selectedGoal, projects, configurations, selectedConfigurationId, onReviewCandidate, onGoalsChanged, onSettings }: StrategyDiscussionPanelProps) {
   const id = useId(), live = useRef(true), owner = useRef<string | undefined>(undefined), dirtyPurpose = useRef(false), epoch = useRef(0), presentedSnapshot = useRef<ProjectSnapshot | undefined>(undefined);
   const [directory, setDirectory] = useState<StrategyDiscussion[]>([]), [detail, setDetail] = useState<StrategyDiscussionDetail>(), [text, setText] = useState(() => readDraft()), [streaming, setStreaming] = useState(''), [activity, setActivity] = useState('');
+  const detailRef = useRef(detail); detailRef.current = detail;
   const [attachmentIds,setAttachmentIds]=useState<string[]>([]);
   function saveAttachmentDraft(id:string,ids:string[]){
     if(ids.length)sessionStorage.setItem(attachmentDraftKey(id),JSON.stringify(ids));
@@ -112,6 +113,7 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
   };
   const apply = (next: StrategyDiscussionDetail, choices = false) => {
     const previousSnapshot = presentedSnapshot.current; presentedSnapshot.current = next.snapshot; setStreaming(old => projectDiscussionStreaming(old, { type: 'snapshot', snapshot: next.snapshot }, previousSnapshot));
+    if (!next.busy) setActivity('');
     owner.current = next.discussion.id; setDetail(next); setReplacementRequestId(readReplacement(next.discussion.id));
     const original = journal.value?.read();
     if (original?.kind === 'message' && original.discussionId === next.discussion.id && api.canSettleDiscussionMessage(next, original.input)) {
@@ -150,7 +152,16 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
       if (!live.current || controller.signal.aborted || owner.current !== discussionId || ticket !== epoch.current) return;
       const previousSnapshot = presentedSnapshot.current; if (event.type === 'snapshot') presentedSnapshot.current = event.snapshot;
       setStreaming(old => projectDiscussionStreaming(old, event, previousSnapshot));
-      if (event.type === 'snapshot' || event.type === 'native' && event.event.type === 'message_end') setDetail(old => old && old.discussion.id === discussionId ? { ...old, snapshot: projectDiscussionSnapshot(old.snapshot, event), ...(event.type === 'snapshot' ? { busy: event.snapshot.status === 'running' } : {}) } : old);
+      if (event.type === 'snapshot' || event.type === 'native' && event.event.type === 'message_end') {
+        const prev = detailRef.current;
+        const shouldReconcile = event.type === 'snapshot' && event.snapshot.status !== 'running' && prev?.discussion.id === discussionId && (prev.busy || prev.discussion.lastRun?.status === 'accepted');
+        setDetail(old => old && old.discussion.id === discussionId ? { ...old, snapshot: projectDiscussionSnapshot(old.snapshot, event), ...(event.type === 'snapshot' ? { busy: event.snapshot.status === 'running' } : {}) } : old);
+        if (shouldReconcile) {
+          setStreaming(''); setActivity('');
+          void read(discussionId).then(() => onGoalsChanged()).catch(fault => { if (live.current) setError(errorText(fault)); });
+          void list().catch(() => {});
+        }
+      }
       if (event.type === 'native' && event.event.type === 'tool_execution_start') setActivity(`正在使用 ${event.event.toolName || '已获准工具'}`);
       if (event.type === 'native' && event.event.type === 'tool_execution_end') setActivity('');
       if (event.type === 'run.settled') { setStreaming(''); setActivity(''); if (event.outcome === 'failed') setError(event.error || '本轮讨论未完成，已保存的记录保留。'); void read(discussionId).then(() => onGoalsChanged()).catch(fault => { if (live.current) setError(errorText(fault)); }); void list().catch(() => {}); }
@@ -235,7 +246,7 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
   const control = async (action: 'stop' | 'close') => { if (!detail || busy) return; setBusy(true); try { if (action === 'stop') await api.stopStrategyDiscussion(detail.discussion.id, detail.discussion.lastRun?.id); else await api.closeStrategyDiscussion(detail.discussion.id); await read(); setNotice(action === 'stop' ? '已请求停止，已保存记录保留；实际收尾以当前状态为准。' : '会话资源已关闭，原生历史保留，可从原讨论续接。'); } catch (fault) { setError(errorText(fault)); } finally { setBusy(false); } };
   useEffect(() => { if (!focusRequest) return; if (busy || pending) { setNotice('当前请求尚待核对，原讨论与定位保持；处理后可再从准确来源打开。'); return; } void choose(focusRequest.source.id).then(() => { if (owner.current === focusRequest.source.id) setFocusedSource(focusRequest.source); }).catch(fault => setError(errorText(fault))); }, [focusRequest?.id]);
   const [mapImportOpen,setMapImportOpen]=useState(false);
-  const dispatchMapImport = async (opts: { prompt: string; importSourceIds: string[]; selectedImportPages?: Record<string, number[]>; mapTemplate?: keyof typeof mapTemplates; mapRef?: StrategyMapRef }) => {
+  const dispatchMapImport = async (opts: { prompt: string; importSourceIds: string[]; selectedImportPages?: Record<string, number[]>; importMode?: 'review-draft'; workingMapDraft?: StrategyMapDraft; mapTemplate?: keyof typeof mapTemplates; mapRef?: StrategyMapRef }) => {
     if (locked) throw new Error('请等本轮讨论结束后再发起导入或重读。');
     setBusy(true); setError(''); setNotice('');
     try {
@@ -246,6 +257,8 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
         text: opts.prompt,
         importSourceIds: opts.importSourceIds,
         ...(opts.selectedImportPages ? { selectedImportPages: opts.selectedImportPages } : {}),
+        ...(opts.importMode ? { importMode: opts.importMode } : {}),
+        ...(opts.workingMapDraft ? { workingMapDraft: opts.workingMapDraft } : {}),
         ...(opts.mapTemplate ? { mapTemplate: opts.mapTemplate } : {}),
         ...(opts.mapRef ? { mapRef: opts.mapRef } : {}),
       };
@@ -256,7 +269,7 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
       apply(await api.readStrategyDiscussion(discussion.id));
       setConnection(value => value + 1);
       onStage?.('compare');
-      setNotice('已交给原战略 Agent 提取/重读，完成后可在战略地图对照原稿核对。');
+      setNotice('已交给原战略 Agent 生成待核草稿（尚未落盘正式版本），完成后请在战略地图对照原稿核对并一次保存。');
     } catch (fault) {
       if (fault instanceof api.StrategyDiscussionRequestError && !fault.uncertain) {
         const original = journal.value?.read();
@@ -269,7 +282,7 @@ export function StrategyDiscussionPanel({ stage='direction',onStage,scopes=[],ge
   const messages = detail?.snapshot.messages.filter((message): message is NativeMessage => message.role === 'user' || message.role === 'assistant') || [];
   return <section className="sg-panel strategy-discussion" aria-labelledby={`${id}-title`}><div className="sg-row-between"><h2 id={`${id}-title`}>战略选择 Agent</h2><label>原讨论 <select className="sg-select" disabled={busy || Boolean(pending)} value={detail?.discussion.id || ''} onChange={event => { void choose(event.target.value).catch(fault => setError(errorText(fault))); }}><option value="">新的战略讨论</option>{directory.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div><p className="sg-muted">直接说明问题，已有战略与 GSA 可以沿用；重要选择集中确认，普通讨论与补证由 Agent 推进。</p><div className="sg-row"><span className="sg-muted">本次：{purpose ? usageKindLabels[purpose.kind] : '未设置，仍可工作'}{detail?.discussion.lastRun ? ' · 沿原讨论背景' : ''}{goal ? ` · 目标准确版 v${goal.version}` : ''}</span>{detail && <button type="button" className="text-button" disabled={busy} onClick={() => { void read().then(() => setConnection(value => value + 1)).catch(fault => setError(errorText(fault))); }}>重读原讨论</button>}</div>
     {selectedGoal && <div className="sg-row"><span className="sg-muted">当前浏览目标：{selectedGoal.title} · v{selectedGoal.version}</span><button type="button" className="text-button" disabled={locked} onClick={() => { setGoal({ goalId: selectedGoal.goalId, version: selectedGoal.version }); if (!detail && !dirtyPurpose.current) setPurpose(goalPurpose(selectedGoal)); setNotice('已选择准确目标；原目标与历史未改写，本轮范围将随下次消息保存。'); }}>围绕此目标讨论</button></div>}
-    {onStage && <StrategyWorkbench key={workspaceEpoch} detail={detail} active={active} stage={stage} scopes={scopes} sentRequest={sentMapRequest} onReconciled={()=>setSentMapRequest(undefined)} onSelectContext={v=>{setMapContext({mapId:v.mapId,version:v.version});setMapTemplate(undefined);}} onStage={onStage} onGoalsChanged={onGoalsChanged} ensureDiscussionId={async()=>(await ensure()).id} importDialogOpen={mapImportOpen} onImportDialogOpenChange={setMapImportOpen} onExtractMapImport={async req=>{await dispatchMapImport({prompt:req.prompt,importSourceIds:[req.sourceId],selectedImportPages:{[req.sourceId]:req.selectedPages},mapTemplate:req.template});}} onRereadMap={(ref,prompt,ids)=>{void dispatchMapImport({prompt:`请结合当前地图 v${ref.version} 和已授权原稿局部重读：${prompt}。保留未提及的人工修改，按 expectedVersion=${ref.version} 保存新版本。`,importSourceIds:ids,mapRef:ref}).catch(()=>{});}} onDiscuss={(ref,edgeId,source)=>{
+    {onStage && <StrategyWorkbench key={workspaceEpoch} detail={detail} active={active} stage={stage} scopes={scopes} sentRequest={sentMapRequest} onReconciled={()=>setSentMapRequest(undefined)} onSelectContext={v=>{setMapContext({mapId:v.mapId,version:v.version});setMapTemplate(undefined);}} onStage={onStage} onGoalsChanged={onGoalsChanged} ensureDiscussionId={async()=>(await ensure()).id} importDialogOpen={mapImportOpen} onImportDialogOpenChange={setMapImportOpen} onRefreshDiscussion={()=>{void read().catch(()=>{});}} onExtractMapImport={async req=>{await dispatchMapImport({prompt:req.prompt,importSourceIds:[req.sourceId],selectedImportPages:{[req.sourceId]:req.selectedPages},importMode:'review-draft',mapTemplate:req.template});}} onRereadMap={req=>{const refNote=req.baseRef?`（关联地图 v${req.baseRef.version}，mapId=${req.baseRef.mapId}，expectedVersion=${req.baseRef.version}）`:'（尚未保存的待核草稿）';void dispatchMapImport({prompt:`请严格以随本轮传入的 workingMapDraft 为用户当前已编辑草稿${refNote}，仅在授权原稿与选页范围内调用 read-import-source 局部重读：${req.prompt}。必须保留用户未提及的全部手工修改，并调用 propose-map-draft 返回修订后的待核草稿（不要直接调用 save-map）。`,importSourceIds:req.importSourceIds,selectedImportPages:req.selectedImportPages,importMode:'review-draft',workingMapDraft:req.currentDraft,mapRef:req.baseRef}).catch(()=>{});}} onDiscuss={(ref,edgeId,source)=>{
       setMapContext(ref?{mapId:ref.mapId,version:ref.version,...(edgeId?{edgeId}:{})}:undefined);
       setFocusedSource(source);onStage('direction');requestAnimationFrame(()=>document.getElementById(id+'-text')?.focus());
     }}/>}

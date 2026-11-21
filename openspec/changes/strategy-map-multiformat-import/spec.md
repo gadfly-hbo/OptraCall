@@ -129,14 +129,14 @@
 
 ---
 
-## 7. 实际修改与新增路径（第二阶段获确认后）
+## 7. 实际修改与新增路径（含返工修订）
 
 - `src/host/strategy-map-types.ts`、`src/host/strategy-map-store.ts`、`src/host/strategy-map-document.ts`
 - `src/host/strategy-discussion-types.ts`、`src/host/strategy-discussion-host.ts`、`src/host/server.ts`
 - 新增战略多格式解析/存储/路由薄层：`src/host/strategy-map-import.ts`、`src/host/strategy-map-import-store.ts`、`src/host/strategy-map-import-routes.ts`
-- `src/agent/strategy-discussion.ts`、`src/agent/strategy-map-schema.ts`、`src/agent/project-session.ts`、`src/agent/project-runtime.ts`（仅 `strategy-discussion` 的 `read-import-source` 图文内容放宽有界 12 MiB IPC 负载，其余工具维持 256 KiB）
-- `src/host/ui/StrategyWorkbench.tsx`、`src/host/ui/StrategyMapPanel.tsx`、`src/host/ui/StrategyWorkbookImport.tsx`、`src/host/ui/StrategyDiscussionPanel.tsx`、`src/host/ui/strategy-map.css`，及新增 `src/host/ui/strategy-map-import-client.ts`、`src/host/ui/StrategyMapImportDialog.tsx`、`src/host/ui/StrategyMapReviewPane.tsx`
-- 对应测试：`tests/strategy-map-import-parser.test.ts`、`tests/strategy-map-import-host.test.ts`、`tests/browser-strategy-map-import.mjs` 与既有 `tests/strategy-*.test.ts` 回归
+- `src/agent/strategy-discussion.ts`（扩展 `read-import-source`、`propose-map-draft`、`save-map`）、`src/agent/strategy-map-schema.ts`、`src/agent/project-session.ts`、`src/agent/project-runtime.ts`（仅 `strategy-discussion` 的 `read-import-source` 图文内容放宽有界 24 MiB IPC 负载以完整承载 ≤16 MiB 图像的 base64 编码并交由官方 Pi SDK `1.4.0` 原生 Photon WASM 缩放，其余工具维持 256 KiB）
+- `src/host/ui/StrategyWorkbench.tsx`、`src/host/ui/StrategyMapPanel.tsx`、`src/host/ui/StrategyWorkbookImport.tsx`、`src/host/ui/StrategyDiscussionPanel.tsx`、`src/host/ui/strategy-map.css`，及新增 `src/host/ui/strategy-map-import-client.ts`、`src/host/ui/StrategyMapImportDialog.tsx`、`src/host/ui/StrategyMapReviewPane.tsx`、`src/host/ui/strategy-map-review-helpers.ts`
+- 对应测试：`tests/strategy-map-import-parser.test.ts`、`tests/strategy-map-import-host.test.ts`、`tests/strategy-map-review-helpers.test.ts`、`tests/browser-strategy-map-import.mjs` 与既有 `tests/strategy-*.test.ts` 回归
 - 规格与结果文档：`openspec/changes/strategy-map-multiformat-import/spec.md`、`result.md`
 
 ---
@@ -150,11 +150,12 @@
 | **阶段一** | T1.1 读取规范与基线，按规范认领 #106 并建独立任务分支 | #106 唯一有效认领评论回读确认；分支基于 `4b8ad9b0b74390b55b580d92fdf69c292f90d0f8` | [x] 已完成 |
 | **阶段一** | T1.2 编写 OpenSpec、四原则前置检查、IN01–IN07 契约与待确认决定 D01–D06 | 本文件完整覆盖四类格式、语义口径、边界与清单 | [x] 已完成 |
 | **阶段一** | T1.3 制作全前端融合可点击 Demo v0.2 并核验脚本语法与离线自包含 | 融合 OptraCall 248px 侧栏、顶栏、战略选择四页签、目标管理承接与双栏对照核对（v0.2 Demo SHA-256 `757f4a7a95beffa006e3ac0966301f5aa9f9ce17bd21f3fc8e7e4b47da2f84df`） | [x] 已完成 |
-| **阶段一** | T1.4 推送设计提交并在 #106 提交设计回执，等待用户确认 | #106 设计回执（`58469b4879f89c987ed31d2d781e7a8fea22a9f1`）已获用户明确确认并授权开工 | [x] 已完成 |
-| **阶段二** | T2.1 Host 多格式只读解析、来源指纹归属、撤权校验与按需页图渲染（TDD） | 覆盖 `.xlsx` / `.pptx` / `.pdf` / `.png|.jpg` 合成样例、同名换版、撤权阻断与渲染环境降级 | [x] 已完成 |
-| **阶段二** | T2.2 统一 Pi 会话工具扩展与候选地图版本存储（Interface v3 / Pi 1.4.0） | 复用 `strategy-discussion`；支持图文/纯文本降级、幂等重试、CAS 冲突、取消零半成品与重启恢复 | [x] 已完成 |
-| **阶段二** | T2.3 对照核对 UI（双入口、双向定位、批量保留清楚项、局部纠偏、自然语言重读） | 桌面与窄屏隔离浏览器点验；保存重开后在原讨论可读人工修改；目标/Case 无自动写入 | [x] 已完成 |
-| **阶段二** | T2.4 完整回归、质量记录与实现回执交回 Codex | 工程边界、构建、回归与隔离浏览器验证记录入 `result.md`；如实区分已验证与未验证项；推送并回执 #106 | [x] 已完成 |
+| **阶段一** | T1.4 推送设计提交并在 #106 提交设计回执，等待用户确认 | #106 设计回执（`58469b4879f89c987ed31d2d781e7a8fea22a9f1`，见 [issuecomment-7057658920](https://github.com/gadfly-hbo/OptraCall/issues/106#issuecomment-7057658920)）于 Antigravity 会话 `b2b4f022` 获用户明确确认「确认范围和 v0.2 Demo/Spec 没问题，进行开发」并授权开工（注：该确认发生在会话侧，未另发 GitHub 评论） | [x] 已完成 |
+| **阶段二** | T2.1–T2.4 首轮实现与提交 `9794c23086afdf9bce2d6c7c73cef9525a469e8e` | Codex 独立复核（[issuecomment-7058762759](https://github.com/gadfly-hbo/OptraCall/issues/106#issuecomment-7058762759)）检出 7 项阻断问题并退回原分支返工（原 FAIL 证据完整保留于 `result.md`） | [!] 已退回返工 |
+| **阶段三（返工）** | R1 修正解析与坐标（Excel 真工作表→绘图/图表/图片绑定、PPTX `grpSp` 组合变换、PDF 旋转四顶点映射与混合图文视觉标记） | 消除假页与跨表串图；组合形状与 90° 旋转 PDF 坐标框精准复验通过 | [x] 已完成 |
+| **阶段三（返工）** | R2 修正本轮授权/选页隔离、无地图撤权历史核验、出处一致性、项目排除统一，以及 16 MiB 内真图送达与如实回执 | `read-import-source` 严格受本轮授权与选页约束；真实 ~7.8 MiB PNG 经官方 Pi SDK `1.4.0` 送达合成视觉 Provider 且 `delivered === true` 与实收 `image_url` 一致 | [x] 已完成 |
+| **阶段三（返工）** | R3 修正「核对后一次保存」(`propose-map-draft`)、局部重读保留手工编辑(`workingMapDraft` + `ManualEditOverlay`)、安全去重与 `unknown` 连线保护、多来源同页热点隔离、D02 缩略图与空节点扫描草稿 | 真实浏览器从 `<input type="file">` 走完提取 0 版本 → 放弃 0 版本 → 改 `9%→15%` 局部重读保留 `15%` → 一次保存 `v1` 与刷新重开，覆盖全部 7 项复验 | [x] 已完成 |
+| **阶段三（返工）** | R4 全量受影响回归、`result.md` 保留原 FAIL 并追加逐项复验证据、推送并回执 `#106` 交回 Codex | `check:agent-sessions`、构建、审计、单测/集成与真实浏览器复验全部通过，停止写入并交回 Codex | [x] 已完成 |
 
 ---
 

@@ -31,7 +31,7 @@ export interface ParsedImportShape {
   text: string;
   /** Normalized 0..1000 coordinates [x, y, w, h] when known */
   bbox?: [number, number, number, number];
-  kind?: 'shape' | 'smartart' | 'cell-anchor';
+  kind?: 'shape' | 'smartart' | 'chart' | 'image' | 'cell-anchor';
 }
 
 export interface ParsedImportConnector {
@@ -40,6 +40,20 @@ export interface ParsedImportConnector {
   fromObjectId?: string;
   toObjectId?: string;
   arrowDirection: 'forward' | 'backward' | 'both' | 'none';
+  bbox?: [number, number, number, number];
+}
+
+export interface ParsedEmbeddedImage {
+  id: string;
+  name: string;
+  mimeType: 'image/png' | 'image/jpeg';
+  width: number;
+  height: number;
+  orientation: number;
+  sha256: string;
+  page?: number;
+  sheetName?: string;
+  objectId?: string;
   bbox?: [number, number, number, number];
 }
 
@@ -53,16 +67,7 @@ export interface ParsedImportPage {
   connectors: ParsedImportConnector[];
   notes?: string[];
   sheetName?: string;
-}
-
-export interface ParsedEmbeddedImage {
-  id: string;
-  name: string;
-  mimeType: 'image/png' | 'image/jpeg';
-  width: number;
-  height: number;
-  orientation: number;
-  sha256: string;
+  embeddedImages?: ParsedEmbeddedImage[];
 }
 
 export interface DecodedStrategyMapImport {
@@ -86,6 +91,19 @@ export interface RenderedPageImageResult {
   orientation?: number;
   renderer?: string;
   reason?: string;
+  imageId?: string;
+  imageName?: string;
+  imageIndex?: number;
+  totalSheetImages?: number;
+  extraImages?: Array<{
+    imageId: string;
+    imageName: string;
+    mimeType: 'image/png' | 'image/jpeg';
+    base64: string;
+    width: number;
+    height: number;
+    orientation: number;
+  }>;
 }
 
 const fault = (code: string, status = 422): never => {
@@ -222,25 +240,128 @@ function parseXmlSafe(xml: string, handlers: {
   parser.write(xml).close();
 }
 
+function resolveZipTarget(baseDir: string, target: string): string {
+  const cleaned = target.replace(/\\/g, '/');
+  if (cleaned.startsWith('/')) return path.posix.normalize(cleaned.slice(1));
+  return path.posix.normalize(path.posix.join(baseDir, cleaned));
+}
+
+async function parseZipRels(
+  zip: JSZip,
+  ownerPath: string,
+): Promise<Map<string, { target: string; type: string }>> {
+  const baseDir = path.posix.dirname(ownerPath);
+  const relsPath = path.posix.join(baseDir, '_rels', `${path.posix.basename(ownerPath)}.rels`);
+  const relsFile = zip.file(relsPath);
+  const result = new Map<string, { target: string; type: string }>();
+  if (!relsFile) return result;
+  parseXmlSafe(await relsFile.async('string'), {
+    onOpen(local, attrs) {
+      if (local !== 'Relationship' || !attrs.Id || !attrs.Target) return;
+      if (attrs.TargetMode?.toLowerCase() === 'external') return;
+      result.set(attrs.Id, {
+        target: resolveZipTarget(baseDir, attrs.Target),
+        type: attrs.Type ?? '',
+      });
+    },
+  });
+  return result;
+}
+
 function normalizeBox(
   offX: number,
   offY: number,
   extCx: number,
   extCy: number,
-  slideCx: number,
-  slideCy: number,
+  canvasCx: number,
+  canvasCy: number,
 ): [number, number, number, number] | undefined {
-  if (!slideCx || !slideCy || extCx <= 0 || extCy <= 0) return undefined;
+  if (!Number.isFinite(offX) || !Number.isFinite(offY) || !Number.isFinite(extCx) || !Number.isFinite(extCy)) return undefined;
+  if (!canvasCx || !canvasCy || extCx <= 0 || extCy <= 0) return undefined;
   const clamp = (v: number) => Math.max(0, Math.min(1000, Math.round(v)));
-  return [
-    clamp((offX / slideCx) * 1000),
-    clamp((offY / slideCy) * 1000),
-    clamp((extCx / slideCx) * 1000),
-    clamp((extCy / slideCy) * 1000),
-  ];
+  const x1 = clamp((offX / canvasCx) * 1000);
+  const y1 = clamp((offY / canvasCy) * 1000);
+  const x2 = clamp(((offX + extCx) / canvasCx) * 1000);
+  const y2 = clamp(((offY + extCy) / canvasCy) * 1000);
+  const w = x2 - x1;
+  const h = y2 - y1;
+  if (w <= 0 || h <= 0) return undefined;
+  return [x1, y1, w, h];
 }
 
-function parseSmartArtTexts(xml: string, prefix: string): ParsedImportShape[] {
+interface GroupTransform {
+  gx: number;
+  gy: number;
+  gcx: number;
+  gcy: number;
+  chx: number;
+  chy: number;
+  chcx: number;
+  chcy: number;
+  flipH: boolean;
+  flipV: boolean;
+  rotDeg: number;
+}
+
+function applyRectRotation(
+  box: { x: number; y: number; cx: number; cy: number },
+  rotDeg: number,
+  centerX?: number,
+  centerY?: number,
+): { x: number; y: number; cx: number; cy: number } {
+  if (!rotDeg || Math.abs(rotDeg % 360) < 1e-6) return box;
+  const rad = (rotDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const cx0 = centerX ?? box.x + box.cx / 2;
+  const cy0 = centerY ?? box.y + box.cy / 2;
+  const corners = [
+    [box.x, box.y],
+    [box.x + box.cx, box.y],
+    [box.x + box.cx, box.y + box.cy],
+    [box.x, box.y + box.cy],
+  ].map(([px, py]) => {
+    const dx = px! - cx0;
+    const dy = py! - cy0;
+    return [cx0 + dx * cos - dy * sin, cy0 + dx * sin + dy * cos];
+  });
+  const xs = corners.map(c => c[0]!);
+  const ys = corners.map(c => c[1]!);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return { x: minX, y: minY, cx: Math.max(...xs) - minX, cy: Math.max(...ys) - minY };
+}
+
+function applyGroupTransforms(
+  box: { x: number; y: number; cx: number; cy: number },
+  stack: readonly GroupTransform[],
+): { x: number; y: number; cx: number; cy: number } {
+  let current = { ...box };
+  for (let i = stack.length - 1; i >= 0; i--) {
+    const g = stack[i]!;
+    if (!(g.gcx > 0 && g.gcy > 0 && g.chcx > 0 && g.chcy > 0)) continue;
+    const sx = g.gcx / g.chcx;
+    const sy = g.gcy / g.chcy;
+    const relX = g.flipH ? g.chx + g.chcx - (current.x + current.cx) : current.x - g.chx;
+    const relY = g.flipV ? g.chy + g.chcy - (current.y + current.cy) : current.y - g.chy;
+    current = {
+      x: g.gx + relX * sx,
+      y: g.gy + relY * sy,
+      cx: current.cx * sx,
+      cy: current.cy * sy,
+    };
+    if (g.rotDeg) {
+      current = applyRectRotation(current, g.rotDeg, g.gx + g.gcx / 2, g.gy + g.gcy / 2);
+    }
+  }
+  return current;
+}
+
+function parseSmartArtTexts(
+  xml: string,
+  prefix: string,
+  fallbackBbox?: [number, number, number, number],
+): ParsedImportShape[] {
   const shapes: ParsedImportShape[] = [];
   let inPt = false;
   let ptId = '';
@@ -269,7 +390,15 @@ function parseSmartArtTexts(xml: string, prefix: string): ParsedImportShape[] {
         if (currentP.trim()) paragraphs.push(currentP.trim());
       } else if (inPt && local === 'pt') {
         const text = paragraphs.join('\n').trim();
-        if (text) shapes.push({ objectId: ptId, name: `SmartArt · ${shapes.length + 1}`, text, kind: 'smartart' });
+        if (text) {
+          shapes.push({
+            objectId: ptId,
+            name: `SmartArt · ${shapes.length + 1}`,
+            text,
+            ...(fallbackBbox ? { bbox: fallbackBbox } : {}),
+            kind: 'smartart',
+          });
+        }
         inPt = false;
       }
     },
@@ -277,21 +406,81 @@ function parseSmartArtTexts(xml: string, prefix: string): ParsedImportShape[] {
   return shapes;
 }
 
+function parseChartXml(
+  xml: string,
+  objectId: string,
+  fallbackName: string,
+  bbox?: [number, number, number, number],
+): ParsedImportShape | undefined {
+  const titleParts: string[] = [];
+  const axisTitles: string[] = [];
+  const seriesNames: string[] = [];
+  const categories: string[] = [];
+  const stack: string[] = [];
+  let currentText = '';
+  let inLeafText = false;
+
+  parseXmlSafe(xml, {
+    onOpen(local) {
+      stack.push(local);
+      if (local === 't' || local === 'v') {
+        inLeafText = true;
+        currentText = '';
+      }
+    },
+    onText(s) {
+      if (inLeafText) currentText += s;
+    },
+    onClose(local) {
+      if (local === 't' || local === 'v') {
+        const val = currentText.trim();
+        if (val) {
+          const inAxis = stack.includes('catAx') || stack.includes('valAx') || stack.includes('dateAx') || stack.includes('serAx');
+          const inTitle = stack.includes('title');
+          const inSer = stack.includes('ser');
+          const inTx = stack.includes('tx');
+          const inCat = stack.includes('cat');
+          if (inTitle && !inAxis) {
+            if (!titleParts.includes(val)) titleParts.push(val);
+          } else if (inTitle && inAxis) {
+            if (!axisTitles.includes(val)) axisTitles.push(val);
+          } else if (inSer && inTx) {
+            if (!seriesNames.includes(val)) seriesNames.push(val);
+          } else if (inSer && inCat && categories.length < 24) {
+            if (!categories.includes(val)) categories.push(val);
+          }
+        }
+        inLeafText = false;
+        currentText = '';
+      }
+      stack.pop();
+    },
+  });
+
+  const mainTitle = titleParts.join(' ').trim();
+  const lines: string[] = [];
+  if (mainTitle) lines.push(`图表标题：${mainTitle}`);
+  if (axisTitles.length) lines.push(`坐标轴：${axisTitles.join(' / ')}`);
+  if (seriesNames.length) lines.push(`系列：${seriesNames.join('、')}`);
+  if (categories.length) lines.push(`分类项：${categories.join('、')}`);
+  const text = lines.join('\n').trim();
+  if (!text) return undefined;
+  return {
+    objectId,
+    name: mainTitle ? `图表 · ${mainTitle}` : fallbackName,
+    text,
+    ...(bbox ? { bbox } : {}),
+    kind: 'chart',
+  };
+}
+
 async function parsePptxImport(fileName: string, bytes: Buffer): Promise<DecodedStrategyMapImport> {
   await inspectStrategyOfficeArchive(bytes);
   const zip = await JSZip.loadAsync(bytes);
   const presFile = zip.file('ppt/presentation.xml');
-  const relsFile = zip.file('ppt/_rels/presentation.xml.rels');
-  if (!presFile || !relsFile) return fault('strategy_map_import_invalid_document', 422);
-
-  const relTargets = new Map<string, string>();
-  parseXmlSafe(await relsFile.async('string'), {
-    onOpen(local, attrs) {
-      if (local === 'Relationship' && attrs.Id && attrs.Target) {
-        relTargets.set(attrs.Id, attrs.Target);
-      }
-    },
-  });
+  if (!presFile) return fault('strategy_map_import_invalid_document', 422);
+  const relTargets = await parseZipRels(zip, 'ppt/presentation.xml');
+  if (!relTargets.size) return fault('strategy_map_import_invalid_document', 422);
 
   const slideRelIds: string[] = [];
   let slideCx = 12192000;
@@ -315,35 +504,103 @@ async function parsePptxImport(fileName: string, bytes: Buffer): Promise<Decoded
 
   const pages: ParsedImportPage[] = [];
   for (let i = 0; i < slideRelIds.length; i++) {
-    const target = relTargets.get(slideRelIds[i]!) ?? '';
-    const normalizedPath = target.startsWith('/') ? target.slice(1) : path.posix.normalize(path.posix.join('ppt', target));
+    const rel = relTargets.get(slideRelIds[i]!);
+    if (!rel) continue;
+    const normalizedPath = rel.target;
     const slideFile = zip.file(normalizedPath);
     if (!slideFile) continue;
 
+    const slideRels = await parseZipRels(zip, normalizedPath);
     const shapes: ParsedImportShape[] = [];
     const connectors: ParsedImportConnector[] = [];
+    const linkedChartRefs: Array<{ relId: string; objectId: string; name: string; bbox?: [number, number, number, number] }> = [];
+    const linkedDiagramRefs: Array<{ relId: string; bbox?: [number, number, number, number] }> = [];
+    let hasSlidePictures = false;
 
     type ActiveItem =
-      | { kind: 'sp'; id: string; name: string; paragraphs: string[]; currentP: string; inText: boolean; x?: number; y?: number; cx?: number; cy?: number }
-      | { kind: 'cxn'; id: string; name: string; fromId?: string; toId?: string; headArrow: boolean; tailArrow: boolean; x?: number; y?: number; cx?: number; cy?: number };
+      | { kind: 'sp'; id: string; name: string; paragraphs: string[]; currentP: string; inText: boolean; x?: number; y?: number; cx?: number; cy?: number; rotDeg: number }
+      | { kind: 'cxn'; id: string; name: string; fromId?: string; toId?: string; headArrow: boolean; tailArrow: boolean; x?: number; y?: number; cx?: number; cy?: number; rotDeg: number }
+      | { kind: 'graphicFrame'; id: string; name: string; x?: number; y?: number; cx?: number; cy?: number; rotDeg: number; chartRelId?: string; diagramRelId?: string; tableRows: string[][]; currentRow: string[]; currentCell: string; inTableText: boolean };
 
     let active: ActiveItem | null = null;
     let inSpPr = false;
+    let inFrameXfrm = false;
+    let inGrpSpPr = false;
+    let inSpTree = false;
+    const groupStack: GroupTransform[] = [];
+    const groupDepthStack: boolean[] = []; // true for grpSp, false for spTree
 
     parseXmlSafe(await slideFile.async('string'), {
       onOpen(local, attrs) {
-        if (local === 'sp') {
-          active = { kind: 'sp', id: '', name: '', paragraphs: [], currentP: '', inText: false };
+        if (local === 'spTree') {
+          inSpTree = true;
+          groupDepthStack.push(false);
+        } else if (local === 'grpSp') {
+          groupDepthStack.push(true);
+          groupStack.push({ gx: 0, gy: 0, gcx: 0, gcy: 0, chx: 0, chy: 0, chcx: 0, chcy: 0, flipH: false, flipV: false, rotDeg: 0 });
+        } else if (local === 'grpSpPr') {
+          inGrpSpPr = true;
+        } else if (inGrpSpPr && groupDepthStack.at(-1) === true && groupStack.length > 0) {
+          const top = groupStack[groupStack.length - 1]!;
+          if (local === 'xfrm') {
+            top.flipH = attrs.flipH === '1' || attrs.flipH === 'true';
+            top.flipV = attrs.flipV === '1' || attrs.flipV === 'true';
+            top.rotDeg = attrs.rot ? Number(attrs.rot) / 60000 : 0;
+          } else if (local === 'off') {
+            top.gx = Number(attrs.x) || 0;
+            top.gy = Number(attrs.y) || 0;
+          } else if (local === 'ext') {
+            top.gcx = Number(attrs.cx) || 0;
+            top.gcy = Number(attrs.cy) || 0;
+          } else if (local === 'chOff') {
+            top.chx = Number(attrs.x) || 0;
+            top.chy = Number(attrs.y) || 0;
+          } else if (local === 'chExt') {
+            top.chcx = Number(attrs.cx) || 0;
+            top.chcy = Number(attrs.cy) || 0;
+          }
+        } else if (local === 'pic' && inSpTree) {
+          hasSlidePictures = true;
+        } else if (local === 'sp') {
+          active = { kind: 'sp', id: '', name: '', paragraphs: [], currentP: '', inText: false, rotDeg: 0 };
           inSpPr = false;
         } else if (local === 'cxnSp') {
-          active = { kind: 'cxn', id: '', name: '', headArrow: false, tailArrow: false };
+          active = { kind: 'cxn', id: '', name: '', headArrow: false, tailArrow: false, rotDeg: 0 };
           inSpPr = false;
+        } else if (local === 'graphicFrame') {
+          active = { kind: 'graphicFrame', id: '', name: '', rotDeg: 0, tableRows: [], currentRow: [], currentCell: '', inTableText: false };
+          inFrameXfrm = false;
         } else if (active) {
           if (local === 'cNvPr' && !active.id) {
             active.id = attrs.id || `${active.kind}-${shapes.length + connectors.length + 1}`;
             active.name = attrs.name || active.id;
+          } else if (active.kind === 'graphicFrame') {
+            if (local === 'xfrm') {
+              inFrameXfrm = true;
+              active.rotDeg = attrs.rot ? Number(attrs.rot) / 60000 : 0;
+            } else if (inFrameXfrm && local === 'off') {
+              active.x = Number(attrs.x);
+              active.y = Number(attrs.y);
+            } else if (inFrameXfrm && local === 'ext') {
+              active.cx = Number(attrs.cx);
+              active.cy = Number(attrs.cy);
+            } else if (local === 'chart') {
+              const rid = attrs['r:id'] ?? attrs.id;
+              if (rid) active.chartRelId = rid;
+            } else if (local === 'relIds') {
+              const dm = attrs['r:dm'] ?? attrs.dm;
+              if (dm) active.diagramRelId = dm;
+            } else if (local === 'tr') {
+              active.currentRow = [];
+            } else if (local === 'tc') {
+              active.currentCell = '';
+            } else if (local === 't') {
+              active.inTableText = true;
+            }
           } else if (local === 'spPr') {
             inSpPr = true;
+          } else if (inSpPr && local === 'xfrm') {
+            active.rotDeg = attrs.rot ? Number(attrs.rot) / 60000 : 0;
           } else if (inSpPr && local === 'off') {
             active.x = Number(attrs.x);
             active.y = Number(attrs.y);
@@ -364,10 +621,57 @@ async function parsePptxImport(fileName: string, bytes: Buffer): Promise<Decoded
       },
       onText(s) {
         if (active?.kind === 'sp' && active.inText) active.currentP += s;
+        else if (active?.kind === 'graphicFrame' && active.inTableText) active.currentCell += s;
       },
       onClose(local) {
+        if (local === 'grpSpPr') {
+          inGrpSpPr = false;
+          return;
+        }
+        if (local === 'grpSp') {
+          if (groupDepthStack.at(-1) === true) {
+            groupDepthStack.pop();
+            groupStack.pop();
+          }
+          return;
+        }
+        if (local === 'spTree') {
+          inSpTree = false;
+          if (groupDepthStack.at(-1) === false) groupDepthStack.pop();
+          return;
+        }
         if (!active) return;
         if (local === 'spPr') inSpPr = false;
+        if (active.kind === 'graphicFrame') {
+          if (local === 'xfrm') inFrameXfrm = false;
+          else if (local === 't') active.inTableText = false;
+          else if (local === 'tc') active.currentRow.push(active.currentCell.trim());
+          else if (local === 'tr') {
+            if (active.currentRow.some(Boolean)) active.tableRows.push(active.currentRow);
+          } else if (local === 'graphicFrame') {
+            let bbox: [number, number, number, number] | undefined;
+            if (active.x !== undefined && active.y !== undefined && active.cx !== undefined && active.cy !== undefined) {
+              const rotated = applyRectRotation({ x: active.x, y: active.y, cx: active.cx, cy: active.cy }, active.rotDeg);
+              const mapped = applyGroupTransforms(rotated, groupStack);
+              bbox = normalizeBox(mapped.x, mapped.y, mapped.cx, mapped.cy, slideCx, slideCy);
+            }
+            if (active.chartRelId) {
+              linkedChartRefs.push({ relId: active.chartRelId, objectId: active.id || `chart-${shapes.length + 1}`, name: active.name || '图表', bbox });
+            } else if (active.diagramRelId) {
+              linkedDiagramRefs.push({ relId: active.diagramRelId, bbox });
+            } else if (active.tableRows.length) {
+              shapes.push({
+                objectId: active.id || `tbl-${shapes.length + 1}`,
+                name: active.name || `表格#${shapes.length + 1}`,
+                text: active.tableRows.map(r => r.join(' | ')).join('\n'),
+                bbox,
+                kind: 'shape',
+              });
+            }
+            active = null;
+          }
+          return;
+        }
         if (active.kind === 'sp') {
           if (local === 't') active.inText = false;
           else if (local === 'p') {
@@ -375,20 +679,29 @@ async function parsePptxImport(fileName: string, bytes: Buffer): Promise<Decoded
           } else if (local === 'sp') {
             const text = active.paragraphs.join('\n').trim();
             if (text) {
+              let bbox: [number, number, number, number] | undefined;
+              if (active.x !== undefined && active.y !== undefined && active.cx !== undefined && active.cy !== undefined) {
+                const rotated = applyRectRotation({ x: active.x, y: active.y, cx: active.cx, cy: active.cy }, active.rotDeg);
+                const mapped = applyGroupTransforms(rotated, groupStack);
+                bbox = normalizeBox(mapped.x, mapped.y, mapped.cx, mapped.cy, slideCx, slideCy);
+              }
               shapes.push({
                 objectId: active.id || `sp-${shapes.length + 1}`,
                 name: active.name || `形状#${shapes.length + 1}`,
                 text,
-                bbox:
-                  active.x !== undefined && active.y !== undefined && active.cx !== undefined && active.cy !== undefined
-                    ? normalizeBox(active.x, active.y, active.cx, active.cy, slideCx, slideCy)
-                    : undefined,
+                bbox,
                 kind: 'shape',
               });
             }
             active = null;
           }
         } else if (active.kind === 'cxn' && local === 'cxnSp') {
+          let bbox: [number, number, number, number] | undefined;
+          if (active.x !== undefined && active.y !== undefined && active.cx !== undefined && active.cy !== undefined) {
+            const rotated = applyRectRotation({ x: active.x, y: active.y, cx: active.cx, cy: active.cy }, active.rotDeg);
+            const mapped = applyGroupTransforms(rotated, groupStack);
+            bbox = normalizeBox(mapped.x, mapped.y, mapped.cx, mapped.cy, slideCx, slideCy);
+          }
           const arrowDirection: ParsedImportConnector['arrowDirection'] =
             active.headArrow && active.tailArrow
               ? 'both'
@@ -403,30 +716,34 @@ async function parsePptxImport(fileName: string, bytes: Buffer): Promise<Decoded
             fromObjectId: active.fromId,
             toObjectId: active.toId,
             arrowDirection,
-            bbox:
-              active.x !== undefined && active.y !== undefined && active.cx !== undefined && active.cy !== undefined
-                ? normalizeBox(active.x, active.y, active.cx, active.cy, slideCx, slideCy)
-                : undefined,
+            bbox,
           });
           active = null;
         }
       },
     });
 
-    // Check slide relationships for linked SmartArt diagrams
-    const slideBase = path.posix.basename(normalizedPath);
-    const slideRelsFile = zip.file(path.posix.join(path.posix.dirname(normalizedPath), '_rels', `${slideBase}.rels`));
-    if (slideRelsFile) {
-      const diagramTargets: string[] = [];
-      parseXmlSafe(await slideRelsFile.async('string'), {
-        onOpen(local, attrs) {
-          if (local === 'Relationship' && attrs.Target && /diagrams\/data\d*\.xml$/i.test(attrs.Target)) {
-            diagramTargets.push(path.posix.normalize(path.posix.join(path.posix.dirname(normalizedPath), attrs.Target)));
-          }
-        },
-      });
-      for (const diagPath of diagramTargets) {
-        const diagFile = zip.file(diagPath);
+    // Resolve charts and SmartArt diagrams linked by this slide
+    const consumedDiagramTargets = new Set<string>();
+    for (const cref of linkedChartRefs) {
+      const target = slideRels.get(cref.relId)?.target;
+      const chartFile = target ? zip.file(target) : null;
+      if (chartFile) {
+        const parsedChart = parseChartXml(await chartFile.async('string'), cref.objectId, cref.name, cref.bbox);
+        if (parsedChart) shapes.push(parsedChart);
+      }
+    }
+    for (const dref of linkedDiagramRefs) {
+      const target = slideRels.get(dref.relId)?.target;
+      const diagFile = target ? zip.file(target) : null;
+      if (diagFile && target) {
+        consumedDiagramTargets.add(target);
+        shapes.push(...parseSmartArtTexts(await diagFile.async('string'), `p${i + 1}-diag`, dref.bbox));
+      }
+    }
+    for (const relInfo of slideRels.values()) {
+      if (/diagrams\/data\d*\.xml$/i.test(relInfo.target) && !consumedDiagramTargets.has(relInfo.target)) {
+        const diagFile = zip.file(relInfo.target);
         if (diagFile) shapes.push(...parseSmartArtTexts(await diagFile.async('string'), `p${i + 1}-diag`));
       }
     }
@@ -438,7 +755,11 @@ async function parsePptxImport(fileName: string, bytes: Buffer): Promise<Decoded
       title,
       text: fullText,
       hasTextLayer: fullText.trim().length > 0,
-      needsVisualReview: shapes.length === 0 || connectors.some(c => !c.fromObjectId || !c.toObjectId),
+      needsVisualReview:
+        shapes.length === 0 ||
+        hasSlidePictures ||
+        linkedChartRefs.length > 0 ||
+        connectors.some(c => !c.fromObjectId || !c.toObjectId),
       shapes,
       connectors,
     });
@@ -454,142 +775,386 @@ async function parsePptxImport(fileName: string, bytes: Buffer): Promise<Decoded
   };
 }
 
-async function parseXlsxImport(fileName: string, bytes: Buffer): Promise<DecodedStrategyMapImport> {
-  const workbook = await decodeStrategyWorkbook(fileName, bytes);
-  const zip = await JSZip.loadAsync(bytes);
+interface XlsxSheetBinding {
+  page: number;
+  sheetName: string;
+  sheetPath: string;
+  isChartSheet: boolean;
+  shapes: ParsedImportShape[];
+  connectors: ParsedImportConnector[];
+  images: Array<ParsedEmbeddedImage & { mediaPath: string }>;
+}
 
-  const drawingShapes: ParsedImportShape[] = [];
-  const drawingConnectors: ParsedImportConnector[] = [];
+async function resolveXlsxSheetBindings(zip: JSZip, workbook: StrategyWorkbook): Promise<XlsxSheetBinding[]> {
+  const wbFile = zip.file('xl/workbook.xml');
+  const wbRels = await parseZipRels(zip, 'xl/workbook.xml');
+  const visibleSheets: Array<{ name: string; target: string; isChartSheet: boolean }> = [];
 
-  for (const entryPath of Object.keys(zip.files).sort()) {
-    if (/^xl\/drawings\/drawing\d*\.xml$/i.test(entryPath)) {
-      const xml = await zip.file(entryPath)!.async('string');
-      let anchorFromCol = 0, anchorFromRow = 0, anchorToCol = 4, anchorToRow = 4;
-      let inFrom = false, inTo = false, activeTag = '';
+  if (wbFile) {
+    parseXmlSafe(await wbFile.async('string'), {
+      onOpen(local, attrs) {
+        if (local !== 'sheet' || !attrs.name) return;
+        const state = attrs.state?.toLowerCase();
+        if (state === 'hidden' || state === 'veryhidden') return;
+        const rid = attrs['r:id'] ?? Object.entries(attrs).find(([k]) => k.endsWith(':id'))?.[1];
+        const rel = rid ? wbRels.get(rid) : undefined;
+        if (!rel) return;
+        const isChartSheet = rel.type.endsWith('/chartsheet') || /\/chartsheets\//i.test(rel.target);
+        visibleSheets.push({ name: attrs.name, target: rel.target, isChartSheet });
+      },
+    });
+  }
+
+  // Fallback if workbook.xml had no resolvable sheet rels
+  if (!visibleSheets.length) {
+    workbook.sheets.forEach((s, idx) => {
+      visibleSheets.push({ name: s.name, target: `xl/worksheets/sheet${idx + 1}.xml`, isChartSheet: false });
+    });
+  }
+
+  const bindings: XlsxSheetBinding[] = [];
+  for (let idx = 0; idx < visibleSheets.length; idx++) {
+    const entry = visibleSheets[idx]!;
+    const pageNum = idx + 1;
+    const sheetShapes: ParsedImportShape[] = [];
+    const sheetConnectors: ParsedImportConnector[] = [];
+    const sheetImages: Array<ParsedEmbeddedImage & { mediaPath: string }> = [];
+
+    const sheetRels = await parseZipRels(zip, entry.target);
+    const drawingTargets: string[] = [];
+    const directChartTargets: string[] = [];
+    const directDiagramTargets: string[] = [];
+
+    for (const rel of sheetRels.values()) {
+      if (rel.type.endsWith('/drawing') || /\/drawings\/drawing\d*\.xml$/i.test(rel.target)) {
+        if (!drawingTargets.includes(rel.target)) drawingTargets.push(rel.target);
+      } else if (rel.type.endsWith('/chart') || /\/charts\/chart\d*\.xml$/i.test(rel.target)) {
+        if (!directChartTargets.includes(rel.target)) directChartTargets.push(rel.target);
+      } else if (/\/diagrams\/data\d*\.xml$/i.test(rel.target)) {
+        if (!directDiagramTargets.includes(rel.target)) directDiagramTargets.push(rel.target);
+      }
+    }
+
+    for (const drawingPath of drawingTargets) {
+      const drawingFile = zip.file(drawingPath);
+      if (!drawingFile) continue;
+      const drawingRels = await parseZipRels(zip, drawingPath);
+
+      type RawAnchor = {
+        fromCol: number;
+        fromRow: number;
+        toCol: number;
+        toRow: number;
+        hasTo: boolean;
+        absX?: number;
+        absY?: number;
+        absCx?: number;
+        absCy?: number;
+      };
+      type PendingObj =
+        | { kind: 'shape'; anchor: RawAnchor; shape: Omit<ParsedImportShape, 'bbox'> }
+        | { kind: 'connector'; anchor: RawAnchor; connector: Omit<ParsedImportConnector, 'bbox'> }
+        | { kind: 'pic'; anchor: RawAnchor; objectId: string; name: string; relId: string }
+        | { kind: 'chart'; anchor: RawAnchor; objectId: string; name: string; relId: string }
+        | { kind: 'diagram'; anchor: RawAnchor; relId: string };
+
+      const pending: PendingObj[] = [];
+      let currentAnchor: RawAnchor | null = null;
+      let inFrom = false;
+      let inTo = false;
+      let coordTag = '';
       let activeSp: { id: string; name: string; paragraphs: string[]; currentP: string; inText: boolean } | null = null;
       let activeCxn: { id: string; name: string; fromId?: string; toId?: string; headArrow: boolean; tailArrow: boolean } | null = null;
-      parseXmlSafe(xml, {
+      let activePic: { id: string; name: string; relId?: string } | null = null;
+      let activeFrame: { id: string; name: string; chartRelId?: string; diagramRelId?: string } | null = null;
+
+      parseXmlSafe(await drawingFile.async('string'), {
         onOpen(local, attrs) {
-          if (local === 'from') { inFrom = true; }
-          else if (local === 'to') { inTo = true; }
-          else if (local === 'col' || local === 'row') { activeTag = local; }
-          else if (local === 'sp') { activeSp = { id: '', name: '', paragraphs: [], currentP: '', inText: false }; }
-          else if (local === 'cxnSp') { activeCxn = { id: '', name: '', headArrow: false, tailArrow: false }; }
-          else if (activeSp) {
+          if (local === 'twoCellAnchor' || local === 'oneCellAnchor' || local === 'absoluteAnchor') {
+            currentAnchor = { fromCol: 0, fromRow: 0, toCol: 4, toRow: 4, hasTo: false };
+          } else if (!currentAnchor) {
+            return;
+          } else if (local === 'from') {
+            inFrom = true;
+          } else if (local === 'to') {
+            inTo = true;
+            currentAnchor.hasTo = true;
+          } else if (local === 'pos') {
+            currentAnchor.absX = Number(attrs.x) || 0;
+            currentAnchor.absY = Number(attrs.y) || 0;
+          } else if (local === 'ext' && !activeSp && !activeCxn && !activePic && !activeFrame) {
+            currentAnchor.absCx = Number(attrs.cx) || 0;
+            currentAnchor.absCy = Number(attrs.cy) || 0;
+          } else if ((inFrom || inTo) && (local === 'col' || local === 'row')) {
+            coordTag = local;
+          } else if (local === 'sp') {
+            activeSp = { id: '', name: '', paragraphs: [], currentP: '', inText: false };
+          } else if (local === 'cxnSp') {
+            activeCxn = { id: '', name: '', headArrow: false, tailArrow: false };
+          } else if (local === 'pic') {
+            activePic = { id: '', name: '' };
+          } else if (local === 'graphicFrame') {
+            activeFrame = { id: '', name: '' };
+          } else if (activeSp) {
             if (local === 'cNvPr' && !activeSp.id) {
-              activeSp.id = attrs.id || `shape-${drawingShapes.length + 1}`;
-              activeSp.name = attrs.name || `形状#${drawingShapes.length + 1}`;
+              activeSp.id = attrs.id || `p${pageNum}-sp-${pending.length + 1}`;
+              activeSp.name = attrs.name || `形状#${pending.length + 1}`;
             } else if (local === 'p') activeSp.currentP = '';
             else if (local === 't') activeSp.inText = true;
+            else if (local === 'br') activeSp.currentP += '\n';
           } else if (activeCxn) {
             if (local === 'cNvPr' && !activeCxn.id) {
-              activeCxn.id = attrs.id || `cxn-${drawingConnectors.length + 1}`;
-              activeCxn.name = attrs.name || `连接符#${drawingConnectors.length + 1}`;
+              activeCxn.id = attrs.id || `p${pageNum}-cxn-${pending.length + 1}`;
+              activeCxn.name = attrs.name || `连接符#${pending.length + 1}`;
             } else if (local === 'stCxn' && attrs.id) activeCxn.fromId = attrs.id;
             else if (local === 'endCxn' && attrs.id) activeCxn.toId = attrs.id;
             else if (local === 'headEnd' && attrs.type && attrs.type !== 'none') activeCxn.headArrow = true;
             else if (local === 'tailEnd' && attrs.type && attrs.type !== 'none') activeCxn.tailArrow = true;
+          } else if (activePic) {
+            if (local === 'cNvPr' && !activePic.id) {
+              activePic.id = attrs.id || `p${pageNum}-pic-${pending.length + 1}`;
+              activePic.name = attrs.name || `图片#${pending.length + 1}`;
+            } else if (local === 'blip') {
+              const embed = attrs['r:embed'] ?? attrs.embed;
+              if (embed) activePic.relId = embed;
+            }
+          } else if (activeFrame) {
+            if (local === 'cNvPr' && !activeFrame.id) {
+              activeFrame.id = attrs.id || `p${pageNum}-frame-${pending.length + 1}`;
+              activeFrame.name = attrs.name || `图表#${pending.length + 1}`;
+            } else if (local === 'chart') {
+              const rid = attrs['r:id'] ?? attrs.id;
+              if (rid) activeFrame.chartRelId = rid;
+            } else if (local === 'relIds') {
+              const dm = attrs['r:dm'] ?? attrs.dm;
+              if (dm) activeFrame.diagramRelId = dm;
+            }
           }
         },
         onText(s) {
           if (activeSp?.inText) activeSp.currentP += s;
-          else if (inFrom && activeTag === 'col') anchorFromCol = Number(s) || 0;
-          else if (inFrom && activeTag === 'row') anchorFromRow = Number(s) || 0;
-          else if (inTo && activeTag === 'col') anchorToCol = Number(s) || 0;
-          else if (inTo && activeTag === 'row') anchorToRow = Number(s) || 0;
+          else if (currentAnchor && inFrom && coordTag === 'col') currentAnchor.fromCol = Number(s) || 0;
+          else if (currentAnchor && inFrom && coordTag === 'row') currentAnchor.fromRow = Number(s) || 0;
+          else if (currentAnchor && inTo && coordTag === 'col') currentAnchor.toCol = Number(s) || 0;
+          else if (currentAnchor && inTo && coordTag === 'row') currentAnchor.toRow = Number(s) || 0;
         },
         onClose(local) {
           if (local === 'from') inFrom = false;
           else if (local === 'to') inTo = false;
-          else if (local === 'col' || local === 'row') activeTag = '';
+          else if (local === 'col' || local === 'row') coordTag = '';
           else if (activeSp) {
             if (local === 't') activeSp.inText = false;
-            else if (local === 'p') { if (activeSp.currentP.trim()) activeSp.paragraphs.push(activeSp.currentP.trim()); }
-            else if (local === 'sp') {
+            else if (local === 'p') {
+              if (activeSp.currentP.trim()) activeSp.paragraphs.push(activeSp.currentP.trim());
+            } else if (local === 'sp') {
               const text = activeSp.paragraphs.join('\n').trim();
-              if (text) {
-                drawingShapes.push({
-                  objectId: activeSp.id || `shape-${drawingShapes.length + 1}`,
-                  name: activeSp.name || `形状#${drawingShapes.length + 1}`,
-                  text,
-                  bbox: [
-                    Math.min(900, anchorFromCol * 70),
-                    Math.min(900, anchorFromRow * 45),
-                    Math.max(120, Math.min(500, Math.max(1, anchorToCol - anchorFromCol) * 70)),
-                    Math.max(60, Math.min(350, Math.max(1, anchorToRow - anchorFromRow) * 45)),
-                  ],
+              if (text && currentAnchor) {
+                pending.push({
                   kind: 'shape',
+                  anchor: { ...currentAnchor },
+                  shape: {
+                    objectId: activeSp.id || `p${pageNum}-sp-${pending.length + 1}`,
+                    name: activeSp.name || `形状#${pending.length + 1}`,
+                    text,
+                    kind: 'shape',
+                  },
                 });
               }
               activeSp = null;
             }
           } else if (activeCxn && local === 'cxnSp') {
-            drawingConnectors.push({
-              objectId: activeCxn.id || `cxn-${drawingConnectors.length + 1}`,
-              name: activeCxn.name,
-              fromObjectId: activeCxn.fromId,
-              toObjectId: activeCxn.toId,
-              arrowDirection:
-                activeCxn.headArrow && activeCxn.tailArrow ? 'both'
-                : activeCxn.tailArrow ? 'forward'
-                : activeCxn.headArrow ? 'backward'
-                : 'none',
-            });
+            if (currentAnchor) {
+              pending.push({
+                kind: 'connector',
+                anchor: { ...currentAnchor },
+                connector: {
+                  objectId: activeCxn.id || `p${pageNum}-cxn-${pending.length + 1}`,
+                  name: activeCxn.name,
+                  fromObjectId: activeCxn.fromId,
+                  toObjectId: activeCxn.toId,
+                  arrowDirection:
+                    activeCxn.headArrow && activeCxn.tailArrow ? 'both'
+                    : activeCxn.tailArrow ? 'forward'
+                    : activeCxn.headArrow ? 'backward'
+                    : 'none',
+                },
+              });
+            }
             activeCxn = null;
+          } else if (activePic && local === 'pic') {
+            if (currentAnchor && activePic.relId) {
+              pending.push({
+                kind: 'pic',
+                anchor: { ...currentAnchor },
+                objectId: activePic.id || `p${pageNum}-pic-${pending.length + 1}`,
+                name: activePic.name || `图片#${pending.length + 1}`,
+                relId: activePic.relId,
+              });
+            }
+            activePic = null;
+          } else if (activeFrame && local === 'graphicFrame') {
+            if (currentAnchor) {
+              if (activeFrame.chartRelId) {
+                pending.push({
+                  kind: 'chart',
+                  anchor: { ...currentAnchor },
+                  objectId: activeFrame.id || `p${pageNum}-chart-${pending.length + 1}`,
+                  name: activeFrame.name || `图表#${pending.length + 1}`,
+                  relId: activeFrame.chartRelId,
+                });
+              } else if (activeFrame.diagramRelId) {
+                pending.push({
+                  kind: 'diagram',
+                  anchor: { ...currentAnchor },
+                  relId: activeFrame.diagramRelId,
+                });
+              }
+            }
+            activeFrame = null;
+          } else if (local === 'twoCellAnchor' || local === 'oneCellAnchor' || local === 'absoluteAnchor') {
+            currentAnchor = null;
           }
         },
       });
-    } else if (/^xl\/diagrams\/data\d*\.xml$/i.test(entryPath)) {
-      drawingShapes.push(...parseSmartArtTexts(await zip.file(entryPath)!.async('string'), 'xlsx-smartart'));
-    }
-  }
 
-  const embeddedImages: ParsedEmbeddedImage[] = [];
-  for (const entryPath of Object.keys(zip.files).sort()) {
-    if (/^xl\/media\/.+\.(png|jpe?g)$/i.test(entryPath)) {
-      const mediaBytes = await zip.file(entryPath)!.async('nodebuffer');
-      try {
-        const meta = inspectImageMetadata(path.posix.basename(entryPath), mediaBytes);
-        embeddedImages.push({
-          id: `media-${embeddedImages.length + 1}`,
-          name: path.posix.basename(entryPath),
-          mimeType: meta.mimeType,
-          width: meta.width,
-          height: meta.height,
-          orientation: meta.orientation,
-          sha256: createHash('sha256').update(mediaBytes).digest('hex'),
-        });
-      } catch {
-        // Skip unreadable media entries without failing the workbook
+      // Normalize anchor coordinates consistently across this sheet's drawing canvas
+      const maxCol = Math.max(12, ...pending.map(p => (p.anchor.hasTo ? Math.max(p.anchor.fromCol + 1, p.anchor.toCol) : p.anchor.fromCol + 4)));
+      const maxRow = Math.max(24, ...pending.map(p => (p.anchor.hasTo ? Math.max(p.anchor.fromRow + 1, p.anchor.toRow) : p.anchor.fromRow + 4)));
+      const anchorBox = (a: RawAnchor): [number, number, number, number] => {
+        if (a.absX !== undefined && a.absY !== undefined && a.absCx && a.absCy) {
+          return normalizeBox(a.absX, a.absY, a.absCx, a.absCy, Math.max(9144000, a.absX + a.absCx), Math.max(6858000, a.absY + a.absCy)) ?? [40, 40, 400, 240];
+        }
+        const toCol = a.hasTo ? Math.max(a.fromCol + 1, a.toCol) : a.fromCol + 4;
+        const toRow = a.hasTo ? Math.max(a.fromRow + 1, a.toRow) : a.fromRow + 4;
+        return normalizeBox(a.fromCol, a.fromRow, toCol - a.fromCol, toRow - a.fromRow, maxCol, maxRow) ?? [40, 40, 300, 180];
+      };
+
+      const consumedDiagrams = new Set<string>();
+      for (const obj of pending) {
+        const bbox = anchorBox(obj.anchor);
+        if (obj.kind === 'shape') {
+          sheetShapes.push({ ...obj.shape, bbox });
+        } else if (obj.kind === 'connector') {
+          sheetConnectors.push({ ...obj.connector, bbox });
+        } else if (obj.kind === 'chart') {
+          const target = drawingRels.get(obj.relId)?.target;
+          const chartFile = target ? zip.file(target) : null;
+          if (chartFile) {
+            const parsed = parseChartXml(await chartFile.async('string'), obj.objectId, obj.name, bbox);
+            if (parsed) sheetShapes.push(parsed);
+          }
+        } else if (obj.kind === 'diagram') {
+          const target = drawingRels.get(obj.relId)?.target;
+          const diagFile = target ? zip.file(target) : null;
+          if (diagFile && target) {
+            consumedDiagrams.add(target);
+            sheetShapes.push(...parseSmartArtTexts(await diagFile.async('string'), `p${pageNum}-diag`, bbox));
+          }
+        } else if (obj.kind === 'pic') {
+          const target = drawingRels.get(obj.relId)?.target;
+          const mediaFile = target ? zip.file(target) : null;
+          if (mediaFile && target && /\.(png|jpe?g)$/i.test(target)) {
+            try {
+              const mediaBytes = await mediaFile.async('nodebuffer');
+              const meta = inspectImageMetadata(path.posix.basename(target), mediaBytes);
+              sheetImages.push({
+                id: `p${pageNum}-img-${sheetImages.length + 1}`,
+                name: obj.name || path.posix.basename(target),
+                mimeType: meta.mimeType,
+                width: meta.width,
+                height: meta.height,
+                orientation: meta.orientation,
+                sha256: createHash('sha256').update(mediaBytes).digest('hex'),
+                page: pageNum,
+                sheetName: entry.name,
+                objectId: obj.objectId,
+                bbox,
+                mediaPath: target,
+              });
+            } catch {
+              // Skip unreadable media entry without failing workbook decode
+            }
+          }
+        }
+      }
+
+      // Catch SmartArt linked directly in drawing.rels without explicit relIds tag
+      for (const rel of drawingRels.values()) {
+        if (/\/diagrams\/data\d*\.xml$/i.test(rel.target) && !consumedDiagrams.has(rel.target)) {
+          const diagFile = zip.file(rel.target);
+          if (diagFile) sheetShapes.push(...parseSmartArtTexts(await diagFile.async('string'), `p${pageNum}-diag`));
+        }
       }
     }
-  }
 
-  const pages: ParsedImportPage[] = workbook.sheets.map((sheet, idx) => {
-    const text = sheet.rows.map(r => `第 ${r.row} 行: ${Object.entries(r.values).map(([c, v]) => `${c}=${v}`).join(' | ')}`).join('\n');
-    return {
-      page: idx + 1,
-      title: `工作表 · ${sheet.name}`,
-      sheetName: sheet.name,
-      text,
-      hasTextLayer: text.trim().length > 0,
-      needsVisualReview: Boolean(workbook.drawings && !sheet.rows.length),
-      shapes: idx === 0 ? drawingShapes : [],
-      connectors: idx === 0 ? drawingConnectors : [],
-    };
-  });
+    for (const chartPath of directChartTargets) {
+      const chartFile = zip.file(chartPath);
+      if (chartFile) {
+        const parsed = parseChartXml(await chartFile.async('string'), `p${pageNum}-chart-${sheetShapes.length + 1}`, `图表 · ${entry.name}`, [40, 40, 920, 880]);
+        if (parsed) sheetShapes.push(parsed);
+      }
+    }
+    for (const diagPath of directDiagramTargets) {
+      const diagFile = zip.file(diagPath);
+      if (diagFile) sheetShapes.push(...parseSmartArtTexts(await diagFile.async('string'), `p${pageNum}-diag`));
+    }
 
-  if (!pages.length || (drawingShapes.length && pages.length > 1)) {
-    pages.push({
-      page: pages.length + 1,
-      title: '绘图与 SmartArt 对象',
-      text: drawingShapes.map(s => `${s.name}: ${s.text}`).join('\n'),
-      hasTextLayer: drawingShapes.length > 0,
-      needsVisualReview: embeddedImages.length > 0,
-      shapes: drawingShapes,
-      connectors: drawingConnectors,
+    bindings.push({
+      page: pageNum,
+      sheetName: entry.name,
+      sheetPath: entry.target,
+      isChartSheet: entry.isChartSheet,
+      shapes: sheetShapes,
+      connectors: sheetConnectors,
+      images: sheetImages,
     });
   }
+
+  return bindings;
+}
+
+async function parseXlsxImport(fileName: string, bytes: Buffer): Promise<DecodedStrategyMapImport> {
+  const workbook = await decodeStrategyWorkbook(fileName, bytes);
+  const zip = await JSZip.loadAsync(bytes);
+  const bindings = await resolveXlsxSheetBindings(zip, workbook);
+
+  const allEmbeddedImages: ParsedEmbeddedImage[] = [];
+  const pages: ParsedImportPage[] = bindings.map(binding => {
+    const sheet = workbook.sheets.find(s => s.name === binding.sheetName);
+    const cellText = sheet
+      ? sheet.rows.map(r => `第 ${r.row} 行: ${Object.entries(r.values).map(([c, v]) => `${c}=${v}`).join(' | ')}`).join('\n')
+      : '';
+    const shapeText = binding.shapes.map(s => `[${s.name}] ${s.text}`).join('\n');
+    const imageNoteText = binding.images.length
+      ? binding.images.map((img, i) => `[嵌入图 ${i + 1}: ${img.name} (${img.width}×${img.height})]`).join('\n')
+      : '';
+    const combinedText = [cellText, shapeText, imageNoteText].filter(Boolean).join('\n');
+
+    const publicImages: ParsedEmbeddedImage[] = binding.images.map(({ mediaPath: _mp, ...rest }) => rest);
+    allEmbeddedImages.push(...publicImages);
+
+    const hasSheetDrawings = binding.shapes.length > 0 || binding.connectors.length > 0 || publicImages.length > 0 || binding.isChartSheet;
+    const notes: string[] = [];
+    if (publicImages.length > 1) {
+      notes.push(`本工作表包含 ${publicImages.length} 幅嵌入图片，可逐幅切换核对。`);
+    }
+    if (binding.shapes.some(s => s.kind === 'chart')) {
+      notes.push('本工作表包含图表对象，已提取图表标题与标签。');
+    }
+
+    return {
+      page: binding.page,
+      title: `工作表 · ${binding.sheetName}`,
+      sheetName: binding.sheetName,
+      text: combinedText,
+      hasTextLayer: combinedText.trim().length > 0,
+      needsVisualReview: hasSheetDrawings,
+      shapes: binding.shapes,
+      connectors: binding.connectors,
+      ...(publicImages.length ? { embeddedImages: publicImages } : {}),
+      ...(notes.length ? { notes } : {}),
+    };
+  });
 
   return {
     format: 'xlsx',
@@ -598,8 +1163,8 @@ async function parseXlsxImport(fileName: string, bytes: Buffer): Promise<Decoded
     bytesLength: bytes.byteLength,
     pages,
     workbook,
-    embeddedImages,
-    hasDrawings: Boolean(workbook.drawings || drawingShapes.length || embeddedImages.length),
+    embeddedImages: allEmbeddedImages,
+    hasDrawings: Boolean(workbook.drawings || bindings.some(b => b.shapes.length || b.connectors.length || b.images.length || b.isChartSheet)),
   };
 }
 
@@ -607,7 +1172,7 @@ async function parsePdfImport(fileName: string, bytes: Buffer): Promise<DecodedS
   if (!bytes.length || bytes.length > STRATEGY_MAP_IMPORT_MAX_BYTES) {
     return fault('strategy_map_import_too_large', 413);
   }
-  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const { getDocument, OPS } = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const pdfRoot = path.dirname(fileURLToPath(import.meta.resolve('pdfjs-dist/package.json')));
   const loading = getDocument({
     data: new Uint8Array(bytes),
@@ -618,6 +1183,25 @@ async function parsePdfImport(fileName: string, bytes: Buffer): Promise<DecodedS
     disableFontFace: true,
     useWorkerFetch: false,
   });
+
+  const imageOps = new Set<number>([
+    OPS.paintImageXObject,
+    OPS.paintInlineImageXObject,
+    OPS.paintImageMaskXObject,
+    OPS.paintImageXObjectRepeat,
+  ].filter(v => typeof v === 'number'));
+  const vectorOps = new Set<number>([
+    OPS.stroke,
+    OPS.closeStroke,
+    OPS.fill,
+    OPS.eoFill,
+    OPS.fillStroke,
+    OPS.eoFillStroke,
+    OPS.closeFillStroke,
+    OPS.closeEOFillStroke,
+    OPS.constructPath,
+  ].filter(v => typeof v === 'number'));
+
   const pages: ParsedImportPage[] = [];
   try {
     const pdf = await loading.promise;
@@ -625,34 +1209,90 @@ async function parsePdfImport(fileName: string, bytes: Buffer): Promise<DecodedS
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const viewport = page.getViewport({ scale: 1 });
+      const [va, vb, vc, vd, ve, vf] = viewport.transform;
       const content = await page.getTextContent();
       const shapes: ParsedImportShape[] = [];
       const pieces: string[] = [];
+
       for (const item of content.items) {
         if (!('str' in item)) continue;
         const s = item.str.trim();
         pieces.push(item.str + (item.hasEOL ? '\n' : ' '));
         if (s && Array.isArray(item.transform) && item.transform.length >= 6 && viewport.width > 0 && viewport.height > 0) {
-          const x = Math.max(0, Math.min(980, Math.round((item.transform[4]! / viewport.width) * 1000)));
-          const y = Math.max(0, Math.min(980, Math.round(((viewport.height - item.transform[5]!) / viewport.height) * 1000)));
-          const w = Math.max(40, Math.min(1000 - x, Math.round(((item.width || 60) / viewport.width) * 1000)));
-          const h = Math.max(24, Math.min(1000 - y, Math.round(((item.height || 14) / viewport.height) * 1000)));
-          if (shapes.length < 120) {
-            shapes.push({ objectId: `p${i}-t${shapes.length + 1}`, name: `第 ${i} 页文本#${shapes.length + 1}`, text: s, bbox: [x, y, w, h], kind: 'shape' });
+          const [ta, tb, tc, td, tx, ty] = item.transform as number[];
+          const baseLen = Math.hypot(ta!, tb!) || 1;
+          const ux = ta! / baseLen;
+          const uy = tb! / baseLen;
+          const ascLen = Math.hypot(tc!, td!);
+          const vx = ascLen > 0 ? tc! / ascLen : -uy;
+          const vy = ascLen > 0 ? td! / ascLen : ux;
+          const fontH = item.height > 0 ? item.height : (ascLen || baseLen || 12);
+          const textW = item.width > 0 ? item.width : Math.max(fontH * 0.6, s.length * fontH * 0.5);
+
+          // Map all 4 PDF user-space corners through viewport.transform (handles /Rotate 0/90/180/270 & CropBox)
+          const corners: Array<[number, number]> = [
+            [tx!, ty!],
+            [tx! + ux * textW, ty! + uy * textW],
+            [tx! + ux * textW + vx * fontH, ty! + uy * textW + vy * fontH],
+            [tx! + vx * fontH, ty! + vy * fontH],
+          ];
+          const mappedX: number[] = [];
+          const mappedY: number[] = [];
+          for (const [px, py] of corners) {
+            mappedX.push(va! * px + vc! * py + ve!);
+            mappedY.push(vb! * px + vd! * py + vf!);
+          }
+          const minX = Math.min(...mappedX);
+          const maxX = Math.max(...mappedX);
+          const minY = Math.min(...mappedY);
+          const maxY = Math.max(...mappedY);
+          const box = normalizeBox(minX, minY, Math.max(1, maxX - minX), Math.max(1, maxY - minY), viewport.width, viewport.height);
+          if (box && shapes.length < 120) {
+            shapes.push({
+              objectId: `p${i}-t${shapes.length + 1}`,
+              name: `第 ${i} 页文本#${shapes.length + 1}`,
+              text: s,
+              bbox: box,
+              kind: 'shape',
+            });
           }
         }
       }
+
+      // Inspect operator list so mixed PDFs (long title text + embedded image or vector diagram) trigger visual review
+      let imageOpCount = 0;
+      let vectorOpCount = 0;
+      try {
+        const opList = await page.getOperatorList();
+        for (const fnId of opList.fnArray) {
+          if (imageOps.has(fnId)) imageOpCount++;
+          else if (vectorOps.has(fnId)) vectorOpCount++;
+        }
+      } catch {
+        // If operator list inspection fails, stay conservative
+        imageOpCount = 1;
+      }
+
       const text = pieces.join('').trim();
       const hasTextLayer = text.length > 0;
+      const hasGraphics = imageOpCount > 0 || vectorOpCount >= 2;
+      const needsVisualReview = !hasTextLayer || text.length < 20 || hasGraphics;
+      const notes: string[] = [];
+      if (!hasTextLayer) {
+        notes.push('本页无可读文字层（扫描页或纯图），建议视觉模型读取或对照原稿核对。');
+      } else if (hasGraphics) {
+        notes.push('本页同时包含文字层与嵌入图/矢量图形，可能存在图内独有指标或连线，建议由视觉模型读取整页图或对照原稿核对。');
+      }
+
       pages.push({
         page: i,
         title: hasTextLayer ? `第 ${i} 页 · ${text.split('\n')[0]!.slice(0, 40)}` : `第 ${i} 页 · 扫描/纯图页`,
         text,
         hasTextLayer,
-        needsVisualReview: !hasTextLayer || text.length < 20,
+        needsVisualReview,
         shapes,
         connectors: [],
-        notes: !hasTextLayer ? ['本页无可读文字层（扫描页或纯图），建议视觉模型读取或对照原稿核对。'] : undefined,
+        ...(notes.length ? { notes } : {}),
       });
       page.cleanup();
     }
@@ -703,11 +1343,80 @@ export async function decodeStrategyMapImportFile(fileName: string, bytes: Buffe
   return parsePdfImport(fileName, bytes);
 }
 
+async function renderOfficeSheetViaLibreOffice(
+  bytes: Buffer,
+  ext: string,
+  expectedPages: number,
+  page: number,
+  thumbnail: boolean,
+): Promise<RenderedPageImageResult | null> {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'optracall-office-render-'));
+  try {
+    const srcPath = path.join(tmpDir, `book${ext}`);
+    const outDir = path.join(tmpDir, 'pdf');
+    const profileDir = path.join(tmpDir, 'lo-profile');
+    await writeFile(srcPath, bytes, { mode: 0o600 });
+    const sofficeCandidates = [
+      process.env.SOFFICE,
+      '/Applications/LibreOffice.app/Contents/MacOS/soffice',
+      'soffice',
+    ].filter((x): x is string => Boolean(x));
+    let convertedPdf = '';
+    for (const bin of sofficeCandidates) {
+      try {
+        await execFileAsync(
+          bin,
+          [`-env:UserInstallation=file://${profileDir}`, '--headless', '--convert-to', 'pdf', '--outdir', outDir, srcPath],
+          { timeout: 90_000 },
+        );
+        convertedPdf = path.join(outDir, 'book.pdf');
+        break;
+      } catch {
+        continue;
+      }
+    }
+    if (!convertedPdf) return null;
+    const outPng = path.join(tmpDir, 'sheet.png');
+    const targetWidth = thumbnail ? 320 : 1280;
+    try {
+      await execFileAsync(
+        'python3',
+        [
+          '-c',
+          'import sys, pypdfium2 as p; doc=p.PdfDocument(sys.argv[1]); exp=int(sys.argv[2]); pg_idx=int(sys.argv[3])-1; w_target=int(sys.argv[4]); assert len(doc)==exp and 0<=pg_idx<len(doc); pg=doc[pg_idx]; w,h=pg.get_size(); pg.render(scale=min(2.0,w_target/max(1,w))).to_pil().save(sys.argv[5])',
+          convertedPdf,
+          String(expectedPages),
+          String(page),
+          String(targetWidth),
+          outPng,
+        ],
+        { timeout: 60_000 },
+      );
+      const pngBytes = await readFile(outPng);
+      const meta = inspectImageMetadata('sheet.png', pngBytes);
+      return {
+        available: true,
+        mimeType: 'image/png',
+        base64: pngBytes.toString('base64'),
+        width: meta.width,
+        height: meta.height,
+        orientation: 1,
+        renderer: 'libreoffice+pypdfium2',
+      };
+    } catch {
+      return null;
+    }
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 /**
  * On-demand page image rendering.
  * Reuses extensions/analysis-assets/ppt-report/scripts/page_images.py for PPTX,
- * native bytes for PNG/JPEG, embedded images for XLSX, and pdftoppm/pypdfium2 for PDF.
- * Cleanly reports unavailable renderer instead of throwing or blocking native extraction.
+ * native bytes for PNG/JPEG, strict sheet-scoped embedded media (or LibreOffice chart render) for XLSX,
+ * and pdftoppm/pypdfium2 for PDF.
+ * Cleanly reports unavailable renderer instead of throwing or misattributing another page's image.
  */
 export async function renderImportPageImage(options: {
   fileName: string;
@@ -715,8 +1424,11 @@ export async function renderImportPageImage(options: {
   bytes: Buffer;
   page: number;
   codeRoot: string;
+  thumbnail?: boolean;
+  imageIndex?: number;
+  includeAllSheetImages?: boolean;
 }): Promise<RenderedPageImageResult> {
-  const { fileName, format, bytes, page, codeRoot } = options;
+  const { fileName, format, bytes, page, codeRoot, thumbnail = false, imageIndex, includeAllSheetImages = false } = options;
   if (format === 'image') {
     const meta = inspectImageMetadata(fileName, bytes);
     return {
@@ -730,23 +1442,89 @@ export async function renderImportPageImage(options: {
     };
   }
   if (format === 'xlsx') {
+    const workbook = await decodeStrategyWorkbook(fileName, bytes);
     const zip = await JSZip.loadAsync(bytes);
-    const media = Object.keys(zip.files).filter(f => /^xl\/media\/.+\.(png|jpe?g)$/i.test(f)).sort();
-    const target = media[page - 1] ?? media[0];
-    if (target) {
-      const imgBytes = await zip.file(target)!.async('nodebuffer');
-      const meta = inspectImageMetadata(path.posix.basename(target), imgBytes);
+    const bindings = await resolveXlsxSheetBindings(zip, workbook);
+    const binding = bindings[page - 1];
+    if (!binding) {
+      return { available: false, reason: `未找到第 ${page} 个工作表。` };
+    }
+    const sheetImages = binding.images;
+    if (imageIndex !== undefined) {
+      if (!Number.isInteger(imageIndex) || imageIndex < 1 || imageIndex > sheetImages.length) {
+        return {
+          available: false,
+          reason: `工作表「${binding.sheetName}」不存在第 ${imageIndex} 幅嵌入图片（共 ${sheetImages.length} 幅）。`,
+          totalSheetImages: sheetImages.length,
+        };
+      }
+      const chosen = sheetImages[imageIndex - 1]!;
+      const imgBytes = await zip.file(chosen.mediaPath)!.async('nodebuffer');
       return {
         available: true,
-        mimeType: meta.mimeType,
+        mimeType: chosen.mimeType,
         base64: imgBytes.toString('base64'),
-        width: meta.width,
-        height: meta.height,
-        orientation: meta.orientation,
-        renderer: 'xlsx-embedded-media',
+        width: chosen.width,
+        height: chosen.height,
+        orientation: chosen.orientation,
+        renderer: 'xlsx-sheet-embedded-media',
+        imageId: chosen.id,
+        imageName: chosen.name,
+        imageIndex,
+        totalSheetImages: sheetImages.length,
       };
     }
-    return { available: false, reason: '当前工作簿无嵌入图片；已提供结构化表与原生绘图形状供核对。' };
+
+    if (sheetImages.length > 0) {
+      const first = sheetImages[0]!;
+      const firstBytes = await zip.file(first.mediaPath)!.async('nodebuffer');
+      const extraImages: NonNullable<RenderedPageImageResult['extraImages']> = [];
+      if (includeAllSheetImages && sheetImages.length > 1) {
+        for (const extra of sheetImages.slice(1)) {
+          const extraBytes = await zip.file(extra.mediaPath)!.async('nodebuffer');
+          extraImages.push({
+            imageId: extra.id,
+            imageName: extra.name,
+            mimeType: extra.mimeType,
+            base64: extraBytes.toString('base64'),
+            width: extra.width,
+            height: extra.height,
+            orientation: extra.orientation,
+          });
+        }
+      }
+      return {
+        available: true,
+        mimeType: first.mimeType,
+        base64: firstBytes.toString('base64'),
+        width: first.width,
+        height: first.height,
+        orientation: first.orientation,
+        renderer: 'xlsx-sheet-embedded-media',
+        imageId: first.id,
+        imageName: first.name,
+        imageIndex: 1,
+        totalSheetImages: sheetImages.length,
+        ...(extraImages.length ? { extraImages } : {}),
+      };
+    }
+
+    // Sheet has charts/shapes/SmartArt without embedded PNG/JPG: try LibreOffice render when available
+    if (binding.shapes.length > 0 || binding.connectors.length > 0 || binding.isChartSheet) {
+      const rendered = await renderOfficeSheetViaLibreOffice(bytes, '.xlsx', bindings.length, page, thumbnail);
+      if (rendered) return rendered;
+      return {
+        available: false,
+        reason: `工作表「${binding.sheetName}」含图表或原生绘图，本机未检测到 LibreOffice/pypdfium2 整页图渲染环境；已提取原生图表标题、形状与表格结构供核对。`,
+        totalSheetImages: 0,
+      };
+    }
+
+    return {
+      available: false,
+      reason: `工作表「${binding.sheetName}」为纯单元格表，无嵌入图片或绘图对象；请直接核对单元格内容。`,
+      totalSheetImages: 0,
+    };
   }
 
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'optracall-import-render-'));
@@ -757,7 +1535,7 @@ export async function renderImportPageImage(options: {
       const outDir = path.join(tmpDir, 'out');
       await writeFile(deckPath, bytes, { mode: 0o600 });
       try {
-        await execFileAsync('python3', [script, '--deck', deckPath, '--out', outDir, '--width', '1280'], { timeout: 90_000 });
+        await execFileAsync('python3', [script, '--deck', deckPath, '--out', outDir, '--width', '1280', '--thumb-width', '320'], { timeout: 90_000 });
       } catch (err) {
         const stderr = err && typeof err === 'object' && 'stderr' in err ? String((err as { stderr?: unknown }).stderr ?? '') : '';
         return {
@@ -767,7 +1545,8 @@ export async function renderImportPageImage(options: {
             : 'PPT 整页渲染暂不可用，已回退原生形状/文字/连接符供核对。',
         };
       }
-      const imgPath = path.join(outDir, `slide-${String(page).padStart(2, '0')}.png`);
+      const prefix = thumbnail ? 'thumb' : 'slide';
+      const imgPath = path.join(outDir, `${prefix}-${String(page).padStart(2, '0')}.png`);
       const pngBytes = await readFile(imgPath);
       const meta = inspectImageMetadata('slide.png', pngBytes);
       return {
@@ -785,8 +1564,9 @@ export async function renderImportPageImage(options: {
       const pdfPath = path.join(tmpDir, 'doc.pdf');
       const outPrefix = path.join(tmpDir, 'page');
       await writeFile(pdfPath, bytes, { mode: 0o600 });
+      const dpi = thumbnail ? '56' : '144';
       try {
-        await execFileAsync('pdftoppm', ['-png', '-r', '144', '-f', String(page), '-l', String(page), '-singlefile', pdfPath, outPrefix], { timeout: 60_000 });
+        await execFileAsync('pdftoppm', ['-png', '-r', dpi, '-f', String(page), '-l', String(page), '-singlefile', pdfPath, outPrefix], { timeout: 60_000 });
         const pngBytes = await readFile(`${outPrefix}.png`);
         const meta = inspectImageMetadata('page.png', pngBytes);
         return {
@@ -799,14 +1579,15 @@ export async function renderImportPageImage(options: {
           renderer: 'pdftoppm',
         };
       } catch {
-        // Fallback: try python3 + pypdfium2
         try {
           const outPng = `${outPrefix}.png`;
+          const targetW = thumbnail ? '320' : '1280';
           await execFileAsync('python3', [
             '-c',
-            'import sys, pypdfium2 as p; doc=p.PdfDocument(sys.argv[1]); pg=doc[int(sys.argv[2])-1]; w,h=pg.get_size(); pg.render(scale=min(2.0,1280/max(1,w))).to_pil().save(sys.argv[3])',
+            'import sys, pypdfium2 as p; doc=p.PdfDocument(sys.argv[1]); pg=doc[int(sys.argv[2])-1]; w,h=pg.get_size(); pg.render(scale=min(2.0,int(sys.argv[3])/max(1,w))).to_pil().save(sys.argv[4])',
             pdfPath,
             String(page),
+            targetW,
             outPng,
           ], { timeout: 60_000 });
           const pngBytes = await readFile(outPng);

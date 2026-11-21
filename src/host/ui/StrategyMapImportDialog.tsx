@@ -2,8 +2,10 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { mapTemplates } from '../strategy-map-types.ts';
 import type { StrategyMapDraft } from '../strategy-map-types.ts';
 import type { StrategyMapImportCandidateFile } from '../strategy-map-import-routes.ts';
+import type { ParsedImportPage, RenderedPageImageResult } from '../strategy-map-import.ts';
 import {
   listMapImportLibrary,
+  readMapImportPreview,
   registerMapImportAttachment,
   registerMapImportProjectFile,
   registerMapImportUpload,
@@ -20,6 +22,36 @@ export interface StrategyMapExtractRequest {
   selectedPages: number[];
   template: StrategyMapDraft['template'];
   prompt: string;
+}
+
+function MiniWireframeThumb({ page }: { page: ParsedImportPage }) {
+  if (page.shapes.length > 0) {
+    return (
+      <svg className="map-import-thumb-svg" viewBox="0 0 1000 1000" aria-hidden="true">
+        {page.shapes.slice(0, 12).map((sh, idx) => {
+          const [x, y, w, h] = sh.bbox ?? [60 + (idx % 2) * 460, 80 + Math.floor(idx / 2) * 160, 420, 120];
+          return (
+            <rect
+              key={sh.objectId}
+              x={x}
+              y={y}
+              width={Math.max(80, w)}
+              height={Math.max(50, h)}
+              rx="18"
+              fill={sh.kind === 'chart' ? 'rgba(201,130,18,0.18)' : 'rgba(101,80,201,0.12)'}
+              stroke={sh.kind === 'chart' ? '#c98212' : '#6550c9'}
+              strokeWidth="14"
+            />
+          );
+        })}
+      </svg>
+    );
+  }
+  return (
+    <div className="map-import-thumb-text" aria-hidden="true">
+      {(page.text || '无文字层 / 扫描页').slice(0, 72)}
+    </div>
+  );
 }
 
 export function StrategyMapImportDialog({
@@ -43,6 +75,8 @@ export function StrategyMapImportDialog({
   const [activeDiscussionId, setActiveDiscussionId] = useState(discussionId);
   const [library, setLibrary] = useState<MapImportLibraryResponse>();
   const [registered, setRegistered] = useState<MapImportRegisterResponse>();
+  const [thumbs, setThumbs] = useState<Record<number, RenderedPageImageResult>>({});
+  const [thumbFallbackNotice, setThumbFallbackNotice] = useState('');
   const [selectedPages, setSelectedPages] = useState<number[]>([]);
   const [template, setTemplate] = useState<StrategyMapDraft['template']>('table');
   const [extraNote, setExtraNote] = useState('');
@@ -54,6 +88,8 @@ export function StrategyMapImportDialog({
   useEffect(() => {
     if (!open) return;
     setRegistered(undefined);
+    setThumbs({});
+    setThumbFallbackNotice('');
     setSelectedPages([]);
     setExtraNote('');
     setError('');
@@ -70,6 +106,35 @@ export function StrategyMapImportDialog({
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [open, discussionId]);
+
+  // D02: Load lightweight page thumbnails for multi-page documents (cleanly degrading to wireframe + reason if renderer absent)
+  useEffect(() => {
+    if (!open || !registered || !activeDiscussionId || registered.decoded.pages.length <= 1) return;
+    const controller = new AbortController();
+    setThumbs({});
+    setThumbFallbackNotice('');
+    const sourceId = registered.source.sourceId;
+    const pagesToFetch = registered.decoded.pages.slice(0, 12);
+    void (async () => {
+      for (const p of pagesToFetch) {
+        if (controller.signal.aborted) return;
+        try {
+          const res = await readMapImportPreview(activeDiscussionId, sourceId, p.page, true, controller.signal, { thumbnail: true });
+          if (controller.signal.aborted) return;
+          setThumbs(prev => ({ ...prev, [p.page]: res.image }));
+          if (!res.image.available && res.image.reason) {
+            setThumbFallbackNotice(old => old || res.image.reason!);
+            // For PPTX/PDF when local renderer is missing on page 1, stop retrying subsequent pages needlessly
+            if (registered.source.format === 'pptx' || registered.source.format === 'pdf') break;
+          }
+        } catch {
+          if (controller.signal.aborted) return;
+          break;
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [open, registered?.source.sourceId, activeDiscussionId]);
 
   if (!open) return null;
 
@@ -135,7 +200,7 @@ export function StrategyMapImportDialog({
     setError('');
     try {
       const pageDesc = registered.decoded.pages.length > 1 ? `第 ${selectedPages.join('、')} 页` : '原稿';
-      const defaultPrompt = `请调用 read-import-source 读取已获准原稿「${registered.source.fileName}」（importSourceId: ${registered.source.sourceId}）的${pageDesc}，提取目标（G）、策略（S）、指标与数值（区分基线/目标、估计/实测、零/待定与单位）及连线（区分分解、支持、待验证因果与未知关系；可见箭头不等于因果），通过 save-map 保存为带精确 sourceLocation 与 reviewState 的可编辑候选。清楚项标 clear，遮挡/低清/冲突/跨页同名处标 needs-review 并说明原因。${extraNote.trim() ? `\n补充说明：${extraNote.trim()}` : ''}`;
+      const defaultPrompt = `请严格在本轮授权页范围内调用 read-import-source 读取已获准原稿「${registered.source.fileName}」（importSourceId: ${registered.source.sourceId}）的${pageDesc}，提取目标（G）、策略（S）、指标与数值（区分基线/目标、估计/实测、零/待定与单位）及连线（区分分解、支持、待验证因果与未知关系；可见箭头不等于因果），并调用 propose-map-draft 返回带精确 sourceLocation、reviewState 与 importSources 的待核草稿（不要直接调用 save-map 写入正式版本，由用户对照原稿核对后一次保存）。清楚项标 clear，遮挡/低清/冲突/跨页同名处标 needs-review 并说明原因；若纯文本模型无法看清扫描图且无可读节点，允许 nodes 为空并在 unknowns 说明。${extraNote.trim() ? `\n补充说明：${extraNote.trim()}` : ''}`;
       await onExtract({
         sourceId: registered.source.sourceId,
         fileName: registered.source.fileName,
@@ -157,7 +222,7 @@ export function StrategyMapImportDialog({
   return (
     <CaseDialog
       title="导入线下战略图"
-      subtitle="支持 Excel（.xlsx）、PowerPoint（.pptx）、PDF（.pdf）及图片（.png/.jpg）。由原战略 Agent 先提取可编辑候选，再对照原稿核对。"
+      subtitle="支持 Excel（.xlsx）、PowerPoint（.pptx）、PDF（.pdf）及图片（.png/.jpg）。由原战略 Agent 先提取待核草稿，对照原稿核对后再一次保存。"
       className="sg-workbook-dialog"
       busy={busy}
       onClose={onClose}
@@ -165,7 +230,7 @@ export function StrategyMapImportDialog({
       {vision && !vision.supportsImages && (
         <div className="map-import-notice" role="status">
           <strong>当前模型仅支持纯文本（{vision.model || '未配置'}）：</strong>
-          {vision.reason || '将优先提取可读文字、单元格与原生形状/连接符；扫描页或图片区域需切换已配置且获准的视觉模型，或直接对照原稿手工核对。'}
+          {vision.reason || '将优先提取可读文字、单元格与原生形状/连接符；扫描页或图片区域可切换已配置且获准的视觉模型，或先生成待核草稿对照原稿手工核对。'}
         </div>
       )}
 
@@ -238,7 +303,7 @@ export function StrategyMapImportDialog({
 
           {registered.source.format === 'xlsx' && registered.decoded.workbook && onOpenExcelFast && (
             <div className="map-import-notice">
-              检测到结构化工作表{registered.decoded.hasDrawings ? '与绘图/嵌入图混排' : ''}。
+              检测到结构化工作表{registered.decoded.hasDrawings ? '与绘图/嵌入图/图表混排' : ''}。
               <button
                 type="button"
                 className="text-button"
@@ -252,26 +317,47 @@ export function StrategyMapImportDialog({
 
           {registered.decoded.pages.length > 1 && (
             <fieldset>
-              <legend>选择含战略图的页（可仅勾选需要提取的页）</legend>
-              <div className="map-import-pages">
-                {registered.decoded.pages.map(p => (
-                  <label key={p.page} className="sg-workbook-goal">
-                    <input
-                      type="checkbox"
-                      checked={selectedPages.includes(p.page)}
-                      disabled={busy}
-                      onChange={e => togglePage(p.page, e.target.checked)}
-                    />
-                    <span>
-                      第 {p.page} 页 · {p.title}
-                      <small>
-                        {p.shapes.length ? `${p.shapes.length} 形状` : ''}
-                        {p.connectors.length ? ` · ${p.connectors.length} 连线` : ''}
-                        {!p.hasTextLayer ? ' · 无文字层（需视觉或手工核对）' : ''}
-                      </small>
-                    </span>
-                  </label>
-                ))}
+              <legend>选择含战略图的页（缩略预览 · 仅读取勾选项）</legend>
+              {thumbFallbackNotice && (
+                <p className="sg-muted" role="status">{thumbFallbackNotice}</p>
+              )}
+              <div className="map-import-thumb-grid">
+                {registered.decoded.pages.map(p => {
+                  const thumb = thumbs[p.page];
+                  const checked = selectedPages.includes(p.page);
+                  return (
+                    <label key={p.page} className={`map-import-thumb-card ${checked ? 'selected' : ''}`}>
+                      <div className="map-import-thumb-preview">
+                        {thumb?.available && thumb.base64 ? (
+                          <img
+                            className="map-import-thumb"
+                            src={`data:${thumb.mimeType};base64,${thumb.base64}`}
+                            alt={`第 ${p.page} 页缩略图`}
+                          />
+                        ) : (
+                          <MiniWireframeThumb page={p} />
+                        )}
+                      </div>
+                      <div className="map-import-thumb-meta">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={busy}
+                          onChange={e => togglePage(p.page, e.target.checked)}
+                        />
+                        <span>
+                          <strong>第 {p.page} 页</strong> · {p.title}
+                          <small>
+                            {p.shapes.length ? `${p.shapes.length} 形状/图表` : ''}
+                            {p.connectors.length ? ` · ${p.connectors.length} 连线` : ''}
+                            {p.embeddedImages?.length ? ` · ${p.embeddedImages.length} 嵌入图` : ''}
+                            {!p.hasTextLayer ? ' · 无文字层（需视觉或手工核对）' : ''}
+                          </small>
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
             </fieldset>
           )}
