@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
-import {atomicJson, exists, readBytes, safePath} from './project-data-context-io.ts';
+import {atomicJson, exists, isMissing, readBytes, safePath} from './project-data-context-io.ts';
 import {StrategyDiscussionFault, type StrategyDiscussionStore, discussionHash, discussionId} from './strategy-discussion-store.ts';
 import type {StrategyMapPublication} from './strategy-map-types.ts';
 
@@ -35,7 +35,10 @@ export class StrategyMapPublicationStore {
     return safePath(this.#owner(id),'maps/'+discussionId(mapId)+'/publications.json',create);
   }
   async #read(id:string,mapId:string):Promise<StrategyMapPublication[]>{
-    const file=await this.#file(id,mapId);
+    const file=await this.#file(id,mapId).catch(error=>{
+      if(isMissing(error)) return fault('strategy_map_not_found',404);
+      throw error;
+    });
     if(!await exists(file))return [];
     let value:unknown;
     try{value=JSON.parse((await readBytes(file,2*1024*1024)).toString());}
@@ -58,11 +61,11 @@ export class StrategyMapPublicationStore {
     for(const record of records){
       if(record.discussionId!==id||record.mapId!==mapId)fault('strategy_map_publication_corrupt',503);
       if(publicationIds.has(record.publicationId)||versions.has(record.version)||operations.has(record.operationId))fault('strategy_map_publication_corrupt',503);
+      publicationIds.add(record.publicationId);versions.add(record.version);operations.add(record.operationId);
       if(record.withdrawOperationId){
         if(operations.has(record.withdrawOperationId))fault('strategy_map_publication_corrupt',503);
         operations.add(record.withdrawOperationId);
       }
-      publicationIds.add(record.publicationId);versions.add(record.version);operations.add(record.operationId);
       if(record.state==='active')active++;
       if(record.state==='superseded'&&!record.supersededAt)fault('strategy_map_publication_corrupt',503);
       if(record.state==='withdrawn'&&(!record.withdrawnAt||!record.withdrawOperationId))fault('strategy_map_publication_corrupt',503);
@@ -70,14 +73,17 @@ export class StrategyMapPublicationStore {
     if(active>1)fault('strategy_map_publication_corrupt',503);
   }
   async list(id:string,mapId:string){discussionId(id);discussionId(mapId);return this.#read(id,mapId);}
-  async publish(id:string,mapId:string,version:number,summary:{contentSha256:string;goalCount:number;strategyCount:number},raw:unknown):Promise<StrategyMapPublication>{
+  async publish(id:string,mapId:string,version:number,raw:unknown,readSummary:()=>Promise<{contentSha256:string;goalCount:number;strategyCount:number}>):Promise<StrategyMapPublication>{
     const request=parsed(input,raw), records=await this.#read(id,mapId);
-    const repeated=records.find(record=>record.operationId===request.operationId);
+    const repeated=records.find(record=>record.operationId===request.operationId||record.withdrawOperationId===request.operationId);
     if(repeated){
-      if(discussionHash(identityOf(repeated))!==discussionHash({discussionId:id,mapId,version,contentSha256:request.sha256}))fault('strategy_map_publication_operation_conflict',409);
+      if(repeated.operationId!==request.operationId||discussionHash(identityOf(repeated))!==discussionHash({discussionId:id,mapId,version,contentSha256:request.sha256}))
+        fault('strategy_map_publication_operation_conflict',409);
       return structuredClone(repeated);
     }
     if(records.some(record=>record.version===version))fault('strategy_map_publication_already_published',409);
+    if(records.some(record=>record.version>version))fault('strategy_map_publication_version_outdated',409);
+    const summary=await readSummary();
     if(request.sha256!==summary.contentSha256)fault('strategy_map_version_conflict',409);
     const now=new Date().toISOString();
     const active=records.find(record=>record.state==='active');
@@ -89,14 +95,20 @@ export class StrategyMapPublicationStore {
     records.push(record);await this.#write(id,mapId,records);return structuredClone(record);
   }
   async withdraw(id:string,mapId:string,version:number,raw:unknown):Promise<StrategyMapPublication>{
-    const request=parsed(withdrawInput,raw), records=await this.#read(id,mapId), record=records.find(item=>item.publicationId===request.publicationId);
-    const expected={discussionId:id,mapId,version,contentSha256:request.sha256};
-    if(!record)fault('strategy_map_publication_conflict',409);
-    if(discussionHash(identityOf(record!))!==discussionHash(expected))fault('strategy_map_publication_conflict',409);
-    if(record!.withdrawOperationId===request.operationId)return structuredClone(record!);
-    if(record!.state!=='active')fault('strategy_map_not_published',409);
-    record!.state='withdrawn';record!.withdrawnAt=new Date().toISOString();record!.withdrawOperationId=request.operationId;
-    await this.#write(id,mapId,records);return structuredClone(record!);
+    const request=parsed(withdrawInput,raw), records=await this.#read(id,mapId);
+    const expected=discussionHash({discussionId:id,mapId,version,contentSha256:request.sha256});
+    const matches=(record:StrategyMapPublication)=>record.publicationId===request.publicationId&&discussionHash(identityOf(record))===expected;
+    const repeated=records.find(record=>record.operationId===request.operationId||record.withdrawOperationId===request.operationId);
+    if(repeated){
+      if(repeated.withdrawOperationId!==request.operationId||!matches(repeated))
+        return fault('strategy_map_publication_operation_conflict',409);
+      return structuredClone(repeated);
+    }
+    const record=records.find(matches);
+    if(!record)return fault('strategy_map_publication_conflict',409);
+    if(record.state!=='active')return fault('strategy_map_not_published',409);
+    record.state='withdrawn';record.withdrawnAt=new Date().toISOString();record.withdrawOperationId=request.operationId;
+    await this.#write(id,mapId,records);return structuredClone(record);
   }
   async active(id:string,mapId:string,version:number,contentSha256:string,publicationId:string):Promise<StrategyMapPublication>{
     const record=(await this.#read(id,mapId)).find(item=>item.publicationId===publicationId);

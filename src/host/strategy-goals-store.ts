@@ -8,6 +8,7 @@ import { parseUsageContext } from './usage-context-types.ts';
 import { parseGoalBasis } from './strategy-goals-types.ts';
 import type { GoalActionArrangement, GoalArrangementInput } from './strategy-goals-types.ts';
 import type { GoalAdoptionInput, GoalAdoptionProvenance, GoalBasis, GoalContextSnapshot, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRelationVersion, GoalRevisionInput, GoalSourceRef, GoalVersion, StrategyGoalRecord, StrategyGoalsIndex } from './strategy-goals-types.ts';
+import type { StrategyMapPublicationIdentity } from './strategy-map-types.ts';
 
 export class StrategyGoalsError extends Error {
   readonly code: string;
@@ -20,12 +21,23 @@ const text = (v: unknown, max = 4000): string => typeof v === 'string' && v.trim
 const uuid = (v: unknown): string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v) ? v : fail('invalid_strategy_goal_id');
 const positive = (v: unknown): number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : fail('invalid_strategy_goal_version');
 const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical).join(',')}]` : object(v) ? `{${Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}` : JSON.stringify(v);
-type StoredIndex = StrategyGoalsIndex & { schemaVersion: 1 | 2 | 3; tableReceipts?: Record<string,GoalRef[]>; operations: GoalOperationReceipt[] };
+type TableGoalRef = GoalRef & { publication?: StrategyMapPublicationIdentity };
+type GoalTableRow = { input: GoalDraftInput; expected: GoalRef | null };
+type StoredIndex = StrategyGoalsIndex & { schemaVersion: 1 | 2 | 3; tableReceipts?: Record<string,TableGoalRef[]>; operations: GoalOperationReceipt[] };
 const empty = (): StoredIndex => ({ schemaVersion: 1, goals: [], relations: [], feedback: [], operations: [] });
 const MAX_BYTES = 4 * 1024 * 1024;
 function goalRef(value: GoalRef): GoalRef {
   if (!object(value)) fail('invalid_strategy_goal_reference');
   return { goalId: uuid(value.goalId), version: positive(value.version) };
+}
+const goalRefKey = (ref: GoalRef) => `${ref.goalId}:${ref.version}`;
+function parseTablePublication(value: unknown): StrategyMapPublicationIdentity {
+  if (!object(value) || Object.keys(value).length !== 2 || typeof value.publishedAt !== 'string')
+    fail('invalid_strategy_map_publication_receipt');
+  const timestamp = Date.parse(value.publishedAt);
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== value.publishedAt)
+    fail('invalid_strategy_map_publication_receipt');
+  return { publicationId: uuid(value.publicationId), publishedAt: value.publishedAt };
 }
 function arrangementInput(input: GoalArrangementInput): GoalArrangementInput {
   if (!object(input) || !Array.isArray(input.checks) || input.checks.length > 20 || !Array.isArray(input.actions) || input.actions.length < 1 || input.actions.length > 20 || !object(input.source)) fail('invalid_strategy_goal_arrangement');
@@ -246,9 +258,20 @@ export class StrategyGoalsStore {
       }
       if(index.tableReceipts!==undefined){
         if(!object(index.tableReceipts))fail('invalid_strategy_goals_storage',503);
+        const publicationBindings = new Map<string, StrategyMapPublicationIdentity>();
         for(const [key,refs] of Object.entries(index.tableReceipts)){
           const receipt=index.operations.find(r=>r.operationId===key);
-          if(!receipt || receipt.kind!=='create'||!Array.isArray(refs)||!refs.length||refs.some(r=>!index.goals.find(g=>g.id===r.goalId)?.versions.find(v=>v.version===r.version)?.structured))fail('invalid_strategy_goals_storage',503);
+          if(!receipt || receipt.kind!=='create'||!Array.isArray(refs)||!refs.length)fail('invalid_strategy_goals_storage',503);
+          for(const ref of refs){
+            const goal=index.goals.find(g=>g.id===ref.goalId)?.versions.find(v=>v.version===ref.version);
+            if(!goal?.structured)fail('invalid_strategy_goals_storage',503);
+            if(ref.publication===undefined)continue;
+            if(!goal.structured.map)fail('invalid_strategy_goals_storage',503);
+            const publication=parseTablePublication(ref.publication);
+            const refKey=goalRefKey(ref),previous=publicationBindings.get(refKey);
+            if(previous && canonical(previous)!==canonical(publication))fail('invalid_strategy_goals_storage',503);
+            publicationBindings.set(refKey,publication);
+          }
         }
       }
       return index;
@@ -461,7 +484,9 @@ export class StrategyGoalsStore {
         const value=goals.get(ref.goalId)?.versions[ref.version-1];
         const structured=value?.structured,origin=structured?.map;
         if(!value || !structured || !origin || origin.discussionId!==discussionId || origin.mapId!==mapId || origin.version!==version || origin.sha256!==sha256)continue;
-        matches.set(ref.goalId+':'+ref.version,{...ref,nodeId:structured.nodeId,title:value.title,scope:value.scope.name,status:value.status,...(structured.publication&&{publicationId:structured.publication.publicationId}),historical:!structured.publication});
+        const key=goalRefKey(ref);
+        if(matches.get(key)?.publicationId&&!ref.publication)continue;
+        matches.set(key,{...goalRef(ref),nodeId:structured.nodeId,title:value.title,scope:value.scope.name,status:value.status,...(ref.publication&&{publicationId:ref.publication.publicationId}),historical:!ref.publication});
       }
     }
     return [...matches.values()];
@@ -471,34 +496,41 @@ export class StrategyGoalsStore {
     if(!refs)fail('strategy_goal_table_conflict',409);
     return structuredClone(refs.map(ref=>index.goals.find(g=>g.id===ref.goalId)!.versions[ref.version-1]!));
   }
-  private tablePlan(index:StoredIndex, rows:{input:GoalDraftInput;expected:GoalRef|null}[]) {
+  private tablePlan(index:StoredIndex, rows:GoalTableRow[], publication?:StrategyMapPublicationIdentity) {
     if(!Array.isArray(rows)||!rows.length||rows.length>500)fail('invalid_strategy_goal_selection');
     const values=rows.map(row=>({input:draft(row.input),expected:row.expected&&goalRef(row.expected)}));
     const key=(v:GoalDraftInput)=>canonical([groupScopeKey(v.scope),v.structured?.groupId,v.structured?.nodeId]);
     if(values.some(row=>!row.input.structured)||new Set(values.map(row=>key(row.input))).size!==values.length)fail('invalid_structured_goal');
+    if(publication&&values.some(row=>!row.input.structured?.map))fail('invalid_strategy_map_publication_receipt');
+    const publicationBindings=new Map<string,StrategyMapPublicationIdentity>();
+    for(const refs of Object.values(index.tableReceipts??{})){
+      for(const ref of refs)if(ref.publication)publicationBindings.set(goalRefKey(ref),ref.publication);
+    }
     return values.map(({input,expected})=>{
       const matches=index.goals.filter(g=>g.versions.some(v=>v.structured&&key(v)===key(input)));
       if(matches.length>1)fail('strategy_goal_table_conflict',409);
-      const record=matches[0],same=record?.versions.find(v=>canonical(draft(v))===canonical(input));
+      const record=matches[0],same=record?.versions.find(v=>canonical(draft(v))===canonical(input) &&
+        canonical(publicationBindings.get(goalRefKey(v)))===canonical(publication));
       if(!same&&(record?(!expected||expected.goalId!==record.id||expected.version!==record.currentVersion):expected!==null))
         fail('strategy_goal_table_conflict',409);
       return {input,record,same};
     });
   }
-  checkTable(rows:{input:GoalDraftInput;expected:GoalRef|null}[]):void{this.tablePlan(this.load(),rows);}
+  checkTable(rows:GoalTableRow[]):void{this.tablePlan(this.load(),rows);}
   /** All rows from one confirmed table use the same file lock and atomic index replacement. */
-  saveTable(operationId: string, rows: {input: GoalDraftInput; expected: GoalRef|null}[]): GoalVersion[] {
-    this.mutate(operationId,'create',{table:rows},index=>{
+  saveTable(operationId: string, rows: GoalTableRow[], publication?: StrategyMapPublicationIdentity): GoalVersion[] {
+    const identity=publication===undefined?undefined:parseTablePublication(publication);
+    this.mutate(operationId,'create',{table:rows,...(identity&&{publication:identity})},index=>{
       const batch:GoalVersion[]=[];
-      for (const {input,record:previous,same} of this.tablePlan(index,rows)) {
+      for (const {input,record:previous,same} of this.tablePlan(index,rows,identity)) {
         if(same){batch.push(same);continue;}
         const record=previous??{id:randomUUID(),currentVersion:0,adoptedVersion:null,versions:[]};
         if(!previous)index.goals.push(record);
         const goal:GoalVersion={...input,goalId:record.id,version:++record.currentVersion,status:'candidate',createdAt:new Date().toISOString()};
         record.versions.push(goal);batch.push(goal);
       }
-      // Additional exact-version references belong to this batch's idempotent receipt.
-      (index.tableReceipts??={})[operationId]=batch.map(goalRef);
+      // Keep the release identity with the exact receipt; older builds can still read and write the goal versions.
+      (index.tableReceipts??={})[operationId]=batch.map(goal=>({...goalRef(goal),...(identity&&{publication:identity})}));
       return batch[0]!;
     });
     return this.tableResult(operationId);

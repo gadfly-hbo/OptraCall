@@ -1,3 +1,5 @@
+import type {KeyboardEvent} from 'react';
+
 export type ManagementStage = 'direction' | 'compare' | 'handoff' | 'strategy-release' | 'strategy-versions' | 'goals' | 'adopt' | 'cases' | 'history' | 'bsc';
 type StrategyStage = 'direction' | 'compare' | 'handoff' | 'strategy-release' | 'strategy-versions' | 'bsc';
 type GoalStage = 'goals' | 'adopt' | 'cases' | 'history';
@@ -14,7 +16,17 @@ export const managementTitle = (route: ManagementRoute) => route.area === 'strat
 export function ManagementTabs({route, onStage}: {route: ManagementRoute; onStage: (stage: ManagementStage) => void}) {
   const views = route.area === 'strategy' ? strategyViews : goalViews;
   const selected = route.stage === 'bsc' ? 'compare' : route.stage;
-  return <nav className="sg-tabs workspace-management-tabs" aria-label={`${managementTitle(route)}工作视图`}>
+  function moveTab(event:KeyboardEvent<HTMLElement>) {
+    if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+    const buttons=[...event.currentTarget.querySelectorAll('button')];
+    const index=buttons.findIndex(button=>button===event.target);
+    if(index<0)return;
+    event.preventDefault();
+    const next=(index+(event.key==='ArrowRight'?1:-1)+views.length)%views.length;
+    onStage(views[next]![0]);
+    buttons[next]?.focus();
+  }
+  return <nav className="sg-tabs workspace-management-tabs" aria-label={`${managementTitle(route)}工作视图`} onKeyDown={route.area==='strategy'?moveTab:undefined}>
     {views.map(([stage, label]) => <button key={stage} type="button" aria-current={selected === stage ? 'page' : undefined} onClick={() => onStage(stage)}>{label}</button>)}
   </nav>;
 }

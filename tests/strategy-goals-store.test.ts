@@ -44,6 +44,30 @@ test('only an explicit adoption decision makes one exact candidate the shared BS
   assert.deepEqual(store.read(candidate).measurement, draft().measurement);
 });
 
+test('map handoff publication belongs to each exact receipt without changing goal or operation bodies', t => {
+  const {root,store,draft}=fixture(t);
+  const map={discussionId:randomUUID(),mapId:randomUUID(),version:1,sha256:'a'.repeat(64)};
+  const input=draft({structured:{groupId:map.mapId,nodeId:'G1',planTitle:'合成地图',map,parents:[],strategies:[],metrics:[]}});
+  const [legacy]=store.saveTable(randomUUID(),[{input,expected:null}]);
+  const operationId=randomUUID(),publication={publicationId:randomUUID(),publishedAt:new Date().toISOString()};
+  const rows=[{input,expected:{goalId:legacy.goalId,version:legacy.version}}];
+  const [released]=store.saveTable(operationId,rows,publication);
+  assert.equal(released.goalId,legacy.goalId);
+  assert.equal(released.version,2);
+  assert.deepEqual(released.structured,legacy.structured);
+
+  const reopened=new StrategyGoalsStore(root);
+  assert.deepEqual(reopened.read(legacy),legacy);
+  assert.deepEqual(reopened.saveTable(operationId,rows,publication),[released]);
+  assert.deepEqual(reopened.saveTable(randomUUID(),rows,publication),[released]);
+  assert.deepEqual(reopened.getOperation(operationId)?.result,released);
+  const handoffs=reopened.mapHandoffs(map.discussionId,map.mapId,map.version,map.sha256);
+  assert.deepEqual(handoffs.map(({version,publicationId,historical})=>({version,publicationId,historical})),[
+    {version:1,publicationId:undefined,historical:true},
+    {version:2,publicationId:publication.publicationId,historical:false},
+  ]);
+});
+
 test('a revised candidate leaves the adopted goal and old Case or report references on their original version', t => {
   const { store, draft } = fixture(t), initial = store.create({ ...draft(), operationId: randomUUID() });
   const first = store.adopt(initial, { expectedVersion: 1, operationId: randomUUID(), decision: '采纳v1' });

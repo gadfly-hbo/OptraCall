@@ -7,7 +7,7 @@ import {groupScopeKey,goalCandidatesFromRows} from './structured-goal.ts';
 import {readWorkbookOriginal,withWorkbookOriginal} from './strategy-workbook-source.ts';
 import {discussionHash} from './strategy-discussion-store.ts';
 import type {GoalRef,GoalDraftInput,GoalVersion} from './strategy-goals-types.ts';
-import type {StrategyMapPublication, StrategyMapVersion} from './strategy-map-types.ts';
+import type {StrategyMapPublication, StrategyMapPublicationIdentity, StrategyMapVersion} from './strategy-map-types.ts';
 
 const id=z.string().uuid(), number=z.number().int().positive(), label=z.string().trim().min(1).max(300);
 const ref=z.object({goalId:id,version:number});
@@ -52,15 +52,15 @@ export function strategyWorkbookRoutes(services:WorkbookServices){
     if(map.contentSha256!==ref.sha256)fail('strategy_map_version_conflict',409);
     return map;
   }
-  function persistGoals(rows:GoalDraftInput[],expected:Record<string,GoalRef|null>={}){
-    const id=stableId(['goal-table',rows]);
+  function persistGoals(rows:GoalDraftInput[],expected:Record<string,GoalRef|null>={},publication?:StrategyMapPublicationIdentity){
+    const id=stableId(publication?['goal-table',rows,publication]:['goal-table',rows]);
     const previous=goals.getOperation(id);
     if(previous) {
       const prior=goals.tableResult(id);
       if(prior.length!==rows.length)fail('strategy_goal_table_conflict',409);
       return prior;
     }
-    return goals.saveTable(id,rows.map(input=>({input,expected:expected[input.structured!.nodeId]??null})));
+    return goals.saveTable(id,rows.map(input=>({input,expected:expected[input.structured!.nodeId]??null})),publication);
   }
   async function saveSourceForGoal(v:GoalVersion){
     const source=v.structured?.workbook;
@@ -82,14 +82,14 @@ export function strategyWorkbookRoutes(services:WorkbookServices){
       return services.mutate(async()=>{
         if(services.isClosing())fail('host_closing',409);
         services.validateScope(input.scope);
+        if((input.scope.kind==='personal')!==(input.perspective==='personal'))fail('invalid_strategy_goal_perspective');
         const map=await readMap(input.map);
         const publicationId=input.publicationId;
         if(!publicationId)fail('strategy_map_publication_required',409);
-        const publication=await services.activePublication(input.map,publicationId!);
+        const {publicationId:verifiedId,publishedAt}=await services.activePublication(input.map,publicationId!);
         if(input.selected.some(id=>!map.nodes.some(n=>n.id===id&&n.kind==='goal'))||new Set(input.selected).size!==input.selected.length)fail('invalid_strategy_goal_selection');
-        const {publicationId:_,...handoffInput}=input;
-        const rows=goalCandidatesFromRows({...handoffInput,groupId:map.mapId,planTitle:map.title,nodes:map.nodes,edges:map.edges,map,publication,workbook:map.importSource});
-        return {goals:persistGoals(rows,input.expected)};
+        const rows=goalCandidatesFromRows({...input,groupId:map.mapId,planTitle:map.title,nodes:map.nodes,edges:map.edges,map,workbook:map.importSource});
+        return {goals:persistGoals(rows,input.expected,{publicationId:verifiedId,publishedAt})};
       });
     }
     if(action!=='preview'&&action!=='commit')return fail('strategy_workbook_not_found',404);

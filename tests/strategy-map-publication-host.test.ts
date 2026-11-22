@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {rename} from 'node:fs/promises';
+import {join} from 'node:path';
+import * as XLSX from 'xlsx';
+import {defaultSelection} from '../src/host/strategy-workbook-types.ts';
 import {startTestHost} from './fixtures/host-process.ts';
 
 test('真实 Host：战略地图正式发布按准确版本门禁目标承接并持久保留记录', {timeout: 90_000}, async t => {
@@ -60,10 +64,15 @@ test('真实 Host：战略地图正式发布按准确版本门禁目标承接并
   assert.equal((await api('/api/strategy/workbooks/handoff', 'POST', {map: ref(v1), publicationId: first.publicationId, selected: ['G1'], ...dest}, 409)).code, 'strategy_map_not_published');
   assert.equal((await api('/api/strategy/workbooks/handoff', 'POST', {map: ref(v2), selected: ['G1'], ...dest}, 409)).code, 'strategy_map_publication_required');
   assert.equal((await api('/api/strategy/workbooks/handoff', 'POST', {map: ref(v2), publicationId: randomUUID(), selected: ['G1'], ...dest}, 409)).code, 'strategy_map_publication_conflict');
+  const mismatchedPerspective = await api('/api/strategy/workbooks/handoff', 'POST', {
+    map: ref(v2), publicationId: second.publicationId, selected: ['G1'], ...dest, perspective: 'nonprofit',
+  }, 400);
+  assert.equal(mismatchedPerspective.code, 'invalid_strategy_goal_perspective');
+  assert.equal((await api('/api/strategy/goals')).goals.length, 0);
 
   const {goals} = await api('/api/strategy/workbooks/handoff', 'POST', {map: ref(v2), publicationId: second.publicationId, selected: ['G1'], ...dest});
   assert.equal(goals.length, 1);
-  assert.deepEqual(goals[0].structured.publication, {publicationId: second.publicationId, publishedAt: second.publishedAt});
+  assert.deepEqual(goals[0].structured.map, ref(v2));
   const handoffs = (await api(`${mapRoute}/${mapId}/versions/${v2.version}/handoffs`)).goals;
   assert.equal(handoffs.length, 1);
   assert.equal(handoffs[0].publicationId, second.publicationId);
@@ -79,15 +88,19 @@ test('真实 Host：战略地图正式发布按准确版本门禁目标承接并
   assert.equal((await api(`${versionPublicationRoute(v2.version)}`, 'POST', {operationId: randomUUID(), sha256: v2.contentSha256}, 409)).code, 'strategy_map_publication_already_published');
   const goalAfterWithdraw = (await api(`/api/strategy/goals/${goals[0].goalId}`)).goal;
   assert.equal(goalAfterWithdraw.currentVersion, 1);
-  assert.equal(goalAfterWithdraw.versions[0].structured.publication.publicationId, second.publicationId);
+  assert.deepEqual(goalAfterWithdraw.versions[0].structured.map, ref(v2));
+  assert.deepEqual((await api(`${mapRoute}/${mapId}/versions/${v2.version}/handoffs`)).goals, handoffs);
 
   await host.close();
   {
-    const {readFile,writeFile}=await import('node:fs/promises'),{join}=await import('node:path');
-    const indexFile=join(host.dataRoot,'strategy-goals','index.json'),index=JSON.parse(await readFile(indexFile,'utf8')) as any;
-    const legacy=index.goals.find((goal:any)=>goal.id===goals[0].goalId).versions.find((version:any)=>version.version===1);
-    delete legacy.structured.publication;
-    delete index.operations.find((operation:any)=>operation.result?.goalId===goals[0].goalId&&operation.result?.version===1)?.result?.structured?.publication;
+    const {readFile,writeFile}=await import('node:fs/promises');
+    const indexFile=join(host.dataRoot,'strategy-goals','index.json');
+    const index=JSON.parse(await readFile(indexFile,'utf8')) as {tableReceipts:Record<string,{goalId:string;version:number;publication?:unknown}[]>};
+    for(const refs of Object.values(index.tableReceipts)){
+      for(const item of refs){
+        if(item.goalId===goals[0].goalId&&item.version===goals[0].version)delete item.publication;
+      }
+    }
     await writeFile(indexFile,JSON.stringify(index));
   }
   host = await startTestHost({dataRoot: host.dataRoot, projectsRoot: host.projectsRoot});
@@ -111,4 +124,76 @@ test('真实 Host：战略地图正式发布按准确版本门禁目标承接并
   assert.equal(noGoalPublication.state, 'active');
   assert.equal(noGoalPublication.goalCount, 0);
   assert.equal((await api('/api/strategy/workbooks/handoff', 'POST', {map: ref(noGoal), publicationId: noGoalPublication.publicationId, selected: ['G1'], ...dest}, 400)).code, 'invalid_strategy_goal_selection');
+});
+
+test('真实 Host：发布操作按准确身份重试，失读时可撤销，旧候选不能接替新发布', {timeout: 90_000}, async t => {
+  const host = await startTestHost();
+  t.after(() => host.close());
+  async function api(route: string, method = 'GET', input?: unknown, status = 200) {
+    const response = await host.request(route, method, input), result = await response.json();
+    assert.equal(response.status, status, JSON.stringify({route, result}));
+    return result;
+  }
+  await api('/api/configuration', 'PUT', {
+    name: '地图发布操作测试', provider: 'openai-compatible', baseUrl: 'http://127.0.0.1:14998/v1',
+    model: 'synthetic', apiKey: 'synthetic-local',
+  });
+  const discussionId = randomUUID();
+  await api('/api/strategy/discussions', 'POST', {operationId: discussionId, title: '同地图发布顺序'}, 201);
+  const mapRoute = `/api/strategy/discussions/${discussionId}/maps`;
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([['目标编号', '目标项', '指标', '基线', '目标值'], ['G1', '覆盖', '覆盖率', '30%', '50%']]);
+  XLSX.utils.book_append_sheet(workbook, sheet, '目标表');
+  const fileName = '合成覆盖地图.xlsx';
+  async function importMap(title: string, base?: {discussionId: string; mapId: string; version: number; sha256: string}) {
+    const bytes = XLSX.write(workbook, {bookType: 'xlsx', type: 'base64'}) as string;
+    const {book} = await api('/api/strategy/workbooks/preview', 'POST', {fileName, bytes});
+    return (await api('/api/strategy/workbooks/commit', 'POST', {
+      fileName, bytes, target: 'map', discussionId, selection: defaultSelection(book, 'map'), title, ...(base&&{base}),
+    })).version;
+  }
+  const first = await importMap('覆盖规划');
+  sheet.E2.v = '55%';
+  const second = await importMap('覆盖规划修订', {discussionId, mapId: first.mapId, version: first.version, sha256: first.contentSha256});
+  assert.equal(second.mapId, first.mapId);
+  const publicationRoute = (version: number) => `${mapRoute}/${first.mapId}/versions/${version}/publication`;
+  const publicationsRoute = `${mapRoute}/${first.mapId}/publications`;
+  const publishInput = {operationId: randomUUID(), sha256: second.contentSha256};
+  const {publication} = await api(publicationRoute(second.version), 'POST', publishInput, 201);
+  const withdrawInput = {operationId: randomUUID(), publicationId: publication.publicationId, sha256: second.contentSha256};
+  const withdrawRoute = publicationRoute(second.version)+'/withdraw';
+  const conflict = 'strategy_map_publication_operation_conflict';
+  assert.equal((await api(withdrawRoute, 'POST', {...withdrawInput, operationId: publishInput.operationId}, 409)).code, conflict);
+  assert.equal((await api(publicationRoute(first.version), 'POST', {...publishInput, sha256: first.contentSha256}, 409)).code, conflict);
+  assert.deepEqual((await api(publicationsRoute)).publications, [publication]);
+  assert.equal((await api(publicationRoute(first.version), 'POST', {
+    operationId: randomUUID(), sha256: first.contentSha256,
+  }, 409)).code, 'strategy_map_publication_version_outdated');
+
+  const original = join(host.dataRoot, 'strategy-workbooks', 'discussion-'+discussionId, second.importSource.sha256+'.xlsx');
+  await rename(original, original+'.unavailable');
+  const sourceExport = await api(`${mapRoute}/${second.mapId}/versions/${second.version}/export`, 'GET', undefined, 409);
+  assert.equal(sourceExport.code, 'strategy_workbook_source_unavailable');
+  assert.equal((await api(publicationRoute(first.version)+'/withdraw', 'POST', withdrawInput, 409)).code, 'strategy_map_publication_conflict');
+  assert.equal((await api(withdrawRoute, 'POST', {...withdrawInput, sha256: '0'.repeat(64)}, 409)).code, 'strategy_map_publication_conflict');
+  const {publication: withdrawn} = await api(withdrawRoute, 'POST', withdrawInput);
+  assert.equal(withdrawn.state, 'withdrawn');
+  assert.deepEqual((await api(withdrawRoute, 'POST', withdrawInput)).publication, withdrawn);
+  assert.deepEqual((await api(publicationRoute(second.version), 'POST', publishInput, 201)).publication, withdrawn);
+  assert.equal((await api(publicationRoute(first.version)+'/withdraw', 'POST', withdrawInput, 409)).code, conflict);
+  assert.equal((await api(publicationRoute(first.version), 'POST', {operationId: withdrawInput.operationId, sha256: first.contentSha256}, 409)).code, conflict);
+  assert.equal((await api(publicationRoute(first.version), 'POST', {
+    operationId: randomUUID(), sha256: first.contentSha256,
+  }, 409)).code, 'strategy_map_publication_version_outdated');
+  assert.deepEqual((await api(publicationsRoute)).publications, [withdrawn]);
+  await rename(original+'.unavailable', original);
+  const denied = await api('/api/strategy/workbooks/handoff', 'POST', {
+    map: {discussionId, mapId: second.mapId, version: second.version, sha256: second.contentSha256},
+    publicationId: publication.publicationId,
+    selected: ['G1'],
+    scope: {kind: 'personal', id: 'self', name: '个人工作'},
+    perspective: 'personal',
+  }, 409);
+  assert.equal(denied.code, 'strategy_map_not_published');
+  assert.equal((await api('/api/strategy/goals')).goals.length, 0);
 });

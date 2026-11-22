@@ -2288,15 +2288,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       const mapPublicationRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/maps\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/publication(\/withdraw)?$/.exec(url.pathname);
       if(mapPublicationRoute && request.method==='POST'){
-        const [,id,mapId,revision,withdraw]=mapPublicationRoute,input=await body(request);
-        json(response,withdraw?200:201,{publication:await mutate(async()=>{
+        const [,id,mapId,revision,withdraw]=mapPublicationRoute,input=await body(request),version=Number(revision);
+        const publication=await mutate(()=>{
           if(closing)throw new RequestFault(409,'host_closing');
-          const map=await strategyDiscussions.readMapVersion(id!,mapId!,Number(revision));
-          const summary={contentSha256:map.contentSha256,goalCount:map.nodes.filter(node=>node.kind==='goal').length,strategyCount:map.nodes.filter(node=>node.kind==='strategy').length};
-          return withdraw
-            ? strategyMapPublications.withdraw(id!,mapId!,Number(revision),input)
-            : strategyMapPublications.publish(id!,mapId!,Number(revision),summary,input);
-        })});return;
+          if(withdraw)return strategyMapPublications.withdraw(id!,mapId!,version,input);
+          return strategyMapPublications.publish(id!,mapId!,version,input,async()=>{
+            const map=await strategyDiscussions.readMapVersion(id!,mapId!,version);
+            return {contentSha256:map.contentSha256,goalCount:map.nodes.filter(node=>node.kind==='goal').length,strategyCount:map.nodes.filter(node=>node.kind==='strategy').length};
+          });
+        });
+        json(response,withdraw?200:201,{publication});return;
       }
       const mapDocumentRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/maps\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/(export|handoffs)$/.exec(url.pathname);
       if(mapDocumentRoute && request.method==='GET'){
