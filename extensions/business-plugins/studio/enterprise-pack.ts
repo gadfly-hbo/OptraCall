@@ -441,8 +441,12 @@ export interface EnterprisePackOriginalCaseRef {
   caseId: string;
   caseTitle?: string;
   summary?: string;
+  caseRevision?: number;
   decisionId?: string;
   decisionRevision?: number;
+  decisionKind?: string;
+  decisionTitle?: string;
+  choiceId?: string;
   preservedAt?: string;
 }
 
@@ -471,6 +475,7 @@ export interface EnterprisePackFeedbackReport {
 
 export interface EnterprisePackFeedbackItemVerification {
   originalCutoffChecked: string;
+  newCutoffChecked?: string;
   transactionAssociationNote: string;
   shouldChange: {
     itemId: string;
@@ -480,6 +485,17 @@ export interface EnterprisePackFeedbackItemVerification {
     refundDate?: string;
     reason?: string;
     classification?: 'mapping_correction' | 'post_cutoff_update' | 'post_cutoff_new_event';
+    evidenceLocator?: string;
+    basisSourceRef?: StudioSourceRef;
+  }[];
+  postCutoffNewEvents?: {
+    itemId: string;
+    originalOrderId: string;
+    refundDate: string;
+    beforeValue: string;
+    afterValue: string;
+    reason?: string;
+    classification: 'post_cutoff_new_event' | 'post_cutoff_update';
     evidenceLocator?: string;
     basisSourceRef?: StudioSourceRef;
   }[];
@@ -588,12 +604,25 @@ export interface EnterprisePackUseRecord {
     verifierTaskId?: string;
     assessmentReportRef?: StudioSourceRef;
     selfAssessmentOnly?: boolean;
-    verifierActualReads?: { ref: StudioSourceRef; complete: boolean; readAt: string }[];
+    verifierActualReads?: {
+      ref: StudioSourceRef;
+      complete: boolean;
+      readAt: string;
+      turnIndex?: number;
+      entryId?: string;
+      fromAssessmentTurn?: boolean;
+    }[];
     verifierEvidenceSummary?: {
       requiredAssetsCount?: number;
       readRequiredAssetsCount: number;
       allRequiredReadByVerifier?: boolean;
       hadDataOrCalcEvidence: boolean;
+      assessmentTurnIndex?: number;
+      assessmentMessageId?: string;
+      carriedFromTurnIndices?: number[];
+      targetReportChecked?: boolean;
+      authorizedInputChecked?: boolean;
+      assessmentReportBoundToTarget?: boolean;
       missingReason?: string;
     };
     checkedRefs?: StudioSourceRef[];
@@ -1019,6 +1048,7 @@ export function evaluateUseVerdict(input: {
   declaredRefs?: readonly StudioSourceRef[];
   hasAuthorDeclaration: boolean;
   independentConfirmed: boolean;
+  wrongVersionConfirmedByVerifier?: boolean;
   partialSubsetOnly?: boolean;
   treatedUnreadableStoreAsZero?: boolean;
   includedOptedOutInSms?: boolean;
@@ -1049,16 +1079,33 @@ export function evaluateUseVerdict(input: {
       }
     }
   }
-  // 1B. Check wrong version reads across expectedRef and all requiredRefs (even if summary number coincides!)
+  // 1B. Independent verifier explicitly confirmed actual wrong-version adoption in the report
+  if (input.wrongVersionConfirmedByVerifier) {
+    return {
+      verdict: 'fail',
+      wrongVersionDetected: true,
+      reason: '独立核验已查实本稿实际采用旧版/错版口径，即使汇总数字巧合相同，该用途仍判未通过',
+    };
+  }
+  // 1C. Wrong version reads across expectedRef and requiredRefs:
+  //     - If the author actually declared adoption on this report (`hasAuthorDeclaration === true`) while only reading the old version -> 'fail' (wrongVersionDetected: true).
+  //     - If the task ONLY inspected/read the old version WITHOUT declaring adoption (`hasAuthorDeclaration === false`) and WITHOUT verifier confirming wrong-version adoption -> 'pending' (NOT misclassified as adopted!).
   for (const target of refsToCheck) {
     const sameAssetReads = input.actualReads.filter(r => sameSourceId(r.ref, target));
     const wrongRead = sameAssetReads.find(r => !sameExactSourceRef(r.ref, target));
     const completeRightRead = sameAssetReads.find(r => r.complete && sameExactSourceRef(r.ref, target));
     if (wrongRead && !completeRightRead) {
+      if (input.hasAuthorDeclaration) {
+        return {
+          verdict: 'fail',
+          wrongVersionDetected: true,
+          reason: `查实本稿声明采用但实际仅读用旧版/错版 ${wrongRead.ref.version}（期望 ${target.version}），即使汇总数字巧合相同，该用途仍判未通过`,
+        };
+      }
       return {
-        verdict: 'fail',
-        wrongVersionDetected: true,
-        reason: `查实实际读用旧版/错版 ${wrongRead.ref.version}（期望 ${target.version}），即使汇总数字巧合相同，该用途仍判未通过`,
+        verdict: 'pending',
+        wrongVersionDetected: false,
+        reason: `任务仅查阅历史旧版 ${wrongRead.ref.version}（期望 ${target.version}），既未声明本稿采用也无独立核验确认错版采用，不将查阅误判为实际采用，保持待验证`,
       };
     }
   }

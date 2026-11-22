@@ -11,14 +11,17 @@ import {
   listResourceGrants,
   preparePackPreview,
   readDomainReferenceOriginal,
+  readOperatorSession,
   reconcilePackReceipt,
   revokeResourceGrant,
   selectPanoramaRecommendation,
+  switchOperatorSession,
   upsertPackPurpose,
   type EnterpriseDomainPack,
   type EnterprisePackPreview,
   type EnterprisePackPurpose,
   type GrantAuthorityCredential,
+  type HostOperatorSessionInfo,
   type ResourceAuthorizationGrant,
 } from './member-pack-client.ts';
 import type {
@@ -81,6 +84,10 @@ export function StudioMemberPackPanel({
   const [pack, setPack] = useState<EnterpriseDomainPack | null>(null);
   const [grants, setGrants] = useState<ResourceAuthorizationGrant[]>([]);
   const [grantAuthority, setGrantAuthority] = useState<GrantAuthorityCredential | null>(null);
+  const [operatorSession, setOperatorSession] = useState<HostOperatorSessionInfo | null>(null);
+  const [opIdInput, setOpIdInput] = useState('');
+  const [opDisplayNameInput, setOpDisplayNameInput] = useState('');
+  const [opPasscodeInput, setOpPasscodeInput] = useState('');
   const [readOnlyRollback, setReadOnlyRollback] = useState(false);
   const [subTab, setSubTab] = useState<'panorama' | 'draft' | 'publication' | 'history' | 'grants'>('panorama');
   const [loading, setLoading] = useState(true);
@@ -97,6 +104,7 @@ export function StudioMemberPackPanel({
     recKey: string;
     rec: EnterprisePanoramaRecommendation;
     candidates: EnterprisePackPurpose[];
+    conflictReason?: string;
   } | null>(null);
   const [refExcerptDrawer, setRefExcerptDrawer] = useState<{
     title: string;
@@ -124,15 +132,17 @@ export function StudioMemberPackPanel({
     setLoading(true);
     setError('');
     try {
-      const [packRes, grantRes] = await Promise.all([
+      const [packRes, grantRes, opRes] = await Promise.all([
         listEnterprisePacks(enterpriseId, 'member-operations', signal, currentProjectId),
         listResourceGrants(enterpriseId, undefined, signal),
+        readOperatorSession(signal).catch(() => null),
       ]);
       if (mounted.current && !signal?.aborted) {
         setPack(packRes.packs[0] ?? null);
         setGrantAuthority(packRes.grantAuthority ?? null);
         setReadOnlyRollback(packRes.readOnlyRollback);
         setGrants(grantRes.grants);
+        if (opRes) setOperatorSession(opRes);
       }
     } catch (fault) {
       if (mounted.current && !signal?.aborted) {
@@ -399,12 +409,46 @@ export function StudioMemberPackPanel({
   const handleContinueFromRecommendation = async (rec: EnterprisePanoramaRecommendation, recKey: string) => {
     if (!pack || !pack.panorama || busy || readOnlyRollback) return;
     const match = matchPanoramaRecommendationPurposes(pack.purposes, rec);
-    if (match.ambiguous) {
-      setAmbiguousRecPicker({ recKey, rec, candidates: match.candidates });
-      setNotice(`同类用途「${rec.purposeKey}」下存在 ${match.candidates.length} 个不同范围用途，请明确选择要续建的原用途或新建独立范围。`);
+    if (match.ambiguous || match.conflictReason) {
+      setAmbiguousRecPicker({
+        recKey,
+        rec,
+        candidates: match.candidates,
+        ...(match.conflictReason ? { conflictReason: match.conflictReason } : {}),
+      });
+      setNotice(
+        match.conflictReason
+          ? match.conflictReason
+          : `同类用途「${rec.purposeKey}」下存在 ${match.candidates.length} 个不同范围用途，请明确选择要续建的原用途或新建独立范围。`,
+      );
       return;
     }
     await executeRecommendationContinuation(rec, match.matched, match.scopeConflictCandidates?.length ?? 0);
+  };
+
+  const handleSwitchOperator = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy || !opIdInput.trim() || opPasscodeInput.length < 4) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await switchOperatorSession({
+        action: 'register',
+        operatorId: opIdInput.trim(),
+        ...(opDisplayNameInput.trim() ? { displayName: opDisplayNameInput.trim() } : {}),
+        passcode: opPasscodeInput,
+        ...(currentProjectId ? { activeProjectId: currentProjectId } : {}),
+      });
+      setOperatorSession(res);
+      setOpPasscodeInput('');
+      setNotice(`已切换 Host 认证操作者：${res.operator.displayName || res.operator.operatorId}（${res.operator.operatorId}）。`);
+      await refresh();
+    } catch (fault) {
+      setError(fault instanceof Error ? fault.message : '操作者身份验证失败。');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleInspectRefExcerpt = async (link: EnterpriseDomainPack['entries'][number]['referenceLinks'][number]) => {
@@ -664,9 +708,23 @@ export function StudioMemberPackPanel({
                               </div>
                             )}
                             {showDisambiguator && (
-                              <div className="studio-note is-warning" role="region" aria-label="选择同用途续建范围">
-                                <p><strong>存在多个同类型不同范围用途，请明确选择续建目标（不自动代入首个用途）：</strong></p>
+                              <div className="studio-note is-warning" role="region" aria-label={ambiguousRecPicker.conflictReason ? '用途标识与建议范围冲突' : '选择同用途续建范围'}>
+                                <p>
+                                  <strong>
+                                    {ambiguousRecPicker.conflictReason
+                                      ? `用途标识与建议范围冲突：${ambiguousRecPicker.conflictReason}`
+                                      : '存在多个同类型不同范围用途，请明确选择续建目标（不自动代入首个用途）：'}
+                                  </strong>
+                                </p>
                                 <div className="studio-actions">
+                                  <button
+                                    type="button"
+                                    className={ambiguousRecPicker.conflictReason ? 'primary-button' : 'text-button'}
+                                    disabled={busy}
+                                    onClick={() => { void executeRecommendationContinuation(rec, undefined, ambiguousRecPicker.candidates.length); }}
+                                  >
+                                    按建议原范围新建独立用途
+                                  </button>
                                   {ambiguousRecPicker.candidates.map(cand => (
                                     <button
                                       key={cand.id}
@@ -675,19 +733,12 @@ export function StudioMemberPackPanel({
                                       disabled={busy}
                                       onClick={() => { void executeRecommendationContinuation(rec, cand); }}
                                     >
-                                      续建 {cand.id} · {cand.limitedCalculationName || cand.title}
+                                      {ambiguousRecPicker.conflictReason ? '仍改选已有宽范围用途 ' : '续建 '}
+                                      {cand.id} · {cand.limitedCalculationName || cand.title}
                                       {cand.scope.stores?.length ? `（${cand.scope.stores.join('、')}）` : ''}
                                       {cand.windowDays ? ` · ${cand.windowDays}日` : ''}
                                     </button>
                                   ))}
-                                  <button
-                                    type="button"
-                                    className="text-button"
-                                    disabled={busy}
-                                    onClick={() => { void executeRecommendationContinuation(rec, undefined); }}
-                                  >
-                                    按新范围新建用途
-                                  </button>
                                   <button
                                     type="button"
                                     className="text-button"
@@ -1032,12 +1083,17 @@ export function StudioMemberPackPanel({
                       )}
                       {fb.revisionLink?.itemVerification && (
                         <div className="studio-meta">
-                          <strong>逐笔更正核验（原截止日 {fb.revisionLink.itemVerification.originalCutoffChecked}）：</strong>
+                          <strong>
+                            逐笔更正核验（原截止日 {fb.revisionLink.itemVerification.originalCutoffChecked}
+                            {fb.revisionLink.itemVerification.newCutoffChecked ? ` · 新截止日 ${fb.revisionLink.itemVerification.newCutoffChecked}` : ''}）：
+                          </strong>
                           <span>{fb.revisionLink.itemVerification.transactionAssociationNote}</span>
                           {fb.revisionLink.itemVerification.originalCaseRef && (
                             <p className="studio-meta">
-                              原 Case 核查：{fb.revisionLink.itemVerification.originalCaseRef.summary || fb.revisionLink.itemVerification.originalCaseRef.caseId}
-                              {fb.revisionLink.itemVerification.originalCaseRef.decisionId ? `（决定 ${fb.revisionLink.itemVerification.originalCaseRef.decisionId}）` : ''}
+                              原 Case 核查：{fb.revisionLink.itemVerification.originalCaseRef.summary || fb.revisionLink.itemVerification.originalCaseRef.caseTitle || fb.revisionLink.itemVerification.originalCaseRef.caseId}
+                              {fb.revisionLink.itemVerification.originalCaseRef.decisionId
+                                ? `（决定 ${fb.revisionLink.itemVerification.originalCaseRef.decisionTitle || fb.revisionLink.itemVerification.originalCaseRef.decisionId}${fb.revisionLink.itemVerification.originalCaseRef.decisionRevision !== undefined ? ` rev.${fb.revisionLink.itemVerification.originalCaseRef.decisionRevision}` : ''}）`
+                                : ''}
                               {' '}· 原经营决定保持不变：{fb.revisionLink.itemVerification.caseDecisionsPreserved ? '是' : '未确认'}
                             </p>
                           )}
@@ -1047,6 +1103,13 @@ export function StudioMemberPackPanel({
                                 应变项 {sc.itemId}
                                 {sc.originalOrderId ? `（原单 ${sc.originalOrderId}${sc.refundDate ? ` · 退款 ${sc.refundDate}` : ''}）` : ''}
                                 ：{sc.beforeValue} → {sc.afterValue}
+                              </li>
+                            ))}
+                            {(fb.revisionLink.itemVerification.postCutoffNewEvents ?? []).map((pc, idx) => (
+                              <li key={`post:${pc.itemId}:${idx}`}>
+                                截止日后新发生退款 {pc.itemId}
+                                （原单 {pc.originalOrderId} · 退款 {pc.refundDate} · {pc.classification}）
+                                ：{pc.beforeValue} → {pc.afterValue}
                               </li>
                             ))}
                             {fb.revisionLink.itemVerification.shouldRetain.map((sr, idx) => (
@@ -1073,7 +1136,9 @@ export function StudioMemberPackPanel({
                             {rep.packDataCutoffAt ? ` · 包版本截止日：${rep.packDataCutoffAt}` : ''}
                             {rep.reportRef.locator?.startsWith('060_reports/') ? ` · 关联报告：${rep.reportRef.locator}` : ''}
                             {rep.independentVerificationStatus ? ` · 独立核验：${rep.independentVerificationStatus}` : ''}
-                            {rep.originalCaseRef ? ` · 原 Case：${rep.originalCaseRef.summary || rep.originalCaseRef.caseId}` : ''}
+                            {rep.originalCaseRef
+                              ? ` · 原 Case：${rep.originalCaseRef.summary || rep.originalCaseRef.caseId}${rep.originalCaseRef.decisionRevision !== undefined ? `（决定 rev.${rep.originalCaseRef.decisionRevision}）` : ''}`
+                              : ''}
                             {' '}· 证据：{rep.evidenceNote}
                             {onOpenTask && (
                               <button type="button" className="text-button" onClick={() => onOpenTask(rep.projectId, rep.taskId)}>
@@ -1139,10 +1204,44 @@ export function StudioMemberPackPanel({
 
           {subTab === 'grants' && (
             <div className="studio-member-pack-section">
-              <p className="studio-meta">Host 按此授权记录核验定义查阅、汇总引用与明细重算权限；授予方凭据与汇总资产身份由 Host 沿原权威核定，客户端角色名不产生权限。新包对未授权项目默认不授予三层使用权。</p>
+              <p className="studio-meta">Host 按此授权记录核验定义查阅、汇总引用与明细重算权限；授予方操作者身份、凭据与汇总资产身份由 Host 沿原权威核定，客户端角色名不产生权限。新包对未授权项目默认不授予三层使用权。</p>
+              <div className="studio-note" role="region" aria-label="当前 Host 认证操作者身份">
+                <p>
+                  <strong>当前 Host 认证操作者：</strong>
+                  {operatorSession?.operator.verified
+                    ? `${operatorSession.operator.displayName || operatorSession.operator.operatorId}（${operatorSession.operator.operatorId}）`
+                    : '未认证操作者（禁止授予或撤回资源权限）'}
+                </p>
+                {!operatorSession?.customResolver && !readOnlyRollback && (
+                  <form onSubmit={e => { void handleSwitchOperator(e); }} className="studio-row" style={{ marginTop: 8, gap: 8, flexWrap: 'wrap' }}>
+                    <input
+                      aria-label="业务操作者标识"
+                      placeholder="业务操作者 ID（如 ops-lead）"
+                      value={opIdInput}
+                      onChange={e => setOpIdInput(e.target.value)}
+                    />
+                    <input
+                      aria-label="业务操作者姓名或岗位"
+                      placeholder="显示名（可选）"
+                      value={opDisplayNameInput}
+                      onChange={e => setOpDisplayNameInput(e.target.value)}
+                    />
+                    <input
+                      type="password"
+                      aria-label="操作者口令"
+                      placeholder="口令（至少4位）"
+                      value={opPasscodeInput}
+                      onChange={e => setOpPasscodeInput(e.target.value)}
+                    />
+                    <button type="submit" className="secondary-button" disabled={busy || !opIdInput.trim() || opPasscodeInput.length < 4}>
+                      注册/切换认证操作者
+                    </button>
+                  </form>
+                )}
+              </div>
               {!grantAuthority && !readOnlyRollback && (
                 <div className="studio-note is-warning" role="status">
-                  当前项目不是该企业包/体系的原权责维护项目，未获 Host 颁发的授权操作凭据，仅可只读查看授权状态，不可授予或撤回资源权限。
+                  当前操作者或项目不是该企业包/体系的原权责维护主体，未获 Host 颁发的授权操作凭据，仅可只读查看授权状态，不可授予或撤回资源权限。
                 </div>
               )}
               {grants.length > 0 ? (

@@ -20,7 +20,7 @@ export class HostRequestError extends Error {
 }
 
 async function request<T>(path: string, method: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`/api/${path}`, { method, mode: 'same-origin', credentials: 'omit', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}), ...(signal ? { signal } : {}) });
+  const response = await fetch(`/api/${path}`, { method, mode: 'same-origin', credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}), ...(signal ? { signal } : {}) });
   const result = await response.json();
   if (!response.ok) throw new HostRequestError(result.message ?? '本地服务未完成请求。', result.fields ?? {}, result.code ?? result.error ?? 'host_request_failed', result.code === 'PERSONAL_CONTEXT_UNAVAILABLE' && result.accepted === false && Array.isArray(result.unavailablePersonalContext) && result.unavailablePersonalContext.length > 0 && result.unavailablePersonalContext.every((index: unknown) => Number.isSafeInteger(index) && Number(index) >= 0) ? result.unavailablePersonalContext : undefined, typeof result.accepted === 'boolean' ? result.accepted : undefined, response.status);
   return result as T;
@@ -81,7 +81,7 @@ export async function uploadFile(id: string, file: File, directory: '010_draw' |
 export async function copyToClean(id: string, path: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/files/copy-to-clean`, 'POST', { path }); }
 export async function saveReport(id: string, text: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/files/save-report`, 'POST', { name: `report-${new Date().toISOString().replace(/[:.]/g, '-')}.md`, text }); }
 export async function downloadFile(id: string, file: FileNode, expectedSha256?: string): Promise<void> {
-  const response = await fetch(`/api/projects/${encodeURIComponent(id)}/files/content?path=${encodeURIComponent(file.path)}${expectedSha256 ? `&expectedSha256=${encodeURIComponent(expectedSha256)}` : ''}`, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' } });
+  const response = await fetch(`/api/projects/${encodeURIComponent(id)}/files/content?path=${encodeURIComponent(file.path)}${expectedSha256 ? `&expectedSha256=${encodeURIComponent(expectedSha256)}` : ''}`, { credentials: 'same-origin', cache: 'no-store', headers: { 'x-optracall-client': '1' } });
   if (!response.ok) {
     if (response.status === 409) throw new HostRequestError('采用副本的内容已变化，与保存版本不一致；未下载，请先核对来源。', {}, 'artifact_version_changed');
     throw new HostRequestError('文件暂时无法下载，请刷新文件列表后重试。');

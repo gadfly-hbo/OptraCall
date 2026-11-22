@@ -54,15 +54,23 @@ try:
 
     base = f'http://127.0.0.1:{port}'
     headers = {'content-type': 'application/json', 'x-optracall-client': '1', 'origin': base}
+    api_cookie = {'value': ''}
 
-    def api(path, method='GET', body=None):
+    def api(path, method='GET', body=None, cookie=None):
+        req_headers = dict(headers)
+        effective_cookie = api_cookie['value'] if cookie is None else cookie
+        if effective_cookie:
+            req_headers['cookie'] = effective_cookie
         req = urllib.request.Request(
             base + path,
             data=json.dumps(body).encode('utf-8') if body is not None else None,
-            headers=headers,
+            headers=req_headers,
             method=method,
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
+            sc = resp.headers.get('Set-Cookie') or ''
+            if cookie is None and 'optracall_op_ctx=' in sc:
+                api_cookie['value'] = sc.split(';')[0]
             return json.loads(resp.read().decode('utf-8'))
 
     # Seed minimal synthetic configuration, enterprise, project, system, and ONE real enabled Enterprise Material
@@ -72,6 +80,19 @@ try:
         'baseUrl': 'http://127.0.0.1:1/v1',
         'model': 'synthetic-browser',
         'apiKey': 'synthetic-only',
+    })
+    # Register authentic owner business operator `ops-lead` AND non-owner `store-analyst`
+    api('/api/studio/operators/session', 'POST', {
+        'action': 'register',
+        'operatorId': 'store-analyst',
+        'displayName': '门店分析师',
+        'passcode': 'analyst-pass-2026',
+    }, cookie='')
+    api('/api/studio/operators/session', 'POST', {
+        'action': 'register',
+        'operatorId': 'ops-lead',
+        'displayName': '会员运营负责人',
+        'passcode': 'ops-pass-2026',
     })
     ent = api('/api/studio/enterprises', 'POST', {'name': '织屿服饰'})
     eid = ent['id']
@@ -404,6 +425,75 @@ try:
             }],
         })['purpose']
 
+        # R3 (Round-7 exact Codex counterexample): Re-save panorama adding a 5th recommendation that
+        # explicitly asks for 湖庭单店 30日 YET carries contradictory targetPurposeId=two_store_purpose['id']!
+        api(f'/api/studio/enterprise-packs/{pack_id}/panorama', 'POST', {
+            'requestId': str(_uuid.uuid4()),
+            'projectId': proj['id'],
+            'goal': '盘点会员运营现状并规划首批建设用途',
+            'brand': '织屿主品牌',
+            'channel': '直营门店',
+            'period': '2026-H1',
+            'dataCutoffAt': '2026-06-30',
+            'decisionPurpose': '确定首批会员留存与活跃用途',
+            'sourceRefs': [mat_ref],
+            'recommendations': [{
+                'purposeKey': 'store-repurchase-90d',
+                'title': '星桥与柳岸直营店 90 天门店复购率',
+                'priorityReason': '直营门店核心复购议题',
+                'deliverableNow': '星桥、柳岸两店受限计算试算',
+                'minimumEvidence': '会员有效购买制度 v1',
+                'ownerRole': '会员运营负责人',
+                'completionCriteria': '经独立分析任务核对样本重算并通过',
+                'selected': False,
+            }, {
+                'purposeKey': 'store-repurchase-multi',
+                'title': '杉岸直营店 90 日门店复购率',
+                'priorityReason': '杉岸直营 90 日长周期复购',
+                'deliverableNow': '杉岸直营店 90 日受限试算',
+                'minimumEvidence': '会员有效购买制度 v1',
+                'ownerRole': '会员运营负责人',
+                'completionCriteria': '杉岸 90 日样本核对通过',
+                'scopeKey': 'zhiyu:shanan:90d',
+                'windowDays': 90,
+                'stores': ['杉岸直营店'],
+                'selected': False,
+            }, {
+                'purposeKey': 'store-repurchase-multi',
+                'title': '湖庭直营店 30 日门店复购率',
+                'priorityReason': '湖庭直营 30 日短周期复购',
+                'deliverableNow': '湖庭直营店 30 日受限试算',
+                'minimumEvidence': '会员有效购买制度 v1',
+                'ownerRole': '会员运营负责人',
+                'completionCriteria': '湖庭 30 日样本核对通过',
+                'scopeKey': 'zhiyu:huting:30d',
+                'windowDays': 30,
+                'stores': ['湖庭直营店'],
+                'selected': False,
+            }, {
+                'purposeKey': 'store-repurchase-single-vs-two',
+                'title': '湖庭单店 30 日门店复购率',
+                'priorityReason': '仅聚焦湖庭单店 30 日复购，不可扩大到湖庭与杉岸两店',
+                'deliverableNow': '湖庭单店 30 日受限试算',
+                'minimumEvidence': '湖庭单店订单明细',
+                'ownerRole': '会员运营负责人',
+                'completionCriteria': '输出湖庭单店 30 日复购分子分母',
+                'selected': False,
+            }, {
+                'purposeKey': 'store-repurchase-single-vs-two',
+                'targetPurposeId': two_store_purpose['id'],
+                'title': '湖庭单店 30 日门店复购率（带冲突两店标识）',
+                'priorityReason': '仅做湖庭单店 30 日复购，不可扩大为两店',
+                'deliverableNow': '湖庭单店 30 日受限试算',
+                'minimumEvidence': '湖庭单店订单明细',
+                'ownerRole': '会员运营负责人',
+                'completionCriteria': '输出湖庭单店 30 日复购分子分母',
+                'selected': False,
+            }],
+            'issues': [],
+            'pendingQuestions': [],
+        })
+
         # Reload page: most recently created project (proj_consumer) is active by default!
         # First verify R2 in real Chromium: consumer project gets read-only Grants view with NO grant creation form!
         page.reload(wait_until='networkidle')
@@ -415,7 +505,7 @@ try:
         page.get_by_label('当前企业').select_option(eid)
         page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
         page.get_by_role('button', name='三层资源授权 (0)').click()
-        page.get_by_text('当前项目不是该企业包/体系的原权责维护项目').wait_for(timeout=10_000)
+        page.get_by_text('当前操作者或项目不是该企业包/体系的原权责维护主体').wait_for(timeout=10_000)
         assert page.get_by_role('heading', name='新增项目资源授权').count() == 0, 'Non-owner consumer project MUST NOT render grant creation form!'
 
         # Now switch active project in sidebar to the authentic owner project (织屿会员建设) and re-enter Studio workbench
@@ -425,6 +515,37 @@ try:
         page.get_by_role('button', name='进入企业 Studio 建设').click()
         page.get_by_role('button', name='体系工作台').click()
         page.get_by_label('当前企业').select_option(eid)
+        page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
+        page.get_by_role('button', name='覆盖与全景').click()
+
+        # R3 (Round-7 exact Codex counterexample): Clicking 湖庭单店 30日 recommendation WITH contradictory targetPurposeId=two_store_purpose['id']
+        # MUST NOT silently hand off two_store_purpose to Agent — MUST display conflict picker with ZERO automatic POST /purposes or /messages!
+        captured_purposes_posts.clear()
+        captured_message_posts.clear()
+        conflict_card = page.locator('article', has_text='湖庭单店 30 日门店复购率（带冲突两店标识）').first
+        conflict_card.wait_for(timeout=10_000)
+        conflict_card.get_by_role('button', name='按此建议携带原范围续建').click()
+        page.wait_for_timeout(500)
+        assert len(captured_purposes_posts) == 0, f'Contradictory targetPurposeId MUST NOT auto-POST /purposes! Got: {captured_purposes_posts}'
+        assert len(captured_message_posts) == 0, f'Contradictory targetPurposeId MUST NOT auto-dispatch message to Agent! Got: {captured_message_posts}'
+        conflict_card.get_by_role('region', name='用途标识与建议范围冲突').wait_for(timeout=10_000)
+        conflict_card.get_by_text('门店范围不一致').wait_for(timeout=10_000)
+        # User explicitly clicks "按建议原范围新建独立用途" -> creates isolated 湖庭直营店 30日 without touching two_store_purpose!
+        conflict_card.get_by_role('button', name='按建议原范围新建独立用途').click()
+        page.wait_for_timeout(1_000)
+        assert len(captured_purposes_posts) >= 1, 'Expected explicit create-isolated-purpose POST /purposes'
+        conflict_upsert = captured_purposes_posts[-1]
+        assert conflict_upsert.get('targetPurposeId') is None, f'Explicit isolated creation MUST have targetPurposeId=None, got {conflict_upsert.get("targetPurposeId")}'
+        assert conflict_upsert.get('windowDays') == 30
+        assert conflict_upsert.get('scope', {}).get('stores') == ['湖庭直营店']
+        if captured_message_posts:
+            conflict_handoff = str(captured_message_posts[-1].get('text', ''))
+            assert '湖庭直营店' in conflict_handoff and '30日' in conflict_handoff
+            assert two_store_purpose['id'] not in conflict_handoff and '杉岸直营店' not in conflict_handoff
+
+        # Return to 覆盖与缺口 -> 覆盖与全景 for the remaining R3 checks
+        page.get_by_role('region', name='资料、资产与建设记录').wait_for(timeout=10_000)
+        page.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
         page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
         page.get_by_role('button', name='覆盖与全景').click()
 
@@ -447,7 +568,7 @@ try:
             assert shanan_purpose['id'] not in handoff_text and '杉岸直营店' not in handoff_text, f'Agent handoff MUST NOT mention 杉岸 90日, got: {handoff_text}'
 
         # Return to 覆盖与缺口 -> 覆盖与全景 and verify Round-6 exact Codex counterexample:
-        # Clicking 湖庭单店 30日 recommendation MUST NOT attach to existing 湖庭与杉岸两店 30日 superset!
+        # Clicking 湖庭单店 30日 recommendation (which now matches the exact isolated 湖庭单店 30日 purpose created above) MUST NEVER attach to existing 湖庭与杉岸两店 30日 superset!
         page.get_by_role('region', name='资料、资产与建设记录').wait_for(timeout=10_000)
         page.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
         page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
@@ -455,14 +576,13 @@ try:
 
         captured_purposes_posts.clear()
         captured_message_posts.clear()
-        single_huting_card = page.locator('article', has_text='湖庭单店 30 日门店复购率').first
+        single_huting_card = page.locator('article', has_text='仅聚焦湖庭单店 30 日复购，不可扩大到湖庭与杉岸两店').first
         single_huting_card.wait_for(timeout=10_000)
         single_huting_card.get_by_role('button', name='按此建议携带原范围续建').click()
         page.wait_for_timeout(1_000)
         assert len(captured_purposes_posts) >= 1, 'Expected browser to POST single-store purpose upsert'
         single_upsert = captured_purposes_posts[-1]
         assert single_upsert.get('targetPurposeId') != two_store_purpose['id'], f"Single-store 湖庭单店 30日 MUST NEVER attach to two-store purpose {two_store_purpose['id']}!"
-        assert single_upsert.get('targetPurposeId') is None, f"Expected new isolated single-store purpose (targetPurposeId=None), got {single_upsert.get('targetPurposeId')}!"
         assert single_upsert.get('windowDays') == 30, f"Expected windowDays=30, got {single_upsert.get('windowDays')}!"
         assert single_upsert.get('scope', {}).get('stores') == ['湖庭直营店'], f"Expected extracted single store ['湖庭直营店'], got {single_upsert.get('scope')}!"
         if captured_message_posts:
@@ -536,9 +656,20 @@ try:
         page.get_by_text('未强行恢复').wait_for(timeout=10_000)
         page.get_by_text('suspended').first.wait_for(timeout=10_000)
 
-        # 3. Create (with Host-issued cryptographic authorityToken for authentic owner project grantor & allowedDataPaths) and revoke a resource grant from UI
+        # 3. R2 (Round-7): Verify real-product browser operator isolation + Host operator authentication switcher!
         page.get_by_role('button', name='三层资源授权 (0)').click()
+        # 3a. Before authenticating as `ops-lead`, this fresh browser session MUST NOT obtain grantAuthority!
+        page.get_by_text('当前操作者或项目不是该企业包/体系的原权责维护主体').wait_for(timeout=10_000)
+        assert page.get_by_role('heading', name='新增项目资源授权').count() == 0, 'Unauthenticated/non-owner browser session MUST NOT see grant creation form!'
+
+        # 3b. Authenticate as authentic owner `ops-lead` via Host operator switcher UI -> grant creation form appears!
+        page.get_by_label('业务操作者标识').fill('ops-lead')
+        page.get_by_label('操作者口令').fill('ops-pass-2026')
+        page.get_by_role('button', name='注册/切换认证操作者').click()
+        page.get_by_text('已切换 Host 认证操作者：会员运营负责人（op:ops-lead）').wait_for(timeout=10_000)
         page.get_by_role('heading', name='新增项目资源授权').wait_for(timeout=10_000)
+
+        # Create (with Host-issued cryptographic authorityToken for authentic owner op:ops-lead & allowedDataPaths) and revoke a resource grant from UI
         page.get_by_label('被授权项目').select_option(proj_consumer['id'])
         page.get_by_label('最高操作层次').select_option('read-detail-recalculate')
         page.get_by_label('允许读取的门店（顿号或逗号分隔）').fill('星桥直营店')
@@ -549,11 +680,36 @@ try:
         page.get_by_role('button', name='撤回授权').first.click()
         page.get_by_text('已撤回').first.wait_for(timeout=10_000)
 
+        # 3c. Switch to non-owner operator `store-analyst` -> grant creation form IMMEDIATELY disappears!
+        page.get_by_label('业务操作者标识').fill('store-analyst')
+        page.get_by_label('操作者口令').fill('analyst-pass-2026')
+        page.get_by_role('button', name='注册/切换认证操作者').click()
+        page.get_by_text('已切换 Host 认证操作者：门店分析师（op:store-analyst）').wait_for(timeout=10_000)
+        page.get_by_text('当前操作者或项目不是该企业包/体系的原权责维护主体').wait_for(timeout=10_000)
+        assert page.get_by_role('heading', name='新增项目资源授权').count() == 0, 'Non-owner operator MUST NOT see grant creation form!'
+
+        # 3d. Completely separate second browser context opens the same URL (and selects owner project 织屿会员建设!) -> STILL read-only Grants view, NO grant form!
+        ctx2 = browser.new_context(viewport={'width': 1440, 'height': 900})
+        page2 = ctx2.new_page()
+        page2.on('pageerror', lambda err: errors.append(f'ctx2: {err}'))
+        page2.goto(base, wait_until='networkidle')
+        page2.get_by_role('button', name='织屿会员建设', exact=True).click()
+        page2.get_by_role('button', name='设置').first.click()
+        page2.get_by_role('button', name='领域资产包').click()
+        page2.get_by_role('button', name='进入企业 Studio 建设').click()
+        page2.get_by_role('button', name='体系工作台').click()
+        page2.get_by_label('当前企业').select_option(eid)
+        page2.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
+        page2.get_by_role('button', name='三层资源授权 (0)').click()
+        page2.get_by_text('当前操作者或项目不是该企业包/体系的原权责维护主体').wait_for(timeout=10_000)
+        assert page2.get_by_role('heading', name='新增项目资源授权').count() == 0, 'Second isolated browser context MUST NOT obtain owner grantAuthority!'
+        ctx2.close()
+
         browser.close()
 
     if errors:
         raise RuntimeError(f'Browser page errors observed: {errors}')
-    print('BROWSER_MEMBER_PACK_E2E: PASS (Round-6: Settings T03 SHA-256 + Dedupe + Drawer -> Multi-Scope Same-PurposeKey Disambiguation [杉岸 90日 vs 湖庭 30日] + Single-Store vs Two-Store Isolation [湖庭单店 30日 NEVER expands into 湖庭与杉岸两店 30日] -> Single-Match Continuation Preserving 90d/Stores/Deps -> Dual-Route Entry Provenance & Reference Excerpt Drawer -> Explicit Decision/Decider -> Preview -> Real Authority Confirm [Nonexistent SAP=failed/suspended + Read-Only Reconcile Stays Failed; Real Enterprise Material=succeeded/eligible] -> Host-Verified Operator/Cookie Owner Grantor Create/Revoke, 0 page errors)')
+    print('BROWSER_MEMBER_PACK_E2E: PASS (Round-7: Settings T03 SHA-256 + Dedupe + Drawer -> Contradictory targetPurposeId Conflict Picker & Explicit Isolated Creation -> Multi-Scope Disambiguation [杉岸 90日 vs 湖庭 30日] + Single-Store vs Two-Store Isolation -> Dual-Route Entry Provenance & Reference Excerpt Drawer -> Explicit Decision/Decider -> Preview -> Real Authority Confirm [Nonexistent SAP=failed/suspended + Read-Only Reconcile Stays Failed; Real Enterprise Material=succeeded/eligible] -> Real-Product Operator Session Isolation & Host Operator Auth Switcher [unauth/non-owner/ctx2 denied; ops-lead grants/revokes], 0 page errors)')
 finally:
     if proc is not None and proc.poll() is None:
         proc.terminate()

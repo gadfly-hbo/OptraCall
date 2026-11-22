@@ -1127,16 +1127,30 @@ export class EnterprisePackStore {
     verifierTaskId?: string;
     assessmentReportRef?: StudioSourceRef;
     selfAssessmentOnly?: boolean;
-    verifierActualReads?: { ref: StudioSourceRef; complete: boolean; readAt: string }[];
+    verifierActualReads?: {
+      ref: StudioSourceRef;
+      complete: boolean;
+      readAt: string;
+      turnIndex?: number;
+      entryId?: string;
+      fromAssessmentTurn?: boolean;
+    }[];
     verifierEvidenceSummary?: {
       requiredAssetsCount?: number;
       readRequiredAssetsCount: number;
       allRequiredReadByVerifier?: boolean;
       hadDataOrCalcEvidence: boolean;
+      assessmentTurnIndex?: number;
+      assessmentMessageId?: string;
+      carriedFromTurnIndices?: number[];
+      targetReportChecked?: boolean;
+      authorizedInputChecked?: boolean;
+      assessmentReportBoundToTarget?: boolean;
       missingReason?: string;
     };
     expectedRef?: StudioSourceRef;
     independentConfirmed: boolean;
+    wrongVersionConfirmedByVerifier?: boolean;
     partialSubsetOnly?: boolean;
     treatedUnreadableStoreAsZero?: boolean;
     includedOptedOutInSms?: boolean;
@@ -1160,6 +1174,7 @@ export class EnterprisePackStore {
         declaredRefs: record.authorDeclaration?.declaredRefs,
         hasAuthorDeclaration: Boolean(record.authorDeclaration),
         independentConfirmed: input.independentConfirmed,
+        wrongVersionConfirmedByVerifier: input.wrongVersionConfirmedByVerifier,
         partialSubsetOnly: input.partialSubsetOnly,
         treatedUnreadableStoreAsZero: input.treatedUnreadableStoreAsZero,
         includedOptedOutInSms: input.includedOptedOutInSms,
@@ -1172,13 +1187,30 @@ export class EnterprisePackStore {
         ...(input.verifierTaskId ? { verifierTaskId: identity(input.verifierTaskId) } : {}),
         ...(input.assessmentReportRef ? { assessmentReportRef: sourceRef(input.assessmentReportRef) } : {}),
         ...(input.selfAssessmentOnly !== undefined ? { selfAssessmentOnly: Boolean(input.selfAssessmentOnly) } : {}),
-        ...(input.verifierActualReads ? { verifierActualReads: input.verifierActualReads.map(r => ({ ref: sourceRef(r.ref), complete: Boolean(r.complete), readAt: text(r.readAt, 100, false) })) } : {}),
+        ...(input.verifierActualReads ? {
+          verifierActualReads: input.verifierActualReads.map(r => ({
+            ref: sourceRef(r.ref),
+            complete: Boolean(r.complete),
+            readAt: text(r.readAt, 100, false),
+            ...(typeof r.turnIndex === 'number' ? { turnIndex: r.turnIndex } : {}),
+            ...(r.entryId ? { entryId: text(r.entryId, 200, false) } : {}),
+            ...(r.fromAssessmentTurn !== undefined ? { fromAssessmentTurn: Boolean(r.fromAssessmentTurn) } : {}),
+          })),
+        } : {}),
         ...(input.verifierEvidenceSummary ? {
           verifierEvidenceSummary: {
             ...(input.verifierEvidenceSummary.requiredAssetsCount !== undefined ? { requiredAssetsCount: Number(input.verifierEvidenceSummary.requiredAssetsCount) || 0 } : {}),
             readRequiredAssetsCount: Number(input.verifierEvidenceSummary.readRequiredAssetsCount) || 0,
             ...(input.verifierEvidenceSummary.allRequiredReadByVerifier !== undefined ? { allRequiredReadByVerifier: Boolean(input.verifierEvidenceSummary.allRequiredReadByVerifier) } : {}),
             hadDataOrCalcEvidence: Boolean(input.verifierEvidenceSummary.hadDataOrCalcEvidence),
+            ...(typeof input.verifierEvidenceSummary.assessmentTurnIndex === 'number' ? { assessmentTurnIndex: input.verifierEvidenceSummary.assessmentTurnIndex } : {}),
+            ...(input.verifierEvidenceSummary.assessmentMessageId ? { assessmentMessageId: text(input.verifierEvidenceSummary.assessmentMessageId, 200, false) } : {}),
+            ...(Array.isArray(input.verifierEvidenceSummary.carriedFromTurnIndices)
+              ? { carriedFromTurnIndices: input.verifierEvidenceSummary.carriedFromTurnIndices.filter(n => typeof n === 'number' && Number.isFinite(n)) }
+              : {}),
+            ...(input.verifierEvidenceSummary.targetReportChecked !== undefined ? { targetReportChecked: Boolean(input.verifierEvidenceSummary.targetReportChecked) } : {}),
+            ...(input.verifierEvidenceSummary.authorizedInputChecked !== undefined ? { authorizedInputChecked: Boolean(input.verifierEvidenceSummary.authorizedInputChecked) } : {}),
+            ...(input.verifierEvidenceSummary.assessmentReportBoundToTarget !== undefined ? { assessmentReportBoundToTarget: Boolean(input.verifierEvidenceSummary.assessmentReportBoundToTarget) } : {}),
             ...(input.verifierEvidenceSummary.missingReason ? { missingReason: text(input.verifierEvidenceSummary.missingReason, 1000, false) } : {}),
           },
         } : {}),
@@ -1225,8 +1257,12 @@ export class EnterprisePackStore {
             caseId: uuid(input.report.originalCaseRef.caseId),
             ...(input.report.originalCaseRef.caseTitle ? { caseTitle: text(input.report.originalCaseRef.caseTitle, 300, false) } : {}),
             ...(input.report.originalCaseRef.summary ? { summary: text(input.report.originalCaseRef.summary, 300, false) } : {}),
+            ...(typeof input.report.originalCaseRef.caseRevision === 'number' ? { caseRevision: input.report.originalCaseRef.caseRevision } : {}),
             ...(input.report.originalCaseRef.decisionId ? { decisionId: text(input.report.originalCaseRef.decisionId, 200, false) } : {}),
             ...(typeof input.report.originalCaseRef.decisionRevision === 'number' ? { decisionRevision: input.report.originalCaseRef.decisionRevision } : {}),
+            ...(input.report.originalCaseRef.decisionKind ? { decisionKind: text(input.report.originalCaseRef.decisionKind, 100, false) } : {}),
+            ...(input.report.originalCaseRef.decisionTitle ? { decisionTitle: text(input.report.originalCaseRef.decisionTitle, 300, false) } : {}),
+            ...(input.report.originalCaseRef.choiceId ? { choiceId: text(input.report.originalCaseRef.choiceId, 200, false) } : {}),
             preservedAt: text(input.report.originalCaseRef.preservedAt ?? now(), 100, false),
           },
         } : {}),
@@ -1364,26 +1400,41 @@ export class EnterprisePackStore {
           fail('feedback_verification_missing_revised_read', 409);
         }
 
-        // R5: Calculation-purpose verification closure MUST include structured item-level should-change & should-retain evidence!
+        // R5: Calculation-purpose verification closure MUST include structured item-level evidence
+        //     covering shouldChange (pre-cutoff mapping corrections) AND/OR postCutoffNewEvents (legitimate
+        //     post-cutoff refunds under a newCutoffChecked) alongside shouldRetain!
         let normalizedItemVerification: EnterprisePackFeedbackItemVerification | undefined;
         const isCalcPurpose = targetPm.tier === 'formal-calculation' || targetPm.tier === 'limited-calculation';
         if (input.itemVerification) {
           const iv = input.itemVerification;
           const originalCutoffChecked = text(iv.originalCutoffChecked, 200, false).trim();
+          const newCutoffChecked = iv.newCutoffChecked ? text(iv.newCutoffChecked, 200, false).trim() : undefined;
           const transactionAssociationNote = text(iv.transactionAssociationNote, 5000, false).trim();
-          if (!Array.isArray(iv.shouldChange) || iv.shouldChange.length === 0 || !Array.isArray(iv.shouldRetain) || iv.shouldRetain.length === 0) {
+          const rawShouldChange = Array.isArray(iv.shouldChange) ? iv.shouldChange : [];
+          const rawPostCutoff = Array.isArray(iv.postCutoffNewEvents) ? iv.postCutoffNewEvents : [];
+          const rawShouldRetain = Array.isArray(iv.shouldRetain) ? iv.shouldRetain : [];
+          if (rawShouldRetain.length === 0 || (rawShouldChange.length === 0 && rawPostCutoff.length === 0)) {
             fail('feedback_verification_missing_item_evidence', 409);
           }
+          if (rawPostCutoff.length > 0 && !newCutoffChecked) {
+            fail('feedback_verification_missing_new_cutoff', 409);
+          }
           const cutoffMs = Date.parse(originalCutoffChecked);
-          const shouldChange = iv.shouldChange.map(item => {
+          const newCutoffMs = newCutoffChecked ? Date.parse(newCutoffChecked) : Number.NaN;
+          if (newCutoffChecked && Number.isFinite(cutoffMs) && Number.isFinite(newCutoffMs) && newCutoffMs <= cutoffMs) {
+            fail('feedback_verification_invalid_new_cutoff', 409);
+          }
+          const shouldChange = rawShouldChange.map(item => {
             const itemId = text(item.itemId, 200, false).trim();
             const beforeValue = text(item.beforeValue, 1000, false).trim();
             const afterValue = text(item.afterValue, 1000, false).trim();
             if (beforeValue === afterValue) fail('feedback_verification_missing_item_evidence', 409);
             const refundDate = item.refundDate ? text(item.refundDate, 100, false).trim() : undefined;
-            if (refundDate && Number.isFinite(cutoffMs) && Number.isFinite(Date.parse(refundDate)) && Date.parse(refundDate) > cutoffMs && item.classification === 'mapping_correction') {
-              // Post-cutoff refunds MUST NOT be misclassified as an original mapping miss!
-              fail('feedback_verification_post_cutoff_misclassified', 409);
+            if (refundDate && Number.isFinite(cutoffMs) && Number.isFinite(Date.parse(refundDate)) && Date.parse(refundDate) > cutoffMs) {
+              // Post-cutoff refunds MUST NOT be placed in shouldChange as original mapping corrections!
+              if (!item.classification || item.classification === 'mapping_correction') {
+                fail('feedback_verification_post_cutoff_misclassified', 409);
+              }
             }
             return {
               itemId,
@@ -1397,7 +1448,38 @@ export class EnterprisePackStore {
               ...(item.basisSourceRef ? { basisSourceRef: sourceRef(item.basisSourceRef) } : {}),
             };
           });
-          const shouldRetain = iv.shouldRetain.map(item => ({
+          const postCutoffNewEvents = rawPostCutoff.map(item => {
+            const itemId = text(item.itemId, 200, false).trim();
+            const originalOrderId = text(item.originalOrderId, 200, false).trim();
+            const refundDate = text(item.refundDate, 100, false).trim();
+            const beforeValue = text(item.beforeValue, 1000, false).trim();
+            const afterValue = text(item.afterValue, 1000, false).trim();
+            if (beforeValue === afterValue) fail('feedback_verification_missing_item_evidence', 409);
+            if (item.classification !== 'post_cutoff_new_event' && item.classification !== 'post_cutoff_update') {
+              fail('feedback_verification_invalid_post_cutoff_classification', 409);
+            }
+            const refundMs = Date.parse(refundDate);
+            if (!Number.isFinite(refundMs)) fail('feedback_verification_invalid_refund_date', 409);
+            if (Number.isFinite(cutoffMs) && refundMs <= cutoffMs) {
+              // Pre-cutoff refund MUST NOT be hidden as a post-cutoff new event!
+              fail('feedback_verification_pre_cutoff_misclassified', 409);
+            }
+            if (Number.isFinite(newCutoffMs) && refundMs > newCutoffMs) {
+              fail('feedback_verification_post_cutoff_out_of_range', 409);
+            }
+            return {
+              itemId,
+              originalOrderId,
+              refundDate,
+              beforeValue,
+              afterValue,
+              classification: item.classification,
+              ...(item.reason ? { reason: text(item.reason, 2000, false).trim() } : {}),
+              ...(item.evidenceLocator ? { evidenceLocator: text(item.evidenceLocator, 500, false) } : {}),
+              ...(item.basisSourceRef ? { basisSourceRef: sourceRef(item.basisSourceRef) } : {}),
+            };
+          });
+          const shouldRetain = rawShouldRetain.map(item => ({
             itemId: text(item.itemId, 200, false).trim(),
             unchangedValue: text(item.unchangedValue, 1000, false).trim(),
             ...(item.originalOrderId ? { originalOrderId: text(item.originalOrderId, 200, false).trim() } : {}),
@@ -1409,8 +1491,10 @@ export class EnterprisePackStore {
           }));
           normalizedItemVerification = {
             originalCutoffChecked,
+            ...(newCutoffChecked ? { newCutoffChecked } : {}),
             transactionAssociationNote,
             shouldChange,
+            ...(postCutoffNewEvents.length ? { postCutoffNewEvents } : {}),
             shouldRetain,
             ...(iv.caseDecisionsPreserved !== undefined ? { caseDecisionsPreserved: Boolean(iv.caseDecisionsPreserved) } : {}),
             ...(iv.originalCaseRef ? {
@@ -1418,8 +1502,12 @@ export class EnterprisePackStore {
                 caseId: uuid(iv.originalCaseRef.caseId),
                 ...(iv.originalCaseRef.caseTitle ? { caseTitle: text(iv.originalCaseRef.caseTitle, 300, false) } : {}),
                 ...(iv.originalCaseRef.summary ? { summary: text(iv.originalCaseRef.summary, 300, false) } : {}),
+                ...(typeof iv.originalCaseRef.caseRevision === 'number' ? { caseRevision: iv.originalCaseRef.caseRevision } : {}),
                 ...(iv.originalCaseRef.decisionId ? { decisionId: text(iv.originalCaseRef.decisionId, 200, false) } : {}),
                 ...(typeof iv.originalCaseRef.decisionRevision === 'number' ? { decisionRevision: iv.originalCaseRef.decisionRevision } : {}),
+                ...(iv.originalCaseRef.decisionKind ? { decisionKind: text(iv.originalCaseRef.decisionKind, 100, false) } : {}),
+                ...(iv.originalCaseRef.decisionTitle ? { decisionTitle: text(iv.originalCaseRef.decisionTitle, 300, false) } : {}),
+                ...(iv.originalCaseRef.choiceId ? { choiceId: text(iv.originalCaseRef.choiceId, 200, false) } : {}),
                 preservedAt: text(iv.originalCaseRef.preservedAt ?? stamp, 100, false),
               },
             } : {}),

@@ -12,6 +12,7 @@ export type AuthorizedDataViewResult =
       filtered: boolean;
       keptRows?: number;
       omittedRows?: number;
+      unattributableRows?: number;
       grantedStores?: string[];
       periodFrom?: string;
       periodTo?: string;
@@ -35,7 +36,18 @@ function normalizeStoreBase(value: string): string {
     .toLowerCase();
 }
 
+const UNATTRIBUTABLE_STORE_TOKENS = new Set([
+  '', 'null', 'undefined', 'n/a', 'na', 'none', 'unknown', 'unassigned', '-', '--', '未归属', '未知', '空', '无',
+]);
+
+function isUnattributableStoreValue(value: string | undefined): boolean {
+  if (value === undefined) return true;
+  const trimmed = value.trim().toLowerCase();
+  return UNATTRIBUTABLE_STORE_TOKENS.has(trimmed);
+}
+
 function rowStoreMatchesGrant(rowStore: string, grantStores: readonly string[]): boolean {
+  if (isUnattributableStoreValue(rowStore)) return false;
   const rRaw = rowStore.trim().toLowerCase();
   const rBase = normalizeStoreBase(rowStore);
   if (!rRaw) return false;
@@ -131,19 +143,15 @@ const DATE_HEADER_NAMES = new Set([
   '交易日期', '下单日期', '首购日期', '日期', '月份', '统计月份', '期间',
 ]);
 
-function looksLikeMixedFilename(relativePath: string): boolean {
-  const base = path.basename(relativePath).toLowerCase();
-  return /(?:^|[_-])(?:all|mixed|multi|combined|global|full|master)(?:[_.-]|$)|全店|混合|多店|全量/u.test(base);
-}
-
 /**
  * Builds a Host-verified authorized view of a project detail data file (`020_clean/...`)
  * enforcing grant-level `allowedDataPaths`, `stores`, `periodFrom`/`periodTo`, and `purposeKeys`.
  *
  * - Mixed-store / mixed-period CSV/TSV/JSON files are filtered row-by-row so unauthorized
- *   stores and out-of-period rows are physically omitted (never leaked, never zero-filled).
- * - Unfilterable opaque files or mixed files missing verifiable store/period columns FAIL CLOSED
- *   with an explicit restriction code and reason.
+ *   stores, out-of-period rows, and unattributable rows (blank/null/unknown store or unparseable date)
+ *   are physically omitted (never leaked, never zero-filled).
+ * - Unfilterable opaque files or ANY file missing verifiable store/period columns under an active
+ *   store/period restriction FAIL CLOSED with an explicit restriction code and reason.
  */
 export function buildAuthorizedDataView(
   bytes: Buffer,
@@ -204,13 +212,23 @@ export function buildAuthorizedDataView(
     };
   }
 
+  const isRowUnattributable = (rowStore: string | undefined, rowDate: string | undefined): boolean => {
+    if (hasStoreRestriction && isUnattributableStoreValue(rowStore)) return true;
+    if (hasPeriodRestriction && (!rowDate || !parseDateBounds(rowDate))) return true;
+    return false;
+  };
+
   const rowAllowedByAnyGrant = (rowStore: string | undefined, rowDate: string | undefined): boolean =>
     matchedGrants.some(g => {
       if (g.scope.stores?.length) {
-        if (rowStore !== undefined && !rowStoreMatchesGrant(rowStore, g.scope.stores)) return false;
+        if (rowStore === undefined || isUnattributableStoreValue(rowStore) || !rowStoreMatchesGrant(rowStore, g.scope.stores)) {
+          return false;
+        }
       }
       if (g.scope.periodFrom || g.scope.periodTo) {
-        if (rowDate === undefined || !rowDateWithinGrant(rowDate, g.scope.periodFrom, g.scope.periodTo)) return false;
+        if (rowDate === undefined || !rowDateWithinGrant(rowDate, g.scope.periodFrom, g.scope.periodTo)) {
+          return false;
+        }
       }
       return true;
     });
@@ -222,18 +240,19 @@ export function buildAuthorizedDataView(
     const rawLines = textContent.split(/\r?\n/);
     const nonEmptyLines = rawLines.filter(line => line.trim().length > 0);
     if (nonEmptyLines.length === 0) {
-      return { allowed: true, bytes, filtered: false, keptRows: 0, omittedRows: 0, grantedStores };
+      return { allowed: true, bytes, filtered: false, keptRows: 0, omittedRows: 0, unattributableRows: 0, grantedStores };
     }
     const headerCells = parseCsvLine(nonEmptyLines[0]!, delimiter);
     const normalizedHeaders = headerCells.map(h => h.replace(/^\uFEFF/, '').trim().toLowerCase());
     const storeIdx = normalizedHeaders.findIndex(h => STORE_HEADER_NAMES.has(h));
     const dateIdx = normalizedHeaders.findIndex(h => DATE_HEADER_NAMES.has(h));
 
-    if (hasStoreRestriction && storeIdx === -1 && looksLikeMixedFilename(normalizedPath)) {
+    // R2: Unconditionally fail closed whenever store restriction is active and file lacks a verifiable store column!
+    if (hasStoreRestriction && storeIdx === -1) {
       return {
         allowed: false,
         code: 'authorized_view_unavailable_missing_store_column',
-        reason: `明细文件 ${normalizedPath} 为共享/混合来源且缺少可核验门店列，无法建立授权门店视图，已限制交付。`,
+        reason: `明细文件 ${normalizedPath} 缺少可核验门店列，无法归属每行门店并建立授权门店视图，已限制交付原文件。`,
       };
     }
     if (hasPeriodRestriction && dateIdx === -1) {
@@ -247,6 +266,7 @@ export function buildAuthorizedDataView(
     const keptLines: string[] = [nonEmptyLines[0]!];
     let keptRows = 0;
     let omittedRows = 0;
+    let unattributableRows = 0;
     for (let i = 1; i < nonEmptyLines.length; i++) {
       const cells = parseCsvLine(nonEmptyLines[i]!, delimiter);
       const rowStore = storeIdx >= 0 ? (cells[storeIdx] ?? '') : undefined;
@@ -256,7 +276,15 @@ export function buildAuthorizedDataView(
         keptRows += 1;
       } else {
         omittedRows += 1;
+        if (isRowUnattributable(rowStore, rowDate)) unattributableRows += 1;
       }
+    }
+    if (keptRows === 0 && unattributableRows > 0) {
+      return {
+        allowed: false,
+        code: 'authorized_view_unattributable_records',
+        reason: `明细文件 ${normalizedPath} 中 ${unattributableRows} 行记录缺少可核验门店或日期归属，无法生成授权视图，已限制交付。`,
+      };
     }
     const outText = keptLines.join(eol) + (textContent.endsWith('\n') ? eol : '');
     const filtered = omittedRows > 0;
@@ -266,12 +294,13 @@ export function buildAuthorizedDataView(
       filtered,
       keptRows,
       omittedRows,
+      unattributableRows,
       ...(grantedStores.length ? { grantedStores } : {}),
       ...(effectivePeriodFrom ? { periodFrom: effectivePeriodFrom } : {}),
       ...(effectivePeriodTo ? { periodTo: effectivePeriodTo } : {}),
       ...(filtered
         ? {
-            restrictionNote: `已按授权范围生成受控视图（保留 ${keptRows} 行，隐藏 ${omittedRows} 行非授权门店或超期间记录；不可读门店绝不视为 0）。`,
+            restrictionNote: `已按授权范围生成受控视图（保留 ${keptRows} 行，隐藏 ${omittedRows} 行非授权门店/超期间记录${unattributableRows > 0 ? `，其中 ${unattributableRows} 行门店或日期无法归属` : ''}；不可读门店绝不视为 0）。`,
           }
         : {}),
     };
@@ -300,11 +329,11 @@ export function buildAuthorizedDataView(
     const sampleKeys = [...new Set(records.flatMap(r => Object.keys(r)))];
     const storeKey = sampleKeys.find(k => STORE_HEADER_NAMES.has(k.trim().toLowerCase()));
     const dateKey = sampleKeys.find(k => DATE_HEADER_NAMES.has(k.trim().toLowerCase()));
-    if (hasStoreRestriction && !storeKey && looksLikeMixedFilename(normalizedPath)) {
+    if (hasStoreRestriction && !storeKey) {
       return {
         allowed: false,
         code: 'authorized_view_unavailable_missing_store_column',
-        reason: `明细文件 ${normalizedPath} 缺少可核验门店字段，无法建立授权门店视图，已限制交付。`,
+        reason: `明细文件 ${normalizedPath} 缺少可核验门店字段，无法归属每条记录并建立授权门店视图，已限制交付。`,
       };
     }
     if (hasPeriodRestriction && !dateKey) {
@@ -316,11 +345,25 @@ export function buildAuthorizedDataView(
     }
     const kept: Record<string, unknown>[] = [];
     let omittedRows = 0;
+    let unattributableRows = 0;
     for (const row of records) {
-      const rowStore = storeKey ? String(row[storeKey] ?? '') : undefined;
-      const rowDate = dateKey ? String(row[dateKey] ?? '') : undefined;
-      if (rowAllowedByAnyGrant(rowStore, rowDate)) kept.push(row);
-      else omittedRows += 1;
+      const rawStore = storeKey ? row[storeKey] : undefined;
+      const rawDate = dateKey ? row[dateKey] : undefined;
+      const rowStore = rawStore === null || rawStore === undefined ? '' : String(rawStore);
+      const rowDate = rawDate === null || rawDate === undefined ? '' : String(rawDate);
+      if (rowAllowedByAnyGrant(storeKey ? rowStore : undefined, dateKey ? rowDate : undefined)) {
+        kept.push(row);
+      } else {
+        omittedRows += 1;
+        if (isRowUnattributable(storeKey ? rowStore : undefined, dateKey ? rowDate : undefined)) unattributableRows += 1;
+      }
+    }
+    if (kept.length === 0 && unattributableRows > 0) {
+      return {
+        allowed: false,
+        code: 'authorized_view_unattributable_records',
+        reason: `JSON 明细文件 ${normalizedPath} 中 ${unattributableRows} 条记录缺少可核验门店或日期归属，无法生成授权视图，已限制交付。`,
+      };
     }
     return {
       allowed: true,
@@ -328,12 +371,13 @@ export function buildAuthorizedDataView(
       filtered: omittedRows > 0,
       keptRows: kept.length,
       omittedRows,
+      unattributableRows,
       ...(grantedStores.length ? { grantedStores } : {}),
       ...(effectivePeriodFrom ? { periodFrom: effectivePeriodFrom } : {}),
       ...(effectivePeriodTo ? { periodTo: effectivePeriodTo } : {}),
       ...(omittedRows > 0
         ? {
-            restrictionNote: `已按授权范围生成受控 JSON 视图（保留 ${kept.length} 条，隐藏 ${omittedRows} 条非授权门店或超期间记录；不可读门店绝不视为 0）。`,
+            restrictionNote: `已按授权范围生成受控 JSON 视图（保留 ${kept.length} 条，隐藏 ${omittedRows} 条非授权门店/超期间记录${unattributableRows > 0 ? `，其中 ${unattributableRows} 条门店或日期无法归属` : ''}；不可读门店绝不视为 0）。`,
           }
         : {}),
     };

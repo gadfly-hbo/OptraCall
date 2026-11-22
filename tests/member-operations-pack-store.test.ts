@@ -13,7 +13,10 @@ import {
   evaluateUseVerdict,
   computeUpgradeImpact,
   matchPanoramaRecommendationPurposes,
+  type EnterprisePackPurpose,
+  type EnterprisePanoramaRecommendation,
 } from '../extensions/business-plugins/studio/enterprise-pack.ts';
+import type { StudioSourceRef } from '../extensions/business-plugins/studio/contracts.ts';
 
 function tempRoot(label: string) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `optracall-member-pack-${label}-`));
@@ -1762,6 +1765,208 @@ test('Round-6 counterexamples: single-store recommendation MUST NOT expand into 
         shouldRetain: [{ itemId: 'C13', unchangedValue: '保留' }],
       },
     }), /feedback_verification_post_cutoff_misclassified/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Round-7 counterexamples: contradictory targetPurposeId refuses auto-match (R3), read-only old version stays pending without false fail (R4), and valid postCutoffNewEvents closes under newCutoffChecked while rejecting misclassified pre-cutoff items (R5)', () => {
+  // 1. R3: Contradictory targetPurposeId pointing to two-store purpose on single-store recommendation MUST NOT auto-match!
+  const twoStorePurpose: EnterprisePackPurpose = {
+    id: 'U-TWO-STORE',
+    dedupKey: 'ent|pack|store-first-purchase-30d-repurchase|brand_account|zhiyu:huting-shanan:30d|30',
+    purposeKey: 'store-first-purchase-30d-repurchase',
+    title: '湖庭与杉岸两店 30 日门店复购率',
+    businessQuestion: '计算湖庭与杉岸两店 30 日复购率',
+    subjectUnit: 'brand_account',
+    windowDays: 30,
+    scope: { scopeKey: 'zhiyu:huting-shanan:30d', brand: '织屿主品牌', channel: '直营门店', stores: ['湖庭直营店', '杉岸直营店'], period: '2026-H1' },
+    tier: 'limited-calculation',
+    businessStatus: 'active',
+    evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass', independentUse: 'pending' },
+    originalGoal: '两店 30 日复购率',
+    remainingGaps: [],
+    exclusions: [],
+    completionCriteria: '两店复算通过',
+    dependencies: [],
+    decisionChoices: [],
+    workItemStatus: 'draft',
+    maintenanceTasks: [],
+    evidenceNotes: [],
+    createdAt: '2026-11-01T00:00:00Z',
+    updatedAt: '2026-11-01T00:00:00Z',
+  };
+  const contradictoryRec: EnterprisePanoramaRecommendation = {
+    purposeKey: 'store-first-purchase-30d-repurchase',
+    targetPurposeId: twoStorePurpose.id,
+    title: '湖庭单店 30 日门店复购率',
+    priorityReason: '仅聚焦湖庭单店 30 日复购，不可扩大到两店',
+    deliverableNow: '湖庭单店 30 日受限试算',
+    minimumEvidence: '湖庭单店订单明细',
+    ownerRole: '会员运营负责人',
+    completionCriteria: '输出湖庭单店 30 日复购分子分母',
+    selected: false,
+  };
+  const conflictMatch = matchPanoramaRecommendationPurposes([twoStorePurpose], contradictoryRec);
+  assert.equal(conflictMatch.matched, undefined, 'Contradictory targetPurposeId MUST NOT auto-match two-store purpose!');
+  assert.equal(conflictMatch.ambiguous, true, 'Contradictory targetPurposeId MUST require explicit user disambiguation!');
+  assert.equal(conflictMatch.scopeConflictCandidates.length, 1);
+  assert.ok(conflictMatch.conflictReason && conflictMatch.conflictReason.includes('门店范围不一致'), `Expected explicit conflictReason, got: ${conflictMatch.conflictReason}`);
+
+  // Aligned targetPurposeId still matches cleanly
+  const alignedRec: EnterprisePanoramaRecommendation = {
+    purposeKey: 'store-first-purchase-30d-repurchase',
+    targetPurposeId: twoStorePurpose.id,
+    title: '湖庭与杉岸两店 30 日门店复购率',
+    priorityReason: '续建两店 30 日复购',
+    deliverableNow: '湖庭及杉岸两店 30 日复算',
+    minimumEvidence: '两店订单明细',
+    ownerRole: '会员运营负责人',
+    completionCriteria: '两店复算通过',
+    stores: ['湖庭直营店', '杉岸直营店'],
+    windowDays: 30,
+    selected: false,
+  };
+  const alignedMatch = matchPanoramaRecommendationPurposes([twoStorePurpose], alignedRec);
+  assert.equal(alignedMatch.matched?.id, twoStorePurpose.id);
+  assert.equal(alignedMatch.conflictReason, undefined);
+
+  // 2. R4: Mere read/inspection of old version WITHOUT author declaration & WITHOUT verifier confirming wrong-version adoption MUST stay pending (NOT fail!)
+  const v1Ref: StudioSourceRef = { authority: 'sap-method', id: 'refund-map', version: '1', sha256: '1'.repeat(64) };
+  const v2Ref: StudioSourceRef = { authority: 'sap-method', id: 'refund-map', version: '2', sha256: '2'.repeat(64) };
+  const inspectOldOnly = evaluateUseVerdict({
+    expectedRef: v2Ref,
+    requiredRefs: [v2Ref],
+    actualReads: [{ ref: v1Ref, complete: true, readAt: '2026-11-01T00:01:00Z' }],
+    hasAuthorDeclaration: false,
+    independentConfirmed: false,
+  });
+  assert.equal(inspectOldOnly.verdict, 'pending', 'Mere inspection of old version without declaration MUST remain pending (not misclassified as adoption)!');
+  assert.equal(inspectOldOnly.wrongVersionDetected, false);
+
+  // When author DOES declare adoption while only reading old v1 -> FAIL
+  const declaredOldOnly = evaluateUseVerdict({
+    expectedRef: v2Ref,
+    requiredRefs: [v2Ref],
+    actualReads: [{ ref: v1Ref, complete: true, readAt: '2026-11-01T00:01:00Z' }],
+    hasAuthorDeclaration: true,
+    independentConfirmed: true,
+  });
+  assert.equal(declaredOldOnly.verdict, 'fail');
+  assert.equal(declaredOldOnly.wrongVersionDetected, true);
+
+  // When independent verifier confirms wrong-version adoption even without declaration -> FAIL
+  const verifierConfirmedWrong = evaluateUseVerdict({
+    expectedRef: v2Ref,
+    requiredRefs: [v2Ref],
+    actualReads: [{ ref: v1Ref, complete: true, readAt: '2026-11-01T00:01:00Z' }],
+    hasAuthorDeclaration: false,
+    independentConfirmed: false,
+    wrongVersionConfirmedByVerifier: true,
+  });
+  assert.equal(verifierConfirmedWrong.verdict, 'fail');
+  assert.equal(verifierConfirmedWrong.wrongVersionDetected, true);
+
+  // 3. R5: Legitimate post-cutoff new-event refund closure under newCutoffChecked
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'optracall-r7-store-'));
+  try {
+    const store = new EnterprisePackStore(root);
+    const entId = '11111111-1111-4111-8111-111111111111';
+    const sysId = '22222222-2222-4222-8222-222222222222';
+    const projId = '33333333-3333-4333-8333-333333333333';
+    const pack = store.ensurePack({ enterpriseId: entId, systemId: sysId, domain: 'member-operations', name: 'R7测试包' });
+    const pCalc = store.upsertPurpose(pack.id, {
+      purposeKey: 'store-repurchase', title: '湖庭30日复购率', businessQuestion: '计算复购率',
+      subjectUnit: 'brand_account', scope: { scopeKey: 'huting:30d', stores: ['湖庭直营店'] }, windowDays: 30,
+      tier: 'formal-calculation', businessStatus: 'active', originalGoal: '复购', completionCriteria: '核验',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass' },
+      dataCutoffAt: '2026-10-31',
+      dependencies: [{ id: 'd1', role: 'shared-asset', authority: 'sap-method', ref: v1Ref, requiredFor: ['formal-calculation'] }],
+    }).purpose;
+    const prev1 = store.preparePreview(pack.id, { version: '1.0', purposeIds: [pCalc.id], decisions: [], summary: 'v1.0', dataCutoffAt: '2026-10-31' });
+    store.confirmPreview(pack.id, { previewId: prev1.id, fingerprint: prev1.fingerprint, moduleReceipts: [{ requestId: 'r1', authority: 'sap-method', targetRef: v1Ref, status: 'succeeded', detail: 'ok', purposeIds: [pCalc.id] }] });
+    store.upsertPurpose(pack.id, {
+      targetPurposeId: pCalc.id,
+      purposeKey: 'store-repurchase', title: '湖庭30日复购率', businessQuestion: '计算复购率',
+      subjectUnit: 'brand_account', scope: { scopeKey: 'huting:30d', stores: ['湖庭直营店'] }, windowDays: 30,
+      tier: 'formal-calculation', businessStatus: 'active', originalGoal: '复购', completionCriteria: '核验',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass' },
+      dataCutoffAt: '2026-11-15',
+      dependencies: [{ id: 'd1', role: 'shared-asset', authority: 'sap-method', ref: v2Ref, requiredFor: ['formal-calculation'] }],
+    });
+    const prev2 = store.preparePreview(pack.id, { version: '1.1', previousVersion: '1.0', purposeIds: [pCalc.id], decisions: [], summary: 'v1.1', dataCutoffAt: '2026-11-15' });
+    store.confirmPreview(pack.id, { previewId: prev2.id, fingerprint: prev2.fingerprint, moduleReceipts: [{ requestId: 'r2', authority: 'sap-method', targetRef: v2Ref, status: 'succeeded', detail: 'ok', purposeIds: [pCalc.id] }] });
+    const taskAId = '44444444-4444-4444-8444-444444444444';
+    const taskBId = '55555555-5555-4555-8555-555555555555';
+    store.pinTaskVersion(pack.id, { projectId: projId, taskId: taskBId, version: '1.1', authorizedScope: '湖庭直营店' });
+    const useB = store.recordUse(pack.id, {
+      projectId: projId, taskId: taskBId,
+      reportRef: { authority: 'task', id: taskBId, projectId: projId, taskId: taskBId, version: 'b'.repeat(64), sha256: 'b'.repeat(64), locator: '060_reports/v1.1.json' },
+      packVersion: '1.1', purposeId: pCalc.id, purposeKey: pCalc.purposeKey, tier: 'formal-calculation', accessLevel: 'recalculate',
+      catalogSupplied: { packVersion: '1.1', purposeIds: [pCalc.id], assetRefs: [v2Ref], suppliedAt: '2026-11-15T00:00:00Z' },
+      actualReads: [{ ref: v2Ref, complete: true, readAt: '2026-11-15T00:01:00Z' }],
+      authorDeclaration: { declaredPurposeId: pCalc.id, declaredRefs: [v2Ref], summaryText: 'v1.1', declaredAt: '2026-11-15T00:02:00Z' },
+    });
+    store.verifyUse(pack.id, useB.id, { verifierRole: '独立核验', expectedRef: v2Ref, independentConfirmed: true });
+    const fb = store.submitFeedback(pack.id, {
+      problemKey: 'r7-post-cutoff-legit',
+      packVersion: '1.0',
+      purposeIds: [pCalc.id],
+      title: '新截止日下确认截止日后新退款并闭环',
+      category: 'shared_refund_mapping',
+      targetAssetRef: v1Ref,
+      report: {
+        projectId: projId, taskId: taskAId, sessionId: 's1', messageId: 'm1',
+        reportRef: { authority: 'task', id: taskAId, projectId: projId, taskId: taskAId, version: 'a'.repeat(64), sha256: 'a'.repeat(64), locator: '060_reports/v1.0.json' },
+        adoptionBasis: 'verified_actual_read', usedPackVersion: '1.0', usedAssetRefs: [v1Ref], taskCutoffAt: '2026-10-31', evidenceNote: 'C21',
+      },
+    }).feedback;
+
+    // Missing newCutoffChecked MUST fail
+    assert.throws(() => store.handleFeedback(pack.id, fb.id, {
+      status: 'verified', note: '缺新截止日反例', verifiedByUseId: useB.id, revisedRef: v2Ref, revisedPackVersion: '1.1',
+      itemVerification: {
+        originalCutoffChecked: '2026-10-31',
+        transactionAssociationNote: '反例',
+        shouldChange: [],
+        postCutoffNewEvents: [{ itemId: 'C21', originalOrderId: 'O-21', refundDate: '2026-11-05', beforeValue: '计入复购', afterValue: '新截止日后排除', classification: 'post_cutoff_new_event' }],
+        shouldRetain: [{ itemId: 'C13', unchangedValue: '保留' }],
+      },
+    }), /feedback_verification_missing_new_cutoff/);
+
+    // Pre-cutoff refund hidden in postCutoffNewEvents MUST fail
+    assert.throws(() => store.handleFeedback(pack.id, fb.id, {
+      status: 'verified', note: '截止日前退款伪装新事件反例', verifiedByUseId: useB.id, revisedRef: v2Ref, revisedPackVersion: '1.1',
+      itemVerification: {
+        originalCutoffChecked: '2026-10-31',
+        newCutoffChecked: '2026-11-15',
+        transactionAssociationNote: '反例',
+        shouldChange: [],
+        postCutoffNewEvents: [{ itemId: 'C07', originalOrderId: 'O-07', refundDate: '2026-10-20', beforeValue: '计入复购', afterValue: '排除', classification: 'post_cutoff_new_event' }],
+        shouldRetain: [{ itemId: 'C13', unchangedValue: '保留' }],
+      },
+    }), /feedback_verification_pre_cutoff_misclassified/);
+
+    // Legitimate postCutoffNewEvents under newCutoffChecked + shouldRetain MUST close as verified!
+    const closed = store.handleFeedback(pack.id, fb.id, {
+      status: 'verified',
+      note: '原截止日 2026-10-31 后新发生退款 C21（2026-11-05）已在新截止日 2026-11-15 下按 post_cutoff_new_event 单独归类并结案',
+      verifiedByUseId: useB.id,
+      revisedRef: v2Ref,
+      revisedPackVersion: '1.1',
+      itemVerification: {
+        originalCutoffChecked: '2026-10-31',
+        newCutoffChecked: '2026-11-15',
+        transactionAssociationNote: 'C21 关联原单 O-21，退款日 2026-11-05 晚于原截止日 2026-10-31，不归咎为原口径错误，在新截止日 2026-11-15 单独列明',
+        shouldChange: [],
+        postCutoffNewEvents: [{ itemId: 'C21', originalOrderId: 'O-21', refundDate: '2026-11-05', beforeValue: '10/31计入复购', afterValue: '11/15口径按新事件排除', classification: 'post_cutoff_new_event' }],
+        shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-13', unchangedValue: '保留有效复购' }],
+      },
+    });
+    assert.equal(closed.feedback.status, 'verified');
+    assert.equal(closed.feedback.revisionLink?.itemVerification?.newCutoffChecked, '2026-11-15');
+    assert.equal(closed.feedback.revisionLink?.itemVerification?.postCutoffNewEvents?.length, 1);
+    assert.equal(closed.feedback.revisionLink?.itemVerification?.postCutoffNewEvents?.[0]?.itemId, 'C21');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

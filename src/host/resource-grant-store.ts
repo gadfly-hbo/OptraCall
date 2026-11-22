@@ -116,7 +116,7 @@ export class ResourceGrantStore {
   grant(input: ResourceGrantInput & { grantorVerifiedBy?: 'host' }): ResourceAuthorizationGrant {
     this.assertWritable();
     const enterpriseId = uuid(input.enterpriseId);
-    const grantor = text(input.grantor, 200, false).trim();
+    const grantor = text(input.grantor, 500, false).trim();
     const grantBasis = text(input.grantBasis, 2000, false).trim();
     if (!['project', 'principal'].includes(input.subjectType)) fail('invalid_grant_subject_type');
     const subjectId = input.subjectType === 'project' ? uuid(input.subjectId) : text(input.subjectId, 200, false).trim();

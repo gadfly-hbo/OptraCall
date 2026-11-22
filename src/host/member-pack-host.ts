@@ -11,6 +11,7 @@ import type { ProjectSnapshot } from '../agent/project-runtime.ts';
 import { StudioError, object, text, uuid, sourceRef, sources as parseSources, digest } from '../../extensions/business-plugins/studio/validation.ts';
 import {
   evaluateResourceAccess,
+  isGrantActive,
   sameExactSourceRef,
   type DomainReferenceDomain,
   type EnterpriseDomainPack,
@@ -127,6 +128,7 @@ export interface MemberPackHostOptions {
   mutate<T>(operation: () => T | Promise<T>): Promise<T>;
   closing(): boolean;
   resolveRequestOperator?(request: IncomingMessage): TrustedHostOperator;
+  manageOperatorSession?(request: IncomingMessage, response: ServerResponse, input?: Record<string, unknown>): Promise<Record<string, unknown>>;
   onProjectPermissionChanged?(projectId: string): void;
   taskSnapshot?(projectId: string, taskId: string): Promise<ProjectSnapshot>;
   readTaskReply(projectId: string, taskId: string, selection: { sessionId: string; messageId: string }): Promise<{ text: string }>;
@@ -267,20 +269,24 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   function projectPermissionFingerprint(projectId: string): string {
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return `unscoped:${enabled ? '1' : '0'}`;
+    const nowMs = Date.now();
+    // Do NOT hash activeRev here: publishing v1.1 must never disrupt or re-gear unaffected tasks pinned to v1.0!
     const activePacks = packs.list(enterpriseId).map(p => ({
       id: p.id,
       owner: isConstructionOwnerProject(p, projectId),
-      activeRev: p.packRevisions.find(r => r.status === 'active')?.version ?? null,
     }));
-    const subjectGrants = grants.listForSubject(enterpriseId, projectId).map(g => ({
-      id: g.id,
-      ops: g.operations,
-      scope: g.scope,
-      purposeKeys: g.purposeKeys ?? [],
-      validFrom: g.validFrom ?? null,
-      validTo: g.validTo ?? null,
-      revokedAt: g.revokedAt ?? null,
-    }));
+    // Include live activeNow status so natural validTo expiration immediately changes the fingerprint!
+    const subjectGrants = grants.listForSubject(enterpriseId, projectId).map(g => {
+      const activeNow = isGrantActive(g, nowMs);
+      return {
+        id: g.id,
+        activeNow,
+        ops: activeNow ? g.operations : [],
+        scope: activeNow ? g.scope : null,
+        purposeKeys: activeNow ? (g.purposeKeys ?? []) : [],
+        revokedAt: g.revokedAt ?? null,
+      };
+    });
     return createHash('sha256')
       .update(JSON.stringify({ enabled, enterpriseId, activePacks, subjectGrants }))
       .digest('hex');
@@ -908,6 +914,30 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const effectiveCleanDir = path.resolve(effectiveRoot, '020_clean');
     const effectiveReportsDir = path.resolve(effectiveRoot, '060_reports');
 
+    // R2: Live natural-expiry enforcement — if grants expired/shrank since workspace preparation,
+    // immediately purge stale authorized views from workspace 020_clean before executing ANY tool!
+    if (workspaceRoot && fs.existsSync(effectiveCleanDir)) {
+      const existingByTask = activeWorkspaces.get(projectId);
+      let wsMatches: RestrictedTaskWorkspace | undefined;
+      if (existingByTask) {
+        for (const ws of existingByTask.values()) {
+          if (path.resolve(ws.workspaceRoot) === effectiveRoot) {
+            wsMatches = ws;
+            break;
+          }
+        }
+      }
+      const prevPaths = wsMatches?.scope.allowedPaths ?? [];
+      const prevMode = wsMatches?.scope.mode;
+      const scopeChanged = prevMode !== scope.mode
+        || prevPaths.length !== scope.allowedPaths.length
+        || prevPaths.some((p, i) => p !== scope.allowedPaths[i]);
+      if (scopeChanged || scope.mode === 'deny-detail') {
+        syncCleanDir(effectiveCleanDir, resolvedProjectRoot, scope);
+        if (wsMatches) wsMatches.scope = scope;
+      }
+    }
+
     const resolveTarget = (rawTarget: unknown): string | undefined => {
       if (typeof rawTarget !== 'string' || !rawTarget.trim()) return undefined;
       return path.resolve(effectiveCleanDir, rawTarget.trim());
@@ -1262,21 +1292,33 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         continue;
       }
 
-      // Check if ref is a Host-authorized summary ref
+      // Check if ref is a Host-authorized summary ref (live active check + purposeKey consistency)
+      const nowMs = Date.now();
       const matchedSummaryGrant = subjectGrants.find(g =>
-        !g.revokedAt
+        isGrantActive(g, nowMs)
         && g.operations.includes('cite-summary')
         && g.resourceRef
         && sameExactSourceRef(g.resourceRef, ref),
       );
       if (matchedSummaryGrant) {
+        const eligiblePurposeKeys = rev.purposeManifests.filter(pm => pm.status === 'eligible').map(pm => pm.purposeKey);
+        const matchingPurposeKey = matchedSummaryGrant.purposeKeys?.length
+          ? matchedSummaryGrant.purposeKeys.find(pk => eligiblePurposeKeys.includes(pk))
+          : eligiblePurposeKeys[0];
+        if (matchedSummaryGrant.purposeKeys?.length && !matchingPurposeKey) {
+          throw new StudioError('resource_access_denied', 403);
+        }
         const evalSummary = evaluateResourceAccess(subjectGrants, {
           operation: 'cite-summary',
+          ...(matchingPurposeKey ? { purposeKey: matchingPurposeKey } : {}),
           grain: matchedSummaryGrant.scope.grain,
           summaryVersion: matchedSummaryGrant.scope.summaryVersion,
         });
         if (!evalSummary.allowed) throw new StudioError('resource_grant_revoked', 403);
         return { matchedPack: { packId: pack.id, packVersion: rev.version, purposeIds: pin?.purposeIds ?? [], summaryAuthorized: true } };
+      }
+      if (subjectGrants.some(g => !isGrantActive(g, nowMs) && g.operations.includes('cite-summary') && g.resourceRef && sameExactSourceRef(g.resourceRef, ref))) {
+        throw new StudioError('resource_grant_revoked', 403);
       }
 
       // Check if ref belongs to any dependency in the pinned revision using the EXACT unified purpose/dependency filter!
@@ -1512,22 +1554,39 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   /**
-   * R4: Inspects an independent verifier task's OWN native transcript to confirm
-   * the verifier actually read the required original authority dependencies (and for
-   * calculation tiers, actually performed data/report/recalculation inspection),
-   * preventing blind pass verdicts from a task that merely submitted a JSON file.
+   * R4: Inspects an independent verifier task's OWN native transcript & assessment report to confirm:
+   *  1. Exact assessment turn (`assessmentTurnIndex`, `assessmentMessageId`) and explicit attribution of
+   *     which required authority reads happened in this turn vs carried from earlier turns (`carriedFromTurnIndices`).
+   *  2. Verifier actually read ALL required original authority dependencies completely.
+   *  3. For calculation tiers, verifier actually inspected authorized `020_clean/` input data or the target
+   *     report (not a meaningless `echo`/`pwd` command), AND the assessment report on disk explicitly binds
+   *     to the target report/use record with concrete recalculation/comparison evidence.
    */
   async function inspectVerifierTaskEvidence(
     verifierProjectId: string,
     verifierTaskId: string,
     pack: EnterpriseDomainPack,
     useRecord: EnterprisePackUseRecord,
+    assessmentReportRef?: StudioSourceRef,
   ): Promise<{
-    verifierReads: { ref: StudioSourceRef; complete: boolean; readAt: string }[];
+    verifierReads: {
+      ref: StudioSourceRef;
+      complete: boolean;
+      readAt: string;
+      turnIndex?: number;
+      entryId?: string;
+      fromAssessmentTurn?: boolean;
+    }[];
     requiredCount: number;
     readRequiredAssetsCount: number;
     allRequiredReadByVerifier: boolean;
     hadDataOrCalcEvidence: boolean;
+    assessmentTurnIndex?: number;
+    assessmentMessageId?: string;
+    carriedFromTurnIndices: number[];
+    targetReportChecked: boolean;
+    authorizedInputChecked: boolean;
+    assessmentReportBoundToTarget: boolean;
     missingReason?: string;
   }> {
     const rev = pack.packRevisions.find(r => r.version === useRecord.packVersion);
@@ -1535,27 +1594,149 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const requiredRefs = pm
       ? pm.dependencies.filter(d => d.requiredFor.includes(pm.tier)).map(d => d.ref)
       : [];
-    const verifierReads: { ref: StudioSourceRef; complete: boolean; readAt: string }[] = [];
+    const verifierReads: {
+      ref: StudioSourceRef;
+      complete: boolean;
+      readAt: string;
+      turnIndex?: number;
+      entryId?: string;
+      fromAssessmentTurn?: boolean;
+    }[] = [];
     const seen = new Set<string>();
-    let hadDataOrCalcEvidence = false;
+    let targetReportChecked = false;
+    let authorizedInputChecked = false;
+    let assessmentTurnIndex: number | undefined;
+    let assessmentMessageId: string | undefined;
+
+    const targetLocator = useRecord.reportRef.locator ?? '';
+    const targetBasename = targetLocator ? path.basename(targetLocator).toLowerCase() : '';
+    const targetShaPrefix = useRecord.reportRef.sha256 ? useRecord.reportRef.sha256.slice(0, 8).toLowerCase() : '';
+    const assessLocator = assessmentReportRef?.locator ?? '';
+    const assessBasename = assessLocator ? path.basename(assessLocator).toLowerCase() : '';
 
     if (options.taskSnapshot) {
       try {
         const snap = await options.taskSnapshot(verifierProjectId, verifierTaskId);
-        for (const msg of snap.messages as Record<string, any>[]) {
-          if (!msg || msg.role !== 'toolResult' || msg.isError) continue;
-          const toolName = String(msg.toolName ?? '');
-          if (['read_input', 'read', 'bash', 'powershell', 'codemode'].includes(toolName)) {
-            hadDataOrCalcEvidence = true;
+        const rawMessages = snap.messages as Record<string, any>[];
+        // Map toolCallId -> { name, argsText, turnIndex } from assistant toolCall blocks
+        const toolCallMeta = new Map<string, { name: string; argsText: string; turnIndex: number }>();
+        let curTurn = 0;
+        let lastAssistantTurn = 0;
+        let lastAssistantMsgId: string | undefined;
+
+        for (let i = 0; i < rawMessages.length; i++) {
+          const msg = rawMessages[i];
+          if (!msg) continue;
+          if (msg.role === 'user') {
+            curTurn += 1;
+            continue;
           }
+          if (msg.role === 'assistant') {
+            lastAssistantTurn = curTurn;
+            if (typeof msg.id === 'string') lastAssistantMsgId = msg.id;
+            const blocks = Array.isArray(msg.content) ? msg.content : [];
+            for (const blk of blocks) {
+              if (blk && typeof blk === 'object' && blk.type === 'toolCall' && typeof blk.id === 'string') {
+                const argsText = typeof blk.arguments === 'string'
+                  ? blk.arguments
+                  : JSON.stringify(blk.arguments ?? {});
+                toolCallMeta.set(blk.id, { name: String(blk.name ?? ''), argsText, turnIndex: curTurn });
+                const lowerArgs = argsText.toLowerCase();
+                if (
+                  (blk.name === 'studio_assets' && lowerArgs.includes('assess-use') && (!assessBasename || lowerArgs.includes(assessBasename)))
+                  || (assessBasename && ['write', 'edit', 'write_report', 'write_project_report'].includes(String(blk.name ?? '')) && lowerArgs.includes(assessBasename))
+                ) {
+                  assessmentTurnIndex = curTurn;
+                  if (typeof msg.id === 'string') assessmentMessageId = msg.id;
+                }
+              }
+            }
+          }
+          if (msg.role === 'toolResult' && !msg.isError) {
+            if (msg.details?.type === 'optracall.studio' && msg.details.action === 'assess-use') {
+              assessmentTurnIndex = curTurn;
+            }
+          }
+        }
+        if (assessmentTurnIndex === undefined && lastAssistantTurn > 0) {
+          assessmentTurnIndex = lastAssistantTurn;
+        }
+        if (!assessmentMessageId && lastAssistantMsgId) {
+          assessmentMessageId = lastAssistantMsgId;
+        }
+
+        // Second pass: collect reads & substantive data/report inspection with exact turnIndex attribution
+        curTurn = 0;
+        for (const msg of rawMessages) {
+          if (!msg) continue;
+          if (msg.role === 'user') {
+            curTurn += 1;
+            continue;
+          }
+          if (msg.role !== 'toolResult' || msg.isError) continue;
+          const toolName = String(msg.toolName ?? '');
+          const callId = typeof msg.toolCallId === 'string' ? msg.toolCallId : (typeof msg.id === 'string' ? msg.id : undefined);
+          const meta = callId ? toolCallMeta.get(callId) : undefined;
+          const argsLower = (meta?.argsText ?? '').toLowerCase();
+          const resultTextLower = messageText(msg).toLowerCase();
+
+          // Detect target report inspection
+          if (
+            targetBasename
+            && ['read', 'read_input', 'read_project_input', 'bash', 'powershell', 'codemode'].includes(toolName)
+            && (argsLower.includes(targetBasename) || (targetLocator && argsLower.includes(targetLocator.toLowerCase())))
+          ) {
+            targetReportChecked = true;
+          }
+
+          // Detect authorized input data reading or genuine calculation/recalculation tool call
+          if (['read_input', 'read_project_input'].includes(toolName)) {
+            authorizedInputChecked = true;
+          } else if (toolName === 'read') {
+            if (argsLower.includes('020_clean') || /\.(?:csv|tsv|json)\b/i.test(argsLower)) {
+              authorizedInputChecked = true;
+            }
+          } else if (['bash', 'powershell', 'codemode'].includes(toolName)) {
+            const isDataOrCalcCmd =
+              argsLower.includes('020_clean')
+              || /\.(?:csv|tsv|json)\b/i.test(argsLower)
+              || (targetBasename ? argsLower.includes(targetBasename) : false)
+              || /\b(?:python3?|node|awk|jq|csv|pandas|sqlite3)\b/i.test(argsLower)
+              || (resultTextLower.includes('020_clean') || /\b(?:repeat|refund|repurchase|复购|退款|订单)\b/i.test(resultTextLower));
+            if (isDataOrCalcCmd) {
+              authorizedInputChecked = true;
+            }
+          }
+
           if (msg.details?.type === 'optracall.studio' && ['read-source', 'read'].includes(msg.details.action) && msg.details.result?.ref) {
             try {
               const ref = sourceRef(msg.details.result.ref);
-              if (ref.authority === 'data' || ref.authority === 'task') hadDataOrCalcEvidence = true;
+              if (ref.authority === 'data') authorizedInputChecked = true;
+              if (
+                ref.authority === 'task'
+                && (
+                  digest(ref) === digest(useRecord.reportRef)
+                  || (useRecord.reportRef.sha256 && ref.sha256 === useRecord.reportRef.sha256)
+                  || (targetLocator && ref.locator === targetLocator)
+                )
+              ) {
+                targetReportChecked = true;
+              }
               const key = digest(ref);
-              if (!seen.has(key)) {
+              const existingIdx = verifierReads.findIndex(r => digest(r.ref) === key);
+              const readItem = {
+                ref,
+                complete: msg.details.result.complete === true,
+                readAt: new Date().toISOString(),
+                turnIndex: curTurn,
+                ...(callId ? { entryId: callId } : {}),
+                ...(assessmentTurnIndex !== undefined ? { fromAssessmentTurn: curTurn === assessmentTurnIndex } : {}),
+              };
+              if (existingIdx === -1) {
                 seen.add(key);
-                verifierReads.push({ ref, complete: msg.details.result.complete === true, readAt: new Date().toISOString() });
+                verifierReads.push(readItem);
+              } else if (curTurn === assessmentTurnIndex && !verifierReads[existingIdx]!.fromAssessmentTurn) {
+                verifierReads[existingIdx] = readItem;
               }
             } catch { /* ignore */ }
           }
@@ -1568,9 +1749,23 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
                 else if (t.kind === 'sap-method') ref = sourceRef({ authority: 'sap-method', id: t.methodId, version: String(t.version), sha256: item.sha256 });
                 else if (t.kind === 'enterprise') ref = sourceRef({ authority: 'enterprise', id: t.materialId, version: t.revisionId, sha256: item.sha256, locator: t.storeId });
                 else if (t.kind === 'studio-source') ref = sourceRef({ authority: 'studio-source', id: t.assetId, version: String(t.version), sha256: item.sha256, locator: t.systemId });
-                if (ref && !seen.has(digest(ref))) {
-                  seen.add(digest(ref));
-                  verifierReads.push({ ref, complete: item.complete !== false, readAt: new Date().toISOString() });
+                if (ref) {
+                  const key = digest(ref);
+                  const existingIdx = verifierReads.findIndex(r => digest(r.ref) === key);
+                  const readItem = {
+                    ref,
+                    complete: item.complete !== false,
+                    readAt: new Date().toISOString(),
+                    turnIndex: curTurn,
+                    ...(callId ? { entryId: callId } : {}),
+                    ...(assessmentTurnIndex !== undefined ? { fromAssessmentTurn: curTurn === assessmentTurnIndex } : {}),
+                  };
+                  if (existingIdx === -1) {
+                    seen.add(key);
+                    verifierReads.push(readItem);
+                  } else if (curTurn === assessmentTurnIndex && !verifierReads[existingIdx]!.fromAssessmentTurn) {
+                    verifierReads[existingIdx] = readItem;
+                  }
                 }
               }
             }
@@ -1579,19 +1774,60 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       } catch { /* snapshot unavailable */ }
     }
 
+    // Read & verify the assessment report text binds to THIS target report/use record!
+    let assessmentReportBoundToTarget = false;
+    const isCalcTier = useRecord.tier === 'formal-calculation' || useRecord.tier === 'limited-calculation';
+    if (assessmentReportRef?.projectId && assessmentReportRef.locator?.startsWith('060_reports/')) {
+      try {
+        const effLoc = resolveTaskReportLocator(assessmentReportRef.projectId, verifierTaskId, assessmentReportRef.locator, assessmentReportRef.sha256);
+        const preserved = readPreservedReportBytes(assessmentReportRef.projectId, verifierTaskId, effLoc, assessmentReportRef.sha256);
+        const bytes = preserved ?? (await options.projects.readFile(assessmentReportRef.projectId, effLoc)).bytes;
+        const reportText = bytes.toString('utf8');
+        const lowerReport = reportText.toLowerCase();
+        const referencesTarget = Boolean(
+          (targetBasename && lowerReport.includes(targetBasename))
+          || (targetLocator && lowerReport.includes(targetLocator.toLowerCase()))
+          || (targetShaPrefix && lowerReport.includes(targetShaPrefix))
+          || lowerReport.includes(useRecord.taskId.slice(0, 8).toLowerCase())
+          || lowerReport.includes(useRecord.purposeKey.toLowerCase())
+          || lowerReport.includes(`v${useRecord.packVersion.toLowerCase()}`)
+          || lowerReport.includes(useRecord.packVersion.toLowerCase()),
+        );
+        const hasCalcComparisonContent = !isCalcTier || (
+          /\d/.test(reportText)
+          && /(?:复算|复核|核对|对比|一致|偏差|口径|笔|率|通过|失败|退款|复购|recalc|recomput|compar|verify|verified|checked|match|diff|pass|fail|rate|ratio|orders?|refund)/i.test(reportText)
+        );
+        assessmentReportBoundToTarget = referencesTarget && hasCalcComparisonContent;
+      } catch {
+        assessmentReportBoundToTarget = false;
+      }
+    } else if (!assessmentReportRef) {
+      assessmentReportBoundToTarget = true;
+    }
+
     const completeVerifierReads = verifierReads.filter(r => r.complete);
-    const readRequiredAssetsCount = requiredRefs.filter(req =>
-      completeVerifierReads.some(vr => sameExactSourceRef(vr.ref, req)),
-    ).length;
+    const matchedRequiredReads = requiredRefs
+      .map(req => completeVerifierReads.find(vr => sameExactSourceRef(vr.ref, req)))
+      .filter((x): x is NonNullable<typeof x> => Boolean(x));
+    const readRequiredAssetsCount = matchedRequiredReads.length;
     const allRequiredReadByVerifier = requiredRefs.length > 0
       ? readRequiredAssetsCount === requiredRefs.length
       : completeVerifierReads.length > 0;
-    const isCalcTier = useRecord.tier === 'formal-calculation' || useRecord.tier === 'limited-calculation';
+
+    const carriedFromTurnIndices = [...new Set(
+      matchedRequiredReads
+        .filter(r => typeof r.turnIndex === 'number' && assessmentTurnIndex !== undefined && r.turnIndex < assessmentTurnIndex)
+        .map(r => r.turnIndex!),
+    )].sort((a, b) => a - b);
+
+    const hadDataOrCalcEvidence = authorizedInputChecked || targetReportChecked;
     let missingReason: string | undefined;
     if (!allRequiredReadByVerifier) {
       missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 尚未完整实读适用原依赖（已完整实读 ${readRequiredAssetsCount}/${requiredRefs.length} 项），缺乏核验实证，保持待验证`;
     } else if (isCalcTier && !hadDataOrCalcEvidence) {
-      missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 未记录对获准明细数据或原报告的实查/复算工具轨迹，计算类用途缺乏核验复算依据，保持待验证`;
+      missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 未记录对获准明细数据或原报告的实查/复算工具轨迹（空命令不算复算依据），保持待验证`;
+    } else if (assessmentReportRef && !assessmentReportBoundToTarget) {
+      missingReason = `独立核验报告 ${assessLocator || assessmentReportRef.id} 未绑定目标报告（${targetBasename || useRecord.taskId.slice(0, 8)}）或缺少复算对照内容，保持待验证`;
     }
     return {
       verifierReads,
@@ -1599,6 +1835,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       readRequiredAssetsCount,
       allRequiredReadByVerifier,
       hadDataOrCalcEvidence,
+      ...(assessmentTurnIndex !== undefined ? { assessmentTurnIndex } : {}),
+      ...(assessmentMessageId ? { assessmentMessageId } : {}),
+      carriedFromTurnIndices,
+      targetReportChecked,
+      authorizedInputChecked,
+      assessmentReportBoundToTarget,
       ...(missingReason ? { missingReason } : {}),
     };
   }
@@ -1917,8 +2159,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
    * R4: Synchronizes a `studio_assets assess-use` assessment onto matching EnterprisePackUseRecord(s).
    * Strictly separates same-task author self-assessment (kept `pending`) from independent-task
    * verification, AND requires the independent verifier task ITSELF to possess actual complete
-   * native reads of the required original dependencies (plus data/calc inspection evidence for
-   * calculation tiers) before granting `status = 'pass'`.
+   * native reads of the required original dependencies (plus target-bound recalculation/comparison
+   * evidence for calculation tiers) before granting `status = 'pass'`.
    */
   async function syncAssessmentFromStudio(input: {
     systemId: string;
@@ -1965,7 +2207,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           && digest(input.assessment.report) !== digest(useRecord.reportRef),
         );
         const verifierEv = isIndependentAssessor
-          ? await inspectVerifierTaskEvidence(input.assessorProjectId, input.assessorTaskId, pack, useRecord)
+          ? await inspectVerifierTaskEvidence(input.assessorProjectId, input.assessorTaskId, pack, useRecord, input.assessment.report)
           : undefined;
         const verifierEvidenceSufficient = Boolean(verifierEv && !verifierEv.missingReason);
         const independentConfirmed = Boolean(
@@ -1973,6 +2215,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           && input.assessment.status === 'pass'
           && assessmentDiskVerified
           && verifierEvidenceSufficient,
+        );
+        const wrongVersionConfirmedByVerifier = Boolean(
+          isIndependentAssessor
+          && input.assessment.status === 'fail'
+          && assessmentDiskVerified
+          && /(?:旧版|错版|wrong.?version|误用旧)/i.test(input.assessment.result ?? ''),
         );
         const verdictDetail = !isIndependentAssessor
           ? `仅见原分析任务作者自评（同任务 ${input.assessorTaskId.slice(0, 8)}），缺少独立任务核验，保持待验证`
@@ -1993,11 +2241,21 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           ...(verifierEv ? {
             verifierActualReads: verifierEv.verifierReads,
             verifierEvidenceSummary: {
+              requiredAssetsCount: verifierEv.requiredCount,
               readRequiredAssetsCount: verifierEv.readRequiredAssetsCount,
+              allRequiredReadByVerifier: verifierEv.allRequiredReadByVerifier,
               hadDataOrCalcEvidence: verifierEv.hadDataOrCalcEvidence,
+              ...(verifierEv.assessmentTurnIndex !== undefined ? { assessmentTurnIndex: verifierEv.assessmentTurnIndex } : {}),
+              ...(verifierEv.assessmentMessageId ? { assessmentMessageId: verifierEv.assessmentMessageId } : {}),
+              ...(verifierEv.carriedFromTurnIndices.length ? { carriedFromTurnIndices: verifierEv.carriedFromTurnIndices } : {}),
+              targetReportChecked: verifierEv.targetReportChecked,
+              authorizedInputChecked: verifierEv.authorizedInputChecked,
+              assessmentReportBoundToTarget: verifierEv.assessmentReportBoundToTarget,
+              ...(verifierEv.missingReason ? { missingReason: verifierEv.missingReason } : {}),
             },
           } : {}),
           independentConfirmed,
+          ...(wrongVersionConfirmedByVerifier ? { wrongVersionConfirmedByVerifier: true } : {}),
           checkedRefs: input.assessment.sources,
           verdictDetail,
         });
@@ -2007,7 +2265,173 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return updated;
   }
 
+  interface SourceTransactionRow {
+    filePath: string;
+    rowNumber: number;
+    itemId: string;
+    originalOrderId?: string;
+    refundDate?: string;
+    fullRefund?: string;
+    store?: string;
+  }
+
+  function parseSimpleCsvLine(line: string, delimiter: string): string[] {
+    const cells: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]!;
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') { cur += '"'; i += 1; }
+        else if (ch === '"') inQuotes = false;
+        else cur += ch;
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === delimiter) {
+        cells.push(cur); cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    cells.push(cur);
+    return cells;
+  }
+
+  async function inspectSourceTransactions(projectIds: readonly string[]): Promise<SourceTransactionRow[]> {
+    const rows: SourceTransactionRow[] = [];
+    const ITEM_KEYS = new Set(['account', 'member_id', 'member', 'user_id', 'item_id', 'customer_id', '会员账号', '账号', '会员id', '记录编号']);
+    const ORDER_KEYS = new Set(['repeat_order_id', 'original_order_id', 'order_id', 'source_order_id', '原订单号', '订单号', '关联订单', '复购订单号']);
+    const REFUND_DATE_KEYS = new Set(['refund_date', 'refunded_at', '退款日期', '退单日期']);
+    const FULL_REFUND_KEYS = new Set(['full_refund', 'is_full_refund', 'refund_status', '是否全额退款', '全额退款', '退款状态']);
+    const STORE_KEYS = new Set(['store', 'store_name', 'shop', '门店', '门店名称']);
+
+    for (const pid of [...new Set(projectIds)]) {
+      let proj: { rootPath: string };
+      try { proj = await options.projects.get(pid); } catch { continue; }
+      const cleanRoot = path.resolve(proj.rootPath, '020_clean');
+      if (!fs.existsSync(cleanRoot)) continue;
+      const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(pid);
+      const subjectGrants = enterpriseId ? grants.listForSubject(enterpriseId, pid) : [];
+      const scope = getProjectToolScope(pid);
+
+      const walk = (dir: string) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          const st = fs.lstatSync(full);
+          if (st.isSymbolicLink()) continue;
+          if (st.isDirectory()) { walk(full); continue; }
+          if (!st.isFile()) continue;
+          const ext = path.extname(entry.name).toLowerCase();
+          if (!['.csv', '.tsv', '.json'].includes(ext)) continue;
+          const rel = normalizeRelativeDataPath(path.relative(proj.rootPath, full));
+          let rawBytes: Buffer;
+          try { rawBytes = fs.readFileSync(full); } catch { continue; }
+          if (scope) {
+            const view = buildAuthorizedDataView(rawBytes, rel, subjectGrants);
+            if (!view.allowed) continue;
+            rawBytes = view.bytes;
+          }
+          const txt = rawBytes.toString('utf8');
+          if (ext === '.csv' || ext === '.tsv') {
+            const delim = ext === '.tsv' ? '\t' : ',';
+            const lines = txt.split(/\r?\n/).filter(l => l.trim().length > 0);
+            if (lines.length < 2) continue;
+            const headers = parseSimpleCsvLine(lines[0]!, delim).map(h => h.replace(/^\uFEFF/, '').trim().toLowerCase());
+            const itemIdx = headers.findIndex(h => ITEM_KEYS.has(h));
+            const orderIdx = headers.findIndex(h => ORDER_KEYS.has(h));
+            const refundDateIdx = headers.findIndex(h => REFUND_DATE_KEYS.has(h));
+            const fullRefundIdx = headers.findIndex(h => FULL_REFUND_KEYS.has(h));
+            const storeIdx = headers.findIndex(h => STORE_KEYS.has(h));
+            if (itemIdx === -1 && orderIdx === -1) continue;
+            for (let i = 1; i < lines.length; i++) {
+              const cells = parseSimpleCsvLine(lines[i]!, delim);
+              const itemVal = itemIdx >= 0 ? (cells[itemIdx] ?? '').trim() : '';
+              const orderVal = orderIdx >= 0 ? (cells[orderIdx] ?? '').trim() : '';
+              if (!itemVal && !orderVal) continue;
+              rows.push({
+                filePath: rel,
+                rowNumber: i + 1,
+                itemId: itemVal || orderVal,
+                ...(orderVal ? { originalOrderId: orderVal } : {}),
+                ...(refundDateIdx >= 0 && (cells[refundDateIdx] ?? '').trim() ? { refundDate: (cells[refundDateIdx] ?? '').trim() } : {}),
+                ...(fullRefundIdx >= 0 && (cells[fullRefundIdx] ?? '').trim() ? { fullRefund: (cells[fullRefundIdx] ?? '').trim() } : {}),
+                ...(storeIdx >= 0 && (cells[storeIdx] ?? '').trim() ? { store: (cells[storeIdx] ?? '').trim() } : {}),
+              });
+            }
+          } else if (ext === '.json') {
+            try {
+              const parsed = JSON.parse(txt);
+              if (!Array.isArray(parsed)) continue;
+              parsed.forEach((rec, idx) => {
+                if (!rec || typeof rec !== 'object' || Array.isArray(rec)) return;
+                const obj = rec as Record<string, unknown>;
+                const findVal = (keys: Set<string>) => {
+                  const k = Object.keys(obj).find(name => keys.has(name.trim().toLowerCase()));
+                  return k && obj[k] !== null && obj[k] !== undefined ? String(obj[k]).trim() : '';
+                };
+                const itemVal = findVal(ITEM_KEYS);
+                const orderVal = findVal(ORDER_KEYS);
+                if (!itemVal && !orderVal) return;
+                const refundDateVal = findVal(REFUND_DATE_KEYS);
+                const fullRefundVal = findVal(FULL_REFUND_KEYS);
+                const storeVal = findVal(STORE_KEYS);
+                rows.push({
+                  filePath: rel,
+                  rowNumber: idx + 1,
+                  itemId: itemVal || orderVal,
+                  ...(orderVal ? { originalOrderId: orderVal } : {}),
+                  ...(refundDateVal ? { refundDate: refundDateVal } : {}),
+                  ...(fullRefundVal ? { fullRefund: fullRefundVal } : {}),
+                  ...(storeVal ? { store: storeVal } : {}),
+                });
+              });
+            } catch { /* ignore malformed JSON */ }
+          }
+        }
+      };
+      walk(cleanRoot);
+    }
+    return rows;
+  }
+
+  function textWindowCoOccurs(diskTexts: readonly string[], anchor: string, relatedTokens: readonly string[]): boolean {
+    const aLow = anchor.trim().toLowerCase();
+    if (!aLow) return false;
+    const reqTokens = relatedTokens.map(t => t.trim().toLowerCase()).filter(Boolean);
+    for (const raw of diskTexts) {
+      const lines = raw.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i++) {
+        if (!lines[i]!.toLowerCase().includes(aLow)) continue;
+        // Check a tight local context window (same JSON object/table row or +/- 4 lines)
+        const slice = lines.slice(Math.max(0, i - 4), Math.min(lines.length, i + 5)).join('\n').toLowerCase();
+        if (reqTokens.every(tok => slice.includes(tok))) return true;
+      }
+      // Also support compact single-line JSON arrays/objects within +/- 280 chars around anchor
+      const lowerRaw = raw.toLowerCase();
+      let pos = lowerRaw.indexOf(aLow);
+      while (pos !== -1) {
+        const win = lowerRaw.slice(Math.max(0, pos - 240), Math.min(lowerRaw.length, pos + aLow.length + 280));
+        if (reqTokens.every(tok => win.includes(tok))) return true;
+        pos = lowerRaw.indexOf(aLow, pos + aLow.length);
+      }
+    }
+    return false;
+  }
+
   async function handle(request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean> {
+    // 0. Host Operator Session Management (R2 real-product operator identity binding)
+    if (url.pathname === '/api/studio/operators/session' && (request.method === 'GET' || request.method === 'POST')) {
+      if (options.manageOperatorSession) {
+        const input = request.method === 'POST' ? await options.readBody(request) : undefined;
+        const result = await options.manageOperatorSession(request, response, input);
+        json(response, 200, result);
+        return true;
+      }
+      const operator = resolveRequestOperator(request);
+      json(response, 200, { operator, customResolver: Boolean(options.resolveRequestOperator) });
+      return true;
+    }
+
     // 1. Domain References (Settings -> 领域资产包)
     if (url.pathname === '/api/studio/domain-references' && request.method === 'GET') {
       const enterpriseId = url.searchParams.get('enterpriseId') || undefined;
@@ -2743,14 +3167,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             ...(typeof input.confirmedBy === 'string' && input.confirmedBy.trim() ? { confirmedBy: input.confirmedBy.trim() } : {}),
             moduleReceipts: hostReceipts,
           });
-          if (options.onProjectPermissionChanged) {
-            const allProjects = await options.projects.list().catch(() => []);
-            for (const p of allProjects) {
-              if (options.enterpriseScopes.enterpriseIdForProject(p.id) === currentPack.enterpriseId) {
-                options.onProjectPermissionChanged(p.id);
-              }
-            }
-          }
+          // Do NOT broadcast onProjectPermissionChanged on pack publication: unaffected in-flight tasks pinned to
+          // earlier pack versions MUST remain undisturbed; new tasks automatically pick up the newly active revision.
           return { result: { pack: packs.get(packId), revision } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
         }
         if (action === 'reconcile') {
@@ -2985,8 +3403,16 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               } catch { /* fallback to existing ref */ }
             }
 
-            // R5: Verify or auto-link original Case reference from CaseStore!
-            let resolvedOriginalCaseRef: { caseId: string; decisionId?: string; decisionRevision?: number; summary?: string } | undefined;
+            const extractDecisionTitle = (dec: { payload?: unknown; recordId: string }): string | undefined => {
+              if (!dec.payload || typeof dec.payload !== 'object') return undefined;
+              const p = dec.payload as Record<string, unknown>;
+              for (const k of ['title', 'statement', 'name', 'summary', 'goal', 'question']) {
+                if (typeof p[k] === 'string' && p[k].trim()) return p[k].trim().slice(0, 280);
+              }
+              return undefined;
+            };
+            // R5: Verify or auto-link original Case & exact decision revision from CaseStore!
+            let resolvedOriginalCaseRef: EnterprisePackOriginalCaseRef | undefined;
             const rawCaseInput = object(input.originalCaseRef)
               ? input.originalCaseRef
               : typeof input.originalCaseId === 'string' && input.originalCaseId.trim()
@@ -2994,21 +3420,52 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
                 : undefined;
             if (rawCaseInput) {
               const cid = uuid(rawCaseInput.caseId);
-              const did = typeof rawCaseInput.decisionId === 'string' && rawCaseInput.decisionId.trim() ? uuid(rawCaseInput.decisionId.trim()) : undefined;
-              const drev = typeof rawCaseInput.decisionRevision === 'number' ? rawCaseInput.decisionRevision : undefined;
+              let did = typeof rawCaseInput.decisionId === 'string' && rawCaseInput.decisionId.trim() ? uuid(rawCaseInput.decisionId.trim()) : undefined;
+              let drev = typeof rawCaseInput.decisionRevision === 'number' ? rawCaseInput.decisionRevision : undefined;
               let caseSummary = typeof rawCaseInput.summary === 'string' && rawCaseInput.summary.trim() ? rawCaseInput.summary.trim() : undefined;
+              let caseTitle: string | undefined;
+              let caseRevision: number | undefined;
+              let decisionKind: string | undefined;
+              let decisionTitle: string | undefined;
+              let choiceId: string | undefined;
               if (options.cases) {
-                let caseRec: { id: string; title: string };
+                let caseRec: ReturnType<CaseStore['getCase']>;
                 try { caseRec = options.cases.getCase(cid); } catch { throw new StudioError('feedback_verification_case_not_found', 409); }
-                if (did) {
-                  try { options.cases.getDecision(cid, did, drev); } catch { throw new StudioError('feedback_verification_case_not_found', 409); }
-                }
+                caseTitle = caseRec.title;
+                caseRevision = caseRec.revision;
                 caseSummary ??= caseRec.title;
+                if (did) {
+                  try {
+                    const dec = options.cases.getDecision(cid, did, drev);
+                    drev = dec.revision;
+                    decisionKind = dec.kind;
+                    decisionTitle = extractDecisionTitle(dec);
+                  } catch {
+                    throw new StudioError('feedback_verification_case_not_found', 409);
+                  }
+                } else {
+                  const latestDec = options.cases.listDecisions(cid).items.at(-1);
+                  if (latestDec) {
+                    did = latestDec.recordId;
+                    drev = latestDec.revision;
+                    decisionKind = latestDec.kind;
+                    decisionTitle = extractDecisionTitle(latestDec);
+                  }
+                }
+                if (did) {
+                  const latestChoice = options.cases.getStrategyChoices(cid).filter(c => c.strategyRef.recordId === did).at(-1);
+                  if (latestChoice) choiceId = latestChoice.choiceId;
+                }
               }
               resolvedOriginalCaseRef = {
                 caseId: cid,
+                ...(caseTitle ? { caseTitle } : {}),
+                ...(caseRevision !== undefined ? { caseRevision } : {}),
                 ...(did ? { decisionId: did } : {}),
                 ...(drev !== undefined ? { decisionRevision: drev } : {}),
+                ...(decisionKind ? { decisionKind } : {}),
+                ...(decisionTitle ? { decisionTitle } : {}),
+                ...(choiceId ? { choiceId } : {}),
                 ...(caseSummary ? { summary: caseSummary } : {}),
               };
             } else if (options.cases) {
@@ -3017,9 +3474,21 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
                 if (projLink) {
                   const caseRec = options.cases.getCase(projLink.caseId);
                   const latestDecision = options.cases.listDecisions(projLink.caseId).items.at(-1);
+                  const latestChoice = latestDecision
+                    ? options.cases.getStrategyChoices(projLink.caseId).filter(c => c.strategyRef.recordId === latestDecision.recordId).at(-1)
+                    : undefined;
+                  const decTitle = latestDecision ? extractDecisionTitle(latestDecision) : undefined;
                   resolvedOriginalCaseRef = {
                     caseId: caseRec.id,
-                    ...(latestDecision ? { decisionId: latestDecision.recordId, decisionRevision: latestDecision.revision } : {}),
+                    caseTitle: caseRec.title,
+                    caseRevision: caseRec.revision,
+                    ...(latestDecision ? {
+                      decisionId: latestDecision.recordId,
+                      decisionRevision: latestDecision.revision,
+                      decisionKind: latestDecision.kind,
+                      ...(decTitle ? { decisionTitle: decTitle } : {}),
+                    } : {}),
+                    ...(latestChoice ? { choiceId: latestChoice.choiceId } : {}),
                     summary: caseRec.title,
                   };
                 }
@@ -3096,6 +3565,40 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       return true;
     }
 
+    const feedbackCaseHistoryMatch = /^\/api\/studio\/enterprise-packs\/([a-f0-9-]+)\/feedback\/([a-f0-9-]+)\/case-history$/.exec(url.pathname);
+    if (feedbackCaseHistoryMatch && request.method === 'GET') {
+      const currentPack = packs.get(feedbackCaseHistoryMatch[1]!);
+      const fb = currentPack.feedbackItems.find(f => f.id === uuid(feedbackCaseHistoryMatch[2]!));
+      if (!fb) throw new StudioError('enterprise_pack_feedback_not_found', 404);
+      const pinnedRef = fb.revisionLink?.itemVerification?.originalCaseRef ?? fb.reports.map(r => r.originalCaseRef).find(Boolean);
+      if (!pinnedRef) {
+        json(response, 200, { feedbackId: fb.id, originalCaseRef: null, caseRecord: null, historicalDecision: null });
+        return true;
+      }
+      let caseRecord: ReturnType<CaseStore['getCase']> | null = null;
+      let historicalDecision: ReturnType<CaseStore['getDecision']> | null = null;
+      let latestDecision: ReturnType<CaseStore['getDecision']> | null = null;
+      if (options.cases) {
+        try { caseRecord = options.cases.getCase(pinnedRef.caseId); } catch { caseRecord = null; }
+        if (caseRecord && pinnedRef.decisionId) {
+          try {
+            historicalDecision = options.cases.getDecision(pinnedRef.caseId, pinnedRef.decisionId, pinnedRef.decisionRevision);
+          } catch { historicalDecision = null; }
+          try {
+            latestDecision = options.cases.getDecision(pinnedRef.caseId, pinnedRef.decisionId);
+          } catch { latestDecision = null; }
+        }
+      }
+      json(response, 200, {
+        feedbackId: fb.id,
+        originalCaseRef: pinnedRef,
+        caseRecord,
+        historicalDecision,
+        latestDecision,
+      });
+      return true;
+    }
+
     const feedbackHandleMatch = /^\/api\/studio\/enterprise-packs\/([a-f0-9-]+)\/feedback\/([a-f0-9-]+)\/handle$/.exec(url.pathname);
     if (feedbackHandleMatch && request.method === 'POST') {
       assertEnabledWritable();
@@ -3149,7 +3652,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           studioFeedbackId = studioFb.id;
         }
 
-        // R5: When closing feedback as 'verified', verify real Studio declare-use + INDEPENDENT assess-use + deep disk-corroborated item-level, cutoff & Case evidence!
+        // R5: When closing feedback as 'verified', verify real Studio declare-use + INDEPENDENT assess-use +
+        //     structured co-occurring disk evidence + REAL 020_clean source transaction cross-check +
+        //     original & new cutoff boundaries + exact pinned Case decision revision!
         let verifiedItemEvidence: EnterprisePackFeedbackItemVerification | undefined;
         if (targetStatus === 'verified' && typeof input.verifiedByUseId === 'string') {
           const verifyingUse = currentPack.useRecords.find(u => u.id === uuid(input.verifiedByUseId));
@@ -3174,7 +3679,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               throw new StudioError('feedback_verification_missing_item_evidence', 409);
             }
             const rawIv = input.itemVerification as unknown as EnterprisePackFeedbackItemVerification;
-            if (!Array.isArray(rawIv.shouldChange) || !rawIv.shouldChange.length || !Array.isArray(rawIv.shouldRetain) || !rawIv.shouldRetain.length) {
+            const rawShouldChange = Array.isArray(rawIv.shouldChange) ? rawIv.shouldChange : [];
+            const rawPostCutoff = Array.isArray(rawIv.postCutoffNewEvents) ? rawIv.postCutoffNewEvents : [];
+            const rawShouldRetain = Array.isArray(rawIv.shouldRetain) ? rawIv.shouldRetain : [];
+            if (!rawShouldRetain.length || (!rawShouldChange.length && !rawPostCutoff.length)) {
               throw new StudioError('feedback_verification_missing_item_evidence', 409);
             }
             // Read actual report & independent assessment bytes from disk (or immutable preserved snapshot)
@@ -3206,6 +3714,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
             // 1. Cutoff corroboration: originalCutoffChecked MUST match the feedback's recorded original cutoff (if any) AND appear in disk bytes!
             const checkedCutoff = String(rawIv.originalCutoffChecked ?? '').trim();
+            const checkedNewCutoff = String(rawIv.newCutoffChecked ?? '').trim();
             const recordedOriginalCutoff = existingFb.reports.map(r => r.taskCutoffAt || r.packDataCutoffAt).find(Boolean)?.trim();
             if (!checkedCutoff) {
               throw new StudioError('feedback_verification_cutoff_uncorroborated', 409);
@@ -3216,24 +3725,47 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             if (!combinedEvidence.includes(checkedCutoff.toLowerCase())) {
               throw new StudioError('feedback_verification_cutoff_uncorroborated', 409);
             }
+            if (rawPostCutoff.length > 0) {
+              if (!checkedNewCutoff) {
+                throw new StudioError('feedback_verification_missing_new_cutoff', 409);
+              }
+              if (checkedNewCutoff <= checkedCutoff) {
+                throw new StudioError('feedback_verification_invalid_new_cutoff', 409);
+              }
+              if (!combinedEvidence.includes(checkedNewCutoff.toLowerCase())) {
+                throw new StudioError('feedback_verification_cutoff_uncorroborated', 409);
+              }
+            }
 
-            // 2. Deep per-item corroboration (original transaction orderId, refundDate, cutoff boundary, reason — reject bare itemId-only stubs!)
-            for (const item of rawIv.shouldChange) {
+            // 2. Load REAL authorized source transactions from 020_clean/ to cross-check original order & refund dates!
+            const sourceProjectIds = [
+              verifyingUse.projectId,
+              ...existingFb.reports.map(r => r.projectId),
+            ];
+            const sourceRows = await inspectSourceTransactions(sourceProjectIds);
+            const findSourceRows = (id: string, orderId?: string) => {
+              const idLow = id.toLowerCase();
+              const orderLow = orderId?.toLowerCase();
+              const matches = sourceRows.filter(row =>
+                row.itemId.toLowerCase() === idLow
+                || (row.originalOrderId && row.originalOrderId.toLowerCase() === idLow)
+                || (orderLow && row.originalOrderId && row.originalOrderId.toLowerCase() === orderLow),
+              );
+              return matches;
+            };
+
+            // 2A. Deep per-item corroboration for shouldChange (pre-cutoff mapping corrections)
+            for (const item of rawShouldChange) {
               const id = String(item?.itemId ?? '').trim();
               const orderId = String(item?.originalOrderId ?? '').trim();
               const refundDate = String(item?.refundDate ?? '').trim();
               const reason = String(item?.reason ?? '').trim();
-              if (!id || !combinedEvidence.includes(id.toLowerCase())) {
+              if (!id || (!orderId && !refundDate)) {
                 throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
               }
-              // Every shouldChange item MUST corroborate original transaction/date context in disk bytes (not bare itemId!)
-              if (!orderId && !refundDate) {
-                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
-              }
-              if (orderId && !combinedEvidence.includes(orderId.toLowerCase())) {
-                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
-              }
-              if (refundDate && !combinedEvidence.includes(refundDate.toLowerCase())) {
+              // Require co-occurrence of itemId with its originalOrderId & refundDate in the SAME local report/assessment block!
+              const coTokens = [orderId, refundDate].filter(Boolean);
+              if (!textWindowCoOccurs(diskTexts, id, coTokens)) {
                 throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
               }
               if (refundDate && checkedCutoff && refundDate > checkedCutoff) {
@@ -3245,54 +3777,165 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               if (reason && reason.length >= 2 && !combinedEvidence.includes(reason.toLowerCase()) && !orderId) {
                 throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
               }
+              // Real source transaction cross-check!
+              if (sourceRows.length > 0) {
+                const matched = findSourceRows(id, orderId);
+                if (!matched.length) {
+                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
+                }
+                if (orderId && !matched.some(r => r.originalOrderId?.toLowerCase() === orderId.toLowerCase())) {
+                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
+                }
+                if (refundDate && !matched.some(r => r.refundDate === refundDate)) {
+                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
+                }
+                const matchingRow = matched.find(r => (!orderId || r.originalOrderId?.toLowerCase() === orderId.toLowerCase()) && (!refundDate || r.refundDate === refundDate)) ?? matched[0]!;
+                if (matchingRow.refundDate && checkedCutoff && matchingRow.refundDate > checkedCutoff) {
+                  throw new StudioError('feedback_verification_post_cutoff_misclassified', 409);
+                }
+              }
             }
-            for (const item of rawIv.shouldRetain) {
+
+            // 2B. Deep per-item corroboration for postCutoffNewEvents (legitimate post-cutoff refunds under newCutoffChecked)
+            for (const item of rawPostCutoff) {
               const id = String(item?.itemId ?? '').trim();
               const orderId = String(item?.originalOrderId ?? '').trim();
               const refundDate = String(item?.refundDate ?? '').trim();
-              if (!id || !combinedEvidence.includes(id.toLowerCase())) {
+              if (!id || !orderId || !refundDate) {
+                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              }
+              if (item.classification !== 'post_cutoff_new_event' && item.classification !== 'post_cutoff_update') {
+                throw new StudioError('feedback_verification_invalid_post_cutoff_classification', 409);
+              }
+              if (refundDate <= checkedCutoff) {
+                throw new StudioError('feedback_verification_pre_cutoff_misclassified', 409);
+              }
+              if (checkedNewCutoff && refundDate > checkedNewCutoff) {
+                throw new StudioError('feedback_verification_post_cutoff_out_of_range', 409);
+              }
+              if (!textWindowCoOccurs(diskTexts, id, [orderId, refundDate])) {
+                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              }
+              if (sourceRows.length > 0) {
+                const matched = findSourceRows(id, orderId);
+                if (!matched.length) {
+                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
+                }
+                if (!matched.some(r => r.originalOrderId?.toLowerCase() === orderId.toLowerCase())) {
+                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
+                }
+                if (!matched.some(r => r.refundDate === refundDate)) {
+                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
+                }
+                const matchingRow = matched.find(r => r.originalOrderId?.toLowerCase() === orderId.toLowerCase() && r.refundDate === refundDate);
+                if (!matchingRow?.refundDate || matchingRow.refundDate <= checkedCutoff) {
+                  throw new StudioError('feedback_verification_pre_cutoff_misclassified', 409);
+                }
+              }
+            }
+
+            // 2C. Deep per-item corroboration for shouldRetain (unchanged valid rows)
+            for (const item of rawShouldRetain) {
+              const id = String(item?.itemId ?? '').trim();
+              const orderId = String(item?.originalOrderId ?? '').trim();
+              const refundDate = String(item?.refundDate ?? '').trim();
+              if (!id) {
                 throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
               }
               if (!orderId && !refundDate && !String(item?.reason ?? '').trim()) {
                 throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
               }
-              if (orderId && !combinedEvidence.includes(orderId.toLowerCase())) {
+              const coTokens = [orderId, refundDate].filter(Boolean);
+              if (coTokens.length > 0) {
+                if (!textWindowCoOccurs(diskTexts, id, coTokens)) {
+                  throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+                }
+              } else if (!combinedEvidence.includes(id.toLowerCase())) {
                 throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
               }
-              if (refundDate && !combinedEvidence.includes(refundDate.toLowerCase())) {
-                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              if (sourceRows.length > 0) {
+                const matched = findSourceRows(id, orderId);
+                if (!matched.length) {
+                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
+                }
+                if (orderId && !matched.some(r => r.originalOrderId?.toLowerCase() === orderId.toLowerCase())) {
+                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
+                }
+                if (refundDate && !matched.some(r => r.refundDate === refundDate)) {
+                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
+                }
               }
             }
 
-            // 3. Original Case decision verification against real CaseStore!
+            // 3. Original Case decision verification against real CaseStore (pin & verify exact decisionId + decisionRevision)!
             const fbCaseRef = existingFb.reports.map(r => r.originalCaseRef).find(Boolean);
             const ivCaseRef = rawIv.originalCaseRef;
             if (fbCaseRef && !ivCaseRef) {
               throw new StudioError('feedback_verification_missing_case_ref', 409);
             }
+            let enrichedCaseRef: EnterprisePackOriginalCaseRef | undefined = ivCaseRef ? { ...ivCaseRef } : undefined;
             if (ivCaseRef) {
               if (!ivCaseRef.caseId) throw new StudioError('feedback_verification_case_not_found', 409);
               if (fbCaseRef && ivCaseRef.caseId !== fbCaseRef.caseId) {
                 throw new StudioError('feedback_verification_case_mismatch', 409);
               }
+              if (fbCaseRef?.decisionId && ivCaseRef.decisionId && ivCaseRef.decisionId !== fbCaseRef.decisionId) {
+                throw new StudioError('feedback_verification_case_decision_mismatch', 409);
+              }
+              if (fbCaseRef?.decisionRevision !== undefined && ivCaseRef.decisionRevision !== undefined && ivCaseRef.decisionRevision !== fbCaseRef.decisionRevision) {
+                throw new StudioError('feedback_verification_case_decision_mismatch', 409);
+              }
               if (rawIv.caseDecisionsPreserved !== true) {
                 throw new StudioError('feedback_verification_case_not_preserved', 409);
               }
               let caseTitle: string | undefined;
+              let pinnedDecisionId = ivCaseRef.decisionId ?? fbCaseRef?.decisionId;
+              let pinnedDecisionRev = ivCaseRef.decisionRevision ?? fbCaseRef?.decisionRevision;
+              let decisionTitle: string | undefined = ivCaseRef.decisionTitle ?? fbCaseRef?.decisionTitle;
               if (options.cases) {
-                let origCase: { id: string; title: string };
+                let origCase: ReturnType<CaseStore['getCase']>;
                 try { origCase = options.cases.getCase(ivCaseRef.caseId); } catch { throw new StudioError('feedback_verification_case_not_found', 409); }
                 caseTitle = origCase.title;
-                if (ivCaseRef.decisionId) {
-                  try {
-                    options.cases.getDecision(ivCaseRef.caseId, ivCaseRef.decisionId, ivCaseRef.decisionRevision);
-                  } catch {
-                    throw new StudioError('feedback_verification_case_not_found', 409);
+                if (!pinnedDecisionId) {
+                  const decs = options.cases.listDecisions(ivCaseRef.caseId).items;
+                  if (decs.length > 0) {
+                    pinnedDecisionId = decs.at(-1)!.recordId;
+                    pinnedDecisionRev ??= decs.at(-1)!.revision;
                   }
+                }
+                if (pinnedDecisionId) {
+                  let decRec: ReturnType<CaseStore['getDecision']>;
+                  try {
+                    decRec = options.cases.getDecision(ivCaseRef.caseId, pinnedDecisionId, pinnedDecisionRev);
+                  } catch {
+                    throw new StudioError('feedback_verification_case_decision_mismatch', 409);
+                  }
+                  const pObj = decRec.payload && typeof decRec.payload === 'object' ? (decRec.payload as Record<string, unknown>) : undefined;
+                  const payloadTitle = pObj
+                    ? (['title', 'statement', 'name', 'summary', 'goal', 'question'].map(k => (typeof pObj[k] === 'string' && pObj[k].trim() ? pObj[k].trim().slice(0, 280) : undefined)).find(Boolean))
+                    : undefined;
+                  decisionTitle = payloadTitle ?? decisionTitle;
+                  enrichedCaseRef = {
+                    ...ivCaseRef,
+                    caseTitle: origCase.title,
+                    caseRevision: fbCaseRef?.caseRevision ?? origCase.revision,
+                    decisionId: decRec.recordId,
+                    decisionRevision: decRec.revision,
+                    decisionKind: decRec.kind,
+                    ...(decisionTitle ? { decisionTitle } : {}),
+                    ...(fbCaseRef?.choiceId ? { choiceId: fbCaseRef.choiceId } : {}),
+                  };
+                } else {
+                  enrichedCaseRef = {
+                    ...ivCaseRef,
+                    caseTitle: origCase.title,
+                    caseRevision: fbCaseRef?.caseRevision ?? origCase.revision,
+                  };
                 }
               }
               const caseMentioned = combinedEvidence.includes(ivCaseRef.caseId.toLowerCase())
-                || (ivCaseRef.decisionId ? combinedEvidence.includes(ivCaseRef.decisionId.toLowerCase()) : false)
+                || (pinnedDecisionId ? combinedEvidence.includes(pinnedDecisionId.toLowerCase()) : false)
+                || (decisionTitle ? combinedEvidence.includes(decisionTitle.toLowerCase()) : false)
                 || (caseTitle ? combinedEvidence.includes(caseTitle.toLowerCase()) : false);
               if (!caseMentioned) {
                 throw new StudioError('feedback_verification_case_uncorroborated', 409);
@@ -3301,6 +3944,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
             verifiedItemEvidence = {
               ...rawIv,
+              ...(enrichedCaseRef ? { originalCaseRef: enrichedCaseRef } : {}),
               assessmentReportRef: rawIv.assessmentReportRef ? sourceRef(rawIv.assessmentReportRef) : latestAssess.report,
             };
           } else if (object(input.itemVerification)) {
@@ -3414,7 +4058,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
         let verifierEv: Awaited<ReturnType<typeof inspectVerifierTaskEvidence>> | undefined;
         if (isIndependentAssessor && assessorProjectId && assessorTaskId) {
-          verifierEv = await inspectVerifierTaskEvidence(assessorProjectId, assessorTaskId, currentPack, useRecord);
+          verifierEv = await inspectVerifierTaskEvidence(assessorProjectId, assessorTaskId, currentPack, useRecord, latestAssessment?.report);
         }
 
         const hostVerifiedIndependentConfirmed = Boolean(
@@ -3447,6 +4091,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               readRequiredAssetsCount: verifierEv.readRequiredAssetsCount,
               allRequiredReadByVerifier: verifierEv.allRequiredReadByVerifier,
               hadDataOrCalcEvidence: verifierEv.hadDataOrCalcEvidence,
+              ...(verifierEv.assessmentTurnIndex !== undefined ? { assessmentTurnIndex: verifierEv.assessmentTurnIndex } : {}),
+              ...(verifierEv.assessmentMessageId ? { assessmentMessageId: verifierEv.assessmentMessageId } : {}),
+              ...(verifierEv.carriedFromTurnIndices.length ? { carriedFromTurnIndices: verifierEv.carriedFromTurnIndices } : {}),
+              targetReportChecked: verifierEv.targetReportChecked,
+              authorizedInputChecked: verifierEv.authorizedInputChecked,
+              assessmentReportBoundToTarget: verifierEv.assessmentReportBoundToTarget,
               ...(verifierEv.missingReason ? { missingReason: verifierEv.missingReason } : {}),
             },
           } : {}),

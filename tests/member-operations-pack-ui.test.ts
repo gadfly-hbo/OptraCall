@@ -184,3 +184,57 @@ test('SemanticContextDetails renders same-turn saved report link, exact SHA-256 
   assert.match(html, /060_reports\/repurchase-v1\.0-indep-assess\.json/);
   assert.match(html, /Q4 湖庭复购经营决策 Case/);
 });
+
+test('SemanticContextDetails never renders 0/undefined when requiredAssetsCount is omitted and shows assessment turn & carried-from turns (R4 Round-7)', async () => {
+  const { semantic } = await bundle;
+  const html = renderToStaticMarkup(createElement(semantic.SemanticContextDetails, {
+    view: 'saved',
+    lookup: { state: 'idle' },
+    records: [],
+    turnEvidence: {
+      projectId: '11111111-1111-4111-8111-111111111111',
+      taskId: '22222222-2222-4222-8222-222222222222',
+      savedReports: [],
+      useRecords: [
+        {
+          packId: '33333333-3333-4333-8333-333333333333',
+          packCode: 'PACK-MEM-001',
+          packName: '织屿服饰 · 会员运营资产包',
+          use: {
+            id: '44444444-4444-4444-8444-444444444444',
+            packId: '33333333-3333-4333-8333-333333333333',
+            projectId: '11111111-1111-4111-8111-111111111111',
+            taskId: '22222222-2222-4222-8222-222222222222',
+            reportRef: { authority: 'task', id: '22222222-2222-4222-8222-222222222222', version: 'a'.repeat(64), sha256: 'a'.repeat(64), locator: '060_reports/repurchase-v1.0.json' },
+            packVersion: '1.0',
+            purposeId: 'U-01',
+            purposeKey: 'store-first-purchase-30d-repurchase',
+            tier: 'formal-calculation',
+            accessLevel: 'recalculate',
+            catalogSupplied: { packVersion: '1.0', purposeIds: ['U-01'], assetRefs: [], suppliedAt: '2026-11-01T00:00:00Z' },
+            actualReads: [],
+            independentVerification: {
+              status: 'pending',
+              verdictDetail: '独立核验报告未绑定目标报告，保持待验证',
+              verifierTaskId: '55555555-5555-4555-8555-555555555555',
+              verifierEvidenceSummary: {
+                readRequiredAssetsCount: 0,
+                hadDataOrCalcEvidence: false,
+                assessmentTurnIndex: 2,
+                carriedFromTurnIndices: [1],
+                assessmentReportBoundToTarget: false,
+              },
+            },
+            createdAt: '2026-11-01T00:00:00Z',
+          },
+        },
+      ],
+      feedbackLinks: [],
+    },
+  }));
+  assert.doesNotMatch(html, /undefined/, 'UI MUST NEVER render 0/undefined!');
+  assert.match(html, /核验实读原依赖 0 项/);
+  assert.match(html, /核验回合 #2/);
+  assert.match(html, /沿用前序回合 #1 实读/);
+  assert.match(html, /核验报告未绑定目标报告/);
+});

@@ -156,11 +156,38 @@ export function matchPanoramaRecommendationPurposes(
   candidates: EnterprisePackPurpose[];
   ambiguous: boolean;
   scopeConflictCandidates: EnterprisePackPurpose[];
+  conflictReason?: string;
 } {
   if (rec.targetPurposeId) {
     const exact = purposes.find(p => p.id === rec.targetPurposeId);
-    if (exact) return { matched: exact, candidates: [exact], ambiguous: false, scopeConflictCandidates: [] };
-    return { candidates: [], ambiguous: false, scopeConflictCandidates: [] };
+    if (!exact) return { candidates: [], ambiguous: false, scopeConflictCandidates: [] };
+    const knownStores = purposes
+      .filter(p => p.purposeKey === exact.purposeKey || p.purposeKey === rec.purposeKey)
+      .flatMap(p => p.scope.stores ?? []);
+    const wantedWindow = extractRecommendationWindowDays(rec);
+    const explicitStores = extractRecommendationStores(rec, knownStores);
+    const reasons: string[] = [];
+    if (rec.purposeKey?.trim() && rec.purposeKey.trim() !== exact.purposeKey) {
+      reasons.push(`用途键不一致（建议：${rec.purposeKey.trim()}，目标：${exact.purposeKey}）`);
+    }
+    if (rec.scopeKey?.trim() && rec.scopeKey.trim().toLowerCase() !== exact.scope.scopeKey.trim().toLowerCase()) {
+      reasons.push(`范围键不一致（建议：${rec.scopeKey.trim()}，目标：${exact.scope.scopeKey}）`);
+    }
+    if (wantedWindow !== undefined && exact.windowDays !== wantedWindow) {
+      reasons.push(`窗口不一致（建议：${wantedWindow}日，目标：${exact.windowDays ?? '未指定'}日）`);
+    }
+    if (explicitStores.length > 0 && (!exact.scope.stores?.length || !storesMatchExactSet(explicitStores, exact.scope.stores))) {
+      reasons.push(`门店范围不一致（建议：${explicitStores.join('、')}，目标：${exact.scope.stores?.join('、') || '未限门店'}）`);
+    }
+    if (reasons.length > 0) {
+      return {
+        candidates: [exact],
+        ambiguous: true,
+        scopeConflictCandidates: [exact],
+        conflictReason: `建议指向已有用途「${exact.title}」(${exact.id})，但与建议明确范围冲突：${reasons.join('；')}。已阻止自动续建，请显式选择按建议新建单用途或改选目标。`,
+      };
+    }
+    return { matched: exact, candidates: [exact], ambiguous: false, scopeConflictCandidates: [] };
   }
 
   const sameKey = purposes.filter(p => p.purposeKey === rec.purposeKey);

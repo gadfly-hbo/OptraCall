@@ -54,9 +54,9 @@ import { createStudioSessions } from './studio-sessions.ts';
 import { runStudioRuleInference } from './studio-semantic.ts';
 import { createStudioOriginalSources } from './studio-original-sources.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
-import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import { AgentRuntime, CONNECTION_PROMPT, SDK_VERSION } from '../agent/runtime.ts';
@@ -209,15 +209,34 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   let staticUi: Awaited<ReturnType<typeof loadStaticUi>> | undefined;
   const instanceId = options.instanceId ?? randomUUID();
   const operatorCookieSecret = randomBytes(32);
-  const localHostOperatorId = (() => {
-    try { return `local:${os.userInfo().username || 'host'}`; } catch { return 'local:host'; }
-  })();
-  function signOperatorContextCookie(operatorId: string, activeProjectId: string): string {
-    const payload = Buffer.from(JSON.stringify({ i: instanceId, o: operatorId, p: activeProjectId }), 'utf8').toString('base64url');
+  const operatorRegistryPath = path.join(dataRoot, 'member-packs', 'operator-registry.json');
+  interface StoredOperatorRecord { displayName: string; salt: string; hash: string; createdAt: string; }
+  function readOperatorRegistry(): Record<string, StoredOperatorRecord> {
+    try {
+      if (existsSync(operatorRegistryPath)) {
+        const parsed = JSON.parse(readFileSync(operatorRegistryPath, 'utf8'));
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, StoredOperatorRecord>;
+      }
+    } catch { /* ignore */ }
+    return {};
+  }
+  function writeOperatorRegistry(registry: Record<string, StoredOperatorRecord>) {
+    mkdirSync(path.dirname(operatorRegistryPath), { recursive: true, mode: 0o700 });
+    const tmp = `${operatorRegistryPath}.${randomUUID()}.tmp`;
+    writeFileSync(tmp, JSON.stringify(registry, null, 2), { mode: 0o600 });
+    renameSync(tmp, operatorRegistryPath);
+  }
+  function signOperatorContextCookie(operatorId: string, activeProjectId?: string, displayName?: string): string {
+    const payload = Buffer.from(JSON.stringify({
+      i: instanceId,
+      o: operatorId,
+      ...(activeProjectId ? { p: activeProjectId } : {}),
+      ...(displayName ? { d: displayName } : {}),
+    }), 'utf8').toString('base64url');
     const sig = createHmac('sha256', operatorCookieSecret).update(payload).digest('base64url');
     return `optracall_op_ctx=${payload}.${sig}; Path=/; HttpOnly; SameSite=Strict`;
   }
-  function parseOperatorContextCookie(cookieHeader: string | undefined): { present: boolean; valid: boolean; operatorId?: string; activeProjectId?: string } {
+  function parseOperatorContextCookie(cookieHeader: string | undefined): { present: boolean; valid: boolean; operatorId?: string; displayName?: string; activeProjectId?: string } {
     if (!cookieHeader) return { present: false, valid: true };
     const raw = cookieHeader.split(';').map(part => part.trim()).find(part => part.startsWith('optracall_op_ctx='));
     if (!raw) return { present: false, valid: true };
@@ -229,32 +248,140 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const a = Buffer.from(sig, 'utf8'), b = Buffer.from(expected, 'utf8');
     if (a.length !== b.length || !timingSafeEqual(a, b)) return { present: true, valid: false };
     try {
-      const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { i?: string; o?: string; p?: string };
-      if (parsed.i !== instanceId || typeof parsed.o !== 'string' || typeof parsed.p !== 'string') return { present: true, valid: false };
-      return { present: true, valid: true, operatorId: parsed.o, activeProjectId: parsed.p };
+      const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { i?: string; o?: string; p?: string; d?: string };
+      if (parsed.i !== instanceId || typeof parsed.o !== 'string' || !parsed.o.trim()) return { present: true, valid: false };
+      return {
+        present: true,
+        valid: true,
+        operatorId: parsed.o,
+        ...(typeof parsed.d === 'string' && parsed.d ? { displayName: parsed.d } : {}),
+        ...(typeof parsed.p === 'string' && parsed.p ? { activeProjectId: parsed.p } : {}),
+      };
     } catch {
       return { present: true, valid: false };
     }
   }
   function resolveRequestOperator(request: IncomingMessage): import('./member-pack-host.ts').TrustedHostOperator {
-    const base: import('./member-pack-host.ts').TrustedHostOperator = options.resolveOperator
-      ? options.resolveOperator(request)
-      : { operatorId: localHostOperatorId, displayName: 'local-host-user', verified: true };
     const cookie = parseOperatorContextCookie(typeof request.headers.cookie === 'string' ? request.headers.cookie : undefined);
-    if (cookie.present) {
-      if (!cookie.valid || cookie.operatorId !== base.operatorId) {
-        return { ...base, verified: false };
+    if (options.resolveOperator) {
+      const base = options.resolveOperator(request);
+      if (cookie.present) {
+        if (!cookie.valid || cookie.operatorId !== base.operatorId) {
+          return { ...base, verified: false };
+        }
+        return { ...base, activeProjectId: cookie.activeProjectId ?? base.activeProjectId };
       }
-      return { ...base, activeProjectId: cookie.activeProjectId ?? base.activeProjectId };
+      return base;
     }
-    return base;
+    // Real local product startup: NEVER treat bare cookie-less requests as a verified global OS user!
+    // Require a Host-signed HttpOnly session/operator cookie bound to an individual browser session or named business operator.
+    if (cookie.present && cookie.valid && cookie.operatorId) {
+      return {
+        operatorId: cookie.operatorId,
+        ...(cookie.displayName ? { displayName: cookie.displayName } : {}),
+        ...(cookie.activeProjectId ? { activeProjectId: cookie.activeProjectId } : {}),
+        verified: true,
+      };
+    }
+    return { operatorId: 'anonymous:unverified', displayName: '未认证请求', verified: false };
   }
   function setOperatorProjectCookie(response: ServerResponse, request: IncomingMessage, projectId: string) {
-    const base: import('./member-pack-host.ts').TrustedHostOperator = options.resolveOperator
-      ? options.resolveOperator(request)
-      : { operatorId: localHostOperatorId, displayName: 'local-host-user', verified: true };
-    if (!base.verified) return;
-    response.setHeader('Set-Cookie', signOperatorContextCookie(base.operatorId, projectId));
+    const cookie = parseOperatorContextCookie(typeof request.headers.cookie === 'string' ? request.headers.cookie : undefined);
+    if (options.resolveOperator) {
+      const base = options.resolveOperator(request);
+      if (!base.verified) return;
+      response.setHeader('Set-Cookie', signOperatorContextCookie(base.operatorId, projectId, base.displayName));
+      return;
+    }
+    // Preserve existing verified operatorId when switching projects so another browser session/operator
+    // CANNOT hijack ownership simply by opening the owner project!
+    if (cookie.present && cookie.valid && cookie.operatorId) {
+      response.setHeader('Set-Cookie', signOperatorContextCookie(cookie.operatorId, projectId, cookie.displayName));
+      return;
+    }
+    // First project creation/open in a new browser session mints a distinct isolated session operatorId!
+    const sessionOpId = `session:${randomUUID()}`;
+    response.setHeader('Set-Cookie', signOperatorContextCookie(sessionOpId, projectId, '工作台会话操作者'));
+  }
+  async function manageOperatorSession(
+    request: IncomingMessage,
+    response: ServerResponse,
+    input?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (!input) {
+      const reg = readOperatorRegistry();
+      return {
+        operator: resolveRequestOperator(request),
+        registeredOperators: Object.entries(reg).map(([operatorId, rec]) => ({
+          operatorId,
+          displayName: rec.displayName,
+          createdAt: rec.createdAt,
+        })),
+        customResolver: Boolean(options.resolveOperator),
+      };
+    }
+    if (options.resolveOperator) {
+      throw new StudioError('operator_session_managed_externally', 409);
+    }
+    const action = String(input.action ?? 'login').trim().toLowerCase();
+    if (action === 'logout') {
+      response.setHeader('Set-Cookie', 'optracall_op_ctx=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
+      return { operator: { operatorId: 'anonymous:unverified', displayName: '未认证请求', verified: false }, loggedOut: true };
+    }
+    const rawId = typeof input.operatorId === 'string' ? input.operatorId.trim() : '';
+    if (!/^[a-zA-Z0-9._:@-]{2,64}$/.test(rawId) || /^session:|^anonymous:/i.test(rawId)) {
+      throw new StudioError('operator_authentication_failed', 403);
+    }
+    const opId = rawId.startsWith('op:') ? rawId : `op:${rawId}`;
+    const passcode = typeof input.passcode === 'string' ? input.passcode : '';
+    if (passcode.length < 4 || passcode.length > 128) {
+      throw new StudioError('operator_passcode_invalid', 400);
+    }
+    const existingCookie = parseOperatorContextCookie(typeof request.headers.cookie === 'string' ? request.headers.cookie : undefined);
+    let activeProjectId = existingCookie.present && existingCookie.valid ? existingCookie.activeProjectId : undefined;
+    if (typeof input.activeProjectId === 'string' && input.activeProjectId.trim()) {
+      const proj = await projects.get(input.activeProjectId.trim());
+      activeProjectId = proj.id;
+    }
+    const registry = readOperatorRegistry();
+    const existing = registry[opId];
+    if (existing) {
+      const derived = scryptSync(passcode, existing.salt, 32);
+      const expectedBuf = Buffer.from(existing.hash, 'hex');
+      if (derived.length !== expectedBuf.length || !timingSafeEqual(derived, expectedBuf)) {
+        throw new StudioError('operator_authentication_failed', 403);
+      }
+      response.setHeader('Set-Cookie', signOperatorContextCookie(opId, activeProjectId, existing.displayName));
+      return {
+        operator: {
+          operatorId: opId,
+          displayName: existing.displayName,
+          ...(activeProjectId ? { activeProjectId } : {}),
+          verified: true,
+        },
+        created: false,
+      };
+    }
+    if (action === 'login' && input.createIfMissing === false) {
+      throw new StudioError('operator_authentication_failed', 403);
+    }
+    const displayName = typeof input.displayName === 'string' && input.displayName.trim()
+      ? input.displayName.trim().slice(0, 80)
+      : rawId;
+    const salt = randomBytes(16).toString('hex');
+    const hash = scryptSync(passcode, salt, 32).toString('hex');
+    registry[opId] = { displayName, salt, hash, createdAt: new Date().toISOString() };
+    writeOperatorRegistry(registry);
+    response.setHeader('Set-Cookie', signOperatorContextCookie(opId, activeProjectId, displayName));
+    return {
+      operator: {
+        operatorId: opId,
+        displayName,
+        ...(activeProjectId ? { activeProjectId } : {}),
+        verified: true,
+      },
+      created: true,
+    };
   }
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
   if (!Number.isSafeInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 10) throw new Error('Invalid observer heartbeat interval.');
@@ -297,7 +424,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const dbReviewBundles = createDbLinkReviewPort({ privateRoot: path.resolve(dataRoot, 'db-link', 'review-bundles'), projects, configurationSnapshot: (id, revision) => configuration.snapshot(id, revision) ?? undefined, materialSource: dbLinks.materialSource, isClosing: () => closing });
   const modelPackRoutes = createModelPackRoutes({store:modelPacks,readBody:body,mutate,isClosing:()=>closing});
   const sapMethods = createSapMethodStore(path.join(dataRoot, 'metric-assets'));
-  const studio = createStudioFeature({ dataRoot, codeRoot: options.cwd, memberPackEnabled: options.memberPackEnabled, memberPackPublishHook: options.memberPackPublishHook, resolveRequestOperator, onProjectPermissionChanged: projectId => { void projectSessions.closeAll({ projectId }).catch(() => {}); }, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
+  const studio = createStudioFeature({ dataRoot, codeRoot: options.cwd, memberPackEnabled: options.memberPackEnabled, memberPackPublishHook: options.memberPackPublishHook, resolveRequestOperator, manageOperatorSession, onProjectPermissionChanged: projectId => { void (async () => { try { const proj = await projects.get(projectId); for (const task of proj.tasks) { const ref = projectSessions.ref({ project: proj, task }); if (!projectSessions.busy(ref)) await projectSessions.close(ref); } } catch { /* ignore */ } })(); }, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
     reason: options.studioPython ? (command, context) => runStudioRuleInference({ python: options.studioPython!, codeRoot: options.cwd, command, signal: context.signal, assertCurrent: context.assertCurrent, registerCleanup: context.registerCleanup }) : undefined,
     extract: async (system, ref, context) => {
       if (!studioSessions) throw new StudioError('studio_semantica_unavailable', 409);
@@ -2730,7 +2857,33 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           }
           json(response, 201, { file: await projects.saveReport(projectId, targetName, reportText) }); return;
         }
-        if (action === 'files/content' && request.method === 'GET') { const expected = url.searchParams.get('expectedSha256'); if (expected !== null && !/^[a-f0-9]{64}$/.test(expected)) throw new RequestFault(400, 'invalid_expected_sha256'); const file = await projects.readFile(projectId, url.searchParams.get('path') ?? ''); if (expected !== null && createHash('sha256').update(file.bytes).digest('hex') !== expected) throw new RequestFault(409, 'artifact_version_changed'); response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(file.bytes); return; }
+        if (action === 'files/content' && request.method === 'GET') {
+          const expected = url.searchParams.get('expectedSha256');
+          if (expected !== null && !/^[a-f0-9]{64}$/.test(expected)) throw new RequestFault(400, 'invalid_expected_sha256');
+          const requestedPath = (url.searchParams.get('path') ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
+          const isMemberPackGuardedData = requestedPath.startsWith('010_draw/') || requestedPath.startsWith('020_clean/');
+          if (isMemberPackGuardedData) {
+            studio.memberPack.assertProjectDataPathAllowed(projectId, requestedPath);
+          }
+          const file = await projects.readFile(projectId, requestedPath);
+          let outBytes = file.bytes;
+          let viewFiltered = false;
+          if (isMemberPackGuardedData) {
+            const view = studio.memberPack.filterAuthorizedProjectData(projectId, requestedPath, file.bytes);
+            outBytes = view.bytes;
+            viewFiltered = Boolean(view.filtered);
+          }
+          if (expected !== null && createHash('sha256').update(outBytes).digest('hex') !== expected) throw new RequestFault(409, 'artifact_version_changed');
+          response.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+            ...(viewFiltered ? { 'X-OptraCall-Authorized-View': 'filtered' } : {}),
+          });
+          response.end(outBytes);
+          return;
+        }
         const taskRoute = /^tasks\/([a-f0-9-]+)(?:\/(.*))?$/.exec(action ?? '');
         if (taskRoute) {
           const taskId = taskRoute[1]!, operation = taskRoute[2], key = keyOf(projectId, taskId);

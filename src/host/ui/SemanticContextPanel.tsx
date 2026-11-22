@@ -203,7 +203,16 @@ function TurnPackEvidenceSection({
       return <article className="sc-relation" key={entry.use.id}>
         <p><strong>{entry.packName || entry.packCode}</strong> · v{entry.use.packVersion} · 用途 <code>{entry.use.purposeId}</code> · <strong>{verificationStatusText[iv.status]}</strong>{iv.selfAssessmentOnly ? '（仅作者自评，未获独立通过）' : ''}</p>
         <p className="sc-meta">原报告：<code>{entry.use.reportRef.locator || entry.use.reportRef.id}</code>{entry.use.reportRef.sha256 ? `（SHA-256 ${entry.use.reportRef.sha256.slice(0, 12)}）` : ''}{entry.use.reportRef.locator?.startsWith('060_reports/') && onInspectSavedReport && <> <button type="button" className="text-button" onClick={() => onInspectSavedReport(entry.packId, entry.use.reportRef.locator!, entry.use.reportRef.sha256)}>查看原报告</button></>}</p>
-        {iv.verifierTaskId && <p className="sc-meta">独立核验任务：{iv.verifierTaskId}{iv.assessmentReportRef?.locator ? ` · 核验报告：${iv.assessmentReportRef.locator}` : ''}{iv.verifierEvidenceSummary ? ` · 核验实读原依赖 ${iv.verifierEvidenceSummary.readRequiredAssetsCount}/${iv.verifierEvidenceSummary.requiredAssetsCount} 项` : ''}</p>}
+        {iv.verifierTaskId && <p className="sc-meta">
+          独立核验任务：{iv.verifierTaskId}
+          {iv.assessmentReportRef?.locator ? ` · 核验报告：${iv.assessmentReportRef.locator}` : ''}
+          {iv.verifierEvidenceSummary
+            ? ` · 核验实读原依赖 ${iv.verifierEvidenceSummary.readRequiredAssetsCount}${typeof iv.verifierEvidenceSummary.requiredAssetsCount === 'number' ? `/${iv.verifierEvidenceSummary.requiredAssetsCount}` : ''} 项`
+            : ''}
+          {typeof iv.verifierEvidenceSummary?.assessmentTurnIndex === 'number' ? ` · 核验回合 #${iv.verifierEvidenceSummary.assessmentTurnIndex}` : ''}
+          {iv.verifierEvidenceSummary?.carriedFromTurnIndices?.length ? `（沿用前序回合 #${iv.verifierEvidenceSummary.carriedFromTurnIndices.join(', #')} 实读）` : ''}
+          {iv.verifierEvidenceSummary?.assessmentReportBoundToTarget === false ? ' · 核验报告未绑定目标报告' : ''}
+        </p>}
         <p className="sc-meta">核验说明：{iv.verdictDetail}</p>
       </article>;
     })}</div>}

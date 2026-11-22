@@ -6,6 +6,8 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { createHost } from '../src/host/server.ts';
 import type { MemberPackHostOptions } from '../src/host/member-pack-host.ts';
+import { CaseStore } from '../src/host/case-store.ts';
+import { withCaseGoal } from './fixtures/case-goal.ts';
 
 import { buildAuthorizedDataView } from '../src/host/member-pack-data-view.ts';
 
@@ -34,19 +36,32 @@ async function startTestHost(
   const addr = host.server.address();
   const port = typeof addr === 'object' && addr ? addr.port : 0;
   const base = `http://127.0.0.1:${port}`;
+  let sessionCookie = '';
   const req = async <T = any>(pathname: string, method: 'GET' | 'POST' | 'PUT' = 'GET', body?: unknown, extraHeaders?: Record<string, string>) => {
+    const hasExplicitCookie = extraHeaders !== undefined && Object.keys(extraHeaders).some(k => k.toLowerCase() === 'cookie');
+    const hdrs: Record<string, string> = {
+      'x-optracall-client': '1',
+      'content-type': 'application/json',
+      origin: `http://127.0.0.1:${uiPort}`,
+      ...(!hasExplicitCookie && sessionCookie ? { cookie: sessionCookie } : {}),
+      ...(extraHeaders ?? {}),
+    };
+    if (hasExplicitCookie && hdrs.cookie === '') delete hdrs.cookie;
     const res = await fetch(`${base}${pathname}`, {
       method,
-      headers: { 'x-optracall-client': '1', 'content-type': 'application/json', origin: `http://127.0.0.1:${uiPort}`, ...(extraHeaders ?? {}) },
+      headers: hdrs,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const text = await res.text();
     let json: any;
     try { json = JSON.parse(text); } catch { json = text; }
     const setCookie = res.headers.get('set-cookie') ?? '';
-    return { status: res.status, json: json as T, setCookie };
+    if (!hasExplicitCookie && setCookie.includes('optracall_op_ctx=')) {
+      sessionCookie = setCookie.split(';')[0] ?? '';
+    }
+    return { status: res.status, json: json as T, setCookie, headers: res.headers };
   };
-  return { host, base, req, close: async () => { await host.close(); } };
+  return { host, base, req, getCookie: () => sessionCookie, clearCookie: () => { sessionCookie = ''; }, close: async () => { await host.close(); } };
 }
 
 test('Host member operations pack Round-2: real authority verification (rejects nonexistent SAP + ignores forged receipts + read-only reconcile + draft drift), default-deny & Host-verified grants + immediate revocation, enterprise-scoped reference original & section slicing, omitted-projectId archive guard, and 3-store rollback read-only mode', async () => {
@@ -601,6 +616,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.deepEqual(ungrantedPackView.json.pack.packRevisions, [], 'Ungranted consumer project MUST NOT receive raw packRevisions!');
 
     // R2.1 COUNTEREXAMPLE: Omitted grantorProjectId, ordinary consumer project, OR forged owner projectId WITHOUT Host-issued authorityToken MUST be rejected with 403!
+    await srv.req(`/api/projects/${projBuild.id}`);
     const omittedGrantor = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
@@ -616,6 +632,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(omittedGrantor.status, 403);
     assert.equal(omittedGrantor.json.code, 'resource_grantor_not_authorized');
 
+    await srv.req(`/api/projects/${projStar.id}`);
     const consumerGrantor = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
@@ -635,7 +652,8 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(ungrantedPackView.json.grantAuthority, undefined, 'Consumer pack view MUST NOT expose authorityToken!');
     assert.equal((await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projStar.id}`)).status, 403);
 
-    // Forging projBuild.id WITHOUT Host-issued authorityToken MUST be rejected with 403!
+    // Switch back to authentic owner project projBuild; forging projBuild.id WITHOUT Host-issued authorityToken MUST still be rejected with 403!
+    await srv.req(`/api/projects/${projBuild.id}`);
     const forgedOwnerNoToken = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
@@ -1063,6 +1081,7 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     const owner2AuthRes = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner2.id}&packId=${packId}`);
     assert.equal(owner2AuthRes.status, 403);
 
+    await srv.req(`/api/projects/${projOwner2.id}`);
     const wrongSystemGrant = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
@@ -1079,6 +1098,7 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     assert.equal(wrongSystemGrant.status, 403);
     assert.equal(wrongSystemGrant.json.code, 'resource_grantor_not_authorized');
 
+    await srv.req(`/api/projects/${projOwner1.id}`);
     const owner1PackView = await srv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projOwner1.id}`);
     assert.equal(owner1PackView.status, 200);
     assert.ok(owner1PackView.json.grantAuthority?.authorityToken);
@@ -1109,6 +1129,7 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     );
 
     // Unrelated Studio system owner projOwner2 MUST NOT be able to revoke projOwner1's grant!
+    await srv.req(`/api/projects/${projOwner2.id}`);
     const wrongRevoke = await srv.req(`/api/studio/resource-grants/${noPathsGrant.json.grant.id}/revoke`, 'POST', {
       requestId: randomUUID(),
       revokerProjectId: projOwner2.id,
@@ -1352,6 +1373,316 @@ test('Host Round-6: trusted operator binding & HttpOnly cookie anti-spoofing (R2
     assert.equal(snapRes.status, 200);
     assert.equal(snapRes.json.sha256, origSha);
     assert.equal(snapRes.json.text, origReportText);
+  } finally {
+    try { await srv.close(); } catch {}
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Host Round-7: real-product operator isolation & named business operator auth (no custom resolveOperator), fail-closed missing store col & unattributable rows, files/content authorized view filtering, natural grant expiry, and Case decision revision readback', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'optracall-member-pack-r7-host-'));
+  // CRITICAL: Default real-product createHost startup with NO custom resolveOperator!
+  let srv = await startTestHost(root);
+  try {
+    // 1. Unit check on buildAuthorizedDataView: missing store column (even with non-mixed filename!) & unattributable rows FAIL CLOSED!
+    const sampleGrant = [{
+      id: '11111111-1111-4111-8111-111111111111',
+      enterpriseId: '22222222-2222-4222-8222-222222222222',
+      grantor: 'owner',
+      grantorVerifiedBy: 'host' as const,
+      grantBasis: 'R7',
+      subjectType: 'project' as const,
+      subjectId: '33333333-3333-4333-8333-333333333333',
+      resourceKind: 'detail' as const,
+      operations: ['read-detail-recalculate' as const],
+      scope: { stores: ['湖庭直营店'], allowedDataPaths: ['020_clean/huting_orders.csv', '020_clean/unattributed.csv', '020_clean/mixed_partial_unattr.csv'] },
+      createdAt: '2026-11-01T00:00:00Z',
+      updatedAt: '2026-11-01T00:00:00Z',
+    }];
+    const noStoreColCsv = Buffer.from('account,order_date,amount\nC01,2026-09-10,120\n', 'utf8');
+    const noStoreColRes = buildAuthorizedDataView(noStoreColCsv, '020_clean/huting_orders.csv', sampleGrant);
+    assert.equal(noStoreColRes.allowed, false, 'CSV lacking store column MUST fail closed even if filename does not say mixed!');
+    assert.equal(noStoreColRes.code, 'authorized_view_unavailable_missing_store_column');
+
+    const allUnattrCsv = Buffer.from('account,order_date,store\nC01,2026-09-10,\nC02,2026-09-11,unknown\nC03,2026-09-12,未归属\n', 'utf8');
+    const allUnattrRes = buildAuthorizedDataView(allUnattrCsv, '020_clean/unattributed.csv', sampleGrant);
+    assert.equal(allUnattrRes.allowed, false, 'All-unattributable CSV MUST fail closed!');
+    assert.equal(allUnattrRes.code, 'authorized_view_unattributable_records');
+
+    const partialUnattrCsv = Buffer.from('account,order_date,store\nC01,2026-09-10,湖庭直营店\nC02,2026-09-11,\nC03,2026-09-12,杉岸直营店\nC04,2026-09-13,null\n', 'utf8');
+    const partialRes = buildAuthorizedDataView(partialUnattrCsv, '020_clean/mixed_partial_unattr.csv', sampleGrant);
+    assert.equal(partialRes.allowed, true);
+    assert.equal(partialRes.keptRows, 1);
+    assert.equal(partialRes.omittedRows, 3);
+    assert.equal(partialRes.unattributableRows, 2);
+    const partialText = partialRes.bytes.toString('utf8');
+    assert.ok(partialText.includes('C01'));
+    assert.ok(!partialText.includes('C02') && !partialText.includes('C03') && !partialText.includes('C04'));
+
+    // 2. Real-product operator session isolation & named business operator auth
+    await srv.req('/api/configuration', 'PUT', {
+      name: 'R7 Synthetic',
+      provider: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:1/v1',
+      model: 'synthetic-r7',
+      apiKey: 'synthetic-only',
+    });
+    const entRes = await srv.req('/api/studio/enterprises', 'POST', { requestId: randomUUID(), name: '织屿R7' });
+    const enterpriseId = entRes.json.id;
+
+    // Context A (Owner browser session) registers named business operator `ops-owner`
+    const regOwner = await srv.req('/api/studio/operators/session', 'POST', {
+      action: 'register',
+      operatorId: 'ops-owner',
+      displayName: '会员运营负责人',
+      passcode: 'owner-secret-123',
+    });
+    assert.equal(regOwner.status, 200);
+    assert.equal(regOwner.json.operator.operatorId, 'op:ops-owner');
+    assert.equal(regOwner.json.operator.verified, true);
+    const ownerCookieA = regOwner.setCookie.split(';')[0]!;
+    assert.ok(ownerCookieA.startsWith('optracall_op_ctx='));
+
+    const ownerProjRes = await srv.req('/api/projects', 'POST', { name: 'R7 权责建设', enterpriseId }, { cookie: ownerCookieA });
+    assert.equal(ownerProjRes.status, 201);
+    const projOwner = ownerProjRes.json.project;
+    const ownerTaskId: string = ownerProjRes.json.task?.id ?? projOwner.activeTaskId ?? randomUUID();
+    const ownerActiveCookie = ownerProjRes.setCookie.split(';')[0]!;
+
+    const consumerProjRes = await srv.req('/api/projects', 'POST', { name: 'R7 受限消费', enterpriseId }, { cookie: ownerActiveCookie });
+    assert.equal(consumerProjRes.status, 201);
+    const projConsumer = consumerProjRes.json.project;
+
+    // Owner creates Studio system & Member Pack (binds system to op:ops-owner)
+    const sysRes = await srv.req('/api/studio/systems', 'POST', {
+      requestId: randomUUID(), enterpriseId, name: 'R7 体系', projectId: projOwner.id, goal: 'R7 权责与过滤测试', topicTitle: 'R7',
+    }, { cookie: ownerActiveCookie });
+    assert.equal(sysRes.status, 201);
+    const systemId = sysRes.json.system.id;
+
+    const packRes = await srv.req('/api/studio/enterprise-packs', 'POST', {
+      requestId: randomUUID(), enterpriseId, systemId, projectId: projOwner.id, domain: 'member-operations', name: 'R7 资产包',
+    }, { cookie: ownerActiveCookie });
+    assert.equal(packRes.status, 200);
+    const packId = packRes.json.pack.id;
+
+    // Bare cookie-less HTTP request MUST be rejected with 403 resource_operator_not_authorized!
+    const bareAuth = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`, 'GET', undefined, { cookie: '' });
+    assert.equal(bareAuth.status, 403, 'Bare cookie-less request MUST NEVER receive grantAuthority!');
+    assert.equal(bareAuth.json.code, 'resource_operator_not_authorized');
+
+    // Context B (completely separate browser session, no prior cookie) opens projOwner directly -> mints DISTINCT session:<uuid-B>, CANNOT hijack op:ops-owner!
+    const ctxBOpen = await srv.req(`/api/projects/${projOwner.id}`, 'GET', undefined, { cookie: '' });
+    assert.equal(ctxBOpen.status, 200);
+    const cookieB = ctxBOpen.setCookie.split(';')[0]!;
+    assert.ok(cookieB.startsWith('optracall_op_ctx='));
+    const ctxBAuth = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`, 'GET', undefined, { cookie: cookieB });
+    assert.equal(ctxBAuth.status, 403, 'Separate browser session B opening owner project MUST NOT obtain owner grantAuthority!');
+
+    // Named non-owner operator `store-analyst` also CANNOT hijack op:ops-owner, AND cannot log in as `ops-owner` with wrong passcode!
+    const regAnalyst = await srv.req('/api/studio/operators/session', 'POST', {
+      action: 'register',
+      operatorId: 'store-analyst',
+      displayName: '湖庭门店分析师',
+      passcode: 'analyst-pass-456',
+      activeProjectId: projOwner.id,
+    }, { cookie: '' });
+    assert.equal(regAnalyst.status, 200);
+    const analystCookie = regAnalyst.setCookie.split(';')[0]!;
+    const analystAuth = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`, 'GET', undefined, { cookie: analystCookie });
+    assert.equal(analystAuth.status, 403, 'Non-owner business operator MUST be rejected from minting owner grantAuthority!');
+
+    const wrongPassLogin = await srv.req('/api/studio/operators/session', 'POST', {
+      action: 'login',
+      operatorId: 'ops-owner',
+      passcode: 'wrong-pass-999',
+    }, { cookie: '' });
+    assert.equal(wrongPassLogin.status, 403, 'Wrong passcode impersonation attempt MUST return 403!');
+    assert.equal(wrongPassLogin.json.code, 'operator_authentication_failed');
+
+    // Authentic `ops-owner` succeeds!
+    const ownerAuthRes = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`, 'GET', undefined, { cookie: ownerActiveCookie });
+    assert.equal(ownerAuthRes.status, 200);
+    const ownerToken = ownerAuthRes.json.grantAuthority.authorityToken;
+
+    // 3. Put mixed CSV, missing-store-column CSV, and raw 010_draw CSV in projConsumer and test GET /api/projects/:id/files/content + natural expiry!
+    const mixedCsv = 'account,first_order_date,store\nC01,2026-09-10,湖庭直营店\nC02,2026-09-12,杉岸直营店\nC03,2026-09-15,\n';
+    fs.writeFileSync(path.join(projConsumer.rootPath, '020_clean', 'mixed_orders.csv'), mixedCsv);
+    fs.writeFileSync(path.join(projConsumer.rootPath, '020_clean', 'no_store.csv'), 'account,first_order_date\nC01,2026-09-10\n');
+    fs.writeFileSync(path.join(projConsumer.rootPath, '020_clean', 'unauthorized_other.csv'), 'account,first_order_date,store\nC99,2026-09-10,杉岸直营店\n');
+    fs.writeFileSync(path.join(projConsumer.rootPath, '010_draw', 'raw_secret.csv'), 'secret,raw\n1,2\n');
+
+    // Grant short-lived (450ms) single-store detail grant for mixed_orders.csv + no_store.csv
+    const validToIso = new Date(Date.now() + 450).toISOString();
+    const shortGrant = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(),
+      enterpriseId,
+      packId,
+      grantorProjectId: projOwner.id,
+      authorityToken: ownerToken,
+      grantBasis: 'R7 短期湖庭单店授权',
+      subjectType: 'project',
+      subjectId: projConsumer.id,
+      resourceKind: 'detail',
+      operations: ['read-detail-recalculate'],
+      scope: { stores: ['湖庭直营店'], allowedDataPaths: ['020_clean/mixed_orders.csv', '020_clean/no_store.csv'] },
+      validTo: validToIso,
+    }, { cookie: ownerActiveCookie });
+    assert.equal(shortGrant.status, 200);
+
+    // Download via GET /api/projects/:id/files/content:
+    // - mixed_orders.csv -> 200 with ONLY 湖庭直营店 (C01), NO 杉岸直营店 (C02) and NO blank store (C03)!
+    const dlMixed = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: ownerActiveCookie });
+    assert.equal(dlMixed.status, 200);
+    assert.equal(dlMixed.headers.get('x-optracall-authorized-view'), 'filtered');
+    assert.ok(String(dlMixed.json).includes('C01'));
+    assert.ok(!String(dlMixed.json).includes('C02'), 'files/content MUST NOT leak unauthorized store C02!');
+    assert.ok(!String(dlMixed.json).includes('C03'), 'files/content MUST NOT leak unattributable row C03!');
+
+    // - no_store.csv -> 403 (missing verifiable store column!)
+    const dlNoStore = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/no_store.csv')}`, 'GET', undefined, { cookie: ownerActiveCookie });
+    assert.equal(dlNoStore.status, 403);
+
+    // - unauthorized_other.csv & 010_draw/raw_secret.csv -> 403
+    const dlUnauth = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/unauthorized_other.csv')}`, 'GET', undefined, { cookie: ownerActiveCookie });
+    assert.equal(dlUnauth.status, 403);
+    const dlDraw = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('010_draw/raw_secret.csv')}`, 'GET', undefined, { cookie: ownerActiveCookie });
+    assert.equal(dlDraw.status, 403);
+
+    // Wait for natural validTo expiry (550ms) -> files/content MUST immediately flip to 403!
+    await new Promise(resolve => setTimeout(resolve, 550));
+    const dlAfterExpiry = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: ownerActiveCookie });
+    assert.equal(dlAfterExpiry.status, 403, 'Naturally expired grant MUST immediately deny files/content download!');
+
+    // 4. R5: Real CaseStore decision revision pinning & historical readback after newer decision revision!
+    const caseGoalHost = {
+      request: async (route: string, method = 'GET', body?: unknown) => {
+        const res = await fetch(`${srv.base}${route}`, {
+          method,
+          headers: { 'x-optracall-client': '1', 'content-type': 'application/json', origin: 'http://127.0.0.1:4183', cookie: ownerActiveCookie },
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        });
+        return res;
+      },
+    };
+    const initCaseRes = await srv.req('/api/cases/storage/initialize', 'POST', {}, { cookie: ownerActiveCookie });
+    assert.equal(initCaseRes.status, 200);
+    const casePayload = await withCaseGoal(caseGoalHost, {
+      operationId: randomUUID(),
+      title: '湖庭复购口径经营决策 Case',
+      description: '核定 2026-10-31 截止日经营决策',
+    });
+    const caseRes = await srv.req('/api/cases', 'POST', casePayload, { cookie: ownerActiveCookie });
+    assert.equal(caseRes.status, 201);
+    const caseId = caseRes.json.case.id;
+    const linkRes = await srv.req(`/api/cases/${caseId}/projects`, 'POST', {
+      operationId: randomUUID(),
+      projectId: projOwner.id,
+      expectedRevision: caseRes.json.case.revision,
+    }, { cookie: ownerActiveCookie });
+    assert.ok(linkRes.status >= 200 && linkRes.status < 300);
+
+    // Seed Case decision rev.1 via approved CaseStore interface while Host is cleanly stopped
+    const dataRoot = path.join(root, 'data');
+    await srv.close();
+    const cs1 = new CaseStore({ dataRoot });
+    await cs1.init();
+    const cs1Status = cs1.getStatus();
+    assert.equal(cs1Status.state, 'ready');
+    const dec1 = cs1.saveDecisionDraft(
+      {
+        operationId: randomUUID(),
+        caseStoreId: cs1Status.storeId!,
+        caseId,
+        expectedRevision: 0,
+        kind: 'strategy',
+        payload: {
+          title: '十月截止口径保持复购激励方案',
+          proposal: '按 2026-10-31 截止日口径执行湖庭试点激励',
+        },
+      },
+      { actorKind: 'agent', projectId: projOwner.id, taskId: ownerTaskId, requestId: randomUUID(), sessionId: 'sess-r7', toolCallId: 'tool-r7-1' },
+    );
+    cs1.close();
+    const decisionId = dec1.recordId;
+    assert.equal(dec1.revision, 1);
+
+    // Restart Host and re-authenticate as persistent named business operator `ops-owner`
+    srv = await startTestHost(root);
+    const relogin1 = await srv.req('/api/studio/operators/session', 'POST', {
+      action: 'login',
+      operatorId: 'ops-owner',
+      passcode: 'owner-secret-123',
+      activeProjectId: projOwner.id,
+    }, { cookie: '' });
+    assert.equal(relogin1.status, 200);
+    const ownerCookieR1 = relogin1.setCookie.split(';')[0]!;
+
+    // Submit feedback pinning original Case decision rev.1
+    const fbRes = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
+      requestId: randomUUID(),
+      projectId: projOwner.id,
+      problemKey: 'r7-case-history-pin',
+      packVersion: '1.0',
+      purposeIds: [],
+      title: '核查原 Case 决策历史版本保全',
+      category: 'shared_refund_mapping',
+      report: {
+        projectId: projOwner.id,
+        taskId: ownerTaskId,
+        sessionId: 'sess-r7',
+        messageId: 'msg-r7',
+        reportRef: { authority: 'task', id: ownerTaskId, projectId: projOwner.id, taskId: ownerTaskId, version: sha('r7'), sha256: sha('r7'), locator: JSON.stringify({ kind: 'native-reply', sessionId: 'sess-r7', messageId: 'msg-r7' }) },
+        originalCaseRef: { caseId, decisionId, decisionRevision: 1, summary: '十月截止口径保持复购激励方案' },
+        adoptionBasis: 'clue_only_no_pack_read',
+        usedAssetRefs: [],
+        taskCutoffAt: '2026-10-31',
+        evidenceNote: '保留当时 Case rev.1 决定',
+      },
+    }, { cookie: ownerCookieR1 });
+    assert.equal(fbRes.status, 200);
+    const fbId = fbRes.json.feedback.id;
+
+    // Now append a NEWER decision revision rev.2 on the same Case!
+    await srv.close();
+    const cs2 = new CaseStore({ dataRoot });
+    await cs2.init();
+    const cs2Status = cs2.getStatus();
+    assert.equal(cs2Status.state, 'ready');
+    const dec2 = cs2.saveDecisionDraft(
+      {
+        operationId: randomUUID(),
+        caseStoreId: cs2Status.storeId!,
+        caseId,
+        recordId: decisionId,
+        expectedRevision: 1,
+        kind: 'strategy',
+        payload: {
+          title: '十一月更新后的激励方案 rev2',
+          proposal: '根据 11-15 新数据调整激励',
+        },
+      },
+      { actorKind: 'agent', projectId: projOwner.id, taskId: ownerTaskId, requestId: randomUUID(), sessionId: 'sess-r7', toolCallId: 'tool-r7-2' },
+    );
+    cs2.close();
+    assert.equal(dec2.revision, 2);
+
+    srv = await startTestHost(root);
+    const relogin2 = await srv.req('/api/studio/operators/session', 'POST', {
+      action: 'login',
+      operatorId: 'ops-owner',
+      passcode: 'owner-secret-123',
+      activeProjectId: projOwner.id,
+    }, { cookie: '' });
+    assert.equal(relogin2.status, 200);
+    const ownerCookieR2 = relogin2.setCookie.split(';')[0]!;
+
+    // GET /feedback/:id/case-history MUST still read back exact historicalDecision rev.1 alongside latestDecision rev.2!
+    const histRes = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback/${fbId}/case-history`, 'GET', undefined, { cookie: ownerCookieR2 });
+    assert.equal(histRes.status, 200);
+    assert.equal(histRes.json.historicalDecision?.revision, 1, 'Feedback case-history MUST preserve exact historical decision rev.1!');
+    assert.equal(histRes.json.historicalDecision?.payload?.title, '十月截止口径保持复购激励方案');
+    assert.equal(histRes.json.latestDecision?.revision, 2);
   } finally {
     try { await srv.close(); } catch {}
     fs.rmSync(root, { recursive: true, force: true });
