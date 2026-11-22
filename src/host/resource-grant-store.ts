@@ -143,7 +143,9 @@ export class ResourceGrantStore {
       grantor,
       ...(input.grantorVerifiedBy ? { grantorVerifiedBy: input.grantorVerifiedBy } : {}),
       ...(input.grantorProjectId ? { grantorProjectId: uuid(input.grantorProjectId) } : {}),
+      ...(input.grantorTaskId ? { grantorTaskId: uuid(input.grantorTaskId) } : {}),
       ...(input.grantorSystemId ? { grantorSystemId: uuid(input.grantorSystemId) } : {}),
+      ...(input.grantorCredentialVerified !== undefined ? { grantorCredentialVerified: Boolean(input.grantorCredentialVerified) } : {}),
       ...(input.grantorAuthorityType ? { grantorAuthorityType: input.grantorAuthorityType } : {}),
       grantBasis,
       subjectType: input.subjectType,
@@ -178,7 +180,7 @@ export class ResourceGrantStore {
     return clone(record);
   }
 
-  revoke(grantId: string, reason: string, actor?: { revokedBy?: string; revokedByProjectId?: string }): ResourceAuthorizationGrant {
+  revoke(grantId: string, reason: string, actor?: { revokedBy?: string; revokedByProjectId?: string; revokedByTaskId?: string }): ResourceAuthorizationGrant {
     this.assertWritable();
     const id = uuid(grantId);
     const revokedReason = text(reason, 2000, false).trim();
@@ -190,6 +192,7 @@ export class ResourceGrantStore {
     found.revokedReason = revokedReason;
     if (actor?.revokedBy) found.revokedBy = text(actor.revokedBy, 200, false);
     if (actor?.revokedByProjectId) found.revokedByProjectId = uuid(actor.revokedByProjectId);
+    if (actor?.revokedByTaskId) found.revokedByTaskId = uuid(actor.revokedByTaskId);
     found.updatedAt = stamp;
     this.save(index);
     return clone(found);

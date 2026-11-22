@@ -17,6 +17,7 @@ import {
   type EnterprisePackEntry,
   type EnterprisePackException,
   type EnterprisePackFeedback,
+  type EnterprisePackFeedbackItemVerification,
   type EnterprisePackFeedbackReport,
   type EnterprisePackPreview,
   type EnterprisePackPurpose,
@@ -44,6 +45,7 @@ const now = () => new Date().toISOString();
 const clone = <T>(value: T): T => structuredClone(value);
 
 export interface UpsertPurposeInput {
+  targetPurposeId?: string;
   purposeKey: string;
   title: string;
   businessQuestion: string;
@@ -241,6 +243,10 @@ export class EnterprisePackStore {
           minimumEvidence: text(rec.minimumEvidence, 5000, false),
           ownerRole: text(rec.ownerRole, 200, false),
           completionCriteria: text(rec.completionCriteria, 5000, false),
+          ...(rec.targetPurposeId ? { targetPurposeId: text(rec.targetPurposeId, 100, false) } : {}),
+          ...(rec.scopeKey ? { scopeKey: text(rec.scopeKey, 500, false) } : {}),
+          ...(typeof rec.windowDays === 'number' && Number.isFinite(rec.windowDays) ? { windowDays: rec.windowDays } : {}),
+          ...(Array.isArray(rec.stores) && rec.stores.length ? { stores: [...new Set(rec.stores.map(s => text(s, 200, false)))] } : {}),
           ...(rec.selected !== undefined ? { selected: Boolean(rec.selected) } : {}),
         })),
         issues: input.issues.map(iss => ({
@@ -275,16 +281,26 @@ export class EnterprisePackStore {
     });
   }
 
-  selectPanoramaRecommendation(packId: string, purposeKey: string, selected: boolean): EnterpriseDomainPack {
+  selectPanoramaRecommendation(
+    packId: string,
+    purposeKey: string,
+    selected: boolean,
+    selector?: { targetPurposeId?: string; scopeKey?: string; title?: string },
+  ): EnterpriseDomainPack {
     return this.mutate(packId, pack => {
       if (!pack.panorama) fail('enterprise_pack_panorama_not_found', 404);
       const key = text(purposeKey, 200, false).trim();
-      const rec = pack.panorama.recommendations.find(r => r.purposeKey === key);
+      const matches = (r: EnterprisePanoramaRecommendation) =>
+        r.purposeKey === key
+        && (!selector?.targetPurposeId || r.targetPurposeId === selector.targetPurposeId)
+        && (!selector?.scopeKey || r.scopeKey === selector.scopeKey)
+        && (!selector?.title || r.title === selector.title);
+      const rec = pack.panorama.recommendations.find(matches);
       if (!rec) fail('enterprise_pack_recommendation_not_found', 404);
       rec.selected = Boolean(selected);
       const latestHist = pack.panoramaHistory.at(-1);
       if (latestHist && latestHist.id === pack.panorama.id) {
-        const histRec = latestHist.recommendations.find(r => r.purposeKey === key);
+        const histRec = latestHist.recommendations.find(matches);
         if (histRec) histRec.selected = Boolean(selected);
       }
       return pack;
@@ -393,11 +409,19 @@ export class EnterprisePackStore {
         scopeKey,
         windowDays: input.windowDays,
       });
-      let existing = pack.purposes.find(p => p.dedupKey === dedupKey);
-      if (!existing && input.windowDays === undefined && !input.scope?.stores?.length) {
-        const sameKeyPurposes = pack.purposes.filter(p => p.purposeKey === purposeKey && p.subjectUnit === input.subjectUnit);
-        if (sameKeyPurposes.length === 1) {
-          existing = sameKeyPurposes[0];
+      let existing: EnterprisePackPurpose | undefined;
+      if (input.targetPurposeId?.trim()) {
+        existing = pack.purposes.find(p => p.id === input.targetPurposeId!.trim());
+        if (!existing) fail('enterprise_pack_purpose_not_found', 404);
+      } else {
+        existing = pack.purposes.find(p => p.dedupKey === dedupKey);
+        if (!existing && input.windowDays === undefined && !input.scope?.stores?.length) {
+          const sameKeyPurposes = pack.purposes.filter(p => p.purposeKey === purposeKey && p.subjectUnit === input.subjectUnit);
+          if (sameKeyPurposes.length === 1) {
+            existing = sameKeyPurposes[0];
+          } else if (sameKeyPurposes.length > 1) {
+            fail('enterprise_pack_purpose_ambiguous', 409);
+          }
         }
       }
       const stamp = now();
@@ -1099,6 +1123,10 @@ export class EnterprisePackStore {
 
   verifyUse(packId: string, useId: string, input: {
     verifierRole: string;
+    verifierProjectId?: string;
+    verifierTaskId?: string;
+    assessmentReportRef?: StudioSourceRef;
+    selfAssessmentOnly?: boolean;
     expectedRef?: StudioSourceRef;
     independentConfirmed: boolean;
     partialSubsetOnly?: boolean;
@@ -1131,6 +1159,10 @@ export class EnterprisePackStore {
         status: evaluated.verdict,
         verdictDetail: input.verdictDetail ? text(input.verdictDetail, 5000, false) : evaluated.reason,
         verifierRole: text(input.verifierRole, 200, false),
+        ...(input.verifierProjectId ? { verifierProjectId: identity(input.verifierProjectId) } : {}),
+        ...(input.verifierTaskId ? { verifierTaskId: identity(input.verifierTaskId) } : {}),
+        ...(input.assessmentReportRef ? { assessmentReportRef: sourceRef(input.assessmentReportRef) } : {}),
+        ...(input.selfAssessmentOnly !== undefined ? { selfAssessmentOnly: Boolean(input.selfAssessmentOnly) } : {}),
         ...(input.checkedRefs ? { checkedRefs: sources(input.checkedRefs) } : {}),
         wrongVersionDetected: evaluated.wrongVersionDetected,
         ...(input.expectedRef ? { expectedVersion: input.expectedRef.version } : {}),
@@ -1223,6 +1255,7 @@ export class EnterprisePackStore {
     studioFeedbackId?: string;
     impactedPurposeIds?: string[];
     verifiedByUseId?: string;
+    itemVerification?: EnterprisePackFeedbackItemVerification;
   }): { pack: EnterpriseDomainPack; feedback: EnterprisePackFeedback } {
     return this.mutate(packId, pack => {
       const feedback = pack.feedbackItems.find(f => f.id === uuid(feedbackId));
@@ -1297,6 +1330,46 @@ export class EnterprisePackStore {
         if (!readRevised || !readAllRequired) {
           fail('feedback_verification_missing_revised_read', 409);
         }
+
+        // R5: Calculation-purpose verification closure MUST include structured item-level should-change & should-retain evidence!
+        let normalizedItemVerification: EnterprisePackFeedbackItemVerification | undefined;
+        const isCalcPurpose = targetPm.tier === 'formal-calculation' || targetPm.tier === 'limited-calculation';
+        if (input.itemVerification) {
+          const iv = input.itemVerification;
+          const originalCutoffChecked = text(iv.originalCutoffChecked, 200, false).trim();
+          const transactionAssociationNote = text(iv.transactionAssociationNote, 5000, false).trim();
+          if (!Array.isArray(iv.shouldChange) || iv.shouldChange.length === 0 || !Array.isArray(iv.shouldRetain) || iv.shouldRetain.length === 0) {
+            fail('feedback_verification_missing_item_evidence', 409);
+          }
+          const shouldChange = iv.shouldChange.map(item => {
+            const itemId = text(item.itemId, 200, false).trim();
+            const beforeValue = text(item.beforeValue, 1000, false).trim();
+            const afterValue = text(item.afterValue, 1000, false).trim();
+            if (beforeValue === afterValue) fail('feedback_verification_missing_item_evidence', 409);
+            return {
+              itemId,
+              beforeValue,
+              afterValue,
+              ...(item.evidenceLocator ? { evidenceLocator: text(item.evidenceLocator, 500, false) } : {}),
+            };
+          });
+          const shouldRetain = iv.shouldRetain.map(item => ({
+            itemId: text(item.itemId, 200, false).trim(),
+            unchangedValue: text(item.unchangedValue, 1000, false).trim(),
+            ...(item.evidenceLocator ? { evidenceLocator: text(item.evidenceLocator, 500, false) } : {}),
+          }));
+          normalizedItemVerification = {
+            originalCutoffChecked,
+            transactionAssociationNote,
+            shouldChange,
+            shouldRetain,
+            ...(iv.caseDecisionsPreserved !== undefined ? { caseDecisionsPreserved: Boolean(iv.caseDecisionsPreserved) } : {}),
+            ...(iv.assessmentReportRef ? { assessmentReportRef: sourceRef(iv.assessmentReportRef) } : {}),
+          };
+        } else if (isCalcPurpose) {
+          fail('feedback_verification_missing_item_evidence', 409);
+        }
+
         const existingUpdates = feedback.revisionLink?.authorityUpdates ?? [];
         const hasSameUpdate = existingUpdates.some(u => sameExactSourceRef(u.toRef, resolvedRevisedRef));
         feedback.revisionLink = {
@@ -1306,6 +1379,7 @@ export class EnterprisePackStore {
             ? existingUpdates
             : [...existingUpdates, { authority: feedback.targetAuthority, fromRef, toRef: resolvedRevisedRef, detail: text(input.note, 2000, false) }],
           verifiedByUseIds: [...new Set([...(feedback.revisionLink?.verifiedByUseIds ?? []), use.id])],
+          ...(normalizedItemVerification ? { itemVerification: normalizedItemVerification } : {}),
         };
       }
       if (input.impactedPurposeIds?.length) {

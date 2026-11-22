@@ -197,7 +197,11 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
         if ('existing' in prepared) return prepared.existing!;
         const agentOptions = prepared.agentOptions!;
         const effective = execution ? { ...agentOptions, protectedExecution: execution.protectedExecution } : agentOptions;
-        const mode: SessionExecutionMode = effective.protectedExecution ? effective.protectedExecution.profile ?? 'protected' : 'unmanaged';
+        const mode: SessionExecutionMode = effective.protectedExecution
+          ? effective.protectedExecution.profile ?? 'protected'
+          : effective.memberPackExecutionScope
+            ? effective.memberPackExecutionScope.profile ?? 'ordinary'
+            : 'unmanaged';
         if (mode !== 'unmanaged' && slot.unmanagedSeen) fail('unmanaged_execution_unknown');
         const agent = options.createAgent?.({ ...effective, configuration }) ?? new ProjectAgent({ ...effective, configuration });
         if (mode === 'unmanaged') slot.unmanagedSeen = true;

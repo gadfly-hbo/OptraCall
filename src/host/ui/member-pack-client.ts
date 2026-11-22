@@ -84,6 +84,14 @@ export async function readDomainReferenceOriginal(
   return studioRequest(`domain-references/${encodeURIComponent(id)}/original${suffix}`, 'GET', undefined, signal);
 }
 
+export interface GrantAuthorityCredential {
+  enterpriseId: string;
+  systemId: string;
+  ownerProjectId: string;
+  ownerTaskId?: string;
+  authorityToken: string;
+}
+
 export async function listResourceGrants(
   enterpriseId?: string,
   subjectId?: string,
@@ -97,7 +105,14 @@ export async function listResourceGrants(
 }
 
 export async function createResourceGrant(
-  input: Omit<ResourceGrantInput, 'grantor'> & { grantor?: string; grantorProjectId?: string; requestId: string },
+  input: Omit<ResourceGrantInput, 'grantor'> & {
+    grantor?: string;
+    grantorProjectId?: string;
+    grantorSystemId?: string;
+    grantorTaskId?: string;
+    authorityToken?: string;
+    requestId: string;
+  },
 ): Promise<{ grant: ResourceAuthorizationGrant }> {
   return studioRequest('resource-grants', 'POST', input);
 }
@@ -107,11 +122,15 @@ export async function revokeResourceGrant(
   reason: string,
   requestId: string,
   revokerProjectId?: string,
+  authority?: { authorityToken?: string; revokerSystemId?: string; revokerTaskId?: string },
 ): Promise<{ grant: ResourceAuthorizationGrant }> {
   return studioRequest(`resource-grants/${encodeURIComponent(grantId)}/revoke`, 'POST', {
     requestId,
     reason,
     ...(revokerProjectId ? { revokerProjectId } : {}),
+    ...(authority?.authorityToken ? { authorityToken: authority.authorityToken } : {}),
+    ...(authority?.revokerSystemId ? { revokerSystemId: authority.revokerSystemId } : {}),
+    ...(authority?.revokerTaskId ? { revokerTaskId: authority.revokerTaskId } : {}),
   });
 }
 
@@ -125,10 +144,12 @@ export async function listEnterprisePacks(
   enterpriseId?: string,
   domain?: string,
   signal?: AbortSignal,
-): Promise<{ packs: EnterpriseDomainPack[]; readOnlyRollback: boolean }> {
+  projectId?: string,
+): Promise<{ packs: EnterpriseDomainPack[]; readOnlyRollback: boolean; grantAuthority?: GrantAuthorityCredential }> {
   const qs = new URLSearchParams();
   if (enterpriseId) qs.set('enterpriseId', enterpriseId);
   if (domain) qs.set('domain', domain);
+  if (projectId) qs.set('projectId', projectId);
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
   return studioRequest(`enterprise-packs${suffix}`, 'GET', undefined, signal);
 }
@@ -148,7 +169,7 @@ export async function readEnterprisePack(
   packId: string,
   projectId?: string,
   signal?: AbortSignal,
-): Promise<{ pack: EnterpriseDomainPack; readOnlyRollback: boolean }> {
+): Promise<{ pack: EnterpriseDomainPack; readOnlyRollback: boolean; grantAuthority?: GrantAuthorityCredential }> {
   const suffix = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
   return studioRequest(`enterprise-packs/${encodeURIComponent(packId)}${suffix}`, 'GET', undefined, signal);
 }
@@ -159,7 +180,7 @@ export async function savePackPanorama(packId: string, input: Record<string, unk
 
 export async function selectPanoramaRecommendation(
   packId: string,
-  input: { requestId: string; projectId?: string; purposeKey: string; selected: boolean },
+  input: { requestId: string; projectId?: string; purposeKey: string; selected: boolean; targetPurposeId?: string; scopeKey?: string; title?: string },
 ): Promise<{ pack: EnterpriseDomainPack }> {
   return studioRequest(`enterprise-packs/${encodeURIComponent(packId)}/panorama-select`, 'POST', input);
 }

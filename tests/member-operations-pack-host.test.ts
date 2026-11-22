@@ -595,7 +595,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.deepEqual(ungrantedPackView.json.pack.entries, []);
     assert.deepEqual(ungrantedPackView.json.pack.packRevisions, [], 'Ungranted consumer project MUST NOT receive raw packRevisions!');
 
-    // R2.1 COUNTEREXAMPLE: Omitted grantorProjectId or ordinary consumer project MUST be rejected with 403!
+    // R2.1 COUNTEREXAMPLE: Omitted grantorProjectId, ordinary consumer project, OR forged owner projectId WITHOUT Host-issued authorityToken MUST be rejected with 403!
     const omittedGrantor = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
@@ -626,11 +626,39 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(consumerGrantor.status, 403);
     assert.equal(consumerGrantor.json.code, 'resource_grantor_not_authorized');
 
+    // Consumer project MUST NOT receive grantAuthority from pack view or authority endpoint!
+    assert.equal(ungrantedPackView.json.grantAuthority, undefined, 'Consumer pack view MUST NOT expose authorityToken!');
+    assert.equal((await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projStar.id}`)).status, 403);
+
+    // Forging projBuild.id WITHOUT Host-issued authorityToken MUST be rejected with 403!
+    const forgedOwnerNoToken = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(),
+      enterpriseId,
+      grantorProjectId: projBuild.id,
+      grantBasis: '仅传请求体 ownerProjectId 无凭据反例',
+      subjectType: 'project',
+      subjectId: projMerch.id,
+      resourceKind: 'definition',
+      purposeKeys: ['store-first-purchase-30d-repurchase'],
+      operations: ['read-definition'],
+      scope: { brand: '岚线', channel: '直营' },
+    });
+    assert.equal(forgedOwnerNoToken.status, 403);
+    assert.equal(forgedOwnerNoToken.json.code, 'resource_grantor_not_authorized');
+
+    // Fetch authentic Host-minted grantAuthority ONLY available to the real active owner project projBuild!
+    const buildAuthRes = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projBuild.id}`);
+    assert.equal(buildAuthRes.status, 200);
+    const buildAuth = buildAuthRes.json.grantAuthority;
+    assert.equal(buildAuth.ownerProjectId, projBuild.id);
+    assert.match(buildAuth.authorityToken, /^[a-f0-9]{64}$/);
+
     // Forged/nonexistent summary asset MUST be rejected!
     const badSummaryGrant = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
       grantorProjectId: projBuild.id,
+      authorityToken: buildAuth.authorityToken,
       grantBasis: '尝试授权不存在汇总',
       subjectType: 'project',
       subjectId: projHQ.id,
@@ -646,6 +674,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       requestId: randomUUID(),
       enterpriseId,
       grantorProjectId: projBuild.id,
+      authorityToken: buildAuth.authorityToken,
       grantBasis: '期间越界汇总授权反例',
       subjectType: 'project',
       subjectId: projHQ.id,
@@ -662,6 +691,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       requestId: randomUUID(),
       enterpriseId,
       grantorProjectId: projBuild.id,
+      authorityToken: buildAuth.authorityToken,
       grantBasis: '粒度不符汇总授权反例',
       subjectType: 'project',
       subjectId: projHQ.id,
@@ -674,11 +704,14 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(badSummaryGrain.status, 409);
     assert.equal(badSummaryGrain.json.code, 'summary_scope_mismatch');
 
-    // Real verified summary grant by authentic authority owner projBuild: Host overrides spoofed grantor & records verified owner project!
+    // Real verified summary grant by authentic authority owner projBuild: Host overrides spoofed grantor & records verified owner project + credential!
     const goodSummaryGrant = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
       grantorProjectId: projBuild.id,
+      grantorSystemId: buildAuth.systemId,
+      grantorTaskId: buildAuth.ownerTaskId,
+      authorityToken: buildAuth.authorityToken,
       grantor: '伪造授权人',
       grantBasis: '总部月报引用核定汇总',
       subjectType: 'project',
@@ -692,6 +725,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(goodSummaryGrant.status, 200);
     assert.equal(goodSummaryGrant.json.grant.grantorVerifiedBy, 'host');
     assert.equal(goodSummaryGrant.json.grant.grantorProjectId, projBuild.id);
+    assert.equal(goodSummaryGrant.json.grant.grantorCredentialVerified, true);
     assert.notEqual(goodSummaryGrant.json.grant.grantor, '伪造授权人');
     assert.equal(goodSummaryGrant.json.grant.scope.summarySha256, realSummaryRef.sha256);
 
@@ -699,6 +733,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       requestId: randomUUID(),
       enterpriseId,
       grantorProjectId: projBuild.id,
+      authorityToken: buildAuth.authorityToken,
       grantBasis: '商品部定义查阅',
       subjectType: 'project',
       subjectId: projMerch.id,
@@ -711,6 +746,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       requestId: randomUUID(),
       enterpriseId,
       grantorProjectId: projBuild.id,
+      authorityToken: buildAuth.authorityToken,
       grantBasis: '星桥店长仅读本店订单',
       subjectType: 'project',
       subjectId: projStar.id,
@@ -726,6 +762,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       requestId: randomUUID(),
       enterpriseId,
       grantorProjectId: projBuild.id,
+      authorityToken: buildAuth.authorityToken,
       grantBasis: '两店核算岗跨店复算',
       subjectType: 'project',
       subjectId: projAud.id,
@@ -752,12 +789,18 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(starLocators.includes('020_clean/starbridge_orders.csv'), true);
     assert.equal(starLocators.includes('020_clean/willowbank_orders.csv'), false);
 
-    // R2.1 Revoker counterexample: omitted or consumer project MUST be rejected with 403!
+    // R2.1 Revoker counterexample: omitted, consumer project, OR forged owner WITHOUT authorityToken MUST be rejected with 403!
     assert.equal((await srv.req(`/api/studio/resource-grants/${starGrantId}/revoke`, 'POST', { requestId: randomUUID(), reason: '省略撤回方反例' })).status, 403);
     assert.equal((await srv.req(`/api/studio/resource-grants/${starGrantId}/revoke`, 'POST', { requestId: randomUUID(), revokerProjectId: projStar.id, reason: '普通项目越权撤回反例' })).status, 403);
+    assert.equal((await srv.req(`/api/studio/resource-grants/${starGrantId}/revoke`, 'POST', { requestId: randomUUID(), revokerProjectId: projBuild.id, reason: '无凭据伪造原权责项目撤回反例' })).status, 403);
 
-    // Revoking projStar's grant by authentic authority owner projBuild IMMEDIATELY blocks 020_clean/starbridge_orders.csv!
-    const revokeOk = await srv.req(`/api/studio/resource-grants/${starGrantId}/revoke`, 'POST', { requestId: randomUUID(), revokerProjectId: projBuild.id, reason: '测试即时撤回' });
+    // Revoking projStar's grant by authentic authority owner projBuild WITH verified authorityToken IMMEDIATELY blocks 020_clean/starbridge_orders.csv!
+    const revokeOk = await srv.req(`/api/studio/resource-grants/${starGrantId}/revoke`, 'POST', {
+      requestId: randomUUID(),
+      revokerProjectId: projBuild.id,
+      authorityToken: buildAuth.authorityToken,
+      reason: '测试即时撤回',
+    });
     assert.equal(revokeOk.status, 200);
     assert.equal(revokeOk.json.grant.revokedByProjectId, projBuild.id);
     const starMatsAfterRevoke = await srv.req(`/api/studio/materials?projectId=${projStar.id}`);
@@ -1008,7 +1051,13 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     const packAfterDouble = await srv.req(`/api/studio/enterprise-packs/${packId}`);
     assert.equal(packAfterDouble.json.pack.packRevisions.length, 1, 'Fixed version 1.0 MUST have strictly ONE published revision!');
 
-    // 2. R2: Unrelated Studio system owner in the SAME enterprise (projOwner2 / sys2) MUST NOT be able to grant on packId!
+    // 2. R2: Unrelated Studio system owner in the SAME enterprise (projOwner2 / sys2) MUST NOT be able to grant on packId even with its own system token!
+    const owner2PackView = await srv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projOwner2.id}`);
+    assert.equal(owner2PackView.status, 200);
+    assert.equal(owner2PackView.json.grantAuthority, undefined, 'Unrelated system owner MUST NOT receive grantAuthority for packId!');
+    const owner2AuthRes = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner2.id}&packId=${packId}`);
+    assert.equal(owner2AuthRes.status, 403);
+
     const wrongSystemGrant = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
@@ -1025,12 +1074,18 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     assert.equal(wrongSystemGrant.status, 403);
     assert.equal(wrongSystemGrant.json.code, 'resource_grantor_not_authorized');
 
+    const owner1PackView = await srv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projOwner1.id}`);
+    assert.equal(owner1PackView.status, 200);
+    assert.ok(owner1PackView.json.grantAuthority?.authorityToken);
+    const owner1Token = owner1PackView.json.grantAuthority.authorityToken;
+
     // Legitimate owner projOwner1 grants detail WITHOUT allowedDataPaths -> projConsumer MUST still be denied reading 020_clean/secret_store.csv!
     const noPathsGrant = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
       packId,
       grantorProjectId: projOwner1.id,
+      authorityToken: owner1Token,
       grantBasis: '仅给门店未给 allowedDataPaths 反例',
       subjectType: 'project',
       subjectId: projConsumer.id,
@@ -1052,14 +1107,16 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     const wrongRevoke = await srv.req(`/api/studio/resource-grants/${noPathsGrant.json.grant.id}/revoke`, 'POST', {
       requestId: randomUUID(),
       revokerProjectId: projOwner2.id,
+      authorityToken: owner1Token,
       reason: '无关体系越权撤回反例',
     });
     assert.equal(wrongRevoke.status, 403);
     assert.equal(wrongRevoke.json.code, 'resource_revoker_not_authorized');
 
-    // 3. R2: Consumer projection strips decisionsSnapshot and unauthorized receipts
+    // 3. R2: Consumer projection strips decisionsSnapshot, unauthorized receipts, AND grantAuthority!
     const consumerPackView = await srv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projConsumer.id}`);
     assert.equal(consumerPackView.status, 200);
+    assert.equal(consumerPackView.json.grantAuthority, undefined);
     assert.deepEqual(consumerPackView.json.pack.packRevisions[0]?.decisionsSnapshot ?? [], []);
   } finally {
     try { await srv.close(); } catch {}

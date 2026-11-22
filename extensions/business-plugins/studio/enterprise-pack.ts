@@ -104,7 +104,9 @@ export interface ResourceAuthorizationGrant {
   grantor: string;
   grantorVerifiedBy?: 'host';
   grantorProjectId?: string;
+  grantorTaskId?: string;
   grantorSystemId?: string;
+  grantorCredentialVerified?: boolean;
   grantorAuthorityType?: 'studio-system-owner' | 'enterprise-authority-asset' | 'resource-owner-project';
   grantBasis: string;
   subjectType: 'project' | 'principal';
@@ -120,6 +122,7 @@ export interface ResourceAuthorizationGrant {
   revokedReason?: string;
   revokedBy?: string;
   revokedByProjectId?: string;
+  revokedByTaskId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -128,7 +131,9 @@ export interface ResourceGrantInput {
   enterpriseId: string;
   grantor: string;
   grantorProjectId?: string;
+  grantorTaskId?: string;
   grantorSystemId?: string;
+  grantorCredentialVerified?: boolean;
   grantorAuthorityType?: 'studio-system-owner' | 'enterprise-authority-asset' | 'resource-owner-project';
   grantBasis: string;
   subjectType: 'project' | 'principal';
@@ -183,6 +188,10 @@ export interface EnterprisePanoramaRecommendation {
   minimumEvidence: string;
   ownerRole: string;
   completionCriteria: string;
+  targetPurposeId?: string;
+  scopeKey?: string;
+  windowDays?: number;
+  stores?: string[];
   selected?: boolean;
 }
 
@@ -441,6 +450,15 @@ export interface EnterprisePackFeedbackReport {
   submittedAt: string;
 }
 
+export interface EnterprisePackFeedbackItemVerification {
+  originalCutoffChecked: string;
+  transactionAssociationNote: string;
+  shouldChange: { itemId: string; beforeValue: string; afterValue: string; evidenceLocator?: string }[];
+  shouldRetain: { itemId: string; unchangedValue: string; evidenceLocator?: string }[];
+  caseDecisionsPreserved?: boolean;
+  assessmentReportRef?: StudioSourceRef;
+}
+
 export interface EnterprisePackFeedback {
   id: string;
   feedbackCode: string;
@@ -467,6 +485,7 @@ export interface EnterprisePackFeedback {
     toPackVersion: string;
     authorityUpdates: { authority: string; fromRef: StudioSourceRef; toRef: StudioSourceRef; detail: string }[];
     verifiedByUseIds?: string[];
+    itemVerification?: EnterprisePackFeedbackItemVerification;
   };
   authorityHandling?: {
     authority: PackFeedbackAuthority;
@@ -526,6 +545,10 @@ export interface EnterprisePackUseRecord {
     status: PackUseVerdict;
     verdictDetail: string;
     verifierRole?: string;
+    verifierProjectId?: string;
+    verifierTaskId?: string;
+    assessmentReportRef?: StudioSourceRef;
+    selfAssessmentOnly?: boolean;
     checkedRefs?: StudioSourceRef[];
     wrongVersionDetected?: boolean;
     expectedVersion?: string;
@@ -1056,3 +1079,5 @@ export function computeUpgradeImpact(
     unaffectedUseIds,
   };
 }
+
+export { extractRecommendationWindowDays, matchPanoramaRecommendationPurposes } from './enterprise-pack-matching.ts';

@@ -12,6 +12,7 @@ import {
   evaluateResourceAccess,
   evaluateUseVerdict,
   computeUpgradeImpact,
+  matchPanoramaRecommendationPurposes,
 } from '../extensions/business-plugins/studio/enterprise-pack.ts';
 
 function tempRoot(label: string) {
@@ -1243,15 +1244,33 @@ test('Round-3 counterexamples: selective republication carries over unchanged el
       status: 'verified', note: '无修订版尝试闭环', verifiedByUseId: useB12.id, revisedRef: sapV1, revisedPackVersion: '1.2',
     }), /feedback_verification_requires_authority_revision/);
 
-    // Real revisedRef sapV2 + independent taskB + new version 1.2 + complete read -> PASSES with non-empty authorityUpdates!
+    // Missing itemVerification on calculation purpose MUST fail!
+    assert.throws(() => store.handleFeedback(pack.id, fb.id, {
+      status: 'verified', note: '缺少逐笔更正证据反例', verifiedByUseId: useB12.id, revisedRef: sapV2, revisedPackVersion: '1.2',
+    }), /feedback_verification_missing_item_evidence/);
+
+    // Real revisedRef sapV2 + independent taskB + new version 1.2 + complete read + itemVerification -> PASSES with non-empty authorityUpdates & itemVerification!
     const closed = store.handleFeedback(pack.id, fb.id, {
-      status: 'verified', note: '独立任务核实修订版 v1.2 通过', verifiedByUseId: useB12.id, revisedRef: sapV2, revisedPackVersion: '1.2',
+      status: 'verified',
+      note: '独立任务核实修订版 v1.2 通过',
+      verifiedByUseId: useB12.id,
+      revisedRef: sapV2,
+      revisedPackVersion: '1.2',
+      itemVerification: {
+        originalCutoffChecked: '2026-10-31',
+        transactionAssociationNote: '原单与跨月退款单在截止日 2026-10-31 前可见，按原单冲销后逐笔核对',
+        shouldChange: [{ itemId: 'C07', beforeValue: '计入复购（3/4）', afterValue: '排除复购（2/4）' }],
+        shouldRetain: [{ itemId: 'C13', unchangedValue: '仍计入有效复购' }],
+        caseDecisionsPreserved: true,
+      },
     });
     assert.equal(closed.feedback.status, 'verified');
     assert.equal(closed.feedback.revisionLink?.fromPackVersion, '1.1');
     assert.equal(closed.feedback.revisionLink?.toPackVersion, '1.2');
     assert.equal(closed.feedback.revisionLink?.authorityUpdates.length, 1);
     assert.equal(closed.feedback.revisionLink?.authorityUpdates[0]?.toRef.version, '1.1.0');
+    assert.equal(closed.feedback.revisionLink?.itemVerification?.shouldChange[0]?.itemId, 'C07');
+    assert.equal(closed.feedback.revisionLink?.itemVerification?.shouldRetain[0]?.itemId, 'C13');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -1438,6 +1457,112 @@ test('Round-4 counterexamples: unique version & previousVersion enforcement acro
       revisedRef: checkinV1,
       revisedPackVersion: '1.1',
     }), /feedback_verification_asset_identity_mismatch/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Round-5 counterexamples: multi-scope same purposeKey (杉岸直营 90日 + 湖庭直营 30日) continuation routes strictly to 湖庭 30日 without hijacking 杉岸 90日, and ambiguous continuation requires explicit targetPurposeId', () => {
+  const root = tempRoot('round5-multiscope');
+  try {
+    const store = new EnterprisePackStore(root);
+    const enterpriseId = '11111111-1111-4111-8111-111111111111';
+    const systemId = '22222222-2222-4222-8222-222222222222';
+    const pack = store.ensurePack({ enterpriseId, systemId, domain: 'member-operations', name: 'Round-5 多范围测试包' });
+
+    const pShanan90 = store.upsertPurpose(pack.id, {
+      purposeKey: 'store-first-purchase-repurchase',
+      title: '杉岸直营店 90 日门店复购率',
+      businessQuestion: '衡量杉岸直营店 90 日复购',
+      subjectUnit: 'brand_account',
+      windowDays: 90,
+      scope: { brand: '织屿', channel: '直营', stores: ['杉岸直营店'], period: '2026-Q3', scopeKey: 'zhiyu:direct:shanan:90d' },
+      tier: 'formal-calculation',
+      businessStatus: 'active',
+      originalGoal: '杉岸 90 日复购',
+      completionCriteria: '杉岸 90 日可复算',
+      dataCutoffAt: '2026-10-31',
+    });
+    const pHuting30 = store.upsertPurpose(pack.id, {
+      purposeKey: 'store-first-purchase-repurchase',
+      title: '湖庭直营店 30 日门店复购率',
+      businessQuestion: '衡量湖庭直营店 30 日复购',
+      subjectUnit: 'brand_account',
+      windowDays: 30,
+      scope: { brand: '织屿', channel: '直营', stores: ['湖庭直营店'], period: '2026-09', scopeKey: 'zhiyu:direct:huting:30d' },
+      tier: 'limited-calculation',
+      limitedCalculationName: '湖庭直营 30 日复购（受限试算版）',
+      businessStatus: 'active',
+      originalGoal: '湖庭 30 日复购',
+      completionCriteria: '湖庭 30 日可复算',
+      dataCutoffAt: '2026-10-31',
+    });
+    assert.notEqual(pShanan90.purpose.id, pHuting30.purpose.id);
+
+    const currentPurposes = store.get(pack.id).purposes;
+    // Exact Codex Round-4 counterexample: clicking 湖庭 30日 recommendation MUST match pHuting30, NEVER pShanan90!
+    const matchHuting = matchPanoramaRecommendationPurposes(currentPurposes, {
+      purposeKey: 'store-first-purchase-repurchase',
+      title: '湖庭直营 30 日门店复购率',
+      priorityReason: '湖庭新店 30 日复购观察',
+      deliverableNow: '湖庭直营店 30 日受限计算',
+      minimumEvidence: '湖庭 9 月订单明细',
+      ownerRole: '会员运营负责人',
+      completionCriteria: '输出湖庭 30 日分子分母',
+    });
+    assert.equal(matchHuting.ambiguous, false);
+    assert.equal(matchHuting.matched?.id, pHuting30.purpose.id, 'MUST match 湖庭 30日 instead of hijacking 杉岸 90日!');
+
+    // Generic ambiguous recommendation under same purposeKey MUST return ambiguous=true and NEVER pick candidates[0]!
+    const matchAmbiguous = matchPanoramaRecommendationPurposes(currentPurposes, {
+      purposeKey: 'store-first-purchase-repurchase',
+      title: '直营门店复购率复盘',
+      priorityReason: '对比直营门店复购表现',
+      deliverableNow: '门店复购试算',
+      minimumEvidence: '门店订单明细',
+      ownerRole: '会员运营负责人',
+      completionCriteria: '输出复购分子分母',
+    });
+    assert.equal(matchAmbiguous.ambiguous, true);
+    assert.equal(matchAmbiguous.matched, undefined);
+    assert.equal(matchAmbiguous.candidates.length, 2);
+
+    // Store upsertPurpose omitting windowDays/stores when two scopes share purposeKey MUST throw 409 enterprise_pack_purpose_ambiguous!
+    assert.throws(() => store.upsertPurpose(pack.id, {
+      purposeKey: 'store-first-purchase-repurchase',
+      title: '未指定范围续建反例',
+      businessQuestion: '复购',
+      subjectUnit: 'brand_account',
+      scope: { brand: '织屿', channel: '直营', scopeKey: 'zhiyu:direct:generic' },
+      tier: 'definition-reference',
+      businessStatus: 'active',
+      originalGoal: '续建',
+      completionCriteria: '核对',
+    }), /enterprise_pack_purpose_ambiguous/);
+
+    // Explicit targetPurposeId updates ONLY 湖庭 30日 while leaving 杉岸 90日 completely untouched!
+    const updatedHuting = store.upsertPurpose(pack.id, {
+      targetPurposeId: pHuting30.purpose.id,
+      purposeKey: 'store-first-purchase-repurchase',
+      title: '湖庭直营店 30 日门店复购率',
+      businessQuestion: '衡量湖庭直营店 30 日复购（续建更新）',
+      subjectUnit: 'brand_account',
+      windowDays: 30,
+      scope: pHuting30.purpose.scope,
+      tier: 'limited-calculation',
+      limitedCalculationName: '湖庭直营 30 日复购（受限试算版）',
+      businessStatus: 'active',
+      originalGoal: '湖庭 30 日复购',
+      completionCriteria: '湖庭 30 日可复算',
+    });
+    assert.equal(updatedHuting.created, false);
+    assert.equal(updatedHuting.purpose.id, pHuting30.purpose.id);
+    const afterPack = store.get(pack.id);
+    assert.equal(afterPack.purposes.length, 2);
+    const shananAfter = afterPack.purposes.find(p => p.id === pShanan90.purpose.id)!;
+    assert.equal(shananAfter.windowDays, 90);
+    assert.deepEqual(shananAfter.scope.stores, ['杉岸直营店']);
+    assert.equal(shananAfter.businessQuestion, '衡量杉岸直营店 90 日复购');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

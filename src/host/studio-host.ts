@@ -1001,10 +1001,16 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (action === 'contribute') return options.mutate(async () => { await assertCurrent(); const prepared = await contributionInput(store.get(id), payload, projectId, taskId); context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503); const contribution = store.contribute(id, prepared); return boundedReply(action, { contribution, claim: 'task-owned-candidate-not-formal-publication-or-use' }, { contribution: { id: contribution.id, revision: contribution.revision, sourceProjectId: projectId, sourceTaskId: taskId } }, id, { action: 'read', payload: jsonRead(contribution, { section: 'contributions', contributionId: contribution.id }) }); });
         if (action === 'feedback') { const refs = parseSources(payload.sources ?? []); await validateSources(refs, system, projectId, isConstruction); return options.mutate(async () => { await assertCurrent(); const feedback = store.addFeedback(id, { ...payload, sources: refs, origin: undefined } as unknown as StudioFeedbackInput); return reply(action, { feedback, claim: 'recorded-not-repaired' }); }); }
         if (action === 'declare-use') {
-          const report = sourceRef(payload.report), refs = parseSources(payload.sources ?? []);
-          if (report.projectId !== projectId || report.taskId && report.taskId !== taskId || !['data','task'].includes(report.authority)) throw new StudioError('studio_use_report_mismatch', 403);
+          const rawReport = sourceRef(payload.report), refs = parseSources(payload.sources ?? []);
+          if (rawReport.projectId !== projectId || rawReport.taskId && rawReport.taskId !== taskId || !['data','task'].includes(rawReport.authority)) throw new StudioError('studio_use_report_mismatch', 403);
           const ownerProj = await options.projects.get(projectId);
           memberPack.syncWorkspaceReportsToProject(projectId, taskId, ownerProj.rootPath);
+          const effectiveLocator = rawReport.locator?.startsWith('060_reports/')
+            ? memberPack.resolveTaskReportLocator(projectId, taskId, rawReport.locator, rawReport.sha256)
+            : rawReport.locator;
+          const report = effectiveLocator && effectiveLocator !== rawReport.locator
+            ? sourceRef({ ...rawReport, locator: effectiveLocator })
+            : rawReport;
           await sources.validate(report, projectId, id); await validateSources(refs, system, projectId, false);
           let graphSnapshotId: string | undefined;
           if (options.taskSnapshot) {
@@ -1013,18 +1019,56 @@ export function createStudioFeature(options: StudioHostOptions) {
             const actual = [...snapshot.messages.slice(start + 1)].reverse().find(message => message.role === 'toolResult' && !message.isError && message.details?.type === 'optracall.semantic-graph-result' && typeof message.details.snapshot?.id === 'string');
             graphSnapshotId = actual?.details.snapshot.id;
           }
-          return options.mutate(async () => { await assertCurrent(); return reply(action, { use: store.recordUse(id, { projectId, taskId, report, sources: refs, result: text(payload.result ?? '', 20_000), verification: 'not_assessed', ...(graphSnapshotId ? { graphSnapshotId } : {}) }), claim: 'author-declaration-not-professional-verification' }); });
+          return options.mutate(async () => {
+            await assertCurrent();
+            const studioUse = store.recordUse(id, { projectId, taskId, report, sources: refs, result: text(payload.result ?? '', 20_000), verification: 'not_assessed', ...(graphSnapshotId ? { graphSnapshotId } : {}) });
+            const memberPackUses = await memberPack.recordUseFromStudioDeclaration({ systemId: id, projectId, taskId, studioUse });
+            return reply(action, {
+              use: studioUse,
+              ...(memberPackUses.length ? { memberPackUses: memberPackUses.map(u => ({ id: u.id, packId: u.packId, packVersion: u.packVersion, purposeId: u.purposeId, independentVerification: u.independentVerification })) } : {}),
+              claim: 'author-declaration-not-professional-verification',
+            });
+          });
         }
         if (action === 'assess-use') {
           const canIndependentAssess = isConstruction || Boolean(system.enterpriseId && enterpriseScopes.enterpriseIdForProject(projectId) === system.enterpriseId);
           const use = system.uses.find(use => use.id === payload.useId && ((use.projectId === projectId && use.taskId === taskId) || canIndependentAssess));
           if (!use) throw new StudioError('studio_use_owner_mismatch', 403);
-          const report = sourceRef(payload.report), refs = parseSources(payload.sources);
-          if (report.authority !== 'task' || report.projectId !== projectId || report.taskId !== taskId || !report.locator?.startsWith('060_reports/')) throw new StudioError('studio_use_report_mismatch', 403);
+          const rawReport = sourceRef(payload.report), refs = parseSources(payload.sources);
+          if (rawReport.authority !== 'task' || rawReport.projectId !== projectId || rawReport.taskId !== taskId || !rawReport.locator?.startsWith('060_reports/')) throw new StudioError('studio_use_report_mismatch', 403);
           const verifierProj = await options.projects.get(projectId);
           memberPack.syncWorkspaceReportsToProject(projectId, taskId, verifierProj.rootPath);
+          const effectiveLocator = memberPack.resolveTaskReportLocator(projectId, taskId, rawReport.locator, rawReport.sha256);
+          const report = effectiveLocator !== rawReport.locator
+            ? sourceRef({ ...rawReport, locator: effectiveLocator })
+            : rawReport;
           await sources.validate(report, projectId, id); await validateSources(refs, system, projectId, false);
-          return options.mutate(async () => { await assertCurrent(); return reply(action, { use: store.recordUseAssessment(id, use.id, { status: payload.status as 'pass' | 'fail' | 'unknown', report, sources: refs, result: text(payload.result, 20_000, false) }), claim: 'agent-explicit-assessment-with-exact-evidence-not-host-or-independent-professional-score' }); });
+          return options.mutate(async () => {
+            await assertCurrent();
+            const updatedUse = store.recordUseAssessment(id, use.id, {
+              status: payload.status as 'pass' | 'fail' | 'unknown',
+              report,
+              sources: refs,
+              result: text(payload.result, 20_000, false),
+              assessorProjectId: projectId,
+              assessorTaskId: taskId,
+            });
+            const latestAssess = updatedUse.assessments?.at(-1);
+            const memberPackUses = latestAssess
+              ? await memberPack.syncAssessmentFromStudio({
+                systemId: id,
+                studioUse: updatedUse,
+                assessment: latestAssess,
+                assessorProjectId: projectId,
+                assessorTaskId: taskId,
+              })
+              : [];
+            return reply(action, {
+              use: updatedUse,
+              ...(memberPackUses.length ? { memberPackUses: memberPackUses.map(u => ({ id: u.id, packId: u.packId, packVersion: u.packVersion, purposeId: u.purposeId, independentVerification: u.independentVerification })) } : {}),
+              claim: 'agent-explicit-assessment-with-exact-evidence-not-host-or-independent-professional-score',
+            });
+          });
         }
         if (!isConstruction) throw new StudioError('studio_construction_only', 403);
         const extractionOwner = { systemId: id, projectId, taskId };

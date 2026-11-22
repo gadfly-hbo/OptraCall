@@ -71,7 +71,13 @@ export class ProjectAgent {
   constructor(options: ProjectAgentOptions) { this.#options = options; }
   /** The common Host layer may capture this construction fact. An Agent's
    * snapshot, text, or tool result cannot mint a managed transition proof. */
-  get executionMode(): 'unmanaged' | 'ordinary' | 'protected' { return this.#options.protectedExecution ? this.#options.protectedExecution.profile ?? 'protected' : 'unmanaged'; }
+  get executionMode(): 'unmanaged' | 'ordinary' | 'protected' {
+    return this.#options.protectedExecution
+      ? this.#options.protectedExecution.profile ?? 'protected'
+      : this.#options.memberPackExecutionScope
+        ? this.#options.memberPackExecutionScope.profile ?? 'ordinary'
+        : 'unmanaged';
+  }
   get busy() { return Boolean(this.#running) || [...this.#personalRequests.values()].some(request => request.owned); }
   get alive() { return !this.#closed && Boolean(this.#child?.connected) && this.#child?.exitCode === null && this.#child?.signalCode === null; }
   get pendingUI() { return [...this.#questions.values()]; }
@@ -338,7 +344,8 @@ export class ProjectAgent {
   async stop(cleanup: { retryFailed?: boolean } = {}) {
     if (this.#running) this.#running.cancelRequested = true;
     this.#cancelPersonalRequests();
-    if (!this.#options.protectedExecution) { const running = this.#running; if (running) { await this.open(); await this.#rpc('stop'); } await this.#waitPersonalRequests(); await running?.completion; return; }
+    const hasManagedExecutor = Boolean(this.#options.protectedExecution || this.#options.memberPackExecutionScope);
+    if (!hasManagedExecutor) { const running = this.#running; if (running) { await this.open(); await this.#rpc('stop'); } await this.#waitPersonalRequests(); await running?.completion; return; }
     if (!this.#stopTask) this.#stopTask = (async () => {
       // A managed scope can contain legitimate background work even after its
       // current SDK turn settled. The driver's close already stops that turn,
@@ -357,8 +364,9 @@ export class ProjectAgent {
     if (!this.#closeTask) {
       this.#closed = true; this.#cancelPersonalRequests();
       const task = this.#dispose(cleanup); this.#closeTask = task;
+      const hasManagedExecutor = Boolean(this.#options.protectedExecution || this.#options.memberPackExecutionScope);
       // Retry only resource cleanup on an explicit close, never a model turn.
-      void task.catch(error => { if ((this.#options.protectedExecution || error instanceof ProjectRuntimeError && ['subagent_cleanup_unknown', 'semantic_context_cleanup_unknown'].includes(error.code)) && this.#closeTask === task) this.#closeTask = undefined; });
+      void task.catch(error => { if ((hasManagedExecutor || error instanceof ProjectRuntimeError && ['subagent_cleanup_unknown', 'semantic_context_cleanup_unknown'].includes(error.code)) && this.#closeTask === task) this.#closeTask = undefined; });
     }
     return this.#closeTask;
   }
@@ -378,11 +386,12 @@ export class ProjectAgent {
   async #disposeDriver(cleanup: { retryFailed?: boolean }) {
     if (!this.#child) return;
     const child = this.#child;
+    const hasManagedExecutor = Boolean(this.#options.protectedExecution || this.#options.memberPackExecutionScope);
     let protectedCleanupAcknowledged = this.#managedCleanupAcknowledged;
     if (child.exitCode === null && child.signalCode === null) {
       let deadline: ReturnType<typeof setTimeout> | undefined;
       let cleanupError: unknown;
-      await Promise.race([this.#rpc('close', { retryFailed: cleanup.retryFailed !== false }).then(result => { protectedCleanupAcknowledged = result?.closed === true; if (protectedCleanupAcknowledged) this.#managedCleanupAcknowledged = true; }, error => { cleanupError = error; }), new Promise<void>(resolve => { deadline = setTimeout(() => { if (!this.#options.protectedExecution) this.#signal(child, 'SIGTERM'); resolve(); }, this.#options.protectedExecution ? 8000 : 3000); })]);
+      await Promise.race([this.#rpc('close', { retryFailed: cleanup.retryFailed !== false }).then(result => { protectedCleanupAcknowledged = result?.closed === true; if (protectedCleanupAcknowledged) this.#managedCleanupAcknowledged = true; }, error => { cleanupError = error; }), new Promise<void>(resolve => { deadline = setTimeout(() => { if (!hasManagedExecutor) this.#signal(child, 'SIGTERM'); resolve(); }, hasManagedExecutor ? 8000 : 3000); })]);
       if (deadline) clearTimeout(deadline);
       // A responsive ordinary driver can also own an attached SDK resource
       // whose shutdown failed. Retain that exact handle for explicit cleanup;
@@ -392,7 +401,7 @@ export class ProjectAgent {
       }
       // Keep a responsive driver and its exact executor ownership available for
       // explicit cleanup retry. Killing it after an error loses that authority.
-      if (this.#options.protectedExecution && !protectedCleanupAcknowledged && child.connected) {
+      if (hasManagedExecutor && !protectedCleanupAcknowledged && child.connected) {
         const error = new ProjectRuntimeError('protected_cleanup_unknown'); error.cause = cleanupError; throw error;
       }
     }
@@ -404,11 +413,11 @@ export class ProjectAgent {
     });
     // A reaped group's numeric ID may be reused; a successful managed close
     // already proves its execution resources are gone and needs no stale kill.
-    if (!this.#options.protectedExecution) this.#signal(child, 'SIGKILL');
+    if (!hasManagedExecutor) this.#signal(child, 'SIGKILL');
     this.#listeners.clear();
     // Killing the trusted SDK driver does not establish that its separately
     // sandboxed tool processes were cleaned up. Preserve the shared owner's
     // quarantine unless that driver explicitly completed executor cleanup.
-    if (this.#options.protectedExecution && !protectedCleanupAcknowledged) throw new ProjectRuntimeError('protected_cleanup_unknown');
+    if (hasManagedExecutor && !protectedCleanupAcknowledged) throw new ProjectRuntimeError('protected_cleanup_unknown');
   }
 }
