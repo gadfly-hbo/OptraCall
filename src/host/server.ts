@@ -223,6 +223,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           return file;
         };
       }
+      if (prop === 'observeFile') {
+        return async (projectId: string, relativePath: string) => {
+          const norm = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+          if (!studioForGuard?.memberPack.getProjectToolScope(projectId) || !/^(010_draw|020_clean)\//.test(norm)) {
+            return target.observeFile(projectId, relativePath);
+          }
+          const pack = studioForGuard.memberPack;
+          pack.assertProjectDataPathAllowed(projectId, norm);
+          const captured = await target.captureFeedbackFile(projectId, relativePath);
+          const view = pack.filterAuthorizedProjectData(projectId, norm, captured.bytes);
+          return { sha256: createHash('sha256').update(view.bytes).digest('hex'), bytes: view.bytes.length, observedAt: captured.observedAt };
+        };
+      }
       if (prop === 'captureFeedbackFile') {
         return async (projectId: string, relativePath: string, maximum?: number) => {
           const norm = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -253,7 +266,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     authorizeEvidence: (projectId, relativePath, bytes) => {
       if (relativePath.startsWith('020_clean/')) {
         const view = studio.memberPack.filterAuthorizedProjectData(projectId, relativePath, bytes);
-        if (view.filtered) throw new RequestFault(403, 'member_pack_frozen_evidence_forbidden');
+        if (!view.bytes.equals(bytes)) throw new RequestFault(403, 'member_pack_frozen_evidence_forbidden');
       }
     },
   });

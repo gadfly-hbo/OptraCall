@@ -21,7 +21,12 @@ async function waitIdle(host: Awaited<ReturnType<typeof startTestHost>>, project
   const route = `/api/projects/${projectId}/tasks/${taskId}`;
   const started = Date.now();
   while (Date.now() - started < 45_000) {
-    const state = await json(await host.request(route));
+    const response = await host.request(route);
+    if (response.status === 409 && (await response.clone().json()).code === 'session_history_unavailable') {
+      await new Promise(resolve => setTimeout(resolve, 30));
+      continue;
+    }
+    const state = await json(response);
     if (
       state.task.lastRun?.status === 'completed'
       && state.snapshot.status === 'idle'
@@ -2414,6 +2419,15 @@ test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexist
   assert.ok(!turn2CsvText.includes('S02') && !turn2CsvText.includes('杉岸直营店'), `Turn 2 after wide expiry MUST immediately strip expired wide-grant store S02, got: ${turn2CsvText}`);
   const narrowEvidence = await consumerReq(frozenEvidence);
   assert.equal(narrowEvidence.status, 403, 'A frozen immutable snapshot requiring a wider grant stays withheld');
+  const currentObserved = await json(await consumerReq(`${dataContext}/preview`, 'POST', { path: '020_clean/mixed_orders.csv' }));
+  const narrowVersion = randomUUID();
+  await json(await consumerReq(`${dataContext}/inputs`, 'POST', {
+    datasetId, inputVersionId: narrowVersion, operationId: narrowVersion, baseIndexRevision: 1, name: '冻结合成明细',
+    sourcePath: '020_clean/mixed_orders.csv', expectedSha256: currentObserved.sha256, expectedBytes: currentObserved.bytes,
+  }), 201);
+  const newEvidence = await consumerReq(`${dataContext}/datasets/${datasetId}/versions/${narrowVersion}/evidence`);
+  assert.equal(newEvidence.status, 200, 'The borrower can freeze and retrieve exactly the current authorized view');
+  assert.equal(await newEvidence.text(), 'account,first_order_date,store\nH01,2026-09-02,湖庭直营店\n');
   const semantic = await json(await consumerReq(`/api/projects/${projConsumer.id}/tasks/${task.id}/semantic-context`, 'POST', {
     action: 'read', target: { kind: 'data-input', projectId: projConsumer.id, datasetId, inputVersionId },
   }));

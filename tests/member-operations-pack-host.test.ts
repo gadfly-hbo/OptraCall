@@ -1376,6 +1376,14 @@ test('Host Round-6: trusted operator binding & HttpOnly cookie anti-spoofing (R2
     );
     assert.equal(snapDenied.status, 403, 'Consumer project cookie MUST NOT read owner project report-snapshot!');
 
+    const unidentified = await srv.req(
+      `/api/studio/enterprise-packs/${packId}/report-snapshot?projectId=${projOwner.id}&taskId=${ownerTaskId}&locator=${encodeURIComponent('060_reports/owner-referenced-report.md')}&sha256=${origSha}`,
+      'GET',
+      undefined,
+      { cookie: '' },
+    );
+    assert.equal(unidentified.status, 403, 'Serving a retained report requires current borrower or original authority context');
+
     const snapRes = await srv.req(
       `/api/studio/enterprise-packs/${packId}/report-snapshot?projectId=${projOwner.id}&taskId=${ownerTaskId}&locator=${encodeURIComponent('060_reports/owner-referenced-report.md')}&sha256=${origSha}`,
       'GET',

@@ -3386,10 +3386,34 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         throw new StudioError('studio_owner_mismatch', 403);
       }
       const operator = resolveRequestOperator(request);
-      if (operator.activeProjectId && operator.activeProjectId !== projectId && !isConstructionOwnerProject(pack, operator.activeProjectId)) {
-        throw new StudioError('studio_owner_mismatch', 403);
+      const borrowerProjectId = operator.activeProjectId ?? operator.authorityProjectId;
+      if (!operator.verified || !borrowerProjectId || options.enterpriseScopes.enterpriseIdForProject(borrowerProjectId) !== pack.enterpriseId) {
+        throw new StudioError('studio_report_permission_denied', 403);
       }
       if (!locator.startsWith('060_reports/')) throw new StudioError('invalid_report_locator', 400);
+      const matchesReport = (ref: StudioSourceRef) => ref.projectId === projectId && ref.taskId === taskId
+        && ref.locator === locator && ref.sha256 === expectedSha256;
+      if (!taskId || !expectedSha256 || !/^[a-f0-9]{64}$/.test(expectedSha256)) {
+        throw new StudioError('invalid_report_locator', 400);
+      }
+      await options.projects.getTask(projectId, taskId);
+      const assertCurrentAccess = () => {
+        const latest = packs.get(pack.id);
+        const retained = latest.useRecords.some(use => matchesReport(use.reportRef)
+          || Boolean(use.independentVerification.assessmentReportRef && matchesReport(use.independentVerification.assessmentReportRef)))
+          || latest.feedbackItems.some(feedback => feedback.reports.some(report => matchesReport(report.reportRef)
+            || Boolean(report.assessmentReportRef && matchesReport(report.assessmentReportRef))));
+        if (!retained) throw new StudioError('studio_report_permission_denied', 403);
+        const boundOperator = getBoundSystemOperator(latest.systemId);
+        const constructionAuthority = isConstructionOwnerProject(latest, borrowerProjectId)
+          && (boundOperator ? boundOperator === operator.operatorId : operator.authorityProjectId === borrowerProjectId);
+        if (constructionAuthority) return;
+        const declarations = options.studio.get(latest.systemId).uses.filter(use => use.projectId === projectId
+          && use.taskId === taskId && matchesReport(use.report));
+        if (!declarations.length) throw new StudioError('studio_report_permission_denied', 403);
+        for (const declaration of declarations) assertDeclaredReportAccess(latest.systemId, borrowerProjectId, declaration);
+      };
+      assertCurrentAccess();
       let bytes: Buffer | undefined;
       let resolvedLocator = locator;
       try {
@@ -3405,7 +3429,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       }
       if (!bytes) throw new StudioError('report_snapshot_not_found', 404);
       const actualSha = createHash('sha256').update(bytes).digest('hex');
-      if (expectedSha256 && actualSha !== expectedSha256) throw new StudioError('studio_use_report_hash_mismatch', 409);
+      if (actualSha !== expectedSha256) throw new StudioError('studio_use_report_hash_mismatch', 409);
+      assertCurrentAccess();
       json(response, 200, {
         projectId,
         ...(taskId ? { taskId } : {}),
