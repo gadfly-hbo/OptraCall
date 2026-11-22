@@ -5,12 +5,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        按[工程规范的外发流程](https://github.com/gadfly-hbo/OptraCall/blob/main/docs/engineering-workflow.md#github-开发任务外发与交付)在本单留言领取和交回回执。请使用可公开的说明、样例和仓库链接。
+        按[工程规范的外发流程](https://github.com/gadfly-hbo/OptraCall/blob/main/docs/engineering-workflow.md#github-开发任务外发与交付)在本单留言领取和交回回执。请使用可公开的说明、样例和仓库链接。交付项仅列工程工作，设备更新及运行验收由用户另行安排。
   - type: textarea
     id: scope
     attributes:
       label: 目标、范围与当前授权
-      description: 说明用户要完成的事、可修改的模块或接缝、可先开展的阶段，以及 Codex 后续负责的发布范围。
+      description: 说明用户要完成的事、可修改的模块或接缝、可先开展的阶段，以及 Codex 后续负责的工程交付范围。
     validations:
       required: true
   - type: textarea
