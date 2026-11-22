@@ -127,7 +127,30 @@ export interface StudioPublicationResult { module: 'studio-source' | 'sap-metric
 export interface StudioPublication { preview: StudioPublicationPreview; results: StudioPublicationResult[] }
 export interface StudioAdoption { projectId: string; refs: StudioSourceRef[]; status: StudioResultStatus; detail: string; at: string }
 export interface StudioGraphState { snapshotId: string; status: StudioResultStatus; sourceRefs: StudioSourceRef[]; detail: string; at: string }
-export interface StudioUseAssessmentInput { status: 'pass' | 'fail' | 'unknown'; report: StudioSourceRef; sources: StudioSourceRef[]; result: string; assessorProjectId?: string; assessorTaskId?: string }
+export interface StudioAssessmentEvidence {
+  targetReport: StudioSourceRef;
+  purposeId?: string;
+  carriedReadToolCallIds?: string[];
+  coverage?: { scope: string; detail: string; inputPaths: string[]; summaryRef?: StudioSourceRef };
+  comparison?: { metrics: { name: string; reported: number; recomputed: number }[]; facts: string };
+  finding?: {
+    kind: 'wrong-version' | 'mismatch' | 'consistent';
+    detail: string;
+    reportLocator: string;
+    sourceLocator?: string;
+    observedRef?: StudioSourceRef;
+  };
+}
+export interface StudioUseAssessmentInput {
+  status: 'pass' | 'fail' | 'unknown';
+  report: StudioSourceRef;
+  sources: StudioSourceRef[];
+  result: string;
+  assessorProjectId?: string;
+  assessorTaskId?: string;
+  nativeCall?: { sessionId: string; toolCallId: string };
+  evidence?: StudioAssessmentEvidence;
+}
 export interface StudioUseAssessment extends StudioUseAssessmentInput { at: string }
 export interface StudioUseRecord { id: string; projectId: string; taskId: string; sources: StudioSourceRef[]; graphSnapshotId?: string; report: StudioSourceRef; result: string; verification: 'not_assessed' | 'pass' | 'fail' | 'unknown'; assessments?: StudioUseAssessment[]; createdAt: string }
 export interface StudioExecutionOwner { projectId: string; taskId: string }

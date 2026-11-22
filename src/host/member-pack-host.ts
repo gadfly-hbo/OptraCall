@@ -31,6 +31,7 @@ import { DomainReferenceStore, BUILTIN_REPO_TEMPLATES } from './domain-reference
 import { ResourceGrantStore } from './resource-grant-store.ts';
 import { EnterprisePackStore } from './enterprise-pack-store.ts';
 import { buildAuthorizedDataView } from './member-pack-data-view.ts';
+import { exactTaskReport, nativeAssessmentEvidence, projectFileLocator, readCoversSource, readNativeFileEvidence, readStudioEvidence, studioPagesComplete } from './member-pack-verification.ts';
 import { createProtectedExecutionScope, type ProtectedExecutionScope } from '../agent/protected-tools.ts';
 
 function json(response: ServerResponse, status: number, value: unknown) {
@@ -1636,370 +1637,168 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     };
   }
 
-  /**
-   * R4: Inspects an independent verifier task's OWN native transcript & assessment report to confirm:
-   *  1. Exact assessment turn (`assessmentTurnIndex`, `assessmentMessageId`) and explicit attribution of
-   *     which required authority reads, target-report read (`targetReportReadTurnIndex`), and authorized-input
-   *     reads (`authorizedInputReadTurnIndices`) happened up to this assessment turn.
-   *  2. Verifier actually read ALL required original authority dependencies completely.
-   *  3. Verifier MUST ACTUALLY READ the target report (`targetReportChecked === true`) for ALL tiers;
-   *     and for calculation tiers (`formal-calculation` / `limited-calculation`) MUST ALSO read authorized
-   *     `020_clean/` input data (`authorizedInputChecked === true`) — NEVER `input || report`!
-   *  4. Assessment report MUST bind to an EXACT target report identifier (`targetBasename`/`targetLocator`/
-   *     `targetShaPrefix`/target `taskId` prefix — NEVER loose `packVersion` or `purposeKey` mentions!),
-   *     MUST NOT contain an explicit non-read / non-comparison disclaimer, and for calculation tiers MUST
-   *     include concrete numeric comparison/recalculation results (excluding version strings like `v1.0`).
-   */
   async function inspectVerifierTaskEvidence(
     verifierProjectId: string,
     verifierTaskId: string,
     pack: EnterpriseDomainPack,
-    useRecord: EnterprisePackUseRecord,
-    assessmentReportRef?: StudioSourceRef,
-    assessmentResultText?: string,
-  ): Promise<{
-    verifierReads: {
-      ref: StudioSourceRef;
-      complete: boolean;
-      readAt: string;
-      turnIndex?: number;
-      entryId?: string;
-      fromAssessmentTurn?: boolean;
-    }[];
-    requiredCount: number;
-    readRequiredAssetsCount: number;
-    allRequiredReadByVerifier: boolean;
-    hadDataOrCalcEvidence: boolean;
-    assessmentTurnIndex?: number;
-    assessmentMessageId?: string;
-    carriedFromTurnIndices: number[];
-    targetReportChecked: boolean;
-    targetReportReadTurnIndex?: number;
-    authorizedInputChecked: boolean;
-    authorizedInputReadTurnIndices: number[];
-    assessmentReportBoundToTarget: boolean;
-    assessmentDisclaimerRejected: boolean;
-    missingReason?: string;
-  }> {
-    const rev = pack.packRevisions.find(r => r.version === useRecord.packVersion);
-    const pm = rev?.purposeManifests.find(p => p.purposeId === useRecord.purposeId);
-    const requiredRefs = pm
-      ? pm.dependencies.filter(d => d.requiredFor.includes(pm.tier)).map(d => d.ref)
-      : [];
-    const verifierReads: {
-      ref: StudioSourceRef;
-      complete: boolean;
-      readAt: string;
-      turnIndex?: number;
-      entryId?: string;
-      fromAssessmentTurn?: boolean;
-    }[] = [];
-    const seen = new Set<string>();
-    let targetReportChecked = false;
-    let targetReportReadTurnIndex: number | undefined;
-    let authorizedInputChecked = false;
-    const authorizedInputReadTurns = new Set<number>();
-    let assessmentTurnIndex: number | undefined;
-    let assessmentMessageId: string | undefined;
-
-    const targetLocator = useRecord.reportRef.locator ?? '';
-    const targetBasename = targetLocator ? path.basename(targetLocator).toLowerCase() : '';
-    const targetShaPrefix = useRecord.reportRef.sha256 ? useRecord.reportRef.sha256.slice(0, 8).toLowerCase() : '';
-    const assessLocator = assessmentReportRef?.locator ?? '';
-    const assessBasename = assessLocator ? path.basename(assessLocator).toLowerCase() : '';
-    const sameProjectAsTarget = verifierProjectId === useRecord.projectId;
-    const verifierScope = getProjectToolScope(verifierProjectId);
-    const allowedDataBasenames = new Set(
-      (verifierScope?.allowedPaths ?? []).map(p => path.basename(p).toLowerCase()).filter(Boolean),
-    );
-
-    if (options.taskSnapshot) {
-      try {
-        const snap = await options.taskSnapshot(verifierProjectId, verifierTaskId);
-        const rawMessages = snap.messages as Record<string, any>[];
-        // Map toolCallId -> { name, argsText, turnIndex } from assistant toolCall blocks
-        const toolCallMeta = new Map<string, { name: string; argsText: string; turnIndex: number }>();
-        let curTurn = 0;
-        let lastAssistantTurn = 0;
-        let lastAssistantMsgId: string | undefined;
-
-        for (let i = 0; i < rawMessages.length; i++) {
-          const msg = rawMessages[i];
-          if (!msg) continue;
-          if (msg.role === 'user') {
-            curTurn += 1;
-            continue;
-          }
-          if (msg.role === 'assistant') {
-            lastAssistantTurn = curTurn;
-            if (typeof msg.id === 'string') lastAssistantMsgId = msg.id;
-            const blocks = Array.isArray(msg.content) ? msg.content : [];
-            for (const blk of blocks) {
-              if (blk && typeof blk === 'object' && blk.type === 'toolCall' && typeof blk.id === 'string') {
-                const argsText = typeof blk.arguments === 'string'
-                  ? blk.arguments
-                  : JSON.stringify(blk.arguments ?? {});
-                toolCallMeta.set(blk.id, { name: String(blk.name ?? ''), argsText, turnIndex: curTurn });
-                const lowerArgs = argsText.toLowerCase();
-                if (
-                  (blk.name === 'studio_assets' && lowerArgs.includes('assess-use') && (!assessBasename || lowerArgs.includes(assessBasename)))
-                  || (assessBasename && ['write', 'edit', 'write_report', 'write_project_report'].includes(String(blk.name ?? '')) && lowerArgs.includes(assessBasename))
-                ) {
-                  assessmentTurnIndex = curTurn;
-                  if (typeof msg.id === 'string') assessmentMessageId = msg.id;
-                }
-              }
-            }
-          }
-          if (msg.role === 'toolResult' && !msg.isError) {
-            if (msg.details?.type === 'optracall.studio' && msg.details.action === 'assess-use') {
-              assessmentTurnIndex = curTurn;
-            }
-          }
-        }
-        if (assessmentTurnIndex === undefined && lastAssistantTurn > 0) {
-          assessmentTurnIndex = lastAssistantTurn;
-        }
-        if (!assessmentMessageId && lastAssistantMsgId) {
-          assessmentMessageId = lastAssistantMsgId;
-        }
-
-        // Second pass: collect reads & substantive target-report / authorized-input inspection up to assessmentTurnIndex
-        curTurn = 0;
-        for (const msg of rawMessages) {
-          if (!msg) continue;
-          if (msg.role === 'user') {
-            curTurn += 1;
-            continue;
-          }
-          if (assessmentTurnIndex !== undefined && curTurn > assessmentTurnIndex) break;
-          if (msg.role !== 'toolResult' || msg.isError) continue;
-          const toolName = String(msg.toolName ?? '');
-          const callId = typeof msg.toolCallId === 'string' ? msg.toolCallId : (typeof msg.id === 'string' ? msg.id : undefined);
-          const meta = callId ? toolCallMeta.get(callId) : undefined;
-          const argsLower = (meta?.argsText ?? '').toLowerCase();
-
-          // 1. Detect genuine target report read:
-          //    - Same-project native read/bash explicitly reading targetBasename/targetLocator (NOT write/edit!)
-          //    - Cross-project target report MUST be read via verified studio_assets read-source below!
-          if (
-            sameProjectAsTarget
-            && targetBasename
-            && ['read', 'bash', 'powershell', 'codemode'].includes(toolName)
-            && (argsLower.includes(targetBasename) || (targetLocator && argsLower.includes(targetLocator.toLowerCase())))
-          ) {
-            // Ensure bash/codemode actually reads the target report rather than just printing its name
-            const isGenuineRead = toolName === 'read'
-              || /\b(?:cat|head|tail|sed|awk|grep|open|readfile|read_text|json\.load|jq|python3?|node)\b/i.test(argsLower);
-            if (isGenuineRead) {
-              targetReportChecked = true;
-              targetReportReadTurnIndex = curTurn;
-            }
-          }
-
-          // 2. Detect genuine authorized 020_clean/ input data read (NOT unrelated 060_reports JSON or generic echo!)
-          if (['read_input', 'read_project_input'].includes(toolName)) {
-            const relPath = typeof msg.details?.relativePath === 'string' ? msg.details.relativePath : '';
-            if (!relPath || relPath.startsWith('020_clean/')) {
-              authorizedInputChecked = true;
-              authorizedInputReadTurns.add(curTurn);
-            }
-          } else if (toolName === 'read') {
-            const isDataFile = argsLower.includes('020_clean')
-              || /\.(?:csv|tsv)\b/i.test(argsLower)
-              || [...allowedDataBasenames].some(bn => argsLower.includes(bn));
-            if (isDataFile && !argsLower.includes('060_reports')) {
-              authorizedInputChecked = true;
-              authorizedInputReadTurns.add(curTurn);
-            }
-          } else if (['bash', 'powershell', 'codemode'].includes(toolName)) {
-            const mentionsAuthorizedData =
-              argsLower.includes('020_clean')
-              || /\.(?:csv|tsv)\b/i.test(argsLower)
-              || [...allowedDataBasenames].some(bn => argsLower.includes(bn));
-            if (mentionsAuthorizedData) {
-              authorizedInputChecked = true;
-              authorizedInputReadTurns.add(curTurn);
-            }
-          }
-
-          if (msg.details?.type === 'optracall.studio' && ['read-source', 'read'].includes(msg.details.action) && msg.details.result?.ref) {
-            try {
-              const ref = sourceRef(msg.details.result.ref);
-              if (ref.authority === 'data') {
-                authorizedInputChecked = true;
-                authorizedInputReadTurns.add(curTurn);
-              }
-              if (
-                ref.authority === 'task'
-                && (
-                  digest(ref) === digest(useRecord.reportRef)
-                  || (useRecord.reportRef.sha256 && ref.sha256 === useRecord.reportRef.sha256)
-                  || (
-                    targetLocator
-                    && ref.locator === targetLocator
-                    && ref.projectId === useRecord.projectId
-                    && (!useRecord.taskId || !ref.taskId || ref.taskId === useRecord.taskId)
-                  )
-                )
-              ) {
-                targetReportChecked = true;
-                targetReportReadTurnIndex = curTurn;
-              }
-              const key = digest(ref);
-              const existingIdx = verifierReads.findIndex(r => digest(r.ref) === key);
-              const readItem = {
-                ref,
-                complete: msg.details.result.complete === true,
-                readAt: new Date().toISOString(),
-                turnIndex: curTurn,
-                ...(callId ? { entryId: callId } : {}),
-                ...(assessmentTurnIndex !== undefined ? { fromAssessmentTurn: curTurn === assessmentTurnIndex } : {}),
-              };
-              if (existingIdx === -1) {
-                seen.add(key);
-                verifierReads.push(readItem);
-              } else if (curTurn === assessmentTurnIndex && !verifierReads[existingIdx]!.fromAssessmentTurn) {
-                verifierReads[existingIdx] = readItem;
-              }
-            } catch { /* ignore */ }
-          }
-          if (msg.details?.type === 'optracall.semantic-context-result' && ['read', 'trace'].includes(msg.details.action)) {
-            for (const item of [...(msg.details.items ?? []), ...(msg.details.unknownTime ?? [])]) {
-              if (typeof item?.body === 'string' && item?.target && typeof item.sha256 === 'string') {
-                const t = item.target;
-                let ref: StudioSourceRef | undefined;
-                if (t.kind === 'sap') ref = sourceRef({ authority: 'sap-metric', id: t.packageId, version: t.version, sha256: item.sha256 });
-                else if (t.kind === 'sap-method') ref = sourceRef({ authority: 'sap-method', id: t.methodId, version: String(t.version), sha256: item.sha256 });
-                else if (t.kind === 'enterprise') ref = sourceRef({ authority: 'enterprise', id: t.materialId, version: t.revisionId, sha256: item.sha256, locator: t.storeId });
-                else if (t.kind === 'studio-source') ref = sourceRef({ authority: 'studio-source', id: t.assetId, version: String(t.version), sha256: item.sha256, locator: t.systemId });
-                if (ref) {
-                  const key = digest(ref);
-                  const existingIdx = verifierReads.findIndex(r => digest(r.ref) === key);
-                  const readItem = {
-                    ref,
-                    complete: item.complete !== false,
-                    readAt: new Date().toISOString(),
-                    turnIndex: curTurn,
-                    ...(callId ? { entryId: callId } : {}),
-                    ...(assessmentTurnIndex !== undefined ? { fromAssessmentTurn: curTurn === assessmentTurnIndex } : {}),
-                  };
-                  if (existingIdx === -1) {
-                    seen.add(key);
-                    verifierReads.push(readItem);
-                  } else if (curTurn === assessmentTurnIndex && !verifierReads[existingIdx]!.fromAssessmentTurn) {
-                    verifierReads[existingIdx] = readItem;
-                  }
-                }
-              }
-            }
-          }
-        }
-      } catch { /* snapshot unavailable */ }
-    }
-
-    // Read & verify the assessment report text STRICTLY binds to THIS exact target report
-    // and NEVER passes when the verifier explicitly states it did not read/compare the original report!
-    let assessmentReportBoundToTarget = false;
-    let assessmentDisclaimerRejected = false;
-    const isCalcTier = useRecord.tier === 'formal-calculation' || useRecord.tier === 'limited-calculation';
-    const NON_VERIFICATION_DISCLAIMER_RE = /(?:未(?:查看|读取|阅览|核对|对照|复核|重算|复算)(?:原|目标|待核)?(?:报告|原稿|正文|数据|明细)|(?:没有|并未|尚未)(?:查看|读取|核对|对照|复核|重算|复算)(?:原|目标|待核)?(?:报告|原稿|正文|数据|明细)|未读取也未对照|未查看[、，,\s]*未对照|did\s+not\s+(?:read|inspect|view|compare|recalculate|verify)\s+(?:the\s+)?(?:original|target)\s+(?:report|data))/i;
-
-    if (assessmentReportRef?.projectId && assessmentReportRef.locator?.startsWith('060_reports/')) {
-      try {
-        const effLoc = resolveTaskReportLocator(assessmentReportRef.projectId, verifierTaskId, assessmentReportRef.locator, assessmentReportRef.sha256);
-        const preserved = readPreservedReportBytes(assessmentReportRef.projectId, verifierTaskId, effLoc, assessmentReportRef.sha256);
-        const bytes = preserved ?? (await options.projects.readFile(assessmentReportRef.projectId, effLoc)).bytes;
-        const reportText = bytes.toString('utf8');
-        const combinedAssessText = `${reportText}\n${assessmentResultText ?? ''}`;
-        if (NON_VERIFICATION_DISCLAIMER_RE.test(combinedAssessText)) {
-          assessmentDisclaimerRejected = true;
-          assessmentReportBoundToTarget = false;
-        } else {
-          const lowerReport = reportText.toLowerCase();
-          // STRICT target binding: require exact report basename, locator, SHA-256 prefix, or target taskId/useId prefix!
-          // NEVER accept loose packVersion ("1.0"/"v1.0") or purposeKey mentions alone!
-          const referencesTarget = Boolean(
-            (targetBasename && lowerReport.includes(targetBasename))
-            || (targetLocator && lowerReport.includes(targetLocator.toLowerCase()))
-            || (targetShaPrefix && lowerReport.includes(targetShaPrefix))
-            || lowerReport.includes(useRecord.taskId.slice(0, 8).toLowerCase())
-            || lowerReport.includes(useRecord.id.slice(0, 8).toLowerCase()),
-          );
-          // Strip version strings like v1.0 / v1.1 / 2026-10-31 when checking for actual numeric calc comparison figures
-          const textWithoutVersions = reportText
-            .replace(/\bv\d+\.\d+(?:\.\d+)?\b/gi, '')
-            .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '');
-          const hasCalcComparisonContent = !isCalcTier || (
-            /\d/.test(textWithoutVersions)
-            && /(?:复算|复核|核对|对比|对照|一致|偏差|分子|分母|笔|率|退款|复购|recalc|recomput|compar|verify|verified|checked|match|diff|rate|ratio|orders?|refund)/i.test(reportText)
-          );
-          assessmentReportBoundToTarget = referencesTarget && hasCalcComparisonContent;
-        }
-      } catch {
-        assessmentReportBoundToTarget = false;
-      }
-    } else {
-      // Missing assessment report ref cannot satisfy bound report verification!
-      assessmentReportBoundToTarget = false;
-    }
-
-    const completeVerifierReads = verifierReads.filter(r => r.complete);
-    const matchedRequiredReads = requiredRefs
-      .map(req => completeVerifierReads.find(vr => sameExactSourceRef(vr.ref, req)))
-      .filter((x): x is NonNullable<typeof x> => Boolean(x));
-    const readRequiredAssetsCount = matchedRequiredReads.length;
-    const allRequiredReadByVerifier = requiredRefs.length > 0
-      ? readRequiredAssetsCount === requiredRefs.length
-      : completeVerifierReads.length > 0;
-
-    const authorizedInputReadTurnIndices = [...authorizedInputReadTurns].sort((a, b) => a - b);
-    const carriedFromTurnIndices = [...new Set([
-      ...matchedRequiredReads
-        .filter(r => typeof r.turnIndex === 'number' && assessmentTurnIndex !== undefined && r.turnIndex < assessmentTurnIndex)
-        .map(r => r.turnIndex!),
-      ...(targetReportReadTurnIndex !== undefined && assessmentTurnIndex !== undefined && targetReportReadTurnIndex < assessmentTurnIndex
-        ? [targetReportReadTurnIndex]
-        : []),
-      ...authorizedInputReadTurnIndices.filter(t => assessmentTurnIndex !== undefined && t < assessmentTurnIndex),
-    ])].sort((a, b) => a - b);
-
-    // R4 STRICT CONJUNCTION:
-    // - ALL tiers require actual reading of the target report (`targetReportChecked === true`)
-    // - Calculation tiers require BOTH `targetReportChecked === true` AND `authorizedInputChecked === true`!
-    const hadDataOrCalcEvidence = isCalcTier
-      ? (authorizedInputChecked && targetReportChecked)
-      : targetReportChecked;
-
-    let missingReason: string | undefined;
-    if (!allRequiredReadByVerifier) {
-      missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 尚未完整实读适用原依赖（已完整实读 ${readRequiredAssetsCount}/${requiredRefs.length} 项），缺乏核验实证，保持待验证`;
-    } else if (!targetReportChecked) {
-      missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 未记录对待核目标报告（${targetBasename || useRecord.taskId.slice(0, 8)}）的实际查阅轨迹，保持待验证`;
-    } else if (isCalcTier && !authorizedInputChecked) {
-      missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 仅查阅原稿但未实读获准明细输入数据（020_clean）以完成独立复算，保持待验证`;
-    } else if (assessmentDisclaimerRejected) {
-      missingReason = `独立核验报告 ${assessLocator || assessmentReportRef?.id || ''} 明确声明未查看或未对照原报告/数据，不可判为独立核验通过，保持待验证`;
-    } else if (!assessmentReportRef || !assessmentReportBoundToTarget) {
-      missingReason = `独立核验报告 ${assessLocator || assessmentReportRef?.id || '（缺失）'} 未绑定目标报告精确身份（${targetBasename || targetShaPrefix || useRecord.taskId.slice(0, 8)}）或缺少复算对照内容，保持待验证`;
-    }
-    return {
-      verifierReads,
-      requiredCount: requiredRefs.length,
-      readRequiredAssetsCount,
-      allRequiredReadByVerifier,
-      hadDataOrCalcEvidence,
-      ...(assessmentTurnIndex !== undefined ? { assessmentTurnIndex } : {}),
-      ...(assessmentMessageId ? { assessmentMessageId } : {}),
-      carriedFromTurnIndices,
-      targetReportChecked,
-      ...(targetReportReadTurnIndex !== undefined ? { targetReportReadTurnIndex } : {}),
-      authorizedInputChecked,
-      authorizedInputReadTurnIndices,
-      assessmentReportBoundToTarget,
-      assessmentDisclaimerRejected,
-      ...(missingReason ? { missingReason } : {}),
+    use: EnterprisePackUseRecord,
+    studioUseId: string,
+    assessment: StudioUseAssessment,
+  ) {
+    const revision = pack.packRevisions.find(item => item.version === use.packVersion);
+    const purpose = revision?.purposeManifests.find(item => item.purposeId === use.purposeId);
+    const requiredRefs = purpose?.dependencies.filter(dep => dep.requiredFor.includes(purpose.tier)).map(dep => dep.ref) ?? [];
+    const report = assessment.report;
+    const target = use.reportRef;
+    const evidence = assessment.evidence;
+    const verifierReads: NonNullable<EnterprisePackUseRecord['independentVerification']['verifierActualReads']> = [];
+    const summary: NonNullable<EnterprisePackUseRecord['independentVerification']['verifierEvidenceSummary']> = {
+      requiredAssetsCount: requiredRefs.length,
+      readRequiredAssetsCount: 0,
+      allRequiredReadByVerifier: false,
+      hadDataOrCalcEvidence: false,
+      targetReportChecked: false,
+      authorizedInputChecked: false,
+      assessmentReportBoundToTarget: false,
     };
+    const pending = (missingReason: string) => ({
+      verifierReads, summary: { ...summary, missingReason }, wrongVersion: false, failed: false,
+    });
+    if (!options.taskSnapshot || !purpose || report.projectId !== verifierProjectId || report.taskId !== verifierTaskId ||
+        report.id !== verifierTaskId || report.authority !== 'task' || !projectFileLocator(report.locator, '060_reports') ||
+        !report.sha256 || report.version !== report.sha256) {
+      return pending('独立核验缺少准确的用途、核验任务或原生评估报告身份，保持待验证');
+    }
+    const [snapshot, project] = await Promise.all([
+      options.taskSnapshot(verifierProjectId, verifierTaskId), options.projects.get(verifierProjectId),
+    ]).catch(() => [undefined, undefined] as const);
+    if (!snapshot || !project) return pending('独立核验原生会话当前不可读，保持待验证');
+
+    const native = nativeAssessmentEvidence(snapshot.messages, pack.systemId, studioUseId, assessment, ref => ({
+      ...ref, locator: ref.locator
+        ? resolveTaskReportLocator(verifierProjectId, verifierTaskId, ref.locator, ref.sha256)
+        : undefined,
+    }));
+    if (!native) return pending('缺少对应本报告与用途的原生独立评估调用，保持待验证');
+    const { boundary, results } = native;
+    summary.assessmentTurnIndex = boundary.turnIndex;
+    summary.assessmentMessageId = boundary.entryId;
+    summary.assessmentSessionId = boundary.sessionId;
+    summary.assessmentToolCallId = boundary.id;
+
+    const workspaceRoot = getProjectToolScope(verifierProjectId)
+      ? path.resolve(options.dataRoot, 'member-pack-workspaces', verifierProjectId, verifierTaskId) : project.rootPath;
+    const owner = {
+      projectId: verifierProjectId, taskId: verifierTaskId,
+      cleanDir: path.join(workspaceRoot, '020_clean'), reportsDir: path.join(workspaceRoot, '060_reports'),
+    };
+    const sourceReads = results.flatMap(result => readStudioEvidence(result).map(item => ({ ...item, call: result.call })));
+    for (const result of results) {
+      const file = readNativeFileEvidence(result, owner);
+      if (!file) continue;
+      if (target.projectId === verifierProjectId && file.locator === target.locator && file.sha256 === target.sha256) {
+        sourceReads.push({ ref: target, complete: true, body: file.body, call: result.call });
+      } else if (projectFileLocator(file.locator, '020_clean')) {
+        sourceReads.push({
+          ref: {
+            authority: 'data', id: createHash('sha256').update(file.locator).digest('hex'),
+            projectId: verifierProjectId, taskId: verifierTaskId, locator: file.locator, version: file.sha256, sha256: file.sha256,
+          },
+          complete: true, body: file.body, call: result.call,
+        });
+      }
+    }
+
+    const inputPaths = evidence?.coverage?.inputPaths ?? [];
+    const authorizedInputs = new Map<string, string>();
+    for (const locator of inputPaths) {
+      if (!authorizeProjectDataPath(verifierProjectId, locator, { purposeKey: use.purposeKey }).allowed) continue;
+      try {
+        const actual = await options.projects.readFile(verifierProjectId, locator);
+        const visible = filterAuthorizedProjectData(verifierProjectId, locator, actual.bytes, { purposeKey: use.purposeKey });
+        authorizedInputs.set(locator, createHash('sha256').update(visible.bytes).digest('hex'));
+      } catch { /* absence of matching authorized bytes remains unknown */ }
+    }
+    const groups = new Map<string, typeof sourceReads>();
+    for (const read of sourceReads) {
+      const { title: _title, ...identity } = read.ref;
+      const key = digest(identity);
+      const group = groups.get(key) ?? [];
+      group.push(read);
+      groups.set(key, group);
+    }
+    // Full source reads supersede an earlier incomplete read. Disjoint pages only
+    // count together when the same exact source identity and full range are covered.
+    for (const group of groups.values()) {
+      const full = group.filter(read => read.complete).at(-1);
+      const complete = Boolean(full) || studioPagesComplete(group);
+      for (const read of full ? [full] : group) {
+        verifierReads.push({
+          ref: read.ref,
+          complete,
+          readAt: new Date().toISOString(),
+          turnIndex: read.call.turnIndex,
+          entryId: read.call.entryId,
+          sessionId: read.call.sessionId,
+          toolCallId: read.call.id,
+          fromAssessmentTurn: read.call.turnIndex === boundary.turnIndex,
+        });
+      }
+    }
+
+    const complete = verifierReads.filter(read => read.complete);
+    const required = requiredRefs.flatMap(ref => complete.filter(read => readCoversSource(read.ref, ref)));
+    const targetReads = complete.filter(read => exactTaskReport(read.ref, target));
+    const inputs = complete.filter(({ ref }) => ref.authority === 'data' && ref.projectId === verifierProjectId &&
+      projectFileLocator(ref.locator, '020_clean') && !!ref.sha256 && authorizedInputs.get(ref.locator) === ref.sha256);
+    const summaryRef = purpose.summaryAccess?.summaryRef;
+    const summaryReads = summaryRef && evidence?.coverage?.summaryRef && readCoversSource(evidence.coverage.summaryRef, summaryRef)
+      ? complete.filter(read => readCoversSource(read.ref, summaryRef)) : [];
+    const numberOfRequired = requiredRefs.filter(ref => required.some(read => readCoversSource(read.ref, ref))).length;
+    const isSummary = use.accessLevel === 'summary';
+    const isRecalculation = !isSummary && use.tier !== 'definition-reference';
+    summary.readRequiredAssetsCount = numberOfRequired;
+    summary.allRequiredReadByVerifier = numberOfRequired === requiredRefs.length;
+    summary.targetReportChecked = targetReads.length > 0;
+    summary.targetReportReadTurnIndex = targetReads.at(-1)?.turnIndex;
+    summary.authorizedInputChecked = inputPaths.length > 0 && inputPaths.every(locator => inputs.some(read => read.ref.locator === locator));
+    summary.authorizedInputReadTurnIndices = [...new Set(inputs.flatMap(read => read.turnIndex ?? []))].sort((a, b) => a - b);
+    summary.carriedFromTurnIndices = [...new Set([...required, ...targetReads, ...inputs, ...summaryReads]
+      .flatMap(read => read.turnIndex !== undefined && read.turnIndex < boundary.turnIndex ? [read.turnIndex] : []))].sort((a, b) => a - b);
+    summary.hadDataOrCalcEvidence = summary.targetReportChecked &&
+      (!isRecalculation || summary.authorizedInputChecked) && (!isSummary || summaryReads.length > 0);
+    if (!summary.targetReportChecked) return pending('独立任务未在对应评估前完整读取这份报告的准确版本，保持待验证');
+    if (evidence && (!exactTaskReport(evidence.targetReport, target) || (evidence.purposeId && evidence.purposeId !== use.purposeId))) {
+      return pending('独立核验声明引用了不同的报告版本或用途，保持待验证');
+    }
+
+    let reportBytes = readPreservedReportBytes(verifierProjectId, verifierTaskId, report.locator, report.sha256);
+    if (!reportBytes) {
+      try { reportBytes = (await options.projects.readFile(verifierProjectId, report.locator)).bytes; }
+      catch { return pending('独立核验报告未通过原件摘要核对，保持待验证'); }
+    }
+    if (createHash('sha256').update(reportBytes).digest('hex') !== report.sha256) {
+      return pending('独立核验报告未通过原件摘要核对，保持待验证');
+    }
+    preserveImmutableReportSnapshot(verifierProjectId, report.locator, reportBytes, report.sha256);
+    summary.assessmentReportBoundToTarget = true;
+
+    const finding = evidence?.finding;
+    const observedRef = finding?.observedRef;
+    const wrongVersion = assessment.status === 'fail' && finding?.kind === 'wrong-version' && !!observedRef &&
+      requiredRefs.some(ref => ref.authority === observedRef.authority && ref.id === observedRef.id && !readCoversSource(observedRef, ref)) &&
+      complete.some(read => readCoversSource(read.ref, observedRef));
+    if (wrongVersion) return { verifierReads, summary, wrongVersion, failed: true };
+    if (!summary.allRequiredReadByVerifier) return pending(`独立核验尚未完整实读适用原依赖（${numberOfRequired}/${requiredRefs.length}），保持待验证`);
+    if (!summary.hadDataOrCalcEvidence) return pending('独立核验尚未完整实读声明用于复算的获准输入或准确汇总，保持待验证');
+    const auditableFinding = finding?.kind === (assessment.status === 'pass' ? 'consistent' : 'mismatch') &&
+      (observedRef ? complete.some(read => readCoversSource(read.ref, observedRef))
+        : !!finding.sourceLocator && [...inputs, ...summaryReads, ...required].some(read => read.ref.locator === finding.sourceLocator));
+    if ((isRecalculation || isSummary || assessment.status === 'fail') && !evidence?.comparison && !auditableFinding) {
+      return pending('独立核验缺少带覆盖依据的对照结果或可回查的核验发现，保持待验证');
+    }
+    if (assessment.status === 'unknown') return pending('独立任务声明本次核验结果待查');
+    return { verifierReads, summary, wrongVersion: false, failed: assessment.status === 'fail' };
   }
 
   function redactPackForConsumer(pack: EnterpriseDomainPack, projectId: string): EnterpriseDomainPack {
@@ -2269,8 +2068,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           && u.purposeId === pm.purposeId
           && Boolean(u.authorDeclaration)
           && (
-            digest(u.reportRef) === digest(input.studioUse.report)
-            || (input.studioUse.report.sha256 && u.reportRef.sha256 === input.studioUse.report.sha256)
+            exactTaskReport(u.reportRef, input.studioUse.report)
           ),
         );
         if (already) {
@@ -2308,6 +2106,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           actualReads: nativeEv.actualReads,
           authorDeclaration: {
             declaredPurposeId: pm.purposeId,
+            studioUseId: input.studioUse.id,
             declaredRefs: input.studioUse.sources,
             summaryText: input.studioUse.result || '来自原 Studio declare-use 本轮作者采用声明',
             declaredAt: input.studioUse.createdAt,
@@ -2319,13 +2118,47 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return created;
   }
 
-  /**
-   * R4: Synchronizes a `studio_assets assess-use` assessment onto matching EnterprisePackUseRecord(s).
-   * Strictly separates same-task author self-assessment (kept `pending`) from independent-task
-   * verification, AND requires the independent verifier task ITSELF to possess actual complete
-   * native reads of the required original dependencies (plus target-bound recalculation/comparison
-   * evidence for calculation tiers) before granting `status = 'pass'`.
-   */
+  function matchesStudioUse(use: EnterprisePackUseRecord, studioUse: StudioUseRecord) {
+    const declaration = use.authorDeclaration;
+    return Boolean(declaration && use.projectId === studioUse.projectId && use.taskId === studioUse.taskId &&
+      exactTaskReport(use.reportRef, studioUse.report) &&
+      (declaration.studioUseId ? declaration.studioUseId === studioUse.id : declaration.declaredAt === studioUse.createdAt));
+  }
+
+  async function applyStudioAssessment(
+    pack: EnterpriseDomainPack,
+    use: EnterprisePackUseRecord,
+    studioUse: StudioUseRecord,
+    assessment: StudioUseAssessment,
+  ) {
+    const verifierProjectId = assessment.assessorProjectId;
+    const verifierTaskId = assessment.assessorTaskId;
+    const independent = !!verifierProjectId && !!verifierTaskId &&
+      (verifierProjectId !== use.projectId || verifierTaskId !== use.taskId) && !exactTaskReport(use.reportRef, assessment.report);
+    const verification = independent
+      ? await inspectVerifierTaskEvidence(verifierProjectId, verifierTaskId, pack, use, studioUse.id, assessment)
+      : undefined;
+    const verdictDetail = verification
+      ? verification.summary.missingReason ?? assessment.result
+      : '仅见原任务自评或缺少核验任务身份，保持待验证';
+    return packs.verifyUse(pack.id, use.id, {
+      verifierRole: independent ? '独立核验任务' : '原任务作者自评',
+      ...(verifierProjectId ? { verifierProjectId } : {}),
+      ...(verifierTaskId ? { verifierTaskId } : {}),
+      assessmentReportRef: assessment.report,
+      selfAssessmentOnly: !independent,
+      ...(verification ? {
+        verifierActualReads: verification.verifierReads,
+        verifierEvidenceSummary: verification.summary,
+        wrongVersionConfirmedByVerifier: verification.wrongVersion,
+        independentFailed: verification.failed,
+      } : {}),
+      independentConfirmed: assessment.status === 'pass' && !!verification && !verification.summary.missingReason,
+      checkedRefs: assessment.sources,
+      verdictDetail,
+    });
+  }
+
   async function syncAssessmentFromStudio(input: {
     systemId: string;
     studioUse: StudioUseRecord;
@@ -2335,99 +2168,15 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }): Promise<EnterprisePackUseRecord[]> {
     if (!enabled) return [];
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(input.studioUse.projectId);
-    if (!enterpriseId) return [];
-    const matchingPacks = packs.list(enterpriseId).filter(p => p.systemId === input.systemId);
-    if (!matchingPacks.length) return [];
-
-    let assessmentDiskVerified = false;
-    if (input.assessment.report.projectId && input.assessment.report.locator?.startsWith('060_reports/')) {
-      try {
-        const file = await options.projects.readFile(input.assessment.report.projectId, input.assessment.report.locator);
-        const actualSha = createHash('sha256').update(file.bytes).digest('hex');
-        if (!input.assessment.report.sha256 || input.assessment.report.sha256 === actualSha) {
-          assessmentDiskVerified = true;
-          preserveImmutableReportSnapshot(input.assessment.report.projectId, input.assessment.report.locator, file.bytes, actualSha);
-        }
-      } catch {
-        assessmentDiskVerified = false;
-      }
-    }
-
+    if (!enterpriseId || options.enterpriseScopes.enterpriseIdForProject(input.assessorProjectId) !== enterpriseId ||
+        input.assessment.assessorProjectId !== input.assessorProjectId || input.assessment.assessorTaskId !== input.assessorTaskId) return [];
     const updated: EnterprisePackUseRecord[] = [];
-    for (const pack of matchingPacks) {
-      const matchedUses = pack.useRecords.filter(u =>
-        u.projectId === input.studioUse.projectId
-        && u.taskId === input.studioUse.taskId
-        && (
-          digest(u.reportRef) === digest(input.studioUse.report)
-          || (u.reportRef.locator && input.studioUse.report.locator && u.reportRef.locator === input.studioUse.report.locator)
-          || (u.reportRef.sha256 && input.studioUse.report.sha256 && u.reportRef.sha256 === input.studioUse.report.sha256)
-        ),
-      );
-      for (const useRecord of matchedUses) {
-        const isIndependentAssessor = Boolean(
-          input.assessorTaskId
-          && input.assessorTaskId !== useRecord.taskId
-          && digest(input.assessment.report) !== digest(useRecord.reportRef),
-        );
-        const verifierEv = isIndependentAssessor
-          ? await inspectVerifierTaskEvidence(input.assessorProjectId, input.assessorTaskId, pack, useRecord, input.assessment.report, input.assessment.result)
-          : undefined;
-        const verifierEvidenceSufficient = Boolean(verifierEv && !verifierEv.missingReason);
-        const independentConfirmed = Boolean(
-          isIndependentAssessor
-          && input.assessment.status === 'pass'
-          && assessmentDiskVerified
-          && verifierEvidenceSufficient,
-        );
-        const wrongVersionConfirmedByVerifier = Boolean(
-          isIndependentAssessor
-          && input.assessment.status === 'fail'
-          && assessmentDiskVerified
-          && verifierEv?.targetReportChecked
-          && /(?:旧版|错版|wrong.?version|误用旧)/i.test(input.assessment.result ?? ''),
-        );
-        const verdictDetail = !isIndependentAssessor
-          ? `仅见原分析任务作者自评（同任务 ${input.assessorTaskId.slice(0, 8)}），缺少独立任务核验，保持待验证`
-          : input.assessment.status === 'fail'
-            ? `独立任务核验未通过：${input.assessment.result}`
-            : !assessmentDiskVerified
-              ? '独立核验报告未通过落盘摘要核对，保持待验证'
-              : verifierEv?.missingReason
-                ? verifierEv.missingReason
-                : input.assessment.result || '已通过独立任务实读、复算与落盘报告核验';
-
-        const verified = packs.verifyUse(pack.id, useRecord.id, {
-          verifierRole: isIndependentAssessor ? '独立核验任务' : '原任务作者自评',
-          verifierProjectId: input.assessorProjectId,
-          verifierTaskId: input.assessorTaskId,
-          assessmentReportRef: input.assessment.report,
-          selfAssessmentOnly: !isIndependentAssessor,
-          ...(verifierEv ? {
-            verifierActualReads: verifierEv.verifierReads,
-            verifierEvidenceSummary: {
-              requiredAssetsCount: verifierEv.requiredCount,
-              readRequiredAssetsCount: verifierEv.readRequiredAssetsCount,
-              allRequiredReadByVerifier: verifierEv.allRequiredReadByVerifier,
-              hadDataOrCalcEvidence: verifierEv.hadDataOrCalcEvidence,
-              ...(verifierEv.assessmentTurnIndex !== undefined ? { assessmentTurnIndex: verifierEv.assessmentTurnIndex } : {}),
-              ...(verifierEv.assessmentMessageId ? { assessmentMessageId: verifierEv.assessmentMessageId } : {}),
-              ...(verifierEv.carriedFromTurnIndices.length ? { carriedFromTurnIndices: verifierEv.carriedFromTurnIndices } : {}),
-              targetReportChecked: verifierEv.targetReportChecked,
-              ...(verifierEv.targetReportReadTurnIndex !== undefined ? { targetReportReadTurnIndex: verifierEv.targetReportReadTurnIndex } : {}),
-              authorizedInputChecked: verifierEv.authorizedInputChecked,
-              ...(verifierEv.authorizedInputReadTurnIndices.length ? { authorizedInputReadTurnIndices: verifierEv.authorizedInputReadTurnIndices } : {}),
-              assessmentReportBoundToTarget: verifierEv.assessmentReportBoundToTarget,
-              assessmentDisclaimerRejected: verifierEv.assessmentDisclaimerRejected,
-              ...(verifierEv.missingReason ? { missingReason: verifierEv.missingReason } : {}),
-            },
-          } : {}),
-          independentConfirmed,
-          ...(wrongVersionConfirmedByVerifier ? { wrongVersionConfirmedByVerifier: true } : {}),
-          checkedRefs: input.assessment.sources,
-          verdictDetail,
-        });
-        updated.push(verified);
+    for (const pack of packs.list(enterpriseId).filter(item => item.systemId === input.systemId)) {
+      const matched = pack.useRecords.filter(use => matchesStudioUse(use, input.studioUse));
+      const purposeId = input.assessment.evidence?.purposeId;
+      if (!purposeId && new Set(matched.map(use => use.purposeId)).size > 1) continue;
+      for (const use of matched.filter(use => !purposeId || use.purposeId === purposeId)) {
+        updated.push(await applyStudioAssessment(pack, use, input.studioUse, input.assessment));
       }
     }
     return updated;
@@ -3494,9 +3243,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               u.projectId === pid
               && u.taskId === tid
               && (
-                digest(u.report) === digest(verifiedReportRef)
-                || (verifiedReportRef.locator && u.report.locator === verifiedReportRef.locator && (!u.report.sha256 || u.report.sha256 === verifiedReportRef.sha256))
-                || (rawReportRef.locator && u.report.locator === rawReportRef.locator && (!u.report.sha256 || u.report.sha256 === verifiedReportRef.sha256))
+                exactTaskReport(u.report, verifiedReportRef)
               ),
             );
             const declaredInThisTurn = !options.taskSnapshot
@@ -3505,6 +3252,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             if (studioUse && declaredInThisTurn && studioUse.sources.length > 0) {
               resolvedDeclaration = {
                 declaredPurposeId: pm.purposeId,
+                studioUseId: studioUse.id,
                 declaredRefs: studioUse.sources,
                 summaryText: studioUse.result || '来自原 Studio declare-use 本轮作者采用声明',
                 declaredAt: studioUse.createdAt,
@@ -4465,129 +4213,20 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         if (!useRecord) throw new StudioError('enterprise_pack_use_not_found', 404);
 
         const studioSys = options.studio.get(currentPack.systemId);
-        const studioUse = [...studioSys.uses].reverse().find(u =>
-          u.projectId === useRecord.projectId
-          && u.taskId === useRecord.taskId
-          && (
-            digest(u.report) === digest(useRecord.reportRef)
-            || (useRecord.reportRef.locator && u.report.locator === useRecord.reportRef.locator)
-            || (u.report.sha256 && u.report.sha256 === useRecord.reportRef.sha256)
-          ),
-        );
-
-        // Allow recording a disk-verified independent assessment report into studio.uses when provided
-        const rawAssessRef = input.assessmentReportRef ?? input.verificationReportRef;
-        if (studioUse && object(rawAssessRef)) {
-          const parsedAssessRef = sourceRef(rawAssessRef);
-          if (
-            parsedAssessRef.authority !== 'task'
-            || !parsedAssessRef.projectId
-            || !parsedAssessRef.taskId
-            || !parsedAssessRef.locator?.startsWith('060_reports/')
-          ) {
-            throw new StudioError('studio_use_report_mismatch', 403);
-          }
-          if (options.enterpriseScopes.enterpriseIdForProject(parsedAssessRef.projectId) !== currentPack.enterpriseId) {
-            throw new StudioError('studio_owner_mismatch', 403);
-          }
-          const assessProj = await options.projects.get(parsedAssessRef.projectId);
-          syncWorkspaceReportsToProject(parsedAssessRef.projectId, parsedAssessRef.taskId, assessProj.rootPath);
-          const effectiveAssessLoc = resolveTaskReportLocator(parsedAssessRef.projectId, parsedAssessRef.taskId, parsedAssessRef.locator, parsedAssessRef.sha256);
-          const assessFile = await options.projects.readFile(parsedAssessRef.projectId, effectiveAssessLoc);
-          const actualAssessSha = createHash('sha256').update(assessFile.bytes).digest('hex');
-          if (parsedAssessRef.sha256 && parsedAssessRef.sha256 !== actualAssessSha) {
-            throw new StudioError('studio_use_report_hash_mismatch', 409);
-          }
-          preserveImmutableReportSnapshot(parsedAssessRef.projectId, effectiveAssessLoc, assessFile.bytes, actualAssessSha);
-          const verifiedAssessRef = sourceRef({ ...parsedAssessRef, locator: effectiveAssessLoc, version: actualAssessSha, sha256: actualAssessSha });
-          if (digest(verifiedAssessRef) === digest(useRecord.reportRef)) {
-            throw new StudioError('studio_use_assessment_same_as_report', 409);
-          }
-          options.studio.recordUseAssessment(currentPack.systemId, studioUse.id, {
-            status: input.independentConfirmed === false ? 'fail' : 'pass',
-            report: verifiedAssessRef,
-            sources: studioUse.sources,
-            result: text(input.verdictDetail ?? '独立复核报告已核对落盘', 20_000, false),
-            assessorProjectId: verifiedAssessRef.projectId,
-            assessorTaskId: verifiedAssessRef.taskId,
-          });
-        }
-
-        // CRITICAL (R4): NEVER trust client-supplied boolean independentConfirmed OR same-task author self-assessment OR blind verifier without reads!
-        // Only a disk-verified StudioUseAssessment authored by an INDEPENDENT task (`assessorTaskId !== useRecord.taskId`) that has its OWN native reads & calc/data evidence may achieve 'pass'!
-        const latestStudioSys = options.studio.get(currentPack.systemId);
-        const latestStudioUse = studioUse ? latestStudioSys.uses.find(u => u.id === studioUse.id) : undefined;
-        const latestAssessment = latestStudioUse?.assessments?.at(-1);
-        const assessorProjectId = latestAssessment?.assessorProjectId ?? latestAssessment?.report.projectId;
-        const assessorTaskId = latestAssessment?.assessorTaskId ?? latestAssessment?.report.taskId;
-        const isIndependentAssessor = Boolean(assessorTaskId && assessorTaskId !== useRecord.taskId);
-        const selfAssessmentOnly = Boolean(latestAssessment && !isIndependentAssessor);
-
-        let assessmentDiskVerified = false;
-        if (latestStudioUse && latestAssessment && latestAssessment.status === 'pass' && latestAssessment.report.projectId && latestAssessment.report.locator?.startsWith('060_reports/')) {
-          try {
-            const effAssessLoc = resolveTaskReportLocator(latestAssessment.report.projectId, assessorTaskId ?? useRecord.taskId, latestAssessment.report.locator, latestAssessment.report.sha256);
-            const assessFile = await options.projects.readFile(latestAssessment.report.projectId, effAssessLoc);
-            const actualSha = createHash('sha256').update(assessFile.bytes).digest('hex');
-            if (!latestAssessment.report.sha256 || latestAssessment.report.sha256 === actualSha) {
-              preserveImmutableReportSnapshot(latestAssessment.report.projectId, effAssessLoc, assessFile.bytes, actualSha);
-              assessmentDiskVerified = true;
-            }
-          } catch {
-            assessmentDiskVerified = false;
-          }
-        }
-
-        let verifierEv: Awaited<ReturnType<typeof inspectVerifierTaskEvidence>> | undefined;
-        if (isIndependentAssessor && assessorProjectId && assessorTaskId) {
-          verifierEv = await inspectVerifierTaskEvidence(assessorProjectId, assessorTaskId, currentPack, useRecord, latestAssessment?.report, latestAssessment?.result);
-        }
-
-        const hostVerifiedIndependentConfirmed = Boolean(
-          input.independentConfirmed === true
-          && latestStudioUse
-          && latestAssessment
-          && latestAssessment.status === 'pass'
-          && assessmentDiskVerified
-          && isIndependentAssessor
-          && (!verifierEv || !verifierEv.missingReason),
-        );
-        const effectiveVerdictDetail = selfAssessmentOnly && input.independentConfirmed === true
-          ? '仅见原分析任务作者自评（同任务），缺少独立任务/独立身份核验，保持待验证'
-          : verifierEv?.missingReason && input.independentConfirmed === true
-            ? verifierEv.missingReason
-            : typeof input.verdictDetail === 'string'
-              ? input.verdictDetail
-              : undefined;
-
-        const use = packs.verifyUse(useVerifyMatch[1]!, useVerifyMatch[2]!, {
-          ...(input as unknown as Parameters<EnterprisePackStore['verifyUse']>[2]),
-          ...(effectiveVerdictDetail ? { verdictDetail: effectiveVerdictDetail } : {}),
-          ...(assessorProjectId ? { verifierProjectId: assessorProjectId } : {}),
-          ...(assessorTaskId ? { verifierTaskId: assessorTaskId } : {}),
-          ...(latestAssessment?.report ? { assessmentReportRef: latestAssessment.report } : {}),
-          ...(verifierEv ? {
-            verifierActualReads: verifierEv.verifierReads,
-            verifierEvidenceSummary: {
-              requiredAssetsCount: verifierEv.requiredCount,
-              readRequiredAssetsCount: verifierEv.readRequiredAssetsCount,
-              allRequiredReadByVerifier: verifierEv.allRequiredReadByVerifier,
-              hadDataOrCalcEvidence: verifierEv.hadDataOrCalcEvidence,
-              ...(verifierEv.assessmentTurnIndex !== undefined ? { assessmentTurnIndex: verifierEv.assessmentTurnIndex } : {}),
-              ...(verifierEv.assessmentMessageId ? { assessmentMessageId: verifierEv.assessmentMessageId } : {}),
-              ...(verifierEv.carriedFromTurnIndices.length ? { carriedFromTurnIndices: verifierEv.carriedFromTurnIndices } : {}),
-              targetReportChecked: verifierEv.targetReportChecked,
-              ...(verifierEv.targetReportReadTurnIndex !== undefined ? { targetReportReadTurnIndex: verifierEv.targetReportReadTurnIndex } : {}),
-              authorizedInputChecked: verifierEv.authorizedInputChecked,
-              ...(verifierEv.authorizedInputReadTurnIndices.length ? { authorizedInputReadTurnIndices: verifierEv.authorizedInputReadTurnIndices } : {}),
-              assessmentReportBoundToTarget: verifierEv.assessmentReportBoundToTarget,
-              assessmentDisclaimerRejected: verifierEv.assessmentDisclaimerRejected,
-              ...(verifierEv.missingReason ? { missingReason: verifierEv.missingReason } : {}),
-            },
-          } : {}),
-          selfAssessmentOnly,
-          independentConfirmed: hostVerifiedIndependentConfirmed,
-        });
+        const candidates = studioSys.uses.filter(studioUse => matchesStudioUse(useRecord, studioUse));
+        const studioUse = candidates.length === 1 ? candidates[0] : undefined;
+        const rawAssessment = input.assessmentReportRef ?? input.verificationReportRef;
+        const exactAssessment = rawAssessment === undefined ? undefined : sourceRef(rawAssessment);
+        const latest = studioUse?.assessments?.filter(item =>
+          (!exactAssessment || exactTaskReport(item.report, exactAssessment)) &&
+          (!item.evidence?.purposeId || item.evidence.purposeId === useRecord.purposeId),
+        ).at(-1);
+        const linkedPurposes = new Set(studioUse
+          ? currentPack.useRecords.filter(use => matchesStudioUse(use, studioUse)).map(use => use.purposeId)
+          : []);
+        const use = studioUse && latest && (linkedPurposes.size === 1 || latest.evidence?.purposeId === useRecord.purposeId)
+          ? await applyStudioAssessment(currentPack, useRecord, studioUse, latest)
+          : useRecord;
         return { result: { use, pack: packs.get(useVerifyMatch[1]!) } as unknown as Record<string, unknown> };
       }));
       json(response, receipt.statusCode || 200, receipt.result);

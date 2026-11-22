@@ -609,6 +609,7 @@ export interface EnterprisePackUseRecord {
   actualReads: EnterprisePackReadEvidence[];
   authorDeclaration?: {
     declaredPurposeId: string;
+    studioUseId?: string;
     declaredRefs: StudioSourceRef[];
     summaryRef?: StudioSourceRef;
     summaryText: string;
@@ -628,6 +629,8 @@ export interface EnterprisePackUseRecord {
       readAt: string;
       turnIndex?: number;
       entryId?: string;
+      sessionId?: string;
+      toolCallId?: string;
       fromAssessmentTurn?: boolean;
     }[];
     verifierEvidenceSummary?: {
@@ -637,6 +640,8 @@ export interface EnterprisePackUseRecord {
       hadDataOrCalcEvidence: boolean;
       assessmentTurnIndex?: number;
       assessmentMessageId?: string;
+      assessmentSessionId?: string;
+      assessmentToolCallId?: string;
       carriedFromTurnIndices?: number[];
       targetReportChecked?: boolean;
       targetReportReadTurnIndex?: number;
@@ -1070,6 +1075,7 @@ export function evaluateUseVerdict(input: {
   hasAuthorDeclaration: boolean;
   independentConfirmed: boolean;
   wrongVersionConfirmedByVerifier?: boolean;
+  independentFailed?: boolean;
   partialSubsetOnly?: boolean;
   treatedUnreadableStoreAsZero?: boolean;
   includedOptedOutInSms?: boolean;
@@ -1107,6 +1113,9 @@ export function evaluateUseVerdict(input: {
       wrongVersionDetected: true,
       reason: '独立核验已查实本稿实际采用旧版/错版口径，即使汇总数字巧合相同，该用途仍判未通过',
     };
+  }
+  if (input.independentFailed) {
+    return { verdict: 'fail', wrongVersionDetected: false, reason: '独立核验记录了有可回查证据的未通过结论' };
   }
   // 1C. Wrong version reads across expectedRef and requiredRefs:
   //     - If the author actually declared adoption on this report (`hasAuthorDeclaration === true`) while only reading the old version -> 'fail' (wrongVersionDetected: true).

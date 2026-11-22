@@ -1127,33 +1127,12 @@ export class EnterprisePackStore {
     verifierTaskId?: string;
     assessmentReportRef?: StudioSourceRef;
     selfAssessmentOnly?: boolean;
-    verifierActualReads?: {
-      ref: StudioSourceRef;
-      complete: boolean;
-      readAt: string;
-      turnIndex?: number;
-      entryId?: string;
-      fromAssessmentTurn?: boolean;
-    }[];
-    verifierEvidenceSummary?: {
-      requiredAssetsCount?: number;
-      readRequiredAssetsCount: number;
-      allRequiredReadByVerifier?: boolean;
-      hadDataOrCalcEvidence: boolean;
-      assessmentTurnIndex?: number;
-      assessmentMessageId?: string;
-      carriedFromTurnIndices?: number[];
-      targetReportChecked?: boolean;
-      targetReportReadTurnIndex?: number;
-      authorizedInputChecked?: boolean;
-      authorizedInputReadTurnIndices?: number[];
-      assessmentReportBoundToTarget?: boolean;
-      assessmentDisclaimerRejected?: boolean;
-      missingReason?: string;
-    };
+    verifierActualReads?: EnterprisePackUseRecord['independentVerification']['verifierActualReads'];
+    verifierEvidenceSummary?: EnterprisePackUseRecord['independentVerification']['verifierEvidenceSummary'];
     expectedRef?: StudioSourceRef;
     independentConfirmed: boolean;
     wrongVersionConfirmedByVerifier?: boolean;
+    independentFailed?: boolean;
     partialSubsetOnly?: boolean;
     treatedUnreadableStoreAsZero?: boolean;
     includedOptedOutInSms?: boolean;
@@ -1178,6 +1157,7 @@ export class EnterprisePackStore {
         hasAuthorDeclaration: Boolean(record.authorDeclaration),
         independentConfirmed: input.independentConfirmed,
         wrongVersionConfirmedByVerifier: input.wrongVersionConfirmedByVerifier,
+        independentFailed: input.independentFailed,
         partialSubsetOnly: input.partialSubsetOnly,
         treatedUnreadableStoreAsZero: input.treatedUnreadableStoreAsZero,
         includedOptedOutInSms: input.includedOptedOutInSms,
@@ -1197,6 +1177,8 @@ export class EnterprisePackStore {
             readAt: text(r.readAt, 100, false),
             ...(typeof r.turnIndex === 'number' ? { turnIndex: r.turnIndex } : {}),
             ...(r.entryId ? { entryId: text(r.entryId, 200, false) } : {}),
+            ...(r.sessionId ? { sessionId: text(r.sessionId, 200, false) } : {}),
+            ...(r.toolCallId ? { toolCallId: text(r.toolCallId, 200, false) } : {}),
             ...(r.fromAssessmentTurn !== undefined ? { fromAssessmentTurn: Boolean(r.fromAssessmentTurn) } : {}),
           })),
         } : {}),
@@ -1208,6 +1190,8 @@ export class EnterprisePackStore {
             hadDataOrCalcEvidence: Boolean(input.verifierEvidenceSummary.hadDataOrCalcEvidence),
             ...(typeof input.verifierEvidenceSummary.assessmentTurnIndex === 'number' ? { assessmentTurnIndex: input.verifierEvidenceSummary.assessmentTurnIndex } : {}),
             ...(input.verifierEvidenceSummary.assessmentMessageId ? { assessmentMessageId: text(input.verifierEvidenceSummary.assessmentMessageId, 200, false) } : {}),
+            ...(input.verifierEvidenceSummary.assessmentSessionId ? { assessmentSessionId: text(input.verifierEvidenceSummary.assessmentSessionId, 200, false) } : {}),
+            ...(input.verifierEvidenceSummary.assessmentToolCallId ? { assessmentToolCallId: text(input.verifierEvidenceSummary.assessmentToolCallId, 200, false) } : {}),
             ...(Array.isArray(input.verifierEvidenceSummary.carriedFromTurnIndices)
               ? { carriedFromTurnIndices: input.verifierEvidenceSummary.carriedFromTurnIndices.filter(n => typeof n === 'number' && Number.isFinite(n)) }
               : {}),

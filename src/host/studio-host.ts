@@ -1,3 +1,4 @@
+import { parseStudioAssessmentEvidence } from './member-pack-verification.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -835,7 +836,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     'mark-issue': '{assetId,revision,sources,reason}; construction Agent explicit, evidenced confirmed error governance; feedback alone never makes this decision',
     'work-item': '{id?,topicId?,kind:task|question|gap|review,title,detail,impact,nextStep,sources,status}; answer is human-only via the original answer entry. An answered question retains its original topic/meaning/evidence/answer and resolved fact; update nextStep to execute the decision. A new decision needs a new question id',
     'declare-use': '{report:exact task060 SourceRef,sources:exact used SourceRef[],result}; example report:{authority:task,id:<actual current taskId>,projectId:<actual current projectId>,taskId:<same current taskId>,locator:060_reports/<actual filename>,version:<complete file bytes SHA256>,sha256:<same SHA256>}. id is taskId, version is byte hash, never filename/latest/semantic version. Agent obtains actual file path/hash with existing tools. Records author use declaration, NOT assessed',
-    'assess-use': '{useId,status:pass|fail|unknown,report:separate exact060 assessment SourceRef,sources:exact use.sources,result}; explicitly assess problem and preserved correct findings, with evidence/limits; no Host score or mandatory specialist workflow',
+    'assess-use': '{useId,status:pass|fail|unknown,report:separate exact060 assessment SourceRef,sources:exact use.sources,result,evidence?:{targetReport:exact original use.report,purposeId?:member pack purpose UUID,carriedReadToolCallIds?:exact prior read call IDs,coverage?:{scope,detail,inputPaths:exact authorized 020 paths,summaryRef?:exact authorized result},comparison?:{metrics:[{name,reported:number,recomputed:number}],facts:source coverage and key facts},finding?:{kind:wrong-version|mismatch|consistent,detail,reportLocator,sourceLocator?,observedRef?:exact compared source}}}. Member pack evidence links the exact original report, prior reads explicitly carried, and for calculation or summary a result comparison with coverage or an auditable finding. The Agent chooses how to check and supplies the findings.',
     'update-feedback': '{feedbackId,status,response,sources?,verification?:{sources,result}}; verified requires matching revised formal source versions, exact new use report+assessment report+used sources; accepted is not repair',
     'pack-read': '{domain?:string}; reads the enterprise member operations asset pack. Construction owner receives current panorama, entries, purposes and revisions; ordinary analysis receives only task-pinned eligible version and Host-authorized purposes/dependencies.',
     'pack-save-panorama': '{goal,brand,channel,period,dataCutoffAt,decisionPurpose,sourceRefs:SourceRef[],recommendations:[{purposeKey,title,priorityReason,deliverableNow,minimumEvidence,ownerRole,completionCriteria}],issues:[{id,problemName,businessStatus:active|not_launched|unknown,assetSupportStatus:ready|definition_only|limited_calc|gap_material|gap_decision|not_needed,summary,factOrInference:fact|inference,decisionImpact,nextStep,evidence:[{sourceRef,locator,scope,note?}]}],pendingQuestions?:[{id,question,impact}]}; construction owner only; validates authorized sourceRefs and saves a verifiable enterprise panorama snapshot directly into the enterprise member pack.',
@@ -1069,6 +1070,7 @@ export function createStudioFeature(options: StudioHostOptions) {
             ? sourceRef({ ...rawReport, locator: effectiveLocator })
             : rawReport;
           await sources.validate(report, projectId, id); await validateSources(refs, system, projectId, false);
+          const evidence = parseStudioAssessmentEvidence(payload.evidence);
           return options.mutate(async () => {
             await assertCurrent();
             const updatedUse = store.recordUseAssessment(id, use.id, {
@@ -1078,6 +1080,8 @@ export function createStudioFeature(options: StudioHostOptions) {
               result: text(payload.result, 20_000, false),
               assessorProjectId: projectId,
               assessorTaskId: taskId,
+              nativeCall: { sessionId: context.sessionId, toolCallId: context.toolCallId },
+              ...(evidence ? { evidence } : {}),
             });
             const latestAssess = updatedUse.assessments?.at(-1);
             const memberPackUses = latestAssess

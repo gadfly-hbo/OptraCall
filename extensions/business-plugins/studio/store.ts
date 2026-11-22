@@ -502,6 +502,11 @@ export class StudioStore {
         result: text(input.result, 20_000, false),
         ...(input.assessorProjectId ? { assessorProjectId: expectedProjectId } : {}),
         ...(input.assessorTaskId ? { assessorTaskId: expectedTaskId } : {}),
+        ...(input.nativeCall ? { nativeCall: {
+          sessionId: text(input.nativeCall.sessionId, 200, false),
+          toolCallId: text(input.nativeCall.toolCallId, 200, false),
+        } } : {}),
+        ...(input.evidence ? { evidence: input.evidence } : {}),
         at: now(),
       });
       return use;
