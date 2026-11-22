@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" href="data:," />
+<title>OptraCall · #116 所有 Agent 对话｜合并推理过程、折叠长消息 UI Demo（设计待审）</title>
+<style>
+  :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; font-synthesis: none; color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: #14131a; }
+  button, input, select, textarea { font: inherit; }
+  button { cursor: pointer; color: inherit; }
+  button:disabled { cursor: not-allowed; }
+  button:focus-visible, summary:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 3px solid #a397e0; outline-offset: 3px; }
+
+  /* ===== 评审控制栏（产品外壳之外） ===== */
+  .demo-review-bar { background: #1e1c29; color: #eeeef2; border-bottom: 1px solid #38344c; padding: 8px 16px; font-size: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; position: sticky; top: 0; z-index: 20; }
+  .demo-review-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .demo-review-badge { background: #6550c9; color: #fff; font-weight: 600; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+  .demo-tab { border: 1px solid #494463; background: #282538; color: #e4e2f0; border-radius: 5px; padding: 4px 10px; font-size: 12px; }
+  .demo-tab[aria-pressed="true"] { background: #6550c9; border-color: #6550c9; color: #fff; font-weight: 600; }
+  .demo-act { border: 1px solid #5b5479; background: #302c42; color: #e4e2f0; border-radius: 5px; padding: 4px 10px; font-size: 12px; }
+  .demo-act:hover { background: #3a3552; }
+  .demo-hint { color: #b2b0be; font-size: 11px; }
+  .demo-store-count { color: #9ce0b0; font-size: 11px; }
+
+  .demo-stage { height: calc(100dvh - 46px); display: flex; justify-content: center; background: #14131a; }
+  .demo-stage[data-viewport="narrow"] { align-items: flex-start; padding-top: 14px; }
+  .demo-stage[data-viewport="narrow"] .app { width: 390px; height: calc(100dvh - 74px); border: 1px solid #3d3b47; border-radius: 14px; overflow: hidden; box-shadow: 0 18px 60px #0009; }
+  .demo-stage[data-viewport="narrow"] .sg-panel { padding: 12px; }
+
+  /* ===== 产品令牌（复制自 src/host/ui/styles.css） ===== */
+  .app { color-scheme: light; --canvas: #fff; --sidebar: #f7f7f9; --surface: #fff; --subtle: #f5f5f8; --hover: #ececf2; --ink: #24232b; --muted: #6c6b78; --faint: #777580; --line: #e6e5eb; --accent: #6550c9; --accent-soft: #eeebfb; --focus: #a397e0; --warning: #80530c; --warning-bg: #fff7e8; --error: #a12b36; --error-bg: #fff4f4; --ok: #1c7c4a; display: flex; flex-direction: column; min-height: 0; height: 100dvh; overflow: hidden; color: var(--ink); background: var(--canvas); font-size: 14px; line-height: 1.55; width: 100%; }
+  .app[data-theme="dark"] { color-scheme: dark; --canvas: #1b1b20; --sidebar: #16161b; --surface: #232329; --subtle: #292930; --hover: #32323a; --ink: #eeeef2; --muted: #b2b0be; --faint: #a7a5b2; --line: #3d3b47; --accent: #b7a7ff; --accent-soft: #30294a; --focus: #c4b7ff; --warning: #edc887; --warning-bg: #372c1b; --error: #ffafb8; --error-bg: #39252b; --ok: #7fd3a4; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 10px 22px; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+  .topbar-title { font-size: 13px; color: var(--muted); }
+  .main-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; clip: rect(0,0,0,0); overflow: hidden; white-space: nowrap; border: 0; }
+  .brand-mark { width: 29px; height: 29px; display: inline-flex; position: relative; color: var(--accent); flex-shrink: 0; }
+  .brand-mark span { position: absolute; inset: 3px; border: 2px solid currentColor; border-radius: 50%; }
+  .brand-mark i { position: absolute; width: 11px; height: 11px; right: 0; bottom: 0; border: 2px solid currentColor; border-radius: 50%; background: var(--canvas); }
+  .brand-mark-xs { width: 18px; height: 18px; }
+  .brand-mark-xs span { inset: 2px; border-width: 1.5px; }
+  .brand-mark-xs i { width: 7px; height: 7px; border-width: 1.5px; }
+  .message-author { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; }
+  .message-author strong { font-weight: 550; }
+  .message-author > span:last-child:not(.user-mark) { color: var(--muted); font-size: 11px; }
+  .strategy-discussion-message .message-author { margin: 0 0 6px; }
+  .msg-author { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 10.5px; color: var(--faint); }
+  .msg-author strong { font-weight: 600; color: var(--muted); font-size: 11px; }
+  .msg-author > span:last-child { font-size: 10px; }
+  .user-mark { display: grid; place-items: center; height: 28px; width: 28px; border-radius: 50%; background: var(--subtle); font-size: 11px; color: var(--muted); }
+  .primary-button { border: 1px solid transparent; background: #6550c9; color: #fff; border-radius: 7px; padding: 7px 14px; }
+  .secondary-button { border: 1px solid var(--line); background: var(--surface); color: inherit; border-radius: 7px; padding: 7px 14px; }
+  .text-button { border: 0; background: transparent; color: var(--accent); padding: 4px 6px; border-radius: 5px; font-size: 12px; }
+  .text-button:hover { background: var(--accent-soft); }
+  .stop-button { display: inline-flex; gap: 5px; align-items: center; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--subtle); font-size: 12px; }
+
+  /* ===== E1 项目任务对话（复制自 styles.css 层级） ===== */
+  .chat-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .task-banner { padding: 10px 22px 0; max-width: 800px; margin: 0 auto; width: calc(100% - 44px); font-size: 13px; color: var(--muted); }
+  .task-banner strong { color: var(--ink); font-weight: 550; }
+  .message-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+  .messages { max-width: 800px; margin: auto; padding: 18px 22px 16px; width: calc(100% - 44px); }
+  .message { padding: 18px 0 22px; }
+  .message-author { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; }
+  .message-author strong { font-weight: 550; }
+  .message-author > span:last-child:not(.user-mark) { color: var(--muted); font-size: 11px; }
+  .message-content { padding-left: 37px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.85; }
+  .message-content .strategy-discussion-reply { white-space: normal; }
+  .message-meta { color: var(--muted); font-size: 11px; padding-left: 37px; margin: 6px 0 0; }
+  .failed-meta { color: var(--error); }
+  .report-action-row { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 37px; margin-top: 8px; }
+  .tool-message { border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); margin: 6px 0; font-size: 12px; overflow: hidden; }
+  .tool-message summary { cursor: pointer; padding: 9px 13px; color: var(--muted); }
+  .tool-message pre { margin: 0; padding: 11px 13px; border-top: 1px solid var(--line); max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.7; }
+  .tool-message > code { display: block; margin: 0 13px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .tool-error { border-color: color-mix(in srgb, var(--error) 35%, var(--line)); }
+  .tool-error summary { color: var(--error); }
+  .run-progress { margin: 4px 0 14px 37px; font-size: 12px; color: var(--muted); }
+  .composer-area { width: min(800px, calc(100% - 44px)); margin: 8px auto 14px; flex: 0 0 auto; }
+  .composer { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 13px 16px; }
+  .composer textarea { display: block; width: 100%; border: 0; background: transparent; color: var(--ink); resize: vertical; min-height: 46px; font-size: 15px; line-height: 1.65; }
+  .composer textarea:focus { outline: 0; }
+  .composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 12px; }
+  .composer-helper { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin: 8px 4px 0; color: var(--muted); font-size: 11px; }
+  .error-notice { display: flex; gap: 10px; align-items: flex-start; border: 1px solid color-mix(in srgb, var(--error) 30%, var(--line)); background: var(--error-bg); color: var(--ink); border-radius: 9px; padding: 10px 13px; font-size: 12.5px; margin: 0 0 10px; }
+  .error-notice strong { color: var(--error); }
+  .error-notice p { margin: 3px 0 6px; }
+  .error-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .semantic-mini { margin: 8px 0 0 37px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); padding: 8px 12px; font-size: 11.5px; color: var(--muted); }
+  .eb-native-context { margin: 8px 0 0 37px; font-size: 11.5px; color: var(--muted); }
+  .eb-native-context summary { cursor: pointer; }
+  .eb-native-context pre { background: var(--subtle); border: 1px solid var(--line); border-radius: 6px; padding: 10px; max-height: 200px; overflow: auto; white-space: pre-wrap; }
+
+  /* ===== E3/E4 共享转录（复制自 strategy-goals.css 层级） ===== */
+  .sg-panel { max-width: 860px; margin: 0 auto; padding: 18px 22px 22px; width: calc(100% - 44px); }
+  .sg-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .sg-row-between { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+  .sg-muted { color: var(--muted); font-size: 12px; line-height: 1.7; }
+  .sg-select { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 6px 8px; font-size: 12px; max-width: 240px; }
+  .strategy-discussion > .sg-row-between h2 { margin: 0; font-size: 16px; }
+  .strategy-discussion-messages { max-height: 52vh; overflow-y: auto; margin: 14px 0; border-top: 1px solid var(--line); }
+  .strategy-discussion-message { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .strategy-discussion-message > strong { color: var(--muted); font-size: 12px; }
+  .strategy-discussion-message > p { margin: 7px 0 0; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .strategy-discussion-message.user { padding-left: 14px; border-left: 2px solid var(--accent-soft); }
+  .strategy-discussion-reply { min-width: 0; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+  .strategy-discussion-reply p { margin: 8px 0; }
+  .strategy-discussion-reply :is(h3, h4, h5, h6) { margin: 14px 0 8px; font-size: 14px; line-height: 1.45; }
+  .strategy-discussion-reply h3 { font-size: 16px; }
+  .strategy-discussion-reply :is(ul, ol) { margin: 7px 0 12px; padding-inline-start: 22px; }
+  .strategy-discussion-reply li { margin: 3px 0; }
+  .sg-table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; }
+  .sg-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .sg-table th, .sg-table td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: 8px 10px; line-height: 1.7; min-width: 118px; }
+  .sg-table th { font-weight: 550; color: var(--ink); background: var(--subtle); }
+  .strategy-discussion-reply pre { overflow-x: auto; padding: 9px 11px; border-radius: 5px; background: var(--subtle); }
+  .strategy-discussion-reply code { font-size: .94em; }
+  .evidence-card { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; border: 1px solid var(--line); background: var(--subtle); border-radius: 8px; padding: 8px 12px; font-size: 12px; max-width: 100%; }
+  .evidence-card .ev-loc { color: var(--accent); font-weight: 550; }
+  .evidence-card .ev-quote { color: var(--muted); overflow-wrap: anywhere; }
+  .strategy-discussion-composer { margin-top: 10px; }
+  .strategy-discussion-composer textarea { width: 100%; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); resize: vertical; min-height: 62px; padding: 10px 12px; font-size: 14px; }
+  .composer-actions-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+
+  /* ===== E5 PPT 精修（复制自 refiner.css 层级，仅对话区） ===== */
+  .refiner-page { width: min(860px, calc(100% - 44px)); margin: 0 auto; padding: 16px 0 26px; }
+  .refiner-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+  .refiner-header h1 { font-size: 17px; font-weight: 550; margin: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .chip.accent { color: #6550c9; border-color: #cfc6ee; background: #eeebfb; }
+  .app[data-theme="dark"] .chip.accent { color: #b7a7ff; border-color: #4a4270; background: #30294a; }
+  .chip.ok { color: #1c7c4a; border-color: #bfe3cf; background: #eef7f1; }
+  .app[data-theme="dark"] .chip.ok { color: #7fd3a4; border-color: #2f5c42; background: #1e2c24; }
+  .refiner-error { color: var(--error); background: var(--error-bg); border: 1px solid color-mix(in srgb, var(--error) 30%, var(--line)); border-radius: 7px; padding: 8px 12px; font-size: 12.5px; margin: 0 0 10px; }
+  .refiner-note { color: var(--muted); font-size: 12px; margin: 6px 0; overflow-wrap: anywhere; }
+  .refiner-chat { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--surface); }
+  .chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 180px; max-height: 46vh; padding: 2px; }
+  .msg { border-radius: 10px; padding: 8px 11px; font-size: 12.5px; max-width: 94%; }
+  .msg.user { align-self: flex-end; background: #eeebfb; border: 1px solid #d9d0f2; }
+  .msg.agent { align-self: flex-start; background: var(--subtle); border: 1px solid var(--line); }
+  .app[data-theme="dark"] .msg.user { background: #30294a; border-color: #4a4270; }
+  .msg .who { font-size: 10px; color: var(--faint); display: block; margin-bottom: 3px; }
+  .msg p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+  .msg-note { margin-top: 6px !important; font-size: 11px; color: var(--faint); }
+  .chat-input-row { display: flex; gap: 8px; }
+  .chat-input-row input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); }
+  .refiner-inspect-option { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+
+  /* ===== 本设计的核心新元素：推理过程组 + 折叠预览 ===== */
+  .process-group { margin: 2px 0 14px 37px; border: 1px solid var(--line); border-radius: 9px; background: var(--subtle); overflow: hidden; }
+  .strategy-discussion-message .process-group, .sg-messages .process-group { margin: 10px 0 4px; }
+  .process-toggle { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; padding: 9px 13px; color: var(--muted); font-size: 12px; text-align: left; }
+  .process-toggle:hover { background: var(--hover); }
+  .process-toggle .p-glyph { width: 15px; height: 15px; border: 1.5px dashed var(--faint); border-radius: 4px; flex-shrink: 0; }
+  .process-toggle .p-count { color: var(--ink); font-weight: 550; }
+  .process-toggle .p-live { color: var(--accent); font-size: 11px; }
+  .process-toggle .chev { margin-left: auto; transition: transform .15s; color: var(--faint); }
+  .process-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
+  .process-steps { border-top: 1px solid var(--line); padding: 8px 12px 10px; display: grid; gap: 6px; }
+  .process-step { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 12px; }
+  .step-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: var(--faint); }
+  .step-dot.ok { background: var(--ok); }
+  .step-dot.err { background: var(--error); }
+  .step-main { min-width: 0; }
+  .step-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; color: var(--muted); }
+  .step-head code { color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+  .step-status { font-size: 11px; }
+  .step-status.ok { color: var(--ok); }
+  .step-status.err { color: var(--error); }
+  .process-step .tool-message { margin: 5px 0 0; }
+
+  .fold { position: relative; }
+  .fold-inner { min-width: 0; }
+  .fold.collapsed .fold-inner { max-height: calc(var(--fold-lines, 5) * 1.85em); overflow: hidden; }
+  .fold.collapsed .fold-inner::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.6em; background: linear-gradient(to bottom, transparent, var(--canvas)); pointer-events: none; }
+  .strategy-discussion-message .fold.collapsed .fold-inner::after { background: linear-gradient(to bottom, transparent, var(--canvas)); }
+  .fold-toggle { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; border: 0; background: transparent; color: var(--accent); font-size: 12px; padding: 3px 4px; border-radius: 5px; }
+  .fold-toggle:hover { background: var(--accent-soft); }
+  .fold-toggle .chev { font-size: 10px; }
+  .streaming-caret { display: inline-block; width: 8px; height: 1em; background: var(--accent); vertical-align: -2px; margin-left: 2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ===== 演示标注（评审用，产品外壳之外的说明） ===== */
+  .demo-note { display: inline-flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; border: 1px dashed #b98a2f; color: #8a6114; background: #fff8ea; border-radius: 6px; padding: 3px 9px; font-size: 11px; margin: 6px 0 0; max-width: 100%; }
+  .app[data-theme="dark"] .demo-note { border-color: #8a6a2a; color: #dcb86a; background: #2e2618; }
+  .demo-note::before { content: "设计点"; font-weight: 600; background: #b98a2f; color: #fff; border-radius: 3px; padding: 1px 5px; font-size: 10px; }
+  .baseline-panel { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; background: var(--surface); }
+  .baseline-panel h3 { margin: 0 0 4px; font-size: 14px; }
+  .baseline-panel .bl-tag { color: var(--error); font-size: 11px; font-weight: 600; }
+  .baseline-problems { margin: 8px 0 12px; padding-inline-start: 20px; font-size: 12px; color: var(--muted); line-height: 1.8; }
+  .empty-agent-block { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="demo-review-bar" id="reviewBar">
+  <div class="demo-review-group">
+    <span class="demo-review-badge">#116 设计待审</span>
+    <button class="demo-tab" data-scene="task" aria-pressed="true">项目任务对话</button>
+    <button class="demo-tab" data-scene="strategy" aria-pressed="false">战略共创</button>
+    <button class="demo-tab" data-scene="role" aria-pressed="false">业务角色</button>
+    <button class="demo-tab" data-scene="refiner" aria-pressed="false">PPT 精修</button>
+    <button class="demo-tab" data-scene="baseline" aria-pressed="false">基线对照</button>
+  </div>
+  <div class="demo-review-group">
+    <button class="demo-act" id="viewportBtn">窄屏 390px</button>
+    <button class="demo-act" id="themeBtn">深色</button>
+    <button class="demo-act" id="streamBtn">▶ 模拟流式输出</button>
+    <button class="demo-act" id="refreshBtn">⟳ 模拟刷新/重连</button>
+    <button class="demo-act" id="keyboardBtn">键盘演示</button>
+    <button class="demo-act" id="resetBtn">清空折叠记忆</button>
+    <span class="demo-store-count" id="storeCount"></span>
+  </div>
+  <div class="demo-hint">合成资料 · 内存状态 · 不连接 Host/模型。Tab 聚焦折叠控制后 Enter 展开/收起。</div>
+</div>
+
+<div class="demo-stage" data-viewport="wide">
+  <div class="app" id="shell" data-theme="light">
+    <header class="topbar"><div><span class="topbar-title" id="sceneTitle">任务对话 · 门店复购分析</span></div></header>
+    <div class="main-scroll" id="sceneRoot"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   #116 UI Demo：共享「过程分组 + 长内容折叠」呈现层（设计候选）
+   - 折叠记忆：真实 sessionStorage，按 会话key::消息身份 隔离
+   - 身份模拟：native:xxx（对应产品 nativeEntryId）；u-xxx / p-xxx 为回退身份
+   ============================================================ */
+const STORE_KEY = 'optracall.demo.transcript-collapse.v1';
+const store = {
+  data: JSON.parse(sessionStorage.getItem(STORE_KEY) || '{}'),
+  get(key) { return this.data[key]; },
+  set(key, value) { this.data[key] = value; sessionStorage.setItem(STORE_KEY, JSON.stringify(this.data)); updateStoreCount(); },
+  clear() { this.data = {}; sessionStorage.removeItem(STORE_KEY); updateStoreCount(); },
+};
+function updateStoreCount() {
+  document.getElementById('storeCount').textContent = Object.keys(store.data).length ? `折叠记忆 ${Object.keys(store.data).length} 条` : '';
+}
+updateStoreCount();
+
+const sceneRoot = document.getElementById('sceneRoot');
+const sceneTitle = document.getElementById('sceneTitle');
+let currentScene = 'task';
+
+/* ---------- 折叠组件（对应共享呈现层 D4/D5/D6） ---------- */
+function applyFoldChoice(group, choice) {
+  const inner = group.querySelector('.fold-inner');
+  const btn = group.querySelector('.fold-toggle');
+  if (choice === 'expanded') { group.classList.remove('collapsed'); btn.setAttribute('aria-expanded', 'true'); btn.querySelector('.t-label').textContent = '收起'; }
+  else { group.classList.add('collapsed'); btn.setAttribute('aria-expanded', 'false'); btn.querySelector('.t-label').textContent = '展开全文'; }
+}
+function mountFoldables(root, sceneKey) {
+  root.querySelectorAll('.fold').forEach(group => {
+    if (group.dataset.mounted) return;
+    group.dataset.mounted = '1';
+    const lines = group.dataset.lines || '5';
+    const id = group.dataset.foldId;
+    const key = `${sceneKey}::${id}`;
+    group.style.setProperty('--fold-lines', lines);
+    const inner = document.createElement('div');
+    inner.className = 'fold-inner';
+    while (group.firstChild) inner.append(group.firstChild);
+    group.append(inner);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'fold-toggle';
+    btn.innerHTML = '<span class="t-label">展开全文</span><span class="chev">⌄</span>';
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-controls', inner.id = 'fold-' + Math.random().toString(36).slice(2, 9));
+    group.append(btn);
+    group.classList.add('collapsed');
+    btn.addEventListener('click', () => {
+      const next = group.classList.contains('collapsed') ? 'expanded' : 'collapsed';
+      applyFoldChoice(group, next);
+      store.set(key, next);
+    });
+    // 短内容：排版未超过预览区 → 全文直接可读，不显示控制
+    requestAnimationFrame(() => {
+      if (inner.scrollHeight > inner.clientHeight + 2) {
+        const saved = store.get(key);
+        if (saved === 'expanded') applyFoldChoice(group, 'expanded');
+      } else { group.classList.remove('collapsed'); btn.hidden = true; group.dataset.short = '1'; }
+    });
+  });
+  root.querySelectorAll('.process-group').forEach(group => {
+    if (group.dataset.mounted) return;
+    group.dataset.mounted = '1';
+    const steps = group.querySelector('.process-steps');
+    const btn = group.querySelector('.process-toggle');
+    const key = `${sceneKey}::${group.dataset.foldId}`;
+    const setState = open => { steps.hidden = !open; btn.setAttribute('aria-expanded', String(open)); };
+    btn.addEventListener('click', () => { const next = steps.hidden; setState(next); store.set(key, next ? 'expanded' : 'collapsed'); });
+    if (store.get(key) === 'expanded') setState(true);
+  });
+}
+
+/* ---------- 过程组（对应 D1/D2） ---------- */
+function stepRow(step) {
+  const status = step.err ? '<span class="step-status err">执行失败</span>' : '<span class="step-status ok">执行结果</span>';
+  const details = [];
+  if (step.command) details.push(`<code>${step.command}</code>`);
+  details.push(`<details class="tool-message ${step.err ? 'tool-error' : ''}"><summary>${step.name} · ${step.err ? '执行失败' : '执行结果'}</summary>${step.command ? `<code>${step.command}</code>` : ''}<pre>${step.output}</pre></details>`);
+  return `<div class="process-step"><span class="step-dot ${step.err ? 'err' : 'ok'}"></span><div class="step-main"><div class="step-head"><code>${step.name}</code>${status}${step.note ? `<span class="step-status">${step.note}</span>` : ''}</div>${details.join('')}</div></div>`;
+}
+function processGroup(id, steps, note) {
+  return `<div class="process-group" data-fold-id="${id}">
+    <button type="button" class="process-toggle" aria-expanded="false"><span class="p-glyph" aria-hidden="true"></span><span>推理过程</span><span class="p-count">· ${steps.length} 步</span>${note ? `<span class="p-live">${note}</span>` : ''}<span class="chev" aria-hidden="true">⌄</span></button>
+    <div class="process-steps" hidden>${steps.map(stepRow).join('')}</div>
+  </div>`;
+}
+
+/* ---------- E1 项目任务对话 ---------- */
+const taskSteps1 = [
+  { name: 'read_input', output: '读取 020_clean/会员订单明细.csv：12,480 行 × 14 列（2026-10-01 ~ 2026-10-31）。' },
+  { name: 'bash', command: 'python3 repeat_analysis.py --month 2026-10', output: '复购率（口径A）18.4%\n复购率（口径B，含企业微信下单）21.7%\n环比上期：口径A -0.7pp' },
+  { name: 'read_project_task_results', output: '上期结论：复购率 19.1%（口径A，2026-09）。可直接对比。' },
+  { name: 'semantic_graph', output: '命中 3 条获准来源：会员经营月报 p.4、周会纪要 2026-10-17、上期分析报告。' },
+  { name: 'bash', command: 'python3 chart_export.py --type trend --out 020_clean/process/trend.png', output: '已写入 020_clean/process/trend.png（复购率趋势，近 6 个月）。' },
+];
+const taskSteps2 = [
+  { name: 'read_input', output: '读取 020_clean/品类销售.csv：8,912 行。' },
+  { name: 'bash', command: 'python3 repeat_analysis.py --month 2026-10 --split category', output: '护肤 22.1% / 个护 15.9% / 家清 11.2%（口径A）\n…计算中断' },
+  { name: 'semantic_graph', err: true, output: 'query member-repeat-category：图查询超时（30s），本步未取得结果。' },
+];
+const taskReplyFinal = `
+<h3>结论：10 月复购率回落，主要来自家清与个护</h3>
+<p>按与上期可比的口径 A，10 月复购率 <strong>18.4%</strong>，环比下降 0.7pp。护肤品类保持增长，回落集中在个护与家清。</p>
+<div class="sg-table-scroll" role="region" aria-label="回复表格" tabindex="0"><table class="sg-table">
+<thead><tr><th scope="col">品类</th><th scope="col">10 月复购率</th><th scope="col">环比</th><th scope="col">主要影响</th></tr></thead>
+<tbody>
+<tr><td>护肤</td><td>22.1%</td><td>+1.3pp</td><td>会员日换购带动二次到店</td></tr>
+<tr><td>个护</td><td>15.9%</td><td>-1.1pp</td><td>促销结束后价格敏感客群流失</td></tr>
+<tr><td>家清</td><td>11.2%</td><td>-2.4pp</td><td>囤货周期叠加竞对低价</td></tr>
+</tbody></table></div>
+<ul>
+<li>口径 A 与上期一致，可直接对比；口径 B（含企业微信下单）为 21.7%，仅作参考。</li>
+<li>家清的回落幅度最大，建议下一步单独看该品类的价格带与库存节奏。</li>
+</ul>
+<pre><code>口径A = 90天内二次购买人数 / 期初购买人数
+口径B = 口径A + 企业微信小程序下单</code></pre>`;
+const taskUserLong = `关于复购回落，我想再多核对几件事：
+1. 个护和家清的回落是不是都集中在促销结束后的那一周？
+2. 家清的囤货周期大概多长？如果上次大促是 8 月，这次回落是不是只是周期性波动？
+3. 会员日换购的护肤增长，去掉换购 SKU 本身之后还剩多少自然复购？
+4. 竞对低价具体打到哪个价格带？我们有对位的 SKU 吗？
+先不用出报告，把口径和数字核清楚，我要拿去和采购对一下。`;
+const STREAM_TEXT = `先说核对结果：家清的回落确实集中在促销结束后的第一周（10-09 ~ 10-15），单周复购率比月均值低 4.2pp，第二周已回到正常区间，符合囤货周期的特征。竞对低价主要打在家清纸品的中位价格带（低约 8%），我们对位 SKU 有两个，但库存深度不足。个护的回落相对分散，暂未看到单周集中特征，可能和促销节奏关系不大，建议下一轮单独拉客群分层看。`;
+
+function brandAuthor(extra) { return `<div class="message-author"><span class="brand-mark" aria-hidden="true"><span></span><i></i></span><strong>OptraCall</strong><span>${extra}</span></div>`; }
+function msgAuthor() { return `<div class="msg-author"><span class="brand-mark brand-mark-xs" aria-hidden="true"><span></span><i></i></span><strong>OptraCall</strong><span>synthetic-demo</span></div>`; }
+function userAuthor() { return `<div class="message-author"><span class="user-mark">你</span><strong>你</strong></div>`; }
+
+function renderTaskScene() {
+  sceneTitle.textContent = '任务对话 · 门店复购分析';
+  sceneRoot.innerHTML = `<div class="chat-page">
+    <p class="task-banner"><strong>门店复购分析</strong> · 模型 synthetic-demo · 历史已保存</p>
+    <div class="message-scroll"><div class="messages" role="log" aria-label="对话记录" aria-live="off">
+      <article class="message user">${userAuthor()}
+        <div class="message-content">看一下这家门店上个月的复购情况，先给结论。</div>
+      </article>
+      ${processGroup('p-turn1', taskSteps1)}
+      <article class="message assistant">${brandAuthor('synthetic-demo')}
+        <div class="fold message-content" data-fold-id="a-mid" data-lines="5"><div class="strategy-discussion-reply"><p>我先核对了复购的统计口径：上期用的是口径 A（90 天内二次购买 / 期初购买），本月订单里企业微信小程序下单没有计入同一张表，我先按口径 A 算出可比数字，口径 B 只作参考。两个口径差 3.3pp，后续结论都以口径 A 为准。</p></div></div>
+        <div class="report-action-row"><button type="button" class="text-button" disabled title="演示：等待原生回复保存并核对准确身份">整理为知识</button><button type="button" class="text-button" disabled>整理为经验</button></div>
+      </article>
+      <article class="message assistant">${brandAuthor('synthetic-demo')}
+        <div class="fold message-content" data-fold-id="a-final" data-lines="5"><div class="strategy-discussion-reply">${taskReplyFinal}</div></div>
+        <div class="semantic-mini">语义上下文 · 本轮引用 3 条获准来源（会员经营月报 p.4 · 周会纪要 2026-10-17 · 上期分析报告）</div>
+        <div class="report-action-row"><button type="button" class="text-button">整理为知识</button><button type="button" class="text-button">整理为经验</button><button type="button" class="text-button">反馈到资产体系</button><button type="button" class="text-button">带这条原回复核对目标</button></div>
+        <p class="demo-note">已完成回复默认收起：预览保留至少 5 行可读正文（含表格表头）；操作行与语义上下文在折叠体之外始终可见。</p>
+      </article>
+      <article class="message user">${userAuthor()}
+        <div class="fold message-content" data-fold-id="u-long" data-lines="3">${taskUserLong}</div>
+        <details class="eb-native-context"><summary>随问题发送的完整上下文</summary><pre>[系统注入] 项目：门店复购分析 · 任务会话 020_clean 6 件资料清单 …（演示截断）</pre></details>
+        <p class="demo-note">用户长消息：实际排版超过 3 行预览区才折叠；「随问题发送的完整上下文」入口保留。</p>
+      </article>
+      ${processGroup('p-turn2', taskSteps2)}
+      <article class="message assistant">${brandAuthor('synthetic-demo')}
+        <div class="fold message-content" data-fold-id="a-failed" data-lines="5"><div class="strategy-discussion-reply"><p>分品类的数字已经出来一半：护肤 22.1%、个护 15.9% 与整体结论一致；家清 11.2% 的拆分在图查询一步超时，还没核对完，先不</p></div></div>
+        <p class="message-meta failed-meta">此条回复未完成</p>
+        <p class="demo-note">失败状态在折叠体之外可见；重试与恢复入口见下方任务状态提示。</p>
+      </article>
+      <div id="streamSlot"></div>
+    </div></div>
+    <div class="composer-area">
+      <div class="error-notice" role="alert"><div><strong>任务状态提示</strong><p>本轮回复在语义图查询一步超时未完成；已保留部分输出，不会自动重发。</p><div class="error-actions"><button type="button" class="secondary-button">重试本次消息</button><button type="button" class="text-button">重新连接任务</button><button type="button" class="text-button">模型设置</button></div></div></div>
+      <form class="composer" aria-label="发送消息"><textarea id="taskComposerInput" rows="2" placeholder="今天想讨论什么？"></textarea><div class="composer-toolbar"><button type="button" class="stop-button" id="taskStopBtn" hidden>停止</button><span class="composer-helper"><span>Enter 发送 · Shift + Enter 换行</span><span role="status" id="taskStatus">任务和历史已保存在本机</span></span></div></form>
+      <p class="demo-note">「▶ 模拟流式输出」从评审栏触发：流式回复保持展开，完成后转为已保存回复并默认收起。</p>
+    </div>
+  </div>`;
+  mountFoldables(sceneRoot, 'task:p-11/t-3');
+}
+
+/* ---------- 流式模拟（对应 D5：流式默认展开，转已保存后默认收起） ---------- */
+let streamTimer = null;
+function startStreaming() {
+  if (currentScene !== 'task') switchScene('task');
+  stopStreaming();
+  const slot = document.getElementById('streamSlot');
+  const status = document.getElementById('taskStatus');
+  const stopBtn = document.getElementById('taskStopBtn');
+  if (!slot) return;
+  slot.innerHTML = `<article class="message assistant streaming-message">${brandAuthor('正在回复')}
+      <div class="message-content" id="streamTarget" aria-live="polite"><span class="streaming-caret" aria-hidden="true"></span></div>
+    </article>
+    <p class="run-progress" role="status">正在回复 · 本轮推理过程已收起为一行（见上）</p>`;
+  status.textContent = 'Pi 正在回复';
+  stopBtn.hidden = false;
+  let cursor = 0;
+  const target = STREAM_TEXT;
+  streamTimer = setInterval(() => {
+    cursor = Math.min(target.length, cursor + 3);
+    const target2 = document.getElementById('streamTarget');
+    if (target2) target2.innerHTML = escapeHtml(target.slice(0, cursor)) + '<span class="streaming-caret" aria-hidden="true"></span>';
+    if (cursor >= target.length) finalizeStreaming(false);
+  }, 40);
+  stopBtn.onclick = () => finalizeStreaming(true);
+}
+function stopStreaming() { if (streamTimer) { clearInterval(streamTimer); streamTimer = null; } }
+function finalizeStreaming(stopped) {
+  stopStreaming();
+  const slot = document.getElementById('streamSlot');
+  const status = document.getElementById('taskStatus');
+  const stopBtn = document.getElementById('taskStopBtn');
+  if (stopBtn) stopBtn.hidden = true;
+  if (status) status.textContent = stopped ? '已停止 · 部分输出已保留' : '任务和历史已保存在本机';
+  if (!slot) return;
+  slot.innerHTML = `<article class="message assistant">${brandAuthor('synthetic-demo')}
+      <div class="fold message-content" data-fold-id="a-stream-1" data-lines="5"><div class="strategy-discussion-reply"><p>${escapeHtml(STREAM_TEXT)}</p></div></div>
+      ${stopped ? '<p class="message-meta">已停止 · 部分输出已保留</p>' : ''}
+      <p class="demo-note">流式 → 已保存：获得原生身份（native:…）后按默认收起渲染，此后展开/收起的选择按会话记忆。</p>
+    </article>`;
+  mountFoldables(sceneRoot, 'task:p-11/t-3');
+}
+function escapeHtml(text) { return text.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch])); }
+
+/* ---------- E3 战略共创 ---------- */
+const strategySteps = [
+  { name: 'strategy_goals', command: 'action: read-goals', output: '已读取目标准确版 v3（当前战略：提升老客价值）与关联指标。' },
+  { name: 'read-import-source', output: '按授权范围读取《会员经营月报》p.3-6：复购率 41.2%（近 12 个月）、会员客单 268 元。' },
+  { name: 'semantic_graph', output: '命中 2 条来源：会员经营月报 p.4、周会纪要 2026-10-17。' },
+  { name: 'strategy_goals', command: 'action: read-goals', output: '复核目标约束：拓新预算上限与复购目标不冲突。' },
+];
+const strategyQuestion = `我们在纠结下季度的主线：一边是继续做老客复购（会员体系刚理顺，复购率 41%），一边是把预算挪到拓新（周边 3 公里新开了两个竞品）。
+我的担心：
+1. 拓新的获客成本如果比老客维护高 3 倍以上，这条线是不是不划算？
+2. 竞品开店对老客的分流有没有数据能提前看出来？
+3. 如果两条线都要保，资源怎么切比较稳？
+帮我把两条路线的关键前提和需要核实的假设列出来，最好能对照我们已有的资料。`;
+const strategyReply = `
+<h3>两条路线的关键前提对照</h3>
+<p>按目标准确版 v3 的约束（老客价值优先），两条路线并不互斥，但资源切换的<strong>前提条件</strong>差异很大。</p>
+<div class="sg-table-scroll" role="region" aria-label="回复表格" tabindex="0"><table class="sg-table">
+<thead><tr><th scope="col">路线</th><th scope="col">关键前提</th><th scope="col">已有证据</th><th scope="col">待核实</th></tr></thead>
+<tbody>
+<tr><td>老客复购</td><td>复购率仍有提升空间</td><td>近 12 个月 41.2%〔会员经营月报 · p.4〕</td><td>会员分层后的天花板</td></tr>
+<tr><td>拓新</td><td>获客成本 ≤ 老客维护 3 倍</td><td>尚无本店数据</td><td>周边客群画像与到店成本</td></tr>
+</tbody></table></div>
+<ul>
+<li>竞品分流可以先看周会纪要里 10-17 提到的客流波动〔周会纪要 2026-10-17〕，目前只有定性描述。</li>
+<li>若要两线并保，建议先定「拓新预算上限」，再谈切分比例。</li>
+</ul>`;
+function renderStrategyScene() {
+  sceneTitle.textContent = '战略选择 Agent · 战略共创';
+  sceneRoot.innerHTML = `<section class="sg-panel strategy-discussion" aria-labelledby="sd-title">
+    <div class="sg-row-between"><h2 id="sd-title">战略选择 Agent</h2><div class="sg-row"><label>原讨论 <select class="sg-select"><option selected>下季度主线：复购 vs 拓新</option><option>新的战略讨论</option></select></label><button type="button" class="secondary-button">刷新讨论记录</button></div></div>
+    <p class="sg-muted">说说你正在考虑的战略问题。可以从比较两个方向开始。</p>
+    <div class="strategy-discussion-messages" role="log" aria-label="战略讨论记录">
+      <article class="strategy-discussion-message user"><strong>你</strong>
+        <div class="fold" data-fold-id="u-strat" data-lines="3"><p>${escapeHtml(strategyQuestion)}</p></div>
+        <p class="demo-note">长问题默认收起为 3 行预览；点「展开全文」查看完整问题。</p>
+      </article>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
+        ${processGroup('p-strat-1', strategySteps)}
+        <p class="demo-note">基线（e2aecfb）在此处渲染两个只有署名的空「Agent」块；本设计把只有工具/过程的条目归入上方「推理过程 · 4 步」，空块消失。</p>
+      </article>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
+        <div class="fold" data-fold-id="a-strat-1" data-lines="5"><div class="strategy-discussion-reply">${strategyReply}</div></div>
+        <div class="sg-row" aria-label="本回复引用的资料" style="margin-top:10px">
+          <div class="evidence-card"><span class="ev-loc">〔会员经营月报 · p.4〕</span><span class="ev-quote">复购率 41.2%（近 12 个月）</span><button type="button" class="text-button">查看原文</button></div>
+          <div class="evidence-card"><span class="ev-loc">〔周会纪要 2026-10-17〕</span><span class="ev-quote">客流波动为定性描述</span><button type="button" class="text-button">查看原文</button></div>
+        </div>
+        <p class="demo-note">资料引用条绑定本条回复，位于折叠正文之外；正文内〔…〕定位与引用卡一一对应。</p>
+      </article>
+    </div>
+    <form class="strategy-discussion-composer" aria-label="发送讨论"><textarea placeholder="下季度该优先拓新客，还是提高复购？"></textarea><div class="composer-actions-row"><div class="sg-row"><button type="button" class="secondary-button">＋ 添加资料</button><button type="button" class="secondary-button">导入战略图</button></div><button type="submit" class="primary-button">发送讨论</button></div></form>
+  </section>`;
+  mountFoldables(sceneRoot, 'discussion:d-117');
+}
+
+/* ---------- E4 业务角色（目标管理） ---------- */
+const roleReplyText = `<p>按「提升老客复购」拆成可执行目标表的建议结构：</p>
+<ul>
+<li><strong>结果目标</strong>：下一季度复购率从 41.2% 提升到 44%（口径沿用会员经营月报 p.4）。</li>
+<li><strong>过程目标</strong>：会员活跃率 ≥ 62%；二次购买间隔中位数缩短 5 天。</li>
+<li><strong>护栏</strong>：会员折扣费用率不超过 6.5%；不牺牲客单结构。</li>
+<li><strong>需先核实</strong>：会员分层后各层天花板；换购 SKU 的自然复购占比。</li>
+</ul>`;
+function renderRoleScene() {
+  sceneTitle.textContent = '目标管理 · 业务角色对话';
+  sceneRoot.innerHTML = `<section class="sg-panel strategy-discussion" aria-labelledby="role-title">
+    <div class="sg-row-between"><h2 id="role-title">目标管理 · goal</h2><span class="sg-muted">业务角色共用战略/业务共享转录渲染</span></div>
+    <div class="strategy-discussion-messages" role="log" aria-label="目标管理 对话记录">
+      <article class="strategy-discussion-message user"><strong>你</strong><p>帮我把「提升老客复购」这个目标梳理成可执行的目标表。</p></article>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
+        ${processGroup('p-role-1', [
+          { name: 'strategy_goals', command: 'action: read-goals', output: '读取目标准确版 v3 与复购相关指标定义。' },
+          { name: 'semantic_graph', output: '命中来源：会员经营月报 p.4、上期复盘。' },
+        ])}
+      </article>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
+        <div class="fold" data-fold-id="native:role-reply-a" data-lines="5"><div class="strategy-discussion-reply">${roleReplyText}</div></div>
+      </article>
+      <article class="strategy-discussion-message user"><strong>你</strong><p>按同样的口径，给新客首购目标也写一版。</p></article>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
+        ${processGroup('p-role-2', [
+          { name: 'strategy_goals', command: 'action: read-goals', output: '复核口径约束：新客首购沿用拉新漏斗定义。' },
+        ])}
+      </article>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
+        <div class="fold" data-fold-id="native:role-reply-b" data-lines="5"><div class="strategy-discussion-reply">${roleReplyText}</div></div>
+        <p class="demo-note">两条回复文本相同、原生身份不同（native:role-reply-a / b）：折叠状态各自独立记忆，可分别展开验证。</p>
+      </article>
+    </div>
+    <p class="sg-muted" role="status">正在回复…</p>
+    <form class="strategy-discussion-composer" aria-label="发送"><textarea placeholder="想梳理哪一个目标或策略？"></textarea><div class="composer-actions-row"><label class="sg-muted">会话模型 <select class="sg-select"><option>synthetic-demo</option></select></label><div class="sg-row"><button type="button" class="secondary-button">停止</button><button type="submit" class="primary-button">发送</button></div></div></form>
+  </section>`;
+  mountFoldables(sceneRoot, 'role:goal:g-7');
+}
+
+/* ---------- E5 PPT 精修 ---------- */
+const refinerUserLong = `第 5 页的三个改动：
+1. 现在的左右两栏对比改成三栏：复购率、客单、活跃率并排；
+2. 每栏顶部加一个大数字，下面配一行同比说明；
+3. 底部的注释区缩小一半，给图表让空间。
+数字都从锚点报告里取，第 3 栏活跃率用 62.4% 那个口径；
+改完不用导出，先给我看效果。`;
+const refinerAgentReply = `已按三点要求调整第 5 页并保存为新版本：
+- 三栏并排布局已建立，栏宽按内容自适应，大数字使用「32pt 加粗」，同比说明一行 12pt 灰字。
+- 活跃率采用锚点报告的 62.4% 口径，与报告脚注一致；复购率 41.2%、客单 268 元均已逐字核对，未做四舍五入。
+- 底部注释区高度压缩约 48%，腾出的空间给了柱状图，图例移到右上角，与第 3 页保持同一种图例位置。
+- 柱状图的 Y 轴从 30% 起改为 0 起，避免视觉夸大差异；网格线减到 4 条，和锚点报告里的图一致。
+- 未改动锁定页；差异已记入历史改动记录（P5 · v5）。
+- 一个需要你确认的点：第 2 栏「客单」的同比说明，报告里有两个口径（含税/不含税），我暂时用了不含税口径并在脚注标了口径，如需改含税请告诉我，我会同时更新大数字。`;
+function renderRefinerScene() {
+  sceneTitle.textContent = 'PPT 逐页精修 · 候选版汇报';
+  sceneRoot.innerHTML = `<div class="refiner-page">
+    <header class="refiner-header"><h1>候选版汇报 · 逐页精修</h1><span class="chip accent">md 锚点 · 只读</span><span class="chip">当前 v5</span><span class="chip ok">P5 最近快照修改</span></header>
+    <p class="refiner-error" role="alert">页图渲染失败：P7 缩略图暂未确认；已有版本记录仍保留。 <button type="button" class="text-button">重新渲染</button></p>
+    <section class="refiner-chat" aria-label="精修对话">
+      <div class="chat-log" role="log" aria-live="polite">
+        <div class="msg agent">${msgAuthor()}<p>选页后可对话修改，也可只读检查。锁定页保持不变；数字与事实改动会对照 md 报告，并保留差异记录。</p></div>
+        <div class="msg user"><span class="who">我</span><div class="fold" data-fold-id="u-refine-1" data-lines="3"><p>${escapeHtml(refinerUserLong)}</p></div></div>
+        <div class="msg agent">${msgAuthor()}<div class="fold" data-fold-id="a-refine-1" data-lines="5"><p>${escapeHtml(refinerAgentReply)}</p></div><p class="msg-note">已完成 · 已保存版本 v5</p></div>
+        <div class="msg user"><span class="who">我</span><p>把标题字号调大两磅。</p></div>
+        <div class="msg agent">${msgAuthor()}<p>标题已从 28pt 调整为 30pt，其余版式未动，已保存 v6。</p><p class="msg-note">已完成 · 已保存版本 v6</p></div>
+        <div class="msg agent">${msgAuthor()}<div class="fold" data-fold-id="a-refine-stopped" data-lines="5"><p>正在核对 P7 的锚点数字：该页有两处口径说明与报告脚注不一致，我先列出差异再决定是否……</p></div><p class="msg-note">已停止 · 未新增内容版本</p></div>
+      </div>
+      <p class="refiner-note" id="refiner-lock-help">本页已锁定，本次仅作只读问答或检查；修改前请先解锁。</p>
+      <form class="chat-input-row" onSubmit="return false"><input placeholder="描述对本页的修改" aria-label="修改指令" aria-describedby="refiner-lock-help" /><button type="submit" class="primary-button">发送</button></form>
+      <label class="refiner-inspect-option"><input type="checkbox" />只读检查，不修改内容</label>
+      <p class="demo-note">PPT 精修无过程数据：不显示「推理过程」组，按实际数据呈现；note（已完成/已停止/未完成 · 版本回执）与错误、锁定提示均在折叠正文之外。</p>
+    </section>
+  </div>`;
+  mountFoldables(sceneRoot, 'deck:deck-203');
+}
+
+/* ---------- 基线对照（e2aecfb 现状） ---------- */
+function renderBaselineScene() {
+  sceneTitle.textContent = '基线对照 · e2aecfb 现状';
+  sceneRoot.innerHTML = `<div class="sg-panel">
+    <div class="baseline-panel">
+      <h3>战略共创（基线）<span class="bl-tag">本次反馈问题</span></h3>
+      <ul class="baseline-problems"><li>只有工具/过程的 assistant 条目渲染为空「Agent」块，多步讨论连续出现多个空块；</li><li>过程事件（工具、读取资料）完全不可见，无法核对 Agent 做了什么；</li><li>长问题与长回复全文平铺，难以快速浏览。</li></ul>
+      <div class="strategy-discussion-messages" role="log" aria-label="基线：战略讨论记录">
+        <article class="strategy-discussion-message user"><strong>你</strong><p>${escapeHtml(strategyQuestion)}</p></article>
+        <article class="strategy-discussion-message assistant"><strong>Agent</strong></article>
+        <article class="strategy-discussion-message assistant"><strong>Agent</strong></article>
+        <article class="strategy-discussion-message assistant"><strong>Agent</strong><div class="strategy-discussion-reply">${strategyReply}</div></article>
+      </div>
+    </div>
+    <div class="baseline-panel">
+      <h3>项目任务对话（基线）</h3>
+      <ul class="baseline-problems"><li>每条工具结果独立成块平铺，过程噪声淹没业务正文；</li><li>长用户消息与长回复全文展开，滚动负担大；</li><li>工具块与回复之间无轮次分组。</li></ul>
+      <div class="messages" role="log" aria-label="基线：任务对话">
+        <article class="message user">${userAuthor()}<div class="message-content">${taskUserLong}</div></article>
+        ${taskSteps1.map(step => `<details class="tool-message" style="margin-left:37px"><summary>${step.name}${step.err ? ' · 执行失败' : ' · 执行结果'}</summary>${step.command ? `<code>${step.command}</code>` : ''}<pre>${step.output}</pre></details>`).join('')}
+        <article class="message assistant">${brandAuthor('synthetic-demo')}<div class="message-content"><div class="strategy-discussion-reply">${taskReplyFinal}</div></div></article>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------- 场景切换与评审栏 ---------- */
+const SCENES = { task: renderTaskScene, strategy: renderStrategyScene, role: renderRoleScene, refiner: renderRefinerScene, baseline: renderBaselineScene };
+function switchScene(name) {
+  stopStreaming();
+  currentScene = name;
+  document.querySelectorAll('.demo-tab').forEach(tab => tab.setAttribute('aria-pressed', String(tab.dataset.scene === name)));
+  SCENES[name]();
+  sceneRoot.scrollIntoView();
+}
+document.getElementById('reviewBar').addEventListener('click', event => {
+  const tab = event.target.closest('.demo-tab');
+  if (tab) switchScene(tab.dataset.scene);
+});
+document.getElementById('viewportBtn').addEventListener('click', event => {
+  const stage = document.querySelector('.demo-stage');
+  const narrow = stage.dataset.viewport === 'narrow';
+  stage.dataset.viewport = narrow ? 'wide' : 'narrow';
+  event.currentTarget.textContent = narrow ? '窄屏 390px' : '宽屏还原';
+});
+document.getElementById('themeBtn').addEventListener('click', event => {
+  const shell = document.getElementById('shell');
+  const dark = shell.dataset.theme === 'dark';
+  shell.dataset.theme = dark ? 'light' : 'dark';
+  event.currentTarget.textContent = dark ? '深色' : '浅色';
+});
+document.getElementById('streamBtn').addEventListener('click', startStreaming);
+document.getElementById('refreshBtn').addEventListener('click', () => { stopStreaming(); SCENES[currentScene](); });
+document.getElementById('keyboardBtn').addEventListener('click', () => {
+  if (currentScene === 'baseline') switchScene('task');
+  const target = sceneRoot.querySelector('.fold-toggle:not([hidden]), .process-toggle');
+  if (target) { target.focus(); target.scrollIntoView({ block: 'center' }); }
+});
+document.getElementById('resetBtn').addEventListener('click', () => { store.clear(); SCENES[currentScene](); });
+switchScene('task');
+</script>
+</body>
+</html>
