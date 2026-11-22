@@ -2192,9 +2192,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       panorama: undefined,
       panoramaHistory: [],
       entries: [],
-      purposes: pack.purposes
-        .filter(p => allowedPurposeIds.has(p.id))
-        .map(p => ({ ...p, dependencies: p.dependencies.filter(d => isRefAllowed(d.ref)) })),
+      purposes: [],
       previews: [],
       packRevisions: filteredRevisions,
       taskPins: ownPins.map(p => ({

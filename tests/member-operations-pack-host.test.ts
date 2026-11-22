@@ -1158,6 +1158,12 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
       'Omitting allowedDataPaths on a detail grant MUST NEVER unlock project 020_clean files!',
     );
 
+    const pendingUpdate = await srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
+      ...pRes.json.purpose, requestId: randomUUID(), projectId: projOwner1.id, title: '同一用途的未发布修改',
+    });
+    assert.equal(pendingUpdate.status, 200);
+    assert.equal(pendingUpdate.json.purpose.id, purposeId);
+
     const definitionGrant = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(), enterpriseId, packId, grantorProjectId: projOwner1.id, authorityToken: owner1Token,
       grantBasis: '只读已发布定义', subjectType: 'project', subjectId: projConsumer.id, resourceKind: 'definition',
@@ -1182,6 +1188,7 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     assert.equal(consumerPackView.status, 200);
     assert.equal(consumerPackView.json.grantAuthority, undefined);
     assert.equal(consumerPackView.json.pack.packRevisions[0]?.purposeManifests[0]?.purposeKey, 'r4-member-def');
+    assert.ok(!JSON.stringify(consumerPackView.json).includes('同一用途的未发布修改'), 'A grant on the published purpose must not disclose later mutable edits to the same purpose ID');
     assert.deepEqual(consumerPackView.json.pack.previews, []);
     assert.deepEqual(consumerPackView.json.pack.panoramaHistory, []);
     const anonymousExact = await srv.req(`/api/studio/enterprise-packs/${packId}`, 'GET', undefined, { cookie: '' });
