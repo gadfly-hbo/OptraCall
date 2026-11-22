@@ -890,8 +890,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   function resolveTaskDataPurpose(projectId: string, taskId: string, purposeId: string): AuthorizedDataPurpose {
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (enterpriseId) {
-      const requested = uuid(purposeId);
-      for (const pack of packs.list(enterpriseId)) {
+      const requested = text(purposeId, 100, false);
+      for (const pack of packs.list(enterpriseId).filter(candidate => candidate.domain === 'member-operations')) {
         const pin = packs.getTaskPin(pack.id, projectId, taskId);
         const revision = pack.packRevisions.find(revision => pin ? revision.version === pin.packVersion : revision.status === 'active');
         const manifest = revision?.purposeManifests.find(purpose => purpose.purposeId === requested && purpose.status === 'eligible');

@@ -76,7 +76,7 @@ export function createProjectFilesPort(options: {
     for (const key of ['offset', 'limit']) if (input[key] !== undefined && (!Number.isSafeInteger(input[key]) || Number(input[key]) < 1)) fault('invalid_input_pagination');
     const relativePath = '020_clean/' + input.filename;
     const purposeId = input.purposeId;
-    if (purposeId !== undefined && (typeof purposeId !== 'string' || !/^[a-f0-9-]{36}$/.test(purposeId) || !options.filterInputBytes)) fault('invalid_input_purpose');
+    if (purposeId !== undefined && (typeof purposeId !== 'string' || !purposeId.trim() || purposeId.length > 100 || !options.filterInputBytes)) fault('invalid_input_purpose');
     if (options.assertInputAllowed) await options.assertInputAllowed(relativePath, purposeId);
     const captured = await options.projects.captureFeedbackFile(options.projectId, relativePath, PROJECT_UPLOAD_MAX_BYTES);
     let deliveredBytes = captured.bytes;

@@ -621,6 +621,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   const { task: taskA } = await json(await host.request(`/api/projects/${projStar.id}/tasks`, 'POST', { name: '星桥首版复购分析' }), 201);
   let stepA = 0;
   let starAllowed = false;
+  let starReadText = '';
   let willowInputBlocked = false;
   let willowNativeReadBlocked = false;
   let willowNativeBashBlocked = false;
@@ -659,8 +660,8 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
       return { calls: [{ name: 'read_input', arguments: { filename: 'starbridge_orders.csv', purposeId: purpose.id } }] };
     }
     if (stepA === 5) {
-      const starText = providerMessageText(context.recentToolResults.at(-1)!.content);
-      starAllowed = starText.includes('C07') && starText.includes('C13');
+      starReadText = providerMessageText(context.recentToolResults.at(-1)!.content);
+      starAllowed = starReadText.includes('C07') && starReadText.includes('C13');
       return { calls: [{ name: 'read_input', arguments: { filename: 'willowbank_orders.csv' } }] };
     }
     if (hasOsSandbox) {
@@ -778,7 +779,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     requestId: randomUUID(), text: '请按星桥直营店授权资料核查 9 月门店复购（数据截止 2026-10-31）。',
   }), 202);
   const stateA = await waitIdle(host, projStar.id, taskA.id);
-  assert.equal(starAllowed, true);
+  assert.equal(starAllowed, true, starReadText);
   assert.equal(willowInputBlocked, true);
   const sandboxCleanDir = path.join(host.dataRoot, 'member-pack-workspaces', projStar.id, taskA.id, '020_clean');
   if (hasOsSandbox) {
@@ -1621,7 +1622,6 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     title: '查阅来源但未将其登记为报告依据',
     evidenceNote: '旧回复的来源阅读没有作为报告采用证据。',
     category: 'shared_refund_mapping',
-    evidenceNote: '本轮保留待核线索。',
   }));
   assert.equal(undeclaredFeedback.feedback.reports[0].adoptionBasis, 'directory_only_unverified');
   assert.equal(undeclaredFeedback.feedback.reports[0].usedPackVersion, undefined);
