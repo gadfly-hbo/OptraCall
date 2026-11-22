@@ -112,7 +112,7 @@ node --test --test-name-pattern='Issue 115 treats an absolute path' tests/strate
 ## 交付记录
 
 - F1 修复后作者重跑：`npm run check:agent-sessions` **PASS**；完整 `npm run check` **PASS**（boundary && test && build，3149 项 3038 通过 / 0 失败 / 111 跳过）；`node tests/browser-issue-115-strategy-loop.mjs` **PASS**（providerRequests=7、pageErrors=[]）。
-- 非作者修复后重验：见独立复核重验结论（下方/Issue 回执）。
-- 候选提交：F1 修复与复核证据提交后推送 `work/qoder/issue-115-strategy-actions`，完整 SHA 以 Issue 交付回执回读为准；本记录随后补记最终 HEAD。
+- 非作者修复后重验：**PASS**（见 `reverify.md`）。F1 解除、`check:agent-sessions` PASS、完整 check exit 0（3149/3038/0/111）、浏览器点验 PASS（providerRequests=7、pageErrors=[]）；0a29ff6 以来仅测试脚本与文档改动、src/ 零改动、无产品回归；本地与远端 HEAD 一致。
+- 候选提交：F1 修复与复核证据提交 `c64061a447db24ae03db707700565284776c5353`（产品代码即此 SHA，经独立重验）；本记录与重验证据另以文档提交补记，最终 HEAD 见 Issue 交付回执回读。
 - 交回 Codex：实现交付回执（身份/版本、完成情况、验证与限制）留于 #115；Codex 负责非作者复核接管、集成最新 main、单 PR 实际 head CI、获授权 squash 合并与 main push CI、结案。本单不直接合并 main、不更新设备/服务。
 - 已知限制与后续增量：F2（business-role 接缝 loop 诊断呈现）、F3（explainGoalProposalError 改按 code 查表）、F4（路径提示含空格/file:// 覆盖）、F6（并行批次计数竞态）；真实 MiniMax/GLM/试用轮根因 NOT_PROVED。回退：任务分支独立、无持久 schema 迁移，按候选 SHA 由 Codex/用户决定，不覆盖新增地图版本/native 历史。
