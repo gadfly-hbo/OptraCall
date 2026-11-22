@@ -564,6 +564,48 @@ async function waitForRun(api: (route: string, method?: string, body?: unknown, 
   throw new Error(`Timed out waiting for run ${reqId}`);
 }
 
+test('Issue 115 import draft page faults keep stable codes and safe details before a corrected draft receipt', { timeout: 60_000 }, async t => {
+  const host = await startTestHost(), provider = await startToolProvider();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const api = async (route: string, method = 'GET', body?: unknown, status = 200) => {
+    const response = await host.request(route, method, body);
+    assert.equal(response.status, status, await response.clone().text());
+    return response.json();
+  };
+  await api('/api/configuration', 'PUT', { name: '页码错误合成模型', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic', apiKey: 'synthetic-only' });
+  const { discussion } = await api('/api/strategy/discussions', 'POST', { operationId: randomUUID(), title: '页码错误契约' }, 201);
+  const base = `/api/strategy/discussions/${discussion.id}`;
+  const reg = await api(`${base}/map-imports`, 'POST', { kind: 'upload', fileName: '四页战略材料.pptx', bytes: (await makeMemberOpsPptx()).toString('base64') });
+  const sourceId = reg.source.sourceId as string;
+  const importSource = { sourceId, format: 'pptx', fileName: '四页战略材料.pptx', sha256: reg.source.sha256, origin: 'upload' };
+  const receipts: string[] = [];
+  provider.setResponder(({ recentToolResults }) => {
+    if (recentToolResults.length > receipts.length) receipts.push(providerMessageText(recentToolResults.at(-1)?.content));
+    if (recentToolResults.length < 3) {
+      const page = [2, 99, 1][recentToolResults.length]!;
+      return { calls: [{ name: 'strategy_goals', arguments: { action: 'propose-map-draft', reason: `页码 ${page} 合成校验`, mapDraft: {
+        title: `页码 ${page} 草稿`, template: 'bsc', choice: '', assumptions: '', unknowns: '',
+        nodes: [{ id: 'G1', kind: 'goal', title: '复购', sourceLocation: { sourceId, page, label: `第 ${page} 页` } }], edges: [], importSources: [importSource],
+      } } }] };
+    }
+    return { text: '页码错误已修正并生成待核草稿。' };
+  });
+  const before = await api(base), requestId = randomUUID();
+  await api(`${base}/messages`, 'POST', { requestId, expectedRevision: before.discussion.revision, text: '先核对越界页，再修正到第 1 页', importSourceIds: [sourceId], selectedImportPages: { [sourceId]: [1] }, importMode: 'review-draft' }, 202);
+  const done = await waitForRun(api, base, requestId);
+  assert.equal(done.discussion.lastRun.status, 'completed');
+  assert.equal(receipts.length, 3);
+  assert.match(receipts[0]!, /invalid_strategy_map/);
+  assert.match(receipts[0]!, /page_outside_selection/);
+  assert.match(receipts[1]!, /strategy_map_import_page_invalid/);
+  assert.match(receipts[1]!, /page_outside_original/);
+  assert.match(receipts[2]!, /editable-map-import-draft/);
+  assert.ok(!receipts.some(receipt => receipt.includes('personal_context_read_failed')));
+  assert.ok(!receipts.some(receipt => receipt.includes('四页战略材料.pptx') && receipt.includes('page_outside_')), 'page fault details must not echo the file name');
+  assert.equal(done.mapImportDrafts.length, 1);
+  assert.equal((await api(`${base}/maps`)).versions.length, 0, 'draft generation and failed validation do not write formal map versions');
+});
+
 test('Item 1: strict turn-scoped importSourceIds and selectedImportPages enforcement', { timeout: 60_000 }, async t => {
   const host = await startTestHost();
   const provider = await startToolProvider();

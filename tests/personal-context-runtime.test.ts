@@ -11,6 +11,7 @@ import { EnterpriseMaterialsStore, enterpriseDraftSha256 } from '../src/host/ent
 import { PersonalRetentionStore } from '../src/host/personal-retention-store.ts';
 import { AgentCandidateControls, type ExactCandidateRef } from '../src/host/agent-candidate-controls.ts';
 import { createPersonalContextReader } from '../src/host/personal-context-reader.ts';
+import { StrategyDiscussionFault } from '../src/host/strategy-discussion-fault.ts';
 import { readPersonalContextHistory } from '../src/host/personal-context-history.ts';
 import type { PersonalContextTarget } from '../src/host/personal-context-types.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
@@ -361,4 +362,50 @@ test('R3 real reader: current direct-source correction reaches actual SDK contin
     assert.equal(f.provider.requests.length, 2, 'reopen/history must not call the Provider or replay reads');
     await writeFile(path.join(f.root, 'reopen-history.json'), JSON.stringify({ nested, history, byteIdentical: true, providerRequests: f.provider.requests.length }, null, 2));
   });
+});
+
+test('Issue 115 shared IPC forwards only explicit safe details and uses a neutral unknown-error contract', async t => {
+  for (const mode of ['safe', 'valid', 'unknown'] as const) await t.test(mode, async t => {
+    const f = await fixture(t, [{ tool: 'read_personal_context', input: { target } }, {}]);
+    const rawMarker = `SYNTHETIC_RAW_${mode}_PATH_AND_STACK`, localDiagnostics: unknown[][] = [];
+    if (mode === 'unknown') t.mock.method(console, 'error', (...args: unknown[]) => { localDiagnostics.push(args); });
+    const agent = f.create({ personalContext: async () => {
+      if (mode === 'safe') throw new StrategyDiscussionFault('invalid_strategy_map', 400, { message: '请修正重复节点后重试。', details: { issues: [{ reason: 'duplicate_item_id', path: 'draft.nodes', itemKind: 'node', itemId: 'G1' }] } });
+      if (mode === 'valid') throw Object.assign(new Error(rawMarker), { code: 'strategy_source_not_authorized' });
+      throw Object.assign(new Error(rawMarker), { code: 'invalid code: sensitive detail' });
+    } });
+    const events: unknown[] = [];
+    agent.subscribe(event => events.push(event));
+    assert.equal((await agent.start('Synthetic shared error transport.', randomUUID()).completion).outcome, 'completed');
+    assert.equal(f.requests.length, 2);
+    const wire = JSON.stringify(f.requests[1]), native = await readFile((await agent.snapshot()).sessionFile!, 'utf8');
+    if (mode === 'safe') {
+      for (const expected of ['invalid_strategy_map', '请修正重复节点后重试。', 'duplicate_item_id', 'draft.nodes', 'G1']) assert.ok(wire.includes(expected), expected);
+      assert.ok(native.includes('duplicate_item_id'));
+    } else {
+      assert.ok(wire.includes(mode === 'valid' ? 'strategy_source_not_authorized' : 'host_tool_failed'));
+      assert.ok(!wire.includes(rawMarker) && !native.includes(rawMarker));
+      assert.ok(!JSON.stringify(events).includes(rawMarker), 'ProjectEvent/SSE projection must not expose the raw exception');
+      assert.ok(!wire.includes('personal_context_read_failed'));
+      assert.ok(!native.includes('personal_context_read_failed'));
+      if (mode === 'unknown') {
+        const diagnosticId = wire.match(/诊断关联 ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/)?.[1];
+        assert.ok(diagnosticId, 'safe diagnostic correlation reaches the tool result');
+        assert.equal(localDiagnostics.length, 1);
+        assert.ok(String(localDiagnostics[0]![0]).includes(diagnosticId!));
+        assert.ok(localDiagnostics[0]!.some(value => value instanceof Error && value.message === rawMarker), 'raw reason remains only in the local diagnostic capture');
+      }
+    }
+  });
+});
+
+test('Issue 115 shared IPC preserves the Method uppercase exception without exposing its raw message', async t => {
+  const input = { methodId: randomUUID(), version: 1, expectedRevision: 0, note: '合成方法问题', sources: [{ type: 'report', label: '合成报告', ref: '060_reports/synthetic.md', version: 'v1', sha256: 'a'.repeat(64) }] };
+  const f = await fixture(t, [{ tool: 'report_method_issue', input }, {}]);
+  const agent = f.create({ methodIssue: async () => { throw Object.assign(new Error('SYNTHETIC_METHOD_RAW_DETAIL'), { code: 'METHOD_NOT_PUBLISHED' }); } });
+  assert.equal((await agent.start('Synthetic Method error transport.', randomUUID()).completion).outcome, 'completed');
+  const wire = JSON.stringify(f.requests[1]), native = await readFile((await agent.snapshot()).sessionFile!, 'utf8');
+  assert.ok(wire.includes('METHOD_NOT_PUBLISHED'));
+  assert.ok(!wire.includes('SYNTHETIC_METHOD_RAW_DETAIL') && !native.includes('SYNTHETIC_METHOD_RAW_DETAIL'));
+  assert.ok(!wire.includes('host_tool_failed') && !wire.includes('personal_context_read_failed'));
 });

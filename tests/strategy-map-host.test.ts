@@ -57,8 +57,14 @@ test('original strategy conversation exposes saved map edits to Pi, traces its e
   assert.equal((await api(base+'/maps')).versions.length,2);
   const invalidReceipt=await turn('提交节点编号重复的候选。',{action:'save-map',mapDraft:{...draft,nodes:[draft.nodes[0]!,draft.nodes[0]!]},reason:'合成重复节点校验'});
   assert.match(invalidReceipt,/invalid_strategy_map/);
+  assert.match(invalidReceipt,/duplicate_item_id/);
   assert.doesNotMatch(invalidReceipt,/personal_context_read_failed/);
   assert.equal((await api(base+'/maps')).versions.length,2,'Host semantic validation must not write a map version');
+  const httpFault=await api(base+'/maps','POST',{mapId:first.mapId,expectedVersion:2,operationId:randomUUID(),reason:'HTTP 重复节点校验',draft:{...fixed,nodes:[fixed.nodes[0]!,fixed.nodes[0]!]}},400);
+  assert.equal(httpFault.code,'invalid_strategy_map');
+  assert.equal(httpFault.accepted,false);
+  assert.ok(!JSON.stringify(httpFault).includes('duplicate_item_id'),'HTTP keeps its existing generic safe message instead of exposing Agent details');
+  assert.equal((await api(base+'/maps')).versions.length,2);
   const recovered=await turn('修正重复编号后保存新候选。',{action:'save-map',mapDraft:{...draft,title:'修正后的候选'},reason:'修正后保存'});
   assert.match(recovered,/candidate-not-adopted/);
   const versions=(await api(base+'/maps')).versions as StrategyMapVersion[];

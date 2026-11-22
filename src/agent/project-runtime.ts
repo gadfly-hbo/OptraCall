@@ -49,6 +49,43 @@ type HostContextRequest = {
   cleanupTask?: Promise<void>; cleanupError?: unknown;
 };
 
+function safeToolFault(error: unknown) {
+  if (!error || typeof error !== 'object' || (error as { exposure?: unknown }).exposure !== 'safe-tool-error-v1') return {};
+  const message = (error as { message?: unknown }).message;
+  const raw = (error as { details?: unknown }).details;
+  const result: { message?: string; details?: { issues: Record<string, unknown>[] } } = {};
+  if (typeof message === 'string' && message.length <= 2000 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(message)) result.message = message;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !Array.isArray((raw as { issues?: unknown }).issues)) return result;
+  const issues = (raw as { issues: unknown[] }).issues;
+  if (issues.length > 20) return result;
+  const safe: Record<string, unknown>[] = [];
+  for (const issue of issues) {
+    if (!issue || typeof issue !== 'object' || Array.isArray(issue)) return result;
+    const value = issue as Record<string, unknown>, output: Record<string, unknown> = {};
+    if (Object.keys(value).some(key => !['reason','path','itemKind','itemId','page'].includes(key)) || typeof value.reason !== 'string' || !/^[a-z][a-z0-9_]{0,99}$/.test(value.reason)) return result;
+    output.reason = value.reason;
+    if (value.path !== undefined) {
+      if (typeof value.path !== 'string' || value.path.length > 200 || !/^[A-Za-z0-9_.[\]]*$/.test(value.path)) return result;
+      output.path = value.path;
+    }
+    if (value.itemKind !== undefined) {
+      if (!['node','edge','source'].includes(String(value.itemKind))) return result;
+      output.itemKind = value.itemKind;
+    }
+    if (value.itemId !== undefined) {
+      if (typeof value.itemId !== 'string' || value.itemId.length > 300 || /[\u0000-\u001f\u007f]/.test(value.itemId)) return result;
+      output.itemId = value.itemId;
+    }
+    if (value.page !== undefined) {
+      if (!Number.isSafeInteger(value.page) || Number(value.page) < 1) return result;
+      output.page = value.page;
+    }
+    safe.push(output);
+  }
+  if (Buffer.byteLength(JSON.stringify({ issues: safe }), 'utf8') <= 16 * 1024) result.details = { issues: safe };
+  return result;
+}
+
 // This adapter only transports SDK calls and events. It never chooses analysis
 // steps, parses business data, or implements an agent/tool loop.
 export class ProjectAgent {
@@ -215,8 +252,14 @@ export class ProjectAgent {
         if (Buffer.byteLength(JSON.stringify(result), 'utf8') > payloadLimit) throw new ProjectRuntimeError('personal_context_payload_limit');
         response = { result };
       } catch (error) {
-        const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && (/^[a-z0-9_]{1,100}$/.test(error.code) || isMethodIssue && /^METHOD_[A-Z0-9_]{1,100}$/.test(error.code)) ? error.code : 'personal_context_read_failed';
-        response = { error: code };
+        const validCode = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && (/^[a-z0-9_]{1,100}$/.test(error.code) || isMethodIssue && /^METHOD_[A-Z0-9_]{1,100}$/.test(error.code)) ? error.code : undefined;
+        const safe = safeToolFault(error);
+        if (validCode) response = { error: validCode, ...safe };
+        else {
+          const diagnosticId = randomUUID();
+          console.error(`[host_tool_failed ${diagnosticId}]`, error);
+          response = { error: 'host_tool_failed', message: 'Host 工具执行未完成，请按诊断关联编号核对本机运行记录。', diagnosticId };
+        }
       }
       await this.#cleanupPersonalRequest(request).catch(() => {});
       request.settled = true;

@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-阶段：分层复现完成，错误契约为已确认 RED，止损/恢复与 composer 提示待 Issue 设计确认。当前候选尚非完整工程交付。
+阶段：分层复现完成，错误契约已由 RED 转为 GREEN；止损/恢复与 composer 提示待 Issue 设计确认。当前候选尚非完整工程交付。
 
 - 基线：`e2aecfb445094245875b9696a02a273b5e0ddb44`
 - 分支：`work/qoder/issue-115-strategy-actions`
@@ -42,6 +42,23 @@ node --test --test-name-pattern='original strategy conversation' tests/strategy-
 - 当前工具回包实际为 `personal_context_read_failed`；测试期望 `invalid_strategy_map` 且不得出现个人资料兜底，在 `tests/strategy-map-host.test.ts` 的重复节点用例失败。
 - 该失败证明共享 IPC 掩盖机制可独立复现。GLM 当晚具体命中哪个校验仍为 **NOT_PROVED**；缺字段类 Pi 验参失败不与本 Host 语义反例混同。
 - 同一测试还保留失败零地图版本、随后修正并保存新版本的后续断言，当前在首个错误码断言处停止，后续尚不能记为通过。
+
+### 修复后 GREEN（与上述历史 RED 分开）
+
+实现：`StrategyDiscussionFault` 拆出稳定 code、安全 message 和有界 details；地图 Store/Host 定点替换复合码；共享 IPC 只转发显式 `safe-tool-error-v1` 且通过白名单校验的字段，未知异常使用 `host_tool_failed` 和 diagnosticId。旧 `{error:string}` 仍可读取；合法码和 Method 大写例外保持，cleanup/abort/revoked 的后置覆盖未改。原始未知异常只在本机 Host 诊断 stderr 以关联 ID 记录，Provider/native/ProjectEvent（SSE 来源）/HTTP 不接收原异常。
+
+验证：
+
+- `node --test --test-name-pattern='original strategy conversation' tests/strategy-map-host.test.ts`：**PASS**。Agent 收到 `invalid_strategy_map + duplicate_item_id`，失败零写入，修正后保存并取得 `candidate-not-adopted`；HTTP 保持通用 message 和稳定 code。
+- `node --test tests/strategy-map-store.test.ts`：**PASS 11/11**。覆盖 schema、重复节点、非法端点、非假设 review、未声明来源、文件标识、选页、重复选页和空地图，全部稳定 details 且零新增版本。
+- `node --test --test-name-pattern='Issue 115 import draft page faults' tests/strategy-map-import-host.test.ts`：**PASS**。实际页码/选页分别返回 `strategy_map_import_page_invalid/page_outside_original` 与 `invalid_strategy_map/page_outside_selection`，修正后取得 editable draft，无正式地图写入。
+- `node --test --test-name-pattern='Issue 115' tests/personal-context-runtime.test.ts`：**PASS 5/5**。安全 Fault、合法权限码、未知异常、本机关联、ProjectEvent 脱敏及 Method 例外通过。
+- `node --test tests/v12-discussion-ui-client.test.ts`：**PASS 8/8**，旧 HTTP 客户端合同保持。
+- 完整受影响文件回归：`personal-context-runtime.test.ts` **33/33 PASS**；`strategy-map-host.test.ts` **4/4 PASS**；`strategy-map-import-host.test.ts` **10/10 PASS**；`semantic-context-runtime.test.ts + automatic-business-feedback-v020.test.ts + method-issue-adapter-v020.test.ts` **38/38 PASS**；`strategy-workbench-integration.test.ts + strategy-discussion-host.test.ts + strategy-goal-proposal.test.ts + pm01-strategy-source-discovery.test.ts` **15/15 PASS**。
+- `npm run check:agent-sessions`：**PASS**；`npm run typecheck`：**PASS**。
+- 完整 `npm run check`（错误契约阶段）：**PASS**，3143 项测试 3032 通过 / 0 失败 / 111 跳过（既有平台/条件跳过），边界检查与构建通过。止损/路径提示实现后的全量 check 与浏览器验证留待最终候选。
+
+GLM 当次具体校验分支仍为 **NOT_PROVED**；合成修复证明共享机制和上述 Host 校验，不回填真实轮事实。
 
 ## C. 绝对路径与来源边界
 

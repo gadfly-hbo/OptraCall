@@ -2,6 +2,7 @@ import { readdir } from 'node:fs/promises';
 import { z } from 'zod';
 import { atomicJson, directory, exists, readBytes, safePath } from './project-data-context-io.ts';
 import { StrategyDiscussionFault, type StrategyDiscussionStore, discussionHash, discussionId } from './strategy-discussion-store.ts';
+import type { StrategyDiscussionFaultDetail } from './strategy-discussion-fault.ts';
 import type { StrategyMapAuthor, StrategyMapDraft, StrategyMapSourceLocation, StrategyMapVersion } from './strategy-map-types.ts';
 import { parseStrategyScenarioModel } from './strategy-simulation.ts';
 
@@ -23,28 +24,33 @@ const importSource=z.strictObject({fileName:label,sha256:z.string().regex(/^[0-9
 const draftSchema=z.strictObject({title:label,template:z.enum(['table','tree','bsc']),choice:text.default(''),excluded:text.default(''),assumptions:text.default(''),unknowns:text.default(''),
   nodes:z.array(node).max(1000),edges:z.array(edge).max(3000),importSource:importSource.optional(),importSources:z.array(multiImportSource).max(20).optional(),scenarioModel:z.unknown().optional()});
 const saveSchema=z.strictObject({operationId:uuid,mapId:uuid,expectedVersion:z.number().int().nonnegative(),reason:label,draft:draftSchema});
-const fault=(message:string,status=400):never=>{throw new StrategyDiscussionFault(message,status);};
+const fault=(code:string,status=400,options:ConstructorParameters<typeof StrategyDiscussionFault>[2]={}):never=>{throw new StrategyDiscussionFault(code,status,options);};
+const invalidMap=(message:string,...issues:StrategyDiscussionFaultDetail[]):never=>fault('invalid_strategy_map',400,{message,details:{issues}});
+const mapFields=new Set(['operationId','mapId','expectedVersion','reason','draft','title','template','choice','excluded','assumptions','unknowns','nodes','edges','importSource','importSources','scenarioModel','id','kind','owner','perspective','detail','metric','baseline','baselineKind','target','unit','period','metrics','sourceLocation','reviewState','ambiguityReason','sourceConflicts','from','to','review','citationTokens','summary','mechanism','condition','alternative','risk','scope','test','field','values','value','label','locationLabel','sourceId','fileName','sha256','origin','selectedPages','imageMeta','width','height','orientation','format','sheets','rows','name','headerRow','columns','nodeId','sheet','row','cell','objectId','bbox','fromBbox','toBbox','arrowBbox','page','model','population','baselineRate','remote','parts','fixed','basis','liftPoints','coverage','coverageAdjustable']);
 type Provenance=Pick<StrategyMapVersion,'source'> & Partial<Pick<StrategyMapVersion,'citations'|'requestId'|'importDraftEntryId'|'importDraftGroupId'>>;
 type Stored=StrategyMapVersion & {requestHash:string};
 function checked<T>(schema:z.ZodType<T>,value:unknown):T {
   const parsed=schema.safeParse(value);
-  if(!parsed.success) return fault('invalid_strategy_map: '+parsed.error.issues.map(e=>e.path.join('.')+' '+e.message).join(' / '));
+  if(!parsed.success) return invalidMap('战略地图草稿结构未通过校验，请按字段定位修正后重试。',...parsed.error.issues.slice(0,20).map(issue=>({
+    reason:issue.code,
+    ...(issue.path.every(part=>typeof part==='number'||typeof part==='string'&&mapFields.has(part))?{path:issue.path.join('.').slice(0,200)}:{}),
+  })));
   return parsed.data;
 }
 
 function validateLocationAgainstSources(
   loc: StrategyMapSourceLocation | undefined,
   sourceMap: ReadonlyMap<string, NonNullable<StrategyMapDraft['importSources']>[number]>,
-  itemLabel: string,
+  item: { kind: 'node' | 'edge'; id: string },
 ) {
   if (!loc) return;
   const src = sourceMap.get(loc.sourceId);
-  if (!src) fault(`invalid_strategy_map: ${itemLabel} 的 sourceLocation.sourceId（${loc.sourceId}）未包含在 importSources 清单中`);
+  if (!src) invalidMap('来源定位的来源 ID 未包含在 importSources 清单中。',{reason:'source_not_declared',path:'sourceLocation.sourceId',itemKind:item.kind,itemId:item.id});
   if (loc.fileName !== undefined && loc.fileName !== src!.fileName) {
-    fault(`invalid_strategy_map: ${itemLabel} 的 sourceLocation.fileName 与 importSources 不一致`);
+    invalidMap('来源定位的文件标识与 importSources 不一致。',{reason:'source_file_mismatch',path:'sourceLocation.fileName',itemKind:item.kind,itemId:item.id});
   }
   if (loc.page !== undefined && src!.selectedPages?.length && !src!.selectedPages.includes(loc.page)) {
-    fault(`invalid_strategy_map: ${itemLabel} 的 sourceLocation.page（${loc.page}）超出 importSources.selectedPages 范围`);
+    invalidMap('来源定位页码超出 importSources.selectedPages 范围。',{reason:'page_outside_selection',path:'sourceLocation.page',itemKind:item.kind,itemId:item.id,page:loc.page});
   }
 }
 
@@ -56,10 +62,10 @@ export function validateStrategyMapDraft(
   const { scenarioModel, ...rest } = parsed;
   const draft: StrategyMapDraft = { ...rest, ...(scenarioModel !== undefined && { scenarioModel: parseStrategyScenarioModel(scenarioModel) }) };
   const nodes = new Set(draft.nodes.map(n => n.id)), edges = new Set(draft.edges.map(e => e.id));
-  if (nodes.size !== draft.nodes.length || edges.size !== draft.edges.length) fault('invalid_strategy_map: 重复的节点或连线编号');
+  if (nodes.size !== draft.nodes.length || edges.size !== draft.edges.length) invalidMap('草稿包含重复的节点或连线编号。',{reason:'duplicate_item_id'});
   for (const e of draft.edges) {
-    if (e.from === e.to || !nodes.has(e.from) || !nodes.has(e.to)) fault('invalid_strategy_map: ' + e.id + ' 的起点或终点无效');
-    if (e.review && e.kind !== 'hypothesis') fault('invalid_strategy_map: ' + e.id + ' 不是因果假设');
+    if (e.from === e.to || !nodes.has(e.from) || !nodes.has(e.to)) invalidMap('连线的起点或终点无效。',{reason:'invalid_edge_endpoint',path:'edges',itemKind:'edge',itemId:e.id});
+    if (e.review && e.kind !== 'hypothesis') invalidMap('只有因果假设连线可以携带审查内容。',{reason:'review_requires_hypothesis',path:'edges.review',itemKind:'edge',itemId:e.id});
   }
   const previous = options.previous;
   if (options.author && options.author !== 'import' && draft.importSource && discussionHash(draft.importSource) !== discussionHash(previous?.importSource ?? null)) {
@@ -70,17 +76,17 @@ export function validateStrategyMapDraft(
 
   const sourceMap = new Map<string, NonNullable<StrategyMapDraft['importSources']>[number]>();
   for (const src of draft.importSources ?? []) {
-    if (sourceMap.has(src.sourceId)) fault('invalid_strategy_map: 重复的 importSources 来源编号');
+    if (sourceMap.has(src.sourceId)) invalidMap('importSources 包含重复的来源 ID。',{reason:'duplicate_source_id',path:'importSources',itemKind:'source',itemId:src.sourceId});
     if (src.selectedPages && new Set(src.selectedPages).size !== src.selectedPages.length) {
-      fault('invalid_strategy_map: importSources.selectedPages 存在重复页码');
+      invalidMap('importSources.selectedPages 包含重复页码。',{reason:'duplicate_selected_page',path:'importSources.selectedPages',itemKind:'source',itemId:src.sourceId});
     }
     sourceMap.set(src.sourceId, src);
   }
-  for (const n of draft.nodes) validateLocationAgainstSources(n.sourceLocation, sourceMap, `节点 ${n.id}`);
-  for (const e of draft.edges) validateLocationAgainstSources(e.sourceLocation, sourceMap, `连线 ${e.id}`);
+  for (const n of draft.nodes) validateLocationAgainstSources(n.sourceLocation, sourceMap, {kind:'node',id:n.id});
+  for (const e of draft.edges) validateLocationAgainstSources(e.sourceLocation, sourceMap, {kind:'edge',id:e.id});
 
   if (!draft.nodes.length && !((draft.importSource || draft.importSources?.length) && draft.unknowns.trim())) {
-    fault('invalid_strategy_map: 请提供节点或说明待核的图形来源');
+    invalidMap('请提供节点，或说明待核的图形来源与未知项。',{reason:'nodes_or_unknowns_required'});
   }
   return draft;
 }

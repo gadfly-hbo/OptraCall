@@ -53,10 +53,10 @@
 ### B. 错误契约与地图保存
 
 - [x] B1 真实 Host/Pi 链路先复现 `save-map` 或 `propose-map-draft` 的 `personal_context_read_failed`，保留 RED；GLM 当次具体命中分支仍待真实证据。
-- [ ] B2 页码、选页、草稿结构、节点/边及来源位置校验拆为稳定 code 和白名单 details；Host 不再靠 message 正则分类或公开原始原因。
-- [ ] B3 IPC 兼容旧 `{error:string}`，安全转发 message/details；合法码、Method 例外、取消和权限码保持，未知异常用中性 `host_tool_failed` 及本地证据关联。
-- [ ] B4 原始异常、堆栈、路径、凭据和未脱敏输入不进入模型/native/SSE/HTTP/公开日志；HTTP 客户端合同保持。
-- [ ] B5 校验失败地图版本零增加；修正后保存一版并取得 `candidate-not-adopted` 回执。
+- [x] B2 页码、选页、草稿结构、节点/边及来源位置校验拆为稳定 code 和白名单 details；Host 不再靠 message 正则分类或公开原始原因。
+- [x] B3 IPC 兼容旧 `{error:string}`，安全转发 message/details；合法码、Method 例外、取消和权限码保持，未知异常用中性 `host_tool_failed` 及本地证据关联。
+- [x] B4 原始异常、堆栈、路径、凭据和未脱敏输入不进入模型/native/SSE/HTTP/公开日志；HTTP 客户端合同保持。
+- [x] B5 校验失败地图版本零增加；修正后保存一版并取得 `candidate-not-adopted` 回执。
 
 ### C. 路径边界与提示
 

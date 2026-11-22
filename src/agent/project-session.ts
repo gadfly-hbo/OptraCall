@@ -953,7 +953,19 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     await transport.close();
   }
   process.on('message', (message: any) => {
-    if (message?.kind === 'personal-context-reply') { const pending = personalRequests.get(message.id); if (pending) { if (message.error) pending.reject(new Error(message.error)); else pending.resolve(message.result); } return; }
+    if (message?.kind === 'personal-context-reply') { const pending = personalRequests.get(message.id); if (pending) {
+      if (message.error) {
+        const code = String(message.error), parts = [code];
+        if (typeof message.message === 'string' && message.message !== code) parts.push(message.message);
+        if (message.details !== undefined) parts.push(JSON.stringify(message.details));
+        if (typeof message.diagnosticId === 'string') parts.push(`诊断关联 ${message.diagnosticId}`);
+        const error = new Error(parts.join('：')) as Error & { code?: string; details?: unknown; diagnosticId?: string };
+        error.code = code;
+        if (message.details !== undefined) error.details = message.details;
+        if (typeof message.diagnosticId === 'string') error.diagnosticId = message.diagnosticId;
+        pending.reject(error);
+      } else pending.resolve(message.result);
+    } return; }
     if (message?.kind !== 'request') return; void (async () => {
     try {
       let result: unknown;
