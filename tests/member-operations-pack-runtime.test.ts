@@ -646,7 +646,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     }
     if (stepA === 4) {
       sapM1ReadText = providerMessageText(context.recentToolResults.at(-1)!.content);
-      return { calls: [{ name: 'read_input', arguments: { filename: 'starbridge_orders.csv' } }] };
+      return { calls: [{ name: 'read_input', arguments: { filename: 'starbridge_orders.csv', purposeId: purpose.id } }] };
     }
     if (stepA === 5) {
       const starText = providerMessageText(context.recentToolResults.at(-1)!.content);

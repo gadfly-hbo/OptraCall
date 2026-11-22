@@ -70,6 +70,19 @@ test('detail views enforce brand, channel, store and period within each single g
     assert.ok(content.includes('granted') && content.includes('both-other'), ext);
     for (const row of [1, 2, 4, 5, 6, 7]) assert.ok(!content.includes(rows[row]![0]!), ext);
 
+    const purposeScoped = buildAuthorizedDataView(bytes(keys, rows), locator, [grant, other], {
+      purposeKey: 'repurchase', purposeScope: { brand: '织屿', channel: '直营', stores: ['湖庭店'] },
+    });
+    assert.ok(purposeScoped.allowed, ext);
+    assert.equal(purposeScoped.keptRows, 1, ext);
+    assert.ok(!purposeScoped.bytes.toString('utf8').includes('both-other'), ext);
+    const quoted = ext === 'json' ? Buffer.from(' '+bytes(keys, [rows[0]!]).toString('utf8')+'\n')
+      : Buffer.from([keys, rows[0]!].map(row => row.map(value => '"' + value + '"').join(ext === 'tsv' ? '\t' : ',')).join('\r\n')+'\r\n');
+    const preserved = buildAuthorizedDataView(quoted, locator, [grant]);
+    assert.ok(preserved.allowed, ext);
+    assert.equal(preserved.filtered, false, ext);
+    assert.deepEqual(preserved.bytes, quoted, ext);
+
     const withoutBrand = bytes(['order', '渠道', '门店', '日期'], [
       ['allowed-by-channel-store-period', '直营', '湖庭店', '2026-09-05'],
       ['other-channel-unknown-brand', '联营', '湖庭店', '2026-09-05'],
