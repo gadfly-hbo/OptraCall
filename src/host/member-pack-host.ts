@@ -538,6 +538,20 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return project;
   }
 
+  function visibleGrants(enterpriseId: string, projectId: string, operator: TrustedHostOperator) {
+    const ownedSystems = new Set(packs.list(enterpriseId).filter(pack => canReadConstructionPack(pack, projectId, operator)).map(pack => pack.systemId));
+    for (const system of options.studio.list()) {
+      if (system.enterpriseId === enterpriseId && studioExecutionOwner(system).projectId === projectId
+        && hasSystemAuthority(system.id, projectId, operator)) ownedSystems.add(system.id);
+    }
+    return grants.list(enterpriseId).filter(grant =>
+      (grant.subjectType === 'project' && grant.subjectId === projectId)
+      || (grant.subjectType === 'principal' && grant.subjectId === operator.operatorId)
+      || Boolean(grant.grantorSystemId && ownedSystems.has(grant.grantorSystemId))
+      || (grant.grantorProjectId === projectId && grant.grantorOperatorId === operator.operatorId),
+    );
+  }
+
   async function packReaderProject(operator: TrustedHostOperator, requestedProjectId: string | null, enterpriseId?: string) {
     const projectId = activeOperatorProject(operator);
     if (requestedProjectId && projectId && uuid(requestedProjectId) !== projectId) throw new StudioError('member_pack_operator_context_required', 403);
@@ -3010,14 +3024,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
     // 1. Domain References (Settings -> 领域资产包)
     if (url.pathname === '/api/studio/domain-references' && request.method === 'GET') {
-      const enterpriseId = url.searchParams.get('enterpriseId') || undefined;
-      const projectId = url.searchParams.get('projectId') || undefined;
-      let verifiedEnterpriseId = enterpriseId;
-      if (projectId) {
-        const projectEnterprise = options.enterpriseScopes.enterpriseIdForProject(uuid(projectId));
-        if (enterpriseId && projectEnterprise !== enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-        verifiedEnterpriseId = projectEnterprise;
-      }
+      const enterpriseId = url.searchParams.get('enterpriseId');
+      const operator = resolveRequestOperator(request);
+      const reader = await packReaderProject(operator, null, enterpriseId ? uuid(enterpriseId) : undefined);
+      const requestedProject = url.searchParams.get('projectId');
+      const verifiedEnterpriseId = !requestedProject || requestedProject === reader?.projectId ? reader?.enterpriseId : undefined;
       const domain = (url.searchParams.get('domain') || undefined) as DomainReferenceDomain | undefined;
       const sourceId = url.searchParams.get('sourceId') || undefined;
       const query = url.searchParams.get('query') || undefined;
@@ -3030,17 +3041,23 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
     if (url.pathname === '/api/studio/domain-references' && request.method === 'POST') {
       assertEnabledWritable();
+      const operator = resolveRequestOperator(request);
       const input = await options.readBody(request, 4 * 1024 * 1024);
       const requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
-      const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
+      const receipt = await options.mutate(async () => {
         if (options.closing()) throw new StudioError('host_closing', 503);
         assertEnabledWritable();
-        if (input.visibility === 'enterprise' && input.enterpriseId) {
-          options.enterpriseScopes.get(uuid(input.enterpriseId));
+        if (input.visibility === 'enterprise') {
+          const enterpriseId = uuid(input.enterpriseId);
+          const reader = await packReaderProject(operator, null, enterpriseId);
+          if (!reader) throw new StudioError('member_pack_operator_context_required', 403);
+          await assertWritableProject(reader.projectId, enterpriseId);
         }
-        const result = references.register(input as unknown as Parameters<DomainReferenceStore['register']>[0]);
-        return { statusCode: 200, result: result as unknown as Record<string, unknown> };
-      }));
+        return options.operations.run(requestId, { path: url.pathname, input }, async () => {
+          const result = references.register(input as unknown as Parameters<DomainReferenceStore['register']>[0]);
+          return { statusCode: 200, result: result as unknown as Record<string, unknown> };
+        });
+      });
       json(response, receipt.statusCode || 200, receipt.result);
       return true;
     }
@@ -3061,16 +3078,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const refOriginalMatch = /^\/api\/studio\/domain-references\/([a-f0-9-]+)\/original$/.exec(url.pathname);
     if (refOriginalMatch && request.method === 'GET') {
       const record = references.get(refOriginalMatch[1]!);
-      const enterpriseId = url.searchParams.get('enterpriseId') || undefined;
-      const projectId = url.searchParams.get('projectId') || undefined;
-      if (projectId) {
-        const pid = uuid(projectId);
-        await options.projects.get(pid);
-        const projectEnterprise = options.enterpriseScopes.enterpriseIdForProject(pid);
-        if (enterpriseId && projectEnterprise !== enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-        if (record.visibility === 'enterprise' && projectEnterprise !== record.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-      } else if (record.visibility === 'enterprise') {
-        if (!enterpriseId || uuid(enterpriseId) !== record.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
+      if (record.visibility === 'enterprise') {
+        const enterpriseId = url.searchParams.get('enterpriseId');
+        if (enterpriseId && uuid(enterpriseId) !== record.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
+        const reader = await packReaderProject(resolveRequestOperator(request), url.searchParams.get('projectId'), record.enterpriseId);
+        if (!reader) throw new StudioError('member_pack_operator_context_required', 403);
       }
       const section = url.searchParams.get('section') || undefined;
       json(response, 200, references.readOriginal(refOriginalMatch[1]!, section));
@@ -3095,26 +3107,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       return true;
     }
     if (url.pathname === '/api/studio/resource-grants' && request.method === 'GET') {
-      const enterpriseId = url.searchParams.get('enterpriseId') || undefined;
-      const subjectId = url.searchParams.get('subjectId') || undefined;
-      const projectId = url.searchParams.get('projectId') || undefined;
-      let effectiveSubjectId = subjectId;
-      if (projectId) {
-        const pid = uuid(projectId);
-        const projectEnterprise = options.enterpriseScopes.enterpriseIdForProject(pid);
-        if (enterpriseId && projectEnterprise !== enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-        const operator = resolveRequestOperator(request);
-        const isOwner = Boolean(
-          projectEnterprise
-          && await resolveGrantAuthorityForProject(projectEnterprise, pid, undefined, operator),
-        );
-        // Non-owner consumer project MUST ONLY see its own grants (never another project's stores/paths)!
-        if (!isOwner) {
-          if (subjectId && subjectId !== pid) throw new StudioError('studio_owner_mismatch', 403);
-          effectiveSubjectId = pid;
-        }
-      }
-      const list = enterpriseId && effectiveSubjectId ? grants.listForSubject(enterpriseId, effectiveSubjectId) : grants.list(enterpriseId);
+      const enterprise = url.searchParams.get('enterpriseId');
+      const subjectId = url.searchParams.get('subjectId');
+      const operator = resolveRequestOperator(request);
+      const reader = await packReaderProject(operator, url.searchParams.get('projectId'), enterprise ? uuid(enterprise) : undefined);
+      const list = reader?.enterpriseId
+        ? visibleGrants(reader.enterpriseId, reader.projectId, operator).filter(grant => !subjectId || grant.subjectId === subjectId)
+        : [];
       json(response, 200, { grants: list, readOnlyRollback: !enabled });
       return true;
     }
@@ -3227,7 +3226,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const headerAuthorityToken = request.headers['x-optracall-authority-token'];
       const suppliedAuthorityToken = input.authorityToken ?? input.grantorAuthorityToken ?? (typeof headerAuthorityToken === 'string' ? headerAuthorityToken : undefined);
       const requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
-      const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
+      const issuerProjectId = typeof (input.grantorProjectId) === 'string' ? uuid(input.grantorProjectId) : undefined;
+      if (!operator.verified || !issuerProjectId || activeOperatorProject(operator) !== issuerProjectId) {
+        throw new StudioError('resource_grantor_not_authorized', 403);
+      }
+      const receipt = await options.mutate(async () => {
+        await assertWritableProject(issuerProjectId, uuid(input.enterpriseId));
+        return options.operations.run(requestId, { path: url.pathname, input }, async () => {
         if (options.closing()) throw new StudioError('host_closing', 503);
         assertEnabledWritable();
         const enterpriseId = uuid(input.enterpriseId);
@@ -3359,7 +3364,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           options.onProjectPermissionChanged?.(record.subjectId);
         }
         return { statusCode: 200, result: { grant: record } as unknown as Record<string, unknown> };
-      }));
+        });
+      });
+      if (!object(receipt.result?.grant) || receipt.result.grant.grantorOperatorId !== operator.operatorId) {
+        throw new StudioError('resource_operator_not_authorized', 403);
+      }
       json(response, receipt.statusCode || 200, receipt.result);
       return true;
     }
@@ -3371,7 +3380,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const headerAuthorityToken = request.headers['x-optracall-authority-token'];
       const suppliedAuthorityToken = input.authorityToken ?? input.revokerAuthorityToken ?? input.grantorAuthorityToken ?? (typeof headerAuthorityToken === 'string' ? headerAuthorityToken : undefined);
       const requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
-      const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
+      const issuerProjectId = typeof (input.revokerProjectId ?? input.grantorProjectId) === 'string' ? uuid(input.revokerProjectId ?? input.grantorProjectId) : undefined;
+      if (!operator.verified || !issuerProjectId || activeOperatorProject(operator) !== issuerProjectId) {
+        throw new StudioError('resource_revoker_not_authorized', 403);
+      }
+      const receipt = await options.mutate(async () => {
+        await assertWritableProject(issuerProjectId, grants.get(revokeMatch[1]!).enterpriseId);
+        return options.operations.run(requestId, { path: url.pathname, input }, async () => {
         if (options.closing()) throw new StudioError('host_closing', 503);
         assertEnabledWritable();
         const existingGrant = grants.get(revokeMatch[1]!);
@@ -3411,7 +3426,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           options.onProjectPermissionChanged?.(record.subjectId);
         }
         return { statusCode: 200, result: { grant: record } as unknown as Record<string, unknown> };
-      }));
+        });
+      });
+      if (!object(receipt.result?.grant) || receipt.result.grant.revokedByOperatorId !== operator.operatorId) {
+        throw new StudioError('resource_operator_not_authorized', 403);
+      }
       json(response, receipt.statusCode || 200, receipt.result);
       return true;
     }
@@ -3419,8 +3438,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const input = await options.readBody(request);
       const enterpriseId = uuid(input.enterpriseId);
       const subjectId = text(input.subjectId, 200, false);
-      const subjectGrants = grants.listForSubject(enterpriseId, subjectId);
-      const evaluation = evaluateResourceAccess(subjectGrants, input as unknown as ResourceAccessQuery);
+      const operator = resolveRequestOperator(request);
+      const reader = await packReaderProject(operator, null, enterpriseId);
+      if (!reader) throw new StudioError('member_pack_operator_context_required', 403);
+      const subjectGrants = visibleGrants(enterpriseId, reader.projectId, operator).filter(grant => grant.subjectId === subjectId);
+      const evaluation = evaluateResourceAccess(subjectGrants, { ...input, at: new Date().toISOString() } as unknown as ResourceAccessQuery);
       json(response, 200, { evaluation });
       return true;
     }

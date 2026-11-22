@@ -138,6 +138,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     const projOtherEnt = await createProj('其他企业项目', ent2.json.id);
 
     // Enterprise-scoped reference: readable by same-enterprise project, REJECTED (403) without enterprise or from foreign enterprise/project!
+    await srv.req(`/api/projects/${projBuild.id}`);
     const entRefRes = await srv.req('/api/studio/domain-references', 'POST', {
       requestId: randomUUID(),
       sourceId: 'ENT-ZHIYU-POLICY-001',
@@ -155,8 +156,12 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     });
     assert.equal(entRefRes.status, 200);
     const entRefId = entRefRes.json.record.id;
-    assert.equal((await srv.req(`/api/studio/domain-references/${entRefId}/original`)).status, 403);
+    assert.equal((await srv.req(`/api/studio/domain-references/${entRefId}/original?enterpriseId=${enterpriseId}`, 'GET', undefined, { cookie: '' })).status, 403);
     assert.equal((await srv.req(`/api/studio/domain-references/${entRefId}/original?projectId=${projOtherEnt.id}`)).status, 403);
+    const anonymousReferences = await srv.req(`/api/studio/domain-references?enterpriseId=${enterpriseId}`, 'GET', undefined, { cookie: '' });
+    assert.equal(anonymousReferences.status, 200);
+    assert.ok(anonymousReferences.json.references.every((ref: any) => ref.visibility === 'public'));
+    assert.ok(anonymousReferences.json.references.length > 0);
     const entRefRead = await srv.req(`/api/studio/domain-references/${entRefId}/original?projectId=${projBuild.id}&section=第二节`);
     assert.equal(entRefRead.status, 200);
     assert.equal(entRefRead.json.isExcerpt, true);
@@ -1892,6 +1897,17 @@ test('Host Round-8: wide+narrow grant coexistence expiry on same path, restricte
     assert.equal(dbLinkRes.status, 403, 'Restricted member-pack project MUST be denied project-scoped db-link HTTP access!');
 
     // Consumer GET /resource-grants?enterpriseId=...&projectId=projConsumer MUST ONLY see projConsumer's grants (not projOtherConsumer)!
+    const anonymousGrants = await srv.req(`/api/studio/resource-grants?enterpriseId=${enterpriseId}`, 'GET', undefined, { cookie: '' });
+    assert.equal(anonymousGrants.status, 200);
+    assert.deepEqual(anonymousGrants.json.grants, []);
+    const wrongGrantQuery = await srv.req(`/api/studio/resource-grants?enterpriseId=${enterpriseId}&projectId=${projOtherConsumer.id}`, 'GET', undefined, { cookie: consumerCookie });
+    assert.equal(wrongGrantQuery.status, 403);
+    const otherEvaluation = await srv.req('/api/studio/resource-grants/evaluate', 'POST', {
+      enterpriseId, subjectId: projOtherConsumer.id, operation: 'read-definition',
+    }, { cookie: consumerCookie });
+    assert.equal(otherEvaluation.status, 200);
+    assert.equal(otherEvaluation.json.evaluation.allowed, false);
+    assert.deepEqual(otherEvaluation.json.evaluation.matchedGrantIds, []);
     const consumerGrantsRes = await srv.req(`/api/studio/resource-grants?enterpriseId=${enterpriseId}&projectId=${projConsumer.id}`, 'GET', undefined, { cookie: consumerCookie });
     assert.equal(consumerGrantsRes.status, 200);
     assert.ok(consumerGrantsRes.json.grants.every((g: any) => g.subjectId === projConsumer.id), 'Consumer resource-grants listing MUST NOT leak other projects grants!');

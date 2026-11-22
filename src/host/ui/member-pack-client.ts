@@ -101,10 +101,12 @@ export async function listResourceGrants(
   enterpriseId?: string,
   subjectId?: string,
   signal?: AbortSignal,
+  projectId?: string,
 ): Promise<{ grants: ResourceAuthorizationGrant[]; readOnlyRollback?: boolean }> {
   const qs = new URLSearchParams();
   if (enterpriseId) qs.set('enterpriseId', enterpriseId);
   if (subjectId) qs.set('subjectId', subjectId);
+  if (projectId) qs.set('projectId', projectId);
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
   return memberPackRequest(`resource-grants${suffix}`, 'GET', undefined, signal);
 }

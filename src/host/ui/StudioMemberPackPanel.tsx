@@ -68,6 +68,7 @@ export interface StudioMemberPackPanelProps {
   systems: StudioSystem[];
   projects: ClientProject[];
   currentProjectId?: string;
+  operatorProjectReady?: boolean;
   onBuildGoal?: (goal: string, systemId?: string) => void;
   onOpenTask?: (projectId: string, taskId: string) => void;
 }
@@ -78,6 +79,7 @@ export function StudioMemberPackPanel({
   systems,
   projects,
   currentProjectId,
+  operatorProjectReady = true,
   onBuildGoal,
   onOpenTask,
 }: StudioMemberPackPanelProps) {
@@ -129,12 +131,13 @@ export function StudioMemberPackPanel({
   const mounted = useRef(true);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
+    if (!operatorProjectReady) return;
     setLoading(true);
     setError('');
     try {
       const [packRes, grantRes, opRes] = await Promise.all([
         listEnterprisePacks(enterpriseId, 'member-operations', signal, currentProjectId),
-        listResourceGrants(enterpriseId, undefined, signal),
+        listResourceGrants(enterpriseId, undefined, signal, currentProjectId),
         readOperatorSession(signal).catch(() => null),
       ]);
       if (mounted.current && !signal?.aborted) {
@@ -151,11 +154,14 @@ export function StudioMemberPackPanel({
     } finally {
       if (mounted.current && !signal?.aborted) setLoading(false);
     }
-  }, [enterpriseId, currentProjectId]);
+  }, [enterpriseId, currentProjectId, operatorProjectReady]);
 
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController();
+    setPack(null);
+    setGrantAuthority(null);
+    setGrants([]);
     void refresh(controller.signal);
     return () => { mounted.current = false; controller.abort(); };
   }, [refresh]);
@@ -594,6 +600,7 @@ export function StudioMemberPackPanel({
     }
   };
 
+  if (!operatorProjectReady) return null;
   const latestRevision = pack?.packRevisions.find(r => r.status === 'active') ?? pack?.packRevisions.at(-1);
 
   return (
