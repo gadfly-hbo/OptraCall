@@ -24,6 +24,20 @@ function tempRoot(label: string) {
 
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 
+function sourceCustody(projectId: string, oldTaskId: string, newTaskId: string, rowNumber: number) {
+  const locator = '020_clean/orders.csv';
+  const sha256 = sha('account,order_id\nC07,O-73\nC13,O-81\nC21,O-21\n');
+  const read = (taskId: string, turn: string) => ({
+    ref: { authority: 'data' as const, id: sha(locator), locator, sha256, version: sha256, projectId, taskId },
+    sessionId: turn, entryId: turn + '-entry', toolCallId: turn + '-call',
+  });
+  return {
+    sourceFileLocator: locator, sourceFileSha256: sha256, sourceRowNumber: rowNumber,
+    originalSourceRead: read(oldTaskId, 'original'), originalSourceRowNumber: rowNumber, originalSourceVisibleOn: '2026-10-01',
+    revisedSourceRead: read(newTaskId, 'verified'), revisedSourceRowNumber: rowNumber, revisedSourceVisibleOn: '2026-10-01',
+  };
+}
+
 test('Reference registration deduplicates same source+version across routes, preserves conflicts without overwriting, coexists versions, and refuses unreadable placeholders as readable', () => {
   const root = tempRoot('refs');
   try {
@@ -1262,8 +1276,8 @@ test('Round-3 counterexamples: selective republication carries over unchanged el
       itemVerification: {
         originalCutoffChecked: '2026-10-31',
         transactionAssociationNote: '原单与跨月退款单在截止日 2026-10-31 前可见，按原单冲销后逐笔核对',
-        shouldChange: [{ itemId: 'C07', beforeValue: '计入复购（3/4）', afterValue: '排除复购（2/4）' }],
-        shouldRetain: [{ itemId: 'C13', unchangedValue: '仍计入有效复购' }],
+        shouldChange: [{ itemId: 'C07', beforeValue: '计入复购（3/4）', afterValue: '排除复购（2/4）', ...sourceCustody(projA, fb.reports[0]!.taskId, taskB, 2) }],
+        shouldRetain: [{ itemId: 'C13', unchangedValue: '仍计入有效复购', ...sourceCustody(projA, fb.reports[0]!.taskId, taskB, 3) }],
         caseDecisionsPreserved: true,
       },
     });
@@ -1959,8 +1973,8 @@ test('Round-7 counterexamples: contradictory targetPurposeId refuses auto-match 
         newCutoffChecked: '2026-11-15',
         transactionAssociationNote: 'C21 关联原单 O-21，退款日 2026-11-05 晚于原截止日 2026-10-31，不归咎为原口径错误，在新截止日 2026-11-15 单独列明',
         shouldChange: [],
-        postCutoffNewEvents: [{ itemId: 'C21', originalOrderId: 'O-21', refundDate: '2026-11-05', beforeValue: '10/31计入复购', afterValue: '11/15口径按新事件排除', classification: 'post_cutoff_new_event' }],
-        shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-13', unchangedValue: '保留有效复购' }],
+        postCutoffNewEvents: [{ itemId: 'C21', originalOrderId: 'O-21', refundDate: '2026-11-05', beforeValue: '10/31计入复购', afterValue: '11/15口径按新事件排除', classification: 'post_cutoff_new_event', ...sourceCustody(projId, fb.reports[0]!.taskId, useB.taskId, 4) }],
+        shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-13', unchangedValue: '保留有效复购', ...sourceCustody(projId, fb.reports[0]!.taskId, useB.taskId, 3) }],
       },
     });
     assert.equal(closed.feedback.status, 'verified');

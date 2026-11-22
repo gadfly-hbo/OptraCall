@@ -453,6 +453,13 @@ export interface EnterprisePackOriginalCaseRef {
   preservedAt?: string;
 }
 
+export interface EnterprisePackFeedbackSourceRead {
+  ref: StudioSourceRef;
+  sessionId: string;
+  entryId: string;
+  toolCallId: string;
+}
+
 export interface EnterprisePackFeedbackReport {
   projectId: string;
   taskId: string;
@@ -468,6 +475,7 @@ export interface EnterprisePackFeedbackReport {
   observedDirectoryVersion?: string;
   usedPackVersion?: string;
   usedAssetRefs: StudioSourceRef[];
+  sourceReads?: EnterprisePackFeedbackSourceRead[];
   taskCutoffAt?: string;
   packDataCutoffAt?: string;
   dataCutoffAt?: string;
@@ -476,11 +484,20 @@ export interface EnterprisePackFeedbackReport {
   submittedAt: string;
 }
 
+export interface EnterprisePackFeedbackRowCustody {
+  originalSourceRead?: EnterprisePackFeedbackSourceRead;
+  originalSourceRowNumber?: number;
+  originalSourceVisibleOn?: string;
+  revisedSourceRead?: EnterprisePackFeedbackSourceRead;
+  revisedSourceRowNumber?: number;
+  revisedSourceVisibleOn?: string;
+}
+
 export interface EnterprisePackFeedbackItemVerification {
   originalCutoffChecked: string;
   newCutoffChecked?: string;
   transactionAssociationNote: string;
-  shouldChange: {
+  shouldChange: (EnterprisePackFeedbackRowCustody & {
     itemId: string;
     beforeValue: string;
     afterValue: string;
@@ -495,8 +512,8 @@ export interface EnterprisePackFeedbackItemVerification {
     sourceRowNumber?: number;
     sourceOrderDate?: string;
     sourceFullRefund?: boolean;
-  }[];
-  postCutoffNewEvents?: {
+  })[];
+  postCutoffNewEvents?: (EnterprisePackFeedbackRowCustody & {
     itemId: string;
     originalOrderId: string;
     refundDate: string;
@@ -511,8 +528,8 @@ export interface EnterprisePackFeedbackItemVerification {
     sourceRowNumber?: number;
     sourceOrderDate?: string;
     sourceFullRefund?: boolean;
-  }[];
-  shouldRetain: {
+  })[];
+  shouldRetain: (EnterprisePackFeedbackRowCustody & {
     itemId: string;
     unchangedValue: string;
     originalOrderId?: string;
@@ -526,7 +543,7 @@ export interface EnterprisePackFeedbackItemVerification {
     sourceRowNumber?: number;
     sourceOrderDate?: string;
     sourceFullRefund?: boolean;
-  }[];
+  })[];
   caseDecisionsPreserved?: boolean;
   originalCaseRef?: EnterprisePackOriginalCaseRef;
   assessmentReportRef?: StudioSourceRef;

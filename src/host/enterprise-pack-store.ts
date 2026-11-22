@@ -19,6 +19,8 @@ import {
   type EnterprisePackFeedback,
   type EnterprisePackFeedbackItemVerification,
   type EnterprisePackFeedbackReport,
+  type EnterprisePackFeedbackRowCustody,
+  type EnterprisePackFeedbackSourceRead,
   type EnterprisePackPreview,
   type EnterprisePackPurpose,
   type EnterprisePackPurposeScope,
@@ -43,6 +45,29 @@ type StoredPackIndex = { schemaVersion: 1; packs: EnterpriseDomainPack[] };
 const MAX_BYTES = 32 * 1024 * 1024;
 const now = () => new Date().toISOString();
 const clone = <T>(value: T): T => structuredClone(value);
+
+function feedbackSourceRead(read: EnterprisePackFeedbackSourceRead): EnterprisePackFeedbackSourceRead {
+  const ref = sourceRef(read.ref);
+  if (ref.authority !== 'data' || !ref.projectId || !ref.taskId || !ref.locator?.startsWith('020_clean/')
+    || !/^[a-f0-9]{64}$/.test(ref.sha256 ?? '')) fail('feedback_verification_source_transaction_mismatch', 409);
+  return {
+    ref, sessionId: text(read.sessionId, 200, false),
+    entryId: text(read.entryId, 200, false), toolCallId: text(read.toolCallId, 200, false),
+  };
+}
+
+function feedbackRowCustody(item: EnterprisePackFeedbackRowCustody): EnterprisePackFeedbackRowCustody {
+  const { originalSourceRead, originalSourceRowNumber, originalSourceVisibleOn,
+    revisedSourceRead, revisedSourceRowNumber, revisedSourceVisibleOn } = item;
+  return {
+    ...(originalSourceRead ? { originalSourceRead: feedbackSourceRead(originalSourceRead) } : {}),
+    ...(revisedSourceRead ? { revisedSourceRead: feedbackSourceRead(revisedSourceRead) } : {}),
+    ...(typeof originalSourceRowNumber === 'number' ? { originalSourceRowNumber } : {}),
+    ...(typeof revisedSourceRowNumber === 'number' ? { revisedSourceRowNumber } : {}),
+    ...(originalSourceVisibleOn ? { originalSourceVisibleOn: text(originalSourceVisibleOn, 100, false) } : {}),
+    ...(revisedSourceVisibleOn ? { revisedSourceVisibleOn: text(revisedSourceVisibleOn, 100, false) } : {}),
+  };
+}
 
 export interface UpsertPurposeInput {
   targetPurposeId?: string;
@@ -1265,6 +1290,7 @@ export class EnterprisePackStore {
         ...(input.report.observedDirectoryVersion ? { observedDirectoryVersion: text(input.report.observedDirectoryVersion, 50, false) } : {}),
         ...(adoptionBasis === 'verified_actual_read' && input.report.usedPackVersion ? { usedPackVersion: text(input.report.usedPackVersion, 50, false) } : {}),
         usedAssetRefs: sources(input.report.usedAssetRefs),
+        ...(input.report.sourceReads ? { sourceReads: input.report.sourceReads.map(feedbackSourceRead) } : {}),
         ...(input.report.taskCutoffAt ? { taskCutoffAt: text(input.report.taskCutoffAt, 100, false) } : {}),
         ...(input.report.packDataCutoffAt ? { packDataCutoffAt: text(input.report.packDataCutoffAt, 100, false) } : {}),
         ...(input.report.taskCutoffAt ? { dataCutoffAt: text(input.report.taskCutoffAt, 100, false) } : input.report.dataCutoffAt ? { dataCutoffAt: text(input.report.dataCutoffAt, 100, false) } : {}),
@@ -1446,6 +1472,7 @@ export class EnterprisePackStore {
               ...(typeof item.sourceRowNumber === 'number' ? { sourceRowNumber: item.sourceRowNumber } : {}),
               ...(item.sourceOrderDate ? { sourceOrderDate: text(item.sourceOrderDate, 100, false) } : {}),
               ...(item.sourceFullRefund !== undefined ? { sourceFullRefund: Boolean(item.sourceFullRefund) } : {}),
+              ...feedbackRowCustody(item),
             };
           });
           const postCutoffNewEvents = rawPostCutoff.map(item => {
@@ -1460,7 +1487,7 @@ export class EnterprisePackStore {
             }
             const refundMs = Date.parse(refundDate);
             if (!Number.isFinite(refundMs)) fail('feedback_verification_invalid_refund_date', 409);
-            if (Number.isFinite(cutoffMs) && refundMs <= cutoffMs) {
+            if (item.classification === 'post_cutoff_new_event' && Number.isFinite(cutoffMs) && refundMs <= cutoffMs) {
               // Pre-cutoff refund MUST NOT be hidden as a post-cutoff new event!
               fail('feedback_verification_pre_cutoff_misclassified', 409);
             }
@@ -1482,6 +1509,7 @@ export class EnterprisePackStore {
               ...(typeof item.sourceRowNumber === 'number' ? { sourceRowNumber: item.sourceRowNumber } : {}),
               ...(item.sourceOrderDate ? { sourceOrderDate: text(item.sourceOrderDate, 100, false) } : {}),
               ...(item.sourceFullRefund !== undefined ? { sourceFullRefund: Boolean(item.sourceFullRefund) } : {}),
+              ...feedbackRowCustody(item),
             };
           });
           const shouldRetain = rawShouldRetain.map(item => ({
@@ -1498,7 +1526,16 @@ export class EnterprisePackStore {
             ...(typeof item.sourceRowNumber === 'number' ? { sourceRowNumber: item.sourceRowNumber } : {}),
             ...(item.sourceOrderDate ? { sourceOrderDate: text(item.sourceOrderDate, 100, false) } : {}),
             ...(item.sourceFullRefund !== undefined ? { sourceFullRefund: Boolean(item.sourceFullRefund) } : {}),
+            ...feedbackRowCustody(item),
           }));
+          if (isCalcPurpose && [...shouldChange, ...postCutoffNewEvents, ...shouldRetain].some(item =>
+            !item.sourceFileLocator || !/^[a-f0-9]{64}$/.test(item.sourceFileSha256 ?? '')
+            || !Number.isSafeInteger(item.sourceRowNumber) || item.sourceRowNumber! < 1
+            || !item.originalSourceRead || !item.revisedSourceRead
+            || !Number.isSafeInteger(item.originalSourceRowNumber) || item.originalSourceRowNumber! < 1
+            || !Number.isSafeInteger(item.revisedSourceRowNumber) || item.revisedSourceRowNumber! < 1
+            || !item.originalSourceVisibleOn || !item.revisedSourceVisibleOn,
+          )) fail('feedback_verification_source_transaction_mismatch', 409);
           normalizedItemVerification = {
             originalCutoffChecked,
             ...(newCutoffChecked ? { newCutoffChecked } : {}),

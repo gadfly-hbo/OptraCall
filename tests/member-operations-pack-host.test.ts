@@ -1689,12 +1689,11 @@ test('Host Round-7: real-product operator isolation & named business operator au
     assert.equal(relogin2.status, 200);
     const ownerCookieR2 = relogin2.setCookie.split(';')[0]!;
 
-    // GET /feedback/:id/case-history MUST still read back exact historicalDecision rev.1 alongside latestDecision rev.2!
+    // The legacy report field has no native source. Treat the Case claim as unproved.
     const histRes = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback/${fbId}/case-history`, 'GET', undefined, { cookie: ownerCookieR2 });
     assert.equal(histRes.status, 200);
-    assert.equal(histRes.json.historicalDecision?.revision, 1, 'Feedback case-history MUST preserve exact historical decision rev.1!');
-    assert.equal(histRes.json.historicalDecision?.payload?.title, '十月截止口径保持复购激励方案');
-    assert.equal(histRes.json.latestDecision?.revision, 2);
+    assert.equal(histRes.json.historicalDecision, null);
+    assert.equal(histRes.json.originalCaseRef, null);
   } finally {
     try { await srv.close(); } catch {}
     fs.rmSync(root, { recursive: true, force: true });
@@ -1894,7 +1893,7 @@ test('Host Round-8: wide+narrow grant coexistence expiry on same path, restricte
         kind: 'strategy',
         payload: { title: 'R8 原决定 rev1', proposal: '十月原口径决定' },
       },
-      { actorKind: 'agent', projectId: projOwner.id, taskId: tRetro.id, requestId: randomUUID(), sessionId: 'sess-r8', toolCallId: 'tool-r8-1' },
+      { actorKind: 'agent', projectId: projOwner.id, taskId: tRetro.id, requestId: randomUUID(), sessionId: 'sess-r8-t1', toolCallId: 'tool-r8-1' },
     );
     csA.close();
     assert.equal(dec1.revision, 1);
@@ -1942,6 +1941,12 @@ test('Host Round-8: wide+narrow grant coexistence expiry on same path, restricte
         expectedRevision: 1,
         kind: 'strategy',
         payload: { title: 'R8 新决定 rev2', proposal: '十一月调整后新决定' },
+        references: [{
+          relation: 'derived_from', note: null, target: { type: 'source', source: {
+            type: 'native-reply', projectId: projOwner.id, taskId: tRetro.id, sessionId: sessionIdT1,
+            messageId: msgIdT1, expectedTextSha256: sha('旧回复正文：按 2026-10-31 口径核得结果。'),
+          } },
+        }],
       },
       { actorKind: 'agent', projectId: projOwner.id, taskId: tRetro.id, requestId: randomUUID(), sessionId: 'sess-r8', toolCallId: 'tool-r8-2' },
     );
@@ -1988,9 +1993,14 @@ test('Host Round-8: wide+narrow grant coexistence expiry on same path, restricte
     }, { cookie: ownerCookie3 });
     assert.equal(earlyFb.status, 200, JSON.stringify(earlyFb.json));
     const earlyCaseRef = earlyFb.json.feedback.reports[0].originalCaseRef;
-    assert.equal(earlyCaseRef?.caseId, caseId);
-    assert.equal(earlyCaseRef?.decisionRevision, undefined, 'Ambiguous post-origin rev.1->rev.2 MUST NOT pin rev.2!');
-    assert.equal(earlyCaseRef?.decisionResolutionStatus, 'unresolved_post_origin_revisions');
+    assert.equal(earlyCaseRef, undefined, 'A later project link and unrelated decisions do not attach to this earlier reply.');
+    const lateExplicit = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
+      requestId: randomUUID(),
+      origin: { projectId: projOwner.id, taskId: tRetro.id, sessionId: sessionIdT1, messageId: msgIdT1 },
+      problemKey: 'r8-late-explicit', title: '较晚的修订不能接管旧 Case', category: 'shared_refund_mapping',
+      originalCaseRef: { caseId, decisionId: dec2.recordId, decisionRevision: 2 },
+    }, { cookie: ownerCookie3 });
+    assert.equal(lateExplicit.status, 409, JSON.stringify(lateExplicit.json));
   } finally {
     try { await srv.close(); } catch {}
     fs.rmSync(root, { recursive: true, force: true });

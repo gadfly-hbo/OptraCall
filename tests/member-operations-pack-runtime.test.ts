@@ -7,6 +7,7 @@ import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 import { withCaseGoal } from './fixtures/case-goal.ts';
 import { CaseStore } from '../src/host/case-store.ts';
+import type { CaseDecisionReference } from '../src/host/case-decision-types.ts';
 
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
@@ -329,6 +330,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     proposal: string;
     projectId: string;
     taskId: string;
+    references?: CaseDecisionReference[];
   }) => {
     const savedDataRoot = host.dataRoot;
     const savedProjectsRoot = host.projectsRoot;
@@ -346,6 +348,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
         expectedRevision: args.expectedRevision,
         kind: 'strategy',
         payload: { title: args.title, proposal: args.proposal },
+        ...(args.references ? { references: args.references } : {}),
       },
       { actorKind: 'agent', projectId: args.projectId, taskId: args.taskId, requestId: randomUUID(), sessionId: 'runtime-seed-session', toolCallId: `seed-${randomUUID()}` },
     );
@@ -377,11 +380,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   // C21: 9月首购 + 9月有效再购 O-88（未退款）
   // C30: 9月首购无再购
   const starCsv = [
-    'account,first_order_date,repeat_order_id,repeat_order_date,refund_date,full_refund,store',
-    'C07,2026-09-02,O-73,2026-09-18,2026-10-02,true,星桥直营店',
-    'C13,2026-09-03,O-81,2026-09-20,,false,星桥直营店',
-    'C21,2026-09-05,O-88,2026-09-24,,false,星桥直营店',
-    'C30,2026-09-06,,,,false,星桥直营店',
+    'account,first_order_date,repeat_order_id,repeat_order_date,refund_date,full_refund,store,data_available_at',
+    'C07,2026-09-02,O-73,2026-09-18,2026-10-02,true,星桥直营店,2026-10-03',
+    'C13,2026-09-03,O-81,2026-09-20,,false,星桥直营店,2026-09-20',
+    'C21,2026-09-05,O-88,2026-09-24,,false,星桥直营店,2026-09-24',
+    'C30,2026-09-06,,,,false,星桥直营店,2026-09-06',
     '',
   ].join('\n');
   const willowCsv = 'account,first_order_date,repeat_order_id,repeat_order_date,refund_date,full_refund,store\nW01,2026-09-04,O-99,2026-09-19,,false,柳岸直营店\n';
@@ -610,7 +613,17 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   let sapM1ReadText = '';
   let taskAStudioUseId = '';
 
-  const reportV1BodyText = JSON.stringify({ packVersion: '1.0', numerator: 3, denominator: 4, accounts: ['C07', 'C13', 'C21'] });
+  const transaction = (itemId: string, originalOrderId: string, disposition: string) => ({
+    itemId, originalOrderId, disposition,
+  });
+  const reportV1BodyText = JSON.stringify({
+    packVersion: '1.0', numerator: 3, denominator: 4, accounts: ['C07', 'C13', 'C21'],
+    transactions: [
+      transaction('C07', 'O-73', '计入复购'),
+      transaction('C13', 'O-81', '计入复购'),
+      transaction('C21', 'O-88', '计入复购'),
+    ],
+  });
   const assessV1SelfBodyText = JSON.stringify({ assessed: 'repurchase-v1.0.json', status: 'pass', selfAssessed: true, numerator: 3, denominator: 4 });
 
   provider.setResponder(context => {
@@ -647,7 +660,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
       if (stepA === 8) {
         const txt = providerMessageText(context.recentToolResults.at(-1)!.content);
         willowNativeBashBlocked = txt.includes('store_detail_not_authorized') || txt.includes('No such file') || txt.includes('not_authorized') || txt.includes('Operation not permitted');
-        const pyCmd = `python3 -c "import csv, hashlib, json, os; print('ISO_CWD=' + os.getcwd() + '|STAR=' + str(os.path.exists('starbridge_orders.csv'))); rows = list(csv.DictReader(open('starbridge_orders.csv'))); rep = [r['account'] for r in rows if r['repeat_order_id'] and not (r['full_refund']=='true' and r['refund_date'].startswith('2026-09'))]; body = json.dumps({'packVersion':'1.0','numerator':len(rep),'denominator':len(rows),'accounts':rep}, ensure_ascii=False).encode(); open('../060_reports/repurchase-v1.0.json','wb').write(body); print('REP_SHA=' + hashlib.sha256(body).hexdigest()); abody = json.dumps({'assessed':'repurchase-v1.0.json','status':'pass','selfAssessed':True,'numerator':len(rep),'denominator':len(rows)}, ensure_ascii=False).encode(); open('../060_reports/repurchase-v1.0-self-assess.json','wb').write(abody); print('ASSESS_SHA=' + hashlib.sha256(abody).hexdigest())"`;
+        const pyCmd = `python3 -c "import csv, hashlib, json, os; print('ISO_CWD=' + os.getcwd() + '|STAR=' + str(os.path.exists('starbridge_orders.csv'))); rows = list(csv.DictReader(open('starbridge_orders.csv'))); rep = [r['account'] for r in rows if r['repeat_order_id'] and not (r['full_refund']=='true' and r['refund_date'].startswith('2026-09'))]; body = json.dumps({'packVersion':'1.0','numerator':len(rep),'denominator':len(rows),'accounts':rep,'transactions':[{'itemId':r['account'],'originalOrderId':r['repeat_order_id'],'disposition':'计入复购' if r['account'] in rep else '冲销排除'} for r in rows if r['repeat_order_id']]}, ensure_ascii=False).encode(); open('../060_reports/repurchase-v1.0.json','wb').write(body); print('REP_SHA=' + hashlib.sha256(body).hexdigest()); abody = json.dumps({'assessed':'repurchase-v1.0.json','status':'pass','selfAssessed':True,'numerator':len(rep),'denominator':len(rows)}, ensure_ascii=False).encode(); open('../060_reports/repurchase-v1.0-self-assess.json','wb').write(abody); print('ASSESS_SHA=' + hashlib.sha256(abody).hexdigest())"`;
         return { calls: [{ name: 'bash', arguments: { command: pyCmd } }] };
       }
       if (stepA === 9) {
@@ -1215,6 +1228,15 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     proposal: '基于 2026-10-31 截止日报告维持当前会员权益方案，后续跟进11月退款映射修订',
     projectId: projStar.id,
     taskId: taskA.id,
+    references: [{
+      relation: 'derived_from',
+      target: { type: 'source', source: {
+        type: 'native-reply', projectId: projStar.id, taskId: taskA.id,
+        sessionId: assistantMsgA.nativeSessionId, messageId: assistantMsgA.nativeEntryId,
+        expectedTextSha256: sha(providerMessageText(assistantMsgA.content)),
+      } },
+      note: null,
+    }],
   });
   const origDecisionId = origDecisionRes.recordId;
   assert.equal(origDecisionRes.revision, 1);
@@ -1224,6 +1246,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   const fb1 = await json(await host.request(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
     requestId: randomUUID(), origin: originA, problemKey: 'cross-month-refund', title: '跨月全额退款漏连原单',
     category: 'shared_refund_mapping', evidenceNote: '账号 C07 10月2日全额退款未冲销9月再购 O-73',
+    taskCutoffAt: '2026-11-15',
   }));
   const fb2 = await json(await host.request(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
     requestId: randomUUID(), origin: originA, problemKey: 'cross-month-refund', title: '跨月全额退款漏连原单',
@@ -1381,6 +1404,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     c07Excluded: true,
     c13Retained: true,
     itemChecks: { shouldChange: ['C07'], shouldRetain: ['C13'] },
+    transactions: [
+      transaction('C07', 'O-73', '冲销排除'),
+      transaction('C13', 'O-81', '计入复购'),
+      transaction('C21', 'O-88', '计入复购'),
+    ],
   });
   let stepB = 0;
   let taskBCatalogText = '';
@@ -1400,7 +1428,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     if (stepB === 4) {
       sapM2ReadText = providerMessageText(context.recentToolResults.at(-1)!.content);
       if (hasOsSandbox) {
-        const pyCmd = `python3 -c "import csv, hashlib, json; rows = list(csv.DictReader(open('starbridge_orders.csv'))); rep = [r['account'] for r in rows if r['repeat_order_id'] and not (r['full_refund']=='true' and r['refund_date'] <= '2026-10-31')]; body = json.dumps({'packVersion':'1.1','numerator':len(rep),'denominator':len(rows),'accounts':rep,'c07Excluded':'C07' not in rep,'c13Retained':'C13' in rep,'itemChecks':{'shouldChange':['C07'],'shouldRetain':['C13']}}, ensure_ascii=False).encode(); open('../060_reports/repurchase-v1.1.json','wb').write(body); print('REP2_SHA=' + hashlib.sha256(body).hexdigest())"`;
+        const pyCmd = `python3 -c "import csv, hashlib, json; rows = list(csv.DictReader(open('starbridge_orders.csv'))); rep = [r['account'] for r in rows if r['repeat_order_id'] and not (r['full_refund']=='true' and r['refund_date'] <= '2026-10-31')]; body = json.dumps({'packVersion':'1.1','numerator':len(rep),'denominator':len(rows),'accounts':rep,'transactions':[{'itemId':r['account'],'originalOrderId':r['repeat_order_id'],'disposition':'计入复购' if r['account'] in rep else '冲销排除'} for r in rows if r['repeat_order_id']],'c07Excluded':'C07' not in rep,'c13Retained':'C13' in rep,'itemChecks':{'shouldChange':['C07'],'shouldRetain':['C13']}}, ensure_ascii=False).encode(); open('../060_reports/repurchase-v1.1.json','wb').write(body); print('REP2_SHA=' + hashlib.sha256(body).hexdigest())"`;
         return { calls: [{ name: 'bash', arguments: { command: pyCmd } }] };
       }
       return { calls: [{ name: 'write_report', arguments: { filename: 'repurchase-v1.1.json', content: reportV2BodyText } }] };
@@ -1469,7 +1497,8 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     stepB2 += 1;
     if (stepB2 === 1) return { calls: [{ name: 'studio_assets', arguments: { action: 'read-source', payload: { ref: refundV2Ref } } }] };
     if (stepB2 === 2) return { calls: [{ name: 'studio_assets', arguments: { action: 'read-source', payload: { ref: sapM2Ref } } }] };
-    if (stepB2 === 3) {
+    if (stepB2 === 3) return { calls: [{ name: 'read_input', arguments: { filename: 'starbridge_orders.csv' } }] };
+    if (stepB2 === 4) {
       return {
         calls: [{
           name: 'studio_assets',
@@ -1493,7 +1522,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
         }],
       };
     }
-    if (stepB2 === 4) {
+    if (stepB2 === 5) {
       const declRes = JSON.parse(providerMessageText(context.recentToolResults.at(-1)!.content));
       taskBStudioUseId = declRes?.use?.id;
       assert.ok(taskBStudioUseId);
@@ -1508,7 +1537,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     return { text: '已完成 v1.1 原生 declare-use 且第二轮受限工作区写入成功（无 protected_executor_draining）。' };
   });
   await json(await host.request(`/api/projects/${projAud.id}/tasks/${taskB.id}/messages`, 'POST', {
-    requestId: randomUUID(), text: '请对 060_reports/repurchase-v1.1.json 发起原生 declare-use 并验证第二轮写入。',
+    requestId: randomUUID(), text: '请按数据截止 2026-10-31 查读原明细，对 060_reports/repurchase-v1.1.json 发起原生 declare-use 并验证第二轮写入。',
   }), 202);
   const stateB2 = await waitIdle(host, projAud.id, taskB.id, stateB.snapshot.messages.length + 2);
   assert.equal(turn2WriteOk, true, 'Turn 2 authorized report write MUST succeed without protected_executor_draining!');
@@ -1550,8 +1579,8 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     originalCaseTitle: origCase.title,
     originalDecisionId: origDecisionId,
     caseDecisionsPreserved: true,
-    shouldChange: [{ itemId: 'C07', originalOrderId: 'O-73', refundDate: '2026-10-02', classification: 'mapping_correction', before: '计入复购', after: '跨月全额退款排除' }],
-    shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-81', unchanged: '仍为有效复购' }],
+    shouldChange: [{ itemId: 'C07', originalOrderId: 'O-73', refundDate: '2026-10-02', classification: 'mapping_correction', beforeValue: '计入复购', afterValue: '冲销排除' }],
+    shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-81', unchangedValue: '计入复购' }],
     c07Excluded: true,
     c13Retained: true,
     numerator: 2,
@@ -1590,6 +1619,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
             payload: {
               useId: taskBStudioUseId,
               status: 'pass',
+              evidence: {
+                targetReport: taskBReportRef,
+                coverage: { inputPaths: ['020_clean/starbridge_orders.csv'], scope: '星桥直营店 9 月首购队列，2026-10-31', detail: '星桥四行，柳岸范围未纳入' },
+                comparison: { metrics: [{ name: '分子', reported: 2, recomputed: 2 }, { name: '分母', reported: 4, recomputed: 4 }], facts: 'C07/O-73 全额冲销，C13/O-81 保留' },
+              },
               report: {
                 authority: 'task',
                 id: taskVerifyV2.id,
@@ -1774,6 +1808,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   });
   assert.equal(closeSplitRow.status, 409, 'Cross-row split spoofing (C07 + O-81) MUST return 409 under single-row conjunction!');
 
+  const originalLiveSource = path.join(projStar.rootPath, '020_clean', 'starbridge_orders.csv');
+  const revisedLiveSource = path.join(projAud.rootPath, '020_clean', 'starbridge_orders.csv');
+  fs.renameSync(originalLiveSource, originalLiveSource + '.offline');
+  fs.renameSync(revisedLiveSource, revisedLiveSource + '.offline');
+
   // Now close with REAL source-transaction-corroborated itemVerification (C07 + O-73 + 2026-10-02 should-change, C13 + REAL O-81 should-retain, exact cutoff 2026-10-31, and pinned original Case decision rev.1)!
   const closedFb = await json(await host.request(`/api/studio/enterprise-packs/${packId}/feedback/${fb1.feedback.id}/handle`, 'POST', {
     requestId: randomUUID(),
@@ -1791,14 +1830,14 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
         originalOrderId: 'O-73',
         refundDate: '2026-10-02',
         classification: 'mapping_correction',
-        beforeValue: '计入复购（3/4）',
-        afterValue: '按原单冲销后排除复购（2/4）',
+        beforeValue: '计入复购',
+        afterValue: '冲销排除',
         evidenceLocator: '060_reports/repurchase-v1.1.json',
       }],
       shouldRetain: [{
         itemId: 'C13',
         originalOrderId: 'O-81',
-        unchangedValue: '有效再购继续计入（保留）',
+        unchangedValue: '计入复购',
         evidenceLocator: '060_reports/repurchase-v1.1.json',
       }],
       originalCaseRef: { caseId: origCase.id, decisionId: origDecisionId, decisionRevision: 1, summary: origCase.title },
@@ -1806,6 +1845,12 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     },
   }));
   assert.equal(closedFb.feedback.status, 'verified');
+  assert.equal(closedFb.feedback.revisionLink.itemVerification.shouldChange[0].sourceFileSha256, sha(starCsv));
+  assert.equal(closedFb.feedback.revisionLink.itemVerification.shouldChange[0].originalSourceVisibleOn, '2026-10-03');
+  assert.equal(closedFb.feedback.revisionLink.itemVerification.shouldChange[0].originalSourceRead.ref.taskId, taskA.id);
+  assert.equal(closedFb.feedback.revisionLink.itemVerification.shouldChange[0].revisedSourceRead.ref.taskId, taskB.id);
+  fs.renameSync(revisedLiveSource + '.offline', revisedLiveSource);
+
   assert.equal(closedFb.feedback.revisionLink.fromPackVersion, '1.0');
   assert.equal(closedFb.feedback.revisionLink.toPackVersion, '1.1');
   assert.equal(closedFb.feedback.revisionLink.authorityUpdates.length, 1);
@@ -1840,7 +1885,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
 
   // R5 (Round-8): Retroactive feedback submitted from old reply originA AFTER Case moved rev.1 -> rev.2 MUST NOT mis-pin rev.2!
   // AND closing post-cutoff new-event refund (C21, O-88, 2026-11-05 under newCutoffChecked 2026-11-15) MUST reject reusing old useBRecord (which never read starCsvNov15!) and succeed ONLY with a fresh analysis + independent verifier task that genuinely read starCsvNov15!
-  const starCsvNov15 = starCsv.replace('C21,2026-09-05,O-88,2026-09-24,,false,星桥直营店', 'C21,2026-09-05,O-88,2026-09-24,2026-11-05,true,星桥直营店');
+  const starCsvNov15 = starCsv.replace('C21,2026-09-05,O-88,2026-09-24,,false,星桥直营店,2026-09-24', 'C21,2026-09-05,O-88,2026-09-24,2026-11-05,true,星桥直营店,2026-11-06');
   fs.writeFileSync(path.join(projAud.rootPath, '020_clean', 'starbridge_orders.csv'), starCsvNov15);
   const fbPostCutoff = await json(await host.request(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
     requestId: randomUUID(), origin: originA, problemKey: 'post-cutoff-nov-refund-c21', title: '截止日后新发生退款 C21（2026-11-05）',
@@ -1884,6 +1929,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     numerator: 1,
     denominator: 4,
     accounts: ['C13'],
+    transactions: [
+      transaction('C07', 'O-73', '冲销排除'),
+      transaction('C13', 'O-81', '计入复购'),
+      transaction('C21', 'O-88', '冲销排除'),
+    ],
     postCutoffNewEvents: [{ itemId: 'C21', originalOrderId: 'O-88', refundDate: '2026-11-05' }],
   });
   let stepC = 0;
@@ -1950,8 +2000,8 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     originalCaseTitle: origCase.title,
     originalDecisionId: origDecisionId,
     caseDecisionsPreserved: true,
-    postCutoffNewEvents: [{ itemId: 'C21', originalOrderId: 'O-88', refundDate: '2026-11-05', classification: 'post_cutoff_new_event', before: '10/31口径有效复购', after: '11/15新截止日后排除' }],
-    shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-81', unchanged: '仍为有效复购' }],
+    postCutoffNewEvents: [{ itemId: 'C21', originalOrderId: 'O-88', refundDate: '2026-11-05', classification: 'post_cutoff_new_event', beforeValue: '计入复购', afterValue: '冲销排除' }],
+    shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-81', unchangedValue: '计入复购' }],
     numerator: 1,
     denominator: 4,
   });
@@ -1982,6 +2032,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
             payload: {
               useId: taskCStudioUseId,
               status: 'pass',
+              evidence: {
+                targetReport: taskCReportRef,
+                coverage: { inputPaths: ['020_clean/starbridge_orders.csv'], scope: '星桥直营店 9 月首购队列，2026-11-15', detail: '星桥四行，柳岸范围未纳入' },
+                comparison: { metrics: [{ name: '分子', reported: 1, recomputed: 1 }, { name: '分母', reported: 4, recomputed: 4 }], facts: 'C21/O-88 新截止全额冲销，C13/O-81 保留' },
+              },
               report: { authority: 'task', id: taskVerifyC.id, projectId: projAud.id, taskId: taskVerifyC.id, version: assessSha, sha256: assessSha, locator: '060_reports/repurchase-v1.1-nov15-assess.json' },
               sources: [refundV2Ref, sapM2Ref],
               result: '独立核验任务 taskVerifyC 实读 2026-11-15 新明细与目标报告 repurchase-v1.1-nov15.json，确认 C21(O-88/2026-11-05) 为截止日后新事件、C13(O-81) 保留，1/4 通过',
@@ -2019,14 +2074,14 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
         originalOrderId: 'O-88',
         refundDate: '2026-11-05',
         classification: 'post_cutoff_new_event',
-        beforeValue: '10/31截止口径计入有效复购',
-        afterValue: '11/15新截止口径按新事件排除',
+        beforeValue: '计入复购',
+        afterValue: '冲销排除',
         evidenceLocator: '060_reports/repurchase-v1.1-nov15-assess.json',
       }],
       shouldRetain: [{
         itemId: 'C13',
         originalOrderId: 'O-81',
-        unchangedValue: '有效再购继续计入（保留）',
+        unchangedValue: '计入复购',
         evidenceLocator: '060_reports/repurchase-v1.1-nov15-assess.json',
       }],
       originalCaseRef: { caseId: origCase.id, decisionId: origDecisionId, decisionRevision: 1, summary: origCase.title },
