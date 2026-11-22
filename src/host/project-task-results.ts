@@ -1,3 +1,4 @@
+import { projectTaskResultTime, stampProjectTaskResultTime } from './project-task-result-sources.ts';
 import { createHash } from 'node:crypto';
 import { PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -25,11 +26,11 @@ function binding(value: ProjectTaskResultBinding, projectId: string, taskId: str
   const parts = value.relativePath.split('/');
   if (parts.length < 2 || parts[0] !== '060_reports' || parts.some(x => !x || x.startsWith('.') || /[\\\u0000-\u001f\u007f]/u.test(x))) fail('project_result_binding_unavailable');
   if (value.nativeEntryId !== undefined && !identity(value.nativeEntryId)) fail('project_result_binding_unavailable');
-  return { projectId, taskId, requestId: value.requestId, sessionId: value.sessionId, toolCallId: value.toolCallId, relativePath: value.relativePath, sha256: value.sha256, bytes: value.bytes, ...(value.nativeEntryId === undefined ? {} : { nativeEntryId: value.nativeEntryId }), ...(value.savedAt === undefined ? {} : { savedAt: value.savedAt }) };
+  return { projectId, taskId, requestId: value.requestId, sessionId: value.sessionId, toolCallId: value.toolCallId, relativePath: value.relativePath, sha256: value.sha256, bytes: value.bytes, ...(value.nativeEntryId === undefined ? {} : { nativeEntryId: value.nativeEntryId }) };
 }
 function nativeBinding(value: ProjectTaskNativeReplyBinding, projectId: string, taskId: string): ProjectTaskNativeReplyBinding {
   if (!object(value) || value.projectId !== projectId || value.taskId !== taskId || !identity(value.requestId) || !identity(value.sessionId) || !identity(value.messageId) || value.messageId.length > 200 || !/^[a-f0-9]{64}$/.test(value.sha256) || !Number.isSafeInteger(value.bytes) || value.bytes < 1 || value.bytes > PROJECT_UPLOAD_MAX_BYTES) fail('project_result_binding_unavailable');
-  return { projectId, taskId, requestId: value.requestId, sessionId: value.sessionId, messageId: value.messageId, sha256: value.sha256, bytes: value.bytes, ...(value.savedAt === undefined ? {} : { savedAt: value.savedAt }) };
+  return { projectId, taskId, requestId: value.requestId, sessionId: value.sessionId, messageId: value.messageId, sha256: value.sha256, bytes: value.bytes };
 }
 function resultId(scope: ProjectTaskResultsScope, value: ProjectTaskResultBinding | ProjectTaskNativeReplyBinding): string {
   if ('messageId' in value) return digest(JSON.stringify([scope.projectId, scope.confirmationId, scope.planVersion, 'native-reply', value.projectId, value.taskId, value.requestId, value.sessionId, value.messageId, value.sha256, value.bytes]));
@@ -97,11 +98,11 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
         for (const raw of sources.reports) {
           const value = binding(raw, scope.projectId, member.taskId);
           const id = resultId(scope, value); if (ids.has(id) || selectedKeys && !selectedKeys.has(member.taskId + '/' + id)) continue; ids.add(id);
-          results.push({ ...value, ...metadata, id, kind: 'report', bindingState: 'saved-receipt-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', limitations: ['正文尚未提供，读取时核对准确内容与当前权限。', '保存快照不单独证明Task完成、项目综合完成或专业结论成立。'] });
+          results.push(stampProjectTaskResultTime<ProjectTaskResultDescriptor>({ ...value, ...metadata, id, kind: 'report', bindingState: 'saved-receipt-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', limitations: ['正文尚未提供，读取时核对准确内容与当前权限。', '保存快照不单独证明Task完成、项目综合完成或专业结论成立。'] }, projectTaskResultTime(raw)));
         }
         for (const raw of sources.replies) {
           const value = nativeBinding(raw, scope.projectId, member.taskId), id = resultId(scope, value); if (ids.has(id) || selectedKeys && !selectedKeys.has(member.taskId + '/' + id)) continue; ids.add(id);
-          results.push({ ...value, ...metadata, id, kind: 'native-reply', bindingState: 'native-reply-reference-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', source: { type: 'native-reply', projectId: value.projectId, taskId: value.taskId, sessionId: value.sessionId, messageId: value.messageId, expectedTextSha256: value.sha256 } });
+          results.push(stampProjectTaskResultTime<ProjectTaskResultDescriptor>({ ...value, ...metadata, id, kind: 'native-reply', bindingState: 'native-reply-reference-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', source: { type: 'native-reply', projectId: value.projectId, taskId: value.taskId, sessionId: value.sessionId, messageId: value.messageId, expectedTextSha256: value.sha256 } }, projectTaskResultTime(raw)));
         }
       } catch (error) {
         check(context);

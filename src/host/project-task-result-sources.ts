@@ -16,6 +16,17 @@ const object = (value: unknown): value is Record<string, unknown> => value !== n
 const text = (value: unknown): value is string => typeof value === 'string' && Boolean(value.trim()) && value.length <= 300 && !/[\u0000-\u001f\u007f]/u.test(value);
 const sourceKey = (source: ProjectTaskResultBinding) => JSON.stringify([source.sessionId, source.requestId, source.toolCallId]);
 const sourceValue = (source: ProjectTaskResultBinding) => JSON.stringify([source.projectId, source.taskId, source.sessionId, source.requestId, source.toolCallId, source.relativePath, source.sha256, source.bytes]);
+// Authorization time comes from the native receipt. Preserve the existing
+// serializable result shapes used for exact source identities and replay.
+const savedResultTimes = new WeakMap<object, string>();
+export function stampProjectTaskResultTime<T extends object>(binding: T, savedAt?: string): T {
+  if (savedAt !== undefined) savedResultTimes.set(binding, savedAt);
+  return binding;
+}
+export function projectTaskResultTime(binding: object): string | undefined {
+  return savedResultTimes.get(binding);
+}
+
 export type ResultSessionSnapshot = Awaited<ReturnType<typeof readNativeSessionSnapshot>>;
 export interface TaskBoundReportsOptions { signal?: AbortSignal; budget?: NativeSnapshotReadBudget; assertCurrent?(): void; onSession?(snapshot: ResultSessionSnapshot): void }
 type NativeEntry = Awaited<ReturnType<typeof readNativeSessionSnapshot>>['entries'][number];
@@ -32,7 +43,7 @@ function completedReply(entries: Map<string, NativeEntry>, terminal: NativeEntry
       if (reply.message.stopReason !== 'stop' || Array.isArray(content) && content.some(part => part.type === 'toolCall')) return;
       const body = typeof content === 'string' ? content : content.filter(part => part.type === 'text').map(part => part.text).join('');
       if (!body.trim() || !text(reply.id)) return;
-      return { requestId: terminal.data.requestId, sessionId, messageId: reply.id, sha256: createHash('sha256').update(body).digest('hex'), bytes: Buffer.byteLength(body), savedAt: reply.timestamp };
+      return stampProjectTaskResultTime({ requestId: terminal.data.requestId, sessionId, messageId: reply.id, sha256: createHash('sha256').update(body).digest('hex'), bytes: Buffer.byteLength(body) }, reply.timestamp);
     }
     if (!reply && ancestor.type === 'message') {
       if (ancestor.message.role !== 'assistant') return;
@@ -90,7 +101,7 @@ async function scanTaskResultSources(project: ProjectRecord, task: TaskRecord, o
       if (data.schemaVersion !== 1 || data.type !== 'optracall.project-report-write' || !text(data.requestId) || !text(data.toolCallId) || typeof data.relativePath !== 'string' || data.relativePath.length > 1000 || typeof data.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(data.sha256) || !Number.isSafeInteger(data.bytes) || Number(data.bytes) < 0 || Number(data.bytes) > PROJECT_UPLOAD_MAX_BYTES) fail('project_result_native_binding_invalid');
       const parts = data.relativePath.split('/');
       if (parts.length < 2 || parts[0] !== '060_reports' || parts.some(part => !part || part.startsWith('.') || /[\\\u0000-\u001f\u007f]/u.test(part)) || data.path !== path.join(project.rootPath, ...parts) || data.filename !== undefined && data.filename !== parts.at(-1)) fail('project_result_native_binding_invalid');
-      const value: ProjectTaskResultBinding = { projectId: project.id, taskId: task.id, sessionId, requestId: data.requestId, toolCallId: data.toolCallId, relativePath: data.relativePath, sha256: data.sha256, bytes: Number(data.bytes), nativeEntryId: entry.id, savedAt: entry.timestamp };
+      const value: ProjectTaskResultBinding = stampProjectTaskResultTime({ projectId: project.id, taskId: task.id, sessionId, requestId: data.requestId, toolCallId: data.toolCallId, relativePath: data.relativePath, sha256: data.sha256, bytes: Number(data.bytes), nativeEntryId: entry.id }, entry.timestamp);
       const previous = results.get(sourceKey(value));
       if (previous && sourceValue(previous) !== sourceValue(value)) fail('project_result_native_binding_conflict');
       if (!previous) results.set(sourceKey(value), value);
@@ -101,7 +112,7 @@ async function scanTaskResultSources(project: ProjectRecord, task: TaskRecord, o
       // The existing accurate reader rejects duplicate session/message sources,
       // including byte-identical copies. Never advertise an ambiguous read.
       if (replies.has(key)) ambiguousReplies.add(key);
-      replies.set(key, { projectId: project.id, taskId: task.id, ...reply });
+      replies.set(key, stampProjectTaskResultTime({ projectId: project.id, taskId: task.id, ...reply }, projectTaskResultTime(reply)));
     }
   }
   const reports = [...results.values()], reportRequests = new Set(reports.map(report => JSON.stringify([report.sessionId, report.requestId])));

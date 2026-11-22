@@ -32,7 +32,7 @@ import { runAutomaticDeliveryActions } from './automatic-delivery-actions.ts';
 import { createStrategyGoalSources, validateStrategyGoalScope } from './strategy-goal-sources.ts';
 import { createProjectPlanPreparationHost, projectPlanPreparationDirectory, projectPlanPreparationOwner } from './project-plan-preparation-host.ts';
 import { createAnalysisDeliveryPort } from './analysis-delivery.ts';
-import { ProjectTaskResultSourceError, listTaskBoundReports, listTaskResultSources } from './project-task-result-sources.ts';
+import { ProjectTaskResultSourceError, listTaskBoundReports, listTaskResultSources, projectTaskResultTime } from './project-task-result-sources.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { NativeSnapshotError } from './native-session-snapshot.ts';
 import { hasReceivedTaskResults, verifyTaskResultLineage } from './project-result-lineage.ts';
@@ -2352,7 +2352,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if (source.kind === 'report') {
           await studio.memberPack.assertCurrentReportFile(source.projectId, source.relativePath, source.sha256);
         } else {
-          studio.memberPack.assertCurrentTaskEvidenceAt(source.projectId, source.taskId, source.savedAt);
+          studio.memberPack.assertCurrentTaskEvidenceAt(source.projectId, source.taskId, projectTaskResultTime(source));
         }
         context.assertCurrent();
       },

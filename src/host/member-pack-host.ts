@@ -31,7 +31,7 @@ import {
 import { DomainReferenceStore, BUILTIN_REPO_TEMPLATES } from './domain-reference-store.ts';
 import { ResourceGrantStore } from './resource-grant-store.ts';
 import { EnterprisePackStore } from './enterprise-pack-store.ts';
-import { listTaskBoundReports } from './project-task-result-sources.ts';
+import { listTaskBoundReports, projectTaskResultTime } from './project-task-result-sources.ts';
 import { createNativeSnapshotReadBudget } from './native-session-snapshot.ts';
 import { buildAuthorizedDataView, isPeriodCovered, type AuthorizedDataPurpose } from './member-pack-data-view.ts';
 import { collectNativeEvidence, exactTaskReport, nativeAssessmentEvidence, projectFileLocator, qualifyAssessmentClaims, readCoversSource, readNativeFileEvidence, readStudioEvidence, studioPagesComplete } from './member-pack-verification.ts';
@@ -369,8 +369,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       for (const task of project.tasks) {
         const reports = await listTaskBoundReports(project, task, { budget });
         for (const binding of reports.filter(item => item.relativePath === locator)) {
-          if (binding.sha256 !== sha || !binding.savedAt) return reject();
-          matching.push({ taskId: binding.taskId, savedAt: binding.savedAt });
+          const savedAt = projectTaskResultTime(binding);
+          if (binding.sha256 !== sha || savedAt === undefined) return reject();
+          matching.push({ taskId: binding.taskId, savedAt });
         }
       }
     } catch { reject(); }
