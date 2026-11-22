@@ -397,7 +397,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
         const legacyContract = (owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'legacy';
         const protectedExecution = legacyContract ? await automatic.ordinaryExecution({ project, task }, execution) : undefined;
-        const restrictedMemberPackWs = !protectedExecution ? studio.memberPack.prepareRestrictedTaskWorkspace(project.id, task.id, project.rootPath) : undefined;
+        const restrictedMemberPackWs = !protectedExecution ? await studio.memberPack.prepareRestrictedTaskWorkspace(project.id, task.id, project.rootPath) : undefined;
         const semanticPort = createSemanticContextPort({ projectId: project.id, taskId: task.id, projects, data: projectDataContext, reader: semanticContext, mutate, isClosing: () => closing });
         const semanticContextRead = semanticGraph && (options.semanticGraph?.bindingFor(project.id, task.id) || options.studioPython && studio.availableForTask(project.id, task.id)) && (!protectedExecution || protectedExecution.profile === 'ordinary')
           ? createSemanticContextReadPort({ projectId: project.id, taskId: task.id, projects, legacy: semanticPort, graph: semanticGraph, graphOnly: Boolean(protectedExecution), isClosing: () => closing }) : undefined;
@@ -433,7 +433,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               deliver();
             }),
           };
-        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, ...(restrictedMemberPackWs ? { memberPackWorkspaceRoot: restrictedMemberPackWs.workspaceRoot } : {}), goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id, task.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(!restrictedMemberPackWs && task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(!restrictedMemberPackWs && task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(!restrictedMemberPackWs && task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(!restrictedMemberPackWs && task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, memberPackGuard: call => studio.memberPack.evaluateNativeToolCall(project.id, project.rootPath, call, restrictedMemberPackWs?.workspaceRoot), methodIssue: async (input, context) => {
+        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, ...(restrictedMemberPackWs ? { memberPackWorkspaceRoot: restrictedMemberPackWs.workspaceRoot, memberPackExecutionScope: restrictedMemberPackWs.protectedScope } : {}), goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id, task.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(!restrictedMemberPackWs && task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(!restrictedMemberPackWs && task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(!restrictedMemberPackWs && task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(!restrictedMemberPackWs && task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, memberPackGuard: call => studio.memberPack.evaluateNativeToolCall(project.id, project.rootPath, call, restrictedMemberPackWs?.workspaceRoot), methodIssue: async (input, context) => {
           const operationId = stableActionId(['task-method-issue-v1', project.id, task.id, context.requestId, input.methodId, input.version, input.note, input.sources]);
           return methodIssues(input, { ...context, operationId, projectId: project.id, taskId: task.id });
         }, quotedDecisions: async (action, input, context) => {
@@ -1605,10 +1605,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     await mutate(async () => {
       const { project, task } = await pair(owner.project.id, owner.task.id);
       if (!context.isCurrent() || task.lastRun?.id !== requestId) return;
-      studio.memberPack.syncWorkspaceReportsToProject(project.id, task.id, project.rootPath);
+      const outcome = result?.outcome ?? result?.snapshot?.lastRun?.outcome;
+      if (outcome === 'completed') {
+        studio.memberPack.syncWorkspaceReportsToProject(project.id, task.id, project.rootPath);
+      } else {
+        studio.memberPack.discardUncommittedWorkspaceReports(project.id, task.id);
+      }
       const file = result?.sessionFile ?? result?.snapshot?.sessionFile;
       if (file) await projects.setSession(project.id, task.id, file);
-      const outcome = result?.outcome ?? result?.snapshot?.lastRun?.outcome;
       const diagnostic = readRunDiagnostic(result?.diagnostic ?? result?.snapshot?.lastRun?.diagnostic);
       await projects.markRun(project.id, task.id, { id: requestId, status: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'interrupted', startedAt, settledAt: new Date().toISOString(), ...(diagnostic ? { diagnostic } : {}) });
     });

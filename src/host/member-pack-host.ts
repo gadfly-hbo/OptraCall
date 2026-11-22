@@ -25,6 +25,7 @@ import {
 import { DomainReferenceStore, BUILTIN_REPO_TEMPLATES } from './domain-reference-store.ts';
 import { ResourceGrantStore } from './resource-grant-store.ts';
 import { EnterprisePackStore } from './enterprise-pack-store.ts';
+import { createProtectedExecutionScope, type ProtectedExecutionScope } from '../agent/protected-tools.ts';
 
 function json(response: ServerResponse, status: number, value: unknown) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -62,8 +63,25 @@ export interface RestrictedTaskWorkspace {
   workspaceRoot: string;
   cleanDir: string;
   reportsDir: string;
+  workDir: string;
+  committedReportsDir: string;
   projectRoot: string;
   scope: ProjectMemberPackFileScope;
+  protectedScope: ProtectedExecutionScope;
+}
+
+interface TaskReportLedgerEntry {
+  projectId: string;
+  ownerTaskId: string;
+  relativePath: string;
+  sha256: string;
+  bytesLength: number;
+  committedAt: string;
+}
+
+interface TaskReportLedger {
+  projectFiles: Record<string, TaskReportLedgerEntry>;
+  taskSyncedFiles: Record<string, { sha256: string; effectiveRelativePath: string; committedAt: string }>;
 }
 
 export interface MemberPackHostOptions {
@@ -114,12 +132,59 @@ function normalizeRelativeDataPath(rawPath: string): string {
   return cleaned;
 }
 
+function ensurePrivateDir(dirPath: string) {
+  fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
+  try { fs.chmodSync(dirPath, 0o700); } catch { /* ignore if not owner */ }
+}
+
 export function createMemberPackFeature(options: MemberPackHostOptions) {
   const enabled = options.memberPackEnabled !== false;
   const references = new DomainReferenceStore(options.dataRoot, options.codeRoot ?? process.cwd(), { readOnlyMode: !enabled });
   const grants = new ResourceGrantStore(options.dataRoot, { readOnlyMode: !enabled });
   const packs = new EnterprisePackStore(options.dataRoot, { readOnlyMode: !enabled });
   const activeWorkspaces = new Map<string, Map<string, RestrictedTaskWorkspace>>();
+  const reportLedgerPath = path.join(options.dataRoot, 'member-packs', 'task-report-ledger.json');
+
+  function readReportLedger(): TaskReportLedger {
+    try {
+      if (fs.existsSync(reportLedgerPath)) {
+        const parsed = JSON.parse(fs.readFileSync(reportLedgerPath, 'utf8'));
+        if (parsed && typeof parsed === 'object') {
+          return {
+            projectFiles: object(parsed.projectFiles) ? (parsed.projectFiles as Record<string, TaskReportLedgerEntry>) : {},
+            taskSyncedFiles: object(parsed.taskSyncedFiles) ? (parsed.taskSyncedFiles as TaskReportLedger['taskSyncedFiles']) : {},
+          };
+        }
+      }
+    } catch { /* fallback to empty ledger */ }
+    return { projectFiles: {}, taskSyncedFiles: {} };
+  }
+
+  function writeReportLedger(ledger: TaskReportLedger) {
+    if (!enabled) return;
+    fs.mkdirSync(path.dirname(reportLedgerPath), { recursive: true });
+    const tmp = `${reportLedgerPath}.${randomUUID()}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2));
+    fs.renameSync(tmp, reportLedgerPath);
+  }
+
+  function isReportLockedByUseOrFeedback(projectId: string, locator: string, candidateSha: string): boolean {
+    const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
+    for (const pack of packs.list(enterpriseId)) {
+      if (pack.useRecords.some(u => u.projectId === projectId && u.reportRef.locator === locator && u.reportRef.sha256 && u.reportRef.sha256 !== candidateSha)) {
+        return true;
+      }
+      if (pack.feedbackItems.some(f => f.reports.some(r => r.projectId === projectId && r.reportRef.locator === locator && r.reportRef.sha256 && r.reportRef.sha256 !== candidateSha))) {
+        return true;
+      }
+    }
+    for (const sys of options.studio.list()) {
+      if (sys.uses.some(u => u.projectId === projectId && u.report.locator === locator && u.report.sha256 && u.report.sha256 !== candidateSha)) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   function assertEnabledWritable() {
     if (!enabled) throw new StudioError('member_pack_disabled_readonly', 503);
@@ -154,11 +219,24 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   function getProjectToolScope(projectId: string): ProjectMemberPackFileScope | undefined {
+    // R6: In --disable-member-pack rollback mode, stop creating restricted workspaces or copying files!
+    if (!enabled) return undefined;
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return undefined;
+    const enterprisePacks = packs.list(enterpriseId);
     const subjectGrants = grants.listForSubject(enterpriseId, projectId);
-    // Preserve ordinary unmanaged project behavior when no resource grants are configured for this project.
-    if (!subjectGrants.length) return undefined;
+    // Preserve ordinary unmanaged project behavior when no member pack and no resource grants exist for this enterprise/project.
+    if (!subjectGrants.length && !enterprisePacks.length) return undefined;
+    // Active Studio construction owner projects without subject grants keep their construction workspace.
+    if (
+      !subjectGrants.length
+      && (
+        enterprisePacks.some(p => isConstructionOwnerProject(p, projectId))
+        || options.studio.list().some(s => s.enterpriseId === enterpriseId && studioExecutionOwner(s).projectId === projectId)
+      )
+    ) {
+      return undefined;
+    }
 
     const nowMs = Date.now();
     const activeDetailGrants = subjectGrants.filter(g =>
@@ -167,22 +245,20 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       && (!g.validTo || Date.parse(g.validTo) >= nowMs)
       && g.operations.includes('read-detail-recalculate'),
     );
-    if (!activeDetailGrants.length) {
+    const allowedPaths = [...new Set(activeDetailGrants.flatMap(g => (g.scope.allowedDataPaths ?? []).map(normalizeRelativeDataPath)))];
+    const allowedStores = [...new Set(activeDetailGrants.flatMap(g => g.scope.stores ?? []))];
+    // Default-deny detail access whenever there are no active detail grants OR when allowedDataPaths was omitted!
+    if (!activeDetailGrants.length || allowedPaths.length === 0) {
       return {
         mode: 'deny-detail',
         enterpriseId,
         projectId,
         allowedPaths: [],
-        allowedStores: [],
-        summary: 'detail_access_not_authorized: 当前项目仅获定义/汇总授权或明细授权已撤回，禁止读取项目 020_clean 明细文件（不可将不可读门店视为 0）。',
+        allowedStores,
+        summary: !activeDetailGrants.length
+          ? 'detail_access_not_authorized: 当前项目仅获定义/汇总授权或明细授权已撤回，禁止读取项目 020_clean 明细文件（不可将不可读门店视为 0）。'
+          : 'store_detail_not_authorized: 当前明细重算授权未配置 allowedDataPaths 白名单路径，默认拒绝读取项目 020_clean 明细文件（不可将不可读门店视为 0）。',
       };
-    }
-
-    const allowedPaths = [...new Set(activeDetailGrants.flatMap(g => (g.scope.allowedDataPaths ?? []).map(normalizeRelativeDataPath)))];
-    const allowedStores = [...new Set(activeDetailGrants.flatMap(g => g.scope.stores ?? []))];
-    // If all active detail grants omit allowedDataPaths (explicit full-project detail grant), check stores; otherwise enforce strict allowlist
-    if (activeDetailGrants.some(g => !g.scope.allowedDataPaths?.length)) {
-      return undefined;
     }
     return {
       mode: 'allowlist',
@@ -195,7 +271,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   function syncCleanDir(workspaceCleanDir: string, projectRoot: string, scope: ProjectMemberPackFileScope | undefined) {
-    fs.mkdirSync(workspaceCleanDir, { recursive: true, mode: 0o700 });
+    if (!enabled) return;
+    ensurePrivateDir(workspaceCleanDir);
     // Clear existing files in sandbox clean dir first so revoked files are immediately purged!
     for (const entry of fs.readdirSync(workspaceCleanDir, { withFileTypes: true })) {
       fs.rmSync(path.join(workspaceCleanDir, entry.name), { recursive: true, force: true });
@@ -212,22 +289,59 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const subRel = rel.slice('020_clean/'.length);
       const dst = path.resolve(workspaceCleanDir, subRel);
       if (!dst.startsWith(path.resolve(workspaceCleanDir) + path.sep)) continue;
-      fs.mkdirSync(path.dirname(dst), { recursive: true, mode: 0o700 });
+      let curDir = path.dirname(dst);
+      ensurePrivateDir(curDir);
+      while (curDir.startsWith(path.resolve(workspaceCleanDir)) && curDir !== path.resolve(workspaceCleanDir)) {
+        try { fs.chmodSync(curDir, 0o700); } catch { /* ignore */ }
+        curDir = path.dirname(curDir);
+      }
       fs.copyFileSync(src, dst);
       fs.chmodSync(dst, 0o400);
     }
   }
 
-  function prepareRestrictedTaskWorkspace(projectId: string, taskId: string, projectRoot: string): RestrictedTaskWorkspace | undefined {
+  async function prepareRestrictedTaskWorkspace(projectId: string, taskId: string, projectRoot: string): Promise<RestrictedTaskWorkspace | undefined> {
+    if (!enabled) return undefined;
     const scope = getProjectToolScope(projectId);
     if (!scope) return undefined;
     const workspaceRoot = path.resolve(options.dataRoot, 'member-pack-workspaces', uuid(projectId), uuid(taskId));
     const cleanDir = path.join(workspaceRoot, '020_clean');
     const reportsDir = path.join(workspaceRoot, '060_reports');
-    fs.mkdirSync(workspaceRoot, { recursive: true, mode: 0o700 });
-    fs.mkdirSync(reportsDir, { recursive: true, mode: 0o700 });
+    const workDir = path.join(workspaceRoot, 'work');
+    const committedReportsDir = path.join(workspaceRoot, 'committed-reports');
+    ensurePrivateDir(workspaceRoot);
+    ensurePrivateDir(cleanDir);
+    ensurePrivateDir(reportsDir);
+    ensurePrivateDir(workDir);
+    ensurePrivateDir(committedReportsDir);
     syncCleanDir(cleanDir, projectRoot, scope);
-    const ws: RestrictedTaskWorkspace = { workspaceRoot, cleanDir, reportsDir, projectRoot: path.resolve(projectRoot), scope };
+    // Ensure all existing subdirectories inside reportsDir / workDir also satisfy 0o700 for createProtectedExecutionScope
+    const tightenDirs = (dir: string) => {
+      try { fs.chmodSync(dir, 0o700); } catch { /* ignore */ }
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory()) tightenDirs(path.join(dir, entry.name));
+      }
+    };
+    tightenDirs(reportsDir);
+    tightenDirs(workDir);
+    const protectedScope = await createProtectedExecutionScope({
+      id: `member-pack-${uuid(projectId)}-${uuid(taskId)}`,
+      profile: 'ordinary',
+      cwd: cleanDir,
+      writableRoot: workDir,
+      writeRoots: [cleanDir, reportsDir],
+      readRoots: [cleanDir, reportsDir],
+    });
+    const ws: RestrictedTaskWorkspace = {
+      workspaceRoot,
+      cleanDir,
+      reportsDir,
+      workDir,
+      committedReportsDir,
+      projectRoot: path.resolve(projectRoot),
+      scope,
+      protectedScope,
+    };
     let byTask = activeWorkspaces.get(projectId);
     if (!byTask) {
       byTask = new Map();
@@ -238,6 +352,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   function syncActiveWorkspacesForProject(projectId: string) {
+    if (!enabled) return;
     const byTask = activeWorkspaces.get(projectId);
     if (!byTask) return;
     const nextScope = getProjectToolScope(projectId);
@@ -248,36 +363,158 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   function syncWorkspaceReportsToProject(projectId: string, taskId: string, projectRoot: string) {
-    const workspaceReports = path.resolve(options.dataRoot, 'member-pack-workspaces', uuid(projectId), uuid(taskId), '060_reports');
+    if (!enabled) return;
+    const pid = uuid(projectId), tid = uuid(taskId);
+    const wsRoot = path.resolve(options.dataRoot, 'member-pack-workspaces', pid, tid);
+    const workspaceReports = path.join(wsRoot, '060_reports');
+    const committedReports = path.join(wsRoot, 'committed-reports');
     if (!fs.existsSync(workspaceReports)) return;
+    ensurePrivateDir(committedReports);
     const targetReports = path.resolve(projectRoot, '060_reports');
     fs.mkdirSync(targetReports, { recursive: true });
+    const ledger = readReportLedger();
+    let changed = false;
+
     const walk = (srcDir: string, relBase: string) => {
       for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
         const srcPath = path.join(srcDir, entry.name);
-        const rel = relBase ? path.join(relBase, entry.name) : entry.name;
-        const dstPath = path.resolve(targetReports, rel);
-        if (!dstPath.startsWith(targetReports + path.sep)) continue;
+        const rel = normalizeRelativeDataPath(relBase ? path.join(relBase, entry.name) : entry.name);
         const st = fs.lstatSync(srcPath);
         if (st.isSymbolicLink()) continue;
         if (st.isDirectory()) {
-          fs.mkdirSync(dstPath, { recursive: true });
           walk(srcPath, rel);
-        } else if (st.isFile()) {
+          continue;
+        }
+        if (!st.isFile()) continue;
+        const srcBytes = fs.readFileSync(srcPath);
+        const srcSha = createHash('sha256').update(srcBytes).digest('hex');
+        const taskKey = `${pid}:${tid}:${rel}`;
+        const prevTaskSync = ledger.taskSyncedFiles[taskKey];
+        // Always persist immutable copy in this task's committed-reports directory
+        const committedCopyPath = path.resolve(committedReports, rel);
+        if (committedCopyPath.startsWith(committedReports + path.sep)) {
+          ensurePrivateDir(path.dirname(committedCopyPath));
+          fs.writeFileSync(committedCopyPath, srcBytes);
+        }
+        // If this task already synced this exact SHA-256 in a previous run, never re-copy over project 060_reports!
+        if (prevTaskSync && prevTaskSync.sha256 === srcSha) {
+          continue;
+        }
+        const projKey = `${pid}:${rel}`;
+        const existingOwner = ledger.projectFiles[projKey];
+        const dstPath = path.resolve(targetReports, rel);
+        if (!dstPath.startsWith(targetReports + path.sep)) continue;
+        const dstExists = fs.existsSync(dstPath);
+        const existingDiskSha = dstExists ? createHash('sha256').update(fs.readFileSync(dstPath)).digest('hex') : undefined;
+        const locator = `060_reports/${rel}`;
+        const hasCollision = Boolean(
+          dstExists
+          && existingDiskSha
+          && existingDiskSha !== srcSha
+          && (
+            (existingOwner && existingOwner.ownerTaskId !== tid)
+            || !existingOwner
+            || isReportLockedByUseOrFeedback(pid, locator, srcSha)
+          ),
+        );
+        const stamp = new Date().toISOString();
+        if (hasCollision) {
+          // NEVER overwrite another task's or a locked report file in <projectRoot>/060_reports!
+          const ext = path.extname(rel);
+          const stem = rel.slice(0, rel.length - ext.length);
+          const altRel = `${stem}.task-${tid.slice(0, 8)}${ext}`;
+          const altDst = path.resolve(targetReports, altRel);
+          if (altDst.startsWith(targetReports + path.sep)) {
+            fs.mkdirSync(path.dirname(altDst), { recursive: true });
+            fs.writeFileSync(altDst, srcBytes);
+            ledger.projectFiles[`${pid}:${altRel}`] = {
+              projectId: pid,
+              ownerTaskId: tid,
+              relativePath: altRel,
+              sha256: srcSha,
+              bytesLength: srcBytes.length,
+              committedAt: stamp,
+            };
+            ledger.taskSyncedFiles[taskKey] = {
+              sha256: srcSha,
+              effectiveRelativePath: altRel,
+              committedAt: stamp,
+            };
+            changed = true;
+          }
+        } else {
           fs.mkdirSync(path.dirname(dstPath), { recursive: true });
-          fs.copyFileSync(srcPath, dstPath);
+          fs.writeFileSync(dstPath, srcBytes);
+          ledger.projectFiles[projKey] = {
+            projectId: pid,
+            ownerTaskId: tid,
+            relativePath: rel,
+            sha256: srcSha,
+            bytesLength: srcBytes.length,
+            committedAt: stamp,
+          };
+          ledger.taskSyncedFiles[taskKey] = {
+            sha256: srcSha,
+            effectiveRelativePath: rel,
+            committedAt: stamp,
+          };
+          changed = true;
         }
       }
     };
     walk(workspaceReports, '');
+    if (changed) writeReportLedger(ledger);
+  }
+
+  function discardUncommittedWorkspaceReports(projectId: string, taskId: string) {
+    if (!enabled) return;
+    const pid = uuid(projectId), tid = uuid(taskId);
+    const wsRoot = path.resolve(options.dataRoot, 'member-pack-workspaces', pid, tid);
+    const workspaceReports = path.join(wsRoot, '060_reports');
+    const committedReports = path.join(wsRoot, 'committed-reports');
+    if (!fs.existsSync(workspaceReports)) return;
+    for (const entry of fs.readdirSync(workspaceReports, { withFileTypes: true })) {
+      fs.rmSync(path.join(workspaceReports, entry.name), { recursive: true, force: true });
+    }
+    if (!fs.existsSync(committedReports)) return;
+    const restoreWalk = (srcDir: string, relBase: string) => {
+      for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+        const srcPath = path.join(srcDir, entry.name);
+        const rel = relBase ? path.join(relBase, entry.name) : entry.name;
+        const dstPath = path.resolve(workspaceReports, rel);
+        if (!dstPath.startsWith(workspaceReports + path.sep)) continue;
+        const st = fs.lstatSync(srcPath);
+        if (st.isSymbolicLink()) continue;
+        if (st.isDirectory()) {
+          ensurePrivateDir(dstPath);
+          restoreWalk(srcPath, rel);
+        } else if (st.isFile()) {
+          ensurePrivateDir(path.dirname(dstPath));
+          fs.copyFileSync(srcPath, dstPath);
+        }
+      }
+    };
+    restoreWalk(committedReports, '');
+  }
+
+  function resolveTaskReportLocator(projectId: string, taskId: string, requestedLocator: string): string {
+    if (!requestedLocator.startsWith('060_reports/')) return requestedLocator;
+    const rel = normalizeRelativeDataPath(requestedLocator.slice('060_reports/'.length));
+    const ledger = readReportLedger();
+    const mapped = ledger.taskSyncedFiles[`${projectId}:${taskId}:${rel}`];
+    if (mapped && mapped.effectiveRelativePath) {
+      return `060_reports/${mapped.effectiveRelativePath}`;
+    }
+    return requestedLocator;
   }
 
   function authorizeProjectDataPath(projectId: string, relativePath: string): { allowed: boolean; reason?: string } {
+    if (!enabled) return { allowed: true };
+    const scope = getProjectToolScope(projectId);
+    if (!scope) return { allowed: true };
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return { allowed: true };
     const subjectGrants = grants.listForSubject(enterpriseId, projectId);
-    // Preserve ordinary unmanaged project behavior when no resource grants are configured for this project.
-    if (!subjectGrants.length) return { allowed: true };
     const normalized = normalizeRelativeDataPath(relativePath);
     const evalResult = evaluateResourceAccess(subjectGrants, {
       operation: 'read-detail-recalculate',
@@ -325,10 +562,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (['read', 'write', 'edit'].includes(call.toolName)) {
       const target = resolveTarget(call.input.path ?? call.input.file_path ?? call.input.target);
       if (!target) return { allowed: false, reason: scope.summary };
-      // Writing/reading own 060_reports deliverables remains allowed
-      if (isInside(target, effectiveReportsDir) || isInside(target, projectReportsDir)) return { allowed: true };
-      // NEVER allow direct access to project's raw 010_draw or original project 020_clean when isolated workspace is active
-      if (isInside(target, projectDrawDir) || (workspaceRoot && isInside(target, projectCleanDir))) {
+      // Writing/reading own 060_reports deliverables inside the task workspace remains allowed
+      if (isInside(target, effectiveReportsDir) || (!workspaceRoot && isInside(target, projectReportsDir))) return { allowed: true };
+      // NEVER allow direct access to project's raw 010_draw or original projectRoot when isolated workspace is active
+      if (isInside(target, projectDrawDir) || (workspaceRoot && isInside(target, resolvedProjectRoot))) {
         return { allowed: false, reason: 'member_pack_path_outside_workspace: 受限资源授权项目禁止越过任务隔离目录访问原项目资料' };
       }
       if (!isInside(target, effectiveRoot)) {
@@ -353,7 +590,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         return { allowed: false, reason: scope.summary };
       }
       const target = resolveTarget(call.input.path ?? '.');
-      if (target && (isInside(target, effectiveReportsDir) || isInside(target, projectReportsDir))) return { allowed: true };
+      if (target && (isInside(target, effectiveReportsDir) || (!workspaceRoot && isInside(target, projectReportsDir)))) return { allowed: true };
       if (call.toolName === 'grep' && target && isInside(target, effectiveCleanDir)) {
         const rel = normalizeRelativeDataPath(path.relative(effectiveRoot, target));
         if (scope.allowedPaths.includes(rel)) return { allowed: true };
@@ -366,12 +603,18 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         return { allowed: false, reason: scope.summary };
       }
       const cmd = String(call.input.command ?? call.input.code ?? '');
-      // Block any reference to projectRoot, 010_draw, or escaping workspace via ../../
-      if (cmd.includes(resolvedProjectRoot) || cmd.includes(projectCleanDir) || /\b010_draw\b|\.\.\/\.\./.test(cmd)) {
+      // Block any reference to projectRoot, projects parent root, 010_draw, or escaping workspace via ../../ or encoded path construction
+      const projectsParentDir = path.dirname(resolvedProjectRoot);
+      if (
+        cmd.includes(resolvedProjectRoot)
+        || cmd.includes(projectCleanDir)
+        || cmd.includes(projectsParentDir)
+        || /\b010_draw\b|\.\.\/\.\.|\.\.\\\.\.|\b(?:atob|b64decode|fromhex|fromCharCode|realpath|readlink)\b|\/proc\//i.test(cmd)
+      ) {
         return { allowed: false, reason: 'member_pack_path_outside_workspace: 受限资源授权项目命令禁止越出任务隔离工作区访问原项目目录' };
       }
       // Enumerate all unauthorized files currently present in original project 020_clean
-      let unauthorizedNames: string[] = [];
+      const unauthorizedNames: string[] = [];
       try {
         const walk = (dir: string) => {
           for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -417,6 +660,52 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (d.role === 'sap-metric' || d.role === 'sap-method') return access.canDef || access.canSummary;
       return false;
     });
+  }
+
+  function evaluatePurposeAccessForSubject(
+    subjectGrants: readonly import('../../extensions/business-plugins/studio/enterprise-pack.ts').ResourceAuthorizationGrant[],
+    pm: EnterpriseDomainPack['packRevisions'][number]['purposeManifests'][number],
+  ) {
+    if (pm.status !== 'eligible') return null;
+    const canDef = evaluateResourceAccess(subjectGrants, {
+      operation: 'read-definition',
+      purposeKey: pm.purposeKey,
+      brand: pm.scope.brand,
+      channel: pm.scope.channel,
+    });
+    const canSummary = evaluateResourceAccess(subjectGrants, {
+      operation: 'cite-summary',
+      purposeKey: pm.purposeKey,
+      brand: pm.scope.brand,
+      channel: pm.scope.channel,
+    });
+    const canDetail = evaluateResourceAccess(subjectGrants, {
+      operation: 'read-detail-recalculate',
+      purposeKey: pm.purposeKey,
+      brand: pm.scope.brand,
+      channel: pm.scope.channel,
+      stores: pm.scope.stores,
+    });
+    const hasPartialOrFullDetail = canDetail.allowed || canDetail.grantedStores.length > 0;
+    if (!canDef.allowed && !canSummary.allowed && !hasPartialOrFullDetail) return null;
+    const visibleDeps = filterDependenciesForAccess(pm.dependencies, {
+      canDef: canDef.allowed,
+      canSummary: canSummary.allowed,
+      canDetail: hasPartialOrFullDetail,
+    });
+    return {
+      canDef,
+      canSummary,
+      canDetail,
+      hasPartialOrFullDetail,
+      visibleDeps,
+    };
+  }
+
+  function packContainsSourceRef(pack: EnterpriseDomainPack, ref: StudioSourceRef): boolean {
+    if (pack.purposes.some(p => p.dependencies.some(d => sameExactSourceRef(d.ref, ref)))) return true;
+    if (pack.packRevisions.some(r => r.purposeManifests.some(pm => pm.dependencies.some(d => sameExactSourceRef(d.ref, ref))))) return true;
+    return false;
   }
 
   function buildPackCatalogSummary(enterpriseId: string, projectId?: string, taskId?: string) {
@@ -518,20 +807,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               accessLevels: ['read-definition', 'cite-summary', 'read-detail-recalculate'] as ResourceGrantOperation[],
             };
           }
-          const canDef = evaluateResourceAccess(subjectGrants, { operation: 'read-definition', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel });
-          const canSummary = evaluateResourceAccess(subjectGrants, { operation: 'cite-summary', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel });
-          const canDetail = evaluateResourceAccess(subjectGrants, { operation: 'read-detail-recalculate', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel, stores: pm.scope.stores });
-          const hasPartialOrFullDetail = canDetail.allowed || canDetail.grantedStores.length > 0;
-          if (!canDef.allowed && !canSummary.allowed && !hasPartialOrFullDetail) return null;
+          const access = evaluatePurposeAccessForSubject(subjectGrants, pm);
+          if (!access) return null;
+          const { canDef, canSummary, canDetail, hasPartialOrFullDetail, visibleDeps } = access;
 
           const matchedDetailGrants = subjectGrants.filter(g => canDetail.matchedGrantIds.includes(g.id));
           const allowedDataPaths = [...new Set(matchedDetailGrants.flatMap(g => g.scope.allowedDataPaths ?? []))];
           const summaryGrant = canSummary.allowed ? subjectGrants.find(g => canSummary.matchedGrantIds.includes(g.id)) : undefined;
-          const visibleDeps = filterDependenciesForAccess(pm.dependencies, {
-            canDef: canDef.allowed,
-            canSummary: canSummary.allowed,
-            canDetail: hasPartialOrFullDetail,
-          });
 
           return {
             purposeId: pm.purposeId,
@@ -607,12 +889,19 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     for (const pack of list) {
       if (isConstructionOwnerProject(pack, projectId)) continue;
       const pin = packs.getTaskPin(pack.id, projectId, taskId);
+      const belongsToPack = packContainsSourceRef(pack, ref);
       // In read-only rollback mode, unpinned new tasks receive NO pack-mediated supply!
-      if (!enabled && !pin) continue;
+      if (!enabled && !pin) {
+        if (belongsToPack) throw new StudioError('member_pack_disabled_readonly', 403);
+        continue;
+      }
       const rev = pin
         ? pack.packRevisions.find(r => r.version === pin.packVersion)
         : pack.packRevisions.find(r => r.status === 'active');
-      if (!rev) continue;
+      if (!rev) {
+        if (belongsToPack) throw new StudioError('resource_access_denied', 403);
+        continue;
+      }
 
       // Check if ref is a Host-authorized summary ref
       const matchedSummaryGrant = subjectGrants.find(g =>
@@ -622,34 +911,36 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         && sameExactSourceRef(g.resourceRef, ref),
       );
       if (matchedSummaryGrant) {
-        const evalSummary = evaluateResourceAccess(subjectGrants, { operation: 'cite-summary' });
+        const evalSummary = evaluateResourceAccess(subjectGrants, {
+          operation: 'cite-summary',
+          grain: matchedSummaryGrant.scope.grain,
+          summaryVersion: matchedSummaryGrant.scope.summaryVersion,
+        });
         if (!evalSummary.allowed) throw new StudioError('resource_grant_revoked', 403);
         return { matchedPack: { packId: pack.id, packVersion: rev.version, purposeIds: pin?.purposeIds ?? [], summaryAuthorized: true } };
       }
 
-      // Check if ref belongs to any dependency in the pinned revision
+      // Check if ref belongs to any dependency in the pinned revision using the EXACT unified purpose/dependency filter!
       const matchedPurposes = rev.purposeManifests.filter(pm =>
         pm.status === 'eligible' && pm.dependencies.some(d => sameExactSourceRef(d.ref, ref)),
       );
       if (matchedPurposes.length > 0) {
-        // Re-verify active Host grant on every read (immediate revocation!)
-        const allowedForAny = matchedPurposes.some(pm => {
-          const canDef = evaluateResourceAccess(subjectGrants, { operation: 'read-definition', purposeKey: pm.purposeKey }).allowed;
-          const canSummary = evaluateResourceAccess(subjectGrants, { operation: 'cite-summary', purposeKey: pm.purposeKey }).allowed;
-          const detailEval = evaluateResourceAccess(subjectGrants, { operation: 'read-detail-recalculate', purposeKey: pm.purposeKey, stores: pm.scope.stores });
-          const canDetail = detailEval.allowed || detailEval.grantedStores.length > 0;
-          const visible = filterDependenciesForAccess(pm.dependencies, { canDef, canSummary, canDetail });
-          return visible.some(d => sameExactSourceRef(d.ref, ref));
+        const allowedPurposes = matchedPurposes.filter(pm => {
+          const access = evaluatePurposeAccessForSubject(subjectGrants, pm);
+          return Boolean(access && access.visibleDeps.some(d => sameExactSourceRef(d.ref, ref)));
         });
-        if (!allowedForAny) {
+        if (!allowedPurposes.length) {
           throw new StudioError(subjectGrants.some(g => Boolean(g.revokedAt)) ? 'resource_grant_revoked' : 'resource_access_denied', 403);
         }
-        return { matchedPack: { packId: pack.id, packVersion: rev.version, purposeIds: matchedPurposes.map(pm => pm.purposeId) } };
+        return { matchedPack: { packId: pack.id, packVersion: rev.version, purposeIds: allowedPurposes.map(pm => pm.purposeId) } };
       }
 
-      // If this project has a revoked summary grant for this exact ref, block immediately!
+      // If this project has a revoked summary grant for this exact ref, or if ref belongs to another unpinned/suspended purpose in this pack, block immediately!
       if (subjectGrants.some(g => g.revokedAt && g.resourceRef && sameExactSourceRef(g.resourceRef, ref))) {
         throw new StudioError('resource_grant_revoked', 403);
+      }
+      if (belongsToPack) {
+        throw new StudioError(subjectGrants.some(g => Boolean(g.revokedAt)) ? 'resource_grant_revoked' : 'resource_access_denied', 403);
       }
     }
     return {};
@@ -657,11 +948,15 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
   /**
    * Collects actual Host-verified tool evidence STRICTLY scoped to the specific reply's turn
-   * `[turnStartIdx .. endIdx]` so a later tool-free turn NEVER inherits reads from an earlier turn!
+   * `[turnStartIdx .. endIdx]` so a later tool-free turn NEVER inherits reads or declarations from an earlier turn!
    */
   async function inspectTaskNativeEvidence(projectId: string, taskId: string, pack: EnterpriseDomainPack, upToSelection?: { sessionId: string; messageId: string }) {
     const turnActualReads: EnterprisePackReadEvidence[] = [];
     const seenReadKeys = new Set<string>();
+    const turnDeclaredStudioUseIds: string[] = [];
+    const otherTurnDeclaredStudioUseIds: string[] = [];
+    let turnWroteOrRanTools = false;
+    let earlierTurnHadReadsOrWrites = false;
     let observedDirectoryVersion: string | undefined;
     let sessionObservedDirectoryVersion: string | undefined;
     let catalogSuppliedAt: string | undefined;
@@ -669,10 +964,15 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     let catalogAssetRefs: StudioSourceRef[] = [];
     let taskCutoffAt: string | undefined;
     let turnIndex: number | undefined;
+    let resolvedSelection: { sessionId: string; messageId: string } | undefined = upToSelection;
 
     if (!options.taskSnapshot) {
       return {
         actualReads: turnActualReads,
+        turnDeclaredStudioUseIds,
+        otherTurnDeclaredStudioUseIds,
+        turnWroteOrRanTools,
+        earlierTurnHadReadsOrWrites,
         observedDirectoryVersion,
         sessionObservedDirectoryVersion,
         catalogSuppliedAt,
@@ -680,6 +980,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         catalogAssetRefs,
         taskCutoffAt,
         turnIndex,
+        resolvedSelection,
       };
     }
     const snap = await options.taskSnapshot(projectId, taskId);
@@ -689,7 +990,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (idx >= 0) endIdx = idx;
     } else {
       for (let i = snap.messages.length - 1; i >= 0; i--) {
-        if ((snap.messages[i] as Record<string, any>)?.role === 'assistant') { endIdx = i; break; }
+        const msg = snap.messages[i] as Record<string, any>;
+        if (msg?.role === 'assistant') {
+          endIdx = i;
+          if (typeof msg.nativeSessionId === 'string' && typeof msg.nativeEntryId === 'string') {
+            resolvedSelection = { sessionId: msg.nativeSessionId, messageId: msg.nativeEntryId };
+          }
+          break;
+        }
       }
     }
 
@@ -706,22 +1014,32 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       }
     }
 
-    // Check earlier turns ONLY for session-level directory pin observation (NEVER reads!)
-    for (let i = 0; i < turnStartIdx; i++) {
+    // Check earlier/other turns ONLY for session-level directory pin observation and other-turn declare-use detection (NEVER reads!)
+    for (let i = 0; i < snap.messages.length; i++) {
+      if (i >= turnStartIdx && i <= endIdx) continue;
       const m = snap.messages[i] as Record<string, any>;
       if (!m || m.role !== 'toolResult' || m.isError) continue;
-      if (m.details?.type === 'optracall.studio' && m.details.action === 'catalog' && Array.isArray(m.details.result?.memberPacks)) {
-        const entry = m.details.result.memberPacks.find((p: any) => p?.packId === pack.id);
-        if (entry && typeof entry.pinnedVersion === 'string') {
-          sessionObservedDirectoryVersion = entry.pinnedVersion;
+      if (i < turnStartIdx) {
+        earlierTurnHadReadsOrWrites = true;
+      }
+      if (m.details?.type === 'optracall.studio') {
+        if (i < turnStartIdx && m.details.action === 'catalog' && Array.isArray(m.details.result?.memberPacks)) {
+          const entry = m.details.result.memberPacks.find((p: any) => p?.packId === pack.id);
+          if (entry && typeof entry.pinnedVersion === 'string') {
+            sessionObservedDirectoryVersion = entry.pinnedVersion;
+          }
+        }
+        if (m.details.action === 'declare-use' && typeof m.details.result?.use?.id === 'string') {
+          otherTurnDeclaredStudioUseIds.push(m.details.result.use.id);
         }
       }
     }
 
-    // Collect ACTUAL reads & catalog supply STRICTLY within THIS turn [turnStartIdx + 1 .. endIdx]!
+    // Collect ACTUAL reads, declare-use, & catalog supply STRICTLY within THIS turn [turnStartIdx + 1 .. endIdx]!
     for (let i = turnStartIdx + 1; i <= endIdx; i++) {
       const m = snap.messages[i] as Record<string, any>;
       if (!m || m.role !== 'toolResult' || m.isError) continue;
+      turnWroteOrRanTools = true;
       if (m.details?.type === 'optracall.studio') {
         const action = m.details.action;
         const result = m.details.result;
@@ -740,6 +1058,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               }
             }
           }
+        }
+        if (action === 'declare-use' && typeof result?.use?.id === 'string') {
+          turnDeclaredStudioUseIds.push(result.use.id);
         }
         if (['read-source', 'read'].includes(action) && result?.ref) {
           try {
@@ -790,6 +1111,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     catalogAssetRefs = [...new Map(catalogAssetRefs.map(r => [digest(r), r])).values()];
     return {
       actualReads: turnActualReads,
+      turnDeclaredStudioUseIds,
+      otherTurnDeclaredStudioUseIds,
+      turnWroteOrRanTools,
+      earlierTurnHadReadsOrWrites,
       observedDirectoryVersion,
       sessionObservedDirectoryVersion,
       catalogSuppliedAt,
@@ -797,6 +1122,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       catalogAssetRefs,
       taskCutoffAt,
       turnIndex,
+      resolvedSelection,
     };
   }
 
@@ -812,39 +1138,26 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       .map(f => ({ ...f, reports: f.reports.filter(r => r.projectId === projectId) }));
     const ownPinnedVersions = new Set([...ownPins.map(p => p.packVersion), ...ownUses.map(u => u.packVersion)]);
 
-    // Helper: filter purposeManifests identically to buildPackCatalogSummary!
+    // Unified purpose & dependency filter identical to buildPackCatalogSummary & inspectPinnedSourceRead!
     const filterPurposeManifest = (pm: EnterpriseDomainPack['packRevisions'][number]['purposeManifests'][number]) => {
-      if (pm.status !== 'eligible') return null;
-      const canDef = evaluateResourceAccess(subjectGrants, { operation: 'read-definition', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel });
-      const canSummary = evaluateResourceAccess(subjectGrants, { operation: 'cite-summary', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel });
-      const canDetail = evaluateResourceAccess(subjectGrants, { operation: 'read-detail-recalculate', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel, stores: pm.scope.stores });
-      const hasDetail = canDetail.allowed || canDetail.grantedStores.length > 0;
-      if (!canDef.allowed && !canSummary.allowed && !hasDetail) return null;
+      const access = evaluatePurposeAccessForSubject(subjectGrants, pm);
+      if (!access) return null;
       return {
         ...pm,
-        dependencies: filterDependenciesForAccess(pm.dependencies, {
-          canDef: canDef.allowed,
-          canSummary: canSummary.allowed,
-          canDetail: hasDetail,
-        }),
+        dependencies: access.visibleDeps,
       };
     };
 
-    if (!enabled || activeGrants.length === 0) {
-      // Rollback mode or ungranted/revoked project: see ONLY own historical pinned/used revisions — zero new active catalog supply!
-      const historicalRevisions = pack.packRevisions
+    if (activeGrants.length === 0) {
+      // Ungranted or revoked project: strip ALL unauthorized purpose manifests, dependencies, and module receipts!
+      const strippedRevisions = pack.packRevisions
         .filter(r => ownPinnedVersions.has(r.version))
-        .map(r => {
-          const pinnedPurposeIds = new Set([
-            ...ownPins.filter(p => p.packVersion === r.version).flatMap(p => p.purposeIds),
-            ...ownUses.filter(u => u.packVersion === r.version).map(u => u.purposeId),
-          ]);
-          return {
-            ...r,
-            purposeManifests: r.purposeManifests.filter(pm => pinnedPurposeIds.has(pm.purposeId)),
-            moduleReceipts: [],
-          };
-        });
+        .map(r => ({
+          ...r,
+          decisionsSnapshot: [],
+          purposeManifests: [],
+          moduleReceipts: [],
+        }));
       return {
         ...pack,
         panorama: undefined,
@@ -852,37 +1165,100 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         entries: [],
         purposes: [],
         previews: [],
-        packRevisions: historicalRevisions,
-        taskPins: ownPins,
-        useRecords: ownUses,
-        feedbackItems: ownFeedback,
+        packRevisions: strippedRevisions,
+        taskPins: ownPins.map(p => ({ ...p, purposeIds: [], pinnedAuthorityRefs: [] })),
+        useRecords: ownUses.map(u => ({
+          ...u,
+          catalogSupplied: { ...u.catalogSupplied, purposeIds: [], assetRefs: [] },
+          actualReads: [],
+          authorDeclaration: undefined,
+        })),
+        feedbackItems: ownFeedback.map(f => ({
+          ...f,
+          targetAssetRef: undefined,
+          authorityHandling: undefined,
+          revisionLink: undefined,
+          reports: f.reports.map(r => ({ ...r, usedAssetRefs: [] })),
+        })),
       };
     }
 
-    // Active consumer project: filter revisions & purposes identically to catalog rules, never exposing unpublished drafts or other projects' records!
+    const activeSummaryRefs = activeGrants
+      .filter(g => g.operations.includes('cite-summary') && g.resourceRef)
+      .map(g => g.resourceRef!);
+
+    // Active consumer project (or rollback mode with existing pins & active grants):
+    // filter revisions, purposeManifests, dependencies, AND moduleReceipts using the exact same permission filter!
     const filteredRevisions = pack.packRevisions
+      .filter(r => enabled || ownPinnedVersions.has(r.version))
       .map(r => {
         const manifests = r.purposeManifests.map(filterPurposeManifest).filter((x): x is NonNullable<typeof x> => Boolean(x));
         if (!manifests.length && !ownPinnedVersions.has(r.version)) return null;
+        const allowedRevPurposeIds = new Set(manifests.map(m => m.purposeId));
+        const allowedRevRefs = [
+          ...manifests.flatMap(m => m.dependencies.map(d => d.ref)),
+          ...activeSummaryRefs,
+        ];
+        const filteredReceipts = r.moduleReceipts
+          .filter(rec =>
+            allowedRevRefs.some(ar => sameExactSourceRef(ar, rec.targetRef))
+            && rec.purposeIds.some(pid => allowedRevPurposeIds.has(pid)),
+          )
+          .map(rec => ({
+            ...rec,
+            purposeIds: rec.purposeIds.filter(pid => allowedRevPurposeIds.has(pid)),
+          }));
         return {
           ...r,
+          decisionsSnapshot: [],
           purposeManifests: manifests,
+          moduleReceipts: filteredReceipts,
         };
       })
       .filter((x): x is NonNullable<typeof x> => Boolean(x));
 
     const allowedPurposeIds = new Set(filteredRevisions.flatMap(r => r.purposeManifests.map(pm => pm.purposeId)));
+    const allAllowedRefs = [
+      ...filteredRevisions.flatMap(r => r.purposeManifests.flatMap(pm => pm.dependencies.map(d => d.ref))),
+      ...activeSummaryRefs,
+    ];
+    const isRefAllowed = (ref: StudioSourceRef) => allAllowedRefs.some(ar => sameExactSourceRef(ar, ref));
+
     return {
       ...pack,
       panorama: undefined,
       panoramaHistory: [],
       entries: [],
-      purposes: pack.purposes.filter(p => allowedPurposeIds.has(p.id)),
+      purposes: pack.purposes
+        .filter(p => allowedPurposeIds.has(p.id))
+        .map(p => ({ ...p, dependencies: p.dependencies.filter(d => isRefAllowed(d.ref)) })),
       previews: [],
       packRevisions: filteredRevisions,
-      taskPins: ownPins,
-      useRecords: ownUses,
-      feedbackItems: ownFeedback,
+      taskPins: ownPins.map(p => ({
+        ...p,
+        purposeIds: p.purposeIds.filter(pid => allowedPurposeIds.has(pid)),
+        pinnedAuthorityRefs: p.pinnedAuthorityRefs.filter(isRefAllowed),
+      })),
+      useRecords: ownUses.map(u => ({
+        ...u,
+        catalogSupplied: {
+          ...u.catalogSupplied,
+          purposeIds: u.catalogSupplied.purposeIds.filter(pid => allowedPurposeIds.has(pid)),
+          assetRefs: u.catalogSupplied.assetRefs.filter(isRefAllowed),
+        },
+        actualReads: u.actualReads.filter(r => isRefAllowed(r.ref)),
+        ...(u.authorDeclaration ? {
+          authorDeclaration: {
+            ...u.authorDeclaration,
+            declaredRefs: u.authorDeclaration.declaredRefs.filter(isRefAllowed),
+          },
+        } : {}),
+      })),
+      feedbackItems: ownFeedback.map(f => ({
+        ...f,
+        ...(f.targetAssetRef && !isRefAllowed(f.targetAssetRef) ? { targetAssetRef: undefined } : {}),
+        reports: f.reports.map(r => ({ ...r, usedAssetRefs: r.usedAssetRefs.filter(isRefAllowed) })),
+      })),
     };
   }
 
@@ -973,46 +1349,19 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       enterpriseId: string,
       requestedActorProjectId: unknown,
       mode: 'grant' | 'revoke',
-      extraAllowedProjectIds: string[] = [],
+      binding: {
+        requiredOwnerProjectIds: string[];
+        requiredSystemId?: string;
+        requestedSystemId?: unknown;
+        requestedTaskId?: unknown;
+      },
     ): Promise<{
       actorLabel: string;
       actorProjectId: string;
       actorSystemId?: string;
       authorityType: 'studio-system-owner' | 'enterprise-authority-asset' | 'resource-owner-project';
     }> {
-      const enterpriseSystems = options.studio.list().filter(s => s.enterpriseId === enterpriseId);
-      const enterprisePacks = packs.list(enterpriseId);
-      const activeOwnerCandidates: { projectId: string; systemId?: string; systemName?: string }[] = [];
-      for (const sys of enterpriseSystems) {
-        const ownerPid = studioExecutionOwner(sys).projectId;
-        try {
-          const proj = await options.projects.get(ownerPid);
-          if (proj.archivedAt === null && options.enterpriseScopes.enterpriseIdForProject(proj.id) === enterpriseId) {
-            activeOwnerCandidates.push({ projectId: proj.id, systemId: sys.id, systemName: sys.name });
-          }
-        } catch { /* ignore unavailable */ }
-      }
-      for (const pk of enterprisePacks) {
-        if (pk.activeOwnerProjectId) {
-          try {
-            const proj = await options.projects.get(pk.activeOwnerProjectId);
-            if (proj.archivedAt === null && options.enterpriseScopes.enterpriseIdForProject(proj.id) === enterpriseId) {
-              activeOwnerCandidates.push({ projectId: proj.id, systemId: pk.systemId, systemName: pk.name });
-            }
-          } catch { /* ignore */ }
-        }
-      }
-      for (const extraPid of extraAllowedProjectIds) {
-        try {
-          const proj = await options.projects.get(uuid(extraPid));
-          if (proj.archivedAt === null && options.enterpriseScopes.enterpriseIdForProject(proj.id) === enterpriseId) {
-            activeOwnerCandidates.push({ projectId: proj.id });
-          }
-        } catch { /* ignore */ }
-      }
-
       const failCode = mode === 'grant' ? 'resource_grantor_not_authorized' : 'resource_revoker_not_authorized';
-
       if (requestedActorProjectId === undefined || requestedActorProjectId === null || String(requestedActorProjectId).trim() === '') {
         throw new StudioError(failCode, 403);
       }
@@ -1020,15 +1369,39 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const proj = await options.projects.get(pid);
       if (proj.archivedAt !== null) throw new StudioError('studio_project_read_only', 409);
       if (options.enterpriseScopes.enterpriseIdForProject(pid) !== enterpriseId) throw new StudioError(failCode, 403);
-      const matchedOwner = activeOwnerCandidates.find(c => c.projectId === pid);
-      if (!matchedOwner) throw new StudioError(failCode, 403);
+
+      if (binding.requestedTaskId !== undefined && binding.requestedTaskId !== null && String(binding.requestedTaskId).trim() !== '') {
+        await options.projects.getTask(pid, uuid(binding.requestedTaskId));
+      }
+      if (binding.requestedSystemId !== undefined && binding.requestedSystemId !== null && String(binding.requestedSystemId).trim() !== '') {
+        const reqSysId = uuid(binding.requestedSystemId);
+        if (binding.requiredSystemId && reqSysId !== binding.requiredSystemId) {
+          throw new StudioError(failCode, 403);
+        }
+      }
+
+      if (!binding.requiredOwnerProjectIds.length || !binding.requiredOwnerProjectIds.includes(pid)) {
+        throw new StudioError(failCode, 403);
+      }
+
+      let matchedSystem: { id: string; name: string } | undefined;
+      if (binding.requiredSystemId) {
+        try {
+          const s = options.studio.get(binding.requiredSystemId);
+          matchedSystem = { id: s.id, name: s.name };
+        } catch { /* ignore */ }
+      } else {
+        const s = options.studio.list().find(sys => sys.enterpriseId === enterpriseId && studioExecutionOwner(sys).projectId === pid);
+        if (s) matchedSystem = { id: s.id, name: s.name };
+      }
+
       return {
-        actorLabel: matchedOwner.systemName
-          ? `Studio体系·${matchedOwner.systemName}（原权责项目：${proj.name}）`
+        actorLabel: matchedSystem
+          ? `Studio体系·${matchedSystem.name}（原权责项目：${proj.name}）`
           : `原权责项目·${proj.name}`,
         actorProjectId: proj.id,
-        ...(matchedOwner.systemId ? { actorSystemId: matchedOwner.systemId } : {}),
-        authorityType: matchedOwner.systemId ? 'studio-system-owner' : 'resource-owner-project',
+        ...(matchedSystem ? { actorSystemId: matchedSystem.id } : {}),
+        authorityType: matchedSystem ? 'studio-system-owner' : 'resource-owner-project',
       };
     }
 
@@ -1050,6 +1423,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const rawScope = object(input.scope) ? { ...input.scope } : {};
         let verifiedResourceRef: StudioSourceRef | undefined = input.resourceRef ? sourceRef(input.resourceRef) : undefined;
         let summaryOwnerProjectId: string | undefined;
+        let summaryOwnerSystemId: string | undefined;
         let summaryVerifiedAuthority: string | undefined;
 
         if (ops.includes('cite-summary')) {
@@ -1069,14 +1443,71 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             rawScope.verifiedScopeSummary = verified.verifiedScopeSummary;
             verifiedResourceRef = verified.resourceRef;
             summaryOwnerProjectId = verified.ownerProjectId;
+            summaryOwnerSystemId = verified.ownerSystemId;
             summaryVerifiedAuthority = verified.summaryAuthority;
           }
         }
+
+        // Resolve the EXACT owning Studio system & active owner project for the target member pack / resource!
+        const enterprisePacks = packs.list(enterpriseId);
+        const requestedPurposeKeys = Array.isArray(input.purposeKeys) ? input.purposeKeys.map(String) : [];
+        const targetPack = (typeof input.packId === 'string' && input.packId.trim() ? enterprisePacks.find(p => p.id === uuid(input.packId)) : undefined)
+          ?? (requestedPurposeKeys.length ? enterprisePacks.find(p => p.purposes.some(pur => requestedPurposeKeys.includes(pur.purposeKey)) || p.packRevisions.some(r => r.purposeManifests.some(pm => requestedPurposeKeys.includes(pm.purposeKey)))) : undefined)
+          ?? enterprisePacks[0];
+
+        let packOwnerProjectId: string | undefined;
+        let packOwnerSystemId: string | undefined;
+        if (targetPack) {
+          packOwnerSystemId = targetPack.systemId;
+          try {
+            const packSys = options.studio.get(targetPack.systemId);
+            const origOwnerPid = studioExecutionOwner(packSys).projectId;
+            packOwnerProjectId = targetPack.activeOwnerProjectId ?? origOwnerPid;
+          } catch {
+            packOwnerProjectId = targetPack.activeOwnerProjectId;
+          }
+        } else {
+          const enterpriseSystems = options.studio.list().filter(s => s.enterpriseId === enterpriseId);
+          if (typeof input.grantorSystemId === 'string' && input.grantorSystemId.trim()) {
+            const reqSys = enterpriseSystems.find(s => s.id === uuid(input.grantorSystemId));
+            if (reqSys) {
+              packOwnerSystemId = reqSys.id;
+              packOwnerProjectId = studioExecutionOwner(reqSys).projectId;
+            }
+          } else if (enterpriseSystems.length === 1) {
+            packOwnerSystemId = enterpriseSystems[0]!.id;
+            packOwnerProjectId = studioExecutionOwner(enterpriseSystems[0]!).projectId;
+          }
+        }
+
+        const needsPackOwner = ops.includes('read-definition') || ops.includes('read-detail-recalculate') || !ops.includes('cite-summary');
+        const needsSummaryOwner = ops.includes('cite-summary');
+        let requiredOwnerProjectIds: string[] = [];
+        let requiredSystemId: string | undefined;
+
+        if (needsSummaryOwner && needsPackOwner) {
+          const sumOwners = summaryOwnerProjectId ? [summaryOwnerProjectId] : (packOwnerProjectId ? [packOwnerProjectId] : []);
+          const pkOwners = packOwnerProjectId ? [packOwnerProjectId] : sumOwners;
+          requiredOwnerProjectIds = sumOwners.filter(id => pkOwners.includes(id));
+          requiredSystemId = summaryOwnerSystemId ?? packOwnerSystemId;
+        } else if (needsSummaryOwner) {
+          requiredOwnerProjectIds = summaryOwnerProjectId ? [summaryOwnerProjectId] : (packOwnerProjectId ? [packOwnerProjectId] : []);
+          requiredSystemId = summaryOwnerSystemId ?? packOwnerSystemId;
+        } else {
+          requiredOwnerProjectIds = packOwnerProjectId ? [packOwnerProjectId] : [];
+          requiredSystemId = packOwnerSystemId;
+        }
+
         const verifiedActor = await resolveVerifiedGrantAuthority(
           enterpriseId,
           input.grantorProjectId,
           'grant',
-          summaryOwnerProjectId ? [summaryOwnerProjectId] : [],
+          {
+            requiredOwnerProjectIds,
+            requiredSystemId,
+            requestedSystemId: input.grantorSystemId,
+            requestedTaskId: input.grantorTaskId,
+          },
         );
         if (Array.isArray(rawScope.allowedDataPaths)) {
           rawScope.allowedDataPaths = rawScope.allowedDataPaths.map((p: unknown) => {
@@ -1116,11 +1547,29 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         if (options.closing()) throw new StudioError('host_closing', 503);
         assertEnabledWritable();
         const existingGrant = grants.get(revokeMatch[1]!);
+        // Only the original grantor project (if active) or its active continuation owner (if original grantor was archived) may revoke!
+        const allowedRevokers: string[] = [];
+        if (existingGrant.grantorProjectId) {
+          const origGrantorProj = await options.projects.get(existingGrant.grantorProjectId).catch(() => null);
+          if (origGrantorProj && origGrantorProj.archivedAt === null) {
+            allowedRevokers.push(origGrantorProj.id);
+          } else if (existingGrant.grantorSystemId) {
+            const packForSys = packs.list(existingGrant.enterpriseId).find(p => p.systemId === existingGrant.grantorSystemId);
+            if (packForSys?.activeOwnerProjectId) {
+              allowedRevokers.push(packForSys.activeOwnerProjectId);
+            }
+          }
+        }
         const revokerActor = await resolveVerifiedGrantAuthority(
           existingGrant.enterpriseId,
           input.revokerProjectId ?? input.grantorProjectId,
           'revoke',
-          existingGrant.grantorProjectId ? [existingGrant.grantorProjectId] : [],
+          {
+            requiredOwnerProjectIds: allowedRevokers,
+            requiredSystemId: existingGrant.grantorSystemId,
+            requestedSystemId: input.revokerSystemId ?? input.grantorSystemId,
+            requestedTaskId: input.revokerTaskId ?? input.grantorTaskId,
+          },
         );
         const record = grants.revoke(revokeMatch[1]!, text(input.reason ?? '显式撤回授权', 2000, false), {
           revokedBy: revokerActor.actorLabel,
@@ -1387,12 +1836,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               : undefined;
 
           if (rawReportRef.locator && rawReportRef.locator.startsWith('060_reports/')) {
-            const file = await options.projects.readFile(pid, rawReportRef.locator);
+            const effectiveLocator = resolveTaskReportLocator(pid, tid, rawReportRef.locator);
+            const file = await options.projects.readFile(pid, effectiveLocator);
             const actualSha = createHash('sha256').update(file.bytes).digest('hex');
             if (rawReportRef.sha256 && rawReportRef.sha256 !== actualSha) {
               throw new StudioError('studio_use_report_hash_mismatch', 409);
             }
-            verifiedReportRef = sourceRef({ ...rawReportRef, version: actualSha, sha256: actualSha });
+            verifiedReportRef = sourceRef({ ...rawReportRef, locator: effectiveLocator, version: actualSha, sha256: actualSha });
           } else if (rawReportRef.locator) {
             try {
               const parsed = JSON.parse(rawReportRef.locator);
@@ -1414,33 +1864,38 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           const pm = rev?.purposeManifests.find(item => item.purposeId === purposeId);
           if (!pm) throw new StudioError('enterprise_pack_purpose_not_found', 404);
 
-          // Resolve real author adoption declaration: either explicit authorDeclaration OR matching Studio declare-use record for this exact report!
+          // CRITICAL (R4): NEVER trust client-supplied input.authorDeclaration from the HTTP request body!
+          // Author adoption declaration MUST come from a real Studio declare-use record in studio.uses for THIS exact turn & report!
           let resolvedDeclaration: Parameters<EnterprisePackStore['recordUse']>[1]['authorDeclaration'] | undefined;
-          if (object(input.authorDeclaration)) {
-            resolvedDeclaration = input.authorDeclaration as Parameters<EnterprisePackStore['recordUse']>[1]['authorDeclaration'];
-          } else {
-            try {
-              const studioSys = options.studio.get(currentPack.systemId);
-              const studioUse = [...studioSys.uses].reverse().find(u =>
-                u.projectId === pid
-                && u.taskId === tid
-                && (digest(u.report) === digest(verifiedReportRef) || (verifiedReportRef.locator && u.report.locator === verifiedReportRef.locator)),
-              );
-              if (studioUse) {
-                resolvedDeclaration = {
-                  declaredPurposeId: pm.purposeId,
-                  declaredRefs: studioUse.sources,
-                  summaryText: studioUse.result || '来自原 Studio declare-use 作者采用声明',
-                  declaredAt: studioUse.createdAt,
-                };
-              }
-            } catch { /* no studio declaration */ }
-          }
+          try {
+            const studioSys = options.studio.get(currentPack.systemId);
+            const studioUse = [...studioSys.uses].reverse().find(u =>
+              u.projectId === pid
+              && u.taskId === tid
+              && (
+                digest(u.report) === digest(verifiedReportRef)
+                || (verifiedReportRef.locator && u.report.locator === verifiedReportRef.locator && (!u.report.sha256 || u.report.sha256 === verifiedReportRef.sha256))
+                || (rawReportRef.locator && u.report.locator === rawReportRef.locator && (!u.report.sha256 || u.report.sha256 === verifiedReportRef.sha256))
+              ),
+            );
+            const declaredInThisTurn = !options.taskSnapshot
+              ? Boolean(studioUse)
+              : Boolean(studioUse && nativeEv.turnDeclaredStudioUseIds.includes(studioUse.id));
+            if (studioUse && declaredInThisTurn && studioUse.sources.length > 0) {
+              resolvedDeclaration = {
+                declaredPurposeId: pm.purposeId,
+                declaredRefs: studioUse.sources,
+                summaryText: studioUse.result || '来自原 Studio declare-use 本轮作者采用声明',
+                declaredAt: studioUse.createdAt,
+              };
+            }
+          } catch { /* no studio declaration */ }
 
+          const effectiveSelection = selectionForTurn ?? nativeEv.resolvedSelection;
           const use = packs.recordUse(packId, {
             projectId: pid,
             taskId: tid,
-            ...(selectionForTurn ? { sessionId: selectionForTurn.sessionId, messageId: selectionForTurn.messageId } : {}),
+            ...(effectiveSelection ? { sessionId: effectiveSelection.sessionId, messageId: effectiveSelection.messageId } : {}),
             ...(nativeEv.turnIndex !== undefined ? { turnIndex: nativeEv.turnIndex } : {}),
             reportRef: verifiedReportRef,
             packVersion: pin.packVersion,
@@ -1619,6 +2074,27 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           studioFeedbackId = studioFb.id;
         }
 
+        // R5: When closing feedback as 'verified', verify real Studio declare-use + assess-use and calculation report on disk!
+        if (targetStatus === 'verified' && typeof input.verifiedByUseId === 'string') {
+          const verifyingUse = currentPack.useRecords.find(u => u.id === uuid(input.verifiedByUseId));
+          if (verifyingUse && (verifyingUse.tier === 'formal-calculation' || verifyingUse.tier === 'limited-calculation')) {
+            const studioSys = options.studio.get(currentPack.systemId);
+            const matchedStudioUse = [...studioSys.uses].reverse().find(u =>
+              u.projectId === verifyingUse.projectId
+              && u.taskId === verifyingUse.taskId
+              && (
+                digest(u.report) === digest(verifyingUse.reportRef)
+                || (verifyingUse.reportRef.locator && u.report.locator === verifyingUse.reportRef.locator)
+                || (u.report.sha256 && u.report.sha256 === verifyingUse.reportRef.sha256)
+              ),
+            );
+            const latestAssess = matchedStudioUse?.assessments?.at(-1);
+            if (!matchedStudioUse || !latestAssess || latestAssess.status !== 'pass') {
+              throw new StudioError('feedback_verification_requires_independent_use_assessment', 409);
+            }
+          }
+        }
+
         const handled = packs.handleFeedback(feedbackHandleMatch[1]!, feedbackHandleMatch[2]!, {
           status: targetStatus,
           note: text(input.note, 5000, false),
@@ -1644,7 +2120,84 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
         if (options.closing()) throw new StudioError('host_closing', 503);
         assertEnabledWritable();
-        const use = packs.verifyUse(useVerifyMatch[1]!, useVerifyMatch[2]!, input as unknown as Parameters<EnterprisePackStore['verifyUse']>[2]);
+        const currentPack = packs.get(useVerifyMatch[1]!);
+        const useRecord = currentPack.useRecords.find(u => u.id === uuid(useVerifyMatch[2]!));
+        if (!useRecord) throw new StudioError('enterprise_pack_use_not_found', 404);
+
+        const studioSys = options.studio.get(currentPack.systemId);
+        const studioUse = [...studioSys.uses].reverse().find(u =>
+          u.projectId === useRecord.projectId
+          && u.taskId === useRecord.taskId
+          && (
+            digest(u.report) === digest(useRecord.reportRef)
+            || (useRecord.reportRef.locator && u.report.locator === useRecord.reportRef.locator)
+            || (u.report.sha256 && u.report.sha256 === useRecord.reportRef.sha256)
+          ),
+        );
+
+        // Allow recording a disk-verified independent assessment report into studio.uses when provided
+        const rawAssessRef = input.assessmentReportRef ?? input.verificationReportRef;
+        if (studioUse && object(rawAssessRef)) {
+          const parsedAssessRef = sourceRef(rawAssessRef);
+          if (
+            parsedAssessRef.authority !== 'task'
+            || !parsedAssessRef.projectId
+            || !parsedAssessRef.taskId
+            || !parsedAssessRef.locator?.startsWith('060_reports/')
+          ) {
+            throw new StudioError('studio_use_report_mismatch', 403);
+          }
+          if (options.enterpriseScopes.enterpriseIdForProject(parsedAssessRef.projectId) !== currentPack.enterpriseId) {
+            throw new StudioError('studio_owner_mismatch', 403);
+          }
+          const assessProj = await options.projects.get(parsedAssessRef.projectId);
+          syncWorkspaceReportsToProject(parsedAssessRef.projectId, parsedAssessRef.taskId, assessProj.rootPath);
+          const effectiveAssessLoc = resolveTaskReportLocator(parsedAssessRef.projectId, parsedAssessRef.taskId, parsedAssessRef.locator);
+          const assessFile = await options.projects.readFile(parsedAssessRef.projectId, effectiveAssessLoc);
+          const actualAssessSha = createHash('sha256').update(assessFile.bytes).digest('hex');
+          if (parsedAssessRef.sha256 && parsedAssessRef.sha256 !== actualAssessSha) {
+            throw new StudioError('studio_use_report_hash_mismatch', 409);
+          }
+          const verifiedAssessRef = sourceRef({ ...parsedAssessRef, locator: effectiveAssessLoc, version: actualAssessSha, sha256: actualAssessSha });
+          if (digest(verifiedAssessRef) === digest(useRecord.reportRef)) {
+            throw new StudioError('studio_use_assessment_same_as_report', 409);
+          }
+          options.studio.recordUseAssessment(currentPack.systemId, studioUse.id, {
+            status: input.independentConfirmed === false ? 'fail' : 'pass',
+            report: verifiedAssessRef,
+            sources: studioUse.sources,
+            result: text(input.verdictDetail ?? '独立复核报告已核对落盘', 20_000, false),
+          });
+        }
+
+        // CRITICAL (R4): NEVER trust client-supplied boolean independentConfirmed unless backed by a REAL Studio declare-use AND a disk-verified StudioUseAssessment!
+        const latestStudioSys = options.studio.get(currentPack.systemId);
+        const latestStudioUse = studioUse ? latestStudioSys.uses.find(u => u.id === studioUse.id) : undefined;
+        const latestAssessment = latestStudioUse?.assessments?.at(-1);
+        let assessmentDiskVerified = false;
+        if (latestStudioUse && latestAssessment && latestAssessment.status === 'pass' && latestAssessment.report.projectId && latestAssessment.report.locator?.startsWith('060_reports/')) {
+          try {
+            const assessFile = await options.projects.readFile(latestAssessment.report.projectId, latestAssessment.report.locator);
+            const actualSha = createHash('sha256').update(assessFile.bytes).digest('hex');
+            if (!latestAssessment.report.sha256 || latestAssessment.report.sha256 === actualSha) {
+              assessmentDiskVerified = true;
+            }
+          } catch {
+            assessmentDiskVerified = false;
+          }
+        }
+        const hostVerifiedIndependentConfirmed = Boolean(
+          input.independentConfirmed === true
+          && latestStudioUse
+          && latestAssessment
+          && latestAssessment.status === 'pass'
+          && assessmentDiskVerified,
+        );
+
+        const use = packs.verifyUse(useVerifyMatch[1]!, useVerifyMatch[2]!, {
+          ...(input as unknown as Parameters<EnterprisePackStore['verifyUse']>[2]),
+          independentConfirmed: hostVerifiedIndependentConfirmed,
+        });
         return { result: { use, pack: packs.get(useVerifyMatch[1]!) } as unknown as Record<string, unknown> };
       }));
       json(response, receipt.statusCode || 200, receipt.result);
@@ -1680,6 +2233,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     prepareRestrictedTaskWorkspace,
     syncActiveWorkspacesForProject,
     syncWorkspaceReportsToProject,
+    discardUncommittedWorkspaceReports,
+    resolveTaskReportLocator,
     authorizeProjectDataPath,
     assertProjectDataPathAllowed,
     evaluateNativeToolCall,

@@ -564,11 +564,68 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
       const res = context.recentToolResults.at(-1)!;
       willowNativeBashBlocked = providerMessageText(res.content).includes('store_detail_not_authorized');
       // R2.4 Physical workspace isolation check: verify starbridge_orders.csv exists in sandbox cwd and compute ../060_reports/repurchase-v1.0.json
-      const pyCmd = `python3 -c "import csv, json, os; print('ISO_CWD=' + os.getcwd() + '|STAR=' + str(os.path.exists('starbridge_orders.csv'))); rows = list(csv.DictReader(open('starbridge_orders.csv'))); rep = [r['account'] for r in rows if r['repeat_order_id'] and not (r['full_refund']=='true' and r['refund_date'].startswith('2026-09'))]; open('../060_reports/repurchase-v1.0.json','w').write(json.dumps({'packVersion':'1.0','numerator':len(rep),'denominator':len(rows),'accounts':rep}, ensure_ascii=False))"`;
+      const pyCmd = `python3 -c "import csv, hashlib, json, os; print('ISO_CWD=' + os.getcwd() + '|STAR=' + str(os.path.exists('starbridge_orders.csv'))); rows = list(csv.DictReader(open('starbridge_orders.csv'))); rep = [r['account'] for r in rows if r['repeat_order_id'] and not (r['full_refund']=='true' and r['refund_date'].startswith('2026-09'))]; body = json.dumps({'packVersion':'1.0','numerator':len(rep),'denominator':len(rows),'accounts':rep}, ensure_ascii=False).encode(); open('../060_reports/repurchase-v1.0.json','wb').write(body); print('REP_SHA=' + hashlib.sha256(body).hexdigest()); abody = json.dumps({'assessed':'repurchase-v1.0.json','status':'pass','numerator':len(rep),'denominator':len(rows)}, ensure_ascii=False).encode(); open('../060_reports/repurchase-v1.0-assess.json','wb').write(abody); print('ASSESS_SHA=' + hashlib.sha256(abody).hexdigest())"`;
       return { calls: [{ name: 'bash', arguments: { command: pyCmd } }] };
     }
-    physicalIsolationProof = providerMessageText(context.recentToolResults.at(-1)!.content);
-    return { text: '星桥9月首购队列按v1.0（已查读销售退款映射v1及复购指标1.0.0）核得 3/4（C07、C13、C21），结果已保存至 060_reports/repurchase-v1.0.json；柳岸明细未授权，未当作零。' };
+    if (stepA === 9) {
+      physicalIsolationProof = providerMessageText(context.recentToolResults.at(-1)!.content);
+      const repSha = /REP_SHA=([a-f0-9]{64})/.exec(physicalIsolationProof)?.[1];
+      assert.ok(repSha, physicalIsolationProof);
+      return {
+        calls: [{
+          name: 'studio_assets',
+          arguments: {
+            action: 'declare-use',
+            systemId: system.id,
+            payload: {
+              report: {
+                authority: 'task',
+                id: taskA.id,
+                projectId: projStar.id,
+                taskId: taskA.id,
+                version: repSha,
+                sha256: repSha,
+                locator: '060_reports/repurchase-v1.0.json',
+              },
+              sources: [refundV1Ref, sapM1Ref],
+              result: 'Task A 原生 declare-use：按 v1.0 核得星桥 3/4',
+            },
+          },
+        }],
+      };
+    }
+    if (stepA === 10) {
+      const declResult = JSON.parse(providerMessageText(context.recentToolResults.at(-1)!.content));
+      const studioUseId = declResult?.use?.id;
+      assert.ok(studioUseId);
+      const assessSha = /ASSESS_SHA=([a-f0-9]{64})/.exec(physicalIsolationProof)?.[1];
+      assert.ok(assessSha, physicalIsolationProof);
+      return {
+        calls: [{
+          name: 'studio_assets',
+          arguments: {
+            action: 'assess-use',
+            systemId: system.id,
+            payload: {
+              useId: studioUseId,
+              status: 'pass',
+              report: {
+                authority: 'task',
+                id: taskA.id,
+                projectId: projStar.id,
+                taskId: taskA.id,
+                version: assessSha,
+                sha256: assessSha,
+                locator: '060_reports/repurchase-v1.0-assess.json',
+              },
+              sources: [refundV1Ref, sapM1Ref],
+              result: 'Task A v1.0 独立核验报告落盘通过',
+            },
+          },
+        }],
+      };
+    }
+    return { text: '星桥9月首购队列按v1.0（已查读销售退款映射v1及复购指标1.0.0并完成原生 declare-use/assess-use）核得 3/4（C07、C13、C21），结果已保存至 060_reports/repurchase-v1.0.json；柳岸明细未授权，未当作零。' };
   });
 
   await json(await host.request(`/api/projects/${projStar.id}/tasks/${taskA.id}/messages`, 'POST', {
@@ -603,6 +660,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
 
   const assistantMsgA = [...stateA.snapshot.messages].reverse().find((m: any) => m.role === 'assistant' && m.nativeEntryId && m.nativeSessionId);
   assert.ok(assistantMsgA);
+  // R4: Record use WITHOUT client authorDeclaration -> Host binds real native declare-use + real disk-verified assess-use!
   const useA = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses`, 'POST', {
     requestId: randomUUID(),
     projectId: projStar.id,
@@ -611,10 +669,75 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     messageId: assistantMsgA.nativeEntryId,
     purposeId: purpose.id,
     accessLevel: 'recalculate',
+    reportRef: {
+      authority: 'task',
+      id: taskA.id,
+      projectId: projStar.id,
+      taskId: taskA.id,
+      version: sha(reportV1Bytes),
+      sha256: sha(reportV1Bytes),
+      locator: '060_reports/repurchase-v1.0.json',
+    },
+  }));
+  assert.equal(useA.use.actualReads.length, 2, 'Host MUST extract BOTH real native read-source receipts from Task A Turn 1!');
+  assert.ok(useA.use.authorDeclaration, 'Host MUST bind real native studio_assets declare-use into authorDeclaration!');
+  assert.equal(useA.use.reportRef.sha256, sha(reportV1Bytes));
+  const verifiedUseA = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses/${useA.use.id}/verify`, 'POST', {
+    requestId: randomUUID(),
+    verifierRole: '独立复核',
+    expectedRef: refundV1Ref,
+    independentConfirmed: true,
+    verdictDetail: 'Task A v1.0 复核通过',
+  }));
+  assert.equal(verifiedUseA.use.independentVerification.status, 'pass');
+
+  // R5 COUNTEREXAMPLE (Same-name report collision across two tasks in the SAME project):
+  // Task A2 also writes ../060_reports/repurchase-v1.0.json -> MUST NOT overwrite Task A's original report!
+  const { task: taskA2 } = await json(await host.request(`/api/projects/${projStar.id}/tasks`, 'POST', { name: '同名报告保护反例任务' }), 201);
+  let stepA2 = 0;
+  provider.setResponder(() => {
+    stepA2 += 1;
+    if (stepA2 === 1) {
+      return {
+        calls: [{
+          name: 'bash',
+          arguments: {
+            command: `python3 -c "import json; open('../060_reports/repurchase-v1.0.json','w').write(json.dumps({'packVersion':'1.0','owner':'taskA2','numerator':99}))"`,
+          },
+        }],
+      };
+    }
+    return { text: '已生成同名报告 repurchase-v1.0.json。' };
+  });
+  await json(await host.request(`/api/projects/${projStar.id}/tasks/${taskA2.id}/messages`, 'POST', {
+    requestId: randomUUID(), text: '生成一份同名报告用于冲突保护测试。',
+  }), 202);
+  await waitIdle(host, projStar.id, taskA2.id);
+  assert.equal(sha(fs.readFileSync(reportV1Path)), sha(reportV1Bytes), 'Second task writing same-name report MUST NEVER overwrite Task A original report!');
+  const conflictCopyPath = path.join(projStar.rootPath, '060_reports', `repurchase-v1.0.task-${taskA2.id.slice(0, 8)}.json`);
+  assert.equal(fs.existsSync(conflictCopyPath), true, 'Second task same-name report MUST be preserved under conflict-free filename!');
+  assert.equal(JSON.parse(fs.readFileSync(conflictCopyPath, 'utf8')).owner, 'taskA2');
+
+  // R4.1 COUNTEREXAMPLE: Send Turn 2 on Task A with ZERO tool calls -> BOTH feedback AND /uses from Turn 2 MUST NOT borrow Turn 1 reads or declare-use!
+  provider.setResponder(() => ({ text: '本轮未调用任何工具，仅做纯文字补充讨论。' }));
+  await json(await host.request(`/api/projects/${projStar.id}/tasks/${taskA.id}/messages`, 'POST', {
+    requestId: randomUUID(), text: '不用查工具，简单总结一下刚才的思路。',
+  }), 202);
+  const stateATurn2 = await waitIdle(host, projStar.id, taskA.id, stateA.snapshot.messages.length + 2);
+  const assistantMsgATurn2 = [...stateATurn2.snapshot.messages].reverse().find((m: any) => m.role === 'assistant' && m.nativeEntryId && m.nativeSessionId);
+  assert.ok(assistantMsgATurn2 && assistantMsgATurn2.nativeEntryId !== assistantMsgA.nativeEntryId);
+  const useTurn2Borrow = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses`, 'POST', {
+    requestId: randomUUID(),
+    projectId: projStar.id,
+    taskId: taskA.id,
+    sessionId: assistantMsgATurn2.nativeSessionId,
+    messageId: assistantMsgATurn2.nativeEntryId,
+    purposeId: purpose.id,
+    accessLevel: 'recalculate',
     authorDeclaration: {
       declaredPurposeId: purpose.id,
       declaredRefs: [refundV1Ref, sapM1Ref],
-      summaryText: 'Task A 作者采用声明：按 v1.0 核得星桥 3/4',
+      summaryText: '试图在无工具轮次伪造 authorDeclaration 并借用第一轮实读',
       declaredAt: new Date().toISOString(),
     },
     reportRef: {
@@ -627,25 +750,16 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
       locator: '060_reports/repurchase-v1.0.json',
     },
   }));
-  assert.equal(useA.use.actualReads.length, 2, 'Host MUST extract BOTH real native read-source receipts from Task A Turn 1!');
-  assert.equal(useA.use.reportRef.sha256, sha(reportV1Bytes));
-  const verifiedUseA = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses/${useA.use.id}/verify`, 'POST', {
+  assert.deepEqual(useTurn2Borrow.use.actualReads, [], 'Zero-tool Turn 2 MUST NOT borrow Turn 1 reads in /uses!');
+  assert.equal(useTurn2Borrow.use.authorDeclaration, undefined, 'Forged client authorDeclaration MUST be ignored when Turn 2 had no native declare-use!');
+  const verifyTurn2Borrow = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses/${useTurn2Borrow.use.id}/verify`, 'POST', {
     requestId: randomUUID(),
     verifierRole: '独立复核',
     expectedRef: refundV1Ref,
     independentConfirmed: true,
-    verdictDetail: 'Task A v1.0 复核通过',
+    verdictDetail: '无读取轮次试图借用第一轮通过',
   }));
-  assert.equal(verifiedUseA.use.independentVerification.status, 'pass');
-
-  // R4.1 COUNTEREXAMPLE: Send Turn 2 on Task A with ZERO tool calls -> feedback from Turn 2 MUST NOT inherit Turn 1 reads!
-  provider.setResponder(() => ({ text: '本轮未调用任何工具，仅做纯文字补充讨论。' }));
-  await json(await host.request(`/api/projects/${projStar.id}/tasks/${taskA.id}/messages`, 'POST', {
-    requestId: randomUUID(), text: '不用查工具，简单总结一下刚才的思路。',
-  }), 202);
-  const stateATurn2 = await waitIdle(host, projStar.id, taskA.id, stateA.snapshot.messages.length + 2);
-  const assistantMsgATurn2 = [...stateATurn2.snapshot.messages].reverse().find((m: any) => m.role === 'assistant' && m.nativeEntryId && m.nativeSessionId);
-  assert.ok(assistantMsgATurn2 && assistantMsgATurn2.nativeEntryId !== assistantMsgA.nativeEntryId);
+  assert.equal(verifyTurn2Borrow.use.independentVerification.status, 'pending', 'Zero-tool Turn 2 MUST NEVER achieve pass by borrowing Turn 1!');
   const fbZeroToolTurn = await json(await host.request(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
     requestId: randomUUID(),
     origin: { projectId: projStar.id, taskId: taskA.id, sessionId: assistantMsgATurn2.nativeSessionId, messageId: assistantMsgATurn2.nativeEntryId },
@@ -828,7 +942,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     if (stepB === 4) {
       sapM2ReadText = providerMessageText(context.recentToolResults.at(-1)!.content);
       // Real Python calculation applying v1.1 cross-month refund rule -> C07 excluded (changed), C13 retained (unchanged) -> 2/4!
-      const pyCmd = `python3 -c "import csv, json; rows = list(csv.DictReader(open('starbridge_orders.csv'))); rep = [r['account'] for r in rows if r['repeat_order_id'] and not (r['full_refund']=='true' and r['refund_date'] <= '2026-10-31')]; open('../060_reports/repurchase-v1.1.json','w').write(json.dumps({'packVersion':'1.1','numerator':len(rep),'denominator':len(rows),'accounts':rep,'c07Excluded':'C07' not in rep,'c13Retained':'C13' in rep}, ensure_ascii=False))"`;
+      const pyCmd = `python3 -c "import csv, hashlib, json; rows = list(csv.DictReader(open('starbridge_orders.csv'))); rep = [r['account'] for r in rows if r['repeat_order_id'] and not (r['full_refund']=='true' and r['refund_date'] <= '2026-10-31')]; body = json.dumps({'packVersion':'1.1','numerator':len(rep),'denominator':len(rows),'accounts':rep,'c07Excluded':'C07' not in rep,'c13Retained':'C13' in rep}, ensure_ascii=False).encode(); open('../060_reports/repurchase-v1.1.json','wb').write(body); print('REP2_SHA=' + hashlib.sha256(body).hexdigest())"`;
       return { calls: [{ name: 'bash', arguments: { command: pyCmd } }] };
     }
     return { text: '独立新任务已查读 v1.1（销售退款映射 v2 + 复购指标 1.1.0）并完成 Python 复算：C07 跨月全额退款排除（应变），C13 有效再购保留（应保留），9 月星桥复购率为 2/4，结果已写入 060_reports/repurchase-v1.1.json。' };
@@ -852,36 +966,9 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   const assistantMsgB = [...stateB.snapshot.messages].reverse().find((m: any) => m.role === 'assistant' && m.nativeEntryId && m.nativeSessionId);
   assert.ok(assistantMsgB);
 
-  // R4.2 COUNTEREXAMPLE: Recording use WITHOUT bound authorDeclaration MUST keep verifyUse at 'pending' (NEVER 'pass')!
+  // R4.2 COUNTEREXAMPLE: Even if caller tries to spoof authorDeclaration in HTTP body when Task B Turn 1 did NOT call studio_assets declare-use,
+  // Host MUST ignore client authorDeclaration AND keep verifyUse at 'pending' (NEVER 'pass')!
   const useBNoDecl = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses`, 'POST', {
-    requestId: randomUUID(),
-    projectId: projAud.id,
-    taskId: taskB.id,
-    sessionId: assistantMsgB.nativeSessionId,
-    messageId: assistantMsgB.nativeEntryId,
-    purposeId: purpose.id,
-    accessLevel: 'recalculate',
-    reportRef: {
-      authority: 'task',
-      id: taskB.id,
-      projectId: projAud.id,
-      taskId: taskB.id,
-      version: sha(reportV2Bytes),
-      sha256: sha(reportV2Bytes),
-      locator: '060_reports/repurchase-v1.1.json',
-    },
-  }));
-  const verifyNoDecl = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses/${useBNoDecl.use.id}/verify`, 'POST', {
-    requestId: randomUUID(),
-    verifierRole: '独立核算复核',
-    expectedRef: refundV2Ref,
-    independentConfirmed: true,
-    verdictDetail: '无作者采用声明反例',
-  }));
-  assert.equal(verifyNoDecl.use.independentVerification.status, 'pending', 'Missing bound authorDeclaration MUST keep verdict pending!');
-
-  // With bound authorDeclaration -> verifyUse passes AND independent Task B v1.1 cleanly closes fb1!
-  const useB = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses`, 'POST', {
     requestId: randomUUID(),
     projectId: projAud.id,
     taskId: taskB.id,
@@ -892,7 +979,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     authorDeclaration: {
       declaredPurposeId: purpose.id,
       declaredRefs: [refundV2Ref, sapM2Ref],
-      summaryText: '独立新任务作者声明：按 v1.1 核得星桥 2/4（C07 排除、C13 保留）',
+      summaryText: '客户端伪造声明（原会话未调用 declare-use）',
       declaredAt: new Date().toISOString(),
     },
     reportRef: {
@@ -905,8 +992,92 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
       locator: '060_reports/repurchase-v1.1.json',
     },
   }));
-  assert.equal(useB.use.actualReads.length, 2);
+  assert.equal(useBNoDecl.use.authorDeclaration, undefined, 'Client-supplied authorDeclaration MUST be ignored without native declare-use!');
+  const verifyNoDecl = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses/${useBNoDecl.use.id}/verify`, 'POST', {
+    requestId: randomUUID(),
+    verifierRole: '独立核算复核',
+    expectedRef: refundV2Ref,
+    independentConfirmed: true,
+    verdictDetail: '无原生 declare-use/assess-use 反例',
+  }));
+  assert.equal(verifyNoDecl.use.independentVerification.status, 'pending', 'Missing native declare-use & disk-verified assess-use MUST keep verdict pending!');
 
+  // Run Task B Turn 2 with real native read-source + declare-use (still without assess-use yet -> verify without assessmentReportRef MUST stay pending!)
+  let stepB2 = 0;
+  provider.setResponder(context => {
+    stepB2 += 1;
+    if (stepB2 === 1) return { calls: [{ name: 'studio_assets', arguments: { action: 'read-source', payload: { ref: refundV2Ref } } }] };
+    if (stepB2 === 2) return { calls: [{ name: 'studio_assets', arguments: { action: 'read-source', payload: { ref: sapM2Ref } } }] };
+    if (stepB2 === 3) {
+      return {
+        calls: [{
+          name: 'studio_assets',
+          arguments: {
+            action: 'declare-use',
+            systemId: system.id,
+            payload: {
+              report: {
+                authority: 'task',
+                id: taskB.id,
+                projectId: projAud.id,
+                taskId: taskB.id,
+                version: sha(reportV2Bytes),
+                sha256: sha(reportV2Bytes),
+                locator: '060_reports/repurchase-v1.1.json',
+              },
+              sources: [refundV2Ref, sapM2Ref],
+              result: '独立新任务原生 declare-use：按 v1.1 核得星桥 2/4（C07 排除、C13 保留）',
+            },
+          },
+        }],
+      };
+    }
+    if (stepB2 === 4) {
+      const pyAssess = `python3 -c "import json; open('../060_reports/repurchase-v1.1-assess.json','w').write(json.dumps({'assessed':'repurchase-v1.1.json','packVersion':'1.1','c07Excluded':True,'c13Retained':True,'numerator':2,'denominator':4}, ensure_ascii=False))"`;
+      return { calls: [{ name: 'bash', arguments: { command: pyAssess } }] };
+    }
+    return { text: '已完成 v1.1 原生 declare-use 并落盘独立复核报告 060_reports/repurchase-v1.1-assess.json。' };
+  });
+  await json(await host.request(`/api/projects/${projAud.id}/tasks/${taskB.id}/messages`, 'POST', {
+    requestId: randomUUID(), text: '请对 060_reports/repurchase-v1.1.json 发起原生 declare-use 并落盘独立复核报告。',
+  }), 202);
+  const stateB2 = await waitIdle(host, projAud.id, taskB.id, stateB.snapshot.messages.length + 2);
+  const assistantMsgB2 = [...stateB2.snapshot.messages].reverse().find((m: any) => m.role === 'assistant' && m.nativeEntryId && m.nativeSessionId);
+  assert.ok(assistantMsgB2);
+
+  const useB = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses`, 'POST', {
+    requestId: randomUUID(),
+    projectId: projAud.id,
+    taskId: taskB.id,
+    sessionId: assistantMsgB2.nativeSessionId,
+    messageId: assistantMsgB2.nativeEntryId,
+    purposeId: purpose.id,
+    accessLevel: 'recalculate',
+    reportRef: {
+      authority: 'task',
+      id: taskB.id,
+      projectId: projAud.id,
+      taskId: taskB.id,
+      version: sha(reportV2Bytes),
+      sha256: sha(reportV2Bytes),
+      locator: '060_reports/repurchase-v1.1.json',
+    },
+  }));
+  assert.equal(useB.use.actualReads.length, 2);
+  assert.ok(useB.use.authorDeclaration, 'Native declare-use MUST populate authorDeclaration automatically!');
+
+  // Bare independentConfirmed: true WITHOUT a disk-verified Studio assessment report MUST stay pending!
+  const verifyBareBool = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses/${useB.use.id}/verify`, 'POST', {
+    requestId: randomUUID(),
+    verifierRole: '独立核算复核',
+    expectedRef: refundV2Ref,
+    independentConfirmed: true,
+    verdictDetail: '缺少真实评估报告仅传布尔值反例',
+  }));
+  assert.equal(verifyBareBool.use.independentVerification.status, 'pending', 'Bare independentConfirmed without disk-verified Studio assessment MUST stay pending!');
+
+  // Now verify WITH real disk-verified assessmentReportRef -> records real StudioUseAssessment & passes!
+  const assessV2Bytes = fs.readFileSync(path.join(projAud.rootPath, '060_reports', 'repurchase-v1.1-assess.json'));
   const verifiedUse = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses/${useB.use.id}/verify`, 'POST', {
     requestId: randomUUID(),
     verifierRole: '独立核算复核',
@@ -914,6 +1085,15 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     independentConfirmed: true,
     verdictDetail: '核实读对 v1.1（refund v2 + sap 1.1.0），C07 排除、C13 保留，分子分母 2/4 无误',
     checkedRefs: [refundV2Ref, sapM2Ref],
+    assessmentReportRef: {
+      authority: 'task',
+      id: taskB.id,
+      projectId: projAud.id,
+      taskId: taskB.id,
+      version: sha(assessV2Bytes),
+      sha256: sha(assessV2Bytes),
+      locator: '060_reports/repurchase-v1.1-assess.json',
+    },
   }));
   assert.equal(verifiedUse.use.independentVerification.status, 'pass');
 
@@ -960,4 +1140,9 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.match(catalogRollbackText, /"readOnlyRollback":true/, 'Rollback mode MUST signal readOnlyRollback: true!');
   assert.match(catalogRollbackText, /"pinnedVersion":null/, 'Brand-new task in rollback mode MUST NOT pin a pack version!');
   assert.match(catalogRollbackText, /"purposes":\[\]/, 'Brand-new task in rollback mode MUST receive ZERO pack purposes/dependencies!');
+  assert.equal(
+    fs.existsSync(path.join(savedDataRoot, 'member-pack-workspaces', projAud.id, taskRollback.id)),
+    false,
+    'Rollback mode MUST NOT create member-pack-workspaces or copy files for new tasks!',
+  );
 });

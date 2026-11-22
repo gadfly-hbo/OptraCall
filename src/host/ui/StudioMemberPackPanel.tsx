@@ -298,33 +298,59 @@ export function StudioMemberPackPanel({
           selected: true,
         });
       }
-      const scopeKey = `${pack.panorama.brand}:${pack.panorama.channel}:${pack.panorama.period}:${rec.purposeKey}`;
+      const existingPurpose = pack.purposes.find(p => p.purposeKey === rec.purposeKey);
+      const preservedScope = existingPurpose
+        ? {
+            ...existingPurpose.scope,
+            brand: existingPurpose.scope.brand ?? pack.panorama.brand,
+            channel: existingPurpose.scope.channel ?? pack.panorama.channel,
+            period: existingPurpose.scope.period ?? pack.panorama.period,
+            scopeKey: existingPurpose.scope.scopeKey,
+          }
+        : {
+            brand: pack.panorama.brand,
+            channel: pack.panorama.channel,
+            period: pack.panorama.period,
+            scopeKey: `${pack.panorama.brand}:${pack.panorama.channel}:${pack.panorama.period}:${rec.purposeKey}`,
+          };
       const upserted = await upsertPackPurpose(pack.id, {
         requestId: crypto.randomUUID(),
         ...(activePid ? { projectId: activePid } : {}),
         purposeKey: rec.purposeKey,
-        title: rec.title,
-        businessQuestion: `${pack.panorama.decisionPurpose}（聚焦：${rec.title}）`,
-        subjectUnit: 'brand_account',
-        scope: {
-          brand: pack.panorama.brand,
-          channel: pack.panorama.channel,
-          period: pack.panorama.period,
-          scopeKey,
-        },
-        tier: 'definition-reference',
-        businessStatus: 'active',
-        originalGoal: rec.deliverableNow,
-        remainingGaps: rec.minimumEvidence ? [rec.minimumEvidence] : [],
-        exclusions: [],
-        completionCriteria: rec.completionCriteria,
-        dataCutoffAt: pack.panorama.dataCutoffAt,
+        title: existingPurpose?.title || rec.title,
+        businessQuestion: existingPurpose?.businessQuestion || `${pack.panorama.decisionPurpose}（聚焦：${rec.title}）`,
+        subjectUnit: existingPurpose?.subjectUnit ?? 'brand_account',
+        ...(existingPurpose?.windowDays !== undefined ? { windowDays: existingPurpose.windowDays } : {}),
+        scope: preservedScope,
+        tier: existingPurpose?.tier ?? 'definition-reference',
+        ...(existingPurpose?.limitedCalculationName ? { limitedCalculationName: existingPurpose.limitedCalculationName } : {}),
+        businessStatus: existingPurpose?.businessStatus ?? 'active',
+        ...(existingPurpose?.evidenceReadiness ? { evidenceReadiness: existingPurpose.evidenceReadiness } : {}),
+        originalGoal: existingPurpose?.originalGoal || rec.deliverableNow,
+        ...(existingPurpose?.deliveredSubset ? { deliveredSubset: existingPurpose.deliveredSubset } : {}),
+        remainingGaps: existingPurpose?.remainingGaps.length
+          ? existingPurpose.remainingGaps
+          : (rec.minimumEvidence ? [rec.minimumEvidence] : []),
+        exclusions: existingPurpose?.exclusions ?? [],
+        completionCriteria: existingPurpose?.completionCriteria || rec.completionCriteria,
+        ...(existingPurpose?.dependencies.length ? { dependencies: existingPurpose.dependencies } : {}),
+        ...(existingPurpose?.decisionChoices.length ? { decisionChoices: existingPurpose.decisionChoices } : {}),
+        ...(existingPurpose?.policyEffectiveFrom ? { policyEffectiveFrom: existingPurpose.policyEffectiveFrom } : {}),
+        dataCutoffAt: existingPurpose?.dataCutoffAt || pack.panorama.dataCutoffAt,
+        ...(existingPurpose?.observationWindowDays !== undefined ? { observationWindowDays: existingPurpose.observationWindowDays } : {}),
+        ...(existingPurpose?.availableHistoryDays !== undefined ? { availableHistoryDays: existingPurpose.availableHistoryDays } : {}),
+        ...(existingPurpose?.ownerRole ? { ownerRole: existingPurpose.ownerRole } : rec.ownerRole ? { ownerRole: rec.ownerRole } : {}),
       });
-      const continuationGoal = `请沿企业会员包 ${pack.packCode} 全景 v${pack.panorama.version} 原范围继续建设用途「${rec.title}」（purposeKey: ${rec.purposeKey}；品牌：${pack.panorama.brand}；渠道：${pack.panorama.channel}；期间：${pack.panorama.period}；资料截止：${pack.panorama.dataCutoffAt}；完成条件：${rec.completionCriteria}；最小补证：${rec.minimumEvidence}）。请直接更新同一用途草案与条目，不要新建重复事项。`;
+      const storesLabel = preservedScope.stores?.length ? `；门店：${preservedScope.stores.join('、')}` : '';
+      const windowLabel = upserted.purpose.windowDays !== undefined ? `；窗口：${upserted.purpose.windowDays}日` : '';
+      const continuationGoal = `请沿企业会员包 ${pack.packCode} 全景 v${pack.panorama.version} 原范围继续建设用途「${upserted.purpose.limitedCalculationName || upserted.purpose.title}」（purposeId: ${upserted.purpose.id}；purposeKey: ${rec.purposeKey}；品牌：${preservedScope.brand ?? pack.panorama.brand}；渠道：${preservedScope.channel ?? pack.panorama.channel}；期间：${preservedScope.period ?? pack.panorama.period}${storesLabel}${windowLabel}；资料截止：${upserted.purpose.dataCutoffAt ?? pack.panorama.dataCutoffAt}；完成条件：${upserted.purpose.completionCriteria}；最小补证：${rec.minimumEvidence}）。请直接更新同一用途草案与条目，不要新建重复事项。`;
       setGoalInput(continuationGoal);
       setPack(upserted.pack);
       setSubTab('draft');
-      setNotice(`已按全景建议「${rec.title}」携带原范围（${pack.panorama.brand} · ${pack.panorama.channel} · ${pack.panorama.period} · 截止 ${pack.panorama.dataCutoffAt}）建好/复用用途草案。`);
+      setNotice(`已按全景建议「${upserted.purpose.limitedCalculationName || rec.title}」携带原范围（${preservedScope.brand ?? pack.panorama.brand} · ${preservedScope.channel ?? pack.panorama.channel}${storesLabel}${windowLabel} · 截止 ${upserted.purpose.dataCutoffAt ?? pack.panorama.dataCutoffAt}）${upserted.created ? '新建' : '复用'}用途草案并接入原建设会话。`);
+      if (onBuildGoal) {
+        onBuildGoal(continuationGoal, pack.systemId);
+      }
     } catch (fault) {
       setError(fault instanceof Error ? fault.message : '从全景建议续建失败。');
     } finally {

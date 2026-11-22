@@ -338,14 +338,29 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     if (editorText === undefined) editorText = o.draft ?? '';
     analysisPython = o.analysisPython && !fixedInput() ? inspectAnalysisPython(o.analysisPython, o.codeRoot) : undefined;
     const restrictedMemberPack = Boolean(o.memberPackWorkspaceRoot && !o.workspace && !o.protectedExecution);
-    const cwd = o.workspace?.cwd ?? (restrictedMemberPack ? path.join(o.memberPackWorkspaceRoot!, '020_clean') : path.join(o.projectDirectory!, '020_clean'));
-    if (o.protectedExecution) {
+    const cwd = o.workspace?.cwd ?? (o.memberPackExecutionScope?.cwd ?? (restrictedMemberPack ? path.join(o.memberPackWorkspaceRoot!, '020_clean') : path.join(o.projectDirectory!, '020_clean')));
+    const activeProtectedScope = o.protectedExecution ?? (
+      restrictedMemberPack && o.memberPackExecutionScope && process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec')
+        ? o.memberPackExecutionScope
+        : undefined
+    );
+    if (activeProtectedScope) {
       if (fixedInput()) throw new Error('protected_execution_profile_conflict');
       if (o.sessionFile && existsSync(o.sessionFile)) {
         const original = readFileSync(o.sessionFile, 'utf8'), header = JSON.parse(original.slice(0, original.indexOf('\n')));
         if (!original.endsWith('\n') || header.type !== 'session' || header.version !== 3) throw new Error('protected_native_version_unsupported');
       }
-      protectedTools = await createProtectedTools({ scope: o.protectedExecution, codeRoot: o.codeRoot, forbiddenRoots: [o.sessionDirectory, o.resourceRoot, ...(o.sessionFile ? [o.sessionFile] : [])], ...(o.analysisPython ? { analysisPython: o.analysisPython } : {}) });
+      protectedTools = await createProtectedTools({
+        scope: activeProtectedScope,
+        codeRoot: o.codeRoot,
+        forbiddenRoots: [
+          ...(restrictedMemberPack && o.projectDirectory ? [o.projectDirectory] : []),
+          o.sessionDirectory,
+          o.resourceRoot,
+          ...(o.sessionFile ? [o.sessionFile] : []),
+        ],
+        ...(o.analysisPython ? { analysisPython: o.analysisPython } : {}),
+      });
       executionId = randomUUID();
     }
     const credentials = { read: async () => undefined, list: async () => [], modify: async () => { throw new Error('Host owns credentials.'); }, delete: async () => {} };
@@ -809,8 +824,9 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           unavailableSkills = snapshot.unavailable;
           return { skills: snapshot.skills, diagnostics: [...base.diagnostics, ...snapshot.unavailable.map(name => ({ type: 'warning' as const, message: `Skill unavailable in protected execution: ${name}` }))] };
         },
-        appendSystemPrompt: [...(o.workspace?.systemPrompt ?? []), ...(ordinaryManaged() ? projectInstructions() : []),
-          `The Host has provided a managed tool execution environment (${o.protectedExecution?.profile ?? 'protected'}). The tools run in ${protectedTools.scope.cwd}. Authorized readable material locations: ${JSON.stringify(protectedTools.scope.readRoots)}. Authorized writable locations: ${JSON.stringify([protectedTools.scope.writableRoot, ...(protectedTools.scope.writeRoots ?? [])])}. ${ordinaryManaged() ? 'Background and parallel calculations may continue across tool calls within this operation; the Host retains their resources until stop, close, or the authorized phase handoff.' : 'Existing data and reports are read-only; save new calculations and deliverables in the new workspace.'} Native session and credential files are unavailable to execution tools. Existing/remote MCP and user execution extensions are unavailable here. All child processes must remain inside this operation\'s owned execution groups: detached sessions and posix_spawn are unavailable. The python and python3 entrypoints use the installed same-version direct interpreters (${JSON.stringify(protectedTools.pythonRuntimes)}); use these entrypoints or their recorded direct executable paths instead of absolute framework launcher wrappers. Ordinary fork/exec subprocesses remain available. Choose methods and tools yourself. Codemode store/load is scoped to this execution workspace. Unavailable tools: ${JSON.stringify(protectedTools.unavailableTools)}.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
+        appendSystemPrompt: [...(o.workspace?.systemPrompt ?? []), ...((ordinaryManaged() || restrictedMemberPack) ? projectInstructions() : []),
+          ...(restrictedMemberPack ? ['当前任务运行在受限资源授权隔离工作区中：工作目录仅包含当前获准读取的资料；未授权门店或资料不可访问、不可通过子会话/连接器/扩展越权获取，也不可将不可读门店视为 0。分析产出请保存到 ../060_reports/。'] : []),
+          `The Host has provided a managed tool execution environment (${activeProtectedScope?.profile ?? 'protected'}). The tools run in ${protectedTools.scope.cwd}. Authorized readable material locations: ${JSON.stringify(protectedTools.scope.readRoots)}. Authorized writable locations: ${JSON.stringify([protectedTools.scope.writableRoot, ...(protectedTools.scope.writeRoots ?? [])])}. ${(ordinaryManaged() || restrictedMemberPack) ? 'Background and parallel calculations may continue across tool calls within this operation; the Host retains their resources until stop, close, or the authorized phase handoff.' : 'Existing data and reports are read-only; save new calculations and deliverables in the new workspace.'} Native session and credential files are unavailable to execution tools. Existing/remote MCP and user execution extensions are unavailable here. All child processes must remain inside this operation\'s owned execution groups: detached sessions and posix_spawn are unavailable. The python and python3 entrypoints use the installed same-version direct interpreters (${JSON.stringify(protectedTools.pythonRuntimes)}); use these entrypoints or their recorded direct executable paths instead of absolute framework launcher wrappers. Ordinary fork/exec subprocesses remain available. Choose methods and tools yourself. Codemode store/load is scoped to this execution workspace. Unavailable tools: ${JSON.stringify(protectedTools.unavailableTools)}.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } : restrictedMemberPack ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['mcp'],

@@ -162,6 +162,15 @@ try:
             'decisionPurpose': '确定首批会员留存与活跃用途',
             'sourceRefs': [mat_ref],
             'recommendations': [{
+                'purposeKey': 'store-repurchase-90d',
+                'title': '星桥与柳岸直营店 90 天门店复购率',
+                'priorityReason': '直营门店核心复购议题',
+                'deliverableNow': '星桥、柳岸两店受限计算试算',
+                'minimumEvidence': '会员有效购买制度 v1',
+                'ownerRole': '会员运营负责人',
+                'completionCriteria': '经独立分析任务核对样本重算并通过',
+                'selected': False,
+            }, {
                 'purposeKey': 'monthly-purchase-active',
                 'title': '自然月购买活跃率',
                 'priorityReason': '区分购买活跃与活动签到',
@@ -276,13 +285,27 @@ try:
         page.get_by_label('当前企业').select_option(eid)
         page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
 
-        # R3.1: Verify Panorama recommendation selection checkbox + "按此建议携带原范围续建" carries exact panorama scope into a 3rd purpose and switches directly to 建设草案!
-        page.get_by_text('自然月购买活跃率').first.wait_for(timeout=10_000)
-        page.get_by_role('checkbox', name='自然月购买活跃率').click()
-        page.get_by_text('已将建议「monthly-purchase-active」选入本轮建设范围。').wait_for(timeout=10_000)
-        page.get_by_role('button', name='按此建议携带原范围续建').click()
-        page.get_by_text('已按全景建议「自然月购买活跃率」携带原范围（织屿主品牌 · 直营门店 · 2026-H1 · 截止 2026-06-30）建好/复用用途草案。').wait_for(timeout=10_000)
-        page.get_by_role('button', name='建设草案 (1 条 / 3 用途)').wait_for(timeout=10_000)
+        # R3.1 (Round-4): Continuing an EXISTING purpose from Panorama recommendation MUST NOT create a duplicate draft
+        # and MUST preserve original stores, 90d window, tier, and dependencies while handing off to the Studio construction session!
+        page.get_by_text('星桥与柳岸直营店 90 天门店复购率').first.wait_for(timeout=10_000)
+        page.get_by_role('checkbox', name='星桥与柳岸直营店 90 天门店复购率').click()
+        page.get_by_text('已将建议「store-repurchase-90d」选入本轮建设范围。').wait_for(timeout=10_000)
+        page.get_by_role('button', name='按此建议携带原范围续建').first.click()
+        # Verify handoff into Studio construction view/session completed and backend pack kept exact 2 purposes with stores/90d/deps intact!
+        page.wait_for_timeout(800)
+        pack_after_cont = api(f'/api/studio/enterprise-packs/{pack_id}')['pack']
+        assert len(pack_after_cont['purposes']) == 2, f"Expected 2 purposes without duplicate, got {len(pack_after_cont['purposes'])}"
+        p90 = [p for p in pack_after_cont['purposes'] if p['purposeKey'] == 'store-repurchase-90d'][0]
+        assert p90['windowDays'] == 90, f"Expected windowDays=90 preserved, got {p90.get('windowDays')}"
+        assert p90['scope'].get('stores') == ['星桥直营店', '柳岸直营店'], f"Expected stores preserved, got {p90['scope']}"
+        assert p90['tier'] == 'limited-calculation', f"Expected tier preserved, got {p90['tier']}"
+        assert len(p90['dependencies']) == 1, f"Expected dependencies preserved, got {p90['dependencies']}"
+
+        # Verify handoff into Studio construction view (建设与演进) and return via top workbench 覆盖与缺口 -> 建设草案 (1 条 / 2 用途)
+        page.get_by_role('region', name='资料、资产与建设记录').wait_for(timeout=10_000)
+        page.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
+        page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
+        page.get_by_role('button', name='建设草案 (1 条 / 2 用途)').click()
         page.get_by_text('直营门店90天复购率（两店试算版）').first.wait_for(timeout=10_000)
 
         # R3.2: Verify dual-route draft provenance (Route 1 enterprise source + Route 2 reference link) & clickable "查看参考原段" excerpt drawer!
@@ -326,7 +349,7 @@ try:
         page.get_by_label('允许读取的 020_clean 路径（顿号或逗号分隔）').fill('020_clean/starbridge_orders.csv')
         page.get_by_role('button', name='保存资源授权').click()
         page.get_by_text('原权责项目').first.wait_for(timeout=10_000)
-        page.get_by_text('门店：星桥直营店').wait_for(timeout=10_000)
+        page.get_by_role('cell', name='门店：星桥直营店 · 路径：020_clean/starbridge_orders.csv').wait_for(timeout=10_000)
         page.get_by_role('button', name='撤回授权').first.click()
         page.get_by_text('已撤回').first.wait_for(timeout=10_000)
 
@@ -334,7 +357,7 @@ try:
 
     if errors:
         raise RuntimeError(f'Browser page errors observed: {errors}')
-    print('BROWSER_MEMBER_PACK_E2E: PASS (Round-3: Settings T03 SHA-256 + Dedupe + Drawer -> Panorama Recommendation Checkbox & Scope Continuation -> Dual-Route Entry Provenance & Reference Excerpt Drawer -> Explicit Decision/Decider -> Preview -> Real Authority Confirm [Nonexistent SAP=failed/suspended + Read-Only Reconcile Stays Failed; Real Enterprise Material=succeeded/eligible] -> Authentic Owner Grantor Create/Revoke, 0 page errors)')
+    print('BROWSER_MEMBER_PACK_E2E: PASS (Round-4: Settings T03 SHA-256 + Dedupe + Drawer -> Panorama Recommendation Continuation Reusing Existing 90d Store Purpose Without Duplicating + Studio Construction Session Handoff -> Dual-Route Entry Provenance & Reference Excerpt Drawer -> Explicit Decision/Decider -> Preview -> Real Authority Confirm [Nonexistent SAP=failed/suspended + Read-Only Reconcile Stays Failed; Real Enterprise Material=succeeded/eligible] -> Authentic Owner Grantor Create/Revoke, 0 page errors)')
 finally:
     if proc is not None and proc.poll() is None:
         proc.terminate()

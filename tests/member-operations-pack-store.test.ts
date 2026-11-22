@@ -593,16 +593,29 @@ test('EnterprisePackStore handles panorama, two-route single-decision entries, c
     assert.equal(confirmRetry.manifestSha256, confirm1.manifestSha256);
     assert.equal(store.get(pack1.id).packRevisions.length, 1);
 
-    // Reconcile P-032 as succeeded -> original unknown receipt preserved + new reconciled receipt appended, calc purposes become eligible!
+    // Reconcile P-032 without original authority operation evidence MUST keep status unknown & purposes suspended!
+    const reconciledNoEvidence = store.reconcileModuleReceipt(pack1.id, '1.0', {
+      requestId: 'P-032',
+      authority: 'sap-metric',
+      targetRef: sapM5,
+      status: 'succeeded',
+      detail: '缺少原操作凭据的伪核对',
+      purposeIds: [pFirst.purpose.id, pLimited.purpose.id],
+    });
+    assert.equal(reconciledNoEvidence.moduleReceipts.at(-1)!.status, 'unknown');
+    assert.equal(reconciledNoEvidence.purposeManifests.find(p => p.purposeId === pFirst.purpose.id)!.status, 'suspended');
+
+    // Reconcile P-032 WITH verified authorityPublishedBy -> original unknown receipt preserved + new reconciled receipt appended, calc purposes become eligible!
     const reconciled = store.reconcileModuleReceipt(pack1.id, '1.0', {
       requestId: 'P-032',
       authority: 'sap-metric',
       targetRef: sapM5,
       status: 'succeeded',
       detail: '核对原请求 P-032 目标指纹一致，证实已成功',
+      authorityPublishedBy: `企业会员包:${pack1.packCode}:${preview.id}`,
       purposeIds: [pFirst.purpose.id, pLimited.purpose.id],
     });
-    assert.equal(reconciled.moduleReceipts.filter(r => r.requestId === 'P-032').length, 2);
+    assert.equal(reconciled.moduleReceipts.filter(r => r.requestId === 'P-032').length, 3);
     assert.equal(reconciled.purposeManifests.find(p => p.purposeId === pFirst.purpose.id)!.status, 'eligible');
     assert.equal(reconciled.purposeManifests.find(p => p.purposeId === pLimited.purpose.id)!.status, 'eligible');
 
@@ -1065,6 +1078,7 @@ test('Round-3 counterexamples: selective republication carries over unchanged el
       targetRef: sapV1,
       status: 'succeeded',
       detail: '原请求核对已提交',
+      authorityPublishedBy: `企业会员包:${pack.packCode}:${prev11.id}`,
       purposeIds: [calcP.purpose.id],
     });
     assert.equal(rec11.purposeManifests.find(p => p.purposeId === calcP.purpose.id)!.status, 'eligible', 'Historical reconcile MUST use frozen v1.1 snapshot, NOT live mutated draft!');
@@ -1238,6 +1252,192 @@ test('Round-3 counterexamples: selective republication carries over unchanged el
     assert.equal(closed.feedback.revisionLink?.toPackVersion, '1.2');
     assert.equal(closed.feedback.revisionLink?.authorityUpdates.length, 1);
     assert.equal(closed.feedback.revisionLink?.authorityUpdates[0]?.toRef.version, '1.1.0');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Round-4 counterexamples: unique version & previousVersion enforcement across two v1.0 previews, omitted allowedDataPaths denied, continuation upsert preserves stores/window/deps, and unrelated asset cannot close refund feedback', () => {
+  const root = tempRoot('round4-counterexamples');
+  try {
+    const store = new EnterprisePackStore(root);
+    const grants = new ResourceGrantStore(root);
+    const enterpriseId = '11111111-1111-4111-8111-111111111111';
+    const systemId = '22222222-2222-4222-8222-222222222222';
+    const projA = '33333333-3333-4333-8333-333333333333';
+    const taskA = '44444444-4444-4444-8444-444444444444';
+    const taskB = '55555555-5555-4555-8555-555555555555';
+
+    // R2: Detail grant WITHOUT allowedDataPaths MUST deny any queried dataPath (never silently allow!)
+    grants.grant({
+      enterpriseId,
+      grantor: '原权责项目',
+      grantBasis: '仅给门店未给路径白名单反例',
+      subjectType: 'project',
+      subjectId: projA,
+      resourceKind: 'detail',
+      purposeKeys: ['store-first-purchase-30d-repurchase'],
+      operations: ['read-detail-recalculate'],
+      scope: { brand: '岚线', stores: ['星桥直营店'], periodFrom: '2026-09-01', periodTo: '2026-10-31' },
+    });
+    const noPathsCheck = evaluateResourceAccess(grants.listForSubject(enterpriseId, projA), {
+      operation: 'read-detail-recalculate',
+      purposeKey: 'store-first-purchase-30d-repurchase',
+      stores: ['星桥直营店'],
+      dataPath: '020_clean/willowbank_orders.csv',
+    });
+    assert.equal(noPathsCheck.allowed, false);
+    assert.equal(noPathsCheck.restrictionReason, 'detail_data_path_not_authorized');
+
+    const pack = store.ensurePack({ enterpriseId, systemId, domain: 'member-operations', name: 'Round-4 校验包' });
+    const refundV1 = { authority: 'sap-method' as const, id: 'refund-method', version: '1', sha256: sha('refund-v1'), title: '退款映射 v1' };
+    const checkinV1 = { authority: 'sap-method' as const, id: 'checkin-method', version: '1', sha256: sha('checkin-v1'), title: '签到口径 v1' };
+
+    const pMain = store.upsertPurpose(pack.id, {
+      purposeKey: 'store-first-purchase-30d-repurchase',
+      title: '门店首购后 30 日有效复购率',
+      businessQuestion: '衡量星桥 30 日有效复购',
+      subjectUnit: 'brand_account',
+      windowDays: 30,
+      scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店'], period: '2026-09', scopeKey: 'lanxian:star:30d' },
+      tier: 'formal-calculation',
+      businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass' },
+      originalGoal: '衡量星桥 30 日有效复购',
+      completionCriteria: '分子分母可核',
+      observationWindowDays: 30,
+      availableHistoryDays: 60,
+      dependencies: [{ id: 'dep-ref', role: 'shared-asset', authority: 'sap-method', ref: refundV1, requiredFor: ['formal-calculation'] }],
+      dataCutoffAt: '2026-10-31',
+    });
+
+    // R3: Continuation upsert from panorama omitting windowDays & stores MUST reuse pMain and preserve stores/windowDays/tier/dependencies!
+    const pContinued = store.upsertPurpose(pack.id, {
+      purposeKey: 'store-first-purchase-30d-repurchase',
+      title: '门店首购后 30 日有效复购率',
+      businessQuestion: '从全景续建同一用途',
+      subjectUnit: 'brand_account',
+      scope: { brand: '岚线', channel: '直营', period: '2026-09', scopeKey: 'lanxian:direct:2026-09:store-first-purchase-30d-repurchase' },
+      tier: 'definition-reference',
+      businessStatus: 'active',
+      originalGoal: '全景续建',
+      completionCriteria: '分子分母可核',
+      dependencies: [],
+    });
+    assert.equal(pContinued.created, false, 'Continuation upsert MUST reuse existing purpose instead of duplicating!');
+    assert.equal(pContinued.purpose.id, pMain.purpose.id);
+    assert.equal(pContinued.purpose.windowDays, 30);
+    assert.deepEqual(pContinued.purpose.scope.stores, ['星桥直营店']);
+    assert.equal(pContinued.purpose.tier, 'formal-calculation');
+    assert.equal(pContinued.purpose.dependencies.length, 1);
+
+    // R1: Two previews prepared for the SAME version '1.0' with different cutoffs/summaries -> ONLY the first may confirm!
+    const preview1a = store.preparePreview(pack.id, {
+      version: '1.0',
+      purposeIds: [pMain.purpose.id],
+      dataCutoffAt: '2026-10-31',
+      summary: 'v1.0 首份预览',
+    });
+    const preview1b = store.preparePreview(pack.id, {
+      version: '1.0',
+      purposeIds: [pMain.purpose.id],
+      dataCutoffAt: '2026-11-15',
+      summary: 'v1.0 冲突第二份预览',
+    });
+    store.confirmPreview(pack.id, {
+      previewId: preview1a.id,
+      fingerprint: preview1a.fingerprint,
+      moduleReceipts: [{ requestId: 'R4-1', authority: 'shared-asset', targetRef: refundV1, status: 'succeeded', detail: 'ok', purposeIds: [pMain.purpose.id] }],
+    });
+    // Confirming the second v1.0 preview MUST fail with enterprise_pack_version_exists!
+    assert.throws(() => store.validateConfirmPreconditions(pack.id, preview1b.id, preview1b.fingerprint), /enterprise_pack_version_exists/);
+    assert.throws(() => store.confirmPreview(pack.id, {
+      previewId: preview1b.id,
+      fingerprint: preview1b.fingerprint,
+      moduleReceipts: [{ requestId: 'R4-2', authority: 'shared-asset', targetRef: refundV1, status: 'succeeded', detail: 'ok', purposeIds: [pMain.purpose.id] }],
+    }), /enterprise_pack_version_exists/);
+    // Preparing another v1.0 preview OR wrong previousVersion MUST fail!
+    assert.throws(() => store.preparePreview(pack.id, { version: '1.0', purposeIds: [pMain.purpose.id], summary: '重复 v1.0' }), /enterprise_pack_version_exists/);
+    assert.throws(() => store.preparePreview(pack.id, { version: '1.1', previousVersion: '0.9', purposeIds: [pMain.purpose.id], summary: '错前驱版' }), /enterprise_pack_previous_version_mismatch/);
+
+    // R5: Unrelated check-in method on a separate purpose in v1.1 MUST NEVER close refund feedback!
+    const pCheckin = store.upsertPurpose(pack.id, {
+      purposeKey: 'store-checkin-definition',
+      title: '门店签到口径',
+      businessQuestion: '签到定义',
+      subjectUnit: 'brand_account',
+      scope: { scopeKey: 'lanxian:checkin' },
+      tier: 'definition-reference',
+      businessStatus: 'active',
+      originalGoal: '签到定义',
+      completionCriteria: '可读',
+      dependencies: [{ id: 'dep-checkin', role: 'sap-method', authority: 'sap-method', ref: checkinV1, requiredFor: ['definition-reference'] }],
+    });
+    const prev11 = store.preparePreview(pack.id, { version: '1.1', previousVersion: '1.0', purposeIds: [pCheckin.purpose.id], summary: '仅增签到口径，未改退款规则' });
+    store.confirmPreview(pack.id, {
+      previewId: prev11.id,
+      fingerprint: prev11.fingerprint,
+      moduleReceipts: [{ requestId: 'R4-3', authority: 'sap-method', targetRef: checkinV1, status: 'succeeded', detail: 'ok', purposeIds: [pCheckin.purpose.id] }],
+    });
+
+    const repA = { authority: 'task' as const, id: taskA, projectId: projA, taskId: taskA, version: sha('rep-a'), sha256: sha('rep-a'), locator: '060_reports/a.json' };
+    const fbRefund = store.submitFeedback(pack.id, {
+      problemKey: 'refund-missing-orig-order',
+      packVersion: '1.0',
+      purposeIds: [pMain.purpose.id],
+      title: '跨月退款未连原单',
+      category: 'shared_refund_mapping',
+      targetAssetRef: refundV1,
+      report: { projectId: projA, taskId: taskA, sessionId: 'sA', messageId: 'mA', reportRef: repA, adoptionBasis: 'verified_actual_read', usedPackVersion: '1.0', usedAssetRefs: [refundV1], evidenceNote: '退款未冲销' },
+    }).feedback;
+
+    const repB = { authority: 'task' as const, id: taskB, projectId: projA, taskId: taskB, version: sha('rep-b'), sha256: sha('rep-b'), locator: '060_reports/b.json' };
+    const useCheckin = store.recordUse(pack.id, {
+      projectId: projA,
+      taskId: taskB,
+      reportRef: repB,
+      packVersion: '1.1',
+      purposeId: pCheckin.purpose.id,
+      purposeKey: pCheckin.purpose.purposeKey,
+      tier: 'definition-reference',
+      accessLevel: 'definition',
+      catalogSupplied: { packVersion: '1.1', purposeIds: [pCheckin.purpose.id], assetRefs: [checkinV1], suppliedAt: new Date().toISOString() },
+      actualReads: [{ ref: checkinV1, sha256: checkinV1.sha256, complete: true, readAt: new Date().toISOString() }],
+      authorDeclaration: { declaredPurposeId: pCheckin.purpose.id, declaredRefs: [checkinV1], summaryText: '只读了签到方法', declaredAt: new Date().toISOString() },
+    });
+    store.verifyUse(pack.id, useCheckin.id, { verifierRole: '复核员', expectedRef: checkinV1, independentConfirmed: true, verdictDetail: '签到阅读通过' });
+
+    // Attempting to close refund feedback using useCheckin + checkinV1 MUST throw!
+    assert.throws(() => store.handleFeedback(pack.id, fbRefund.id, {
+      status: 'verified',
+      note: '试图用无关签到用途闭环退款反馈',
+      verifiedByUseId: useCheckin.id,
+      revisedRef: checkinV1,
+      revisedPackVersion: '1.1',
+    }), /feedback_verification_purpose_mismatch/);
+
+    // Even if a use was recorded under pMain on v1.1 with checkinV1 as revisedRef, asset identity mismatch MUST throw!
+    const useMainFake = store.recordUse(pack.id, {
+      projectId: projA,
+      taskId: taskB,
+      reportRef: repB,
+      packVersion: '1.1',
+      purposeId: pMain.purpose.id,
+      purposeKey: pMain.purpose.purposeKey,
+      tier: 'formal-calculation',
+      accessLevel: 'recalculate',
+      catalogSupplied: { packVersion: '1.1', purposeIds: [pMain.purpose.id], assetRefs: [refundV1], suppliedAt: new Date().toISOString() },
+      actualReads: [{ ref: refundV1, sha256: refundV1.sha256, complete: true, readAt: new Date().toISOString() }, { ref: checkinV1, sha256: checkinV1.sha256, complete: true, readAt: new Date().toISOString() }],
+      authorDeclaration: { declaredPurposeId: pMain.purpose.id, declaredRefs: [refundV1], summaryText: '试图混用', declaredAt: new Date().toISOString() },
+    });
+    store.verifyUse(pack.id, useMainFake.id, { verifierRole: '复核员', expectedRef: refundV1, independentConfirmed: true, verdictDetail: 'ok' });
+    assert.throws(() => store.handleFeedback(pack.id, fbRefund.id, {
+      status: 'verified',
+      note: '试图用签到方法冒充退款修订',
+      verifiedByUseId: useMainFake.id,
+      revisedRef: checkinV1,
+      revisedPackVersion: '1.1',
+    }), /feedback_verification_asset_identity_mismatch/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

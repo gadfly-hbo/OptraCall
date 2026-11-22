@@ -906,3 +906,163 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrelated Studio system in same enterprise cannot grant/revoke another pack, detail grant omitting allowedDataPaths stays deny-detail, and redacted pack strips moduleReceipts/decisionsSnapshot', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'optracall-member-pack-host-r4-'));
+  const srv = await startTestHost(root);
+  try {
+    const ent = await srv.req('/api/studio/enterprises', 'POST', { requestId: randomUUID(), name: 'Round-4 隔离测试企业' });
+    assert.equal(ent.status, 201);
+    const enterpriseId = ent.json.id;
+
+    const cfg = await srv.req('/api/configuration', 'PUT', {
+      name: 'Member Pack R4 Synthetic',
+      provider: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:1/v1',
+      model: 'synthetic-member-pack',
+      apiKey: 'synthetic-only',
+    });
+    assert.equal(cfg.status, 200);
+
+    const createProj = async (name: string) => {
+      const p = await srv.req('/api/projects', 'POST', { name });
+      assert.equal(p.status, 201);
+      assert.equal((await srv.req('/api/studio/enterprise-associations', 'POST', {
+        requestId: randomUUID(), kind: 'project', entityId: p.json.project.id, enterpriseId,
+      })).status, 200);
+      return p.json.project;
+    };
+
+    const projOwner1 = await createProj('会员体系主项目');
+    const projOwner2 = await createProj('同企业无关第二体系项目');
+    const projConsumer = await createProj('分析消费项目');
+    fs.writeFileSync(path.join(projConsumer.rootPath, '020_clean', 'secret_store.csv'), 'account,amt\nS1,100\n');
+
+    const sys1 = await srv.req('/api/studio/systems', 'POST', {
+      requestId: randomUUID(), enterpriseId, name: '会员体系一', projectId: projOwner1.id, goal: '建设会员包', topicTitle: '会员',
+    });
+    assert.equal(sys1.status, 201);
+    const sys2 = await srv.req('/api/studio/systems', 'POST', {
+      requestId: randomUUID(), enterpriseId, name: '财务无关体系二', projectId: projOwner2.id, goal: '无关体系', topicTitle: '财务',
+    });
+    assert.equal(sys2.status, 201);
+
+    const mat = await srv.req('/api/enterprise-materials', 'POST', { title: '有效购买口径 R4', body: '有效购买口径正文' });
+    assert.equal(mat.status, 201);
+    const matEnabled = await srv.req(`/api/enterprise-materials/${mat.json.material.id}/enable`, 'POST', { expectedVersion: mat.json.material.version });
+    assert.equal(matEnabled.status, 200);
+    assert.equal((await srv.req('/api/studio/enterprise-associations', 'POST', {
+      requestId: randomUUID(), kind: 'asset', authority: 'enterprise', entityId: mat.json.material.id, enterpriseId,
+    })).status, 200);
+    const matRef = {
+      authority: 'enterprise' as const,
+      id: mat.json.material.id,
+      version: matEnabled.json.material.revisions[0].revisionId,
+      sha256: matEnabled.json.material.revisions[0].bodySha256,
+      locator: matEnabled.json.storeId,
+      title: '有效购买口径 R4',
+    };
+
+    const packRes = await srv.req('/api/studio/enterprise-packs', 'POST', {
+      requestId: randomUUID(), enterpriseId, systemId: sys1.json.system.id, domain: 'member-operations', name: '会员包 R4',
+    });
+    assert.equal(packRes.status, 200);
+    const packId = packRes.json.pack.id;
+
+    const pRes = await srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
+      requestId: randomUUID(),
+      projectId: projOwner1.id,
+      purposeKey: 'r4-member-def',
+      title: 'R4 会员口径定义',
+      businessQuestion: '定义有效购买',
+      subjectUnit: 'brand_account',
+      scope: { brand: '岚线', channel: '直营', scopeKey: 'r4:def' },
+      tier: 'definition-reference',
+      businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass' },
+      originalGoal: '发布口径',
+      completionCriteria: '可读',
+      dependencies: [{ id: 'dep-r4', role: 'member-rule', authority: 'enterprise', ref: matRef, requiredFor: ['definition-reference'] }],
+    });
+    assert.equal(pRes.status, 200);
+    const purposeId = pRes.json.purpose.id;
+
+    // 1. R1: Prepare TWO different v1.0 previews with different dataCutoffAt and summary -> first confirms, second MUST return 409 enterprise_pack_version_exists!
+    const prevA = await srv.req(`/api/studio/enterprise-packs/${packId}/previews`, 'POST', {
+      requestId: randomUUID(), projectId: projOwner1.id, version: '1.0', purposeIds: [purposeId], dataCutoffAt: '2026-10-31', summary: 'v1.0 首份预览',
+    });
+    assert.equal(prevA.status, 200);
+    const prevB = await srv.req(`/api/studio/enterprise-packs/${packId}/previews`, 'POST', {
+      requestId: randomUUID(), projectId: projOwner1.id, version: '1.0', purposeIds: [purposeId], dataCutoffAt: '2026-11-30', summary: 'v1.0 另一截止日预览',
+    });
+    assert.equal(prevB.status, 200);
+    const confirmA = await srv.req(`/api/studio/enterprise-packs/${packId}/confirm`, 'POST', {
+      requestId: randomUUID(), projectId: projOwner1.id, previewId: prevA.json.preview.id, fingerprint: prevA.json.preview.fingerprint,
+    });
+    assert.equal(confirmA.status, 200);
+    const confirmB = await srv.req(`/api/studio/enterprise-packs/${packId}/confirm`, 'POST', {
+      requestId: randomUUID(), projectId: projOwner1.id, previewId: prevB.json.preview.id, fingerprint: prevB.json.preview.fingerprint,
+    });
+    assert.equal(confirmB.status, 409);
+    assert.equal(confirmB.json.code, 'enterprise_pack_version_exists');
+    const packAfterDouble = await srv.req(`/api/studio/enterprise-packs/${packId}`);
+    assert.equal(packAfterDouble.json.pack.packRevisions.length, 1, 'Fixed version 1.0 MUST have strictly ONE published revision!');
+
+    // 2. R2: Unrelated Studio system owner in the SAME enterprise (projOwner2 / sys2) MUST NOT be able to grant on packId!
+    const wrongSystemGrant = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(),
+      enterpriseId,
+      packId,
+      grantorProjectId: projOwner2.id,
+      grantBasis: '无关第二体系越权授权反例',
+      subjectType: 'project',
+      subjectId: projConsumer.id,
+      resourceKind: 'definition',
+      purposeKeys: ['r4-member-def'],
+      operations: ['read-definition'],
+      scope: { brand: '岚线' },
+    });
+    assert.equal(wrongSystemGrant.status, 403);
+    assert.equal(wrongSystemGrant.json.code, 'resource_grantor_not_authorized');
+
+    // Legitimate owner projOwner1 grants detail WITHOUT allowedDataPaths -> projConsumer MUST still be denied reading 020_clean/secret_store.csv!
+    const noPathsGrant = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(),
+      enterpriseId,
+      packId,
+      grantorProjectId: projOwner1.id,
+      grantBasis: '仅给门店未给 allowedDataPaths 反例',
+      subjectType: 'project',
+      subjectId: projConsumer.id,
+      resourceKind: 'detail',
+      purposeKeys: ['r4-member-def'],
+      operations: ['read-detail-recalculate'],
+      scope: { brand: '岚线', stores: ['星桥直营店'], periodFrom: '2026-09-01', periodTo: '2026-10-31' },
+    });
+    assert.equal(noPathsGrant.status, 200);
+    const consumerMats = await srv.req(`/api/studio/materials?projectId=${projConsumer.id}`);
+    assert.equal(consumerMats.status, 200);
+    assert.equal(
+      consumerMats.json.materials.filter((m: any) => m.ref.authority === 'data').length,
+      0,
+      'Omitting allowedDataPaths on a detail grant MUST NEVER unlock project 020_clean files!',
+    );
+
+    // Unrelated Studio system owner projOwner2 MUST NOT be able to revoke projOwner1's grant!
+    const wrongRevoke = await srv.req(`/api/studio/resource-grants/${noPathsGrant.json.grant.id}/revoke`, 'POST', {
+      requestId: randomUUID(),
+      revokerProjectId: projOwner2.id,
+      reason: '无关体系越权撤回反例',
+    });
+    assert.equal(wrongRevoke.status, 403);
+    assert.equal(wrongRevoke.json.code, 'resource_revoker_not_authorized');
+
+    // 3. R2: Consumer projection strips decisionsSnapshot and unauthorized receipts
+    const consumerPackView = await srv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projConsumer.id}`);
+    assert.equal(consumerPackView.status, 200);
+    assert.deepEqual(consumerPackView.json.pack.packRevisions[0]?.decisionsSnapshot ?? [], []);
+  } finally {
+    try { await srv.close(); } catch {}
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

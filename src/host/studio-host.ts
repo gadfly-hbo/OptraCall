@@ -140,11 +140,13 @@ export function createStudioFeature(options: StudioHostOptions) {
           return { status: 'failed', detail: `原 SAP 指标 ${ref.id}@${ref.version} 摘要不符（期望 ${ref.sha256.slice(0, 12)}，实际 ${known.entry.bytesSha256.slice(0, 12)}）` };
         }
         // Distinguish whether THIS original request published the target vs an unrelated external operation!
-        if (originalReceipt?.status === 'unknown' && originalReceipt.authorityPublishedBy) {
-          if (known.entry.publishedBy !== originalReceipt.authorityPublishedBy) {
+        if (originalReceipt?.status === 'unknown') {
+          if (!originalReceipt.authorityPublishedBy || known.entry.publishedBy !== originalReceipt.authorityPublishedBy) {
             return {
               status: 'unknown',
-              detail: `原请求 ${originalReceipt.requestId} 未查到对应发布回执；原 SAP 库现存版本由其他操作（${known.entry.publishedBy}）发布，未将该独立操作记为原请求成功，请重新发起预览确认`,
+              detail: !originalReceipt.authorityPublishedBy
+                ? `原请求 ${originalReceipt.requestId} 缺少原权威操作凭据，无法将现存版本（${known.entry.publishedBy}）核定为原请求成功，保持 UNKNOWN`
+                : `原请求 ${originalReceipt.requestId} 未查到对应发布回执；原 SAP 库现存版本由其他操作（${known.entry.publishedBy}）发布，未将该独立操作记为原请求成功，请重新发起预览确认`,
               authorityPublishedBy: known.entry.publishedBy,
             };
           }
@@ -161,16 +163,24 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (ref.sha256 && published.version.contentSha256 !== ref.sha256) {
           return { status: 'failed', detail: `原 SAP 方法 ${ref.id}@${ref.version} 摘要不符` };
         }
-        if (originalReceipt?.status === 'unknown' && originalReceipt.authorityOperationId) {
-          const opState = methods.operation(originalReceipt.authorityOperationId);
-          if (!opState || opState.status !== 'committed') {
+        if (originalReceipt?.status === 'unknown') {
+          const opState = originalReceipt.authorityOperationId
+            ? methods.operation(originalReceipt.authorityOperationId)
+            : undefined;
+          if (!originalReceipt.authorityOperationId || !opState || opState.status !== 'committed') {
             return {
               status: 'unknown',
-              detail: `原请求 ${originalReceipt.requestId}（操作 ${originalReceipt.authorityOperationId}）在原 SAP 方法库中无对应已提交回执；现存发布版来自其他操作，未记为原请求成功，请重新发起预览确认`,
+              detail: !originalReceipt.authorityOperationId
+                ? `原请求 ${originalReceipt.requestId} 缺少原 SAP 方法操作凭据，无法将现存发布版核定为原请求成功，保持 UNKNOWN`
+                : `原请求 ${originalReceipt.requestId}（操作 ${originalReceipt.authorityOperationId}）在原 SAP 方法库中无对应已提交回执；现存发布版来自其他操作，未记为原请求成功，请重新发起预览确认`,
             };
           }
         }
-        return { status: 'succeeded', detail: `原 SAP 方法库已核验准确发布版 ${ref.id}@${ref.version}` };
+        return {
+          status: 'succeeded',
+          detail: `原 SAP 方法库已核验准确发布版 ${ref.id}@${ref.version}`,
+          ...(originalReceipt?.authorityOperationId ? { authorityOperationId: originalReceipt.authorityOperationId } : {}),
+        };
       }
       if (ref.authority === 'studio-source') {
         const targetSystem = store.get(ref.locator ? uuid(ref.locator) : pack.systemId);
@@ -184,14 +194,23 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (ref.sha256 && revision.sha256 !== ref.sha256) return { status: 'failed', detail: `原 Studio 资产 ${ref.id}@${ref.version} 摘要不符` };
         if (asset.issue?.affectedRevision === revNum) return { status: 'failed', detail: `原 Studio 资产 ${ref.id}@${ref.version} 已标确错，不可发布` };
         if (asset.formalRevision !== revNum) return { status: 'unknown', detail: `原 Studio 资产 ${ref.id}@${ref.version} 尚未正式发布（当前正式版 ${asset.formalRevision ?? '无'}）` };
-        if (originalReceipt?.status === 'unknown' && originalReceipt.authorityOperationId) {
-          const matchedPub = targetSystem.publications.find(p => p.preview.id === originalReceipt.authorityOperationId && p.preview.confirmedAt);
-          if (!matchedPub) {
+        if (originalReceipt?.status === 'unknown') {
+          const matchedPub = originalReceipt.authorityOperationId
+            ? targetSystem.publications.find(p => p.preview.id === originalReceipt.authorityOperationId && p.preview.confirmedAt)
+            : undefined;
+          if (!originalReceipt.authorityOperationId || !matchedPub) {
             return {
               status: 'unknown',
-              detail: `原请求 ${originalReceipt.requestId} 未在原 Studio 查到对应确认发布记录；现存正式版来自其他操作，未记为原请求成功`,
+              detail: !originalReceipt.authorityOperationId
+                ? `原请求 ${originalReceipt.requestId} 缺少原 Studio 确认发布操作凭据，保持 UNKNOWN`
+                : `原请求 ${originalReceipt.requestId} 未在原 Studio 查到对应确认发布记录；现存正式版来自其他操作，未记为原请求成功`,
             };
           }
+          return {
+            status: 'succeeded',
+            detail: `原 Studio 已核验准确正式版 ${ref.id}@${ref.version}`,
+            authorityOperationId: matchedPub.preview.id,
+          };
         }
         return { status: 'succeeded', detail: `原 Studio 已核验准确正式版 ${ref.id}@${ref.version}` };
       }
@@ -204,6 +223,12 @@ export function createStudioFeature(options: StudioHostOptions) {
         const revSha = rev.bodySha256 || createHash('sha256').update(rev.body ?? '').digest('hex');
         if (ref.sha256 && ref.sha256 !== revSha) {
           return { status: 'failed', detail: `企业资料 ${ref.id}@${ref.version} 摘要不符` };
+        }
+        if (originalReceipt?.status === 'unknown' && !originalReceipt.authorityOperationId && !originalReceipt.authorityPublishedBy) {
+          return {
+            status: 'unknown',
+            detail: `原请求 ${originalReceipt.requestId} 缺少原权威操作凭据，保持 UNKNOWN`,
+          };
         }
         return { status: 'succeeded', detail: `企业资料库已核验启用版 ${ref.id}@${ref.version}` };
       }
@@ -314,6 +339,43 @@ export function createStudioFeature(options: StudioHostOptions) {
     }
   }
 
+  function resolveAssetAuthorityOwner(
+    enterpriseId: string,
+    authority: 'studio-source' | 'enterprise' | 'sap-metric',
+    assetId: string,
+    explicitSystem?: StudioSystem,
+  ): { ownerProjectId?: string; ownerSystemId?: string } {
+    let targetSystem = explicitSystem;
+    if (!targetSystem) {
+      const enterpriseSystems = store.list().filter(s => s.enterpriseId === enterpriseId);
+      targetSystem = enterpriseSystems.find(s =>
+        s.materials.some(m => m.ref.authority === authority && m.ref.id === assetId)
+        || s.assetRefs.some(r => r.authority === authority && r.id === assetId)
+        || s.publications.some(p => p.preview.refs.some(r => r.authority === authority && r.id === assetId))
+        || s.assets.some(a => a.revisions.some(rev => [...rev.sources, ...rev.dependencies].some(r => r.authority === authority && r.id === assetId))),
+      );
+      if (!targetSystem) {
+        const packWithDep = memberPack.packs.list(enterpriseId).find(p =>
+          p.purposes.some(pur => pur.dependencies.some(d => d.ref.authority === authority && d.ref.id === assetId))
+          || p.entries.some(e => (e.authorityRef?.authority === authority && e.authorityRef.id === assetId) || e.enterpriseSourceRefs.some(r => r.authority === authority && r.id === assetId))
+          || p.panorama?.sourceRefs.some(r => r.authority === authority && r.id === assetId),
+        ) ?? memberPack.packs.list(enterpriseId)[0];
+        if (packWithDep) {
+          try { targetSystem = store.get(packWithDep.systemId); } catch { /* system not found */ }
+        }
+      }
+      if (!targetSystem && enterpriseSystems.length === 1) {
+        targetSystem = enterpriseSystems[0];
+      }
+    }
+    if (!targetSystem) return {};
+    const packForSys = memberPack.packs.list(enterpriseId).find(p => p.systemId === targetSystem!.id);
+    return {
+      ownerProjectId: packForSys?.activeOwnerProjectId ?? studioExecutionOwner(targetSystem).projectId,
+      ownerSystemId: targetSystem.id,
+    };
+  }
+
   async function verifySummaryAuthority(
     enterpriseId: string,
     scope: { summaryAssetId?: string; summaryVersion?: string; resourceRef?: StudioSourceRef; grain?: string; periodFrom?: string; periodTo?: string },
@@ -331,14 +393,14 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (asset.issue?.affectedRevision === revNum) throw new StudioError('summary_authority_restricted', 409);
         if (ref.sha256 && revision.sha256 !== ref.sha256) throw new StudioError('summary_authority_hash_mismatch', 409);
         const verifiedScopeSummary = assertSummaryScopeMatchesAsset(revision.body, revision.scope, scope);
+        const owner = resolveAssetAuthorityOwner(enterpriseId, 'studio-source', asset.id, system);
         return {
           summaryAssetId: asset.id,
           summaryVersion: String(revNum),
           summaryAuthority: `Studio·${system.name}`,
           summarySha256: revision.sha256,
           verifiedScopeSummary,
-          ownerProjectId: studioExecutionOwner(system).projectId,
-          ownerSystemId: system.id,
+          ...owner,
           resourceRef: { ...ref, sha256: revision.sha256 },
         };
       }
@@ -350,12 +412,14 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (!rev) throw new StudioError('summary_authority_not_found', 404);
         const revSha = rev.bodySha256 || createHash('sha256').update(rev.body ?? '').digest('hex');
         const verifiedScopeSummary = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
+        const owner = resolveAssetAuthorityOwner(enterpriseId, 'enterprise', mat.material.id);
         return {
           summaryAssetId: mat.material.id,
           summaryVersion: rev.revisionId,
           summaryAuthority: `企业资料库·${rev.title}`,
           summarySha256: revSha,
           verifiedScopeSummary,
+          ...owner,
           resourceRef: { ...ref, sha256: revSha, locator: mat.storeId },
         };
       }
@@ -364,12 +428,14 @@ export function createStudioFeature(options: StudioHostOptions) {
         const known = library.read(ref.id, ref.version);
         if (ref.sha256 && known.entry.bytesSha256 !== ref.sha256) throw new StudioError('summary_authority_hash_mismatch', 409);
         const verifiedScopeSummary = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
+        const owner = resolveAssetAuthorityOwner(enterpriseId, 'sap-metric', ref.id);
         return {
           summaryAssetId: ref.id,
           summaryVersion: ref.version,
           summaryAuthority: '原 SAP 指标库',
           summarySha256: known.entry.bytesSha256,
           verifiedScopeSummary,
+          ...owner,
           resourceRef: { ...ref, sha256: known.entry.bytesSha256 },
         };
       }
@@ -386,14 +452,14 @@ export function createStudioFeature(options: StudioHostOptions) {
       const rev = asset?.revisions.find(r => String(r.revision) === targetVer);
       if (asset && rev && asset.formalRevision === rev.revision && asset.issue?.affectedRevision !== rev.revision) {
         const verifiedScopeSummary = assertSummaryScopeMatchesAsset(rev.body, rev.scope, scope);
+        const owner = resolveAssetAuthorityOwner(enterpriseId, 'studio-source', asset.id, system);
         return {
           summaryAssetId: asset.id,
           summaryVersion: String(rev.revision),
           summaryAuthority: `Studio·${system.name}`,
           summarySha256: rev.sha256,
           verifiedScopeSummary,
-          ownerProjectId: studioExecutionOwner(system).projectId,
-          ownerSystemId: system.id,
+          ...owner,
           resourceRef: { authority: 'studio-source', id: asset.id, version: String(rev.revision), sha256: rev.sha256, projectId: system.projectId, locator: system.id, title: rev.title },
         };
       }
@@ -405,12 +471,14 @@ export function createStudioFeature(options: StudioHostOptions) {
       if (mat.material.enabled && rev) {
         const revSha = rev.bodySha256 || createHash('sha256').update(rev.body ?? '').digest('hex');
         const verifiedScopeSummary = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
+        const owner = resolveAssetAuthorityOwner(enterpriseId, 'enterprise', mat.material.id);
         return {
           summaryAssetId: mat.material.id,
           summaryVersion: rev.revisionId,
           summaryAuthority: `企业资料库·${rev.title}`,
           summarySha256: revSha,
           verifiedScopeSummary,
+          ...owner,
           resourceRef: { authority: 'enterprise', id: mat.material.id, version: rev.revisionId, sha256: revSha, locator: mat.storeId, title: rev.title },
         };
       }
@@ -421,12 +489,14 @@ export function createStudioFeature(options: StudioHostOptions) {
       await assertNativeEnterprise('sap-metric', targetId, enterpriseId);
       const known = library.read(targetId, targetVer);
       const verifiedScopeSummary = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
+      const owner = resolveAssetAuthorityOwner(enterpriseId, 'sap-metric', targetId);
       return {
         summaryAssetId: targetId,
         summaryVersion: targetVer,
         summaryAuthority: '原 SAP 指标库',
         summarySha256: known.entry.bytesSha256,
         verifiedScopeSummary,
+        ...owner,
         resourceRef: { authority: 'sap-metric', id: targetId, version: targetVer, sha256: known.entry.bytesSha256 },
       };
     } catch (error) {
@@ -933,6 +1003,8 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (action === 'declare-use') {
           const report = sourceRef(payload.report), refs = parseSources(payload.sources ?? []);
           if (report.projectId !== projectId || report.taskId && report.taskId !== taskId || !['data','task'].includes(report.authority)) throw new StudioError('studio_use_report_mismatch', 403);
+          const ownerProj = await options.projects.get(projectId);
+          memberPack.syncWorkspaceReportsToProject(projectId, taskId, ownerProj.rootPath);
           await sources.validate(report, projectId, id); await validateSources(refs, system, projectId, false);
           let graphSnapshotId: string | undefined;
           if (options.taskSnapshot) {
@@ -944,10 +1016,13 @@ export function createStudioFeature(options: StudioHostOptions) {
           return options.mutate(async () => { await assertCurrent(); return reply(action, { use: store.recordUse(id, { projectId, taskId, report, sources: refs, result: text(payload.result ?? '', 20_000), verification: 'not_assessed', ...(graphSnapshotId ? { graphSnapshotId } : {}) }), claim: 'author-declaration-not-professional-verification' }); });
         }
         if (action === 'assess-use') {
-          const use = system.uses.find(use => use.id === payload.useId && use.projectId === projectId && use.taskId === taskId);
+          const canIndependentAssess = isConstruction || Boolean(system.enterpriseId && enterpriseScopes.enterpriseIdForProject(projectId) === system.enterpriseId);
+          const use = system.uses.find(use => use.id === payload.useId && ((use.projectId === projectId && use.taskId === taskId) || canIndependentAssess));
           if (!use) throw new StudioError('studio_use_owner_mismatch', 403);
           const report = sourceRef(payload.report), refs = parseSources(payload.sources);
           if (report.authority !== 'task' || report.projectId !== projectId || report.taskId !== taskId || !report.locator?.startsWith('060_reports/')) throw new StudioError('studio_use_report_mismatch', 403);
+          const verifierProj = await options.projects.get(projectId);
+          memberPack.syncWorkspaceReportsToProject(projectId, taskId, verifierProj.rootPath);
           await sources.validate(report, projectId, id); await validateSources(refs, system, projectId, false);
           return options.mutate(async () => { await assertCurrent(); return reply(action, { use: store.recordUseAssessment(id, use.id, { status: payload.status as 'pass' | 'fail' | 'unknown', report, sources: refs, result: text(payload.result, 20_000, false) }), claim: 'agent-explicit-assessment-with-exact-evidence-not-host-or-independent-professional-score' }); });
         }

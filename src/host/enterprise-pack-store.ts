@@ -393,14 +393,30 @@ export class EnterprisePackStore {
         scopeKey,
         windowDays: input.windowDays,
       });
-      const existing = pack.purposes.find(p => p.dedupKey === dedupKey);
+      let existing = pack.purposes.find(p => p.dedupKey === dedupKey);
+      if (!existing && input.windowDays === undefined && !input.scope?.stores?.length) {
+        const sameKeyPurposes = pack.purposes.filter(p => p.purposeKey === purposeKey && p.subjectUnit === input.subjectUnit);
+        if (sameKeyPurposes.length === 1) {
+          existing = sameKeyPurposes[0];
+        }
+      }
       const stamp = now();
       if (existing) {
         existing.title = text(input.title, 300, false);
         existing.businessQuestion = text(input.businessQuestion, 5000, false);
-        existing.tier = input.tier;
+        const preserveCalcTier = input.tier === 'definition-reference' && existing.tier !== 'definition-reference' && !input.dependencies?.length;
+        if (!preserveCalcTier) existing.tier = input.tier;
         if (input.limitedCalculationName) existing.limitedCalculationName = text(input.limitedCalculationName, 300, false);
         existing.businessStatus = input.businessStatus;
+        if (input.windowDays !== undefined) existing.windowDays = input.windowDays;
+        if (input.scope) {
+          const keepExistingStores = !input.scope.stores?.length && Boolean(existing.scope.stores?.length);
+          existing.scope = {
+            ...existing.scope,
+            ...input.scope,
+            ...(keepExistingStores ? { stores: existing.scope.stores, scopeKey: existing.scope.scopeKey } : { scopeKey }),
+          };
+        }
         if (input.evidenceReadiness) {
           if (input.evidenceReadiness.definition) existing.evidenceReadiness.definition = input.evidenceReadiness.definition;
           if (input.evidenceReadiness.mapping) existing.evidenceReadiness.mapping = input.evidenceReadiness.mapping;
@@ -550,6 +566,13 @@ export class EnterprisePackStore {
     return this.mutate(packId, pack => {
       const version = text(input.version, 50, false).trim();
       if (pack.packRevisions.some(r => r.version === version)) fail('enterprise_pack_version_exists', 409);
+      const currentActive = pack.packRevisions.find(r => r.status === 'active');
+      const resolvedPrevVersion = input.previousVersion !== undefined && input.previousVersion !== null && String(input.previousVersion).trim() !== ''
+        ? text(input.previousVersion, 50, false).trim()
+        : currentActive?.version;
+      if ((currentActive?.version ?? undefined) !== (resolvedPrevVersion ?? undefined)) {
+        fail('enterprise_pack_previous_version_mismatch', 409);
+      }
       if (!Array.isArray(input.purposeIds) || !input.purposeIds.length) fail('empty_pack_preview');
 
       const decisionsSnapshot: EnterprisePackPreview['decisions'] = [];
@@ -654,7 +677,7 @@ export class EnterprisePackStore {
       const createdAt = now();
       const bodyForFingerprint = {
         version,
-        previousVersion: input.previousVersion ?? null,
+        previousVersion: resolvedPrevVersion ?? null,
         packRevision: pack.revision,
         draftFingerprint,
         summary: text(input.summary, 5000, false),
@@ -667,7 +690,7 @@ export class EnterprisePackStore {
       const preview: EnterprisePackPreview = {
         id: randomUUID(),
         version,
-        ...(input.previousVersion ? { previousVersion: input.previousVersion } : {}),
+        ...(resolvedPrevVersion ? { previousVersion: resolvedPrevVersion } : {}),
         fingerprint: digest(bodyForFingerprint),
         draftFingerprint,
         packRevision: pack.revision,
@@ -685,8 +708,8 @@ export class EnterprisePackStore {
   }
 
   /**
-   * Validates preview existence, fingerprint, and draft stability BEFORE any original
-   * authority publication write is attempted (zero side effects on 404/409).
+   * Validates preview existence, fingerprint, version uniqueness, predecessor match, and draft stability
+   * BEFORE any original authority publication write is attempted (zero side effects on 404/409).
    */
   validateConfirmPreconditions(packId: string, previewId: string, fingerprint: string): {
     pack: EnterpriseDomainPack;
@@ -700,6 +723,15 @@ export class EnterprisePackStore {
     if (preview.confirmedAt) {
       const existingRevision = pack.packRevisions.find(r => r.previewId === preview.id);
       if (existingRevision) return { pack, preview, existingRevision };
+    }
+    // Reject if ANOTHER preview has already published this version number!
+    if (pack.packRevisions.some(r => r.version === preview.version)) {
+      fail('enterprise_pack_version_exists', 409);
+    }
+    // Reject if the current active revision no longer matches this preview's predecessor!
+    const currentActive = pack.packRevisions.find(r => r.status === 'active');
+    if ((currentActive?.version ?? undefined) !== (preview.previousVersion ?? undefined)) {
+      fail('enterprise_pack_previous_version_mismatch', 409);
     }
     if (preview.draftFingerprint) {
       const currentDraftFingerprint = this.computeDraftFingerprint(pack, preview.purposeIds);
@@ -784,15 +816,8 @@ export class EnterprisePackStore {
       authorityPublishedBy?: string;
     }[];
   }): EnterprisePackRevision {
-    // Idempotent check BEFORE mutating: if already confirmed for exact previewId + fingerprint, return existing!
-    const current = this.get(packId);
-    const existingPreview = current.previews.find(p => p.id === uuid(input.previewId));
-    if (!existingPreview) fail('enterprise_pack_preview_not_found', 404);
-    if (existingPreview.fingerprint !== input.fingerprint) fail('enterprise_pack_preview_changed', 409);
-    if (existingPreview.confirmedAt) {
-      const existingRevision = current.packRevisions.find(r => r.previewId === existingPreview.id);
-      if (existingRevision) return existingRevision;
-    }
+    const precheck = this.validateConfirmPreconditions(packId, input.previewId, input.fingerprint);
+    if (precheck.existingRevision) return precheck.existingRevision;
 
     return this.mutate(packId, pack => {
       const preview = pack.previews.find(p => p.id === uuid(input.previewId));
@@ -800,6 +825,13 @@ export class EnterprisePackStore {
       if (preview.fingerprint !== input.fingerprint) fail('enterprise_pack_preview_changed', 409);
       if (preview.confirmedAt) {
         return pack.packRevisions.find(r => r.previewId === preview.id)!;
+      }
+      if (pack.packRevisions.some(r => r.version === preview.version)) {
+        fail('enterprise_pack_version_exists', 409);
+      }
+      const currentActive = pack.packRevisions.find(r => r.status === 'active');
+      if ((currentActive?.version ?? undefined) !== (preview.previousVersion ?? undefined)) {
+        fail('enterprise_pack_previous_version_mismatch', 409);
       }
       // Reject stale preview if draft purposes/entries/exceptions drifted after preparePreview!
       if (preview.draftFingerprint) {
@@ -925,17 +957,29 @@ export class EnterprisePackStore {
       if (firstReceipt && firstReceipt.status === 'failed' && input.status === 'succeeded') {
         fail('enterprise_pack_failed_receipt_not_reconcilable', 409);
       }
+      const hasOperationEvidence = Boolean(
+        input.authorityOperationId
+        || input.authorityPublishedBy
+        || firstReceipt?.authorityOperationId
+        || firstReceipt?.authorityPublishedBy,
+      );
+      const effectiveStatus = (firstReceipt?.status === 'unknown' && input.status === 'succeeded' && !hasOperationEvidence)
+        ? 'unknown'
+        : input.status;
+      const effectiveDetail = (effectiveStatus === 'unknown' && input.status === 'succeeded')
+        ? `${text(input.detail, 4800, false)}（缺少原权威操作凭据，保持 UNKNOWN）`
+        : text(input.detail, 5000, false);
       const receipt: PackModulePublicationReceipt = {
         receiptId: randomUUID(),
         requestId: text(input.requestId, 200, false),
         authority: input.authority,
         targetRef: ref,
         targetFingerprint: digest(ref),
-        status: input.status,
-        detail: text(input.detail, 5000, false),
+        status: effectiveStatus,
+        detail: effectiveDetail,
         purposeIds: [...new Set(input.purposeIds)],
-        ...(input.authorityOperationId ? { authorityOperationId: text(input.authorityOperationId, 200, false) } : {}),
-        ...(input.authorityPublishedBy ? { authorityPublishedBy: text(input.authorityPublishedBy, 200, false) } : {}),
+        ...(input.authorityOperationId ? { authorityOperationId: text(input.authorityOperationId, 200, false) } : firstReceipt?.authorityOperationId ? { authorityOperationId: firstReceipt.authorityOperationId } : {}),
+        ...(input.authorityPublishedBy ? { authorityPublishedBy: text(input.authorityPublishedBy, 200, false) } : firstReceipt?.authorityPublishedBy ? { authorityPublishedBy: firstReceipt.authorityPublishedBy } : {}),
         ...(input.supersedesReceiptId ? { supersedesReceiptId: input.supersedesReceiptId } : {}),
         at: now(),
       };
@@ -1200,6 +1244,10 @@ export class EnterprisePackStore {
         if (!use || use.independentVerification.status !== 'pass') {
           fail('feedback_verification_use_not_passed', 409);
         }
+        // Must verify one of the feedback's impacted purposes (NEVER an unrelated purpose!)
+        if (feedback.purposeIds.length > 0 && !feedback.purposeIds.includes(use.purposeId)) {
+          fail('feedback_verification_purpose_mismatch', 409);
+        }
         // Must be verified by a DIFFERENT independent new task (NEVER the original faulty task itself!)
         if (feedback.reports.some(r => r.taskId === use.taskId)) {
           fail('feedback_verification_must_be_independent_task', 409);
@@ -1213,23 +1261,42 @@ export class EnterprisePackStore {
         }
         const targetRev = pack.packRevisions.find(r => r.version === use.packVersion);
         if (!targetRev) fail('feedback_verification_revision_not_found', 409);
-        // Must have a REAL revised authority asset ref that differs from original targetRef and was completely read by the independent task!
+        const targetPm = targetRev.purposeManifests.find(p => p.purposeId === use.purposeId);
+        if (!targetPm || targetPm.status !== 'eligible') {
+          fail('feedback_verification_purpose_not_eligible', 409);
+        }
+        // Must have a REAL revised authority asset ref that evolved the SAME original asset ID in the impacted purpose!
         if (!resolvedRevisedRef) {
           fail('feedback_verification_requires_authority_revision', 409);
         }
-        if (resolvedTargetRef && sameExactSourceRef(resolvedTargetRef, resolvedRevisedRef)) {
+        const fromRev = pack.packRevisions.find(r => r.version === feedback.packVersion);
+        const fromPm = fromRev?.purposeManifests.find(p => p.purposeId === use.purposeId);
+        const inferredFromRef = fromPm?.dependencies.find(d => d.ref.authority === resolvedRevisedRef.authority && d.ref.id === resolvedRevisedRef.id)?.ref;
+        const fromRef = resolvedTargetRef ?? inferredFromRef;
+        if (!fromRef) {
           fail('feedback_verification_requires_authority_revision', 409);
         }
+        if (resolvedRevisedRef.authority !== fromRef.authority || resolvedRevisedRef.id !== fromRef.id) {
+          fail('feedback_verification_asset_identity_mismatch', 409);
+        }
+        if (
+          sameExactSourceRef(fromRef, resolvedRevisedRef)
+          || (resolvedRevisedRef.version === fromRef.version && (!fromRef.sha256 || !resolvedRevisedRef.sha256 || fromRef.sha256 === resolvedRevisedRef.sha256))
+        ) {
+          fail('feedback_verification_requires_authority_revision', 409);
+        }
+        if (
+          !targetPm.dependencies.some(d => sameExactSourceRef(d.ref, resolvedRevisedRef))
+          || targetPm.dependencies.some(d => sameExactSourceRef(d.ref, fromRef))
+        ) {
+          fail('feedback_verification_dependency_not_in_purpose', 409);
+        }
+        const requiredDeps = targetPm.dependencies.filter(d => d.requiredFor.includes(targetPm.tier));
         const readRevised = use.actualReads.some(r => r.complete && sameExactSourceRef(r.ref, resolvedRevisedRef));
-        if (!readRevised) {
+        const readAllRequired = requiredDeps.every(dep => use.actualReads.some(r => r.complete && sameExactSourceRef(r.ref, dep.ref)));
+        if (!readRevised || !readAllRequired) {
           fail('feedback_verification_missing_revised_read', 409);
         }
-        const fromRef = resolvedTargetRef ?? {
-          authority: resolvedRevisedRef.authority,
-          id: resolvedRevisedRef.id,
-          version: feedback.packVersion,
-          title: resolvedRevisedRef.title ?? '原版本',
-        };
         const existingUpdates = feedback.revisionLink?.authorityUpdates ?? [];
         const hasSameUpdate = existingUpdates.some(u => sameExactSourceRef(u.toRef, resolvedRevisedRef));
         feedback.revisionLink = {

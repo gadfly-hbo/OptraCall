@@ -708,7 +708,7 @@ export function evaluateResourceAccess(
   for (const grant of scopeMatched) {
     if (query.dataPath) {
       const allowedPaths = grant.scope.allowedDataPaths;
-      if (allowedPaths && !allowedPaths.includes(query.dataPath)) continue;
+      if (!allowedPaths?.length || !allowedPaths.includes(query.dataPath)) continue;
     }
     matchedGrantIds.push(grant.id);
     for (const storeName of grant.scope.stores ?? []) grantedStoresSet.add(storeName);
