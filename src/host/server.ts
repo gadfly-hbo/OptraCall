@@ -354,10 +354,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     }
     return { operatorId: 'anonymous:unverified', displayName: '未认证请求', verified: false };
   }
-  function assertCurrentProjectBorrower(request: IncomingMessage, projectId: string) {
-    if (!studio.memberPack.getProjectToolScope(projectId)) return;
+  function currentProjectBorrower(request: IncomingMessage, projectId: string) {
+    if (!studio.memberPack.getProjectToolScope(projectId)) return true;
     const operator = resolveRequestOperator(request);
-    if (!operator.verified || operator.activeProjectId !== projectId) throw new RequestFault(403, 'member_pack_borrower_context_required');
+    return operator.verified && operator.activeProjectId === projectId;
+  }
+  function assertCurrentProjectBorrower(request: IncomingMessage, projectId: string) {
+    if (!currentProjectBorrower(request, projectId)) throw new RequestFault(403, 'member_pack_borrower_context_required');
   }
 
   function setOperatorProjectCookie(response: ServerResponse, request: IncomingMessage, projectId: string) {
@@ -463,6 +466,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); await dbLinks.init(); await boardStore.init(); await decisionFeedback.init(); await verification.reconcileInterrupted(); await automatic.init(); });
   type ProjectOwner = { project: ProjectRecord; task: TaskRecord; reviewAdmission?: ReviewAdmissionContract };
   const streams = new Map<string, Set<ServerResponse>>();
+  const streamRequests = new WeakMap<ServerResponse, { request: IncomingMessage; statusOnly: boolean }>();
   const clearing = new Map<string, number>(), archiving = new Set<string>();
   let gate = Promise.resolve(), testing = false, closing = false, clearingAll = 0;
   // metric-factory business plugin: the extension owns handlers, the host owns transport.
@@ -581,13 +585,33 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const sapMethodRoutes = createSapMethodRoutes({ store: sapMethods, enabled: options.sapMethodsEnabled !== false, readBody: request => body(request, 512 * 1024), mutate, isClosing: () => closing,
     readSource: (methodId, version, index) => sapMethodFeature.readSource(methodId, version, index) });
   const endStreams = (id?: string) => { for (const [key, responses] of streams) { if (id && key !== id) continue; for (const response of responses) response.end(); streams.delete(key); } };
-  const publish = (projectId: string, taskId: string, event: object) => {
-    const projected = 'snapshot' in event && event.snapshot
-      ? { ...event, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, event.snapshot as ProjectSnapshot) }
-      : event;
-    for (const response of streams.get(keyOf(projectId, taskId)) ?? []) {
-      if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...projected, projectId, taskId })}\n\n`);
+  function streamTaskEvent(response: ServerResponse, projectId: string, taskId: string, event: object) {
+    if (response.destroyed || response.writableEnded) return;
+    const stream = streamRequests.get(response);
+    const full = stream !== undefined && !stream.statusOnly && currentProjectBorrower(stream.request, projectId);
+    let projected: object;
+    if ('snapshot' in event && event.snapshot) {
+      const snapshot = event.snapshot as ProjectSnapshot;
+      projected = full
+        ? { ...event, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, snapshot) }
+        : {
+          type: 'snapshot', statusOnly: true,
+          snapshot: {
+            sessionId: '', sdkVersion: '', messages: [], tools: [], status: snapshot.status,
+            ...(snapshot.lastRun ? { lastRun: { requestId: snapshot.lastRun.requestId, outcome: snapshot.lastRun.outcome } } : {}),
+          },
+        };
+    } else if (full) {
+      projected = event;
+    } else if ('type' in event && event.type === 'run.settled' && 'requestId' in event && 'outcome' in event) {
+      projected = { type: 'run.settled', statusOnly: true, requestId: event.requestId, outcome: event.outcome };
+    } else {
+      return;
     }
+    response.write(`data: ${JSON.stringify({ ...projected, projectId, taskId })}\n\n`);
+  }
+  const publish = (projectId: string, taskId: string, event: object) => {
+    for (const response of streams.get(keyOf(projectId, taskId)) ?? []) streamTaskEvent(response, projectId, taskId, event);
   };
   const availableConfiguration = (id?: string, revision?: number) => {
     const snapshot = configuration.snapshot(id, revision);
@@ -639,6 +663,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     // closeAll invalidates all matching leases synchronously before it awaits cleanup.
     void projectSessions.closeAll({ projectId }).catch(() => { /* Public lifecycle retains unknown cleanup. */ });
     studio.memberPack.retireRestrictedWorkspaceInputs(projectId);
+    for (const key of streams.keys()) if (key.startsWith(projectId + '/')) endStreams(key);
     scheduleProjectPermissionExpiry(projectId);
   }
   function scheduleProjectPermissionExpiry(projectId: string) {
@@ -1004,8 +1029,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     },
   });
   function decorateProject(project: ProjectRecord) {
-    try { if (cases.getStatus().state === 'ready') return { ...project, work: cases.getProjectWork(project.id), workUnavailable: false }; } catch {}
-    return { ...project, work: null, workUnavailable: true };
+    const scoped = Boolean(studio.memberPack.getProjectToolScope(project.id));
+    try { if (cases.getStatus().state === 'ready') return { ...project, memberPackScoped: scoped, work: cases.getProjectWork(project.id), workUnavailable: false }; } catch {}
+    return { ...project, memberPackScoped: scoped, work: null, workUnavailable: true };
   }
   const methodIssues = createMethodIssueAdapter({ methods: sapMethods, mutate,
     admit: async context => { context.signal.throwIfAborted(); context.assertCurrent(); if (closing) throw new RequestFault(409, 'host_closing'); await pair(context.projectId, context.taskId, true); },
@@ -3010,7 +3036,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           let viewFiltered = false;
           if (requestedPath.startsWith('060_reports/')) {
             assertCurrentProjectBorrower(request, projectId);
-            studio.memberPack.assertCurrentReportFile(projectId, requestedPath, createHash('sha256').update(file.bytes).digest('hex'));
+            await studio.memberPack.assertCurrentReportFile(projectId, requestedPath, createHash('sha256').update(file.bytes).digest('hex'));
           }
           if (isMemberPackGuardedData) {
             const view = studio.memberPack.filterAuthorizedProjectData(projectId, requestedPath, file.bytes);
@@ -3251,18 +3277,22 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             throw new RequestFault(404, 'not_found');
           }
           if (!operation && request.method === 'GET') {
+            assertCurrentProjectBorrower(request, projectId);
             await mutate(async () => {
               const state = await taskState(projectId, taskId, false, true);
+              assertCurrentProjectBorrower(request, projectId);
               json(response, 200, { ...state, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, state.snapshot) });
             });
             return;
           }
           if (operation === 'open' && request.method === 'POST') {
+            assertCurrentProjectBorrower(request, projectId);
             await body(request);
             const automaticEnabled = reviewTransition.legacyAdmissionAllowed() && (await automatic.store.readSettings({ projectId, taskId })).enabled;
             const state = await taskState(projectId, taskId, !automaticEnabled);
             await mutate(async () => {
               state.snapshot = await presentFrameworkHistory(projectId, taskId, state.snapshot);
+              assertCurrentProjectBorrower(request, projectId);
               publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot });
               json(response, 200, { ...state, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, state.snapshot) });
             });
@@ -3278,13 +3308,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (operation === 'events' && request.method === 'GET') {
             await pair(projectId, taskId);
             response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.flushHeaders();
-            const responses = streams.get(key) ?? new Set(); responses.add(response); streams.set(key, responses); response.write(': task connection\n\n');
+            const responses = streams.get(key) ?? new Set(); responses.add(response); streams.set(key, responses); streamRequests.set(response, { request, statusOnly: url.searchParams.get('view') === 'status' }); response.write(': task connection\n\n');
             heartbeat(response, heartbeatIntervalMs);
-            response.once('close', () => { responses.delete(response); if (!responses.size) streams.delete(key); });
+            response.once('close', () => { responses.delete(response); if (!responses.size && streams.get(key) === responses) streams.delete(key); });
             try {
               await mutate(async () => {
                 const state = await taskState(projectId, taskId, false, true);
-                if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ type: 'snapshot', snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, state.snapshot), projectId, taskId })}\n\n`);
+                streamTaskEvent(response, projectId, taskId, { type: 'snapshot', snapshot: state.snapshot });
               });
             }
             catch { if (!response.destroyed && !response.writableEnded) { response.write(`data: ${JSON.stringify({ type: 'stream.error', message: '任务连接未就绪，请检查模型配置或重新连接。', projectId, taskId })}\n\n`); response.end(); } }
@@ -3308,6 +3338,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             if (!result?.accepted) throw new RequestFault(409, 'ui_request_unavailable'); json(response, 200, result); return;
           }
           if (operation === 'commands' && request.method === 'POST') {
+            assertCurrentProjectBorrower(request, projectId);
             const input = await body(request);
             if (typeof input.text !== 'string' || !input.text.startsWith('/') || input.text.length > 20000 || (input.requestId !== undefined && (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId)))) throw new RequestFault(400, 'invalid_command');
             const requestId = typeof input.requestId === 'string' ? input.requestId : randomUUID(), owner: ProjectOwner = await pair(projectId, taskId, true);

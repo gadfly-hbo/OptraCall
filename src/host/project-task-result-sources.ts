@@ -90,7 +90,7 @@ async function scanTaskResultSources(project: ProjectRecord, task: TaskRecord, o
       if (data.schemaVersion !== 1 || data.type !== 'optracall.project-report-write' || !text(data.requestId) || !text(data.toolCallId) || typeof data.relativePath !== 'string' || data.relativePath.length > 1000 || typeof data.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(data.sha256) || !Number.isSafeInteger(data.bytes) || Number(data.bytes) < 0 || Number(data.bytes) > PROJECT_UPLOAD_MAX_BYTES) fail('project_result_native_binding_invalid');
       const parts = data.relativePath.split('/');
       if (parts.length < 2 || parts[0] !== '060_reports' || parts.some(part => !part || part.startsWith('.') || /[\\\u0000-\u001f\u007f]/u.test(part)) || data.path !== path.join(project.rootPath, ...parts) || data.filename !== undefined && data.filename !== parts.at(-1)) fail('project_result_native_binding_invalid');
-      const value: ProjectTaskResultBinding = { projectId: project.id, taskId: task.id, sessionId, requestId: data.requestId, toolCallId: data.toolCallId, relativePath: data.relativePath, sha256: data.sha256, bytes: Number(data.bytes), nativeEntryId: entry.id };
+      const value: ProjectTaskResultBinding = { projectId: project.id, taskId: task.id, sessionId, requestId: data.requestId, toolCallId: data.toolCallId, relativePath: data.relativePath, sha256: data.sha256, bytes: Number(data.bytes), nativeEntryId: entry.id, savedAt: entry.timestamp };
       const previous = results.get(sourceKey(value));
       if (previous && sourceValue(previous) !== sourceValue(value)) fail('project_result_native_binding_conflict');
       if (!previous) results.set(sourceKey(value), value);

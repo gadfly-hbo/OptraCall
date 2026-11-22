@@ -3,11 +3,59 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { startLegacyTestHost, startTestHost } from './fixtures/host-process.ts';
+import { startLegacyTestHost as startLegacyHostFixture, startTestHost as startHostFixture } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 import { withCaseGoal } from './fixtures/case-goal.ts';
 import { CaseStore } from '../src/host/case-store.ts';
 import type { CaseDecisionReference } from '../src/host/case-decision-types.ts';
+
+type TestHost = Awaited<ReturnType<typeof startHostFixture>>;
+function selectProjectForTaskReads(host: TestHost): TestHost {
+  return {
+    ...host,
+    async request(route, method = 'GET', body, signal) {
+      const match = /^\/api\/projects\/([^/]+)\/tasks\/[^/?]+($|\/open$|\/commands$)/u.exec(route);
+      if (!match) return host.request(route, method, body, signal);
+      const selection = await host.request(`/api/projects/${match[1]}`);
+      const cookie = selection.headers.get('set-cookie')?.split(';')[0];
+      assert.ok(cookie, 'Project navigation binds the browser context before task history reads');
+      return fetch(host.baseUrl + route, { method, headers: { ...host.headers, cookie }, signal,
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+    },
+  };
+}
+async function startTestHost(options?: Parameters<typeof startHostFixture>[0]) {
+  return selectProjectForTaskReads(await startHostFixture(options));
+}
+async function startLegacyTestHost(options?: Parameters<typeof startLegacyHostFixture>[0]) {
+  return selectProjectForTaskReads(await startLegacyHostFixture(options));
+}
+async function firstTaskSnapshot(host: TestHost, route: string, cookie?: string) {
+  const response = await fetch(host.baseUrl + route + '/events', {
+    headers: { ...host.headers, ...(cookie ? { cookie } : {}) },
+    signal: AbortSignal.timeout(10_000),
+  });
+  assert.equal(response.status, 200);
+  const reader = response.body!.getReader();
+  try {
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const part = await reader.read();
+      assert.equal(part.done, false);
+      buffer += decoder.decode(part.value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const event = JSON.parse(line.slice(6));
+        if (event.type === 'snapshot') return event;
+      }
+    }
+  } finally {
+    await reader.cancel();
+  }
+}
 
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
@@ -1507,6 +1555,37 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   const stateATurn3 = await waitIdle(host, projStar.id, taskA.id, stateATurn2.snapshot.messages.length + 2);
   assert.equal(taskAStillV1, true, 'Existing Task A MUST remain pinned to v1.0 and able to read pinned refundV1Ref after v1.1 publish!');
 
+  const scopedTaskRoute = `/api/projects/${projStar.id}/tasks/${taskA.id}`;
+  const scopedSelection = await host.request(`/api/projects/${projStar.id}`);
+  const scopedCookie = scopedSelection.headers.get('set-cookie')?.split(';')[0];
+  const otherSelection = await host.request(`/api/projects/${projAud.id}`);
+  const otherCookie = otherSelection.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(scopedCookie && otherCookie);
+  assert.equal((await fetch(host.baseUrl + scopedTaskRoute, { headers: host.headers })).status, 403);
+  assert.equal((await fetch(host.baseUrl + scopedTaskRoute + '/open', { method: 'POST', headers: { ...host.headers, cookie: otherCookie }, body: '{}' })).status, 403);
+  const backgroundEvent = await firstTaskSnapshot(host, scopedTaskRoute, otherCookie);
+  assert.equal(backgroundEvent.statusOnly, true);
+  assert.deepEqual(backgroundEvent.snapshot.messages, []);
+  assert.equal(backgroundEvent.snapshot.status, 'idle');
+  const selectedEvent = await firstTaskSnapshot(host, scopedTaskRoute, scopedCookie);
+  assert.notEqual(selectedEvent.statusOnly, true);
+  assert.ok(selectedEvent.snapshot.messages.some((message: any) => message.role === 'assistant'));
+
+  const boundReportTask = await json(await host.request(`/api/projects/${projStar.id}/tasks`, 'POST', { name: '用户工具报告授权边界' }), 201);
+  const privateReportText = '合成报告完整正文。';
+  let reportStep = 0;
+  provider.setResponder(() => ++reportStep === 1
+    ? { calls: [{ name: 'write_report', arguments: { filename: 'bound-scope-report.md', content: privateReportText } }] }
+    : { text: '已保存测试报告。' });
+  await json(await host.request(`/api/projects/${projStar.id}/tasks/${boundReportTask.task.id}/messages`, 'POST', {
+    requestId: randomUUID(), text: '保存合成核验结果。',
+  }), 202);
+  await waitIdle(host, projStar.id, boundReportTask.task.id);
+  const boundFile = `/api/projects/${projStar.id}/files/content?path=060_reports%2Fbound-scope-report.md`;
+  const currentReport = await fetch(host.baseUrl + boundFile, { headers: { ...host.headers, cookie: scopedCookie } });
+  assert.equal(currentReport.status, 200);
+  assert.equal(await currentReport.text(), privateReportText);
+
   // R2.4 LIVE REVOCATION PURGE: Revoke projStar's grant mid-session -> verify starbridge_orders.csv is IMMEDIATELY blocked in-session (and purged from sandbox on macOS)!
   await json(await ownerReq(`/api/studio/resource-grants/${starGrantId}/revoke`, 'POST', {
     requestId: randomUUID(), revokerProjectId: projBuild.id, authorityToken: buildAuth.authorityToken, reason: '运行中即时撤回验证',
@@ -1530,6 +1609,12 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   }), 202);
   await waitIdle(host, projStar.id, taskA.id, stateATurn3.snapshot.messages.length + 2);
   assert.equal(afterRevokeBlocked, true, 'Revoking detail grant MUST immediately block detail reads in the active session!');
+  const oldReport = await fetch(host.baseUrl + boundFile, { headers: { ...host.headers, cookie: scopedCookie } });
+  assert.equal(oldReport.status, 403);
+  assert.equal(fs.readFileSync(path.join(projStar.rootPath, '060_reports', 'bound-scope-report.md'), 'utf8'), privateReportText);
+  const projectedOldUsers = (await json(await host.request(scopedTaskRoute))).snapshot.messages.filter((message: any) => message.role === 'user');
+  assert.ok(projectedOldUsers.some((message: any) => !message.originalUserText && message.content?.[0]?.text));
+
 
   // Run brand-new independent Task B discovering v1.1 + Turn 2 continuation (verifying macOS Turn 2 NEVER hits protected_executor_draining!)
   const { task: taskB } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '独立新任务核对新版' }), 201);

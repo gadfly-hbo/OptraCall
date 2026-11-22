@@ -91,7 +91,7 @@ export async function downloadFile(id: string, file: FileNode, expectedSha256?: 
   }
   const url = URL.createObjectURL(await response.blob()); const anchor = document.createElement('a'); anchor.href = url; anchor.download = file.name; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export type TaskWatchOptions = { idleTimeoutMs?: number };
+export type TaskWatchOptions = { idleTimeoutMs?: number; statusOnly?: boolean };
 export async function watchTask(projectId: string, taskId: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal, options: TaskWatchOptions = {}): Promise<void> {
   if (signal.aborted) return;
   const observation = new AbortController(), observationSignal = AbortSignal.any([signal, observation.signal]);
@@ -100,7 +100,7 @@ export async function watchTask(projectId: string, taskId: string, onEvent: (eve
   const touch = () => { clearWatchdog(); timer = setTimeout(() => observation.abort(), options.idleTimeoutMs ?? 45000); };
   signal.addEventListener('abort', clearWatchdog, { once: true }); touch();
   try {
-    const response = await fetch(`/api/${taskPath(projectId, taskId)}/events`, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal: observationSignal });
+    const response = await fetch(`/api/${taskPath(projectId, taskId)}/events${options.statusOnly ? '?view=status' : ''}`, { credentials: 'same-origin', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal: observationSignal });
     if (!response.ok || !response.body) throw new HostRequestError('任务事件连接未建立，请重新连接。');
     reader = response.body.getReader(); const decoder = new TextDecoder(); let pending = '';
     while (!signal.aborted) {
@@ -167,7 +167,7 @@ export async function observeTask(projectId: string, taskId: string, onEvent: (e
     } catch { if (signal.aborted) return; }
     report({ state: 'recovering', message: '观察连接已断开，正在只读核对任务状态；不会重发消息。' });
     let message = '任务状态仍未知；不会重发消息。', requestId = options.expectedRequestId?.() ?? observedRequestId;
-    try {
+    if (!options.statusOnly) try {
       const value = await readTask(projectId, taskId, AbortSignal.any([signal, AbortSignal.timeout(10000)]));
       if (signal.aborted) return;
       const currentRequestId = options.expectedRequestId?.();

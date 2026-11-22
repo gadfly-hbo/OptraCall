@@ -14,6 +14,7 @@ export interface ProjectTaskResultBinding {
   sha256: string;
   bytes: number;
   nativeEntryId?: string;
+  savedAt?: string;
 }
 export type ProjectTaskNativeReplyRef = Extract<PersonalSourceRef, { type: 'native-reply' }>;
 /** A final original reply in the ancestry of an explicitly completed native run. */

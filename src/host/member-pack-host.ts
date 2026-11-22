@@ -31,6 +31,8 @@ import {
 import { DomainReferenceStore, BUILTIN_REPO_TEMPLATES } from './domain-reference-store.ts';
 import { ResourceGrantStore } from './resource-grant-store.ts';
 import { EnterprisePackStore } from './enterprise-pack-store.ts';
+import { listTaskBoundReports } from './project-task-result-sources.ts';
+import { createNativeSnapshotReadBudget } from './native-session-snapshot.ts';
 import { buildAuthorizedDataView, isPeriodCovered, type AuthorizedDataPurpose } from './member-pack-data-view.ts';
 import { collectNativeEvidence, exactTaskReport, nativeAssessmentEvidence, projectFileLocator, qualifyAssessmentClaims, readCoversSource, readNativeFileEvidence, readStudioEvidence, studioPagesComplete } from './member-pack-verification.ts';
 import { createProtectedExecutionScope, type ProtectedExecutionScope } from '../agent/protected-tools.ts';
@@ -306,9 +308,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (!getProjectToolScope(projectId) || !snapshot.messages.length) return snapshot;
     const since = currentTaskPolicyStart(projectId, taskId);
     const messages = snapshot.messages.map(message => {
-      if (message.role === 'user') return message;
       const stamp = typeof message.timestamp === 'number' ? message.timestamp : Date.parse(message.timestamp ?? message.createdAt ?? '');
       if (since !== undefined && stamp >= since) return message;
+      const text = message.role === 'user' && typeof message.originalUserText === 'string' && message.originalUserText.trim()
+        ? message.originalUserText : '此条历史内容按原权限保留，当前权限未能核对。';
       return {
         role: message.role,
         timestamp: message.timestamp,
@@ -316,20 +319,39 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         nativeEntryId: message.nativeEntryId,
         toolCallId: message.toolCallId,
         toolName: message.toolName,
-        content: [{ type: 'text', text: '此条历史内容按原权限保留，当前权限未能核对。' }],
+        content: [{ type: 'text', text }],
       };
     });
     return { ...snapshot, messages };
   }
 
-  function assertCurrentReportFile(projectId: string, locator: string, sha: string) {
+  async function assertCurrentReportFile(projectId: string, locator: string, sha: string) {
     if (!getProjectToolScope(projectId)) return;
+    const reject = (): never => { throw new StudioError('member_pack_report_current_authority_required', 403); };
+    const check = (taskId: string, savedAt: string) => {
+      const since = currentTaskPolicyStart(projectId, taskId);
+      if (since === undefined || !(Date.parse(savedAt) >= since)) reject();
+    };
     const report = readReportLedger().projectFiles[`${projectId}:${locator.slice('060_reports/'.length)}`];
-    if (!report || report.sha256 !== sha) return;
-    const since = currentTaskPolicyStart(projectId, report.ownerTaskId);
-    if (since === undefined || Date.parse(report.committedAt) < since) {
-      throw new StudioError('member_pack_report_current_authority_required', 403);
+    if (report) {
+      if (report.sha256 !== sha) reject();
+      check(report.ownerTaskId, report.committedAt);
+      return;
     }
+
+    // Host-bound write_report already records original path, exact bytes and time
+    // in the task's native session, even when no filesystem workspace is used.
+    const project = await options.projects.get(projectId);
+    const budget = createNativeSnapshotReadBudget();
+    try {
+      for (const task of project.tasks) {
+        const reports = await listTaskBoundReports(project, task, { budget });
+        for (const binding of reports.filter(item => item.relativePath === locator)) {
+          if (binding.sha256 !== sha || !binding.savedAt) return reject();
+          check(binding.taskId, binding.savedAt);
+        }
+      }
+    } catch { reject(); }
   }
 
   function nextProjectGrantExpiry(projectId: string): number | undefined {
