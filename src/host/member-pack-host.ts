@@ -2233,6 +2233,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   function businessDate(value: unknown): string | undefined {
+    if (typeof value === 'number' && Number.isSafeInteger(value)) {
+      const captured = new Date(value);
+      if (Number.isFinite(captured.getTime())) value = captured.toISOString();
+    }
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(value)) return undefined;
     const day = value.slice(0, 10);
     const midnight = Date.parse(`${day}T00:00:00Z`);
@@ -2371,12 +2375,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       target.type === 'source' && exactReply(target.source),
     );
 
-    let links: ReturnType<CaseStore['listProjectLinks']>;
-    try { links = cases.listProjectLinks().filter(link => link.projectId === projectId); }
+    let linkedCaseIds: string[];
+    try { linkedCaseIds = cases.listHistoricallyLinkedCaseIds(projectId); }
     catch { return undefined; }
     const requestedCaseId = requested ? uuid(requested.caseId) : undefined;
-    const relevant = links.filter(link => !requestedCaseId || link.caseId === requestedCaseId);
-    const candidates = relevant.flatMap(({ caseId }) => {
+    const relevant = linkedCaseIds.filter(caseId => !requestedCaseId || caseId === requestedCaseId);
+    const candidates = relevant.flatMap(caseId => {
       const events = cases.getEvents('case', caseId);
       const originalEvents = events.filter(event => atOrigin(event.occurredAt));
       const originalLink = originalEvents.filter(event =>
@@ -2454,6 +2458,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     itemId: string;
     originalOrderId: string;
     orderDate: string;
+    store?: string;
     refundDate?: string;
     fullRefund?: boolean;
     visibleOn: string;
@@ -2495,6 +2500,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       itemId: ['account', 'member_id', 'member', 'user_id', 'item_id', 'customer_id', '会员账号', '账号', '会员id', '记录编号'],
       originalOrderId: ['repeat_order_id', 'original_order_id', 'order_id', 'source_order_id', '原订单号', '订单号', '关联订单', '复购订单号'],
       orderDate: ['repeat_order_date', 'order_date', 'purchase_date', '下单日期', '复购日期', '交易日期'],
+      store: ['store', 'store_id', 'store_name', 'shop', 'shop_id', '门店', '门店名称', '门店编码'],
       refundDate: ['refund_date', 'refunded_at', '退款日期', '退单日期'],
       fullRefund: ['full_refund', 'is_full_refund', 'refund_status', '是否全额退款', '全额退款', '退款状态'],
       availableAt: ['data_available_at', 'available_at', '可见日期', '资料可见日期'],
@@ -2536,6 +2542,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         };
         const itemId = read('itemId'), originalOrderId = read('originalOrderId');
         const orderDate = businessDate(read('orderDate'));
+        const store = read('store');
         const rawRefundDate = read('refundDate'), refundDate = businessDate(rawRefundDate);
         const fullRefund = parseFullRefundFlag(read('fullRefund'));
         const rawAvailableAt = read('availableAt'), availableAt = businessDate(rawAvailableAt);
@@ -2554,6 +2561,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           itemId,
           originalOrderId,
           orderDate,
+          ...(store ? { store } : {}),
           ...(refundDate ? { refundDate } : {}),
           ...(fullRefund !== undefined ? { fullRefund } : {}),
           visibleOn,
@@ -2686,15 +2694,23 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       };
     };
 
-    const retainedRow = (rows: SourceTransactionRow[], itemId: string, orderId: string) => {
-      const candidates = rows.filter(row => sameOrder(row, itemId, orderId));
-      if (isRefund && candidates.some(row => row.fullRefund === true)) return undefined;
-      return candidates.find(row => !isRefund || row.fullRefund === false);
+    const sameTransaction = (a: SourceTransactionRow, b: SourceTransactionRow) =>
+      a.orderDate === b.orderDate && a.store === b.store;
+    const unambiguousRow = (rows: SourceTransactionRow[], itemId: string, orderId: string) => {
+      const matches = rows.filter(row => sameOrder(row, itemId, orderId));
+      const first = matches[0];
+      if (first && matches.every(row => sameTransaction(first, row)
+        && row.refundDate === first.refundDate && row.fullRefund === first.fullRefund)) return first;
     };
-    const refundRow = (rows: SourceTransactionRow[], itemId: string, orderId: string, refundDate?: string) => rows.find(row =>
-      sameOrder(row, itemId, orderId) && (!refundDate || row.refundDate === refundDate)
-      && (!isRefund || (refundDate && row.fullRefund === true)),
-    );
+    const retainedRow = (rows: SourceTransactionRow[], itemId: string, orderId: string) => {
+      const row = unambiguousRow(rows, itemId, orderId);
+      return row && (!isRefund || row.fullRefund === false) ? row : undefined;
+    };
+    const refundRow = (rows: SourceTransactionRow[], itemId: string, orderId: string, refundDate?: string) => {
+      const row = unambiguousRow(rows, itemId, orderId);
+      return row && (!refundDate || row.refundDate === refundDate)
+        && (!isRefund || (refundDate && row.fullRefund === true)) ? row : undefined;
+    };
     const seen = new Set<string>();
     const validateDisposition = (itemId: string, orderId: string, before: string, after: string) => {
       const key = JSON.stringify([itemId, orderId]);
@@ -2713,7 +2729,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (!exactAssessmentItem(assessmentText, assessmentData, 'shouldChange', { ...item, originalOrderId: orderId })) return fail();
       const old = refundRow(originals, itemId, orderId, refundDate);
       const next = refundRow(revised, itemId, orderId, refundDate);
-      if (!old || !next) return fail('feedback_verification_source_transaction_mismatch');
+      if (!old || !next || !sameTransaction(old, next)) return fail('feedback_verification_source_transaction_mismatch');
       return { ...item, evidenceLocator: use.reportRef.locator, ...rowCustody(old, next) };
     });
     const verifiedNewEvents = newEvents.map(item => {
@@ -2726,7 +2742,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (!exactAssessmentItem(assessmentText, assessmentData, 'postCutoffNewEvents', item)) return fail();
       const old = retainedRow(originals, itemId, orderId);
       const next = refundRow(revised, itemId, orderId, refundDate);
-      if (!old || !next || next.visibleOn <= oldCutoff) return fail('feedback_verification_new_cutoff_not_actually_read');
+      if (!old || !next || !sameTransaction(old, next) || next.visibleOn <= oldCutoff) return fail('feedback_verification_new_cutoff_not_actually_read');
       return { ...item, evidenceLocator: use.reportRef.locator, ...rowCustody(old, next, true) };
     });
     const verifiedRetain = retained.map(item => {
@@ -2736,7 +2752,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (!exactAssessmentItem(assessmentText, assessmentData, 'shouldRetain', { ...item, originalOrderId: orderId })) return fail();
       const old = retainedRow(originals, itemId, orderId);
       const next = retainedRow(revised, itemId, orderId);
-      if (!old || !next || (item.refundDate && (old.refundDate !== item.refundDate || next.refundDate !== item.refundDate))) {
+      if (!old || !next || !sameTransaction(old, next)
+        || (item.refundDate && (old.refundDate !== item.refundDate || next.refundDate !== item.refundDate))) {
         return fail('feedback_verification_source_transaction_mismatch');
       }
       return { ...item, evidenceLocator: use.reportRef.locator, ...rowCustody(old, next) };
@@ -3728,6 +3745,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           }
           let resolvedPackVersion: string | undefined;
           let resolvedTargetRef: StudioSourceRef | undefined;
+          const requestedPurposes = Array.isArray(input.purposeIds) ? input.purposeIds.map(String) : [];
+          let resolvedPurposes = requestedPurposes;
           const category = (input.category as PackFeedbackCategory) ?? 'shared_refund_mapping';
 
           if (object(input.origin)) {
@@ -3768,15 +3787,29 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               .map(u => u.report);
             const savedReports = [...nativeEv.turnWrittenReports, ...turnDeclaredReportRefs]
               .filter(ref => isTaskReport(ref, pid, tid));
-            const matchingTurnUse = [...currentPack.useRecords].reverse().find(u =>
+            const matchingTurnUses = [...currentPack.useRecords].reverse().filter(u =>
               u.projectId === pid && u.taskId === tid
               && (exactTaskReport(u.reportRef, replyRef) || savedReports.some(ref => exactTaskReport(ref, u.reportRef)))
               && u.actualReads.some(r => r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep))),
             );
-            const hasActualUse = Boolean(matchingTurnUse || packMatchedReads.length);
-            const matchedRefs = packMatchedReads.length > 0
-              ? packMatchedReads.map(r => r.ref)
-              : matchingTurnUse?.actualReads.filter(r => r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep))).map(r => r.ref) ?? [];
+            const hasActualUse = Boolean(matchingTurnUses.length || packMatchedReads.length);
+            const evidenceRefs = (reads: typeof nativeEv.actualReads) =>
+              reads.filter(r => r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep))).map(r => r.ref);
+            const observedPurposes = new Set(matchingTurnUses.map(use => use.purposeId));
+            if (!observedPurposes.size && packMatchedReads.length) {
+              for (const manifest of rev?.purposeManifests ?? []) {
+                if (packMatchedReads.every(read => manifest.dependencies.some(dep => sameExactSourceRef(dep.ref, read.ref)))) {
+                  observedPurposes.add(manifest.purposeId);
+                }
+              }
+            }
+            const selectedPurposes = [...observedPurposes].filter(id => !requestedPurposes.length || requestedPurposes.includes(id));
+            if (observedPurposes.size) resolvedPurposes = selectedPurposes.length ? selectedPurposes : [...observedPurposes];
+            const selectedPurpose = resolvedPurposes.length === 1 && observedPurposes.has(resolvedPurposes[0]!)
+              ? resolvedPurposes[0] : undefined;
+            const matchingTurnUse = selectedPurpose ? matchingTurnUses.find(use => use.purposeId === selectedPurpose) : undefined;
+            const matchedRefs = [...packMatchedReads.map(r => r.ref), ...evidenceRefs(matchingTurnUse?.actualReads ?? [])]
+              .filter((ref, index, all) => all.findIndex(other => sameExactSourceRef(ref, other)) === index);
 
             // A later file at the same path cannot change the original reference.
             const uniqueSavedReports = [...new Map(savedReports.map(ref => [`${ref.locator}:${ref.sha256}`, ref])).values()];
@@ -3815,13 +3848,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
                 .map(({ binding }) => binding)
               : [];
 
-            // Resolve matching target authority asset ref from pinned revision when available
-            if (rev) {
-              const wantedRole = category === 'shared_refund_mapping' ? 'shared-asset' : category === 'sap_formula' ? 'sap-metric' : category === 'member_policy' ? 'member-rule' : undefined;
-              if (wantedRole) {
-                resolvedTargetRef = rev.purposeManifests.flatMap(pm => pm.dependencies).find(d => d.role === wantedRole)?.ref;
-              }
-            }
+            const wantedRole = category === 'shared_refund_mapping' ? 'shared-asset' : category === 'sap_formula' ? 'sap-metric' : category === 'member_policy' ? 'member-rule' : undefined;
+            const originalPurpose = rev?.purposeManifests.find(pm => pm.purposeId === selectedPurpose);
+            const targets = (originalPurpose?.dependencies ?? []).filter(dep =>
+              dep.role === wantedRole && matchedRefs.some(ref => sameExactSourceRef(dep.ref, ref)));
+            if (targets.length === 1) resolvedTargetRef = targets[0]?.ref;
 
             resolvedPackVersion = adoptionBasis === 'verified_actual_read'
               ? (matchingTurnUse?.packVersion ?? pin?.packVersion ?? observedDirVer ?? 'unconfirmed')
@@ -3855,7 +3886,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           const result = packs.submitFeedback(packId, {
             problemKey: text(input.problemKey ?? input.title, 200, false),
             packVersion: text(resolvedPackVersion ?? (typeof input.packVersion === 'string' ? input.packVersion : 'unconfirmed'), 50, false),
-            purposeIds: Array.isArray(input.purposeIds) ? input.purposeIds.map(String) : [],
+            purposeIds: resolvedPurposes,
             title: text(input.title, 300, false),
             category,
             ...(resolvedTargetRef ? { targetAssetRef: resolvedTargetRef } : {}),

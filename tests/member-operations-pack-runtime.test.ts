@@ -1730,6 +1730,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
               },
               sources: [refundV2Ref, sapM2Ref],
               result: '独立复核任务 taskVerifyV2 实读 v1.1（refund v2 + sap 1.1.0）、目标报告 repurchase-v1.1.json 与原明细并核实 C07（O-73/2026-10-02）排除、C13（O-81）保留，分子分母 2/4 无误，原 Case 经营决定不变',
+              evidence: {
+                targetReport: taskBReportRef,
+                coverage: { inputPaths: ['020_clean/starbridge_orders.csv'], scope: '星桥直营店9月首购队列，截至2026-10-31', detail: '已核对授权明细、观察窗和退款记录' },
+                comparison: { metrics: [{ name: '分子', reported: 2, recomputed: 2 }, { name: '分母', reported: 4, recomputed: 4 }], facts: '按原单号核对退款变动和应保留的有效复购' },
+              },
             },
           },
         }],
@@ -2167,6 +2172,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
               report: { authority: 'task', id: taskVerifyC.id, projectId: projAud.id, taskId: taskVerifyC.id, version: assessSha, sha256: assessSha, locator: '060_reports/repurchase-v1.1-nov15-assess.json' },
               sources: [refundV2Ref, sapM2Ref],
               result: '独立核验任务 taskVerifyC 实读 2026-11-15 新明细与目标报告 repurchase-v1.1-nov15.json，确认 C21(O-88/2026-11-05) 为截止日后新事件、C13(O-81) 保留，1/4 通过',
+              evidence: {
+                targetReport: taskCReportRef,
+                coverage: { inputPaths: ['020_clean/starbridge_orders.csv'], scope: '星桥直营店9月首购队列，截至2026-11-15', detail: '已核对授权明细、观察窗和退款记录' },
+                comparison: { metrics: [{ name: '分子', reported: 1, recomputed: 1 }, { name: '分母', reported: 4, recomputed: 4 }], facts: '按原单号核对退款变动和应保留的有效复购' },
+              },
             },
           },
         }],
