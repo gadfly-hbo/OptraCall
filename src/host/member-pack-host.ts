@@ -31,7 +31,7 @@ import {
 import { DomainReferenceStore, BUILTIN_REPO_TEMPLATES } from './domain-reference-store.ts';
 import { ResourceGrantStore } from './resource-grant-store.ts';
 import { EnterprisePackStore } from './enterprise-pack-store.ts';
-import { buildAuthorizedDataView } from './member-pack-data-view.ts';
+import { buildAuthorizedDataView, isPeriodCovered } from './member-pack-data-view.ts';
 import { collectNativeEvidence, exactTaskReport, nativeAssessmentEvidence, projectFileLocator, readCoversSource, readNativeFileEvidence, readStudioEvidence, studioPagesComplete } from './member-pack-verification.ts';
 import { createProtectedExecutionScope, type ProtectedExecutionScope } from '../agent/protected-tools.ts';
 
@@ -62,6 +62,7 @@ export interface TrustedHostOperator {
   operatorId: string;
   displayName?: string;
   activeProjectId?: string;
+  authorityProjectId?: string;
   verified: boolean;
 }
 
@@ -85,6 +86,7 @@ export interface RestrictedTaskWorkspace {
   osSandboxAvailable: boolean;
   scope: ProjectMemberPackFileScope;
   policyFingerprint: string;
+  contextStartAt: number;
   protectedScope: ProtectedExecutionScope;
 }
 
@@ -122,7 +124,6 @@ export interface MemberPackHostOptions {
   dataRoot: string;
   codeRoot?: string;
   memberPackEnabled?: boolean;
-  hasExternalOperatorResolver?: boolean;
   projects: ProjectStore;
   enterpriseScopes: EnterpriseScopeStore;
   cases?: CaseStore;
@@ -270,6 +271,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return undefined;
   }
 
+  function projectGrants(enterpriseId: string, projectId: string) {
+    return grants.listForSubject(enterpriseId, projectId).filter(grant => grant.subjectType === 'project');
+  }
+
   function projectPermissionFingerprint(projectId: string): string {
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return `unscoped:${enabled ? '1' : '0'}`;
@@ -279,21 +284,24 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       id: p.id,
       owner: isConstructionOwnerProject(p, projectId),
     }));
-    // Include live activeNow status so natural validTo expiration immediately changes the fingerprint!
-    const subjectGrants = grants.listForSubject(enterpriseId, projectId).map(g => {
-      const activeNow = isGrantActive(g, nowMs);
-      return {
-        id: g.id,
-        activeNow,
-        ops: activeNow ? g.operations : [],
-        scope: activeNow ? g.scope : null,
-        purposeKeys: activeNow ? (g.purposeKeys ?? []) : [],
-        revokedAt: g.revokedAt ?? null,
-      };
-    });
+    const subjectGrants = projectGrants(enterpriseId, projectId)
+      .filter(grant => isGrantActive(grant, nowMs))
+      .map(({ id, operations, scope, purposeKeys, resourceRef }) => ({ id, operations, scope, purposeKeys, resourceRef }));
     return createHash('sha256')
       .update(JSON.stringify({ enabled, enterpriseId, activePacks, subjectGrants }))
       .digest('hex');
+  }
+
+  function nextProjectGrantExpiry(projectId: string): number | undefined {
+    if (!enabled) return undefined;
+    const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
+    if (!enterpriseId) return undefined;
+    const at = Date.now();
+    const next = projectGrants(enterpriseId, projectId)
+      .filter(grant => grant.validTo && isGrantActive(grant, at))
+      .map(grant => Date.parse(grant.validTo!) + 1)
+      .sort((a, b) => a - b)[0];
+    return Number.isFinite(next) ? next : undefined;
   }
 
   function getAuthoritySecret(): Buffer {
@@ -464,7 +472,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return undefined;
     const enterprisePacks = packs.list(enterpriseId);
-    const subjectGrants = grants.listForSubject(enterpriseId, projectId);
+    const subjectGrants = projectGrants(enterpriseId, projectId);
     // Preserve ordinary unmanaged project behavior when no member pack and no resource grants exist for this enterprise/project.
     if (!subjectGrants.length && !enterprisePacks.length) return undefined;
     // Active Studio construction owner projects without subject grants keep their construction workspace.
@@ -524,7 +532,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
     // R2: When OS managed sandbox is unavailable, NEVER copy raw detail files to an unprotected filesystem directory!
     if (!scope || scope.mode !== 'allowlist' || !hasOsSandboxAvailable()) return;
-    const subjectGrants = grants.listForSubject(scope.enterpriseId, scope.projectId);
+    const subjectGrants = projectGrants(scope.enterpriseId, scope.projectId);
     const resolvedProjectRoot = path.resolve(projectRoot);
     for (const rel of scope.allowedPaths) {
       if (!rel.startsWith('020_clean/') || rel.includes('..')) continue;
@@ -560,7 +568,22 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const reportsDir = path.join(workspaceRoot, '060_reports');
     const workDir = path.join(workspaceRoot, 'work');
     const committedReportsDir = path.join(workspaceRoot, 'committed-reports');
+    const policyFingerprint = projectPermissionFingerprint(projectId);
     ensurePrivateDir(workspaceRoot);
+    const policyPath = path.join(workspaceRoot, '.policy');
+    const previousPolicy = fs.existsSync(policyPath) ? fs.readFileSync(policyPath, 'utf8').split('\n') : undefined;
+    const priorContextStart = Number(previousPolicy?.[1]);
+    const samePolicy = previousPolicy?.[0] === policyFingerprint && Number.isSafeInteger(priorContextStart);
+    const contextStartAt = samePolicy ? priorContextStart : Date.now();
+    if (!samePolicy) {
+      const archived = path.join(workspaceRoot, 'retired', randomUUID());
+      for (const dir of [cleanDir, reportsDir, workDir]) {
+        if (!fs.existsSync(dir)) continue;
+        ensurePrivateDir(archived);
+        fs.renameSync(dir, path.join(archived, path.basename(dir)));
+      }
+      fs.writeFileSync(policyPath, [policyFingerprint, contextStartAt].join('\n'), { mode: 0o600 });
+    }
     ensurePrivateDir(cleanDir);
     ensurePrivateDir(reportsDir);
     ensurePrivateDir(workDir);
@@ -592,7 +615,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       projectRoot: path.resolve(projectRoot),
       osSandboxAvailable,
       scope,
-      policyFingerprint: projectPermissionFingerprint(projectId),
+      policyFingerprint,
+      contextStartAt,
       protectedScope,
     };
     let byTask = activeWorkspaces.get(projectId);
@@ -604,16 +628,15 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return ws;
   }
 
-  function syncActiveWorkspacesForProject(projectId: string) {
-    if (!enabled) return;
-    const byTask = activeWorkspaces.get(projectId);
-    if (!byTask) return;
-    const nextScope = getProjectToolScope(projectId);
-    const nextFp = projectPermissionFingerprint(projectId);
-    for (const ws of byTask.values()) {
-      syncCleanDir(ws.cleanDir, ws.projectRoot, nextScope);
-      if (nextScope) ws.scope = nextScope;
-      ws.policyFingerprint = nextFp;
+  function retireRestrictedWorkspaceInputs(projectId: string) {
+    const workspaces = activeWorkspaces.get(projectId);
+    if (!workspaces) return;
+    const fingerprint = projectPermissionFingerprint(projectId);
+    for (const workspace of workspaces.values()) {
+      if (workspace.policyFingerprint === fingerprint || !fs.existsSync(workspace.cleanDir)) continue;
+      const retired = path.join(workspace.workspaceRoot, 'retired', randomUUID());
+      ensurePrivateDir(retired);
+      fs.renameSync(workspace.cleanDir, path.join(retired, '020_clean'));
     }
   }
 
@@ -624,6 +647,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const workspaceReports = path.join(wsRoot, '060_reports');
     const committedReports = path.join(wsRoot, 'committed-reports');
     if (!fs.existsSync(workspaceReports)) return;
+    const policyPath = path.join(wsRoot, '.policy');
+    if (!fs.existsSync(policyPath) || fs.readFileSync(policyPath, 'utf8').split('\n')[0] !== projectPermissionFingerprint(pid)) {
+      // Previously committed reports remain available by their exact locators.
+      return;
+    }
     ensurePrivateDir(committedReports);
     const targetReports = path.resolve(projectRoot, '060_reports');
     fs.mkdirSync(targetReports, { recursive: true });
@@ -795,7 +823,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (!scope) return { allowed: true };
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return { allowed: true };
-    const subjectGrants = grants.listForSubject(enterpriseId, projectId);
+    const subjectGrants = projectGrants(enterpriseId, projectId);
     const normalized = normalizeRelativeDataPath(relativePath);
     if (normalized.startsWith('010_draw/') || normalized === '010_draw') {
       return { allowed: false, reason: 'raw_draw_access_not_authorized: 受限资源授权项目禁止读取 010_draw 原始目录' };
@@ -841,7 +869,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (!scope) return { bytes: rawBytes, filtered: false };
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return { bytes: rawBytes, filtered: false };
-    const subjectGrants = grants.listForSubject(enterpriseId, projectId);
+    const subjectGrants = projectGrants(enterpriseId, projectId);
     const view = buildAuthorizedDataView(rawBytes, relativePath, subjectGrants, query);
     if (!view.allowed) {
       throw Object.assign(new StudioError(view.reason, 403), { code: view.code });
@@ -974,36 +1002,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const effectiveCleanDir = path.resolve(effectiveRoot, '020_clean');
     const effectiveReportsDir = path.resolve(effectiveRoot, '060_reports');
 
-    // R2: Live natural-expiry & grant-narrowing enforcement — compare full live policyFingerprint
-    // (including activeNow, stores, periodFrom/To, grain, purposeKeys, allowedPaths) so that even when
-    // a wide grant expires while a narrow grant on the SAME path remains active, stale wide-scope rows
-    // are IMMEDIATELY purged & re-filtered in workspace 020_clean before executing ANY tool!
-    if (workspaceRoot && fs.existsSync(effectiveCleanDir)) {
-      const existingByTask = activeWorkspaces.get(projectId);
-      let wsMatches: RestrictedTaskWorkspace | undefined;
-      if (existingByTask) {
-        for (const ws of existingByTask.values()) {
-          if (path.resolve(ws.workspaceRoot) === effectiveRoot) {
-            wsMatches = ws;
-            break;
-          }
-        }
-      }
-      const currentFp = projectPermissionFingerprint(projectId);
-      const prevPaths = wsMatches?.scope.allowedPaths ?? [];
-      const prevMode = wsMatches?.scope.mode;
-      const scopeChanged = prevMode !== scope.mode
-        || prevPaths.length !== scope.allowedPaths.length
-        || prevPaths.some((p, i) => p !== scope.allowedPaths[i])
-        || !wsMatches
-        || wsMatches.policyFingerprint !== currentFp;
-      if (scopeChanged || scope.mode === 'deny-detail') {
-        syncCleanDir(effectiveCleanDir, resolvedProjectRoot, scope);
-        if (wsMatches) {
-          wsMatches.scope = scope;
-          wsMatches.policyFingerprint = currentFp;
-        }
-      }
+    const workspace = workspaceRoot && [...(activeWorkspaces.get(projectId)?.values() ?? [])]
+      .find(candidate => candidate.workspaceRoot === effectiveRoot);
+    if (workspace && workspace.policyFingerprint !== projectPermissionFingerprint(projectId)) {
+      return { allowed: false, reason: 'member_pack_workspace_permission_changed' };
     }
 
     const resolveTarget = (rawTarget: unknown): string | undefined => {
@@ -1104,6 +1106,42 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return { allowed: true };
   }
 
+  function assertDeclaredReportAccess(systemId: string, projectId: string, declaration: StudioUseRecord) {
+    const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
+    if (!enabled || !enterpriseId || options.enterpriseScopes.enterpriseIdForProject(declaration.projectId) !== enterpriseId) {
+      throw new StudioError('studio_report_permission_denied', 403);
+    }
+    const grantsNow = projectGrants(enterpriseId, projectId)
+      .filter(grant => isGrantActive(grant, Date.now()));
+    const reportIdentity = digest(sourceRef(declaration.report));
+    const qualifications = packs.list(enterpriseId).filter(pack => pack.systemId === systemId).flatMap(pack =>
+      pack.useRecords.filter(use => matchesStudioUse(use, declaration))
+        .map(use => ({ use, purpose: pack.packRevisions.find(revision => revision.version === use.packVersion)
+          ?.purposeManifests.find(purpose => purpose.purposeId === use.purposeId && purpose.purposeKey === use.purposeKey) })),
+    );
+    const entitled = qualifications.length > 0 && qualifications.every(({ use, purpose }) => {
+      if (!purpose || purpose.status !== 'eligible') return false;
+      const operation = use.accessLevel === 'recalculate' ? 'read-detail-recalculate' : use.accessLevel === 'summary' ? 'cite-summary' : 'read-definition';
+      return grantsNow.some(grant => {
+        if (!grant.operations.includes(operation)) return false;
+        if (grant.purposeKeys?.length && !grant.purposeKeys.includes('*') && !grant.purposeKeys.includes(purpose.purposeKey)) return false;
+        if (grant.scope.brand && grant.scope.brand !== purpose.scope.brand) return false;
+        if (grant.scope.channel && grant.scope.channel !== purpose.scope.channel) return false;
+        if (grant.scope.stores?.length && (!purpose.scope.stores?.length || !purpose.scope.stores.every(store => grant.scope.stores?.includes(store)))) return false;
+        if (!isPeriodCovered(purpose.scope.period, grant.scope.periodFrom, grant.scope.periodTo)) return false;
+        if (operation === 'read-detail-recalculate' && !grant.scope.allowedDataPaths?.length) return false;
+        if (operation === 'cite-summary') {
+          const summary = purpose.summaryAccess;
+          return Boolean(summary && grant.resourceRef && digest(sourceRef(grant.resourceRef)) === digest(sourceRef(summary.summaryRef))
+            && grant.scope.grain === summary.grain && grant.scope.summaryVersion === summary.summaryRef.version);
+        }
+        return (!grant.scope.grain || grant.scope.grain === purpose.subjectUnit)
+          && (!grant.resourceRef || digest(sourceRef(grant.resourceRef)) === reportIdentity);
+      });
+    });
+    if (!entitled) throw new StudioError('studio_report_permission_denied', 403);
+  }
+
   function filterDependenciesForAccess(
     deps: EnterprisePackDependency[],
     access: { canDef: boolean; canSummary: boolean; canDetail: boolean },
@@ -1167,7 +1205,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
   function buildPackCatalogSummary(enterpriseId: string, projectId?: string, taskId?: string) {
     const list = packs.list(enterpriseId);
-    const subjectGrants = projectId ? grants.listForSubject(enterpriseId, projectId) : [];
+    const subjectGrants = projectId ? projectGrants(enterpriseId, projectId) : [];
     const summaries: Record<string, unknown>[] = [];
 
     for (const pack of list) {
@@ -1342,7 +1380,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const list = packs.list(enterpriseId);
     if (!list.length) return {};
 
-    const subjectGrants = grants.listForSubject(enterpriseId, projectId);
+    const subjectGrants = projectGrants(enterpriseId, projectId);
     for (const pack of list) {
       if (isConstructionOwnerProject(pack, projectId)) continue;
       const pin = packs.getTaskPin(pack.id, projectId, taskId);
@@ -1813,7 +1851,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
   function redactPackForConsumer(pack: EnterpriseDomainPack, projectId: string): EnterpriseDomainPack {
     if (isConstructionOwnerProject(pack, projectId)) return pack;
-    const subjectGrants = grants.listForSubject(pack.enterpriseId, projectId);
+    const subjectGrants = projectGrants(pack.enterpriseId, projectId);
     const nowMs = Date.now();
     const activeGrants = subjectGrants.filter(g => !g.revokedAt && (!g.validFrom || Date.parse(g.validFrom) <= nowMs) && (!g.validTo || Date.parse(g.validTo) >= nowMs));
     const ownPins = pack.taskPins.filter(p => p.projectId === projectId);
@@ -1968,10 +2006,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const isOperatorAllowedForSystem = (systemId: string): boolean => {
         const boundOp = getBoundSystemOperator(systemId);
         if (boundOp) return boundOp === effectiveOperatorId;
-        // Unbound legacy system (created before operator-bindings.json existed):
-        // ONLY allow when an external Host operator resolver is explicitly configured;
-        // NEVER allow arbitrary ephemeral `session:*` browser sessions to hijack an unbound legacy system!
-        return Boolean(options.hasExternalOperatorResolver);
+        // Only a trusted owner mapping can qualify legacy unbound systems.
+        return operator?.authorityProjectId === pid;
       };
       if (pack) {
         if (!isConstructionOwnerProject(pack, pid)) return undefined;
@@ -2040,7 +2076,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (!matchingPacks.length) return [];
 
     const created: EnterprisePackUseRecord[] = [];
-    const subjectGrants = grants.listForSubject(enterpriseId, input.projectId);
+    const subjectGrants = projectGrants(enterpriseId, input.projectId);
     const nowMs = Date.now();
     const activeGrants = subjectGrants.filter(g => !g.revokedAt && (!g.validFrom || Date.parse(g.validFrom) <= nowMs) && (!g.validTo || Date.parse(g.validTo) >= nowMs));
 
@@ -2077,8 +2113,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           created.push(already);
           continue;
         }
-        const hasDetailGrant = isConstruction || activeGrants.some(g => g.operations.includes('read-detail-recalculate'));
-        const hasSummaryGrant = activeGrants.some(g => g.operations.includes('cite-summary'));
+        const purposeAccess = evaluatePurposeAccessForSubject(activeGrants, pm);
+        const hasDetailGrant = isConstruction || Boolean(purposeAccess?.hasPartialOrFullDetail);
+        const hasSummaryGrant = Boolean(purposeAccess?.canSummary.allowed);
         const accessLevel: 'definition' | 'summary' | 'recalculate' =
           (pm.tier === 'formal-calculation' || pm.tier === 'limited-calculation') && hasDetailGrant
             ? 'recalculate'
@@ -2137,12 +2174,23 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const verifierTaskId = assessment.assessorTaskId;
     const independent = !!verifierProjectId && !!verifierTaskId &&
       (verifierProjectId !== use.projectId || verifierTaskId !== use.taskId) && !exactTaskReport(use.reportRef, assessment.report);
-    const verification = independent
-      ? await inspectVerifierTaskEvidence(verifierProjectId, verifierTaskId, pack, use, studioUse.id, assessment)
-      : undefined;
-    const verdictDetail = verification
-      ? verification.summary.missingReason ?? assessment.result
-      : '仅见原任务自评或缺少核验任务身份，保持待验证';
+    let verification: Awaited<ReturnType<typeof inspectVerifierTaskEvidence>> | undefined;
+    let verdictDetail = '仅见原任务自评或缺少核验任务身份，保持待验证';
+    if (independent) {
+      const verifyReportAccess = () => {
+        if (verifierProjectId !== use.projectId) assertDeclaredReportAccess(pack.systemId, verifierProjectId, studioUse);
+      };
+      try {
+        verifyReportAccess();
+        verification = await inspectVerifierTaskEvidence(verifierProjectId, verifierTaskId, pack, use, studioUse.id, assessment);
+        verifyReportAccess();
+        verdictDetail = verification.summary.missingReason ?? assessment.result;
+      } catch (error) {
+        if (!(error instanceof StudioError) || error.status !== 403) throw error;
+        verification = undefined;
+        verdictDetail = '当前核验任务缺少对该用途原报告的有效授权，保持待验证';
+      }
+    }
     return packs.verifyUse(pack.id, use.id, {
       verifierRole: independent ? '独立核验任务' : '原任务作者自评',
       ...(verifierProjectId ? { verifierProjectId } : {}),
@@ -2922,7 +2970,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         if (boundOperator !== binding.operator.operatorId) {
           throw new StudioError('resource_operator_not_authorized', 403);
         }
-      } else if (!options.hasExternalOperatorResolver) {
+      } else if (binding.operator.authorityProjectId !== pid) {
         throw new StudioError('resource_operator_not_bound', 403);
       }
       const effectiveOwnerTaskId = verifiedTaskId ?? matchedSystem?.ownerTaskId;
@@ -3085,9 +3133,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           ...(verifiedResourceRef ? { resourceRef: verifiedResourceRef } : {}),
           scope: rawScope as Parameters<ResourceGrantStore['grant']>[0]['scope'],
         });
-        // Immediately synchronize active task sandboxes AND re-gear open sessions for this subject project!
-        if (record.subjectType === 'project') {
-          syncActiveWorkspacesForProject(record.subjectId);
+        if (record.subjectType === 'project' && isGrantActive(record, Date.now())) {
           options.onProjectPermissionChanged?.(record.subjectId);
         }
         return { statusCode: 200, result: { grant: record } as unknown as Record<string, unknown> };
@@ -3139,9 +3185,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           ...(revokerActor.actorTaskId ? { revokedByTaskId: revokerActor.actorTaskId } : {}),
           revokedByOperatorId: revokerActor.actorOperatorId,
         });
-        // Immediately purge revoked files from active sandboxes AND re-gear open sessions for this subject project!
-        if (record.subjectType === 'project') {
-          syncActiveWorkspacesForProject(record.subjectId);
+        if (record.subjectType === 'project' && isGrantActive(existingGrant, Date.now())) {
           options.onProjectPermissionChanged?.(record.subjectId);
         }
         return { statusCode: 200, result: { grant: record } as unknown as Record<string, unknown> };
@@ -3273,7 +3317,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
     if (url.pathname === '/api/studio/enterprise-packs' && request.method === 'POST') {
       assertEnabledWritable();
-      const operator = resolveRequestOperator(request);
       const input = await options.readBody(request);
       const requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
       const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
@@ -3287,9 +3330,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         // Always enforce non-archived active project check (explicit projectId or system execution owner project)
         const targetProjectId = input.projectId !== undefined ? String(input.projectId) : studioExecutionOwner(system).projectId;
         await assertWritableProject(targetProjectId, enterpriseId);
-        if (operator.verified && operator.operatorId.trim()) {
-          bindSystemOperator(systemId, operator.operatorId);
-        }
         const pack = packs.ensurePack({
           enterpriseId,
           systemId,
@@ -3984,9 +4024,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     readPreservedReportBytes,
     isReportLockedByUseOrFeedback,
     projectPermissionFingerprint,
+    nextProjectGrantExpiry,
     getProjectToolScope,
     prepareRestrictedTaskWorkspace,
-    syncActiveWorkspacesForProject,
+    retireRestrictedWorkspaceInputs,
     syncWorkspaceReportsToProject,
     discardUncommittedWorkspaceReports,
     resolveTaskReportLocator,
@@ -3997,6 +4038,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     evaluateNativeToolCall,
     buildPackCatalogSummary,
     inspectPinnedSourceRead,
+    assertDeclaredReportAccess,
     resolveGrantAuthorityForProject,
     recordUseFromStudioDeclaration,
     syncAssessmentFromStudio,

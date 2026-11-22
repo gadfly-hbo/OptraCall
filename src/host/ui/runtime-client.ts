@@ -44,6 +44,9 @@ export async function importCredentials(credentials: unknown, signal?: AbortSign
 export async function clearConfiguration(provider?: string, signal?: AbortSignal): Promise<void> { await request(`configuration${provider ? `?provider=${encodeURIComponent(provider)}` : ''}`, 'DELETE', undefined, signal); }
 export function testConnection(revision: number, signal?: AbortSignal): Promise<{ ok: boolean; revision: number; reply: string; message: string }> { return request('connection-test', 'POST', { revision }, signal); }
 export async function listProjects(signal?: AbortSignal): Promise<ClientProject[]> { return (await request<{ projects: ClientProject[] }>('projects', 'GET', undefined, signal)).projects; }
+export async function bindProjectContext(id: string, signal?: AbortSignal): Promise<void> {
+  await request(`projects/${encodeURIComponent(id)}`, 'GET', undefined, signal);
+}
 export async function createProject(name: string, configurationId: string, goalOrigin?:ClientProject['goalOrigin']): Promise<ClientProject> { return (await request<{ project: ClientProject }>('projects', 'POST', { name, configurationId,goalOrigin })).project; }
 export async function renameProject(id: string, name: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}`, 'PATCH', { name })).project; }
 export async function archiveProject(id: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}/archive`, 'POST', {})).project; }

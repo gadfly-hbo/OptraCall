@@ -289,6 +289,19 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       if (!connector.enabled) return { block: true, reason: `${connector.label}工具未在当前普通任务资源开启。` };
       if (!checkDirectory(connector)) return { block: true, reason: connectorDirectories.get(connector.prefix)?.frozen ? `${connector.label}工具目录已变化，本会话连接器已冻结；请核对版本后关闭并重开会话。` : `${connector.label}工具目录尚未完整就绪，请先核对连接器状态。` };
     });
+    if (options.memberPackContextStartAt !== undefined) {
+      const contextStartAt = options.memberPackContextStartAt;
+      // Keep the native history intact. The current policy only qualifies messages from its own execution context.
+      const qualifiedMessage = (message: object) => 'timestamp' in message && typeof message.timestamp === 'number' && message.timestamp >= contextStartAt;
+      pi.on('context', event => ({ messages: event.messages.filter(qualifiedMessage) }));
+      pi.on('session_before_compact', event => {
+        if ([...event.preparation.messagesToSummarize, ...event.preparation.turnPrefixMessages].some(message => !qualifiedMessage(message))
+          || event.preparation.previousSummary && event.branchEntries.filter(entry => entry.type === 'compaction').some(entry => Date.parse(entry.timestamp) < contextStartAt)) return { cancel: true };
+      });
+      pi.on('session_before_tree', event => {
+        if (event.preparation.userWantsSummary && event.preparation.entriesToSummarize.some(entry => Date.parse(entry.timestamp) < contextStartAt)) return { cancel: true };
+      });
+    }
     // The SDK applies this replacement to agent state before its own JSONL append.
     pi.on('message_end', event => ({ message: redact(event.message) }));
     pi.on('before_agent_start', event => analysisPython ? ({ systemPrompt: event.systemPrompt + '\n' + analysisPythonGuidance(analysisPython, options.protectedExecution ? 'private' : 'existing') }) : undefined);

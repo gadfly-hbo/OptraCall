@@ -36,6 +36,7 @@ export type SessionProfile<Owner> = {
   agentOptions(owner: Owner, configuration: Readonly<RuntimeModelConfiguration>, execution?: SessionExecutionPlan): Omit<ProjectAgentOptions, 'configuration'> | Promise<Omit<ProjectAgentOptions, 'configuration'>>;
   executionMode?(owner: Owner): SessionExecutionMode | Promise<SessionExecutionMode>;
   policyFingerprint?(owner: Owner): string | Promise<string>;
+  policyCurrent?(owner: Owner, fingerprint: string | undefined): boolean;
   admit?(owner: Owner): void | Promise<void>;
   capabilities?: { commands?: boolean; ui?: boolean; editor?: boolean };
 };
@@ -97,7 +98,9 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
   const fail = (code: string): never => { throw new ProjectRuntimeError(code); };
   const identity = (ref: SessionRef<Owner>) => refs.get(ref) ?? fail('invalid_session_reference');
   const slotFor = (ref: SessionRef<Owner>) => { const { owner, key } = identity(ref); let slot = slots.get(key); if (!slot) { slot = { owner }; slots.set(key, slot); } return slot; };
-  const resourceCurrent = (slot: Slot, resource: Resource) => resource.active && (slot.resource === resource || slot.opening?.resource === resource);
+  const resourceCurrent = (slot: Slot, resource: Resource) => resource.active
+    && (slot.resource === resource || slot.opening?.resource === resource)
+    && (options.profile.policyCurrent?.(resource.owner, resource.policyFingerprint) ?? true);
   const resourceContext = (slot: Slot, resource: Resource): SessionContext<Owner> => ({ owner: resource.owner, isCurrent: () => resourceCurrent(slot, resource) });
   const operationContext = (slot: Slot, operation: Operation, requestId?: string): SessionContext<Owner> => {
     const context: SessionContext<Owner> = {

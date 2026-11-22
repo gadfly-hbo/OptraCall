@@ -249,7 +249,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const modelPacks = new ModelPackStore(path.join(dataRoot, 'models'));
   const enterpriseMaterials = new EnterpriseMaterialsStore(dataRoot);
   const projectDataReferences = createProjectDataContextReferences({ dataRoot, projects: guardedProjects, enterpriseMaterials });
-  const projectDataContext = new ProjectDataContextStore({ dataRoot, projects: guardedProjects, validateReferences: projectDataReferences.validate });
+  const projectDataContext = new ProjectDataContextStore({ dataRoot, projects: guardedProjects, validateReferences: projectDataReferences.validate,
+    authorizeEvidence: (projectId, relativePath, bytes) => {
+      if (relativePath.startsWith('020_clean/')) {
+        const view = studio.memberPack.filterAuthorizedProjectData(projectId, relativePath, bytes);
+        if (view.filtered) throw new RequestFault(403, 'member_pack_frozen_evidence_forbidden');
+      }
+    },
+  });
   let staticUi: Awaited<ReturnType<typeof loadStaticUi>> | undefined;
   const instanceId = options.instanceId ?? randomUUID();
   const operatorCookieSecret = randomBytes(32);
@@ -309,13 +316,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const cookie = parseOperatorContextCookie(typeof request.headers.cookie === 'string' ? request.headers.cookie : undefined);
     if (options.resolveOperator) {
       const base = options.resolveOperator(request);
+      const identity = { ...base, authorityProjectId: base.authorityProjectId ?? base.activeProjectId };
       if (cookie.present) {
         if (!cookie.valid || cookie.operatorId !== base.operatorId) {
-          return { ...base, verified: false };
+          return { ...identity, verified: false };
         }
-        return { ...base, activeProjectId: cookie.activeProjectId ?? base.activeProjectId };
+        return { ...identity, activeProjectId: cookie.activeProjectId ?? base.activeProjectId };
       }
-      return base;
+      return identity;
     }
     // Real local product startup: NEVER treat bare cookie-less requests as a verified global OS user!
     // Require a Host-signed HttpOnly session/operator cookie bound to an individual browser session or named business operator.
@@ -329,6 +337,12 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     }
     return { operatorId: 'anonymous:unverified', displayName: '未认证请求', verified: false };
   }
+  function assertCurrentProjectBorrower(request: IncomingMessage, projectId: string) {
+    if (!studio.memberPack.getProjectToolScope(projectId)) return;
+    const operator = resolveRequestOperator(request);
+    if (!operator.verified || operator.activeProjectId !== projectId) throw new RequestFault(403, 'member_pack_borrower_context_required');
+  }
+
   function setOperatorProjectCookie(response: ServerResponse, request: IncomingMessage, projectId: string) {
     const cookie = parseOperatorContextCookie(typeof request.headers.cookie === 'string' ? request.headers.cookie : undefined);
     if (options.resolveOperator) {
@@ -468,7 +482,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const dbReviewBundles = createDbLinkReviewPort({ privateRoot: path.resolve(dataRoot, 'db-link', 'review-bundles'), projects: guardedProjects, configurationSnapshot: (id, revision) => configuration.snapshot(id, revision) ?? undefined, materialSource: dbLinks.materialSource, isClosing: () => closing });
   const modelPackRoutes = createModelPackRoutes({store:modelPacks,readBody:body,mutate,isClosing:()=>closing});
   const sapMethods = createSapMethodStore(path.join(dataRoot, 'metric-assets'));
-  const studio = createStudioFeature({ dataRoot, codeRoot: options.cwd, memberPackEnabled: options.memberPackEnabled, memberPackPublishHook: options.memberPackPublishHook, resolveRequestOperator, hasExternalOperatorResolver: Boolean(options.resolveOperator), manageOperatorSession, onProjectPermissionChanged: projectId => { void (async () => { try { const proj = await projects.get(projectId); for (const task of proj.tasks) { const ref = projectSessions.ref({ project: proj, task }); if (!projectSessions.busy(ref)) await projectSessions.close(ref); } } catch { /* ignore */ } })(); }, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
+  const studio = createStudioFeature({ dataRoot, codeRoot: options.cwd, memberPackEnabled: options.memberPackEnabled, memberPackPublishHook: options.memberPackPublishHook, resolveRequestOperator, manageOperatorSession, onProjectPermissionChanged: retireProjectPermission, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
     reason: options.studioPython ? (command, context) => runStudioRuleInference({ python: options.studioPython!, codeRoot: options.cwd, command, signal: context.signal, assertCurrent: context.assertCurrent, registerCleanup: context.registerCleanup }) : undefined,
     extract: async (system, ref, context) => {
       if (!studioSessions) throw new StudioError('studio_semantica_unavailable', 409);
@@ -596,6 +610,29 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       else requirementPlugin.store.read(rap.instanceId);
     },
   });
+  const projectGrantExpiry = new Map<string, { expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
+  function retireProjectPermission(projectId: string) {
+    // closeAll invalidates all matching leases synchronously before it awaits cleanup.
+    void projectSessions.closeAll({ projectId }).catch(() => { /* Public lifecycle retains unknown cleanup. */ });
+    studio.memberPack.retireRestrictedWorkspaceInputs(projectId);
+    scheduleProjectPermissionExpiry(projectId);
+  }
+  function scheduleProjectPermissionExpiry(projectId: string) {
+    const current = projectGrantExpiry.get(projectId);
+    const expiresAt = studio.memberPack.nextProjectGrantExpiry(projectId);
+    if (current?.expiresAt === expiresAt) return;
+    if (current) clearTimeout(current.timer);
+    projectGrantExpiry.delete(projectId);
+    if (expiresAt === undefined || closing) return;
+    const timer = setTimeout(() => {
+      projectGrantExpiry.delete(projectId);
+      if (Date.now() < expiresAt) scheduleProjectPermissionExpiry(projectId);
+      else retireProjectPermission(projectId);
+    }, Math.min(2_147_483_647, Math.max(1, expiresAt - Date.now())));
+    timer.unref();
+    projectGrantExpiry.set(projectId, { expiresAt, timer });
+  }
+
   const projectSessions: AgentSessionDomain<ProjectOwner> = createAgentSessionDomain<ProjectOwner>({
     name: 'project-tasks',
     profile: {
@@ -603,6 +640,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       projectId: owner => owner.project.id,
       configuration: owner => availableConfiguration(owner.task.configuration.id, owner.task.configuration.revision),
       policyFingerprint: owner => studio.memberPack.projectPermissionFingerprint(owner.project.id),
+      policyCurrent: (owner, captured) => captured === studio.memberPack.projectPermissionFingerprint(owner.project.id),
       executionMode: async owner => {
         if (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec') && Boolean(studio.memberPack.getProjectToolScope(owner.project.id))) {
           return 'ordinary';
@@ -616,14 +654,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const { task } = await pair(owner.project.id, owner.task.id, true);
         if (clearing.has(task.configuration.provider)) throw new RequestFault(409, 'configuration_required');
         if (await verification.revisionBusy(owner.project.id, owner.task.id)) throw new RequestFault(409, 'session_busy');
+        scheduleProjectPermissionExpiry(owner.project.id);
       },
       agentOptions: async (owner, _configuration, execution) => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
         const legacyContract = (owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'legacy';
-        const protectedExecution = legacyContract ? await automatic.ordinaryExecution({ project, task }, execution) : undefined;
         const hasOsSandbox = process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec');
         const isRestrictedMemberPack = Boolean(studio.memberPack.getProjectToolScope(project.id));
-        const restrictedMemberPackWs = !protectedExecution ? await studio.memberPack.prepareRestrictedTaskWorkspace(project.id, task.id, project.rootPath) : undefined;
+        if (isRestrictedMemberPack && execution) throw new RequestFault(403, 'member_pack_legacy_execution_forbidden');
+        const protectedExecution = legacyContract && !isRestrictedMemberPack ? await automatic.ordinaryExecution({ project, task }, execution) : undefined;
+        const restrictedMemberPackWs = isRestrictedMemberPack ? await studio.memberPack.prepareRestrictedTaskWorkspace(project.id, task.id, project.rootPath) : undefined;
         const semanticPort = createSemanticContextPort({ projectId: project.id, taskId: task.id, projects: guardedProjects, data: projectDataContext, reader: semanticContext, mutate, isClosing: () => closing });
         const semanticContextRead = semanticGraph && (options.semanticGraph?.bindingFor(project.id, task.id) || options.studioPython && studio.availableForTask(project.id, task.id)) && (!protectedExecution || protectedExecution.profile === 'ordinary')
           ? createSemanticContextReadPort({ projectId: project.id, taskId: task.id, projects: guardedProjects, legacy: semanticPort, graph: semanticGraph, graphOnly: Boolean(protectedExecution), isClosing: () => closing }) : undefined;
@@ -660,7 +700,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               deliver();
             }),
           };
-        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, ...(restrictedMemberPackWs ? { memberPackWorkspaceRoot: restrictedMemberPackWs.workspaceRoot, ...(hasOsSandbox ? { memberPackExecutionScope: restrictedMemberPackWs.protectedScope } : {}) } : {}), goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id, task.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(!isRestrictedMemberPack && task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(!isRestrictedMemberPack && task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(!isRestrictedMemberPack && task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(!isRestrictedMemberPack && task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, memberPackGuard: call => studio.memberPack.evaluateNativeToolCall(project.id, project.rootPath, call, restrictedMemberPackWs?.workspaceRoot), methodIssue: async (input, context) => {
+        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, ...(restrictedMemberPackWs ? { memberPackWorkspaceRoot: restrictedMemberPackWs.workspaceRoot, memberPackContextStartAt: restrictedMemberPackWs.contextStartAt, memberPackPermissionCurrent: () => restrictedMemberPackWs.policyFingerprint === studio.memberPack.projectPermissionFingerprint(project.id), ...(hasOsSandbox ? { memberPackExecutionScope: restrictedMemberPackWs.protectedScope } : {}) } : {}), goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id, task.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(!isRestrictedMemberPack && task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(!isRestrictedMemberPack && task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(!isRestrictedMemberPack && task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(!isRestrictedMemberPack && task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, memberPackGuard: call => studio.memberPack.evaluateNativeToolCall(project.id, project.rootPath, call, restrictedMemberPackWs?.workspaceRoot), methodIssue: async (input, context) => {
           const operationId = stableActionId(['task-method-issue-v1', project.id, task.id, context.requestId, input.methodId, input.version, input.note, input.sources]);
           return methodIssues(input, { ...context, operationId, projectId: project.id, taskId: task.id });
         }, quotedDecisions: async (action, input, context) => {
@@ -868,6 +908,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
   });
   const automatic: ReturnType<typeof createAutomaticVerificationFeature> = createAutomaticVerificationFeature({ dataRoot, projects, verification, sessions: projectSessions, pair,
+    ordinaryReadAllowed: projectId => !studio.memberPack.getProjectToolScope(projectId),
     ordinaryReadRoots: () => [enterpriseMaterials.directoryPath, path.join(enterpriseMaterials.root, 'bodies'), path.join(enterpriseMaterials.root, 'files')],
     configuration: availableConfiguration,
     selectedConfiguration: id => { const selected = configuration.read(id); if (!selected) throw new RequestFault(409, 'configuration_required'); const snapshot = availableConfiguration(selected.id, selected.revision); if (!snapshot) throw new RequestFault(409, 'configuration_required'); return snapshot; },
@@ -2415,7 +2456,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           let calculationContract;
           owner.reviewAdmission = reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion';
           try {
-            if (owner.reviewAdmission === 'legacy') {
+            if (owner.reviewAdmission === 'legacy' && !studio.memberPack.getProjectToolScope(projectId)) {
               const legacy = await automatic.store.readSettings({ projectId, taskId });
               automaticObservation = await automatic.admit({ project, task }, requestId, fingerprint ?? createHash('sha256').update(JSON.stringify(['automatic-request-v1', projectId, taskId, requestId, prompt])).digest('hex'));
               calculationContract = reportCalculationContract({ ordinaryPrompt: (input.studioContext as { purpose?: string } | undefined)?.purpose !== 'construction', legacyEnabled: legacy.enabled, legacyAdmitted: Boolean(automaticObservation) });
@@ -2651,6 +2692,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const dbLink = await dbLinks.handle(request, url);
       if (dbLink) { json(response, dbLink.status, dbLink.body); return; }
       if (await studio.handle(request, response, url)) return;
+      const dataContextProject = /^\/api\/projects\/([a-f0-9-]+)\/data-context(?:\/|$)/.exec(url.pathname);
+      if (dataContextProject) assertCurrentProjectBorrower(request, dataContextProject[1]!);
       if (await handleProjectDataContextRoute({ request, response, url, store: projectDataContext, projects: guardedProjects, readBody: body, choices: projectDataReferences.choices, sourceStatuses: projectDataReferences.statuses, conceptSource: projectDataReferences.conceptSource, mutate, isClosing: () => closing })) return;
       if (url.pathname === '/api/connectors/trade-area' && request.method === 'GET') { json(response, 200, readTradeAreaStatus(dataRoot)); return; }
       if (await handleEnterpriseMaterialsRoute({ request, response, url, store: enterpriseMaterials, cases, mutate })) { await conclusionSourcesChanged(request.method); return; }
@@ -2692,6 +2735,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const semanticQuery = /^\/api\/projects\/([a-f0-9-]+)\/tasks\/([a-f0-9-]+)\/semantic-context$/.exec(url.pathname);
       if (semanticQuery && request.method === 'POST') {
         const projectId = semanticQuery[1]!, taskId = semanticQuery[2]!;
+        assertCurrentProjectBorrower(request, projectId);
         await pair(projectId, taskId);
         const input = await body(request);
         json(response, 200, await semanticContext.query(projectId, taskId, input as SemanticQueryInput, { audience: 'human' }));
@@ -2895,7 +2939,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             return created;
           }); json(response, 201, { task }); return;
         }
-        if (action === 'files' && request.method === 'GET') { json(response, 200, { files: studio.memberPack.filterProjectFileTree(projectId, await projects.tree(projectId)) }); return; }
+        if (action === 'files' && request.method === 'GET') { assertCurrentProjectBorrower(request, projectId); json(response, 200, { files: studio.memberPack.filterProjectFileTree(projectId, await projects.tree(projectId)) }); return; }
         if (action === 'files/upload' && request.method === 'POST') {
           const input = await body(request, PROJECT_UPLOAD_JSON_MAX_BYTES);
           if (typeof input.content !== 'string' || input.content.length % 4 !== 0) throw new RequestFault(400, 'invalid_file_encoding');
@@ -2934,6 +2978,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const requestedPath = (url.searchParams.get('path') ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
           const isMemberPackGuardedData = requestedPath.startsWith('010_draw/') || requestedPath.startsWith('020_clean/');
           if (isMemberPackGuardedData) {
+            assertCurrentProjectBorrower(request, projectId);
             studio.memberPack.assertProjectDataPathAllowed(projectId, requestedPath);
           }
           const file = await projects.readFile(projectId, requestedPath);
@@ -3349,6 +3394,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   })(); });
   return { server, ready, configuration, projects, cases, activateConclusionReviews: () => mutate(() => reviewTransition.activate()), close: async () => {
     closing = true;
+    for (const entry of projectGrantExpiry.values()) clearTimeout(entry.timer);
+    projectGrantExpiry.clear();
     const errors: unknown[] = [];
     const release = async (operation: () => unknown | Promise<unknown>) => { try { await operation(); } catch (error) { errors.push(error); } };
     await release(() => gate);

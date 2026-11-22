@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { startTestHost } from './fixtures/host-process.ts';
+import { startLegacyTestHost, startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 import { withCaseGoal } from './fixtures/case-goal.ts';
 import { CaseStore } from '../src/host/case-store.ts';
@@ -804,6 +804,22 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(autoUseA.independentVerification.status, 'pending', 'Same-task author self-assessment MUST NOT achieve independentVerification=pass!');
   assert.equal(autoUseA.independentVerification.selfAssessmentOnly, true, 'Same-task self-assessment MUST be explicitly flagged selfAssessmentOnly=true!');
 
+  const { task: definitionReportReader } = await json(await host.request(`/api/projects/${projMerch.id}/tasks`, 'POST', { name: '仅定义授权的历史报告检查' }), 201);
+  let definitionReadResult = '';
+  provider.setResponder(context => {
+    if (!context.recentToolResults.length) return { calls: [{
+      name: 'studio_assets', arguments: { action: 'read-source', systemId: system.id, payload: { ref: autoUseA.reportRef } },
+    }] };
+    definitionReadResult = providerMessageText(context.recentToolResults.at(-1)!.content);
+    return { text: '已检查当前可见范围。' };
+  });
+  await json(await host.request(`/api/projects/${projMerch.id}/tasks/${definitionReportReader.id}/messages`, 'POST', {
+    requestId: randomUUID(), text: '确认这个历史报告当前是否获准查看。',
+  }), 202);
+  await waitIdle(host, projMerch.id, definitionReportReader.id);
+  assert.match(definitionReadResult, /studio_report_permission_denied/);
+  assert.ok(!definitionReadResult.includes('C07'));
+
   // Even POST /uses/:id/verify with independentConfirmed: true MUST still reject same-task self-assessment as pass!
   const verifySelfOnly = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses/${autoUseA.id}/verify`, 'POST', {
     requestId: randomUUID(),
@@ -1202,22 +1218,28 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     assert.equal(sha(fs.readFileSync(reportV1Path)), sha(reportV1Bytes), 'Original report bytes MUST remain 100% untouched!');
   }
 
-  // Also test direct workspace sync same-task same-name collision on projStar (regardless of OS)!
-  const wsTaskAReports = path.join(host.dataRoot, 'member-pack-workspaces', projStar.id, taskA.id, '060_reports');
-  fs.mkdirSync(wsTaskAReports, { recursive: true });
-  fs.writeFileSync(path.join(wsTaskAReports, 'repurchase-v1.0.json'), JSON.stringify({ owner: 'taskA-ws-rev2', numerator: 88 }));
-  // Trigger sync via a second task or declare-use path; assert original reportV1Path stays untouched!
   const { task: taskA2 } = await json(await host.request(`/api/projects/${projStar.id}/tasks`, 'POST', { name: '同名报告保护反例任务' }), 201);
-  const wsTaskA2Reports = path.join(host.dataRoot, 'member-pack-workspaces', projStar.id, taskA2.id, '060_reports');
-  fs.mkdirSync(wsTaskA2Reports, { recursive: true });
-  fs.writeFileSync(path.join(wsTaskA2Reports, 'repurchase-v1.0.json'), JSON.stringify({ packVersion: '1.0', owner: 'taskA2', numerator: 99 }));
-  provider.setResponder(() => ({ text: '已生成同名报告冲突测试完成。' }));
+  let sameNameStep = 0;
+  const sameNameReport = JSON.stringify({ packVersion: '1.0', owner: 'taskA2', numerator: 99 });
+  const altName = `repurchase-v1.0.task-${taskA2.id.slice(0, 8)}.json`;
+  provider.setResponder(() => {
+    sameNameStep += 1;
+    if (sameNameStep === 1) {
+      return hasOsSandbox
+        ? { calls: [{ name: 'write', arguments: { path: '../060_reports/repurchase-v1.0.json', content: sameNameReport } }] }
+        : { calls: [{ name: 'write_report', arguments: { filename: 'repurchase-v1.0.json', content: sameNameReport } }] };
+    }
+    if (!hasOsSandbox && sameNameStep === 2) {
+      return { calls: [{ name: 'write_report', arguments: { filename: altName, content: sameNameReport } }] };
+    }
+    return { text: '已生成同名报告冲突测试完成。' };
+  });
   await json(await host.request(`/api/projects/${projStar.id}/tasks/${taskA2.id}/messages`, 'POST', {
     requestId: randomUUID(), text: '同步同名报告保护测试。',
   }), 202);
   await waitIdle(host, projStar.id, taskA2.id);
   assert.equal(sha(fs.readFileSync(reportV1Path)), sha(reportV1Bytes), 'Second task writing same-name report MUST NEVER overwrite Task A original report!');
-  const conflictCopyPath = path.join(projStar.rootPath, '060_reports', `repurchase-v1.0.task-${taskA2.id.slice(0, 8)}.json`);
+  const conflictCopyPath = path.join(projStar.rootPath, '060_reports', altName);
   assert.equal(fs.existsSync(conflictCopyPath), true, 'Second task same-name report MUST be preserved under conflict-free filename!');
   assert.equal(JSON.parse(fs.readFileSync(conflictCopyPath, 'utf8')).owner, 'taskA2');
 
@@ -2235,7 +2257,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
 test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexistence expiry on the SAME 020_clean CSV immediately narrows active task view', { timeout: 90_000 }, async t => {
   const provider = await startToolProvider();
   t.after(() => provider.close());
-  const host = await startTestHost();
+  const host = await startLegacyTestHost();
   t.after(() => host.close());
 
   await json(await host.request('/api/configuration', 'PUT', {
@@ -2272,6 +2294,17 @@ test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexist
     });
 
   const { project: projConsumer } = await json(await host.request('/api/projects', 'POST', { name: 'R8 实时宽窄消费' }), 201);
+  const hasOsSandbox = process.platform === 'darwin' && fs.existsSync('/usr/bin/sandbox-exec');
+  const { task } = await json(await host.request(`/api/projects/${projConsumer.id}/tasks`, 'POST', { name: '在途宽窄过期切换任务' }), 201);
+  const legacyRoute = `/api/projects/${projConsumer.id}/tasks/${task.id}/automatic-verification`;
+  const mixedPath = path.join(projConsumer.rootPath, '020_clean', 'mixed_orders.csv');
+  if (hasOsSandbox) {
+    fs.writeFileSync(mixedPath, 'account,first_order_date,store\nH01,2026-09-02,湖庭直营店\n');
+    await json(await host.request(`${legacyRoute}/settings`, 'PUT', {
+      expectedRevision: 0,
+      settings: { enabled: true, question: '合成兼容核算', dataFiles: ['020_clean/mixed_orders.csv'], reportPath: '060_reports/legacy.md' },
+    }));
+  }
   for (const p of [projBuild, projConsumer]) {
     await json(await host.request('/api/studio/enterprise-associations', 'POST', { requestId: randomUUID(), kind: 'project', entityId: p.id, enterpriseId }));
   }
@@ -2292,10 +2325,23 @@ test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexist
   ].join('\n');
   fs.writeFileSync(path.join(projConsumer.rootPath, '020_clean', 'mixed_orders.csv'), mixedCsv);
 
+  const openConsumer = await host.request(`/api/projects/${projConsumer.id}`);
+  assert.equal(openConsumer.status, 200);
+  const consumerCookie = (openConsumer.headers.get('set-cookie') ?? '').split(';')[0]!;
+  const consumerReq = (route: string, method = 'GET', data?: unknown) =>
+    fetch(host.baseUrl + route, {
+      method,
+      headers: { ...host.headers, cookie: consumerCookie },
+      ...(data === undefined ? {} : { body: JSON.stringify(data) }),
+    });
+  const inputVersionId = randomUUID(), datasetId = randomUUID();
+  const dataContext = `/api/projects/${projConsumer.id}/data-context`;
+  const frozenEvidence = `${dataContext}/datasets/${datasetId}/versions/${inputVersionId}/evidence`;
+
   // Grant TWO grants on the SAME 020_clean/mixed_orders.csv:
   // - Wide grant (湖庭直营店 + 杉岸直营店) expiring in 2500ms
   // - Narrow grant (湖庭直营店 ONLY) with NO expiry
-  const wideExpiryIso = new Date(Date.now() + 2500).toISOString();
+  const wideExpiryIso = new Date(Date.now() + 12_000).toISOString();
   await json(await ownerReq('/api/studio/resource-grants', 'POST', {
     requestId: randomUUID(), enterpriseId, grantorProjectId: projBuild.id, authorityToken: authToken,
     grantBasis: '实时宽授权（两店短期）', subjectType: 'project', subjectId: projConsumer.id, resourceKind: 'detail',
@@ -2310,8 +2356,18 @@ test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexist
     scope: { stores: ['湖庭直营店'], allowedDataPaths: ['020_clean/mixed_orders.csv'] },
   }));
 
-  const hasOsSandbox = process.platform === 'darwin' && fs.existsSync('/usr/bin/sandbox-exec');
-  const { task } = await json(await host.request(`/api/projects/${projConsumer.id}/tasks`, 'POST', { name: '在途宽窄过期切换任务' }), 201);
+  await json(await consumerReq(`${dataContext}/inputs`, 'POST', {
+    datasetId, inputVersionId, operationId: inputVersionId, baseIndexRevision: 0, name: '冻结合成明细',
+    sourcePath: '020_clean/mixed_orders.csv', expectedSha256: sha(mixedCsv), expectedBytes: Buffer.byteLength(mixedCsv),
+  }), 201);
+  const wideEvidence = await consumerReq(frozenEvidence);
+  assert.equal(wideEvidence.status, 200);
+  assert.equal(await wideEvidence.text(), mixedCsv);
+
+  if (hasOsSandbox) {
+    assert.equal((await json(await host.request(`${legacyRoute}/settings`))).settings.enabled, true);
+    assert.equal((await json(await host.request(`${legacyRoute}/capabilities`))).supported, false);
+  }
 
   // Turn 1 (BEFORE wide grant expiry): reads mixed_orders.csv -> sees BOTH H01 and S02!
   let step1 = 0;
@@ -2342,6 +2398,7 @@ test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexist
   provider.setResponder(context => {
     step2 += 1;
     if (step2 === 1) {
+      assert.ok(!JSON.stringify(context.messages).includes('S02'), 'A resumed narrow run must not resend the wider native context to its provider');
       return hasOsSandbox
         ? { calls: [{ name: 'read', arguments: { path: 'mixed_orders.csv' } }] }
         : { calls: [{ name: 'read_input', arguments: { filename: 'mixed_orders.csv' } }] };
@@ -2355,5 +2412,37 @@ test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexist
   await waitIdle(host, projConsumer.id, task.id, st1.snapshot.messages.length + 2);
   assert.ok(turn2CsvText.includes('H01'), `Turn 2 after wide expiry MUST still see narrow-granted H01, got: ${turn2CsvText}`);
   assert.ok(!turn2CsvText.includes('S02') && !turn2CsvText.includes('杉岸直营店'), `Turn 2 after wide expiry MUST immediately strip expired wide-grant store S02, got: ${turn2CsvText}`);
+  const narrowEvidence = await consumerReq(frozenEvidence);
+  assert.equal(narrowEvidence.status, 403, 'A frozen immutable snapshot requiring a wider grant stays withheld');
+  const semantic = await json(await consumerReq(`/api/projects/${projConsumer.id}/tasks/${task.id}/semantic-context`, 'POST', {
+    action: 'read', target: { kind: 'data-input', projectId: projConsumer.id, datasetId, inputVersionId },
+  }));
+  assert.ok(!JSON.stringify(semantic).includes('S02'), 'The semantic reader applies the same frozen original authorization');
+
+  const expiry = new Date(Date.now() + 12_000).toISOString();
+  await json(await ownerReq('/api/studio/resource-grants', 'POST', {
+    requestId: randomUUID(), enterpriseId, grantorProjectId: projBuild.id, authorityToken: authToken,
+    grantBasis: '在途合成明细权限', subjectType: 'project', subjectId: projConsumer.id, resourceKind: 'detail',
+    operations: ['read-detail-recalculate'], validTo: expiry,
+    scope: { stores: ['湖庭直营店', '杉岸直营店'], allowedDataPaths: ['020_clean/mixed_orders.csv'] },
+  }));
+  const { task: duringExpiry } = await json(await host.request(`/api/projects/${projConsumer.id}/tasks`, 'POST', { name: '权限到期中的活动任务' }), 201);
+  const providerCount = provider.requests.length;
+  let expiryStep = 0;
+  provider.setResponder(() => {
+    if (++expiryStep === 1 && hasOsSandbox) return { calls: [
+      { name: 'write', arguments: { path: '../060_reports/held.md', content: '合成暂存稿' } },
+    ] };
+    return { hold: true };
+  });
+  await json(await host.request(`/api/projects/${projConsumer.id}/tasks/${duringExpiry.id}/messages`, 'POST', {
+    requestId: randomUUID(), text: '保存一份暂存稿后继续等待。',
+  }), 202);
+  const heldIndex = providerCount + (hasOsSandbox ? 1 : 0);
+  await provider.waitForRequests(heldIndex + 1);
+  const held = provider.requests[heldIndex]!;
+  for (let attempt = 0; attempt < 140 && !held.closedEarly; attempt++) await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(held.closedEarly, true, 'Natural expiry retires an already admitted active operation');
+  assert.equal(fs.existsSync(path.join(projConsumer.rootPath, '060_reports', 'held.md')), false, 'A late staged report is never published after retirement');
   assert.deepEqual(provider.errors, []);
 });

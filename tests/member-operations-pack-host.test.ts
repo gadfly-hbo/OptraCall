@@ -1524,6 +1524,10 @@ test('Host Round-7: real-product operator isolation & named business operator au
     fs.writeFileSync(path.join(projConsumer.rootPath, '020_clean', 'unauthorized_other.csv'), 'account,first_order_date,store\nC99,2026-09-10,杉岸直营店\n');
     fs.writeFileSync(path.join(projConsumer.rootPath, '010_draw', 'raw_secret.csv'), 'secret,raw\n1,2\n');
 
+    const openConsumer = await srv.req(`/api/projects/${projConsumer.id}`, 'GET', undefined, { cookie: analystCookie });
+    assert.equal(openConsumer.status, 200);
+    const consumerCookie = openConsumer.setCookie.split(';')[0]!;
+
     // Grant short-lived (450ms) single-store detail grant for mixed_orders.csv + no_store.csv
     const validToIso = new Date(Date.now() + 450).toISOString();
     const shortGrant = await srv.req('/api/studio/resource-grants', 'POST', {
@@ -1543,8 +1547,11 @@ test('Host Round-7: real-product operator isolation & named business operator au
     assert.equal(shortGrant.status, 200);
 
     // Download via GET /api/projects/:id/files/content:
+    const otherProjectRead = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=020_clean%2Fmixed_orders.csv`, 'GET', undefined, { cookie: ownerActiveCookie });
+    assert.equal(otherProjectRead.status, 403);
+    assert.equal(otherProjectRead.json.code, 'member_pack_borrower_context_required');
     // - mixed_orders.csv -> 200 with ONLY 湖庭直营店 (C01), NO 杉岸直营店 (C02) and NO blank store (C03)!
-    const dlMixed = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: ownerActiveCookie });
+    const dlMixed = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: consumerCookie });
     assert.equal(dlMixed.status, 200);
     assert.equal(dlMixed.headers.get('x-optracall-authorized-view'), 'filtered');
     assert.ok(String(dlMixed.json).includes('C01'));
@@ -1552,18 +1559,18 @@ test('Host Round-7: real-product operator isolation & named business operator au
     assert.ok(!String(dlMixed.json).includes('C03'), 'files/content MUST NOT leak unattributable row C03!');
 
     // - no_store.csv -> 403 (missing verifiable store column!)
-    const dlNoStore = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/no_store.csv')}`, 'GET', undefined, { cookie: ownerActiveCookie });
+    const dlNoStore = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/no_store.csv')}`, 'GET', undefined, { cookie: consumerCookie });
     assert.equal(dlNoStore.status, 403);
 
     // - unauthorized_other.csv & 010_draw/raw_secret.csv -> 403
-    const dlUnauth = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/unauthorized_other.csv')}`, 'GET', undefined, { cookie: ownerActiveCookie });
+    const dlUnauth = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/unauthorized_other.csv')}`, 'GET', undefined, { cookie: consumerCookie });
     assert.equal(dlUnauth.status, 403);
-    const dlDraw = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('010_draw/raw_secret.csv')}`, 'GET', undefined, { cookie: ownerActiveCookie });
+    const dlDraw = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('010_draw/raw_secret.csv')}`, 'GET', undefined, { cookie: consumerCookie });
     assert.equal(dlDraw.status, 403);
 
     // Wait for natural validTo expiry (550ms) -> files/content MUST immediately flip to 403!
     await new Promise(resolve => setTimeout(resolve, 550));
-    const dlAfterExpiry = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: ownerActiveCookie });
+    const dlAfterExpiry = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: consumerCookie });
     assert.equal(dlAfterExpiry.status, 403, 'Naturally expired grant MUST immediately deny files/content download!');
 
     // 4. R5: Real CaseStore decision revision pinning & historical readback after newer decision revision!
@@ -1792,13 +1799,17 @@ test('Host Round-8: wide+narrow grant coexistence expiry on same path, restricte
     }, { cookie: ownerCookie });
     assert.equal(otherGrant.status, 200);
 
+    const consumerContext = await srv.req(`/api/projects/${projConsumer.id}`, 'GET', undefined, { cookie: '' });
+    assert.equal(consumerContext.status, 200);
+    const consumerCookie = consumerContext.setCookie.split(';')[0]!;
+
     // Before wide grant expiry: files/content sees BOTH H01 (湖庭) and S02 (杉岸)!
-    const beforeExpiry = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: ownerCookie });
+    const beforeExpiry = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: consumerCookie });
     assert.equal(beforeExpiry.status, 200);
     assert.ok(String(beforeExpiry.json).includes('H01') && String(beforeExpiry.json).includes('S02'), 'Before wide grant expiry, both 湖庭 and 杉岸 MUST be visible');
 
     // Restricted project GET /files hides 010_draw and unauthorized_other.csv, keeping only mixed_orders.csv!
-    const treeRes = await srv.req(`/api/projects/${projConsumer.id}/files`, 'GET', undefined, { cookie: ownerCookie });
+    const treeRes = await srv.req(`/api/projects/${projConsumer.id}/files`, 'GET', undefined, { cookie: consumerCookie });
     assert.equal(treeRes.status, 200);
     const treeJson = JSON.stringify(treeRes.json.files);
     assert.ok(treeJson.includes('mixed_orders.csv'), 'Authorized mixed_orders.csv MUST appear in filtered file tree');
@@ -1806,34 +1817,34 @@ test('Host Round-8: wide+narrow grant coexistence expiry on same path, restricte
     assert.ok(!treeJson.includes('raw_secret.csv'), '010_draw raw file MUST be hidden from restricted project tree!');
 
     // Restricted project POST /files/copy-to-clean -> 403!
-    const copyRes = await srv.req(`/api/projects/${projConsumer.id}/files/copy-to-clean`, 'POST', { path: '010_draw/raw_secret.csv' }, { cookie: ownerCookie });
+    const copyRes = await srv.req(`/api/projects/${projConsumer.id}/files/copy-to-clean`, 'POST', { path: '010_draw/raw_secret.csv' }, { cookie: consumerCookie });
     assert.equal(copyRes.status, 403, 'Restricted member-pack project MUST NOT copy 010_draw to 020_clean!');
 
     // Restricted project GET /db-link/sources -> 403!
-    const dbLinkRes = await srv.req(`/api/projects/${projConsumer.id}/db-link/sources`, 'GET', undefined, { cookie: ownerCookie });
+    const dbLinkRes = await srv.req(`/api/projects/${projConsumer.id}/db-link/sources`, 'GET', undefined, { cookie: consumerCookie });
     assert.equal(dbLinkRes.status, 403, 'Restricted member-pack project MUST be denied project-scoped db-link HTTP access!');
 
     // Consumer GET /resource-grants?enterpriseId=...&projectId=projConsumer MUST ONLY see projConsumer's grants (not projOtherConsumer)!
-    const consumerGrantsRes = await srv.req(`/api/studio/resource-grants?enterpriseId=${enterpriseId}&projectId=${projConsumer.id}`, 'GET', undefined, { cookie: ownerCookie });
+    const consumerGrantsRes = await srv.req(`/api/studio/resource-grants?enterpriseId=${enterpriseId}&projectId=${projConsumer.id}`, 'GET', undefined, { cookie: consumerCookie });
     assert.equal(consumerGrantsRes.status, 200);
     assert.ok(consumerGrantsRes.json.grants.every((g: any) => g.subjectId === projConsumer.id), 'Consumer resource-grants listing MUST NOT leak other projects grants!');
 
     // Wait 600ms -> wide grant expires while narrow grant remains active on the SAME path!
     await new Promise(resolve => setTimeout(resolve, 600));
-    const afterWideExpiry = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: ownerCookie });
+    const afterWideExpiry = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: consumerCookie });
     assert.equal(afterWideExpiry.status, 200, 'Narrow grant MUST keep mixed_orders.csv readable after wide grant expires');
     assert.ok(String(afterWideExpiry.json).includes('H01'), 'Narrow-granted 湖庭直营店 MUST stay visible');
     assert.ok(!String(afterWideExpiry.json).includes('S02') && !String(afterWideExpiry.json).includes('杉岸直营店'), 'Expired wide grant store 杉岸直营店 MUST be stripped immediately!');
 
     // 2. R2: Legacy unbound system anti-takeover under default real-product startup (no resolveOperator)
     const dataRoot = path.join(root, 'data');
-    const bindingsPath = path.join(dataRoot, 'studio', 'operator-bindings.json');
+    const bindingsPath = path.join(dataRoot, 'member-packs', 'operator-bindings.json');
     await srv.close();
-    if (fs.existsSync(bindingsPath)) {
-      const parsed = JSON.parse(fs.readFileSync(bindingsPath, 'utf8'));
-      delete parsed.systems?.[systemId];
-      fs.writeFileSync(bindingsPath, JSON.stringify(parsed, null, 2));
-    }
+    const originalBindings = fs.readFileSync(bindingsPath);
+    const legacyBindings = JSON.parse(originalBindings.toString('utf8'));
+    assert.ok(legacyBindings[systemId]);
+    delete legacyBindings[systemId];
+    fs.writeFileSync(bindingsPath, JSON.stringify(legacyBindings));
     srv = await startTestHost(root);
     // Ephemeral session:* opening projOwner MUST NOT hijack unbound legacy system!
     const ephOpen = await srv.req(`/api/projects/${projOwner.id}`, 'GET', undefined, { cookie: '' });
@@ -1841,6 +1852,27 @@ test('Host Round-8: wide+narrow grant coexistence expiry on same path, restricte
     const ephCookie = ephOpen.setCookie.split(';')[0]!;
     const ephAuth = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`, 'GET', undefined, { cookie: ephCookie });
     assert.equal(ephAuth.status, 403, 'Ephemeral session:* MUST NEVER take over an unbound legacy system!');
+    await srv.req('/api/studio/enterprise-packs', 'POST', {
+      requestId: randomUUID(), enterpriseId, systemId, projectId: projOwner.id, domain: 'member-operations', name: 'R8 资产包',
+    }, { cookie: ephCookie });
+    const afterEnsure = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`, 'GET', undefined, { cookie: ephCookie });
+    assert.equal(afterEnsure.status, 403, 'The existing pack entry cannot establish authority for an unbound legacy owner');
+    await srv.close();
+
+    srv = await startTestHost(root, { resolveOperator: () => ({ operatorId: 'op:unmapped', verified: true }) });
+    const unmapped = await srv.req(`/api/projects/${projOwner.id}`);
+    assert.equal(unmapped.status, 200);
+    const unmappedAuth = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`);
+    assert.equal(unmappedAuth.status, 403, 'A trusted login without an ownership mapping cannot issue an unbound legacy credential');
+    await srv.close();
+
+    srv = await startTestHost(root, { resolveOperator: () => ({ operatorId: 'op:mapped', verified: true, authorityProjectId: projOwner.id }) });
+    const mappedAuth = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`);
+    assert.equal(mappedAuth.status, 200, 'An explicit original-project authority mapping can qualify a legacy owner');
+    await srv.close();
+    fs.writeFileSync(bindingsPath, originalBindings);
+    srv = await startTestHost(root);
+
 
     // 3. R5: Retroactive feedback after Case rev.1 -> rev.2 MUST resolve historical rev.1 (or mark unresolved when post-origin), NEVER pin rev.2!
     const relogin = await srv.req('/api/studio/operators/session', 'POST', {

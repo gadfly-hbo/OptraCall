@@ -50,7 +50,6 @@ export type StudioHostOptions = {
   reason?(command: StudioRuleCommand, context: SemanticContextCallContext): Promise<StudioRuleResult>;
   memberPackPublishHook?: import('./member-pack-host.ts').MemberPackHostOptions['publishAuthorityDependency'];
   resolveRequestOperator?: import('./member-pack-host.ts').MemberPackHostOptions['resolveRequestOperator'];
-  hasExternalOperatorResolver?: boolean;
   manageOperatorSession?: import('./member-pack-host.ts').MemberPackHostOptions['manageOperatorSession'];
   onProjectPermissionChanged?: import('./member-pack-host.ts').MemberPackHostOptions['onProjectPermissionChanged'];
 };
@@ -529,7 +528,6 @@ export function createStudioFeature(options: StudioHostOptions) {
     inspectAuthorityDependency,
     verifySummaryAuthority,
     resolveRequestOperator: options.resolveRequestOperator,
-    hasExternalOperatorResolver: options.hasExternalOperatorResolver,
     manageOperatorSession: options.manageOperatorSession,
     onProjectPermissionChanged: options.onProjectPermissionChanged,
   });
@@ -541,6 +539,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     ...options,
     studio: store,
     enterpriseScope,
+    assertDeclaredReportAccess: memberPack.assertDeclaredReportAccess,
     assertDataPathAllowed: (projectId, locator) => memberPack.assertProjectDataPathAllowed(projectId, locator),
     filterAuthorizedDataBytes: (projectId, locator, rawBytes) => memberPack.filterAuthorizedProjectData(projectId, locator, rawBytes),
     readPreservedReportBytes: (projectId, taskId, locator, expectedSha256) => memberPack.readPreservedReportBytes(projectId, taskId, locator, expectedSha256),
@@ -1009,17 +1008,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           return options.mutate(async () => {
             await assertCurrent();
             const pinnedCheck = !isConstruction ? memberPack.inspectPinnedSourceRead(projectId, taskId, ref) : {};
-            const nowMs = Date.now();
-            const allowDeclaredUseReport = !isConstruction
-              && ref.authority === 'task'
-              && Boolean(ref.locator?.startsWith('060_reports/'))
-              && Boolean(system.enterpriseId && enterpriseScopes.enterpriseIdForProject(projectId) === system.enterpriseId)
-              && memberPack.grants.listForSubject(system.enterpriseId!, projectId).some(g =>
-                !g.revokedAt
-                && (!g.validFrom || Date.parse(g.validFrom) <= nowMs)
-                && (!g.validTo || Date.parse(g.validTo) >= nowMs),
-              );
-            const read = await sources.read(ref, projectId, id, { construction: isConstruction, taskId, ...(pinnedCheck.matchedPack ? { historical: true } : {}), ...(allowDeclaredUseReport ? { allowDeclaredUseReport: true } : {}) });
+            const read = await sources.read(ref, projectId, id, { construction: isConstruction, taskId, ...(pinnedCheck.matchedPack ? { historical: true } : {}) });
             context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503);
             const { text: _body, ...metadata } = read, selected = selectFoundationSource(read, payload), qualifications = !isConstruction ? { publications: publicationFacts(store.get(id), projectId, [read.ref]).map(publication => publicationIndex(id, publication)) } : {}, page = studioTextPage(selected.text, { ...payload, length: payload.length === undefined ? 16_000 : payload.length }, { ...metadata, ...qualifications, ...(pinnedCheck.matchedPack ? { pinnedPack: pinnedCheck.matchedPack } : {}), ...selected.selection }, { ref: read.ref, ...selected.selection });
             return reply(action, { ...page, complete: read.complete && page.complete });

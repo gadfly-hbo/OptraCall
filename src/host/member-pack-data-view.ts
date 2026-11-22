@@ -28,14 +28,6 @@ function normalizeRelPath(value: string): string {
   return value.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/').trim();
 }
 
-function normalizeStoreBase(value: string): string {
-  return value
-    .trim()
-    .replace(/(?:直营门店|直营店|旗舰店|加盟店|单店|门店|直营|店)$/u, '')
-    .trim()
-    .toLowerCase();
-}
-
 const UNATTRIBUTABLE_STORE_TOKENS = new Set([
   '', 'null', 'undefined', 'n/a', 'na', 'none', 'unknown', 'unassigned', '-', '--', '未归属', '未知', '空', '无',
 ]);
@@ -46,55 +38,35 @@ function isUnattributableStoreValue(value: string | undefined): boolean {
   return UNATTRIBUTABLE_STORE_TOKENS.has(trimmed);
 }
 
-function rowStoreMatchesGrant(rowStore: string, grantStores: readonly string[]): boolean {
-  if (isUnattributableStoreValue(rowStore)) return false;
-  const rRaw = rowStore.trim().toLowerCase();
-  const rBase = normalizeStoreBase(rowStore);
-  if (!rRaw) return false;
-  return grantStores.some(gs => {
-    const gRaw = gs.trim().toLowerCase();
-    const gBase = normalizeStoreBase(gs);
-    if (rRaw === gRaw) return true;
-    if (rBase && gBase && rBase === gBase) return true;
-    return false;
-  });
-}
-
-function parseDateBounds(value: string): { start: number; end: number } | undefined {
+export function dataPeriodBounds(value: string): { start: number; end: number } | undefined {
   const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const ym = /^(\d{4})-(\d{2})$/.exec(trimmed);
-  if (ym) {
-    const year = Number(ym[1]), month = Number(ym[2]);
-    if (month >= 1 && month <= 12) {
-      const start = Date.UTC(year, month - 1, 1);
-      const end = Date.UTC(year, month, 0, 23, 59, 59, 999);
-      return { start, end };
-    }
+  const month = /^(\d{4})-(\d{2})$/.exec(trimmed);
+  if (month) {
+    const start = Date.parse(`${trimmed}-01T00:00:00.000Z`);
+    if (!Number.isFinite(start)) return undefined;
+    const next = new Date(start);
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    return { start, end: next.getTime() - 1 };
   }
-  const ymd = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
-  if (ymd) {
-    const ms = Date.parse(`${ymd[1]}-${ymd[2]}-${ymd[3]}T00:00:00Z`);
-    if (Number.isFinite(ms)) return { start: ms, end: ms + 86_399_999 };
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const start = Date.parse(`${trimmed}T00:00:00.000Z`);
+    if (!Number.isFinite(start) || new Date(start).toISOString().slice(0, 10) !== trimmed) return undefined;
+    return { start, end: start + 86_399_999 };
   }
-  const ms = Date.parse(trimmed);
-  if (Number.isFinite(ms)) return { start: ms, end: ms };
+  if (/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/i.test(trimmed)) {
+    const instant = Date.parse(trimmed);
+    if (Number.isFinite(instant)) return { start: instant, end: instant };
+  }
   return undefined;
 }
 
-function rowDateWithinGrant(rowDate: string, periodFrom?: string, periodTo?: string): boolean {
+export function isPeriodCovered(period: string | undefined, periodFrom?: string, periodTo?: string): boolean {
   if (!periodFrom && !periodTo) return true;
-  const rowBounds = parseDateBounds(rowDate);
-  if (!rowBounds) return false;
-  if (periodFrom) {
-    const fromBounds = parseDateBounds(periodFrom);
-    if (fromBounds && rowBounds.end < fromBounds.start) return false;
-  }
-  if (periodTo) {
-    const toBounds = parseDateBounds(periodTo);
-    if (toBounds && rowBounds.start > toBounds.end) return false;
-  }
-  return true;
+  const bounds = period && dataPeriodBounds(period);
+  if (!bounds) return false;
+  const lowerBound = periodFrom ? dataPeriodBounds(periodFrom)?.start : Number.NEGATIVE_INFINITY;
+  const upperBound = periodTo ? dataPeriodBounds(periodTo)?.end : Number.POSITIVE_INFINITY;
+  return lowerBound !== undefined && upperBound !== undefined && bounds.start >= lowerBound && bounds.end <= upperBound;
 }
 
 function parseCsvLine(line: string, delimiter: string): string[] {
@@ -214,19 +186,19 @@ export function buildAuthorizedDataView(
 
   const isRowUnattributable = (rowStore: string | undefined, rowDate: string | undefined): boolean => {
     if (hasStoreRestriction && isUnattributableStoreValue(rowStore)) return true;
-    if (hasPeriodRestriction && (!rowDate || !parseDateBounds(rowDate))) return true;
+    if (hasPeriodRestriction && (!rowDate || !dataPeriodBounds(rowDate))) return true;
     return false;
   };
 
   const rowAllowedByAnyGrant = (rowStore: string | undefined, rowDate: string | undefined): boolean =>
     matchedGrants.some(g => {
       if (g.scope.stores?.length) {
-        if (rowStore === undefined || isUnattributableStoreValue(rowStore) || !rowStoreMatchesGrant(rowStore, g.scope.stores)) {
+        if (rowStore === undefined || isUnattributableStoreValue(rowStore) || !g.scope.stores.some(store => store.trim() === rowStore.trim())) {
           return false;
         }
       }
       if (g.scope.periodFrom || g.scope.periodTo) {
-        if (rowDate === undefined || !rowDateWithinGrant(rowDate, g.scope.periodFrom, g.scope.periodTo)) {
+        if (rowDate === undefined || !isPeriodCovered(rowDate, g.scope.periodFrom, g.scope.periodTo)) {
           return false;
         }
       }

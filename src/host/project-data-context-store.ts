@@ -39,8 +39,8 @@ function operation(record: unknown, projectId: string, operationId: string, kind
 
 export class ProjectDataContextStore {
   readonly writeVersion: 1 | 2;
-  readonly options: { dataRoot: string; projects: ProjectStore; validateReferences?: ValidateDataContextReferences; writeVersion?: 1 | 2 };
-  constructor(options: { dataRoot: string; projects: ProjectStore; validateReferences?: ValidateDataContextReferences; writeVersion?: 1 | 2 }) {
+  readonly options: { dataRoot: string; projects: ProjectStore; validateReferences?: ValidateDataContextReferences; authorizeEvidence?: (projectId: string, relativePath: string, bytes: Buffer) => void; writeVersion?: 1 | 2 };
+  constructor(options: { dataRoot: string; projects: ProjectStore; validateReferences?: ValidateDataContextReferences; authorizeEvidence?: (projectId: string, relativePath: string, bytes: Buffer) => void; writeVersion?: 1 | 2 }) {
     if (path.resolve(options.dataRoot) !== options.projects.dataRoot) fail('data_context_root_mismatch');
     this.options = options; this.writeVersion = options.writeVersion ?? 2;
     if (![1, 2].includes(this.writeVersion)) fail('invalid_data_context_write_version');
@@ -81,9 +81,16 @@ export class ProjectDataContextStore {
     const index = await this.#loadIndex(projectId); if (!index) return fail('data_context_version_not_found');
     const ref = this.#dataset(index, datasetId).versions.find(version => version.inputVersionId === id(inputVersionId)); if (!ref) return fail('data_context_version_not_found');
     const record = this.#decodeVersion(await this.#record(projectId, this.#versionPath(datasetId, inputVersionId), ref.recordSha256), projectId, datasetId, inputVersionId);
-    await this.#inputBytes(projectId, record); return record;
+    const bytes = await this.#inputBytes(projectId, record);
+    this.options.authorizeEvidence?.(projectId, record.sourcePath, bytes);
+    return record;
   }
-  async readInputEvidence(projectId: string, datasetId: string, inputVersionId: string): Promise<{ record: InputVersionRecord; bytes: Buffer }> { const record = await this.readVersion(projectId, datasetId, inputVersionId); return { record, bytes: await this.#inputBytes(projectId, record) }; }
+  async readInputEvidence(projectId: string, datasetId: string, inputVersionId: string): Promise<{ record: InputVersionRecord; bytes: Buffer }> {
+    const record = await this.readVersion(projectId, datasetId, inputVersionId);
+    const bytes = await this.#inputBytes(projectId, record);
+    this.options.authorizeEvidence?.(projectId, record.sourcePath, bytes);
+    return { record, bytes };
+  }
   async #publish<T extends DataContextOperation & { schemaVersion: 1 | 2 }>(projectId: string, input: { operationId: string; baseIndexRevision: number }, kind: T['operationKind'], recordPath: string, normalized: unknown, committed: (index: ProjectDataContextIndex) => string | null, decode: (value: unknown) => T, verify: (record: T) => Promise<void>, create: (index: ProjectDataContextIndex) => Promise<T>, append: (index: ProjectDataContextIndex, record: T, recordHash: string) => void, assertWritable?: () => void): Promise<DataContextWriteResult<T>> {
     assertWritable?.();
     id(input.operationId); integer(input.baseIndexRevision); const fingerprint = digest(canonical(normalized)), root = this.#root(projectId), rootExisted = await exists(root), existingIndex = await this.#loadIndex(projectId, true), index = existingIndex ?? empty(projectId);
@@ -309,6 +316,7 @@ export class ProjectDataContextStore {
     const expected = `citations/${record.citationId}/${attachmentIndex === null ? 'report' : 'attachment-' + String(attachmentIndex).padStart(4, '0')}${path.extname(file.originalPath).toLowerCase()}`;
     if (file.evidencePath !== expected) return fail('corrupt_data_context_record'); const bytes = await readBytes(await safePath(this.#root(projectId), expected), record.schemaVersion === 1 ? maxFileBytes : EVIDENCE_FILE_MAX_BYTES);
     if (bytes.length !== file.bytes || digest(bytes) !== file.sha256) return fail('data_context_evidence_hash_mismatch');
+    this.options.authorizeEvidence?.(projectId, file.originalPath, bytes);
     return { file, bytes };
   }
   async #verifyCitation(projectId: string, record: DataCitationRecord): Promise<void> {

@@ -61,7 +61,7 @@ import { ProjectNavigation } from './ProjectNavigation.tsx';
 import { RenameProjectDialog, TaskDialog } from './ProjectDialogs.tsx';
 import { TaskCapabilityList } from './TaskCapabilities.tsx';
 import { TASK_CAPABILITIES, type TaskCapability, type TaskCapabilities } from '../task-capabilities.ts';
-import { answerInteraction, archiveTask as archiveDiskTask, restoreTask as restoreDiskTask, archiveProject, createTask as createDiskTask, createProject as createDiskProject, HostRequestError, listProjects, openTask, readConfigurations, readTask, renameProject, restoreProject, runCommand, saveDraft, saveReport, sendMessage, setTaskCapability, stopTask, observeTask, type TaskObservationState } from './runtime-client.ts';
+import { bindProjectContext, answerInteraction, archiveTask as archiveDiskTask, restoreTask as restoreDiskTask, archiveProject, createTask as createDiskTask, createProject as createDiskProject, HostRequestError, listProjects, openTask, readConfigurations, readTask, renameProject, restoreProject, runCommand, saveDraft, saveReport, sendMessage, setTaskCapability, stopTask, observeTask, type TaskObservationState } from './runtime-client.ts';
 import { messageText, nativeMessageText, taskKey, type BrowserUIRequest, type BrowserUIResponse, type ClientProject, type ClientTask, type NativeMessage, type ProjectEvent, type PublicModelConfiguration, type SessionSnapshot } from './project-types.ts';
 import { SapMethodExtractionPanel } from './SapMethodExtractionPanel.tsx';
 import type { SapMethodRef } from '../../../extensions/business-plugins/metric-factory/methods/types.ts';
@@ -215,7 +215,8 @@ export function App() {
   const active = projects.find(item => item.id === activeId), activeTask = active?.tasks.find(item => item.id === activeTaskId), activeKey = active && activeTask ? taskKey(active.id, activeTask.id) : undefined;
   const canOpenProjectFiles = Boolean(active) && (view === 'chat' || (view === 'studio' && Boolean(activeKey)));
   const showConclusion = view === 'chat' && activeKey !== undefined && conclusionOpenKey === activeKey;
-  const showProjectFiles = canOpenProjectFiles && filesOpen && !showConclusion;
+  const [boundProjectId, setBoundProjectId] = useState<string>();
+  const showProjectFiles = canOpenProjectFiles && filesOpen && !showConclusion && boundProjectId === activeId;
   const selectedCase = activeKey ? caseContexts[activeKey] : undefined;
   const attachedRequirement = activeKey ? requirementContexts[activeKey] : undefined;
   const attachedEnterprise = activeKey ? enterpriseMaterials[activeKey] ?? [] : [];
@@ -311,6 +312,16 @@ export function App() {
     }, error => { if (!controller.signal.aborted) { setHostStatus('unavailable'); setGlobalError(safeError(error)); } });
     return () => { mounted.current = false; controller.abort(); for (const stream of streams.current.values()) stream.controller.abort(); streams.current.clear(); };
   }, []);
+  useEffect(() => {
+    if (!activeId) { setBoundProjectId(undefined); return; }
+    const controller = new AbortController();
+    void bindProjectContext(activeId, controller.signal).then(() => {
+      if (!controller.signal.aborted) setBoundProjectId(activeId);
+    }).catch(error => {
+      if (!controller.signal.aborted) { setBoundProjectId(undefined); setGlobalError(safeError(error)); }
+    });
+    return () => controller.abort();
+  }, [activeId]);
   const subscriptionKeys = projects.flatMap(project => project.archivedAt ? [] : project.tasks.filter(task => (['chat', 'studio'].includes(view) && taskKey(project.id, task.id) === activeKey) || task.lastRun?.status === 'running' || ['running', 'stopping'].includes(ui[taskKey(project.id, task.id)]?.status ?? '') || ui[taskKey(project.id, task.id)]?.opening || ui[taskKey(project.id, task.id)]?.uiRequests.length).map(task => taskKey(project.id, task.id))).join(',');
   useEffect(() => { const wanted = new Set(subscriptionKeys.split(',').filter(Boolean)); for (const [key, stream] of streams.current) if (!wanted.has(key)) { stream.controller.abort(); streams.current.delete(key); } for (const key of wanted) { const [projectId, taskId] = key.split('/') as [string, string]; void connect(projectId, taskId).then(() => refreshTask(projectId, taskId)).catch(error => { if (!(error instanceof DOMException && error.name === 'AbortError')) changeUI(key, old => ({ ...old, error: safeError(error) })); }); } }, [subscriptionKeys]);
   useEffect(() => { if (active?.archivedAt && activeTask) { const key = taskKey(active.id, activeTask.id); void refreshTask(active.id, activeTask.id).then(() => changeUI(key, old => ({ ...old, connected: true, observation: undefined }))).catch(error => changeUI(key, old => ({ ...old, error: safeError(error) }))); } }, [active?.archivedAt, active?.id, activeTask?.id]);
