@@ -2293,7 +2293,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (!verification.verifierProjectId || !verification.verifierTaskId || !options.taskSnapshot) return [];
     const { messages } = await options.taskSnapshot(verification.verifierProjectId, verification.verifierTaskId);
     const { results } = collectNativeEvidence(messages);
-    const verifiedData = verification.verifierActualReads?.filter(r => r.complete && r.ref.authority === 'data') ?? [];
+    const verifiedData = verification.verifierActualReads?.filter(r => r.complete && r.authorizedInput === true && r.ref.authority === 'data') ?? [];
     const receipts = results.filter(({ call }) => verifiedData.some(r => r.sessionId === call.sessionId
       && r.entryId === call.entryId && r.toolCallId === call.id));
     const snapshots = await readSourceSnapshots(verification.verifierProjectId, verification.verifierTaskId, receipts);
@@ -2386,6 +2386,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         ...(decision ? {
           decisionId: decision.recordId, decisionRevision: decision.revision,
           decisionKind: decision.kind, decisionTitle: decision.payload.title,
+          originReplySha256: replySha,
         } : {}),
         ...(choice ? { choiceId: choice.choiceId } : {}),
         ...(originTime !== undefined ? { originTimestamp: new Date(originTime).toISOString() } : {}),
@@ -2513,34 +2514,46 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     });
   }
 
-  function reportShowsDisposition(report: Buffer, itemId: string, orderId: string, disposition: string): boolean {
-    const raw = report.toString('utf8');
+  function reportTableItems(body: string): string[][] {
+    return body.split(/\r?\n/)
+      .filter(line => line.trim().startsWith('|'))
+      .map(line => line.split('|').map(cell => cell.trim().replace(/^`([^`]*)`$/, '$1')));
+  }
+
+  function structuredReport(body: string): Record<string, unknown> | undefined {
     try {
-      const parsed: unknown = JSON.parse(raw);
-      if (object(parsed) && Array.isArray(parsed.transactions)) {
-        return parsed.transactions.some(row => object(row) && row.itemId === itemId
-          && row.originalOrderId === orderId && row.disposition === disposition);
-      }
-    } catch { /* Reports can also contain a transaction table. */ }
-    return raw.split(/\r?\n/).some(line => {
-      const cells = line.trim().split('|').map(cell => cell.trim().replace(/^`([^`]*)`$/, '$1'));
-      return cells.length >= 3 && cells.includes(itemId) && cells.includes(orderId) && cells.includes(disposition);
-    });
+      const parsed: unknown = JSON.parse(body);
+      return object(parsed) ? parsed : undefined;
+    } catch { return undefined; }
+  }
+
+  function reportShowsDisposition(report: Buffer, itemId: string, orderId: string, disposition: string): boolean {
+    const body = report.toString('utf8');
+    const structured = structuredReport(body);
+    if (structured && Array.isArray(structured.transactions)) {
+      return structured.transactions.some(row => object(row) && row.itemId === itemId
+        && row.originalOrderId === orderId && row.disposition === disposition);
+    }
+    return reportTableItems(body).some(cells => [itemId, orderId, disposition].every(value => cells.includes(value)));
   }
 
   function exactAssessmentItem(
-    assessment: Buffer,
+    assessment: string,
+    structured: Record<string, unknown> | undefined,
     list: 'shouldChange' | 'postCutoffNewEvents' | 'shouldRetain',
-    item: { itemId: string; originalOrderId: string; refundDate?: string; beforeValue?: string; afterValue?: string; unchangedValue?: string },
+    item: { itemId: string; originalOrderId: string; refundDate?: string; beforeValue?: string; afterValue?: string; unchangedValue?: string; classification?: string },
   ): boolean {
-    try {
-      const parsed: unknown = JSON.parse(assessment.toString('utf8'));
-      if (!object(parsed) || !Array.isArray(parsed[list])) return false;
-      return parsed[list].some(entry => object(entry)
+    const entries = structured?.[list];
+    if (Array.isArray(entries)) {
+      return entries.some(entry => object(entry)
         && entry.itemId === item.itemId && entry.originalOrderId === item.originalOrderId
         && entry.refundDate === item.refundDate && entry.beforeValue === item.beforeValue
-        && entry.afterValue === item.afterValue && entry.unchangedValue === item.unchangedValue);
-    } catch { return false; }
+        && entry.afterValue === item.afterValue && entry.unchangedValue === item.unchangedValue
+        && (list !== 'postCutoffNewEvents' || entry.classification === item.classification));
+    }
+    const required = [item.itemId, item.originalOrderId,
+      ...[item.refundDate, item.beforeValue, item.afterValue, item.unchangedValue].filter((value): value is string => Boolean(value))];
+    return reportTableItems(assessment).some(cells => required.every(value => cells.includes(value)));
   }
 
   async function verifyFeedbackItems(
@@ -2586,6 +2599,15 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (!oldReport || !currentReport || !assessment || originalRun.cutoff !== oldCutoff || currentRun.cutoff !== cutoff) {
       return fail('feedback_verification_cutoff_uncorroborated');
     }
+    const assessmentText = assessment.toString('utf8');
+    const assessmentData = structuredReport(assessmentText);
+    if (assessmentData) {
+      if (assessmentData.originalCutoffChecked !== oldCutoff
+        || (newEvents.length > 0 && assessmentData.newCutoffChecked !== newCutoff)) return fail('feedback_verification_cutoff_uncorroborated');
+    } else if (!assessmentText.includes(oldCutoff) || (newEvents.length > 0 && !assessmentText.includes(cutoff))) {
+      return fail('feedback_verification_cutoff_uncorroborated');
+    }
+    if (newEvents.length > 0 && !currentReport.toString('utf8').includes(cutoff)) return fail('feedback_verification_cutoff_uncorroborated');
     const originalReceipts = original.sourceReads.map(read => digest(read));
     const originals = inspectSourceTransactions(
       originalRun.snapshots.filter(({ binding }) => originalReceipts.includes(digest(binding))),
@@ -2640,7 +2662,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         || (item.classification && item.classification !== 'mapping_correction')
         || (refundDate && refundDate > oldCutoff)) return fail();
       validateDisposition(itemId, orderId, beforeValue, afterValue);
-      if (!exactAssessmentItem(assessment, 'shouldChange', { ...item, originalOrderId: orderId })) return fail();
+      if (!exactAssessmentItem(assessmentText, assessmentData, 'shouldChange', { ...item, originalOrderId: orderId })) return fail();
       const old = refundRow(originals, itemId, orderId, refundDate);
       const next = refundRow(revised, itemId, orderId, refundDate);
       if (!old || !next) return fail('feedback_verification_source_transaction_mismatch');
@@ -2653,7 +2675,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         || (item.classification === 'post_cutoff_new_event' && refundDate <= oldCutoff)
         || (item.classification !== 'post_cutoff_new_event' && item.classification !== 'post_cutoff_update')) return fail();
       validateDisposition(itemId, orderId, beforeValue, afterValue);
-      if (!exactAssessmentItem(assessment, 'postCutoffNewEvents', item)) return fail();
+      if (!exactAssessmentItem(assessmentText, assessmentData, 'postCutoffNewEvents', item)) return fail();
       const old = retainedRow(originals, itemId, orderId);
       const next = refundRow(revised, itemId, orderId, refundDate);
       if (!old || !next || next.visibleOn <= oldCutoff) return fail('feedback_verification_new_cutoff_not_actually_read');
@@ -2663,7 +2685,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const { itemId, originalOrderId: orderId, unchangedValue } = item;
       if (!orderId) return fail();
       validateDisposition(itemId, orderId, unchangedValue, unchangedValue);
-      if (!exactAssessmentItem(assessment, 'shouldRetain', { ...item, originalOrderId: orderId })) return fail();
+      if (!exactAssessmentItem(assessmentText, assessmentData, 'shouldRetain', { ...item, originalOrderId: orderId })) return fail();
       const old = retainedRow(originals, itemId, orderId);
       const next = retainedRow(revised, itemId, orderId);
       if (!old || !next || (item.refundDate && (old.refundDate !== item.refundDate || next.refundDate !== item.refundDate))) {
@@ -2682,12 +2704,21 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         return fail('feedback_verification_case_mismatch');
       }
       if (!options.cases || pinnedCase.decisionResolutionStatus !== 'pinned'
-        || !pinnedCase.decisionId || pinnedCase.decisionRevision === undefined) return fail('feedback_verification_case_decision_unresolved');
+        || !pinnedCase.decisionId || pinnedCase.decisionRevision === undefined
+        || !pinnedCase.originReplySha256 || pinnedCase.originReplySha256 !== original.replyRef?.sha256) {
+        return fail('feedback_verification_case_decision_unresolved');
+      }
       try { options.cases.getDecision(pinnedCase.caseId, pinnedCase.decisionId, pinnedCase.decisionRevision); }
       catch { return fail('feedback_verification_case_decision_mismatch'); }
-      const proof = assessment.toString('utf8');
-      if (!proof.includes(pinnedCase.caseId) || !proof.includes(pinnedCase.decisionId)
-        || (pinnedCase.choiceId && !proof.includes(pinnedCase.choiceId))) return fail('feedback_verification_case_uncorroborated');
+      if (assessmentData && (
+        assessmentData.originalCaseId !== pinnedCase.caseId
+        || assessmentData.originalDecisionId !== pinnedCase.decisionId
+        || assessmentData.originalDecisionRevision !== pinnedCase.decisionRevision
+        || assessmentData.caseDecisionsPreserved !== true
+        || (pinnedCase.choiceId && assessmentData.originalChoiceId !== pinnedCase.choiceId)
+      )) return fail('feedback_verification_case_uncorroborated');
+      if (!assessmentData && (!assessmentText.includes(pinnedCase.caseId) || !assessmentText.includes(pinnedCase.decisionId)
+        || (pinnedCase.choiceId && !assessmentText.includes(pinnedCase.choiceId)))) return fail('feedback_verification_case_uncorroborated');
     }
     return {
       originalCutoffChecked: oldCutoff,
@@ -3620,7 +3651,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         }
         if (action === 'feedback') {
           let reportPayload: Record<string, unknown> | undefined;
-          if (object(input.report)) {
+          if (!object(input.origin) && object(input.report)) {
             const clue = input.report;
             const projectId = uuid(clue.projectId);
             if (options.enterpriseScopes.enterpriseIdForProject(projectId) !== currentPack.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
@@ -3780,11 +3811,16 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const currentPack = packs.get(feedbackCaseHistoryMatch[1]!);
       const fb = currentPack.feedbackItems.find(f => f.id === uuid(feedbackCaseHistoryMatch[2]!));
       if (!fb) throw new StudioError('enterprise_pack_feedback_not_found', 404);
-      const pinnedRef = fb.reports[0]?.originalCaseRef;
-      if (!pinnedRef) {
+      const original = fb.reports[0];
+      const recordedRef = original?.originalCaseRef;
+      if (!recordedRef) {
         json(response, 200, { feedbackId: fb.id, originalCaseRef: null, caseRecord: null, historicalDecision: null });
         return true;
       }
+      const pinnedRef = recordedRef.decisionResolutionStatus === 'pinned'
+        && (!recordedRef.originReplySha256 || recordedRef.originReplySha256 !== original.replyRef?.sha256)
+        ? { ...recordedRef, decisionResolutionStatus: 'unresolved_ambiguous' as const, resolutionNote: '旧记录缺少原回复的决策归属凭据，保留待核。' }
+        : recordedRef;
       let caseRecord: ReturnType<CaseStore['getCase']> | null = null;
       let historicalDecision: ReturnType<CaseStore['getDecision']> | null = null;
       let latestDecision: ReturnType<CaseStore['getDecision']> | null = null;

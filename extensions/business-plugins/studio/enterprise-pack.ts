@@ -450,6 +450,7 @@ export interface EnterprisePackOriginalCaseRef {
   decisionResolutionStatus?: 'pinned' | 'unresolved_post_origin_revisions' | 'unresolved_ambiguous' | 'no_decision_at_origin';
   resolutionNote?: string;
   originTimestamp?: string;
+  originReplySha256?: string;
   preservedAt?: string;
 }
 
