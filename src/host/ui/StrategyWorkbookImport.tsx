@@ -1,14 +1,14 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import type {GoalDraftInput,GoalRef,GoalScope,GoalVersion,StrategyGoalsIndex} from '../strategy-goals-types.ts';
 import {groupScopeKey} from '../structured-goal.ts';
-import {mapNodeMetrics,mapTemplates,type StrategyMapVersion} from '../strategy-map-types.ts';
+import {mapNodeMetrics,mapTemplates,type StrategyMapPublicationIdentity,type StrategyMapVersion} from '../strategy-map-types.ts';
 import {defaultSelection,guessMapping,mapStrategyWorkbook,unstableWorkbookMatches,workbookFields,workbookKinds,type StrategyWorkbook,type WorkbookSelection,type WorkbookTarget} from '../strategy-workbook-types.ts';
 import {CaseDialog} from './CaseDialogs.tsx';
 import {list as listGoals} from './strategy-goals-client.ts';
 
 type Result={version?:StrategyMapVersion;goals?:GoalVersion[];errors?:string[]};
 const errors:Record<string,string>={
-  strategy_workbook_unstable_ids:'新旧工作簿中有按行号临时标识的条目，无法确认是同一项。请补充稳定编号或选择新建。',strategy_goal_table_conflict:'目标已有新版本，请关闭并重新核对。',strategy_workbook_size:'工作簿须在 8 MiB 以内。',invalid_strategy_workbook:'无法读取此工作簿，请确认是有效的 .xlsx 文件。',strategy_workbook_range_limit:'工作表超出可处理范围，请另存要导入的区域。',strategy_workbook_source_changed:'原工作簿指纹已变化。',strategy_map_version_conflict:'地图已有新版本，请重新核对。',strategy_workbook_owner_mismatch:'所选工作簿与当前归属不一致。'};
+  strategy_workbook_unstable_ids:'新旧工作簿中有按行号临时标识的条目，无法确认是同一项。请补充稳定编号或选择新建。',strategy_goal_table_conflict:'目标已有新版本，请关闭并重新核对。',strategy_workbook_size:'工作簿须在 8 MiB 以内。',invalid_strategy_workbook:'无法读取此工作簿，请确认是有效的 .xlsx 文件。',strategy_workbook_range_limit:'工作表超出可处理范围，请另存要导入的区域。',strategy_workbook_source_changed:'原工作簿指纹已变化。',strategy_map_version_conflict:'地图已有新版本，请重新核对。',strategy_workbook_owner_mismatch:'所选工作簿与当前归属不一致。',strategy_map_publication_required:'此地图版本尚未通过发布身份核对，请回「战略发布」处理。',strategy_map_not_published:'此地图版本当前不是有效发布，不能带入目标管理。',strategy_map_publication_conflict:'发布记录与所选地图版本不一致，请重新选择并核对。'};
 async function request<T>(action:string,input:unknown):Promise<T>{
   const r=await fetch('/api/strategy/workbooks/'+action,{method:'POST',credentials:'omit',cache:'no-store',mode:'same-origin',headers:{'content-type':'application/json','x-optracall-client':'1'},body:JSON.stringify(input)});
   const data=await r.json();if(!r.ok)throw new Error(errors[data.code]||data.message||data.code||'未完成，请核对原文件及权限。');return data as T;
@@ -35,16 +35,16 @@ export function DownloadWorkbook({version,goal}:{version?:StrategyMapVersion;goa
 function ScopeSelect({scopes,scope,onScope,perspective,onPerspective}:{scopes:GoalScope[];scope:GoalScope|undefined;onScope:(s:GoalScope)=>void;perspective:GoalDraftInput['perspective'];onPerspective:(p:GoalDraftInput['perspective'])=>void}){
   return <div className="case-form-row"><label>目标归属<select className="sg-select" value={scope?groupScopeKey(scope):''} onChange={e=>{const next=scopes.find(s=>groupScopeKey(s)===e.target.value);if(next)onScope(next);}}><option value="">选择归属范围</option>{scopes.map(s=><option value={groupScopeKey(s)} key={groupScopeKey(s)}>{s.name}</option>)}</select></label>{scope&&scope.kind!=='personal'&&<label>组织视角<select className="sg-select" value={perspective} onChange={e=>onPerspective(e.target.value as typeof perspective)}><option value="profit">营利组织</option><option value="nonprofit">非营利组织</option></select></label>}</div>;
 }
-export function MapGoalHandoff({version,scopes,onSaved,openOnMount=false,onClose}:{openOnMount?:boolean;onClose?:()=>void;version:StrategyMapVersion;scopes:GoalScope[];onSaved?:(goals:GoalVersion[])=>void}){
+export function MapGoalHandoff({version,publication,scopes,onSaved,openOnMount=false,onClose}:{openOnMount?:boolean;onClose?:()=>void;version:StrategyMapVersion;publication:StrategyMapPublicationIdentity;scopes:GoalScope[];onSaved?:(goals:GoalVersion[])=>void}){
   const [open,setOpen]=useState(false),[selected,setSelected]=useState<string[]>([]),[scope,setScope]=useState<GoalScope>(),[perspective,setPerspective]=useState<'profit'|'nonprofit'|'personal'>('profit');
   const [index,setIndex]=useState<StrategyGoalsIndex>(),[busy,setBusy]=useState(false),[error,setError]=useState('');
   useEffect(()=>{if(openOnMount)void begin();else setOpen(false);},[openOnMount,version.mapId,version.version]);
   const close=()=>{setOpen(false);onClose?.();};
   async function begin(){setSelected(version.nodes.filter(n=>n.kind==='goal').map(n=>n.id));setScope(scopes.length===1?scopes[0]:undefined);setIndex(undefined);setError('');setOpen(true);try{setIndex(await listGoals());}catch(e){setError(errorMessage(e));}}
   async function submit(){if(!scope||!index)return;setBusy(true);setError('');
-    try{const result=await request<Result>('handoff',{map:mapRef(version),selected,scope,perspective:scope.kind==='personal'?'personal':perspective,expected:expectedVersions(index,version.mapId,scope)});close();onSaved?.(result.goals??[]);}
+      try{const result=await request<Result>('handoff',{map:mapRef(version),publicationId:publication.publicationId,selected,scope,perspective:scope.kind==='personal'?'personal':perspective,expected:expectedVersions(index,version.mapId,scope)});close();onSaved?.(result.goals??[]);}
     catch(e){setError(errorMessage(e));}finally{setBusy(false);}}
-  return <>{!openOnMount&&<button className="secondary-button" type="button" disabled={!version.nodes.some(n=>n.kind==='goal')} onClick={()=>void begin()}>将此版带入目标管理</button>}{open&&<CaseDialog title="核对承接的目标与策略" subtitle={version.title+' · v'+version.version} busy={busy} onClose={close}>
+  return <>{!openOnMount&&<button className="secondary-button" type="button" disabled={!version.nodes.some(n=>n.kind==='goal')} onClick={()=>void begin()}>将此版带入目标管理</button>}{open&&<CaseDialog title="核对承接的目标与策略" subtitle={version.title+' · v'+version.version+' · '+publication.publicationId} busy={busy} onClose={close}>
     <ScopeSelect scopes={scopes} scope={scope} onScope={setScope} perspective={perspective} onPerspective={setPerspective}/>
     <fieldset><legend>承接范围</legend>{version.nodes.filter(n=>n.kind==='goal').map(n=><label className="sg-workbook-goal" key={n.id}><input type="checkbox" checked={selected.includes(n.id)} onChange={e=>setSelected(previous=>e.target.checked?[...previous,n.id]:previous.filter(id=>id!==n.id))}/><span>{n.id} · {n.title}<small>{version.edges.filter(edge=>edge.to===n.id && ['supports','hypothesis'].includes(edge.kind)&&version.nodes.some(s=>s.id===edge.from&&s.kind==='strategy')).map(edge=>version.nodes.find(s=>s.id===edge.from)!.title).join('、')||'关联策略待补'}</small></span></label>)}</fieldset>
     {error&&<p role="alert">{error}</p>}<div className="case-dialog-actions"><button className="secondary-button" disabled={busy} onClick={close}>取消</button><button className="primary-button" disabled={busy||!index||!scope||!selected.length} onClick={()=>void submit()}>保存目标候选</button></div>

@@ -1,10 +1,10 @@
-export type ManagementStage = 'direction' | 'compare' | 'handoff' | 'strategy-versions' | 'goals' | 'adopt' | 'cases' | 'history' | 'bsc';
-type StrategyStage = 'direction' | 'compare' | 'handoff' | 'strategy-versions' | 'bsc';
+export type ManagementStage = 'direction' | 'compare' | 'handoff' | 'strategy-release' | 'strategy-versions' | 'goals' | 'adopt' | 'cases' | 'history' | 'bsc';
+type StrategyStage = 'direction' | 'compare' | 'handoff' | 'strategy-release' | 'strategy-versions' | 'bsc';
 type GoalStage = 'goals' | 'adopt' | 'cases' | 'history';
 export type ManagementRoute = {area: 'strategy'; stage: StrategyStage} | {area: 'gsa'; stage: GoalStage};
 
 const strategyViews: ReadonlyArray<[StrategyStage, string]> = [
-  ['direction', '战略共创'], ['compare', '战略地图'], ['handoff', '战略模拟'], ['strategy-versions', '版本与来源'],
+  ['direction', '战略共创'], ['compare', '战略地图'], ['handoff', '战略模拟'], ['strategy-release', '战略发布'], ['strategy-versions', '版本与来源'],
 ];
 const goalViews: ReadonlyArray<[GoalStage, string]> = [
   ['goals', '目标与策略'], ['adopt', '核对与采用'], ['cases', '年度决策事项'], ['history', '版本与反馈'],

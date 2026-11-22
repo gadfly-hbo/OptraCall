@@ -455,13 +455,13 @@ export class StrategyGoalsStore {
   mapHandoffs(discussionId:string,mapId:string,version:number,sha256:string) {
     const index=this.load();
     const goals=new Map(index.goals.map(g=>[g.id,g]));
-    const matches=new Map<string,{goalId:string;version:number;nodeId:string;title:string;scope:string;status:GoalVersion['status']}>();
+    const matches=new Map<string,{goalId:string;version:number;nodeId:string;title:string;scope:string;status:GoalVersion['status'];publicationId?:string;historical:boolean}>();
     for(const refs of Object.values(index.tableReceipts??{})) {
       for(const ref of refs) {
         const value=goals.get(ref.goalId)?.versions[ref.version-1];
-        const origin=value?.structured?.map;
-        if(!value || !origin || origin.discussionId!==discussionId || origin.mapId!==mapId || origin.version!==version || origin.sha256!==sha256)continue;
-        matches.set(ref.goalId+':'+ref.version,{...ref,nodeId:value.structured!.nodeId,title:value.title,scope:value.scope.name,status:value.status});
+        const structured=value?.structured,origin=structured?.map;
+        if(!value || !structured || !origin || origin.discussionId!==discussionId || origin.mapId!==mapId || origin.version!==version || origin.sha256!==sha256)continue;
+        matches.set(ref.goalId+':'+ref.version,{...ref,nodeId:structured.nodeId,title:value.title,scope:value.scope.name,status:value.status,...(structured.publication&&{publicationId:structured.publication.publicationId}),historical:!structured.publication});
       }
     }
     return [...matches.values()];

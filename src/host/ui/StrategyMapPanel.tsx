@@ -104,7 +104,7 @@ type Props={
   onDraftConflictRefresh?:()=>Promise<void>|void;
   focusEdgeId?:string;
   onSelect:(ref:StrategyMapRef)=>void;onSaved:(version:StrategyMapVersion,settledDraftEntryId?:string)=>void|Promise<void>;
-  onDiscuss:(ref?:StrategyMapRef,edgeId?:string)=>void;onSimulate:(ref:StrategyMapRef,edgeId:string)=>void;onHandoff?:(version:StrategyMapVersion)=>void;
+  onDiscuss:(ref?:StrategyMapRef,edgeId?:string)=>void;onSimulate:(ref:StrategyMapRef,edgeId:string)=>void;
   onOpenImport?:()=>void;onReread?:(req:StrategyMapRereadRequest)=>void;onRevoked?:()=>void;
 };
 export function StrategyMapPanel(props:Props){
@@ -138,7 +138,7 @@ type ResolvedScopeView = {
   mergedFromReread: boolean;
 };
 
-function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,onDismissPendingDraft,onDraftConflictRefresh,discussionId,versions,onSelect,onDiscuss,onSimulate,onSaved,onHandoff,onOpenImport,onReread,onRevoked,focusEdgeId}:Props & {active?:StrategyMapVersion;latest?:StrategyMapVersion}){
+function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,onDismissPendingDraft,onDraftConflictRefresh,discussionId,versions,onSelect,onDiscuss,onSimulate,onSaved,onOpenImport,onReread,onRevoked,focusEdgeId}:Props & {active?:StrategyMapVersion;latest?:StrategyMapVersion}){
   const isPendingMode=Boolean(pendingDraft);
   const activeKey=active?versionKey(active):undefined;
   const currentScopeKey=isPendingMode&&pendingDraft?`pending:${pendingDraft.draftGroupId}`:activeKey?`saved:${activeKey}`:'none';
@@ -608,7 +608,6 @@ function MapView({active,latest,pendingDrafts,pendingDraft,onSelectPendingDraft,
           [currentScopeKey]:{edit:structuredClone(mapDraft(active)),manualEdits:emptyManualEditOverlay(),reason:''},
         }));
       }}>编辑地图</button>}
-      {!isPendingMode&&active&&onHandoff&&button('将此版带入目标管理',()=>onHandoff(active))}
     </div>
     {hasMultiImport&&reviewOpen&&(
       <StrategyMapReviewPane

@@ -16,4 +16,23 @@
 .wb-simulation button[aria-pressed=true] {border-color:var(--accent);color:var(--accent)}
 .wb-methods {margin:.75rem 0}
 .wb-methods button {text-align:left}
-@media(max-width:650px){.wb-table-wrap table {min-width:30rem}.wb-fields label {flex-wrap:wrap}.wb-simulation>.sg-row {flex-wrap:wrap}}
+.strategy-release {display:grid;gap:.85rem}
+.release-grid {display:grid;grid-template-columns:minmax(18rem,.7fr) minmax(20rem,1fr);gap:.8rem 1.2rem;align-items:start}
+.release-grid label {display:grid;gap:.3rem;min-width:0}
+.release-identity {display:grid;gap:.25rem;padding:.65rem .75rem;border:1px solid var(--line);border-radius:.5rem;background:var(--subtle);min-width:0}
+.release-identity strong {overflow-wrap:anywhere}
+.release-summary {display:grid;gap:.7rem;padding:1rem;border:1px solid var(--line);border-radius:.6rem;background:var(--subtle)}
+.release-summary h3,.release-columns h3 {margin:0}
+.release-summary > details,.release-record-list,.release-handoff-list {background:var(--surface);border:1px solid var(--line);border-radius:.5rem;padding:.75rem}
+.release-actions {display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}
+.sg-status {margin:0;padding:.55rem .65rem;border:1px solid var(--line);border-radius:.45rem;background:var(--surface);color:var(--muted);font-size:.81rem}
+.release-columns {display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.9fr);gap:1rem;align-items:start}
+.release-columns > div {display:grid;gap:.45rem}
+.release-record-list,.release-handoff-list {list-style:none;margin:0;display:grid;gap:.75rem}
+.release-record-list li,.release-handoff-list li {display:grid;gap:.35rem;padding-bottom:.7rem;border-bottom:1px solid var(--line)}
+.release-record-list li:last-child,.release-handoff-list li:last-child {padding-bottom:0;border-bottom:0}
+.release-handoff-item {display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap}
+.release-handoff-item strong {min-width:0;overflow-wrap:anywhere}
+.danger-button {border-color:var(--error);color:var(--error)}
+@media(max-width:850px){.release-columns {grid-template-columns:1fr}}
+@media(max-width:650px){.wb-table-wrap table {min-width:30rem}.wb-fields label {flex-wrap:wrap}.wb-simulation>.sg-row {flex-wrap:wrap}.release-grid {grid-template-columns:1fr}.release-actions {align-items:stretch}.release-actions > button {flex:1 1 auto}}

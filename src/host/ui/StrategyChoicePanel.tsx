@@ -66,7 +66,7 @@ export function StrategyChoicePanel({detail,onRefresh,onHandoff,scopes,boundScop
         <p>{selected.version.title} · v{number}</p><p className="workspace-saved-choice-preview">{selected.version.choice||selected.reply}</p>
         <DownloadVersion key={number} route={base+'/'+number+'/export'}/>
         {selected.version.destination ? <button className="text-button" onClick={()=>openDestination(selected.version)}>打开已交接的目标草稿</button>
-          : <div className="sg-row">{receivingScope}<button type="button" className="primary-button" disabled={!scope||pending||detail.busy} onClick={()=>void deliverSaved(selected.version)}>将此版带入 GSA</button></div>}
+          : <div className="sg-row">{receivingScope}<button type="button" className="primary-button" disabled={!scope||pending||detail.busy} onClick={()=>void deliverSaved(selected.version)}>将此版带入 GSA（历史战略文稿）</button></div>}
       </>}
       {!versions.length&&<p>此讨论尚无旧版战略文稿。</p>}
     {error&&<p role="alert">{error}</p>}
