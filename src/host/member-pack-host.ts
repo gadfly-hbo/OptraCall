@@ -1750,13 +1750,19 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
 
     const inputPaths = evidence?.coverage?.inputPaths ?? [];
+    const publishedUse = use.authorDeclaration?.studioUseId;
+    const originInputs = inputPaths.length && publishedUse
+      ? (await readReportInputSnapshots(use.projectId, use.taskId, target, undefined, publishedUse)).snapshots
+      : [];
+    const originInputDigests = new Set(originInputs.map(({ binding }) => binding.ref.sha256));
     const authorizedInputs = new Map<string, string>();
     for (const locator of inputPaths) {
       if (!authorizeProjectDataPath(verifierProjectId, locator, { purposeKey: use.purposeKey }).allowed) continue;
       try {
         const actual = await options.projects.readFile(verifierProjectId, locator);
         const visible = filterAuthorizedProjectData(verifierProjectId, locator, actual.bytes, { purposeKey: use.purposeKey });
-        authorizedInputs.set(locator, createHash('sha256').update(visible.bytes).digest('hex'));
+        const sha = createHash('sha256').update(visible.bytes).digest('hex');
+        if (originInputDigests.has(sha)) authorizedInputs.set(locator, sha);
       } catch { /* absence of matching authorized bytes remains unknown */ }
     }
     const groups = new Map<string, typeof sourceReads>();
@@ -1851,7 +1857,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (claim.contradictoryPass) return pending('核验结论为通过，但提交的报告值与独立复算值不一致，保持待验证');
     if (claim.wrongVersion) return { verifierReads, summary, wrongVersion: true, failed: true };
     if (!summary.allRequiredReadByVerifier) return pending(`独立核验尚未完整实读适用原依赖（${numberOfRequired}/${requiredRefs.length}），保持待验证`);
-    if (!summary.hadDataOrCalcEvidence) return pending('独立核验尚未完整实读声明用于复算的获准输入或准确汇总，保持待验证');
+    if (!summary.hadDataOrCalcEvidence) return pending('独立核验尚未完整实读与原报告相符的获准输入或准确汇总，保持待验证');
     if ((isRecalculation || isSummary || assessment.status === 'fail') && !claim.usefulComparison && !claim.auditableFinding) {
       return pending('独立核验缺少带覆盖依据的对照结果或可回查的核验发现，保持待验证');
     }
@@ -2308,6 +2314,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     taskId: string,
     report: StudioSourceRef,
     reply?: { sessionId: string; messageId: string },
+    studioUseId?: string,
   ): Promise<{ snapshots: InputSnapshot[]; cutoff?: string }> {
     if (!isTaskReport(report, projectId, taskId) || !options.taskSnapshot) return { snapshots: [] };
     const snapshot = await options.taskSnapshot(projectId, taskId).catch(() => undefined);
@@ -2327,10 +2334,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (index > replyIndex || call.index <= userIndex || (reply && call.sessionId !== reply.sessionId) || message.isError) return false;
       const details = message.details;
       if (details?.type === 'optracall.studio' && details.action === 'declare-use') {
-        const stored = details.result?.use?.report;
-        return stored && exactTaskReport(stored, report);
+        const declared = details.result?.use;
+        return declared?.report && (!studioUseId || declared.id === studioUseId) && exactTaskReport(declared.report, report);
       }
-      return details?.type === 'optracall.project-report-write'
+      return !studioUseId && details?.type === 'optracall.project-report-write'
         && details.projectId === projectId && details.taskId === taskId
         && details.relativePath === report.locator && details.sha256 === report.sha256 && !details.reused;
     });
@@ -2666,7 +2673,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       readReportInputSnapshots(original.projectId, original.taskId, original.reportRef, {
         sessionId: original.sessionId, messageId: original.messageId,
       }),
-      readReportInputSnapshots(use.projectId, use.taskId, use.reportRef),
+      readReportInputSnapshots(use.projectId, use.taskId, use.reportRef, undefined, use.authorDeclaration?.studioUseId),
       readAssessorInputSnapshots(use),
     ]);
     if (!oldReport || !currentReport || !assessment || originalRun.cutoff !== oldCutoff || currentRun.cutoff !== cutoff) {

@@ -398,6 +398,8 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     fs.writeFileSync(path.join(p.rootPath, '020_clean', 'willowbank_orders.csv'), willowCsv);
   }
 
+  fs.writeFileSync(path.join(projAud.rootPath, '020_clean', 'store-opening-policy.csv'), 'store,opens\n星桥直营店,10:00\n');
+
   // Seed REAL original authorities for v1.0:
   // 1) Real SAP Method v1 (同月退款口径)
   const methodV1 = await json(await host.request('/api/sap/methods', 'POST', {
@@ -841,7 +843,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     requestId: randomUUID(), enterpriseId, grantorProjectId: projBuild.id, authorityToken: buildAuth.authorityToken, grantBasis: '独立核算岗全店复算',
     subjectType: 'project', subjectId: projAud.id, resourceKind: 'detail',
     purposeKeys: ['store-first-purchase-30d-repurchase'], operations: ['read-definition', 'read-detail-recalculate'],
-    scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店', '柳岸直营店'], allowedDataPaths: ['020_clean/starbridge_orders.csv', '020_clean/willowbank_orders.csv'] },
+    scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店', '柳岸直营店'], allowedDataPaths: ['020_clean/starbridge_orders.csv', '020_clean/willowbank_orders.csv', '020_clean/store-opening-policy.csv'] },
   }));
   const { task: taskBlindVerify } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '盲签核验反例任务' }), 201);
   const blindAssessText = JSON.stringify({ assessed: 'repurchase-v1.0.json', verifier: 'taskBlindVerify', status: 'pass', blind: true });
@@ -1054,9 +1056,9 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   const sourceRead = (ref: unknown, length?: number) => ({
     name: 'studio_assets', arguments: { action: 'read-source', systemId: system.id, payload: { ref, ...(length ? { length } : {}) } },
   });
-  const inputRead = hasOsSandbox
-    ? { name: 'read', arguments: { path: 'starbridge_orders.csv' } }
-    : { name: 'read_input', arguments: { filename: 'starbridge_orders.csv' } };
+  const inputRead = (filename: string) => hasOsSandbox
+    ? { name: 'read', arguments: { path: filename } }
+    : { name: 'read_input', arguments: { filename } };
   const assessmentCall = (evidence?: unknown) => ({
     name: 'studio_assets', arguments: {
       action: 'assess-use', systemId: system.id, payload: {
@@ -1068,7 +1070,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   const assessmentWrite = hasOsSandbox
     ? { name: 'write', arguments: { path: '../060_reports/assessment-order.md', content: assessmentNote } }
     : { name: 'write_report', arguments: { filename: 'assessment-order.md', content: assessmentNote } };
-  async function runVerifierOrder(calls: (ReturnType<typeof sourceRead> | ReturnType<typeof assessmentCall> | typeof inputRead | typeof assessmentWrite)[]) {
+  async function runVerifierOrder(calls: (ReturnType<typeof sourceRead> | ReturnType<typeof assessmentCall> | ReturnType<typeof inputRead> | typeof assessmentWrite)[]) {
     let step = 0;
     provider.setResponder(() => {
       const call = calls[step++];
@@ -1085,19 +1087,31 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   }
   const tooLate = await runVerifierOrder([
     sourceRead(refundV1Ref), sourceRead(sapM1Ref), sourceRead(taskAReportRef, 4),
-    inputRead, assessmentWrite, assessmentCall(v1ComparisonEvidence), sourceRead(taskAReportRef),
+    inputRead('starbridge_orders.csv'), assessmentWrite, assessmentCall(v1ComparisonEvidence), sourceRead(taskAReportRef),
   ]);
   assert.equal(tooLate.status, 'pending');
   assert.equal(tooLate.verifierEvidenceSummary.targetReportChecked, false);
   assert.equal(tooLate.verifierEvidenceSummary.authorizedInputChecked, true);
   const noComparison = await runVerifierOrder([
-    sourceRead(refundV1Ref), sourceRead(sapM1Ref), sourceRead(taskAReportRef), inputRead,
+    sourceRead(refundV1Ref), sourceRead(sapM1Ref), sourceRead(taskAReportRef), inputRead('starbridge_orders.csv'),
     assessmentCall({ targetReport: taskAReportRef, coverage: v1ComparisonEvidence.coverage }),
   ]);
   assert.equal(noComparison.status, 'pending');
   assert.equal(noComparison.verifierEvidenceSummary.targetReportChecked, true);
   assert.equal(noComparison.verifierEvidenceSummary.authorizedInputChecked, true);
   assert.match(noComparison.verifierEvidenceSummary.missingReason, /对照结果/);
+  const unrelatedInput = await runVerifierOrder([
+    sourceRead(refundV1Ref), sourceRead(sapM1Ref), sourceRead(taskAReportRef), inputRead('store-opening-policy.csv'),
+    assessmentCall({
+      ...v1ComparisonEvidence,
+      coverage: { ...v1ComparisonEvidence.coverage, inputPaths: ['020_clean/store-opening-policy.csv'] },
+    }),
+  ]);
+  assert.equal(unrelatedInput.status, 'pending');
+  assert.equal(unrelatedInput.verifierEvidenceSummary.targetReportChecked, true);
+  assert.equal(unrelatedInput.verifierEvidenceSummary.authorizedInputChecked, false);
+  assert.ok(unrelatedInput.verifierActualReads.some((read: any) => read.complete && read.ref.locator === '020_clean/store-opening-policy.csv'));
+
 
   // R4 (Round-8): Now run a GENUINE independent verifier task (taskVerifyV1 in projAud) that reads BOTH required dependencies + TARGET REPORT (via studio_assets read-source) + authorized CSV input data, writes assessment bound to target report + SHA-256 + recalculation, and calls assess-use!
   const { task: taskVerifyV1 } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '独立核验任务V1' }), 201);
