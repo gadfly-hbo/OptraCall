@@ -196,10 +196,51 @@ export class ProjectDataContextStore {
   }
   async summary(projectId: string): Promise<DataContextSummary> {
     const index = await this.#loadIndex(projectId); if (!index) return { index: null, datasets: [], citations: [] };
+    async function readable<T>(read: () => Promise<T>): Promise<T | undefined> {
+      try { return await read(); }
+      catch (error) {
+        if (error instanceof ProjectDataContextFault && error.code === 'data_context_evidence_forbidden') return undefined;
+        throw error;
+      }
+    }
     const datasets: DataContextSummary['datasets'] = [];
-    for (const dataset of index.datasets) { const versions: InputVersionRecord[] = [], descriptions: DataDescriptionRevision[] = []; for (const ref of dataset.versions) versions.push(await this.readVersion(projectId, dataset.datasetId, ref.inputVersionId)); for (const ref of dataset.descriptions) descriptions.push(await this.readDescription(projectId, dataset.datasetId, ref.descriptionRevisionId)); datasets.push({ dataset, versions, descriptions }); }
-    const citations: DataCitationRecord[] = []; for (const ref of index.citations) citations.push(await this.readCitation(projectId, ref.citationId));
-    return { index, datasets, citations };
+    for (const dataset of index.datasets) {
+      const versions: InputVersionRecord[] = [];
+      for (const ref of dataset.versions) {
+        const record = await readable(() => this.readVersion(projectId, dataset.datasetId, ref.inputVersionId));
+        if (record) versions.push(record);
+      }
+      const latest = versions.at(-1);
+      if (!latest) continue;
+      const visibleVersions = new Set(versions.map(record => record.inputVersionId));
+      const descriptions: DataDescriptionRevision[] = [];
+      for (const ref of dataset.descriptions) {
+        if (!visibleVersions.has(ref.inputVersionId)) continue;
+        const record = await readable(() => this.readDescription(projectId, dataset.datasetId, ref.descriptionRevisionId));
+        if (record) descriptions.push(record);
+      }
+      const visibleDescriptions = new Set(descriptions.map(record => record.descriptionRevisionId));
+      const projected = {
+        ...dataset,
+        ...(latest.inputVersionId !== dataset.versions.at(-1)?.inputVersionId ? { name: path.basename(latest.sourcePath) } : {}),
+        sourcePath: latest.sourcePath,
+        uploadId: latest.uploadId,
+        versions: dataset.versions.filter(ref => visibleVersions.has(ref.inputVersionId)),
+        descriptions: dataset.descriptions.filter(ref => visibleDescriptions.has(ref.descriptionRevisionId)),
+        latestDescriptionByInputVersion: Object.fromEntries(Object.entries(dataset.latestDescriptionByInputVersion)
+          .filter(([version, description]) => visibleVersions.has(version) && visibleDescriptions.has(description))),
+      };
+      datasets.push({ dataset: projected, versions, descriptions });
+    }
+    const citations: DataCitationRecord[] = [];
+    const citationRefs: ProjectDataContextIndex['citations'] = [];
+    for (const ref of index.citations) {
+      const citation = await readable(() => this.readCitation(projectId, ref.citationId));
+      if (!citation) continue;
+      citations.push(citation);
+      citationRefs.push(ref);
+    }
+    return { index: { ...index, datasets: datasets.map(item => item.dataset), citations: citationRefs }, datasets, citations };
   }
   #decodeDescription(value: unknown, projectId: string, datasetId: string, descriptionRevisionId: string): DataDescriptionRevision {
     operation(value, projectId, descriptionRevisionId, 'save-description');

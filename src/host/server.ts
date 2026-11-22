@@ -264,10 +264,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const projectDataReferences = createProjectDataContextReferences({ dataRoot, projects: guardedProjects, enterpriseMaterials });
   const projectDataContext = new ProjectDataContextStore({ dataRoot, projects: guardedProjects, validateReferences: projectDataReferences.validate,
     authorizeEvidence: (projectId, relativePath, bytes) => {
-      if (relativePath.startsWith('020_clean/')) {
+      if (!relativePath.startsWith('020_clean/')) return;
+      try {
         const view = studio.memberPack.filterAuthorizedProjectData(projectId, relativePath, bytes);
-        if (!view.bytes.equals(bytes)) throw new RequestFault(403, 'member_pack_frozen_evidence_forbidden');
+        if (view.bytes.equals(bytes)) return;
+      } catch (error) {
+        if (!(error instanceof StudioError) || error.status !== 403) throw error;
       }
+      throw new ProjectDataContextFault('data_context_evidence_forbidden');
     },
   });
   let staticUi: Awaited<ReturnType<typeof loadStaticUi>> | undefined;
@@ -672,7 +676,6 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       agentOptions: async (owner, _configuration, execution) => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
         const legacyContract = (owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'legacy';
-        const hasOsSandbox = process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec');
         const isRestrictedMemberPack = Boolean(studio.memberPack.getProjectToolScope(project.id));
         if (isRestrictedMemberPack && execution) throw new RequestFault(403, 'member_pack_legacy_execution_forbidden');
         const protectedExecution = legacyContract && !isRestrictedMemberPack ? await automatic.ordinaryExecution({ project, task }, execution) : undefined;
@@ -713,7 +716,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               deliver();
             }),
           };
-        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, ...(restrictedMemberPackWs ? { memberPackWorkspaceRoot: restrictedMemberPackWs.workspaceRoot, memberPackContextStartAt: restrictedMemberPackWs.contextStartAt, memberPackPermissionCurrent: () => restrictedMemberPackWs.policyFingerprint === studio.memberPack.projectPermissionFingerprint(project.id), ...(hasOsSandbox ? { memberPackExecutionScope: restrictedMemberPackWs.protectedScope } : {}) } : {}), goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id, task.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(!isRestrictedMemberPack && task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(!isRestrictedMemberPack && task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(!isRestrictedMemberPack && task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(!isRestrictedMemberPack && task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, memberPackGuard: call => studio.memberPack.evaluateNativeToolCall(project.id, project.rootPath, call, restrictedMemberPackWs?.workspaceRoot), methodIssue: async (input, context) => {
+        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, ...(restrictedMemberPackWs ? { memberPackWorkspaceRoot: restrictedMemberPackWs.workspaceRoot, memberPackContextStartAt: restrictedMemberPackWs.contextStartAt, memberPackPermissionCurrent: () => restrictedMemberPackWs.policyFingerprint === studio.memberPack.projectPermissionFingerprint(project.id), ...(restrictedMemberPackWs.osSandboxAvailable ? { memberPackExecutionScope: restrictedMemberPackWs.protectedScope } : {}) } : {}), goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id, task.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(!isRestrictedMemberPack && task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(!isRestrictedMemberPack && task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(!isRestrictedMemberPack && task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(!isRestrictedMemberPack && task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, memberPackGuard: call => studio.memberPack.evaluateNativeToolCall(project.id, project.rootPath, call, restrictedMemberPackWs?.workspaceRoot), methodIssue: async (input, context) => {
           const operationId = stableActionId(['task-method-issue-v1', project.id, task.id, context.requestId, input.methodId, input.version, input.note, input.sources]);
           return methodIssues(input, { ...context, operationId, projectId: project.id, taskId: task.id });
         }, quotedDecisions: async (action, input, context) => {

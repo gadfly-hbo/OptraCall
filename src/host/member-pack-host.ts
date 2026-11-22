@@ -293,7 +293,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   function nextProjectGrantExpiry(projectId: string): number | undefined {
-    if (!enabled) return undefined;
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return undefined;
     const at = Date.now();
@@ -467,8 +466,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   function getProjectToolScope(projectId: string): ProjectMemberPackFileScope | undefined {
-    // R6: In --disable-member-pack rollback mode, stop creating restricted workspaces or copying files!
-    if (!enabled) return undefined;
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return undefined;
     const enterprisePacks = packs.list(enterpriseId);
@@ -495,7 +492,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     );
     const allowedPaths = [...new Set(activeDetailGrants.flatMap(g => (g.scope.allowedDataPaths ?? []).map(normalizeRelativeDataPath)))];
     const allowedStores = [...new Set(activeDetailGrants.flatMap(g => g.scope.stores ?? []))];
-    const osSandboxAvailable = hasOsSandboxAvailable();
+    const osSandboxAvailable = enabled && hasOsSandboxAvailable();
     // Default-deny detail access whenever there are no active detail grants OR when allowedDataPaths was omitted!
     if (!activeDetailGrants.length || allowedPaths.length === 0) {
       return {
@@ -524,14 +521,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   function syncCleanDir(workspaceCleanDir: string, projectRoot: string, scope: ProjectMemberPackFileScope | undefined) {
-    if (!enabled) return;
     ensurePrivateDir(workspaceCleanDir);
     // Clear existing files in sandbox clean dir first so revoked files are immediately purged!
     for (const entry of fs.readdirSync(workspaceCleanDir, { withFileTypes: true })) {
       fs.rmSync(path.join(workspaceCleanDir, entry.name), { recursive: true, force: true });
     }
     // R2: When OS managed sandbox is unavailable, NEVER copy raw detail files to an unprotected filesystem directory!
-    if (!scope || scope.mode !== 'allowlist' || !hasOsSandboxAvailable()) return;
+    if (!scope || scope.mode !== 'allowlist' || !scope.osSandboxAvailable) return;
     const subjectGrants = projectGrants(scope.enterpriseId, scope.projectId);
     const resolvedProjectRoot = path.resolve(projectRoot);
     for (const rel of scope.allowedPaths) {
@@ -559,10 +555,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   async function prepareRestrictedTaskWorkspace(projectId: string, taskId: string, projectRoot: string): Promise<RestrictedTaskWorkspace | undefined> {
-    if (!enabled) return undefined;
     const scope = getProjectToolScope(projectId);
     if (!scope) return undefined;
-    const osSandboxAvailable = hasOsSandboxAvailable();
+    const { osSandboxAvailable } = scope;
     const workspaceRoot = path.resolve(options.dataRoot, 'member-pack-workspaces', uuid(projectId), uuid(taskId));
     const cleanDir = path.join(workspaceRoot, '020_clean');
     const reportsDir = path.join(workspaceRoot, '060_reports');
@@ -818,7 +813,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     relativePath: string,
     query: { purposeKey?: string; grain?: string } = {},
   ): { allowed: boolean; reason?: string } {
-    if (!enabled) return { allowed: true };
     const scope = getProjectToolScope(projectId);
     if (!scope) return { allowed: true };
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
@@ -864,7 +858,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     rawBytes: Buffer,
     query: { purposeKey?: string } = {},
   ): { bytes: Buffer; filtered?: boolean; restrictionNote?: string } {
-    if (!enabled) return { bytes: rawBytes, filtered: false };
     const scope = getProjectToolScope(projectId);
     if (!scope) return { bytes: rawBytes, filtered: false };
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
@@ -882,7 +875,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   function filterProjectFileTree<T extends { path: string; type?: string; children?: T[] }>(projectId: string, nodes: T[]): T[] {
-    if (!enabled) return nodes;
     const scope = getProjectToolScope(projectId);
     if (!scope) return nodes;
     const walk = (items: T[]): T[] => {
@@ -928,7 +920,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
     // R5: Guard Studio/Pack-referenced reports in 060_reports/ against overwrite EVEN on ordinary & owner-construction projects!
     const guardOrdinaryReferencedReport = (): { allowed: boolean; reason?: string } | undefined => {
-      if (!enabled) return undefined;
       if (['write', 'edit'].includes(call.toolName)) {
         const rawTarget = call.input.path ?? call.input.file_path ?? call.input.target;
         if (typeof rawTarget === 'string' && rawTarget.trim()) {

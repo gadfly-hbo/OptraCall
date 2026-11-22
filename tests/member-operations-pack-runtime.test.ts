@@ -1608,6 +1608,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     problemKey: 'feedback-without-report-adoption',
     title: '查阅来源但未将其登记为报告依据',
     category: 'shared_refund_mapping',
+    evidenceNote: '本轮保留待核线索。',
   }));
   assert.equal(undeclaredFeedback.feedback.reports[0].adoptionBasis, 'directory_only_unverified');
   assert.equal(undeclaredFeedback.feedback.reports[0].usedPackVersion, undefined);
@@ -2465,6 +2466,10 @@ test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexist
   const newEvidence = await consumerReq(`${dataContext}/datasets/${datasetId}/versions/${narrowVersion}/evidence`);
   assert.equal(newEvidence.status, 200, 'The borrower can freeze and retrieve exactly the current authorized view');
   assert.equal(await newEvidence.text(), 'account,first_order_date,store\nH01,2026-09-02,湖庭直营店\n');
+  const visibleDataContext = await json(await consumerReq(dataContext));
+  assert.equal(visibleDataContext.index.revision, 2);
+  assert.deepEqual(visibleDataContext.datasets[0].versions.map((record: any) => record.inputVersionId), [narrowVersion]);
+  assert.deepEqual(visibleDataContext.index.datasets[0].versions.map((record: any) => record.inputVersionId), [narrowVersion]);
   const semantic = await json(await consumerReq(`/api/projects/${projConsumer.id}/tasks/${task.id}/semantic-context`, 'POST', {
     action: 'read', target: { kind: 'data-input', projectId: projConsumer.id, datasetId, inputVersionId },
   }));
