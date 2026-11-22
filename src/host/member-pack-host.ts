@@ -292,6 +292,46 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       .digest('hex');
   }
 
+  function currentTaskPolicyStart(projectId: string, taskId: string): number | undefined {
+    const policyFile = path.resolve(options.dataRoot, 'member-pack-workspaces', uuid(projectId), uuid(taskId), '.policy');
+    try {
+      const [fingerprint, start] = fs.readFileSync(policyFile, 'utf8').split('\n');
+      const since = Number(start);
+      if (fingerprint === projectPermissionFingerprint(projectId) && Number.isSafeInteger(since) && since > 0) return since;
+    } catch { /* A missing or unreadable receipt cannot attest to current scope. */ }
+    return undefined;
+  }
+
+  function presentTaskHistory(projectId: string, taskId: string, snapshot: ProjectSnapshot): ProjectSnapshot {
+    if (!getProjectToolScope(projectId) || !snapshot.messages.length) return snapshot;
+    const since = currentTaskPolicyStart(projectId, taskId);
+    const messages = snapshot.messages.map(message => {
+      if (message.role === 'user') return message;
+      const stamp = typeof message.timestamp === 'number' ? message.timestamp : Date.parse(message.timestamp ?? message.createdAt ?? '');
+      if (since !== undefined && stamp >= since) return message;
+      return {
+        role: message.role,
+        timestamp: message.timestamp,
+        nativeSessionId: message.nativeSessionId,
+        nativeEntryId: message.nativeEntryId,
+        toolCallId: message.toolCallId,
+        toolName: message.toolName,
+        content: [{ type: 'text', text: '此条历史内容按原权限保留，当前权限未能核对。' }],
+      };
+    });
+    return { ...snapshot, messages };
+  }
+
+  function assertCurrentReportFile(projectId: string, locator: string, sha: string) {
+    if (!getProjectToolScope(projectId)) return;
+    const report = readReportLedger().projectFiles[`${projectId}:${locator.slice('060_reports/'.length)}`];
+    if (!report || report.sha256 !== sha) return;
+    const since = currentTaskPolicyStart(projectId, report.ownerTaskId);
+    if (since === undefined || Date.parse(report.committedAt) < since) {
+      throw new StudioError('member_pack_report_current_authority_required', 403);
+    }
+  }
+
   function nextProjectGrantExpiry(projectId: string): number | undefined {
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return undefined;
@@ -1099,7 +1139,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
   function assertDeclaredReportAccess(systemId: string, projectId: string, declaration: StudioUseRecord) {
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
-    if (!enabled || !enterpriseId || options.enterpriseScopes.enterpriseIdForProject(declaration.projectId) !== enterpriseId) {
+    if (!enterpriseId || options.enterpriseScopes.enterpriseIdForProject(declaration.projectId) !== enterpriseId) {
       throw new StudioError('studio_report_permission_denied', 403);
     }
     const grantsNow = projectGrants(enterpriseId, projectId)
@@ -4104,6 +4144,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     readPreservedReportBytes,
     isReportLockedByUseOrFeedback,
     projectPermissionFingerprint,
+    presentTaskHistory,
+    assertCurrentReportFile,
     nextProjectGrantExpiry,
     getProjectToolScope,
     prepareRestrictedTaskWorkspace,

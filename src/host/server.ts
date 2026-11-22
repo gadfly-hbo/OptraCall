@@ -581,7 +581,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const sapMethodRoutes = createSapMethodRoutes({ store: sapMethods, enabled: options.sapMethodsEnabled !== false, readBody: request => body(request, 512 * 1024), mutate, isClosing: () => closing,
     readSource: (methodId, version, index) => sapMethodFeature.readSource(methodId, version, index) });
   const endStreams = (id?: string) => { for (const [key, responses] of streams) { if (id && key !== id) continue; for (const response of responses) response.end(); streams.delete(key); } };
-  const publish = (projectId: string, taskId: string, event: object) => { for (const response of streams.get(keyOf(projectId, taskId)) ?? []) if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...event, projectId, taskId })}\n\n`); };
+  const publish = (projectId: string, taskId: string, event: object) => {
+    const projected = 'snapshot' in event && event.snapshot
+      ? { ...event, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, event.snapshot as ProjectSnapshot) }
+      : event;
+    for (const response of streams.get(keyOf(projectId, taskId)) ?? []) {
+      if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...projected, projectId, taskId })}\n\n`);
+    }
+  };
   const availableConfiguration = (id?: string, revision?: number) => {
     const snapshot = configuration.snapshot(id, revision);
     return snapshot && !clearingAll && !clearing.has(snapshot.provider) ? snapshot : undefined;
@@ -659,9 +666,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       policyFingerprint: owner => studio.memberPack.projectPermissionFingerprint(owner.project.id),
       policyCurrent: (owner, captured) => captured === studio.memberPack.projectPermissionFingerprint(owner.project.id),
       executionMode: async owner => {
-        if (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec') && Boolean(studio.memberPack.getProjectToolScope(owner.project.id))) {
-          return 'ordinary';
-        }
+        const memberScope = studio.memberPack.getProjectToolScope(owner.project.id);
+        if (memberScope) return memberScope.osSandboxAvailable ? 'ordinary' : 'unmanaged';
         if ((owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'conclusion') return 'unmanaged';
         const id = { projectId: owner.project.id, taskId: owner.task.id };
         return (await automatic.store.readSettings(id)).enabled && (await automatic.capabilities(id)).supported ? 'ordinary' : 'unmanaged';
@@ -3000,6 +3006,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const file = await projects.readFile(projectId, requestedPath);
           let outBytes = file.bytes;
           let viewFiltered = false;
+          if (requestedPath.startsWith('060_reports/')) {
+            assertCurrentProjectBorrower(request, projectId);
+            studio.memberPack.assertCurrentReportFile(projectId, requestedPath, createHash('sha256').update(file.bytes).digest('hex'));
+          }
           if (isMemberPackGuardedData) {
             const view = studio.memberPack.filterAuthorizedProjectData(projectId, requestedPath, file.bytes);
             outBytes = view.bytes;
@@ -3239,7 +3249,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             throw new RequestFault(404, 'not_found');
           }
           if (!operation && request.method === 'GET') {
-            await mutate(async () => { json(response, 200, await taskState(projectId, taskId, false, true)); });
+            await mutate(async () => {
+              const state = await taskState(projectId, taskId, false, true);
+              json(response, 200, { ...state, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, state.snapshot) });
+            });
             return;
           }
           if (operation === 'open' && request.method === 'POST') {
@@ -3249,7 +3262,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             await mutate(async () => {
               state.snapshot = await presentFrameworkHistory(projectId, taskId, state.snapshot);
               publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot });
-              json(response, 200, state);
+              json(response, 200, { ...state, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, state.snapshot) });
             });
             return;
           }
@@ -3269,7 +3282,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             try {
               await mutate(async () => {
                 const state = await taskState(projectId, taskId, false, true);
-                if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ type: 'snapshot', snapshot: state.snapshot, projectId, taskId })}\n\n`);
+                if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ type: 'snapshot', snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, state.snapshot), projectId, taskId })}\n\n`);
               });
             }
             catch { if (!response.destroyed && !response.writableEnded) { response.write(`data: ${JSON.stringify({ type: 'stream.error', message: '任务连接未就绪，请检查模型配置或重新连接。', projectId, taskId })}\n\n`); response.end(); } }
@@ -3297,7 +3310,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             if (typeof input.text !== 'string' || !input.text.startsWith('/') || input.text.length > 20000 || (input.requestId !== undefined && (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId)))) throw new RequestFault(400, 'invalid_command');
             const requestId = typeof input.requestId === 'string' ? input.requestId : randomUUID(), owner: ProjectOwner = await pair(projectId, taskId, true);
             const known = await priorRequest(owner.project, owner.task, requestId);
-            if (known) { json(response, 200, { result: { deduplicated: true }, outcome: known, snapshot: (await taskState(projectId, taskId)).snapshot }); return; }
+            if (known) { json(response, 200, { result: { deduplicated: true }, outcome: known, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, (await taskState(projectId, taskId)).snapshot) }); return; }
             let terminalContext: SessionContext<ProjectOwner> | undefined;
             const result = await projectSessions.withSession(projectSessions.ref(owner), async lease => {
               let startedAt: string | undefined;
@@ -3313,7 +3326,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                     await automatic.admit({ project, task }, requestId, createHash('sha256').update(JSON.stringify(['automatic-command-v1', projectId, taskId, requestId, input.text])).digest('hex'));
                   }
                 });
-                if (previous) return { result: { deduplicated: true }, outcome: previous, snapshot: (await taskState(projectId, taskId)).snapshot };
+                if (previous) return { result: { deduplicated: true }, outcome: previous, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, (await taskState(projectId, taskId)).snapshot) };
                 const run = lease.start({
                   text: input.text as string, requestId, kind: 'command',
                   verifyBeforeDispatch: async () => {
@@ -3338,7 +3351,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               const diagnostic = readRunDiagnostic((result as any).diagnostic ?? (result as any).snapshot?.lastRun?.diagnostic);
               publish(projectId, taskId, { type: 'run.settled', requestId, outcome: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'failed', ...(diagnostic ? { diagnostic } : {}) });
             }
-            json(response, 200, result); return;
+            json(response, 200, 'snapshot' in result && result.snapshot
+              ? { ...result, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, result.snapshot as ProjectSnapshot) }
+              : result);
+            return;
           }
         }
       }
