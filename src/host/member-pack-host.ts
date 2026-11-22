@@ -31,7 +31,7 @@ import {
 import { DomainReferenceStore, BUILTIN_REPO_TEMPLATES } from './domain-reference-store.ts';
 import { ResourceGrantStore } from './resource-grant-store.ts';
 import { EnterprisePackStore } from './enterprise-pack-store.ts';
-import { buildAuthorizedDataView, isPeriodCovered } from './member-pack-data-view.ts';
+import { buildAuthorizedDataView, isPeriodCovered, type AuthorizedDataPurpose } from './member-pack-data-view.ts';
 import { collectNativeEvidence, exactTaskReport, nativeAssessmentEvidence, projectFileLocator, qualifyAssessmentClaims, readCoversSource, readNativeFileEvidence, readStudioEvidence, studioPagesComplete } from './member-pack-verification.ts';
 import { createProtectedExecutionScope, type ProtectedExecutionScope } from '../agent/protected-tools.ts';
 
@@ -848,6 +848,25 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return requestedLocator;
   }
 
+  function resolveTaskDataPurpose(projectId: string, taskId: string, purposeId: string): AuthorizedDataPurpose {
+    const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
+    if (enterpriseId) {
+      const requested = uuid(purposeId);
+      for (const pack of packs.list(enterpriseId)) {
+        const pin = packs.getTaskPin(pack.id, projectId, taskId);
+        const revision = pack.packRevisions.find(revision => pin ? revision.version === pin.packVersion : revision.status === 'active');
+        const manifest = revision?.purposeManifests.find(purpose => purpose.purposeId === requested && purpose.status === 'eligible');
+        if (!manifest) continue;
+        const access = evaluatePurposeAccessForSubject(projectGrants(enterpriseId, projectId), manifest);
+        if (isConstructionOwnerProject(pack, projectId) || access?.hasPartialOrFullDetail) {
+          const { brand, channel, stores } = manifest.scope;
+          return { purposeKey: manifest.purposeKey, purposeScope: { brand, channel, stores } };
+        }
+      }
+    }
+    throw new StudioError('member_pack_purpose_detail_not_authorized', 403);
+  }
+
   function authorizeProjectDataPath(
     projectId: string,
     relativePath: string,
@@ -896,7 +915,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     projectId: string,
     relativePath: string,
     rawBytes: Buffer,
-    query: { purposeKey?: string } = {},
+    query: AuthorizedDataPurpose = {},
   ): { bytes: Buffer; filtered?: boolean; restrictionNote?: string } {
     const scope = getProjectToolScope(projectId);
     if (!scope) return { bytes: rawBytes, filtered: false };
@@ -1787,11 +1806,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       : [];
     const originInputDigests = new Set(originInputs.map(({ binding }) => binding.ref.sha256));
     const authorizedInputs = new Map<string, string>();
+    const purposeData = { purposeKey: use.purposeKey, purposeScope: {
+      brand: purpose.scope.brand, channel: purpose.scope.channel, stores: purpose.scope.stores,
+    } };
     for (const locator of inputPaths) {
       if (!authorizeProjectDataPath(verifierProjectId, locator, { purposeKey: use.purposeKey }).allowed) continue;
       try {
         const actual = await options.projects.readFile(verifierProjectId, locator);
-        const visible = filterAuthorizedProjectData(verifierProjectId, locator, actual.bytes, { purposeKey: use.purposeKey });
+        const visible = filterAuthorizedProjectData(verifierProjectId, locator, actual.bytes, purposeData);
         const sha = createHash('sha256').update(visible.bytes).digest('hex');
         if (originInputDigests.has(sha)) authorizedInputs.set(locator, sha);
       } catch { /* absence of matching authorized bytes remains unknown */ }
@@ -4154,6 +4176,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     discardUncommittedWorkspaceReports,
     resolveTaskReportLocator,
     authorizeProjectDataPath,
+    resolveTaskDataPurpose,
     assertProjectDataPathAllowed,
     filterAuthorizedProjectData,
     filterProjectFileTree,

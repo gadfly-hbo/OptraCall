@@ -16,8 +16,8 @@ export function createProjectFilesPort(options: {
   projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore; projectId: string; taskId: string; assertOwner(): Promise<void>;
   listBoundReports?(): Promise<ProjectTaskResultBinding[]>;
   readScopedCatalog?(): Promise<{ bytes: Buffer; enterpriseId?: string } | undefined>;
-  assertInputAllowed?(relativePath: string): void | Promise<void>;
-  filterInputBytes?(relativePath: string, bytes: Buffer): Promise<{ bytes: Buffer; filtered?: boolean; restrictionNote?: string }> | { bytes: Buffer; filtered?: boolean; restrictionNote?: string };
+  assertInputAllowed?(relativePath: string, purposeId?: string): void | Promise<void>;
+  filterInputBytes?(relativePath: string, bytes: Buffer, purposeId?: string): Promise<{ bytes: Buffer; filtered?: boolean; restrictionNote?: string }> | { bytes: Buffer; filtered?: boolean; restrictionNote?: string };
 }): ProjectFilesPort {
   return async (action, input, context) => {
     const check = () => { context.signal.throwIfAborted(); context.assertCurrent(); };
@@ -72,16 +72,18 @@ export function createProjectFilesPort(options: {
         storeId: catalog.storeId, path: catalog.path, sha256: createHash('sha256').update(catalog.bytes).digest('hex'), bytes: catalog.bytes.length } };
     }
     if (action !== 'read-input') fault('invalid_project_file_action');
-    if (Object.keys(input).some(key => !['filename', 'offset', 'limit'].includes(key)) || !filename(input.filename)) fault('invalid_input_filename');
+    if (Object.keys(input).some(key => !['filename', 'offset', 'limit', 'purposeId'].includes(key)) || !filename(input.filename)) fault('invalid_input_filename');
     for (const key of ['offset', 'limit']) if (input[key] !== undefined && (!Number.isSafeInteger(input[key]) || Number(input[key]) < 1)) fault('invalid_input_pagination');
     const relativePath = '020_clean/' + input.filename;
-    if (options.assertInputAllowed) await options.assertInputAllowed(relativePath);
+    const purposeId = input.purposeId;
+    if (purposeId !== undefined && (typeof purposeId !== 'string' || !/^[a-f0-9-]{36}$/.test(purposeId) || !options.filterInputBytes)) fault('invalid_input_purpose');
+    if (options.assertInputAllowed) await options.assertInputAllowed(relativePath, purposeId);
     const captured = await options.projects.captureFeedbackFile(options.projectId, relativePath, PROJECT_UPLOAD_MAX_BYTES);
     let deliveredBytes = captured.bytes;
     let authorizedViewNote: string | undefined;
     let filteredView = false;
     if (options.filterInputBytes) {
-      const view = await options.filterInputBytes(relativePath, captured.bytes);
+      const view = await options.filterInputBytes(relativePath, captured.bytes, purposeId);
       deliveredBytes = view.bytes;
       filteredView = Boolean(view.filtered);
       authorizedViewNote = view.restrictionNote;
@@ -98,7 +100,7 @@ export function createProjectFilesPort(options: {
       ? [{ type: 'text' as const, text: `[Host 授权视图] ${authorizedViewNote}\n${result.content.map(c => c.text).join('')}` }]
       : result.content;
     return { content, details: { ...result.details, type: 'optracall.project-file-read', ...identity,
-      path: target, relativePath, sha256: deliveredSha, bytes: deliveredBytes.length, observedAt: captured.observedAt,
+      path: target, relativePath, ...(purposeId ? { purposeId } : {}), sha256: deliveredSha, bytes: deliveredBytes.length, observedAt: captured.observedAt,
       ...(filteredView ? { authorizedViewFiltered: true, restrictionNote: authorizedViewNote } : {}) } };
   };
 }

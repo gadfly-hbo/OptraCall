@@ -152,11 +152,16 @@ function knownScopeValue(values: unknown[]): string | undefined {
  * each applicable grant. A row must meet one grant on its own. A missing or
  * ambiguous dimension only bars grants that restrict that dimension.
  */
+export type AuthorizedDataPurpose = {
+  purposeKey?: string;
+  purposeScope?: Pick<ResourceAuthorizationGrant['scope'], 'brand' | 'channel' | 'stores'>;
+};
+
 export function buildAuthorizedDataView(
   bytes: Buffer,
   relativePath: string,
   grants: readonly ResourceAuthorizationGrant[],
-  query: { purposeKey?: string; at?: string } = {},
+  query: AuthorizedDataPurpose & { at?: string } = {},
 ): AuthorizedDataViewResult {
   const normalizedPath = normalizeRelPath(relativePath);
   const access = evaluateResourceAccess(grants, {
@@ -180,11 +185,12 @@ export function buildAuthorizedDataView(
     return isGrantActive(g, atMs);
   });
 
+  const purposeColumns = query.purposeScope ? constrainedColumns(query.purposeScope) : [];
   const rowGrants = matchedGrants.map(grant => ({
     scope: grant.scope,
     constrained: constrainedColumns(grant.scope),
   }));
-  if (rowGrants.some(grant => !grant.constrained.length)) {
+  if (!purposeColumns.length && rowGrants.some(grant => !grant.constrained.length)) {
     return { allowed: true, bytes, filtered: false };
   }
 
@@ -218,6 +224,8 @@ export function buildAuthorizedDataView(
     return column === 'store' || column === 'period' ? matching.slice(0, 1) : matching;
   };
   const missingScope = (hasColumn: (column: ScopeColumn) => boolean) => {
+    const purposeMissing = purposeColumns.find(column => !hasColumn(column));
+    if (purposeMissing) return purposeMissing;
     if (rowGrants.some(grant => grant.constrained.every(hasColumn))) return undefined;
     return scopeColumns.find(column => !hasColumn(column) && rowGrants.some(grant => grant.constrained.includes(column)));
   };
@@ -230,16 +238,18 @@ export function buildAuthorizedDataView(
   const dimensionKnown = (row: RowScope, column: ScopeColumn): boolean =>
     column === 'period' ? !!(row.period && dataPeriodBounds(row.period)) : row[column] !== undefined;
   const isRowUnattributable = (row: RowScope): boolean =>
-    rowGrants.some(grant => grant.constrained.some(column => !dimensionKnown(row, column)));
+    purposeColumns.some(column => !dimensionKnown(row, column))
+    || rowGrants.some(grant => grant.constrained.some(column => !dimensionKnown(row, column)));
+  const matchesScope = (row: RowScope, scope: ResourceAuthorizationGrant['scope'], constrained: ScopeColumn[]) =>
+    constrained.every(column => {
+      if (!dimensionKnown(row, column)) return false;
+      if (column === 'period') return isPeriodCovered(row.period, scope.periodFrom, scope.periodTo);
+      if (column === 'store') return scope.stores?.some(store => store.trim() === row.store);
+      return scope[column]?.trim() === row[column];
+    });
   const rowAllowedByAnyGrant = (row: RowScope): boolean =>
-    rowGrants.some(({ scope, constrained }) =>
-      constrained.every(column => {
-        if (!dimensionKnown(row, column)) return false;
-        if (column === 'period') return isPeriodCovered(row.period, scope.periodFrom, scope.periodTo);
-        if (column === 'store') return scope.stores?.some(store => store.trim() === row.store);
-        return scope[column]?.trim() === row[column];
-      }),
-    );
+    (!query.purposeScope || matchesScope(row, query.purposeScope, purposeColumns))
+      && rowGrants.some(({ scope, constrained }) => matchesScope(row, scope, constrained));
 
   const unauditableDelimitedFile: AuthorizedDataViewResult = {
     allowed: false,
@@ -290,7 +300,7 @@ export function buildAuthorizedDataView(
     const filtered = omittedRows > 0;
     return {
       allowed: true,
-      bytes: Buffer.from(outText, 'utf8'),
+      bytes: filtered ? Buffer.from(outText, 'utf8') : bytes,
       filtered,
       keptRows,
       omittedRows,
@@ -318,14 +328,15 @@ export function buildAuthorizedDataView(
         reason: `JSON 明细文件 ${normalizedPath} 无法解析，无法建立授权视图，已限制交付。`,
       };
     }
-    if (!Array.isArray(parsed)) {
+    if (!Array.isArray(parsed) || parsed.some(item => !item || typeof item !== 'object' || Array.isArray(item))) {
       return {
         allowed: false,
         code: 'authorized_view_unavailable_unfilterable_source',
         reason: `JSON 明细文件 ${normalizedPath} 非记录数组结构，无法按授权范围建立行级授权视图，已限制交付。`,
       };
     }
-    const records = parsed.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item));
+    if (parsed.length === 0) return { allowed: true, bytes, filtered: false, keptRows: 0, omittedRows: 0, unattributableRows: 0, grantedStores };
+    const records = parsed as Record<string, unknown>[];
     const sampleKeys = [...new Set(records.flatMap(record => Object.keys(record)))];
     const keys = new Map(scopeColumns.map(column =>
       [column, columnPositions(sampleKeys, column).map(index => sampleKeys[index]!)],
@@ -355,7 +366,7 @@ export function buildAuthorizedDataView(
     }
     return {
       allowed: true,
-      bytes: Buffer.from(JSON.stringify(kept, null, 2) + '\n', 'utf8'),
+      bytes: omittedRows ? Buffer.from(JSON.stringify(kept, null, 2) + '\n', 'utf8') : bytes,
       filtered: omittedRows > 0,
       keptRows: kept.length,
       omittedRows,

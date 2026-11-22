@@ -696,8 +696,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const scope = await enterpriseContextFor(project.id, task.id);
             return scope ? { enterpriseId: scope.enterpriseId, bytes: Buffer.from(JSON.stringify({ enterpriseId: scope.enterpriseId ?? null, summary: scope.summary, claim: 'directory-visible-not-read', continuation: 'studio_assets catalog' })) } : undefined;
           },
-          assertInputAllowed: relativePath => studio.memberPack.assertProjectDataPathAllowed(project.id, relativePath),
-          filterInputBytes: (relativePath, bytes) => studio.memberPack.filterAuthorizedProjectData(project.id, relativePath, bytes),
+          assertInputAllowed: (relativePath, purposeId) => studio.memberPack.assertProjectDataPathAllowed(
+            project.id, relativePath, purposeId ? studio.memberPack.resolveTaskDataPurpose(project.id, task.id, purposeId) : undefined),
+          filterInputBytes: (relativePath, bytes, purposeId) => studio.memberPack.filterAuthorizedProjectData(
+            project.id, relativePath, bytes, purposeId ? studio.memberPack.resolveTaskDataPurpose(project.id, task.id, purposeId) : undefined),
           assertOwner: async () => {
             if (closing) throw new RequestFault(503, 'host_closing');
             await pair(project.id, task.id, true);
