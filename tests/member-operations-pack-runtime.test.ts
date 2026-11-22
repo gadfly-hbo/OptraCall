@@ -964,6 +964,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(useAAfterDisc.independentVerification.status, 'pending', 'Verifier explicitly stating it never read/compared the original report MUST stay pending!');
   assert.equal(useAAfterDisc.independentVerification.verifierEvidenceSummary?.targetReportChecked, false);
   assert.equal(useAAfterDisc.independentVerification.verifierEvidenceSummary?.assessmentReportBoundToTarget, false);
+  assert.equal(useAAfterDisc.independentVerification.verifierEvidenceSummary?.assessmentDisclaimerRejected, true);
 
   const v1ComparisonEvidence = {
     targetReport: taskAReportRef,
@@ -1144,6 +1145,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.ok((useAAfterIndep.independentVerification.verifierEvidenceSummary?.targetReportReadTurnIndex ?? 0) >= 1);
   assert.equal(useAAfterIndep.independentVerification.verifierEvidenceSummary?.hadDataOrCalcEvidence, true);
   assert.equal(useAAfterIndep.independentVerification.verifierEvidenceSummary?.assessmentReportBoundToTarget, true);
+  assert.equal(useAAfterIndep.independentVerification.verifierEvidenceSummary?.assessmentDisclaimerRejected, false);
   assert.ok((useAAfterIndep.independentVerification.verifierEvidenceSummary?.assessmentTurnIndex ?? 0) >= 1);
   const verifierAState = await json(await host.request(`/api/projects/${projAud.id}/tasks/${taskVerifyV1.id}`));
   const assessorMessage = verifierAState.snapshot.messages.find((m: any) => m.role === 'assistant' && m.content?.some((c: any) => c.type === 'toolCall' && c.name === 'studio_assets' && c.arguments?.action === 'assess-use'));

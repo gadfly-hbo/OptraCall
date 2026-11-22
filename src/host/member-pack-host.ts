@@ -1661,6 +1661,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       targetReportChecked: false,
       authorizedInputChecked: false,
       assessmentReportBoundToTarget: false,
+      assessmentDisclaimerRejected: false,
     };
     const pending = (missingReason: string) => ({
       verifierReads, summary: { ...summary, missingReason }, wrongVersion: false, failed: false,
@@ -1769,11 +1770,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       .flatMap(read => read.turnIndex !== undefined && read.turnIndex < boundary.turnIndex ? [read.turnIndex] : []))].sort((a, b) => a - b);
     summary.hadDataOrCalcEvidence = summary.targetReportChecked &&
       (!isRecalculation || summary.authorizedInputChecked) && (!isSummary || summaryReads.length > 0);
-    if (!summary.targetReportChecked) return pending('独立任务未在对应评估前完整读取这份报告的准确版本，保持待验证');
-    if (evidence && (!exactTaskReport(evidence.targetReport, target) || (evidence.purposeId && evidence.purposeId !== use.purposeId))) {
-      return pending('独立核验声明引用了不同的报告版本或用途，保持待验证');
-    }
-
     let reportBytes = readPreservedReportBytes(verifierProjectId, verifierTaskId, report.locator, report.sha256);
     if (!reportBytes) {
       try { reportBytes = (await options.projects.readFile(verifierProjectId, report.locator)).bytes; }
@@ -1783,6 +1779,18 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       return pending('独立核验报告未通过原件摘要核对，保持待验证');
     }
     preserveImmutableReportSnapshot(verifierProjectId, report.locator, reportBytes, report.sha256);
+    // The Agent's explicit statement of non-comparison is negative evidence only.
+    // The use, report, input and call receipts establish every positive check.
+    const declinedComparison = /(?:未(?:查看|读取|阅览|核对|对照|复核|重算|复算)(?:原|目标|待核)?(?:报告|原稿|正文|数据|明细)|(?:没有|并未|尚未)(?:查看|读取|核对|对照|复核|重算|复算)(?:原|目标|待核)?(?:报告|原稿|正文|数据|明细)|未读取也未对照|未查看[、，,\s]*未对照|did\s+not\s+(?:read|inspect|view|compare|recalculate|verify)\s+(?:the\s+)?(?:original|target)\s+(?:report|data))/iu;
+    summary.assessmentDisclaimerRejected = declinedComparison.test(`${reportBytes.toString('utf8')}\n${assessment.result}`);
+    if (summary.assessmentDisclaimerRejected) {
+      return pending('独立核验明确说明未查阅或未对照原报告／明细，保持待验证');
+    }
+    if (!summary.targetReportChecked) return pending('独立任务未在对应评估前完整读取这份报告的准确版本，保持待验证');
+    if (evidence && (!exactTaskReport(evidence.targetReport, target) || (evidence.purposeId && evidence.purposeId !== use.purposeId))) {
+      return pending('独立核验声明引用了不同的报告版本或用途，保持待验证');
+    }
+
     summary.assessmentReportBoundToTarget = true;
 
     const finding = evidence?.finding;
