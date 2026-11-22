@@ -8,6 +8,7 @@ import { ProjectStore } from '../src/host/project-store.ts';
 import type { ProjectPlanConfirmation } from '../src/host/project-plan-types.ts';
 import type { ProjectTaskResultBinding } from '../src/host/project-task-results-types.ts';
 import { createProjectTaskResultsReader } from '../src/host/project-task-results.ts';
+import { projectTaskResultTime, stampProjectTaskResultTime } from '../src/host/project-task-result-sources.ts';
 
 const configuration = { id: 'synthetic', revision: 1, provider: 'synthetic', model: 'synthetic', name: 'Synthetic', baseUrl: 'https://example.invalid' };
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
@@ -57,6 +58,35 @@ test('reading a discovered result delivers the exact bound bytes and preserves i
   assert.equal(value.details.result.requestId, saved.requestId);
   assert.equal(value.details.result.taskId, tasks[1].id);
   assert.equal(value.details.complete, true);
+});
+
+test('Host authorization gets the native result time without changing the saved result ID or transport shape', async t => {
+  const { projects, project, tasks, confirmation, context, save, reader: original } = await fixture(t);
+  const binding = await save(tasks[0].id, 'exact.md', '准确成果');
+  const initial = await original('find', {}, context);
+  if (initial.details.action !== 'find') assert.fail('expected discovery');
+  const savedAt = '2026-11-22T12:34:56.000Z';
+  stampProjectTaskResultTime(binding, savedAt);
+  const authorized: string[] = [];
+  const reader = createProjectTaskResultsReader({
+    projects, projectId: project.id, taskId: tasks[2].id, confirmation,
+    listBoundReports: async (_projectId, taskId) => taskId === binding.taskId ? [binding] : [],
+    assertAuthorized: async ({ source }) => {
+      if (!source) return;
+      assert.equal(projectTaskResultTime(source), savedAt);
+      assert.equal('savedAt' in source, false);
+      authorized.push(source.id);
+    },
+  });
+  const found = await reader('find', {}, context);
+  if (found.details.action !== 'find') assert.fail('expected discovery');
+  const id = found.details.results[0]?.id;
+  assert.equal(id, initial.details.results[0]?.id);
+  assert.ok(id);
+  const read = await reader('read', { id }, context);
+  assert.equal(JSON.parse(read.content[0].text).text, '准确成果');
+  assert.equal(read.content[0].text.includes('savedAt'), false);
+  assert.ok(authorized.length > 1 && authorized.every(value => value === id));
 });
 
 test('result reading is bounded and paginates UTF-16 text without splitting an astral character', async t => {

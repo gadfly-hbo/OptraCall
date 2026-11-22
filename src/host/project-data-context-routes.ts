@@ -22,7 +22,7 @@ const messages: Record<string, string> = {
 };
 export function dataContextErrorResponse(error: ProjectDataContextFault) {
   const code = error.code;
-  const status = /too_large|too_many/.test(code) ? 413 : /not_found|missing/.test(code) ? 404 : /corrupt|incomplete|uncommitted|unknown/.test(code) ? 503 : /conflict|changed|archived|disabled|mismatch|not_prepared/.test(code) ? 409 : 400;
+  const status = code === 'data_context_evidence_forbidden' ? 403 : /too_large|too_many/.test(code) ? 413 : /not_found|missing/.test(code) ? 404 : /corrupt|incomplete|uncommitted|unknown/.test(code) ? 503 : /conflict|changed|archived|disabled|mismatch|not_prepared/.test(code) ? 409 : 400;
   return { status, body: { code, message: messages[code] ?? '数据版本或来源未能核对，请保留草稿并检查明确版本；未自动改用最新内容。' } };
 }
 const send = (response: ServerResponse, status: number, value: unknown) => {

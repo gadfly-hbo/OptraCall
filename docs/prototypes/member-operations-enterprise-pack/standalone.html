@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>会员运营资产包 · OptraCall 交互演示</title>
+  <style>
+:root{color-scheme:light;--canvas:#fff;--side:#f7f7fa;--line:#e4e4eb;--ink:#272731;--muted:#656572;--brand:#614dcc;--active:#eeebfa;--soft:#f8f8fb;--green:#17684b;--amber:#845407;--radius:7px;font:14px/1.62 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:var(--canvas)}
+*{box-sizing:border-box}body{margin:0}button,input,textarea,select{font:inherit}button,select,summary{cursor:pointer}button{background:white;border:1px solid var(--line);color:var(--ink);padding:7px 13px;border-radius:var(--radius);line-height:1.45}button:hover:not(:disabled),summary:hover{border-color:#a99edc;color:var(--brand)}button:disabled{cursor:default;color:#93929d;background:#f5f5f7}button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid #8e7ee5;outline-offset:3px}
+.app{display:grid;grid-template-columns:244px minmax(0,1fr);min-height:100vh}.app.collapsed{grid-template-columns:0 minmax(0,1fr)}.collapsed aside{visibility:hidden;overflow:hidden}
+aside{position:sticky;top:0;align-self:start;height:100vh;background:var(--side);border-right:1px solid var(--line);padding:22px 14px 10px;display:flex;flex-flow:column;overflow:auto}.brand{display:flex;align-items:center;gap:13px;margin:4px 10px 23px}.brand-icon{width:24px;height:24px;border-radius:50%;border:2px solid var(--brand);position:relative;flex:none}.brand-icon:after{content:'';position:absolute;width:9px;height:9px;border:2px solid var(--brand);border-radius:50%;right:-5px;bottom:-3px;background:var(--side)}.brand strong{display:block;font-size:19px;letter-spacing:-.5px}.brand small{font-size:11px;color:var(--muted)}
+.nav-label{font-size:12px;color:var(--muted);font-weight:550;display:flex;justify-content:space-between;padding:14px 11px 5px}.navitem,.navghost,.project,.taskitem{display:flex;text-align:left;align-items:center;gap:12px;width:100%;padding:9px 11px;border:0;background:transparent;border-radius:6px}.navghost,.project{font-size:14px}.icon{font-size:16px;width:17px;text-align:center;color:inherit;line-height:1}.active{color:var(--brand);background:var(--active);font-weight:600}.project{padding:7px 8px;gap:6px}.taskitem{width:calc(100% - 25px);margin-left:25px;padding:7px 9px;font-size:13px}.side-bottom{margin-top:auto;padding-top:18px;border-top:1px solid var(--line)}.demo-note{font-size:11px;color:var(--muted);line-height:1.55;margin:12px 10px 7px}.side-reset{font-size:12px}
+main{min-width:0}header{height:64px;display:flex;align-items:center;gap:14px;padding:0 27px;color:var(--muted);font-size:13px}.path{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mode{display:inline-flex;align-items:center;background:#f5f5f8;border:1px solid var(--line);border-radius:8px;padding:3px;color:var(--muted)}.mode span{padding:4px 22px}.mode .on{border-radius:5px;background:white;color:var(--ink);box-shadow:0 1px 3px #24243816}.icon-btn{border:0;background:none;color:var(--muted);font-size:17px;padding:5px}.skip{position:absolute;left:-999px;z-index:10}.skip:focus{left:15px;padding:8px;background:white}
+#screen{max-width:1600px;margin:auto;padding:22px 32px 60px;outline:0}.head,.section-head,.box-head,.row,.actions,.hero-actions{display:flex;align-items:center;gap:12px}.head,.section-head,.box-head{justify-content:space-between;align-items:flex-start}.head{margin-bottom:24px}.head h1{font-size:25px;line-height:1.35;margin:0 0 5px;letter-spacing:-.5px}.head p,.section-head p,.box-head p{margin:0;color:var(--muted);font-size:13px}.context{min-width:175px}.context span,.field>span{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}.context b{display:block;border:1px solid var(--line);border-radius:5px;padding:6px 11px;font-weight:520}
+h2{font-size:18px;margin:0;line-height:1.45}h3{font-size:15px;margin:0 0 5px}h4{font-size:14px;margin:0 0 3px}p{margin:5px 0 10px}small,.muted{color:var(--muted)}.tabs{display:flex;align-items:center;gap:22px;border-bottom:1px solid var(--line);margin-bottom:20px;overflow:auto;white-space:nowrap}.tabs>span,.tabs>button{font-size:13px;background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:8px 0 12px;color:var(--muted)}.tabs .sel{border-bottom-color:#806bf0;color:var(--brand);font-weight:650}.sections{display:flex;align-items:center;gap:5px;margin:14px 0 20px;border-bottom:1px solid var(--line);padding-bottom:5px;overflow:auto;white-space:nowrap}.sections button,.filter button,.pill{font-size:13px;border:0;background:none;color:var(--muted)}.sections .sel,.filter .sel{background:var(--active);color:var(--brand)}
+.eyebrow{font-size:12px;color:var(--muted);margin:0 0 5px}.panel,.subtle,.summary,.paper{border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin:14px 0}.subtle,.summary{background:var(--soft)}.summary{border-left:3px solid #a18fe9}.summary .box-head,.panel>.box-head{margin-bottom:10px}.status{display:inline-flex;align-items:center;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;background:#f0f0f4;color:#50505d;white-space:nowrap;vertical-align:middle}.status.ok{background:#e9f4ed;color:var(--green)}.status.wait{background:#fbf0da;color:var(--amber)}.status.purple{background:var(--active);color:var(--brand)}.status.bad{background:#fae9e7;color:#973b34}
+.primary{background:var(--brand);color:white;border-color:var(--brand)}.primary:hover:not(:disabled){background:#5140b6;color:white;border-color:#5140b6}.link{background:none;border:0;color:var(--brand);padding:3px 0}.actions,.hero-actions{flex-wrap:wrap;margin:12px 0 0}.hero-actions{border-top:1px solid var(--line);padding-top:15px;margin-top:18px}.right{margin-left:auto}
+.field{display:block;margin:12px 0}.field>span{font-size:13px;color:var(--ink);font-weight:550}textarea,input[type=text],input[type=search],select{border:1px solid #d7d7e0;background:#fff;border-radius:6px;padding:8px 10px;color:var(--ink);max-width:100%}textarea{resize:vertical;width:100%;min-height:74px}input[type=text],input[type=search]{width:100%}input[type=radio],input[type=checkbox]{accent-color:var(--brand)}.docs{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.doc{font-size:12px;background:white;padding:5px 9px}.filter{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.tablebox{margin:12px 0;overflow:auto}table{border-collapse:collapse;width:100%;font-size:13px;text-align:left}th{color:var(--muted);font-size:12px;font-weight:550;background:var(--soft)}th,td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.55}td:first-child{font-weight:550}.vlist{display:grid;gap:0}.item{padding:12px 0;border-bottom:1px solid var(--line)}.item:last-child{border:0}.item p:last-child{margin-bottom:0}.item .muted,div.muted{font-size:13px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.grid>*{min-width:0}.grid .panel,.grid .subtle{margin:0}.subtle li+li{margin-top:6px}.subtle ul,ol{padding-left:20px;margin:6px 0}.kv{display:grid;grid-template-columns:minmax(80px,120px) 1fr;gap:7px 15px;font-size:13px}.kv dt{color:var(--muted)}.kv dd{margin:0}details>summary{font-weight:550;color:var(--brand);width:fit-content}details>div{margin:8px 0 2px}.choice{display:flex;align-items:flex-start;gap:8px;margin:7px 0}.choice input{margin-top:6px}.mono{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;overflow-wrap:anywhere}.empty{border:1px dashed var(--line);text-align:center;border-radius:7px;padding:26px 20px;color:var(--muted)}.report{max-width:880px;margin:auto}.stages{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:15px 0 20px}.stage{border:1px solid var(--line);padding:8px;border-radius:7px;background:white;font-size:13px}.stage.here{border-color:#b3a5ed;background:var(--active)}.stage small{font-size:11px}.bubble{background:#f4f3fa;border-radius:9px;padding:12px 16px;margin:14px 0 18px 15%;font-size:14px}.reply{padding:8px 0}.reply-tools{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px;margin-top:16px}.divider{height:1px;background:var(--line);margin:16px 0}
+dialog{border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:0;width:min(630px,calc(100% - 26px));max-height:88vh;box-shadow:0 20px 55px #26223730}dialog::backdrop{background:#29253348}dialog.drawer{margin:0 0 0 auto;width:min(550px,100%);height:100dvh;max-height:100dvh;border-radius:0;padding:0}.dlg-head,.dlg-foot{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line);background:#fff}.dlg-head p{margin:4px 0 0;color:var(--muted);font-size:13px}.dlg-body{padding:2px 20px 14px}.dlg-foot{border:0;border-top:1px solid var(--line);justify-content:flex-end;flex-wrap:wrap}.dlg-head button{padding:2px 7px;font-size:19px;background:none;border:0}.toast{position:fixed;z-index:4;right:20px;bottom:20px;background:#302c40;color:white;border-radius:7px;padding:9px 16px}.desktop-spacer{margin-left:auto}
+@media(max-width:1000px){.app{grid-template-columns:196px minmax(0,1fr)}aside{padding:15px 9px}.brand{margin-left:7px}.project,.taskitem{font-size:12px}#screen{padding:15px 20px 45px}.head{margin-bottom:18px}.tabs{gap:16px}header{padding:0 18px}}
+@media(max-width:720px){.app,.app.collapsed{display:block}.app aside{display:none}.app.mobile-open aside{display:flex;position:fixed;z-index:3;top:55px;left:0;height:calc(100dvh - 55px);width:235px;box-shadow:5px 5px 25px #372d482c;visibility:visible}header{height:55px;padding:0 12px;gap:7px}.mode span{padding:2px 8px}.mode span:last-child{display:none}#screen{padding:10px 13px 35px}.head,.section-head,.box-head{flex-wrap:wrap;gap:8px}.head h1{font-size:22px}.context{min-width:0}.context span{display:none}.context b{padding:3px 8px;font-size:12px}.grid{grid-template-columns:1fr}.panel,.subtle,.summary,.paper{padding:12px 13px}.stages{gap:4px}.stage{text-align:center;padding:5px 2px;font-size:11px}.stage small{display:none}.tabs{gap:12px}.sections button{padding:6px 8px}.tablebox table{min-width:510px}.kv{grid-template-columns:83px 1fr}.bubble{margin-left:5%}.hero-actions .right{margin-left:0}.status{font-size:10px}.head p{font-size:12px}.dlg-body,.dlg-head,.dlg-foot{padding-left:14px;padding-right:14px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+</style>
+</head>
+<body>
+  <a class="skip" href="#screen">跳到主内容</a>
+  <div class="app">
+    <aside id="side" aria-label="工作台导航"></aside>
+    <main>
+      <header id="toolbar"></header>
+      <div id="screen" tabindex="-1"></div>
+    </main>
+  </div>
+  <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+  <div id="notice" role="status" aria-live="polite"></div>
+  <script>
+// All company records, decisions and receipts below are fictional demo fixtures.
+const materials = [
+  ['会员制度', '织屿会员制度 2026.07 · §2.1、§4.2、§6.1', '岚线直营店以品牌账号识别会员。已生效制度规定全额退货不形成有效购买。本品牌本年度未开通积分，生日券由会员部统一发放。', '能说明制度和适用期。积分未开通有明确依据，发券的实际执行另看月报。'],
+  ['经营月报', '直营门店经营月报 2026.09 · 表2、表5及复盘议题', '月报列出新增会员、各店会员成交和生日券发放量，并要求下次复盘比较在各店首次购买的会员后来是否再次购买。新增列未注明是集团首次入会还是新增门店服务关系。', '可引用月报已列数字。缺核销汇总，无法从发放量估计权益成本或预算。'],
+  ['系统字段表', '会员交易字段表 r4 · 会员绑定、交易、售后、券', '有入会时间、绑定时间、订单发生门店、支付日期、退款原单号、发券与到期时间。字段说明未给核销事件，未注明所有渠道的历史起点。', '据此起草候选映射。字段存在不能证明已填、已在月报取用或足以追溯首购。']
+];
+const references = [
+  ['会员领域包','0.1','通用参考草案','会员运营','会员身份、有效购买与观察窗','member-domain-asset-package.md · 第 195–215、283–295 行','用于核对重复购买的统计对象、有效购买和窗口。品牌选择及具体天数由企业依据确定。'],
+  ['商品领域包','0.1','通用参考草案','商品经营','商品分类与排除','商品包 · 商品结构与分类章节','本例未指定品类排除，本期只登记来源。'],
+  ['门店领域包','0.1','通用参考草案','门店运营','可比门店与门店归属','门店包 · 门店运营诊断场景','有助于分别检查队列归属与交易发生门店。企业门店身份回到共享门店资产。'],
+  ['供应链领域包','0.1','通用参考草案','供应链','换货履约事件','供应链包 · 履约场景','如未来需要核对换货履约，再引用具体条目。原单与退款仍由销售退款资产维护。'],
+  ['营销领域包','0.1','通用参考草案','营销','活动归因与渠道','营销包 · 活动经营场景','活动参与可另建用途，本轮门店复购仅登记营销来源。'],
+  ['Nike 企业公开参考 T03','0.2','公开标杆参考','企业线','销售渠道与触点','03-nike-enterprise-public.md · 渠道与触点','用于对照交易发生的渠道；公开披露未说明其内部销售归属算法。'],
+  ['Nike 会员运营公开参考 T04','0.2','公开标杆参考','会员线','参与、服务与购物','04-nike-membership-public.md · 会员触点','启发区分活动签到、再次到店和有效购买，企业复购只采纳有据的购买事件。'],
+  ['江南布衣会员标杆研究','0.1','第三方研究','企业线与会员线共引','集团与品牌的统计范围','DAP-BENCH-JNBY-MEMBER-001 · §4–5、§7','研究覆盖集团多品牌。活跃指标含媒体转述，会员分级报道有分歧。保留来源等级与未知，不能作为织屿正式依据。']
+];
+const panorama = [
+  ['招募与身份','已开展','口径待定','月报有门店新增，未注明集团获客与首次绑定的区别。','比门店前，先找取数脚注或一条可区分入会与绑定的记录。','经营月报 · 表2；系统字段表 · 会员绑定'],
+  ['购买与价值','已开展','映射待核','月报列报直营会员销售。门店复盘需要识别首购队列与再购发生店。','优先查已发布门店、身份、销售退款映射及历史覆盖。','经营月报 · 表2与复盘议题'],
+  ['权益与服务','已开展','资料缺失','本期月报有生日券发放量。核销事件缺失，暂不能据此调整下期预算。','需要预算决定时，再取获准净核销汇总和企业预算基准。','会员制度 · §6.1；经营月报 · 表5'],
+  ['活动与活跃','开展情况待核','资料缺失','现有三份材料未提供本期签到。购买、参加活动分别表述。','若改建活跃，先核相应事件及品牌内的有效身份。','字段表 · 事件清单；经营月报'],
+  ['留存与召回','开展情况待核','资料缺失','现有字段说明未覆盖完整沉睡窗口、短信许可及退订。','先核曾购、连续观察和许可，退订者排除出短信候选。','系统字段表 · 交易与联系方式'],
+  ['积分计划','未开展','本期无需建设','制度明确岚线直营本年度未开通积分。','保留品牌与期间；制度更新后再核。','会员制度 · §2.1']
+];
+const pack = '织屿服饰 / 会员运营包';
+const identity = 'ZY-MEMBER';
+const broad = '帮我建设本企业的会员运营资产包';
+const specific = '建设岚线品牌直营门店的 30 日复购用途';
+const question = '岚线九月星桥店的会员，30 天内有多少回来购买？';
+const choices = {
+  any: '任一获准直营店再购', same: '只计回首购店再购'
+};
+const sourceIdentity = [
+  ['DAP-MEMBER-001','member-domain-asset-package.md'],['DAP-PRODUCT-001','product-domain-asset-package.md'],
+  ['DAP-STORE-001','store-domain-asset-package.md'],['DAP-SUPPLY-001','supply-domain-asset-package.md'],
+  ['DAP-MARKETING-001','marketing-domain-asset-package.md'],['T03','03-nike-enterprise-public.md'],
+  ['T04','04-nike-membership-public.md'],['DAP-BENCH-JNBY-MEMBER-001','benchmark-jnby-member-domain-asset-package.md']
+];
+const otherUses = {
+  identity:{id:'U-02',name:'会员身份归属',match:/身份|绑定|入会|新增服务/,ask:'哪些品牌账号已能可靠归属到会员？',basis:'制度 §2.1、字段表的入会与绑定日期、已有品牌身份 r2。',gap:'同名不能确定同人；门店首次绑定不必等于集团首次入会。先核一条能区分两种情况的记录。',complete:'在岚线直营的获准账号中，逐项说明可确认的绑定与仍待核的记录，并交代覆盖。跨品牌同人须另有证据。'},
+  coupon:{id:'U-03',name:'生日券核销与预算',match:/生日券|核销|权益预算/,ask:'上期生日券的净核销能否支持下一期预算？',basis:'制度 §6.1、经营月报的发放量，字段表含到期日。',gap:'先取得已到期批次的获准核销与冲销汇总，再核企业认可的预算比较基准。到期不能证明已核销。',complete:'按获准批次去重、扣除冲销并复算净核销率。只有企业预算比较基准也有据，才能支持预算决定。'},
+  active:{id:'U-04',name:'购买活跃与活动参与',match:/活跃|签到|活动参与|到店活动/,ask:'本月谁购买过，谁实际参加了门店活动？',basis:'复用品牌身份、有效购买与销售退款原资产；活动签到需另核会员关联。',gap:'月报销售可证明发生过购买。活动签到及其覆盖未随三份材料交付，不能把购买和参加活动混成一个数字。',complete:'按本月有效事件分别对品牌账号去重，首次购买也计入购买活跃。需要活跃率时，再核分母和归属。'},
+  recall:{id:'U-05',name:'沉睡会员召回',match:/沉睡|召回|短信/,ask:'哪些长期没购买的会员符合门店短信召回条件？',basis:'复用已有品牌账号、有效购买与退款口径；独立核购买窗口、服务归属及短信许可。',gap:'只有最近 45 天交易时，90 天沉睡状态待核。购买、参与事件与短信许可分别检查，已退订账号排除。',complete:'在完整连续 90 天范围内核曾购而未再购的人，处理退订与免打扰，分别交付可用候选和资料待核项。'}
+};
+
+</script>
+  <script>
+'use strict';
+const $ = selector => document.querySelector(selector);
+const screen = $('#screen');
+const dialog = $('#dialog');
+const initial = () => ({page:'start', started:false, selected:false, goal:broad, project:0,
+  scope:'', published:0, oldTask:false, newTask:false, feedback:false, revised:false, check:false,
+  role:'总部月报', issue:'', receipts:'ok', recovered:false, sourceFilter:'全部', search:'',
+  extraUses:[], activeUse:'', reports:[], reportId:'', feedbackId:'', feedbackSources:[], hasPanorama:false, archive:false, currentTask:1, basisTab:0, addedEvidence:false});
+let s = initial();
+let returnFocus, toastTimer;
+const esc = str => String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const btn = (t,a,kind='',disabled=false) => '<button type="button" data-act="'+a+'" class="'+kind+'"'+(disabled?' disabled':'')+'>'+t+'</button>';
+const label = (t,kind='') => '<span class="status '+kind+'">'+t+'</span>';
+const row = (key,value) => '<dt>'+key+'</dt><dd>'+value+'</dd>';
+const details = (title,body,open=false) => '<details'+(open?' open':'')+'><summary>'+title+'</summary><div>'+body+'</div></details>';
+const tbl = (headers,rows) => '<div class="tablebox" role="region" aria-label="'+esc(headers.join('、'))+'" tabindex="0"><table><thead><tr>'+headers.map(h=>'<th scope="col">'+h+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+const panel = (title,body) => '<section class="panel"><h3>'+title+'</h3>'+body+'</section>';
+const pnames = ['会员资产建设','品牌经营复盘'];
+const v = n => 'v1.'+(n-1);
+const mapVer = n => n===1?'r3':'r4';
+const result = n => (s.scope==='same'? (n===1?2:1):(n===1?3:2));
+const pct = n => (result(n)*25)+'%';
+const originalReady = () => s.receipts==='ok'||s.recovered;
+const done = () => s.published===2||originalReady();
+const reading = () => s.reports.find(r=>r.id===s.reportId);
+function openReport(id){const rec=s.reports.find(r=>r.id===id);if(!rec)return;s.reportId=id;s.currentTask=rec.version;go('answer')}
+const firstReport = ver => s.reports.find(r=>r.version===ver);
+const isAnalysis = () => ['ask','answer'].includes(s.page);
+const stageName = () => ({start:'覆盖与缺口',panorama:'覆盖与缺口',draft:'建设与演进',preview:'发布与使用',receipts:'发布与使用',revision:'建设与演进',history:'发布与使用',archive:'建设与演进',other:'建设与演进'}[s.page]||'');
+const starter = () => s.activeUse?'other':s.selected?'draft':s.hasPanorama?'panorama':'start';
+function toast(t){clearTimeout(toastTimer);$('#notice').textContent=t;$('#notice').className='toast';toastTimer=setTimeout(()=>{$('#notice').className='';$('#notice').textContent=''},2600)}
+function go(page){if(s.archive&&s.project===0&&['draft','panorama','start','preview','revision','other'].includes(page))page='archive';s.page=page;$('.app').classList.remove('mobile-open');render();window.scrollTo(0,0);screen.focus({preventScroll:true})}
+function sides(){
+  const nav=(icon,name,action,active=false)=>action?btn('<span class="icon" aria-hidden="true">'+icon+'</span>'+name,action,'navitem '+(active?'active':'')):'<div class="navghost"><span class="icon" aria-hidden="true">'+icon+'</span>'+name+'</div>';
+  $('#side').innerHTML='<div class="brand"><i class="brand-icon" aria-hidden="true"></i><div><strong>OptraCall</strong><small>持续做出更好的决策</small></div></div>'+
+    '<div class="nav-label">主导航</div>'+nav('◇','战略选择')+nav('✓','目标管理')+nav('◫','决策星图')+nav('▱','项目地图')+nav('⬡','语义资产','studio',!isAnalysis()&&s.page!=='settings')+nav('⊞','分析资产')+
+    '<div class="nav-label">项目空间 <span>2</span></div>'+pnames.map((p,i)=>btn('›　▱　'+p+(i===0&&s.archive?'（已归档）':''),'project'+i,'project')+(i===0&&s.started?btn('会员包建设事项','studio','taskitem'):'')+(i===1&&s.oldTask?btn('9 月门店复购','old','taskitem '+(isAnalysis()&&s.currentTask===1?'active':'')):'')+(i===1&&s.newTask?btn('复盘 · 独立新任务','newReport','taskitem '+(isAnalysis()&&s.currentTask===2?'active':'')):'' )).join('')+
+    '<div class="side-bottom">'+nav('⚙','设置','settings',s.page==='settings')+'<div class="demo-note">交互演示 · 全部企业资料为虚构<br>操作仅在本页生效，刷新可重来。</div>'+btn('重新演示','reset','link side-reset')+'</div>';
+  $('#toolbar').innerHTML=btn('◫','toggle','icon-btn')+'<span class="path">'+(s.page==='settings'?'设置':isAnalysis()?pnames[1]+' / '+(s.currentTask===1?'9 月门店复购':'复盘 · 独立新任务'):'语义资产 / 体系工作台')+'</span><div class="mode" aria-label="当前工作区"><span class="'+(isAnalysis()?'on':'')+'">分析</span><span>决策</span></div>'+btn('？','help','icon-btn');
+  $('#toolbar button:first-child').setAttribute('aria-label','展开或收起侧栏');$('#toolbar button:last-child').setAttribute('aria-label','演示说明');
+}
+function studioChrome() {
+  return '<div class="head"><div><h1>语义资产</h1><p>查业务口径、字段映射和原资料。</p></div><div class="context"><span>当前企业</span><b>织屿服饰（演示）</b></div></div>'+
+    '<nav class="tabs" aria-label="语义资产工作视图"><span>业务语义</span><span>数据映射</span><span>企业资料</span><span class="sel">体系工作台</span></nav>'+
+    '<div class="section-head"><div><h2>体系工作台</h2><p>同一企业的语义、指标和方法在这里一起建设和发布。</p></div>'+btn('查看参考目录','settings','link')+'</div>'+
+    '<nav class="sections" aria-label="体系工作台视图">'+[['覆盖与缺口','coverage'],['建设与演进','build'],['发布与使用','publication']].map(([n,a])=>btn(n,a,stageName()===n?'sel':'')).join('')+'</nav>';
+}
+function render(){
+  sides(); const pages={settings, start, panorama:overview, draft, preview, receipts, ask, answer, revision, history, archive,other:otherDraft};
+  screen.innerHTML=(s.page==='settings'||isAnalysis()?'':studioChrome())+pages[s.page]();
+}
+function modal(title,sub,body,buttons,drawer=false){
+  if(!dialog.open)returnFocus=document.activeElement;
+  dialog.className=drawer?'drawer':'';
+  dialog.innerHTML='<div class="dlg-head"><div><h2 id="dialog-title">'+title+'</h2><p>'+sub+'</p></div>'+btn('×','close')+'</div><div class="dlg-body">'+body+'</div><div class="dlg-foot">'+(buttons||btn('关闭','close'))+'</div>';
+  dialog.querySelector('.dlg-head button').setAttribute('aria-label','关闭'+title);
+  if(!dialog.open)dialog.showModal();
+}
+function dismiss(){if(dialog.open)dialog.close();if(returnFocus?.isConnected)returnFocus.focus()}
+function mat(i){const x=materials[i];modal(x[0],x[1],'<p>'+x[2]+'</p>'+panel('能支持的判断','<p>'+x[3]+'</p>'))}
+function settings(){
+  return '<div class="head"><div><h1>设置</h1><p>管理资料、模型、连接与自动模式。</p></div>'+btn('← 返回企业 Studio','studio','link')+'</div><nav class="tabs" aria-label="设置分类"><span>使用用途</span><span>个人资料</span><span>模型设置</span><span>连接配置</span><span>业务模型包</span><span class="sel">领域资产包</span></nav>'+
+    '<div class="box-head"><div><h2>领域资产包</h2><p>按来源和版本登记，企业建设可引用同一份参考。</p></div>'+btn('登记参考','register')+'</div>'+
+    '<div class="panel"><label class="field"><span>查找参考</span><input id="refsearch" type="search" value="'+esc(s.search)+'" placeholder="名称、领域或版本"></label><div id="refrows">'+refRows()+'</div></div>'+btn('在织屿服饰继续建设','studio','primary');
+}
+function refRows(){
+  const rows=references.map((r,i)=>({r,i})).filter(({r})=>r.join(' ').toLowerCase().includes(s.search.trim().toLowerCase()));
+  return '<p class="eyebrow">已登记 '+references.length+' 份 · 当前显示 '+rows.length+' 份</p>'+tbl(['来源 / 版本','性质','本次用途',''],rows.map(({r,i})=>[r[0]+' <small>v'+r[1]+'</small>',r[2],r[4],btn('查看参考','ref'+i,'link')]));
+}
+const origText = {
+  5:['03-nike-enterprise-public.md','已知公开事实与参考实例 · 第 20 行','NIKE Direct 包含自营零售及数字销售，另有批发经营'],
+  6:['04-nike-membership-public.md','本体模板 · 第 58 行','区分定义与实际事件、报名与到场、访问与使用，不直接推断营销效果']
+};
+function ref(i){const x=references[i],o=origText[i];modal(x[0]+' · v'+x[1],x[2]+'　／　'+x[3],'<dl class="kv">'+row('来源位置',sourceIdentity[i][1]+'　／　'+x[5])+row('原文标识',sourceIdentity[i][0]+' / v'+x[1])+row('维护方','原资料维护人待核')+row('适用范围',x[4])+'</dl>'+(o?panel('准确原文摘录','<blockquote>'+o[2]+'</blockquote><p class="muted">'+o[1]+'</p><a href="../../reference-templates/v0.2/'+o[0]+'" target="_blank" rel="noopener">打开仓库内 v0.2 原文 ↗</a>'):'')+panel('本次取用及证据限制',x[6])+panel('企业引用',i===7?'同一来源同时供企业线和会员线引用。本包排除用集团活跃替代品牌有效复购。':'来源记录与织屿的正式决定分别保留。'),btn('返回','close')+btn('进入本企业建设事项','refBuild','primary'))}
+function start(){
+  return '<div class="box-head"><div><p class="eyebrow">'+pack+'</p><h2>建设会员运营资产包</h2></div>'+label('建设项目 · '+pnames[s.project],'purple')+'</div>'+
+    '<section class="panel"><h3>本轮要支持什么经营问题？</h3><label class="field"><span>建设目标</span><textarea id="goal">'+esc(s.goal)+'</textarea></label>'+
+    '<div class="row">'+btn('用宽目标起步','broad','link')+btn('直接建设门店复购','specific','link')+'</div>'+
+    '<label class="field"><span>本轮获准资料 · 3 份</span></label><div class="docs">'+materials.map((m,i)=>btn('▤　'+m[0],'mat'+i,'doc')).join('')+'</div>'+
+    '<p class="muted">来自本项目的演示附件，可点开查看。建设 Agent 还可查本企业已发布、且当前任务有权使用的资产。</p>'+
+    '<div class="hero-actions">'+btn('开始本轮建设','begin','primary')+'</div></section>';
+}
+function overview(){
+  return '<p class="eyebrow">'+pack+'　／　'+identity+'</p><div class="box-head"><div><h2>本企业会员运营全景与首批建设建议</h2><p>岚线品牌 · 直营门店 · 2026 年 9 月　｜　资料截止 10 月 31 日</p></div>'+label('企业建设草案','purple')+'</div>'+
+    '<section class="summary"><div class="box-head"><h3>首批建议　先建门店复购</h3>'+label(s.selected?'已选定':'待选定',s.selected?'ok':'wait')+'</div><p>月报把比较各店首购队列是否再次购买列为下次复盘议题。已有成交汇总，但“回到同一家店”和“到任一直营店再购”会改变答案。</p><p><b>先核什么</b>　回查现有门店与退款映射、星桥和柳岸的历史起点。选定后，在同一预览处理跨店取舍。</p><p><b>完成条件</b>　说清九月各店可核的队列、分子、分母和限制；对历史较短的门店单独命名，只比较证据覆盖相同的范围。</p><div class="actions">'+btn(s.selected?'继续门店复购':'选择门店复购','choose','primary')+'</div></section>'+
+    '<section class="panel"><div class="box-head"><div><h3>按经营问题查看依据</h3><p>业务开展情况和资料能支持的用途分别记录。</p></div></div>'+panorama.map((x,i)=>'<div class="item">'+details(x[0]+'　'+label(x[1],x[1]==='已开展'?'ok':'')+' '+label(x[2],x[2]==='本期无需建设'?'':'wait'),'<p>'+x[3]+'</p><p><b>出处</b>　'+x[5]+'</p><p><b>下一步</b>　'+x[4]+'</p>'+(['identity','','coupon','active','recall',''][i]?btn('从这个用途起步','use-'+['identity','','coupon','active','recall',''][i],'link'):'') )+'</div>').join('')+'</section>';
+}
+function draft(){
+  return '<div class="box-head"><div><p class="eyebrow">'+pack+'　／　'+identity+'　／　用途 U-01</p><h2>门店复购 · 企业草案</h2><p>岚线直营 · 九月队列 · 截至 10 月 31 日</p></div>'+label(s.published?'首版发布前草案 · v1.0（只读）':'待确认发布','purple')+'</div>'+
+    '<section class="summary"><h3>本次要回答的问题</h3><p>在各店完成品牌首购的会员，30 天内有多少再次有效购买？企业共享首购凭证覆盖星桥本批 4 个账号；柳岸本批账号缺少迁入前的品牌首购依据。</p><p>先交星桥真实首购用途和柳岸受限用途。两店口径不同，暂缓排名。</p></section>'+
+    '<section class="panel"><div class="box-head"><div><h3>两条路线，共用一份企业草案</h3><p>点击来源查看段落位置与证据性质。</p></div></div><div class="item"><b>企业线</b>　运动鞋服行业 T01 → Nike 企业 T03 → 织屿共享底座<div class="docs">'+btn('Nike 企业 T03','ref5','link')+btn('江南布衣研究 v0.1','ref7','link')+'</div></div><div class="item"><b>会员线</b>　会员运营领域 T02、通用会员包 → 标杆会员运营 → 织屿会员部<div class="docs">'+btn('会员领域包 v0.1','ref0','link')+btn('Nike 会员 T04','ref6','link')+btn('江南布衣研究 v0.1','ref7','link')+'</div></div>'+
+    tbl(['建议与标杆线索','本企业处理及其依据','准确维护位置'],[
+      ['区分统计主体与触点','修改 · 按品牌账号去重。依据《会员制度》§2.1；集团同人另待核。','会员身份 r2 / 会员部'],
+      ['分别记录队列店与发生店','采用 · 首购店用于队列，交易仍归发生店。见门店目录 r2 与成交样本。','共享门店 r2 / 原门店资产'],
+      ['再次参与是否算复购','排除 · 活动签到不作为有效购买。制度 §4.2；不采用第三方活跃作为企业口径。','购买规则 r1 / 会员部'],
+      ['全额退款与跨期原单','采用 · 按原单核销购买资格。已有销售退款映射 r3，9 月抽样当时通过。','销售退款映射 r3 / 原资产'],
+      ['跨店复购归属','待定 · 有权负责人须在发布预览选定本次考核的业务含义。','SAP 复购指标候选 / 会员部决定']
+    ])+'</section>'+
+    panel('核过哪些资料？',details('查看获准材料与现有资产','<p>三份输入支持制度、列报和映射候选。Agent 继续查了该项目已获准使用的品牌账号表、共享门店 r2、交易退款 r3 和 SAP 样算回执。</p><p>跨店品牌首购凭证 r2 为星桥入组的 4 个账号逐一核过开业至首购日全渠道历史，并标明首购日期与门店。本组没有缺证账号；缺证者必须单列。柳岸本批只有 9 月 1 日起的交易，缺迁入前品牌凭证。两店均有完整后续 30 天。只用三份最初材料时，仅能提出这些核查项。</p>'))+
+    '<div class="hero-actions">'+btn(s.published?'查看当前正式版 '+v(s.published)+' 与回执':'查看发布预览',s.published?'receipts':'preview','primary')+(s.hasPanorama?btn('返回全景','panorama','link'):'')+'</div>';
+}
+function preview(){
+  if(!s.selected)return emptyState('暂无发布预览','先从本企业选择建设目标。');
+  if(s.published)return receipts();
+  return '<p class="eyebrow">'+pack+'　／　首版 v1.0</p><div class="box-head"><div><h2>确认发布预览</h2><p>岚线直营 · 事件自 2026-09-01 生效 · 资料截至 2026-10-31</p></div>'+label('1 项经营取舍','wait')+'</div>'+
+    '<section class="summary"><h3>希望用哪种复购考核首购店？</h3><p>会员在星桥首购、20 天后在柳岸再次有效购买。交易归柳岸，下面的选择决定这名会员是否计入星桥队列的复购分子。</p>'+
+    Object.entries(choices).map(([val,t])=>'<label class="choice"><input type="radio" name="scope" value="'+val+'" '+(s.scope===val?'checked':'')+'><span><b>'+t+'</b>　'+(val==='any'?'计入。看在首购店首次买过的账号是否继续在品牌内购买。':'不计入。看首购门店自身接回会员的能力。')+'</span></label>').join('')+'</section>'+
+    panel('本次正式采用的用途',tbl(['用途','范围和发布资格','排除及仍待核'],[
+      ['定义参考','门店首购后 30 日有效复购率。在岚线直营店按首购店归组。分母为身份可靠、已完整观察后续 30 日的去重品牌账号数，分子为其中在次日起 30 日内、按所选门店范围再次有效购买的去重品牌账号数。','明确未成熟、未知身份和未能连回原单的记录。'],
+      ['正式计算','星桥 · 首购后 30 日有效复购率；本批 4 个账号的跨店品牌首购凭证 r2、后续窗和样算已核。','只限成熟队列以及合格的资料与权限。'],
+      ['受限计算','柳岸 · 资料期内首次可见购买后 30 日复购率；资料自 9 月 1 日连续。','无法确认迁入前首购，暂停与星桥直接排名。']
+    ]))+
+    panel('谁能用到哪一层',tbl(['获准身份','范围与用途'],[['总部月报','引用岚线直营已发布的门店月度汇总，保留期间和粒度。'],['商品部','查阅定义，可解释跨店规则；没有品类汇总。'],['星桥店','核本店明细，同时可引用已授权星桥队列汇总。'],['两店数据核算岗','读取两店获准身份、交易和退款明细，复算本用途。']]))+
+    panel('沿用的授权与原权威',details('查看批准人、依赖和例外','<p>织屿会员运营负责人确认经营范围与跨店取舍。企业资料原权责方已授权上述访问，范围扩大由该权责方核定。</p><p>引用共享门店 r2、品牌身份 r2、跨店品牌首购凭证 r2、销售退款 r3；SAP 维护指标与方法，Studio 固定用途和准确引用。本次无获准的换码试点例外。</p>'))+
+    '<div class="hero-actions">'+btn('确认并按用途发布','publish','primary',!s.scope)+btn('返回草案','draft','link')+btn('演示发布异常','scenario','link right')+'</div>';
+}
+function receipts(){
+  if(!s.published)return emptyState('暂无分项发布回执','先在原草案核对并确认用途。');
+  const n=s.published, ready=done(), old=n===1;
+  return '<p class="eyebrow">'+pack+'　／　'+identity+'　／　'+v(n)+'</p><div class="box-head"><div><h2>发布与使用 · 分项回执</h2><p>已确认的跨店口径为「'+choices[s.scope]+'」。</p></div>'+label(ready?'已发布 · 按用途':'部分用途挂起',ready?'ok':'wait')+'</div>'+
+    tbl(['原维护方','准确资产 / 原结果','本包用途'],[
+      ['共享资产','共享门店 r2、身份 r2、首购凭证 r2、退款映射 '+mapVer(n)+' · '+(old?'P-030':'P-041')+' '+label('成功','ok'),'引用原正式资产'],
+      ['会员部','会员有效购买 r1 · P-031 '+label('成功','ok'),'定义已生效，按品牌账号'],
+      ['SAP','复购指标 '+(old?'m5':'m6')+' · '+(old?(s.recovered&&s.receipts==='failed'?'P-032b':'P-032'):'P-043')+' '+label(ready?'成功':s.receipts==='unknown'?'结果未知':'失败',ready?'ok':'wait'),'星桥正式计算、柳岸受限计算'+(ready?'已具备所需依赖':'等待此依赖')],
+      ['Studio','会员包 '+v(n)+' · P-'+(old?'033':'042')+' '+label('成功','ok'),'定义参考'+(ready?'、两种计算用途已列入企业目录':'已列入目录；挂起用途不能用于计算')]
+    ])+((s.receipts!=='ok')?panel('原请求记录', 'P-032 首次'+(s.receipts==='unknown'?'结果未知。':'发布失败。')+(s.recovered?(s.receipts==='unknown'?'后来查询原请求证实成功。':'确认修正后的 m5，另发 P-032b 并成功。'):'待查。')+' 原请求状态按发生顺序留存。'):'')+(ready?'<p class="muted">已发布，首次企业真实使用待验证。以下操作演示虚构项目如何使用。</p>':panel('只核对这项依赖','<p>先查 SAP 原请求 P-032 与目标指纹。定义及历史回执保留。</p>'+btn(s.receipts==='unknown'?'查原回执':'查看失败与修订','recover','primary'))) +
+    '<div class="hero-actions">'+btn(n===1?'到分析窗口提问':'在独立新任务核对新版',n===1?'ask1':'ask2','primary')+btn('查看版本与历史','history','link')+'</div>';
+}
+function emptyState(title,text){return '<div class="empty"><h3>'+title+'</h3><p>'+text+'</p>'+btn('返回本企业建设','studio','link')+'</div>'}
+function analysisTop(n){const displayId=s.page==='answer'?reading().id:'尚未发送';
+  return '<div class="head"><div><p class="eyebrow">'+pnames[1]+'　／　独立分析任务 '+displayId+'</p><h1>'+ (n===1?'9 月门店复购':'修订后再看 9 月门店复购')+'</h1><p>织屿服饰　·　截止 2026-10-31</p></div>'+label('虚构项目','purple')+'</div><div class="stages" aria-label="分析进度">'+['资料准备','需求梳理','分析对话','结果与审查'].map((x,i)=>'<div class="stage '+(i===(s.page==='ask'?2:3)?'here':'')+'">'+(i+1)+'　'+x+'</div>').join('')+'</div>';
+}
+function ask(){
+  const n=s.currentTask;
+  return '<div class="report">'+analysisTop(n)+panel('分析对话','<p>已进入同企业的「品牌经营复盘」项目。新任务只收到经营问题、资料截止和本项目获准资料。</p>'+
+    '<label class="field"><span>经营问题</span><textarea id="question" readonly>'+question+'</textarea></label>'+
+    '<label class="field"><span>演示角色及本项目的授权</span><select id="role">'+['总部月报','商品部','星桥店','两店数据核算岗'].map(x=>'<option '+(x===s.role?'selected':'')+'>'+x+'</option>').join('')+'</select></label>'+
+    '<p class="muted">同一问题可从不同角色查看。本次访问随项目与角色确定。</p>'+
+    '<div class="hero-actions">'+btn('发送经营问题','run','primary')+'</div>')+'</div>';
+}
+function reportBody(n,role,ready){
+  if(role==='商品部'||!ready)return '<h3>可解释定义，数值待核</h3><p>队列按首购店归组，按品牌账号去重。依企业本次决定「'+choices[s.scope]+'」。合格的再购需落在次日起 30 日内，已全额退款的购买不计。</p><p>'+(role==='商品部'?'商品部只获准看定义。门店汇总不能推出各品类的复购分布。':'计算用途的必要依赖尚未成功。当前只能使用正式定义。')+'</p>';
+  const count=result(n);
+  const lead={'总部月报':'据获准的《岚线直营 · 9 月星桥队列月度汇总》','星桥店':'本店明细可核星桥发生的购买和后续交易；品牌首购资格及跨店结果引用已授权的星桥队列汇总','两店数据核算岗':'按获准的品牌首购凭证和两店身份、订单、退款明细复算'}[role];
+  return '<h3>星桥首购队列的 30 日有效复购率为 '+pct(n)+'</h3><p>'+lead+'，4 个身份可靠且观察已满 30 天的品牌账号中，'+count+' 个在「'+choices[s.scope]+'」口径下再次有效购买。</p>'+
+    tbl(['九月队列','复购分子','成熟分母','截止日'],[['星桥直营店',String(count),'4','2026-10-31']])+
+    '<p>柳岸历史仅从 9 月 1 日开始，其独立用途为「资料期内首次可见购买后 30 日复购率」。此次不据此给两店排名。</p>'+
+    (role==='总部月报'?'<p class="muted">引用门店月度汇总，未读取订单明细。</p>':role==='星桥店'?'<p class="muted">柳岸订单对当前任务不可读，未按零计入。门店未独立复算跨店范围。</p>':'<p class="muted">已核品牌身份 r2、跨店品牌首购凭证 r2、观察窗与去重。该组共 4 个成熟账号，无待核身份或缺失首购凭证；每位账号最多计一次。</p>');
+}
+function answer(){
+  const r=reading(), n=r.version, role=r.role, ready=r.ready;
+  return '<div class="report">'+analysisTop(n)+'<div class="bubble">'+question+'</div><article class="reply"><p class="eyebrow"><b>OptraCall</b>　·　原回复 '+(r.id+' / 01')+'</p>'+reportBody(n,role,ready)+
+    (n===2&&ready&&role==='两店数据核算岗'?panel('两笔复查','<p>星桥再次购买的账号 C07 已于 10 月 2 日全退。新版把该次再购排除；账号 C13 在星桥的正常再购仍计入。两人的九月首次购买均有效，队列分母仍为 4。</p>'):'')+
+    '<div class="reply-tools">'+btn('本次依据','basis','link')+(n===1?btn('反馈到资产体系','feedback','link'):btn('回看旧报告与 Case','history','link'))+'</div></article>'+
+    (n===1&&s.feedbackSources.some(item=>item.reportId===r.id)?'<div class="subtle"><h3>问题已关联 F-08</h3><p>原回复、当时依据与截止日已关联到本企业会员包。</p>'+btn('回 Studio 查看修订','revision','primary')+'</div>':'')+
+    '<div class="hero-actions">'+btn('另开任务换角色查看',s.revised?'ask2':'ask1')+btn('查看版本历史','history','link')+'</div>'+'</div>';
+}
+function basis(tab=0){
+  s.basisTab=tab;const r=reading(),n=r.version,role=r.role,ready=r.ready;
+  const affected=ready&&role!=='商品部';
+  const use=role==='商品部'||!ready?'仅采用正式定义':role==='两店数据核算岗'?'采用准确指标和原明细复算':role==='总部月报'?'引用已发布的门店月度汇总':'本店明细核对＋获准队列汇总';
+  const reads=role==='商品部'||!ready?'会员规则 r1、跨店定义；未读取汇总与明细':role==='总部月报'?'汇总 S-'+(n===1?'09a':'09b')+'（原表完整）、其定义；未读取明细':role==='星桥店'?'本店交易及退款明细、已授权队列月度汇总 S-'+(n===1?'09a':'09b')+'（获准范围内完整）；外店明细不可见':'身份 r2、交易及销售退款 '+mapVer(n)+'、跨店品牌首购凭证 r2、SAP 复购 '+(n===1?'m5':'m6')+'（均完整）';
+  const original='<dl class="kv">'+row('原任务／回复',r.id+' / 01 · '+role)+row('目录供给',identity+' '+v(n)+' · '+(role==='商品部'||!ready?'仅定义参考':role==='总部月报'?'定义、获准的门店月度汇总':role==='星桥店'?'定义、本店资料、获准星桥队列汇总':'定义、合格的两店重算用途'))+row('实际读取',reads)+row('作者采用',use+' · '+choices[s.scope])+row('独立核验', '待验证。此离线演示未发生真实独立使用或复核。')+row('事件与截止','2026 年 9 月首购队列；数据截至 10 月 31 日。')+'</dl>';
+  modal('本次依据与前提变化','原记录与现在回看分别展示；查看不启动模型。','<nav class="sections">'+btn('原稿与当时返回','basis0',tab===0?'sel':'')+btn('现在回看','basis1',tab===1?'sel':'')+'</nav>'+(tab===0?original:panel('当前与当时的差异',n===1&&s.revised?(affected?(role==='两店数据核算岗'?'本报告用 r3 重算，r3 后来修订为 r4，原数值受影响。':'本报告曾引用门店汇总 S-09a，其生产链使用 r3。r3 后来修订为 r4，汇总变更影响本报告数值。'+(role==='总部月报'?'原任务没有直接读取退款明细。':'原任务可回查本店明细，跨店部分来自已授权汇总。')):'本回复只采用正式定义。退款映射 r3 后来修订为 r4，定义及本回复的解释继续适用，本回复未采用受影响数值。'):'当前尚无影响该原回复的更新。')),btn('返回原分析','close'),true);
+}
+function feedback(){
+  const n=s.currentTask;
+  const existing=s.feedbackSources.flatMap(item=>item.notes.map(text=>({report:item.reportId,text})));
+  if(n!==1)return;
+  modal('反馈到原资产体系','先定位这条回复的问题，源资产缺陷或长期缺口再回原体系。','<div class="sections"><span class="pill active">记录问题反馈</span></div><dl class="kv">'+row('接收体系',pack+' · '+identity)+row('原分析任务',reading().id+' / 01 · v1.0 · 2026-10-31')+'</dl><label class="field"><span>反馈主题</span><input type="text" id="subject" readonly value="九月再购的跨月退款漏连"></label>'+(s.feedback?panel('F-08 已有证据（只读）','<ul>'+existing.map(note=>'<li>'+esc(note.report)+'　'+esc(note.text)+'</li>').join('')+'</ul>'):'')+'<label class="field"><span>'+(s.feedback?'新增证据（可选）':'问题、证据与当前处理')+'</span><textarea id="issue" placeholder="'+(s.feedback?'有新证据时填写；留空即可只关联本条原回复。':'填写问题与证据')+'">'+(s.feedback?'':'售后负责人指出一笔 9 月再次购买已于 10 月 2 日全额退款。请核当时映射是否连回原单。')+'</textarea></label><p class="muted">同一基础版、同一问题并入原事项。保存后由建设 Agent 核查当时可见的资料。</p>',btn('返回原分析','close')+btn(s.feedback?'补充到原事项':'保存反馈关联','saveFeedback','primary'));
+}
+function revision(){
+  const impacted=s.reports.filter(r=>r.version===1&&r.ready&&r.role!=='商品部').map(r=>r.id);
+  if(!s.feedback)return emptyState('暂无与会员包关联的反馈','先在分析任务的原回复旁反馈问题。');
+  return '<div class="box-head"><div><p class="eyebrow">'+pack+'　／　建设与演进　／　F-08</p><h2>跨月全额退款漏连</h2><p>'+s.feedbackId+' 原回复 01　·　当时采用 v1.0　·　原数据截止 10 月 31 日</p></div>'+label(s.revised?'修订已发布':s.check?'已核查 · 待确认修订':'待核查',s.revised?'ok':'wait')+'</div>'+
+    panel('来自原回复的反馈',s.feedbackSources.map(item=>'<div class="item"><b>'+item.reportId+' / 01</b>　'+btn('回看这条来源回复','record-'+item.reportId,'link')+(item.notes.length?'<ul>'+item.notes.map(text=>'<li>'+esc(text)+'</li>').join('')+'</ul>':'<p class="muted">已关联此来源，沿用原证据。</p>')+'</div>').join('')+'<p class="muted">'+(s.addedEvidence?'重复发起已定位到 F-08，新增不同证据才追加。':'同一问题归入 F-08。')+'</p>'+'<p class="muted">反馈来源与受影响的数值分别核对。首次线索 '+s.feedbackId+' '+(impacted.includes(s.feedbackId)?'采用了受影响的汇总或映射。':'只解释定义，未采用有误的映射或其数值结果。')+'</p>'+btn('查看原回复','feedbackOriginal','link'))+
+    (s.check||s.revised?panel('原资产核查结果','<p>9 月再次购买 O-73 的退款 R-02 于 10 月 2 日发生，在原报告截止前可读。旧映射 r3 仅在同月查原单。共享销售退款负责人将跨月原单关联修正为 r4。</p>'+
+      tbl(['逐笔核查','应有的结果'],[['C07 · 星桥再次购买 O-73','O-73 已全退，排除这次再购；保留九月另笔有效首购。'],['C13 · 星桥正常再购 O-81','无冲销，继续计一次复购；首购队列不变。']])+
+      '<p><b>影响</b>　引用 r3 的九月复购、汇总。'+(impacted.length?'受影响的数值回复：'+impacted.join('、')+'。采用汇总的任务经汇总版本关联；直接复算的任务按它实际读取的映射关联。':'目前留存的回复只提供定义，没有使用受影响数值的报告。')+'门店身份、未退款交易和品牌统计单位仍适用。SAP 指标算法不变，更新所依赖的映射版本。</p>'):'')+
+    '<div class="hero-actions">'+(s.revised?btn('在独立新任务核对新版','ask2','primary'):s.check?btn('查看修订发布预览','revPreview','primary'):btn('查看建设 Agent 核查','investigate','primary'))+btn('查看版本与历史','history','link')+'</div>';
+}
+function revPreview(){
+  modal('修订发布预览 · v1.1','织屿服饰 · 同一会员运营包 '+identity,
+    panel('只复核受影响的用途','<p>沿用原授权、适用范围和经营决定「'+choices[s.scope]+'」。修正的是原截止日前已可见的漏连，不追改旧报告。</p>'+
+      tbl(['原权威','本次变化'],[['销售退款资产','r3 → r4；按原单跨月关联。'],['SAP 指标','m5 → m6；同一指标引用 r4，算法和观察窗沿用。'],['会员包','v1.0 → v1.1；门店、会员身份、原经营决定不变。']]))+
+    '<p>星桥正式计算、柳岸受限计算重核后再入目录。保留原报告、原依据、原 Case 选择及行动。</p>',btn('返回','close')+btn('确认发布修订','approveRevision','primary'));
+}
+function history(){
+  if(!s.published)return emptyState('暂无已发布版本','首版预览确认后，在这里回看准确版本。');
+  return '<p class="eyebrow">'+pack+'　／　'+identity+'</p><h2>版本与历史</h2>'+
+    tbl(['版本','依据与使用范围','记录'],[
+      ...(s.revised?[['v1.1 · 当前','退款 r4、SAP m6；同一账号和观察规则。',s.newTask?btn('查看新任务','newReport','link'):btn('新任务核对','ask2','link')]]:[]),
+      ['v1.0'+(s.revised?' · 历史':' · 当前'),(originalReady()?'退款 r3、SAP m5；保留起始范围和当时采用。':'退款 r3；SAP m5 首次'+(s.receipts==='unknown'?'结果未知':'失败')+'，原版仅具定义资格。'),s.oldTask?btn('原报告与当时依据','old','link'):'待首次使用']
+    ])+panel('已留存的分析任务',s.reports.length?tbl(['任务及版本','任务角色','原结果'],s.reports.map(r=>[r.id+' / '+v(r.version),r.role,btn('回看本条原回复','record-'+r.id,'link')])):'尚无分析任务。')+panel('原 Case · 直营店秋季会员复盘','<p>已有独立经营会纪要 C-12（11 月 2 日）。会员负责人决定先核星桥回购归属，再决定下月活动投放；会后已安排门店核对。依据为 9 月月报复盘议题，经营效果待观察。</p><p class="muted">此决定及行动来自既有 Case。当前分析任务和退款修订均不自动更新决定或新增行动。</p>')+
+    '<div class="hero-actions">'+btn('返回发布与使用','receipts')+(s.revised?btn('在独立新任务核对新版','ask2','primary'):'')+'</div>';
+}
+function archive(){return '<h2>原项目只读历史</h2>'+panel('会员资产建设 · 已归档','<p>本项目保留原建设会话与当时的包引用。接续项目「品牌经营复盘」拥有自己的资料授权。</p><p>企业资产仍为 '+identity+'，已有门店复购用途 U-01。私有附件不随接续自动开放。</p>')+btn('到获准项目接续同一包','continueProject','primary')}
+function projectDialog(i){
+  const listed=s.extraUses.map(k=>otherUses[k].id+' '+otherUses[k].name);
+  if(s.selected)listed.unshift('U-01 门店复购');
+  if(i===0&&s.archive){go('archive');return}
+  modal(pnames[i], '织屿服饰 · 项目权限随当前身份核对',
+    '<p>企业目录定位到「'+pack+'」（'+identity+'）。'+(s.started?'已找到原建设事项 M-01，重复发起会回到原事项。':'可由本项目发起第一份建设建议。')+'</p>'+
+    (listed.length?'<p>原包已有用途：'+listed.join('、')+'。</p>':'')+(s.started&&i===1?'<p>原建设项目未共享的私有附件仍按原权限处理，已有正式资产可按本项目用途继续引用。</p>':''),
+    btn('返回','close')+btn('在此项目接续','switchProject'+i,'primary')+(i===0&&s.published?btn('演示原项目归档','archiveProject','link'):''));
+}
+function begin(){
+  s.goal=($('#goal')?.value||'').trim();
+  if(!s.goal){toast('请写下建设目标');return}
+  const key=Object.keys(otherUses).find(k=>otherUses[k].match.test(s.goal));
+  if(key&&!/复购/.test(s.goal)){startOther(key);return}
+  if(!/会员|复购/.test(s.goal)){toast('本演示支持会员运营宽目标和门店复购用途。');return}
+  s.started=true;
+  if(/复购/.test(s.goal)){s.selected=true;go('draft')}
+  else{s.hasPanorama=true;go('panorama')}
+}
+function startOther(key){
+  if(!otherUses[key])return;
+  s.started=true;s.activeUse=key;
+  if(!s.extraUses.includes(key))s.extraUses.push(key);
+  go('other');
+}
+function otherDraft(){
+  const u=otherUses[s.activeUse];
+  if(!u)return emptyState('尚未指定用途','在本企业提出需要解决的问题。');
+  return '<div class="box-head"><div><p class="eyebrow">'+pack+'　／　'+identity+'　／　用途 '+u.id+'</p><h2>'+u.name+' · 用途草案</h2><p>当前建设项目：'+pnames[s.project]+'　·　已定位同一企业包、同一用途事项</p></div>'+label('起步草案','purple')+'</div>'+
+    panel('本次经营问题','<p>'+u.ask+'</p>')+panel('引用与待补证','<p>'+u.basis+'</p><p>'+u.gap+'</p>')+
+    panel('约定的完成条件','<p>'+u.complete+'</p>')+
+    '<p class="muted">此用途演示到建设起点。门店复购可继续操作发布、使用和修订。</p><div class="hero-actions">'+btn('继续本包的门店复购','namedStart','primary')+btn('提出其他建设目标','newGoal','link')+(s.hasPanorama?btn('返回全景','panorama','link'):'')+'</div>';
+}
+function register(){
+  modal('登记参考','按来源、准确版本与原文内容识别重复。','<label class="field"><span>获准的示例来源</span><select id="importRef">'+references.map((r,i)=>'<option value="'+i+'">'+r[0]+' · v'+r[1]+'</option>').join('')+'</select></label><label class="field"><span>登记情形</span><select id="importType"><option value="same">同源同版原文再次提供</option><option value="conflict">同源同版、正文不同</option></select></label>',btn('返回','close')+btn('核对并登记','doRegister','primary'));
+}
+function startAsk(n){
+  if(!s.published){go('preview');return}
+  if(n===2&&!s.revised){go('revision');return}
+  if(n===1&&s.revised)n=2;
+  s.currentTask=n;s.project=1;s.role=n===2?'两店数据核算岗':'总部月报';go('ask');
+}
+function doRun(){
+  const n=s.currentTask;s.role=$('#role').value;
+  const previous=s.reports.filter(r=>r.version===n).length;
+  const id=(n===1?'A-':'B-')+String((n===1?17:26)+previous);
+  s.reports.push({id,version:n,role:s.role,ready:done()});
+  s.reportId=id;
+  if(n===1)s.oldTask=true;else s.newTask=true;
+  go('answer')
+}
+const handlers={
+  reset:()=>modal('重新开始演示？','仅清除这一页的虚构演示操作。','<p>从建设目标和三份演示附件重新开始。</p>',btn('继续当前演示','close')+btn('重新开始','resetYes','primary')),
+  resetYes:()=>{dismiss();s=initial();go('start')},
+  help:()=>modal('演示说明','织屿服饰为虚构企业，经营资料和回执均为演示样例。','<p>从体系工作台提出目标，选门店复购并确认一份发布预览，再到项目的分析窗口查看当时依据、反馈和修订。左栏和 Studio 页签可随时回看。</p><p>演示不连接产品、模型或任何企业资料。参考卡片说明来源和段落位置，内容为演示转述。</p>'),
+  toggle:()=>{const app=$('.app');if(matchMedia('(max-width:720px)').matches){app.classList.toggle('mobile-open')}else{app.classList.toggle('collapsed')}},
+  studio:()=>{go(s.archive&&s.project===0?'archive':starter())},
+  coverage:()=>go(s.hasPanorama?'panorama':starter()),
+  build:()=>go(s.archive&&s.project===0?'archive':s.feedback?'revision':starter()),
+  publication:()=>go(s.published?'receipts':'preview'),
+  settings:()=>go('settings'),
+  close:dismiss, refBuild:()=>{dismiss();go(s.archive&&s.project===0?'archive':starter())},
+  broad:()=>{s.goal=broad;$('#goal').value=s.goal;$('#goal').focus()},
+  specific:()=>{s.goal=specific;$('#goal').value=s.goal;$('#goal').focus()},
+  begin, namedStart:()=>{dismiss();s.activeUse='';s.started=true;s.selected=true;s.goal=specific;go('draft')},
+  newGoal:()=>{s.activeUse='';s.goal=broad;go('start')},choose:()=>{s.activeUse='';s.selected=true;go('draft')}, draft:()=>go('draft'), panorama:()=>go('panorama'),
+  preview:()=>go('preview'), receipts:()=>go('receipts'), history:()=>go('history'),
+  scenario:()=>modal('演示发布异常','仅改变本次虚构 SAP 分项的回执情形。','<label class="field"><span>SAP 指标发布结果</span><select id="resultMode">'+[['ok','成功'],['unknown','结果未知'],['failed','发布失败']].map(([val,t])=>'<option value="'+val+'" '+(s.receipts===val?'selected':'')+'>'+t+'</option>').join('')+'</select></label><p>依赖异常时只挂起受影响的计算用途。</p>',btn('返回','close')+btn('采用此情形','setScenario','primary')),
+  setScenario:()=>{s.receipts=$('#resultMode').value;dismiss();toast('已选择虚构发布回执情形')},
+  publish:()=>{if(!s.scope||s.published)return;s.published=1;go('receipts')},
+  recover:()=>{
+    if(s.receipts==='unknown'){
+      modal('查原发布回执','P-032 · 同一请求与同一目标指纹。','<p>原 SAP 记录显示该请求实际成功，目标版本 m5 与确认预览一致。查证后补记回执并恢复依赖用途。</p>',btn('返回','close')+btn('据原回执更新资格','recovered','primary'))
+    }else{
+      modal('修正受影响的 SAP 候选','P-032 失败 · 原因是经确认的指纹与 SAP 候选不一致。','<p>已回原指标查明为说明字段更新，准备了准确候选和新的发布请求 P-032b。范围、输入映射和其余已发布条目沿用。</p>',btn('返回','close')+btn('确认受影响项并发布','recovered','primary'))
+    }
+  },
+  recovered:()=>{s.recovered=true;dismiss();go('receipts');toast(s.receipts==='failed'?'P-032b 已成功，P-032 原失败保留。':'P-032 原请求查证成功。')},
+  ask1:()=>startAsk(1), ask2:()=>startAsk(2), run:doRun,
+  old:()=>openReport(firstReport(1)?.id),newReport:()=>openReport(s.reports.filter(r=>r.version===2).at(-1)?.id),feedbackOriginal:()=>openReport(s.feedbackId),
+  basis:()=>basis(0), basis0:()=>basis(0), basis1:()=>basis(1), feedback,
+  saveFeedback:()=>{
+    const body=$('#issue').value.trim(),subject=$('#subject').value.trim();
+    if((!s.feedback&&!body)||!subject){toast('请保留反馈主题及问题证据。');return}
+    let entry=s.feedbackSources.find(item=>item.reportId===s.reportId);
+    if(!s.feedback)s.feedbackId=s.reportId;else s.addedEvidence=true;
+    if(!entry){entry={reportId:s.reportId,notes:[]};s.feedbackSources.push(entry)}
+    const allNotes=s.feedbackSources.flatMap(item=>item.notes);
+    let addition=body;
+    for(const known of allNotes){if(addition.startsWith(known))addition=addition.slice(known.length).trim()}
+    if(addition&&!allNotes.includes(addition))entry.notes.push(addition);
+    s.feedback=true;dismiss();go('answer');toast('已关联原事项 F-08')
+  },
+  revision:()=>go('revision'),investigate:()=>{s.check=true;go('revision')},revPreview,
+  approveRevision:()=>{s.revised=true;s.published=2;dismiss();go('receipts')},
+  register,doRegister:()=>{
+    const i=Number($('#importRef').value), same=$('#importType').value==='same';
+    modal(same?'已找到相同版本':'同版正文不同，待核来源',references[i][0]+' · v'+references[i][1],'<p>'+(same?'复用原登记记录。两条路线可共同引用该来源，登记数仍为 8。':'保留原版及其引用。本次不同正文未替换原记录，须由来源维护者核实。')+'</p>',btn('返回目录','close')+btn('查看原参考','ref'+i,'primary'))
+  },
+  project0:()=>projectDialog(0),project1:()=>projectDialog(1),
+  switchProject0:()=>{s.project=0;dismiss();go(starter())},switchProject1:()=>{s.project=1;dismiss();go(starter())},
+  archiveProject:()=>{s.archive=true;s.project=0;dismiss();go('archive')},
+  continueProject:()=>{s.project=1;go(starter());toast('在本项目接续原包 '+identity)}
+};
+document.addEventListener('click', e=>{
+  const b=e.target.closest('button[data-act]');if(!b||b.disabled)return;
+  const a=b.dataset.act;
+  if(a.startsWith('use-'))startOther(a.slice(4));
+  else if(/^mat\d+$/.test(a))mat(Number(a.slice(3)));
+  else if(/^ref\d+$/.test(a))ref(Number(a.slice(3)));
+  else if(a.startsWith('record-'))openReport(a.slice(7));
+  else if(handlers[a])handlers[a]();
+});
+document.addEventListener('input',e=>{
+  if(e.target.id==='refsearch'){s.search=e.target.value;$('#refrows').innerHTML=refRows()}
+  if(e.target.id==='goal')s.goal=e.target.value;
+});
+document.addEventListener('change',e=>{
+  if(e.target.name==='scope'){s.scope=e.target.value;screen.querySelector('[data-act=publish]').disabled=false}
+});
+dialog.addEventListener('close',()=>{if(returnFocus?.isConnected)returnFocus.focus()});
+render();
+
+</script>
+<script>
+const bundledOriginals = {"04-nike-membership-public.md": "# T04｜Nike 会员运营主数据、指标体系与本体公开参考模板\n\n版本 v0.2 · 2026-11-12 · 公开参考草稿，供审核\n\n\n本版增加指标体系、三类资产关联和分项状态；上一版原文保留在[同名 v0.1 模板](../04-nike-membership-public.md)。全部候选与公开参考仍待用户审核，目标企业正式资产尚未建立。\n\n\n建设路线：会员运营领域 T02 → Nike 会员运营公开参考 T04 → 目标企业会员运营。此处“部门”按业务功能域组织；Nike 内部会员部门名称、汇报关系、系统分工和权限尚无本次可用证据。共享企业、品牌、商品、渠道与门店引用 [T01](01-sportswear-industry.md)／[T03](03-nike-enterprise-public.md)，会员概念引用 [T02](02-membership-domain.md)。\n\n本稿通过购物、运动内容、活动体验、服务和偏好等功能组织公开参考。这些分组是建模建议，不是对 Nike 内部部门设置的陈述。事实来源 N03–N08 及访问限制见[Nike 研究记录](../nike-public-reference-sources-v0.1.md)。\n\n## 公开参考内容\n\n| 参考项 | 来源可支持的事实 | 建模建议及边界 |\n| --- | --- | --- |\n| 美国会员计划视图 | 美国会员页展示免费加入及 Nike App、NRC、NTC、SNKRS 等入口 | 建立带市场范围的计划视图及触点参考；不推断全部地区均可用或属于同一技术账户系统 |\n| 中国会员计划视图 | 中国会员页展示课程、线下活动、定制、SNKRS 中国 App 和会员体验 | 建立购物、内容、活动与服务定义，不把这些功能强制折叠为购买行为 |\n| 地区化权益 | 美国与中国会员页展示的权益内容和条件有所不同 | 权益定义关联市场、渠道、条件及准确来源，动态网页查阅日与业务生效日分开 |\n| 条款与订单条件 | 中国销售条款说明平台附加规定、账户状态和下单条件等可影响适用规则 | 营销说明、政策和具体订单条件分别保留；无法判断优先或冲突时回源核定 |\n| 偏好设置 | 澳大利亚帮助页描述部分网站／App 设置及跨平台保存 | 建立偏好记录及适用平台；不推断全球所有字段实时同步 |\n\n以上事实分别见 [Nike 美国会员页](https://www.nike.com/membership)、[Nike 中国会员页](https://www.nike.com.cn/membership)、[中国销售条款](https://agreementservice.svs.nike.com.cn/rest/agreement?agreementType=termsOfSale&country=CN&language=zh&requestType=redirect&uxId=com.nike.tos)及[澳大利亚设置帮助](https://www.nike.com/au/help/a/nike-settings/app)。实际资格与权益履行须回到相应地区、期间和具体规则。\n\n## 主数据模板：公开填充与企业待定\n\n字段类型和统一来源／时间字段沿 T02 与[包说明](README.md)。下表字段均为本包逻辑字段，不是 Nike 内部字段。\n\n| 对象 | 建议关键字段 | 公开资料可填充 | 保持未知／企业内化时填写 |\n| --- | --- | --- | --- |\n| `MemberProgramView` 计划公开视图 | `view_id:text`、`public_name:text`、`market_scope:ref[]`、`source_ref:ref`、`underlying_program_ref:ref?` | 中国／美国页面名称、地区及展示内容 | 不同视图是否属于同一全球计划、实际计划主键和运营组织；本对象是资料视图而非认定独立计划 |\n| `Account`／`ProgramMembership` | `account_id:text`、`source_namespace:text`、`membership_id:text`、`program_ref:ref`、`status:code`、`valid_period:period?` | 可定义账号和入会关系两个概念；不创建真实个人实例 | 企业注册与入会是否同一动作、状态、退出流程及账号映射 |\n| `Touchpoint` | `touchpoint_id:text`、`public_name:text`、`touchpoint_type:code`、`market_scope:ref[]`、`source_ref:ref` | 来源明确地区内的官网、App 或活动入口 | 全部可用国家、账号共享、接口和事件可得性 |\n| `BenefitDefinition` | `benefit_id:text`、`type:code`、`description:text`、`eligibility_rule_ref:ref?`、`market_scope:ref[]`、`valid_period:period?` | 资料展示的权益类别及明确条件 | 未公开门槛、实际领取对象、目标企业是否采用此权益 |\n| `BusinessRule`／`PolicyDocumentVersion` | `rule_id:text`、`document_ref:ref`、`scope:map`、`conditions:text?`、`exceptions:text?`、`effective_period:period?` | 官方规则原文、版本和明示范围 | 没有写明的例外、生效时间及优先关系 |\n| `ContentService` | `service_id:text`、`name:text`、`service_type:code`、`touchpoint_refs:ref[]`、`access_rule_ref:ref?` | 公开提及的课程、定制或其他服务定义 | 完整内容库、服务资格及内部服务目录 |\n| `CampaignActivity` | `activity_id:text`、`public_name:text`、`type:code`、`market_scope:ref[]`、`rule_ref:ref?` | 有来源的活动类别或公开活动定义 | 全量活动、实际报名／到场数据及内部活动码 |\n| `PreferenceDefinition`／偏好记录 | `preference_key:text`、`value_domain:ref`、`platform_scope:ref[]`、`source_ref:ref`、`valid_period:period?` | 帮助页明确的设置类别和适用平台 | 内部字段、实时同步承诺、每名会员实际选择 |\n| `IdentityLink` | `from_ref:ref`、`to_ref:ref`、`link_type:code`、`evidence_ref:ref`、`verification_state:code` | 只能提供结构槽位，不从公共页面填真实关联 | 身份归并规则、历史合并拆分和目标企业实际映射 |\n| 权限／用途定义与记录 | `purpose_id:text`、`scope:text`、`policy_ref:ref?`、`record_source:ref?`、`effective_period:period?` | 官方政策可作为范围和概念参考，细节限已取得原文 | 内部同意记录结构、全部数据流及目标企业适用依据 |\n\n本次资料未足以核定 Nike 的等级、积分、家庭会员、付费订阅及内部优惠券体系；这些内容继续作为 T02 可选模块。未知不表达为“不存在”。内部会员数、活跃阈值、生命周期分层、留存与复购定义均保持未知。\n\n## 本体模板\n\n以下均为建模建议；只有明确引用的名称、体验及条款内容作为公开事实。\n\n| 关系／事件 | 含义与约束候选 |\n| --- | --- |\n| 计划公开视图—描述—会员计划 | 页面是计划说明来源；先保留地区视图，不因名称相同就合并全球制度 |\n| 会员关系—连接—账号／主体与会员计划 | 入会关系引用准确计划范围；自然人身份和账号一致性需证据 |\n| 计划—通过—触点提供内容／服务／活动 | 触点、服务定义与参与事实分别建模；有入口不等于某会员已参与 |\n| 权益定义—受限于—业务规则版本 | 明确地区、期间、渠道、商品和资格；条件未知时不得写“全员无条件” |\n| 会员关系—符合资格／获授／领取／使用—权益 | 四类语义及相应事件分开；公开营销信息只支持权益介绍，不证明个体资格或使用 |\n| 账号—具有—偏好记录 | 偏好项、值、来源、适用平台与有效期分别记录；推断标签另有方法依据 |\n| 账号／主体—参与—交易角色 | 购买者、付款者、收件人和会员可能不同；访客订单允许会员关联未知 |\n| 注册／入会／退出／身份关联变更 | 作为候选事件骨架；内部状态机、必经步骤和真实事件字段待企业资料 |\n| 报名／活动参与／课程使用／服务履行 | 区分定义与实际事件、报名与到场、访问与使用，不直接推断营销效果 |\n| 权限选择／撤回—引用—目的及政策版本 | 模型表达有范围的历史记录；具体制度和获准数据由目标企业核定 |\n\n```mermaid\nflowchart LR\n    P[主体或账号] --> M[会员关系]\n    M --> G[会员计划]\n    V[地区公开视图] -.描述.-> G\n    G --> B[权益／内容／服务／活动定义]\n    R[政策与业务规则版本] --> B\n    T[触点] --> B\n    P --> E[参与或使用事件]\n    E --> B\n```\n\n图是本包模型建议，不描述 Nike 内部架构。真实账号关联、事件采集和资格计算都须由企业证据补齐。\n\n## 目标企业内化示例工作表\n\n| 参考内容 | 企业可选动作 | 必需依据 |\n| --- | --- | --- |\n| 账号、计划与会员关系分离 | 采用，或保留概念分离并映射同一来源记录 | 实际注册入会流程、主键、资格与状态定义 |\n| 多触点内容、活动和服务 | 按已有业务取舍或扩展 | 企业实际触点、服务、活动清单及数据覆盖 |\n| 地区化、条件化权益 | 采用规则结构，重新填写企业制度 | 企业权益条款、门槛、例外、期间与权威来源 |\n| 等级／积分等可选机制 | 有证据时启用 | 企业实际制度和流水定义；不因标杆模板就默认存在 |\n| 共享身份与偏好 | 采用追溯结构，核定具体事实 | 获准关联资料、业务规则和状态历史 |\n\n正式企业资产的发布、后续普通分析实际使用及任务贡献，并回现有 Studio 两层体系。本轮成果到三类资产参考模板为止，用户提供资料后再进行企业内化。\n\n## 指标体系：公开事实启发的测量建议\n\n公开资料确认了若干会员体验、触点和带条件权益；它们没有提供本次所需的内部会员 KPI、计算公式、活跃窗口、分层门槛或完整数据结构。因此本节**全部运营指标均为 M：建模建议**，不是 Nike 已采用指标。F 仅表示其所依托的体验或业务概念可在来源查到。`metricKey` 是本模板参考项，未绑定正式 SAP 包。\n\n| 测量主题 | F：公开业务线索 | M：候选指标族 | U：内部制度与数据 |\n| --- | --- | --- | --- |\n| 资格与规模 | 会员加入及地区公开计划视图，N03／N04 | 账号、有效会员关系、新增资格 | 全球计划是否统一、资格状态、去重与历史 |\n| 运动与内容参与 | 课程、活动及运动触点，N03／N04 | 合格内容参与、报名／到场、服务使用 | 内部活跃判定、事件名、采集覆盖与 KPI |\n| 购物与体验 | 定制、商品体验及购物入口，N03–N05 | 购买会员关系、服务／定制订单、关联交易 | 会员交易映射、统计资格、退款归属 |\n| 权益履行 | 地区化权益及条件，N03–N05 | 资格覆盖、授予、使用、履行及时性 | 是否逐实例管理、分母、窗口和履约数据 |\n| 偏好与服务 | 部分平台设置与偏好帮助，N07 | 有来源的偏好资料覆盖、服务案件 | 内部字段、同步能力、联系许可及运营目标 |\n\n## 候选指标条目\n\n下列骨架供目标企业决定采用、调整、排除或新增；定义及公式核定后进入原 SAP，目录和本体只保存准确引用。\n\n| metricKey／候选名称（M） | 定义或测量骨架 | 对象、粒度、单位 | 维度、时间及资格 | 所需资料与未知 |\n| --- | --- | --- | --- | --- |\n| `nike.ref.member.active_memberships` 有效会员关系数 | 在约定时点满足计划及状态规则的不同关系数 | `ProgramMembership`；计划内关系；个 | 地区、计划、品牌；资格期间、状态及账号／主体范围待核 | 内部状态与身份历史未知；不能用网页注册人数或账号替代 |\n| `nike.ref.content.participating_memberships` 内容参与会员关系数 | 期间有约定合格内容参与事件的不同关系数 | 会员关系；个／期间 | 内容、触点、市场；有效参与及去重待核 | 官网只支持内容入口概念，不提供此事件或 KPI 定义 |\n| `nike.ref.activity.attended_memberships` 活动到场会员关系数 | 可核实际到场事件关联的不同关系数 | 会员关系×活动；个 | 活动、市场、时间；报名与到场分开，身份可关联 | 需要报名／到场与身份依据，公开活动页不证明实际参与 |\n| `nike.ref.service.customization_orders` 合格定制订单数 | 在企业约定订单状态下的不同定制服务订单数 | 服务订单；单 | 服务、市场、渠道、期间；取消退款影响待核 | N04 只启发服务概念，内部订单键与资格规则未知 |\n| `nike.ref.benefit.fulfilled_instances` 权益履行实例数 | 有依据确认符合规则履行的不同权益实例数 | 权益实例；份等待企业定义单位 | 权益版本、市场、渠道、期间；资格、授予和使用分开 | 逐实例机制及事件是否存在未知，不能默认所有权益有券实例 |\n| `nike.ref.benefit.fulfillment_rate` 权益履行率 | 同一合格且完成观察资格的授予／服务队列中，按规则履行的比例 | 权益实例或服务单位，企业择定；比率 | 承诺、有效期、截止与例外一致，未知不能当未履行 | 对应规则与完整分母、履行记录待企业资料；不是 Nike 官方 SLA |\n| `nike.ref.preference.sourced_coverage` 有来源的偏好记录覆盖率 | 指定资料范围内，具有明确来源与适用期间偏好记录的合格对象比例 | 账号／主体择一；比率 | 目的、平台、市场、时点；主动与推断分开 | N07 支持部分设置概念，不支持全量字段、实际选择或全球同步 |\n| `nike.ref.purchase.member_net_sales` 会员关联交易净额 | 在核定身份及购买规则下归属会员范围的净金额 | 交易行及归属；货币 | 地区、商品、门店渠道、期间；退款及多主体分摊待核 | 访客、购买人／付款人／收件人可不同；真实关联和金额规则未知 |\n\n不能从这些候选反推 Nike 内部目标、绩效、工具部署或现有数据完备性。T02 的留存、生命周期、等级、积分及价值指标继续作为通用可选内容，有企业依据再采用。\n\n## 四种指标关系的候选表达\n\n| 关系类别 | 可建模的内容 | 本节边界 |\n| --- | --- | --- |\n| 目录归属 | 资格规模、内容参与、活动服务、权益和交易等主题 | 本包分类建议，不代表内部部门及 KPI 目录 |\n| 公式依赖 | 例如履行率引用同队列履行数与合格观察分母 | 队列、单位、期间、状态与例外先核定；缺分母时保持待核 |\n| 统计分解 | 按市场、计划、触点或活动分组 | 多触点参与可能重叠，跨触点人数不能直接相加；计划统一性未知 |\n| 分析用途关联 | 参与、权益和交易可以共同作为分析输入 | 浏览、参加、购买和效果分别留证，不能形成未经证明的因果链 |\n\n## 三类资产关联表\n\n以下逻辑项与 T01／T02 共享身份含义，保持参考归属。`ont.*` 为建模建议项，不是 Nike 内部本体或已生成图节点。\n\n| 主数据／关系项 | 参考指标 | 事件、维度、时间及资格 | 本体关联候选 | 实际 Binding 与待核 |\n| --- | --- | --- | --- | --- |\n| `md.account`、`md.program_membership`、计划公开视图 | `nike.ref.member.active_memberships` | 注册、加入、退出、状态期间；地区计划范围 | `ont.view_describes_program`、`ont.membership_valid_at` | 原计划、账号与关系键未知；不由页面名合并全球资格 |\n| 触点、内容／活动、会员关系 | 内容参与、活动到场指标 | 访问、内容使用、报名、到场分别表达 | `ont.access_via_touchpoint`、`ont.participates_in` | 公开入口不能证明真实事件字段、身份或参与覆盖 |\n| 权益定义／规则、可选实例 | 权益履行数与履行率 | 资格、授予、履行及截止；市场、渠道及例外 | `ont.eligible_for`、`ont.fulfilled_under_rule` | 公开条款与营销资料并存，实际适用及实例机制待核 |\n| 偏好定义、账号／主体 | 有来源偏好记录覆盖 | 声明／更新、来源、用途、平台及有效期 | `ont.expresses_preference`、`ont.preference_scope` | 未披露字段、个人选择及同步保证保持未知 |\n| 会员关系、`md.store`、`md.sku` | 会员关联交易净额 | 订单、付款、退货、退款；参与角色与时间归属 | `ont.transaction_role_of`、`ont.refund_of_transaction` | 内部交易—会员关联未知，访客允许未关联 |\n\n## 企业内化与四项状态\n\n每项标记 F／M／U 及来源地区、时间范围，保存参考准确版本、参考 item、目标 item、采用动作、企业证据和差异理由。数据不支持的标杆内部内容保持未知，目标企业可用自身制度补齐并形成独立正式资产。\n\n当前各运营候选的目标企业状态均为：定义待核、数据未映射、当前不可计算、实际使用未验；公开体验有来源不改变这些状态。候选／正式身份另存。定义可核但缺数据时，只能按核定范围发布定义参考，不能显示为已测量或经营有效。\n", "03-nike-enterprise-public.md": "# T03｜Nike 企业主数据、指标体系与本体公开参考模板\n\n版本 v0.2 · 2026-11-12 · 公开参考草稿，供审核\n\n\n本版增加指标体系、三类资产关联和分项状态；上一版原文保留在[同名 v0.1 模板](../03-nike-enterprise-public.md)。全部候选与公开参考仍待用户审核，目标企业正式资产尚未建立。\n\n\n建设路线：运动鞋服行业 T01 → Nike 企业公开参考 T03 → 目标企业。T03 引用 [T01](01-sportswear-industry.md) 的共享对象，在公开资料能够支持的位置填充事实，增加标杆差异；全部内部字段与组织实现保持待核。证据编号 N01–N08、原文链接和访问限制见[Nike 研究记录](../nike-public-reference-sources-v0.1.md)。\n\n## 已知公开事实与参考实例\n\n下表“参考标识”仅为本模板命名，用来连接资料，不是 Nike 生产系统编码。公开名称、业务描述、资料期间与本包逻辑分类分别保存。\n\n| 参考对象 | 公开事实与范围 | 模板如何表达 | 来源 |\n| --- | --- | --- | --- |\n| 企业 `REF.NIKE.Enterprise` | NIKE, Inc. 的 FY2026 年报披露企业业务及品牌组合 | 企业身份与品牌身份分别建对象；法律实体全量清单另核 | [N01：FY2026 10-K，Item 1](https://investors.nike.com/sec-filings/all-sec-filings/content/0000320187-26-000088/nke-20260531.htm) |\n| 品牌参考集合 | 年报涉及 NIKE、Jordan、Converse | 品牌关系保留年报期间，不从品牌名称推定同名法人 | N01 |\n| 商品类别参考集合 | 公开业务包含鞋、服装及器材等 | 作为分类候选；内部商品分类树和编码未知 | N01 |\n| 经营渠道参考 | NIKE Direct 包含自营零售及数字销售，另有批发经营 | 直销／批发经营路径、具体触点、经营主体分别表达 | N01 |\n| 报告分部参考 | NIKE Brand 的四个地理报告分部；Converse 另列 | 增加报告范围对象，与法律组织及运营单元分别关联 | N01，Our Markets／Segment Information |\n| 制造网络参考 | 年报区分合同制造商与其工厂 | 伙伴主体与物理设施分开；具体供货关系不得全连接 | N01，Manufacturing |\n| 商品展示参考 | 中国站一商品页展示名称、颜色和公开款式号 | 外部显示标识带页面来源；不认定其等同内部 SKU 或可据后缀拆出颜色键 | [N02：中国商品示例](https://www.nike.com.cn/t/everyday-all-court-8p-%E7%AF%AE%E7%90%83-5DG2xC) |\n\n这组实例说明公开参考的填写方式，不构成完整品牌库、门店库、商品库或组织全图。年报所述报告分部与原文的财年口径一起保存，不把资料查阅日写成组织变更生效日。\n\n## 主数据模板：复用与扩展\n\n以下均为建模建议。T01 中的定义和统一来源／时间字段继续适用。\n\n| 对象 | 建议字段／对 T01 的扩展 | 公开参考能填什么 | 保持未知的内容 |\n| --- | --- | --- | --- |\n| `Enterprise`／`LegalEntity` | `entity_id`、`entity_kind`、`official_name`、`jurisdiction?`、`external_ids[]` | 资料所述企业名称、文件身份和披露期间 | 内部企业主键、全量法人层级及系统映射 |\n| `Brand` | `brand_id`、`name`、`enterprise_relation_ref`、`market_scope`、`valid_period?` | 已公开的品牌名称和资料中的关系 | 所有授权链、内部品牌码和目标企业是否采用同构层级 |\n| `ReportingSegment`，本稿扩展 | `segment_id`、`name`、`reporting_period`、`coverage_description`、`source_ref` | 年报列示的报告范围 | 全量国家映射、是否与具体运营单元一一对应 |\n| `ProductStyle`／`SellableSKU` | `external_display_identifier`、`identifier_scheme`、`display_attributes`、`source_page` | 页面确实展示的标识及属性 | 内部款、款色、尺码库存主键与算法 |\n| `Channel`／`Touchpoint` | `business_route`、`touchpoint_type`、`operator_ref?`、`market_scope` | 年报经营路径与官网可见入口 | 全部平台账号、门店接入及身份共享安排 |\n| `Store`／`FacilitySite` | `business_unit_ref?`、`physical_site_ref?`、`operator_ref?`、`location_type` | 来源能确认的对象类别；有具体来源才填实例 | 完整地点与经营主体名录、内部地点键 |\n| `BusinessPartner`／制造设施 | `partner_id`、`partner_role`、`facility_refs[]`、`relationship_scope` | 制造商与工厂分离这一公开业务结构 | 未披露的合同、逐商品制造关系及权威系统 |\n| `PolicyDocumentVersion`，本稿扩展 | `document_id`、`subject`、`market_scope`、`published_at?`、`effective_at?`、`source_ref`、`related_rule_refs[]` | 官方文件和政策的准确版本、范围、原文位置 | 未写明的优先规则、生效时间和内部制度 |\n\n`PolicyDocumentVersion` 是来源及受管文件记录；`BusinessRule` 是从资料核定的业务规则，两者通过依据关系连接。模板不把文件本身等同于已完成核定的企业规则。\n\n## 本体模板\n\n以下对象类型与关系名称为本包建议。公开事实是其建模依据，不证明 Nike 内部已采用相同本体。\n\n| 主体—关系—客体 | 语义及限定 |\n| --- | --- |\n| 企业—具有品牌关系—品牌 | 关系类型、披露期间和来源明确；品牌不是组织类型的同义词 |\n| 企业—按范围报告—报告分部 | 报告维度独立；与组织和市场的对照需有具体证据 |\n| 报告分部—覆盖—市场范围描述 | 先保留来源描述；逐国家归属未核定时不补造枚举 |\n| 商品款—归属—品牌／商品类别 | 各关系分别维护；商品变体对款的归属沿 T01 核定 |\n| 销售经营路径—通过—门店／数字触点 | “直销”作为经营路径，“App”作为入口，两者可以关联而不互代 |\n| 伙伴—承担角色—制造商／经销等角色 | 同一组织可有多角色；实际角色实例需要来源 |\n| 制造商—经营—工厂；商品—制造于—设施 | 两段关系分别核查，年报概况不生成所有商品与所有工厂的连接 |\n| 业务规则—依据—政策文件版本 | 明确地区、渠道、商品、时间及例外；规则未知时保留引用与待核项 |\n\n订购、付款、拆分交付、取消、退货与退款沿 T01 分开建事件。中国销售条款 N05 可以支持这些流程概念与条件化规则的参考；具体企业事件表、状态枚举、基数和统计影响由目标企业材料核定。\n\n## 内化到目标企业的差异表\n\n| 参考结构 | 目标企业处理方式 | 需用户资料支持的内容 |\n| --- | --- | --- |\n| 多品牌与品牌关系 | 采用／简化／调整／新增 | 实际品牌、持有或授权关系及适用范围 |\n| 报告分部与经营市场 | 可采用各自对象，也可排除不需要的维度 | 企业报告方式、组织范围与市场编码 |\n| 直销／批发及触点 | 按企业经营模式调整 | 自营、加盟、经销、平台等实际关系及来源 |\n| 商品款与变体 | 沿实际粒度建立映射 | 款、款色、SKU、包装、尺码与外部标识字典 |\n| 伙伴与设施 | 按现有供应与履约业务采用 | 主体、工厂／仓库／地点、角色和期间 |\n\n目标企业的结论与映射记录独立身份、证据与版本。参考中缺少的内部组织、身份和制度仍标未知，留待目标企业补充。\n\n## 指标体系：公开披露与建议分列\n\n本版于 2026-11-12 再次核对 [FY2026 官方 10-K](https://investors.nike.com/sec-filings/all-sec-filings/content/0000320187-26-000088/nke-20260531.htm) 中 Results of Operations／Gross Margin、Segment Information 及零售门店表。公开报表列示收入、销售成本、毛利、毛利率，并按其报告范围展示收入与门店资料。这里仅整理度量类别与口径边界，不抄录金额或建立真实计算包。\n\n下表 `F` 指度量在公开报告中出现；`M` 指本包的参考归类及字段结构。`metricKey` 是参考项标识，不是 Nike 系统码或正式 SAP 指标。收入确认、成本、合并调节、货币中性变化等须回到完整原文，不能由下表短定义代替。\n\n| 主题／metricKey | F：可核公开内容 | M：定义与对象粒度骨架 | 维度、单位、时间与资格 | 数据要求与未知 |\n| --- | --- | --- | --- | --- |\n| 经营规模／`nike.pub.reported_revenues` | 年报的 Revenues | 一个合并／报告范围在财年内的已报告收入 | 报告范围、品牌／产品／渠道等仅按原文可得分组；报表列明的货币单位与财年 | 原财务表、附注及范围；内部逐笔收入映射未知 |\n| 经营价值／`nike.pub.reported_cost_of_sales` | 年报的 Cost of sales | 同财务范围和财年的已报告销售成本 | 与收入范围和币种一致；按原表单位 | 账务与成本附注；商品或门店级分摊未知 |\n| 经营价值／`nike.pub.reported_gross_profit` | 年报的 Gross profit | 读取原报表毛利；本包建议与同范围收入及成本建立核对关系 | 财务范围与财年；货币 | 完整表及调节依据；业务流水差额不自动等于报表毛利 |\n| 经营价值／`nike.pub.reported_gross_margin` | 年报的 Gross margin | 读取原报表比率；模板建议核对同范围毛利与收入的关系 | 同一报告范围／财年；百分比 | 不直接平均分部毛利率，零收入及调整遵原文 |\n| 经营结构／`nike.pub.reported_revenue_breakdown` | 年报的地理、产品及经营渠道收入展示 | 各报告维度内的分组收入 | 各自报告维度、期间和单位；不是任意可交叉切片数据 | 报告范围与完整合并调节；未披露的维度交叉保持未知 |\n| 经营网络／`nike.pub.reported_store_count` | 年报零售门店表 | 指定报告时点及门店类别的已报告数量 | 地区、品牌／店类以原表为准；家；报告时点 | 完整表及分类说明；非全渠道所有合作店名录，内部门店键未知 |\n\n公开指标可参考地组织为经营规模、经营价值、经营结构和经营网络主题。T01 的库存周转、履约及时性等也可作为目标企业候选，但本次来源不据此证明 Nike 采用这些内部 KPI、公式或阈值。Nike 的内部会员、商品生命周期及经营诊断指标体系仍未知。\n\n## 指标关系模板\n\n| 关系类别 | 公开参考可以支持什么 | 内化限制 |\n| --- | --- | --- |\n| 目录归属 | 本包把公开度量归入上述四个主题 | 是建模建议，不是 Nike 内部指标目录 |\n| 公式依赖 | 建议把毛利与收入／成本、毛利率与毛利／收入作同范围核对 | 正式计算以准确 SAP 定义及完整财务政策为准，不从报表标题推导全部调整规则 |\n| 统计分解 | 在各原报告维度内核对收入分组与相应总额 | 地区、产品、渠道是不同视角，不跨维度重复求和；范围及调节项须完整 |\n| 分析用途关联 | 可将规模、渠道结构与毛利共同用于经营分析 | 不能据其并列就断言渠道变化导致毛利变化；原文解释与独立证据分别处理 |\n\n目录与模型不保存另一份可独立修改的正式公式。后续若形成 SAP 包，各参考项绑定准确包 ID、版本和指标名；原 `SourceRef.locator` 的含义保持，项定位单独记录。\n\n## 三类资产关联表\n\n以下关联均为 `M`，不是 Nike 内部模型或数据血缘。\n\n| 主数据／参考对象 | 指标参考项 | 本体关系与时间条件 | 实际 Binding 与证据状态 |\n| --- | --- | --- | --- |\n| 企业／法律及报告范围 | `nike.pub.reported_revenues`、成本、毛利及毛利率 | `ont.financial_measure_for_scope`；财年与合并范围明确 | 可引用原报表定位；内部账务明细及目标企业映射未核 |\n| `ReportingSegment`、`Market` | 公开收入分组 | `ont.reports_under_segment`；报告分部不直接等于法人或运营组织 | 报告表维度可查；完整国家／内部组织关联待证据 |\n| 品牌、商品分类 | 产品／品牌范围内公开度量 | `ont.product_classified_as`、`ont.measure_for_product_scope` | 报表分类与内部款色码映射未知，不推算 SKU 级收入 |\n| `Channel`、`Touchpoint` | 公开渠道收入展示 | `ont.operates_via_channel`；直销／批发与具体入口分别表达 | 公开经营路径有依据；订单触点和会员共享映射未知 |\n| `md.store` 对应门店、地点、经营者 | 公开门店数量 | `ont.operated_by_during`、`ont.store_at_site`；报告时点及类别明确 | 原表不构成全量门店主表；经营记录和历史映射待资料 |\n\n## 企业内化与四项状态\n\n每个公开参考项保留 N01 及财年、表名／章节；目标企业记录独立的报告范围、期间、单位、数据和政策，不迁入 Nike 的数值或制度。公开报表可读不代表目标企业已完成数据映射。\n\n定义状态分别标“公开报表定义范围可查／内部规则未知／目标企业待核”；数据映射、当前可计算及实际使用仍分别记录。参考文件审核通过不能把目标企业任何指标标为正式、可计算或使用通过。若公开表格解析后用于一次限定参考分析，也只核定该公开输入及用途，不推广到内部经营数据。\n"};
+document.addEventListener('click', function (event) {
+  const a=event.target.closest('a[href*="reference-templates/v0.2/"]');
+  if (!a) return;
+  const name=a.getAttribute('href').split('/').pop();
+  if (name in bundledOriginals) a.href=URL.createObjectURL(new Blob([bundledOriginals[name]], {type:'text/plain;charset=utf-8'}));
+}, true);
+</script>
+</body>
+</html>

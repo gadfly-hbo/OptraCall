@@ -73,6 +73,32 @@ test('write_report keeps one complete file on a same-name race and publishes not
   assert.deepEqual(await fs.readdir(path.join(project.rootPath, '060_reports')), [args.filename]);
 });
 
+test('a same-byte retry can replace an unpublished report reservation but cannot replace a saved report', async t => {
+  const { projects, project, task, context } = await fixture(t);
+  const filename = 'reservation-retry.md';
+  const content = '同一份合成报告';
+  const target = path.join(project.rootPath, '060_reports', filename);
+  const admissions: string[] = [];
+  await assert.rejects(projects.writeBoundReport(project.id, task.id, filename, content, {
+    ...context,
+    beforePublication: receipt => {
+      admissions.push(receipt.sha256);
+      throw new Error('scope changed before publication');
+    },
+  }), /scope changed before publication/);
+  assert.equal(existsSync(target), false);
+  const saved = await projects.writeBoundReport(project.id, task.id, filename, content, {
+    ...context,
+    beforePublication: receipt => { admissions.push(receipt.sha256); },
+  });
+  assert.deepEqual(admissions, [saved.sha256, saved.sha256]);
+  await assert.rejects(projects.writeBoundReport(project.id, task.id, filename, content, {
+    ...context,
+    beforePublication: () => { assert.fail('a saved file cannot acquire replacement scope'); },
+  }), /report_name_conflict/);
+  assert.equal(readFileSync(target, 'utf8'), content);
+});
+
 test('read_catalog uses the current enabled catalogue without creating or refreshing the store', async t => {
   const { enterpriseMaterials, context, port } = await fixture(t);
   await assert.rejects(port('read-catalog', {}, context), /enterprise_source_missing/);

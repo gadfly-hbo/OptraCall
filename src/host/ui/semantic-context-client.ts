@@ -133,7 +133,7 @@ export function isSemanticSourcesRecorded(value: unknown): value is SemanticSour
 }
 
 export const readSemanticContext: SemanticContextReader = async (projectId, taskId, input, signal) => {
-  const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/semantic-context`, { method: 'POST', credentials: 'omit', mode: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'x-optracall-client': '1' }, body: JSON.stringify(input), signal });
+  const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/semantic-context`, { method: 'POST', credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'x-optracall-client': '1' }, body: JSON.stringify(input), signal });
   let result;
   try { result = await response.json(); }
   catch { throw new SemanticContextRequestError('semantic_context_invalid_response', response.status, '本次来源回包无法核定，原记录保持。'); }

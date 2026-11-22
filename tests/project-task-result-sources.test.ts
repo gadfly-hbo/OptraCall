@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { SessionManager } from '../src/agent/sdk.ts';
 import { ProjectStore } from '../src/host/project-store.ts';
-import { listTaskBoundReports } from '../src/host/project-task-result-sources.ts';
+import { listTaskBoundReports, listTaskResultSources, projectTaskResultTime } from '../src/host/project-task-result-sources.ts';
 
 const configuration = { id: 'synthetic', revision: 1, provider: 'synthetic', model: 'synthetic', name: 'Synthetic', baseUrl: 'https://example.invalid' };
 function persistSession(manager: ReturnType<typeof SessionManager.create>) {
@@ -38,8 +38,25 @@ test('saved result discovery uses the exact Host report receipt in the original 
   assert.equal(results[0].taskId, task.id);
   assert.equal(results[0].sha256, data.sha256);
   assert.equal('path' in results[0], false);
+  assert.equal('savedAt' in results[0], false);
+  assert.ok(Number.isFinite(Date.parse(projectTaskResultTime(results[0]) ?? '')));
   assert.deepEqual(await fs.readFile(native), bytes);
   assert.equal((await fs.stat(native)).mtimeMs, before.mtimeMs);
+});
+
+test('the native final-reply timestamp stays available to Host policy without changing the exact source shape', async t => {
+  const { project, task, manager } = await fixture(t);
+  const requestId = randomUUID(), sessionId = manager.getSessionId();
+  manager.appendCustomEntry('optracall.run', { phase: 'started', requestId, sessionId });
+  persistSession(manager);
+  manager.appendCustomEntry('optracall.run', { phase: 'settled', outcome: 'completed', requestId, sessionId });
+  const { replies } = await listTaskResultSources(project, task);
+  assert.equal(replies.length, 1);
+  const reply = replies[0]!;
+  assert.equal(reply.requestId, requestId);
+  assert.ok(Number.isFinite(Date.parse(projectTaskResultTime(reply) ?? '')));
+  assert.deepEqual(Object.keys(reply).sort(), ['bytes', 'messageId', 'projectId', 'requestId', 'sessionId', 'sha256', 'taskId']);
+  assert.equal(projectTaskResultTime({ ...reply }), undefined);
 });
 
 test('imported parent receipts do not become writes by another session, while genuine writes by both sessions retain separate versions', async t => {

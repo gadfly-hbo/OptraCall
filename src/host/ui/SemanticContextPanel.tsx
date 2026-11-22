@@ -6,19 +6,39 @@ import type { SemanticContextReader, SemanticContextRecord, SemanticGraphResult,
 import type { StudioSemanticGraphSourceRef } from '../../../extensions/business-plugins/semantic-context/graph.ts';
 import { StudioRuleReceiptView } from './StudioRuleExecutionView.tsx';
 import { StudioFoundationContent } from './StudioFoundationView.tsx';
+import { readPreservedReportSnapshot, readTurnPackEvidence, type TurnPackEvidenceResponse } from './member-pack-client.ts';
 import './semantic-context.css';
 
-export type SemanticContextPanelProps = { projectId: string; taskId: string; records?: AssetContextRecord[]; readContext?: SemanticContextReader; onFollowup?: (draft: string) => void };
+export type SemanticContextPanelProps = {
+  projectId: string;
+  taskId: string;
+  sessionId?: string;
+  messageId?: string;
+  records?: AssetContextRecord[];
+  turnEvidence?: TurnPackEvidenceResponse;
+  readContext?: SemanticContextReader;
+  onFollowup?: (draft: string) => void;
+};
 
 export function SemanticContextPanel(props: SemanticContextPanelProps) {
   return <SemanticContextOwner key={`${props.projectId}/${props.taskId}`} {...props} />;
 }
 
-function SemanticContextOwner({ projectId, taskId, records = [], readContext = readSemanticContext, onFollowup }: SemanticContextPanelProps) {
+function SemanticContextOwner({ projectId, taskId, sessionId, messageId, records = [], turnEvidence: suppliedTurnEvidence, readContext = readSemanticContext, onFollowup }: SemanticContextPanelProps) {
   const [open, setOpen] = useState(false), trigger = useRef<HTMLButtonElement>(null);
   const [view, setView] = useState<'saved' | 'current'>('saved'), [lookup, setLookup] = useState<SemanticContextLookup>({ state: 'idle' });
+  const [turnEvidence, setTurnEvidence] = useState<TurnPackEvidenceResponse | undefined>(suppliedTurnEvidence);
+  const [reportPreview, setReportPreview] = useState<{ locator: string; sha256: string; text: string } | { error: string } | null>(null);
   const current = useRef(0), controller = useRef<AbortController | null>(null), input = useRef<SemanticQueryInput | null>(null);
   useEffect(() => () => { ++current.current; controller.current?.abort(); }, []);
+  useEffect(() => {
+    if (!open || suppliedTurnEvidence) return;
+    const ac = new AbortController();
+    void readTurnPackEvidence(projectId, taskId, sessionId, messageId, ac.signal)
+      .then(res => { if (!ac.signal.aborted) setTurnEvidence(res); })
+      .catch(() => { /* pack feature may be disabled or empty */ });
+    return () => ac.abort();
+  }, [open, projectId, taskId, sessionId, messageId, suppliedTurnEvidence]);
   function cancel() { ++current.current; controller.current?.abort(); controller.current = null; setLookup({ state: 'cancelled' }); }
   function close() { if (controller.current) cancel(); setOpen(false); }
   async function query(request: SemanticQueryInput) {
@@ -34,10 +54,18 @@ function SemanticContextOwner({ projectId, taskId, records = [], readContext = r
       setLookup({ state: 'error', error: error instanceof Error ? error.message : '本次来源查询未能核定。' });
     } finally { if (epoch === current.current) controller.current = null; }
   }
+  async function inspectSavedReport(packId: string, locator: string, sha256?: string) {
+    try {
+      const snap = await readPreservedReportSnapshot(packId, projectId, locator, sha256, taskId);
+      setReportPreview({ locator: snap.locator, sha256: snap.sha256, text: snap.text });
+    } catch (err) {
+      setReportPreview({ error: err instanceof Error ? err.message : '无法按准确摘要回读原报告。' });
+    }
+  }
   const read = (target: SemanticTarget) => { void query({ action: 'read', target }); }, trace = (target: SemanticTarget) => { void query({ action: 'trace', target }); };
   return <div className="semantic-context-entry"><button ref={trigger} className="text-button" type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>本次依据</button>{open && <PersonalDialog drawer title="本次依据与前提变化" subtitle="原记录与现在回看分别展示；查看不启动模型" returnFocus={trigger.current} onClose={close}>
     <nav className="sc-view-switch" aria-label="依据查看方式"><button className="text-button" type="button" aria-pressed={view === 'saved'} onClick={() => setView('saved')}>原稿与当时返回</button><button className="text-button" type="button" aria-pressed={view === 'current'} onClick={() => setView('current')}>现在回看</button></nav>
-    <SemanticContextDetails records={records} view={view} lookup={lookup} onRead={read} onTrace={trace} onCancel={cancel} onFollowup={onFollowup ? draft => { close(); onFollowup(draft); } : undefined} onContinue={lookup.result?.coverage.continuation && input.current ? () => { void query({ ...input.current!, continuation: lookup.result!.coverage.continuation }); } : undefined} onContinueRecord={record => { if (record.input && record.result?.coverage.continuation) void query({ ...record.input, continuation: record.result.coverage.continuation }); }} />
+    <SemanticContextDetails records={records} turnEvidence={turnEvidence} reportPreview={reportPreview} onInspectSavedReport={inspectSavedReport} view={view} lookup={lookup} onRead={read} onTrace={trace} onCancel={cancel} onFollowup={onFollowup ? draft => { close(); onFollowup(draft); } : undefined} onContinue={lookup.result?.coverage.continuation && input.current ? () => { void query({ ...input.current!, continuation: lookup.result!.coverage.continuation }); } : undefined} onContinueRecord={record => { if (record.input && record.result?.coverage.continuation) void query({ ...record.input, continuation: record.result.coverage.continuation }); }} />
   </PersonalDialog>}</div>;
 }
 
@@ -129,34 +157,94 @@ export function SemanticGraphEvidence({ result }: { result: SemanticGraphResult 
   </div>;
 }
 
+const verificationStatusText: Record<'pending' | 'pass' | 'fail' | 'partial', string> = {
+  pending: '待独立核验',
+  pass: '独立核验通过',
+  fail: '独立核验未通过',
+  partial: '部分通过（仍待补齐）',
+};
+
 function StudioEvidence({ evidence }: { evidence: StudioContextEvidence }) {
   if (evidence.action === 'reason') return <StudioRuleReceiptView receipt={evidence.result} historical />;
-  const label = evidence.stage === 'directory' ? '企业资产目录' : evidence.stage === 'source' ? '准确来源读取' : evidence.stage === 'declaration' ? '作者使用声明' : '准确资产信息';
-  const use = evidence.result.use && typeof evidence.result.use === 'object' && !Array.isArray(evidence.result.use) ? evidence.result.use as Record<string, unknown> : undefined;
-  return <section className="sc-source"><div className="sc-row"><h3>{label}</h3><span className="sc-status">{evidence.stage === 'directory' ? '目录提供' : evidence.declaration ? '作者声明' : evidence.complete === true ? '本次返回完整' : evidence.complete === false ? '部分正文／元数据' : '范围待核'}</span></div>
-    <p className="sc-note">{evidence.stage === 'directory' ? '目录命中不代表取得正文或采用资产。' : evidence.declaration ? '原 Studio 已保存作者明确声明的引用；不证明真实计算采用或专业正确。' : '这里只展示当时实际返回的内容；读取成功不代表正确应用，采用声明另列。'}独立核验：本记录未提供独立核验结果。</p>
-    {evidence.ref && <dl className="sc-metadata"><dt>来源权威</dt><dd>{evidence.ref.authority}</dd><dt>准确资产</dt><dd>{evidence.ref.id}</dd><dt>原版本</dt><dd>{evidence.ref.version}</dd>{evidence.ref.sha256 && <><dt>原内容摘要</dt><dd>{evidence.ref.sha256}</dd></>}</dl>}
-    {use && <p className="sc-meta">声明记录：{typeof use.id === 'string' ? use.id : '身份未记录'}；原记录的评估不自动等同于独立核验。</p>}
+  const label = evidence.stage === 'directory' ? '企业资产目录' : evidence.stage === 'source' ? '准确来源读取' : evidence.stage === 'declaration' ? '作者使用声明' : evidence.stage === 'assessment' ? '独立核验回执' : '准确资产信息';
+  const use = evidence.result.use && typeof evidence.result.use === 'object' && !Array.isArray(evidence.result.use) ? evidence.result.use as Record<string, any> : undefined;
+  const memberPacks = Array.isArray(evidence.result.memberPacks) ? evidence.result.memberPacks as Record<string, any>[] : [];
+  const memberPackUses = Array.isArray(evidence.result.memberPackUses) ? evidence.result.memberPackUses as Record<string, any>[] : [];
+  const declaredReport = use?.report && typeof use.report === 'object' ? use.report as Record<string, any> : undefined;
+  return <section className="sc-source"><div className="sc-row"><h3>{label}</h3><span className="sc-status">{evidence.stage === 'directory' ? '目录提供' : evidence.declaration ? '作者声明' : evidence.stage === 'assessment' ? '独立核验' : evidence.complete === true ? '本次返回完整' : evidence.complete === false ? '部分正文／元数据' : '范围待核'}</span></div>
+    <p className="sc-note">{evidence.stage === 'directory' ? '目录命中不代表取得正文或采用资产。' : evidence.declaration ? '原 Studio 已保存作者明确声明的引用；不证明真实计算采用或专业正确。' : evidence.stage === 'assessment' ? '原 Studio 已记录核验回执；仅独立任务完整实读并通过复算核查后记为通过。' : '这里只展示当时实际返回的内容；读取成功不代表正确应用，采用声明另列。'}{memberPackUses.length === 0 ? '独立核验：详见下方本轮企业包独立核验状态（查实错版即使汇总数字相同也判该用途未通过，缺实际读取证据保持待验证）。' : ''}</p>
+    {memberPacks.length > 0 && <div className="sc-relations"><h4>本任务固定的领域资产包目录供给</h4>{memberPacks.map((pack, idx) => <div className="sc-relation" key={String(pack.packId ?? idx)}><strong>{String(pack.name || pack.packCode || '企业领域资产包')}</strong> · 固定版 {pack.pinnedVersion ? `v${String(pack.pinnedVersion)}` : '未固定/未授权'}{pack.authorizationNote ? <p className="sc-meta">{String(pack.authorizationNote)}</p> : null}{Array.isArray(pack.purposes) && pack.purposes.length > 0 && <ul>{pack.purposes.map((pm: Record<string, any>) => <li key={String(pm.purposeId)}><strong>{String(pm.limitedCalculationName || pm.title)}</strong>（{String(pm.tier)}）· 授权层次：{Array.isArray(pm.accessLevels) ? pm.accessLevels.join(' / ') : '未核'}{pm.dataCutoffAt ? ` · 包截止 ${String(pm.dataCutoffAt)}` : ''}{Array.isArray(pm.grantedStores) && pm.grantedStores.length > 0 ? ` · 获准门店：${pm.grantedStores.join('、')}` : ''}{pm.authorizedSummary ? ` · 获准汇总：${String(pm.authorizedSummary.summaryAssetId)}@${String(pm.authorizedSummary.summaryVersion)}（${String(pm.authorizedSummary.grain)}）` : ''}{pm.restrictedDetailNote ? ` · ${String(pm.restrictedDetailNote)}` : ''}{Array.isArray(pm.dependencies) && pm.dependencies.length > 0 && <div className="sc-meta">固定原依赖：{pm.dependencies.map((d: any) => `${String(d.role)}:${String(d.ref?.id)}@${String(d.ref?.version)}`).join('；')}</div>}</li>)}</ul>}</div>)}</div>}
+    {evidence.ref && <dl className="sc-metadata"><dt>来源权威</dt><dd>{evidence.ref.authority}</dd><dt>准确资产</dt><dd>{evidence.ref.id}</dd><dt>原版本</dt><dd>{evidence.ref.version}</dd>{evidence.ref.sha256 && <><dt>原内容摘要</dt><dd>{evidence.ref.sha256}</dd></>}{evidence.result.pinnedPack && typeof evidence.result.pinnedPack === 'object' ? <><dt>所属固定包版</dt><dd>v{String((evidence.result.pinnedPack as { packVersion?: string }).packVersion ?? '')}</dd></> : null}</dl>}
+    {use && <dl className="sc-metadata"><dt>声明记录</dt><dd>{typeof use.id === 'string' ? use.id : '身份未记录'}</dd>{declaredReport?.locator && <><dt>关联已保存报告</dt><dd>{String(declaredReport.locator)}{declaredReport.sha256 ? ` · SHA-256 ${String(declaredReport.sha256).slice(0, 12)}` : ''}</dd></>}</dl>}
+    {memberPackUses.length > 0 && <div className="sc-relations"><h4>本轮已登记的企业包采用与核验状态</h4>{memberPackUses.map((u, idx) => <p className="sc-meta" key={String(u.id ?? idx)}>用途 {String(u.purposeId)}（v{String(u.packVersion)}）· 状态：<strong>{verificationStatusText[(u.independentVerification?.status as 'pending' | 'pass' | 'fail') ?? 'pending'] ?? String(u.independentVerification?.status)}</strong>{u.independentVerification?.verdictDetail ? ` · ${String(u.independentVerification.verdictDetail)}` : ''}</p>)}</div>}
     {evidence.body !== undefined && <>{evidence.complete === true && <StudioFoundationContent body={evidence.body} sourceRef={evidence.ref} />}<p className="sc-meta">{evidence.complete === false ? '部分正文，不能当作全文。' : evidence.complete === true ? '本次准确返回的正文。' : '实际返回片段，完整性未核定。'}{evidence.range && ` 范围 [${evidence.range.start}, ${evidence.range.end}) / ${evidence.range.total}。`}</p><pre className="sc-paper">{evidence.body}</pre></>}
-    {evidence.stage !== 'declaration' && <p className="sc-meta">本项未保存作者使用声明；计算与判断请结合原报告、实际计算记录及其他来源声明核对。</p>}
+    {evidence.stage !== 'declaration' && evidence.stage !== 'assessment' && <p className="sc-meta">本项未保存作者使用声明；计算与判断请结合原报告、实际计算记录及其他来源声明核对。</p>}
     <details><summary>原 Studio 回执与准确引用</summary><pre>{JSON.stringify({ action: evidence.action, input: evidence.input, result: evidence.result }, null, 2)}</pre></details>
   </section>;
 }
 
+function TurnPackEvidenceSection({
+  turnEvidence,
+  reportPreview,
+  onInspectSavedReport,
+}: {
+  turnEvidence: TurnPackEvidenceResponse;
+  reportPreview?: { locator: string; sha256: string; text: string } | { error: string } | null;
+  onInspectSavedReport?: (packId: string, locator: string, sha256?: string) => void;
+}) {
+  const hasAny = turnEvidence.savedReports.length > 0 || turnEvidence.useRecords.length > 0 || turnEvidence.feedbackLinks.length > 0;
+  if (!hasAny) return null;
+  const primaryPackId = turnEvidence.useRecords[0]?.packId ?? turnEvidence.feedbackLinks[0]?.packId;
+  return <section className="sc-source" aria-label="本轮已保存报告与独立核验结果">
+    <div className="sc-row"><h3>本轮已保存报告与独立核验结果</h3><span className="sc-status">{turnEvidence.useRecords.some(r => r.use.independentVerification.status === 'pass') ? '已有独立核验通过' : turnEvidence.useRecords.some(r => r.use.independentVerification.status === 'fail') ? '存在核验未通过' : '已关联本轮产物'}</span></div>
+    {turnEvidence.savedReports.length > 0 && <div className="sc-relations"><h4>同轮已保存分析报告</h4><ul>{turnEvidence.savedReports.map((rep, idx) => <li key={`${rep.locator}:${rep.sha256}:${idx}`}><code>{rep.locator}</code>{rep.sha256 ? ` · SHA-256 ${rep.sha256.slice(0, 12)}` : ''}{primaryPackId && rep.locator && onInspectSavedReport && <> <button type="button" className="text-button" onClick={() => onInspectSavedReport(primaryPackId, rep.locator!, rep.sha256)}>按准确摘要查看原报告</button></>}</li>)}</ul></div>}
+    {turnEvidence.useRecords.length > 0 && <div className="sc-relations"><h4>企业包采用与独立核验结论</h4>{turnEvidence.useRecords.map(entry => {
+      const iv = entry.use.independentVerification;
+      return <article className="sc-relation" key={entry.use.id}>
+        <p><strong>{entry.packName || entry.packCode}</strong> · v{entry.use.packVersion} · 用途 <code>{entry.use.purposeId}</code> · <strong>{verificationStatusText[iv.status]}</strong>{iv.selfAssessmentOnly ? '（仅作者自评，未获独立通过）' : ''}</p>
+        <p className="sc-meta">原报告：<code>{entry.use.reportRef.locator || entry.use.reportRef.id}</code>{entry.use.reportRef.sha256 ? `（SHA-256 ${entry.use.reportRef.sha256.slice(0, 12)}）` : ''}{entry.use.reportRef.locator?.startsWith('060_reports/') && onInspectSavedReport && <> <button type="button" className="text-button" onClick={() => onInspectSavedReport(entry.packId, entry.use.reportRef.locator!, entry.use.reportRef.sha256)}>查看原报告</button></>}</p>
+        {iv.verifierTaskId && <p className="sc-meta">
+          独立核验任务：{iv.verifierTaskId}
+          {iv.assessmentReportRef?.locator ? ` · 核验报告：${iv.assessmentReportRef.locator}` : ''}
+          {iv.verifierEvidenceSummary
+            ? ` · 核验实读原依赖 ${iv.verifierEvidenceSummary.readRequiredAssetsCount}${typeof iv.verifierEvidenceSummary.requiredAssetsCount === 'number' ? `/${iv.verifierEvidenceSummary.requiredAssetsCount}` : ''} 项`
+            : ''}
+          {iv.verifierEvidenceSummary?.targetReportChecked === true
+            ? ` · 已实读目标报告${typeof iv.verifierEvidenceSummary.targetReportReadTurnIndex === 'number' ? `（回合 #${iv.verifierEvidenceSummary.targetReportReadTurnIndex}）` : ''}`
+            : iv.verifierEvidenceSummary?.targetReportChecked === false
+              ? ' · 未实读目标报告'
+              : ''}
+          {typeof iv.verifierEvidenceSummary?.assessmentTurnIndex === 'number' ? ` · 核验回合 #${iv.verifierEvidenceSummary.assessmentTurnIndex}` : ''}
+          {iv.verifierEvidenceSummary?.carriedFromTurnIndices?.length ? `（沿用前序回合 #${iv.verifierEvidenceSummary.carriedFromTurnIndices.join(', #')} 实读）` : ''}
+          {iv.verifierEvidenceSummary?.assessmentReportBoundToTarget === false ? ' · 核验报告未绑定目标报告' : ''}
+          {iv.verifierEvidenceSummary?.assessmentDisclaimerRejected === true ? ' · 核验声明未查看或未对照原报告（不可判通过）' : ''}
+        </p>}
+        <p className="sc-meta">核验说明：{iv.verdictDetail}</p>
+      </article>;
+    })}</div>}
+    {turnEvidence.feedbackLinks.length > 0 && <div className="sc-relations"><h4>本轮关联企业包反馈与原 Case</h4><ul>{turnEvidence.feedbackLinks.map(fb => <li key={fb.feedbackId}><strong>{fb.feedbackCode} · {fb.title}</strong>（{fb.status}）· 报告 <code>{fb.reportRef.locator || '原回复'}</code>{fb.originalCaseRef ? ` · 原 Case：${fb.originalCaseRef.summary || fb.originalCaseRef.caseId}` : ''}</li>)}</ul></div>}
+    {reportPreview && ('error' in reportPreview
+      ? <p className="sc-error">{reportPreview.error}</p>
+      : <div className="sc-relations"><h4>原报告快照回读 · {reportPreview.locator}</h4><p className="sc-meta">SHA-256：{reportPreview.sha256}</p><pre className="sc-paper">{reportPreview.text}</pre></div>)}
+  </section>;
+}
+
 export type SemanticContextLookup = { state: 'idle' | 'loading' | 'cancelled' | 'error' | 'done'; result?: SemanticQueryResult; error?: string };
-export function SemanticContextDetails({ records, view, lookup, onRead, onTrace, onCancel, onFollowup, onContinue, onContinueRecord }: { records: AssetContextRecord[]; view: 'saved' | 'current'; lookup: SemanticContextLookup; onRead?: (target: SemanticTarget) => void; onTrace?: (target: SemanticTarget) => void; onCancel?: () => void; onFollowup?: (draft: string) => void; onContinue?: () => void; onContinueRecord?: (record: SemanticContextRecord) => void }) {
+export function SemanticContextDetails({ records, turnEvidence, reportPreview, onInspectSavedReport, view, lookup, onRead, onTrace, onCancel, onFollowup, onContinue, onContinueRecord }: { records: AssetContextRecord[]; turnEvidence?: TurnPackEvidenceResponse; reportPreview?: { locator: string; sha256: string; text: string } | { error: string } | null; onInspectSavedReport?: (packId: string, locator: string, sha256?: string) => void; view: 'saved' | 'current'; lookup: SemanticContextLookup; onRead?: (target: SemanticTarget) => void; onTrace?: (target: SemanticTarget) => void; onCancel?: () => void; onFollowup?: (draft: string) => void; onContinue?: () => void; onContinueRecord?: (record: SemanticContextRecord) => void }) {
   return <div className="sc-content" aria-busy={view === 'current' && lookup.state === 'loading' || undefined}>
     {view === 'saved' ? <>
       <p className="sc-meta">以下按本条回复可核定的原工具结果展示。提供过、启用过与作者声明引用分别保留；不能重建当时全部已知信息。</p>
-      {!records.length && <p className="sc-empty">本条回复尚无可核定的语义工具记录，原稿引用与实际采用为未知；不会用当前配置补齐。原任务仍可继续。</p>}
+      {turnEvidence && <TurnPackEvidenceSection turnEvidence={turnEvidence} reportPreview={reportPreview} onInspectSavedReport={onInspectSavedReport} />}
+      {!records.length && !(turnEvidence && (turnEvidence.savedReports.length || turnEvidence.useRecords.length || turnEvidence.feedbackLinks.length)) && <p className="sc-empty">本条回复尚无可核定的语义工具记录，原稿引用与实际采用为未知；不会用当前配置补齐。原任务仍可继续。</p>}
       {records.map((record, index) => <section className="sc-record" key={index} aria-label={`来源查询结果 ${index + 1}`}>
         {record.issue && <p className="sc-error" role="status">{record.issue} 原稿引用与提供范围未知，原记录保持。</p>}
         {record.issue && record.input?.action === 'read' && record.input.target && onRead && <div className="sc-note"><p>当前回读只核对这份准确来源，不能补造历史子工具正文或保存回执。</p><button className="secondary-button" type="button" onClick={() => onRead(record.input!.target!)}>现在按原引用回读</button></div>}
         {record.result && <SemanticContextEvidence result={record.result} onRead={onRead} onTrace={onTrace} onContinue={record.input && onContinueRecord ? () => onContinueRecord(record) : undefined} />}
         {record.studio && <StudioEvidence evidence={record.studio} />}
+        {record.savedReport && <section className="sc-source"><h3>本轮已保存分析报告</h3><dl className="sc-metadata"><dt>报告位置</dt><dd>{record.savedReport.locator}</dd>{record.savedReport.sha256 && <><dt>文件 SHA-256</dt><dd>{record.savedReport.sha256}</dd></>}</dl></section>}
         {record.graphResult && <SemanticGraphEvidence result={record.graphResult} />}
         {record.receipt && <section className="sc-source"><h3>作者声明引用回执</h3><p className="sc-note">原 M2 已返回这份成果来源的保存回执；只代表作者明确声明引用，不证明真实计算采用或专业正确性。</p><dl className="sc-metadata"><dt>准确来源记录</dt><dd>{record.receipt.citationId}</dd><dt>原成果</dt><dd>{record.receipt.report.originalPath}</dd><dt>原操作</dt><dd>{record.receipt.operationId}</dd><dt>索引版本</dt><dd>{record.receipt.indexRevision}</dd></dl><p className="sc-meta">{record.receipt.replayed ? '回读原操作回执；没有重复创建引用。' : '本次原操作回执。'}</p>{onRead && <button className="secondary-button" type="button" onClick={() => onRead({ kind: 'data-citation', projectId: record.receipt!.projectId, citationId: record.receipt!.citationId })}>查看这份声明的准确来源</button>}<details><summary>原回执与校验信息</summary><pre>{JSON.stringify(record.receipt, null, 2)}</pre></details></section>}
-        {!record.result && !record.graphResult && !record.receipt && !record.studio && !record.issue && <p className="sc-note">这项原工具结果无法核定，引用与提供范围未知。</p>}
+        {!record.result && !record.graphResult && !record.receipt && !record.studio && !record.savedReport && !record.issue && <p className="sc-note">这项原工具结果无法核定，引用与提供范围未知。</p>}
         {record.native && <details><summary>原生记录身份</summary><dl className="sc-metadata"><dt>会话</dt><dd>{record.native.sessionId}</dd><dt>记录</dt><dd>{record.native.entryId}</dd>{record.native.toolCallId && <><dt>调用</dt><dd>{record.native.toolCallId}</dd></>}{record.native.recordedAt && <><dt>原生记录时间</dt><dd>{record.native.recordedAt}</dd></>}</dl></details>}
       </section>)}
     </> : <>

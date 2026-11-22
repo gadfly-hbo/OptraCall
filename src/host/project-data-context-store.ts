@@ -39,8 +39,8 @@ function operation(record: unknown, projectId: string, operationId: string, kind
 
 export class ProjectDataContextStore {
   readonly writeVersion: 1 | 2;
-  readonly options: { dataRoot: string; projects: ProjectStore; validateReferences?: ValidateDataContextReferences; writeVersion?: 1 | 2 };
-  constructor(options: { dataRoot: string; projects: ProjectStore; validateReferences?: ValidateDataContextReferences; writeVersion?: 1 | 2 }) {
+  readonly options: { dataRoot: string; projects: ProjectStore; validateReferences?: ValidateDataContextReferences; authorizeEvidence?: (projectId: string, relativePath: string, bytes: Buffer) => void; writeVersion?: 1 | 2 };
+  constructor(options: { dataRoot: string; projects: ProjectStore; validateReferences?: ValidateDataContextReferences; authorizeEvidence?: (projectId: string, relativePath: string, bytes: Buffer) => void; writeVersion?: 1 | 2 }) {
     if (path.resolve(options.dataRoot) !== options.projects.dataRoot) fail('data_context_root_mismatch');
     this.options = options; this.writeVersion = options.writeVersion ?? 2;
     if (![1, 2].includes(this.writeVersion)) fail('invalid_data_context_write_version');
@@ -81,9 +81,16 @@ export class ProjectDataContextStore {
     const index = await this.#loadIndex(projectId); if (!index) return fail('data_context_version_not_found');
     const ref = this.#dataset(index, datasetId).versions.find(version => version.inputVersionId === id(inputVersionId)); if (!ref) return fail('data_context_version_not_found');
     const record = this.#decodeVersion(await this.#record(projectId, this.#versionPath(datasetId, inputVersionId), ref.recordSha256), projectId, datasetId, inputVersionId);
-    await this.#inputBytes(projectId, record); return record;
+    const bytes = await this.#inputBytes(projectId, record);
+    this.options.authorizeEvidence?.(projectId, record.sourcePath, bytes);
+    return record;
   }
-  async readInputEvidence(projectId: string, datasetId: string, inputVersionId: string): Promise<{ record: InputVersionRecord; bytes: Buffer }> { const record = await this.readVersion(projectId, datasetId, inputVersionId); return { record, bytes: await this.#inputBytes(projectId, record) }; }
+  async readInputEvidence(projectId: string, datasetId: string, inputVersionId: string): Promise<{ record: InputVersionRecord; bytes: Buffer }> {
+    const record = await this.readVersion(projectId, datasetId, inputVersionId);
+    const bytes = await this.#inputBytes(projectId, record);
+    this.options.authorizeEvidence?.(projectId, record.sourcePath, bytes);
+    return { record, bytes };
+  }
   async #publish<T extends DataContextOperation & { schemaVersion: 1 | 2 }>(projectId: string, input: { operationId: string; baseIndexRevision: number }, kind: T['operationKind'], recordPath: string, normalized: unknown, committed: (index: ProjectDataContextIndex) => string | null, decode: (value: unknown) => T, verify: (record: T) => Promise<void>, create: (index: ProjectDataContextIndex) => Promise<T>, append: (index: ProjectDataContextIndex, record: T, recordHash: string) => void, assertWritable?: () => void): Promise<DataContextWriteResult<T>> {
     assertWritable?.();
     id(input.operationId); integer(input.baseIndexRevision); const fingerprint = digest(canonical(normalized)), root = this.#root(projectId), rootExisted = await exists(root), existingIndex = await this.#loadIndex(projectId, true), index = existingIndex ?? empty(projectId);
@@ -189,10 +196,51 @@ export class ProjectDataContextStore {
   }
   async summary(projectId: string): Promise<DataContextSummary> {
     const index = await this.#loadIndex(projectId); if (!index) return { index: null, datasets: [], citations: [] };
+    async function readable<T>(read: () => Promise<T>): Promise<T | undefined> {
+      try { return await read(); }
+      catch (error) {
+        if (error instanceof ProjectDataContextFault && error.code === 'data_context_evidence_forbidden') return undefined;
+        throw error;
+      }
+    }
     const datasets: DataContextSummary['datasets'] = [];
-    for (const dataset of index.datasets) { const versions: InputVersionRecord[] = [], descriptions: DataDescriptionRevision[] = []; for (const ref of dataset.versions) versions.push(await this.readVersion(projectId, dataset.datasetId, ref.inputVersionId)); for (const ref of dataset.descriptions) descriptions.push(await this.readDescription(projectId, dataset.datasetId, ref.descriptionRevisionId)); datasets.push({ dataset, versions, descriptions }); }
-    const citations: DataCitationRecord[] = []; for (const ref of index.citations) citations.push(await this.readCitation(projectId, ref.citationId));
-    return { index, datasets, citations };
+    for (const dataset of index.datasets) {
+      const versions: InputVersionRecord[] = [];
+      for (const ref of dataset.versions) {
+        const record = await readable(() => this.readVersion(projectId, dataset.datasetId, ref.inputVersionId));
+        if (record) versions.push(record);
+      }
+      const latest = versions.at(-1);
+      if (!latest) continue;
+      const visibleVersions = new Set(versions.map(record => record.inputVersionId));
+      const descriptions: DataDescriptionRevision[] = [];
+      for (const ref of dataset.descriptions) {
+        if (!visibleVersions.has(ref.inputVersionId)) continue;
+        const record = await readable(() => this.readDescription(projectId, dataset.datasetId, ref.descriptionRevisionId));
+        if (record) descriptions.push(record);
+      }
+      const visibleDescriptions = new Set(descriptions.map(record => record.descriptionRevisionId));
+      const projected = {
+        ...dataset,
+        ...(latest.inputVersionId !== dataset.versions.at(-1)?.inputVersionId ? { name: path.basename(latest.sourcePath) } : {}),
+        sourcePath: latest.sourcePath,
+        uploadId: latest.uploadId,
+        versions: dataset.versions.filter(ref => visibleVersions.has(ref.inputVersionId)),
+        descriptions: dataset.descriptions.filter(ref => visibleDescriptions.has(ref.descriptionRevisionId)),
+        latestDescriptionByInputVersion: Object.fromEntries(Object.entries(dataset.latestDescriptionByInputVersion)
+          .filter(([version, description]) => visibleVersions.has(version) && visibleDescriptions.has(description))),
+      };
+      datasets.push({ dataset: projected, versions, descriptions });
+    }
+    const citations: DataCitationRecord[] = [];
+    const citationRefs: ProjectDataContextIndex['citations'] = [];
+    for (const ref of index.citations) {
+      const citation = await readable(() => this.readCitation(projectId, ref.citationId));
+      if (!citation) continue;
+      citations.push(citation);
+      citationRefs.push(ref);
+    }
+    return { index: { ...index, datasets: datasets.map(item => item.dataset), citations: citationRefs }, datasets, citations };
   }
   #decodeDescription(value: unknown, projectId: string, datasetId: string, descriptionRevisionId: string): DataDescriptionRevision {
     operation(value, projectId, descriptionRevisionId, 'save-description');
@@ -309,6 +357,7 @@ export class ProjectDataContextStore {
     const expected = `citations/${record.citationId}/${attachmentIndex === null ? 'report' : 'attachment-' + String(attachmentIndex).padStart(4, '0')}${path.extname(file.originalPath).toLowerCase()}`;
     if (file.evidencePath !== expected) return fail('corrupt_data_context_record'); const bytes = await readBytes(await safePath(this.#root(projectId), expected), record.schemaVersion === 1 ? maxFileBytes : EVIDENCE_FILE_MAX_BYTES);
     if (bytes.length !== file.bytes || digest(bytes) !== file.sha256) return fail('data_context_evidence_hash_mismatch');
+    this.options.authorizeEvidence?.(projectId, file.originalPath, bytes);
     return { file, bytes };
   }
   async #verifyCitation(projectId: string, record: DataCitationRecord): Promise<void> {
