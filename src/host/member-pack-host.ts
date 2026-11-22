@@ -565,7 +565,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return { projectId, enterpriseId: projectEnterpriseId };
   }
 
-  function scopedPack(pack: EnterpriseDomainPack, projectId: string, operator: TrustedHostOperator) {
+  async function scopedPack(pack: EnterpriseDomainPack, projectId: string, operator: TrustedHostOperator) {
     return canReadConstructionPack(pack, projectId, operator) ? pack : redactPackForConsumer(pack, projectId);
   }
 
@@ -1262,6 +1262,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (!enterpriseId || options.enterpriseScopes.enterpriseIdForProject(declaration.projectId) !== enterpriseId) {
       throw new StudioError('studio_report_permission_denied', 403);
     }
+    const permissionAtRead = projectPermissionFingerprint(projectId);
     const grantsNow = projectGrants(enterpriseId, projectId)
       .filter(grant => isGrantActive(grant, Date.now()));
     const qualifications = packs.list(enterpriseId).filter(pack => pack.systemId === systemId).flatMap(pack =>
@@ -1283,14 +1284,16 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (!snapshots.length) throw denied();
       const { brand, channel, stores } = purpose.scope;
       const query = { purposeKey: purpose.purposeKey, purposeScope: { brand, channel, stores } };
-      for (const { binding } of snapshots) {
+      for (const { binding, body } of snapshots) {
         if (!binding.ref.locator || !binding.ref.sha256) throw denied();
-        const current = await options.projects.readFile(projectId, binding.ref.locator).catch(() => undefined);
-        if (!current) throw denied();
-        const visible = buildAuthorizedDataView(current.bytes, binding.ref.locator, allowedGrants, query);
+        const bytes = projectId === use.projectId ? Buffer.from(body, 'utf8')
+          : (await options.projects.readFile(projectId, binding.ref.locator).catch(() => undefined))?.bytes;
+        if (!bytes) throw denied();
+        const visible = buildAuthorizedDataView(bytes, binding.ref.locator, allowedGrants, query);
         if (!visible.allowed || createHash('sha256').update(visible.bytes).digest('hex') !== binding.ref.sha256) throw denied();
       }
     }
+    if (permissionAtRead !== projectPermissionFingerprint(projectId)) throw denied();
   }
 
   function filterDependenciesForAccess(
@@ -2031,7 +2034,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return { verifierReads, summary, wrongVersion: false, failed: assessment.status === 'fail' };
   }
 
-  function redactPackForConsumer(pack: EnterpriseDomainPack, projectId: string): EnterpriseDomainPack {
+  async function redactPackForConsumer(pack: EnterpriseDomainPack, projectId: string): Promise<EnterpriseDomainPack> {
     const { activeOwnerProjectId: _owner, continuationHistory: _continuations, ...visiblePack } = pack;
     const subjectGrants = projectGrants(pack.enterpriseId, projectId);
     const nowMs = Date.now();
@@ -2040,7 +2043,22 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const ownUses = pack.useRecords.filter(u => u.projectId === projectId);
     const purposeForUse = (use: EnterprisePackUseRecord) => pack.packRevisions.find(revision => revision.version === use.packVersion)
       ?.purposeManifests.find(purpose => purpose.purposeId === use.purposeId);
-    const mayReadUse = (use: EnterprisePackUseRecord) => reportUseCovered(use, purposeForUse(use), activeGrants);
+    const readableUses = new Set<string>();
+    const declarations = activeGrants.length ? options.studio.get(pack.systemId).uses : [];
+    for (const use of ownUses) {
+      if (!reportUseCovered(use, purposeForUse(use), activeGrants)) continue;
+      if (use.accessLevel === 'recalculate') {
+        const declaration = declarations.find(record => matchesStudioUse(use, record));
+        if (!declaration) continue;
+        try { await assertDeclaredReportAccess(pack.systemId, projectId, declaration); }
+        catch (error) {
+          if (!(error instanceof StudioError) || error.status !== 403) throw error;
+          continue;
+        }
+      }
+      readableUses.add(use.id);
+    }
+    const mayReadUse = (use: EnterprisePackUseRecord) => readableUses.has(use.id);
     const unavailableEvidence = (use: EnterprisePackUseRecord): EnterprisePackUseRecord['independentVerification'] => ({
       status: use.independentVerification.status,
       verdictDetail: '当前权限不足以展示原核验资料。历史记录已保留。',
@@ -3458,7 +3476,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
       const operator = resolveRequestOperator(request);
       if (enterpriseId) assertOperatorProject(operator, projectId);
-      const enterprisePacks = enterpriseId ? packs.list(enterpriseId).map(pack => scopedPack(pack, projectId, operator)) : [];
+      const enterprisePacks = enterpriseId
+        ? await Promise.all(packs.list(enterpriseId).map(pack => scopedPack(pack, projectId, operator)))
+        : [];
       const matchingUses: Array<{
         packId: string;
         packCode: string;
@@ -3545,7 +3565,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const owned = reader && rawList.find(pack => canReadConstructionPack(pack, reader.projectId, operator));
       const grantAuthority = owned && reader ? await resolveGrantAuthorityForProject(owned.enterpriseId, reader.projectId, owned, operator) : undefined;
       json(response, 200, {
-        packs: reader ? rawList.map(pack => scopedPack(pack, reader.projectId, operator)) : [],
+        packs: reader ? await Promise.all(rawList.map(pack => scopedPack(pack, reader.projectId, operator))) : [],
         readOnlyRollback: !enabled,
         ...(grantAuthority ? { grantAuthority } : {}),
       });
@@ -3601,7 +3621,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (!reader) throw new StudioError('member_pack_operator_context_required', 403);
       const grantAuthority = await resolveGrantAuthorityForProject(pack.enterpriseId, reader.projectId, pack, operator);
       json(response, 200, {
-        pack: scopedPack(pack, reader.projectId, operator),
+        pack: await scopedPack(pack, reader.projectId, operator),
         readOnlyRollback: !enabled,
         ...(grantAuthority ? { grantAuthority } : {}),
       });
@@ -4141,7 +4161,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         };
         const result = await options.operations.run(requestId, { path: url.pathname, input }, performAction);
         if (!taskAction || !result.result) return result;
-        const pack = scopedPack(packs.get(packId), project.id, operator);
+        const pack = await scopedPack(packs.get(packId), project.id, operator);
         const resultBody = result.result;
         return { ...result, result: {
           ...resultBody, pack,
@@ -4320,7 +4340,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           : useRecord;
         return { result: { use, pack: packs.get(useVerifyMatch[1]!) } as unknown as Record<string, unknown> };
         });
-        const pack = scopedPack(packs.get(currentPack.id), reader, operator);
+        const pack = await scopedPack(packs.get(currentPack.id), reader, operator);
         return { ...result, result: { ...result.result, pack, use: pack.useRecords.find(use => use.id === useRecord.id) } };
       });
       json(response, receipt.statusCode || 200, receipt.result);
