@@ -333,7 +333,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const relativePath = input.relativePath.slice('060_reports/'.length);
     const ledger = readReportLedger();
     const key = `${input.projectId}:${relativePath}`;
-    if (ledger.projectFiles[key]?.sha256 === input.sha256) return;
+    // The bound writer invokes this only after confirming the destination is
+    // absent. Replace any reservation left by an interrupted publication.
     ledger.projectFiles[key] = {
       projectId: input.projectId, ownerTaskId: input.taskId, relativePath,
       sha256: input.sha256, bytesLength: input.bytes, committedAt: new Date().toISOString(),
