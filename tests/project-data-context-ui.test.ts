@@ -27,7 +27,7 @@ test('MC02/MC07 UI client: preview and history use exact project/version routes 
     assert.deepEqual(calls.map(call => call.path), ['/api/projects/project%2Fa/data-context', '/api/projects/project%2Fa/data-context/preview', '/api/projects/project%2Fa/data-context/datasets/dataset%2F1/descriptions/revision%2Fold', '/api/projects/project%2Fa/data-context/prepare']);
     assert.equal(calls[2]!.init?.method, 'GET');
     assert.deepEqual(JSON.parse(String(calls[3]!.init?.body)), { datasetId: 'dataset/1', inputVersionId: 'input/old' });
-    assert.ok(calls.every(call => call.init?.credentials === 'omit' && call.init?.cache === 'no-store'));
+    assert.ok(calls.every(call => call.init?.credentials === 'same-origin' && call.init?.mode === 'same-origin' && call.init?.cache === 'no-store'));
   } finally { globalThis.fetch = originalFetch; }
 });
 

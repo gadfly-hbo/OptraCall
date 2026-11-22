@@ -123,7 +123,7 @@ export class ProjectDataContextRequestError extends Error {
 }
 const base = (projectId: string) => `/api/projects/${encodeURIComponent(projectId)}/data-context`;
 async function request<T>(path: string, method = 'GET', input?: unknown): Promise<T> {
-  const response = await fetch(path, { method, credentials: 'omit', mode: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(input === undefined ? {} : { body: JSON.stringify(input) }) });
+  const response = await fetch(path, { method, credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(input === undefined ? {} : { body: JSON.stringify(input) }) });
   const result = await response.json();
   if (!response.ok) throw new ProjectDataContextRequestError(result.error ?? result.code ?? 'data_context_failed', response.status, typeof result.message === 'string' ? result.message : undefined);
   return result as T;
@@ -206,7 +206,7 @@ export async function readProjectDataEvidenceBytes(id: string, datasetId: string
 export async function readCitationEvidence(id: string, citationId: string, attachmentIndex?: number): Promise<string> { return readEvidence(`${base(id)}/citations/${encodeURIComponent(citationId)}/evidence${attachmentIndex === undefined ? '' : `?attachmentIndex=${attachmentIndex}`}`); }
 export async function readCitationEvidenceBytes(id: string, citationId: string, expected: { bytes: number; sha256: string }, attachmentIndex?: number): Promise<Uint8Array<ArrayBuffer>> { return readEvidenceBytes(`${base(id)}/citations/${encodeURIComponent(citationId)}/evidence${attachmentIndex === undefined ? '' : `?attachmentIndex=${attachmentIndex}`}`, expected); }
 async function readEvidenceBytes(path: string, expected?: { bytes: number; sha256: string }): Promise<Uint8Array<ArrayBuffer>> {
-  const response = await fetch(path, { credentials: 'omit', mode: 'same-origin', cache: 'no-store', headers: { 'x-optracall-client': '1' } });
+  const response = await fetch(path, { credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', headers: { 'x-optracall-client': '1' } });
   if (!response.ok) { const result = await response.json(); throw new ProjectDataContextRequestError(result.error ?? result.code ?? 'evidence_unavailable', response.status, result.message); }
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.byteLength > EVIDENCE_FILE_MAX_BYTES) throw new ProjectDataContextRequestError('evidence_too_large', 413, '固定文件超过此入口范围；原引用保留。');

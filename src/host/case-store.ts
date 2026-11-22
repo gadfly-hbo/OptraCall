@@ -934,6 +934,13 @@ export class CaseStore {
       : this.database().prepare('SELECT * FROM case_project_links WHERE case_id=? ORDER BY linked_at,project_id').all(uuid(caseId));
     return rows.map(row => fromRow<CaseProjectLink>(row));
   }
+  listHistoricallyLinkedCaseIds(projectId: string): string[] {
+    return this.database().prepare(`
+      SELECT DISTINCT e.subject_id AS id
+      FROM work_events e JOIN operation_receipts o ON o.operation_id=e.operation_id
+      WHERE e.subject_type='case' AND e.event_type='project_linked' AND o.project_id=?
+    `).all(uuid(projectId)).map(row => String(row.id));
+  }
   private linked(caseId: string, projectId: string): CaseProjectLink | null {
     const row = this.database().prepare('SELECT * FROM case_project_links WHERE case_id=? AND project_id=?').get(caseId, projectId);
     return row ? fromRow<CaseProjectLink>(row) : null;

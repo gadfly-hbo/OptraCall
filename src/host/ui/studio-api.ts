@@ -1,3 +1,4 @@
+import { bindProjectContext } from './runtime-client.ts';
 import { HostRequestError } from './runtime-client.ts';
 import { parseCoverageContent } from '../../../extensions/business-plugins/studio/coverage.ts';
 
@@ -35,10 +36,10 @@ const failureMessages: Record<string, string> = {
 };
 
 /** HTTP boundary for Studio's own business endpoints; never replays a mutation. */
-export async function studioRequest<T>(path: string, method: 'GET' | 'POST' = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
+export async function studioRequest<T>(path: string, method: 'GET' | 'POST' = 'GET', body?: unknown, signal?: AbortSignal, credentials: RequestCredentials = 'omit'): Promise<T> {
   try {
     const response = await fetch(`/api/studio/${path}`, {
-      method, mode: 'same-origin', credentials: 'omit', cache: 'no-store',
+      method, mode: 'same-origin', credentials, cache: 'no-store',
       headers: { 'x-optracall-client': '1', 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }), ...(signal ? { signal } : {}),
     });
@@ -89,7 +90,8 @@ export async function readStudioWorkspace(id: string, signal?: AbortSignal): Pro
   return value;
 }
 export async function createStudioSystem(input: StudioCreateRequest): Promise<StudioSystem> {
-  const value = await studioRequest<{ system: StudioSystem }>('systems', 'POST', input);
+  await bindProjectContext(input.projectId);
+  const value = await studioRequest<{ system: StudioSystem }>('systems', 'POST', input, undefined, 'same-origin');
   if (!object(value) || !object(value.system) || value.system.projectId !== input.projectId || typeof value.system.id !== 'string' || input.enterpriseId && value.system.enterpriseId !== input.enterpriseId) throw mismatch(true);
   return value.system;
 }

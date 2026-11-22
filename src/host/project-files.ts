@@ -15,7 +15,10 @@ function fault(code: string): never { throw Object.assign(new Error(code), { cod
 export function createProjectFilesPort(options: {
   projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore; projectId: string; taskId: string; assertOwner(): Promise<void>;
   listBoundReports?(): Promise<ProjectTaskResultBinding[]>;
+  beforeReportPublication?: Parameters<ProjectStore['writeBoundReport']>[4]['beforePublication'];
   readScopedCatalog?(): Promise<{ bytes: Buffer; enterpriseId?: string } | undefined>;
+  assertInputAllowed?(relativePath: string, purposeId?: string): void | Promise<void>;
+  filterInputBytes?(relativePath: string, bytes: Buffer, purposeId?: string): Promise<{ bytes: Buffer; filtered?: boolean; restrictionNote?: string }> | { bytes: Buffer; filtered?: boolean; restrictionNote?: string };
 }): ProjectFilesPort {
   return async (action, input, context) => {
     const check = () => { context.signal.throwIfAborted(); context.assertCurrent(); };
@@ -42,7 +45,7 @@ export function createProjectFilesPort(options: {
       }
       const receipt = await writeProjectFileText({ content,
         signal: context.signal, toolCallId: context.toolCallId,
-        write: () => options.projects.writeBoundReport(project.id, options.taskId, name, content, context) });
+        write: () => options.projects.writeBoundReport(project.id, options.taskId, name, content, { ...context, beforePublication: options.beforeReportPublication }) });
       check();
       return { content: [{ type: 'text', text: `报告已保存到 ${receipt.path}\n准确回执：${JSON.stringify(receipt)}` }], details: { schemaVersion: 1, type: 'optracall.project-report-write', ...receipt } };
     }
@@ -70,18 +73,35 @@ export function createProjectFilesPort(options: {
         storeId: catalog.storeId, path: catalog.path, sha256: createHash('sha256').update(catalog.bytes).digest('hex'), bytes: catalog.bytes.length } };
     }
     if (action !== 'read-input') fault('invalid_project_file_action');
-    if (Object.keys(input).some(key => !['filename', 'offset', 'limit'].includes(key)) || !filename(input.filename)) fault('invalid_input_filename');
+    if (Object.keys(input).some(key => !['filename', 'offset', 'limit', 'purposeId'].includes(key)) || !filename(input.filename)) fault('invalid_input_filename');
     for (const key of ['offset', 'limit']) if (input[key] !== undefined && (!Number.isSafeInteger(input[key]) || Number(input[key]) < 1)) fault('invalid_input_pagination');
     const relativePath = '020_clean/' + input.filename;
+    const purposeId = input.purposeId;
+    if (purposeId !== undefined && (typeof purposeId !== 'string' || !purposeId.trim() || purposeId.length > 100 || !options.filterInputBytes)) fault('invalid_input_purpose');
+    if (options.assertInputAllowed) await options.assertInputAllowed(relativePath, purposeId);
     const captured = await options.projects.captureFeedbackFile(options.projectId, relativePath, PROJECT_UPLOAD_MAX_BYTES);
-    try { new TextDecoder('utf-8', { fatal: true }).decode(captured.bytes); } catch { fault('project_file_requires_text'); }
-    if (captured.bytes.includes(0)) fault('project_file_requires_text');
+    let deliveredBytes = captured.bytes;
+    let authorizedViewNote: string | undefined;
+    let filteredView = false;
+    if (options.filterInputBytes) {
+      const view = await options.filterInputBytes(relativePath, captured.bytes, purposeId);
+      deliveredBytes = view.bytes;
+      filteredView = Boolean(view.filtered);
+      authorizedViewNote = view.restrictionNote;
+    }
+    try { new TextDecoder('utf-8', { fatal: true }).decode(deliveredBytes); } catch { fault('project_file_requires_text'); }
+    if (deliveredBytes.includes(0)) fault('project_file_requires_text');
     check();
     const target = path.join(project.rootPath, relativePath);
-    const result = await readProjectFileText({ bytes: captured.bytes, signal: context.signal,
+    const result = await readProjectFileText({ bytes: deliveredBytes, signal: context.signal,
       toolCallId: context.toolCallId, offset: input.offset as number | undefined, limit: input.limit as number | undefined });
     await owner();
-    return { content: result.content, details: { ...result.details, type: 'optracall.project-file-read', ...identity,
-      path: target, relativePath, sha256: captured.sha256, bytes: captured.bytes.length, observedAt: captured.observedAt } };
+    const deliveredSha = createHash('sha256').update(deliveredBytes).digest('hex');
+    const content = authorizedViewNote
+      ? [{ type: 'text' as const, text: `[Host 授权视图] ${authorizedViewNote}\n${result.content.map(c => c.text).join('')}` }]
+      : result.content;
+    return { content, details: { ...result.details, type: 'optracall.project-file-read', ...identity,
+      path: target, relativePath, ...(purposeId ? { purposeId } : {}), sha256: deliveredSha, bytes: deliveredBytes.length, observedAt: captured.observedAt,
+      ...(filteredView ? { authorizedViewFiltered: true, restrictionNote: authorizedViewNote } : {}) } };
   };
 }

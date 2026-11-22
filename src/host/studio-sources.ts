@@ -1,3 +1,4 @@
+import type { StudioUseRecord } from '../../extensions/business-plugins/studio/contracts.ts';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { ProjectStore, FileNode } from './project-store.ts';
@@ -26,6 +27,10 @@ export interface StudioSourceDependencies {
   readTaskReply?: (projectId: string, taskId: string, selection: { sessionId: string; messageId: string }) => Promise<{ text: string }>;
   readOriginal?: (ref: StudioSourceRef, projectId: string, taskId?: string) => Promise<StudioSourceRead>;
   readRequirementRelease?: (id: string, version: string, projectId: string) => Promise<ReturnType<ReturnType<typeof createRequirementStore>['readRelease']>>;
+  assertDeclaredReportAccess?: (systemId: string, projectId: string, declaration: StudioUseRecord) => void | Promise<void>;
+  assertDataPathAllowed?: (projectId: string, locator: string) => void | Promise<void>;
+  filterAuthorizedDataBytes?: (projectId: string, locator: string, bytes: Buffer) => Promise<{ bytes: Buffer; filtered?: boolean; restrictionNote?: string }> | { bytes: Buffer; filtered?: boolean; restrictionNote?: string };
+  readPreservedReportBytes?: (projectId: string, taskId: string, locator: string, expectedSha256?: string) => Buffer | undefined;
 }
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 const flatFiles = (nodes: FileNode[]): FileNode[] => nodes.flatMap(node => node.kind === 'file' ? [node] : flatFiles(node.children ?? []));
@@ -121,6 +126,9 @@ export function createStudioSources(deps: StudioSourceDependencies) {
       }
     } catch (error) { if ((error as { code?: string }).code !== 'enterprise_source_missing') throw error; }
     for (const file of flatFiles(await deps.projects.tree(projectId, ['020_clean']))) {
+      if (deps.assertDataPathAllowed) {
+        try { await deps.assertDataPathAllowed(projectId, file.path); } catch { continue; }
+      }
       const observed = await deps.projects.observeFile(projectId, file.path);
       materials.push({ ref: { authority: 'data', id: sha(file.path), version: observed.sha256, sha256: observed.sha256, projectId, locator: file.path, title: file.name }, saved: true, readable: true, note: '当前项目020资料；准确文件身份已观察，未交付正文或证明Agent已读' });
     }
@@ -186,6 +194,7 @@ export function createStudioSources(deps: StudioSourceDependencies) {
     const ref = sourceRef(raw); await deps.projects.get(projectId);
     await enterpriseQualified(ref, projectId, options.construction === true, systemId);
     let taskProjectId = projectId;
+    let declaredReportAccess: (() => Promise<void>) | undefined;
     if (options.construction) {
       if (!systemId) fail('studio_source_construction_mismatch', 403);
       const system = deps.studio.get(systemId), owner = studioExecutionOwner(system);
@@ -196,6 +205,17 @@ export function createStudioSources(deps: StudioSourceDependencies) {
         const retained = [...system.feedback.flatMap(feedback => feedback.sources), ...system.uses.flatMap(use => [use.report, ...(use.assessments ?? []).map(assessment => assessment.report)]), ...(system.contributions ?? []).flatMap(item => item.revisions.flatMap(revision => [revision.report, ...revision.sourceRefs]))];
         if (retained.some(saved => digest(sourceRef(saved)) === digest(ref))) taskProjectId = ref.projectId;
       }
+    } else if (systemId && options.taskId && ref.authority === 'task' && ref.projectId && ref.projectId !== projectId && ref.locator?.startsWith('060_reports/')) {
+      const system = deps.studio.get(systemId), identity = digest(ref);
+      await deps.projects.getTask(projectId, options.taskId);
+      declaredReportAccess = async () => {
+        const declarations = deps.studio.get(system.id).uses.filter(use =>
+          use.projectId === ref.projectId && use.taskId === ref.taskId && digest(sourceRef(use.report)) === identity);
+        if (!declarations.length || !deps.assertDeclaredReportAccess) fail('studio_report_permission_denied', 403);
+        for (const declaration of declarations) await deps.assertDeclaredReportAccess(system.id, projectId, declaration);
+      };
+      await declaredReportAccess();
+      taskProjectId = ref.projectId;
     }
     if (ref.authority === 'case' || ref.authority === 'data' && ref.locator?.startsWith('{')) {
       if (!deps.readOriginal) fail('studio_source_unsupported');
@@ -229,13 +249,41 @@ export function createStudioSources(deps: StudioSourceDependencies) {
       if (ref.projectId !== sourceProjectId) fail('studio_source_project_mismatch', 403);
       const locator = ref.locator;
       if (!locator || !(ref.authority === 'data' ? /^020_clean\// : /^060_reports\//).test(locator) || locator.split('/').some(p => !p || p === '.' || p === '..' || p.includes('\\'))) fail('studio_source_path_invalid');
+      if (ref.authority === 'data' && deps.assertDataPathAllowed) await deps.assertDataPathAllowed(sourceProjectId, locator);
       if (ref.authority === 'data' && ref.id !== sha(locator)) fail('studio_source_changed', 409);
       if (ref.authority === 'task') { if (!ref.taskId || ref.id !== ref.taskId) fail('studio_source_owner_mismatch', 403); await deps.projects.getTask(sourceProjectId, ref.taskId); }
-      const observed = await deps.projects.observeFile(sourceProjectId, locator);
-      if (ref.version !== observed.sha256 || observed.bytes > 50 * 1024 * 1024) fail('studio_source_changed', 409); exactHash(ref, observed.sha256);
-      const actual = await deps.projects.readFile(sourceProjectId, locator); const after = await deps.projects.observeFile(sourceProjectId, locator);
-      if (sha(actual.bytes) !== observed.sha256 || after.sha256 !== observed.sha256 || actual.bytes.length !== observed.bytes) fail('studio_source_changed', 409);
-      return { text: utf8(actual.bytes), complete: true, ref: { ...ref, sha256: observed.sha256 } };
+      let actualBytes: Buffer | undefined;
+      let observedSha: string | undefined;
+      try {
+        const observed = await deps.projects.observeFile(sourceProjectId, locator);
+        if (ref.version === observed.sha256 && observed.bytes <= 50 * 1024 * 1024) {
+          exactHash(ref, observed.sha256);
+          const actual = await deps.projects.readFile(sourceProjectId, locator); const after = await deps.projects.observeFile(sourceProjectId, locator);
+          if (sha(actual.bytes) === observed.sha256 && after.sha256 === observed.sha256 && actual.bytes.length === observed.bytes) {
+            actualBytes = actual.bytes;
+            observedSha = observed.sha256;
+          }
+        }
+      } catch {
+        // Fall through to exact preserved snapshot fallback for historical task reports below
+      }
+      if (!actualBytes && ref.authority === 'task' && ref.taskId && deps.readPreservedReportBytes) {
+        const expected = ref.sha256 ?? ref.version;
+        const preserved = deps.readPreservedReportBytes(sourceProjectId, ref.taskId, locator, expected);
+        if (preserved && sha(preserved) === expected && preserved.length <= 50 * 1024 * 1024) {
+          actualBytes = preserved;
+          observedSha = expected;
+        }
+      }
+      if (!actualBytes || !observedSha) fail('studio_source_changed', 409);
+      await declaredReportAccess?.();
+      if (ref.authority === 'data' && deps.filterAuthorizedDataBytes) {
+        const view = await deps.filterAuthorizedDataBytes(sourceProjectId, locator, actualBytes);
+        const filteredText = utf8(view.bytes);
+        const finalText = view.restrictionNote ? `[Host 授权视图] ${view.restrictionNote}\n${filteredText}` : filteredText;
+        return { text: finalText, complete: true, ref: { ...ref, sha256: sha(view.bytes) } };
+      }
+      return { text: utf8(actualBytes), complete: true, ref: { ...ref, sha256: observedSha } };
     }
     return fail('studio_source_unsupported', 400);
   }
