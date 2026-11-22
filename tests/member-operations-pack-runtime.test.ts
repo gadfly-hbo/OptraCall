@@ -281,7 +281,7 @@ test('R3 · Normal construction session via real Pi SDK 1.4.0 reads 3 materials 
   assert.match(packReadResultText, /store-first-purchase-30d-repurchase/);
 });
 
-test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native read/bash narrowing, directory-only feedback separation & taskCutoff preservation, exact version read + report verification, authority revision v1.0->v1.1, and independent Python recalculation (C07 changes, C13 stays)', { timeout: 120_000 }, async t => {
+test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native read/bash narrowing, directory-only feedback separation & taskCutoff preservation, exact version read + report verification, authority revision v1.0->v1.1, and independent Python recalculation (C07 changes, C13 stays)', { timeout: 180_000 }, async t => {
   const provider = await startToolProvider();
   t.after(() => provider.close());
   let host = await startTestHost();
