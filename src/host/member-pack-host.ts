@@ -2263,7 +2263,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   async function readSourceSnapshots(projectId: string, taskId: string, receipts: ReturnType<typeof collectNativeEvidence>['results']): Promise<InputSnapshot[]> {
-    const project = await options.projects.get(projectId);
+    const project = await options.projects.get(projectId).catch(() => undefined);
+    if (!project) return [];
     const workspace = path.resolve(options.dataRoot, 'member-pack-workspaces', projectId, taskId);
     const root = fs.existsSync(workspace) ? workspace : project.rootPath;
     return receipts.flatMap(receipt => {
@@ -2295,7 +2296,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     reply?: { sessionId: string; messageId: string },
   ): Promise<{ snapshots: InputSnapshot[]; cutoff?: string }> {
     if (!isTaskReport(report, projectId, taskId) || !options.taskSnapshot) return { snapshots: [] };
-    const { messages } = await options.taskSnapshot(projectId, taskId);
+    const snapshot = await options.taskSnapshot(projectId, taskId).catch(() => undefined);
+    if (!snapshot) return { snapshots: [] };
+    const { messages } = snapshot;
     const replyIndex = reply ? messages.findIndex(m =>
       m.role === 'assistant' && m.nativeSessionId === reply.sessionId && m.nativeEntryId === reply.messageId,
     ) : messages.length - 1;
@@ -2331,8 +2334,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   async function readAssessorInputSnapshots(use: EnterprisePackUseRecord): Promise<InputSnapshot[]> {
     const verification = use.independentVerification;
     if (!verification.verifierProjectId || !verification.verifierTaskId || !options.taskSnapshot) return [];
-    const { messages } = await options.taskSnapshot(verification.verifierProjectId, verification.verifierTaskId);
-    const { results } = collectNativeEvidence(messages);
+    const snapshot = await options.taskSnapshot(verification.verifierProjectId, verification.verifierTaskId).catch(() => undefined);
+    if (!snapshot) return [];
+    const { results } = collectNativeEvidence(snapshot.messages);
     const verifiedData = verification.verifierActualReads?.filter(r => r.complete && r.authorizedInput === true && r.ref.authority === 'data') ?? [];
     const receipts = results.filter(({ call }) => verifiedData.some(r => r.sessionId === call.sessionId
       && r.entryId === call.entryId && r.toolCallId === call.id));
@@ -2463,7 +2467,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return undefined;
   }
 
-  function parseSimpleCsvLine(line: string, delimiter: string): string[] {
+  function parseSimpleCsvLine(line: string, delimiter: string): string[] | undefined {
     const cells: string[] = [];
     let cur = '';
     let inQuotes = false;
@@ -2481,6 +2485,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         cur += ch;
       }
     }
+    if (inQuotes) return undefined;
     cells.push(cur);
     return cells;
   }
@@ -2502,13 +2507,16 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (ext === '.csv' || ext === '.tsv') {
         const delimiter = ext === '.tsv' ? '\t' : ',';
         const lines = snapshot.body.split(/\r?\n/);
-        const header = parseSimpleCsvLine(lines[0] ?? '', delimiter).map(h => h.replace(/^\uFEFF/, '').trim().toLowerCase());
+        const headings = parseSimpleCsvLine(lines[0] ?? '', delimiter);
+        if (!headings) return [];
+        const header = headings.map(h => h.replace(/^\uFEFF/, '').trim().toLowerCase());
         if (new Set(header).size !== header.length) return [];
-        records = lines.slice(1).flatMap((line, index) => {
+        for (const [index, line] of lines.slice(1).entries()) {
+          if (!line.trim()) continue;
           const cells = parseSimpleCsvLine(line, delimiter);
-          if (!line.trim() || cells.length !== header.length) return [];
-          return [{ record: Object.fromEntries(header.map((key, i) => [key, cells[i]!])), rowNumber: index + 2 }];
-        });
+          if (!cells || cells.length !== header.length) return [];
+          records.push({ record: Object.fromEntries(header.map((key, i) => [key, cells[i]!])), rowNumber: index + 2 });
+        }
       } else if (ext === '.json') {
         try {
           const parsed: unknown = JSON.parse(snapshot.body);
@@ -2571,8 +2579,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const body = report.toString('utf8');
     const structured = structuredReport(body);
     if (structured && Array.isArray(structured.transactions)) {
-      return structured.transactions.some(row => object(row) && row.itemId === itemId
-        && row.originalOrderId === orderId && row.disposition === disposition);
+      const rows = structured.transactions.filter(row => object(row) && row.itemId === itemId && row.originalOrderId === orderId);
+      return rows.length > 0 && rows.every(row => row.disposition === disposition);
     }
     return reportTableItems(body).some(cells => [itemId, orderId, disposition].every(value => cells.includes(value)));
   }
