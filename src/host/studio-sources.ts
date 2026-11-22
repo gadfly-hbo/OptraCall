@@ -27,7 +27,7 @@ export interface StudioSourceDependencies {
   readTaskReply?: (projectId: string, taskId: string, selection: { sessionId: string; messageId: string }) => Promise<{ text: string }>;
   readOriginal?: (ref: StudioSourceRef, projectId: string, taskId?: string) => Promise<StudioSourceRead>;
   readRequirementRelease?: (id: string, version: string, projectId: string) => Promise<ReturnType<ReturnType<typeof createRequirementStore>['readRelease']>>;
-  assertDeclaredReportAccess?: (systemId: string, projectId: string, declaration: StudioUseRecord) => void;
+  assertDeclaredReportAccess?: (systemId: string, projectId: string, declaration: StudioUseRecord) => void | Promise<void>;
   assertDataPathAllowed?: (projectId: string, locator: string) => void | Promise<void>;
   filterAuthorizedDataBytes?: (projectId: string, locator: string, bytes: Buffer) => Promise<{ bytes: Buffer; filtered?: boolean; restrictionNote?: string }> | { bytes: Buffer; filtered?: boolean; restrictionNote?: string };
   readPreservedReportBytes?: (projectId: string, taskId: string, locator: string, expectedSha256?: string) => Buffer | undefined;
@@ -194,7 +194,7 @@ export function createStudioSources(deps: StudioSourceDependencies) {
     const ref = sourceRef(raw); await deps.projects.get(projectId);
     await enterpriseQualified(ref, projectId, options.construction === true, systemId);
     let taskProjectId = projectId;
-    let declaredReportAccess: (() => void) | undefined;
+    let declaredReportAccess: (() => Promise<void>) | undefined;
     if (options.construction) {
       if (!systemId) fail('studio_source_construction_mismatch', 403);
       const system = deps.studio.get(systemId), owner = studioExecutionOwner(system);
@@ -208,13 +208,13 @@ export function createStudioSources(deps: StudioSourceDependencies) {
     } else if (systemId && options.taskId && ref.authority === 'task' && ref.projectId && ref.projectId !== projectId && ref.locator?.startsWith('060_reports/')) {
       const system = deps.studio.get(systemId), identity = digest(ref);
       await deps.projects.getTask(projectId, options.taskId);
-      declaredReportAccess = () => {
+      declaredReportAccess = async () => {
         const declarations = deps.studio.get(system.id).uses.filter(use =>
           use.projectId === ref.projectId && use.taskId === ref.taskId && digest(sourceRef(use.report)) === identity);
         if (!declarations.length || !deps.assertDeclaredReportAccess) fail('studio_report_permission_denied', 403);
-        for (const declaration of declarations) deps.assertDeclaredReportAccess(system.id, projectId, declaration);
+        for (const declaration of declarations) await deps.assertDeclaredReportAccess(system.id, projectId, declaration);
       };
-      declaredReportAccess();
+      await declaredReportAccess();
       taskProjectId = ref.projectId;
     }
     if (ref.authority === 'case' || ref.authority === 'data' && ref.locator?.startsWith('{')) {
@@ -276,7 +276,7 @@ export function createStudioSources(deps: StudioSourceDependencies) {
         }
       }
       if (!actualBytes || !observedSha) fail('studio_source_changed', 409);
-      declaredReportAccess?.();
+      await declaredReportAccess?.();
       if (ref.authority === 'data' && deps.filterAuthorizedDataBytes) {
         const view = await deps.filterAuthorizedDataBytes(sourceProjectId, locator, actualBytes);
         const filteredText = utf8(view.bytes);

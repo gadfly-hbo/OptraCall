@@ -1210,7 +1210,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (grant.scope.channel && grant.scope.channel !== purpose.scope.channel) return false;
       if (grant.scope.stores?.length && (!purpose.scope.stores?.length || !purpose.scope.stores.every(store => grant.scope.stores?.includes(store)))) return false;
       if (!isPeriodCovered(purpose.scope.period, grant.scope.periodFrom, grant.scope.periodTo)) return false;
-      if (operation === 'read-detail-recalculate' && !grant.scope.allowedDataPaths?.length) return false;
+      if (operation === 'read-detail-recalculate' && !grant.scope.allowedDataPaths?.length && !grant.resourceRef) return false;
       if (operation === 'cite-summary') {
         const summary = purpose.summaryAccess;
         return Boolean(summary && grant.resourceRef && digest(sourceRef(grant.resourceRef)) === digest(sourceRef(summary.summaryRef))
@@ -1221,7 +1221,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     });
   }
 
-  function assertDeclaredReportAccess(systemId: string, projectId: string, declaration: StudioUseRecord) {
+  async function assertDeclaredReportAccess(systemId: string, projectId: string, declaration: StudioUseRecord) {
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId || options.enterpriseScopes.enterpriseIdForProject(declaration.projectId) !== enterpriseId) {
       throw new StudioError('studio_report_permission_denied', 403);
@@ -1233,8 +1233,28 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         .map(use => ({ use, purpose: pack.packRevisions.find(revision => revision.version === use.packVersion)
           ?.purposeManifests.find(purpose => purpose.purposeId === use.purposeId && purpose.purposeKey === use.purposeKey) })),
     );
-    const entitled = qualifications.length > 0 && qualifications.every(({ use, purpose }) => reportUseCovered(use, purpose, grantsNow));
-    if (!entitled) throw new StudioError('studio_report_permission_denied', 403);
+    const denied = () => new StudioError('studio_report_permission_denied', 403);
+    if (!qualifications.length) throw denied();
+    for (const { use, purpose } of qualifications) {
+      if (!purpose || !reportUseCovered(use, purpose, grantsNow)) throw denied();
+      if (use.accessLevel !== 'recalculate') continue;
+      const reportIdentity = digest(sourceRef(use.reportRef));
+      const explicitReportGrant = grantsNow.some(grant => grant.resourceRef
+        && digest(sourceRef(grant.resourceRef)) === reportIdentity && reportUseCovered(use, purpose, [grant]));
+      if (explicitReportGrant) continue;
+      const allowedGrants = grantsNow.filter(grant => reportUseCovered(use, purpose, [grant]));
+      const { snapshots } = await readReportInputSnapshots(use.projectId, use.taskId, use.reportRef, undefined, declaration.id);
+      if (!snapshots.length) throw denied();
+      const { brand, channel, stores } = purpose.scope;
+      const query = { purposeKey: purpose.purposeKey, purposeScope: { brand, channel, stores } };
+      for (const { binding } of snapshots) {
+        if (!binding.ref.locator || !binding.ref.sha256) throw denied();
+        const current = await options.projects.readFile(projectId, binding.ref.locator).catch(() => undefined);
+        if (!current) throw denied();
+        const visible = buildAuthorizedDataView(current.bytes, binding.ref.locator, allowedGrants, query);
+        if (!visible.allowed || createHash('sha256').update(visible.bytes).digest('hex') !== binding.ref.sha256) throw denied();
+      }
+    }
   }
 
   function filterDependenciesForAccess(
@@ -2324,13 +2344,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     let verification: Awaited<ReturnType<typeof inspectVerifierTaskEvidence>> | undefined;
     let verdictDetail = '仅见原任务自评或缺少核验任务身份，保持待验证';
     if (independent) {
-      const verifyReportAccess = () => {
-        if (verifierProjectId !== use.projectId) assertDeclaredReportAccess(pack.systemId, verifierProjectId, studioUse);
+      const verifyReportAccess = async () => {
+        if (verifierProjectId !== use.projectId) await assertDeclaredReportAccess(pack.systemId, verifierProjectId, studioUse);
       };
       try {
-        verifyReportAccess();
+        await verifyReportAccess();
         verification = await inspectVerifierTaskEvidence(verifierProjectId, verifierTaskId, pack, use, studioUse.id, assessment);
-        verifyReportAccess();
+        await verifyReportAccess();
         verdictDetail = verification.summary.missingReason ?? assessment.result;
       } catch (error) {
         if (!(error instanceof StudioError) || error.status !== 403) throw error;
@@ -3566,7 +3586,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         throw new StudioError('invalid_report_locator', 400);
       }
       await options.projects.getTask(projectId, taskId);
-      const assertCurrentAccess = () => {
+      const assertCurrentAccess = async () => {
         const latest = packs.get(pack.id);
         const retained = latest.useRecords.some(use => matchesReport(use.reportRef)
           || Boolean(use.independentVerification.assessmentReportRef && matchesReport(use.independentVerification.assessmentReportRef)))
@@ -3580,9 +3600,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const declarations = options.studio.get(latest.systemId).uses.filter(use => use.projectId === projectId
           && use.taskId === taskId && matchesReport(use.report));
         if (!declarations.length) throw new StudioError('studio_report_permission_denied', 403);
-        for (const declaration of declarations) assertDeclaredReportAccess(latest.systemId, borrowerProjectId, declaration);
+        for (const declaration of declarations) await assertDeclaredReportAccess(latest.systemId, borrowerProjectId, declaration);
       };
-      assertCurrentAccess();
+      await assertCurrentAccess();
       let bytes: Buffer | undefined;
       let resolvedLocator = locator;
       try {
@@ -3599,7 +3619,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (!bytes) throw new StudioError('report_snapshot_not_found', 404);
       const actualSha = createHash('sha256').update(bytes).digest('hex');
       if (actualSha !== expectedSha256) throw new StudioError('studio_use_report_hash_mismatch', 409);
-      assertCurrentAccess();
+      await assertCurrentAccess();
       json(response, 200, {
         projectId,
         ...(taskId ? { taskId } : {}),
