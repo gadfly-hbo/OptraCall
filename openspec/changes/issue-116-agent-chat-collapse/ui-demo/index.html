@@ -42,6 +42,16 @@
   .brand-mark { width: 29px; height: 29px; display: inline-flex; position: relative; color: var(--accent); flex-shrink: 0; }
   .brand-mark span { position: absolute; inset: 3px; border: 2px solid currentColor; border-radius: 50%; }
   .brand-mark i { position: absolute; width: 11px; height: 11px; right: 0; bottom: 0; border: 2px solid currentColor; border-radius: 50%; background: var(--canvas); }
+  .brand-mark-xs { width: 18px; height: 18px; }
+  .brand-mark-xs span { inset: 2px; border-width: 1.5px; }
+  .brand-mark-xs i { width: 7px; height: 7px; border-width: 1.5px; }
+  .message-author { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; }
+  .message-author strong { font-weight: 550; }
+  .message-author > span:last-child:not(.user-mark) { color: var(--muted); font-size: 11px; }
+  .strategy-discussion-message .message-author { margin: 0 0 6px; }
+  .msg-author { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 10.5px; color: var(--faint); }
+  .msg-author strong { font-weight: 600; color: var(--muted); font-size: 11px; }
+  .msg-author > span:last-child { font-size: 10px; }
   .user-mark { display: grid; place-items: center; height: 28px; width: 28px; border-radius: 50%; background: var(--subtle); font-size: 11px; color: var(--muted); }
   .primary-button { border: 1px solid transparent; background: #6550c9; color: #fff; border-radius: 7px; padding: 7px 14px; }
   .secondary-button { border: 1px solid var(--line); background: var(--surface); color: inherit; border-radius: 7px; padding: 7px 14px; }
@@ -344,6 +354,7 @@ const taskUserLong = `关于复购回落，我想再多核对几件事：
 const STREAM_TEXT = `先说核对结果：家清的回落确实集中在促销结束后的第一周（10-09 ~ 10-15），单周复购率比月均值低 4.2pp，第二周已回到正常区间，符合囤货周期的特征。竞对低价主要打在家清纸品的中位价格带（低约 8%），我们对位 SKU 有两个，但库存深度不足。个护的回落相对分散，暂未看到单周集中特征，可能和促销节奏关系不大，建议下一轮单独拉客群分层看。`;
 
 function brandAuthor(extra) { return `<div class="message-author"><span class="brand-mark" aria-hidden="true"><span></span><i></i></span><strong>OptraCall</strong><span>${extra}</span></div>`; }
+function msgAuthor() { return `<div class="msg-author"><span class="brand-mark brand-mark-xs" aria-hidden="true"><span></span><i></i></span><strong>OptraCall</strong><span>synthetic-demo</span></div>`; }
 function userAuthor() { return `<div class="message-author"><span class="user-mark">你</span><strong>你</strong></div>`; }
 
 function renderTaskScene() {
@@ -466,11 +477,11 @@ function renderStrategyScene() {
         <div class="fold" data-fold-id="u-strat" data-lines="3"><p>${escapeHtml(strategyQuestion)}</p></div>
         <p class="demo-note">长问题默认收起为 3 行预览；点「展开全文」查看完整问题。</p>
       </article>
-      <article class="strategy-discussion-message assistant"><strong>Agent</strong>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
         ${processGroup('p-strat-1', strategySteps)}
         <p class="demo-note">基线（e2aecfb）在此处渲染两个只有署名的空「Agent」块；本设计把只有工具/过程的条目归入上方「推理过程 · 4 步」，空块消失。</p>
       </article>
-      <article class="strategy-discussion-message assistant"><strong>Agent</strong>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
         <div class="fold" data-fold-id="a-strat-1" data-lines="5"><div class="strategy-discussion-reply">${strategyReply}</div></div>
         <div class="sg-row" aria-label="本回复引用的资料" style="margin-top:10px">
           <div class="evidence-card"><span class="ev-loc">〔会员经营月报 · p.4〕</span><span class="ev-quote">复购率 41.2%（近 12 个月）</span><button type="button" class="text-button">查看原文</button></div>
@@ -498,22 +509,22 @@ function renderRoleScene() {
     <div class="sg-row-between"><h2 id="role-title">目标管理 · goal</h2><span class="sg-muted">业务角色共用战略/业务共享转录渲染</span></div>
     <div class="strategy-discussion-messages" role="log" aria-label="目标管理 对话记录">
       <article class="strategy-discussion-message user"><strong>你</strong><p>帮我把「提升老客复购」这个目标梳理成可执行的目标表。</p></article>
-      <article class="strategy-discussion-message assistant"><strong>Agent</strong>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
         ${processGroup('p-role-1', [
           { name: 'strategy_goals', command: 'action: read-goals', output: '读取目标准确版 v3 与复购相关指标定义。' },
           { name: 'semantic_graph', output: '命中来源：会员经营月报 p.4、上期复盘。' },
         ])}
       </article>
-      <article class="strategy-discussion-message assistant"><strong>Agent</strong>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
         <div class="fold" data-fold-id="native:role-reply-a" data-lines="5"><div class="strategy-discussion-reply">${roleReplyText}</div></div>
       </article>
       <article class="strategy-discussion-message user"><strong>你</strong><p>按同样的口径，给新客首购目标也写一版。</p></article>
-      <article class="strategy-discussion-message assistant"><strong>Agent</strong>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
         ${processGroup('p-role-2', [
           { name: 'strategy_goals', command: 'action: read-goals', output: '复核口径约束：新客首购沿用拉新漏斗定义。' },
         ])}
       </article>
-      <article class="strategy-discussion-message assistant"><strong>Agent</strong>
+      <article class="strategy-discussion-message assistant">${brandAuthor('synthetic-demo')}
         <div class="fold" data-fold-id="native:role-reply-b" data-lines="5"><div class="strategy-discussion-reply">${roleReplyText}</div></div>
         <p class="demo-note">两条回复文本相同、原生身份不同（native:role-reply-a / b）：折叠状态各自独立记忆，可分别展开验证。</p>
       </article>
@@ -545,12 +556,12 @@ function renderRefinerScene() {
     <p class="refiner-error" role="alert">页图渲染失败：P7 缩略图暂未确认；已有版本记录仍保留。 <button type="button" class="text-button">重新渲染</button></p>
     <section class="refiner-chat" aria-label="精修对话">
       <div class="chat-log" role="log" aria-live="polite">
-        <div class="msg agent"><span class="who">Agent · 精修会话</span><p>选页后可对话修改，也可只读检查。锁定页保持不变；数字与事实改动会对照 md 报告，并保留差异记录。</p></div>
+        <div class="msg agent">${msgAuthor()}<p>选页后可对话修改，也可只读检查。锁定页保持不变；数字与事实改动会对照 md 报告，并保留差异记录。</p></div>
         <div class="msg user"><span class="who">我</span><div class="fold" data-fold-id="u-refine-1" data-lines="3"><p>${escapeHtml(refinerUserLong)}</p></div></div>
-        <div class="msg agent"><span class="who">Agent · 精修会话</span><div class="fold" data-fold-id="a-refine-1" data-lines="5"><p>${escapeHtml(refinerAgentReply)}</p></div><p class="msg-note">已完成 · 已保存版本 v5</p></div>
+        <div class="msg agent">${msgAuthor()}<div class="fold" data-fold-id="a-refine-1" data-lines="5"><p>${escapeHtml(refinerAgentReply)}</p></div><p class="msg-note">已完成 · 已保存版本 v5</p></div>
         <div class="msg user"><span class="who">我</span><p>把标题字号调大两磅。</p></div>
-        <div class="msg agent"><span class="who">Agent · 精修会话</span><p>标题已从 28pt 调整为 30pt，其余版式未动，已保存 v6。</p><p class="msg-note">已完成 · 已保存版本 v6</p></div>
-        <div class="msg agent"><span class="who">Agent · 精修会话</span><div class="fold" data-fold-id="a-refine-stopped" data-lines="5"><p>正在核对 P7 的锚点数字：该页有两处口径说明与报告脚注不一致，我先列出差异再决定是否……</p></div><p class="msg-note">已停止 · 未新增内容版本</p></div>
+        <div class="msg agent">${msgAuthor()}<p>标题已从 28pt 调整为 30pt，其余版式未动，已保存 v6。</p><p class="msg-note">已完成 · 已保存版本 v6</p></div>
+        <div class="msg agent">${msgAuthor()}<div class="fold" data-fold-id="a-refine-stopped" data-lines="5"><p>正在核对 P7 的锚点数字：该页有两处口径说明与报告脚注不一致，我先列出差异再决定是否……</p></div><p class="msg-note">已停止 · 未新增内容版本</p></div>
       </div>
       <p class="refiner-note" id="refiner-lock-help">本页已锁定，本次仅作只读问答或检查；修改前请先解锁。</p>
       <form class="chat-input-row" onSubmit="return false"><input placeholder="描述对本页的修改" aria-label="修改指令" aria-describedby="refiner-lock-help" /><button type="submit" class="primary-button">发送</button></form>
