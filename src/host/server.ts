@@ -42,6 +42,7 @@ import { createProjectPlanStore, ProjectPlanFault } from './project-plan-store.t
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { StrategyGoalsStore, StrategyGoalsError, goalContentSha256, parseGoalRoleSuggestion } from './strategy-goals-store.ts';
 import { strategyWorkbookRoutes,checkWorkbookSource } from './strategy-workbook-routes.ts';
+import { StrategyMapPublicationStore } from './strategy-map-publication-store.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
@@ -867,6 +868,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       return directory.enterprises.filter(enterprise=>!assigned||enterprise.id===assigned);
     },configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,verifyGoalContext:verifyFrozenGoalContext,verifyArrangement:verifyGoalOperationArrangement,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{...page,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}};
   const strategyDiscussions=createStrategyDiscussionHost(discussionOptions);
+  const strategyMapPublications=new StrategyMapPublicationStore(strategyDiscussions.store);
   strategyMapImports=createStrategyMapImportService({dataRoot,codeRoot:options.cwd,attachments:strategyAttachments,projects,owner:id=>strategyDiscussions.store.get(id),configuration:(id,revision)=>availableConfiguration(id,revision),mutate,
     writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
   });
@@ -1213,7 +1215,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const {goal,arrangements}=await readGoalVersionPage(goalId,version);
     return downloadable(gsaVersionDocument(goal,strategyGoals.get(goalId).adoptedVersion===version,arrangements));
   }
-  const workbookRoutes=strategyWorkbookRoutes({goals:strategyGoals,mapMetadata:strategyDiscussions.mapMetadata,readMap:strategyDiscussions.readMapVersion,saveMap:strategyDiscussions.saveMapVersion,
+  const workbookRoutes=strategyWorkbookRoutes({goals:strategyGoals,mapMetadata:strategyDiscussions.mapMetadata,readMap:strategyDiscussions.readMapVersion,activePublication:(map,publicationId)=>strategyMapPublications.active(map.discussionId,map.mapId,map.version,map.sha256,publicationId),saveMap:strategyDiscussions.saveMapVersion,
     mutate,isClosing:()=>closing,validateScope:scope=>validateStrategyGoalScope(scope,studio.enterpriseScopes),verifyGoal:goal=>validateStrategyGoal(goal)});
   const strategyGoalRoutes = createStrategyGoalRoutes({ store: strategyGoals, mutate, isClosing: () => closing,
     listSources: strategySources.list,
@@ -2279,6 +2281,23 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if(trialRoute && request.method==='POST'){
         const input=await body(request);
         json(response,200,{trial:await mutate(()=>strategyTrials.save(trialRoute[1]!,input))});return;
+      }
+      const mapPublicationListRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/maps\/([a-f0-9-]{36})\/publications$/.exec(url.pathname);
+      if(mapPublicationListRoute && request.method==='GET'){
+        json(response,200,{publications:await strategyMapPublications.list(mapPublicationListRoute[1]!,mapPublicationListRoute[2]!)});return;
+      }
+      const mapPublicationRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/maps\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/publication(\/withdraw)?$/.exec(url.pathname);
+      if(mapPublicationRoute && request.method==='POST'){
+        const [,id,mapId,revision,withdraw]=mapPublicationRoute,input=await body(request),version=Number(revision);
+        const publication=await mutate(()=>{
+          if(closing)throw new RequestFault(409,'host_closing');
+          if(withdraw)return strategyMapPublications.withdraw(id!,mapId!,version,input);
+          return strategyMapPublications.publish(id!,mapId!,version,input,async()=>{
+            const map=await strategyDiscussions.readMapVersion(id!,mapId!,version);
+            return {contentSha256:map.contentSha256,goalCount:map.nodes.filter(node=>node.kind==='goal').length,strategyCount:map.nodes.filter(node=>node.kind==='strategy').length};
+          });
+        });
+        json(response,withdraw?200:201,{publication});return;
       }
       const mapDocumentRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/maps\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/(export|handoffs)$/.exec(url.pathname);
       if(mapDocumentRoute && request.method==='GET'){

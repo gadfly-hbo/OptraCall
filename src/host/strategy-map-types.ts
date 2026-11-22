@@ -62,6 +62,15 @@ export interface StrategyMapVersion extends StrategyMapDraft, StrategyMapRef {
   requestId?:string; source?:GoalDiscussionSourceRef; replySource?:GoalDiscussionSourceRef; citations:StrategyAttachmentCitation[]; operationId:string;
   importDraftEntryId?:string; importDraftGroupId?:string;
 }
+export type StrategyMapPublicationState = 'active' | 'superseded' | 'withdrawn';
+export interface StrategyMapPublicationIdentity {
+  publicationId:string; publishedAt:string;
+}
+export interface StrategyMapPublication extends StrategyMapPublicationIdentity {
+  discussionId:string; mapId:string; version:number; contentSha256:string;
+  state:StrategyMapPublicationState; goalCount:number; strategyCount:number;
+  operationId:string; supersededAt?:string; withdrawnAt?:string; withdrawOperationId?:string;
+}
 export function mapDraft(version:StrategyMapVersion):StrategyMapDraft {
   const {title,template,choice,excluded,assumptions,unknowns,nodes,edges,scenarioModel,importSource,importSources}=version;
   return {title,template,choice,excluded,assumptions,unknowns,nodes,edges,...(scenarioModel&&{scenarioModel}),...(importSource&&{importSource}),...(importSources&&{importSources})};

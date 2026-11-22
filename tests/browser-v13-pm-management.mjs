@@ -36,12 +36,12 @@ async function strategy(){
   const readV1='**/api/'+route+'/versions/1';
   await page.route(readV1,r=>r.fulfill({status:403,json:{code:'strategy_source_not_authorized'}}));
   await selectVersion.selectOption('1');await page.getByRole('alert').filter({hasText:'所选文稿或依据已失读'}).waitFor();
-  assert.equal(await button('将此版带入 GSA').count(),0);assert.equal(await page.getByText('延时窗口',{exact:true}).count(),0);
+  assert.equal(await button('将此版带入 GSA（历史战略文稿）').count(),0);assert.equal(await page.getByText('延时窗口',{exact:true}).count(),0);
   assert.equal((await api(route+'/versions/2')).version.destination,undefined);
   await page.unroute(readV1);await selectVersion.selectOption('2');await selectVersion.selectOption('1');
   await page.getByText('预约窗口',{exact:true}).waitFor();await page.getByLabel('接收范围').waitFor();
   const before=(await api(route+'/versions/1')).version, previousRevision=(await api(route)).discussion.revision;
-  await button('将此版带入 GSA').click();await page.getByRole('navigation',{name:'目标管理工作视图'}).waitFor();
+  await button('将此版带入 GSA（历史战略文稿）').click();await page.getByRole('navigation',{name:'目标管理工作视图'}).waitFor();
   const after=(await api(route+'/versions/1')).version, other=(await api(route+'/versions/2')).version;
   assert.deepEqual(after.source,source);assert.equal(after.contentSha256,before.contentSha256);assert.equal(after.choice,'预约窗口');assert.ok(after.destination?.scope);assert.ok(!other.destination);assert.equal((await api(route+'/versions')).versions.length,2);
   await button('战略选择',nav).click();await page.locator('label').filter({hasText:/^原讨论/}).locator('select').selectOption(discussion);await button('版本与来源').click();await page.getByLabel('已保存版本').selectOption('1');await button('打开已交接的目标草稿').click();

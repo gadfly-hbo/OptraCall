@@ -1,0 +1,978 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OptraCall · #112 战略发布 UI Demo（设计待审）</title>
+  <link rel="icon" href="data:," />
+  <style>
+    :root {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-synthesis: none;
+      color-scheme: light dark;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: #14131a; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; color: inherit; }
+    button:disabled { cursor: not-allowed; }
+    button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    .review-bar {
+      min-height: 46px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 14px;
+      padding: 8px 16px;
+      border-bottom: 1px solid #38344c;
+      background: #1e1c29;
+      color: #eeeef2;
+      font-size: 12px;
+      position: relative;
+      z-index: 30;
+    }
+    .review-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .review-badge {
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: #6550c9;
+      color: #fff;
+      font-weight: 650;
+    }
+    .review-note { color: #cfcbe2; }
+    .review-pill {
+      min-height: 30px;
+      padding: 5px 10px;
+      border: 1px solid #494463;
+      border-radius: 5px;
+      background: #282538;
+      color: #e4e2f0;
+      font-size: 12px;
+    }
+    .review-pill:hover { background: #35314a; }
+    .review-pill[aria-pressed="true"] {
+      border-color: #8f7ce6;
+      background: #6550c9;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .stage-wrap {
+      display: flex;
+      justify-content: center;
+      min-height: calc(100dvh - 46px);
+      background: #14131a;
+    }
+    .stage-wrap.narrow { padding: 12px 0; }
+    .stage-wrap.narrow .app {
+      width: 390px;
+      height: 844px;
+      min-height: 844px;
+      max-width: 100%;
+      border: 1px solid #3d3b47;
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.45);
+    }
+
+    .app {
+      --canvas:#fff;
+      --sidebar:#f7f7f9;
+      --surface:#fff;
+      --subtle:#f5f5f8;
+      --hover:#ececf2;
+      --ink:#24232b;
+      --muted:#6c6b78;
+      --line:#e6e5eb;
+      --accent:#6550c9;
+      --accent-soft:#eeebfb;
+      --focus:#a397e0;
+      --warning:#80530c;
+      --warning-bg:#fff7e8;
+      --error:#a12b36;
+      --error-bg:#fff4f4;
+      --ok:#20715b;
+      --ok-bg:#edf8f4;
+      width: 100%;
+      display: flex;
+      min-height: calc(100dvh - 46px);
+      height: calc(100dvh - 46px);
+      overflow: hidden;
+      background: var(--canvas);
+      color: var(--ink);
+      color-scheme: light;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .app.dark {
+      --canvas:#1b1b20;
+      --sidebar:#16161b;
+      --surface:#232329;
+      --subtle:#292930;
+      --hover:#32323a;
+      --ink:#eeeef2;
+      --muted:#b2b0be;
+      --line:#3d3b47;
+      --accent:#b7a7ff;
+      --accent-soft:#30294a;
+      --focus:#c4b7ff;
+      --warning:#edc887;
+      --warning-bg:#372c1b;
+      --error:#ffafb8;
+      --error-bg:#39252b;
+      --ok:#8fd4bd;
+      --ok-bg:#223429;
+      color-scheme: dark;
+    }
+    .sr-only {
+      position:absolute;
+      width:1px;
+      height:1px;
+      padding:0;
+      margin:-1px;
+      clip:rect(0,0,0,0);
+      overflow:hidden;
+      white-space:nowrap;
+      border:0;
+    }
+
+    .sidebar {
+      width: 248px;
+      flex: 0 0 248px;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 14px 14px;
+      background: var(--sidebar);
+      border-right: 1px solid var(--line);
+      min-height: 0;
+    }
+    .brand { display:flex; align-items:center; gap:11px; padding:0 10px 20px; }
+    .brand-mark { position:relative; width:38px; height:38px; flex:0 0 auto; color:var(--accent); }
+    .brand-mark span { position:absolute; inset:3px; display:block; border:3px solid currentColor; border-radius:50%; }
+    .brand-mark i { position:absolute; right:0; bottom:0; width:14px; height:14px; border:3px solid currentColor; border-radius:50%; background:var(--canvas); }
+    .brand strong { display:block; font-size:19px; letter-spacing:-.3px; }
+    .brand small { display:block; margin-top:2px; color:var(--muted); font-size:11px; }
+    .new-button {
+      width:100%;
+      min-height:38px;
+      margin-bottom:10px;
+      padding:0 12px;
+      border:1px solid var(--line);
+      border-radius:7px;
+      background:var(--surface);
+      text-align:left;
+      font-weight:600;
+    }
+    .new-button:hover, .nav-item:hover { background:var(--hover); }
+    .nav-group { margin-top:6px; }
+    .nav-title { margin:12px 10px 6px; color:var(--muted); font-size:11px; font-weight:650; }
+    .nav-item {
+      width:100%;
+      min-height:38px;
+      padding:0 12px;
+      border:0;
+      border-radius:7px;
+      background:transparent;
+      text-align:left;
+    }
+    .nav-item.selected { background:var(--accent-soft); color:var(--accent); font-weight:650; }
+    .sidebar-foot { margin-top:auto; padding-top:10px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; }
+
+    .main { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+    .topbar {
+      min-height:58px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:10px 26px;
+      border-bottom:1px solid var(--line);
+      flex:0 0 auto;
+    }
+    .topbar-context { color:var(--muted); font-size:13px; }
+    .workspace-switch {
+      display:inline-flex;
+      padding:3px;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:var(--subtle);
+    }
+    .workspace-switch button {
+      min-height:28px;
+      padding:4px 16px;
+      border:0;
+      border-radius:5px;
+      background:transparent;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .workspace-switch button[aria-pressed="true"] { background:var(--surface); color:var(--ink); font-weight:600; }
+    .icon-button { min-height:32px; padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--surface); }
+
+    .content { flex:1; min-height:0; padding:24px 26px 34px; overflow:auto; }
+    .page-head { max-width:1080px; margin:0 auto 20px; }
+    .page-head h1 { margin:0 0 6px; font-size:24px; letter-spacing:-.3px; }
+    .page-head p { margin:0; color:var(--muted); }
+    .tabs {
+      max-width:1080px;
+      margin:0 auto 20px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:22px;
+      border-bottom:1px solid var(--line);
+    }
+    .tabs button {
+      padding:10px 0 12px;
+      border:0;
+      border-bottom:2px solid transparent;
+      background:transparent;
+      color:var(--muted);
+      font-size:13px;
+    }
+    .tabs button[aria-selected="true"] { border-bottom-color:var(--accent); color:var(--accent); font-weight:650; }
+
+    .panel {
+      max-width:1080px;
+      margin:0 auto 16px;
+      padding:18px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:var(--surface);
+    }
+    .panel > h2 { margin:0 0 8px; font-size:17px; }
+    .panel > h3 { margin:18px 0 8px; font-size:14px; }
+    .muted { color:var(--muted); }
+    .small { font-size:12px; }
+    .row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+    .row-between { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .grid-2 { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,.9fr); gap:16px; align-items:start; }
+    .release-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 18px; }
+    .field { display:flex; flex-direction:column; gap:5px; min-width:0; }
+    .field label { font-size:12px; color:var(--muted); font-weight:650; }
+    select, input[type="text"] {
+      min-height:36px;
+      padding:7px 9px;
+      border:1px solid var(--line);
+      border-radius:6px;
+      background:var(--surface);
+      color:var(--ink);
+    }
+    select { width:100%; }
+
+    .primary-button, .secondary-button, .text-button {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:36px;
+      padding:7px 14px;
+      border-radius:6px;
+      font-size:13px;
+      white-space:nowrap;
+    }
+    .primary-button { border:1px solid var(--accent); background:var(--accent); color:#fff; font-weight:600; }
+    .app.dark .primary-button { color:#191225; }
+    .primary-button:hover { filter:brightness(.94); }
+    .secondary-button { border:1px solid var(--line); background:var(--surface); color:var(--ink); }
+    .secondary-button:hover { background:var(--hover); }
+    .text-button { min-height:30px; padding:5px 0; border:0; background:transparent; color:var(--accent); font-size:12px; }
+    .text-button:hover { text-decoration:underline; }
+    .danger-button { border:1px solid var(--error); background:transparent; color:var(--error); }
+
+    .badge {
+      display:inline-flex;
+      align-items:center;
+      min-height:22px;
+      padding:3px 7px;
+      border-radius:4px;
+      background:var(--accent-soft);
+      color:var(--accent);
+      font-size:11px;
+      font-weight:650;
+      white-space:nowrap;
+    }
+    .badge.pending { background:var(--subtle); color:var(--muted); }
+    .badge.ok { background:var(--ok-bg); color:var(--ok); }
+    .badge.warn { background:var(--warning-bg); color:var(--warning); }
+    .badge.error { background:var(--error-bg); color:var(--error); }
+
+    .status {
+      min-height:38px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      margin-top:12px;
+      padding:8px 10px;
+      border:1px solid var(--line);
+      border-radius:7px;
+      background:var(--subtle);
+      color:var(--muted);
+      font-size:12px;
+    }
+    .status.ok { border-color:color-mix(in srgb, var(--ok) 40%, var(--line)); background:var(--ok-bg); color:var(--ok); }
+    .status.warn { border-color:color-mix(in srgb, var(--warning) 40%, var(--line)); background:var(--warning-bg); color:var(--warning); }
+    .status.error { border-color:color-mix(in srgb, var(--error) 40%, var(--line)); background:var(--error-bg); color:var(--error); }
+
+    .table-wrap { width:100%; overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:.91rem; }
+    th, td { padding:.62rem .68rem; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; overflow-wrap:anywhere; }
+    th { font-weight:650; }
+    caption { text-align:left; padding:.7rem 0 .5rem; font-weight:650; }
+    dl.meta { display:grid; grid-template-columns:112px minmax(0,1fr); gap:7px 12px; margin:12px 0; }
+    dl.meta dt { color:var(--muted); font-size:12px; font-weight:650; }
+    dl.meta dd { margin:0; min-width:0; overflow-wrap:anywhere; }
+    .mono { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; }
+
+    details.box, .callout {
+      margin-top:12px;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:var(--subtle);
+    }
+    details.box summary { cursor:pointer; font-weight:650; }
+    details.box > *:not(summary) { margin-top:8px; }
+    .callout.warn { border-color:color-mix(in srgb, var(--warning) 40%, var(--line)); background:var(--warning-bg); color:var(--warning); }
+    .callout.plain { background:transparent; }
+    .callout ul { margin:8px 0 0; padding-left:20px; }
+    .callout li + li { margin-top:4px; }
+
+    .record-list { list-style:none; margin:0; padding:0; }
+    .record-list li { padding:11px 0; border-bottom:1px solid var(--line); }
+    .record-list li:last-child { border-bottom:0; }
+    .record-title { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:7px; }
+    .record-title strong { min-width:0; overflow-wrap:anywhere; }
+    .record-meta { margin:5px 0 7px; color:var(--muted); font-size:12px; }
+    .handoff-list { list-style:none; margin:0; padding:0; }
+    .handoff-list li { padding:10px 0; border-bottom:1px solid var(--line); }
+    .handoff-list li:last-child { border-bottom:0; }
+    .handoff-item { display:flex; flex-wrap:wrap; justify-content:space-between; gap:7px; }
+    .handoff-item strong { min-width:0; }
+    .handoff-meta { margin-top:4px; color:var(--muted); font-size:12px; }
+
+    .candidate {
+      margin-top:14px;
+      padding:14px;
+      border:1px solid var(--line);
+      border-radius:9px;
+      background:var(--subtle);
+    }
+    .candidate-actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:12px; }
+    .goal-choice {
+      display:flex;
+      align-items:flex-start;
+      gap:9px;
+      padding:9px;
+      border:1px solid var(--line);
+      border-radius:7px;
+      background:var(--surface);
+    }
+    .goal-choice span { display:grid; gap:3px; min-width:0; }
+    .goal-choice small { color:var(--muted); }
+    .composer {
+      margin-top:14px;
+      padding:12px;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:var(--subtle);
+    }
+    .composer textarea {
+      width:100%;
+      min-height:86px;
+      padding:9px;
+      border:1px solid var(--line);
+      border-radius:7px;
+      background:var(--surface);
+      color:var(--ink);
+      resize:vertical;
+    }
+    .map-preview {
+      margin-top:12px;
+      padding:12px;
+      border:1px dashed var(--line);
+      border-radius:8px;
+      background:var(--subtle);
+    }
+    .map-line { display:flex; align-items:center; gap:8px; margin:7px 0; }
+    .map-node { padding:5px 9px; border:1px solid var(--line); border-radius:6px; background:var(--surface); }
+    .map-node.strategy { border-color:color-mix(in srgb, var(--accent) 45%, var(--line)); color:var(--accent); }
+    .map-arrow { color:var(--muted); }
+
+    dialog {
+      width:min(720px, calc(100vw - 28px));
+      max-height:calc(100dvh - 28px);
+      padding:0;
+      border:1px solid var(--line);
+      border-radius:11px;
+      background:var(--surface);
+      color:var(--ink);
+      box-shadow:0 20px 60px rgba(0,0,0,.28);
+    }
+    dialog::backdrop { background:rgba(20,19,26,.55); }
+    .dialog-shell { padding:20px; }
+    .dialog-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .dialog-head h2 { margin:0 0 4px; font-size:18px; }
+    .dialog-head p { margin:0; color:var(--muted); font-size:12px; }
+    .dialog-body { max-height:calc(100dvh - 210px); overflow:auto; padding-right:2px; }
+    .dialog-actions {
+      display:flex;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+      gap:9px;
+      margin-top:20px;
+      padding-top:16px;
+      border-top:1px solid var(--line);
+    }
+    .warning-box {
+      margin-top:12px;
+      padding:10px;
+      border:1px solid color-mix(in srgb, var(--warning) 40%, var(--line));
+      border-radius:7px;
+      background:var(--warning-bg);
+      color:var(--warning);
+      font-size:12px;
+    }
+    .api-result {
+      margin-top:10px;
+      padding:10px;
+      border:1px solid var(--line);
+      border-radius:7px;
+      background:var(--subtle);
+      font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+      font-size:12px;
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
+    }
+    .api-result.error { border-color:color-mix(in srgb, var(--error) 40%, var(--line)); background:var(--error-bg); color:var(--error); }
+    .legend { display:flex; flex-wrap:wrap; gap:7px; margin-top:9px; }
+
+    @media (max-width:1000px) {
+      .grid-2 { grid-template-columns:1fr; }
+    }
+    @media (max-width:750px) {
+      .app { height:auto; min-height:100dvh; flex-direction:column; overflow:visible; }
+      .sidebar { width:100%; flex:0 0 auto; border-right:0; border-bottom:1px solid var(--line); }
+      .content { padding:16px 14px 28px; overflow:visible; }
+      .tabs { gap:14px; }
+      .release-grid { grid-template-columns:1fr; }
+      .dialog-actions button { flex:1 1 auto; }
+      table { min-width:640px; }
+    }
+  </style>
+</head>
+<body>
+<header class="review-bar">
+  <div class="review-group">
+    <span class="review-badge">设计待审</span>
+    <span class="review-note">#112 · 战略发布 · 合成数据 · 本页不写入产品、浏览器存储或目标库</span>
+  </div>
+  <div class="review-group">
+    <button class="review-pill" id="narrowToggle" type="button" aria-pressed="false">390px 窄屏</button>
+    <button class="review-pill" id="darkToggle" type="button" aria-pressed="false">深色模式</button>
+    <button class="review-pill" id="resetDemo" type="button">重置演示</button>
+  </div>
+</header>
+
+<div class="stage-wrap" id="stageWrap">
+  <div class="app" id="app">
+    <aside class="sidebar" aria-label="工作台导航">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"><span></span><i></i></span>
+        <div><strong>OptraCall</strong><small>持续做出更好的决策</small></div>
+      </div>
+      <button class="new-button" type="button">新建项目</button>
+      <nav class="nav-group" aria-label="主导航">
+        <p class="nav-title">主导航</p>
+        <button class="nav-item selected" type="button">战略选择</button>
+        <button class="nav-item" type="button">目标管理</button>
+        <button class="nav-item" type="button">决策星图</button>
+        <button class="nav-item" type="button">项目地图</button>
+      </nav>
+      <div class="sidebar-foot">Demo 只保留与本次设计相关的导航与入口。</div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <span class="topbar-context">战略选择</span>
+        <div class="row">
+          <div class="workspace-switch" role="group" aria-label="工作区切换">
+            <button type="button">分析</button>
+            <button type="button" aria-pressed="true">决策</button>
+          </div>
+          <button class="icon-button" type="button">帮助</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <div class="page-head">
+          <h1>战略选择</h1>
+          <p>与 Agent 共创候选地图；正式发布后，才从「战略发布」带入目标管理。</p>
+        </div>
+
+        <nav class="tabs" role="tablist" aria-label="战略选择工作视图" id="tabs">
+          <button type="button" role="tab" id="tab-direction" aria-controls="view-direction" aria-selected="false">战略共创</button>
+          <button type="button" role="tab" id="tab-compare" aria-controls="view-compare" aria-selected="false">战略地图</button>
+          <button type="button" role="tab" id="tab-handoff" aria-controls="view-handoff" aria-selected="false">战略模拟</button>
+          <button type="button" role="tab" id="tab-release" aria-controls="view-release" aria-selected="true">战略发布</button>
+          <button type="button" role="tab" id="tab-strategy-versions" aria-controls="view-strategy-versions" aria-selected="false">版本与来源</button>
+        </nav>
+
+        <section class="panel" id="view-direction" role="tabpanel" aria-labelledby="tab-direction" hidden>
+          <h2>战略选择 Agent</h2>
+          <p class="muted">说说你正在考虑的战略问题。可以从比较两个方向开始。本 Demo 不发送模型请求。</p>
+          <div class="composer">
+            <label class="sr-only" for="demo-question">战略讨论问题</label>
+            <textarea id="demo-question">下季度该优先提高老客复购，还是补充新客首购？</textarea>
+            <div class="row-between" style="margin-top:9px">
+              <div class="row"><button class="secondary-button" type="button">＋ 添加资料</button><button class="secondary-button" type="button">导入战略图</button></div>
+              <button class="primary-button" type="button" disabled>发送讨论</button>
+            </div>
+          </div>
+          <div class="callout">共创、人工编辑和导入产生的地图都只是候选；本页不出现「带入目标管理」。</div>
+        </section>
+
+        <section class="panel" id="view-compare" role="tabpanel" aria-labelledby="tab-compare" hidden>
+          <h2>战略地图</h2>
+          <p class="muted">查看、编辑、对照原稿和继续原讨论。发布状态只在「战略发布」处理；本页不提供地图承接按钮。</p>
+          <div class="map-preview" id="mapPreview"></div>
+          <div class="candidate-actions">
+            <button class="secondary-button" type="button">继续原讨论</button>
+            <button class="secondary-button" type="button">导入战略图</button>
+            <button class="secondary-button" type="button">编辑地图</button>
+            <button class="text-button" type="button" data-go-release>到战略发布核对候选</button>
+          </div>
+          <div class="callout warn">设计变化：原「将此版带入目标管理」从本页移除。编辑保存后生成下一版候选，需回「战略发布」再次确认。</div>
+        </section>
+
+        <section class="panel" id="view-handoff" role="tabpanel" aria-labelledby="tab-handoff" hidden>
+          <h2>战略模拟</h2>
+          <p class="muted">比较两个或更多候选版本的假设与情景，可返回原地图连线。模拟结果不等于发布或目标采用。</p>
+          <div class="release-grid">
+            <div class="candidate">
+              <div class="record-title"><strong>v2 · 维持会员优先</strong><span class="badge ok">已发布</span></div>
+              <p class="muted small">假设：首购回访可提高 90 天复购。</p>
+            </div>
+            <div class="candidate">
+              <div class="record-title"><strong>v3 · 会员优先＋周边获客</strong><span class="badge pending">候选</span></div>
+              <p class="muted small">假设：新增周边轻推广能带来首购，但不稀释回访资源。</p>
+            </div>
+          </div>
+          <div class="candidate-actions"><button class="secondary-button" type="button">返回原地图连线</button><button class="text-button" type="button" data-go-release>发布所选版本</button></div>
+        </section>
+
+        <section id="view-release" role="tabpanel" aria-labelledby="tab-release">
+          <div class="grid-2">
+            <section class="panel">
+              <div class="row-between">
+                <div><h2>战略发布</h2><p class="muted">先核对候选地图的准确版本；正式发布后，才能从本页带入目标管理。</p></div>
+                <span class="badge" id="selectedBadge">候选</span>
+              </div>
+              <div class="release-grid" style="margin-top:14px">
+                <div class="field">
+                  <label for="versionSelect">待核对地图版本</label>
+                  <select id="versionSelect"></select>
+                </div>
+                <div class="field">
+                  <label for="scopePreview">发布后承接归属（在目标核对中可改）</label>
+                  <select id="scopePreview">
+                    <option>河畔零售 · 会员运营</option>
+                    <option>个人工作</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="selectedSummary"></div>
+              <div class="candidate-actions" id="releaseActions"></div>
+              <div class="status" id="releaseStatus" role="status" aria-live="polite">已选择未发布候选。发布前请核对版本、指纹、目标和策略。</div>
+
+              <details class="box">
+                <summary>Host 写入门禁（设计说明）</summary>
+                <p class="small">即使绕过界面直接调用现有承接入口，Host 仍按讨论归属、地图版本、内容指纹、发布记录和目标选择复核。</p>
+                <div class="row">
+                  <button class="secondary-button" type="button" id="directRejectDemo">模拟直接承接当前所选版</button>
+                  <span class="badge" id="directWriteBadge">负例写入 0 次</span>
+                </div>
+                <div class="api-result" id="directResult" hidden></div>
+              </details>
+            </section>
+
+            <div>
+              <section class="panel">
+                <h2>发布记录</h2>
+                <p class="muted small">同一地图只有一个当前发布；新版发布后，旧发布转为「已被替代」并保留记录。</p>
+                <ul class="record-list" id="publicationList"></ul>
+              </section>
+
+              <section class="panel">
+                <h2>承接记录</h2>
+                <p class="muted small">旧数据保留；缺少发布身份的记录标为历史承接，不自动升级到最新发布。</p>
+                <ul class="handoff-list" id="handoffList"></ul>
+              </section>
+
+              <section class="panel">
+                <h2>入口边界</h2>
+                <div class="callout plain">
+                  <ul>
+                    <li>战略地图：查看、编辑、导入、对照原稿；无地图承接。</li>
+                    <li>战略模拟：比较候选；无地图承接。</li>
+                    <li>版本与来源：查看修订、来源和历史交接；无地图承接。</li>
+                    <li>历史战略文稿「将此版带入 GSA」保留为文稿交接，另加说明，不与地图发布混用。</li>
+                  </ul>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="view-strategy-versions" role="tabpanel" aria-labelledby="tab-strategy-versions" hidden>
+          <h2>地图修订记录</h2>
+          <p class="muted">查看修订理由、来源、发布记录和历史交接；导出仍按所选准确版本。</p>
+          <div class="table-wrap">
+            <table>
+              <caption>本 Demo 的合成地图版本</caption>
+              <thead><tr><th>版本</th><th>状态</th><th>修订理由</th><th>操作</th></tr></thead>
+              <tbody id="historyRows"></tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <strong>历史战略文稿入口（待确认）</strong>
+            <p class="small">「将此版带入 GSA」继续走历史文稿交接路径，不进入地图发布门禁。本 Demo 建议保留入口并补充「历史战略文稿」说明；是否改名或移除由你确认。</p>
+            <button class="secondary-button" type="button">将此版带入 GSA（历史战略文稿）</button>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<dialog id="publishDialog" aria-labelledby="publishTitle">
+  <div class="dialog-shell">
+    <div class="dialog-head">
+      <div><h2 id="publishTitle">确认正式发布战略地图</h2><p id="publishSubtitle"></p></div>
+      <button class="text-button" type="button" data-close="publishDialog">关闭</button>
+    </div>
+    <div class="dialog-body" id="publishBody"></div>
+    <div class="warning-box">正式发布只冻结这次核对过的地图准确版本；不会创建目标、采用目标、启动 Case 或项目。后续编辑会生成新的候选版本。</div>
+    <div class="dialog-actions">
+      <button class="secondary-button" type="button" id="cancelPublish" data-close="publishDialog">取消</button>
+      <button class="primary-button" type="button" id="confirmPublish">确认正式发布</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="withdrawDialog" aria-labelledby="withdrawTitle">
+  <div class="dialog-shell">
+    <div class="dialog-head">
+      <div><h2 id="withdrawTitle">撤销这次发布？</h2><p id="withdrawSubtitle"></p></div>
+      <button class="text-button" type="button" data-close="withdrawDialog">关闭</button>
+    </div>
+    <div class="dialog-body">
+      <p>撤销后，这个版本不能再被带入目标管理；地图版本、发布记录、已保存目标候选和历史引用都保留。</p>
+      <p class="muted small">如需恢复承接，需要重新确认并发布同一准确版本，生成新的发布记录。</p>
+    </div>
+    <div class="dialog-actions">
+      <button class="secondary-button" type="button" id="cancelWithdraw" data-close="withdrawDialog">取消</button>
+      <button class="danger-button" type="button" id="confirmWithdraw">确认撤销发布</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="handoffDialog" aria-labelledby="handoffTitle">
+  <div class="dialog-shell">
+    <div class="dialog-head">
+      <div><h2 id="handoffTitle">核对承接的目标与策略</h2><p id="handoffSubtitle"></p></div>
+      <button class="text-button" type="button" data-close="handoffDialog">关闭</button>
+    </div>
+    <div class="dialog-body">
+      <div class="release-grid">
+        <div class="field">
+          <label for="handoffScope">目标归属</label>
+          <select id="handoffScope">
+            <option>河畔零售 · 会员运营</option>
+            <option>个人工作</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="handoffPerspective">组织视角</label>
+          <select id="handoffPerspective"><option>营利组织</option><option>非营利组织</option></select>
+        </div>
+      </div>
+      <h3 style="margin:14px 0 8px;font-size:14px">承接范围</h3>
+      <div id="handoffGoals" style="display:grid;gap:8px"></div>
+      <div class="warning-box">保存只会生成目标候选；目标采用、Case 和项目启动仍由目标管理原有流程处理。</div>
+    </div>
+    <div class="dialog-actions">
+      <button class="secondary-button" type="button" id="cancelHandoff" data-close="handoffDialog">取消</button>
+      <button class="primary-button" type="button" id="saveGoalCandidates">保存目标候选</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const nowText = () => new Date().toLocaleString('sv-SE', {hour12:false});
+const initialVersions = () => ({
+  v1: {
+    id:'v1', mapId:'11111111-map-demo-0001', title:'会员经营地图', version:1,
+    template:'条目表', author:'Agent 共创', reason:'首轮候选：比较普发券与首购回访',
+    createdAt:'2026-11-20 09:31', sha:'a91f03c7d24e5b68', status:'superseded',
+    publicationId:'PUB-112-01', publishedAt:'2026-11-20 10:02', supersededAt:'2026-11-21 15:20',
+    withdrawnAt:'',
+    choice:'先保住 90 天复购，暂不扩大新客投放。',
+    unknowns:'普发券对毛利的影响仍待观察；回访人力容量未核对。',
+    goals:[
+      {id:'G1', title:'90天复购率', strategies:['首购后 7 日回访']},
+      {id:'G2', title:'会员客单价', strategies:['会员日权益']}
+    ]
+  },
+  v2: {
+    id:'v2', mapId:'11111111-map-demo-0001', title:'会员经营地图', version:2,
+    template:'目标与策略树', author:'用户编辑', reason:'补充会员权益并核对首购回访责任',
+    createdAt:'2026-11-21 15:04', sha:'4d80c1a99f6be207', status:'active',
+    publicationId:'PUB-112-02', publishedAt:'2026-11-21 15:20', supersededAt:'',
+    withdrawnAt:'',
+    choice:'以老客复购为主，保留一档可控的会员权益。',
+    unknowns:'权益成本与复购提升的因果关系仍需门店试点验证。',
+    goals:[
+      {id:'G1', title:'90天复购率', strategies:['首购后 7 日回访','会员权益提醒']},
+      {id:'G2', title:'会员客单价', strategies:['会员日权益']}
+    ]
+  },
+  v3: {
+    id:'v3', mapId:'11111111-map-demo-0001', title:'会员经营地图', version:3,
+    template:'目标与策略树', author:'用户编辑', reason:'修订候选：增加周边轻获客，待核对后再发布',
+    createdAt:'2026-11-22 10:12', sha:'b7e451208ca93d60', status:'candidate',
+    publicationId:'', publishedAt:'', supersededAt:'',
+    withdrawnAt:'',
+    choice:'维持复购优先，同时测试周边门店轻获客。',
+    unknowns:'周边获客是否分散回访人力；新客首购成本待补。',
+    goals:[
+      {id:'G1', title:'90天复购率', strategies:['首购后 7 日回访','会员权益提醒']},
+      {id:'G2', title:'会员客单价', strategies:['会员日权益']},
+      {id:'G3', title:'周边新客首购', strategies:['周边社区轻推广']}
+    ]
+  }
+});
+const initialHandoffs = () => ([
+  {version:1, title:'90天复购率 · v1', at:'2026-11-20 10:20', kind:'historical', publicationId:''},
+  {version:2, title:'90天复购率 · v1候选', at:'2026-11-21 15:41', kind:'published', publicationId:'PUB-112-02'}
+]);
+let versions, handoffs, selectedId, directWrites, selectedGoals;
+
+function resetDemo(notify=true) {
+  versions = initialVersions();
+  handoffs = initialHandoffs();
+  selectedId = 'v3';
+  directWrites = 0;
+  selectedGoals = new Set(['G1','G2']);
+  $('directResult').hidden = true;
+  $('directResult').className='api-result';
+  $('directResult').textContent='';
+  render();
+  if(notify) setReleaseStatus('演示已重置：v3 是未发布候选，v2 是当前发布。', '');
+}
+const current = () => versions[selectedId];
+const statusLabel = status => ({candidate:'未发布候选',active:'当前发布',superseded:'已被替代',withdrawn:'已撤销'}[status]);
+const statusClass = status => ({candidate:'pending',active:'ok',superseded:'warn',withdrawn:'error'}[status]);
+const nextPublicationId = () => 'PUB-112-' + String(Object.values(versions).filter(v=>v.publicationId).length + 1).padStart(2,'0');
+
+function strategiesFor(v, goal) {
+  return v.goals.find(item=>item.id===goal.id)?.strategies ?? [];
+}
+function render() {
+  renderVersionSelect();
+  renderSelected();
+  renderPublications();
+  renderHandoffs();
+  renderHistory();
+  renderMapPreview();
+  $('directWriteBadge').textContent = '负例写入 ' + directWrites + ' 次';
+}
+function renderVersionSelect() {
+  $('versionSelect').innerHTML = Object.values(versions).map(v => `<option value="${v.id}">${esc(v.title)} · v${v.version} · ${esc(statusLabel(v.status))}</option>`).join('');
+  $('versionSelect').value = selectedId;
+}
+function renderSelected() {
+  const v=current();
+  $('selectedBadge').textContent=statusLabel(v.status);
+  $('selectedBadge').className='badge '+statusClass(v.status);
+  $('selectedSummary').innerHTML=`
+    <div class="candidate">
+      <div class="row-between">
+        <strong>${esc(v.title)} · v${v.version}</strong>
+        <span class="muted small mono">sha256:${esc(v.sha)}</span>
+      </div>
+      <dl class="meta">
+        <dt>地图身份</dt><dd class="mono">${esc(v.mapId)} · v${v.version}</dd>
+        <dt>来源</dt><dd>${esc(v.author)} · ${esc(v.reason)}</dd>
+        <dt>保存时间</dt><dd>${esc(v.createdAt)}</dd>
+        <dt>发布记录</dt><dd>${v.publicationId ? esc(v.publicationId)+' · '+esc(v.publishedAt)+(v.status==='withdrawn'&&v.withdrawnAt?' · 撤销于 '+esc(v.withdrawnAt):v.supersededAt?' · 替代于 '+esc(v.supersededAt):'') : '尚未发布'}</dd>
+      </dl>
+      <details class="box" open><summary>目标与策略核对</summary>
+        <div class="table-wrap"><table><thead><tr><th>目标</th><th>关联策略</th></tr></thead><tbody>
+        ${v.goals.map(g=>`<tr><th scope="row">${esc(g.id)} · ${esc(g.title)}</th><td>${esc(strategiesFor(v,g).join('、')||'关联策略待补')}</td></tr>`).join('')}
+        </tbody></table></div>
+      </details>
+      <details class="box"><summary>取舍与待核依据</summary><p>${esc(v.choice)}</p><p class="muted">${esc(v.unknowns)}</p></details>
+    </div>`;
+  const actions=[];
+  if(v.status==='candidate') actions.push(`<button class="secondary-button" type="button" id="openPublish">核对此版并正式发布</button>`);
+  if(v.status==='active') {
+    actions.push(`<button class="primary-button" type="button" id="openHandoff">带入目标管理</button>`);
+    actions.push(`<button class="secondary-button" type="button" id="openWithdraw">撤销发布</button>`);
+  }
+  if(v.status!=='candidate') actions.push(`<button class="secondary-button" type="button" id="viewCurrentMap">查看此版地图</button>`);
+  actions.push(`<button class="text-button" type="button" id="backToMap">回战略地图核对修订</button>`);
+  $('releaseActions').innerHTML=actions.join('');
+  if($('openPublish')) $('openPublish').addEventListener('click',openPublish);
+  if($('openHandoff')) $('openHandoff').addEventListener('click',openHandoff);
+  if($('openWithdraw')) $('openWithdraw').addEventListener('click',openWithdraw);
+  if($('viewCurrentMap')) $('viewCurrentMap').addEventListener('click',()=>setReleaseStatus('查看只读地图；承接入口仍在战略发布页。',''));
+  if($('backToMap')) $('backToMap').addEventListener('click',()=>selectTab('compare'));
+}
+function renderPublications() {
+  $('publicationList').innerHTML=Object.values(versions).slice().reverse().map(v=>`
+    <li>
+      <div class="record-title"><strong>${esc(v.title)} · v${v.version}</strong><span class="badge ${statusClass(v.status)}">${statusLabel(v.status)}</span></div>
+      <p class="record-meta">${v.publicationId?esc(v.publicationId)+' · 发布 '+esc(v.publishedAt)+(v.status==='withdrawn'&&v.withdrawnAt?' · 撤销 '+esc(v.withdrawnAt):v.supersededAt?' · 替代 '+esc(v.supersededAt):''):'尚未发布 · 保存 '+esc(v.createdAt)} · <span class="mono">${esc(v.sha)}</span></p>
+      <div class="row"><button class="text-button" type="button" data-select="${v.id}">选择核对</button>${v.status==='active'?'<span class="small muted">当前唯一可承接版本</span>':'<span class="small muted">不可承接</span>'}</div>
+    </li>`).join('');
+  document.querySelectorAll('#publicationList [data-select]').forEach(button=>button.addEventListener('click',()=>{
+    selectedId=button.dataset.select; $('versionSelect').value=selectedId; render(); setReleaseStatus('已切换到 '+current().title+' v'+current().version+'。','');
+  }));
+}
+function renderHandoffs() {
+  $('handoffList').innerHTML=handoffs.slice().reverse().map((item,index)=>`
+    <li>
+      <div class="handoff-item"><strong>${esc(item.title)}</strong><span class="badge ${item.kind==='historical'?'pending':'ok'}">${item.kind==='historical'?'历史承接':'发布后承接'}</span></div>
+      <p class="handoff-meta">${esc(item.at)} · ${item.publicationId?'发布 '+esc(item.publicationId):'发布功能上线前，原数据缺少发布身份'}</p>
+    </li>`).join('');
+}
+function renderHistory() {
+  $('historyRows').innerHTML=Object.values(versions).slice().reverse().map(v=>`
+    <tr>
+      <th scope="row">v${v.version} · <span class="mono">${esc(v.sha)}</span></th>
+      <td><span class="badge ${statusClass(v.status)}">${statusLabel(v.status)}</span></td>
+      <td>${esc(v.reason)}</td>
+      <td><button class="text-button" type="button" data-history-select="${v.id}">查看</button></td>
+    </tr>`).join('');
+  document.querySelectorAll('[data-history-select]').forEach(button=>button.addEventListener('click',()=>{
+    selectedId=button.dataset.historySelect; $('versionSelect').value=selectedId; render(); selectTab('release'); setReleaseStatus('已从历史记录切换到 v'+current().version+'。','');
+  }));
+}
+function renderMapPreview() {
+  const v=current();
+  $('mapPreview').innerHTML=`
+    <div class="row-between"><strong>${esc(v.title)} · v${v.version}</strong><span class="badge ${statusClass(v.status)}">${statusLabel(v.status)}</span></div>
+    <p class="muted small">${esc(v.reason)} · <span class="mono">${esc(v.sha)}</span></p>
+    ${v.goals.map(goal=>`<div class="map-line"><span class="map-node">${esc(goal.id)} ${esc(goal.title)}</span><span class="map-arrow">←</span>${strategiesFor(v,goal).map(s=>`<span class="map-node strategy">${esc(s)}</span>`).join('')}</div>`).join('')}`;
+}
+function setReleaseStatus(text, kind='') {
+  $('releaseStatus').className='status '+kind;
+  $('releaseStatus').textContent=text;
+}
+function selectTab(name) {
+  for(const tab of ['direction','compare','handoff','release','strategy-versions']) {
+    const selected=tab===name;
+    $('tab-'+tab).ariaSelected=String(selected);
+    $('tab-'+tab).tabIndex=selected?0:-1;
+    $('view-'+tab).hidden=!selected;
+  }
+  $('tab-'+name).focus();
+}
+function openPublish() {
+  const v=current(), active=Object.values(versions).find(item=>item.mapId===v.mapId&&item.status==='active');
+  $('publishSubtitle').textContent=`${v.title} · v${v.version} · sha256:${v.sha}`;
+  $('publishBody').innerHTML=`
+    <dl class="meta">
+      <dt>准确身份</dt><dd class="mono">${esc(v.mapId)} · v${v.version} · ${esc(v.sha)}</dd>
+      <dt>版本来源</dt><dd>${esc(v.author)} · ${esc(v.reason)}</dd>
+      <dt>将冻结</dt><dd>${v.goals.length} 个目标节点、${v.goals.reduce((n,g)=>n+strategiesFor(v,g).length,0)} 条关联策略</dd>
+      <dt>同地图现状</dt><dd>${active?`v${active.version} 为当前发布；确认后它会转为「已被替代」并保留记录。`:'当前没有有效发布；确认后会生成新的发布记录。'}</dd>
+    </dl>
+    <div class="table-wrap"><table><thead><tr><th>目标</th><th>关联策略</th></tr></thead><tbody>${v.goals.map(g=>`<tr><th scope="row">${esc(g.id)} · ${esc(g.title)}</th><td>${esc(strategiesFor(v,g).join('、')||'关联策略待补')}</td></tr>`).join('')}</tbody></table></div>`;
+  $('publishDialog').showModal();
+}
+function openWithdraw() {
+  const v=current();
+  $('withdrawSubtitle').textContent=`${v.title} · v${v.version} · ${v.publicationId}`;
+  $('withdrawDialog').showModal();
+}
+function openHandoff() {
+  const v=current();
+  selectedGoals=new Set(v.goals.map(g=>g.id));
+  $('handoffSubtitle').textContent=`${v.title} · v${v.version} · ${v.publicationId} · sha256:${v.sha}`;
+  $('handoffGoals').innerHTML=v.goals.map(goal=>`
+    <label class="goal-choice"><input type="checkbox" value="${esc(goal.id)}" checked><span><strong>${esc(goal.id)} · ${esc(goal.title)}</strong><small>${esc(strategiesFor(v,goal).join('、')||'关联策略待补')}</small></span></label>`).join('');
+  $('handoffDialog').showModal();
+}
+function closeDialog(id) { $(id).close(); }
+
+$('tabs').addEventListener('click',event=>{
+  const button=event.target.closest('[role="tab"]'); if(!button)return;
+  selectTab(button.id.replace('tab-',''));
+});
+$('tabs').addEventListener('keydown',event=>{
+  const tabs=[...document.querySelectorAll('#tabs [role="tab"]')], index=tabs.findIndex(item=>item.getAttribute('aria-selected')==='true');
+  if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+  event.preventDefault();
+  const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+  tabs[next]?.focus(); tabs[next]?.click();
+});
+document.addEventListener('click',event=>{
+  const goRelease=event.target.closest('[data-go-release]'); if(goRelease){selectTab('release');return;}
+  const closer=event.target.closest('[data-close]'); if(closer){closeDialog(closer.dataset.close);}
+});
+$('versionSelect').addEventListener('change',()=>{selectedId=$('versionSelect').value;render();setReleaseStatus('已选择 '+current().title+' v'+current().version+'。请核对指纹和目标策略。','');});
+$('confirmPublish').addEventListener('click',()=>{
+  const v=current(), old=Object.values(versions).find(item=>item.status==='active');
+  if(old&&old.id!==v.id){old.status='superseded';old.supersededAt=nowText();}
+  v.status='active';v.publicationId=nextPublicationId();v.publishedAt=nowText();v.supersededAt='';
+  closeDialog('publishDialog');render();
+  setReleaseStatus(`已正式发布 ${v.title} v${v.version}（${v.publicationId}）。发布未创建目标；如需承接，请点击「带入目标管理」。`,'ok');
+});
+$('confirmWithdraw').addEventListener('click',()=>{
+  const v=current();v.status='withdrawn';v.withdrawnAt=nowText();
+  closeDialog('withdrawDialog');render();
+  setReleaseStatus(`已撤销 ${v.publicationId}。地图和记录保留，当前版本不能带入目标管理。`,'warn');
+});
+$('handoffGoals').addEventListener('change',()=>{selectedGoals=new Set([...document.querySelectorAll('#handoffGoals input:checked')].map(input=>input.value));});
+$('saveGoalCandidates').addEventListener('click',()=>{
+  const v=current();
+  if(!selectedGoals.size){setReleaseStatus('请至少选择一个目标；未保存目标候选。','warn');return;}
+  const titles=[...selectedGoals].map(id=>v.goals.find(g=>g.id===id)?.title??id);
+  handoffs.push({version:v.version,title:titles.join('、')+' · v'+v.version,at:nowText(),kind:'published',publicationId:v.publicationId});
+  closeDialog('handoffDialog');renderHandoffs();
+  setReleaseStatus(`已保存 ${selectedGoals.size} 项目标候选（Demo）。后续采用仍在目标管理中人工核对。`,'ok');
+});
+$('directRejectDemo').addEventListener('click',()=>{
+  const v=current(), result=$('directResult');
+  if(v.status==='active'){
+    result.hidden=false;result.className='api-result';result.textContent='当前所选版已是 active。请切到 candidate / superseded / withdrawn 版本再演示 Host 负例。';
+    return;
+  }
+  result.hidden=false;result.className='api-result error';
+  result.textContent=`POST /api/strategy/workbooks/handoff\n→ 409 strategy_map_not_published\nmap=${v.mapId} v${v.version} sha256=${v.sha}\n发布状态=${statusLabel(v.status)}；Host 拒绝写入，未保存目标候选，也未切换最新版。`;
+});
+$('cancelPublish').addEventListener('click',()=>setReleaseStatus('已取消发布确认，未写入发布记录。',''));
+$('cancelWithdraw').addEventListener('click',()=>setReleaseStatus('已取消撤销发布，当前发布状态保持不变。',''));
+$('cancelHandoff').addEventListener('click',()=>setReleaseStatus('已取消目标核对，未保存目标候选。',''));
+$('narrowToggle').addEventListener('click',()=>{
+  const narrow=!$('stageWrap').classList.contains('narrow');
+  $('stageWrap').classList.toggle('narrow',narrow);$('narrowToggle').ariaPressed=String(narrow);
+});
+$('darkToggle').addEventListener('click',()=>{
+  const dark=!$('app').classList.contains('dark');
+  $('app').classList.toggle('dark',dark);$('darkToggle').ariaPressed=String(dark);
+});
+$('resetDemo').addEventListener('click',()=>resetDemo());
+resetDemo(false);
+</script>
+</body>
+</html>

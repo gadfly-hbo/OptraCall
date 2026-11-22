@@ -31,11 +31,12 @@ test('真实 Host：Excel 预览不写业务，精确地图交接多个 G/S，�
   assert.equal(version.nodes.length,4);assert.equal(version.author,'import');
   assert.deepEqual((await api(endpoint+'commit','POST',input)).version,version);
   const map={discussionId,mapId:version.mapId,version:1,sha256:version.contentSha256};
+  const {publication}=await api(`/api/strategy/discussions/${discussionId}/maps/${version.mapId}/versions/1/publication`,'POST',{operationId:randomUUID(),sha256:version.contentSha256},201);
   assert.equal((await api(endpoint+'map-source','POST',map)).bytes,bytes);
   const dest={scope:{kind:'personal',id:'self',name:'个人工作'},perspective:'personal'};
-  const {goals}=await api(endpoint+'handoff','POST',{map,selected:['G1','G2'],...dest});
+  const {goals}=await api(endpoint+'handoff','POST',{map,publicationId:publication.publicationId,selected:['G1','G2'],...dest});
   assert.equal(goals.length,2);assert.equal(goals[0].structured.map.version,1);
-  assert.deepEqual((await api(endpoint+'handoff','POST',{map,selected:['G1','G2'],...dest})).goals,goals);
+  assert.deepEqual((await api(endpoint+'handoff','POST',{map,publicationId:publication.publicationId,selected:['G1','G2'],...dest})).goals,goals);
   await api('/api/cases/storage/initialize','POST',{});
   for(const g of goals){
     assert.equal(g.status,'candidate');
@@ -82,7 +83,7 @@ test('真实 Host：Excel 预览不写业务，精确地图交接多个 G/S，�
   const {rename}=await import('node:fs/promises'),{join}=await import('node:path');
   const rawFile=join(host.dataRoot,'strategy-workbooks','discussion-'+discussionId,book.sha256+'.xlsx');
   await rename(rawFile,rawFile+'.unavailable');
-  await api(endpoint+'handoff','POST',{map,selected:['G2'],...dest},409);
+  await api(endpoint+'handoff','POST',{map,publicationId:publication.publicationId,selected:['G2'],...dest},409);
   const reopened=await host.request('/api/strategy/discussions/'+discussionId+'/maps/'+map.mapId+'/versions/1/export');
   assert.equal(reopened.status,409);
   const filtered=await api('/api/strategy/goals');
@@ -157,7 +158,8 @@ test('人工清空地图指标字段后，重开 v2 可交接目标并保留两�
   assert.deepEqual(versions.find((map:any)=>map.version===1),first);
   assert.deepEqual(versions.find((map:any)=>map.version===2),second);
   const map={discussionId,mapId,version:2,sha256:second.contentSha256};
-  const {goals}=await api('/api/strategy/workbooks/handoff','POST',{map,selected:['G1','G2'],scope:{kind:'personal',id:'self',name:'个人工作'},perspective:'personal'});
+  const {publication}=await api(`/api/strategy/discussions/${discussionId}/maps/${mapId}/versions/2/publication`,'POST',{operationId:randomUUID(),sha256:second.contentSha256},201);
+  const {goals}=await api('/api/strategy/workbooks/handoff','POST',{map,publicationId:publication.publicationId,selected:['G1','G2'],scope:{kind:'personal',id:'self',name:'个人工作'},perspective:'personal'});
   const {goal}=await api('/api/strategy/goals/'+goals[0].goalId);
   const saved=goal.versions[0];
   assert.deepEqual(saved.structured.map,map);
