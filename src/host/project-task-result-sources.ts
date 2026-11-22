@@ -32,7 +32,7 @@ function completedReply(entries: Map<string, NativeEntry>, terminal: NativeEntry
       if (reply.message.stopReason !== 'stop' || Array.isArray(content) && content.some(part => part.type === 'toolCall')) return;
       const body = typeof content === 'string' ? content : content.filter(part => part.type === 'text').map(part => part.text).join('');
       if (!body.trim() || !text(reply.id)) return;
-      return { requestId: terminal.data.requestId, sessionId, messageId: reply.id, sha256: createHash('sha256').update(body).digest('hex'), bytes: Buffer.byteLength(body) };
+      return { requestId: terminal.data.requestId, sessionId, messageId: reply.id, sha256: createHash('sha256').update(body).digest('hex'), bytes: Buffer.byteLength(body), savedAt: reply.timestamp };
     }
     if (!reply && ancestor.type === 'message') {
       if (ancestor.message.role !== 'assistant') return;

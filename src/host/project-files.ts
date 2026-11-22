@@ -15,6 +15,7 @@ function fault(code: string): never { throw Object.assign(new Error(code), { cod
 export function createProjectFilesPort(options: {
   projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore; projectId: string; taskId: string; assertOwner(): Promise<void>;
   listBoundReports?(): Promise<ProjectTaskResultBinding[]>;
+  beforeReportPublication?: Parameters<ProjectStore['writeBoundReport']>[4]['beforePublication'];
   readScopedCatalog?(): Promise<{ bytes: Buffer; enterpriseId?: string } | undefined>;
   assertInputAllowed?(relativePath: string, purposeId?: string): void | Promise<void>;
   filterInputBytes?(relativePath: string, bytes: Buffer, purposeId?: string): Promise<{ bytes: Buffer; filtered?: boolean; restrictionNote?: string }> | { bytes: Buffer; filtered?: boolean; restrictionNote?: string };
@@ -44,7 +45,7 @@ export function createProjectFilesPort(options: {
       }
       const receipt = await writeProjectFileText({ content,
         signal: context.signal, toolCallId: context.toolCallId,
-        write: () => options.projects.writeBoundReport(project.id, options.taskId, name, content, context) });
+        write: () => options.projects.writeBoundReport(project.id, options.taskId, name, content, { ...context, beforePublication: options.beforeReportPublication }) });
       check();
       return { content: [{ type: 'text', text: `报告已保存到 ${receipt.path}\n准确回执：${JSON.stringify(receipt)}` }], details: { schemaVersion: 1, type: 'optracall.project-report-write', ...receipt } };
     }

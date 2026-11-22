@@ -645,6 +645,7 @@ export class ProjectStore {
   }
   async writeBoundReport(projectId: string, taskId: string, filename: string, content: string, context: {
     signal: AbortSignal; requestId: string; sessionId: string; toolCallId: string; assertCurrent(): void;
+    beforePublication?(input: { projectId: string; taskId: string; relativePath: string; sha256: string; bytes: number }): void;
   }) {
     if (typeof filename !== 'string' || !filename.trim() || filename === '.' || filename === '..' ||
         Buffer.byteLength(filename, 'utf8') > 255 || /[\\/\u0000-\u001f\u007f]/u.test(filename)) fail('invalid_report_name');
@@ -685,6 +686,15 @@ export class ProjectStore {
         await checkDirectory();
         await checkStaging(bytes.length);
         assertCurrent();
+        if (context.beforePublication) {
+          const prior = await fs.lstat(target).catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== 'ENOENT') throw error;
+            return undefined;
+          });
+          if (prior) fail('report_name_conflict');
+          assertCurrent();
+          context.beforePublication({ projectId, taskId, relativePath, sha256, bytes: bytes.length });
+        }
         try { await fs.link(temporary, target); }
         catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') fail('report_name_conflict'); throw error; }
         published = true;

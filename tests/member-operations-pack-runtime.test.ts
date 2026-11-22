@@ -1585,6 +1585,13 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   const currentReport = await fetch(host.baseUrl + boundFile, { headers: { ...host.headers, cookie: scopedCookie } });
   assert.equal(currentReport.status, 200);
   assert.equal(await currentReport.text(), privateReportText);
+  const taskResultsUrl = `/api/projects/${projStar.id}/tasks/${boundReportTask.task.id}/results`;
+  assert.equal((await fetch(host.baseUrl + taskResultsUrl, { headers: host.headers })).status, 403);
+  const resultHeaders = { ...host.headers, cookie: scopedCookie };
+  const currentResults = await json(await fetch(host.baseUrl + taskResultsUrl, { headers: resultHeaders }));
+  const boundResult = currentResults.details.results.find((result: any) => result.relativePath === '060_reports/bound-scope-report.md');
+  assert.ok(boundResult);
+
 
   // R2.4 LIVE REVOCATION PURGE: Revoke projStar's grant mid-session -> verify starbridge_orders.csv is IMMEDIATELY blocked in-session (and purged from sandbox on macOS)!
   await json(await ownerReq(`/api/studio/resource-grants/${starGrantId}/revoke`, 'POST', {
@@ -1611,6 +1618,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(afterRevokeBlocked, true, 'Revoking detail grant MUST immediately block detail reads in the active session!');
   const oldReport = await fetch(host.baseUrl + boundFile, { headers: { ...host.headers, cookie: scopedCookie } });
   assert.equal(oldReport.status, 403);
+  const staleResults = await json(await fetch(host.baseUrl + taskResultsUrl, { headers: resultHeaders }));
+  assert.equal(staleResults.details.results.length, 0);
+  const staleResult = await fetch(host.baseUrl + taskResultsUrl + '?id=' + boundResult.id, { headers: resultHeaders });
+  assert.equal(staleResult.status, 404);
+
   assert.equal(fs.readFileSync(path.join(projStar.rootPath, '060_reports', 'bound-scope-report.md'), 'utf8'), privateReportText);
   const projectedOldUsers = (await json(await host.request(scopedTaskRoute))).snapshot.messages.filter((message: any) => message.role === 'user');
   assert.ok(projectedOldUsers.some((message: any) => !message.originalUserText && message.content?.[0]?.text));

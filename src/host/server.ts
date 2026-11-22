@@ -716,6 +716,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           ? createSemanticContextReadPort({ projectId: project.id, taskId: task.id, projects: guardedProjects, legacy: semanticPort, graph: semanticGraph, graphOnly: Boolean(protectedExecution), isClosing: () => closing }) : undefined;
         const projectFiles = protectedExecution ? undefined : createProjectFilesPort({
           projects, enterpriseMaterials, projectId: project.id, taskId: task.id,
+          ...(isRestrictedMemberPack ? { beforeReportPublication: studio.memberPack.recordBoundReportPublication } : {}),
           listBoundReports: async () => { const original = await pair(project.id, task.id); return listTaskBoundReports(original.project, original.task); },
           readScopedCatalog: async () => {
             const scope = await enterpriseContextFor(project.id, task.id);
@@ -2342,6 +2343,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const current = await pair(project.id, task.id, true);
         if (scope.handoff?.mode === 'selected' && (!current.task.assignment?.sources?.some(row => row.taskId === sourceTaskId) || JSON.stringify(current.task.assignment) !== JSON.stringify(task.assignment))) throw new RequestFault(403, 'project_result_permission_unavailable');
         if (!source) return;
+        if (source.kind === 'report') {
+          await studio.memberPack.assertCurrentReportFile(source.projectId, source.relativePath, source.sha256);
+        } else {
+          studio.memberPack.assertCurrentTaskEvidenceAt(source.projectId, source.taskId, source.savedAt);
+        }
         const recipient = destination?.configuration ?? current.task.configuration;
         const cfg = availableConfiguration(recipient.id, recipient.revision);
         if (!cfg) throw new RequestFault(403, 'project_result_permission_unavailable');
@@ -3058,10 +3064,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if (taskRoute) {
           const taskId = taskRoute[1]!, operation = taskRoute[2], key = keyOf(projectId, taskId);
           if (operation === 'results' && request.method === 'GET') {
+            assertCurrentProjectBorrower(request, projectId);
             const source = await pair(projectId, taskId), action = url.searchParams.has('id') ? 'read' : 'find';
             await assertFrameworkContinuation(projectId, taskId);
             const cursor = url.searchParams.get('cursor'), resultId = url.searchParams.get('id');
-            json(response, 200, await resultReader(source, { handoff: { mode: 'own-results' } })(action, resultId ? { id: resultId, offset: Number(url.searchParams.get('offset') ?? 0) } : cursor ? { cursor } : {}, resultReadContext(request))); return;
+            const results = await resultReader(source, { handoff: { mode: 'own-results' } })(action, resultId ? { id: resultId, offset: Number(url.searchParams.get('offset') ?? 0) } : cursor ? { cursor } : {}, resultReadContext(request));
+            assertCurrentProjectBorrower(request, projectId);
+            json(response, 200, results); return;
           }
           if (operation === 'default-skill' && request.method === 'PUT') {
             const input = await body(request);

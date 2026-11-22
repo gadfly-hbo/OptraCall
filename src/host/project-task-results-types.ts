@@ -26,6 +26,7 @@ export interface ProjectTaskNativeReplyBinding {
   messageId: string;
   sha256: string;
   bytes: number;
+  savedAt?: string;
 }
 export interface ProjectTaskResultSources {
   reports: ProjectTaskResultBinding[];

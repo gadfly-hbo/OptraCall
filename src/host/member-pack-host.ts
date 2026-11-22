@@ -325,17 +325,37 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return { ...snapshot, messages };
   }
 
+  function recordBoundReportPublication(input: { projectId: string; taskId: string; relativePath: string; sha256: string; bytes: number }) {
+    if (!getProjectToolScope(input.projectId)) return;
+    if (currentTaskPolicyStart(input.projectId, input.taskId) === undefined) {
+      throw new StudioError('member_pack_report_current_authority_required', 403);
+    }
+    const relativePath = input.relativePath.slice('060_reports/'.length);
+    const ledger = readReportLedger();
+    const key = `${input.projectId}:${relativePath}`;
+    if (ledger.projectFiles[key]?.sha256 === input.sha256) return;
+    ledger.projectFiles[key] = {
+      projectId: input.projectId, ownerTaskId: input.taskId, relativePath,
+      sha256: input.sha256, bytesLength: input.bytes, committedAt: new Date().toISOString(),
+    };
+    writeReportLedger(ledger, true);
+  }
+
+  function assertCurrentTaskEvidenceAt(projectId: string, taskId: string, savedAt?: string) {
+    if (!getProjectToolScope(projectId)) return;
+    const since = currentTaskPolicyStart(projectId, taskId);
+    if (since === undefined || !savedAt || !(Date.parse(savedAt) >= since)) {
+      throw new StudioError('member_pack_report_current_authority_required', 403);
+    }
+  }
+
   async function assertCurrentReportFile(projectId: string, locator: string, sha: string) {
     if (!getProjectToolScope(projectId)) return;
     const reject = (): never => { throw new StudioError('member_pack_report_current_authority_required', 403); };
-    const check = (taskId: string, savedAt: string) => {
-      const since = currentTaskPolicyStart(projectId, taskId);
-      if (since === undefined || !(Date.parse(savedAt) >= since)) reject();
-    };
     const report = readReportLedger().projectFiles[`${projectId}:${locator.slice('060_reports/'.length)}`];
     if (report) {
       if (report.sha256 !== sha) reject();
-      check(report.ownerTaskId, report.committedAt);
+      assertCurrentTaskEvidenceAt(projectId, report.ownerTaskId, report.committedAt);
       return;
     }
 
@@ -343,15 +363,18 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     // in the task's native session, even when no filesystem workspace is used.
     const project = await options.projects.get(projectId);
     const budget = createNativeSnapshotReadBudget();
+    let bound = false;
     try {
       for (const task of project.tasks) {
         const reports = await listTaskBoundReports(project, task, { budget });
         for (const binding of reports.filter(item => item.relativePath === locator)) {
           if (binding.sha256 !== sha || !binding.savedAt) return reject();
-          check(binding.taskId, binding.savedAt);
+          assertCurrentTaskEvidenceAt(projectId, binding.taskId, binding.savedAt);
+          bound = true;
         }
       }
     } catch { reject(); }
+    if (!bound && isReportLockedByUseOrFeedback(projectId, locator)) reject();
   }
 
   function nextProjectGrantExpiry(projectId: string): number | undefined {
@@ -457,20 +480,20 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return { projectFiles: {}, taskSyncedFiles: {} };
   }
 
-  function writeReportLedger(ledger: TaskReportLedger) {
-    if (!enabled) return;
+  function writeReportLedger(ledger: TaskReportLedger, scopeReceipt = false) {
+    if (!enabled && !scopeReceipt) return;
     fs.mkdirSync(path.dirname(reportLedgerPath), { recursive: true });
     const tmp = `${reportLedgerPath}.${randomUUID()}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2));
     fs.renameSync(tmp, reportLedgerPath);
   }
 
-  function isReportLockedByUseOrFeedback(projectId: string, locator: string, candidateSha: string): boolean {
+  function isReportLockedByUseOrFeedback(projectId: string, locator: string, candidateSha?: string): boolean {
     const normLoc = normalizeRelativeDataPath(locator);
     const matchRef = (ref: StudioSourceRef | undefined) => {
       if (!ref || ref.projectId !== projectId || !ref.locator) return false;
       if (normalizeRelativeDataPath(ref.locator) !== normLoc) return false;
-      return !ref.sha256 || ref.sha256 !== candidateSha;
+      return candidateSha === undefined || !ref.sha256 || ref.sha256 !== candidateSha;
     };
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     for (const pack of packs.list(enterpriseId)) {
@@ -4381,7 +4404,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     isReportLockedByUseOrFeedback,
     projectPermissionFingerprint,
     presentTaskHistory,
+    recordBoundReportPublication,
     assertCurrentReportFile,
+    assertCurrentTaskEvidenceAt,
     nextProjectGrantExpiry,
     getProjectToolScope,
     prepareRestrictedTaskWorkspace,

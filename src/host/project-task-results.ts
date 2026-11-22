@@ -25,11 +25,11 @@ function binding(value: ProjectTaskResultBinding, projectId: string, taskId: str
   const parts = value.relativePath.split('/');
   if (parts.length < 2 || parts[0] !== '060_reports' || parts.some(x => !x || x.startsWith('.') || /[\\\u0000-\u001f\u007f]/u.test(x))) fail('project_result_binding_unavailable');
   if (value.nativeEntryId !== undefined && !identity(value.nativeEntryId)) fail('project_result_binding_unavailable');
-  return { projectId, taskId, requestId: value.requestId, sessionId: value.sessionId, toolCallId: value.toolCallId, relativePath: value.relativePath, sha256: value.sha256, bytes: value.bytes, ...(value.nativeEntryId === undefined ? {} : { nativeEntryId: value.nativeEntryId }) };
+  return { projectId, taskId, requestId: value.requestId, sessionId: value.sessionId, toolCallId: value.toolCallId, relativePath: value.relativePath, sha256: value.sha256, bytes: value.bytes, ...(value.nativeEntryId === undefined ? {} : { nativeEntryId: value.nativeEntryId }), ...(value.savedAt === undefined ? {} : { savedAt: value.savedAt }) };
 }
 function nativeBinding(value: ProjectTaskNativeReplyBinding, projectId: string, taskId: string): ProjectTaskNativeReplyBinding {
   if (!object(value) || value.projectId !== projectId || value.taskId !== taskId || !identity(value.requestId) || !identity(value.sessionId) || !identity(value.messageId) || value.messageId.length > 200 || !/^[a-f0-9]{64}$/.test(value.sha256) || !Number.isSafeInteger(value.bytes) || value.bytes < 1 || value.bytes > PROJECT_UPLOAD_MAX_BYTES) fail('project_result_binding_unavailable');
-  return { projectId, taskId, requestId: value.requestId, sessionId: value.sessionId, messageId: value.messageId, sha256: value.sha256, bytes: value.bytes };
+  return { projectId, taskId, requestId: value.requestId, sessionId: value.sessionId, messageId: value.messageId, sha256: value.sha256, bytes: value.bytes, ...(value.savedAt === undefined ? {} : { savedAt: value.savedAt }) };
 }
 function resultId(scope: ProjectTaskResultsScope, value: ProjectTaskResultBinding | ProjectTaskNativeReplyBinding): string {
   if ('messageId' in value) return digest(JSON.stringify([scope.projectId, scope.confirmationId, scope.planVersion, 'native-reply', value.projectId, value.taskId, value.requestId, value.sessionId, value.messageId, value.sha256, value.bytes]));
