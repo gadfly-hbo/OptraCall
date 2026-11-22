@@ -21,7 +21,7 @@ test('groupConversation keeps a mixed turn as user → single process group → 
     call('c2', 'semantic_graph'),
     result('c2', 'semantic_graph', '命中 3 条'),
     { ...text('结论：回落主要来自家清。'), nativeEntryId: 'e-9' },
-  ]);
+  ], { includeToolDetails: true });
   assert.deepEqual(items.map(item => item.kind), ['user', 'process', 'body']);
   const group = items[1]!;
   assert.equal(group.kind, 'process');
@@ -55,7 +55,7 @@ test('each turn groups separately and bodies split process segments inside one t
     text('最终正文。'),
     { role: 'user', content: '第二轮。' },
     bash('python3 x.py', 'done'),
-  ]);
+  ], { includeToolDetails: true });
   assert.deepEqual(items.map(item => item.kind), ['user', 'process', 'body', 'process', 'body', 'user', 'process']);
   const first = items[1]!, second = items[3]!, third = items[6]!;
   assert.equal(first.kind === 'process' && first.steps.length, 1);
@@ -78,7 +78,27 @@ test('step counting: unpaired call, standalone result and note entries each coun
   assert.equal(unpaired!.pending, true);
   assert.equal(standalone!.toolName, 'legacy_bash');
   assert.equal(note!.kind, 'note');
-  assert.equal(note!.text, '先核对口径再计算。');
+  assert.equal('text' in note!, false, 'internal reasoning does not become UI content');
+});
+
+test('process group identity follows the first native entry across changes in prior messages', () => {
+  const target = { ...call('target', 'read_input'), nativeEntryId: 'tool-entry' };
+  const initial = groupConversation([{ role: 'user', content: '问题' }, target]);
+  const moved = groupConversation([{ role: 'user', content: '更早的提问' }, text('更早的回答'), { role: 'user', content: '问题' }, target]);
+  assert.equal(initial.find(item => item.kind === 'process')?.identity, moved.find(item => item.kind === 'process')?.identity);
+});
+
+test('a tool result paired across a body boundary remains available to external result controls', () => {
+  const items = groupConversation([
+    { role: 'assistant', content: [{ type: 'text', text: '阶段正文' }, { type: 'toolCall', id: 'c1', name: 'simlab' }] },
+    result('c1', 'simlab', '固化建议'),
+    text('最终正文'),
+  ], { includeToolDetails: true });
+  assert.deepEqual(items.map(item => item.kind), ['process', 'body', 'body']);
+  const process = items[0]!;
+  assert.equal(process.kind, 'process');
+  assert.deepEqual(process.entries.map(entry => entry.index), [0, 1]);
+  assert.equal(process.steps[0]?.output, '固化建议');
 });
 
 test('failed tool result keeps error flag for status visibility', () => {
@@ -118,11 +138,11 @@ test('foldStore defaults to memory backing outside browsers and round-trips choi
   assert.equal(foldStore.get('conv-c', 'm1'), undefined, 'different conversations stay independent');
 });
 
-test('Foldable renders a collapsed preview with an accessible toggle by default', () => {
+test('Foldable keeps content in the server markup before browser overflow measurement', () => {
   const html = renderToStaticMarkup(createElement(Foldable, { conversationKey: 'k', identity: 'i1', lines: 5, children: createElement('p', null, '长内容') }));
-  assert.match(html, /class="fold collapsed"/);
-  assert.match(html, /aria-expanded="false"/);
-  assert.match(html, /展开全文/);
+  assert.match(html, /class="fold"/);
+  assert.match(html, /<p>长内容<\/p>/);
+  assert.doesNotMatch(html, /fold-toggle/);
 });
 
 test('ProcessGroup renders one collapsed line with step count and hidden steps', () => {
@@ -155,6 +175,22 @@ test('StrategyDiscussionTranscript drops blank agent blocks and shows branded au
   assert.match(html, /· 1 步/);
   assert.match(html, /两条路线的关键前提对照。/);
   assert.match(html, /<strong>你<\/strong>/, 'user label stays');
+});
+
+test('the shared discussion transcript shows outcome metadata without projecting raw tool data or reasoning', () => {
+  const messages: NativeMessage[] = [
+    { role: 'user', content: '问' },
+    { role: 'assistant', content: [{ type: 'thinking', text: 'synthetic-hidden-reasoning' }], stopReason: 'aborted' },
+    call('c1', 'strategy_goals'),
+    result('c1', 'strategy_goals', 'synthetic-hidden-result', true),
+    { ...text('部分输出'), stopReason: 'error' },
+  ];
+  const html = renderToStaticMarkup(createElement(StrategyDiscussionTranscript, { messages }));
+  assert.doesNotMatch(html, /synthetic-hidden/);
+  assert.match(html, /strategy_goals/);
+  assert.match(html, /1 步失败/);
+  assert.match(html, /<p class="message-meta">已停止/);
+  assert.match(html, /<p class="message-meta failed-meta">此条回复未完成/);
 });
 
 test('StrategyDiscussionTranscript keeps streaming replies unfolded and citation rows outside folds', () => {

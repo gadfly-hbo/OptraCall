@@ -71,6 +71,7 @@ try {
   assert.match(await processGroup.locator('.process-toggle').innerText(), /推理过程/);
   assert.match(await processGroup.locator('.process-toggle').innerText(), /1 步/);
   assert.equal(await processGroup.locator('.process-toggle').getAttribute('aria-expanded'), 'false');
+  assert.equal(await processGroup.locator('.process-steps').isVisible(), false, 'collapsed process steps are visually hidden');
   await processGroup.locator('.process-toggle').click();
   assert.equal(await processGroup.locator('.process-toggle').getAttribute('aria-expanded'), 'true');
   await assert.doesNotMatch(await processGroup.locator('.process-steps details.tool-message summary').first().innerText(), /^$/);
@@ -80,7 +81,7 @@ try {
   assert.equal(await userFold.getAttribute('aria-expanded'), 'false', 'long user message collapses to a preview');
   const replyFold = page.locator('.message.assistant:not(.streaming-message) .fold-toggle').first();
   assert.equal(await replyFold.getAttribute('aria-expanded'), 'false', 'completed reply collapses by default');
-  assert.equal(await page.locator('.message.assistant .message-author strong').first().innerText(), 'OptraCall');
+  assert.match(await page.locator('.message.assistant .message-author').first().innerText(), /OptraCall\s+synthetic-collapse/);
 
   await replyFold.click();
   assert.equal(await replyFold.getAttribute('aria-expanded'), 'true');
@@ -125,13 +126,16 @@ try {
   );
   assert.equal(blankAssistants, 0, 'no blank Agent blocks remain');
   assert.equal(await page.locator('.strategy-discussion-messages .process-group').count(), 1);
-  assert.equal(await page.locator('.strategy-discussion-message.assistant .message-author strong').first().innerText(), 'OptraCall');
+  assert.match(await page.locator('.strategy-discussion-message.assistant .message-author').first().innerText(), /OptraCall\s+synthetic-collapse/);
   assert.equal(await page.locator('.strategy-discussion-message.user .fold-toggle').count(), 1, 'long strategy question collapses');
 
   const strategyToggle = page.locator('.strategy-discussion-messages .process-group .process-toggle').first();
+  const strategySteps = page.locator('.strategy-discussion-messages .process-group .process-steps').first();
+  assert.equal(await strategySteps.isVisible(), false);
   await strategyToggle.evaluate(el => el.focus());
   await page.keyboard.press('Enter');
   assert.equal(await strategyToggle.getAttribute('aria-expanded'), 'true', 'keyboard Enter expands the process group');
+  assert.equal(await strategySteps.isVisible(), true);
 
   assert.deepEqual(errors, []);
   console.log('PASS Issue #116 browser verification');

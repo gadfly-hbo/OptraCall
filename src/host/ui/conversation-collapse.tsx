@@ -1,4 +1,4 @@
-import { Fragment, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { messageText, nativeMessageText, type NativeContent, type NativeMessage } from './project-types.ts';
 import { BrandMark } from './BrandMark.tsx';
 import './conversation-collapse.css';
@@ -56,7 +56,7 @@ export function messageIdentity(message: NativeMessage, index: number): string {
   return `#${index}:${message.role}:${stableHash(messageText(message) || nativeMessageText(message) || message.toolName || '')}`;
 }
 
-export type ProcessStep = { key: string; kind: 'tool' | 'note'; toolName?: string; command?: string; output?: string; isError?: boolean; pending?: boolean; text?: string };
+export type ProcessStep = { key: string; kind: 'tool' | 'note'; toolName?: string; command?: string; output?: string; isError?: boolean; pending?: boolean };
 export type ConversationEntry = { message: NativeMessage; index: number };
 export type ConversationItem =
   | { kind: 'user'; message: NativeMessage; index: number; identity: string }
@@ -66,55 +66,48 @@ export type ConversationItem =
 
 const toolCallsOf = (message: NativeMessage): NativeContent[] => Array.isArray(message.content) ? message.content.filter((part: NativeContent) => part.type === 'toolCall') : [];
 const resultTextOf = (message: NativeMessage): string => nativeMessageText(message) || message.output || '';
-const noteTextOf = (message: NativeMessage): string => Array.isArray(message.content) ? contentTextParts(message).join('') : '';
-
-function contentTextParts(message: NativeMessage): string[] {
-  return (Array.isArray(message.content) ? message.content : []).filter(part => part.type !== 'toolCall' && typeof part.text === 'string').map(part => part.text ?? '');
-}
 
 /**
  * One turn = everything between user messages. Tool calls and their results collapse into
  * process steps; text-bearing assistant messages and custom display messages stay as body
  * items, each preceded by the process accumulated since the previous body boundary.
  */
-export function groupConversation(messages: readonly NativeMessage[]): ConversationItem[] {
+export function groupConversation(messages: readonly NativeMessage[], { includeToolDetails = false } = {}): ConversationItem[] {
   const items: ConversationItem[] = [];
-  let turn = 0, segment = 0;
   let steps: ProcessStep[] = [];
   let entries: ConversationEntry[] = [];
-  let pending = new Map<string, ProcessStep>();
+  const pending = new Map<string, { step: ProcessStep; entries: ConversationEntry[] }>();
   const flush = () => {
-    if (!steps.length) return;
-    items.push({ kind: 'process', identity: `process:${turn}:${segment}`, steps: [...steps], entries: [...entries] });
-    steps = []; entries = []; segment++;
+    const first = entries[0];
+    if (!first) return;
+    items.push({ kind: 'process', identity: `process:${messageIdentity(first.message, first.index)}`, steps, entries });
+    steps = []; entries = [];
   };
-  const addCall = (message: NativeMessage, index: number) => {
+  const addCalls = (message: NativeMessage, index: number, calls: NativeContent[]) => {
     entries.push({ message, index });
-    for (const part of toolCallsOf(message)) {
-      const step: ProcessStep = { key: `call:${index}:${part.id ?? part.name ?? steps.length}`, kind: 'tool', toolName: part.name, pending: true };
+    for (const part of calls) {
+      const step: ProcessStep = { key: `call:${index}:${steps.length}`, kind: 'tool', toolName: part.name, pending: true };
       steps.push(step);
-      if (typeof part.id === 'string' && part.id) pending.set(part.id, step);
+      if (part.id) pending.set(part.id, { step, entries });
     }
   };
   messages.forEach((message, index) => {
     if (message.role === 'user') {
-      flush(); pending = new Map();
+      flush(); pending.clear();
       items.push({ kind: 'user', message, index, identity: messageIdentity(message, index) });
-      turn++; segment = 0;
       return;
     }
     if (message.role === 'toolResult' || message.role === 'bashExecution') {
-      entries.push({ message, index });
-      const paired = typeof message.toolCallId === 'string' ? pending.get(message.toolCallId) : undefined;
+      const { toolCallId, toolName, command, isError } = message;
+      const paired = toolCallId ? pending.get(toolCallId) : undefined;
+      const details = includeToolDetails ? { command, output: resultTextOf(message) } : {};
       if (paired) {
-        paired.toolName = paired.toolName ?? message.toolName;
-        paired.command = paired.command ?? message.command;
-        paired.output = resultTextOf(message);
-        paired.isError = message.isError === true;
-        paired.pending = false;
-        pending.delete(message.toolCallId!);
+        paired.entries.push({ message, index });
+        Object.assign(paired.step, { toolName: paired.step.toolName ?? toolName, isError, pending: false, ...details });
+        pending.delete(toolCallId!);
       } else {
-        steps.push({ key: `result:${index}`, kind: 'tool', toolName: message.toolName ?? (message.role === 'bashExecution' ? 'bash' : '工具结果'), command: message.command, output: resultTextOf(message), isError: message.isError === true });
+        entries.push({ message, index });
+        steps.push({ key: `result:${index}`, kind: 'tool', toolName: toolName ?? (message.role === 'bashExecution' ? 'bash' : '工具结果'), isError, ...details });
       }
       return;
     }
@@ -124,14 +117,12 @@ export function groupConversation(messages: readonly NativeMessage[]): Conversat
       return;
     }
     if (message.role === 'assistant') {
-      const text = messageText(message);
-      if (!text) {
-        const note = noteTextOf(message);
-        if (toolCallsOf(message).length) addCall(message, index);
-        else { entries.push({ message, index }); steps.push({ key: `note:${index}`, kind: 'note', text: note }); }
+      const calls = toolCallsOf(message);
+      if (calls.length) addCalls(message, index, calls);
+      if (!messageText(message).trim()) {
+        if (!calls.length) { entries.push({ message, index }); steps.push({ key: `note:${index}`, kind: 'note' }); }
         return;
       }
-      addCall(message, index);
       flush();
       items.push({ kind: 'body', message, index, identity: messageIdentity(message, index) });
       return;
@@ -142,79 +133,145 @@ export function groupConversation(messages: readonly NativeMessage[]): Conversat
   return items;
 }
 
-export function AgentAuthor({ model, compact = false }: { model?: string; compact?: boolean }) {
+export function AssistantOutcome({ message }: { message: NativeMessage }) {
+  if (message.stopReason === 'aborted') return <p className="message-meta">已停止 · 部分输出已保留</p>;
+  if (message.stopReason === 'error') return <p className="message-meta failed-meta">此条回复未完成</p>;
+  return null;
+}
+
+export const isPartialAssistantReply = (message: NativeMessage) => message.stopReason === 'aborted' || message.stopReason === 'error';
+
+export function AgentAuthor({ model, status, compact = false }: { model?: string; status?: string; compact?: boolean }) {
   return <div className={`message-author ${compact ? 'msg-author' : ''}`}>
     {compact
       ? <span className="brand-mark brand-mark-xs" aria-hidden="true"><span /><i /></span>
       : <BrandMark small />}
     <strong>OptraCall</strong>
     {model ? <span>{model}</span> : null}
+    {status ? <span>{status}</span> : null}
   </div>;
 }
 
 /** Long content collapses to `lines` of preview; the toggle only appears when the content actually overflows. */
 export function Foldable({ conversationKey, identity, lines, className, children }: { conversationKey: string; identity: string; lines: number; className?: string; children: ReactNode }) {
   const contentId = useId();
-  const box = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(() => foldStore.get(conversationKey, identity) === 'expanded');
-  const [overflow, setOverflow] = useState(true);
+  const [readableHeight, setReadableHeight] = useState<number>();
   useLayoutEffect(() => {
-    const boxElement = box.current, contentElement = content.current;
-    if (!boxElement || !contentElement) return;
+    const element = content.current;
+    if (!element) return;
+    const hiddenControls = new Set<HTMLElement>();
+    const updatePreview = (height?: number) => {
+      setReadableHeight(height);
+      const cutoff = expanded || height === undefined ? Infinity : element.getBoundingClientRect().top + height;
+      for (const control of hiddenControls) {
+        if (element.contains(control) && control.getBoundingClientRect().top >= cutoff) continue;
+        control.inert = false;
+        hiddenControls.delete(control);
+      }
+      if (cutoff === Infinity) return;
+      for (const control of element.querySelectorAll<HTMLElement>('a[href], pre, [tabindex]')) {
+        if (control.inert || control.getBoundingClientRect().top < cutoff) continue;
+        control.inert = true;
+        hiddenControls.add(control);
+      }
+    };
     const measure = () => {
-      const fontSize = parseFloat(getComputedStyle(boxElement).fontSize) || 14;
-      setOverflow(contentElement.scrollHeight > lines * 1.85 * fontSize + 2);
+      // Read actual text fragments so wrapping, inline markup and block spacing are reflected in the preview.
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      const range = document.createRange();
+      const fragments: DOMRect[] = [];
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.textContent?.trim()) continue;
+        range.selectNodeContents(node);
+        for (const rect of range.getClientRects()) {
+          if (rect.width > 0 && rect.height > 0) fragments.push(rect);
+        }
+      }
+      fragments.sort((first, second) => first.top - second.top);
+      const bottoms: number[] = [];
+      for (const rect of fragments) {
+        const last = bottoms.length - 1;
+        if (last >= 0 && rect.top < bottoms[last]!) bottoms[last] = Math.max(bottoms[last]!, rect.bottom);
+        else bottoms.push(rect.bottom);
+      }
+      if (bottoms.length <= lines) {
+        updatePreview();
+        return;
+      }
+      let cutoff = bottoms[lines - 1]!;
+      // When the preview reaches a table, keep its header with the first data row.
+      for (const table of element.querySelectorAll('table')) {
+        if (table.getBoundingClientRect().top >= cutoff) continue;
+        const firstRow = table.tBodies[0]?.rows[0];
+        if (firstRow) cutoff = Math.max(cutoff, firstRow.getBoundingClientRect().bottom);
+      }
+      updatePreview(cutoff < bottoms.at(-1)! ? Math.ceil(cutoff - element.getBoundingClientRect().top) + 1 : undefined);
     };
     measure();
-    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
-    observer?.observe(contentElement);
-    return () => observer?.disconnect();
-  });
+    let frame: number | undefined;
+    const scheduleMeasure = () => {
+      frame ??= requestAnimationFrame(() => { frame = undefined; measure(); });
+    };
+    const sizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(scheduleMeasure);
+    sizeObserver?.observe(element);
+    const contentObserver = new MutationObserver(scheduleMeasure);
+    contentObserver.observe(element, { childList: true, subtree: true, characterData: true });
+    return () => {
+      sizeObserver?.disconnect();
+      contentObserver.disconnect();
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      for (const control of hiddenControls) control.inert = false;
+    };
+  }, [expanded, lines]);
   const toggle = () => setExpanded(value => {
     const next = !value;
     foldStore.set(conversationKey, identity, next ? 'expanded' : 'collapsed');
     return next;
   });
-  const collapsed = !expanded && overflow;
-  return <div className={['fold', collapsed ? 'collapsed' : '', className].filter(Boolean).join(' ')} style={{ ['--fold-lines' as string]: String(lines) }}>
-    <div className="fold-viewport" ref={box}><div className="fold-inner" ref={content} id={contentId}>{children}</div></div>
-    {overflow && <button type="button" className="fold-toggle" aria-expanded={expanded} aria-controls={contentId} onClick={toggle}><span className="t-label">{expanded ? '收起' : '展开全文'}</span><span className="chev" aria-hidden="true">⌄</span></button>}
+  const collapsed = !expanded && readableHeight !== undefined;
+  return <div className={['fold', collapsed ? 'collapsed' : '', className].filter(Boolean).join(' ')} style={collapsed ? { ['--fold-readable-height' as string]: `${readableHeight}px` } : undefined}>
+    <div className="fold-viewport"><div className="fold-inner" ref={content} id={contentId}>{children}</div></div>
+    {readableHeight !== undefined && <button type="button" className="fold-toggle" aria-expanded={expanded} aria-controls={contentId} onClick={toggle}><span className="t-label">{expanded ? '收起' : '展开全文'}</span><span className="chev" aria-hidden="true">⌄</span></button>}
   </div>;
 }
 
 function DefaultStep({ step }: { step: ProcessStep }) {
   if (step.kind === 'note') {
-    return <div className="process-step"><span className="step-dot" aria-hidden="true" /><div className="step-note">{step.text?.trim() ? step.text : '过程条目 · 无可见输出'}</div></div>;
+    return <div className="process-step"><span className="step-dot" aria-hidden="true" /><div className="step-note">过程条目 · 无可见输出</div></div>;
   }
   const failed = step.isError === true;
+  const status = <>{step.toolName ?? '工具'}{failed ? ' · 执行失败' : step.pending ? ' · 等待结果' : ' · 执行结果'}</>;
   return <div className="process-step">
     <span className={`step-dot ${failed ? 'err' : step.pending ? '' : 'ok'}`} aria-hidden="true" />
-    <details className={`tool-message ${failed ? 'tool-error' : ''}`}>
-      <summary>{step.toolName ?? '工具'}{failed ? ' · 执行失败' : step.pending ? ' · 等待结果' : ' · 执行结果'}</summary>
+    {step.command || step.output !== undefined ? <details className={`tool-message ${failed ? 'tool-error' : ''}`}>
+      <summary>{status}</summary>
       {step.command && <code>{step.command}</code>}
-      <pre>{step.output?.trim() ? step.output : step.pending ? '本步没有结果回执（运行中或已中断）。' : '无文本输出。'}</pre>
-    </details>
+      <pre>{step.output?.trim() ? step.output : '无文本输出。'}</pre>
+    </details> : <div>{status}</div>}
   </div>;
 }
 
-export function ProcessGroup({ conversationKey, identity, steps, renderStep }: { conversationKey: string; identity: string; steps: ProcessStep[]; renderStep?: (step: ProcessStep) => ReactNode }) {
+export function ProcessGroup({ conversationKey, identity, steps, entries = [] }: { conversationKey: string; identity: string; steps: ProcessStep[]; entries?: ConversationEntry[] }) {
   const stepsId = useId();
   const [expanded, setExpanded] = useState(() => foldStore.get(conversationKey, identity) === 'expanded');
+  const failureCount = steps.filter(step => step.isError).length;
   const toggle = () => setExpanded(value => {
     const next = !value;
     foldStore.set(conversationKey, identity, next ? 'expanded' : 'collapsed');
     return next;
   });
-  return <div className="process-group">
+  return <><div className="process-group">
     <button type="button" className="process-toggle" aria-expanded={expanded} aria-controls={stepsId} onClick={toggle}>
       <span className="p-glyph" aria-hidden="true" />
       <span>推理过程</span>
       <span className="p-count">· {steps.length} 步</span>
+      {failureCount > 0 && <span className="failed-meta">· {failureCount} 步失败</span>}
       <span className="chev" aria-hidden="true">⌄</span>
     </button>
     <div className="process-steps" id={stepsId} hidden={!expanded}>
-      {steps.map(step => <Fragment key={step.key}>{renderStep ? renderStep(step) : <DefaultStep step={step} />}</Fragment>)}
+      {steps.map(step => <DefaultStep key={step.key} step={step} />)}
     </div>
-  </div>;
+  </div>{entries.filter(({ message }) => message.role === 'assistant' && !messageText(message).trim()).map(({ message, index }) => <AssistantOutcome key={messageIdentity(message, index)} message={message} />)}</>;
 }

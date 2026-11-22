@@ -1,5 +1,6 @@
 import { ConversationDrawer } from "../../../../src/host/ui/ConversationDrawer.tsx";
 import { AgentAuthor, Foldable } from "../../../../src/host/ui/conversation-collapse.tsx";
+import type { ClientProject, PublicModelConfiguration } from "../../../../src/host/ui/project-types.ts";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VersionEntry } from '../types.ts';
 import { createDeck, listDecks, readDeck, setPageLock, revertDeck, exportDeck, runTurn, stopPendingTurn, renderDeck, readImage, RefinerRequestError, type DeckSummary, type DeckView, type RefinerSource, type TurnResult } from './refiner-client.ts';
@@ -7,7 +8,10 @@ import './refiner.css';
 
 export type { RefinerSource } from './refiner-client.ts';
 export type RefinerLeaveGuard = () => Promise<boolean>;
-type ChatMessage = { who: 'user' | 'agent'; text: string; note?: string };
+type ChatMessage = { turnId: string; who: 'user' | 'agent'; text: string; note?: string; partial?: boolean };
+type ModelIdentity = Pick<PublicModelConfiguration, 'id' | 'revision' | 'model'>;
+// The existing deck response includes the resolved source project's binding for legacy decks.
+type RefinerView = DeckView & { configuration?: Pick<ModelIdentity, 'id' | 'revision'> };
 type PendingTurn = { request: Promise<TurnResult>; completion: Promise<boolean>; transportUnknown: boolean };
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 const imageName = (kind: 'slide' | 'thumb', page: number) => kind + '-' + String(page).padStart(2, '0') + '.png';
@@ -26,14 +30,16 @@ function usePageImages(deckId: string) {
   return { images, load, clear };
 }
 
-export function RefinerPage({ initialDeckId, source, onBack, onNavigationGuard, onDeckChange }: {
+export function RefinerPage({ initialDeckId, source, projects, configurations, onBack, onNavigationGuard, onDeckChange }: {
   initialDeckId?: string;
   source?: RefinerSource;
+  projects: readonly Pick<ClientProject, 'id' | 'configuration'>[];
+  configurations: readonly ModelIdentity[];
   onBack: () => void;
   onNavigationGuard?: (guard: RefinerLeaveGuard | null) => void;
   onDeckChange?: (deckId: string | undefined) => void;
 }) {
-  const [view, setView] = useState<DeckView | null>(null);
+  const [view, setView] = useState<RefinerView | null>(null);
   const [decks, setDecks] = useState<DeckSummary[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -83,7 +89,14 @@ export function RefinerPage({ initialDeckId, source, onBack, onNavigationGuard, 
       }}>打开<span className="sr-only"> {deck.meta.title}</span></button></li>)}</ul>
     </section>}
   </div>;
-  return <RefinerWorkbench key={view.meta.id} view={view} refresh={() => openDeck(view.meta.id)} onBack={() => { if (source) onBack(); else { setView(null); onDeckChange?.(undefined); void refreshList().catch(reason => setError(errorText(reason))); } }} onNavigationGuard={onNavigationGuard} />;
+  const fixedConfiguration = view.meta.configuration ?? (view.projectId ? view.configuration : undefined);
+  let model: string | undefined;
+  if (fixedConfiguration?.revision !== undefined) {
+    const matches = (configuration: ModelIdentity) => configuration.id === fixedConfiguration.id && configuration.revision === fixedConfiguration.revision;
+    const projectConfiguration = projects.find(project => project.id === view.projectId)?.configuration;
+    model = (projectConfiguration && matches(projectConfiguration) ? projectConfiguration : configurations.find(matches))?.model;
+  }
+  return <RefinerWorkbench key={view.meta.id} view={view} model={model ?? '模型待核对'} refresh={() => openDeck(view.meta.id)} onBack={() => { if (source) onBack(); else { setView(null); onDeckChange?.(undefined); void refreshList().catch(reason => setError(errorText(reason))); } }} onNavigationGuard={onNavigationGuard} />;
 }
 
 function VersionHistory({ versions, currentVersion, protectionFailed, busy, readOnly, onRevert, onClose }: {
@@ -104,8 +117,8 @@ function VersionHistory({ versions, currentVersion, protectionFailed, busy, read
   </dialog>;
 }
 
-function RefinerWorkbench({ view, refresh, onBack, onNavigationGuard }: {
-  view: DeckView; refresh: () => Promise<DeckView>; onBack: () => void; onNavigationGuard?: (guard: RefinerLeaveGuard | null) => void;
+function RefinerWorkbench({ view, model, refresh, onBack, onNavigationGuard }: {
+  view: DeckView; model: string; refresh: () => Promise<DeckView>; onBack: () => void; onNavigationGuard?: (guard: RefinerLeaveGuard | null) => void;
 }) {
   const deckId = view.meta.id;
   const latest = view.versions.at(-1);
@@ -117,7 +130,7 @@ function RefinerWorkbench({ view, refresh, onBack, onNavigationGuard }: {
   const [running, setRunning] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState('');
-  const [chat, setChat] = useState<ChatMessage[]>([{ who: 'agent', text: '选页后可对话修改，也可只读检查。锁定页保持不变；数字与事实改动会对照 md 报告，并保留差异记录。' }]);
+  const [chat, setChat] = useState<ChatMessage[]>([{ turnId: 'intro', who: 'agent', text: '选页后可对话修改，也可只读检查。锁定页保持不变；数字与事实改动会对照 md 报告，并保留差异记录。' }]);
   const [input, setInput] = useState('');
   const [inspectOnly, setInspectOnly] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -192,24 +205,26 @@ function RefinerWorkbench({ view, refresh, onBack, onNavigationGuard }: {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, []);
-  const addReply = (result: TurnResult) => {
+  const addReply = (requestId: string, result: TurnResult) => {
     const outcome = result.outcome === 'cancelled' ? '已停止' : result.outcome === 'failed' ? '未完成' : '已完成';
     const saved = result.snapshot ? '已保存版本 v' + result.snapshot.version : '未新增内容版本';
-    setChat(previous => [...previous, { who: 'agent', text: result.reply || outcome, note: outcome + ' · ' + saved }]);
+    const partial = result.outcome === 'cancelled' || result.outcome === 'failed';
+    setChat(previous => [...previous, { turnId: requestId, who: 'agent', text: result.reply || outcome, note: outcome + ' · ' + saved, partial }]);
   };
   const executeTurn = (text: string, mode: 'edit' | 'inspect', visual = false) => {
     if (!text.trim() || writeBusy || contentBlocked || pendingTurn.current) return;
     setInput(''); setBusy(true); setRunning(true); setError(''); setExportInfo('');
-    setChat(previous => [...previous, { who: 'user', text }]);
-    const request = runTurn(deckId, text.trim(), crypto.randomUUID(), selected, mode, visual);
+    const requestId = crypto.randomUUID();
+    setChat(previous => [...previous, { turnId: requestId, who: 'user', text }]);
+    const request = runTurn(deckId, text.trim(), requestId, selected, mode, visual);
     const pending: PendingTurn = { request, completion: Promise.resolve(false), transportUnknown: false };
     pendingTurn.current = pending;
     pending.completion = (async () => {
-      try { addReply(await request); }
+      try { addReply(requestId, await request); }
       catch (reason) {
         pending.transportUnknown = !(reason instanceof RefinerRequestError);
-        if (reason instanceof RefinerRequestError && reason.turn) addReply(reason.turn);
-        else setChat(previous => [...previous, { who: 'agent', text: (pending.transportUnknown ? '请求结果尚未确认：' : '请求未获执行回执：') + errorText(reason) + '。正在读回已保存版本，不会自动重发。' }]);
+        if (reason instanceof RefinerRequestError && reason.turn) addReply(requestId, reason.turn);
+        else setChat(previous => [...previous, { turnId: requestId, who: 'agent', partial: true, text: (pending.transportUnknown ? '请求结果尚未确认：' : '请求未获执行回执：') + errorText(reason) + '。正在读回已保存版本，不会自动重发。' }]);
         setError(errorText(reason));
       }
       return reconcile(pending);
@@ -268,7 +283,15 @@ function RefinerWorkbench({ view, refresh, onBack, onNavigationGuard }: {
       <section className="refiner-chat" aria-label="精修对话">
         <ConversationDrawer title="PPT 精修 Agent" className="workspace-refiner-conversation">
     {error && <p className="refiner-error" role="alert">{error}</p>}
-        <div className="chat-log" role="log" aria-live="polite">{chat.map((message, index) => <div key={index} className={'msg ' + message.who}>{message.who === 'user' ? <span className="who">我</span> : <AgentAuthor compact />}<Foldable conversationKey={`deck:${deckId}`} identity={`msg:${index}:${message.who}`} lines={message.who === 'user' ? 3 : 5}><p>{message.text}</p></Foldable>{message.note && <p className="msg-note">{message.note}</p>}</div>)}</div>
+        <div className="chat-log" role="log" aria-live="polite">{chat.map(message => {
+          const identity = `${message.turnId}:${message.who}`;
+          const content = <p>{message.text}</p>;
+          return <div key={identity} className={'msg ' + message.who}>
+            {message.who === 'user' ? <span className="who">我</span> : <AgentAuthor model={model} compact />}
+            {message.partial ? content : <Foldable conversationKey={`deck:${deckId}`} identity={identity} lines={message.who === 'user' ? 3 : 5}>{content}</Foldable>}
+            {message.note && <p className="msg-note">{message.note}</p>}
+          </div>;
+        })}</div>
         {locked && <p className="refiner-note" id="refiner-lock-help">本页已锁定，本次仅作只读问答或检查；修改前请先解锁。</p>}
         <form className="chat-input-row" onSubmit={event => { event.preventDefault(); executeTurn(input, locked || inspectOnly ? 'inspect' : 'edit'); }}>
           <input value={input} onChange={event => setInput(event.target.value)} disabled={writeBusy || contentBlocked} placeholder={locked || inspectOnly ? '描述要检查的问题' : '描述对本页的修改'} aria-label={locked || inspectOnly ? '只读检查指令' : '修改指令'} aria-describedby={locked ? 'refiner-lock-help' : undefined} />

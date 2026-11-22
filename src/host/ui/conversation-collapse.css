@@ -8,6 +8,7 @@
 .process-toggle .chev { margin-left: auto; transition: transform .15s; color: var(--faint); }
 .process-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
 .process-steps { border-top: 1px solid var(--line); padding: 8px 12px 10px; display: grid; gap: 6px; }
+.process-steps[hidden] { display: none; }
 .process-step { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 12px; }
 .step-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: var(--faint); }
 .step-dot.ok { background: var(--ok, #1c7c4a); }
@@ -18,7 +19,15 @@
 
 .fold { min-width: 0; }
 .fold-viewport { min-width: 0; }
-.fold.collapsed .fold-viewport { max-height: calc(var(--fold-lines, 5) * 1.85em); overflow: hidden; -webkit-mask-image: linear-gradient(#000 62%, transparent); mask-image: linear-gradient(#000 62%, transparent); }
+.fold-inner { display: flow-root; }
+.fold.collapsed .fold-viewport {
+  max-height: calc(var(--fold-readable-height) + 8px);
+  overflow: hidden;
+  overflow: clip;
+  -webkit-mask-image: linear-gradient(#000 var(--fold-readable-height), transparent);
+  mask-image: linear-gradient(#000 var(--fold-readable-height), transparent);
+}
+.fold.collapsed pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .fold-toggle { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; border: 0; background: transparent; color: var(--accent); font-size: 12px; padding: 3px 4px; border-radius: 5px; }
 .fold-toggle:hover { background: var(--accent-soft); }
 .fold-toggle .chev { font-size: 10px; }

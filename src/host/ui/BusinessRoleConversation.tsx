@@ -131,7 +131,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,onGo
     .filter(message => message.role !== 'user' || Boolean(messageText(message))) ?? [];
   const prompt = roleQuestions[owner.role === 'goal-draft' ? 'goal' : owner.role];
   return <ConversationDrawer title={title} showInlineTitle={showInlineTitle} className="role-conversation"><section className="strategy-discussion-panel role-discussion" aria-label={title}>
-    {(messages.length > 0 || stream) && <StrategyDiscussionTranscript messages={messages} streaming={stream} label={title+' 对话记录'} conversationKey={`role:${ownerKey}`} modelLabel={configs.find(config => config.id === model)?.name} />}
+    {(messages.length > 0 || stream) && <StrategyDiscussionTranscript messages={messages} streaming={stream} label={title+' 对话记录'} conversationKey={`role:${ownerKey}`} modelLabel={configs.find(config => config.id === model && config.revision === view?.discussion?.configurationRevision)?.model ?? '模型待核对'} />}
     {onGoalDraft&&view?.discussion&&view.goalDrafts?.map(item=><button className="secondary-button" type="button" data-return-to-workspace key={item.source.entryId} disabled={busy||running} onClick={()=>void act(async()=>{
       const original:StrategyDiscussionDetail=await call('','GET');
       const fresh=original.goalDrafts?.find(entry=>entry.source.entryId===item.source.entryId&&entry.source.sessionId===item.source.sessionId&&entry.source.sha256===item.source.sha256);

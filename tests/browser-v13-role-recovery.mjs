@@ -109,6 +109,7 @@ try {
   const drawer=page.getByRole('dialog',{name:'Project Agent',exact:true});
   const conversation=region.locator('xpath=ancestor::*[contains(concat(" ",normalize-space(@class)," ")," workspace-conversation ")][1]');
   const history=region.getByRole('log',{name:'Project Agent 对话记录'});
+  await history.getByRole('button',{name:'展开全文'}).click();
   const progress=await history.evaluate(el=>{el.scrollTop=120; return el.scrollTop;});
   assert.ok(progress>0);
   await conversation.getByRole('button',{name:'放大对话'}).click();
