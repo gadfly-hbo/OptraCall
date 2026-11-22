@@ -35,6 +35,7 @@ export type SessionProfile<Owner> = {
   configuration(owner: Owner): Readonly<RuntimeModelConfiguration> | null | undefined;
   agentOptions(owner: Owner, configuration: Readonly<RuntimeModelConfiguration>, execution?: SessionExecutionPlan): Omit<ProjectAgentOptions, 'configuration'> | Promise<Omit<ProjectAgentOptions, 'configuration'>>;
   executionMode?(owner: Owner): SessionExecutionMode | Promise<SessionExecutionMode>;
+  policyFingerprint?(owner: Owner): string | Promise<string>;
   admit?(owner: Owner): void | Promise<void>;
   capabilities?: { commands?: boolean; ui?: boolean; editor?: boolean };
 };
@@ -81,7 +82,7 @@ export type AgentSessionPort<Owner> = Omit<AgentSessionDomain<Owner>, 'name' | '
 
 /** One implementation, instantiated by Host for separate business domains. */
 export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptions<Owner>): AgentSessionDomain<Owner> {
-  type Resource = { owner: Owner; agent: SessionRuntime; configuration: Readonly<RuntimeModelConfiguration>; mode: SessionExecutionMode; active: boolean; operation?: Operation; closeBlocksOwner?: boolean; retirement?: Promise<void>; closeFailed?: boolean };
+  type Resource = { owner: Owner; agent: SessionRuntime; configuration: Readonly<RuntimeModelConfiguration>; mode: SessionExecutionMode; policyFingerprint?: string; active: boolean; operation?: Operation; closeBlocksOwner?: boolean; retirement?: Promise<void>; closeFailed?: boolean };
   type Opening = { configuration: Readonly<RuntimeModelConfiguration>; cancelled: boolean; resource?: Resource; task: Promise<Resource> };
   type Operation = { owner: Owner; configuration: Readonly<RuntimeModelConfiguration>; cancelled: boolean; detached: boolean; leaseActive: boolean; resource?: Resource; requestId?: string; inFlight?: SessionRun<Owner>; execution?: SessionExecutionPlan; cancelHandlers: Set<SessionCancelHandler>; cancellation?: Promise<void>; failedCancelHandlers?: SessionCancelHandler[]; cleanupFailed?: boolean };
   type Slot = { owner: Owner; resource?: Resource; opening?: Opening; operation?: Operation; latest?: Operation; unmanagedSeen?: boolean; freshRegistered?: boolean };
@@ -172,7 +173,7 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
       return pending.task;
     }
     const existing = slot.resource;
-    if (!options.profile.executionMode && existing?.agent.alive && sameConfiguration(existing.configuration, configuration)) return Promise.resolve(existing);
+    if (!options.profile.executionMode && !options.profile.policyFingerprint && existing?.agent.alive && sameConfiguration(existing.configuration, configuration)) return Promise.resolve(existing);
     if (existing?.agent.busy) return Promise.reject(new ProjectRuntimeError('session_busy'));
     const record: Opening = { configuration, cancelled: false, task: undefined as unknown as Promise<Resource> };
     const check = () => {
@@ -189,9 +190,10 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
         const prepared = await options.mutate(async () => {
           check(); await options.profile.admit?.(owner); check();
           const expectedMode = execution ? execution.protectedExecution.profile ?? 'protected' : await options.profile.executionMode?.(owner);
+          const expectedPolicy = await options.profile.policyFingerprint?.(owner);
           if (expectedMode && expectedMode !== 'unmanaged' && slot.unmanagedSeen) fail('unmanaged_execution_unknown');
-          if (existing?.agent.alive && sameConfiguration(existing.configuration, configuration) && (!expectedMode || existing.mode === expectedMode)) return { existing };
-          return { agentOptions: await options.profile.agentOptions(owner, configuration, execution) };
+          if (existing?.agent.alive && sameConfiguration(existing.configuration, configuration) && (!expectedMode || existing.mode === expectedMode) && (expectedPolicy === undefined || existing.policyFingerprint === expectedPolicy)) return { existing };
+          return { agentOptions: await options.profile.agentOptions(owner, configuration, execution), policyFingerprint: expectedPolicy };
         });
         check();
         if ('existing' in prepared) return prepared.existing!;
@@ -205,7 +207,7 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
         if (mode !== 'unmanaged' && slot.unmanagedSeen) fail('unmanaged_execution_unknown');
         const agent = options.createAgent?.({ ...effective, configuration }) ?? new ProjectAgent({ ...effective, configuration });
         if (mode === 'unmanaged') slot.unmanagedSeen = true;
-        const resource: Resource = { owner, agent, configuration, mode, active: true };
+        const resource: Resource = { owner, agent, configuration, mode, ...(prepared.policyFingerprint !== undefined ? { policyFingerprint: prepared.policyFingerprint } : {}), active: true };
         record.resource = resource;
         agent.subscribe(event => forward(slot, resource, event));
         if (existing) {

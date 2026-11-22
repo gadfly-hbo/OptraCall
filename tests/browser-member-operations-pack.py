@@ -212,6 +212,15 @@ try:
                 'windowDays': 30,
                 'stores': ['湖庭直营店'],
                 'selected': False,
+            }, {
+                'purposeKey': 'store-repurchase-single-vs-two',
+                'title': '湖庭单店 30 日门店复购率',
+                'priorityReason': '仅聚焦湖庭单店 30 日复购，不可扩大到湖庭与杉岸两店',
+                'deliverableNow': '湖庭单店 30 日受限试算',
+                'minimumEvidence': '湖庭单店订单明细',
+                'ownerRole': '会员运营负责人',
+                'completionCriteria': '输出湖庭单店 30 日复购分子分母',
+                'selected': False,
             }],
             'issues': [],
             'pendingQuestions': [],
@@ -365,6 +374,35 @@ try:
                 'requiredFor': ['limited-calculation'],
             }],
         })['purpose']
+        two_store_purpose = api(f'/api/studio/enterprise-packs/{pack_id}/purposes', 'POST', {
+            'requestId': str(_uuid.uuid4()),
+            'projectId': proj['id'],
+            'purposeKey': 'store-repurchase-single-vs-two',
+            'title': '湖庭与杉岸两店 30 日门店复购率',
+            'businessQuestion': '如何计算湖庭与杉岸两店合并 30 日复购率？',
+            'limitedCalculationName': '湖庭及杉岸两店30日复购率（试算版）',
+            'tier': 'limited-calculation',
+            'businessStatus': 'active',
+            'subjectUnit': 'brand_account',
+            'scope': {'scopeKey': 'zhiyu:huting-shanan:30d', 'brand': '织屿主品牌', 'channel': '直营门店', 'stores': ['湖庭直营店', '杉岸直营店'], 'period': '2026-H1'},
+            'windowDays': 30,
+            'originalGoal': '核算湖庭与杉岸两店 30 日复购率',
+            'completionCriteria': '两店 30 日样本核对通过',
+            'evidenceReadiness': {'definition': 'pass', 'mapping': 'pass', 'sampleCalculation': 'pass'},
+            'policyEffectiveFrom': '2026-01-01',
+            'dataCutoffAt': '2026-06-30',
+            'observationWindowDays': 30,
+            'availableHistoryDays': 120,
+            'exclusions': ['全额退款订单'],
+            'remainingGaps': [],
+            'dependencies': [{
+                'id': 'dep-two-store-ent',
+                'role': 'member-rule',
+                'authority': 'enterprise',
+                'ref': mat_ref,
+                'requiredFor': ['limited-calculation'],
+            }],
+        })['purpose']
 
         # Reload page: most recently created project (proj_consumer) is active by default!
         # First verify R2 in real Chromium: consumer project gets read-only Grants view with NO grant creation form!
@@ -408,16 +446,42 @@ try:
             assert huting_purpose['id'] in handoff_text and '湖庭直营店' in handoff_text and '30日' in handoff_text, f'Agent handoff MUST carry 湖庭 30日, got: {handoff_text}'
             assert shanan_purpose['id'] not in handoff_text and '杉岸直营店' not in handoff_text, f'Agent handoff MUST NOT mention 杉岸 90日, got: {handoff_text}'
 
-        # Return to 覆盖与缺口 and verify backend kept exact 4 purposes and 杉岸 90日 is 100% untouched!
+        # Return to 覆盖与缺口 -> 覆盖与全景 and verify Round-6 exact Codex counterexample:
+        # Clicking 湖庭单店 30日 recommendation MUST NOT attach to existing 湖庭与杉岸两店 30日 superset!
+        page.get_by_role('region', name='资料、资产与建设记录').wait_for(timeout=10_000)
+        page.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
+        page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
+        page.get_by_role('button', name='覆盖与全景').click()
+
+        captured_purposes_posts.clear()
+        captured_message_posts.clear()
+        single_huting_card = page.locator('article', has_text='湖庭单店 30 日门店复购率').first
+        single_huting_card.wait_for(timeout=10_000)
+        single_huting_card.get_by_role('button', name='按此建议携带原范围续建').click()
+        page.wait_for_timeout(1_000)
+        assert len(captured_purposes_posts) >= 1, 'Expected browser to POST single-store purpose upsert'
+        single_upsert = captured_purposes_posts[-1]
+        assert single_upsert.get('targetPurposeId') != two_store_purpose['id'], f"Single-store 湖庭单店 30日 MUST NEVER attach to two-store purpose {two_store_purpose['id']}!"
+        assert single_upsert.get('targetPurposeId') is None, f"Expected new isolated single-store purpose (targetPurposeId=None), got {single_upsert.get('targetPurposeId')}!"
+        assert single_upsert.get('windowDays') == 30, f"Expected windowDays=30, got {single_upsert.get('windowDays')}!"
+        assert single_upsert.get('scope', {}).get('stores') == ['湖庭直营店'], f"Expected extracted single store ['湖庭直营店'], got {single_upsert.get('scope')}!"
+        if captured_message_posts:
+            single_handoff = str(captured_message_posts[-1].get('text', ''))
+            assert '湖庭直营店' in single_handoff and '30日' in single_handoff, f'Single-store handoff MUST carry 湖庭直营店 30日, got: {single_handoff}'
+            assert two_store_purpose['id'] not in single_handoff and '杉岸直营店' not in single_handoff, f'Single-store handoff MUST NOT expand to 杉岸直营店 or two-store purpose, got: {single_handoff}'
+
+        # Return to 覆盖与缺口 and verify backend kept exact 6 purposes (5 seeded + 1 new single-store) and 杉岸 90日 & 湖庭与杉岸两店 30日 are 100% untouched!
         page.get_by_role('region', name='资料、资产与建设记录').wait_for(timeout=10_000)
         page.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
         page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
         pack_after_huting = api(f'/api/studio/enterprise-packs/{pack_id}')['pack']
-        assert len(pack_after_huting['purposes']) == 4, f"Expected exact 4 purposes without duplicates, got {len(pack_after_huting['purposes'])}"
+        assert len(pack_after_huting['purposes']) == 6, f"Expected exact 6 purposes (5 seeded + 1 new single-store 湖庭30日), got {len(pack_after_huting['purposes'])}"
         shanan_after = [p for p in pack_after_huting['purposes'] if p['id'] == shanan_purpose['id']][0]
         huting_after = [p for p in pack_after_huting['purposes'] if p['id'] == huting_purpose['id']][0]
+        two_store_after = [p for p in pack_after_huting['purposes'] if p['id'] == two_store_purpose['id']][0]
         assert shanan_after['windowDays'] == 90 and shanan_after['scope'].get('stores') == ['杉岸直营店']
         assert huting_after['windowDays'] == 30 and huting_after['scope'].get('stores') == ['湖庭直营店']
+        assert two_store_after['windowDays'] == 30 and two_store_after['scope'].get('stores') == ['湖庭直营店', '杉岸直营店']
 
         # Also verify single-match continuation (星桥与柳岸 90天) updates selection toast and preserves stores/window/deps
         page.get_by_text('星桥与柳岸直营店 90 天门店复购率').first.wait_for(timeout=10_000)
@@ -426,18 +490,18 @@ try:
         page.get_by_role('button', name='按此建议携带原范围续建').first.click()
         page.wait_for_timeout(800)
         pack_after_cont = api(f'/api/studio/enterprise-packs/{pack_id}')['pack']
-        assert len(pack_after_cont['purposes']) == 4, f"Expected 4 purposes without duplicate, got {len(pack_after_cont['purposes'])}"
+        assert len(pack_after_cont['purposes']) == 6, f"Expected 6 purposes without duplicate, got {len(pack_after_cont['purposes'])}"
         p90 = [p for p in pack_after_cont['purposes'] if p['purposeKey'] == 'store-repurchase-90d'][0]
         assert p90['windowDays'] == 90, f"Expected windowDays=90 preserved, got {p90.get('windowDays')}"
         assert p90['scope'].get('stores') == ['星桥直营店', '柳岸直营店'], f"Expected stores preserved, got {p90['scope']}"
         assert p90['tier'] == 'limited-calculation', f"Expected tier preserved, got {p90['tier']}"
         assert len(p90['dependencies']) == 1, f"Expected dependencies preserved, got {p90['dependencies']}"
 
-        # Verify handoff into Studio construction view (建设与演进) and return via top workbench 覆盖与缺口 -> 建设草案 (1 条 / 4 用途)
+        # Verify handoff into Studio construction view (建设与演进) and return via top workbench 覆盖与缺口 -> 建设草案 (1 条 / 6 用途)
         page.get_by_role('region', name='资料、资产与建设记录').wait_for(timeout=10_000)
         page.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
         page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
-        page.get_by_role('button', name='建设草案 (1 条 / 4 用途)').click()
+        page.get_by_role('button', name='建设草案 (1 条 / 6 用途)').click()
         page.get_by_text('直营门店90天复购率（两店试算版）').first.wait_for(timeout=10_000)
 
         # R3.2: Verify dual-route draft provenance (Route 1 enterprise source + Route 2 reference link) & clickable "查看参考原段" excerpt drawer!
@@ -489,7 +553,7 @@ try:
 
     if errors:
         raise RuntimeError(f'Browser page errors observed: {errors}')
-    print('BROWSER_MEMBER_PACK_E2E: PASS (Round-5: Settings T03 SHA-256 + Dedupe + Drawer -> Multi-Scope Same-PurposeKey Disambiguation [杉岸 90日 vs 湖庭 30日 -> Handed Off Strictly 湖庭 30日 Without Touching 杉岸 90日] -> Single-Match Continuation Preserving 90d/Stores/Deps -> Dual-Route Entry Provenance & Reference Excerpt Drawer -> Explicit Decision/Decider -> Preview -> Real Authority Confirm [Nonexistent SAP=failed/suspended + Read-Only Reconcile Stays Failed; Real Enterprise Material=succeeded/eligible] -> Host-Verified Cryptographic Owner Grantor Create/Revoke, 0 page errors)')
+    print('BROWSER_MEMBER_PACK_E2E: PASS (Round-6: Settings T03 SHA-256 + Dedupe + Drawer -> Multi-Scope Same-PurposeKey Disambiguation [杉岸 90日 vs 湖庭 30日] + Single-Store vs Two-Store Isolation [湖庭单店 30日 NEVER expands into 湖庭与杉岸两店 30日] -> Single-Match Continuation Preserving 90d/Stores/Deps -> Dual-Route Entry Provenance & Reference Excerpt Drawer -> Explicit Decision/Decider -> Preview -> Real Authority Confirm [Nonexistent SAP=failed/suspended + Read-Only Reconcile Stays Failed; Real Enterprise Material=succeeded/eligible] -> Host-Verified Operator/Cookie Owner Grantor Create/Revoke, 0 page errors)')
 finally:
     if proc is not None and proc.poll() is None:
         proc.terminate()

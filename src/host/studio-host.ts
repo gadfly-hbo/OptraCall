@@ -48,6 +48,8 @@ export type StudioHostOptions = {
   inspectGraph?(systemId: string, snapshotId: string): Promise<{ snapshotId: string; sourceRefs: StudioSourceRef[]; detail: string }>;
   reason?(command: StudioRuleCommand, context: SemanticContextCallContext): Promise<StudioRuleResult>;
   memberPackPublishHook?: import('./member-pack-host.ts').MemberPackHostOptions['publishAuthorityDependency'];
+  resolveRequestOperator?: import('./member-pack-host.ts').MemberPackHostOptions['resolveRequestOperator'];
+  onProjectPermissionChanged?: import('./member-pack-host.ts').MemberPackHostOptions['onProjectPermissionChanged'];
 };
 export function createStudioFeature(options: StudioHostOptions) {
   const store = new StudioStore(options.dataRoot), operations = studioOperations(options.dataRoot);
@@ -513,6 +515,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     projects: options.projects,
     enterpriseScopes,
     studio: store,
+    cases: options.cases,
     operations,
     readBody: options.readBody,
     mutate: options.mutate,
@@ -522,12 +525,21 @@ export function createStudioFeature(options: StudioHostOptions) {
     publishAuthorityDependency,
     inspectAuthorityDependency,
     verifySummaryAuthority,
+    resolveRequestOperator: options.resolveRequestOperator,
+    onProjectPermissionChanged: options.onProjectPermissionChanged,
   });
   const enterpriseCatalog = createStudioEnterpriseCatalog({ ...options, scopes: enterpriseScopes, studio: store, qualifySource: async (ref, projectId) => { await sources.read(ref, projectId, ref.locator); } });
   const enterpriseScope = { active: () => enterpriseScopes.list().enterprises.length > 0, enterpriseIdForProject: (projectId: string) => enterpriseScopes.enterpriseIdForProject(projectId), sourceAllowed: enterpriseCatalog.sourceAllowed, coverageSourceCurrent: enterpriseCatalog.coverageSourceCurrent,
     constructionSourceAllowed: async (projectId: string, ref: StudioSourceRef) => { await assertNativeEnterprise(ref.authority, ref.id, enterpriseScopes.enterpriseIdForProject(projectId)); return true; } };
   const extractions = studioExtractions(options.dataRoot);
-  const sources = createStudioSources({ ...options, studio: store, enterpriseScope, assertDataPathAllowed: (projectId, locator) => memberPack.assertProjectDataPathAllowed(projectId, locator) });
+  const sources = createStudioSources({
+    ...options,
+    studio: store,
+    enterpriseScope,
+    assertDataPathAllowed: (projectId, locator) => memberPack.assertProjectDataPathAllowed(projectId, locator),
+    filterAuthorizedDataBytes: (projectId, locator, rawBytes) => memberPack.filterAuthorizedProjectData(projectId, locator, rawBytes),
+    readPreservedReportBytes: (projectId, taskId, locator, expectedSha256) => memberPack.readPreservedReportBytes(projectId, taskId, locator, expectedSha256),
+  });
   const workspace = async (id: string) => {
     const system = store.get(id), owner = studioExecutionOwner(system), project = await options.projects.get(owner.projectId), task = await options.projects.getTask(owner.projectId, owner.taskId);
     if (options.taskSnapshot) {
@@ -1305,7 +1317,10 @@ export function createStudioFeature(options: StudioHostOptions) {
             if (enterpriseId) { enterpriseScopes.get(enterpriseId); assertProjectEnterprise(projectId, enterpriseId); enterpriseScopes.associateProject(projectId, enterpriseId); }
             const materials = await selectedMaterials(input.materials, projectId);
             const task = await options.projects.createTask(projectId, { name: `Studio · ${name}` }); await options.projects.saveDraft(projectId, task.id, goal);
-            const system = store.create({ name, projectId, taskId: task.id, goal, topicTitle, materials, ...(enterpriseId ? { enterpriseId } : {}) }); return { statusCode: 201, result: { system }, systemId: system.id };
+            const system = store.create({ name, projectId, taskId: task.id, goal, topicTitle, materials, ...(enterpriseId ? { enterpriseId } : {}) });
+            const creatorOp = options.resolveRequestOperator?.(request);
+            if (creatorOp) memberPack.bindSystemOperator(system.id, creatorOp.operatorId);
+            return { statusCode: 201, result: { system }, systemId: system.id };
           }
           const state = await workspace(id), system = state.system;
           if (action === 'contributions') {

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
+import { withCaseGoal } from './fixtures/case-goal.ts';
 
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
@@ -698,6 +699,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   }
   assert.equal(fs.existsSync(path.join(sandboxCleanDir, 'willowbank_orders.csv')), false, 'Unauthorized willowbank_orders.csv MUST NOT physically exist in restricted task sandbox!');
   assert.equal((stateA.snapshot.tools ?? []).includes('subagent'), false, 'Restricted member-pack session MUST disable subagent delegation!');
+  assert.equal((stateA.snapshot.tools ?? []).some((t: string) => t.startsWith('db_') || t.includes('dblink')), false, 'Restricted member-pack session MUST withhold dbLink tools!');
   assert.match(taskACatalogText, /"pinnedVersion":"1\.0"/);
   assert.match(taskACatalogText, /"dependencies":\[/);
   assert.match(refundV1ReadText, /v1口径：仅扣除与再购单同月的全额退款/);
@@ -734,14 +736,54 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(verifySelfOnly.use.independentVerification.status, 'pending', 'POST /verify MUST keep same-task self-assessment pending!');
   assert.equal(verifySelfOnly.use.independentVerification.selfAssessmentOnly, true);
 
-  // R4 (Round-5): Now run a SEPARATE INDEPENDENT verifier task (taskVerifyV1 in projAud) calling studio_assets assess-use!
-  // Grant projAud first so it can run in the same enterprise
+  // R4 (Round-6): Grant projAud and FIRST run a BLIND independent verifier (submits assessment JSON WITHOUT reading required assets -> MUST stay pending!)
   await json(await host.request('/api/studio/resource-grants', 'POST', {
     requestId: randomUUID(), enterpriseId, grantorProjectId: projBuild.id, authorityToken: buildAuth.authorityToken, grantBasis: '独立核算岗全店复算',
     subjectType: 'project', subjectId: projAud.id, resourceKind: 'detail',
     purposeKeys: ['store-first-purchase-30d-repurchase'], operations: ['read-definition', 'read-detail-recalculate'],
     scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店', '柳岸直营店'], allowedDataPaths: ['020_clean/starbridge_orders.csv', '020_clean/willowbank_orders.csv'] },
   }));
+  const { task: taskBlindVerify } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '盲签核验反例任务' }), 201);
+  const blindAssessText = JSON.stringify({ assessed: 'repurchase-v1.0.json', verifier: 'taskBlindVerify', status: 'pass', blind: true });
+  let stepBlind = 0;
+  provider.setResponder(() => {
+    stepBlind += 1;
+    if (stepBlind === 1) {
+      return hasOsSandbox
+        ? { calls: [{ name: 'write', arguments: { path: '../060_reports/repurchase-v1.0-blind-assess.json', content: blindAssessText } }] }
+        : { calls: [{ name: 'write_report', arguments: { filename: 'repurchase-v1.0-blind-assess.json', content: blindAssessText } }] };
+    }
+    if (stepBlind === 2) {
+      const assessSha = sha(blindAssessText);
+      return {
+        calls: [{
+          name: 'studio_assets',
+          arguments: {
+            action: 'assess-use',
+            systemId: system.id,
+            payload: {
+              useId: taskAStudioUseId,
+              status: 'pass',
+              report: { authority: 'task', id: taskBlindVerify.id, projectId: projAud.id, taskId: taskBlindVerify.id, version: assessSha, sha256: assessSha, locator: '060_reports/repurchase-v1.0-blind-assess.json' },
+              sources: [refundV1Ref, sapM1Ref],
+              result: '盲签核验反例：未实读原依赖即提交 pass',
+            },
+          },
+        }],
+      };
+    }
+    return { text: '盲签核验任务已提交未实读原依赖的核验单。' };
+  });
+  await json(await host.request(`/api/projects/${projAud.id}/tasks/${taskBlindVerify.id}/messages`, 'POST', {
+    requestId: randomUUID(), text: '盲签反例：不读原资产直接提交核验。',
+  }), 202);
+  await waitIdle(host, projAud.id, taskBlindVerify.id);
+  const packAfterBlind = await json(await host.request(`/api/studio/enterprise-packs/${packId}`));
+  const useAAfterBlind = packAfterBlind.pack.useRecords.find((u: any) => u.id === autoUseA.id);
+  assert.equal(useAAfterBlind.independentVerification.status, 'pending', 'Blind verifier WITHOUT native reads of required assets MUST NEVER promote useRecord to pass!');
+  assert.equal(useAAfterBlind.independentVerification.verifierEvidenceSummary?.readRequiredAssetsCount, 0);
+
+  // R4 (Round-6): Now run a GENUINE independent verifier task (taskVerifyV1 in projAud) that reads BOTH required dependencies + input data, writes via managed write/write_report (no shell quoting fragility on macOS!), and calls assess-use!
   const { task: taskVerifyV1 } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '独立核验任务V1' }), 201);
   const indepAssessV1Text = JSON.stringify({ assessed: 'repurchase-v1.0.json', verifier: 'taskVerifyV1', status: 'pass', numerator: 3, denominator: 4 });
   let stepVV1 = 0;
@@ -749,11 +791,22 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   provider.setResponder(context => {
     stepVV1 += 1;
     if (stepVV1 === 1) {
-      return hasOsSandbox
-        ? { calls: [{ name: 'bash', arguments: { command: `python3 -c "import json; open('../060_reports/repurchase-v1.0-indep-assess.json','w').write(${JSON.stringify(indepAssessV1Text)})"` } }] }
-        : { calls: [{ name: 'write_report', arguments: { filename: 'repurchase-v1.0-indep-assess.json', content: indepAssessV1Text } }] };
+      return { calls: [{ name: 'studio_assets', arguments: { action: 'read-source', systemId: system.id, payload: { ref: refundV1Ref } } }] };
     }
     if (stepVV1 === 2) {
+      return { calls: [{ name: 'studio_assets', arguments: { action: 'read-source', systemId: system.id, payload: { ref: sapM1Ref } } }] };
+    }
+    if (stepVV1 === 3) {
+      return hasOsSandbox
+        ? { calls: [{ name: 'read', arguments: { path: 'starbridge_orders.csv' } }] }
+        : { calls: [{ name: 'read_input', arguments: { filename: 'starbridge_orders.csv' } }] };
+    }
+    if (stepVV1 === 4) {
+      return hasOsSandbox
+        ? { calls: [{ name: 'write', arguments: { path: '../060_reports/repurchase-v1.0-indep-assess.json', content: indepAssessV1Text } }] }
+        : { calls: [{ name: 'write_report', arguments: { filename: 'repurchase-v1.0-indep-assess.json', content: indepAssessV1Text } }] };
+    }
+    if (stepVV1 === 5) {
       const assessSha = sha(indepAssessV1Text);
       return {
         calls: [{
@@ -766,7 +819,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
               status: 'pass',
               report: { authority: 'task', id: taskVerifyV1.id, projectId: projAud.id, taskId: taskVerifyV1.id, version: assessSha, sha256: assessSha, locator: '060_reports/repurchase-v1.0-indep-assess.json' },
               sources: [refundV1Ref, sapM1Ref],
-              result: '独立核验任务 taskVerifyV1 核对 v1.0 原文与 3/4 复算通过',
+              result: '独立核验任务 taskVerifyV1 实读 v1.0 原文与星桥明细并核对 3/4 复算通过',
             },
           },
         }],
@@ -774,18 +827,28 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     }
     const resTxt = providerMessageText(context.recentToolResults.at(-1)!.content);
     indepAssessV1Ok = resTxt.includes('"status":"pass"');
-    return { text: '独立核验任务已完成对 Task A v1.0 报告的独立 assess-use。' };
+    return { text: '独立核验任务已完成对 Task A v1.0 报告的独立实读与 assess-use。' };
   });
   await json(await host.request(`/api/projects/${projAud.id}/tasks/${taskVerifyV1.id}/messages`, 'POST', {
-    requestId: randomUUID(), text: '请作为独立核验任务核对 Task A 的 v1.0 报告。',
+    requestId: randomUUID(), text: '请作为独立核验任务先实读适用原依赖与授权明细，再核对 Task A 的 v1.0 报告。',
   }), 202);
   await waitIdle(host, projAud.id, taskVerifyV1.id);
   assert.equal(indepAssessV1Ok, true, 'Independent verifier task studio_assets assess-use MUST be accepted by StudioStore!');
   const packAfterIndepV1 = await json(await host.request(`/api/studio/enterprise-packs/${packId}`));
   const useAAfterIndep = packAfterIndepV1.pack.useRecords.find((u: any) => u.id === autoUseA.id);
-  assert.equal(useAAfterIndep.independentVerification.status, 'pass', 'Independent verifier task assess-use MUST promote Task A useRecord to pass!');
+  assert.equal(useAAfterIndep.independentVerification.status, 'pass', 'Genuine independent verifier task assess-use MUST promote Task A useRecord to pass!');
   assert.equal(useAAfterIndep.independentVerification.verifierTaskId, taskVerifyV1.id);
   assert.equal(useAAfterIndep.independentVerification.selfAssessmentOnly, false);
+  assert.equal(useAAfterIndep.independentVerification.verifierEvidenceSummary?.readRequiredAssetsCount, 2);
+  assert.equal(useAAfterIndep.independentVerification.verifierEvidenceSummary?.hadDataOrCalcEvidence, true);
+
+  // R4 (Round-6): Verify GET /api/studio/enterprise-packs/turn-evidence & /report-snapshot link Task A's turn to saved report + pass verdict!
+  const turnEvA = await json(await host.request(`/api/studio/enterprise-packs/turn-evidence?projectId=${projStar.id}&taskId=${taskA.id}`));
+  assert.ok(turnEvA.savedReports.some((r: any) => r.locator === '060_reports/repurchase-v1.0.json'), 'turn-evidence MUST list Task A saved report!');
+  assert.ok(turnEvA.useRecords.some((r: any) => r.use.id === autoUseA.id && r.use.independentVerification.status === 'pass'), 'turn-evidence MUST surface REAL independent verification pass verdict!');
+  const snapA = await json(await host.request(`/api/studio/enterprise-packs/${packId}/report-snapshot?projectId=${projStar.id}&taskId=${taskA.id}&locator=${encodeURIComponent('060_reports/repurchase-v1.0.json')}&sha256=${sha(reportV1Bytes)}`));
+  assert.equal(snapA.sha256, sha(reportV1Bytes));
+  assert.equal(snapA.text, reportV1Bytes.toString('utf8'));
 
   // R5 (Round-5): Same-task subsequent same-name report overwrite protection + Cross-task same-name protection!
   // 1) Same task (Task A) writing modified repurchase-v1.0.json MUST NEVER overwrite the already-recorded original!
@@ -904,7 +967,22 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(fbZeroToolTurn.feedback.reports[0].usedPackVersion, undefined);
   assert.deepEqual(fbZeroToolTurn.feedback.reports[0].usedAssetRefs, []);
 
-  // Submit feedback from Task A's Turn 1 native reply twice -> verified_actual_read + usedPackVersion='1.0' + dedupe!
+  // R5 (Round-6): Create a real Case in CaseStore linked to projStar so feedback auto-binds originalCaseRef and closure verifies original Case preservation!
+  await json(await host.request('/api/cases/storage/initialize', 'POST', {}));
+  const caseCreated = await json(await host.request('/api/cases', 'POST', await withCaseGoal(host, {
+    operationId: randomUUID(),
+    title: 'Q4 星桥复购经营决定 Case',
+    description: '基于 2026-10-31 截止日复购报告作出的门店运营决策',
+  })), 201);
+  const origCase = caseCreated.case;
+  const linkCaseRes = await host.request(`/api/cases/${origCase.id}/projects`, 'POST', {
+    operationId: randomUUID(),
+    projectId: projStar.id,
+    expectedRevision: origCase.revision,
+  });
+  assert.ok(linkCaseRes.status >= 200 && linkCaseRes.status < 300, `Linking Case to projStar failed: ${linkCaseRes.status}`);
+
+  // Submit feedback from Task A's Turn 1 native reply twice -> verified_actual_read + usedPackVersion='1.0' + linked saved report + originalCaseRef + dedupe!
   const originA = { projectId: projStar.id, taskId: taskA.id, sessionId: assistantMsgA.nativeSessionId, messageId: assistantMsgA.nativeEntryId };
   const fb1 = await json(await host.request(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
     requestId: randomUUID(), origin: originA, problemKey: 'cross-month-refund', title: '跨月全额退款漏连原单',
@@ -921,6 +999,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(fb1.feedback.reports[0].adoptionBasis, 'verified_actual_read');
   assert.equal(fb1.feedback.reports[0].usedPackVersion, '1.0');
   assert.equal(fb1.feedback.reports[0].taskCutoffAt, '2026-10-31');
+  assert.equal(fb1.feedback.reports[0].reportRef.locator, '060_reports/repurchase-v1.0.json', 'Feedback reportRef MUST link to the same-turn saved report file!');
+  assert.ok(fb1.feedback.reports[0].replyRef?.locator?.includes('native-reply'), 'Feedback MUST preserve original replyRef alongside saved reportRef!');
+  assert.equal(fb1.feedback.reports[0].linkedUseRecordId, autoUseA.id);
+  assert.equal(fb1.feedback.reports[0].independentVerificationStatus, 'pass');
+  assert.equal(fb1.feedback.reports[0].originalCaseRef?.caseId, origCase.id, 'Feedback MUST auto-link original Case from CaseStore!');
   assert.equal(fb1.feedback.targetAssetRef.id, refundV1Ref.id);
 
   // R5.3 COUNTEREXAMPLE: Attempting to close fb1 using Task A's OWN v1.0 pass use record MUST be rejected (409)!
@@ -1208,14 +1291,17 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   }));
   assert.equal(verifyBareBool.use.independentVerification.status, 'pending', 'Bare independentConfirmed without independent disk-verified Studio assessment MUST stay pending!');
 
-  // Now run a SEPARATE INDEPENDENT verifier task (taskVerifyV2) that writes 060_reports/repurchase-v1.1-assess.json and calls studio_assets assess-use!
+  // Now run a SEPARATE GENUINE INDEPENDENT verifier task (taskVerifyV2) that reads v1.1 required dependencies + data, writes 060_reports/repurchase-v1.1-assess.json via managed write/write_report (no macOS bash quote fragility!), and calls studio_assets assess-use!
   const { task: taskVerifyV2 } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '独立复核新版V1.1任务' }), 201);
   const assessV2Text = JSON.stringify({
     assessed: 'repurchase-v1.1.json',
     packVersion: '1.1',
     originalCutoffChecked: '2026-10-31',
-    shouldChange: [{ itemId: 'C07', before: '计入复购', after: '跨月全额退款排除' }],
-    shouldRetain: [{ itemId: 'C13', unchanged: '仍为有效复购' }],
+    originalCaseId: origCase.id,
+    originalCaseTitle: origCase.title,
+    caseDecisionsPreserved: true,
+    shouldChange: [{ itemId: 'C07', originalOrderId: 'O-73', refundDate: '2026-10-02', classification: 'mapping_correction', before: '计入复购', after: '跨月全额退款排除' }],
+    shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-13', unchanged: '仍为有效复购' }],
     c07Excluded: true,
     c13Retained: true,
     numerator: 2,
@@ -1225,11 +1311,22 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   provider.setResponder(() => {
     stepVV2 += 1;
     if (stepVV2 === 1) {
-      return hasOsSandbox
-        ? { calls: [{ name: 'bash', arguments: { command: `python3 -c "open('../060_reports/repurchase-v1.1-assess.json','w').write(${JSON.stringify(assessV2Text)})"` } }] }
-        : { calls: [{ name: 'write_report', arguments: { filename: 'repurchase-v1.1-assess.json', content: assessV2Text } }] };
+      return { calls: [{ name: 'studio_assets', arguments: { action: 'read-source', systemId: system.id, payload: { ref: refundV2Ref } } }] };
     }
     if (stepVV2 === 2) {
+      return { calls: [{ name: 'studio_assets', arguments: { action: 'read-source', systemId: system.id, payload: { ref: sapM2Ref } } }] };
+    }
+    if (stepVV2 === 3) {
+      return hasOsSandbox
+        ? { calls: [{ name: 'read', arguments: { path: 'starbridge_orders.csv' } }] }
+        : { calls: [{ name: 'read_input', arguments: { filename: 'starbridge_orders.csv' } }] };
+    }
+    if (stepVV2 === 4) {
+      return hasOsSandbox
+        ? { calls: [{ name: 'write', arguments: { path: '../060_reports/repurchase-v1.1-assess.json', content: assessV2Text } }] }
+        : { calls: [{ name: 'write_report', arguments: { filename: 'repurchase-v1.1-assess.json', content: assessV2Text } }] };
+    }
+    if (stepVV2 === 5) {
       const assessSha = sha(assessV2Text);
       return {
         calls: [{
@@ -1250,16 +1347,16 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
                 locator: '060_reports/repurchase-v1.1-assess.json',
               },
               sources: [refundV2Ref, sapM2Ref],
-              result: '独立复核任务 taskVerifyV2 核实 v1.1（refund v2 + sap 1.1.0）：C07 排除（应变），C13 保留（应保留），分子分母 2/4 无误',
+              result: '独立复核任务 taskVerifyV2 实读 v1.1（refund v2 + sap 1.1.0）与原明细并核实 C07（O-73/2026-10-02）排除、C13（O-13）保留，分子分母 2/4 无误，原 Case 经营决定不变',
             },
           },
         }],
       };
     }
-    return { text: '独立复核任务已完成对 v1.1 复算报告的独立核验。' };
+    return { text: '独立复核任务已完成对 v1.1 复算报告的独立实读与核验。' };
   });
   await json(await host.request(`/api/projects/${projAud.id}/tasks/${taskVerifyV2.id}/messages`, 'POST', {
-    requestId: randomUUID(), text: '请独立复核 Task B 的 v1.1 复算报告（核对 C07 应变、C13 保留）。',
+    requestId: randomUUID(), text: '请独立实读 v1.1 原依赖与明细后复核 Task B 的 v1.1 复算报告（核对 C07 应变、C13 保留与原 Case 决定不变）。',
   }), 202);
   await waitIdle(host, projAud.id, taskVerifyV2.id);
 
@@ -1267,8 +1364,9 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   const verifiedUseB = packAfterVV2.pack.useRecords.find((u: any) => u.id === useBRecord.id);
   assert.equal(verifiedUseB.independentVerification.status, 'pass', 'Independent verifier task assess-use MUST promote Task B useRecord to pass!');
   assert.equal(verifiedUseB.independentVerification.verifierTaskId, taskVerifyV2.id);
+  assert.equal(verifiedUseB.independentVerification.verifierEvidenceSummary?.readRequiredAssetsCount, 2);
 
-  // R5 (Round-5): Closing feedback WITHOUT itemVerification OR with uncorroborated itemId MUST return 409!
+  // R5 (Round-6): Closing feedback WITHOUT itemVerification, with bare itemId-only stub, with mismatched cutoff, with post-cutoff refund, with missing CaseRef, OR with forged CaseRef MUST ALL return 409!
   const closeNoItemEv = await host.request(`/api/studio/enterprise-packs/${packId}/feedback/${fb1.feedback.id}/handle`, 'POST', {
     requestId: randomUUID(),
     projectId: projBuild.id,
@@ -1280,37 +1378,113 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   });
   assert.equal(closeNoItemEv.status, 409);
 
-  const closeFakeItemEv = await host.request(`/api/studio/enterprise-packs/${packId}/feedback/${fb1.feedback.id}/handle`, 'POST', {
+  // Bare itemId-only stub WITHOUT originalOrderId / refundDate MUST return 409!
+  const closeBareIdOnly = await host.request(`/api/studio/enterprise-packs/${packId}/feedback/${fb1.feedback.id}/handle`, 'POST', {
     requestId: randomUUID(),
     projectId: projBuild.id,
     status: 'verified',
-    note: '伪造不存在于落盘报告的逐笔项反例',
+    note: '仅写编号未核对原单号/退款日反例',
     revisedRef: refundV2Ref,
     revisedPackVersion: '1.1',
     verifiedByUseId: useBRecord.id,
     itemVerification: {
       originalCutoffChecked: '2026-10-31',
-      transactionAssociationNote: '核对原截止日',
-      shouldChange: [{ itemId: 'C999-NONEXISTENT', beforeValue: '3/4', afterValue: '2/4' }],
-      shouldRetain: [{ itemId: 'C13', unchangedValue: '有效复购保留' }],
+      transactionAssociationNote: '仅有编号',
+      shouldChange: [{ itemId: 'C07', beforeValue: '3/4', afterValue: '2/4' }],
+      shouldRetain: [{ itemId: 'C13', unchangedValue: '保留' }],
+      originalCaseRef: { caseId: origCase.id },
+      caseDecisionsPreserved: true,
     },
   });
-  assert.equal(closeFakeItemEv.status, 409);
+  assert.equal(closeBareIdOnly.status, 409, 'Bare itemId-only itemVerification without originalOrderId/refundDate MUST be rejected!');
 
-  // Now close with REAL disk-corroborated itemVerification (C07 should-change + C13 should-retain)!
+  // Mismatched originalCutoffChecked MUST return 409!
+  const closeWrongCutoff = await host.request(`/api/studio/enterprise-packs/${packId}/feedback/${fb1.feedback.id}/handle`, 'POST', {
+    requestId: randomUUID(),
+    projectId: projBuild.id,
+    status: 'verified',
+    note: '错填截止日反例',
+    revisedRef: refundV2Ref,
+    revisedPackVersion: '1.1',
+    verifiedByUseId: useBRecord.id,
+    itemVerification: {
+      originalCutoffChecked: '2026-09-30',
+      transactionAssociationNote: '错填截止日',
+      shouldChange: [{ itemId: 'C07', originalOrderId: 'O-73', refundDate: '2026-10-02', beforeValue: '3/4', afterValue: '2/4' }],
+      shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-13', unchangedValue: '保留' }],
+      originalCaseRef: { caseId: origCase.id },
+      caseDecisionsPreserved: true,
+    },
+  });
+  assert.equal(closeWrongCutoff.status, 409, 'Mismatched originalCutoffChecked MUST be rejected!');
+
+  // Omitting originalCaseRef when feedback had linked originalCaseRef MUST return 409!
+  const closeMissingCase = await host.request(`/api/studio/enterprise-packs/${packId}/feedback/${fb1.feedback.id}/handle`, 'POST', {
+    requestId: randomUUID(),
+    projectId: projBuild.id,
+    status: 'verified',
+    note: '遗漏原 Case 核查反例',
+    revisedRef: refundV2Ref,
+    revisedPackVersion: '1.1',
+    verifiedByUseId: useBRecord.id,
+    itemVerification: {
+      originalCutoffChecked: '2026-10-31',
+      transactionAssociationNote: '未提供原 Case',
+      shouldChange: [{ itemId: 'C07', originalOrderId: 'O-73', refundDate: '2026-10-02', beforeValue: '3/4', afterValue: '2/4' }],
+      shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-13', unchangedValue: '保留' }],
+      caseDecisionsPreserved: true,
+    },
+  });
+  assert.equal(closeMissingCase.status, 409, 'Omitting originalCaseRef when feedback is linked to a Case MUST be rejected!');
+
+  // Forged nonexistent Case ID MUST return 409!
+  const closeForgedCase = await host.request(`/api/studio/enterprise-packs/${packId}/feedback/${fb1.feedback.id}/handle`, 'POST', {
+    requestId: randomUUID(),
+    projectId: projBuild.id,
+    status: 'verified',
+    note: '伪造不存在原 Case 反例',
+    revisedRef: refundV2Ref,
+    revisedPackVersion: '1.1',
+    verifiedByUseId: useBRecord.id,
+    itemVerification: {
+      originalCutoffChecked: '2026-10-31',
+      transactionAssociationNote: '伪造 Case',
+      shouldChange: [{ itemId: 'C07', originalOrderId: 'O-73', refundDate: '2026-10-02', beforeValue: '3/4', afterValue: '2/4' }],
+      shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-13', unchangedValue: '保留' }],
+      originalCaseRef: { caseId: randomUUID() },
+      caseDecisionsPreserved: true,
+    },
+  });
+  assert.equal(closeForgedCase.status, 409, 'Forged Case ID MUST be rejected!');
+
+  // Now close with REAL disk-corroborated itemVerification (C07 + O-73 + 2026-10-02 should-change, C13 + O-13 should-retain, exact cutoff 2026-10-31, and intact original Case)!
   const closedFb = await json(await host.request(`/api/studio/enterprise-packs/${packId}/feedback/${fb1.feedback.id}/handle`, 'POST', {
     requestId: randomUUID(),
     projectId: projBuild.id,
     status: 'verified',
-    note: '已由独立新任务按 v1.1 复算并通过独立任务核验与逐笔核对闭环',
+    note: '已由独立新任务按 v1.1 复算并通过独立实读核验、逐笔原单/退款日/截止日及原 Case 核查闭环',
     revisedRef: refundV2Ref,
     revisedPackVersion: '1.1',
     verifiedByUseId: useBRecord.id,
     itemVerification: {
       originalCutoffChecked: '2026-10-31',
-      transactionAssociationNote: '核查原单 O-73 与 10月2日退款单 R-02 在原截止日 2026-10-31 前已可见，原规则漏连跨月退款；修订后原 Case 经营决定保留不变',
-      shouldChange: [{ itemId: 'C07', beforeValue: '计入复购（3/4）', afterValue: '按原单冲销后排除复购（2/4）', evidenceLocator: '060_reports/repurchase-v1.1.json' }],
-      shouldRetain: [{ itemId: 'C13', unchangedValue: '有效再购继续计入（保留）', evidenceLocator: '060_reports/repurchase-v1.1.json' }],
+      transactionAssociationNote: '核查原单 O-73 与 2026-10-02 退款单在原截止日 2026-10-31 前已可见，原规则漏连跨月退款；修订后原 Case 经营决定保留不变',
+      shouldChange: [{
+        itemId: 'C07',
+        originalOrderId: 'O-73',
+        refundDate: '2026-10-02',
+        classification: 'mapping_correction',
+        beforeValue: '计入复购（3/4）',
+        afterValue: '按原单冲销后排除复购（2/4）',
+        evidenceLocator: '060_reports/repurchase-v1.1.json',
+      }],
+      shouldRetain: [{
+        itemId: 'C13',
+        originalOrderId: 'O-13',
+        unchangedValue: '有效再购继续计入（保留）',
+        evidenceLocator: '060_reports/repurchase-v1.1.json',
+      }],
+      originalCaseRef: { caseId: origCase.id, summary: origCase.title },
       caseDecisionsPreserved: true,
     },
   }));
@@ -1319,7 +1493,9 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(closedFb.feedback.revisionLink.toPackVersion, '1.1');
   assert.equal(closedFb.feedback.revisionLink.authorityUpdates.length, 1);
   assert.equal(closedFb.feedback.revisionLink.itemVerification.shouldChange[0].itemId, 'C07');
+  assert.equal(closedFb.feedback.revisionLink.itemVerification.shouldChange[0].originalOrderId, 'O-73');
   assert.equal(closedFb.feedback.revisionLink.itemVerification.shouldRetain[0].itemId, 'C13');
+  assert.equal(closedFb.feedback.revisionLink.itemVerification.originalCaseRef?.caseId, origCase.id);
 
   // Confirm Task A pin remained 1.0, Task B pin is 1.1, and Task A's historical report file is untouched!
   const finalPack = await json(await host.request(`/api/studio/enterprise-packs/${packId}`));

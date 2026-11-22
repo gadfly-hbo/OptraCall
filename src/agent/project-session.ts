@@ -825,7 +825,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           return { skills: snapshot.skills, diagnostics: [...base.diagnostics, ...snapshot.unavailable.map(name => ({ type: 'warning' as const, message: `Skill unavailable in protected execution: ${name}` }))] };
         },
         appendSystemPrompt: [...(o.workspace?.systemPrompt ?? []), ...((ordinaryManaged() || restrictedMemberPack) ? projectInstructions() : []),
-          ...(restrictedMemberPack ? ['当前任务运行在受限资源授权隔离工作区中：工作目录仅包含当前获准读取的资料；未授权门店或资料不可访问、不可通过子会话/连接器/扩展越权获取，也不可将不可读门店视为 0。分析产出请保存到 ../060_reports/。'] : []),
+          ...(restrictedMemberPack ? ['当前任务运行在受限资源授权隔离工作区中：工作目录仅包含当前获准门店与时段范围内的授权视图；未授权门店、超期数据、数据库直连（dbLink）及未授权连接器/子会话/扩展均已禁止，且不可将不可读门店视为 0。分析产出请保存到 ../060_reports/。'] : []),
           `The Host has provided a managed tool execution environment (${activeProtectedScope?.profile ?? 'protected'}). The tools run in ${protectedTools.scope.cwd}. Authorized readable material locations: ${JSON.stringify(protectedTools.scope.readRoots)}. Authorized writable locations: ${JSON.stringify([protectedTools.scope.writableRoot, ...(protectedTools.scope.writeRoots ?? [])])}. ${(ordinaryManaged() || restrictedMemberPack) ? 'Background and parallel calculations may continue across tool calls within this operation; the Host retains their resources until stop, close, or the authorized phase handoff.' : 'Existing data and reports are read-only; save new calculations and deliverables in the new workspace.'} Native session and credential files are unavailable to execution tools. Existing/remote MCP and user execution extensions are unavailable here. All child processes must remain inside this operation\'s owned execution groups: detached sessions and posix_spawn are unavailable. The python and python3 entrypoints use the installed same-version direct interpreters (${JSON.stringify(protectedTools.pythonRuntimes)}); use these entrypoints or their recorded direct executable paths instead of absolute framework launcher wrappers. Ordinary fork/exec subprocesses remain available. Choose methods and tools yourself. Codemode store/load is scoped to this execution workspace. Unavailable tools: ${JSON.stringify(protectedTools.unavailableTools)}.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
       } : restrictedMemberPack ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
@@ -833,7 +833,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         extensionFactories: [...searchExtensions, ...reportReviewExtensions, environmentExtension],
         appendSystemPrompt: [
           ...projectInstructions(),
-          '当前运行环境缺少操作系统受管隔离边界（sandbox-exec 不可用），已按工程规格禁用原生文件系统与 Shell/Codemode/子会话工具，并限制底层明细文件直连；仅开放受 Host 权限逐项核验的 read_input、write_report 与 studio_assets 工具。未授权门店或资料不可读取，也不可将不可读门店视为 0。',
+          '当前运行环境缺少操作系统受管隔离边界（sandbox-exec 不可用），已按工程规格禁用原生文件系统、Shell/Codemode/子会话与数据库直连（dbLink）及外部连接器；仅开放受 Host 门店/时段授权视图核验的 read_input、write_report 与 studio_assets 工具。未授权门店或超期资料不可读取，也不可将不可读门店视为 0。',
           ...(o.metricIndexText ? [o.metricIndexText] : []),
         ],
       } : {

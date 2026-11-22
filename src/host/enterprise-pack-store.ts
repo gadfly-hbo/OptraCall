@@ -1127,6 +1127,14 @@ export class EnterprisePackStore {
     verifierTaskId?: string;
     assessmentReportRef?: StudioSourceRef;
     selfAssessmentOnly?: boolean;
+    verifierActualReads?: { ref: StudioSourceRef; complete: boolean; readAt: string }[];
+    verifierEvidenceSummary?: {
+      requiredAssetsCount?: number;
+      readRequiredAssetsCount: number;
+      allRequiredReadByVerifier?: boolean;
+      hadDataOrCalcEvidence: boolean;
+      missingReason?: string;
+    };
     expectedRef?: StudioSourceRef;
     independentConfirmed: boolean;
     partialSubsetOnly?: boolean;
@@ -1149,6 +1157,7 @@ export class EnterprisePackStore {
         expectedRef: input.expectedRef,
         requiredRefs,
         actualReads: record.actualReads,
+        declaredRefs: record.authorDeclaration?.declaredRefs,
         hasAuthorDeclaration: Boolean(record.authorDeclaration),
         independentConfirmed: input.independentConfirmed,
         partialSubsetOnly: input.partialSubsetOnly,
@@ -1163,6 +1172,16 @@ export class EnterprisePackStore {
         ...(input.verifierTaskId ? { verifierTaskId: identity(input.verifierTaskId) } : {}),
         ...(input.assessmentReportRef ? { assessmentReportRef: sourceRef(input.assessmentReportRef) } : {}),
         ...(input.selfAssessmentOnly !== undefined ? { selfAssessmentOnly: Boolean(input.selfAssessmentOnly) } : {}),
+        ...(input.verifierActualReads ? { verifierActualReads: input.verifierActualReads.map(r => ({ ref: sourceRef(r.ref), complete: Boolean(r.complete), readAt: text(r.readAt, 100, false) })) } : {}),
+        ...(input.verifierEvidenceSummary ? {
+          verifierEvidenceSummary: {
+            ...(input.verifierEvidenceSummary.requiredAssetsCount !== undefined ? { requiredAssetsCount: Number(input.verifierEvidenceSummary.requiredAssetsCount) || 0 } : {}),
+            readRequiredAssetsCount: Number(input.verifierEvidenceSummary.readRequiredAssetsCount) || 0,
+            ...(input.verifierEvidenceSummary.allRequiredReadByVerifier !== undefined ? { allRequiredReadByVerifier: Boolean(input.verifierEvidenceSummary.allRequiredReadByVerifier) } : {}),
+            hadDataOrCalcEvidence: Boolean(input.verifierEvidenceSummary.hadDataOrCalcEvidence),
+            ...(input.verifierEvidenceSummary.missingReason ? { missingReason: text(input.verifierEvidenceSummary.missingReason, 1000, false) } : {}),
+          },
+        } : {}),
         ...(input.checkedRefs ? { checkedRefs: sources(input.checkedRefs) } : {}),
         wrongVersionDetected: evaluated.wrongVersionDetected,
         ...(input.expectedRef ? { expectedVersion: input.expectedRef.version } : {}),
@@ -1197,6 +1216,20 @@ export class EnterprisePackStore {
         sessionId: text(input.report.sessionId, 200, false),
         messageId: text(input.report.messageId, 200, false),
         reportRef: sourceRef(input.report.reportRef),
+        ...(input.report.replyRef ? { replyRef: sourceRef(input.report.replyRef) } : {}),
+        ...(input.report.linkedUseRecordId ? { linkedUseRecordId: identity(input.report.linkedUseRecordId) } : {}),
+        ...(input.report.independentVerificationStatus ? { independentVerificationStatus: input.report.independentVerificationStatus } : {}),
+        ...(input.report.assessmentReportRef ? { assessmentReportRef: sourceRef(input.report.assessmentReportRef) } : {}),
+        ...(input.report.originalCaseRef ? {
+          originalCaseRef: {
+            caseId: uuid(input.report.originalCaseRef.caseId),
+            ...(input.report.originalCaseRef.caseTitle ? { caseTitle: text(input.report.originalCaseRef.caseTitle, 300, false) } : {}),
+            ...(input.report.originalCaseRef.summary ? { summary: text(input.report.originalCaseRef.summary, 300, false) } : {}),
+            ...(input.report.originalCaseRef.decisionId ? { decisionId: text(input.report.originalCaseRef.decisionId, 200, false) } : {}),
+            ...(typeof input.report.originalCaseRef.decisionRevision === 'number' ? { decisionRevision: input.report.originalCaseRef.decisionRevision } : {}),
+            preservedAt: text(input.report.originalCaseRef.preservedAt ?? now(), 100, false),
+          },
+        } : {}),
         adoptionBasis,
         ...(input.report.observedDirectoryVersion ? { observedDirectoryVersion: text(input.report.observedDirectoryVersion, 50, false) } : {}),
         ...(adoptionBasis === 'verified_actual_read' && input.report.usedPackVersion ? { usedPackVersion: text(input.report.usedPackVersion, 50, false) } : {}),
@@ -1341,22 +1374,38 @@ export class EnterprisePackStore {
           if (!Array.isArray(iv.shouldChange) || iv.shouldChange.length === 0 || !Array.isArray(iv.shouldRetain) || iv.shouldRetain.length === 0) {
             fail('feedback_verification_missing_item_evidence', 409);
           }
+          const cutoffMs = Date.parse(originalCutoffChecked);
           const shouldChange = iv.shouldChange.map(item => {
             const itemId = text(item.itemId, 200, false).trim();
             const beforeValue = text(item.beforeValue, 1000, false).trim();
             const afterValue = text(item.afterValue, 1000, false).trim();
             if (beforeValue === afterValue) fail('feedback_verification_missing_item_evidence', 409);
+            const refundDate = item.refundDate ? text(item.refundDate, 100, false).trim() : undefined;
+            if (refundDate && Number.isFinite(cutoffMs) && Number.isFinite(Date.parse(refundDate)) && Date.parse(refundDate) > cutoffMs && item.classification === 'mapping_correction') {
+              // Post-cutoff refunds MUST NOT be misclassified as an original mapping miss!
+              fail('feedback_verification_post_cutoff_misclassified', 409);
+            }
             return {
               itemId,
               beforeValue,
               afterValue,
+              ...(item.originalOrderId ? { originalOrderId: text(item.originalOrderId, 200, false).trim() } : {}),
+              ...(refundDate ? { refundDate } : {}),
+              ...(item.reason ? { reason: text(item.reason, 2000, false).trim() } : {}),
+              ...(item.classification ? { classification: item.classification } : {}),
               ...(item.evidenceLocator ? { evidenceLocator: text(item.evidenceLocator, 500, false) } : {}),
+              ...(item.basisSourceRef ? { basisSourceRef: sourceRef(item.basisSourceRef) } : {}),
             };
           });
           const shouldRetain = iv.shouldRetain.map(item => ({
             itemId: text(item.itemId, 200, false).trim(),
             unchangedValue: text(item.unchangedValue, 1000, false).trim(),
+            ...(item.originalOrderId ? { originalOrderId: text(item.originalOrderId, 200, false).trim() } : {}),
+            ...(item.refundDate ? { refundDate: text(item.refundDate, 100, false).trim() } : {}),
+            ...(item.reason ? { reason: text(item.reason, 2000, false).trim() } : {}),
+            ...(item.classification ? { classification: item.classification } : {}),
             ...(item.evidenceLocator ? { evidenceLocator: text(item.evidenceLocator, 500, false) } : {}),
+            ...(item.basisSourceRef ? { basisSourceRef: sourceRef(item.basisSourceRef) } : {}),
           }));
           normalizedItemVerification = {
             originalCutoffChecked,
@@ -1364,6 +1413,16 @@ export class EnterprisePackStore {
             shouldChange,
             shouldRetain,
             ...(iv.caseDecisionsPreserved !== undefined ? { caseDecisionsPreserved: Boolean(iv.caseDecisionsPreserved) } : {}),
+            ...(iv.originalCaseRef ? {
+              originalCaseRef: {
+                caseId: uuid(iv.originalCaseRef.caseId),
+                ...(iv.originalCaseRef.caseTitle ? { caseTitle: text(iv.originalCaseRef.caseTitle, 300, false) } : {}),
+                ...(iv.originalCaseRef.summary ? { summary: text(iv.originalCaseRef.summary, 300, false) } : {}),
+                ...(iv.originalCaseRef.decisionId ? { decisionId: text(iv.originalCaseRef.decisionId, 200, false) } : {}),
+                ...(typeof iv.originalCaseRef.decisionRevision === 'number' ? { decisionRevision: iv.originalCaseRef.decisionRevision } : {}),
+                preservedAt: text(iv.originalCaseRef.preservedAt ?? stamp, 100, false),
+              },
+            } : {}),
             ...(iv.assessmentReportRef ? { assessmentReportRef: sourceRef(iv.assessmentReportRef) } : {}),
           };
         } else if (isCalcPurpose) {

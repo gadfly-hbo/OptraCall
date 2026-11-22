@@ -240,4 +240,55 @@ export async function recordPackUpgradeImpact(packId: string, input: Record<stri
   return studioRequest(`enterprise-packs/${encodeURIComponent(packId)}/upgrade-impact`, 'POST', input);
 }
 
+export interface TurnPackEvidenceResponse {
+  projectId: string;
+  taskId: string;
+  sessionId?: string;
+  messageId?: string;
+  savedReports: { authority: string; id: string; projectId?: string; taskId?: string; version: string; sha256?: string; locator?: string }[];
+  useRecords: {
+    packId: string;
+    packCode: string;
+    packName: string;
+    use: EnterprisePackUseRecord;
+  }[];
+  feedbackLinks: {
+    packId: string;
+    feedbackId: string;
+    feedbackCode: string;
+    title: string;
+    status: string;
+    reportRef: { locator?: string; sha256?: string; version?: string };
+    replyRef?: { locator?: string; sha256?: string };
+    originalCaseRef?: { caseId: string; decisionId?: string; summary?: string };
+  }[];
+}
+
+export async function readTurnPackEvidence(
+  projectId: string,
+  taskId: string,
+  sessionId?: string,
+  messageId?: string,
+  signal?: AbortSignal,
+): Promise<TurnPackEvidenceResponse> {
+  const qs = new URLSearchParams({ projectId, taskId });
+  if (sessionId) qs.set('sessionId', sessionId);
+  if (messageId) qs.set('messageId', messageId);
+  return studioRequest(`enterprise-packs/turn-evidence?${qs.toString()}`, 'GET', undefined, signal);
+}
+
+export async function readPreservedReportSnapshot(
+  packId: string,
+  projectId: string,
+  locator: string,
+  sha256?: string,
+  taskId?: string,
+  signal?: AbortSignal,
+): Promise<{ projectId: string; taskId?: string; locator: string; sha256: string; bytesLength: number; text: string }> {
+  const qs = new URLSearchParams({ projectId, locator });
+  if (sha256) qs.set('sha256', sha256);
+  if (taskId) qs.set('taskId', taskId);
+  return studioRequest(`enterprise-packs/${encodeURIComponent(packId)}/report-snapshot?${qs.toString()}`, 'GET', undefined, signal);
+}
+
 export { StudioRequestError };

@@ -470,3 +470,54 @@ test('memberPackExecutionScope drains and retires Turn 1 resource so Turn 2 spaw
   assert.equal(created[1]!.drainCalls, 1);
   assert.equal(created[1]!.closeCalls, 1);
 });
+
+test('policyFingerprint change retires cached idle session and spawns a fresh session with updated permissions (R2 Round-6)', async t => {
+  const cfg = configuration('pol');
+  let currentPolicy = 'grant-set-v1';
+  let openCount = 0;
+  let closeCount = 0;
+  const domain = createAgentSessionDomain<string>({
+    name: 'policy-regear-test',
+    profile: {
+      key: id => id,
+      projectId: () => 'proj-1',
+      configuration: () => cfg,
+      policyFingerprint: () => currentPolicy,
+      agentOptions: owner => ({
+        projectId: owner.split('/')[0]!,
+        taskId: owner.split('/')[1]!,
+        sessionDirectory: '/synthetic',
+        draft: '',
+        codeRoot: '/synthetic',
+        resourceRoot: '/synthetic/pi',
+        managementPorts: [],
+      }),
+    },
+    configurationSnapshot: id => (id === cfg.id ? cfg : undefined),
+    mutate: async op => op(),
+    isClosing: () => false,
+    publish: () => {},
+    createAgent: opts => {
+      openCount += 1;
+      const agent = new Transport(opts);
+      const origClose = agent.close.bind(agent);
+      agent.close = async () => { closeCount += 1; return origClose(); };
+      return agent;
+    },
+  });
+  t.after(() => domain.closeAll());
+
+  const ref = domain.ref('p/t');
+  await domain.open(ref);
+  assert.equal(openCount, 1);
+  // Same fingerprint reuses open session
+  await domain.open(ref);
+  assert.equal(openCount, 1);
+  assert.equal(closeCount, 0);
+
+  // Grant or pack permission change alters policyFingerprint -> MUST close stale session and open fresh session!
+  currentPolicy = 'grant-set-v2-revoked';
+  await domain.open(ref);
+  assert.equal(openCount, 2, 'Changed policyFingerprint MUST retire stale session and spawn a fresh session');
+  assert.equal(closeCount, 1);
+});

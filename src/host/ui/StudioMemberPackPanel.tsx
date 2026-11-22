@@ -26,6 +26,7 @@ import type {
   ResourceGrantOperation,
 } from '../../../extensions/business-plugins/studio/enterprise-pack.ts';
 import {
+  extractRecommendationStores,
   extractRecommendationWindowDays,
   matchPanoramaRecommendationPurposes,
 } from '../../../extensions/business-plugins/studio/enterprise-pack-matching.ts';
@@ -305,6 +306,7 @@ export function StudioMemberPackPanel({
   const executeRecommendationContinuation = async (
     rec: EnterprisePanoramaRecommendation,
     existingPurpose?: EnterprisePackPurpose,
+    scopeConflictCount = 0,
   ) => {
     if (!pack || !pack.panorama || busy || readOnlyRollback) return;
     setBusy(true);
@@ -325,6 +327,10 @@ export function StudioMemberPackPanel({
         });
       }
       const parsedRecWindow = extractRecommendationWindowDays(rec);
+      const parsedRecStores = extractRecommendationStores(
+        rec,
+        pack.purposes.flatMap(p => p.scope.stores ?? []),
+      );
       const preservedScope = existingPurpose
         ? {
             ...existingPurpose.scope,
@@ -337,8 +343,8 @@ export function StudioMemberPackPanel({
             brand: pack.panorama.brand,
             channel: pack.panorama.channel,
             period: pack.panorama.period,
-            ...(rec.stores?.length ? { stores: rec.stores } : {}),
-            scopeKey: rec.scopeKey || `${pack.panorama.brand}:${pack.panorama.channel}:${rec.stores?.join('/') || pack.panorama.period}:${rec.purposeKey}${parsedRecWindow ? `:${parsedRecWindow}d` : ''}`,
+            ...(parsedRecStores.length ? { stores: parsedRecStores } : {}),
+            scopeKey: rec.scopeKey || `${pack.panorama.brand}:${pack.panorama.channel}:${parsedRecStores.join('/') || pack.panorama.period}:${rec.purposeKey}${parsedRecWindow ? `:${parsedRecWindow}d` : ''}`,
           };
       const effectiveWindow = existingPurpose?.windowDays ?? parsedRecWindow;
       const upserted = await upsertPackPurpose(pack.id, {
@@ -372,11 +378,14 @@ export function StudioMemberPackPanel({
       });
       const storesLabel = preservedScope.stores?.length ? `；门店：${preservedScope.stores.join('、')}` : '';
       const windowLabel = upserted.purpose.windowDays !== undefined ? `；窗口：${upserted.purpose.windowDays}日` : '';
+      const scopeIsolationNote = !existingPurpose && scopeConflictCount > 0
+        ? '（保留原单店/子范围，未扩大并入既有宽范围用途）'
+        : '';
       const continuationGoal = `请沿企业会员包 ${pack.packCode} 全景 v${pack.panorama.version} 原范围继续建设用途「${upserted.purpose.limitedCalculationName || upserted.purpose.title}」（purposeId: ${upserted.purpose.id}；purposeKey: ${rec.purposeKey}；scopeKey: ${preservedScope.scopeKey}；品牌：${preservedScope.brand ?? pack.panorama.brand}；渠道：${preservedScope.channel ?? pack.panorama.channel}；期间：${preservedScope.period ?? pack.panorama.period}${storesLabel}${windowLabel}；资料截止：${upserted.purpose.dataCutoffAt ?? pack.panorama.dataCutoffAt}；完成条件：${upserted.purpose.completionCriteria}；最小补证：${rec.minimumEvidence}）。请直接更新同一用途草案与条目，不要新建重复事项。`;
       setGoalInput(continuationGoal);
       setPack(upserted.pack);
       setSubTab('draft');
-      setNotice(`已按全景建议「${upserted.purpose.limitedCalculationName || rec.title}」携带原范围（${preservedScope.brand ?? pack.panorama.brand} · ${preservedScope.channel ?? pack.panorama.channel}${storesLabel}${windowLabel} · 截止 ${upserted.purpose.dataCutoffAt ?? pack.panorama.dataCutoffAt}）${upserted.created ? '新建' : '复用'}用途草案（${upserted.purpose.id}）并接入原建设会话。`);
+      setNotice(`已按全景建议「${upserted.purpose.limitedCalculationName || rec.title}」携带原范围（${preservedScope.brand ?? pack.panorama.brand} · ${preservedScope.channel ?? pack.panorama.channel}${storesLabel}${windowLabel} · 截止 ${upserted.purpose.dataCutoffAt ?? pack.panorama.dataCutoffAt}）${upserted.created ? '新建' : '复用'}用途草案（${upserted.purpose.id}）${scopeIsolationNote}并接入原建设会话。`);
       if (onBuildGoal) {
         onBuildGoal(continuationGoal, pack.systemId);
       }
@@ -395,7 +404,7 @@ export function StudioMemberPackPanel({
       setNotice(`同类用途「${rec.purposeKey}」下存在 ${match.candidates.length} 个不同范围用途，请明确选择要续建的原用途或新建独立范围。`);
       return;
     }
-    await executeRecommendationContinuation(rec, match.matched);
+    await executeRecommendationContinuation(rec, match.matched, match.scopeConflictCandidates?.length ?? 0);
   };
 
   const handleInspectRefExcerpt = async (link: EnterpriseDomainPack['entries'][number]['referenceLinks'][number]) => {
@@ -1023,14 +1032,29 @@ export function StudioMemberPackPanel({
                       )}
                       {fb.revisionLink?.itemVerification && (
                         <div className="studio-meta">
-                          <strong>逐笔更正核验（截止 {fb.revisionLink.itemVerification.originalCutoffChecked}）：</strong>
+                          <strong>逐笔更正核验（原截止日 {fb.revisionLink.itemVerification.originalCutoffChecked}）：</strong>
                           <span>{fb.revisionLink.itemVerification.transactionAssociationNote}</span>
+                          {fb.revisionLink.itemVerification.originalCaseRef && (
+                            <p className="studio-meta">
+                              原 Case 核查：{fb.revisionLink.itemVerification.originalCaseRef.summary || fb.revisionLink.itemVerification.originalCaseRef.caseId}
+                              {fb.revisionLink.itemVerification.originalCaseRef.decisionId ? `（决定 ${fb.revisionLink.itemVerification.originalCaseRef.decisionId}）` : ''}
+                              {' '}· 原经营决定保持不变：{fb.revisionLink.itemVerification.caseDecisionsPreserved ? '是' : '未确认'}
+                            </p>
+                          )}
                           <ul>
                             {fb.revisionLink.itemVerification.shouldChange.map((sc, idx) => (
-                              <li key={`chg:${sc.itemId}:${idx}`}>应变项 {sc.itemId}：{sc.beforeValue} → {sc.afterValue}</li>
+                              <li key={`chg:${sc.itemId}:${idx}`}>
+                                应变项 {sc.itemId}
+                                {sc.originalOrderId ? `（原单 ${sc.originalOrderId}${sc.refundDate ? ` · 退款 ${sc.refundDate}` : ''}）` : ''}
+                                ：{sc.beforeValue} → {sc.afterValue}
+                              </li>
                             ))}
                             {fb.revisionLink.itemVerification.shouldRetain.map((sr, idx) => (
-                              <li key={`ret:${sr.itemId}:${idx}`}>应保留项 {sr.itemId}：{sr.unchangedValue}</li>
+                              <li key={`ret:${sr.itemId}:${idx}`}>
+                                应保留项 {sr.itemId}
+                                {sr.originalOrderId ? `（原单 ${sr.originalOrderId}${sr.refundDate ? ` · 退款 ${sr.refundDate}` : ''}）` : ''}
+                                ：{sr.unchangedValue}
+                              </li>
                             ))}
                           </ul>
                         </div>
@@ -1047,6 +1071,9 @@ export function StudioMemberPackPanel({
                             </span>
                             {' '}· 原任务截止日：{rep.taskCutoffAt || '未指定'}
                             {rep.packDataCutoffAt ? ` · 包版本截止日：${rep.packDataCutoffAt}` : ''}
+                            {rep.reportRef.locator?.startsWith('060_reports/') ? ` · 关联报告：${rep.reportRef.locator}` : ''}
+                            {rep.independentVerificationStatus ? ` · 独立核验：${rep.independentVerificationStatus}` : ''}
+                            {rep.originalCaseRef ? ` · 原 Case：${rep.originalCaseRef.summary || rep.originalCaseRef.caseId}` : ''}
                             {' '}· 证据：{rep.evidenceNote}
                             {onOpenTask && (
                               <button type="button" className="text-button" onClick={() => onOpenTask(rep.projectId, rep.taskId)}>

@@ -106,6 +106,8 @@ export interface ResourceAuthorizationGrant {
   grantorProjectId?: string;
   grantorTaskId?: string;
   grantorSystemId?: string;
+  grantorOperatorId?: string;
+  grantorOperatorVerified?: boolean;
   grantorCredentialVerified?: boolean;
   grantorAuthorityType?: 'studio-system-owner' | 'enterprise-authority-asset' | 'resource-owner-project';
   grantBasis: string;
@@ -123,6 +125,7 @@ export interface ResourceAuthorizationGrant {
   revokedBy?: string;
   revokedByProjectId?: string;
   revokedByTaskId?: string;
+  revokedByOperatorId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -133,6 +136,8 @@ export interface ResourceGrantInput {
   grantorProjectId?: string;
   grantorTaskId?: string;
   grantorSystemId?: string;
+  grantorOperatorId?: string;
+  grantorOperatorVerified?: boolean;
   grantorCredentialVerified?: boolean;
   grantorAuthorityType?: 'studio-system-owner' | 'enterprise-authority-asset' | 'resource-owner-project';
   grantBasis: string;
@@ -432,12 +437,26 @@ export interface EnterprisePackTaskPin {
 
 export type FeedbackAdoptionBasis = 'verified_actual_read' | 'directory_only_unverified' | 'clue_only_no_pack_read';
 
+export interface EnterprisePackOriginalCaseRef {
+  caseId: string;
+  caseTitle?: string;
+  summary?: string;
+  decisionId?: string;
+  decisionRevision?: number;
+  preservedAt?: string;
+}
+
 export interface EnterprisePackFeedbackReport {
   projectId: string;
   taskId: string;
   sessionId: string;
   messageId: string;
   reportRef: StudioSourceRef;
+  replyRef?: StudioSourceRef;
+  linkedUseRecordId?: string;
+  independentVerificationStatus?: PackUseVerdict;
+  assessmentReportRef?: StudioSourceRef;
+  originalCaseRef?: EnterprisePackOriginalCaseRef;
   adoptionBasis?: FeedbackAdoptionBasis;
   observedDirectoryVersion?: string;
   usedPackVersion?: string;
@@ -453,9 +472,29 @@ export interface EnterprisePackFeedbackReport {
 export interface EnterprisePackFeedbackItemVerification {
   originalCutoffChecked: string;
   transactionAssociationNote: string;
-  shouldChange: { itemId: string; beforeValue: string; afterValue: string; evidenceLocator?: string }[];
-  shouldRetain: { itemId: string; unchangedValue: string; evidenceLocator?: string }[];
+  shouldChange: {
+    itemId: string;
+    beforeValue: string;
+    afterValue: string;
+    originalOrderId?: string;
+    refundDate?: string;
+    reason?: string;
+    classification?: 'mapping_correction' | 'post_cutoff_update' | 'post_cutoff_new_event';
+    evidenceLocator?: string;
+    basisSourceRef?: StudioSourceRef;
+  }[];
+  shouldRetain: {
+    itemId: string;
+    unchangedValue: string;
+    originalOrderId?: string;
+    refundDate?: string;
+    reason?: string;
+    classification?: 'retained_valid';
+    evidenceLocator?: string;
+    basisSourceRef?: StudioSourceRef;
+  }[];
   caseDecisionsPreserved?: boolean;
+  originalCaseRef?: EnterprisePackOriginalCaseRef;
   assessmentReportRef?: StudioSourceRef;
 }
 
@@ -549,6 +588,14 @@ export interface EnterprisePackUseRecord {
     verifierTaskId?: string;
     assessmentReportRef?: StudioSourceRef;
     selfAssessmentOnly?: boolean;
+    verifierActualReads?: { ref: StudioSourceRef; complete: boolean; readAt: string }[];
+    verifierEvidenceSummary?: {
+      requiredAssetsCount?: number;
+      readRequiredAssetsCount: number;
+      allRequiredReadByVerifier?: boolean;
+      hadDataOrCalcEvidence: boolean;
+      missingReason?: string;
+    };
     checkedRefs?: StudioSourceRef[];
     wrongVersionDetected?: boolean;
     expectedVersion?: string;
@@ -646,7 +693,7 @@ function sameSourceId(a: StudioSourceRef, b: StudioSourceRef): boolean {
   return a.authority === b.authority && a.id === b.id;
 }
 
-function isGrantActive(grant: ResourceAuthorizationGrant, atMs: number): boolean {
+export function isGrantActive(grant: ResourceAuthorizationGrant, atMs: number): boolean {
   if (grant.revokedAt) return false;
   if (grant.validFrom && Number.isFinite(Date.parse(grant.validFrom)) && atMs < Date.parse(grant.validFrom)) return false;
   if (grant.validTo && Number.isFinite(Date.parse(grant.validTo)) && atMs > Date.parse(grant.validTo)) return false;
@@ -969,6 +1016,7 @@ export function evaluateUseVerdict(input: {
   expectedRef?: StudioSourceRef;
   requiredRefs?: readonly StudioSourceRef[];
   actualReads: readonly EnterprisePackReadEvidence[];
+  declaredRefs?: readonly StudioSourceRef[];
   hasAuthorDeclaration: boolean;
   independentConfirmed: boolean;
   partialSubsetOnly?: boolean;
@@ -985,7 +1033,23 @@ export function evaluateUseVerdict(input: {
     ...(input.expectedRef ? [input.expectedRef] : []),
     ...(input.requiredRefs ?? []),
   ];
-  // 1. Check wrong version FIRST across expectedRef and all requiredRefs (even if summary number coincides!)
+  // 1A. CRITICAL (R4): Author's actually adopted version in the report (`declaredRefs`) takes precedence!
+  //     Even if the session read BOTH old v1 and new v2, when the report explicitly adopts the OLD/WRONG version,
+  //     the verdict MUST be 'fail' (wrongVersionDetected: true) — NEVER 'pass'!
+  if (input.declaredRefs && input.declaredRefs.length > 0) {
+    for (const target of refsToCheck) {
+      const sameAssetDeclared = input.declaredRefs.filter(d => sameSourceId(d, target));
+      const wrongDeclared = sameAssetDeclared.find(d => !sameExactSourceRef(d, target));
+      if (wrongDeclared) {
+        return {
+          verdict: 'fail',
+          wrongVersionDetected: true,
+          reason: `报告实际采用声明指向旧版/错版 ${wrongDeclared.version}（期望 ${target.version}），即便会话中也曾读过新版，仍按报告实际采用版本判该用途未通过`,
+        };
+      }
+    }
+  }
+  // 1B. Check wrong version reads across expectedRef and all requiredRefs (even if summary number coincides!)
   for (const target of refsToCheck) {
     const sameAssetReads = input.actualReads.filter(r => sameSourceId(r.ref, target));
     const wrongRead = sameAssetReads.find(r => !sameExactSourceRef(r.ref, target));
@@ -1017,6 +1081,18 @@ export function evaluateUseVerdict(input: {
   // 4. Require explicit author adoption declaration bound to this specific report/use!
   if (!input.hasAuthorDeclaration) {
     return { verdict: 'pending', wrongVersionDetected: false, reason: '缺少与本稿绑定的作者采用声明（仅读取原件不代表本稿实际采用），保持待验证' };
+  }
+  // 4B. When declaredRefs is supplied, ensure it actually covers the expected/required target(s)
+  if (input.declaredRefs && refsToCheck.length > 0) {
+    for (const target of refsToCheck) {
+      if (!input.declaredRefs.some(d => sameExactSourceRef(d, target))) {
+        return {
+          verdict: 'pending',
+          wrongVersionDetected: false,
+          reason: `作者采用声明未覆盖适用准确依赖 ${target.authority}:${target.id}@${target.version}，保持待验证`,
+        };
+      }
+    }
   }
   if (!input.independentConfirmed) {
     return { verdict: 'pending', wrongVersionDetected: false, reason: '尚无与权限和用途相称的独立核对结论，保持待验证' };
@@ -1080,4 +1156,9 @@ export function computeUpgradeImpact(
   };
 }
 
-export { extractRecommendationWindowDays, matchPanoramaRecommendationPurposes } from './enterprise-pack-matching.ts';
+export {
+  extractRecommendationStores,
+  extractRecommendationWindowDays,
+  matchPanoramaRecommendationPurposes,
+  storesMatchExactSet,
+} from './enterprise-pack-matching.ts';

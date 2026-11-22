@@ -7,6 +7,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createHost } from '../src/host/server.ts';
 import type { MemberPackHostOptions } from '../src/host/member-pack-host.ts';
 
+import { buildAuthorizedDataView } from '../src/host/member-pack-data-view.ts';
+
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
 async function startTestHost(
@@ -14,6 +16,7 @@ async function startTestHost(
   opts: {
     memberPackEnabled?: boolean;
     memberPackPublishHook?: MemberPackHostOptions['publishAuthorityDependency'];
+    resolveOperator?: Parameters<typeof createHost>[0]['resolveOperator'];
   } = {},
 ) {
   const uiPort = 4183;
@@ -25,21 +28,23 @@ async function startTestHost(
     projectsRoot: path.join(root, 'projects'),
     memberPackEnabled: opts.memberPackEnabled,
     memberPackPublishHook: opts.memberPackPublishHook,
+    resolveOperator: opts.resolveOperator,
   });
   await new Promise<void>(resolve => host.server.listen(0, '127.0.0.1', resolve));
   const addr = host.server.address();
   const port = typeof addr === 'object' && addr ? addr.port : 0;
   const base = `http://127.0.0.1:${port}`;
-  const req = async <T = any>(pathname: string, method: 'GET' | 'POST' | 'PUT' = 'GET', body?: unknown) => {
+  const req = async <T = any>(pathname: string, method: 'GET' | 'POST' | 'PUT' = 'GET', body?: unknown, extraHeaders?: Record<string, string>) => {
     const res = await fetch(`${base}${pathname}`, {
       method,
-      headers: { 'x-optracall-client': '1', 'content-type': 'application/json', origin: `http://127.0.0.1:${uiPort}` },
+      headers: { 'x-optracall-client': '1', 'content-type': 'application/json', origin: `http://127.0.0.1:${uiPort}`, ...(extraHeaders ?? {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const text = await res.text();
     let json: any;
     try { json = JSON.parse(text); } catch { json = text; }
-    return { status: res.status, json: json as T };
+    const setCookie = res.headers.get('set-cookie') ?? '';
+    return { status: res.status, json: json as T, setCookie };
   };
   return { host, base, req, close: async () => { await host.close(); } };
 }
@@ -1118,6 +1123,235 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     assert.equal(consumerPackView.status, 200);
     assert.equal(consumerPackView.json.grantAuthority, undefined);
     assert.deepEqual(consumerPackView.json.pack.packRevisions[0]?.decisionsSnapshot ?? [], []);
+  } finally {
+    try { await srv.close(); } catch {}
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Host Round-6: trusted operator binding & HttpOnly cookie anti-spoofing (R2), row-level mixed-store/period authorized data view & unfilterable fail-closed (R2), and ordinary-project referenced-report protection + preserved SHA-256 snapshot readback (R5)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'optracall-member-pack-r6-host-'));
+  let activeOperator = { operatorId: 'op:owner-alice', displayName: 'Alice', verified: true };
+  const srv = await startTestHost(root, {
+    resolveOperator: () => activeOperator,
+  });
+  try {
+    const ent = await srv.req('/api/studio/enterprises', 'POST', { requestId: randomUUID(), name: '织屿服饰 R6' });
+    assert.equal(ent.status, 201);
+    const enterpriseId = ent.json.id ?? ent.json.enterprise?.id;
+
+    const cfg = await srv.req('/api/configuration', 'PUT', {
+      name: 'Member Pack R6 Synthetic',
+      provider: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:1/v1',
+      model: 'synthetic-model',
+      apiKey: 'sk-r6-test',
+    });
+    assert.equal(cfg.status, 200);
+    const cfgId = cfg.json.configuration?.id ?? cfg.json.id;
+
+    const pOwnerRes = await srv.req('/api/projects', 'POST', { name: 'R6 权责建设方', configurationId: cfgId, enterpriseId });
+    assert.equal(pOwnerRes.status, 201);
+    const projOwner = pOwnerRes.json.project;
+    assert.ok(pOwnerRes.setCookie.includes('optracall_op_ctx='), 'Host MUST set HttpOnly signed optracall_op_ctx cookie on project create!');
+    const ownerCookie = pOwnerRes.setCookie.split(';')[0]!;
+
+    const pConsumerRes = await srv.req('/api/projects', 'POST', { name: 'R6 消费分析方', configurationId: cfgId, enterpriseId });
+    assert.equal(pConsumerRes.status, 201);
+    const projConsumer = pConsumerRes.json.project;
+    const consumerCookie = pConsumerRes.setCookie.split(';')[0]!;
+
+    const sysRes = await srv.req('/api/studio/systems', 'POST', {
+      requestId: randomUUID(), projectId: projOwner.id, enterpriseId, name: 'R6 会员体系', goal: 'R6 测试', topicTitle: 'R6 主题', materials: [],
+    }, { cookie: ownerCookie });
+    assert.equal(sysRes.status, 201);
+    const systemId = sysRes.json.system.id;
+
+    const packRes = await srv.req('/api/studio/enterprise-packs', 'POST', {
+      requestId: randomUUID(), enterpriseId, systemId, domain: 'member-operations', name: '织屿 R6 资产包',
+    }, { cookie: ownerCookie });
+    assert.equal(packRes.status, 200);
+    const packId = packRes.json.pack.id;
+
+    // 1. R2: Consumer's Host-signed activeProjectId cookie trying to impersonate projOwner MUST be rejected (403)!
+    const spoofedAuth = await srv.req(
+      `/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`,
+      'GET',
+      undefined,
+      { cookie: consumerCookie },
+    );
+    assert.equal(spoofedAuth.status, 403, 'Consumer cookie context MUST NOT obtain owner project grantAuthority!');
+
+    // Tampered cookie MUST also be rejected (403)!
+    const tamperedAuth = await srv.req(
+      `/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`,
+      'GET',
+      undefined,
+      { cookie: 'optracall_op_ctx=forged.signature' },
+    );
+    assert.equal(tamperedAuth.status, 403, 'Tampered optracall_op_ctx cookie MUST be rejected!');
+
+    // Authentic owner operator + owner cookie obtains authorityToken bound to op:owner-alice!
+    const validAuth = await srv.req(
+      `/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`,
+      'GET',
+      undefined,
+      { cookie: ownerCookie },
+    );
+    assert.equal(validAuth.status, 200);
+    assert.equal(validAuth.json.grantAuthority.operatorId, 'op:owner-alice');
+    const aliceToken = validAuth.json.grantAuthority.authorityToken;
+
+    // Different operator (op:bob) trying to USE Alice's authorityToken OR create grant on Alice's system -> 403!
+    activeOperator = { operatorId: 'op:intruder-bob', displayName: 'Bob', verified: true };
+    const bobGrant = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(),
+      enterpriseId,
+      packId,
+      grantorProjectId: projOwner.id,
+      authorityToken: aliceToken,
+      grantBasis: '非原操作者复用他人令牌反例',
+      subjectType: 'project',
+      subjectId: projConsumer.id,
+      resourceKind: 'detail',
+      purposeKeys: ['store-first-purchase-30d-repurchase'],
+      operations: ['read-detail-recalculate'],
+      scope: { brand: '织屿', stores: ['湖庭直营店'], periodFrom: '2026-09-01', periodTo: '2026-10-31', allowedDataPaths: ['020_clean/mixed_orders.csv'] },
+    });
+    assert.equal(bobGrant.status, 403, 'Different Host operator MUST NOT reuse owner authorityToken or grant on bound system!');
+
+    // Switch back to Alice + consumer cookie spoofing on POST /resource-grants -> 403!
+    activeOperator = { operatorId: 'op:owner-alice', displayName: 'Alice', verified: true };
+    const consumerCookieGrant = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(),
+      enterpriseId,
+      packId,
+      grantorProjectId: projOwner.id,
+      authorityToken: aliceToken,
+      grantBasis: '消费侧会话 Cookie 冒用建设侧项目授权反例',
+      subjectType: 'project',
+      subjectId: projConsumer.id,
+      resourceKind: 'detail',
+      purposeKeys: ['store-first-purchase-30d-repurchase'],
+      operations: ['read-detail-recalculate'],
+      scope: { brand: '织屿', stores: ['湖庭直营店'], periodFrom: '2026-09-01', periodTo: '2026-10-31', allowedDataPaths: ['020_clean/mixed_orders.csv'] },
+    }, { cookie: consumerCookie });
+    assert.equal(consumerCookieGrant.status, 403, 'Consumer activeProjectId cookie MUST NOT submit grant claiming grantorProjectId=projOwner!');
+
+    // Legitimate Alice + owner cookie succeeds and records grantorOperatorId = op:owner-alice!
+    const okGrant = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(),
+      enterpriseId,
+      packId,
+      grantorProjectId: projOwner.id,
+      authorityToken: aliceToken,
+      grantBasis: '原操作者 Alice 授权湖庭直营店 9-10 月明细',
+      subjectType: 'project',
+      subjectId: projConsumer.id,
+      resourceKind: 'detail',
+      purposeKeys: ['store-first-purchase-30d-repurchase'],
+      operations: ['read-detail-recalculate'],
+      scope: { brand: '织屿', stores: ['湖庭直营店'], periodFrom: '2026-09-01', periodTo: '2026-10-31', allowedDataPaths: ['020_clean/mixed_orders.csv'] },
+    }, { cookie: ownerCookie });
+    assert.equal(okGrant.status, 200);
+    assert.equal(okGrant.json.grant.grantorOperatorId, 'op:owner-alice');
+    assert.equal(okGrant.json.grant.grantorOperatorVerified, true);
+
+    // Different operator Bob trying to REVOKE Alice's grant -> 403!
+    activeOperator = { operatorId: 'op:intruder-bob', displayName: 'Bob', verified: true };
+    const bobRevoke = await srv.req(`/api/studio/resource-grants/${okGrant.json.grant.id}/revoke`, 'POST', {
+      requestId: randomUUID(),
+      revokerProjectId: projOwner.id,
+      authorityToken: aliceToken,
+      reason: '非原操作者越权撤回反例',
+    });
+    assert.equal(bobRevoke.status, 403);
+    activeOperator = { operatorId: 'op:owner-alice', displayName: 'Alice', verified: true };
+
+    // 2. R2: Row-level store & period authorized data view filtering (mixed CSV + opaque fail-closed)
+    const mixedCsv = [
+      'order_id,store,order_date,member_id,amount',
+      'O-01,湖庭直营店,2026-09-15,M01,320',
+      'O-02,杉岸直营店,2026-09-16,M02,410',
+      'O-03,湖庭直营店,2026-11-05,M03,500',
+      'O-04,湖庭直营店,2026-10-20,M01,280',
+    ].join('\n') + '\n';
+    const viewRes = buildAuthorizedDataView(Buffer.from(mixedCsv, 'utf8'), '020_clean/mixed_orders.csv', [okGrant.json.grant]);
+    assert.equal(viewRes.allowed, true);
+    if (viewRes.allowed) {
+      const out = viewRes.bytes.toString('utf8');
+      assert.ok(out.includes('O-01') && out.includes('O-04'), 'Authorized 湖庭直营店 within 2026-09-01..2026-10-31 MUST be included');
+      assert.ok(!out.includes('杉岸直营店') && !out.includes('O-02'), 'Unauthorized 杉岸直营店 rows MUST be stripped!');
+      assert.ok(!out.includes('2026-11-05') && !out.includes('O-03'), 'Out-of-period rows (> 2026-10-31) MUST be stripped!');
+    }
+    const opaqueFail = buildAuthorizedDataView(Buffer.from('opaque text blob with mixed stores'), '020_clean/mixed_notes.txt', [okGrant.json.grant]);
+    assert.equal(opaqueFail.allowed, false, 'Unfilterable opaque file under scoped store/period grant MUST fail closed!');
+
+    // 3. R5: Ordinary/owner project referenced report overwrite protection via files/save-report + /report-snapshot SHA-256 readback!
+    const origReportText = '# 原报告 v1.0\n湖庭直营店 30日复购率 3/4，原截止日 2026-10-31。\n';
+    const savedOrig = await srv.req(`/api/projects/${projOwner.id}/files/save-report`, 'POST', {
+      name: 'owner-referenced-report.md',
+      text: origReportText,
+    }, { cookie: ownerCookie });
+    assert.equal(savedOrig.status, 201);
+    const origSha = sha(origReportText);
+
+    // Publish a minimal definition purpose & pin + record a use referencing 060_reports/owner-referenced-report.md
+    const matRes = await srv.req('/api/enterprise-materials', 'POST', {
+      title: 'R6 口径', body: '有效购买口径正文',
+    });
+    assert.equal(matRes.status, 201);
+    const matEnabled = await srv.req(`/api/enterprise-materials/${matRes.json.material.id}/enable`, 'POST', {
+      expectedVersion: matRes.json.material.version,
+    });
+    assert.equal(matEnabled.status, 200);
+    await srv.req('/api/studio/enterprise-associations', 'POST', {
+      requestId: randomUUID(), kind: 'asset', authority: 'enterprise', entityId: matRes.json.material.id, enterpriseId,
+    });
+    const matRef = { authority: 'enterprise', id: matRes.json.material.id, version: matEnabled.json.material.revisions[0].revisionId, sha256: matEnabled.json.material.revisions[0].sha256 };
+    const pDef = await srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
+      requestId: randomUUID(), projectId: projOwner.id, purposeKey: 'r6-def', title: 'R6 定义', businessQuestion: '定义', subjectUnit: 'brand_account',
+      scope: { brand: '织屿', scopeKey: 'zhiyu:r6:def' }, tier: 'definition-reference', businessStatus: 'active', evidenceReadiness: { definition: 'pass' },
+      originalGoal: '定义', completionCriteria: '可读', dependencies: [{ id: 'd-def', role: 'member-rule', authority: 'enterprise', ref: matRef, requiredFor: ['definition-reference'] }],
+    }, { cookie: ownerCookie });
+    const prevDef = await srv.req(`/api/studio/enterprise-packs/${packId}/previews`, 'POST', {
+      requestId: randomUUID(), projectId: projOwner.id, version: '1.0', purposeIds: [pDef.json.purpose.id], dataCutoffAt: '2026-10-31', summary: 'v1.0',
+    }, { cookie: ownerCookie });
+    await srv.req(`/api/studio/enterprise-packs/${packId}/confirm`, 'POST', {
+      requestId: randomUUID(), projectId: projOwner.id, previewId: prevDef.json.preview.id, fingerprint: prevDef.json.preview.fingerprint,
+    }, { cookie: ownerCookie });
+    const ownerTaskRes = await srv.req(`/api/projects/${projOwner.id}/tasks`, 'POST', { name: 'R6 原报告任务' });
+    assert.equal(ownerTaskRes.status, 201);
+    const ownerTaskId = ownerTaskRes.json.task.id;
+    const pinRes = await srv.req(`/api/studio/enterprise-packs/${packId}/pin`, 'POST', {
+      requestId: randomUUID(), projectId: projOwner.id, taskId: ownerTaskId, version: '1.0', authorizedScope: '织屿主品牌',
+    }, { cookie: ownerCookie });
+    assert.equal(pinRes.status, 200);
+    const useRefRes = await srv.req(`/api/studio/enterprise-packs/${packId}/uses`, 'POST', {
+      requestId: randomUUID(), projectId: projOwner.id, taskId: ownerTaskId, purposeId: pDef.json.purpose.id,
+      reportRef: { authority: 'task', id: ownerTaskId, projectId: projOwner.id, taskId: ownerTaskId, version: origSha, sha256: origSha, locator: '060_reports/owner-referenced-report.md' },
+    }, { cookie: ownerCookie });
+    assert.equal(useRefRes.status, 200);
+
+    // Attempt to save revised text with the SAME filename via files/save-report on ordinary/owner project -> MUST auto-save .rev-<sha8>.md and keep original untouched!
+    const revisedReportText = '# 更正稿 v1.1\n湖庭直营店 30日复购率 2/4。\n';
+    const savedRev = await srv.req(`/api/projects/${projOwner.id}/files/save-report`, 'POST', {
+      name: 'owner-referenced-report.md',
+      text: revisedReportText,
+    }, { cookie: ownerCookie });
+    assert.equal(savedRev.status, 201);
+    assert.notEqual(savedRev.json.file.path, '060_reports/owner-referenced-report.md', 'Saving revised text for a referenced report MUST auto-save under a new conflict-safe filename!');
+    assert.ok(savedRev.json.file.path.includes('.rev-'));
+    // Original file on disk MUST remain 100% untouched AND /report-snapshot returns exact SHA-256 original!
+    const diskOrig = fs.readFileSync(path.join(projOwner.rootPath, '060_reports', 'owner-referenced-report.md'), 'utf8');
+    assert.equal(sha(diskOrig), origSha, 'Original referenced report on ordinary/owner project MUST remain untouched!');
+
+    const snapRes = await srv.req(
+      `/api/studio/enterprise-packs/${packId}/report-snapshot?projectId=${projOwner.id}&taskId=${ownerTaskId}&locator=${encodeURIComponent('060_reports/owner-referenced-report.md')}&sha256=${origSha}`,
+    );
+    assert.equal(snapRes.status, 200);
+    assert.equal(snapRes.json.sha256, origSha);
+    assert.equal(snapRes.json.text, origReportText);
   } finally {
     try { await srv.close(); } catch {}
     fs.rmSync(root, { recursive: true, force: true });

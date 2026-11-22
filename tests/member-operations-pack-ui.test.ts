@@ -120,3 +120,67 @@ test('StudioMemberPackPanel renders enterprise member pack section cleanly', asy
   assert.match(html, /企业会员运营资产包/);
   assert.match(html, /同一企业包承接企业线与会员线两条路线/);
 });
+
+test('SemanticContextDetails renders same-turn saved report link, exact SHA-256 readback button, independent verification pass verdict, and original Case link (R4/R5)', async () => {
+  const { semantic } = await bundle;
+  const html = renderToStaticMarkup(createElement(semantic.SemanticContextDetails, {
+    view: 'saved',
+    lookup: { state: 'idle' },
+    records: [],
+    onInspectSavedReport: () => {},
+    turnEvidence: {
+      projectId: '11111111-1111-4111-8111-111111111111',
+      taskId: '22222222-2222-4222-8222-222222222222',
+      savedReports: [
+        { authority: 'task', id: '22222222-2222-4222-8222-222222222222', version: 'a'.repeat(64), sha256: 'a'.repeat(64), locator: '060_reports/repurchase-v1.0.json' },
+      ],
+      useRecords: [
+        {
+          packId: '33333333-3333-4333-8333-333333333333',
+          packCode: 'PACK-MEM-001',
+          packName: '织屿服饰 · 会员运营资产包',
+          use: {
+            id: '44444444-4444-4444-8444-444444444444',
+            packId: '33333333-3333-4333-8333-333333333333',
+            projectId: '11111111-1111-4111-8111-111111111111',
+            taskId: '22222222-2222-4222-8222-222222222222',
+            reportRef: { authority: 'task', id: '22222222-2222-4222-8222-222222222222', version: 'a'.repeat(64), sha256: 'a'.repeat(64), locator: '060_reports/repurchase-v1.0.json' },
+            packVersion: '1.0',
+            purposeId: 'U-01',
+            purposeKey: 'store-first-purchase-30d-repurchase',
+            tier: 'formal-calculation',
+            accessLevel: 'recalculate',
+            catalogSupplied: { packVersion: '1.0', purposeIds: ['U-01'], assetRefs: [], suppliedAt: '2026-11-01T00:00:00Z' },
+            actualReads: [],
+            independentVerification: {
+              status: 'pass',
+              verdictDetail: '独立核验任务实读原依赖并通过 3/4 复算核查',
+              verifierTaskId: '55555555-5555-4555-8555-555555555555',
+              assessmentReportRef: { authority: 'task', id: '55555555-5555-4555-8555-555555555555', version: 'b'.repeat(64), sha256: 'b'.repeat(64), locator: '060_reports/repurchase-v1.0-indep-assess.json' },
+              verifierEvidenceSummary: { requiredAssetsCount: 2, readRequiredAssetsCount: 2, allRequiredReadByVerifier: true, hadDataOrCalcEvidence: true },
+            },
+            createdAt: '2026-11-01T00:00:00Z',
+          },
+        },
+      ],
+      feedbackLinks: [
+        {
+          packId: '33333333-3333-4333-8333-333333333333',
+          feedbackId: '66666666-6666-4666-8666-666666666666',
+          feedbackCode: 'FB-001',
+          title: '跨月退款核查',
+          status: 'verified',
+          reportRef: { locator: '060_reports/repurchase-v1.0.json', sha256: 'a'.repeat(64) },
+          originalCaseRef: { caseId: '77777777-7777-4777-8777-777777777777', summary: 'Q4 湖庭复购经营决策 Case' },
+        },
+      ],
+    },
+  }));
+  assert.match(html, /本轮已保存报告与独立核验结果/);
+  assert.match(html, /060_reports\/repurchase-v1\.0\.json/);
+  assert.match(html, /按准确摘要查看原报告/);
+  assert.match(html, /独立核验通过/);
+  assert.match(html, /核验实读原依赖 2\/2 项/);
+  assert.match(html, /060_reports\/repurchase-v1\.0-indep-assess\.json/);
+  assert.match(html, /Q4 湖庭复购经营决策 Case/);
+});

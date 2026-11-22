@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { ProjectStore } from './project-store.ts';
 import type { EnterpriseScopeStore } from './enterprise-scope-store.ts';
+import type { CaseStore } from './case-store.ts';
 import type { StudioStore } from '../../extensions/business-plugins/studio/store.ts';
 import { studioExecutionOwner, type StudioSourceRef, type StudioUseAssessment, type StudioUseRecord } from '../../extensions/business-plugins/studio/contracts.ts';
 import type { ProjectSnapshot } from '../agent/project-runtime.ts';
@@ -15,6 +16,7 @@ import {
   type EnterpriseDomainPack,
   type EnterprisePackDependency,
   type EnterprisePackFeedbackItemVerification,
+  type EnterprisePackOriginalCaseRef,
   type EnterprisePackPreview,
   type EnterprisePackReadEvidence,
   type EnterprisePackUseRecord,
@@ -27,6 +29,7 @@ import {
 import { DomainReferenceStore, BUILTIN_REPO_TEMPLATES } from './domain-reference-store.ts';
 import { ResourceGrantStore } from './resource-grant-store.ts';
 import { EnterprisePackStore } from './enterprise-pack-store.ts';
+import { buildAuthorizedDataView } from './member-pack-data-view.ts';
 import { createProtectedExecutionScope, type ProtectedExecutionScope } from '../agent/protected-tools.ts';
 
 function json(response: ServerResponse, status: number, value: unknown) {
@@ -50,6 +53,13 @@ export interface VerifiedSummaryAuthority {
   ownerProjectId?: string;
   ownerSystemId?: string;
   resourceRef: StudioSourceRef;
+}
+
+export interface TrustedHostOperator {
+  operatorId: string;
+  displayName?: string;
+  activeProjectId?: string;
+  verified: boolean;
 }
 
 export interface ProjectMemberPackFileScope {
@@ -79,6 +89,7 @@ export interface GrantAuthorityCredential {
   systemId: string;
   ownerProjectId: string;
   ownerTaskId?: string;
+  operatorId?: string;
   authorityToken: string;
 }
 
@@ -109,11 +120,14 @@ export interface MemberPackHostOptions {
   memberPackEnabled?: boolean;
   projects: ProjectStore;
   enterpriseScopes: EnterpriseScopeStore;
+  cases?: CaseStore;
   studio: StudioStore;
   operations: { run: (requestId: string, fingerprintInput: unknown, operation: () => Promise<{ statusCode?: number; result: Record<string, unknown>; systemId?: string }>) => Promise<{ statusCode?: number; result?: Record<string, unknown> }> };
   readBody(request: IncomingMessage, limit?: number): Promise<Record<string, unknown>>;
   mutate<T>(operation: () => T | Promise<T>): Promise<T>;
   closing(): boolean;
+  resolveRequestOperator?(request: IncomingMessage): TrustedHostOperator;
+  onProjectPermissionChanged?(projectId: string): void;
   taskSnapshot?(projectId: string, taskId: string): Promise<ProjectSnapshot>;
   readTaskReply(projectId: string, taskId: string, selection: { sessionId: string; messageId: string }): Promise<{ text: string }>;
   publishAuthorityDependency?: (pack: EnterpriseDomainPack, preview: EnterprisePackPreview, dep: EnterprisePackDependency, requestId: string) => Promise<AuthorityPublicationOutcome>;
@@ -168,7 +182,109 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   const activeWorkspaces = new Map<string, Map<string, RestrictedTaskWorkspace>>();
   const reportLedgerPath = path.join(options.dataRoot, 'member-packs', 'task-report-ledger.json');
   const authoritySecretPath = path.join(options.dataRoot, 'member-packs', '.authority-secret');
+  const operatorBindingsPath = path.join(options.dataRoot, 'member-packs', 'operator-bindings.json');
+  const preservedReportsRoot = path.join(options.dataRoot, 'member-packs', 'preserved-reports');
   let cachedAuthoritySecret: Buffer | undefined;
+
+  function resolveRequestOperator(request: IncomingMessage): TrustedHostOperator {
+    if (options.resolveRequestOperator) return options.resolveRequestOperator(request);
+    return { operatorId: 'local:host', verified: true };
+  }
+
+  function readOperatorBindings(): Record<string, string> {
+    try {
+      if (fs.existsSync(operatorBindingsPath)) {
+        const parsed = JSON.parse(fs.readFileSync(operatorBindingsPath, 'utf8'));
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, string>;
+      }
+    } catch { /* ignore */ }
+    return {};
+  }
+
+  function bindSystemOperator(systemId: string, operatorId: string) {
+    if (!enabled || !operatorId.trim()) return;
+    const bindings = readOperatorBindings();
+    if (bindings[systemId]) return;
+    bindings[systemId] = operatorId.trim();
+    ensurePrivateDir(path.dirname(operatorBindingsPath));
+    const tmp = `${operatorBindingsPath}.${randomUUID()}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(bindings, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, operatorBindingsPath);
+  }
+
+  function getBoundSystemOperator(systemId?: string): string | undefined {
+    if (!systemId) return undefined;
+    return readOperatorBindings()[systemId];
+  }
+
+  function preserveImmutableReportSnapshot(projectId: string, locator: string, bytes: Buffer, sha256?: string): string {
+    const actualSha = sha256 ?? createHash('sha256').update(bytes).digest('hex');
+    if (!enabled) return actualSha;
+    try {
+      const pid = uuid(projectId);
+      const dir = path.resolve(preservedReportsRoot, pid);
+      ensurePrivateDir(dir);
+      const target = path.join(dir, `${actualSha}.bin`);
+      if (!fs.existsSync(target)) {
+        const tmp = `${target}.${randomUUID()}.tmp`;
+        fs.writeFileSync(tmp, bytes, { mode: 0o400 });
+        fs.renameSync(tmp, target);
+      }
+      const metaTarget = path.join(dir, `${actualSha}.meta.json`);
+      if (!fs.existsSync(metaTarget)) {
+        fs.writeFileSync(metaTarget, JSON.stringify({ projectId: pid, locator: normalizeRelativeDataPath(locator), sha256: actualSha, bytesLength: bytes.length, preservedAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
+      }
+    } catch { /* never fail caller */ }
+    return actualSha;
+  }
+
+  function readPreservedReportBytes(projectId: string, taskId: string, locator: string, expectedSha256?: string): Buffer | undefined {
+    try {
+      const pid = uuid(projectId);
+      if (expectedSha256 && /^[a-f0-9]{64}$/i.test(expectedSha256)) {
+        const snapPath = path.resolve(preservedReportsRoot, pid, `${expectedSha256.toLowerCase()}.bin`);
+        if (snapPath.startsWith(path.resolve(preservedReportsRoot) + path.sep) && fs.existsSync(snapPath)) {
+          const bytes = fs.readFileSync(snapPath);
+          if (createHash('sha256').update(bytes).digest('hex') === expectedSha256.toLowerCase()) {
+            return bytes;
+          }
+        }
+      }
+      if (locator.startsWith('060_reports/')) {
+        const resolvedLoc = resolveTaskReportLocator(pid, taskId, locator, expectedSha256);
+        const rel = normalizeRelativeDataPath(resolvedLoc.slice('060_reports/'.length));
+        const ledger = readReportLedger();
+        const entry = ledger.projectFiles[`${pid}:${rel}`];
+        if (entry && (!expectedSha256 || entry.sha256 === expectedSha256)) {
+          const snapPath = path.resolve(preservedReportsRoot, pid, `${entry.sha256}.bin`);
+          if (fs.existsSync(snapPath)) return fs.readFileSync(snapPath);
+        }
+      }
+    } catch { /* ignore */ }
+    return undefined;
+  }
+
+  function projectPermissionFingerprint(projectId: string): string {
+    const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
+    if (!enterpriseId) return `unscoped:${enabled ? '1' : '0'}`;
+    const activePacks = packs.list(enterpriseId).map(p => ({
+      id: p.id,
+      owner: isConstructionOwnerProject(p, projectId),
+      activeRev: p.packRevisions.find(r => r.status === 'active')?.version ?? null,
+    }));
+    const subjectGrants = grants.listForSubject(enterpriseId, projectId).map(g => ({
+      id: g.id,
+      ops: g.operations,
+      scope: g.scope,
+      purposeKeys: g.purposeKeys ?? [],
+      validFrom: g.validFrom ?? null,
+      validTo: g.validTo ?? null,
+      revokedAt: g.revokedAt ?? null,
+    }));
+    return createHash('sha256')
+      .update(JSON.stringify({ enabled, enterpriseId, activePacks, subjectGrants }))
+      .digest('hex');
+  }
 
   function getAuthoritySecret(): Buffer {
     if (cachedAuthoritySecret) return cachedAuthoritySecret;
@@ -199,24 +315,27 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     systemId: string;
     ownerProjectId: string;
     ownerTaskId?: string;
+    operatorId?: string;
   }): GrantAuthorityCredential {
-    const payload = `${input.enterpriseId}:${input.systemId}:${input.ownerProjectId}:${input.ownerTaskId ?? ''}`;
+    const op = input.operatorId?.trim() || 'local:host';
+    const payload = `${input.enterpriseId}:${input.systemId}:${input.ownerProjectId}:${input.ownerTaskId ?? ''}:${op}`;
     const authorityToken = createHmac('sha256', getAuthoritySecret()).update(payload).digest('hex');
     return {
       enterpriseId: input.enterpriseId,
       systemId: input.systemId,
       ownerProjectId: input.ownerProjectId,
       ...(input.ownerTaskId ? { ownerTaskId: input.ownerTaskId } : {}),
+      operatorId: op,
       authorityToken,
     };
   }
 
   function verifyGrantAuthorityCredential(
     token: unknown,
-    expected: { enterpriseId: string; systemId?: string; ownerProjectId: string; ownerTaskId?: string },
+    expected: { enterpriseId: string; systemId?: string; ownerProjectId: string; ownerTaskId?: string; operatorId: string },
   ): boolean {
     if (typeof token !== 'string' || !/^[a-f0-9]{64}$/i.test(token.trim())) return false;
-    if (!expected.systemId) return false;
+    if (!expected.systemId || !expected.operatorId.trim()) return false;
     const candidate = Buffer.from(token.trim().toLowerCase(), 'hex');
     const checks = [
       mintGrantAuthorityCredential({
@@ -224,12 +343,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         systemId: expected.systemId,
         ownerProjectId: expected.ownerProjectId,
         ownerTaskId: expected.ownerTaskId,
+        operatorId: expected.operatorId,
       }).authorityToken,
       ...(expected.ownerTaskId ? [
         mintGrantAuthorityCredential({
           enterpriseId: expected.enterpriseId,
           systemId: expected.systemId,
           ownerProjectId: expected.ownerProjectId,
+          operatorId: expected.operatorId,
         }).authorityToken,
       ] : []),
     ];
@@ -393,6 +514,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
     // R2: When OS managed sandbox is unavailable, NEVER copy raw detail files to an unprotected filesystem directory!
     if (!scope || scope.mode !== 'allowlist' || !hasOsSandboxAvailable()) return;
+    const subjectGrants = grants.listForSubject(scope.enterpriseId, scope.projectId);
     const resolvedProjectRoot = path.resolve(projectRoot);
     for (const rel of scope.allowedPaths) {
       if (!rel.startsWith('020_clean/') || rel.includes('..')) continue;
@@ -401,6 +523,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (!fs.existsSync(src)) continue;
       const stat = fs.lstatSync(src);
       if (stat.isSymbolicLink() || !stat.isFile()) continue;
+      const rawBytes = fs.readFileSync(src);
+      const view = buildAuthorizedDataView(rawBytes, rel, subjectGrants);
+      if (!view.allowed) continue; // Fail closed: unfilterable mixed source is NEVER copied to sandbox!
       const subRel = rel.slice('020_clean/'.length);
       const dst = path.resolve(workspaceCleanDir, subRel);
       if (!dst.startsWith(path.resolve(workspaceCleanDir) + path.sep)) continue;
@@ -410,7 +535,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         try { fs.chmodSync(curDir, 0o700); } catch { /* ignore */ }
         curDir = path.dirname(curDir);
       }
-      fs.copyFileSync(src, dst);
+      fs.writeFileSync(dst, view.bytes);
       fs.chmodSync(dst, 0o400);
     }
   }
@@ -679,19 +804,106 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
   }
 
+  function filterAuthorizedProjectData(projectId: string, relativePath: string, rawBytes: Buffer): { bytes: Buffer; filtered?: boolean; restrictionNote?: string } {
+    if (!enabled) return { bytes: rawBytes, filtered: false };
+    const scope = getProjectToolScope(projectId);
+    if (!scope) return { bytes: rawBytes, filtered: false };
+    const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
+    if (!enterpriseId) return { bytes: rawBytes, filtered: false };
+    const subjectGrants = grants.listForSubject(enterpriseId, projectId);
+    const view = buildAuthorizedDataView(rawBytes, relativePath, subjectGrants);
+    if (!view.allowed) {
+      throw Object.assign(new StudioError(view.reason, 403), { code: view.code });
+    }
+    return {
+      bytes: view.bytes,
+      filtered: view.filtered,
+      ...(view.restrictionNote ? { restrictionNote: view.restrictionNote } : {}),
+    };
+  }
+
   function evaluateNativeToolCall(
     projectId: string,
     projectRoot: string,
     call: { toolName: string; input: Record<string, unknown> },
     workspaceRoot?: string,
   ): { allowed: boolean; reason?: string } {
-    const scope = getProjectToolScope(projectId);
-    if (!scope) return { allowed: true };
-
     const resolvedProjectRoot = path.resolve(projectRoot);
+    const projectReportsDir = path.resolve(resolvedProjectRoot, '060_reports');
+    const isInside = (target: string, dir: string) => target === dir || target.startsWith(dir + path.sep);
+
+    // R5: Guard Studio/Pack-referenced reports in 060_reports/ against overwrite EVEN on ordinary & owner-construction projects!
+    const guardOrdinaryReferencedReport = (): { allowed: boolean; reason?: string } | undefined => {
+      if (!enabled) return undefined;
+      if (['write', 'edit'].includes(call.toolName)) {
+        const rawTarget = call.input.path ?? call.input.file_path ?? call.input.target;
+        if (typeof rawTarget === 'string' && rawTarget.trim()) {
+          const target = path.resolve(resolvedProjectRoot, rawTarget.trim());
+          if (isInside(target, projectReportsDir)) {
+            const rel = normalizeRelativeDataPath(path.relative(resolvedProjectRoot, target));
+            if (fs.existsSync(target) && isReportLockedByUseOrFeedback(projectId, rel, 'overwrite-check')) {
+              return {
+                allowed: false,
+                reason: `referenced_report_immutable_save_new_file: 报告 ${rel} 已被 Studio 或企业会员包引用，禁止覆盖原文件，请另存新文件名保留原稿。`,
+              };
+            }
+          }
+        }
+      }
+      if (['bash', 'powershell', 'codemode'].includes(call.toolName)) {
+        const cmd = String(call.input.command ?? call.input.code ?? '');
+        if (cmd.includes('060_reports') && fs.existsSync(projectReportsDir)) {
+          const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const targetsFileForMutation = (fileName: string, relSub: string): boolean => {
+            const namePat = `(?:${escapeRe(relSub)}|${escapeRe(fileName)})`;
+            const patterns = [
+              // Shell output redirection into the referenced file
+              new RegExp(`>{1,2}\\s*['"]?[^'"\\s;&|\\n]*${namePat}`, 'i'),
+              // Shell destructive / overwrite commands mentioning the referenced file
+              new RegExp(`\\b(?:rm|mv|cp|tee|truncate|unlink|sed\\s+-i)\\b[^\\n;&|]*${namePat}`, 'i'),
+              // Python open(..., 'w'|'a'|'x'|'r+') / write_text / write_bytes on the referenced file
+              new RegExp(`open\\s*\\([^\\n\\)]*${namePat}[^\\n\\)]*,\\s*['"][wax+]|open\\s*\\([^\\n\\)]*${namePat}[^\\n\\)]*mode\\s*=\\s*['"][wax+]`, 'i'),
+              new RegExp(`Path\\s*\\([^\\n\\)]*${namePat}[^\\n\\)]*\\)\\s*\\.\\s*write_(?:text|bytes)`, 'i'),
+              // Node fs.writeFile/appendFile/unlink/rename on the referenced file
+              new RegExp(`(?:writeFile|appendFile|rm|unlink|rename)(?:Sync)?\\s*\\([^\\n,]*${namePat}`, 'i'),
+            ];
+            return patterns.some(re => re.test(cmd));
+          };
+          const walkLocked = (dir: string, relBase: string): string | undefined => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const subRel = relBase ? `${relBase}/${entry.name}` : entry.name;
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                const found = walkLocked(full, subRel);
+                if (found) return found;
+              } else if (entry.isFile()) {
+                const locator = `060_reports/${subRel}`;
+                if (targetsFileForMutation(entry.name, subRel) && isReportLockedByUseOrFeedback(projectId, locator, 'overwrite-check')) {
+                  return locator;
+                }
+              }
+            }
+            return undefined;
+          };
+          const hit = walkLocked(projectReportsDir, '');
+          if (hit) {
+            return {
+              allowed: false,
+              reason: `referenced_report_immutable_save_new_file: 报告 ${hit} 已被 Studio 或企业会员包引用，禁止通过命令覆盖原文件，请另存新文件名保留原稿。`,
+            };
+          }
+        }
+      }
+      return undefined;
+    };
+
+    const scope = getProjectToolScope(projectId);
+    if (!scope) {
+      return guardOrdinaryReferencedReport() ?? { allowed: true };
+    }
+
     const projectCleanDir = path.resolve(resolvedProjectRoot, '020_clean');
     const projectDrawDir = path.resolve(resolvedProjectRoot, '010_draw');
-    const projectReportsDir = path.resolve(resolvedProjectRoot, '060_reports');
     const effectiveRoot = workspaceRoot ? path.resolve(workspaceRoot) : resolvedProjectRoot;
     const effectiveCleanDir = path.resolve(effectiveRoot, '020_clean');
     const effectiveReportsDir = path.resolve(effectiveRoot, '060_reports');
@@ -700,8 +912,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (typeof rawTarget !== 'string' || !rawTarget.trim()) return undefined;
       return path.resolve(effectiveCleanDir, rawTarget.trim());
     };
-
-    const isInside = (target: string, dir: string) => target === dir || target.startsWith(dir + path.sep);
 
     // Block subagent escape attempts in restricted member-pack projects
     if (call.toolName === 'subagent') {
@@ -1104,7 +1314,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const seenReadKeys = new Set<string>();
     const turnDeclaredStudioUseIds: string[] = [];
     const otherTurnDeclaredStudioUseIds: string[] = [];
+    const turnWrittenReports: StudioSourceRef[] = [];
     let turnWroteOrRanTools = false;
+    let hadDataOrCalcTool = false;
     let earlierTurnHadReadsOrWrites = false;
     let observedDirectoryVersion: string | undefined;
     let sessionObservedDirectoryVersion: string | undefined;
@@ -1120,7 +1332,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         actualReads: turnActualReads,
         turnDeclaredStudioUseIds,
         otherTurnDeclaredStudioUseIds,
+        turnWrittenReports,
         turnWroteOrRanTools,
+        hadDataOrCalcTool,
         earlierTurnHadReadsOrWrites,
         observedDirectoryVersion,
         sessionObservedDirectoryVersion,
@@ -1181,11 +1395,27 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       }
     }
 
-    // Collect ACTUAL reads, declare-use, & catalog supply STRICTLY within THIS turn [turnStartIdx + 1 .. endIdx]!
+    // Collect ACTUAL reads, declare-use, written reports, & catalog supply STRICTLY within THIS turn [turnStartIdx + 1 .. endIdx]!
     for (let i = turnStartIdx + 1; i <= endIdx; i++) {
       const m = snap.messages[i] as Record<string, any>;
       if (!m || m.role !== 'toolResult' || m.isError) continue;
       turnWroteOrRanTools = true;
+      if (['read_input', 'read', 'bash', 'powershell', 'codemode'].includes(String(m.toolName ?? ''))) {
+        hadDataOrCalcTool = true;
+      }
+      if (m.details?.type === 'optracall.project-report-write' && typeof m.details.relativePath === 'string' && typeof m.details.sha256 === 'string') {
+        try {
+          turnWrittenReports.push(sourceRef({
+            authority: 'task',
+            id: taskId,
+            projectId,
+            taskId,
+            version: m.details.sha256,
+            sha256: m.details.sha256,
+            locator: m.details.relativePath,
+          }));
+        } catch { /* ignore */ }
+      }
       if (m.details?.type === 'optracall.studio') {
         const action = m.details.action;
         const result = m.details.result;
@@ -1207,10 +1437,16 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         }
         if (action === 'declare-use' && typeof result?.use?.id === 'string') {
           turnDeclaredStudioUseIds.push(result.use.id);
+          if (result.use.report) {
+            try { turnWrittenReports.push(sourceRef(result.use.report)); } catch { /* ignore */ }
+          }
         }
         if (['read-source', 'read'].includes(action) && result?.ref) {
           try {
             const ref = sourceRef(result.ref);
+            if (ref.authority === 'data' || ref.authority === 'task') {
+              hadDataOrCalcTool = true;
+            }
             const key = `${digest(ref)}:${String(m.toolCallId ?? i)}`;
             if (!seenReadKeys.has(key)) {
               seenReadKeys.add(key);
@@ -1255,11 +1491,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
 
     catalogAssetRefs = [...new Map(catalogAssetRefs.map(r => [digest(r), r])).values()];
+    const uniqueWrittenReports = [...new Map(turnWrittenReports.map(r => [digest(r), r])).values()];
     return {
       actualReads: turnActualReads,
       turnDeclaredStudioUseIds,
       otherTurnDeclaredStudioUseIds,
+      turnWrittenReports: uniqueWrittenReports,
       turnWroteOrRanTools,
+      hadDataOrCalcTool,
       earlierTurnHadReadsOrWrites,
       observedDirectoryVersion,
       sessionObservedDirectoryVersion,
@@ -1269,6 +1508,98 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       taskCutoffAt,
       turnIndex,
       resolvedSelection,
+    };
+  }
+
+  /**
+   * R4: Inspects an independent verifier task's OWN native transcript to confirm
+   * the verifier actually read the required original authority dependencies (and for
+   * calculation tiers, actually performed data/report/recalculation inspection),
+   * preventing blind pass verdicts from a task that merely submitted a JSON file.
+   */
+  async function inspectVerifierTaskEvidence(
+    verifierProjectId: string,
+    verifierTaskId: string,
+    pack: EnterpriseDomainPack,
+    useRecord: EnterprisePackUseRecord,
+  ): Promise<{
+    verifierReads: { ref: StudioSourceRef; complete: boolean; readAt: string }[];
+    requiredCount: number;
+    readRequiredAssetsCount: number;
+    allRequiredReadByVerifier: boolean;
+    hadDataOrCalcEvidence: boolean;
+    missingReason?: string;
+  }> {
+    const rev = pack.packRevisions.find(r => r.version === useRecord.packVersion);
+    const pm = rev?.purposeManifests.find(p => p.purposeId === useRecord.purposeId);
+    const requiredRefs = pm
+      ? pm.dependencies.filter(d => d.requiredFor.includes(pm.tier)).map(d => d.ref)
+      : [];
+    const verifierReads: { ref: StudioSourceRef; complete: boolean; readAt: string }[] = [];
+    const seen = new Set<string>();
+    let hadDataOrCalcEvidence = false;
+
+    if (options.taskSnapshot) {
+      try {
+        const snap = await options.taskSnapshot(verifierProjectId, verifierTaskId);
+        for (const msg of snap.messages as Record<string, any>[]) {
+          if (!msg || msg.role !== 'toolResult' || msg.isError) continue;
+          const toolName = String(msg.toolName ?? '');
+          if (['read_input', 'read', 'bash', 'powershell', 'codemode'].includes(toolName)) {
+            hadDataOrCalcEvidence = true;
+          }
+          if (msg.details?.type === 'optracall.studio' && ['read-source', 'read'].includes(msg.details.action) && msg.details.result?.ref) {
+            try {
+              const ref = sourceRef(msg.details.result.ref);
+              if (ref.authority === 'data' || ref.authority === 'task') hadDataOrCalcEvidence = true;
+              const key = digest(ref);
+              if (!seen.has(key)) {
+                seen.add(key);
+                verifierReads.push({ ref, complete: msg.details.result.complete === true, readAt: new Date().toISOString() });
+              }
+            } catch { /* ignore */ }
+          }
+          if (msg.details?.type === 'optracall.semantic-context-result' && ['read', 'trace'].includes(msg.details.action)) {
+            for (const item of [...(msg.details.items ?? []), ...(msg.details.unknownTime ?? [])]) {
+              if (typeof item?.body === 'string' && item?.target && typeof item.sha256 === 'string') {
+                const t = item.target;
+                let ref: StudioSourceRef | undefined;
+                if (t.kind === 'sap') ref = sourceRef({ authority: 'sap-metric', id: t.packageId, version: t.version, sha256: item.sha256 });
+                else if (t.kind === 'sap-method') ref = sourceRef({ authority: 'sap-method', id: t.methodId, version: String(t.version), sha256: item.sha256 });
+                else if (t.kind === 'enterprise') ref = sourceRef({ authority: 'enterprise', id: t.materialId, version: t.revisionId, sha256: item.sha256, locator: t.storeId });
+                else if (t.kind === 'studio-source') ref = sourceRef({ authority: 'studio-source', id: t.assetId, version: String(t.version), sha256: item.sha256, locator: t.systemId });
+                if (ref && !seen.has(digest(ref))) {
+                  seen.add(digest(ref));
+                  verifierReads.push({ ref, complete: item.complete !== false, readAt: new Date().toISOString() });
+                }
+              }
+            }
+          }
+        }
+      } catch { /* snapshot unavailable */ }
+    }
+
+    const completeVerifierReads = verifierReads.filter(r => r.complete);
+    const readRequiredAssetsCount = requiredRefs.filter(req =>
+      completeVerifierReads.some(vr => sameExactSourceRef(vr.ref, req)),
+    ).length;
+    const allRequiredReadByVerifier = requiredRefs.length > 0
+      ? readRequiredAssetsCount === requiredRefs.length
+      : completeVerifierReads.length > 0;
+    const isCalcTier = useRecord.tier === 'formal-calculation' || useRecord.tier === 'limited-calculation';
+    let missingReason: string | undefined;
+    if (!allRequiredReadByVerifier) {
+      missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 尚未完整实读适用原依赖（已完整实读 ${readRequiredAssetsCount}/${requiredRefs.length} 项），缺乏核验实证，保持待验证`;
+    } else if (isCalcTier && !hadDataOrCalcEvidence) {
+      missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 未记录对获准明细数据或原报告的实查/复算工具轨迹，计算类用途缺乏核验复算依据，保持待验证`;
+    }
+    return {
+      verifierReads,
+      requiredCount: requiredRefs.length,
+      readRequiredAssetsCount,
+      allRequiredReadByVerifier,
+      hadDataOrCalcEvidence,
+      ...(missingReason ? { missingReason } : {}),
     };
   }
 
@@ -1412,14 +1743,23 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     enterpriseId: string,
     projectId: string,
     pack?: EnterpriseDomainPack,
+    operator?: TrustedHostOperator,
   ): Promise<GrantAuthorityCredential | undefined> {
     try {
       const pid = uuid(projectId);
       const proj = await options.projects.get(pid);
       if (proj.archivedAt !== null) return undefined;
       if (options.enterpriseScopes.enterpriseIdForProject(pid) !== enterpriseId) return undefined;
+      if (operator) {
+        if (!operator.verified || !operator.operatorId.trim()) return undefined;
+        // If Host-signed HttpOnly operator context cookie pins an active project, refuse cross-project spoofing!
+        if (operator.activeProjectId && operator.activeProjectId !== pid) return undefined;
+      }
+      const effectiveOperatorId = operator?.operatorId?.trim() || 'local:host';
       if (pack) {
         if (!isConstructionOwnerProject(pack, pid)) return undefined;
+        const boundOp = getBoundSystemOperator(pack.systemId);
+        if (boundOp && boundOp !== effectiveOperatorId) return undefined;
         let ownerTaskId: string | undefined;
         try {
           const sys = options.studio.get(pack.systemId);
@@ -1434,22 +1774,26 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           systemId: pack.systemId,
           ownerProjectId: pid,
           ...(ownerTaskId ? { ownerTaskId } : {}),
+          operatorId: effectiveOperatorId,
         });
       }
       const enterprisePacks = packs.list(enterpriseId);
       for (const p of enterprisePacks) {
         if (isConstructionOwnerProject(p, pid)) {
-          return resolveGrantAuthorityForProject(enterpriseId, pid, p);
+          return resolveGrantAuthorityForProject(enterpriseId, pid, p, operator);
         }
       }
       const ownedSystem = options.studio.list().find(s => s.enterpriseId === enterpriseId && studioExecutionOwner(s).projectId === pid);
       if (!ownedSystem) return undefined;
+      const boundOp = getBoundSystemOperator(ownedSystem.id);
+      if (boundOp && boundOp !== effectiveOperatorId) return undefined;
       const execOwner = studioExecutionOwner(ownedSystem);
       return mintGrantAuthorityCredential({
         enterpriseId,
         systemId: ownedSystem.id,
         ownerProjectId: pid,
         ownerTaskId: execOwner.taskId,
+        operatorId: effectiveOperatorId,
       });
     } catch {
       return undefined;
@@ -1468,6 +1812,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     studioUse: StudioUseRecord;
   }): Promise<EnterprisePackUseRecord[]> {
     if (!enabled) return [];
+    // R5: Always preserve immutable copy of any Studio-declared report (both restricted & ordinary/owner tasks)!
+    if (input.studioUse.report.projectId && input.studioUse.report.locator?.startsWith('060_reports/')) {
+      try {
+        const repFile = await options.projects.readFile(input.studioUse.report.projectId, input.studioUse.report.locator);
+        preserveImmutableReportSnapshot(input.studioUse.report.projectId, input.studioUse.report.locator, repFile.bytes, input.studioUse.report.sha256);
+      } catch { /* best-effort preservation */ }
+    }
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(input.projectId);
     if (!enterpriseId) return [];
     const matchingPacks = packs.list(enterpriseId).filter(p => p.systemId === input.systemId);
@@ -1565,7 +1916,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   /**
    * R4: Synchronizes a `studio_assets assess-use` assessment onto matching EnterprisePackUseRecord(s).
    * Strictly separates same-task author self-assessment (kept `pending`) from independent-task
-   * verification (eligible for `pass` when disk-verified and all required refs were completely read).
+   * verification, AND requires the independent verifier task ITSELF to possess actual complete
+   * native reads of the required original dependencies (plus data/calc inspection evidence for
+   * calculation tiers) before granting `status = 'pass'`.
    */
   async function syncAssessmentFromStudio(input: {
     systemId: string;
@@ -1587,6 +1940,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const actualSha = createHash('sha256').update(file.bytes).digest('hex');
         if (!input.assessment.report.sha256 || input.assessment.report.sha256 === actualSha) {
           assessmentDiskVerified = true;
+          preserveImmutableReportSnapshot(input.assessment.report.projectId, input.assessment.report.locator, file.bytes, actualSha);
         }
       } catch {
         assessmentDiskVerified = false;
@@ -1610,10 +1964,15 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           && input.assessorTaskId !== useRecord.taskId
           && digest(input.assessment.report) !== digest(useRecord.reportRef),
         );
+        const verifierEv = isIndependentAssessor
+          ? await inspectVerifierTaskEvidence(input.assessorProjectId, input.assessorTaskId, pack, useRecord)
+          : undefined;
+        const verifierEvidenceSufficient = Boolean(verifierEv && !verifierEv.missingReason);
         const independentConfirmed = Boolean(
           isIndependentAssessor
           && input.assessment.status === 'pass'
-          && assessmentDiskVerified,
+          && assessmentDiskVerified
+          && verifierEvidenceSufficient,
         );
         const verdictDetail = !isIndependentAssessor
           ? `仅见原分析任务作者自评（同任务 ${input.assessorTaskId.slice(0, 8)}），缺少独立任务核验，保持待验证`
@@ -1621,7 +1980,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             ? `独立任务核验未通过：${input.assessment.result}`
             : !assessmentDiskVerified
               ? '独立核验报告未通过落盘摘要核对，保持待验证'
-              : input.assessment.result || '已通过独立任务落盘报告核验';
+              : verifierEv?.missingReason
+                ? verifierEv.missingReason
+                : input.assessment.result || '已通过独立任务实读、复算与落盘报告核验';
 
         const verified = packs.verifyUse(pack.id, useRecord.id, {
           verifierRole: isIndependentAssessor ? '独立核验任务' : '原任务作者自评',
@@ -1629,6 +1990,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           verifierTaskId: input.assessorTaskId,
           assessmentReportRef: input.assessment.report,
           selfAssessmentOnly: !isIndependentAssessor,
+          ...(verifierEv ? {
+            verifierActualReads: verifierEv.verifierReads,
+            verifierEvidenceSummary: {
+              readRequiredAssetsCount: verifierEv.readRequiredAssetsCount,
+              hadDataOrCalcEvidence: verifierEv.hadDataOrCalcEvidence,
+            },
+          } : {}),
           independentConfirmed,
           checkedRefs: input.assessment.sources,
           verdictDetail,
@@ -1716,7 +2084,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const packId = url.searchParams.get('packId') || undefined;
       const targetPack = packId ? packs.get(packId) : undefined;
       if (targetPack && targetPack.enterpriseId !== enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-      const grantAuthority = await resolveGrantAuthorityForProject(enterpriseId, projectId, targetPack);
+      const operator = resolveRequestOperator(request);
+      if (!operator.verified) throw new StudioError('resource_operator_not_authorized', 403);
+      if (operator.activeProjectId && operator.activeProjectId !== projectId) {
+        throw new StudioError('resource_operator_context_mismatch', 403);
+      }
+      const grantAuthority = await resolveGrantAuthorityForProject(enterpriseId, projectId, targetPack, operator);
       if (!grantAuthority) throw new StudioError('resource_grantor_not_authorized', 403);
       json(response, 200, { grantAuthority });
       return true;
@@ -1743,19 +2116,28 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         requestedSystemId?: unknown;
         requestedTaskId?: unknown;
         authorityToken?: unknown;
+        operator: TrustedHostOperator;
       },
     ): Promise<{
       actorLabel: string;
       actorProjectId: string;
       actorTaskId?: string;
       actorSystemId?: string;
+      actorOperatorId: string;
       authorityType: 'studio-system-owner' | 'enterprise-authority-asset' | 'resource-owner-project';
     }> {
       const failCode = mode === 'grant' ? 'resource_grantor_not_authorized' : 'resource_revoker_not_authorized';
+      if (!binding.operator.verified || !binding.operator.operatorId.trim()) {
+        throw new StudioError('resource_operator_not_authorized', 403);
+      }
       if (requestedActorProjectId === undefined || requestedActorProjectId === null || String(requestedActorProjectId).trim() === '') {
         throw new StudioError(failCode, 403);
       }
       const pid = uuid(requestedActorProjectId);
+      // If Host-signed HttpOnly operator context cookie binds an active project, refuse cross-project spoofing!
+      if (binding.operator.activeProjectId && binding.operator.activeProjectId !== pid) {
+        throw new StudioError('resource_operator_context_mismatch', 403);
+      }
       const proj = await options.projects.get(pid);
       if (proj.archivedAt !== null) throw new StudioError('studio_project_read_only', 409);
       if (options.enterpriseScopes.enterpriseIdForProject(pid) !== enterpriseId) throw new StudioError(failCode, 403);
@@ -1791,32 +2173,40 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         }
       }
 
-      // R2 AUTHENTIC OPERATOR BINDING: Require Host-issued HMAC authorityToken bound to (enterpriseId, systemId, ownerProjectId, ownerTaskId)!
+      // R2 AUTHENTIC OPERATOR BINDING: Verify current Host operator matches bound system owner operator AND HMAC authorityToken!
       const effectiveSystemId = matchedSystem?.id ?? binding.requiredSystemId;
+      const boundOperator = getBoundSystemOperator(effectiveSystemId);
+      if (boundOperator && boundOperator !== binding.operator.operatorId) {
+        throw new StudioError('resource_operator_not_authorized', 403);
+      }
       const effectiveOwnerTaskId = verifiedTaskId ?? matchedSystem?.ownerTaskId;
       const tokenValid = verifyGrantAuthorityCredential(binding.authorityToken, {
         enterpriseId,
         systemId: effectiveSystemId,
         ownerProjectId: pid,
         ownerTaskId: effectiveOwnerTaskId,
+        operatorId: binding.operator.operatorId,
       });
       if (!tokenValid) {
         throw new StudioError(failCode, 403);
       }
 
+      const opTag = binding.operator.displayName ? `${binding.operator.displayName} (${binding.operator.operatorId})` : binding.operator.operatorId;
       return {
         actorLabel: matchedSystem
-          ? `Studio体系·${matchedSystem.name}（原权责项目：${proj.name}）`
-          : `原权责项目·${proj.name}`,
+          ? `Studio体系·${matchedSystem.name}（原权责项目：${proj.name} · 操作者：${opTag}）`
+          : `原权责项目·${proj.name}（操作者：${opTag}）`,
         actorProjectId: proj.id,
         ...(effectiveOwnerTaskId ? { actorTaskId: effectiveOwnerTaskId } : {}),
         ...(matchedSystem ? { actorSystemId: matchedSystem.id } : {}),
+        actorOperatorId: binding.operator.operatorId,
         authorityType: matchedSystem ? 'studio-system-owner' : 'resource-owner-project',
       };
     }
 
     if (url.pathname === '/api/studio/resource-grants' && request.method === 'POST') {
       assertEnabledWritable();
+      const operator = resolveRequestOperator(request);
       const input = await options.readBody(request);
       const headerAuthorityToken = request.headers['x-optracall-authority-token'];
       const suppliedAuthorityToken = input.authorityToken ?? input.grantorAuthorityToken ?? (typeof headerAuthorityToken === 'string' ? headerAuthorityToken : undefined);
@@ -1920,6 +2310,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             requestedSystemId: input.grantorSystemId,
             requestedTaskId: input.grantorTaskId,
             authorityToken: suppliedAuthorityToken,
+            operator,
           },
         );
         if (Array.isArray(rawScope.allowedDataPaths)) {
@@ -1941,13 +2332,18 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           grantorProjectId: verifiedActor.actorProjectId,
           ...(verifiedActor.actorTaskId ? { grantorTaskId: verifiedActor.actorTaskId } : {}),
           ...(verifiedActor.actorSystemId ? { grantorSystemId: verifiedActor.actorSystemId } : {}),
+          grantorOperatorId: verifiedActor.actorOperatorId,
+          grantorOperatorVerified: true,
           grantorCredentialVerified: true,
           grantorAuthorityType: summaryVerifiedAuthority ? 'enterprise-authority-asset' : verifiedActor.authorityType,
           ...(verifiedResourceRef ? { resourceRef: verifiedResourceRef } : {}),
           scope: rawScope as Parameters<ResourceGrantStore['grant']>[0]['scope'],
         });
-        // Immediately synchronize any active task sandboxes for this subject project
-        if (record.subjectType === 'project') syncActiveWorkspacesForProject(record.subjectId);
+        // Immediately synchronize active task sandboxes AND re-gear open sessions for this subject project!
+        if (record.subjectType === 'project') {
+          syncActiveWorkspacesForProject(record.subjectId);
+          options.onProjectPermissionChanged?.(record.subjectId);
+        }
         return { statusCode: 200, result: { grant: record } as unknown as Record<string, unknown> };
       }));
       json(response, receipt.statusCode || 200, receipt.result);
@@ -1956,6 +2352,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const revokeMatch = /^\/api\/studio\/resource-grants\/([a-f0-9-]+)\/revoke$/.exec(url.pathname);
     if (revokeMatch && request.method === 'POST') {
       assertEnabledWritable();
+      const operator = resolveRequestOperator(request);
       const input = await options.readBody(request);
       const headerAuthorityToken = request.headers['x-optracall-authority-token'];
       const suppliedAuthorityToken = input.authorityToken ?? input.revokerAuthorityToken ?? input.grantorAuthorityToken ?? (typeof headerAuthorityToken === 'string' ? headerAuthorityToken : undefined);
@@ -1987,15 +2384,20 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             requestedSystemId: input.revokerSystemId ?? input.grantorSystemId,
             requestedTaskId: input.revokerTaskId ?? input.grantorTaskId,
             authorityToken: suppliedAuthorityToken,
+            operator,
           },
         );
         const record = grants.revoke(revokeMatch[1]!, text(input.reason ?? '显式撤回授权', 2000, false), {
           revokedBy: revokerActor.actorLabel,
           revokedByProjectId: revokerActor.actorProjectId,
           ...(revokerActor.actorTaskId ? { revokedByTaskId: revokerActor.actorTaskId } : {}),
+          revokedByOperatorId: revokerActor.actorOperatorId,
         });
-        // Immediately purge revoked files from all active restricted sandboxes of this subject project!
-        if (record.subjectType === 'project') syncActiveWorkspacesForProject(record.subjectId);
+        // Immediately purge revoked files from active sandboxes AND re-gear open sessions for this subject project!
+        if (record.subjectType === 'project') {
+          syncActiveWorkspacesForProject(record.subjectId);
+          options.onProjectPermissionChanged?.(record.subjectId);
+        }
         return { statusCode: 200, result: { grant: record } as unknown as Record<string, unknown> };
       }));
       json(response, receipt.statusCode || 200, receipt.result);
@@ -2012,6 +2414,91 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
 
     // 3. Enterprise Domain Packs
+    if (url.pathname === '/api/studio/enterprise-packs/turn-evidence' && request.method === 'GET') {
+      const projectId = uuid(url.searchParams.get('projectId'));
+      const taskId = uuid(url.searchParams.get('taskId'));
+      const sessionId = url.searchParams.get('sessionId') || undefined;
+      const messageId = url.searchParams.get('messageId') || undefined;
+      await options.projects.get(projectId);
+      await options.projects.getTask(projectId, taskId);
+      const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
+      const enterprisePacks = enterpriseId ? packs.list(enterpriseId) : [];
+      const matchingUses: Array<{
+        packId: string;
+        packCode: string;
+        packName: string;
+        use: EnterprisePackUseRecord;
+      }> = [];
+      const matchingFeedback: Array<{
+        packId: string;
+        feedbackId: string;
+        feedbackCode: string;
+        title: string;
+        status: string;
+        reportRef: StudioSourceRef;
+        replyRef?: StudioSourceRef;
+        independentVerificationStatus?: string;
+        assessmentReportRef?: StudioSourceRef;
+        originalCaseRef?: EnterprisePackOriginalCaseRef;
+      }> = [];
+      const turnWrittenReports: StudioSourceRef[] = [];
+      for (const p of enterprisePacks) {
+        if (sessionId && messageId) {
+          const ev = await inspectTaskNativeEvidence(projectId, taskId, p, { sessionId, messageId });
+          for (const wr of ev.turnWrittenReports) turnWrittenReports.push(wr);
+          for (const u of p.useRecords) {
+            if (u.projectId !== projectId || u.taskId !== taskId) continue;
+            const sameMsg = Boolean(u.sessionId === sessionId && u.messageId === messageId);
+            const sameTurnReport = ev.turnWrittenReports.some(wr =>
+              digest(wr) === digest(u.reportRef) || (wr.sha256 && u.reportRef.sha256 === wr.sha256),
+            );
+            const sameTurnDecl = ev.turnDeclaredStudioUseIds.length > 0 && u.turnIndex === ev.turnIndex;
+            if (sameMsg || sameTurnReport || sameTurnDecl) {
+              matchingUses.push({ packId: p.id, packCode: p.packCode, packName: p.name, use: u });
+            }
+          }
+        } else {
+          for (const u of p.useRecords) {
+            if (u.projectId === projectId && u.taskId === taskId) {
+              matchingUses.push({ packId: p.id, packCode: p.packCode, packName: p.name, use: u });
+            }
+          }
+        }
+        for (const fb of p.feedbackItems) {
+          for (const rep of fb.reports) {
+            if (rep.projectId !== projectId || rep.taskId !== taskId) continue;
+            if (sessionId && messageId && (rep.sessionId !== sessionId || rep.messageId !== messageId)) continue;
+            matchingFeedback.push({
+              packId: p.id,
+              feedbackId: fb.id,
+              feedbackCode: fb.feedbackCode,
+              title: fb.title,
+              status: fb.status,
+              reportRef: rep.reportRef,
+              ...(rep.replyRef ? { replyRef: rep.replyRef } : {}),
+              ...(rep.independentVerificationStatus ? { independentVerificationStatus: rep.independentVerificationStatus } : {}),
+              ...(rep.assessmentReportRef ? { assessmentReportRef: rep.assessmentReportRef } : {}),
+              ...(rep.originalCaseRef ? { originalCaseRef: rep.originalCaseRef } : {}),
+            });
+          }
+        }
+      }
+      const uniqueReports = [...new Map([
+        ...turnWrittenReports,
+        ...matchingUses.map(m => m.use.reportRef),
+      ].map(r => [digest(r), r])).values()];
+      json(response, 200, {
+        projectId,
+        taskId,
+        ...(sessionId ? { sessionId } : {}),
+        ...(messageId ? { messageId } : {}),
+        savedReports: uniqueReports,
+        useRecords: matchingUses,
+        feedbackLinks: matchingFeedback,
+      });
+      return true;
+    }
+
     if (url.pathname === '/api/studio/enterprise-packs' && request.method === 'GET') {
       const enterpriseId = url.searchParams.get('enterpriseId') || undefined;
       const projectId = url.searchParams.get('projectId') || undefined;
@@ -2026,9 +2513,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const domain = url.searchParams.get('domain') || undefined;
       const rawList = packs.list(scopedEnterpriseId).filter(p => !domain || p.domain === domain);
       const list = rawList.map(p => (projectId ? redactPackForConsumer(p, projectId) : p));
-      // ONLY mint grantAuthority when an explicit projectId is passed AND it is the real active owner project (NEVER for consumers)!
+      const operator = resolveRequestOperator(request);
+      // ONLY mint grantAuthority when an explicit projectId is passed AND current verified Host operator owns it!
       const grantAuthority = projectId && scopedEnterpriseId
-        ? await resolveGrantAuthorityForProject(scopedEnterpriseId, projectId, rawList[0])
+        ? await resolveGrantAuthorityForProject(scopedEnterpriseId, projectId, rawList[0], operator)
         : undefined;
       json(response, 200, {
         packs: list,
@@ -2039,6 +2527,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
     if (url.pathname === '/api/studio/enterprise-packs' && request.method === 'POST') {
       assertEnabledWritable();
+      const operator = resolveRequestOperator(request);
       const input = await options.readBody(request);
       const requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
       const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
@@ -2052,6 +2541,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         // Always enforce non-archived active project check (explicit projectId or system execution owner project)
         const targetProjectId = input.projectId !== undefined ? String(input.projectId) : studioExecutionOwner(system).projectId;
         await assertWritableProject(targetProjectId, enterpriseId);
+        if (operator.verified && operator.operatorId.trim()) {
+          bindSystemOperator(systemId, operator.operatorId);
+        }
         const pack = packs.ensurePack({
           enterpriseId,
           systemId,
@@ -2077,13 +2569,52 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const ownerEnterprise = options.enterpriseScopes.enterpriseIdForProject(pid);
         if (ownerEnterprise !== pack.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
       }
+      const operator = resolveRequestOperator(request);
       const grantAuthority = projectId
-        ? await resolveGrantAuthorityForProject(pack.enterpriseId, projectId, pack)
+        ? await resolveGrantAuthorityForProject(pack.enterpriseId, projectId, pack, operator)
         : undefined;
       json(response, 200, {
         pack: projectId ? redactPackForConsumer(pack, projectId) : pack,
         readOnlyRollback: !enabled,
         ...(grantAuthority ? { grantAuthority } : {}),
+      });
+      return true;
+    }
+
+    const packReportSnapMatch = /^\/api\/studio\/enterprise-packs\/([a-f0-9-]+)\/report-snapshot$/.exec(url.pathname);
+    if (packReportSnapMatch && request.method === 'GET') {
+      const pack = packs.get(packReportSnapMatch[1]!);
+      const projectId = uuid(url.searchParams.get('projectId'));
+      const taskId = url.searchParams.get('taskId') ? uuid(url.searchParams.get('taskId')) : undefined;
+      const locator = text(url.searchParams.get('locator') ?? '', 500, false);
+      const expectedSha256 = url.searchParams.get('sha256') || undefined;
+      if (options.enterpriseScopes.enterpriseIdForProject(projectId) !== pack.enterpriseId) {
+        throw new StudioError('studio_owner_mismatch', 403);
+      }
+      if (!locator.startsWith('060_reports/')) throw new StudioError('invalid_report_locator', 400);
+      let bytes: Buffer | undefined;
+      let resolvedLocator = locator;
+      try {
+        resolvedLocator = taskId ? resolveTaskReportLocator(projectId, taskId, locator, expectedSha256) : locator;
+        const disk = await options.projects.readFile(projectId, resolvedLocator);
+        const diskSha = createHash('sha256').update(disk.bytes).digest('hex');
+        if (!expectedSha256 || diskSha === expectedSha256) {
+          bytes = disk.bytes;
+        }
+      } catch { /* fall back to preserved snapshot */ }
+      if (!bytes && expectedSha256) {
+        bytes = readPreservedReportBytes(projectId, taskId ?? '', locator, expectedSha256);
+      }
+      if (!bytes) throw new StudioError('report_snapshot_not_found', 404);
+      const actualSha = createHash('sha256').update(bytes).digest('hex');
+      if (expectedSha256 && actualSha !== expectedSha256) throw new StudioError('studio_use_report_hash_mismatch', 409);
+      json(response, 200, {
+        projectId,
+        ...(taskId ? { taskId } : {}),
+        locator: resolvedLocator,
+        sha256: actualSha,
+        bytesLength: bytes.length,
+        text: bytes.toString('utf8'),
       });
       return true;
     }
@@ -2212,6 +2743,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             ...(typeof input.confirmedBy === 'string' && input.confirmedBy.trim() ? { confirmedBy: input.confirmedBy.trim() } : {}),
             moduleReceipts: hostReceipts,
           });
+          if (options.onProjectPermissionChanged) {
+            const allProjects = await options.projects.list().catch(() => []);
+            for (const p of allProjects) {
+              if (options.enterpriseScopes.enterpriseIdForProject(p.id) === currentPack.enterpriseId) {
+                options.onProjectPermissionChanged(p.id);
+              }
+            }
+          }
           return { result: { pack: packs.get(packId), revision } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
         }
         if (action === 'reconcile') {
@@ -2284,6 +2823,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             if (rawReportRef.sha256 && rawReportRef.sha256 !== actualSha) {
               throw new StudioError('studio_use_report_hash_mismatch', 409);
             }
+            preserveImmutableReportSnapshot(pid, effectiveLocator, file.bytes, actualSha);
             verifiedReportRef = sourceRef({ ...rawReportRef, locator: effectiveLocator, version: actualSha, sha256: actualSha });
           } else if (rawReportRef.locator) {
             try {
@@ -2367,10 +2907,21 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           if (object(input.origin)) {
             const origin = input.origin;
             const pid = uuid(origin.projectId), tid = uuid(origin.taskId);
+            const originProj = await options.projects.get(pid);
             if (options.enterpriseScopes.enterpriseIdForProject(pid) !== currentPack.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
+            syncWorkspaceReportsToProject(pid, tid, originProj.rootPath);
             const selection = { sessionId: text(origin.sessionId, 200, false), messageId: text(origin.messageId, 200, false) };
             const original = await options.readTaskReply(pid, tid, selection);
             const replySha = createHash('sha256').update(original.text).digest('hex');
+            const replyRef = sourceRef({
+              authority: 'task',
+              id: tid,
+              projectId: pid,
+              taskId: tid,
+              version: replySha,
+              sha256: replySha,
+              locator: JSON.stringify({ kind: 'native-reply', ...selection }),
+            });
             const pin = packs.getTaskPin(packId, pid, tid);
             const nativeEv = await inspectTaskNativeEvidence(pid, tid, currentPack, selection);
 
@@ -2385,12 +2936,22 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const packMatchedReads = nativeEv.actualReads.filter(r =>
               r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep)),
             );
-            // Only match a recorded use bound to THIS EXACT message (sessionId + messageId) with real complete pack reads!
-            const matchingTurnUse = currentPack.useRecords.find(u =>
+            // Match a recorded use bound to THIS EXACT turn (messageId OR same-turn saved report / declared studio use)
+            const studioSys = options.studio.get(currentPack.systemId);
+            const turnDeclaredReportRefs = studioSys.uses
+              .filter(u => u.projectId === pid && u.taskId === tid && nativeEv.turnDeclaredStudioUseIds.includes(u.id))
+              .map(u => u.report);
+            const sameTurnReportCandidates = [...nativeEv.turnWrittenReports, ...turnDeclaredReportRefs];
+            const matchingTurnUse = [...currentPack.useRecords].reverse().find(u =>
               u.projectId === pid
               && u.taskId === tid
-              && u.sessionId === selection.sessionId
-              && u.messageId === selection.messageId
+              && (
+                (u.sessionId === selection.sessionId && u.messageId === selection.messageId)
+                || sameTurnReportCandidates.some(ref =>
+                  digest(ref) === digest(u.reportRef)
+                  || (ref.locator && u.reportRef.locator === ref.locator && (!ref.sha256 || !u.reportRef.sha256 || ref.sha256 === u.reportRef.sha256)),
+                )
+              )
               && u.actualReads.some(r => r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep))),
             );
             const hasActualUse = Boolean(matchingTurnUse || packMatchedReads.length > 0);
@@ -2399,6 +2960,71 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               : matchingTurnUse
                 ? matchingTurnUse.actualReads.filter(r => r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep))).map(r => r.ref)
                 : [];
+
+            // R4: Link feedback to the actual saved 060_reports/ file from THIS turn while preserving replyRef!
+            let linkedSavedReportRef: StudioSourceRef | undefined;
+            if (matchingTurnUse?.reportRef.locator?.startsWith('060_reports/')) {
+              linkedSavedReportRef = matchingTurnUse.reportRef;
+            } else if (nativeEv.turnWrittenReports.length > 0) {
+              linkedSavedReportRef = nativeEv.turnWrittenReports.at(-1);
+            } else if (turnDeclaredReportRefs.some(r => r.locator?.startsWith('060_reports/'))) {
+              linkedSavedReportRef = turnDeclaredReportRefs.filter(r => r.locator?.startsWith('060_reports/')).at(-1);
+            } else if (object(input.reportRef)) {
+              const explicitRep = sourceRef(input.reportRef);
+              if (explicitRep.projectId === pid && explicitRep.locator?.startsWith('060_reports/')) {
+                linkedSavedReportRef = explicitRep;
+              }
+            }
+            if (linkedSavedReportRef?.locator?.startsWith('060_reports/')) {
+              try {
+                const effLoc = resolveTaskReportLocator(pid, tid, linkedSavedReportRef.locator, linkedSavedReportRef.sha256);
+                const f = await options.projects.readFile(pid, effLoc);
+                const fSha = createHash('sha256').update(f.bytes).digest('hex');
+                preserveImmutableReportSnapshot(pid, effLoc, f.bytes, fSha);
+                linkedSavedReportRef = sourceRef({ ...linkedSavedReportRef, locator: effLoc, version: fSha, sha256: fSha });
+              } catch { /* fallback to existing ref */ }
+            }
+
+            // R5: Verify or auto-link original Case reference from CaseStore!
+            let resolvedOriginalCaseRef: { caseId: string; decisionId?: string; decisionRevision?: number; summary?: string } | undefined;
+            const rawCaseInput = object(input.originalCaseRef)
+              ? input.originalCaseRef
+              : typeof input.originalCaseId === 'string' && input.originalCaseId.trim()
+                ? { caseId: input.originalCaseId.trim(), ...(typeof input.originalDecisionId === 'string' ? { decisionId: input.originalDecisionId.trim() } : {}) }
+                : undefined;
+            if (rawCaseInput) {
+              const cid = uuid(rawCaseInput.caseId);
+              const did = typeof rawCaseInput.decisionId === 'string' && rawCaseInput.decisionId.trim() ? uuid(rawCaseInput.decisionId.trim()) : undefined;
+              const drev = typeof rawCaseInput.decisionRevision === 'number' ? rawCaseInput.decisionRevision : undefined;
+              let caseSummary = typeof rawCaseInput.summary === 'string' && rawCaseInput.summary.trim() ? rawCaseInput.summary.trim() : undefined;
+              if (options.cases) {
+                let caseRec: { id: string; title: string };
+                try { caseRec = options.cases.getCase(cid); } catch { throw new StudioError('feedback_verification_case_not_found', 409); }
+                if (did) {
+                  try { options.cases.getDecision(cid, did, drev); } catch { throw new StudioError('feedback_verification_case_not_found', 409); }
+                }
+                caseSummary ??= caseRec.title;
+              }
+              resolvedOriginalCaseRef = {
+                caseId: cid,
+                ...(did ? { decisionId: did } : {}),
+                ...(drev !== undefined ? { decisionRevision: drev } : {}),
+                ...(caseSummary ? { summary: caseSummary } : {}),
+              };
+            } else if (options.cases) {
+              try {
+                const projLink = options.cases.listProjectLinks().find(l => l.projectId === pid);
+                if (projLink) {
+                  const caseRec = options.cases.getCase(projLink.caseId);
+                  const latestDecision = options.cases.listDecisions(projLink.caseId).items.at(-1);
+                  resolvedOriginalCaseRef = {
+                    caseId: caseRec.id,
+                    ...(latestDecision ? { decisionId: latestDecision.recordId, decisionRevision: latestDecision.revision } : {}),
+                    summary: caseRec.title,
+                  };
+                }
+              } catch { /* no linked case */ }
+            }
 
             let adoptionBasis: FeedbackAdoptionBasis;
             if (hasActualUse) {
@@ -2432,7 +3058,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               taskId: tid,
               sessionId: selection.sessionId,
               messageId: selection.messageId,
-              reportRef: { authority: 'task', id: tid, projectId: pid, taskId: tid, version: replySha, sha256: replySha, locator: JSON.stringify({ kind: 'native-reply', ...selection }) },
+              reportRef: linkedSavedReportRef ?? replyRef,
+              replyRef,
+              ...(matchingTurnUse ? {
+                linkedUseRecordId: matchingTurnUse.id,
+                independentVerificationStatus: matchingTurnUse.independentVerification.status,
+                ...(matchingTurnUse.independentVerification.assessmentReportRef ? { assessmentReportRef: matchingTurnUse.independentVerification.assessmentReportRef } : {}),
+              } : {}),
+              ...(resolvedOriginalCaseRef ? { originalCaseRef: resolvedOriginalCaseRef } : {}),
               adoptionBasis,
               ...(observedDirVer ? { observedDirectoryVersion: observedDirVer } : {}),
               // ONLY populate usedPackVersion when actual reading/use of THIS pack in THIS turn was verified!
@@ -2516,7 +3149,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           studioFeedbackId = studioFb.id;
         }
 
-        // R5: When closing feedback as 'verified', verify real Studio declare-use + INDEPENDENT assess-use + disk-corroborated item-level evidence!
+        // R5: When closing feedback as 'verified', verify real Studio declare-use + INDEPENDENT assess-use + deep disk-corroborated item-level, cutoff & Case evidence!
         let verifiedItemEvidence: EnterprisePackFeedbackItemVerification | undefined;
         if (targetStatus === 'verified' && typeof input.verifiedByUseId === 'string') {
           const verifyingUse = currentPack.useRecords.find(u => u.id === uuid(input.verifiedByUseId));
@@ -2544,26 +3177,128 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             if (!Array.isArray(rawIv.shouldChange) || !rawIv.shouldChange.length || !Array.isArray(rawIv.shouldRetain) || !rawIv.shouldRetain.length) {
               throw new StudioError('feedback_verification_missing_item_evidence', 409);
             }
-            // Corroborate every cited shouldChange & shouldRetain itemId against actual report/assessment bytes on disk!
+            // Read actual report & independent assessment bytes from disk (or immutable preserved snapshot)
             const diskTexts: string[] = [];
             if (verifyingUse.reportRef.projectId && verifyingUse.reportRef.locator?.startsWith('060_reports/')) {
               const effLoc = resolveTaskReportLocator(verifyingUse.reportRef.projectId, verifyingUse.taskId, verifyingUse.reportRef.locator, verifyingUse.reportRef.sha256);
-              const repFile = await options.projects.readFile(verifyingUse.reportRef.projectId, effLoc);
-              diskTexts.push(repFile.bytes.toString('utf8'));
+              const preserved = readPreservedReportBytes(verifyingUse.reportRef.projectId, verifyingUse.taskId, effLoc, verifyingUse.reportRef.sha256);
+              if (preserved) {
+                diskTexts.push(preserved.toString('utf8'));
+              } else {
+                const repFile = await options.projects.readFile(verifyingUse.reportRef.projectId, effLoc);
+                diskTexts.push(repFile.bytes.toString('utf8'));
+              }
             }
             if (latestAssess.report.projectId && latestAssess.report.locator?.startsWith('060_reports/')) {
               const effAssessLoc = resolveTaskReportLocator(latestAssess.report.projectId, assessTaskId!, latestAssess.report.locator, latestAssess.report.sha256);
-              const assessFile = await options.projects.readFile(latestAssess.report.projectId, effAssessLoc);
-              diskTexts.push(assessFile.bytes.toString('utf8'));
+              const preservedAssess = readPreservedReportBytes(latestAssess.report.projectId, assessTaskId!, effAssessLoc, latestAssess.report.sha256);
+              if (preservedAssess) {
+                diskTexts.push(preservedAssess.toString('utf8'));
+              } else {
+                const assessFile = await options.projects.readFile(latestAssess.report.projectId, effAssessLoc);
+                diskTexts.push(assessFile.bytes.toString('utf8'));
+              }
             }
             const combinedEvidence = diskTexts.join('\n').toLowerCase();
-            const allItemIds = [
-              ...rawIv.shouldChange.map(i => String(i?.itemId ?? '').trim()),
-              ...rawIv.shouldRetain.map(i => String(i?.itemId ?? '').trim()),
-            ];
-            if (!combinedEvidence || allItemIds.some(id => !id || !combinedEvidence.includes(id.toLowerCase()))) {
+            if (!combinedEvidence) {
               throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
             }
+
+            // 1. Cutoff corroboration: originalCutoffChecked MUST match the feedback's recorded original cutoff (if any) AND appear in disk bytes!
+            const checkedCutoff = String(rawIv.originalCutoffChecked ?? '').trim();
+            const recordedOriginalCutoff = existingFb.reports.map(r => r.taskCutoffAt || r.packDataCutoffAt).find(Boolean)?.trim();
+            if (!checkedCutoff) {
+              throw new StudioError('feedback_verification_cutoff_uncorroborated', 409);
+            }
+            if (recordedOriginalCutoff && checkedCutoff !== recordedOriginalCutoff) {
+              throw new StudioError('feedback_verification_cutoff_mismatch', 409);
+            }
+            if (!combinedEvidence.includes(checkedCutoff.toLowerCase())) {
+              throw new StudioError('feedback_verification_cutoff_uncorroborated', 409);
+            }
+
+            // 2. Deep per-item corroboration (original transaction orderId, refundDate, cutoff boundary, reason — reject bare itemId-only stubs!)
+            for (const item of rawIv.shouldChange) {
+              const id = String(item?.itemId ?? '').trim();
+              const orderId = String(item?.originalOrderId ?? '').trim();
+              const refundDate = String(item?.refundDate ?? '').trim();
+              const reason = String(item?.reason ?? '').trim();
+              if (!id || !combinedEvidence.includes(id.toLowerCase())) {
+                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              }
+              // Every shouldChange item MUST corroborate original transaction/date context in disk bytes (not bare itemId!)
+              if (!orderId && !refundDate) {
+                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              }
+              if (orderId && !combinedEvidence.includes(orderId.toLowerCase())) {
+                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              }
+              if (refundDate && !combinedEvidence.includes(refundDate.toLowerCase())) {
+                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              }
+              if (refundDate && checkedCutoff && refundDate > checkedCutoff) {
+                throw new StudioError('feedback_verification_post_cutoff_misclassified', 409);
+              }
+              if (item?.classification === 'post_cutoff_new_event') {
+                throw new StudioError('feedback_verification_post_cutoff_misclassified', 409);
+              }
+              if (reason && reason.length >= 2 && !combinedEvidence.includes(reason.toLowerCase()) && !orderId) {
+                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              }
+            }
+            for (const item of rawIv.shouldRetain) {
+              const id = String(item?.itemId ?? '').trim();
+              const orderId = String(item?.originalOrderId ?? '').trim();
+              const refundDate = String(item?.refundDate ?? '').trim();
+              if (!id || !combinedEvidence.includes(id.toLowerCase())) {
+                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              }
+              if (!orderId && !refundDate && !String(item?.reason ?? '').trim()) {
+                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              }
+              if (orderId && !combinedEvidence.includes(orderId.toLowerCase())) {
+                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              }
+              if (refundDate && !combinedEvidence.includes(refundDate.toLowerCase())) {
+                throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
+              }
+            }
+
+            // 3. Original Case decision verification against real CaseStore!
+            const fbCaseRef = existingFb.reports.map(r => r.originalCaseRef).find(Boolean);
+            const ivCaseRef = rawIv.originalCaseRef;
+            if (fbCaseRef && !ivCaseRef) {
+              throw new StudioError('feedback_verification_missing_case_ref', 409);
+            }
+            if (ivCaseRef) {
+              if (!ivCaseRef.caseId) throw new StudioError('feedback_verification_case_not_found', 409);
+              if (fbCaseRef && ivCaseRef.caseId !== fbCaseRef.caseId) {
+                throw new StudioError('feedback_verification_case_mismatch', 409);
+              }
+              if (rawIv.caseDecisionsPreserved !== true) {
+                throw new StudioError('feedback_verification_case_not_preserved', 409);
+              }
+              let caseTitle: string | undefined;
+              if (options.cases) {
+                let origCase: { id: string; title: string };
+                try { origCase = options.cases.getCase(ivCaseRef.caseId); } catch { throw new StudioError('feedback_verification_case_not_found', 409); }
+                caseTitle = origCase.title;
+                if (ivCaseRef.decisionId) {
+                  try {
+                    options.cases.getDecision(ivCaseRef.caseId, ivCaseRef.decisionId, ivCaseRef.decisionRevision);
+                  } catch {
+                    throw new StudioError('feedback_verification_case_not_found', 409);
+                  }
+                }
+              }
+              const caseMentioned = combinedEvidence.includes(ivCaseRef.caseId.toLowerCase())
+                || (ivCaseRef.decisionId ? combinedEvidence.includes(ivCaseRef.decisionId.toLowerCase()) : false)
+                || (caseTitle ? combinedEvidence.includes(caseTitle.toLowerCase()) : false);
+              if (!caseMentioned) {
+                throw new StudioError('feedback_verification_case_uncorroborated', 409);
+              }
+            }
+
             verifiedItemEvidence = {
               ...rawIv,
               assessmentReportRef: rawIv.assessmentReportRef ? sourceRef(rawIv.assessmentReportRef) : latestAssess.report,
@@ -2637,6 +3372,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           if (parsedAssessRef.sha256 && parsedAssessRef.sha256 !== actualAssessSha) {
             throw new StudioError('studio_use_report_hash_mismatch', 409);
           }
+          preserveImmutableReportSnapshot(parsedAssessRef.projectId, effectiveAssessLoc, assessFile.bytes, actualAssessSha);
           const verifiedAssessRef = sourceRef({ ...parsedAssessRef, locator: effectiveAssessLoc, version: actualAssessSha, sha256: actualAssessSha });
           if (digest(verifiedAssessRef) === digest(useRecord.reportRef)) {
             throw new StudioError('studio_use_assessment_same_as_report', 409);
@@ -2651,8 +3387,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           });
         }
 
-        // CRITICAL (R4): NEVER trust client-supplied boolean independentConfirmed OR same-task author self-assessment!
-        // Only a disk-verified StudioUseAssessment authored by an INDEPENDENT task (`assessorTaskId !== useRecord.taskId`) may achieve 'pass'!
+        // CRITICAL (R4): NEVER trust client-supplied boolean independentConfirmed OR same-task author self-assessment OR blind verifier without reads!
+        // Only a disk-verified StudioUseAssessment authored by an INDEPENDENT task (`assessorTaskId !== useRecord.taskId`) that has its OWN native reads & calc/data evidence may achieve 'pass'!
         const latestStudioSys = options.studio.get(currentPack.systemId);
         const latestStudioUse = studioUse ? latestStudioSys.uses.find(u => u.id === studioUse.id) : undefined;
         const latestAssessment = latestStudioUse?.assessments?.at(-1);
@@ -2668,25 +3404,35 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const assessFile = await options.projects.readFile(latestAssessment.report.projectId, effAssessLoc);
             const actualSha = createHash('sha256').update(assessFile.bytes).digest('hex');
             if (!latestAssessment.report.sha256 || latestAssessment.report.sha256 === actualSha) {
+              preserveImmutableReportSnapshot(latestAssessment.report.projectId, effAssessLoc, assessFile.bytes, actualSha);
               assessmentDiskVerified = true;
             }
           } catch {
             assessmentDiskVerified = false;
           }
         }
+
+        let verifierEv: Awaited<ReturnType<typeof inspectVerifierTaskEvidence>> | undefined;
+        if (isIndependentAssessor && assessorProjectId && assessorTaskId) {
+          verifierEv = await inspectVerifierTaskEvidence(assessorProjectId, assessorTaskId, currentPack, useRecord);
+        }
+
         const hostVerifiedIndependentConfirmed = Boolean(
           input.independentConfirmed === true
           && latestStudioUse
           && latestAssessment
           && latestAssessment.status === 'pass'
           && assessmentDiskVerified
-          && isIndependentAssessor,
+          && isIndependentAssessor
+          && (!verifierEv || !verifierEv.missingReason),
         );
         const effectiveVerdictDetail = selfAssessmentOnly && input.independentConfirmed === true
           ? '仅见原分析任务作者自评（同任务），缺少独立任务/独立身份核验，保持待验证'
-          : typeof input.verdictDetail === 'string'
-            ? input.verdictDetail
-            : undefined;
+          : verifierEv?.missingReason && input.independentConfirmed === true
+            ? verifierEv.missingReason
+            : typeof input.verdictDetail === 'string'
+              ? input.verdictDetail
+              : undefined;
 
         const use = packs.verifyUse(useVerifyMatch[1]!, useVerifyMatch[2]!, {
           ...(input as unknown as Parameters<EnterprisePackStore['verifyUse']>[2]),
@@ -2694,6 +3440,16 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           ...(assessorProjectId ? { verifierProjectId: assessorProjectId } : {}),
           ...(assessorTaskId ? { verifierTaskId: assessorTaskId } : {}),
           ...(latestAssessment?.report ? { assessmentReportRef: latestAssessment.report } : {}),
+          ...(verifierEv ? {
+            verifierActualReads: verifierEv.verifierReads,
+            verifierEvidenceSummary: {
+              requiredAssetsCount: verifierEv.requiredCount,
+              readRequiredAssetsCount: verifierEv.readRequiredAssetsCount,
+              allRequiredReadByVerifier: verifierEv.allRequiredReadByVerifier,
+              hadDataOrCalcEvidence: verifierEv.hadDataOrCalcEvidence,
+              ...(verifierEv.missingReason ? { missingReason: verifierEv.missingReason } : {}),
+            },
+          } : {}),
           selfAssessmentOnly,
           independentConfirmed: hostVerifiedIndependentConfirmed,
         });
@@ -2728,6 +3484,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     references,
     grants,
     packs,
+    bindSystemOperator,
+    preserveImmutableReportSnapshot,
+    readPreservedReportBytes,
+    isReportLockedByUseOrFeedback,
+    projectPermissionFingerprint,
     getProjectToolScope,
     prepareRestrictedTaskWorkspace,
     syncActiveWorkspacesForProject,
@@ -2736,6 +3497,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     resolveTaskReportLocator,
     authorizeProjectDataPath,
     assertProjectDataPathAllowed,
+    filterAuthorizedProjectData,
     evaluateNativeToolCall,
     buildPackCatalogSummary,
     inspectPinnedSourceRead,
