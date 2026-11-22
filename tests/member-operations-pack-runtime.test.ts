@@ -2286,15 +2286,23 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   await json(await roHost.request(`/api/projects/${projAud.id}/tasks/${taskRollback.id}/messages`, 'POST', {
     requestId: randomUUID(), text: '查看目录中可用的企业会员包用途。',
   }), 202);
-  await waitIdle(roHost, projAud.id, taskRollback.id);
+  const rollbackState = await waitIdle(roHost, projAud.id, taskRollback.id);
   assert.match(catalogRollbackText, /"readOnlyRollback":true/, 'Rollback mode MUST signal readOnlyRollback: true!');
   assert.match(catalogRollbackText, /"pinnedVersion":null/, 'Brand-new task in rollback mode MUST NOT pin a pack version!');
   assert.match(catalogRollbackText, /"purposes":\[\]/, 'Brand-new task in rollback mode MUST receive ZERO pack purposes/dependencies!');
-  assert.equal(
-    fs.existsSync(path.join(savedDataRoot, 'member-pack-workspaces', projAud.id, taskRollback.id)),
-    false,
-    'Rollback mode MUST NOT create member-pack-workspaces or copy files for new tasks!',
-  );
+  const rollbackInputs = path.join(savedDataRoot, 'member-pack-workspaces', projAud.id, taskRollback.id, '020_clean');
+  assert.deepEqual(fs.readdirSync(rollbackInputs), [], 'Rollback creates a capability boundary without copying project files');
+  assert.equal(rollbackState.snapshot.tools.includes('bash'), false);
+  const rollbackSelection = await roHost.request(`/api/projects/${projMerch.id}`);
+  const rollbackCookie = rollbackSelection.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(rollbackCookie);
+  const rollbackDetail = await fetch(`${roHost.baseUrl}/api/projects/${projMerch.id}/files/content?path=020_clean%2Fstarbridge_orders.csv`, {
+    headers: { ...roHost.headers, cookie: rollbackCookie },
+  });
+  assert.equal(rollbackDetail.status, 403, 'A definition-only project cannot borrow detail during rollback');
+  const rollbackHistory = await json(await roHost.request(`/api/projects/${projStar.id}/tasks/${taskA.id}`));
+  assert.ok(!JSON.stringify(rollbackHistory.snapshot.messages).includes('O-73'), 'Rollback cannot resurface previous wider native output');
+  assert.equal(sha(fs.readFileSync(reportV1Path)), sha(reportV1Bytes), 'Rollback preserves the earlier report bytes');
 });
 
 test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexistence expiry on the SAME 020_clean CSV immediately narrows active task view', { timeout: 90_000 }, async t => {
@@ -2455,6 +2463,9 @@ test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexist
   await waitIdle(host, projConsumer.id, task.id, st1.snapshot.messages.length + 2);
   assert.ok(turn2CsvText.includes('H01'), `Turn 2 after wide expiry MUST still see narrow-granted H01, got: ${turn2CsvText}`);
   assert.ok(!turn2CsvText.includes('S02') && !turn2CsvText.includes('杉岸直营店'), `Turn 2 after wide expiry MUST immediately strip expired wide-grant store S02, got: ${turn2CsvText}`);
+  const visibleTaskAfterExpiry = await json(await consumerReq(`/api/projects/${projConsumer.id}/tasks/${task.id}`));
+  assert.ok(!JSON.stringify(visibleTaskAfterExpiry.snapshot.messages).includes('S02'), 'The browser history suppresses content from the earlier wider permission');
+  assert.ok(JSON.stringify(visibleTaskAfterExpiry.snapshot.messages).includes('H01'), 'The browser still displays the latest authorized history');
   const narrowEvidence = await consumerReq(frozenEvidence);
   assert.equal(narrowEvidence.status, 403, 'A frozen immutable snapshot requiring a wider grant stays withheld');
   const currentObserved = await json(await consumerReq(`${dataContext}/preview`, 'POST', { path: '020_clean/mixed_orders.csv' }));
