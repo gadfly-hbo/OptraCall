@@ -2072,15 +2072,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       });
 
       for (const pm of sortedPurposes) {
-        const already = pack.useRecords.find(u =>
-          u.projectId === input.projectId
-          && u.taskId === input.taskId
-          && u.purposeId === pm.purposeId
-          && Boolean(u.authorDeclaration)
-          && (
-            exactTaskReport(u.reportRef, input.studioUse.report)
-          ),
-        );
+        const already = pack.useRecords.find(use => use.purposeId === pm.purposeId && matchesStudioUse(use, input.studioUse));
         if (already) {
           created.push(already);
           continue;
@@ -3947,13 +3939,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const rawAssessment = input.assessmentReportRef ?? input.verificationReportRef;
         const exactAssessment = rawAssessment === undefined ? undefined : sourceRef(rawAssessment);
         const latest = studioUse?.assessments?.filter(item =>
-          (!exactAssessment || exactTaskReport(item.report, exactAssessment)) &&
-          (!item.evidence?.purposeId || item.evidence.purposeId === useRecord.purposeId),
+          !item.evidence?.purposeId || item.evidence.purposeId === useRecord.purposeId,
         ).at(-1);
         const linkedPurposes = new Set(studioUse
           ? currentPack.useRecords.filter(use => matchesStudioUse(use, studioUse)).map(use => use.purposeId)
           : []);
-        const use = studioUse && latest && (linkedPurposes.size === 1 || latest.evidence?.purposeId === useRecord.purposeId)
+        const use = studioUse && latest && (!exactAssessment || exactTaskReport(latest.report, exactAssessment)) &&
+          (linkedPurposes.size === 1 || latest.evidence?.purposeId === useRecord.purposeId)
           ? await applyStudioAssessment(currentPack, useRecord, studioUse, latest)
           : useRecord;
         return { result: { use, pack: packs.get(useVerifyMatch[1]!) } as unknown as Record<string, unknown> };

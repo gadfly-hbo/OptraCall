@@ -79,7 +79,8 @@ export function nativeAssessmentEvidence(
   if (boundaries.length !== 1) return;
   const [boundary] = boundaries;
   if (!boundary || boundary.name !== 'studio_assets' || boundary.args.action !== 'assess-use' ||
-      boundary.args.systemId !== systemId || !object(boundary.args.payload)) return;
+      (boundary.args.systemId !== undefined && boundary.args.systemId !== systemId) ||
+      !object(boundary.args.payload)) return;
   const { payload } = boundary.args;
   if (payload.useId !== studioUseId || payload.status !== assessment.status) return;
   try {
