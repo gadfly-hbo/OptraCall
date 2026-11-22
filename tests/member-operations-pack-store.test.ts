@@ -779,6 +779,7 @@ test('EnterprisePackStore handles panorama, two-route single-decision entries, c
       expectedRef: refundR4,
       actualReads: [{ ref: refundR3, sha256: refundR3.sha256, complete: true, readAt: new Date().toISOString() }],
       hasAuthorDeclaration: true,
+      declaredRefs: [refundR3],
       independentConfirmed: true,
     });
     assert.equal(wrongVersionVerdict.verdict, 'fail');
@@ -1144,6 +1145,7 @@ test('Round-3 counterexamples: selective republication carries over unchanged el
         { ref: sapV1, sha256: sapV1.sha256, complete: true, readAt: new Date().toISOString() },
       ],
       hasAuthorDeclaration: true,
+      declaredRefs: [ruleRef, sapV1],
       independentConfirmed: true,
     });
     assert.equal(wrongRequiredVerdict.verdict, 'fail');
@@ -1858,12 +1860,26 @@ test('Round-7 counterexamples: contradictory targetPurposeId refuses auto-match 
   assert.equal(inspectOldOnly.verdict, 'pending', 'Mere inspection of old version without declaration MUST remain pending (not misclassified as adoption)!');
   assert.equal(inspectOldOnly.wrongVersionDetected, false);
 
-  // When author DOES declare adoption while only reading old v1 -> FAIL
+  // A declaration on the report cannot attribute an incidental old read to the report.
+  for (const declaredRefs of [[v2Ref], undefined]) {
+    const unconfirmedAdoption = evaluateUseVerdict({
+      requiredRefs: [v2Ref],
+      actualReads: [{ ref: v1Ref, complete: true, readAt: '2026-11-01T00:01:00Z' }],
+      hasAuthorDeclaration: true,
+      declaredRefs,
+      independentConfirmed: true,
+    });
+    assert.equal(unconfirmedAdoption.verdict, 'pending');
+    assert.equal(unconfirmedAdoption.wrongVersionDetected, false);
+  }
+
+  // The authors explicitly declared old v1 as adopted for this report.
   const declaredOldOnly = evaluateUseVerdict({
     expectedRef: v2Ref,
     requiredRefs: [v2Ref],
     actualReads: [{ ref: v1Ref, complete: true, readAt: '2026-11-01T00:01:00Z' }],
     hasAuthorDeclaration: true,
+    declaredRefs: [v1Ref],
     independentConfirmed: true,
   });
   assert.equal(declaredOldOnly.verdict, 'fail');

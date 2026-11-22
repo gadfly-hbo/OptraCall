@@ -1136,28 +1136,8 @@ export function evaluateUseVerdict(input: {
   if (input.independentFailed) {
     return { verdict: 'fail', wrongVersionDetected: false, reason: '独立核验记录了有可回查证据的未通过结论' };
   }
-  // 1C. Wrong version reads across expectedRef and requiredRefs:
-  //     - If the author actually declared adoption on this report (`hasAuthorDeclaration === true`) while only reading the old version -> 'fail' (wrongVersionDetected: true).
-  //     - If the task ONLY inspected/read the old version WITHOUT declaring adoption (`hasAuthorDeclaration === false`) and WITHOUT verifier confirming wrong-version adoption -> 'pending' (NOT misclassified as adopted!).
-  for (const target of refsToCheck) {
-    const sameAssetReads = input.actualReads.filter(r => sameSourceId(r.ref, target));
-    const wrongRead = sameAssetReads.find(r => !sameExactSourceRef(r.ref, target));
-    const completeRightRead = sameAssetReads.find(r => r.complete && sameExactSourceRef(r.ref, target));
-    if (wrongRead && !completeRightRead) {
-      if (input.hasAuthorDeclaration) {
-        return {
-          verdict: 'fail',
-          wrongVersionDetected: true,
-          reason: `查实本稿声明采用但实际仅读用旧版/错版 ${wrongRead.ref.version}（期望 ${target.version}），即使汇总数字巧合相同，该用途仍判未通过`,
-        };
-      }
-      return {
-        verdict: 'pending',
-        wrongVersionDetected: false,
-        reason: `任务仅查阅历史旧版 ${wrongRead.ref.version}（期望 ${target.version}），既未声明本稿采用也无独立核验确认错版采用，不将查阅误判为实际采用，保持待验证`,
-      };
-    }
-  }
+  // Old reads do not establish adoption. The exact-read check below leaves the
+  // required version pending unless the declaration or verifier proved wrong use.
   // 2. Require at least one complete read overall
   const completeReads = input.actualReads.filter(r => r.complete);
   if (!completeReads.length) {
