@@ -1048,7 +1048,7 @@ export class EnterprisePackStore {
     });
   }
 
-  pinTaskVersion(packId: string, input: { projectId: string; taskId: string; authorizedScope: string; version?: string }): EnterprisePackTaskPin {
+  pinTaskVersion(packId: string, input: { projectId: string; taskId: string; authorizedScope: string; version?: string; qualifiedPurposes?: Pick<EnterprisePurposePublicationState, 'purposeId' | 'dependencies'>[] }): EnterprisePackTaskPin {
     const existing = this.getTaskPin(packId, input.projectId, input.taskId);
     if (existing) return existing;
 
@@ -1062,7 +1062,7 @@ export class EnterprisePackStore {
         : pack.packRevisions.find(r => r.status === 'active') ?? pack.packRevisions.at(-1);
       if (!rev) fail('enterprise_pack_no_published_revision', 409);
 
-      const eligiblePurposes = rev.purposeManifests.filter(pm => pm.status === 'eligible');
+      const eligiblePurposes = input.qualifiedPurposes ?? rev.purposeManifests.filter(pm => pm.status === 'eligible');
       const pinnedAuthorityRefs = [...new Map(
         eligiblePurposes.flatMap(pm => pm.dependencies.map(d => [digest(d.ref), d.ref] as const)),
       ).values()];

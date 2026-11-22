@@ -1326,7 +1326,7 @@ export function createStudioFeature(options: StudioHostOptions) {
             const task = await options.projects.createTask(projectId, { name: `Studio · ${name}` }); await options.projects.saveDraft(projectId, task.id, goal);
             const system = store.create({ name, projectId, taskId: task.id, goal, topicTitle, materials, ...(enterpriseId ? { enterpriseId } : {}) });
             const creatorOp = options.resolveRequestOperator?.(request);
-            if (creatorOp?.verified && creatorOp.operatorId.trim()) memberPack.bindSystemOperator(system.id, creatorOp.operatorId);
+            if (creatorOp?.verified && creatorOp.operatorId.trim() && (!creatorOp.activeProjectId || creatorOp.activeProjectId === projectId)) memberPack.bindSystemOperator(system.id, creatorOp.operatorId);
             return { statusCode: 201, result: { system }, systemId: system.id };
           }
           const state = await workspace(id), system = state.system;

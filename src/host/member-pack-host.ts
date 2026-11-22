@@ -485,13 +485,52 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return project;
   }
 
-  async function assertWritablePackProject(pack: EnterpriseDomainPack, requestedProjectId?: unknown) {
-    if (requestedProjectId !== undefined && requestedProjectId !== null && String(requestedProjectId).trim() !== '') {
-      return assertWritableProject(String(requestedProjectId), pack.enterpriseId);
+  function activeOperatorProject(operator: TrustedHostOperator): string | undefined {
+    return operator.verified && operator.operatorId.trim()
+      ? operator.activeProjectId ?? operator.authorityProjectId
+      : undefined;
+  }
+
+  function assertOperatorProject(operator: TrustedHostOperator, projectId: string) {
+    if (activeOperatorProject(operator) !== projectId) throw new StudioError('member_pack_operator_context_required', 403);
+  }
+
+  function hasSystemAuthority(systemId: string, projectId: string, operator: TrustedHostOperator): boolean {
+    const bound = getBoundSystemOperator(systemId);
+    return activeOperatorProject(operator) === projectId
+      && (bound ? bound === operator.operatorId : operator.authorityProjectId === projectId);
+  }
+
+  function canReadConstructionPack(pack: EnterpriseDomainPack, projectId: string, operator: TrustedHostOperator) {
+    return isConstructionOwnerProject(pack, projectId) && hasSystemAuthority(pack.systemId, projectId, operator);
+  }
+
+  async function assertWritablePackProject(pack: EnterpriseDomainPack, operator: TrustedHostOperator, requestedProjectId?: unknown) {
+    const target = requestedProjectId === undefined ? activeOperatorProject(operator) : uuid(requestedProjectId);
+    if (!target || !hasSystemAuthority(pack.systemId, target, operator)) throw new StudioError('member_pack_construction_authority_required', 403);
+    const project = await assertWritableProject(target, pack.enterpriseId);
+    const ownerProjectId = pack.activeOwnerProjectId ?? studioExecutionOwner(options.studio.get(pack.systemId)).projectId;
+    if (ownerProjectId !== target && (await options.projects.get(ownerProjectId)).archivedAt === null) {
+      throw new StudioError('member_pack_construction_authority_required', 403);
     }
-    const system = options.studio.get(pack.systemId);
-    const ownerProjectId = pack.activeOwnerProjectId ?? studioExecutionOwner(system).projectId;
-    return assertWritableProject(ownerProjectId, pack.enterpriseId);
+    return project;
+  }
+
+  async function packReaderProject(operator: TrustedHostOperator, requestedProjectId: string | null, enterpriseId?: string) {
+    const projectId = activeOperatorProject(operator);
+    if (requestedProjectId && projectId && uuid(requestedProjectId) !== projectId) throw new StudioError('member_pack_operator_context_required', 403);
+    if (!projectId) return undefined;
+    await options.projects.get(projectId);
+    const projectEnterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
+    if (enterpriseId && projectEnterpriseId !== enterpriseId) {
+      if (requestedProjectId) throw new StudioError('studio_owner_mismatch', 403);
+      return undefined;
+    }
+    return { projectId, enterpriseId: projectEnterpriseId };
+  }
+
+  function scopedPack(pack: EnterpriseDomainPack, projectId: string, operator: TrustedHostOperator) {
+    return canReadConstructionPack(pack, projectId, operator) ? pack : redactPackForConsumer(pack, projectId);
   }
 
   function isConstructionOwnerProject(pack: EnterpriseDomainPack, projectId: string): boolean {
@@ -1156,6 +1195,32 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return { allowed: true };
   }
 
+  function reportUseCovered(
+    use: EnterprisePackUseRecord,
+    purpose: EnterpriseDomainPack['packRevisions'][number]['purposeManifests'][number] | undefined,
+    subjectGrants: ReturnType<typeof projectGrants>,
+  ) {
+    const reportIdentity = digest(sourceRef(use.reportRef));
+    if (!purpose || purpose.status !== 'eligible') return false;
+    const operation = use.accessLevel === 'recalculate' ? 'read-detail-recalculate' : use.accessLevel === 'summary' ? 'cite-summary' : 'read-definition';
+    return subjectGrants.some(grant => {
+      if (!grant.operations.includes(operation)) return false;
+      if (grant.purposeKeys?.length && !grant.purposeKeys.includes('*') && !grant.purposeKeys.includes(purpose.purposeKey)) return false;
+      if (grant.scope.brand && grant.scope.brand !== purpose.scope.brand) return false;
+      if (grant.scope.channel && grant.scope.channel !== purpose.scope.channel) return false;
+      if (grant.scope.stores?.length && (!purpose.scope.stores?.length || !purpose.scope.stores.every(store => grant.scope.stores?.includes(store)))) return false;
+      if (!isPeriodCovered(purpose.scope.period, grant.scope.periodFrom, grant.scope.periodTo)) return false;
+      if (operation === 'read-detail-recalculate' && !grant.scope.allowedDataPaths?.length) return false;
+      if (operation === 'cite-summary') {
+        const summary = purpose.summaryAccess;
+        return Boolean(summary && grant.resourceRef && digest(sourceRef(grant.resourceRef)) === digest(sourceRef(summary.summaryRef))
+          && grant.scope.grain === summary.grain && grant.scope.summaryVersion === summary.summaryRef.version);
+      }
+      return (!grant.scope.grain || grant.scope.grain === purpose.subjectUnit)
+        && (!grant.resourceRef || digest(sourceRef(grant.resourceRef)) === reportIdentity);
+    });
+  }
+
   function assertDeclaredReportAccess(systemId: string, projectId: string, declaration: StudioUseRecord) {
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId || options.enterpriseScopes.enterpriseIdForProject(declaration.projectId) !== enterpriseId) {
@@ -1163,32 +1228,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
     const grantsNow = projectGrants(enterpriseId, projectId)
       .filter(grant => isGrantActive(grant, Date.now()));
-    const reportIdentity = digest(sourceRef(declaration.report));
     const qualifications = packs.list(enterpriseId).filter(pack => pack.systemId === systemId).flatMap(pack =>
       pack.useRecords.filter(use => matchesStudioUse(use, declaration))
         .map(use => ({ use, purpose: pack.packRevisions.find(revision => revision.version === use.packVersion)
           ?.purposeManifests.find(purpose => purpose.purposeId === use.purposeId && purpose.purposeKey === use.purposeKey) })),
     );
-    const entitled = qualifications.length > 0 && qualifications.every(({ use, purpose }) => {
-      if (!purpose || purpose.status !== 'eligible') return false;
-      const operation = use.accessLevel === 'recalculate' ? 'read-detail-recalculate' : use.accessLevel === 'summary' ? 'cite-summary' : 'read-definition';
-      return grantsNow.some(grant => {
-        if (!grant.operations.includes(operation)) return false;
-        if (grant.purposeKeys?.length && !grant.purposeKeys.includes('*') && !grant.purposeKeys.includes(purpose.purposeKey)) return false;
-        if (grant.scope.brand && grant.scope.brand !== purpose.scope.brand) return false;
-        if (grant.scope.channel && grant.scope.channel !== purpose.scope.channel) return false;
-        if (grant.scope.stores?.length && (!purpose.scope.stores?.length || !purpose.scope.stores.every(store => grant.scope.stores?.includes(store)))) return false;
-        if (!isPeriodCovered(purpose.scope.period, grant.scope.periodFrom, grant.scope.periodTo)) return false;
-        if (operation === 'read-detail-recalculate' && !grant.scope.allowedDataPaths?.length) return false;
-        if (operation === 'cite-summary') {
-          const summary = purpose.summaryAccess;
-          return Boolean(summary && grant.resourceRef && digest(sourceRef(grant.resourceRef)) === digest(sourceRef(summary.summaryRef))
-            && grant.scope.grain === summary.grain && grant.scope.summaryVersion === summary.summaryRef.version);
-        }
-        return (!grant.scope.grain || grant.scope.grain === purpose.subjectUnit)
-          && (!grant.resourceRef || digest(sourceRef(grant.resourceRef)) === reportIdentity);
-      });
-    });
+    const entitled = qualifications.length > 0 && qualifications.every(({ use, purpose }) => reportUseCovered(use, purpose, grantsNow));
     if (!entitled) throw new StudioError('studio_report_permission_denied', 403);
   }
 
@@ -1245,6 +1290,16 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       hasPartialOrFullDetail,
       visibleDeps,
     };
+  }
+
+  function qualifiedPinPurposes(pack: EnterpriseDomainPack, projectId: string, construction: boolean, revision?: EnterpriseDomainPack['packRevisions'][number]) {
+    const subjectGrants = projectGrants(pack.enterpriseId, projectId);
+    return (revision?.purposeManifests ?? []).flatMap(purpose => {
+      if (purpose.status !== 'eligible') return [];
+      if (construction) return [purpose];
+      const access = evaluatePurposeAccessForSubject(subjectGrants, purpose);
+      return access ? [{ purposeId: purpose.purposeId, dependencies: access.visibleDeps }] : [];
+    });
   }
 
   function packContainsSourceRef(pack: EnterpriseDomainPack, ref: StudioSourceRef): boolean {
@@ -1304,7 +1359,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const scopeDesc = isConstruction
               ? 'construction-owner'
               : activeGrants.map(g => `${g.operations.join(',')}:${g.scope.stores?.join('/') || g.scope.grain || g.scope.brand || '*'}`).join(';') || 'restricted';
-            const pin = packs.pinTaskVersion(pack.id, { projectId, taskId, authorizedScope: scopeDesc });
+            const qualifiedPurposes = qualifiedPinPurposes(pack, projectId, isConstruction, activeRev);
+            if (!qualifiedPurposes.length) throw new StudioError('member_pack_purpose_not_authorized', 403);
+            const pin = packs.pinTaskVersion(pack.id, { projectId, taskId, authorizedScope: scopeDesc, qualifiedPurposes });
             pinnedVersion = pin.packVersion;
             pinnedManifest = pack.packRevisions.find(r => r.version === pin.packVersion) ?? activeRev;
           } catch { /* No active revision yet or read-only mode */ }
@@ -1919,12 +1976,26 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   function redactPackForConsumer(pack: EnterpriseDomainPack, projectId: string): EnterpriseDomainPack {
-    if (isConstructionOwnerProject(pack, projectId)) return pack;
+    const { activeOwnerProjectId: _owner, continuationHistory: _continuations, ...visiblePack } = pack;
     const subjectGrants = projectGrants(pack.enterpriseId, projectId);
     const nowMs = Date.now();
     const activeGrants = subjectGrants.filter(g => !g.revokedAt && (!g.validFrom || Date.parse(g.validFrom) <= nowMs) && (!g.validTo || Date.parse(g.validTo) >= nowMs));
     const ownPins = pack.taskPins.filter(p => p.projectId === projectId);
     const ownUses = pack.useRecords.filter(u => u.projectId === projectId);
+    const purposeForUse = (use: EnterprisePackUseRecord) => pack.packRevisions.find(revision => revision.version === use.packVersion)
+      ?.purposeManifests.find(purpose => purpose.purposeId === use.purposeId);
+    const mayReadUse = (use: EnterprisePackUseRecord) => reportUseCovered(use, purposeForUse(use), activeGrants);
+    const unavailableEvidence = (use: EnterprisePackUseRecord): EnterprisePackUseRecord['independentVerification'] => ({
+      status: use.independentVerification.status,
+      verdictDetail: '当前权限不足以展示原核验资料。历史记录已保留。',
+    });
+    const publicFeedbackReport = (report: EnterpriseDomainPack['feedbackItems'][number]['reports'][number]) => {
+      const linked = ownUses.find(use => use.id === report.linkedUseRecordId);
+      return linked && mayReadUse(linked) ? report : {
+        ...report, usedAssetRefs: [], sourceReads: undefined, assessmentReportRef: undefined,
+        ...(linked ? { evidenceNote: '当前权限不足以展示原采用资料。' } : {}),
+      };
+    };
     const ownFeedback = pack.feedbackItems
       .filter(f => f.reports.some(r => r.projectId === projectId))
       .map(f => ({ ...f, reports: f.reports.filter(r => r.projectId === projectId) }));
@@ -1951,7 +2022,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           moduleReceipts: [],
         }));
       return {
-        ...pack,
+        ...visiblePack,
+        upgradeImpacts: [],
         panorama: undefined,
         panoramaHistory: [],
         entries: [],
@@ -1964,13 +2036,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           catalogSupplied: { ...u.catalogSupplied, purposeIds: [], assetRefs: [] },
           actualReads: [],
           authorDeclaration: undefined,
+          independentVerification: unavailableEvidence(u),
         })),
         feedbackItems: ownFeedback.map(f => ({
           ...f,
           targetAssetRef: undefined,
           authorityHandling: undefined,
           revisionLink: undefined,
-          reports: f.reports.map(r => ({ ...r, usedAssetRefs: [] })),
+          reports: f.reports.map(publicFeedbackReport),
         })),
       };
     }
@@ -2017,7 +2090,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const isRefAllowed = (ref: StudioSourceRef) => allAllowedRefs.some(ar => sameExactSourceRef(ar, ref));
 
     return {
-      ...pack,
+      ...visiblePack,
+        upgradeImpacts: [],
       panorama: undefined,
       panoramaHistory: [],
       entries: [],
@@ -2038,18 +2112,22 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           purposeIds: u.catalogSupplied.purposeIds.filter(pid => allowedPurposeIds.has(pid)),
           assetRefs: u.catalogSupplied.assetRefs.filter(isRefAllowed),
         },
-        actualReads: u.actualReads.filter(r => isRefAllowed(r.ref)),
-        ...(u.authorDeclaration ? {
+        actualReads: mayReadUse(u) ? u.actualReads.filter(r => isRefAllowed(r.ref)) : [],
+        independentVerification: mayReadUse(u) ? {
+          ...u.independentVerification,
+          verifierActualReads: u.independentVerification.verifierActualReads?.filter(read => isRefAllowed(read.ref)),
+        } : unavailableEvidence(u),
+        ...(u.authorDeclaration && mayReadUse(u) ? {
           authorDeclaration: {
             ...u.authorDeclaration,
             declaredRefs: u.authorDeclaration.declaredRefs.filter(isRefAllowed),
           },
-        } : {}),
+        } : { authorDeclaration: undefined }),
       })),
       feedbackItems: ownFeedback.map(f => ({
         ...f,
         ...(f.targetAssetRef && !isRefAllowed(f.targetAssetRef) ? { targetAssetRef: undefined } : {}),
-        reports: f.reports.map(r => ({ ...r, usedAssetRefs: r.usedAssetRefs.filter(isRefAllowed) })),
+        reports: f.reports.map(report => { const visible = publicFeedbackReport(report); return { ...visible, usedAssetRefs: visible.usedAssetRefs.filter(isRefAllowed) }; }),
       })),
     };
   }
@@ -3314,7 +3392,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       await options.projects.get(projectId);
       await options.projects.getTask(projectId, taskId);
       const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
-      const enterprisePacks = enterpriseId ? packs.list(enterpriseId) : [];
+      const operator = resolveRequestOperator(request);
+      if (enterpriseId) assertOperatorProject(operator, projectId);
+      const enterprisePacks = enterpriseId ? packs.list(enterpriseId).map(pack => scopedPack(pack, projectId, operator)) : [];
       const matchingUses: Array<{
         packId: string;
         packCode: string;
@@ -3392,26 +3472,16 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
 
     if (url.pathname === '/api/studio/enterprise-packs' && request.method === 'GET') {
-      const enterpriseId = url.searchParams.get('enterpriseId') || undefined;
-      const projectId = url.searchParams.get('projectId') || undefined;
-      let scopedEnterpriseId = enterpriseId;
-      if (projectId) {
-        const pid = uuid(projectId);
-        await options.projects.get(pid);
-        const ownerEnterprise = options.enterpriseScopes.enterpriseIdForProject(pid);
-        if (enterpriseId && ownerEnterprise !== enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-        scopedEnterpriseId = ownerEnterprise;
-      }
-      const domain = url.searchParams.get('domain') || undefined;
-      const rawList = packs.list(scopedEnterpriseId).filter(p => !domain || p.domain === domain);
-      const list = rawList.map(p => (projectId ? redactPackForConsumer(p, projectId) : p));
+      const enterpriseId = url.searchParams.get('enterpriseId');
+      const enterprise = enterpriseId ? uuid(enterpriseId) : undefined;
       const operator = resolveRequestOperator(request);
-      // ONLY mint grantAuthority when an explicit projectId is passed AND current verified Host operator owns it!
-      const grantAuthority = projectId && scopedEnterpriseId
-        ? await resolveGrantAuthorityForProject(scopedEnterpriseId, projectId, rawList[0], operator)
-        : undefined;
+      const reader = await packReaderProject(operator, url.searchParams.get('projectId'), enterprise);
+      const domain = url.searchParams.get('domain') || undefined;
+      const rawList = reader?.enterpriseId ? packs.list(reader.enterpriseId).filter(pack => !domain || pack.domain === domain) : [];
+      const owned = reader && rawList.find(pack => canReadConstructionPack(pack, reader.projectId, operator));
+      const grantAuthority = owned && reader ? await resolveGrantAuthorityForProject(owned.enterpriseId, reader.projectId, owned, operator) : undefined;
       json(response, 200, {
-        packs: list,
+        packs: reader ? rawList.map(pack => scopedPack(pack, reader.projectId, operator)) : [],
         readOnlyRollback: !enabled,
         ...(grantAuthority ? { grantAuthority } : {}),
       });
@@ -3419,9 +3489,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
     if (url.pathname === '/api/studio/enterprise-packs' && request.method === 'POST') {
       assertEnabledWritable();
+      const operator = resolveRequestOperator(request);
       const input = await options.readBody(request);
       const requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
-      const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
+      const receipt = await options.mutate(async () => {
         if (options.closing()) throw new StudioError('host_closing', 503);
         assertEnabledWritable();
         const enterpriseId = uuid(input.enterpriseId);
@@ -3429,18 +3500,29 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const systemId = uuid(input.systemId);
         const system = options.studio.get(systemId);
         if (system.enterpriseId !== enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-        // Always enforce non-archived active project check (explicit projectId or system execution owner project)
-        const targetProjectId = input.projectId !== undefined ? String(input.projectId) : studioExecutionOwner(system).projectId;
-        await assertWritableProject(targetProjectId, enterpriseId);
-        const pack = packs.ensurePack({
-          enterpriseId,
-          systemId,
-          domain: typeof input.domain === 'string' ? input.domain : 'member-operations',
-          name: text(input.name ?? `${system.name} · 会员运营资产包`, 200, false),
-          ...(typeof input.packCode === 'string' ? { packCode: input.packCode } : {}),
+        const domain = typeof input.domain === 'string' ? input.domain : 'member-operations';
+        const existing = packs.list(enterpriseId).find(pack => pack.systemId === systemId && pack.domain === domain);
+        if (existing) {
+          await assertWritablePackProject(existing, operator, input.projectId);
+        } else {
+          const originalProjectId = studioExecutionOwner(system).projectId;
+          const targetProjectId = input.projectId === undefined ? originalProjectId : uuid(input.projectId);
+          if (targetProjectId !== originalProjectId || !hasSystemAuthority(systemId, targetProjectId, operator)) {
+            throw new StudioError('member_pack_construction_authority_required', 403);
+          }
+          await assertWritableProject(targetProjectId, enterpriseId);
+        }
+        return options.operations.run(requestId, { path: url.pathname, input }, async () => {
+          const pack = packs.ensurePack({
+            enterpriseId,
+            systemId,
+            domain,
+            name: text(input.name ?? `${system.name} · 会员运营资产包`, 200, false),
+            ...(typeof input.packCode === 'string' ? { packCode: input.packCode } : {}),
+          });
+          return { statusCode: 200, result: { pack } as unknown as Record<string, unknown>, systemId };
         });
-        return { statusCode: 200, result: { pack } as unknown as Record<string, unknown>, systemId };
-      }));
+      });
       json(response, receipt.statusCode || 200, receipt.result);
       return true;
     }
@@ -3450,19 +3532,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const pack = packs.get(packGetMatch[1]!);
       const enterpriseId = url.searchParams.get('enterpriseId');
       if (enterpriseId && uuid(enterpriseId) !== pack.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-      const projectId = url.searchParams.get('projectId');
-      if (projectId) {
-        const pid = uuid(projectId);
-        await options.projects.get(pid);
-        const ownerEnterprise = options.enterpriseScopes.enterpriseIdForProject(pid);
-        if (ownerEnterprise !== pack.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-      }
       const operator = resolveRequestOperator(request);
-      const grantAuthority = projectId
-        ? await resolveGrantAuthorityForProject(pack.enterpriseId, projectId, pack, operator)
-        : undefined;
+      const reader = await packReaderProject(operator, url.searchParams.get('projectId'), pack.enterpriseId);
+      if (!reader) throw new StudioError('member_pack_operator_context_required', 403);
+      const grantAuthority = await resolveGrantAuthorityForProject(pack.enterpriseId, reader.projectId, pack, operator);
       json(response, 200, {
-        pack: projectId ? redactPackForConsumer(pack, projectId) : pack,
+        pack: scopedPack(pack, reader.projectId, operator),
         readOnlyRollback: !enabled,
         ...(grantAuthority ? { grantAuthority } : {}),
       });
@@ -3541,25 +3616,44 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       assertEnabledWritable();
       const packId = packActionMatch[1]!;
       const action = packActionMatch[2]!;
+      const operator = resolveRequestOperator(request);
       const input = await options.readBody(request, 4 * 1024 * 1024);
       const requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
-      const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
+      const receipt = await options.mutate(async () => {
         if (options.closing()) throw new StudioError('host_closing', 503);
-        assertEnabledWritable();
         const currentPack = packs.get(packId);
-        // Unconditionally enforce active non-archived project for all pack-mutating construction actions!
-        let activeProject: { id: string } | undefined;
-        if (['panorama', 'panorama-select', 'entries', 'purposes', 'previews', 'confirm', 'reconcile', 'upgrade-impact'].includes(action)) {
-          activeProject = await assertWritablePackProject(currentPack, input.projectId);
+        const taskAction = action === 'pin' || action === 'uses' || action === 'feedback';
+        const feedbackOrigin = object(input.origin) ? input.origin : input.report;
+        const origin = action === 'feedback' && object(feedbackOrigin) ? feedbackOrigin : input;
+        const project = taskAction ? await assertWritableProject(uuid(origin.projectId), currentPack.enterpriseId)
+          : await assertWritablePackProject(currentPack, operator, input.projectId);
+        if (taskAction) assertOperatorProject(operator, project.id);
+        const taskId = origin.taskId === undefined ? undefined : uuid(origin.taskId);
+        if (taskId) {
+          const task = await options.projects.getTask(project.id, taskId);
+          if (task.archivedAt) throw new StudioError('studio_project_read_only', 409);
+        }
+        if (taskAction && !taskId) throw new StudioError('studio_source_task_required', 403);
+        const construction = canReadConstructionPack(currentPack, project.id, operator);
+        const existingPin = taskId ? packs.getTaskPin(packId, project.id, taskId) : undefined;
+        const version = existingPin?.packVersion ?? (typeof input.version === 'string' ? input.version : undefined);
+        const pinRevision = version ? currentPack.packRevisions.find(revision => revision.version === version) : currentPack.packRevisions.find(revision => revision.status === 'active');
+        const permitted = action === 'pin' || action === 'uses' ? qualifiedPinPurposes(currentPack, project.id, construction, pinRevision) : undefined;
+        if (permitted && (permitted.length === 0 || (action === 'uses' && !permitted.some(purpose => purpose.purposeId === input.purposeId)))) {
+          throw new StudioError('member_pack_purpose_not_authorized', 403);
+        }
+        if (action === 'pin' && !existingPin && pinRevision?.status !== 'active') throw new StudioError('enterprise_pack_no_published_revision', 409);
+        const performAction = async () => {
+          if (!taskAction) {
           // Bind continuation owner when the previous owner project has been archived and an active same-enterprise project takes over construction!
           const origSystem = options.studio.get(currentPack.systemId);
           const currentOwnerPid = currentPack.activeOwnerProjectId ?? studioExecutionOwner(origSystem).projectId;
-          if (activeProject.id !== currentOwnerPid) {
+          if (project.id !== currentOwnerPid) {
             const currentOwnerProj = await options.projects.get(currentOwnerPid).catch(() => null);
             if (!currentOwnerProj || currentOwnerProj.archivedAt !== null) {
               packs.bindContinuationOwner(
                 packId,
-                activeProject.id,
+                project.id,
                 typeof input.taskId === 'string' ? input.taskId : undefined,
                 '原建设归属项目已归档，同企业活跃项目接续建设同一企业会员包',
               );
@@ -3700,10 +3794,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           return { result: { pack: packs.get(packId), revision } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
         }
         if (action === 'pin') {
-          const pid = uuid(input.projectId), tid = uuid(input.taskId);
-          if (options.enterpriseScopes.enterpriseIdForProject(pid) !== currentPack.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-          const pin = packs.pinTaskVersion(packId, input as unknown as Parameters<EnterprisePackStore['pinTaskVersion']>[1]);
-          return { result: { pin, pack: packs.get(packId) } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
+          const pin = packs.pinTaskVersion(packId, {
+            projectId: project.id, taskId: taskId!, authorizedScope: 'host-qualified', version: pinRevision?.version,
+            qualifiedPurposes: permitted,
+          });
+          return { result: { pin } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
         }
         if (action === 'uses') {
           const pid = uuid(input.projectId), tid = uuid(input.taskId);
@@ -3794,7 +3889,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             purposeId: pm.purposeId,
             purposeKey: pm.purposeKey,
             tier: pm.tier,
-            accessLevel: (input.accessLevel as 'definition' | 'summary' | 'recalculate') ?? 'recalculate',
+            accessLevel: (() => {
+              const access = evaluatePurposeAccessForSubject(projectGrants(currentPack.enterpriseId, pid), pm);
+              if (pm.tier !== 'definition-reference' && (construction || access?.hasPartialOrFullDetail)) return 'recalculate';
+              if (access?.canSummary.allowed && !access?.hasPartialOrFullDetail) return 'summary';
+              return 'definition';
+            })(),
             ...(pm.policyEffectiveFrom ? { policyEffectiveFrom: pm.policyEffectiveFrom } : {}),
             ...(nativeEv.taskCutoffAt ? { dataCutoffAt: nativeEv.taskCutoffAt } : typeof input.dataCutoffAt === 'string' ? { dataCutoffAt: input.dataCutoffAt } : {}),
             catalogSupplied: {
@@ -3974,7 +4074,18 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         // upgrade-impact
         const impact = packs.recordUpgradeImpact(packId, input as unknown as Parameters<EnterprisePackStore['recordUpgradeImpact']>[1]);
         return { result: { impact, pack: packs.get(packId) } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
-      }));
+        };
+        const result = await options.operations.run(requestId, { path: url.pathname, input }, performAction);
+        if (!taskAction || !result.result) return result;
+        const pack = scopedPack(packs.get(packId), project.id, operator);
+        const resultBody = result.result;
+        return { ...result, result: {
+          ...resultBody, pack,
+          ...(action === 'pin' ? { pin: pack.taskPins.find(pin => pin.projectId === project.id && pin.taskId === taskId) } : {}),
+          ...(action === 'uses' && object(resultBody.use) ? { use: pack.useRecords.find(use => use.id === (resultBody.use as { id?: string }).id) } : {}),
+          ...(action === 'feedback' && object(resultBody.feedback) ? { feedback: pack.feedbackItems.find(item => item.id === (resultBody.feedback as { id?: string }).id) } : {}),
+        } };
+      });
       json(response, receipt.statusCode || 200, receipt.result);
       return true;
     }
@@ -3982,9 +4093,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const feedbackCaseHistoryMatch = /^\/api\/studio\/enterprise-packs\/([a-f0-9-]+)\/feedback\/([a-f0-9-]+)\/case-history$/.exec(url.pathname);
     if (feedbackCaseHistoryMatch && request.method === 'GET') {
       const currentPack = packs.get(feedbackCaseHistoryMatch[1]!);
+      const operator = resolveRequestOperator(request), reader = activeOperatorProject(operator);
+      if (!reader || options.enterpriseScopes.enterpriseIdForProject(reader) !== currentPack.enterpriseId) throw new StudioError('member_pack_operator_context_required', 403);
+      const canReadAny = canReadConstructionPack(currentPack, reader, operator);
       const fb = currentPack.feedbackItems.find(f => f.id === uuid(feedbackCaseHistoryMatch[2]!));
       if (!fb) throw new StudioError('enterprise_pack_feedback_not_found', 404);
       const original = fb.reports[0];
+      if (!canReadAny && original?.projectId !== reader) throw new StudioError('member_pack_operator_context_required', 403);
       const recordedRef = original?.originalCaseRef;
       if (!recordedRef) {
         json(response, 200, { feedbackId: fb.id, originalCaseRef: null, caseRecord: null, historicalDecision: null });
@@ -4023,13 +4138,15 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const feedbackHandleMatch = /^\/api\/studio\/enterprise-packs\/([a-f0-9-]+)\/feedback\/([a-f0-9-]+)\/handle$/.exec(url.pathname);
     if (feedbackHandleMatch && request.method === 'POST') {
       assertEnabledWritable();
+      const operator = resolveRequestOperator(request);
       const input = await options.readBody(request);
       const requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
-      const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
+      const receipt = await options.mutate(async () => {
         if (options.closing()) throw new StudioError('host_closing', 503);
         assertEnabledWritable();
         const currentPack = packs.get(feedbackHandleMatch[1]!);
-        await assertWritablePackProject(currentPack, input.projectId);
+        await assertWritablePackProject(currentPack, operator, input.projectId);
+        return options.operations.run(requestId, { path: url.pathname, input }, async () => {
         const existingFb = currentPack.feedbackItems.find(f => f.id === uuid(feedbackHandleMatch[2]!));
         if (!existingFb) throw new StudioError('enterprise_pack_feedback_not_found', 404);
 
@@ -4098,7 +4215,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           ...(verifiedItemEvidence ? { itemVerification: verifiedItemEvidence } : {}),
         });
         return { result: { ...handled, ...(studioWorkItemId ? { studioWorkItemId } : {}), ...(studioFeedbackId ? { studioFeedbackId } : {}) } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
-      }));
+        });
+      });
       json(response, receipt.statusCode || 200, receipt.result);
       return true;
     }
@@ -4106,15 +4224,21 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const useVerifyMatch = /^\/api\/studio\/enterprise-packs\/([a-f0-9-]+)\/uses\/([a-f0-9-]+)\/verify$/.exec(url.pathname);
     if (useVerifyMatch && request.method === 'POST') {
       assertEnabledWritable();
+      const operator = resolveRequestOperator(request);
       const input = await options.readBody(request);
       const requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
-      const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
+      const receipt = await options.mutate(async () => {
         if (options.closing()) throw new StudioError('host_closing', 503);
         assertEnabledWritable();
         const currentPack = packs.get(useVerifyMatch[1]!);
         const useRecord = currentPack.useRecords.find(u => u.id === uuid(useVerifyMatch[2]!));
         if (!useRecord) throw new StudioError('enterprise_pack_use_not_found', 404);
-
+        const reader = activeOperatorProject(operator);
+        if (!reader || options.enterpriseScopes.enterpriseIdForProject(reader) !== currentPack.enterpriseId
+          || (!canReadConstructionPack(currentPack, reader, operator) && reader !== useRecord.projectId)) {
+          throw new StudioError('member_pack_operator_context_required', 403);
+        }
+        const result = await options.operations.run(requestId, { path: url.pathname, input }, async () => {
         const studioSys = options.studio.get(currentPack.systemId);
         const candidates = studioSys.uses.filter(studioUse => matchesStudioUse(useRecord, studioUse));
         const studioUse = candidates.length === 1 ? candidates[0] : undefined;
@@ -4131,7 +4255,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           ? await applyStudioAssessment(currentPack, useRecord, studioUse, latest)
           : useRecord;
         return { result: { use, pack: packs.get(useVerifyMatch[1]!) } as unknown as Record<string, unknown> };
-      }));
+        });
+        const pack = scopedPack(packs.get(currentPack.id), reader, operator);
+        return { ...result, result: { ...result.result, pack, use: pack.useRecords.find(use => use.id === useRecord.id) } };
+      });
       json(response, receipt.statusCode || 200, receipt.result);
       return true;
     }
@@ -4139,16 +4266,19 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const restrictRevMatch = /^\/api\/studio\/enterprise-packs\/([a-f0-9-]+)\/revisions\/([^/]+)\/restrict$/.exec(url.pathname);
     if (restrictRevMatch && request.method === 'POST') {
       assertEnabledWritable();
+      const operator = resolveRequestOperator(request);
       const input = await options.readBody(request);
       const requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
-      const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
+      const receipt = await options.mutate(async () => {
         if (options.closing()) throw new StudioError('host_closing', 503);
         assertEnabledWritable();
         const currentPack = packs.get(restrictRevMatch[1]!);
-        await assertWritablePackProject(currentPack, input.projectId);
+        await assertWritablePackProject(currentPack, operator, input.projectId);
+        return options.operations.run(requestId, { path: url.pathname, input }, async () => {
         const revision = packs.restrictRevision(restrictRevMatch[1]!, decodeURIComponent(restrictRevMatch[2]!), text(input.reason, 2000, false));
         return { result: { revision, pack: packs.get(restrictRevMatch[1]!) } as unknown as Record<string, unknown> };
-      }));
+        });
+      });
       json(response, receipt.statusCode || 200, receipt.result);
       return true;
     }

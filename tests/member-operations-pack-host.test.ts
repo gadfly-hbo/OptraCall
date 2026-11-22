@@ -169,6 +169,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     }
 
     // Create Studio System for projBuild
+    await srv.req(`/api/projects/${projBuild.id}`);
     const sysRes = await srv.req('/api/studio/systems', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
@@ -261,6 +262,8 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     ).replaceAll('reviewed_by: huangbo', 'reviewed_by: synthetic-reviewer');
     fs.writeFileSync(path.join(projBuild.rootPath, '020_clean', 'member-repurchase.sap.yaml'), rawSapYaml);
 
+    await srv.req(`/api/projects/${projBuild.id}`);
+
     // Ensure Enterprise Pack
     const packRes = await srv.req('/api/studio/enterprise-packs', 'POST', {
       requestId: randomUUID(),
@@ -311,7 +314,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       }],
     };
 
-    // Concurrent purpose creation from two projects deduplicates into ONE purpose
+    // Concurrent writes by the authorized current construction owner deduplicate into one purpose
     const [cp1, cp2] = await Promise.all([
       srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
         requestId: randomUUID(), projectId: projBuild.id, ...purposeBase,
@@ -321,7 +324,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
         ],
       }),
       srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
-        requestId: randomUUID(), projectId: projAud.id, ...purposeBase,
+        requestId: randomUUID(), projectId: projBuild.id, ...purposeBase,
         dependencies: [
           { id: 'dep-m', role: 'member-rule', authority: 'enterprise', ref: memberRuleRef, requiredFor: ['definition-reference', 'formal-calculation'] },
           { id: 'dep-fake-sap', role: 'sap-metric', authority: 'sap-metric', ref: nonexistentSapRef, requiredFor: ['formal-calculation'] },
@@ -332,6 +335,13 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(cp2.status, 200);
     assert.equal(cp1.json.purpose.id, cp2.json.purpose.id);
     const calcPurposeId = cp1.json.purpose.id;
+
+    const otherProjectContext = await srv.req(`/api/projects/${projAud.id}`, 'GET', undefined, { cookie: srv.getCookie() });
+    const otherProjectCookie = otherProjectContext.setCookie.split(';')[0]!;
+    const noConstruction = await srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
+      requestId: randomUUID(), projectId: projAud.id, ...purposeBase,
+    }, { cookie: otherProjectCookie });
+    assert.equal(noConstruction.status, 403, 'Another same-enterprise project cannot take over an active construction owner');
 
     // Independent definition-reference purpose backed by REAL enabled enterprise material
     const defPurpose = await srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
@@ -610,7 +620,9 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(recMatched.json.revision.moduleReceipts.at(-1).status, 'succeeded');
 
     // 5. R2: Default-deny + Consistent Pack History Redaction + Authentic Grantor/Revoker + Summary Scope Verification!
-    const ungrantedPackView = await srv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projUngranted.id}`);
+    const ungrantedContext = await srv.req(`/api/projects/${projUngranted.id}`, 'GET', undefined, { cookie: srv.getCookie() });
+    const ungrantedCookie = ungrantedContext.setCookie.split(';')[0]!;
+    const ungrantedPackView = await srv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projUngranted.id}`, 'GET', undefined, { cookie: ungrantedCookie });
     assert.equal(ungrantedPackView.status, 200);
     assert.deepEqual(ungrantedPackView.json.pack.purposes, []);
     assert.deepEqual(ungrantedPackView.json.pack.entries, []);
@@ -836,6 +848,10 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(merchMats.json.materials.filter((m: any) => m.ref.authority === 'data').length, 0);
 
     // 5B. R5.2: Routing feedback creates REAL linked Studio workItem & feedback in StudioStore!
+    const directFeedbackTask = await srv.req(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '来源线索登记' });
+    assert.equal(directFeedbackTask.status, 201);
+    const auditorContext = await srv.req(`/api/projects/${projAud.id}`, 'GET', undefined, { cookie: srv.getCookie() });
+    const auditorCookie = auditorContext.setCookie.split(';')[0]!;
     const fbDirect = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
       requestId: randomUUID(),
       problemKey: 'refund-link-studio',
@@ -846,7 +862,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       targetAssetRef: refundMethodRef,
       report: {
         projectId: projAud.id,
-        taskId: randomUUID(),
+        taskId: directFeedbackTask.json.task.id,
         sessionId: 'sess-host',
         messageId: 'msg-host',
         reportRef: { authority: 'task', id: randomUUID(), projectId: projAud.id, version: '1', sha256: sha('host-rep'), locator: '060_reports/host.md' },
@@ -855,7 +871,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
         usedAssetRefs: [refundMethodRef],
         evidenceNote: '需在原 Studio 建立关联工作项',
       },
-    });
+    }, { cookie: auditorCookie });
     assert.equal(fbDirect.status, 200);
     const handledStudio = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback/${fbDirect.json.feedback.id}/handle`, 'POST', {
       requestId: randomUUID(),
@@ -888,6 +904,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(archivedOmitted.status, 409);
     assert.equal(archivedOmitted.json.code, 'studio_project_read_only');
 
+    await srv.req(`/api/projects/${projAud.id}`);
     const contWrite = await srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
       requestId: randomUUID(),
       projectId: projAud.id,
@@ -922,6 +939,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
 
     const roSrv = await startTestHost(root, { memberPackEnabled: false });
     try {
+      await roSrv.req(`/api/projects/${projAud.id}`);
       const roPack = await roSrv.req(`/api/studio/enterprise-packs/${packId}`);
       assert.equal(roPack.status, 200);
       assert.equal(roPack.json.pack.id, packId);
@@ -934,6 +952,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       assert.equal(roGrants.json.readOnlyRollback, true);
 
       // R6.1: Granted consumer project with no historical pins MUST receive ZERO pack purposes/revisions during --disable-member-pack rollback!
+      await roSrv.req(`/api/projects/${projMerch.id}`);
       const roMerchPack = await roSrv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projMerch.id}`);
       assert.equal(roMerchPack.status, 200);
       assert.equal(roMerchPack.json.readOnlyRollback, true);
@@ -1005,10 +1024,12 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     const projConsumer = await createProj('分析消费项目');
     fs.writeFileSync(path.join(projConsumer.rootPath, '020_clean', 'secret_store.csv'), 'account,amt\nS1,100\n');
 
+    await srv.req(`/api/projects/${projOwner1.id}`);
     const sys1 = await srv.req('/api/studio/systems', 'POST', {
       requestId: randomUUID(), enterpriseId, name: '会员体系一', projectId: projOwner1.id, goal: '建设会员包', topicTitle: '会员',
     });
     assert.equal(sys1.status, 201);
+    await srv.req(`/api/projects/${projOwner2.id}`);
     const sys2 = await srv.req('/api/studio/systems', 'POST', {
       requestId: randomUUID(), enterpriseId, name: '财务无关体系二', projectId: projOwner2.id, goal: '无关体系', topicTitle: '财务',
     });
@@ -1030,6 +1051,7 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
       title: '有效购买口径 R4',
     };
 
+    await srv.req(`/api/projects/${projOwner1.id}`);
     const packRes = await srv.req('/api/studio/enterprise-packs', 'POST', {
       requestId: randomUUID(), enterpriseId, systemId: sys1.json.system.id, domain: 'member-operations', name: '会员包 R4',
     });
@@ -1076,6 +1098,7 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     assert.equal(packAfterDouble.json.pack.packRevisions.length, 1, 'Fixed version 1.0 MUST have strictly ONE published revision!');
 
     // 2. R2: Unrelated Studio system owner in the SAME enterprise (projOwner2 / sys2) MUST NOT be able to grant on packId even with its own system token!
+    await srv.req(`/api/projects/${projOwner2.id}`);
     const owner2PackView = await srv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projOwner2.id}`);
     assert.equal(owner2PackView.status, 200);
     assert.equal(owner2PackView.json.grantAuthority, undefined, 'Unrelated system owner MUST NOT receive grantAuthority for packId!');
@@ -1099,6 +1122,7 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     assert.equal(wrongSystemGrant.status, 403);
     assert.equal(wrongSystemGrant.json.code, 'resource_grantor_not_authorized');
 
+    await srv.req(`/api/projects/${projOwner1.id}`);
     await srv.req(`/api/projects/${projOwner1.id}`);
     const owner1PackView = await srv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projOwner1.id}`);
     assert.equal(owner1PackView.status, 200);
@@ -1129,6 +1153,13 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
       'Omitting allowedDataPaths on a detail grant MUST NEVER unlock project 020_clean files!',
     );
 
+    const definitionGrant = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(), enterpriseId, packId, grantorProjectId: projOwner1.id, authorityToken: owner1Token,
+      grantBasis: '只读已发布定义', subjectType: 'project', subjectId: projConsumer.id, resourceKind: 'definition',
+      purposeKeys: ['r4-member-def'], operations: ['read-definition'], scope: { brand: '岚线' },
+    });
+    assert.equal(definitionGrant.status, 200);
+
     // Unrelated Studio system owner projOwner2 MUST NOT be able to revoke projOwner1's grant!
     await srv.req(`/api/projects/${projOwner2.id}`);
     const wrongRevoke = await srv.req(`/api/studio/resource-grants/${noPathsGrant.json.grant.id}/revoke`, 'POST', {
@@ -1141,9 +1172,15 @@ test('Host Round-4 counterexamples: two v1.0 previews cannot both publish, unrel
     assert.equal(wrongRevoke.json.code, 'resource_revoker_not_authorized');
 
     // 3. R2: Consumer projection strips decisionsSnapshot, unauthorized receipts, AND grantAuthority!
+    await srv.req(`/api/projects/${projConsumer.id}`);
     const consumerPackView = await srv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projConsumer.id}`);
     assert.equal(consumerPackView.status, 200);
     assert.equal(consumerPackView.json.grantAuthority, undefined);
+    assert.equal(consumerPackView.json.pack.packRevisions[0]?.purposeManifests[0]?.purposeKey, 'r4-member-def');
+    assert.deepEqual(consumerPackView.json.pack.previews, []);
+    assert.deepEqual(consumerPackView.json.pack.panoramaHistory, []);
+    const anonymousExact = await srv.req(`/api/studio/enterprise-packs/${packId}`, 'GET', undefined, { cookie: '' });
+    assert.equal(anonymousExact.status, 403);
     assert.deepEqual(consumerPackView.json.pack.packRevisions[0]?.decisionsSnapshot ?? [], []);
   } finally {
     try { await srv.close(); } catch {}
@@ -1345,10 +1382,14 @@ test('Host Round-6: trusted operator binding & HttpOnly cookie anti-spoofing (R2
     const ownerTaskRes = await srv.req(`/api/projects/${projOwner.id}/tasks`, 'POST', { name: 'R6 原报告任务' });
     assert.equal(ownerTaskRes.status, 201);
     const ownerTaskId = ownerTaskRes.json.task.id;
-    const pinRes = await srv.req(`/api/studio/enterprise-packs/${packId}/pin`, 'POST', {
-      requestId: randomUUID(), projectId: projOwner.id, taskId: ownerTaskId, version: '1.0', authorizedScope: '织屿主品牌',
-    }, { cookie: ownerCookie });
+    const pinPayload = { requestId: randomUUID(), projectId: projOwner.id, taskId: ownerTaskId, version: '1.0', authorizedScope: '织屿主品牌' };
+    const pinRes = await srv.req(`/api/studio/enterprise-packs/${packId}/pin`, 'POST', pinPayload, { cookie: ownerCookie });
     assert.equal(pinRes.status, 200);
+    const unauthorizedReplay = await srv.req(`/api/studio/enterprise-packs/${packId}/pin`, 'POST', pinPayload, { cookie: consumerCookie });
+    assert.equal(unauthorizedReplay.status, 403);
+    const authorizedReplay = await srv.req(`/api/studio/enterprise-packs/${packId}/pin`, 'POST', pinPayload, { cookie: ownerCookie });
+    assert.equal(authorizedReplay.status, 200);
+    assert.deepEqual(authorizedReplay.json.pin, pinRes.json.pin);
     const useRefRes = await srv.req(`/api/studio/enterprise-packs/${packId}/uses`, 'POST', {
       requestId: randomUUID(), projectId: projOwner.id, taskId: ownerTaskId, purposeId: pDef.json.purpose.id,
       reportRef: { authority: 'task', id: ownerTaskId, projectId: projOwner.id, taskId: ownerTaskId, version: origSha, sha256: origSha, locator: '060_reports/owner-referenced-report.md' },
@@ -1367,6 +1408,20 @@ test('Host Round-6: trusted operator binding & HttpOnly cookie anti-spoofing (R2
     // Original file on disk MUST remain 100% untouched AND /report-snapshot returns exact SHA-256 original!
     const diskOrig = fs.readFileSync(path.join(projOwner.rootPath, '060_reports', 'owner-referenced-report.md'), 'utf8');
     assert.equal(sha(diskOrig), origSha, 'Original referenced report on ordinary/owner project MUST remain untouched!');
+
+    const packPath = `/api/studio/enterprise-packs/${packId}`;
+    const directory = await srv.req(`/api/studio/enterprise-packs?enterpriseId=${enterpriseId}`, 'GET', undefined, { cookie: '' });
+    assert.equal(directory.status, 200);
+    assert.deepEqual(directory.json.packs, [], 'Anonymous settings discovery reports no enterprise pack entries');
+    const unqualified = await srv.req(`${packPath}?projectId=${projOwner.id}`, 'GET', undefined, { cookie: consumerCookie });
+    assert.equal(unqualified.status, 403, 'Claiming the construction project is insufficient for an ordinary borrower');
+    const retained = await srv.req(packPath, 'GET', undefined, { cookie: ownerCookie });
+    assert.equal(retained.status, 200);
+    assert.equal(retained.json.pack.useRecords.length, 1, 'Verified construction authority retains original pack history');
+    const unauthorizedWrite = await srv.req(`${packPath}/panorama-select`, 'POST', {
+      requestId: randomUUID(), purposeKey: 'unrelated-purpose', selected: true,
+    }, { cookie: consumerCookie });
+    assert.equal(unauthorizedWrite.status, 403);
 
     const snapDenied = await srv.req(
       `/api/studio/enterprise-packs/${packId}/report-snapshot?projectId=${projOwner.id}&taskId=${ownerTaskId}&locator=${encodeURIComponent('060_reports/owner-referenced-report.md')}&sha256=${origSha}`,
@@ -1466,7 +1521,9 @@ test('Host Round-7: real-product operator isolation & named business operator au
     const ownerProjRes = await srv.req('/api/projects', 'POST', { name: 'R7 权责建设', enterpriseId }, { cookie: ownerCookieA });
     assert.equal(ownerProjRes.status, 201);
     const projOwner = ownerProjRes.json.project;
-    const ownerTaskId: string = ownerProjRes.json.task?.id ?? projOwner.activeTaskId ?? randomUUID();
+    const originalTask = await srv.req(`/api/projects/${projOwner.id}/tasks`, 'POST', { name: '原 Case 决策任务' });
+    assert.equal(originalTask.status, 201);
+    const ownerTaskId: string = originalTask.json.task.id;
     const ownerActiveCookie = ownerProjRes.setCookie.split(';')[0]!;
 
     const consumerProjRes = await srv.req('/api/projects', 'POST', { name: 'R7 受限消费', enterpriseId }, { cookie: ownerActiveCookie });
@@ -1705,6 +1762,8 @@ test('Host Round-7: real-product operator isolation & named business operator au
     const ownerCookieR2 = relogin2.setCookie.split(';')[0]!;
 
     // The legacy report field has no native source. Treat the Case claim as unproved.
+    const unscopedCase = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback/${fbId}/case-history`, 'GET', undefined, { cookie: '' });
+    assert.equal(unscopedCase.status, 403);
     const histRes = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback/${fbId}/case-history`, 'GET', undefined, { cookie: ownerCookieR2 });
     assert.equal(histRes.status, 200);
     assert.equal(histRes.json.historicalDecision, null);

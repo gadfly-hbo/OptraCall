@@ -1,3 +1,4 @@
+import { bindProjectContext } from './runtime-client.ts';
 import { HostRequestError } from './runtime-client.ts';
 import { parseCoverageContent } from '../../../extensions/business-plugins/studio/coverage.ts';
 
@@ -89,7 +90,8 @@ export async function readStudioWorkspace(id: string, signal?: AbortSignal): Pro
   return value;
 }
 export async function createStudioSystem(input: StudioCreateRequest): Promise<StudioSystem> {
-  const value = await studioRequest<{ system: StudioSystem }>('systems', 'POST', input);
+  await bindProjectContext(input.projectId);
+  const value = await studioRequest<{ system: StudioSystem }>('systems', 'POST', input, undefined, 'same-origin');
   if (!object(value) || !object(value.system) || value.system.projectId !== input.projectId || typeof value.system.id !== 'string' || input.enterpriseId && value.system.enterpriseId !== input.enterpriseId) throw mismatch(true);
   return value.system;
 }

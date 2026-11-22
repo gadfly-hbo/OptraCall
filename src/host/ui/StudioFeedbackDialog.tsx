@@ -48,7 +48,7 @@ export function StudioFeedbackDialog({ project, task, message, initialSystemId, 
         const selectedSys = systems.find(s => s.id === targetSystemId);
         if (selectedSys?.enterpriseId) {
           try {
-            const packList = await listEnterprisePacks(selectedSys.enterpriseId, 'member-operations');
+            const packList = await listEnterprisePacks(selectedSys.enterpriseId, 'member-operations', undefined, project.id);
             const matchingPack = packList.packs.find(p => p.systemId === targetSystemId) ?? packList.packs[0];
             if (matchingPack) {
               if (packList.readOnlyRollback) {
