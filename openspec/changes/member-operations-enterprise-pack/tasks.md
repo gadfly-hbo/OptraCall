@@ -108,3 +108,16 @@
 - [x] **R8-2（R4 · 独立核验必须实读目标报告且计算类必须同时实读授权输入、拦截未查看/未对照声明与收紧报告绑定）**：① `inspectVerifierTaskEvidence`（贯穿 `syncAssessmentFromStudio` 与 `POST /uses/:id/verify`）将核验回合实读限制在 `<= assessmentTurnIndex`，对全部档位强制要求真实实读目标报告（`targetReportChecked === true` + `targetReportReadTurnIndex`），对计算类用途（`formal-calculation`/`limited-calculation`）由 `||` 升级为严格合取 `targetReportChecked && authorizedInputChecked`；② `studio-sources.ts` 与 `studio-host.ts` 仅对同企业持有效授权的独立核验任务开放精确 `system.uses[].report`（`060_reports/`）的 `studio_assets read-source` 只读回查（绝不开放任意跨项目文件或评估稿，原有 Studio 边界测试全绿）；③ `referencesTarget` 移除宽松 `packVersion`（`v1.0`/`1.0`）与 `purposeKey` 匹配，仅认精确目标报告文件名/路径/SHA-256 前缀/任务 ID；④ 新增 `NON_VERIFICATION_DISCLAIMER_RE` 拦截评估报告或 `assess-use` 说明中明确声明「未查看/未对照原报告」的笔记（标记 `assessmentDisclaimerRejected: true` 保持 `pending`），并在计算数字核对前剔除版本号/日期数字；⑤ `SemanticContextPanel.tsx` 显式展示 `未实读目标报告` 与 `核验声明未查看或未对照原报告（不可判通过）` 提示。
 - [x] **R8-3（R5 · 旧回复补提反馈按时点回溯原 Case 历史修订、单行合取逐笔源表证据与新截止日新核验实读校验）**：① `POST /feedback` 通过 `inspectTaskNativeEvidence` 提取原回复权威时间戳 `replyTimestampMs`，并在 `CaseStore.listDecisions(cid, { history: true, includeArchived: true })` 上按「显式引用 → 时点 `createdAt <= originTimestampMs` → 无歧义单修订」回溯当时原决定：当 Case 从 `rev.1` 演进至 `rev.2` 后从旧回复补提反馈时准确固定 `rev.1`（若多修订均晚于旧回复且无唯一归属则标 `decisionResolutionStatus: 'unresolved_post_origin_revisions'`，绝不将 `rev.2` 误记为原决定）；② `POST /feedback/:id/handle` 对 `shouldChange`/`postCutoffNewEvents`/`shouldRetain` 强制同一源表行单行合取匹配（`itemId` + `originalOrderId` + `refundDate` + `orderDate <= checkedCutoff` + `fullRefund === true` 全部命中同一行，拦截跨行拼凑返 `409`），落库可追溯字段 `sourceFileLocator`/`sourceFileSha256`/`sourceRowNumber`/`sourceOrderDate`/`sourceFullRefund` 并展示于 `StudioMemberPackPanel.tsx`；③ 截止日后新发生退款（`postCutoffNewEvents` + `newCutoffChecked`）强制核查核验任务实际读取过含新截止日记录的源表（`sourceFileSha256` 或原生工具结果行共现），禁止复用旧核验任务（返 `409 feedback_verification_new_cutoff_not_actually_read`）；④ 若反馈原 Case 决策未确定且闭环未人工指定合法历史修订，拒绝静默落到最新 `rev.2`（`409 feedback_verification_case_decision_unresolved`）。
 - [x] **R8-4（全面第八轮正反例测试、回归、隔离 Chromium 端到端、文档留痕与 Issue #111 交付）**：补齐 Host Round-8（宽窄并存同路径过期、受限文件树/`copy-to-clean`/`db-link`/授权列表收窄、无绑定旧体系防接管、Case `rev.1 -> rev.2` 补提反馈回溯 `rev.1` 与更早回复标待核）、真实官方 Pi SDK `1.4.0` 运行时（在途宽窄并存同路径自然过期即时收窄、仅提包版未查原报告声明反例、仅读明细未读目标报告反例、真独立核验实读目标报告+明细+原依赖、跨行拼凑反例、复用旧核验结案新截止日反例与新任务+新独立核验真闭环）与 UI SSR 专项测试；完成全套回归、`build`、`check:agent-sessions`、`audit`、`git diff --check`、冻结基线校验与 Chromium E2E；追加第 12 节至 `result.md`（保留前七轮 FAIL 留痕），推送分支并在 Issue #111 回报第八轮「实现交付」。
+
+## Codex 接管清单
+
+沿用用户确认的首期规格与 Demo，以第八轮固定提交 `3fd69c61c4b0ed296d4d06f091ec38925121f917` 和主线 `e2aecfb445094245875b9696a02a273b5e0ddb44` 的隔离合并为起点。沿用会话 Interface v3 的项目任务及 Studio owner。Pi 1.4.0 与 Semantica 0.7.0 沿原公开接缝，SDK 及依赖锁保持原版。
+
+- [x] 固定原交付、退回证据、主线及接管回执。
+- [ ] R2。门店、期间、用途和资源授权贯穿同一任务的续接、在途有效范围、历史回读及产物。复验许可路径和撤回路径。
+- [ ] R4。使用同一评估的确切目标报告、适用授权输入和可回读核对结果。错误采用判失败，缺证保留待验证。
+- [ ] R5。逐笔结案回到当时可见的原记录、新任务实读与原 Case 决定。保留原稿、旧决定及失败证据。
+- [ ] 固定候选，完成正常入口、原生 Pi、适用全仓回归和全新上下文非作者复核。
+- [ ] 完成获准的 PR、实际 head CI、主线合并与 push CI，读回工单结案。
+
+本轮修复集中在 Host 的授权和证据接缝，沿用已确认用户路径。实质交互变化仍按工程规范处理。验证使用隔离合成资料。真实企业采用、企业修订闭环与用户产品验收分别记录。
