@@ -1,6 +1,7 @@
 import { StrategyAttachmentEvidence } from './StrategyAttachmentEvidence.tsx';
 import type { StrategyAttachmentReplyReferences } from '../strategy-attachment-types.ts';
 import { messageText, type NativeMessage } from './project-types.ts';
+import { AgentAuthor, Foldable, ProcessGroup, groupConversation } from './conversation-collapse.tsx';
 import { Marked } from 'marked';
 import type { MarkedToken, Token, Tokens } from 'marked';
 import markedCjkFriendly from 'marked-cjk-friendly';
@@ -79,16 +80,24 @@ export const StrategyDiscussionReply = memo(function StrategyDiscussionReply({ t
   }
 });
 
-export function StrategyDiscussionTranscript({ messages, streaming, discussionId,references,label = '战略讨论记录' }: { messages: NativeMessage[]; streaming?: string; discussionId?:string; references?:StrategyAttachmentReplyReferences[]; label?: string }) {
+export function StrategyDiscussionTranscript({ messages, streaming, discussionId, references, label = '战略讨论记录', conversationKey = 'discussion', modelLabel }: { messages: NativeMessage[]; streaming?: string; discussionId?: string; references?: StrategyAttachmentReplyReferences[]; label?: string; conversationKey?: string; modelLabel?: string }) {
+  const items = groupConversation(messages);
   return <div className="strategy-discussion-messages" role="log" aria-label={label}>
-    {messages.map((message, index) => {
-      const cited=references?.find(ref=>ref.entryId===message.nativeEntryId)?.citations??[];
-      const text=cited.reduce((s,c)=>s.replaceAll('[[资料:'+c.token+']]','〔'+c.locator+'〕'),messageText(message));
-      return <article className={`strategy-discussion-message ${message.role}`} key={message.nativeEntryId || index}>
-      <strong>{message.role === 'user' ? '你' : 'Agent'}</strong>
-      {message.role === 'assistant' ? <StrategyDiscussionReply text={text} /> : <p>{messageText(message)}</p>}
-      {discussionId&&cited.length>0&&<div className="sg-row" aria-label="本回复引用的资料">{cited.map(c=><StrategyAttachmentEvidence key={c.token} discussionId={discussionId} citation={c}/>)}</div>}
-    </article>;})}
-    {streaming && <article className="strategy-discussion-message assistant"><strong>Agent</strong><StrategyDiscussionReply text={streaming} /></article>}
+    {items.map(item => {
+      if (item.kind === 'process') return <ProcessGroup key={item.identity} conversationKey={conversationKey} identity={item.identity} steps={item.steps} />;
+      if (item.kind === 'custom') return <article className="strategy-discussion-message assistant" key={item.identity}><AgentAuthor model={modelLabel} /><p>{messageText(item.message)}</p></article>;
+      if (item.kind === 'user') return <article className="strategy-discussion-message user" key={item.identity}>
+        <strong>你</strong>
+        <Foldable conversationKey={conversationKey} identity={item.identity} lines={3}><p>{messageText(item.message)}</p></Foldable>
+      </article>;
+      const cited = references?.find(ref => ref.entryId === item.message.nativeEntryId)?.citations ?? [];
+      const text = cited.reduce((s, c) => s.replaceAll('[[资料:' + c.token + ']]', '〔' + c.locator + '〕'), messageText(item.message));
+      return <article className="strategy-discussion-message assistant" key={item.identity}>
+        <AgentAuthor model={modelLabel} />
+        <Foldable conversationKey={conversationKey} identity={item.identity} lines={5} className="strategy-discussion-reply"><StrategyDiscussionReply text={text} /></Foldable>
+        {discussionId && cited.length > 0 && <div className="sg-row" aria-label="本回复引用的资料">{cited.map(c => <StrategyAttachmentEvidence key={c.token} discussionId={discussionId} citation={c} />)}</div>}
+      </article>;
+    })}
+    {streaming && <article className="strategy-discussion-message assistant"><AgentAuthor model={modelLabel} /><div className="strategy-discussion-reply"><StrategyDiscussionReply text={streaming} /></div></article>}
   </div>;
 }

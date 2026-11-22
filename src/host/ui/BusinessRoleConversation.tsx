@@ -127,11 +127,11 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,onGo
   const sameRevision = pending && (!recorded ? pending.expectedRevision===0 :
     recorded.revision===pending.expectedRevision || (pending.expectedRevision===0 && recorded.revision===1 && !recorded.lastRun));
   const messages = view?.snapshot?.messages
-    .filter((message): message is NativeMessage => message.role === 'user' || message.role === 'assistant')
-    .filter(message => messageText(message)) ?? [];
+    .filter((message): message is NativeMessage => ['assistant', 'toolResult', 'bashExecution', 'user'].includes(message.role))
+    .filter(message => message.role !== 'user' || Boolean(messageText(message))) ?? [];
   const prompt = roleQuestions[owner.role === 'goal-draft' ? 'goal' : owner.role];
   return <ConversationDrawer title={title} showInlineTitle={showInlineTitle} className="role-conversation"><section className="strategy-discussion-panel role-discussion" aria-label={title}>
-    {(messages.length > 0 || stream) && <StrategyDiscussionTranscript messages={messages} streaming={stream} label={title+' 对话记录'} />}
+    {(messages.length > 0 || stream) && <StrategyDiscussionTranscript messages={messages} streaming={stream} label={title+' 对话记录'} conversationKey={`role:${ownerKey}`} modelLabel={configs.find(config => config.id === model)?.name} />}
     {onGoalDraft&&view?.discussion&&view.goalDrafts?.map(item=><button className="secondary-button" type="button" data-return-to-workspace key={item.source.entryId} disabled={busy||running} onClick={()=>void act(async()=>{
       const original:StrategyDiscussionDetail=await call('','GET');
       const fresh=original.goalDrafts?.find(entry=>entry.source.entryId===item.source.entryId&&entry.source.sessionId===item.source.sessionId&&entry.source.sha256===item.source.sha256);

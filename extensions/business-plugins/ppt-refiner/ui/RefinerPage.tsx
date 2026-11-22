@@ -1,4 +1,5 @@
 import { ConversationDrawer } from "../../../../src/host/ui/ConversationDrawer.tsx";
+import { AgentAuthor, Foldable } from "../../../../src/host/ui/conversation-collapse.tsx";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VersionEntry } from '../types.ts';
 import { createDeck, listDecks, readDeck, setPageLock, revertDeck, exportDeck, runTurn, stopPendingTurn, renderDeck, readImage, RefinerRequestError, type DeckSummary, type DeckView, type RefinerSource, type TurnResult } from './refiner-client.ts';
@@ -267,7 +268,7 @@ function RefinerWorkbench({ view, refresh, onBack, onNavigationGuard }: {
       <section className="refiner-chat" aria-label="精修对话">
         <ConversationDrawer title="PPT 精修 Agent" className="workspace-refiner-conversation">
     {error && <p className="refiner-error" role="alert">{error}</p>}
-        <div className="chat-log" role="log" aria-live="polite">{chat.map((message, index) => <div key={index} className={'msg ' + message.who}><span className="who">{message.who === 'user' ? '我' : 'Agent · 精修会话'}</span><p>{message.text}</p>{message.note && <p className="msg-note">{message.note}</p>}</div>)}</div>
+        <div className="chat-log" role="log" aria-live="polite">{chat.map((message, index) => <div key={index} className={'msg ' + message.who}>{message.who === 'user' ? <span className="who">我</span> : <AgentAuthor compact />}<Foldable conversationKey={`deck:${deckId}`} identity={`msg:${index}:${message.who}`} lines={message.who === 'user' ? 3 : 5}><p>{message.text}</p></Foldable>{message.note && <p className="msg-note">{message.note}</p>}</div>)}</div>
         {locked && <p className="refiner-note" id="refiner-lock-help">本页已锁定，本次仅作只读问答或检查；修改前请先解锁。</p>}
         <form className="chat-input-row" onSubmit={event => { event.preventDefault(); executeTurn(input, locked || inspectOnly ? 'inspect' : 'edit'); }}>
           <input value={input} onChange={event => setInput(event.target.value)} disabled={writeBusy || contentBlocked} placeholder={locked || inspectOnly ? '描述要检查的问题' : '描述对本页的修改'} aria-label={locked || inspectOnly ? '只读检查指令' : '修改指令'} aria-describedby={locked ? 'refiner-lock-help' : undefined} />

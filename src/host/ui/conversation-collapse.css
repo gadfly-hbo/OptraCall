@@ -1,0 +1,46 @@
+/* #116 共享对话呈现层：过程分组 + 长内容折叠（spec D1–D9）。 */
+
+.process-group { border: 1px solid var(--line); border-radius: 9px; background: var(--subtle); overflow: hidden; }
+.process-toggle { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; padding: 8px 13px; color: var(--muted); font-size: 12px; text-align: left; }
+.process-toggle:hover { background: var(--hover); }
+.process-toggle .p-glyph { width: 15px; height: 15px; border: 1.5px dashed var(--faint); border-radius: 4px; flex-shrink: 0; }
+.process-toggle .p-count { color: var(--ink); font-weight: 550; }
+.process-toggle .chev { margin-left: auto; transition: transform .15s; color: var(--faint); }
+.process-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.process-steps { border-top: 1px solid var(--line); padding: 8px 12px 10px; display: grid; gap: 6px; }
+.process-step { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 12px; }
+.step-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: var(--faint); }
+.step-dot.ok { background: var(--ok, #1c7c4a); }
+.step-dot.err { background: var(--error); }
+.step-note { color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.process-step .tool-message { margin: 0; }
+.process-group-slot { margin: 0 0 14px 37px; }
+
+.fold { min-width: 0; }
+.fold-viewport { min-width: 0; }
+.fold.collapsed .fold-viewport { max-height: calc(var(--fold-lines, 5) * 1.85em); overflow: hidden; -webkit-mask-image: linear-gradient(#000 62%, transparent); mask-image: linear-gradient(#000 62%, transparent); }
+.fold-toggle { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; border: 0; background: transparent; color: var(--accent); font-size: 12px; padding: 3px 4px; border-radius: 5px; }
+.fold-toggle:hover { background: var(--accent-soft); }
+.fold-toggle .chev { font-size: 10px; }
+.fold-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
+
+/* E1/E2 项目任务与资产建设对话 */
+.messages .process-group { margin: 0 0 14px 37px; }
+.messages .process-group-slot .process-group { margin: 0; }
+
+/* E3/E4 共享转录（战略共创 / 业务角色） */
+.strategy-discussion-message .message-author { margin: 0 0 6px; font-size: 13px; gap: 8px; }
+.strategy-discussion-message .message-author strong { font-weight: 550; }
+.strategy-discussion-message .message-author > span:last-child { color: var(--muted); font-size: 11px; }
+.strategy-discussion-message .process-group { margin: 10px 0 4px; }
+.strategy-discussion-message .fold p { margin: 7px 0 0; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.strategy-discussion-message .fold .strategy-discussion-reply { font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+
+/* E5 PPT 精修对话 */
+.brand-mark-xs { width: 18px; height: 18px; position: relative; display: inline-flex; color: var(--accent); flex-shrink: 0; }
+.brand-mark-xs span { position: absolute; inset: 2px; border: 1.5px solid currentColor; border-radius: 50%; }
+.brand-mark-xs i { position: absolute; width: 7px; height: 7px; right: 0; bottom: 0; border: 1.5px solid currentColor; border-radius: 50%; background: var(--surface, #fff); }
+.message-author.msg-author { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 10.5px; color: var(--faint); }
+.message-author.msg-author strong { font-weight: 600; color: var(--muted); font-size: 11px; }
+.message-author.msg-author > span:last-child { font-size: 10px; }
+.msg .fold-toggle { font-size: 11px; }
