@@ -838,6 +838,15 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.match(definitionReadResult, /studio_report_permission_denied/);
   assert.ok(!definitionReadResult.includes('C07'));
 
+  await json(await ownerReq('/api/studio/resource-grants', 'POST', {
+    requestId: randomUUID(), enterpriseId, grantorProjectId: projBuild.id, authorityToken: buildAuth.authorityToken,
+    grantBasis: '仅查读合成营业时间', subjectType: 'project', subjectId: projAud.id, resourceKind: 'detail',
+    purposeKeys: ['store-first-purchase-30d-repurchase'], operations: ['read-detail-recalculate'],
+    scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店'], allowedDataPaths: ['020_clean/store-opening-policy.csv'] },
+  }));
+  const reportSnapshotRoute = `/api/studio/enterprise-packs/${packId}/report-snapshot?projectId=${projStar.id}&taskId=${taskA.id}&locator=060_reports%2Frepurchase-v1.0.json&sha256=${sha(reportV1Bytes)}`;
+  assert.equal((await projectReq(projAud.id, reportSnapshotRoute)).status, 403, 'Unrelated data rights cannot authorize the original report');
+
   // Even POST /uses/:id/verify with independentConfirmed: true MUST still reject same-task self-assessment as pass!
   const verifySelfOnly = await json(await ownerReq(`/api/studio/enterprise-packs/${packId}/uses/${autoUseA.id}/verify`, 'POST', {
     requestId: randomUUID(),
@@ -856,6 +865,8 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     purposeKeys: ['store-first-purchase-30d-repurchase'], operations: ['read-definition', 'read-detail-recalculate'],
     scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店', '柳岸直营店'], allowedDataPaths: ['020_clean/starbridge_orders.csv', '020_clean/willowbank_orders.csv', '020_clean/store-opening-policy.csv'] },
   }));
+  const authorizedSnapshot = await json(await projectReq(projAud.id, reportSnapshotRoute));
+  assert.equal(authorizedSnapshot.sha256, sha(reportV1Bytes));
   const { task: taskBlindVerify } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '盲签核验反例任务' }), 201);
   const blindAssessText = JSON.stringify({ assessed: 'repurchase-v1.0.json', verifier: 'taskBlindVerify', status: 'pass', blind: true });
   let stepBlind = 0;
