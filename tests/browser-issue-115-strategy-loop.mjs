@@ -8,12 +8,12 @@ import { mkdtemp, mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
 import { startToolProvider } from './fixtures/tool-provider.ts';
-import { runtimeEnvironment, workspaceRoot } from '../scripts/runtime-process.ts';
+import { runtimeEnvironment } from '../scripts/runtime-process.ts';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('/opt/homebrew/lib/node_modules/@playwright/mcp/node_modules/playwright');
+// Literal absolute dynamic import of the locally installed global playwright (from @playwright/mcp).
+// A literal source keeps the session-boundary import rules satisfied; no project dependency is added.
+const { chromium } = await import('/opt/homebrew/lib/node_modules/@playwright/mcp/node_modules/playwright/index.mjs');
 const root = fileURLToPath(new URL('../', import.meta.url));
 const uid = () => crypto.randomUUID();
 
