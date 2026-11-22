@@ -385,20 +385,20 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   // C21: 9月首购 + 9月有效再购 O-88（未退款）
   // C30: 9月首购无再购
   const starCsv = [
-    'account,first_order_date,repeat_order_id,repeat_order_date,refund_date,full_refund,store,data_available_at',
-    'C07,2026-09-02,O-73,2026-09-18,2026-10-02,true,星桥直营店,2026-10-03',
-    'C13,2026-09-03,O-81,2026-09-20,,false,星桥直营店,2026-09-20',
-    'C21,2026-09-05,O-88,2026-09-24,,false,星桥直营店,2026-09-24',
-    'C30,2026-09-06,,,,false,星桥直营店,2026-09-06',
+    'account,first_order_date,repeat_order_id,repeat_order_date,refund_date,full_refund,store,data_available_at,brand,channel',
+    'C07,2026-09-02,O-73,2026-09-18,2026-10-02,true,星桥直营店,2026-10-03,岚线,直营',
+    'C13,2026-09-03,O-81,2026-09-20,,false,星桥直营店,2026-09-20,岚线,直营',
+    'C21,2026-09-05,O-88,2026-09-24,,false,星桥直营店,2026-09-24,岚线,直营',
+    'C30,2026-09-06,,,,false,星桥直营店,2026-09-06,岚线,直营',
     '',
   ].join('\n');
-  const willowCsv = 'account,first_order_date,repeat_order_id,repeat_order_date,refund_date,full_refund,store\nW01,2026-09-04,O-99,2026-09-19,,false,柳岸直营店\n';
+  const willowCsv = 'account,first_order_date,repeat_order_id,repeat_order_date,refund_date,full_refund,store,brand,channel\nW01,2026-09-04,O-99,2026-09-19,,false,柳岸直营店,岚线,直营\n';
   for (const p of [projMerch, projStar, projAud]) {
     fs.writeFileSync(path.join(p.rootPath, '020_clean', 'starbridge_orders.csv'), starCsv);
     fs.writeFileSync(path.join(p.rootPath, '020_clean', 'willowbank_orders.csv'), willowCsv);
   }
 
-  fs.writeFileSync(path.join(projAud.rootPath, '020_clean', 'store-opening-policy.csv'), 'store,opens\n星桥直营店,10:00\n');
+  fs.writeFileSync(path.join(projAud.rootPath, '020_clean', 'store-opening-policy.csv'), 'store,opens,brand,channel\n星桥直营店,10:00,岚线,直营\n');
 
   // Seed REAL original authorities for v1.0:
   // 1) Real SAP Method v1 (同月退款口径)
@@ -2035,7 +2035,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
 
   // R5 (Round-8): Retroactive feedback submitted from old reply originA AFTER Case moved rev.1 -> rev.2 MUST NOT mis-pin rev.2!
   // AND closing post-cutoff new-event refund (C21, O-88, 2026-11-05 under newCutoffChecked 2026-11-15) MUST reject reusing old useBRecord (which never read starCsvNov15!) and succeed ONLY with a fresh analysis + independent verifier task that genuinely read starCsvNov15!
-  const starCsvNov15 = starCsv.replace('C21,2026-09-05,O-88,2026-09-24,,false,星桥直营店,2026-09-24', 'C21,2026-09-05,O-88,2026-09-24,2026-11-05,true,星桥直营店,2026-11-06');
+  const starCsvNov15 = starCsv.replace('C21,2026-09-05,O-88,2026-09-24,,false,星桥直营店,2026-09-24,岚线,直营', 'C21,2026-09-05,O-88,2026-09-24,2026-11-05,true,星桥直营店,2026-11-06,岚线,直营');
   fs.writeFileSync(path.join(projAud.rootPath, '020_clean', 'starbridge_orders.csv'), starCsvNov15);
   const fbPostCutoff = await json(await host.request(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
     requestId: randomUUID(), origin: originA, problemKey: 'post-cutoff-nov-refund-c21', title: '截止日后新发生退款 C21（2026-11-05）',

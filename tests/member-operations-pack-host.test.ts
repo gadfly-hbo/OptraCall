@@ -164,8 +164,8 @@ test('Host member operations pack Round-2: real authority verification (rejects 
 
     // Put detail CSV files into analysis projects' 020_clean
     for (const p of [projStar, projAud, projMerch, projHQ]) {
-      fs.writeFileSync(path.join(p.rootPath, '020_clean', 'starbridge_orders.csv'), 'account,date,amount\nC07,2026-09-02,500\n');
-      fs.writeFileSync(path.join(p.rootPath, '020_clean', 'willowbank_orders.csv'), 'account,date,amount\nW01,2026-09-05,400\n');
+      fs.writeFileSync(path.join(p.rootPath, '020_clean', 'starbridge_orders.csv'), 'account,date,amount,store,brand,channel\nC07,2026-09-02,500,星桥直营店,岚线,直营\n');
+      fs.writeFileSync(path.join(p.rootPath, '020_clean', 'willowbank_orders.csv'), 'account,date,amount,store,brand,channel\nW01,2026-09-05,400,柳岸直营店,岚线,直营\n');
     }
 
     // Create Studio System for projBuild
@@ -1292,11 +1292,11 @@ test('Host Round-6: trusted operator binding & HttpOnly cookie anti-spoofing (R2
 
     // 2. R2: Row-level store & period authorized data view filtering (mixed CSV + opaque fail-closed)
     const mixedCsv = [
-      'order_id,store,order_date,member_id,amount',
-      'O-01,湖庭直营店,2026-09-15,M01,320',
-      'O-02,杉岸直营店,2026-09-16,M02,410',
-      'O-03,湖庭直营店,2026-11-05,M03,500',
-      'O-04,湖庭直营店,2026-10-20,M01,280',
+      'order_id,store,order_date,member_id,amount,brand',
+      'O-01,湖庭直营店,2026-09-15,M01,320,织屿',
+      'O-02,杉岸直营店,2026-09-16,M02,410,织屿',
+      'O-03,湖庭直营店,2026-11-05,M03,500,织屿',
+      'O-04,湖庭直营店,2026-10-20,M01,280,织屿',
     ].join('\n') + '\n';
     const viewRes = buildAuthorizedDataView(Buffer.from(mixedCsv, 'utf8'), '020_clean/mixed_orders.csv', [okGrant.json.grant]);
     assert.equal(viewRes.allowed, true);

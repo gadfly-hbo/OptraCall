@@ -28,14 +28,14 @@ function normalizeRelPath(value: string): string {
   return value.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/').trim();
 }
 
-const UNATTRIBUTABLE_STORE_TOKENS = new Set([
+const UNATTRIBUTABLE_SCOPE_TOKENS = new Set([
   '', 'null', 'undefined', 'n/a', 'na', 'none', 'unknown', 'unassigned', '-', '--', '未归属', '未知', '空', '无',
 ]);
 
-function isUnattributableStoreValue(value: string | undefined): boolean {
+function isUnattributableScopeValue(value: string | undefined): boolean {
   if (value === undefined) return true;
   const trimmed = value.trim().toLowerCase();
-  return UNATTRIBUTABLE_STORE_TOKENS.has(trimmed);
+  return UNATTRIBUTABLE_SCOPE_TOKENS.has(trimmed);
 }
 
 export function dataPeriodBounds(value: string): { start: number; end: number } | undefined {
@@ -69,7 +69,7 @@ export function isPeriodCovered(period: string | undefined, periodFrom?: string,
   return lowerBound !== undefined && upperBound !== undefined && bounds.start >= lowerBound && bounds.end <= upperBound;
 }
 
-function parseCsvLine(line: string, delimiter: string): string[] {
+function parseCsvLine(line: string, delimiter: string): string[] | undefined {
   const cells: string[] = [];
   let cur = '';
   let inQuotes = false;
@@ -93,6 +93,7 @@ function parseCsvLine(line: string, delimiter: string): string[] {
       cur += ch;
     }
   }
+  if (inQuotes) return undefined;
   cells.push(cur);
   return cells;
 }
@@ -115,15 +116,41 @@ const DATE_HEADER_NAMES = new Set([
   '交易日期', '下单日期', '首购日期', '日期', '月份', '统计月份', '期间',
 ]);
 
+const SCOPED_COLUMNS = {
+  store: { headers: STORE_HEADER_NAMES, label: '门店' },
+  period: { headers: DATE_HEADER_NAMES, label: '日期/期间' },
+  brand: { headers: new Set(['brand', '品牌']), label: '品牌' },
+  channel: { headers: new Set(['channel', '渠道']), label: '渠道' },
+};
+type ScopeColumn = keyof typeof SCOPED_COLUMNS;
+type GrantScope = ResourceAuthorizationGrant['scope'];
+type RowScope = Partial<Record<ScopeColumn, string>>;
+
+const scopeColumns = Object.keys(SCOPED_COLUMNS) as ScopeColumn[];
+const normalizeColumn = (name: string) => name.replace(/^\uFEFF/, '').trim().toLowerCase();
+
+function constrainedColumns(scope: GrantScope): ScopeColumn[] {
+  const constraints: Record<ScopeColumn, boolean> = {
+    store: Boolean(scope.stores?.length),
+    period: Boolean(scope.periodFrom || scope.periodTo),
+    brand: Boolean(scope.brand),
+    channel: Boolean(scope.channel),
+  };
+  return scopeColumns.filter(column => constraints[column]);
+}
+
+function knownScopeValue(values: unknown[]): string | undefined {
+  const normalized = values.map(value =>
+    typeof value === 'string' ? value.trim() : typeof value === 'number' ? String(value) : undefined,
+  );
+  const first = normalized[0];
+  return first && !isUnattributableScopeValue(first) && normalized.every(value => value === first) ? first : undefined;
+}
+
 /**
- * Builds a Host-verified authorized view of a project detail data file (`020_clean/...`)
- * enforcing grant-level `allowedDataPaths`, `stores`, `periodFrom`/`periodTo`, and `purposeKeys`.
- *
- * - Mixed-store / mixed-period CSV/TSV/JSON files are filtered row-by-row so unauthorized
- *   stores, out-of-period rows, and unattributable rows (blank/null/unknown store or unparseable date)
- *   are physically omitted (never leaked, never zero-filled).
- * - Unfilterable opaque files or ANY file missing verifiable store/period columns under an active
- *   store/period restriction FAIL CLOSED with an explicit restriction code and reason.
+ * Builds a Host-verified view of project detail data using all dimensions of
+ * each applicable grant. A row must meet one grant on its own. A missing or
+ * ambiguous dimension only bars grants that restrict that dimension.
  */
 export function buildAuthorizedDataView(
   bytes: Buffer,
@@ -153,9 +180,11 @@ export function buildAuthorizedDataView(
     return isGrantActive(g, atMs);
   });
 
-  const hasStoreRestriction = matchedGrants.some(g => Boolean(g.scope.stores?.length));
-  const hasPeriodRestriction = matchedGrants.some(g => Boolean(g.scope.periodFrom || g.scope.periodTo));
-  if (!hasStoreRestriction && !hasPeriodRestriction) {
+  const rowGrants = matchedGrants.map(grant => ({
+    scope: grant.scope,
+    constrained: constrainedColumns(grant.scope),
+  }));
+  if (rowGrants.some(grant => !grant.constrained.length)) {
     return { allowed: true, bytes, filtered: false };
   }
 
@@ -173,39 +202,51 @@ export function buildAuthorizedDataView(
     return {
       allowed: false,
       code: 'authorized_view_unavailable_unfilterable_source',
-      reason: '该明细文件非 UTF-8 可解析结构化数据，无法按授权门店/期间生成可验证授权视图，已限制交付原文件。',
+      reason: '该明细文件非 UTF-8 可解析结构化数据，无法按授权范围生成可验证授权视图，已限制交付原文件。',
     };
   }
   if (bytes.includes(0)) {
     return {
       allowed: false,
       code: 'authorized_view_unavailable_unfilterable_source',
-      reason: '该明细文件包含二进制内容，无法按授权门店/期间生成可验证授权视图，已限制交付原文件。',
+      reason: '该明细文件包含二进制内容，无法按授权范围生成可验证授权视图，已限制交付原文件。',
     };
   }
 
-  const isRowUnattributable = (rowStore: string | undefined, rowDate: string | undefined): boolean => {
-    if (hasStoreRestriction && isUnattributableStoreValue(rowStore)) return true;
-    if (hasPeriodRestriction && (!rowDate || !dataPeriodBounds(rowDate))) return true;
-    return false;
+  const columnPositions = (headings: string[], column: ScopeColumn) => {
+    const matching = headings.flatMap((heading, index) => SCOPED_COLUMNS[column].headers.has(normalizeColumn(heading)) ? [index] : []);
+    return column === 'store' || column === 'period' ? matching.slice(0, 1) : matching;
+  };
+  const missingScope = (hasColumn: (column: ScopeColumn) => boolean) => {
+    if (rowGrants.some(grant => grant.constrained.every(hasColumn))) return undefined;
+    return scopeColumns.find(column => !hasColumn(column) && rowGrants.some(grant => grant.constrained.includes(column)));
+  };
+  const missingColumn = (column: ScopeColumn): AuthorizedDataViewResult => ({
+    allowed: false,
+    code: `authorized_view_unavailable_missing_${column}_column`,
+    reason: `明细文件 ${normalizedPath} 缺少可核验${SCOPED_COLUMNS[column].label}字段，无法建立授权视图，已限制交付。`,
+  });
+
+  const dimensionKnown = (row: RowScope, column: ScopeColumn): boolean =>
+    column === 'period' ? !!(row.period && dataPeriodBounds(row.period)) : row[column] !== undefined;
+  const isRowUnattributable = (row: RowScope): boolean =>
+    rowGrants.some(grant => grant.constrained.some(column => !dimensionKnown(row, column)));
+  const rowAllowedByAnyGrant = (row: RowScope): boolean =>
+    rowGrants.some(({ scope, constrained }) =>
+      constrained.every(column => {
+        if (!dimensionKnown(row, column)) return false;
+        if (column === 'period') return isPeriodCovered(row.period, scope.periodFrom, scope.periodTo);
+        if (column === 'store') return scope.stores?.some(store => store.trim() === row.store);
+        return scope[column]?.trim() === row[column];
+      }),
+    );
+
+  const unauditableDelimitedFile: AuthorizedDataViewResult = {
+    allowed: false,
+    code: 'authorized_view_unavailable_unfilterable_source',
+    reason: `明细文件 ${normalizedPath} 含不可准确解析的行，无法建立授权视图，已限制交付。`,
   };
 
-  const rowAllowedByAnyGrant = (rowStore: string | undefined, rowDate: string | undefined): boolean =>
-    matchedGrants.some(g => {
-      if (g.scope.stores?.length) {
-        if (rowStore === undefined || isUnattributableStoreValue(rowStore) || !g.scope.stores.some(store => store.trim() === rowStore.trim())) {
-          return false;
-        }
-      }
-      if (g.scope.periodFrom || g.scope.periodTo) {
-        if (rowDate === undefined || !isPeriodCovered(rowDate, g.scope.periodFrom, g.scope.periodTo)) {
-          return false;
-        }
-      }
-      return true;
-    });
-
-  // 1. CSV / TSV row-level store + period view filtering
   if (ext === '.csv' || ext === '.tsv') {
     const delimiter = ext === '.tsv' ? '\t' : ',';
     const eol = textContent.includes('\r\n') ? '\r\n' : '\n';
@@ -215,25 +256,10 @@ export function buildAuthorizedDataView(
       return { allowed: true, bytes, filtered: false, keptRows: 0, omittedRows: 0, unattributableRows: 0, grantedStores };
     }
     const headerCells = parseCsvLine(nonEmptyLines[0]!, delimiter);
-    const normalizedHeaders = headerCells.map(h => h.replace(/^\uFEFF/, '').trim().toLowerCase());
-    const storeIdx = normalizedHeaders.findIndex(h => STORE_HEADER_NAMES.has(h));
-    const dateIdx = normalizedHeaders.findIndex(h => DATE_HEADER_NAMES.has(h));
-
-    // R2: Unconditionally fail closed whenever store restriction is active and file lacks a verifiable store column!
-    if (hasStoreRestriction && storeIdx === -1) {
-      return {
-        allowed: false,
-        code: 'authorized_view_unavailable_missing_store_column',
-        reason: `明细文件 ${normalizedPath} 缺少可核验门店列，无法归属每行门店并建立授权门店视图，已限制交付原文件。`,
-      };
-    }
-    if (hasPeriodRestriction && dateIdx === -1) {
-      return {
-        allowed: false,
-        code: 'authorized_view_unavailable_missing_period_column',
-        reason: `明细文件 ${normalizedPath} 缺少可核验日期/期间列，无法建立授权期间视图，已限制交付。`,
-      };
-    }
+    if (!headerCells) return unauditableDelimitedFile;
+    const positions = new Map(scopeColumns.map(column => [column, columnPositions(headerCells, column)]));
+    const missing = missingScope(column => !!positions.get(column)?.length);
+    if (missing) return missingColumn(missing);
 
     const keptLines: string[] = [nonEmptyLines[0]!];
     let keptRows = 0;
@@ -241,21 +267,23 @@ export function buildAuthorizedDataView(
     let unattributableRows = 0;
     for (let i = 1; i < nonEmptyLines.length; i++) {
       const cells = parseCsvLine(nonEmptyLines[i]!, delimiter);
-      const rowStore = storeIdx >= 0 ? (cells[storeIdx] ?? '') : undefined;
-      const rowDate = dateIdx >= 0 ? (cells[dateIdx] ?? '') : undefined;
-      if (rowAllowedByAnyGrant(rowStore, rowDate)) {
+      if (!cells || cells.length !== headerCells.length) return unauditableDelimitedFile;
+      const row = Object.fromEntries(scopeColumns.map(column =>
+        [column, knownScopeValue(positions.get(column)!.map(index => cells[index]))],
+      )) as RowScope;
+      if (rowAllowedByAnyGrant(row)) {
         keptLines.push(cells.map(c => formatCsvCell(c, delimiter)).join(delimiter));
         keptRows += 1;
       } else {
         omittedRows += 1;
-        if (isRowUnattributable(rowStore, rowDate)) unattributableRows += 1;
+        if (isRowUnattributable(row)) unattributableRows += 1;
       }
     }
     if (keptRows === 0 && unattributableRows > 0) {
       return {
         allowed: false,
         code: 'authorized_view_unattributable_records',
-        reason: `明细文件 ${normalizedPath} 中 ${unattributableRows} 行记录缺少可核验门店或日期归属，无法生成授权视图，已限制交付。`,
+        reason: `明细文件 ${normalizedPath} 中 ${unattributableRows} 行记录缺少可核验的授权范围，无法生成授权视图，已限制交付。`,
       };
     }
     const outText = keptLines.join(eol) + (textContent.endsWith('\n') ? eol : '');
@@ -272,7 +300,7 @@ export function buildAuthorizedDataView(
       ...(effectivePeriodTo ? { periodTo: effectivePeriodTo } : {}),
       ...(filtered
         ? {
-            restrictionNote: `已按授权范围生成受控视图（保留 ${keptRows} 行，隐藏 ${omittedRows} 行非授权门店/超期间记录${unattributableRows > 0 ? `，其中 ${unattributableRows} 行门店或日期无法归属` : ''}；不可读门店绝不视为 0）。`,
+            restrictionNote: `已按授权范围生成受控视图（保留 ${keptRows} 行，隐藏 ${omittedRows} 行超出授权范围的记录${unattributableRows > 0 ? `，其中 ${unattributableRows} 行授权范围无法确认` : ''}；不可读门店绝不视为 0）。`,
           }
         : {}),
     };
@@ -294,47 +322,35 @@ export function buildAuthorizedDataView(
       return {
         allowed: false,
         code: 'authorized_view_unavailable_unfilterable_source',
-        reason: `JSON 明细文件 ${normalizedPath} 非记录数组结构，无法按门店/期间建立行级授权视图，已限制交付。`,
+        reason: `JSON 明细文件 ${normalizedPath} 非记录数组结构，无法按授权范围建立行级授权视图，已限制交付。`,
       };
     }
     const records = parsed.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item));
-    const sampleKeys = [...new Set(records.flatMap(r => Object.keys(r)))];
-    const storeKey = sampleKeys.find(k => STORE_HEADER_NAMES.has(k.trim().toLowerCase()));
-    const dateKey = sampleKeys.find(k => DATE_HEADER_NAMES.has(k.trim().toLowerCase()));
-    if (hasStoreRestriction && !storeKey) {
-      return {
-        allowed: false,
-        code: 'authorized_view_unavailable_missing_store_column',
-        reason: `明细文件 ${normalizedPath} 缺少可核验门店字段，无法归属每条记录并建立授权门店视图，已限制交付。`,
-      };
-    }
-    if (hasPeriodRestriction && !dateKey) {
-      return {
-        allowed: false,
-        code: 'authorized_view_unavailable_missing_period_column',
-        reason: `明细文件 ${normalizedPath} 缺少可核验日期/期间字段，无法建立授权期间视图，已限制交付。`,
-      };
-    }
+    const sampleKeys = [...new Set(records.flatMap(record => Object.keys(record)))];
+    const keys = new Map(scopeColumns.map(column =>
+      [column, columnPositions(sampleKeys, column).map(index => sampleKeys[index]!)],
+    ));
+    const missing = missingScope(column => !!keys.get(column)?.length);
+    if (missing) return missingColumn(missing);
     const kept: Record<string, unknown>[] = [];
     let omittedRows = 0;
     let unattributableRows = 0;
     for (const row of records) {
-      const rawStore = storeKey ? row[storeKey] : undefined;
-      const rawDate = dateKey ? row[dateKey] : undefined;
-      const rowStore = rawStore === null || rawStore === undefined ? '' : String(rawStore);
-      const rowDate = rawDate === null || rawDate === undefined ? '' : String(rawDate);
-      if (rowAllowedByAnyGrant(storeKey ? rowStore : undefined, dateKey ? rowDate : undefined)) {
+      const dimensions = Object.fromEntries(scopeColumns.map(column => [column,
+        knownScopeValue(keys.get(column)!.filter(key => Object.hasOwn(row, key)).map(key => row[key])),
+      ])) as RowScope;
+      if (rowAllowedByAnyGrant(dimensions)) {
         kept.push(row);
       } else {
         omittedRows += 1;
-        if (isRowUnattributable(storeKey ? rowStore : undefined, dateKey ? rowDate : undefined)) unattributableRows += 1;
+        if (isRowUnattributable(dimensions)) unattributableRows += 1;
       }
     }
     if (kept.length === 0 && unattributableRows > 0) {
       return {
         allowed: false,
         code: 'authorized_view_unattributable_records',
-        reason: `JSON 明细文件 ${normalizedPath} 中 ${unattributableRows} 条记录缺少可核验门店或日期归属，无法生成授权视图，已限制交付。`,
+        reason: `JSON 明细文件 ${normalizedPath} 中 ${unattributableRows} 条记录缺少可核验的授权范围，无法生成授权视图，已限制交付。`,
       };
     }
     return {
@@ -349,16 +365,15 @@ export function buildAuthorizedDataView(
       ...(effectivePeriodTo ? { periodTo: effectivePeriodTo } : {}),
       ...(omittedRows > 0
         ? {
-            restrictionNote: `已按授权范围生成受控 JSON 视图（保留 ${kept.length} 条，隐藏 ${omittedRows} 条非授权门店/超期间记录${unattributableRows > 0 ? `，其中 ${unattributableRows} 条门店或日期无法归属` : ''}；不可读门店绝不视为 0）。`,
+            restrictionNote: `已按授权范围生成受控 JSON 视图（保留 ${kept.length} 条，隐藏 ${omittedRows} 条超出授权范围的记录${unattributableRows > 0 ? `，其中 ${unattributableRows} 条授权范围无法确认` : ''}；不可读门店绝不视为 0）。`,
           }
         : {}),
     };
   }
 
-  // 3. Opaque / unstructured file when store or period restriction is active -> FAIL CLOSED!
   return {
     allowed: false,
     code: 'authorized_view_unavailable_unfilterable_source',
-    reason: `明细文件 ${normalizedPath}（格式 ${ext || '无扩展名'}）无法按授权门店/期间建立可验证授权视图，已限制交付原文件。`,
+    reason: `明细文件 ${normalizedPath}（格式 ${ext || '无扩展名'}）无法按授权范围建立可验证授权视图，已限制交付原文件。`,
   };
 }
