@@ -27,12 +27,13 @@ import { EnterpriseScopeStore } from './enterprise-scope-store.ts';
 import { createStudioEnterpriseCatalog } from './studio-enterprise-catalog.ts';
 import { CaseStoreError, type CaseStore } from './case-store.ts';
 import { reasonWithStudioSources, type StudioRuleCommand, type StudioRuleResult } from './studio-rule-reasoning.ts';
+import { createMemberPackFeature } from './member-pack-host.ts';
 
 function json(response: ServerResponse, status: number, value: unknown) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(JSON.stringify(value));
 }
 export type StudioHostOptions = {
-  dataRoot: string; projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore;
+  dataRoot: string; codeRoot?: string; memberPackEnabled?: boolean; projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore;
   cases?: CaseStore;
   readBody(request: IncomingMessage, limit?: number): Promise<Record<string, unknown>>;
   mutate<T>(operation: () => T | Promise<T>): Promise<T>;
@@ -50,11 +51,25 @@ export type StudioHostOptions = {
 export function createStudioFeature(options: StudioHostOptions) {
   const store = new StudioStore(options.dataRoot), operations = studioOperations(options.dataRoot);
   const enterpriseScopes = new EnterpriseScopeStore(options.dataRoot);
+  const memberPack = createMemberPackFeature({
+    dataRoot: options.dataRoot,
+    codeRoot: options.codeRoot,
+    memberPackEnabled: options.memberPackEnabled,
+    projects: options.projects,
+    enterpriseScopes,
+    studio: store,
+    operations,
+    readBody: options.readBody,
+    mutate: options.mutate,
+    closing: options.closing,
+    taskSnapshot: options.taskSnapshot,
+    readTaskReply: options.readTaskReply,
+  });
   const enterpriseCatalog = createStudioEnterpriseCatalog({ ...options, scopes: enterpriseScopes, studio: store, qualifySource: async (ref, projectId) => { await sources.read(ref, projectId, ref.locator); } });
   const enterpriseScope = { active: () => enterpriseScopes.list().enterprises.length > 0, enterpriseIdForProject: (projectId: string) => enterpriseScopes.enterpriseIdForProject(projectId), sourceAllowed: enterpriseCatalog.sourceAllowed, coverageSourceCurrent: enterpriseCatalog.coverageSourceCurrent,
     constructionSourceAllowed: async (projectId: string, ref: StudioSourceRef) => { await assertNativeEnterprise(ref.authority, ref.id, enterpriseScopes.enterpriseIdForProject(projectId)); return true; } };
   const extractions = studioExtractions(options.dataRoot);
-  const sources = createStudioSources({ ...options, studio: store, enterpriseScope });
+  const sources = createStudioSources({ ...options, studio: store, enterpriseScope, assertDataPathAllowed: (projectId, locator) => memberPack.assertProjectDataPathAllowed(projectId, locator) });
   const library = createMetricLibrary(path.join(options.dataRoot, 'metric-assets')), methods = createSapMethodStore(path.join(options.dataRoot, 'metric-assets'));
   const workspace = async (id: string) => {
     const system = store.get(id), owner = studioExecutionOwner(system), project = await options.projects.get(owner.projectId), task = await options.projects.getTask(owner.projectId, owner.taskId);
@@ -351,7 +366,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     'update-feedback': '{feedbackId,status,response,sources?,verification?:{sources,result}}; verified requires matching revised formal source versions, exact new use report+assessment report+used sources; accepted is not repair',
   }, note: 'Checks are author evidence, not Host business truth. Formal publication, adoption, graph refresh and use verification remain separate.' };
   const api = {
-    store, sources, workspace, constructionFor, availableFor, enterpriseScopes, enterpriseCatalog, enterpriseScope,
+    store, sources, workspace, constructionFor, availableFor, enterpriseScopes, enterpriseCatalog, enterpriseScope, memberPack,
     availableForTask: (projectId: string, taskId: string) => Boolean(enterpriseScopes.enterpriseIdForProject(projectId)) || Boolean(constructionFor(projectId, taskId)) || store.list().some(system => system.usageTasks?.some(task => task.projectId === projectId && task.taskId === taskId)),
     async prepareContext(projectId: string, taskId: string, selection?: unknown, mode: { analysisOnly?: boolean } = {}) {
       const construction = mode.analysisOnly ? undefined : constructionFor(projectId, taskId);
@@ -390,13 +405,14 @@ export function createStudioFeature(options: StudioHostOptions) {
           const systems = store.list().filter(system => availableFor(system, projectId)).map(system => ({ id: system.id, name: system.name, projectId: system.projectId, taskId: system.taskId, executionOwner: studioExecutionOwner(system), topics: system.topics.map(({ id, title }) => ({ id, title })), construction: construction?.id === system.id }));
           const items = enterpriseId ? (await enterpriseCatalog.catalog(enterpriseId, projectId)).items.filter(item => item.eligible && item.ref) : [];
           const inputs = (await sources.inventory(projectId)).filter(item => item.ref.authority === 'data');
+          const memberPacks = enterpriseId ? memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId) : [];
           const directory = [...systems.map(system => ({ kind: 'system' as const, system })), ...items.map(item => ({ kind: 'source' as const, item })), ...inputs.map(input => ({ kind: 'input' as const, input }))];
           const catalogSha256 = digest(directory);
           if (payload.expectedCatalogSha256 !== undefined && payload.expectedCatalogSha256 !== catalogSha256) throw new StudioError('studio_catalog_changed', 409);
           const start = payload.start === undefined ? 0 : Number(payload.start), length = payload.length === undefined ? 20 : Number(payload.length);
           if (!Number.isSafeInteger(start) || start < 0 || start > directory.length || !Number.isSafeInteger(length) || length < 1 || length > 100) throw new StudioError('invalid_studio_source_range');
           let end = Math.min(directory.length, start + length);
-          const page = () => { const selected = directory.slice(start, end); return { ...(enterpriseId ? { enterpriseId } : {}), systems: selected.flatMap(entry => entry.kind === 'system' ? [entry.system] : []), items: selected.flatMap(entry => entry.kind === 'source' ? [entry.item] : []), inputs: selected.flatMap(entry => entry.kind === 'input' ? [entry.input] : []), catalogSha256, range: { start, end, total: directory.length, unit: 'entries' }, complete: end === directory.length, continuation: end < directory.length ? { action: 'catalog', payload: { start: end, length, expectedCatalogSha256: catalogSha256 } } : null, contract: sourceContract }; };
+          const page = () => { const selected = directory.slice(start, end); return { ...(enterpriseId ? { enterpriseId } : {}), systems: selected.flatMap(entry => entry.kind === 'system' ? [entry.system] : []), items: selected.flatMap(entry => entry.kind === 'source' ? [entry.item] : []), inputs: selected.flatMap(entry => entry.kind === 'input' ? [entry.input] : []), ...(memberPacks.length ? { memberPacks } : {}), catalogSha256, range: { start, end, total: directory.length, unit: 'entries' }, complete: end === directory.length, continuation: end < directory.length ? { action: 'catalog', payload: { start: end, length, expectedCatalogSha256: catalogSha256 } } : null, contract: sourceContract }; };
           while (end > start && JSON.stringify(page()).length > 28_000) end--;
           if (end === start && start < directory.length) throw new StudioError('studio_result_too_large', 413);
           await assertCurrent(); return reply(action, page());
@@ -585,6 +601,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     async handle(request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean> {
       if (!url.pathname.startsWith('/api/studio/')) return false;
       try {
+        if (await memberPack.handle(request, response, url)) return true;
         if (url.pathname === '/api/studio/enterprises' && request.method === 'GET') { json(response, 200, enterpriseScopes.list()); return true; }
         if (url.pathname === '/api/studio/foundation' && request.method === 'GET') { json(response, 200, await enterpriseCatalog.catalog(uuid(url.searchParams.get('enterpriseId')))); return true; }
         if (url.pathname === '/api/studio/enterprises' && request.method === 'POST') {

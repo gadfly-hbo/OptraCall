@@ -195,7 +195,7 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
   response.once('close', clear); response.once('finish', clear);
 }
 
-export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; webSearchFetch?: typeof fetch; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; caseRelationsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; studioPython?: string; reviewAdmission?: ReviewAdmissionContract; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
+export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; webSearchFetch?: typeof fetch; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; caseRelationsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; memberPackEnabled?: boolean; studioPython?: string; reviewAdmission?: ReviewAdmissionContract; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false, relationsEnabled: options.caseRelationsEnabled !== false });
   const projectPlans = createProjectPlanStore({ dataRoot });
@@ -249,7 +249,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const dbReviewBundles = createDbLinkReviewPort({ privateRoot: path.resolve(dataRoot, 'db-link', 'review-bundles'), projects, configurationSnapshot: (id, revision) => configuration.snapshot(id, revision) ?? undefined, materialSource: dbLinks.materialSource, isClosing: () => closing });
   const modelPackRoutes = createModelPackRoutes({store:modelPacks,readBody:body,mutate,isClosing:()=>closing});
   const sapMethods = createSapMethodStore(path.join(dataRoot, 'metric-assets'));
-  const studio = createStudioFeature({ dataRoot, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
+  const studio = createStudioFeature({ dataRoot, codeRoot: options.cwd, memberPackEnabled: options.memberPackEnabled, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
     reason: options.studioPython ? (command, context) => runStudioRuleInference({ python: options.studioPython!, codeRoot: options.cwd, command, signal: context.signal, assertCurrent: context.assertCurrent, registerCleanup: context.registerCleanup }) : undefined,
     extract: async (system, ref, context) => {
       if (!studioSessions) throw new StudioError('studio_semantica_unavailable', 409);
@@ -276,19 +276,24 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     } : undefined,
     inspectGraph: (systemId, snapshotId) => studioGraph.inspect(systemId, snapshotId),
   });
-  async function enterpriseContextFor(projectId: string) {
+  async function enterpriseContextFor(projectId: string, taskId?: string) {
     let enterpriseId: string | undefined;
     try {
       if (!studio.enterpriseScope.active()) return undefined;
       enterpriseId = studio.enterpriseScope.enterpriseIdForProject(projectId);
       let summary = '本任务企业归属尚未核定：未默认提供全局企业目录或其他企业标准。可继续使用原授权任务资料，必要时集中澄清范围。';
       if (enterpriseId) {
-        const catalog = await studio.enterpriseCatalog.catalog(enterpriseId);
+        const catalog = await studio.enterpriseCatalog.catalog(enterpriseId, projectId);
         const lines = [`当前企业：${catalog.enterprise.name}（${enterpriseId}）。以下只为可发现线索，不代表正文已读或本次采用。`];
         for (const item of catalog.items.filter(item => item.eligible && item.ref)) {
           const line = JSON.stringify({ authority: item.authority, id: item.id, version: item.version, title: item.title, ref: item.ref });
           if (lines.join('\n').length + line.length > 8000) { lines.push('目录摘要未列全，请沿 studio_assets catalog 的实际分页继续按需发现。'); break; }
           lines.push(line);
+        }
+        const packSummaries = studio.memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId);
+        for (const packSummary of packSummaries) {
+          const line = JSON.stringify({ kind: 'enterprise-domain-pack', ...packSummary });
+          if (lines.join('\n').length + line.length <= 8000) lines.push(line);
         }
         lines.push('使用 studio_assets 或 read_semantic_context 读取适用的准确来源；自行判断前提、选择方法、计算并解释。不要将候选、目录或作者声明当专业核验。');
         summary = lines.join('\n');
@@ -300,8 +305,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       return { enterpriseId, summary: '企业资产目录当前不可用，未提供企业标准正文或其他企业目录，也不代表没有相关资产。可继续原授权项目数据的独立分析；受影响的口径和结论须保留待核或明确临时依据。', sourceAllowed: () => false };
     }
   }
-  async function enterpriseMetricIndex(projectId: string): Promise<string | undefined> {
-    const context = await enterpriseContextFor(projectId);
+  async function enterpriseMetricIndex(projectId: string, taskId?: string): Promise<string | undefined> {
+    const context = await enterpriseContextFor(projectId, taskId);
     return context ? context.summary : metricIndexText({ dataRoot, projectId });
   }
   function enterpriseSemanticSourceAllowed(projectId: string, target: SemanticTarget): boolean | Promise<boolean> {
@@ -399,9 +404,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           projects, enterpriseMaterials, projectId: project.id, taskId: task.id,
           listBoundReports: async () => { const original = await pair(project.id, task.id); return listTaskBoundReports(original.project, original.task); },
           readScopedCatalog: async () => {
-            const scope = await enterpriseContextFor(project.id);
+            const scope = await enterpriseContextFor(project.id, task.id);
             return scope ? { enterpriseId: scope.enterpriseId, bytes: Buffer.from(JSON.stringify({ enterpriseId: scope.enterpriseId ?? null, summary: scope.summary, claim: 'directory-visible-not-read', continuation: 'studio_assets catalog' })) } : undefined;
           },
+          assertInputAllowed: relativePath => studio.memberPack.assertProjectDataPathAllowed(project.id, relativePath),
           assertOwner: async () => {
             if (closing) throw new RequestFault(503, 'host_closing');
             await pair(project.id, task.id, true);
@@ -426,7 +432,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               deliver();
             }),
           };
-        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, methodIssue: async (input, context) => {
+        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id, task.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, methodIssue: async (input, context) => {
           const operationId = stableActionId(['task-method-issue-v1', project.id, task.id, context.requestId, input.methodId, input.version, input.note, input.sources]);
           return methodIssues(input, { ...context, operationId, projectId: project.id, taskId: task.id });
         }, quotedDecisions: async (action, input, context) => {

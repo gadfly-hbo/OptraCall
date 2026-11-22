@@ -26,6 +26,7 @@ export interface StudioSourceDependencies {
   readTaskReply?: (projectId: string, taskId: string, selection: { sessionId: string; messageId: string }) => Promise<{ text: string }>;
   readOriginal?: (ref: StudioSourceRef, projectId: string, taskId?: string) => Promise<StudioSourceRead>;
   readRequirementRelease?: (id: string, version: string, projectId: string) => Promise<ReturnType<ReturnType<typeof createRequirementStore>['readRelease']>>;
+  assertDataPathAllowed?: (projectId: string, locator: string) => void | Promise<void>;
 }
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 const flatFiles = (nodes: FileNode[]): FileNode[] => nodes.flatMap(node => node.kind === 'file' ? [node] : flatFiles(node.children ?? []));
@@ -121,6 +122,9 @@ export function createStudioSources(deps: StudioSourceDependencies) {
       }
     } catch (error) { if ((error as { code?: string }).code !== 'enterprise_source_missing') throw error; }
     for (const file of flatFiles(await deps.projects.tree(projectId, ['020_clean']))) {
+      if (deps.assertDataPathAllowed) {
+        try { await deps.assertDataPathAllowed(projectId, file.path); } catch { continue; }
+      }
       const observed = await deps.projects.observeFile(projectId, file.path);
       materials.push({ ref: { authority: 'data', id: sha(file.path), version: observed.sha256, sha256: observed.sha256, projectId, locator: file.path, title: file.name }, saved: true, readable: true, note: '当前项目020资料；准确文件身份已观察，未交付正文或证明Agent已读' });
     }
@@ -229,6 +233,7 @@ export function createStudioSources(deps: StudioSourceDependencies) {
       if (ref.projectId !== sourceProjectId) fail('studio_source_project_mismatch', 403);
       const locator = ref.locator;
       if (!locator || !(ref.authority === 'data' ? /^020_clean\// : /^060_reports\//).test(locator) || locator.split('/').some(p => !p || p === '.' || p === '..' || p.includes('\\'))) fail('studio_source_path_invalid');
+      if (ref.authority === 'data' && deps.assertDataPathAllowed) await deps.assertDataPathAllowed(sourceProjectId, locator);
       if (ref.authority === 'data' && ref.id !== sha(locator)) fail('studio_source_changed', 409);
       if (ref.authority === 'task') { if (!ref.taskId || ref.id !== ref.taskId) fail('studio_source_owner_mismatch', 403); await deps.projects.getTask(sourceProjectId, ref.taskId); }
       const observed = await deps.projects.observeFile(sourceProjectId, locator);

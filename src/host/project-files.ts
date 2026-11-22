@@ -16,6 +16,7 @@ export function createProjectFilesPort(options: {
   projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore; projectId: string; taskId: string; assertOwner(): Promise<void>;
   listBoundReports?(): Promise<ProjectTaskResultBinding[]>;
   readScopedCatalog?(): Promise<{ bytes: Buffer; enterpriseId?: string } | undefined>;
+  assertInputAllowed?(relativePath: string): void | Promise<void>;
 }): ProjectFilesPort {
   return async (action, input, context) => {
     const check = () => { context.signal.throwIfAborted(); context.assertCurrent(); };
@@ -73,6 +74,7 @@ export function createProjectFilesPort(options: {
     if (Object.keys(input).some(key => !['filename', 'offset', 'limit'].includes(key)) || !filename(input.filename)) fault('invalid_input_filename');
     for (const key of ['offset', 'limit']) if (input[key] !== undefined && (!Number.isSafeInteger(input[key]) || Number(input[key]) < 1)) fault('invalid_input_pagination');
     const relativePath = '020_clean/' + input.filename;
+    if (options.assertInputAllowed) await options.assertInputAllowed(relativePath);
     const captured = await options.projects.captureFeedbackFile(options.projectId, relativePath, PROJECT_UPLOAD_MAX_BYTES);
     try { new TextDecoder('utf-8', { fatal: true }).decode(captured.bytes); } catch { fault('project_file_requires_text'); }
     if (captured.bytes.includes(0)) fault('project_file_requires_text');

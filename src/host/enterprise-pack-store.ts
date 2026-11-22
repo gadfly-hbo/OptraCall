@@ -1,0 +1,969 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { digest, fail, identity, object, sourceRef, sources, StudioError, text, uuid } from '../../extensions/business-plugins/studio/validation.ts';
+import type { StudioSourceRef } from '../../extensions/business-plugins/studio/contracts.ts';
+import {
+  computeUpgradeImpact,
+  evaluateExceptionsAndWindow,
+  evaluateUseVerdict,
+  feedbackTargetAuthority,
+  normalizePurposeDedupKey,
+  sameExactSourceRef,
+  type DomainReferenceRoute,
+  type EnterpriseDomainPack,
+  type EnterprisePackDecisionChoice,
+  type EnterprisePackDependency,
+  type EnterprisePackEntry,
+  type EnterprisePackException,
+  type EnterprisePackFeedback,
+  type EnterprisePackFeedbackReport,
+  type EnterprisePackPreview,
+  type EnterprisePackPurpose,
+  type EnterprisePackPurposeScope,
+  type EnterprisePackReadEvidence,
+  type EnterprisePackRevision,
+  type EnterprisePackTaskPin,
+  type EnterprisePackUpgradeImpact,
+  type EnterprisePackUseRecord,
+  type EnterprisePanoramaIssue,
+  type EnterprisePanoramaRecommendation,
+  type EnterprisePanoramaSnapshot,
+  type EnterprisePurposePublicationState,
+  type PackBusinessStatus,
+  type PackFeedbackCategory,
+  type PackModulePublicationReceipt,
+  type PackPurposeTier,
+  type PackSubjectUnit,
+  type PackUseVerdict,
+} from '../../extensions/business-plugins/studio/enterprise-pack.ts';
+
+type StoredPackIndex = { schemaVersion: 1; packs: EnterpriseDomainPack[] };
+const MAX_BYTES = 32 * 1024 * 1024;
+const now = () => new Date().toISOString();
+const clone = <T>(value: T): T => structuredClone(value);
+
+export interface UpsertPurposeInput {
+  purposeKey: string;
+  title: string;
+  businessQuestion: string;
+  subjectUnit: PackSubjectUnit;
+  windowDays?: number;
+  scope: EnterprisePackPurposeScope;
+  tier: PackPurposeTier;
+  limitedCalculationName?: string;
+  businessStatus: PackBusinessStatus;
+  originalGoal: string;
+  deliveredSubset?: string;
+  remainingGaps?: string[];
+  exclusions?: string[];
+  completionCriteria: string;
+  dependencies?: EnterprisePackDependency[];
+  policyEffectiveFrom?: string;
+  policyEffectiveTo?: string;
+  dataCutoffAt?: string;
+  observationWindowDays?: number;
+  availableHistoryDays?: number;
+  decisionChoices?: EnterprisePackDecisionChoice[];
+  ownerRole?: string;
+  taskOwner?: { projectId: string; taskId: string };
+  evidenceNote?: { projectId: string; taskId?: string; note: string; sourceRefs: StudioSourceRef[] };
+}
+
+export class EnterprisePackStore {
+  readonly dataRoot: string;
+  readonly root: string;
+  readonly file: string;
+  private readonly readOnlyMode: boolean;
+
+  constructor(dataRoot: string, options: { readOnlyMode?: boolean } = {}) {
+    this.dataRoot = path.resolve(dataRoot);
+    this.root = path.join(this.dataRoot, 'member-packs');
+    this.file = path.join(this.root, 'enterprise-packs.json');
+    this.readOnlyMode = options.readOnlyMode === true;
+  }
+
+  private assertWritable(): void {
+    if (this.readOnlyMode) fail('enterprise_pack_disabled', 409);
+  }
+
+  private directory(dir: string, create: boolean): boolean {
+    let stat: fs.Stats;
+    try { stat = fs.lstatSync(dir); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') fail('unsafe_enterprise_pack_storage', 503);
+      if (!create) return false;
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      stat = fs.lstatSync(dir);
+    }
+    if (!stat.isDirectory() || stat.isSymbolicLink()) fail('unsafe_enterprise_pack_storage', 503);
+    return true;
+  }
+
+  private load(): StoredPackIndex {
+    if (!this.directory(this.dataRoot, false) || !this.directory(this.root, false)) return { schemaVersion: 1, packs: [] };
+    if (!fs.existsSync(this.file)) return { schemaVersion: 1, packs: [] };
+    const stat = fs.lstatSync(this.file, { bigint: true });
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1n || stat.size > BigInt(MAX_BYTES)) fail('unsafe_enterprise_pack_storage', 503);
+    const fd = fs.openSync(this.file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    try {
+      const bytes = fs.readFileSync(fd);
+      const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+      if (!object(parsed) || parsed.schemaVersion !== 1 || !Array.isArray(parsed.packs)) fail('invalid_enterprise_pack_storage', 503);
+      return parsed as unknown as StoredPackIndex;
+    } catch (error) {
+      if (error instanceof StudioError) throw error;
+      return fail('invalid_enterprise_pack_storage', 503);
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  private save(index: StoredPackIndex): void {
+    this.directory(this.dataRoot, true);
+    this.directory(this.root, true);
+    const bytes = Buffer.from(JSON.stringify(index, null, 2) + '\n');
+    if (bytes.length > MAX_BYTES) fail('enterprise_pack_storage_too_large', 413);
+    const tmp = `${this.file}.${randomUUID()}.tmp`;
+    const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+    try { fs.writeFileSync(fd, bytes); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    try {
+      fs.renameSync(tmp, this.file);
+      const dirFd = fs.openSync(this.root, 'r');
+      try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
+    } catch (error) {
+      try { fs.unlinkSync(tmp); } catch {}
+      throw error;
+    }
+  }
+
+  private mutate<T>(packId: string, fn: (pack: EnterpriseDomainPack) => T): T {
+    this.assertWritable();
+    const index = this.load();
+    const pack = index.packs.find(p => p.id === uuid(packId));
+    if (!pack) fail('enterprise_pack_not_found', 404);
+    const result = fn(pack);
+    pack.revision += 1;
+    pack.updatedAt = now();
+    this.save(index);
+    return clone(result);
+  }
+
+  list(enterpriseId?: string): EnterpriseDomainPack[] {
+    const all = this.load().packs;
+    return clone(enterpriseId ? all.filter(p => p.enterpriseId === uuid(enterpriseId)) : all);
+  }
+
+  get(packId: string): EnterpriseDomainPack {
+    const found = this.load().packs.find(p => p.id === uuid(packId));
+    if (!found) fail('enterprise_pack_not_found', 404);
+    return clone(found);
+  }
+
+  findByEnterpriseAndDomain(enterpriseId: string, domain = 'member-operations'): EnterpriseDomainPack | undefined {
+    const eid = uuid(enterpriseId);
+    const d = text(domain, 100, false).trim().toLowerCase();
+    const found = this.load().packs.find(p => p.enterpriseId === eid && p.domain === d);
+    return found ? clone(found) : undefined;
+  }
+
+  ensurePack(input: { enterpriseId: string; systemId: string; domain?: string; name: string; packCode?: string }): EnterpriseDomainPack {
+    this.assertWritable();
+    const enterpriseId = uuid(input.enterpriseId);
+    const systemId = uuid(input.systemId);
+    const domain = text(input.domain ?? 'member-operations', 100, false).trim().toLowerCase();
+    const name = text(input.name, 200, false).trim();
+    const index = this.load();
+    const existing = index.packs.find(p => p.enterpriseId === enterpriseId && p.domain === domain);
+    if (existing) return clone(existing);
+    const stamp = now();
+    const seq = index.packs.filter(p => p.enterpriseId === enterpriseId).length + 1;
+    const pack: EnterpriseDomainPack = {
+      id: randomUUID(),
+      packCode: input.packCode ? text(input.packCode, 64, false) : `PACK-MEM-${String(seq).padStart(3, '0')}`,
+      enterpriseId,
+      systemId,
+      domain,
+      name,
+      revision: 1,
+      panoramaHistory: [],
+      entries: [],
+      purposes: [],
+      previews: [],
+      packRevisions: [],
+      taskPins: [],
+      feedbackItems: [],
+      useRecords: [],
+      upgradeImpacts: [],
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+    index.packs.push(pack);
+    this.save(index);
+    return clone(pack);
+  }
+
+  savePanorama(packId: string, input: {
+    goal: string;
+    brand: string;
+    channel: string;
+    period: string;
+    dataCutoffAt: string;
+    decisionPurpose: string;
+    sourceRefs: StudioSourceRef[];
+    recommendations: EnterprisePanoramaRecommendation[];
+    issues: EnterprisePanoramaIssue[];
+    pendingQuestions?: { id: string; question: string; impact: string; workItemId?: string }[];
+    createdByTask?: { projectId: string; taskId: string };
+  }): EnterpriseDomainPack {
+    return this.mutate(packId, pack => {
+      const version = pack.panoramaHistory.length + 1;
+      const snapshot: EnterprisePanoramaSnapshot = {
+        id: randomUUID(),
+        version,
+        goal: text(input.goal, 20_000, false),
+        brand: text(input.brand, 200, false),
+        channel: text(input.channel, 200, false),
+        period: text(input.period, 200, false),
+        dataCutoffAt: text(input.dataCutoffAt, 100, false),
+        decisionPurpose: text(input.decisionPurpose, 2000, false),
+        sourceRefs: sources(input.sourceRefs),
+        recommendations: input.recommendations.map(rec => ({
+          purposeKey: text(rec.purposeKey, 200, false),
+          title: text(rec.title, 300, false),
+          priorityReason: text(rec.priorityReason, 5000, false),
+          deliverableNow: text(rec.deliverableNow, 5000, false),
+          minimumEvidence: text(rec.minimumEvidence, 5000, false),
+          ownerRole: text(rec.ownerRole, 200, false),
+          completionCriteria: text(rec.completionCriteria, 5000, false),
+          ...(rec.selected !== undefined ? { selected: Boolean(rec.selected) } : {}),
+        })),
+        issues: input.issues.map(iss => ({
+          id: text(iss.id, 100, false),
+          problemName: text(iss.problemName, 300, false),
+          businessStatus: iss.businessStatus,
+          assetSupportStatus: iss.assetSupportStatus,
+          summary: text(iss.summary, 5000, false),
+          factOrInference: iss.factOrInference,
+          decisionImpact: text(iss.decisionImpact, 5000, false),
+          nextStep: text(iss.nextStep, 5000),
+          evidence: iss.evidence.map(ev => ({
+            sourceRef: sourceRef(ev.sourceRef),
+            locator: text(ev.locator, 500, false),
+            scope: text(ev.scope, 500, false),
+            ...(ev.note ? { note: text(ev.note, 2000) } : {}),
+          })),
+          ...(iss.candidatePurposeKey ? { candidatePurposeKey: text(iss.candidatePurposeKey, 200, false) } : {}),
+        })),
+        pendingQuestions: (input.pendingQuestions ?? []).map(q => ({
+          id: text(q.id, 100, false),
+          question: text(q.question, 5000, false),
+          impact: text(q.impact, 5000, false),
+          ...(q.workItemId ? { workItemId: text(q.workItemId, 200, false) } : {}),
+        })),
+        createdAt: now(),
+        ...(input.createdByTask ? { createdByTask: { projectId: identity(input.createdByTask.projectId), taskId: identity(input.createdByTask.taskId) } } : {}),
+      };
+      pack.panorama = snapshot;
+      pack.panoramaHistory.push(snapshot);
+      return pack;
+    });
+  }
+
+  upsertEntry(packId: string, input: Omit<EnterprisePackEntry, 'id' | 'updatedAt'> & { id?: string }): EnterpriseDomainPack {
+    return this.mutate(packId, pack => {
+      const entryKey = text(input.entryKey, 200, false).trim();
+      const routes: DomainReferenceRoute[] = [...new Set(input.routes)];
+      if (!routes.length) fail('invalid_pack_entry_routes');
+      const existing = pack.entries.find(e => e.entryKey === entryKey || (input.id && e.id === input.id));
+      const stamp = now();
+      if (existing) {
+        existing.title = text(input.title, 300, false);
+        existing.action = input.action;
+        existing.routes = [...new Set([...existing.routes, ...routes])];
+        existing.referenceLinks = input.referenceLinks;
+        existing.enterpriseBasis = text(input.enterpriseBasis, 20_000, false);
+        existing.decisionOwner = input.decisionOwner ? text(input.decisionOwner, 200, false) : existing.decisionOwner;
+        existing.enterpriseSourceRefs = sources(input.enterpriseSourceRefs);
+        existing.authorityRef = input.authorityRef ? sourceRef(input.authorityRef) : existing.authorityRef;
+        existing.scope = text(input.scope, 5000, false);
+        existing.grain = input.grain ? text(input.grain, 200, false) : existing.grain;
+        existing.validFrom = input.validFrom ?? existing.validFrom;
+        existing.validTo = input.validTo ?? existing.validTo;
+        existing.impactedPurposeIds = [...new Set(input.impactedPurposeIds)];
+        existing.exceptions = input.exceptions;
+        existing.updatedAt = stamp;
+      } else {
+        pack.entries.push({
+          id: input.id ? text(input.id, 200, false) : randomUUID(),
+          entryKey,
+          title: text(input.title, 300, false),
+          action: input.action,
+          routes,
+          referenceLinks: input.referenceLinks,
+          enterpriseBasis: text(input.enterpriseBasis, 20_000, false),
+          ...(input.decisionOwner ? { decisionOwner: text(input.decisionOwner, 200, false) } : {}),
+          enterpriseSourceRefs: sources(input.enterpriseSourceRefs),
+          ...(input.authorityRef ? { authorityRef: sourceRef(input.authorityRef) } : {}),
+          scope: text(input.scope, 5000, false),
+          ...(input.grain ? { grain: text(input.grain, 200, false) } : {}),
+          ...(input.validFrom ? { validFrom: input.validFrom } : {}),
+          ...(input.validTo ? { validTo: input.validTo } : {}),
+          impactedPurposeIds: [...new Set(input.impactedPurposeIds)],
+          exceptions: input.exceptions,
+          updatedAt: stamp,
+        });
+      }
+      return pack;
+    });
+  }
+
+  upsertPurpose(packId: string, input: UpsertPurposeInput): { pack: EnterpriseDomainPack; purpose: EnterprisePackPurpose; created: boolean } {
+    return this.mutate(packId, pack => {
+      const purposeKey = text(input.purposeKey, 200, false).trim();
+      if (!input.scope || typeof input.scope !== 'object') fail('invalid_purpose_scope');
+      const scopeKey = text(input.scope.scopeKey, 500, false).trim();
+      if (input.tier === 'limited-calculation' && !input.limitedCalculationName?.trim()) {
+        fail('limited_calculation_requires_distinct_name');
+      }
+      const dedupKey = normalizePurposeDedupKey({
+        enterpriseId: pack.enterpriseId,
+        packId: pack.id,
+        purposeKey,
+        subjectUnit: input.subjectUnit,
+        scopeKey,
+        windowDays: input.windowDays,
+      });
+      const existing = pack.purposes.find(p => p.dedupKey === dedupKey);
+      const stamp = now();
+      if (existing) {
+        existing.title = text(input.title, 300, false);
+        existing.businessQuestion = text(input.businessQuestion, 5000, false);
+        existing.tier = input.tier;
+        if (input.limitedCalculationName) existing.limitedCalculationName = text(input.limitedCalculationName, 300, false);
+        existing.businessStatus = input.businessStatus;
+        if (input.deliveredSubset !== undefined) existing.deliveredSubset = text(input.deliveredSubset, 5000);
+        if (input.remainingGaps) existing.remainingGaps = input.remainingGaps.map(g => text(g, 2000, false));
+        if (input.exclusions?.length) existing.exclusions = [...new Set([...existing.exclusions, ...input.exclusions.map(e => text(e, 2000, false))])];
+        if (input.dependencies?.length) {
+          existing.dependencies = input.dependencies.map(d => ({ ...d, ref: sourceRef(d.ref) }));
+        }
+        if (input.policyEffectiveFrom) existing.policyEffectiveFrom = input.policyEffectiveFrom;
+        if (input.policyEffectiveTo) existing.policyEffectiveTo = input.policyEffectiveTo;
+        if (input.dataCutoffAt) existing.dataCutoffAt = input.dataCutoffAt;
+        if (input.observationWindowDays !== undefined) existing.observationWindowDays = input.observationWindowDays;
+        if (input.availableHistoryDays !== undefined) existing.availableHistoryDays = input.availableHistoryDays;
+        if (input.decisionChoices?.length) existing.decisionChoices = input.decisionChoices;
+        if (input.ownerRole) existing.ownerRole = text(input.ownerRole, 200, false);
+        if (input.taskOwner) {
+          const ownerKey = `${input.taskOwner.projectId}:${input.taskOwner.taskId}`;
+          if (!existing.maintenanceTasks.some(t => `${t.projectId}:${t.taskId}` === ownerKey)) {
+            existing.maintenanceTasks.push({ projectId: identity(input.taskOwner.projectId), taskId: identity(input.taskOwner.taskId), addedAt: stamp });
+          }
+        }
+        if (input.evidenceNote) {
+          const noteText = text(input.evidenceNote.note, 5000, false).trim();
+          const noteRefs = sources(input.evidenceNote.sourceRefs);
+          const noteSig = digest([noteText, noteRefs]);
+          if (!existing.evidenceNotes.some(n => digest([n.note, n.sourceRefs]) === noteSig)) {
+            existing.evidenceNotes.push({
+              id: randomUUID(),
+              projectId: identity(input.evidenceNote.projectId),
+              ...(input.evidenceNote.taskId ? { taskId: identity(input.evidenceNote.taskId) } : {}),
+              note: noteText,
+              sourceRefs: noteRefs,
+              at: stamp,
+            });
+          }
+        }
+        existing.updatedAt = stamp;
+        return { pack, purpose: existing, created: false };
+      }
+
+      const nextIndex = pack.purposes.length + 1;
+      const purpose: EnterprisePackPurpose = {
+        id: `U-${String(nextIndex).padStart(2, '0')}`,
+        dedupKey,
+        purposeKey,
+        title: text(input.title, 300, false),
+        businessQuestion: text(input.businessQuestion, 5000, false),
+        subjectUnit: input.subjectUnit,
+        ...(input.windowDays !== undefined ? { windowDays: input.windowDays } : {}),
+        scope: { ...input.scope, scopeKey },
+        tier: input.tier,
+        ...(input.limitedCalculationName ? { limitedCalculationName: text(input.limitedCalculationName, 300, false) } : {}),
+        businessStatus: input.businessStatus,
+        evidenceReadiness: {
+          definition: 'pending',
+          mapping: 'pending',
+          sampleCalculation: 'pending',
+          independentUse: 'pending',
+        },
+        originalGoal: text(input.originalGoal, 5000, false),
+        ...(input.deliveredSubset ? { deliveredSubset: text(input.deliveredSubset, 5000) } : {}),
+        remainingGaps: (input.remainingGaps ?? []).map(g => text(g, 2000, false)),
+        exclusions: (input.exclusions ?? []).map(e => text(e, 2000, false)),
+        completionCriteria: text(input.completionCriteria, 5000, false),
+        dependencies: (input.dependencies ?? []).map(d => ({ ...d, ref: sourceRef(d.ref) })),
+        ...(input.policyEffectiveFrom ? { policyEffectiveFrom: input.policyEffectiveFrom } : {}),
+        ...(input.policyEffectiveTo ? { policyEffectiveTo: input.policyEffectiveTo } : {}),
+        ...(input.dataCutoffAt ? { dataCutoffAt: input.dataCutoffAt } : {}),
+        ...(input.observationWindowDays !== undefined ? { observationWindowDays: input.observationWindowDays } : {}),
+        ...(input.availableHistoryDays !== undefined ? { availableHistoryDays: input.availableHistoryDays } : {}),
+        decisionChoices: input.decisionChoices ?? [],
+        workItemStatus: 'draft',
+        ...(input.ownerRole ? { ownerRole: text(input.ownerRole, 200, false) } : {}),
+        maintenanceTasks: input.taskOwner ? [{ projectId: identity(input.taskOwner.projectId), taskId: identity(input.taskOwner.taskId), addedAt: stamp }] : [],
+        evidenceNotes: input.evidenceNote ? [{
+          id: randomUUID(),
+          projectId: identity(input.evidenceNote.projectId),
+          ...(input.evidenceNote.taskId ? { taskId: identity(input.evidenceNote.taskId) } : {}),
+          note: text(input.evidenceNote.note, 5000, false).trim(),
+          sourceRefs: sources(input.evidenceNote.sourceRefs),
+          at: stamp,
+        }] : [],
+        createdAt: stamp,
+        updatedAt: stamp,
+      };
+      pack.purposes.push(purpose);
+      return { pack, purpose, created: true };
+    });
+  }
+
+  preparePreview(packId: string, input: {
+    version: string;
+    previousVersion?: string;
+    purposeIds: string[];
+    decisions?: { purposeId: string; choiceId: string; selectedKey: string; decidedBy?: string }[];
+    policyEffectiveFrom?: string;
+    dataCutoffAt?: string;
+    summary: string;
+  }): EnterprisePackPreview {
+    return this.mutate(packId, pack => {
+      const version = text(input.version, 50, false).trim();
+      if (pack.packRevisions.some(r => r.version === version)) fail('enterprise_pack_version_exists', 409);
+      if (!Array.isArray(input.purposeIds) || !input.purposeIds.length) fail('empty_pack_preview');
+
+      const decisionsSnapshot: EnterprisePackPreview['decisions'] = [];
+      const purposeSnapshots: EnterprisePurposePublicationState[] = [];
+
+      for (const pid of [...new Set(input.purposeIds)]) {
+        const purpose = pack.purposes.find(p => p.id === pid);
+        if (!purpose) fail('enterprise_pack_purpose_not_found', 404);
+
+        // Apply any submitted decision choices and validate required choices
+        for (const choice of purpose.decisionChoices) {
+          const submitted = input.decisions?.find(d => d.purposeId === pid && d.choiceId === choice.id);
+          const chosenKey = submitted?.selectedKey ?? choice.selectedKey;
+          if (!chosenKey) fail('enterprise_pack_decision_required', 409);
+          const option = choice.options.find(o => o.key === chosenKey);
+          if (!option) fail('invalid_enterprise_pack_decision', 400);
+          choice.selectedKey = chosenKey;
+          if (submitted?.decidedBy) choice.decidedBy = submitted.decidedBy;
+          choice.decidedAt = choice.decidedAt ?? now();
+          decisionsSnapshot.push({
+            purposeId: pid,
+            choiceId: choice.id,
+            selectedKey: chosenKey,
+            label: option.label,
+            ...(choice.decidedBy ? { decidedBy: choice.decidedBy } : {}),
+          });
+        }
+
+        // Collect related exceptions from pack entries
+        const exceptions = pack.entries
+          .filter(e => !e.impactedPurposeIds.length || e.impactedPurposeIds.includes(pid))
+          .flatMap(e => e.exceptions);
+
+        // Evaluate history window & overlapping exceptions
+        const evalResult = evaluateExceptionsAndWindow({
+          eventDate: input.dataCutoffAt ?? purpose.dataCutoffAt ?? now().slice(0, 10),
+          exceptions,
+          observationWindowDays: purpose.observationWindowDays,
+          availableHistoryDays: purpose.availableHistoryDays,
+        });
+
+        let status: EnterprisePurposePublicationState['status'] = 'eligible';
+        let suspensionReason: string | undefined;
+        if (evalResult.overlapConflict) {
+          status = 'conflict_blocked';
+          suspensionReason = '存在未批准优先关系的重叠例外，受影响范围保持候选限制';
+        } else if (purpose.tier === 'formal-calculation' && !evalResult.windowSufficient) {
+          status = 'restricted';
+          suspensionReason = `已知历史长度（${purpose.availableHistoryDays}天）不足所需观察窗（${purpose.observationWindowDays}天），保留限制`;
+        }
+
+        purposeSnapshots.push({
+          purposeId: purpose.id,
+          purposeKey: purpose.purposeKey,
+          title: purpose.title,
+          tier: purpose.tier,
+          ...(purpose.limitedCalculationName ? { limitedCalculationName: purpose.limitedCalculationName } : {}),
+          subjectUnit: purpose.subjectUnit,
+          ...(purpose.windowDays !== undefined ? { windowDays: purpose.windowDays } : {}),
+          scope: clone(purpose.scope),
+          ...(input.policyEffectiveFrom ?? purpose.policyEffectiveFrom ? { policyEffectiveFrom: input.policyEffectiveFrom ?? purpose.policyEffectiveFrom } : {}),
+          ...(input.dataCutoffAt ?? purpose.dataCutoffAt ? { dataCutoffAt: input.dataCutoffAt ?? purpose.dataCutoffAt } : {}),
+          exclusions: [...purpose.exclusions],
+          gaps: [...purpose.remainingGaps],
+          dependencies: clone(purpose.dependencies),
+          exceptions: clone(exceptions),
+          status,
+          ...(suspensionReason ? { suspensionReason } : {}),
+        });
+      }
+
+      const createdAt = now();
+      const bodyForFingerprint = {
+        version,
+        previousVersion: input.previousVersion ?? null,
+        packRevision: pack.revision,
+        summary: text(input.summary, 5000, false),
+        policyEffectiveFrom: input.policyEffectiveFrom ?? null,
+        dataCutoffAt: input.dataCutoffAt ?? null,
+        purposeIds: [...new Set(input.purposeIds)],
+        decisions: decisionsSnapshot,
+        purposeSnapshots,
+      };
+      const preview: EnterprisePackPreview = {
+        id: randomUUID(),
+        version,
+        ...(input.previousVersion ? { previousVersion: input.previousVersion } : {}),
+        fingerprint: digest(bodyForFingerprint),
+        packRevision: pack.revision,
+        summary: text(input.summary, 5000, false),
+        ...(input.policyEffectiveFrom ? { policyEffectiveFrom: input.policyEffectiveFrom } : {}),
+        ...(input.dataCutoffAt ? { dataCutoffAt: input.dataCutoffAt } : {}),
+        purposeIds: [...new Set(input.purposeIds)],
+        decisions: decisionsSnapshot,
+        purposeSnapshots,
+        createdAt,
+      };
+      pack.previews.push(preview);
+      return preview;
+    });
+  }
+
+  private recomputePurposeEligibility(
+    purposeManifests: EnterprisePurposePublicationState[],
+    receipts: PackModulePublicationReceipt[],
+  ): void {
+    for (const pm of purposeManifests) {
+      if (pm.status === 'conflict_blocked' || pm.status === 'restricted') continue;
+      const requiredDeps = pm.dependencies.filter(d => d.requiredFor.includes(pm.tier));
+      const unsatisfied: string[] = [];
+      for (const dep of requiredDeps) {
+        const matchingReceipts = receipts.filter(r => sameExactSourceRef(r.targetRef, dep.ref));
+        const latest = matchingReceipts.at(-1);
+        if (!latest || latest.status !== 'succeeded') {
+          unsatisfied.push(`${dep.role}:${dep.ref.id}@${dep.ref.version}(${latest?.status ?? 'missing'})`);
+        }
+      }
+      if (unsatisfied.length > 0) {
+        pm.status = 'suspended';
+        pm.suspensionReason = `必要依赖尚未成功：${unsatisfied.join('、')}`;
+      } else {
+        pm.status = 'eligible';
+        pm.suspensionReason = undefined;
+      }
+    }
+  }
+
+  confirmPreview(packId: string, input: {
+    previewId: string;
+    fingerprint: string;
+    confirmedBy?: string;
+    moduleReceipts: {
+      requestId: string;
+      authority: PackModulePublicationReceipt['authority'];
+      targetRef: StudioSourceRef;
+      status: 'succeeded' | 'failed' | 'unknown';
+      detail: string;
+      purposeIds: string[];
+    }[];
+  }): EnterprisePackRevision {
+    // Idempotent check BEFORE mutating: if already confirmed for exact previewId + fingerprint, return existing!
+    const current = this.get(packId);
+    const existingPreview = current.previews.find(p => p.id === uuid(input.previewId));
+    if (!existingPreview) fail('enterprise_pack_preview_not_found', 404);
+    if (existingPreview.fingerprint !== input.fingerprint) fail('enterprise_pack_preview_changed', 409);
+    if (existingPreview.confirmedAt) {
+      const existingRevision = current.packRevisions.find(r => r.previewId === existingPreview.id);
+      if (existingRevision) return existingRevision;
+    }
+
+    return this.mutate(packId, pack => {
+      const preview = pack.previews.find(p => p.id === uuid(input.previewId));
+      if (!preview) fail('enterprise_pack_preview_not_found', 404);
+      if (preview.fingerprint !== input.fingerprint) fail('enterprise_pack_preview_changed', 409);
+      if (preview.confirmedAt) {
+        return pack.packRevisions.find(r => r.previewId === preview.id)!;
+      }
+
+      const stamp = now();
+      const receipts: PackModulePublicationReceipt[] = input.moduleReceipts.map(r => {
+        const ref = sourceRef(r.targetRef);
+        return {
+          receiptId: randomUUID(),
+          requestId: text(r.requestId, 200, false),
+          authority: r.authority,
+          targetRef: ref,
+          targetFingerprint: digest(ref),
+          status: r.status,
+          detail: text(r.detail, 5000, false),
+          purposeIds: [...new Set(r.purposeIds)],
+          at: stamp,
+        };
+      });
+
+      const purposeManifests = clone(preview.purposeSnapshots);
+      this.recomputePurposeEligibility(purposeManifests, receipts);
+
+      // Mark previous active revision as superseded (retaining it immutably for historical lookups!)
+      for (const oldRev of pack.packRevisions) {
+        if (oldRev.status === 'active') oldRev.status = 'superseded';
+      }
+
+      const manifestCore = {
+        version: preview.version,
+        previousVersion: preview.previousVersion ?? null,
+        previewId: preview.id,
+        previewFingerprint: preview.fingerprint,
+        decisionsSnapshot: preview.decisions,
+        purposeManifests: purposeManifests.map(pm => ({
+          purposeId: pm.purposeId,
+          purposeKey: pm.purposeKey,
+          tier: pm.tier,
+          dependencies: pm.dependencies,
+          scope: pm.scope,
+          exclusions: pm.exclusions,
+        })),
+      };
+
+      const revision: EnterprisePackRevision = {
+        version: preview.version,
+        ...(preview.previousVersion ? { previousVersion: preview.previousVersion } : {}),
+        previewId: preview.id,
+        previewFingerprint: preview.fingerprint,
+        manifestSha256: digest(manifestCore),
+        confirmedAt: stamp,
+        ...(input.confirmedBy ? { confirmedBy: text(input.confirmedBy, 200, false) } : {}),
+        ...(preview.policyEffectiveFrom ? { policyEffectiveFrom: preview.policyEffectiveFrom } : {}),
+        ...(preview.dataCutoffAt ? { dataCutoffAt: preview.dataCutoffAt } : {}),
+        decisionsSnapshot: clone(preview.decisions),
+        purposeManifests,
+        moduleReceipts: receipts,
+        status: 'active',
+      };
+
+      preview.confirmedAt = stamp;
+      pack.packRevisions.push(revision);
+
+      // Update purpose statuses without losing history
+      for (const pm of purposeManifests) {
+        const purpose = pack.purposes.find(p => p.id === pm.purposeId);
+        if (!purpose) continue;
+        purpose.workItemStatus = pm.status === 'eligible' ? 'published' : pm.status === 'suspended' ? 'partially_suspended' : 'restricted';
+        purpose.updatedAt = stamp;
+      }
+
+      return revision;
+    });
+  }
+
+  /**
+   * Append-only reconciliation of a previously unknown or failed module receipt.
+   * Original failed/unknown receipts are ALWAYS preserved in chronological order.
+   */
+  reconcileModuleReceipt(packId: string, version: string, input: {
+    requestId: string;
+    authority: PackModulePublicationReceipt['authority'];
+    targetRef: StudioSourceRef;
+    status: 'succeeded' | 'failed' | 'unknown';
+    detail: string;
+    purposeIds: string[];
+    supersedesReceiptId?: string;
+  }): EnterprisePackRevision {
+    return this.mutate(packId, pack => {
+      const revision = pack.packRevisions.find(r => r.version === version);
+      if (!revision) fail('enterprise_pack_revision_not_found', 404);
+      const ref = sourceRef(input.targetRef);
+      const receipt: PackModulePublicationReceipt = {
+        receiptId: randomUUID(),
+        requestId: text(input.requestId, 200, false),
+        authority: input.authority,
+        targetRef: ref,
+        targetFingerprint: digest(ref),
+        status: input.status,
+        detail: text(input.detail, 5000, false),
+        purposeIds: [...new Set(input.purposeIds)],
+        ...(input.supersedesReceiptId ? { supersedesReceiptId: input.supersedesReceiptId } : {}),
+        at: now(),
+      };
+      revision.moduleReceipts.push(receipt);
+      this.recomputePurposeEligibility(revision.purposeManifests, revision.moduleReceipts);
+
+      if (revision.status === 'active') {
+        for (const pm of revision.purposeManifests) {
+          const purpose = pack.purposes.find(p => p.id === pm.purposeId);
+          if (purpose) {
+            purpose.workItemStatus = pm.status === 'eligible' ? 'published' : pm.status === 'suspended' ? 'partially_suspended' : 'restricted';
+          }
+        }
+      }
+      return revision;
+    });
+  }
+
+  pinTaskVersion(packId: string, input: { projectId: string; taskId: string; authorizedScope: string; version?: string }): EnterprisePackTaskPin {
+    const existing = this.getTaskPin(packId, input.projectId, input.taskId);
+    if (existing) return existing;
+
+    return this.mutate(packId, pack => {
+      const pid = identity(input.projectId), tid = identity(input.taskId);
+      const already = pack.taskPins.find(p => p.projectId === pid && p.taskId === tid);
+      if (already) return already;
+
+      const rev = input.version
+        ? pack.packRevisions.find(r => r.version === input.version)
+        : pack.packRevisions.find(r => r.status === 'active') ?? pack.packRevisions.at(-1);
+      if (!rev) fail('enterprise_pack_no_published_revision', 409);
+
+      const eligiblePurposes = rev.purposeManifests.filter(pm => pm.status === 'eligible');
+      const pinnedAuthorityRefs = [...new Map(
+        eligiblePurposes.flatMap(pm => pm.dependencies.map(d => [digest(d.ref), d.ref] as const)),
+      ).values()];
+
+      const pin: EnterprisePackTaskPin = {
+        projectId: pid,
+        taskId: tid,
+        enterpriseId: pack.enterpriseId,
+        packId: pack.id,
+        packVersion: rev.version,
+        manifestSha256: rev.manifestSha256,
+        purposeIds: eligiblePurposes.map(pm => pm.purposeId),
+        pinnedAuthorityRefs,
+        authorizedScope: text(input.authorizedScope, 2000, false),
+        ...(rev.dataCutoffAt ? { dataCutoffAt: rev.dataCutoffAt } : {}),
+        pinnedAt: now(),
+      };
+      pack.taskPins.push(pin);
+      return pin;
+    });
+  }
+
+  getTaskPin(packId: string, projectId: string, taskId: string): EnterprisePackTaskPin | undefined {
+    const pack = this.get(packId);
+    return pack.taskPins.find(p => p.projectId === projectId && p.taskId === taskId);
+  }
+
+  recordUse(packId: string, input: {
+    projectId: string;
+    taskId: string;
+    sessionId?: string;
+    turnIndex?: number;
+    messageId?: string;
+    reportRef: StudioSourceRef;
+    packVersion: string;
+    purposeId: string;
+    purposeKey: string;
+    tier: PackPurposeTier;
+    accessLevel: 'definition' | 'summary' | 'recalculate';
+    policyEffectiveFrom?: string;
+    dataCutoffAt?: string;
+    catalogSupplied: EnterprisePackUseRecord['catalogSupplied'];
+    actualReads: EnterprisePackReadEvidence[];
+    authorDeclaration?: EnterprisePackUseRecord['authorDeclaration'];
+  }): EnterprisePackUseRecord {
+    return this.mutate(packId, pack => {
+      const record: EnterprisePackUseRecord = {
+        id: randomUUID(),
+        projectId: identity(input.projectId),
+        taskId: identity(input.taskId),
+        ...(input.sessionId ? { sessionId: text(input.sessionId, 200, false) } : {}),
+        ...(input.turnIndex !== undefined ? { turnIndex: input.turnIndex } : {}),
+        ...(input.messageId ? { messageId: text(input.messageId, 200, false) } : {}),
+        reportRef: sourceRef(input.reportRef),
+        packId: pack.id,
+        packVersion: text(input.packVersion, 50, false),
+        purposeId: text(input.purposeId, 100, false),
+        purposeKey: text(input.purposeKey, 200, false),
+        tier: input.tier,
+        accessLevel: input.accessLevel,
+        ...(input.policyEffectiveFrom ? { policyEffectiveFrom: input.policyEffectiveFrom } : {}),
+        ...(input.dataCutoffAt ? { dataCutoffAt: input.dataCutoffAt } : {}),
+        catalogSupplied: {
+          packVersion: text(input.catalogSupplied.packVersion, 50, false),
+          purposeIds: [...new Set(input.catalogSupplied.purposeIds)],
+          assetRefs: sources(input.catalogSupplied.assetRefs),
+          suppliedAt: input.catalogSupplied.suppliedAt,
+        },
+        actualReads: input.actualReads.map(r => ({ ...r, ref: sourceRef(r.ref) })),
+        ...(input.authorDeclaration ? { authorDeclaration: { ...input.authorDeclaration, declaredRefs: sources(input.authorDeclaration.declaredRefs) } } : {}),
+        independentVerification: {
+          status: 'pending',
+          verdictDetail: '尚无独立核验结论；目录供给、读取回执与作者声明均不替代独立核验',
+        },
+        createdAt: now(),
+      };
+      pack.useRecords.push(record);
+      return record;
+    });
+  }
+
+  verifyUse(packId: string, useId: string, input: {
+    verifierRole: string;
+    expectedRef?: StudioSourceRef;
+    independentConfirmed: boolean;
+    partialSubsetOnly?: boolean;
+    treatedUnreadableStoreAsZero?: boolean;
+    includedOptedOutInSms?: boolean;
+    deliveredSubset?: string;
+    remainingGaps?: string[];
+    verdictDetail?: string;
+    checkedRefs?: StudioSourceRef[];
+  }): EnterprisePackUseRecord {
+    return this.mutate(packId, pack => {
+      const record = pack.useRecords.find(u => u.id === uuid(useId));
+      if (!record) fail('enterprise_pack_use_not_found', 404);
+      const evaluated = evaluateUseVerdict({
+        expectedRef: input.expectedRef,
+        actualReads: record.actualReads,
+        hasAuthorDeclaration: Boolean(record.authorDeclaration),
+        independentConfirmed: input.independentConfirmed,
+        partialSubsetOnly: input.partialSubsetOnly,
+        treatedUnreadableStoreAsZero: input.treatedUnreadableStoreAsZero,
+        includedOptedOutInSms: input.includedOptedOutInSms,
+      });
+      record.independentVerification = {
+        status: evaluated.verdict,
+        verdictDetail: input.verdictDetail ? text(input.verdictDetail, 5000, false) : evaluated.reason,
+        verifierRole: text(input.verifierRole, 200, false),
+        ...(input.checkedRefs ? { checkedRefs: sources(input.checkedRefs) } : {}),
+        wrongVersionDetected: evaluated.wrongVersionDetected,
+        ...(input.expectedRef ? { expectedVersion: input.expectedRef.version } : {}),
+        ...(input.deliveredSubset ? { deliveredSubset: text(input.deliveredSubset, 2000, false) } : {}),
+        ...(input.remainingGaps ? { remainingGaps: input.remainingGaps.map(g => text(g, 2000, false)) } : {}),
+        verifiedAt: now(),
+      };
+      const purpose = pack.purposes.find(p => p.id === record.purposeId);
+      if (purpose) {
+        purpose.evidenceReadiness.independentUse = evaluated.verdict;
+      }
+      return record;
+    });
+  }
+
+  submitFeedback(packId: string, input: {
+    problemKey: string;
+    packVersion: string;
+    purposeIds: string[];
+    title: string;
+    category: PackFeedbackCategory;
+    report: Omit<EnterprisePackFeedbackReport, 'submittedAt'>;
+  }): { pack: EnterpriseDomainPack; feedback: EnterprisePackFeedback; created: boolean } {
+    return this.mutate(packId, pack => {
+      const problemKey = text(input.problemKey, 200, false).trim().toLowerCase();
+      const packVersion = text(input.packVersion, 50, false).trim();
+      const reportEntry: EnterprisePackFeedbackReport = {
+        projectId: identity(input.report.projectId),
+        taskId: identity(input.report.taskId),
+        sessionId: text(input.report.sessionId, 200, false),
+        messageId: text(input.report.messageId, 200, false),
+        reportRef: sourceRef(input.report.reportRef),
+        ...(input.report.usedPackVersion ? { usedPackVersion: text(input.report.usedPackVersion, 50, false) } : {}),
+        usedAssetRefs: sources(input.report.usedAssetRefs),
+        ...(input.report.dataCutoffAt ? { dataCutoffAt: text(input.report.dataCutoffAt, 100, false) } : {}),
+        ...(input.report.roleOrAccessLevel ? { roleOrAccessLevel: text(input.report.roleOrAccessLevel, 200, false) } : {}),
+        evidenceNote: text(input.report.evidenceNote, 5000, false),
+        submittedAt: now(),
+      };
+
+      // Deduplicate by (packVersion, problemKey): append new evidence without creating duplicate feedback!
+      const existing = pack.feedbackItems.find(f => f.packVersion === packVersion && f.problemKey === problemKey);
+      if (existing) {
+        const sig = digest([reportEntry.reportRef, reportEntry.evidenceNote]);
+        if (!existing.reports.some(r => digest([r.reportRef, r.evidenceNote]) === sig)) {
+          existing.reports.push(reportEntry);
+        }
+        existing.purposeIds = [...new Set([...existing.purposeIds, ...input.purposeIds])];
+        existing.updatedAt = now();
+        return { pack, feedback: existing, created: false };
+      }
+
+      const seq = pack.feedbackItems.length + 1;
+      const targetAuthority = feedbackTargetAuthority(input.category);
+      const stamp = now();
+      const feedback: EnterprisePackFeedback = {
+        id: randomUUID(),
+        feedbackCode: `F-${String(seq).padStart(2, '0')}`,
+        problemKey,
+        packVersion,
+        purposeIds: [...new Set(input.purposeIds)],
+        title: text(input.title, 300, false),
+        category: input.category,
+        targetAuthority,
+        status: targetAuthority === 'task' ? 'retained_in_task' : 'recorded',
+        reports: [reportEntry],
+        createdAt: stamp,
+        updatedAt: stamp,
+      };
+      pack.feedbackItems.push(feedback);
+      return { pack, feedback, created: true };
+    });
+  }
+
+  recordUpgradeImpact(packId: string, input: {
+    changedAuthorityRef: StudioSourceRef;
+    replacementRef: StudioSourceRef;
+    fromPackVersion: string;
+    toPackVersion: string;
+    fromFeedbackId?: string;
+    note?: string;
+  }): EnterprisePackUpgradeImpact {
+    return this.mutate(packId, pack => {
+      const computed = computeUpgradeImpact(pack, {
+        changedAuthorityRef: sourceRef(input.changedAuthorityRef),
+        replacementRef: sourceRef(input.replacementRef),
+        fromPackVersion: text(input.fromPackVersion, 50, false),
+        toPackVersion: text(input.toPackVersion, 50, false),
+      });
+      const stamp = now();
+      const record: EnterprisePackUpgradeImpact = {
+        id: randomUUID(),
+        ...computed,
+        createdAt: stamp,
+      };
+      pack.upgradeImpacts.push(record);
+
+      // Annotate historical use records without mutating original report content!
+      for (const use of pack.useRecords) {
+        if (use.packVersion !== input.fromPackVersion) continue;
+        const affected = computed.verifiedImpactedUseIds.includes(use.id) || computed.pendingImpactedUseIds.includes(use.id);
+        use.impactNotes ??= [];
+        use.impactNotes.push({
+          fromFeedbackId: input.fromFeedbackId ?? record.id,
+          newPackVersion: input.toPackVersion,
+          note: input.note ?? (affected ? `该报告受 ${input.fromPackVersion} → ${input.toPackVersion} 上游修订影响，原报告与原依据保留只读` : `上游修订未改变本报告所用口径/定义，原结论继续成立`),
+          affected,
+          addedAt: stamp,
+        });
+      }
+      return record;
+    });
+  }
+
+  restrictRevision(packId: string, version: string, reason: string): EnterprisePackRevision {
+    return this.mutate(packId, pack => {
+      const rev = pack.packRevisions.find(r => r.version === version);
+      if (!rev) fail('enterprise_pack_revision_not_found', 404);
+      rev.status = 'restricted';
+      rev.restrictionNote = text(reason, 2000, false);
+      for (const pm of rev.purposeManifests) {
+        pm.status = 'restricted';
+        pm.suspensionReason = rev.restrictionNote;
+      }
+      return rev;
+    });
+  }
+}
