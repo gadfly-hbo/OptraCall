@@ -1588,6 +1588,17 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   }));
   assert.equal(verifyNoDecl.use.independentVerification.status, 'pending', 'Missing native declare-use & disk-verified assess-use MUST keep verdict pending!');
 
+  const undeclaredFeedback = await json(await host.request(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
+    requestId: randomUUID(),
+    origin: { projectId: projAud.id, taskId: taskB.id, sessionId: assistantMsgB.nativeSessionId, messageId: assistantMsgB.nativeEntryId },
+    problemKey: 'feedback-without-report-adoption',
+    title: '查阅来源但未将其登记为报告依据',
+    category: 'shared_refund_mapping',
+  }));
+  assert.equal(undeclaredFeedback.feedback.reports[0].adoptionBasis, 'directory_only_unverified');
+  assert.equal(undeclaredFeedback.feedback.reports[0].usedPackVersion, undefined);
+  assert.equal(undeclaredFeedback.feedback.targetAssetRef, undefined);
+
   // Run Task B Turn 2 (proves Mac mini Turn-2 continuation writes cleanly WITHOUT protected_executor_draining!) with real native read-source + declare-use!
   let stepB2 = 0;
   let taskBStudioUseId = '';
@@ -2002,6 +2013,10 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(caseHist.historicalDecision?.revision, 1, 'Feedback case-history MUST read back exact historical decision rev.1!');
   assert.equal(caseHist.historicalDecision?.payload?.title, '星桥十月截止复购激励决策 rev1');
   assert.equal(caseHist.latestDecision?.revision, 2);
+  await json(await host.request(`/api/cases/${origCase.id}/projects/${projStar.id}`, 'DELETE', {
+    operationId: randomUUID(),
+    expectedRevision: caseHist.caseRecord.revision,
+  }));
 
   // R5 (Round-8): Retroactive feedback submitted from old reply originA AFTER Case moved rev.1 -> rev.2 MUST NOT mis-pin rev.2!
   // AND closing post-cutoff new-event refund (C21, O-88, 2026-11-05 under newCutoffChecked 2026-11-15) MUST reject reusing old useBRecord (which never read starCsvNov15!) and succeed ONLY with a fresh analysis + independent verifier task that genuinely read starCsvNov15!
@@ -2012,11 +2027,9 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     category: 'shared_refund_mapping', evidenceNote: 'C21 原单 O-88 在原截止日 2026-10-31 之后于 2026-11-05 发生全额退款',
   }));
   // CRITICAL (R5 Round-8): originA happened BEFORE dec2, and dec1/dec2 both post-date originA -> MUST NEVER silently pin rev.2!
-  assert.notEqual(
-    fbPostCutoff.feedback.reports[0].originalCaseRef?.decisionRevision,
-    2,
-    'Retroactive feedback from old reply originA after Case moved to rev.2 MUST NEVER pin rev.2!',
-  );
+  assert.equal(fbPostCutoff.feedback.reports[0].originalCaseRef?.caseId, origCase.id);
+  assert.equal(fbPostCutoff.feedback.reports[0].originalCaseRef?.decisionRevision, 1,
+    'The exact original Case decision survives a later revision and project unlink');
 
   // A real read in a later turn of the same old verifier cannot retroactively attach to its assessment.
   let laterVerifierRead = '';

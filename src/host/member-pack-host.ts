@@ -2625,6 +2625,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   async function verifyFeedbackItems(
     feedback: EnterpriseDomainPack['feedbackItems'][number],
     use: EnterprisePackUseRecord,
+    originalUse: EnterprisePackUseRecord | undefined,
     raw: EnterprisePackFeedbackItemVerification,
   ): Promise<EnterprisePackFeedbackItemVerification> {
     const fail = (code = 'feedback_verification_item_evidence_uncorroborated'): never => {
@@ -2644,7 +2645,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const retained = Array.isArray(raw.shouldRetain) ? raw.shouldRetain : [];
     const newEvents = Array.isArray(raw.postCutoffNewEvents) ? raw.postCutoffNewEvents : [];
     if (!retained.length || (!changed.length && !newEvents.length)) return fail('feedback_verification_missing_item_evidence');
-    if (!oldCutoff || !original.sourceReads?.length || original.adoptionBasis !== 'verified_actual_read') {
+    const originalDeclaration = originalUse?.authorDeclaration;
+    const originalAdoption = originalUse && originalDeclaration?.studioUseId
+      && originalUse.packVersion === original.usedPackVersion && exactTaskReport(originalUse.reportRef, original.reportRef)
+      && originalDeclaration.declaredRefs.some(ref =>
+        original.usedAssetRefs.some(used => sameExactSourceRef(used, ref))
+        && originalUse.actualReads.some(read => read.complete && sameExactSourceRef(read.ref, ref)));
+    if (!oldCutoff || !original.sourceReads?.length || original.adoptionBasis !== 'verified_actual_read' || !originalAdoption) {
       return fail('feedback_verification_original_snapshot_unavailable');
     }
     if (raw.originalCutoffChecked !== oldCutoff) return fail('feedback_verification_cutoff_mismatch');
@@ -3792,19 +3799,19 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep)),
             );
             const studioSys = options.studio.get(currentPack.systemId);
-            const turnDeclaredReportRefs = studioSys.uses
-              .filter(u => u.projectId === pid && u.taskId === tid && nativeEv.turnDeclaredStudioUseIds.includes(u.id))
-              .map(u => u.report);
-            const savedReports = [...nativeEv.turnWrittenReports, ...turnDeclaredReportRefs]
+            const turnDeclaredUses = studioSys.uses
+              .filter(u => u.projectId === pid && u.taskId === tid && nativeEv.turnDeclaredStudioUseIds.includes(u.id));
+            const savedReports = [...nativeEv.turnWrittenReports, ...turnDeclaredUses.map(use => use.report)]
               .filter(ref => isTaskReport(ref, pid, tid));
-            const matchingTurnUses = [...currentPack.useRecords].reverse().filter(u =>
-              u.projectId === pid && u.taskId === tid
-              && (exactTaskReport(u.reportRef, replyRef) || savedReports.some(ref => exactTaskReport(ref, u.reportRef)))
-              && u.actualReads.some(r => r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep))),
+            const evidenceRefs = (use: EnterprisePackUseRecord) => use.actualReads
+              .filter(read => read.complete
+                && packDepRefs.some(dep => sameExactSourceRef(read.ref, dep))
+                && use.authorDeclaration?.declaredRefs.some(declared => sameExactSourceRef(read.ref, declared)))
+              .map(read => read.ref);
+            const matchingTurnUses = [...currentPack.useRecords].reverse().filter(use =>
+              turnDeclaredUses.some(declared => matchesStudioUse(use, declared)) && evidenceRefs(use).length > 0,
             );
-            const hasActualUse = Boolean(matchingTurnUses.length || packMatchedReads.length);
-            const evidenceRefs = (reads: typeof nativeEv.actualReads) =>
-              reads.filter(r => r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep))).map(r => r.ref);
+            const hasActualUse = matchingTurnUses.length > 0;
             const observedPurposes = new Set(matchingTurnUses.map(use => use.purposeId));
             if (!observedPurposes.size && packMatchedReads.length) {
               for (const manifest of rev?.purposeManifests ?? []) {
@@ -3818,7 +3825,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const selectedPurpose = resolvedPurposes.length === 1 && observedPurposes.has(resolvedPurposes[0]!)
               ? resolvedPurposes[0] : undefined;
             const matchingTurnUse = selectedPurpose ? matchingTurnUses.find(use => use.purposeId === selectedPurpose) : undefined;
-            const matchedRefs = [...packMatchedReads.map(r => r.ref), ...evidenceRefs(matchingTurnUse?.actualReads ?? [])]
+            const matchedRefs = (matchingTurnUse ? evidenceRefs(matchingTurnUse) : matchingTurnUses.flatMap(evidenceRefs))
               .filter((ref, index, all) => all.findIndex(other => sameExactSourceRef(ref, other)) === index);
 
             // A later file at the same path cannot change the original reference.
@@ -4011,8 +4018,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           const use = currentPack.useRecords.find(u => u.id === uuid(input.verifiedByUseId));
           if (use && (use.tier === 'formal-calculation' || use.tier === 'limited-calculation')) {
             if (!object(input.itemVerification)) throw new StudioError('feedback_verification_missing_item_evidence', 409);
+            const originalUse = currentPack.useRecords.find(record => record.id === existingFb.reports[0]?.linkedUseRecordId);
             verifiedItemEvidence = await verifyFeedbackItems(
-              existingFb, use, input.itemVerification as unknown as EnterprisePackFeedbackItemVerification,
+              existingFb, use, originalUse, input.itemVerification as unknown as EnterprisePackFeedbackItemVerification,
             );
           }
         }
