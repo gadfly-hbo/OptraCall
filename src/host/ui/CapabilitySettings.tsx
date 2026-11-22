@@ -34,8 +34,7 @@ export function ConnectorCapabilitySettings({ onSharedConnections, onProjectSour
     <section className="project-plan-section"><h3>历史天气</h3><p>沿原 Open-Meteo 历史日级连接，无密钥或账号配置。本页不发天气请求，网络与服务可用性尚未核实。</p><p>在任务空闲时显式启用；原出境说明和使用条件仍在任务能力入口展示，结果进入所选模型上下文。</p><button type="button" className="text-button" onClick={onProjectSources}>到原任务核对启用与范围</button></section>
   </section>;
 }
-export function CapabilityPlansSettings() {
-  return <section aria-labelledby="settings-domain-pack-title">
-    <div className="page-heading"><div><h2 id="settings-domain-pack-title">领域资产包</h2></div></div>
-  </section>;
+import { DomainPackSettingsPanel } from './DomainPackSettingsPanel.tsx';
+export function CapabilityPlansSettings({ onOpenStudio }: { onOpenStudio?: () => void } = {}) {
+  return <DomainPackSettingsPanel onOpenStudio={onOpenStudio} />;
 }

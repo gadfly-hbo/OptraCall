@@ -35,10 +35,10 @@ const failureMessages: Record<string, string> = {
 };
 
 /** HTTP boundary for Studio's own business endpoints; never replays a mutation. */
-export async function studioRequest<T>(path: string, method: 'GET' | 'POST' = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
+export async function studioRequest<T>(path: string, method: 'GET' | 'POST' = 'GET', body?: unknown, signal?: AbortSignal, credentials: RequestCredentials = 'omit'): Promise<T> {
   try {
     const response = await fetch(`/api/studio/${path}`, {
-      method, mode: 'same-origin', credentials: 'omit', cache: 'no-store',
+      method, mode: 'same-origin', credentials, cache: 'no-store',
       headers: { 'x-optracall-client': '1', 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }), ...(signal ? { signal } : {}),
     });

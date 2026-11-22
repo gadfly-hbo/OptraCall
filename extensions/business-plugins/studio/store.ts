@@ -490,8 +490,21 @@ export class StudioStore {
     return this.mutate(id, system => {
       const use = system.uses.find(value => value.id === uuid(useId)); if (!use) fail('studio_use_not_found', 404);
       if (!['pass', 'fail', 'unknown'].includes(input.status)) fail('invalid_studio_use_assessment');
-      const report = sourceRef(input.report); if ((report.projectId && report.projectId !== use.projectId) || (report.taskId && report.taskId !== use.taskId)) fail('studio_use_owner_mismatch');
-      use.assessments ??= []; use.assessments.push({ status: input.status, report, sources: sources(input.sources), result: text(input.result, 20_000, false), at: now() }); return use;
+      const report = sourceRef(input.report);
+      const expectedProjectId = input.assessorProjectId ? identity(input.assessorProjectId) : use.projectId;
+      const expectedTaskId = input.assessorTaskId ? identity(input.assessorTaskId) : use.taskId;
+      if ((report.projectId && report.projectId !== expectedProjectId) || (report.taskId && report.taskId !== expectedTaskId)) fail('studio_use_owner_mismatch');
+      use.assessments ??= [];
+      use.assessments.push({
+        status: input.status,
+        report,
+        sources: sources(input.sources),
+        result: text(input.result, 20_000, false),
+        ...(input.assessorProjectId ? { assessorProjectId: expectedProjectId } : {}),
+        ...(input.assessorTaskId ? { assessorTaskId: expectedTaskId } : {}),
+        at: now(),
+      });
+      return use;
     });
   }
   addTopic(id: string, input: Pick<StudioTopic, 'title' | 'goal' | 'scope'>): StudioTopic {

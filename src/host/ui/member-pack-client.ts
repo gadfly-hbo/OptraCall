@@ -1,0 +1,338 @@
+import { studioRequest, StudioRequestError } from './studio-api.ts';
+
+/** Member-pack, resource-grant, and operator-session endpoints use same-origin HttpOnly operator context cookies. */
+const memberPackRequest = <T>(path: string, method: 'GET' | 'POST' = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> =>
+  studioRequest<T>(path, method, body, signal, 'same-origin');
+
+import type {
+  DomainReferenceDomain,
+  DomainReferenceRecord,
+  DomainReferenceRegisterInput,
+  EnterpriseDomainPack,
+  EnterprisePackFeedback,
+  EnterprisePackPreview,
+  EnterprisePackPurpose,
+  EnterprisePackRevision,
+  EnterprisePackTaskPin,
+  EnterprisePackUpgradeImpact,
+  EnterprisePackUseRecord,
+  ResourceAccessEvaluation,
+  ResourceAccessQuery,
+  ResourceAuthorizationGrant,
+  ResourceGrantInput,
+} from '../../../extensions/business-plugins/studio/enterprise-pack.ts';
+
+export type {
+  DomainReferenceRecord,
+  EnterpriseDomainPack,
+  EnterprisePackFeedback,
+  EnterprisePackPreview,
+  EnterprisePackPurpose,
+  EnterprisePackRevision,
+  EnterprisePackUseRecord,
+  ResourceAuthorizationGrant,
+};
+
+export interface BuiltinTemplateSummary {
+  sourceId: 'T01' | 'T02' | 'T03' | 'T04';
+  version: string;
+  title: string;
+  domain: DomainReferenceDomain;
+  locator: string;
+}
+
+export async function listDomainReferences(
+  params?: { enterpriseId?: string; domain?: DomainReferenceDomain; sourceId?: string; query?: string },
+  signal?: AbortSignal,
+): Promise<{ references: DomainReferenceRecord[]; builtinTemplates: BuiltinTemplateSummary[]; readOnlyRollback?: boolean }> {
+  const qs = new URLSearchParams();
+  if (params?.enterpriseId) qs.set('enterpriseId', params.enterpriseId);
+  if (params?.domain) qs.set('domain', params.domain);
+  if (params?.sourceId) qs.set('sourceId', params.sourceId);
+  if (params?.query) qs.set('query', params.query);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return memberPackRequest(`domain-references${suffix}`, 'GET', undefined, signal);
+}
+
+export async function registerDomainReference(
+  input: DomainReferenceRegisterInput & { requestId: string },
+): Promise<{ record: DomainReferenceRecord; outcome: 'created' | 'reused' | 'conflict' }> {
+  return memberPackRequest('domain-references', 'POST', input);
+}
+
+export async function registerRepoTemplate(
+  templateId: 'T01' | 'T02' | 'T03' | 'T04',
+  requestId: string,
+): Promise<{ record: DomainReferenceRecord; outcome: 'created' | 'reused' | 'conflict' }> {
+  return memberPackRequest('domain-references/repo-template', 'POST', { requestId, templateId });
+}
+
+export async function readDomainReferenceOriginal(
+  id: string,
+  section?: string,
+  enterpriseId?: string,
+  signal?: AbortSignal,
+): Promise<{
+  record: DomainReferenceRecord;
+  text: string;
+  sha256: string;
+  excerptSha256?: string;
+  isExcerpt?: boolean;
+  lineRange?: { start: number; end: number; total: number };
+  matchedHeading?: string;
+  sectionLocator?: string;
+}> {
+  const qs = new URLSearchParams();
+  if (section) qs.set('section', section);
+  if (enterpriseId) qs.set('enterpriseId', enterpriseId);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return memberPackRequest(`domain-references/${encodeURIComponent(id)}/original${suffix}`, 'GET', undefined, signal);
+}
+
+export interface GrantAuthorityCredential {
+  enterpriseId: string;
+  systemId: string;
+  ownerProjectId: string;
+  ownerTaskId?: string;
+  authorityToken: string;
+}
+
+export async function listResourceGrants(
+  enterpriseId?: string,
+  subjectId?: string,
+  signal?: AbortSignal,
+): Promise<{ grants: ResourceAuthorizationGrant[]; readOnlyRollback?: boolean }> {
+  const qs = new URLSearchParams();
+  if (enterpriseId) qs.set('enterpriseId', enterpriseId);
+  if (subjectId) qs.set('subjectId', subjectId);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return memberPackRequest(`resource-grants${suffix}`, 'GET', undefined, signal);
+}
+
+export async function createResourceGrant(
+  input: Omit<ResourceGrantInput, 'grantor'> & {
+    grantor?: string;
+    grantorProjectId?: string;
+    grantorSystemId?: string;
+    grantorTaskId?: string;
+    authorityToken?: string;
+    requestId: string;
+  },
+): Promise<{ grant: ResourceAuthorizationGrant }> {
+  return memberPackRequest('resource-grants', 'POST', input);
+}
+
+export async function revokeResourceGrant(
+  grantId: string,
+  reason: string,
+  requestId: string,
+  revokerProjectId?: string,
+  authority?: { authorityToken?: string; revokerSystemId?: string; revokerTaskId?: string },
+): Promise<{ grant: ResourceAuthorizationGrant }> {
+  return memberPackRequest(`resource-grants/${encodeURIComponent(grantId)}/revoke`, 'POST', {
+    requestId,
+    reason,
+    ...(revokerProjectId ? { revokerProjectId } : {}),
+    ...(authority?.authorityToken ? { authorityToken: authority.authorityToken } : {}),
+    ...(authority?.revokerSystemId ? { revokerSystemId: authority.revokerSystemId } : {}),
+    ...(authority?.revokerTaskId ? { revokerTaskId: authority.revokerTaskId } : {}),
+  });
+}
+
+export async function evaluateResourceAccessApi(
+  input: ResourceAccessQuery & { enterpriseId: string; subjectId: string },
+): Promise<{ evaluation: ResourceAccessEvaluation }> {
+  return memberPackRequest('resource-grants/evaluate', 'POST', input);
+}
+
+export async function listEnterprisePacks(
+  enterpriseId?: string,
+  domain?: string,
+  signal?: AbortSignal,
+  projectId?: string,
+): Promise<{ packs: EnterpriseDomainPack[]; readOnlyRollback: boolean; grantAuthority?: GrantAuthorityCredential }> {
+  const qs = new URLSearchParams();
+  if (enterpriseId) qs.set('enterpriseId', enterpriseId);
+  if (domain) qs.set('domain', domain);
+  if (projectId) qs.set('projectId', projectId);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return memberPackRequest(`enterprise-packs${suffix}`, 'GET', undefined, signal);
+}
+
+export async function ensureEnterprisePack(input: {
+  requestId: string;
+  enterpriseId: string;
+  systemId: string;
+  projectId?: string;
+  domain?: string;
+  name?: string;
+}): Promise<{ pack: EnterpriseDomainPack }> {
+  return memberPackRequest('enterprise-packs', 'POST', input);
+}
+
+export async function readEnterprisePack(
+  packId: string,
+  projectId?: string,
+  signal?: AbortSignal,
+): Promise<{ pack: EnterpriseDomainPack; readOnlyRollback: boolean; grantAuthority?: GrantAuthorityCredential }> {
+  const suffix = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}${suffix}`, 'GET', undefined, signal);
+}
+
+export async function savePackPanorama(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/panorama`, 'POST', input);
+}
+
+export async function selectPanoramaRecommendation(
+  packId: string,
+  input: { requestId: string; projectId?: string; purposeKey: string; selected: boolean; targetPurposeId?: string; scopeKey?: string; title?: string },
+): Promise<{ pack: EnterpriseDomainPack }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/panorama-select`, 'POST', input);
+}
+
+export async function upsertPackEntry(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/entries`, 'POST', input);
+}
+
+export async function upsertPackPurpose(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack; purpose: EnterprisePackPurpose; created: boolean }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/purposes`, 'POST', input);
+}
+
+export async function preparePackPreview(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack; preview: EnterprisePackPreview }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/previews`, 'POST', input);
+}
+
+export async function confirmPackPreview(packId: string, input: {
+  requestId: string;
+  projectId?: string;
+  previewId: string;
+  fingerprint: string;
+  confirmedBy?: string;
+}): Promise<{ pack: EnterpriseDomainPack; revision: EnterprisePackRevision }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/confirm`, 'POST', input);
+}
+
+export async function reconcilePackReceipt(packId: string, input: {
+  requestId: string;
+  projectId?: string;
+  version: string;
+  targetRequestId: string;
+}): Promise<{ pack: EnterpriseDomainPack; revision: EnterprisePackRevision }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/reconcile`, 'POST', input);
+}
+
+export async function pinPackTaskVersion(packId: string, input: Record<string, unknown>): Promise<{ pin: EnterprisePackTaskPin; pack: EnterpriseDomainPack }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/pin`, 'POST', input);
+}
+
+export async function recordPackUse(packId: string, input: Record<string, unknown>): Promise<{ use: EnterprisePackUseRecord; pack: EnterpriseDomainPack }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/uses`, 'POST', input);
+}
+
+export async function verifyPackUse(packId: string, useId: string, input: Record<string, unknown>): Promise<{ use: EnterprisePackUseRecord; pack: EnterpriseDomainPack }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/uses/${encodeURIComponent(useId)}/verify`, 'POST', input);
+}
+
+export async function submitPackFeedback(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack; feedback: EnterprisePackFeedback; created: boolean }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/feedback`, 'POST', input);
+}
+
+export async function handlePackFeedback(packId: string, feedbackId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack; feedback: EnterprisePackFeedback }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/feedback/${encodeURIComponent(feedbackId)}/handle`, 'POST', input);
+}
+
+export async function recordPackUpgradeImpact(packId: string, input: Record<string, unknown>): Promise<{ impact: EnterprisePackUpgradeImpact; pack: EnterpriseDomainPack }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/upgrade-impact`, 'POST', input);
+}
+
+export interface TurnPackEvidenceResponse {
+  projectId: string;
+  taskId: string;
+  sessionId?: string;
+  messageId?: string;
+  savedReports: { authority: string; id: string; projectId?: string; taskId?: string; version: string; sha256?: string; locator?: string }[];
+  useRecords: {
+    packId: string;
+    packCode: string;
+    packName: string;
+    use: EnterprisePackUseRecord;
+  }[];
+  feedbackLinks: {
+    packId: string;
+    feedbackId: string;
+    feedbackCode: string;
+    title: string;
+    status: string;
+    reportRef: { locator?: string; sha256?: string; version?: string };
+    replyRef?: { locator?: string; sha256?: string };
+    originalCaseRef?: { caseId: string; decisionId?: string; summary?: string };
+  }[];
+}
+
+export async function readTurnPackEvidence(
+  projectId: string,
+  taskId: string,
+  sessionId?: string,
+  messageId?: string,
+  signal?: AbortSignal,
+): Promise<TurnPackEvidenceResponse> {
+  const qs = new URLSearchParams({ projectId, taskId });
+  if (sessionId) qs.set('sessionId', sessionId);
+  if (messageId) qs.set('messageId', messageId);
+  return memberPackRequest(`enterprise-packs/turn-evidence?${qs.toString()}`, 'GET', undefined, signal);
+}
+
+export async function readPreservedReportSnapshot(
+  packId: string,
+  projectId: string,
+  locator: string,
+  sha256?: string,
+  taskId?: string,
+  signal?: AbortSignal,
+): Promise<{ projectId: string; taskId?: string; locator: string; sha256: string; bytesLength: number; text: string }> {
+  const qs = new URLSearchParams({ projectId, locator });
+  if (sha256) qs.set('sha256', sha256);
+  if (taskId) qs.set('taskId', taskId);
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/report-snapshot?${qs.toString()}`, 'GET', undefined, signal);
+}
+
+export interface HostOperatorSessionInfo {
+  operator: {
+    operatorId: string;
+    displayName?: string;
+    activeProjectId?: string;
+    verified: boolean;
+  };
+  registeredOperators?: { operatorId: string; displayName: string; createdAt: string }[];
+  customResolver?: boolean;
+}
+
+export async function readOperatorSession(signal?: AbortSignal): Promise<HostOperatorSessionInfo> {
+  return memberPackRequest('operators/session', 'GET', undefined, signal);
+}
+
+export async function switchOperatorSession(input: {
+  action?: 'login' | 'register' | 'logout';
+  operatorId?: string;
+  displayName?: string;
+  passcode?: string;
+  activeProjectId?: string;
+}): Promise<HostOperatorSessionInfo & { created?: boolean; loggedOut?: boolean }> {
+  return memberPackRequest('operators/session', 'POST', input);
+}
+
+export async function readFeedbackCaseHistory(
+  packId: string,
+  feedbackId: string,
+  signal?: AbortSignal,
+): Promise<{
+  feedbackId: string;
+  originalCaseRef: Record<string, unknown> | null;
+  caseRecord: Record<string, unknown> | null;
+  historicalDecision: Record<string, unknown> | null;
+  latestDecision?: Record<string, unknown> | null;
+}> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/feedback/${encodeURIComponent(feedbackId)}/case-history`, 'GET', undefined, signal);
+}
+
+export { StudioRequestError };

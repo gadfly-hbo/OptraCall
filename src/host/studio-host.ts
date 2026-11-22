@@ -27,12 +27,13 @@ import { EnterpriseScopeStore } from './enterprise-scope-store.ts';
 import { createStudioEnterpriseCatalog } from './studio-enterprise-catalog.ts';
 import { CaseStoreError, type CaseStore } from './case-store.ts';
 import { reasonWithStudioSources, type StudioRuleCommand, type StudioRuleResult } from './studio-rule-reasoning.ts';
+import { createMemberPackFeature } from './member-pack-host.ts';
 
 function json(response: ServerResponse, status: number, value: unknown) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(JSON.stringify(value));
 }
 export type StudioHostOptions = {
-  dataRoot: string; projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore;
+  dataRoot: string; codeRoot?: string; memberPackEnabled?: boolean; projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore;
   cases?: CaseStore;
   readBody(request: IncomingMessage, limit?: number): Promise<Record<string, unknown>>;
   mutate<T>(operation: () => T | Promise<T>): Promise<T>;
@@ -46,16 +47,503 @@ export type StudioHostOptions = {
   refreshGraph?(system: StudioSystem, snapshotId: string, task: TaskRecord): Promise<{ snapshotId: string; sourceRefs: StudioSourceRef[]; detail: string }>;
   inspectGraph?(systemId: string, snapshotId: string): Promise<{ snapshotId: string; sourceRefs: StudioSourceRef[]; detail: string }>;
   reason?(command: StudioRuleCommand, context: SemanticContextCallContext): Promise<StudioRuleResult>;
+  memberPackPublishHook?: import('./member-pack-host.ts').MemberPackHostOptions['publishAuthorityDependency'];
+  resolveRequestOperator?: import('./member-pack-host.ts').MemberPackHostOptions['resolveRequestOperator'];
+  hasExternalOperatorResolver?: boolean;
+  manageOperatorSession?: import('./member-pack-host.ts').MemberPackHostOptions['manageOperatorSession'];
+  onProjectPermissionChanged?: import('./member-pack-host.ts').MemberPackHostOptions['onProjectPermissionChanged'];
 };
 export function createStudioFeature(options: StudioHostOptions) {
   const store = new StudioStore(options.dataRoot), operations = studioOperations(options.dataRoot);
   const enterpriseScopes = new EnterpriseScopeStore(options.dataRoot);
+  const library = createMetricLibrary(path.join(options.dataRoot, 'metric-assets')), methods = createSapMethodStore(path.join(options.dataRoot, 'metric-assets'));
+
+  function assertSummaryScopeMatchesAsset(
+    assetText: string,
+    assetScope: string | undefined,
+    requested: { grain?: string; periodFrom?: string; periodTo?: string },
+  ): string {
+    const combined = `${assetScope ?? ''}\n${assetText}`;
+    const trimmedGrain = requested.grain?.trim();
+    if (!trimmedGrain) throw new StudioError('invalid_summary_grant_scope', 400);
+
+    // 1. If asset body is structured JSON with explicit grain/period fields, enforce exact match
+    try {
+      const parsed = JSON.parse(assetText);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        if (typeof parsed.grain === 'string' && parsed.grain.trim() && parsed.grain.trim() !== trimmedGrain) {
+          throw new StudioError('summary_scope_mismatch', 409);
+        }
+        if (typeof parsed.periodFrom === 'string' && requested.periodFrom && parsed.periodFrom !== requested.periodFrom) {
+          throw new StudioError('summary_scope_mismatch', 409);
+        }
+        if (typeof parsed.periodTo === 'string' && requested.periodTo && parsed.periodTo !== requested.periodTo) {
+          throw new StudioError('summary_scope_mismatch', 409);
+        }
+        if (typeof parsed.period === 'string' && parsed.period.trim()) {
+          const p = parsed.period.trim();
+          if (requested.periodFrom && !requested.periodFrom.startsWith(p) && !p.includes(requested.periodFrom.slice(0, 7))) {
+            throw new StudioError('summary_scope_mismatch', 409);
+          }
+          if (requested.periodTo && !requested.periodTo.startsWith(p) && !p.includes(requested.periodTo.slice(0, 7))) {
+            throw new StudioError('summary_scope_mismatch', 409);
+          }
+        }
+      }
+    } catch (error) {
+      if (error instanceof StudioError) throw error;
+      // Non-JSON text body; validate prose period & grain markers below
+    }
+
+    // 2. If text explicitly names YYYY-MM period(s) and requested periodFrom/periodTo don't overlap them, reject!
+    const textMonths = [...new Set([...combined.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2]))\b/g)].map(m => m[1]!))];
+    if (textMonths.length > 0 && (requested.periodFrom || requested.periodTo)) {
+      const reqFromMonth = requested.periodFrom?.slice(0, 7);
+      const reqToMonth = requested.periodTo?.slice(0, 7);
+      const overlaps = textMonths.some(m => (!reqFromMonth || m >= reqFromMonth) && (!reqToMonth || m <= reqToMonth));
+      if (!overlaps) throw new StudioError('summary_scope_mismatch', 409);
+    }
+
+    // 3. Verify grain compatibility against explicit or inferred asset grain markers
+    const lowerCombined = combined.toLowerCase();
+    const lowerGrain = trimmedGrain.toLowerCase();
+    const explicitGrainMatch = /粒度\s*[:：]\s*([a-z0-9_\u4e00-\u9fa5-]+)/i.exec(combined);
+    if (explicitGrainMatch && explicitGrainMatch[1]!.toLowerCase() !== lowerGrain) {
+      throw new StudioError('summary_scope_mismatch', 409);
+    }
+    const isStoreMonthAsset = /(store-month|门店-月|门店月|门店[^\n]{0,12}(?:月|汇总)|月报[^\n]{0,12}(?:门店|汇总)|直营店[^\n]{0,16}汇总)/i.test(combined);
+    if (isStoreMonthAsset && !/^(store-month|门店-月|门店月)$/i.test(lowerGrain)) {
+      throw new StudioError('summary_scope_mismatch', 409);
+    }
+    if (/(member-day|order-detail|order-member|user-level|会员明细|订单明细)/i.test(lowerGrain) && /(汇总|月报|summary)/i.test(lowerCombined)) {
+      throw new StudioError('summary_scope_mismatch', 409);
+    }
+
+    const periodSummary = requested.periodFrom || requested.periodTo
+      ? `${requested.periodFrom ?? '*'}..${requested.periodTo ?? '*'}`
+      : (textMonths.join(',') || '未声明期间');
+    return `粒度:${trimmedGrain} · 期间:${periodSummary}`;
+  }
+
+  async function inspectAuthorityDependency(
+    pack: import('../../extensions/business-plugins/studio/enterprise-pack.ts').EnterpriseDomainPack,
+    ref: StudioSourceRef,
+    originalReceipt?: import('../../extensions/business-plugins/studio/enterprise-pack.ts').PackModulePublicationReceipt,
+  ): Promise<import('./member-pack-host.ts').AuthorityPublicationOutcome> {
+    if (originalReceipt?.status === 'failed') {
+      return {
+        status: 'failed',
+        detail: `原请求 ${originalReceipt.requestId} 已确定失败，只读查验不改写为成功；如需采用原权威版本请重新生成预览并确认发布`,
+      };
+    }
+    try {
+      if (ref.authority === 'sap-metric') {
+        await assertNativeEnterprise('sap-metric', ref.id, pack.enterpriseId);
+        const known = library.read(ref.id, ref.version);
+        if (ref.sha256 && known.entry.bytesSha256 !== ref.sha256) {
+          return { status: 'failed', detail: `原 SAP 指标 ${ref.id}@${ref.version} 摘要不符（期望 ${ref.sha256.slice(0, 12)}，实际 ${known.entry.bytesSha256.slice(0, 12)}）` };
+        }
+        // Distinguish whether THIS original request published the target vs an unrelated external operation!
+        if (originalReceipt?.status === 'unknown') {
+          if (!originalReceipt.authorityPublishedBy || known.entry.publishedBy !== originalReceipt.authorityPublishedBy) {
+            return {
+              status: 'unknown',
+              detail: !originalReceipt.authorityPublishedBy
+                ? `原请求 ${originalReceipt.requestId} 缺少原权威操作凭据，无法将现存版本（${known.entry.publishedBy}）核定为原请求成功，保持 UNKNOWN`
+                : `原请求 ${originalReceipt.requestId} 未查到对应发布回执；原 SAP 库现存版本由其他操作（${known.entry.publishedBy}）发布，未将该独立操作记为原请求成功，请重新发起预览确认`,
+              authorityPublishedBy: known.entry.publishedBy,
+            };
+          }
+        }
+        return {
+          status: 'succeeded',
+          detail: `原 SAP 指标库已核验准确发布版 ${ref.id}@${ref.version}`,
+          authorityPublishedBy: known.entry.publishedBy,
+        };
+      }
+      if (ref.authority === 'sap-method') {
+        await assertNativeEnterprise('sap-method', ref.id, pack.enterpriseId);
+        const published = methods.getPublished(ref.id, Number(ref.version));
+        if (ref.sha256 && published.version.contentSha256 !== ref.sha256) {
+          return { status: 'failed', detail: `原 SAP 方法 ${ref.id}@${ref.version} 摘要不符` };
+        }
+        if (originalReceipt?.status === 'unknown') {
+          const opState = originalReceipt.authorityOperationId
+            ? methods.operation(originalReceipt.authorityOperationId)
+            : undefined;
+          if (!originalReceipt.authorityOperationId || !opState || opState.status !== 'committed') {
+            return {
+              status: 'unknown',
+              detail: !originalReceipt.authorityOperationId
+                ? `原请求 ${originalReceipt.requestId} 缺少原 SAP 方法操作凭据，无法将现存发布版核定为原请求成功，保持 UNKNOWN`
+                : `原请求 ${originalReceipt.requestId}（操作 ${originalReceipt.authorityOperationId}）在原 SAP 方法库中无对应已提交回执；现存发布版来自其他操作，未记为原请求成功，请重新发起预览确认`,
+            };
+          }
+        }
+        return {
+          status: 'succeeded',
+          detail: `原 SAP 方法库已核验准确发布版 ${ref.id}@${ref.version}`,
+          ...(originalReceipt?.authorityOperationId ? { authorityOperationId: originalReceipt.authorityOperationId } : {}),
+        };
+      }
+      if (ref.authority === 'studio-source') {
+        const targetSystem = store.get(ref.locator ? uuid(ref.locator) : pack.systemId);
+        if (targetSystem.enterpriseId && targetSystem.enterpriseId !== pack.enterpriseId) {
+          return { status: 'failed', detail: 'Studio 资产归属其他企业，禁止跨企业发布' };
+        }
+        const asset = targetSystem.assets.find(a => a.id === ref.id);
+        const revNum = Number(ref.version);
+        const revision = asset?.revisions.find(r => r.revision === revNum);
+        if (!asset || !revision) return { status: 'failed', detail: `原 Studio 中未找到资产 ${ref.id}@${ref.version}` };
+        if (ref.sha256 && revision.sha256 !== ref.sha256) return { status: 'failed', detail: `原 Studio 资产 ${ref.id}@${ref.version} 摘要不符` };
+        if (asset.issue?.affectedRevision === revNum) return { status: 'failed', detail: `原 Studio 资产 ${ref.id}@${ref.version} 已标确错，不可发布` };
+        if (asset.formalRevision !== revNum) return { status: 'unknown', detail: `原 Studio 资产 ${ref.id}@${ref.version} 尚未正式发布（当前正式版 ${asset.formalRevision ?? '无'}）` };
+        if (originalReceipt?.status === 'unknown') {
+          const matchedPub = originalReceipt.authorityOperationId
+            ? targetSystem.publications.find(p => p.preview.id === originalReceipt.authorityOperationId && p.preview.confirmedAt)
+            : undefined;
+          if (!originalReceipt.authorityOperationId || !matchedPub) {
+            return {
+              status: 'unknown',
+              detail: !originalReceipt.authorityOperationId
+                ? `原请求 ${originalReceipt.requestId} 缺少原 Studio 确认发布操作凭据，保持 UNKNOWN`
+                : `原请求 ${originalReceipt.requestId} 未在原 Studio 查到对应确认发布记录；现存正式版来自其他操作，未记为原请求成功`,
+            };
+          }
+          return {
+            status: 'succeeded',
+            detail: `原 Studio 已核验准确正式版 ${ref.id}@${ref.version}`,
+            authorityOperationId: matchedPub.preview.id,
+          };
+        }
+        return { status: 'succeeded', detail: `原 Studio 已核验准确正式版 ${ref.id}@${ref.version}` };
+      }
+      if (ref.authority === 'enterprise') {
+        await assertNativeEnterprise('enterprise', ref.id, pack.enterpriseId);
+        const mat = await options.enterpriseMaterials.get(uuid(ref.id));
+        if (!mat.material.enabled) return { status: 'failed', detail: `企业资料 ${ref.id} 当前未启用` };
+        const rev = mat.material.revisions.find(r => r.revisionId === ref.version);
+        if (!rev) return { status: 'failed', detail: `企业资料 ${ref.id} 不存在修订 ${ref.version}` };
+        const revSha = rev.bodySha256 || createHash('sha256').update(rev.body ?? '').digest('hex');
+        if (ref.sha256 && ref.sha256 !== revSha) {
+          return { status: 'failed', detail: `企业资料 ${ref.id}@${ref.version} 摘要不符` };
+        }
+        if (originalReceipt?.status === 'unknown' && !originalReceipt.authorityOperationId && !originalReceipt.authorityPublishedBy) {
+          return {
+            status: 'unknown',
+            detail: `原请求 ${originalReceipt.requestId} 缺少原权威操作凭据，保持 UNKNOWN`,
+          };
+        }
+        return { status: 'succeeded', detail: `企业资料库已核验启用版 ${ref.id}@${ref.version}` };
+      }
+      return { status: 'failed', detail: `不支持的原权威类型 ${ref.authority}` };
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error ? String((error as { code: unknown }).code) : 'authority_not_found';
+      return { status: 'failed', detail: `原权威查验未通过（${code}）：${ref.authority}:${ref.id}@${ref.version}` };
+    }
+  }
+
+  async function publishAuthorityDependency(
+    pack: import('../../extensions/business-plugins/studio/enterprise-pack.ts').EnterpriseDomainPack,
+    preview: import('../../extensions/business-plugins/studio/enterprise-pack.ts').EnterprisePackPreview,
+    dep: import('../../extensions/business-plugins/studio/enterprise-pack.ts').EnterprisePackDependency,
+    depReqId: string,
+  ): Promise<import('./member-pack-host.ts').AuthorityPublicationOutcome> {
+    const sapPublishedBy = `企业会员包:${pack.packCode}:${preview.id}`;
+    const methodOpId = operationId(['member-pack-method-publish', pack.id, preview.id, dep.ref]);
+    if (options.memberPackPublishHook) {
+      const hooked = await options.memberPackPublishHook(pack, preview, dep, depReqId);
+      if (hooked) {
+        return {
+          ...hooked,
+          ...(dep.ref.authority === 'sap-metric' && !hooked.authorityPublishedBy ? { authorityPublishedBy: sapPublishedBy } : {}),
+          ...(dep.ref.authority === 'sap-method' && !hooked.authorityOperationId ? { authorityOperationId: methodOpId } : {}),
+        };
+      }
+    }
+    const ref = dep.ref;
+    try {
+      if (ref.authority === 'sap-metric') {
+        await assertNativeEnterprise('sap-metric', ref.id, pack.enterpriseId);
+        if (ref.locator?.startsWith('020_clean/')) {
+          const system = store.get(pack.systemId);
+          library.publish(await metricDraft(system, ref), sapPublishedBy);
+          try { enterpriseScopes.associateAsset('sap-metric', ref.id, pack.enterpriseId); } catch { /* already associated */ }
+          return {
+            status: 'succeeded',
+            detail: `原 SAP 指标库已正式发布 ${ref.id}@${ref.version}`,
+            authorityPublishedBy: sapPublishedBy,
+          };
+        }
+        return inspectAuthorityDependency(pack, ref);
+      }
+      if (ref.authority === 'sap-method') {
+        await assertNativeEnterprise('sap-method', ref.id, pack.enterpriseId);
+        try {
+          const existing = methods.getPublished(ref.id, Number(ref.version));
+          if (!ref.sha256 || existing.version.contentSha256 === ref.sha256) {
+            return { status: 'succeeded', detail: `原 SAP 方法库已存在准确发布版 ${ref.id}@${ref.version}` };
+          }
+          return { status: 'failed', detail: `原 SAP 方法 ${ref.id}@${ref.version} 摘要不符` };
+        } catch {
+          if (!ref.sha256) return { status: 'failed', detail: `原 SAP 方法 ${ref.id}@${ref.version} 缺少摘要，无法发布` };
+          methods.publish(ref.id, {
+            requestId: methodOpId,
+            version: Number(ref.version),
+            expectedSha256: ref.sha256,
+          });
+          try { enterpriseScopes.associateAsset('sap-method', ref.id, pack.enterpriseId); } catch { /* already associated */ }
+          return {
+            status: 'succeeded',
+            detail: `原 SAP 方法库已正式发布 ${ref.id}@${ref.version}`,
+            authorityOperationId: methodOpId,
+          };
+        }
+      }
+      if (ref.authority === 'studio-source') {
+        const targetSystem = store.get(ref.locator ? uuid(ref.locator) : pack.systemId);
+        if (targetSystem.enterpriseId && targetSystem.enterpriseId !== pack.enterpriseId) {
+          return { status: 'failed', detail: 'Studio 资产归属其他企业，禁止跨企业发布' };
+        }
+        const asset = targetSystem.assets.find(a => a.id === ref.id);
+        const revNum = Number(ref.version);
+        const revision = asset?.revisions.find(r => r.revision === revNum);
+        if (!asset || !revision) return { status: 'failed', detail: `原 Studio 中未找到资产 ${ref.id}@${ref.version}` };
+        if (ref.sha256 && revision.sha256 !== ref.sha256) return { status: 'failed', detail: `原 Studio 资产 ${ref.id}@${ref.version} 摘要不符` };
+        if (asset.issue?.affectedRevision === revNum) return { status: 'failed', detail: `原 Studio 资产 ${ref.id}@${ref.version} 已标确错` };
+        if (asset.formalRevision === revNum) {
+          return { status: 'succeeded', detail: `原 Studio 已核验准确正式版 ${ref.id}@${ref.version}` };
+        }
+        if (asset.candidateRevision === revNum && revision.readyForPublication && !revision.checks.some(c => c.status !== 'pass')) {
+          // Follow the EXACT original Studio publication qualification & publish path (never bypass foundation/rule/contribution checks!)
+          const pubInput: Record<string, unknown> = {
+            assetIds: [asset.id],
+            refs: [],
+            summary: `企业会员包 ${pack.packCode} v${preview.version} 关联发布`,
+            scope: revision.scope,
+          };
+          await qualifyRulePublication(targetSystem, pubInput);
+          await qualifyFoundationSelection(targetSystem, [asset.id], []);
+          await validatePublicationRefs(targetSystem, []);
+          await qualifySelectedContributions(targetSystem, pubInput);
+          const studioPreview = store.preparePublication(targetSystem.id, pubInput as unknown as StudioPublicationInput);
+          await publish(store.get(targetSystem.id), studioPreview.id, studioPreview.fingerprint);
+          return {
+            status: 'succeeded',
+            detail: `原 Studio 已按完整校验链路正式发布 ${ref.id}@${ref.version}`,
+            authorityOperationId: studioPreview.id,
+          };
+        }
+        return { status: 'failed', detail: `原 Studio 资产 ${ref.id}@${ref.version} 未达到正式发布条件` };
+      }
+      return inspectAuthorityDependency(pack, ref);
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error ? String((error as { code: unknown }).code) : 'authority_publish_failed';
+      return { status: 'failed', detail: `原权威发布失败（${code}）：${ref.authority}:${ref.id}@${ref.version}` };
+    }
+  }
+
+  function resolveAssetAuthorityOwner(
+    enterpriseId: string,
+    authority: 'studio-source' | 'enterprise' | 'sap-metric',
+    assetId: string,
+    explicitSystem?: StudioSystem,
+  ): { ownerProjectId?: string; ownerSystemId?: string } {
+    let targetSystem = explicitSystem;
+    if (!targetSystem) {
+      const enterpriseSystems = store.list().filter(s => s.enterpriseId === enterpriseId);
+      targetSystem = enterpriseSystems.find(s =>
+        s.materials.some(m => m.ref.authority === authority && m.ref.id === assetId)
+        || s.assetRefs.some(r => r.authority === authority && r.id === assetId)
+        || s.publications.some(p => p.preview.refs.some(r => r.authority === authority && r.id === assetId))
+        || s.assets.some(a => a.revisions.some(rev => [...rev.sources, ...rev.dependencies].some(r => r.authority === authority && r.id === assetId))),
+      );
+      if (!targetSystem) {
+        const packWithDep = memberPack.packs.list(enterpriseId).find(p =>
+          p.purposes.some(pur => pur.dependencies.some(d => d.ref.authority === authority && d.ref.id === assetId))
+          || p.entries.some(e => (e.authorityRef?.authority === authority && e.authorityRef.id === assetId) || e.enterpriseSourceRefs.some(r => r.authority === authority && r.id === assetId))
+          || p.panorama?.sourceRefs.some(r => r.authority === authority && r.id === assetId),
+        ) ?? memberPack.packs.list(enterpriseId)[0];
+        if (packWithDep) {
+          try { targetSystem = store.get(packWithDep.systemId); } catch { /* system not found */ }
+        }
+      }
+      if (!targetSystem && enterpriseSystems.length === 1) {
+        targetSystem = enterpriseSystems[0];
+      }
+    }
+    if (!targetSystem) return {};
+    const packForSys = memberPack.packs.list(enterpriseId).find(p => p.systemId === targetSystem!.id);
+    return {
+      ownerProjectId: packForSys?.activeOwnerProjectId ?? studioExecutionOwner(targetSystem).projectId,
+      ownerSystemId: targetSystem.id,
+    };
+  }
+
+  async function verifySummaryAuthority(
+    enterpriseId: string,
+    scope: { summaryAssetId?: string; summaryVersion?: string; resourceRef?: StudioSourceRef; grain?: string; periodFrom?: string; periodTo?: string },
+  ): Promise<import('./member-pack-host.ts').VerifiedSummaryAuthority> {
+    const ref = scope.resourceRef;
+    // 1. Explicit resourceRef pointing to Studio formal asset, Enterprise enabled material, or SAP metric
+    if (ref) {
+      if (ref.authority === 'studio-source') {
+        const system = store.get(uuid(ref.locator));
+        if (system.enterpriseId !== enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
+        const asset = system.assets.find(a => a.id === ref.id);
+        const revNum = Number(ref.version);
+        const revision = asset?.revisions.find(r => r.revision === revNum);
+        if (!asset || !revision || asset.formalRevision !== revNum) throw new StudioError('summary_authority_not_published', 404);
+        if (asset.issue?.affectedRevision === revNum) throw new StudioError('summary_authority_restricted', 409);
+        if (ref.sha256 && revision.sha256 !== ref.sha256) throw new StudioError('summary_authority_hash_mismatch', 409);
+        const verifiedScopeSummary = assertSummaryScopeMatchesAsset(revision.body, revision.scope, scope);
+        const owner = resolveAssetAuthorityOwner(enterpriseId, 'studio-source', asset.id, system);
+        return {
+          summaryAssetId: asset.id,
+          summaryVersion: String(revNum),
+          summaryAuthority: `Studio·${system.name}`,
+          summarySha256: revision.sha256,
+          verifiedScopeSummary,
+          ...owner,
+          resourceRef: { ...ref, sha256: revision.sha256 },
+        };
+      }
+      if (ref.authority === 'enterprise') {
+        await assertNativeEnterprise('enterprise', ref.id, enterpriseId);
+        const mat = await options.enterpriseMaterials.get(uuid(ref.id));
+        if (!mat.material.enabled) throw new StudioError('summary_authority_not_enabled', 409);
+        const rev = mat.material.revisions.find(r => r.revisionId === ref.version);
+        if (!rev) throw new StudioError('summary_authority_not_found', 404);
+        const revSha = rev.bodySha256 || createHash('sha256').update(rev.body ?? '').digest('hex');
+        const verifiedScopeSummary = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
+        const owner = resolveAssetAuthorityOwner(enterpriseId, 'enterprise', mat.material.id);
+        return {
+          summaryAssetId: mat.material.id,
+          summaryVersion: rev.revisionId,
+          summaryAuthority: `企业资料库·${rev.title}`,
+          summarySha256: revSha,
+          verifiedScopeSummary,
+          ...owner,
+          resourceRef: { ...ref, sha256: revSha, locator: mat.storeId },
+        };
+      }
+      if (ref.authority === 'sap-metric') {
+        await assertNativeEnterprise('sap-metric', ref.id, enterpriseId);
+        const known = library.read(ref.id, ref.version);
+        if (ref.sha256 && known.entry.bytesSha256 !== ref.sha256) throw new StudioError('summary_authority_hash_mismatch', 409);
+        const verifiedScopeSummary = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
+        const owner = resolveAssetAuthorityOwner(enterpriseId, 'sap-metric', ref.id);
+        return {
+          summaryAssetId: ref.id,
+          summaryVersion: ref.version,
+          summaryAuthority: '原 SAP 指标库',
+          summarySha256: known.entry.bytesSha256,
+          verifiedScopeSummary,
+          ...owner,
+          resourceRef: { ...ref, sha256: known.entry.bytesSha256 },
+        };
+      }
+      throw new StudioError('invalid_summary_authority', 400);
+    }
+
+    // 2. Lookup by summaryAssetId + summaryVersion in enterprise Studio formal assets, EnterpriseMaterials, or SAP MetricLibrary
+    const targetId = scope.summaryAssetId?.trim();
+    const targetVer = scope.summaryVersion?.trim();
+    if (!targetId || !targetVer) throw new StudioError('invalid_summary_grant_scope', 400);
+
+    for (const system of store.list().filter(s => s.enterpriseId === enterpriseId)) {
+      const asset = system.assets.find(a => a.id === targetId);
+      const rev = asset?.revisions.find(r => String(r.revision) === targetVer);
+      if (asset && rev && asset.formalRevision === rev.revision && asset.issue?.affectedRevision !== rev.revision) {
+        const verifiedScopeSummary = assertSummaryScopeMatchesAsset(rev.body, rev.scope, scope);
+        const owner = resolveAssetAuthorityOwner(enterpriseId, 'studio-source', asset.id, system);
+        return {
+          summaryAssetId: asset.id,
+          summaryVersion: String(rev.revision),
+          summaryAuthority: `Studio·${system.name}`,
+          summarySha256: rev.sha256,
+          verifiedScopeSummary,
+          ...owner,
+          resourceRef: { authority: 'studio-source', id: asset.id, version: String(rev.revision), sha256: rev.sha256, projectId: system.projectId, locator: system.id, title: rev.title },
+        };
+      }
+    }
+    try {
+      const mat = await options.enterpriseMaterials.get(uuid(targetId));
+      await assertNativeEnterprise('enterprise', targetId, enterpriseId);
+      const rev = mat.material.revisions.find(r => r.revisionId === targetVer);
+      if (mat.material.enabled && rev) {
+        const revSha = rev.bodySha256 || createHash('sha256').update(rev.body ?? '').digest('hex');
+        const verifiedScopeSummary = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
+        const owner = resolveAssetAuthorityOwner(enterpriseId, 'enterprise', mat.material.id);
+        return {
+          summaryAssetId: mat.material.id,
+          summaryVersion: rev.revisionId,
+          summaryAuthority: `企业资料库·${rev.title}`,
+          summarySha256: revSha,
+          verifiedScopeSummary,
+          ...owner,
+          resourceRef: { authority: 'enterprise', id: mat.material.id, version: rev.revisionId, sha256: revSha, locator: mat.storeId, title: rev.title },
+        };
+      }
+    } catch (error) {
+      if (error instanceof StudioError && error.code === 'summary_scope_mismatch') throw error;
+    }
+    try {
+      await assertNativeEnterprise('sap-metric', targetId, enterpriseId);
+      const known = library.read(targetId, targetVer);
+      const verifiedScopeSummary = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
+      const owner = resolveAssetAuthorityOwner(enterpriseId, 'sap-metric', targetId);
+      return {
+        summaryAssetId: targetId,
+        summaryVersion: targetVer,
+        summaryAuthority: '原 SAP 指标库',
+        summarySha256: known.entry.bytesSha256,
+        verifiedScopeSummary,
+        ...owner,
+        resourceRef: { authority: 'sap-metric', id: targetId, version: targetVer, sha256: known.entry.bytesSha256 },
+      };
+    } catch (error) {
+      if (error instanceof StudioError && error.code === 'summary_scope_mismatch') throw error;
+    }
+
+    throw new StudioError('summary_authority_not_found', 404);
+  }
+
+  const memberPack = createMemberPackFeature({
+    dataRoot: options.dataRoot,
+    codeRoot: options.codeRoot,
+    memberPackEnabled: options.memberPackEnabled,
+    projects: options.projects,
+    enterpriseScopes,
+    studio: store,
+    cases: options.cases,
+    operations,
+    readBody: options.readBody,
+    mutate: options.mutate,
+    closing: options.closing,
+    taskSnapshot: options.taskSnapshot,
+    readTaskReply: options.readTaskReply,
+    publishAuthorityDependency,
+    inspectAuthorityDependency,
+    verifySummaryAuthority,
+    resolveRequestOperator: options.resolveRequestOperator,
+    hasExternalOperatorResolver: options.hasExternalOperatorResolver,
+    manageOperatorSession: options.manageOperatorSession,
+    onProjectPermissionChanged: options.onProjectPermissionChanged,
+  });
   const enterpriseCatalog = createStudioEnterpriseCatalog({ ...options, scopes: enterpriseScopes, studio: store, qualifySource: async (ref, projectId) => { await sources.read(ref, projectId, ref.locator); } });
   const enterpriseScope = { active: () => enterpriseScopes.list().enterprises.length > 0, enterpriseIdForProject: (projectId: string) => enterpriseScopes.enterpriseIdForProject(projectId), sourceAllowed: enterpriseCatalog.sourceAllowed, coverageSourceCurrent: enterpriseCatalog.coverageSourceCurrent,
     constructionSourceAllowed: async (projectId: string, ref: StudioSourceRef) => { await assertNativeEnterprise(ref.authority, ref.id, enterpriseScopes.enterpriseIdForProject(projectId)); return true; } };
   const extractions = studioExtractions(options.dataRoot);
-  const sources = createStudioSources({ ...options, studio: store, enterpriseScope });
-  const library = createMetricLibrary(path.join(options.dataRoot, 'metric-assets')), methods = createSapMethodStore(path.join(options.dataRoot, 'metric-assets'));
+  const sources = createStudioSources({
+    ...options,
+    studio: store,
+    enterpriseScope,
+    assertDataPathAllowed: (projectId, locator) => memberPack.assertProjectDataPathAllowed(projectId, locator),
+    filterAuthorizedDataBytes: (projectId, locator, rawBytes) => memberPack.filterAuthorizedProjectData(projectId, locator, rawBytes),
+    readPreservedReportBytes: (projectId, taskId, locator, expectedSha256) => memberPack.readPreservedReportBytes(projectId, taskId, locator, expectedSha256),
+  });
   const workspace = async (id: string) => {
     const system = store.get(id), owner = studioExecutionOwner(system), project = await options.projects.get(owner.projectId), task = await options.projects.getTask(owner.projectId, owner.taskId);
     if (options.taskSnapshot) {
@@ -349,9 +837,13 @@ export function createStudioFeature(options: StudioHostOptions) {
     'declare-use': '{report:exact task060 SourceRef,sources:exact used SourceRef[],result}; example report:{authority:task,id:<actual current taskId>,projectId:<actual current projectId>,taskId:<same current taskId>,locator:060_reports/<actual filename>,version:<complete file bytes SHA256>,sha256:<same SHA256>}. id is taskId, version is byte hash, never filename/latest/semantic version. Agent obtains actual file path/hash with existing tools. Records author use declaration, NOT assessed',
     'assess-use': '{useId,status:pass|fail|unknown,report:separate exact060 assessment SourceRef,sources:exact use.sources,result}; explicitly assess problem and preserved correct findings, with evidence/limits; no Host score or mandatory specialist workflow',
     'update-feedback': '{feedbackId,status,response,sources?,verification?:{sources,result}}; verified requires matching revised formal source versions, exact new use report+assessment report+used sources; accepted is not repair',
+    'pack-read': '{domain?:string}; reads the enterprise member operations asset pack. Construction owner receives current panorama, entries, purposes and revisions; ordinary analysis receives only task-pinned eligible version and Host-authorized purposes/dependencies.',
+    'pack-save-panorama': '{goal,brand,channel,period,dataCutoffAt,decisionPurpose,sourceRefs:SourceRef[],recommendations:[{purposeKey,title,priorityReason,deliverableNow,minimumEvidence,ownerRole,completionCriteria}],issues:[{id,problemName,businessStatus:active|not_launched|unknown,assetSupportStatus:ready|definition_only|limited_calc|gap_material|gap_decision|not_needed,summary,factOrInference:fact|inference,decisionImpact,nextStep,evidence:[{sourceRef,locator,scope,note?}]}],pendingQuestions?:[{id,question,impact}]}; construction owner only; validates authorized sourceRefs and saves a verifiable enterprise panorama snapshot directly into the enterprise member pack.',
+    'pack-upsert-entry': '{entryKey,title,action:adopt|modify|exclude|add|pending,routes:[enterprise|domain],referenceLinks,enterpriseBasis,decisionOwner?,enterpriseSourceRefs:SourceRef[],authorityRef?,scope,grain?,validFrom?,validTo?,impactedPurposeIds,exceptions}; construction owner only; merges dual-route evidence without overwriting prior route sources.',
+    'pack-upsert-purpose': '{purposeKey,title,businessQuestion,subjectUnit,windowDays?,scope:{scopeKey,brand?,channel?,stores?,period?},tier:definition-reference|limited-calculation|formal-calculation,limitedCalculationName?,businessStatus,evidenceReadiness?:{definition?,mapping?,sampleCalculation?},originalGoal,deliveredSubset?,remainingGaps,exclusions,completionCriteria,dependencies?,policyEffectiveFrom?,dataCutoffAt?,observationWindowDays?,availableHistoryDays?,decisionChoices?,ownerRole?,evidenceNote?}; construction owner only; deduplicates by canonical (enterpriseId,packId,purposeKey,subjectUnit,scopeKey,windowDays) across projects.',
   }, note: 'Checks are author evidence, not Host business truth. Formal publication, adoption, graph refresh and use verification remain separate.' };
   const api = {
-    store, sources, workspace, constructionFor, availableFor, enterpriseScopes, enterpriseCatalog, enterpriseScope,
+    store, sources, workspace, constructionFor, availableFor, enterpriseScopes, enterpriseCatalog, enterpriseScope, memberPack,
     availableForTask: (projectId: string, taskId: string) => Boolean(enterpriseScopes.enterpriseIdForProject(projectId)) || Boolean(constructionFor(projectId, taskId)) || store.list().some(system => system.usageTasks?.some(task => task.projectId === projectId && task.taskId === taskId)),
     async prepareContext(projectId: string, taskId: string, selection?: unknown, mode: { analysisOnly?: boolean } = {}) {
       const construction = mode.analysisOnly ? undefined : constructionFor(projectId, taskId);
@@ -370,8 +862,16 @@ export function createStudioFeature(options: StudioHostOptions) {
         const ref: StudioSourceRef = { authority: 'studio-source', id: asset.id, version: String(version), sha256: revision.sha256, projectId: system.projectId, locator: system.id, title: revision.title };
         refs.push(ref); assets.push({ kind: asset.kind, title: revision.title, ref, status: asset.formalRevision === version ? 'formal' : 'candidate', limitations: revision.limitations });
       }
+      const existingMemberPack = purpose === 'construction' && system.enterpriseId
+        ? memberPack.packs.list(system.enterpriseId).find(p => p.domain === 'member-operations')
+        : undefined;
+      const memberPackSummary = purpose === 'construction' && system.enterpriseId
+        ? existingMemberPack
+          ? { packId: existingMemberPack.id, packCode: existingMemberPack.packCode, panoramaVersion: existingMemberPack.panorama?.version ?? 0, entryCount: existingMemberPack.entries.length, purposeCount: existingMemberPack.purposes.length, note: '使用 studio_assets 的 pack-save-panorama / pack-upsert-entry / pack-upsert-purpose 将盘点全景、双线企业条目与首批用途直接写入本企业会员运营包。' }
+          : { packId: null, note: '调用 studio_assets 的 pack-save-panorama / pack-upsert-entry / pack-upsert-purpose 时将自动为本企业初始化唯一会员运营包并持久保存结果。' }
+        : undefined;
       const context = { systemId: system.id, name: system.name, purpose, topics: purpose === 'construction' ? system.topics : analysisTopics(system), assets,
-        ...(purpose === 'construction' ? { materials: system.materials, workItems: system.workItems, feedback: system.feedback.filter(item => !['verified','not_confirmed'].includes(item.status)), contract: sourceContract } : { publications: supply!.publications.map(publication => publicationIndex(system.id, publication)), adoptions: supply!.adoptions }) };
+        ...(purpose === 'construction' ? { materials: system.materials, workItems: system.workItems, feedback: system.feedback.filter(item => !['verified','not_confirmed'].includes(item.status)), ...(memberPackSummary ? { memberPack: memberPackSummary } : {}), contract: sourceContract } : { publications: supply!.publications.map(publication => publicationIndex(system.id, publication)), adoptions: supply!.adoptions }) };
       let body = JSON.stringify(context);
       if (purpose === 'analysis' && 'publications' in context && body.length > 24_000) { context.publications = supply!.publications.map(publication => publicationIndex(system.id, publication, true)); body = JSON.stringify(context); }
       if (body.length > 48_000) throw new StudioError('studio_context_too_large', 413);
@@ -390,23 +890,42 @@ export function createStudioFeature(options: StudioHostOptions) {
           const systems = store.list().filter(system => availableFor(system, projectId)).map(system => ({ id: system.id, name: system.name, projectId: system.projectId, taskId: system.taskId, executionOwner: studioExecutionOwner(system), topics: system.topics.map(({ id, title }) => ({ id, title })), construction: construction?.id === system.id }));
           const items = enterpriseId ? (await enterpriseCatalog.catalog(enterpriseId, projectId)).items.filter(item => item.eligible && item.ref) : [];
           const inputs = (await sources.inventory(projectId)).filter(item => item.ref.authority === 'data');
+          const memberPacks = enterpriseId ? memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId) : [];
           const directory = [...systems.map(system => ({ kind: 'system' as const, system })), ...items.map(item => ({ kind: 'source' as const, item })), ...inputs.map(input => ({ kind: 'input' as const, input }))];
           const catalogSha256 = digest(directory);
           if (payload.expectedCatalogSha256 !== undefined && payload.expectedCatalogSha256 !== catalogSha256) throw new StudioError('studio_catalog_changed', 409);
           const start = payload.start === undefined ? 0 : Number(payload.start), length = payload.length === undefined ? 20 : Number(payload.length);
           if (!Number.isSafeInteger(start) || start < 0 || start > directory.length || !Number.isSafeInteger(length) || length < 1 || length > 100) throw new StudioError('invalid_studio_source_range');
           let end = Math.min(directory.length, start + length);
-          const page = () => { const selected = directory.slice(start, end); return { ...(enterpriseId ? { enterpriseId } : {}), systems: selected.flatMap(entry => entry.kind === 'system' ? [entry.system] : []), items: selected.flatMap(entry => entry.kind === 'source' ? [entry.item] : []), inputs: selected.flatMap(entry => entry.kind === 'input' ? [entry.input] : []), catalogSha256, range: { start, end, total: directory.length, unit: 'entries' }, complete: end === directory.length, continuation: end < directory.length ? { action: 'catalog', payload: { start: end, length, expectedCatalogSha256: catalogSha256 } } : null, contract: sourceContract }; };
+          const page = () => { const selected = directory.slice(start, end); return { ...(enterpriseId ? { enterpriseId } : {}), systems: selected.flatMap(entry => entry.kind === 'system' ? [entry.system] : []), items: selected.flatMap(entry => entry.kind === 'source' ? [entry.item] : []), inputs: selected.flatMap(entry => entry.kind === 'input' ? [entry.input] : []), ...(memberPacks.length ? { memberPacks } : {}), catalogSha256, range: { start, end, total: directory.length, unit: 'entries' }, complete: end === directory.length, continuation: end < directory.length ? { action: 'catalog', payload: { start: end, length, expectedCatalogSha256: catalogSha256 } } : null, contract: sourceContract }; };
           while (end > start && JSON.stringify(page()).length > 28_000) end--;
           if (end === start && start < directory.length) throw new StudioError('studio_result_too_large', 413);
           await assertCurrent(); return reply(action, page());
+        }
+        if (action === 'pack-read') {
+          const enterpriseId = enterpriseScopes.enterpriseIdForProject(projectId);
+          if (!enterpriseId) return reply(action, { enterpriseId: null, packs: [] });
+          const domain = typeof payload.domain === 'string' && payload.domain.trim() ? payload.domain.trim() : 'member-operations';
+          if (construction && construction.enterpriseId === enterpriseId) {
+            const found = memberPack.packs.list(enterpriseId).find(p => p.domain === domain) ?? null;
+            return reply(action, { enterpriseId, mode: 'construction', pack: found ? { id: found.id, packCode: found.packCode, domain: found.domain, name: found.name, revision: found.revision, panorama: found.panorama ?? null, entries: found.entries, purposes: found.purposes, packRevisions: found.packRevisions.map(r => ({ version: r.version, status: r.status, confirmedAt: r.confirmedAt, dataCutoffAt: r.dataCutoffAt })) } : null });
+          }
+          const summary = memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId).filter((p: any) => p.domain === domain);
+          return reply(action, { enterpriseId, mode: 'analysis', packs: summary });
         }
         const exactSourceSystem = ['read-source', 'reason'].includes(action) && object(payload.ref) && payload.ref.authority === 'studio-source' ? payload.ref.locator : undefined;
         const id = input.systemId === undefined ? exactSourceSystem === undefined ? construction?.id : uuid(exactSourceSystem) : uuid(input.systemId);
         if (!id && action === 'read-source') {
           const ref = sourceRef(payload.ref);
           if (!['enterprise','sap-metric','sap-method'].includes(ref.authority) || ref.locator?.startsWith('020_clean/')) throw new StudioError('studio_system_required');
-          return options.mutate(async () => { await assertCurrent(); const read = await sources.read(ref, projectId, undefined, { taskId }); context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503); const { text: _body, ...metadata } = read, selected = selectFoundationSource(read, payload), page = studioTextPage(selected.text, { ...payload, length: payload.length === undefined ? 16_000 : payload.length }, { ...metadata, ...selected.selection }, { ref: read.ref, ...selected.selection }); return reply(action, { ...page, complete: read.complete && page.complete }); });
+          return options.mutate(async () => {
+            await assertCurrent();
+            const pinnedCheck = memberPack.inspectPinnedSourceRead(projectId, taskId, ref);
+            const read = await sources.read(ref, projectId, undefined, { taskId, ...(pinnedCheck.matchedPack ? { historical: true } : {}) });
+            context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503);
+            const { text: _body, ...metadata } = read, selected = selectFoundationSource(read, payload), page = studioTextPage(selected.text, { ...payload, length: payload.length === undefined ? 16_000 : payload.length }, { ...metadata, ...(pinnedCheck.matchedPack ? { pinnedPack: pinnedCheck.matchedPack } : {}), ...selected.selection }, { ref: read.ref, ...selected.selection });
+            return reply(action, { ...page, complete: read.complete && page.complete });
+          });
         }
         if (!id) throw new StudioError('studio_system_required');
         const system = store.get(id), isConstruction = construction?.id === id;
@@ -484,12 +1003,40 @@ export function createStudioFeature(options: StudioHostOptions) {
           }
           return reply(action, await api.prepareContext(projectId, taskId, { systemId: id, purpose: 'analysis' }));
         }
-        if (action === 'read-source') { const ref = sourceRef(payload.ref); return options.mutate(async () => { await assertCurrent(); const read = await sources.read(ref, projectId, id, { construction: isConstruction, taskId }); context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503); const { text: _body, ...metadata } = read, selected = selectFoundationSource(read, payload), qualifications = !isConstruction ? { publications: publicationFacts(store.get(id), projectId, [read.ref]).map(publication => publicationIndex(id, publication)) } : {}, page = studioTextPage(selected.text, { ...payload, length: payload.length === undefined ? 16_000 : payload.length }, { ...metadata, ...qualifications, ...selected.selection }, { ref: read.ref, ...selected.selection }); return reply(action, { ...page, complete: read.complete && page.complete }); }); }
+        if (action === 'read-source') {
+          const ref = sourceRef(payload.ref);
+          return options.mutate(async () => {
+            await assertCurrent();
+            const pinnedCheck = !isConstruction ? memberPack.inspectPinnedSourceRead(projectId, taskId, ref) : {};
+            const nowMs = Date.now();
+            const allowDeclaredUseReport = !isConstruction
+              && ref.authority === 'task'
+              && Boolean(ref.locator?.startsWith('060_reports/'))
+              && Boolean(system.enterpriseId && enterpriseScopes.enterpriseIdForProject(projectId) === system.enterpriseId)
+              && memberPack.grants.listForSubject(system.enterpriseId!, projectId).some(g =>
+                !g.revokedAt
+                && (!g.validFrom || Date.parse(g.validFrom) <= nowMs)
+                && (!g.validTo || Date.parse(g.validTo) >= nowMs),
+              );
+            const read = await sources.read(ref, projectId, id, { construction: isConstruction, taskId, ...(pinnedCheck.matchedPack ? { historical: true } : {}), ...(allowDeclaredUseReport ? { allowDeclaredUseReport: true } : {}) });
+            context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503);
+            const { text: _body, ...metadata } = read, selected = selectFoundationSource(read, payload), qualifications = !isConstruction ? { publications: publicationFacts(store.get(id), projectId, [read.ref]).map(publication => publicationIndex(id, publication)) } : {}, page = studioTextPage(selected.text, { ...payload, length: payload.length === undefined ? 16_000 : payload.length }, { ...metadata, ...qualifications, ...(pinnedCheck.matchedPack ? { pinnedPack: pinnedCheck.matchedPack } : {}), ...selected.selection }, { ref: read.ref, ...selected.selection });
+            return reply(action, { ...page, complete: read.complete && page.complete });
+          });
+        }
         if (action === 'contribute') return options.mutate(async () => { await assertCurrent(); const prepared = await contributionInput(store.get(id), payload, projectId, taskId); context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503); const contribution = store.contribute(id, prepared); return boundedReply(action, { contribution, claim: 'task-owned-candidate-not-formal-publication-or-use' }, { contribution: { id: contribution.id, revision: contribution.revision, sourceProjectId: projectId, sourceTaskId: taskId } }, id, { action: 'read', payload: jsonRead(contribution, { section: 'contributions', contributionId: contribution.id }) }); });
         if (action === 'feedback') { const refs = parseSources(payload.sources ?? []); await validateSources(refs, system, projectId, isConstruction); return options.mutate(async () => { await assertCurrent(); const feedback = store.addFeedback(id, { ...payload, sources: refs, origin: undefined } as unknown as StudioFeedbackInput); return reply(action, { feedback, claim: 'recorded-not-repaired' }); }); }
         if (action === 'declare-use') {
-          const report = sourceRef(payload.report), refs = parseSources(payload.sources ?? []);
-          if (report.projectId !== projectId || report.taskId && report.taskId !== taskId || !['data','task'].includes(report.authority)) throw new StudioError('studio_use_report_mismatch', 403);
+          const rawReport = sourceRef(payload.report), refs = parseSources(payload.sources ?? []);
+          if (rawReport.projectId !== projectId || rawReport.taskId && rawReport.taskId !== taskId || !['data','task'].includes(rawReport.authority)) throw new StudioError('studio_use_report_mismatch', 403);
+          const ownerProj = await options.projects.get(projectId);
+          memberPack.syncWorkspaceReportsToProject(projectId, taskId, ownerProj.rootPath);
+          const effectiveLocator = rawReport.locator?.startsWith('060_reports/')
+            ? memberPack.resolveTaskReportLocator(projectId, taskId, rawReport.locator, rawReport.sha256)
+            : rawReport.locator;
+          const report = effectiveLocator && effectiveLocator !== rawReport.locator
+            ? sourceRef({ ...rawReport, locator: effectiveLocator })
+            : rawReport;
           await sources.validate(report, projectId, id); await validateSources(refs, system, projectId, false);
           let graphSnapshotId: string | undefined;
           if (options.taskSnapshot) {
@@ -498,15 +1045,56 @@ export function createStudioFeature(options: StudioHostOptions) {
             const actual = [...snapshot.messages.slice(start + 1)].reverse().find(message => message.role === 'toolResult' && !message.isError && message.details?.type === 'optracall.semantic-graph-result' && typeof message.details.snapshot?.id === 'string');
             graphSnapshotId = actual?.details.snapshot.id;
           }
-          return options.mutate(async () => { await assertCurrent(); return reply(action, { use: store.recordUse(id, { projectId, taskId, report, sources: refs, result: text(payload.result ?? '', 20_000), verification: 'not_assessed', ...(graphSnapshotId ? { graphSnapshotId } : {}) }), claim: 'author-declaration-not-professional-verification' }); });
+          return options.mutate(async () => {
+            await assertCurrent();
+            const studioUse = store.recordUse(id, { projectId, taskId, report, sources: refs, result: text(payload.result ?? '', 20_000), verification: 'not_assessed', ...(graphSnapshotId ? { graphSnapshotId } : {}) });
+            const memberPackUses = await memberPack.recordUseFromStudioDeclaration({ systemId: id, projectId, taskId, studioUse });
+            return reply(action, {
+              use: studioUse,
+              ...(memberPackUses.length ? { memberPackUses: memberPackUses.map(u => ({ id: u.id, packId: u.packId, packVersion: u.packVersion, purposeId: u.purposeId, independentVerification: u.independentVerification })) } : {}),
+              claim: 'author-declaration-not-professional-verification',
+            });
+          });
         }
         if (action === 'assess-use') {
-          const use = system.uses.find(use => use.id === payload.useId && use.projectId === projectId && use.taskId === taskId);
+          const canIndependentAssess = isConstruction || Boolean(system.enterpriseId && enterpriseScopes.enterpriseIdForProject(projectId) === system.enterpriseId);
+          const use = system.uses.find(use => use.id === payload.useId && ((use.projectId === projectId && use.taskId === taskId) || canIndependentAssess));
           if (!use) throw new StudioError('studio_use_owner_mismatch', 403);
-          const report = sourceRef(payload.report), refs = parseSources(payload.sources);
-          if (report.authority !== 'task' || report.projectId !== projectId || report.taskId !== taskId || !report.locator?.startsWith('060_reports/')) throw new StudioError('studio_use_report_mismatch', 403);
+          const rawReport = sourceRef(payload.report), refs = parseSources(payload.sources);
+          if (rawReport.authority !== 'task' || rawReport.projectId !== projectId || rawReport.taskId !== taskId || !rawReport.locator?.startsWith('060_reports/')) throw new StudioError('studio_use_report_mismatch', 403);
+          const verifierProj = await options.projects.get(projectId);
+          memberPack.syncWorkspaceReportsToProject(projectId, taskId, verifierProj.rootPath);
+          const effectiveLocator = memberPack.resolveTaskReportLocator(projectId, taskId, rawReport.locator, rawReport.sha256);
+          const report = effectiveLocator !== rawReport.locator
+            ? sourceRef({ ...rawReport, locator: effectiveLocator })
+            : rawReport;
           await sources.validate(report, projectId, id); await validateSources(refs, system, projectId, false);
-          return options.mutate(async () => { await assertCurrent(); return reply(action, { use: store.recordUseAssessment(id, use.id, { status: payload.status as 'pass' | 'fail' | 'unknown', report, sources: refs, result: text(payload.result, 20_000, false) }), claim: 'agent-explicit-assessment-with-exact-evidence-not-host-or-independent-professional-score' }); });
+          return options.mutate(async () => {
+            await assertCurrent();
+            const updatedUse = store.recordUseAssessment(id, use.id, {
+              status: payload.status as 'pass' | 'fail' | 'unknown',
+              report,
+              sources: refs,
+              result: text(payload.result, 20_000, false),
+              assessorProjectId: projectId,
+              assessorTaskId: taskId,
+            });
+            const latestAssess = updatedUse.assessments?.at(-1);
+            const memberPackUses = latestAssess
+              ? await memberPack.syncAssessmentFromStudio({
+                systemId: id,
+                studioUse: updatedUse,
+                assessment: latestAssess,
+                assessorProjectId: projectId,
+                assessorTaskId: taskId,
+              })
+              : [];
+            return reply(action, {
+              use: updatedUse,
+              ...(memberPackUses.length ? { memberPackUses: memberPackUses.map(u => ({ id: u.id, packId: u.packId, packVersion: u.packVersion, purposeId: u.purposeId, independentVerification: u.independentVerification })) } : {}),
+              claim: 'agent-explicit-assessment-with-exact-evidence-not-host-or-independent-professional-score',
+            });
+          });
         }
         if (!isConstruction) throw new StudioError('studio_construction_only', 403);
         const extractionOwner = { systemId: id, projectId, taskId };
@@ -575,6 +1163,50 @@ export function createStudioFeature(options: StudioHostOptions) {
           if (action === 'prepare-publication') { await qualifyRulePublication(system, payload); await qualifyFoundationSelection(system, payload.assetIds, parseSources(payload.refs ?? [])); await validatePublicationRefs(system, parseSources(payload.refs ?? [])); await qualifySelectedContributions(system, payload); context.assertCurrent(); context.signal.throwIfAborted(); const preview = store.preparePublication(id, payload as unknown as StudioPublicationInput), publication = store.get(id).publications.find(value => value.preview.id === preview.id)!; return boundedReply(action, { preview, claim: 'prepared-not-approved' }, { preview: { id: preview.id, fingerprint: preview.fingerprint, systemRevision: preview.systemRevision, topicId: preview.topicId, itemCount: preview.items.length, refCount: preview.refs.length }, claim: 'prepared-not-approved' }, id, { action: 'read', payload: jsonRead(publication, { section: 'publications', publicationId: preview.id }) }); }
           if (action === 'mark-issue') { const refs = parseSources(payload.sources); if (!refs.length) throw new StudioError('studio_issue_evidence_required'); await validateSources(refs, system); context.assertCurrent(); context.signal.throwIfAborted(); const asset = system.assets.find(asset => asset.id === payload.assetId); if (!asset || asset.formalRevision !== payload.revision) throw new StudioError('studio_asset_conflict', 409); return reply(action, { asset: store.markAssetIssue(id, asset.id, text(payload.reason, 20_000, false)), evidence: refs, claim: 'construction-agent-explicit-governance-decision-not-automatic-feedback' }); }
           if (action === 'update-feedback') { if (payload.sources !== undefined) { await validateSources(parseSources(payload.sources), system); context.assertCurrent(); context.signal.throwIfAborted(); } if (payload.status === 'verified') { if (!object(payload.verification)) throw new StudioError('studio_use_verification_required', 409); const refs = parseSources(payload.verification.sources); for (const ref of refs) { if (ref.authority === 'task') { const owner = system.uses.find(use => digest(use.report) === digest(ref) || use.assessments?.some(assessment => digest(assessment.report) === digest(ref))); if (!owner) throw new StudioError('studio_use_verification_required', 409); await sources.validate(ref, owner.projectId, id); } else { const use = system.uses.find(use => use.sources.some(source => digest(source) === digest(ref))); await sources.validate(ref, use?.projectId ?? projectId, id, { construction: !use }); } } context.assertCurrent(); context.signal.throwIfAborted(); } return reply(action, { feedback: store.updateFeedback(id, uuid(payload.feedbackId), payload as unknown as StudioFeedbackUpdate) }); }
+          if (action === 'pack-save-panorama' || action === 'pack-upsert-entry' || action === 'pack-upsert-purpose') {
+            const entId = system.enterpriseId ?? enterpriseScopes.enterpriseIdForProject(projectId);
+            if (!entId) throw new StudioError('studio_enterprise_required', 409);
+            const domain = typeof payload.domain === 'string' && payload.domain.trim() ? payload.domain.trim() : 'member-operations';
+            const ensured = memberPack.packs.ensurePack({ enterpriseId: entId, systemId: id, domain, name: `${system.name} · 会员运营资产包` });
+            if (action === 'pack-save-panorama') {
+              const srcRefs = parseSources(payload.sourceRefs ?? []);
+              await validateSources(srcRefs, system, projectId, true);
+              if (Array.isArray(payload.issues)) {
+                for (const iss of payload.issues as Array<{ evidence?: Array<{ sourceRef?: unknown }> }>) {
+                  if (Array.isArray(iss?.evidence)) {
+                    await validateSources(parseSources(iss.evidence.map(e => e.sourceRef)), system, projectId, true);
+                  }
+                }
+              }
+              context.assertCurrent(); context.signal.throwIfAborted();
+              const updated = memberPack.packs.savePanorama(ensured.id, {
+                ...(payload as unknown as Parameters<typeof memberPack.packs.savePanorama>[1]),
+                sourceRefs: srcRefs,
+                createdByTask: { projectId, taskId },
+              });
+              return reply(action, { packId: updated.id, packCode: updated.packCode, panoramaVersion: updated.panorama?.version ?? 0, recommendationCount: updated.panorama?.recommendations.length ?? 0, issueCount: updated.panorama?.issues.length ?? 0 });
+            }
+            if (action === 'pack-upsert-entry') {
+              const entRefs = parseSources(payload.enterpriseSourceRefs ?? []);
+              await validateSources(entRefs, system, projectId, true);
+              context.assertCurrent(); context.signal.throwIfAborted();
+              const updated = memberPack.packs.upsertEntry(ensured.id, {
+                ...(payload as unknown as Parameters<typeof memberPack.packs.upsertEntry>[1]),
+                enterpriseSourceRefs: entRefs,
+              });
+              return reply(action, { packId: updated.id, packCode: updated.packCode, entryCount: updated.entries.length });
+            }
+            // pack-upsert-purpose
+            if (object(payload.evidenceNote) && Array.isArray(payload.evidenceNote.sourceRefs)) {
+              await validateSources(parseSources(payload.evidenceNote.sourceRefs), system, projectId, true);
+            }
+            context.assertCurrent(); context.signal.throwIfAborted();
+            const saved = memberPack.packs.upsertPurpose(ensured.id, {
+              ...(payload as unknown as Parameters<typeof memberPack.packs.upsertPurpose>[1]),
+              taskOwner: { projectId, taskId },
+            });
+            return reply(action, { packId: saved.pack.id, packCode: saved.pack.packCode, purposeId: saved.purpose.id, created: saved.created, purposeCount: saved.pack.purposes.length });
+          }
           throw new StudioError('studio_action_not_available', 409);
         }).catch(error => {
           if (error instanceof SapFault || error instanceof MetricLibraryFault || error instanceof SapMethodStoreError) throw new StudioError(error.code.toLowerCase(), 'status' in error && typeof error.status === 'number' ? error.status : 409);
@@ -585,6 +1217,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     async handle(request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean> {
       if (!url.pathname.startsWith('/api/studio/')) return false;
       try {
+        if (await memberPack.handle(request, response, url)) return true;
         if (url.pathname === '/api/studio/enterprises' && request.method === 'GET') { json(response, 200, enterpriseScopes.list()); return true; }
         if (url.pathname === '/api/studio/foundation' && request.method === 'GET') { json(response, 200, await enterpriseCatalog.catalog(uuid(url.searchParams.get('enterpriseId')))); return true; }
         if (url.pathname === '/api/studio/enterprises' && request.method === 'POST') {
@@ -698,7 +1331,10 @@ export function createStudioFeature(options: StudioHostOptions) {
             if (enterpriseId) { enterpriseScopes.get(enterpriseId); assertProjectEnterprise(projectId, enterpriseId); enterpriseScopes.associateProject(projectId, enterpriseId); }
             const materials = await selectedMaterials(input.materials, projectId);
             const task = await options.projects.createTask(projectId, { name: `Studio · ${name}` }); await options.projects.saveDraft(projectId, task.id, goal);
-            const system = store.create({ name, projectId, taskId: task.id, goal, topicTitle, materials, ...(enterpriseId ? { enterpriseId } : {}) }); return { statusCode: 201, result: { system }, systemId: system.id };
+            const system = store.create({ name, projectId, taskId: task.id, goal, topicTitle, materials, ...(enterpriseId ? { enterpriseId } : {}) });
+            const creatorOp = options.resolveRequestOperator?.(request);
+            if (creatorOp?.verified && creatorOp.operatorId.trim()) memberPack.bindSystemOperator(system.id, creatorOp.operatorId);
+            return { statusCode: 201, result: { system }, systemId: system.id };
           }
           const state = await workspace(id), system = state.system;
           if (action === 'contributions') {
