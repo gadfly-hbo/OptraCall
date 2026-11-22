@@ -223,7 +223,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       const tool = pi.getAllTools().find(tool => tool.name === 'read_semantic_context');
       return tool ? semanticContextAnthropicPayload(event.payload, tool.parameters) : undefined;
     });
-    const eligible = !fixedInput() && !options.protectedExecution;
+    const eligible = !fixedInput() && !options.protectedExecution && !options.memberPackWorkspaceRoot;
     const connectors = [
       { label: '商圈', prefix: 'mcp__trade_area_mcp__', enabled: eligible && Boolean(options.tradeAreaConnector), tools: ['tradearea_search', 'tradearea_detail', 'tradearea_score'] },
       { label: '天气', prefix: 'mcp__weather_mcp__', enabled: eligible && Boolean(options.weatherConnector), tools: ['weather_history'] },
@@ -263,7 +263,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     // MCP waits for direct servers before this observation; this is not a model-turn gate.
     pi.on('before_agent_start', () => { for (const connector of connectors) checkDirectory(connector); });
     pi.on('tool_call', async event => {
-      if (options.memberPackGuardEnabled && ['read', 'write', 'edit', 'grep', 'find', 'ls', 'bash', 'powershell', 'codemode'].includes(event.toolName) && run && manager) {
+      if (options.memberPackGuardEnabled && ['read', 'write', 'edit', 'grep', 'find', 'ls', 'bash', 'powershell', 'codemode', 'subagent'].includes(event.toolName) && run && manager) {
         try {
           const check = await requestHostTool(
             {
@@ -337,7 +337,8 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     if (fixedInput() && !strategyDiscussion() && o.sessionFile) throw new Error('fixed_draft_history_not_allowed');
     if (editorText === undefined) editorText = o.draft ?? '';
     analysisPython = o.analysisPython && !fixedInput() ? inspectAnalysisPython(o.analysisPython, o.codeRoot) : undefined;
-    const cwd = o.workspace?.cwd ?? path.join(o.projectDirectory!, '020_clean');
+    const restrictedMemberPack = Boolean(o.memberPackWorkspaceRoot && !o.workspace && !o.protectedExecution);
+    const cwd = o.workspace?.cwd ?? (restrictedMemberPack ? path.join(o.memberPackWorkspaceRoot!, '020_clean') : path.join(o.projectDirectory!, '020_clean'));
     if (o.protectedExecution) {
       if (fixedInput()) throw new Error('protected_execution_profile_conflict');
       if (o.sessionFile && existsSync(o.sessionFile)) {
@@ -348,10 +349,10 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       executionId = randomUUID();
     }
     const credentials = { read: async () => undefined, list: async () => [], modify: async () => { throw new Error('Host owns credentials.'); }, delete: async () => {} };
-    // 经营推演工具按任务级开关注入普通项目任务；受管/封闭文本资源不注入——
+    // 经营推演工具按任务级开关注入普通项目任务；受管/封闭文本/受限会员包资源不注入——
     // 其纯计算执行体未经受限执行边界核验，按不可安全委派扩展明确不提供（SIM12）。
-    const simulationTools = !fixedInput() && !o.protectedExecution && o.simulationTools ? createSimulationTools(o.simulationTools) : undefined;
-    const modelPackTools = !fixedInput() && !o.workspace && !o.protectedExecution && o.projectDirectory && o.modelPackTools
+    const simulationTools = !fixedInput() && !o.protectedExecution && !restrictedMemberPack && o.simulationTools ? createSimulationTools(o.simulationTools) : undefined;
+    const modelPackTools = !fixedInput() && !o.workspace && !o.protectedExecution && !restrictedMemberPack && o.projectDirectory && o.modelPackTools
       ? createModelPackTools({ ...o.modelPackTools, projectRoot: o.projectDirectory }) : undefined;
     // Only the Host's ordinary project-task options carry both real owner keys.
     // A business-plugin workspace, managed scope or sealed reader never gains it.
@@ -518,7 +519,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         },
       }));
     };
-    const loadMcpConfig = !fixedInput() && !o.protectedExecution ? await getSdkMcpConfigLoader() : undefined;
+    const loadMcpConfig = !fixedInput() && !o.protectedExecution && !restrictedMemberPack ? await getSdkMcpConfigLoader() : undefined;
     const mcpExtension = loadMcpConfig ? createMcpExtension({ loadConfig: context => {
       const loaded = loadMcpConfig({ agentDir: getAgentDir(), cwd: context.cwd, projectTrusted: context.isProjectTrusted() });
       const reserved = (name: string) => ['trade_area_mcp', 'weather_mcp'].includes(name.replace(/[^A-Za-z0-9_]/g, '_'));
@@ -739,7 +740,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       const contextAdapter = scopeToolContexts ? createToolContextAdapter((ctx, signal) => qualifyToolInvocation(parent, ctx, signal)) : undefined;
       const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
       const customTools = [...createGoalContextTools(sessionManager), ...createStrategyTools(sessionManager), ...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager), ...createBoundDbLinkTools(sessionManager), ...(o.reportCalculationReviewEnabled ? [createReportReviewTool(() => parent)] : [])];
-      const delegation = !fixedInput() && !o.workspace && (!o.protectedExecution || ordinaryManaged());
+      const delegation = !fixedInput() && !o.workspace && !restrictedMemberPack && (!o.protectedExecution || ordinaryManaged());
       const searchGuidance: ExtensionFactory = pi => {
         pi.on('before_agent_start', event => {
           const prompt = event.systemPromptOptions;
@@ -788,7 +789,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         const { type, skill } = o.assignment, purpose = taskPurpose[type];
         return ['当前委托为' + purpose.label + ' Task。按业务需要交付' + purpose.deliverable + '。' + (skill ? '当前用户启用 ' + skill.id + ' ' + skill.version + '，请从 Pi 提供的准确入口读取并按适用契约工作。' : '本任务未启用类型默认 Skill。')];
       };
-      const projectInstructions = () => [...taskInstruction(), projectSystemPrompt(targetCwd, path.join(o.projectDirectory!, '060_reports'), dbLinkAvailable), OUTPUT_EVIDENCE_GUIDANCE, ...(o.analysisDeliveryEnabled ? [ANALYSIS_DELIVERY_GUIDANCE] : [])];
+      const projectInstructions = () => [...taskInstruction(), projectSystemPrompt(targetCwd, restrictedMemberPack ? path.join(o.memberPackWorkspaceRoot!, '060_reports') : path.join(o.projectDirectory!, '060_reports'), dbLinkAvailable), OUTPUT_EVIDENCE_GUIDANCE, ...(o.analysisDeliveryEnabled ? [ANALYSIS_DELIVERY_GUIDANCE] : [])];
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: { ...(contextAdapter ? { extensionsOverride: contextAdapter.extensionsOverride } : {}), ...(fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
@@ -810,6 +811,15 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         },
         appendSystemPrompt: [...(o.workspace?.systemPrompt ?? []), ...(ordinaryManaged() ? projectInstructions() : []),
           `The Host has provided a managed tool execution environment (${o.protectedExecution?.profile ?? 'protected'}). The tools run in ${protectedTools.scope.cwd}. Authorized readable material locations: ${JSON.stringify(protectedTools.scope.readRoots)}. Authorized writable locations: ${JSON.stringify([protectedTools.scope.writableRoot, ...(protectedTools.scope.writeRoots ?? [])])}. ${ordinaryManaged() ? 'Background and parallel calculations may continue across tool calls within this operation; the Host retains their resources until stop, close, or the authorized phase handoff.' : 'Existing data and reports are read-only; save new calculations and deliverables in the new workspace.'} Native session and credential files are unavailable to execution tools. Existing/remote MCP and user execution extensions are unavailable here. All child processes must remain inside this operation\'s owned execution groups: detached sessions and posix_spawn are unavailable. The python and python3 entrypoints use the installed same-version direct interpreters (${JSON.stringify(protectedTools.pythonRuntimes)}); use these entrypoints or their recorded direct executable paths instead of absolute framework launcher wrappers. Ordinary fork/exec subprocesses remain available. Choose methods and tools yourself. Codemode store/load is scoped to this execution workspace. Unavailable tools: ${JSON.stringify(protectedTools.unavailableTools)}.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
+      } : restrictedMemberPack ? {
+        noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
+        disabledBuiltinExtensions: ['mcp'],
+        extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), ...searchExtensions, ...reportReviewExtensions, environmentExtension],
+        appendSystemPrompt: [
+          ...projectInstructions(),
+          '当前任务运行在受限资源授权隔离工作区中：工作目录仅包含当前获准读取的资料；未授权门店或资料不可访问、不可通过子会话/连接器/扩展越权获取，也不可将不可读门店视为 0。分析产出请保存到 ../060_reports/。',
+          ...(o.metricIndexText ? [o.metricIndexText] : []),
+        ],
       } : {
         extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), mcpExtension!, ...searchExtensions, ...reportReviewExtensions, environmentExtension],
         additionalSkillPaths: [analysisAssetsDir],

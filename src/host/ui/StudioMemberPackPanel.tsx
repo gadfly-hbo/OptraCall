@@ -10,8 +10,11 @@ import {
   listEnterprisePacks,
   listResourceGrants,
   preparePackPreview,
+  readDomainReferenceOriginal,
   reconcilePackReceipt,
   revokeResourceGrant,
+  selectPanoramaRecommendation,
+  upsertPackPurpose,
   type EnterpriseDomainPack,
   type EnterprisePackPreview,
   type ResourceAuthorizationGrant,
@@ -79,8 +82,17 @@ export function StudioMemberPackPanel({
   const [decisionMap, setDecisionMap] = useState<Record<string, string>>({});
   const [decisionOwnerMap, setDecisionOwnerMap] = useState<Record<string, string>>({});
   const [confirmByInput, setConfirmByInput] = useState('');
+  const [refExcerptDrawer, setRefExcerptDrawer] = useState<{
+    title: string;
+    sourceId: string;
+    version: string;
+    sectionLocator?: string;
+    lineRange?: { start: number; end: number; total: number };
+    sha256: string;
+    text: string;
+  } | null>(null);
 
-  // Grant form state (Host verifies grantor & summary authority identity)
+  // Grant form state (Host verifies grantor authority & summary scope)
   const [grantProjectId, setGrantProjectId] = useState('');
   const [grantOp, setGrantOp] = useState<ResourceGrantOperation>('read-definition');
   const [grantStores, setGrantStores] = useState('');
@@ -251,6 +263,97 @@ export function StudioMemberPackPanel({
     }
   };
 
+  const handleToggleRecommendation = async (purposeKey: string, selected: boolean) => {
+    if (!pack || busy || readOnlyRollback) return;
+    setBusy(true);
+    setError('');
+    try {
+      const res = await selectPanoramaRecommendation(pack.id, {
+        requestId: crypto.randomUUID(),
+        ...(currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? { projectId: currentProjectId } : {}),
+        purposeKey,
+        selected,
+      });
+      setPack(res.pack);
+      setNotice(selected ? `已将建议「${purposeKey}」选入本轮建设范围。` : `已取消建议「${purposeKey}」的本轮选中状态。`);
+    } catch (fault) {
+      setError(fault instanceof Error ? fault.message : '更新全景建议选择失败。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleContinueFromRecommendation = async (rec: NonNullable<EnterpriseDomainPack['panorama']>['recommendations'][number]) => {
+    if (!pack || !pack.panorama || busy || readOnlyRollback) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const activePid = currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? currentProjectId : undefined;
+      if (!rec.selected) {
+        await selectPanoramaRecommendation(pack.id, {
+          requestId: crypto.randomUUID(),
+          ...(activePid ? { projectId: activePid } : {}),
+          purposeKey: rec.purposeKey,
+          selected: true,
+        });
+      }
+      const scopeKey = `${pack.panorama.brand}:${pack.panorama.channel}:${pack.panorama.period}:${rec.purposeKey}`;
+      const upserted = await upsertPackPurpose(pack.id, {
+        requestId: crypto.randomUUID(),
+        ...(activePid ? { projectId: activePid } : {}),
+        purposeKey: rec.purposeKey,
+        title: rec.title,
+        businessQuestion: `${pack.panorama.decisionPurpose}（聚焦：${rec.title}）`,
+        subjectUnit: 'brand_account',
+        scope: {
+          brand: pack.panorama.brand,
+          channel: pack.panorama.channel,
+          period: pack.panorama.period,
+          scopeKey,
+        },
+        tier: 'definition-reference',
+        businessStatus: 'active',
+        originalGoal: rec.deliverableNow,
+        remainingGaps: rec.minimumEvidence ? [rec.minimumEvidence] : [],
+        exclusions: [],
+        completionCriteria: rec.completionCriteria,
+        dataCutoffAt: pack.panorama.dataCutoffAt,
+      });
+      const continuationGoal = `请沿企业会员包 ${pack.packCode} 全景 v${pack.panorama.version} 原范围继续建设用途「${rec.title}」（purposeKey: ${rec.purposeKey}；品牌：${pack.panorama.brand}；渠道：${pack.panorama.channel}；期间：${pack.panorama.period}；资料截止：${pack.panorama.dataCutoffAt}；完成条件：${rec.completionCriteria}；最小补证：${rec.minimumEvidence}）。请直接更新同一用途草案与条目，不要新建重复事项。`;
+      setGoalInput(continuationGoal);
+      setPack(upserted.pack);
+      setSubTab('draft');
+      setNotice(`已按全景建议「${rec.title}」携带原范围（${pack.panorama.brand} · ${pack.panorama.channel} · ${pack.panorama.period} · 截止 ${pack.panorama.dataCutoffAt}）建好/复用用途草案。`);
+    } catch (fault) {
+      setError(fault instanceof Error ? fault.message : '从全景建议续建失败。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleInspectRefExcerpt = async (link: EnterpriseDomainPack['entries'][number]['referenceLinks'][number]) => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const res = await readDomainReferenceOriginal(link.refId, link.sectionLocator || undefined, enterpriseId);
+      setRefExcerptDrawer({
+        title: res.record.title,
+        sourceId: res.record.sourceId,
+        version: res.record.version,
+        sectionLocator: res.sectionLocator ?? link.sectionLocator,
+        lineRange: res.lineRange,
+        sha256: res.excerptSha256 ?? res.sha256,
+        text: res.text,
+      });
+    } catch (fault) {
+      setError(fault instanceof Error ? fault.message : '读取参考原段失败。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleRouteFeedbackToAuthority = async (fb: EnterpriseDomainPack['feedbackItems'][number]) => {
     if (!pack || busy) return;
     setBusy(true);
@@ -261,16 +364,47 @@ export function StudioMemberPackPanel({
         requestId: crypto.randomUUID(),
         ...(currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? { projectId: currentProjectId } : {}),
         status: fb.targetAuthority === 'task' ? 'retained_in_task' : 'investigating',
-        note: `已按归属（${fb.targetAuthority}）登记原权威核查与修订任务，仅重核受影响用途。`,
+        note: `已按归属（${fb.targetAuthority}）在原 Studio 登记关联工作项与反馈，仅重核受影响用途。`,
         impactedPurposeIds: fb.purposeIds,
       });
       setPack(res.pack);
-      setNotice(`事项 ${fb.feedbackCode} 已转入原权威处理（${fb.targetAuthority}）；不受影响用途与旧报告保持原样。`);
+      const workItemTag = res.feedback.authorityHandling?.studioWorkItemId ? `（Studio 关联工作项 ${res.feedback.authorityHandling.studioWorkItemId.slice(0, 8)}…）` : '';
+      setNotice(`事项 ${fb.feedbackCode} 已转入原权威处理（${fb.targetAuthority}）${workItemTag}；不受影响用途与旧报告保持原样。`);
     } catch (fault) {
       setError(fault instanceof Error ? fault.message : '更新反馈处理状态失败。');
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleContinueFeedbackInSession = async (fb: EnterpriseDomainPack['feedbackItems'][number]) => {
+    if (!pack || !primarySystem || !onBuildGoal || busy || readOnlyRollback) return;
+    let workItemId = fb.authorityHandling?.studioWorkItemId;
+    if (!workItemId && fb.targetAuthority !== 'task') {
+      setBusy(true);
+      setError('');
+      try {
+        const res = await handlePackFeedback(pack.id, fb.id, {
+          requestId: crypto.randomUUID(),
+          ...(currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? { projectId: currentProjectId } : {}),
+          status: 'investigating',
+          note: `已创建原 Studio 关联工作项并转入建设会话修订（归属 ${fb.targetAuthority}）。`,
+          impactedPurposeIds: fb.purposeIds,
+        });
+        setPack(res.pack);
+        workItemId = res.feedback.authorityHandling?.studioWorkItemId;
+      } catch (fault) {
+        setError(fault instanceof Error ? fault.message : '建立原权威关联工作项失败。');
+        setBusy(false);
+        return;
+      } finally {
+        setBusy(false);
+      }
+    }
+    onBuildGoal(
+      `处理会员包反馈 ${fb.feedbackCode}（${fb.title}，归属 ${fb.targetAuthority}${workItemId ? `，原 Studio 关联工作项 ${workItemId}` : ''}${fb.targetAssetRef ? `，目标原资产 ${fb.targetAssetRef.authority}:${fb.targetAssetRef.id}@${fb.targetAssetRef.version}` : ''}）：请在原权威核查并仅修订受影响用途（${fb.purposeIds.join('、') || '待核定'}），不改动未受影响用途与历史报告。`,
+      primarySystem.id,
+    );
   };
 
   const handleAddGrant = async (event: React.FormEvent) => {
@@ -287,9 +421,13 @@ export function StudioMemberPackPanel({
           : ['read-definition', 'read-detail-recalculate'];
       const stores = grantStores.split(/[、,，\s]+/).map(s => s.trim()).filter(Boolean);
       const allowedDataPaths = grantAllowedPaths.split(/[、,，\s]+/).map(s => s.trim()).filter(Boolean);
+      const systemOwnerProjectId = pack?.activeOwnerProjectId ?? primarySystem?.maintenanceHistory?.at(-1)?.projectId ?? primarySystem?.projectId;
+      const actorProjectId = (currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? currentProjectId : undefined)
+        ?? (systemOwnerProjectId && writableProjects.some(p => p.id === systemOwnerProjectId) ? systemOwnerProjectId : undefined);
       await createResourceGrant({
         requestId: crypto.randomUUID(),
         enterpriseId,
+        ...(actorProjectId ? { grantorProjectId: actorProjectId } : {}),
         grantBasis: grantBasis.trim() || '项目资源授权',
         subjectType: 'project',
         subjectId: grantProjectId,
@@ -302,7 +440,7 @@ export function StudioMemberPackPanel({
         },
       });
       await refresh();
-      setNotice('已保存 Host 核定资源授权记录（授予方与汇总身份由 Host 按原权威校验）；客户端角色名不产生权限。');
+      setNotice('已保存资源授权记录（授予方与汇总范围由 Host 按原权责主体与原权威资产核验）；客户端角色名不产生权限。');
     } catch (fault) {
       setError(fault instanceof Error ? fault.message : '保存资源授权未能完成。');
     } finally {
@@ -315,9 +453,12 @@ export function StudioMemberPackPanel({
     setBusy(true);
     setError('');
     try {
-      await revokeResourceGrant(grantId, '权限复核撤回', crypto.randomUUID());
+      const systemOwnerProjectId = pack?.activeOwnerProjectId ?? primarySystem?.maintenanceHistory?.at(-1)?.projectId ?? primarySystem?.projectId;
+      const actorProjectId = (currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? currentProjectId : undefined)
+        ?? (systemOwnerProjectId && writableProjects.some(p => p.id === systemOwnerProjectId) ? systemOwnerProjectId : undefined);
+      await revokeResourceGrant(grantId, '权限复核撤回', crypto.randomUUID(), actorProjectId);
       await refresh();
-      setNotice('已撤回该项资源授权；后续查询与翻页将立即停止供给受影响项，原历史报告保留。');
+      setNotice('已撤回该项资源授权；活跃任务隔离工作区与后续查询将立即停止供给受影响项，原历史报告保留。');
     } catch (fault) {
       setError(fault instanceof Error ? fault.message : '撤回授权未能完成。');
     } finally {
@@ -405,16 +546,36 @@ export function StudioMemberPackPanel({
                   </div>
                   {pack.panorama.recommendations.length > 0 && (
                     <section className="studio-record">
-                      <h4>首批建设建议</h4>
+                      <h4>首批建设建议（可选定并携带原范围直接续建）</h4>
                       {pack.panorama.recommendations.map(rec => (
                         <article key={rec.purposeKey} className="studio-coverage">
                           <div className="studio-row">
-                            <strong>{rec.title}</strong>
+                            <label className="studio-inline-check">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(rec.selected)}
+                                disabled={busy || readOnlyRollback}
+                                onChange={e => { void handleToggleRecommendation(rec.purposeKey, e.target.checked); }}
+                              />
+                              <strong>{rec.title}</strong>
+                            </label>
                             <span className="studio-badge">{rec.ownerRole}</span>
                           </div>
                           <p>{rec.priorityReason}</p>
                           <p className="studio-meta">可先交付：{rec.deliverableNow} · 最小补证：{rec.minimumEvidence}</p>
                           <p className="studio-meta">完成条件：{rec.completionCriteria}</p>
+                          {!readOnlyRollback && (
+                            <div className="studio-actions">
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                disabled={busy}
+                                onClick={() => { void handleContinueFromRecommendation(rec); }}
+                              >
+                                按此建议携带原范围续建
+                              </button>
+                            </div>
+                          )}
                         </article>
                       ))}
                     </section>
@@ -449,6 +610,17 @@ export function StudioMemberPackPanel({
 
           {subTab === 'draft' && (
             <div className="studio-member-pack-section">
+              {refExcerptDrawer && (
+                <PersonalDialog
+                  drawer
+                  title={`参考原段回查 · ${refExcerptDrawer.title}`}
+                  subtitle={`${refExcerptDrawer.sourceId} · v${refExcerptDrawer.version}${refExcerptDrawer.sectionLocator ? ` · 章节 ${refExcerptDrawer.sectionLocator}` : ''}${refExcerptDrawer.lineRange ? ` · 第 ${refExcerptDrawer.lineRange.start}-${refExcerptDrawer.lineRange.end} 行` : ''} · SHA-256 ${refExcerptDrawer.sha256.slice(0, 16)}…`}
+                  onClose={() => setRefExcerptDrawer(null)}
+                  footer={<button type="button" className="secondary-button" onClick={() => setRefExcerptDrawer(null)}>关闭</button>}
+                >
+                  <pre className="sc-paper">{refExcerptDrawer.text}</pre>
+                </PersonalDialog>
+              )}
               <h4>两条路线合入同一企业草案</h4>
               {pack.entries.length > 0 ? (
                 <div className="studio-table-wrap">
@@ -457,7 +629,7 @@ export function StudioMemberPackPanel({
                       <tr>
                         <th>业务问题与路线</th>
                         <th>采用动作</th>
-                        <th>本企业决定与依据</th>
+                        <th>本企业决定、两线依据与参考原段</th>
                         <th>生效期与例外</th>
                         <th>原权威维护</th>
                       </tr>
@@ -473,6 +645,38 @@ export function StudioMemberPackPanel({
                           <td>
                             <p>{entry.enterpriseBasis}</p>
                             <p className="studio-meta">范围：{entry.scope}{entry.decisionOwner ? ` · 负责人：${entry.decisionOwner}` : ''}</p>
+                            {entry.enterpriseSourceRefs.length > 0 && (
+                              <div className="studio-meta">
+                                <strong>企业线依据：</strong>
+                                <ul>
+                                  {entry.enterpriseSourceRefs.map((src, idx) => (
+                                    <li key={`${src.id}:${src.version}:${idx}`}>
+                                      {src.title || src.id}（{src.authority}@{src.version.slice(0, 12)}{src.locator ? ` · ${src.locator}` : ''}）
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {entry.referenceLinks.length > 0 && (
+                              <div className="studio-meta">
+                                <strong>领域/行业参考原段：</strong>
+                                <ul>
+                                  {entry.referenceLinks.map((link, idx) => (
+                                    <li key={`${link.refId}:${link.sectionLocator}:${idx}`}>
+                                      {link.sourceId}@{link.version}（章节：{link.sectionLocator}）{link.excerpt ? ` · ${link.excerpt}` : ''}{' '}
+                                      <button
+                                        type="button"
+                                        className="text-button"
+                                        disabled={busy}
+                                        onClick={() => { void handleInspectRefExcerpt(link); }}
+                                      >
+                                        查看参考原段
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                           </td>
                           <td>
                             <p className="studio-meta">{entry.validFrom || '未定'} → {entry.validTo || '长期'}</p>
@@ -697,6 +901,8 @@ export function StudioMemberPackPanel({
                       {fb.authorityHandling && (
                         <p className="studio-meta">
                           原权威处理记录：{fb.authorityHandling.note}
+                          {fb.authorityHandling.studioWorkItemId ? ` · Studio 工作项：${fb.authorityHandling.studioWorkItemId}` : ''}
+                          {fb.authorityHandling.studioFeedbackId ? ` · Studio 反馈：${fb.authorityHandling.studioFeedbackId}` : ''}
                           {fb.authorityHandling.revisedRef ? ` · 修订版：${fb.authorityHandling.revisedRef.id}@${fb.authorityHandling.revisedRef.version}` : ''}
                           {fb.authorityHandling.revisedPackVersion ? ` · 新包版：v${fb.authorityHandling.revisedPackVersion}` : ''}
                         </p>
@@ -729,7 +935,7 @@ export function StudioMemberPackPanel({
                           </button>
                         )}
                         {onBuildGoal && primarySystem && !readOnlyRollback && fb.targetAuthority !== 'task' && (
-                          <button type="button" className="text-button" onClick={() => onBuildGoal(`处理反馈 ${fb.feedbackCode}（${fb.title}，归属 ${fb.targetAuthority}）：在原权威核查并仅修订受影响用途，不改动未受影响用途与旧报告。`, primarySystem.id)}>
+                          <button type="button" className="text-button" disabled={busy} onClick={() => { void handleContinueFeedbackInSession(fb); }}>
                             在建设会话继续修订
                           </button>
                         )}

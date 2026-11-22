@@ -107,6 +107,12 @@ export class ResourceGrantStore {
     return this.load().grants.some(g => g.enterpriseId === eid && (subjectId === undefined || g.subjectId === subjectId));
   }
 
+  get(grantId: string): ResourceAuthorizationGrant {
+    const found = this.load().grants.find(g => g.id === uuid(grantId));
+    if (!found) fail('resource_grant_not_found', 404);
+    return clone(found);
+  }
+
   grant(input: ResourceGrantInput & { grantorVerifiedBy?: 'host' }): ResourceAuthorizationGrant {
     this.assertWritable();
     const enterpriseId = uuid(input.enterpriseId);
@@ -136,6 +142,9 @@ export class ResourceGrantStore {
       enterpriseId,
       grantor,
       ...(input.grantorVerifiedBy ? { grantorVerifiedBy: input.grantorVerifiedBy } : {}),
+      ...(input.grantorProjectId ? { grantorProjectId: uuid(input.grantorProjectId) } : {}),
+      ...(input.grantorSystemId ? { grantorSystemId: uuid(input.grantorSystemId) } : {}),
+      ...(input.grantorAuthorityType ? { grantorAuthorityType: input.grantorAuthorityType } : {}),
       grantBasis,
       subjectType: input.subjectType,
       subjectId,
@@ -154,6 +163,7 @@ export class ResourceGrantStore {
         ...(scope.summaryVersion ? { summaryVersion: text(scope.summaryVersion, 100, false) } : {}),
         ...(scope.summaryAuthority ? { summaryAuthority: text(scope.summaryAuthority, 200, false) } : {}),
         ...(scope.summarySha256 ? { summarySha256: text(scope.summarySha256, 128, false) } : {}),
+        ...(scope.verifiedScopeSummary ? { verifiedScopeSummary: text(scope.verifiedScopeSummary, 500, false) } : {}),
         ...(scope.metricRef ? { metricRef: sourceRef(scope.metricRef) } : {}),
         ...(scope.allowedDataPaths?.length ? { allowedDataPaths: [...new Set(scope.allowedDataPaths.map(p => text(p, 1000, false)))] } : {}),
       },
@@ -168,7 +178,7 @@ export class ResourceGrantStore {
     return clone(record);
   }
 
-  revoke(grantId: string, reason: string): ResourceAuthorizationGrant {
+  revoke(grantId: string, reason: string, actor?: { revokedBy?: string; revokedByProjectId?: string }): ResourceAuthorizationGrant {
     this.assertWritable();
     const id = uuid(grantId);
     const revokedReason = text(reason, 2000, false).trim();
@@ -178,6 +188,8 @@ export class ResourceGrantStore {
     const stamp = now();
     found.revokedAt = found.revokedAt ?? stamp;
     found.revokedReason = revokedReason;
+    if (actor?.revokedBy) found.revokedBy = text(actor.revokedBy, 200, false);
+    if (actor?.revokedByProjectId) found.revokedByProjectId = uuid(actor.revokedByProjectId);
     found.updatedAt = stamp;
     this.save(index);
     return clone(found);

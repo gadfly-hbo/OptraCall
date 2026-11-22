@@ -136,11 +136,66 @@ try:
         page.get_by_role('button', name='初始化本企业会员运营包').click()
         page.get_by_text('PACK-MEM-001').first.wait_for(timeout=10_000)
 
-        # Seed TWO purposes via Host API:
-        # (a) Calculation purpose referencing a NONEXISTENT SAP metric (MET-FAKE-BROWSER-999@9.9.9) with UNDECIDED choice
-        # (b) Definition-reference purpose referencing the REAL enabled Enterprise Material above
+        # Look up registered T03 record ID for dual-route entry provenance
+        refs = api('/api/studio/domain-references')['references']
+        t03_rec = [r for r in refs if r['sourceId'] == 'T03'][0]
+        mat_ref = {
+            'authority': 'enterprise',
+            'id': mat['id'],
+            'version': mat_rev['revisionId'],
+            'sha256': mat_rev['bodySha256'],
+            'locator': enabled_mat['storeId'],
+            'title': '织屿会员有效购买制度 v1',
+        }
+
+        # Seed panorama + dual-route entry + TWO purposes via Host API:
         packs = api(f'/api/studio/enterprise-packs?enterpriseId={eid}&domain=member-operations')['packs']
         pack_id = packs[0]['id']
+        api(f'/api/studio/enterprise-packs/{pack_id}/panorama', 'POST', {
+            'requestId': str(_uuid.uuid4()),
+            'projectId': proj['id'],
+            'goal': '盘点会员运营现状并规划首批建设用途',
+            'brand': '织屿主品牌',
+            'channel': '直营门店',
+            'period': '2026-H1',
+            'dataCutoffAt': '2026-06-30',
+            'decisionPurpose': '确定首批会员留存与活跃用途',
+            'sourceRefs': [mat_ref],
+            'recommendations': [{
+                'purposeKey': 'monthly-purchase-active',
+                'title': '自然月购买活跃率',
+                'priorityReason': '区分购买活跃与活动签到',
+                'deliverableNow': '直营门店口径定义与核验',
+                'minimumEvidence': '会员有效购买制度 v1',
+                'ownerRole': '会员运营负责人',
+                'completionCriteria': '明确排除非购买签到',
+                'selected': False,
+            }],
+            'issues': [],
+            'pendingQuestions': [],
+        })
+        api(f'/api/studio/enterprise-packs/{pack_id}/entries', 'POST', {
+            'requestId': str(_uuid.uuid4()),
+            'projectId': proj['id'],
+            'entryKey': 'repurchase-valid-order',
+            'title': '有效再购与全额退款冲销规则',
+            'action': 'modify',
+            'routes': ['enterprise', 'domain'],
+            'enterpriseBasis': '依据织屿制度 v1 扣除全额退款，并参考 T03 标杆界定退货边界',
+            'decisionOwner': '张明（会员运营负责人）',
+            'enterpriseSourceRefs': [mat_ref],
+            'referenceLinks': [{
+                'refId': t03_rec['id'],
+                'sourceId': t03_rec['sourceId'],
+                'version': t03_rec['version'],
+                'sectionLocator': '1-5',
+                'evidenceNature': 'public-benchmark',
+                'excerpt': 'Nike T03 前5行摘要',
+            }],
+            'scope': '织屿主品牌直营门店',
+            'impactedPurposeIds': [],
+            'exceptions': [],
+        })
         api(f'/api/studio/enterprise-packs/{pack_id}/purposes', 'POST', {
             'requestId': str(_uuid.uuid4()),
             'projectId': proj['id'],
@@ -206,14 +261,7 @@ try:
                 'id': 'dep-ent-real',
                 'role': 'member-rule',
                 'authority': 'enterprise',
-                'ref': {
-                    'authority': 'enterprise',
-                    'id': mat['id'],
-                    'version': mat_rev['revisionId'],
-                    'sha256': mat_rev['bodySha256'],
-                    'locator': enabled_mat['storeId'],
-                    'title': '织屿会员有效购买制度 v1',
-                },
+                'ref': mat_ref,
                 'requiredFor': ['definition-reference'],
             }],
         })
@@ -228,8 +276,22 @@ try:
         page.get_by_label('当前企业').select_option(eid)
         page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
 
-        page.get_by_role('button', name='建设草案 (0 条 / 2 用途)').click()
+        # R3.1: Verify Panorama recommendation selection checkbox + "按此建议携带原范围续建" carries exact panorama scope into a 3rd purpose and switches directly to 建设草案!
+        page.get_by_text('自然月购买活跃率').first.wait_for(timeout=10_000)
+        page.get_by_role('checkbox', name='自然月购买活跃率').click()
+        page.get_by_text('已将建议「monthly-purchase-active」选入本轮建设范围。').wait_for(timeout=10_000)
+        page.get_by_role('button', name='按此建议携带原范围续建').click()
+        page.get_by_text('已按全景建议「自然月购买活跃率」携带原范围（织屿主品牌 · 直营门店 · 2026-H1 · 截止 2026-06-30）建好/复用用途草案。').wait_for(timeout=10_000)
+        page.get_by_role('button', name='建设草案 (1 条 / 3 用途)').wait_for(timeout=10_000)
         page.get_by_text('直营门店90天复购率（两店试算版）').first.wait_for(timeout=10_000)
+
+        # R3.2: Verify dual-route draft provenance (Route 1 enterprise source + Route 2 reference link) & clickable "查看参考原段" excerpt drawer!
+        page.get_by_text('企业线依据：').wait_for(timeout=10_000)
+        page.get_by_text('领域/行业参考原段：').wait_for(timeout=10_000)
+        page.get_by_role('button', name='查看参考原段').first.click()
+        page.get_by_text('参考原段回查').first.wait_for(timeout=10_000)
+        page.get_by_text('第 1-5 行').wait_for(timeout=10_000)
+        page.get_by_role('button', name='关闭', exact=True).click()
 
         # Explicitly choose option + decider in UI (no silent fallback!)
         page.get_by_label('跨店复购归属口径', exact=True).select_option('first-store')
@@ -255,7 +317,7 @@ try:
         page.get_by_text('未强行恢复').wait_for(timeout=10_000)
         page.get_by_text('suspended').first.wait_for(timeout=10_000)
 
-        # 3. Create (with Host-verified grantor & allowedDataPaths) and revoke a resource grant from UI
+        # 3. Create (with Host-verified authentic owner project grantor & allowedDataPaths) and revoke a resource grant from UI
         page.get_by_role('button', name='三层资源授权 (0)').click()
         page.get_by_role('heading', name='新增项目资源授权').wait_for(timeout=10_000)
         page.get_by_label('被授权项目').select_option(proj['id'])
@@ -263,7 +325,7 @@ try:
         page.get_by_label('允许读取的门店（顿号或逗号分隔）').fill('星桥直营店')
         page.get_by_label('允许读取的 020_clean 路径（顿号或逗号分隔）').fill('020_clean/starbridge_orders.csv')
         page.get_by_role('button', name='保存资源授权').click()
-        page.get_by_text('Host 核定').first.wait_for(timeout=10_000)
+        page.get_by_text('原权责项目').first.wait_for(timeout=10_000)
         page.get_by_text('门店：星桥直营店').wait_for(timeout=10_000)
         page.get_by_role('button', name='撤回授权').first.click()
         page.get_by_text('已撤回').first.wait_for(timeout=10_000)
@@ -272,7 +334,7 @@ try:
 
     if errors:
         raise RuntimeError(f'Browser page errors observed: {errors}')
-    print('BROWSER_MEMBER_PACK_E2E: PASS (Round-2: Settings T03 SHA-256 + Dedupe + Drawer -> Studio Member Pack Draft -> Explicit Decision/Decider -> Preview -> Real Authority Confirm [Nonexistent SAP=failed/suspended + Read-Only Reconcile Stays Failed; Real Enterprise Material=succeeded/eligible] -> Host-Verified Grants Create/Revoke, 0 page errors)')
+    print('BROWSER_MEMBER_PACK_E2E: PASS (Round-3: Settings T03 SHA-256 + Dedupe + Drawer -> Panorama Recommendation Checkbox & Scope Continuation -> Dual-Route Entry Provenance & Reference Excerpt Drawer -> Explicit Decision/Decider -> Preview -> Real Authority Confirm [Nonexistent SAP=failed/suspended + Read-Only Reconcile Stays Failed; Real Enterprise Material=succeeded/eligible] -> Authentic Owner Grantor Create/Revoke, 0 page errors)')
 finally:
     if proc is not None and proc.poll() is None:
         proc.terminate()

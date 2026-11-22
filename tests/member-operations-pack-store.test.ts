@@ -949,3 +949,296 @@ test('Round-2 counterexamples: missing history/sample/deps never eligible, draft
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('Round-3 counterexamples: selective republication carries over unchanged eligible purposes, frozen snapshot isolates historical reconcile from live draft drift, failed receipts cannot promote to succeeded, verifyUse requires complete requiredRefs reads + authorDeclaration, and verified feedback closure rejects same-task/same-version/unrevised-authority', () => {
+  const root = tempRoot('r3-counterexamples');
+  try {
+    const store = new EnterprisePackStore(root);
+    const entId = '11111111-1111-4111-8111-111111111111';
+    const sysId = '22222222-2222-4222-8222-222222222222';
+    const projA = '33333333-3333-4333-8333-333333333333';
+    const taskA = '44444444-4444-4444-8444-444444444444';
+    const taskB = '55555555-5555-4555-8555-555555555555';
+
+    const pack = store.ensurePack({ enterpriseId: entId, systemId: sysId, domain: 'member-operations', name: 'R3 严格验证包' });
+    const ruleRef = { authority: 'enterprise' as const, id: '66666666-6666-4666-8666-666666666666', version: 'r1', sha256: sha('rule-r1'), title: '会员有效购买口径' };
+    const sapV1 = { authority: 'sap-metric' as const, id: 'repurchase', version: '1.0.0', sha256: sha('sap-v1'), title: '复购指标 v1' };
+    const sapV2 = { authority: 'sap-metric' as const, id: 'repurchase', version: '1.1.0', sha256: sha('sap-v2'), title: '复购指标 v2' };
+    const unrelatedRef = { authority: 'enterprise' as const, id: '77777777-7777-4777-8777-777777777777', version: 'r1', sha256: sha('unrelated'), title: '无关资料' };
+
+    const defP = store.upsertPurpose(pack.id, {
+      purposeKey: 'member-def-only',
+      title: '独立定义用途',
+      businessQuestion: '解释有效购买定义',
+      subjectUnit: 'brand_account',
+      windowDays: 30,
+      scope: { scopeKey: 'def:all' },
+      tier: 'definition-reference',
+      businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass' },
+      originalGoal: '口径定义',
+      completionCriteria: '清晰可查',
+      dependencies: [{ id: 'd-rule', role: 'member-rule', authority: 'enterprise', ref: ruleRef, requiredFor: ['definition-reference'] }],
+    });
+    const calcP = store.upsertPurpose(pack.id, {
+      purposeKey: 'member-calc-main',
+      title: '门店复购计算用途',
+      businessQuestion: '计算复购率',
+      subjectUnit: 'brand_account',
+      windowDays: 30,
+      scope: { scopeKey: 'calc:star' },
+      tier: 'formal-calculation',
+      businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass' },
+      originalGoal: '门店复购计算',
+      completionCriteria: '分子分母可核',
+      observationWindowDays: 30,
+      availableHistoryDays: 60,
+      dependencies: [
+        { id: 'd-rule-c', role: 'member-rule', authority: 'enterprise', ref: ruleRef, requiredFor: ['formal-calculation'] },
+        { id: 'd-sap-c', role: 'sap-metric', authority: 'sap-metric', ref: sapV1, requiredFor: ['formal-calculation'] },
+      ],
+    });
+
+    // R1.3: Publish v1.0 where calc SAP fails definitely -> failed receipt MUST NOT be promoted to succeeded via reconcile!
+    const prev10 = store.preparePreview(pack.id, { version: '1.0', purposeIds: [defP.purpose.id, calcP.purpose.id], summary: 'v1.0 发布' });
+    const rev10 = store.confirmPreview(pack.id, {
+      previewId: prev10.id,
+      fingerprint: prev10.fingerprint,
+      moduleReceipts: [
+        { requestId: 'REQ-RULE-1', authority: 'member-rule', targetRef: ruleRef, status: 'succeeded', detail: 'ok', purposeIds: [defP.purpose.id, calcP.purpose.id] },
+        { requestId: 'REQ-SAP-FAIL', authority: 'sap-metric', targetRef: sapV1, status: 'failed', detail: '原 SAP 指标不存在', purposeIds: [calcP.purpose.id] },
+      ],
+    });
+    assert.equal(rev10.purposeManifests.find(p => p.purposeId === defP.purpose.id)!.status, 'eligible');
+    assert.equal(rev10.purposeManifests.find(p => p.purposeId === calcP.purpose.id)!.status, 'suspended');
+    assert.throws(() => store.reconcileModuleReceipt(pack.id, '1.0', {
+      requestId: 'REQ-SAP-FAIL',
+      authority: 'sap-metric',
+      targetRef: sapV1,
+      status: 'succeeded',
+      detail: '尝试将明确失败改写为成功',
+      purposeIds: [calcP.purpose.id],
+    }), /enterprise_pack_failed_receipt_not_reconcilable/);
+
+    // R1.4 & R1.5: Republish ONLY calcP in v1.1 (with unknown SAP initially), THEN mutate live draft sampleCalculation='pending',
+    // THEN reconcile v1.1 -> unchanged defP MUST be carried over as eligible (carriedOverFromVersion='1.0'),
+    // AND frozen snapshot in v1.1 MUST allow calcP to recover to eligible despite later live draft edit!
+    const prev11 = store.preparePreview(pack.id, { version: '1.1', previousVersion: '1.0', purposeIds: [calcP.purpose.id], summary: '仅重发计算用途 v1.1' });
+    const rev11 = store.confirmPreview(pack.id, {
+      previewId: prev11.id,
+      fingerprint: prev11.fingerprint,
+      moduleReceipts: [
+        { requestId: 'REQ-RULE-2', authority: 'member-rule', targetRef: ruleRef, status: 'succeeded', detail: 'ok', purposeIds: [calcP.purpose.id] },
+        { requestId: 'REQ-SAP-UNK', authority: 'sap-metric', targetRef: sapV1, status: 'unknown', detail: '超时未知', purposeIds: [calcP.purpose.id] },
+      ],
+    });
+    const carriedDef = rev11.purposeManifests.find(p => p.purposeId === defP.purpose.id);
+    assert.ok(carriedDef, 'Unchanged eligible defP MUST be carried over when only calcP is republished!');
+    assert.equal(carriedDef.status, 'eligible');
+    assert.equal(carriedDef.carriedOverFromVersion, '1.0');
+    assert.equal(rev11.purposeManifests.find(p => p.purposeId === calcP.purpose.id)!.status, 'suspended');
+
+    // Mutate live draft calcP AFTER publishing v1.1 (simulating ongoing future v1.2 draft editing)
+    store.upsertPurpose(pack.id, {
+      purposeKey: 'member-calc-main',
+      title: '门店复购计算用途（下一版草案编辑中）',
+      businessQuestion: '计算复购率',
+      subjectUnit: 'brand_account',
+      windowDays: 30,
+      scope: { scopeKey: 'calc:star' },
+      tier: 'formal-calculation',
+      businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pending' },
+      originalGoal: '门店复购计算',
+      completionCriteria: '分子分母可核',
+      observationWindowDays: 30,
+      availableHistoryDays: 10,
+      dependencies: [
+        { id: 'd-rule-c', role: 'member-rule', authority: 'enterprise', ref: ruleRef, requiredFor: ['formal-calculation'] },
+        { id: 'd-sap-c', role: 'sap-metric', authority: 'sap-metric', ref: sapV2, requiredFor: ['formal-calculation'] },
+      ],
+    });
+    const rec11 = store.reconcileModuleReceipt(pack.id, '1.1', {
+      requestId: 'REQ-SAP-UNK',
+      authority: 'sap-metric',
+      targetRef: sapV1,
+      status: 'succeeded',
+      detail: '原请求核对已提交',
+      purposeIds: [calcP.purpose.id],
+    });
+    assert.equal(rec11.purposeManifests.find(p => p.purposeId === calcP.purpose.id)!.status, 'eligible', 'Historical reconcile MUST use frozen v1.1 snapshot, NOT live mutated draft!');
+    assert.equal(rec11.purposeManifests.find(p => p.purposeId === defP.purpose.id)!.status, 'eligible');
+
+    // R4.2: Strict evaluateUseVerdict checks (partial read, missing requiredRef, missing authorDeclaration -> pending; wrong version -> fail)
+    const partialVerdict = evaluateUseVerdict({
+      expectedRef: sapV1,
+      requiredRefs: [ruleRef, sapV1],
+      actualReads: [
+        { ref: ruleRef, sha256: ruleRef.sha256, complete: true, readAt: new Date().toISOString() },
+        { ref: sapV1, sha256: sapV1.sha256, complete: false, readAt: new Date().toISOString() },
+      ],
+      hasAuthorDeclaration: true,
+      independentConfirmed: true,
+    });
+    assert.equal(partialVerdict.verdict, 'pending');
+
+    const missingDeclVerdict = evaluateUseVerdict({
+      expectedRef: sapV1,
+      requiredRefs: [ruleRef, sapV1],
+      actualReads: [
+        { ref: ruleRef, sha256: ruleRef.sha256, complete: true, readAt: new Date().toISOString() },
+        { ref: sapV1, sha256: sapV1.sha256, complete: true, readAt: new Date().toISOString() },
+      ],
+      hasAuthorDeclaration: false,
+      independentConfirmed: true,
+    });
+    assert.equal(missingDeclVerdict.verdict, 'pending');
+
+    const unrelatedOnlyVerdict = evaluateUseVerdict({
+      expectedRef: sapV1,
+      requiredRefs: [ruleRef, sapV1],
+      actualReads: [{ ref: unrelatedRef, sha256: unrelatedRef.sha256, complete: true, readAt: new Date().toISOString() }],
+      hasAuthorDeclaration: true,
+      independentConfirmed: true,
+    });
+    assert.equal(unrelatedOnlyVerdict.verdict, 'pending');
+
+    const wrongRequiredVerdict = evaluateUseVerdict({
+      expectedRef: ruleRef,
+      requiredRefs: [ruleRef, sapV2],
+      actualReads: [
+        { ref: ruleRef, sha256: ruleRef.sha256, complete: true, readAt: new Date().toISOString() },
+        { ref: sapV1, sha256: sapV1.sha256, complete: true, readAt: new Date().toISOString() },
+      ],
+      hasAuthorDeclaration: true,
+      independentConfirmed: true,
+    });
+    assert.equal(wrongRequiredVerdict.verdict, 'fail');
+    assert.equal(wrongRequiredVerdict.wrongVersionDetected, true);
+
+    // R5.3: Strict feedback verified closure checks!
+    const reportA = { authority: 'task' as const, id: taskA, projectId: projA, taskId: taskA, version: sha('repA'), sha256: sha('repA'), locator: '060_reports/a.json' };
+    const useA = store.recordUse(pack.id, {
+      projectId: projA,
+      taskId: taskA,
+      reportRef: reportA,
+      packVersion: '1.1',
+      purposeId: calcP.purpose.id,
+      purposeKey: calcP.purpose.purposeKey,
+      tier: 'formal-calculation',
+      accessLevel: 'recalculate',
+      catalogSupplied: { packVersion: '1.1', purposeIds: [calcP.purpose.id], assetRefs: [ruleRef, sapV1], suppliedAt: new Date().toISOString() },
+      actualReads: [
+        { ref: ruleRef, sha256: ruleRef.sha256, complete: true, readAt: new Date().toISOString() },
+        { ref: sapV1, sha256: sapV1.sha256, complete: true, readAt: new Date().toISOString() },
+      ],
+      authorDeclaration: { declaredPurposeId: calcP.purpose.id, declaredRefs: [ruleRef, sapV1], summaryText: 'Task A 声明', declaredAt: new Date().toISOString() },
+    });
+    store.verifyUse(pack.id, useA.id, { verifierRole: '复核员', expectedRef: sapV1, independentConfirmed: true, verdictDetail: 'v1.1 pass' });
+
+    const fb = store.submitFeedback(pack.id, {
+      problemKey: 'sap-bug',
+      packVersion: '1.1',
+      purposeIds: [calcP.purpose.id],
+      title: 'SAP 指标口径缺陷',
+      category: 'sap_formula',
+      targetAssetRef: sapV1,
+      report: { projectId: projA, taskId: taskA, sessionId: 's1', messageId: 'm1', reportRef: reportA, adoptionBasis: 'verified_actual_read', usedPackVersion: '1.1', usedAssetRefs: [sapV1], evidenceNote: '发现缺陷' },
+    }).feedback;
+
+    // 1) Same task + same version MUST be rejected!
+    assert.throws(() => store.handleFeedback(pack.id, fb.id, {
+      status: 'verified', note: '试图同任务同版闭环', verifiedByUseId: useA.id,
+    }), /feedback_verification_must_be_independent_task/);
+
+    // 2) Independent taskB on SAME pack version 1.1 MUST be rejected!
+    const reportB11 = { authority: 'task' as const, id: taskB, projectId: projA, taskId: taskB, version: sha('repB11'), sha256: sha('repB11'), locator: '060_reports/b11.json' };
+    const useB11 = store.recordUse(pack.id, {
+      projectId: projA,
+      taskId: taskB,
+      reportRef: reportB11,
+      packVersion: '1.1',
+      purposeId: calcP.purpose.id,
+      purposeKey: calcP.purpose.purposeKey,
+      tier: 'formal-calculation',
+      accessLevel: 'recalculate',
+      catalogSupplied: { packVersion: '1.1', purposeIds: [calcP.purpose.id], assetRefs: [ruleRef, sapV1], suppliedAt: new Date().toISOString() },
+      actualReads: [
+        { ref: ruleRef, sha256: ruleRef.sha256, complete: true, readAt: new Date().toISOString() },
+        { ref: sapV1, sha256: sapV1.sha256, complete: true, readAt: new Date().toISOString() },
+      ],
+      authorDeclaration: { declaredPurposeId: calcP.purpose.id, declaredRefs: [ruleRef, sapV1], summaryText: 'Task B v1.1', declaredAt: new Date().toISOString() },
+    });
+    store.verifyUse(pack.id, useB11.id, { verifierRole: '复核员', expectedRef: sapV1, independentConfirmed: true, verdictDetail: 'v1.1 pass' });
+    assert.throws(() => store.handleFeedback(pack.id, fb.id, {
+      status: 'verified', note: '试图同版闭环', verifiedByUseId: useB11.id, revisedRef: sapV2, revisedPackVersion: '1.1',
+    }), /feedback_verification_requires_new_pack_version/);
+
+    // 3) Publish real v1.2 with revised sapV2 -> reject closing without revisedRef OR with unchanged sapV1, succeed ONLY with real sapV2 + complete read!
+    store.upsertPurpose(pack.id, {
+      purposeKey: 'member-calc-main',
+      title: '门店复购计算用途',
+      businessQuestion: '计算复购率',
+      subjectUnit: 'brand_account',
+      windowDays: 30,
+      scope: { scopeKey: 'calc:star' },
+      tier: 'formal-calculation',
+      businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass' },
+      originalGoal: '门店复购计算',
+      completionCriteria: '分子分母可核',
+      observationWindowDays: 30,
+      availableHistoryDays: 60,
+      dependencies: [
+        { id: 'd-rule-c', role: 'member-rule', authority: 'enterprise', ref: ruleRef, requiredFor: ['formal-calculation'] },
+        { id: 'd-sap-c', role: 'sap-metric', authority: 'sap-metric', ref: sapV2, requiredFor: ['formal-calculation'] },
+      ],
+    });
+    const prev12 = store.preparePreview(pack.id, { version: '1.2', previousVersion: '1.1', purposeIds: [calcP.purpose.id], summary: '修订 SAP v2' });
+    store.confirmPreview(pack.id, {
+      previewId: prev12.id,
+      fingerprint: prev12.fingerprint,
+      moduleReceipts: [
+        { requestId: 'REQ-RULE-3', authority: 'member-rule', targetRef: ruleRef, status: 'succeeded', detail: 'ok', purposeIds: [calcP.purpose.id] },
+        { requestId: 'REQ-SAP-3', authority: 'sap-metric', targetRef: sapV2, status: 'succeeded', detail: 'ok', purposeIds: [calcP.purpose.id] },
+      ],
+    });
+
+    const reportB12 = { authority: 'task' as const, id: taskB, projectId: projA, taskId: taskB, version: sha('repB12'), sha256: sha('repB12'), locator: '060_reports/b12.json' };
+    const useB12 = store.recordUse(pack.id, {
+      projectId: projA,
+      taskId: taskB,
+      reportRef: reportB12,
+      packVersion: '1.2',
+      purposeId: calcP.purpose.id,
+      purposeKey: calcP.purpose.purposeKey,
+      tier: 'formal-calculation',
+      accessLevel: 'recalculate',
+      catalogSupplied: { packVersion: '1.2', purposeIds: [calcP.purpose.id], assetRefs: [ruleRef, sapV2], suppliedAt: new Date().toISOString() },
+      actualReads: [
+        { ref: ruleRef, sha256: ruleRef.sha256, complete: true, readAt: new Date().toISOString() },
+        { ref: sapV2, sha256: sapV2.sha256, complete: true, readAt: new Date().toISOString() },
+      ],
+      authorDeclaration: { declaredPurposeId: calcP.purpose.id, declaredRefs: [ruleRef, sapV2], summaryText: 'Task B v1.2', declaredAt: new Date().toISOString() },
+    });
+    store.verifyUse(pack.id, useB12.id, { verifierRole: '复核员', expectedRef: sapV2, independentConfirmed: true, verdictDetail: 'v1.2 pass' });
+
+    // Same unchanged ref MUST fail!
+    assert.throws(() => store.handleFeedback(pack.id, fb.id, {
+      status: 'verified', note: '无修订版尝试闭环', verifiedByUseId: useB12.id, revisedRef: sapV1, revisedPackVersion: '1.2',
+    }), /feedback_verification_requires_authority_revision/);
+
+    // Real revisedRef sapV2 + independent taskB + new version 1.2 + complete read -> PASSES with non-empty authorityUpdates!
+    const closed = store.handleFeedback(pack.id, fb.id, {
+      status: 'verified', note: '独立任务核实修订版 v1.2 通过', verifiedByUseId: useB12.id, revisedRef: sapV2, revisedPackVersion: '1.2',
+    });
+    assert.equal(closed.feedback.status, 'verified');
+    assert.equal(closed.feedback.revisionLink?.fromPackVersion, '1.1');
+    assert.equal(closed.feedback.revisionLink?.toPackVersion, '1.2');
+    assert.equal(closed.feedback.revisionLink?.authorityUpdates.length, 1);
+    assert.equal(closed.feedback.revisionLink?.authorityUpdates[0]?.toRef.version, '1.1.0');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -65,6 +65,7 @@ export async function registerRepoTemplate(
 export async function readDomainReferenceOriginal(
   id: string,
   section?: string,
+  enterpriseId?: string,
   signal?: AbortSignal,
 ): Promise<{
   record: DomainReferenceRecord;
@@ -76,7 +77,10 @@ export async function readDomainReferenceOriginal(
   matchedHeading?: string;
   sectionLocator?: string;
 }> {
-  const suffix = section ? `?section=${encodeURIComponent(section)}` : '';
+  const qs = new URLSearchParams();
+  if (section) qs.set('section', section);
+  if (enterpriseId) qs.set('enterpriseId', enterpriseId);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
   return studioRequest(`domain-references/${encodeURIComponent(id)}/original${suffix}`, 'GET', undefined, signal);
 }
 
@@ -93,7 +97,7 @@ export async function listResourceGrants(
 }
 
 export async function createResourceGrant(
-  input: Omit<ResourceGrantInput, 'grantor'> & { grantor?: string; requestId: string },
+  input: Omit<ResourceGrantInput, 'grantor'> & { grantor?: string; grantorProjectId?: string; requestId: string },
 ): Promise<{ grant: ResourceAuthorizationGrant }> {
   return studioRequest('resource-grants', 'POST', input);
 }
@@ -102,8 +106,13 @@ export async function revokeResourceGrant(
   grantId: string,
   reason: string,
   requestId: string,
+  revokerProjectId?: string,
 ): Promise<{ grant: ResourceAuthorizationGrant }> {
-  return studioRequest(`resource-grants/${encodeURIComponent(grantId)}/revoke`, 'POST', { requestId, reason });
+  return studioRequest(`resource-grants/${encodeURIComponent(grantId)}/revoke`, 'POST', {
+    requestId,
+    reason,
+    ...(revokerProjectId ? { revokerProjectId } : {}),
+  });
 }
 
 export async function evaluateResourceAccessApi(
@@ -146,6 +155,13 @@ export async function readEnterprisePack(
 
 export async function savePackPanorama(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack }> {
   return studioRequest(`enterprise-packs/${encodeURIComponent(packId)}/panorama`, 'POST', input);
+}
+
+export async function selectPanoramaRecommendation(
+  packId: string,
+  input: { requestId: string; projectId?: string; purposeKey: string; selected: boolean },
+): Promise<{ pack: EnterpriseDomainPack }> {
+  return studioRequest(`enterprise-packs/${encodeURIComponent(packId)}/panorama-select`, 'POST', input);
 }
 
 export async function upsertPackEntry(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack }> {

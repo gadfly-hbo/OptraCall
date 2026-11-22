@@ -93,6 +93,7 @@ export interface ResourceGrantScope {
   summaryVersion?: string;
   summaryAuthority?: string;
   summarySha256?: string;
+  verifiedScopeSummary?: string;
   metricRef?: StudioSourceRef;
   allowedDataPaths?: string[];
 }
@@ -102,6 +103,9 @@ export interface ResourceAuthorizationGrant {
   enterpriseId: string;
   grantor: string;
   grantorVerifiedBy?: 'host';
+  grantorProjectId?: string;
+  grantorSystemId?: string;
+  grantorAuthorityType?: 'studio-system-owner' | 'enterprise-authority-asset' | 'resource-owner-project';
   grantBasis: string;
   subjectType: 'project' | 'principal';
   subjectId: string;
@@ -114,6 +118,8 @@ export interface ResourceAuthorizationGrant {
   validTo?: string;
   revokedAt?: string;
   revokedReason?: string;
+  revokedBy?: string;
+  revokedByProjectId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -121,6 +127,9 @@ export interface ResourceAuthorizationGrant {
 export interface ResourceGrantInput {
   enterpriseId: string;
   grantor: string;
+  grantorProjectId?: string;
+  grantorSystemId?: string;
+  grantorAuthorityType?: 'studio-system-owner' | 'enterprise-authority-asset' | 'resource-owner-project';
   grantBasis: string;
   subjectType: 'project' | 'principal';
   subjectId: string;
@@ -324,6 +333,8 @@ export interface PackModulePublicationReceipt {
   status: 'succeeded' | 'failed' | 'unknown';
   detail: string;
   purposeIds: string[];
+  authorityOperationId?: string;
+  authorityPublishedBy?: string;
   supersedesReceiptId?: string;
   at: string;
 }
@@ -339,6 +350,14 @@ export interface EnterprisePurposePublicationState {
   scope: EnterprisePackPurposeScope;
   policyEffectiveFrom?: string;
   dataCutoffAt?: string;
+  observationWindowDays?: number;
+  availableHistoryDays?: number;
+  evidenceReadiness?: {
+    definition: 'pass' | 'pending' | 'fail';
+    mapping: 'pass' | 'pending' | 'fail';
+    sampleCalculation: 'pass' | 'pending' | 'fail';
+  };
+  carriedOverFromVersion?: string;
   exclusions: string[];
   gaps: string[];
   dependencies: EnterprisePackDependency[];
@@ -454,6 +473,8 @@ export interface EnterprisePackFeedback {
     targetRef?: StudioSourceRef;
     revisedRef?: StudioSourceRef;
     revisedPackVersion?: string;
+    studioWorkItemId?: string;
+    studioFeedbackId?: string;
     note: string;
     updatedAt: string;
   };
@@ -542,6 +563,8 @@ export interface EnterpriseDomainPack {
   packCode: string;
   enterpriseId: string;
   systemId: string;
+  activeOwnerProjectId?: string;
+  continuationHistory?: { projectId: string; taskId?: string; reason?: string; continuedAt: string }[];
   domain: string;
   name: string;
   revision: number;
@@ -921,6 +944,7 @@ export function evaluateExceptionsAndWindow(input: {
 
 export function evaluateUseVerdict(input: {
   expectedRef?: StudioSourceRef;
+  requiredRefs?: readonly StudioSourceRef[];
   actualReads: readonly EnterprisePackReadEvidence[];
   hasAuthorDeclaration: boolean;
   independentConfirmed: boolean;
@@ -934,20 +958,42 @@ export function evaluateUseVerdict(input: {
   if (input.includedOptedOutInSms) {
     return { verdict: 'fail', wrongVersionDetected: false, reason: '把已退订会员列入短信候选，该用途未通过' };
   }
-  if (input.expectedRef) {
-    const sameAssetReads = input.actualReads.filter(r => sameSourceId(r.ref, input.expectedRef!));
-    const wrongRead = sameAssetReads.find(r => !sameExactSourceRef(r.ref, input.expectedRef!));
-    const rightRead = sameAssetReads.find(r => sameExactSourceRef(r.ref, input.expectedRef!));
-    if (wrongRead && !rightRead) {
+  const refsToCheck: StudioSourceRef[] = [
+    ...(input.expectedRef ? [input.expectedRef] : []),
+    ...(input.requiredRefs ?? []),
+  ];
+  // 1. Check wrong version FIRST across expectedRef and all requiredRefs (even if summary number coincides!)
+  for (const target of refsToCheck) {
+    const sameAssetReads = input.actualReads.filter(r => sameSourceId(r.ref, target));
+    const wrongRead = sameAssetReads.find(r => !sameExactSourceRef(r.ref, target));
+    const completeRightRead = sameAssetReads.find(r => r.complete && sameExactSourceRef(r.ref, target));
+    if (wrongRead && !completeRightRead) {
       return {
         verdict: 'fail',
         wrongVersionDetected: true,
-        reason: `查实实际读用旧版/错版 ${wrongRead.ref.version}（期望 ${input.expectedRef.version}），即使汇总数字巧合相同，该用途仍判未通过`,
+        reason: `查实实际读用旧版/错版 ${wrongRead.ref.version}（期望 ${target.version}），即使汇总数字巧合相同，该用途仍判未通过`,
       };
     }
   }
-  if (!input.actualReads.length) {
-    return { verdict: 'pending', wrongVersionDetected: false, reason: '缺少实际工具读取版本的依据，仅凭目录或作者自述保持待验证' };
+  // 2. Require at least one complete read overall
+  const completeReads = input.actualReads.filter(r => r.complete);
+  if (!completeReads.length) {
+    return { verdict: 'pending', wrongVersionDetected: false, reason: '缺少完整实际工具读取版本的依据（仅目录、无读取或仅部分片段），保持待验证' };
+  }
+  // 3. Require complete exact read of expectedRef and EVERY required dependency of this purpose
+  for (const target of refsToCheck) {
+    const hasCompleteExact = completeReads.some(r => sameExactSourceRef(r.ref, target));
+    if (!hasCompleteExact) {
+      return {
+        verdict: 'pending',
+        wrongVersionDetected: false,
+        reason: `缺少适用准确依赖 ${target.authority}:${target.id}@${target.version} 的完整实际读取记录（无关或部分读取不可通过），保持待验证`,
+      };
+    }
+  }
+  // 4. Require explicit author adoption declaration bound to this specific report/use!
+  if (!input.hasAuthorDeclaration) {
+    return { verdict: 'pending', wrongVersionDetected: false, reason: '缺少与本稿绑定的作者采用声明（仅读取原件不代表本稿实际采用），保持待验证' };
   }
   if (!input.independentConfirmed) {
     return { verdict: 'pending', wrongVersionDetected: false, reason: '尚无与权限和用途相称的独立核对结论，保持待验证' };
@@ -955,7 +1001,7 @@ export function evaluateUseVerdict(input: {
   if (input.partialSubsetOnly) {
     return { verdict: 'partial', wrongVersionDetected: false, reason: '子用途已证实成立，同时保留原目标与剩余缺口' };
   }
-  return { verdict: 'pass', wrongVersionDetected: false, reason: '已核对实际采用准确版本与独立验证结论，本用途成立' };
+  return { verdict: 'pass', wrongVersionDetected: false, reason: '已核对实际完整读取准确版本、本稿采用声明与独立验证结论，本用途成立' };
 }
 
 export function computeUpgradeImpact(

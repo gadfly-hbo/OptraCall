@@ -34,6 +34,8 @@ function json(response: ServerResponse, status: number, value: unknown) {
 export interface AuthorityPublicationOutcome {
   status: 'succeeded' | 'failed' | 'unknown';
   detail: string;
+  authorityOperationId?: string;
+  authorityPublishedBy?: string;
 }
 
 export interface VerifiedSummaryAuthority {
@@ -41,6 +43,9 @@ export interface VerifiedSummaryAuthority {
   summaryVersion: string;
   summaryAuthority: string;
   summarySha256: string;
+  verifiedScopeSummary: string;
+  ownerProjectId?: string;
+  ownerSystemId?: string;
   resourceRef: StudioSourceRef;
 }
 
@@ -51,6 +56,14 @@ export interface ProjectMemberPackFileScope {
   allowedPaths: string[];
   allowedStores: string[];
   summary: string;
+}
+
+export interface RestrictedTaskWorkspace {
+  workspaceRoot: string;
+  cleanDir: string;
+  reportsDir: string;
+  projectRoot: string;
+  scope: ProjectMemberPackFileScope;
 }
 
 export interface MemberPackHostOptions {
@@ -67,8 +80,8 @@ export interface MemberPackHostOptions {
   taskSnapshot?(projectId: string, taskId: string): Promise<ProjectSnapshot>;
   readTaskReply(projectId: string, taskId: string, selection: { sessionId: string; messageId: string }): Promise<{ text: string }>;
   publishAuthorityDependency?: (pack: EnterpriseDomainPack, preview: EnterprisePackPreview, dep: EnterprisePackDependency, requestId: string) => Promise<AuthorityPublicationOutcome>;
-  inspectAuthorityDependency?: (pack: EnterpriseDomainPack, ref: StudioSourceRef) => Promise<AuthorityPublicationOutcome>;
-  verifySummaryAuthority?: (enterpriseId: string, scope: { summaryAssetId?: string; summaryVersion?: string; resourceRef?: StudioSourceRef }) => Promise<VerifiedSummaryAuthority>;
+  inspectAuthorityDependency?: (pack: EnterpriseDomainPack, ref: StudioSourceRef, originalReceipt?: PackModulePublicationReceipt) => Promise<AuthorityPublicationOutcome>;
+  verifySummaryAuthority?: (enterpriseId: string, scope: { summaryAssetId?: string; summaryVersion?: string; resourceRef?: StudioSourceRef; grain?: string; periodFrom?: string; periodTo?: string }) => Promise<VerifiedSummaryAuthority>;
 }
 
 function extractTaskCutoffFromText(rawText: string): string | undefined {
@@ -106,6 +119,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   const references = new DomainReferenceStore(options.dataRoot, options.codeRoot ?? process.cwd(), { readOnlyMode: !enabled });
   const grants = new ResourceGrantStore(options.dataRoot, { readOnlyMode: !enabled });
   const packs = new EnterprisePackStore(options.dataRoot, { readOnlyMode: !enabled });
+  const activeWorkspaces = new Map<string, Map<string, RestrictedTaskWorkspace>>();
 
   function assertEnabledWritable() {
     if (!enabled) throw new StudioError('member_pack_disabled_readonly', 503);
@@ -124,11 +138,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       return assertWritableProject(String(requestedProjectId), pack.enterpriseId);
     }
     const system = options.studio.get(pack.systemId);
-    const ownerProjectId = studioExecutionOwner(system).projectId;
+    const ownerProjectId = pack.activeOwnerProjectId ?? studioExecutionOwner(system).projectId;
     return assertWritableProject(ownerProjectId, pack.enterpriseId);
   }
 
   function isConstructionOwnerProject(pack: EnterpriseDomainPack, projectId: string): boolean {
+    if (pack.activeOwnerProjectId === projectId) return true;
     try {
       const system = options.studio.get(pack.systemId);
       const owner = studioExecutionOwner(system);
@@ -179,6 +194,84 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     };
   }
 
+  function syncCleanDir(workspaceCleanDir: string, projectRoot: string, scope: ProjectMemberPackFileScope | undefined) {
+    fs.mkdirSync(workspaceCleanDir, { recursive: true, mode: 0o700 });
+    // Clear existing files in sandbox clean dir first so revoked files are immediately purged!
+    for (const entry of fs.readdirSync(workspaceCleanDir, { withFileTypes: true })) {
+      fs.rmSync(path.join(workspaceCleanDir, entry.name), { recursive: true, force: true });
+    }
+    if (!scope || scope.mode !== 'allowlist') return;
+    const resolvedProjectRoot = path.resolve(projectRoot);
+    for (const rel of scope.allowedPaths) {
+      if (!rel.startsWith('020_clean/') || rel.includes('..')) continue;
+      const src = path.resolve(resolvedProjectRoot, rel);
+      if (!src.startsWith(path.resolve(resolvedProjectRoot, '020_clean') + path.sep)) continue;
+      if (!fs.existsSync(src)) continue;
+      const stat = fs.lstatSync(src);
+      if (stat.isSymbolicLink() || !stat.isFile()) continue;
+      const subRel = rel.slice('020_clean/'.length);
+      const dst = path.resolve(workspaceCleanDir, subRel);
+      if (!dst.startsWith(path.resolve(workspaceCleanDir) + path.sep)) continue;
+      fs.mkdirSync(path.dirname(dst), { recursive: true, mode: 0o700 });
+      fs.copyFileSync(src, dst);
+      fs.chmodSync(dst, 0o400);
+    }
+  }
+
+  function prepareRestrictedTaskWorkspace(projectId: string, taskId: string, projectRoot: string): RestrictedTaskWorkspace | undefined {
+    const scope = getProjectToolScope(projectId);
+    if (!scope) return undefined;
+    const workspaceRoot = path.resolve(options.dataRoot, 'member-pack-workspaces', uuid(projectId), uuid(taskId));
+    const cleanDir = path.join(workspaceRoot, '020_clean');
+    const reportsDir = path.join(workspaceRoot, '060_reports');
+    fs.mkdirSync(workspaceRoot, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(reportsDir, { recursive: true, mode: 0o700 });
+    syncCleanDir(cleanDir, projectRoot, scope);
+    const ws: RestrictedTaskWorkspace = { workspaceRoot, cleanDir, reportsDir, projectRoot: path.resolve(projectRoot), scope };
+    let byTask = activeWorkspaces.get(projectId);
+    if (!byTask) {
+      byTask = new Map();
+      activeWorkspaces.set(projectId, byTask);
+    }
+    byTask.set(taskId, ws);
+    return ws;
+  }
+
+  function syncActiveWorkspacesForProject(projectId: string) {
+    const byTask = activeWorkspaces.get(projectId);
+    if (!byTask) return;
+    const nextScope = getProjectToolScope(projectId);
+    for (const ws of byTask.values()) {
+      syncCleanDir(ws.cleanDir, ws.projectRoot, nextScope);
+      if (nextScope) ws.scope = nextScope;
+    }
+  }
+
+  function syncWorkspaceReportsToProject(projectId: string, taskId: string, projectRoot: string) {
+    const workspaceReports = path.resolve(options.dataRoot, 'member-pack-workspaces', uuid(projectId), uuid(taskId), '060_reports');
+    if (!fs.existsSync(workspaceReports)) return;
+    const targetReports = path.resolve(projectRoot, '060_reports');
+    fs.mkdirSync(targetReports, { recursive: true });
+    const walk = (srcDir: string, relBase: string) => {
+      for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+        const srcPath = path.join(srcDir, entry.name);
+        const rel = relBase ? path.join(relBase, entry.name) : entry.name;
+        const dstPath = path.resolve(targetReports, rel);
+        if (!dstPath.startsWith(targetReports + path.sep)) continue;
+        const st = fs.lstatSync(srcPath);
+        if (st.isSymbolicLink()) continue;
+        if (st.isDirectory()) {
+          fs.mkdirSync(dstPath, { recursive: true });
+          walk(srcPath, rel);
+        } else if (st.isFile()) {
+          fs.mkdirSync(path.dirname(dstPath), { recursive: true });
+          fs.copyFileSync(srcPath, dstPath);
+        }
+      }
+    };
+    walk(workspaceReports, '');
+  }
+
   function authorizeProjectDataPath(projectId: string, relativePath: string): { allowed: boolean; reason?: string } {
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return { allowed: true };
@@ -204,36 +297,53 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     projectId: string,
     projectRoot: string,
     call: { toolName: string; input: Record<string, unknown> },
+    workspaceRoot?: string,
   ): { allowed: boolean; reason?: string } {
     const scope = getProjectToolScope(projectId);
     if (!scope) return { allowed: true };
 
-    const cleanDir = path.resolve(projectRoot, '020_clean');
-    const reportsDir = path.resolve(projectRoot, '060_reports');
-    const resolvedRoot = path.resolve(projectRoot);
+    const resolvedProjectRoot = path.resolve(projectRoot);
+    const projectCleanDir = path.resolve(resolvedProjectRoot, '020_clean');
+    const projectDrawDir = path.resolve(resolvedProjectRoot, '010_draw');
+    const projectReportsDir = path.resolve(resolvedProjectRoot, '060_reports');
+    const effectiveRoot = workspaceRoot ? path.resolve(workspaceRoot) : resolvedProjectRoot;
+    const effectiveCleanDir = path.resolve(effectiveRoot, '020_clean');
+    const effectiveReportsDir = path.resolve(effectiveRoot, '060_reports');
 
     const resolveTarget = (rawTarget: unknown): string | undefined => {
       if (typeof rawTarget !== 'string' || !rawTarget.trim()) return undefined;
-      // Pi's project session cwd is <projectRoot>/020_clean
-      return path.resolve(cleanDir, rawTarget.trim());
+      return path.resolve(effectiveCleanDir, rawTarget.trim());
     };
 
     const isInside = (target: string, dir: string) => target === dir || target.startsWith(dir + path.sep);
+
+    // Block subagent escape attempts in restricted member-pack projects
+    if (call.toolName === 'subagent') {
+      return { allowed: false, reason: 'member_pack_subagent_restricted: 受限资源授权项目禁用子会话委派，请直接按获准范围执行分析' };
+    }
 
     if (['read', 'write', 'edit'].includes(call.toolName)) {
       const target = resolveTarget(call.input.path ?? call.input.file_path ?? call.input.target);
       if (!target) return { allowed: false, reason: scope.summary };
       // Writing/reading own 060_reports deliverables remains allowed
-      if (isInside(target, reportsDir)) return { allowed: true };
-      if (!isInside(target, resolvedRoot)) {
-        return { allowed: false, reason: 'member_pack_path_outside_project: 受限资源授权项目禁止访问项目目录外路径' };
+      if (isInside(target, effectiveReportsDir) || isInside(target, projectReportsDir)) return { allowed: true };
+      // NEVER allow direct access to project's raw 010_draw or original project 020_clean when isolated workspace is active
+      if (isInside(target, projectDrawDir) || (workspaceRoot && isInside(target, projectCleanDir))) {
+        return { allowed: false, reason: 'member_pack_path_outside_workspace: 受限资源授权项目禁止越过任务隔离目录访问原项目资料' };
+      }
+      if (!isInside(target, effectiveRoot)) {
+        return { allowed: false, reason: 'member_pack_path_outside_project: 受限资源授权项目禁止访问工作区外路径' };
       }
       if (scope.mode === 'deny-detail') {
         return { allowed: false, reason: scope.summary };
       }
-      const rel = normalizeRelativeDataPath(path.relative(resolvedRoot, target));
+      const rel = normalizeRelativeDataPath(path.relative(effectiveRoot, target));
       if (!scope.allowedPaths.includes(rel)) {
         return { allowed: false, reason: `store_detail_not_authorized: 当前项目无权读取 ${rel}（仅获准：${scope.allowedPaths.join('、')}），不可将未授权门店再购当作零` };
+      }
+      // Keep clean files strictly read-only for write/edit
+      if (call.toolName !== 'read') {
+        return { allowed: false, reason: 'member_pack_clean_readonly: 获准明细资料为只读，请将分析产出写入 060_reports' };
       }
       return { allowed: true };
     }
@@ -243,10 +353,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         return { allowed: false, reason: scope.summary };
       }
       const target = resolveTarget(call.input.path ?? '.');
-      if (target && isInside(target, reportsDir)) return { allowed: true };
-      // Only allow grep on a single explicitly authorized file; block sweeping 020_clean directory
-      if (call.toolName === 'grep' && target && isInside(target, cleanDir)) {
-        const rel = normalizeRelativeDataPath(path.relative(resolvedRoot, target));
+      if (target && (isInside(target, effectiveReportsDir) || isInside(target, projectReportsDir))) return { allowed: true };
+      if (call.toolName === 'grep' && target && isInside(target, effectiveCleanDir)) {
+        const rel = normalizeRelativeDataPath(path.relative(effectiveRoot, target));
         if (scope.allowedPaths.includes(rel)) return { allowed: true };
       }
       return { allowed: false, reason: `store_detail_not_authorized: 受限资源授权项目禁止扫描 020_clean 目录，请直接按获准路径读取：${scope.allowedPaths.join('、')}` };
@@ -257,7 +366,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         return { allowed: false, reason: scope.summary };
       }
       const cmd = String(call.input.command ?? call.input.code ?? '');
-      // Enumerate all unauthorized files currently present in 020_clean
+      // Block any reference to projectRoot, 010_draw, or escaping workspace via ../../
+      if (cmd.includes(resolvedProjectRoot) || cmd.includes(projectCleanDir) || /\b010_draw\b|\.\.\/\.\./.test(cmd)) {
+        return { allowed: false, reason: 'member_pack_path_outside_workspace: 受限资源授权项目命令禁止越出任务隔离工作区访问原项目目录' };
+      }
+      // Enumerate all unauthorized files currently present in original project 020_clean
       let unauthorizedNames: string[] = [];
       try {
         const walk = (dir: string) => {
@@ -265,14 +378,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const full = path.join(dir, entry.name);
             if (entry.isDirectory()) walk(full);
             else {
-              const rel = normalizeRelativeDataPath(path.relative(resolvedRoot, full));
+              const rel = normalizeRelativeDataPath(path.relative(resolvedProjectRoot, full));
               if (!scope.allowedPaths.includes(rel)) {
                 unauthorizedNames.push(entry.name, rel);
               }
             }
           }
         };
-        if (fs.existsSync(cleanDir)) walk(cleanDir);
+        if (fs.existsSync(projectCleanDir)) walk(projectCleanDir);
       } catch { /* ignore */ }
 
       const lowerCmd = cmd.toLowerCase();
@@ -283,7 +396,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       }
       // Block directory listing / globbing / recursive sweeps that could bypass filename checks
       if (/\b(?:ls|find|glob|iglob|rglob|listdir|scandir|walk|dir)\b|\*\.[a-z0-9]+|\b020_clean\/?\s*[*?]/i.test(cmd)) {
-        return { allowed: false, reason: `store_detail_not_authorized: 受限资源授权项目禁止通配/枚举 020_clean 目录，请显式读取获准文件：${scope.allowedPaths.join('、')}` };
+        return { allowed: false, reason: `store_detail_not_authorized: 受限资源授权项目禁止通配/枚举目录，请显式读取获准文件：${scope.allowedPaths.join('、')}` };
       }
       return { allowed: true };
     }
@@ -314,6 +427,28 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     for (const pack of list) {
       const activeRev = pack.packRevisions.find(r => r.status === 'active') ?? pack.packRevisions.at(-1);
       const isConstruction = Boolean(projectId && isConstructionOwnerProject(pack, projectId));
+      const existingPin = projectId && taskId ? packs.getTaskPin(pack.id, projectId, taskId) : undefined;
+
+      // R6: In --disable-member-pack read-only rollback mode, STOP supplying pack purposes/dependencies to NEW tasks!
+      if (!enabled && !existingPin) {
+        if (activeRev) {
+          summaries.push({
+            packId: pack.id,
+            packCode: pack.packCode,
+            domain: pack.domain,
+            name: pack.name,
+            systemId: pack.systemId,
+            pinnedVersion: null,
+            revisionStatus: activeRev.status,
+            readOnlyRollback: true,
+            authorizationRequired: true,
+            authorizationNote: '当前处于回退只读模式（--disable-member-pack）：已停止向新任务供给企业会员包用途与依赖；历史记录保留只读。',
+            purposes: [],
+          });
+        }
+        continue;
+      }
+
       let pinnedVersion = activeRev?.version;
       let pinnedManifest = activeRev;
 
@@ -327,7 +462,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       });
 
       if (projectId && taskId && activeRev && (isConstruction || activeGrants.length > 0)) {
-        const existingPin = packs.getTaskPin(pack.id, projectId, taskId);
         if (existingPin) {
           pinnedVersion = existingPin.packVersion;
           pinnedManifest = pack.packRevisions.find(r => r.version === existingPin.packVersion) ?? activeRev;
@@ -387,7 +521,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           const canDef = evaluateResourceAccess(subjectGrants, { operation: 'read-definition', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel });
           const canSummary = evaluateResourceAccess(subjectGrants, { operation: 'cite-summary', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel });
           const canDetail = evaluateResourceAccess(subjectGrants, { operation: 'read-detail-recalculate', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel, stores: pm.scope.stores });
-          // A project with partial-store detail grant (e.g. only 星桥直营店 out of [星桥, 柳岸]) still has grantedStores > 0!
           const hasPartialOrFullDetail = canDetail.allowed || canDetail.grantedStores.length > 0;
           if (!canDef.allowed && !canSummary.allowed && !hasPartialOrFullDetail) return null;
 
@@ -424,6 +557,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
                 summaryVersion: summaryGrant.scope.summaryVersion,
                 summaryAuthority: summaryGrant.scope.summaryAuthority,
                 summarySha256: summaryGrant.scope.summarySha256,
+                verifiedScopeSummary: summaryGrant.scope.verifiedScopeSummary,
                 grain: summaryGrant.scope.grain,
                 periodFrom: summaryGrant.scope.periodFrom,
                 periodTo: summaryGrant.scope.periodTo,
@@ -450,6 +584,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         systemId: pack.systemId,
         pinnedVersion: pinnedVersion ?? null,
         revisionStatus: pinnedManifest?.status ?? 'draft',
+        ...(!enabled ? { readOnlyRollback: true } : {}),
         purposes: visiblePurposes,
       });
     }
@@ -472,6 +607,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     for (const pack of list) {
       if (isConstructionOwnerProject(pack, projectId)) continue;
       const pin = packs.getTaskPin(pack.id, projectId, taskId);
+      // In read-only rollback mode, unpinned new tasks receive NO pack-mediated supply!
+      if (!enabled && !pin) continue;
       const rev = pin
         ? pack.packRevisions.find(r => r.version === pin.packVersion)
         : pack.packRevisions.find(r => r.status === 'active');
@@ -519,37 +656,70 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   /**
-   * Collects actual Host-verified tool evidence from the task's native Pi transcript.
+   * Collects actual Host-verified tool evidence STRICTLY scoped to the specific reply's turn
+   * `[turnStartIdx .. endIdx]` so a later tool-free turn NEVER inherits reads from an earlier turn!
    */
   async function inspectTaskNativeEvidence(projectId: string, taskId: string, pack: EnterpriseDomainPack, upToSelection?: { sessionId: string; messageId: string }) {
-    const actualReads: EnterprisePackReadEvidence[] = [];
+    const turnActualReads: EnterprisePackReadEvidence[] = [];
     const seenReadKeys = new Set<string>();
     let observedDirectoryVersion: string | undefined;
+    let sessionObservedDirectoryVersion: string | undefined;
     let catalogSuppliedAt: string | undefined;
     let catalogPurposeIds: string[] = [];
     let catalogAssetRefs: StudioSourceRef[] = [];
     let taskCutoffAt: string | undefined;
+    let turnIndex: number | undefined;
 
     if (!options.taskSnapshot) {
-      return { actualReads, observedDirectoryVersion, catalogSuppliedAt, catalogPurposeIds, catalogAssetRefs, taskCutoffAt };
+      return {
+        actualReads: turnActualReads,
+        observedDirectoryVersion,
+        sessionObservedDirectoryVersion,
+        catalogSuppliedAt,
+        catalogPurposeIds,
+        catalogAssetRefs,
+        taskCutoffAt,
+        turnIndex,
+      };
     }
     const snap = await options.taskSnapshot(projectId, taskId);
     let endIdx = snap.messages.length - 1;
     if (upToSelection) {
       const idx = snap.messages.findIndex(m => m.role === 'assistant' && m.nativeSessionId === upToSelection.sessionId && m.nativeEntryId === upToSelection.messageId);
       if (idx >= 0) endIdx = idx;
-    }
-
-    // Parse user messages up to this turn for explicit task cutoff date (e.g. 2026-10-27)
-    for (let i = endIdx; i >= 0; i--) {
-      const m = snap.messages[i] as Record<string, any>;
-      if (m?.role === 'user') {
-        const parsed = extractTaskCutoffFromText(messageText(m));
-        if (parsed) { taskCutoffAt = parsed; break; }
+    } else {
+      for (let i = snap.messages.length - 1; i >= 0; i--) {
+        if ((snap.messages[i] as Record<string, any>)?.role === 'assistant') { endIdx = i; break; }
       }
     }
 
-    for (let i = 0; i <= endIdx; i++) {
+    // Locate the start of THIS specific turn (the user message immediately preceding endIdx)
+    let turnStartIdx = 0;
+    for (let i = endIdx; i >= 0; i--) {
+      const m = snap.messages[i] as Record<string, any>;
+      if (m?.role === 'user') {
+        turnStartIdx = i;
+        turnIndex = i;
+        const parsed = extractTaskCutoffFromText(messageText(m));
+        if (parsed) taskCutoffAt = parsed;
+        break;
+      }
+    }
+
+    // Check earlier turns ONLY for session-level directory pin observation (NEVER reads!)
+    for (let i = 0; i < turnStartIdx; i++) {
+      const m = snap.messages[i] as Record<string, any>;
+      if (!m || m.role !== 'toolResult' || m.isError) continue;
+      if (m.details?.type === 'optracall.studio' && m.details.action === 'catalog' && Array.isArray(m.details.result?.memberPacks)) {
+        const entry = m.details.result.memberPacks.find((p: any) => p?.packId === pack.id);
+        if (entry && typeof entry.pinnedVersion === 'string') {
+          sessionObservedDirectoryVersion = entry.pinnedVersion;
+        }
+      }
+    }
+
+    // Collect ACTUAL reads & catalog supply STRICTLY within THIS turn [turnStartIdx + 1 .. endIdx]!
+    for (let i = turnStartIdx + 1; i <= endIdx; i++) {
       const m = snap.messages[i] as Record<string, any>;
       if (!m || m.role !== 'toolResult' || m.isError) continue;
       if (m.details?.type === 'optracall.studio') {
@@ -559,6 +729,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           const entry = result.memberPacks.find((p: any) => p?.packId === pack.id);
           if (entry && typeof entry.pinnedVersion === 'string') {
             observedDirectoryVersion = entry.pinnedVersion;
+            sessionObservedDirectoryVersion = entry.pinnedVersion;
             catalogSuppliedAt = new Date().toISOString();
             if (Array.isArray(entry.purposes)) {
               catalogPurposeIds = entry.purposes.map((p: any) => String(p.purposeId)).filter(Boolean);
@@ -576,10 +747,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const key = `${digest(ref)}:${String(m.toolCallId ?? i)}`;
             if (!seenReadKeys.has(key)) {
               seenReadKeys.add(key);
-              actualReads.push({
+              turnActualReads.push({
                 ref,
                 ...(ref.sha256 ? { sha256: ref.sha256 } : {}),
-                complete: result.complete !== false,
+                complete: result.complete === true,
                 readAt: new Date().toISOString(),
                 turnIndex: i,
                 ...(typeof m.toolCallId === 'string' ? { toolCallId: m.toolCallId } : {}),
@@ -601,7 +772,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               const key = `${digest(ref)}:${String(m.toolCallId ?? i)}`;
               if (!seenReadKeys.has(key)) {
                 seenReadKeys.add(key);
-                actualReads.push({ ref, sha256: ref.sha256, complete: true, readAt: new Date().toISOString(), turnIndex: i, ...(typeof m.toolCallId === 'string' ? { toolCallId: m.toolCallId } : {}) });
+                turnActualReads.push({
+                  ref,
+                  sha256: ref.sha256,
+                  complete: item.complete !== false,
+                  readAt: new Date().toISOString(),
+                  turnIndex: i,
+                  ...(typeof m.toolCallId === 'string' ? { toolCallId: m.toolCallId } : {}),
+                });
               }
             }
           }
@@ -610,15 +788,63 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
 
     catalogAssetRefs = [...new Map(catalogAssetRefs.map(r => [digest(r), r])).values()];
-    return { actualReads, observedDirectoryVersion, catalogSuppliedAt, catalogPurposeIds, catalogAssetRefs, taskCutoffAt };
+    return {
+      actualReads: turnActualReads,
+      observedDirectoryVersion,
+      sessionObservedDirectoryVersion,
+      catalogSuppliedAt,
+      catalogPurposeIds,
+      catalogAssetRefs,
+      taskCutoffAt,
+      turnIndex,
+    };
   }
 
   function redactPackForConsumer(pack: EnterpriseDomainPack, projectId: string): EnterpriseDomainPack {
     if (isConstructionOwnerProject(pack, projectId)) return pack;
     const subjectGrants = grants.listForSubject(pack.enterpriseId, projectId);
-    const activeOps = new Set(subjectGrants.filter(g => !g.revokedAt).flatMap(g => g.operations));
-    // Non-construction project sees published revisions & authorized history only, never raw unpublished drafts/internal paths if unauthorized
-    if (activeOps.size === 0) {
+    const nowMs = Date.now();
+    const activeGrants = subjectGrants.filter(g => !g.revokedAt && (!g.validFrom || Date.parse(g.validFrom) <= nowMs) && (!g.validTo || Date.parse(g.validTo) >= nowMs));
+    const ownPins = pack.taskPins.filter(p => p.projectId === projectId);
+    const ownUses = pack.useRecords.filter(u => u.projectId === projectId);
+    const ownFeedback = pack.feedbackItems
+      .filter(f => f.reports.some(r => r.projectId === projectId))
+      .map(f => ({ ...f, reports: f.reports.filter(r => r.projectId === projectId) }));
+    const ownPinnedVersions = new Set([...ownPins.map(p => p.packVersion), ...ownUses.map(u => u.packVersion)]);
+
+    // Helper: filter purposeManifests identically to buildPackCatalogSummary!
+    const filterPurposeManifest = (pm: EnterpriseDomainPack['packRevisions'][number]['purposeManifests'][number]) => {
+      if (pm.status !== 'eligible') return null;
+      const canDef = evaluateResourceAccess(subjectGrants, { operation: 'read-definition', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel });
+      const canSummary = evaluateResourceAccess(subjectGrants, { operation: 'cite-summary', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel });
+      const canDetail = evaluateResourceAccess(subjectGrants, { operation: 'read-detail-recalculate', purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel, stores: pm.scope.stores });
+      const hasDetail = canDetail.allowed || canDetail.grantedStores.length > 0;
+      if (!canDef.allowed && !canSummary.allowed && !hasDetail) return null;
+      return {
+        ...pm,
+        dependencies: filterDependenciesForAccess(pm.dependencies, {
+          canDef: canDef.allowed,
+          canSummary: canSummary.allowed,
+          canDetail: hasDetail,
+        }),
+      };
+    };
+
+    if (!enabled || activeGrants.length === 0) {
+      // Rollback mode or ungranted/revoked project: see ONLY own historical pinned/used revisions — zero new active catalog supply!
+      const historicalRevisions = pack.packRevisions
+        .filter(r => ownPinnedVersions.has(r.version))
+        .map(r => {
+          const pinnedPurposeIds = new Set([
+            ...ownPins.filter(p => p.packVersion === r.version).flatMap(p => p.purposeIds),
+            ...ownUses.filter(u => u.packVersion === r.version).map(u => u.purposeId),
+          ]);
+          return {
+            ...r,
+            purposeManifests: r.purposeManifests.filter(pm => pinnedPurposeIds.has(pm.purposeId)),
+            moduleReceipts: [],
+          };
+        });
       return {
         ...pack,
         panorama: undefined,
@@ -626,15 +852,37 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         entries: [],
         purposes: [],
         previews: [],
-        taskPins: pack.taskPins.filter(p => p.projectId === projectId),
-        useRecords: pack.useRecords.filter(u => u.projectId === projectId),
-        feedbackItems: pack.feedbackItems.filter(f => f.reports.some(r => r.projectId === projectId)),
+        packRevisions: historicalRevisions,
+        taskPins: ownPins,
+        useRecords: ownUses,
+        feedbackItems: ownFeedback,
       };
     }
+
+    // Active consumer project: filter revisions & purposes identically to catalog rules, never exposing unpublished drafts or other projects' records!
+    const filteredRevisions = pack.packRevisions
+      .map(r => {
+        const manifests = r.purposeManifests.map(filterPurposeManifest).filter((x): x is NonNullable<typeof x> => Boolean(x));
+        if (!manifests.length && !ownPinnedVersions.has(r.version)) return null;
+        return {
+          ...r,
+          purposeManifests: manifests,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => Boolean(x));
+
+    const allowedPurposeIds = new Set(filteredRevisions.flatMap(r => r.purposeManifests.map(pm => pm.purposeId)));
     return {
       ...pack,
+      panorama: undefined,
+      panoramaHistory: [],
+      entries: [],
+      purposes: pack.purposes.filter(p => allowedPurposeIds.has(p.id)),
       previews: [],
-      taskPins: pack.taskPins.filter(p => p.projectId === projectId),
+      packRevisions: filteredRevisions,
+      taskPins: ownPins,
+      useRecords: ownUses,
+      feedbackItems: ownFeedback,
     };
   }
 
@@ -721,6 +969,69 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       json(response, 200, { grants: list, readOnlyRollback: !enabled });
       return true;
     }
+    async function resolveVerifiedGrantAuthority(
+      enterpriseId: string,
+      requestedActorProjectId: unknown,
+      mode: 'grant' | 'revoke',
+      extraAllowedProjectIds: string[] = [],
+    ): Promise<{
+      actorLabel: string;
+      actorProjectId: string;
+      actorSystemId?: string;
+      authorityType: 'studio-system-owner' | 'enterprise-authority-asset' | 'resource-owner-project';
+    }> {
+      const enterpriseSystems = options.studio.list().filter(s => s.enterpriseId === enterpriseId);
+      const enterprisePacks = packs.list(enterpriseId);
+      const activeOwnerCandidates: { projectId: string; systemId?: string; systemName?: string }[] = [];
+      for (const sys of enterpriseSystems) {
+        const ownerPid = studioExecutionOwner(sys).projectId;
+        try {
+          const proj = await options.projects.get(ownerPid);
+          if (proj.archivedAt === null && options.enterpriseScopes.enterpriseIdForProject(proj.id) === enterpriseId) {
+            activeOwnerCandidates.push({ projectId: proj.id, systemId: sys.id, systemName: sys.name });
+          }
+        } catch { /* ignore unavailable */ }
+      }
+      for (const pk of enterprisePacks) {
+        if (pk.activeOwnerProjectId) {
+          try {
+            const proj = await options.projects.get(pk.activeOwnerProjectId);
+            if (proj.archivedAt === null && options.enterpriseScopes.enterpriseIdForProject(proj.id) === enterpriseId) {
+              activeOwnerCandidates.push({ projectId: proj.id, systemId: pk.systemId, systemName: pk.name });
+            }
+          } catch { /* ignore */ }
+        }
+      }
+      for (const extraPid of extraAllowedProjectIds) {
+        try {
+          const proj = await options.projects.get(uuid(extraPid));
+          if (proj.archivedAt === null && options.enterpriseScopes.enterpriseIdForProject(proj.id) === enterpriseId) {
+            activeOwnerCandidates.push({ projectId: proj.id });
+          }
+        } catch { /* ignore */ }
+      }
+
+      const failCode = mode === 'grant' ? 'resource_grantor_not_authorized' : 'resource_revoker_not_authorized';
+
+      if (requestedActorProjectId === undefined || requestedActorProjectId === null || String(requestedActorProjectId).trim() === '') {
+        throw new StudioError(failCode, 403);
+      }
+      const pid = uuid(requestedActorProjectId);
+      const proj = await options.projects.get(pid);
+      if (proj.archivedAt !== null) throw new StudioError('studio_project_read_only', 409);
+      if (options.enterpriseScopes.enterpriseIdForProject(pid) !== enterpriseId) throw new StudioError(failCode, 403);
+      const matchedOwner = activeOwnerCandidates.find(c => c.projectId === pid);
+      if (!matchedOwner) throw new StudioError(failCode, 403);
+      return {
+        actorLabel: matchedOwner.systemName
+          ? `Studio体系·${matchedOwner.systemName}（原权责项目：${proj.name}）`
+          : `原权责项目·${proj.name}`,
+        actorProjectId: proj.id,
+        ...(matchedOwner.systemId ? { actorSystemId: matchedOwner.systemId } : {}),
+        authorityType: matchedOwner.systemId ? 'studio-system-owner' : 'resource-owner-project',
+      };
+    }
+
     if (url.pathname === '/api/studio/resource-grants' && request.method === 'POST') {
       assertEnabledWritable();
       const input = await options.readBody(request);
@@ -729,7 +1040,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         if (options.closing()) throw new StudioError('host_closing', 503);
         assertEnabledWritable();
         const enterpriseId = uuid(input.enterpriseId);
-        const enterprise = options.enterpriseScopes.get(enterpriseId);
+        options.enterpriseScopes.get(enterpriseId);
         if (input.subjectType === 'project') {
           const projectId = uuid(input.subjectId);
           await options.projects.get(projectId);
@@ -738,7 +1049,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const ops = Array.isArray(input.operations) ? input.operations.map(String) : [];
         const rawScope = object(input.scope) ? { ...input.scope } : {};
         let verifiedResourceRef: StudioSourceRef | undefined = input.resourceRef ? sourceRef(input.resourceRef) : undefined;
-        let verifiedGrantor = `${enterprise.name}（Host 核定原权责方）`;
+        let summaryOwnerProjectId: string | undefined;
+        let summaryVerifiedAuthority: string | undefined;
 
         if (ops.includes('cite-summary')) {
           if (options.verifySummaryAuthority) {
@@ -746,15 +1058,26 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               summaryAssetId: typeof rawScope.summaryAssetId === 'string' ? rawScope.summaryAssetId : undefined,
               summaryVersion: typeof rawScope.summaryVersion === 'string' ? rawScope.summaryVersion : undefined,
               resourceRef: verifiedResourceRef,
+              grain: typeof rawScope.grain === 'string' ? rawScope.grain : undefined,
+              periodFrom: typeof rawScope.periodFrom === 'string' ? rawScope.periodFrom : undefined,
+              periodTo: typeof rawScope.periodTo === 'string' ? rawScope.periodTo : undefined,
             });
             rawScope.summaryAssetId = verified.summaryAssetId;
             rawScope.summaryVersion = verified.summaryVersion;
             rawScope.summaryAuthority = verified.summaryAuthority;
             rawScope.summarySha256 = verified.summarySha256;
+            rawScope.verifiedScopeSummary = verified.verifiedScopeSummary;
             verifiedResourceRef = verified.resourceRef;
-            verifiedGrantor = `${verified.summaryAuthority}（Host 核定汇总原权责方）`;
+            summaryOwnerProjectId = verified.ownerProjectId;
+            summaryVerifiedAuthority = verified.summaryAuthority;
           }
         }
+        const verifiedActor = await resolveVerifiedGrantAuthority(
+          enterpriseId,
+          input.grantorProjectId,
+          'grant',
+          summaryOwnerProjectId ? [summaryOwnerProjectId] : [],
+        );
         if (Array.isArray(rawScope.allowedDataPaths)) {
           rawScope.allowedDataPaths = rawScope.allowedDataPaths.map((p: unknown) => {
             const cleaned = normalizeRelativeDataPath(text(p, 1000, false));
@@ -767,11 +1090,18 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
         const record = grants.grant({
           ...(input as unknown as Parameters<ResourceGrantStore['grant']>[0]),
-          grantor: verifiedGrantor,
+          grantor: summaryVerifiedAuthority
+            ? `${summaryVerifiedAuthority} / ${verifiedActor.actorLabel}`
+            : verifiedActor.actorLabel,
           grantorVerifiedBy: 'host',
+          grantorProjectId: verifiedActor.actorProjectId,
+          ...(verifiedActor.actorSystemId ? { grantorSystemId: verifiedActor.actorSystemId } : {}),
+          grantorAuthorityType: summaryVerifiedAuthority ? 'enterprise-authority-asset' : verifiedActor.authorityType,
           ...(verifiedResourceRef ? { resourceRef: verifiedResourceRef } : {}),
           scope: rawScope as Parameters<ResourceGrantStore['grant']>[0]['scope'],
         });
+        // Immediately synchronize any active task sandboxes for this subject project
+        if (record.subjectType === 'project') syncActiveWorkspacesForProject(record.subjectId);
         return { statusCode: 200, result: { grant: record } as unknown as Record<string, unknown> };
       }));
       json(response, receipt.statusCode || 200, receipt.result);
@@ -785,7 +1115,19 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const receipt = await options.mutate(() => options.operations.run(requestId, { path: url.pathname, input }, async () => {
         if (options.closing()) throw new StudioError('host_closing', 503);
         assertEnabledWritable();
-        const record = grants.revoke(revokeMatch[1]!, text(input.reason ?? '显式撤回授权', 2000, false));
+        const existingGrant = grants.get(revokeMatch[1]!);
+        const revokerActor = await resolveVerifiedGrantAuthority(
+          existingGrant.enterpriseId,
+          input.revokerProjectId ?? input.grantorProjectId,
+          'revoke',
+          existingGrant.grantorProjectId ? [existingGrant.grantorProjectId] : [],
+        );
+        const record = grants.revoke(revokeMatch[1]!, text(input.reason ?? '显式撤回授权', 2000, false), {
+          revokedBy: revokerActor.actorLabel,
+          revokedByProjectId: revokerActor.actorProjectId,
+        });
+        // Immediately purge revoked files from all active restricted sandboxes of this subject project!
+        if (record.subjectType === 'project') syncActiveWorkspacesForProject(record.subjectId);
         return { statusCode: 200, result: { grant: record } as unknown as Record<string, unknown> };
       }));
       json(response, receipt.statusCode || 200, receipt.result);
@@ -864,7 +1206,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       return true;
     }
 
-    const packActionMatch = /^\/api\/studio\/enterprise-packs\/([a-f0-9-]+)\/(panorama|entries|purposes|previews|confirm|reconcile|pin|uses|feedback|upgrade-impact)$/.exec(url.pathname);
+    const packActionMatch = /^\/api\/studio\/enterprise-packs\/([a-f0-9-]+)\/(panorama|panorama-select|entries|purposes|previews|confirm|reconcile|pin|uses|feedback|upgrade-impact)$/.exec(url.pathname);
     if (packActionMatch && request.method === 'POST') {
       assertEnabledWritable();
       const packId = packActionMatch[1]!;
@@ -876,12 +1218,31 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         assertEnabledWritable();
         const currentPack = packs.get(packId);
         // Unconditionally enforce active non-archived project for all pack-mutating construction actions!
-        if (['panorama', 'entries', 'purposes', 'previews', 'confirm', 'reconcile', 'upgrade-impact'].includes(action)) {
-          await assertWritablePackProject(currentPack, input.projectId);
+        let activeProject: { id: string } | undefined;
+        if (['panorama', 'panorama-select', 'entries', 'purposes', 'previews', 'confirm', 'reconcile', 'upgrade-impact'].includes(action)) {
+          activeProject = await assertWritablePackProject(currentPack, input.projectId);
+          // Bind continuation owner when the previous owner project has been archived and an active same-enterprise project takes over construction!
+          const origSystem = options.studio.get(currentPack.systemId);
+          const currentOwnerPid = currentPack.activeOwnerProjectId ?? studioExecutionOwner(origSystem).projectId;
+          if (activeProject.id !== currentOwnerPid) {
+            const currentOwnerProj = await options.projects.get(currentOwnerPid).catch(() => null);
+            if (!currentOwnerProj || currentOwnerProj.archivedAt !== null) {
+              packs.bindContinuationOwner(
+                packId,
+                activeProject.id,
+                typeof input.taskId === 'string' ? input.taskId : undefined,
+                '原建设归属项目已归档，同企业活跃项目接续建设同一企业会员包',
+              );
+            }
+          }
         }
 
         if (action === 'panorama') {
           const pack = packs.savePanorama(packId, input as unknown as Parameters<EnterprisePackStore['savePanorama']>[1]);
+          return { result: { pack } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
+        }
+        if (action === 'panorama-select') {
+          const pack = packs.selectPanoramaRecommendation(packId, text(input.purposeKey, 200, false), Boolean(input.selected));
           return { result: { pack } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
         }
         if (action === 'entries') {
@@ -902,14 +1263,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         if (action === 'confirm') {
           const previewId = uuid(input.previewId);
           const fingerprint = text(input.fingerprint, 128, false);
-          const preview = currentPack.previews.find(p => p.id === previewId);
-          if (!preview) throw new StudioError('enterprise_pack_preview_not_found', 404);
-          if (preview.fingerprint !== fingerprint) throw new StudioError('enterprise_pack_preview_changed', 409);
-          // Idempotent return if already confirmed
-          if (preview.confirmedAt) {
-            const existingRev = currentPack.packRevisions.find(r => r.previewId === preview.id);
-            if (existingRev) return { result: { pack: currentPack, revision: existingRev } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
+          // CRITICAL (R1.1): Validate frozen preview, fingerprint, AND draftFingerprint BEFORE ANY original authority write!
+          const precheck = packs.validateConfirmPreconditions(packId, previewId, fingerprint);
+          if (precheck.existingRevision) {
+            return { result: { pack: precheck.pack, revision: precheck.existingRevision } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
           }
+          const preview = precheck.preview;
           // Host executes publication/verification directly against REAL original authorities — NEVER trusts client-supplied moduleReceipts!
           const hostReceipts: {
             requestId: string;
@@ -918,6 +1277,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             status: 'succeeded' | 'failed' | 'unknown';
             detail: string;
             purposeIds: string[];
+            authorityOperationId?: string;
+            authorityPublishedBy?: string;
           }[] = [];
           const depGroups = new Map<string, { dep: EnterprisePackDependency; purposeIds: string[] }>();
           for (const pm of preview.purposeSnapshots) {
@@ -938,7 +1299,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const mappedAuthority: PackModulePublicationReceipt['authority'] = dep.role === 'summary-result' ? 'studio-source' : dep.role;
             let outcome: AuthorityPublicationOutcome;
             if (options.publishAuthorityDependency) {
-              outcome = await options.publishAuthorityDependency(currentPack, preview, dep, depReqId);
+              outcome = await options.publishAuthorityDependency(precheck.pack, preview, dep, depReqId);
             } else {
               outcome = { status: 'failed', detail: '未配置原权威发布适配器，拒绝伪造成功回执' };
             }
@@ -949,6 +1310,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               status: outcome.status,
               detail: outcome.detail,
               purposeIds,
+              ...(outcome.authorityOperationId ? { authorityOperationId: outcome.authorityOperationId } : {}),
+              ...(outcome.authorityPublishedBy ? { authorityPublishedBy: outcome.authorityPublishedBy } : {}),
             });
           }
 
@@ -970,23 +1333,28 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               ? text(input.receipt.requestId, 200, false)
               : '';
           if (!targetRequestId) throw new StudioError('invalid_reconcile_target_request', 400);
-          const originalReceipt = [...rev.moduleReceipts].reverse().find(r => r.requestId === targetRequestId);
-          if (!originalReceipt) throw new StudioError('enterprise_pack_receipt_not_found', 404);
-          if (originalReceipt.status === 'succeeded') {
+          const receiptsForReq = rev.moduleReceipts.filter(r => r.requestId === targetRequestId);
+          const firstReceipt = receiptsForReq[0];
+          const latestReceipt = receiptsForReq.at(-1);
+          if (!firstReceipt || !latestReceipt) throw new StudioError('enterprise_pack_receipt_not_found', 404);
+          if (latestReceipt.status === 'succeeded') {
             return { result: { pack: currentPack, revision: rev } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
           }
-          // Host performs read-only check against the REAL original authority — NEVER blindly accepts client status='succeeded'!
+          // Host performs read-only check against the REAL original authority, passing the ORIGINAL receipt so failed requests
+          // and unrelated external publishes can NEVER be falsely attributed to the original request!
           const outcome: AuthorityPublicationOutcome = options.inspectAuthorityDependency
-            ? await options.inspectAuthorityDependency(currentPack, originalReceipt.targetRef)
-            : { status: 'unknown', detail: '未配置原权威只读查证器，保持原未知/失败状态' };
+            ? await options.inspectAuthorityDependency(currentPack, firstReceipt.targetRef, firstReceipt)
+            : { status: firstReceipt.status === 'failed' ? 'failed' : 'unknown', detail: '未配置原权威只读查证器，保持原未知/失败状态' };
           const revision = packs.reconcileModuleReceipt(packId, version, {
-            requestId: originalReceipt.requestId,
-            authority: originalReceipt.authority,
-            targetRef: originalReceipt.targetRef,
-            status: outcome.status,
+            requestId: firstReceipt.requestId,
+            authority: firstReceipt.authority,
+            targetRef: firstReceipt.targetRef,
+            status: firstReceipt.status === 'failed' ? 'failed' : outcome.status,
             detail: outcome.detail,
-            purposeIds: originalReceipt.purposeIds,
-            supersedesReceiptId: originalReceipt.receiptId,
+            purposeIds: firstReceipt.purposeIds,
+            ...(outcome.authorityOperationId ? { authorityOperationId: outcome.authorityOperationId } : firstReceipt.authorityOperationId ? { authorityOperationId: firstReceipt.authorityOperationId } : {}),
+            ...(outcome.authorityPublishedBy ? { authorityPublishedBy: outcome.authorityPublishedBy } : firstReceipt.authorityPublishedBy ? { authorityPublishedBy: firstReceipt.authorityPublishedBy } : {}),
+            supersedesReceiptId: latestReceipt.receiptId,
           });
           return { result: { pack: packs.get(packId), revision } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
         }
@@ -998,10 +1366,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         }
         if (action === 'uses') {
           const pid = uuid(input.projectId), tid = uuid(input.taskId);
+          const project = await options.projects.get(pid);
           await options.projects.getTask(pid, tid);
           if (options.enterpriseScopes.enterpriseIdForProject(pid) !== currentPack.enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
           const pin = packs.getTaskPin(packId, pid, tid);
           if (!pin) throw new StudioError('enterprise_pack_task_not_pinned', 409);
+
+          // Sync any deliverables written inside a restricted task workspace into project 060_reports/
+          syncWorkspaceReportsToProject(pid, tid, project.rootPath);
 
           // Host verifies the actual report file bytes & SHA-256 on disk!
           const rawReportRef = sourceRef(input.reportRef);
@@ -1009,6 +1381,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             throw new StudioError('studio_use_report_mismatch', 403);
           }
           let verifiedReportRef = rawReportRef;
+          let selectionForTurn: { sessionId: string; messageId: string } | undefined =
+            typeof input.sessionId === 'string' && typeof input.messageId === 'string'
+              ? { sessionId: input.sessionId, messageId: input.messageId }
+              : undefined;
+
           if (rawReportRef.locator && rawReportRef.locator.startsWith('060_reports/')) {
             const file = await options.projects.readFile(pid, rawReportRef.locator);
             const actualSha = createHash('sha256').update(file.bytes).digest('hex');
@@ -1017,31 +1394,54 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             }
             verifiedReportRef = sourceRef({ ...rawReportRef, version: actualSha, sha256: actualSha });
           } else if (rawReportRef.locator) {
-            // Native reply locator: verify via readTaskReply
             try {
               const parsed = JSON.parse(rawReportRef.locator);
               if (parsed?.kind === 'native-reply' && typeof parsed.sessionId === 'string' && typeof parsed.messageId === 'string') {
                 const reply = await options.readTaskReply(pid, tid, { sessionId: parsed.sessionId, messageId: parsed.messageId });
                 const actualSha = createHash('sha256').update(reply.text).digest('hex');
                 verifiedReportRef = sourceRef({ ...rawReportRef, version: actualSha, sha256: actualSha });
+                selectionForTurn ??= { sessionId: parsed.sessionId, messageId: parsed.messageId };
               }
             } catch {
               throw new StudioError('studio_use_report_unavailable', 409);
             }
           }
 
-          // Host extracts REAL directory supply & ACTUAL read receipts from the native Pi transcript (NEVER trusts client-claimed actualReads!)
-          const nativeEv = await inspectTaskNativeEvidence(pid, tid, currentPack);
+          // Host extracts REAL directory supply & ACTUAL read receipts STRICTLY from THIS specific turn!
+          const nativeEv = await inspectTaskNativeEvidence(pid, tid, currentPack, selectionForTurn);
           const rev = currentPack.packRevisions.find(r => r.version === pin.packVersion);
           const purposeId = text(input.purposeId, 100, false);
           const pm = rev?.purposeManifests.find(item => item.purposeId === purposeId);
           if (!pm) throw new StudioError('enterprise_pack_purpose_not_found', 404);
 
+          // Resolve real author adoption declaration: either explicit authorDeclaration OR matching Studio declare-use record for this exact report!
+          let resolvedDeclaration: Parameters<EnterprisePackStore['recordUse']>[1]['authorDeclaration'] | undefined;
+          if (object(input.authorDeclaration)) {
+            resolvedDeclaration = input.authorDeclaration as Parameters<EnterprisePackStore['recordUse']>[1]['authorDeclaration'];
+          } else {
+            try {
+              const studioSys = options.studio.get(currentPack.systemId);
+              const studioUse = [...studioSys.uses].reverse().find(u =>
+                u.projectId === pid
+                && u.taskId === tid
+                && (digest(u.report) === digest(verifiedReportRef) || (verifiedReportRef.locator && u.report.locator === verifiedReportRef.locator)),
+              );
+              if (studioUse) {
+                resolvedDeclaration = {
+                  declaredPurposeId: pm.purposeId,
+                  declaredRefs: studioUse.sources,
+                  summaryText: studioUse.result || '来自原 Studio declare-use 作者采用声明',
+                  declaredAt: studioUse.createdAt,
+                };
+              }
+            } catch { /* no studio declaration */ }
+          }
+
           const use = packs.recordUse(packId, {
             projectId: pid,
             taskId: tid,
-            ...(typeof input.sessionId === 'string' ? { sessionId: input.sessionId } : {}),
-            ...(typeof input.messageId === 'string' ? { messageId: input.messageId } : {}),
+            ...(selectionForTurn ? { sessionId: selectionForTurn.sessionId, messageId: selectionForTurn.messageId } : {}),
+            ...(nativeEv.turnIndex !== undefined ? { turnIndex: nativeEv.turnIndex } : {}),
             reportRef: verifiedReportRef,
             packVersion: pin.packVersion,
             purposeId: pm.purposeId,
@@ -1051,13 +1451,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             ...(pm.policyEffectiveFrom ? { policyEffectiveFrom: pm.policyEffectiveFrom } : {}),
             ...(nativeEv.taskCutoffAt ? { dataCutoffAt: nativeEv.taskCutoffAt } : typeof input.dataCutoffAt === 'string' ? { dataCutoffAt: input.dataCutoffAt } : {}),
             catalogSupplied: {
-              packVersion: nativeEv.observedDirectoryVersion ?? pin.packVersion,
+              packVersion: nativeEv.observedDirectoryVersion ?? nativeEv.sessionObservedDirectoryVersion ?? pin.packVersion,
               purposeIds: nativeEv.catalogPurposeIds.length ? nativeEv.catalogPurposeIds : pin.purposeIds,
               assetRefs: nativeEv.catalogAssetRefs.length ? nativeEv.catalogAssetRefs : pin.pinnedAuthorityRefs,
               suppliedAt: nativeEv.catalogSuppliedAt ?? pin.pinnedAt,
             },
             actualReads: nativeEv.actualReads,
-            ...(object(input.authorDeclaration) ? { authorDeclaration: input.authorDeclaration as Parameters<EnterprisePackStore['recordUse']>[1]['authorDeclaration'] } : {}),
+            ...(resolvedDeclaration ? { authorDeclaration: resolvedDeclaration } : {}),
           });
           return { result: { use, pack: packs.get(packId) } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
         }
@@ -1076,14 +1476,32 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const replySha = createHash('sha256').update(original.text).digest('hex');
             const pin = packs.getTaskPin(packId, pid, tid);
             const nativeEv = await inspectTaskNativeEvidence(pid, tid, currentPack, selection);
-            const actualReadRefs = nativeEv.actualReads.map(r => r.ref);
 
-            // Check if this task actually read any pinned dependency or has a verified use record with actualReads!
-            const matchingUse = currentPack.useRecords.find(u => u.projectId === pid && u.taskId === tid && u.actualReads.length > 0);
-            const pinnedDeps = pin?.pinnedAuthorityRefs ?? [];
-            const readPinnedDep = actualReadRefs.some(r => pinnedDeps.some(dep => sameExactSourceRef(r, dep)));
-            const hasActualUse = Boolean(matchingUse || readPinnedDep || actualReadRefs.length > 0);
-            const observedDirVer = nativeEv.observedDirectoryVersion ?? pin?.packVersion;
+            const observedDirVer = nativeEv.observedDirectoryVersion ?? nativeEv.sessionObservedDirectoryVersion ?? pin?.packVersion;
+            const rev = currentPack.packRevisions.find(r => r.version === (pin?.packVersion ?? observedDirVer));
+            const packDepRefs = [
+              ...(pin?.pinnedAuthorityRefs ?? []),
+              ...(rev ? rev.purposeManifests.flatMap(pm => pm.dependencies.map(d => d.ref)) : []),
+            ];
+
+            // STRICT (R4.1 + R5.1): Only COMPLETE reads from THIS specific turn matching an actual PACK dependency count!
+            const packMatchedReads = nativeEv.actualReads.filter(r =>
+              r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep)),
+            );
+            // Only match a recorded use bound to THIS EXACT message (sessionId + messageId) with real complete pack reads!
+            const matchingTurnUse = currentPack.useRecords.find(u =>
+              u.projectId === pid
+              && u.taskId === tid
+              && u.sessionId === selection.sessionId
+              && u.messageId === selection.messageId
+              && u.actualReads.some(r => r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep))),
+            );
+            const hasActualUse = Boolean(matchingTurnUse || packMatchedReads.length > 0);
+            const matchedRefs = packMatchedReads.length > 0
+              ? packMatchedReads.map(r => r.ref)
+              : matchingTurnUse
+                ? matchingTurnUse.actualReads.filter(r => r.complete && packDepRefs.some(dep => sameExactSourceRef(r.ref, dep))).map(r => r.ref)
+                : [];
 
             let adoptionBasis: FeedbackAdoptionBasis;
             if (hasActualUse) {
@@ -1098,10 +1516,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const explicitTaskCutoff = typeof input.taskCutoffAt === 'string' && input.taskCutoffAt.trim()
               ? input.taskCutoffAt.trim()
               : nativeEv.taskCutoffAt;
-            const packCutoff = pin?.dataCutoffAt ?? currentPack.packRevisions.find(r => r.version === observedDirVer)?.dataCutoffAt;
+            const packCutoff = pin?.dataCutoffAt ?? rev?.dataCutoffAt;
 
             // Resolve matching target authority asset ref from pinned revision when available
-            const rev = currentPack.packRevisions.find(r => r.version === (matchingUse?.packVersion ?? observedDirVer));
             if (rev) {
               const wantedRole = category === 'shared_refund_mapping' ? 'shared-asset' : category === 'sap_formula' ? 'sap-metric' : category === 'member_policy' ? 'member-rule' : undefined;
               if (wantedRole) {
@@ -1110,7 +1527,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             }
 
             resolvedPackVersion = adoptionBasis === 'verified_actual_read'
-              ? (matchingUse?.packVersion ?? pin?.packVersion ?? observedDirVer ?? 'unconfirmed')
+              ? (matchingTurnUse?.packVersion ?? pin?.packVersion ?? observedDirVer ?? 'unconfirmed')
               : (observedDirVer ?? 'unconfirmed');
 
             reportPayload = {
@@ -1121,9 +1538,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               reportRef: { authority: 'task', id: tid, projectId: pid, taskId: tid, version: replySha, sha256: replySha, locator: JSON.stringify({ kind: 'native-reply', ...selection }) },
               adoptionBasis,
               ...(observedDirVer ? { observedDirectoryVersion: observedDirVer } : {}),
-              // ONLY populate usedPackVersion when actual reading/use was verified!
+              // ONLY populate usedPackVersion when actual reading/use of THIS pack in THIS turn was verified!
               ...(adoptionBasis === 'verified_actual_read' && resolvedPackVersion !== 'unconfirmed' ? { usedPackVersion: resolvedPackVersion } : {}),
-              usedAssetRefs: actualReadRefs,
+              usedAssetRefs: matchedRefs,
               ...(explicitTaskCutoff ? { taskCutoffAt: explicitTaskCutoff } : {}),
               ...(packCutoff ? { packDataCutoffAt: packCutoff } : {}),
               evidenceNote: text(input.evidenceNote ?? input.problem ?? '', 5000, false),
@@ -1159,6 +1576,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         assertEnabledWritable();
         const currentPack = packs.get(feedbackHandleMatch[1]!);
         await assertWritablePackProject(currentPack, input.projectId);
+        const existingFb = currentPack.feedbackItems.find(f => f.id === uuid(feedbackHandleMatch[2]!));
+        if (!existingFb) throw new StudioError('enterprise_pack_feedback_not_found', 404);
+
         let verifiedRevisedRef: StudioSourceRef | undefined;
         if (input.revisedRef !== undefined) {
           verifiedRevisedRef = sourceRef(input.revisedRef);
@@ -1167,16 +1587,50 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             if (check.status !== 'succeeded') throw new StudioError('revised_authority_ref_not_published', 409);
           }
         }
+
+        // R5.2: When routing to an original authority (investigating / revision_prepared), create REAL linked Studio workItem & feedback!
+        let studioWorkItemId = existingFb.authorityHandling?.studioWorkItemId;
+        let studioFeedbackId = existingFb.authorityHandling?.studioFeedbackId;
+        const targetStatus = input.status as Parameters<EnterprisePackStore['handleFeedback']>[2]['status'];
+        if (['investigating', 'revision_prepared'].includes(targetStatus) && existingFb.targetAuthority !== 'task' && !studioWorkItemId) {
+          const studioSys = options.studio.get(currentPack.systemId);
+          const linkSources: StudioSourceRef[] = [
+            ...(existingFb.targetAssetRef ? [existingFb.targetAssetRef] : []),
+            ...existingFb.reports.map(r => r.reportRef),
+          ];
+          const uniqueLinkSources = [...new Map(linkSources.map(r => [digest(r), r])).values()];
+          const workItem = options.studio.setWorkItem(currentPack.systemId, {
+            topicId: studioSys.currentTopicId,
+            kind: 'review',
+            title: `[会员包反馈 ${existingFb.feedbackCode}] ${existingFb.title}`,
+            detail: `来自企业会员包 ${currentPack.packCode} v${existingFb.packVersion}（归属原权威：${existingFb.targetAuthority}）。处置说明：${text(input.note, 2000, false)}`,
+            impact: `受影响用途：${(Array.isArray(input.impactedPurposeIds) && input.impactedPurposeIds.length ? input.impactedPurposeIds : existingFb.purposeIds).join('、') || '待核定受影响用途'}；未受影响用途保持不变。`,
+            nextStep: '在对应原权威修订资产并形成新版包预览，随后由独立新任务按新版实读并复算核验后闭环。',
+            sources: uniqueLinkSources,
+            status: 'in_progress',
+          });
+          studioWorkItemId = workItem.id;
+          const studioFb = options.studio.addFeedback(currentPack.systemId, {
+            title: `[会员包 ${existingFb.feedbackCode}] ${existingFb.title}`,
+            problem: existingFb.reports.map(r => r.evidenceNote).join('；') || existingFb.title,
+            currentHandling: `已由会员包转入原权威修订（关联工作项 ${workItem.id}，归属 ${existingFb.targetAuthority}）`,
+            sources: uniqueLinkSources,
+          });
+          studioFeedbackId = studioFb.id;
+        }
+
         const handled = packs.handleFeedback(feedbackHandleMatch[1]!, feedbackHandleMatch[2]!, {
-          status: input.status as Parameters<EnterprisePackStore['handleFeedback']>[2]['status'],
+          status: targetStatus,
           note: text(input.note, 5000, false),
           ...(input.targetRef ? { targetRef: sourceRef(input.targetRef) } : {}),
           ...(verifiedRevisedRef ? { revisedRef: verifiedRevisedRef } : {}),
           ...(typeof input.revisedPackVersion === 'string' ? { revisedPackVersion: input.revisedPackVersion } : {}),
+          ...(studioWorkItemId ? { studioWorkItemId } : {}),
+          ...(studioFeedbackId ? { studioFeedbackId } : {}),
           ...(Array.isArray(input.impactedPurposeIds) ? { impactedPurposeIds: input.impactedPurposeIds.map(String) } : {}),
           ...(typeof input.verifiedByUseId === 'string' ? { verifiedByUseId: input.verifiedByUseId } : {}),
         });
-        return { result: handled as unknown as Record<string, unknown>, systemId: currentPack.systemId };
+        return { result: { ...handled, ...(studioWorkItemId ? { studioWorkItemId } : {}), ...(studioFeedbackId ? { studioFeedbackId } : {}) } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
       }));
       json(response, receipt.statusCode || 200, receipt.result);
       return true;
@@ -1223,6 +1677,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     grants,
     packs,
     getProjectToolScope,
+    prepareRestrictedTaskWorkspace,
+    syncActiveWorkspacesForProject,
+    syncWorkspaceReportsToProject,
     authorizeProjectDataPath,
     assertProjectDataPathAllowed,
     evaluateNativeToolCall,

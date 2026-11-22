@@ -390,12 +390,20 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(recFake.json.revision.purposeManifests.find((p: any) => p.purposeId === calcPurposeId).status, 'suspended');
     assert.equal(recFake.json.revision.moduleReceipts.at(-1).status, 'failed');
 
-    // 4. Draft drift rejection + Real SAP publish with simulated 'unknown' -> read-only reconcile recovery!
-    const realSapRef = {
+    // 4. R1.1 (Zero Side Effects on Stale Preview) + R1.3 (Operation-Aware Reconcile) + R1.4 (Selective Carry-Over)
+    const sapValidate = await srv.req('/api/metric-factory/draft/validate', 'POST', {
+      projectId: projBuild.id,
+      path: '020_clean/member-repurchase.sap.yaml',
+    });
+    assert.equal(sapValidate.status, 200);
+    const realSapDraftRef = {
       authority: 'sap-metric' as const,
       id: 'membership-repurchase',
       version: '1.0.0',
-      title: '会员复购率 1.0.0',
+      sha256: sapValidate.json.bytesSha256,
+      projectId: projBuild.id,
+      locator: '020_clean/member-repurchase.sap.yaml',
+      title: '会员复购率 1.0.0（草案）',
     };
     await srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
       requestId: randomUUID(),
@@ -404,11 +412,12 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       dependencies: [
         { id: 'dep-r', role: 'shared-asset', authority: 'sap-method', ref: refundMethodRef, requiredFor: ['formal-calculation'] },
         { id: 'dep-m', role: 'member-rule', authority: 'enterprise', ref: memberRuleRef, requiredFor: ['definition-reference', 'formal-calculation'] },
-        { id: 'dep-s', role: 'sap-metric', authority: 'sap-metric', ref: realSapRef, requiredFor: ['formal-calculation'] },
+        { id: 'dep-s', role: 'sap-metric', authority: 'sap-metric', ref: realSapDraftRef, requiredFor: ['formal-calculation'] },
       ],
     });
 
-    // Prepare preview v1.1, then mutate purpose -> confirm MUST reject 409 enterprise_pack_draft_changed!
+    // R1.1 COUNTEREXAMPLE: Prepare preview v1.1 referencing unpublished SAP draft -> mutate purpose -> confirm MUST return 409
+    // AND MUST NOT write membership-repurchase@1.0.0 into real SAP MetricLibrary (ZERO side effects)!
     const stalePrev = await srv.req(`/api/studio/enterprise-packs/${packId}/previews`, 'POST', {
       requestId: randomUUID(),
       projectId: projBuild.id,
@@ -418,7 +427,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       decisions: [{ purposeId: calcPurposeId, choiceId: 'cross-store-scope', selectedKey: 'any-direct', decidedBy: '会员运营负责人' }],
       policyEffectiveFrom: '2026-09-01',
       dataCutoffAt: '2026-10-31',
-      summary: '草案漂移测试预览',
+      summary: '草案漂移零副作用测试预览',
     });
     assert.equal(stalePrev.status, 200);
     await srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
@@ -429,7 +438,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       dependencies: [
         { id: 'dep-r', role: 'shared-asset', authority: 'sap-method', ref: refundMethodRef, requiredFor: ['formal-calculation'] },
         { id: 'dep-m', role: 'member-rule', authority: 'enterprise', ref: memberRuleRef, requiredFor: ['definition-reference', 'formal-calculation'] },
-        { id: 'dep-s', role: 'sap-metric', authority: 'sap-metric', ref: realSapRef, requiredFor: ['formal-calculation'] },
+        { id: 'dep-s', role: 'sap-metric', authority: 'sap-metric', ref: realSapDraftRef, requiredFor: ['formal-calculation'] },
       ],
     });
     const driftConfirm = await srv.req(`/api/studio/enterprise-packs/${packId}/confirm`, 'POST', {
@@ -441,8 +450,16 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     });
     assert.equal(driftConfirm.status, 409);
     assert.equal(driftConfirm.json.code, 'enterprise_pack_draft_changed');
+    const sapLibAfterDrift = await srv.req('/api/metric-factory/library');
+    assert.equal(sapLibAfterDrift.status, 200);
+    assert.equal(
+      (sapLibAfterDrift.json.entries ?? []).some((e: any) => e.id === 'membership-repurchase' && e.version === '1.0.0'),
+      false,
+      'Stale preview 409 MUST leave real SAP MetricLibrary completely untouched (ZERO side effects)!',
+    );
 
-    // Fresh preview v1.1 + confirm where SAP returns real 'unknown' (not yet published in SAP MetricLibrary)
+    // R1.3 COUNTEREXAMPLE (External unrelated publish MUST NOT be credited to an old 'unknown' pack request!):
+    // Fresh preview v1.1 + confirm where SAP returns 'unknown' (not written by pack)
     const freshPrev = await srv.req(`/api/studio/enterprise-packs/${packId}/previews`, 'POST', {
       requestId: randomUUID(),
       projectId: projBuild.id,
@@ -469,53 +486,151 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(confUnknown.json.revision.purposeManifests.find((p: any) => p.purposeId === calcPurposeId).status, 'suspended');
     assert.equal(confUnknown.json.revision.purposeManifests.find((p: any) => p.purposeId === defPurposeId).status, 'eligible');
 
-    // Reconcile BEFORE real SAP publication MUST NOT recover to succeeded
-    const recBeforePub = await srv.req(`/api/studio/enterprise-packs/${packId}/reconcile`, 'POST', {
-      requestId: randomUUID(),
-      projectId: projBuild.id,
-      version: '1.1',
-      targetRequestId: unknownSapReceipt.requestId,
-    });
-    assert.equal(recBeforePub.status, 200);
-    assert.equal(recBeforePub.json.revision.purposeManifests.find((p: any) => p.purposeId === calcPurposeId).status, 'suspended');
-
-    // Now ACTUALLY publish membership-repurchase@1.0.0 in real MetricLibrary!
-    const sapValidate = await srv.req('/api/metric-factory/draft/validate', 'POST', {
-      projectId: projBuild.id,
-      path: '020_clean/member-repurchase.sap.yaml',
-    });
-    assert.equal(sapValidate.status, 200);
-    const sapPub = await srv.req('/api/metric-factory/publish', 'POST', {
+    // External publish with DIFFERENT publishedBy ('synthetic-reviewer' != pack's authorityPublishedBy)
+    const sapPubExternal = await srv.req('/api/metric-factory/publish', 'POST', {
       projectId: projBuild.id,
       path: '020_clean/member-repurchase.sap.yaml',
       publishedBy: 'synthetic-reviewer',
       expectedPackageFingerprint: sapValidate.json.packageFingerprint,
     });
-    assert.equal(sapPub.status, 201);
+    assert.equal(sapPubExternal.status, 201);
 
-    // Now read-only reconcile queries REAL MetricLibrary, confirms exact published version, preserves old unknown receipt, and promotes calc purpose to eligible!
-    const recAfterPub = await srv.req(`/api/studio/enterprise-packs/${packId}/reconcile`, 'POST', {
+    // Reconcile MUST NOT falsely attribute external publish to the old unknown pack request!
+    const recExternal = await srv.req(`/api/studio/enterprise-packs/${packId}/reconcile`, 'POST', {
       requestId: randomUUID(),
       projectId: projBuild.id,
       version: '1.1',
       targetRequestId: unknownSapReceipt.requestId,
     });
-    assert.equal(recAfterPub.status, 200);
-    assert.equal(recAfterPub.json.revision.purposeManifests.find((p: any) => p.purposeId === calcPurposeId).status, 'eligible');
-    assert.ok(recAfterPub.json.revision.moduleReceipts.some((r: any) => r.receiptId === unknownSapReceipt.receiptId && r.status === 'unknown'));
-    assert.equal(recAfterPub.json.revision.moduleReceipts.at(-1).status, 'succeeded');
+    assert.equal(recExternal.status, 200);
+    assert.equal(recExternal.json.revision.moduleReceipts.at(-1).status, 'unknown', 'External publish by another publisher MUST NOT falsely mark old unknown request succeeded!');
+    assert.equal(recExternal.json.revision.purposeManifests.find((p: any) => p.purposeId === calcPurposeId).status, 'suspended');
 
-    // 5. R2: Default-deny on ungranted same-enterprise project + Host-verified grantor & summary authority + immediate revocation!
+    // R1.4 (Selective republication of ONLY calcPurposeId carries over unchanged defPurposeId!)
+    // + R1.3 genuine recovery when SAP 1.0.1 was genuinely published by THIS pack operation before simulated timeout!
+    const v101Yaml = rawSapYaml
+      .replace('version: 1.0.0', 'version: 1.0.1')
+      .replace('指定时间窗口内', '跨月全额退款原单冲销后指定时间窗口内');
+    fs.writeFileSync(path.join(projBuild.rootPath, '020_clean', 'member-repurchase-101.sap.yaml'), v101Yaml);
+    const sapVal101 = await srv.req('/api/metric-factory/draft/validate', 'POST', {
+      projectId: projBuild.id,
+      path: '020_clean/member-repurchase-101.sap.yaml',
+    });
+    assert.equal(sapVal101.status, 200);
+    const sapRef101 = {
+      authority: 'sap-metric' as const,
+      id: 'membership-repurchase',
+      version: '1.0.1',
+      sha256: sapVal101.json.bytesSha256,
+      projectId: projBuild.id,
+      locator: '020_clean/member-repurchase-101.sap.yaml',
+      title: '会员复购率 1.0.1',
+    };
+    await srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
+      requestId: randomUUID(),
+      projectId: projBuild.id,
+      ...purposeBase,
+      completionCriteria: '草案变更后的完成标准',
+      dependencies: [
+        { id: 'dep-r', role: 'shared-asset', authority: 'sap-method', ref: refundMethodRef, requiredFor: ['formal-calculation'] },
+        { id: 'dep-m', role: 'member-rule', authority: 'enterprise', ref: memberRuleRef, requiredFor: ['definition-reference', 'formal-calculation'] },
+        { id: 'dep-s', role: 'sap-metric', authority: 'sap-metric', ref: sapRef101, requiredFor: ['formal-calculation'] },
+      ],
+    });
+    // Republish ONLY [calcPurposeId] (omitting defPurposeId!)
+    const prevSelective = await srv.req(`/api/studio/enterprise-packs/${packId}/previews`, 'POST', {
+      requestId: randomUUID(),
+      projectId: projBuild.id,
+      version: '1.2',
+      previousVersion: '1.1',
+      purposeIds: [calcPurposeId],
+      decisions: [{ purposeId: calcPurposeId, choiceId: 'cross-store-scope', selectedKey: 'any-direct', decidedBy: '会员运营负责人' }],
+      policyEffectiveFrom: '2026-09-01',
+      dataCutoffAt: '2026-10-31',
+      summary: '仅重发受影响计算用途 v1.2',
+    });
+    assert.equal(prevSelective.status, 200);
+    // Simulate transport timeout AFTER this exact pack operation's SAP write actually landed with matching authorityPublishedBy
+    const expectedPackPublisher = `企业会员包:PACK-MEM-001:${prevSelective.json.preview.id}`;
+    simulateUnknownSapOnce = true;
+    const confSelective = await srv.req(`/api/studio/enterprise-packs/${packId}/confirm`, 'POST', {
+      requestId: randomUUID(),
+      projectId: projBuild.id,
+      previewId: prevSelective.json.preview.id,
+      fingerprint: prevSelective.json.preview.fingerprint,
+      confirmedBy: '会员运营负责人',
+    });
+    assert.equal(confSelective.status, 200);
+    const carriedDefManifest = confSelective.json.revision.purposeManifests.find((p: any) => p.purposeId === defPurposeId);
+    assert.ok(carriedDefManifest, 'Unchanged defPurposeId MUST be carried over when only calcPurposeId is republished!');
+    assert.equal(carriedDefManifest.status, 'eligible');
+    assert.equal(carriedDefManifest.carriedOverFromVersion, '1.1');
+
+    // Simulate that the original pack operation's write actually committed in SAP MetricLibrary with matching publisher tag
+    const sapPubMatching = await srv.req('/api/metric-factory/publish', 'POST', {
+      projectId: projBuild.id,
+      path: '020_clean/member-repurchase-101.sap.yaml',
+      publishedBy: expectedPackPublisher,
+      expectedPackageFingerprint: sapVal101.json.packageFingerprint,
+    });
+    assert.equal(sapPubMatching.status, 201);
+    const unknown101Receipt = confSelective.json.revision.moduleReceipts.find((r: any) => r.targetRef.version === '1.0.1');
+    assert.equal(unknown101Receipt.status, 'unknown');
+    const recMatched = await srv.req(`/api/studio/enterprise-packs/${packId}/reconcile`, 'POST', {
+      requestId: randomUUID(),
+      projectId: projBuild.id,
+      version: '1.2',
+      targetRequestId: unknown101Receipt.requestId,
+    });
+    assert.equal(recMatched.status, 200);
+    assert.equal(recMatched.json.revision.purposeManifests.find((p: any) => p.purposeId === calcPurposeId).status, 'eligible');
+    assert.equal(recMatched.json.revision.purposeManifests.find((p: any) => p.purposeId === defPurposeId).status, 'eligible');
+    assert.ok(recMatched.json.revision.moduleReceipts.some((r: any) => r.receiptId === unknown101Receipt.receiptId && r.status === 'unknown'));
+    assert.equal(recMatched.json.revision.moduleReceipts.at(-1).status, 'succeeded');
+
+    // 5. R2: Default-deny + Consistent Pack History Redaction + Authentic Grantor/Revoker + Summary Scope Verification!
     const ungrantedPackView = await srv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projUngranted.id}`);
     assert.equal(ungrantedPackView.status, 200);
     assert.deepEqual(ungrantedPackView.json.pack.purposes, []);
     assert.deepEqual(ungrantedPackView.json.pack.entries, []);
+    assert.deepEqual(ungrantedPackView.json.pack.packRevisions, [], 'Ungranted consumer project MUST NOT receive raw packRevisions!');
+
+    // R2.1 COUNTEREXAMPLE: Omitted grantorProjectId or ordinary consumer project MUST be rejected with 403!
+    const omittedGrantor = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(),
+      enterpriseId,
+      grantor: '自称原权责方',
+      grantBasis: '省略授予方项目反例',
+      subjectType: 'project',
+      subjectId: projMerch.id,
+      resourceKind: 'definition',
+      purposeKeys: ['store-first-purchase-30d-repurchase'],
+      operations: ['read-definition'],
+      scope: { brand: '岚线', channel: '直营' },
+    });
+    assert.equal(omittedGrantor.status, 403);
+    assert.equal(omittedGrantor.json.code, 'resource_grantor_not_authorized');
+
+    const consumerGrantor = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(),
+      enterpriseId,
+      grantorProjectId: projStar.id,
+      grantBasis: '普通分析项目越权授予反例',
+      subjectType: 'project',
+      subjectId: projMerch.id,
+      resourceKind: 'definition',
+      purposeKeys: ['store-first-purchase-30d-repurchase'],
+      operations: ['read-definition'],
+      scope: { brand: '岚线', channel: '直营' },
+    });
+    assert.equal(consumerGrantor.status, 403);
+    assert.equal(consumerGrantor.json.code, 'resource_grantor_not_authorized');
 
     // Forged/nonexistent summary asset MUST be rejected!
     const badSummaryGrant = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
-      grantor: '伪造授权人',
+      grantorProjectId: projBuild.id,
       grantBasis: '尝试授权不存在汇总',
       subjectType: 'project',
       subjectId: projHQ.id,
@@ -526,10 +641,44 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     });
     assert.equal(badSummaryGrant.status, 404);
 
-    // Real verified summary grant: Host overrides spoofed grantor and binds grantorVerifiedBy='host' + real summarySha256!
+    // R2.2 COUNTEREXAMPLE: Summary grant with mismatched period or mismatched grain MUST be rejected with 409 summary_scope_mismatch!
+    const badSummaryPeriod = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(),
+      enterpriseId,
+      grantorProjectId: projBuild.id,
+      grantBasis: '期间越界汇总授权反例',
+      subjectType: 'project',
+      subjectId: projHQ.id,
+      resourceKind: 'summary',
+      resourceRef: realSummaryRef,
+      purposeKeys: ['store-first-purchase-30d-repurchase'],
+      operations: ['read-definition', 'cite-summary'],
+      scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店'], periodFrom: '2026-10-01', periodTo: '2026-10-31', grain: 'store-month', summaryAssetId: realSummaryRef.id, summaryVersion: realSummaryRef.version },
+    });
+    assert.equal(badSummaryPeriod.status, 409);
+    assert.equal(badSummaryPeriod.json.code, 'summary_scope_mismatch');
+
+    const badSummaryGrain = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(),
+      enterpriseId,
+      grantorProjectId: projBuild.id,
+      grantBasis: '粒度不符汇总授权反例',
+      subjectType: 'project',
+      subjectId: projHQ.id,
+      resourceKind: 'summary',
+      resourceRef: realSummaryRef,
+      purposeKeys: ['store-first-purchase-30d-repurchase'],
+      operations: ['read-definition', 'cite-summary'],
+      scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店'], periodFrom: '2026-09-01', periodTo: '2026-09-30', grain: 'member-day', summaryAssetId: realSummaryRef.id, summaryVersion: realSummaryRef.version },
+    });
+    assert.equal(badSummaryGrain.status, 409);
+    assert.equal(badSummaryGrain.json.code, 'summary_scope_mismatch');
+
+    // Real verified summary grant by authentic authority owner projBuild: Host overrides spoofed grantor & records verified owner project!
     const goodSummaryGrant = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
+      grantorProjectId: projBuild.id,
       grantor: '伪造授权人',
       grantBasis: '总部月报引用核定汇总',
       subjectType: 'project',
@@ -542,13 +691,14 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     });
     assert.equal(goodSummaryGrant.status, 200);
     assert.equal(goodSummaryGrant.json.grant.grantorVerifiedBy, 'host');
+    assert.equal(goodSummaryGrant.json.grant.grantorProjectId, projBuild.id);
     assert.notEqual(goodSummaryGrant.json.grant.grantor, '伪造授权人');
     assert.equal(goodSummaryGrant.json.grant.scope.summarySha256, realSummaryRef.sha256);
 
-    await srv.req('/api/studio/resource-grants', 'POST', {
+    assert.equal((await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
-      grantor: '企业资料原权责方',
+      grantorProjectId: projBuild.id,
       grantBasis: '商品部定义查阅',
       subjectType: 'project',
       subjectId: projMerch.id,
@@ -556,11 +706,11 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       purposeKeys: ['store-first-purchase-30d-repurchase', 'store-first-purchase-30d-repurchase-def'],
       operations: ['read-definition'],
       scope: { brand: '岚线', channel: '直营' },
-    });
+    })).status, 200);
     const starGrantRes = await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
-      grantor: '企业资料原权责方',
+      grantorProjectId: projBuild.id,
       grantBasis: '星桥店长仅读本店订单',
       subjectType: 'project',
       subjectId: projStar.id,
@@ -572,10 +722,10 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(starGrantRes.status, 200);
     const starGrantId = starGrantRes.json.grant.id;
 
-    await srv.req('/api/studio/resource-grants', 'POST', {
+    assert.equal((await srv.req('/api/studio/resource-grants', 'POST', {
       requestId: randomUUID(),
       enterpriseId,
-      grantor: '企业资料原权责方',
+      grantorProjectId: projBuild.id,
       grantBasis: '两店核算岗跨店复算',
       subjectType: 'project',
       subjectId: projAud.id,
@@ -583,7 +733,7 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       purposeKeys: ['store-first-purchase-30d-repurchase'],
       operations: ['read-definition', 'read-detail-recalculate'],
       scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店', '柳岸直营店'], allowedDataPaths: ['020_clean/starbridge_orders.csv', '020_clean/willowbank_orders.csv'] },
-    });
+    })).status, 200);
 
     // Host evaluation & /api/studio/materials file boundary enforcement
     const evalStarOwn = await srv.req('/api/studio/resource-grants/evaluate', 'POST', {
@@ -602,8 +752,14 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(starLocators.includes('020_clean/starbridge_orders.csv'), true);
     assert.equal(starLocators.includes('020_clean/willowbank_orders.csv'), false);
 
-    // Revoking projStar's grant IMMEDIATELY blocks 020_clean/starbridge_orders.csv in /api/studio/materials!
-    assert.equal((await srv.req(`/api/studio/resource-grants/${starGrantId}/revoke`, 'POST', { requestId: randomUUID(), reason: '测试即时撤回' })).status, 200);
+    // R2.1 Revoker counterexample: omitted or consumer project MUST be rejected with 403!
+    assert.equal((await srv.req(`/api/studio/resource-grants/${starGrantId}/revoke`, 'POST', { requestId: randomUUID(), reason: '省略撤回方反例' })).status, 403);
+    assert.equal((await srv.req(`/api/studio/resource-grants/${starGrantId}/revoke`, 'POST', { requestId: randomUUID(), revokerProjectId: projStar.id, reason: '普通项目越权撤回反例' })).status, 403);
+
+    // Revoking projStar's grant by authentic authority owner projBuild IMMEDIATELY blocks 020_clean/starbridge_orders.csv!
+    const revokeOk = await srv.req(`/api/studio/resource-grants/${starGrantId}/revoke`, 'POST', { requestId: randomUUID(), revokerProjectId: projBuild.id, reason: '测试即时撤回' });
+    assert.equal(revokeOk.status, 200);
+    assert.equal(revokeOk.json.grant.revokedByProjectId, projBuild.id);
     const starMatsAfterRevoke = await srv.req(`/api/studio/materials?projectId=${projStar.id}`);
     assert.equal(starMatsAfterRevoke.json.materials.filter((m: any) => m.ref.authority === 'data').length, 0);
 
@@ -612,7 +768,46 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     assert.equal(merchMats.status, 200);
     assert.equal(merchMats.json.materials.filter((m: any) => m.ref.authority === 'data').length, 0);
 
-    // 6. R6: Archiving construction project rejects BOTH explicit projectId AND omitted projectId (409), while active projAud continues SAME packId!
+    // 5B. R5.2: Routing feedback creates REAL linked Studio workItem & feedback in StudioStore!
+    const fbDirect = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
+      requestId: randomUUID(),
+      problemKey: 'refund-link-studio',
+      packVersion: '1.2',
+      purposeIds: [calcPurposeId],
+      title: '核实跨月退款与原 Studio 联动',
+      category: 'shared_refund_mapping',
+      targetAssetRef: refundMethodRef,
+      report: {
+        projectId: projAud.id,
+        taskId: randomUUID(),
+        sessionId: 'sess-host',
+        messageId: 'msg-host',
+        reportRef: { authority: 'task', id: randomUUID(), projectId: projAud.id, version: '1', sha256: sha('host-rep'), locator: '060_reports/host.md' },
+        adoptionBasis: 'verified_actual_read',
+        usedPackVersion: '1.2',
+        usedAssetRefs: [refundMethodRef],
+        evidenceNote: '需在原 Studio 建立关联工作项',
+      },
+    });
+    assert.equal(fbDirect.status, 200);
+    const handledStudio = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback/${fbDirect.json.feedback.id}/handle`, 'POST', {
+      requestId: randomUUID(),
+      projectId: projBuild.id,
+      status: 'investigating',
+      note: '转入原 Studio 工作项跟进',
+      impactedPurposeIds: [calcPurposeId],
+    });
+    assert.equal(handledStudio.status, 200);
+    const linkedWorkItemId = handledStudio.json.feedback.authorityHandling.studioWorkItemId;
+    const linkedFeedbackId = handledStudio.json.feedback.authorityHandling.studioFeedbackId;
+    assert.ok(linkedWorkItemId, 'Routing feedback MUST create real Studio workItem and record studioWorkItemId!');
+    assert.ok(linkedFeedbackId, 'Routing feedback MUST create real Studio feedback and record studioFeedbackId!');
+    const sysAfterRoute = await srv.req(`/api/studio/systems/${systemId}`);
+    assert.equal(sysAfterRoute.status, 200);
+    assert.ok(sysAfterRoute.json.system.workItems.some((w: any) => w.id === linkedWorkItemId));
+    assert.ok(sysAfterRoute.json.system.feedback.some((f: any) => f.id === linkedFeedbackId));
+
+    // 6. R6: Archiving construction project rejects BOTH explicit projectId AND omitted projectId (409), while active projAud continues SAME packId & binds continuation owner!
     assert.equal((await srv.req(`/api/projects/${projBuild.id}/archive`, 'POST', {})).status, 200);
     const archivedExplicit = await srv.req(`/api/studio/enterprise-packs/${packId}/purposes`, 'POST', {
       requestId: randomUUID(), projectId: projBuild.id, ...purposeBase, dependencies: [{ id: 'dep-m', role: 'member-rule', authority: 'enterprise', ref: memberRuleRef, requiredFor: ['definition-reference'] }],
@@ -646,8 +841,10 @@ test('Host member operations pack Round-2: real authority verification (rejects 
     });
     assert.equal(contWrite.status, 200);
     assert.equal(contWrite.json.pack.id, packId);
+    assert.equal(contWrite.json.pack.activeOwnerProjectId, projAud.id, 'Continuation from another active project MUST bind activeOwnerProjectId!');
+    assert.equal(contWrite.json.pack.continuationHistory.length, 1);
 
-    // 7. R6: Close host & reopen with --disable-member-pack (memberPackEnabled: false) -> ALL 3 stores read-only, bytes untouched!
+    // 7. R6: Close host & reopen with --disable-member-pack (memberPackEnabled: false) -> ALL 3 stores read-only, bytes untouched, AND new task receives ZERO pack supply!
     await srv.close();
     const storeFiles = [
       path.join(root, 'data', 'member-packs', 'domain-references.json'),
@@ -669,20 +866,27 @@ test('Host member operations pack Round-2: real authority verification (rejects 
       assert.equal(roGrants.status, 200);
       assert.equal(roGrants.json.readOnlyRollback, true);
 
+      // R6.1: Granted consumer project with no historical pins MUST receive ZERO pack purposes/revisions during --disable-member-pack rollback!
+      const roMerchPack = await roSrv.req(`/api/studio/enterprise-packs/${packId}?projectId=${projMerch.id}`);
+      assert.equal(roMerchPack.status, 200);
+      assert.equal(roMerchPack.json.readOnlyRollback, true);
+      assert.deepEqual(roMerchPack.json.pack.purposes, [], 'Consumer project MUST NOT receive new pack purposes during --disable-member-pack rollback!');
+      assert.deepEqual(roMerchPack.json.pack.packRevisions, [], 'Consumer project without historical pins MUST NOT receive active packRevisions during rollback!');
+
       // ALL 3 stores block writes with 503 member_pack_disabled_readonly!
       const wRef = await roSrv.req('/api/studio/domain-references/repo-template', 'POST', { requestId: randomUUID(), templateId: 'T03' });
       assert.equal(wRef.status, 503);
       assert.equal(wRef.json.code, 'member_pack_disabled_readonly');
 
       const wGrant = await roSrv.req('/api/studio/resource-grants', 'POST', {
-        requestId: randomUUID(), enterpriseId, grantor: '原权责方', grantBasis: '回退期禁止写入',
+        requestId: randomUUID(), enterpriseId, grantorProjectId: projAud.id, grantBasis: '回退期禁止写入',
         subjectType: 'project', subjectId: projMerch.id, resourceKind: 'definition',
         purposeKeys: ['store-first-purchase-30d-repurchase'], operations: ['read-definition'], scope: {},
       });
       assert.equal(wGrant.status, 503);
       assert.equal(wGrant.json.code, 'member_pack_disabled_readonly');
 
-      const wRevoke = await roSrv.req(`/api/studio/resource-grants/${goodSummaryGrant.json.grant.id}/revoke`, 'POST', { requestId: randomUUID(), reason: '回退期禁止撤回' });
+      const wRevoke = await roSrv.req(`/api/studio/resource-grants/${goodSummaryGrant.json.grant.id}/revoke`, 'POST', { requestId: randomUUID(), revokerProjectId: projAud.id, reason: '回退期禁止撤回' });
       assert.equal(wRevoke.status, 503);
       assert.equal(wRevoke.json.code, 'member_pack_disabled_readonly');
 

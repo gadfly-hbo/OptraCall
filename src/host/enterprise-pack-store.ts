@@ -275,6 +275,40 @@ export class EnterprisePackStore {
     });
   }
 
+  selectPanoramaRecommendation(packId: string, purposeKey: string, selected: boolean): EnterpriseDomainPack {
+    return this.mutate(packId, pack => {
+      if (!pack.panorama) fail('enterprise_pack_panorama_not_found', 404);
+      const key = text(purposeKey, 200, false).trim();
+      const rec = pack.panorama.recommendations.find(r => r.purposeKey === key);
+      if (!rec) fail('enterprise_pack_recommendation_not_found', 404);
+      rec.selected = Boolean(selected);
+      const latestHist = pack.panoramaHistory.at(-1);
+      if (latestHist && latestHist.id === pack.panorama.id) {
+        const histRec = latestHist.recommendations.find(r => r.purposeKey === key);
+        if (histRec) histRec.selected = Boolean(selected);
+      }
+      return pack;
+    });
+  }
+
+  bindContinuationOwner(packId: string, projectId: string, taskId?: string, reason?: string): EnterpriseDomainPack {
+    return this.mutate(packId, pack => {
+      const pid = identity(projectId);
+      const tid = taskId ? identity(taskId) : undefined;
+      if (pack.activeOwnerProjectId !== pid) {
+        pack.activeOwnerProjectId = pid;
+        pack.continuationHistory = pack.continuationHistory ?? [];
+        pack.continuationHistory.push({
+          projectId: pid,
+          ...(tid ? { taskId: tid } : {}),
+          ...(reason ? { reason: text(reason, 1000, false) } : {}),
+          continuedAt: now(),
+        });
+      }
+      return pack;
+    });
+  }
+
   upsertEntry(packId: string, input: Omit<EnterprisePackEntry, 'id' | 'updatedAt'> & { id?: string }): EnterpriseDomainPack {
     return this.mutate(packId, pack => {
       const entryKey = text(input.entryKey, 200, false).trim();
@@ -599,6 +633,13 @@ export class EnterprisePackStore {
           scope: clone(purpose.scope),
           ...(input.policyEffectiveFrom ?? purpose.policyEffectiveFrom ? { policyEffectiveFrom: input.policyEffectiveFrom ?? purpose.policyEffectiveFrom } : {}),
           ...(input.dataCutoffAt ?? purpose.dataCutoffAt ? { dataCutoffAt: input.dataCutoffAt ?? purpose.dataCutoffAt } : {}),
+          ...(purpose.observationWindowDays !== undefined ? { observationWindowDays: purpose.observationWindowDays } : {}),
+          ...(purpose.availableHistoryDays !== undefined ? { availableHistoryDays: purpose.availableHistoryDays } : {}),
+          evidenceReadiness: {
+            definition: purpose.evidenceReadiness.definition,
+            mapping: purpose.evidenceReadiness.mapping,
+            sampleCalculation: purpose.evidenceReadiness.sampleCalculation,
+          },
           exclusions: [...purpose.exclusions],
           gaps: [...purpose.remainingGaps],
           dependencies: clone(purpose.dependencies),
@@ -643,29 +684,61 @@ export class EnterprisePackStore {
     });
   }
 
+  /**
+   * Validates preview existence, fingerprint, and draft stability BEFORE any original
+   * authority publication write is attempted (zero side effects on 404/409).
+   */
+  validateConfirmPreconditions(packId: string, previewId: string, fingerprint: string): {
+    pack: EnterpriseDomainPack;
+    preview: EnterprisePackPreview;
+    existingRevision?: EnterprisePackRevision;
+  } {
+    const pack = this.get(packId);
+    const preview = pack.previews.find(p => p.id === uuid(previewId));
+    if (!preview) fail('enterprise_pack_preview_not_found', 404);
+    if (preview.fingerprint !== fingerprint) fail('enterprise_pack_preview_changed', 409);
+    if (preview.confirmedAt) {
+      const existingRevision = pack.packRevisions.find(r => r.previewId === preview.id);
+      if (existingRevision) return { pack, preview, existingRevision };
+    }
+    if (preview.draftFingerprint) {
+      const currentDraftFingerprint = this.computeDraftFingerprint(pack, preview.purposeIds);
+      if (currentDraftFingerprint !== preview.draftFingerprint) {
+        fail('enterprise_pack_draft_changed', 409);
+      }
+    }
+    return { pack, preview };
+  }
+
   private recomputePurposeEligibility(
     pack: EnterpriseDomainPack,
     purposeManifests: EnterprisePurposePublicationState[],
     receipts: PackModulePublicationReceipt[],
   ): void {
     for (const pm of purposeManifests) {
+      // Unchanged purposes carried over from a prior active revision preserve their original frozen state!
+      if (pm.carriedOverFromVersion) continue;
       if (pm.status === 'conflict_blocked' || pm.status === 'restricted') continue;
       const isCalc = pm.tier === 'formal-calculation' || pm.tier === 'limited-calculation';
-      const draftPurpose = pack.purposes.find(p => p.id === pm.purposeId);
-      if (isCalc && draftPurpose) {
-        if (draftPurpose.observationWindowDays !== undefined && (
-          draftPurpose.availableHistoryDays === undefined || draftPurpose.availableHistoryDays < draftPurpose.observationWindowDays
-        )) {
+      // Always read frozen snapshot fields captured at preview time (fallback to draft ONLY for legacy pre-Round-3 records)
+      const legacyDraft = pm.evidenceReadiness === undefined ? pack.purposes.find(p => p.id === pm.purposeId) : undefined;
+      const obsWindow = pm.observationWindowDays !== undefined ? pm.observationWindowDays : legacyDraft?.observationWindowDays;
+      const availDays = pm.availableHistoryDays !== undefined ? pm.availableHistoryDays : legacyDraft?.availableHistoryDays;
+      const readiness = pm.evidenceReadiness ?? legacyDraft?.evidenceReadiness;
+
+      if (isCalc) {
+        if (obsWindow !== undefined && (availDays === undefined || availDays < obsWindow)) {
           pm.status = 'restricted';
-          pm.suspensionReason = draftPurpose.availableHistoryDays === undefined
-            ? `缺少首购/历史周期长度证据，无法满足所需观察窗（${draftPurpose.observationWindowDays}天），保留限制`
-            : `已知历史长度（${draftPurpose.availableHistoryDays}天）不足所需观察窗（${draftPurpose.observationWindowDays}天），保留限制`;
+          pm.suspensionReason = availDays === undefined
+            ? `缺少首购/历史周期长度证据，无法满足所需观察窗（${obsWindow}天），保留限制`
+            : `已知历史长度（${availDays}天）不足所需观察窗（${obsWindow}天），保留限制`;
           continue;
         }
         if (
-          draftPurpose.evidenceReadiness.definition !== 'pass'
-          || draftPurpose.evidenceReadiness.mapping !== 'pass'
-          || draftPurpose.evidenceReadiness.sampleCalculation !== 'pass'
+          !readiness
+          || readiness.definition !== 'pass'
+          || readiness.mapping !== 'pass'
+          || readiness.sampleCalculation !== 'pass'
         ) {
           pm.status = 'suspended';
           pm.suspensionReason = '计算类用途尚未完成定义/映射/样本试算前置核验，暂不可进入合格目录';
@@ -707,6 +780,8 @@ export class EnterprisePackStore {
       status: 'succeeded' | 'failed' | 'unknown';
       detail: string;
       purposeIds: string[];
+      authorityOperationId?: string;
+      authorityPublishedBy?: string;
     }[];
   }): EnterprisePackRevision {
     // Idempotent check BEFORE mutating: if already confirmed for exact previewId + fingerprint, return existing!
@@ -746,12 +821,29 @@ export class EnterprisePackStore {
           status: r.status,
           detail: text(r.detail, 5000, false),
           purposeIds: [...new Set(r.purposeIds)],
+          ...(r.authorityOperationId ? { authorityOperationId: text(r.authorityOperationId, 200, false) } : {}),
+          ...(r.authorityPublishedBy ? { authorityPublishedBy: text(r.authorityPublishedBy, 200, false) } : {}),
           at: stamp,
         };
       });
 
       const purposeManifests = clone(preview.purposeSnapshots);
       this.recomputePurposeEligibility(pack, purposeManifests, receipts);
+
+      // Carry over unchanged purposes from the previous active revision when only impacted purposes are republished!
+      const previousActive = pack.packRevisions.find(r => r.status === 'active');
+      if (previousActive) {
+        const republishedIds = new Set(purposeManifests.map(pm => pm.purposeId));
+        for (const priorPm of previousActive.purposeManifests) {
+          if (republishedIds.has(priorPm.purposeId)) continue;
+          const draftStillPresent = pack.purposes.find(p => p.id === priorPm.purposeId);
+          if (!draftStillPresent || draftStillPresent.businessStatus === 'not_launched') continue;
+          purposeManifests.push({
+            ...clone(priorPm),
+            carriedOverFromVersion: priorPm.carriedOverFromVersion ?? previousActive.version,
+          });
+        }
+      }
 
       // Mark previous active revision as superseded (retaining it immutably for historical lookups!)
       for (const oldRev of pack.packRevisions) {
@@ -771,6 +863,7 @@ export class EnterprisePackStore {
           dependencies: pm.dependencies,
           scope: pm.scope,
           exclusions: pm.exclusions,
+          ...(pm.carriedOverFromVersion ? { carriedOverFromVersion: pm.carriedOverFromVersion } : {}),
         })),
       };
 
@@ -793,8 +886,9 @@ export class EnterprisePackStore {
       preview.confirmedAt = stamp;
       pack.packRevisions.push(revision);
 
-      // Update purpose statuses without losing history
+      // Update ONLY newly-republished purpose draft statuses without disturbing unchanged carried-over purposes
       for (const pm of purposeManifests) {
+        if (pm.carriedOverFromVersion) continue;
         const purpose = pack.purposes.find(p => p.id === pm.purposeId);
         if (!purpose) continue;
         purpose.workItemStatus = pm.status === 'eligible' ? 'published' : pm.status === 'suspended' ? 'partially_suspended' : 'restricted';
@@ -806,8 +900,9 @@ export class EnterprisePackStore {
   }
 
   /**
-   * Append-only reconciliation of a previously unknown or failed module receipt.
+   * Append-only reconciliation of a previously unknown (or failed read-only recheck) module receipt.
    * Original failed/unknown receipts are ALWAYS preserved in chronological order.
+   * A definite original 'failed' receipt can NEVER be silently promoted to 'succeeded' via reconcile.
    */
   reconcileModuleReceipt(packId: string, version: string, input: {
     requestId: string;
@@ -816,12 +911,20 @@ export class EnterprisePackStore {
     status: 'succeeded' | 'failed' | 'unknown';
     detail: string;
     purposeIds: string[];
+    authorityOperationId?: string;
+    authorityPublishedBy?: string;
     supersedesReceiptId?: string;
   }): EnterprisePackRevision {
     return this.mutate(packId, pack => {
       const revision = pack.packRevisions.find(r => r.version === version);
       if (!revision) fail('enterprise_pack_revision_not_found', 404);
       const ref = sourceRef(input.targetRef);
+      const priorForReq = revision.moduleReceipts.filter(r => r.requestId === input.requestId);
+      const firstReceipt = priorForReq[0];
+      // Definite original failure cannot be retroactively rewritten as succeeded by reconcile!
+      if (firstReceipt && firstReceipt.status === 'failed' && input.status === 'succeeded') {
+        fail('enterprise_pack_failed_receipt_not_reconcilable', 409);
+      }
       const receipt: PackModulePublicationReceipt = {
         receiptId: randomUUID(),
         requestId: text(input.requestId, 200, false),
@@ -831,6 +934,8 @@ export class EnterprisePackStore {
         status: input.status,
         detail: text(input.detail, 5000, false),
         purposeIds: [...new Set(input.purposeIds)],
+        ...(input.authorityOperationId ? { authorityOperationId: text(input.authorityOperationId, 200, false) } : {}),
+        ...(input.authorityPublishedBy ? { authorityPublishedBy: text(input.authorityPublishedBy, 200, false) } : {}),
         ...(input.supersedesReceiptId ? { supersedesReceiptId: input.supersedesReceiptId } : {}),
         at: now(),
       };
@@ -839,6 +944,7 @@ export class EnterprisePackStore {
 
       if (revision.status === 'active') {
         for (const pm of revision.purposeManifests) {
+          if (pm.carriedOverFromVersion) continue;
           const purpose = pack.purposes.find(p => p.id === pm.purposeId);
           if (purpose) {
             purpose.workItemStatus = pm.status === 'eligible' ? 'published' : pm.status === 'suspended' ? 'partially_suspended' : 'restricted';
@@ -962,8 +1068,14 @@ export class EnterprisePackStore {
     return this.mutate(packId, pack => {
       const record = pack.useRecords.find(u => u.id === uuid(useId));
       if (!record) fail('enterprise_pack_use_not_found', 404);
+      const rev = pack.packRevisions.find(r => r.version === record.packVersion);
+      const pm = rev?.purposeManifests.find(p => p.purposeId === record.purposeId);
+      const requiredRefs = pm
+        ? pm.dependencies.filter(d => d.requiredFor.includes(pm.tier)).map(d => d.ref)
+        : [];
       const evaluated = evaluateUseVerdict({
         expectedRef: input.expectedRef,
+        requiredRefs,
         actualReads: record.actualReads,
         hasAuthorDeclaration: Boolean(record.authorDeclaration),
         independentConfirmed: input.independentConfirmed,
@@ -1063,6 +1175,8 @@ export class EnterprisePackStore {
     targetRef?: StudioSourceRef;
     revisedRef?: StudioSourceRef;
     revisedPackVersion?: string;
+    studioWorkItemId?: string;
+    studioFeedbackId?: string;
     impactedPurposeIds?: string[];
     verifiedByUseId?: string;
   }): { pack: EnterpriseDomainPack; feedback: EnterprisePackFeedback } {
@@ -1070,24 +1184,60 @@ export class EnterprisePackStore {
       const feedback = pack.feedbackItems.find(f => f.id === uuid(feedbackId));
       if (!feedback) fail('enterprise_pack_feedback_not_found', 404);
       const stamp = now();
+      const resolvedTargetRef = input.targetRef
+        ? sourceRef(input.targetRef)
+        : feedback.authorityHandling?.targetRef ?? feedback.targetAssetRef;
+      const resolvedRevisedRef = input.revisedRef
+        ? sourceRef(input.revisedRef)
+        : feedback.authorityHandling?.revisedRef;
+      const resolvedRevisedPackVersion = input.revisedPackVersion
+        ? text(input.revisedPackVersion, 50, false)
+        : feedback.authorityHandling?.revisedPackVersion;
+
       if (input.status === 'verified') {
         if (!input.verifiedByUseId) fail('feedback_verification_use_required', 409);
         const use = pack.useRecords.find(u => u.id === uuid(input.verifiedByUseId));
         if (!use || use.independentVerification.status !== 'pass') {
           fail('feedback_verification_use_not_passed', 409);
         }
-        const expectedVersion = input.revisedPackVersion ?? feedback.authorityHandling?.revisedPackVersion;
-        if (expectedVersion && use.packVersion !== expectedVersion) {
+        // Must be verified by a DIFFERENT independent new task (NEVER the original faulty task itself!)
+        if (feedback.reports.some(r => r.taskId === use.taskId)) {
+          fail('feedback_verification_must_be_independent_task', 409);
+        }
+        // Must verify against a NEW pack version (NEVER 1.0 -> 1.0!)
+        if (use.packVersion === feedback.packVersion) {
+          fail('feedback_verification_requires_new_pack_version', 409);
+        }
+        if (resolvedRevisedPackVersion && use.packVersion !== resolvedRevisedPackVersion) {
           fail('feedback_verification_version_mismatch', 409);
         }
+        const targetRev = pack.packRevisions.find(r => r.version === use.packVersion);
+        if (!targetRev) fail('feedback_verification_revision_not_found', 409);
+        // Must have a REAL revised authority asset ref that differs from original targetRef and was completely read by the independent task!
+        if (!resolvedRevisedRef) {
+          fail('feedback_verification_requires_authority_revision', 409);
+        }
+        if (resolvedTargetRef && sameExactSourceRef(resolvedTargetRef, resolvedRevisedRef)) {
+          fail('feedback_verification_requires_authority_revision', 409);
+        }
+        const readRevised = use.actualReads.some(r => r.complete && sameExactSourceRef(r.ref, resolvedRevisedRef));
+        if (!readRevised) {
+          fail('feedback_verification_missing_revised_read', 409);
+        }
+        const fromRef = resolvedTargetRef ?? {
+          authority: resolvedRevisedRef.authority,
+          id: resolvedRevisedRef.id,
+          version: feedback.packVersion,
+          title: resolvedRevisedRef.title ?? '原版本',
+        };
+        const existingUpdates = feedback.revisionLink?.authorityUpdates ?? [];
+        const hasSameUpdate = existingUpdates.some(u => sameExactSourceRef(u.toRef, resolvedRevisedRef));
         feedback.revisionLink = {
           fromPackVersion: feedback.packVersion,
           toPackVersion: use.packVersion,
-          authorityUpdates: feedback.revisionLink?.authorityUpdates ?? (
-            feedback.authorityHandling?.targetRef && feedback.authorityHandling?.revisedRef
-              ? [{ authority: feedback.targetAuthority, fromRef: feedback.authorityHandling.targetRef, toRef: feedback.authorityHandling.revisedRef, detail: text(input.note, 2000, false) }]
-              : []
-          ),
+          authorityUpdates: hasSameUpdate
+            ? existingUpdates
+            : [...existingUpdates, { authority: feedback.targetAuthority, fromRef, toRef: resolvedRevisedRef, detail: text(input.note, 2000, false) }],
           verifiedByUseIds: [...new Set([...(feedback.revisionLink?.verifiedByUseIds ?? []), use.id])],
         };
       }
@@ -1104,9 +1254,11 @@ export class EnterprisePackStore {
       feedback.status = input.status;
       feedback.authorityHandling = {
         authority: feedback.targetAuthority,
-        ...(input.targetRef ? { targetRef: sourceRef(input.targetRef) } : feedback.targetAssetRef ? { targetRef: feedback.targetAssetRef } : {}),
-        ...(input.revisedRef ? { revisedRef: sourceRef(input.revisedRef) } : feedback.authorityHandling?.revisedRef ? { revisedRef: feedback.authorityHandling.revisedRef } : {}),
-        ...(input.revisedPackVersion ? { revisedPackVersion: text(input.revisedPackVersion, 50, false) } : feedback.authorityHandling?.revisedPackVersion ? { revisedPackVersion: feedback.authorityHandling.revisedPackVersion } : {}),
+        ...(resolvedTargetRef ? { targetRef: resolvedTargetRef } : {}),
+        ...(resolvedRevisedRef ? { revisedRef: resolvedRevisedRef } : {}),
+        ...(resolvedRevisedPackVersion ? { revisedPackVersion: resolvedRevisedPackVersion } : {}),
+        ...(input.studioWorkItemId ? { studioWorkItemId: text(input.studioWorkItemId, 200, false) } : feedback.authorityHandling?.studioWorkItemId ? { studioWorkItemId: feedback.authorityHandling.studioWorkItemId } : {}),
+        ...(input.studioFeedbackId ? { studioFeedbackId: text(input.studioFeedbackId, 200, false) } : feedback.authorityHandling?.studioFeedbackId ? { studioFeedbackId: feedback.authorityHandling.studioFeedbackId } : {}),
         note: text(input.note, 5000, false),
         updatedAt: stamp,
       };
