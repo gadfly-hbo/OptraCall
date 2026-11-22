@@ -1204,6 +1204,7 @@ export class EnterprisePackStore {
             ...(r.entryId ? { entryId: text(r.entryId, 200, false) } : {}),
             ...(r.sessionId ? { sessionId: text(r.sessionId, 200, false) } : {}),
             ...(r.toolCallId ? { toolCallId: text(r.toolCallId, 200, false) } : {}),
+            ...(r.authorizedInput ? { authorizedInput: true } : {}),
             ...(r.fromAssessmentTurn !== undefined ? { fromAssessmentTurn: Boolean(r.fromAssessmentTurn) } : {}),
           })),
         } : {}),

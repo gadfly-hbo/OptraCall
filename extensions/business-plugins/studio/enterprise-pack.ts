@@ -648,6 +648,7 @@ export interface EnterprisePackUseRecord {
       entryId?: string;
       sessionId?: string;
       toolCallId?: string;
+      authorizedInput?: boolean;
       fromAssessmentTurn?: boolean;
     }[];
     verifierEvidenceSummary?: {

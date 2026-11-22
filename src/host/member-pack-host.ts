@@ -1752,6 +1752,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const targetReads = complete.filter(read => exactTaskReport(read.ref, target));
     const inputs = complete.filter(({ ref }) => ref.authority === 'data' && ref.projectId === verifierProjectId &&
       projectFileLocator(ref.locator, '020_clean') && !!ref.sha256 && authorizedInputs.get(ref.locator) === ref.sha256);
+    for (const read of inputs) read.authorizedInput = true;
     const summaryRef = purpose.summaryAccess?.summaryRef;
     const summaryReads = summaryRef && evidence?.coverage?.summaryRef && readCoversSource(evidence.coverage.summaryRef, summaryRef)
       ? complete.filter(read => readCoversSource(read.ref, summaryRef)) : [];

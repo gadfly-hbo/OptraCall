@@ -88,10 +88,16 @@ export function nativeAssessmentEvidence(
     return;
   }
   const carried = new Set(assessment.evidence?.carriedReadToolCallIds ?? []);
+  const priorCallCounts = new Map<string, number>();
+  for (const call of calls) {
+    if (call.sessionId === boundary.sessionId && carried.has(call.id)) {
+      priorCallCounts.set(call.id, (priorCallCounts.get(call.id) ?? 0) + 1);
+    }
+  }
   return {
     boundary,
     results: results.filter(result => result.index < boundary.index && result.call.sessionId === boundary.sessionId &&
-      (result.call.turnIndex === boundary.turnIndex || carried.has(result.call.id))),
+      (result.call.turnIndex === boundary.turnIndex || priorCallCounts.get(result.call.id) === 1)),
   };
 }
 
