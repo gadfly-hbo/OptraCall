@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
 import { startTestHost } from './fixtures/host-process.ts';
@@ -53,6 +55,44 @@ test('original strategy conversation exposes saved map edits to Pi, traces its e
   const stale=await turn('修改旧稿。',{action:'save-map',mapId:first.mapId,expectedVersion:1,mapDraft:draft,reason:'模拟并发'});
   assert.match(stale,/strategy_map_version_conflict/);
   assert.equal((await api(base+'/maps')).versions.length,2);
+  const invalidReceipt=await turn('提交节点编号重复的候选。',{action:'save-map',mapDraft:{...draft,nodes:[draft.nodes[0]!,draft.nodes[0]!]},reason:'合成重复节点校验'});
+  assert.match(invalidReceipt,/invalid_strategy_map/);
+  assert.doesNotMatch(invalidReceipt,/personal_context_read_failed/);
+  assert.equal((await api(base+'/maps')).versions.length,2,'Host semantic validation must not write a map version');
+  const recovered=await turn('修正重复编号后保存新候选。',{action:'save-map',mapDraft:{...draft,title:'修正后的候选'},reason:'修正后保存'});
+  assert.match(recovered,/candidate-not-adopted/);
+  const versions=(await api(base+'/maps')).versions as StrategyMapVersion[];
+  assert.equal(versions.length,3);
+  assert.ok(versions.some(version=>version.title==='修正后的候选'&&version.version===1));
+});
+
+test('Issue 115 treats an absolute path as text, exposes no file tool and rejects it as an unselected source ID', {timeout:60000}, async t=>{
+  const host=await startTestHost(),provider=await startToolProvider();
+  t.after(async()=>{await host.close();await provider.close();});
+  const req=async(route:string,method='GET',body?:unknown,status=200)=>{
+    const res=await host.request(route,method,body);assert.equal(res.status,status,await res.clone().text());return res.json();
+  };
+  await req('/api/configuration','PUT',{name:'路径合成模型',provider:'openai-compatible',baseUrl:provider.baseUrl,model:'synthetic',apiKey:'synthetic-only'});
+  const {discussion}=await req('/api/strategy/discussions','POST',{operationId:randomUUID(),title:'路径边界'},201);
+  const base='/api/strategy/discussions/'+discussion.id,file=path.join(host.scratch,'path-only.md'),marker='SYNTHETIC_PATH_FILE_MUST_NOT_BE_READ';
+  await writeFile(file,'# 合成路径文件\n'+marker,'utf8');
+  let receipt='';
+  provider.setResponder(({recentToolResults})=>{
+    if(!recentToolResults.length)return {calls:[{name:'strategy_goals',arguments:{action:'read-source',sourceId:file}}]};
+    receipt=providerMessageText(recentToolResults.at(-1)?.content);
+    return {text:'未能通过来源 ID 读取该路径。'};
+  });
+  const before=await req(base),requestId=randomUUID();
+  await req(base+'/messages','POST',{requestId,expectedRevision:before.discussion.revision,text:`请读取 ${file}`},202);
+  let detail=await req(base);
+  for(let n=0;n<400&&(detail.busy||detail.discussion.lastRun?.id!==requestId);n++){await delay(25);detail=await req(base);}
+  assert.equal(detail.discussion.lastRun.status,'completed');
+  assert.equal(receipt,'strategy_discussion_source_not_selected');
+  assert.deepEqual(detail.snapshot.tools,['strategy_goals']);
+  const captured=JSON.stringify(provider.requests.map(request=>request.body));
+  assert.ok(captured.includes(file),'the user path remains visible as prompt text');
+  assert.ok(!captured.includes(marker),'no Host or SDK path read may disclose the synthetic file body');
+  t.diagnostic('Proven boundary: no general file tool and no source-ID match. The real models\' chosen failure path remains separately unproved.');
 });
 
 test('a map references only the cited attachment version and follows its authorization after replacement and revocation', {timeout:60000}, async t=>{
