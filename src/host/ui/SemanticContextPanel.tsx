@@ -209,9 +209,15 @@ function TurnPackEvidenceSection({
           {iv.verifierEvidenceSummary
             ? ` · 核验实读原依赖 ${iv.verifierEvidenceSummary.readRequiredAssetsCount}${typeof iv.verifierEvidenceSummary.requiredAssetsCount === 'number' ? `/${iv.verifierEvidenceSummary.requiredAssetsCount}` : ''} 项`
             : ''}
+          {iv.verifierEvidenceSummary?.targetReportChecked === true
+            ? ` · 已实读目标报告${typeof iv.verifierEvidenceSummary.targetReportReadTurnIndex === 'number' ? `（回合 #${iv.verifierEvidenceSummary.targetReportReadTurnIndex}）` : ''}`
+            : iv.verifierEvidenceSummary?.targetReportChecked === false
+              ? ' · 未实读目标报告'
+              : ''}
           {typeof iv.verifierEvidenceSummary?.assessmentTurnIndex === 'number' ? ` · 核验回合 #${iv.verifierEvidenceSummary.assessmentTurnIndex}` : ''}
           {iv.verifierEvidenceSummary?.carriedFromTurnIndices?.length ? `（沿用前序回合 #${iv.verifierEvidenceSummary.carriedFromTurnIndices.join(', #')} 实读）` : ''}
           {iv.verifierEvidenceSummary?.assessmentReportBoundToTarget === false ? ' · 核验报告未绑定目标报告' : ''}
+          {iv.verifierEvidenceSummary?.assessmentDisclaimerRejected === true ? ' · 核验声明未查看或未对照原报告（不可判通过）' : ''}
         </p>}
         <p className="sc-meta">核验说明：{iv.verdictDetail}</p>
       </article>;

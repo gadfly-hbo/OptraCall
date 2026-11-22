@@ -238,3 +238,57 @@ test('SemanticContextDetails never renders 0/undefined when requiredAssetsCount 
   assert.match(html, /沿用前序回合 #1 实读/);
   assert.match(html, /核验报告未绑定目标报告/);
 });
+
+test('SemanticContextDetails surfaces targetReportChecked=false and assessmentDisclaimerRejected=true warnings (R4 Round-8)', async () => {
+  const { semantic } = await bundle;
+  const html = renderToStaticMarkup(createElement(semantic.SemanticContextDetails, {
+    view: 'saved',
+    lookup: { state: 'idle' },
+    records: [],
+    turnEvidence: {
+      projectId: '11111111-1111-4111-8111-111111111111',
+      taskId: '22222222-2222-4222-8222-222222222222',
+      savedReports: [],
+      useRecords: [
+        {
+          packId: '33333333-3333-4333-8333-333333333333',
+          packCode: 'PACK-MEM-001',
+          packName: '织屿服饰 · 会员运营资产包',
+          use: {
+            id: '44444444-4444-4444-8444-444444444444',
+            packId: '33333333-3333-4333-8333-333333333333',
+            projectId: '11111111-1111-4111-8111-111111111111',
+            taskId: '22222222-2222-4222-8222-222222222222',
+            reportRef: { authority: 'task', id: '22222222-2222-4222-8222-222222222222', version: 'a'.repeat(64), sha256: 'a'.repeat(64), locator: '060_reports/repurchase-v1.0.json' },
+            packVersion: '1.0',
+            purposeId: 'U-01',
+            purposeKey: 'store-first-purchase-30d-repurchase',
+            tier: 'formal-calculation',
+            accessLevel: 'recalculate',
+            catalogSupplied: { packVersion: '1.0', purposeIds: ['U-01'], assetRefs: [], suppliedAt: '2026-11-01T00:00:00Z' },
+            actualReads: [],
+            independentVerification: {
+              status: 'pending',
+              verdictDetail: '核验说明明确写明未查看/未对照原报告，保持待验证',
+              verifierTaskId: '55555555-5555-4555-8555-555555555555',
+              verifierEvidenceSummary: {
+                requiredAssetsCount: 2,
+                readRequiredAssetsCount: 2,
+                targetReportChecked: false,
+                authorizedInputChecked: false,
+                hadDataOrCalcEvidence: false,
+                assessmentTurnIndex: 1,
+                assessmentReportBoundToTarget: false,
+                assessmentDisclaimerRejected: true,
+              },
+            },
+            createdAt: '2026-11-01T00:00:00Z',
+          },
+        },
+      ],
+      feedbackLinks: [],
+    },
+  }));
+  assert.match(html, /未实读目标报告/);
+  assert.match(html, /核验声明未查看或未对照原报告（不可判通过）/);
+});

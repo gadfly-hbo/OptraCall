@@ -82,6 +82,7 @@ export interface RestrictedTaskWorkspace {
   projectRoot: string;
   osSandboxAvailable: boolean;
   scope: ProjectMemberPackFileScope;
+  policyFingerprint: string;
   protectedScope: ProtectedExecutionScope;
 }
 
@@ -119,6 +120,7 @@ export interface MemberPackHostOptions {
   dataRoot: string;
   codeRoot?: string;
   memberPackEnabled?: boolean;
+  hasExternalOperatorResolver?: boolean;
   projects: ProjectStore;
   enterpriseScopes: EnterpriseScopeStore;
   cases?: CaseStore;
@@ -588,6 +590,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       projectRoot: path.resolve(projectRoot),
       osSandboxAvailable,
       scope,
+      policyFingerprint: projectPermissionFingerprint(projectId),
       protectedScope,
     };
     let byTask = activeWorkspaces.get(projectId);
@@ -604,9 +607,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const byTask = activeWorkspaces.get(projectId);
     if (!byTask) return;
     const nextScope = getProjectToolScope(projectId);
+    const nextFp = projectPermissionFingerprint(projectId);
     for (const ws of byTask.values()) {
       syncCleanDir(ws.cleanDir, ws.projectRoot, nextScope);
       if (nextScope) ws.scope = nextScope;
+      ws.policyFingerprint = nextFp;
     }
   }
 
@@ -778,7 +783,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return requestedLocator;
   }
 
-  function authorizeProjectDataPath(projectId: string, relativePath: string): { allowed: boolean; reason?: string } {
+  function authorizeProjectDataPath(
+    projectId: string,
+    relativePath: string,
+    query: { purposeKey?: string; grain?: string } = {},
+  ): { allowed: boolean; reason?: string } {
     if (!enabled) return { allowed: true };
     const scope = getProjectToolScope(projectId);
     if (!scope) return { allowed: true };
@@ -786,17 +795,26 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (!enterpriseId) return { allowed: true };
     const subjectGrants = grants.listForSubject(enterpriseId, projectId);
     const normalized = normalizeRelativeDataPath(relativePath);
+    if (normalized.startsWith('010_draw/') || normalized === '010_draw') {
+      return { allowed: false, reason: 'raw_draw_access_not_authorized: 受限资源授权项目禁止读取 010_draw 原始目录' };
+    }
     const evalResult = evaluateResourceAccess(subjectGrants, {
       operation: 'read-detail-recalculate',
       dataPath: normalized,
+      ...(query.purposeKey ? { purposeKey: query.purposeKey } : {}),
+      ...(query.grain ? { grain: query.grain } : {}),
     });
     return evalResult.allowed
       ? { allowed: true }
       : { allowed: false, reason: evalResult.restrictionReason ?? 'resource_detail_not_authorized' };
   }
 
-  function assertProjectDataPathAllowed(projectId: string, relativePath: string): void {
-    const result = authorizeProjectDataPath(projectId, relativePath);
+  function assertProjectDataPathAllowed(
+    projectId: string,
+    relativePath: string,
+    query: { purposeKey?: string; grain?: string } = {},
+  ): void {
+    const result = authorizeProjectDataPath(projectId, relativePath, query);
     if (!result.allowed) {
       const sanitized = (result.reason ?? 'resource_detail_not_authorized')
         .toLowerCase()
@@ -810,14 +828,19 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
   }
 
-  function filterAuthorizedProjectData(projectId: string, relativePath: string, rawBytes: Buffer): { bytes: Buffer; filtered?: boolean; restrictionNote?: string } {
+  function filterAuthorizedProjectData(
+    projectId: string,
+    relativePath: string,
+    rawBytes: Buffer,
+    query: { purposeKey?: string } = {},
+  ): { bytes: Buffer; filtered?: boolean; restrictionNote?: string } {
     if (!enabled) return { bytes: rawBytes, filtered: false };
     const scope = getProjectToolScope(projectId);
     if (!scope) return { bytes: rawBytes, filtered: false };
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return { bytes: rawBytes, filtered: false };
     const subjectGrants = grants.listForSubject(enterpriseId, projectId);
-    const view = buildAuthorizedDataView(rawBytes, relativePath, subjectGrants);
+    const view = buildAuthorizedDataView(rawBytes, relativePath, subjectGrants, query);
     if (!view.allowed) {
       throw Object.assign(new StudioError(view.reason, 403), { code: view.code });
     }
@@ -826,6 +849,41 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       filtered: view.filtered,
       ...(view.restrictionNote ? { restrictionNote: view.restrictionNote } : {}),
     };
+  }
+
+  function filterProjectFileTree<T extends { path: string; type?: string; children?: T[] }>(projectId: string, nodes: T[]): T[] {
+    if (!enabled) return nodes;
+    const scope = getProjectToolScope(projectId);
+    if (!scope) return nodes;
+    const walk = (items: T[]): T[] => {
+      const out: T[] = [];
+      for (const node of items) {
+        const norm = normalizeRelativeDataPath(node.path);
+        if (norm === '010_draw' || norm.startsWith('010_draw/')) {
+          // Never expose raw 010_draw filenames to restricted member-pack consumer projects!
+          if (norm === '010_draw' && Array.isArray(node.children)) {
+            out.push({ ...node, children: [] });
+          }
+          continue;
+        }
+        if (norm === '020_clean' && Array.isArray(node.children)) {
+          out.push({ ...node, children: walk(node.children) });
+          continue;
+        }
+        if (norm.startsWith('020_clean/')) {
+          if (Array.isArray(node.children)) {
+            const sub = walk(node.children);
+            if (sub.length > 0) out.push({ ...node, children: sub });
+          } else if (authorizeProjectDataPath(projectId, norm).allowed) {
+            out.push(node);
+          }
+          continue;
+        }
+        out.push(Array.isArray(node.children) ? { ...node, children: walk(node.children) } : node);
+      }
+      return out;
+    };
+    return walk(nodes);
   }
 
   function evaluateNativeToolCall(
@@ -914,8 +972,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const effectiveCleanDir = path.resolve(effectiveRoot, '020_clean');
     const effectiveReportsDir = path.resolve(effectiveRoot, '060_reports');
 
-    // R2: Live natural-expiry enforcement — if grants expired/shrank since workspace preparation,
-    // immediately purge stale authorized views from workspace 020_clean before executing ANY tool!
+    // R2: Live natural-expiry & grant-narrowing enforcement — compare full live policyFingerprint
+    // (including activeNow, stores, periodFrom/To, grain, purposeKeys, allowedPaths) so that even when
+    // a wide grant expires while a narrow grant on the SAME path remains active, stale wide-scope rows
+    // are IMMEDIATELY purged & re-filtered in workspace 020_clean before executing ANY tool!
     if (workspaceRoot && fs.existsSync(effectiveCleanDir)) {
       const existingByTask = activeWorkspaces.get(projectId);
       let wsMatches: RestrictedTaskWorkspace | undefined;
@@ -927,14 +987,20 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           }
         }
       }
+      const currentFp = projectPermissionFingerprint(projectId);
       const prevPaths = wsMatches?.scope.allowedPaths ?? [];
       const prevMode = wsMatches?.scope.mode;
       const scopeChanged = prevMode !== scope.mode
         || prevPaths.length !== scope.allowedPaths.length
-        || prevPaths.some((p, i) => p !== scope.allowedPaths[i]);
+        || prevPaths.some((p, i) => p !== scope.allowedPaths[i])
+        || !wsMatches
+        || wsMatches.policyFingerprint !== currentFp;
       if (scopeChanged || scope.mode === 'deny-detail') {
         syncCleanDir(effectiveCleanDir, resolvedProjectRoot, scope);
-        if (wsMatches) wsMatches.scope = scope;
+        if (wsMatches) {
+          wsMatches.scope = scope;
+          wsMatches.policyFingerprint = currentFp;
+        }
       }
     }
 
@@ -1367,7 +1433,20 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     let catalogAssetRefs: StudioSourceRef[] = [];
     let taskCutoffAt: string | undefined;
     let turnIndex: number | undefined;
+    let replyTimestampMs: number | undefined;
     let resolvedSelection: { sessionId: string; messageId: string } | undefined = upToSelection;
+
+    const parseMsgTimestamp = (msg: Record<string, any> | undefined): number | undefined => {
+      if (!msg) return undefined;
+      for (const raw of [msg.timestamp, msg.createdAt, msg.created_at, msg.at]) {
+        if (typeof raw === 'number' && Number.isFinite(raw)) return raw > 1e12 ? raw : raw * 1000;
+        if (typeof raw === 'string' && raw.trim()) {
+          const parsed = Date.parse(raw);
+          if (Number.isFinite(parsed)) return parsed;
+        }
+      }
+      return undefined;
+    };
 
     if (!options.taskSnapshot) {
       return {
@@ -1385,6 +1464,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         catalogAssetRefs,
         taskCutoffAt,
         turnIndex,
+        replyTimestampMs,
         resolvedSelection,
       };
     }
@@ -1398,10 +1478,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const msg = snap.messages[i] as Record<string, any>;
         if (msg?.role === 'assistant' && typeof msg.nativeSessionId === 'string' && typeof msg.nativeEntryId === 'string') {
           resolvedSelection = { sessionId: msg.nativeSessionId, messageId: msg.nativeEntryId };
+          endIdx = i;
           break;
         }
       }
     }
+    replyTimestampMs = parseMsgTimestamp(snap.messages[endIdx] as Record<string, any> | undefined);
 
     // Locate the start of THIS specific turn (the user message immediately preceding endIdx)
     let turnStartIdx = 0;
@@ -1549,6 +1631,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       catalogAssetRefs,
       taskCutoffAt,
       turnIndex,
+      replyTimestampMs,
       resolvedSelection,
     };
   }
@@ -1556,11 +1639,16 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   /**
    * R4: Inspects an independent verifier task's OWN native transcript & assessment report to confirm:
    *  1. Exact assessment turn (`assessmentTurnIndex`, `assessmentMessageId`) and explicit attribution of
-   *     which required authority reads happened in this turn vs carried from earlier turns (`carriedFromTurnIndices`).
+   *     which required authority reads, target-report read (`targetReportReadTurnIndex`), and authorized-input
+   *     reads (`authorizedInputReadTurnIndices`) happened up to this assessment turn.
    *  2. Verifier actually read ALL required original authority dependencies completely.
-   *  3. For calculation tiers, verifier actually inspected authorized `020_clean/` input data or the target
-   *     report (not a meaningless `echo`/`pwd` command), AND the assessment report on disk explicitly binds
-   *     to the target report/use record with concrete recalculation/comparison evidence.
+   *  3. Verifier MUST ACTUALLY READ the target report (`targetReportChecked === true`) for ALL tiers;
+   *     and for calculation tiers (`formal-calculation` / `limited-calculation`) MUST ALSO read authorized
+   *     `020_clean/` input data (`authorizedInputChecked === true`) — NEVER `input || report`!
+   *  4. Assessment report MUST bind to an EXACT target report identifier (`targetBasename`/`targetLocator`/
+   *     `targetShaPrefix`/target `taskId` prefix — NEVER loose `packVersion` or `purposeKey` mentions!),
+   *     MUST NOT contain an explicit non-read / non-comparison disclaimer, and for calculation tiers MUST
+   *     include concrete numeric comparison/recalculation results (excluding version strings like `v1.0`).
    */
   async function inspectVerifierTaskEvidence(
     verifierProjectId: string,
@@ -1568,6 +1656,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     pack: EnterpriseDomainPack,
     useRecord: EnterprisePackUseRecord,
     assessmentReportRef?: StudioSourceRef,
+    assessmentResultText?: string,
   ): Promise<{
     verifierReads: {
       ref: StudioSourceRef;
@@ -1585,8 +1674,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     assessmentMessageId?: string;
     carriedFromTurnIndices: number[];
     targetReportChecked: boolean;
+    targetReportReadTurnIndex?: number;
     authorizedInputChecked: boolean;
+    authorizedInputReadTurnIndices: number[];
     assessmentReportBoundToTarget: boolean;
+    assessmentDisclaimerRejected: boolean;
     missingReason?: string;
   }> {
     const rev = pack.packRevisions.find(r => r.version === useRecord.packVersion);
@@ -1604,7 +1696,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }[] = [];
     const seen = new Set<string>();
     let targetReportChecked = false;
+    let targetReportReadTurnIndex: number | undefined;
     let authorizedInputChecked = false;
+    const authorizedInputReadTurns = new Set<number>();
     let assessmentTurnIndex: number | undefined;
     let assessmentMessageId: string | undefined;
 
@@ -1613,6 +1707,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const targetShaPrefix = useRecord.reportRef.sha256 ? useRecord.reportRef.sha256.slice(0, 8).toLowerCase() : '';
     const assessLocator = assessmentReportRef?.locator ?? '';
     const assessBasename = assessLocator ? path.basename(assessLocator).toLowerCase() : '';
+    const sameProjectAsTarget = verifierProjectId === useRecord.projectId;
+    const verifierScope = getProjectToolScope(verifierProjectId);
+    const allowedDataBasenames = new Set(
+      (verifierScope?.allowedPaths ?? []).map(p => path.basename(p).toLowerCase()).filter(Boolean),
+    );
 
     if (options.taskSnapshot) {
       try {
@@ -1665,7 +1764,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           assessmentMessageId = lastAssistantMsgId;
         }
 
-        // Second pass: collect reads & substantive data/report inspection with exact turnIndex attribution
+        // Second pass: collect reads & substantive target-report / authorized-input inspection up to assessmentTurnIndex
         curTurn = 0;
         for (const msg of rawMessages) {
           if (!msg) continue;
@@ -1673,54 +1772,79 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             curTurn += 1;
             continue;
           }
+          if (assessmentTurnIndex !== undefined && curTurn > assessmentTurnIndex) break;
           if (msg.role !== 'toolResult' || msg.isError) continue;
           const toolName = String(msg.toolName ?? '');
           const callId = typeof msg.toolCallId === 'string' ? msg.toolCallId : (typeof msg.id === 'string' ? msg.id : undefined);
           const meta = callId ? toolCallMeta.get(callId) : undefined;
           const argsLower = (meta?.argsText ?? '').toLowerCase();
-          const resultTextLower = messageText(msg).toLowerCase();
 
-          // Detect target report inspection
+          // 1. Detect genuine target report read:
+          //    - Same-project native read/bash explicitly reading targetBasename/targetLocator (NOT write/edit!)
+          //    - Cross-project target report MUST be read via verified studio_assets read-source below!
           if (
-            targetBasename
-            && ['read', 'read_input', 'read_project_input', 'bash', 'powershell', 'codemode'].includes(toolName)
+            sameProjectAsTarget
+            && targetBasename
+            && ['read', 'bash', 'powershell', 'codemode'].includes(toolName)
             && (argsLower.includes(targetBasename) || (targetLocator && argsLower.includes(targetLocator.toLowerCase())))
           ) {
-            targetReportChecked = true;
+            // Ensure bash/codemode actually reads the target report rather than just printing its name
+            const isGenuineRead = toolName === 'read'
+              || /\b(?:cat|head|tail|sed|awk|grep|open|readfile|read_text|json\.load|jq|python3?|node)\b/i.test(argsLower);
+            if (isGenuineRead) {
+              targetReportChecked = true;
+              targetReportReadTurnIndex = curTurn;
+            }
           }
 
-          // Detect authorized input data reading or genuine calculation/recalculation tool call
+          // 2. Detect genuine authorized 020_clean/ input data read (NOT unrelated 060_reports JSON or generic echo!)
           if (['read_input', 'read_project_input'].includes(toolName)) {
-            authorizedInputChecked = true;
-          } else if (toolName === 'read') {
-            if (argsLower.includes('020_clean') || /\.(?:csv|tsv|json)\b/i.test(argsLower)) {
+            const relPath = typeof msg.details?.relativePath === 'string' ? msg.details.relativePath : '';
+            if (!relPath || relPath.startsWith('020_clean/')) {
               authorizedInputChecked = true;
+              authorizedInputReadTurns.add(curTurn);
+            }
+          } else if (toolName === 'read') {
+            const isDataFile = argsLower.includes('020_clean')
+              || /\.(?:csv|tsv)\b/i.test(argsLower)
+              || [...allowedDataBasenames].some(bn => argsLower.includes(bn));
+            if (isDataFile && !argsLower.includes('060_reports')) {
+              authorizedInputChecked = true;
+              authorizedInputReadTurns.add(curTurn);
             }
           } else if (['bash', 'powershell', 'codemode'].includes(toolName)) {
-            const isDataOrCalcCmd =
+            const mentionsAuthorizedData =
               argsLower.includes('020_clean')
-              || /\.(?:csv|tsv|json)\b/i.test(argsLower)
-              || (targetBasename ? argsLower.includes(targetBasename) : false)
-              || /\b(?:python3?|node|awk|jq|csv|pandas|sqlite3)\b/i.test(argsLower)
-              || (resultTextLower.includes('020_clean') || /\b(?:repeat|refund|repurchase|复购|退款|订单)\b/i.test(resultTextLower));
-            if (isDataOrCalcCmd) {
+              || /\.(?:csv|tsv)\b/i.test(argsLower)
+              || [...allowedDataBasenames].some(bn => argsLower.includes(bn));
+            if (mentionsAuthorizedData) {
               authorizedInputChecked = true;
+              authorizedInputReadTurns.add(curTurn);
             }
           }
 
           if (msg.details?.type === 'optracall.studio' && ['read-source', 'read'].includes(msg.details.action) && msg.details.result?.ref) {
             try {
               const ref = sourceRef(msg.details.result.ref);
-              if (ref.authority === 'data') authorizedInputChecked = true;
+              if (ref.authority === 'data') {
+                authorizedInputChecked = true;
+                authorizedInputReadTurns.add(curTurn);
+              }
               if (
                 ref.authority === 'task'
                 && (
                   digest(ref) === digest(useRecord.reportRef)
                   || (useRecord.reportRef.sha256 && ref.sha256 === useRecord.reportRef.sha256)
-                  || (targetLocator && ref.locator === targetLocator)
+                  || (
+                    targetLocator
+                    && ref.locator === targetLocator
+                    && ref.projectId === useRecord.projectId
+                    && (!useRecord.taskId || !ref.taskId || ref.taskId === useRecord.taskId)
+                  )
                 )
               ) {
                 targetReportChecked = true;
+                targetReportReadTurnIndex = curTurn;
               }
               const key = digest(ref);
               const existingIdx = verifierReads.findIndex(r => digest(r.ref) === key);
@@ -1774,35 +1898,50 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       } catch { /* snapshot unavailable */ }
     }
 
-    // Read & verify the assessment report text binds to THIS target report/use record!
+    // Read & verify the assessment report text STRICTLY binds to THIS exact target report
+    // and NEVER passes when the verifier explicitly states it did not read/compare the original report!
     let assessmentReportBoundToTarget = false;
+    let assessmentDisclaimerRejected = false;
     const isCalcTier = useRecord.tier === 'formal-calculation' || useRecord.tier === 'limited-calculation';
+    const NON_VERIFICATION_DISCLAIMER_RE = /(?:未(?:查看|读取|阅览|核对|对照|复核|重算|复算)(?:原|目标|待核)?(?:报告|原稿|正文|数据|明细)|(?:没有|并未|尚未)(?:查看|读取|核对|对照|复核|重算|复算)(?:原|目标|待核)?(?:报告|原稿|正文|数据|明细)|未读取也未对照|未查看[、，,\s]*未对照|did\s+not\s+(?:read|inspect|view|compare|recalculate|verify)\s+(?:the\s+)?(?:original|target)\s+(?:report|data))/i;
+
     if (assessmentReportRef?.projectId && assessmentReportRef.locator?.startsWith('060_reports/')) {
       try {
         const effLoc = resolveTaskReportLocator(assessmentReportRef.projectId, verifierTaskId, assessmentReportRef.locator, assessmentReportRef.sha256);
         const preserved = readPreservedReportBytes(assessmentReportRef.projectId, verifierTaskId, effLoc, assessmentReportRef.sha256);
         const bytes = preserved ?? (await options.projects.readFile(assessmentReportRef.projectId, effLoc)).bytes;
         const reportText = bytes.toString('utf8');
-        const lowerReport = reportText.toLowerCase();
-        const referencesTarget = Boolean(
-          (targetBasename && lowerReport.includes(targetBasename))
-          || (targetLocator && lowerReport.includes(targetLocator.toLowerCase()))
-          || (targetShaPrefix && lowerReport.includes(targetShaPrefix))
-          || lowerReport.includes(useRecord.taskId.slice(0, 8).toLowerCase())
-          || lowerReport.includes(useRecord.purposeKey.toLowerCase())
-          || lowerReport.includes(`v${useRecord.packVersion.toLowerCase()}`)
-          || lowerReport.includes(useRecord.packVersion.toLowerCase()),
-        );
-        const hasCalcComparisonContent = !isCalcTier || (
-          /\d/.test(reportText)
-          && /(?:复算|复核|核对|对比|一致|偏差|口径|笔|率|通过|失败|退款|复购|recalc|recomput|compar|verify|verified|checked|match|diff|pass|fail|rate|ratio|orders?|refund)/i.test(reportText)
-        );
-        assessmentReportBoundToTarget = referencesTarget && hasCalcComparisonContent;
+        const combinedAssessText = `${reportText}\n${assessmentResultText ?? ''}`;
+        if (NON_VERIFICATION_DISCLAIMER_RE.test(combinedAssessText)) {
+          assessmentDisclaimerRejected = true;
+          assessmentReportBoundToTarget = false;
+        } else {
+          const lowerReport = reportText.toLowerCase();
+          // STRICT target binding: require exact report basename, locator, SHA-256 prefix, or target taskId/useId prefix!
+          // NEVER accept loose packVersion ("1.0"/"v1.0") or purposeKey mentions alone!
+          const referencesTarget = Boolean(
+            (targetBasename && lowerReport.includes(targetBasename))
+            || (targetLocator && lowerReport.includes(targetLocator.toLowerCase()))
+            || (targetShaPrefix && lowerReport.includes(targetShaPrefix))
+            || lowerReport.includes(useRecord.taskId.slice(0, 8).toLowerCase())
+            || lowerReport.includes(useRecord.id.slice(0, 8).toLowerCase()),
+          );
+          // Strip version strings like v1.0 / v1.1 / 2026-10-31 when checking for actual numeric calc comparison figures
+          const textWithoutVersions = reportText
+            .replace(/\bv\d+\.\d+(?:\.\d+)?\b/gi, '')
+            .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '');
+          const hasCalcComparisonContent = !isCalcTier || (
+            /\d/.test(textWithoutVersions)
+            && /(?:复算|复核|核对|对比|对照|一致|偏差|分子|分母|笔|率|退款|复购|recalc|recomput|compar|verify|verified|checked|match|diff|rate|ratio|orders?|refund)/i.test(reportText)
+          );
+          assessmentReportBoundToTarget = referencesTarget && hasCalcComparisonContent;
+        }
       } catch {
         assessmentReportBoundToTarget = false;
       }
-    } else if (!assessmentReportRef) {
-      assessmentReportBoundToTarget = true;
+    } else {
+      // Missing assessment report ref cannot satisfy bound report verification!
+      assessmentReportBoundToTarget = false;
     }
 
     const completeVerifierReads = verifierReads.filter(r => r.complete);
@@ -1814,20 +1953,35 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       ? readRequiredAssetsCount === requiredRefs.length
       : completeVerifierReads.length > 0;
 
-    const carriedFromTurnIndices = [...new Set(
-      matchedRequiredReads
+    const authorizedInputReadTurnIndices = [...authorizedInputReadTurns].sort((a, b) => a - b);
+    const carriedFromTurnIndices = [...new Set([
+      ...matchedRequiredReads
         .filter(r => typeof r.turnIndex === 'number' && assessmentTurnIndex !== undefined && r.turnIndex < assessmentTurnIndex)
         .map(r => r.turnIndex!),
-    )].sort((a, b) => a - b);
+      ...(targetReportReadTurnIndex !== undefined && assessmentTurnIndex !== undefined && targetReportReadTurnIndex < assessmentTurnIndex
+        ? [targetReportReadTurnIndex]
+        : []),
+      ...authorizedInputReadTurnIndices.filter(t => assessmentTurnIndex !== undefined && t < assessmentTurnIndex),
+    ])].sort((a, b) => a - b);
 
-    const hadDataOrCalcEvidence = authorizedInputChecked || targetReportChecked;
+    // R4 STRICT CONJUNCTION:
+    // - ALL tiers require actual reading of the target report (`targetReportChecked === true`)
+    // - Calculation tiers require BOTH `targetReportChecked === true` AND `authorizedInputChecked === true`!
+    const hadDataOrCalcEvidence = isCalcTier
+      ? (authorizedInputChecked && targetReportChecked)
+      : targetReportChecked;
+
     let missingReason: string | undefined;
     if (!allRequiredReadByVerifier) {
       missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 尚未完整实读适用原依赖（已完整实读 ${readRequiredAssetsCount}/${requiredRefs.length} 项），缺乏核验实证，保持待验证`;
-    } else if (isCalcTier && !hadDataOrCalcEvidence) {
-      missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 未记录对获准明细数据或原报告的实查/复算工具轨迹（空命令不算复算依据），保持待验证`;
-    } else if (assessmentReportRef && !assessmentReportBoundToTarget) {
-      missingReason = `独立核验报告 ${assessLocator || assessmentReportRef.id} 未绑定目标报告（${targetBasename || useRecord.taskId.slice(0, 8)}）或缺少复算对照内容，保持待验证`;
+    } else if (!targetReportChecked) {
+      missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 未记录对待核目标报告（${targetBasename || useRecord.taskId.slice(0, 8)}）的实际查阅轨迹，保持待验证`;
+    } else if (isCalcTier && !authorizedInputChecked) {
+      missingReason = `独立核验任务 ${verifierTaskId.slice(0, 8)} 仅查阅原稿但未实读获准明细输入数据（020_clean）以完成独立复算，保持待验证`;
+    } else if (assessmentDisclaimerRejected) {
+      missingReason = `独立核验报告 ${assessLocator || assessmentReportRef?.id || ''} 明确声明未查看或未对照原报告/数据，不可判为独立核验通过，保持待验证`;
+    } else if (!assessmentReportRef || !assessmentReportBoundToTarget) {
+      missingReason = `独立核验报告 ${assessLocator || assessmentReportRef?.id || '（缺失）'} 未绑定目标报告精确身份（${targetBasename || targetShaPrefix || useRecord.taskId.slice(0, 8)}）或缺少复算对照内容，保持待验证`;
     }
     return {
       verifierReads,
@@ -1839,8 +1993,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       ...(assessmentMessageId ? { assessmentMessageId } : {}),
       carriedFromTurnIndices,
       targetReportChecked,
+      ...(targetReportReadTurnIndex !== undefined ? { targetReportReadTurnIndex } : {}),
       authorizedInputChecked,
+      authorizedInputReadTurnIndices,
       assessmentReportBoundToTarget,
+      assessmentDisclaimerRejected,
       ...(missingReason ? { missingReason } : {}),
     };
   }
@@ -1997,11 +2154,19 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         // If Host-signed HttpOnly operator context cookie pins an active project, refuse cross-project spoofing!
         if (operator.activeProjectId && operator.activeProjectId !== pid) return undefined;
       }
-      const effectiveOperatorId = operator?.operatorId?.trim() || 'local:host';
+      const effectiveOperatorId = operator?.operatorId?.trim() || '';
+      if (!effectiveOperatorId) return undefined;
+      const isOperatorAllowedForSystem = (systemId: string): boolean => {
+        const boundOp = getBoundSystemOperator(systemId);
+        if (boundOp) return boundOp === effectiveOperatorId;
+        // Unbound legacy system (created before operator-bindings.json existed):
+        // ONLY allow when an external Host operator resolver is explicitly configured;
+        // NEVER allow arbitrary ephemeral `session:*` browser sessions to hijack an unbound legacy system!
+        return Boolean(options.hasExternalOperatorResolver);
+      };
       if (pack) {
         if (!isConstructionOwnerProject(pack, pid)) return undefined;
-        const boundOp = getBoundSystemOperator(pack.systemId);
-        if (boundOp && boundOp !== effectiveOperatorId) return undefined;
+        if (!isOperatorAllowedForSystem(pack.systemId)) return undefined;
         let ownerTaskId: string | undefined;
         try {
           const sys = options.studio.get(pack.systemId);
@@ -2027,8 +2192,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       }
       const ownedSystem = options.studio.list().find(s => s.enterpriseId === enterpriseId && studioExecutionOwner(s).projectId === pid);
       if (!ownedSystem) return undefined;
-      const boundOp = getBoundSystemOperator(ownedSystem.id);
-      if (boundOp && boundOp !== effectiveOperatorId) return undefined;
+      if (!isOperatorAllowedForSystem(ownedSystem.id)) return undefined;
       const execOwner = studioExecutionOwner(ownedSystem);
       return mintGrantAuthorityCredential({
         enterpriseId,
@@ -2207,7 +2371,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           && digest(input.assessment.report) !== digest(useRecord.reportRef),
         );
         const verifierEv = isIndependentAssessor
-          ? await inspectVerifierTaskEvidence(input.assessorProjectId, input.assessorTaskId, pack, useRecord, input.assessment.report)
+          ? await inspectVerifierTaskEvidence(input.assessorProjectId, input.assessorTaskId, pack, useRecord, input.assessment.report, input.assessment.result)
           : undefined;
         const verifierEvidenceSufficient = Boolean(verifierEv && !verifierEv.missingReason);
         const independentConfirmed = Boolean(
@@ -2220,6 +2384,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           isIndependentAssessor
           && input.assessment.status === 'fail'
           && assessmentDiskVerified
+          && verifierEv?.targetReportChecked
           && /(?:旧版|错版|wrong.?version|误用旧)/i.test(input.assessment.result ?? ''),
         );
         const verdictDetail = !isIndependentAssessor
@@ -2249,8 +2414,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               ...(verifierEv.assessmentMessageId ? { assessmentMessageId: verifierEv.assessmentMessageId } : {}),
               ...(verifierEv.carriedFromTurnIndices.length ? { carriedFromTurnIndices: verifierEv.carriedFromTurnIndices } : {}),
               targetReportChecked: verifierEv.targetReportChecked,
+              ...(verifierEv.targetReportReadTurnIndex !== undefined ? { targetReportReadTurnIndex: verifierEv.targetReportReadTurnIndex } : {}),
               authorizedInputChecked: verifierEv.authorizedInputChecked,
+              ...(verifierEv.authorizedInputReadTurnIndices.length ? { authorizedInputReadTurnIndices: verifierEv.authorizedInputReadTurnIndices } : {}),
               assessmentReportBoundToTarget: verifierEv.assessmentReportBoundToTarget,
+              assessmentDisclaimerRejected: verifierEv.assessmentDisclaimerRejected,
               ...(verifierEv.missingReason ? { missingReason: verifierEv.missingReason } : {}),
             },
           } : {}),
@@ -2266,13 +2434,26 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   }
 
   interface SourceTransactionRow {
+    projectId: string;
     filePath: string;
+    fileSha256: string;
     rowNumber: number;
     itemId: string;
     originalOrderId?: string;
+    orderDate?: string;
     refundDate?: string;
-    fullRefund?: string;
+    fullRefundRaw?: string;
+    fullRefund?: boolean;
+    hasFullRefundColumn?: boolean;
     store?: string;
+  }
+
+  function parseFullRefundFlag(raw: string): boolean | undefined {
+    const low = raw.trim().toLowerCase();
+    if (!low) return undefined;
+    if (['true', '1', 'yes', 'y', 'full', 'full_refund', '是', '全额', '全额退款', '已全退'].includes(low)) return true;
+    if (['false', '0', 'no', 'n', 'partial', 'none', '否', '未退款', '部分退款'].includes(low)) return false;
+    return undefined;
   }
 
   function parseSimpleCsvLine(line: string, delimiter: string): string[] {
@@ -2301,6 +2482,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const rows: SourceTransactionRow[] = [];
     const ITEM_KEYS = new Set(['account', 'member_id', 'member', 'user_id', 'item_id', 'customer_id', '会员账号', '账号', '会员id', '记录编号']);
     const ORDER_KEYS = new Set(['repeat_order_id', 'original_order_id', 'order_id', 'source_order_id', '原订单号', '订单号', '关联订单', '复购订单号']);
+    const ORDER_DATE_KEYS = new Set(['repeat_order_date', 'order_date', 'first_order_date', 'purchase_date', '下单日期', '复购日期', '首购日期', '交易日期']);
     const REFUND_DATE_KEYS = new Set(['refund_date', 'refunded_at', '退款日期', '退单日期']);
     const FULL_REFUND_KEYS = new Set(['full_refund', 'is_full_refund', 'refund_status', '是否全额退款', '全额退款', '退款状态']);
     const STORE_KEYS = new Set(['store', 'store_name', 'shop', '门店', '门店名称']);
@@ -2331,6 +2513,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             if (!view.allowed) continue;
             rawBytes = view.bytes;
           }
+          const fileSha256 = createHash('sha256').update(rawBytes).digest('hex');
           const txt = rawBytes.toString('utf8');
           if (ext === '.csv' || ext === '.tsv') {
             const delim = ext === '.tsv' ? '\t' : ',';
@@ -2339,6 +2522,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const headers = parseSimpleCsvLine(lines[0]!, delim).map(h => h.replace(/^\uFEFF/, '').trim().toLowerCase());
             const itemIdx = headers.findIndex(h => ITEM_KEYS.has(h));
             const orderIdx = headers.findIndex(h => ORDER_KEYS.has(h));
+            const orderDateIdx = headers.findIndex(h => ORDER_DATE_KEYS.has(h));
             const refundDateIdx = headers.findIndex(h => REFUND_DATE_KEYS.has(h));
             const fullRefundIdx = headers.findIndex(h => FULL_REFUND_KEYS.has(h));
             const storeIdx = headers.findIndex(h => STORE_KEYS.has(h));
@@ -2348,13 +2532,22 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               const itemVal = itemIdx >= 0 ? (cells[itemIdx] ?? '').trim() : '';
               const orderVal = orderIdx >= 0 ? (cells[orderIdx] ?? '').trim() : '';
               if (!itemVal && !orderVal) continue;
+              const orderDateVal = orderDateIdx >= 0 ? (cells[orderDateIdx] ?? '').trim() : '';
+              const refundDateVal = refundDateIdx >= 0 ? (cells[refundDateIdx] ?? '').trim() : '';
+              const fullRefundRaw = fullRefundIdx >= 0 ? (cells[fullRefundIdx] ?? '').trim() : '';
+              const fullRefund = fullRefundRaw ? parseFullRefundFlag(fullRefundRaw) : undefined;
               rows.push({
+                projectId: pid,
                 filePath: rel,
+                fileSha256,
                 rowNumber: i + 1,
                 itemId: itemVal || orderVal,
                 ...(orderVal ? { originalOrderId: orderVal } : {}),
-                ...(refundDateIdx >= 0 && (cells[refundDateIdx] ?? '').trim() ? { refundDate: (cells[refundDateIdx] ?? '').trim() } : {}),
-                ...(fullRefundIdx >= 0 && (cells[fullRefundIdx] ?? '').trim() ? { fullRefund: (cells[fullRefundIdx] ?? '').trim() } : {}),
+                ...(orderDateVal ? { orderDate: orderDateVal } : {}),
+                ...(refundDateVal ? { refundDate: refundDateVal } : {}),
+                ...(fullRefundRaw ? { fullRefundRaw } : {}),
+                ...(fullRefund !== undefined ? { fullRefund } : {}),
+                hasFullRefundColumn: fullRefundIdx >= 0,
                 ...(storeIdx >= 0 && (cells[storeIdx] ?? '').trim() ? { store: (cells[storeIdx] ?? '').trim() } : {}),
               });
             }
@@ -2369,19 +2562,27 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
                   const k = Object.keys(obj).find(name => keys.has(name.trim().toLowerCase()));
                   return k && obj[k] !== null && obj[k] !== undefined ? String(obj[k]).trim() : '';
                 };
+                const hasKey = (keys: Set<string>) => Object.keys(obj).some(name => keys.has(name.trim().toLowerCase()));
                 const itemVal = findVal(ITEM_KEYS);
                 const orderVal = findVal(ORDER_KEYS);
                 if (!itemVal && !orderVal) return;
+                const orderDateVal = findVal(ORDER_DATE_KEYS);
                 const refundDateVal = findVal(REFUND_DATE_KEYS);
-                const fullRefundVal = findVal(FULL_REFUND_KEYS);
+                const fullRefundRaw = findVal(FULL_REFUND_KEYS);
+                const fullRefund = fullRefundRaw ? parseFullRefundFlag(fullRefundRaw) : undefined;
                 const storeVal = findVal(STORE_KEYS);
                 rows.push({
+                  projectId: pid,
                   filePath: rel,
+                  fileSha256,
                   rowNumber: idx + 1,
                   itemId: itemVal || orderVal,
                   ...(orderVal ? { originalOrderId: orderVal } : {}),
+                  ...(orderDateVal ? { orderDate: orderDateVal } : {}),
                   ...(refundDateVal ? { refundDate: refundDateVal } : {}),
-                  ...(fullRefundVal ? { fullRefund: fullRefundVal } : {}),
+                  ...(fullRefundRaw ? { fullRefundRaw } : {}),
+                  ...(fullRefund !== undefined ? { fullRefund } : {}),
+                  hasFullRefundColumn: hasKey(FULL_REFUND_KEYS),
                   ...(storeVal ? { store: storeVal } : {}),
                 });
               });
@@ -2522,11 +2723,23 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const enterpriseId = url.searchParams.get('enterpriseId') || undefined;
       const subjectId = url.searchParams.get('subjectId') || undefined;
       const projectId = url.searchParams.get('projectId') || undefined;
+      let effectiveSubjectId = subjectId;
       if (projectId) {
-        const projectEnterprise = options.enterpriseScopes.enterpriseIdForProject(uuid(projectId));
+        const pid = uuid(projectId);
+        const projectEnterprise = options.enterpriseScopes.enterpriseIdForProject(pid);
         if (enterpriseId && projectEnterprise !== enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
+        const operator = resolveRequestOperator(request);
+        const isOwner = Boolean(
+          projectEnterprise
+          && await resolveGrantAuthorityForProject(projectEnterprise, pid, undefined, operator),
+        );
+        // Non-owner consumer project MUST ONLY see its own grants (never another project's stores/paths)!
+        if (!isOwner) {
+          if (subjectId && subjectId !== pid) throw new StudioError('studio_owner_mismatch', 403);
+          effectiveSubjectId = pid;
+        }
       }
-      const list = enterpriseId && subjectId ? grants.listForSubject(enterpriseId, subjectId) : grants.list(enterpriseId);
+      const list = enterpriseId && effectiveSubjectId ? grants.listForSubject(enterpriseId, effectiveSubjectId) : grants.list(enterpriseId);
       json(response, 200, { grants: list, readOnlyRollback: !enabled });
       return true;
     }
@@ -2600,8 +2813,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       // R2 AUTHENTIC OPERATOR BINDING: Verify current Host operator matches bound system owner operator AND HMAC authorityToken!
       const effectiveSystemId = matchedSystem?.id ?? binding.requiredSystemId;
       const boundOperator = getBoundSystemOperator(effectiveSystemId);
-      if (boundOperator && boundOperator !== binding.operator.operatorId) {
-        throw new StudioError('resource_operator_not_authorized', 403);
+      if (boundOperator) {
+        if (boundOperator !== binding.operator.operatorId) {
+          throw new StudioError('resource_operator_not_authorized', 403);
+        }
+      } else if (!options.hasExternalOperatorResolver) {
+        throw new StudioError('resource_operator_not_bound', 403);
       }
       const effectiveOwnerTaskId = verifiedTaskId ?? matchedSystem?.ownerTaskId;
       const tokenValid = verifyGrantAuthorityCredential(binding.authorityToken, {
@@ -3015,6 +3232,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (options.enterpriseScopes.enterpriseIdForProject(projectId) !== pack.enterpriseId) {
         throw new StudioError('studio_owner_mismatch', 403);
       }
+      const operator = resolveRequestOperator(request);
+      if (operator.activeProjectId && operator.activeProjectId !== projectId && !isConstructionOwnerProject(pack, operator.activeProjectId)) {
+        throw new StudioError('studio_owner_mismatch', 403);
+      }
       if (!locator.startsWith('060_reports/')) throw new StudioError('invalid_report_locator', 400);
       let bytes: Buffer | undefined;
       let resolvedLocator = locator;
@@ -3411,7 +3632,152 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               }
               return undefined;
             };
-            // R5: Verify or auto-link original Case & exact decision revision from CaseStore!
+            // Collect ALL historical decision revisions for a Case (rev.1, rev.2, ...)
+            const loadAllCaseDecisionRevisions = (cid: string) => {
+              if (!options.cases) return [] as ReturnType<CaseStore['listDecisions']>['items'];
+              const all: ReturnType<CaseStore['listDecisions']>['items'] = [];
+              let continuation: string | undefined;
+              for (let guard = 0; guard < 40; guard++) {
+                const page = options.cases.listDecisions(cid, { history: true, includeArchived: true, pageSize: 50, ...(continuation ? { continuation } : {}) });
+                all.push(...page.items);
+                if (!page.continuation) break;
+                continuation = page.continuation;
+              }
+              return all;
+            };
+            // Determine authoritative timestamp of the original reply/report BEFORE resolving Case history!
+            let originTimestampMs: number | undefined = nativeEv.replyTimestampMs;
+            if (originTimestampMs === undefined && matchingTurnUse?.createdAt) {
+              const ms = Date.parse(matchingTurnUse.createdAt);
+              if (Number.isFinite(ms)) originTimestampMs = ms;
+            }
+            if (originTimestampMs === undefined && linkedSavedReportRef?.locator?.startsWith('060_reports/')) {
+              try {
+                const proj = await options.projects.get(pid);
+                const fullPath = path.join(proj.rootPath, linkedSavedReportRef.locator);
+                if (fs.existsSync(fullPath)) {
+                  const st = fs.statSync(fullPath);
+                  if (Number.isFinite(st.mtimeMs)) originTimestampMs = st.mtimeMs;
+                }
+              } catch { /* ignore */ }
+            }
+            if (originTimestampMs === undefined) {
+              try {
+                const tRec = await options.projects.getTask(pid, tid);
+                const rawTs = tRec.updatedAt;
+                const ms = rawTs ? Date.parse(rawTs) : Number.NaN;
+                if (Number.isFinite(ms)) originTimestampMs = ms;
+              } catch { /* ignore */ }
+            }
+            const originTimestampIso = originTimestampMs !== undefined ? new Date(originTimestampMs).toISOString() : undefined;
+
+            const resolveHistoricalCaseDecisionForOrigin = (cid: string): {
+              decision?: ReturnType<CaseStore['listDecisions']>['items'][number];
+              status: 'pinned' | 'unresolved_post_origin_revisions' | 'unresolved_ambiguous' | 'no_decision_at_origin';
+              note?: string;
+            } => {
+              const allRevs = loadAllCaseDecisionRevisions(cid);
+              if (!allRevs.length) return { status: 'no_decision_at_origin', note: '原 Case 在当时尚无已记录的决策修订。' };
+
+              // Priority 1: Explicit reference to THIS exact report/reply inside a decision revision's references!
+              const targetReportLoc = linkedSavedReportRef?.locator;
+              const targetReportSha = linkedSavedReportRef?.sha256;
+              const referencingRevs = allRevs.filter(rev =>
+                (rev.references ?? []).some(r => {
+                  if (!('type' in r.target) || r.target.type !== 'source') return false;
+                  const src = r.target.source as unknown as Record<string, unknown>;
+                  if (src.type === 'native-reply' && src.projectId === pid && src.taskId === tid && src.sessionId === selection.sessionId && src.messageId === selection.messageId) {
+                    return true;
+                  }
+                  if (targetReportLoc && src.projectId === pid && (src.path === targetReportLoc || src.relativePath === targetReportLoc)) {
+                    if (!targetReportSha || !src.sha256 || src.sha256 === targetReportSha) return true;
+                  }
+                  return false;
+                }),
+              );
+              if (referencingRevs.length > 0) {
+                const byRecord = new Map<string, typeof allRevs>();
+                for (const r of referencingRevs) {
+                  const arr = byRecord.get(r.recordId) ?? [];
+                  arr.push(r);
+                  byRecord.set(r.recordId, arr);
+                }
+                if (byRecord.size === 1) {
+                  const earliest = [...byRecord.values()][0]!.sort((a, b) => a.revision - b.revision)[0]!;
+                  return { decision: earliest, status: 'pinned' };
+                }
+                return { status: 'unresolved_ambiguous', note: '多个 Case 决策引用了原报告，无法自动唯一确定原决定，保留待核。' };
+              }
+
+              // Priority 2: Historical point-in-time lookup `createdAt <= originTimestampMs`!
+              // CRITICAL (R5): If Case updated rev.1 -> rev.2 AFTER the old report/reply, NEVER pin rev.2!
+              if (originTimestampMs !== undefined) {
+                const atOrBefore = allRevs.filter(r => {
+                  const ms = Date.parse(r.createdAt);
+                  return Number.isFinite(ms) && ms <= originTimestampMs! + 1;
+                });
+                if (atOrBefore.length > 0) {
+                  // Group by recordId and take the latest revision <= originTimestampMs for each record
+                  const latestByRecord = new Map<string, typeof allRevs[number]>();
+                  for (const r of atOrBefore) {
+                    const prev = latestByRecord.get(r.recordId);
+                    if (!prev || r.revision > prev.revision) latestByRecord.set(r.recordId, r);
+                  }
+                  const candidates = [...latestByRecord.values()];
+                  if (candidates.length === 1) {
+                    return { decision: candidates[0]!, status: 'pinned' };
+                  }
+                  const taskMatches = candidates.filter(c => c.origin.actorKind === 'agent' && c.origin.projectId === pid && c.origin.taskId === tid);
+                  if (taskMatches.length === 1) {
+                    return { decision: taskMatches[0]!, status: 'pinned' };
+                  }
+                  return { status: 'unresolved_ambiguous', note: `原报告时点（${originTimestampIso}）存在 ${candidates.length} 条并行 Case 决策，无法自动唯一归属，保留待核。` };
+                }
+              }
+
+              // Priority 3: All revisions were created AFTER originTimestampMs (e.g., decision recorded after report).
+              const byRecord = new Map<string, typeof allRevs>();
+              for (const r of allRevs) {
+                const arr = byRecord.get(r.recordId) ?? [];
+                arr.push(r);
+                byRecord.set(r.recordId, arr);
+              }
+              if (byRecord.size === 1) {
+                const sorted = [...byRecord.values()][0]!.sort((a, b) => a.revision - b.revision);
+                // If ONLY rev.1 exists (never subsequently superseded by rev.2!), pinning rev.1 is unambiguous!
+                if (sorted.length === 1) {
+                  return { decision: sorted[0]!, status: 'pinned' };
+                }
+                // If rev.1 was authored by THIS task while later revisions came from other tasks/users, pin rev.1!
+                const firstRev = sorted[0]!;
+                const laterSameTask = sorted.slice(1).some(r => r.origin.actorKind === 'agent' && r.origin.taskId === tid);
+                if (firstRev.origin.actorKind === 'agent' && firstRev.origin.projectId === pid && firstRev.origin.taskId === tid && !laterSameTask) {
+                  return { decision: firstRev, status: 'pinned' };
+                }
+                // Otherwise rev.1 -> rev.2+ all happened after the old report with NO unambiguous link:
+                // NEVER substitute rev.2 as the original decision — leave unresolved for explicit review!
+                return {
+                  status: 'unresolved_post_origin_revisions',
+                  note: `原报告时点（${originTimestampIso ?? '未知'}）之后该 Case 决策已演进至 rev.${sorted.at(-1)!.revision}（共 ${sorted.length} 个修订），未将最新修订误记为原决定，请人工核定当时原决策修订。`,
+                };
+              }
+              return {
+                status: 'unresolved_post_origin_revisions',
+                note: '原报告时点之后该 Case 已产生多个决策修订，无法自动唯一定位当时原决定，保留待核。',
+              };
+            };
+
+            const findExactChoiceForDecision = (cid: string, did: string, drev: number): string | undefined => {
+              if (!options.cases) return undefined;
+              const matches = options.cases.getStrategyChoices(cid).filter(c =>
+                c.strategyRef.recordId === did
+                && c.strategyRef.revision === drev
+                && (originTimestampMs === undefined || !Number.isFinite(Date.parse(c.occurredAt)) || Date.parse(c.occurredAt) <= originTimestampMs + 1),
+              );
+              return matches.at(-1)?.choiceId;
+            };
+
+            // R5: Verify or auto-link original Case & exact historical decision revision from CaseStore!
             let resolvedOriginalCaseRef: EnterprisePackOriginalCaseRef | undefined;
             const rawCaseInput = object(input.originalCaseRef)
               ? input.originalCaseRef
@@ -3428,33 +3794,53 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               let decisionKind: string | undefined;
               let decisionTitle: string | undefined;
               let choiceId: string | undefined;
+              let decisionResolutionStatus: EnterprisePackOriginalCaseRef['decisionResolutionStatus'];
+              let resolutionNote: string | undefined;
               if (options.cases) {
                 let caseRec: ReturnType<CaseStore['getCase']>;
                 try { caseRec = options.cases.getCase(cid); } catch { throw new StudioError('feedback_verification_case_not_found', 409); }
                 caseTitle = caseRec.title;
                 caseRevision = caseRec.revision;
                 caseSummary ??= caseRec.title;
-                if (did) {
+                if (did && drev !== undefined) {
                   try {
                     const dec = options.cases.getDecision(cid, did, drev);
                     drev = dec.revision;
                     decisionKind = dec.kind;
                     decisionTitle = extractDecisionTitle(dec);
+                    decisionResolutionStatus = 'pinned';
                   } catch {
                     throw new StudioError('feedback_verification_case_not_found', 409);
                   }
                 } else {
-                  const latestDec = options.cases.listDecisions(cid).items.at(-1);
-                  if (latestDec) {
-                    did = latestDec.recordId;
-                    drev = latestDec.revision;
-                    decisionKind = latestDec.kind;
-                    decisionTitle = extractDecisionTitle(latestDec);
+                  const hist = resolveHistoricalCaseDecisionForOrigin(cid);
+                  decisionResolutionStatus = hist.status;
+                  resolutionNote = hist.note;
+                  if (hist.decision && (!did || hist.decision.recordId === did)) {
+                    did = hist.decision.recordId;
+                    drev = hist.decision.revision;
+                    decisionKind = hist.decision.kind;
+                    decisionTitle = extractDecisionTitle(hist.decision);
+                  } else if (did) {
+                    // Explicit decisionId without decisionRevision: resolve its historical revision <= originTimestampMs
+                    const revs = loadAllCaseDecisionRevisions(cid).filter(r => r.recordId === did).sort((a, b) => a.revision - b.revision);
+                    const atOrBefore = originTimestampMs !== undefined
+                      ? revs.filter(r => Number.isFinite(Date.parse(r.createdAt)) && Date.parse(r.createdAt) <= originTimestampMs! + 1)
+                      : [];
+                    const picked = atOrBefore.at(-1) ?? (revs.length === 1 ? revs[0] : undefined);
+                    if (picked) {
+                      drev = picked.revision;
+                      decisionKind = picked.kind;
+                      decisionTitle = extractDecisionTitle(picked);
+                      decisionResolutionStatus = 'pinned';
+                    } else {
+                      decisionResolutionStatus = 'unresolved_post_origin_revisions';
+                      resolutionNote = '原报告时点无法唯一定位该 Case 决策的历史修订，未自动采用最新修订，保留待核。';
+                    }
                   }
                 }
-                if (did) {
-                  const latestChoice = options.cases.getStrategyChoices(cid).filter(c => c.strategyRef.recordId === did).at(-1);
-                  if (latestChoice) choiceId = latestChoice.choiceId;
+                if (did && drev !== undefined) {
+                  choiceId = findExactChoiceForDecision(cid, did, drev);
                 }
               }
               resolvedOriginalCaseRef = {
@@ -3466,6 +3852,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
                 ...(decisionKind ? { decisionKind } : {}),
                 ...(decisionTitle ? { decisionTitle } : {}),
                 ...(choiceId ? { choiceId } : {}),
+                ...(decisionResolutionStatus ? { decisionResolutionStatus } : {}),
+                ...(resolutionNote ? { resolutionNote } : {}),
+                ...(originTimestampIso ? { originTimestamp: originTimestampIso } : {}),
                 ...(caseSummary ? { summary: caseSummary } : {}),
               };
             } else if (options.cases) {
@@ -3473,22 +3862,24 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
                 const projLink = options.cases.listProjectLinks().find(l => l.projectId === pid);
                 if (projLink) {
                   const caseRec = options.cases.getCase(projLink.caseId);
-                  const latestDecision = options.cases.listDecisions(projLink.caseId).items.at(-1);
-                  const latestChoice = latestDecision
-                    ? options.cases.getStrategyChoices(projLink.caseId).filter(c => c.strategyRef.recordId === latestDecision.recordId).at(-1)
-                    : undefined;
-                  const decTitle = latestDecision ? extractDecisionTitle(latestDecision) : undefined;
+                  const hist = resolveHistoricalCaseDecisionForOrigin(projLink.caseId);
+                  const picked = hist.decision;
+                  const decTitle = picked ? extractDecisionTitle(picked) : undefined;
+                  const choiceId = picked ? findExactChoiceForDecision(projLink.caseId, picked.recordId, picked.revision) : undefined;
                   resolvedOriginalCaseRef = {
                     caseId: caseRec.id,
                     caseTitle: caseRec.title,
                     caseRevision: caseRec.revision,
-                    ...(latestDecision ? {
-                      decisionId: latestDecision.recordId,
-                      decisionRevision: latestDecision.revision,
-                      decisionKind: latestDecision.kind,
+                    ...(picked ? {
+                      decisionId: picked.recordId,
+                      decisionRevision: picked.revision,
+                      decisionKind: picked.kind,
                       ...(decTitle ? { decisionTitle: decTitle } : {}),
                     } : {}),
-                    ...(latestChoice ? { choiceId: latestChoice.choiceId } : {}),
+                    ...(choiceId ? { choiceId } : {}),
+                    decisionResolutionStatus: hist.status,
+                    ...(hist.note ? { resolutionNote: hist.note } : {}),
+                    ...(originTimestampIso ? { originTimestamp: originTimestampIso } : {}),
                     summary: caseRec.title,
                   };
                 }
@@ -3670,6 +4061,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               ),
             );
             const latestAssess = matchedStudioUse?.assessments?.at(-1);
+            const assessProjectId = latestAssess?.assessorProjectId ?? latestAssess?.report.projectId;
             const assessTaskId = latestAssess?.assessorTaskId ?? latestAssess?.report.taskId;
             const isIndependentAssess = Boolean(assessTaskId && assessTaskId !== verifyingUse.taskId);
             if (!matchedStudioUse || !latestAssess || latestAssess.status !== 'pass' || !isIndependentAssess) {
@@ -3737,24 +4129,66 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               }
             }
 
-            // 2. Load REAL authorized source transactions from 020_clean/ to cross-check original order & refund dates!
+            // 2. Load REAL authorized source transactions from 020_clean/ of the verifying project (and original project if needed)
+            //    and enforce SINGLE-ROW CONJUNCTION matching (never combining unrelated rows via separate .some() checks)!
             const sourceProjectIds = [
               verifyingUse.projectId,
+              ...(assessProjectId && assessProjectId !== verifyingUse.projectId ? [assessProjectId] : []),
               ...existingFb.reports.map(r => r.projectId),
             ];
             const sourceRows = await inspectSourceTransactions(sourceProjectIds);
-            const findSourceRows = (id: string, orderId?: string) => {
-              const idLow = id.toLowerCase();
-              const orderLow = orderId?.toLowerCase();
-              const matches = sourceRows.filter(row =>
-                row.itemId.toLowerCase() === idLow
-                || (row.originalOrderId && row.originalOrderId.toLowerCase() === idLow)
-                || (orderLow && row.originalOrderId && row.originalOrderId.toLowerCase() === orderLow),
-              );
-              return matches;
+            const isRefundCategory = existingFb.category === 'shared_refund_mapping';
+
+            // Helper: collect actual native data-read evidence from the verifying task (and independent assessor task)
+            // to prove that post-cutoff new-event closure actually read the new-cutoff dataset (never reusing an older verifier!)
+            const collectTaskReadEvidenceTexts = async (): Promise<{ texts: string[]; shas: Set<string> }> => {
+              const texts: string[] = [];
+              const shas = new Set<string>();
+              if (!options.taskSnapshot) return { texts, shas };
+              const pairs: [string, string][] = [[verifyingUse.projectId, verifyingUse.taskId]];
+              if (assessProjectId && assessTaskId && (assessProjectId !== verifyingUse.projectId || assessTaskId !== verifyingUse.taskId)) {
+                pairs.push([assessProjectId, assessTaskId]);
+              }
+              for (const [pId, tId] of pairs) {
+                try {
+                  const snap = await options.taskSnapshot(pId, tId);
+                  for (const msg of snap.messages as Record<string, any>[]) {
+                    if (!msg || msg.role !== 'toolResult' || msg.isError) continue;
+                    const tName = String(msg.toolName ?? '');
+                    if (['read_input', 'read_project_input', 'read', 'bash', 'powershell', 'codemode'].includes(tName)) {
+                      const txt = messageText(msg);
+                      if (txt) texts.push(txt);
+                      if (typeof msg.details?.sha256 === 'string') shas.add(msg.details.sha256.toLowerCase());
+                    }
+                    if (msg.details?.type === 'optracall.studio' && ['read-source', 'read'].includes(msg.details.action) && msg.details.result?.ref?.authority === 'data') {
+                      const txt = messageText(msg);
+                      if (txt) texts.push(txt);
+                      if (typeof msg.details.result.ref.sha256 === 'string') shas.add(msg.details.result.ref.sha256.toLowerCase());
+                    }
+                  }
+                } catch { /* ignore */ }
+              }
+              return { texts, shas };
+            };
+            const verifierReadEvidence = rawPostCutoff.length > 0 ? await collectTaskReadEvidenceTexts() : { texts: [], shas: new Set<string>() };
+
+            const attachRowProvenance = <T extends Record<string, unknown>>(item: T, row?: SourceTransactionRow): T => {
+              if (!row) return item;
+              return {
+                ...item,
+                sourceFileLocator: row.filePath,
+                sourceFileSha256: row.fileSha256,
+                sourceRowNumber: row.rowNumber,
+                ...(row.orderDate ? { sourceOrderDate: row.orderDate } : {}),
+                ...(row.fullRefund !== undefined ? { sourceFullRefund: row.fullRefund } : {}),
+              };
             };
 
-            // 2A. Deep per-item corroboration for shouldChange (pre-cutoff mapping corrections)
+            const enrichedShouldChange: EnterprisePackFeedbackItemVerification['shouldChange'] = [];
+            const enrichedPostCutoff: NonNullable<EnterprisePackFeedbackItemVerification['postCutoffNewEvents']> = [];
+            const enrichedShouldRetain: EnterprisePackFeedbackItemVerification['shouldRetain'] = [];
+
+            // 2A. Deep SINGLE-ROW per-item corroboration for shouldChange (pre-cutoff mapping corrections)
             for (const item of rawShouldChange) {
               const id = String(item?.itemId ?? '').trim();
               const orderId = String(item?.originalOrderId ?? '').trim();
@@ -3763,7 +4197,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               if (!id || (!orderId && !refundDate)) {
                 throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
               }
-              // Require co-occurrence of itemId with its originalOrderId & refundDate in the SAME local report/assessment block!
               const coTokens = [orderId, refundDate].filter(Boolean);
               if (!textWindowCoOccurs(diskTexts, id, coTokens)) {
                 throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
@@ -3777,26 +4210,39 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               if (reason && reason.length >= 2 && !combinedEvidence.includes(reason.toLowerCase()) && !orderId) {
                 throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
               }
-              // Real source transaction cross-check!
+              let matchedRow: SourceTransactionRow | undefined;
               if (sourceRows.length > 0) {
-                const matched = findSourceRows(id, orderId);
-                if (!matched.length) {
+                const idLow = id.toLowerCase();
+                const orderLow = orderId.toLowerCase();
+                // STRICT SINGLE-ROW CONJUNCTION: account/itemId + originalOrderId + refundDate MUST come from the SAME row!
+                const exactSameRowCandidates = sourceRows.filter(row =>
+                  row.itemId.toLowerCase() === idLow
+                  && (!orderLow || (row.originalOrderId && row.originalOrderId.toLowerCase() === orderLow))
+                  && (!refundDate || row.refundDate === refundDate),
+                );
+                if (!exactSameRowCandidates.length) {
                   throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
                 }
-                if (orderId && !matched.some(r => r.originalOrderId?.toLowerCase() === orderId.toLowerCase())) {
-                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
+                // Check post-cutoff visibility and full_refund flag on THAT EXACT SAME ROW!
+                const validRow = exactSameRowCandidates.find(row => {
+                  if (row.refundDate && checkedCutoff && row.refundDate > checkedCutoff) return false;
+                  if (row.orderDate && checkedCutoff && row.orderDate > checkedCutoff) return false;
+                  if (isRefundCategory && row.hasFullRefundColumn && row.fullRefund !== true) return false;
+                  return true;
+                });
+                if (!validRow) {
+                  const hasPostCutoff = exactSameRowCandidates.some(row => row.refundDate && checkedCutoff && row.refundDate > checkedCutoff);
+                  throw new StudioError(
+                    hasPostCutoff ? 'feedback_verification_post_cutoff_misclassified' : 'feedback_verification_source_transaction_mismatch',
+                    409,
+                  );
                 }
-                if (refundDate && !matched.some(r => r.refundDate === refundDate)) {
-                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
-                }
-                const matchingRow = matched.find(r => (!orderId || r.originalOrderId?.toLowerCase() === orderId.toLowerCase()) && (!refundDate || r.refundDate === refundDate)) ?? matched[0]!;
-                if (matchingRow.refundDate && checkedCutoff && matchingRow.refundDate > checkedCutoff) {
-                  throw new StudioError('feedback_verification_post_cutoff_misclassified', 409);
-                }
+                matchedRow = validRow;
               }
+              enrichedShouldChange.push(attachRowProvenance(item as Record<string, unknown>, matchedRow) as EnterprisePackFeedbackItemVerification['shouldChange'][number]);
             }
 
-            // 2B. Deep per-item corroboration for postCutoffNewEvents (legitimate post-cutoff refunds under newCutoffChecked)
+            // 2B. Deep SINGLE-ROW & NEW-CUTOFF-READ corroboration for postCutoffNewEvents
             for (const item of rawPostCutoff) {
               const id = String(item?.itemId ?? '').trim();
               const orderId = String(item?.originalOrderId ?? '').trim();
@@ -3816,25 +4262,41 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               if (!textWindowCoOccurs(diskTexts, id, [orderId, refundDate])) {
                 throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
               }
-              if (sourceRows.length > 0) {
-                const matched = findSourceRows(id, orderId);
-                if (!matched.length) {
-                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
-                }
-                if (!matched.some(r => r.originalOrderId?.toLowerCase() === orderId.toLowerCase())) {
-                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
-                }
-                if (!matched.some(r => r.refundDate === refundDate)) {
-                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
-                }
-                const matchingRow = matched.find(r => r.originalOrderId?.toLowerCase() === orderId.toLowerCase() && r.refundDate === refundDate);
-                if (!matchingRow?.refundDate || matchingRow.refundDate <= checkedCutoff) {
-                  throw new StudioError('feedback_verification_pre_cutoff_misclassified', 409);
-                }
+              if (!sourceRows.length) {
+                throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
               }
+              const idLow = id.toLowerCase();
+              const orderLow = orderId.toLowerCase();
+              // STRICT SINGLE-ROW CONJUNCTION on the same transaction row!
+              const sameRowMatches = sourceRows.filter(row =>
+                row.itemId.toLowerCase() === idLow
+                && row.originalOrderId?.toLowerCase() === orderLow
+                && row.refundDate === refundDate,
+              );
+              if (!sameRowMatches.length) {
+                throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
+              }
+              const validRow = sameRowMatches.find(row => {
+                if (!row.refundDate || row.refundDate <= checkedCutoff) return false;
+                if (checkedNewCutoff && row.refundDate > checkedNewCutoff) return false;
+                if (isRefundCategory && row.hasFullRefundColumn && row.fullRefund !== true) return false;
+                return true;
+              });
+              if (!validRow) {
+                throw new StudioError('feedback_verification_pre_cutoff_misclassified', 409);
+              }
+              // CRITICAL (R5): Verify that the verifying task ACTUALLY READ the new-cutoff dataset containing this post-cutoff refund!
+              // Reusing an older verifier task that ran BEFORE the post-cutoff refund existed MUST fail with 409!
+              const readByFileSha = verifierReadEvidence.shas.has(validRow.fileSha256.toLowerCase());
+              const readByRowContent = verifierReadEvidence.texts.length > 0
+                && textWindowCoOccurs(verifierReadEvidence.texts, id, [orderId, refundDate]);
+              if (!readByFileSha && !readByRowContent) {
+                throw new StudioError('feedback_verification_new_cutoff_not_actually_read', 409);
+              }
+              enrichedPostCutoff.push(attachRowProvenance(item as Record<string, unknown>, validRow) as NonNullable<EnterprisePackFeedbackItemVerification['postCutoffNewEvents']>[number]);
             }
 
-            // 2C. Deep per-item corroboration for shouldRetain (unchanged valid rows)
+            // 2C. Deep SINGLE-ROW per-item corroboration for shouldRetain (unchanged valid rows)
             for (const item of rawShouldRetain) {
               const id = String(item?.itemId ?? '').trim();
               const orderId = String(item?.originalOrderId ?? '').trim();
@@ -3853,18 +4315,28 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               } else if (!combinedEvidence.includes(id.toLowerCase())) {
                 throw new StudioError('feedback_verification_item_evidence_uncorroborated', 409);
               }
+              let matchedRow: SourceTransactionRow | undefined;
               if (sourceRows.length > 0) {
-                const matched = findSourceRows(id, orderId);
-                if (!matched.length) {
+                const idLow = id.toLowerCase();
+                const orderLow = orderId.toLowerCase();
+                const exactSameRowCandidates = sourceRows.filter(row =>
+                  row.itemId.toLowerCase() === idLow
+                  && (!orderLow || (row.originalOrderId && row.originalOrderId.toLowerCase() === orderLow))
+                  && (!refundDate || row.refundDate === refundDate),
+                );
+                if (!exactSameRowCandidates.length) {
                   throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
                 }
-                if (orderId && !matched.some(r => r.originalOrderId?.toLowerCase() === orderId.toLowerCase())) {
+                // A retained valid order MUST NOT have a pre-cutoff full refund on that same row!
+                const validRetainRow = exactSameRowCandidates.find(row =>
+                  !(isRefundCategory && row.fullRefund === true && row.refundDate && checkedCutoff && row.refundDate <= checkedCutoff),
+                );
+                if (!validRetainRow) {
                   throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
                 }
-                if (refundDate && !matched.some(r => r.refundDate === refundDate)) {
-                  throw new StudioError('feedback_verification_source_transaction_mismatch', 409);
-                }
+                matchedRow = validRetainRow;
               }
+              enrichedShouldRetain.push(attachRowProvenance(item as Record<string, unknown>, matchedRow) as EnterprisePackFeedbackItemVerification['shouldRetain'][number]);
             }
 
             // 3. Original Case decision verification against real CaseStore (pin & verify exact decisionId + decisionRevision)!
@@ -3896,11 +4368,17 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
                 let origCase: ReturnType<CaseStore['getCase']>;
                 try { origCase = options.cases.getCase(ivCaseRef.caseId); } catch { throw new StudioError('feedback_verification_case_not_found', 409); }
                 caseTitle = origCase.title;
-                if (!pinnedDecisionId) {
-                  const decs = options.cases.listDecisions(ivCaseRef.caseId).items;
-                  if (decs.length > 0) {
-                    pinnedDecisionId = decs.at(-1)!.recordId;
-                    pinnedDecisionRev ??= decs.at(-1)!.revision;
+                // CRITICAL (R5): If original Case decision was unresolved at feedback time, NEVER silently adopt latest rev.2!
+                if (!pinnedDecisionId || pinnedDecisionRev === undefined) {
+                  const existingDecs = options.cases.listDecisions(ivCaseRef.caseId).items;
+                  if (existingDecs.length > 0 && (fbCaseRef?.decisionResolutionStatus && fbCaseRef.decisionResolutionStatus !== 'pinned' && fbCaseRef.decisionResolutionStatus !== 'no_decision_at_origin')) {
+                    throw new StudioError('feedback_verification_case_decision_unresolved', 409);
+                  }
+                  if (!pinnedDecisionId && existingDecs.length === 1 && existingDecs[0]!.revision === 1) {
+                    pinnedDecisionId = existingDecs[0]!.recordId;
+                    pinnedDecisionRev = 1;
+                  } else if (existingDecs.length > 0 && (!pinnedDecisionId || pinnedDecisionRev === undefined)) {
+                    throw new StudioError('feedback_verification_case_decision_unresolved', 409);
                   }
                 }
                 if (pinnedDecisionId) {
@@ -3922,6 +4400,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
                     decisionId: decRec.recordId,
                     decisionRevision: decRec.revision,
                     decisionKind: decRec.kind,
+                    decisionResolutionStatus: 'pinned',
                     ...(decisionTitle ? { decisionTitle } : {}),
                     ...(fbCaseRef?.choiceId ? { choiceId: fbCaseRef.choiceId } : {}),
                   };
@@ -3944,6 +4423,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
             verifiedItemEvidence = {
               ...rawIv,
+              shouldChange: enrichedShouldChange,
+              ...(enrichedPostCutoff.length ? { postCutoffNewEvents: enrichedPostCutoff } : {}),
+              shouldRetain: enrichedShouldRetain,
               ...(enrichedCaseRef ? { originalCaseRef: enrichedCaseRef } : {}),
               assessmentReportRef: rawIv.assessmentReportRef ? sourceRef(rawIv.assessmentReportRef) : latestAssess.report,
             };
@@ -4058,7 +4540,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
         let verifierEv: Awaited<ReturnType<typeof inspectVerifierTaskEvidence>> | undefined;
         if (isIndependentAssessor && assessorProjectId && assessorTaskId) {
-          verifierEv = await inspectVerifierTaskEvidence(assessorProjectId, assessorTaskId, currentPack, useRecord, latestAssessment?.report);
+          verifierEv = await inspectVerifierTaskEvidence(assessorProjectId, assessorTaskId, currentPack, useRecord, latestAssessment?.report, latestAssessment?.result);
         }
 
         const hostVerifiedIndependentConfirmed = Boolean(
@@ -4095,8 +4577,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               ...(verifierEv.assessmentMessageId ? { assessmentMessageId: verifierEv.assessmentMessageId } : {}),
               ...(verifierEv.carriedFromTurnIndices.length ? { carriedFromTurnIndices: verifierEv.carriedFromTurnIndices } : {}),
               targetReportChecked: verifierEv.targetReportChecked,
+              ...(verifierEv.targetReportReadTurnIndex !== undefined ? { targetReportReadTurnIndex: verifierEv.targetReportReadTurnIndex } : {}),
               authorizedInputChecked: verifierEv.authorizedInputChecked,
+              ...(verifierEv.authorizedInputReadTurnIndices.length ? { authorizedInputReadTurnIndices: verifierEv.authorizedInputReadTurnIndices } : {}),
               assessmentReportBoundToTarget: verifierEv.assessmentReportBoundToTarget,
+              assessmentDisclaimerRejected: verifierEv.assessmentDisclaimerRejected,
               ...(verifierEv.missingReason ? { missingReason: verifierEv.missingReason } : {}),
             },
           } : {}),
@@ -4148,6 +4633,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     authorizeProjectDataPath,
     assertProjectDataPathAllowed,
     filterAuthorizedProjectData,
+    filterProjectFileTree,
     evaluateNativeToolCall,
     buildPackCatalogSummary,
     inspectPinnedSourceRead,

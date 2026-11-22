@@ -188,7 +188,7 @@ export function createStudioSources(deps: StudioSourceDependencies) {
     }
     return { text: revision.body, complete: true, assetKind: asset.kind, ...(issue ? { governance: issue } : {}), ref: { ...ref, sha256: revision.sha256 } };
   }
-  async function read(raw: StudioSourceRef, projectId: string, systemId?: string, options: { construction?: boolean; historical?: boolean; taskId?: string } = {}): Promise<StudioSourceRead> {
+  async function read(raw: StudioSourceRef, projectId: string, systemId?: string, options: { construction?: boolean; historical?: boolean; taskId?: string; allowDeclaredUseReport?: boolean } = {}): Promise<StudioSourceRead> {
     const ref = sourceRef(raw); await deps.projects.get(projectId);
     await enterpriseQualified(ref, projectId, options.construction === true, systemId);
     let taskProjectId = projectId;
@@ -201,6 +201,11 @@ export function createStudioSources(deps: StudioSourceDependencies) {
       if (ref.authority === 'task' && ref.projectId && ref.projectId !== projectId) {
         const retained = [...system.feedback.flatMap(feedback => feedback.sources), ...system.uses.flatMap(use => [use.report, ...(use.assessments ?? []).map(assessment => assessment.report)]), ...(system.contributions ?? []).flatMap(item => item.revisions.flatMap(revision => [revision.report, ...revision.sourceRefs]))];
         if (retained.some(saved => digest(sourceRef(saved)) === digest(ref))) taskProjectId = ref.projectId;
+      }
+    } else if (options.allowDeclaredUseReport && systemId && ref.authority === 'task' && ref.projectId && ref.projectId !== projectId && ref.locator?.startsWith('060_reports/')) {
+      const system = deps.studio.get(systemId);
+      if (system.uses.some(use => digest(sourceRef(use.report)) === digest(ref))) {
+        taskProjectId = ref.projectId;
       }
     }
     if (ref.authority === 'case' || ref.authority === 'data' && ref.locator?.startsWith('{')) {

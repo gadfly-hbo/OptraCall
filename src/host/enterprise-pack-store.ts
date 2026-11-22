@@ -1144,8 +1144,11 @@ export class EnterprisePackStore {
       assessmentMessageId?: string;
       carriedFromTurnIndices?: number[];
       targetReportChecked?: boolean;
+      targetReportReadTurnIndex?: number;
       authorizedInputChecked?: boolean;
+      authorizedInputReadTurnIndices?: number[];
       assessmentReportBoundToTarget?: boolean;
+      assessmentDisclaimerRejected?: boolean;
       missingReason?: string;
     };
     expectedRef?: StudioSourceRef;
@@ -1209,8 +1212,13 @@ export class EnterprisePackStore {
               ? { carriedFromTurnIndices: input.verifierEvidenceSummary.carriedFromTurnIndices.filter(n => typeof n === 'number' && Number.isFinite(n)) }
               : {}),
             ...(input.verifierEvidenceSummary.targetReportChecked !== undefined ? { targetReportChecked: Boolean(input.verifierEvidenceSummary.targetReportChecked) } : {}),
+            ...(typeof input.verifierEvidenceSummary.targetReportReadTurnIndex === 'number' ? { targetReportReadTurnIndex: input.verifierEvidenceSummary.targetReportReadTurnIndex } : {}),
             ...(input.verifierEvidenceSummary.authorizedInputChecked !== undefined ? { authorizedInputChecked: Boolean(input.verifierEvidenceSummary.authorizedInputChecked) } : {}),
+            ...(Array.isArray(input.verifierEvidenceSummary.authorizedInputReadTurnIndices)
+              ? { authorizedInputReadTurnIndices: input.verifierEvidenceSummary.authorizedInputReadTurnIndices.filter(n => typeof n === 'number' && Number.isFinite(n)) }
+              : {}),
             ...(input.verifierEvidenceSummary.assessmentReportBoundToTarget !== undefined ? { assessmentReportBoundToTarget: Boolean(input.verifierEvidenceSummary.assessmentReportBoundToTarget) } : {}),
+            ...(input.verifierEvidenceSummary.assessmentDisclaimerRejected !== undefined ? { assessmentDisclaimerRejected: Boolean(input.verifierEvidenceSummary.assessmentDisclaimerRejected) } : {}),
             ...(input.verifierEvidenceSummary.missingReason ? { missingReason: text(input.verifierEvidenceSummary.missingReason, 1000, false) } : {}),
           },
         } : {}),
@@ -1263,6 +1271,9 @@ export class EnterprisePackStore {
             ...(input.report.originalCaseRef.decisionKind ? { decisionKind: text(input.report.originalCaseRef.decisionKind, 100, false) } : {}),
             ...(input.report.originalCaseRef.decisionTitle ? { decisionTitle: text(input.report.originalCaseRef.decisionTitle, 300, false) } : {}),
             ...(input.report.originalCaseRef.choiceId ? { choiceId: text(input.report.originalCaseRef.choiceId, 200, false) } : {}),
+            ...(input.report.originalCaseRef.decisionResolutionStatus ? { decisionResolutionStatus: input.report.originalCaseRef.decisionResolutionStatus } : {}),
+            ...(input.report.originalCaseRef.resolutionNote ? { resolutionNote: text(input.report.originalCaseRef.resolutionNote, 1000, false) } : {}),
+            ...(input.report.originalCaseRef.originTimestamp ? { originTimestamp: text(input.report.originalCaseRef.originTimestamp, 100, false) } : {}),
             preservedAt: text(input.report.originalCaseRef.preservedAt ?? now(), 100, false),
           },
         } : {}),
@@ -1446,6 +1457,11 @@ export class EnterprisePackStore {
               ...(item.classification ? { classification: item.classification } : {}),
               ...(item.evidenceLocator ? { evidenceLocator: text(item.evidenceLocator, 500, false) } : {}),
               ...(item.basisSourceRef ? { basisSourceRef: sourceRef(item.basisSourceRef) } : {}),
+              ...(item.sourceFileLocator ? { sourceFileLocator: text(item.sourceFileLocator, 500, false) } : {}),
+              ...(item.sourceFileSha256 ? { sourceFileSha256: text(item.sourceFileSha256, 128, false) } : {}),
+              ...(typeof item.sourceRowNumber === 'number' ? { sourceRowNumber: item.sourceRowNumber } : {}),
+              ...(item.sourceOrderDate ? { sourceOrderDate: text(item.sourceOrderDate, 100, false) } : {}),
+              ...(item.sourceFullRefund !== undefined ? { sourceFullRefund: Boolean(item.sourceFullRefund) } : {}),
             };
           });
           const postCutoffNewEvents = rawPostCutoff.map(item => {
@@ -1477,6 +1493,11 @@ export class EnterprisePackStore {
               ...(item.reason ? { reason: text(item.reason, 2000, false).trim() } : {}),
               ...(item.evidenceLocator ? { evidenceLocator: text(item.evidenceLocator, 500, false) } : {}),
               ...(item.basisSourceRef ? { basisSourceRef: sourceRef(item.basisSourceRef) } : {}),
+              ...(item.sourceFileLocator ? { sourceFileLocator: text(item.sourceFileLocator, 500, false) } : {}),
+              ...(item.sourceFileSha256 ? { sourceFileSha256: text(item.sourceFileSha256, 128, false) } : {}),
+              ...(typeof item.sourceRowNumber === 'number' ? { sourceRowNumber: item.sourceRowNumber } : {}),
+              ...(item.sourceOrderDate ? { sourceOrderDate: text(item.sourceOrderDate, 100, false) } : {}),
+              ...(item.sourceFullRefund !== undefined ? { sourceFullRefund: Boolean(item.sourceFullRefund) } : {}),
             };
           });
           const shouldRetain = rawShouldRetain.map(item => ({
@@ -1488,6 +1509,11 @@ export class EnterprisePackStore {
             ...(item.classification ? { classification: item.classification } : {}),
             ...(item.evidenceLocator ? { evidenceLocator: text(item.evidenceLocator, 500, false) } : {}),
             ...(item.basisSourceRef ? { basisSourceRef: sourceRef(item.basisSourceRef) } : {}),
+            ...(item.sourceFileLocator ? { sourceFileLocator: text(item.sourceFileLocator, 500, false) } : {}),
+            ...(item.sourceFileSha256 ? { sourceFileSha256: text(item.sourceFileSha256, 128, false) } : {}),
+            ...(typeof item.sourceRowNumber === 'number' ? { sourceRowNumber: item.sourceRowNumber } : {}),
+            ...(item.sourceOrderDate ? { sourceOrderDate: text(item.sourceOrderDate, 100, false) } : {}),
+            ...(item.sourceFullRefund !== undefined ? { sourceFullRefund: Boolean(item.sourceFullRefund) } : {}),
           }));
           normalizedItemVerification = {
             originalCutoffChecked,
@@ -1508,6 +1534,9 @@ export class EnterprisePackStore {
                 ...(iv.originalCaseRef.decisionKind ? { decisionKind: text(iv.originalCaseRef.decisionKind, 100, false) } : {}),
                 ...(iv.originalCaseRef.decisionTitle ? { decisionTitle: text(iv.originalCaseRef.decisionTitle, 300, false) } : {}),
                 ...(iv.originalCaseRef.choiceId ? { choiceId: text(iv.originalCaseRef.choiceId, 200, false) } : {}),
+                ...(iv.originalCaseRef.decisionResolutionStatus ? { decisionResolutionStatus: iv.originalCaseRef.decisionResolutionStatus } : {}),
+                ...(iv.originalCaseRef.resolutionNote ? { resolutionNote: text(iv.originalCaseRef.resolutionNote, 1000, false) } : {}),
+                ...(iv.originalCaseRef.originTimestamp ? { originTimestamp: text(iv.originalCaseRef.originTimestamp, 100, false) } : {}),
                 preservedAt: text(iv.originalCaseRef.preservedAt ?? stamp, 100, false),
               },
             } : {}),

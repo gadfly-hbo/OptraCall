@@ -7,6 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createHost } from '../src/host/server.ts';
 import type { MemberPackHostOptions } from '../src/host/member-pack-host.ts';
 import { CaseStore } from '../src/host/case-store.ts';
+import { ProjectStore } from '../src/host/project-store.ts';
 import { withCaseGoal } from './fixtures/case-goal.ts';
 
 import { buildAuthorizedDataView } from '../src/host/member-pack-data-view.ts';
@@ -1367,8 +1368,19 @@ test('Host Round-6: trusted operator binding & HttpOnly cookie anti-spoofing (R2
     const diskOrig = fs.readFileSync(path.join(projOwner.rootPath, '060_reports', 'owner-referenced-report.md'), 'utf8');
     assert.equal(sha(diskOrig), origSha, 'Original referenced report on ordinary/owner project MUST remain untouched!');
 
+    const snapDenied = await srv.req(
+      `/api/studio/enterprise-packs/${packId}/report-snapshot?projectId=${projOwner.id}&taskId=${ownerTaskId}&locator=${encodeURIComponent('060_reports/owner-referenced-report.md')}&sha256=${origSha}`,
+      'GET',
+      undefined,
+      { cookie: consumerCookie },
+    );
+    assert.equal(snapDenied.status, 403, 'Consumer project cookie MUST NOT read owner project report-snapshot!');
+
     const snapRes = await srv.req(
       `/api/studio/enterprise-packs/${packId}/report-snapshot?projectId=${projOwner.id}&taskId=${ownerTaskId}&locator=${encodeURIComponent('060_reports/owner-referenced-report.md')}&sha256=${origSha}`,
+      'GET',
+      undefined,
+      { cookie: ownerCookie },
     );
     assert.equal(snapRes.status, 200);
     assert.equal(snapRes.json.sha256, origSha);
@@ -1683,6 +1695,302 @@ test('Host Round-7: real-product operator isolation & named business operator au
     assert.equal(histRes.json.historicalDecision?.revision, 1, 'Feedback case-history MUST preserve exact historical decision rev.1!');
     assert.equal(histRes.json.historicalDecision?.payload?.title, '十月截止口径保持复购激励方案');
     assert.equal(histRes.json.latestDecision?.revision, 2);
+  } finally {
+    try { await srv.close(); } catch {}
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Host Round-8: wide+narrow grant coexistence expiry on same path, restricted files/copy-to-clean/db-link/grants scoping, legacy unbound system anti-takeover, and retroactive feedback Case rev.1 vs rev.2 pinning', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'optracall-member-pack-r8-host-'));
+  let srv = await startTestHost(root);
+  try {
+    await srv.req('/api/configuration', 'PUT', {
+      name: 'R8 Synthetic',
+      provider: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:1/v1',
+      model: 'synthetic-r8',
+      apiKey: 'synthetic-only',
+    });
+    const entRes = await srv.req('/api/studio/enterprises', 'POST', { requestId: randomUUID(), name: '织屿R8' });
+    const enterpriseId = entRes.json.id;
+
+    const regOwner = await srv.req('/api/studio/operators/session', 'POST', {
+      action: 'register',
+      operatorId: 'ops-r8-owner',
+      displayName: 'R8 负责人',
+      passcode: 'r8-owner-pass',
+    });
+    assert.equal(regOwner.status, 200);
+    const ownerBaseCookie = regOwner.setCookie.split(';')[0]!;
+
+    const ownerProjRes = await srv.req('/api/projects', 'POST', { name: 'R8 建设方', enterpriseId }, { cookie: ownerBaseCookie });
+    assert.equal(ownerProjRes.status, 201);
+    const projOwner = ownerProjRes.json.project;
+    const ownerCookie = ownerProjRes.setCookie.split(';')[0]!;
+
+    const consumerProjRes = await srv.req('/api/projects', 'POST', { name: 'R8 受限消费方A', enterpriseId }, { cookie: ownerCookie });
+    assert.equal(consumerProjRes.status, 201);
+    const projConsumer = consumerProjRes.json.project;
+
+    const otherConsumerRes = await srv.req('/api/projects', 'POST', { name: 'R8 受限消费方B', enterpriseId }, { cookie: ownerCookie });
+    assert.equal(otherConsumerRes.status, 201);
+    const projOtherConsumer = otherConsumerRes.json.project;
+
+    const sysRes = await srv.req('/api/studio/systems', 'POST', {
+      requestId: randomUUID(), enterpriseId, name: 'R8 体系', projectId: projOwner.id, goal: 'R8 验证', topicTitle: 'R8',
+    }, { cookie: ownerCookie });
+    assert.equal(sysRes.status, 201);
+    const systemId = sysRes.json.system.id;
+
+    const packRes = await srv.req('/api/studio/enterprise-packs', 'POST', {
+      requestId: randomUUID(), enterpriseId, systemId, projectId: projOwner.id, domain: 'member-operations', name: 'R8 资产包',
+    }, { cookie: ownerCookie });
+    assert.equal(packRes.status, 200);
+    const packId = packRes.json.pack.id;
+
+    const authRes = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`, 'GET', undefined, { cookie: ownerCookie });
+    assert.equal(authRes.status, 200);
+    const ownerToken = authRes.json.grantAuthority.authorityToken;
+
+    // 1. Seed mixed_orders.csv + unauthorized_other.csv + 010_draw/raw_secret.csv on projConsumer
+    const mixedCsv = [
+      'account,first_order_date,repeat_order_id,repeat_order_date,refund_date,full_refund,store',
+      'H01,2026-09-02,O-11,2026-09-18,,false,湖庭直营店',
+      'S02,2026-09-03,O-22,2026-09-19,,false,杉岸直营店',
+    ].join('\n') + '\n';
+    fs.writeFileSync(path.join(projConsumer.rootPath, '020_clean', 'mixed_orders.csv'), mixedCsv);
+    fs.writeFileSync(path.join(projConsumer.rootPath, '020_clean', 'unauthorized_other.csv'), 'account,store\nX01,杉岸直营店\n');
+    fs.writeFileSync(path.join(projConsumer.rootPath, '010_draw', 'raw_secret.csv'), 'raw,secret\n1,2\n');
+
+    // Grant TWO overlapping grants on the SAME path 020_clean/mixed_orders.csv:
+    // - Wide grant (湖庭直营店 + 杉岸直营店) expiring in 500ms
+    // - Narrow grant (湖庭直营店 ONLY) with NO expiry
+    const wideValidTo = new Date(Date.now() + 500).toISOString();
+    const wideGrant = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(), enterpriseId, packId, grantorProjectId: projOwner.id, authorityToken: ownerToken,
+      grantBasis: 'R8 短期宽授权（两店）', subjectType: 'project', subjectId: projConsumer.id, resourceKind: 'detail',
+      operations: ['read-detail-recalculate'],
+      scope: { stores: ['湖庭直营店', '杉岸直营店'], allowedDataPaths: ['020_clean/mixed_orders.csv'] },
+      validTo: wideValidTo,
+    }, { cookie: ownerCookie });
+    assert.equal(wideGrant.status, 200);
+
+    const narrowGrant = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(), enterpriseId, packId, grantorProjectId: projOwner.id, authorityToken: ownerToken,
+      grantBasis: 'R8 长期窄授权（湖庭单店）', subjectType: 'project', subjectId: projConsumer.id, resourceKind: 'detail',
+      operations: ['read-detail-recalculate'],
+      scope: { stores: ['湖庭直营店'], allowedDataPaths: ['020_clean/mixed_orders.csv'] },
+    }, { cookie: ownerCookie });
+    assert.equal(narrowGrant.status, 200);
+
+    // Also grant projOtherConsumer so we verify GET /resource-grants?projectId=projConsumer hides other projects' grants!
+    const otherGrant = await srv.req('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(), enterpriseId, packId, grantorProjectId: projOwner.id, authorityToken: ownerToken,
+      grantBasis: 'R8 其他消费项目授权', subjectType: 'project', subjectId: projOtherConsumer.id, resourceKind: 'definition',
+      operations: ['read-definition'],
+      scope: { stores: ['杉岸直营店'] },
+    }, { cookie: ownerCookie });
+    assert.equal(otherGrant.status, 200);
+
+    // Before wide grant expiry: files/content sees BOTH H01 (湖庭) and S02 (杉岸)!
+    const beforeExpiry = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: ownerCookie });
+    assert.equal(beforeExpiry.status, 200);
+    assert.ok(String(beforeExpiry.json).includes('H01') && String(beforeExpiry.json).includes('S02'), 'Before wide grant expiry, both 湖庭 and 杉岸 MUST be visible');
+
+    // Restricted project GET /files hides 010_draw and unauthorized_other.csv, keeping only mixed_orders.csv!
+    const treeRes = await srv.req(`/api/projects/${projConsumer.id}/files`, 'GET', undefined, { cookie: ownerCookie });
+    assert.equal(treeRes.status, 200);
+    const treeJson = JSON.stringify(treeRes.json.files);
+    assert.ok(treeJson.includes('mixed_orders.csv'), 'Authorized mixed_orders.csv MUST appear in filtered file tree');
+    assert.ok(!treeJson.includes('unauthorized_other.csv'), 'Unauthorized 020_clean file MUST be hidden from restricted project tree!');
+    assert.ok(!treeJson.includes('raw_secret.csv'), '010_draw raw file MUST be hidden from restricted project tree!');
+
+    // Restricted project POST /files/copy-to-clean -> 403!
+    const copyRes = await srv.req(`/api/projects/${projConsumer.id}/files/copy-to-clean`, 'POST', { path: '010_draw/raw_secret.csv' }, { cookie: ownerCookie });
+    assert.equal(copyRes.status, 403, 'Restricted member-pack project MUST NOT copy 010_draw to 020_clean!');
+
+    // Restricted project GET /db-link/sources -> 403!
+    const dbLinkRes = await srv.req(`/api/projects/${projConsumer.id}/db-link/sources`, 'GET', undefined, { cookie: ownerCookie });
+    assert.equal(dbLinkRes.status, 403, 'Restricted member-pack project MUST be denied project-scoped db-link HTTP access!');
+
+    // Consumer GET /resource-grants?enterpriseId=...&projectId=projConsumer MUST ONLY see projConsumer's grants (not projOtherConsumer)!
+    const consumerGrantsRes = await srv.req(`/api/studio/resource-grants?enterpriseId=${enterpriseId}&projectId=${projConsumer.id}`, 'GET', undefined, { cookie: ownerCookie });
+    assert.equal(consumerGrantsRes.status, 200);
+    assert.ok(consumerGrantsRes.json.grants.every((g: any) => g.subjectId === projConsumer.id), 'Consumer resource-grants listing MUST NOT leak other projects grants!');
+
+    // Wait 600ms -> wide grant expires while narrow grant remains active on the SAME path!
+    await new Promise(resolve => setTimeout(resolve, 600));
+    const afterWideExpiry = await srv.req(`/api/projects/${projConsumer.id}/files/content?path=${encodeURIComponent('020_clean/mixed_orders.csv')}`, 'GET', undefined, { cookie: ownerCookie });
+    assert.equal(afterWideExpiry.status, 200, 'Narrow grant MUST keep mixed_orders.csv readable after wide grant expires');
+    assert.ok(String(afterWideExpiry.json).includes('H01'), 'Narrow-granted 湖庭直营店 MUST stay visible');
+    assert.ok(!String(afterWideExpiry.json).includes('S02') && !String(afterWideExpiry.json).includes('杉岸直营店'), 'Expired wide grant store 杉岸直营店 MUST be stripped immediately!');
+
+    // 2. R2: Legacy unbound system anti-takeover under default real-product startup (no resolveOperator)
+    const dataRoot = path.join(root, 'data');
+    const bindingsPath = path.join(dataRoot, 'studio', 'operator-bindings.json');
+    await srv.close();
+    if (fs.existsSync(bindingsPath)) {
+      const parsed = JSON.parse(fs.readFileSync(bindingsPath, 'utf8'));
+      delete parsed.systems?.[systemId];
+      fs.writeFileSync(bindingsPath, JSON.stringify(parsed, null, 2));
+    }
+    srv = await startTestHost(root);
+    // Ephemeral session:* opening projOwner MUST NOT hijack unbound legacy system!
+    const ephOpen = await srv.req(`/api/projects/${projOwner.id}`, 'GET', undefined, { cookie: '' });
+    assert.equal(ephOpen.status, 200);
+    const ephCookie = ephOpen.setCookie.split(';')[0]!;
+    const ephAuth = await srv.req(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${projOwner.id}&packId=${packId}`, 'GET', undefined, { cookie: ephCookie });
+    assert.equal(ephAuth.status, 403, 'Ephemeral session:* MUST NEVER take over an unbound legacy system!');
+
+    // 3. R5: Retroactive feedback after Case rev.1 -> rev.2 MUST resolve historical rev.1 (or mark unresolved when post-origin), NEVER pin rev.2!
+    const relogin = await srv.req('/api/studio/operators/session', 'POST', {
+      action: 'login',
+      operatorId: 'ops-r8-owner',
+      passcode: 'r8-owner-pass',
+      activeProjectId: projOwner.id,
+    }, { cookie: '' });
+    assert.equal(relogin.status, 200);
+    const ownerCookie2 = relogin.setCookie.split(';')[0]!;
+
+    const caseGoalHost = {
+      request: async (route: string, method = 'GET', body?: unknown) =>
+        fetch(`${srv.base}${route}`, {
+          method,
+          headers: { 'x-optracall-client': '1', 'content-type': 'application/json', origin: 'http://127.0.0.1:4183', cookie: ownerCookie2 },
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        }),
+    };
+    await srv.req('/api/cases/storage/initialize', 'POST', {}, { cookie: ownerCookie2 });
+    const caseRes = await srv.req('/api/cases', 'POST', await withCaseGoal(caseGoalHost, {
+      operationId: randomUUID(),
+      title: 'R8 历史决策回溯 Case',
+      description: '验证 rev.1 -> rev.2 演进后旧回复补提反馈不误记 rev.2',
+    }), { cookie: ownerCookie2 });
+    assert.equal(caseRes.status, 201);
+    const caseId = caseRes.json.case.id;
+    await srv.req(`/api/cases/${caseId}/projects`, 'POST', {
+      operationId: randomUUID(), projectId: projOwner.id, expectedRevision: caseRes.json.case.revision,
+    }, { cookie: ownerCookie2 });
+
+    // Create tasks for T1 retroactive rev.1 pinning and T_early post-origin unresolved test
+    const tRetroRes = await srv.req(`/api/projects/${projOwner.id}/tasks`, 'POST', { name: 'R8 补提反馈旧任务' }, { cookie: ownerCookie2 });
+    assert.equal(tRetroRes.status, 201);
+    const tRetro = tRetroRes.json.task;
+    const tEarlyRes = await srv.req(`/api/projects/${projOwner.id}/tasks`, 'POST', { name: 'R8 更早无决策任务' }, { cookie: ownerCookie2 });
+    assert.equal(tEarlyRes.status, 201);
+    const tEarly = tEarlyRes.json.task;
+
+    // Seed Case rev.1 at T0, then write old reply/report at T1 > T0, then append rev.2 at T2 > T1!
+    await srv.close();
+    const csA = new CaseStore({ dataRoot });
+    await csA.init();
+    const dec1 = csA.saveDecisionDraft(
+      {
+        operationId: randomUUID(),
+        caseStoreId: csA.getStatus().storeId!,
+        caseId,
+        expectedRevision: 0,
+        kind: 'strategy',
+        payload: { title: 'R8 原决定 rev1', proposal: '十月原口径决定' },
+      },
+      { actorKind: 'agent', projectId: projOwner.id, taskId: tRetro.id, requestId: randomUUID(), sessionId: 'sess-r8', toolCallId: 'tool-r8-1' },
+    );
+    csA.close();
+    assert.equal(dec1.revision, 1);
+
+    // Wait 50ms -> T1: create a real native-session JSONL reply at T1 (strictly AFTER rev.1, BEFORE rev.2!)
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const replyTimestamp = new Date().toISOString();
+    const msgIdT1 = 'msg-r8-t1';
+    const sessionIdT1 = 'sess-r8-t1';
+    const tRetroSessionFile = path.join(tRetro.sessionDirectory, `${sessionIdT1}.jsonl`);
+    fs.mkdirSync(tRetro.sessionDirectory, { recursive: true });
+    fs.writeFileSync(tRetroSessionFile, [
+      JSON.stringify({ type: 'session', version: 3, id: sessionIdT1, timestamp: replyTimestamp, cwd: projOwner.rootPath }),
+      JSON.stringify({ type: 'message', id: 'u-r8-1', parentId: null, timestamp: replyTimestamp, message: { role: 'user', timestamp: Date.parse(replyTimestamp), content: [{ type: 'text', text: '按 2026-10-31 截止日核查复购' }] } }),
+      JSON.stringify({ type: 'message', id: msgIdT1, parentId: 'u-r8-1', timestamp: replyTimestamp, message: { role: 'assistant', timestamp: Date.parse(replyTimestamp), content: [{ type: 'text', text: '旧回复正文：按 2026-10-31 口径核得结果。' }] } }),
+    ].join('\n') + '\n');
+
+    const earlyTs = new Date(Date.parse(dec1.createdAt) - 60_000).toISOString();
+    const earlySid = 'sess-r8-early';
+    const earlyMid = 'msg-r8-early';
+    const earlySessionFile = path.join(tEarly.sessionDirectory, `${earlySid}.jsonl`);
+    fs.mkdirSync(tEarly.sessionDirectory, { recursive: true });
+    fs.writeFileSync(earlySessionFile, [
+      JSON.stringify({ type: 'session', version: 3, id: earlySid, timestamp: earlyTs, cwd: projOwner.rootPath }),
+      JSON.stringify({ type: 'message', id: 'u-early', parentId: null, timestamp: earlyTs, message: { role: 'user', timestamp: Date.parse(earlyTs), content: [{ type: 'text', text: '早期分析' }] } }),
+      JSON.stringify({ type: 'message', id: earlyMid, parentId: 'u-early', timestamp: earlyTs, message: { role: 'assistant', timestamp: Date.parse(earlyTs), content: [{ type: 'text', text: '早期回复（早于 Case rev.1 和 rev.2）' }] } }),
+    ].join('\n') + '\n');
+
+    const projStoreSeed = new ProjectStore({ dataRoot, projectsRoot: path.join(root, 'projects') });
+    await projStoreSeed.init();
+    await projStoreSeed.setSession(projOwner.id, tRetro.id, tRetroSessionFile);
+    await projStoreSeed.setSession(projOwner.id, tEarly.id, earlySessionFile);
+    await projStoreSeed.close();
+
+    // Wait 50ms -> T2: append Case rev.2 AFTER the old reply!
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const csB = new CaseStore({ dataRoot });
+    await csB.init();
+    const dec2 = csB.saveDecisionDraft(
+      {
+        operationId: randomUUID(),
+        caseStoreId: csB.getStatus().storeId!,
+        caseId,
+        recordId: dec1.recordId,
+        expectedRevision: 1,
+        kind: 'strategy',
+        payload: { title: 'R8 新决定 rev2', proposal: '十一月调整后新决定' },
+      },
+      { actorKind: 'agent', projectId: projOwner.id, taskId: tRetro.id, requestId: randomUUID(), sessionId: 'sess-r8', toolCallId: 'tool-r8-2' },
+    );
+    csB.close();
+    assert.equal(dec2.revision, 2);
+
+    srv = await startTestHost(root);
+    const relogin3 = await srv.req('/api/studio/operators/session', 'POST', {
+      action: 'login', operatorId: 'ops-r8-owner', passcode: 'r8-owner-pass', activeProjectId: projOwner.id,
+    }, { cookie: '' });
+    const ownerCookie3 = relogin3.setCookie.split(';')[0]!;
+
+    // Submit retroactive feedback from the old reply (T1) WITHOUT passing originalCaseRef -> MUST pin rev.1 (NEVER rev.2!)
+    const retroFb = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
+      requestId: randomUUID(),
+      packVersion: '1.0',
+      origin: { projectId: projOwner.id, taskId: tRetro.id, sessionId: sessionIdT1, messageId: msgIdT1 },
+      problemKey: 'r8-retro-case-rev1',
+      title: 'R8 旧回复补提反馈必须回溯原决定 rev.1',
+      category: 'shared_refund_mapping',
+      evidenceNote: 'Case 升至 rev.2 后从 T1 旧回复补提反馈',
+    }, { cookie: ownerCookie3 });
+    assert.equal(retroFb.status, 200, JSON.stringify(retroFb.json));
+    const pinnedCaseRef = retroFb.json.feedback.reports[0].originalCaseRef;
+    assert.equal(pinnedCaseRef?.caseId, caseId);
+    assert.equal(pinnedCaseRef?.decisionId, dec1.recordId);
+    assert.equal(pinnedCaseRef?.decisionRevision, 1, 'Retroactive feedback from T1 reply MUST pin historical rev.1, NEVER rev.2!');
+    assert.equal(pinnedCaseRef?.decisionResolutionStatus, 'pinned');
+
+    const retroHist = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback/${retroFb.json.feedback.id}/case-history`, 'GET', undefined, { cookie: ownerCookie3 });
+    assert.equal(retroHist.status, 200);
+    assert.equal(retroHist.json.historicalDecision?.revision, 1);
+    assert.equal(retroHist.json.latestDecision?.revision, 2);
+
+    // Submit feedback from T_early (BEFORE rev.1 existed, authored by a DIFFERENT task than dec1/dec2) -> MUST mark unresolved_post_origin_revisions (NEVER pin rev.2!)
+    const earlyFb = await srv.req(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
+      requestId: randomUUID(),
+      packVersion: '1.0',
+      origin: { projectId: projOwner.id, taskId: tEarly.id, sessionId: earlySid, messageId: earlyMid },
+      problemKey: 'r8-early-unresolved',
+      title: 'R8 早于多修订演进的旧回复不误记 rev.2',
+      category: 'shared_refund_mapping',
+      evidenceNote: 'rev.1 与 rev.2 均晚于本回复且非本任务创建，应标记原决策待核',
+    }, { cookie: ownerCookie3 });
+    assert.equal(earlyFb.status, 200, JSON.stringify(earlyFb.json));
+    const earlyCaseRef = earlyFb.json.feedback.reports[0].originalCaseRef;
+    assert.equal(earlyCaseRef?.caseId, caseId);
+    assert.equal(earlyCaseRef?.decisionRevision, undefined, 'Ambiguous post-origin rev.1->rev.2 MUST NOT pin rev.2!');
+    assert.equal(earlyCaseRef?.decisionResolutionStatus, 'unresolved_post_origin_revisions');
   } finally {
     try { await srv.close(); } catch {}
     fs.rmSync(root, { recursive: true, force: true });

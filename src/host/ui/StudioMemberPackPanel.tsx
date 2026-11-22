@@ -1103,6 +1103,7 @@ export function StudioMemberPackPanel({
                                 应变项 {sc.itemId}
                                 {sc.originalOrderId ? `（原单 ${sc.originalOrderId}${sc.refundDate ? ` · 退款 ${sc.refundDate}` : ''}）` : ''}
                                 ：{sc.beforeValue} → {sc.afterValue}
+                                {sc.sourceFileLocator ? ` · 原表 ${sc.sourceFileLocator}${sc.sourceRowNumber ? `#L${sc.sourceRowNumber}` : ''}` : ''}
                               </li>
                             ))}
                             {(fb.revisionLink.itemVerification.postCutoffNewEvents ?? []).map((pc, idx) => (
@@ -1110,6 +1111,7 @@ export function StudioMemberPackPanel({
                                 截止日后新发生退款 {pc.itemId}
                                 （原单 {pc.originalOrderId} · 退款 {pc.refundDate} · {pc.classification}）
                                 ：{pc.beforeValue} → {pc.afterValue}
+                                {pc.sourceFileLocator ? ` · 原表 ${pc.sourceFileLocator}${pc.sourceRowNumber ? `#L${pc.sourceRowNumber}` : ''}` : ''}
                               </li>
                             ))}
                             {fb.revisionLink.itemVerification.shouldRetain.map((sr, idx) => (
@@ -1117,6 +1119,7 @@ export function StudioMemberPackPanel({
                                 应保留项 {sr.itemId}
                                 {sr.originalOrderId ? `（原单 ${sr.originalOrderId}${sr.refundDate ? ` · 退款 ${sr.refundDate}` : ''}）` : ''}
                                 ：{sr.unchangedValue}
+                                {sr.sourceFileLocator ? ` · 原表 ${sr.sourceFileLocator}${sr.sourceRowNumber ? `#L${sr.sourceRowNumber}` : ''}` : ''}
                               </li>
                             ))}
                           </ul>
@@ -1137,7 +1140,7 @@ export function StudioMemberPackPanel({
                             {rep.reportRef.locator?.startsWith('060_reports/') ? ` · 关联报告：${rep.reportRef.locator}` : ''}
                             {rep.independentVerificationStatus ? ` · 独立核验：${rep.independentVerificationStatus}` : ''}
                             {rep.originalCaseRef
-                              ? ` · 原 Case：${rep.originalCaseRef.summary || rep.originalCaseRef.caseId}${rep.originalCaseRef.decisionRevision !== undefined ? `（决定 rev.${rep.originalCaseRef.decisionRevision}）` : ''}`
+                              ? ` · 原 Case：${rep.originalCaseRef.summary || rep.originalCaseRef.caseId}${rep.originalCaseRef.decisionRevision !== undefined ? `（决定 rev.${rep.originalCaseRef.decisionRevision}）` : rep.originalCaseRef.decisionResolutionStatus && rep.originalCaseRef.decisionResolutionStatus !== 'pinned' ? '（原决策待核，未将后续新修订误记为原决定）' : ''}`
                               : ''}
                             {' '}· 证据：{rep.evidenceNote}
                             {onOpenTask && (

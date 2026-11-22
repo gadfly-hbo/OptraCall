@@ -447,6 +447,9 @@ export interface EnterprisePackOriginalCaseRef {
   decisionKind?: string;
   decisionTitle?: string;
   choiceId?: string;
+  decisionResolutionStatus?: 'pinned' | 'unresolved_post_origin_revisions' | 'unresolved_ambiguous' | 'no_decision_at_origin';
+  resolutionNote?: string;
+  originTimestamp?: string;
   preservedAt?: string;
 }
 
@@ -487,6 +490,11 @@ export interface EnterprisePackFeedbackItemVerification {
     classification?: 'mapping_correction' | 'post_cutoff_update' | 'post_cutoff_new_event';
     evidenceLocator?: string;
     basisSourceRef?: StudioSourceRef;
+    sourceFileLocator?: string;
+    sourceFileSha256?: string;
+    sourceRowNumber?: number;
+    sourceOrderDate?: string;
+    sourceFullRefund?: boolean;
   }[];
   postCutoffNewEvents?: {
     itemId: string;
@@ -498,6 +506,11 @@ export interface EnterprisePackFeedbackItemVerification {
     classification: 'post_cutoff_new_event' | 'post_cutoff_update';
     evidenceLocator?: string;
     basisSourceRef?: StudioSourceRef;
+    sourceFileLocator?: string;
+    sourceFileSha256?: string;
+    sourceRowNumber?: number;
+    sourceOrderDate?: string;
+    sourceFullRefund?: boolean;
   }[];
   shouldRetain: {
     itemId: string;
@@ -508,6 +521,11 @@ export interface EnterprisePackFeedbackItemVerification {
     classification?: 'retained_valid';
     evidenceLocator?: string;
     basisSourceRef?: StudioSourceRef;
+    sourceFileLocator?: string;
+    sourceFileSha256?: string;
+    sourceRowNumber?: number;
+    sourceOrderDate?: string;
+    sourceFullRefund?: boolean;
   }[];
   caseDecisionsPreserved?: boolean;
   originalCaseRef?: EnterprisePackOriginalCaseRef;
@@ -621,8 +639,11 @@ export interface EnterprisePackUseRecord {
       assessmentMessageId?: string;
       carriedFromTurnIndices?: number[];
       targetReportChecked?: boolean;
+      targetReportReadTurnIndex?: number;
       authorizedInputChecked?: boolean;
+      authorizedInputReadTurnIndices?: number[];
       assessmentReportBoundToTarget?: boolean;
+      assessmentDisclaimerRejected?: boolean;
       missingReason?: string;
     };
     checkedRefs?: StudioSourceRef[];
