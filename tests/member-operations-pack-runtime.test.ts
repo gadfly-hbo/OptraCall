@@ -1692,11 +1692,6 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
             payload: {
               useId: taskBStudioUseId,
               status: 'pass',
-              evidence: {
-                targetReport: taskBReportRef,
-                coverage: { inputPaths: ['020_clean/starbridge_orders.csv'], scope: '星桥直营店 9 月首购队列，2026-10-31', detail: '星桥四行，柳岸范围未纳入' },
-                comparison: { metrics: [{ name: '分子', reported: 2, recomputed: 2 }, { name: '分母', reported: 4, recomputed: 4 }], facts: 'C07/O-73 全额冲销，C13/O-81 保留' },
-              },
               report: {
                 authority: 'task',
                 id: taskVerifyV2.id,
@@ -1881,6 +1876,26 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   });
   assert.equal(closeSplitRow.status, 409, 'Cross-row split spoofing (C07 + O-81) MUST return 409 under single-row conjunction!');
 
+  const unprovedFeedback = await json(await host.request(`/api/studio/enterprise-packs/${packId}/feedback`, 'POST', {
+    requestId: randomUUID(), problemKey: 'missing-original-custody', packVersion: '1.0',
+    title: '旧表原始回执未取得', category: 'shared_refund_mapping', targetAssetRef: refundV1Ref,
+    report: fb1.feedback.reports[0],
+  }));
+  assert.equal(unprovedFeedback.feedback.reports[0].sourceReads, undefined);
+  assert.equal(unprovedFeedback.feedback.reports[0].adoptionBasis, 'clue_only_no_pack_read');
+  const unprovedClosure = await host.request(`/api/studio/enterprise-packs/${packId}/feedback/${unprovedFeedback.feedback.id}/handle`, 'POST', {
+    requestId: randomUUID(), projectId: projBuild.id, status: 'verified',
+    note: '准确报告和新版复算不能替代原资料可见性',
+    revisedRef: refundV2Ref, revisedPackVersion: '1.1', verifiedByUseId: useBRecord.id,
+    itemVerification: {
+      originalCutoffChecked: '2026-10-31', transactionAssociationNote: '检查原始来源',
+      shouldChange: [{ itemId: 'C07', originalOrderId: 'O-73', refundDate: '2026-10-02', beforeValue: '计入复购', afterValue: '冲销排除' }],
+      shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-81', unchangedValue: '计入复购' }],
+    },
+  });
+  assert.equal(unprovedClosure.status, 409);
+  assert.match(await unprovedClosure.text(), /feedback_verification_original_snapshot_unavailable/);
+
   const originalLiveSource = path.join(projStar.rootPath, '020_clean', 'starbridge_orders.csv');
   const revisedLiveSource = path.join(projAud.rootPath, '020_clean', 'starbridge_orders.csv');
   fs.renameSync(originalLiveSource, originalLiveSource + '.offline');
@@ -1971,6 +1986,22 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     'Retroactive feedback from old reply originA after Case moved to rev.2 MUST NEVER pin rev.2!',
   );
 
+  // A real read in a later turn of the same old verifier cannot retroactively attach to its assessment.
+  let laterVerifierRead = '';
+  provider.setResponder(context => {
+    if (!context.recentToolResults.length) {
+      return { calls: [{ name: 'read_input', arguments: { filename: 'starbridge_orders.csv' } }] };
+    }
+    laterVerifierRead = providerMessageText(context.recentToolResults.at(-1)!.content);
+    return { text: '后续查读完成。' };
+  });
+  const verifierBeforeLateRead = await json(await host.request(`/api/projects/${projAud.id}/tasks/${taskVerifyV2.id}`));
+  await json(await host.request(`/api/projects/${projAud.id}/tasks/${taskVerifyV2.id}/messages`, 'POST', {
+    requestId: randomUUID(), text: '请查阅 11 月新台账。',
+  }), 202);
+  await waitIdle(host, projAud.id, taskVerifyV2.id, verifierBeforeLateRead.snapshot.messages.length + 4);
+  assert.match(laterVerifierRead, /C21.*2026-11-05/);
+
   // Reusing older useBRecord (which NEVER read starCsvNov15!) MUST be rejected with 409!
   const staleUsePostCutoff = await host.request(`/api/studio/enterprise-packs/${packId}/feedback/${fbPostCutoff.feedback.id}/handle`, 'POST', {
     requestId: randomUUID(),
@@ -1985,14 +2016,13 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
       newCutoffChecked: '2026-11-15',
       transactionAssociationNote: '复用旧核验反例',
       shouldChange: [],
-      caseDecisionsPreserved: true,
-    postCutoffNewEvents: [{ itemId: 'C21', originalOrderId: 'O-88', refundDate: '2026-11-05', classification: 'post_cutoff_new_event', beforeValue: '有效', afterValue: '新事件排除' }],
+      postCutoffNewEvents: [{ itemId: 'C21', originalOrderId: 'O-88', refundDate: '2026-11-05', classification: 'post_cutoff_new_event', beforeValue: '有效', afterValue: '新事件排除' }],
       shouldRetain: [{ itemId: 'C13', originalOrderId: 'O-81', unchangedValue: '保留' }],
       originalCaseRef: { caseId: origCase.id, decisionId: origDecisionId, decisionRevision: 1, summary: origCase.title },
       caseDecisionsPreserved: true,
     },
   });
-  assert.equal(staleUsePostCutoff.status, 409, 'Reusing an older verifier that NEVER read the new-cutoff dataset MUST return 409!');
+  assert.equal(staleUsePostCutoff.status, 409, 'A newer input read cannot change what the old verifier assessed.');
 
   // Run fresh analysis taskC + fresh independent verifier taskVerifyC AFTER starCsvNov15 was written!
   const { task: taskC } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '新截止日2026-11-15复算任务C' }), 201);
@@ -2107,11 +2137,6 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
             payload: {
               useId: taskCStudioUseId,
               status: 'pass',
-              evidence: {
-                targetReport: taskCReportRef,
-                coverage: { inputPaths: ['020_clean/starbridge_orders.csv'], scope: '星桥直营店 9 月首购队列，2026-11-15', detail: '星桥四行，柳岸范围未纳入' },
-                comparison: { metrics: [{ name: '分子', reported: 1, recomputed: 1 }, { name: '分母', reported: 4, recomputed: 4 }], facts: 'C21/O-88 新截止全额冲销，C13/O-81 保留' },
-              },
               report: { authority: 'task', id: taskVerifyC.id, projectId: projAud.id, taskId: taskVerifyC.id, version: assessSha, sha256: assessSha, locator: '060_reports/repurchase-v1.1-nov15-assess.json' },
               sources: [refundV2Ref, sapM2Ref],
               result: '独立核验任务 taskVerifyC 实读 2026-11-15 新明细与目标报告 repurchase-v1.1-nov15.json，确认 C21(O-88/2026-11-05) 为截止日后新事件、C13(O-81) 保留，1/4 通过',
