@@ -27,11 +27,17 @@ export class ResourceGrantStore {
   readonly dataRoot: string;
   readonly root: string;
   readonly file: string;
+  readonly readOnlyMode: boolean;
 
-  constructor(dataRoot: string) {
+  constructor(dataRoot: string, options?: { readOnlyMode?: boolean }) {
     this.dataRoot = path.resolve(dataRoot);
     this.root = path.join(this.dataRoot, 'member-packs');
     this.file = path.join(this.root, 'resource-grants.json');
+    this.readOnlyMode = Boolean(options?.readOnlyMode);
+  }
+
+  private assertWritable(): void {
+    if (this.readOnlyMode) fail('member_pack_disabled_readonly', 503);
   }
 
   private directory(dir: string, create: boolean): boolean {
@@ -67,6 +73,7 @@ export class ResourceGrantStore {
   }
 
   private save(index: StoredGrantIndex): void {
+    this.assertWritable();
     this.directory(this.dataRoot, true);
     this.directory(this.root, true);
     const bytes = Buffer.from(JSON.stringify(index, null, 2) + '\n');
@@ -100,7 +107,8 @@ export class ResourceGrantStore {
     return this.load().grants.some(g => g.enterpriseId === eid && (subjectId === undefined || g.subjectId === subjectId));
   }
 
-  grant(input: ResourceGrantInput): ResourceAuthorizationGrant {
+  grant(input: ResourceGrantInput & { grantorVerifiedBy?: 'host' }): ResourceAuthorizationGrant {
+    this.assertWritable();
     const enterpriseId = uuid(input.enterpriseId);
     const grantor = text(input.grantor, 200, false).trim();
     const grantBasis = text(input.grantBasis, 2000, false).trim();
@@ -127,6 +135,7 @@ export class ResourceGrantStore {
       id: randomUUID(),
       enterpriseId,
       grantor,
+      ...(input.grantorVerifiedBy ? { grantorVerifiedBy: input.grantorVerifiedBy } : {}),
       grantBasis,
       subjectType: input.subjectType,
       subjectId,
@@ -144,6 +153,7 @@ export class ResourceGrantStore {
         ...(scope.summaryAssetId ? { summaryAssetId: text(scope.summaryAssetId, 200, false) } : {}),
         ...(scope.summaryVersion ? { summaryVersion: text(scope.summaryVersion, 100, false) } : {}),
         ...(scope.summaryAuthority ? { summaryAuthority: text(scope.summaryAuthority, 200, false) } : {}),
+        ...(scope.summarySha256 ? { summarySha256: text(scope.summarySha256, 128, false) } : {}),
         ...(scope.metricRef ? { metricRef: sourceRef(scope.metricRef) } : {}),
         ...(scope.allowedDataPaths?.length ? { allowedDataPaths: [...new Set(scope.allowedDataPaths.map(p => text(p, 1000, false)))] } : {}),
       },
@@ -159,6 +169,7 @@ export class ResourceGrantStore {
   }
 
   revoke(grantId: string, reason: string): ResourceAuthorizationGrant {
+    this.assertWritable();
     const id = uuid(grantId);
     const revokedReason = text(reason, 2000, false).trim();
     const index = this.load();

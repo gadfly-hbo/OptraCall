@@ -31,7 +31,7 @@ const bundle = (async () => {
   return { semantic, capability, memberPack };
 })();
 
-test('SemanticContextDetails renders layered member pack directory supply, pinned version, access levels, and independent verification boundary', async () => {
+test('SemanticContextDetails renders layered member pack directory supply, exact pinned dependencies, granted stores, authorized summary, default-deny authorization note, pinnedPack read receipt, and independent verification boundary', async () => {
   const { semantic } = await bundle;
   const html = renderToStaticMarkup(createElement(semantic.SemanticContextDetails, {
     view: 'saved',
@@ -55,12 +55,36 @@ test('SemanticContextDetails renders layered member pack directory supply, pinne
                     tier: 'formal-calculation',
                     accessLevels: ['read-definition', 'read-detail-recalculate'],
                     dataCutoffAt: '2026-10-31',
+                    grantedStores: ['星桥直营店'],
+                    authorizedSummary: { summaryAssetId: 'SUM-09', summaryVersion: '1', grain: 'store-month' },
+                    dependencies: [
+                      { id: 'dep-1', role: 'shared-asset', authority: 'sap-method', ref: { authority: 'sap-method', id: 'refund-map', version: '1' } },
+                    ],
                     restrictedDetailNote: '部分门店明细未授权，不可将未授权门店再购当作零',
                   },
                 ],
               },
+              {
+                packId: '22222222-2222-4222-8222-222222222222',
+                packCode: 'PACK-MEM-002',
+                name: '未授权企业包',
+                pinnedVersion: null,
+                authorizationRequired: true,
+                authorizationNote: '新企业会员包需显式配置项目资源授权（定义查阅 / 汇总引用 / 明细重算），仅凭企业归属不自动授予使用权。',
+                purposes: [],
+              },
             ],
           },
+        },
+      },
+      {
+        studio: {
+          action: 'read-source',
+          stage: 'source',
+          complete: true,
+          ref: { authority: 'sap-method', id: 'refund-map', version: '1', sha256: 'abc123' },
+          body: '退款映射规则正文',
+          result: { pinnedPack: { packId: '11111111-1111-4111-8111-111111111111', packVersion: '1.0', purposeIds: ['U-01'] } },
         },
       },
     ],
@@ -68,7 +92,12 @@ test('SemanticContextDetails renders layered member pack directory supply, pinne
   assert.match(html, /本任务固定的领域资产包目录供给/);
   assert.match(html, /固定版 v1\.0/);
   assert.match(html, /read-definition \/ read-detail-recalculate/);
+  assert.match(html, /获准门店：星桥直营店/);
+  assert.match(html, /获准汇总：SUM-09@1（store-month）/);
+  assert.match(html, /固定原依赖：shared-asset:refund-map@1/);
   assert.match(html, /部分门店明细未授权，不可将未授权门店再购当作零/);
+  assert.match(html, /新企业会员包需显式配置项目资源授权/);
+  assert.match(html, /所属固定包版/);
   assert.match(html, /查实错版即使汇总数字相同也判该用途未通过/);
 });
 

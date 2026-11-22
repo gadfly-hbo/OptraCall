@@ -58,10 +58,14 @@ export function DomainPackSettingsPanel({ onOpenStudio }: { onOpenStudio?: () =>
   const [visibility, setVisibility] = useState<DomainReferenceVisibility>('shared');
   const [contentBody, setContentBody] = useState('');
 
+  const [readOnlyRollback, setReadOnlyRollback] = useState(false);
   const [originalDialog, setOriginalDialog] = useState<{
     record: DomainReferenceRecord;
     text?: string;
     sha256?: string;
+    isExcerpt?: boolean;
+    lineRange?: { start: number; end: number; total: number };
+    matchedHeading?: string;
     error?: string;
     loading: boolean;
   }>();
@@ -75,6 +79,7 @@ export function DomainPackSettingsPanel({ onOpenStudio }: { onOpenStudio?: () =>
       if (mounted.current && !signal?.aborted) {
         setReferences(data.references);
         setTemplates(data.builtinTemplates);
+        setReadOnlyRollback(Boolean(data.readOnlyRollback));
       }
     } catch (fault) {
       if (mounted.current && !signal?.aborted) {
@@ -93,7 +98,7 @@ export function DomainPackSettingsPanel({ onOpenStudio }: { onOpenStudio?: () =>
   }, [refresh]);
 
   const handleRegisterTemplate = async (templateId: 'T01' | 'T02' | 'T03' | 'T04') => {
-    if (busy) return;
+    if (busy || readOnlyRollback) return;
     setBusy(true);
     setError('');
     setNotice('');
@@ -116,7 +121,7 @@ export function DomainPackSettingsPanel({ onOpenStudio }: { onOpenStudio?: () =>
 
   const handleRegisterCustom = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (busy) return;
+    if (busy || readOnlyRollback) return;
     setBusy(true);
     setError('');
     setNotice('');
@@ -153,12 +158,20 @@ export function DomainPackSettingsPanel({ onOpenStudio }: { onOpenStudio?: () =>
     }
   };
 
-  const openOriginal = async (record: DomainReferenceRecord) => {
+  const openOriginal = async (record: DomainReferenceRecord, section?: string) => {
     setOriginalDialog({ record, loading: true });
     try {
-      const data = await readDomainReferenceOriginal(record.id);
+      const data = await readDomainReferenceOriginal(record.id, section);
       if (mounted.current) {
-        setOriginalDialog({ record: data.record, text: data.text, sha256: data.sha256, loading: false });
+        setOriginalDialog({
+          record: data.record,
+          text: data.text,
+          sha256: data.sha256,
+          isExcerpt: data.isExcerpt,
+          lineRange: data.lineRange,
+          matchedHeading: data.matchedHeading,
+          loading: false,
+        });
       }
     } catch (fault) {
       if (mounted.current) {
@@ -186,15 +199,16 @@ export function DomainPackSettingsPanel({ onOpenStudio }: { onOpenStudio?: () =>
           <p>按来源身份、准确版本与正文 SHA-256 登记行业与领域参考。同源同版只登记一次，异文保留待核，新旧版并存；参考登记不替代目标企业正式依据。</p>
         </div>
         <div className="studio-actions">
-          <button type="button" className="secondary-button" disabled={busy} onClick={() => setRegisterOpen(true)}>登记参考来源</button>
+          {!readOnlyRollback && <button type="button" className="secondary-button" disabled={busy} onClick={() => setRegisterOpen(true)}>登记参考来源</button>}
           {onOpenStudio && <button type="button" className="primary-button" onClick={onOpenStudio}>进入企业 Studio 建设</button>}
         </div>
       </header>
 
+      {readOnlyRollback && <p className="case-message" role="status">当前处于回退只读模式（--disable-member-pack）：已登记参考来源与历史保留只读可查，暂不接受新登记。</p>}
       {error && <p className="case-message case-error" role="alert">{error}</p>}
       {notice && <p className="case-message" role="status">{notice}</p>}
 
-      {templates.length > 0 && (
+      {templates.length > 0 && !readOnlyRollback && (
         <section className="project-plan-section" aria-label="仓库内置公开参考模板">
           <h3>仓库内置公开参考（核验正文 SHA-256 后登记）</h3>
           <div className="report-action-row">

@@ -92,6 +92,7 @@ export interface ResourceGrantScope {
   summaryAssetId?: string;
   summaryVersion?: string;
   summaryAuthority?: string;
+  summarySha256?: string;
   metricRef?: StudioSourceRef;
   allowedDataPaths?: string[];
 }
@@ -100,6 +101,7 @@ export interface ResourceAuthorizationGrant {
   id: string;
   enterpriseId: string;
   grantor: string;
+  grantorVerifiedBy?: 'host';
   grantBasis: string;
   subjectType: 'project' | 'principal';
   subjectId: string;
@@ -357,6 +359,7 @@ export interface EnterprisePackPreview {
   version: string;
   previousVersion?: string;
   fingerprint: string;
+  draftFingerprint?: string;
   packRevision: number;
   summary: string;
   policyEffectiveFrom?: string;
@@ -399,14 +402,20 @@ export interface EnterprisePackTaskPin {
   pinnedAt: string;
 }
 
+export type FeedbackAdoptionBasis = 'verified_actual_read' | 'directory_only_unverified' | 'clue_only_no_pack_read';
+
 export interface EnterprisePackFeedbackReport {
   projectId: string;
   taskId: string;
   sessionId: string;
   messageId: string;
   reportRef: StudioSourceRef;
+  adoptionBasis?: FeedbackAdoptionBasis;
+  observedDirectoryVersion?: string;
   usedPackVersion?: string;
   usedAssetRefs: StudioSourceRef[];
+  taskCutoffAt?: string;
+  packDataCutoffAt?: string;
   dataCutoffAt?: string;
   roleOrAccessLevel?: string;
   evidenceNote: string;
@@ -422,6 +431,7 @@ export interface EnterprisePackFeedback {
   title: string;
   category: PackFeedbackCategory;
   targetAuthority: PackFeedbackAuthority;
+  targetAssetRef?: StudioSourceRef;
   status: 'recorded' | 'investigating' | 'revision_prepared' | 'published_pending_use' | 'verified' | 'retained_in_task' | 'not_confirmed';
   reports: EnterprisePackFeedbackReport[];
   investigation?: {
@@ -438,6 +448,14 @@ export interface EnterprisePackFeedback {
     toPackVersion: string;
     authorityUpdates: { authority: string; fromRef: StudioSourceRef; toRef: StudioSourceRef; detail: string }[];
     verifiedByUseIds?: string[];
+  };
+  authorityHandling?: {
+    authority: PackFeedbackAuthority;
+    targetRef?: StudioSourceRef;
+    revisedRef?: StudioSourceRef;
+    revisedPackVersion?: string;
+    note: string;
+    updatedAt: string;
   };
   createdAt: string;
   updatedAt: string;
@@ -728,52 +746,153 @@ export interface ExceptionWindowEvaluation {
   reasons: string[];
 }
 
+export interface ExceptionOverlapConflict {
+  exceptionIds: [string, string];
+  eventType: string;
+  stores: string[];
+  reason: string;
+}
+
+function datesOverlap(a: EnterprisePackException, b: EnterprisePackException): boolean {
+  const aStart = Date.parse(a.effectiveFrom);
+  const bStart = Date.parse(b.effectiveFrom);
+  const aEnd = a.effectiveTo ? Date.parse(a.effectiveTo) : Number.POSITIVE_INFINITY;
+  const bEnd = b.effectiveTo ? Date.parse(b.effectiveTo) : Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(aStart) || !Number.isFinite(bStart)) return true;
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+function eventTypesOverlap(a: EnterprisePackException, b: EnterprisePackException): boolean {
+  const ea = a.eventType.trim().toLowerCase();
+  const eb = b.eventType.trim().toLowerCase();
+  if (!ea || ea === '*' || !eb || eb === '*') return true;
+  return ea === eb;
+}
+
+function storesOverlap(a: EnterprisePackException, b: EnterprisePackException, purposeStores?: readonly string[]): { overlaps: boolean; sharedStores: string[] } {
+  const sa = (a.storeIds ?? []).map(s => s.trim()).filter(Boolean);
+  const sb = (b.storeIds ?? []).map(s => s.trim()).filter(Boolean);
+  if (sa.length && sb.length) {
+    const shared = sa.filter(s => sb.includes(s));
+    if (!shared.length) return { overlaps: false, sharedStores: [] };
+    if (purposeStores?.length) {
+      const relevant = shared.filter(s => purposeStores.includes(s));
+      return { overlaps: relevant.length > 0, sharedStores: relevant };
+    }
+    return { overlaps: true, sharedStores: shared };
+  }
+  const narrow = sa.length ? sa : sb;
+  if (narrow.length && purposeStores?.length) {
+    const relevant = narrow.filter(s => purposeStores.includes(s));
+    return { overlaps: relevant.length > 0, sharedStores: relevant };
+  }
+  return { overlaps: true, sharedStores: narrow.length ? narrow : [...(purposeStores ?? [])] };
+}
+
+/**
+ * Checks pairwise overlaps across approved exceptions ONLY when they intersect
+ * in effective time, eventType, AND store/scope, without an explicit approved priorityOver.
+ * Two exceptions active in overlapping dates for different stores or different event types
+ * do NOT conflict.
+ */
+export function detectExceptionOverlaps(
+  exceptions: readonly EnterprisePackException[],
+  purposeStores?: readonly string[],
+): ExceptionOverlapConflict[] {
+  const approved = exceptions.filter(ex => ex.status === 'approved');
+  const conflicts: ExceptionOverlapConflict[] = [];
+  for (let i = 0; i < approved.length; i++) {
+    for (let j = i + 1; j < approved.length; j++) {
+      const a = approved[i]!;
+      const b = approved[j]!;
+      if (!datesOverlap(a, b)) continue;
+      if (!eventTypesOverlap(a, b)) continue;
+      const storeCheck = storesOverlap(a, b, purposeStores);
+      if (!storeCheck.overlaps) continue;
+      const hasPriority = Boolean(a.priorityOver?.includes(b.id) || b.priorityOver?.includes(a.id));
+      if (hasPriority) continue;
+      conflicts.push({
+        exceptionIds: [a.id, b.id],
+        eventType: a.eventType === '*' ? b.eventType : a.eventType,
+        stores: storeCheck.sharedStores,
+        reason: 'overlapping_exceptions_without_approved_priority',
+      });
+    }
+  }
+  return conflicts;
+}
+
 export function evaluateExceptionsAndWindow(input: {
-  eventDate: string;
+  eventDate?: string;
   storeId?: string;
   eventType?: string;
+  purposeStores?: readonly string[];
   exceptions?: readonly EnterprisePackException[];
   observationWindowDays?: number;
   availableHistoryDays?: number;
+  requireHistoryDays?: boolean;
   optedOut?: boolean;
 }): ExceptionWindowEvaluation {
   const reasons: string[] = [];
-  const eventMs = Date.parse(input.eventDate);
-  const matching = (input.exceptions ?? []).filter(ex => {
-    if (ex.status !== 'approved') return false;
-    if (input.eventType && ex.eventType !== input.eventType) return false;
-    if (input.storeId && ex.storeIds?.length && !ex.storeIds.includes(input.storeId)) return false;
-    if (Number.isFinite(eventMs)) {
-      if (eventMs < Date.parse(ex.effectiveFrom)) return false;
-      if (ex.effectiveTo && eventMs > Date.parse(ex.effectiveTo)) return false;
-    }
-    return true;
-  });
-
   let overlapConflict = false;
   let conflictingExceptionIds: string[] = [];
-  let appliedExceptionIds = matching.map(e => e.id);
+  let appliedExceptionIds: string[] = [];
 
-  if (matching.length > 1) {
-    // Only approved explicit priorityOver can resolve overlapping exceptions
-    const winner = matching.find(candidate =>
-      matching.every(other => other.id === candidate.id || candidate.priorityOver?.includes(other.id)),
-    );
-    if (winner) {
-      appliedExceptionIds = [winner.id];
-    } else {
+  if (input.eventDate) {
+    const eventMs = Date.parse(input.eventDate);
+    const matching = (input.exceptions ?? []).filter(ex => {
+      if (ex.status !== 'approved') return false;
+      if (input.eventType && ex.eventType && ex.eventType !== '*' && ex.eventType !== input.eventType) return false;
+      if (input.storeId && ex.storeIds?.length && !ex.storeIds.includes(input.storeId)) return false;
+      if (Number.isFinite(eventMs)) {
+        if (eventMs < Date.parse(ex.effectiveFrom)) return false;
+        if (ex.effectiveTo && eventMs > Date.parse(ex.effectiveTo)) return false;
+      }
+      return true;
+    });
+
+    // Among date-matched exceptions, check pairwise conflicts by store & eventType
+    const pairwise = detectExceptionOverlaps(matching, input.storeId ? [input.storeId] : input.purposeStores);
+    if (pairwise.length > 0) {
       overlapConflict = true;
-      conflictingExceptionIds = matching.map(e => e.id);
+      conflictingExceptionIds = [...new Set(pairwise.flatMap(c => c.exceptionIds))];
       appliedExceptionIds = [];
+      reasons.push('overlapping_exceptions_without_approved_priority');
+    } else if (matching.length > 1) {
+      // Pick non-dominated winners when priorityOver resolves same-scope overlaps, or keep non-conflicting distinct-scope exceptions
+      appliedExceptionIds = matching
+        .filter(candidate => !matching.some(other => other.id !== candidate.id && other.priorityOver?.includes(candidate.id)))
+        .map(e => e.id);
+    } else {
+      appliedExceptionIds = matching.map(e => e.id);
+    }
+  } else {
+    // Preview / structural check without a specific transaction eventDate:
+    // check pairwise overlaps by store/scope + eventType + effective date intervals (never treating dataCutoffAt as eventDate)
+    const pairwise = detectExceptionOverlaps(input.exceptions ?? [], input.purposeStores);
+    if (pairwise.length > 0) {
+      overlapConflict = true;
+      conflictingExceptionIds = [...new Set(pairwise.flatMap(c => c.exceptionIds))];
       reasons.push('overlapping_exceptions_without_approved_priority');
     }
   }
 
+  const missingRequiredHistory = Boolean(
+    input.requireHistoryDays
+    && input.observationWindowDays !== undefined
+    && input.availableHistoryDays === undefined,
+  );
   const windowSufficient = input.observationWindowDays === undefined
-    || input.availableHistoryDays === undefined
-    || input.availableHistoryDays >= input.observationWindowDays;
+    ? true
+    : input.availableHistoryDays === undefined
+      ? !missingRequiredHistory
+      : input.availableHistoryDays >= input.observationWindowDays;
   if (!windowSufficient) {
-    reasons.push(`insufficient_history_${input.availableHistoryDays}d_of_${input.observationWindowDays}d`);
+    reasons.push(
+      input.availableHistoryDays === undefined
+        ? `missing_history_for_${input.observationWindowDays}d_window`
+        : `insufficient_history_${input.availableHistoryDays}d_of_${input.observationWindowDays}d`,
+    );
   }
 
   const smsEligible = input.optedOut !== true;

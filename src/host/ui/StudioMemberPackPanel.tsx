@@ -6,6 +6,7 @@ import {
   confirmPackPreview,
   createResourceGrant,
   ensureEnterprisePack,
+  handlePackFeedback,
   listEnterprisePacks,
   listResourceGrants,
   preparePackPreview,
@@ -76,14 +77,18 @@ export function StudioMemberPackPanel({
   const [goalInput, setGoalInput] = useState('');
   const [activePreview, setActivePreview] = useState<EnterprisePackPreview | null>(null);
   const [decisionMap, setDecisionMap] = useState<Record<string, string>>({});
+  const [decisionOwnerMap, setDecisionOwnerMap] = useState<Record<string, string>>({});
+  const [confirmByInput, setConfirmByInput] = useState('');
 
-  // Grant form state
+  // Grant form state (Host verifies grantor & summary authority identity)
   const [grantProjectId, setGrantProjectId] = useState('');
   const [grantOp, setGrantOp] = useState<ResourceGrantOperation>('read-definition');
   const [grantStores, setGrantStores] = useState('');
+  const [grantAllowedPaths, setGrantAllowedPaths] = useState('');
   const [grantGrain, setGrantGrain] = useState('store-month');
+  const [grantSummaryAssetId, setGrantSummaryAssetId] = useState('');
   const [grantSummaryVer, setGrantSummaryVer] = useState('1');
-  const [grantBasis, setGrantBasis] = useState('企业资料原权责方授权');
+  const [grantBasis, setGrantBasis] = useState('项目用途资源授权');
 
   const mounted = useRef(true);
 
@@ -144,21 +149,30 @@ export function StudioMemberPackPanel({
 
   const handlePreparePreview = async () => {
     if (!pack || busy || !pack.purposes.length) return;
-    setBusy(true);
     setError('');
     setNotice('');
+    // Validate explicit user decision choices and explicit deciders — NEVER silently fall back to options[0] or hardcoded decider!
+    const decisions: { purposeId: string; choiceId: string; selectedKey: string; decidedBy: string }[] = [];
+    for (const p of pack.purposes) {
+      for (const c of p.decisionChoices) {
+        const key = (decisionMap[`${p.id}:${c.id}`] ?? c.selectedKey ?? '').trim();
+        const owner = (decisionOwnerMap[`${p.id}:${c.id}`] ?? c.decidedBy ?? '').trim();
+        if (!key) {
+          setError(`用途「${p.limitedCalculationName || p.title}」的经营取舍「${c.question}」尚未选定，请先明确选择。`);
+          return;
+        }
+        if (!owner) {
+          setError(`请填写经营取舍「${c.question}」的实际决定人（不自动填充固定角色）。`);
+          return;
+        }
+        decisions.push({ purposeId: p.id, choiceId: c.id, selectedKey: key, decidedBy: owner });
+      }
+    }
+    setBusy(true);
     try {
       const nextNum = pack.packRevisions.length;
       const version = nextNum === 0 ? '1.0' : `1.${nextNum}`;
       const previousVersion = pack.packRevisions.at(-1)?.version;
-      const decisions = pack.purposes.flatMap(p =>
-        p.decisionChoices.map(c => ({
-          purposeId: p.id,
-          choiceId: c.id,
-          selectedKey: decisionMap[`${p.id}:${c.id}`] ?? c.selectedKey ?? c.options[0]?.key ?? '',
-          decidedBy: '企业会员运营负责人',
-        })),
-      );
       const res = await preparePackPreview(pack.id, {
         requestId: crypto.randomUUID(),
         ...(currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? { projectId: currentProjectId } : {}),
@@ -173,7 +187,7 @@ export function StudioMemberPackPanel({
       setPack(res.pack);
       setActivePreview(res.preview);
       setSubTab('publication');
-      setNotice(`已生成一份发布预览 v${version}，确认前可核对每个用途的范围、例外与权限。`);
+      setNotice(`已生成一份发布预览 v${version}，确认后将由 Host 直连原 Studio/SAP/资料库权威执行发布并记录真实回执。`);
     } catch (fault) {
       setError(fault instanceof Error ? fault.message : '准备发布预览未能完成。');
     } finally {
@@ -187,27 +201,22 @@ export function StudioMemberPackPanel({
     setError('');
     setNotice('');
     try {
-      const receipts = preview.purposeSnapshots.flatMap((pm, pmIdx) =>
-        pm.dependencies.map((dep, idx) => ({
-          requestId: `P-${preview.version}-${pmIdx + 1}-${idx + 1}`,
-          authority: dep.role === 'summary-result' ? 'studio-source' : dep.role,
-          targetRef: dep.ref,
-          status: 'succeeded' as const,
-          detail: `原权威已确认准确版本 ${dep.ref.id}@${dep.ref.version}`,
-          purposeIds: [pm.purposeId],
-        })),
-      );
+      // Browser NEVER fabricates moduleReceipts; Host executes real original authorities and records actual receipts!
       const res = await confirmPackPreview(pack.id, {
         requestId: crypto.randomUUID(),
         ...(currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? { projectId: currentProjectId } : {}),
         previewId: preview.id,
         fingerprint: preview.fingerprint,
-        confirmedBy: '企业会员运营负责人',
-        moduleReceipts: receipts,
+        ...(confirmByInput.trim() ? { confirmedBy: confirmByInput.trim() } : {}),
       });
       setPack(res.pack);
       setActivePreview(null);
-      setNotice(`已完成 v${res.revision.version} 分项发布确认；首次独立使用仍需在新分析任务中分别验证。`);
+      const suspendedCount = res.revision.purposeManifests.filter(pm => pm.status !== 'eligible').length;
+      setNotice(
+        suspendedCount > 0
+          ? `已完成 v${res.revision.version} 原权威分项核验；有 ${suspendedCount} 项用途因依赖/前置核验未通过保持挂起，独立合格项已入目录。`
+          : `已完成 v${res.revision.version} 原权威分项发布确认；首次独立使用仍需在新分析任务中分别验证。`,
+      );
     } catch (fault) {
       setError(fault instanceof Error ? fault.message : '确认发布未能完成。');
     } finally {
@@ -215,27 +224,26 @@ export function StudioMemberPackPanel({
     }
   };
 
-  const handleReconcile = async (version: string, requestId: string, authority: string, targetRef: unknown, purposeIds: string[]) => {
+  const handleReconcile = async (version: string, targetRequestId: string) => {
     if (!pack || busy) return;
     setBusy(true);
     setError('');
     setNotice('');
     try {
+      // Browser NEVER sends status='succeeded'; Host performs read-only check against the real original authority!
       const res = await reconcilePackReceipt(pack.id, {
         requestId: crypto.randomUUID(),
         ...(currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? { projectId: currentProjectId } : {}),
         version,
-        receipt: {
-          requestId,
-          authority,
-          targetRef,
-          status: 'succeeded',
-          detail: '核查原权威请求回执与目标指纹一致，补记成功并保留原未知/失败记录',
-          purposeIds,
-        },
+        targetRequestId,
       });
       setPack(res.pack);
-      setNotice(`已核查原回执 ${requestId} 并更新依赖用途资格；历史轨迹完整保留。`);
+      const latest = [...res.revision.moduleReceipts].reverse().find(r => r.requestId === targetRequestId);
+      setNotice(
+        latest?.status === 'succeeded'
+          ? `已在原权威只读核实 ${targetRequestId} 已正式发布并恢复依赖用途资格；原历史轨迹完整保留。`
+          : `已向原权威只读核查 ${targetRequestId}，当前结果仍为 ${latest?.status ?? 'unknown'}（${latest?.detail ?? ''}），未强行恢复。`,
+      );
     } catch (fault) {
       setError(fault instanceof Error ? fault.message : '核查原回执未能完成。');
     } finally {
@@ -243,9 +251,31 @@ export function StudioMemberPackPanel({
     }
   };
 
+  const handleRouteFeedbackToAuthority = async (fb: EnterpriseDomainPack['feedbackItems'][number]) => {
+    if (!pack || busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await handlePackFeedback(pack.id, fb.id, {
+        requestId: crypto.randomUUID(),
+        ...(currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? { projectId: currentProjectId } : {}),
+        status: fb.targetAuthority === 'task' ? 'retained_in_task' : 'investigating',
+        note: `已按归属（${fb.targetAuthority}）登记原权威核查与修订任务，仅重核受影响用途。`,
+        impactedPurposeIds: fb.purposeIds,
+      });
+      setPack(res.pack);
+      setNotice(`事项 ${fb.feedbackCode} 已转入原权威处理（${fb.targetAuthority}）；不受影响用途与旧报告保持原样。`);
+    } catch (fault) {
+      setError(fault instanceof Error ? fault.message : '更新反馈处理状态失败。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleAddGrant = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (busy || !grantProjectId) return;
+    if (busy || !grantProjectId || readOnlyRollback) return;
     setBusy(true);
     setError('');
     setNotice('');
@@ -256,10 +286,10 @@ export function StudioMemberPackPanel({
           ? ['read-definition', 'cite-summary']
           : ['read-definition', 'read-detail-recalculate'];
       const stores = grantStores.split(/[、,，\s]+/).map(s => s.trim()).filter(Boolean);
+      const allowedDataPaths = grantAllowedPaths.split(/[、,，\s]+/).map(s => s.trim()).filter(Boolean);
       await createResourceGrant({
         requestId: crypto.randomUUID(),
         enterpriseId,
-        grantor: '企业资料原权责方',
         grantBasis: grantBasis.trim() || '项目资源授权',
         subjectType: 'project',
         subjectId: grantProjectId,
@@ -267,11 +297,12 @@ export function StudioMemberPackPanel({
         operations: ops,
         scope: {
           ...(stores.length ? { stores } : {}),
-          ...(grantOp === 'cite-summary' ? { summaryAssetId: 'authorized-summary', summaryVersion: grantSummaryVer.trim() || '1', summaryAuthority: '总部经营分析中心', grain: grantGrain.trim() || 'store-month' } : {}),
+          ...(allowedDataPaths.length ? { allowedDataPaths } : {}),
+          ...(grantOp === 'cite-summary' ? { summaryAssetId: grantSummaryAssetId.trim(), summaryVersion: grantSummaryVer.trim() || '1', grain: grantGrain.trim() || 'store-month' } : {}),
         },
       });
       await refresh();
-      setNotice('已保存 Host 资源授权记录；客户端角色名不产生权限，实际取用均按此记录核验。');
+      setNotice('已保存 Host 核定资源授权记录（授予方与汇总身份由 Host 按原权威校验）；客户端角色名不产生权限。');
     } catch (fault) {
       setError(fault instanceof Error ? fault.message : '保存资源授权未能完成。');
     } finally {
@@ -489,16 +520,26 @@ export function StudioMemberPackPanel({
                                   <option value="">待负责人选定</option>
                                   {c.options.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
                                 </select>
+                                <input
+                                  aria-label={`${c.question}决定人`}
+                                  placeholder="填写实际决定人"
+                                  value={decisionOwnerMap[`${purpose.id}:${c.id}`] ?? c.decidedBy ?? ''}
+                                  onChange={e => setDecisionOwnerMap(prev => ({ ...prev, [`${purpose.id}:${c.id}`]: e.target.value }))}
+                                />
                               </div>
                             ))}
                           </td>
                           <td>
                             <span>{tierText[purpose.tier]}</span>
                             <p className="studio-meta">统计单位：{purpose.subjectUnit}{purpose.windowDays ? ` · ${purpose.windowDays}日` : ''}</p>
+                            <p className="studio-meta">核验：定义 {purpose.evidenceReadiness.definition} / 映射 {purpose.evidenceReadiness.mapping} / 样算 {purpose.evidenceReadiness.sampleCalculation}</p>
                           </td>
                           <td>
                             <span>{purpose.scope.scopeKey}</span>
                             <p className="studio-meta">生效 {purpose.policyEffectiveFrom || '未定'} · 截止 {purpose.dataCutoffAt || '未核'}</p>
+                            {purpose.observationWindowDays !== undefined && purpose.availableHistoryDays === undefined && (
+                              <p className="studio-badge is-warning">缺少首购历史长度（所需 {purpose.observationWindowDays}天，待核）</p>
+                            )}
                             {purpose.availableHistoryDays !== undefined && purpose.observationWindowDays !== undefined && purpose.availableHistoryDays < purpose.observationWindowDays && (
                               <p className="studio-badge is-warning">历史 {purpose.availableHistoryDays}天 &lt; 所需 {purpose.observationWindowDays}天（待核）</p>
                             )}
@@ -546,6 +587,10 @@ export function StudioMemberPackPanel({
                   }
                 >
                   <p>{activePreview.summary}</p>
+                  <label className="studio-field">
+                    <span>确认发布人（可选，不伪造默认角色）</span>
+                    <input value={confirmByInput} onChange={e => setConfirmByInput(e.target.value)} placeholder="如：会员运营负责人姓名" />
+                  </label>
                   {activePreview.decisions.length > 0 && (
                     <section className="studio-record">
                       <h4>已冻结的业务取舍</h4>
@@ -586,7 +631,7 @@ export function StudioMemberPackPanel({
                       </li>
                     ))}
                   </ul>
-                  <h4>原权威分项发布回执（按发生顺序留存）</h4>
+                  <h4>原权威分项发布回执（按发生顺序留存，Host 实核原权威）</h4>
                   <div className="studio-table-wrap">
                     <table className="studio-foundation-table">
                       <thead>
@@ -605,9 +650,9 @@ export function StudioMemberPackPanel({
                                   type="button"
                                   className="text-button"
                                   disabled={busy}
-                                  onClick={() => { void handleReconcile(latestRevision.version, r.requestId, r.authority, r.targetRef, r.purposeIds); }}
+                                  onClick={() => { void handleReconcile(latestRevision.version, r.requestId); }}
                                 >
-                                  查原回执并恢复
+                                  只读查原权威并核对
                                 </button>
                               )}
                             </td>
@@ -638,13 +683,57 @@ export function StudioMemberPackPanel({
                 <p className="studio-meta">暂无历史版本。</p>
               )}
 
-              <h4>反馈与归属分流（同题同版追加证据）</h4>
+              <h4>反馈与归属分流（同题同版追加证据；严格区分线索与已核实实际采用）</h4>
               {pack.feedbackItems.length > 0 ? (
                 <ul>
                   {pack.feedbackItems.map(fb => (
-                    <li key={fb.id}>
-                      <strong>{fb.feedbackCode} · {fb.title}</strong>（v{fb.packVersion} · {feedbackCategoryText[fb.category]} · 状态 {fb.status}）
-                      <p className="studio-meta">已归集原回复证据 {fb.reports.length} 条；处理归属：{fb.targetAuthority}</p>
+                    <li key={fb.id} className="studio-record">
+                      <strong>{fb.feedbackCode} · {fb.title}</strong>（{feedbackCategoryText[fb.category]} · 状态 {fb.status}）
+                      <p className="studio-meta">
+                        处理归属：{fb.targetAuthority}
+                        {fb.targetAssetRef ? ` · 目标原资产：${fb.targetAssetRef.id}@${fb.targetAssetRef.version}` : ''}
+                        {' '}· 已归集原回复证据 {fb.reports.length} 条
+                      </p>
+                      {fb.authorityHandling && (
+                        <p className="studio-meta">
+                          原权威处理记录：{fb.authorityHandling.note}
+                          {fb.authorityHandling.revisedRef ? ` · 修订版：${fb.authorityHandling.revisedRef.id}@${fb.authorityHandling.revisedRef.version}` : ''}
+                          {fb.authorityHandling.revisedPackVersion ? ` · 新包版：v${fb.authorityHandling.revisedPackVersion}` : ''}
+                        </p>
+                      )}
+                      <ul>
+                        {fb.reports.map((rep, idx) => (
+                          <li key={`${rep.taskId}:${rep.messageId}:${idx}`} className="studio-meta">
+                            <span className={`studio-badge ${rep.adoptionBasis === 'verified_actual_read' ? 'is-success' : 'is-warning'}`}>
+                              {rep.adoptionBasis === 'verified_actual_read'
+                                ? `已核实实际读取原资产（v${rep.usedPackVersion ?? fb.packVersion}）`
+                                : rep.adoptionBasis === 'directory_only_unverified'
+                                  ? `线索来自此回复（仅见目录 v${rep.observedDirectoryVersion ?? fb.packVersion}，未核实实际采用）`
+                                  : '线索来自此回复（未读取包原资产）'}
+                            </span>
+                            {' '}· 原任务截止日：{rep.taskCutoffAt || '未指定'}
+                            {rep.packDataCutoffAt ? ` · 包版本截止日：${rep.packDataCutoffAt}` : ''}
+                            {' '}· 证据：{rep.evidenceNote}
+                            {onOpenTask && (
+                              <button type="button" className="text-button" onClick={() => onOpenTask(rep.projectId, rep.taskId)}>
+                                查看原回复任务
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="studio-actions">
+                        {!readOnlyRollback && fb.status === 'recorded' && (
+                          <button type="button" className="secondary-button" disabled={busy} onClick={() => { void handleRouteFeedbackToAuthority(fb); }}>
+                            转入原权威修订（仅重核受影响用途）
+                          </button>
+                        )}
+                        {onBuildGoal && primarySystem && !readOnlyRollback && fb.targetAuthority !== 'task' && (
+                          <button type="button" className="text-button" onClick={() => onBuildGoal(`处理反馈 ${fb.feedbackCode}（${fb.title}，归属 ${fb.targetAuthority}）：在原权威核查并仅修订受影响用途，不改动未受影响用途与旧报告。`, primarySystem.id)}>
+                            在建设会话继续修订
+                          </button>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -658,7 +747,7 @@ export function StudioMemberPackPanel({
                   {pack.useRecords.map(u => (
                     <li key={u.id}>
                       <strong>{u.reportRef.title || u.reportRef.id}</strong>（v{u.packVersion} · {u.accessLevel} · 独立核验：{u.independentVerification.status}）
-                      <p className="studio-meta">{u.independentVerification.verdictDetail}</p>
+                      <p className="studio-meta">实读原资产：{u.actualReads.length} 项 · {u.independentVerification.verdictDetail}</p>
                       {u.impactNotes?.map((note, idx) => (
                         <p key={idx} className="studio-meta">影响说明（v{note.newPackVersion}）：{note.note}</p>
                       ))}
@@ -678,26 +767,28 @@ export function StudioMemberPackPanel({
 
           {subTab === 'grants' && (
             <div className="studio-member-pack-section">
-              <p className="studio-meta">Host 按此授权记录核验定义查阅、汇总引用与明细重算权限；客户端提交的角色名不产生权限。</p>
+              <p className="studio-meta">Host 按此授权记录核验定义查阅、汇总引用与明细重算权限；授予方与汇总资产身份由 Host 沿原权威核定，客户端角色名不产生权限。新包对未授权项目默认不授予三层使用权。</p>
               {grants.length > 0 ? (
                 <div className="studio-table-wrap">
                   <table className="studio-foundation-table">
                     <thead>
-                      <tr><th>授权项目/主体</th><th>允许操作</th><th>范围与粒度</th><th>状态</th><th>操作</th></tr>
+                      <tr><th>授权项目/主体</th><th>授予方（Host 核定）</th><th>允许操作</th><th>范围与粒度</th><th>状态</th><th>操作</th></tr>
                     </thead>
                     <tbody>
                       {grants.map(g => (
                         <tr key={g.id}>
                           <td>{projects.find(p => p.id === g.subjectId)?.name || g.subjectId}</td>
+                          <td>{g.grantor}</td>
                           <td>{g.operations.map(op => opText[op]).join('、')}</td>
                           <td>
                             {g.scope.stores?.length ? `门店：${g.scope.stores.join('、')}` : '无门店明细范围'}
+                            {g.scope.allowedDataPaths?.length ? ` · 路径：${g.scope.allowedDataPaths.join('、')}` : ''}
                             {g.scope.grain ? ` · 粒度：${g.scope.grain}` : ''}
-                            {g.scope.summaryVersion ? ` · 汇总 v${g.scope.summaryVersion}` : ''}
+                            {g.scope.summaryAssetId ? ` · 汇总 ${g.scope.summaryAssetId}@${g.scope.summaryVersion || ''}` : ''}
                           </td>
                           <td>{g.revokedAt ? `已撤回 (${g.revokedReason || ''})` : '有效'}</td>
                           <td>
-                            {!g.revokedAt && (
+                            {!g.revokedAt && !readOnlyRollback && (
                               <button type="button" className="text-button" disabled={busy} onClick={() => { void handleRevokeGrant(g.id); }}>
                                 撤回授权
                               </button>
@@ -709,38 +800,44 @@ export function StudioMemberPackPanel({
                   </table>
                 </div>
               ) : (
-                <p className="studio-meta">尚未为具体项目配置细粒度资源授权；未配置时沿用普通项目既有授权边界。</p>
+                <p className="studio-meta">尚未为分析项目配置本企业会员包的资源授权；未配置前新包不会仅凭企业归属授予三层使用权。</p>
               )}
 
-              <form onSubmit={e => { void handleAddGrant(e); }} className="studio-record">
-                <h4>新增项目资源授权</h4>
-                <label className="studio-field">
-                  <span>被授权项目</span>
-                  <select required value={grantProjectId} onChange={e => setGrantProjectId(e.target.value)}>
-                    <option value="">选择本企业项目</option>
-                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </label>
-                <label className="studio-field">
-                  <span>最高操作层次</span>
-                  <select value={grantOp} onChange={e => setGrantOp(e.target.value as ResourceGrantOperation)}>
-                    <option value="read-definition">仅查阅正式定义（不提供汇总/明细）</option>
-                    <option value="cite-summary">引用已授权汇总（需匹配期间与粒度）</option>
-                    <option value="read-detail-recalculate">读取获准门店明细并重算</option>
-                  </select>
-                </label>
-                {grantOp === 'cite-summary' && (
-                  <>
-                    <label className="studio-field"><span>汇总粒度</span><input value={grantGrain} onChange={e => setGrantGrain(e.target.value)} /></label>
-                    <label className="studio-field"><span>汇总版本</span><input value={grantSummaryVer} onChange={e => setGrantSummaryVer(e.target.value)} /></label>
-                  </>
-                )}
-                {grantOp === 'read-detail-recalculate' && (
-                  <label className="studio-field"><span>允许读取的门店（顿号或逗号分隔）</span><input value={grantStores} onChange={e => setGrantStores(e.target.value)} placeholder="如：星桥直营店、柳岸直营店" /></label>
-                )}
-                <label className="studio-field"><span>授权依据</span><input required value={grantBasis} onChange={e => setGrantBasis(e.target.value)} /></label>
-                <button type="submit" className="secondary-button" disabled={busy || !grantProjectId}>保存资源授权</button>
-              </form>
+              {!readOnlyRollback && (
+                <form onSubmit={e => { void handleAddGrant(e); }} className="studio-record">
+                  <h4>新增项目资源授权</h4>
+                  <label className="studio-field">
+                    <span>被授权项目</span>
+                    <select required value={grantProjectId} onChange={e => setGrantProjectId(e.target.value)}>
+                      <option value="">选择本企业项目</option>
+                      {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="studio-field">
+                    <span>最高操作层次</span>
+                    <select value={grantOp} onChange={e => setGrantOp(e.target.value as ResourceGrantOperation)}>
+                      <option value="read-definition">仅查阅正式定义（不提供汇总/明细）</option>
+                      <option value="cite-summary">引用已授权汇总（由 Host 校验原汇总资产）</option>
+                      <option value="read-detail-recalculate">读取获准门店明细并重算</option>
+                    </select>
+                  </label>
+                  {grantOp === 'cite-summary' && (
+                    <>
+                      <label className="studio-field"><span>原汇总资产 ID（须已在本企业 Studio/资料库/SAP 正式发布）</span><input required value={grantSummaryAssetId} onChange={e => setGrantSummaryAssetId(e.target.value)} placeholder="原汇总资产 ID" /></label>
+                      <label className="studio-field"><span>汇总粒度</span><input required value={grantGrain} onChange={e => setGrantGrain(e.target.value)} /></label>
+                      <label className="studio-field"><span>汇总版本</span><input required value={grantSummaryVer} onChange={e => setGrantSummaryVer(e.target.value)} /></label>
+                    </>
+                  )}
+                  {grantOp === 'read-detail-recalculate' && (
+                    <>
+                      <label className="studio-field"><span>允许读取的门店（顿号或逗号分隔）</span><input value={grantStores} onChange={e => setGrantStores(e.target.value)} placeholder="如：星桥直营店、柳岸直营店" /></label>
+                      <label className="studio-field"><span>允许读取的 020_clean 路径（顿号或逗号分隔）</span><input value={grantAllowedPaths} onChange={e => setGrantAllowedPaths(e.target.value)} placeholder="如：020_clean/starbridge_orders.csv" /></label>
+                    </>
+                  )}
+                  <label className="studio-field"><span>授权依据</span><input required value={grantBasis} onChange={e => setGrantBasis(e.target.value)} /></label>
+                  <button type="submit" className="secondary-button" disabled={busy || !grantProjectId}>保存资源授权</button>
+                </form>
+              )}
             </div>
           )}
         </>

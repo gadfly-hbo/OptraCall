@@ -46,3 +46,13 @@
   - 编写 `openspec/changes/member-operations-enterprise-pack/result.md`（脱敏公开证据、命令、退出码、未验证项、四原则与 SDK 自检、兼容与 `--disable-member-pack` 回退）；
   - 核对 `git status` / 4 份冻结 OpenSpec 文件 SHA-256 一致 / 提交信息含 `Refs #111`，推送 `work/antigravity/issue-111-member-operations-pack` 并回读远端完整 SHA；
   - 在 Issue #111 提交规范「实现交付」评论并回读确认，停止写入分支，保持 Issue Open。
+
+## 第二轮返工清单（对应 Controller 退回回执 `issuecomment-7072583615`，候选 `f56d1b1b363105fd55727d3e7c81a748da73bc98` 独立复核 FAIL）
+
+- [x] **R1（P1）原权威发布及用途资格**：移除客户端自造成功回执与“查原回执”盲补成功；Host 确认发布直连真实 `StudioStore`/`MetricLibrary`/`SapMethodStore`/`EnterpriseMaterials` 并按原权威只读核查恢复；补齐正式/受限计算缺少首购历史、缺少样本试算、缺少原依赖与回执时禁止 `eligible`；确认前复核草案未漂移（`409 enterprise_pack_draft_changed`）；禁止未决选择自动回退首项与硬编码决定人；按事件发生日、门店与事件类型分别判定例外冲突，不将 `dataCutoffAt` 当作事件日。
+- [x] **R2（P1）授权主体与底层取用**：新包无细粒度授权时默认不授予三层权限（保持既有无包普通项目原行为）；Host 校验并绑定授予方（`grantorVerifiedBy: 'host'`）与真实汇总资产身份/版本/粒度/期间；经统一 `member-pack-guard`（`pi.on('tool_call')`）同步收窄 Pi 原生运行工具（`read`/`bash`/`grep`/`find`/`ls`/`edit`/`write`/`powershell`/`codemode`）与 `read_input`/`studio-sources` 一致隔离并即时响应撤权；参考原文与包历史读取沿可信身份核验并脱敏未授权视图。
+- [x] **R3（P1）建设会话与全景内化**：在统一 `studio_assets` 工具接线 `pack-read` / `pack-save-panorama` / `pack-upsert-entry` / `pack-upsert-purpose`，正常建设入口启动的原官方 Pi SDK `1.4.0` 会话盘点三份资料后直接保存可回查的全景、建议与用途；双线合入同一企业条目时合并保留双方 `referenceLinks` 与 `enterpriseSourceRefs`；参考原文按指定 `section` 真正切片返回原段（无匹配明确 `404`）。
+- [x] **R4（P1）准确版本查读与报告采用**：`studio_assets catalog` 供给已固定包用途的准确原依赖与授权门店/汇总；`read-source` 按任务固定版本与当前授权校验供给（含升版后历史固定依赖回读）；`recordUse` 由 Host 从真实原生任务轨迹与真实 `060_reports/*` 文件字节/SHA-256 核验提取实际读取与报告身份（忽略客户端自报 `actualReads`，无读取证据保持 `pending`，实测错版判 `fail`），独立核验与作者声明分离；升级 Pi 运行时测试走完整 `catalog -> read-source -> read_input/read/bash -> 060_reports/* -> use/verify`。
+- [x] **R5（P1）原回复反馈、原权威修订与独立再用**：原回复关联包反馈出错不再吞错；Host 从原生任务轨迹严格区分 `verified_actual_read` 与 `directory_only_unverified` / `clue_only_no_pack_read`（目录仅见不记 `usedPackVersion="1.0"`），从 `originalUserText` 保留原任务提问截止日（如 `2026-10-27`）不以包截止日（`2026-10-31`）覆盖；新增 `POST /feedback/:feedbackId/handle` 与 Studio 反馈面板出处/归属/原权威修订与独立新任务复验闭环。
+- [x] **R6（P2）回退与归档边界**：`--disable-member-pack` 统一覆盖参考登记、资源授权、企业包全部写路径返回 `503 member_pack_disabled_readonly` 并验证三份落盘 JSON 字节无变化、获准历史只读可查；所有包写入无论是否传 `projectId` 均无条件校验活跃非归档项目（归档返回 `409 studio_project_read_only`）；补全归档/接续/回退回归并更新 `result.md`。
+- [x] **R7 全面回归、真实浏览器复验、推送新候选 SHA 与 Issue #111 回报**：`npm run build` + `npm run check:agent-sessions` + `npm audit --audit-level=high` PASS；专项 10/10 PASS；统一会话/项目文件/语义上下文 155/155 PASS；Studio/Enterprise 331 PASS / 19 SKIP / 0 FAIL；隔离 Chromium 端到端 PASS（0 page errors）。

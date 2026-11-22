@@ -422,6 +422,7 @@ test('EnterprisePackStore handles panorama, two-route single-decision entries, c
       scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店'], period: '2026-09', scopeKey: 'lanxian:direct:starbridge:2026-09' },
       tier: 'formal-calculation',
       businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass' },
       originalGoal: '衡量星桥直营店首购会员 30 日复购率',
       remainingGaps: [],
       exclusions: ['未满 30 日观察窗', '身份未知'],
@@ -519,6 +520,7 @@ test('EnterprisePackStore handles panorama, two-route single-decision entries, c
       tier: 'limited-calculation',
       limitedCalculationName: '资料期内首次可见购买后 30 日复购率',
       businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass' },
       originalGoal: '柳岸直营店复购评估（缺少 9 月前品牌首购历史）',
       deliveredSubset: '仅 9 月 1 日起资料期内首次可见购买，暂停与星桥排名',
       remainingGaps: ['缺少迁入前全品牌首购凭证'],
@@ -758,6 +760,191 @@ test('EnterprisePackStore handles panorama, two-route single-decision entries, c
       independentConfirmed: false,
     });
     assert.equal(noReadEvidenceVerdict.verdict, 'pending');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Round-2 counterexamples: missing history/sample/deps never eligible, draft drift rejects stale preview, unresolved decider rejected, distinct-store/event overlapping-date exceptions do not falsely conflict, dual-route upsertEntry preserves both sources, reference readOriginal slices exact section, and readOnlyMode blocks all 3 stores', () => {
+  const root = tempRoot('r2-counterexamples');
+  try {
+    // 1. Reference section slicing & 404 on missing section
+    const refStore = new DomainReferenceStore(root, process.cwd());
+    const docBody = [
+      '# 会员资产参考模板',
+      '引言第一段。',
+      '## 第 1 节 身份去重',
+      '品牌账号口径说明。',
+      '## 第 2 节 观察窗与退款',
+      '首购后 30 日观察窗，跨月全额退款需冲销。',
+      '## 第 3 节 退订边界',
+      '退订用户不得进入短信候选。',
+    ].join('\n');
+    const reg = refStore.register({
+      sourceId: 'SYNTH-SEC-001',
+      version: '0.1',
+      title: '章节切片测试参考',
+      domain: 'member',
+      routes: ['domain'],
+      maintainer: '测试维护',
+      scope: '章节回读验证',
+      evidenceNature: 'synthetic-fixture',
+      locator: 'synthetic://sec.md',
+      visibility: 'shared',
+      contentBody: docBody,
+    });
+    const sec2 = refStore.readOriginal(reg.record.id, '第 2 节');
+    assert.equal(sec2.isExcerpt, true);
+    assert.ok(sec2.text.includes('观察窗与退款'));
+    assert.ok(!sec2.text.includes('身份去重'));
+    assert.ok(!sec2.text.includes('退订用户不得进入短信候选'));
+    const lineSlice = refStore.readOriginal(reg.record.id, '3-4');
+    assert.equal(lineSlice.isExcerpt, true);
+    assert.equal(lineSlice.text, '## 第 1 节 身份去重\n品牌账号口径说明。');
+    assert.throws(() => refStore.readOriginal(reg.record.id, '不存在的第 99 节'), /domain_reference_section_not_found/);
+
+    // 2. Dual-route upsertEntry merges both routes' referenceLinks and enterpriseSourceRefs without overwriting!
+    const packStore = new EnterprisePackStore(root);
+    const entId = '11111111-1111-4111-8111-111111111111';
+    const sysId = '22222222-2222-4222-8222-222222222222';
+    const pack = packStore.ensurePack({ enterpriseId: entId, systemId: sysId, domain: 'member-operations', name: '反例校验包' });
+
+    const srcA = { authority: 'data' as const, id: 'policy.md', version: '1', sha256: sha('policy'), title: '会员制度' };
+    const srcB = { authority: 'data' as const, id: 'monthly.md', version: '1', sha256: sha('monthly'), title: '月报口径' };
+    packStore.upsertEntry(pack.id, {
+      entryKey: 'valid_purchase',
+      title: '有效购买规则',
+      action: 'modify',
+      routes: ['enterprise'],
+      referenceLinks: [{ refId: reg.record.id, sourceId: 'T03', version: '0.2', sectionLocator: '渠道', evidenceNature: 'public-benchmark' }],
+      enterpriseBasis: '企业线依据：以制度实付成交为准',
+      enterpriseSourceRefs: [srcA],
+      scope: '直营门店',
+      impactedPurposeIds: [],
+      exceptions: [
+        // Two exceptions overlapping in dates (Sep 2026) for DIFFERENT stores & DIFFERENT eventTypes -> MUST NOT conflict!
+        { id: 'ex-star-coupon', replacesRuleKey: 'valid_purchase', eventType: 'coupon_rebate', scope: '星桥满减活动', storeIds: ['星桥直营店'], effectiveFrom: '2026-09-01', effectiveTo: '2026-09-30', approvalBasis: '审批1', approvedBy: '运营甲', status: 'approved' },
+      ],
+    });
+    const afterSecondRoute = packStore.upsertEntry(pack.id, {
+      entryKey: 'valid_purchase',
+      title: '有效购买规则',
+      action: 'modify',
+      routes: ['domain'],
+      referenceLinks: [{ refId: reg.record.id, sourceId: 'DAP-MEMBER-001', version: '0.1', sectionLocator: '第 2 节', evidenceNature: 'generic-draft' }],
+      enterpriseBasis: '会员线依据：全额退款排除',
+      enterpriseSourceRefs: [srcB],
+      scope: '直营门店',
+      impactedPurposeIds: [],
+      exceptions: [
+        { id: 'ex-willow-birthday', replacesRuleKey: 'valid_purchase', eventType: 'birthday_voucher', scope: '柳岸生日券试点', storeIds: ['柳岸直营店'], effectiveFrom: '2026-09-10', effectiveTo: '2026-09-25', approvalBasis: '审批2', approvedBy: '运营乙', status: 'approved' },
+      ],
+    });
+    const mergedEntry = afterSecondRoute.entries.find(e => e.entryKey === 'valid_purchase')!;
+    assert.deepEqual([...mergedEntry.routes].sort(), ['domain', 'enterprise']);
+    assert.equal(mergedEntry.referenceLinks.length, 2, 'Route 2 update must preserve Route 1 referenceLinks');
+    assert.equal(mergedEntry.enterpriseSourceRefs.length, 2, 'Route 2 update must preserve Route 1 enterpriseSourceRefs');
+    assert.ok(mergedEntry.enterpriseBasis.includes('企业线依据') && mergedEntry.enterpriseBasis.includes('会员线依据'));
+    assert.equal(mergedEntry.exceptions.length, 2);
+
+    // 3. Calculation purpose missing history, sampleCalculation, or dependencies MUST NOT become eligible!
+    const depRef = { authority: 'sap-metric' as const, id: 'repurchase', version: '1.0.0', sha256: sha('rep-1') };
+    const noHistory = packStore.upsertPurpose(pack.id, {
+      purposeKey: 'no-history', title: '缺首购历史复购', businessQuestion: '缺历史', subjectUnit: 'brand_account', windowDays: 30,
+      scope: { scopeKey: 's1', stores: ['星桥直营店'] }, tier: 'formal-calculation', businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass' },
+      originalGoal: 'g', completionCriteria: 'c', observationWindowDays: 30, /* availableHistoryDays omitted! */
+      dependencies: [{ id: 'd1', role: 'sap-metric', authority: 'sap-metric', ref: depRef, requiredFor: ['formal-calculation'] }],
+    });
+    const noSample = packStore.upsertPurpose(pack.id, {
+      purposeKey: 'no-sample', title: '缺样算复购', businessQuestion: '缺样算', subjectUnit: 'brand_account', windowDays: 30,
+      scope: { scopeKey: 's2', stores: ['星桥直营店'] }, tier: 'formal-calculation', businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pending' },
+      originalGoal: 'g', completionCriteria: 'c', observationWindowDays: 30, availableHistoryDays: 60,
+      dependencies: [{ id: 'd2', role: 'sap-metric', authority: 'sap-metric', ref: depRef, requiredFor: ['formal-calculation'] }],
+    });
+    const noDeps = packStore.upsertPurpose(pack.id, {
+      purposeKey: 'no-deps', title: '缺依赖复购', businessQuestion: '缺依赖', subjectUnit: 'brand_account', windowDays: 30,
+      scope: { scopeKey: 's3', stores: ['星桥直营店'] }, tier: 'formal-calculation', businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass' },
+      originalGoal: 'g', completionCriteria: 'c', observationWindowDays: 30, availableHistoryDays: 60,
+      dependencies: [],
+    });
+    const readyDistinctEx = packStore.upsertPurpose(pack.id, {
+      purposeKey: 'ready-distinct-ex', title: '不同门店与事件例外不误判冲突', businessQuestion: '验证例外作用域', subjectUnit: 'brand_account', windowDays: 30,
+      scope: { scopeKey: 's4', stores: ['星桥直营店', '柳岸直营店'] }, tier: 'formal-calculation', businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass' },
+      originalGoal: 'g', completionCriteria: 'c', observationWindowDays: 30, availableHistoryDays: 60,
+      dependencies: [{ id: 'd4', role: 'sap-metric', authority: 'sap-metric', ref: depRef, requiredFor: ['formal-calculation'] }],
+      decisionChoices: [{ id: 'c1', question: '跨店归属', options: [{ key: 'first', label: '首购店', impact: '归首购' }] }],
+    });
+
+    // Unresolved decision or missing decider is rejected!
+    assert.throws(() => packStore.preparePreview(pack.id, {
+      version: '1.0', purposeIds: [readyDistinctEx.purpose.id], summary: '未选决定',
+    }), /enterprise_pack_decision_required/);
+    assert.throws(() => packStore.preparePreview(pack.id, {
+      version: '1.0', purposeIds: [readyDistinctEx.purpose.id],
+      decisions: [{ purposeId: readyDistinctEx.purpose.id, choiceId: 'c1', selectedKey: 'first' }],
+      summary: '缺决定人',
+    }), /enterprise_pack_decision_owner_required/);
+
+    const preview = packStore.preparePreview(pack.id, {
+      version: '1.0',
+      purposeIds: [noHistory.purpose.id, noSample.purpose.id, noDeps.purpose.id, readyDistinctEx.purpose.id],
+      decisions: [{ purposeId: readyDistinctEx.purpose.id, choiceId: 'c1', selectedKey: 'first', decidedBy: '实际负责人张三' }],
+      dataCutoffAt: '2026-10-31',
+      summary: '全反例预览',
+    });
+    assert.equal(preview.purposeSnapshots.find(p => p.purposeId === noHistory.purpose.id)!.status, 'restricted');
+    assert.equal(preview.purposeSnapshots.find(p => p.purposeId === noSample.purpose.id)!.status, 'suspended');
+    assert.equal(preview.purposeSnapshots.find(p => p.purposeId === noDeps.purpose.id)!.status, 'suspended');
+    // Distinct store & distinct eventType overlapping-date exceptions MUST NOT falsely conflict!
+    assert.equal(preview.purposeSnapshots.find(p => p.purposeId === readyDistinctEx.purpose.id)!.status, 'eligible');
+
+    // Draft drift after preview MUST reject confirming the stale preview!
+    packStore.upsertPurpose(pack.id, {
+      purposeKey: 'ready-distinct-ex', title: '草案已变动的用途', businessQuestion: '验证漂移', subjectUnit: 'brand_account', windowDays: 30,
+      scope: { scopeKey: 's4', stores: ['星桥直营店', '柳岸直营店'] }, tier: 'formal-calculation', businessStatus: 'active',
+      evidenceReadiness: { definition: 'pass', mapping: 'pass', sampleCalculation: 'pass' },
+      originalGoal: 'g', completionCriteria: 'c', observationWindowDays: 30, availableHistoryDays: 60,
+      dependencies: [{ id: 'd4', role: 'sap-metric', authority: 'sap-metric', ref: depRef, requiredFor: ['formal-calculation'] }],
+    });
+    assert.throws(() => packStore.confirmPreview(pack.id, {
+      previewId: preview.id,
+      fingerprint: preview.fingerprint,
+      moduleReceipts: [{ requestId: 'P-1', authority: 'sap-metric', targetRef: depRef, status: 'succeeded', detail: 'ok', purposeIds: [readyDistinctEx.purpose.id] }],
+    }), /enterprise_pack_draft_changed/);
+
+    // Fresh preview after drift confirms cleanly: only readyDistinctEx becomes eligible; noHistory/noSample/noDeps remain NOT eligible!
+    const preview2 = packStore.preparePreview(pack.id, {
+      version: '1.0',
+      purposeIds: [noHistory.purpose.id, noSample.purpose.id, noDeps.purpose.id, readyDistinctEx.purpose.id],
+      decisions: [{ purposeId: readyDistinctEx.purpose.id, choiceId: 'c1', selectedKey: 'first', decidedBy: '实际负责人张三' }],
+      summary: '重新预览',
+    });
+    const rev = packStore.confirmPreview(pack.id, {
+      previewId: preview2.id,
+      fingerprint: preview2.fingerprint,
+      moduleReceipts: [{ requestId: 'P-1', authority: 'sap-metric', targetRef: depRef, status: 'succeeded', detail: 'ok', purposeIds: [readyDistinctEx.purpose.id] }],
+    });
+    assert.equal(rev.purposeManifests.find(p => p.purposeId === noHistory.purpose.id)!.status, 'restricted');
+    assert.equal(rev.purposeManifests.find(p => p.purposeId === noSample.purpose.id)!.status, 'suspended');
+    assert.equal(rev.purposeManifests.find(p => p.purposeId === noDeps.purpose.id)!.status, 'suspended');
+    assert.equal(rev.purposeManifests.find(p => p.purposeId === readyDistinctEx.purpose.id)!.status, 'eligible');
+
+    // 4. All three stores enforce 503 member_pack_disabled_readonly when readOnlyMode: true!
+    const roRefs = new DomainReferenceStore(root, process.cwd(), { readOnlyMode: true });
+    const roGrants = new ResourceGrantStore(root, { readOnlyMode: true });
+    const roPacks = new EnterprisePackStore(root, { readOnlyMode: true });
+    assert.throws(() => roRefs.registerRepoTemplate('T03'), /member_pack_disabled_readonly/);
+    assert.throws(() => roGrants.grant({
+      enterpriseId: entId, grantor: 'h', grantBasis: 'b', subjectType: 'project', subjectId: sysId, resourceKind: 'definition', operations: ['read-definition'],
+    }), /member_pack_disabled_readonly/);
+    assert.throws(() => roPacks.ensurePack({ enterpriseId: entId, systemId: sysId, domain: 'member-operations', name: 'x' }), /member_pack_disabled_readonly/);
+    // While reads remain intact
+    assert.equal(roRefs.list().length, 1);
+    assert.equal(roPacks.get(pack.id).packRevisions.length, 1);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

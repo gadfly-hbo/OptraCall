@@ -43,29 +43,46 @@ export function StudioFeedbackDialog({ project, task, message, initialSystemId, 
         ? await writeStudioSystem(targetSystemId, 'contributions', { requestId, origin, scope: contributionScope, baseSystemRevision: systems.find(system => system.id === targetSystemId)?.revision, candidate: { kind: candidateKind, title: title.trim(), body: candidateBody, scope: applicableScope.trim(), reason: problem.trim() } })
         : await writeStudioSystem(targetSystemId, 'feedback', { requestId, title: title.trim(), problem: problem.trim(), origin });
       let packNotice = '';
+      let packError = '';
       if (mode === 'feedback') {
         const selectedSys = systems.find(s => s.id === targetSystemId);
         if (selectedSys?.enterpriseId) {
           try {
             const packList = await listEnterprisePacks(selectedSys.enterpriseId, 'member-operations');
             const matchingPack = packList.packs.find(p => p.systemId === targetSystemId) ?? packList.packs[0];
-            if (matchingPack && !packList.readOnlyRollback) {
-              const fbRes = await submitPackFeedback(matchingPack.id, {
-                requestId: crypto.randomUUID(),
-                origin,
-                problemKey: `${feedbackCategory}:${title.trim().toLowerCase()}`,
-                title: title.trim(),
-                category: feedbackCategory,
-                evidenceNote: problem.trim(),
-              });
-              packNotice = fbRes.created
-                ? ` 已同步关联企业包事项 ${fbRes.feedback.feedbackCode}（归属：${fbRes.feedback.targetAuthority}）。`
-                : ` 同题同版已存在，已将本次新证据合并追加至 ${fbRes.feedback.feedbackCode}，未重复起单。`;
+            if (matchingPack) {
+              if (packList.readOnlyRollback) {
+                packError = '企业包当前处于回退只读模式（--disable-member-pack），原 Studio 反馈已保存，企业包事项未写入。';
+              } else {
+                const fbRes = await submitPackFeedback(matchingPack.id, {
+                  requestId: crypto.randomUUID(),
+                  origin,
+                  problemKey: `${feedbackCategory}:${title.trim().toLowerCase()}`,
+                  title: title.trim(),
+                  category: feedbackCategory,
+                  evidenceNote: problem.trim(),
+                });
+                const latestReport = fbRes.feedback.reports.at(-1);
+                const basisLabel = latestReport?.adoptionBasis === 'verified_actual_read'
+                  ? `已核实实际读取原资产（v${latestReport.usedPackVersion ?? fbRes.feedback.packVersion}）`
+                  : latestReport?.adoptionBasis === 'directory_only_unverified'
+                    ? `线索来自此回复（仅见目录 v${latestReport.observedDirectoryVersion ?? fbRes.feedback.packVersion}，尚未核实实际采用）`
+                    : '线索来自此回复（未核实包读取）';
+                packNotice = fbRes.created
+                  ? ` 已同步关联企业包事项 ${fbRes.feedback.feedbackCode}（归属：${fbRes.feedback.targetAuthority}；${basisLabel}）。`
+                  : ` 同题同版已存在，已将本次新证据合并追加至 ${fbRes.feedback.feedbackCode}（${basisLabel}），未重复起单。`;
+              }
             }
-          } catch { /* Pack association is additive; original Studio feedback remains saved. */ }
+          } catch (fault) {
+            packError = `原 Studio 反馈已保存，但关联企业会员包失败：${fault instanceof Error ? fault.message : '请到企业 Studio 核对并重试'}。`;
+          }
         }
       }
-      if (mounted.current) { setSavedSystemId(value.id); setNotice(mode === 'contribution' ? '任务贡献候选已保存并关联准确原回复；未发布、未覆盖基础标准，后续核查与再用另记。' : `反馈已保存并关联原回复。原报告与准确引用保持；接手、源问题核查、修订和再次使用仍分别记实。${packNotice}`); }
+      if (mounted.current) {
+        setSavedSystemId(value.id);
+        if (packError) setError(packError);
+        setNotice(mode === 'contribution' ? '任务贡献候选已保存并关联准确原回复；未发布、未覆盖基础标准，后续核查与再用另记。' : `反馈已保存并关联原回复。原报告与准确引用保持；接手、源问题核查、修订和再次使用仍分别记实。${packNotice}`);
+      }
     } catch (error) { if (mounted.current) { if (error instanceof StudioRequestError && error.uncertain) setPending({ requestId, systemId: targetSystemId, mode }); setError(error instanceof Error ? error.message : '反馈保存未完成。'); } }
     finally { if (mounted.current) setWorking(false); }
   };

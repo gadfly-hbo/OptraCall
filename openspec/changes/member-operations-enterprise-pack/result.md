@@ -76,3 +76,42 @@
 - **存储与数据兼容**：新增持久化文件全部独立位于 `<dataRoot>/member-packs/`（`domain-references.json`、`resource-grants.json`、`enterprise-packs.json`），不修改既有 `<dataRoot>/studio/index.json`、企业资料库、SAP、Case 或历史项目会话 JSONL；未配置细粒度资源授权时，普通既有项目与任务完全沿用原有授权边界，无需数据迁移。
 - **运行时回退开关（`--disable-member-pack`）**：启动 Host 时传入 `--disable-member-pack`（或在 `createHost` 传 `memberPackEnabled: false`），会员运营包所有写入路由立即返回 `503 member_pack_disabled_readonly`，同时完整保留只读查阅历史发布版本、回执、使用依据与已注册参考，不影响既有企业资料、SAP、Case 与普通分析任务（已于 `tests/member-operations-pack-host.test.ts` 实测验证）。
 - **代码回退**：本变更集中于独立新增模块及 10 个既有文件的最小接缝（`+92 / -22` 行），若需彻底回退直接撤销分支/合并提交即可，已落盘的 `<dataRoot>/member-packs/` 可独立保留或只读归档，不触发旧版数据损坏。
+
+---
+
+## 6. 第二轮返工记录（对应独立复核退回 `issuecomment-7072583615`）
+
+### 6.1 第一轮独立复核 FAIL 留痕（原样保留）
+
+- **被退回候选 SHA**：`f56d1b1b363105fd55727d3e7c81a748da73bc98`（分支 `work/antigravity/issue-111-member-operations-pack`）
+- **审核退回回执**：`OC｜SAA_Studio_3` 于 [Issue #111 comment-7072583615](https://github.com/gadfly-hbo/OptraCall/issues/111#issuecomment-7072583615) 判定独立复核未通过（**5 项 P1 + 1 项 P2**），退回返工；领取方于 [Issue #111 comment-7072626586](https://github.com/gadfly-hbo/OptraCall/issues/111#issuecomment-7072626586) 确认接回返工。
+- 第一轮交付记录与既有并发首跑失败留痕保留于上文第 1–5 节，未篡改或抹去。
+
+### 6.2 逐项修复对照（5 × P1 + 1 × P2）
+
+| 退回项 | 严重级 | 根因与修复要点（核心代码路径） | 正常入口与反例验证 |
+| --- | --- | --- | --- |
+| **R1 · 原权威发布及用途资格** | **P1** | `src/host/studio-host.ts` + `src/host/member-pack-host.ts` + `src/host/enterprise-pack-store.ts` + `extensions/business-plugins/studio/enterprise-pack.ts` + `src/host/ui/StudioMemberPackPanel.tsx` + `src/host/ui/member-pack-client.ts`：① `POST /confirm` 与 `POST /reconcile` 彻底忽略客户端传入的 `moduleReceipts` 与 `status`，由 Host 直连真实 `StudioStore`、`MetricLibrary`、`SapMethodStore`、`EnterpriseMaterialsStore` 执行核验/发布并按原权威只读回查核对；② 预览强制显式选定选项与决定人（移除首项静默回退与硬编码角色），计算用途缺首购历史（`restricted`）、缺定义/映射/样算核验或无必要依赖（`suspended`）绝不进入 `eligible`；③ `confirmPreview` 复算 `draftFingerprint`，草案漂移返回 `409 enterprise_pack_draft_changed`；④ `evaluateExceptionsAndWindow` 按事件发生日、门店与事件类型分别判重叠，不再误将 `dataCutoffAt` 当作事件日。 | Store 单测、Host 集成（不存在 SAP 指标 + 客户端伪造成功回执仍判 `failed`/`suspended`，只读核对保持失败；真实 SAP 模拟 `unknown` 后发布实包再只读核对恢复 `succeeded` 且保留原 `unknown` 回执；草案漂移 `409`）、隔离 Chromium 端到端全部 **PASS**。 |
+| **R2 · 授权主体与底层取用** | **P1** | `src/host/member-pack-host.ts` + `src/host/studio-host.ts` + `src/agent/project-runtime.ts` + `src/agent/project-session.ts` + `src/host/server.ts`：① 新企业会员包无有效项目授权时默认拒绝（`purposes: []`, `authorizationRequired: true`），保持既有无包普通项目兼容；② `POST /api/studio/resource-grants` 由 Host 绑定 `grantorVerifiedBy: 'host'` 并通过 `verifySummaryAuthority` 实查原 Studio/企业资料/SAP 汇总资产与 SHA-256（不存在汇总拒 `404`）；③ 通过统一 IPC 能力 `member-pack-guard` 在原官方 Pi SDK `pi.on('tool_call')` 实时收窄 `read`/`write`/`edit`/`grep`/`find`/`ls`/`bash`/`powershell`/`codemode` 与 `read_input`/`studio-sources` 一致执行门店/文件白名单并即时响应撤权；④ 参考原文与包查询校验企业/项目归属并对未授权视图脱敏。 | Host 集成（未授权项目脱敏、伪造汇总 `404`、Host 核定授予方、即时撤权）、真实官方 Pi SDK `1.4.0` 运行时（未授权项目默认拒绝；仅定义项目调 Pi 原生 `read` 被拒；星桥项目调 `read_input`/`read`/`bash` 读 `willowbank_orders.csv` 全部被拒，读 `starbridge_orders.csv` 并写 `060_reports/*` 放行）全部 **PASS**。 |
+| **R3 · 建设会话与全景内化** | **P1** | `src/agent/studio.ts` + `src/host/studio-host.ts` + `src/host/enterprise-pack-store.ts` + `src/host/domain-reference-store.ts`：① 在既有 `studio_assets` 工具扩展 `pack-read` / `pack-save-panorama` / `pack-upsert-entry` / `pack-upsert-purpose`，建设任务上下文注入当前包摘要，原 Pi 会话通读资料后可直接将全景、双线条目与用途草案持久化入包；② `upsertEntry` 合入双路线时合并去重 `routes`、`referenceLinks`、`enterpriseSourceRefs`、`exceptions` 与 `enterpriseBasis`，不再覆盖路线一来源；③ `DomainReferenceStore.readOriginal(id, section)` 支持行号范围与 Markdown 章节真切片返回 `isExcerpt: true` 与 `lineRange`（无匹配返回 `404`）。 | 真实官方 Pi SDK `1.4.0` 正常建设任务（读取 `member_policy.md` / `monthly_report.md` / `order_fields.csv` 并调用 `pack-save-panorama` + 双路线 `pack-upsert-entry` + `pack-upsert-purpose` + `pack-read` 落盘核验）、Store & Host 章节切片正反例全部 **PASS**。 |
+| **R4 · 准确版本查读与报告采用** | **P1** | `src/host/member-pack-host.ts` + `src/host/studio-host.ts` + `src/host/ui/SemanticContextPanel.tsx`：① `studio_assets catalog` 供给已固定版本的准确原依赖 `dependencies`、获准门店与获准汇总；② `read-source` 通过 `inspectPinnedSourceRead` 校验任务固定版本与当前授权，支持升版后旧任务按 `{ historical: true }` 继续读取原固定依赖并附 `pinnedPack`；③ `POST /uses` 由 Host 从真实原生 Pi 任务轨迹提取 `catalogSupplied` 与 `actualReads` 并核验 `060_reports/*` 磁盘文件字节与 SHA-256（拒绝客户端自报读取，无读取保持 `pending`，错版判 `fail`）；④ `SemanticContextPanel` 展示固定依赖、获准门店/汇总、默认拒绝提示与 `pinnedPack`。 | 真实官方 Pi SDK `1.4.0` 运行时（完整 `catalog -> read-source -> read_input/read/bash -> 060_reports/* -> POST /uses -> POST /uses/:id/verify`；升版 `v1.1` 后旧任务仍固定 `v1.0` 并读回旧版 `refundV1Ref`）、UI SSR 全部 **PASS**。 |
+| **R5 · 原回复反馈、原权威修订与独立再用** | **P1** | `src/host/member-pack-host.ts` + `src/host/enterprise-pack-store.ts` + `src/host/ui/StudioFeedbackDialog.tsx` + `src/host/ui/StudioMemberPackPanel.tsx`：① `StudioFeedbackDialog` 不再吞错，如实回显错误或 `adoptionBasis`；② `POST /feedback` 从真实原生轨迹区分 `verified_actual_read` 与 `directory_only_unverified` / `clue_only_no_pack_read`（目录仅见绝不记为已用 `v1.0`），并从 `originalUserText` 提取原任务截止日（且排除注入 JSON 的 `dataCutoffAt` 键），不再以包截止日覆盖任务截止日；③ 新增 `POST /feedback/:feedbackId/handle`（校验真实原权威修订版与独立复算 `pass` 使用记录方允许 `verified` 闭环）及 Studio 反馈处置界面。 | 真实官方 Pi SDK `1.4.0` 运行时（仅看目录任务提问截止 `2026-10-27` vs 包截止 `2026-10-31`：`adoptionBasis === 'directory_only_unverified'`、`usedPackVersion === undefined`、`taskCutoffAt === '2026-10-27'`、`packDataCutoffAt === '2026-10-31'`；实际读取任务 `verified_actual_read` + 同题去重 + 转原权威修订 `v1.1` + 独立新任务 Python 复算证明 `C07` 排除、`C13` 保留 + 原 `v1.0` 报告字节未改 + 闭环 `verified`）全部 **PASS**。 |
+| **R6 · 回退与归档边界** | **P2** | `src/host/domain-reference-store.ts` + `src/host/resource-grant-store.ts` + `src/host/enterprise-pack-store.ts` + `src/host/member-pack-host.ts` + `src/host/ui/{DomainPackSettingsPanel,StudioMemberPackPanel}.tsx`：① `--disable-member-pack` / `memberPackEnabled: false` 统一将参考、授权、企业包三份 Store 置为 `readOnlyMode: true`，全部写路由返回 `503 member_pack_disabled_readonly`，三份落盘 JSON 字节零变更，只读回查保持可用；② `assertWritablePackProject` 无论请求是否传 `projectId`（省略时回退体系主建设执行项目）均无条件拦截归档项目写入（`409 studio_project_read_only`）。 | Store 单测 + Host 集成（显式与省略 `projectId` 归档均返回 `409`；活跃同企项目沿原包 ID 延续；`memberPackEnabled: false` 覆盖参考/授权/撤权/企业包全部写路径返回 `503` 且三份 JSON SHA-256 逐字节不变）全部 **PASS**。 |
+
+### 6.3 第二轮实际执行验证与命令证据
+
+| 验证项 | 实际执行命令 | 结果与计数 | 退出码 |
+| --- | --- | --- | --- |
+| **类型检查、产品构建与构建印章** | `npm run build` | **PASS**（`tsc --noEmit` + `frontend build` + `stamp-build`） | `0` |
+| **统一会话边界与 SDK 治理检查** | `npm run check:agent-sessions` | **PASS**（`Agent session integration boundary and pinned SDK materials: PASS`） | `0` |
+| **高危依赖安全审计** | `npm audit --audit-level=high` | **PASS**（0 high / 0 critical；基线既有 2 项 moderate 来自锁定 `@earendil-works/pi-coding-agent@1.4.0` 的 `minimatch`，未改动任何依赖） | `0` |
+| **会员运营包全套专项与反例测试（Store / Host / Pi SDK `1.4.0` Runtime / UI SSR）** | `node --test --test-concurrency=2 tests/member-operations-pack-store.test.ts tests/member-operations-pack-host.test.ts tests/member-operations-pack-runtime.test.ts tests/member-operations-pack-ui.test.ts` | **10/10 PASS**（0 fail / 0 skip，耗时 `24.4s`） | `0` |
+| **统一会话、项目文件与语义上下文回归** | `node --test --test-concurrency=2 tests/agent-session-boundary.test.ts tests/agent-session-execution.test.ts tests/agent-sessions.test.ts tests/project-files.test.ts tests/project-files-host.test.ts tests/semantic-context-history.test.ts tests/semantic-context-host-client.test.ts tests/semantic-context-host.test.ts tests/semantic-context-reader.test.ts tests/semantic-context-runtime.test.ts tests/semantic-context-service.test.ts tests/semantic-context-ui.test.ts tests/semantic-context-write.test.ts` | **155/155 PASS**（0 fail / 0 skip，耗时 `87.0s`） | `0` |
+| **Studio / Studio2 / Enterprise 全套回归** | `node --test --test-concurrency=2 tests/studio-*.test.ts tests/studio2-*.test.ts tests/enterprise-*.test.ts` | **331 PASS / 19 SKIP / 0 FAIL**（耗时 `172.0s`） | `0` |
+| **隔离无头 Chromium 产品端到端验证** | `python3 tests/browser-member-operations-pack.py` | **PASS**（`0 pageerrors`；验证设置 T03 SHA-256/去重/原文抽屉→Studio 建包→显式选定选项与决定人→预览确认真实原权威：不存在 SAP 指标判 `failed`/`suspended` 且点「只读查原权威并核对」保持失败，真实启用企业资料判 `succeeded`/`eligible`→Host 核定授予方与路径白名单授权创建及撤回） | `0` |
+
+### 6.4 第二轮未验证项（与第一轮边界一致，诚实保留 `NOT_RUN`）
+
+- **6 份 MacBook 私有参考原文实体回读**：`NOT_RUN`（云端 VM 不含私有机密原文，仅核验仓库公开 Nike `T03`/`T04` 及合成替身）。
+- **全仓 400+ 测试文件完整 `npm run test`**：`NOT_RUN`（本轮实跑受影响全部套件共 496 PASS / 19 SKIP / 0 FAIL；全仓 CI 交由 PR/Controller 补跑）。
+- **真实商业大模型分析与验收人盲验答案核对 / 独立非作者复核 / PR 与 `main` 合并 / 设备切换**：`NOT_RUN`（未产生外部商业模型调用，交由 `OC｜SAA_Studio_3` 复验）。

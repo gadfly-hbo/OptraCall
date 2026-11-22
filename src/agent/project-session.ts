@@ -262,7 +262,28 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     };
     // MCP waits for direct servers before this observation; this is not a model-turn gate.
     pi.on('before_agent_start', () => { for (const connector of connectors) checkDirectory(connector); });
-    pi.on('tool_call', event => {
+    pi.on('tool_call', async event => {
+      if (options.memberPackGuardEnabled && ['read', 'write', 'edit', 'grep', 'find', 'ls', 'bash', 'powershell', 'codemode'].includes(event.toolName) && run && manager) {
+        try {
+          const check = await requestHostTool(
+            {
+              feature: 'member-pack-guard',
+              action: 'check',
+              input: { toolName: event.toolName, input: (event.input && typeof event.input === 'object' ? event.input : {}) as Record<string, unknown> },
+              toolCallId: event.toolCallId,
+              requestId: run.id,
+              sessionId: manager.getSessionId(),
+            },
+            new AbortController().signal,
+            'member_pack_guard_unavailable',
+          ) as { allowed?: boolean; reason?: string };
+          if (check && check.allowed === false) {
+            return { block: true, reason: check.reason || 'member_pack_detail_access_denied' };
+          }
+        } catch {
+          return { block: true, reason: 'member_pack_guard_unavailable' };
+        }
+      }
       const connector = connectors.find(item => event.toolName.startsWith(item.prefix));
       if (!connector) return;
       if (!connector.enabled) return { block: true, reason: `${connector.label}工具未在当前普通任务资源开启。` };

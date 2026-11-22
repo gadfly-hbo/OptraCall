@@ -96,12 +96,18 @@ export class DomainReferenceStore {
   readonly root: string;
   readonly file: string;
   readonly codeRoot: string;
+  readonly readOnlyMode: boolean;
 
-  constructor(dataRoot: string, codeRoot = process.cwd()) {
+  constructor(dataRoot: string, codeRoot = process.cwd(), options?: { readOnlyMode?: boolean }) {
     this.dataRoot = path.resolve(dataRoot);
     this.root = path.join(this.dataRoot, 'member-packs');
     this.file = path.join(this.root, 'domain-references.json');
     this.codeRoot = path.resolve(codeRoot);
+    this.readOnlyMode = Boolean(options?.readOnlyMode);
+  }
+
+  private assertWritable(): void {
+    if (this.readOnlyMode) fail('member_pack_disabled_readonly', 503);
   }
 
   private directory(dir: string, create: boolean): boolean {
@@ -137,6 +143,7 @@ export class DomainReferenceStore {
   }
 
   private save(index: StoredReferenceIndex): void {
+    this.assertWritable();
     this.directory(this.dataRoot, true);
     this.directory(this.root, true);
     const bytes = Buffer.from(JSON.stringify(index, null, 2) + '\n');
@@ -175,7 +182,118 @@ export class DomainReferenceStore {
     return clone(found);
   }
 
-  readOriginal(id: string, sectionLocator?: string): { record: DomainReferenceRecord; text: string; sha256: string; sectionLocator?: string } {
+  private extractSection(body: string, record: DomainReferenceRecord, sectionLocator: string): {
+    text: string;
+    lineRange: { start: number; end: number; total: number };
+    matchedHeading?: string;
+  } {
+    const lines = body.split(/\r?\n/);
+    const total = lines.length;
+    const raw = sectionLocator.trim();
+    if (!raw) fail('invalid_domain_reference_section', 400);
+
+    // 1. Line range locator: e.g. "195-215", "L195-L215", "第 195–215 行", "10~20"
+    const lineRangeMatch = /^(?:第\s*)?[Ll]?(\d+)\s*[-–—~至到]\s*[Ll]?(\d+)\s*行?$/.exec(raw);
+    if (lineRangeMatch) {
+      const start = Number(lineRangeMatch[1]);
+      const end = Number(lineRangeMatch[2]);
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start || start > total) {
+        fail('domain_reference_section_not_found', 404);
+      }
+      const clampedEnd = Math.min(end, total);
+      return {
+        text: lines.slice(start - 1, clampedEnd).join('\n'),
+        lineRange: { start, end: clampedEnd, total },
+      };
+    }
+
+    // 2. Declared section lookup (resolve to heading/locator/excerpt if registered)
+    const declared = record.sections?.find(s =>
+      s.id === raw || s.locator === raw || s.title === raw,
+    );
+    const targetNeedle = (declared?.locator || declared?.title || raw).replace(/^#+\s*/, '').trim();
+
+    // 3. Markdown heading match (supports "# 标题", "2.1", "第 2 节", "第 2-3 节")
+    const headings: { lineIdx: number; level: number; headingText: string }[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^(#{1,6})\s+(.*)$/.exec(lines[i]!);
+      if (m) headings.push({ lineIdx: i, level: m[1]!.length, headingText: m[2]!.trim() });
+    }
+
+    // Range of numbered sections: e.g. "第 2-3 节" / "第2–3节" / "2-3"
+    const secRangeMatch = /^(?:第\s*)?(\d+)\s*[-–—~至到]\s*(\d+)\s*(?:节|章)?$/.exec(targetNeedle);
+    if (secRangeMatch && headings.length) {
+      const fromNum = Number(secRangeMatch[1]);
+      const toNum = Number(secRangeMatch[2]);
+      const startHeadingIdx = headings.findIndex(h => new RegExp(`^(?:第\\s*${fromNum}\\s*[节章]|${fromNum}(?:\\.|\\s|、|$))`).test(h.headingText));
+      const endHeadingIdx = headings.findIndex((h, idx) => idx >= startHeadingIdx && new RegExp(`^(?:第\\s*${toNum}\\s*[节章]|${toNum}(?:\\.|\\s|、|$))`).test(h.headingText));
+      if (startHeadingIdx >= 0 && endHeadingIdx >= startHeadingIdx) {
+        const first = headings[startHeadingIdx]!;
+        const last = headings[endHeadingIdx]!;
+        let nextLine = total;
+        for (let k = endHeadingIdx + 1; k < headings.length; k++) {
+          if (headings[k]!.level <= last.level) { nextLine = headings[k]!.lineIdx; break; }
+        }
+        return {
+          text: lines.slice(first.lineIdx, nextLine).join('\n'),
+          lineRange: { start: first.lineIdx + 1, end: nextLine, total },
+          matchedHeading: `${first.headingText} .. ${last.headingText}`,
+        };
+      }
+    }
+
+    // Single heading match (exact, numbered section, or case-insensitive substring)
+    const singleNumMatch = /^(?:第\s*)?(\d+(?:\.\d+)*)\s*(?:节|章)?$/.exec(targetNeedle);
+    let matchedIdx = -1;
+    if (singleNumMatch) {
+      const num = singleNumMatch[1]!.replace(/\./g, '\\.');
+      matchedIdx = headings.findIndex(h => new RegExp(`^(?:第\\s*${num}\\s*[节章]|${num}(?:\\.|\\s|、|$))`).test(h.headingText));
+    }
+    if (matchedIdx < 0) {
+      const lowerNeedle = targetNeedle.toLowerCase();
+      matchedIdx = headings.findIndex(h => h.headingText.toLowerCase() === lowerNeedle)
+        >= 0
+        ? headings.findIndex(h => h.headingText.toLowerCase() === lowerNeedle)
+        : headings.findIndex(h => h.headingText.toLowerCase().includes(lowerNeedle));
+    }
+    if (matchedIdx >= 0) {
+      const matched = headings[matchedIdx]!;
+      let nextLine = total;
+      for (let k = matchedIdx + 1; k < headings.length; k++) {
+        if (headings[k]!.level <= matched.level) { nextLine = headings[k]!.lineIdx; break; }
+      }
+      return {
+        text: lines.slice(matched.lineIdx, nextLine).join('\n'),
+        lineRange: { start: matched.lineIdx + 1, end: nextLine, total },
+        matchedHeading: matched.headingText,
+      };
+    }
+
+    // 4. Fallback to declared excerpt if exact section metadata existed and appears verbatim in body
+    if (declared?.excerpt && body.includes(declared.excerpt)) {
+      const idx = body.indexOf(declared.excerpt);
+      const start = body.slice(0, idx).split(/\r?\n/).length;
+      const span = declared.excerpt.split(/\r?\n/).length;
+      return {
+        text: declared.excerpt,
+        lineRange: { start, end: start + span - 1, total },
+        matchedHeading: declared.title,
+      };
+    }
+
+    fail('domain_reference_section_not_found', 404);
+  }
+
+  readOriginal(id: string, sectionLocator?: string): {
+    record: DomainReferenceRecord;
+    text: string;
+    sha256: string;
+    excerptSha256?: string;
+    isExcerpt: boolean;
+    lineRange?: { start: number; end: number; total: number };
+    matchedHeading?: string;
+    sectionLocator?: string;
+  } {
     const record = this.get(id);
     if (record.contentStatus !== 'available' || !record.contentSha256 || typeof record.contentBody !== 'string') {
       fail('domain_reference_source_unavailable', 409);
@@ -183,15 +301,31 @@ export class DomainReferenceStore {
     if (sha(record.contentBody) !== record.contentSha256) {
       fail('domain_reference_source_changed', 409);
     }
+    if (sectionLocator && sectionLocator.trim()) {
+      const extracted = this.extractSection(record.contentBody, record, sectionLocator);
+      return {
+        record,
+        text: extracted.text,
+        sha256: record.contentSha256,
+        excerptSha256: sha(extracted.text),
+        isExcerpt: true,
+        lineRange: extracted.lineRange,
+        ...(extracted.matchedHeading ? { matchedHeading: extracted.matchedHeading } : {}),
+        sectionLocator: sectionLocator.trim(),
+      };
+    }
+    const total = record.contentBody.split(/\r?\n/).length;
     return {
       record,
       text: record.contentBody,
       sha256: record.contentSha256,
-      ...(sectionLocator ? { sectionLocator } : {}),
+      isExcerpt: false,
+      lineRange: { start: 1, end: total, total },
     };
   }
 
   register(input: DomainReferenceRegisterInput): DomainReferenceRegisterResult {
+    this.assertWritable();
     const sourceId = text(input.sourceId, 200, false).trim();
     const version = text(input.version, 100, false).trim();
     const title = text(input.title, 300, false).trim();

@@ -39,7 +39,7 @@ export interface BuiltinTemplateSummary {
 export async function listDomainReferences(
   params?: { enterpriseId?: string; domain?: DomainReferenceDomain; sourceId?: string; query?: string },
   signal?: AbortSignal,
-): Promise<{ references: DomainReferenceRecord[]; builtinTemplates: BuiltinTemplateSummary[] }> {
+): Promise<{ references: DomainReferenceRecord[]; builtinTemplates: BuiltinTemplateSummary[]; readOnlyRollback?: boolean }> {
   const qs = new URLSearchParams();
   if (params?.enterpriseId) qs.set('enterpriseId', params.enterpriseId);
   if (params?.domain) qs.set('domain', params.domain);
@@ -66,7 +66,16 @@ export async function readDomainReferenceOriginal(
   id: string,
   section?: string,
   signal?: AbortSignal,
-): Promise<{ record: DomainReferenceRecord; text: string; sha256: string; sectionLocator?: string }> {
+): Promise<{
+  record: DomainReferenceRecord;
+  text: string;
+  sha256: string;
+  excerptSha256?: string;
+  isExcerpt?: boolean;
+  lineRange?: { start: number; end: number; total: number };
+  matchedHeading?: string;
+  sectionLocator?: string;
+}> {
   const suffix = section ? `?section=${encodeURIComponent(section)}` : '';
   return studioRequest(`domain-references/${encodeURIComponent(id)}/original${suffix}`, 'GET', undefined, signal);
 }
@@ -75,7 +84,7 @@ export async function listResourceGrants(
   enterpriseId?: string,
   subjectId?: string,
   signal?: AbortSignal,
-): Promise<{ grants: ResourceAuthorizationGrant[] }> {
+): Promise<{ grants: ResourceAuthorizationGrant[]; readOnlyRollback?: boolean }> {
   const qs = new URLSearchParams();
   if (enterpriseId) qs.set('enterpriseId', enterpriseId);
   if (subjectId) qs.set('subjectId', subjectId);
@@ -84,7 +93,7 @@ export async function listResourceGrants(
 }
 
 export async function createResourceGrant(
-  input: ResourceGrantInput & { requestId: string },
+  input: Omit<ResourceGrantInput, 'grantor'> & { grantor?: string; requestId: string },
 ): Promise<{ grant: ResourceAuthorizationGrant }> {
   return studioRequest('resource-grants', 'POST', input);
 }
@@ -151,11 +160,22 @@ export async function preparePackPreview(packId: string, input: Record<string, u
   return studioRequest(`enterprise-packs/${encodeURIComponent(packId)}/previews`, 'POST', input);
 }
 
-export async function confirmPackPreview(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack; revision: EnterprisePackRevision }> {
+export async function confirmPackPreview(packId: string, input: {
+  requestId: string;
+  projectId?: string;
+  previewId: string;
+  fingerprint: string;
+  confirmedBy?: string;
+}): Promise<{ pack: EnterpriseDomainPack; revision: EnterprisePackRevision }> {
   return studioRequest(`enterprise-packs/${encodeURIComponent(packId)}/confirm`, 'POST', input);
 }
 
-export async function reconcilePackReceipt(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack; revision: EnterprisePackRevision }> {
+export async function reconcilePackReceipt(packId: string, input: {
+  requestId: string;
+  projectId?: string;
+  version: string;
+  targetRequestId: string;
+}): Promise<{ pack: EnterpriseDomainPack; revision: EnterprisePackRevision }> {
   return studioRequest(`enterprise-packs/${encodeURIComponent(packId)}/reconcile`, 'POST', input);
 }
 
@@ -173,6 +193,10 @@ export async function verifyPackUse(packId: string, useId: string, input: Record
 
 export async function submitPackFeedback(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack; feedback: EnterprisePackFeedback; created: boolean }> {
   return studioRequest(`enterprise-packs/${encodeURIComponent(packId)}/feedback`, 'POST', input);
+}
+
+export async function handlePackFeedback(packId: string, feedbackId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack; feedback: EnterprisePackFeedback }> {
+  return studioRequest(`enterprise-packs/${encodeURIComponent(packId)}/feedback/${encodeURIComponent(feedbackId)}/handle`, 'POST', input);
 }
 
 export async function recordPackUpgradeImpact(packId: string, input: Record<string, unknown>): Promise<{ impact: EnterprisePackUpgradeImpact; pack: EnterpriseDomainPack }> {

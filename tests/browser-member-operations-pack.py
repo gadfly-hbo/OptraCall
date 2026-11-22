@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Isolated headless Chromium browser verification for Issue #111 (Member Operations Enterprise Pack)."""
+"""Isolated headless Chromium browser verification for Issue #111 Round-2 (Member Operations Enterprise Pack)."""
 import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 import urllib.request
+import uuid as _uuid
 from playwright.sync_api import sync_playwright
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -65,7 +65,7 @@ try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read().decode('utf-8'))
 
-    # Seed minimal synthetic configuration, enterprise, project, system, and pack panorama/purpose
+    # Seed minimal synthetic configuration, enterprise, project, system, and ONE real enabled Enterprise Material
     api('/api/configuration', 'PUT', {
         'name': 'Browser Synthetic',
         'provider': 'openai-compatible',
@@ -77,15 +77,29 @@ try:
     eid = ent['id']
     proj = api('/api/projects', 'POST', {'name': '织屿会员建设'})['project']
     api('/api/studio/enterprise-associations', 'POST', {'kind': 'project', 'entityId': proj['id'], 'enterpriseId': eid})
-    import uuid as _uuid
-    sys_obj = api('/api/studio/systems', 'POST', {
+
+    mat = api('/api/enterprise-materials', 'POST', {
+        'title': '织屿会员有效购买制度 v1',
+        'body': '有效购买口径：单品牌会员账号口径，扣除全额退款订单。',
+    })['material']
+    enabled_mat = api(f"/api/enterprise-materials/{mat['id']}/enable", 'POST', {'expectedVersion': mat['version']})
+    mat_rev = enabled_mat['material']['revisions'][0]
+    api('/api/studio/enterprise-associations', 'POST', {
+        'requestId': str(_uuid.uuid4()),
+        'kind': 'asset',
+        'authority': 'enterprise',
+        'entityId': mat['id'],
+        'enterpriseId': eid,
+    })
+
+    api('/api/studio/systems', 'POST', {
         'requestId': str(_uuid.uuid4()),
         'enterpriseId': eid,
         'name': '织屿会员运营体系',
         'projectId': proj['id'],
         'goal': '盘点会员运营现状并建设门店复购',
         'topicTitle': '会员运营',
-    })['system']
+    })
 
     errors = []
     with sync_playwright() as p:
@@ -122,7 +136,9 @@ try:
         page.get_by_role('button', name='初始化本企业会员运营包').click()
         page.get_by_text('PACK-MEM-001').first.wait_for(timeout=10_000)
 
-        # Seed a panorama + purpose via Host API (simulating Agent/Studio draft preparation), then verify UI preview -> confirm -> receipts
+        # Seed TWO purposes via Host API:
+        # (a) Calculation purpose referencing a NONEXISTENT SAP metric (MET-FAKE-BROWSER-999@9.9.9) with UNDECIDED choice
+        # (b) Definition-reference purpose referencing the REAL enabled Enterprise Material above
         packs = api(f'/api/studio/enterprise-packs?enterpriseId={eid}&domain=member-operations')['packs']
         pack_id = packs[0]['id']
         api(f'/api/studio/enterprise-packs/{pack_id}/purposes', 'POST', {
@@ -140,6 +156,7 @@ try:
             'originalGoal': '核算全品牌 90 天门店复购率',
             'deliveredSubset': '当前仅在星桥、柳岸两家直营店按单品牌会员账号试算',
             'completionCriteria': '经独立分析任务核对样本重算并通过',
+            'evidenceReadiness': {'definition': 'pass', 'mapping': 'pass', 'sampleCalculation': 'pass'},
             'policyEffectiveFrom': '2026-01-01',
             'dataCutoffAt': '2026-06-30',
             'observationWindowDays': 90,
@@ -153,21 +170,51 @@ try:
                     {'key': 'first-store', 'label': '归首购门店（同城跨店计复购）', 'impact': '星桥首购+柳岸复购计入星桥'},
                     {'key': 'same-store-only', 'label': '仅同店复购', 'impact': '跨店不计入'},
                 ],
-                'selectedKey': 'first-store',
-                'decidedBy': '会员运营负责人',
             }],
             'dependencies': [{
-                'id': 'dep-sap-rep',
+                'id': 'dep-sap-fake',
                 'role': 'sap-metric',
                 'authority': 'sap-metric',
                 'ref': {
                     'authority': 'sap-metric',
-                    'id': 'MET-REP-90D',
-                    'version': '1.0.0',
+                    'id': 'MET-FAKE-BROWSER-999',
+                    'version': '9.9.9',
                     'sha256': 'a' * 64,
-                    'title': '90天门店复购率',
+                    'title': '不存在的90天复购指标',
                 },
                 'requiredFor': ['limited-calculation'],
+            }],
+        })
+        api(f'/api/studio/enterprise-packs/{pack_id}/purposes', 'POST', {
+            'requestId': str(_uuid.uuid4()),
+            'projectId': proj['id'],
+            'purposeKey': 'member-valid-order-def',
+            'title': '会员有效购买口径定义',
+            'businessQuestion': '如何定义单品牌会员有效购买？',
+            'tier': 'definition-reference',
+            'businessStatus': 'active',
+            'subjectUnit': 'brand_account',
+            'scope': {'scopeKey': 'zhiyu:direct:all:def', 'brand': '织屿主品牌', 'channel': '直营门店'},
+            'originalGoal': '明确单品牌会员有效购买定义',
+            'completionCriteria': '关联真实启用企业资料',
+            'evidenceReadiness': {'definition': 'pass'},
+            'policyEffectiveFrom': '2026-01-01',
+            'dataCutoffAt': '2026-06-30',
+            'exclusions': ['全额退款订单'],
+            'remainingGaps': [],
+            'dependencies': [{
+                'id': 'dep-ent-real',
+                'role': 'member-rule',
+                'authority': 'enterprise',
+                'ref': {
+                    'authority': 'enterprise',
+                    'id': mat['id'],
+                    'version': mat_rev['revisionId'],
+                    'sha256': mat_rev['bodySha256'],
+                    'locator': enabled_mat['storeId'],
+                    'title': '织屿会员有效购买制度 v1',
+                },
+                'requiredFor': ['definition-reference'],
             }],
         })
 
@@ -181,21 +228,42 @@ try:
         page.get_by_label('当前企业').select_option(eid)
         page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
 
-        page.get_by_role('button', name='建设草案 (0 条 / 1 用途)').click()
+        page.get_by_role('button', name='建设草案 (0 条 / 2 用途)').click()
         page.get_by_text('直营门店90天复购率（两店试算版）').first.wait_for(timeout=10_000)
+
+        # Explicitly choose option + decider in UI (no silent fallback!)
+        page.get_by_label('跨店复购归属口径', exact=True).select_option('first-store')
+        page.get_by_label('跨店复购归属口径决定人').fill('张明（会员运营负责人）')
+
         page.get_by_role('button', name='生成一份发布预览').click()
         page.get_by_role('heading', name='确认发布预览 · v1.0').wait_for(timeout=10_000)
+        page.get_by_label('确认发布人（可选，不伪造默认角色）').fill('张明（会员运营负责人）')
         page.get_by_role('button', name='确认并按用途发布').click()
         page.get_by_text('当前发布版 v1.0').wait_for(timeout=10_000)
-        page.get_by_text('P-1.0-1-1').wait_for(timeout=10_000)
 
-        # Create and revoke a resource grant from UI
+        # Verify REAL authority outcomes in Chromium UI:
+        # - Nonexistent SAP metric MUST show failed receipt & suspended purpose (NOT succeeded / eligible!)
+        # - Real enabled enterprise material MUST show succeeded receipt & eligible purpose!
+        page.get_by_text('suspended').first.wait_for(timeout=10_000)
+        page.get_by_text('eligible').first.wait_for(timeout=10_000)
+        page.get_by_text('failed').first.wait_for(timeout=10_000)
+        page.get_by_text('succeeded').first.wait_for(timeout=10_000)
+
+        # Clicking read-only reconcile against nonexistent SAP metric MUST keep it failed & suspended!
+        page.get_by_role('button', name='只读查原权威并核对').first.click()
+        page.get_by_text('当前结果仍为 failed').wait_for(timeout=10_000)
+        page.get_by_text('未强行恢复').wait_for(timeout=10_000)
+        page.get_by_text('suspended').first.wait_for(timeout=10_000)
+
+        # 3. Create (with Host-verified grantor & allowedDataPaths) and revoke a resource grant from UI
         page.get_by_role('button', name='三层资源授权 (0)').click()
         page.get_by_role('heading', name='新增项目资源授权').wait_for(timeout=10_000)
         page.get_by_label('被授权项目').select_option(proj['id'])
         page.get_by_label('最高操作层次').select_option('read-detail-recalculate')
         page.get_by_label('允许读取的门店（顿号或逗号分隔）').fill('星桥直营店')
+        page.get_by_label('允许读取的 020_clean 路径（顿号或逗号分隔）').fill('020_clean/starbridge_orders.csv')
         page.get_by_role('button', name='保存资源授权').click()
+        page.get_by_text('Host 核定').first.wait_for(timeout=10_000)
         page.get_by_text('门店：星桥直营店').wait_for(timeout=10_000)
         page.get_by_role('button', name='撤回授权').first.click()
         page.get_by_text('已撤回').first.wait_for(timeout=10_000)
@@ -204,7 +272,7 @@ try:
 
     if errors:
         raise RuntimeError(f'Browser page errors observed: {errors}')
-    print('BROWSER_MEMBER_PACK_E2E: PASS (Settings T03 SHA-256 + Dedupe + Drawer -> Studio Member Pack Draft -> Preview -> Confirm Receipts -> Grants Create/Revoke, 0 page errors)')
+    print('BROWSER_MEMBER_PACK_E2E: PASS (Round-2: Settings T03 SHA-256 + Dedupe + Drawer -> Studio Member Pack Draft -> Explicit Decision/Decider -> Preview -> Real Authority Confirm [Nonexistent SAP=failed/suspended + Read-Only Reconcile Stays Failed; Real Enterprise Material=succeeded/eligible] -> Host-Verified Grants Create/Revoke, 0 page errors)')
 finally:
     if proc is not None and proc.poll() is None:
         proc.terminate()
