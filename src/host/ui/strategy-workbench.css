@@ -18,7 +18,8 @@
 .wb-methods button {text-align:left}
 .strategy-release {display:grid;grid-template-columns:minmax(0,1fr);gap:.85rem}
 .release-grid {display:grid;grid-template-columns:minmax(0,.7fr) minmax(0,1fr);gap:.8rem 1.2rem;align-items:start}
-.release-grid label {display:grid;gap:.3rem;min-width:0}
+.release-grid label {display:grid;grid-template-columns:minmax(0,1fr);gap:.3rem;min-width:0}
+.release-grid select {width:100%;min-width:0}
 .release-identity {display:grid;gap:.25rem;padding:.65rem .75rem;border:1px solid var(--line);border-radius:.5rem;background:var(--subtle);min-width:0}
 .release-identity .mono,.release-record-list .mono {overflow-wrap:anywhere}
 .release-summary {display:grid;grid-template-columns:minmax(0,1fr);gap:.7rem;padding:1rem;border:1px solid var(--line);border-radius:.6rem;background:var(--subtle)}

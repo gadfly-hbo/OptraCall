@@ -104,11 +104,25 @@ try{
   await picker.selectOption({value:mapId+':2'});
   await page.locator('.release-handoff-list .sg-badge').filter({hasText:'发布后承接'}).waitFor();
 
-  await button('撤销发布').click();const withdraw=page.getByRole('dialog',{name:'撤销这次发布？'});
+  const catalogPath='**'+mapRoute;
+  await page.route(catalogPath,async route=>{
+    if(route.request().method()!=='GET')return route.continue();
+    const response=await route.fetch(),catalog=await response.json();
+    const unavailable={mapId,version:second.version,reason:'合成原稿暂不可读'};
+    return route.fulfill({response,json:{...catalog,versions:catalog.versions.filter(item=>item.mapId!==mapId||item.version!==second.version),unavailable:[...(catalog.unavailable??[]),unavailable]}});
+  });
+  await button('战略地图').click();
+  await button('战略发布').click();
+  const unreadableRecord=page.locator('.release-record-list li').filter({hasText:'原来源暂不可读'});
+  await unreadableRecord.getByText('当前发布',{exact:true}).waitFor();
+  assert.equal(await picker.locator('option').evaluateAll(options=>options.some(option=>option.value.endsWith(':2'))),false);
+  assert.equal(await button('带入目标管理').count(),0);
+  await unreadableRecord.getByRole('button',{name:'撤销发布'}).click();const withdraw=page.getByRole('dialog',{name:'撤销这次发布？'});
   await withdraw.getByText(/不允许撤销后重新发布同一版本/).waitFor();await withdraw.getByRole('button',{name:'取消'}).click();
   await page.getByText('已取消撤销发布，当前发布状态保持不变。').waitFor();
-  await button('撤销发布').click();await withdraw.getByRole('button',{name:'确认撤销发布'}).click();
+  await unreadableRecord.getByRole('button',{name:'撤销发布'}).click();await withdraw.getByRole('button',{name:'确认撤销发布'}).click();
   await page.getByText(/已撤销发布，发布记录 /).waitFor();assert.equal(await button('带入目标管理').count(),0);
+  await unreadableRecord.getByText('已撤销',{exact:true}).waitFor();
   const denied=await api('/api/strategy/workbooks/handoff','POST',{map:{discussionId,mapId,version:second.version,sha256:second.contentSha256},publicationId:secondPublication.publicationId,selected:['G1'],scope:{kind:'personal',id:'self',name:'个人工作'},perspective:'personal'},409);
   assert.equal(denied.code,'strategy_map_not_published');assert.equal((await api('/api/strategy/goals')).goals.length,1);
 
@@ -116,7 +130,7 @@ try{
   await page.getByRole('heading',{name:'战略发布',exact:true}).waitFor();
   assert.equal(await page.locator('.app').getAttribute('data-theme'),'dark');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false,'390px release page must not overflow the document');
-  assert.equal(await page.locator('.release-identity, .release-summary, .release-actions, .release-map-records').evaluateAll(elements=>elements.every(element=>{
+  assert.equal(await page.locator('.release-grid, .release-identity, .release-summary, .release-actions, .release-map-records').evaluateAll(elements=>elements.every(element=>{
     const {left,right}=element.getBoundingClientRect();
     return left>=0&&right<=window.innerWidth+1&&element.scrollWidth<=element.clientWidth+1;
   })),true,'Important release controls and identity must fit the viewport');

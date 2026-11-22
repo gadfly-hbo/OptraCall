@@ -48,7 +48,7 @@ export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDisc
  onRefreshDiscussion?:()=>Promise<void>|void;
 }){
   const id=detail?.discussion.id;
-  const [catalog,setCatalog]=useState<Catalog>({versions:[]}), [selected,setSelected]=useState<StrategyMapRef>();
+  const [catalog,setCatalog]=useState<Catalog&{discussionId?:string}>({versions:[]}), [selected,setSelected]=useState<StrategyMapRef>();
   const [activeDraftGroupId,setActiveDraftGroupId]=useState<string>();
   const [localImportOpen,setLocalImportOpen]=useState(false);
   const [excelImportReq,setExcelImportReq]=useState(0);
@@ -77,7 +77,7 @@ export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDisc
     setLoading(true);setError('');
     strategyWorkbenchRequest<Catalog>(id,'/maps','GET',undefined,controller.signal).then(data=>{
       if(controller.signal.aborted || fetched.current!==ticket)return;
-      setCatalog(data);
+      setCatalog({...data,discussionId:id});
       if(sentRequest && sentRequest===detail?.discussion.lastRun?.id && detail.discussion.lastRun.status==='completed'){
         const candidate=data.versions.filter(v=>v.requestId===sentRequest).at(-1);
         if(candidate){setSelected(candidate);onSelectContext(candidate);}
@@ -117,7 +117,7 @@ export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDisc
       {!id && <div className="sg-row"><p>可从原战略讨论形成候选，或导入线下整理的战略图。</p>{onExtractMapImport&&<button type="button" className="primary-button" onClick={()=>setOpenImport(true)}>导入战略图</button>}</div>}{importer}
     </>}
     {stage==='handoff' && (id && (catalog.versions.length || !loading) ? <StrategySimulationPanel key={id+':'+simulationVisit} discussionId={id} versions={catalog.versions} origin={simulationEdge} onReturn={e=>{setSelected(e);setReturnEdge(e);onStage('compare');}}/>:<p>{loading?'正在读取可比较的版本…':'选择原讨论后，可比较其中的候选版本。'}</p>)}
-    {stage==='strategy-release' && <StrategyReleasePanel key={id} discussionId={id} versions={catalog.versions} selected={selected} scopes={scopes} onSelect={select} onStage={onStage} onGoalsChanged={onGoalsChanged} onDiscuss={v=>onDiscuss(v,undefined,v.replySource??v.source)}/>}
+    {stage==='strategy-release' && <StrategyReleasePanel key={id} discussionId={id} versions={catalog.versions} unavailable={catalog.discussionId===id?catalog.unavailable:undefined} selected={selected} scopes={scopes} onSelect={select} onStage={onStage} onGoalsChanged={onGoalsChanged} onDiscuss={v=>onDiscuss(v,undefined,v.replySource??v.source)}/>}
     {stage==='strategy-versions' && <section className="wb-history"><div className="sg-row-between"><h3>地图修订记录</h3>{picker}</div>
       {version?<><h4>{version.title} · v{version.version}</h4><p>{version.reason}</p><p className="sg-muted">{mapTemplates[version.template]} · {{user:'用户编辑',agent:'Agent 共创',import:'Excel 导入'}[version.author]} · {new Date(version.createdAt).toLocaleString('zh-CN')}</p>
         <div className="sg-row"><button className="secondary-button" onClick={()=>{setSelected(version);onStage('compare');}}>查看此版地图</button><button className="text-button" onClick={()=>onDiscuss(version,undefined,version.replySource??version.source)}>返回原讨论</button><DownloadVersion key={keyOf(version)} route={'/api/strategy/discussions/'+id+'/maps/'+version.mapId+'/versions/'+version.version+'/export'}/></div>
