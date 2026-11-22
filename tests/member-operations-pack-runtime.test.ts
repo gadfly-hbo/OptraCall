@@ -921,7 +921,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     locator: '060_reports/repurchase-v1.0.json',
   };
 
-  // R4 (Round-8): Policy-only independent verifier whose assessment explicitly states it NEVER read/compared the original report (only mentions pack version v1.0!) -> MUST stay pending with assessmentDisclaimerRejected=true!
+  // A note about the policy version cannot replace a read of the exact target report.
   const { task: taskDisclaimerVerify } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '仅提包版未查原报告反例核验' }), 201);
   const disclaimerAssessText = '独立核验说明：仅核对企业包版本 v1.0 制度口径，未查看、未对照原报告内容，也未复核原明细数据。';
   let stepDisc = 0;
@@ -963,7 +963,13 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   const useAAfterDisc = packAfterDisc.pack.useRecords.find((u: any) => u.id === autoUseA.id);
   assert.equal(useAAfterDisc.independentVerification.status, 'pending', 'Verifier explicitly stating it never read/compared the original report MUST stay pending!');
   assert.equal(useAAfterDisc.independentVerification.verifierEvidenceSummary?.targetReportChecked, false);
-  assert.equal(useAAfterDisc.independentVerification.verifierEvidenceSummary?.assessmentDisclaimerRejected, true);
+  assert.equal(useAAfterDisc.independentVerification.verifierEvidenceSummary?.assessmentReportBoundToTarget, false);
+
+  const v1ComparisonEvidence = {
+    targetReport: taskAReportRef,
+    coverage: { inputPaths: ['020_clean/starbridge_orders.csv'], scope: '星桥直营店9月首购队列，截至2026-10-31', detail: '已核对完整授权窗口和退款记录' },
+    comparison: { metrics: [{ name: '分子', reported: 3, recomputed: 3 }, { name: '分母', reported: 4, recomputed: 4 }], facts: '按星桥明细首购和再次购买逐笔核对，原V1规则只扣同月全退' },
+  };
 
   // R4 (Round-8): Input-only verifier (reads deps + CSV, mentions filename & 3/4, but NEVER actually reads target report!) -> MUST stay pending!
   const { task: taskInputOnlyVerify } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '仅读明细未读目标报告反例核验' }), 201);
@@ -997,6 +1003,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
               report: { authority: 'task', id: taskInputOnlyVerify.id, projectId: projAud.id, taskId: taskInputOnlyVerify.id, version: assessSha, sha256: assessSha, locator: '060_reports/input-only-assess.json' },
               sources: [refundV1Ref, sapM1Ref],
               result: '仅读明细未实读目标报告反例',
+              evidence: v1ComparisonEvidence,
             },
           },
         }],
@@ -1013,6 +1020,62 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(useAAfterIO.independentVerification.status, 'pending', 'Verifier that never actually read the target report MUST stay pending!');
   assert.equal(useAAfterIO.independentVerification.verifierEvidenceSummary?.targetReportChecked, false);
   assert.equal(useAAfterIO.independentVerification.verifierEvidenceSummary?.authorizedInputChecked, true);
+
+  // Completing a partial read after submitting the assessment cannot qualify that assessment.
+  // A later assessment which reads everything still needs a typed comparison or finding.
+  const { task: chronologyTask } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '核验调用顺序与比较证据' }), 201);
+  const assessmentNote = '核对 repurchase-v1.0.json 的30日规则，3/4。';
+  const chronologyReport = {
+    authority: 'task', id: chronologyTask.id, projectId: projAud.id, taskId: chronologyTask.id,
+    version: sha(assessmentNote), sha256: sha(assessmentNote), locator: '060_reports/assessment-order.md',
+  };
+  const sourceRead = (ref: unknown, length?: number) => ({
+    name: 'studio_assets', arguments: { action: 'read-source', systemId: system.id, payload: { ref, ...(length ? { length } : {}) } },
+  });
+  const inputRead = hasOsSandbox
+    ? { name: 'read', arguments: { path: 'starbridge_orders.csv' } }
+    : { name: 'read_input', arguments: { filename: 'starbridge_orders.csv' } };
+  const assessmentCall = (evidence?: unknown) => ({
+    name: 'studio_assets', arguments: {
+      action: 'assess-use', systemId: system.id, payload: {
+        useId: taskAStudioUseId, status: 'pass', report: chronologyReport,
+        sources: [refundV1Ref, sapM1Ref], result: assessmentNote, ...(evidence ? { evidence } : {}),
+      },
+    },
+  });
+  const assessmentWrite = hasOsSandbox
+    ? { name: 'write', arguments: { path: '../060_reports/assessment-order.md', content: assessmentNote } }
+    : { name: 'write_report', arguments: { filename: 'assessment-order.md', content: assessmentNote } };
+  async function runVerifierOrder(calls: (ReturnType<typeof sourceRead> | ReturnType<typeof assessmentCall> | typeof inputRead | typeof assessmentWrite)[]) {
+    let step = 0;
+    provider.setResponder(() => {
+      const call = calls[step++];
+      return call ? { calls: [call] } : { text: '核验回执已提交。' };
+    });
+    await json(await host.request(`/api/projects/${projAud.id}/tasks/${chronologyTask.id}/messages`, 'POST', {
+      requestId: randomUUID(), text: '提交合成核验回执。',
+    }), 202);
+    await waitIdle(host, projAud.id, chronologyTask.id);
+    const response = await json(await host.request(`/api/studio/enterprise-packs/${packId}/uses/${autoUseA.id}/verify`, 'POST', {
+      requestId: randomUUID(), assessmentReportRef: chronologyReport, independentConfirmed: true,
+    }));
+    return response.use.independentVerification;
+  }
+  const tooLate = await runVerifierOrder([
+    sourceRead(refundV1Ref), sourceRead(sapM1Ref), sourceRead(taskAReportRef, 4),
+    inputRead, assessmentWrite, assessmentCall(v1ComparisonEvidence), sourceRead(taskAReportRef),
+  ]);
+  assert.equal(tooLate.status, 'pending');
+  assert.equal(tooLate.verifierEvidenceSummary.targetReportChecked, false);
+  assert.equal(tooLate.verifierEvidenceSummary.authorizedInputChecked, true);
+  const noComparison = await runVerifierOrder([
+    sourceRead(refundV1Ref), sourceRead(sapM1Ref), sourceRead(taskAReportRef), inputRead,
+    assessmentCall({ targetReport: taskAReportRef, coverage: v1ComparisonEvidence.coverage }),
+  ]);
+  assert.equal(noComparison.status, 'pending');
+  assert.equal(noComparison.verifierEvidenceSummary.targetReportChecked, true);
+  assert.equal(noComparison.verifierEvidenceSummary.authorizedInputChecked, true);
+  assert.match(noComparison.verifierEvidenceSummary.missingReason, /对照结果/);
 
   // R4 (Round-8): Now run a GENUINE independent verifier task (taskVerifyV1 in projAud) that reads BOTH required dependencies + TARGET REPORT (via studio_assets read-source) + authorized CSV input data, writes assessment bound to target report + SHA-256 + recalculation, and calls assess-use!
   const { task: taskVerifyV1 } = await json(await host.request(`/api/projects/${projAud.id}/tasks`, 'POST', { name: '独立核验任务V1' }), 201);
@@ -1054,6 +1117,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
               report: { authority: 'task', id: taskVerifyV1.id, projectId: projAud.id, taskId: taskVerifyV1.id, version: assessSha, sha256: assessSha, locator: '060_reports/repurchase-v1.0-indep-assess.json' },
               sources: [refundV1Ref, sapM1Ref],
               result: '独立核验任务 taskVerifyV1 实读 v1.0 原文、目标报告 repurchase-v1.0.json 与星桥明细并核对 3/4 复算通过',
+              evidence: v1ComparisonEvidence,
             },
           },
         }],
@@ -1081,6 +1145,12 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(useAAfterIndep.independentVerification.verifierEvidenceSummary?.hadDataOrCalcEvidence, true);
   assert.equal(useAAfterIndep.independentVerification.verifierEvidenceSummary?.assessmentReportBoundToTarget, true);
   assert.ok((useAAfterIndep.independentVerification.verifierEvidenceSummary?.assessmentTurnIndex ?? 0) >= 1);
+  const verifierAState = await json(await host.request(`/api/projects/${projAud.id}/tasks/${taskVerifyV1.id}`));
+  const assessorMessage = verifierAState.snapshot.messages.find((m: any) => m.role === 'assistant' && m.content?.some((c: any) => c.type === 'toolCall' && c.name === 'studio_assets' && c.arguments?.action === 'assess-use'));
+  assert.ok(assessorMessage?.nativeEntryId);
+  assert.equal(useAAfterIndep.independentVerification.verifierEvidenceSummary.assessmentMessageId, assessorMessage.nativeEntryId);
+  assert.equal(useAAfterIndep.independentVerification.verifierEvidenceSummary.assessmentSessionId, verifierAState.snapshot.sessionId);
+
 
   // R4 (Round-6): Verify GET /api/studio/enterprise-packs/turn-evidence & /report-snapshot link Task A's turn to saved report + pass verdict!
   const turnEvA = await json(await host.request(`/api/studio/enterprise-packs/turn-evidence?projectId=${projStar.id}&taskId=${taskA.id}`));
@@ -1635,6 +1705,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
               },
               sources: [refundV2Ref, sapM2Ref],
               result: '独立复核任务 taskVerifyV2 实读 v1.1（refund v2 + sap 1.1.0）、目标报告 repurchase-v1.1.json 与原明细并核实 C07（O-73/2026-10-02）排除、C13（O-81）保留，分子分母 2/4 无误，原 Case 经营决定不变',
+              evidence: {
+                targetReport: taskBReportRef,
+                coverage: { inputPaths: ['020_clean/starbridge_orders.csv'], scope: '星桥直营店9月首购队列，截至2026-10-31', detail: '已核对授权明细、观察窗和退款记录' },
+                comparison: { metrics: [{ name: '分子', reported: 2, recomputed: 2 }, { name: '分母', reported: 4, recomputed: 4 }], facts: '按原单号核对退款变动和应保留的有效复购' },
+              },
             },
           },
         }],
@@ -2040,6 +2115,11 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
               report: { authority: 'task', id: taskVerifyC.id, projectId: projAud.id, taskId: taskVerifyC.id, version: assessSha, sha256: assessSha, locator: '060_reports/repurchase-v1.1-nov15-assess.json' },
               sources: [refundV2Ref, sapM2Ref],
               result: '独立核验任务 taskVerifyC 实读 2026-11-15 新明细与目标报告 repurchase-v1.1-nov15.json，确认 C21(O-88/2026-11-05) 为截止日后新事件、C13(O-81) 保留，1/4 通过',
+              evidence: {
+                targetReport: taskCReportRef,
+                coverage: { inputPaths: ['020_clean/starbridge_orders.csv'], scope: '星桥直营店9月首购队列，截至2026-11-15', detail: '已核对授权明细、观察窗和退款记录' },
+                comparison: { metrics: [{ name: '分子', reported: 1, recomputed: 1 }, { name: '分母', reported: 4, recomputed: 4 }], facts: '按原单号核对退款变动和应保留的有效复购' },
+              },
             },
           },
         }],
