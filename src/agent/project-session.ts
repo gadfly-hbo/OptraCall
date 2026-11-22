@@ -46,7 +46,11 @@ import { reportCalculationTool, reportCalculationToolName, reportCalculationSyst
 type Outcome = 'completed' | 'cancelled' | 'failed';
 type LastRun = { requestId: string; outcome?: Outcome; diagnostic?: RunDiagnostic; reportCalculationReview?: ReportCalculationRunReceipt };
 type Assistant = Extract<AgentSession['messages'][number], { role: 'assistant' }>;
-type ActiveRun = { id: string; kind: 'prompt' | 'command'; requestFingerprint?: string; providedContext?: Record<string, unknown>; cancelled: boolean; commandFailed?: boolean; retryCount: number; last?: Assistant; pending: string; managers: Set<SessionManager>; publicSearch?: ReturnType<typeof createPublicNativeSearchObservation>; reportReview?: ReportCalculationRunReceipt; reportReviewPreparing?: boolean; reportReviewDelegated?: boolean; childCleanupUnknown?: boolean };
+type ActiveRun = { id: string; kind: 'prompt' | 'command'; requestFingerprint?: string; providedContext?: Record<string, unknown>; cancelled: boolean; commandFailed?: boolean; retryCount: number; last?: Assistant; pending: string; managers: Set<SessionManager>; publicSearch?: ReturnType<typeof createPublicNativeSearchObservation>; reportReview?: ReportCalculationRunReceipt; reportReviewPreparing?: boolean; reportReviewDelegated?: boolean; childCleanupUnknown?: boolean; strategyReadLoop?: { action: string; fingerprint: string; count: number }; strategyLoopStopped?: boolean };
+const STRATEGY_READ_ACTIONS = new Set(['read-goals', 'find-sources', 'read-source', 'read-import-source', 'read-map']);
+const STRATEGY_READ_LOOP_LIMIT = 6;
+function strategyReadFingerprint(value: unknown): string { return createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex'); }
+function noteStrategyRead(run: ActiveRun, action: string, fingerprint: string) { const prev = run.strategyReadLoop; if (prev && prev.action === action && prev.fingerprint === fingerprint) prev.count += 1; else run.strategyReadLoop = { action, fingerprint, count: 1 }; }
 type RunResult = { outcome: Outcome; text: string; result?: unknown; snapshot: ProjectSnapshot; diagnostic?: RunDiagnostic; publicSearch?: PublicNativeSearchResult & { requestId: string }; reportCalculationReview?: ReportCalculationRunReceipt };
 const RUN_ENTRY = 'optracall.run';
 const EXECUTION_ENTRY = 'optracall.execution';
@@ -699,11 +703,21 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         assertCurrent();
         if(!(STRATEGY_DISCUSSION_ACTIONS as readonly unknown[]).includes(parameters.action))throw new Error('invalid_strategy_discussion_action');
         const {action,...input}=parameters;
+        const isRead = STRATEGY_READ_ACTIONS.has(String(action));
+        if (isRead && originalRun!.strategyReadLoop && originalRun!.strategyReadLoop.count >= STRATEGY_READ_LOOP_LIMIT && originalRun!.strategyReadLoop.action === action) {
+          originalRun!.strategyLoopStopped = true;
+          originalRun!.cancelled = true;
+          rejectPersonalRequests();
+          void session?.abort().catch(() => {});
+          throw new Error('strategy_action_loop');
+        }
         try {
           const result = await requestHostTool({feature:'strategy-discussion',action:String(action),input,toolCallId,requestId:originalRun!.id,sessionId:boundSessionId},signal!,'strategy_discussion_run_unavailable');
           assertCurrent();
+          if (isRead) noteStrategyRead(originalRun!, String(action), strategyReadFingerprint(result));
           return result as {content:({type:'text';text:string}|{type:'image';data:string;mimeType:string})[];details:Record<string,unknown>};
         } catch (error) {
+          if (isRead && !originalRun!.strategyLoopStopped) noteStrategyRead(originalRun!, String(action), strategyReadFingerprint({ code: (error as {code?:unknown})?.code ?? (error as Error)?.message, details: (error as {details?:unknown})?.details }));
           if (action === 'propose-goal' && o.workspace?.discussionTools !== 'goal-draft') throw explainGoalProposalError(error);
           throw error;
         }
@@ -881,7 +895,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       flushDelta();
       const last = current.last, nativeCancelled = Boolean(result && typeof result === 'object' && 'cancelled' in result && result.cancelled);
       const outcome: Outcome = current.childCleanupUnknown ? 'failed' : current.cancelled || nativeCancelled ? 'cancelled' : nativeSearchFailure ? 'failed' : last?.stopReason === 'aborted' ? 'cancelled' : failed || current.commandFailed || last?.stopReason === 'error' ? 'failed' : 'completed';
-      const diagnostic = runDiagnostic({ outcome, kind, retryCount: current.retryCount, error: failure ?? last?.errorMessage, commandFailed: current.commandFailed, transportCause });
+      const diagnostic = runDiagnostic({ outcome, kind, retryCount: current.retryCount, error: failure ?? last?.errorMessage, commandFailed: current.commandFailed, transportCause, actionLoop: current.strategyLoopStopped });
       const answer = redactText(last?.content.filter(part => part.type === 'text').map(part => part.text).join('') ?? '');
       const grant = current.providedContext?.reportCalculationReview;
       const admittedReview = options.reportCalculationReviewEnabled && kind === 'prompt' && grant && typeof grant === 'object' && 'contract' in grant && grant.contract === 'foreground-report-calculation-v1';
@@ -893,7 +907,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       run = undefined;
       const state = snapshot();
       publish({ type: 'snapshot', snapshot: state });
-      publish({ type: 'run.settled', requestId: id, outcome, ...(outcome === 'failed' ? { error: diagnostic!.message } : {}), ...(diagnostic ? { diagnostic } : {}) });
+      publish({ type: 'run.settled', requestId: id, outcome, ...(outcome === 'failed' || current.strategyLoopStopped ? { error: diagnostic!.message } : {}), ...(diagnostic ? { diagnostic } : {}) });
       const publicResult = publicSearchResult(current, outcome, diagnostic);
       return { outcome, text: answer, result: redact(result ?? null), snapshot: state, ...(diagnostic ? { diagnostic } : {}), ...(publicResult ? { publicSearch: publicResult } : {}), ...(reviewReceipt ? { reportCalculationReview: reviewReceipt } : {}) };
     })().finally(() => { run = undefined; pendingOperation = undefined; });

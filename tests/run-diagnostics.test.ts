@@ -23,6 +23,19 @@ test('ER01: diagnostic classification only reports explicit failure facts and ne
   assert.ok(!JSON.stringify(runtimeDiagnostic(new Error('synthetic-private-detail'))).includes('synthetic-private-detail'));
 });
 
+test('Issue 115 strategy_action_loop is a cancelled-only diagnostic rebuilt from the safe enum', () => {
+  const loop = runDiagnostic({ outcome: 'cancelled', kind: 'prompt', actionLoop: true, retryCount: 0 });
+  assert.equal(loop?.code, 'strategy_action_loop');
+  assert.match(loop!.message, /自动停止/);
+  assert.equal(runDiagnostic({ outcome: 'cancelled', kind: 'prompt', retryCount: 0 })?.code, 'cancelled', 'manual cancel keeps the plain cancelled diagnostic');
+  assert.equal(readRunDiagnostic({ code: 'strategy_action_loop', stage: 'native_request', retryCount: 0 }, 'cancelled')?.code, 'strategy_action_loop');
+  assert.equal(readRunDiagnostic({ code: 'strategy_action_loop', stage: 'native_request', retryCount: 0 }, 'failed'), undefined);
+  assert.equal(readRunDiagnostic({ code: 'strategy_action_loop', stage: 'native_request', retryCount: 0 }, 'completed'), undefined);
+  assert.equal(readRunDiagnostic({ code: 'cancelled', stage: 'native_request', retryCount: 0 }, 'cancelled')?.code, 'cancelled');
+  const decoded = readRunDiagnostic({ code: 'strategy_action_loop', stage: 'native_request', retryCount: 0, message: 'synthetic-private-detail' }, 'cancelled');
+  assert.ok(!JSON.stringify(decoded).includes('synthetic-private-detail'));
+});
+
 test('ER01: saved diagnostics are rebuilt from safe enums while legacy absence remains absent', () => {
   assert.equal(readRunDiagnostic(undefined), undefined);
   assert.equal(readRunDiagnostic({ code: 'synthetic-private-detail', stage: 'native_request', retryCount: 0 }), undefined);

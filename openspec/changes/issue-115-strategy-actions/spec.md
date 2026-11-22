@@ -46,9 +46,9 @@
 
 - [x] A1 同 request/toolCallId 对齐 schema、原始分片、Pi、Host、native toolResult 和下一请求；非首项 action 与分片正例通过。
 - [x] A2 注入 `read-goals + query/sourceId/mapDraft` 可复现原样分派；真实 MiniMax“联合恒取首项”无原始出参时仍 NOT_PROVED。
-- [ ] A3 设计待审：推荐仅读取 action 在同一 request 中连续 6 次得到完全相同结果后，第 7 次 Host 派发前取消；参数不参与指纹，action/结果变化重置。写操作、operation 轮询和 public-search 不纳入。
-- [ ] A4 经 Issue 确认后实现：取消终态携带 `strategy_action_loop` 专用诊断，手动取消不冒报；第 7 次零 Host 派发，迟到结果安全，历史保留，刷新及下一显式请求可恢复。
-- [ ] A5 无关参数不能绕过；正常分页、不同结果、不同 action、合法多轮不误断；提示可建议切换模型但不自动切换。
+- [x] A3 设计经用户确认（#issuecomment-7080447650）：仅读取 action 在同一 request 中连续 6 次得到完全相同结果后，第 7 次 Host 派发前取消；参数不参与指纹，action/结果变化重置。写操作、operation 轮询和 public-search 不纳入。
+- [x] A4 取消终态携带 `strategy_action_loop` 专用诊断，手动取消不冒报；第 7 次零 Host 派发，迟到结果安全，历史保留，刷新及下一显式请求可恢复。
+- [x] A5 无关参数不能绕过；正常分页、不同结果、不同 action、合法多轮不误断；提示可建议切换模型但不自动切换。
 
 ### B. 错误契约与地图保存
 
@@ -62,7 +62,7 @@
 
 - [x] C1 证明战略讨论 active tools 只有 `strategy_goals`，路径文本不自动转来源；路径冒充 sourceId 时按既有来源准入拒绝且正文不泄露。
 - [x] C2 区分“无通用文件工具”“未选择来源”“路径解析失败”；真实各模型具体选择缺原始出参时不宣称唯一根因。
-- [ ] C3 设计经 Issue 确认后，以系统提示、composer 非阻断短提示和帮助说明“路径文本不会上传或授权，电脑文件请用＋添加资料”；普通问答、已选附件和合法分页不变。
+- [x] C3 设计经用户确认后，以系统提示、composer 非阻断短提示和帮助说明“路径文本不会上传或授权，电脑文件请用＋添加资料”；普通问答、已选附件和合法分页不变。
 
 ### D. 工程交付
 

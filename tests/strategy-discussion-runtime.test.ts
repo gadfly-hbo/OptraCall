@@ -34,16 +34,17 @@ async function miniMaxStrategyFixture(t: TestContext, strategyDiscussion: Projec
     catch { await transport.close(); process.exitCode = 1; if (process.connected) process.disconnect(); }
   `);
   const requestId = randomUUID();
-  const agent = new ProjectAgent({
+  const options: ProjectAgentOptions = {
     projectId: 'strategy-discussion:' + randomUUID(),
     workspace: { cwd, systemPrompt: ['Use only the synthetic strategy tool when needed.'], capabilityPolicy: 'strategy-discussion' },
     sessionDirectory: path.join(root, 'native'), resourceRoot, codeRoot: fixtureCode, managementPorts: [],
     configuration: { id: 'minimax-m31-flash', name: 'Synthetic MiniMax loopback', revision: 1, provider: 'minimax-cn', api: 'anthropic-messages', baseUrl: provider.baseUrl, model: 'MiniMax-M3.1-Flash', apiKey: 'synthetic-minimax-only' },
     strategyDiscussion,
-  });
+  };
+  const agent = new ProjectAgent(options);
   t.after(async () => { await agent.close(); await provider.close(); });
   const opened = await agent.open();
-  return { agent, provider, opened, requestId };
+  return { agent, provider, opened, requestId, options };
 }
 
 async function nativeToolCalls(file: string) {
@@ -153,4 +154,90 @@ test('Issue 115 reproduces read-goals dispatch even when unrelated fields vary u
   }
   assert.deepEqual(provider.errors, []);
   t.diagnostic('The injected first-action symptom is preserved downstream; the real Provider root cause remains unproved.');
+});
+
+test('Issue 115 stops a same-action read loop before the 7th Host dispatch and recovers on the next explicit request', { timeout: 45_000 }, async t => {
+  const delivered: { action: string; input: Record<string, unknown> }[] = [];
+  const fixture = await miniMaxStrategyFixture(t, async (action, input, context) => {
+    context.assertCurrent();
+    delivered.push({ action, input });
+    return syntheticPayload({ goalScopes: [], candidates: [], claim: 'provided-not-adopted' });
+  });
+  const { agent, provider, opened, requestId, options } = fixture;
+  provider.setResponder(({ requestNumber }) => ({ calls: [{ name: 'strategy_goals', arguments: { action: 'read-goals', query: '无关参数 ' + requestNumber }, fragments: 2 }] }));
+  const done = await agent.start('合成读取循环', requestId).completion;
+  assert.equal(done.outcome, 'cancelled', JSON.stringify(done.diagnostic));
+  assert.equal(done.diagnostic?.code, 'strategy_action_loop');
+  assert.equal(delivered.length, 6, 'six identical Host reads dispatch; the seventh is stopped before Host even though the query varies');
+  assert.equal(provider.requests.length, 7, 'no Provider continuation after the loop stop');
+  assert.ok(delivered.every(call => call.action === 'read-goals'));
+  await agent.close();
+  const reopened = new ProjectAgent({ ...options, sessionFile: opened.sessionFile });
+  t.after(() => reopened.close());
+  const snap = await reopened.open();
+  assert.equal(snap.lastRun?.outcome, 'cancelled');
+  assert.equal(snap.lastRun?.diagnostic?.code, 'strategy_action_loop', 'reopen restores the loop diagnostic from native history');
+  let recoveryStep = 0;
+  provider.setResponder(() => { recoveryStep += 1; return recoveryStep === 1 ? { calls: [{ name: 'strategy_goals', arguments: { action: 'read-goals' }, fragments: 2 }] } : { text: '合成恢复完成。' }; });
+  const recovered = await reopened.start('合成恢复请求', randomUUID()).completion;
+  assert.equal(recovered.outcome, 'completed', JSON.stringify(recovered.diagnostic));
+  assert.deepEqual(provider.errors, []);
+});
+
+test('Issue 115 does not stop legitimate read-source pagination beyond six pages', { timeout: 45_000 }, async t => {
+  const delivered: { action: string; input: Record<string, unknown> }[] = [];
+  const fixture = await miniMaxStrategyFixture(t, async (action, input, context) => {
+    context.assertCurrent();
+    delivered.push({ action, input });
+    const offset = Number(input.offset ?? 0);
+    return syntheticPayload({ source: { id: 'synthetic-source' }, read: { text: '第 ' + offset + ' 页正文', range: { start: offset * 10, end: offset * 10 + 10, total: 100 }, complete: false }, claim: 'provided-not-used-or-verified' });
+  });
+  const { agent, provider, requestId } = fixture;
+  provider.setResponder(({ requestNumber }) => requestNumber <= 8
+    ? { calls: [{ name: 'strategy_goals', arguments: { action: 'read-source', sourceId: 'synthetic-source', offset: requestNumber - 1 }, fragments: 2 }] }
+    : { text: '合成翻页完成。' });
+  const done = await agent.start('合成连续翻页', requestId).completion;
+  assert.equal(done.outcome, 'completed', JSON.stringify(done.diagnostic));
+  assert.equal(delivered.length, 8, 'eight distinct pages all dispatch; differing results reset the streak');
+  assert.notEqual(done.diagnostic?.code, 'strategy_action_loop');
+  assert.deepEqual(provider.errors, []);
+});
+
+test('Issue 115 resets the read streak when the action or the result changes', { timeout: 45_000 }, async t => {
+  const delivered: { action: string }[] = [];
+  let counter = 0;
+  const fixture = await miniMaxStrategyFixture(t, async (action, _input, context) => {
+    context.assertCurrent();
+    delivered.push({ action });
+    if (action === 'find-sources') return syntheticPayload({ sources: [], range: { start: 0, end: 0, total: 0 }, complete: true });
+    counter += 1;
+    return syntheticPayload({ goalScopes: [], candidates: [], revision: counter, claim: 'provided-not-adopted' });
+  });
+  const { agent, provider, requestId } = fixture;
+  provider.setResponder(({ requestNumber }) => requestNumber <= 8
+    ? { calls: [{ name: 'strategy_goals', arguments: requestNumber % 2 ? { action: 'read-goals' } : { action: 'find-sources' }, fragments: 2 }] }
+    : { text: '合成交替动作完成。' });
+  const done = await agent.start('合成交替读取', requestId).completion;
+  assert.equal(done.outcome, 'completed', JSON.stringify(done.diagnostic));
+  assert.equal(delivered.length, 8);
+  assert.notEqual(done.diagnostic?.code, 'strategy_action_loop');
+  assert.deepEqual(provider.errors, []);
+});
+
+test('Issue 115 does not apply the read-loop guard to write actions', { timeout: 45_000 }, async t => {
+  const delivered: { action: string }[] = [];
+  const fixture = await miniMaxStrategyFixture(t, async (action, _input, context) => {
+    context.assertCurrent();
+    delivered.push({ action });
+    return syntheticPayload({ map: { mapId: 'synthetic', version: 1 }, operationId: 'synthetic-op', claim: 'candidate-not-adopted' });
+  });
+  const { agent, provider, requestId } = fixture;
+  provider.setResponder(({ requestNumber }) => requestNumber <= 8
+    ? { calls: [{ name: 'strategy_goals', arguments: { action: 'save-map', mapDraft: { title: '合成', template: 'table', nodes: [{ id: 'G', kind: 'goal', title: '目标' }], edges: [] }, reason: '合成保存' }, fragments: 2 }] }
+    : { text: '合成写入完成。' });
+  const done = await agent.start('合成重复写入', requestId).completion;
+  assert.equal(done.outcome, 'completed', JSON.stringify(done.diagnostic));
+  assert.equal(delivered.length, 8, 'save-map is a write action and is exempt from the read-loop guard');
+  assert.notEqual(done.diagnostic?.code, 'strategy_action_loop');
+  assert.deepEqual(provider.errors, []);
 });

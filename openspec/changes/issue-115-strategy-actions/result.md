@@ -77,8 +77,21 @@ node --test --test-name-pattern='Issue 115 treats an absolute path' tests/strate
 - 代码对应：`project-session.ts` 固定工作区仅启用 strategy custom tool；`strategy-discussion-host.ts` 的 `read-source` 只在已选或合法发现的来源中按 ID 查找；项目文档 target 另有 020/060 和权限校验，但不负责解析用户消息中的原始路径。
 - 结论边界：已区分“无通用文件工具”和“未选择来源 ID”；本路径不存在原始路径解析器，不能把失败归因于某个路径解析失败分支。真实各模型在试用轮为何选择某种调用或答复仍为 **NOT_PROVED**。
 
-## 待设计确认
+## D. 动作循环止损与路径提示（设计经用户确认后实现）
 
-推荐方案见 spec A3–A5、C3：读取 action 连续 6 次相同结果后第 7 次派发前取消；专用 `strategy_action_loop` 取消诊断；既有 alert 恢复说明；系统提示、composer 非阻断文字和帮助说明“路径不等于上传/授权，请用＋添加资料”。未获 Issue 确认前不实现这些产品行为。
+设计确认：[#issuecomment-7080447650](https://github.com/gadfly-hbo/OptraCall/issues/115#issuecomment-7080447650)（用户经本会话 AskUserQuestion 裁定「按方案实施」，代为记录）。
 
-当前不做 MiniMax 移除/专属适配、自动换模型、通用路径读取或权限放宽。后续错误契约实现、完整回归、独立复核、Git/CI 和 Codex 集成均未完成。
+实现：
+- `project-session.ts` ActiveRun 记录读取 action 的结果 SHA-256 指纹与连续计数；`createStrategyTools` 在同一 request 同读取 action 连续 6 次相同结果后、第 7 次 Host 派发前置 cancelled + `strategyLoopStopped`，复用 `rejectPersonalRequests()` 与 `session.abort()`，不在工具回调内等待自身 stop。写操作/operation/public-search 不纳入。
+- `run-diagnostics.ts` 新增 `strategy_action_loop`（cancelled-only），`readRunDiagnostic` 兼容旧记录；手动取消仍为 `cancelled`。
+- `StrategyDiscussionPanel.tsx` 在 cancelled+loop 时以既有 alert 显示诊断，并在 apply/重开时从 `snapshot.lastRun.diagnostic` 恢复；composer 对路径样例文本显示非阻断「＋ 添加资料」提示（排除 URL，不访问文件系统，不阻断发送）。
+- `STRATEGY_CONTRACT` 系统提示、`help-content.ts` 与重新生成的 `docs/user-manual.md` 说明路径文本不等于上传/授权及止损恢复。
+
+验证：
+- `node --test --test-name-pattern='Issue 115' tests/strategy-discussion-runtime.test.ts tests/run-diagnostics.test.ts`：**PASS**。覆盖第 7 次派发前停止（6 次 Host、7 次 Provider 请求、cancelled+专用诊断）、无关参数不绕过、重开恢复诊断、下一显式请求恢复、正常翻页 8 页不误断、action/结果变化重置、写动作豁免、诊断 cancelled-only 与脱敏重建。
+- `node --test tests/issue-115-strategy-path-hint.test.ts tests/help-manual.test.ts`：**PASS**。路径提示出现、普通问题/URL/空草稿不出现、非阻断；手册与帮助内容一致。
+- 受影响战略/UI 回归合跑（runtime/host/issue-108/cancelled-ui/ui-client/goal-proposal/workbench/pm01）：**33/33 PASS**。
+- 最终全量 `npm run check`：**PASS**，3149 项测试 3038 通过 / 0 失败 / 111 跳过（既有平台/条件跳过），边界检查与构建通过。
+- 浏览器点验 `node tests/browser-issue-115-strategy-loop.mjs`（隔离 Host + 合成 Provider + 系统 Chrome，未改项目依赖）：**PASS**。实际发送触发 read-goals 循环，第 7 次 Host 派发前停止（Provider 请求 7 次），既有 alert 显示止损说明；刷新后诊断恢复；composer 路径提示非阻断且发送可用；普通问题不显示提示；390px 窄屏无横向溢出；无页面错误。截图存 `.local/issue-115/browser/`（loop-stop-alert / loop-alert-after-refresh / path-hint / path-hint-narrow）。
+
+当前不做 MiniMax 移除/专属适配、自动换模型、通用路径读取或权限放宽。真实 MiniMax/GLM/试用轮根因仍 NOT_PROVED。独立复核、Git/CI 与 Codex 集成见交付记录。

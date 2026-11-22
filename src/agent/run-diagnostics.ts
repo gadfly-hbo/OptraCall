@@ -1,6 +1,6 @@
 import type { Outcome } from './events.ts';
 
-export type RunDiagnosticCode = 'authentication_failed' | 'rate_limited' | 'request_terminated' | 'request_failed' | 'http_body_timeout' | 'http_headers_timeout' | 'http_connect_timeout' | 'http_connection_closed' | 'command_failed' | 'runtime_stopped' | 'runtime_start_failed' | 'runtime_start_timeout' | 'cancelled' | 'completed_after_retry' | 'verification_source_changed' | 'verification_source_missing';
+export type RunDiagnosticCode = 'authentication_failed' | 'rate_limited' | 'request_terminated' | 'request_failed' | 'http_body_timeout' | 'http_headers_timeout' | 'http_connect_timeout' | 'http_connection_closed' | 'command_failed' | 'runtime_stopped' | 'runtime_start_failed' | 'runtime_start_timeout' | 'cancelled' | 'strategy_action_loop' | 'completed_after_retry' | 'verification_source_changed' | 'verification_source_missing';
 export type RunDiagnostic = { code: RunDiagnosticCode; stage: 'native_request' | 'native_command' | 'runtime'; message: string; retryCount: number };
 const messages: Record<RunDiagnosticCode, string> = {
   authentication_failed: '原生模型请求被拒绝认证，请检查该任务的模型配置。',
@@ -16,6 +16,7 @@ const messages: Record<RunDiagnosticCode, string> = {
   runtime_start_failed: '原生运行环境未能启动。',
   runtime_start_timeout: '等待原生运行环境启动超时。',
   cancelled: '本次操作已取消。',
+  strategy_action_loop: '本轮连续重复同一读取动作且没有新进展，已自动停止。这不代表资料缺失或不可读，模型可能误报为资料问题。请先核对本轮已保存的结果；如需继续，可在讨论设置中改用另一已配置模型后重新发送。',
   completed_after_retry: '本次操作经原生重试后完成。',
   verification_source_changed: '本次核对的原始文件已变化，修订交付失败；原冻结证据保留。',
   verification_source_missing: '本次核对的原始文件或项目目录已缺失，修订交付失败；原冻结证据保留。',
@@ -25,10 +26,10 @@ function diagnostic(code: RunDiagnosticCode, stage: RunDiagnostic['stage'], retr
 
 /** Only classify explicit observations. Provider error text is never copied into
  * a diagnostic; ambiguous failures retain an unknown-cause message. */
-export function runDiagnostic(input: { outcome: Outcome; kind: 'prompt' | 'command'; retryCount?: number; error?: unknown; commandFailed?: boolean; transportCause?: string }): RunDiagnostic | undefined {
+export function runDiagnostic(input: { outcome: Outcome; kind: 'prompt' | 'command'; retryCount?: number; error?: unknown; commandFailed?: boolean; transportCause?: string; actionLoop?: boolean }): RunDiagnostic | undefined {
   const retryCount = count(input.retryCount), stage = input.kind === 'command' ? 'native_command' : 'native_request';
   if (input.outcome === 'completed') return retryCount ? diagnostic('completed_after_retry', stage, retryCount) : undefined;
-  if (input.outcome === 'cancelled') return diagnostic('cancelled', stage, retryCount);
+  if (input.outcome === 'cancelled') return diagnostic(input.actionLoop ? 'strategy_action_loop' : 'cancelled', stage, retryCount);
   if (input.commandFailed || input.kind === 'command') return diagnostic('command_failed', stage, retryCount);
   const message = typeof input.error === 'string' ? input.error.trim() : input.error instanceof Error ? input.error.message.trim() : '';
   const code: RunDiagnosticCode = /^(?:401|403)(?:\s|:|$)/.test(message) ? 'authentication_failed'
@@ -57,6 +58,6 @@ export function readRunDiagnostic(value: unknown, outcome?: Outcome): RunDiagnos
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const item = value as Record<string, unknown>;
   if (typeof item.code !== 'string' || !Object.hasOwn(messages, item.code) || typeof item.stage !== 'string' || !['native_request', 'native_command', 'runtime'].includes(item.stage) || typeof item.retryCount !== 'number' || !Number.isSafeInteger(item.retryCount) || item.retryCount < 0) return undefined;
-  if (outcome === 'completed' && item.code !== 'completed_after_retry' || outcome === 'cancelled' && item.code !== 'cancelled' || outcome === 'failed' && (item.code === 'cancelled' || item.code === 'completed_after_retry')) return undefined;
+  if (outcome === 'completed' && item.code !== 'completed_after_retry' || outcome === 'cancelled' && item.code !== 'cancelled' && item.code !== 'strategy_action_loop' || outcome === 'failed' && (item.code === 'cancelled' || item.code === 'strategy_action_loop' || item.code === 'completed_after_retry')) return undefined;
   return diagnostic(item.code as RunDiagnosticCode, item.stage as RunDiagnostic['stage'], item.retryCount);
 }
