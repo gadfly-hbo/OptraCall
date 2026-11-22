@@ -363,18 +363,18 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     // in the task's native session, even when no filesystem workspace is used.
     const project = await options.projects.get(projectId);
     const budget = createNativeSnapshotReadBudget();
-    let bound = false;
+    const matching: { taskId: string; savedAt: string }[] = [];
     try {
       for (const task of project.tasks) {
         const reports = await listTaskBoundReports(project, task, { budget });
         for (const binding of reports.filter(item => item.relativePath === locator)) {
           if (binding.sha256 !== sha || !binding.savedAt) return reject();
-          assertCurrentTaskEvidenceAt(projectId, binding.taskId, binding.savedAt);
-          bound = true;
+          matching.push({ taskId: binding.taskId, savedAt: binding.savedAt });
         }
       }
     } catch { reject(); }
-    if (!bound && isReportLockedByUseOrFeedback(projectId, locator)) reject();
+    for (const binding of matching) assertCurrentTaskEvidenceAt(projectId, binding.taskId, binding.savedAt);
+    if (!matching.length && isReportLockedByUseOrFeedback(projectId, locator)) reject();
   }
 
   function nextProjectGrantExpiry(projectId: string): number | undefined {

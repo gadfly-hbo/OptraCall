@@ -2343,17 +2343,17 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const current = await pair(project.id, task.id, true);
         if (scope.handoff?.mode === 'selected' && (!current.task.assignment?.sources?.some(row => row.taskId === sourceTaskId) || JSON.stringify(current.task.assignment) !== JSON.stringify(task.assignment))) throw new RequestFault(403, 'project_result_permission_unavailable');
         if (!source) return;
-        if (source.kind === 'report') {
-          await studio.memberPack.assertCurrentReportFile(source.projectId, source.relativePath, source.sha256);
-        } else {
-          studio.memberPack.assertCurrentTaskEvidenceAt(source.projectId, source.taskId, source.savedAt);
-        }
         const recipient = destination?.configuration ?? current.task.configuration;
         const cfg = availableConfiguration(recipient.id, recipient.revision);
         if (!cfg) throw new RequestFault(403, 'project_result_permission_unavailable');
         const caseId = scope.confirmation?.plan.caseContext?.caseId;
         const issue = destination ? destination.issue : current.task.assignment?.issue ?? (caseId ? { caseId } : undefined);
         await assertTaskResultAccess({ ...source }, cfg, { ...context, ...(!destination ? { receivingTask: { projectId: project.id, taskId: current.task.id } } : {}) }, issue);
+        if (source.kind === 'report') {
+          await studio.memberPack.assertCurrentReportFile(source.projectId, source.relativePath, source.sha256);
+        } else {
+          studio.memberPack.assertCurrentTaskEvidenceAt(source.projectId, source.taskId, source.savedAt);
+        }
         context.assertCurrent();
       },
     });
