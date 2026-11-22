@@ -168,6 +168,7 @@ export function parseStudioAssessmentEvidence(raw: unknown): StudioAssessmentEvi
         kind: raw.finding.kind,
         detail: text(raw.finding.detail, 4000, false),
         reportLocator: text(raw.finding.reportLocator, 1000, false),
+        ...(raw.finding.reportExcerpt !== undefined ? { reportExcerpt: text(raw.finding.reportExcerpt, 4000, false) } : {}),
         ...(raw.finding.sourceLocator ? { sourceLocator: text(raw.finding.sourceLocator, 1000, false) } : {}),
         ...(raw.finding.observedRef ? { observedRef: sourceRef(raw.finding.observedRef) } : {}),
       };
@@ -223,4 +224,55 @@ export function studioPagesComplete(reads: readonly ReturnType<typeof readStudio
     covered = Math.max(covered, range.end);
   }
   return covered === total;
+}
+
+function findingMatchesReportLines(finding: NonNullable<StudioAssessmentEvidence['finding']>, targetBody: string): boolean {
+  const lines = targetBody.split(/\r?\n/u);
+  const locator = /^L([1-9]\d*)(?:-L([1-9]\d*))?$/u.exec(finding.reportLocator);
+  if (!locator || !finding.reportExcerpt) return false;
+  const from = Number(locator[1]);
+  const to = Number(locator[2] ?? locator[1]);
+  return from <= to && to <= lines.length && lines.slice(from - 1, to).join('\n') === finding.reportExcerpt;
+}
+
+function reportAdoptionRef(locator: string, targetBody: string): StudioSourceRef | undefined {
+  const match = /^\/adoptedSources\/(0|[1-9]\d*)$/u.exec(locator);
+  if (!match) return;
+  try {
+    const declared = JSON.parse(targetBody)?.adoptedSources;
+    if (Array.isArray(declared)) return sourceRef(declared[Number(match[1])]);
+  } catch { /* unavailable or invalid declaration */ }
+}
+
+export function qualifyAssessmentClaims(input: {
+  assessment: StudioUseAssessment;
+  targetBody?: string;
+  requiredRefs: readonly StudioSourceRef[];
+  actuallyRead: readonly StudioSourceRef[];
+  comparisonSources: readonly StudioSourceRef[];
+}) {
+  const { assessment, requiredRefs, actuallyRead, comparisonSources } = input;
+  const targetBody = input.targetBody !== undefined && assessment.evidence?.targetReport.sha256 === hash(input.targetBody)
+    ? input.targetBody : undefined;
+  const finding = assessment.evidence?.finding;
+  const observed = finding?.observedRef;
+  const metrics = assessment.evidence?.comparison?.metrics;
+  const difference = metrics?.some(metric => metric.reported !== metric.recomputed);
+  const contradictoryPass = assessment.status === 'pass' && difference === true;
+  const usefulComparison = (assessment.status === 'pass' && difference === false) ||
+    (assessment.status === 'fail' && difference === true);
+  const auditableFinding = Boolean(targetBody && finding &&
+    finding.kind === (assessment.status === 'pass' ? 'consistent' : 'mismatch') &&
+    findingMatchesReportLines(finding, targetBody) &&
+    comparisonSources.some(ref => observed
+      ? readCoversSource(ref, observed)
+      : !!finding.sourceLocator && ref.locator === finding.sourceLocator));
+  const adopted = targetBody && finding?.kind === 'wrong-version'
+    ? reportAdoptionRef(finding.reportLocator, targetBody) : undefined;
+  const wrongVersion = Boolean(assessment.status === 'fail' && adopted && observed &&
+    readCoversSource(adopted, observed) && readCoversSource(observed, adopted) &&
+    actuallyRead.some(ref => readCoversSource(ref, observed)) &&
+    requiredRefs.some(ref => ref.authority === adopted.authority && ref.id === adopted.id &&
+      (ref.version !== adopted.version || (ref.sha256 !== undefined && ref.sha256 !== adopted.sha256))));
+  return { contradictoryPass, usefulComparison, auditableFinding, wrongVersion };
 }

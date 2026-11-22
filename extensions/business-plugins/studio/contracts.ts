@@ -137,6 +137,7 @@ export interface StudioAssessmentEvidence {
     kind: 'wrong-version' | 'mismatch' | 'consistent';
     detail: string;
     reportLocator: string;
+    reportExcerpt?: string;
     sourceLocator?: string;
     observedRef?: StudioSourceRef;
   };

@@ -32,7 +32,7 @@ import { DomainReferenceStore, BUILTIN_REPO_TEMPLATES } from './domain-reference
 import { ResourceGrantStore } from './resource-grant-store.ts';
 import { EnterprisePackStore } from './enterprise-pack-store.ts';
 import { buildAuthorizedDataView, isPeriodCovered } from './member-pack-data-view.ts';
-import { collectNativeEvidence, exactTaskReport, nativeAssessmentEvidence, projectFileLocator, readCoversSource, readNativeFileEvidence, readStudioEvidence, studioPagesComplete } from './member-pack-verification.ts';
+import { collectNativeEvidence, exactTaskReport, nativeAssessmentEvidence, projectFileLocator, qualifyAssessmentClaims, readCoversSource, readNativeFileEvidence, readStudioEvidence, studioPagesComplete } from './member-pack-verification.ts';
 import { createProtectedExecutionScope, type ProtectedExecutionScope } from '../agent/protected-tools.ts';
 
 function json(response: ServerResponse, status: number, value: unknown) {
@@ -1831,18 +1831,28 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
     summary.assessmentReportBoundToTarget = true;
 
-    const finding = evidence?.finding;
-    const observedRef = finding?.observedRef;
-    const wrongVersion = assessment.status === 'fail' && finding?.kind === 'wrong-version' && !!observedRef &&
-      requiredRefs.some(ref => ref.authority === observedRef.authority && ref.id === observedRef.id && !readCoversSource(observedRef, ref)) &&
-      complete.some(read => readCoversSource(read.ref, observedRef));
-    if (wrongVersion) return { verifierReads, summary, wrongVersion, failed: true };
+    let targetBody: string | undefined;
+    if (evidence?.finding && target.sha256) {
+      targetBody = sourceReads.find(read => read.complete && exactTaskReport(read.ref, target) && read.body !== undefined &&
+        createHash('sha256').update(read.body).digest('hex') === target.sha256)?.body;
+      if (targetBody === undefined && target.projectId && target.taskId && projectFileLocator(target.locator, '060_reports')) {
+        let bytes = readPreservedReportBytes(target.projectId, target.taskId, target.locator, target.sha256);
+        try {
+          bytes ??= (await options.projects.readFile(target.projectId, target.locator)).bytes;
+          if (createHash('sha256').update(bytes).digest('hex') === target.sha256) targetBody = bytes.toString('utf8');
+        } catch { /* the exact report body is unavailable */ }
+      }
+    }
+    const claim = qualifyAssessmentClaims({
+      assessment, targetBody, requiredRefs,
+      actuallyRead: complete.map(read => read.ref),
+      comparisonSources: [...required, ...inputs, ...summaryReads].map(read => read.ref),
+    });
+    if (claim.contradictoryPass) return pending('核验结论为通过，但提交的报告值与独立复算值不一致，保持待验证');
+    if (claim.wrongVersion) return { verifierReads, summary, wrongVersion: true, failed: true };
     if (!summary.allRequiredReadByVerifier) return pending(`独立核验尚未完整实读适用原依赖（${numberOfRequired}/${requiredRefs.length}），保持待验证`);
     if (!summary.hadDataOrCalcEvidence) return pending('独立核验尚未完整实读声明用于复算的获准输入或准确汇总，保持待验证');
-    const auditableFinding = finding?.kind === (assessment.status === 'pass' ? 'consistent' : 'mismatch') &&
-      (observedRef ? complete.some(read => readCoversSource(read.ref, observedRef))
-        : !!finding.sourceLocator && [...inputs, ...summaryReads, ...required].some(read => read.ref.locator === finding.sourceLocator));
-    if ((isRecalculation || isSummary || assessment.status === 'fail') && !evidence?.comparison && !auditableFinding) {
+    if ((isRecalculation || isSummary || assessment.status === 'fail') && !claim.usefulComparison && !claim.auditableFinding) {
       return pending('独立核验缺少带覆盖依据的对照结果或可回查的核验发现，保持待验证');
     }
     if (assessment.status === 'unknown') return pending('独立任务声明本次核验结果待查');
