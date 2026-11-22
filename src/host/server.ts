@@ -3306,7 +3306,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   await assertFrameworkContinuation(projectId, taskId);
                   startedAt = new Date().toISOString();
                   owner.reviewAdmission = reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion';
-                  if (owner.reviewAdmission === 'legacy') await automatic.admit({ project, task }, requestId, createHash('sha256').update(JSON.stringify(['automatic-command-v1', projectId, taskId, requestId, input.text])).digest('hex'));
+                  if (owner.reviewAdmission === 'legacy' && !studio.memberPack.getProjectToolScope(projectId)) {
+                    await automatic.admit({ project, task }, requestId, createHash('sha256').update(JSON.stringify(['automatic-command-v1', projectId, taskId, requestId, input.text])).digest('hex'));
+                  }
                 });
                 if (previous) return { result: { deduplicated: true }, outcome: previous, snapshot: (await taskState(projectId, taskId)).snapshot };
                 const run = lease.start({
