@@ -1,29 +1,29 @@
 name: 外发开发任务
-description: Codex 发布，非 Codex 工程 Agent 领取、开发并推送任务分支。
+description: PM Agent 发布功能开发或试用修正。具备任务分支推送权限的 Agent 均可领取，包括 Codex。
 title: "[开发任务] "
 body:
   - type: markdown
     attributes:
       value: |
-        按[工程规范的外发流程](https://github.com/gadfly-hbo/OptraCall/blob/main/docs/engineering-workflow.md#github-开发任务外发与交付)在本单留言领取和交回回执。请使用可公开的说明、样例和仓库链接。交付项仅列工程工作，设备更新及运行验收由用户另行安排。
+        按[工程规范的外发流程](https://github.com/gadfly-hbo/OptraCall/blob/main/docs/engineering-workflow.md#github-开发任务外发与交付)在本单留言领取并向 PM Agent 回执。请使用可公开的说明、样例和仓库链接。交付项仅列工程工作，设备更新和运行验收由用户自行安排。
   - type: textarea
     id: scope
     attributes:
       label: 目标、范围与当前授权
-      description: 说明用户要完成的事、可修改的模块或接缝、可先开展的阶段，以及 Codex 后续负责的工程交付范围。
+      description: 写明实际 PM Agent、用户确认的目标与授权、可修改的模块或接缝、当前可开工阶段。试用修正如已有原反馈 Issue，请关联原单。
     validations:
       required: true
   - type: textarea
     id: inputs
     attributes:
       label: 基线与设计依据
-      description: 填写基线 SHA、规格、Demo 和确认状态。尚需设计的部分注明要先交付的内容。
+      description: 填写基线 SHA。新产品或新功能链接已推送的确认版 spec、适用的 Demo 及其 SHA。试用修正附核实后的复现和适用设计依据。
     validations:
       required: true
   - type: textarea
     id: acceptance
     attributes:
       label: 验收与回执
-      description: 列出真实入口、预期结果、重要负例和交付物。领取方在原单按规范回复分支、完整 SHA 和验证证据。
+      description: 列出真实入口、预期结果、重要负例和交付物。领取方在本单回复分支、完整 SHA 和验证证据，交回 PM Agent 审核。
     validations:
       required: true

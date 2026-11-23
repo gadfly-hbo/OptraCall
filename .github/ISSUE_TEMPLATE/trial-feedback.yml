@@ -1,5 +1,5 @@
 name: 试用反馈与问题修复
-description: 提交 OptraCall 使用问题，也可附上整份试用报告。
+description: 用户或试用 Agent 提交 OptraCall 使用问题，可附整份试用报告。
 title: "[问题] "
 body:
   - type: markdown
@@ -20,7 +20,7 @@ body:
     attributes:
       label: 运行版本与环境
       description: 已知时填写；暂时不知道可留空或写“未知”。
-      placeholder: MacBook / macOS 版本 / OptraCall 版本或提交号
+      placeholder: Mac mini 或 MacBook / macOS 版本 / OptraCall 版本或提交号
   - type: textarea
     id: reproduction
     attributes:
@@ -43,4 +43,4 @@ body:
   - type: markdown
     attributes:
       value: |
-        提交后由执行者整理修复清单并维护进展。处理与关闭遵循[工程规范](https://github.com/gadfly-hbo/OptraCall/blob/main/docs/engineering-workflow.md#github-issues-问题收件与结案)。
+        PM Agent 核实反馈后按授权发布关联开发 Issue。处理与关闭遵循[工程规范](https://github.com/gadfly-hbo/OptraCall/blob/main/docs/engineering-workflow.md#github-issues-问题收件与结案)。

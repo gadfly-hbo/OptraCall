@@ -1,16 +1,14 @@
 # OptraCall 工程入口
 
-开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.2](docs/OptraCall_产品讨论稿_v0.2.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
+开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.4](docs/OptraCall_产品讨论稿_v0.4.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
 
 开发前，按[任务目标执行清单与范围管理](docs/engineering-workflow.md#任务目标执行清单与范围管理)列出目标和阶段任务，执行中逐项更新并据此处理新发现的问题。
 
-接收新问题、执行 Issue 修复或准备关闭 Issue 时，先读[GitHub Issues 问题收件与结案规则](docs/engineering-workflow.md#github-issues-问题收件与结案)；新反馈统一走 Issues。
-
-Codex 外发开发任务、非 Codex Agent 领取或推送候选、Codex 接收回执时，按[GitHub 开发任务外发与交付](docs/engineering-workflow.md#github-开发任务外发与交付)执行。
+新产品、新功能和试用修正以云端开发为主，均通过 GitHub Issue 发单、领取、交接和结案。按[两类开发流程](docs/engineering-workflow.md#github-issues-问题收件与结案)找到入口，再按[GitHub 开发任务外发与交付](docs/engineering-workflow.md#github-开发任务外发与交付)执行。PM Agent 通常由 Codex 担任，也可由其他 Agent 担任或代理。具备任务分支推送权限的 Agent（包括 Codex）均可领取。
 
 为 MacBook 上的 Qoder 编写或维护反馈项目规则时，先读取仓库文件 `docs/engineering-workflow.md` 的「MacBook 端 Qoder 整理与提交」小节；反馈会话工作区与产品源码目录分开，按该节的绝对路径读取约定接入同一规范。
 
-编写或修改 OptraCall 分析类 Skill 本体时（含 `SKILL.md`、随包参考资料、脚本和模板），先读取项目根目录下的 [分析类 Skill 编写规范](docs/分析类Skill编写规范.md)，按规范编写并自检。仅做测评、只读审查、Host 接缝或接入时，沿用各自流程。
+编写或修改 OptraCall 分析类 Skill 本体时（含 `SKILL.md`、随包参考资料、脚本和模板），先读取项目根目录下的 [分析类 Skill 编写规范](docs/分析类Skill编写规范.md)，按规范编写并自检，按工程规范交付。
 
 本项目遵循四点产品原则：**Host 管环境、Agent 自主执行、优先复用 Pi 已有能力、减少人的操作**。准备或修改 spec／UI、开发及验收时，必须按[工程规范第2节](docs/engineering-workflow.md#四点产品原则)与[前置检查](docs/engineering-workflow.md#3-连续-sdd-与-tdd)核对实际职责、复用依据和最少用户操作路径，完成[专项最终检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；完整规则仅在工程规范维护。
 
@@ -18,9 +16,9 @@ Codex 外发开发任务、非 Codex Agent 领取或推送候选、Codex 接收�
 
 [模型包消费端](openspec/changes/model-pack-consumer/result.md#合并交付与原位归档)已完成工程交付并原位归档。维护时先读规格、结果及[后续采用记录](openspec/changes/model-pack-consumer/live-validation.md)：MPS训练／导出，OptraCall消费v1纯计算包；任务显式开启、受管／封闭资源排除，快照不可变、损坏不静默修复。用户后续授权运行采用及设备更新，实际状态按后续收据核定；当前真实业务模型与LLM验收已由用户决定跳过。旧备份包有限检查、取消、原失败及历史前置TDD证明NOT_PROVED保留。
 
-维护[deep-research skill](openspec/changes/deep-research-skill/result.md#合并交付与原位归档)或新增skill测评展示时，先读其归档记录及[统一展示规范](docs/skill-evaluation-display.md)：测评默认收起，历史回执绑定被测版本。长期`qoder/ext-skills`分支的测评门禁、移交与写入归属按工程规范第2、5节执行；按已记录的2026-11-04用户裁定，原有效结论覆盖工程修正版，不新增待复测事项；原被测身份与未重测事实保留。
+维护[deep-research skill](openspec/changes/deep-research-skill/result.md#合并交付与原位归档)时，先读其归档记录。修改 Skill 测评信息展示时，按[统一展示规范](docs/skill-evaluation-display.md)处理。历史回执绑定被测版本，原工程修正的覆盖范围按归档中的用户裁定核对。
 
-维护[data-analysis skill](openspec/changes/data-analysis-skill/result.md#合并交付与原位归档)时，先读其规格、结果与独立复核；测评门禁、单向工程修正及长期分支归属沿工程规范第2、5节。原失败、暂定结论、成本与验收边界保留，工程合并和运行采用分别核定。
+维护[data-analysis skill](openspec/changes/data-analysis-skill/result.md#合并交付与原位归档)时，先读其规格、结果与独立复核。原失败、暂定结论、成本与验收边界保留，工程合并和运行采用分别核定。
 
 [商圈数据 MCP 连接器](openspec/changes/trade-area-mcp/result.md#合并交付与原位归档)与[天气连接器](openspec/changes/weather-mcp/result.md#合并交付与原位归档)已分别经非作者复核、实际head CI及获授权squash入main，OpenSpec原位归档；后续维护先读对应结果和[商圈IN06](openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)的SDK薄层复用边界。Qoder整体移交后只读，接缝及后续维护由Codex承接，原清单、移交包及失败保留。[后续真实模型记录](openspec/changes/weather-mcp/live-validation.md)为两轮工具／保存闭环完成、报告内容FAIL，不能当专业或用户产品验收；已授权MacBook main及同一正式快照采用，实际运行与保全按最终回执核定。Mac mini原运行服务保持，经营数据与凭据留在获准本机根，未来来源版本导入仍单独授权。
 
