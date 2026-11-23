@@ -286,7 +286,7 @@ Issue [#120](https://github.com/gadfly-hbo/OptraCall/issues/120) · 规格 [Spec
 - **I 公开来源资格**（`1972a44`）：pass 须含 file/candidate/kickoff 准确身份来源；public 仅 http(s) URL；占位不生成凭证。
 - **J 承接恢复一致性**（`b7f531d`）：per-goal operationId 含 requestFingerprint；同操作变更范围冲突；不同操作独立目标。
 
-**验证**：浏览器主流程 30/30 + 崩溃替换 4/4 PASS；完整 npm run check 最终复跑进行中。
+**验证**：浏览器主流程 30/30 + 崩溃替换 4/4 PASS；完整 `npm run check` 最终复跑 PASS（exit 0）：3248 项，3137 通过，0 失败，111 原有条件跳过；边界与锁定 SDK 材料 PASS；build 成功。证据 `.local/issue-120/full-check-final3.log`。
 
 ## 范围外问题
 
