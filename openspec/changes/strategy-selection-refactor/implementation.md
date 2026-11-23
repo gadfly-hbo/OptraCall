@@ -203,6 +203,15 @@ Issue [#120](https://github.com/gadfly-hbo/OptraCall/issues/120) · 规格 [Spec
 - `npm ci` 按锁文件安装依赖（无升级）。
 - 干净隔离根启动真实 Host：`node .local/issue-120/kickoff-check.mjs` → host-ready sdkVersion 1.4.0 / transportVersion 8.12.2；GET /api/strategy/discussions 空；dataRoot 内 publications.json 0 个；有效发布 0；SIGTERM 干净停机。证据：`.local/issue-120/kickoff/evidence.json`。
 
+### 2026-11-23 开发一进展
+
+- 切片一（事项存储+HTTP）：`3453ebb`。RED（404）→GREEN 2/2；创建幂等/冲突、范围稳定身份键、CAS 改名、字段白名单、重启读回。typecheck、check:agent-sessions 通过。证据 `.local/issue-120/{red,green}-initiative*.log`。
+- 切片二（开题报告版本链，SS03 存储层）：`834e60d`。RED→GREEN；Schema 门禁（3–5 命题、稳定唯一 ID、字段白名单）、锁定指纹+操作者+时间、按范围应用指针、应用台账、operationId 幂等。证据 `.local/issue-120/{red,green}-kickoff.log`。
+- 环境备注：Node 类型剥离不支持参数属性，Host 模块须用普通字段赋值（已修）。
+- 切片三（事项文件存储）：`c933e6f`+`0e0d4dd`（类型收窄修复）。RED→GREEN；010/020 上传、范围归属、sha 校验、名称/目录白名单、跨事项隔离、operationId 幂等。
+- 切片四（主会话，SS02）：`c2c6b64`。复用 strategyDiscussion port 扩展 initiative-files/read-file/read-kickoff/save-kickoff 四动作（讨论 Host 显式拒绝）；新域 strategy-initiative 登记 domainRegistrars；真实 Pi SDK+合成工具 Provider：开题草稿保存（generation.kind agent+requestId）、幂等回读不重发、Schema 负例零写入、停止 cancelled、关闭不唤模型、重启原生读回。修复两处实现错误：systemPrompt 须字符串数组；detail 用 domain.read 投影。受影响回归 51/51（讨论 Host/runtime、agent-sessions、事项四测试）。证据 `.local/issue-120/session-run*.log`、`regression-run1.log`。
+- 待办提示：grill-me/deep-research 资产实际激活尚未验证（SS02 要求隔离环境验证，来源待核定项如实记录）；当前主会话提示词内置追问纪律，Skill 挂载按获准资产后续接入。
+
 ## 范围外问题
 
 （暂无。）
