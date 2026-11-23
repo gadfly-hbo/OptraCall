@@ -91,6 +91,26 @@ test('真实 Host+Pi：事项主会话开题保存草稿、幂等回读与负例
   assert.deepEqual(provider.errors, []);
 });
 
+test('真实 Host+Pi：冻结配置线路变化后拒绝派发', {timeout: 90_000}, async t => {
+  const provider = await startToolProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  await req('/api/configuration', 'PUT', {name: '配置变化', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-initiative', apiKey: 'synthetic-config-change'});
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '配置变化事项', scopes: [stores]}, 201);
+  const created = (await req(`/api/strategy/initiatives/${initiativeId}/session`, 'POST', {operationId: randomUUID(), scope: stores}, 201)).session;
+  const messageRoute = `/api/strategy/initiatives/${initiativeId}/messages?scopeKey=${encodeURIComponent(scopeKey)}`;
+  await req('/api/configuration', 'PUT', {id: created.configurationId, name: '配置变化', provider: 'openai-compatible', baseUrl: 'http://127.0.0.1:14998/v1', model: 'synthetic-initiative', apiKey: 'synthetic-config-change'});
+  const requests = provider.requests.length;
+  const denied = await req(messageRoute, 'POST', {requestId: randomUUID(), text: '继续开题。', expectedRevision: 1}, 409);
+  assert.equal(denied.code, 'configuration_changed');
+  assert.equal(provider.requests.length, requests, 'frozen configuration line change blocks dispatch');
+});
+
 test('真实 Host+Pi：事项主会话停止、关闭与重开读回', {timeout: 120_000}, async t => {
   const provider = await startToolProvider();
   const scratch = await mkdtemp(join(os.tmpdir(), 'optracall-initiative-session-'));
