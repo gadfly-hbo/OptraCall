@@ -44,6 +44,7 @@ import { StrategyGoalsStore, StrategyGoalsError, goalContentSha256, parseGoalRol
 import { strategyWorkbookRoutes,checkWorkbookSource } from './strategy-workbook-routes.ts';
 import { StrategyMapPublicationStore } from './strategy-map-publication-store.ts';
 import { StrategyInitiativeStore } from './strategy-initiative-store.ts';
+import { StrategyInitiativeReports } from './strategy-initiative-reports.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
@@ -1196,6 +1197,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const strategyDiscussions=createStrategyDiscussionHost(discussionOptions);
   const strategyMapPublications=new StrategyMapPublicationStore(strategyDiscussions.store);
   const strategyInitiatives=new StrategyInitiativeStore(dataRoot);
+  const strategyKickoffReports=new StrategyInitiativeReports(strategyInitiatives);
   strategyMapImports=createStrategyMapImportService({dataRoot,codeRoot:options.cwd,attachments:strategyAttachments,projects,owner:id=>strategyDiscussions.store.get(id),configuration:(id,revision)=>availableConfiguration(id,revision),mutate,
     writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
   });
@@ -2726,6 +2728,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const id=initiativeRoute[1]!;
         if(request.method==='GET'){json(response,200,{initiative:strategyInitiatives.get(id)});return;}
         if(request.method==='PATCH'){const input=await body(request);json(response,200,{initiative:await mutate(()=>strategyInitiatives.update(id,input as unknown as import('./strategy-initiative-types.ts').StrategyInitiativeUpdate))});return;}
+      }
+      const kickoffRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/reports(?:\/([1-9]\d*)\/(lock|apply))?$/.exec(url.pathname);
+      if(kickoffRoute){
+        const id=kickoffRoute[1]!,no=Number(kickoffRoute[2]),action=kickoffRoute[3];
+        if(!action&&request.method==='GET'){json(response,200,strategyKickoffReports.view(id));return;}
+        if(!action&&request.method==='POST'){const input=await body(request);json(response,201,{version:await mutate(()=>strategyKickoffReports.save(id,input as Parameters<typeof strategyKickoffReports.save>[1]))});return;}
+        if(action==='lock'&&request.method==='POST'){const input=await body(request);json(response,200,{version:await mutate(()=>strategyKickoffReports.lock(id,no,input as Parameters<typeof strategyKickoffReports.lock>[2]))});return;}
+        if(action==='apply'&&request.method==='POST'){const input=await body(request);json(response,200,{anchor:await mutate(()=>strategyKickoffReports.apply(id,no,input as Parameters<typeof strategyKickoffReports.apply>[2]))});return;}
       }
       const workbookRoute=/^\/api\/strategy\/workbooks\/(preview|commit|handoff|map-source|goal-source)$/.exec(url.pathname);
       if(workbookRoute && request.method==='POST'){
