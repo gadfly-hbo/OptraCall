@@ -2039,6 +2039,11 @@ test('purposeKeys wildcard * grants access to any purpose; empty purposeKeys mea
     assert.ok(evaluateResourceAccess([pGrant], { operation: 'read-definition', purposeKey: 'specific-purpose' }).allowed, 'precise key matches');
     assert.equal(evaluateResourceAccess([pGrant], { operation: 'read-definition', purposeKey: 'other-purpose' }).allowed, false, 'precise key must not expand');
     assert.ok(evaluateResourceAccess([uGrant], { operation: 'read-definition', purposeKey: 'anything' }).allowed, 'empty purposeKeys means unrestricted (legacy)');
+    assert.throws(() => grants.grant({ ...base, subjectId: projU, purposeKeys: [] }), /invalid_grant_purpose_keys/, 'explicit empty purposeKeys array must be rejected');
+    const brandGrant = grants.grant({ ...base, subjectId: projP, purposeKeys: ['brand-a-purpose'], operations: ['read-definition', 'cite-summary'], resourceKind: 'summary', scope: { brand: 'BrandA', summaryAssetId: 'asset-1', summaryVersion: '1', summaryAuthority: 'studio-source', grain: 'store-month' }, resourceRef: { authority: 'studio-source', id: 'asset-1', version: '1' } });
+    const bGrant = grants.get(brandGrant.id);
+    assert.ok(evaluateResourceAccess([bGrant], { operation: 'cite-summary', purposeKey: 'brand-a-purpose', brand: 'BrandA', grain: 'store-month', summaryVersion: '1' }).allowed, 'matching brand passes');
+    assert.equal(evaluateResourceAccess([bGrant], { operation: 'cite-summary', purposeKey: 'brand-a-purpose', brand: 'DifferentBrand', grain: 'store-month', summaryVersion: '1' }).allowed, false, 'brand mismatch must deny');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

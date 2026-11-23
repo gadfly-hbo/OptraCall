@@ -116,7 +116,7 @@ function checkShape(raw: unknown): SapDocument {
     const grains = strings(m.time_grains, `${path}.time_grains`);
     if (!grains.length || new Set(grains).size !== grains.length || grains.some(grain => !TIME_GRAINS.includes(grain))) fail('SAP_STRUCTURE', `${path}.time_grains`);
     const switches = isObject(m.caliber_switches) ? m.caliber_switches : fail('SAP_STRUCTURE', `${path}.caliber_switches`);
-    for (const [key, entry] of Object.entries(switches)) { text(key, `${path}.caliber_switches`); if (typeof entry !== 'boolean') fail('SAP_STRUCTURE', `${path}.caliber_switches.${key}`); }
+    for (const [key, entry] of Object.entries(switches)) { text(key, `${path}.caliber_switches`); if (typeof entry !== 'boolean') fail('SAP_STRUCTURE', `${path}.caliber_switches`); }
     let typeParams: Record<string, string> | undefined;
     if (m.type_params !== undefined) {
       const params = isObject(m.type_params) ? m.type_params : fail('SAP_STRUCTURE', `${path}.type_params`);

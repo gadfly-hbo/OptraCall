@@ -1206,10 +1206,10 @@ export function createStudioFeature(options: StudioHostOptions) {
           throw new StudioError('studio_action_not_available', 409);
         }).catch(error => {
           if (error instanceof SapFault) {
-            const rawPath = error.code === 'SAP_UNKNOWN_FIELD'
-              ? (error.path.includes('.') ? error.path.slice(0, error.path.lastIndexOf('.')) : '')
-              : error.path;
-            const safePath = rawPath && /^[A-Za-z0-9_.[\]]{1,200}$/.test(rawPath) ? rawPath : '';
+            const segments = error.path ? error.path.split('.') : [];
+            let safeCount = 0;
+            for (const segment of segments) { if (/^[a-z][a-z_]*$|^\d+$/.test(segment)) safeCount++; else break; }
+            const safePath = segments.slice(0, safeCount).join('.');
             const message = safePath === 'package.id'
               ? 'SAP package.id 必须匹配 ^[a-z][a-z0-9-]*$：小写字母开头，仅含小写字母、数字和连字符；例如 studio-retail-flow。请修正后重试。'
               : safePath === 'package.version'
