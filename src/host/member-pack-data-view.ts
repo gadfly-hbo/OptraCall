@@ -70,6 +70,7 @@ export function isPeriodCovered(period: string | undefined, periodFrom?: string,
 }
 
 export function isSourcePeriodCovered(sourcePeriodFrom?: string, sourcePeriodTo?: string, grantPeriodFrom?: string, grantPeriodTo?: string): boolean {
+  if (!grantPeriodFrom && !grantPeriodTo) return true;
   if (!sourcePeriodFrom || !sourcePeriodTo) return false;
   const sourceStart = dataPeriodBounds(sourcePeriodFrom)?.start;
   const sourceEnd = dataPeriodBounds(sourcePeriodTo)?.end;

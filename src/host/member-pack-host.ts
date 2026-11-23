@@ -3330,6 +3330,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             rawScope.summaryAuthority = verified.summaryAuthority;
             rawScope.summarySha256 = verified.summarySha256;
             rawScope.verifiedScopeSummary = verified.verifiedScopeSummary;
+            delete rawScope.sourcePeriodFrom;
+            delete rawScope.sourcePeriodTo;
             if (verified.sourcePeriodFrom) rawScope.sourcePeriodFrom = verified.sourcePeriodFrom;
             if (verified.sourcePeriodTo) rawScope.sourcePeriodTo = verified.sourcePeriodTo;
             verifiedResourceRef = verified.resourceRef;

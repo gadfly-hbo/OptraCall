@@ -122,11 +122,33 @@ export function createStudioFeature(options: StudioHostOptions) {
     const periodSummary = requested.periodFrom || requested.periodTo
       ? `${requested.periodFrom ?? '*'}..${requested.periodTo ?? '*'}`
       : (textMonths.join(',') || '未声明期间');
-    const sourceDates = [...combined.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))\b/g)].map(m => m[1]!).sort();
-    const sourceMonths = [...combined.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2]))\b/g)].map(m => m[1]!).filter(m => !sourceDates.some(d => d.startsWith(m))).sort();
-    const allPeriodTokens = [...sourceDates, ...sourceMonths].sort();
-    const sourcePeriodFrom = allPeriodTokens.length > 0 ? allPeriodTokens[0] : undefined;
-    const sourcePeriodTo = allPeriodTokens.length > 0 ? allPeriodTokens[allPeriodTokens.length - 1] : undefined;
+    // Extract source period: structured JSON fields first, then context-filtered text
+    let sourcePeriodFrom: string | undefined;
+    let sourcePeriodTo: string | undefined;
+    try {
+      const parsed = JSON.parse(assetText);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        if (typeof parsed.periodFrom === 'string' && parsed.periodFrom.trim()) sourcePeriodFrom = parsed.periodFrom.trim();
+        if (typeof parsed.periodTo === 'string' && parsed.periodTo.trim()) sourcePeriodTo = parsed.periodTo.trim();
+        if (!sourcePeriodFrom && !sourcePeriodTo && typeof parsed.period === 'string' && parsed.period.trim()) {
+          sourcePeriodFrom = parsed.period.trim();
+          sourcePeriodTo = parsed.period.trim();
+        }
+      }
+    } catch { /* non-JSON body */ }
+    if (!sourcePeriodFrom && !sourcePeriodTo) {
+      const periodKeywords = /(?:统计期间|数据期间|期间范围|期间|统计范围|数据范围|覆盖期间)/;
+      const nonPeriodKeywords = /(?:生成日期|生成时间|修订日期|修订时间|样例日期|创建日期|创建时间|截止日期|截止时间|发布日期|发布时间|更新日期|更新时间)/;
+      const qualifyingLines = combined.split(/[\n\r]+/).filter(line => periodKeywords.test(line) && !nonPeriodKeywords.test(line));
+      const qualifyingText = qualifyingLines.join('\n');
+      const sourceDates = [...new Set([...qualifyingText.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))\b/g)].map(m => m[1]!))].sort();
+      const sourceMonths = [...new Set([...qualifyingText.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2]))\b/g)].map(m => m[1]!).filter(m => !sourceDates.some(d => d.startsWith(m))))].sort();
+      const allPeriodTokens = [...sourceDates, ...sourceMonths].sort();
+      if (allPeriodTokens.length > 0) {
+        sourcePeriodFrom = allPeriodTokens[0];
+        sourcePeriodTo = allPeriodTokens[allPeriodTokens.length - 1];
+      }
+    }
     return { verifiedScopeSummary: `粒度:${trimmedGrain} · 期间:${periodSummary}`, sourcePeriodFrom, sourcePeriodTo };
   }
 
