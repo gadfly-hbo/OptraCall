@@ -39,7 +39,7 @@ const text = (value: unknown, path: string): string => { if (typeof value !== 's
 const list = (value: unknown, path: string): unknown[] => { if (!Array.isArray(value) || value.length > 4096) return fail('SAP_STRUCTURE', path); return value; };
 const strings = (value: unknown, path: string): string[] => list(value, path).map((item, index) => text(item, `${path}.${index}`));
 const one = (value: unknown, allowed: readonly string[], path: string) => { if (!allowed.includes(String(value))) fail('SAP_STRUCTURE', path); };
-const keys = (value: Record<string, unknown>, allowed: readonly string[], path: string) => { for (const key of Object.keys(value)) if (!allowed.includes(key)) fail('SAP_UNKNOWN_FIELD', `${path}.${key}`); };
+const keys = (value: Record<string, unknown>, allowed: readonly string[], path: string) => { for (const key of Object.keys(value)) if (!allowed.includes(key)) fail('SAP_UNKNOWN_FIELD', path); };
 
 /** Exactly SAP 0.2 canonical form: recursive UTF-16 key sort, NFC scalars, LF, two-space block YAML. */
 export function canonicalSapYaml(value: unknown): string {

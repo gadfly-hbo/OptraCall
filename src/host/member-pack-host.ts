@@ -1606,24 +1606,26 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       );
       if (activeSummaryGrants.length) {
         const eligiblePurposes = rev.purposeManifests.filter(pm => pm.status === 'eligible');
-        const eligiblePurposeKeys = eligiblePurposes.map(pm => pm.purposeKey);
         let summaryAllowed = false;
         for (const grant of activeSummaryGrants) {
-          const matchingPurposeKey = grant.purposeKeys?.length
-            ? (grant.purposeKeys.includes('*') ? eligiblePurposeKeys[0] : grant.purposeKeys.find(pk => eligiblePurposeKeys.includes(pk)))
-            : eligiblePurposeKeys[0];
-          if (grant.purposeKeys?.length && !matchingPurposeKey) continue;
-          const purposeScope = eligiblePurposes.find(pm => pm.purposeKey === matchingPurposeKey)?.scope;
-          const evalSummary = evaluateResourceAccess([grant], {
-            operation: 'cite-summary',
-            ...(matchingPurposeKey ? { purposeKey: matchingPurposeKey } : {}),
-            ...(purposeScope?.brand ? { brand: purposeScope.brand } : {}),
-            ...(purposeScope?.channel ? { channel: purposeScope.channel } : {}),
-            ...(purposeScope?.period ? { period: purposeScope.period } : {}),
-            grain: grant.scope.grain,
-            summaryVersion: grant.scope.summaryVersion,
-          });
-          if (evalSummary.allowed) { summaryAllowed = true; break; }
+          const applicablePurposes = grant.purposeKeys?.length
+            ? (grant.purposeKeys.includes('*') ? eligiblePurposes : eligiblePurposes.filter(pm => grant.purposeKeys!.includes(pm.purposeKey)))
+            : eligiblePurposes;
+          for (const purpose of applicablePurposes) {
+            const evalSummary = evaluateResourceAccess([grant], {
+              operation: 'cite-summary',
+              purposeKey: purpose.purposeKey,
+              ...(purpose.scope?.brand ? { brand: purpose.scope.brand } : {}),
+              ...(purpose.scope?.channel ? { channel: purpose.scope.channel } : {}),
+              grain: grant.scope.grain,
+              summaryVersion: grant.scope.summaryVersion,
+            });
+            if (!evalSummary.allowed) continue;
+            if (!isPeriodCovered(purpose.scope?.period, grant.scope.periodFrom, grant.scope.periodTo)) continue;
+            summaryAllowed = true;
+            break;
+          }
+          if (summaryAllowed) break;
         }
         if (summaryAllowed) return { matchedPack: { packId: pack.id, packVersion: rev.version, purposeIds: pin?.purposeIds ?? [], summaryAuthorized: true } };
         throw new StudioError('resource_access_denied', 403);

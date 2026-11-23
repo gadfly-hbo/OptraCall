@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { DomainReferenceStore } from '../src/host/domain-reference-store.ts';
+import { isPeriodCovered } from '../src/host/member-pack-data-view.ts';
 import { ResourceGrantStore } from '../src/host/resource-grant-store.ts';
 import { EnterprisePackStore } from '../src/host/enterprise-pack-store.ts';
 import {
@@ -2044,6 +2045,10 @@ test('purposeKeys wildcard * grants access to any purpose; empty purposeKeys mea
     const bGrant = grants.get(brandGrant.id);
     assert.ok(evaluateResourceAccess([bGrant], { operation: 'cite-summary', purposeKey: 'brand-a-purpose', brand: 'BrandA', grain: 'store-month', summaryVersion: '1' }).allowed, 'matching brand passes');
     assert.equal(evaluateResourceAccess([bGrant], { operation: 'cite-summary', purposeKey: 'brand-a-purpose', brand: 'DifferentBrand', grain: 'store-month', summaryVersion: '1' }).allowed, false, 'brand mismatch must deny');
+    const periodGrant = grants.grant({ ...base, subjectId: projU, purposeKeys: ['*'], operations: ['read-definition', 'cite-summary'], resourceKind: 'summary', scope: { periodFrom: '2026-09-01', periodTo: '2026-09-15', summaryAssetId: 'asset-1', summaryVersion: '1', summaryAuthority: 'studio-source', grain: 'store-month' }, resourceRef: { authority: 'studio-source', id: 'asset-1', version: '1' } });
+    const pGrant2 = grants.get(periodGrant.id);
+    assert.equal(isPeriodCovered('2026-09', pGrant2.scope.periodFrom, pGrant2.scope.periodTo), false, 'half-month grant must not cover full September');
+    assert.equal(isPeriodCovered('2026-09-01', pGrant2.scope.periodFrom, pGrant2.scope.periodTo), true, 'single day within grant passes');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
