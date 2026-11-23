@@ -1,10 +1,10 @@
 # Issue #121 试用反馈修复
 
-状态：实施中  
-来源：[Issue #121 正式外发评论](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7093149868)  
-领取：QoderCN / Mac mini 当前 Qoder 实例  
-任务分支：`work/qoder/issue-121-trial-feedback`  
-开工基线：`166c7136bc65c3cc37c237ef62f4652c01a79f2a`
+- 状态：领取方已交付，PM 集成复核中
+- 来源：[Issue #121 正式外发评论](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7093149868)
+- 领取：QoderCN / Mac mini 当前 Qoder 实例
+- 任务分支：`work/qoder/issue-121-trial-feedback`
+- 开工基线：`166c7136bc65c3cc37c237ef62f4652c01a79f2a`
 
 ## 目标与交付
 
