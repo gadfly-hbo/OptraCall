@@ -183,7 +183,8 @@ test('SAP unknown field error does not echo the raw key name in message or detai
   const rawKey = 'SYNTHETIC_RAW_CUSTOMER_1234';
   const dottedKey = 'SYNTHETIC.CUSTOMER.KEY.NAME';
   const switchKey = 'CUSTOMER_BRAND_SWITCH_5678';
-  const docWithUnknown = JSON.stringify({ sap: '0.2', package: { id: 'studio-unknown-test', version: '1.0.0', namespace: 'mf.studio-unknown-test', fingerprint: '' }, dimensions: ['store'], metrics: [{ name: 'm1', display_name: 'M', type: 'simple', definition: 'D', dimensions: ['store'], time_grains: ['month'], owner_role: 'finance', caliber_switches: {}, provenance: { origin: 'manual' } }], scenarios: [], [rawKey]: 'val', [dottedKey]: 'val' });
+  const lowercaseKey = 'synthetic_lowercase_field';
+  const docWithUnknown = JSON.stringify({ sap: '0.2', package: { id: 'studio-unknown-test', version: '1.0.0', namespace: 'mf.studio-unknown-test', fingerprint: '' }, dimensions: ['store'], metrics: [{ name: 'm1', display_name: 'M', type: 'simple', definition: 'D', dimensions: ['store'], time_grains: ['month'], owner_role: 'finance', caliber_switches: {}, provenance: { origin: 'manual' } }], scenarios: [], [rawKey]: 'val', [dottedKey]: 'val', [lowercaseKey]: 'val' });
   const docWithSwitchTypeError = JSON.stringify({ sap: '0.2', package: { id: 'studio-switch-test', version: '1.0.0', namespace: 'mf.studio-switch-test', fingerprint: '' }, dimensions: ['store'], metrics: [{ name: 'm2', display_name: 'M', type: 'simple', definition: 'D', dimensions: ['store'], time_grains: ['month'], owner_role: 'finance', caliber_switches: { [switchKey]: 'not-a-boolean' }, provenance: { origin: 'manual' } }], scenarios: [] });
   writeFileSync(path.join(project.rootPath, '020_clean', 'unknown-key.yaml'), docWithUnknown);
   writeFileSync(path.join(project.rootPath, '020_clean', 'switch-type-error.yaml'), docWithSwitchTypeError);
@@ -207,6 +208,7 @@ test('SAP unknown field error does not echo the raw key name in message or detai
   assert.match(errText0, /sap_unknown_field/);
   assert.equal(errText0.includes(rawKey), false, 'raw underscore key must not appear');
   assert.equal(errText0.includes(dottedKey), false, 'dotted key must not appear');
+  assert.equal(errText0.includes(lowercaseKey), false, 'lowercase unknown key must not appear');
   assert.equal(results[1].isError, true);
   const errText1 = providerMessageText(results[1].content);
   assert.match(errText1, /sap_structure/);
@@ -218,6 +220,7 @@ test('SAP unknown field error does not echo the raw key name in message or detai
   assert.equal(allModelText.includes(rawKey), false, 'raw key must not enter next model request');
   assert.equal(allModelText.includes(dottedKey), false, 'dotted key must not enter next model request');
   assert.equal(allModelText.includes(switchKey), false, 'switch key must not enter next model request');
+  assert.equal(allModelText.includes(lowercaseKey), false, 'lowercase key must not enter next model request');
 });
 
 test('Studio graph unavailable fails before dispatch and leaves independent source work usable', async t => {
