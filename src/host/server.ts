@@ -127,7 +127,7 @@ import { createPptRefinerSessions } from './ppt-refiner-sessions.ts';
 import { createPptRefinerAccess } from './ppt-refiner-access.ts';
 import { createAgentSessionDomain, type AgentSessionDomain, type SessionContext } from './agent-sessions.ts';
 import { checkTeachObservationHistory, savedTaskHistory, priorTaskRequest, taskContextReceipts, readSavedTaskReply, ProjectHistoryError } from './project-history.ts';
-import { readRunDiagnostic, runtimeDiagnostic } from '../agent/run-diagnostics.ts';
+import { readRunDiagnostic, runtimeDiagnostic, taskSkillVersionChangedMessage } from '../agent/run-diagnostics.ts';
 import { createVerificationFeature, parseVerificationSelection } from './verification-host.ts';
 import { VerificationStoreError } from './verification-store.ts';
 import { EnterpriseMaterialsStore, EnterpriseMaterialsError } from './enterprise-materials-store.ts';
@@ -2580,9 +2580,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot });
       });
     }).catch(async error => {
-      rejectAcknowledgement(error);
+      const diagnostic = runtimeDiagnostic(error);
+      if (!accepted && (diagnostic.code === 'task_skill_version_changed' || diagnostic.code === 'task_skill_unavailable')) rejectAcknowledgement(new RequestFault(409, diagnostic.code));
+      else rejectAcknowledgement(error);
       await automatic.operationFinished({ projectId, taskId }, requestId, undefined, error).catch(() => {});
-      if (!closing && accepted && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。', diagnostic: runtimeDiagnostic(error) });
+      if (!closing && accepted && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。', diagnostic });
       if (!closing) await taskState(projectId, taskId).then(state => publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot })).catch(() => {});
     });
     return acknowledged;
@@ -3464,6 +3466,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
       const status = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable', 'unmanaged_execution_unknown'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
+      if (code === 'member_pack_connector_restricted') { json(response, status, { code, message: '该项目受企业会员包资源授权约束，数据库直连和外部连接器不可用。请使用当前获准的 read_input/受控工具；如需更多明细，请到企业 Studio「三层资源授权」，由原权责维护主体核对准确用途、门店、期间和 allowedDataPaths。' }); return; }
+      if (code === 'task_skill_version_changed' || code === 'task_skill_unavailable') { json(response, status, { code, message: code === 'task_skill_version_changed' ? taskSkillVersionChangedMessage : '默认 Skill 当前不可用。请在分析资产中核对安装，或编辑任务并明确取消该 Skill 后重试。' }); return; }
       if (conclusionReviewMessages[code]) { json(response, status, { code, message: conclusionReviewMessages[code] }); return; }
       json(response, status, { code, message: ['automatic_unmanaged_history', 'unmanaged_execution_unknown'].includes(code) ? '本项目或任务缺少可信的受管执行起点或完整收尾证明，暂不能开启自动核算；原项目和会话保留，关闭自动核算后可继续普通分析。' : code === 'automatic_unsupported_protection' ? '当前系统不支持所需执行保护，未启动自动核算或修订。' : code === 'verification_revision_materials_too_large' ? '修订固定材料全文超过20,000字符，请缩小本次核算所选资料后新建核算；未启动修订模型，不会截断或恢复执行工具。' : code === 'verification_revision_text_required' ? '修订出稿仅接收完整UTF-8文本材料；所选文件不能解码，未启动修订模型。' : code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'configuration_not_found' ? '原模型配置已不可用，请选择可用模型。' : code === 'invalid_search_order' ? '搜索顺序必须包含 MiniMax 和 DeepSeek 各一次。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }

@@ -19,9 +19,15 @@ export function packageIdentity(filePath: string) {
 }
 /** Public SDK metadata discovery only. Package identity covers instructions, references, scripts and templates. */
 export function projectSkillCatalog(codeRoot: string, cwd: string, resourceRoot?: string) {
-  const result = loadSkills({ cwd, agentDir: resourceRoot ?? getAgentDir(), skillPaths: [path.resolve(codeRoot, 'extensions/analysis-assets')], includeDefaults: true });
-  const diagnostics = result.diagnostics.map(item => ({ type: item.type, message: item.message }));
-  const skills = result.skills.flatMap(skill => {
+  const analysisAssetsDir = path.resolve(codeRoot, 'extensions/analysis-assets');
+  const agentDir = resourceRoot ?? getAgentDir();
+  const result = loadSkills({ cwd, agentDir, skillPaths: [analysisAssetsDir], includeDefaults: true });
+  const bundled = loadSkills({ cwd, agentDir, skillPaths: [analysisAssetsDir], includeDefaults: false });
+  const byName = new Map(result.skills.map(skill => [skill.name, skill]));
+  for (const skill of bundled.skills) byName.set(skill.name, skill);
+  result.skills = [...byName.values()];
+  const diagnostics = [...result.diagnostics, ...bundled.diagnostics].map(item => ({ type: item.type, message: item.message }));
+  const skills = [...byName.values()].flatMap(skill => {
     try { const sha256 = packageIdentity(skill.filePath); return [{ id: skill.name, title: skill.name, description: skill.description, version: `sha256:${sha256}`, sha256, filePath: skill.filePath }]; }
     catch (error) { diagnostics.push({ type: 'warning', message: `${skill.name}: ${error instanceof Error ? error.message : 'skill_package_identity_unavailable'}` }); return []; }
   });

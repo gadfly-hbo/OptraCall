@@ -469,6 +469,22 @@ test('EnterprisePackStore handles panorama, two-route single-decision entries, c
     });
     assert.equal(pFirst.created, true);
 
+    const invalidPurposeList = {
+      purposeKey: 'invalid-remaining-gaps-probe', title: '字段类型反例', businessQuestion: '验证 remainingGaps 必须为数组',
+      subjectUnit: 'brand_account' as const, scope: { scopeKey: 'synthetic:invalid-list' }, tier: 'definition-reference' as const,
+      businessStatus: 'active' as const, originalGoal: '工程字段校验', completionCriteria: '错误可定位且改正后继续',
+      remainingGaps: '北岭缺档与南湾首购锚点未知' as unknown as string[], exclusions: [], dependencies: [],
+    };
+    assert.throws(() => store.upsertPurpose(pack1.id, invalidPurposeList), error => {
+      const fault = error as Error & { code?: string; details?: { issues?: { reason: string; path?: string }[] } };
+      assert.equal(fault.code, 'invalid_purpose_remaining_gaps');
+      assert.match(fault.message, /remainingGaps.*数组/);
+      assert.deepEqual(fault.details?.issues, [{ reason: 'expected_string_array', path: 'payload.remainingGaps' }]);
+      return true;
+    });
+    const correctedPurposeList = store.upsertPurpose(pack1.id, { ...invalidPurposeList, remainingGaps: ['北岭缺档与南湾首购锚点未知'] });
+    assert.equal(correctedPurposeList.created, true);
+
     // Same purpose+scope from Project B merges into SAME purpose ID, adds evidence once
     const pSecond = store.upsertPurpose(pack1.id, {
       purposeKey: 'store-first-purchase-30d-repurchase',

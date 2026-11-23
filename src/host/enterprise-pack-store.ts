@@ -421,7 +421,10 @@ export class EnterprisePackStore {
   upsertPurpose(packId: string, input: UpsertPurposeInput): { pack: EnterpriseDomainPack; purpose: EnterprisePackPurpose; created: boolean } {
     return this.mutate(packId, pack => {
       const purposeKey = text(input.purposeKey, 200, false).trim();
-      if (!input.scope || typeof input.scope !== 'object') fail('invalid_purpose_scope');
+      if (!input.scope || typeof input.scope !== 'object') fail('invalid_purpose_scope', 400, { message: '缺少有效的 payload.scope；请提供品牌、渠道、门店、期间及 scopeKey 等准确用途范围后重试。', details: { issues: [{ reason: 'required', path: 'payload.scope' }] } });
+      if (input.remainingGaps !== undefined && (!Array.isArray(input.remainingGaps) || input.remainingGaps.some(gap => typeof gap !== 'string'))) {
+        fail('invalid_purpose_remaining_gaps', 400, { message: 'payload.remainingGaps 必须是字符串数组；请把每条缺口作为数组元素重发。', details: { issues: [{ reason: 'expected_string_array', path: 'payload.remainingGaps' }] } });
+      }
       const scopeKey = text(input.scope.scopeKey, 500, false).trim();
       if (input.tier === 'limited-calculation' && !input.limitedCalculationName?.trim()) {
         fail('limited_calculation_requires_distinct_name');

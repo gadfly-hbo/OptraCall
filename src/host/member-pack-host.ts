@@ -643,8 +643,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         allowedStores,
         osSandboxAvailable,
         summary: !activeDetailGrants.length
-          ? 'detail_access_not_authorized: 当前项目仅获定义/汇总授权或明细授权已撤回，禁止读取项目 020_clean 明细文件（不可将不可读门店视为 0）。'
-          : 'store_detail_not_authorized: 当前明细重算授权未配置 allowedDataPaths 白名单路径，默认拒绝读取项目 020_clean 明细文件（不可将不可读门店视为 0）。',
+          ? 'detail_access_not_authorized: 当前项目仅获定义/汇总授权或明细授权已撤回，禁止读取项目 020_clean 明细文件（不可将不可读门店视为 0）。缺少 read-detail-recalculate 时，请到企业 Studio「三层资源授权」，由原权责维护主体（grantAuthority 持有方）授予准确用途、门店、期间和 allowedDataPaths。'
+          : 'store_detail_not_authorized: 当前明细重算授权未配置 allowedDataPaths 白名单路径，默认拒绝读取项目 020_clean 明细文件（不可将不可读门店视为 0）。请到企业 Studio「三层资源授权」，由原权责维护主体（grantAuthority 持有方）补齐准确路径。',
       };
     }
     return {
@@ -1007,7 +1007,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const code = sanitized.includes('not_authorized') || sanitized.includes('no_active_grant')
         ? sanitized
         : `detail_access_not_authorized_${sanitized}`.slice(0, 100);
-      throw Object.assign(new StudioError(result.reason ?? code, 403), { code });
+      const pathDenied = code.includes('data_path');
+      const storeDenied = code.includes('store_detail');
+      const reason = pathDenied ? 'data_path_not_authorized' : storeDenied ? 'store_not_authorized' : code.includes('no_active_grant') ? 'missing_detail_recalculate_grant' : 'detail_access_not_authorized';
+      const issuePath = pathDenied ? 'resourceGrant.scope.allowedDataPaths' : storeDenied ? 'resourceGrant.scope.stores' : 'resourceGrant.operations';
+      throw new StudioError(code, 403, {
+        message: `当前项目缺少有效的 read-detail-recalculate 明细重算授权，或请求已超出授权用途、门店、期间或文件范围（${code}）。请到企业 Studio「三层资源授权」，由该企业包/体系的原权责维护主体（grantAuthority 持有方）核对并授予准确范围及 allowedDataPaths 后重试；仅定义/汇总授权不能读取明细，不可把不可读记录当作 0。`,
+        details: { issues: [{ reason, path: issuePath }] },
+      });
     }
   }
 
@@ -1465,8 +1472,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             revisionStatus: activeRev.status,
             authorizationRequired: true,
             authorizationNote: subjectGrants.length > 0
-              ? '当前项目的资源授权已撤回或失效，停止供给包用途与原依赖；历史报告保留只读。'
-              : '新企业会员包需显式配置项目资源授权（定义查阅 / 汇总引用 / 明细重算），仅凭企业归属不自动授予使用权。',
+              ? '当前项目的资源授权已撤回或失效，停止供给包用途与原依赖；历史报告保留只读。如需继续，请到企业 Studio「三层资源授权」，由原权责维护主体（grantAuthority 持有方）重新授予准确用途、期间和路径。'
+              : '新企业会员包需显式配置项目资源授权（定义查阅 / 汇总引用 / 明细重算），仅凭企业归属不自动授予使用权。请到企业 Studio「三层资源授权」，由原权责维护主体（grantAuthority 持有方）为当前项目配置准确用途、期间和数据路径。',
             purposes: [],
           });
         }

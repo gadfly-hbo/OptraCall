@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 
@@ -104,10 +106,18 @@ test('Studio use declaration advertises an array, explains invalid sources and s
   assert.equal(results.length, 5);
   for (const rejected of results.slice(0, 2)) {
     assert.equal(rejected.isError, true);
-    assert.match(providerMessageText(rejected.content), /payload\.sources.*JSON array.*received object/);
+    const text = providerMessageText(rejected.content);
+    assert.match(text, /payload\.sources.*JSON array.*received object/);
+    assert.match(text, /"reason":"expected_array"/);
+    assert.match(text, /"path":"payload\.sources"/);
+    assert.match(text, /Pass the array directly/);
   }
   assert.equal(results[2].isError, true);
-  assert.match(providerMessageText(results[2].content), /\binvalid_studio_sources\b/);
+  const excessiveSources = providerMessageText(results[2].content);
+  assert.match(excessiveSources, /\binvalid_studio_sources\b/);
+  assert.match(excessiveSources, /"reason":"too_many_items"/);
+  assert.match(excessiveSources, /"path":"payload\.sources"/);
+  assert.match(excessiveSources, /200/);
   assert.equal(results[3].isError, true);
   assert.match(providerMessageText(results[3].content), /\binvalid_studio_source\b/);
   assert.equal(results[4].isError, false);
@@ -118,6 +128,50 @@ test('Studio use declaration advertises an array, explains invalid sources and s
   assert.equal(saved.uses[0].report.sha256, sha256);
   assert.deepEqual(saved.uses[0].sources, [source]);
   assert.equal(saved.uses[0].verification, 'not_assessed');
+});
+
+test('SAP validation identifies package.id and accepts the corrected candidate through the same Studio tool path', { timeout: 45_000 }, async t => {
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', { name: 'Synthetic SAP validation', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-sap-validation', apiKey: 'synthetic-sap-validation' }));
+  const { project } = await json(await host.request('/api/projects', 'POST', { name: 'SAP validation owner' }), 201);
+  const { system } = await json(await host.request('/api/studio/systems', 'POST', { requestId: randomUUID(), name: 'SAP validation system', projectId: project.id, goal: 'Locate and correct package identity', topicTitle: 'Metrics' }), 201);
+  const document = (id: string) => JSON.stringify({ sap: '0.2', package: { id, version: '1.0.0', namespace: `mf.${id}`, fingerprint: '' }, dimensions: ['store'], metrics: [{ name: 'successful_payments', display_name: '成功支付金额', type: 'simple', definition: '合成支付金额', dimensions: ['store'], time_grains: ['month'], owner_role: 'finance', caliber_switches: { successful_only: true }, provenance: { origin: 'manual', note: 'Synthetic engineering fixture' } }], scenarios: [] });
+  for (const [name, id] of [['invalid-sap.yaml', 'Studio_Retail'], ['valid-sap.yaml', 'studio-retail-flow']] as const) {
+    writeFileSync(path.join(project.rootPath, '020_clean', name), document(id));
+  }
+  provider.setResponder(context => {
+    const index = context.recentToolResults.length;
+    if (index < 3) return { calls: [{ name: 'studio_assets', arguments: { action: 'register-sap-metric', systemId: system.id, payload: { path: index === 0 ? '020_clean/not-created-sap.yaml' : `020_clean/${index === 1 ? 'invalid' : 'valid'}-sap.yaml` } } }] };
+    return { text: 'SAP_VALIDATION_CORRECTED' };
+  });
+  const route = `/api/projects/${project.id}/tasks/${system.taskId}`;
+  await json(await host.request(`${route}/messages`, 'POST', { requestId: randomUUID(), text: 'Validate the candidate and correct the package identity.', studioContext: { systemId: system.id, purpose: 'construction' } }), 202);
+  let state: any; const deadline = Date.now() + 25_000;
+  do { state = await json(await host.request(route)); if (state.task.lastRun?.status === 'completed' && state.snapshot.status === 'idle') break; await new Promise(resolve => setTimeout(resolve, 25)); } while (Date.now() < deadline);
+  assert.equal(state.task.lastRun?.status, 'completed');
+  const results = state.snapshot.messages.filter((message: any) => message.role === 'toolResult' && message.toolName === 'studio_assets');
+  assert.equal(results.length, 3);
+  assert.equal(results[0].isError, true);
+  const missing = providerMessageText(results[0].content);
+  assert.match(missing, /studio_metric_candidate_unavailable/);
+  assert.match(missing, /"reason":"candidate_file_unavailable"/);
+  assert.match(missing, /"path":"payload\.path"/);
+  assert.equal(missing.includes('not-created-sap.yaml'), false);
+  assert.equal(missing.includes(host.scratch), false);
+  assert.equal(results[1].isError, true);
+  const invalid = providerMessageText(results[1].content);
+  assert.match(invalid, /sap_structure/);
+  assert.match(invalid, /"reason":"sap_structure"/);
+  assert.match(invalid, /"path":"package\.id"/);
+  assert.match(invalid, /\^\[a-z\]\[a-z0-9-\]\*\$/);
+  assert.equal(invalid.includes('Studio_Retail'), false);
+  assert.equal(invalid.includes(host.scratch), false);
+  assert.equal(results[2].isError, false);
+  const saved = await json(await host.request(`/api/studio/systems/${system.id}`));
+  assert.equal(saved.system.assetRefs.length, 1);
+  assert.equal(saved.system.assetRefs[0].id, 'studio-retail-flow');
+  assert.deepEqual(provider.errors, []);
 });
 
 test('Studio graph unavailable fails before dispatch and leaves independent source work usable', async t => {

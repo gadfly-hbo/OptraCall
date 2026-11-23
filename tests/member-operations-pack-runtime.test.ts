@@ -160,6 +160,7 @@ test('R3 · Normal construction session via real Pi SDK 1.4.0 reads 3 materials 
 
   let step = 0;
   let packReadResultText = '';
+  let missingScopeErrorText = '';
   provider.setResponder(context => {
     step += 1;
     if (step === 1) return { calls: [{ name: 'read_input', arguments: { filename: 'member_policy.md' } }] };
@@ -282,6 +283,19 @@ test('R3 · Normal construction session via real Pi SDK 1.4.0 reads 3 materials 
           arguments: {
             action: 'pack-upsert-purpose',
             systemId: system.id,
+            payload: { purposeKey: 'missing-scope-probe' },
+          },
+        }],
+      };
+    }
+    if (step === 8) {
+      missingScopeErrorText = providerMessageText(context.recentToolResults.at(-1)!.content);
+      return {
+        calls: [{
+          name: 'studio_assets',
+          arguments: {
+            action: 'pack-upsert-purpose',
+            systemId: system.id,
             payload: {
               purposeKey: 'store-first-purchase-30d-repurchase',
               title: '门店首购后 30 日有效复购率',
@@ -305,7 +319,7 @@ test('R3 · Normal construction session via real Pi SDK 1.4.0 reads 3 materials 
         }],
       };
     }
-    if (step === 8) {
+    if (step === 9) {
       return { calls: [{ name: 'studio_assets', arguments: { action: 'pack-read', systemId: system.id } }] };
     }
     packReadResultText = providerMessageText(context.recentToolResults.at(-1)!.content);
@@ -334,6 +348,10 @@ test('R3 · Normal construction session via real Pi SDK 1.4.0 reads 3 materials 
   assert.equal(pack.entries[0].enterpriseSourceRefs.length, 1);
   assert.equal(pack.entries[0].referenceLinks.length, 1);
   assert.equal(pack.purposes.length, 1);
+  assert.match(missingScopeErrorText, /invalid_purpose_scope/);
+  assert.match(missingScopeErrorText, /"reason":"required"/);
+  assert.match(missingScopeErrorText, /"path":"payload\.scope"/);
+  assert.match(missingScopeErrorText, /scope/);
   assert.equal(pack.purposes[0].purposeKey, 'store-first-purchase-30d-repurchase');
   assert.match(packReadResultText, /store-first-purchase-30d-repurchase/);
 });
@@ -554,6 +572,8 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   await waitIdle(host, projUngranted.id, taskU.id);
   assert.match(catalogU, /"authorizationRequired":true/);
   assert.match(catalogU, /"purposes":\[\]/);
+  assert.match(catalogU, /三层资源授权/);
+  assert.match(catalogU, /原权责维护主体/);
 
   // Seed an UNRELATED enabled enterprise material (NOT in pack dependencies) to test R5.1 unrelated-read counterexample!
   const unrelatedMat = await json(await host.request('/api/enterprise-materials', 'POST', {
@@ -593,6 +613,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   const { task: taskD } = await json(await host.request(`/api/projects/${projMerch.id}/tasks`, 'POST', { name: '商品部仅看目录反例' }), 201);
   let stepD = 0;
   let merchDetailBlocked = false;
+  let merchDetailGuidance = '';
   provider.setResponder(context => {
     stepD += 1;
     if (stepD === 1) return { calls: [{ name: 'studio_assets', arguments: { action: 'catalog' } }] };
@@ -602,6 +623,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
         : { calls: [{ name: 'read_input', arguments: { filename: 'starbridge_orders.csv' } }] };
     }
     const readResText = providerMessageText(context.recentToolResults.at(-1)!.content);
+    merchDetailGuidance = readResText;
     merchDetailBlocked = readResText.includes('detail_access_not_authorized') || readResText.includes('禁止读取项目 020_clean') || readResText.includes('resource_detail_not_authorized') || readResText.includes('no_active_grant_for_read_detail_recalculate') || readResText.includes('not_authorized');
     return { text: '仅查看了目录，未读取任何原资产，且无权读取明细文件。' };
   });
@@ -610,6 +632,10 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   }), 202);
   const stateD = await waitIdle(host, projMerch.id, taskD.id);
   assert.equal(merchDetailBlocked, true, 'Definition-only project MUST be blocked from reading 020_clean CSV!');
+  assert.match(merchDetailGuidance, /read-detail-recalculate/);
+  assert.match(merchDetailGuidance, /三层资源授权/);
+  assert.match(merchDetailGuidance, /原权责维护主体/);
+  assert.match(merchDetailGuidance, /missing_detail_recalculate_grant|no_active_grant_for_read_detail_recalculate|detail_access_not_authorized/);
   if (!hasOsSandbox) {
     for (const rawTool of ['bash', 'read', 'write', 'edit', 'ls', 'grep', 'find', 'codemode', 'subagent']) {
       assert.equal((stateD.snapshot.tools ?? []).includes(rawTool), false, `Without OS sandbox, restricted session MUST withhold raw tool ${rawTool}!`);
@@ -662,9 +688,17 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     requestId: randomUUID(), enterpriseId, grantorProjectId: projBuild.id, authorityToken: buildAuth.authorityToken, grantBasis: '星桥店长仅读本店明细',
     subjectType: 'project', subjectId: projStar.id, resourceKind: 'detail',
     purposeKeys: ['store-first-purchase-30d-repurchase'], operations: ['read-definition', 'read-detail-recalculate'],
-    scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店'], allowedDataPaths: ['020_clean/starbridge_orders.csv'] },
+    scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店'], allowedDataPaths: ['020_clean/starbridge_orders.csv'], periodFrom: '2026-09-01', periodTo: '2026-09-30' },
   }));
   const starGrantId = starGrantCreated.grant.id;
+  assert.equal(starGrantCreated.grant.scope.periodFrom, '2026-09-01');
+  assert.equal(starGrantCreated.grant.scope.periodTo, '2026-09-30');
+  const restrictedConnector = await projectReq(projStar.id, `/api/projects/${projStar.id}/db-link/sources`);
+  assert.equal(restrictedConnector.status, 403);
+  const restrictedConnectorBody = await restrictedConnector.json();
+  assert.equal(restrictedConnectorBody.code, 'member_pack_connector_restricted');
+  assert.match(restrictedConnectorBody.message, /三层资源授权/);
+  assert.match(restrictedConnectorBody.message, /read_input|受控工具/);
 
   const { task: taskA } = await json(await host.request(`/api/projects/${projStar.id}/tasks`, 'POST', { name: '星桥首版复购分析' }), 201);
   let stepA = 0;
@@ -1600,6 +1634,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(fs.existsSync(path.join(sandboxCleanDir, 'starbridge_orders.csv')), false, 'Revoking detail grant MUST leave zero starbridge_orders.csv in active restricted task sandbox!');
   let stepA4 = 0;
   let afterRevokeBlocked = false;
+  let afterRevokeGuidance = '';
   provider.setResponder(context => {
     stepA4 += 1;
     if (stepA4 === 1) {
@@ -1608,6 +1643,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
         : { calls: [{ name: 'read_input', arguments: { filename: 'starbridge_orders.csv' } }] };
     }
     const txt = providerMessageText(context.recentToolResults.at(-1)!.content);
+    afterRevokeGuidance = txt;
     afterRevokeBlocked = txt.includes('detail_access_not_authorized') || txt.includes('禁止读取项目 020_clean') || txt.includes('no_active_grant_for_read_detail_recalculate') || txt.includes('not_authorized') || txt.includes('ENOENT') || txt.includes('No such file');
     return { text: '授权撤回后实时会话已立即拦截明细读取。' };
   });
@@ -1616,6 +1652,9 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   }), 202);
   await waitIdle(host, projStar.id, taskA.id, stateATurn3.snapshot.messages.length + 2);
   assert.equal(afterRevokeBlocked, true, 'Revoking detail grant MUST immediately block detail reads in the active session!');
+  assert.match(afterRevokeGuidance, /read-detail-recalculate/);
+  assert.match(afterRevokeGuidance, /三层资源授权/);
+  assert.match(afterRevokeGuidance, /原权责维护主体/);
   const oldReport = await fetch(host.baseUrl + boundFile, { headers: { ...host.headers, cookie: scopedCookie } });
   assert.equal(oldReport.status, 403);
   const staleResults = await json(await fetch(host.baseUrl + taskResultsUrl, { headers: resultHeaders }));

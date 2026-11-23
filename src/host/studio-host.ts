@@ -1140,8 +1140,11 @@ export function createStudioFeature(options: StudioHostOptions) {
           }
           if (action === 'register-sap-metric') {
             const locator = text(payload.path, 1024, false);
-            if (!/^020_clean\/.+\.ya?ml$/.test(locator)) throw new StudioError('studio_metric_candidate_unavailable');
-            const file = await options.projects.readFile(projectId, locator), publication = prepareSapPublication(new Uint8Array(file.bytes)); context.assertCurrent(); context.signal.throwIfAborted();
+            if (!/^020_clean\/.+\.ya?ml$/.test(locator)) throw new StudioError('studio_metric_candidate_unavailable', 400, { message: 'payload.path 必须指向 020_clean 下的 SAP YAML 候选文件；请先写入准确文件后注册。', details: { issues: [{ reason: 'candidate_path_invalid', path: 'payload.path' }] } });
+            let file: Awaited<ReturnType<typeof options.projects.readFile>>;
+            try { file = await options.projects.readFile(projectId, locator); }
+            catch { throw new StudioError('studio_metric_candidate_unavailable', 400, { message: 'payload.path 指向的 SAP 候选文件当前不存在或不可读；请先写入 020_clean 下的准确 YAML 后重试。', details: { issues: [{ reason: 'candidate_file_unavailable', path: 'payload.path' }] } }); }
+            const publication = prepareSapPublication(new Uint8Array(file.bytes)); context.assertCurrent(); context.signal.throwIfAborted();
             if (enterpriseScope.active()) await assertNativeEnterprise('sap-metric', publication.document.package.id, system.enterpriseId ?? enterpriseScopes.enterpriseIdForProject(projectId));
             context.assertCurrent(); context.signal.throwIfAborted();
             const ref: StudioSourceRef = { authority: 'sap-metric', id: publication.document.package.id, version: publication.document.package.version, sha256: publication.bytesSha256, projectId, locator, title: publication.document.package.id };
@@ -1202,7 +1205,16 @@ export function createStudioFeature(options: StudioHostOptions) {
           }
           throw new StudioError('studio_action_not_available', 409);
         }).catch(error => {
-          if (error instanceof SapFault || error instanceof MetricLibraryFault || error instanceof SapMethodStoreError) throw new StudioError(error.code.toLowerCase(), 'status' in error && typeof error.status === 'number' ? error.status : 409);
+          if (error instanceof SapFault) {
+            const safePath = error.path && /^[A-Za-z0-9_.[\]]{1,200}$/.test(error.path) ? error.path : '';
+            const message = safePath === 'package.id'
+              ? 'SAP package.id 必须匹配 ^[a-z][a-z0-9-]*$：小写字母开头，仅含小写字母、数字和连字符；例如 studio-retail-flow。请修正后重试。'
+              : safePath === 'package.version'
+                ? 'SAP package.version 必须是 x.y.z 数字语义版本，例如 1.0.0。请修正后重试。'
+                : `SAP ${safePath || 'document'} 未通过结构校验；请按 SAP 0.2 规则修正该字段后重试。`;
+            throw new StudioError(error.code.toLowerCase(), 400, { message, details: { issues: [{ reason: error.code.toLowerCase(), ...(safePath ? { path: safePath } : {}) }] } });
+          }
+          if (error instanceof MetricLibraryFault || error instanceof SapMethodStoreError) throw new StudioError(error.code.toLowerCase(), 'status' in error && typeof error.status === 'number' ? error.status : 409);
           throw error;
         });
       };

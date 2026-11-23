@@ -19,7 +19,9 @@ export interface AnalysisDeliveryReceipt {
   reports: ProjectTaskResultBinding[]; save: { status: 'not-requested' | 'disabled' | 'saved' | 'reused' | 'unknown'; settingsRevision?: number; code?: string }; claim: 'declared-not-professionally-verified';
 }
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-function fail(code: string): never { throw Object.assign(new Error(code), { code }); }
+function fail(code: string, options: { message?: string; details?: { issues: { reason: string; path?: string }[] } } = {}): never {
+  throw Object.assign(new Error(options.message ?? code), { code, exposure: 'safe-tool-error-v1', ...(options.details ? { details: options.details } : {}) });
+}
 const list = (value: unknown, max: number): value is string[] => Array.isArray(value) && value.length <= max && value.every(item => typeof item === 'string' && item.length <= 2000);
 export function createAnalysisDeliveryPort(options: { projectId: string; taskId: string; projects: ProjectStore; settings: ReturnType<typeof createAutomaticActionSettingsStore>; projectFiles: ProjectFilesPort; listBoundReports(): Promise<ProjectTaskResultBinding[]>; assertOwner(): Promise<void> }): AnalysisDeliveryPort {
   return async (input, context) => {
@@ -38,7 +40,7 @@ export function createAnalysisDeliveryPort(options: { projectId: string; taskId:
       if (!Array.isArray(input.reviewBasis) || input.reviewBasis.length > 24 || new Set(input.reviewBasis.map(ref => object(ref) ? ref.relativePath : undefined)).size !== input.reviewBasis.length) fail('invalid_analysis_delivery_review_basis');
       for (const ref of input.reviewBasis) {
         if (!object(ref) || Object.keys(ref).sort().join(',') !== 'relativePath,sha256' || typeof ref.relativePath !== 'string' || !/^(020_clean|060_reports)\//.test(ref.relativePath) || ref.relativePath.split('/').some(part => !part || part === '.' || part === '..' || /[\\\u0000-\u001f]/.test(part)) || !/^[a-f0-9]{64}$/.test(String(ref.sha256))) fail('invalid_analysis_delivery_review_basis');
-        const actual = await options.projects.captureFeedbackFile(options.projectId, ref.relativePath); await check();
+        const actual = await options.projects.captureFeedbackFile(options.projectId, ref.relativePath).catch(() => fail('analysis_delivery_basis_unavailable', { message: 'reviewBasis 引用的文件当前不存在或不可读；请先写入该文件再声明，或移除该条目后重试。', details: { issues: [{ reason: 'basis_file_unavailable', path: 'reviewBasis' }] } })); await check();
         if (actual.sha256 !== ref.sha256) fail('analysis_delivery_basis_changed');
       }
     }
@@ -47,7 +49,7 @@ export function createAnalysisDeliveryPort(options: { projectId: string; taskId:
       if (!object(ref) || Object.keys(ref).some(key => !['relativePath', 'sha256'].includes(key)) || typeof ref.relativePath !== 'string' || !/^[a-f0-9]{64}$/.test(String(ref.sha256))) fail('invalid_analysis_delivery_report');
       const bound = available.filter(item => item.relativePath === ref.relativePath && item.sha256 === ref.sha256 && item.projectId === options.projectId && item.taskId === options.taskId);
       if (!bound.length) fail('analysis_delivery_report_unbound');
-      const actual = await options.projects.captureFeedbackFile(options.projectId, String(ref.relativePath)); await check();
+      const actual = await options.projects.captureFeedbackFile(options.projectId, String(ref.relativePath)).catch(() => fail('analysis_delivery_report_unavailable', { message: 'reports 引用的文件当前不存在或不可读；请先保存该报告再声明交付。', details: { issues: [{ reason: 'report_file_unavailable', path: 'reports' }] } })); await check();
       if (actual.sha256 !== ref.sha256 || actual.bytes.length !== bound[0]!.bytes) fail('analysis_delivery_report_changed');
       if (!reports.some(item => item.relativePath === ref.relativePath && item.sha256 === ref.sha256)) reports.push(bound[0]!);
     }
@@ -61,7 +63,7 @@ export function createAnalysisDeliveryPort(options: { projectId: string; taskId:
     // Match the unchanged public worker envelope limits before any optional save.
     const response = (receipt: AnalysisDeliveryReceipt) => {
       const value = { content: [{ type: 'text' as const, text: JSON.stringify(receipt) }], details: receipt as unknown as Record<string, unknown> };
-      if (value.content[0].text.length > 32_768 || Buffer.byteLength(JSON.stringify(value), 'utf8') > 256 * 1024) fail('analysis_delivery_payload_limit');
+      if (value.content[0].text.length > 32_768 || Buffer.byteLength(JSON.stringify(value), 'utf8') > 256 * 1024) fail('analysis_delivery_payload_limit', { message: '交付声明文本超过 32,768 字符或结构化回包超过 256 KiB；请减少 summary、limitations、selfCheck.findings 或 findings 后重试。', details: { issues: [{ reason: 'payload_too_large', path: 'declaration' }] } });
       return value;
     };
     let save: AnalysisDeliveryReceipt['save'] = { status: 'not-requested' };

@@ -403,6 +403,42 @@ test('v1.3 manual Task first send, shared agreement, Pi skill selection and no-P
   assert.deepEqual(plan.history, []);
 });
 
+test('fixed Skill initialization failures expose a safe recovery action instead of a generic request failure', async t => {
+  const host = await startTestHost(); t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', { name: '合成 Skill 故障配置', provider: 'openai-compatible', baseUrl: 'http://127.0.0.1:1/v1', model: 'synthetic-skill-failure', apiKey: 'synthetic-only' }));
+  const { project } = await json(await host.request('/api/projects', 'POST', { name: 'Skill 故障提示项目' }), 201);
+  const response = await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: '固定版本已变化', assignment: { type: 'analysis', skill: { id: 'data-analysis', version: '0.0.0', sha256: '0'.repeat(64) } } });
+  assert.equal(response.status, 409);
+  const body = await response.json();
+  assert.equal(body.code, 'task_skill_version_changed');
+  assert.match(body.message, /data-analysis 2\.0\.0-candidate\.1/);
+  assert.match(body.message, /明确取消该 Skill/);
+  assert.equal(body.message.includes(host.scratch), false);
+  assert.equal(body.message.includes('0'.repeat(64)), false);
+});
+
+test('fixed Skill survives a project .pi same-name copy through the public Host first send', { timeout: 60000 }, async t => {
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', { name: 'Pi 目录合成配置', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-pi-collision', apiKey: 'synthetic-only' }));
+  const { project } = await json(await host.request('/api/projects', 'POST', { name: 'Pi 目录同名 Skill 项目' }), 201);
+  const collision = path.join(project.rootPath, '020_clean', '.pi', 'skills', 'data-analysis');
+  await fs.mkdir(collision, { recursive: true });
+  await fs.writeFile(path.join(collision, 'SKILL.md'), '---\nname: data-analysis\ndescription: Project .pi synthetic collision.\n---\n\nNot the built-in skill.\n');
+  const { makeTaskAssignment } = await import('../src/host/task-assignment.ts');
+  const { task } = await json(await host.request(`/api/projects/${project.id}/tasks`, 'POST', { name: 'Pi 目录同名对照', assignment: makeTaskAssignment('analysis', true) }), 201);
+  provider.setResponder(() => ({ text: 'PI_COLLISION_FIRST_REPLY' }));
+  const stream = await projectEvents(host, project.id, task.id);
+  try {
+    const requestId = randomUUID();
+    await json(await host.request(`/api/projects/${project.id}/tasks/${task.id}/messages`, 'POST', { requestId, text: '发送默认 Skill 首条消息。' }), 202);
+    assert.equal((await stream.terminal(requestId)).outcome, 'completed');
+  } finally { await stream.close(); }
+  const system = provider.requests.at(-1)!.body.messages!.filter(message => message.role === 'system').map(message => typeof message.content === 'string' ? message.content : JSON.stringify(message.content)).join('\n');
+  assert.equal(system.includes(path.join(process.cwd(), 'extensions/analysis-assets/data-analysis/SKILL.md')), true);
+  assert.equal(system.includes(path.join(collision, 'SKILL.md')), false);
+});
+
 test('manual handoff and Project Agent requalify the antecedents of the selected reply and retain independent sources', { timeout: 90000 }, async t => {
   const provider = await startToolProvider(); t.after(() => provider.close());
   const host = await startTestHost(); t.after(() => host.close());
