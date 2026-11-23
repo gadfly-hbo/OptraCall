@@ -2640,16 +2640,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       const mapPublicationRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/maps\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/publication(\/withdraw)?$/.exec(url.pathname);
       if(mapPublicationRoute && request.method==='POST'){
-        const [,id,mapId,revision,withdraw]=mapPublicationRoute,input=await body(request),version=Number(revision);
-        const publication=await mutate(()=>{
-          if(closing)throw new RequestFault(409,'host_closing');
-          if(withdraw)return strategyMapPublications.withdraw(id!,mapId!,version,input);
-          return strategyMapPublications.publish(id!,mapId!,version,input,async()=>{
-            const map=await strategyDiscussions.readMapVersion(id!,mapId!,version);
-            return {contentSha256:map.contentSha256,goalCount:map.nodes.filter(node=>node.kind==='goal').length,strategyCount:map.nodes.filter(node=>node.kind==='strategy').length};
-          });
-        });
-        json(response,withdraw?200:201,{publication});return;
+        throw new StrategyDiscussionFault('strategy_map_publication_retired');
       }
       const mapDocumentRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/maps\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/(export|handoffs)$/.exec(url.pathname);
       if(mapDocumentRoute && request.method==='GET'){
@@ -2763,6 +2754,17 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(action==='verify'&&request.method==='POST'){const input=await body(request);json(response,202,await strategyVerifications.start(id,cid!,no,input));return;}
         if(action==='verifications'&&request.method==='GET'){json(response,200,{batches:strategyVerifications.list(id,cid!,no)});return;}
       }
+      const initiativeHistoryRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/history$/.exec(url.pathname);
+      if(initiativeHistoryRoute&&request.method==='GET'){
+        const id=initiativeHistoryRoute[1]!;
+        json(response,200,{
+          reports:strategyKickoffReports.view(id),
+          candidates:strategyCandidates.list(id),
+          verifications:strategyVerifications.list(id),
+          publications:strategyInitiativePublications.list(id),
+          legacy:{discussions:strategyDiscussions.store.list().map(d=>({id:d.id,title:d.title,updatedAt:d.updatedAt,note:'旧讨论记录沿原入口回读；其地图发布不计为当前有效版。'}))},
+        });return;
+      }
       const initiativePublicationRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/publications(?:\/([a-f0-9-]{36})\/(withdraw|handoff))?$/.exec(url.pathname);
       if(initiativePublicationRoute){
         const id=initiativePublicationRoute[1]!,pubId=initiativePublicationRoute[2],action=initiativePublicationRoute[3];
@@ -2809,6 +2811,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       const workbookRoute=/^\/api\/strategy\/workbooks\/(preview|commit|handoff|map-source|goal-source)$/.exec(url.pathname);
       if(workbookRoute && request.method==='POST'){
+        if(workbookRoute[1]==='handoff')throw new StrategyDiscussionFault('strategy_workbook_handoff_retired');
         const data=await workbookRoutes(workbookRoute[1]!,await body(request,12*1024*1024));
         json(response,200,data);return;
       }
