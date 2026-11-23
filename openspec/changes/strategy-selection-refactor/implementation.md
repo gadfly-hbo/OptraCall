@@ -211,6 +211,9 @@ Issue [#120](https://github.com/gadfly-hbo/OptraCall/issues/120) · 规格 [Spec
 - 切片三（事项文件存储）：`c933e6f`+`0e0d4dd`（类型收窄修复）。RED→GREEN；010/020 上传、范围归属、sha 校验、名称/目录白名单、跨事项隔离、operationId 幂等。
 - 切片四（主会话，SS02）：`c2c6b64`。复用 strategyDiscussion port 扩展 initiative-files/read-file/read-kickoff/save-kickoff 四动作（讨论 Host 显式拒绝）；新域 strategy-initiative 登记 domainRegistrars；真实 Pi SDK+合成工具 Provider：开题草稿保存（generation.kind agent+requestId）、幂等回读不重发、Schema 负例零写入、停止 cancelled、关闭不唤模型、重启原生读回。修复两处实现错误：systemPrompt 须字符串数组；detail 用 domain.read 投影。受影响回归 51/51（讨论 Host/runtime、agent-sessions、事项四测试）。证据 `.local/issue-120/session-run*.log`、`regression-run1.log`。
 - 待办提示：grill-me/deep-research 资产实际激活尚未验证（SS02 要求隔离环境验证，来源待核定项如实记录）；当前主会话提示词内置追问纪律，Skill 挂载按获准资产后续接入。
+- 切片五（候选独立会话，SS04/SS05 基础）：`1dbd2ab`。新域 strategy-candidate；创建须已应用锁定开题（草稿门禁）；工具绑定本版本身份；双候选不同 native、同开题引用、续聊同会话、停止隔离、关闭重开、创建幂等不重派。修复 waitForRequests 绝对计数用法。
+- 切片六（限定修改+锁定，SS06/SS07）：`594a949`。开题字段/命题路径补丁、候选块 ID 补丁；旧值字节哈希、白名单、越界/错版/旧值冲突/重复负例；原件与旧锁定保留；锁定绑定指纹+操作者；编辑锁定版立新候选新会话（修订版不自动唤模型）。修复 CandidateVersion CAS revision 与元数据字段名冲突（元数据改 revisionMeta）。回归 54/54。
+- 顺序决定：开发一/二 Host 层先行（公开 HTTP 即真实用户入口接缝），四页签 UI 与文件树在端点齐备后实施，浏览器 E2E 覆盖真实用户入口（SS01/SS05/SS10/SS13/SS16）。
 
 ## 范围外问题
 
