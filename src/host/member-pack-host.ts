@@ -1579,9 +1579,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
    * Validates whether an ordinary task's `read-source` call for `ref` matches a
    * pinned dependency of a member pack and is still permitted by current Host grants.
    */
-  function inspectPinnedSourceRead(projectId: string, taskId: string, ref: StudioSourceRef): {
+  async function inspectPinnedSourceRead(projectId: string, taskId: string, ref: StudioSourceRef): Promise<{
     matchedPack?: { packId: string; packVersion: string; purposeIds: string[]; summaryAuthorized?: boolean };
-  } {
+  }> {
     const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
     if (!enterpriseId) return {};
     const list = packs.list(enterpriseId);
@@ -1617,6 +1617,15 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const eligiblePurposes = rev.purposeManifests.filter(pm => pm.status === 'eligible');
         let summaryAllowed = false;
         for (const grant of activeSummaryGrants) {
+          let sourcePeriodFrom = grant.scope.sourcePeriodFrom;
+          let sourcePeriodTo = grant.scope.sourcePeriodTo;
+          if (!grant.scope.sourcePeriodVerified && options.verifySummaryAuthority && grant.resourceRef) {
+            try {
+              const verified = await options.verifySummaryAuthority(pack.enterpriseId, { resourceRef: grant.resourceRef, grain: grant.scope.grain });
+              sourcePeriodFrom = verified.sourcePeriodFrom;
+              sourcePeriodTo = verified.sourcePeriodTo;
+            } catch { /* legacy grant cannot resolve source period */ }
+          }
           const applicablePurposes = grant.purposeKeys?.length
             ? (grant.purposeKeys.includes('*') ? eligiblePurposes : eligiblePurposes.filter(pm => grant.purposeKeys!.includes(pm.purposeKey)))
             : eligiblePurposes;
@@ -1630,7 +1639,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               summaryVersion: grant.scope.summaryVersion,
             });
             if (!evalSummary.allowed) continue;
-            if (!isSourcePeriodCovered(grant.scope.sourcePeriodFrom, grant.scope.sourcePeriodTo, grant.scope.periodFrom, grant.scope.periodTo, purpose.scope?.period, grant.scope.sourcePeriodVerified)) continue;
+            if (!isSourcePeriodCovered(sourcePeriodFrom, sourcePeriodTo, grant.scope.periodFrom, grant.scope.periodTo, purpose.scope?.period, grant.scope.sourcePeriodVerified || sourcePeriodFrom !== undefined)) continue;
             summaryAllowed = true;
             break;
           }

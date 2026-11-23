@@ -145,11 +145,24 @@ export function createStudioFeature(options: StudioHostOptions) {
     if (!sourcePeriodFrom && !sourcePeriodTo) {
       const periodKeywords = /(?:统计期间|数据期间|期间范围|期间|统计范围|数据范围|覆盖期间)/;
       const nonPeriodKeywords = /(?:生成日期|生成时间|修订日期|修订时间|样例日期|创建日期|创建时间|截止日期|截止时间|发布日期|发布时间|更新日期|更新时间)/;
-      const qualifyingLines = combined.split(/[\n\r]+/).filter(line => periodKeywords.test(line) && !nonPeriodKeywords.test(line));
-      const qualifyingText = qualifyingLines.join('\n');
-      const sourceMonths = [...new Set([...qualifyingText.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2]))\b/g)].map(m => m[1]!))].sort();
-      const sourceDates = [...new Set([...qualifyingText.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))\b/g)].map(m => m[1]!))].sort();
-      const allPeriodTokens = sourceMonths.length > 0 ? sourceMonths : sourceDates;
+      const qualifyingLines = combined.split(/[\n\r]+/).filter(line => periodKeywords.test(line));
+      const qualifyingDates: string[] = [];
+      const qualifyingMonths: string[] = [];
+      for (const line of qualifyingLines) {
+        const dateMatches = [...line.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))\b/g)];
+        for (const match of dateMatches) {
+          const before = line.slice(Math.max(0, match.index! - 20), match.index!);
+          if (!nonPeriodKeywords.test(before)) qualifyingDates.push(match[1]!);
+        }
+        const monthMatches = [...line.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2]))(?![/-]\d{2})\b/g)];
+        for (const match of monthMatches) {
+          const before = line.slice(Math.max(0, match.index! - 20), match.index!);
+          if (!nonPeriodKeywords.test(before)) qualifyingMonths.push(match[1]!);
+        }
+      }
+      const sourceDates = [...new Set(qualifyingDates)].sort();
+      const sourceMonths = [...new Set(qualifyingMonths)].sort();
+      const allPeriodTokens = sourceDates.length > 0 ? sourceDates : sourceMonths;
       if (allPeriodTokens.length > 0) {
         sourcePeriodFrom = allPeriodTokens[0];
         sourcePeriodTo = allPeriodTokens[allPeriodTokens.length - 1];
@@ -959,7 +972,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           if (!['enterprise','sap-metric','sap-method'].includes(ref.authority) || ref.locator?.startsWith('020_clean/')) throw new StudioError('studio_system_required');
           return options.mutate(async () => {
             await assertCurrent();
-            const pinnedCheck = memberPack.inspectPinnedSourceRead(projectId, taskId, ref);
+            const pinnedCheck = await memberPack.inspectPinnedSourceRead(projectId, taskId, ref);
             const read = await sources.read(ref, projectId, undefined, { taskId, ...(pinnedCheck.matchedPack ? { historical: true } : {}) });
             context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503);
             const { text: _body, ...metadata } = read, selected = selectFoundationSource(read, payload), page = studioTextPage(selected.text, { ...payload, length: payload.length === undefined ? 16_000 : payload.length }, { ...metadata, ...(pinnedCheck.matchedPack ? { pinnedPack: pinnedCheck.matchedPack } : {}), ...selected.selection }, { ref: read.ref, ...selected.selection });
@@ -1046,7 +1059,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           const ref = sourceRef(payload.ref);
           return options.mutate(async () => {
             await assertCurrent();
-            const pinnedCheck = !isConstruction ? memberPack.inspectPinnedSourceRead(projectId, taskId, ref) : {};
+            const pinnedCheck = !isConstruction ? await memberPack.inspectPinnedSourceRead(projectId, taskId, ref) : {};
             const read = await sources.read(ref, projectId, id, { construction: isConstruction, taskId, ...(pinnedCheck.matchedPack ? { historical: true } : {}) });
             context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503);
             const { text: _body, ...metadata } = read, selected = selectFoundationSource(read, payload), qualifications = !isConstruction ? { publications: publicationFacts(store.get(id), projectId, [read.ref]).map(publication => publicationIndex(id, publication)) } : {}, page = studioTextPage(selected.text, { ...payload, length: payload.length === undefined ? 16_000 : payload.length }, { ...metadata, ...qualifications, ...(pinnedCheck.matchedPack ? { pinnedPack: pinnedCheck.matchedPack } : {}), ...selected.selection }, { ref: read.ref, ...selected.selection });

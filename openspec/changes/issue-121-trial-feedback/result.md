@@ -161,3 +161,11 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 2. **同行整月优先于日级附注。** 文本提取改为：若存在 `YYYY-MM` 则优先使用月份（不再被同月的 `YYYY-MM-DD` 过滤掉），仅在无月份时回退到日级。
 3. **旧授权兼容。** 新增 `sourcePeriodVerified` 标记区分新旧授权：新授权（`true`）只用权威核验的来源期间；旧授权（无标记）回退到用途期间，保留原合法语义。`isSourcePeriodCovered` 增加 `legacyFallbackPeriod` 和 `sourcePeriodVerified` 参数。
 - 新增测试：旧授权回退放行/拒绝；新授权跨月全覆盖放行。
+
+### PM 九次返工（旧授权权威核实与文本声明）
+
+1. **旧授权沿原正式来源核实完整期间。** 旧授权（无 `sourcePeriodVerified`）在精读时调用 `options.verifySummaryAuthority` 从原权威重新获取来源期间，不再回退到用途日期。半月旧授权无法读整月来源；覆全旧授权继续可读。`inspectPinnedSourceRead` 改为 async，两个 caller 加 `await`。
+2. **文本声明按可信统计语义区分。**
+   - 单日声明：`YYYY-MM-DD` 优先使用（不再被同月的 `YYYY-MM` 覆盖）。
+   - 同行附注：不再因含"生成日期"等关键词丢弃整行，改为逐日期检查前 20 字符是否含非期间关键词，只排除附注日期。
+   - 月份匹配增加负向前瞻 `(?![/-]\d{2})`，避免 `YYYY-MM` 匹配到 `YYYY-MM-DD` 的前缀。
