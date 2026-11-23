@@ -238,6 +238,23 @@ Issue [#120](https://github.com/gadfly-hbo/OptraCall/issues/120) · 规格 [Spec
 5. 真实模型专业质量、真实业务数据、设备运行采用、远端 CI 与用户产品验收均未在本轮授权内，分别核定。
 6. 111 项跳过为原有条件跳过（非本轮新增）；本地检查不表述为远端 CI PASS。
 
+### 2026-11-23 Codex 复核退回返工（评论 7094858710）
+
+逐项修复并补可复跑回归（均先 RED 复现后 GREEN）：
+
+1. **检验资格与发布状态**（`b4f6548`）：结论绑定实际请求（verdictRequestId），取消轮结论不被重试沿用；每次尝试终态留档（attempts）；业务退回同锁定版禁再启批/发布；证据 file/candidate/kickoff 来源须解析到准确身份与指纹；被替代版禁再发布；发布携带 expectedActive 并落盘前重验当前发布身份。回归 `tests/strategy-rework-verification-host.test.ts`。
+2. **承接整批一致性**（`b8b6786`）：parseGoalDraft+validateGoal 全批预校验后才写入；per-goal 确定性 operationId 支持中途失败按原操作恢复；重试按 scope+selected 完整指纹，更改选择返回冲突。回归 `tests/strategy-rework-handoff-host.test.ts`。
+3. **会话失败显式恢复**（`783ce0f`）：主会话/候选 send 支持 replacePendingRequestId（仅 failed/cancelled）；UI「替换原请求并发送」；重启读回恢复终态。回归 `tests/strategy-rework-recovery-host.test.ts`。
+4. **开题来源与范围**（`8a214f3`+`f55059d`）：file 来源按 fileId+sha256 在保存/锁定/应用/修订核对；报告 scopeKeys，应用须目标范围∈报告范围；专属文件 HTTP 读取与 Agent 工具一致鉴范围；同名替换/篡改负例。回归 `tests/strategy-rework-sources-host.test.ts`。
+5. **候选主流程**（`c6b5dca`）：比较 prompt 携带同开题最新候选正文/身份/sha；initiative-read-candidate 工具；限定修改改为意图→Agent 拟改（initiative-propose-revision，Host 绑定 proposalId 与块）→核对差异→采纳另存；修订重放覆盖精确补丁。回归 `tests/strategy-rework-candidate-flow-host.test.ts`。
+6. **公开研究接入**（`2e52498`）：复用获准 createRequirementPublicSearch（initiative-public-search 独立域）；进程内隔离 minimax 合成原生搜索验证实际检索来源留档；无原生搜索能力配置如实 unavailable。回归 `tests/strategy-rework-research-host.test.ts`。
+7. **准确历史入口**（`e901e08`）：准确版本弹窗「查看候选会话」入口；旧讨论回读 pinned 定位所选身份；尝试终态（含重试前 UNKNOWN/取消）台账与弹窗展示。SSR 断言补充。
+
+**仍需用户决定（不记为完成）：**
+- **deep-research Skill 激活**：基线含 `extensions/analysis-assets/deep-research` 资产，但事项会话沿 strategy-discussion 固定输入策略（noSkills）。启用需改变 capabilityPolicy 并沿工程规范 Skill 测评门禁接入——待用户指定接入范围与测评安排。受影响验收：SS02 的 deep-research 实际激活。
+- **grill-me 资产来源**：仓库内未找到 grill-me 资产（find 无结果），来源与接入待用户核定。受影响验收：SS02 的 grill-me 多轮追问资产激活（当前由主会话提示词纪律+合成 Provider 验证多轮访谈行为）。
+- 公开研究已按获准既有能力接入并隔离验证（不依赖上述决定）；原生 Provider 线路由配置治理固定，产品 HTTP 配置不可指向 loopback，故实际执行验证采用进程内隔离 Host 范式（与 native-search-runtime 测试同源）。
+
 ## 范围外问题
 
 （暂无。）
