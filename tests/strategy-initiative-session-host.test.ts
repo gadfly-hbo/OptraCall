@@ -49,7 +49,7 @@ test('真实 Host+Pi：事项主会话开题保存草稿、幂等回读与负例
     const step = ctx.recentToolResults.length;
     if (step === 0) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-files'}}]};
     if (step === 1) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-read-file', fileId: uploaded.fileId}}]};
-    if (step === 2) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-kickoff', operationId: randomUUID(), kickoffFields, kickoffSources: [{kind: 'file', ref: `010_draw/${uploaded.name}`, title: uploaded.name, sha256: uploaded.sha256}]}}]};
+    if (step === 2) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-kickoff', operationId: randomUUID(), kickoffFields, kickoffSources: [{kind: 'file', ref: `010_draw/${uploaded.name}`, title: uploaded.name, fileId: uploaded.fileId, sha256: uploaded.sha256}]}}]};
     return {text: '开题草稿已保存，请核对并锁定。'};
   });
   const requestId = randomUUID();
