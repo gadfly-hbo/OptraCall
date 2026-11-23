@@ -25,7 +25,7 @@ import {createUsageContextStore} from './usage-context-store.ts';
 import {createUsageContextRoutes} from './usage-context-routes.ts';
 import {resolveNewUsageContext,UsageContextFault} from './usage-context-types.ts';
 import { createMethodIssueAdapter } from './method-issue-adapter.ts';
-import { projectSkillCatalog } from '../agent/skill-catalog.ts';
+import { projectSkillCatalog, loadFixedBuiltInSkill } from '../agent/skill-catalog.ts';
 import { createQuotedDecisionAdapter } from './quoted-decision-adapter.ts';
 import { readTaskAnalysisDelivery, qualifyAnalysisDeliverySource } from './task-analysis-delivery.ts';
 import { runAutomaticDeliveryActions } from './automatic-delivery-actions.ts';
@@ -2124,9 +2124,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     if (!skill) return;
     const fixed = approvedTaskSkills[assignment.type];
     if (fixed?.sha256 !== skill.sha256 || fixed.version !== skill.version) throw new RequestFault(409, 'task_skill_version_changed');
-    const catalog = projectSkillCatalog(options.cwd, path.join(project.rootPath, '020_clean'), path.join(dataRoot, 'pi'));
-    const chosen = catalog.skills.find(s => s.id === skill.id && s.sha256 === skill.sha256 && s.filePath === path.resolve(options.cwd, 'extensions/analysis-assets', skill.id, 'SKILL.md'));
-    if (!chosen) throw new RequestFault(409, 'task_skill_version_changed');
+    const chosen = loadFixedBuiltInSkill(options.cwd, skill.id, path.join(project.rootPath, '020_clean'), path.join(dataRoot, 'pi'));
+    if (!chosen || chosen.sha256 !== skill.sha256) throw new RequestFault(409, 'task_skill_version_changed');
   }
   async function assertTaskResultAccess(target: Record<string, unknown>, cfg: Readonly<RuntimeModelConfiguration>, context: import('./strategy-discussion-sources.ts').StrategyDiscussionSourceContext, issue?: { caseId: string; issueId?: string; choiceId?: string }) {
     const deny = (): never => { throw new RequestFault(403, 'project_result_permission_unavailable'); };

@@ -17,19 +17,26 @@ export function packageIdentity(filePath: string) {
   };
   visit(root); return createHash('sha256').update(JSON.stringify(entries)).digest('hex');
 }
-/** Public SDK metadata discovery only. Package identity covers instructions, references, scripts and templates. */
+/** Public SDK metadata discovery only. Package identity covers instructions, references, scripts and templates.
+ * Preserves the SDK's original selection order (project/user skills win over bundled same-name).
+ * Project Plan capability validation depends on this order matching what the Agent actually sees. */
 export function projectSkillCatalog(codeRoot: string, cwd: string, resourceRoot?: string) {
-  const analysisAssetsDir = path.resolve(codeRoot, 'extensions/analysis-assets');
-  const agentDir = resourceRoot ?? getAgentDir();
-  const result = loadSkills({ cwd, agentDir, skillPaths: [analysisAssetsDir], includeDefaults: true });
-  const bundled = loadSkills({ cwd, agentDir, skillPaths: [analysisAssetsDir], includeDefaults: false });
-  const byName = new Map(result.skills.map(skill => [skill.name, skill]));
-  for (const skill of bundled.skills) byName.set(skill.name, skill);
-  result.skills = [...byName.values()];
-  const diagnostics = [...result.diagnostics, ...bundled.diagnostics].map(item => ({ type: item.type, message: item.message }));
-  const skills = [...byName.values()].flatMap(skill => {
+  const result = loadSkills({ cwd, agentDir: resourceRoot ?? getAgentDir(), skillPaths: [path.resolve(codeRoot, 'extensions/analysis-assets')], includeDefaults: true });
+  const diagnostics = result.diagnostics.map(item => ({ type: item.type, message: item.message }));
+  const skills = result.skills.flatMap(skill => {
     try { const sha256 = packageIdentity(skill.filePath); return [{ id: skill.name, title: skill.name, description: skill.description, version: `sha256:${sha256}`, sha256, filePath: skill.filePath }]; }
     catch (error) { diagnostics.push({ type: 'warning', message: `${skill.name}: ${error instanceof Error ? error.message : 'skill_package_identity_unavailable'}` }); return []; }
   });
   return { skills, diagnostics };
+}
+
+/** Exact-load a single fixed built-in skill, bypassing project/user same-name overrides.
+ * Only for the "user enabled the fixed built-in version" validation and execution path. */
+export function loadFixedBuiltInSkill(codeRoot: string, skillId: string, cwd: string, resourceRoot?: string) {
+  const fixedPath = path.resolve(codeRoot, 'extensions/analysis-assets', skillId, 'SKILL.md');
+  const result = loadSkills({ cwd, agentDir: resourceRoot ?? getAgentDir(), skillPaths: [fixedPath], includeDefaults: false });
+  const skill = result.skills.find(s => s.name === skillId);
+  if (!skill) return undefined;
+  try { return { id: skill.name, sha256: packageIdentity(skill.filePath), filePath: skill.filePath }; }
+  catch { return undefined; }
 }

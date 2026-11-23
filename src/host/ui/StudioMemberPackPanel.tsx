@@ -554,6 +554,7 @@ export function StudioMemberPackPanel({
       const stores = grantStores.split(/[、,，\s]+/).map(s => s.trim()).filter(Boolean);
       const allowedDataPaths = grantAllowedPaths.split(/[、,，\s]+/).map(s => s.trim()).filter(Boolean);
       const purposeKeys = grantPurposeKeys.split(/[、,，\s]+/).map(s => s.trim()).filter(Boolean);
+      if (!purposeKeys.length) { setError('授权用途不能为空；请填写至少一个 purposeKey 或 * 表示全部用途。'); setBusy(false); return; }
       await createResourceGrant({
         requestId: crypto.randomUUID(),
         enterpriseId,
