@@ -2,6 +2,7 @@ import path from 'node:path';
 import {existsSync, lstatSync, openSync, readFileSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync, constants} from 'node:fs';
 import {createHash, randomUUID} from 'node:crypto';
 import {StrategyDiscussionFault} from './strategy-discussion-fault.ts';
+import {parseGoalDraft} from './strategy-goals-store.ts';
 import {StrategyInitiativeStore} from './strategy-initiative-store.ts';
 import {initiativeScopeKey, type CandidateVersion, type VerificationBatch} from './strategy-initiative-types.ts';
 import type {GoalDraftInput, GoalScope} from './strategy-goals-types.ts';
@@ -31,7 +32,7 @@ export interface InitiativePublication {
   replacedBy?: string;
   withdrawnAt?: string;
   withdrawOperationId?: string;
-  handoffs: { operationId: string; scope: GoalScope; goals: { goalId: string; version: number }[]; at: string }[];
+  handoffs: { operationId: string; requestFingerprint: string; scope: GoalScope; goals: { goalId: string; version: number }[]; at: string }[];
 }
 type PublicationFile = { formatVersion: 1; publications: InitiativePublication[] };
 
@@ -39,7 +40,11 @@ export function createStrategyInitiativePublications(options: {
   initiatives: StrategyInitiativeStore;
   candidates: { version(id: string, cid: string, no: number): CandidateVersion };
   verifications: { passCredentials(id: string, cid: string, no: number): VerificationBatch | undefined };
-  goals: { create(input: GoalDraftInput & { operationId: string }): { goalId: string; version: number } };
+  goals: {
+    create(input: GoalDraftInput & { operationId: string }): { goalId: string; version: number };
+    getOperation(id: string): unknown | null;
+    operationContext(receipt: unknown): { goals: { goalId: string; version: number }[] }[];
+  };
   validateGoal?(input: GoalDraftInput, target?: 'create'): void | Promise<void>;
   mutate<T>(fn: () => T | Promise<T>): Promise<T>;
 }) {
@@ -163,34 +168,51 @@ export function createStrategyInitiativePublications(options: {
     if (!scope || typeof scope !== 'object' || !['enterprise', 'department', 'personal'].includes(scope.kind) || typeof scope.id !== 'string' || typeof scope.name !== 'string') fail('strategy_publication_fields_invalid', 400);
     if (!Array.isArray(input.selected) || !input.selected.length || input.selected.length > 20 || input.selected.some(i => !Number.isSafeInteger(i))) fail('strategy_publication_fields_invalid', 400);
     const candidate = candidates.version(id, publication.candidateId, publication.no);
-    const selected = [...new Set(input.selected as number[])];
+    const selected = [...new Set(input.selected as number[])].sort((a, b) => a - b);
     if (selected.some(i => i < 0 || i >= candidate.goals.length)) fail('strategy_publication_goal_invalid', 400);
+    const requestFingerprint = hash({scope, selected});
+    const drafts = selected.map(index => {
+      const text = candidate.goals[index]!;
+      return {
+        operationId: stableId({handoff: input.operationId, index}),
+        title: text, outcome: text,
+        perspective: scope.kind === 'personal' ? 'personal' : 'profit',
+        scope,
+        measurement: {kind: 'deliverable', criterion: text},
+        baseline: {state: 'pending', description: '战略发布承接，基线待核。'},
+        responsible: '待指定',
+        strategies: [candidate.title],
+        strategyContext: {summary: `来源：战略发布 ${publicationId} · 候选 ${publication.candidateId}:${publication.no} · 指纹 ${publication.contentSha256}`},
+      } as GoalDraftInput & { operationId: string };
+    });
+    for (const draft of drafts) {
+      parseGoalDraft(draft);
+      await options.validateGoal?.(draft, 'create');
+    }
     return options.mutate(async () => {
       const file = readFile(id);
       const current = file.publications.find(p => p.publicationId === publicationId);
       if (!current) fail('strategy_publication_not_found', 404);
       const prior = current.handoffs.find(h => h.operationId === input.operationId);
-      if (prior) return structuredClone(prior);
+      if (prior) {
+        if (prior.requestFingerprint !== requestFingerprint) fail('strategy_publication_operation_conflict');
+        return structuredClone(prior);
+      }
       if (current.state !== 'active') fail('strategy_publication_not_active');
       const created: { goalId: string; version: number }[] = [];
-      for (const index of selected) {
-        const text = candidate.goals[index]!;
-        const draft: GoalDraftInput & { operationId: string } = {
-          operationId: stableId({handoff: input.operationId, index}),
-          title: text, outcome: text,
-          perspective: scope.kind === 'personal' ? 'personal' : 'profit',
-          scope,
-          measurement: {kind: 'deliverable', criterion: text},
-          baseline: {state: 'pending', description: '战略发布承接，基线待核。'},
-          responsible: '待指定',
-          strategies: [candidate.title],
-          strategyContext: {summary: `来源：战略发布 ${publicationId} · 候选 ${publication.candidateId}:${publication.no} · 指纹 ${publication.contentSha256}`},
-        };
-        await options.validateGoal?.(draft, 'create');
+      for (const draft of drafts) {
+        const receipt = goals.getOperation(draft.operationId);
+        if (receipt) {
+          const context = goals.operationContext(receipt)[0];
+          const ref = context?.goals[0];
+          if (!ref) fail('strategy_publication_recovery_unknown', 503);
+          created.push(ref);
+          continue;
+        }
         const record = goals.create(draft);
         created.push({goalId: record.goalId, version: record.version});
       }
-      const receipt = {operationId: input.operationId as string, scope, goals: created, at: new Date().toISOString()};
+      const receipt = {operationId: input.operationId as string, requestFingerprint, scope, goals: created, at: new Date().toISOString()};
       current.handoffs.push(receipt);
       writeFile(id, file);
       return structuredClone(receipt);
