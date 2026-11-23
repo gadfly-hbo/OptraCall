@@ -49,6 +49,7 @@ import { StrategyInitiativeFiles } from './strategy-initiative-files.ts';
 import { createStrategyInitiativeHost } from './strategy-initiative-host.ts';
 import { createStrategyCandidateHost } from './strategy-candidate-host.ts';
 import { createStrategyVerificationHost } from './strategy-verification-host.ts';
+import { createStrategyInitiativePublications } from './strategy-initiative-publications.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
@@ -1209,6 +1210,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const strategyInitiativeSessions=createStrategyInitiativeHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyCandidates=createStrategyCandidateHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyVerifications=createStrategyVerificationHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no),busy:(id,cid,no)=>strategyCandidates.busy(id,cid,no),markReturned:(id,cid,no,batchId)=>strategyCandidates.markReturned(id,cid,no,batchId)},codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
+  const strategyInitiativePublications=createStrategyInitiativePublications({initiatives:strategyInitiatives,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no)},verifications:{passCredentials:(id,cid,no)=>strategyVerifications.passCredentials(id,cid,no)},goals:{create:input=>strategyGoals.create(input)},validateGoal:(input,target)=>validateStrategyGoal(input,target),mutate});
   strategyMapImports=createStrategyMapImportService({dataRoot,codeRoot:options.cwd,attachments:strategyAttachments,projects,owner:id=>strategyDiscussions.store.get(id),configuration:(id,revision)=>availableConfiguration(id,revision),mutate,
     writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
   });
@@ -2760,6 +2762,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(action==='revise'&&request.method==='POST'){const input=await body(request);json(response,201,{candidate:await strategyCandidates.revise(id,cid!,no,input)});return;}
         if(action==='verify'&&request.method==='POST'){const input=await body(request);json(response,202,await strategyVerifications.start(id,cid!,no,input));return;}
         if(action==='verifications'&&request.method==='GET'){json(response,200,{batches:strategyVerifications.list(id,cid!,no)});return;}
+      }
+      const initiativePublicationRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/publications(?:\/([a-f0-9-]{36})\/(withdraw|handoff))?$/.exec(url.pathname);
+      if(initiativePublicationRoute){
+        const id=initiativePublicationRoute[1]!,pubId=initiativePublicationRoute[2],action=initiativePublicationRoute[3];
+        if(!pubId&&request.method==='GET'){json(response,200,{publications:strategyInitiativePublications.list(id,url.searchParams.get('scopeKey')??undefined)});return;}
+        if(!pubId&&request.method==='POST'){const input=await body(request);json(response,201,{publication:await strategyInitiativePublications.publish(id,input)});return;}
+        if(action==='withdraw'&&request.method==='POST'){const input=await body(request);json(response,200,{publication:await strategyInitiativePublications.withdraw(id,pubId!,input)});return;}
+        if(action==='handoff'&&request.method==='POST'){const input=await body(request);json(response,200,{handoff:await strategyInitiativePublications.handoff(id,pubId!,input)});return;}
       }
       const gateRetryRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/candidates\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/gates\/([01])\/retry$/.exec(url.pathname);
       if(gateRetryRoute&&request.method==='POST'){const input=await body(request);json(response,202,await strategyVerifications.retry(gateRetryRoute[1]!,gateRetryRoute[2]!,Number(gateRetryRoute[3]),Number(gateRetryRoute[4]) as 0|1,input));return;}
