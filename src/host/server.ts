@@ -47,6 +47,7 @@ import { StrategyInitiativeStore } from './strategy-initiative-store.ts';
 import { StrategyInitiativeReports } from './strategy-initiative-reports.ts';
 import { StrategyInitiativeFiles } from './strategy-initiative-files.ts';
 import { createStrategyInitiativeHost } from './strategy-initiative-host.ts';
+import { createStrategyCandidateHost } from './strategy-candidate-host.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
@@ -925,6 +926,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       requirementSessions.closeAll(filter),
       strategyDiscussions.closeAll(filter),
       strategyInitiativeSessions.closeAll(filter),
+      strategyCandidates.closeAll(filter),
       businessDiscussions.closeAll(filter),
     ]);
     for (const key of [...streams.keys()]) {
@@ -1203,6 +1205,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const strategyKickoffReports=new StrategyInitiativeReports(strategyInitiatives);
   const strategyInitiativeFiles=new StrategyInitiativeFiles(strategyInitiatives);
   const strategyInitiativeSessions=createStrategyInitiativeHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
+  const strategyCandidates=createStrategyCandidateHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   strategyMapImports=createStrategyMapImportService({dataRoot,codeRoot:options.cwd,attachments:strategyAttachments,projects,owner:id=>strategyDiscussions.store.get(id),configuration:(id,revision)=>availableConfiguration(id,revision),mutate,
     writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
   });
@@ -2740,6 +2743,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(!fileId&&request.method==='GET'){json(response,200,{files:strategyInitiativeFiles.list(id,url.searchParams.get('scopeKey')??undefined)});return;}
         if(!fileId&&request.method==='POST'){const input=await body(request,68*1024*1024);json(response,201,{file:await mutate(()=>strategyInitiativeFiles.upload(id,input as Parameters<typeof strategyInitiativeFiles.upload>[1]))});return;}
         if(fileId&&request.method==='GET'){json(response,200,strategyInitiativeFiles.read(id,fileId));return;}
+      }
+      const candidateRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/candidates(?:\/([a-f0-9-]{36})\/versions\/([1-9]\d*)(?:\/(messages|stop|close))?)?$/.exec(url.pathname);
+      if(candidateRoute){
+        const id=candidateRoute[1]!,cid=candidateRoute[2],no=Number(candidateRoute[3]),action=candidateRoute[4];
+        if(!cid&&request.method==='GET'){json(response,200,{candidates:strategyCandidates.list(id,url.searchParams.get('scopeKey')??undefined)});return;}
+        if(!cid&&request.method==='POST'){const input=await body(request);json(response,202,await strategyCandidates.create(id,input));return;}
+        if(cid&&!action&&request.method==='GET'){json(response,200,await strategyCandidates.detail(id,cid,no));return;}
+        if(action==='messages'&&request.method==='POST'){const input=await body(request);json(response,202,await strategyCandidates.send(id,cid!,no,input));return;}
+        if(action==='stop'&&request.method==='POST'){const input=await body(request);json(response,200,await strategyCandidates.stop(id,cid!,no,input.expectedRequestId as string|undefined));return;}
+        if(action==='close'&&request.method==='POST'){json(response,200,await strategyCandidates.close(id,cid!,no));return;}
       }
       const initiativeSessionRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/(session|messages|events|stop|close)$/.exec(url.pathname);
       if(initiativeSessionRoute){

@@ -49,3 +49,30 @@ export interface KickoffApplication {
   at: string;
 }
 export interface KickoffAnchor { scopeKey: string; scope: GoalScope; reportNo: number; contentSha256: string; at: string; operationId: string }
+
+export interface CandidateBlock { id: string; label: string; text: string }
+export interface CandidateVersion {
+  initiativeId: string;
+  candidateId: string;
+  no: number;
+  scopeKey: string;
+  title: string;
+  anchor: { reportNo: number; contentSha256: string };
+  parent?: { candidateId: string; no: number };
+  blocks: CandidateBlock[];
+  goals: string[];
+  contentSha256: string;
+  configurationId: string;
+  configurationRevision: number;
+  sessionFile?: string;
+  revision: number;
+  createOperationId: string;
+  instruction: string;
+  pendingInput?: { requestId: string; text: string; expectedRevision: number };
+  lastRun?: { id: string; fingerprint: string; status: string };
+  lock?: { operationId: string; operator: string; at: string; fingerprint: string };
+  lastSave?: { operationId: string; contentSha256: string; at: string; requestId?: string };
+  returned?: { batchId: string; at: string };
+  createdAt: string;
+  updatedAt: string;
+}
