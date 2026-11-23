@@ -2,9 +2,7 @@
 
 2026-10-29 · 对应[已确认规格](../openspec/changes/macbook-trial-delivery/spec.md)，实际安装版本和检查见[交付记录](../openspec/changes/macbook-trial-delivery/result.md)。
 
-Mac mini负责开发、工程测试和交付；GitHub main保存经复核及CI的集成版本。MacBook在 `/Users/huangbo/Dev/OptraCall` 使用独立浅克隆，只接收main、体验和反馈。该副本禁用默认代码push，不从MacBook提交或回推产品代码；通过GitHub提交Issue属于反馈。部署时安装依赖、构建产品不属于在MacBook开发。
-
-2026-11-03确认的长期`Test-And-Repair`试用修正分支及其与`main`的关系，见[工程规范第5节](engineering-workflow.md#5-git-与-ci-的精简节奏)；本说明中的MacBook更新来源仍为`main`。
+开发和修正以云端为主，GitHub `main` 保存经复核和 CI 的集成版本。Mac mini 运行正式服务。MacBook 从 `/Users/huangbo/Dev/OptraCall` 的独立浅克隆单向接收 `main`，用于体验和反馈。该副本禁用默认代码 push。
 
 当前包含反馈闭环、自动核算和托管优化的试用范围见[本次版本说明](current-version-trial.md)。自动核算采用单独的受管执行环境，只有当前Host可信新建起点的任务具备资格；其工具／扩展限制不等同于默认关闭自动核算时的普通分析能力。专业验证仍有重要错误及漏报，工程交付不替代用户体验或专业验收。
 
@@ -18,7 +16,7 @@ Mac mini负责开发、工程测试和交付；GitHub main保存经复核及CI�
 | `停止 OptraCall.command` | 核实本clone实例身份后正常停止Host及其原生SDK工作进程，不关闭其它端口服务或浏览器。 |
 | `更新并启动 OptraCall.command` | 先核对应用已停止，再读取官方main；目标提交的main push CI成功才只快进、按锁文件安装、构建并启动。 |
 
-双击后终端显示成功或错误。地址为 `http://127.0.0.1:4173/`，只绑定本机；静态UI和API由同一Host提供。健康接口 `/api/health` 的 `runtime` 返回实际已加载构建的版本、提交、构建时间和本实例身份。磁盘更新不会把旧进程显示成新构建；需要停止再启动才能采用新版本。试用启动核对独立Git根、HEAD／tree及包版本与构建一致，拒绝脏树或本地脏构建；开发者在Mini使用 `npm run dev`。更新失败遗留的旧dist不会被当成新版本启动。
+双击后终端显示成功或错误。地址为 `http://127.0.0.1:4173/`，只绑定本机；静态UI和API由同一Host提供。健康接口 `/api/health` 的 `runtime` 返回实际已加载构建的版本、提交、构建时间和本实例身份。磁盘更新不会把旧进程显示成新构建；需要停止再启动才能采用新版本。试用启动核对独立Git根、HEAD／tree及包版本与构建一致，拒绝脏树或本地脏构建。更新失败遗留的旧dist不会被当成新版本启动。
 
 如果停止入口提示当前没有实例，表示没有由该试用入口管理的活动进程。4173被其它服务占用时停止并报告冲突，不接管或杀死其它进程。多个入口并发会通过本机操作锁串行协调。进程异常或无法核实身份时保留记录并报错，不用广泛kill作为恢复手段。
 
@@ -42,14 +40,14 @@ Mac mini负责开发、工程测试和交付；GitHub main保存经复核及CI�
 
 安装用 `npm ci --ignore-scripts`；构建成功后由新代码的启动器启动。更新失败会显示阶段错误，保留现有配置、项目和历史；不reset、stash、clean、强制覆盖或回退数据。若代码已快进而安装／构建失败，先保留现场并反馈，网络等问题修复后可再次双击更新重试。不要在缺少依赖或构建失败时尝试手工拼装启动命令。
 
-本机源码有变化时不自动丢弃，交由Mac mini核对。版本回退也由Mac mini提供兼容方案；代码回退不等于数据回退，不用旧备份覆盖新增项目或会话。运行中不热更新、不自动后台同步。
+本机源码有变化时保留现场，可交 PM Agent 核对。回退前由 PM Agent 核对版本和数据兼容性，保留新增项目和会话。更新使用上述显式入口。
 
 ## 部署与反馈
 
 首次部署只对确认空的指定文件夹执行 `git clone --depth 1 --single-branch --branch main`。若非空，先核对保留，不覆写已有内容。使用MacBook原生Node.js 25+及依赖；需要专用Node时放在 `~/Library/Application Support/OptraCall/runtime/node/`，不替换全局Node。Finder入口也可识别clone内 `.runtime/node/`、Homebrew和有效PATH中的Node；Python通过原生bash与本机PATH使用。
 
-新问题统一通过 [GitHub Issues 反馈表单](https://github.com/gadfly-hbo/OptraCall/issues/new?template=trial-feedback.yml)提交，可直接附上整份试用报告。请按已知信息附实际运行版本／提交、复现步骤、预期与实际及可公开的截图或日志；仓库公开，密钥和敏感业务资料保留本地。处理与关闭详见[问题收件与结案规则](engineering-workflow.md#github-issues-问题收件与结案)。原 `待修复`／`已修复` 子目录已由用户删除，后续用 Issue 跟踪状态。由 Mac mini 修复、经工程交付进入 main，MacBook 再按获授权的更新安排接收。部署检查只证明产品安装和基本运行，用户试用及正式产品验收另行确认。
+用户或试用 Agent 可将问题或整份试用报告交给 PM Agent，或通过 [GitHub Issues 反馈表单](https://github.com/gadfly-hbo/OptraCall/issues/new?template=trial-feedback.yml)提交。按已知信息附实际运行版本／提交、复现步骤、预期与实际及可公开的截图或日志。仓库公开，密钥和敏感业务资料保留本地。PM Agent 核实后按授权发单，交付状态按[工程规范](engineering-workflow.md#github-issues-问题收件与结案)在 Issue 跟踪。目标 `main` 提交的 push CI 通过后，用户自行更新 MacBook 并体验修复。
 
-MacBook 的 Qoder 反馈会话使用 `/Users/huangbo/Dev/OptraCall-Test-And-Repair` 工作区；产品源码／试用副本仍在 `/Users/huangbo/Dev/OptraCall`。用户将交接 prompt 转给 Qoder，在反馈工作区后续建立项目规则，明确读取文档参考副本 `/Users/huangbo/Dev/OptraCall-Test-And-Repair/.optracall-guidance/current/docs/engineering-workflow.md` 的[MacBook 端 Qoder 整理与提交](engineering-workflow.md#macbook-端-qoder-整理与提交)小节。规则建立后，可告诉 Qoder“按工程规范整理并提交这份 OptraCall 试用反馈”。Qoder 固定提交到 `gadfly-hbo/OptraCall` 并返回 Issue 编号和链接，后续在 Mac mini 指定该 Issue 开始修复。反馈工作区的 Git 初始化另行安排，提交 Issue 无需初始化 Git、切换修复分支或启用代码 push。
+MacBook 的 Qoder 反馈会话使用 `/Users/huangbo/Dev/OptraCall-Test-And-Repair` 工作区；产品源码／试用副本仍在 `/Users/huangbo/Dev/OptraCall`。用户将交接 prompt 转给 Qoder，在反馈工作区后续建立项目规则，明确读取文档参考副本 `/Users/huangbo/Dev/OptraCall-Test-And-Repair/.optracall-guidance/current/docs/engineering-workflow.md` 的[MacBook 端 Qoder 整理与提交](engineering-workflow.md#macbook-端-qoder-整理与提交)小节。规则建立后，可告诉 Qoder“按工程规范整理并提交这份 OptraCall 试用反馈”。Qoder 固定提交到 `gadfly-hbo/OptraCall` 并返回 Issue 编号和链接，供 PM Agent 核实。反馈工作区的 Git 初始化另行安排，提交 Issue 无需初始化 Git、切换代码分支或启用代码 push。
 
 反馈规范同步按该小节的文档参考副本约定执行，只交付文档并记录来源提交；不需要更新产品源码、安装构建、启停服务或检查产品项目和任务。产品版本更新仍按前述既有入口及其单独授权执行。
