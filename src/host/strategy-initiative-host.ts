@@ -14,6 +14,7 @@ import type {ProjectEvent} from '../agent/project-runtime.ts';
 import type {StrategyDiscussionAction, StrategyDiscussionToolContext} from '../agent/strategy-discussion.ts';
 import {readNativeSessionSnapshot} from './native-session-snapshot.ts';
 import {presentContextMessages} from '../agent/context-presentation.ts';
+import {createRequirementPublicSearch} from './requirement-public-search.ts';
 
 const canonical = (x: unknown): unknown => Array.isArray(x) ? x.map(canonical) : x && typeof x === 'object' ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, canonical(v)])) : x;
 const hash = (x: unknown): string => createHash('sha256').update(JSON.stringify(canonical(x))).digest('hex');
@@ -93,6 +94,7 @@ export function createStrategyInitiativeHost(options: {
   }
   const nativeDirectory = (o: InitiativeMainSession) => path.join(initiatives.directory(o.initiativeId), 'native', `main-${hash(o.scopeKey).slice(0, 16)}`);
   const workspaceDirectory = (o: InitiativeMainSession) => path.join(initiatives.directory(o.initiativeId), 'files', '020_clean');
+  const publicSearch = createRequirementPublicSearch({codeRoot: options.codeRoot, domain: {name: 'initiative-public-search', projectPrefix: 'initiative-public'}, sessionDirectory: instanceId => path.join(initiatives.directory(instanceId.split(':')[0]!), 'public-search'), configurationSnapshot: (id, revision) => options.configuration(id, revision), mutate: options.mutate, isClosing: options.isClosing});
 
   const domain = createAgentSessionDomain<InitiativeMainSession>({
     name: 'strategy-initiative',
@@ -132,7 +134,7 @@ export function createStrategyInitiativeHost(options: {
   async function tool(o: InitiativeMainSession, _configuration: Readonly<RuntimeModelConfiguration>, action: StrategyDiscussionAction, input: Record<string, unknown>, context: StrategyDiscussionToolContext): Promise<{content: {type: 'text'; text: string}[]; details: Record<string, unknown>}> {
     context.assertCurrent(); context.signal.throwIfAborted();
     const current = session(o.initiativeId, o.scopeKey);
-    if (!action.startsWith('initiative-')) fail('role_action_unavailable', 403);
+    if (!action.startsWith('initiative-') && action !== 'public-search') fail('role_action_unavailable', 403);
     if (!options.configuration(current.configurationId, current.configurationRevision)) fail('configuration_changed', 403);
     if (action === 'initiative-files') {
       return payload({files: files.list(o.initiativeId, o.scopeKey)});
@@ -192,6 +194,17 @@ export function createStrategyInitiativeHost(options: {
         : await candidates.markProposed(o.initiativeId, proposal.proposalId, input.newText, context.requestId);
       context.assertCurrent(); context.signal.throwIfAborted();
       return payload({proposal: {proposalId: updated.proposalId, blockId: updated.blockId, status: updated.status}, claim: 'proposal-for-decision-maker-review'});
+    }
+    if (action === 'public-search') {
+      if (typeof input.query !== 'string' || !input.query.trim() || input.query.length > 2000) fail('invalid_public_search_query', 400);
+      const current = session(o.initiativeId, o.scopeKey);
+      const cfg = options.configuration(current.configurationId, current.configurationRevision);
+      if (!cfg) fail('configuration_changed', 403);
+      const h = hash([o.initiativeId, o.scopeKey, context.requestId, context.toolCallId]);
+      const operationId = `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+      const result = await publicSearch.run({instanceId: `${o.initiativeId}:${o.scopeKey}`, operationId, topic: input.query, configuration: {id: cfg.id, revision: cfg.revision}, parent: {context: {owner: `${o.initiativeId}:${o.scopeKey}`, isCurrent: () => { try { context.assertCurrent(); return !context.signal.aborted; } catch { return false; } }}, onCancel(handler) { const cancel = () => { void Promise.resolve(handler({retryFailed: false})).catch(() => {}); }; context.signal.addEventListener('abort', cancel, {once: true}); context.registerCleanup?.(opts => Promise.resolve(handler({retryFailed: opts.retryFailed === true}))); return () => context.signal.removeEventListener('abort', cancel); }}});
+      context.assertCurrent(); context.signal.throwIfAborted();
+      return payload({search: result});
     }
     fail('role_action_unavailable', 403);
   }
@@ -369,6 +382,6 @@ export function createStrategyInitiativeHost(options: {
     subscribe(id: string, scopeKey: string, fn: (event: ProjectEvent) => void) { return domain.subscribe(domain.ref(session(id, scopeKey)), fn); },
     async stop(id: string, scopeKey: string, expectedRequestId?: string) { return {stopped: await domain.stop(domain.ref(session(id, scopeKey)), expectedRequestId ? {expectedRequestId} : undefined)}; },
     async close(id: string, scopeKey: string) { await domain.close(domain.ref(session(id, scopeKey))); return {closed: true}; },
-    closeAll: (filter?: {provider?: string}) => domain.closeAll(filter),
+    closeAll: async (filter?: {provider?: string}) => { await Promise.all([domain.closeAll(filter), publicSearch.closeAll(filter)]); },
   };
 }
