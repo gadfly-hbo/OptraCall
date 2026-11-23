@@ -55,6 +55,7 @@ export interface VerifiedSummaryAuthority {
   summaryAuthority: string;
   summarySha256: string;
   verifiedScopeSummary: string;
+  sourcePeriod?: string;
   ownerProjectId?: string;
   ownerSystemId?: string;
   resourceRef: StudioSourceRef;
@@ -1360,10 +1361,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       brand: pm.scope.brand,
       channel: pm.scope.channel,
     });
-    const canSummary = canSummaryRaw.allowed && pm.summaryAccess
+    const canSummary = canSummaryRaw.allowed
       ? { ...canSummaryRaw, matchedGrantIds: canSummaryRaw.matchedGrantIds.filter(id => {
           const g = subjectGrants.find(g => g.id === id);
-          return g ? isPeriodCovered(pm.summaryAccess!.period, g.scope.periodFrom, g.scope.periodTo) : false;
+          return g ? isPeriodCovered(g.scope.sourcePeriod ?? pm.scope.period, g.scope.periodFrom, g.scope.periodTo) : false;
         }) }
       : canSummaryRaw;
     if (canSummary.matchedGrantIds.length === 0) canSummary.allowed = false;
@@ -1628,7 +1629,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               summaryVersion: grant.scope.summaryVersion,
             });
             if (!evalSummary.allowed) continue;
-            if (!isPeriodCovered(purpose.summaryAccess?.period ?? purpose.scope?.period, grant.scope.periodFrom, grant.scope.periodTo)) continue;
+            if (!isPeriodCovered(grant.scope.sourcePeriod ?? purpose.summaryAccess?.period ?? purpose.scope?.period, grant.scope.periodFrom, grant.scope.periodTo)) continue;
             summaryAllowed = true;
             break;
           }
@@ -3328,6 +3329,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             rawScope.summaryAuthority = verified.summaryAuthority;
             rawScope.summarySha256 = verified.summarySha256;
             rawScope.verifiedScopeSummary = verified.verifiedScopeSummary;
+            if (verified.sourcePeriod) rawScope.sourcePeriod = verified.sourcePeriod;
             verifiedResourceRef = verified.resourceRef;
             summaryOwnerProjectId = verified.ownerProjectId;
             summaryOwnerSystemId = verified.ownerSystemId;

@@ -135,3 +135,7 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 
 1. **目录与精读同一汇总资格。** `evaluatePurposeAccessForSubject` 的 `canSummary` 增加 `isPeriodCovered(pm.summaryAccess.period, ...)` 过滤，半月授权不再在目录中标为 `authorizedSummary`。精读路径改用 `summaryAccess.period`（来源自身期间）而非 `purpose.scope.period`，用途单日但来源整月时拒绝。
 2. **显式 `null` 用途拒绝。** `ResourceGrantStore.grant()` 在规范化前校验 `purposeKeys` 非数组即拒绝（`invalid_grant_purpose_keys`），零写入。新增测试：`null as unknown as string[]` 被拒。
+
+### PM 五次返工（汇总来源期间）
+
+`summaryAccess.period` 在正常发布路径从未写入。修复：`assertSummaryScopeMatchesAsset` 从已发布来源正文提取 `sourcePeriod` 并返回；`verifySummaryAuthority` 传递；授权创建时存入 `grant.scope.sourcePeriod`；目录和精读用 `grant.scope.sourcePeriod ?? purpose.scope.period` 做 `isPeriodCovered` 核对。半月授权下目录不再标整月可引用，单日用途指向整月来源时精读拒绝。
