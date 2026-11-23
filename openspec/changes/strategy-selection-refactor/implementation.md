@@ -251,7 +251,7 @@ Issue [#120](https://github.com/gadfly-hbo/OptraCall/issues/120) · 规格 [Spec
 7. **准确历史入口**（`e901e08`）：准确版本弹窗「查看候选会话」入口；旧讨论回读 pinned 定位所选身份；尝试终态（含重试前 UNKNOWN/取消）台账与弹窗展示。SSR 断言补充。
 
 **仍需用户决定（不记为完成）：**
-- **deep-research Skill 激活**：基线含 `extensions/analysis-assets/deep-research` 资产，但事项会话沿 strategy-discussion 固定输入策略（noSkills）。启用需改变 capabilityPolicy 并沿工程规范 Skill 测评门禁接入——待用户指定接入范围与测评安排。受影响验收：SS02 的 deep-research 实际激活。
+- **deep-research Skill 激活**：基线含 `extensions/analysis-assets/deep-research` 资产，但事项会话沿 strategy-discussion 固定输入策略（noSkills）。启用需改变 capabilityPolicy 并按现行规范 v1.14（用户 2026-11-23 取消独立测评门禁）开发接入后直接启用——接入实施中。受影响验收：SS02 的 deep-research 实际激活。
 - **grill-me 资产来源**：仓库内未找到 grill-me 资产（find 无结果），来源与接入待用户核定。受影响验收：SS02 的 grill-me 多轮追问资产激活（当前由主会话提示词纪律+合成 Provider 验证多轮访谈行为）。
 - 公开研究已按获准既有能力接入并隔离验证（不依赖上述决定）；原生 Provider 线路由配置治理固定，产品 HTTP 配置不可指向 loopback，故实际执行验证采用进程内隔离 Host 范式（与 native-search-runtime 测试同源）。
 
