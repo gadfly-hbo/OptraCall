@@ -255,6 +255,13 @@ Issue [#120](https://github.com/gadfly-hbo/OptraCall/issues/120) · 规格 [Spec
 - **grill-me 资产来源**：仓库内未找到 grill-me 资产（find 无结果），来源与接入待用户核定。受影响验收：SS02 的 grill-me 多轮追问资产激活（当前由主会话提示词纪律+合成 Provider 验证多轮访谈行为）。
 - 公开研究已按获准既有能力接入并隔离验证（不依赖上述决定）；原生 Provider 线路由配置治理固定，产品 HTTP 配置不可指向 loopback，故实际执行验证采用进程内隔离 Host 范式（与 native-search-runtime 测试同源）。
 
+### 2026-11-23 返工后验证
+
+- **浏览器 E2E 29/29 PASS**（真实 Host + 合成 Provider + 系统 Chrome，每次运行独立干净数据根，非本机 origin 全 abort）：原 25 项 + 返工 4 项（准确版本弹窗候选会话入口、旧讨论回读定位、对话式限定修改 Agent 拟改核对、采纳另存新候选）。1440/390 零横向溢出；弹窗 scrollHeight 1068 > clientHeight 558，overflowY auto。证据 `.local/issue-120/browser-run11.log`、`browser/results.json`、截图。
+- **UI 入口修复**（`05da867`）：已发布/撤销版提供「从此版修订」（恢复发布取新候选版本，Spec §3.4）。
+- **夹具对齐**（`fe774a9`、`afbcab0`）：两处旧测试 file 来源补 fileId，符合返工4准确身份合同；单独重跑均通过。
+- **完整 `npm run check` 最终复跑**：进行中（前一轮 3238 项中 2 项失败均为上述夹具问题，修复后复跑确认）。
+
 ## 范围外问题
 
 （暂无。）
