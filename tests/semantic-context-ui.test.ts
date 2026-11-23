@@ -46,7 +46,8 @@ test('L101/106 UI explicit source read preserves exact tuple and owner and does 
   assert.equal(calls[0]!.init?.method, 'POST');
   assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), query);
   assert.equal(calls[0]!.init?.signal, signal);
-  assert.equal(calls[0]!.init?.credentials, 'omit');
+  assert.equal(calls[0]!.init?.credentials, 'same-origin');
+  assert.equal(calls[0]!.init?.mode, 'same-origin');
   assert.equal(calls[0]!.init?.cache, 'no-store');
 });
 

@@ -20,6 +20,7 @@ import { StudioFoundationContent, StudioFoundationNavigation, StudioFoundationVi
 import type { StudioFoundationSection } from './StudioFoundationView.tsx';
 import { routeStudioCoverageBuild } from './studio-coverage-view.ts';
 import { StudioRulePublicationView, studioRulePreviewChanged } from './StudioRuleExecutionView.tsx';
+import { StudioMemberPackPanel } from './StudioMemberPackPanel.tsx';
 
 export type StudioLeaveGuard = () => Promise<boolean>;
 export type StudioSystemLocation = { status: 'none' | 'loading' | 'unavailable'; systemId?: string } | { status: 'available'; systemId: string; enterpriseId: string };
@@ -34,6 +35,7 @@ export interface StudioPageProps {
   libraryArea?: StudioLibraryArea; libraryRequest?: StudioLibraryRequest; onLibraryAreaChange?: (area: StudioLibraryArea) => void;
   active?: boolean;
   currentProjectId?: string;
+  operatorProjectReady?: boolean;
   projects: ClientProject[];
   initialSystemId?: string;
   onTargetConsumed?: () => void;
@@ -623,6 +625,7 @@ export function StudioPage(props: StudioPageProps) {
     {activeLibraryTab === 'workbench' && !exactLocationBlocked && <StudioProjectAssociation project={projects.find(project => project.id === currentProjectId)} directory={directory} enterpriseId={enterpriseId} disabled={loading || busy || Boolean(pending)} onAssociate={() => { if (!currentProjectId) return; void mutate('关联当前项目', requestId => associateStudioEnterprise({ requestId, kind: 'project', entityId: currentProjectId, enterpriseId }), () => setNotice('已关联当前项目到此企业，普通分析可按需发现可用资产；没有启动建设任务。')); }} />}
     {exactLocationBlocked ? <div className="studio-note is-warning" role="status"><strong>保留原体系定位</strong><p><code>{props.initialSystemId}</code></p><p>{exactLocation.status === 'loading' ? '正在核对原体系及当前可见范围，未打开其他体系。' : '原体系不存在、归属待核或当前范围不可读，未替换为其他体系，也未恢复旧权限。'}</p><button type="button" className="secondary-button" disabled={loading || busy || Boolean(pending)} onClick={() => { setLoading(true); void refreshDirectory().catch(error => setError(errorText(error))).finally(() => setLoading(false)); }}>只读核对原定位</button><button type="button" className="text-button" disabled={busy || Boolean(pending)} onClick={() => { void allowLeave().then(allowed => { if (allowed) { props.onTargetConsumed?.(); setSystemTarget(''); setSelectedSystemId(''); setView('foundation'); } }); }}>明确返回企业列表</button></div> : !enterpriseId ? <div className="studio-empty"><h2>明确企业基础层的归属</h2><p>{scopePrompt}</p><button type="button" className="primary-button" disabled={busy} onClick={() => setNewEnterprise(true)}>建立企业范围</button></div> : <>
       {view === 'foundation' && <>
+        {activeLibraryTab === 'workbench' && <StudioMemberPackPanel enterpriseId={enterpriseId} enterpriseName={directory?.enterprises.find(enterprise => enterprise.id === enterpriseId)?.name} systems={systems} projects={scopeProjects} currentProjectId={currentProjectId} operatorProjectReady={props.operatorProjectReady} onBuildGoal={(goalText, sysId) => { void startConstruction(goalText, sysId); }} onOpenTask={props.onOpenTask} />}
         {activeLibraryTab === 'workbench' && <details className="workspace-studio-options"><summary>体系详情与校验</summary><StudioFoundationNavigation section={foundationSection} disabled={busy || Boolean(pending)} onSelect={next => { void allowLeave().then(ok => { if (ok) { setFoundationSection(next); setProfessional(undefined); requestAnimationFrame(() => heading.current?.focus()); } }); }} /></details>}
 
         {!professional && (activeLibraryTab === 'workbench' || !scopedFoundation) && <><StudioFoundationView foundation={scopedFoundation} section={foundationSection} loading={loading} catalogItems={foundationSection === 'assets' ? visibleItems : undefined} onRefresh={() => { const expected = scopeRef.current; setLoading(true); setError(''); void refreshFoundation().catch(error => { if (mounted.current && scopeRef.current === expected) setError(errorText(error)); }).finally(() => { if (mounted.current && scopeRef.current === expected) setLoading(false); }); }} onBuild={(goal, systemId) => { void startConstruction(goal, systemId); }} onModalChange={setCoverageModal} onOpenUsage={system => { void openCoverageUsage(system); }} onOpenWorkItems={system => { void openCoverageWorkItems(system); }} onOpenAsset={(system, asset) => { void openSystem(system, 'evolution', asset); }} onReadSource={(system, ref, returnFocus) => { void showItem({ authority: ref.authority, id: ref.id, version: ref.version, title: ref.title || ref.id, status: 'reference', ref, systemId: ref.authority === 'studio-source' ? ref.locator || system : system }, returnFocus); }} /></>}

@@ -44,6 +44,7 @@ export function createAutomaticVerificationFeature(options: {
   pair(projectId: string, taskId: string, writable?: boolean): Promise<Owner>;
   configuration(id?: string, revision?: number): Readonly<RuntimeModelConfiguration> | undefined;
   selectedConfiguration(id: string): Readonly<RuntimeModelConfiguration>;
+  ordinaryReadAllowed?(projectId: string): boolean;
   ordinaryReadRoots?(): readonly string[];
   mutate<T>(operation: () => T | Promise<T>): Promise<T>;
   settle(owner: Owner, context: SessionContext<Owner>, requestId: string, startedAt: string, result?: Record<string, any>): Promise<void>;
@@ -71,6 +72,9 @@ export function createAutomaticVerificationFeature(options: {
     }) || await verification.hasUnprovenProjectWriter(owner.project.id);
   }
   async function capabilities(id: AutomaticOwner) {
+    if (options.ordinaryReadAllowed?.(id.projectId) === false) {
+      return { supported: false, reason: '会员包限权项目沿当前授权范围继续分析，兼容自动核算工作区暂不可用。' };
+    }
     let toolProtectionAvailable = process.platform === 'darwin';
     if (toolProtectionAvailable) try { await access('/usr/bin/sandbox-exec', constants.X_OK); } catch { toolProtectionAvailable = false; }
     if (!toolProtectionAvailable) return { supported: false, reason: '当前系统没有所需的原件保护执行能力，自动核算与修订暂不可用。' };

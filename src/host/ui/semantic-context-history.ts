@@ -13,19 +13,26 @@ function graphQuery(value: unknown): SemanticGraphQuery | undefined {
 }
 
 export type StudioContextEvidence = {
-  action: 'catalog' | 'read' | 'read-source' | 'reason' | 'declare-use';
-  stage: 'directory' | 'asset' | 'source' | 'declaration';
+  action: 'catalog' | 'read' | 'read-source' | 'reason' | 'declare-use' | 'assess-use';
+  stage: 'directory' | 'asset' | 'source' | 'declaration' | 'assessment';
   result: Record<string, unknown>; input?: Record<string, unknown>;
   ref?: StudioSourceRef; body?: string; complete?: boolean;
   range?: { start: number; end: number; total: number }; declaration?: true;
 };
-export type AssetContextRecord = SemanticContextRecord & { studio?: StudioContextEvidence };
-const studioActions = ['catalog', 'read', 'read-source', 'reason', 'declare-use'];
+export type SavedReportEvidence = {
+  locator: string;
+  sha256?: string;
+  projectId?: string;
+  taskId?: string;
+};
+export type AssetContextRecord = SemanticContextRecord & { studio?: StudioContextEvidence; savedReport?: SavedReportEvidence };
+const studioActions = ['catalog', 'read', 'read-source', 'reason', 'declare-use', 'assess-use'];
 function studioEvidence(value: unknown, input: unknown, owner?: { projectId: string; taskId: string }): StudioContextEvidence | undefined {
   if (!object(value) || value.type !== 'optracall.studio' || !studioActions.includes(value.action) || !object(value.result)) return;
   if (object(input) && input.action !== value.action) return;
   const result = value.result, action = value.action as StudioContextEvidence['action'];
-  const evidence: StudioContextEvidence = { action, stage: action === 'catalog' ? 'directory' : action === 'read-source' ? 'source' : action === 'declare-use' ? 'declaration' : 'asset', result, ...(object(input) ? { input } : {}) };
+  const stage: StudioContextEvidence['stage'] = action === 'catalog' ? 'directory' : action === 'read-source' ? 'source' : action === 'declare-use' ? 'declaration' : action === 'assess-use' ? 'assessment' : 'asset';
+  const evidence: StudioContextEvidence = { action, stage, result, ...(object(input) ? { input } : {}) };
   if (action === 'reason') {
     if (!object(result.identity) || owner && (result.identity.projectId !== owner.projectId || result.identity.taskId !== owner.taskId)) return;
     // Preserve the actual saved receipt; rendering validates its supported shape.
@@ -75,6 +82,15 @@ export function semanticRecordsForAssistant(messages: readonly Record<string, an
     } else if (message.toolName === 'record_analysis_sources') {
       const receipt = !message.isError && isSemanticSourcesRecorded(message.details) && (!owner || message.details.projectId === owner.projectId) ? message.details : undefined;
       records.push(receipt ? { receipt, native } : { native, issue: '来源保存回执未能核定 · UNKNOWN。不能认定已保存，也不改变原分析结果。' });
+    } else if (message.toolName === 'write_report' && !message.isError && object(message.details) && typeof message.details.relativePath === 'string' && message.details.relativePath.startsWith('060_reports/')) {
+      records.push({
+        savedReport: {
+          locator: message.details.relativePath,
+          ...(typeof message.details.sha256 === 'string' ? { sha256: message.details.sha256 } : {}),
+          ...(owner ? { projectId: owner.projectId, taskId: owner.taskId } : {}),
+        },
+        native,
+      });
     }
     if (!Array.isArray(message.nestedCalls?.calls)) continue;
     for (const call of message.nestedCalls.calls) {

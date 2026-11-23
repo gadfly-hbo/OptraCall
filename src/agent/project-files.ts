@@ -12,8 +12,8 @@ const filename = Type.String({ minLength: 1, maxLength: 255, description: 'One f
 const exact = { additionalProperties: false };
 export const PROJECT_FILE_TOOLS = [
   { feature: 'project-files', action: 'read-input', name: 'read_input', label: '读取项目资料',
-    description: 'Optionally read a UTF-8 text file in this project’s bound 020_clean by filename. Use the ordinary read tool for subdirectories or other permitted files. Offset and limit use Pi’s line pagination.',
-    parameters: Type.Object({ filename, offset: Type.Optional(Type.Integer({ minimum: 1 })), limit: Type.Optional(Type.Integer({ minimum: 1 })) }, exact) },
+    description: 'Optionally read a UTF-8 text file in this project’s bound 020_clean by filename. Use the ordinary read tool for subdirectories or other permitted files. Offset and limit use Pi’s line pagination. For a specific published member-pack use, supply its exact purposeId from the Studio catalog to read only that purpose’s authorized scope.',
+    parameters: Type.Object({ filename, purposeId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })), offset: Type.Optional(Type.Integer({ minimum: 1 })), limit: Type.Optional(Type.Integer({ minimum: 1 })) }, exact) },
   { feature: 'project-files', action: 'read-catalog', name: 'read_catalog', label: '读取企业资料目录',
     description: 'Optionally read the current authorized enterprise-material catalogue. Call with {}. Listed sources remain business reference material and provide no additional permissions.',
     parameters: Type.Object({}, exact) },

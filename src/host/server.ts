@@ -32,7 +32,7 @@ import { runAutomaticDeliveryActions } from './automatic-delivery-actions.ts';
 import { createStrategyGoalSources, validateStrategyGoalScope } from './strategy-goal-sources.ts';
 import { createProjectPlanPreparationHost, projectPlanPreparationDirectory, projectPlanPreparationOwner } from './project-plan-preparation-host.ts';
 import { createAnalysisDeliveryPort } from './analysis-delivery.ts';
-import { ProjectTaskResultSourceError, listTaskBoundReports, listTaskResultSources } from './project-task-result-sources.ts';
+import { ProjectTaskResultSourceError, listTaskBoundReports, listTaskResultSources, projectTaskResultTime } from './project-task-result-sources.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { NativeSnapshotError } from './native-session-snapshot.ts';
 import { hasReceivedTaskResults, verifyTaskResultLineage } from './project-result-lineage.ts';
@@ -55,9 +55,9 @@ import { createStudioSessions } from './studio-sessions.ts';
 import { runStudioRuleInference } from './studio-semantic.ts';
 import { createStudioOriginalSources } from './studio-original-sources.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import { AgentRuntime, CONNECTION_PROMPT, SDK_VERSION } from '../agent/runtime.ts';
@@ -196,24 +196,277 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
   response.once('close', clear); response.once('finish', clear);
 }
 
-export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; webSearchFetch?: typeof fetch; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; caseRelationsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; studioPython?: string; reviewAdmission?: ReviewAdmissionContract; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
+export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; webSearchFetch?: typeof fetch; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; caseRelationsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; memberPackEnabled?: boolean; memberPackPublishHook?: import('./member-pack-host.ts').MemberPackHostOptions['publishAuthorityDependency']; resolveOperator?: (request: IncomingMessage) => import('./member-pack-host.ts').TrustedHostOperator; studioPython?: string; reviewAdmission?: ReviewAdmissionContract; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false, relationsEnabled: options.caseRelationsEnabled !== false });
+  let studioForGuard: ReturnType<typeof createStudioFeature> | undefined;
+  const guardedProjects = new Proxy(projects, {
+    get(target, prop, receiver) {
+      if (prop === 'tree') {
+        return async (projectId: string, directories?: Parameters<ProjectStore['tree']>[1]) => {
+          const nodes = await target.tree(projectId, directories);
+          return studioForGuard ? studioForGuard.memberPack.filterProjectFileTree(projectId, nodes) : nodes;
+        };
+      }
+      if (prop === 'readFile') {
+        return async (projectId: string, relativePath: string) => {
+          const norm = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+          const isData = norm.startsWith('010_draw/') || norm.startsWith('020_clean/');
+          if (isData && studioForGuard) {
+            studioForGuard.memberPack.assertProjectDataPathAllowed(projectId, norm);
+          }
+          const file = await target.readFile(projectId, relativePath);
+          if (isData && studioForGuard) {
+            const view = studioForGuard.memberPack.filterAuthorizedProjectData(projectId, norm, file.bytes);
+            return { ...file, bytes: view.bytes };
+          }
+          return file;
+        };
+      }
+      if (prop === 'observeFile') {
+        return async (projectId: string, relativePath: string) => {
+          const norm = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+          if (!studioForGuard?.memberPack.getProjectToolScope(projectId) || !/^(010_draw|020_clean)\//.test(norm)) {
+            return target.observeFile(projectId, relativePath);
+          }
+          const pack = studioForGuard.memberPack;
+          pack.assertProjectDataPathAllowed(projectId, norm);
+          const captured = await target.captureFeedbackFile(projectId, relativePath);
+          const view = pack.filterAuthorizedProjectData(projectId, norm, captured.bytes);
+          return { sha256: createHash('sha256').update(view.bytes).digest('hex'), bytes: view.bytes.length, observedAt: captured.observedAt };
+        };
+      }
+      if (prop === 'captureFeedbackFile') {
+        return async (projectId: string, relativePath: string, maximum?: number) => {
+          const norm = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+          const isData = norm.startsWith('010_draw/') || norm.startsWith('020_clean/');
+          if (isData && studioForGuard) {
+            studioForGuard.memberPack.assertProjectDataPathAllowed(projectId, norm);
+          }
+          const captured = await target.captureFeedbackFile(projectId, relativePath, maximum);
+          if (isData && studioForGuard) {
+            const view = studioForGuard.memberPack.filterAuthorizedProjectData(projectId, norm, captured.bytes);
+            return { ...captured, bytes: view.bytes, sha256: createHash('sha256').update(view.bytes).digest('hex') };
+          }
+          return captured;
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
   const projectPlans = createProjectPlanStore({ dataRoot });
   const strategyGoals = new StrategyGoalsStore(dataRoot), automaticActions = createAutomaticActionSettingsStore({ dataRoot });
   const usageSettings=createUsageContextStore({dataRoot});
   const usageRoutes=createUsageContextRoutes({store:usageSettings,mutate:fn=>mutate(fn),isClosing:()=>closing});
   const modelPacks = new ModelPackStore(path.join(dataRoot, 'models'));
   const enterpriseMaterials = new EnterpriseMaterialsStore(dataRoot);
-  const projectDataReferences = createProjectDataContextReferences({ dataRoot, projects, enterpriseMaterials });
-  const projectDataContext = new ProjectDataContextStore({ dataRoot, projects, validateReferences: projectDataReferences.validate });
+  const projectDataReferences = createProjectDataContextReferences({ dataRoot, projects: guardedProjects, enterpriseMaterials });
+  const projectDataContext = new ProjectDataContextStore({ dataRoot, projects: guardedProjects, validateReferences: projectDataReferences.validate,
+    authorizeEvidence: (projectId, relativePath, bytes) => {
+      if (!relativePath.startsWith('020_clean/')) return;
+      try {
+        const view = studio.memberPack.filterAuthorizedProjectData(projectId, relativePath, bytes);
+        if (view.bytes.equals(bytes)) return;
+      } catch (error) {
+        if (!(error instanceof StudioError) || error.status !== 403) throw error;
+      }
+      throw new ProjectDataContextFault('data_context_evidence_forbidden');
+    },
+  });
   let staticUi: Awaited<ReturnType<typeof loadStaticUi>> | undefined;
   const instanceId = options.instanceId ?? randomUUID();
+  const operatorCookieSecret = randomBytes(32);
+  const operatorRegistryPath = path.join(dataRoot, 'member-packs', 'operator-registry.json');
+  interface StoredOperatorRecord { displayName: string; salt: string; hash: string; createdAt: string; }
+  function readOperatorRegistry(): Record<string, StoredOperatorRecord> {
+    try {
+      if (existsSync(operatorRegistryPath)) {
+        const parsed = JSON.parse(readFileSync(operatorRegistryPath, 'utf8'));
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, StoredOperatorRecord>;
+      }
+    } catch { /* ignore */ }
+    return {};
+  }
+  function writeOperatorRegistry(registry: Record<string, StoredOperatorRecord>) {
+    mkdirSync(path.dirname(operatorRegistryPath), { recursive: true, mode: 0o700 });
+    const tmp = `${operatorRegistryPath}.${randomUUID()}.tmp`;
+    writeFileSync(tmp, JSON.stringify(registry, null, 2), { mode: 0o600 });
+    renameSync(tmp, operatorRegistryPath);
+  }
+  function signOperatorContextCookie(operatorId: string, activeProjectId?: string, displayName?: string): string {
+    const payload = Buffer.from(JSON.stringify({
+      i: instanceId,
+      o: operatorId,
+      ...(activeProjectId ? { p: activeProjectId } : {}),
+      ...(displayName ? { d: displayName } : {}),
+    }), 'utf8').toString('base64url');
+    const sig = createHmac('sha256', operatorCookieSecret).update(payload).digest('base64url');
+    return `optracall_op_ctx=${payload}.${sig}; Path=/; HttpOnly; SameSite=Strict`;
+  }
+  function parseOperatorContextCookie(cookieHeader: string | undefined): { present: boolean; valid: boolean; operatorId?: string; displayName?: string; activeProjectId?: string } {
+    if (!cookieHeader) return { present: false, valid: true };
+    const raw = cookieHeader.split(';').map(part => part.trim()).find(part => part.startsWith('optracall_op_ctx='));
+    if (!raw) return { present: false, valid: true };
+    const token = raw.slice('optracall_op_ctx='.length);
+    const dot = token.indexOf('.');
+    if (dot <= 0) return { present: true, valid: false };
+    const payload = token.slice(0, dot), sig = token.slice(dot + 1);
+    const expected = createHmac('sha256', operatorCookieSecret).update(payload).digest('base64url');
+    const a = Buffer.from(sig, 'utf8'), b = Buffer.from(expected, 'utf8');
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return { present: true, valid: false };
+    try {
+      const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { i?: string; o?: string; p?: string; d?: string };
+      if (parsed.i !== instanceId || typeof parsed.o !== 'string' || !parsed.o.trim()) return { present: true, valid: false };
+      return {
+        present: true,
+        valid: true,
+        operatorId: parsed.o,
+        ...(typeof parsed.d === 'string' && parsed.d ? { displayName: parsed.d } : {}),
+        ...(typeof parsed.p === 'string' && parsed.p ? { activeProjectId: parsed.p } : {}),
+      };
+    } catch {
+      return { present: true, valid: false };
+    }
+  }
+  function resolveRequestOperator(request: IncomingMessage): import('./member-pack-host.ts').TrustedHostOperator {
+    const cookie = parseOperatorContextCookie(typeof request.headers.cookie === 'string' ? request.headers.cookie : undefined);
+    if (options.resolveOperator) {
+      const base = options.resolveOperator(request);
+      const identity = { ...base, authorityProjectId: base.authorityProjectId ?? base.activeProjectId };
+      if (cookie.present) {
+        if (!cookie.valid || cookie.operatorId !== base.operatorId) {
+          return { ...identity, verified: false };
+        }
+        return { ...identity, activeProjectId: cookie.activeProjectId ?? base.activeProjectId };
+      }
+      return identity;
+    }
+    // Real local product startup: NEVER treat bare cookie-less requests as a verified global OS user!
+    // Require a Host-signed HttpOnly session/operator cookie bound to an individual browser session or named business operator.
+    if (cookie.present && cookie.valid && cookie.operatorId) {
+      return {
+        operatorId: cookie.operatorId,
+        ...(cookie.displayName ? { displayName: cookie.displayName } : {}),
+        ...(cookie.activeProjectId ? { activeProjectId: cookie.activeProjectId } : {}),
+        verified: true,
+      };
+    }
+    return { operatorId: 'anonymous:unverified', displayName: '未认证请求', verified: false };
+  }
+  function currentProjectBorrower(request: IncomingMessage, projectId: string) {
+    if (!studio.memberPack.getProjectToolScope(projectId)) return true;
+    const operator = resolveRequestOperator(request);
+    return operator.verified && operator.activeProjectId === projectId;
+  }
+  function assertCurrentProjectBorrower(request: IncomingMessage, projectId: string) {
+    if (!currentProjectBorrower(request, projectId)) throw new RequestFault(403, 'member_pack_borrower_context_required');
+  }
+
+  function setOperatorProjectCookie(response: ServerResponse, request: IncomingMessage, projectId: string) {
+    const cookie = parseOperatorContextCookie(typeof request.headers.cookie === 'string' ? request.headers.cookie : undefined);
+    if (options.resolveOperator) {
+      const base = options.resolveOperator(request);
+      if (!base.verified) return;
+      response.setHeader('Set-Cookie', signOperatorContextCookie(base.operatorId, projectId, base.displayName));
+      return;
+    }
+    // Preserve existing verified operatorId when switching projects so another browser session/operator
+    // CANNOT hijack ownership simply by opening the owner project!
+    if (cookie.present && cookie.valid && cookie.operatorId) {
+      response.setHeader('Set-Cookie', signOperatorContextCookie(cookie.operatorId, projectId, cookie.displayName));
+      return;
+    }
+    // First project creation/open in a new browser session mints a distinct isolated session operatorId!
+    const sessionOpId = `session:${randomUUID()}`;
+    response.setHeader('Set-Cookie', signOperatorContextCookie(sessionOpId, projectId, '工作台会话操作者'));
+  }
+  async function manageOperatorSession(
+    request: IncomingMessage,
+    response: ServerResponse,
+    input?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (!input) {
+      const reg = readOperatorRegistry();
+      return {
+        operator: resolveRequestOperator(request),
+        registeredOperators: Object.entries(reg).map(([operatorId, rec]) => ({
+          operatorId,
+          displayName: rec.displayName,
+          createdAt: rec.createdAt,
+        })),
+        customResolver: Boolean(options.resolveOperator),
+      };
+    }
+    if (options.resolveOperator) {
+      throw new StudioError('operator_session_managed_externally', 409);
+    }
+    const action = String(input.action ?? 'login').trim().toLowerCase();
+    if (action === 'logout') {
+      response.setHeader('Set-Cookie', 'optracall_op_ctx=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
+      return { operator: { operatorId: 'anonymous:unverified', displayName: '未认证请求', verified: false }, loggedOut: true };
+    }
+    const rawId = typeof input.operatorId === 'string' ? input.operatorId.trim() : '';
+    if (!/^[a-zA-Z0-9._:@-]{2,64}$/.test(rawId) || /^session:|^anonymous:/i.test(rawId)) {
+      throw new StudioError('operator_authentication_failed', 403);
+    }
+    const opId = rawId.startsWith('op:') ? rawId : `op:${rawId}`;
+    const passcode = typeof input.passcode === 'string' ? input.passcode : '';
+    if (passcode.length < 4 || passcode.length > 128) {
+      throw new StudioError('operator_passcode_invalid', 400);
+    }
+    const existingCookie = parseOperatorContextCookie(typeof request.headers.cookie === 'string' ? request.headers.cookie : undefined);
+    let activeProjectId = existingCookie.present && existingCookie.valid ? existingCookie.activeProjectId : undefined;
+    if (typeof input.activeProjectId === 'string' && input.activeProjectId.trim()) {
+      const proj = await projects.get(input.activeProjectId.trim());
+      activeProjectId = proj.id;
+    }
+    const registry = readOperatorRegistry();
+    const existing = registry[opId];
+    if (existing) {
+      const derived = scryptSync(passcode, existing.salt, 32);
+      const expectedBuf = Buffer.from(existing.hash, 'hex');
+      if (derived.length !== expectedBuf.length || !timingSafeEqual(derived, expectedBuf)) {
+        throw new StudioError('operator_authentication_failed', 403);
+      }
+      response.setHeader('Set-Cookie', signOperatorContextCookie(opId, activeProjectId, existing.displayName));
+      return {
+        operator: {
+          operatorId: opId,
+          displayName: existing.displayName,
+          ...(activeProjectId ? { activeProjectId } : {}),
+          verified: true,
+        },
+        created: false,
+      };
+    }
+    if (action === 'login' && input.createIfMissing === false) {
+      throw new StudioError('operator_authentication_failed', 403);
+    }
+    const displayName = typeof input.displayName === 'string' && input.displayName.trim()
+      ? input.displayName.trim().slice(0, 80)
+      : rawId;
+    const salt = randomBytes(16).toString('hex');
+    const hash = scryptSync(passcode, salt, 32).toString('hex');
+    registry[opId] = { displayName, salt, hash, createdAt: new Date().toISOString() };
+    writeOperatorRegistry(registry);
+    response.setHeader('Set-Cookie', signOperatorContextCookie(opId, activeProjectId, displayName));
+    return {
+      operator: {
+        operatorId: opId,
+        displayName,
+        ...(activeProjectId ? { activeProjectId } : {}),
+        verified: true,
+      },
+      created: true,
+    };
+  }
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
   if (!Number.isSafeInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 10) throw new Error('Invalid observer heartbeat interval.');
   const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); await dbLinks.init(); await boardStore.init(); await decisionFeedback.init(); await verification.reconcileInterrupted(); await automatic.init(); });
   type ProjectOwner = { project: ProjectRecord; task: TaskRecord; reviewAdmission?: ReviewAdmissionContract };
   const streams = new Map<string, Set<ServerResponse>>();
+  const streamRequests = new WeakMap<ServerResponse, { request: IncomingMessage; statusOnly: boolean }>();
   const clearing = new Map<string, number>(), archiving = new Set<string>();
   let gate = Promise.resolve(), testing = false, closing = false, clearingAll = 0;
   // metric-factory business plugin: the extension owns handlers, the host owns transport.
@@ -246,11 +499,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     saveReport: (projectId, name, text) => mutate(() => projects.saveReport(projectId, name, text)),
   });
   const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => { const result = gate.then(operation); gate = result.then(() => {}, () => {}); return result; };
-  const dbLinks = createDbLinkHost({ dataRoot, projects, data: projectDataContext, configurationSnapshot: (id, revision) => configuration.snapshot(id, revision) ?? undefined, mutate, isClosing: () => closing, readBody: body });
-  const dbReviewBundles = createDbLinkReviewPort({ privateRoot: path.resolve(dataRoot, 'db-link', 'review-bundles'), projects, configurationSnapshot: (id, revision) => configuration.snapshot(id, revision) ?? undefined, materialSource: dbLinks.materialSource, isClosing: () => closing });
+  const dbLinks = createDbLinkHost({ dataRoot, projects: guardedProjects, data: projectDataContext, configurationSnapshot: (id, revision) => configuration.snapshot(id, revision) ?? undefined, mutate, isClosing: () => closing, readBody: body });
+  const dbReviewBundles = createDbLinkReviewPort({ privateRoot: path.resolve(dataRoot, 'db-link', 'review-bundles'), projects: guardedProjects, configurationSnapshot: (id, revision) => configuration.snapshot(id, revision) ?? undefined, materialSource: dbLinks.materialSource, isClosing: () => closing });
   const modelPackRoutes = createModelPackRoutes({store:modelPacks,readBody:body,mutate,isClosing:()=>closing});
   const sapMethods = createSapMethodStore(path.join(dataRoot, 'metric-assets'));
-  const studio = createStudioFeature({ dataRoot, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
+  const studio = createStudioFeature({ dataRoot, codeRoot: options.cwd, memberPackEnabled: options.memberPackEnabled, memberPackPublishHook: options.memberPackPublishHook, resolveRequestOperator, manageOperatorSession, onProjectPermissionChanged: retireProjectPermission, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
     reason: options.studioPython ? (command, context) => runStudioRuleInference({ python: options.studioPython!, codeRoot: options.cwd, command, signal: context.signal, assertCurrent: context.assertCurrent, registerCleanup: context.registerCleanup }) : undefined,
     extract: async (system, ref, context) => {
       if (!studioSessions) throw new StudioError('studio_semantica_unavailable', 409);
@@ -277,19 +530,25 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     } : undefined,
     inspectGraph: (systemId, snapshotId) => studioGraph.inspect(systemId, snapshotId),
   });
-  async function enterpriseContextFor(projectId: string) {
+  studioForGuard = studio;
+  async function enterpriseContextFor(projectId: string, taskId?: string) {
     let enterpriseId: string | undefined;
     try {
       if (!studio.enterpriseScope.active()) return undefined;
       enterpriseId = studio.enterpriseScope.enterpriseIdForProject(projectId);
       let summary = '本任务企业归属尚未核定：未默认提供全局企业目录或其他企业标准。可继续使用原授权任务资料，必要时集中澄清范围。';
       if (enterpriseId) {
-        const catalog = await studio.enterpriseCatalog.catalog(enterpriseId);
+        const catalog = await studio.enterpriseCatalog.catalog(enterpriseId, projectId);
         const lines = [`当前企业：${catalog.enterprise.name}（${enterpriseId}）。以下只为可发现线索，不代表正文已读或本次采用。`];
         for (const item of catalog.items.filter(item => item.eligible && item.ref)) {
           const line = JSON.stringify({ authority: item.authority, id: item.id, version: item.version, title: item.title, ref: item.ref });
           if (lines.join('\n').length + line.length > 8000) { lines.push('目录摘要未列全，请沿 studio_assets catalog 的实际分页继续按需发现。'); break; }
           lines.push(line);
+        }
+        const packSummaries = studio.memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId);
+        for (const packSummary of packSummaries) {
+          const line = JSON.stringify({ kind: 'enterprise-domain-pack', ...packSummary });
+          if (lines.join('\n').length + line.length <= 8000) lines.push(line);
         }
         lines.push('使用 studio_assets 或 read_semantic_context 读取适用的准确来源；自行判断前提、选择方法、计算并解释。不要将候选、目录或作者声明当专业核验。');
         summary = lines.join('\n');
@@ -301,8 +560,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       return { enterpriseId, summary: '企业资产目录当前不可用，未提供企业标准正文或其他企业目录，也不代表没有相关资产。可继续原授权项目数据的独立分析；受影响的口径和结论须保留待核或明确临时依据。', sourceAllowed: () => false };
     }
   }
-  async function enterpriseMetricIndex(projectId: string): Promise<string | undefined> {
-    const context = await enterpriseContextFor(projectId);
+  async function enterpriseMetricIndex(projectId: string, taskId?: string): Promise<string | undefined> {
+    const context = await enterpriseContextFor(projectId, taskId);
     return context ? context.summary : metricIndexText({ dataRoot, projectId });
   }
   function enterpriseSemanticSourceAllowed(projectId: string, target: SemanticTarget): boolean | Promise<boolean> {
@@ -326,7 +585,34 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const sapMethodRoutes = createSapMethodRoutes({ store: sapMethods, enabled: options.sapMethodsEnabled !== false, readBody: request => body(request, 512 * 1024), mutate, isClosing: () => closing,
     readSource: (methodId, version, index) => sapMethodFeature.readSource(methodId, version, index) });
   const endStreams = (id?: string) => { for (const [key, responses] of streams) { if (id && key !== id) continue; for (const response of responses) response.end(); streams.delete(key); } };
-  const publish = (projectId: string, taskId: string, event: object) => { for (const response of streams.get(keyOf(projectId, taskId)) ?? []) if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ ...event, projectId, taskId })}\n\n`); };
+  function streamTaskEvent(response: ServerResponse, projectId: string, taskId: string, event: object) {
+    if (response.destroyed || response.writableEnded) return;
+    const stream = streamRequests.get(response);
+    const full = stream !== undefined && !stream.statusOnly && currentProjectBorrower(stream.request, projectId);
+    let projected: object;
+    if ('snapshot' in event && event.snapshot) {
+      const snapshot = event.snapshot as ProjectSnapshot;
+      projected = full
+        ? { ...event, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, snapshot) }
+        : {
+          type: 'snapshot', statusOnly: true,
+          snapshot: {
+            sessionId: '', sdkVersion: '', messages: [], tools: [], status: snapshot.status,
+            ...(snapshot.lastRun ? { lastRun: { requestId: snapshot.lastRun.requestId, outcome: snapshot.lastRun.outcome } } : {}),
+          },
+        };
+    } else if (full) {
+      projected = event;
+    } else if ('type' in event && event.type === 'run.settled' && 'requestId' in event && 'outcome' in event) {
+      projected = { type: 'run.settled', statusOnly: true, requestId: event.requestId, outcome: event.outcome };
+    } else {
+      return;
+    }
+    response.write(`data: ${JSON.stringify({ ...projected, projectId, taskId })}\n\n`);
+  }
+  const publish = (projectId: string, taskId: string, event: object) => {
+    for (const response of streams.get(keyOf(projectId, taskId)) ?? []) streamTaskEvent(response, projectId, taskId, event);
+  };
   const availableConfiguration = (id?: string, revision?: number) => {
     const snapshot = configuration.snapshot(id, revision);
     return snapshot && !clearingAll && !clearing.has(snapshot.provider) ? snapshot : undefined;
@@ -364,7 +650,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     catch (error) { if (error instanceof ConfigurationStoreError) return null; throw error; }
   }, fetch: options.webSearchFetch });
   const calculationMaterials = createReportCalculationMaterials({
-    dataRoot, projects, enterpriseMaterials, dbBundles: dbReviewBundles,
+    dataRoot, projects: guardedProjects, enterpriseMaterials, dbBundles: dbReviewBundles,
     assertRapCurrent: async (rap, owner) => {
       if (rap.basisSha256 && createHash('sha256').update(rap.text).digest('hex') !== rap.basisSha256) throw new RequestFault(409, 'requirement_unavailable');
       if (rap.frameworkVersion) await requirementPlugin.review.assertFrameworkHistoryReadable(rap.instanceId, rap.frameworkVersion, owner.projectId);
@@ -372,13 +658,41 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       else requirementPlugin.store.read(rap.instanceId);
     },
   });
+  const projectGrantExpiry = new Map<string, { expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
+  function retireProjectPermission(projectId: string) {
+    // closeAll invalidates all matching leases synchronously before it awaits cleanup.
+    void projectSessions.closeAll({ projectId }).catch(() => { /* Public lifecycle retains unknown cleanup. */ });
+    studio.memberPack.retireRestrictedWorkspaceInputs(projectId);
+    for (const key of streams.keys()) if (key.startsWith(projectId + '/')) endStreams(key);
+    scheduleProjectPermissionExpiry(projectId);
+  }
+  function scheduleProjectPermissionExpiry(projectId: string) {
+    const current = projectGrantExpiry.get(projectId);
+    const expiresAt = studio.memberPack.nextProjectGrantExpiry(projectId);
+    if (current?.expiresAt === expiresAt) return;
+    if (current) clearTimeout(current.timer);
+    projectGrantExpiry.delete(projectId);
+    if (expiresAt === undefined || closing) return;
+    const timer = setTimeout(() => {
+      projectGrantExpiry.delete(projectId);
+      if (Date.now() < expiresAt) scheduleProjectPermissionExpiry(projectId);
+      else retireProjectPermission(projectId);
+    }, Math.min(2_147_483_647, Math.max(1, expiresAt - Date.now())));
+    timer.unref();
+    projectGrantExpiry.set(projectId, { expiresAt, timer });
+  }
+
   const projectSessions: AgentSessionDomain<ProjectOwner> = createAgentSessionDomain<ProjectOwner>({
     name: 'project-tasks',
     profile: {
       key: owner => keyOf(owner.project.id, owner.task.id),
       projectId: owner => owner.project.id,
       configuration: owner => availableConfiguration(owner.task.configuration.id, owner.task.configuration.revision),
+      policyFingerprint: owner => studio.memberPack.projectPermissionFingerprint(owner.project.id),
+      policyCurrent: (owner, captured) => captured === studio.memberPack.projectPermissionFingerprint(owner.project.id),
       executionMode: async owner => {
+        const memberScope = studio.memberPack.getProjectToolScope(owner.project.id);
+        if (memberScope) return memberScope.osSandboxAvailable ? 'ordinary' : 'unmanaged';
         if ((owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'conclusion') return 'unmanaged';
         const id = { projectId: owner.project.id, taskId: owner.task.id };
         return (await automatic.store.readSettings(id)).enabled && (await automatic.capabilities(id)).supported ? 'ordinary' : 'unmanaged';
@@ -388,27 +702,36 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const { task } = await pair(owner.project.id, owner.task.id, true);
         if (clearing.has(task.configuration.provider)) throw new RequestFault(409, 'configuration_required');
         if (await verification.revisionBusy(owner.project.id, owner.task.id)) throw new RequestFault(409, 'session_busy');
+        scheduleProjectPermissionExpiry(owner.project.id);
       },
       agentOptions: async (owner, _configuration, execution) => {
         const { project, task } = await pair(owner.project.id, owner.task.id, true), address = server.address();
         const legacyContract = (owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'legacy';
-        const protectedExecution = legacyContract ? await automatic.ordinaryExecution({ project, task }, execution) : undefined;
-        const semanticPort = createSemanticContextPort({ projectId: project.id, taskId: task.id, projects, data: projectDataContext, reader: semanticContext, mutate, isClosing: () => closing });
+        const isRestrictedMemberPack = Boolean(studio.memberPack.getProjectToolScope(project.id));
+        if (isRestrictedMemberPack && execution) throw new RequestFault(403, 'member_pack_legacy_execution_forbidden');
+        const protectedExecution = legacyContract && !isRestrictedMemberPack ? await automatic.ordinaryExecution({ project, task }, execution) : undefined;
+        const restrictedMemberPackWs = isRestrictedMemberPack ? await studio.memberPack.prepareRestrictedTaskWorkspace(project.id, task.id, project.rootPath) : undefined;
+        const semanticPort = createSemanticContextPort({ projectId: project.id, taskId: task.id, projects: guardedProjects, data: projectDataContext, reader: semanticContext, mutate, isClosing: () => closing });
         const semanticContextRead = semanticGraph && (options.semanticGraph?.bindingFor(project.id, task.id) || options.studioPython && studio.availableForTask(project.id, task.id)) && (!protectedExecution || protectedExecution.profile === 'ordinary')
-          ? createSemanticContextReadPort({ projectId: project.id, taskId: task.id, projects, legacy: semanticPort, graph: semanticGraph, graphOnly: Boolean(protectedExecution), isClosing: () => closing }) : undefined;
+          ? createSemanticContextReadPort({ projectId: project.id, taskId: task.id, projects: guardedProjects, legacy: semanticPort, graph: semanticGraph, graphOnly: Boolean(protectedExecution), isClosing: () => closing }) : undefined;
         const projectFiles = protectedExecution ? undefined : createProjectFilesPort({
           projects, enterpriseMaterials, projectId: project.id, taskId: task.id,
+          ...(isRestrictedMemberPack ? { beforeReportPublication: studio.memberPack.recordBoundReportPublication } : {}),
           listBoundReports: async () => { const original = await pair(project.id, task.id); return listTaskBoundReports(original.project, original.task); },
           readScopedCatalog: async () => {
-            const scope = await enterpriseContextFor(project.id);
+            const scope = await enterpriseContextFor(project.id, task.id);
             return scope ? { enterpriseId: scope.enterpriseId, bytes: Buffer.from(JSON.stringify({ enterpriseId: scope.enterpriseId ?? null, summary: scope.summary, claim: 'directory-visible-not-read', continuation: 'studio_assets catalog' })) } : undefined;
           },
+          assertInputAllowed: (relativePath, purposeId) => studio.memberPack.assertProjectDataPathAllowed(
+            project.id, relativePath, purposeId ? studio.memberPack.resolveTaskDataPurpose(project.id, task.id, purposeId) : undefined),
+          filterInputBytes: (relativePath, bytes, purposeId) => studio.memberPack.filterAuthorizedProjectData(
+            project.id, relativePath, bytes, purposeId ? studio.memberPack.resolveTaskDataPurpose(project.id, task.id, purposeId) : undefined),
           assertOwner: async () => {
             if (closing) throw new RequestFault(503, 'host_closing');
             await pair(project.id, task.id, true);
           },
         });
-        return { dbLink: dbLinks.port(project.id, task.id, _configuration), reportCalculationReview: async (selection, context) => {
+        return { ...(isRestrictedMemberPack ? {} : { dbLink: dbLinks.port(project.id, task.id, _configuration) }), reportCalculationReview: async (selection, context) => {
           let historicalFrameworks: Awaited<ReturnType<typeof readHistoricalReportFrameworks>> = [], frameworkHistoryUnavailable: string | undefined;
           if (!context.providedContext?.rap) {
             try { historicalFrameworks = await readHistoricalReportFrameworks(project, (await pair(project.id, task.id)).task, context.requestId); }
@@ -427,7 +750,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               deliver();
             }),
           };
-        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, methodIssue: async (input, context) => {
+        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, ...(restrictedMemberPackWs ? { memberPackWorkspaceRoot: restrictedMemberPackWs.workspaceRoot, memberPackContextStartAt: restrictedMemberPackWs.contextStartAt, memberPackPermissionCurrent: () => restrictedMemberPackWs.policyFingerprint === studio.memberPack.projectPermissionFingerprint(project.id), ...(restrictedMemberPackWs.osSandboxAvailable ? { memberPackExecutionScope: restrictedMemberPackWs.protectedScope } : {}) } : {}), goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id, task.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(!isRestrictedMemberPack && task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(!isRestrictedMemberPack && task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(!isRestrictedMemberPack && task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(!isRestrictedMemberPack && task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, memberPackGuard: call => studio.memberPack.evaluateNativeToolCall(project.id, project.rootPath, call, restrictedMemberPackWs?.workspaceRoot), methodIssue: async (input, context) => {
           const operationId = stableActionId(['task-method-issue-v1', project.id, task.id, context.requestId, input.methodId, input.version, input.note, input.sources]);
           return methodIssues(input, { ...context, operationId, projectId: project.id, taskId: task.id });
         }, quotedDecisions: async (action, input, context) => {
@@ -615,7 +938,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     if (project.archivedAt !== null) throw new RequestFault(409, 'project_archived');
     if (archiving.has(project.id)) throw new RequestFault(409, 'project_busy');
   }
-  const conclusionMaterials = createConclusionReviewMaterials({ dataRoot, projects, pair, availableConfiguration, cases, enterpriseMaterials, dbBundles: dbReviewBundles,
+  const conclusionMaterials = createConclusionReviewMaterials({ dataRoot, projects: guardedProjects, pair, availableConfiguration, cases, enterpriseMaterials, dbBundles: dbReviewBundles,
     projectContract: async (projectId, taskId, selection) => { const context = await projectPlanFeature.context(projectId, taskId, selection); if (!context) throw new RequestFault(409, 'project_plan_context_changed'); return context.text; },
     assertProjectContractAuthorized: async (projectId, taskId, selection) => { await pair(projectId, taskId); const state = await projectPlans.read(projectId); if (!state.history.some(confirmation => confirmation.id === selection.confirmationId && confirmation.tasks.some(task => task.taskKey === selection.taskKey && task.taskId === taskId))) throw new RequestFault(409, 'project_plan_context_changed'); },
     requirementContext: (input, projectId) => requirementPrefix(input, projectId),
@@ -625,7 +948,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       else requirementPlugin.store.read(selection.instanceId);
     },
   });
-  const verification: ReturnType<typeof createVerificationFeature> = createVerificationFeature({ dataRoot, codeRoot: options.cwd, projects, cases, configuration, projectSessions, pair, requirementContext: (input, projectId) => requirementPrefix(input, projectId),
+  const verification: ReturnType<typeof createVerificationFeature> = createVerificationFeature({ dataRoot, codeRoot: options.cwd, projects: guardedProjects, cases, configuration, projectSessions, pair, requirementContext: (input, projectId) => requirementPrefix(input, projectId),
     conclusionReview: {
       prepare: conclusionMaterials.prepare,
       assertAuthorized: record => conclusionMaterials.assertAuthorized(record, { active: ['preparing', 'ready', 'running'].includes(record.state) }),
@@ -635,6 +958,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     managementPorts: () => { const address = server.address(); return [...options.uiPorts, address && typeof address === 'object' ? address.port : 4175]; },
   });
   const automatic: ReturnType<typeof createAutomaticVerificationFeature> = createAutomaticVerificationFeature({ dataRoot, projects, verification, sessions: projectSessions, pair,
+    ordinaryReadAllowed: projectId => !studio.memberPack.getProjectToolScope(projectId),
     ordinaryReadRoots: () => [enterpriseMaterials.directoryPath, path.join(enterpriseMaterials.root, 'bodies'), path.join(enterpriseMaterials.root, 'files')],
     configuration: availableConfiguration,
     selectedConfiguration: id => { const selected = configuration.read(id); if (!selected) throw new RequestFault(409, 'configuration_required'); const snapshot = availableConfiguration(selected.id, selected.revision); if (!snapshot) throw new RequestFault(409, 'configuration_required'); return snapshot; },
@@ -650,7 +974,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const candidateControls = new AgentCandidateControls({ dataRoot, readTarget: async ref => { const row = await candidateReader.read(ref); if (row.status !== 'available') throw new CandidateReadError('candidate_source_unknown'); } });
   const candidateReader = createAgentCandidateReader({ projects, controls: candidateControls });
   const personalContext = createPersonalContextReader({ projects, retention: personalRetention, controls: candidateControls });
-  const semanticContext = new SemanticContextService({ projects, data: projectDataContext, enterprise: enterpriseMaterials, cases, sourceAllowed: enterpriseSemanticSourceAllowed,
+  const semanticContext = new SemanticContextService({ projects: guardedProjects, data: projectDataContext, enterprise: enterpriseMaterials, cases, sourceAllowed: enterpriseSemanticSourceAllowed,
     metricLibrary: () => createMetricLibrary(path.join(dataRoot, 'metric-assets')), ...(options.sapMethodsEnabled !== false ? { methodLibrary: sapMethods } : {}), readSource: readPersonalSource, personal: personalContext });
   const studioOriginalSources = createStudioOriginalSources({ reader: semanticContext });
   const semanticGraph = options.semanticGraph || options.studioPython ? createSemanticGraphService({ bindingFor: (projectId, taskId) => studioGraph.bindingFor(projectId, taskId) ?? options.semanticGraph?.bindingFor(projectId, taskId),
@@ -706,8 +1030,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     },
   });
   function decorateProject(project: ProjectRecord) {
-    try { if (cases.getStatus().state === 'ready') return { ...project, work: cases.getProjectWork(project.id), workUnavailable: false }; } catch {}
-    return { ...project, work: null, workUnavailable: true };
+    const scoped = Boolean(studio.memberPack.getProjectToolScope(project.id));
+    try { if (cases.getStatus().state === 'ready') return { ...project, memberPackScoped: scoped, work: cases.getProjectWork(project.id), workUnavailable: false }; } catch {}
+    return { ...project, memberPackScoped: scoped, work: null, workUnavailable: true };
   }
   const methodIssues = createMethodIssueAdapter({ methods: sapMethods, mutate,
     admit: async context => { context.signal.throwIfAborted(); context.assertCurrent(); if (closing) throw new RequestFault(409, 'host_closing'); await pair(context.projectId, context.taskId, true); },
@@ -1600,9 +1925,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     await mutate(async () => {
       const { project, task } = await pair(owner.project.id, owner.task.id);
       if (!context.isCurrent() || task.lastRun?.id !== requestId) return;
+      const outcome = result?.outcome ?? result?.snapshot?.lastRun?.outcome;
+      if (outcome === 'completed') {
+        studio.memberPack.syncWorkspaceReportsToProject(project.id, task.id, project.rootPath);
+      } else {
+        studio.memberPack.discardUncommittedWorkspaceReports(project.id, task.id);
+      }
       const file = result?.sessionFile ?? result?.snapshot?.sessionFile;
       if (file) await projects.setSession(project.id, task.id, file);
-      const outcome = result?.outcome ?? result?.snapshot?.lastRun?.outcome;
       const diagnostic = readRunDiagnostic(result?.diagnostic ?? result?.snapshot?.lastRun?.diagnostic);
       await projects.markRun(project.id, task.id, { id: requestId, status: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'interrupted', startedAt, settledAt: new Date().toISOString(), ...(diagnostic ? { diagnostic } : {}) });
     });
@@ -1715,7 +2045,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     });
     return terminal;
   }
-  const projectPlanFeature = createProjectPlanFeature({ codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), plans: projectPlans, projects, cases, goals: strategyGoals, defaultUsageContext:async()=> (await usageSettings.read()).context, methods: sapMethods, databaseSources: (projectId, read) => dbLinks.planningSources(projectId, read), mutate, isClosing: () => closing, startMessage: (projectId, taskId, input) => startProjectMessage(projectId, taskId, input, { userText: false }), registerFresh: async (projectId, taskId) => { const owner = await pair(projectId, taskId); projectSessions.registerFresh(projectSessions.ref(owner)); } });
+  const projectPlanFeature = createProjectPlanFeature({ codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), plans: projectPlans, projects: guardedProjects, cases, goals: strategyGoals, defaultUsageContext:async()=> (await usageSettings.read()).context, methods: sapMethods, databaseSources: async (projectId, read) => studio.memberPack.getProjectToolScope(projectId) ? [] : dbLinks.planningSources(projectId, read), mutate, isClosing: () => closing, startMessage: (projectId, taskId, input) => startProjectMessage(projectId, taskId, input, { userText: false }), registerFresh: async (projectId, taskId) => { const owner = await pair(projectId, taskId); projectSessions.registerFresh(projectSessions.ref(owner)); } });
   const projectPlanPreparation = createProjectPlanPreparationHost({ dataRoot, projects, plans: projectPlans, sessions: requirementSessions, capabilities: projectPlanFeature.capabilities, validate: projectPlanFeature.validate, goalContent: projectPlanFeature.goalContent, prepareContext:projectPlanFeature.prepareContext, goalEvidence:projectPlanFeature.goalEvidence, capabilityIssues: projectPlanFeature.capabilityIssues, mutate, isClosing: () => closing });
   function qualifyIssueReply(issue:TaskCaseIssue,cfg:Readonly<RuntimeModelConfiguration>|undefined,receivingTask?:{projectId:string;taskId:string},receivingProjectId?:string,receivingGoal?:import('./strategy-goals-types.ts').GoalRef) {
     return async (source:import('./case-decision-types.ts').CaseIssueReply,requestId:string) => {
@@ -2019,6 +2349,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const caseId = scope.confirmation?.plan.caseContext?.caseId;
         const issue = destination ? destination.issue : current.task.assignment?.issue ?? (caseId ? { caseId } : undefined);
         await assertTaskResultAccess({ ...source }, cfg, { ...context, ...(!destination ? { receivingTask: { projectId: project.id, taskId: current.task.id } } : {}) }, issue);
+        if (source.kind === 'report') {
+          await studio.memberPack.assertCurrentReportFile(source.projectId, source.relativePath, source.sha256);
+        } else {
+          studio.memberPack.assertCurrentTaskEvidenceAt(source.projectId, source.taskId, projectTaskResultTime(source));
+        }
         context.assertCurrent();
       },
     });
@@ -2177,7 +2512,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           let calculationContract;
           owner.reviewAdmission = reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion';
           try {
-            if (owner.reviewAdmission === 'legacy') {
+            if (owner.reviewAdmission === 'legacy' && !studio.memberPack.getProjectToolScope(projectId)) {
               const legacy = await automatic.store.readSettings({ projectId, taskId });
               automaticObservation = await automatic.admit({ project, task }, requestId, fingerprint ?? createHash('sha256').update(JSON.stringify(['automatic-request-v1', projectId, taskId, requestId, prompt])).digest('hex'));
               calculationContract = reportCalculationContract({ ordinaryPrompt: (input.studioContext as { purpose?: string } | undefined)?.purpose !== 'construction', legacyEnabled: legacy.enabled, legacyAdmitted: Boolean(automaticObservation) });
@@ -2406,10 +2741,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         throw new RequestFault(404, 'not_found');
       }
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
+      const dbLinkProjectMatch = /^\/api\/projects\/([a-f0-9-]+)(?:\/tasks\/[a-f0-9-]+)?\/db-link(?:\/|$)/.exec(url.pathname);
+      if (dbLinkProjectMatch && studio.memberPack.getProjectToolScope(dbLinkProjectMatch[1])) {
+        throw new RequestFault(403, 'member_pack_connector_restricted');
+      }
       const dbLink = await dbLinks.handle(request, url);
       if (dbLink) { json(response, dbLink.status, dbLink.body); return; }
       if (await studio.handle(request, response, url)) return;
-      if (await handleProjectDataContextRoute({ request, response, url, store: projectDataContext, projects, readBody: body, choices: projectDataReferences.choices, sourceStatuses: projectDataReferences.statuses, conceptSource: projectDataReferences.conceptSource, mutate, isClosing: () => closing })) return;
+      const dataContextProject = /^\/api\/projects\/([a-f0-9-]+)\/data-context(?:\/|$)/.exec(url.pathname);
+      if (dataContextProject) assertCurrentProjectBorrower(request, dataContextProject[1]!);
+      if (await handleProjectDataContextRoute({ request, response, url, store: projectDataContext, projects: guardedProjects, readBody: body, choices: projectDataReferences.choices, sourceStatuses: projectDataReferences.statuses, conceptSource: projectDataReferences.conceptSource, mutate, isClosing: () => closing })) return;
       if (url.pathname === '/api/connectors/trade-area' && request.method === 'GET') { json(response, 200, readTradeAreaStatus(dataRoot)); return; }
       if (await handleEnterpriseMaterialsRoute({ request, response, url, store: enterpriseMaterials, cases, mutate })) { await conclusionSourcesChanged(request.method); return; }
       if (await handleAgentCandidateRoute({ request, response, url, reader: candidateReader, controls: candidateControls, readBody: body, isClosing: () => closing , experienceLearningEnabled: options.experienceLearningEnabled !== false })) return;
@@ -2450,6 +2791,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const semanticQuery = /^\/api\/projects\/([a-f0-9-]+)\/tasks\/([a-f0-9-]+)\/semantic-context$/.exec(url.pathname);
       if (semanticQuery && request.method === 'POST') {
         const projectId = semanticQuery[1]!, taskId = semanticQuery[2]!;
+        assertCurrentProjectBorrower(request, projectId);
         await pair(projectId, taskId);
         const input = await body(request);
         json(response, 200, await semanticContext.query(projectId, taskId, input as SemanticQueryInput, { audience: 'human' }));
@@ -2569,6 +2911,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             for (const task of created.tasks) if (!task.sessionFile && !task.lastRun) projectSessions.registerFresh(projectSessions.ref({ project: created, task }));
             return created;
           });
+          setOperatorProjectCookie(response, request, value.id);
           json(response, 201, { project: decorateProject(value) }); return;
         }
       }
@@ -2580,7 +2923,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const result = await projectPlanPreparation.handle(projectId, action, request.method ?? 'GET', input) ?? await projectPlanFeature.handle(projectId, action, request.method ?? 'GET', input);
           if (result) { json(response, 200, result.body); return; }
         }
-        if (!action && request.method === 'GET') { json(response, 200, { project: decorateProject(await projects.get(projectId)) }); return; }
+        if (!action && request.method === 'GET') { const project = await projects.get(projectId); setOperatorProjectCookie(response, request, project.id); json(response, 200, { project: decorateProject(project) }); return; }
         if (!action && request.method === 'PATCH') { const input = await body(request); json(response, 200, { project: decorateProject(await mutate(async () => { assertActive(await projects.get(projectId)); return projects.rename(projectId, String(input.name ?? '')); })) }); return; }
         if (action === 'archive' && request.method === 'POST') {
           await body(request);
@@ -2652,7 +2995,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             return created;
           }); json(response, 201, { task }); return;
         }
-        if (action === 'files' && request.method === 'GET') { json(response, 200, { files: await projects.tree(projectId) }); return; }
+        if (action === 'files' && request.method === 'GET') { assertCurrentProjectBorrower(request, projectId); json(response, 200, { files: studio.memberPack.filterProjectFileTree(projectId, await projects.tree(projectId)) }); return; }
         if (action === 'files/upload' && request.method === 'POST') {
           const input = await body(request, PROJECT_UPLOAD_JSON_MAX_BYTES);
           if (typeof input.content !== 'string' || input.content.length % 4 !== 0) throw new RequestFault(400, 'invalid_file_encoding');
@@ -2661,17 +3004,73 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (input.directory !== undefined && input.directory !== '010_draw' && input.directory !== '020_clean') throw new RequestFault(400, 'invalid_upload_directory');
           json(response, 201, { file: await projects.upload({ projectId, name: String(input.name ?? ''), bytes: Buffer.from(input.content, 'base64'), directory: input.directory as '010_draw' | '020_clean' | undefined }) }); return;
         }
-        if (action === 'files/copy-to-clean' && request.method === 'POST') { const input = await body(request); json(response, 201, { file: await projects.copyToClean(projectId, String(input.path ?? '')) }); return; }
-        if (action === 'files/save-report' && request.method === 'POST') { const input = await body(request, 14 * 1024 * 1024); json(response, 201, { file: await projects.saveReport(projectId, String(input.name ?? ''), String(input.text ?? '')) }); return; }
-        if (action === 'files/content' && request.method === 'GET') { const expected = url.searchParams.get('expectedSha256'); if (expected !== null && !/^[a-f0-9]{64}$/.test(expected)) throw new RequestFault(400, 'invalid_expected_sha256'); const file = await projects.readFile(projectId, url.searchParams.get('path') ?? ''); if (expected !== null && createHash('sha256').update(file.bytes).digest('hex') !== expected) throw new RequestFault(409, 'artifact_version_changed'); response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(file.bytes); return; }
+        if (action === 'files/copy-to-clean' && request.method === 'POST') {
+          if (studio.memberPack.getProjectToolScope(projectId)) throw new RequestFault(403, 'detail_access_not_authorized');
+          const input = await body(request); json(response, 201, { file: await projects.copyToClean(projectId, String(input.path ?? '')) }); return;
+        }
+        if (action === 'files/save-report' && request.method === 'POST') {
+          const input = await body(request, 14 * 1024 * 1024);
+          let targetName = String(input.name ?? '').trim();
+          const reportText = String(input.text ?? '');
+          const candidateSha = createHash('sha256').update(Buffer.from(reportText, 'utf8')).digest('hex');
+          const baseName = path.basename(targetName);
+          if (baseName && studio.memberPack.isReportLockedByUseOrFeedback(projectId, `060_reports/${baseName}`, candidateSha)) {
+            try {
+              const existing = await projects.readFile(projectId, `060_reports/${baseName}`);
+              const existingSha = createHash('sha256').update(existing.bytes).digest('hex');
+              if (existingSha !== candidateSha) {
+                studio.memberPack.preserveImmutableReportSnapshot(projectId, `060_reports/${baseName}`, existing.bytes, existingSha);
+                const ext = path.extname(baseName);
+                const stem = ext ? baseName.slice(0, -ext.length) : baseName;
+                targetName = `${stem}.rev-${candidateSha.slice(0, 8)}${ext}`;
+              }
+            } catch { /* file does not exist yet */ }
+          }
+          json(response, 201, { file: await projects.saveReport(projectId, targetName, reportText) }); return;
+        }
+        if (action === 'files/content' && request.method === 'GET') {
+          const expected = url.searchParams.get('expectedSha256');
+          if (expected !== null && !/^[a-f0-9]{64}$/.test(expected)) throw new RequestFault(400, 'invalid_expected_sha256');
+          const requestedPath = (url.searchParams.get('path') ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
+          const isMemberPackGuardedData = requestedPath.startsWith('010_draw/') || requestedPath.startsWith('020_clean/');
+          if (isMemberPackGuardedData) {
+            assertCurrentProjectBorrower(request, projectId);
+            studio.memberPack.assertProjectDataPathAllowed(projectId, requestedPath);
+          }
+          const file = await projects.readFile(projectId, requestedPath);
+          let outBytes = file.bytes;
+          let viewFiltered = false;
+          if (requestedPath.startsWith('060_reports/')) {
+            assertCurrentProjectBorrower(request, projectId);
+            await studio.memberPack.assertCurrentReportFile(projectId, requestedPath, createHash('sha256').update(file.bytes).digest('hex'));
+          }
+          if (isMemberPackGuardedData) {
+            const view = studio.memberPack.filterAuthorizedProjectData(projectId, requestedPath, file.bytes);
+            outBytes = view.bytes;
+            viewFiltered = Boolean(view.filtered);
+          }
+          if (expected !== null && createHash('sha256').update(outBytes).digest('hex') !== expected) throw new RequestFault(409, 'artifact_version_changed');
+          response.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+            ...(viewFiltered ? { 'X-OptraCall-Authorized-View': 'filtered' } : {}),
+          });
+          response.end(outBytes);
+          return;
+        }
         const taskRoute = /^tasks\/([a-f0-9-]+)(?:\/(.*))?$/.exec(action ?? '');
         if (taskRoute) {
           const taskId = taskRoute[1]!, operation = taskRoute[2], key = keyOf(projectId, taskId);
           if (operation === 'results' && request.method === 'GET') {
+            assertCurrentProjectBorrower(request, projectId);
             const source = await pair(projectId, taskId), action = url.searchParams.has('id') ? 'read' : 'find';
             await assertFrameworkContinuation(projectId, taskId);
             const cursor = url.searchParams.get('cursor'), resultId = url.searchParams.get('id');
-            json(response, 200, await resultReader(source, { handoff: { mode: 'own-results' } })(action, resultId ? { id: resultId, offset: Number(url.searchParams.get('offset') ?? 0) } : cursor ? { cursor } : {}, resultReadContext(request))); return;
+            const results = await resultReader(source, { handoff: { mode: 'own-results' } })(action, resultId ? { id: resultId, offset: Number(url.searchParams.get('offset') ?? 0) } : cursor ? { cursor } : {}, resultReadContext(request));
+            assertCurrentProjectBorrower(request, projectId);
+            json(response, 200, results); return;
           }
           if (operation === 'default-skill' && request.method === 'PUT') {
             const input = await body(request);
@@ -2887,17 +3286,24 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             throw new RequestFault(404, 'not_found');
           }
           if (!operation && request.method === 'GET') {
-            await mutate(async () => { json(response, 200, await taskState(projectId, taskId, false, true)); });
+            assertCurrentProjectBorrower(request, projectId);
+            await mutate(async () => {
+              const state = await taskState(projectId, taskId, false, true);
+              assertCurrentProjectBorrower(request, projectId);
+              json(response, 200, { ...state, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, state.snapshot) });
+            });
             return;
           }
           if (operation === 'open' && request.method === 'POST') {
+            assertCurrentProjectBorrower(request, projectId);
             await body(request);
             const automaticEnabled = reviewTransition.legacyAdmissionAllowed() && (await automatic.store.readSettings({ projectId, taskId })).enabled;
             const state = await taskState(projectId, taskId, !automaticEnabled);
             await mutate(async () => {
               state.snapshot = await presentFrameworkHistory(projectId, taskId, state.snapshot);
+              assertCurrentProjectBorrower(request, projectId);
               publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot });
-              json(response, 200, state);
+              json(response, 200, { ...state, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, state.snapshot) });
             });
             return;
           }
@@ -2911,13 +3317,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (operation === 'events' && request.method === 'GET') {
             await pair(projectId, taskId);
             response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.flushHeaders();
-            const responses = streams.get(key) ?? new Set(); responses.add(response); streams.set(key, responses); response.write(': task connection\n\n');
+            const responses = streams.get(key) ?? new Set(); responses.add(response); streams.set(key, responses); streamRequests.set(response, { request, statusOnly: url.searchParams.get('view') === 'status' }); response.write(': task connection\n\n');
             heartbeat(response, heartbeatIntervalMs);
-            response.once('close', () => { responses.delete(response); if (!responses.size) streams.delete(key); });
+            response.once('close', () => { responses.delete(response); if (!responses.size && streams.get(key) === responses) streams.delete(key); });
             try {
               await mutate(async () => {
                 const state = await taskState(projectId, taskId, false, true);
-                if (!response.destroyed && !response.writableEnded) response.write(`data: ${JSON.stringify({ type: 'snapshot', snapshot: state.snapshot, projectId, taskId })}\n\n`);
+                streamTaskEvent(response, projectId, taskId, { type: 'snapshot', snapshot: state.snapshot });
               });
             }
             catch { if (!response.destroyed && !response.writableEnded) { response.write(`data: ${JSON.stringify({ type: 'stream.error', message: '任务连接未就绪，请检查模型配置或重新连接。', projectId, taskId })}\n\n`); response.end(); } }
@@ -2941,11 +3347,12 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             if (!result?.accepted) throw new RequestFault(409, 'ui_request_unavailable'); json(response, 200, result); return;
           }
           if (operation === 'commands' && request.method === 'POST') {
+            assertCurrentProjectBorrower(request, projectId);
             const input = await body(request);
             if (typeof input.text !== 'string' || !input.text.startsWith('/') || input.text.length > 20000 || (input.requestId !== undefined && (typeof input.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(input.requestId)))) throw new RequestFault(400, 'invalid_command');
             const requestId = typeof input.requestId === 'string' ? input.requestId : randomUUID(), owner: ProjectOwner = await pair(projectId, taskId, true);
             const known = await priorRequest(owner.project, owner.task, requestId);
-            if (known) { json(response, 200, { result: { deduplicated: true }, outcome: known, snapshot: (await taskState(projectId, taskId)).snapshot }); return; }
+            if (known) { json(response, 200, { result: { deduplicated: true }, outcome: known, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, (await taskState(projectId, taskId)).snapshot) }); return; }
             let terminalContext: SessionContext<ProjectOwner> | undefined;
             const result = await projectSessions.withSession(projectSessions.ref(owner), async lease => {
               let startedAt: string | undefined;
@@ -2957,9 +3364,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   await assertFrameworkContinuation(projectId, taskId);
                   startedAt = new Date().toISOString();
                   owner.reviewAdmission = reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion';
-                  if (owner.reviewAdmission === 'legacy') await automatic.admit({ project, task }, requestId, createHash('sha256').update(JSON.stringify(['automatic-command-v1', projectId, taskId, requestId, input.text])).digest('hex'));
+                  if (owner.reviewAdmission === 'legacy' && !studio.memberPack.getProjectToolScope(projectId)) {
+                    await automatic.admit({ project, task }, requestId, createHash('sha256').update(JSON.stringify(['automatic-command-v1', projectId, taskId, requestId, input.text])).digest('hex'));
+                  }
                 });
-                if (previous) return { result: { deduplicated: true }, outcome: previous, snapshot: (await taskState(projectId, taskId)).snapshot };
+                if (previous) return { result: { deduplicated: true }, outcome: previous, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, (await taskState(projectId, taskId)).snapshot) };
                 const run = lease.start({
                   text: input.text as string, requestId, kind: 'command',
                   verifyBeforeDispatch: async () => {
@@ -2984,7 +3393,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               const diagnostic = readRunDiagnostic((result as any).diagnostic ?? (result as any).snapshot?.lastRun?.diagnostic);
               publish(projectId, taskId, { type: 'run.settled', requestId, outcome: ['completed', 'cancelled', 'failed'].includes(outcome) ? outcome : 'failed', ...(diagnostic ? { diagnostic } : {}) });
             }
-            json(response, 200, result); return;
+            json(response, 200, 'snapshot' in result && result.snapshot
+              ? { ...result, snapshot: studio.memberPack.presentTaskHistory(projectId, taskId, result.snapshot as ProjectSnapshot) }
+              : result);
+            return;
           }
         }
       }
@@ -3058,6 +3470,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   })(); });
   return { server, ready, configuration, projects, cases, activateConclusionReviews: () => mutate(() => reviewTransition.activate()), close: async () => {
     closing = true;
+    for (const entry of projectGrantExpiry.values()) clearTimeout(entry.timer);
+    projectGrantExpiry.clear();
     const errors: unknown[] = [];
     const release = async (operation: () => unknown | Promise<unknown>) => { try { await operation(); } catch (error) { errors.push(error); } };
     await release(() => gate);

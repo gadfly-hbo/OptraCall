@@ -218,7 +218,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   }
   const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => {
     const previous = lastRun();
-    return { sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(previous ? { lastRun: previous } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { ...(previous?.reportCalculationReview ? { reportCalculationReview: previous.reportCalculationReview } : {}), ...(analysisPython ? { analysisPython } : {}), nativeTools: !fixedInput(), subagent: session!.getActiveToolNames().includes('subagent'), nativeSearch: publicSearch() || !fixedInput() && !options.workspace && (!protectedTools || ordinaryManaged()) && !options.webSearchEnabled ? nativeSearchMode(options.configuration) ?? false : false, python: fixedInput() ? false : 'bash', powershell: fixedInput() || protectedTools ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools, skills: !fixedInput() && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)), mcp: !fixedInput() && !protectedTools, codemode: !fixedInput(), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged()), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: options.protectedExecution?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } };
+    return { sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(previous ? { lastRun: previous } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { ...(previous?.reportCalculationReview ? { reportCalculationReview: previous.reportCalculationReview } : {}), ...(analysisPython ? { analysisPython } : {}), nativeTools: !fixedInput() && !(Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools), subagent: session!.getActiveToolNames().includes('subagent'), nativeSearch: publicSearch() || !fixedInput() && !options.workspace && (!protectedTools || ordinaryManaged()) && !options.webSearchEnabled ? nativeSearchMode(options.configuration) ?? false : false, python: fixedInput() || (Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools) ? false : 'bash', powershell: fixedInput() || protectedTools || Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, skills: !fixedInput() && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)) && !options.memberPackWorkspaceRoot, mcp: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, codemode: !fixedInput() && !(Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged() || Boolean(options.memberPackExecutionScope)), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: (options.protectedExecution ?? options.memberPackExecutionScope)?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } };
   };
   const environmentExtension: ExtensionFactory = pi => {
     pi.on('before_provider_request', (event, ctx) => {
@@ -227,7 +227,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       const tool = pi.getAllTools().find(tool => tool.name === 'read_semantic_context');
       return tool ? semanticContextAnthropicPayload(event.payload, tool.parameters) : undefined;
     });
-    const eligible = !fixedInput() && !options.protectedExecution;
+    const eligible = !fixedInput() && !options.protectedExecution && !options.memberPackWorkspaceRoot;
     const connectors = [
       { label: '商圈', prefix: 'mcp__trade_area_mcp__', enabled: eligible && Boolean(options.tradeAreaConnector), tools: ['tradearea_search', 'tradearea_detail', 'tradearea_score'] },
       { label: '天气', prefix: 'mcp__weather_mcp__', enabled: eligible && Boolean(options.weatherConnector), tools: ['weather_history'] },
@@ -266,12 +266,46 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     };
     // MCP waits for direct servers before this observation; this is not a model-turn gate.
     pi.on('before_agent_start', () => { for (const connector of connectors) checkDirectory(connector); });
-    pi.on('tool_call', event => {
+    pi.on('tool_call', async event => {
+      if (options.memberPackGuardEnabled && ['read', 'write', 'edit', 'grep', 'find', 'ls', 'bash', 'powershell', 'codemode', 'subagent'].includes(event.toolName) && run && manager) {
+        try {
+          const check = await requestHostTool(
+            {
+              feature: 'member-pack-guard',
+              action: 'check',
+              input: { toolName: event.toolName, input: (event.input && typeof event.input === 'object' ? event.input : {}) as Record<string, unknown> },
+              toolCallId: event.toolCallId,
+              requestId: run.id,
+              sessionId: manager.getSessionId(),
+            },
+            new AbortController().signal,
+            'member_pack_guard_unavailable',
+          ) as { allowed?: boolean; reason?: string };
+          if (check && check.allowed === false) {
+            return { block: true, reason: check.reason || 'member_pack_detail_access_denied' };
+          }
+        } catch {
+          return { block: true, reason: 'member_pack_guard_unavailable' };
+        }
+      }
       const connector = connectors.find(item => event.toolName.startsWith(item.prefix));
       if (!connector) return;
       if (!connector.enabled) return { block: true, reason: `${connector.label}工具未在当前普通任务资源开启。` };
       if (!checkDirectory(connector)) return { block: true, reason: connectorDirectories.get(connector.prefix)?.frozen ? `${connector.label}工具目录已变化，本会话连接器已冻结；请核对版本后关闭并重开会话。` : `${connector.label}工具目录尚未完整就绪，请先核对连接器状态。` };
     });
+    if (options.memberPackContextStartAt !== undefined) {
+      const contextStartAt = options.memberPackContextStartAt;
+      // Keep the native history intact. The current policy only qualifies messages from its own execution context.
+      const qualifiedMessage = (message: object) => 'timestamp' in message && typeof message.timestamp === 'number' && message.timestamp >= contextStartAt;
+      pi.on('context', event => ({ messages: event.messages.filter(qualifiedMessage) }));
+      pi.on('session_before_compact', event => {
+        if ([...event.preparation.messagesToSummarize, ...event.preparation.turnPrefixMessages].some(message => !qualifiedMessage(message))
+          || event.preparation.previousSummary && event.branchEntries.filter(entry => entry.type === 'compaction').some(entry => Date.parse(entry.timestamp) < contextStartAt)) return { cancel: true };
+      });
+      pi.on('session_before_tree', event => {
+        if (event.preparation.userWantsSummary && event.preparation.entriesToSummarize.some(entry => Date.parse(entry.timestamp) < contextStartAt)) return { cancel: true };
+      });
+    }
     // The SDK applies this replacement to agent state before its own JSONL append.
     pi.on('message_end', event => ({ message: redact(event.message) }));
     pi.on('before_agent_start', event => analysisPython ? ({ systemPrompt: event.systemPrompt + '\n' + analysisPythonGuidance(analysisPython, options.protectedExecution ? 'private' : 'existing') }) : undefined);
@@ -320,21 +354,37 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     if (fixedInput() && !strategyDiscussion() && o.sessionFile) throw new Error('fixed_draft_history_not_allowed');
     if (editorText === undefined) editorText = o.draft ?? '';
     analysisPython = o.analysisPython && !fixedInput() ? inspectAnalysisPython(o.analysisPython, o.codeRoot) : undefined;
-    const cwd = o.workspace?.cwd ?? path.join(o.projectDirectory!, '020_clean');
-    if (o.protectedExecution) {
+    const restrictedMemberPack = Boolean(o.memberPackWorkspaceRoot && !o.workspace && !o.protectedExecution);
+    const cwd = o.workspace?.cwd ?? (o.memberPackExecutionScope?.cwd ?? (restrictedMemberPack ? path.join(o.memberPackWorkspaceRoot!, '020_clean') : path.join(o.projectDirectory!, '020_clean')));
+    const activeProtectedScope = o.protectedExecution ?? (
+      restrictedMemberPack && o.memberPackExecutionScope && process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec')
+        ? o.memberPackExecutionScope
+        : undefined
+    );
+    if (activeProtectedScope) {
       if (fixedInput()) throw new Error('protected_execution_profile_conflict');
       if (o.sessionFile && existsSync(o.sessionFile)) {
         const original = readFileSync(o.sessionFile, 'utf8'), header = JSON.parse(original.slice(0, original.indexOf('\n')));
         if (!original.endsWith('\n') || header.type !== 'session' || header.version !== 3) throw new Error('protected_native_version_unsupported');
       }
-      protectedTools = await createProtectedTools({ scope: o.protectedExecution, codeRoot: o.codeRoot, forbiddenRoots: [o.sessionDirectory, o.resourceRoot, ...(o.sessionFile ? [o.sessionFile] : [])], ...(o.analysisPython ? { analysisPython: o.analysisPython } : {}) });
+      protectedTools = await createProtectedTools({
+        scope: activeProtectedScope,
+        codeRoot: o.codeRoot,
+        forbiddenRoots: [
+          ...(restrictedMemberPack && o.projectDirectory ? [o.projectDirectory] : []),
+          o.sessionDirectory,
+          o.resourceRoot,
+          ...(o.sessionFile ? [o.sessionFile] : []),
+        ],
+        ...(o.analysisPython ? { analysisPython: o.analysisPython } : {}),
+      });
       executionId = randomUUID();
     }
     const credentials = { read: async () => undefined, list: async () => [], modify: async () => { throw new Error('Host owns credentials.'); }, delete: async () => {} };
-    // 经营推演工具按任务级开关注入普通项目任务；受管/封闭文本资源不注入——
+    // 经营推演工具按任务级开关注入普通项目任务；受管/封闭文本/受限会员包资源不注入——
     // 其纯计算执行体未经受限执行边界核验，按不可安全委派扩展明确不提供（SIM12）。
-    const simulationTools = !fixedInput() && !o.protectedExecution && o.simulationTools ? createSimulationTools(o.simulationTools) : undefined;
-    const modelPackTools = !fixedInput() && !o.workspace && !o.protectedExecution && o.projectDirectory && o.modelPackTools
+    const simulationTools = !fixedInput() && !o.protectedExecution && !restrictedMemberPack && o.simulationTools ? createSimulationTools(o.simulationTools) : undefined;
+    const modelPackTools = !fixedInput() && !o.workspace && !o.protectedExecution && !restrictedMemberPack && o.projectDirectory && o.modelPackTools
       ? createModelPackTools({ ...o.modelPackTools, projectRoot: o.projectDirectory }) : undefined;
     // Only the Host's ordinary project-task options carry both real owner keys.
     // A business-plugin workspace, managed scope or sealed reader never gains it.
@@ -501,7 +551,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         },
       }));
     };
-    const loadMcpConfig = !fixedInput() && !o.protectedExecution ? await getSdkMcpConfigLoader() : undefined;
+    const loadMcpConfig = !fixedInput() && !o.protectedExecution && !restrictedMemberPack ? await getSdkMcpConfigLoader() : undefined;
     const mcpExtension = loadMcpConfig ? createMcpExtension({ loadConfig: context => {
       const loaded = loadMcpConfig({ agentDir: getAgentDir(), cwd: context.cwd, projectTrusted: context.isProjectTrusted() });
       const reserved = (name: string) => ['trade_area_mcp', 'weather_mcp'].includes(name.replace(/[^A-Za-z0-9_]/g, '_'));
@@ -742,7 +792,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       const contextAdapter = scopeToolContexts ? createToolContextAdapter((ctx, signal) => qualifyToolInvocation(parent, ctx, signal)) : undefined;
       const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
       const customTools = [...createGoalContextTools(sessionManager), ...createStrategyTools(sessionManager), ...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager), ...createBoundDbLinkTools(sessionManager), ...(o.reportCalculationReviewEnabled ? [createReportReviewTool(() => parent)] : [])];
-      const delegation = !fixedInput() && !o.workspace && (!o.protectedExecution || ordinaryManaged());
+      const delegation = !fixedInput() && !o.workspace && !restrictedMemberPack && (!o.protectedExecution || ordinaryManaged());
       const searchGuidance: ExtensionFactory = pi => {
         pi.on('before_agent_start', event => {
           const prompt = event.systemPromptOptions;
@@ -791,7 +841,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         const { type, skill } = o.assignment, purpose = taskPurpose[type];
         return ['当前委托为' + purpose.label + ' Task。按业务需要交付' + purpose.deliverable + '。' + (skill ? '当前用户启用 ' + skill.id + ' ' + skill.version + '，请从 Pi 提供的准确入口读取并按适用契约工作。' : '本任务未启用类型默认 Skill。')];
       };
-      const projectInstructions = () => [...taskInstruction(), projectSystemPrompt(targetCwd, path.join(o.projectDirectory!, '060_reports'), dbLinkAvailable), OUTPUT_EVIDENCE_GUIDANCE, ...(o.analysisDeliveryEnabled ? [ANALYSIS_DELIVERY_GUIDANCE] : [])];
+      const projectInstructions = () => [...taskInstruction(), projectSystemPrompt(targetCwd, restrictedMemberPack ? path.join(o.memberPackWorkspaceRoot!, '060_reports') : path.join(o.projectDirectory!, '060_reports'), dbLinkAvailable), OUTPUT_EVIDENCE_GUIDANCE, ...(o.analysisDeliveryEnabled ? [ANALYSIS_DELIVERY_GUIDANCE] : [])];
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: { ...(contextAdapter ? { extensionsOverride: contextAdapter.extensionsOverride } : {}), ...(fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
@@ -811,8 +861,18 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           unavailableSkills = snapshot.unavailable;
           return { skills: snapshot.skills, diagnostics: [...base.diagnostics, ...snapshot.unavailable.map(name => ({ type: 'warning' as const, message: `Skill unavailable in protected execution: ${name}` }))] };
         },
-        appendSystemPrompt: [...(o.workspace?.systemPrompt ?? []), ...(ordinaryManaged() ? projectInstructions() : []),
-          `The Host has provided a managed tool execution environment (${o.protectedExecution?.profile ?? 'protected'}). The tools run in ${protectedTools.scope.cwd}. Authorized readable material locations: ${JSON.stringify(protectedTools.scope.readRoots)}. Authorized writable locations: ${JSON.stringify([protectedTools.scope.writableRoot, ...(protectedTools.scope.writeRoots ?? [])])}. ${ordinaryManaged() ? 'Background and parallel calculations may continue across tool calls within this operation; the Host retains their resources until stop, close, or the authorized phase handoff.' : 'Existing data and reports are read-only; save new calculations and deliverables in the new workspace.'} Native session and credential files are unavailable to execution tools. Existing/remote MCP and user execution extensions are unavailable here. All child processes must remain inside this operation\'s owned execution groups: detached sessions and posix_spawn are unavailable. The python and python3 entrypoints use the installed same-version direct interpreters (${JSON.stringify(protectedTools.pythonRuntimes)}); use these entrypoints or their recorded direct executable paths instead of absolute framework launcher wrappers. Ordinary fork/exec subprocesses remain available. Choose methods and tools yourself. Codemode store/load is scoped to this execution workspace. Unavailable tools: ${JSON.stringify(protectedTools.unavailableTools)}.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
+        appendSystemPrompt: [...(o.workspace?.systemPrompt ?? []), ...((ordinaryManaged() || restrictedMemberPack) ? projectInstructions() : []),
+          ...(restrictedMemberPack ? ['当前任务运行在受限资源授权隔离工作区中：工作目录仅包含当前获准门店与时段范围内的授权视图；未授权门店、超期数据、数据库直连（dbLink）及未授权连接器/子会话/扩展均已禁止，且不可将不可读门店视为 0。分析产出请保存到 ../060_reports/。'] : []),
+          `The Host has provided a managed tool execution environment (${activeProtectedScope?.profile ?? 'protected'}). The tools run in ${protectedTools.scope.cwd}. Authorized readable material locations: ${JSON.stringify(protectedTools.scope.readRoots)}. Authorized writable locations: ${JSON.stringify([protectedTools.scope.writableRoot, ...(protectedTools.scope.writeRoots ?? [])])}. ${(ordinaryManaged() || restrictedMemberPack) ? 'Background and parallel calculations may continue across tool calls within this operation; the Host retains their resources until stop, close, or the authorized phase handoff.' : 'Existing data and reports are read-only; save new calculations and deliverables in the new workspace.'} Native session and credential files are unavailable to execution tools. Existing/remote MCP and user execution extensions are unavailable here. All child processes must remain inside this operation\'s owned execution groups: detached sessions and posix_spawn are unavailable. The python and python3 entrypoints use the installed same-version direct interpreters (${JSON.stringify(protectedTools.pythonRuntimes)}); use these entrypoints or their recorded direct executable paths instead of absolute framework launcher wrappers. Ordinary fork/exec subprocesses remain available. Choose methods and tools yourself. Codemode store/load is scoped to this execution workspace. Unavailable tools: ${JSON.stringify(protectedTools.unavailableTools)}.`, ...(o.metricIndexText ? [o.metricIndexText] : [])],
+      } : restrictedMemberPack ? {
+        noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
+        disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
+        extensionFactories: [...searchExtensions, ...reportReviewExtensions, environmentExtension],
+        appendSystemPrompt: [
+          ...projectInstructions(),
+          '当前运行环境缺少操作系统受管隔离边界（sandbox-exec 不可用），已按工程规格禁用原生文件系统、Shell/Codemode/子会话与数据库直连（dbLink）及外部连接器；仅开放受 Host 门店/时段授权视图核验的 read_input、write_report 与 studio_assets 工具。未授权门店或超期资料不可读取，也不可将不可读门店视为 0。',
+          ...(o.metricIndexText ? [o.metricIndexText] : []),
+        ],
       } : {
         extensionFactories: [createCodemodeExtension({ mode: 'on' }), createToolSearchExtension(), mcpExtension!, ...searchExtensions, ...reportReviewExtensions, environmentExtension],
         additionalSkillPaths: [analysisAssetsDir],
@@ -827,13 +887,14 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       if (publicSearch()) services.settingsManager.applyOverrides({ retry: { enabled: false } });
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
+      const restrictedHostToolsOnly = restrictedMemberPack && !protectedTools;
       const sourceToolNames = sourceWorkspace || strategyDiscussion() ? customTools.map(tool => tool.name) : [];
-      services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? sourceToolNames : protectedTools ? [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...webTools.map(tool => `+${tool}`), ...(subagent ? ['+subagent'] : [])] });
+      services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? sourceToolNames : protectedTools ? [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] : restrictedHostToolsOnly ? customTools.map(tool => tool.name) : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...webTools.map(tool => `+${tool}`), ...(subagent ? ['+subagent'] : [])] });
       // SDK modifiers append to either a plain workspace allowlist or inherited defaults.
-      if (customTools.length) services.settingsManager.applyOverrides({ defaultTools: customTools.filter(tool => tool.name !== reportCalculationToolName).map(tool => `+${tool.name}`) });
+      if (customTools.length && !restrictedHostToolsOnly) services.settingsManager.applyOverrides({ defaultTools: customTools.filter(tool => tool.name !== reportCalculationToolName).map(tool => `+${tool.name}`) });
       const productTools = [...customTools, ...(subagent ? [subagent] : [])];
       const ownedTools = contextAdapter ? productTools.map(tool => contextAdapter.tool(tool)) : productTools;
-      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(sourceToolNames.length ? { tools: sourceToolNames, customTools: ownedTools } : fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: [...protectedTools.tools, ...ownedTools], tools: [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] } : { customTools: ownedTools }), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
+      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(sourceToolNames.length ? { tools: sourceToolNames, customTools: ownedTools } : fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: [...protectedTools.tools, ...ownedTools], tools: [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] } : restrictedHostToolsOnly ? { customTools: ownedTools, tools: customTools.map(tool => tool.name), noTools: 'all' as const, excludeTools: ['read', 'write', 'edit', 'bash', 'powershell', 'grep', 'find', 'ls', 'codemode', 'subagent'] } : { customTools: ownedTools }), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
       if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
       parent = created.session;
       return { ...created, services, diagnostics: services.diagnostics };
@@ -933,7 +994,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   }
   async function command(text: string, id: string) {
     if (fixedInput()) throw new Error('fixed_draft_commands_not_allowed');
-    if (protectedTools && !ordinaryManaged()) throw new Error('protected_execution_commands_not_allowed');
+    if (protectedTools && !ordinaryManaged() && !options.memberPackExecutionScope) throw new Error('protected_execution_commands_not_allowed');
     const [name, ...tail] = text.trim().split(/\s+/); const argument = tail.join(' ');
     return execute(id, 'command', async () => {
       if (name === '/tools') return session!.getAllTools();

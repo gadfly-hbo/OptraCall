@@ -392,3 +392,132 @@ test('V020 automatic receipt uses the original idle lease and cannot append afte
     assert.equal(appended.length, 1);
   });
 });
+
+test('memberPackExecutionScope drains and retires Turn 1 resource so Turn 2 spawns a fresh executor without protected_executor_draining', async t => {
+  const created: Array<{ drainCalls: number; closeCalls: number; turns: string[]; draining: boolean }> = [];
+  let seq = 0;
+  class ManagedMemberPackTransport extends Transport {
+    draining = false;
+    drainCalls = 0;
+    turns: string[] = [];
+    constructor(options: ProjectAgentOptions) {
+      super(options);
+      created.push(this);
+    }
+    override execute(text: string, id: string, kind: string) {
+      this.turns.push(text);
+      if (this.draining) {
+        const err = Object.assign(new Error('protected_executor_draining'), { code: 'protected_executor_draining' });
+        return { requestId: id, accepted: Promise.reject(err), completion: Promise.reject(err) };
+      }
+      const run = super.execute(text, id, kind);
+      this.settle(`ok:${text}`);
+      return run;
+    }
+    async drain() {
+      this.drainCalls += 1;
+      this.draining = true;
+    }
+  }
+  const cfg = configuration('member-pack');
+  const domain = createAgentSessionDomain<string>({
+    name: 'member-pack-continuation',
+    profile: {
+      key: owner => owner,
+      projectId: owner => owner.split('/')[0]!,
+      configuration: () => cfg,
+      executionMode: () => 'ordinary',
+      agentOptions: owner => ({
+        projectId: owner.split('/')[0]!,
+        taskId: owner.split('/')[1]!,
+        projectDirectory: '/synthetic/project',
+        memberPackWorkspaceRoot: '/synthetic/mp-ws',
+        memberPackExecutionScope: {
+          id: `mp-scope-${++seq}`,
+          profile: 'ordinary',
+          cwd: '/synthetic/mp-ws/020_clean',
+          readRoots: ['/synthetic/mp-ws/020_clean'],
+          writableRoot: '/synthetic/mp-ws/060_reports',
+          writeRoots: ['/synthetic/mp-ws/060_reports'],
+          pythonRuntimes: [],
+        },
+        sessionDirectory: '/synthetic/sessions',
+        codeRoot: '/synthetic',
+        resourceRoot: '/synthetic/pi',
+        managementPorts: [],
+      }),
+    },
+    configurationSnapshot: id => (id === cfg.id ? cfg : undefined),
+    mutate: async operation => operation(),
+    isClosing: () => false,
+    publish: () => {},
+    createAgent: opts => new ManagedMemberPackTransport(opts),
+  });
+  t.after(() => domain.closeAll());
+
+  const ref = domain.ref('p/t');
+  const turn1 = await domain.withSession(ref, lease => lease.run({ text: 'turn-1-write', requestId: 'req-1' }));
+  assert.equal(turn1.outcome, 'completed');
+  assert.equal(created.length, 1);
+  assert.equal(created[0]!.drainCalls, 1);
+  assert.equal(created[0]!.closeCalls, 1);
+
+  const turn2 = await domain.withSession(ref, lease => lease.run({ text: 'turn-2-write', requestId: 'req-2' }));
+  assert.equal(turn2.outcome, 'completed');
+  assert.equal(created.length, 2, 'Turn 2 MUST open a fresh executor after Turn 1 retired its drained memberPackExecutionScope');
+  assert.deepEqual(created[0]!.turns, ['turn-1-write']);
+  assert.deepEqual(created[1]!.turns, ['turn-2-write']);
+  assert.equal(created[1]!.drainCalls, 1);
+  assert.equal(created[1]!.closeCalls, 1);
+});
+
+test('policyFingerprint change retires cached idle session and spawns a fresh session with updated permissions (R2 Round-6)', async t => {
+  const cfg = configuration('pol');
+  let currentPolicy = 'grant-set-v1';
+  let openCount = 0;
+  let closeCount = 0;
+  const domain = createAgentSessionDomain<string>({
+    name: 'policy-regear-test',
+    profile: {
+      key: id => id,
+      projectId: () => 'proj-1',
+      configuration: () => cfg,
+      policyFingerprint: () => currentPolicy,
+      agentOptions: owner => ({
+        projectId: owner.split('/')[0]!,
+        taskId: owner.split('/')[1]!,
+        sessionDirectory: '/synthetic',
+        draft: '',
+        codeRoot: '/synthetic',
+        resourceRoot: '/synthetic/pi',
+        managementPorts: [],
+      }),
+    },
+    configurationSnapshot: id => (id === cfg.id ? cfg : undefined),
+    mutate: async op => op(),
+    isClosing: () => false,
+    publish: () => {},
+    createAgent: opts => {
+      openCount += 1;
+      const agent = new Transport(opts);
+      const origClose = agent.close.bind(agent);
+      agent.close = async () => { closeCount += 1; return origClose(); };
+      return agent;
+    },
+  });
+  t.after(() => domain.closeAll());
+
+  const ref = domain.ref('p/t');
+  await domain.open(ref);
+  assert.equal(openCount, 1);
+  // Same fingerprint reuses open session
+  await domain.open(ref);
+  assert.equal(openCount, 1);
+  assert.equal(closeCount, 0);
+
+  // Grant or pack permission change alters policyFingerprint -> MUST close stale session and open fresh session!
+  currentPolicy = 'grant-set-v2-revoked';
+  await domain.open(ref);
+  assert.equal(openCount, 2, 'Changed policyFingerprint MUST retire stale session and spawn a fresh session');
+  assert.equal(closeCount, 1);
+});

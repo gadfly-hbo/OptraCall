@@ -1,3 +1,4 @@
+import { projectTaskResultTime, stampProjectTaskResultTime } from './project-task-result-sources.ts';
 import { createHash } from 'node:crypto';
 import { PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -97,11 +98,11 @@ export function createProjectTaskResultsReader(options: ProjectTaskResultsOption
         for (const raw of sources.reports) {
           const value = binding(raw, scope.projectId, member.taskId);
           const id = resultId(scope, value); if (ids.has(id) || selectedKeys && !selectedKeys.has(member.taskId + '/' + id)) continue; ids.add(id);
-          results.push({ ...value, ...metadata, id, kind: 'report', bindingState: 'saved-receipt-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', limitations: ['正文尚未提供，读取时核对准确内容与当前权限。', '保存快照不单独证明Task完成、项目综合完成或专业结论成立。'] });
+          results.push(stampProjectTaskResultTime<ProjectTaskResultDescriptor>({ ...value, ...metadata, id, kind: 'report', bindingState: 'saved-receipt-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', limitations: ['正文尚未提供，读取时核对准确内容与当前权限。', '保存快照不单独证明Task完成、项目综合完成或专业结论成立。'] }, projectTaskResultTime(raw)));
         }
         for (const raw of sources.replies) {
           const value = nativeBinding(raw, scope.projectId, member.taskId), id = resultId(scope, value); if (ids.has(id) || selectedKeys && !selectedKeys.has(member.taskId + '/' + id)) continue; ids.add(id);
-          results.push({ ...value, ...metadata, id, kind: 'native-reply', bindingState: 'native-reply-reference-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', source: { type: 'native-reply', projectId: value.projectId, taskId: value.taskId, sessionId: value.sessionId, messageId: value.messageId, expectedTextSha256: value.sha256 } });
+          results.push(stampProjectTaskResultTime<ProjectTaskResultDescriptor>({ ...value, ...metadata, id, kind: 'native-reply', bindingState: 'native-reply-reference-only', requestRelation: confirmedRequestId === value.requestId ? 'confirmed-request' : 'other-saved-request', source: { type: 'native-reply', projectId: value.projectId, taskId: value.taskId, sessionId: value.sessionId, messageId: value.messageId, expectedTextSha256: value.sha256 } }, projectTaskResultTime(raw)));
         }
       } catch (error) {
         check(context);
