@@ -214,6 +214,11 @@ Issue [#120](https://github.com/gadfly-hbo/OptraCall/issues/120) · 规格 [Spec
 - 切片五（候选独立会话，SS04/SS05 基础）：`1dbd2ab`。新域 strategy-candidate；创建须已应用锁定开题（草稿门禁）；工具绑定本版本身份；双候选不同 native、同开题引用、续聊同会话、停止隔离、关闭重开、创建幂等不重派。修复 waitForRequests 绝对计数用法。
 - 切片六（限定修改+锁定，SS06/SS07）：`594a949`。开题字段/命题路径补丁、候选块 ID 补丁；旧值字节哈希、白名单、越界/错版/旧值冲突/重复负例；原件与旧锁定保留；锁定绑定指纹+操作者；编辑锁定版立新候选新会话（修订版不自动唤模型）。修复 CandidateVersion CAS revision 与元数据字段名冲突（元数据改 revisionMeta）。回归 54/54。
 - 顺序决定：开发一/二 Host 层先行（公开 HTTP 即真实用户入口接缝），四页签 UI 与文件树在端点齐备后实施，浏览器 E2E 覆盖真实用户入口（SS01/SS05/SS10/SS13/SS16）。
+- 切片七（串行双检验，SS08/SS09）：`4c60ea3`。新域 strategy-verification；同批同指纹串行、第二道自动启动；fail/insufficient 停链退回；unknown 原批原编号重试；stop 先落 cancelled 修复派发竞态。
+- 切片八（发布治理+承接，SS10/SS11/SS12）：`53ede05`。确认门禁+锁定指纹+同批双凭证；单 active 原子替代；撤销禁同版重发；承接经原 GoalStore 保存候选+发布来源回执；跨范围并存。
+- 切片九（退役+历史，SS13）：`d9ce22c`。地图 publication 与 workbook handoff 写入退役（稳定码，直接请求同拒），读取保留；历史文稿 GSA 交接沿原合同（Spec §5 澄清，选择表 handoff 不退役）；history 聚合端点+旧讨论身份。旧测试改按退役合同断言，覆盖保留。
+- 切片十（权限负例，SS14）：`1f877e4`。三域派发前重验原生历史文件读取的当前权限；跨事项隔离、越界路径、撤回来源零模型调用。
+- 开发二 Host 层完成（SS08–SS14）。下一步：四页签 UI（SS01/SS05/SS10/SS13 界面）+ 浏览器 E2E，然后 SS15/SS16 完整验证。
 
 ## 范围外问题
 
