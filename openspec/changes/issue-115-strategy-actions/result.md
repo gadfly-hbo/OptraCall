@@ -132,3 +132,9 @@ node --test --test-name-pattern='Issue 115 treats an absolute path' tests/strate
 返工独立重验：**PASS**（见 `rework-review.md`，非作者全新上下文，自写反例独立复现）。5 项逐项解除：并行批次恰 6 次派发且串行 maxActive=1、豁免不误停、路径 ID 全通道不回显且结构下标定位、scenario 稳定码非兜底、作用域收回全量工具且变体不静默取消。check:agent-sessions/typecheck/完整 check（3154/3043/0/111，build 标记 49f140a）/浏览器均 PASS；SDK 1.4.0、undici 8.12.2、Interface v3 未改；diff 仅 10 文件，未改 SDK/锁/agent-sessions 生命周期。剩余阻断：无。两条非阻断观察：批次止损后第 8 调用原生无 toolResult 系 SDK abort 原生行为（线上全配对、恢复完成，非缺陷）；strategy-trials.ts 遗留 camelCase 码仅走 HTTP/UI、不进工具链，属范围外既有命名不一致。
 
 返工候选：`49f140a91fca050fa00e6e88db10d4bbe35174a0`（产品代码经独立重验）；本记录与重验证据另以文档提交补记，最终 HEAD 见 Issue 返工回执回读。交回 Codex 集成最新 main（审核时 main 为 0da160bcf3cc28e91811e97911c19ccc2546f3f0，只读预检无文本冲突），共享运行时与战略界面在集成候选上重验。
+
+## Codex 集成复核补充
+
+返工交付候选 `bf740aa9a21194fdeb8212ae1064bf2f97c36734` 已阻止绝对路径回显。非作者在隔离 Host/Pi 链路补测时发现，普通文件名等自由文本仍可通过 `itemId` 进入工具错误回包和原生工具结果。
+
+集成修订保留公开字段、结构下标、条目类型和页码，工具错误详情只使用这些数据定位。原始 ID 不再由地图校验写入错误详情，IPC 收到旧形状也会保留结构定位并省略 ID。回归覆盖绝对路径、文件名、业务文本和不带分隔符的合成标记，验证失败零写入、HTTP 400 回包及修正后保存。返工交付与其独立重验保留原候选身份。

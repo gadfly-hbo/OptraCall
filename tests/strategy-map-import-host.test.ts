@@ -579,13 +579,14 @@ test('Issue 115 import draft page faults keep stable codes and safe details befo
   const sourceId = reg.source.sourceId as string;
   const importSource = { sourceId, format: 'pptx', fileName: '四页战略材料.pptx', sha256: reg.source.sha256, origin: 'upload' };
   const receipts: string[] = [];
+  const rejectedNodeIds = ['synthetic-private-page.pdf', '6e80f204f0094490981e0d1448844e39'];
   provider.setResponder(({ recentToolResults }) => {
     if (recentToolResults.length > receipts.length) receipts.push(providerMessageText(recentToolResults.at(-1)?.content));
     if (recentToolResults.length < 3) {
       const page = [2, 99, 1][recentToolResults.length]!;
       return { calls: [{ name: 'strategy_goals', arguments: { action: 'propose-map-draft', reason: `页码 ${page} 合成校验`, mapDraft: {
         title: `页码 ${page} 草稿`, template: 'bsc', choice: '', assumptions: '', unknowns: '',
-        nodes: [{ id: 'G1', kind: 'goal', title: '复购', sourceLocation: { sourceId, page, label: `第 ${page} 页` } }], edges: [], importSources: [importSource],
+        nodes: [{ id: rejectedNodeIds[recentToolResults.length] ?? 'G1', kind: 'goal', title: '复购', sourceLocation: { sourceId, page, label: `第 ${page} 页` } }], edges: [], importSources: [importSource],
       } } }] };
     }
     return { text: '页码错误已修正并生成待核草稿。' };
@@ -599,10 +600,26 @@ test('Issue 115 import draft page faults keep stable codes and safe details befo
   assert.match(receipts[0]!, /page_outside_selection/);
   assert.match(receipts[1]!, /strategy_map_import_page_invalid/);
   assert.match(receipts[1]!, /page_outside_original/);
+  for (const [index, page] of [2, 99].entries()) {
+    const rejected = receipts[index]!;
+    assert.ok(rejected.includes('nodes[0].sourceLocation.page') && rejected.includes('"itemKind":"node"') && rejected.includes(`"page":${page}`));
+    assert.ok(!rejected.includes(rejectedNodeIds[index]!) && !rejected.includes('itemId'), 'page faults must not return the input node ID');
+  }
   assert.match(receipts[2]!, /editable-map-import-draft/);
   assert.ok(!receipts.some(receipt => receipt.includes('personal_context_read_failed')));
   assert.ok(!receipts.some(receipt => receipt.includes('四页战略材料.pptx') && receipt.includes('page_outside_')), 'page fault details must not echo the file name');
   assert.equal(done.mapImportDrafts.length, 1);
+  const rejectedSave = await api(`${base}/maps`, 'POST', {
+    operationId: randomUUID(), mapId: randomUUID(), expectedVersion: 0, reason: '合成 HTTP 校验',
+    draft: {
+      title: '未通过校验', template: 'bsc', nodes: [{ id: 'G1', kind: 'goal', title: '复购' }],
+      edges: [{ id: rejectedNodeIds[0], from: 'missing', to: 'G1', kind: 'supports' }],
+    },
+  }, 400);
+  assert.deepEqual(Object.keys(rejectedSave).sort(), ['accepted', 'code', 'message']);
+  assert.equal(rejectedSave.code, 'invalid_strategy_map');
+  assert.equal(rejectedSave.accepted, false);
+  assert.ok(!JSON.stringify(rejectedSave).includes(rejectedNodeIds[0]!));
   assert.equal((await api(`${base}/maps`)).versions.length, 0, 'draft generation and failed validation do not write formal map versions');
 });
 

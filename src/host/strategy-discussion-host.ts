@@ -24,7 +24,6 @@ import { discussionGoalScopes, pageDiscussionGoalScopes, selectDiscussionGoalSco
 import { discussionSourceMode, isDiscussionSourceSelected, isDiscussionSourceExcluded } from './strategy-discussion-source-scope.ts';
 import { readNativeSessionSnapshot, NativeSnapshotError } from './native-session-snapshot.ts';
 import { StrategyDiscussionStore, StrategyDiscussionFault, discussionHash, discussionId } from './strategy-discussion-store.ts';
-import { safeStrategyItemId } from './strategy-discussion-fault.ts';
 import type { StrategyDiscussion, StrategyDiscussionCreate, StrategyDiscussionUpdate, StrategyDiscussionDetail, StrategyDiscussionSource, StrategyMapImportDraftReceipt } from './strategy-discussion-types.ts';
 import type { ProjectEvent } from '../agent/project-runtime.ts';
 import type { StrategyDiscussionAction, StrategyDiscussionToolContext } from '../agent/strategy-discussion.ts';
@@ -398,17 +397,16 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   }
   const verifiedMap = await importer!.verifySources(owner, draft.importSources);
   const sourceById = new Map(draft.importSources.map(s => [s.sourceId, s]));
-  const checkPage = (loc: import('./strategy-map-types.ts').StrategyMapSourceLocation | undefined, item: { kind: 'node' | 'edge'; id: string; index: number }) => {
+  const checkPage = (loc: import('./strategy-map-types.ts').StrategyMapSourceLocation | undefined, item: { kind: 'node' | 'edge'; index: number }) => {
     if (!loc || loc.page === undefined) return;
     const base = `${item.kind==='node'?'nodes':'edges'}[${item.index}]`;
-    const safeId = safeStrategyItemId(item.id);
     const stored = verifiedMap.get(loc.sourceId);
     if (!stored || loc.page < 1 || loc.page > stored.pageCount) {
-      fail('strategy_map_import_page_invalid',400,{message:'来源定位页码超出原文件页数范围。',details:{issues:[{reason:'page_outside_original',path:`${base}.sourceLocation.page`,itemKind:item.kind,...(safeId?{itemId:safeId}:{}),page:loc.page}]}});
+      fail('strategy_map_import_page_invalid',400,{message:'来源定位页码超出原文件页数范围。',details:{issues:[{reason:'page_outside_original',path:`${base}.sourceLocation.page`,itemKind:item.kind,page:loc.page}]}});
     }
     const srcPages = sourceById.get(loc.sourceId)?.selectedPages;
     if (srcPages?.length && !srcPages.includes(loc.page)) {
-      fail('invalid_strategy_map',400,{message:'来源定位页码超出所选页范围。',details:{issues:[{reason:'page_outside_selection',path:`${base}.sourceLocation.page`,itemKind:item.kind,...(safeId?{itemId:safeId}:{}),page:loc.page}]}});
+      fail('invalid_strategy_map',400,{message:'来源定位页码超出所选页范围。',details:{issues:[{reason:'page_outside_selection',path:`${base}.sourceLocation.page`,itemKind:item.kind,page:loc.page}]}});
     }
     const prevPages = prevById.get(loc.sourceId)?.selectedPages;
     const effectiveBound = prevPages?.length ? prevPages : opts.turnSelectedPages?.[loc.sourceId];
@@ -416,8 +414,8 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
       fail('strategy_map_import_page_not_authorized', 403);
     }
   };
-  for (const [index, n] of draft.nodes.entries()) checkPage(n.sourceLocation, {kind:'node',id:n.id,index});
-  for (const [index, e] of draft.edges.entries()) checkPage(e.sourceLocation, {kind:'edge',id:e.id,index});
+  for (const [index, n] of draft.nodes.entries()) checkPage(n.sourceLocation, {kind:'node',index});
+  for (const [index, e] of draft.edges.entries()) checkPage(e.sourceLocation, {kind:'edge',index});
   if (opts.requireTurnScope) {
     for (const src of draft.importSources) {
       const prev = prevById.get(src.sourceId);

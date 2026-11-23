@@ -368,9 +368,16 @@ test('Issue 115 shared IPC forwards only explicit safe details and uses a neutra
   for (const mode of ['safe', 'valid', 'unknown'] as const) await t.test(mode, async t => {
     const f = await fixture(t, [{ tool: 'read_personal_context', input: { target } }, {}]);
     const rawMarker = `SYNTHETIC_RAW_${mode}_PATH_AND_STACK`, localDiagnostics: unknown[][] = [];
+    const rawItemIds = ['/synthetic/private-input.pdf', 'synthetic-private-input.pdf', '合成私有门店文本', '6e80f204f0094490981e0d1448844e39'];
     if (mode === 'unknown') t.mock.method(console, 'error', (...args: unknown[]) => { localDiagnostics.push(args); });
     const agent = f.create({ personalContext: async () => {
-      if (mode === 'safe') throw new StrategyDiscussionFault('invalid_strategy_map', 400, { message: '请修正重复节点后重试。', details: { issues: [{ reason: 'duplicate_item_id', path: 'draft.nodes', itemKind: 'node', itemId: 'G1' }] } });
+      if (mode === 'safe') {
+        // Exercise the current IPC boundary against an older producer that still includes input IDs.
+        const issues = rawItemIds.map((itemId, index) => ({
+          reason: 'page_outside_selection', path: `draft.nodes[${index}].sourceLocation.page`, itemKind: 'node' as const, page: index + 2, itemId,
+        }));
+        throw new StrategyDiscussionFault('invalid_strategy_map', 400, { message: '请修正来源定位后重试。', details: { issues } });
+      }
       if (mode === 'valid') throw Object.assign(new Error(rawMarker), { code: 'strategy_source_not_authorized' });
       throw Object.assign(new Error(rawMarker), { code: 'invalid code: sensitive detail' });
     } });
@@ -380,8 +387,15 @@ test('Issue 115 shared IPC forwards only explicit safe details and uses a neutra
     assert.equal(f.requests.length, 2);
     const wire = JSON.stringify(f.requests[1]), native = await readFile((await agent.snapshot()).sessionFile!, 'utf8');
     if (mode === 'safe') {
-      for (const expected of ['invalid_strategy_map', '请修正重复节点后重试。', 'duplicate_item_id', 'draft.nodes', 'G1']) assert.ok(wire.includes(expected), expected);
-      assert.ok(native.includes('duplicate_item_id'));
+      const toolResult = f.requests[1].messages.find((message: { role: string; content: unknown }) => message.role === 'tool');
+      const content = providerMessageText(toolResult?.content);
+      for (const expected of ['invalid_strategy_map', '请修正来源定位后重试。', 'page_outside_selection', 'draft.nodes[3].sourceLocation.page', '"itemKind":"node"', '"page":5']) {
+        assert.ok(content.includes(expected), expected);
+      }
+      assert.ok(native.includes('page_outside_selection'));
+      for (const forbidden of [...rawItemIds, 'itemId']) {
+        assert.ok(!wire.includes(forbidden) && !native.includes(forbidden) && !JSON.stringify(events).includes(forbidden), forbidden);
+      }
     } else {
       assert.ok(wire.includes(mode === 'valid' ? 'strategy_source_not_authorized' : 'host_tool_failed'));
       assert.ok(!wire.includes(rawMarker) && !native.includes(rawMarker));

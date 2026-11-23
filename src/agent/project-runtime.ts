@@ -62,6 +62,7 @@ function safeToolFault(error: unknown) {
   for (const issue of issues) {
     if (!issue || typeof issue !== 'object' || Array.isArray(issue)) return result;
     const value = issue as Record<string, unknown>, output: Record<string, unknown> = {};
+    // Recognize the legacy itemId field without forwarding it, so callers retain structural details.
     if (Object.keys(value).some(key => !['reason','path','itemKind','itemId','page'].includes(key)) || typeof value.reason !== 'string' || !/^[a-z][a-z0-9_]{0,99}$/.test(value.reason)) return result;
     output.reason = value.reason;
     if (value.path !== undefined) {
@@ -69,11 +70,8 @@ function safeToolFault(error: unknown) {
       output.path = value.path;
     }
     if (value.itemKind !== undefined) {
-      if (!['node','edge','source'].includes(String(value.itemKind))) return result;
+      if (value.itemKind !== 'node' && value.itemKind !== 'edge' && value.itemKind !== 'source') return result;
       output.itemKind = value.itemKind;
-    }
-    if (value.itemId !== undefined) {
-      if (typeof value.itemId === 'string' && value.itemId.length <= 300 && !/[\u0000-\u001f\u007f/\\]/.test(value.itemId) && !/^[A-Za-z]:/.test(value.itemId) && !value.itemId.startsWith('~')) output.itemId = value.itemId;
     }
     if (value.page !== undefined) {
       if (!Number.isSafeInteger(value.page) || Number(value.page) < 1) return result;

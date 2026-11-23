@@ -47,12 +47,12 @@ test('Issue 115 map validation uses stable codes and whitelisted details without
   const cases: {name:string; reason:string; update:(value:any)=>void}[] = [
     {name:'schema',reason:'unrecognized_keys',update:value=>{value.draft.syntheticUnknownField='SYNTHETIC_RAW_SCHEMA_VALUE';}},
     {name:'duplicate nodes',reason:'duplicate_item_id',update:value=>{value.draft.nodes=[value.draft.nodes[0],value.draft.nodes[0]];}},
-    {name:'edge endpoint',reason:'invalid_edge_endpoint',update:value=>{value.draft.edges=[{id:'bad-edge',from:'missing',to:'G1',kind:'supports'}];}},
+    {name:'edge endpoint',reason:'invalid_edge_endpoint',update:value=>{value.draft.edges=[{id:'SYNTHETIC_RAW_EDGE_FILENAME.pdf',from:'missing',to:'G1',kind:'supports'}];}},
     {name:'edge review',reason:'review_requires_hypothesis',update:value=>{value.draft.nodes=[...value.draft.nodes,{id:'S1',kind:'strategy',title:'回访'}];value.draft.edges=[{id:'bad-review',from:'S1',to:'G1',kind:'supports',review:{summary:'s',mechanism:'m',condition:'c',alternative:'a',risk:'r',scope:'s',test:'t'}}];}},
     {name:'missing source',reason:'source_not_declared',update:value=>{value.draft.importSources=importSources;value.draft.nodes[0].sourceLocation={sourceId:'missing-source',label:'定位'};}},
-    {name:'file identity',reason:'source_file_mismatch',update:value=>{value.draft.importSources=importSources;value.draft.nodes[0].sourceLocation={sourceId:'src-a',fileName:'SYNTHETIC_RAW_FILE_NAME.pdf',label:'定位'};}},
-    {name:'selected page',reason:'page_outside_selection',update:value=>{value.draft.importSources=importSources;value.draft.nodes[0].sourceLocation={sourceId:'src-a',page:3,label:'定位'};}},
-    {name:'duplicate page',reason:'duplicate_selected_page',update:value=>{value.draft.importSources=[{...importSources[0],selectedPages:[1,1]}];}},
+    {name:'file identity',reason:'source_file_mismatch',update:value=>{value.draft.importSources=importSources;value.draft.nodes[0].id='SYNTHETIC_RAW_合成私有文本';value.draft.nodes[0].sourceLocation={sourceId:'src-a',fileName:'SYNTHETIC_RAW_FILE_NAME.pdf',label:'定位'};}},
+    {name:'selected page',reason:'page_outside_selection',update:value=>{value.draft.importSources=importSources;value.draft.nodes[0].id='/synthetic/SYNTHETIC_RAW_PATH.pdf';value.draft.nodes[0].sourceLocation={sourceId:'src-a',page:3,label:'定位'};}},
+    {name:'duplicate page',reason:'duplicate_selected_page',update:value=>{value.draft.importSources=[{...importSources[0],sourceId:'6e80f204f0094490981e0d1448844e39',selectedPages:[1,1]}];}},
     {name:'empty map',reason:'nodes_or_unknowns_required',update:value=>{value.draft.nodes=[];value.draft.unknowns='';}},
   ];
   for (const item of cases) await t.test(item.name, async () => {
@@ -66,6 +66,8 @@ test('Issue 115 map validation uses stable codes and whitelisted details without
       assert.equal(error.details.issues[0].reason,item.reason,item.name);
       const exposed=error.message+JSON.stringify(error.details);
       assert.ok(!exposed.includes('SYNTHETIC_RAW_'),item.name);
+      assert.ok(!exposed.includes('6e80f204f0094490981e0d1448844e39'),item.name);
+      assert.ok(error.details.issues.every((issue:object)=>!Object.hasOwn(issue,'itemId')),item.name);
       return true;
     });
     assert.equal((await maps.list(id)).length,1,item.name+' must not write a version');
