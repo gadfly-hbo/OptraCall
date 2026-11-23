@@ -64,7 +64,7 @@ export class StrategyInitiativeFiles {
     if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'directory', 'name', 'contentBase64', 'scopeKey'].includes(key))) throw new StrategyDiscussionFault('strategy_file_fields_invalid', 400);
     if (typeof input.operationId !== 'string' || !uuid.test(input.operationId)) throw new StrategyDiscussionFault('strategy_file_operation_invalid', 400);
     if (input.directory !== '010_draw' && input.directory !== '020_clean') throw new StrategyDiscussionFault('strategy_file_directory_invalid', 400);
-    const directory = input.directory;
+    const directory: '010_draw' | '020_clean' = input.directory === '010_draw' ? '010_draw' : '020_clean';
     if (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 200 || /[\/\\\u0000-\u001f]/.test(input.name) || input.name.includes('..')) throw new StrategyDiscussionFault('strategy_file_name_invalid', 400);
     if (typeof input.contentBase64 !== 'string') throw new StrategyDiscussionFault('strategy_file_content_invalid', 400);
     if (input.scopeKey !== undefined && !initiative.scopes.some(s => initiativeScopeKey(s) === input.scopeKey)) throw new StrategyDiscussionFault('strategy_initiative_scope_unknown');
