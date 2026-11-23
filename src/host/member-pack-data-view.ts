@@ -69,9 +69,15 @@ export function isPeriodCovered(period: string | undefined, periodFrom?: string,
   return lowerBound !== undefined && upperBound !== undefined && bounds.start >= lowerBound && bounds.end <= upperBound;
 }
 
-export function isSourcePeriodCovered(sourcePeriodFrom?: string, sourcePeriodTo?: string, grantPeriodFrom?: string, grantPeriodTo?: string): boolean {
+export function isSourcePeriodCovered(sourcePeriodFrom?: string, sourcePeriodTo?: string, grantPeriodFrom?: string, grantPeriodTo?: string, legacyFallbackPeriod?: string, sourcePeriodVerified?: boolean): boolean {
   if (!grantPeriodFrom && !grantPeriodTo) return true;
-  if (!sourcePeriodFrom || !sourcePeriodTo) return false;
+  if (sourcePeriodVerified) {
+    if (!sourcePeriodFrom || !sourcePeriodTo) return false;
+  } else {
+    sourcePeriodFrom = legacyFallbackPeriod;
+    sourcePeriodTo = legacyFallbackPeriod;
+    if (!sourcePeriodFrom || !sourcePeriodTo) return false;
+  }
   const sourceStart = dataPeriodBounds(sourcePeriodFrom)?.start;
   const sourceEnd = dataPeriodBounds(sourcePeriodTo)?.end;
   if (sourceStart === undefined || sourceEnd === undefined) return false;
