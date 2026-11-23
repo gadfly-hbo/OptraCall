@@ -848,7 +848,10 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
         ...(strategyInitiative() ? {
           additionalSkillPaths: [analysisAssetsDir],
-          skillsOverride: (base: { skills: Parameters<typeof snapshotProtectedSkills>[0]; diagnostics: any[] }) => ({ ...base, skills: base.skills.filter(skill => skill.name === 'deep-research' || skill.name === 'grill-me') }),
+          skillsOverride: (base: { skills: Parameters<typeof snapshotProtectedSkills>[0]; diagnostics: any[] }) => ({ ...base, skills: base.skills.filter(skill => {
+            const file = path.resolve(skill.filePath);
+            return file === path.join(analysisAssetsDir, 'deep-research', 'SKILL.md') || file === path.resolve(o.codeRoot, 'extensions/strategy-assets/grill-me/SKILL.md');
+          }) }),
         } : {}),
         extensionFactories: [
           ...(publicSearch() ? [createNativeSearchExtension(o.configuration, code => { nativeSearchFailure = code; }, true, (receipt, details) => run?.publicSearch?.observe(receipt, details))] : []),

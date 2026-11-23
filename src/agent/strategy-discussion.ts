@@ -57,7 +57,7 @@ export const strategyDiscussionTool = {
     '候选会话专用：initiative-save-candidate 保存本候选版本正文，给 operationId、candidateBlocks（稳定唯一 id、label、text 的结构化章节，覆盖定位与增长、目标与里程碑、资源与明确不做、成立条件与假设）及可选 candidateGoals。Host 绑定本版本身份，不接受其他候选或开题引用；锁定由决策者完成。',
     '检验会话专用：initiative-save-verification 提交本道检验结论，给 verdict（pass/fail/insufficient）、evidence（可核对的关键发现与依据）及可选 verificationSources。结论只针对 Host 固定的锁定版指纹；发布由决策者完成。',
     '主会话比较与拟改：initiative-read-candidate 按准确 candidateId/no 读取本事项当前范围候选正文与身份；initiative-propose-revision 仅用于本轮携带的修订拟议任务，按 Host 给定的 proposalId 与固定块提交 newText（仅替换该块，其他内容不动），由决策者核对差异后采纳另存。',
-    '主会话技能：initiative-read-skill 按 skill（deep-research 或 grill-me）读取 Host 固定产品资产原文与指纹；使用技能前先读取并遵循其方法。仅这两个资产可用。',
+    '主会话技能：initiative-read-skill 按 skill（deep-research 或 grill-me）读取 Host 固定产品资产原文与指纹；可附 path 读取该包内 references/agents 获准资料（默认 SKILL.md，禁止越界）。使用技能前先读取并遵循其方法。仅这两个资产可用。',
   ].join(' '),
   parameters: Type.Object({
     action: Type.Union(STRATEGY_DISCUSSION_ACTIONS.map(x => Type.Literal(x))),
@@ -85,6 +85,7 @@ export const strategyDiscussionTool = {
     proposalId: Type.Optional(nonblank(100)),
     newText: Type.Optional(nonblank(20000)),
     skill: Type.Optional(Type.Union([Type.Literal('deep-research'), Type.Literal('grill-me')])),
+    path: Type.Optional(nonblank(300)),
     verdict: Type.Optional(Type.Union([Type.Literal('pass'), Type.Literal('fail'), Type.Literal('insufficient')])),
     evidence: Type.Optional(nonblank(8000)),
     verificationSources: Type.Optional(Type.Array(Type.Object({

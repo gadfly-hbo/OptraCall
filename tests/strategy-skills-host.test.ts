@@ -37,7 +37,7 @@ test('真实 Host+Pi：战略主会话仅加载 deep-research 与 grill-me，其
   await req(`${base}/messages?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {requestId: randomUUID(), text: '请帮我开题。', expectedRevision: 1}, 202);
   let d: any;
   for (let n = 0; n < 500; n++) { d = await req(`${base}/session?scopeKey=${encodeURIComponent(scopeKey)}`); if (d.session.lastRun?.status === 'completed') break; await delay(20); }
-  assert.equal(d.session.lastRun.status, 'completed');
+  t.diagnostic(JSON.stringify(d.session.lastRun)); t.diagnostic(JSON.stringify(provider.errors)); assert.equal(d.session.lastRun.status, 'completed');
   assert.equal(d.snapshot.capabilities.skills, true, 'initiative main session exposes skills');
   assert.match(systemText, /grill-me/, 'grill-me is actually loaded');
   assert.match(systemText, /deep-research/, 'deep-research is actually loaded');
@@ -65,5 +65,49 @@ test('真实 Host+Pi：战略主会话仅加载 deep-research 与 grill-me，其
   let ld: any;
   for (let n = 0; n < 500; n++) { ld = await req(`/api/strategy/discussions/${legacyId}`); if (!ld.busy && ld.discussion.lastRun?.status === 'completed') break; await delay(20); }
   assert.equal(ld.snapshot.capabilities.skills, false, 'legacy discussion keeps the fixed-input boundary');
+  assert.deepEqual(provider.errors, []);
+});
+test('真实 Host+Pi：普通项目任务不加载 grill-me，包内获准资料与越界负例', {timeout: 150_000}, async t => {
+  const provider = await startToolProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  await req('/api/configuration', 'PUT', {name: '技能边界', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-skill-boundary', apiKey: 'synthetic-skill-boundary'});
+  const goal = (await req('/api/strategy/goals', 'POST', {operationId: randomUUID(), title: '边界目标', outcome: '普通分析', perspective: 'personal', scope: {kind: 'personal', id: 'self', name: '个人工作'}, measurement: {kind: 'deliverable', criterion: '普通资料分析'}, baseline: {state: 'pending', description: '待补'}, responsible: '本人'}, 201)).goal;
+  await req(`/api/strategy/goals/${goal.goalId}/adopt`, 'POST', {version: 1, expectedVersion: 1, operationId: randomUUID(), decision: '明确采用'});
+  const {project} = await req('/api/projects', 'POST', {name: '普通项目任务'}, 201);
+  const plan = {request: '沿普通分析继续', premises: [], materials: [], coverage: [], tasks: [{key: 'analysis', name: '普通资料分析', selected: true, scope: '普通资料分析', capabilities: []}], taskMode: 'single', summaryTaskKey: 'analysis', dependencies: [], caseContext: null, goalContext: {goal: {goalId: goal.goalId, version: 1}, purpose: 'assigned-work'}};
+  await req(`/api/projects/${project.id}/plan/draft`, 'POST', {operationId: randomUUID(), expectedRevision: 0, plan});
+  const currentPlan = await req(`/api/projects/${project.id}/plan`);
+  let systemText = '';
+  provider.setResponder((ctx: any) => {
+    if (!systemText) systemText = ctx.messages.filter((m: any) => m.role === 'system' || m.role === 'developer').map((m: any) => providerMessageText(m.content)).join('\n');
+    return {text: '普通分析结果。'};
+  });
+  const confirmed = await req(`/api/projects/${project.id}/plan/confirm`, 'POST', {operationId: randomUUID(), expectedRevision: currentPlan.revision, mode: 'start'});
+  await provider.waitForRequests(1);
+  assert.doesNotMatch(systemText, /grill-me|Interview me relentlessly/, 'ordinary project task never loads the strategy-only skill');
+
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '包内资料事项', scopes: [stores]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}`;
+  await req(`${base}/session`, 'POST', {operationId: randomUUID(), scope: stores}, 201);
+  let standards = '', denied = '';
+  provider.setResponder((ctx: any) => {
+    const step = ctx.recentToolResults.length;
+    if (step === 0) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-read-skill', skill: 'deep-research', path: 'references/source-standards.md'}}]};
+    if (step === 1) { standards = providerMessageText(ctx.recentToolResults[0].content); return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-read-skill', skill: 'deep-research', path: '../secret.md'}}]}; }
+    if (step === 2) { denied = providerMessageText(ctx.recentToolResults.at(-1)?.content); return {text: '已读取来源规范。'}; }
+    return {text: '继续。'};
+  });
+  await req(`${base}/messages?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {requestId: randomUUID(), text: '请读取来源规范。', expectedRevision: 1}, 202);
+  let d: any;
+  for (let n = 0; n < 500; n++) { d = await req(`${base}/session?scopeKey=${encodeURIComponent(scopeKey)}`); if (d.session.lastRun?.status === 'completed') break; await delay(20); }
+  t.diagnostic(JSON.stringify(d.session.lastRun)); t.diagnostic(JSON.stringify(provider.errors)); assert.equal(d.session.lastRun.status, 'completed');
+  assert.match(standards, /来源|引用/, 'package-internal approved references are readable');
+  assert.match(denied, /strategy_skill_unavailable/, 'path traversal outside the package is rejected');
   assert.deepEqual(provider.errors, []);
 });

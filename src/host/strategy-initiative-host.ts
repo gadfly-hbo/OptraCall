@@ -198,11 +198,17 @@ export function createStrategyInitiativeHost(options: {
     }
     if (action === 'initiative-read-skill') {
       if (input.skill !== 'deep-research' && input.skill !== 'grill-me') fail('strategy_skill_unavailable', 400);
-      const file = path.join(options.codeRoot, 'extensions', 'analysis-assets', input.skill, 'SKILL.md');
+      const root = input.skill === 'grill-me'
+        ? path.resolve(options.codeRoot, 'extensions', 'strategy-assets', 'grill-me')
+        : path.resolve(options.codeRoot, 'extensions', 'analysis-assets', 'deep-research');
+      const relative = input.path === undefined ? 'SKILL.md' : input.path;
+      if (typeof relative !== 'string' || !relative.trim() || relative.length > 300 || relative.startsWith('/') || relative.includes('..') || /[\\\x00-\x1f]/.test(relative)) fail('strategy_skill_unavailable', 400);
+      const file = path.resolve(root, relative);
+      if (!file.startsWith(root + path.sep)) fail('strategy_skill_unavailable', 400);
       let content: string;
       try { content = readFileSync(file, 'utf8'); } catch { fail('strategy_skill_unavailable', 400); }
       context.assertCurrent(); context.signal.throwIfAborted();
-      return payload({skill: input.skill, content, sha256: createHash('sha256').update(content).digest('hex'), claim: 'fixed-product-asset'});
+      return payload({skill: input.skill, path: relative, content, sha256: createHash('sha256').update(content).digest('hex'), claim: 'fixed-product-asset'});
     }
     if (action === 'public-search') {
       if (typeof input.query !== 'string' || !input.query.trim() || input.query.length > 2000) fail('invalid_public_search_query', 400);
