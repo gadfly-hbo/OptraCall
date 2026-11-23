@@ -262,6 +262,22 @@ Issue [#120](https://github.com/gadfly-hbo/OptraCall/issues/120) · 规格 [Spec
 - **夹具对齐**（`fe774a9`、`afbcab0`）：两处旧测试 file 来源补 fileId，符合返工4准确身份合同；单独重跑均通过。
 - **完整 `npm run check` 最终复跑**：PASS（check-exit=0）。3238 项测试，3127 通过，**0 失败**，111 原有条件跳过；check:agent-sessions 边界与锁定 SDK 材料 PASS；tsc 0 错误；build 成功（0.1.0-mvp.4）。证据 `.local/issue-120/full-check-final.log`。前一轮 2 项失败均为夹具未对齐返工4合同，修复后复跑确认。
 
+### 2026-11-23 第二轮返工（Codex 复核评论 7096723386）
+
+吸收最新 main（51e9000，含规范 v1.14 取消 Skill 测评门禁）与确认版规格更新 9b29a86（`91426c8`）。逐项修复：
+
+- **A 检验来源与启动恢复**（`4f73a8d`）：pass 须有可核对且属当前版本/权限范围的来源；start/retry/gate1 派发前失败落 failed 可恢复终态；mutation 内复核业务退回。回归：无来源通过拒发布、超长候选启动失败可重试。
+- **B 承接操作归属**（`8264d36`）：per-goal 确定性 operationId 含 publicationId；复用既有目标前重验标题与发布来源。回归：跨发布同操作 ID 不串目标。
+- **C 会话中断恢复**（`eaace90`）：accepted 且无存活资源（Host 崩溃重启）可显式替换；原 ID 只读回不重派；UI 替换按钮覆盖中断态。回归：SIGKILL 崩溃后主会话+候选替换恢复。
+- **D 开题来源范围**（`e77886c`）：scopeKeys 由来源真实范围推导（专属文件限定）；显式超范围拒绝；共用来源保全事项范围。
+- **E 限定修改终态**（`b775076`）：ended/failed 终态 + UI 继续入口；pendingInput 记录 proposalId；拟议端点等待前轮收敛后显式替换。回归：未拟改终态、连续拟改不拒。
+- **SS02 两项 Skill**（`f769609`）：grill-me 产品资产（上游 MIT fb3629d 原文 + LICENSE + PROVENANCE + 战略开题适配节）；deep-research 复用仓库包。新 capabilityPolicy strategy-initiative：固定输入面 + skillsOverride 限定两资产 + initiative-read-skill 窄面读取原文与指纹（无通用文件工具）。真实 Pi 隔离验证实际加载与访谈/研究使用；候选/检验/旧讨论边界不变（54/54 回归）。
+- 公开研究（前轮 `2e52498`）保持：minimax 合成原生搜索实际执行留来源；无能力配置如实 unavailable。
+
+**验证**：浏览器 E2E **30/30 PASS**（含 SS02 技能能力、对话式限定修改、候选会话入口、旧讨论定位、双宽度零溢出、零外呼）。证据 `.local/issue-120/browser-final.log`。完整 `npm run check` 最终复跑进行中。
+
+**仍保留的未验证项**：真实模型专业质量、真实业务数据、设备采用、远端 CI、用户产品验收分别核定；111 项原有条件跳过非本轮新增。
+
 ## 范围外问题
 
 （暂无。）
