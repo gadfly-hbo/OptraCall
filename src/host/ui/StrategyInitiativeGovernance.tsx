@@ -8,7 +8,7 @@ import type { ClientProject, PublicModelConfiguration } from './project-types.ts
 import type { CandidateVersion, KickoffAnchor, KickoffReportVersion, VerificationBatch } from '../strategy-initiative-types.ts';
 import { initiativeScopeKey } from '../strategy-initiative-types.ts';
 import * as api from './strategy-initiative-client.ts';
-import type { InitiativeHistory, InitiativePublication } from './strategy-initiative-client.ts';
+import type { InitiativeHistory, InitiativePublication, KickoffReportReadback } from './strategy-initiative-client.ts';
 import { Badge, CandidateBody, KickoffBody, ReleaseMap, candidateLabel, candidateStatus, formatTime, gateMissions, gateNames, gateStatus, latestBatch, passedBatchFor, publicationFor } from './strategy-initiative-view.tsx';
 
 export type CandidateRef = { candidateId: string; no: number };
@@ -171,21 +171,22 @@ export function StrategyReleaseReview({ initiativeId, scope, scopes, candidates,
   </section>;
 }
 
-export function ReportVersionDialog({ version, anchor, outOfScope, onClose }: { version: KickoffReportVersion; anchor?: KickoffAnchor; outOfScope?: boolean; onClose: () => void }) {
+export function ReportVersionDialog({ version, anchor, outOfScope, onClose }: { version: KickoffReportReadback; anchor?: KickoffAnchor; outOfScope?: boolean; onClose: () => void }) {
   const status = version.lock ? (anchor?.reportNo === version.no ? '已应用为方案输入' : '已锁定') : '草稿';
+  const readable = !outOfScope && api.isReadableKickoffReport(version) ? version : undefined;
   return <CaseDialog title={`开题报告 · v${version.no}`} subtitle={`${status}${version.parent ? ` · 修订自 v${version.parent}` : ''}`} onClose={onClose} className="si-version-dialog">
     <div className="si-dialog-scroll">
       <p className="si-muted">生成 {version.generation.kind} · {formatTime(version.generation.at)}{version.lock ? ` · 锁定 ${version.lock.operator} · ${formatTime(version.lock.at)}` : ''}</p>
       <p className="si-muted">内容指纹 <code>{version.contentSha256}</code></p>
-      {version.revision && <p className="si-muted">限定修订请求：{version.revision.request} · 仅更新 {version.revision.patches.map(patch => patch.blockId).join('、')}</p>}
-      {outOfScope ? <p className="si-notice si-notice-warning" role="status">当前范围不可读此报告正文（适用范围为 {version.scopeKeys.join('、') || '未记录'}）；仅保留版本身份、来源范围与失读原因。</p> : <KickoffBody version={version} />}
+      {readable?.revision && <p className="si-muted">限定修订请求：{readable.revision.request} · 仅更新 {readable.revision.patches.map(patch => patch.blockId).join('、')}</p>}
+      {readable ? <KickoffBody version={readable} /> : <p className="si-notice si-notice-warning" role="status">当前范围不可读此报告正文（适用范围为 {version.scopeKeys.join('、') || '未记录'}）；仅保留版本身份、来源范围与失读原因。</p>}
     </div>
     <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>关闭</button></div>
   </CaseDialog>;
 }
 
 export function VersionReceiptDialog({ candidate, anchorReport, batch, publication, onClose, onViewReport, onOpenSession }: {
-  candidate: CandidateVersion; anchorReport?: KickoffReportVersion; batch?: VerificationBatch; publication?: InitiativePublication; onClose: () => void; onViewReport?: () => void; onOpenSession?: () => void;
+  candidate: CandidateVersion; anchorReport?: Pick<KickoffReportVersion, 'no' | 'contentSha256'>; batch?: VerificationBatch; publication?: InitiativePublication; onClose: () => void; onViewReport?: () => void; onOpenSession?: () => void;
 }) {
   const status = candidateStatus(candidate, { batch, publication });
   return <CaseDialog title={`查看准确版本 · ${candidateLabel(candidate)}`} subtitle={`候选会话 ${candidate.candidateId.slice(0, 8)} · 开题报告 v${candidate.anchor.reportNo}${candidate.parent ? ` · 修订自 v${candidate.parent.no}` : ''}`} onClose={onClose} className="si-version-dialog">
@@ -282,9 +283,9 @@ export function StrategyVersionsPanel({ initiativeId, scopeKey, history, access,
   useEffect(() => {
     if (history) return;
     let alive = true;
-    void api.readInitiativeHistory(initiativeId).then(value => { if (alive) setLocalHistory(value); }).catch(fault => { if (alive) setHistoryError(api.errorText(fault)); });
+    void api.readInitiativeHistory(initiativeId, scopeKey).then(value => { if (alive) setLocalHistory(value); }).catch(fault => { if (alive) setHistoryError(api.errorText(fault)); });
     return () => { alive = false; };
-  }, [initiativeId, history]);
+  }, [initiativeId, scopeKey, history]);
   const data = localHistory;
   const scopeCandidates = data?.candidates.filter(candidate => candidate.scopeKey === scopeKey) ?? [];
   const scopePublications = data?.publications.filter(publication => publication.scopeKey === scopeKey) ?? [];

@@ -2784,11 +2784,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const initiativeHistoryRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/history$/.exec(url.pathname);
       if(initiativeHistoryRoute&&request.method==='GET'){
         const id=initiativeHistoryRoute[1]!;
+        const scopeKey=url.searchParams.get('scopeKey')??undefined;
+        const candidates=strategyCandidates.list(id,scopeKey);
+        const candidateVersions=new Set(candidates.map(candidate=>`${candidate.candidateId}:${candidate.no}`));
         json(response,200,{
-          reports:strategyKickoffReports.view(id),
-          candidates:strategyCandidates.list(id),
-          verifications:strategyVerifications.list(id),
-          publications:strategyInitiativePublications.list(id),
+          reports:strategyKickoffReports.viewForScope(id,scopeKey),
+          candidates,
+          verifications:strategyVerifications.list(id).filter(batch=>scopeKey===undefined||candidateVersions.has(`${batch.candidateId}:${batch.no}`)),
+          publications:strategyInitiativePublications.list(id,scopeKey),
           legacy:{discussions:strategyDiscussions.store.list().map(d=>({id:d.id,title:d.title,updatedAt:d.updatedAt,note:'旧讨论记录沿原入口回读；其地图发布不计为当前有效版。'}))},
         });return;
       }
@@ -2830,16 +2833,34 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const kickoffRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/reports(?:\/([1-9]\d*)\/(lock|apply|revise-proposal|revise))?$/.exec(url.pathname);
       if(kickoffRoute){
         const id=kickoffRoute[1]!,no=Number(kickoffRoute[2]),action=kickoffRoute[3];
-        if(!action&&request.method==='GET'){json(response,200,strategyKickoffReports.view(id));return;}
+        const scopeKey=url.searchParams.get('scopeKey')??undefined;
+        if(!action&&request.method==='GET'){json(response,200,strategyKickoffReports.viewForScope(id,scopeKey));return;}
         if(!action&&request.method==='POST'){const input=await body(request);json(response,201,{version:await mutate(()=>strategyKickoffReports.save(id,input as Parameters<typeof strategyKickoffReports.save>[1]))});return;}
-        if(action==='lock'&&request.method==='POST'){const input=await body(request);json(response,200,{version:await mutate(()=>strategyKickoffReports.lock(id,no,input as Parameters<typeof strategyKickoffReports.lock>[2]))});return;}
+        if(action==='lock'&&request.method==='POST'){
+          const input=await body(request);
+          const version=await mutate(()=>{
+            strategyKickoffReports.versionForScope(id,no,scopeKey);
+            return strategyKickoffReports.lock(id,no,input as Parameters<typeof strategyKickoffReports.lock>[2]);
+          });
+          json(response,200,{version});return;
+        }
         if(action==='apply'&&request.method==='POST'){const input=await body(request);json(response,200,{anchor:await mutate(()=>strategyKickoffReports.apply(id,no,input as Parameters<typeof strategyKickoffReports.apply>[2]))});return;}
-        if(action==='revise'&&request.method==='POST'){const input=await body(request);json(response,201,{version:await mutate(()=>strategyKickoffReports.revise(id,no,input as Parameters<typeof strategyKickoffReports.revise>[2]))});return;}
+        if(action==='revise'&&request.method==='POST'){
+          const input=await body(request);
+          const version=await mutate(()=>{
+            strategyKickoffReports.versionForScope(id,no,scopeKey);
+            return strategyKickoffReports.revise(id,no,input as Parameters<typeof strategyKickoffReports.revise>[2]);
+          });
+          json(response,201,{version});return;
+        }
         if(action==='revise-proposal'&&request.method==='POST'){
-          const input=await body(request);const scopeKey=url.searchParams.get('scopeKey')??'';
+          const input=await body(request);
           const initiative=strategyInitiatives.get(id);const scope=initiative.scopes.find(s=>initiativeScopeKey(s)===scopeKey);
-          if(!scope)throw new StrategyDiscussionFault('strategy_initiative_scope_unknown');
-          const proposal=await mutate(()=>strategyKickoffReports.createProposal(id,no,input as Parameters<typeof strategyKickoffReports.createProposal>[2]));
+          if(!scope||scopeKey===undefined)throw new StrategyDiscussionFault('strategy_initiative_scope_unknown');
+          const proposal=await mutate(()=>{
+            strategyKickoffReports.versionForScope(id,no,scopeKey);
+            return strategyKickoffReports.createProposal(id,no,input as Parameters<typeof strategyKickoffReports.createProposal>[2]);
+          });
           let session;try{session=strategyInitiativeSessions.session(id,scopeKey);}catch{session=await strategyInitiativeSessions.create(id,{operationId:randomUUID(),scope});}
           const replace=await proposalReplacement(id,scopeKey);
           const ack=await strategyInitiativeSessions.send(id,scopeKey,{requestId:randomUUID(),text:`限定修改拟议：${proposal.request}`,expectedRevision:session.revision,proposal:proposal.proposalId,...(replace?{replacePendingRequestId:replace}:{})});
@@ -2848,9 +2869,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       const initiativeProposalRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/proposals$/.exec(url.pathname);
       if(initiativeProposalRoute&&request.method==='GET'){
+        const id=initiativeProposalRoute[1]!;
         const pid=url.searchParams.get('proposalId')??'';
-        const proposal=strategyKickoffReports.proposal(initiativeProposalRoute[1]!,pid)??strategyCandidates.proposal(initiativeProposalRoute[1]!,pid);
+        const proposal=strategyKickoffReports.proposal(id,pid)??strategyCandidates.proposal(id,pid);
         if(!proposal)throw new StrategyDiscussionFault('strategy_proposal_unavailable',404);
+        if(proposal.target.kind==='report')strategyKickoffReports.versionForScope(id,proposal.target.no,url.searchParams.get('scopeKey')??undefined);
         json(response,200,{proposal});return;
       }
       const workbookRoute=/^\/api\/strategy\/workbooks\/(preview|commit|handoff|map-source|goal-source)$/.exec(url.pathname);

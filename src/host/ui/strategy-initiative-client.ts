@@ -1,7 +1,9 @@
 import type { GoalScope } from '../strategy-goals-types.ts';
 import type { ProjectEvent, ProjectSnapshot } from '../../agent/project-runtime.ts';
-import type { CandidateVersion, KickoffAnchor, KickoffReportVersion, VerificationBatch } from '../strategy-initiative-types.ts';
+import type { CandidateVersion, KickoffAnchor, KickoffReportVersion, ReplacedStrategyRequest, StrategySessionPendingRequest, StrategySessionRun, VerificationBatch } from '../strategy-initiative-types.ts';
+import type { KickoffReportReadback, ScopedKickoffReportsView } from '../strategy-initiative-reports.ts';
 export type { CandidateBlock, CandidateVersion, KickoffAnchor, KickoffFields, KickoffProposition, KickoffReportVersion, KickoffSourceRef, VerificationBatch, VerificationGate } from '../strategy-initiative-types.ts';
+export type { KickoffReportReadback } from '../strategy-initiative-reports.ts';
 export { initiativeScopeKey } from '../strategy-initiative-types.ts';
 
 /** UI-side mirrors of the Host record shapes; the Host modules themselves stay server-only. */
@@ -9,8 +11,8 @@ export interface InitiativeRecord { id: string; title: string; revision: number;
 export interface InitiativeFile { fileId: string; operationId: string; name: string; directory: '010_draw' | '020_clean'; scopeKey?: string; size: number; sha256: string; uploadedAt: string }
 export interface InitiativeMainSession {
   initiativeId: string; scopeKey: string; scope: GoalScope; configurationId: string; configurationRevision: number; sessionFile?: string;
-  revision: number; createOperationId: string; pendingInput?: { requestId: string; text: string; expectedRevision: number };
-  lastRun?: { id: string; fingerprint: string; status: string }; createdAt: string; updatedAt: string;
+  revision: number; createOperationId: string; pendingInput?: StrategySessionPendingRequest;
+  lastRun?: StrategySessionRun; replacedRequests?: ReplacedStrategyRequest[]; createdAt: string; updatedAt: string;
 }
 export interface InitiativePublication {
   publicationId: string; initiativeId: string; scopeKey: string; candidateId: string; no: number; contentSha256: string; lockOperationId: string;
@@ -18,7 +20,8 @@ export interface InitiativePublication {
   replacedAt?: string; replacedBy?: string; withdrawnAt?: string; withdrawOperationId?: string;
   handoffs: { operationId: string; scope: GoalScope; goals: { goalId: string; version: number }[]; at: string }[];
 }
-export interface ReportsView { versions: KickoffReportVersion[]; anchors: Record<string, KickoffAnchor> }
+export type ReportsView = ScopedKickoffReportsView;
+export function isReadableKickoffReport(version: KickoffReportReadback): version is KickoffReportVersion { return !('unavailable' in version); }
 export interface InitiativeHistory {
   reports: ReportsView; candidates: CandidateVersion[]; verifications: VerificationBatch[]; publications: InitiativePublication[];
   legacy: { discussions: { id: string; title: string; updatedAt: string; note: string }[] };
@@ -58,7 +61,7 @@ export const readInitiativeFile = (id: string, fileId: string, scopeKey?: string
 
 export const createInitiativeSession = (id: string, input: { operationId: string; scope: GoalScope; configurationId?: string }) => request<{ session: InitiativeMainSession }>(`${path(id)}/session`, 'POST', input);
 export const readInitiativeSession = (id: string, scopeKey: string, signal?: AbortSignal) => request<InitiativeSessionDetail>(`${path(id)}/session${scopeQuery(scopeKey)}`, 'GET', undefined, signal);
-export const sendInitiativeMessage = (id: string, scopeKey: string, input: { requestId: string; text: string; expectedRevision: number; replacePendingRequestId?: string }) => request<{ session: InitiativeMainSession; requestId: string; replayed?: boolean }>(`${path(id)}/messages${scopeQuery(scopeKey)}`, 'POST', input);
+export const sendInitiativeMessage = (id: string, scopeKey: string, input: { requestId: string; text: string; expectedRevision: number; replacePendingRequestId?: string }) => request<{ session: InitiativeMainSession; requestId: string; replayed?: boolean; receipt?: ReplacedStrategyRequest }>(`${path(id)}/messages${scopeQuery(scopeKey)}`, 'POST', input);
 export const stopInitiativeSession = (id: string, scopeKey: string, expectedRequestId?: string) => request<{ stopped: boolean }>(`${path(id)}/stop${scopeQuery(scopeKey)}`, 'POST', { ...(expectedRequestId ? { expectedRequestId } : {}) });
 export const closeInitiativeSession = (id: string, scopeKey: string) => request<{ closed: true }>(`${path(id)}/close${scopeQuery(scopeKey)}`, 'POST', {});
 export async function watchInitiativeEvents(id: string, scopeKey: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal): Promise<void> {
@@ -69,17 +72,17 @@ export async function watchInitiativeEvents(id: string, scopeKey: string, onEven
   finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
-export const readKickoffReports = (id: string) => request<ReportsView>(`${path(id)}/reports`);
-export const lockKickoffReport = (id: string, no: number, input: { operationId: string; sha256: string; operator?: string }) => request<{ version: KickoffReportVersion }>(`${path(id)}/reports/${no}/lock`, 'POST', input);
+export const readKickoffReports = (id: string, scopeKey: string) => request<ReportsView>(`${path(id)}/reports${scopeQuery(scopeKey)}`);
+export const lockKickoffReport = (id: string, no: number, input: { operationId: string; sha256: string; operator?: string }, scopeKey: string) => request<{ version: KickoffReportVersion }>(`${path(id)}/reports/${no}/lock${scopeQuery(scopeKey)}`, 'POST', input);
 export const applyKickoffReport = (id: string, no: number, input: { operationId: string; sha256: string; scope: GoalScope }) => request<{ anchor: KickoffAnchor }>(`${path(id)}/reports/${no}/apply`, 'POST', input);
 export interface RevisePatchInput { blockId: string; expectedOldSha256: string; newText: string }
-export const reviseKickoffReport = (id: string, no: number, input: { operationId: string; baseSha256: string; request: string; patches: RevisePatchInput[]; proposalId?: string }) => request<{ version: KickoffReportVersion }>(`${path(id)}/reports/${no}/revise`, 'POST', input);
+export const reviseKickoffReport = (id: string, no: number, input: { operationId: string; baseSha256: string; request: string; patches: RevisePatchInput[]; proposalId?: string }, scopeKey: string) => request<{ version: KickoffReportVersion }>(`${path(id)}/reports/${no}/revise${scopeQuery(scopeKey)}`, 'POST', input);
 
 export const listCandidates = (id: string, scopeKey?: string) => request<{ candidates: CandidateVersion[] }>(`${path(id)}/candidates${scopeKey !== undefined ? scopeQuery(scopeKey) : ''}`);
 export const createCandidate = (id: string, input: { operationId: string; scope: GoalScope; title: string; instruction: string; configurationId?: string }) => request<{ candidate: CandidateVersion; requestId?: string; replayed?: boolean }>(`${path(id)}/candidates`, 'POST', input);
 const candidatePath = (id: string, cid: string, no: number) => `${path(id)}/candidates/${encodeURIComponent(cid)}/versions/${no}`;
 export const readCandidate = (id: string, cid: string, no: number) => request<CandidateDetail>(candidatePath(id, cid, no));
-export const sendCandidateMessage = (id: string, cid: string, no: number, input: { requestId: string; text: string; expectedRevision: number; replacePendingRequestId?: string }) => request<{ candidate: CandidateVersion; requestId: string; replayed?: boolean }>(`${candidatePath(id, cid, no)}/messages`, 'POST', input);
+export const sendCandidateMessage = (id: string, cid: string, no: number, input: { requestId: string; text: string; expectedRevision: number; replacePendingRequestId?: string }) => request<{ candidate: CandidateVersion; requestId: string; replayed?: boolean; receipt?: ReplacedStrategyRequest }>(`${candidatePath(id, cid, no)}/messages`, 'POST', input);
 export const stopCandidate = (id: string, cid: string, no: number, expectedRequestId?: string) => request<{ stopped: boolean }>(`${candidatePath(id, cid, no)}/stop`, 'POST', { ...(expectedRequestId ? { expectedRequestId } : {}) });
 export const closeCandidate = (id: string, cid: string, no: number) => request<{ closed: true }>(`${candidatePath(id, cid, no)}/close`, 'POST', {});
 export const lockCandidate = (id: string, cid: string, no: number, input: { operationId: string; sha256: string; operator?: string }) => request<{ candidate: CandidateVersion }>(`${candidatePath(id, cid, no)}/lock`, 'POST', input);
@@ -94,7 +97,7 @@ export const publishInitiative = (id: string, input: { operationId: string; cand
 export const withdrawPublication = (id: string, publicationId: string, input: { operationId: string }) => request<{ publication: InitiativePublication }>(`${path(id)}/publications/${encodeURIComponent(publicationId)}/withdraw`, 'POST', input);
 export const handoffPublication = (id: string, publicationId: string, input: { operationId: string; scope: GoalScope; selected: number[] }) => request<{ handoff: InitiativeHandoffReceipt }>(`${path(id)}/publications/${encodeURIComponent(publicationId)}/handoff`, 'POST', input);
 
-export const readInitiativeHistory = (id: string) => request<InitiativeHistory>(`${path(id)}/history`);
+export const readInitiativeHistory = (id: string, scopeKey: string) => request<InitiativeHistory>(`${path(id)}/history${scopeQuery(scopeKey)}`);
 
 /** The Host checks patch old-value hashes over the exact UTF-8 bytes of the original string. */
 export async function sha256Text(text: string): Promise<string> {
@@ -104,4 +107,8 @@ export async function sha256Text(text: string): Promise<string> {
 export interface RevisionProposalView { proposalId: string; target: { kind: 'report'; no: number } | { kind: 'candidate'; candidateId: string; no: number }; blockId: string; request: string; baselineSha256: string; newText?: string; status: 'pending' | 'proposed' | 'adopted' | 'ended' | 'failed'; at: string; updatedAt: string }
 export const proposeReportRevision = (id: string, no: number, scopeKey: string, input: { operationId: string; blockId: string; request: string }) => request<{ proposal: RevisionProposalView; requestId: string }>(`${path(id)}/reports/${no}/revise-proposal${scopeQuery(scopeKey)}`, 'POST', input);
 export const proposeCandidateRevision = (id: string, cid: string, no: number, input: { operationId: string; blockId: string; request: string }) => request<{ proposal: RevisionProposalView; requestId: string }>(`${candidatePath(id, cid, no)}/revise-proposal`, 'POST', input);
-export const readProposal = (id: string, proposalId: string) => request<{ proposal: RevisionProposalView }>(`${path(id)}/proposals?proposalId=${encodeURIComponent(proposalId)}`);
+export const readProposal = (id: string, proposalId: string, scopeKey?: string) => {
+  const query = new URLSearchParams({proposalId});
+  if (scopeKey !== undefined) query.set('scopeKey', scopeKey);
+  return request<{ proposal: RevisionProposalView }>(`${path(id)}/proposals?${query}`);
+};

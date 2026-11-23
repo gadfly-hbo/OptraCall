@@ -53,6 +53,13 @@ function validateSources(input: unknown): KickoffSourceRef[] {
 }
 
 type ReportFile = { formatVersion: 1; versions: KickoffReportVersion[]; applications: KickoffApplication[]; proposals: RevisionProposal[] };
+type UnavailableKickoffReport = Pick<KickoffReportVersion, 'no' | 'contentSha256' | 'scopeKeys' | 'parent' | 'generation' | 'lock'> & { unavailable: 'scope' };
+export type KickoffReportReadback = KickoffReportVersion | UnavailableKickoffReport;
+export interface ScopedKickoffReportsView { versions: KickoffReportReadback[]; anchors: Record<string, KickoffAnchor> }
+
+function canReadReport(version: KickoffReportVersion, scopeKeys: string[]): boolean {
+  return scopeKeys.every(key => (version.scopeKeys ?? []).includes(key));
+}
 
 export class StrategyInitiativeReports {
   private readonly initiatives: StrategyInitiativeStore;
@@ -104,13 +111,37 @@ export class StrategyInitiativeReports {
     for (const application of applications) anchors[application.scopeKey] = {...application};
     return {versions: structuredClone(versions), anchors};
   }
+  private readScopeKeys(id: string, scopeKey?: string): string[] {
+    const keys = this.initiatives.get(id).scopes.map(initiativeScopeKey);
+    if (scopeKey === undefined) return keys;
+    if (!keys.includes(scopeKey)) throw new StrategyDiscussionFault('strategy_initiative_scope_unknown');
+    return [scopeKey];
+  }
+  viewForScope(id: string, scopeKey?: string): ScopedKickoffReportsView {
+    const keys = this.readScopeKeys(id, scopeKey);
+    const {versions, anchors} = this.view(id);
+    return {
+      versions: versions.map(version => {
+        if (canReadReport(version, keys)) return version;
+        const {no, contentSha256, scopeKeys, parent, generation, lock} = version;
+        return {no, contentSha256, scopeKeys: scopeKeys ?? [], parent, generation, lock, unavailable: 'scope'};
+      }),
+      anchors: scopeKey === undefined ? anchors : anchors[scopeKey] ? {[scopeKey]: anchors[scopeKey]!} : {},
+    };
+  }
   version(id: string, no: number): KickoffReportVersion {
     const {versions} = this.read(id);
     const version = versions.find(v => v.no === no);
     if (!version) throw new StrategyDiscussionFault('strategy_kickoff_version_not_found', 404);
     return version;
   }
-  save(id: string, input: { operationId: string; fields: KickoffFields; sources: KickoffSourceRef[]; scopeKeys?: string[]; parent?: number; kind?: 'agent' | 'revision' | 'manual'; requestId?: string }): KickoffReportVersion {
+  versionForScope(id: string, no: number, scopeKey?: string): KickoffReportVersion {
+    const keys = this.readScopeKeys(id, scopeKey);
+    const version = this.version(id, no);
+    if (!canReadReport(version, keys)) throw new StrategyDiscussionFault('strategy_kickoff_scope_unknown');
+    return version;
+  }
+  save(id: string, input: { operationId: string; fields: KickoffFields; sources: KickoffSourceRef[]; scopeKeys?: string[]; parent?: number; kind?: 'agent' | 'revision' | 'manual'; requestId?: string }, authorScopeKey?: string): KickoffReportVersion {
     const initiative = this.initiatives.get(id);
     if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'fields', 'sources', 'scopeKeys', 'parent', 'kind', 'requestId'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
     if (typeof input.operationId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(input.operationId)) throw new StrategyDiscussionFault('strategy_kickoff_operation_invalid', 400);
@@ -127,11 +158,13 @@ export class StrategyInitiativeReports {
     }
     const scopeKeys = input.scopeKeys === undefined ? allowed : input.scopeKeys;
     if (!Array.isArray(scopeKeys) || !scopeKeys.length || scopeKeys.some(k => typeof k !== 'string' || !allowed.includes(k))) throw new StrategyDiscussionFault('strategy_kickoff_scope_unknown', 400);
+    if (authorScopeKey !== undefined && !scopeKeys.includes(authorScopeKey)) throw new StrategyDiscussionFault('strategy_kickoff_scope_unknown');
     const file = this.read(id);
     const existing = file.versions.find(v => v.generation.operationId === input.operationId);
     const contentSha256 = hash({fields, sources});
     if (existing) {
       if (existing.contentSha256 !== contentSha256 || existing.parent !== input.parent) throw new StrategyDiscussionFault('strategy_kickoff_operation_conflict');
+      if (authorScopeKey !== undefined && !(existing.scopeKeys ?? []).includes(authorScopeKey)) throw new StrategyDiscussionFault('strategy_kickoff_scope_unknown');
       return structuredClone(existing);
     }
     if (input.parent !== undefined && (!Number.isSafeInteger(input.parent) || input.parent < 1 || input.parent > file.versions.length)) throw new StrategyDiscussionFault('strategy_kickoff_parent_invalid', 400);

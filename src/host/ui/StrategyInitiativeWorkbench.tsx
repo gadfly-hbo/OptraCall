@@ -166,36 +166,58 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
   const [draft, setDraft] = useState(() => readDraft(id, scopeKey));
   const [streaming, setStreaming] = useState(''), [activity, setActivity] = useState('');
   const [pending, setPending] = useState<{ requestId: string; text: string } | null>(null);
+  const pendingRef = useRef<typeof pending>(null), terminalRequestId = useRef<string | null>(null);
   const [busy, setBusy] = useState(false), [connection, setConnection] = useState(0);
   const [dialog, setDialog] = useState<'new-candidate' | 'lock-report' | 'lock-candidate' | 'revise-report' | 'revise-candidate' | 'candidate-session' | null>(null);
   const [preview, setPreview] = useState<{ title: string; content: string } | null>(null);
   const [fileBusy, setFileBusy] = useState(false), [fileError, setFileError] = useState('');
   const [legacyId, setLegacyId] = useState('');
   const alive = useRef(true), presentedSnapshot = useRef<InitiativeSessionDetail['snapshot']>(null);
+  const rememberPending = (value: typeof pending) => {
+    pendingRef.current = value;
+    setPending(value);
+    try { if (value) sessionStorage.setItem(journalKey(id, scopeKey), JSON.stringify(value)); else sessionStorage.removeItem(journalKey(id, scopeKey)); } catch { /* keep in memory */ }
+  };
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
-    try { const raw = sessionStorage.getItem(journalKey(id, scopeKey)); if (raw) { const value = JSON.parse(raw) as { requestId: string; text: string }; if (value?.requestId) { setPending(value); if (!readDraft(id, scopeKey)) setDraft(value.text); } } } catch { /* journal unreadable: keep inputs in memory */ }
+    try { const raw = sessionStorage.getItem(journalKey(id, scopeKey)); if (raw) { const value = JSON.parse(raw) as { requestId: string; text: string }; if (value?.requestId) { rememberPending(value); if (!readDraft(id, scopeKey)) setDraft(value.text); } } } catch { /* journal unreadable: keep inputs in memory */ }
   }, [id, scopeKey]);
   useEffect(() => { if (legacyFocus) setLegacyId(legacyFocus.source.id); }, [legacyFocus?.id]);
 
-  const applySession = (next: InitiativeSessionDetail | null) => {
+  const applySession = (next: InitiativeSessionDetail | null, updateReports = true) => {
     const previous = presentedSnapshot.current; presentedSnapshot.current = next?.snapshot ?? null;
     setStreaming(old => next ? projectDiscussionStreaming(old, { type: 'snapshot', snapshot: next.snapshot ?? { sessionId: '', messages: [], tools: [], status: 'idle', sdkVersion: '', capabilities: {} } }, previous ?? undefined) : '');
     if (!next?.busy) setActivity('');
+    const hostPending = next?.session.pendingInput;
+    const currentPending = pendingRef.current;
+    const lastRun = next?.session.lastRun;
+    const replaced = next?.session.replacedRequests?.find(request => request.requestId === currentPending?.requestId);
+    if (replaced) {
+      terminalRequestId.current = replaced.requestId;
+      rememberPending(hostPending ? { requestId: hostPending.requestId, text: hostPending.text } : null);
+      const outcome = replaced.status === 'failed' ? '失败' : replaced.status === 'cancelled' ? '取消' : '结果未知';
+      setNotice(`原请求${outcome}，已由显式操作替换，原回执保留。`);
+    } else if (hostPending && !currentPending && hostPending.requestId !== terminalRequestId.current) {
+      rememberPending({ requestId: hostPending.requestId, text: hostPending.text });
+    } else if (!hostPending && lastRun && lastRun.status !== 'accepted') {
+      terminalRequestId.current = lastRun.id;
+      if (currentPending?.requestId === lastRun.id) rememberPending(null);
+    }
+    if (next && updateReports) setReports(next.reports);
     setSession(next);
   };
   const refresh = async () => {
     const [reportResult, sessionResult, fileResult, candidateResult, publicationResult, historyResult] = await Promise.allSettled([
-      api.readKickoffReports(id),
+      api.readKickoffReports(id, scopeKey),
       api.readInitiativeSession(id, scopeKey).catch(fault => { if (fault instanceof api.StrategyInitiativeRequestError && fault.status === 404) return null; throw fault; }),
       api.listInitiativeFiles(id, scopeKey),
       api.listCandidates(id, scopeKey),
       api.listPublications(id, scopeKey),
-      api.readInitiativeHistory(id),
+      api.readInitiativeHistory(id, scopeKey),
     ]);
     if (!alive.current) return;
     if (reportResult.status === 'fulfilled') setReports(reportResult.value);
-    if (sessionResult.status === 'fulfilled') applySession(sessionResult.value);
+    if (sessionResult.status === 'fulfilled') applySession(sessionResult.value, reportResult.status !== 'fulfilled');
     if (fileResult.status === 'fulfilled') setFiles(fileResult.value.files);
     if (candidateResult.status === 'fulfilled') setCandidates(candidateResult.value.candidates);
     if (publicationResult.status === 'fulfilled') setPublications(publicationResult.value.publications);
@@ -205,11 +227,24 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
     setLoading(false);
   };
   useEffect(() => { if (active) void refresh(); }, [active, id, scopeKey]);
+  useEffect(() => {
+    if (!active || !pending) return;
+    const controller = new AbortController();
+    let reading = false;
+    const timer = setInterval(() => {
+      if (reading || pendingRef.current?.requestId !== pending.requestId) return;
+      reading = true;
+      void api.readInitiativeSession(id, scopeKey, controller.signal).then(next => {
+        if (!controller.signal.aborted && pendingRef.current?.requestId === pending.requestId) applySession(next);
+      }).catch(() => { /* the existing recovery action can recheck an unavailable connection */ }).finally(() => { reading = false; });
+    }, 2000);
+    return () => { clearInterval(timer); controller.abort(); };
+  }, [active, id, scopeKey, pending?.requestId]);
   const running = candidates.some(candidate => candidate.lastRun?.status === 'accepted') || Boolean(history?.verifications.some(batch => batch.state === 'running'));
   useEffect(() => {
     if (!active || !running) return;
     const timer = setInterval(() => {
-      void Promise.allSettled([api.listCandidates(id, scopeKey), api.readInitiativeHistory(id), api.listPublications(id, scopeKey)]).then(([candidateResult, historyResult, publicationResult]) => {
+      void Promise.allSettled([api.listCandidates(id, scopeKey), api.readInitiativeHistory(id, scopeKey), api.listPublications(id, scopeKey)]).then(([candidateResult, historyResult, publicationResult]) => {
         if (!alive.current) return;
         if (candidateResult.status === 'fulfilled') setCandidates(candidateResult.value.candidates);
         if (historyResult.status === 'fulfilled') setHistory(historyResult.value);
@@ -228,12 +263,16 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       setStreaming(old => projectDiscussionStreaming(old, event.type === 'snapshot' ? { ...event, snapshot: event.snapshot ?? { sessionId: '', messages: [], tools: [], status: 'idle', sdkVersion: '', capabilities: {} } } as any : event, previous ?? undefined));
       if (event.type === 'native' && event.event.type === 'tool_execution_start') setActivity(`正在使用 ${event.event.toolName || '已获准工具'}`);
       if (event.type === 'native' && event.event.type === 'tool_execution_end') setActivity('');
-      if (event.type === 'run.settled') { setStreaming(''); setActivity(''); if (event.outcome === 'failed') setError(event.error || '本轮讨论未完成，已保存的记录保留。'); rememberPending(null); void refresh(); }
+      if (event.type === 'run.settled') {
+        setStreaming(''); setActivity('');
+        if (event.outcome === 'failed') setError(event.error || '本轮讨论未完成，已保存的记录保留。');
+        void refresh();
+      }
     }, controller.signal).catch(() => { if (!controller.signal.aborted && alive.current) setNotice('实时连接暂不可用，可刷新讨论记录；未重发消息。'); });
     return () => controller.abort();
   }, [active, stage, session?.session.scopeKey, connection]);
 
-  const scopedVersions = reports.versions.filter(version => (version.scopeKeys ?? []).includes(scopeKey));
+  const scopedVersions = reports.versions.filter(api.isReadableKickoffReport);
   const anchor = reports.anchors[scopeKey];
   const report = scopedVersions.find(version => version.no === reportNo) ?? scopedVersions.at(-1);
   const current = candidates.find(candidate => sameRef(candidate, selectedCandidate)) ?? candidates.at(-1);
@@ -241,30 +280,39 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
   const locked = busy || Boolean(pending) || sessionBusy;
   const modelLabel = configurations.find(item => session ? item.id === session.session.configurationId && item.revision === session.session.configurationRevision : item.id === selectedConfigurationId)?.model ?? '模型待核对';
 
-  const rememberPending = (value: { requestId: string; text: string } | null) => {
-    setPending(value);
-    try { if (value) sessionStorage.setItem(journalKey(id, scopeKey), JSON.stringify(value)); else sessionStorage.removeItem(journalKey(id, scopeKey)); } catch { /* keep in memory */ }
-  };
   const sendMain = async (text: string, replacePendingRequestId?: string) => {
-    if (busy || sessionBusy || (!replacePendingRequestId && locked) || !text.trim()) return;
+    const priorPending = pendingRef.current;
+    if (busy || sessionBusy || priorPending?.requestId !== replacePendingRequestId || !text.trim()) return;
     setBusy(true); setError(''); setNotice('');
+    let requestId: string | undefined;
+    let accepted = false;
     try {
       let detail = session;
       if (!detail) {
         await api.createInitiativeSession(id, { operationId: crypto.randomUUID(), scope, ...(selectedConfigurationId ? { configurationId: selectedConfigurationId } : {}) });
         detail = await api.readInitiativeSession(id, scopeKey);
+        applySession(detail);
       }
-      const input = { requestId: crypto.randomUUID(), text: text.trim(), expectedRevision: detail.session.revision, ...(replacePendingRequestId ? { replacePendingRequestId } : {}) };
+      requestId = crypto.randomUUID();
+      const input = { requestId, text: text.trim(), expectedRevision: detail.session.revision, ...(replacePendingRequestId ? { replacePendingRequestId } : {}) };
       rememberPending(input);
       await api.sendInitiativeMessage(id, scopeKey, input);
+      accepted = true;
       setDraft(''); saveDraft(id, scopeKey, ''); setStreaming('');
-      const after = await api.readInitiativeSession(id, scopeKey);
-      applySession(after);
-      if (after.session.lastRun?.status !== 'accepted') rememberPending(null);
       setConnection(value => value + 1);
+      applySession(await api.readInitiativeSession(id, scopeKey));
     } catch (fault) {
-      if (fault instanceof api.StrategyInitiativeRequestError && !fault.uncertain) rememberPending(null);
-      setError(errorText(fault));
+      if (accepted) setNotice('本轮已受理，正在核对运行状态。');
+      else {
+        if (requestId && fault instanceof api.StrategyInitiativeRequestError && !fault.uncertain) {
+          const checked = await api.readInitiativeSession(id, scopeKey).catch(() => null);
+          if (checked) {
+            if (checked.session.lastRun?.id !== requestId && checked.session.pendingInput?.requestId !== requestId) rememberPending(priorPending);
+            applySession(checked);
+          }
+        }
+        setError(errorText(fault));
+      }
     } finally { if (alive.current) setBusy(false); }
   };
   const recover = async () => {
@@ -272,8 +320,10 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
     setBusy(true); setError('');
     try {
       const detail = await api.readInitiativeSession(id, scopeKey).catch(fault => { if (fault instanceof api.StrategyInitiativeRequestError && fault.status === 404) return null; throw fault; });
-      if (detail && (detail.session.lastRun?.id === pending.requestId || detail.session.pendingInput?.requestId === pending.requestId)) {
-        rememberPending(null); applySession(detail); setConnection(value => value + 1); setNotice('已核对原请求，历史与当前状态已重读。');
+      const replaced = detail?.session.replacedRequests?.some(request => request.requestId === pending.requestId);
+      if (detail && (replaced || detail.session.lastRun?.id === pending.requestId || detail.session.pendingInput?.requestId === pending.requestId)) {
+        applySession(detail); setConnection(value => value + 1);
+        if (!replaced) setNotice('已核对原请求，历史与当前状态已重读。');
       } else setError('尚未核对到原请求已受理；输入与原编号保留，未自动重发。');
     } catch (fault) { setError(errorText(fault)); } finally { if (alive.current) setBusy(false); }
   };
@@ -386,24 +436,24 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
     </div>
     <div className="si-side">
       <CaseFormError error={fileError} />
-      <InitiativeFilePanel files={files} reports={reports.versions} candidates={candidates} batches={history?.verifications ?? []} scopeKey={scopeKey} busy={fileBusy}
+      <InitiativeFilePanel files={files} reports={scopedVersions} candidates={candidates} batches={history?.verifications ?? []} scopeKey={scopeKey} busy={fileBusy}
         onUpload={(directory, file, scopeExclusive) => { void upload(directory, file, scopeExclusive); }}
         onOpenFile={file => { void openFile(file); }}
         onOpenReport={(entry: ReportFileEntry) => setPreview({ title: entry.name, content: entry.content })} />
     </div>
     {dialog === 'new-candidate' && <NewCandidateDialog initiativeId={id} scope={scope} anchorNo={anchor?.reportNo} onClose={() => setDialog(null)} onCreated={async candidate => { setDialog(null); await refresh(); setSelectedCandidate({ candidateId: candidate.candidateId, no: candidate.no }); setNotice('候选独立会话已启动；完成后回到主窗口核对。'); }} />}
     {dialog === 'lock-report' && report && <LockConfirmDialog title="锁定开题报告" subtitle={`确认开题报告 v${report.no} 的战略命题、资料依据和待核项。锁定后可将此准确版本用作方案输入。`} body={<KickoffBody version={report} />} busy={busy}
-      onConfirm={operationId => api.lockKickoffReport(id, report.no, { operationId, sha256: report.contentSha256 })}
+      onConfirm={operationId => api.lockKickoffReport(id, report.no, { operationId, sha256: report.contentSha256 }, scopeKey)}
       onDone={async () => { setDialog(null); await refresh(); setNotice(`已锁定开题报告 v${report.no}。`); }} onClose={() => setDialog(null)} />}
     {dialog === 'lock-candidate' && current && <LockConfirmDialog title="锁定战略候选" subtitle={`确认 ${candidateLabel(current)} 的完整方案及开题报告 v${current.anchor.reportNo}。锁定后可以开始战略检验。`} body={<CandidateBody candidate={current} />} busy={busy}
       onConfirm={operationId => api.lockCandidate(id, current.candidateId, current.no, { operationId, sha256: current.contentSha256 })}
       onDone={async () => { setDialog(null); await refresh(); setNotice('已锁定，可以开始因果检验。'); onStage('strategy-check'); }} onClose={() => setDialog(null)} />}
     {dialog === 'revise-report' && report && <ReviseDialog title="限定修改开题报告" baseLabel={`开题报告 · v${report.no}`} baseSha256={report.contentSha256} targets={kickoffPatchTargets(report.fields)} maxText={8000}
-      propose={input => api.proposeReportRevision(id, report.no, scopeKey, input)} readProposal={pid => api.readProposal(id, pid)}
-      onSubmit={input => api.reviseKickoffReport(id, report.no, input)}
+      propose={input => api.proposeReportRevision(id, report.no, scopeKey, input)} readProposal={pid => api.readProposal(id, pid, scopeKey)}
+      onSubmit={input => api.reviseKickoffReport(id, report.no, input, scopeKey)}
       onDone={async result => { setDialog(null); await refresh(); setReportNo(result.version.no); setPhase('kickoff'); setNotice(`已另存开题草稿 v${result.version.no}；修订版仍须重新锁定并明确应用。`); }} onClose={() => setDialog(null)} />}
     {dialog === 'revise-candidate' && current && <ReviseDialog title="限定修改战略候选" baseLabel={candidateLabel(current)} baseSha256={current.contentSha256} targets={current.blocks.map(block => ({ blockId: block.id, label: block.label, text: block.text }))} maxText={20000}
-      propose={input => api.proposeCandidateRevision(id, current.candidateId, current.no, input)} readProposal={pid => api.readProposal(id, pid)}
+      propose={input => api.proposeCandidateRevision(id, current.candidateId, current.no, input)} readProposal={pid => api.readProposal(id, pid, scopeKey)}
       onSubmit={input => api.reviseCandidate(id, current.candidateId, current.no, input)}
       onDone={async result => { setDialog(null); await refresh(); setSelectedCandidate({ candidateId: result.candidate.candidateId, no: result.candidate.no }); setNotice(`已另存新候选 v${result.candidate.no}；每版使用新的独立会话，重新进入候选态。`); }} onClose={() => setDialog(null)} />}
     {dialog === 'candidate-session' && current && <CandidateSessionDialog initiativeId={id} candidateRef={{ candidateId: current.candidateId, no: current.no }} onClose={() => setDialog(null)} onChanged={refresh} modelLabel={modelLabel} />}

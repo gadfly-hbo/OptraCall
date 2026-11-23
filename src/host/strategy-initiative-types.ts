@@ -52,6 +52,21 @@ export interface KickoffApplication {
 }
 export interface KickoffAnchor { scopeKey: string; scope: GoalScope; reportNo: number; contentSha256: string; at: string; operationId: string }
 
+export interface StrategySessionPendingRequest { requestId: string; text: string; expectedRevision: number; proposalId?: string }
+export interface StrategySessionRun { id: string; fingerprint: string; status: string }
+export interface ReplacedStrategyRequest extends StrategySessionPendingRequest {
+  fingerprint: string;
+  status: 'failed' | 'cancelled' | 'unknown';
+  replacedBy: string;
+  replacedAt: string;
+}
+
+export function recordReplacedStrategyRequest(previous: ReplacedStrategyRequest[] | undefined, pending: StrategySessionPendingRequest, run: StrategySessionRun, replacedBy: string, replacedAt: string): ReplacedStrategyRequest[] {
+  const status = run.status === 'failed' || run.status === 'cancelled' ? run.status : 'unknown';
+  const receipt: ReplacedStrategyRequest = {...pending, fingerprint: run.fingerprint, status, replacedBy, replacedAt};
+  return [...(previous ?? []), receipt];
+}
+
 export interface CandidateBlock { id: string; label: string; text: string }
 export interface RevisionProposal {
   proposalId: string;
@@ -83,8 +98,9 @@ export interface CandidateVersion {
   revision: number;
   createOperationId: string;
   instruction: string;
-  pendingInput?: { requestId: string; text: string; expectedRevision: number };
-  lastRun?: { id: string; fingerprint: string; status: string };
+  pendingInput?: StrategySessionPendingRequest;
+  lastRun?: StrategySessionRun;
+  replacedRequests?: ReplacedStrategyRequest[];
   lock?: { operationId: string; operator: string; at: string; fingerprint: string };
   revisionMeta?: { operationId: string; request: string; base: { candidateId: string; no: number }; patches: { blockId: string; oldSha256: string; newSha256: string }[]; at: string };
   lastSave?: { operationId: string; contentSha256: string; at: string; requestId?: string };

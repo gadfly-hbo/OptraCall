@@ -33,9 +33,9 @@ test('unassigned assets offer accurate read-only inspection before a separate en
 
 test('professional read-only inspection exposes no creation, review publication or modeling controls', async () => {
   const Materials = await materials, Metrics = await metrics, Methods = await methods;
-  const materialHtml = renderToStaticMarkup(createElement(Materials, { embedded: true, readOnly: true, allowedIds: ['native-one'], initialMaterialId: 'native-one', initialRevisionId: 'original-uuid', onBack() {}, onMetrics() {}, onRequirements() {} }));
-  const metricHtml = renderToStaticMarkup(createElement(Metrics, { embedded: true, readOnly: true, allowedIds: ['native-two'], projects: [], onBack() {}, onOpenTask() {}, onProjectsChanged() {} }));
-  const methodHtml = renderToStaticMarkup(createElement(Methods, { embedded: true, readOnly: true, allowedIds: ['native-three'] }));
+  const materialHtml = renderToStaticMarkup(createElement(Materials, { readOnly: true, allowedIds: ['native-one'], initialMaterialId: 'native-one', initialRevisionId: 'original-uuid' }));
+  const metricHtml = renderToStaticMarkup(createElement(Metrics, { embedded: true, readOnly: true, allowedIds: ['native-two'], projects: [], onOpenTask() {}, onProjectsChanged() {} }));
+  const methodHtml = renderToStaticMarkup(createElement(Methods, { readOnly: true, allowedIds: ['native-three'] }));
   assert.doesNotMatch(materialHtml, /新建资料|保存工作稿|启用此修订|停用资料/);
   assert.doesNotMatch(metricHtml, /审核发布|导入草稿|发起建模任务|项目启用/);
   assert.doesNotMatch(methodHtml, /新建方法|保存并发布|发布此版本|派生新方法/);
@@ -107,7 +107,7 @@ test('Studio presents enterprise foundation, task evolution and publication as o
 
 test('enterprise materials can be managed inside Studio without another page heading or plugin return route', async () => {
   const Page = await materials;
-  const html = renderToStaticMarkup(createElement(Page, { embedded: true, enterpriseId: 'ea', allowedIds: [], onBack() {}, onMetrics() {}, onRequirements() {} }));
+  const html = renderToStaticMarkup(createElement(Page, { enterpriseId: 'ea', allowedIds: [] }));
   assert.match(html, /<h2[^>]*>企业业务资料<\/h2>/);
   assert.doesNotMatch(html, /<h1|返回分析资产|公共资料集中维护/);
   assert.match(html, /新建资料/);
@@ -115,7 +115,7 @@ test('enterprise materials can be managed inside Studio without another page hea
 
 test('SAP indicators remain a professional editor inside Studio without mandatory per-project enablement', async () => {
   const Page = await metrics;
-  const html = renderToStaticMarkup(createElement(Page, { embedded: true, enterpriseId: 'ea', allowedIds: [], projects: [], onBack() {}, onOpenTask() {}, onProjectsChanged() {} }));
+  const html = renderToStaticMarkup(createElement(Page, { embedded: true, enterpriseId: 'ea', allowedIds: [], projects: [], onOpenTask() {}, onProjectsChanged() {} }));
   assert.match(html, /<h2[^>]*>分析指标<\/h2>/);
   assert.doesNotMatch(html, /<h1|返回分析资产|项目启用|全局库 ·/);
   assert.match(html, /审核发布/);
@@ -123,7 +123,7 @@ test('SAP indicators remain a professional editor inside Studio without mandator
 
 test('SAP methods preserve their save-before-publish behavior under the Studio heading', async () => {
   const Page = await methods;
-  const html = renderToStaticMarkup(createElement(Page, { embedded: true, enterpriseId: 'ea', allowedIds: [] }));
+  const html = renderToStaticMarkup(createElement(Page, { enterpriseId: 'ea', allowedIds: [] }));
   assert.match(html, /<h2[^>]*>分析方法<\/h2>/);
   assert.doesNotMatch(html, /<h1/);
   assert.match(html, /新建方法/);

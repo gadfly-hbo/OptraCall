@@ -8,7 +8,7 @@ import type { CaseStore } from './case-store.ts';
 import type { StudioStore } from '../../extensions/business-plugins/studio/store.ts';
 import { studioExecutionOwner, type StudioSourceRef, type StudioUseAssessment, type StudioUseRecord } from '../../extensions/business-plugins/studio/contracts.ts';
 import type { ProjectSnapshot } from '../agent/project-runtime.ts';
-import { StudioError, object, text, uuid, sourceRef, sources as parseSources, digest } from '../../extensions/business-plugins/studio/validation.ts';
+import { StudioError, object, text, uuid, sourceRef, digest } from '../../extensions/business-plugins/studio/validation.ts';
 import {
   evaluateResourceAccess,
   isGrantActive,

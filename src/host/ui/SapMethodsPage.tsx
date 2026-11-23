@@ -27,7 +27,7 @@ function MethodDialog({ title, children, onClose }: { title: string; children: R
   return <dialog ref={dialog} className="sap-method-dialog" aria-labelledby="sap-method-dialog-title" onCancel={event => { event.preventDefault(); onClose(); }}><div className="sap-method-dialog-header"><h2 id="sap-method-dialog-title">{title}</h2><button type="button" className="text-button" onClick={onClose} aria-label={`关闭${title}`}>关闭</button></div>{children}</dialog>;
 }
 
-export function SapMethodsPage({ active = true, initialTarget, onTargetConsumed, onNavigationGuard, embedded = false, readOnly = false, allowedIds, onSaved }: { active?: boolean; initialTarget?: SapMethodRef; onTargetConsumed?: () => void; onNavigationGuard?: (guard: SapMethodsLeaveGuard | null) => void; embedded?: boolean; readOnly?: boolean; enterpriseId?: string; allowedIds?: string[]; onSaved?: (id: string) => void | Promise<void> }) {
+export function SapMethodsPage({ active = true, initialTarget, onTargetConsumed, onNavigationGuard, readOnly = false, allowedIds, onSaved }: { active?: boolean; initialTarget?: SapMethodRef; onTargetConsumed?: () => void; onNavigationGuard?: (guard: SapMethodsLeaveGuard | null) => void; readOnly?: boolean; enterpriseId?: string; allowedIds?: string[]; onSaved?: (id: string) => void | Promise<void> }) {
   const [methods, setMethods] = useState<SapMethodSummary[]>([]), [detail, setDetail] = useState<SapMethodDetail>();
   const [query, setQuery] = useState(''), [origin, setOrigin] = useState<'' | 'ir' | 'other'>(''), [status, setStatus] = useState<'' | 'draft' | 'published'>('');
   const [loading, setLoading] = useState(false), [working, setWorking] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -55,8 +55,8 @@ export function SapMethodsPage({ active = true, initialTarget, onTargetConsumed,
   const finishLeave = (allowed: boolean) => { const resolve = leaveResolver.current; leaveResolver.current = null; setLeaveOpen(false); if (allowed) { setEditor(undefined); setFieldError(undefined); } resolve?.(allowed); };
   const reloadList = useCallback(async (signal?: AbortSignal) => {
     const values = await listSapMethods({ ...(origin ? { origin } : {}), ...(status ? { status } : {}), ...(query.trim() ? { query: query.trim() } : {}) }, signal);
-    if (mounted.current && !signal?.aborted) setMethods(embedded ? values.filter(value => allowedIds?.includes(value.id)) : values);
-  }, [origin, status, query, embedded, allowedIds]);
+    if (mounted.current && !signal?.aborted) setMethods(values.filter(value => allowedIds?.includes(value.id)));
+  }, [origin, status, query, allowedIds]);
   useEffect(() => {
     if (!active || detail || editor) return;
     const controller = new AbortController(); setLoading(true); setError('');
@@ -64,7 +64,7 @@ export function SapMethodsPage({ active = true, initialTarget, onTargetConsumed,
     return () => controller.abort();
   }, [active, detail, editor, reloadList]);
   const openMethod = async (id: string, version?: number) => {
-    if (embedded && !allowedIds?.includes(id)) { setError('此方法尚未核定归属当前企业，未读取其他企业或待核内容。'); return; }
+    if (!allowedIds?.includes(id)) { setError('此方法尚未核定归属当前企业，未读取其他企业或待核内容。'); return; }
     if (!await allowLeave()) return;
     const epoch = ++selectionEpoch.current; setLoading(true); setError(''); setNotice('');
     try { const value = await readSapMethod(id, version); if (mounted.current && epoch === selectionEpoch.current) { setDetail(value); setEditor(undefined); setFieldError(undefined); requestAnimationFrame(() => heading.current?.focus()); } }
@@ -154,11 +154,10 @@ export function SapMethodsPage({ active = true, initialTarget, onTargetConsumed,
     } catch (error) { if (mounted.current) setIssueForm({ ...issueForm, error: errorText(error) }); }
     finally { if (mounted.current) setWorking(false); }
   };
-  const Header = embedded ? 'h2' : 'h1';
   const selectedPublished = Boolean(detail && selected && published(detail, selected));
   const selectedIssue = detail && selected ? issueFor(detail, selected.version) : undefined;
-  return <section className={`sap-method-page${embedded ? ' is-embedded' : ''}`} aria-label="SAP 分析方法" aria-busy={loading || working}>
-    <header className="sap-method-heading"><div><Header ref={heading} tabIndex={-1}>{editor ? editor.derived ? '派生分析方法' : editor.base ? '编辑分析方法' : '新建分析方法' : selected ? selected.title : '分析方法'}</Header><p>{editor ? '保存形成未发布版本；发布后才可供后续任务参考。' : '两类来源统一管理，已发布且有权访问的版本按需供后续任务参考。'}</p></div>{!readOnly && !detail && !editor && <button type="button" className="primary-button" onClick={() => startEditor()} disabled={working}>新建方法</button>}</header>
+  return <section className="sap-method-page is-embedded" aria-label="SAP 分析方法" aria-busy={loading || working}>
+    <header className="sap-method-heading"><div><h2 ref={heading} tabIndex={-1}>{editor ? editor.derived ? '派生分析方法' : editor.base ? '编辑分析方法' : '新建分析方法' : selected ? selected.title : '分析方法'}</h2><p>{editor ? '保存形成未发布版本；发布后才可供后续任务参考。' : '两类来源统一管理，已发布且有权访问的版本按需供后续任务参考。'}</p></div>{!readOnly && !detail && !editor && <button type="button" className="primary-button" onClick={() => startEditor()} disabled={working}>新建方法</button>}</header>
     {error && <div className="sap-method-note is-error" role="alert">{error}</div>}{notice && <div className="sap-method-note" role="status">{notice}</div>}
     {pendingSave && <div className="sap-method-note is-warning" role="alert"><p>保存结果 UNKNOWN。原输入和原请求已保留，本页不会自动重放。</p><div className="sap-method-actions"><button type="button" className="secondary-button" disabled={working} onClick={() => { void inspectSave(); }}>核对此次保存结果</button><button type="button" className="text-button" disabled={working} onClick={() => { void performSave(pendingSave.input, pendingSave.publishAfter); }}>重试原保存请求</button></div></div>}
     {pendingPublish && <div className="sap-method-note is-warning" role="alert"><p>发布结果 UNKNOWN；已保存内容与旧发布版本保持。下方为上次已核对的版本状态，请核对本次发布结果。</p><div className="sap-method-actions"><button type="button" className="secondary-button" disabled={working} onClick={() => { void inspectPublication(); }}>核对发布结果</button><button type="button" className="text-button" disabled={working} onClick={() => { const p = pendingPublish, v = detail?.versions.find(item => item.version === p.version); if (detail && v) { setWorking(true); void performPublish(detail, v, p.requestId).finally(() => { if (mounted.current) setWorking(false); }); } }}>重试原发布请求</button></div></div>}

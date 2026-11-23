@@ -6,7 +6,7 @@ import {StrategyDiscussionFault} from './strategy-discussion-fault.ts';
 import {StrategyInitiativeStore} from './strategy-initiative-store.ts';
 import {StrategyInitiativeReports} from './strategy-initiative-reports.ts';
 import {StrategyInitiativeFiles} from './strategy-initiative-files.ts';
-import {initiativeScopeKey, type KickoffAnchor, type CandidateVersion, type RevisionProposal} from './strategy-initiative-types.ts';
+import {initiativeScopeKey, recordReplacedStrategyRequest, type KickoffAnchor, type CandidateVersion, type RevisionProposal, type ReplacedStrategyRequest, type StrategySessionPendingRequest, type StrategySessionRun} from './strategy-initiative-types.ts';
 import {reportBlockText} from './strategy-initiative-reports.ts';
 import type {GoalScope} from './strategy-goals-types.ts';
 import type {RuntimeModelConfiguration} from './config-store.ts';
@@ -31,8 +31,9 @@ export interface InitiativeMainSession {
   sessionFile?: string;
   revision: number;
   createOperationId: string;
-  pendingInput?: { requestId: string; text: string; expectedRevision: number; proposalId?: string };
-  lastRun?: { id: string; fingerprint: string; status: string };
+  pendingInput?: StrategySessionPendingRequest;
+  lastRun?: StrategySessionRun;
+  replacedRequests?: ReplacedStrategyRequest[];
   createdAt: string;
   updatedAt: string;
 }
@@ -155,13 +156,11 @@ export function createStrategyInitiativeHost(options: {
       return payload({file, text: text.slice(offset, end), range: {start: offset, end, total: text.length}, nextOffset: end < text.length ? end : null});
     }
     if (action === 'initiative-read-kickoff') {
-      const view = reports.view(o.initiativeId);
-      const scoped = view.versions.filter(v => (v.scopeKeys ?? []).includes(o.scopeKey));
       if (input.version !== undefined) {
-        const version = scoped.find(v => v.no === Number(input.version));
-        if (!version) fail('strategy_kickoff_scope_unknown');
-        return payload({version});
+        return payload({version: reports.versionForScope(o.initiativeId, Number(input.version), o.scopeKey)});
       }
+      const view = reports.viewForScope(o.initiativeId, o.scopeKey);
+      const scoped = view.versions.filter(v => !('unavailable' in v));
       return payload({versions: scoped.map(v => ({no: v.no, contentSha256: v.contentSha256, parent: v.parent, locked: Boolean(v.lock), generation: v.generation})), anchors: view.anchors});
     }
     if (action === 'initiative-save-kickoff') {
@@ -170,7 +169,7 @@ export function createStrategyInitiativeHost(options: {
         operationId: String(input.operationId ?? ''), fields: input.kickoffFields as any, sources: input.kickoffSources as any,
         ...(input.parent !== undefined ? {parent: Number(input.parent)} : {}),
         kind: 'agent', requestId: context.requestId,
-      }));
+      }, o.scopeKey));
       context.assertCurrent(); context.signal.throwIfAborted();
       return payload({version: {no: version.no, contentSha256: version.contentSha256, generation: version.generation}, claim: 'draft-saved-lock-by-decision-maker'});
     }
@@ -186,7 +185,9 @@ export function createStrategyInitiativeHost(options: {
       if (typeof input.proposalId !== 'string' || !uuid.test(input.proposalId)) fail('strategy_proposal_unavailable', 400);
       const proposal = reports.proposal(o.initiativeId, input.proposalId) ?? candidates.proposal(o.initiativeId, input.proposalId);
       if (!proposal || proposal.status !== 'pending' || proposal.initiativeId !== o.initiativeId) fail('strategy_proposal_unavailable');
-      if (proposal.target.kind === 'candidate') {
+      if (proposal.target.kind === 'report') {
+        reports.versionForScope(o.initiativeId, proposal.target.no, o.scopeKey);
+      } else {
         const target = candidates.version(o.initiativeId, proposal.target.candidateId, proposal.target.no);
         if (target.scopeKey !== o.scopeKey) fail('strategy_proposal_unavailable');
       }
@@ -264,7 +265,7 @@ export function createStrategyInitiativeHost(options: {
     const n = owner.sessionFile ? await readNativeSessionSnapshot(owner.sessionFile, nativeDirectory(owner), workspaceDirectory(owner)).catch(() => null) : null;
     const snapshot = live.snapshot ?? (owner.sessionFile ? {sessionId: n?.manager.getSessionId() ?? '', sessionFile: owner.sessionFile, messages: [], tools: [], status: 'idle' as const, sdkVersion: '1.4.0', capabilities: {}} : null);
     const messages = n ? presentContextMessages(n.manager.buildSessionContext().messages, n.manager.getBranch(), n.manager.getSessionId()) : [];
-    return {session: owner, busy: live.busy, reports: reports.view(id), files: files.list(id, scopeKey), snapshot: snapshot ? {...snapshot, messages} : null};
+    return {session: owner, busy: live.busy, reports: reports.viewForScope(id, scopeKey), files: files.list(id, scopeKey), snapshot: snapshot ? {...snapshot, messages} : null};
   }
 
   async function send(id: string, scopeKey: string, input: Record<string, unknown>) {
@@ -279,6 +280,12 @@ export function createStrategyInitiativeHost(options: {
       if (owner.lastRun.fingerprint !== fingerprint) fail('strategy_initiative_operation_conflict');
       return {session: owner, requestId, replayed: true};
     }
+    const receipt = owner.replacedRequests?.find(run => run.requestId === requestId);
+    if (receipt) {
+      if (receipt.fingerprint !== fingerprint) fail('strategy_initiative_operation_conflict');
+      return {session: owner, requestId, replayed: true, receipt};
+    }
+    if (input.replacePendingRequestId !== undefined && input.replacePendingRequestId !== owner.pendingInput?.requestId) fail('strategy_initiative_pending_request');
     if (owner.pendingInput && owner.pendingInput.requestId !== requestId) {
       const replaceable = ['failed', 'cancelled'].includes(owner.lastRun?.status ?? '') || (owner.lastRun?.status === 'accepted' && !domain.busy(ref) && !domain.live(ref));
       if (input.replacePendingRequestId !== owner.pendingInput.requestId || !replaceable) fail('strategy_initiative_pending_request');
@@ -287,7 +294,7 @@ export function createStrategyInitiativeHost(options: {
     if (domain.busy(ref)) fail('session_busy');
     const initiative = initiatives.get(id);
     const anchor: KickoffAnchor | undefined = reports.anchor(id, owner.scope);
-    const anchorReport = anchor ? reports.view(id).versions.find(v => v.no === anchor.reportNo) : undefined;
+    const anchorReport = anchor ? reports.versionForScope(id, anchor.reportNo, scopeKey) : undefined;
     const catalog = files.list(id, scopeKey);
     const scopeCandidates = candidates.list(id, scopeKey);
     const comparable = anchor ? scopeCandidates.filter(c => c.anchor.reportNo === anchor.reportNo && c.blocks.length > 0) : [];
@@ -299,8 +306,8 @@ export function createStrategyInitiativeHost(options: {
       if (!proposal || proposal.status !== 'pending' || proposal.initiativeId !== id) fail('strategy_proposal_unavailable');
       let baselineText: string | undefined;
       if (proposal.target.kind === 'report') {
-        const version = reports.view(id).versions.find(v => v.no === proposal.target.no);
-        baselineText = version ? reportBlockText(version.fields, proposal.blockId) : undefined;
+        const version = reports.versionForScope(id, proposal.target.no, scopeKey);
+        baselineText = reportBlockText(version.fields, proposal.blockId);
       } else {
         const target = candidates.version(id, proposal.target.candidateId, proposal.target.no);
         if (target.scopeKey !== scopeKey) fail('strategy_proposal_unavailable');
@@ -318,7 +325,10 @@ export function createStrategyInitiativeHost(options: {
     };
     const prompt = JSON.stringify(contextBody) + '\n\n用户本轮原话：\n' + originalUserText;
     if (prompt.length > 65536) fail('strategy_initiative_materials_too_large', 413);
-    owner = {...owner, revision: owner.revision + 1, updatedAt: new Date().toISOString(), lastRun: {id: requestId, fingerprint, status: 'accepted'}, pendingInput: {requestId, text: originalUserText, expectedRevision: Number(input.expectedRevision), ...(typeof input.proposal === 'string' ? {proposalId: input.proposal} : {})}};
+    const now = new Date().toISOString();
+    const replacedRequests = owner.pendingInput && owner.lastRun?.id === owner.pendingInput.requestId
+      ? recordReplacedStrategyRequest(owner.replacedRequests, owner.pendingInput, owner.lastRun, requestId, now) : owner.replacedRequests;
+    owner = {...owner, revision: owner.revision + 1, updatedAt: now, ...(replacedRequests ? {replacedRequests} : {}), lastRun: {id: requestId, fingerprint, status: 'accepted'}, pendingInput: {requestId, text: originalUserText, expectedRevision: Number(input.expectedRevision), ...(typeof input.proposal === 'string' ? {proposalId: input.proposal} : {})}};
     await options.mutate(() => {
       const file = readSessions(id);
       const latest = file.sessions.find(s => s.scopeKey === scopeKey);

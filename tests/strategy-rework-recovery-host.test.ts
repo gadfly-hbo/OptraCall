@@ -121,7 +121,8 @@ test('真实 Host+Pi：运行中 Host 崩溃后重启，中断请求可显式替
   assert.equal(provider.requests.length, requests, 'original id reads back without redispatch');
   assert.equal((await req(messageRoute, 'POST', {requestId: randomUUID(), text: '新输入。', expectedRevision: detail.session.revision}, 409)).code, 'strategy_initiative_pending_request');
   provider.setResponder(() => ({text: '恢复完成。'}));
-  await req(messageRoute, 'POST', {requestId: randomUUID(), text: '中断后继续。', expectedRevision: detail.session.revision, replacePendingRequestId: mainRequestId}, 202);
+  const mainReplacement = randomUUID();
+  await req(messageRoute, 'POST', {requestId: mainReplacement, text: '中断后继续。', expectedRevision: detail.session.revision, replacePendingRequestId: mainRequestId}, 202);
   for (let n = 0; n < 300; n++) { detail = await req(sessionRoute); if (detail.session.lastRun?.status === 'completed') break; await delay(20); }
   assert.equal(detail.session.lastRun.status, 'completed');
   assert.equal(detail.session.pendingInput, undefined);
@@ -129,9 +130,30 @@ test('真实 Host+Pi：运行中 Host 崩溃后重启，中断请求可显式替
   assert.equal(cd.candidate.lastRun.status, 'accepted');
   assert.equal(cd.candidate.pendingInput.requestId, candRequestId);
   assert.equal((await req(`${base}/candidates/${cid}/versions/1/messages`, 'POST', {requestId: randomUUID(), text: '新输入。', expectedRevision: cd.candidate.revision}, 409)).code, 'strategy_candidate_pending_request');
-  await req(`${base}/candidates/${cid}/versions/1/messages`, 'POST', {requestId: randomUUID(), text: '中断后继续。', expectedRevision: cd.candidate.revision, replacePendingRequestId: candRequestId}, 202);
+  const candidateReplacement = randomUUID();
+  const candidateMessages = `${base}/candidates/${cid}/versions/1/messages`;
+  await req(candidateMessages, 'POST', {requestId: candidateReplacement, text: '中断后继续。', expectedRevision: cd.candidate.revision, replacePendingRequestId: candRequestId}, 202);
   for (let n = 0; n < 300; n++) { cd = await req(`${base}/candidates/${cid}/versions/1`); if (cd.candidate.lastRun?.status === 'completed') break; await delay(20); }
   assert.equal(cd.candidate.lastRun.status, 'completed');
   assert.equal(cd.candidate.pendingInput, undefined);
+  assert.equal(provider.requests.length, requests + 2, 'only the two explicit replacements dispatch');
+
+  await host.close();
+  host = await startTestHost(options);
+  for (const [route, originalId, originalText, replacementId, conflictCode] of [
+    [messageRoute, mainRequestId, '开始开题。', mainReplacement, 'strategy_initiative_operation_conflict'],
+    [candidateMessages, candRequestId, '形成方案。', candidateReplacement, 'strategy_candidate_operation_conflict'],
+  ]) {
+    const original = {requestId: originalId, text: originalText, expectedRevision: 1};
+    const reread = await req(route, 'POST', original, 202);
+    assert.equal(reread.replayed, true);
+    assert.equal(reread.receipt.requestId, originalId);
+    assert.equal(reread.receipt.text, originalText);
+    assert.equal(reread.receipt.expectedRevision, 1);
+    assert.equal(reread.receipt.status, 'unknown');
+    assert.equal(reread.receipt.replacedBy, replacementId);
+    assert.equal((await req(route, 'POST', {...original, text: '不同输入。'}, 409)).code, conflictCode);
+  }
+  assert.equal(provider.requests.length, requests + 2, 'persisted original receipts are read without dispatching');
   assert.deepEqual(provider.errors, []);
 });

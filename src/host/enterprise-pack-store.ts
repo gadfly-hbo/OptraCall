@@ -38,7 +38,6 @@ import {
   type PackModulePublicationReceipt,
   type PackPurposeTier,
   type PackSubjectUnit,
-  type PackUseVerdict,
 } from '../../extensions/business-plugins/studio/enterprise-pack.ts';
 
 type StoredPackIndex = { schemaVersion: 1; packs: EnterpriseDomainPack[] };
@@ -190,13 +189,6 @@ export class EnterprisePackStore {
     const found = this.load().packs.find(p => p.id === uuid(packId));
     if (!found) fail('enterprise_pack_not_found', 404);
     return clone(found);
-  }
-
-  findByEnterpriseAndDomain(enterpriseId: string, domain = 'member-operations'): EnterpriseDomainPack | undefined {
-    const eid = uuid(enterpriseId);
-    const d = text(domain, 100, false).trim().toLowerCase();
-    const found = this.load().packs.find(p => p.enterpriseId === eid && p.domain === d);
-    return found ? clone(found) : undefined;
   }
 
   ensurePack(input: { enterpriseId: string; systemId: string; domain?: string; name: string; packCode?: string }): EnterpriseDomainPack {

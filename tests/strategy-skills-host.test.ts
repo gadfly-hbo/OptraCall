@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {mkdir, writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {startTestHost} from './fixtures/host-process.ts';
 import {startToolProvider, providerMessageText} from './fixtures/tool-provider.ts';
@@ -11,8 +13,10 @@ const fields = {horizon: '2027–2029', diagnosis: '缺口。', propositions: [{
 const blocks = [{id: 'B1', label: '定位', text: '深耕门店。'}];
 
 test('真实 Host+Pi：战略主会话仅加载 deep-research 与 grill-me，其他会话边界不变', {timeout: 150_000}, async t => {
-  const provider = await startToolProvider(), host = await startTestHost();
-  t.after(async () => { await host.close(); await provider.close(); });
+  const provider = await startToolProvider();
+  t.after(() => provider.close());
+  const host = await startTestHost();
+  t.after(() => host.close());
   const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
     const r = await host.request(route, method, body);
     assert.equal(r.status, status, await r.clone().text());
@@ -23,6 +27,9 @@ test('真实 Host+Pi：战略主会话仅加载 deep-research 与 grill-me，其
   await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '技能事项', scopes: [stores]}, 201);
   const base = `/api/strategy/initiatives/${initiativeId}`;
   await req(`${base}/session`, 'POST', {operationId: randomUUID(), scope: stores}, 201);
+  const localSkill = join(host.dataRoot, 'strategy-initiatives', initiativeId, 'resources', 'skills', 'deep-research');
+  await mkdir(localSkill, {recursive: true});
+  await writeFile(join(localSkill, 'SKILL.md'), '---\nname: deep-research\ndescription: Synthetic local name collision\n---\nUnapproved local asset.\n');
   let systemText = '';
   let grillContent = '';
   let researchContent = '';
@@ -38,10 +45,11 @@ test('真实 Host+Pi：战略主会话仅加载 deep-research 与 grill-me，其
   let d: any;
   for (let n = 0; n < 500; n++) { d = await req(`${base}/session?scopeKey=${encodeURIComponent(scopeKey)}`); if (d.session.lastRun?.status === 'completed') break; await delay(20); }
   t.diagnostic(JSON.stringify(d.session.lastRun)); t.diagnostic(JSON.stringify(provider.errors)); assert.equal(d.session.lastRun.status, 'completed');
+  assert.deepEqual(d.snapshot.capabilities.strategySkills, ['deep-research', 'grill-me'], 'Pi loads both bundled assets despite a same-name local skill');
   assert.equal(d.snapshot.capabilities.skills, true, 'initiative main session exposes skills');
-  assert.match(systemText, /grill-me/, 'grill-me is actually loaded');
-  assert.match(systemText, /deep-research/, 'deep-research is actually loaded');
-  assert.doesNotMatch(systemText, /data-analysis|ppt-report|roi-forecast/, 'only the two designated assets load');
+  assert.match(systemText, /grill-me/, 'the strategy prompt explains when to use the interview skill');
+  assert.match(systemText, /deep-research/, 'the strategy prompt explains when to use the research skill');
+  assert.doesNotMatch(systemText, /data-analysis|ppt-report|roi-forecast|Synthetic local name collision/);
   assert.match(grillContent, /Interview me relentlessly/, 'grill-me upstream method is actually read through the narrow tool');
   assert.match(grillContent, /OptraCall 战略开题适配/, 'local adaptation is present');
   assert.match(researchContent, /深度研究与研究报告/, 'deep-research package is actually read');
@@ -68,8 +76,10 @@ test('真实 Host+Pi：战略主会话仅加载 deep-research 与 grill-me，其
   assert.deepEqual(provider.errors, []);
 });
 test('真实 Host+Pi：普通项目任务不加载 grill-me，包内获准资料与越界负例', {timeout: 150_000}, async t => {
-  const provider = await startToolProvider(), host = await startTestHost();
-  t.after(async () => { await host.close(); await provider.close(); });
+  const provider = await startToolProvider();
+  t.after(() => provider.close());
+  const host = await startTestHost();
+  t.after(() => host.close());
   const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
     const r = await host.request(route, method, body);
     assert.equal(r.status, status, await r.clone().text());
