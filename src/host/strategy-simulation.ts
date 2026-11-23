@@ -15,20 +15,21 @@ const bounded=(value:unknown,low:number,high:number):value is number=>
 export function parseStrategyScenarioModel(value:unknown):StrategyScenarioModel {
   if(!value || typeof value!=='object' || Array.isArray(value))throw new StrategyDiscussionFault('invalid_scenario_model',400);
   const data=value as Record<string,unknown>;
+  const scenarioCode=(key:string)=>'invalid_scenario_'+key.replace(/[A-Z]/g,letter=>'_'+letter.toLowerCase());
   function label(key:string) {
     const field=data[key];
-    if(typeof field!=='string'||!field.trim()||field.length>2000)throw new StrategyDiscussionFault('invalid_scenario_'+key,400);
+    if(typeof field!=='string'||!field.trim()||field.length>2000)throw new StrategyDiscussionFault(scenarioCode(key),400);
     return field.trim();
   }
   function number(key:string,low:number,high:number){
     const field=data[key];
-    if(!bounded(field,low,high))throw new StrategyDiscussionFault('invalid_scenario_'+key,400);
+    if(!bounded(field,low,high))throw new StrategyDiscussionFault(scenarioCode(key),400);
     return field;
   }
   const common={population:label('population'),metric:label('metric'),unit:label('unit'),period:label('period'),basis:label('basis'),baselineRate:number('baselineRate',0,100)};
   if(data.model==='repeat-visits-v1')return {...common,model:data.model,remote:number('remote',0,100),parts:number('parts',0,100),fixed:number('fixed',0,Number.MAX_SAFE_INTEGER)};
   if(data.model!==undefined && data.model!=='coverage-lift')throw new StrategyDiscussionFault('invalid_scenario_model',400);
-  if(typeof data.coverageAdjustable!=='boolean')throw new StrategyDiscussionFault('invalid_scenario_coverageAdjustable',400);
+  if(typeof data.coverageAdjustable!=='boolean')throw new StrategyDiscussionFault(scenarioCode('coverageAdjustable'),400);
   return {...common,liftPoints:number('liftPoints',-common.baselineRate,100-common.baselineRate),coverage:number('coverage',0,100),coverageAdjustable:data.coverageAdjustable};
 }
 

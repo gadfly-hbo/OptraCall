@@ -29,7 +29,7 @@ import type { ProjectEvent } from '../agent/project-runtime.ts';
 import type { StrategyDiscussionAction, StrategyDiscussionToolContext } from '../agent/strategy-discussion.ts';
 
 const object=(x:unknown):x is Record<string,unknown>=>!!x&&typeof x==='object'&&!Array.isArray(x);
-function fail(code:string,status=409):never{throw new StrategyDiscussionFault(code,status);}
+function fail(code:string,status=409,options:ConstructorParameters<typeof StrategyDiscussionFault>[2]={}):never{throw new StrategyDiscussionFault(code,status,options);}
 const stableId=(value:unknown)=>{const h=discussionHash(value);return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20,32)}`;};
 const textOf=(m:any)=>typeof m.content==='string'?m.content:Array.isArray(m.content)?m.content.filter((p:any)=>p.type==='text').map((p:any)=>p.text).join(''):'';
 const sourceBody=(m:any)=>m.role==='assistant'&&Array.isArray(m.content)&&m.content.some((p:any)=>p.type==='toolCall')?JSON.stringify(m.content):textOf(m);
@@ -43,6 +43,7 @@ const STRATEGY_CONTRACT=[
  'TOC/TP作为相关业务思考底层框架，项目整体必须实质采用；具体工具与深度自行选择，不要求每Task全套树。区分必要条件、贡献关系、因果假设和充分性；说明内部条件、外部前提、替代解释/路径、限制、资源取舍、副作用、证据强度及观察窗口。相关性、逻辑图和用户采用不证明因果。资料不足时具体索取补证并继续独立可行部分，不编造根因、基线、目标值、负责人或上层组织。',
  '使用用途只是背景不是权限。组织包括营利/非营利；部门可上层未知，个人可包括事业家庭，不强套企业财务树。已有目标是准确版本，不默换latest。BSC按需，共用原GSA目标权威。',
  '战略共创可以从一句问题、上期复盘或线下战略开始。按实际需要区分未执行、未见改善与观察未满；运用 SWOT、五力等诊断说明证据怎样改变备选方向；需综合调研、重算或 Case/Teach 观察时沿已有授权和原成果查证。专业问题可以直接回答。不要自动建 Task。附件按 read-source 查读；需要确切页、表行、正文段时 query 填具体 locator。实际采用的内容用读取结果的 [[资料:<token>]] 引用。选中或列出不能作为已读证据。',
+ '用户在消息里粘贴的本地文件路径只是文本，不会上传、解析或授予读取权限；本讨论没有通用文件读取工具，只按来源 ID 读取已添加的资料。需要电脑文件时引导用户用「＋ 添加资料」，不要把路径当作可读取的文件，也不要据此声称文件不存在或资料缺失。',
  '形成候选时使用 save-map。按业务方向命名，区分选择、放弃的方向、成立条件和未知项。currentMap 是 Host 提供的所见版本，mapCandidates 是同讨论的不同候选；普通对话保持原图，明确要求修改时读取准确版和用户手工值，保留无关节点与关系，按 expectedVersion 修订。切换 BSC、目标树或条目表保留稳定编号。过期先读回并比对改动。场景数据只有指标、单位、人群、周期、基线和依据已知时才填 scenarioModel。',
  '按选中的因果连线进行审查时使用 TOC/TP，说明机制、必要条件、其他解释、负面分支、证据范围和可检验的观察方法。仅 hypothesis 边携带 review；分解或支持本身不能证明因果。引用的依据附 citationTokens。重要取舍由用户决定，保存地图不会采用目标。',
  '用户导入线下战略图（Excel/PPT/PDF/图片）或发起局部重读时，仅在本轮授权的 importSourceIds 与 selectedImportPages 范围内调用 read-import-source 读取原生结构、表格或渲染图面，再调用 propose-map-draft 返回带精确 sourceLocation、reviewState（clear/needs-review）与 importSources 的待核草稿（不要直接调用 save-map 写入正式版本，由用户对照原稿核对后一次保存）。严格区分 decomposition（分解）、supports（支持）、upstream（上游）、hypothesis（待验证因果）与 unknown（未知/遮挡），可见箭头不等于因果；准确区分基线与目标、估计与实测、数值 0 与待定及单位。源表与图上数值不一致时在 sourceConflicts 并列原值；箭头遮挡、局部低清或跨页同名时仅标该处 needs-review 并写明 ambiguityReason，清楚项标 clear；纯文本模型看不清扫描图时允许 nodes 为空并在 unknowns 说明原因。多页不同方案保留各自边界；局部重读时须以 workingMapDraft 为准，仅修订用户指定处并完整保留用户的手工修改。',
@@ -396,15 +397,16 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   }
   const verifiedMap = await importer!.verifySources(owner, draft.importSources);
   const sourceById = new Map(draft.importSources.map(s => [s.sourceId, s]));
-  const checkPage = (loc: import('./strategy-map-types.ts').StrategyMapSourceLocation | undefined, itemLabel: string) => {
+  const checkPage = (loc: import('./strategy-map-types.ts').StrategyMapSourceLocation | undefined, item: { kind: 'node' | 'edge'; index: number }) => {
     if (!loc || loc.page === undefined) return;
+    const base = `${item.kind==='node'?'nodes':'edges'}[${item.index}]`;
     const stored = verifiedMap.get(loc.sourceId);
     if (!stored || loc.page < 1 || loc.page > stored.pageCount) {
-      fail(`strategy_map_import_page_invalid: ${itemLabel} 页码超出原文件页数范围`, 400);
+      fail('strategy_map_import_page_invalid',400,{message:'来源定位页码超出原文件页数范围。',details:{issues:[{reason:'page_outside_original',path:`${base}.sourceLocation.page`,itemKind:item.kind,page:loc.page}]}});
     }
     const srcPages = sourceById.get(loc.sourceId)?.selectedPages;
     if (srcPages?.length && !srcPages.includes(loc.page)) {
-      fail(`invalid_strategy_map: ${itemLabel} 的 sourceLocation.page（${loc.page}）超出所选页范围`, 400);
+      fail('invalid_strategy_map',400,{message:'来源定位页码超出所选页范围。',details:{issues:[{reason:'page_outside_selection',path:`${base}.sourceLocation.page`,itemKind:item.kind,page:loc.page}]}});
     }
     const prevPages = prevById.get(loc.sourceId)?.selectedPages;
     const effectiveBound = prevPages?.length ? prevPages : opts.turnSelectedPages?.[loc.sourceId];
@@ -412,8 +414,8 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
       fail('strategy_map_import_page_not_authorized', 403);
     }
   };
-  for (const n of draft.nodes) checkPage(n.sourceLocation, `节点 ${n.id}`);
-  for (const e of draft.edges) checkPage(e.sourceLocation, `连线 ${e.id}`);
+  for (const [index, n] of draft.nodes.entries()) checkPage(n.sourceLocation, {kind:'node',index});
+  for (const [index, e] of draft.edges.entries()) checkPage(e.sourceLocation, {kind:'edge',index});
   if (opts.requireTurnScope) {
     for (const src of draft.importSources) {
       const prev = prevById.get(src.sourceId);
@@ -468,7 +470,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
    const replySource=await finalMapReply(map.source);
    if(replySource){
     try{await verifyChoiceSource(replySource,recipient);return {...map,replySource};}
-    catch(e){if(!(e instanceof Error)||!/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized/.test(e.message))throw e;}
+    catch(e){const code=(e as {code?:unknown})?.code;if(typeof code!=='string'||!/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized/.test(code))throw e;}
    }
   }
   return map;
@@ -478,8 +480,9 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   for(const row of await maps.list(id)){
    try {versions.push(await readMapVersion(id,row.mapId,row.version,recipient));}
    catch(e){
-    if(!(e instanceof Error) || !/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized/.test(e.message))throw e;
-    unavailable.push({mapId:row.mapId,version:row.version,reason:e.message});
+    const code=(e as {code?:unknown})?.code;
+    if(typeof code!=='string' || !/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized/.test(code))throw e;
+    unavailable.push({mapId:row.mapId,version:row.version,reason:code});
    }
   }
   return {versions,unavailable};
@@ -932,8 +935,8 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
     groupsByGroupId.set(draftGroupId,group);
     groupsByEntryId.set(entry.id,group);
    }catch(e){
-    const reason=e instanceof Error?e.message:'strategy_map_import_source_unavailable';
-    if(!/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized|import_page_not_authorized|invalid_strategy_map/.test(reason))throw e;
+    const reason=(e as {code?:unknown})?.code;
+    if(typeof reason!=='string'||!/source|permission|configuration|scope_changed|attachment|import_revoked|import_not_authorized|import_page_not_authorized|invalid_strategy_map/.test(reason))throw e;
     unavailable.push({entryId:entry.id,reason});
    }
   }

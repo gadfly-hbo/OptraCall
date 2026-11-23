@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sendStrategyDiscussionMessage, StrategyDiscussionRequestError, discussionJournal, readStrategyDiscussion, watchStrategyDiscussion, canSettleDiscussionMessage } from '../src/host/ui/strategy-discussion-client.ts';
+import { sendStrategyDiscussionMessage, StrategyDiscussionRequestError, discussionJournal, readStrategyDiscussion, watchStrategyDiscussion, canSettleDiscussionMessage, saveStrategyMap } from '../src/host/ui/strategy-discussion-client.ts';
 import type { StrategyDiscussionDetail } from '../src/host/strategy-discussion-types.ts';
 test('a discussion message cannot accept a response belonging to another request or owner', async t => {
   t.mock.method(globalThis, 'fetch', async () => Response.json({ discussion: { id: 'other-discussion' }, requestId: 'other-request' }, { status: 202 }));
@@ -46,4 +46,16 @@ test('the exact native source reader retains entry identity and rejects a mismat
   t.mock.method(globalThis, 'fetch', async (url: string) => { calls.push(url); return Response.json({ source: { ...source, sha256: 'b'.repeat(64) }, role: 'assistant', body: '[{"type":"toolCall"}]', range: { start: 0, end: 21, total: 21 }, complete: true }); });
   await assert.rejects(client.readStrategyDiscussionSource(source), error => error instanceof StrategyDiscussionRequestError && error.code === 'strategy_discussion_source_mismatch');
   assert.match(calls[0], /\/source\?sessionId=session-id&entryId=entry-id&sha256=a{64}&entryType=message&offset=0&limit=8192$/);
+});
+
+test('Issue 115 map client consumes a stable validation code with the existing safe HTTP message contract', async t => {
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ code: 'invalid_strategy_map', accepted: false, message: '请核对草稿字段后重试。' }, { status: 400 }));
+  await assert.rejects(saveStrategyMap('discussion-one', { operationId: 'synthetic-operation' }), error => {
+    assert.ok(error instanceof StrategyDiscussionRequestError);
+    assert.equal(error.code, 'invalid_strategy_map');
+    assert.equal(error.status, 400);
+    assert.equal(error.uncertain, false);
+    assert.equal(error.message, '请核对草稿字段后重试。');
+    return true;
+  });
 });

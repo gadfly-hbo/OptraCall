@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { writeFile, readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
 import { startTestHost } from './fixtures/host-process.ts';
@@ -53,6 +55,92 @@ test('original strategy conversation exposes saved map edits to Pi, traces its e
   const stale=await turn('修改旧稿。',{action:'save-map',mapId:first.mapId,expectedVersion:1,mapDraft:draft,reason:'模拟并发'});
   assert.match(stale,/strategy_map_version_conflict/);
   assert.equal((await api(base+'/maps')).versions.length,2);
+  const invalidReceipt=await turn('提交节点编号重复的候选。',{action:'save-map',mapDraft:{...draft,nodes:[draft.nodes[0]!,draft.nodes[0]!]},reason:'合成重复节点校验'});
+  assert.match(invalidReceipt,/invalid_strategy_map/);
+  assert.match(invalidReceipt,/duplicate_item_id/);
+  assert.doesNotMatch(invalidReceipt,/personal_context_read_failed/);
+  assert.equal((await api(base+'/maps')).versions.length,2,'Host semantic validation must not write a map version');
+  const httpFault=await api(base+'/maps','POST',{mapId:first.mapId,expectedVersion:2,operationId:randomUUID(),reason:'HTTP 重复节点校验',draft:{...fixed,nodes:[fixed.nodes[0]!,fixed.nodes[0]!]}},400);
+  assert.equal(httpFault.code,'invalid_strategy_map');
+  assert.equal(httpFault.accepted,false);
+  assert.ok(!JSON.stringify(httpFault).includes('duplicate_item_id'),'HTTP keeps its existing generic safe message instead of exposing Agent details');
+  assert.equal((await api(base+'/maps')).versions.length,2);
+  const recovered=await turn('修正重复编号后保存新候选。',{action:'save-map',mapDraft:{...draft,title:'修正后的候选'},reason:'修正后保存'});
+  assert.match(recovered,/candidate-not-adopted/);
+  const versions=(await api(base+'/maps')).versions as StrategyMapVersion[];
+  assert.equal(versions.length,3);
+  assert.ok(versions.some(version=>version.title==='修正后的候选'&&version.version===1));
+});
+
+test('Issue 115 treats an absolute path as text, exposes no file tool and rejects it as an unselected source ID', {timeout:60000}, async t=>{
+  const host=await startTestHost(),provider=await startToolProvider();
+  t.after(async()=>{await host.close();await provider.close();});
+  const req=async(route:string,method='GET',body?:unknown,status=200)=>{
+    const res=await host.request(route,method,body);assert.equal(res.status,status,await res.clone().text());return res.json();
+  };
+  await req('/api/configuration','PUT',{name:'路径合成模型',provider:'openai-compatible',baseUrl:provider.baseUrl,model:'synthetic',apiKey:'synthetic-only'});
+  const {discussion}=await req('/api/strategy/discussions','POST',{operationId:randomUUID(),title:'路径边界'},201);
+  const base='/api/strategy/discussions/'+discussion.id,file=path.join(host.scratch,'path-only.md'),marker='SYNTHETIC_PATH_FILE_MUST_NOT_BE_READ';
+  await writeFile(file,'# 合成路径文件\n'+marker,'utf8');
+  let receipt='';
+  provider.setResponder(({recentToolResults})=>{
+    if(!recentToolResults.length)return {calls:[{name:'strategy_goals',arguments:{action:'read-source',sourceId:file}}]};
+    receipt=providerMessageText(recentToolResults.at(-1)?.content);
+    return {text:'未能通过来源 ID 读取该路径。'};
+  });
+  const before=await req(base),requestId=randomUUID();
+  await req(base+'/messages','POST',{requestId,expectedRevision:before.discussion.revision,text:`请读取 ${file}`},202);
+  let detail=await req(base);
+  for(let n=0;n<400&&(detail.busy||detail.discussion.lastRun?.id!==requestId);n++){await delay(25);detail=await req(base);}
+  assert.equal(detail.discussion.lastRun.status,'completed');
+  assert.equal(receipt,'strategy_discussion_source_not_selected');
+  assert.deepEqual(detail.snapshot.tools,['strategy_goals']);
+  const captured=JSON.stringify(provider.requests.map(request=>request.body));
+  assert.ok(captured.includes(file),'the user path remains visible as prompt text');
+  assert.ok(!captured.includes(marker),'no Host or SDK path read may disclose the synthetic file body');
+  t.diagnostic('Proven boundary: no general file tool and no source-ID match. The real models\' chosen failure path remains separately unproved.');
+});
+
+test('Issue 115 rework: invalid edge ID does not echo a raw path and scenario validation keeps a stable code', {timeout:60000}, async t=>{
+  const host=await startTestHost(),provider=await startToolProvider();
+  t.after(async()=>{await host.close();await provider.close();});
+  const api=async(route:string,method='GET',body?:unknown,status=200)=>{const r=await host.request(route,method,body);assert.equal(r.status,status,await r.clone().text());return r.json();};
+  await api('/api/configuration','PUT',{name:'返工错误契约',provider:'openai-compatible',baseUrl:provider.baseUrl,model:'synthetic',apiKey:'synthetic-only'});
+  const {discussion}=await api('/api/strategy/discussions','POST',{operationId:randomUUID(),title:'返工错误契约'},201);
+  const base='/api/strategy/discussions/'+discussion.id;
+  const secretPath='/Users/synthetic/private-strategy-plan.md';
+  const baseDraft={title:'返工候选',template:'table',choice:'',assumptions:'',unknowns:'',nodes:[{id:'G1',kind:'goal',title:'目标'}],edges:[]};
+  async function turn(args:Record<string,unknown>){
+    let receipt='';
+    provider.setResponder(({recentToolResults})=>{if(!recentToolResults.length)return {calls:[{name:'strategy_goals',arguments:args}]};receipt=providerMessageText(recentToolResults.at(-1)?.content);return {text:'已核对。'};});
+    const before=await api(base),requestId=randomUUID();
+    await api(base+'/messages','POST',{requestId,expectedRevision:before.discussion.revision,text:'合成校验'},202);
+    let d=await api(base);for(let n=0;n<400&&(d.busy||d.discussion.lastRun?.id!==requestId);n++){await delay(25);d=await api(base);}
+    assert.equal(d.discussion.lastRun.status,'completed');
+    return {receipt,detail:d};
+  }
+  const badEdge=await turn({action:'save-map',mapDraft:{...baseDraft,edges:[{id:secretPath,from:'G1',to:'G1',kind:'supports'}]},reason:'合成无效连线'});
+  assert.match(badEdge.receipt,/invalid_strategy_map/);
+  assert.match(badEdge.receipt,/invalid_edge_endpoint/);
+  assert.match(badEdge.receipt,/edges\[0\]/,'the error is located by structural position');
+  assert.ok(!badEdge.receipt.includes(secretPath),'the tool error receipt must not echo the raw path ID');
+  const nativeEntries=(await readFile(badEdge.detail.snapshot.sessionFile,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
+  const nativeToolResults=nativeEntries.filter(e=>e.message?.role==='toolResult');
+  assert.ok(nativeToolResults.length>0);
+  assert.ok(!JSON.stringify(nativeToolResults).includes(secretPath),'native toolResult must not echo the raw path ID');
+  const snapToolResults=(badEdge.detail.snapshot.messages||[]).filter((m:any)=>m.role==='toolResult');
+  assert.ok(!JSON.stringify(snapToolResults).includes(secretPath),'discussion snapshot toolResult must not echo the raw path ID');
+  const nextToolMessages=(provider.requests.at(-1)?.body.messages||[]).filter((m:any)=>m.role==='tool');
+  assert.ok(!JSON.stringify(nextToolMessages).includes(secretPath),'the next Provider tool result must not echo the raw path ID');
+  assert.equal((await api(base+'/maps')).versions.length,0,'invalid submission keeps zero writes');
+  const scenario={population:'合成',metric:'复购',unit:'%',period:'季',basis:'合成依据',liftPoints:5,coverage:50,coverageAdjustable:true};
+  const badScenario=await turn({action:'save-map',mapDraft:{...baseDraft,scenarioModel:{...scenario,baselineRate:-1}},reason:'合成场景校验'});
+  assert.match(badScenario.receipt,/invalid_scenario_baseline_rate/,'known scenario validation keeps a stable code in the tool chain');
+  assert.ok(!badScenario.receipt.includes('host_tool_failed'),'known scenario validation must not be masked by the neutral fallback');
+  assert.equal((await api(base+'/maps')).versions.length,0);
+  const good=await turn({action:'save-map',mapDraft:{...baseDraft,scenarioModel:{...scenario,baselineRate:10}},reason:'修正后保存'});
+  assert.match(good.receipt,/candidate-not-adopted/);
+  assert.equal((await api(base+'/maps')).versions.length,1,'corrected input saves one version');
 });
 
 test('a map references only the cited attachment version and follows its authorization after replacement and revocation', {timeout:60000}, async t=>{

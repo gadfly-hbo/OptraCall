@@ -22,7 +22,7 @@ test('缺模型、口径不同、人数不明时只支持定性比较，数值�
     assert.equal(compareStrategyScenarios([a,changed],env).kind,'qualitative');
   assert.equal(compareStrategyScenarios([a,b],{...env,populationSize:0}).kind,'qualitative');
   const model=parseStrategyScenarioModel({...b,coverage:0});assert.ok(model.model!=='repeat-visits-v1');assert.equal(model.coverage,0);
-  assert.throws(()=>parseStrategyScenarioModel({...b,liftPoints:92}),/liftPoints/);
+  assert.throws(()=>parseStrategyScenarioModel({...b,liftPoints:92}),/invalid_scenario_lift_points/);
   assert.throws(()=>parseStrategyScenarioModel({...b,basis:''}),/basis/);
 });
 

@@ -46,7 +46,11 @@ import { reportCalculationTool, reportCalculationToolName, reportCalculationSyst
 type Outcome = 'completed' | 'cancelled' | 'failed';
 type LastRun = { requestId: string; outcome?: Outcome; diagnostic?: RunDiagnostic; reportCalculationReview?: ReportCalculationRunReceipt };
 type Assistant = Extract<AgentSession['messages'][number], { role: 'assistant' }>;
-type ActiveRun = { id: string; kind: 'prompt' | 'command'; requestFingerprint?: string; providedContext?: Record<string, unknown>; cancelled: boolean; commandFailed?: boolean; retryCount: number; last?: Assistant; pending: string; managers: Set<SessionManager>; publicSearch?: ReturnType<typeof createPublicNativeSearchObservation>; reportReview?: ReportCalculationRunReceipt; reportReviewPreparing?: boolean; reportReviewDelegated?: boolean; childCleanupUnknown?: boolean };
+type ActiveRun = { id: string; kind: 'prompt' | 'command'; requestFingerprint?: string; providedContext?: Record<string, unknown>; cancelled: boolean; commandFailed?: boolean; retryCount: number; last?: Assistant; pending: string; managers: Set<SessionManager>; publicSearch?: ReturnType<typeof createPublicNativeSearchObservation>; reportReview?: ReportCalculationRunReceipt; reportReviewPreparing?: boolean; reportReviewDelegated?: boolean; childCleanupUnknown?: boolean; strategyReadLoop?: { action: string; fingerprint: string; count: number }; strategyLoopStopped?: boolean };
+const STRATEGY_READ_ACTIONS = new Set(['read-goals', 'find-sources', 'read-source', 'read-import-source', 'read-map']);
+const STRATEGY_READ_LOOP_LIMIT = 6;
+function strategyReadFingerprint(value: unknown): string { return createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex'); }
+function noteStrategyRead(run: ActiveRun, action: string, fingerprint: string) { const prev = run.strategyReadLoop; if (prev && prev.action === action && prev.fingerprint === fingerprint) prev.count += 1; else run.strategyReadLoop = { action, fingerprint, count: 1 }; }
 type RunResult = { outcome: Outcome; text: string; result?: unknown; snapshot: ProjectSnapshot; diagnostic?: RunDiagnostic; publicSearch?: PublicNativeSearchResult & { requestId: string }; reportCalculationReview?: ReportCalculationRunReceipt };
 const RUN_ENTRY = 'optracall.run';
 const EXECUTION_ENTRY = 'optracall.execution';
@@ -741,24 +745,44 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       });
     }
     const scopeToolContexts = Boolean(o.goalContextSourceEnabled || strategyDiscussion() || candidateAvailable || dbLinkAvailable || o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
-    const createStrategyTools = (boundManager: SessionManager) => !strategyDiscussion() || !o.strategyDiscussionEnabled ? [] : [{
-      ...(o.workspace?.discussionTools === 'project-sources' ? projectDiscussionSourceTool : o.workspace?.discussionTools === 'goal-draft' ? editableGoalTool : strategyDiscussionTool),
-      execute: async (toolCallId:string, parameters:Record<string,unknown>, signal:AbortSignal|undefined, _update:unknown, ctx:ExtensionToolContext) => {
-        const originalRun=run,boundSessionId=boundManager.getSessionId();
-        const assertCurrent=()=>{if(!originalRun || run!==originalRun || originalRun.cancelled || originalRun.kind!=='prompt' || closing || !signal || signal.aborted || manager!==boundManager || session?.sessionManager!==boundManager || ctx.sessionManager!==boundManager || !toolCallId.trim())throw new Error('strategy_discussion_run_unavailable');};
-        assertCurrent();
-        if(!(STRATEGY_DISCUSSION_ACTIONS as readonly unknown[]).includes(parameters.action))throw new Error('invalid_strategy_discussion_action');
-        const {action,...input}=parameters;
-        try {
-          const result = await requestHostTool({feature:'strategy-discussion',action:String(action),input,toolCallId,requestId:originalRun!.id,sessionId:boundSessionId},signal!,'strategy_discussion_run_unavailable');
+    const createStrategyTools = (boundManager: SessionManager) => {
+      if (!strategyDiscussion() || !o.strategyDiscussionEnabled) return [];
+      const variant = o.workspace?.discussionTools;
+      // 止损作用域限于已确认的战略共创全量工具；business-role 的 project-sources/goal-draft 变体不纳入，
+      // 避免在未呈现该诊断的消费者处静默取消。顺序执行复用 Pi 原生 executionMode，使批次内逐工具结算计数。
+      const loopGuard = !variant;
+      const baseTool = variant === 'project-sources' ? projectDiscussionSourceTool : variant === 'goal-draft' ? editableGoalTool : strategyDiscussionTool;
+      return [{
+        ...baseTool,
+        ...(loopGuard ? { executionMode: 'sequential' as const } : {}),
+        execute: async (toolCallId:string, parameters:Record<string,unknown>, signal:AbortSignal|undefined, _update:unknown, ctx:ExtensionToolContext) => {
+          const originalRun=run,boundSessionId=boundManager.getSessionId();
+          const assertCurrent=()=>{if(!originalRun || run!==originalRun || originalRun.cancelled || originalRun.kind!=='prompt' || closing || !signal || signal.aborted || manager!==boundManager || session?.sessionManager!==boundManager || ctx.sessionManager!==boundManager || !toolCallId.trim())throw new Error('strategy_discussion_run_unavailable');};
           assertCurrent();
-          return result as {content:({type:'text';text:string}|{type:'image';data:string;mimeType:string})[];details:Record<string,unknown>};
-        } catch (error) {
-          if (action === 'propose-goal' && o.workspace?.discussionTools !== 'goal-draft') throw explainGoalProposalError(error);
-          throw error;
+          if(!(STRATEGY_DISCUSSION_ACTIONS as readonly unknown[]).includes(parameters.action))throw new Error('invalid_strategy_discussion_action');
+          const {action,...input}=parameters;
+          const isRead = loopGuard && STRATEGY_READ_ACTIONS.has(String(action));
+          if (loopGuard && !isRead) originalRun!.strategyReadLoop = undefined;
+          if (isRead && originalRun!.strategyReadLoop && originalRun!.strategyReadLoop.count >= STRATEGY_READ_LOOP_LIMIT && originalRun!.strategyReadLoop.action === action) {
+            originalRun!.strategyLoopStopped = true;
+            originalRun!.cancelled = true;
+            rejectPersonalRequests();
+            void session?.abort().catch(() => {});
+            throw new Error('strategy_action_loop');
+          }
+          try {
+            const result = await requestHostTool({feature:'strategy-discussion',action:String(action),input,toolCallId,requestId:originalRun!.id,sessionId:boundSessionId},signal!,'strategy_discussion_run_unavailable');
+            assertCurrent();
+            if (isRead) noteStrategyRead(originalRun!, String(action), strategyReadFingerprint(result));
+            return result as {content:({type:'text';text:string}|{type:'image';data:string;mimeType:string})[];details:Record<string,unknown>};
+          } catch (error) {
+            if (isRead && !originalRun!.strategyLoopStopped) noteStrategyRead(originalRun!, String(action), strategyReadFingerprint({ code: (error as {code?:unknown})?.code ?? (error as Error)?.message, details: (error as {details?:unknown})?.details }));
+            if (action === 'propose-goal' && variant !== 'goal-draft') throw explainGoalProposalError(error);
+            throw error;
+          }
         }
-      }
-    }];
+      }];
+    };
     const createGoalContextTools=(boundManager:SessionManager)=>!o.goalContextSourceEnabled || o.workspace || !o.projectId || !o.taskId || o.protectedExecution&&!ordinaryManaged()?[]:[{...goalContextSourceTool,execute:async(toolCallId:string,input:Record<string,unknown>,signal:AbortSignal|undefined,_update:unknown,ctx:ExtensionToolContext)=>{
       const current=run,boundSessionId=boundManager.getSessionId();const assertCurrent=()=>{if(!current||run!==current||current.kind!=='prompt'||current.cancelled||closing||!signal||signal.aborted||manager!==boundManager||session?.sessionManager!==boundManager||ctx.sessionManager!==boundManager||!toolCallId.trim())throw new Error('goal_context_source_unavailable');};
       assertCurrent();const result=await requestHostTool({feature:'goal-context-source',action:'read',input,toolCallId,requestId:current!.id,sessionId:boundSessionId},signal!,'goal_context_source_unavailable');assertCurrent();recordSourceDelivery(boundManager,current!,goalContextSourceTool.name,toolCallId,(result as {details:unknown}).details);return result as {content:{type:'text';text:string}[];details:Record<string,unknown>};
@@ -942,7 +966,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       flushDelta();
       const last = current.last, nativeCancelled = Boolean(result && typeof result === 'object' && 'cancelled' in result && result.cancelled);
       const outcome: Outcome = current.childCleanupUnknown ? 'failed' : current.cancelled || nativeCancelled ? 'cancelled' : nativeSearchFailure ? 'failed' : last?.stopReason === 'aborted' ? 'cancelled' : failed || current.commandFailed || last?.stopReason === 'error' ? 'failed' : 'completed';
-      const diagnostic = runDiagnostic({ outcome, kind, retryCount: current.retryCount, error: failure ?? last?.errorMessage, commandFailed: current.commandFailed, transportCause });
+      const diagnostic = runDiagnostic({ outcome, kind, retryCount: current.retryCount, error: failure ?? last?.errorMessage, commandFailed: current.commandFailed, transportCause, actionLoop: current.strategyLoopStopped });
       const answer = redactText(last?.content.filter(part => part.type === 'text').map(part => part.text).join('') ?? '');
       const grant = current.providedContext?.reportCalculationReview;
       const admittedReview = options.reportCalculationReviewEnabled && kind === 'prompt' && grant && typeof grant === 'object' && 'contract' in grant && grant.contract === 'foreground-report-calculation-v1';
@@ -954,7 +978,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       run = undefined;
       const state = snapshot();
       publish({ type: 'snapshot', snapshot: state });
-      publish({ type: 'run.settled', requestId: id, outcome, ...(outcome === 'failed' ? { error: diagnostic!.message } : {}), ...(diagnostic ? { diagnostic } : {}) });
+      publish({ type: 'run.settled', requestId: id, outcome, ...(outcome === 'failed' || current.strategyLoopStopped ? { error: diagnostic!.message } : {}), ...(diagnostic ? { diagnostic } : {}) });
       const publicResult = publicSearchResult(current, outcome, diagnostic);
       return { outcome, text: answer, result: redact(result ?? null), snapshot: state, ...(diagnostic ? { diagnostic } : {}), ...(publicResult ? { publicSearch: publicResult } : {}), ...(reviewReceipt ? { reportCalculationReview: reviewReceipt } : {}) };
     })().finally(() => { run = undefined; pendingOperation = undefined; });
@@ -1014,7 +1038,19 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     await transport.close();
   }
   process.on('message', (message: any) => {
-    if (message?.kind === 'personal-context-reply') { const pending = personalRequests.get(message.id); if (pending) { if (message.error) pending.reject(new Error(message.error)); else pending.resolve(message.result); } return; }
+    if (message?.kind === 'personal-context-reply') { const pending = personalRequests.get(message.id); if (pending) {
+      if (message.error) {
+        const code = String(message.error), parts = [code];
+        if (typeof message.message === 'string' && message.message !== code) parts.push(message.message);
+        if (message.details !== undefined) parts.push(JSON.stringify(message.details));
+        if (typeof message.diagnosticId === 'string') parts.push(`诊断关联 ${message.diagnosticId}`);
+        const error = new Error(parts.join('：')) as Error & { code?: string; details?: unknown; diagnosticId?: string };
+        error.code = code;
+        if (message.details !== undefined) error.details = message.details;
+        if (typeof message.diagnosticId === 'string') error.diagnosticId = message.diagnosticId;
+        pending.reject(error);
+      } else pending.resolve(message.result);
+    } return; }
     if (message?.kind !== 'request') return; void (async () => {
     try {
       let result: unknown;
