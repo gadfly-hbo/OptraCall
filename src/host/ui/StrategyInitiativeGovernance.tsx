@@ -171,14 +171,14 @@ export function StrategyReleaseReview({ initiativeId, scope, scopes, candidates,
   </section>;
 }
 
-export function ReportVersionDialog({ version, anchor, onClose }: { version: KickoffReportVersion; anchor?: KickoffAnchor; onClose: () => void }) {
+export function ReportVersionDialog({ version, anchor, outOfScope, onClose }: { version: KickoffReportVersion; anchor?: KickoffAnchor; outOfScope?: boolean; onClose: () => void }) {
   const status = version.lock ? (anchor?.reportNo === version.no ? '已应用为方案输入' : '已锁定') : '草稿';
   return <CaseDialog title={`开题报告 · v${version.no}`} subtitle={`${status}${version.parent ? ` · 修订自 v${version.parent}` : ''}`} onClose={onClose} className="si-version-dialog">
     <div className="si-dialog-scroll">
       <p className="si-muted">生成 {version.generation.kind} · {formatTime(version.generation.at)}{version.lock ? ` · 锁定 ${version.lock.operator} · ${formatTime(version.lock.at)}` : ''}</p>
       <p className="si-muted">内容指纹 <code>{version.contentSha256}</code></p>
       {version.revision && <p className="si-muted">限定修订请求：{version.revision.request} · 仅更新 {version.revision.patches.map(patch => patch.blockId).join('、')}</p>}
-      <KickoffBody version={version} />
+      {outOfScope ? <p className="si-notice si-notice-warning" role="status">当前范围不可读此报告正文（适用范围为 {version.scopeKeys.join('、') || '未记录'}）；仅保留版本身份、来源范围与失读原因。</p> : <KickoffBody version={version} />}
     </div>
     <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>关闭</button></div>
   </CaseDialog>;
@@ -299,7 +299,8 @@ export function StrategyVersionsPanel({ initiativeId, scopeKey, history, access,
       <div className="si-ledger">
         <h3>开题报告</h3>
         {data.reports.versions.length ? data.reports.versions.slice().reverse().map(version => {
-          const status = version.lock ? (anchor?.reportNo === version.no ? { label: '已应用为方案输入', tone: 'positive' as const } : { label: '已锁定', tone: 'accent' as const }) : { label: '草稿', tone: 'neutral' as const };
+          const outOfScope = !(version.scopeKeys ?? []).includes(scopeKey);
+          const status = outOfScope ? { label: '失读 · 范围外', tone: 'warning' as const } : version.lock ? (anchor?.reportNo === version.no ? { label: '已应用为方案输入', tone: 'positive' as const } : { label: '已锁定', tone: 'accent' as const }) : { label: '草稿', tone: 'neutral' as const };
           return <div className="si-ledger-row" key={version.no}><button type="button" className="text-button" onClick={() => setViewing({ kind: 'report', no: version.no })}>开题报告 · v{version.no}</button><Badge tone={status.tone}>{status.label}</Badge></div>;
         }) : <p className="si-muted">尚无开题版本。</p>}
         <h3>战略候选与父版</h3>
@@ -336,7 +337,7 @@ export function StrategyVersionsPanel({ initiativeId, scopeKey, history, access,
         {legacyId && <LegacyDiscussionReadback key={legacyId} discussionId={legacyId} access={access} focusRequest={legacyFocus} />}
       </div>
     </>}
-    {viewingReport && <ReportVersionDialog version={viewingReport} anchor={anchor} onClose={() => setViewing(null)} />}
+    {viewingReport && <ReportVersionDialog version={viewingReport} anchor={anchor} outOfScope={!(viewingReport.scopeKeys ?? []).includes(scopeKey)} onClose={() => setViewing(null)} />}
     {viewingCandidate && <VersionReceiptDialog candidate={viewingCandidate} anchorReport={data?.reports.versions.find(version => version.no === viewingCandidate.anchor.reportNo)} batch={latestBatch(data?.verifications ?? [], viewingCandidate)} publication={publicationFor(data?.publications ?? [], viewingCandidate)} onClose={() => setViewing(null)} onViewReport={() => setViewing({ kind: 'report', no: viewingCandidate.anchor.reportNo })} onOpenSession={onOpenSession ? () => { const ref = { candidateId: viewingCandidate.candidateId, no: viewingCandidate.no }; setViewing(null); onOpenSession(ref); } : undefined} />}
   </section>;
 }

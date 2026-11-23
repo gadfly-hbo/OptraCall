@@ -153,7 +153,7 @@ export function createStrategyCandidateHost(options: {
     if (action === 'initiative-read-kickoff') {
       if (input.version !== undefined && Number(input.version) !== o.anchor.reportNo) fail('strategy_candidate_anchor_fixed', 403);
       const found = reports.view(o.initiativeId).versions.find(v => v.no === o.anchor.reportNo);
-      if (!found || found.contentSha256 !== o.anchor.contentSha256) fail('strategy_kickoff_version_conflict');
+      if (!found || found.contentSha256 !== o.anchor.contentSha256 || !(found.scopeKeys ?? []).includes(o.scopeKey)) fail('strategy_kickoff_scope_unknown');
       return payload({version: found});
     }
     if (action === 'initiative-save-candidate') {

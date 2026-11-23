@@ -233,8 +233,9 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
     return () => controller.abort();
   }, [active, stage, session?.session.scopeKey, connection]);
 
+  const scopedVersions = reports.versions.filter(version => (version.scopeKeys ?? []).includes(scopeKey));
   const anchor = reports.anchors[scopeKey];
-  const report = reports.versions.find(version => version.no === reportNo) ?? reports.versions.at(-1);
+  const report = scopedVersions.find(version => version.no === reportNo) ?? scopedVersions.at(-1);
   const current = candidates.find(candidate => sameRef(candidate, selectedCandidate)) ?? candidates.at(-1);
   const sessionBusy = Boolean(session?.busy || session?.snapshot?.status === 'running');
   const locked = busy || Boolean(pending) || sessionBusy;
@@ -332,7 +333,7 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
 
   const kickoff = <section className="sg-panel si-panel" aria-label="开题报告">
     <div className="si-panel-head"><div><p className="si-eyebrow">战略启动 · 诊断锚定</p><h2>开题报告{report ? ` v${report.no}` : ''}</h2></div>{report && <Badge tone={report.lock ? (anchor?.reportNo === report.no ? 'positive' : 'accent') : 'neutral'}>{report.lock ? (anchor?.reportNo === report.no ? '已应用为方案输入' : '已锁定') : '草稿'}</Badge>}</div>
-    {reports.versions.length > 1 && <label className="si-inline-picker">报告版本<select aria-label="报告版本" value={report?.no ?? ''} onChange={event => setReportNo(Number(event.target.value))}>{reports.versions.slice().reverse().map(version => <option key={version.no} value={version.no}>开题报告 v{version.no}</option>)}</select></label>}
+    {scopedVersions.length > 1 && <label className="si-inline-picker">报告版本<select aria-label="报告版本" value={report?.no ?? ''} onChange={event => setReportNo(Number(event.target.value))}>{scopedVersions.slice().reverse().map(version => <option key={version.no} value={version.no}>开题报告 v{version.no}</option>)}</select></label>}
     {loading ? <p className="si-muted" role="status">正在读取开题报告…</p> : !report ? <div className="si-empty"><p>围绕战略命题与主 Agent 多轮访谈；Agent 保存草稿后在此核对、锁定并应用。资料不足时允许沿用公开资料与明确假设开题。</p></div> : <>
       <KickoffBody version={report} />
       <p className="si-validation">{report.fields.propositions.length >= 3 && report.fields.propositions.length <= 5 && report.fields.horizon.trim() && report.fields.diagnosis.trim() ? '✓ Schema 校验通过' : '⚠ Schema 待补全'} · {report.lock ? '已完成报告审核' : '待人工审核'}</p>

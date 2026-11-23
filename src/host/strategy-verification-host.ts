@@ -134,7 +134,7 @@ export function createStrategyVerificationHost(options: {
     }
     if (action === 'initiative-read-kickoff') {
       const found = reports.view(o.initiativeId).versions.find(v => v.no === candidate.anchor.reportNo);
-      if (!found || found.contentSha256 !== candidate.anchor.contentSha256) fail('strategy_kickoff_version_conflict');
+      if (!found || found.contentSha256 !== candidate.anchor.contentSha256 || !(found.scopeKeys ?? []).includes(candidate.scopeKey)) fail('strategy_kickoff_scope_unknown');
       return payload({version: found});
     }
     if (action === 'initiative-save-verification') {

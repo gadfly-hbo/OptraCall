@@ -156,12 +156,13 @@ export function createStrategyInitiativeHost(options: {
     }
     if (action === 'initiative-read-kickoff') {
       const view = reports.view(o.initiativeId);
+      const scoped = view.versions.filter(v => (v.scopeKeys ?? []).includes(o.scopeKey));
       if (input.version !== undefined) {
-        const version = view.versions.find(v => v.no === Number(input.version));
-        if (!version) fail('strategy_kickoff_version_not_found', 404);
+        const version = scoped.find(v => v.no === Number(input.version));
+        if (!version) fail('strategy_kickoff_scope_unknown');
         return payload({version});
       }
-      return payload({versions: view.versions.map(v => ({no: v.no, contentSha256: v.contentSha256, parent: v.parent, locked: Boolean(v.lock), generation: v.generation})), anchors: view.anchors});
+      return payload({versions: scoped.map(v => ({no: v.no, contentSha256: v.contentSha256, parent: v.parent, locked: Boolean(v.lock), generation: v.generation})), anchors: view.anchors});
     }
     if (action === 'initiative-save-kickoff') {
       if (Object.keys(input).some(key => !['action', 'operationId', 'kickoffFields', 'kickoffSources', 'parent'].includes(key))) fail('strategy_kickoff_fields_invalid', 400);

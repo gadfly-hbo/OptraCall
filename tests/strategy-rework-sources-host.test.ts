@@ -4,6 +4,8 @@ import {randomUUID} from 'node:crypto';
 import {readFile, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {startTestHost} from './fixtures/host-process.ts';
+import {startToolProvider, providerMessageText} from './fixtures/tool-provider.ts';
+import {setTimeout as delay} from 'node:timers/promises';
 
 const stores = {kind: 'department' as const, id: 'east-retail', name: '华东零售事业部', enterpriseId: 'ent-1'};
 const ecommerce = {kind: 'department' as const, id: 'east-ecom', name: '华东电商业务', enterpriseId: 'ent-1'};
@@ -81,4 +83,37 @@ test('真实 Host：范围专属来源限定报告适用范围，跨范围应用
   const shared = (await req(`${base}/files`, 'POST', {operationId: randomUUID(), directory: '010_draw', name: '共用复盘.md', contentBase64: Buffer.from('共用').toString('base64')}, 201)).file;
   const v2 = (await req(`${base}/reports`, 'POST', {operationId: randomUUID(), fields: {...fields, diagnosis: '共用资料开题。'}, sources: [{kind: 'file', ref: '010_draw/共用复盘.md', fileId: shared.fileId, sha256: shared.sha256}], parent: 1}, 201)).version;
   assert.deepEqual(v2.scopeKeys, [storesKey, 'department:ent-1:east-ecom'], 'shared sources keep all initiative scopes');
+});
+
+test('真实 Host+Pi：会话按范围拒绝越界开题正文与列表', {timeout: 120_000}, async t => {
+  const provider = await startToolProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  await req('/api/configuration', 'PUT', {name: '范围会话', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-scope-read', apiKey: 'synthetic-scope-read'});
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '范围会话事项', scopes: [stores, ecommerce]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}`;
+  const exclusive = (await req(`${base}/files`, 'POST', {operationId: randomUUID(), directory: '020_clean', name: 'A口径.md', contentBase64: Buffer.from('A 范围专属诊断').toString('base64'), scopeKey: storesKey}, 201)).file;
+  const source = {kind: 'file', ref: '020_clean/A口径.md', fileId: exclusive.fileId, sha256: exclusive.sha256};
+  await req(`${base}/reports`, 'POST', {operationId: randomUUID(), fields, sources: [source]}, 201);
+  await req(`${base}/session`, 'POST', {operationId: randomUUID(), scope: ecommerce}, 201);
+  let denied = '', listing = '';
+  provider.setResponder((ctx: any) => {
+    const step = ctx.recentToolResults.length;
+    if (step === 0) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-read-kickoff', version: 1}}]};
+    if (step === 1) { denied = providerMessageText(ctx.recentToolResults[0].content); return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-read-kickoff'}}]}; }
+    if (step === 2) { listing = providerMessageText(ctx.recentToolResults[1].content); return {text: '已核对范围。'}; }
+    return {text: '继续。'};
+  });
+  await req(`${base}/messages?scopeKey=${encodeURIComponent('department:ent-1:east-ecom')}`, 'POST', {requestId: randomUUID(), text: '读取开题。', expectedRevision: 1}, 202);
+  let d: any;
+  for (let n = 0; n < 400; n++) { d = await req(`${base}/session?scopeKey=${encodeURIComponent('department:ent-1:east-ecom')}`); if (d.session.lastRun?.status === 'completed') break; await delay(20); }
+  assert.equal(d.session.lastRun.status, 'completed');
+  assert.match(denied, /strategy_kickoff_scope_unknown/, 'out-of-scope version read is rejected');
+  assert.doesNotMatch(listing, /"no":1\b/, 'out-of-scope report is excluded from the list');
+  assert.deepEqual(provider.errors, []);
 });
