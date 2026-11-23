@@ -2,7 +2,7 @@ import { StrategyAttachmentPicker } from './StrategyAttachmentPicker.tsx';
 import { fileBase64,projectAttachmentLibrary } from './runtime-client.ts';
 import {StrategyWorkbench} from './StrategyWorkbench.tsx';
 import {mapTemplates,type StrategyMapDraft,type StrategyMapRef} from '../strategy-map-types.ts';
-import type { ManagementStage } from './ManagementTabs.tsx';
+import type { LegacyStrategyStage } from './ManagementTabs.tsx';
 import type { GoalScope } from '../strategy-goals-types.ts';
 import { StrategyChoicePanel,type ChoiceHandoff } from './StrategyChoicePanel.tsx';
 import { ConversationDrawer } from "./ConversationDrawer.tsx";
@@ -88,7 +88,7 @@ export function StrategyDiscussionBackground({ id, selection, projects, availabl
   </>;
 }
 export interface StrategyDiscussionPanelProps {
-  stage?:ManagementStage; onStage?:(stage:ManagementStage)=>void; scopes?:GoalScope[]; getGoalScope?:(goal:GoalRef)=>GoalScope|undefined; onHandoff?:(v:ChoiceHandoff)=>void;
+  stage?:LegacyStrategyStage; onStage?:(stage:LegacyStrategyStage)=>void; scopes?:GoalScope[]; getGoalScope?:(goal:GoalRef)=>GoalScope|undefined; onHandoff?:(v:ChoiceHandoff)=>void;
   active: boolean; focusRequest?: { source: GoalDiscussionSourceRef; id: string }; selectedGoal?: GoalVersion; projects: ClientProject[]; configurations: PublicModelConfiguration[]; selectedConfigurationId?: string | null;
   onReviewCandidate: (goal: GoalVersion, discussionId: string, reload: () => Promise<void>) => void; onGoalsChanged: (goals?:GoalVersion[]) => Promise<void>; onSettings: () => void;
 }
