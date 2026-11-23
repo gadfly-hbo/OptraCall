@@ -278,6 +278,16 @@ Issue [#120](https://github.com/gadfly-hbo/OptraCall/issues/120) · 规格 [Spec
 
 **仍保留的未验证项**：真实模型专业质量、真实业务数据、设备采用、远端 CI、用户产品验收分别核定；111 项原有条件跳过非本轮新增。
 
+### 2026-11-23 第三轮返工（Codex 复核评论 7101345470）
+
+- **F Skill 按范围加载**（`bf77d20`）：grill-me 移至 extensions/strategy-assets（不被普通资产扫描）；skillsOverride 按确切文件路径绑定；initiative-read-skill 支持包内 references/agents 资料与越界负例。普通项目任务不加载战略 Skill。
+- **G 开题正文范围**（`2d78eaa`）：工作台按 scopeKeys 过滤；initiative-read-kickoff 按范围拒绝越界版本与列表；历史范围外仅身份+失读原因。
+- **H 浏览器替换派发**（`662b2a6`+`8e64041`）：sendMain pending 锁不拦截显式替换；accepted 后 pending 保留至终态（崩溃重启可替换）；SSE null snapshot 守卫。浏览器验证替换派发一次、completed、无重复。
+- **I 公开来源资格**（`1972a44`）：pass 须含 file/candidate/kickoff 准确身份来源；public 仅 http(s) URL；占位不生成凭证。
+- **J 承接恢复一致性**（`b7f531d`）：per-goal operationId 含 requestFingerprint；同操作变更范围冲突；不同操作独立目标。
+
+**验证**：浏览器主流程 30/30 + 崩溃替换 4/4 PASS；完整 npm run check 最终复跑进行中。
+
 ## 范围外问题
 
 （暂无。）
