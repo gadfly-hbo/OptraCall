@@ -2017,3 +2017,29 @@ test('Round-7 counterexamples: contradictory targetPurposeId refuses auto-match 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('purposeKeys wildcard * grants access to any purpose; empty purposeKeys means unrestricted (legacy); precise keys do not expand', () => {
+  const root = tempRoot('purpose-wildcard');
+  try {
+    const grants = new ResourceGrantStore(root);
+    const entId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const projW = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const projP = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const projU = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const base = { enterpriseId: entId, grantor: 'owner', grantBasis: 'test', subjectType: 'project' as const, subjectId: projW, resourceKind: 'definition' as const, operations: ['read-definition' as const], scope: {} };
+    const wildcard = grants.grant({ ...base, purposeKeys: ['*'], operations: ['read-definition', 'cite-summary'], resourceKind: 'summary', scope: { summaryAssetId: 'asset-1', summaryVersion: '1', summaryAuthority: 'studio-source', grain: 'store-month' }, resourceRef: { authority: 'studio-source', id: 'asset-1', version: '1' } });
+    const precise = grants.grant({ ...base, subjectId: projP, purposeKeys: ['specific-purpose'], operations: ['read-definition'] });
+    const unrestricted = grants.grant({ ...base, subjectId: projU, operations: ['read-definition'] });
+    const all = grants.list(entId);
+    const wGrant = all.find(g => g.id === wildcard.id)!;
+    const pGrant = all.find(g => g.id === precise.id)!;
+    const uGrant = all.find(g => g.id === unrestricted.id)!;
+    assert.ok(evaluateResourceAccess([wGrant], { operation: 'read-definition', purposeKey: 'any-purpose-at-all' }).allowed, '* must match any purpose');
+    assert.ok(evaluateResourceAccess([wGrant], { operation: 'cite-summary', purposeKey: 'another-purpose', grain: 'store-month', summaryVersion: '1' }).allowed, '* must match any purpose for summary');
+    assert.ok(evaluateResourceAccess([pGrant], { operation: 'read-definition', purposeKey: 'specific-purpose' }).allowed, 'precise key matches');
+    assert.equal(evaluateResourceAccess([pGrant], { operation: 'read-definition', purposeKey: 'other-purpose' }).allowed, false, 'precise key must not expand');
+    assert.ok(evaluateResourceAccess([uGrant], { operation: 'read-definition', purposeKey: 'anything' }).allowed, 'empty purposeKeys means unrestricted (legacy)');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

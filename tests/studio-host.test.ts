@@ -174,6 +174,38 @@ test('SAP validation identifies package.id and accepts the corrected candidate t
   assert.deepEqual(provider.errors, []);
 });
 
+test('SAP unknown field error does not echo the raw key name in message or details', { timeout: 45_000 }, async t => {
+  const provider = await startToolProvider(); t.after(() => provider.close());
+  const host = await startTestHost(); t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', { name: 'Synthetic SAP unknown key', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-sap-unknown', apiKey: 'synthetic-sap-unknown' }));
+  const { project } = await json(await host.request('/api/projects', 'POST', { name: 'SAP unknown key owner' }), 201);
+  const { system } = await json(await host.request('/api/studio/systems', 'POST', { requestId: randomUUID(), name: 'SAP unknown key system', projectId: project.id, goal: 'Verify unknown key not echoed', topicTitle: 'Metrics' }), 201);
+  const rawKey = 'SYNTHETIC_RAW_CUSTOMER_1234';
+  const docWithUnknown = JSON.stringify({ sap: '0.2', package: { id: 'studio-unknown-test', version: '1.0.0', namespace: 'mf.studio-unknown-test', fingerprint: '' }, dimensions: ['store'], metrics: [{ name: 'm1', display_name: 'M', type: 'simple', definition: 'D', dimensions: ['store'], time_grains: ['month'], owner_role: 'finance', caliber_switches: {}, provenance: { origin: 'manual' } }], scenarios: [], [rawKey]: 'should not appear in error' });
+  writeFileSync(path.join(project.rootPath, '020_clean', 'unknown-key.yaml'), docWithUnknown);
+  const validDoc = JSON.stringify({ sap: '0.2', package: { id: 'studio-unknown-test', version: '1.0.0', namespace: 'mf.studio-unknown-test', fingerprint: '' }, dimensions: ['store'], metrics: [{ name: 'm1', display_name: 'M', type: 'simple', definition: 'D', dimensions: ['store'], time_grains: ['month'], owner_role: 'finance', caliber_switches: {}, provenance: { origin: 'manual' } }], scenarios: [] });
+  writeFileSync(path.join(project.rootPath, '020_clean', 'valid-after-unknown.yaml'), validDoc);
+  provider.setResponder(context => {
+    const index = context.recentToolResults.length;
+    if (index < 2) return { calls: [{ name: 'studio_assets', arguments: { action: 'register-sap-metric', systemId: system.id, payload: { path: `020_clean/${index === 0 ? 'unknown-key' : 'valid-after-unknown'}.yaml` } } }] };
+    return { text: 'SAP_UNKNOWN_KEY_CORRECTED' };
+  });
+  const route = `/api/projects/${project.id}/tasks/${system.taskId}`;
+  await json(await host.request(`${route}/messages`, 'POST', { requestId: randomUUID(), text: 'Register SAP with unknown key then correct.', studioContext: { systemId: system.id, purpose: 'construction' } }), 202);
+  let state: any; const deadline = Date.now() + 25_000;
+  do { state = await json(await host.request(route)); if (state.task.lastRun?.status === 'completed' && state.snapshot.status === 'idle') break; await new Promise(resolve => setTimeout(resolve, 25)); } while (Date.now() < deadline);
+  assert.equal(state.task.lastRun?.status, 'completed');
+  const results = state.snapshot.messages.filter((message: any) => message.role === 'toolResult' && message.toolName === 'studio_assets');
+  assert.equal(results.length, 2);
+  assert.equal(results[0].isError, true);
+  const errText = providerMessageText(results[0].content);
+  assert.match(errText, /sap_unknown_field/);
+  assert.equal(errText.includes(rawKey), false, 'raw unknown key must not appear in error text');
+  assert.equal(errText.includes('should not appear'), false);
+  assert.equal(results[1].isError, false);
+  assert.deepEqual(provider.errors, []);
+});
+
 test('Studio graph unavailable fails before dispatch and leaves independent source work usable', async t => {
  const host=await startTestHost(); t.after(()=>host.close());
  await json(await host.request('/api/configuration','PUT',{name:'Studio graph unavailable',provider:'openai-compatible',baseUrl:'http://127.0.0.1:1/v1',model:'synthetic-studio',apiKey:'synthetic-only'}));

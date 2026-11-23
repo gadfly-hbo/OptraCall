@@ -1206,12 +1206,17 @@ export function createStudioFeature(options: StudioHostOptions) {
           throw new StudioError('studio_action_not_available', 409);
         }).catch(error => {
           if (error instanceof SapFault) {
-            const safePath = error.path && /^[A-Za-z0-9_.[\]]{1,200}$/.test(error.path) ? error.path : '';
+            const rawPath = error.code === 'SAP_UNKNOWN_FIELD'
+              ? (error.path.includes('.') ? error.path.slice(0, error.path.lastIndexOf('.')) : '')
+              : error.path;
+            const safePath = rawPath && /^[A-Za-z0-9_.[\]]{1,200}$/.test(rawPath) ? rawPath : '';
             const message = safePath === 'package.id'
               ? 'SAP package.id 必须匹配 ^[a-z][a-z0-9-]*$：小写字母开头，仅含小写字母、数字和连字符；例如 studio-retail-flow。请修正后重试。'
               : safePath === 'package.version'
                 ? 'SAP package.version 必须是 x.y.z 数字语义版本，例如 1.0.0。请修正后重试。'
-                : `SAP ${safePath || 'document'} 未通过结构校验；请按 SAP 0.2 规则修正该字段后重试。`;
+                : error.code === 'SAP_UNKNOWN_FIELD'
+                  ? `SAP ${safePath || 'document'} 含有不认识的字段；请移除未知键后重试。`
+                  : `SAP ${safePath || 'document'} 未通过结构校验；请按 SAP 0.2 规则修正该字段后重试。`;
             throw new StudioError(error.code.toLowerCase(), 400, { message, details: { issues: [{ reason: error.code.toLowerCase(), ...(safePath ? { path: safePath } : {}) }] } });
           }
           if (error instanceof MetricLibraryFault || error instanceof SapMethodStoreError) throw new StudioError(error.code.toLowerCase(), 'status' in error && typeof error.status === 'number' ? error.status : 409);

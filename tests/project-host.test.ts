@@ -439,6 +439,23 @@ test('fixed Skill survives a project .pi same-name copy through the public Host 
   assert.equal(system.includes(path.join(collision, 'SKILL.md')), false);
 });
 
+test('projectSkillCatalog preserves SDK selection order for project-supplied optional skills (Project Plan contract)', async t => {
+  const { projectSkillCatalog, loadFixedBuiltInSkill } = await import('../src/agent/skill-catalog.ts');
+  const host = await startTestHost(); t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', { name: 'Catalog order config', provider: 'openai-compatible', baseUrl: 'http://127.0.0.1:1/v1', model: 'synthetic-catalog', apiKey: 'synthetic-only' }));
+  const { project } = await json(await host.request('/api/projects', 'POST', { name: 'Catalog order project' }), 201);
+  const piSkillDir = path.join(project.rootPath, '020_clean', '.pi', 'skills', 'deep-research');
+  await fs.mkdir(piSkillDir, { recursive: true });
+  await fs.writeFile(path.join(piSkillDir, 'SKILL.md'), '---\nname: deep-research\ndescription: Project-local deep-research variant.\n---\n\nProject variant.\n');
+  const catalog = projectSkillCatalog(process.cwd(), path.join(project.rootPath, '020_clean'), path.join(host.dataRoot, 'pi'));
+  const dr = catalog.skills.find(s => s.id === 'deep-research');
+  assert.ok(dr, 'deep-research must appear in catalog');
+  assert.equal(dr.filePath, path.join(piSkillDir, 'SKILL.md'), 'project .pi version must win over bundled for optional skills');
+  const fixed = loadFixedBuiltInSkill(process.cwd(), 'data-analysis', path.join(project.rootPath, '020_clean'), path.join(host.dataRoot, 'pi'));
+  assert.ok(fixed, 'fixed built-in data-analysis must still load exactly');
+  assert.equal(fixed.filePath, path.join(process.cwd(), 'extensions/analysis-assets/data-analysis/SKILL.md'));
+});
+
 test('manual handoff and Project Agent requalify the antecedents of the selected reply and retain independent sources', { timeout: 90000 }, async t => {
   const provider = await startToolProvider(); t.after(() => provider.close());
   const host = await startTestHost(); t.after(() => host.close());

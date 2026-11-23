@@ -110,3 +110,13 @@
 **发布预览状态。** Studio 体系 `872da0e2` 含 6 个 prepared-not-approved 预览（最终 `23c4f34f`，definition-reference，3 资产，排除 rule-execution 与 SAP）。会员包 PACK-MEM-001 全景 v1 + 4 条目 + 3 工作项已保存；purposes 因 remainingGaps 缺陷未写入（已修，修复后同载荷可成功）。报告 `060_reports/chengchuan-member-repurchase-build-v1.md` SHA `153f9faa…ba40c` 已保存。
 
 **未验证项。** 修复后未重放真实模型（用户授权仅一次首版）；会员包 purposes 修复后的真实模型端到端未验；MacBook 实机未操作；供应商结算费用未知（SDK token 计数非账单）。
+
+### PM 复核返工（三组）
+
+PM 接管后独立复核发现三组阻断问题，退回原领取方。已在原分支追加修正：
+
+1. **Skill 目录覆盖收窄。** `projectSkillCatalog` 恢复 SDK 原始选择顺序（项目/用户同名优先），供 Project Plan 能力校验使用。新增 `loadFixedBuiltInSkill` 仅供 `checkAssignmentSkill` 的固定内置校验路径，不影响通用目录。新增测试验证项目 `.pi/skills/deep-research` 在目录中保持项目版本。
+2. **用途语义统一。** 表单仅分隔符输入拒绝（零写入）；汇总读取路径 `purposeKeys: ['*']` 按通配处理（与 `evaluateResourceAccess` 一致）。新增测试覆盖 `*` 匹配任意用途、精确键不扩大、空键不限（legacy）。
+3. **SAP 未知键不回显。** `SAP_UNKNOWN_FIELD` 错误路径剥离末段未知键名，只保留结构父位置；message 和 details 均不含原始键。新增测试用 `SYNTHETIC_RAW_CUSTOMER_1234` 验证不回显。
+
+返工回归 14 项通过；全量检查另行记录。

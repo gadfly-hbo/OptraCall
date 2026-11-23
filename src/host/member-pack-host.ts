@@ -1607,7 +1607,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (matchedSummaryGrant) {
         const eligiblePurposeKeys = rev.purposeManifests.filter(pm => pm.status === 'eligible').map(pm => pm.purposeKey);
         const matchingPurposeKey = matchedSummaryGrant.purposeKeys?.length
-          ? matchedSummaryGrant.purposeKeys.find(pk => eligiblePurposeKeys.includes(pk))
+          ? (matchedSummaryGrant.purposeKeys.includes('*') ? eligiblePurposeKeys[0] : matchedSummaryGrant.purposeKeys.find(pk => eligiblePurposeKeys.includes(pk)))
           : eligiblePurposeKeys[0];
         if (matchedSummaryGrant.purposeKeys?.length && !matchingPurposeKey) {
           throw new StudioError('resource_access_denied', 403);
