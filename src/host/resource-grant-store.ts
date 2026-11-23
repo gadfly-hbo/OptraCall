@@ -172,6 +172,7 @@ export class ResourceGrantStore {
         ...(scope.verifiedScopeSummary ? { verifiedScopeSummary: text(scope.verifiedScopeSummary, 500, false) } : {}),
         ...(scope.sourcePeriodFrom ? { sourcePeriodFrom: text(scope.sourcePeriodFrom, 100, false) } : {}),
         ...(scope.sourcePeriodTo ? { sourcePeriodTo: text(scope.sourcePeriodTo, 100, false) } : {}),
+        ...(scope.sourcePeriodVerified !== undefined ? { sourcePeriodVerified: scope.sourcePeriodVerified } : {}),
         ...(scope.metricRef ? { metricRef: sourceRef(scope.metricRef) } : {}),
         ...(scope.allowedDataPaths?.length ? { allowedDataPaths: [...new Set(scope.allowedDataPaths.map(p => text(p, 1000, false)))] } : {}),
       },

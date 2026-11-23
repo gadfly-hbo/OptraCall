@@ -1365,7 +1365,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const canSummary = canSummaryRaw.allowed
       ? { ...canSummaryRaw, matchedGrantIds: canSummaryRaw.matchedGrantIds.filter(id => {
           const g = subjectGrants.find(g => g.id === id);
-          return g ? isSourcePeriodCovered(g.scope.sourcePeriodFrom, g.scope.sourcePeriodTo, g.scope.periodFrom, g.scope.periodTo) : false;
+          return g ? isSourcePeriodCovered(g.scope.sourcePeriodFrom, g.scope.sourcePeriodTo, g.scope.periodFrom, g.scope.periodTo, pm.scope.period, g.scope.sourcePeriodVerified) : false;
         }) }
       : canSummaryRaw;
     if (canSummary.matchedGrantIds.length === 0) canSummary.allowed = false;
@@ -1630,7 +1630,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               summaryVersion: grant.scope.summaryVersion,
             });
             if (!evalSummary.allowed) continue;
-            if (!isSourcePeriodCovered(grant.scope.sourcePeriodFrom, grant.scope.sourcePeriodTo, grant.scope.periodFrom, grant.scope.periodTo)) continue;
+            if (!isSourcePeriodCovered(grant.scope.sourcePeriodFrom, grant.scope.sourcePeriodTo, grant.scope.periodFrom, grant.scope.periodTo, purpose.scope?.period, grant.scope.sourcePeriodVerified)) continue;
             summaryAllowed = true;
             break;
           }
@@ -3332,6 +3332,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             rawScope.verifiedScopeSummary = verified.verifiedScopeSummary;
             delete rawScope.sourcePeriodFrom;
             delete rawScope.sourcePeriodTo;
+            rawScope.sourcePeriodVerified = true;
             if (verified.sourcePeriodFrom) rawScope.sourcePeriodFrom = verified.sourcePeriodFrom;
             if (verified.sourcePeriodTo) rawScope.sourcePeriodTo = verified.sourcePeriodTo;
             verifiedResourceRef = verified.resourceRef;

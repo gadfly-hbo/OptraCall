@@ -154,3 +154,10 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 2. **授权入参不能代替来源范围。** 授权创建时先 `delete rawScope.sourcePeriodFrom/sourcePeriodTo` 再从权威核验结果存入，调用方传入的替代范围不再落盘。
 3. **无期间限制授权继续放行。** `isSourcePeriodCovered` 在授权本身无 `periodFrom`/`periodTo` 时返回 true（无论来源是否声明期间），保留原合法授权语义。
 - 新增测试：无期间限制+未知来源放行；有限期间+未知来源拒绝。
+
+### PM 八次返工（期间解析与旧授权兼容）
+
+1. **单字段跨月范围解析。** `period` 字段支持 `"2026-08..2026-09"` / `"2026-08 至 2026-09"` 等范围表达式，解析为 `sourcePeriodFrom`/`sourcePeriodTo`。
+2. **同行整月优先于日级附注。** 文本提取改为：若存在 `YYYY-MM` 则优先使用月份（不再被同月的 `YYYY-MM-DD` 过滤掉），仅在无月份时回退到日级。
+3. **旧授权兼容。** 新增 `sourcePeriodVerified` 标记区分新旧授权：新授权（`true`）只用权威核验的来源期间；旧授权（无标记）回退到用途期间，保留原合法语义。`isSourcePeriodCovered` 增加 `legacyFallbackPeriod` 和 `sourcePeriodVerified` 参数。
+- 新增测试：旧授权回退放行/拒绝；新授权跨月全覆盖放行。

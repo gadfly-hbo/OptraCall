@@ -96,6 +96,7 @@ export interface ResourceGrantScope {
   verifiedScopeSummary?: string;
   sourcePeriodFrom?: string;
   sourcePeriodTo?: string;
+  sourcePeriodVerified?: boolean;
   metricRef?: StudioSourceRef;
   allowedDataPaths?: string[];
 }

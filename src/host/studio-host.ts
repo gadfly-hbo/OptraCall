@@ -131,8 +131,14 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (typeof parsed.periodFrom === 'string' && parsed.periodFrom.trim()) sourcePeriodFrom = parsed.periodFrom.trim();
         if (typeof parsed.periodTo === 'string' && parsed.periodTo.trim()) sourcePeriodTo = parsed.periodTo.trim();
         if (!sourcePeriodFrom && !sourcePeriodTo && typeof parsed.period === 'string' && parsed.period.trim()) {
-          sourcePeriodFrom = parsed.period.trim();
-          sourcePeriodTo = parsed.period.trim();
+          const rangeMatch = /^(20\d{2}[-/]\d{2}(?:[-/]\d{2})?)\s*(?:\.\.|~|—|–|至|到|to)\s*(20\d{2}[-/]\d{2}(?:[-/]\d{2})?)$/i.exec(parsed.period.trim());
+          if (rangeMatch) {
+            sourcePeriodFrom = rangeMatch[1]!.replace('/', '-');
+            sourcePeriodTo = rangeMatch[2]!.replace('/', '-');
+          } else {
+            sourcePeriodFrom = parsed.period.trim();
+            sourcePeriodTo = parsed.period.trim();
+          }
         }
       }
     } catch { /* non-JSON body */ }
@@ -141,9 +147,9 @@ export function createStudioFeature(options: StudioHostOptions) {
       const nonPeriodKeywords = /(?:生成日期|生成时间|修订日期|修订时间|样例日期|创建日期|创建时间|截止日期|截止时间|发布日期|发布时间|更新日期|更新时间)/;
       const qualifyingLines = combined.split(/[\n\r]+/).filter(line => periodKeywords.test(line) && !nonPeriodKeywords.test(line));
       const qualifyingText = qualifyingLines.join('\n');
+      const sourceMonths = [...new Set([...qualifyingText.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2]))\b/g)].map(m => m[1]!))].sort();
       const sourceDates = [...new Set([...qualifyingText.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))\b/g)].map(m => m[1]!))].sort();
-      const sourceMonths = [...new Set([...qualifyingText.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2]))\b/g)].map(m => m[1]!).filter(m => !sourceDates.some(d => d.startsWith(m))))].sort();
-      const allPeriodTokens = [...sourceDates, ...sourceMonths].sort();
+      const allPeriodTokens = sourceMonths.length > 0 ? sourceMonths : sourceDates;
       if (allPeriodTokens.length > 0) {
         sourcePeriodFrom = allPeriodTokens[0];
         sourcePeriodTo = allPeriodTokens[allPeriodTokens.length - 1];
