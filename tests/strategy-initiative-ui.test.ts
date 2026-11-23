@@ -131,11 +131,13 @@ test('SS08 check panel binds both gates to the locked version and offers revisio
 
 test('SS13 exact-version dialog keeps every receipt inside a scrollable body', async () => {
   const { VersionReceiptDialog } = await import('../src/host/ui/StrategyInitiativeGovernance.tsx');
-  const html = renderToStaticMarkup(createElement(VersionReceiptDialog, { candidate, anchorReport: report, batch, publication, onClose() {}, onViewReport() {} }));
+  const html = renderToStaticMarkup(createElement(VersionReceiptDialog, { candidate, anchorReport: report, batch, publication, onClose() {}, onViewReport() {}, onOpenSession() {} }));
   assert.match(html, /si-version-dialog/); assert.match(html, /si-dialog-scroll/);
   assert.match(html, /战略定位与增长路径/); assert.match(html, /三年目标与里程碑/); assert.match(html, /资源分配与明确不做/);
   assert.match(html, /检验回执/); assert.match(html, /「触达→再到店→二购」的关键前提和反例已记录/);
   assert.match(html, /发布记录/); assert.match(html, /承接/); assert.match(html, /华东零售事业部/);
   assert.match(html, /cccccccc v1/); assert.match(html, /查看原开题报告/);
   assert.match(html, /锚定开题报告 v1/);
+  assert.match(html, /查看候选会话/, 'exact-version dialog offers the original candidate session entry');
+  assert.match(html, /尝试 1 · completed · pass/, 'every gate attempt keeps its true terminal state');
 });

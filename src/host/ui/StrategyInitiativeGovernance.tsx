@@ -184,8 +184,8 @@ export function ReportVersionDialog({ version, anchor, onClose }: { version: Kic
   </CaseDialog>;
 }
 
-export function VersionReceiptDialog({ candidate, anchorReport, batch, publication, onClose, onViewReport }: {
-  candidate: CandidateVersion; anchorReport?: KickoffReportVersion; batch?: VerificationBatch; publication?: InitiativePublication; onClose: () => void; onViewReport?: () => void;
+export function VersionReceiptDialog({ candidate, anchorReport, batch, publication, onClose, onViewReport, onOpenSession }: {
+  candidate: CandidateVersion; anchorReport?: KickoffReportVersion; batch?: VerificationBatch; publication?: InitiativePublication; onClose: () => void; onViewReport?: () => void; onOpenSession?: () => void;
 }) {
   const status = candidateStatus(candidate, { batch, publication });
   return <CaseDialog title={`查看准确版本 · ${candidateLabel(candidate)}`} subtitle={`候选会话 ${candidate.candidateId.slice(0, 8)} · 开题报告 v${candidate.anchor.reportNo}${candidate.parent ? ` · 修订自 v${candidate.parent.no}` : ''}`} onClose={onClose} className="si-version-dialog">
@@ -194,13 +194,14 @@ export function VersionReceiptDialog({ candidate, anchorReport, batch, publicati
       <p className="si-muted">内容指纹 <code>{candidate.contentSha256}</code>{candidate.lock ? ` · 锁定 ${candidate.lock.operator} · ${formatTime(candidate.lock.at)}` : ' · 尚未锁定'}</p>
       {candidate.revisionMeta && <p className="si-muted">限定修订请求：{candidate.revisionMeta.request} · 仅更新 {candidate.revisionMeta.patches.map(patch => patch.blockId).join('、')}</p>}
       <CandidateBody candidate={candidate} />
-      {batch && <section className="si-content-block"><h4>检验回执 · 批次 {batch.batchId.slice(0, 8)}</h4>{batch.gates.map((gate, turn) => <div key={turn}><p><strong>{gateNames[turn]} · {gateStatus(gate).label}</strong></p><p>{gate.evidence || '证据暂不可读。'}</p><p className="si-muted">{gate.ref}{gate.finishedAt ? ` · ${formatTime(gate.finishedAt)}` : ''}</p></div>)}</section>}
+      {batch && <section className="si-content-block"><h4>检验回执 · 批次 {batch.batchId.slice(0, 8)}</h4>{batch.gates.map((gate, turn) => <div key={turn}><p><strong>{gateNames[turn]} · {gateStatus(gate).label}</strong></p><p>{gate.evidence || '证据暂不可读。'}</p><p className="si-muted">{gate.ref}{gate.finishedAt ? ` · ${formatTime(gate.finishedAt)}` : ''}</p>{gate.attempts?.length ? <ul className="si-muted">{gate.attempts.map((attempt, index) => <li key={index}>尝试 {index + 1} · {attempt.status}{attempt.verdict ? ` · ${attempt.verdict}` : ''} · {formatTime(attempt.at)}{attempt.evidence ? ` · ${attempt.evidence}` : ''}</li>)}</ul> : null}</div>)}</section>}
       {publication && <section className="si-content-block"><h4>发布记录 · {publication.publicationId.slice(0, 8)}</h4>
         <p>{publication.state === 'active' ? '当前有效' : publication.state === 'replaced' ? `已被替代${publication.replacedBy ? ` → ${publication.replacedBy.slice(0, 8)}` : ''}` : '已撤销'} · 展示 {publication.template} · {formatTime(publication.publishedAt)}</p>
         {publication.withdrawnAt && <p className="si-muted">撤销于 {formatTime(publication.withdrawnAt)}；同版不能重发。</p>}
         {publication.handoffs.length ? publication.handoffs.map(receipt => <p key={receipt.operationId} className="si-muted">承接 {receipt.operationId.slice(0, 8)} · {receipt.scope.name} · {receipt.goals.map(goal => `${goal.goalId.slice(0, 8)} v${goal.version}`).join('、')} · {formatTime(receipt.at)}</p>) : <p className="si-muted">尚无目标承接回执。</p>}
       </section>}
       {anchorReport ? <section className="si-content-block"><h4>锚定开题报告 v{anchorReport.no}</h4><p className="si-muted">指纹 {anchorReport.contentSha256.slice(0, 12)}…</p>{onViewReport && <button type="button" className="text-button" onClick={onViewReport}>查看原开题报告</button>}</section> : <p className="si-muted">锚定开题报告 v{candidate.anchor.reportNo} 当前暂不可读；版本身份保留。</p>}
+      {onOpenSession && <div className="si-actions"><button type="button" className="secondary-button" onClick={onOpenSession}>查看候选会话</button></div>}
     </div>
     <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>关闭</button></div>
   </CaseDialog>;
@@ -223,10 +224,10 @@ export function LegacyDiscussionReadback({ discussionId, access, focusRequest }:
     <StrategyDiscussionPanel
       stage={stage === 'strategy-release' ? 'direction' : stage}
       onStage={next => { if (next === 'goals') { access.onStage('goals'); return; } if (next === 'strategy-release') { setNotice('旧地图发布入口已退役；当前发布与承接请在「战略发布」和上方台账核对。'); return; } setStage(next); }}
-      active={access.active} scopes={access.scopes} getGoalScope={access.getGoalScope} selectedGoal={access.selectedGoal}
+      active={access.active} pinned scopes={access.scopes} getGoalScope={access.getGoalScope} selectedGoal={access.selectedGoal}
       projects={access.projects} configurations={access.configurations} selectedConfigurationId={access.selectedConfigurationId}
       onSettings={access.onSettings} onGoalsChanged={access.onGoalsChanged} onReviewCandidate={access.onReviewCandidate}
-      focusRequest={focusRequest?.source.id === discussionId ? focusRequest : undefined}
+      focusRequest={focusRequest?.source.id === discussionId ? focusRequest : { source: { id: discussionId } as GoalDiscussionSourceRef, id: discussionId }}
     />
   </div>;
 }
@@ -249,7 +250,13 @@ function ledgerEvents(history: InitiativeHistory, scopeKey: string): LedgerEvent
     const candidate = history.candidates.find(item => item.candidateId === batch.candidateId && item.no === batch.no);
     if (candidate && candidate.scopeKey !== scopeKey) continue;
     events.push({ at: batch.createdAt, title: '检验批次已发起', detail: `批次 ${batch.batchId.slice(0, 8)} · ${candidate ? candidateLabel(candidate) : `${batch.candidateId.slice(0, 8)} v${batch.no}`}`, view: candidate ? { kind: 'candidate', candidateId: candidate.candidateId, no: candidate.no } : undefined });
-    for (const gate of batch.gates) if (gate.finishedAt) events.push({ at: gate.finishedAt, title: `${gateNames[gate.turn]} ${gateStatus(gate).label}`, detail: `${gate.ref} · ${gate.evidence ?? '原始依据保留'}`, view: candidate ? { kind: 'candidate', candidateId: candidate.candidateId, no: candidate.no } : undefined });
+    for (const gate of batch.gates) {
+      if (gate.attempts?.length) {
+        for (const attempt of gate.attempts) events.push({ at: attempt.at, title: `${gateNames[gate.turn]} ${attempt.status === 'completed' && attempt.verdict ? { pass: '通过', fail: '不通过', insufficient: '依据不足' }[attempt.verdict] : { running: '运行中', completed: '完成', failed: '技术失败', cancelled: '已取消', unknown: '结果未知', waiting: '等待' }[attempt.status]}`, detail: `${gate.ref} · ${attempt.evidence ?? '原始依据保留'}`, view: candidate ? { kind: 'candidate', candidateId: candidate.candidateId, no: candidate.no } : undefined });
+      } else if (gate.finishedAt) {
+        events.push({ at: gate.finishedAt, title: `${gateNames[gate.turn]} ${gateStatus(gate).label}`, detail: `${gate.ref} · ${gate.evidence ?? '原始依据保留'}`, view: candidate ? { kind: 'candidate', candidateId: candidate.candidateId, no: candidate.no } : undefined });
+      }
+    }
   }
   for (const publication of history.publications) {
     if (publication.scopeKey !== scopeKey) continue;
@@ -264,9 +271,9 @@ function ledgerEvents(history: InitiativeHistory, scopeKey: string): LedgerEvent
   return events.sort((a, b) => b.at.localeCompare(a.at));
 }
 
-export function StrategyVersionsPanel({ initiativeId, scopeKey, history, access, legacyId, onLegacySelect, legacyFocus }: {
+export function StrategyVersionsPanel({ initiativeId, scopeKey, history, access, legacyId, onLegacySelect, legacyFocus, onOpenSession }: {
   initiativeId: string; scopeKey: string; history: InitiativeHistory | null; access: LegacyDiscussionAccess;
-  legacyId: string; onLegacySelect: (id: string) => void; legacyFocus?: { source: GoalDiscussionSourceRef; id: string };
+  legacyId: string; onLegacySelect: (id: string) => void; legacyFocus?: { source: GoalDiscussionSourceRef; id: string }; onOpenSession?: (ref: CandidateRef) => void;
 }) {
   const [viewing, setViewing] = useState<{ kind: 'report'; no: number } | { kind: 'candidate'; candidateId: string; no: number } | null>(null);
   const [historyError, setHistoryError] = useState('');
@@ -330,6 +337,6 @@ export function StrategyVersionsPanel({ initiativeId, scopeKey, history, access,
       </div>
     </>}
     {viewingReport && <ReportVersionDialog version={viewingReport} anchor={anchor} onClose={() => setViewing(null)} />}
-    {viewingCandidate && <VersionReceiptDialog candidate={viewingCandidate} anchorReport={data?.reports.versions.find(version => version.no === viewingCandidate.anchor.reportNo)} batch={latestBatch(data?.verifications ?? [], viewingCandidate)} publication={publicationFor(data?.publications ?? [], viewingCandidate)} onClose={() => setViewing(null)} onViewReport={() => setViewing({ kind: 'report', no: viewingCandidate.anchor.reportNo })} />}
+    {viewingCandidate && <VersionReceiptDialog candidate={viewingCandidate} anchorReport={data?.reports.versions.find(version => version.no === viewingCandidate.anchor.reportNo)} batch={latestBatch(data?.verifications ?? [], viewingCandidate)} publication={publicationFor(data?.publications ?? [], viewingCandidate)} onClose={() => setViewing(null)} onViewReport={() => setViewing({ kind: 'report', no: viewingCandidate.anchor.reportNo })} onOpenSession={onOpenSession ? () => { const ref = { candidateId: viewingCandidate.candidateId, no: viewingCandidate.no }; setViewing(null); onOpenSession(ref); } : undefined} />}
   </section>;
 }

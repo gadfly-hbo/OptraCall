@@ -380,7 +380,7 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       </>}
       {stage === 'strategy-check' && <StrategyCheckPanel initiativeId={id} candidates={candidates} batches={history?.verifications ?? []} selected={selectedCandidate} onSelect={setSelectedCandidate} onStage={onStage} onRevise={candidate => { setSelectedCandidate({ candidateId: candidate.candidateId, no: candidate.no }); setDialog('revise-candidate'); }} onRefresh={refresh} />}
       {stage === 'strategy-release' && <StrategyReleaseReview initiativeId={id} scope={scope} scopes={access.scopes} candidates={candidates} batches={history?.verifications ?? []} publications={publications} selected={selectedCandidate} onSelect={setSelectedCandidate} onStage={onStage} onRefresh={refresh} onGoalsChanged={async () => { await access.onGoalsChanged(); }} />}
-      {stage === 'strategy-versions' && <StrategyVersionsPanel initiativeId={id} scopeKey={scopeKey} history={history} access={access} legacyId={legacyId} onLegacySelect={setLegacyId} legacyFocus={legacyFocus} />}
+      {stage === 'strategy-versions' && <StrategyVersionsPanel initiativeId={id} scopeKey={scopeKey} history={history} access={access} legacyId={legacyId} onLegacySelect={setLegacyId} legacyFocus={legacyFocus} onOpenSession={ref => { setSelectedCandidate(ref); setDialog('candidate-session'); }} />}
     </div>
     <div className="si-side">
       <CaseFormError error={fileError} />
