@@ -3,7 +3,7 @@
 .map-import-notice{padding:10px 12px;border-radius:7px;background:var(--warning-bg);color:var(--warning);border:1px solid color-mix(in srgb,var(--warning) 35%,var(--line));font-size:12.5px;margin:8px 0}
 .map-conflict-list{margin:6px 0 0;padding-left:18px;display:grid;gap:4px}
 .map-conflict-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-.map-import-source-list,.map-import-pages{display:grid;gap:8px;margin:8px 0}
+.map-import-source-list{display:grid;gap:8px;margin:8px 0}
 .map-import-selected{display:grid;gap:10px}
 .map-review-workspace{margin:12px 0}
 .map-mobile-pane-tabs{display:none;gap:8px;margin-bottom:10px}

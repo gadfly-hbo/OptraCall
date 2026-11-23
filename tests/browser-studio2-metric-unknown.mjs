@@ -17,7 +17,7 @@ await writeFile(entryPath, `import {createElement} from 'react';
 import {createRoot} from 'react-dom/client';
 import {MetricFactoryPage} from ${JSON.stringify(resolve('extensions/business-plugins/metric-factory/ui/MetricFactoryPage.tsx'))};
 window.__metricSaved=[];
-createRoot(document.getElementById('root')).render(createElement(MetricFactoryPage,{embedded:true,allowedIds:[],projects:[{id:'p1',name:'合成分析项目',archivedAt:null,tasks:[]}],onOpenTask(){},onProjectsChanged(){},onBack(){},onSaved(id){window.__metricSaved.push(id)},onNavigationGuard(guard){window.__metricGuard=guard}}));`);
+createRoot(document.getElementById('root')).render(createElement(MetricFactoryPage,{embedded:true,allowedIds:[],projects:[{id:'p1',name:'合成分析项目',archivedAt:null,tasks:[]}],onOpenTask(){},onProjectsChanged(){},onSaved(id){window.__metricSaved.push(id)},onNavigationGuard(guard){window.__metricGuard=guard}}));`);
 await build({ input: entryPath, platform: 'browser', output: { format: 'esm', file: bundlePath } });
 const bundle = await readFile(bundlePath);
 const server = createServer((request, response) => {

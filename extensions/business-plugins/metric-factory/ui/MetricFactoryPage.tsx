@@ -51,12 +51,11 @@ function MetricCard({ metric }: { metric: SapDocument['metrics'][number] }) {
   </article>;
 }
 
-export function MetricFactoryPage({ projects, onOpenTask, onProjectsChanged, onBack, embedded = false, active = true, readOnly = false, enterpriseId, allowedIds, initialTarget, onTargetConsumed, onSaved, onNavigationGuard }: {
+export function MetricFactoryPage({ projects, onOpenTask, onProjectsChanged, embedded = false, active = true, readOnly = false, enterpriseId, allowedIds, initialTarget, onTargetConsumed, onSaved, onNavigationGuard }: {
   embedded?: boolean; active?: boolean; readOnly?: boolean; enterpriseId?: string; allowedIds?: string[]; initialTarget?: { id: string; version: string }; onTargetConsumed?: () => void; onSaved?: (id: string) => void | Promise<void>; onNavigationGuard?: (guard: (() => Promise<boolean>) | null) => void;
   projects: ClientProject[];
   onOpenTask: (project: ClientProject, task: ClientTask) => void;
   onProjectsChanged: () => void;
-  onBack: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('overview');
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
@@ -122,7 +121,6 @@ export function MetricFactoryPage({ projects, onOpenTask, onProjectsChanged, onB
   };
 
   useEffect(() => { if (active && initialTarget) { void openDetail(initialTarget.id, initialTarget.version).finally(() => onTargetConsumed?.()); } }, [active, initialTarget]);
-  const Header = embedded ? 'h2' : 'h1';
 
   const createModelingTask = async () => {
     const project = activeProjects.find(item => item.id === modelingProject);
@@ -136,14 +134,13 @@ export function MetricFactoryPage({ projects, onOpenTask, onProjectsChanged, onB
     } catch (caught) { setError(caught instanceof HostRequestError ? caught.message : '建模任务创建失败，请重试。'); }
   };
 
-  return <div className={`mf-page${embedded ? ' is-embedded' : ''}`} data-build="metric-factory-mvp">
+  return <div className="mf-page is-embedded" data-build="metric-factory-mvp">
     <div className="page-heading">
       <div>
         <p className="eyebrow">METRIC FACTORY · 分析资产</p>
-        <Header ref={heading} tabIndex={-1}>{embedded ? '分析指标' : '指标体系'}</Header>
-        <p>{embedded ? '与 Pi 在原项目任务中建设指标，沿原专业主库校验发布；本企业正式资产按资格供给，实际采用保留准确版本。' : '在任务中与 Pi 协作起草指标体系，审核发布到本机全局库；项目按精确版本启用，分析时引用口径并注明版本。'}</p>
+        <h2 ref={heading} tabIndex={-1}>分析指标</h2>
+        <p>与 Pi 在原项目任务中建设指标，沿原专业主库校验发布；本企业正式资产按资格供给，实际采用保留准确版本。</p>
       </div>
-      {!embedded && <span className="mf-store">全局库 · ~/.optracall/metric-assets/</span>}
     </div>
     {error && <div className="error-notice" role="alert"><div><strong>指标体系提示</strong><p>{error}</p></div><button className="text-button" onClick={() => { setError(''); void reload(); }}>重试</button></div>}
     {notice && <p className="project-notice" role="status">{notice}<button className="text-button" onClick={() => setNotice('')}>知道了</button></p>}
@@ -173,8 +170,8 @@ export function MetricFactoryPage({ projects, onOpenTask, onProjectsChanged, onB
             <button className="text-button" onClick={() => void openDetail(id, latest.version)}>查看详情 →</button>
           </div>
         </article>)}
-      </div> : <div className="mf-empty"><h2>{query ? '没有匹配的资产包' : embedded ? '本企业尚无已关联指标' : '全局库还没有资产包'}</h2><p>{query ? '试试其他关键词。' : '在项目任务中与 Pi 协作起草指标体系草稿，然后到「审核发布」导入发布。'}</p>{!query && <button className="primary-button" onClick={() => setModelingOpen(true)} disabled={!activeProjects.length}>＋ 发起建模任务</button>}</div>}
-      <p className="mf-footer">{embedded ? '发布版本不可覆盖；企业供给与当前任务实际采用分别记录，旧报告保留原依据。' : '发布即不可变：内容未变拒绝重发，版本不可覆盖 · 更新=新版本+项目显式升级'}</p>
+      </div> : <div className="mf-empty"><h2>{query ? '没有匹配的资产包' : '本企业尚无已关联指标'}</h2><p>{query ? '试试其他关键词。' : '在项目任务中与 Pi 协作起草指标体系草稿，然后到「审核发布」导入发布。'}</p>{!query && <button className="primary-button" onClick={() => setModelingOpen(true)} disabled={!activeProjects.length}>＋ 发起建模任务</button>}</div>}
+      <p className="mf-footer">发布版本不可覆盖；企业供给与当前任务实际采用分别记录，旧报告保留原依据。</p>
     </section>}
 
     {tab === 'detail' && <section aria-label="包详情">
@@ -246,7 +243,6 @@ export function MetricFactoryPage({ projects, onOpenTask, onProjectsChanged, onB
       </div>
     </dialog>}
     {leaveOpen && <PersonalDialog title={reviewState.uncertain ? '保留未知发布尝试并离开？' : '保留未完成的指标审核？'} onClose={() => finishLeave(false)} footer={<><button type="button" className="primary-button" onClick={() => finishLeave(false)}>继续核对</button><button type="button" className="secondary-button" onClick={() => finishLeave(true)}>{reviewState.uncertain ? '保留未知并离开' : '放弃本次未提交审核'}</button></>}>{reviewState.uncertain ? <p>原尝试的准确目标、指纹、项目和草稿路径已保留在本浏览器标签页。离开不确认原请求成功或失败；返回此企业的指标管理可展开原尝试核对，其他工作可继续。</p> : <p>当前口径勾选和署名尚未提交。原项目草稿与已发布版本保持。</p>}</PersonalDialog>}
-    {!embedded && <p className="mf-footer"><button className="text-button" onClick={onBack}>返回分析资产 →</button> · Agent 对全局库只读；发布与启用均为显式操作</p>}
   </div>;
 }
 

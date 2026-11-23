@@ -1,4 +1,4 @@
-import type { BrowserUIRequest, BrowserUIResponse, FileNode } from './project-types.ts';
+import type { BrowserUIRequest, FileNode } from './project-types.ts';
 import type { VerificationAuthorPreview, VerificationContextEvidence, VerificationSelectedMaterials } from '../verification-context.ts';
 export type { VerificationAuthorPreview, VerificationContextEvidence, VerificationMaterialPreview } from '../verification-context.ts';
 
@@ -98,10 +98,6 @@ export async function verificationAction(projectId: string, taskId: string, id: 
     } catch { /* The original intent remains unresolved; never replay the action. */ }
     throw new VerificationSubmissionUnknown(id);
   }
-}
-export async function respondVerificationUI(projectId: string, taskId: string, id: string, input: BrowserUIResponse): Promise<VerificationRecord> {
-  await request(`${scopePath(projectId, taskId)}/${encodeURIComponent(id)}/ui-response`, 'POST', input, AbortSignal.timeout(30000));
-  return readVerification(projectId, taskId, id, AbortSignal.timeout(10000));
 }
 export async function downloadVerificationAuthorFile(projectId: string, taskId: string, id: string, relativePath: string): Promise<void> {
   const response = await fetch(`/api/${scopePath(projectId, taskId)}/${encodeURIComponent(id)}/author-file?path=${encodeURIComponent(relativePath)}`, { credentials: 'omit', mode: 'same-origin', cache: 'no-store', headers: { 'x-optracall-client': '1' } });
