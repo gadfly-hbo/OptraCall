@@ -59,3 +59,26 @@ test('真实 Host：开题来源按 fileId+指纹核对，范围引用与专属�
   assert.equal((await req(`${base}/reports`, 'POST', {operationId: randomUUID(), fields: {...fields, diagnosis: '第三版。'}, sources: [goodSource], parent: 2}, 409)).code, 'strategy_kickoff_source_invalid');
   assert.equal((await req(`${base}/reports/1/apply`, 'POST', {operationId: randomUUID(), sha256: v1.contentSha256, scope: stores}, 409)).code, 'strategy_kickoff_source_invalid');
 });
+test('真实 Host：范围专属来源限定报告适用范围，跨范围应用拒绝', {timeout: 90_000}, async t => {
+  const host = await startTestHost();
+  t.after(async () => { await host.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '范围来源事项', scopes: [stores, ecommerce]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}`;
+  const exclusive = (await req(`${base}/files`, 'POST', {operationId: randomUUID(), directory: '020_clean', name: 'A范围口径.md', contentBase64: Buffer.from('A 范围专属').toString('base64'), scopeKey: storesKey}, 201)).file;
+  const source = {kind: 'file', ref: '020_clean/A范围口径.md', fileId: exclusive.fileId, sha256: exclusive.sha256};
+  assert.equal((await req(`${base}/reports`, 'POST', {operationId: randomUUID(), fields, sources: [source], scopeKeys: [storesKey, 'department:ent-1:east-ecom']}, 400)).code, 'strategy_kickoff_scope_unknown');
+  const v1 = (await req(`${base}/reports`, 'POST', {operationId: randomUUID(), fields, sources: [source]}, 201)).version;
+  assert.deepEqual(v1.scopeKeys, [storesKey], 'report applicability derives from the real source scope');
+  await req(`${base}/reports/1/lock`, 'POST', {operationId: randomUUID(), sha256: v1.contentSha256});
+  assert.equal((await req(`${base}/reports/1/apply`, 'POST', {operationId: randomUUID(), sha256: v1.contentSha256, scope: ecommerce}, 409)).code, 'strategy_kickoff_scope_unknown');
+  await req(`${base}/reports/1/apply`, 'POST', {operationId: randomUUID(), sha256: v1.contentSha256, scope: stores});
+  const shared = (await req(`${base}/files`, 'POST', {operationId: randomUUID(), directory: '010_draw', name: '共用复盘.md', contentBase64: Buffer.from('共用').toString('base64')}, 201)).file;
+  const v2 = (await req(`${base}/reports`, 'POST', {operationId: randomUUID(), fields: {...fields, diagnosis: '共用资料开题。'}, sources: [{kind: 'file', ref: '010_draw/共用复盘.md', fileId: shared.fileId, sha256: shared.sha256}], parent: 1}, 201)).version;
+  assert.deepEqual(v2.scopeKeys, [storesKey, 'department:ent-1:east-ecom'], 'shared sources keep all initiative scopes');
+});

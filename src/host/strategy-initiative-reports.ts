@@ -117,8 +117,16 @@ export class StrategyInitiativeReports {
     const fields = validateFields(input.fields), sources = validateSources(input.sources);
     this.assertSources(id, sources);
     const initiativeKeys = initiative.scopes.map(s => initiativeScopeKey(s));
-    const scopeKeys = input.scopeKeys === undefined ? initiativeKeys : input.scopeKeys;
-    if (!Array.isArray(scopeKeys) || !scopeKeys.length || scopeKeys.some(k => typeof k !== 'string' || !initiativeKeys.includes(k))) throw new StrategyDiscussionFault('strategy_initiative_scope_unknown', 400);
+    let allowed = initiativeKeys;
+    if (this.files) {
+      for (const source of sources) {
+        if (source.kind !== 'file' || !source.fileId) continue;
+        const file = this.files.read(id, source.fileId).file;
+        if (file.scopeKey !== undefined) allowed = allowed.filter(key => key === file.scopeKey);
+      }
+    }
+    const scopeKeys = input.scopeKeys === undefined ? allowed : input.scopeKeys;
+    if (!Array.isArray(scopeKeys) || !scopeKeys.length || scopeKeys.some(k => typeof k !== 'string' || !allowed.includes(k))) throw new StrategyDiscussionFault('strategy_kickoff_scope_unknown', 400);
     const file = this.read(id);
     const existing = file.versions.find(v => v.generation.operationId === input.operationId);
     const contentSha256 = hash({fields, sources});
