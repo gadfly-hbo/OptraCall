@@ -139,3 +139,11 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 ### PM 五次返工（汇总来源期间）
 
 `summaryAccess.period` 在正常发布路径从未写入。修复：`assertSummaryScopeMatchesAsset` 从已发布来源正文提取 `sourcePeriod` 并返回；`verifySummaryAuthority` 传递；授权创建时存入 `grant.scope.sourcePeriod`；目录和精读用 `grant.scope.sourcePeriod ?? purpose.scope.period` 做 `isPeriodCovered` 核对。半月授权下目录不再标整月可引用，单日用途指向整月来源时精读拒绝。
+
+### PM 六次返工（完整来源期间范围）
+
+`sourcePeriod` 只取首个 `YYYY-MM`，无法表达跨月/单日/未知。修复：
+- `assertSummaryScopeMatchesAsset` 提取完整范围：`YYYY-MM-DD` 优先（单日），剩余 `YYYY-MM` 为月份标记，取最早/最晚存入 `sourcePeriodFrom`/`sourcePeriodTo`。
+- 新增 `isSourcePeriodCovered(sourceFrom, sourceTo, grantFrom, grantTo)`：来源期间未知时拒绝（不回退用途期间），已知时核对授权完整覆盖。
+- 目录和精读统一用 `isSourcePeriodCovered`，不再回退到 `purpose.scope.period`。
+- 新增测试：跨月只授权首月拒绝、跨月全授权通过、未知来源期间拒绝、单日来源+单日授权通过、单日来源+月授权通过。

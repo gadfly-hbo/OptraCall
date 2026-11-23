@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { DomainReferenceStore } from '../src/host/domain-reference-store.ts';
-import { isPeriodCovered } from '../src/host/member-pack-data-view.ts';
+import { isPeriodCovered, isSourcePeriodCovered } from '../src/host/member-pack-data-view.ts';
 import { ResourceGrantStore } from '../src/host/resource-grant-store.ts';
 import { EnterprisePackStore } from '../src/host/enterprise-pack-store.ts';
 import {
@@ -2050,6 +2050,11 @@ test('purposeKeys wildcard * grants access to any purpose; empty purposeKeys mea
     const pGrant2 = grants.get(periodGrant.id);
     assert.equal(isPeriodCovered('2026-09', pGrant2.scope.periodFrom, pGrant2.scope.periodTo), false, 'half-month grant must not cover full September');
     assert.equal(isPeriodCovered('2026-09-01', pGrant2.scope.periodFrom, pGrant2.scope.periodTo), true, 'single day within grant passes');
+    assert.equal(isSourcePeriodCovered('2026-08', '2026-09', '2026-08-01', '2026-08-31'), false, 'cross-month source: grant only covers first month');
+    assert.equal(isSourcePeriodCovered('2026-08', '2026-09', '2026-08-01', '2026-09-30'), true, 'cross-month source: grant covers both months');
+    assert.equal(isSourcePeriodCovered(undefined, undefined, '2026-09-01', '2026-09-15'), false, 'unknown source period: deny even with finite grant');
+    assert.equal(isSourcePeriodCovered('2026-09-15', '2026-09-15', '2026-09-15', '2026-09-15'), true, 'single-day source with single-day grant: allow');
+    assert.equal(isSourcePeriodCovered('2026-09-15', '2026-09-15', '2026-09-01', '2026-09-30'), true, 'single-day source with month grant: allow (grant covers source)');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
