@@ -173,3 +173,38 @@ test('真实 Host+Pi：无来源通过被拒，派发前失败落可恢复终态
   assert.equal(retried.gates[0].status, 'failed', 'retry after pre-dispatch failure stays recoverable, never stuck running');
   assert.deepEqual(provider.errors, []);
 });
+
+test('真实 Host+Pi：公开占位来源不生成通过凭证，准确身份+有效 URL 可辅助', {timeout: 150_000}, async t => {
+  const provider = await startToolProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  await req('/api/configuration', 'PUT', {name: '公开资格', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-public-qual', apiKey: 'synthetic-public-qual'});
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '公开资格事项', scopes: [stores]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}`;
+  const {cid, locked} = await setup(req, provider, base);
+
+  const cases = [
+    {sources: [{kind: 'public', ref: '行业实践'}], expected: 'unknown', code: 'strategy_verification_source_required'},
+    {sources: [{kind: 'public', ref: 'https://example.com/practice'}], expected: 'unknown', code: 'strategy_verification_source_required'},
+    {sources: [{kind: 'candidate', ref: `${cid}:1`, sha256: locked.contentSha256}, {kind: 'public', ref: '行业实践'}], expected: 'unknown', code: 'strategy_verification_source_invalid'},
+    {sources: [{kind: 'candidate', ref: `${cid}:1`, sha256: locked.contentSha256}, {kind: 'public', ref: 'https://example.com/practice'}], expected: 'passed', code: ''},
+  ];
+  let index = 0;
+  for (const item of cases) {
+    index++;
+    provider.setResponder((ctx: any) => ctx.recentToolResults.length
+      ? {text: '结论已提交。'}
+      : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-verification', verdict: 'pass', evidence: '依据。', verificationSources: item.sources}}]});
+    if (index === 1) await req(`${base}/candidates/${cid}/versions/1/verify`, 'POST', {operationId: randomUUID()}, 202);
+    else await req(`${base}/candidates/${cid}/versions/1/gates/0/retry`, 'POST', {}, 202);
+    const batch = await waitGate(req, base, cid, 1, b => item.expected === 'passed' ? b.state === 'passed' : b.gates[0].status !== 'running');
+    assert.equal(batch.state, item.expected, JSON.stringify(item.sources));
+    if (item.expected !== 'passed') assert.equal(batch.gates[0].verdict, undefined, item.code);
+  }
+  assert.deepEqual(provider.errors, []);
+});

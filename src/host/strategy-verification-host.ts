@@ -143,7 +143,12 @@ export function createStrategyVerificationHost(options: {
       if (typeof input.evidence !== 'string' || !input.evidence.trim() || input.evidence.length > 8000) fail('strategy_verification_fields_invalid', 400);
       const sources = input.verificationSources === undefined ? [] : input.verificationSources;
       if (!Array.isArray(sources) || sources.length > 50 || sources.some(s => !s || typeof s !== 'object' || !['file', 'public', 'candidate', 'kickoff'].includes((s as any).kind) || typeof (s as any).ref !== 'string')) fail('strategy_verification_fields_invalid', 400);
-      if (input.verdict === 'pass' && sources.length === 0) fail('strategy_verification_source_required', 400);
+      if (input.verdict === 'pass') {
+        if (!sources.some(s => ['file', 'candidate', 'kickoff'].includes((s as {kind: string}).kind)) ) fail('strategy_verification_source_required', 400);
+        for (const source of sources as {kind: string; ref: string}[]) {
+          if (source.kind === 'public' && !/^https?:\/\//i.test(source.ref)) fail('strategy_verification_source_invalid', 400);
+        }
+      }
       for (const source of sources as { kind: string; ref: string; fileId?: string; sha256?: string }[]) {
         if (source.kind === 'file') {
           if (typeof source.fileId !== 'string' || !uuid.test(source.fileId) || typeof source.sha256 !== 'string') fail('strategy_verification_source_invalid', 400);
