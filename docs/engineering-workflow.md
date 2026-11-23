@@ -304,7 +304,7 @@ Semantica 升级沿用上节[Pi SDK 升级流程](#pi-sdk-升级流程)的用户
 
 ### CI
 
-原四项开发与独立复核后已建立[单任务CI](../.github/workflows/check.yml)：Ubuntu／Node25.9.0，锁文件安装后运行 `npm run check` 和高危级别依赖审计，无真实凭据、模型或业务数据。PR检查实际head，合并后main push另行检查；没有空流程或重复矩阵。本地检查不表述为CI PASS，浏览器／macOS真实模型及产品验收分别记录，交付必须核对实际检查与提交身份。
+[Check 工作流](../.github/workflows/check.yml)检查 PR 的实际 head 和每次 `main` push 的实际提交。整份差异仅编辑 `AGENTS.md`、`README.md`、本规范或 `docs/macbook-trial.md` 时，CI 检查差异格式和 UTF-8 编码，内容一致性、引用、范围及适用独立复核按下表完成。其他变更、无法可靠判断范围或手动触发时，在 Ubuntu／Node 25.9.0 按锁文件安装依赖，运行 `npm run check` 和高危级别依赖审计。CI 无真实凭据、模型或业务数据。本地检查与 CI 结果分别记录，浏览器／macOS 真实模型及产品验收另行记录。交付须核对检查范围、结果和提交身份。
 
 | 修改范围 | 验证选择 |
 | --- | --- |
