@@ -425,7 +425,7 @@ function CandidateDetailPanel({ candidate, batch, publication, busy, onLock, onR
         : candidate.lock ? <button type="button" className="primary-button" onClick={() => onStage('strategy-check')}>前往战略检验</button>
         : !generating && candidate.blocks.length > 0 && <button type="button" className="primary-button" disabled={busy} onClick={onLock}>审核并锁定</button>}
       {!generating && candidate.blocks.length > 0 && !candidate.lock && !publication && <button type="button" className="secondary-button" disabled={busy} onClick={onRevise}>限定修改</button>}
-      {candidate.lock && !publication && batch?.state !== 'running' && <button type="button" className="secondary-button" disabled={busy} onClick={onRevise}>从此版修订</button>}
+      {candidate.lock && batch?.state !== 'running' && <button type="button" className="secondary-button" disabled={busy} onClick={onRevise}>从此版修订</button>}
       <button type="button" className="secondary-button" onClick={onSession}>查看候选会话</button>
     </div>
   </section>;
