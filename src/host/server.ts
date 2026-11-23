@@ -1202,8 +1202,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const strategyDiscussions=createStrategyDiscussionHost(discussionOptions);
   const strategyMapPublications=new StrategyMapPublicationStore(strategyDiscussions.store);
   const strategyInitiatives=new StrategyInitiativeStore(dataRoot);
-  const strategyKickoffReports=new StrategyInitiativeReports(strategyInitiatives);
   const strategyInitiativeFiles=new StrategyInitiativeFiles(strategyInitiatives);
+  const strategyKickoffReports=new StrategyInitiativeReports(strategyInitiatives,strategyInitiativeFiles);
   const strategyInitiativeSessions=createStrategyInitiativeHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyCandidates=createStrategyCandidateHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   strategyMapImports=createStrategyMapImportService({dataRoot,codeRoot:options.cwd,attachments:strategyAttachments,projects,owner:id=>strategyDiscussions.store.get(id),configuration:(id,revision)=>availableConfiguration(id,revision),mutate,
@@ -2744,7 +2744,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(!fileId&&request.method==='POST'){const input=await body(request,68*1024*1024);json(response,201,{file:await mutate(()=>strategyInitiativeFiles.upload(id,input as Parameters<typeof strategyInitiativeFiles.upload>[1]))});return;}
         if(fileId&&request.method==='GET'){json(response,200,strategyInitiativeFiles.read(id,fileId));return;}
       }
-      const candidateRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/candidates(?:\/([a-f0-9-]{36})\/versions\/([1-9]\d*)(?:\/(messages|stop|close))?)?$/.exec(url.pathname);
+      const candidateRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/candidates(?:\/([a-f0-9-]{36})\/versions\/([1-9]\d*)(?:\/(messages|stop|close|lock|revise))?)?$/.exec(url.pathname);
       if(candidateRoute){
         const id=candidateRoute[1]!,cid=candidateRoute[2],no=Number(candidateRoute[3]),action=candidateRoute[4];
         if(!cid&&request.method==='GET'){json(response,200,{candidates:strategyCandidates.list(id,url.searchParams.get('scopeKey')??undefined)});return;}
@@ -2753,6 +2753,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(action==='messages'&&request.method==='POST'){const input=await body(request);json(response,202,await strategyCandidates.send(id,cid!,no,input));return;}
         if(action==='stop'&&request.method==='POST'){const input=await body(request);json(response,200,await strategyCandidates.stop(id,cid!,no,input.expectedRequestId as string|undefined));return;}
         if(action==='close'&&request.method==='POST'){json(response,200,await strategyCandidates.close(id,cid!,no));return;}
+        if(action==='lock'&&request.method==='POST'){const input=await body(request);json(response,200,{candidate:await strategyCandidates.lock(id,cid!,no,input)});return;}
+        if(action==='revise'&&request.method==='POST'){const input=await body(request);json(response,201,{candidate:await strategyCandidates.revise(id,cid!,no,input)});return;}
       }
       const initiativeSessionRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/(session|messages|events|stop|close)$/.exec(url.pathname);
       if(initiativeSessionRoute){
@@ -2777,13 +2779,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           return;
         }
       }
-      const kickoffRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/reports(?:\/([1-9]\d*)\/(lock|apply))?$/.exec(url.pathname);
+      const kickoffRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/reports(?:\/([1-9]\d*)\/(lock|apply|revise))?$/.exec(url.pathname);
       if(kickoffRoute){
         const id=kickoffRoute[1]!,no=Number(kickoffRoute[2]),action=kickoffRoute[3];
         if(!action&&request.method==='GET'){json(response,200,strategyKickoffReports.view(id));return;}
         if(!action&&request.method==='POST'){const input=await body(request);json(response,201,{version:await mutate(()=>strategyKickoffReports.save(id,input as Parameters<typeof strategyKickoffReports.save>[1]))});return;}
         if(action==='lock'&&request.method==='POST'){const input=await body(request);json(response,200,{version:await mutate(()=>strategyKickoffReports.lock(id,no,input as Parameters<typeof strategyKickoffReports.lock>[2]))});return;}
         if(action==='apply'&&request.method==='POST'){const input=await body(request);json(response,200,{anchor:await mutate(()=>strategyKickoffReports.apply(id,no,input as Parameters<typeof strategyKickoffReports.apply>[2]))});return;}
+        if(action==='revise'&&request.method==='POST'){const input=await body(request);json(response,201,{version:await mutate(()=>strategyKickoffReports.revise(id,no,input as Parameters<typeof strategyKickoffReports.revise>[2]))});return;}
       }
       const workbookRoute=/^\/api\/strategy\/workbooks\/(preview|commit|handoff|map-source|goal-source)$/.exec(url.pathname);
       if(workbookRoute && request.method==='POST'){

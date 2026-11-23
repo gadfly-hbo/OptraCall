@@ -340,8 +340,86 @@ export function createStrategyCandidateHost(options: {
     return {candidate: owner, busy: live.busy, files: files.list(id, owner.scopeKey), snapshot: snapshot ? {...snapshot, messages} : null};
   }
 
+  async function lock(id: string, candidateId: string, no: number, input: Record<string, unknown>) {
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'sha256', 'operator'].includes(key))) fail('strategy_candidate_fields_invalid', 400);
+    if (typeof input.operationId !== 'string' || !uuid.test(input.operationId)) fail('strategy_candidate_operation_invalid', 400);
+    const owner = version(id, candidateId, no);
+    if (domain.busy(domain.ref(owner))) fail('session_busy');
+    if (!owner.blocks.length) fail('strategy_candidate_empty');
+    if (typeof input.sha256 !== 'string' || input.sha256 !== owner.contentSha256) fail('strategy_candidate_version_conflict');
+    if (owner.lock) {
+      if (owner.lock.operationId === input.operationId && owner.lock.fingerprint === input.sha256) return structuredClone(owner);
+      fail('strategy_candidate_already_locked');
+    }
+    const operator = input.operator === undefined ? '决策者' : input.operator;
+    if (typeof operator !== 'string' || !operator.trim() || operator.length > 100) fail('strategy_candidate_fields_invalid', 400);
+    return options.mutate(() => {
+      const file = readFile(id);
+      const record = file.candidates.find(c => c.candidateId === candidateId && c.no === no);
+      if (!record) fail('strategy_candidate_not_found', 404);
+      if (record.lock) fail('strategy_candidate_already_locked');
+      if (record.contentSha256 !== input.sha256) fail('strategy_candidate_version_conflict');
+      record.lock = {operationId: input.operationId as string, operator: (operator as string).trim(), at: new Date().toISOString(), fingerprint: record.contentSha256};
+      record.updatedAt = new Date().toISOString();
+      writeFile(id, file);
+      return structuredClone(record);
+    });
+  }
+
+  async function revise(id: string, candidateId: string, no: number, input: Record<string, unknown>) {
+    initiatives.get(id);
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'baseSha256', 'request', 'patches'].includes(key))) fail('strategy_candidate_fields_invalid', 400);
+    if (typeof input.operationId !== 'string' || !uuid.test(input.operationId)) fail('strategy_candidate_operation_invalid', 400);
+    if (typeof input.request !== 'string' || !input.request.trim() || input.request.length > 2000) fail('strategy_candidate_fields_invalid', 400);
+    if (!Array.isArray(input.patches) || input.patches.length < 1 || input.patches.length > 20) fail('strategy_candidate_fields_invalid', 400);
+    const base = version(id, candidateId, no);
+    const configuration = options.configuration();
+    if (!configuration) fail('configuration_required');
+    return options.mutate(() => {
+      const file = readFile(id);
+      const existing = file.candidates.find(c => c.createOperationId === input.operationId);
+      if (existing) {
+        if (existing.parent?.candidateId !== candidateId || existing.parent?.no !== no || existing.revisionMeta?.request !== input.request) fail('strategy_candidate_operation_conflict');
+        return structuredClone(existing);
+      }
+      const record = file.candidates.find(c => c.candidateId === candidateId && c.no === no);
+      if (!record) fail('strategy_candidate_not_found', 404);
+      if (typeof input.baseSha256 !== 'string' || input.baseSha256 !== record.contentSha256) fail('strategy_candidate_version_conflict');
+      if (!record.blocks.length) fail('strategy_candidate_empty');
+      const blocks = structuredClone(record.blocks);
+      const applied: { blockId: string; oldSha256: string; newSha256: string }[] = [];
+      const seen = new Set<string>();
+      for (const patch of input.patches as Record<string, unknown>[]) {
+        if (!patch || typeof patch !== 'object' || Object.keys(patch).some(key => !['blockId', 'expectedOldSha256', 'newText'].includes(key))) fail('strategy_candidate_fields_invalid', 400);
+        if (typeof patch.blockId !== 'string' || seen.has(patch.blockId)) fail('strategy_candidate_patch_target_invalid', 400);
+        seen.add(patch.blockId);
+        const block = blocks.find(b => b.id === patch.blockId);
+        if (!block) fail('strategy_candidate_patch_target_invalid', 400);
+        if (typeof patch.newText !== 'string' || !patch.newText.trim() || patch.newText.length > 20000) fail('strategy_candidate_fields_invalid', 400);
+        const oldSha256 = createHash('sha256').update(block.text).digest('hex');
+        if (typeof patch.expectedOldSha256 !== 'string' || patch.expectedOldSha256 !== oldSha256) fail('strategy_candidate_old_value_conflict');
+        block.text = patch.newText;
+        applied.push({blockId: patch.blockId, oldSha256, newSha256: createHash('sha256').update(patch.newText).digest('hex')});
+      }
+      const goals = structuredClone(record.goals);
+      const now = new Date().toISOString();
+      const next: CandidateVersion = {
+        initiativeId: id, candidateId, no: Math.max(...file.candidates.filter(c => c.candidateId === candidateId).map(c => c.no)) + 1,
+        scopeKey: record.scopeKey, title: record.title, anchor: structuredClone(record.anchor),
+        parent: {candidateId, no}, blocks, goals, contentSha256: hash({blocks, goals}),
+        configurationId: configuration.id, configurationRevision: configuration.revision,
+        revision: 1, createOperationId: input.operationId as string, instruction: (input.request as string).trim(),
+        createdAt: now, updatedAt: now,
+      };
+      next.revisionMeta = {operationId: input.operationId as string, request: (input.request as string).trim(), base: {candidateId, no}, patches: applied, at: now};
+      file.candidates.push(next);
+      writeFile(id, file);
+      return structuredClone(next);
+    });
+  }
+
   return {
-    domain, create, send, detail, version,
+    domain, create, send, detail, version, lock, revise,
     list(id: string, scopeKey?: string) {
       initiatives.get(id);
       const all = readFile(id).candidates;

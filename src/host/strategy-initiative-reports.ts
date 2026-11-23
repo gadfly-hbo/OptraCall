@@ -55,7 +55,8 @@ type ReportFile = { formatVersion: 1; versions: KickoffReportVersion[]; applicat
 
 export class StrategyInitiativeReports {
   private readonly initiatives: StrategyInitiativeStore;
-  constructor(initiatives: StrategyInitiativeStore) { this.initiatives = initiatives; }
+  private readonly files?: { list(id: string, scopeKey?: string): { name: string; directory: string }[] };
+  constructor(initiatives: StrategyInitiativeStore, files?: { list(id: string, scopeKey?: string): { name: string; directory: string }[] }) { this.initiatives = initiatives; this.files = files; }
   private file(id: string) { return path.join(this.initiatives.directory(id), 'reports.json'); }
   private read(id: string): ReportFile {
     const file = this.file(id);
@@ -164,5 +165,70 @@ export class StrategyInitiativeReports {
   anchor(id: string, scope: GoalScope): KickoffAnchor | undefined {
     const {anchors} = this.view(id);
     return anchors[initiativeScopeKey(scope)];
+  }
+  revise(id: string, no: number, input: { operationId: string; baseSha256: string; request: string; patches: { blockId: string; expectedOldSha256: string; newText: string }[] }): KickoffReportVersion {
+    this.initiatives.get(id);
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'baseSha256', 'request', 'patches'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
+    if (typeof input.operationId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(input.operationId)) throw new StrategyDiscussionFault('strategy_kickoff_operation_invalid', 400);
+    if (typeof input.request !== 'string' || !input.request.trim() || input.request.length > 2000) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
+    if (!Array.isArray(input.patches) || input.patches.length < 1 || input.patches.length > 20) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
+    const file = this.read(id);
+    const base = file.versions.find(v => v.no === no);
+    if (!base) throw new StrategyDiscussionFault('strategy_kickoff_version_not_found', 404);
+    const prior = file.versions.find(v => v.revision?.operationId === input.operationId);
+    if (prior) {
+      if (prior.parent !== no || prior.revision!.request !== input.request || hash(prior.revision!.patches) !== hash(input.patches.map(p => ({blockId: p.blockId, oldSha256: p.expectedOldSha256, newSha256: createHash('sha256').update(String(p.newText ?? '')).digest('hex')})))) throw new StrategyDiscussionFault('strategy_kickoff_operation_conflict');
+      return structuredClone(prior);
+    }
+    if (typeof input.baseSha256 !== 'string' || input.baseSha256 !== base.contentSha256) throw new StrategyDiscussionFault('strategy_kickoff_version_conflict');
+    const fields = structuredClone(base.fields);
+    const applied: { blockId: string; oldSha256: string; newSha256: string }[] = [];
+    const seen = new Set<string>();
+    for (const patch of input.patches) {
+      if (!patch || typeof patch !== 'object' || Object.keys(patch).some(key => !['blockId', 'expectedOldSha256', 'newText'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
+      if (typeof patch.blockId !== 'string' || seen.has(patch.blockId)) throw new StrategyDiscussionFault('strategy_kickoff_patch_target_invalid', 400);
+      seen.add(patch.blockId);
+      if (typeof patch.newText !== 'string' || !patch.newText.trim() || patch.newText.length > 8000) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
+      const segments = patch.blockId.split(':');
+      let current: string | undefined;
+      let assign: (value: string) => void;
+      if (segments.length === 1 && ['horizon', 'diagnosis', 'assumptions', 'evidenceGaps', 'followUp'].includes(segments[0]!)) {
+        const key = segments[0] as 'horizon' | 'diagnosis' | 'assumptions' | 'evidenceGaps' | 'followUp';
+        current = fields[key];
+        assign = value => { fields[key] = value; };
+      } else if (segments.length === 3 && segments[0] === 'proposition' && ['question', 'whyItMatters', 'evidence', 'gaps'].includes(segments[2]!)) {
+        const proposition = fields.propositions.find(p => p.id === segments[1]);
+        if (!proposition) throw new StrategyDiscussionFault('strategy_kickoff_patch_target_invalid', 400);
+        const key = segments[2] as 'question' | 'whyItMatters' | 'evidence' | 'gaps';
+        current = proposition[key];
+        assign = value => { proposition[key] = value; };
+      } else {
+        throw new StrategyDiscussionFault('strategy_kickoff_patch_target_invalid', 400);
+      }
+      const oldSha256 = createHash('sha256').update(current ?? '').digest('hex');
+      if (typeof patch.expectedOldSha256 !== 'string' || patch.expectedOldSha256 !== oldSha256) throw new StrategyDiscussionFault('strategy_kickoff_old_value_conflict');
+      assign(patch.newText);
+      applied.push({blockId: patch.blockId, oldSha256, newSha256: createHash('sha256').update(patch.newText).digest('hex')});
+    }
+    const validated = validateFields(fields);
+    if (this.files) {
+      const catalog = this.files.list(id);
+      for (const source of base.sources) {
+        if (source.kind !== 'file') continue;
+        const slash = source.ref.indexOf('/');
+        const directory = slash > 0 ? source.ref.slice(0, slash) : '';
+        const name = slash > 0 ? source.ref.slice(slash + 1) : source.ref;
+        if (!catalog.some(f => f.directory === directory && f.name === name)) throw new StrategyDiscussionFault('strategy_initiative_source_changed');
+      }
+    }
+    const now = new Date().toISOString();
+    const version: KickoffReportVersion = {
+      no: file.versions.length + 1, fields: validated, sources: structuredClone(base.sources), contentSha256: hash({fields: validated, sources: base.sources}),
+      parent: no, generation: {operationId: input.operationId, kind: 'revision', at: now},
+      revision: {operationId: input.operationId, request: input.request, baseNo: no, patches: applied, at: now},
+    };
+    file.versions.push(version);
+    this.write(id, file);
+    return structuredClone(version);
   }
 }

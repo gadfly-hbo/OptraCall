@@ -38,6 +38,7 @@ export interface KickoffReportVersion {
   contentSha256: string;
   parent?: number;
   generation: { operationId: string; kind: 'agent' | 'revision' | 'manual'; at: string; requestId?: string };
+  revision?: { operationId: string; request: string; baseNo: number; patches: { blockId: string; oldSha256: string; newSha256: string }[]; at: string };
   lock?: { operationId: string; operator: string; at: string; fingerprint: string };
 }
 export interface KickoffApplication {
@@ -71,6 +72,7 @@ export interface CandidateVersion {
   pendingInput?: { requestId: string; text: string; expectedRevision: number };
   lastRun?: { id: string; fingerprint: string; status: string };
   lock?: { operationId: string; operator: string; at: string; fingerprint: string };
+  revisionMeta?: { operationId: string; request: string; base: { candidateId: string; no: number }; patches: { blockId: string; oldSha256: string; newSha256: string }[]; at: string };
   lastSave?: { operationId: string; contentSha256: string; at: string; requestId?: string };
   returned?: { batchId: string; at: string };
   createdAt: string;
