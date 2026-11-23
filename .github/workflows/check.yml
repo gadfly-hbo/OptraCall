@@ -17,11 +17,63 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
+      - name: Select validation scope
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          base=
+          case "$EVENT_NAME" in
+            pull_request)
+              base=$(git merge-base --all "$EVENT_BASE" HEAD) || base=
+              ;;
+            push)
+              if git merge-base --is-ancestor "$EVENT_BASE" HEAD; then
+                base=$EVENT_BASE
+              fi
+              ;;
+          esac
+
+          mode=full
+          docs=()
+          changes="$RUNNER_TEMP/check-changes"
+          if [[ "$base" =~ ^[0-9a-f]{40}$ ]] &&
+             git diff --raw -z --no-renames --ignore-submodules=none "$base" HEAD -- > "$changes"; then
+            while IFS= read -r -d '' entry && IFS= read -r -d '' path; do
+              # Only edits to existing regular Markdown files qualify.
+              if [[ "$entry" != ':100644 100644 '*" M" ]]; then
+                docs=()
+                break
+              fi
+              case "$path" in
+                AGENTS.md|README.md|docs/engineering-workflow.md|docs/macbook-trial.md)
+                  docs+=("$path")
+                  ;;
+                *) docs=(); break ;;
+              esac
+            done < "$changes"
+          fi
+
+          if (( ${#docs[@]} > 0 )); then
+            mode=docs
+            printf 'Documentation diff and UTF-8 checks for %s\n' "${docs[@]}"
+            git diff --check "$base" HEAD --
+            iconv -f UTF-8 -t UTF-8 "${docs[@]}" > /dev/null
+          fi
+          printf 'Validation scope: %s\n' "$mode"
+          printf 'mode=%s\n' "$mode" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.scope.outputs.mode != 'docs'
         with:
           node-version: '25.9.0'
           cache: npm
       - run: npm ci --ignore-scripts
+        if: steps.scope.outputs.mode != 'docs'
       - run: npm run check
+        if: steps.scope.outputs.mode != 'docs'
       - run: npm audit --audit-level=high
+        if: steps.scope.outputs.mode != 'docs'
