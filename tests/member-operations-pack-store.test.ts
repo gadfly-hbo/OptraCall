@@ -2055,6 +2055,8 @@ test('purposeKeys wildcard * grants access to any purpose; empty purposeKeys mea
     assert.equal(isSourcePeriodCovered(undefined, undefined, '2026-09-01', '2026-09-15'), false, 'unknown source period: deny even with finite grant');
     assert.equal(isSourcePeriodCovered('2026-09-15', '2026-09-15', '2026-09-15', '2026-09-15'), true, 'single-day source with single-day grant: allow');
     assert.equal(isSourcePeriodCovered('2026-09-15', '2026-09-15', '2026-09-01', '2026-09-30'), true, 'single-day source with month grant: allow (grant covers source)');
+    assert.equal(isSourcePeriodCovered(undefined, undefined, undefined, undefined), true, 'no period restriction grant + unknown source: allow');
+    assert.equal(isSourcePeriodCovered(undefined, undefined, '2026-09-01', '2026-09-30'), false, 'restricted grant + unknown source: deny');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

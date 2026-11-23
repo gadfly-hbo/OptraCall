@@ -147,3 +147,10 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 - 新增 `isSourcePeriodCovered(sourceFrom, sourceTo, grantFrom, grantTo)`：来源期间未知时拒绝（不回退用途期间），已知时核对授权完整覆盖。
 - 目录和精读统一用 `isSourcePeriodCovered`，不再回退到 `purpose.scope.period`。
 - 新增测试：跨月只授权首月拒绝、跨月全授权通过、未知来源期间拒绝、单日来源+单日授权通过、单日来源+月授权通过。
+
+### PM 七次返工（来源期间权威与兼容）
+
+1. **生成日期不等于统计期间。** 来源期间提取改为：优先结构化 JSON 字段（`periodFrom`/`periodTo`/`period`），文本回退时只取含"期间/统计"关键词且不含"生成/修订/样例/创建/截止/发布/更新"关键词的行。整月汇总带生成日期不再被缩为单日；只有生成日期的材料视为未知期间。
+2. **授权入参不能代替来源范围。** 授权创建时先 `delete rawScope.sourcePeriodFrom/sourcePeriodTo` 再从权威核验结果存入，调用方传入的替代范围不再落盘。
+3. **无期间限制授权继续放行。** `isSourcePeriodCovered` 在授权本身无 `periodFrom`/`periodTo` 时返回 true（无论来源是否声明期间），保留原合法授权语义。
+- 新增测试：无期间限制+未知来源放行；有限期间+未知来源拒绝。
