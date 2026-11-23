@@ -326,7 +326,7 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
         {sessionBusy ? <button type="button" className="secondary-button" disabled={busy} onClick={() => { void control('stop'); }}>停止本轮讨论</button> : <button type="submit" className="primary-button" disabled={!draft.trim() || locked}>发送讨论</button>}
       </div>
     </form>
-    {pending && <div className="sg-unknown"><p>原请求结果待核，输入与原编号保留；未重发模型。</p><button type="button" className="secondary-button" disabled={busy} onClick={() => { void recover(); }}>核对原请求</button>{['failed', 'cancelled'].includes(session?.session.lastRun?.status ?? '') && <button type="button" className="secondary-button" disabled={busy || !(draft || pending.text).trim()} onClick={() => { void sendMain(draft || pending.text, pending.requestId); }}>替换原请求并发送</button>}<details><summary>原请求编号</summary><code>{pending.requestId}</code></details></div>}
+    {pending && <div className="sg-unknown"><p>原请求结果待核，输入与原编号保留；未重发模型。</p><button type="button" className="secondary-button" disabled={busy} onClick={() => { void recover(); }}>核对原请求</button>{(['failed', 'cancelled'].includes(session?.session.lastRun?.status ?? '') || (session?.session.lastRun?.status === 'accepted' && !sessionBusy)) && <button type="button" className="secondary-button" disabled={busy || !(draft || pending.text).trim()} onClick={() => { void sendMain(draft || pending.text, pending.requestId); }}>替换原请求并发送</button>}<details><summary>原请求编号</summary><code>{pending.requestId}</code></details></div>}
     {!session && !loading && <p className="si-muted">首次发送将为本范围创建主会话；模型沿当前选择。<button type="button" className="text-button" onClick={onSettings}>前往模型设置</button></p>}
   </section>;
 
@@ -564,7 +564,7 @@ function CandidateSessionDialog({ initiativeId, candidateRef, onClose, onChanged
         {!locked && <form className="si-composer" onSubmit={event => {
           event.preventDefault();
           if (!text.trim() || !candidate || busy || detail?.busy) return;
-          void act(async () => { await api.sendCandidateMessage(initiativeId, candidateRef.candidateId, candidateRef.no, { requestId: crypto.randomUUID(), text: text.trim(), expectedRevision: candidate.revision, ...(candidate.pendingInput && ['failed', 'cancelled'].includes(candidate.lastRun?.status ?? '') ? { replacePendingRequestId: candidate.pendingInput.requestId } : {}) }); setText(''); });
+          void act(async () => { await api.sendCandidateMessage(initiativeId, candidateRef.candidateId, candidateRef.no, { requestId: crypto.randomUUID(), text: text.trim(), expectedRevision: candidate.revision, ...(candidate.pendingInput && (['failed', 'cancelled'].includes(candidate.lastRun?.status ?? '') || (candidate.lastRun?.status === 'accepted' && !detail?.busy)) ? { replacePendingRequestId: candidate.pendingInput.requestId } : {}) }); setText(''); });
         }}>
           <label className="sr-only" htmlFor="si-candidate-text">候选会话输入</label>
           <textarea id="si-candidate-text" rows={3} maxLength={20000} value={text} disabled={busy || Boolean(detail?.busy)} placeholder="继续补充该方向的要求或依据…" onChange={event => setText(event.target.value)} />

@@ -241,14 +241,17 @@ export function createStrategyCandidateHost(options: {
     const originalUserText = input.text;
     let owner = version(id, candidateId, no);
     if (owner.lock) fail('strategy_candidate_locked');
+    const ref = domain.ref(owner);
     const fingerprint = hash(input);
     if (owner.lastRun?.id === requestId) {
       if (owner.lastRun.fingerprint !== fingerprint) fail('strategy_candidate_operation_conflict');
       return {candidate: owner, requestId, replayed: true};
     }
-    if (owner.pendingInput && owner.pendingInput.requestId !== requestId && (input.replacePendingRequestId !== owner.pendingInput.requestId || !['failed', 'cancelled'].includes(owner.lastRun?.status ?? ''))) fail('strategy_candidate_pending_request');
+    if (owner.pendingInput && owner.pendingInput.requestId !== requestId) {
+      const replaceable = ['failed', 'cancelled'].includes(owner.lastRun?.status ?? '') || (owner.lastRun?.status === 'accepted' && !domain.busy(ref) && !domain.live(ref));
+      if (input.replacePendingRequestId !== owner.pendingInput.requestId || !replaceable) fail('strategy_candidate_pending_request');
+    }
     if (!Number.isSafeInteger(input.expectedRevision) || owner.revision !== input.expectedRevision) fail('strategy_candidate_context_changed');
-    const ref = domain.ref(owner);
     if (domain.busy(ref)) fail('session_busy');
     const initiative = initiatives.get(id);
     const anchorReport = reports.view(id).versions.find(v => v.no === owner.anchor.reportNo);

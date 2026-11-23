@@ -252,14 +252,17 @@ export function createStrategyInitiativeHost(options: {
     const requestId = input.requestId;
     const originalUserText = input.text;
     let owner = session(id, scopeKey);
+    const ref = domain.ref(owner);
     const fingerprint = hash(input);
     if (owner.lastRun?.id === requestId) {
       if (owner.lastRun.fingerprint !== fingerprint) fail('strategy_initiative_operation_conflict');
       return {session: owner, requestId, replayed: true};
     }
-    if (owner.pendingInput && owner.pendingInput.requestId !== requestId && (input.replacePendingRequestId !== owner.pendingInput.requestId || !['failed', 'cancelled'].includes(owner.lastRun?.status ?? ''))) fail('strategy_initiative_pending_request');
+    if (owner.pendingInput && owner.pendingInput.requestId !== requestId) {
+      const replaceable = ['failed', 'cancelled'].includes(owner.lastRun?.status ?? '') || (owner.lastRun?.status === 'accepted' && !domain.busy(ref) && !domain.live(ref));
+      if (input.replacePendingRequestId !== owner.pendingInput.requestId || !replaceable) fail('strategy_initiative_pending_request');
+    }
     if (!Number.isSafeInteger(input.expectedRevision) || owner.revision !== input.expectedRevision) fail('strategy_initiative_context_changed');
-    const ref = domain.ref(owner);
     if (domain.busy(ref)) fail('session_busy');
     const initiative = initiatives.get(id);
     const anchor: KickoffAnchor | undefined = reports.anchor(id, owner.scope);
