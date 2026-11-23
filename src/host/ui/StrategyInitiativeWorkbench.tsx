@@ -224,11 +224,11 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
     void api.watchInitiativeEvents(id, scopeKey, event => {
       if (controller.signal.aborted || !alive.current) return;
       const previous = presentedSnapshot.current;
-      if (event.type === 'snapshot') { presentedSnapshot.current = event.snapshot; setSession(old => old ? { ...old, snapshot: event.snapshot, busy: event.snapshot.status === 'running' } : old); }
-      setStreaming(old => projectDiscussionStreaming(old, event, previous ?? undefined));
+      if (event.type === 'snapshot' && event.snapshot) { presentedSnapshot.current = event.snapshot; setSession(old => old ? { ...old, snapshot: event.snapshot, busy: event.snapshot.status === 'running' } : old); }
+      setStreaming(old => projectDiscussionStreaming(old, { ...event, snapshot: event.snapshot ?? { sessionId: '', messages: [], tools: [], status: 'idle', sdkVersion: '', capabilities: {} } }, previous ?? undefined));
       if (event.type === 'native' && event.event.type === 'tool_execution_start') setActivity(`正在使用 ${event.event.toolName || '已获准工具'}`);
       if (event.type === 'native' && event.event.type === 'tool_execution_end') setActivity('');
-      if (event.type === 'run.settled') { setStreaming(''); setActivity(''); if (event.outcome === 'failed') setError(event.error || '本轮讨论未完成，已保存的记录保留。'); void refresh(); }
+      if (event.type === 'run.settled') { setStreaming(''); setActivity(''); if (event.outcome === 'failed') setError(event.error || '本轮讨论未完成，已保存的记录保留。'); rememberPending(null); void refresh(); }
     }, controller.signal).catch(() => { if (!controller.signal.aborted && alive.current) setNotice('实时连接暂不可用，可刷新讨论记录；未重发消息。'); });
     return () => controller.abort();
   }, [active, stage, session?.session.scopeKey, connection]);
@@ -246,7 +246,7 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
     try { if (value) sessionStorage.setItem(journalKey(id, scopeKey), JSON.stringify(value)); else sessionStorage.removeItem(journalKey(id, scopeKey)); } catch { /* keep in memory */ }
   };
   const sendMain = async (text: string, replacePendingRequestId?: string) => {
-    if (locked || !text.trim()) return;
+    if (busy || sessionBusy || (!replacePendingRequestId && locked) || !text.trim()) return;
     setBusy(true); setError(''); setNotice('');
     try {
       let detail = session;
@@ -257,9 +257,10 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       const input = { requestId: crypto.randomUUID(), text: text.trim(), expectedRevision: detail.session.revision, ...(replacePendingRequestId ? { replacePendingRequestId } : {}) };
       rememberPending(input);
       await api.sendInitiativeMessage(id, scopeKey, input);
-      rememberPending(null);
       setDraft(''); saveDraft(id, scopeKey, ''); setStreaming('');
-      applySession(await api.readInitiativeSession(id, scopeKey));
+      const after = await api.readInitiativeSession(id, scopeKey);
+      applySession(after);
+      if (after.session.lastRun?.status !== 'accepted') rememberPending(null);
       setConnection(value => value + 1);
     } catch (fault) {
       if (fault instanceof api.StrategyInitiativeRequestError && !fault.uncertain) rememberPending(null);
