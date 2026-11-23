@@ -170,6 +170,7 @@ export class ResourceGrantStore {
         ...(scope.summaryAuthority ? { summaryAuthority: text(scope.summaryAuthority, 200, false) } : {}),
         ...(scope.summarySha256 ? { summarySha256: text(scope.summarySha256, 128, false) } : {}),
         ...(scope.verifiedScopeSummary ? { verifiedScopeSummary: text(scope.verifiedScopeSummary, 500, false) } : {}),
+        ...(scope.sourcePeriod ? { sourcePeriod: text(scope.sourcePeriod, 100, false) } : {}),
         ...(scope.metricRef ? { metricRef: sourceRef(scope.metricRef) } : {}),
         ...(scope.allowedDataPaths?.length ? { allowedDataPaths: [...new Set(scope.allowedDataPaths.map(p => text(p, 1000, false)))] } : {}),
       },
