@@ -67,7 +67,7 @@ test('真实 Pi（进程内隔离 Host）：事项公开研究经获准原生搜
   const reports = new StrategyInitiativeReports(initiatives);
   const files = new StrategyInitiativeFiles(initiatives);
   const candidates = createStrategyCandidateHost({initiatives, reports, files, codeRoot: process.cwd(), configuration, mutate, isClosing: () => false});
-  const host = createStrategyInitiativeHost({initiatives, reports, files, candidates: {version: (id, cid, no) => candidates.version(id, cid, no), list: (id, scopeKey) => candidates.list(id, scopeKey), proposal: (id, pid) => candidates.proposal(id, pid), markProposed: (id, pid, newText, requestId) => candidates.markProposed(id, pid, newText, requestId)}, codeRoot: process.cwd(), configuration, mutate, isClosing: () => false});
+  const host = createStrategyInitiativeHost({initiatives, reports, files, candidates: {version: (id, cid, no) => candidates.version(id, cid, no), list: (id, scopeKey) => candidates.list(id, scopeKey), proposal: (id, pid) => candidates.proposal(id, pid), markProposed: (id, pid, newText, requestId) => candidates.markProposed(id, pid, newText, requestId), markTerminal: (id, pid, status) => candidates.markTerminal(id, pid, status)}, codeRoot: process.cwd(), configuration, mutate, isClosing: () => false});
   t.after(async () => { await host.closeAll(); });
   const initiativeId = randomUUID();
   initiatives.create({operationId: initiativeId, title: '研究事项', scopes: [stores]});
