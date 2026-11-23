@@ -274,7 +274,7 @@ Issue [#120](https://github.com/gadfly-hbo/OptraCall/issues/120) · 规格 [Spec
 - **SS02 两项 Skill**（`f769609`）：grill-me 产品资产（上游 MIT fb3629d 原文 + LICENSE + PROVENANCE + 战略开题适配节）；deep-research 复用仓库包。新 capabilityPolicy strategy-initiative：固定输入面 + skillsOverride 限定两资产 + initiative-read-skill 窄面读取原文与指纹（无通用文件工具）。真实 Pi 隔离验证实际加载与访谈/研究使用；候选/检验/旧讨论边界不变（54/54 回归）。
 - 公开研究（前轮 `2e52498`）保持：minimax 合成原生搜索实际执行留来源；无能力配置如实 unavailable。
 
-**验证**：浏览器 E2E **30/30 PASS**（含 SS02 技能能力、对话式限定修改、候选会话入口、旧讨论定位、双宽度零溢出、零外呼）。证据 `.local/issue-120/browser-final.log`。完整 `npm run check` 最终复跑进行中。
+**验证**：浏览器 E2E **30/30 PASS**（含 SS02 技能能力、对话式限定修改、候选会话入口、旧讨论定位、双宽度零溢出、零外呼）。证据 `.local/issue-120/browser-final.log`。完整 `npm run check` 最终复跑 PASS（exit 0）：3244 项，3133 通过，0 失败，111 原有条件跳过；边界与锁定 SDK 材料 PASS；build 成功。证据 `.local/issue-120/full-check-final2.log`。
 
 **仍保留的未验证项**：真实模型专业质量、真实业务数据、设备采用、远端 CI、用户产品验收分别核定；111 项原有条件跳过非本轮新增。
 
