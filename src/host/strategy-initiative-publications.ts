@@ -44,6 +44,7 @@ export function createStrategyInitiativePublications(options: {
     create(input: GoalDraftInput & { operationId: string }): { goalId: string; version: number };
     getOperation(id: string): unknown | null;
     operationContext(receipt: unknown): { goals: { goalId: string; version: number }[] }[];
+    read(ref: { goalId: string; version: number }): { title: string; strategyContext?: { summary?: string } };
   };
   validateGoal?(input: GoalDraftInput, target?: 'create'): void | Promise<void>;
   mutate<T>(fn: () => T | Promise<T>): Promise<T>;
@@ -174,7 +175,7 @@ export function createStrategyInitiativePublications(options: {
     const drafts = selected.map(index => {
       const text = candidate.goals[index]!;
       return {
-        operationId: stableId({handoff: input.operationId, index}),
+        operationId: stableId({handoff: input.operationId, publicationId, index}),
         title: text, outcome: text,
         perspective: scope.kind === 'personal' ? 'personal' : 'profit',
         scope,
@@ -206,6 +207,8 @@ export function createStrategyInitiativePublications(options: {
           const context = goals.operationContext(receipt)[0];
           const ref = context?.goals[0];
           if (!ref) fail('strategy_publication_recovery_unknown', 503);
+          const existing = goals.read(ref);
+          if (existing.title !== draft.title || !existing.strategyContext?.summary?.includes(publicationId)) fail('strategy_publication_recovery_unknown', 503);
           created.push(ref);
           continue;
         }

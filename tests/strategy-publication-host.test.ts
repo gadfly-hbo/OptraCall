@@ -27,7 +27,7 @@ async function lockedPassedCandidate(req: any, provider: any, base: string, scop
   const locked = (await req(`${base}/candidates/${cid}/versions/1/lock`, 'POST', {operationId: lockOperationId, sha256: detail.candidate.contentSha256})).candidate;
   provider.setResponder((ctx: any) => ctx.recentToolResults.length
     ? {text: '结论已提交。'}
-    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-verification', verdict: 'pass', evidence: '因果链与假设已核对。'}}]});
+    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-verification', verdict: 'pass', evidence: '因果链与假设已核对。', verificationSources: [{kind: 'candidate', ref: `${cid}:1`, sha256: detail.candidate.contentSha256}]}}]});
   await req(`${base}/candidates/${cid}/versions/1/verify`, 'POST', {operationId: randomUUID()}, 202);
   let batch: any;
   for (let n = 0; n < 600; n++) {
