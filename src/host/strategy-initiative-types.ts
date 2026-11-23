@@ -85,14 +85,16 @@ export interface VerificationGate {
   ref: string;
   status: 'waiting' | 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown';
   verdict?: 'pass' | 'fail' | 'insufficient';
+  verdictRequestId?: string;
   evidence?: string;
-  sources?: { kind: 'file' | 'public' | 'candidate' | 'kickoff'; ref: string; sha256?: string }[];
+  sources?: { kind: 'file' | 'public' | 'candidate' | 'kickoff'; ref: string; fileId?: string; sha256?: string }[];
   sessionFile?: string;
   configurationId: string;
   configurationRevision: number;
   requestId?: string;
   startedAt?: string;
   finishedAt?: string;
+  attempts: { requestId: string; status: VerificationGate['status']; verdict?: VerificationGate['verdict']; at: string; evidence?: string }[];
 }
 export interface VerificationBatch {
   batchId: string;

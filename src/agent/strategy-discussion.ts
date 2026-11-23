@@ -81,7 +81,7 @@ export const strategyDiscussionTool = {
     evidence: Type.Optional(nonblank(8000)),
     verificationSources: Type.Optional(Type.Array(Type.Object({
       kind: Type.Union([Type.Literal('file'), Type.Literal('public'), Type.Literal('candidate'), Type.Literal('kickoff')]),
-      ref: nonblank(500), sha256: Type.Optional(Type.String({ pattern: '^[a-f0-9]{64}$' })),
+      ref: nonblank(500), fileId: Type.Optional(nonblank(100)), sha256: Type.Optional(Type.String({ pattern: '^[a-f0-9]{64}$' })),
     }, exact), { maxItems: 50 })),
     quote: Type.Optional(Type.Object({ start: Type.Integer({ minimum: 0 }), end: Type.Integer({ minimum: 1 }), text: Type.String({ minLength: 1, maxLength: 20000 }) }, exact)),
   }, exact),

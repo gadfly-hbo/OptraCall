@@ -58,7 +58,7 @@ test('真实 Host：发布门禁、单一有效、原子替代、撤销禁重发
   const a = await lockedPassedCandidate(req, provider, base, stores, '会员复购优先', ['90天二购率达到12%']);
 
   assert.deepEqual((await req(`${base}/publications`)).publications, []);
-  const publishInput = {operationId: randomUUID(), candidateId: a.cid, no: 1, sha256: a.locked.contentSha256, batchId: a.batch.batchId, confirmed: true};
+  const publishInput = {operationId: randomUUID(), candidateId: a.cid, no: 1, sha256: a.locked.contentSha256, batchId: a.batch.batchId, confirmed: true, expectedActive: null};
   assert.equal((await req(`${base}/publications`, 'POST', {...publishInput, confirmed: false}, 400)).code, 'strategy_publication_confirmation_required');
   assert.deepEqual((await req(`${base}/publications`)).publications, [], 'skipped confirmation writes nothing');
   assert.equal((await req(`${base}/publications`, 'POST', {...publishInput, operationId: randomUUID(), sha256: '0'.repeat(64)}, 409)).code, 'strategy_candidate_version_conflict');
@@ -81,7 +81,7 @@ test('真实 Host：发布门禁、单一有效、原子替代、撤销禁重发
   assert.equal((await req('/api/strategy/goals')).goals.length, 1, 'duplicate handoff does not create goals');
 
   const b = await lockedPassedCandidate(req, provider, base, stores, '门店效率优先', ['同店转化率提升2个百分点']);
-  const pubB = (await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: b.cid, no: 1, sha256: b.locked.contentSha256, batchId: b.batch.batchId, confirmed: true}, 201)).publication;
+  const pubB = (await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: b.cid, no: 1, sha256: b.locked.contentSha256, batchId: b.batch.batchId, confirmed: true, expectedActive: pubA.publicationId}, 201)).publication;
   const pubs = (await req(`${base}/publications`)).publications;
   assert.equal(pubs.filter((p: any) => p.state === 'active').length, 1);
   const replacedA = pubs.find((p: any) => p.publicationId === pubA.publicationId);
@@ -94,7 +94,7 @@ test('真实 Host：发布门禁、单一有效、原子替代、撤销禁重发
   assert.equal(withdrawn.state, 'withdrawn');
   assert.ok(withdrawn.withdrawnAt);
   assert.equal((await req(`${base}/publications/${pubB.publicationId}/handoff`, 'POST', {operationId: randomUUID(), scope: personal, selected: [0]}, 409)).code, 'strategy_publication_not_active');
-  assert.equal((await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: b.cid, no: 1, sha256: b.locked.contentSha256, batchId: b.batch.batchId, confirmed: true}, 409)).code, 'strategy_publication_withdrawn_locked');
+  assert.equal((await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: b.cid, no: 1, sha256: b.locked.contentSha256, batchId: b.batch.batchId, confirmed: true, expectedActive: null}, 409)).code, 'strategy_publication_withdrawn_locked');
   assert.equal((await req(`${base}/publications`)).publications.filter((p: any) => p.state === 'active').length, 0);
   assert.deepEqual(provider.errors, []);
 });
@@ -117,8 +117,8 @@ test('真实 Host：不同范围的有效发布并存', {timeout: 180_000}, asyn
   await req(`${base}/reports/1/apply`, 'POST', {operationId: randomUUID(), sha256: report.contentSha256, scope: ecommerce});
   const a = await lockedPassedCandidate(req, provider, base, stores, '会员复购优先', ['二购率12%']);
   const b = await lockedPassedCandidate(req, provider, base, ecommerce, '门店效率优先', ['转化率提升']);
-  const pubA = (await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: a.cid, no: 1, sha256: a.locked.contentSha256, batchId: a.batch.batchId, confirmed: true}, 201)).publication;
-  const pubB = (await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: b.cid, no: 1, sha256: b.locked.contentSha256, batchId: b.batch.batchId, confirmed: true}, 201)).publication;
+  const pubA = (await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: a.cid, no: 1, sha256: a.locked.contentSha256, batchId: a.batch.batchId, confirmed: true, expectedActive: null}, 201)).publication;
+  const pubB = (await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: b.cid, no: 1, sha256: b.locked.contentSha256, batchId: b.batch.batchId, confirmed: true, expectedActive: null}, 201)).publication;
   assert.equal(pubA.state, 'active');
   assert.equal(pubB.state, 'active');
   assert.notEqual(pubA.scopeKey, pubB.scopeKey);

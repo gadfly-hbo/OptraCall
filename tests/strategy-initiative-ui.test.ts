@@ -45,6 +45,7 @@ const gate = (turn: 0 | 1): VerificationGate => ({
   turn, operationId: '77777777-7777-4777-8777-777777777777', ref: `检验 ${candidateId.slice(0, 8)}-${turn + 1}`,
   status: 'completed', verdict: 'pass', evidence: turn ? '关键假设可用同店同期对照检验。' : '「触达→再到店→二购」的关键前提和反例已记录。',
   sources: [{ kind: 'file', ref: '010_draw/上期经营复盘.pdf' }], configurationId: 'config-1', configurationRevision: 1,
+  attempts: [{requestId: '77777777-7777-4777-8777-777777777777', status: 'completed', verdict: 'pass', at: '2026-11-21T02:00:00Z'}],
   startedAt: '2026-11-21T01:00:00Z', finishedAt: '2026-11-21T02:00:00Z',
 });
 const batch: VerificationBatch = {

@@ -71,9 +71,9 @@ export function PublishConfirmDialog({ initiativeId, candidate, batch, prior, te
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!confirmed || busy || !candidate.lock) return;
-    const id = operationId({ candidateId: candidate.candidateId, no: candidate.no, sha256: candidate.lock.fingerprint, batchId: batch.batchId, template });
+    const id = operationId({ candidateId: candidate.candidateId, no: candidate.no, sha256: candidate.lock.fingerprint, batchId: batch.batchId, template, expectedActive: prior?.publicationId ?? null });
     setBusy(true); setError('');
-    void api.publishInitiative(initiativeId, { operationId: id, candidateId: candidate.candidateId, no: candidate.no, sha256: candidate.lock.fingerprint, batchId: batch.batchId, template, confirmed: true })
+    void api.publishInitiative(initiativeId, { operationId: id, candidateId: candidate.candidateId, no: candidate.no, sha256: candidate.lock.fingerprint, batchId: batch.batchId, template, confirmed: true, expectedActive: prior?.publicationId ?? null })
       .then(async () => { await onPublished(); onClose(); })
       .catch(fault => setError(api.errorText(fault)))
       .finally(() => setBusy(false));

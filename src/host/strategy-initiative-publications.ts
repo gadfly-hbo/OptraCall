@@ -84,9 +84,10 @@ export function createStrategyInitiativePublications(options: {
 
   async function publish(id: string, input: Record<string, unknown>) {
     initiatives.get(id);
-    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'candidateId', 'no', 'sha256', 'batchId', 'template', 'confirmed'].includes(key))) fail('strategy_publication_fields_invalid', 400);
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'candidateId', 'no', 'sha256', 'batchId', 'template', 'confirmed', 'expectedActive'].includes(key))) fail('strategy_publication_fields_invalid', 400);
     if (typeof input.operationId !== 'string' || !uuid.test(input.operationId)) fail('strategy_publication_operation_invalid', 400);
     if (input.confirmed !== true) fail('strategy_publication_confirmation_required', 400);
+    if (input.expectedActive !== null && typeof input.expectedActive !== 'string') fail('strategy_publication_fields_invalid', 400);
     if (typeof input.candidateId !== 'string' || !uuid.test(input.candidateId) || !Number.isSafeInteger(input.no)) fail('strategy_publication_fields_invalid', 400);
     const candidate = candidates.version(id, input.candidateId, Number(input.no));
     if (!candidate.lock) fail('strategy_candidate_not_locked');
@@ -107,7 +108,10 @@ export function createStrategyInitiativePublications(options: {
       if (!current.lock || current.lock.fingerprint !== input.sha256 || current.lock.operationId !== batch.lockOperationId) fail('strategy_candidate_version_conflict');
       const credentials = verifications.passCredentials(id, candidate.candidateId, candidate.no);
       if (!credentials || credentials.batchId !== input.batchId) fail('strategy_verification_credentials_required');
+      const currentActive = file.publications.find(p => p.scopeKey === candidate.scopeKey && p.state === 'active');
+      if ((input.expectedActive ?? null) !== (currentActive?.publicationId ?? null)) fail('strategy_publication_context_changed');
       if (file.publications.some(p => p.candidateId === candidate.candidateId && p.no === candidate.no && p.state === 'withdrawn')) fail('strategy_publication_withdrawn_locked');
+      if (file.publications.some(p => p.candidateId === candidate.candidateId && p.no === candidate.no && p.state === 'replaced')) fail('strategy_publication_replaced_locked');
       if (file.publications.some(p => p.candidateId === candidate.candidateId && p.no === candidate.no && p.state === 'active')) fail('strategy_publication_already_active');
       const now = new Date().toISOString();
       const publicationId = randomUUID();

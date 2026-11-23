@@ -143,12 +143,25 @@ export function createStrategyVerificationHost(options: {
       if (typeof input.evidence !== 'string' || !input.evidence.trim() || input.evidence.length > 8000) fail('strategy_verification_fields_invalid', 400);
       const sources = input.verificationSources === undefined ? [] : input.verificationSources;
       if (!Array.isArray(sources) || sources.length > 50 || sources.some(s => !s || typeof s !== 'object' || !['file', 'public', 'candidate', 'kickoff'].includes((s as any).kind) || typeof (s as any).ref !== 'string')) fail('strategy_verification_fields_invalid', 400);
+      for (const source of sources as { kind: string; ref: string; fileId?: string; sha256?: string }[]) {
+        if (source.kind === 'file') {
+          if (typeof source.fileId !== 'string' || !uuid.test(source.fileId) || typeof source.sha256 !== 'string') fail('strategy_verification_source_invalid', 400);
+          let read;
+          try { read = files.read(o.initiativeId, source.fileId); } catch { fail('strategy_verification_source_invalid', 400); }
+          if (read.file.sha256 !== source.sha256 || (read.file.scopeKey !== undefined && read.file.scopeKey !== candidate.scopeKey)) fail('strategy_verification_source_invalid', 400);
+        } else if (source.kind === 'candidate') {
+          if (source.ref !== `${o.candidateId}:${o.no}` || source.sha256 !== batch.contentSha256) fail('strategy_verification_source_invalid', 400);
+        } else if (source.kind === 'kickoff') {
+          if (source.ref !== String(candidate.anchor.reportNo) || source.sha256 !== candidate.anchor.contentSha256) fail('strategy_verification_source_invalid', 400);
+        }
+      }
       await options.mutate(() => {
         const file = readFile(o.initiativeId);
         const current = file.batches.find(b => b.batchId === o.batchId);
         const currentGate = current?.gates[o.turn];
         if (!current || !currentGate || currentGate.status !== 'running' || currentGate.requestId !== context.requestId) fail('strategy_verification_run_unavailable');
         currentGate.verdict = input.verdict as VerificationGate['verdict'];
+        currentGate.verdictRequestId = context.requestId;
         currentGate.evidence = input.evidence as string;
         currentGate.sources = sources as VerificationGate['sources'];
         writeFile(o.initiativeId, file);
@@ -227,7 +240,9 @@ export function createStrategyVerificationHost(options: {
       const gate = batch?.gates[turn];
       if (!batch || !gate || gate.requestId !== requestId || gate.status !== 'running') return;
       gate.finishedAt = new Date().toISOString();
-      if (outcome === 'completed' && gate.verdict) {
+      const attemptVerdict = gate.verdict;
+      const validVerdict = outcome === 'completed' && gate.verdict && gate.verdictRequestId === requestId;
+      if (validVerdict) {
         gate.status = 'completed';
         if (gate.verdict === 'pass') {
           if (turn === 0) { batch.state = 'running'; continueChain = true; }
@@ -235,13 +250,18 @@ export function createStrategyVerificationHost(options: {
         } else {
           batch.state = 'returned';
         }
-      } else if (outcome === 'completed') {
-        gate.status = 'unknown';
-        batch.state = 'unknown';
       } else {
-        gate.status = outcome === 'cancelled' ? 'cancelled' : outcome === 'unknown' ? 'unknown' : 'failed';
-        batch.state = gate.status === 'cancelled' ? 'stopped' : 'unknown';
+        if (outcome === 'completed') {
+          gate.status = 'unknown';
+          batch.state = 'unknown';
+        } else {
+          gate.status = outcome === 'cancelled' ? 'cancelled' : outcome === 'unknown' ? 'unknown' : 'failed';
+          batch.state = gate.status === 'cancelled' ? 'stopped' : 'unknown';
+        }
+        gate.verdict = undefined;
+        gate.verdictRequestId = undefined;
       }
+      gate.attempts.push({requestId, status: gate.status, ...(attemptVerdict ? {verdict: attemptVerdict} : {}), at: gate.finishedAt, ...(gate.evidence ? {evidence: gate.evidence} : {})});
       batch.updatedAt = new Date().toISOString();
       writeFile(id, file);
     });
@@ -271,6 +291,7 @@ export function createStrategyVerificationHost(options: {
     const candidate = candidates.version(id, cid, no);
     if (!candidate.lock) fail('strategy_candidate_not_locked');
     if (candidates.busy(id, cid, no)) fail('session_busy');
+    if (readFile(id).batches.some(b => b.candidateId === cid && b.no === no && b.state === 'returned')) fail('strategy_verification_returned');
     const configuration = options.configuration();
     if (!configuration) fail('configuration_required');
     const batchId = randomUUID();
@@ -280,6 +301,7 @@ export function createStrategyVerificationHost(options: {
       turn, operationId: input.operationId as string, ref: `检验 ${cid.slice(0, 8)}-${turn + 1}`,
       status: turn === 0 ? 'running' : 'waiting',
       configurationId: configuration.id, configurationRevision: configuration.revision,
+      attempts: [],
       ...(turn === 0 ? {requestId, startedAt: now} : {}),
     });
     await options.mutate(() => {
@@ -314,6 +336,8 @@ export function createStrategyVerificationHost(options: {
       if (!b) fail('strategy_verification_not_found', 404);
       b.gates[turn].status = 'running';
       b.gates[turn].requestId = requestId;
+      b.gates[turn].verdict = undefined;
+      b.gates[turn].verdictRequestId = undefined;
       b.gates[turn].startedAt = new Date().toISOString();
       b.state = 'running';
       writeFile(id, current);
@@ -345,7 +369,10 @@ export function createStrategyVerificationHost(options: {
           const current = file.batches.find(b => b.batchId === batchId);
           const gate = current?.gates.find(g => g.status === 'running');
           if (!current || !gate) return;
+          gate.attempts.push({requestId: gate.requestId ?? '', status: 'cancelled', ...(gate.verdict ? {verdict: gate.verdict} : {}), at: new Date().toISOString(), ...(gate.evidence ? {evidence: gate.evidence} : {})});
           gate.status = 'cancelled';
+          gate.verdict = undefined;
+          gate.verdictRequestId = undefined;
           gate.finishedAt = new Date().toISOString();
           current.state = 'stopped';
           current.updatedAt = new Date().toISOString();

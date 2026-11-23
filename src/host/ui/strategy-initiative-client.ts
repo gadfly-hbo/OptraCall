@@ -90,7 +90,7 @@ export const retryVerificationGate = (id: string, cid: string, no: number, turn:
 export const stopVerification = (id: string, batchId: string) => request<{ stopped: boolean }>(`${path(id)}/verifications/${encodeURIComponent(batchId)}/stop`, 'POST', {});
 
 export const listPublications = (id: string, scopeKey?: string) => request<{ publications: InitiativePublication[] }>(`${path(id)}/publications${scopeKey !== undefined ? scopeQuery(scopeKey) : ''}`);
-export const publishInitiative = (id: string, input: { operationId: string; candidateId: string; no: number; sha256: string; batchId: string; template?: string; confirmed: true }) => request<{ publication: InitiativePublication }>(`${path(id)}/publications`, 'POST', input);
+export const publishInitiative = (id: string, input: { operationId: string; candidateId: string; no: number; sha256: string; batchId: string; template?: string; confirmed: true; expectedActive: string | null }) => request<{ publication: InitiativePublication }>(`${path(id)}/publications`, 'POST', input);
 export const withdrawPublication = (id: string, publicationId: string, input: { operationId: string }) => request<{ publication: InitiativePublication }>(`${path(id)}/publications/${encodeURIComponent(publicationId)}/withdraw`, 'POST', input);
 export const handoffPublication = (id: string, publicationId: string, input: { operationId: string; scope: GoalScope; selected: number[] }) => request<{ handoff: InitiativeHandoffReceipt }>(`${path(id)}/publications/${encodeURIComponent(publicationId)}/handoff`, 'POST', input);
 

@@ -117,9 +117,12 @@ test('真实 Host+Pi：业务不通过/依据不足停链退回、技术未知�
   assert.equal(insufficient.gates[0].verdict, 'insufficient');
   assert.equal(insufficient.contentSha256, v2.contentSha256);
 
+  const newText2 = '深耕现有门店，以分层回访带动二次到店并补自然复购对照。';
+  const v3 = (await req(`${base}/candidates/${cid}/versions/2/revise`, 'POST', {operationId: randomUUID(), baseSha256: v2.contentSha256, request: '补证后修订。', patches: [{blockId: 'B1', expectedOldSha256: createHash('sha256').update(newText).digest('hex'), newText: newText2}]}, 201)).candidate;
+  await req(`${base}/candidates/${cid}/versions/3/lock`, 'POST', {operationId: randomUUID(), sha256: v3.contentSha256});
   provider.setResponder(() => ({text: '尚无结论。'}));
-  await req(`${base}/candidates/${cid}/versions/2/verify`, 'POST', {operationId: randomUUID()}, 202);
-  const unknown = await waitBatch(req, base, cid, 2, b => b.no === 2 && b.state === 'unknown');
+  await req(`${base}/candidates/${cid}/versions/3/verify`, 'POST', {operationId: randomUUID()}, 202);
+  const unknown = await waitBatch(req, base, cid, 3, b => b.no === 3 && b.state === 'unknown');
   assert.equal(unknown.gates[0].status, 'unknown');
   assert.equal(unknown.gates[0].verdict, undefined);
   assert.equal(unknown.gates[1].status, 'waiting');
@@ -127,17 +130,21 @@ test('真实 Host+Pi：业务不通过/依据不足停链退回、技术未知�
   provider.setResponder((ctx: any) => ctx.recentToolResults.length
     ? {text: '结论已提交。'}
     : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-verification', verdict: 'pass', evidence: '补证后因果链与假设已核对。'}}]});
-  await req(`${base}/candidates/${cid}/versions/2/gates/0/retry`, 'POST', {}, 202);
-  const passed = await waitBatch(req, base, cid, 2, b => b.no === 2 && b.state === 'passed');
+  await req(`${base}/candidates/${cid}/versions/3/gates/0/retry`, 'POST', {}, 202);
+  const passed = await waitBatch(req, base, cid, 3, b => b.no === 3 && b.state === 'passed');
   assert.equal(passed.batchId, unknown.batchId, 'retry keeps the original batch and gate ref');
   assert.equal(passed.gates[0].ref, originalRef);
   assert.equal(passed.gates[1].verdict, 'pass');
+  assert.equal((await req(`${base}/candidates/${cid}/versions/2/verify`, 'POST', {operationId: randomUUID()}, 409)).code, 'strategy_verification_returned', 'business-returned locked version cannot start a new batch');
 
+  const newText3 = '深耕现有门店，分层回访与工时核对并行。';
+  const v4 = (await req(`${base}/candidates/${cid}/versions/3/revise`, 'POST', {operationId: randomUUID(), baseSha256: v3.contentSha256, request: '再修订。', patches: [{blockId: 'B1', expectedOldSha256: createHash('sha256').update(newText2).digest('hex'), newText: newText3}]}, 201)).candidate;
+  await req(`${base}/candidates/${cid}/versions/4/lock`, 'POST', {operationId: randomUUID(), sha256: v4.contentSha256});
   provider.setResponder(() => ({text: '等待', hold: true}));
-  await req(`${base}/candidates/${cid}/versions/1/verify`, 'POST', {operationId: randomUUID()}, 202);
-  const running = await waitBatch(req, base, cid, 1, b => b.no === 1 && b.gates[0].status === 'running' && b.state === 'running' && b.batchId !== returned.batchId);
+  await req(`${base}/candidates/${cid}/versions/4/verify`, 'POST', {operationId: randomUUID()}, 202);
+  const running = await waitBatch(req, base, cid, 4, b => b.no === 4 && b.gates[0].status === 'running' && b.state === 'running');
   await req(`${base}/verifications/${running.batchId}/stop`, 'POST', {});
-  const stopped = await waitBatch(req, base, cid, 1, b => b.batchId === running.batchId && b.state === 'stopped');
+  const stopped = await waitBatch(req, base, cid, 4, b => b.batchId === running.batchId && b.state === 'stopped');
   assert.equal(stopped.gates[0].status, 'cancelled');
   assert.equal(stopped.gates[1].status, 'waiting');
   assert.equal(passed.gates[1].verdict, 'pass', 'stopping one batch does not affect another');
