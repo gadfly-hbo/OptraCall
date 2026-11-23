@@ -46,6 +46,7 @@ import { StrategyMapPublicationStore } from './strategy-map-publication-store.ts
 import { StrategyInitiativeStore } from './strategy-initiative-store.ts';
 import { StrategyInitiativeReports } from './strategy-initiative-reports.ts';
 import { StrategyInitiativeFiles } from './strategy-initiative-files.ts';
+import { createStrategyInitiativeHost } from './strategy-initiative-host.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
@@ -923,6 +924,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       ...(studioSessions ? [studioSessions.closeAll(filter)] : []),
       requirementSessions.closeAll(filter),
       strategyDiscussions.closeAll(filter),
+      strategyInitiativeSessions.closeAll(filter),
       businessDiscussions.closeAll(filter),
     ]);
     for (const key of [...streams.keys()]) {
@@ -1200,6 +1202,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const strategyInitiatives=new StrategyInitiativeStore(dataRoot);
   const strategyKickoffReports=new StrategyInitiativeReports(strategyInitiatives);
   const strategyInitiativeFiles=new StrategyInitiativeFiles(strategyInitiatives);
+  const strategyInitiativeSessions=createStrategyInitiativeHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   strategyMapImports=createStrategyMapImportService({dataRoot,codeRoot:options.cwd,attachments:strategyAttachments,projects,owner:id=>strategyDiscussions.store.get(id),configuration:(id,revision)=>availableConfiguration(id,revision),mutate,
     writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
   });
@@ -2737,6 +2740,29 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(!fileId&&request.method==='GET'){json(response,200,{files:strategyInitiativeFiles.list(id,url.searchParams.get('scopeKey')??undefined)});return;}
         if(!fileId&&request.method==='POST'){const input=await body(request,68*1024*1024);json(response,201,{file:await mutate(()=>strategyInitiativeFiles.upload(id,input as Parameters<typeof strategyInitiativeFiles.upload>[1]))});return;}
         if(fileId&&request.method==='GET'){json(response,200,strategyInitiativeFiles.read(id,fileId));return;}
+      }
+      const initiativeSessionRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/(session|messages|events|stop|close)$/.exec(url.pathname);
+      if(initiativeSessionRoute){
+        const id=initiativeSessionRoute[1]!,action=initiativeSessionRoute[2]!,scopeKey=url.searchParams.get('scopeKey')??'';
+        if(action==='session'&&request.method==='POST'){const input=await body(request);json(response,201,{session:await strategyInitiativeSessions.create(id,input)});return;}
+        if(action==='session'&&request.method==='GET'){json(response,200,await strategyInitiativeSessions.detail(id,scopeKey));return;}
+        if(action==='messages'&&request.method==='POST'){const input=await body(request);json(response,202,await strategyInitiativeSessions.send(id,scopeKey,input));return;}
+        if(action==='stop'&&request.method==='POST'){const input=await body(request);json(response,200,await strategyInitiativeSessions.stop(id,scopeKey,input.expectedRequestId as string|undefined));return;}
+        if(action==='close'&&request.method==='POST'){json(response,200,await strategyInitiativeSessions.close(id,scopeKey));return;}
+        if(action==='events'&&request.method==='GET'){
+          let ready=false;const queued:unknown[]=[];
+          const writeEvent=(event:unknown)=>{if(!response.destroyed&&!response.writableEnded)response.write(`data: ${JSON.stringify(event)}\n\n`);};
+          const unsubscribe=strategyInitiativeSessions.subscribe(id,scopeKey,event=>{if(!ready)queued.push(event);else writeEvent(event);});
+          let d:Awaited<ReturnType<typeof strategyInitiativeSessions.detail>>;
+          try{d=await strategyInitiativeSessions.detail(id,scopeKey);}catch(e){unsubscribe();throw e;}
+          if(request.destroyed||response.destroyed){unsubscribe();return;}
+          response.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});
+          request.on('close',unsubscribe);
+          writeEvent({type:'snapshot',snapshot:d.snapshot,session:d.session});
+          ready=true;
+          for(const event of queued)writeEvent(event);
+          return;
+        }
       }
       const kickoffRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/reports(?:\/([1-9]\d*)\/(lock|apply))?$/.exec(url.pathname);
       if(kickoffRoute){

@@ -1,10 +1,10 @@
 import { strategyMapDraftSchema } from './strategy-map-schema.ts';
 import { Type } from 'typebox';
-export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map';
+export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff';
 export type StrategyDiscussionToolContext = { requestId:string; sessionId:string; toolCallId:string; signal:AbortSignal; assertCurrent():void; originalUserText:string; userQuoteEligible:boolean; goalBasis?:import('../host/strategy-goals-types.ts').GoalBasis; importSourceIds?:string[]; selectedImportPages?:Record<string,number[]>; importMode?:'review-draft'; draftGroupId?:string; supersedesDraftEntryId?:string; targetMapRef?:{mapId:string;version:number}; registerCleanup?:(cleanup:(options:{retryFailed?:boolean})=>Promise<void>)=>void };
 export type StrategyDiscussionToolContent = {type:'text';text:string} | {type:'image';data:string;mimeType:string};
 export type StrategyDiscussionPort = (action:StrategyDiscussionAction,input:Record<string,unknown>,context:StrategyDiscussionToolContext)=>Promise<{content:StrategyDiscussionToolContent[];details:Record<string,unknown>}>;
-export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','operation','public-search','read-map','save-map'] as const;
+export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','operation','public-search','read-map','save-map','initiative-files','initiative-read-file','initiative-read-kickoff','initiative-save-kickoff'] as const;
 const exact = { additionalProperties: false };
 const nonblank = (maxLength = 4000) => Type.String({ minLength: 1, maxLength, pattern: '\\S' });
 const textList = Type.Array(nonblank(), { maxItems: 100 });
@@ -53,6 +53,7 @@ export const strategyDiscussionTool = {
     'propose-goal 保存完整候选。draft 必填 title（标题）、outcome（预期结果）、perspective（profit/nonprofit/personal）、responsible（负责人）、baseline（状态及说明）、measurement（成果核对标准或已发布 SAP 指标及固定版本）。',
     'goalScopes.bound 或 defaultScope 已明确时可省略 draft.scope；有多种适用范围时按用户明确意图选用，归属仍有歧义时询问。基线待补用 pending，目标依据不足时继续讨论。修订原候选须给 goalId 和 expectedVersion。',
     'adopt-goal 仅按本轮用户明确原话给 quote(start/end/text)、准确 goalId/version/expectedVersion 和 goalContentSha256 采用。目标采用不授权经营执行。operation 给原 operationId 查回执，未知先核对原操作。',
+    '战略事项主会话专用：initiative-files 列本事项共用及当前范围资料；initiative-read-file 按 fileId 读取文本资料（offset/limit 续读）；initiative-read-kickoff 读开题报告版本（可给 version）；initiative-save-kickoff 保存开题报告草稿，给 operationId、kickoffFields（horizon/diagnosis/propositions 3–5 项含稳定唯一 id、question、whyItMatters/assumptions/evidenceGaps/followUp）与 kickoffSources（实际读取的 file/public 来源）。锁定与应用由决策者在界面完成，工具不锁定。',
   ].join(' '),
   parameters: Type.Object({
     action: Type.Union(STRATEGY_DISCUSSION_ACTIONS.map(x => Type.Literal(x))),
@@ -62,6 +63,14 @@ export const strategyDiscussionTool = {
     query: Type.Optional(Type.String({ maxLength: 2000 })), goalId: Type.Optional(Type.String()), version: Type.Optional(Type.Integer({ minimum: 1 })),
     expectedVersion: Type.Optional(Type.Integer({ minimum: 1 })), goalContentSha256: Type.Optional(Type.String()), operationId: Type.Optional(Type.String({ pattern: '^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$', description: '原操作的 UUID，查询或重试时沿用。' })),
     draft: Type.Optional(proposalDraft),
+    fileId: Type.Optional(nonblank(100)),
+    parent: Type.Optional(Type.Integer({ minimum: 1 })),
+    kickoffFields: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    kickoffSources: Type.Optional(Type.Array(Type.Object({
+      kind: Type.Union([Type.Literal('file'), Type.Literal('public')]),
+      ref: nonblank(500), title: Type.Optional(nonblank(300)),
+      sha256: Type.Optional(Type.String({ pattern: '^[a-f0-9]{64}$' })),
+    }, exact), { maxItems: 100 })),
     quote: Type.Optional(Type.Object({ start: Type.Integer({ minimum: 0 }), end: Type.Integer({ minimum: 1 }), text: Type.String({ minLength: 1, maxLength: 20000 }) }, exact)),
   }, exact),
 };
