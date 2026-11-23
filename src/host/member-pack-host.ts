@@ -1596,30 +1596,37 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         continue;
       }
 
-      // Check if ref is a Host-authorized summary ref (live active check + purposeKey consistency)
+      // Check if ref is a Host-authorized summary ref (live active check + purposeKey + full scope)
       const nowMs = Date.now();
-      const matchedSummaryGrant = subjectGrants.find(g =>
+      const activeSummaryGrants = subjectGrants.filter(g =>
         isGrantActive(g, nowMs)
         && g.operations.includes('cite-summary')
         && g.resourceRef
         && sameExactSourceRef(g.resourceRef, ref),
       );
-      if (matchedSummaryGrant) {
-        const eligiblePurposeKeys = rev.purposeManifests.filter(pm => pm.status === 'eligible').map(pm => pm.purposeKey);
-        const matchingPurposeKey = matchedSummaryGrant.purposeKeys?.length
-          ? (matchedSummaryGrant.purposeKeys.includes('*') ? eligiblePurposeKeys[0] : matchedSummaryGrant.purposeKeys.find(pk => eligiblePurposeKeys.includes(pk)))
-          : eligiblePurposeKeys[0];
-        if (matchedSummaryGrant.purposeKeys?.length && !matchingPurposeKey) {
-          throw new StudioError('resource_access_denied', 403);
+      if (activeSummaryGrants.length) {
+        const eligiblePurposes = rev.purposeManifests.filter(pm => pm.status === 'eligible');
+        const eligiblePurposeKeys = eligiblePurposes.map(pm => pm.purposeKey);
+        let summaryAllowed = false;
+        for (const grant of activeSummaryGrants) {
+          const matchingPurposeKey = grant.purposeKeys?.length
+            ? (grant.purposeKeys.includes('*') ? eligiblePurposeKeys[0] : grant.purposeKeys.find(pk => eligiblePurposeKeys.includes(pk)))
+            : eligiblePurposeKeys[0];
+          if (grant.purposeKeys?.length && !matchingPurposeKey) continue;
+          const purposeScope = eligiblePurposes.find(pm => pm.purposeKey === matchingPurposeKey)?.scope;
+          const evalSummary = evaluateResourceAccess([grant], {
+            operation: 'cite-summary',
+            ...(matchingPurposeKey ? { purposeKey: matchingPurposeKey } : {}),
+            ...(purposeScope?.brand ? { brand: purposeScope.brand } : {}),
+            ...(purposeScope?.channel ? { channel: purposeScope.channel } : {}),
+            ...(purposeScope?.period ? { period: purposeScope.period } : {}),
+            grain: grant.scope.grain,
+            summaryVersion: grant.scope.summaryVersion,
+          });
+          if (evalSummary.allowed) { summaryAllowed = true; break; }
         }
-        const evalSummary = evaluateResourceAccess(subjectGrants, {
-          operation: 'cite-summary',
-          ...(matchingPurposeKey ? { purposeKey: matchingPurposeKey } : {}),
-          grain: matchedSummaryGrant.scope.grain,
-          summaryVersion: matchedSummaryGrant.scope.summaryVersion,
-        });
-        if (!evalSummary.allowed) throw new StudioError('resource_grant_revoked', 403);
-        return { matchedPack: { packId: pack.id, packVersion: rev.version, purposeIds: pin?.purposeIds ?? [], summaryAuthorized: true } };
+        if (summaryAllowed) return { matchedPack: { packId: pack.id, packVersion: rev.version, purposeIds: pin?.purposeIds ?? [], summaryAuthorized: true } };
+        throw new StudioError('resource_access_denied', 403);
       }
       if (subjectGrants.some(g => !isGrantActive(g, nowMs) && g.operations.includes('cite-summary') && g.resourceRef && sameExactSourceRef(g.resourceRef, ref))) {
         throw new StudioError('resource_grant_revoked', 403);
