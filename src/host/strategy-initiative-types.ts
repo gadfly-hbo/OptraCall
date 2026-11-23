@@ -30,11 +30,12 @@ export interface KickoffFields {
   followUp: string;
   priorReview?: 'applicable' | 'not-applicable';
 }
-export interface KickoffSourceRef { kind: 'file' | 'public'; ref: string; title?: string; sha256?: string }
+export interface KickoffSourceRef { kind: 'file' | 'public'; ref: string; title?: string; fileId?: string; sha256?: string }
 export interface KickoffReportVersion {
   no: number;
   fields: KickoffFields;
   sources: KickoffSourceRef[];
+  scopeKeys: string[];
   contentSha256: string;
   parent?: number;
   generation: { operationId: string; kind: 'agent' | 'revision' | 'manual'; at: string; requestId?: string };

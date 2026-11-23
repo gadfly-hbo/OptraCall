@@ -54,7 +54,7 @@ export const updateInitiative = (id: string, input: { expectedRevision: number; 
 
 export const listInitiativeFiles = (id: string, scopeKey: string) => request<{ files: InitiativeFile[] }>(`${path(id)}/files${scopeQuery(scopeKey)}`);
 export const uploadInitiativeFile = (id: string, input: { operationId: string; directory: '010_draw' | '020_clean'; name: string; contentBase64: string; scopeKey?: string }) => request<{ file: InitiativeFile }>(`${path(id)}/files`, 'POST', input);
-export const readInitiativeFile = (id: string, fileId: string) => request<{ file: InitiativeFile; contentBase64: string }>(`${path(id)}/files/${encodeURIComponent(fileId)}`);
+export const readInitiativeFile = (id: string, fileId: string, scopeKey?: string) => request<{ file: InitiativeFile; contentBase64: string }>(`${path(id)}/files/${encodeURIComponent(fileId)}${scopeKey ? `?scopeKey=${encodeURIComponent(scopeKey)}` : ''}`);
 
 export const createInitiativeSession = (id: string, input: { operationId: string; scope: GoalScope; configurationId?: string }) => request<{ session: InitiativeMainSession }>(`${path(id)}/session`, 'POST', input);
 export const readInitiativeSession = (id: string, scopeKey: string, signal?: AbortSignal) => request<InitiativeSessionDetail>(`${path(id)}/session${scopeQuery(scopeKey)}`, 'GET', undefined, signal);

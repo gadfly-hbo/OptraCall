@@ -2738,7 +2738,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const id=initiativeFilesRoute[1]!,fileId=initiativeFilesRoute[2];
         if(!fileId&&request.method==='GET'){json(response,200,{files:strategyInitiativeFiles.list(id,url.searchParams.get('scopeKey')??undefined)});return;}
         if(!fileId&&request.method==='POST'){const input=await body(request,68*1024*1024);json(response,201,{file:await mutate(()=>strategyInitiativeFiles.upload(id,input as Parameters<typeof strategyInitiativeFiles.upload>[1]))});return;}
-        if(fileId&&request.method==='GET'){json(response,200,strategyInitiativeFiles.read(id,fileId));return;}
+        if(fileId&&request.method==='GET'){const result=strategyInitiativeFiles.read(id,fileId);const scopeKey=url.searchParams.get('scopeKey');if(result.file.scopeKey!==undefined&&result.file.scopeKey!==scopeKey)throw new StrategyDiscussionFault('strategy_file_not_found',404);json(response,200,result);return;}
       }
       const candidateRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/candidates(?:\/([a-f0-9-]{36})\/versions\/([1-9]\d*)(?:\/(messages|stop|close|lock|revise|verify|verifications))?)?$/.exec(url.pathname);
       if(candidateRoute){

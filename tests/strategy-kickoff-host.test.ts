@@ -29,6 +29,8 @@ test('真实 Host：开题报告版本链、Schema 门禁、锁定与应用', {t
   }
   const initiativeId = randomUUID();
   await api('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '华东门店增长战略', scopes: [stores]}, 201);
+  const uploaded = (await api(`/api/strategy/initiatives/${initiativeId}/files`, 'POST', {operationId: randomUUID(), directory: '010_draw', name: '上期经营复盘.pdf', contentBase64: Buffer.from('合成经营复盘').toString('base64')}, 201)).file;
+  const sources = [{kind: 'file' as const, ref: '010_draw/上期经营复盘.pdf', title: '上期经营复盘', fileId: uploaded.fileId, sha256: uploaded.sha256}];
   const base = `/api/strategy/initiatives/${initiativeId}/reports`;
 
   assert.deepEqual((await api(base)).versions, []);

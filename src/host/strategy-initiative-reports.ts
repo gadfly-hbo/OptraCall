@@ -43,11 +43,12 @@ function validateSources(input: unknown): KickoffSourceRef[] {
   return input.map(entry => {
     if (!entry || typeof entry !== 'object') throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
     const s = entry as Record<string, unknown>;
-    if (Object.keys(s).some(key => !['kind', 'ref', 'title', 'sha256'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
+    if (Object.keys(s).some(key => !['kind', 'ref', 'title', 'fileId', 'sha256'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
     if ((s.kind !== 'file' && s.kind !== 'public') || typeof s.ref !== 'string' || !s.ref.trim() || s.ref.length > 500) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
     if (s.title !== undefined && (typeof s.title !== 'string' || s.title.length > 300)) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
     if (s.sha256 !== undefined && (typeof s.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(s.sha256))) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
-    return {kind: s.kind, ref: s.ref, ...(s.title !== undefined ? {title: s.title} : {}), ...(s.sha256 !== undefined ? {sha256: s.sha256} : {})};
+    if (s.kind === 'file' && (typeof s.fileId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(s.fileId) || typeof s.sha256 !== 'string')) throw new StrategyDiscussionFault('strategy_kickoff_source_invalid', 400);
+    return {kind: s.kind, ref: s.ref, ...(s.title !== undefined ? {title: s.title} : {}), ...(s.fileId !== undefined ? {fileId: s.fileId as string} : {}), ...(s.sha256 !== undefined ? {sha256: s.sha256} : {})};
   });
 }
 
@@ -55,8 +56,17 @@ type ReportFile = { formatVersion: 1; versions: KickoffReportVersion[]; applicat
 
 export class StrategyInitiativeReports {
   private readonly initiatives: StrategyInitiativeStore;
-  private readonly files?: { list(id: string, scopeKey?: string): { name: string; directory: string }[] };
-  constructor(initiatives: StrategyInitiativeStore, files?: { list(id: string, scopeKey?: string): { name: string; directory: string }[] }) { this.initiatives = initiatives; this.files = files; }
+  private readonly files?: { list(id: string, scopeKey?: string): { name: string; directory: string }[]; read(id: string, fileId: string): { file: { sha256: string; scopeKey?: string } } };
+  constructor(initiatives: StrategyInitiativeStore, files?: { list(id: string, scopeKey?: string): { name: string; directory: string }[]; read(id: string, fileId: string): { file: { sha256: string; scopeKey?: string } } }) { this.initiatives = initiatives; this.files = files; }
+  private assertSources(id: string, sources: KickoffSourceRef[]): void {
+    for (const source of sources) {
+      if (source.kind !== 'file') continue;
+      if (!this.files || !source.fileId || !source.sha256) throw new StrategyDiscussionFault('strategy_kickoff_source_invalid');
+      let read;
+      try { read = this.files.read(id, source.fileId); } catch { throw new StrategyDiscussionFault('strategy_kickoff_source_invalid'); }
+      if (read.file.sha256 !== source.sha256) throw new StrategyDiscussionFault('strategy_kickoff_source_invalid');
+    }
+  }
   private file(id: string) { return path.join(this.initiatives.directory(id), 'reports.json'); }
   private read(id: string): ReportFile {
     const file = this.file(id);
@@ -99,11 +109,15 @@ export class StrategyInitiativeReports {
     if (!version) throw new StrategyDiscussionFault('strategy_kickoff_version_not_found', 404);
     return version;
   }
-  save(id: string, input: { operationId: string; fields: KickoffFields; sources: KickoffSourceRef[]; parent?: number; kind?: 'agent' | 'revision' | 'manual'; requestId?: string }): KickoffReportVersion {
-    this.initiatives.get(id);
-    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'fields', 'sources', 'parent', 'kind', 'requestId'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
+  save(id: string, input: { operationId: string; fields: KickoffFields; sources: KickoffSourceRef[]; scopeKeys?: string[]; parent?: number; kind?: 'agent' | 'revision' | 'manual'; requestId?: string }): KickoffReportVersion {
+    const initiative = this.initiatives.get(id);
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'fields', 'sources', 'scopeKeys', 'parent', 'kind', 'requestId'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
     if (typeof input.operationId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(input.operationId)) throw new StrategyDiscussionFault('strategy_kickoff_operation_invalid', 400);
     const fields = validateFields(input.fields), sources = validateSources(input.sources);
+    this.assertSources(id, sources);
+    const initiativeKeys = initiative.scopes.map(s => initiativeScopeKey(s));
+    const scopeKeys = input.scopeKeys === undefined ? initiativeKeys : input.scopeKeys;
+    if (!Array.isArray(scopeKeys) || !scopeKeys.length || scopeKeys.some(k => typeof k !== 'string' || !initiativeKeys.includes(k))) throw new StrategyDiscussionFault('strategy_initiative_scope_unknown', 400);
     const file = this.read(id);
     const existing = file.versions.find(v => v.generation.operationId === input.operationId);
     const contentSha256 = hash({fields, sources});
@@ -115,7 +129,7 @@ export class StrategyInitiativeReports {
     const kind = input.kind ?? 'manual';
     if (!['agent', 'revision', 'manual'].includes(kind)) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
     const version: KickoffReportVersion = {
-      no: file.versions.length + 1, fields, sources, contentSha256,
+      no: file.versions.length + 1, fields, sources, scopeKeys: [...new Set(scopeKeys)], contentSha256,
       ...(input.parent !== undefined ? {parent: input.parent} : {}),
       generation: {operationId: input.operationId, kind, at: new Date().toISOString(), ...(input.requestId ? {requestId: input.requestId} : {})},
     };
@@ -131,6 +145,7 @@ export class StrategyInitiativeReports {
     const version = file.versions.find(v => v.no === no);
     if (!version) throw new StrategyDiscussionFault('strategy_kickoff_version_not_found', 404);
     if (typeof input.sha256 !== 'string' || input.sha256 !== version.contentSha256) throw new StrategyDiscussionFault('strategy_kickoff_version_conflict');
+    this.assertSources(id, version.sources);
     if (version.lock) {
       if (version.lock.operationId === input.operationId && version.lock.fingerprint === input.sha256) return structuredClone(version);
       throw new StrategyDiscussionFault('strategy_kickoff_already_locked');
@@ -157,6 +172,8 @@ export class StrategyInitiativeReports {
     if (typeof input.sha256 !== 'string' || input.sha256 !== version.contentSha256 || version.lock.fingerprint !== input.sha256) throw new StrategyDiscussionFault('strategy_kickoff_version_conflict');
     const scope = input.scope;
     if (!scope || !initiative.scopes.some(s => initiativeScopeKey(s) === initiativeScopeKey(scope))) throw new StrategyDiscussionFault('strategy_initiative_scope_unknown');
+    if (!version.scopeKeys.includes(initiativeScopeKey(scope))) throw new StrategyDiscussionFault('strategy_kickoff_scope_unknown');
+    this.assertSources(id, version.sources);
     const application: KickoffApplication = {operationId: input.operationId, scopeKey: initiativeScopeKey(scope), scope, reportNo: no, contentSha256: version.contentSha256, at: new Date().toISOString()};
     file.applications.push(application);
     this.write(id, file);
@@ -211,19 +228,10 @@ export class StrategyInitiativeReports {
       applied.push({blockId: patch.blockId, oldSha256, newSha256: createHash('sha256').update(patch.newText).digest('hex')});
     }
     const validated = validateFields(fields);
-    if (this.files) {
-      const catalog = this.files.list(id);
-      for (const source of base.sources) {
-        if (source.kind !== 'file') continue;
-        const slash = source.ref.indexOf('/');
-        const directory = slash > 0 ? source.ref.slice(0, slash) : '';
-        const name = slash > 0 ? source.ref.slice(slash + 1) : source.ref;
-        if (!catalog.some(f => f.directory === directory && f.name === name)) throw new StrategyDiscussionFault('strategy_initiative_source_changed');
-      }
-    }
+    this.assertSources(id, base.sources);
     const now = new Date().toISOString();
     const version: KickoffReportVersion = {
-      no: file.versions.length + 1, fields: validated, sources: structuredClone(base.sources), contentSha256: hash({fields: validated, sources: base.sources}),
+      no: file.versions.length + 1, fields: validated, sources: structuredClone(base.sources), scopeKeys: structuredClone(base.scopeKeys), contentSha256: hash({fields: validated, sources: base.sources}),
       parent: no, generation: {operationId: input.operationId, kind: 'revision', at: now},
       revision: {operationId: input.operationId, request: input.request, baseNo: no, patches: applied, at: now},
     };

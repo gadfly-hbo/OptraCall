@@ -53,7 +53,7 @@ export const strategyDiscussionTool = {
     'propose-goal 保存完整候选。draft 必填 title（标题）、outcome（预期结果）、perspective（profit/nonprofit/personal）、responsible（负责人）、baseline（状态及说明）、measurement（成果核对标准或已发布 SAP 指标及固定版本）。',
     'goalScopes.bound 或 defaultScope 已明确时可省略 draft.scope；有多种适用范围时按用户明确意图选用，归属仍有歧义时询问。基线待补用 pending，目标依据不足时继续讨论。修订原候选须给 goalId 和 expectedVersion。',
     'adopt-goal 仅按本轮用户明确原话给 quote(start/end/text)、准确 goalId/version/expectedVersion 和 goalContentSha256 采用。目标采用不授权经营执行。operation 给原 operationId 查回执，未知先核对原操作。',
-    '战略事项主会话专用：initiative-files 列本事项共用及当前范围资料；initiative-read-file 按 fileId 读取文本资料（offset/limit 续读）；initiative-read-kickoff 读开题报告版本（可给 version）；initiative-save-kickoff 保存开题报告草稿，给 operationId、kickoffFields（horizon/diagnosis/propositions 3–5 项含稳定唯一 id、question、whyItMatters/assumptions/evidenceGaps/followUp）与 kickoffSources（实际读取的 file/public 来源）。锁定与应用由决策者在界面完成，工具不锁定。',
+    '战略事项主会话专用：initiative-files 列本事项共用及当前范围资料；initiative-read-file 按 fileId 读取文本资料（offset/limit 续读）；initiative-read-kickoff 读开题报告版本（可给 version）；initiative-save-kickoff 保存开题报告草稿，给 operationId、kickoffFields（horizon/diagnosis/propositions 3–5 项含稳定唯一 id、question、whyItMatters/assumptions/evidenceGaps/followUp）与 kickoffSources（file 来源须给实际读取的 fileId 与 sha256 准确身份，public 来源给依据）。锁定与应用由决策者在界面完成，工具不锁定。',
     '候选会话专用：initiative-save-candidate 保存本候选版本正文，给 operationId、candidateBlocks（稳定唯一 id、label、text 的结构化章节，覆盖定位与增长、目标与里程碑、资源与明确不做、成立条件与假设）及可选 candidateGoals。Host 绑定本版本身份，不接受其他候选或开题引用；锁定由决策者完成。',
     '检验会话专用：initiative-save-verification 提交本道检验结论，给 verdict（pass/fail/insufficient）、evidence（可核对的关键发现与依据）及可选 verificationSources。结论只针对 Host 固定的锁定版指纹；发布由决策者完成。',
   ].join(' '),
@@ -71,6 +71,7 @@ export const strategyDiscussionTool = {
     kickoffSources: Type.Optional(Type.Array(Type.Object({
       kind: Type.Union([Type.Literal('file'), Type.Literal('public')]),
       ref: nonblank(500), title: Type.Optional(nonblank(300)),
+      fileId: Type.Optional(nonblank(100)),
       sha256: Type.Optional(Type.String({ pattern: '^[a-f0-9]{64}$' })),
     }, exact), { maxItems: 100 })),
     candidateBlocks: Type.Optional(Type.Array(Type.Object({

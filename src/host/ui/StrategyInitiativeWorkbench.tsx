@@ -299,7 +299,7 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
   const openFile = async (file: InitiativeFile) => {
     setFileError('');
     try {
-      const result = await api.readInitiativeFile(id, file.fileId);
+      const result = await api.readInitiativeFile(id, file.fileId, file.scopeKey ?? scopeKey);
       const bytes = Uint8Array.from(atob(result.contentBase64), char => char.charCodeAt(0));
       let text: string;
       try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { setPreview({ title: file.name, content: '二进制原件暂不支持文本预览；请按元数据引用，需要正文时提供文本版本。' }); return; }
