@@ -115,7 +115,8 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   const publicSearch = () => options?.workspace?.capabilityPolicy === 'public-search';
   // Sealed profiles reuse the same no-execution resource path.
   const strategyDiscussion = () => options?.workspace?.capabilityPolicy === 'strategy-discussion';
-  const fixedInput = () => strategyDiscussion() || publicSearch() || options?.workspace?.capabilityPolicy === 'fixed-draft' || options?.workspace?.capabilityPolicy === 'text-only' || options?.workspace?.capabilityPolicy === 'source-reader';
+  const strategyInitiative = () => options?.workspace?.capabilityPolicy === 'strategy-initiative';
+  const fixedInput = () => strategyDiscussion() || strategyInitiative() || publicSearch() || options?.workspace?.capabilityPolicy === 'fixed-draft' || options?.workspace?.capabilityPolicy === 'text-only' || options?.workspace?.capabilityPolicy === 'source-reader';
   const ordinaryManaged = () => Boolean(protectedTools && options.protectedExecution?.profile === 'ordinary');
   function syncExecutionJournal(target: SessionManager) {
     const file = target.getSessionFile(); if (!file) throw new Error('managed_native_file_required');
@@ -218,7 +219,8 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   }
   const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => {
     const previous = lastRun();
-    return { sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(previous ? { lastRun: previous } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { ...(previous?.reportCalculationReview ? { reportCalculationReview: previous.reportCalculationReview } : {}), ...(analysisPython ? { analysisPython } : {}), nativeTools: !fixedInput() && !(Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools), subagent: session!.getActiveToolNames().includes('subagent'), nativeSearch: publicSearch() || !fixedInput() && !options.workspace && (!protectedTools || ordinaryManaged()) && !options.webSearchEnabled ? nativeSearchMode(options.configuration) ?? false : false, python: fixedInput() || (Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools) ? false : 'bash', powershell: fixedInput() || protectedTools || Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, skills: !fixedInput() && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)) && !options.memberPackWorkspaceRoot, mcp: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, codemode: !fixedInput() && !(Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged() || Boolean(options.memberPackExecutionScope)), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: (options.protectedExecution ?? options.memberPackExecutionScope)?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } };
+    const strategySkills = strategyInitiative() ? session!.resourceLoader.getSkills().skills.map(skill => skill.name).sort() : undefined;
+    return { sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(previous ? { lastRun: previous } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { ...(previous?.reportCalculationReview ? { reportCalculationReview: previous.reportCalculationReview } : {}), ...(analysisPython ? { analysisPython } : {}), nativeTools: !fixedInput() && !(Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools), subagent: session!.getActiveToolNames().includes('subagent'), nativeSearch: publicSearch() || !fixedInput() && !options.workspace && (!protectedTools || ordinaryManaged()) && !options.webSearchEnabled ? nativeSearchMode(options.configuration) ?? false : false, python: fixedInput() || (Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools) ? false : 'bash', powershell: fixedInput() || protectedTools || Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, skills: (strategySkills ? strategySkills.length > 0 : !fixedInput()) && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)) && !options.memberPackWorkspaceRoot, ...(strategySkills ? { strategySkills } : {}), mcp: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, codemode: !fixedInput() && !(Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged() || Boolean(options.memberPackExecutionScope)), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: (options.protectedExecution ?? options.memberPackExecutionScope)?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } };
   };
   const environmentExtension: ExtensionFactory = pi => {
     pi.on('before_provider_request', (event, ctx) => {
@@ -351,7 +353,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   async function open(o: ProjectAgentWireOptions) {
     if (runtime) throw new Error('session_already_open');
     options = o;
-    if (fixedInput() && !strategyDiscussion() && o.sessionFile) throw new Error('fixed_draft_history_not_allowed');
+    if (fixedInput() && !strategyDiscussion() && !strategyInitiative() && o.sessionFile) throw new Error('fixed_draft_history_not_allowed');
     if (editorText === undefined) editorText = o.draft ?? '';
     analysisPython = o.analysisPython && !fixedInput() ? inspectAnalysisPython(o.analysisPython, o.codeRoot) : undefined;
     const restrictedMemberPack = Boolean(o.memberPackWorkspaceRoot && !o.workspace && !o.protectedExecution);
@@ -744,9 +746,9 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         },
       });
     }
-    const scopeToolContexts = Boolean(o.goalContextSourceEnabled || strategyDiscussion() || candidateAvailable || dbLinkAvailable || o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
+    const scopeToolContexts = Boolean(o.goalContextSourceEnabled || strategyDiscussion() || strategyInitiative() || candidateAvailable || dbLinkAvailable || o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
     const createStrategyTools = (boundManager: SessionManager) => {
-      if (!strategyDiscussion() || !o.strategyDiscussionEnabled) return [];
+      if (!(strategyDiscussion() || strategyInitiative()) || !o.strategyDiscussionEnabled) return [];
       const variant = o.workspace?.discussionTools;
       // 止损作用域限于已确认的战略共创全量工具；business-role 的 project-sources/goal-draft 变体不纳入，
       // 避免在未呈现该诊断的消费者处静默取消。顺序执行复用 Pi 原生 executionMode，使批次内逐工具结算计数。
@@ -791,6 +793,10 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       let parent: AgentSession;
       const contextAdapter = scopeToolContexts ? createToolContextAdapter((ctx, signal) => qualifyToolInvocation(parent, ctx, signal)) : undefined;
       const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
+      const strategySkillPaths = strategyInitiative() ? [
+        path.join(analysisAssetsDir, 'deep-research', 'SKILL.md'),
+        path.resolve(o.codeRoot, 'extensions/strategy-assets/grill-me/SKILL.md'),
+      ] : undefined;
       const customTools = [...createGoalContextTools(sessionManager), ...createStrategyTools(sessionManager), ...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager), ...createBoundDbLinkTools(sessionManager), ...(o.reportCalculationReviewEnabled ? [createReportReviewTool(() => parent)] : [])];
       const delegation = !fixedInput() && !o.workspace && !restrictedMemberPack && (!o.protectedExecution || ordinaryManaged());
       const searchGuidance: ExtensionFactory = pi => {
@@ -845,6 +851,13 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       const services = await createAgentSessionServices({ cwd: targetCwd, agentDir, modelRuntime: models, resourceLoaderOptions: { ...(contextAdapter ? { extensionsOverride: contextAdapter.extensionsOverride } : {}), ...(fixedInput() ? {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
+        ...(strategySkillPaths ? {
+          additionalSkillPaths: strategySkillPaths,
+          skillsOverride: (base: { skills: Parameters<typeof snapshotProtectedSkills>[0]; diagnostics: any[] }) => ({
+            ...base,
+            skills: base.skills.filter(skill => strategySkillPaths.includes(path.resolve(skill.filePath))),
+          }),
+        } : {}),
         extensionFactories: [
           ...(publicSearch() ? [createNativeSearchExtension(o.configuration, code => { nativeSearchFailure = code; }, true, (receipt, details) => run?.publicSearch?.observe(receipt, details))] : []),
           environmentExtension,
@@ -888,7 +901,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
       const restrictedHostToolsOnly = restrictedMemberPack && !protectedTools;
-      const sourceToolNames = sourceWorkspace || strategyDiscussion() ? customTools.map(tool => tool.name) : [];
+      const sourceToolNames = sourceWorkspace || strategyDiscussion() || strategyInitiative() ? customTools.map(tool => tool.name) : [];
       services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? sourceToolNames : protectedTools ? [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] : restrictedHostToolsOnly ? customTools.map(tool => tool.name) : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...webTools.map(tool => `+${tool}`), ...(subagent ? ['+subagent'] : [])] });
       // SDK modifiers append to either a plain workspace allowlist or inherited defaults.
       if (customTools.length && !restrictedHostToolsOnly) services.settingsManager.applyOverrides({ defaultTools: customTools.filter(tool => tool.name !== reportCalculationToolName).map(tool => `+${tool.name}`) });

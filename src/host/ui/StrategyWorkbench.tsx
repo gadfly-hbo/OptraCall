@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {ManagementStage} from './ManagementTabs.tsx';
+import type {LegacyStrategyStage} from './ManagementTabs.tsx';
 import {mapTemplates, type StrategyMapRef, type StrategyMapVersion} from '../strategy-map-types.ts';
 import type {GoalDiscussionSourceRef,GoalScope,GoalVersion} from '../strategy-goals-types.ts';
 import type {StrategyDiscussionDetail} from '../strategy-discussion-types.ts';
@@ -38,8 +38,8 @@ function MapHandoffs({version}:{version:StrategyMapVersion}){
 import {StrategyMapImportDialog,type StrategyMapExtractRequest} from './StrategyMapImportDialog.tsx';
 
 export function StrategyWorkbench({detail,stage,active,scopes,onStage,ensureDiscussionId,onDiscuss,onGoalsChanged,onSelectContext,sentRequest,onReconciled,importDialogOpen,onImportDialogOpenChange,onExtractMapImport,onRereadMap,onRefreshDiscussion}:{
- detail?:StrategyDiscussionDetail;stage:ManagementStage;active:boolean;scopes:GoalScope[];
- onStage:(stage:ManagementStage)=>void;ensureDiscussionId:()=>Promise<string>;
+ detail?:StrategyDiscussionDetail;stage:LegacyStrategyStage;active:boolean;scopes:GoalScope[];
+ onStage:(stage:LegacyStrategyStage)=>void;ensureDiscussionId:()=>Promise<string>;
  sentRequest?:string;onReconciled:()=>void;onSelectContext:(ref:StrategyMapRef)=>void;
  onDiscuss:(ref?:StrategyMapRef,edgeId?:string,source?:GoalDiscussionSourceRef)=>void;onGoalsChanged:(goals?:GoalVersion[])=>Promise<void>;
  importDialogOpen?:boolean;onImportDialogOpenChange?:(open:boolean)=>void;

@@ -605,6 +605,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
  function payload(value:unknown){const text=JSON.stringify(value);if(text.length>goalToolPayloadLimit)fail('strategy_discussion_materials_too_large',413);return {content:[{type:'text' as const,text}],details:object(value)?value:{result:value}};}
  async function tool(o:StrategyDiscussion,configuration:Readonly<RuntimeModelConfiguration>,action:StrategyDiscussionAction,input:Record<string,unknown>,context:StrategyDiscussionToolContext){
   context.assertCurrent();context.signal.throwIfAborted();o=store.get(o.id);
+  if(action.startsWith('initiative-'))fail('role_action_unavailable',403);
   if(o.businessOwner) {
    const owner=o.businessOwner;
    if(owner.role==='goal'||owner.role==='goal-draft'){
