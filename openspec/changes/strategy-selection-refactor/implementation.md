@@ -260,7 +260,7 @@ Issue [#120](https://github.com/gadfly-hbo/OptraCall/issues/120) · 规格 [Spec
 - **浏览器 E2E 29/29 PASS**（真实 Host + 合成 Provider + 系统 Chrome，每次运行独立干净数据根，非本机 origin 全 abort）：原 25 项 + 返工 4 项（准确版本弹窗候选会话入口、旧讨论回读定位、对话式限定修改 Agent 拟改核对、采纳另存新候选）。1440/390 零横向溢出；弹窗 scrollHeight 1068 > clientHeight 558，overflowY auto。证据 `.local/issue-120/browser-run11.log`、`browser/results.json`、截图。
 - **UI 入口修复**（`05da867`）：已发布/撤销版提供「从此版修订」（恢复发布取新候选版本，Spec §3.4）。
 - **夹具对齐**（`fe774a9`、`afbcab0`）：两处旧测试 file 来源补 fileId，符合返工4准确身份合同；单独重跑均通过。
-- **完整 `npm run check` 最终复跑**：进行中（前一轮 3238 项中 2 项失败均为上述夹具问题，修复后复跑确认）。
+- **完整 `npm run check` 最终复跑**：PASS（check-exit=0）。3238 项测试，3127 通过，**0 失败**，111 原有条件跳过；check:agent-sessions 边界与锁定 SDK 材料 PASS；tsc 0 错误；build 成功（0.1.0-mvp.4）。证据 `.local/issue-120/full-check-final.log`。前一轮 2 项失败均为夹具未对齐返工4合同，修复后复跑确认。
 
 ## 范围外问题
 
