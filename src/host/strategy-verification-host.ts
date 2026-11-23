@@ -9,6 +9,7 @@ import {StrategyInitiativeFiles} from './strategy-initiative-files.ts';
 import type {CandidateVersion, VerificationBatch, VerificationGate, VerificationOwner} from './strategy-initiative-types.ts';
 import type {RuntimeModelConfiguration} from './config-store.ts';
 import type {StrategyDiscussionAction, StrategyDiscussionToolContext} from '../agent/strategy-discussion.ts';
+import {readNativeSessionSnapshot} from './native-session-snapshot.ts';
 
 const canonical = (x: unknown): unknown => Array.isArray(x) ? x.map(canonical) : x && typeof x === 'object' ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, canonical(v)])) : x;
 const hash = (x: unknown): string => createHash('sha256').update(JSON.stringify(canonical(x))).digest('hex');
@@ -187,6 +188,17 @@ export function createStrategyVerificationHost(options: {
         for (const exposed of catalog) {
           const actual = currentCatalog.find(f => f.fileId === exposed.fileId);
           if (!actual || actual.sha256 !== exposed.sha256) fail('strategy_initiative_source_changed');
+        }
+        const history = owner.sessionFile ? await readNativeSessionSnapshot(owner.sessionFile, nativeDirectory(owner), workspaceDirectory(owner)).catch(() => null) : null;
+        if (history) for (const entry of history.entries) {
+          if (entry.type !== 'message' || entry.message.role !== 'assistant' || !Array.isArray(entry.message.content)) continue;
+          for (const part of entry.message.content as any[]) {
+            if (part?.type === 'toolCall' && part.arguments?.action === 'initiative-read-file' && typeof part.arguments.fileId === 'string') {
+              let read;
+              try { read = files.read(id, part.arguments.fileId); } catch { fail('strategy_initiative_source_changed'); }
+              if (read.file.scopeKey !== undefined && read.file.scopeKey !== candidate.scopeKey) fail('strategy_initiative_source_changed');
+            }
+          }
         }
       };
       const run = lease.start({requestId, text: prompt, requestFingerprint: hash(prompt), providedContext: {userQuoteEligible: false, originalUserText: '战略检验', strategyDiscussion: {discussionId: `${id}:${batchId}:${turn}`, methods: []}}, verifyBeforeDispatch: verify});

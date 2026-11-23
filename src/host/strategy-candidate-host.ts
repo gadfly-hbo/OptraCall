@@ -286,6 +286,17 @@ export function createStrategyCandidateHost(options: {
           const actual = currentCatalog.find(f => f.fileId === exposed.fileId);
           if (!actual || actual.sha256 !== exposed.sha256) fail('strategy_initiative_source_changed');
         }
+        const history = owner.sessionFile ? await readNativeSessionSnapshot(owner.sessionFile, nativeDirectory(owner), workspaceDirectory(owner)).catch(() => null) : null;
+        if (history) for (const entry of history.entries) {
+          if (entry.type !== 'message' || entry.message.role !== 'assistant' || !Array.isArray(entry.message.content)) continue;
+          for (const part of entry.message.content as any[]) {
+            if (part?.type === 'toolCall' && part.arguments?.action === 'initiative-read-file' && typeof part.arguments.fileId === 'string') {
+              let read;
+              try { read = files.read(id, part.arguments.fileId); } catch { fail('strategy_initiative_source_changed'); }
+              if (read.file.scopeKey !== undefined && read.file.scopeKey !== owner.scopeKey) fail('strategy_initiative_source_changed');
+            }
+          }
+        }
         const currentAnchor = reports.view(id).versions.find(v => v.no === owner.anchor.reportNo);
         if (!currentAnchor || currentAnchor.contentSha256 !== owner.anchor.contentSha256) fail('strategy_kickoff_version_conflict');
       };
