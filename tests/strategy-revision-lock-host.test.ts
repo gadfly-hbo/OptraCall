@@ -32,7 +32,7 @@ test('真实 Host：开题限定修订白名单、原字节保留与负例', {ti
   await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '修订事项', scopes: [stores]}, 201);
   const base = `/api/strategy/initiatives/${initiativeId}/reports`;
   const uploaded = (await req(`/api/strategy/initiatives/${initiativeId}/files`, 'POST', {operationId: randomUUID(), directory: '010_draw', name: '复盘.md', contentBase64: Buffer.from('合成复盘').toString('base64')}, 201)).file;
-  const v1 = (await req(base, 'POST', {operationId: randomUUID(), fields: kickoffFields, sources: [{kind: 'file', ref: '010_draw/复盘.md', sha256: uploaded.sha256}]}, 201)).version;
+  const v1 = (await req(base, 'POST', {operationId: randomUUID(), fields: kickoffFields, sources: [{kind: 'file', ref: '010_draw/复盘.md', fileId: uploaded.fileId, sha256: uploaded.sha256}]}, 201)).version;
   await req(`${base}/1/lock`, 'POST', {operationId: randomUUID(), sha256: v1.contentSha256});
   await req(`${base}/1/apply`, 'POST', {operationId: randomUUID(), sha256: v1.contentSha256, scope: stores});
 
