@@ -45,6 +45,7 @@ import { strategyWorkbookRoutes,checkWorkbookSource } from './strategy-workbook-
 import { StrategyMapPublicationStore } from './strategy-map-publication-store.ts';
 import { StrategyInitiativeStore } from './strategy-initiative-store.ts';
 import { StrategyInitiativeReports } from './strategy-initiative-reports.ts';
+import { StrategyInitiativeFiles } from './strategy-initiative-files.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
@@ -1198,6 +1199,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const strategyMapPublications=new StrategyMapPublicationStore(strategyDiscussions.store);
   const strategyInitiatives=new StrategyInitiativeStore(dataRoot);
   const strategyKickoffReports=new StrategyInitiativeReports(strategyInitiatives);
+  const strategyInitiativeFiles=new StrategyInitiativeFiles(strategyInitiatives);
   strategyMapImports=createStrategyMapImportService({dataRoot,codeRoot:options.cwd,attachments:strategyAttachments,projects,owner:id=>strategyDiscussions.store.get(id),configuration:(id,revision)=>availableConfiguration(id,revision),mutate,
     writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
   });
@@ -2728,6 +2730,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const id=initiativeRoute[1]!;
         if(request.method==='GET'){json(response,200,{initiative:strategyInitiatives.get(id)});return;}
         if(request.method==='PATCH'){const input=await body(request);json(response,200,{initiative:await mutate(()=>strategyInitiatives.update(id,input as unknown as import('./strategy-initiative-types.ts').StrategyInitiativeUpdate))});return;}
+      }
+      const initiativeFilesRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/files(?:\/([a-f0-9-]{36}))?$/.exec(url.pathname);
+      if(initiativeFilesRoute){
+        const id=initiativeFilesRoute[1]!,fileId=initiativeFilesRoute[2];
+        if(!fileId&&request.method==='GET'){json(response,200,{files:strategyInitiativeFiles.list(id,url.searchParams.get('scopeKey')??undefined)});return;}
+        if(!fileId&&request.method==='POST'){const input=await body(request,68*1024*1024);json(response,201,{file:await mutate(()=>strategyInitiativeFiles.upload(id,input as Parameters<typeof strategyInitiativeFiles.upload>[1]))});return;}
+        if(fileId&&request.method==='GET'){json(response,200,strategyInitiativeFiles.read(id,fileId));return;}
       }
       const kickoffRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/reports(?:\/([1-9]\d*)\/(lock|apply))?$/.exec(url.pathname);
       if(kickoffRoute){
