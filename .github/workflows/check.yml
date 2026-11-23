@@ -42,7 +42,7 @@ jobs:
           docs=()
           changes="$RUNNER_TEMP/check-changes"
           if [[ "$base" =~ ^[0-9a-f]{40}$ ]] &&
-             git diff --raw -z --no-renames "$base" HEAD -- > "$changes"; then
+             git diff --raw -z --no-renames --ignore-submodules=none "$base" HEAD -- > "$changes"; then
             while IFS= read -r -d '' entry && IFS= read -r -d '' path; do
               # Only edits to existing regular Markdown files qualify.
               if [[ "$entry" != ':100644 100644 '*" M" ]]; then
