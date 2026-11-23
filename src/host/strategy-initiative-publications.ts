@@ -162,6 +162,14 @@ export function createStrategyInitiativePublications(options: {
   }
 
   async function handoff(id: string, publicationId: string, input: Record<string, unknown>) {
+    try {
+      const result = await handoffInner(id, publicationId, input);
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+  async function handoffInner(id: string, publicationId: string, input: Record<string, unknown>) {
     if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'scope', 'selected'].includes(key))) fail('strategy_publication_fields_invalid', 400);
     if (typeof input.operationId !== 'string' || !uuid.test(input.operationId)) fail('strategy_publication_operation_invalid', 400);
     const publication = get(id, publicationId);
@@ -175,7 +183,7 @@ export function createStrategyInitiativePublications(options: {
     const drafts = selected.map(index => {
       const text = candidate.goals[index]!;
       return {
-        operationId: stableId({handoff: input.operationId, publicationId, index}),
+        operationId: stableId({handoff: input.operationId, publicationId, index, requestFingerprint}),
         title: text, outcome: text,
         perspective: scope.kind === 'personal' ? 'personal' : 'profit',
         scope,

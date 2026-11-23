@@ -134,3 +134,44 @@ test('真实 Host：相同承接操作 ID 跨发布不得串目标身份与来�
   assert.deepEqual(replay2, handoff2);
   assert.equal((await req('/api/strategy/goals')).goals.length, 2);
 });
+
+test('真实 Host：承接同操作变更范围返回冲突，不同操作独立目标', {timeout: 150_000}, async t => {
+  const provider = await startToolProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  await req('/api/configuration', 'PUT', {name: '承接一致', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-consistency', apiKey: 'synthetic-consistency'});
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '承接一致事项', scopes: [stores]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}`;
+  const {publication} = await publishedCandidate(req, provider, base, ['目标一', '目标二']);
+  const operationId = randomUUID();
+  const scopeA = {kind: 'personal' as const, id: 'self', name: '个人工作'};
+  const scopeB = {kind: 'personal' as const, id: 'other-person', name: '其他个人'};
+
+  const first = (await req(`${base}/publications/${publication.publicationId}/handoff`, 'POST', {operationId, scope: scopeA, selected: [0]})).handoff;
+  assert.equal(first.scope.id, 'self');
+  assert.equal(first.goals.length, 1);
+
+  const replay = (await req(`${base}/publications/${publication.publicationId}/handoff`, 'POST', {operationId, scope: scopeA, selected: [0]})).handoff;
+  assert.deepEqual(replay, first, 'same request idempotent');
+
+  const conflict = await req(`${base}/publications/${publication.publicationId}/handoff`, 'POST', {operationId, scope: scopeB, selected: [0]}, 409);
+  assert.equal(conflict.code, 'strategy_publication_operation_conflict', 'same operationId different scope is conflict');
+
+  const second = (await req(`${base}/publications/${publication.publicationId}/handoff`, 'POST', {operationId: randomUUID(), scope: scopeB, selected: [1]})).handoff;
+  assert.equal(second.scope.id, 'other-person');
+  assert.equal(second.goals.length, 1);
+  assert.notEqual(second.goals[0].goalId, first.goals[0].goalId, 'different operation creates independent goals');
+
+  const goalA = (await req(`/api/strategy/goals/${first.goals[0].goalId}`)).goal;
+  const goalB = (await req(`/api/strategy/goals/${second.goals[0].goalId}`)).goal;
+  assert.equal(goalA.versions[0].scope.id, 'self');
+  assert.equal(goalB.versions[0].scope.id, 'other-person');
+  assert.equal(goalA.versions[0].title, '目标一');
+  assert.equal(goalB.versions[0].title, '目标二');
+  assert.equal((await req('/api/strategy/goals')).goals.length, 2);
+});
