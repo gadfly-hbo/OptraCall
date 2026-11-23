@@ -58,7 +58,7 @@ export const readInitiativeFile = (id: string, fileId: string) => request<{ file
 
 export const createInitiativeSession = (id: string, input: { operationId: string; scope: GoalScope; configurationId?: string }) => request<{ session: InitiativeMainSession }>(`${path(id)}/session`, 'POST', input);
 export const readInitiativeSession = (id: string, scopeKey: string, signal?: AbortSignal) => request<InitiativeSessionDetail>(`${path(id)}/session${scopeQuery(scopeKey)}`, 'GET', undefined, signal);
-export const sendInitiativeMessage = (id: string, scopeKey: string, input: { requestId: string; text: string; expectedRevision: number }) => request<{ session: InitiativeMainSession; requestId: string; replayed?: boolean }>(`${path(id)}/messages${scopeQuery(scopeKey)}`, 'POST', input);
+export const sendInitiativeMessage = (id: string, scopeKey: string, input: { requestId: string; text: string; expectedRevision: number; replacePendingRequestId?: string }) => request<{ session: InitiativeMainSession; requestId: string; replayed?: boolean }>(`${path(id)}/messages${scopeQuery(scopeKey)}`, 'POST', input);
 export const stopInitiativeSession = (id: string, scopeKey: string, expectedRequestId?: string) => request<{ stopped: boolean }>(`${path(id)}/stop${scopeQuery(scopeKey)}`, 'POST', { ...(expectedRequestId ? { expectedRequestId } : {}) });
 export const closeInitiativeSession = (id: string, scopeKey: string) => request<{ closed: true }>(`${path(id)}/close${scopeQuery(scopeKey)}`, 'POST', {});
 export async function watchInitiativeEvents(id: string, scopeKey: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal): Promise<void> {
@@ -79,7 +79,7 @@ export const listCandidates = (id: string, scopeKey?: string) => request<{ candi
 export const createCandidate = (id: string, input: { operationId: string; scope: GoalScope; title: string; instruction: string; configurationId?: string }) => request<{ candidate: CandidateVersion; requestId?: string; replayed?: boolean }>(`${path(id)}/candidates`, 'POST', input);
 const candidatePath = (id: string, cid: string, no: number) => `${path(id)}/candidates/${encodeURIComponent(cid)}/versions/${no}`;
 export const readCandidate = (id: string, cid: string, no: number) => request<CandidateDetail>(candidatePath(id, cid, no));
-export const sendCandidateMessage = (id: string, cid: string, no: number, input: { requestId: string; text: string; expectedRevision: number }) => request<{ candidate: CandidateVersion; requestId: string; replayed?: boolean }>(`${candidatePath(id, cid, no)}/messages`, 'POST', input);
+export const sendCandidateMessage = (id: string, cid: string, no: number, input: { requestId: string; text: string; expectedRevision: number; replacePendingRequestId?: string }) => request<{ candidate: CandidateVersion; requestId: string; replayed?: boolean }>(`${candidatePath(id, cid, no)}/messages`, 'POST', input);
 export const stopCandidate = (id: string, cid: string, no: number, expectedRequestId?: string) => request<{ stopped: boolean }>(`${candidatePath(id, cid, no)}/stop`, 'POST', { ...(expectedRequestId ? { expectedRequestId } : {}) });
 export const closeCandidate = (id: string, cid: string, no: number) => request<{ closed: true }>(`${candidatePath(id, cid, no)}/close`, 'POST', {});
 export const lockCandidate = (id: string, cid: string, no: number, input: { operationId: string; sha256: string; operator?: string }) => request<{ candidate: CandidateVersion }>(`${candidatePath(id, cid, no)}/lock`, 'POST', input);

@@ -209,7 +209,7 @@ export function createStrategyInitiativeHost(options: {
   }
 
   async function send(id: string, scopeKey: string, input: Record<string, unknown>) {
-    if (!input || Object.keys(input).some(key => !['requestId', 'text', 'expectedRevision'].includes(key)) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) fail('invalid_strategy_message', 400);
+    if (!input || Object.keys(input).some(key => !['requestId', 'text', 'expectedRevision', 'replacePendingRequestId'].includes(key)) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) fail('invalid_strategy_message', 400);
     if (typeof input.requestId !== 'string' || !uuid.test(input.requestId)) fail('invalid_strategy_message', 400);
     const requestId = input.requestId;
     const originalUserText = input.text;
@@ -219,7 +219,7 @@ export function createStrategyInitiativeHost(options: {
       if (owner.lastRun.fingerprint !== fingerprint) fail('strategy_initiative_operation_conflict');
       return {session: owner, requestId, replayed: true};
     }
-    if (owner.pendingInput && owner.pendingInput.requestId !== requestId) fail('strategy_initiative_pending_request');
+    if (owner.pendingInput && owner.pendingInput.requestId !== requestId && (input.replacePendingRequestId !== owner.pendingInput.requestId || !['failed', 'cancelled'].includes(owner.lastRun?.status ?? ''))) fail('strategy_initiative_pending_request');
     if (!Number.isSafeInteger(input.expectedRevision) || owner.revision !== input.expectedRevision) fail('strategy_initiative_context_changed');
     const ref = domain.ref(owner);
     if (domain.busy(ref)) fail('session_busy');
