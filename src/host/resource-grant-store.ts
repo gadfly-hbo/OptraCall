@@ -124,6 +124,7 @@ export class ResourceGrantStore {
     if (!Array.isArray(input.operations) || !input.operations.length || input.operations.some(op => !OPS.includes(op))) fail('invalid_grant_operations');
     const operations = [...new Set(input.operations)];
     const resourceRef = input.resourceRef ? sourceRef(input.resourceRef) : undefined;
+    if (input.purposeKeys !== undefined && !Array.isArray(input.purposeKeys)) fail('invalid_grant_purpose_keys');
     const purposeKeys = input.purposeKeys?.map(k => text(k, 200, false).trim());
     if (input.purposeKeys !== undefined && Array.isArray(input.purposeKeys) && input.purposeKeys.length === 0) fail('invalid_grant_purpose_keys');
 

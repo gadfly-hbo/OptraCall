@@ -130,3 +130,8 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 
 1. **SAP 校验器不放键名入路径。** `keys()` 发现未知字段时直接用结构父路径（如 `root`、`metrics.0`），不再拼入实际键名。新增测试：小写未知键 `synthetic_lowercase_field` 不进入正文、details 或下一轮请求。
 2. **汇总读取完整期间 + 多用途遍历。** 用途期间改用 `isPeriodCovered` 全区间核对（半月授权不能读整月汇总）。通配授权遍历全部合格用途（不再只试第一个），找到实际范围匹配项即通过。新增测试：半月不覆盖整月、单日在范围内。
+
+### PM 四次返工（授权接缝收尾）
+
+1. **目录与精读同一汇总资格。** `evaluatePurposeAccessForSubject` 的 `canSummary` 增加 `isPeriodCovered(pm.summaryAccess.period, ...)` 过滤，半月授权不再在目录中标为 `authorizedSummary`。精读路径改用 `summaryAccess.period`（来源自身期间）而非 `purpose.scope.period`，用途单日但来源整月时拒绝。
+2. **显式 `null` 用途拒绝。** `ResourceGrantStore.grant()` 在规范化前校验 `purposeKeys` 非数组即拒绝（`invalid_grant_purpose_keys`），零写入。新增测试：`null as unknown as string[]` 被拒。

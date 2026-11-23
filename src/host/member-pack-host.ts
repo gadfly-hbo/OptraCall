@@ -1354,12 +1354,19 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       brand: pm.scope.brand,
       channel: pm.scope.channel,
     });
-    const canSummary = evaluateResourceAccess(subjectGrants, {
+    const canSummaryRaw = evaluateResourceAccess(subjectGrants, {
       operation: 'cite-summary',
       purposeKey: pm.purposeKey,
       brand: pm.scope.brand,
       channel: pm.scope.channel,
     });
+    const canSummary = canSummaryRaw.allowed && pm.summaryAccess
+      ? { ...canSummaryRaw, matchedGrantIds: canSummaryRaw.matchedGrantIds.filter(id => {
+          const g = subjectGrants.find(g => g.id === id);
+          return g ? isPeriodCovered(pm.summaryAccess!.period, g.scope.periodFrom, g.scope.periodTo) : false;
+        }) }
+      : canSummaryRaw;
+    if (canSummary.matchedGrantIds.length === 0) canSummary.allowed = false;
     const canDetail = evaluateResourceAccess(subjectGrants, {
       operation: 'read-detail-recalculate',
       purposeKey: pm.purposeKey,
@@ -1621,7 +1628,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               summaryVersion: grant.scope.summaryVersion,
             });
             if (!evalSummary.allowed) continue;
-            if (!isPeriodCovered(purpose.scope?.period, grant.scope.periodFrom, grant.scope.periodTo)) continue;
+            if (!isPeriodCovered(purpose.summaryAccess?.period ?? purpose.scope?.period, grant.scope.periodFrom, grant.scope.periodTo)) continue;
             summaryAllowed = true;
             break;
           }
