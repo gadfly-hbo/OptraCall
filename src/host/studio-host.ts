@@ -62,7 +62,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     assetText: string,
     assetScope: string | undefined,
     requested: { grain?: string; periodFrom?: string; periodTo?: string },
-  ): { verifiedScopeSummary: string; sourcePeriod?: string } {
+  ): { verifiedScopeSummary: string; sourcePeriodFrom?: string; sourcePeriodTo?: string } {
     const combined = `${assetScope ?? ''}\n${assetText}`;
     const trimmedGrain = requested.grain?.trim();
     if (!trimmedGrain) throw new StudioError('invalid_summary_grant_scope', 400);
@@ -122,8 +122,12 @@ export function createStudioFeature(options: StudioHostOptions) {
     const periodSummary = requested.periodFrom || requested.periodTo
       ? `${requested.periodFrom ?? '*'}..${requested.periodTo ?? '*'}`
       : (textMonths.join(',') || '未声明期间');
-    const sourcePeriod = textMonths.length > 0 ? textMonths[0] : undefined;
-    return { verifiedScopeSummary: `粒度:${trimmedGrain} · 期间:${periodSummary}`, sourcePeriod };
+    const sourceDates = [...combined.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))\b/g)].map(m => m[1]!).sort();
+    const sourceMonths = [...combined.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2]))\b/g)].map(m => m[1]!).filter(m => !sourceDates.some(d => d.startsWith(m))).sort();
+    const allPeriodTokens = [...sourceDates, ...sourceMonths].sort();
+    const sourcePeriodFrom = allPeriodTokens.length > 0 ? allPeriodTokens[0] : undefined;
+    const sourcePeriodTo = allPeriodTokens.length > 0 ? allPeriodTokens[allPeriodTokens.length - 1] : undefined;
+    return { verifiedScopeSummary: `粒度:${trimmedGrain} · 期间:${periodSummary}`, sourcePeriodFrom, sourcePeriodTo };
   }
 
   async function inspectAuthorityDependency(
@@ -397,7 +401,7 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (!asset || !revision || asset.formalRevision !== revNum) throw new StudioError('summary_authority_not_published', 404);
         if (asset.issue?.affectedRevision === revNum) throw new StudioError('summary_authority_restricted', 409);
         if (ref.sha256 && revision.sha256 !== ref.sha256) throw new StudioError('summary_authority_hash_mismatch', 409);
-        const { verifiedScopeSummary, sourcePeriod } = assertSummaryScopeMatchesAsset(revision.body, revision.scope, scope);
+        const { verifiedScopeSummary, sourcePeriodFrom, sourcePeriodTo } = assertSummaryScopeMatchesAsset(revision.body, revision.scope, scope);
         const owner = resolveAssetAuthorityOwner(enterpriseId, 'studio-source', asset.id, system);
         return {
           summaryAssetId: asset.id,
@@ -405,7 +409,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           summaryAuthority: `Studio·${system.name}`,
           summarySha256: revision.sha256,
           verifiedScopeSummary,
-          ...(sourcePeriod ? { sourcePeriod } : {}),
+          ...(sourcePeriodFrom ? { sourcePeriodFrom, sourcePeriodTo } : {}),
           ...owner,
           resourceRef: { ...ref, sha256: revision.sha256 },
         };
@@ -417,7 +421,7 @@ export function createStudioFeature(options: StudioHostOptions) {
         const rev = mat.material.revisions.find(r => r.revisionId === ref.version);
         if (!rev) throw new StudioError('summary_authority_not_found', 404);
         const revSha = rev.bodySha256 || createHash('sha256').update(rev.body ?? '').digest('hex');
-        const { verifiedScopeSummary, sourcePeriod } = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
+        const { verifiedScopeSummary, sourcePeriodFrom, sourcePeriodTo } = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
         const owner = resolveAssetAuthorityOwner(enterpriseId, 'enterprise', mat.material.id);
         return {
           summaryAssetId: mat.material.id,
@@ -425,7 +429,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           summaryAuthority: `企业资料库·${rev.title}`,
           summarySha256: revSha,
           verifiedScopeSummary,
-          ...(sourcePeriod ? { sourcePeriod } : {}),
+          ...(sourcePeriodFrom ? { sourcePeriodFrom, sourcePeriodTo } : {}),
           ...owner,
           resourceRef: { ...ref, sha256: revSha, locator: mat.storeId },
         };
@@ -434,7 +438,7 @@ export function createStudioFeature(options: StudioHostOptions) {
         await assertNativeEnterprise('sap-metric', ref.id, enterpriseId);
         const known = library.read(ref.id, ref.version);
         if (ref.sha256 && known.entry.bytesSha256 !== ref.sha256) throw new StudioError('summary_authority_hash_mismatch', 409);
-        const { verifiedScopeSummary, sourcePeriod } = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
+        const { verifiedScopeSummary, sourcePeriodFrom, sourcePeriodTo } = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
         const owner = resolveAssetAuthorityOwner(enterpriseId, 'sap-metric', ref.id);
         return {
           summaryAssetId: ref.id,
@@ -442,7 +446,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           summaryAuthority: '原 SAP 指标库',
           summarySha256: known.entry.bytesSha256,
           verifiedScopeSummary,
-          ...(sourcePeriod ? { sourcePeriod } : {}),
+          ...(sourcePeriodFrom ? { sourcePeriodFrom, sourcePeriodTo } : {}),
           ...owner,
           resourceRef: { ...ref, sha256: known.entry.bytesSha256 },
         };
@@ -459,7 +463,7 @@ export function createStudioFeature(options: StudioHostOptions) {
       const asset = system.assets.find(a => a.id === targetId);
       const rev = asset?.revisions.find(r => String(r.revision) === targetVer);
       if (asset && rev && asset.formalRevision === rev.revision && asset.issue?.affectedRevision !== rev.revision) {
-        const { verifiedScopeSummary, sourcePeriod } = assertSummaryScopeMatchesAsset(rev.body, rev.scope, scope);
+        const { verifiedScopeSummary, sourcePeriodFrom, sourcePeriodTo } = assertSummaryScopeMatchesAsset(rev.body, rev.scope, scope);
         const owner = resolveAssetAuthorityOwner(enterpriseId, 'studio-source', asset.id, system);
         return {
           summaryAssetId: asset.id,
@@ -467,7 +471,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           summaryAuthority: `Studio·${system.name}`,
           summarySha256: rev.sha256,
           verifiedScopeSummary,
-          ...(sourcePeriod ? { sourcePeriod } : {}),
+          ...(sourcePeriodFrom ? { sourcePeriodFrom, sourcePeriodTo } : {}),
           ...owner,
           resourceRef: { authority: 'studio-source', id: asset.id, version: String(rev.revision), sha256: rev.sha256, projectId: system.projectId, locator: system.id, title: rev.title },
         };
@@ -479,7 +483,7 @@ export function createStudioFeature(options: StudioHostOptions) {
       const rev = mat.material.revisions.find(r => r.revisionId === targetVer);
       if (mat.material.enabled && rev) {
         const revSha = rev.bodySha256 || createHash('sha256').update(rev.body ?? '').digest('hex');
-        const { verifiedScopeSummary, sourcePeriod } = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
+        const { verifiedScopeSummary, sourcePeriodFrom, sourcePeriodTo } = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
         const owner = resolveAssetAuthorityOwner(enterpriseId, 'enterprise', mat.material.id);
         return {
           summaryAssetId: mat.material.id,
@@ -487,7 +491,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           summaryAuthority: `企业资料库·${rev.title}`,
           summarySha256: revSha,
           verifiedScopeSummary,
-          ...(sourcePeriod ? { sourcePeriod } : {}),
+          ...(sourcePeriodFrom ? { sourcePeriodFrom, sourcePeriodTo } : {}),
           ...owner,
           resourceRef: { authority: 'enterprise', id: mat.material.id, version: rev.revisionId, sha256: revSha, locator: mat.storeId, title: rev.title },
         };
@@ -498,7 +502,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     try {
       await assertNativeEnterprise('sap-metric', targetId, enterpriseId);
       const known = library.read(targetId, targetVer);
-      const { verifiedScopeSummary, sourcePeriod } = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
+      const { verifiedScopeSummary, sourcePeriodFrom, sourcePeriodTo } = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
       const owner = resolveAssetAuthorityOwner(enterpriseId, 'sap-metric', targetId);
       return {
         summaryAssetId: targetId,
@@ -506,7 +510,7 @@ export function createStudioFeature(options: StudioHostOptions) {
         summaryAuthority: '原 SAP 指标库',
         summarySha256: known.entry.bytesSha256,
         verifiedScopeSummary,
-          ...(sourcePeriod ? { sourcePeriod } : {}),
+          ...(sourcePeriodFrom ? { sourcePeriodFrom, sourcePeriodTo } : {}),
         ...owner,
         resourceRef: { authority: 'sap-metric', id: targetId, version: targetVer, sha256: known.entry.bytesSha256 },
       };

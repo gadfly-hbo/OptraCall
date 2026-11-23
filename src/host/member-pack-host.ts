@@ -33,7 +33,7 @@ import { ResourceGrantStore } from './resource-grant-store.ts';
 import { EnterprisePackStore } from './enterprise-pack-store.ts';
 import { listTaskBoundReports, projectTaskResultTime } from './project-task-result-sources.ts';
 import { createNativeSnapshotReadBudget } from './native-session-snapshot.ts';
-import { buildAuthorizedDataView, isPeriodCovered, type AuthorizedDataPurpose } from './member-pack-data-view.ts';
+import { buildAuthorizedDataView, isPeriodCovered, isSourcePeriodCovered, type AuthorizedDataPurpose } from './member-pack-data-view.ts';
 import { collectNativeEvidence, exactTaskReport, nativeAssessmentEvidence, projectFileLocator, qualifyAssessmentClaims, readCoversSource, readNativeFileEvidence, readStudioEvidence, studioPagesComplete } from './member-pack-verification.ts';
 import { createProtectedExecutionScope, type ProtectedExecutionScope } from '../agent/protected-tools.ts';
 
@@ -55,7 +55,8 @@ export interface VerifiedSummaryAuthority {
   summaryAuthority: string;
   summarySha256: string;
   verifiedScopeSummary: string;
-  sourcePeriod?: string;
+  sourcePeriodFrom?: string;
+  sourcePeriodTo?: string;
   ownerProjectId?: string;
   ownerSystemId?: string;
   resourceRef: StudioSourceRef;
@@ -1364,7 +1365,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const canSummary = canSummaryRaw.allowed
       ? { ...canSummaryRaw, matchedGrantIds: canSummaryRaw.matchedGrantIds.filter(id => {
           const g = subjectGrants.find(g => g.id === id);
-          return g ? isPeriodCovered(g.scope.sourcePeriod ?? pm.scope.period, g.scope.periodFrom, g.scope.periodTo) : false;
+          return g ? isSourcePeriodCovered(g.scope.sourcePeriodFrom, g.scope.sourcePeriodTo, g.scope.periodFrom, g.scope.periodTo) : false;
         }) }
       : canSummaryRaw;
     if (canSummary.matchedGrantIds.length === 0) canSummary.allowed = false;
@@ -1629,7 +1630,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               summaryVersion: grant.scope.summaryVersion,
             });
             if (!evalSummary.allowed) continue;
-            if (!isPeriodCovered(grant.scope.sourcePeriod ?? purpose.summaryAccess?.period ?? purpose.scope?.period, grant.scope.periodFrom, grant.scope.periodTo)) continue;
+            if (!isSourcePeriodCovered(grant.scope.sourcePeriodFrom, grant.scope.sourcePeriodTo, grant.scope.periodFrom, grant.scope.periodTo)) continue;
             summaryAllowed = true;
             break;
           }
@@ -3329,7 +3330,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             rawScope.summaryAuthority = verified.summaryAuthority;
             rawScope.summarySha256 = verified.summarySha256;
             rawScope.verifiedScopeSummary = verified.verifiedScopeSummary;
-            if (verified.sourcePeriod) rawScope.sourcePeriod = verified.sourcePeriod;
+            if (verified.sourcePeriodFrom) rawScope.sourcePeriodFrom = verified.sourcePeriodFrom;
+            if (verified.sourcePeriodTo) rawScope.sourcePeriodTo = verified.sourcePeriodTo;
             verifiedResourceRef = verified.resourceRef;
             summaryOwnerProjectId = verified.ownerProjectId;
             summaryOwnerSystemId = verified.ownerSystemId;
