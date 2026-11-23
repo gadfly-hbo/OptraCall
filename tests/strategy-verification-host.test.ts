@@ -129,7 +129,7 @@ test('真实 Host+Pi：业务不通过/依据不足停链退回、技术未知�
   const originalRef = unknown.gates[0].ref;
   provider.setResponder((ctx: any) => ctx.recentToolResults.length
     ? {text: '结论已提交。'}
-    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-verification', verdict: 'pass', evidence: '补证后因果链与假设已核对。'}}]});
+    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-verification', verdict: 'pass', evidence: '补证后因果链与假设已核对。', verificationSources: [{kind: 'candidate', ref: `${cid}:3`, sha256: v3.contentSha256}]}}]});
   await req(`${base}/candidates/${cid}/versions/3/gates/0/retry`, 'POST', {}, 202);
   const passed = await waitBatch(req, base, cid, 3, b => b.no === 3 && b.state === 'passed');
   assert.equal(passed.batchId, unknown.batchId, 'retry keeps the original batch and gate ref');

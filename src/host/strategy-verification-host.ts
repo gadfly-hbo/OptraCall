@@ -143,6 +143,7 @@ export function createStrategyVerificationHost(options: {
       if (typeof input.evidence !== 'string' || !input.evidence.trim() || input.evidence.length > 8000) fail('strategy_verification_fields_invalid', 400);
       const sources = input.verificationSources === undefined ? [] : input.verificationSources;
       if (!Array.isArray(sources) || sources.length > 50 || sources.some(s => !s || typeof s !== 'object' || !['file', 'public', 'candidate', 'kickoff'].includes((s as any).kind) || typeof (s as any).ref !== 'string')) fail('strategy_verification_fields_invalid', 400);
+      if (input.verdict === 'pass' && sources.length === 0) fail('strategy_verification_source_required', 400);
       for (const source of sources as { kind: string; ref: string; fileId?: string; sha256?: string }[]) {
         if (source.kind === 'file') {
           if (typeof source.fileId !== 'string' || !uuid.test(source.fileId) || typeof source.sha256 !== 'string') fail('strategy_verification_source_invalid', 400);
@@ -278,7 +279,11 @@ export function createStrategyVerificationHost(options: {
         current.gates[1].startedAt = new Date().toISOString();
         writeFile(id, file);
       });
-      await dispatchGate(id, batchId, 1, requestId2);
+      try {
+        await dispatchGate(id, batchId, 1, requestId2);
+      } catch {
+        await finalize(id, batchId, 1, requestId2, 'failed').catch(() => {});
+      }
     } else {
       const batch = batchOf(id, batchId);
       if (batch.state === 'returned') await candidates.markReturned(id, batch.candidateId, batch.no, batchId);
@@ -291,7 +296,6 @@ export function createStrategyVerificationHost(options: {
     const candidate = candidates.version(id, cid, no);
     if (!candidate.lock) fail('strategy_candidate_not_locked');
     if (candidates.busy(id, cid, no)) fail('session_busy');
-    if (readFile(id).batches.some(b => b.candidateId === cid && b.no === no && b.state === 'returned')) fail('strategy_verification_returned');
     const configuration = options.configuration();
     if (!configuration) fail('configuration_required');
     const batchId = randomUUID();
@@ -306,6 +310,7 @@ export function createStrategyVerificationHost(options: {
     });
     await options.mutate(() => {
       const file = readFile(id);
+      if (file.batches.some(b => b.candidateId === cid && b.no === no && b.state === 'returned')) fail('strategy_verification_returned');
       const existing = file.batches.find(b => b.candidateId === cid && b.no === no && (b.state === 'running' || b.state === 'passed'));
       if (existing) fail('strategy_verification_batch_exists');
       const prior = file.batches.find(b => b.gates[0].operationId === input.operationId || b.gates[1].operationId === input.operationId);
@@ -314,7 +319,12 @@ export function createStrategyVerificationHost(options: {
       file.batches.push(batch);
       writeFile(id, file);
     });
-    await dispatchGate(id, batchId, 0, requestId);
+    try {
+      await dispatchGate(id, batchId, 0, requestId);
+    } catch (error) {
+      await finalize(id, batchId, 0, requestId, 'failed').catch(() => {});
+      throw error;
+    }
     return {batch: batchOf(id, batchId)};
   }
 
@@ -334,6 +344,8 @@ export function createStrategyVerificationHost(options: {
       const current = readFile(id);
       const b = current.batches.find(x => x.batchId === batch.batchId);
       if (!b) fail('strategy_verification_not_found', 404);
+      if (b.gates[turn].verdict === 'fail' || b.gates[turn].verdict === 'insufficient') fail('strategy_verification_returned');
+      if (b.gates[turn].status === 'running') fail('session_busy');
       b.gates[turn].status = 'running';
       b.gates[turn].requestId = requestId;
       b.gates[turn].verdict = undefined;
@@ -342,7 +354,12 @@ export function createStrategyVerificationHost(options: {
       b.state = 'running';
       writeFile(id, current);
     });
-    await dispatchGate(id, batch.batchId, turn, requestId);
+    try {
+      await dispatchGate(id, batch.batchId, turn, requestId);
+    } catch (error) {
+      await finalize(id, batch.batchId, turn, requestId, 'failed').catch(() => {});
+      throw error;
+    }
     return {batch: batchOf(id, batch.batchId)};
   }
 

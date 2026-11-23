@@ -131,3 +131,45 @@ test('真实 Host：业务退回同锁定版禁再启批，证据来源须解析
   assert.equal((await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: cid, no: 2, sha256: v2.contentSha256, batchId: passed.batchId, confirmed: true, expectedActive: pub3.publicationId}, 409)).code, 'strategy_publication_replaced_locked');
   assert.deepEqual(provider.errors, []);
 });
+test('真实 Host+Pi：无来源通过被拒，派发前失败落可恢复终态', {timeout: 150_000}, async t => {
+  const provider = await startToolProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  await req('/api/configuration', 'PUT', {name: '来源必需', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-source-req', apiKey: 'synthetic-source-req'});
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '来源必需事项', scopes: [stores]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}`;
+  const {cid, locked} = await setup(req, provider, base);
+
+  provider.setResponder((ctx: any) => ctx.recentToolResults.length
+    ? {text: '结论已提交。'}
+    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-verification', verdict: 'pass', evidence: '无来源的通过。', verificationSources: []}}]});
+  await req(`${base}/candidates/${cid}/versions/1/verify`, 'POST', {operationId: randomUUID()}, 202);
+  const noSource = await waitGate(req, base, cid, 1, b => b.gates[0].status !== 'running');
+  assert.equal(noSource.gates[0].verdict, undefined, 'pass without verifiable sources must not record');
+  assert.equal(noSource.state, 'unknown');
+  assert.equal((await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: cid, no: 1, sha256: locked.contentSha256, batchId: noSource.batchId, confirmed: true, expectedActive: null}, 409)).code, 'strategy_verification_credentials_required');
+
+  const longBlocks = [1, 2, 3, 4].map(i => ({id: `B${i}`, label: `章节${i}`, text: '长'.repeat(19000)}));
+  provider.setResponder((ctx: any) => ctx.recentToolResults.length
+    ? {text: '候选已保存。'}
+    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), candidateBlocks: longBlocks}}]});
+  const longCreated = await req(`${base}/candidates`, 'POST', {operationId: randomUUID(), scope: stores, title: '超长候选', instruction: '形成方案。'}, 202);
+  const longCid = longCreated.candidate.candidateId;
+  let ld: any;
+  for (let n = 0; n < 500; n++) { ld = await req(`${base}/candidates/${longCid}/versions/1`); if (ld.candidate.lastRun?.status === 'completed') break; await delay(20); }
+  await req(`${base}/candidates/${longCid}/versions/1/lock`, 'POST', {operationId: randomUUID(), sha256: ld.candidate.contentSha256});
+  const tooLong = await req(`${base}/candidates/${longCid}/versions/1/verify`, 'POST', {operationId: randomUUID()}, 413);
+  assert.equal(tooLong.code, 'strategy_verification_materials_too_large');
+  const failedBatch = (await req(`${base}/candidates/${longCid}/versions/1/verifications`)).batches.at(-1);
+  assert.equal(failedBatch.gates[0].status, 'failed', 'pre-dispatch failure must reach a recoverable terminal state');
+  assert.equal(failedBatch.state, 'unknown');
+  await req(`${base}/candidates/${longCid}/versions/1/gates/0/retry`, 'POST', {}, 413);
+  const retried = (await req(`${base}/candidates/${longCid}/versions/1/verifications`)).batches.at(-1);
+  assert.equal(retried.gates[0].status, 'failed', 'retry after pre-dispatch failure stays recoverable, never stuck running');
+  assert.deepEqual(provider.errors, []);
+});
