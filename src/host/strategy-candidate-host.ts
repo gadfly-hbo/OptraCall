@@ -420,6 +420,17 @@ export function createStrategyCandidateHost(options: {
 
   return {
     domain, create, send, detail, version, lock, revise,
+    busy(id: string, candidateId: string, no: number) { return domain.busy(domain.ref(version(id, candidateId, no))); },
+    async markReturned(id: string, candidateId: string, no: number, batchId: string) {
+      await options.mutate(() => {
+        const file = readFile(id);
+        const record = file.candidates.find(c => c.candidateId === candidateId && c.no === no);
+        if (!record) return;
+        record.returned = {batchId, at: new Date().toISOString()};
+        record.updatedAt = new Date().toISOString();
+        writeFile(id, file);
+      });
+    },
     list(id: string, scopeKey?: string) {
       initiatives.get(id);
       const all = readFile(id).candidates;

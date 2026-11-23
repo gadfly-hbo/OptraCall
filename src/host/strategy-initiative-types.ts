@@ -78,3 +78,41 @@ export interface CandidateVersion {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface VerificationGate {
+  turn: 0 | 1;
+  operationId: string;
+  ref: string;
+  status: 'waiting' | 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown';
+  verdict?: 'pass' | 'fail' | 'insufficient';
+  evidence?: string;
+  sources?: { kind: 'file' | 'public' | 'candidate' | 'kickoff'; ref: string; sha256?: string }[];
+  sessionFile?: string;
+  configurationId: string;
+  configurationRevision: number;
+  requestId?: string;
+  startedAt?: string;
+  finishedAt?: string;
+}
+export interface VerificationBatch {
+  batchId: string;
+  initiativeId: string;
+  candidateId: string;
+  no: number;
+  contentSha256: string;
+  lockOperationId: string;
+  gates: [VerificationGate, VerificationGate];
+  state: 'running' | 'passed' | 'returned' | 'stopped' | 'unknown';
+  createdAt: string;
+  updatedAt: string;
+}
+export interface VerificationOwner {
+  initiativeId: string;
+  candidateId: string;
+  no: number;
+  batchId: string;
+  turn: 0 | 1;
+  configurationId: string;
+  configurationRevision: number;
+  sessionFile?: string;
+}

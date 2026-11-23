@@ -1,10 +1,10 @@
 import { strategyMapDraftSchema } from './strategy-map-schema.ts';
 import { Type } from 'typebox';
-export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff' | 'initiative-save-candidate';
+export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff' | 'initiative-save-candidate' | 'initiative-save-verification';
 export type StrategyDiscussionToolContext = { requestId:string; sessionId:string; toolCallId:string; signal:AbortSignal; assertCurrent():void; originalUserText:string; userQuoteEligible:boolean; goalBasis?:import('../host/strategy-goals-types.ts').GoalBasis; importSourceIds?:string[]; selectedImportPages?:Record<string,number[]>; importMode?:'review-draft'; draftGroupId?:string; supersedesDraftEntryId?:string; targetMapRef?:{mapId:string;version:number}; registerCleanup?:(cleanup:(options:{retryFailed?:boolean})=>Promise<void>)=>void };
 export type StrategyDiscussionToolContent = {type:'text';text:string} | {type:'image';data:string;mimeType:string};
 export type StrategyDiscussionPort = (action:StrategyDiscussionAction,input:Record<string,unknown>,context:StrategyDiscussionToolContext)=>Promise<{content:StrategyDiscussionToolContent[];details:Record<string,unknown>}>;
-export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','operation','public-search','read-map','save-map','initiative-files','initiative-read-file','initiative-read-kickoff','initiative-save-kickoff','initiative-save-candidate'] as const;
+export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','operation','public-search','read-map','save-map','initiative-files','initiative-read-file','initiative-read-kickoff','initiative-save-kickoff','initiative-save-candidate','initiative-save-verification'] as const;
 const exact = { additionalProperties: false };
 const nonblank = (maxLength = 4000) => Type.String({ minLength: 1, maxLength, pattern: '\\S' });
 const textList = Type.Array(nonblank(), { maxItems: 100 });
@@ -55,6 +55,7 @@ export const strategyDiscussionTool = {
     'adopt-goal 仅按本轮用户明确原话给 quote(start/end/text)、准确 goalId/version/expectedVersion 和 goalContentSha256 采用。目标采用不授权经营执行。operation 给原 operationId 查回执，未知先核对原操作。',
     '战略事项主会话专用：initiative-files 列本事项共用及当前范围资料；initiative-read-file 按 fileId 读取文本资料（offset/limit 续读）；initiative-read-kickoff 读开题报告版本（可给 version）；initiative-save-kickoff 保存开题报告草稿，给 operationId、kickoffFields（horizon/diagnosis/propositions 3–5 项含稳定唯一 id、question、whyItMatters/assumptions/evidenceGaps/followUp）与 kickoffSources（实际读取的 file/public 来源）。锁定与应用由决策者在界面完成，工具不锁定。',
     '候选会话专用：initiative-save-candidate 保存本候选版本正文，给 operationId、candidateBlocks（稳定唯一 id、label、text 的结构化章节，覆盖定位与增长、目标与里程碑、资源与明确不做、成立条件与假设）及可选 candidateGoals。Host 绑定本版本身份，不接受其他候选或开题引用；锁定由决策者完成。',
+    '检验会话专用：initiative-save-verification 提交本道检验结论，给 verdict（pass/fail/insufficient）、evidence（可核对的关键发现与依据）及可选 verificationSources。结论只针对 Host 固定的锁定版指纹；发布由决策者完成。',
   ].join(' '),
   parameters: Type.Object({
     action: Type.Union(STRATEGY_DISCUSSION_ACTIONS.map(x => Type.Literal(x))),
@@ -76,6 +77,12 @@ export const strategyDiscussionTool = {
       id: nonblank(40), label: nonblank(200), text: nonblank(20000),
     }, exact), { maxItems: 20 })),
     candidateGoals: Type.Optional(Type.Array(nonblank(500), { maxItems: 10 })),
+    verdict: Type.Optional(Type.Union([Type.Literal('pass'), Type.Literal('fail'), Type.Literal('insufficient')])),
+    evidence: Type.Optional(nonblank(8000)),
+    verificationSources: Type.Optional(Type.Array(Type.Object({
+      kind: Type.Union([Type.Literal('file'), Type.Literal('public'), Type.Literal('candidate'), Type.Literal('kickoff')]),
+      ref: nonblank(500), sha256: Type.Optional(Type.String({ pattern: '^[a-f0-9]{64}$' })),
+    }, exact), { maxItems: 50 })),
     quote: Type.Optional(Type.Object({ start: Type.Integer({ minimum: 0 }), end: Type.Integer({ minimum: 1 }), text: Type.String({ minLength: 1, maxLength: 20000 }) }, exact)),
   }, exact),
 };
