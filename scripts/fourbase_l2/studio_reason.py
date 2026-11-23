@@ -77,7 +77,7 @@ def _depth(edges):
 
 
 def _shapes(constraints):
-    from rdflib import BNode, Graph, Literal, RDF, URIRef
+    from rdflib import Graph, Literal, RDF, URIRef
     from rdflib.namespace import SH
 
     _object(constraints, ['format', 'shapes', 'sourceRefs'])

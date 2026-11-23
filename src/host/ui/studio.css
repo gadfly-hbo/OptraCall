@@ -162,7 +162,6 @@
 .studio-professional-region { min-width: 0; border-top: 1px solid var(--line); padding-top: 14px; }
 .studio-professional-region .eb-page, .studio-professional-region .mf-page, .studio-professional-region .sap-method-page { width: 100%; max-width: none; padding: 20px 0 0; overflow: visible; min-height: 0; }
 .studio-professional-region .page-heading h2, .studio-professional-region .sap-method-heading h2 { font-size: 20px; line-height: 1.4; margin: 0; }
-.studio-professional-region .eb-authority { display: none; }
 .studio-system-workbench { padding: 0; overflow: visible; min-height: 0; }
 .studio-system-workbench > .studio-heading h2 { font-size: 19px; }
 .studio-system-workbench.is-publication .studio-conversation { display: none; }

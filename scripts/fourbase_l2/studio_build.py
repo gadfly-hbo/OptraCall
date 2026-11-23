@@ -10,7 +10,6 @@ import importlib.metadata
 import io
 import json
 import os
-import uuid
 from pathlib import Path
 
 from .identity import canonical, claim_id, edge_id, ref_identity, stable_id

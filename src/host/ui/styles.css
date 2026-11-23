@@ -423,7 +423,6 @@ button { color: inherit; }
 
 /* metric-factory business plugin: asset library, review and project enablement. */
 .mf-page { width: 100%; overflow-y: auto; padding: 6px 32px 28px; }
-.mf-store { display: inline-flex; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
 .mf-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 22px; overflow-x: auto; }
 .mf-tabs button { flex-shrink: 0; border: 0; border-bottom: 2px solid transparent; padding: 12px 0 14px; background: transparent; color: var(--muted); font-size: 13px; }
 .mf-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
