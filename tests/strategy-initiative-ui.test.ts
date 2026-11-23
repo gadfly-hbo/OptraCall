@@ -23,6 +23,7 @@ const report: KickoffReportVersion = {
     assumptions: '试点门店口径一致。', evidenceGaps: '缺自然复购对照。', followUp: '形成两个可比较候选。',
   },
   sources: [{ kind: 'file', ref: '010_draw/上期经营复盘.pdf', title: '上期经营复盘.pdf' }],
+  scopeKeys: [scopeKey],
   contentSha256: 'a'.repeat(64),
   generation: { operationId: '33333333-3333-4333-8333-333333333333', kind: 'agent', at: '2026-11-20T01:00:00Z' },
   lock: { operationId: '44444444-4444-4444-8444-444444444444', operator: '决策者', at: '2026-11-20T02:00:00Z', fingerprint: 'a'.repeat(64) },
