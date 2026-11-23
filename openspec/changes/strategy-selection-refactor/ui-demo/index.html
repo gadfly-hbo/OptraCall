@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>战略选择 · OptraCall 产品原型</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="demo.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#work-panel">跳到工作区</a>
+<div class="app-shell">
+  <aside class="sidebar" aria-label="产品导航">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><div class="brand-name">OptraCall<small>持续做出更好的决策</small></div></div>
+    <div class="nav-caption">工作台</div>
+    <nav class="primary-nav" aria-label="工作台模块">
+      <span class="nav-item is-active" aria-current="page"><span class="nav-icon" aria-hidden="true">◎</span>战略选择</span>
+      <button class="nav-item" data-action="destination" data-module="目标管理"><span class="nav-icon" aria-hidden="true">▤</span>目标管理</button>
+      <span class="nav-item nav-context"><span class="nav-icon" aria-hidden="true">◇</span>决策星图</span>
+      <span class="nav-item nav-context"><span class="nav-icon" aria-hidden="true">▱</span>项目地图</span>
+    </nav>
+    <div class="nav-caption lifecycle-caption">战略生命周期</div>
+    <nav class="primary-nav lifecycle-nav" aria-label="战略生命周期占位">
+      <button class="nav-item" data-action="placeholder" data-module="战略复盘"><span class="nav-icon" aria-hidden="true">↻</span>战略复盘</button>
+      <button class="nav-item" data-action="placeholder" data-module="战略重构"><span class="nav-icon" aria-hidden="true">◫</span>战略重构</button>
+    </nav>
+    <div class="side-footer"><span class="avatar" aria-hidden="true">周</span><div><strong>周明</strong><small>战略决策者 · 演示角色</small></div></div>
+  </aside>
+  <div class="stage-container">
+    <header class="topbar">
+      <div class="breadcrumb"><span>经营管理</span><span aria-hidden="true">/</span><strong>战略选择</strong></div>
+      <div class="topbar-actions"><span class="demo-label">互动原型</span><a class="button ghost small file-jump" href="#files">事项文件</a><button class="button ghost small" data-action="guide">演示路径</button></div>
+    </header>
+    <header class="workspace-intro">
+      <div class="intro-row"><div><h1 class="workspace-title">华东门店增长战略</h1><p class="scope-meta">2027–2029 · 华东门店与零售业务</p></div>
+      <label class="scope-control">适用范围<select id="scope-select" aria-label="适用范围"><option value="stores">华东零售事业部</option><option value="ecommerce">华东电商业务</option></select></label></div>
+    </header>
+    <nav class="workspace-tabs" role="tablist" aria-label="战略选择工作视图">
+      <button class="tab" id="tab-create" role="tab" aria-controls="work-panel" data-tab="create">战略共创</button>
+      <button class="tab" id="tab-check" role="tab" aria-controls="work-panel" data-tab="check">战略检验</button>
+      <button class="tab" id="tab-release" role="tab" aria-controls="work-panel" data-tab="release">战略发布</button>
+      <button class="tab" id="tab-history" role="tab" aria-controls="work-panel" data-tab="history">版本管理</button>
+    </nav>
+    <div class="page-layout">
+      <main class="main-region" id="work-panel" role="tabpanel" tabindex="0" aria-labelledby="tab-create"></main>
+      <aside class="file-panel" id="files" tabindex="-1" aria-labelledby="file-heading"></aside>
+    </div>
+  </div>
+</div>
+<dialog class="dialog" aria-labelledby="dialog-title" id="dialog"></dialog>
+<div class="toast" role="status" id="toast" hidden></div>
+<noscript><p>启用 JavaScript 后可体验互动原型。</p></noscript>
+</body>
+</html>
