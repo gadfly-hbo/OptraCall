@@ -397,9 +397,11 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       onConfirm={operationId => api.lockCandidate(id, current.candidateId, current.no, { operationId, sha256: current.contentSha256 })}
       onDone={async () => { setDialog(null); await refresh(); setNotice('已锁定，可以开始因果检验。'); onStage('strategy-check'); }} onClose={() => setDialog(null)} />}
     {dialog === 'revise-report' && report && <ReviseDialog title="限定修改开题报告" baseLabel={`开题报告 · v${report.no}`} baseSha256={report.contentSha256} targets={kickoffPatchTargets(report.fields)} maxText={8000}
+      propose={input => api.proposeReportRevision(id, report.no, scopeKey, input)} readProposal={pid => api.readProposal(id, pid)}
       onSubmit={input => api.reviseKickoffReport(id, report.no, input)}
       onDone={async result => { setDialog(null); await refresh(); setReportNo(result.version.no); setPhase('kickoff'); setNotice(`已另存开题草稿 v${result.version.no}；修订版仍须重新锁定并明确应用。`); }} onClose={() => setDialog(null)} />}
     {dialog === 'revise-candidate' && current && <ReviseDialog title="限定修改战略候选" baseLabel={candidateLabel(current)} baseSha256={current.contentSha256} targets={current.blocks.map(block => ({ blockId: block.id, label: block.label, text: block.text }))} maxText={20000}
+      propose={input => api.proposeCandidateRevision(id, current.candidateId, current.no, input)} readProposal={pid => api.readProposal(id, pid)}
       onSubmit={input => api.reviseCandidate(id, current.candidateId, current.no, input)}
       onDone={async result => { setDialog(null); await refresh(); setSelectedCandidate({ candidateId: result.candidate.candidateId, no: result.candidate.no }); setNotice(`已另存新候选 v${result.candidate.no}；每版使用新的独立会话，重新进入候选态。`); }} onClose={() => setDialog(null)} />}
     {dialog === 'candidate-session' && current && <CandidateSessionDialog initiativeId={id} candidateRef={{ candidateId: current.candidateId, no: current.no }} onClose={() => setDialog(null)} onChanged={refresh} modelLabel={modelLabel} />}
@@ -463,40 +465,72 @@ function LockConfirmDialog({ title, subtitle, body, busy, onConfirm, onDone, onC
   </CaseDialog>;
 }
 
-export function ReviseDialog<T>({ title, baseLabel, baseSha256, targets, maxText, onSubmit, onDone, onClose }: {
+export function ReviseDialog<T>({ title, baseLabel, baseSha256, targets, maxText, propose, readProposal, onSubmit, onDone, onClose }: {
   title: string; baseLabel: string; baseSha256: string; targets: PatchTarget[]; maxText: number;
-  onSubmit: (input: { operationId: string; baseSha256: string; request: string; patches: { blockId: string; expectedOldSha256: string; newText: string }[] }) => Promise<T>;
+  propose: (input: { operationId: string; blockId: string; request: string }) => Promise<{ proposal: { proposalId: string } }>;
+  readProposal: (proposalId: string) => Promise<{ proposal: { status: string; newText?: string } }>;
+  onSubmit: (input: { operationId: string; baseSha256: string; request: string; patches: { blockId: string; expectedOldSha256: string; newText: string }[]; proposalId: string }) => Promise<T>;
   onDone: (result: T) => Promise<void>; onClose: () => void;
 }) {
   const [blockId, setBlockId] = useState(targets[0]?.blockId ?? '');
   const target = targets.find(item => item.blockId === blockId) ?? targets[0];
-  const [request, setRequest] = useState(''), [newText, setNewText] = useState(target?.text ?? '');
-  const [step, setStep] = useState<'edit' | 'diff'>('edit');
+  const [request, setRequest] = useState('');
+  const [step, setStep] = useState<'intent' | 'waiting' | 'diff'>('intent');
+  const [proposalId, setProposalId] = useState(''), [proposedText, setProposedText] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const operationId = useOperationId();
-  return <CaseDialog title={title} subtitle={`基于 ${baseLabel}。选定一处，描述修改要求并给出新文本；其他章节保留原文。`} busy={busy} onClose={onClose} className="si-version-dialog">
-    {step === 'edit' ? <form onSubmit={event => { event.preventDefault(); if (!request.trim() || !newText.trim() || !target) return; setStep('diff'); }}>
-      <div className="case-field"><label htmlFor="si-revise-block">修改位置</label><select id="si-revise-block" value={blockId} onChange={event => { setBlockId(event.target.value); const next = targets.find(item => item.blockId === event.target.value); setNewText(next?.text ?? ''); }}>{targets.map(item => <option key={item.blockId} value={item.blockId}>{item.label}</option>)}</select></div>
-      <div className="case-field"><label htmlFor="si-revise-request">修改要求</label><textarea id="si-revise-request" required rows={2} maxLength={2000} value={request} onChange={event => setRequest(event.target.value)} placeholder="例如：将三店试点调整为两店，先核对导购工时。" /></div>
-      <div className="case-field"><label htmlFor="si-revise-text">新文本（仅替换所选位置）</label><textarea id="si-revise-text" required rows={6} maxLength={maxText} value={newText} onChange={event => setNewText(event.target.value)} /></div>
-      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button type="submit" className="primary-button" disabled={!request.trim() || !newText.trim()}>查看修改差异</button></div>
-    </form> : <form onSubmit={event => {
-      event.preventDefault();
-      if (busy || !target || !newText.trim()) return;
-      setBusy(true); setError('');
-      void (async () => {
-        const expectedOldSha256 = await sha256Of(target.text);
-        const id = operationId({ baseSha256, blockId: target.blockId, request: request.trim(), newText });
-        const result = await onSubmit({ operationId: id, baseSha256, request: request.trim(), patches: [{ blockId: target.blockId, expectedOldSha256, newText }] });
-        await onDone(result);
-      })().catch(fault => setError(errorText(fault))).finally(() => setBusy(false));
-    }}>
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => {
+    if (step !== 'waiting' || !proposalId) return;
+    let cancelled = false;
+    const timer = setInterval(() => {
+      void readProposal(proposalId).then(result => {
+        if (cancelled || !alive.current) return;
+        if (result.proposal.status === 'proposed' && result.proposal.newText) { setProposedText(result.proposal.newText); setStep('diff'); }
+      }).catch(fault => { if (!cancelled && alive.current) { setError(errorText(fault)); setStep('intent'); } });
+    }, 2000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [step, proposalId]);
+  const startProposal = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!request.trim() || !target || busy) return;
+    setBusy(true); setError('');
+    try {
+      const id = operationId({ baseSha256, blockId: target.blockId, request: request.trim() });
+      const result = await propose({ operationId: id, blockId: target.blockId, request: request.trim() });
+      if (!alive.current) return;
+      setProposalId(result.proposal.proposalId); setStep('waiting');
+    } catch (fault) { if (alive.current) setError(errorText(fault)); }
+    finally { if (alive.current) setBusy(false); }
+  };
+  const adopt = async (event: FormEvent) => {
+    event.preventDefault();
+    if (busy || !target || !proposedText.trim()) return;
+    setBusy(true); setError('');
+    try {
+      const expectedOldSha256 = await sha256Of(target.text);
+      const id = operationId({ baseSha256, blockId: target.blockId, request: request.trim(), newText: proposedText, proposalId });
+      const result = await onSubmit({ operationId: id, baseSha256, request: request.trim(), patches: [{ blockId: target.blockId, expectedOldSha256, newText: proposedText }], proposalId });
+      await onDone(result);
+    } catch (fault) { if (alive.current) setError(errorText(fault)); }
+    finally { if (alive.current) setBusy(false); }
+  };
+  return <CaseDialog title={title} subtitle={`基于 ${baseLabel}。描述修改意图，由 Agent 拟改；核对差异后采纳另存，其他章节保留原文。`} busy={busy} onClose={onClose} className="si-version-dialog">
+    {step === 'intent' && <form onSubmit={startProposal}>
+      <div className="case-field"><label htmlFor="si-revise-block">修改位置</label><select id="si-revise-block" value={blockId} onChange={event => setBlockId(event.target.value)}>{targets.map(item => <option key={item.blockId} value={item.blockId}>{item.label}</option>)}</select></div>
+      <div className="case-field"><label htmlFor="si-revise-request">修改意图</label><textarea id="si-revise-request" required rows={3} maxLength={2000} value={request} onChange={event => setRequest(event.target.value)} placeholder="例如：将三店试点调整为两店，先核对导购工时。" /></div>
+      <CaseFormError error={error} />
+      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button type="submit" className="primary-button" disabled={!request.trim() || busy}>{busy ? '正在提交…' : '请 Agent 拟改'}</button></div>
+    </form>}
+    {step === 'waiting' && <div className="si-dialog-scroll"><p className="si-muted" role="status">Agent 正在基于准确基线拟改「{target?.label}」；完成后在此核对差异。未采纳前不另存版本。</p><CaseFormError error={error} /><div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button></div></div>}
+    {step === 'diff' && <form onSubmit={adopt}>
       <div className="si-dialog-scroll">
         <p>{baseLabel} · 仅修改「{target?.label}」。其他章节以原字节和顺序复用。</p>
-        <div className="si-diff"><div className="si-diff-before"><strong>原文</strong><p>{target?.text}</p></div><div className="si-diff-after"><strong>新文本</strong><p>{newText}</p></div></div>
+        <div className="si-diff"><div className="si-diff-before"><strong>原文</strong><p>{target?.text}</p></div><div className="si-diff-after"><strong>Agent 拟改</strong><p>{proposedText}</p></div></div>
       </div>
       <CaseFormError error={error} />
-      <div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setStep('edit')}>返回修改</button><button type="submit" className="primary-button" disabled={busy}>{busy ? '正在另存…' : '另存新版本'}</button></div>
+      <div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setStep('intent')}>返回修改意图</button><button type="submit" className="primary-button" disabled={busy}>{busy ? '正在另存…' : '采纳并另存新版本'}</button></div>
     </form>}
   </CaseDialog>;
 }

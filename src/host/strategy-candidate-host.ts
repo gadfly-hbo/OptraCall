@@ -40,7 +40,7 @@ function validateGoals(input: unknown): string[] {
   return input as string[];
 }
 
-type CandidateFile = { formatVersion: 1; candidates: CandidateVersion[] };
+type CandidateFile = { formatVersion: 1; candidates: CandidateVersion[]; proposals: import('./strategy-initiative-types.ts').RevisionProposal[] };
 
 const CANDIDATE_CONTRACT = [
   '你在 OptraCall 战略候选独立会话中，基于 Host 固定的已应用锁定开题报告形成一个完整备选方案。Host 只提供环境、权限、准确来源与原记录读写；方案内容、方法、取舍和判断由你自主决定。',
@@ -62,13 +62,14 @@ export function createStrategyCandidateHost(options: {
   const fileOf = (id: string) => path.join(initiatives.directory(id), 'candidates.json');
   function readFile(id: string): CandidateFile {
     const file = fileOf(id);
-    if (!existsSync(file)) return {formatVersion: 1, candidates: []};
+    if (!existsSync(file)) return {formatVersion: 1, candidates: [], proposals: []};
     const s = lstatSync(file);
     if (!s.isFile() || s.isSymbolicLink() || s.nlink !== 1 || s.size > 2 * 1024 * 1024) throw new StrategyDiscussionFault('strategy_candidate_unsafe_file');
     const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
     let x: any;
     try { x = JSON.parse(readFileSync(fd, 'utf8')); } finally { closeSync(fd); }
     if (x.formatVersion !== 1 || !Array.isArray(x.candidates)) throw new StrategyDiscussionFault('strategy_candidate_corrupt');
+    if (!Array.isArray(x.proposals)) x.proposals = [];
     return x;
   }
   function writeFile(id: string, value: CandidateFile): void {
@@ -379,7 +380,7 @@ export function createStrategyCandidateHost(options: {
 
   async function revise(id: string, candidateId: string, no: number, input: Record<string, unknown>) {
     initiatives.get(id);
-    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'baseSha256', 'request', 'patches'].includes(key))) fail('strategy_candidate_fields_invalid', 400);
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'baseSha256', 'request', 'patches', 'proposalId'].includes(key))) fail('strategy_candidate_fields_invalid', 400);
     if (typeof input.operationId !== 'string' || !uuid.test(input.operationId)) fail('strategy_candidate_operation_invalid', 400);
     if (typeof input.request !== 'string' || !input.request.trim() || input.request.length > 2000) fail('strategy_candidate_fields_invalid', 400);
     if (!Array.isArray(input.patches) || input.patches.length < 1 || input.patches.length > 20) fail('strategy_candidate_fields_invalid', 400);
@@ -390,12 +391,18 @@ export function createStrategyCandidateHost(options: {
       const file = readFile(id);
       const existing = file.candidates.find(c => c.createOperationId === input.operationId);
       if (existing) {
-        if (existing.parent?.candidateId !== candidateId || existing.parent?.no !== no || existing.revisionMeta?.request !== input.request) fail('strategy_candidate_operation_conflict');
+        const priorPatches = existing.revisionMeta?.patches ?? [];
+        const inputPatches = (input.patches as Record<string, unknown>[]).map(p => ({blockId: p.blockId, oldSha256: p.expectedOldSha256, newSha256: createHash('sha256').update(String(p.newText ?? '')).digest('hex')}));
+        if (existing.parent?.candidateId !== candidateId || existing.parent?.no !== no || existing.revisionMeta?.request !== input.request || hash(priorPatches) !== hash(inputPatches)) fail('strategy_candidate_operation_conflict');
         return structuredClone(existing);
       }
       const record = file.candidates.find(c => c.candidateId === candidateId && c.no === no);
       if (!record) fail('strategy_candidate_not_found', 404);
       if (typeof input.baseSha256 !== 'string' || input.baseSha256 !== record.contentSha256) fail('strategy_candidate_version_conflict');
+      if (input.proposalId !== undefined) {
+        const proposal = file.proposals.find(p => p.proposalId === input.proposalId);
+        if (!proposal || proposal.status !== 'proposed' || proposal.target.kind !== 'candidate' || proposal.target.candidateId !== candidateId || proposal.target.no !== no || (input.patches as Record<string, unknown>[]).length !== 1 || (input.patches as Record<string, unknown>[])[0]!.blockId !== proposal.blockId || (input.patches as Record<string, unknown>[])[0]!.newText !== proposal.newText) fail('strategy_proposal_unavailable');
+      }
       if (!record.blocks.length) fail('strategy_candidate_empty');
       const blocks = structuredClone(record.blocks);
       const applied: { blockId: string; oldSha256: string; newSha256: string }[] = [];
@@ -425,12 +432,57 @@ export function createStrategyCandidateHost(options: {
       next.revisionMeta = {operationId: input.operationId as string, request: (input.request as string).trim(), base: {candidateId, no}, patches: applied, at: now};
       file.candidates.push(next);
       writeFile(id, file);
+      if (input.proposalId) {
+        const proposal = file.proposals.find(p => p.proposalId === input.proposalId);
+        if (proposal) { proposal.status = 'adopted'; proposal.updatedAt = new Date().toISOString(); writeFile(id, file); }
+      }
       return structuredClone(next);
     });
   }
 
+  function createProposal(id: string, candidateId: string, no: number, input: Record<string, unknown>) {
+    initiatives.get(id);
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'blockId', 'request'].includes(key))) fail('strategy_candidate_fields_invalid', 400);
+    if (typeof input.operationId !== 'string' || !uuid.test(input.operationId)) fail('strategy_candidate_operation_invalid', 400);
+    if (typeof input.request !== 'string' || !input.request.trim() || input.request.length > 2000) fail('strategy_candidate_fields_invalid', 400);
+    return options.mutate(() => {
+      const file = readFile(id);
+      const existing = file.proposals.find(p => p.proposalId === input.operationId);
+      if (existing) {
+        if (existing.target.kind !== 'candidate' || existing.target.candidateId !== candidateId || existing.target.no !== no || existing.blockId !== input.blockId || existing.request !== input.request) fail('strategy_candidate_operation_conflict');
+        return structuredClone(existing);
+      }
+      const record = file.candidates.find(c => c.candidateId === candidateId && c.no === no);
+      if (!record) fail('strategy_candidate_not_found', 404);
+      const block = record.blocks.find(b => b.id === input.blockId);
+      if (!block) fail('strategy_candidate_patch_target_invalid', 400);
+      const now = new Date().toISOString();
+      const proposal: import('./strategy-initiative-types.ts').RevisionProposal = {proposalId: input.operationId as string, initiativeId: id, target: {kind: 'candidate', candidateId, no}, blockId: input.blockId as string, request: input.request as string, baselineSha256: createHash('sha256').update(block.text).digest('hex'), status: 'pending', at: now, updatedAt: now};
+      file.proposals.push(proposal);
+      writeFile(id, file);
+      return structuredClone(proposal);
+    });
+  }
+  function proposal(id: string, proposalId: string) {
+    return structuredClone(readFile(id).proposals.find(p => p.proposalId === proposalId));
+  }
+  function markProposed(id: string, proposalId: string, newText: string, requestId: string) {
+    return options.mutate(() => {
+      const file = readFile(id);
+      const proposal = file.proposals.find(p => p.proposalId === proposalId);
+      if (!proposal || proposal.status !== 'pending') fail('strategy_proposal_unavailable');
+      if (typeof newText !== 'string' || !newText.trim() || newText.length > 20000) fail('strategy_candidate_fields_invalid', 400);
+      proposal.newText = newText;
+      proposal.status = 'proposed';
+      proposal.requestId = requestId;
+      proposal.updatedAt = new Date().toISOString();
+      writeFile(id, file);
+      return structuredClone(proposal);
+    });
+  }
+
   return {
-    domain, create, send, detail, version, lock, revise,
+    domain, create, send, detail, version, lock, revise, createProposal, proposal, markProposed,
     busy(id: string, candidateId: string, no: number) { return domain.busy(domain.ref(version(id, candidateId, no))); },
     async markReturned(id: string, candidateId: string, no: number, batchId: string) {
       await options.mutate(() => {

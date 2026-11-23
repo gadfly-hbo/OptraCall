@@ -53,6 +53,19 @@ export interface KickoffApplication {
 export interface KickoffAnchor { scopeKey: string; scope: GoalScope; reportNo: number; contentSha256: string; at: string; operationId: string }
 
 export interface CandidateBlock { id: string; label: string; text: string }
+export interface RevisionProposal {
+  proposalId: string;
+  initiativeId: string;
+  target: { kind: 'report'; no: number } | { kind: 'candidate'; candidateId: string; no: number };
+  blockId: string;
+  request: string;
+  baselineSha256: string;
+  newText?: string;
+  status: 'pending' | 'proposed' | 'adopted';
+  requestId?: string;
+  at: string;
+  updatedAt: string;
+}
 export interface CandidateVersion {
   initiativeId: string;
   candidateId: string;

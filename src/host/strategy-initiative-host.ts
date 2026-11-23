@@ -6,7 +6,8 @@ import {StrategyDiscussionFault} from './strategy-discussion-fault.ts';
 import {StrategyInitiativeStore} from './strategy-initiative-store.ts';
 import {StrategyInitiativeReports} from './strategy-initiative-reports.ts';
 import {StrategyInitiativeFiles} from './strategy-initiative-files.ts';
-import {initiativeScopeKey, type KickoffAnchor} from './strategy-initiative-types.ts';
+import {initiativeScopeKey, type KickoffAnchor, type CandidateVersion, type RevisionProposal} from './strategy-initiative-types.ts';
+import {reportBlockText} from './strategy-initiative-reports.ts';
 import type {GoalScope} from './strategy-goals-types.ts';
 import type {RuntimeModelConfiguration} from './config-store.ts';
 import type {ProjectEvent} from '../agent/project-runtime.ts';
@@ -49,12 +50,13 @@ export function createStrategyInitiativeHost(options: {
   initiatives: StrategyInitiativeStore;
   reports: StrategyInitiativeReports;
   files: StrategyInitiativeFiles;
+  candidates: { version(id: string, cid: string, no: number): CandidateVersion; list(id: string, scopeKey?: string): CandidateVersion[]; proposal(id: string, proposalId: string): RevisionProposal | undefined; markProposed(id: string, proposalId: string, newText: string, requestId: string): Promise<RevisionProposal> };
   codeRoot: string;
   configuration(id?: string, revision?: number): Readonly<RuntimeModelConfiguration> | null | undefined;
   mutate<T>(fn: () => T | Promise<T>): Promise<T>;
   isClosing(): boolean;
 }) {
-  const {initiatives, reports, files} = options;
+  const {initiatives, reports, files, candidates} = options;
   const sessionFileOf = (id: string) => path.join(initiatives.directory(id), 'sessions.json');
   function readSessions(id: string): SessionFile {
     const file = sessionFileOf(id);
@@ -168,6 +170,29 @@ export function createStrategyInitiativeHost(options: {
       context.assertCurrent(); context.signal.throwIfAborted();
       return payload({version: {no: version.no, contentSha256: version.contentSha256, generation: version.generation}, claim: 'draft-saved-lock-by-decision-maker'});
     }
+    if (action === 'initiative-read-candidate') {
+      if (typeof input.candidateId !== 'string' || !uuid.test(input.candidateId) || !Number.isSafeInteger(input.no)) fail('strategy_candidate_not_found', 404);
+      const candidate = candidates.version(o.initiativeId, input.candidateId, Number(input.no));
+      if (candidate.scopeKey !== o.scopeKey) fail('strategy_candidate_not_found', 404);
+      context.assertCurrent(); context.signal.throwIfAborted();
+      return payload({candidate: {candidateId: candidate.candidateId, no: candidate.no, title: candidate.title, contentSha256: candidate.contentSha256, anchor: candidate.anchor, locked: Boolean(candidate.lock), blocks: candidate.blocks, goals: candidate.goals}});
+    }
+    if (action === 'initiative-propose-revision') {
+      if (Object.keys(input).some(key => !['action', 'proposalId', 'newText'].includes(key))) fail('strategy_proposal_fields_invalid', 400);
+      if (typeof input.proposalId !== 'string' || !uuid.test(input.proposalId)) fail('strategy_proposal_unavailable', 400);
+      const proposal = reports.proposal(o.initiativeId, input.proposalId) ?? candidates.proposal(o.initiativeId, input.proposalId);
+      if (!proposal || proposal.status !== 'pending' || proposal.initiativeId !== o.initiativeId) fail('strategy_proposal_unavailable');
+      if (proposal.target.kind === 'candidate') {
+        const target = candidates.version(o.initiativeId, proposal.target.candidateId, proposal.target.no);
+        if (target.scopeKey !== o.scopeKey) fail('strategy_proposal_unavailable');
+      }
+      if (typeof input.newText !== 'string' || !input.newText.trim()) fail('strategy_proposal_fields_invalid', 400);
+      const updated = proposal.target.kind === 'report'
+        ? reports.markProposed(o.initiativeId, proposal.proposalId, input.newText, context.requestId)
+        : await candidates.markProposed(o.initiativeId, proposal.proposalId, input.newText, context.requestId);
+      context.assertCurrent(); context.signal.throwIfAborted();
+      return payload({proposal: {proposalId: updated.proposalId, blockId: updated.blockId, status: updated.status}, claim: 'proposal-for-decision-maker-review'});
+    }
     fail('role_action_unavailable', 403);
   }
 
@@ -209,7 +234,7 @@ export function createStrategyInitiativeHost(options: {
   }
 
   async function send(id: string, scopeKey: string, input: Record<string, unknown>) {
-    if (!input || Object.keys(input).some(key => !['requestId', 'text', 'expectedRevision', 'replacePendingRequestId'].includes(key)) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) fail('invalid_strategy_message', 400);
+    if (!input || Object.keys(input).some(key => !['requestId', 'text', 'expectedRevision', 'replacePendingRequestId', 'proposal'].includes(key)) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) fail('invalid_strategy_message', 400);
     if (typeof input.requestId !== 'string' || !uuid.test(input.requestId)) fail('invalid_strategy_message', 400);
     const requestId = input.requestId;
     const originalUserText = input.text;
@@ -227,9 +252,31 @@ export function createStrategyInitiativeHost(options: {
     const anchor: KickoffAnchor | undefined = reports.anchor(id, owner.scope);
     const anchorReport = anchor ? reports.view(id).versions.find(v => v.no === anchor.reportNo) : undefined;
     const catalog = files.list(id, scopeKey);
+    const scopeCandidates = candidates.list(id, scopeKey);
+    const comparable = anchor ? scopeCandidates.filter(c => c.anchor.reportNo === anchor.reportNo && c.blocks.length > 0) : [];
+    const latestComparable = comparable.filter(c => !comparable.some(newer => newer.candidateId === c.candidateId && newer.no > c.no));
+    let proposalContext: Record<string, unknown> | undefined;
+    if (input.proposal !== undefined) {
+      if (typeof input.proposal !== 'string' || !uuid.test(input.proposal)) fail('strategy_proposal_unavailable', 400);
+      const proposal = reports.proposal(id, input.proposal) ?? candidates.proposal(id, input.proposal);
+      if (!proposal || proposal.status !== 'pending' || proposal.initiativeId !== id) fail('strategy_proposal_unavailable');
+      let baselineText: string | undefined;
+      if (proposal.target.kind === 'report') {
+        const version = reports.view(id).versions.find(v => v.no === proposal.target.no);
+        baselineText = version ? reportBlockText(version.fields, proposal.blockId) : undefined;
+      } else {
+        const target = candidates.version(id, proposal.target.candidateId, proposal.target.no);
+        if (target.scopeKey !== scopeKey) fail('strategy_proposal_unavailable');
+        baselineText = target.blocks.find(b => b.id === proposal.blockId)?.text;
+      }
+      if (baselineText === undefined) fail('strategy_proposal_unavailable');
+      proposalContext = {proposalId: proposal.proposalId, target: proposal.target, blockId: proposal.blockId, request: proposal.request, baselineText};
+    }
     const contextBody = {
       initiative: {id, title: initiative.title}, scope: owner.scope,
       appliedKickoff: anchor && anchorReport ? {reportNo: anchor.reportNo, contentSha256: anchor.contentSha256, fields: anchorReport.fields} : null,
+      candidates: latestComparable.map(c => ({candidateId: c.candidateId, no: c.no, title: c.title, contentSha256: c.contentSha256, locked: Boolean(c.lock), blocks: c.blocks, goals: c.goals})),
+      ...(proposalContext ? {proposal: proposalContext} : {}),
       files: catalog, claim: 'accurate-context-not-professional-judgement',
     };
     const prompt = JSON.stringify(contextBody) + '\n\n用户本轮原话：\n' + originalUserText;

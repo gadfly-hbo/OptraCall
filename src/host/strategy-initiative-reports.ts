@@ -3,7 +3,7 @@ import {existsSync, lstatSync, openSync, readFileSync, writeFileSync, fsyncSync,
 import {createHash, randomUUID} from 'node:crypto';
 import {StrategyDiscussionFault} from './strategy-discussion-fault.ts';
 import {StrategyInitiativeStore} from './strategy-initiative-store.ts';
-import {initiativeScopeKey, type KickoffApplication, type KickoffFields, type KickoffReportVersion, type KickoffSourceRef, type KickoffAnchor} from './strategy-initiative-types.ts';
+import {initiativeScopeKey, type KickoffApplication, type KickoffFields, type KickoffReportVersion, type KickoffSourceRef, type KickoffAnchor, type RevisionProposal} from './strategy-initiative-types.ts';
 import type {GoalScope} from './strategy-goals-types.ts';
 
 const canonical = (x: unknown): unknown => Array.isArray(x) ? x.map(canonical) : x && typeof x === 'object' ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, canonical(v)])) : x;
@@ -52,7 +52,7 @@ function validateSources(input: unknown): KickoffSourceRef[] {
   });
 }
 
-type ReportFile = { formatVersion: 1; versions: KickoffReportVersion[]; applications: KickoffApplication[] };
+type ReportFile = { formatVersion: 1; versions: KickoffReportVersion[]; applications: KickoffApplication[]; proposals: RevisionProposal[] };
 
 export class StrategyInitiativeReports {
   private readonly initiatives: StrategyInitiativeStore;
@@ -70,7 +70,7 @@ export class StrategyInitiativeReports {
   private file(id: string) { return path.join(this.initiatives.directory(id), 'reports.json'); }
   private read(id: string): ReportFile {
     const file = this.file(id);
-    if (!existsSync(file)) return {formatVersion: 1, versions: [], applications: []};
+    if (!existsSync(file)) return {formatVersion: 1, versions: [], applications: [], proposals: []};
     const s = lstatSync(file);
     if (!s.isFile() || s.isSymbolicLink() || s.nlink !== 1 || s.size > 2 * 1024 * 1024) throw new StrategyDiscussionFault('strategy_kickoff_unsafe_file');
     const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -78,6 +78,7 @@ export class StrategyInitiativeReports {
     try { x = JSON.parse(readFileSync(fd, 'utf8')); } finally { closeSync(fd); }
     if (x.formatVersion !== 1 || !Array.isArray(x.versions) || !Array.isArray(x.applications) || x.versions.some((v: any, i: number) => !v || v.no !== i + 1 || typeof v.contentSha256 !== 'string'))
       throw new StrategyDiscussionFault('strategy_kickoff_corrupt');
+    if (!Array.isArray(x.proposals)) x.proposals = [];
     return x;
   }
   private write(id: string, value: ReportFile): void {
@@ -183,9 +184,9 @@ export class StrategyInitiativeReports {
     const {anchors} = this.view(id);
     return anchors[initiativeScopeKey(scope)];
   }
-  revise(id: string, no: number, input: { operationId: string; baseSha256: string; request: string; patches: { blockId: string; expectedOldSha256: string; newText: string }[] }): KickoffReportVersion {
+  revise(id: string, no: number, input: { operationId: string; baseSha256: string; request: string; patches: { blockId: string; expectedOldSha256: string; newText: string }[]; proposalId?: string }): KickoffReportVersion {
     this.initiatives.get(id);
-    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'baseSha256', 'request', 'patches'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'baseSha256', 'request', 'patches', 'proposalId'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
     if (typeof input.operationId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(input.operationId)) throw new StrategyDiscussionFault('strategy_kickoff_operation_invalid', 400);
     if (typeof input.request !== 'string' || !input.request.trim() || input.request.length > 2000) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
     if (!Array.isArray(input.patches) || input.patches.length < 1 || input.patches.length > 20) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
@@ -198,6 +199,10 @@ export class StrategyInitiativeReports {
       return structuredClone(prior);
     }
     if (typeof input.baseSha256 !== 'string' || input.baseSha256 !== base.contentSha256) throw new StrategyDiscussionFault('strategy_kickoff_version_conflict');
+    if (input.proposalId !== undefined) {
+      const proposal = file.proposals.find(p => p.proposalId === input.proposalId);
+      if (!proposal || proposal.status !== 'proposed' || proposal.target.kind !== 'report' || proposal.target.no !== no || input.patches.length !== 1 || input.patches[0]!.blockId !== proposal.blockId || input.patches[0]!.newText !== proposal.newText) throw new StrategyDiscussionFault('strategy_proposal_unavailable');
+    }
     const fields = structuredClone(base.fields);
     const applied: { blockId: string; oldSha256: string; newSha256: string }[] = [];
     const seen = new Set<string>();
@@ -237,6 +242,60 @@ export class StrategyInitiativeReports {
     };
     file.versions.push(version);
     this.write(id, file);
+    if (input.proposalId) this.markAdopted(id, input.proposalId);
     return structuredClone(version);
   }
+  createProposal(id: string, no: number, input: { operationId: string; blockId: string; request: string }): RevisionProposal {
+    this.initiatives.get(id);
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'blockId', 'request'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
+    if (typeof input.operationId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(input.operationId)) throw new StrategyDiscussionFault('strategy_kickoff_operation_invalid', 400);
+    if (typeof input.request !== 'string' || !input.request.trim() || input.request.length > 2000) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
+    const file = this.read(id);
+    const existing = file.proposals.find(p => p.proposalId === input.operationId);
+    if (existing) {
+      if (existing.target.kind !== 'report' || existing.target.no !== no || existing.blockId !== input.blockId || existing.request !== input.request) throw new StrategyDiscussionFault('strategy_kickoff_operation_conflict');
+      return structuredClone(existing);
+    }
+    const version = file.versions.find(v => v.no === no);
+    if (!version) throw new StrategyDiscussionFault('strategy_kickoff_version_not_found', 404);
+    const baseline = reportBlockText(version.fields, input.blockId);
+    if (baseline === undefined) throw new StrategyDiscussionFault('strategy_kickoff_patch_target_invalid', 400);
+    const now = new Date().toISOString();
+    const proposal: RevisionProposal = {proposalId: input.operationId, initiativeId: id, target: {kind: 'report', no}, blockId: input.blockId, request: input.request, baselineSha256: createHash('sha256').update(baseline).digest('hex'), status: 'pending', at: now, updatedAt: now};
+    file.proposals.push(proposal);
+    this.write(id, file);
+    return structuredClone(proposal);
+  }
+  proposal(id: string, proposalId: string): RevisionProposal | undefined {
+    return structuredClone(this.read(id).proposals.find(p => p.proposalId === proposalId));
+  }
+  markProposed(id: string, proposalId: string, newText: string, requestId: string): RevisionProposal {
+    const file = this.read(id);
+    const proposal = file.proposals.find(p => p.proposalId === proposalId);
+    if (!proposal || proposal.status !== 'pending') throw new StrategyDiscussionFault('strategy_proposal_unavailable');
+    if (typeof newText !== 'string' || !newText.trim() || newText.length > 8000) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
+    proposal.newText = newText;
+    proposal.status = 'proposed';
+    proposal.requestId = requestId;
+    proposal.updatedAt = new Date().toISOString();
+    this.write(id, file);
+    return structuredClone(proposal);
+  }
+  markAdopted(id: string, proposalId: string): void {
+    const file = this.read(id);
+    const proposal = file.proposals.find(p => p.proposalId === proposalId);
+    if (!proposal || proposal.status !== 'proposed') throw new StrategyDiscussionFault('strategy_proposal_unavailable');
+    proposal.status = 'adopted';
+    proposal.updatedAt = new Date().toISOString();
+    this.write(id, file);
+  }
+}
+export function reportBlockText(fields: KickoffFields, blockId: string): string | undefined {
+  const segments = blockId.split(':');
+  if (segments.length === 1 && ['horizon', 'diagnosis', 'assumptions', 'evidenceGaps', 'followUp'].includes(segments[0]!)) return fields[segments[0] as 'horizon' | 'diagnosis' | 'assumptions' | 'evidenceGaps' | 'followUp'];
+  if (segments.length === 3 && segments[0] === 'proposition' && ['question', 'whyItMatters', 'evidence', 'gaps'].includes(segments[2]!)) {
+    const proposition = fields.propositions.find(p => p.id === segments[1]);
+    return proposition ? proposition[segments[2] as 'question' | 'whyItMatters' | 'evidence' | 'gaps'] : undefined;
+  }
+  return undefined;
 }

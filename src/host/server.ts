@@ -44,6 +44,7 @@ import { StrategyGoalsStore, StrategyGoalsError, goalContentSha256, parseGoalRol
 import { strategyWorkbookRoutes,checkWorkbookSource } from './strategy-workbook-routes.ts';
 import { StrategyMapPublicationStore } from './strategy-map-publication-store.ts';
 import { StrategyInitiativeStore } from './strategy-initiative-store.ts';
+import { initiativeScopeKey } from './strategy-initiative-types.ts';
 import { StrategyInitiativeReports } from './strategy-initiative-reports.ts';
 import { StrategyInitiativeFiles } from './strategy-initiative-files.ts';
 import { createStrategyInitiativeHost } from './strategy-initiative-host.ts';
@@ -1207,7 +1208,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const strategyInitiatives=new StrategyInitiativeStore(dataRoot);
   const strategyInitiativeFiles=new StrategyInitiativeFiles(strategyInitiatives);
   const strategyKickoffReports=new StrategyInitiativeReports(strategyInitiatives,strategyInitiativeFiles);
-  const strategyInitiativeSessions=createStrategyInitiativeHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
+  const strategyInitiativeSessions=createStrategyInitiativeHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no),list:(id,scopeKey)=>strategyCandidates.list(id,scopeKey),proposal:(id,pid)=>strategyCandidates.proposal(id,pid),markProposed:(id,pid,newText,requestId)=>strategyCandidates.markProposed(id,pid,newText,requestId)},codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyCandidates=createStrategyCandidateHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyVerifications=createStrategyVerificationHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no),busy:(id,cid,no)=>strategyCandidates.busy(id,cid,no),markReturned:(id,cid,no,batchId)=>strategyCandidates.markReturned(id,cid,no,batchId)},codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyInitiativePublications=createStrategyInitiativePublications({initiatives:strategyInitiatives,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no)},verifications:{passCredentials:(id,cid,no)=>strategyVerifications.passCredentials(id,cid,no)},goals:{create:input=>strategyGoals.create(input),getOperation:id=>strategyGoals.getOperation(id),operationContext:receipt=>strategyGoals.operationContext(receipt as import('./strategy-goals-types.ts').GoalOperationReceipt)},validateGoal:(input,target)=>validateStrategyGoal(input,target),mutate});
@@ -2740,7 +2741,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(!fileId&&request.method==='POST'){const input=await body(request,68*1024*1024);json(response,201,{file:await mutate(()=>strategyInitiativeFiles.upload(id,input as Parameters<typeof strategyInitiativeFiles.upload>[1]))});return;}
         if(fileId&&request.method==='GET'){const result=strategyInitiativeFiles.read(id,fileId);const scopeKey=url.searchParams.get('scopeKey');if(result.file.scopeKey!==undefined&&result.file.scopeKey!==scopeKey)throw new StrategyDiscussionFault('strategy_file_not_found',404);json(response,200,result);return;}
       }
-      const candidateRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/candidates(?:\/([a-f0-9-]{36})\/versions\/([1-9]\d*)(?:\/(messages|stop|close|lock|revise|verify|verifications))?)?$/.exec(url.pathname);
+      const candidateRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/candidates(?:\/([a-f0-9-]{36})\/versions\/([1-9]\d*)(?:\/(messages|stop|close|lock|revise-proposal|revise|verify|verifications))?)?$/.exec(url.pathname);
       if(candidateRoute){
         const id=candidateRoute[1]!,cid=candidateRoute[2],no=Number(candidateRoute[3]),action=candidateRoute[4];
         if(!cid&&request.method==='GET'){json(response,200,{candidates:strategyCandidates.list(id,url.searchParams.get('scopeKey')??undefined)});return;}
@@ -2751,6 +2752,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(action==='close'&&request.method==='POST'){json(response,200,await strategyCandidates.close(id,cid!,no));return;}
         if(action==='lock'&&request.method==='POST'){const input=await body(request);json(response,200,{candidate:await strategyCandidates.lock(id,cid!,no,input)});return;}
         if(action==='revise'&&request.method==='POST'){const input=await body(request);json(response,201,{candidate:await strategyCandidates.revise(id,cid!,no,input)});return;}
+        if(action==='revise-proposal'&&request.method==='POST'){
+          const input=await body(request);
+          const candidate=strategyCandidates.version(id,cid!,no);
+          const initiative=strategyInitiatives.get(id);const scope=initiative.scopes.find(s=>initiativeScopeKey(s)===candidate.scopeKey);
+          if(!scope)throw new StrategyDiscussionFault('strategy_initiative_scope_unknown');
+          const proposal=await strategyCandidates.createProposal(id,cid!,no,input);
+          let session;try{session=strategyInitiativeSessions.session(id,candidate.scopeKey);}catch{session=await strategyInitiativeSessions.create(id,{operationId:randomUUID(),scope});}
+          const ack=await strategyInitiativeSessions.send(id,candidate.scopeKey,{requestId:randomUUID(),text:`限定修改拟议：${proposal.request}`,expectedRevision:session.revision,proposal:proposal.proposalId});
+          json(response,202,{proposal,requestId:ack.requestId});return;
+        }
         if(action==='verify'&&request.method==='POST'){const input=await body(request);json(response,202,await strategyVerifications.start(id,cid!,no,input));return;}
         if(action==='verifications'&&request.method==='GET'){json(response,200,{batches:strategyVerifications.list(id,cid!,no)});return;}
       }
@@ -2800,7 +2811,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           return;
         }
       }
-      const kickoffRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/reports(?:\/([1-9]\d*)\/(lock|apply|revise))?$/.exec(url.pathname);
+      const kickoffRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/reports(?:\/([1-9]\d*)\/(lock|apply|revise-proposal|revise))?$/.exec(url.pathname);
       if(kickoffRoute){
         const id=kickoffRoute[1]!,no=Number(kickoffRoute[2]),action=kickoffRoute[3];
         if(!action&&request.method==='GET'){json(response,200,strategyKickoffReports.view(id));return;}
@@ -2808,6 +2819,22 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(action==='lock'&&request.method==='POST'){const input=await body(request);json(response,200,{version:await mutate(()=>strategyKickoffReports.lock(id,no,input as Parameters<typeof strategyKickoffReports.lock>[2]))});return;}
         if(action==='apply'&&request.method==='POST'){const input=await body(request);json(response,200,{anchor:await mutate(()=>strategyKickoffReports.apply(id,no,input as Parameters<typeof strategyKickoffReports.apply>[2]))});return;}
         if(action==='revise'&&request.method==='POST'){const input=await body(request);json(response,201,{version:await mutate(()=>strategyKickoffReports.revise(id,no,input as Parameters<typeof strategyKickoffReports.revise>[2]))});return;}
+        if(action==='revise-proposal'&&request.method==='POST'){
+          const input=await body(request);const scopeKey=url.searchParams.get('scopeKey')??'';
+          const initiative=strategyInitiatives.get(id);const scope=initiative.scopes.find(s=>initiativeScopeKey(s)===scopeKey);
+          if(!scope)throw new StrategyDiscussionFault('strategy_initiative_scope_unknown');
+          const proposal=await mutate(()=>strategyKickoffReports.createProposal(id,no,input as Parameters<typeof strategyKickoffReports.createProposal>[2]));
+          let session;try{session=strategyInitiativeSessions.session(id,scopeKey);}catch{session=await strategyInitiativeSessions.create(id,{operationId:randomUUID(),scope});}
+          const ack=await strategyInitiativeSessions.send(id,scopeKey,{requestId:randomUUID(),text:`限定修改拟议：${proposal.request}`,expectedRevision:session.revision,proposal:proposal.proposalId});
+          json(response,202,{proposal,requestId:ack.requestId});return;
+        }
+      }
+      const initiativeProposalRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/proposals$/.exec(url.pathname);
+      if(initiativeProposalRoute&&request.method==='GET'){
+        const pid=url.searchParams.get('proposalId')??'';
+        const proposal=strategyKickoffReports.proposal(initiativeProposalRoute[1]!,pid)??strategyCandidates.proposal(initiativeProposalRoute[1]!,pid);
+        if(!proposal)throw new StrategyDiscussionFault('strategy_proposal_unavailable',404);
+        json(response,200,{proposal});return;
       }
       const workbookRoute=/^\/api\/strategy\/workbooks\/(preview|commit|handoff|map-source|goal-source)$/.exec(url.pathname);
       if(workbookRoute && request.method==='POST'){

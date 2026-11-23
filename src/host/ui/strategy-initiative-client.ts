@@ -73,7 +73,7 @@ export const readKickoffReports = (id: string) => request<ReportsView>(`${path(i
 export const lockKickoffReport = (id: string, no: number, input: { operationId: string; sha256: string; operator?: string }) => request<{ version: KickoffReportVersion }>(`${path(id)}/reports/${no}/lock`, 'POST', input);
 export const applyKickoffReport = (id: string, no: number, input: { operationId: string; sha256: string; scope: GoalScope }) => request<{ anchor: KickoffAnchor }>(`${path(id)}/reports/${no}/apply`, 'POST', input);
 export interface RevisePatchInput { blockId: string; expectedOldSha256: string; newText: string }
-export const reviseKickoffReport = (id: string, no: number, input: { operationId: string; baseSha256: string; request: string; patches: RevisePatchInput[] }) => request<{ version: KickoffReportVersion }>(`${path(id)}/reports/${no}/revise`, 'POST', input);
+export const reviseKickoffReport = (id: string, no: number, input: { operationId: string; baseSha256: string; request: string; patches: RevisePatchInput[]; proposalId?: string }) => request<{ version: KickoffReportVersion }>(`${path(id)}/reports/${no}/revise`, 'POST', input);
 
 export const listCandidates = (id: string, scopeKey?: string) => request<{ candidates: CandidateVersion[] }>(`${path(id)}/candidates${scopeKey !== undefined ? scopeQuery(scopeKey) : ''}`);
 export const createCandidate = (id: string, input: { operationId: string; scope: GoalScope; title: string; instruction: string; configurationId?: string }) => request<{ candidate: CandidateVersion; requestId?: string; replayed?: boolean }>(`${path(id)}/candidates`, 'POST', input);
@@ -83,7 +83,7 @@ export const sendCandidateMessage = (id: string, cid: string, no: number, input:
 export const stopCandidate = (id: string, cid: string, no: number, expectedRequestId?: string) => request<{ stopped: boolean }>(`${candidatePath(id, cid, no)}/stop`, 'POST', { ...(expectedRequestId ? { expectedRequestId } : {}) });
 export const closeCandidate = (id: string, cid: string, no: number) => request<{ closed: true }>(`${candidatePath(id, cid, no)}/close`, 'POST', {});
 export const lockCandidate = (id: string, cid: string, no: number, input: { operationId: string; sha256: string; operator?: string }) => request<{ candidate: CandidateVersion }>(`${candidatePath(id, cid, no)}/lock`, 'POST', input);
-export const reviseCandidate = (id: string, cid: string, no: number, input: { operationId: string; baseSha256: string; request: string; patches: RevisePatchInput[] }) => request<{ candidate: CandidateVersion }>(`${candidatePath(id, cid, no)}/revise`, 'POST', input);
+export const reviseCandidate = (id: string, cid: string, no: number, input: { operationId: string; baseSha256: string; request: string; patches: RevisePatchInput[]; proposalId?: string }) => request<{ candidate: CandidateVersion }>(`${candidatePath(id, cid, no)}/revise`, 'POST', input);
 export const startVerification = (id: string, cid: string, no: number, input: { operationId: string }) => request<{ batch: VerificationBatch }>(`${candidatePath(id, cid, no)}/verify`, 'POST', input);
 export const listVerifications = (id: string, cid: string, no: number) => request<{ batches: VerificationBatch[] }>(`${candidatePath(id, cid, no)}/verifications`);
 export const retryVerificationGate = (id: string, cid: string, no: number, turn: 0 | 1, input: { operationId: string }) => request<{ batch: VerificationBatch }>(`${candidatePath(id, cid, no)}/gates/${turn}/retry`, 'POST', input);
@@ -100,4 +100,7 @@ export const readInitiativeHistory = (id: string) => request<InitiativeHistory>(
 export async function sha256Text(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
-}
+}export interface RevisionProposalView { proposalId: string; target: { kind: 'report'; no: number } | { kind: 'candidate'; candidateId: string; no: number }; blockId: string; request: string; baselineSha256: string; newText?: string; status: 'pending' | 'proposed' | 'adopted'; at: string; updatedAt: string }
+export const proposeReportRevision = (id: string, no: number, scopeKey: string, input: { operationId: string; blockId: string; request: string }) => request<{ proposal: RevisionProposalView; requestId: string }>(`${path(id)}/reports/${no}/revise-proposal${scopeQuery(scopeKey)}`, 'POST', input);
+export const proposeCandidateRevision = (id: string, cid: string, no: number, input: { operationId: string; blockId: string; request: string }) => request<{ proposal: RevisionProposalView; requestId: string }>(`${candidatePath(id, cid, no)}/revise-proposal`, 'POST', input);
+export const readProposal = (id: string, proposalId: string) => request<{ proposal: RevisionProposalView }>(`${path(id)}/proposals?proposalId=${encodeURIComponent(proposalId)}`);
