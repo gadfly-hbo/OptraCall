@@ -16,7 +16,7 @@ import {createRoot} from 'react-dom/client';
 import {StudioPage} from ${JSON.stringify(resolve('src/host/ui/StudioPage.tsx'))};
 import {EnterpriseMaterialsPage} from ${JSON.stringify(resolve('src/host/ui/EnterpriseMaterialsPage.tsx'))};
 const mode=new URLSearchParams(location.search).get('mode');
-function Harness(){const [target,setTarget]=useState(mode==='derived'?{kind:'methods',id:'method-b',version:2}:undefined);return mode==='categories'?createElement(EnterpriseMaterialsPage,{embedded:true,allowedIds:['mat-a'],onBack(){},onMetrics(){},onRequirements(){}}):createElement(StudioPage,{projects:[{id:'p1',name:'A分析项目',archivedAt:null,tasks:[]}],currentProjectId:'p1',onOpenTask(){},initialProfessionalTarget:target,onProfessionalTargetConsumed(){setTarget(undefined)}})}
+function Harness(){const [target,setTarget]=useState(mode==='derived'?{kind:'methods',id:'method-b',version:2}:undefined);return mode==='categories'?createElement(EnterpriseMaterialsPage,{allowedIds:['mat-a']}):createElement(StudioPage,{projects:[{id:'p1',name:'A分析项目',archivedAt:null,tasks:[]}],currentProjectId:'p1',onOpenTask(){},initialProfessionalTarget:target,onProfessionalTargetConsumed(){setTarget(undefined)}})}
 createRoot(document.getElementById('root')).render(createElement(Harness));`);
 await build({ input: entryPath, platform: 'browser', output: { format: 'esm', file: bundlePath }, plugins: [{ name: 'css-boundary', resolveId(id) { if (id.endsWith('.css')) return '\0css:' + id + '.js'; }, load(id) { if (id.startsWith('\0css:')) return ''; } }] });
 const bundle = await readFile(bundlePath);

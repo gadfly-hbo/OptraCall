@@ -102,11 +102,6 @@ export class ResourceGrantStore {
     return clone(this.load().grants.filter(g => g.enterpriseId === eid && g.subjectId === sid));
   }
 
-  hasAnyGrants(enterpriseId: string, subjectId?: string): boolean {
-    const eid = uuid(enterpriseId);
-    return this.load().grants.some(g => g.enterpriseId === eid && (subjectId === undefined || g.subjectId === subjectId));
-  }
-
   get(grantId: string): ResourceAuthorizationGrant {
     const found = this.load().grants.find(g => g.id === uuid(grantId));
     if (!found) fail('resource_grant_not_found', 404);

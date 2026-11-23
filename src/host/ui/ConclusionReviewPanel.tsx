@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ConclusionReviewClaim, ConclusionReviewContextEvidence, ConclusionReviewMaterial, ConclusionReviewMetadata } from '../conclusion-review-contract.ts';
 import type { ConclusionReviewReportCandidate } from '../conclusion-review-materials.ts';
-import type { ClientProject, ClientTask, PublicModelConfiguration } from './project-types.ts';
+import type { ClientProject, ClientTask } from './project-types.ts';
 import type { RequirementContextSelection } from './requirement-types.ts';
 import type { EnterpriseMaterialSelection } from '../enterprise-materials-types.ts';
 import { PersonalDialog } from './PersonalDialog.tsx';
@@ -16,7 +16,7 @@ import {
 import './conclusion-review.css';
 
 type Props = {
-  project: ClientProject; task: ClientTask; configurations: PublicModelConfiguration[]; taskBusy: boolean; filesRevision: number;
+  project: ClientProject; task: ClientTask; taskBusy: boolean; filesRevision: number;
   requirementContext?: RequirementContextSelection;
   caseContext?: { id: string; title: string; description: string; revision: number };
   enterpriseMaterials?: EnterpriseMaterialSelection[];
@@ -177,7 +177,7 @@ function BoardHandoff({ projectId, taskId, review, archived, refreshToken, onOpe
   </section>;
 }
 
-export function ConclusionReviewPanel({ project, task, configurations, taskBusy, filesRevision, requirementContext, caseContext, enterpriseMaterials = [], semanticContext, onClose, onOpenBoard, onCarry }: Props) {
+export function ConclusionReviewPanel({ project, task, taskBusy, filesRevision, requirementContext, caseContext, enterpriseMaterials = [], semanticContext, onClose, onOpenBoard, onCarry }: Props) {
   const uid = useId(), heading = useRef<HTMLHeadingElement>(null), alive = useRef(true), reportRequest = useRef(0);
   const pendingKey = `optracall.conclusion-review:${project.id}/${task.id}`;
   const [tab, setTab] = useState<'review' | 'history'>('review');
@@ -322,7 +322,7 @@ export function ConclusionReviewPanel({ project, task, configurations, taskBusy,
       {tab === 'history' ? <>
         <h3>结论与建议审查记录</h3>
         {reviews.length ? <ul className="cnr-history-list">{reviews.map(review => <li key={review.verificationId}><button type="button" disabled={posting || loading || inProgress} onClick={() => { setTab('review'); void refresh(review.verificationId); }}><strong>{review.review.report.relativePath}</strong><small>{status[review.state]} · {timestamp(review.createdAt)}</small><small>{review.review.report.sha256}</small></button></li>)}</ul> : <p className="cnr-caption">尚无结论审查记录。</p>}
-        <VerificationPanel readOnly project={project} task={task} configurations={configurations} taskBusy={taskBusy} filesRevision={filesRevision} requirementContext={requirementContext} caseContext={caseContext} semanticContext={semanticContext} />
+        <VerificationPanel project={project} task={task} taskBusy={taskBusy} filesRevision={filesRevision} semanticContext={semanticContext} />
       </> : <>
         {transition && transition.state !== 'ready' && <p className="cnr-notice" role="status"><strong>待确认旧流程已收尾</strong><br />{transition.reason ?? '原记录仍可回看，旧流程收尾后可开始新审查。'}</p>}
         {pending && <p className="cnr-notice" role="status">本次启动结果尚未确认，操作编号 {pending}。请只读刷新原请求。</p>}
