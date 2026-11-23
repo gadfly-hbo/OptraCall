@@ -9,7 +9,7 @@ import { ProjectAgent, type ProjectAgentOptions } from '../src/agent/project-run
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 import { anthropicToolResults, startAnthropicToolProvider } from './fixtures/anthropic-tool-provider.ts';
 
-async function miniMaxStrategyFixture(t: TestContext, strategyDiscussion: ProjectAgentOptions['strategyDiscussion']) {
+async function miniMaxStrategyFixture(t: TestContext, strategyDiscussion: ProjectAgentOptions['strategyDiscussion'], discussionTools?: 'project-sources' | 'goal-draft') {
   const root = await mkdtemp(path.join(os.tmpdir(), 'issue115-minimax-strategy-'));
   const provider = await startAnthropicToolProvider();
   const cwd = path.join(root, 'workspace'), resourceRoot = path.join(root, 'resources'), fixtureCode = path.join(root, 'fixture-code');
@@ -36,7 +36,7 @@ async function miniMaxStrategyFixture(t: TestContext, strategyDiscussion: Projec
   const requestId = randomUUID();
   const options: ProjectAgentOptions = {
     projectId: 'strategy-discussion:' + randomUUID(),
-    workspace: { cwd, systemPrompt: ['Use only the synthetic strategy tool when needed.'], capabilityPolicy: 'strategy-discussion' },
+    workspace: { cwd, systemPrompt: ['Use only the synthetic strategy tool when needed.'], capabilityPolicy: 'strategy-discussion', ...(discussionTools ? { discussionTools } : {}) },
     sessionDirectory: path.join(root, 'native'), resourceRoot, codeRoot: fixtureCode, managementPorts: [],
     configuration: { id: 'minimax-m31-flash', name: 'Synthetic MiniMax loopback', revision: 1, provider: 'minimax-cn', api: 'anthropic-messages', baseUrl: provider.baseUrl, model: 'MiniMax-M3.1-Flash', apiKey: 'synthetic-minimax-only' },
     strategyDiscussion,
@@ -239,5 +239,76 @@ test('Issue 115 does not apply the read-loop guard to write actions', { timeout:
   assert.equal(done.outcome, 'completed', JSON.stringify(done.diagnostic));
   assert.equal(delivered.length, 8, 'save-map is a write action and is exempt from the read-loop guard');
   assert.notEqual(done.diagnostic?.code, 'strategy_action_loop');
+  assert.deepEqual(provider.errors, []);
+});
+
+test('Issue 115 bounds a parallel batch of identical reads to six Host dispatches and recovers', { timeout: 45_000 }, async t => {
+  const delivered: { action: string }[] = [];
+  const fixture = await miniMaxStrategyFixture(t, async (action, _input, context) => { context.assertCurrent(); delivered.push({ action }); return syntheticPayload({ goalScopes: [], candidates: [], claim: 'provided-not-adopted' }); });
+  const { agent, provider, requestId } = fixture;
+  let phase = 'loop', recoveryStep = 0;
+  provider.setResponder(() => {
+    if (phase === 'loop') return { calls: Array.from({ length: 8 }, () => ({ name: 'strategy_goals', arguments: { action: 'read-goals' } })) };
+    recoveryStep += 1;
+    return recoveryStep === 1 ? { calls: [{ name: 'strategy_goals', arguments: { action: 'read-goals' } }] } : { text: '合成恢复完成。' };
+  });
+  const done = await agent.start('合成并行批次循环', requestId).completion;
+  assert.equal(done.outcome, 'cancelled', JSON.stringify(done.diagnostic));
+  assert.equal(done.diagnostic?.code, 'strategy_action_loop');
+  assert.equal(delivered.length, 6, 'a parallel batch of eight identical reads dispatches at most six times (Pi sequential execution)');
+  assert.equal(provider.requests.length, 1, 'the batch is one Provider response; no continuation after the stop');
+  phase = 'recover';
+  const recovered = await agent.start('合成批次后恢复', randomUUID()).completion;
+  assert.equal(recovered.outcome, 'completed', JSON.stringify(recovered.diagnostic));
+  assert.deepEqual(provider.errors, []);
+});
+
+test('Issue 115 bounds five sequential reads plus a two-call batch to six Host dispatches', { timeout: 45_000 }, async t => {
+  const delivered: { action: string }[] = [];
+  const fixture = await miniMaxStrategyFixture(t, async (action, _input, context) => { context.assertCurrent(); delivered.push({ action }); return syntheticPayload({ goalScopes: [], candidates: [], claim: 'provided-not-adopted' }); });
+  const { agent, provider, requestId } = fixture;
+  provider.setResponder(({ requestNumber }) => {
+    if (requestNumber <= 5) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-goals' } }] };
+    if (requestNumber === 6) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-goals' } }, { name: 'strategy_goals', arguments: { action: 'read-goals' } }] };
+    return { text: '合成完成。' };
+  });
+  const done = await agent.start('合成顺序加批次', requestId).completion;
+  assert.equal(done.outcome, 'cancelled', JSON.stringify(done.diagnostic));
+  assert.equal(done.diagnostic?.code, 'strategy_action_loop');
+  assert.equal(delivered.length, 6, 'five sequential reads plus a two-call batch stop at the sixth Host dispatch');
+  assert.deepEqual(provider.errors, []);
+});
+
+test('Issue 115 an exempt operation between reads resets the streak and does not false-stop', { timeout: 45_000 }, async t => {
+  const delivered: { action: string }[] = [];
+  const fixture = await miniMaxStrategyFixture(t, async (action, _input, context) => {
+    context.assertCurrent(); delivered.push({ action });
+    if (action === 'operation') return syntheticPayload({ operationId: 'synthetic-op', status: 'completed' });
+    return syntheticPayload({ goalScopes: [], candidates: [], claim: 'provided-not-adopted' });
+  });
+  const { agent, provider, requestId } = fixture;
+  provider.setResponder(({ requestNumber }) => {
+    if (requestNumber <= 6) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-goals' } }] };
+    if (requestNumber === 7) return { calls: [{ name: 'strategy_goals', arguments: { action: 'operation', operationId: randomUUID() } }] };
+    if (requestNumber === 8) return { calls: [{ name: 'strategy_goals', arguments: { action: 'read-goals' } }] };
+    return { text: '合成豁免重置完成。' };
+  });
+  const done = await agent.start('合成豁免重置', requestId).completion;
+  assert.equal(done.outcome, 'completed', JSON.stringify(done.diagnostic));
+  assert.notEqual(done.diagnostic?.code, 'strategy_action_loop');
+  assert.equal(delivered.length, 8);
+  assert.equal(delivered[6]!.action, 'operation');
+  assert.deepEqual(provider.errors, []);
+});
+
+test('Issue 115 the read-loop guard does not apply to the business-role project-sources variant', { timeout: 45_000 }, async t => {
+  const delivered: { action: string }[] = [];
+  const fixture = await miniMaxStrategyFixture(t, async (action, _input, context) => { context.assertCurrent(); delivered.push({ action }); return syntheticPayload({ source: { id: 'synthetic-source' }, read: { text: '合成正文', range: { start: 0, end: 4, total: 4 }, complete: true }, claim: 'provided-not-used-or-verified' }); }, 'project-sources');
+  const { agent, provider, requestId } = fixture;
+  provider.setResponder(({ requestNumber }) => requestNumber <= 8 ? { calls: [{ name: 'strategy_goals', arguments: { action: 'read-source', sourceId: 'synthetic-source' } }] } : { text: '合成项目资料完成。' });
+  const done = await agent.start('合成项目资料读取', requestId).completion;
+  assert.equal(done.outcome, 'completed', JSON.stringify(done.diagnostic));
+  assert.notEqual(done.diagnostic?.code, 'strategy_action_loop', 'the guard is scoped to the full strategy co-creation tool, not business-role project-sources');
+  assert.equal(delivered.length, 8);
   assert.deepEqual(provider.errors, []);
 });

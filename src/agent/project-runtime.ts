@@ -73,8 +73,7 @@ function safeToolFault(error: unknown) {
       output.itemKind = value.itemKind;
     }
     if (value.itemId !== undefined) {
-      if (typeof value.itemId !== 'string' || value.itemId.length > 300 || /[\u0000-\u001f\u007f]/.test(value.itemId)) return result;
-      output.itemId = value.itemId;
+      if (typeof value.itemId === 'string' && value.itemId.length <= 300 && !/[\u0000-\u001f\u007f/\\]/.test(value.itemId) && !/^[A-Za-z]:/.test(value.itemId) && !value.itemId.startsWith('~')) output.itemId = value.itemId;
     }
     if (value.page !== undefined) {
       if (!Number.isSafeInteger(value.page) || Number(value.page) < 1) return result;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
@@ -99,6 +99,48 @@ test('Issue 115 treats an absolute path as text, exposes no file tool and reject
   assert.ok(captured.includes(file),'the user path remains visible as prompt text');
   assert.ok(!captured.includes(marker),'no Host or SDK path read may disclose the synthetic file body');
   t.diagnostic('Proven boundary: no general file tool and no source-ID match. The real models\' chosen failure path remains separately unproved.');
+});
+
+test('Issue 115 rework: invalid edge ID does not echo a raw path and scenario validation keeps a stable code', {timeout:60000}, async t=>{
+  const host=await startTestHost(),provider=await startToolProvider();
+  t.after(async()=>{await host.close();await provider.close();});
+  const api=async(route:string,method='GET',body?:unknown,status=200)=>{const r=await host.request(route,method,body);assert.equal(r.status,status,await r.clone().text());return r.json();};
+  await api('/api/configuration','PUT',{name:'返工错误契约',provider:'openai-compatible',baseUrl:provider.baseUrl,model:'synthetic',apiKey:'synthetic-only'});
+  const {discussion}=await api('/api/strategy/discussions','POST',{operationId:randomUUID(),title:'返工错误契约'},201);
+  const base='/api/strategy/discussions/'+discussion.id;
+  const secretPath='/Users/synthetic/private-strategy-plan.md';
+  const baseDraft={title:'返工候选',template:'table',choice:'',assumptions:'',unknowns:'',nodes:[{id:'G1',kind:'goal',title:'目标'}],edges:[]};
+  async function turn(args:Record<string,unknown>){
+    let receipt='';
+    provider.setResponder(({recentToolResults})=>{if(!recentToolResults.length)return {calls:[{name:'strategy_goals',arguments:args}]};receipt=providerMessageText(recentToolResults.at(-1)?.content);return {text:'已核对。'};});
+    const before=await api(base),requestId=randomUUID();
+    await api(base+'/messages','POST',{requestId,expectedRevision:before.discussion.revision,text:'合成校验'},202);
+    let d=await api(base);for(let n=0;n<400&&(d.busy||d.discussion.lastRun?.id!==requestId);n++){await delay(25);d=await api(base);}
+    assert.equal(d.discussion.lastRun.status,'completed');
+    return {receipt,detail:d};
+  }
+  const badEdge=await turn({action:'save-map',mapDraft:{...baseDraft,edges:[{id:secretPath,from:'G1',to:'G1',kind:'supports'}]},reason:'合成无效连线'});
+  assert.match(badEdge.receipt,/invalid_strategy_map/);
+  assert.match(badEdge.receipt,/invalid_edge_endpoint/);
+  assert.match(badEdge.receipt,/edges\[0\]/,'the error is located by structural position');
+  assert.ok(!badEdge.receipt.includes(secretPath),'the tool error receipt must not echo the raw path ID');
+  const nativeEntries=(await readFile(badEdge.detail.snapshot.sessionFile,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
+  const nativeToolResults=nativeEntries.filter(e=>e.message?.role==='toolResult');
+  assert.ok(nativeToolResults.length>0);
+  assert.ok(!JSON.stringify(nativeToolResults).includes(secretPath),'native toolResult must not echo the raw path ID');
+  const snapToolResults=(badEdge.detail.snapshot.messages||[]).filter((m:any)=>m.role==='toolResult');
+  assert.ok(!JSON.stringify(snapToolResults).includes(secretPath),'discussion snapshot toolResult must not echo the raw path ID');
+  const nextToolMessages=(provider.requests.at(-1)?.body.messages||[]).filter((m:any)=>m.role==='tool');
+  assert.ok(!JSON.stringify(nextToolMessages).includes(secretPath),'the next Provider tool result must not echo the raw path ID');
+  assert.equal((await api(base+'/maps')).versions.length,0,'invalid submission keeps zero writes');
+  const scenario={population:'合成',metric:'复购',unit:'%',period:'季',basis:'合成依据',liftPoints:5,coverage:50,coverageAdjustable:true};
+  const badScenario=await turn({action:'save-map',mapDraft:{...baseDraft,scenarioModel:{...scenario,baselineRate:-1}},reason:'合成场景校验'});
+  assert.match(badScenario.receipt,/invalid_scenario_baseline_rate/,'known scenario validation keeps a stable code in the tool chain');
+  assert.ok(!badScenario.receipt.includes('host_tool_failed'),'known scenario validation must not be masked by the neutral fallback');
+  assert.equal((await api(base+'/maps')).versions.length,0);
+  const good=await turn({action:'save-map',mapDraft:{...baseDraft,scenarioModel:{...scenario,baselineRate:10}},reason:'修正后保存'});
+  assert.match(good.receipt,/candidate-not-adopted/);
+  assert.equal((await api(base+'/maps')).versions.length,1,'corrected input saves one version');
 });
 
 test('a map references only the cited attachment version and follows its authorization after replacement and revocation', {timeout:60000}, async t=>{

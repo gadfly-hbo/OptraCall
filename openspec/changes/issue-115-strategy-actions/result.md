@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-阶段：A/B/C 实现完成并经非作者独立复核证实；独立复核发现的唯一 blocker F1（浏览器脚本 createRequire 触犯边界门禁）已修复并重跑门禁/全量 check/浏览器点验。待修复后重验确认与 Issue 交付回执（D3），随后交回 Codex 集成。
+阶段：A/B/C 实现完成；首轮交付 180c894 经 Codex 审核退回 5 项（并行批次/豁免误停/路径回显/scenario 兜底/共享作用域），已逐项修复并补反例（见文末「返工修复」）。待返工后全量 check/浏览器/独立重验确认，再交回 Codex 集成。
 
 - 基线：`e2aecfb445094245875b9696a02a273b5e0ddb44`
 - 分支：`work/qoder/issue-115-strategy-actions`
@@ -116,3 +116,15 @@ node --test --test-name-pattern='Issue 115 treats an absolute path' tests/strate
 - 候选提交：F1 修复与复核证据提交 `c64061a447db24ae03db707700565284776c5353`（产品代码即此 SHA，经独立重验）；本记录与重验证据另以文档提交补记，最终 HEAD 见 Issue 交付回执回读。
 - 交回 Codex：实现交付回执（身份/版本、完成情况、验证与限制）留于 #115；Codex 负责非作者复核接管、集成最新 main、单 PR 实际 head CI、获授权 squash 合并与 main push CI、结案。本单不直接合并 main、不更新设备/服务。
 - 已知限制与后续增量：F2（business-role 接缝 loop 诊断呈现）、F3（explainGoalProposalError 改按 code 查表）、F4（路径提示含空格/file:// 覆盖）、F6（并行批次计数竞态）；真实 MiniMax/GLM/试用轮根因 NOT_PROVED。回退：任务分支独立、无持久 schema 迁移，按候选 SHA 由 Codex/用户决定，不覆盖新增地图版本/native 历史。
+
+## 返工修复（Codex 审核退回 180c894，[#issuecomment-7088759365](https://github.com/gadfly-hbo/OptraCall/issues/115#issuecomment-7088759365)）
+
+审核指出 A3/A4/A5、B2/B3/B4 与共享入口影响共 5 项。逐项修复并补反例：
+
+1. **并行批次越过第七次派发（A3/A4）**：原检查在派发前读旧计数、回包后才计数，Pi 并行批次可一次派发 8 次相同读取。修复：战略共创全量工具声明 Pi 原生 `executionMode:'sequential'`（`pi-agent-core` 批次中任一工具声明即整批逐工具执行），使批次内按结果结算计数。反例：一批 8 次相同 read-goals → 最多 6 次 Host 派发、cancelled+`strategy_action_loop`、下一请求恢复；5 次顺序＋2 调用批次 → 6 次派发。均 PASS。
+2. **豁免动作保留旧计数误停（A3/A5）**：原非读取动作不重置读取计数，6 次 read-goals 后一次 operation 成功再 read-goals 被误停。修复：任何非读取动作派发即清空 `strategyReadLoop`（动作变化重置）；写入/operation/public-search 仍豁免计数。反例：6 read-goals＋operation＋read-goals → completed、无 loop 诊断。PASS。
+3. **错误回包回显原始路径（B4）**：无效连线 ID 为绝对路径时，details.itemId 按自由文本转发，回显到工具回包/native toolResult/快照。修复：校验详情改用公开字段路径＋结构下标定位（如 `edges[0].sourceLocation.page`），itemId 经 `safeStrategyItemId` 脱敏（含 `/`、`\`、盘符、`~`、控制字符即省略）；IPC `safeToolFault` 同样仅省略不安全 itemId、保留 reason/path。反例：路径 ID 无效连线 → 工具回包/native toolResult/快照 toolResult/下一 Provider tool 结果均不含该路径，结构下标可定位，零写入。PASS。（模型提交的 toolCall 参数本身含输入路径属原始输入，非错误回包泄露。）
+4. **已知 scenario 校验被中性兜底（B2/B3）**：`parseStrategyScenarioModel` 生成 camelCase 码（如 `invalid_scenario_baselineRate`）不匹配 IPC 小写白名单 → `host_tool_failed`。修复：scenario 码统一 snake_case（`invalid_scenario_baseline_rate` 等，数据字段名不变），工具链与 HTTP 均保留稳定原因。反例：`scenarioModel.baselineRate=-1` → 工具链收到 `invalid_scenario_baseline_rate`（非 host_tool_failed）、零写入；修正 baselineRate=10 保存一版取得 candidate-not-adopted。既有 simulation 断言随稳定码更新。PASS。
+5. **共享入口静默停止（作用域）**：止损原作用于所有 strategy-discussion profile（含 business-role project-sources/goal-draft），后者 UI 不呈现该诊断 → 静默取消。修复：止损作用域收回已确认的战略共创全量工具（`loopGuard = !workspace.discussionTools`），business-role 变体不纳入计数/取消，亦不声明 sequential。反例：project-sources 变体 8 次相同 read-source → completed、无 loop 诊断。PASS。战略共创主面板 alert/重载恢复经浏览器点验仍通过。
+
+返工验证：止损反例 10/10、错误契约返工反例 PASS、地图/共享 IPC/UI 65/65、simulation 6/6、战略 host/runtime/goal-proposal/pm01/workbench 套件 PASS。返工后最终全量 `npm run check`：**PASS**（boundary && test && build，3154 项 3043 通过 / 0 失败 / 111 跳过）；`npm run typecheck` PASS；浏览器点验 `node tests/browser-issue-115-strategy-loop.mjs` **PASS**（providerRequests=7、pageErrors=[]，止损 alert/重载恢复/路径提示/窄屏）。真实 MiniMax/GLM/试用轮根因仍 NOT_PROVED。返工候选 SHA 与独立重验见 Issue 返工回执。
