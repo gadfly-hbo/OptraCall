@@ -31,7 +31,7 @@ export interface InitiativeMainSession {
   sessionFile?: string;
   revision: number;
   createOperationId: string;
-  pendingInput?: { requestId: string; text: string; expectedRevision: number };
+  pendingInput?: { requestId: string; text: string; expectedRevision: number; proposalId?: string };
   lastRun?: { id: string; fingerprint: string; status: string };
   createdAt: string;
   updatedAt: string;
@@ -51,7 +51,7 @@ export function createStrategyInitiativeHost(options: {
   initiatives: StrategyInitiativeStore;
   reports: StrategyInitiativeReports;
   files: StrategyInitiativeFiles;
-  candidates: { version(id: string, cid: string, no: number): CandidateVersion; list(id: string, scopeKey?: string): CandidateVersion[]; proposal(id: string, proposalId: string): RevisionProposal | undefined; markProposed(id: string, proposalId: string, newText: string, requestId: string): Promise<RevisionProposal> };
+  candidates: { version(id: string, cid: string, no: number): CandidateVersion; list(id: string, scopeKey?: string): CandidateVersion[]; proposal(id: string, proposalId: string): RevisionProposal | undefined; markProposed(id: string, proposalId: string, newText: string, requestId: string): Promise<RevisionProposal>; markTerminal(id: string, proposalId: string, status: 'ended' | 'failed'): Promise<void> };
   codeRoot: string;
   configuration(id?: string, revision?: number): Readonly<RuntimeModelConfiguration> | null | undefined;
   mutate<T>(fn: () => T | Promise<T>): Promise<T>;
@@ -209,6 +209,11 @@ export function createStrategyInitiativeHost(options: {
     fail('role_action_unavailable', 403);
   }
 
+  async function markProposalTerminal(id: string, proposalId: string, status: 'ended' | 'failed') {
+    if (reports.proposal(id, proposalId)) { reports.markTerminal(id, proposalId, status); return; }
+    await candidates.markTerminal(id, proposalId, status);
+  }
+
   async function create(id: string, input: Record<string, unknown>): Promise<InitiativeMainSession> {
     const initiative = initiatives.get(id);
     if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'scope', 'configurationId'].includes(key))) fail('strategy_initiative_session_fields_invalid', 400);
@@ -297,7 +302,7 @@ export function createStrategyInitiativeHost(options: {
     };
     const prompt = JSON.stringify(contextBody) + '\n\n用户本轮原话：\n' + originalUserText;
     if (prompt.length > 65536) fail('strategy_initiative_materials_too_large', 413);
-    owner = {...owner, revision: owner.revision + 1, updatedAt: new Date().toISOString(), lastRun: {id: requestId, fingerprint, status: 'accepted'}, pendingInput: {requestId, text: originalUserText, expectedRevision: Number(input.expectedRevision)}};
+    owner = {...owner, revision: owner.revision + 1, updatedAt: new Date().toISOString(), lastRun: {id: requestId, fingerprint, status: 'accepted'}, pendingInput: {requestId, text: originalUserText, expectedRevision: Number(input.expectedRevision), ...(typeof input.proposal === 'string' ? {proposalId: input.proposal} : {})}};
     await options.mutate(() => {
       const file = readSessions(id);
       const latest = file.sessions.find(s => s.scopeKey === scopeKey);
@@ -361,9 +366,11 @@ export function createStrategyInitiativeHost(options: {
           writeSessions(id, file);
         }
       });
+      if (typeof input.proposal === 'string') await markProposalTerminal(id, input.proposal, result.outcome === 'completed' ? 'ended' : 'failed');
     });
     void execution.catch(async e => {
       reject(e);
+      if (typeof input.proposal === 'string') await markProposalTerminal(id, input.proposal, 'failed').catch(() => {});
       try {
         await options.mutate(() => {
           const file = readSessions(id);

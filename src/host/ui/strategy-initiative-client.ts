@@ -100,7 +100,8 @@ export const readInitiativeHistory = (id: string) => request<InitiativeHistory>(
 export async function sha256Text(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
-}export interface RevisionProposalView { proposalId: string; target: { kind: 'report'; no: number } | { kind: 'candidate'; candidateId: string; no: number }; blockId: string; request: string; baselineSha256: string; newText?: string; status: 'pending' | 'proposed' | 'adopted'; at: string; updatedAt: string }
+}
+export interface RevisionProposalView { proposalId: string; target: { kind: 'report'; no: number } | { kind: 'candidate'; candidateId: string; no: number }; blockId: string; request: string; baselineSha256: string; newText?: string; status: 'pending' | 'proposed' | 'adopted' | 'ended' | 'failed'; at: string; updatedAt: string }
 export const proposeReportRevision = (id: string, no: number, scopeKey: string, input: { operationId: string; blockId: string; request: string }) => request<{ proposal: RevisionProposalView; requestId: string }>(`${path(id)}/reports/${no}/revise-proposal${scopeQuery(scopeKey)}`, 'POST', input);
 export const proposeCandidateRevision = (id: string, cid: string, no: number, input: { operationId: string; blockId: string; request: string }) => request<{ proposal: RevisionProposalView; requestId: string }>(`${candidatePath(id, cid, no)}/revise-proposal`, 'POST', input);
 export const readProposal = (id: string, proposalId: string) => request<{ proposal: RevisionProposalView }>(`${path(id)}/proposals?proposalId=${encodeURIComponent(proposalId)}`);

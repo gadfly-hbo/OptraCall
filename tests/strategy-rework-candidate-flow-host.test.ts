@@ -123,3 +123,44 @@ test('真实 Host+Pi：对话式限定修改（意图→Agent 拟改→核对采
   assert.deepEqual((await req(`${base}/candidates/${a.candidateId}/versions/1/revise`, 'POST', reviseInput, 201)).candidate, cv2);
   assert.deepEqual(provider.errors, []);
 });
+test('真实 Host+Pi：拟改本轮未提出补丁落终态，连续拟改不被 pending 误拒', {timeout: 150_000}, async t => {
+  const provider = await startToolProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  await req('/api/configuration', 'PUT', {name: '拟改终态', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-propose-end', apiKey: 'synthetic-propose-end'});
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '拟改终态事项', scopes: [stores]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}`;
+  const {report, a} = await setup(req, provider, base);
+
+  provider.setResponder(() => ({text: '本轮没有提出补丁。'}));
+  const endedOp = randomUUID();
+  await req(`${base}/reports/1/revise-proposal?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {operationId: endedOp, blockId: 'diagnosis', request: '请拟改。'}, 202);
+  let ended: any;
+  for (let n = 0; n < 500; n++) { ended = (await req(`${base}/proposals?proposalId=${endedOp}`)).proposal; if (ended.status !== 'pending') break; await delay(20); }
+  assert.equal(ended.status, 'ended', 'turn ended without a patch reaches a terminal state');
+  assert.equal(ended.newText, undefined);
+
+  const op1 = randomUUID();
+  provider.setResponder((ctx: any) => ctx.recentToolResults.length
+    ? {text: '拟改已提交。'}
+    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-propose-revision', proposalId: op1, newText: '第一次拟改文本。'}}]});
+  await req(`${base}/reports/1/revise-proposal?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {operationId: op1, blockId: 'diagnosis', request: '第一次拟改。'}, 202);
+  let p1: any;
+  for (let n = 0; n < 500; n++) { p1 = (await req(`${base}/proposals?proposalId=${op1}`)).proposal; if (p1.status === 'proposed') break; await delay(20); }
+  assert.equal(p1.status, 'proposed');
+  const op2 = randomUUID();
+  provider.setResponder((ctx: any) => ctx.recentToolResults.length
+    ? {text: '拟改已提交。'}
+    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-propose-revision', proposalId: op2, newText: '第二次拟改文本。'}}]});
+  await req(`${base}/reports/1/revise-proposal?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {operationId: op2, blockId: 'diagnosis', request: '紧接着第二次拟改。'}, 202);
+  let p2: any;
+  for (let n = 0; n < 500; n++) { p2 = (await req(`${base}/proposals?proposalId=${op2}`)).proposal; if (p2.status === 'proposed') break; await delay(20); }
+  assert.equal(p2.status, 'proposed', 'consecutive proposal right after a saved patch is not blocked by pending');
+  assert.notEqual(p2.newText, p1.newText);
+  assert.deepEqual(provider.errors, []);
+});

@@ -297,6 +297,14 @@ export class StrategyInitiativeReports {
     proposal.updatedAt = new Date().toISOString();
     this.write(id, file);
   }
+  markTerminal(id: string, proposalId: string, status: 'ended' | 'failed'): void {
+    const file = this.read(id);
+    const proposal = file.proposals.find(p => p.proposalId === proposalId);
+    if (!proposal || proposal.status !== 'pending') return;
+    proposal.status = status;
+    proposal.updatedAt = new Date().toISOString();
+    this.write(id, file);
+  }
 }
 export function reportBlockText(fields: KickoffFields, blockId: string): string | undefined {
   const segments = blockId.split(':');

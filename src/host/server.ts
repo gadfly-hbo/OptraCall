@@ -1208,10 +1208,25 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const strategyInitiatives=new StrategyInitiativeStore(dataRoot);
   const strategyInitiativeFiles=new StrategyInitiativeFiles(strategyInitiatives);
   const strategyKickoffReports=new StrategyInitiativeReports(strategyInitiatives,strategyInitiativeFiles);
-  const strategyInitiativeSessions=createStrategyInitiativeHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no),list:(id,scopeKey)=>strategyCandidates.list(id,scopeKey),proposal:(id,pid)=>strategyCandidates.proposal(id,pid),markProposed:(id,pid,newText,requestId)=>strategyCandidates.markProposed(id,pid,newText,requestId)},codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
+  const strategyInitiativeSessions=createStrategyInitiativeHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no),list:(id,scopeKey)=>strategyCandidates.list(id,scopeKey),proposal:(id,pid)=>strategyCandidates.proposal(id,pid),markProposed:(id,pid,newText,requestId)=>strategyCandidates.markProposed(id,pid,newText,requestId),markTerminal:(id,pid,status)=>strategyCandidates.markTerminal(id,pid,status)},codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyCandidates=createStrategyCandidateHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyVerifications=createStrategyVerificationHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no),busy:(id,cid,no)=>strategyCandidates.busy(id,cid,no),markReturned:(id,cid,no,batchId)=>strategyCandidates.markReturned(id,cid,no,batchId)},codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyInitiativePublications=createStrategyInitiativePublications({initiatives:strategyInitiatives,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no)},verifications:{passCredentials:(id,cid,no)=>strategyVerifications.passCredentials(id,cid,no)},goals:{create:input=>strategyGoals.create(input),getOperation:id=>strategyGoals.getOperation(id),operationContext:receipt=>strategyGoals.operationContext(receipt as import('./strategy-goals-types.ts').GoalOperationReceipt),read:ref=>strategyGoals.read(ref)},validateGoal:(input,target)=>validateStrategyGoal(input,target),mutate});
+  const proposalReplacement = async (id: string, scopeKey: string): Promise<string | undefined> => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      let s;
+      try { s = strategyInitiativeSessions.session(id, scopeKey); } catch { return undefined; }
+      if (!s.pendingInput) return undefined;
+      const pid = s.pendingInput.proposalId;
+      if (!pid) throw new StrategyDiscussionFault('strategy_initiative_pending_request');
+      const proposal = strategyKickoffReports.proposal(id, pid) ?? strategyCandidates.proposal(id, pid);
+      if (!proposal || proposal.status === 'pending') throw new StrategyDiscussionFault('strategy_initiative_pending_request');
+      const ref = strategyInitiativeSessions.domain.ref(s);
+      if (!strategyInitiativeSessions.domain.busy(ref) && !strategyInitiativeSessions.domain.live(ref)) return s.pendingInput.requestId;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new StrategyDiscussionFault('strategy_initiative_pending_request');
+  };
   strategyMapImports=createStrategyMapImportService({dataRoot,codeRoot:options.cwd,attachments:strategyAttachments,projects,owner:id=>strategyDiscussions.store.get(id),configuration:(id,revision)=>availableConfiguration(id,revision),mutate,
     writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
   });
@@ -2759,7 +2774,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if(!scope)throw new StrategyDiscussionFault('strategy_initiative_scope_unknown');
           const proposal=await strategyCandidates.createProposal(id,cid!,no,input);
           let session;try{session=strategyInitiativeSessions.session(id,candidate.scopeKey);}catch{session=await strategyInitiativeSessions.create(id,{operationId:randomUUID(),scope});}
-          const ack=await strategyInitiativeSessions.send(id,candidate.scopeKey,{requestId:randomUUID(),text:`限定修改拟议：${proposal.request}`,expectedRevision:session.revision,proposal:proposal.proposalId});
+          const replace=await proposalReplacement(id,candidate.scopeKey);
+          const ack=await strategyInitiativeSessions.send(id,candidate.scopeKey,{requestId:randomUUID(),text:`限定修改拟议：${proposal.request}`,expectedRevision:session.revision,proposal:proposal.proposalId,...(replace?{replacePendingRequestId:replace}:{})});
           json(response,202,{proposal,requestId:ack.requestId});return;
         }
         if(action==='verify'&&request.method==='POST'){const input=await body(request);json(response,202,await strategyVerifications.start(id,cid!,no,input));return;}
@@ -2825,7 +2841,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if(!scope)throw new StrategyDiscussionFault('strategy_initiative_scope_unknown');
           const proposal=await mutate(()=>strategyKickoffReports.createProposal(id,no,input as Parameters<typeof strategyKickoffReports.createProposal>[2]));
           let session;try{session=strategyInitiativeSessions.session(id,scopeKey);}catch{session=await strategyInitiativeSessions.create(id,{operationId:randomUUID(),scope});}
-          const ack=await strategyInitiativeSessions.send(id,scopeKey,{requestId:randomUUID(),text:`限定修改拟议：${proposal.request}`,expectedRevision:session.revision,proposal:proposal.proposalId});
+          const replace=await proposalReplacement(id,scopeKey);
+          const ack=await strategyInitiativeSessions.send(id,scopeKey,{requestId:randomUUID(),text:`限定修改拟议：${proposal.request}`,expectedRevision:session.revision,proposal:proposal.proposalId,...(replace?{replacePendingRequestId:replace}:{})});
           json(response,202,{proposal,requestId:ack.requestId});return;
         }
       }

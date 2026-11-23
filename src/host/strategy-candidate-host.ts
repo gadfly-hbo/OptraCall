@@ -483,9 +483,19 @@ export function createStrategyCandidateHost(options: {
       return structuredClone(proposal);
     });
   }
+  function markTerminal(id: string, proposalId: string, status: 'ended' | 'failed') {
+    return options.mutate(() => {
+      const file = readFile(id);
+      const proposal = file.proposals.find(p => p.proposalId === proposalId);
+      if (!proposal || proposal.status !== 'pending') return;
+      proposal.status = status;
+      proposal.updatedAt = new Date().toISOString();
+      writeFile(id, file);
+    });
+  }
 
   return {
-    domain, create, send, detail, version, lock, revise, createProposal, proposal, markProposed,
+    domain, create, send, detail, version, lock, revise, createProposal, proposal, markProposed, markTerminal,
     busy(id: string, candidateId: string, no: number) { return domain.busy(domain.ref(version(id, candidateId, no))); },
     async markReturned(id: string, candidateId: string, no: number, batchId: string) {
       await options.mutate(() => {

@@ -488,6 +488,10 @@ export function ReviseDialog<T>({ title, baseLabel, baseSha256, targets, maxText
       void readProposal(proposalId).then(result => {
         if (cancelled || !alive.current) return;
         if (result.proposal.status === 'proposed' && result.proposal.newText) { setProposedText(result.proposal.newText); setStep('diff'); }
+        else if (result.proposal.status === 'ended' || result.proposal.status === 'failed') {
+          setError(result.proposal.status === 'ended' ? 'Agent 本轮结束但未提出补丁；原稿未改动。可修改意图后继续拟改。' : '本轮拟改失败；原稿未改动。可修改意图后继续拟改。');
+          setStep('intent');
+        }
       }).catch(fault => { if (!cancelled && alive.current) { setError(errorText(fault)); setStep('intent'); } });
     }, 2000);
     return () => { cancelled = true; clearInterval(timer); };

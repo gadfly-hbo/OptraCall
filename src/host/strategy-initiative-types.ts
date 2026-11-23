@@ -61,7 +61,7 @@ export interface RevisionProposal {
   request: string;
   baselineSha256: string;
   newText?: string;
-  status: 'pending' | 'proposed' | 'adopted';
+  status: 'pending' | 'proposed' | 'adopted' | 'ended' | 'failed';
   requestId?: string;
   at: string;
   updatedAt: string;
