@@ -43,6 +43,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { StrategyGoalsStore, StrategyGoalsError, goalContentSha256, parseGoalRoleSuggestion } from './strategy-goals-store.ts';
 import { strategyWorkbookRoutes,checkWorkbookSource } from './strategy-workbook-routes.ts';
 import { StrategyMapPublicationStore } from './strategy-map-publication-store.ts';
+import { StrategyInitiativeStore } from './strategy-initiative-store.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
@@ -1194,6 +1195,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     },configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,verifyGoalContext:verifyFrozenGoalContext,verifyArrangement:verifyGoalOperationArrangement,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{...page,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}};
   const strategyDiscussions=createStrategyDiscussionHost(discussionOptions);
   const strategyMapPublications=new StrategyMapPublicationStore(strategyDiscussions.store);
+  const strategyInitiatives=new StrategyInitiativeStore(dataRoot);
   strategyMapImports=createStrategyMapImportService({dataRoot,codeRoot:options.cwd,attachments:strategyAttachments,projects,owner:id=>strategyDiscussions.store.get(id),configuration:(id,revision)=>availableConfiguration(id,revision),mutate,
     writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
   });
@@ -2714,6 +2716,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           for(const event of queued)writeEvent(event);
           return;
         }
+      }
+      if(url.pathname==='/api/strategy/initiatives'){
+        if(request.method==='GET'){json(response,200,{initiatives:strategyInitiatives.list()});return;}
+        if(request.method==='POST'){const input=await body(request);json(response,201,{initiative:await mutate(()=>strategyInitiatives.create(input as unknown as import('./strategy-initiative-types.ts').StrategyInitiativeCreate))});return;}
+      }
+      const initiativeRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})$/.exec(url.pathname);
+      if(initiativeRoute){
+        const id=initiativeRoute[1]!;
+        if(request.method==='GET'){json(response,200,{initiative:strategyInitiatives.get(id)});return;}
+        if(request.method==='PATCH'){const input=await body(request);json(response,200,{initiative:await mutate(()=>strategyInitiatives.update(id,input as unknown as import('./strategy-initiative-types.ts').StrategyInitiativeUpdate))});return;}
       }
       const workbookRoute=/^\/api\/strategy\/workbooks\/(preview|commit|handoff|map-source|goal-source)$/.exec(url.pathname);
       if(workbookRoute && request.method==='POST'){
