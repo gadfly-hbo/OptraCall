@@ -225,7 +225,7 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       if (controller.signal.aborted || !alive.current) return;
       const previous = presentedSnapshot.current;
       if (event.type === 'snapshot' && event.snapshot) { presentedSnapshot.current = event.snapshot; setSession(old => old ? { ...old, snapshot: event.snapshot, busy: event.snapshot.status === 'running' } : old); }
-      setStreaming(old => projectDiscussionStreaming(old, { ...event, snapshot: event.snapshot ?? { sessionId: '', messages: [], tools: [], status: 'idle', sdkVersion: '', capabilities: {} } }, previous ?? undefined));
+      setStreaming(old => projectDiscussionStreaming(old, event.type === 'snapshot' ? { ...event, snapshot: event.snapshot ?? { sessionId: '', messages: [], tools: [], status: 'idle', sdkVersion: '', capabilities: {} } } as any : event, previous ?? undefined));
       if (event.type === 'native' && event.event.type === 'tool_execution_start') setActivity(`正在使用 ${event.event.toolName || '已获准工具'}`);
       if (event.type === 'native' && event.event.type === 'tool_execution_end') setActivity('');
       if (event.type === 'run.settled') { setStreaming(''); setActivity(''); if (event.outcome === 'failed') setError(event.error || '本轮讨论未完成，已保存的记录保留。'); rememberPending(null); void refresh(); }
