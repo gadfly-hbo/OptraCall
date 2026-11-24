@@ -205,6 +205,28 @@ test('a protected close failure stays occupied until an explicit close establish
   assert.equal(h.domain.busy(ref), false);
 });
 
+test('only a finished, quarantined request exposes its identity for explicit task cleanup', async () => {
+  const h = harness(undefined, { ...scope, profile: 'ordinary' });
+  const ref = h.domain.ref('p/t'), other = h.domain.ref('p/other');
+  await h.domain.open(ref);
+  h.agents[0].closeError = true;
+  await assert.rejects(h.domain.withSession(ref, async lease => {
+    const run = lease.start({ requestId: 'original', text: 'synthetic' });
+    assert.equal(h.domain.executionState(ref).cleanupRequestId, undefined);
+    await run.completion;
+  }), /termination unknown/);
+  assert.equal(h.domain.executionState(ref).cleanupRequestId, 'original');
+  assert.equal(h.domain.executionState(other).cleanupRequestId, undefined);
+  await h.domain.read(ref);
+  assert.equal(h.agents[0].closed, 1, 'observation cannot retry cleanup');
+  await assert.rejects(h.domain.close(ref), /session_close_failed/);
+  assert.equal(h.domain.busy(ref), true);
+  h.agents[0].closeError = false;
+  await h.domain.close(ref);
+  assert.equal(h.domain.executionState(ref).cleanupRequestId, undefined);
+  assert.equal(h.domain.busy(ref), false);
+});
+
 test('execution permits cannot cross owners or replace an in-flight turn', async () => {
   const h = harness(), ar = h.domain.ref('p/a'), br = h.domain.ref('p/b');
   await h.domain.withSession(ar, async lease => {

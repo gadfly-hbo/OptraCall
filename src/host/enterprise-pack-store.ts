@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { digest, fail, identity, object, sourceRef, sources, StudioError, text, uuid } from '../../extensions/business-plugins/studio/validation.ts';
+import { decisionChoiceIssue } from '../../extensions/business-plugins/studio/enterprise-pack-decisions.ts';
 import type { StudioSourceRef } from '../../extensions/business-plugins/studio/contracts.ts';
 import {
   computeUpgradeImpact,
@@ -44,6 +46,14 @@ type StoredPackIndex = { schemaVersion: 1; packs: EnterpriseDomainPack[] };
 const MAX_BYTES = 32 * 1024 * 1024;
 const now = () => new Date().toISOString();
 const clone = <T>(value: T): T => structuredClone(value);
+
+function checkDecisionChoices(value: unknown): void {
+  const issue = decisionChoiceIssue(value);
+  if (issue) fail('invalid_purpose_field', 400, {
+    message: `${issue.path} 格式有误。经营取舍需提供 id、question，以及含 key、label 和 impact 的 options 数组；允许暂不选择。请修正原用途草案。`,
+    details: { issues: [issue] },
+  });
+}
 
 function feedbackSourceRead(read: EnterprisePackFeedbackSourceRead): EnterprisePackFeedbackSourceRead {
   const ref = sourceRef(read.ref);
@@ -652,12 +662,7 @@ export class EnterprisePackStore {
       };
     }
 
-    if (input.decisionChoices !== undefined && !Array.isArray(input.decisionChoices)) {
-      fail('invalid_purpose_field', 400, {
-        message: 'payload.decisionChoices 必须是数组；每项包含 id、question 与 options。',
-        details: { issues: [{ reason: 'expected_array', path: 'payload.decisionChoices' }] },
-      });
-    }
+    if (input.decisionChoices !== undefined) checkDecisionChoices(input.decisionChoices);
     if (input.evidenceReadiness !== undefined && !object(input.evidenceReadiness)) {
       fail('invalid_purpose_field', 400, {
         message: 'payload.evidenceReadiness 必须是对象（包含 definition、mapping、sampleCalculation 状态）。',
@@ -710,20 +715,11 @@ export class EnterprisePackStore {
         }
       }
     }
-    if (Array.isArray(raw.evidenceNotes) && raw.evidenceNotes.length > 0) {
-      const isVerbatimRoundTrip = Boolean(existing)
-        && raw.evidenceNotes.length === existing!.evidenceNotes.length
-        && raw.evidenceNotes.every((item, idx) =>
-          object(item)
-          && item.id === existing!.evidenceNotes[idx]!.id
-          && item.note === existing!.evidenceNotes[idx]!.note,
-        );
-      if (!isVerbatimRoundTrip) {
-        fail('invalid_purpose_evidence_note_key', 400, {
-          message: '输入不支持复数存储字段 payload.evidenceNotes；请改用单数对象字段 payload.evidenceNote（{ projectId, taskId?, note, sourceRefs }）后重试。本次未写入。',
-          details: { issues: [{ reason: 'use_singular_evidence_note', path: 'payload.evidenceNotes' }] },
-        });
-      }
+    if (Array.isArray(raw.evidenceNotes) && !isDeepStrictEqual(raw.evidenceNotes, existing?.evidenceNotes ?? [])) {
+      fail('invalid_purpose_evidence_note_key', 400, {
+        message: '输入不支持复数存储字段 payload.evidenceNotes；请改用单数对象字段 payload.evidenceNote（{ projectId, taskId?, note, sourceRefs }）后重试。本次未写入。',
+        details: { issues: [{ reason: 'use_singular_evidence_note', path: 'payload.evidenceNotes' }] },
+      });
     }
     const originalGoal = existing
       ? (input.originalGoal !== undefined ? checkText(input.originalGoal, 'payload.originalGoal', 5000, false) : existing.originalGoal)
@@ -818,7 +814,9 @@ export class EnterprisePackStore {
         if (input.dataCutoffAt) existing.dataCutoffAt = input.dataCutoffAt;
         if (input.observationWindowDays !== undefined) existing.observationWindowDays = input.observationWindowDays;
         if (input.availableHistoryDays !== undefined) existing.availableHistoryDays = input.availableHistoryDays;
-        if (input.decisionChoices?.length) existing.decisionChoices = input.decisionChoices;
+        if (input.decisionChoices && (input.decisionChoices.length || (explicitTarget && decisionChoiceIssue(existing.decisionChoices)))) {
+          existing.decisionChoices = input.decisionChoices;
+        }
         if (ownerRole) existing.ownerRole = ownerRole;
         if (input.taskOwner) {
           const ownerKey = `${input.taskOwner.projectId}:${input.taskOwner.taskId}`;
@@ -982,6 +980,7 @@ export class EnterprisePackStore {
         if (!purpose) fail('enterprise_pack_purpose_not_found', 404);
 
         // Apply any submitted decision choices and validate required choices & explicit decider
+        checkDecisionChoices(purpose.decisionChoices);
         for (const choice of purpose.decisionChoices) {
           const submitted = input.decisions?.find(d => d.purposeId === pid && d.choiceId === choice.id);
           const chosenKey = (submitted?.selectedKey ?? choice.selectedKey ?? '').trim();
@@ -1122,6 +1121,10 @@ export class EnterprisePackStore {
     if (preview.confirmedAt) {
       const existingRevision = pack.packRevisions.find(r => r.previewId === preview.id);
       if (existingRevision) return { pack, preview, existingRevision };
+    }
+    for (const id of preview.purposeIds) {
+      const purpose = pack.purposes.find(item => item.id === id);
+      if (purpose) checkDecisionChoices(purpose.decisionChoices);
     }
     // Reject if ANOTHER preview has already published this version number!
     if (pack.packRevisions.some(r => r.version === preview.version)) {

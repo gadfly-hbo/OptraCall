@@ -1,7 +1,7 @@
 import type { Outcome } from './events.ts';
 import { approvedTaskSkills } from '../host/task-assignment.ts';
 
-export type RunDiagnosticCode = 'authentication_failed' | 'rate_limited' | 'request_terminated' | 'request_failed' | 'http_body_timeout' | 'http_headers_timeout' | 'http_connect_timeout' | 'http_connection_closed' | 'command_failed' | 'runtime_stopped' | 'runtime_start_failed' | 'runtime_start_timeout' | 'cancelled' | 'strategy_action_loop' | 'completed_after_retry' | 'verification_source_changed' | 'verification_source_missing' | 'task_skill_version_changed' | 'task_skill_unavailable';
+export type RunDiagnosticCode = 'authentication_failed' | 'rate_limited' | 'request_terminated' | 'request_failed' | 'http_body_timeout' | 'http_headers_timeout' | 'http_connect_timeout' | 'http_connection_closed' | 'command_failed' | 'runtime_stopped' | 'runtime_start_failed' | 'runtime_start_timeout' | 'native_run_start_rejected' | 'cancelled' | 'strategy_action_loop' | 'completed_after_retry' | 'verification_source_changed' | 'verification_source_missing' | 'task_skill_version_changed' | 'task_skill_unavailable';
 export type RunDiagnostic = { code: RunDiagnosticCode; stage: 'native_request' | 'native_command' | 'runtime'; message: string; retryCount: number };
 const fixedTaskSkills = Object.values(approvedTaskSkills).flatMap(skill => skill ? [`${skill.id} ${skill.version}`] : []).join('、');
 export const taskSkillVersionChangedMessage = `默认 Skill 的版本或文件与任务固定版本不一致。请恢复 ${fixedTaskSkills} 后重试，或编辑任务并明确取消该 Skill；无需删除其他同名用户 Skill。`;
@@ -18,6 +18,7 @@ const messages: Record<RunDiagnosticCode, string> = {
   runtime_stopped: '原生运行进程已停止，执行结果需核对。',
   runtime_start_failed: '原生运行环境未能启动。',
   runtime_start_timeout: '等待原生运行环境启动超时。',
+  native_run_start_rejected: '发送未获 Host 接受。原会话暂时无法写入，请恢复写入权限后再手动发送。',
   cancelled: '本次操作已取消。',
   strategy_action_loop: '本轮连续重复同一读取动作且没有新进展，已自动停止。这不代表资料缺失或不可读，模型可能误报为资料问题。请先核对本轮已保存的结果；如需继续，可在讨论设置中改用另一已配置模型后重新发送。',
   completed_after_retry: '本次操作经原生重试后完成。',
@@ -55,7 +56,7 @@ export function runtimeDiagnostic(error: unknown): RunDiagnostic {
   const observed: RunDiagnosticCode = causeMessage === 'task_skill_version_changed' || causeMessage === 'task_skill_unavailable' ? causeMessage
     : code === 'verification_source_changed' || code === 'verification_source_missing' ? code
     : code === 'runtime_process_stopped' || code === 'runtime_closed' ? 'runtime_stopped'
-    : code === 'runtime_start_failed' || code === 'runtime_start_timeout' ? code : 'request_failed';
+    : code === 'runtime_start_failed' || code === 'runtime_start_timeout' || code === 'native_run_start_rejected' ? code : 'request_failed';
   return diagnostic(observed, 'runtime', 0);
 }
 

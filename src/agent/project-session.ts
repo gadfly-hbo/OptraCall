@@ -55,6 +55,7 @@ function noteStrategyRead(run: ActiveRun, action: string, fingerprint: string) {
 type RunResult = { outcome: Outcome; text: string; result?: unknown; snapshot: ProjectSnapshot; diagnostic?: RunDiagnostic; publicSearch?: PublicNativeSearchResult & { requestId: string }; reportCalculationReview?: ReportCalculationRunReceipt };
 const RUN_ENTRY = 'optracall.run';
 const EXECUTION_ENTRY = 'optracall.execution';
+class NativeRunStartRejected extends Error {}
 const PI_1_4_0_DEFAULT_ROLE = 'You are an expert coding assistant operating inside pi, a coding agent harness.';
 const PI_1_4_0_DEFAULT_PREAMBLE = `${PI_1_4_0_DEFAULT_ROLE} You help users by reading files, executing commands, editing code, and writing new files.\n\n`;
 const OPTRACALL_ROLE = "You are OptraCall's analysis and decision-support assistant running on Pi.";
@@ -104,7 +105,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   const retireChildren = foreground.retireAll;
   // Resource lifetime state deliberately survives SDK extension reload/fork within this worker.
   const connectorDirectories = new Map<string, { digest?: string; frozen: boolean }>();
-  const executionBindings = new Map<string, { manager: SessionManager; file: string; cwd: string; closed: boolean }>();
+  const executionBindings = new Map<string, { manager: SessionManager; file: string; cwd: string; closed: boolean; reloadJournal?: boolean }>();
   const personalRequests = new Map<string, { resolve: (result: unknown) => void; reject: (error: Error) => void }>();
   function rejectPersonalRequests() { for (const pending of personalRequests.values()) pending.reject(new Error('personal_context_run_unavailable')); personalRequests.clear(); }
   function qualifyToolInvocation(target: AgentSession, ctx: ExtensionToolContext, signal: AbortSignal | undefined) {
@@ -144,14 +145,32 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       // Close only journals actually bound to this execution, through the SDK,
       // rather than writing an old identity into the newly selected branch.
       let writer = binding.manager;
-      if (writer.getSessionId() !== sessionId || writer.getSessionFile() !== binding.file) {
+      if (binding.reloadJournal || writer.getSessionId() !== sessionId || writer.getSessionFile() !== binding.file) {
         const original = readFileSync(binding.file, 'utf8'), header = JSON.parse(original.slice(0, original.indexOf('\n')));
         if (!original.endsWith('\n') || header.type !== 'session' || header.version !== 3 || header.id !== sessionId || header.cwd !== binding.cwd) throw new Error('managed_native_changed');
         writer = SessionManager.open(binding.file, options.sessionDirectory, binding.cwd);
+        if (binding.reloadJournal) {
+          // The SDK updates its in-memory leaf before appending. A failed append
+          // must not leave the next receipt parented to an unpersisted entry.
+          const phases = writer.getEntries().flatMap(entry => {
+            if (entry.type !== 'custom' || entry.customType !== EXECUTION_ENTRY) return [];
+            const data = entry.data as Record<string, unknown> | undefined;
+            return data?.version === 1 && data.executionId === executionId && data.sessionId === sessionId && data.scopeId === protectedTools?.scope.id ? [data.phase] : [];
+          });
+          if (!phases.includes('opened')) throw new Error('managed_native_changed');
+          if (phases.includes('closed')) {
+            syncExecutionJournal(writer); binding.closed = true; continue;
+          }
+        }
       }
-      writer.appendCustomEntry(EXECUTION_ENTRY, { version: 1, phase: 'closed', executionId, sessionId,
-        scopeId: protectedTools.scope.id, profile: (options.protectedExecution ?? options.memberPackExecutionScope)?.profile ?? 'protected', at: new Date().toISOString() });
-      syncExecutionJournal(writer); binding.closed = true;
+      try {
+        writer.appendCustomEntry(EXECUTION_ENTRY, { version: 1, phase: 'closed', executionId, sessionId,
+          scopeId: protectedTools.scope.id, profile: (options.protectedExecution ?? options.memberPackExecutionScope)?.profile ?? 'protected', at: new Date().toISOString() });
+        syncExecutionJournal(writer); binding.closed = true;
+      } catch (error) {
+        binding.reloadJournal = true;
+        throw error;
+      }
     }
   }
   const send = (value: unknown) => { if (process.connected) process.send?.(value); };
@@ -1034,8 +1053,25 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       run = undefined;
       unacceptedRunIds.add(id);
       const persistedFile = manager!.getSessionFile();
+      const sessionId = manager!.getSessionId();
+      const failure = error as NodeJS.ErrnoException;
+      // An open denied on the first started-marker append cannot have written
+      // any bytes. Partial writes, lost replies and later errors remain unknown.
+      const deniedOpen = kind === 'prompt' && !current.managers.size && persistedFile &&
+        failure?.syscall === 'open' && failure.path === persistedFile &&
+        ['EACCES', 'EPERM', 'EROFS'].includes(failure.code ?? '');
       if (persistedFile && existsSync(persistedFile)) {
-        try { manager!.setSessionFile(persistedFile); session?.refreshContext(); } catch {}
+        let restored = false;
+        try {
+          manager!.setSessionFile(persistedFile);
+          session?.refreshContext();
+          restored = manager!.getSessionId() === sessionId;
+        } catch {}
+        if (deniedOpen && restored && !manager!.getEntries().some(entry =>
+          entry.type === 'custom' && entry.customType === RUN_ENTRY &&
+          (entry.data as { requestId?: string } | undefined)?.requestId === id)) {
+          throw new NativeRunStartRejected('native_run_start_rejected');
+        }
       }
       throw error;
     }
@@ -1182,7 +1218,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       }
       else throw new Error('unknown_method');
       send({ kind: 'reply', id: message.id, result: result === undefined ? null : redact(result) });
-    } catch (error) { send({ kind: 'reply', id: message.id, error: 'sdk_operation_failed', detail: redact({ message: error instanceof Error ? error.message : String(error), code: (error as NodeJS.ErrnoException | undefined)?.code }) }); }
+    } catch (error) { send({ kind: 'reply', id: message.id, error: error instanceof NativeRunStartRejected ? 'native_run_start_rejected' : 'sdk_operation_failed', detail: redact({ message: error instanceof Error ? error.message : String(error), code: (error as NodeJS.ErrnoException | undefined)?.code }) }); }
   })(); });
   process.on('disconnect', () => { if (closing) return; closing = true; void dispose().finally(() => { process.exit(0); }); });
   send({ kind: 'ready' });

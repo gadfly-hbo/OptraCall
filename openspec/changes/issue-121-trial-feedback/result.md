@@ -393,3 +393,18 @@ Qoder 最后交回 `5e9b001c52e3cba6d89c9c1263e80032eb8ade9e`。PM 在合入当�
 - 受影响后端回归套件（16 套：`project-store`、`project-tasks`、`project-runtime`、`project-host`、`task-host`、`task-observation`、`personal-context-*`、`member-operations-pack-*`、`studio-host`、`studio-ui-client`、`strategy-discussion-loop-guard`）：**191 pass / 0 fail / 3 skipped**（退出 0）。
 - `git diff --check f9994cb`：**PASS（0 warnings，退出 0）**。
 - **未覆盖边界**：本云端环境为 Ubuntu 24.04（2 vCPU），macOS `/usr/bin/sandbox-exec` 实机与全仓库 465 文件 `npm run check` / GitHub Actions CI 仍待 PM Agent 在 Mac mini / PR CI 复核；未调用真实付费 LLM，未改动真实业务包/设备/服务。
+
+## Codex 接手后的 Mac mini 复验与修复
+
+接手提交 `e625c03`，整合基线 `f9994cb`。上述各轮结果按其提交和环境保留。[PM 退回的两个场景](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7134764755)均在 macOS Chromium 和隔离 Host/Pi 重现。
+
+| 范围 | 用户路径和验证结果 |
+| --- | --- |
+| 03 普通任务 | 会话拒绝写入后保留可编辑的原稿。新浏览器打开同一任务能读回未受理状态。清理尚未完成时，观察和刷新保持占用；恢复写入后，显式重新连接只清理原请求。用户发送一次，模型收到一次请求，原生会话新增一条用户消息。 |
+| 03 个人选材 | Pi 在登记前打开原日志被拒，重读同一会话核实后，Host 将确定未受理和清理结果分别记录。原页重连后人工发送，所选版本实际进入合成 Provider 请求。网络回执确实未知时按原编号核对和显式重试。完整刷新后，问题草稿按原合同恢复，未发送的选材沿原任务内存规则。 |
+| 04 依据与经营取舍 | 兼容原样回传的依据列表；改变备注来源、项目或删除已有备注时返回字段位置，修订号不变。新草案在写入前核对取舍和选项。旧草案缺少选项时，工作台标出具体用途，允许先发布其他用途。对原用途显式修订后，仍由人选择并确认发布。 |
+| 同单回归 | 实际 Chromium 完成默认 Skill 首次发送、建设归属、草稿恢复、用途修订与发布、实名维护与汇总／明细授权、新任务弹窗的键盘与窄屏检查。另复跑原会员包浏览器套件。 |
+
+两位非作者分别复核规格与工程规范。初审发现无编号停止可能重试清理，以及草案字段校验仍有遗漏，已修复并纳入对应反例。原生文件保全、历史报告、失败与 UNKNOWN 记录保留。本次使用原任务生命周期、原生会话及既有 Studio 资产库，未变更依赖版本或数据 schema。
+
+工程交付以本单的候选、PR head 及合并提交 CI 回执为准。回退可按 Git 回退代码，保留现有业务文件、库及会话。旧界面对清理待核、异常取舍及预览排除的处理仍有本页列出的限制。双端运行采用、真实模型效果及产品验收单列。

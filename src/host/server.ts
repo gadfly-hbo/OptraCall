@@ -1951,7 +1951,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     snapshot.uiRequests = current.pendingUI.map(event => event.request);
     const diagnostic = readRunDiagnostic(task.lastRun?.diagnostic, snapshot.lastRun?.outcome);
     if (diagnostic && snapshot.lastRun && snapshot.lastRun.requestId === task.lastRun?.id) snapshot.lastRun = { ...snapshot.lastRun, diagnostic };
-    snapshot = await presentFrameworkHistory(projectId, taskId, { ...snapshot, status: projectSessions.busy(ref) ? 'running' : 'idle' });
+    const execution = projectSessions.executionState(ref);
+    snapshot = await presentFrameworkHistory(projectId, taskId, { ...snapshot, status: execution.busy ? 'running' : 'idle', ...(execution.cleanupRequestId ? { cleanupRequestId: execution.cleanupRequestId } : {}) });
     return { project: decorateProject(project), task, snapshot };
   }
   async function settleProjectRun(owner: ProjectOwner, context: SessionContext<ProjectOwner>, requestId: string, startedAt: string, result?: Record<string, any>) {
@@ -2459,6 +2460,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
     }
     let accepted = false, terminalContext: SessionContext<ProjectOwner> | undefined, terminalRequestId = requestId;
+    let nativeStartRejection: ProjectRuntimeError | undefined;
     let acknowledge!: (receipt: ProjectMessageReceipt) => void, rejectAcknowledgement!: (error: unknown) => void;
     const acknowledged = new Promise<ProjectMessageReceipt>((resolve, reject) => { acknowledge = resolve; rejectAcknowledgement = reject; });
     const completion = projectSessions.withSession(projectSessions.ref(owner), async lease => {
@@ -2583,7 +2585,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           },
         });
         terminalContext = run.context;
-        await run.accepted;
+        try { await run.accepted; }
+        catch (error) {
+          // The lease may subsequently report a separate cleanup failure. Keep
+          // the worker's definite acknowledgement outcome for this send.
+          if (error instanceof ProjectRuntimeError && error.code === 'native_run_start_rejected') nativeStartRejection = error;
+          throw error;
+        }
         await projects.clearDraftIf(projectId, taskId, input.text as string).catch(() => {});
         accepted = true; acknowledge({ requestId, status: 'running' });
         await mutate(() => recordFeedbackDelivery(projectId,taskId,requestId,fingerprint)).catch(() => {
@@ -2615,7 +2623,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     }).catch(async error => {
       const diagnostic = runtimeDiagnostic(error);
       if (!accepted && (diagnostic.code === 'task_skill_version_changed' || diagnostic.code === 'task_skill_unavailable')) rejectAcknowledgement(new RequestFault(409, diagnostic.code));
-      else rejectAcknowledgement(error);
+      else rejectAcknowledgement(nativeStartRejection ?? error);
       await automatic.operationFinished({ projectId, taskId }, requestId, undefined, error).catch(() => {});
       if (!closing && accepted && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。', diagnostic });
       if (!closing) await taskState(projectId, taskId).then(state => publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot })).catch(() => {});
@@ -3500,8 +3508,18 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             json(response, 202, result); return;
           }
           if (operation === 'stop' && request.method === 'POST') {
-            await body(request); const owner = await pair(projectId, taskId, true);
-            await projectSessions.stop(projectSessions.ref(owner));
+            const input = await body(request), owner = await pair(projectId, taskId, true);
+            const ref = projectSessions.ref(owner);
+            const cleanupRequestId = projectSessions.executionState(ref).cleanupRequestId;
+            if (input.cleanupRequestId !== undefined) {
+              assertCurrentProjectBorrower(request, projectId);
+              if (typeof input.cleanupRequestId !== 'string' || !input.cleanupRequestId) throw new RequestFault(400, 'invalid_request_id');
+              // A stale recovery click must never stop a new turn or another task's work.
+              const matches = input.cleanupRequestId === cleanupRequestId;
+              if (matches) await projectSessions.close(ref);
+              json(response, 200, { stopped: matches }); return;
+            }
+            await projectSessions.stop(ref);
             await Promise.all([verification.stopForTask(projectId, taskId), sapMethodFeature.stopForTask(projectId, taskId), studioSessions?.stopForTask(projectId, taskId)]);
             json(response, 200, { stopped: true }); return;
           }
@@ -3572,6 +3590,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       throw new RequestFault(404, 'not_found');
     } catch (error) {
       const rejectedSend = (statusCode: number) => (messageSendRoute && statusCode >= 400 && statusCode < 500 ? { accepted: false as const } : {});
+      if (messageSendRoute && error instanceof ProjectRuntimeError && error.code === 'native_run_start_rejected') {
+        json(response, 500, { code: 'sdk_operation_failed', accepted: false, message: '原会话暂时无法写入，本次消息未被接受。请恢复写入权限后重试。' }); return;
+      }
       if(error instanceof StrategyDiscussionFault || error instanceof StrategyDiscussionSourceFault){json(response,error.status,{code:error.code,accepted:false,...(error instanceof StrategyDiscussionFault && ['strategy_kickoff_schema_invalid', 'strategy_kickoff_source_invalid'].includes(error.code) && error.details ? {details:error.details} : {}),message:attachmentErrors[error.code]??(error.status===503?'战略讨论或保存结果尚未核实，原输入、选择和操作编号保留；请先只读核对原结果，不要重复创建或自动重试。':error.code==='strategy_discussion_history_scope_changed'?'已读取的历史资料与当前背景范围或排除项不一致，本次未发送给模型。原输入、选择和历史保留；请集中核对资料范围并明确调整，不能把旧会话视为已忘记资料。':error.code==='strategy_discussion_context_changed'?'当前讨论背景或准确版本已变化，本次未继续派发。原输入与选择保留，请集中核对后明确调整。':'战略讨论未完成，原输入和选择保留；请核对目标准确版本、资料权限、模型配置或原操作状态。')});return;}
       if (error instanceof DecisionBoardFault && ['choice_already_arranged', 'arrangement_operation_conflict'].includes(error.code)) {
         const message = error.code === 'choice_already_arranged' ? '本次取舍已有行动安排，请核对原看板。' : '该操作编号已用于另一份行动安排，请核对原操作。';

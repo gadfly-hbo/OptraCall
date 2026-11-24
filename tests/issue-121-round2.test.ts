@@ -571,9 +571,26 @@ test('Item 04 · pack-upsert-purpose returns safe field diagnostics, rejects plu
     requestId: randomUUID(),
     projectId: ownerProject.id,
     ...basePurpose,
+    evidenceNote: { projectId: ownerProject.id, note: '复核门店归属的合成依据', sourceRefs: [] },
   }), 200);
   assert.equal(u1Res.purpose.id, 'U-01');
-  const revBeforeInvalid = u1Res.pack.revision as number;
+  const originalNotes = u1Res.purpose.evidenceNotes;
+  assert.equal(originalNotes.length, 1);
+  const purposeRoute = `/api/studio/enterprise-packs/${pack.id}/purposes`;
+  const updateWithNotes = (evidenceNotes: unknown[]) => boundOwnerReq(purposeRoute, 'POST', {
+    ...basePurpose, targetPurposeId: 'U-01', projectId: ownerProject.id, requestId: randomUUID(), evidenceNotes,
+  });
+  const echoed = await json(await updateWithNotes(originalNotes), 200);
+  assert.deepEqual(echoed.purpose.evidenceNotes, originalNotes);
+  const revBeforeInvalid = echoed.pack.revision as number;
+  for (const changed of [
+    [{ ...originalNotes[0], projectId: 'other-project' }],
+    [{ ...originalNotes[0], sourceRefs: [{ authority: 'studio', id: 'other', version: '1' }] }],
+    [],
+  ]) {
+    const failure = await json(await updateWithNotes(changed), 400);
+    assert.equal(failure.details.issues[0].path, 'payload.evidenceNotes');
+  }
 
   // 1. Missing title -> safe path payload.title, zero write
   const missingTitleRes = await boundOwnerReq(`/api/studio/enterprise-packs/${pack.id}/purposes`, 'POST', {
@@ -659,8 +676,9 @@ test('Item 04 · pack-upsert-purpose returns safe field diagnostics, rejects plu
   assert.equal(fixedRes.created, false);
   assert.equal(fixedRes.purpose.id, 'U-01');
   assert.equal(fixedRes.pack.revision, revBeforeInvalid + 1);
-  assert.equal(fixedRes.purpose.evidenceNotes.length, 1);
-  assert.equal(fixedRes.purpose.evidenceNotes[0].note, '已按单数 evidenceNote 保存核验备注');
+  assert.equal(fixedRes.purpose.evidenceNotes.length, originalNotes.length + 1);
+  assert.deepEqual(fixedRes.purpose.evidenceNotes.slice(0, -1), originalNotes);
+  assert.equal(fixedRes.purpose.evidenceNotes.at(-1).note, '已按单数 evidenceNote 保存核验备注');
 
   // 8. Create an erroneous extra draft U-02, exclude U-02 from preview, verify preview & publication contain ONLY U-01 while U-02 & history stay intact
   const u2Res = await json(await boundOwnerReq(`/api/studio/enterprise-packs/${pack.id}/purposes`, 'POST', {
@@ -975,12 +993,14 @@ test('Item 03 · Pre-acceptance 409 returns accepted:false keeping draft intact;
     });
     const writeFailBody = await json(writeFailRes, 500);
     assert.equal(writeFailBody.code, 'sdk_operation_failed');
+    assert.equal(writeFailBody.accepted, false, 'OS denied opening the native journal before Pi accepted this request');
     assert.equal(provider.requests.length, providerCountBefore, 'Model provider must receive ZERO requests when native session write fails before run.accepted');
 
     const afterFail = await json(await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}`), 200);
     assert.equal(afterFail.task.draft, writeFailPrompt, 'Original saved draft MUST remain intact when Pi native session write fails before run.accepted');
     assert.equal(afterFail.task.lastRun?.id, failedReqId);
     assert.equal(afterFail.task.lastRun?.status, 'interrupted');
+    assert.equal(afterFail.task.lastRun?.diagnostic?.code, 'native_run_start_rejected');
     assert.notEqual(afterFail.snapshot.lastRun?.requestId, failedReqId, 'Unaccepted run must NOT appear in native snapshot.lastRun');
     assert.equal(afterFail.snapshot.messages.filter((m: any) => m.role === 'user').length, 0, 'Native session must contain ZERO user messages');
 
@@ -1015,6 +1035,65 @@ test('Item 03 · Pre-acceptance 409 returns accepted:false keeping draft intact;
   assert.equal(retrySettled.task.lastRun.status, 'completed');
   assert.equal(retrySettled.task.draft, '', 'Manual retry after write recovery must clear matching draft on acceptance');
   assert.equal(retrySettled.snapshot.messages.filter((m: any) => m.role === 'user').length, 1, 'Manual retry must produce strictly 1 native user message');
+});
+
+test('Item 03 · explicit recovery closes only the interrupted managed execution on its durable branch', {timeout: 45_000}, async t => {
+  const provider = await startToolProvider();
+  t.after(() => provider.close());
+  const host = await startTestHost();
+  t.after(() => host.close());
+  const { consumerProject, consumerReq, consumerCookie } = await seedRestrictedMemberPackScenario(host, provider.baseUrl);
+  const base = `/api/projects/${consumerProject.id}/tasks`;
+  const { task } = await json(await consumerReq(base, 'POST', {name: '恢复原任务'}), 201);
+  const route = `${base}/${task.id}`;
+  const { snapshot } = await json(await consumerReq(route + '/open', 'POST', {}));
+  const file = snapshot.sessionFile as string;
+  const original = fs.readFileSync(file);
+  const rid = randomUUID();
+  const text = '保留原草稿，显式恢复后重试。';
+  await json(await consumerReq(route + '/draft', 'PATCH', {text}));
+  fs.chmodSync(file, 0o400);
+  try {
+    assert.equal((await consumerReq(route + '/messages', 'POST', {text, requestId: rid})).status, 500);
+    // A known pre-dispatch rejection may reach the UI before cleanup finishes.
+    let state = await json(await consumerReq(route));
+    if (snapshot.capabilities.protectedExecution) {
+      for (let i = 0; i < 100 && !state.snapshot.cleanupRequestId; i++) {
+        await new Promise(resolve => setTimeout(resolve, 30));
+        state = await json(await consumerReq(route));
+      }
+      assert.equal(state.snapshot.cleanupRequestId, rid);
+      assert.equal(state.task.draft, text);
+      const stale = await json(await consumerReq(route + '/stop', 'POST', {cleanupRequestId: randomUUID()}));
+      assert.equal(stale.stopped, false);
+      assert.equal((await consumerReq(route + '/stop', 'POST', {cleanupRequestId: rid})).status, 500);
+      assert.equal((await json(await consumerReq(route))).snapshot.cleanupRequestId, rid);
+    }
+    assert.deepEqual(fs.readFileSync(file), original);
+    assert.equal(provider.requests.length, 0);
+  } finally { fs.chmodSync(file, 0o600); }
+  if (snapshot.capabilities.protectedExecution) {
+    // An old or delayed, unqualified stop cannot acknowledge this recovery.
+    await consumerReq(route + '/stop', 'POST', {});
+    assert.equal((await json(await consumerReq(route))).snapshot.cleanupRequestId, rid);
+    assert.equal((await json(await consumerReq(route + '/stop', 'POST', {cleanupRequestId: rid}))).stopped, true);
+    const entries = fs.readFileSync(file, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    const { executionId } = snapshot.capabilities.protectedExecution;
+    const closed = entries.filter(e => e.customType === 'optracall.execution' && e.data.executionId === executionId && e.data.phase === 'closed');
+    assert.equal(closed.length, 1);
+    assert.ok(entries.some(entry => entry.id === closed[0].parentId), 'recovered receipt must point to an actual persisted parent');
+  }
+  const recovered = await json(await consumerReq(route));
+  assert.equal(recovered.snapshot.cleanupRequestId, undefined);
+  assert.equal(recovered.snapshot.status, 'idle');
+  assert.equal(recovered.task.lastRun.status, 'interrupted');
+  assert.equal(recovered.task.draft, text);
+  assert.equal(provider.requests.length, 0);
+  await json(await consumerReq(route + '/messages', 'POST', {text, requestId: randomUUID()}), 202);
+  const final = await waitTaskSettled(host, consumerProject.id, task.id, consumerCookie);
+  assert.equal(final.task.lastRun.status, 'completed');
+  assert.equal(final.snapshot.messages.filter((message: {role: string}) => message.role === 'user').length, 1);
+  assert.equal(provider.requests.length, 1);
 });
 
 test('Item 05 · Named maintainer guidance, cross-browser re-auth, summary/wrong-purpose denials, dynamic CSV 3-file recalculate (2/3), revocation, and ephemeral historical preservation', { timeout: 90_000 }, async t => {

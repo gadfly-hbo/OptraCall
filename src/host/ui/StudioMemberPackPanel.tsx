@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { decisionChoiceIssue } from '../../../extensions/business-plugins/studio/enterprise-pack-decisions.ts';
 import { PersonalDialog } from './PersonalDialog.tsx';
 import type { ClientProject } from './project-types.ts';
 import type { StudioSystem } from './studio-api.ts';
@@ -327,7 +328,7 @@ export function StudioMemberPackPanel({
         exclusions: editingPurpose.exclusions.split('\n').map(s => s.trim()).filter(Boolean),
         completionCriteria: editingPurpose.completionCriteria.trim(),
         ...(p.dependencies.length ? { dependencies: p.dependencies } : {}),
-        ...(p.decisionChoices.length ? { decisionChoices: p.decisionChoices } : {}),
+        ...(p.decisionChoices?.length ? { decisionChoices: p.decisionChoices } : {}),
         ...(p.policyEffectiveFrom ? { policyEffectiveFrom: p.policyEffectiveFrom } : {}),
         ...(p.dataCutoffAt ? { dataCutoffAt: p.dataCutoffAt } : {}),
         ...(p.observationWindowDays !== undefined ? { observationWindowDays: p.observationWindowDays } : {}),
@@ -360,6 +361,10 @@ export function StudioMemberPackPanel({
     // Validate explicit user decision choices and explicit deciders ONLY for included purposes — NEVER silently fall back to options[0] or hardcoded decider!
     const decisions: { purposeId: string; choiceId: string; selectedKey: string; decidedBy: string }[] = [];
     for (const p of includedPurposes) {
+      if (decisionChoiceIssue(p.decisionChoices)) {
+        setError(`用途「${p.title}」的经营取舍资料不完整。请在原建设任务修订，或取消勾选该用途后继续预览。`);
+        return;
+      }
       for (const c of p.decisionChoices) {
         const key = (decisionMap[`${p.id}:${c.id}`] ?? c.selectedKey ?? '').trim();
         const owner = (decisionOwnerMap[`${p.id}:${c.id}`] ?? c.decidedBy ?? '').trim();
@@ -546,7 +551,7 @@ export function StudioMemberPackPanel({
         exclusions: existingPurpose?.exclusions ?? [],
         completionCriteria: existingPurpose?.completionCriteria || rec.completionCriteria,
         ...(existingPurpose?.dependencies.length ? { dependencies: existingPurpose.dependencies } : {}),
-        ...(existingPurpose?.decisionChoices.length ? { decisionChoices: existingPurpose.decisionChoices } : {}),
+        ...(existingPurpose?.decisionChoices?.length ? { decisionChoices: existingPurpose.decisionChoices } : {}),
         ...(existingPurpose?.policyEffectiveFrom ? { policyEffectiveFrom: existingPurpose.policyEffectiveFrom } : {}),
         dataCutoffAt: existingPurpose?.dataCutoffAt || pack.panorama.dataCutoffAt,
         ...(existingPurpose?.observationWindowDays !== undefined ? { observationWindowDays: existingPurpose.observationWindowDays } : {}),
@@ -1171,7 +1176,9 @@ export function StudioMemberPackPanel({
                               {purpose.evidenceNotes?.length ? (
                                 <p className="studio-meta">依据备注：{purpose.evidenceNotes.at(-1)?.note}</p>
                               ) : null}
-                              {purpose.decisionChoices.map(c => (
+                              {decisionChoiceIssue(purpose.decisionChoices) ? (
+                                <p className="studio-badge is-warning">该用途的经营取舍资料不完整，请在原建设任务修订后再发布。其他用途可单独预览。</p>
+                              ) : purpose.decisionChoices.map(c => (
                                 <div key={c.id} className="studio-meta">
                                   <span>取舍：{c.question}</span>
                                   <select

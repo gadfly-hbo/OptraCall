@@ -6,6 +6,7 @@ import http.server
 import io
 import json
 import os
+from pathlib import Path
 import shutil
 import socketserver
 import subprocess
@@ -14,14 +15,16 @@ import threading
 import time
 import urllib.request
 import uuid as _uuid
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 TMP_ROOT = tempfile.mkdtemp(prefix='optracall-issue121-r2-browser-')
 DATA_ROOT = os.path.join(TMP_ROOT, 'data')
 PROJECTS_ROOT = os.path.join(TMP_ROOT, 'projects')
 UI_ROOT = os.path.join(REPO_ROOT, 'dist')
-CHROME_BIN = '/usr/bin/google-chrome'
+CHROME_BIN = os.environ.get('CHROME_BIN') or shutil.which('google-chrome')
+if not CHROME_BIN and os.path.isfile('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'):
+    CHROME_BIN = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 
 # Shared state for our local synthetic OpenAI-compatible SSE server
 llm_state = {
@@ -377,7 +380,7 @@ try:
 
     with sync_playwright() as p:
         launch_kwargs = {'headless': True}
-        if os.path.exists(CHROME_BIN):
+        if CHROME_BIN:
             launch_kwargs['executable_path'] = CHROME_BIN
         browser = p.chromium.launch(**launch_kwargs)
 
@@ -559,48 +562,153 @@ try:
         task_d_end = api(f"/api/projects/{proj_alt['id']}/tasks/{task_d['id']}", 'GET', cookie=ctx1_cookie())
         assert len([m for m in task_d_end['snapshot']['messages'] if m.get('role') == 'user']) == 3, 'Item 03: expected 3 distinct turns after deliberate re-send'
 
-        # Item 03 Scenario C (PM re-review blocker): Pre-acceptance native Pi JSONL write failure (500 sdk_operation_failed,
-        # task.lastRun.status='interrupted', snapshot.lastRun absent, 0 native user messages) MUST preserve saved draft in BOTH UI & Host
-        # immediately and across full reload, with zero auto-resend, and allow manual retry once writable!
-        task_e = api(f"/api/projects/{proj_alt['id']}/tasks", 'POST', {'name': 'Item03-PreAccept-SessionWriteFail'})['task']
-        task_e_open = api(f"/api/projects/{proj_alt['id']}/tasks/{task_e['id']}/open", 'POST', {}, cookie=ctx1_cookie())
-        session_file_e = task_e_open['snapshot'].get('sessionFile')
-        assert session_file_e and os.path.exists(session_file_e), f'Item 03 Scenario C: expected materialized sessionFile, got {session_file_e!r}'
-        page1.goto(f"{base}/?project={proj_alt['id']}&task={task_e['id']}", wait_until='domcontentloaded')
-        page1.locator('#message-input').wait_for(state='visible')
-        prompt_e = '场景C：原生会话写入失败前已保存的原问题'
-        page1.locator('#message-input').fill(prompt_e)
-        page1.wait_for_timeout(500)
-        task_e_saved = api(f"/api/projects/{proj_alt['id']}/tasks/{task_e['id']}", 'GET', cookie=ctx1_cookie())
-        assert task_e_saved['task']['draft'] == prompt_e, 'Item 03 Scenario C: draft must be saved before write failure'
-        os.chmod(session_file_e, 0o400)
-        try:
-            with page1.expect_response(lambda r: f"/api/projects/{proj_alt['id']}/tasks/{task_e['id']}/messages" in r.url and r.request.method == 'POST') as fail_resp_info:
-                page1.get_by_role('button', name='发送消息').click()
-            assert fail_resp_info.value.status == 500, f'Item 03 Scenario C: expected 500 sdk_operation_failed, got {fail_resp_info.value.status}'
-            page1.wait_for_timeout(600)
-            assert page1.locator('#message-input').input_value() == prompt_e, f'Item 03 Scenario C: UI cleared draft on pre-acceptance 500! got={page1.locator("#message-input").input_value()!r}'
-            assert page1.locator('.message.user').count() == 0, 'Item 03 Scenario C: failed pre-acceptance prompt must not appear in conversation'
-            task_e_after_fail = api(f"/api/projects/{proj_alt['id']}/tasks/{task_e['id']}", 'GET', cookie=ctx1_cookie())
-            assert task_e_after_fail['task']['draft'] == prompt_e, f'Item 03 Scenario C: Host cleared draft on pre-acceptance 500! got={task_e_after_fail["task"]["draft"]!r}'
-            assert task_e_after_fail['task']['lastRun']['status'] == 'interrupted', f'Item 03 Scenario C: expected interrupted lastRun, got {task_e_after_fail["task"]["lastRun"]}'
-            assert len([m for m in task_e_after_fail['snapshot']['messages'] if m.get('role') == 'user']) == 0, 'Item 03 Scenario C: native session must have 0 user messages'
-        finally:
-            os.chmod(session_file_e, 0o600)
-        # Full page reload after restoring writability: draft MUST remain intact, zero auto-resend!
-        page1.reload(wait_until='domcontentloaded')
-        page1.locator('#message-input').wait_for(state='visible')
-        page1.wait_for_timeout(500)
-        assert page1.locator('#message-input').input_value() == prompt_e, f'Item 03 Scenario C: draft lost after reload! got={page1.locator("#message-input").input_value()!r}'
-        assert page1.locator('.message.user').count() == 0, 'Item 03 Scenario C: reload must not auto-resend!'
-        # Manual retry now succeeds cleanly!
-        page1.get_by_role('button', name='发送消息').click()
-        page1.locator('.message.assistant').first.wait_for(state='visible', timeout=15000)
-        page1.wait_for_timeout(300)
-        assert page1.locator('#message-input').input_value() == '', 'Item 03 Scenario C: draft should clear after manual retry succeeds'
-        task_e_end = api(f"/api/projects/{proj_alt['id']}/tasks/{task_e['id']}", 'GET', cookie=ctx1_cookie())
-        assert len([m for m in task_e_end['snapshot']['messages'] if m.get('role') == 'user']) == 1, 'Item 03 Scenario C: manual retry must produce strictly 1 native user message'
-        print('PASS [Browser Item 03] Pre-acceptance 409 + pre-acceptance 500 session-write-fail preservation + delayed-202 reload no-duplicate + delayed-202 newer-draft preservation verified')
+        # Exercise the same interrupted Pi write with and without an explicit personal selection.
+        def check_session_write_recovery(personal):
+            task = api(f"/api/projects/{proj_alt['id']}/tasks", 'POST', {
+                'name': 'Item03-PersonalWriteFailure' if personal else 'Item03-PlainWriteFailure',
+            })['task']
+            task_path = f"/api/projects/{proj_alt['id']}/tasks/{task['id']}"
+            opened = api(task_path + '/open', 'POST', {}, cookie=ctx1_cookie())
+            session_file = Path(opened['snapshot']['sessionFile'])
+            page1.goto(f"{base}/?project={proj_alt['id']}&task={task['id']}", wait_until='domcontentloaded')
+            composer = page1.locator('#message-input')
+            composer.wait_for(state='visible')
+            selected_context = None
+            if personal:
+                title = '会员口径原始说明'
+                material = api('/api/enterprise-materials', 'POST', {
+                    'title': title, 'body': '合成资料：退款订单剔除。', 'scope': '测试品牌',
+                })['material']
+                item_path = '/api/personal-retention/items/' + material['id']
+                editor = api(item_path + '/editor')
+                decision = api(item_path + '/retain', 'POST', {
+                    'operationId': str(_uuid.uuid4()), 'expectedRevision': 0, 'target': editor['draftTarget'],
+                    'metadata': {'kind': 'knowledge', 'aliases': [], 'caution': '', 'sourceRefs': []},
+                    'personalLabel': None,
+                })['decision']
+                selected_context = [{'target': {
+                    'type': 'retained', 'storeId': decision['contentRef']['storeId'], 'materialId': material['id'],
+                    'decisionId': decision['operationId'], 'revisionId': decision['contentRef']['revisionId'],
+                    'expectedBodySha256': decision['bodySha256'],
+                }}]
+                page1.get_by_role('button', name='设置', exact=True).click()
+                page1.get_by_role('button', name='个人资料', exact=True).click()
+                row = page1.get_by_role('article').filter(has=page1.get_by_role('button', name=title, exact=True))
+                row.get_by_role('button', name='加入当前任务', exact=False).click()
+                composer.wait_for(state='visible')
+
+            posts = []
+            def record_send(request):
+                if request.url == base + task_path + '/messages' and request.method == 'POST':
+                    posts.append(request.post_data_json)
+
+            page1.on('request', record_send)
+            def message_response(response):
+                return response.url == base + task_path + '/messages' and response.request.method == 'POST'
+
+            def task_state():
+                return api(task_path, cookie=ctx1_cookie())
+
+            send = page1.get_by_role('button', name='发送消息', exact=True)
+            prompt = '请核对指定个人资料的会员口径。' if personal else '原生会话写入失败前已保存的原问题'
+            with page1.expect_response(lambda r: r.url == base + task_path + '/draft' and r.request.method == 'PATCH'):
+                composer.fill(prompt)
+            assert task_state()['task']['draft'] == prompt
+            provider_before = len(llm_state['requests'])
+            native_before = session_file.read_bytes()
+            original_mode = session_file.stat().st_mode & 0o777
+            session_file.chmod(0o400)
+            try:
+                with page1.expect_response(message_response) as failure:
+                    send.click()
+                assert failure.value.status == 500 and failure.value.json().get('accepted') is False, (
+                    'The Host must identify a proven pre-acceptance rejection', failure.value.status, failure.value.json())
+                expect(page1.locator('.error-notice')).to_contain_text('发送未获 Host 接受')
+                expect(composer).to_have_value(prompt)
+                expect(page1.locator('.message.user')).to_have_count(0)
+                failed = task_state()
+                assert failed['task']['draft'] == prompt and failed['task']['lastRun']['status'] == 'interrupted'
+                assert not [m for m in failed['snapshot']['messages'] if m.get('role') == 'user']
+                assert len(posts) == 1 and posts[0].get('personalContext') == selected_context
+                if personal:
+                    expect(page1.get_by_label('本次指定个人资料')).to_contain_text(title)
+                assert session_file.read_bytes() == native_before and len(llm_state['requests']) == provider_before
+                conflict = failed['snapshot'].get('cleanupRequestId')
+                if conflict:
+                    assert conflict == posts[0]['requestId']
+                    with page1.expect_response(lambda r: r.url == base + task_path + '/stop' and r.request.method == 'POST') as cleanup:
+                        page1.get_by_role('button', name='重新连接任务', exact=True).click()
+                    assert cleanup.value.status >= 400
+                    assert task_state()['snapshot'].get('cleanupRequestId') == conflict
+            finally:
+                session_file.chmod(original_mode)
+
+            # Ordinary task reopens from disk. An attached personal selection is retained in its current tab.
+            if not personal:
+                # A second browser has no stored UI error. It must recover the acceptance decision from the Host.
+                fresh = browser.new_context()
+                try:
+                    reopened = fresh.new_page()
+                    reopened.goto(page1.url, wait_until='domcontentloaded')
+                    expect(reopened.locator('.error-notice')).to_contain_text('发送未获 Host 接受')
+                    expect(reopened.locator('.error-notice')).not_to_contain_text('UNKNOWN')
+                    expect(reopened.locator('#message-input')).to_have_value(prompt)
+                finally:
+                    fresh.close()
+                page1.reload(wait_until='domcontentloaded')
+                expect(page1.locator('.error-notice')).to_contain_text('发送未获 Host 接受')
+            expect(composer).to_have_value(prompt)
+            expect(page1.locator('.message.user')).to_have_count(0)
+            if conflict:
+                # Reading or refreshing the task must leave the guarded resource untouched.
+                assert task_state()['snapshot'].get('cleanupRequestId') == conflict
+                expect(page1.locator('.composer-area').get_by_role('status').filter(has_text='上次运行的资源清理未完成')).to_be_visible()
+                page1.get_by_role('button', name='重新连接任务', exact=True).click()
+            expect(send).to_be_enabled()
+            expect(composer).to_be_editable()
+            assert len(posts) == 1 and len(llm_state['requests']) == provider_before, 'Review or reconnect resent the draft'
+            with page1.expect_response(message_response) as success:
+                send.click()
+            assert success.value.status == 202
+            expect(page1.locator('.message.assistant').first).to_be_visible(timeout=15000)
+            expect(composer).to_have_value('')
+            final = task_state()
+            assert len([m for m in final['snapshot']['messages'] if m.get('role') == 'user']) == 1
+            assert len(posts) == 2 and posts[0]['requestId'] != posts[1]['requestId']
+            assert final['task']['draft'] == '' and final['task']['lastRun']['id'] == posts[1]['requestId']
+            assert posts[1]['text'] == prompt and posts[1].get('personalContext') == selected_context
+            assert len(llm_state['requests']) == provider_before + 1
+
+            if personal:
+                provider_messages = llm_state['requests'][-1]['messages']
+                assert any(m.get('role') == 'user' and '合成资料：退款订单剔除。' in json.dumps(m['content'], ensure_ascii=False)
+                           for m in provider_messages), 'Accepted retry did not deliver the selected revision to the provider'
+                # Losing the network before receiving a Host decision leaves the browser unable to infer acceptance.
+                # An explicit status check is read-only. An explicit retry must reuse the exact original request.
+                next_prompt = '保留同一份个人资料，核对刚才的结论。'
+                composer.fill(next_prompt)
+                page1.route(base + task_path + '/messages', lambda route: route.abort(), times=1)
+                send.click()
+                unknown = page1.get_by_role('alert').filter(has_text='此次发送状态 UNKNOWN')
+                expect(unknown).to_be_visible()
+                expect(composer).not_to_be_editable()
+                expect(composer).to_have_value(next_prompt)
+                unknown.get_by_role('button', name='核对此次发送').click()
+                expect(page1.get_by_text('尚未核对到原请求已接受', exact=False)).to_be_visible()
+                assert len(posts) == 3 and len(llm_state['requests']) == provider_before + 1
+                with page1.expect_response(message_response) as recovered:
+                    unknown.get_by_role('button', name='按原请求重试此次发送').click()
+                assert recovered.value.status == 202 and len(posts) == 4
+                assert posts[3] == posts[2] and posts[2].get('personalContext') == selected_context
+                expect(page1.locator('.message.assistant')).to_have_count(2, timeout=15000)
+                expect(unknown).to_have_count(0)
+                assert len([m for m in task_state()['snapshot']['messages'] if m.get('role') == 'user']) == 2
+                assert len(llm_state['requests']) == provider_before + 2
+            page1.remove_listener('request', record_send)
+
+        check_session_write_recovery(personal=False)
+        check_session_write_recovery(personal=True)
+        print('PASS [Browser Item 03] Rejected ordinary/personal sends preserve the draft and exact selection; manual retry dispatches once. Unknown retries keep identity; delayed 202 does not duplicate or erase newer drafts.')
 
         # =====================================================================
         # ITEM 02 (P2): Studio construction form required hints & project guard
@@ -627,8 +735,7 @@ try:
         goal_err.wait_for(state='visible')
         assert '请填写建设目标与企业范围' in goal_err.inner_text() and '下一步' in goal_err.inner_text()
         assert len(system_post_bodies) == 0, 'Item 02: empty goal must not send POST /api/studio/systems'
-        focused_id = page1.evaluate('document.activeElement?.id')
-        assert focused_id == 'studio-new-goal', f'Item 02: focus expected on studio-new-goal, got {focused_id}'
+        expect(page1.locator('#studio-new-goal')).to_be_focused()
 
         # 2b: Whitespace-only goal -> persistent inline error, zero API call, other inputs preserved
         page1.locator('#studio-new-project').select_option(proj_alt['id'])
