@@ -1554,6 +1554,9 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           }
           const access = evaluatePurposeAccessForSubject(subjectGrants, pm, legacyPeriods);
           if (!access) return null;
+          if (access.canSummary.allowed && !access.canSummary.matchedGrantIds.some(id => eligibleSummaryGrantIds.has(id))) {
+            access.canSummary.allowed = false;
+          }
           const { canDef, canSummary, canDetail, hasPartialOrFullDetail, visibleDeps } = access;
 
           const matchedDetailGrants = subjectGrants.filter(g => canDetail.matchedGrantIds.includes(g.id));
