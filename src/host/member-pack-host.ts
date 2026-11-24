@@ -1273,14 +1273,57 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return { allowed: true };
   }
 
+  function adoptedSummarySources(use: EnterprisePackUseRecord, purpose: EnterprisePurposePublicationState): StudioSourceRef[] {
+    const declaration = use.authorDeclaration;
+    if (declaration?.declaredPurposeId !== purpose.purposeId) return [];
+    const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(use.projectId);
+    const at = Date.parse(declaration.declaredAt);
+    if (!enterpriseId || !Number.isFinite(at)) return [];
+    // A withdrawn grant still identifies what the author could cite at the
+    // recorded time. Only independently qualified current grants allow a reader.
+    const originalGrants = projectGrants(enterpriseId, use.projectId)
+      .filter(grant => Date.parse(grant.createdAt) <= at && (!grant.revokedAt || Date.parse(grant.revokedAt) >= at))
+      .map(grant => ({ ...grant, revokedAt: undefined }));
+    const original = evaluateResourceAccess(originalGrants, {
+      operation: 'cite-summary', at: declaration.declaredAt, purposeKey: purpose.purposeKey,
+      brand: purpose.scope.brand, channel: purpose.scope.channel,
+    });
+    const bindings = originalGrants.filter(grant => original.matchedGrantIds.includes(grant.id));
+    const fixed = purpose.summaryAccess?.summaryRef;
+    const sources: StudioSourceRef[] = [];
+    for (const declared of declaration.declaredRefs) {
+      const dependency = purpose.dependencies.find(dep => sameSummarySource(dep.ref, declared));
+      const fixedSummary = fixed && sameSummarySource(fixed, declared);
+      const knownSummary = bindings.some(grant => grant.resourceRef && sameSummarySource(grant.resourceRef, declared));
+      if (!knownSummary && !fixedSummary) {
+        if (dependency && dependency.role !== 'summary-result') continue;
+        return [];
+      }
+      const read = use.actualReads.find(item => item.complete && readCoversSource(item.ref, declared));
+      if (!read) return [];
+      sources.push(read.ref);
+    }
+    return !fixed || sources.some(ref => readCoversSource(ref, fixed)) ? sources : [];
+  }
+
   function reportUseCovered(
     use: EnterprisePackUseRecord,
     purpose: EnterpriseDomainPack['packRevisions'][number]['purposeManifests'][number] | undefined,
     subjectGrants: ReturnType<typeof projectGrants>,
+    summaryGrants: QualifiedSummaryGrant[] = [],
   ) {
     const reportIdentity = digest(sourceRef(use.reportRef));
     if (!purpose || purpose.status !== 'eligible') return false;
     const operation = use.accessLevel === 'recalculate' ? 'read-detail-recalculate' : use.accessLevel === 'summary' ? 'cite-summary' : 'read-definition';
+    if (operation === 'cite-summary') {
+      const adopted = adoptedSummarySources(use, purpose);
+      const access = evaluatePurposeAccessForSubject(subjectGrants, purpose, summaryGrants);
+      return adopted.length > 0 && adopted.every(ref => access?.summaries.some(grant =>
+        readCoversSource(ref, grant.resourceRef)
+        && (!grant.scope.brand || grant.scope.brand === purpose.scope.brand)
+        && (!grant.scope.channel || grant.scope.channel === purpose.scope.channel)
+        && (!grant.scope.stores?.length || (purpose.scope.stores?.length && purpose.scope.stores.every(store => grant.scope.stores!.includes(store))))));
+    }
     return subjectGrants.some(grant => {
       if (!grant.operations.includes(operation)) return false;
       if (grant.purposeKeys?.length && !grant.purposeKeys.includes('*') && !grant.purposeKeys.includes(purpose.purposeKey)) return false;
@@ -1289,11 +1332,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (grant.scope.stores?.length && (!purpose.scope.stores?.length || !purpose.scope.stores.every(store => grant.scope.stores?.includes(store)))) return false;
       if (!isPeriodCovered(purpose.scope.period, grant.scope.periodFrom, grant.scope.periodTo)) return false;
       if (operation === 'read-detail-recalculate' && !grant.scope.allowedDataPaths?.length && !grant.resourceRef) return false;
-      if (operation === 'cite-summary') {
-        const summary = purpose.summaryAccess;
-        return Boolean(summary && grant.resourceRef && digest(sourceRef(grant.resourceRef)) === digest(sourceRef(summary.summaryRef))
-          && grant.scope.grain === summary.grain && grant.scope.summaryVersion === summary.summaryRef.version);
-      }
       return (!grant.scope.grain || grant.scope.grain === purpose.subjectUnit)
         && (!grant.resourceRef || digest(sourceRef(grant.resourceRef)) === reportIdentity);
     });
@@ -1317,7 +1355,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const summaryGrants = qualifications.some(({ use }) => use.accessLevel === 'summary')
       ? await qualifySummaryGrants(enterpriseId, grantsNow) : [];
     for (const { use, purpose } of qualifications) {
-      if (!purpose || !reportUseCovered(use, purpose, use.accessLevel === 'summary' ? summaryGrants : grantsNow)) throw denied();
+      if (!purpose || !reportUseCovered(use, purpose, grantsNow, summaryGrants)) throw denied();
       if (use.accessLevel !== 'recalculate') continue;
       const reportIdentity = digest(sourceRef(use.reportRef));
       const explicitReportGrant = grantsNow.some(grant => grant.resourceRef
@@ -1427,7 +1465,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (purpose.status !== 'eligible') return [];
       if (construction) return [purpose];
       const access = evaluatePurposeAccessForSubject(subjectGrants, purpose, summaryGrants);
-      return access ? [{ purposeId: purpose.purposeId, dependencies: access.visibleDeps }] : [];
+      if (!access) return [];
+      const summary = access.summaries[0]?.resourceRef;
+      const dependencies = [...access.visibleDeps];
+      if (summary && !dependencies.some(dep => sameSummarySource(summary, dep.ref))) {
+        dependencies.push({ id: summary.id, role: 'summary-result', authority: summary.authority, ref: summary, requiredFor: [] });
+      }
+      return [{ purposeId: purpose.purposeId, dependencies }];
     });
   }
 
@@ -1667,7 +1711,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
    */
   async function inspectTaskNativeEvidence(projectId: string, taskId: string, pack: EnterpriseDomainPack, upToSelection?: { sessionId: string; messageId: string }) {
     const turnActualReads: EnterprisePackReadEvidence[] = [];
-    const seenReadKeys = new Set<string>();
     const turnDeclaredStudioUseIds: string[] = [];
     const otherTurnDeclaredStudioUseIds: string[] = [];
     const turnWrittenReports: StudioSourceRef[] = [];
@@ -1800,6 +1843,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             if (Array.isArray(entry.purposes)) {
               catalogPurposeIds = entry.purposes.map((p: any) => String(p.purposeId)).filter(Boolean);
               for (const p of entry.purposes) {
+                if (p.authorizedSummary?.ref) catalogAssetRefs.push(sourceRef(p.authorizedSummary.ref));
                 for (const d of Array.isArray(p.dependencies) ? p.dependencies : []) {
                   if (d?.ref) catalogAssetRefs.push(sourceRef(d.ref));
                 }
@@ -1813,52 +1857,31 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             try { turnWrittenReports.push(sourceRef(result.use.report)); } catch { /* ignore */ }
           }
         }
-        if (['read-source', 'read'].includes(action) && result?.ref) {
-          try {
-            const ref = sourceRef(result.ref);
-            if (ref.authority === 'data' || ref.authority === 'task') {
-              hadDataOrCalcTool = true;
-            }
-            const key = `${digest(ref)}:${String(m.toolCallId ?? i)}`;
-            if (!seenReadKeys.has(key)) {
-              seenReadKeys.add(key);
-              turnActualReads.push({
-                ref,
-                ...(ref.sha256 ? { sha256: ref.sha256 } : {}),
-                complete: result.complete === true,
-                readAt: new Date().toISOString(),
-                turnIndex: i,
-                ...(typeof m.toolCallId === 'string' ? { toolCallId: m.toolCallId } : {}),
-              });
-            }
-          } catch { /* ignore non-source ref */ }
-        }
       }
-      if (m.details?.type === 'optracall.semantic-context-result' && ['read', 'trace'].includes(m.details.action)) {
-        for (const item of [...(m.details.items ?? []), ...(m.details.unknownTime ?? [])]) {
-          if (typeof item?.body === 'string' && item?.target && typeof item.sha256 === 'string') {
-            const t = item.target;
-            let ref: StudioSourceRef | undefined;
-            if (t.kind === 'sap') ref = sourceRef({ authority: 'sap-metric', id: t.packageId, version: t.version, sha256: item.sha256 });
-            else if (t.kind === 'sap-method') ref = sourceRef({ authority: 'sap-method', id: t.methodId, version: String(t.version), sha256: item.sha256 });
-            else if (t.kind === 'enterprise') ref = sourceRef({ authority: 'enterprise', id: t.materialId, version: t.revisionId, sha256: item.sha256, locator: t.storeId });
-            else if (t.kind === 'studio-source') ref = sourceRef({ authority: 'studio-source', id: t.assetId, version: String(t.version), sha256: item.sha256, locator: t.systemId });
-            if (ref) {
-              const key = `${digest(ref)}:${String(m.toolCallId ?? i)}`;
-              if (!seenReadKeys.has(key)) {
-                seenReadKeys.add(key);
-                turnActualReads.push({
-                  ref,
-                  sha256: ref.sha256,
-                  complete: item.complete !== false,
-                  readAt: new Date().toISOString(),
-                  turnIndex: i,
-                  ...(typeof m.toolCallId === 'string' ? { toolCallId: m.toolCallId } : {}),
-                });
-              }
-            }
-          }
-        }
+    }
+
+    // Only successful results paired with the actual tool call in this turn
+    // establish a read. Selected excerpts and gaps in a paged source stay partial.
+    const groups = new Map<string, { evidence: EnterprisePackReadEvidence; page: ReturnType<typeof readStudioEvidence>[number] }[]>();
+    const { results } = collectNativeEvidence(snap.messages.slice(turnStartIdx, endIdx + 1));
+    for (const result of results) {
+      for (const page of readStudioEvidence(result)) {
+        const { title: _title, ...identity } = page.ref;
+        const key = digest(identity);
+        const group = groups.get(key) ?? [];
+        const evidence = {
+          ref: page.ref, sha256: page.ref.sha256, complete: page.complete, range: page.range,
+          readAt: new Date().toISOString(), turnIndex: result.index + turnStartIdx, toolCallId: result.call.id,
+        };
+        group.push({ page, evidence });
+        groups.set(key, group);
+        turnActualReads.push(evidence);
+        if (page.ref.authority === 'data' || page.ref.authority === 'task') hadDataOrCalcTool = true;
+      }
+    }
+    for (const group of groups.values()) {
+      if (!group.some(read => read.evidence.complete) && studioPagesComplete(group.map(read => read.page))) {
+        group.at(-1)!.evidence.complete = true;
       }
     }
 
@@ -2009,9 +2032,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const inputs = complete.filter(({ ref }) => ref.authority === 'data' && ref.projectId === verifierProjectId &&
       projectFileLocator(ref.locator, '020_clean') && !!ref.sha256 && authorizedInputs.get(ref.locator) === ref.sha256);
     for (const read of inputs) read.authorizedInput = true;
-    const summaryRef = purpose.summaryAccess?.summaryRef;
-    const summaryReads = summaryRef && evidence?.coverage?.summaryRef && readCoversSource(evidence.coverage.summaryRef, summaryRef)
-      ? complete.filter(read => readCoversSource(read.ref, summaryRef)) : [];
+    const adopted = use.accessLevel === 'summary' ? adoptedSummarySources(use, purpose) : [];
+    const declaredCoverage = evidence?.coverage?.summaryRef;
+    const summaryReads = declaredCoverage && adopted.some(ref => readCoversSource(declaredCoverage, ref))
+      && adopted.every(ref => complete.some(read => readCoversSource(read.ref, ref)))
+      ? complete.filter(read => adopted.some(ref => readCoversSource(read.ref, ref))) : [];
     const numberOfRequired = requiredRefs.filter(ref => required.some(read => readCoversSource(read.ref, ref))).length;
     const isSummary = use.accessLevel === 'summary';
     const isRecalculation = !isSummary && use.tier !== 'definition-reference';
@@ -2089,7 +2114,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const readableUses = new Set<string>();
     const declarations = activeGrants.length ? options.studio.get(pack.systemId).uses : [];
     for (const use of ownUses) {
-      if (!reportUseCovered(use, purposeForUse(use), use.accessLevel === 'summary' ? summaryGrants : activeGrants)) continue;
+      if (!reportUseCovered(use, purposeForUse(use), activeGrants, summaryGrants)) continue;
       if (use.accessLevel === 'recalculate') {
         const declaration = declarations.find(record => matchesStudioUse(use, record));
         if (!declaration) continue;

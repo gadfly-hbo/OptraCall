@@ -61,8 +61,18 @@ function parseSummaryPeriod(value: string, prose: boolean) {
   // range separator or a malformed end never qualifies its start as a singleton.
   const match = /^(\d{4}[-/]\d+(?:[-/]\d+)?)(?:\s*(?:\.\.|~|～|—|–|至|到|to|\s-\s)\s*(\d{4}[-/]\d+(?:[-/]\d+)?))?/i.exec(declaration);
   if (!match) return undefined;
-  const tail = declaration.slice(match[0].length).trimStart();
-  if (tail && (!prose || /^(?:[\d/~～—–-]|\.\.|至|到|to\b|T\d|起|以来|以[前后]|之[前后])/i.test(tail))) return undefined;
+  const remainder = declaration.slice(match[0].length);
+  if (remainder.trim()) {
+    if (!prose) return undefined;
+    // Free text qualifies only when the period ends at a recognizable boundary.
+    // An unsupported continuation must not shrink a statement to its first month.
+    const [sameLine, ...laterLines] = remainder.split(/\r?\n/);
+    const suffix = sameLine!.trim();
+    const nextField = /^[,，;；。]\s*[\p{L}_][\p{L}\p{N}_ -]{0,30}[:：]/u;
+    const note = /^[,，;；。]?\s*[（(]?\s*(?:(?:生成|修订|更新)(?:于|时间|日期)|首批样本|样本|备注|附注|核对日)/u;
+    if (suffix && !/^[;；。]$/.test(suffix) && !nextField.test(suffix) && !note.test(suffix)) return undefined;
+    if (!suffix && /^(?:\d{4}[-/]|[,，、~～—–-]|(?:及|和|与|至|到)\s*\d)/u.test(laterLines.join('\n').trimStart())) return undefined;
+  }
   return summaryPeriodRange(match[1], match[2] ?? match[1]);
 }
 
