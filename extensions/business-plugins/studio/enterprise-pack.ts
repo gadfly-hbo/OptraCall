@@ -334,6 +334,8 @@ export interface EnterprisePackPurpose {
   availableHistoryDays?: number;
   decisionChoices: EnterprisePackDecisionChoice[];
   workItemStatus: 'draft' | 'ready_for_preview' | 'published' | 'partially_suspended' | 'restricted';
+  excludedFromPreview?: boolean;
+  excludedReason?: string;
   ownerRole?: string;
   maintenanceTasks: { projectId: string; taskId: string; addedAt: string }[];
   evidenceNotes: { id: string; projectId: string; taskId?: string; note: string; sourceRefs: StudioSourceRef[]; at: string }[];

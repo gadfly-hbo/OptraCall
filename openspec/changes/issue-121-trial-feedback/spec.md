@@ -45,3 +45,65 @@
 ## 不做事项
 
 不处理与上述验收无关的旧工具错误或泛化提示，不重建 IR/方法库/权限系统，不新增分析流程或人的普通操作，不做正式数据迁移、真实经营动作、SDK/Semantica 升级、Mac mini/MacBook 运行采用或用户产品验收。
+
+---
+
+## Round 2 追加范围与执行规格（2026-11-24）
+
+- 状态：工程实现与验证完成，准备交回 PM Agent 审核、独立复核、PR/CI 与合并
+- 来源：[Issue #121 Round 2 正式外发评论](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7126052321)
+- 领取评论：[Issue #121 Round 2 领取回执](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7126196689)
+- 领取方：Antigravity 云端工程 Agent
+- 任务分支：`work/antigravity/issue-121-round2-fixes`
+- 开工基线：`7ef6ebb81b735ffecdad3753217a96f02cb95c76`（与 MacBook 试用构建及二次复核基线一致）
+
+### 规范、SDK 与界面边界
+
+- 遵循工程规范 v1.14、四点产品原则（Host 管环境、Agent 自主执行、优先复用 Pi 已有能力、减少人的操作）与统一会话规范 IN01–IN07（Interface v3）。
+- 普通分析与会员包受限任务沿用同一 `projectId + taskId` owner 与 `project-tasks` profile；官方 `@earendil-works/pi-coding-agent` 保持 `1.4.0`，`undici` 保持 `8.12.2`，不修改官方包、不放宽安全边界或文件/工具白名单。
+- **UI Demo 适用性说明**：本轮 6 项均在既有表单、消息提示条、会员包草案表、历史列表与权限提示区内做原地缺陷修复与状态补全，不新增页面、顶层导航或全新交互流程，沿用原批准设计，因此无需单独出可点击 UI Demo 审批。
+- **四原则前置核对**：
+  - **Host 管环境**：受限任务隔离工作区由 Host 补建 `skills/` 快照根并保持只读边界；Host 校验用途字段与拼写并拒绝零写入；Host 显式返回接受前拒绝标记 `accepted: false`；Host 仅输出脱敏维护人/权责项目引导，绝不暴露口令/盐/哈希/凭据。
+  - **Agent 自主执行**：受限任务加载固定内置 `data-analysis` Skill 后，仍由 Agent 自主分析并沿受控 `read_input` 重算，Host 不代算、不改写业务口径。
+  - **优先复用 Pi 已有能力**：复用公开 `loadSkills`、`selectTaskSkills`、`snapshotProtectedSkills` 与原生 `read_input`，不自建第二套 Skill 加载或会话循环。
+  - **减少人的操作**：首建包前直接露出可复用维护身份入口，消除换浏览器后找不到入口与有权人的折返；用途保存直接定位字段与拼写；接受前发送失败自动保底原文与状态，无需重写。
+
+### Round 2 任务目标执行清单
+
+- [x] **01 · P1 默认 Skill 阻断会员包受限项目分析**：补齐 `prepareRestrictedTaskWorkspace` 的 `skills` 快照根与 `project-session.ts` 受限任务固定 Skill 装载路径，保留文件/工具隔离、固定包摘要校验、明确取消、同名碰撞覆盖和通用目录顺序。
+- [x] **02 · P2 发起体系建设表单必填提示与项目选择保留**：`StudioPage` 取消依赖瞬时浏览器原生提示，空白/纯空格目标展示持续可见的行内提示与下一步且零请求；仅切换项目关闭触发专属离开确认（与候选编辑确认分开验证），继续编辑保留项目，单次提交创建并进入对应项目任务。
+- [x] **03 · P2 接受前发送失败保留原文与重试入口**：`server.ts` 对 `/messages` 接受前 4xx 拒绝显式返回 `accepted: false`；`App.tsx` 仅在 Host 接受后清草稿，拒绝时保留多行原文与按任务隔离的失败状态，离开/重开/完整刷新均可见、绝不自动重发、不伪装成已发送原生消息，其他任务不可见，保留既有 accepted-but-unknown 核对/去重规则。
+- [x] **04 · P2 用途保存字段诊断与误建草案排除**：`pack-upsert-purpose` 事前校验全部字段并输出安全字段路径/期望形态/UTF-8 字节上限，显式拒绝复数 `evidenceNotes` 等错写键并保证零写入（`revision` 不变）；新增草案预览排除持久化与 UI 修正/排除/恢复入口，排除误建 `U-02` 后预览与发布版仅含有效项且保留历史版本可查。
+- [x] **05 · P2 首次纯界面建立可复用维护身份与受阻指引**：在 `StudioMemberPackPanel` 顶部（建包前可见）与 `发起体系建设` 抽屉暴露具名维护身份（`op:*`）建立/登录入口；新增安全 `grantAuthorityGuidance` 并接入受阻引导 UI 与明细拒绝提示（不含凭据）；验证纯界面空企业建身份/首包→换浏览器受阻引导→重认证→授权 T05→独立新任务实读三表重算→他者只读→撤权阻断→历史临时会话包不静默迁移。
+- [x] **06 · P3 新建任务弹窗与背景 Skill 复选框实测复验**：在真实 Chromium 展开旧任务「交接与依据」下，覆盖鼠标、键盘（Tab/Escape）与桌面/390×844 窄屏完成 5 轮开关复验，核实弹窗内仅 1 个默认 Skill 复选框、原生顶层 `<dialog>.showModal()` 遮罩阻断背景误点、键盘焦点不逃逸、任务目标明确且新旧任务状态完全独立，无误操作缺陷，不做无关 UI 改动。
+
+### Round 2 PM 返工补充规格（依据 [comment-7128937545](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7128937545)）
+
+- **合并最新 `origin/main`**：合入 `f9994cb7b5ad4f9ab52141f278085d9e21f05d45`（PR `#130`，合并提交 `8edf0e4`），在 `src/host/server.ts` 同时保留 `#130` 的战略开题结构化错误 `details` 与 `#121` 的 `/messages` 接受前 `accepted: false`。
+- **01 · 受限任务固定 Skill 真正可读（Linux + macOS）**：
+  - Linux 无 `sandbox-exec` 降级路径（`restrictedHostToolsOnly`）：仅当任务开启 `assignment.skill` 时，在系统提示词明确宣告固定 Skill（`id@version`、`sha256`）并经官方 `defineTool` 暴露严格只读的 `read_task_skill`（校验 `packageIdentity` 摘要，拒绝绝对路径/`..`/隐藏文件/符号链接/硬链接/超限文件，且缺文件时返回 `task_skill_file_unavailable` 不泄漏宿主机路径）；显式取消 Skill 时完全不暴露提示与工具。
+  - macOS `protectedTools` + `evaluateNativeToolCall`：对工作区与项目路径统一 `canonicalPath`（解决 `/var` → `/private/var` 符号链接别名），允许在 `deny-detail` 模式下只读访问 `workspaceRoot/skills`（`read`/`ls`/`find`/`grep`），同时显式拒绝 `write`/`edit`（`member_pack_skill_readonly`），并在 `bash`/`powershell`/`codemode` 枚举分支同步使用 `realProjectRoot` 与其父目录守卫。
+  - 能力快照验证改在活跃打开会话（`POST /open`）与 `/skills` 上核对，兼容 macOS `ordinary` 结算即停机行为。
+- **03 · 延迟 202 不重复发送、不覆盖较新草稿，且 Pi 确认收件前失败保留原稿**：
+  - Host `ProjectStore.markRun` 仅写运行状态而不提前清草稿；`startProjectMessage` 与 `/commands` 严格在 `await run.accepted`（Pi 确认收件并完成原生会话登记）之后、发送 202 / 等待结果之前，调用原子 `ProjectStore.clearDraftIf(projectId, taskId, expectedText)` 仅当 `task.draft` 仍匹配本次发送原文（命令匹配 `trim`）时清空草稿；Pi 确认收件前任何失败（含 4xx 拒绝与原生会话写入失败 500 `sdk_operation_failed`）均绝不清空已保存草稿。
+  - 前端 `App.tsx` 发前先排空该任务在途 `draftQueues` 并记录 `draftVersions` 快照，202 返回或 `requestAcceptedInSnapshot` 确认原生会话已登记该 `requestId` 时仅当草稿版本未变且无在途保存才清理本地未变草稿，不再发起盲目 `PATCH /draft ""` 覆盖用户较新保存草稿；未确认收件的 `interrupted` 失败不会误判为已接受，原草稿在当前页与刷新后保持完整。
+- **04 · 临时取消勾选保持、非法用途零写入与等价领域大小写兼容**：
+  - `StudioMemberPackPanel.tsx` 的 `syncSelectedPurposes` 改为按 `pack.id` 与各用途 `excludedFromPreview` 变化增量合并：同一资产包编辑 `U-01` 时保留用户对 `U-02` 的临时取消勾选，显式切换持久化排除或切换包时仍按服务端状态同步。
+  - `EnterprisePackStore` 抽出只读 `validatePurposeInput` 与唯一领域归一入口 `normalizeDomain` / `findByDomain`（与 `ensurePack` 共享 `.trim().toLowerCase()`）；`studio-host.ts` 的 `pack-read` 与 `pack-upsert-purpose` 预检及 `member-pack-host.ts` 调 `bindContinuationOwner` 之前先完成全量字段校验，保证 0 包企业不创建空包、已归档原项目下非法接续请求不抬高 `revision` / 不新增 `continuationHistory` / 不更改 `activeOwnerProjectId`，且沿 `targetPurposeId` 使用默认/`member-operations`/`MEMBER-OPERATIONS` 等价领域修订时均命中同一资产包与同一用途。
+- **05 · 维护身份验证期间禁用「发起建设」与实读行动态重算**：
+  - `StudioPage.tsx` 在 `newOpBusy` 期间禁用「发起建设」提交与关闭（`allowLeave` + `PersonalDialog.busy`）并在 `newSystem()` 顶部兜底拦截；身份验证失败显示行内 `role="alert"` 且保留已填表单与项目选择；保留原临时会话创建路径不变。
+  - 后端与 Chromium 测试均直接解析 `read_input` 实际返回的 CSV 行计算复购分子/分母（零硬编码 `2/3`），并补齐仅汇总授权、错误用途授权与撤权后的显式负例。
+- **回退与数据兼容性说明**：
+  - 新增持久化字段 `EnterprisePackPurpose.excludedFromPreview` / `excludedReason` 为可选字段，不破坏历史资产包、修订记录、任务固定快照、会话或授权读取。
+  - 若代码回退到不识别 `excludedFromPreview` 的旧版本：已有资产包和历史发布版仍可正常加载且不丢数据，但旧版前端与预览逻辑会忽略 `excludedFromPreview: true`，在下次准备新预览时将曾被排除的草案重新纳入默认勾选列表，需人工手动取消勾选（或升级回含本修复的版本）以避免误发。
+
+### Round 2 普通发送与个人选材的恢复
+
+依据[PM 二次复验](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7134764755)。适用工程规范 v1.14、会话 Interface v3、原 Project/Task owner 与原 Pi 1.4.0。Host 负责核对本次请求是否登记、受管执行资源是否关闭。Agent 继续自主处理用户问题和已授权的资料。
+
+- 原生会话写入失败时保留草稿。明确未受理、正在执行、清理待核与请求结果未知应能区别。只有公共生命周期证明占用已释放，界面才允许发起新一轮。读状态和刷新页面不会自行重放消息。
+- 普通任务恢复可写后，用户能在原任务从刷新后的界面直接发送，或显式重新连接后发送。一次人工发送产生一条原生用户消息。
+- 附资料的请求若确证在派发前失败，用户能沿用原文和确切资料版本重新发送。仍须核对当时权限。发送结果确实不明时保留原请求身份，继续沿既有核对和查重路径。迟到的受理回执不能清除后写入的草稿。
+- 核验通过隔离 Host、官方 Pi、本地合成 Provider 与真实 Chromium 进行。核对请求身份、原生用户消息、模型请求次数与草稿；保留原失败记录及同单其他五项回归。
+
+第 04 项同时核对两种容易误报保存成功的输入。客户端可以原样带回用途的既有备注列表，通过单数 `evidenceNote` 增补依据。若修改或删减了列表中的旧备注，须指出 `payload.evidenceNotes`，保持原依据及修订号。经营取舍草案按已有字段契约校验问题和选项，指出缺失的位置；允许把有效的草案留待业务人员作选择。旧草案的局部错误应能被发现和修订，其他用途仍可查看。

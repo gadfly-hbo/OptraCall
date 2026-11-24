@@ -93,6 +93,20 @@ export interface GrantAuthorityCredential {
   authorityToken: string;
 }
 
+export interface GrantAuthorityGuidance {
+  authorized: boolean;
+  reason?: 'wrong_project' | 'wrong_operator' | 'not_authenticated' | 'ephemeral_maintainer_binding' | 'unbound_legacy_pack' | 'project_archived';
+  ownerProjectId?: string;
+  ownerProjectName?: string;
+  maintainerType: 'named-operator' | 'ephemeral-session' | 'unbound-legacy';
+  maintainerOperatorId?: string;
+  maintainerDisplayName?: string;
+  currentOperatorId?: string;
+  currentOperatorType: 'named-operator' | 'ephemeral-session' | 'unverified';
+  inOwnerProject: boolean;
+  nextStep: string;
+}
+
 export async function listResourceGrants(
   enterpriseId?: string,
   subjectId?: string,
@@ -142,7 +156,7 @@ export async function listEnterprisePacks(
   domain?: string,
   signal?: AbortSignal,
   projectId?: string,
-): Promise<{ packs: EnterpriseDomainPack[]; readOnlyRollback: boolean; grantAuthority?: GrantAuthorityCredential }> {
+): Promise<{ packs: EnterpriseDomainPack[]; readOnlyRollback: boolean; grantAuthority?: GrantAuthorityCredential; grantAuthorityGuidance?: GrantAuthorityGuidance }> {
   const qs = new URLSearchParams();
   if (enterpriseId) qs.set('enterpriseId', enterpriseId);
   if (domain) qs.set('domain', domain);
@@ -171,6 +185,14 @@ export async function selectPanoramaRecommendation(
 
 export async function upsertPackPurpose(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack; purpose: EnterprisePackPurpose; created: boolean }> {
   return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/purposes`, 'POST', input);
+}
+
+export async function setPackPurposePreviewExclusion(
+  packId: string,
+  purposeId: string,
+  input: { requestId: string; projectId?: string; excluded: boolean; reason?: string },
+): Promise<{ pack: EnterpriseDomainPack; purpose: EnterprisePackPurpose }> {
+  return memberPackRequest(`enterprise-packs/${encodeURIComponent(packId)}/purposes/${encodeURIComponent(purposeId)}/preview-exclusion`, 'POST', input);
 }
 
 export async function preparePackPreview(packId: string, input: Record<string, unknown>): Promise<{ pack: EnterpriseDomainPack; preview: EnterprisePackPreview }> {
