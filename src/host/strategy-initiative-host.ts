@@ -58,6 +58,7 @@ export function createStrategyInitiativeHost(options: {
   configuration(id?: string, revision?: number): Readonly<RuntimeModelConfiguration> | null | undefined;
   mutate<T>(fn: () => T | Promise<T>): Promise<T>;
   isClosing(): boolean;
+  captureTool?: (tool: any) => void;
 }) {
   const {initiatives, reports, files, candidates} = options;
   const sessionFileOf = (id: string) => path.join(initiatives.directory(id), 'sessions.json');
@@ -165,11 +166,14 @@ export function createStrategyInitiativeHost(options: {
     }
     if (action === 'initiative-save-kickoff') {
       if (Object.keys(input).some(key => !['action', 'operationId', 'kickoffFields', 'kickoffSources', 'parent'].includes(key))) fail('strategy_kickoff_fields_invalid', 400);
-      const version = await options.mutate(() => reports.save(o.initiativeId, {
-        operationId: String(input.operationId ?? ''), fields: input.kickoffFields as any, sources: input.kickoffSources as any,
-        ...(input.parent !== undefined ? {parent: Number(input.parent)} : {}),
-        kind: 'agent', requestId: context.requestId,
-      }, o.scopeKey));
+      const version = await options.mutate(() => {
+        context.assertCurrent(); context.signal.throwIfAborted();
+        return reports.save(o.initiativeId, {
+          operationId: String(input.operationId ?? ''), fields: input.kickoffFields as any, sources: input.kickoffSources as any,
+          ...(input.parent !== undefined ? {parent: Number(input.parent)} : {}),
+          kind: 'agent', requestId: context.requestId,
+        }, o.scopeKey);
+      });
       context.assertCurrent(); context.signal.throwIfAborted();
       return payload({version: {no: version.no, contentSha256: version.contentSha256, generation: version.generation}, claim: 'draft-saved-lock-by-decision-maker'});
     }
@@ -230,6 +234,8 @@ export function createStrategyInitiativeHost(options: {
     if (reports.proposal(id, proposalId)) { reports.markTerminal(id, proposalId, status); return; }
     await candidates.markTerminal(id, proposalId, status);
   }
+
+  options.captureTool?.(tool);
 
   async function create(id: string, input: Record<string, unknown>): Promise<InitiativeMainSession> {
     const initiative = initiatives.get(id);

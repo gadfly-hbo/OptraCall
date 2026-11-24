@@ -112,3 +112,25 @@
 - 原 `.local/issue-128/` 中部分 RED／GREEN／浏览器日志和截图未及外置归档即丢失；本文早期相对路径可能断链。不能用重建后的空目录或新运行冒充原失败证据。
 - 已外置保全的关键日志位于 `/Users/bendandebaba/.qoder-cn/evidence/issue-128-strategy-trial-repair/`，包括 `npm-check-fourth.log`、`npm-check-head-stopped.log`、`npm-check-head-final.log`、`browser-head-final.log`。最终 Issue 回执以这些可访问证据和已推送候选为准。
 - 其他 worktree 的未跟踪 `.local` 缓存／run 回执损失由用户另行记录；本单不恢复、不重放、不猜测其内容。
+- 早期本文引用的 `.local/issue-128/` 相对日志（kickoff／candidate／handoff／state／sources／self-review／npm-check-first～third／browser-joint 各 attempt 与 green）在误删中 LOST；其当时结论曾按实际命令输出记录，但原始文件现无法复核，证据状态标 NOT_PROVED。外置保全及返工新增日志以 `/Users/bendandebaba/.qoder-cn/evidence/issue-128-strategy-trial-repair/` 实际文件为准。
+
+## 8. PM 退回返工（2026-11-24）
+
+PM 独立复核退回两项合并阻断，仍由 Qoder/Mac-mini 在原分支整体返工。
+
+### R1 开题／候选保存排队期间取消仍落盘
+
+- RED：`node --test tests/strategy-save-cancel-queue.test.ts`，退出 1，2 项失败。受控 mutate 门闩下，进入工具时 context 有效，排队后 abort 再释放门闩，开题报告与候选正文／saveReceipts 仍写入，并携带已取消 requestId。外置日志：`save-cancel-red.log`。
+- 修复：在现有 mutation 提交回调起始处重核 `context.assertCurrent()` 与 `context.signal.throwIfAborted()`，沿用统一生命周期；未新建运行台账。为永久回归增加窄测试接缝 `captureTool`，仅测试注入使用，不开放 HTTP 入口。
+- GREEN：同一命令退出 0，2 项通过；取消先于提交零写入，提交后取消原结果／回执继续可读。外置日志：`save-cancel-green.log`。
+
+### R2 SSE 正常 EOF 未提示观察连接受损
+
+- RED：浏览器脚本新增正常 EOF 场景：合成 Provider 保持运行，events 请求返回 HTTP 200 有限 `text/event-stream` 后结束。修前页面仍显示正常 accepted 运行文案，无断连提示；pending 防重保持。外置日志：`browser-eof-red.log`。
+- 修复：`watchInitiativeEvents` 正常 resolve 且非显式 abort 时，Workbench 同样标记 `observationDisconnected` 并提示可刷新核对；保留请求编号、防重和显式恢复语义。
+- GREEN：重新 build 后浏览器 28 项全部 PASS，包含正常 EOF 提示、EOF 后 pending 防重、拒绝 SSE 对照及原 26 项联合场景；零外部浏览器请求。外置日志：`browser-eof-green.log`。
+
+### 返工后完整检查
+
+- 完整 `npm run check`：退出 0；3274 项中 3163 通过、0 失败、111 条件跳过，测试耗时约 371155 ms；边界检查 PASS，build 通过。外置日志：`npm-check-rework.log`。
+- 提交后固定 HEAD 再执行 build 与联合浏览器，最终结果写入 Issue 返工回执。

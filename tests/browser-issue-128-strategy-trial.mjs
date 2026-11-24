@@ -75,6 +75,29 @@ try {
   check('零外部浏览器请求', external.length === 0, JSON.stringify(external));
   await api(`/api/strategy/initiatives/${initiativeId}/stop?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {});
 
+  const eofScope = {kind: 'department', id: 'eof-east', name: 'EOF 验证部门'};
+  const eofKey = 'department::eof-east';
+  const eofId = randomUUID();
+  await api('/api/strategy/initiatives', 'POST', {operationId: eofId, title: 'EOF 验证事项', scopes: [eofScope]});
+  provider.setResponder(() => ({text: '保持运行', hold: true}));
+  await page.route(`**/api/strategy/initiatives/${eofId}/events*`, route => route.fulfill({status: 200, contentType: 'text/event-stream', body: ''}));
+  await page.reload({waitUntil: 'networkidle'});
+  await page.getByRole('button', {name: '战略选择'}).click();
+  await page.selectOption('select[aria-label="战略事项"]', eofId);
+  await page.waitForSelector('#si-main-text');
+  const beforeEof = provider.requests.length;
+  await page.fill('#si-main-text', '请保持运行以验证观察流正常结束。');
+  await page.getByRole('button', {name: '发送讨论'}).click();
+  await provider.waitForRequests(beforeEof + 1);
+  await page.waitForTimeout(700);
+  const eofBody = await page.locator('body').innerText();
+  check('I128-04 正常 EOF 提示观察连接受损', eofBody.includes('观察连接受损') || eofBody.includes('实时观察流已结束'), eofBody.match(/.{0,30}(观察连接|实时观察).{0,50}/)?.[0] ?? 'no disconnect notice');
+  const eofSession = await api(`/api/strategy/initiatives/${eofId}/session?scopeKey=${encodeURIComponent(eofKey)}`);
+  check('I128-04 EOF 后 pending 防重保持', eofSession.session.pendingInput && provider.requests.length === beforeEof + 1);
+  await page.screenshot({path: path.join(evidenceDir, 'main-eof.png')});
+  await page.unroute(`**/api/strategy/initiatives/${eofId}/events*`);
+  await api(`/api/strategy/initiatives/${eofId}/stop?scopeKey=${encodeURIComponent(eofKey)}`, 'POST', {});
+
   const fields = {horizon: '2027–2029', diagnosis: '首版诊断：客流稳定，优先验证复购。', propositions: [{id: 'P1', question: '复购能否驱动增长？', whyItMatters: '决定资源投向。'}, {id: 'P2', question: '触达能否规模化？', whyItMatters: '决定是否推广。'}, {id: 'P3', question: '如何分配有限预算？', whyItMatters: '决定取舍。'}], assumptions: '', evidenceGaps: '', followUp: ''};
   const blocksA = [{id: 'B1', label: '定位与增长', text: '首版方案：先以三店分层回访验证复购。'}, {id: 'B2', label: '目标与资源', text: '2027 三店试点，暂缓大规模开店。'}];
   const blocksV2 = [{...blocksA[0], text: '修订版方案：先验证成熟店，再考虑新店。'}, blocksA[1]];

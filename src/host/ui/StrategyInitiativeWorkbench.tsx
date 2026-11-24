@@ -277,7 +277,7 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
         if (event.outcome === 'failed') setError(event.error || '本轮讨论未完成，已保存的记录保留。');
         void refresh();
       }
-    }, controller.signal).catch(() => { if (!controller.signal.aborted && alive.current) { setObservationDisconnected(true); setNotice('实时连接暂不可用，可刷新讨论记录；未重发消息。'); } });
+    }, controller.signal).then(() => { if (!controller.signal.aborted && alive.current) { setObservationDisconnected(true); setNotice('实时观察流已结束，可刷新讨论记录；未重发消息。'); } }).catch(() => { if (!controller.signal.aborted && alive.current) { setObservationDisconnected(true); setNotice('实时连接暂不可用，可刷新讨论记录；未重发消息。'); } });
     return () => controller.abort();
   }, [active, stage, session?.session.scopeKey, connection]);
 

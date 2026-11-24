@@ -75,6 +75,7 @@ export function createStrategyCandidateHost(options: {
   configuration(id?: string, revision?: number): Readonly<RuntimeModelConfiguration> | null | undefined;
   mutate<T>(fn: () => T | Promise<T>): Promise<T>;
   isClosing(): boolean;
+  captureTool?: (tool: any) => void;
 }) {
   const {initiatives, reports, files} = options;
   const fileOf = (id: string) => path.join(initiatives.directory(id), 'candidates.json');
@@ -195,6 +196,7 @@ export function createStrategyCandidateHost(options: {
       const blocks = validateBlocks(input.candidateBlocks), goals = validateGoals(input.candidateGoals);
       const contentSha256 = hash({blocks, goals});
       const saved = await options.mutate(() => {
+        context.assertCurrent(); context.signal.throwIfAborted();
         const file = readFile(o.initiativeId);
         const record = file.candidates.find(c => c.candidateId === o.candidateId && c.no === o.no);
         if (!record) fail('strategy_candidate_not_found', 404);
@@ -219,6 +221,8 @@ export function createStrategyCandidateHost(options: {
     }
     fail('role_action_unavailable', 403);
   }
+
+  options.captureTool?.(tool);
 
   async function create(id: string, input: Record<string, unknown>) {
     const initiative = initiatives.get(id);
