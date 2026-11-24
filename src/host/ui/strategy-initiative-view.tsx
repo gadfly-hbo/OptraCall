@@ -102,7 +102,12 @@ export function KickoffBody({ version }: { version: KickoffReportVersion }) {
 export function CandidateBody({ candidate }: { candidate: CandidateVersion }) {
   return <div className="si-body">
     {candidate.blocks.length ? candidate.blocks.map(block => <section className="si-content-block" key={block.id}><h4>{block.label}</h4><p>{block.text}</p></section>) : <p className="si-muted">候选正文尚未回传；独立会话完成后在此核对。</p>}
-    {candidate.goals.length > 0 && <section className="si-content-block"><h4>战略目标</h4><ul>{candidate.goals.map((goal, index) => <li key={index}>G{index + 1} · {goal}</li>)}</ul></section>}
+    {(candidate.blocks.length > 0 || candidate.goals.length > 0) && <section className="si-content-block">
+      <h4>可承接战略目标（{candidate.goals.length} 个）</h4>
+      {candidate.goals.length > 0
+        ? <ul>{candidate.goals.map((goal, index) => <li key={index}>G{index + 1} · {goal}</li>)}</ul>
+        : <p className="si-muted">当前方案未列出可承接目标。仍可合法锁定并作为战略记录发布，但发布后无法「带入目标管理」；如需承接目标，请先在未锁定草稿的候选会话中让 Agent 补充可承接目标后再锁定。</p>}
+    </section>}
   </div>;
 }
 export interface PatchTarget { blockId: string; label: string; text: string }
@@ -158,12 +163,51 @@ export function systemReportEntries(reports: KickoffReportVersion[], candidates:
   return entries;
 }
 
-export function InitiativeFilePanel({ files, reports, candidates, batches, scopeKey, busy = false, onUpload, onOpenFile, onOpenReport }: {
+export interface PendingInitiativeUpload {
+  operationId: string;
+  initiativeId: string;
+  workspaceScopeKey: string;
+  scopeKey?: string;
+  directory: '010_draw' | '020_clean';
+  name: string;
+  size: number;
+  sha256: string;
+  status: 'uploading' | 'unknown' | 'not-found' | 'failed';
+  errorCode?: string;
+  errorMessage?: string;
+  unreachable?: boolean;
+  createdAt: string;
+  checkedAt?: string;
+}
+
+export function matchPendingUploadFile(
+  pending: PendingInitiativeUpload,
+  files: InitiativeFile[],
+): { kind: 'matched'; file: InitiativeFile } | { kind: 'conflict'; file: InitiativeFile } | { kind: 'not-found' } {
+  const found = files.find(file => file.operationId === pending.operationId);
+  if (!found) return { kind: 'not-found' };
+  const exact = found.directory === pending.directory
+    && found.name === pending.name
+    && found.sha256 === pending.sha256
+    && (found.scopeKey ?? undefined) === pending.scopeKey;
+  return exact ? { kind: 'matched', file: found } : { kind: 'conflict', file: found };
+}
+
+export function InitiativeFilePanel({
+  files, reports, candidates, batches, scopeKey, busy = false,
+  pendingUpload = null, hasPendingUploadPayload = false,
+  onUpload, onOpenFile, onOpenReport,
+  onCheckPendingUpload, onRetryPendingUpload, onReselectPendingUpload, onDismissPendingUpload,
+}: {
   files: InitiativeFile[]; reports: KickoffReportVersion[]; candidates: CandidateVersion[]; batches: VerificationBatch[]; scopeKey: string; busy?: boolean;
+  pendingUpload?: PendingInitiativeUpload | null; hasPendingUploadPayload?: boolean;
   onUpload: (directory: '010_draw' | '020_clean', file: File, scopeExclusive: boolean) => void;
   onOpenFile: (file: InitiativeFile) => void; onOpenReport: (entry: ReportFileEntry) => void;
+  onCheckPendingUpload?: () => void; onRetryPendingUpload?: () => void;
+  onReselectPendingUpload?: (file: File) => void; onDismissPendingUpload?: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const reselectInput = useRef<HTMLInputElement>(null);
   const [directory, setDirectory] = useState<'010_draw' | '020_clean'>('010_draw');
   const [scopeExclusive, setScopeExclusive] = useState(false);
   const reportEntries = systemReportEntries(reports, candidates, batches);
@@ -181,6 +225,25 @@ export function InitiativeFilePanel({ files, reports, candidates, batches, scope
       <input ref={input} type="file" hidden aria-label="选择上传文件" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onUpload(directory, file, scopeExclusive); }} />
       <p className="si-muted">上传仅进入 010／020；060 由系统成果展示。目录不提供敏感数据隔离。</p>
     </div>
+    {pendingUpload && <div className="si-upload-recovery si-notice si-notice-warning" role="status" aria-label="待核上传记录">
+      <p><strong>{pendingUpload.status === 'uploading' ? '正在上传资料' : pendingUpload.status === 'not-found' ? '已核对 · 尚未发现原上传记录' : '上传结果未知（UNKNOWN）'}</strong></p>
+      <p className="si-muted">{pendingUpload.name} · {pendingUpload.directory} · {pendingUpload.scopeKey ? '仅当前范围专属' : '事项共用'} · {(pendingUpload.size / 1024).toFixed(1)} KB</p>
+      {pendingUpload.unreachable && <p>本地 OptraCall 服务当前不可达，本次上传结果仍为 UNKNOWN。请先通过现有启动入口（双击「启动 OptraCall.command」或运行 <code>npm run start</code>）恢复服务，并保留启动日志（<code>~/.optracall/trial/logs/</code>）备查；恢复后先点击「核对原上传结果」，确认是否已保存再决定是否按原编号重试。</p>}
+      {!pendingUpload.unreachable && pendingUpload.status === 'unknown' && <p>未收到明确的上传完成回执，原操作编号与文件指纹已保留，未自动重传。请先只读核对是否已保存到当前事项。</p>}
+      {pendingUpload.status === 'not-found' && <p>已只读核对当前文件列表，尚未发现原操作编号对应的文件记录。可沿原操作编号重试，避免生成重复记录；也可放弃此待核记录后发起明确新上传。</p>}
+      {pendingUpload.status === 'not-found' && !hasPendingUploadPayload && <p className="si-muted">页面刷新后原文件字节未保存在浏览器内存；如需沿原操作编号重试，请重新选择原文件（将核对文件名与 SHA-256 指纹一致）。</p>}
+      {pendingUpload.errorMessage && <p className="si-muted">最近回执：{pendingUpload.errorMessage}</p>}
+      <details><summary>原操作编号与指纹</summary><p className="si-muted">operationId <code>{pendingUpload.operationId}</code></p><p className="si-muted">SHA-256 <code>{pendingUpload.sha256}</code></p></details>
+      {pendingUpload.status !== 'uploading' && <div className="si-actions">
+        {onCheckPendingUpload && <button type="button" className="secondary-button" disabled={busy} onClick={onCheckPendingUpload}>核对原上传结果</button>}
+        {hasPendingUploadPayload && onRetryPendingUpload && <button type="button" className="secondary-button" disabled={busy} onClick={onRetryPendingUpload}>按原操作编号重试</button>}
+        {!hasPendingUploadPayload && onReselectPendingUpload && <>
+          <button type="button" className="secondary-button" disabled={busy} onClick={() => reselectInput.current?.click()}>重选原文件并按原编号重试</button>
+          <input ref={reselectInput} type="file" hidden aria-label="重选原文件并按原编号重试" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onReselectPendingUpload(file); }} />
+        </>}
+        {onDismissPendingUpload && <button type="button" className="text-button" disabled={busy} onClick={onDismissPendingUpload}>放弃待核记录</button>}
+      </div>}
+    </div>}
     {directories.map(folder => <details className="si-folder" key={folder.key} open={folder.key !== '020_clean' || undefined}>
       <summary><span aria-hidden="true">▱</span><strong>{folder.key}</strong><span className="si-file-count">{folder.key === '060_reports' ? reportEntries.length : files.filter(file => file.directory === folder.key).length}</span><small>{folder.note}</small></summary>
       <div className="si-folder-entries">{folder.entries.length ? folder.entries : <p className="si-muted">{folder.key === '060_reports' ? '暂无成果' : '暂无文件'}</p>}</div>

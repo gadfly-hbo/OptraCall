@@ -367,11 +367,15 @@ export class StrategyInitiativeReports {
     proposal.updatedAt = new Date().toISOString();
     this.write(id, file);
   }
-  markTerminal(id: string, proposalId: string, status: 'ended' | 'failed'): void {
+  markTerminal(id: string, proposalId: string, status: 'ended' | 'failed', feedback?: import('./strategy-initiative-types.ts').RevisionProposalFeedback): void {
     const file = this.read(id);
     const proposal = file.proposals.find(p => p.proposalId === proposalId);
     if (!proposal || proposal.status !== 'pending') return;
     proposal.status = status;
+    if (feedback) {
+      proposal.requestId = feedback.requestId;
+      proposal.feedback = structuredClone(feedback);
+    }
     proposal.updatedAt = new Date().toISOString();
     this.write(id, file);
   }
@@ -384,4 +388,17 @@ export function reportBlockText(fields: KickoffFields, blockId: string): string 
     return proposition ? proposition[segments[2] as 'question' | 'whyItMatters' | 'evidence' | 'gaps'] : undefined;
   }
   return undefined;
+}
+export function reportBlockCatalog(fields: KickoffFields): { blockId: string; label: string }[] {
+  const labels: Record<'horizon' | 'diagnosis' | 'assumptions' | 'evidenceGaps' | 'followUp', string> = {
+    horizon: '时间视野', diagnosis: '诊断摘要', assumptions: '事实与假设', evidenceGaps: '证据缺口', followUp: '后续方案形成要求',
+  };
+  const items: { blockId: string; label: string }[] = (['horizon', 'diagnosis', 'assumptions', 'evidenceGaps', 'followUp'] as const).map(key => ({blockId: key, label: labels[key]}));
+  for (const proposition of fields.propositions) {
+    items.push({blockId: `proposition:${proposition.id}:question`, label: `命题 ${proposition.id} · 关键问题`});
+    items.push({blockId: `proposition:${proposition.id}:whyItMatters`, label: `命题 ${proposition.id} · 为何影响选择`});
+    if (proposition.evidence !== undefined) items.push({blockId: `proposition:${proposition.id}:evidence`, label: `命题 ${proposition.id} · 依据`});
+    if (proposition.gaps !== undefined) items.push({blockId: `proposition:${proposition.id}:gaps`, label: `命题 ${proposition.id} · 缺口`});
+  }
+  return items;
 }

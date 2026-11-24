@@ -11,8 +11,8 @@ import { initiativeScopeKey } from '../strategy-initiative-types.ts';
 import type { ManagementStage, StrategyStage } from './ManagementTabs.tsx';
 import * as api from './strategy-initiative-client.ts';
 import type { CandidateDetail, InitiativeFile, InitiativeHistory, InitiativePublication, InitiativeRecord, InitiativeSessionDetail, KickoffReportReadback, KickoffReportVersion, ReportsView } from './strategy-initiative-client.ts';
-import { Badge, CandidateBody, InitiativeFilePanel, KickoffBody, LifecyclePlaceholderDialog, candidateLabel, candidateStatus, kickoffPatchTargets, latestBatch, mainSessionPresentation, publicationFor } from './strategy-initiative-view.tsx';
-import type { PatchTarget, ReportFileEntry } from './strategy-initiative-view.tsx';
+import { Badge, CandidateBody, InitiativeFilePanel, KickoffBody, LifecyclePlaceholderDialog, candidateLabel, candidateStatus, kickoffPatchTargets, latestBatch, mainSessionPresentation, matchPendingUploadFile, publicationFor } from './strategy-initiative-view.tsx';
+import type { PatchTarget, PendingInitiativeUpload, ReportFileEntry } from './strategy-initiative-view.tsx';
 import { StrategyCheckPanel, StrategyReleaseReview, StrategyVersionsPanel, LegacyDiscussionReadback, ReportVersionDialog, VersionReceiptDialog, verificationSourceLabels } from './StrategyInitiativeGovernance.tsx';
 import type { CandidateRef, LegacyDiscussionAccess } from './StrategyInitiativeGovernance.tsx';
 import { listStrategyDiscussions } from './strategy-discussion-client.ts';
@@ -23,8 +23,24 @@ const transcriptMessages = (snapshot: { messages: Record<string, unknown>[] } | 
   (snapshot?.messages ?? []).filter((message): message is NativeMessage => ['user', 'assistant', 'toolResult', 'bashExecution'].includes((message as { role?: string }).role ?? ''));
 const draftKey = (id: string, scopeKey: string) => `optracall.strategy-initiative.draft.v1:${id}:${scopeKey}`;
 const journalKey = (id: string, scopeKey: string) => `optracall.strategy-initiative.pending.v1:${id}:${scopeKey}`;
+const uploadJournalKey = (id: string, scopeKey: string) => `optracall.strategy-initiative.upload-pending.v1:${id}:${scopeKey}`;
 const readDraft = (id: string, scopeKey: string): string => { try { return sessionStorage.getItem(draftKey(id, scopeKey)) || ''; } catch { return ''; } };
 const saveDraft = (id: string, scopeKey: string, text: string) => { try { sessionStorage.setItem(draftKey(id, scopeKey), text); } catch { /* input stays in memory */ } };
+const readPendingUpload = (id: string, scopeKey: string): PendingInitiativeUpload | null => {
+  try {
+    const raw = sessionStorage.getItem(uploadJournalKey(id, scopeKey));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PendingInitiativeUpload;
+    if (!parsed || typeof parsed !== 'object' || parsed.initiativeId !== id || parsed.workspaceScopeKey !== scopeKey || typeof parsed.operationId !== 'string' || typeof parsed.sha256 !== 'string' || typeof parsed.name !== 'string') return null;
+    return parsed.status === 'uploading' ? { ...parsed, status: 'unknown' } : parsed;
+  } catch { return null; }
+};
+const savePendingUpload = (id: string, scopeKey: string, value: PendingInitiativeUpload | null) => {
+  try {
+    if (value) sessionStorage.setItem(uploadJournalKey(id, scopeKey), JSON.stringify(value));
+    else sessionStorage.removeItem(uploadJournalKey(id, scopeKey));
+  } catch { /* metadata stays in memory */ }
+};
 const sameRef = (candidate: CandidateVersion, ref: CandidateRef | null) => Boolean(ref && candidate.candidateId === ref.candidateId && candidate.no === ref.no);
 type SourcePreview =
   | { kind: 'report'; source: VerificationSourceRef; version: KickoffReportReadback; anchor?: KickoffAnchor }
@@ -110,35 +126,53 @@ function LegacyWithoutInitiative({ access, legacyFocus }: { access: LegacyDiscus
   </section>;
 }
 
-function InitiativeEditorDialog({ initial, onClose, onSaved }: { initial?: InitiativeRecord; onClose: () => void; onSaved: (record: InitiativeRecord) => Promise<void> }) {
+export function InitiativeEditorDialog({ initial, onClose, onSaved }: { initial?: InitiativeRecord; onClose: () => void; onSaved: (record: InitiativeRecord) => Promise<void> }) {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [rows, setRows] = useState<GoalScope[]>(initial?.scopes.length ? initial.scopes.map(scope => ({ ...scope })) : [{ kind: 'department', id: '', name: '' }]);
-  const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [invalidField, setInvalidField] = useState<string | null>(null);
   const operationId = useOperationId();
-  const change = (index: number, patch: Partial<GoalScope>) => setRows(old => old.map((row, at) => at === index ? { ...row, ...patch } : row));
+  const change = (index: number, patch: Partial<GoalScope>) => {
+    setRows(old => old.map((row, at) => at === index ? { ...row, ...patch } : row));
+    setInvalidField(null);
+  };
+  const focusField = (fieldId: string, message: string) => {
+    setInvalidField(fieldId);
+    setError(message);
+    if (typeof document !== 'undefined') document.getElementById(fieldId)?.focus();
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const cleaned = title.trim();
+    if (!cleaned) { focusField('si-initiative-title', '请填写事项名称（必填），并至少保留一个标识与名称齐全的范围。'); return; }
+    for (const [index, row] of rows.entries()) {
+      const name = row.name.trim(), id = row.id.trim();
+      if (!name && !id) {
+        if (rows.length === 1) { focusField('si-scope-name-0', '请填写事项名称，并至少保留一个标识与名称齐全的范围（范围 1 缺少必填的「范围名称」与「归属标识」）。'); return; }
+        continue;
+      }
+      if (!name) { focusField(`si-scope-name-${index}`, `范围 ${index + 1} 缺少必填的「范围名称」，请补全后再保存。`); return; }
+      if (!id) { focusField(`si-scope-id-${index}`, `范围 ${index + 1} 缺少必填的「归属标识」（稳定组织／业务标识），请补全后再保存。`); return; }
+    }
     const scopes = rows.map(row => ({ kind: row.kind, id: row.id.trim(), name: row.name.trim(), ...(row.kind === 'department' && row.enterpriseId?.trim() ? { enterpriseId: row.enterpriseId.trim() } : {}) })).filter(row => row.id && row.name);
-    if (!cleaned || !scopes.length) { setError('请填写事项名称，并至少保留一个标识与名称齐全的范围。'); return; }
-    if (new Set(scopes.map(scope => initiativeScopeKey(scope))).size !== scopes.length) { setError('范围归属标识重复，请核对后再保存。'); return; }
-    setBusy(true); setError('');
+    if (!scopes.length) { focusField('si-scope-id-0', '请填写事项名称，并至少保留一个标识与名称齐全的范围。'); return; }
+    if (new Set(scopes.map(scope => initiativeScopeKey(scope))).size !== scopes.length) { focusField('si-scope-id-0', '范围归属标识重复，请核对后再保存。'); return; }
+    setBusy(true); setError(''); setInvalidField(null);
     const action = initial
       ? api.updateInitiative(initial.id, { expectedRevision: initial.revision, title: cleaned, scopes })
       : api.createInitiative({ operationId: operationId({ title: cleaned, scopes }), title: cleaned, scopes });
     void action.then(result => onSaved(result.initiative)).catch(fault => setError(errorText(fault))).finally(() => setBusy(false));
   };
   return <CaseDialog title={initial ? '编辑战略事项' : '新建战略事项'} subtitle="范围持有实际组织／业务归属；切换范围保留各自的应用指针、访谈与资料。" busy={busy} onClose={onClose}>
-    <form onSubmit={submit}>
-      <div className="case-field"><label htmlFor="si-initiative-title">事项名称</label><input id="si-initiative-title" required maxLength={200} disabled={busy} value={title} onChange={event => setTitle(event.target.value)} placeholder="例如：华东门店增长战略" /></div>
+    <form onSubmit={submit} noValidate>
+      <div className="case-field"><label htmlFor="si-initiative-title">事项名称 <span>必填</span></label><input id="si-initiative-title" required aria-required="true" aria-invalid={invalidField === 'si-initiative-title' || undefined} maxLength={200} disabled={busy} value={title} onChange={event => { setTitle(event.target.value); setInvalidField(null); }} placeholder="例如：华东门店增长战略" /></div>
       {rows.map((row, index) => <fieldset className="si-scope-row" key={index}>
         <legend>范围 {index + 1}</legend>
         <div className="case-form-row">
           <div className="case-field"><label htmlFor={`si-scope-kind-${index}`}>层级</label><select id={`si-scope-kind-${index}`} disabled={busy} value={row.kind} onChange={event => change(index, { kind: event.target.value as GoalScope['kind'] })}><option value="enterprise">企业</option><option value="department">部门／业务</option><option value="personal">个人</option></select></div>
-          <div className="case-field"><label htmlFor={`si-scope-name-${index}`}>范围名称</label><input id={`si-scope-name-${index}`} maxLength={200} disabled={busy} value={row.name} onChange={event => change(index, { name: event.target.value })} placeholder="例如：华东零售事业部" /></div>
+          <div className="case-field"><label htmlFor={`si-scope-name-${index}`}>范围名称 <span>必填</span></label><input id={`si-scope-name-${index}`} required aria-required="true" aria-invalid={invalidField === `si-scope-name-${index}` || undefined} maxLength={200} disabled={busy} value={row.name} onChange={event => change(index, { name: event.target.value })} placeholder="例如：华东零售事业部" /></div>
         </div>
         <div className="case-form-row">
-          <div className="case-field"><label htmlFor={`si-scope-id-${index}`}>归属标识</label><input id={`si-scope-id-${index}`} maxLength={200} disabled={busy} value={row.id} onChange={event => change(index, { id: event.target.value })} placeholder="稳定标识，改名不另开范围" /></div>
+          <div className="case-field"><label htmlFor={`si-scope-id-${index}`}>归属标识 <span>必填</span></label><input id={`si-scope-id-${index}`} required aria-required="true" aria-invalid={invalidField === `si-scope-id-${index}` || undefined} maxLength={200} disabled={busy} value={row.id} onChange={event => change(index, { id: event.target.value })} placeholder="必填，如 east-retail；改名不另开范围" /></div>
           {row.kind === 'department' && <div className="case-field"><label htmlFor={`si-scope-enterprise-${index}`}>上层企业标识（可选）</label><input id={`si-scope-enterprise-${index}`} maxLength={200} disabled={busy} value={row.enterpriseId ?? ''} onChange={event => change(index, { enterpriseId: event.target.value })} /></div>}
         </div>
         {rows.length > 1 && <button type="button" className="text-button" disabled={busy} onClick={() => setRows(old => old.filter((_, at) => at !== index))}>移除此范围</button>}
@@ -174,12 +208,21 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
   const pendingRef = useRef<typeof pending>(null), terminalRequestId = useRef<string | null>(null);
   const [busy, setBusy] = useState(false), [connection, setConnection] = useState(0);
   const [dispatching, setDispatching] = useState(false), [observationDisconnected, setObservationDisconnected] = useState(false);
-  const [dialog, setDialog] = useState<'new-candidate' | 'lock-report' | 'lock-candidate' | 'revise-report' | 'revise-candidate' | 'candidate-session' | null>(null);
+  const [dialog, setDialog] = useState<'new-candidate' | 'new-candidate-from-parent' | 'lock-report' | 'lock-candidate' | 'revise-report' | 'revise-candidate' | 'candidate-session' | 'main-discussion' | null>(null);
   const [preview, setPreview] = useState<{ title: string; content: string } | null>(null);
   const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
   const [fileBusy, setFileBusy] = useState(false), [fileError, setFileError] = useState('');
+  const [pendingUpload, setPendingUpload] = useState<PendingInitiativeUpload | null>(() => readPendingUpload(id, scopeKey));
+  const pendingUploadRef = useRef<PendingInitiativeUpload | null>(pendingUpload);
+  const pendingUploadPayloadRef = useRef<{ operationId: string; contentBase64: string } | null>(null);
   const [legacyId, setLegacyId] = useState('');
   const alive = useRef(true), presentedSnapshot = useRef<InitiativeSessionDetail['snapshot']>(null);
+  const rememberPendingUpload = (value: PendingInitiativeUpload | null) => {
+    pendingUploadRef.current = value;
+    setPendingUpload(value);
+    savePendingUpload(id, scopeKey, value);
+    if (!value || pendingUploadPayloadRef.current?.operationId !== value.operationId) pendingUploadPayloadRef.current = null;
+  };
   const rememberPending = (value: typeof pending) => {
     pendingRef.current = value;
     setPending(value);
@@ -225,7 +268,18 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
     if (!alive.current) return;
     if (reportResult.status === 'fulfilled') setReports(reportResult.value);
     if (sessionResult.status === 'fulfilled') applySession(sessionResult.value, reportResult.status !== 'fulfilled');
-    if (fileResult.status === 'fulfilled') setFiles(fileResult.value.files);
+    if (fileResult.status === 'fulfilled') {
+      setFiles(fileResult.value.files);
+      const pendingItem = pendingUploadRef.current;
+      if (pendingItem && pendingItem.status !== 'uploading') {
+        const matched = matchPendingUploadFile(pendingItem, fileResult.value.files);
+        if (matched.kind === 'matched') {
+          rememberPendingUpload(null);
+          setFileError('');
+          setNotice(`已核对原上传操作（${pendingItem.operationId.slice(0, 8)}）：文件「${matched.file.name}」已保存于 ${matched.file.directory}，未重复上传。`);
+        }
+      }
+    }
     if (candidateResult.status === 'fulfilled') setCandidates(candidateResult.value.candidates);
     if (publicationResult.status === 'fulfilled') setPublications(publicationResult.value.publications);
     if (historyResult.status === 'fulfilled') setHistory(historyResult.value);
@@ -351,16 +405,130 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       if (action === 'refresh') setNotice('已刷新讨论记录，消息与状态已同步。');
     } catch (fault) { setError(errorText(fault)); } finally { if (alive.current) setBusy(false); }
   };
+  const executeUpload = async (record: PendingInitiativeUpload, contentBase64: string) => {
+    setFileBusy(true); setFileError('');
+    pendingUploadPayloadRef.current = { operationId: record.operationId, contentBase64 };
+    rememberPendingUpload({ ...record, status: 'uploading', errorCode: undefined, errorMessage: undefined, unreachable: false });
+    try {
+      const uploaded = await api.uploadInitiativeFile(id, {
+        operationId: record.operationId, directory: record.directory, name: record.name, contentBase64,
+        ...(record.scopeKey ? { scopeKey: record.scopeKey } : {}),
+      });
+      if (!alive.current) return;
+      rememberPendingUpload(null);
+      try {
+        const result = await api.listInitiativeFiles(id, scopeKey);
+        if (alive.current) setFiles(result.files);
+      } catch {
+        if (alive.current) setFiles(old => old.some(item => item.fileId === uploaded.file.fileId) ? old : [...old, uploaded.file]);
+      }
+      if (alive.current) setNotice('资料已加入当前事项；上传本身不调用模型。');
+    } catch (fault) {
+      if (!alive.current) return;
+      const isReqErr = fault instanceof api.StrategyInitiativeRequestError;
+      const uncertain = !isReqErr || fault.uncertain || fault.status === 0 || fault.status >= 500 || fault.code === 'strategy_file_operation_conflict';
+      const msg = errorText(fault);
+      if (uncertain) {
+        rememberPendingUpload({
+          ...record,
+          status: 'unknown',
+          unreachable: isReqErr && fault.status === 0,
+          errorCode: isReqErr ? fault.code : undefined,
+          errorMessage: msg,
+        });
+      } else {
+        rememberPendingUpload(null);
+      }
+      setFileError(msg);
+    } finally { if (alive.current) setFileBusy(false); }
+  };
   const upload = async (directory: '010_draw' | '020_clean', file: File, scopeExclusive: boolean) => {
     if (fileBusy) return;
     if (file.size > 50 * 1024 * 1024) { setFileError('单文件不超过 50 MiB。'); return; }
     setFileBusy(true); setFileError('');
     try {
-      const contentBase64 = await fileBase64(file);
-      await api.uploadInitiativeFile(id, { operationId: crypto.randomUUID(), directory, name: file.name, contentBase64, ...(scopeExclusive ? { scopeKey } : {}) });
+      const [buffer, contentBase64] = await Promise.all([file.arrayBuffer(), fileBase64(file)]);
+      const sha256 = await api.sha256Buffer(buffer);
+      const record: PendingInitiativeUpload = {
+        operationId: crypto.randomUUID(),
+        initiativeId: id,
+        workspaceScopeKey: scopeKey,
+        ...(scopeExclusive ? { scopeKey } : {}),
+        directory,
+        name: file.name,
+        size: file.size,
+        sha256,
+        status: 'uploading',
+        createdAt: new Date().toISOString(),
+      };
+      await executeUpload(record, contentBase64);
+    } catch (fault) {
+      if (alive.current) { setFileError(errorText(fault)); setFileBusy(false); }
+    }
+  };
+  const checkPendingUpload = async () => {
+    const currentPending = pendingUploadRef.current;
+    if (!currentPending || fileBusy) return;
+    setFileBusy(true); setFileError('');
+    try {
       const result = await api.listInitiativeFiles(id, scopeKey);
-      if (alive.current) { setFiles(result.files); setNotice('资料已加入当前事项；上传本身不调用模型。'); }
-    } catch (fault) { if (alive.current) setFileError(errorText(fault)); } finally { if (alive.current) setFileBusy(false); }
+      if (!alive.current) return;
+      setFiles(result.files);
+      const matched = matchPendingUploadFile(currentPending, result.files);
+      if (matched.kind === 'matched') {
+        rememberPendingUpload(null);
+        setNotice(`已核对原上传操作（${currentPending.operationId.slice(0, 8)}）：文件「${matched.file.name}」已保存于 ${matched.file.directory}（fileId ${matched.file.fileId.slice(0, 8)}），未重复上传。`);
+      } else if (matched.kind === 'conflict') {
+        setFileError(`原操作编号 ${currentPending.operationId.slice(0, 8)} 已对应不同文件「${matched.file.name}」；未覆盖或重复上传。`);
+      } else {
+        rememberPendingUpload({ ...currentPending, status: 'not-found', unreachable: false, errorMessage: undefined, checkedAt: new Date().toISOString() });
+        setNotice(`已只读核对当前事项文件列表，尚未发现原上传操作（${currentPending.operationId.slice(0, 8)}）的已保存记录。`);
+      }
+    } catch (fault) {
+      if (!alive.current) return;
+      const isReqErr = fault instanceof api.StrategyInitiativeRequestError;
+      const msg = errorText(fault);
+      rememberPendingUpload({
+        ...currentPending,
+        status: 'unknown',
+        unreachable: isReqErr && fault.status === 0,
+        errorCode: isReqErr ? fault.code : undefined,
+        errorMessage: msg,
+        checkedAt: new Date().toISOString(),
+      });
+      setFileError(msg);
+    } finally { if (alive.current) setFileBusy(false); }
+  };
+  const retryPendingUpload = async () => {
+    const currentPending = pendingUploadRef.current;
+    const payload = pendingUploadPayloadRef.current;
+    if (!currentPending || fileBusy || !payload || payload.operationId !== currentPending.operationId) return;
+    await executeUpload(currentPending, payload.contentBase64);
+  };
+  const reselectPendingUpload = async (file: File) => {
+    const currentPending = pendingUploadRef.current;
+    if (!currentPending || fileBusy) return;
+    if (file.size > 50 * 1024 * 1024) { setFileError('单文件不超过 50 MiB。'); return; }
+    setFileBusy(true); setFileError('');
+    try {
+      const buffer = await file.arrayBuffer();
+      const sha256 = await api.sha256Buffer(buffer);
+      if (file.name !== currentPending.name || file.size !== currentPending.size || sha256 !== currentPending.sha256) {
+        setFileError(`重选文件「${file.name}」与待核记录「${currentPending.name}」的文件名或 SHA-256 指纹不一致，未沿原操作编号上传；请重选原文件，或放弃待核记录后发起新上传。`);
+        setFileBusy(false);
+        return;
+      }
+      const contentBase64 = await fileBase64(file);
+      await executeUpload(currentPending, contentBase64);
+    } catch (fault) {
+      if (alive.current) { setFileError(errorText(fault)); setFileBusy(false); }
+    }
+  };
+  const dismissPendingUpload = () => {
+    if (fileBusy) return;
+    rememberPendingUpload(null);
+    setFileError('');
+    setNotice('已放弃本地待核上传记录；服务端已有文件不受影响。');
   };
   const decodeFilePreview = (name: string, contentBase64: string) => {
     const bytes = Uint8Array.from(atob(contentBase64), char => char.charCodeAt(0));
@@ -469,8 +637,12 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       })}</div> : <div className="si-empty"><p>为一个备选方向创建独立会话。完成后，候选将回到这里供核对。</p></div>}
     </section>
     {current && <CandidateDetailPanel candidate={current} batch={latestBatch(history?.verifications ?? [], current)} publication={publicationFor(publications, current)} busy={busy}
-      onLock={() => setDialog('lock-candidate')} onRevise={() => setDialog('revise-candidate')} onSession={() => setDialog('candidate-session')} onStage={onStage} />}
-    {comparable.length > 1 && conversation('主会话 · 候选比较', `围绕开题报告 v${anchor.reportNo}，比较 ${comparable.length} 个候选方向。`, '例如：预算固定时，两种方案的主要取舍是什么？')}
+      onLock={() => setDialog('lock-candidate')} onRevise={() => setDialog('revise-candidate')} onSession={() => setDialog('candidate-session')} onNewFromParent={() => setDialog('new-candidate-from-parent')} onStage={onStage} />}
+    {comparable.length > 1
+      ? conversation('主会话 · 候选比较', `围绕开题报告 v${anchor.reportNo}，比较 ${comparable.length} 个候选方向。`, '例如：预算固定时，两种方案的主要取舍是什么？')
+      : session && <section className="sg-panel si-panel" aria-label="主会话原讨论">
+          <div className="si-panel-head"><div><h3>主会话原讨论</h3><p className="si-muted">单候选方案页也可随时查看主会话的开题、比较与限定修改讨论记录。</p></div><button type="button" className="secondary-button" onClick={() => setDialog('main-discussion')}>查看主会话讨论</button></div>
+        </section>}
   </>;
 
   return <div className="si-layout">
@@ -491,26 +663,50 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
     <div className="si-side">
       <CaseFormError error={fileError} />
       <InitiativeFilePanel files={files} reports={scopedVersions} candidates={candidates} batches={history?.verifications ?? []} scopeKey={scopeKey} busy={fileBusy}
+        pendingUpload={pendingUpload}
+        hasPendingUploadPayload={Boolean(pendingUpload && pendingUploadPayloadRef.current?.operationId === pendingUpload.operationId)}
         onUpload={(directory, file, scopeExclusive) => { void upload(directory, file, scopeExclusive); }}
         onOpenFile={file => { void openFile(file); }}
-        onOpenReport={(entry: ReportFileEntry) => setPreview({ title: entry.name, content: entry.content })} />
+        onOpenReport={(entry: ReportFileEntry) => setPreview({ title: entry.name, content: entry.content })}
+        onCheckPendingUpload={() => { void checkPendingUpload(); }}
+        onRetryPendingUpload={() => { void retryPendingUpload(); }}
+        onReselectPendingUpload={file => { void reselectPendingUpload(file); }}
+        onDismissPendingUpload={dismissPendingUpload} />
     </div>
     {dialog === 'new-candidate' && <NewCandidateDialog initiativeId={id} scope={scope} anchorNo={anchor?.reportNo} onClose={() => setDialog(null)} onCreated={async candidate => { setDialog(null); await refresh(); setSelectedCandidate({ candidateId: candidate.candidateId, no: candidate.no }); setNotice('候选独立会话已启动；完成后回到主窗口核对。'); }} />}
+    {dialog === 'new-candidate-from-parent' && current && <NewCandidateDialog initiativeId={id} scope={scope} anchorNo={current.anchor.reportNo} parent={current} onClose={() => setDialog(null)} onCreated={async candidate => { setDialog(null); await refresh(); setSelectedCandidate({ candidateId: candidate.candidateId, no: candidate.no }); setNotice(`已基于父版 ${candidateLabel(current)} 启动新候选 v${candidate.no} 的独立会话；新版须重新锁定与检验。`); }} />}
     {dialog === 'lock-report' && report && <LockConfirmDialog title="锁定开题报告" subtitle={`确认开题报告 v${report.no} 的战略命题、资料依据和待核项。锁定后可将此准确版本用作方案输入。`} body={<KickoffBody version={report} />} busy={busy}
       onConfirm={operationId => api.lockKickoffReport(id, report.no, { operationId, sha256: report.contentSha256 }, scopeKey)}
       onDone={async () => { setDialog(null); await refresh(); setNotice(`已锁定开题报告 v${report.no}。`); }} onClose={() => setDialog(null)} />}
-    {dialog === 'lock-candidate' && current && <LockConfirmDialog title="锁定战略候选" subtitle={`确认 ${candidateLabel(current)} 的完整方案及开题报告 v${current.anchor.reportNo}。锁定后可以开始战略检验。`} body={<CandidateBody candidate={current} />} busy={busy}
+    {dialog === 'lock-candidate' && current && <LockConfirmDialog title="锁定战略候选" subtitle={`确认 ${candidateLabel(current)} 的完整方案及开题报告 v${current.anchor.reportNo}。锁定后可以开始战略检验。`}
+      preface={current.goals.length === 0
+        ? <p className="si-notice si-notice-warning" role="status">可承接目标：0 个。锁定后此版不可原位修改；仍可完成检验并作为战略记录正式发布，但发布后无法「带入目标管理」。如需补齐可承接目标，请先返回候选会话补充后再锁定。</p>
+        : <p className="si-notice si-notice-positive" role="status">可承接目标：{current.goals.length} 个（锁定并通过双检验发布后，可按需带入目标管理）。</p>}
+      secondaryAction={current.goals.length === 0 ? { label: '先回候选会话补充目标', onClick: () => setDialog('candidate-session') } : undefined}
+      body={<CandidateBody candidate={current} />} busy={busy}
       onConfirm={operationId => api.lockCandidate(id, current.candidateId, current.no, { operationId, sha256: current.contentSha256 })}
       onDone={async () => { setDialog(null); await refresh(); setNotice('已锁定，可以开始因果检验。'); onStage('strategy-check'); }} onClose={() => setDialog(null)} />}
     {dialog === 'revise-report' && report && <ReviseDialog title="限定修改开题报告" baseLabel={`开题报告 · v${report.no}`} baseSha256={report.contentSha256} targets={kickoffPatchTargets(report.fields)} maxText={8000}
       propose={input => api.proposeReportRevision(id, report.no, scopeKey, input)} readProposal={pid => api.readProposal(id, pid, scopeKey)}
+      readMainDiscussion={() => api.readInitiativeSession(id, scopeKey).catch(fault => { if (fault instanceof api.StrategyInitiativeRequestError && fault.status === 404) return null; throw fault; })}
+      modelLabel={modelLabel}
       onSubmit={input => api.reviseKickoffReport(id, report.no, input, scopeKey)}
       onDone={async result => { setDialog(null); await refresh(); setReportNo(result.version.no); setPhase('kickoff'); setNotice(`已另存开题草稿 v${result.version.no}；修订版仍须重新锁定并明确应用。`); }} onClose={() => setDialog(null)} />}
     {dialog === 'revise-candidate' && current && <ReviseDialog title="限定修改战略候选" baseLabel={candidateLabel(current)} baseSha256={current.contentSha256} targets={current.blocks.map(block => ({ blockId: block.id, label: block.label, text: block.text }))} maxText={20000}
       propose={input => api.proposeCandidateRevision(id, current.candidateId, current.no, input)} readProposal={pid => api.readProposal(id, pid, scopeKey)}
+      readMainDiscussion={() => api.readInitiativeSession(id, scopeKey).catch(fault => { if (fault instanceof api.StrategyInitiativeRequestError && fault.status === 404) return null; throw fault; })}
+      modelLabel={modelLabel}
       onSubmit={input => api.reviseCandidate(id, current.candidateId, current.no, input)}
       onDone={async result => { setDialog(null); await refresh(); setSelectedCandidate({ candidateId: result.candidate.candidateId, no: result.candidate.no }); setNotice(`已另存新候选 v${result.candidate.no}；每版使用新的独立会话，重新进入候选态。`); }} onClose={() => setDialog(null)} />}
     {dialog === 'candidate-session' && current && <CandidateSessionDialog initiativeId={id} candidateRef={{ candidateId: current.candidateId, no: current.no }} onClose={() => setDialog(null)} onChanged={refresh} modelLabel={modelLabel} />}
+    {dialog === 'main-discussion' && <CaseDialog title="主会话原讨论" subtitle={`${initiative.title} · ${scope.name}`} onClose={() => setDialog(null)} className="si-version-dialog">
+      <div className="si-dialog-scroll">
+        {transcriptMessages(session?.snapshot).length > 0
+          ? <StrategyDiscussionTranscript messages={transcriptMessages(session?.snapshot)} conversationKey={`initiative-readback:${id}:${scopeKey}`} modelLabel={modelLabel} label="主会话原讨论记录" />
+          : <p className="si-muted">主会话尚无已保存讨论记录。</p>}
+      </div>
+      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={() => setDialog(null)}>关闭</button></div>
+    </CaseDialog>}
     {sourcePreview?.kind === 'report' && <ReportVersionDialog version={sourcePreview.version} anchor={sourcePreview.anchor} onClose={() => setSourcePreview(null)} />}
     {sourcePreview?.kind === 'candidate' && <VersionReceiptDialog candidate={sourcePreview.candidate} anchorReport={sourcePreview.anchorReport} batch={latestBatch(history?.verifications ?? [], sourcePreview.candidate)} publication={publicationFor(publications, sourcePreview.candidate)} onClose={() => setSourcePreview(null)} />}
     {sourcePreview?.kind === 'file' && <CaseDialog title={`检验依据 · ${sourcePreview.name}`} subtitle={`准确文件 · ${sourcePreview.source.fileId}`} onClose={() => setSourcePreview(null)} className="si-version-dialog">
@@ -525,108 +721,176 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
   </div>;
 }
 
-function CandidateDetailPanel({ candidate, batch, publication, busy, onLock, onRevise, onSession, onStage }: {
+function CandidateDetailPanel({ candidate, batch, publication, busy, onLock, onRevise, onSession, onNewFromParent, onStage }: {
   candidate: CandidateVersion; batch?: import('../strategy-initiative-types.ts').VerificationBatch; publication?: InitiativePublication; busy: boolean;
-  onLock: () => void; onRevise: () => void; onSession: () => void; onStage: (stage: ManagementStage) => void;
+  onLock: () => void; onRevise: () => void; onSession: () => void; onNewFromParent: () => void; onStage: (stage: ManagementStage) => void;
 }) {
   const status = candidateStatus(candidate, { batch, publication });
   const generating = candidate.lastRun?.status === 'accepted';
   return <section className="sg-panel si-panel" aria-label="候选详情">
     <div className="si-panel-head"><div><p className="si-eyebrow">方案正文</p><h2>{candidateLabel(candidate)}</h2><p className="si-muted">候选会话 {candidate.candidateId.slice(0, 8)} · 锚定开题报告 v{candidate.anchor.reportNo}{candidate.parent ? ` · 修订自 v${candidate.parent.no}` : ''}</p></div><Badge tone={status.tone}>{status.label}</Badge></div>
     {candidate.returned && <p className="si-notice si-notice-warning" role="status">检验意见已留档。修订会生成新候选，并从因果检验重走。</p>}
+    {!generating && candidate.blocks.length > 0 && !candidate.lock && !publication && candidate.goals.length === 0 && <p className="si-notice si-notice-warning" role="status">当前可承接目标 0 个：可以直接锁定并作为战略记录发布，但发布后无法「带入目标管理」。如需补齐可承接目标，可先在原候选会话中用自然语言让 Agent 读回正文并补充目标。</p>}
+    {candidate.lock && candidate.goals.length === 0 && <p className="si-muted" role="status">此锁定版可承接目标 0 个且不可原位修改；如需补充可承接目标，可基于此版新建候选版本（新独立会话与新指纹，须重新锁定与检验）。</p>}
     {generating && !candidate.blocks.length ? <p className="si-muted" role="status">候选会话正在整理获准资料和方案。可继续查看其他候选，或打开会话入口回看。</p> : <CandidateBody candidate={candidate} />}
     <div className="si-actions">
       {publication ? <button type="button" className="secondary-button" onClick={() => onStage('strategy-release')}>查看发布记录</button>
         : candidate.returned ? <button type="button" className="primary-button" disabled={busy} onClick={onRevise}>按检验意见修订</button>
         : candidate.lock ? <button type="button" className="primary-button" onClick={() => onStage('strategy-check')}>前往战略检验</button>
         : !generating && candidate.blocks.length > 0 && <button type="button" className="primary-button" disabled={busy} onClick={onLock}>审核并锁定</button>}
+      {!generating && candidate.blocks.length > 0 && !candidate.lock && !publication && candidate.goals.length === 0 && <button type="button" className="secondary-button" disabled={busy} onClick={onSession}>在候选会话补充目标</button>}
       {!generating && candidate.blocks.length > 0 && !candidate.lock && !publication && <button type="button" className="secondary-button" disabled={busy} onClick={onRevise}>限定修改</button>}
       {candidate.lock && batch?.state !== 'running' && <button type="button" className="secondary-button" disabled={busy} onClick={onRevise}>从此版修订</button>}
+      {candidate.lock && batch?.state !== 'running' && <button type="button" className="secondary-button" disabled={busy} onClick={onNewFromParent}>基于此版新建候选补充目标</button>}
       <button type="button" className="secondary-button" onClick={onSession}>查看候选会话</button>
     </div>
   </section>;
 }
 
-function NewCandidateDialog({ initiativeId, scope, anchorNo, onClose, onCreated }: { initiativeId: string; scope: GoalScope; anchorNo?: number; onClose: () => void; onCreated: (candidate: CandidateVersion) => Promise<void> }) {
-  const [title, setTitle] = useState(''), [instruction, setInstruction] = useState('');
+function NewCandidateDialog({ initiativeId, scope, anchorNo, parent, onClose, onCreated }: { initiativeId: string; scope: GoalScope; anchorNo?: number; parent?: CandidateVersion; onClose: () => void; onCreated: (candidate: CandidateVersion) => Promise<void> }) {
+  const [title, setTitle] = useState(parent?.title ?? ''), [instruction, setInstruction] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const operationId = useOperationId();
-  return <CaseDialog title="新建候选会话" subtitle={anchorNo ? `沿用开题报告 v${anchorNo} 和当前范围的获准资料；每个候选版本独立使用一个可持久重开的会话。` : '请先应用开题报告。'} busy={busy} onClose={onClose}>
+  return <CaseDialog title={parent ? `基于 ${candidateLabel(parent)} 新建候选` : '新建候选会话'} subtitle={parent ? `将作为父版 ${candidateLabel(parent)} 的后续新版本建立独立会话与新指纹；原锁定版、检验与发布凭证保留且不复用，新版须重新锁定与检验。` : anchorNo ? `沿用开题报告 v${anchorNo} 和当前范围的获准资料；每个候选版本独立使用一个可持久重开的会话。` : '请先应用开题报告。'} busy={busy} onClose={onClose}>
     <form onSubmit={event => {
       event.preventDefault();
       if (!title.trim() || !instruction.trim() || busy || !anchorNo) return;
-      const id = operationId({ title: title.trim(), instruction: instruction.trim(), scopeKey: initiativeScopeKey(scope) });
+      const parentRef = parent ? { candidateId: parent.candidateId, no: parent.no } : undefined;
+      const id = operationId({ title: title.trim(), instruction: instruction.trim(), scopeKey: initiativeScopeKey(scope), parent: parentRef ?? null });
       setBusy(true); setError('');
-      void api.createCandidate(initiativeId, { operationId: id, scope, title: title.trim(), instruction: instruction.trim() })
+      void api.createCandidate(initiativeId, { operationId: id, scope, title: title.trim(), instruction: instruction.trim(), ...(parentRef ? { parent: parentRef } : {}) })
         .then(result => onCreated(result.candidate)).catch(fault => setError(errorText(fault))).finally(() => setBusy(false));
     }}>
       <div className="case-field"><label htmlFor="si-candidate-title">方向标题</label><input id="si-candidate-title" required maxLength={200} disabled={busy} value={title} onChange={event => setTitle(event.target.value)} placeholder="例如：会员复购优先" /></div>
-      <div className="case-field"><label htmlFor="si-candidate-instruction">方向要求</label><textarea id="si-candidate-instruction" required rows={4} maxLength={20000} disabled={busy} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="说明该方向的增长逻辑、取舍与需要核对的假设…" /></div>
+      <div className="case-field"><label htmlFor="si-candidate-instruction">方向要求</label><textarea id="si-candidate-instruction" required rows={4} maxLength={20000} disabled={busy} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder={parent ? '例如：保留父版正文，补充 2–3 条可量化承接的战略目标…' : '说明该方向的增长逻辑、取舍与需要核对的假设…'} /></div>
       <CaseFormError error={error} />
       <div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="primary-button" disabled={busy || !anchorNo}>{busy ? '正在启动…' : '启动独立会话'}</button></div>
     </form>
   </CaseDialog>;
 }
 
-function LockConfirmDialog({ title, subtitle, body, busy, onConfirm, onDone, onClose }: { title: string; subtitle: string; body: ReactNode; busy: boolean; onConfirm: (operationId: string) => Promise<unknown>; onDone: () => Promise<void>; onClose: () => void }) {
+function LockConfirmDialog({ title, subtitle, preface, body, busy, secondaryAction, onConfirm, onDone, onClose }: { title: string; subtitle: string; preface?: ReactNode; body: ReactNode; busy: boolean; secondaryAction?: { label: string; onClick: () => void }; onConfirm: (operationId: string) => Promise<unknown>; onDone: () => Promise<void>; onClose: () => void }) {
   const [saving, setSaving] = useState(false), [error, setError] = useState('');
   const operationId = useOperationId();
   return <CaseDialog title={title} subtitle={subtitle} busy={busy || saving} onClose={onClose} className="si-version-dialog">
-    <div className="si-dialog-scroll">{body}</div>
+    <div className="si-dialog-scroll">{preface}{body}</div>
     <CaseFormError error={error} />
-    <div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={saving} onClick={onClose}>取消</button><button type="button" className="primary-button" disabled={saving || busy} onClick={() => {
-      if (saving) return; setSaving(true); setError('');
-      void onConfirm(operationId({ title })).then(async () => { await onDone(); }).catch(fault => setError(errorText(fault))).finally(() => setSaving(false));
-    }}>{saving ? '正在锁定…' : '确认锁定'}</button></div>
+    <div className="case-dialog-actions">
+      <button type="button" className="secondary-button" disabled={saving} onClick={onClose}>取消</button>
+      {secondaryAction && <button type="button" className="secondary-button" disabled={saving || busy} onClick={secondaryAction.onClick}>{secondaryAction.label}</button>}
+      <button type="button" className="primary-button" disabled={saving || busy} onClick={() => {
+        if (saving) return; setSaving(true); setError('');
+        void onConfirm(operationId({ title })).then(async () => { await onDone(); }).catch(fault => setError(errorText(fault))).finally(() => setSaving(false));
+      }}>{saving ? '正在锁定…' : '确认锁定'}</button>
+    </div>
   </CaseDialog>;
 }
 
-export function ReviseDialog<T>({ title, baseLabel, baseSha256, targets, maxText, propose, readProposal, onSubmit, onDone, onClose }: {
+export interface ReviseFeedbackSummary {
+  proposalId: string;
+  requestId?: string;
+  blockId: string;
+  blockLabel: string;
+  status: 'ended' | 'failed';
+  feedback?: api.RevisionProposalFeedback;
+}
+
+export function ReviseDialog<T>({
+  title, baseLabel, baseSha256, targets, maxText, propose, readProposal, onSubmit, onDone, onClose,
+  readMainDiscussion, modelLabel, initialFeedback = null,
+}: {
   title: string; baseLabel: string; baseSha256: string; targets: PatchTarget[]; maxText: number;
-  propose: (input: { operationId: string; blockId: string; request: string }) => Promise<{ proposal: { proposalId: string } }>;
-  readProposal: (proposalId: string) => Promise<{ proposal: { status: string; newText?: string } }>;
+  propose: (input: { operationId: string; blockId: string; request: string }) => Promise<{ proposal: { proposalId: string }; requestId?: string }>;
+  readProposal: (proposalId: string) => Promise<{ proposal: { status: string; newText?: string; requestId?: string; feedback?: api.RevisionProposalFeedback } }>;
   onSubmit: (input: { operationId: string; baseSha256: string; request: string; patches: { blockId: string; expectedOldSha256: string; newText: string }[]; proposalId: string }) => Promise<T>;
   onDone: (result: T) => Promise<void>; onClose: () => void;
+  readMainDiscussion?: () => Promise<InitiativeSessionDetail | null>;
+  modelLabel?: string;
+  initialFeedback?: ReviseFeedbackSummary | null;
 }) {
   const [blockId, setBlockId] = useState(targets[0]?.blockId ?? '');
   const target = targets.find(item => item.blockId === blockId) ?? targets[0];
   const [request, setRequest] = useState('');
   const [step, setStep] = useState<'intent' | 'waiting' | 'diff'>('intent');
-  const [proposalId, setProposalId] = useState(''), [proposedText, setProposedText] = useState('');
+  const [proposalId, setProposalId] = useState(''), [proposalRequestId, setProposalRequestId] = useState<string | undefined>(undefined), [proposedText, setProposedText] = useState('');
+  const [lastFeedback, setLastFeedback] = useState<ReviseFeedbackSummary | null>(initialFeedback);
+  const [showDiscussion, setShowDiscussion] = useState(false);
+  const [discussionDetail, setDiscussionDetail] = useState<InitiativeSessionDetail | null>(null);
+  const [discussionLoading, setDiscussionLoading] = useState(false);
+  const [discussionError, setDiscussionError] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const operationId = useOperationId();
   const alive = useRef(true);
+  const activeProposalRef = useRef('');
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     if (step !== 'waiting' || !proposalId) return;
     let cancelled = false;
-    const timer = setInterval(() => {
-      void readProposal(proposalId).then(result => {
-        if (cancelled || !alive.current) return;
-        if (result.proposal.status === 'proposed' && result.proposal.newText) { setProposedText(result.proposal.newText); setStep('diff'); }
-        else if (result.proposal.status === 'ended' || result.proposal.status === 'failed') {
-          setError(result.proposal.status === 'ended' ? 'Agent 本轮结束但未提出补丁；原稿未改动。可修改意图后继续拟改。' : '本轮拟改失败；原稿未改动。可修改意图后继续拟改。');
+    activeProposalRef.current = proposalId;
+    const watchedId = proposalId;
+    const watchedBlockId = target?.blockId ?? blockId;
+    const watchedBlockLabel = target?.label ?? blockId;
+    const poll = () => {
+      void readProposal(watchedId).then(result => {
+        if (cancelled || !alive.current || activeProposalRef.current !== watchedId) return;
+        const p = result.proposal;
+        if (p.status === 'proposed' && p.newText) {
+          setProposedText(p.newText);
+          setLastFeedback(null);
+          setStep('diff');
+        } else if (p.status === 'ended' || p.status === 'failed') {
+          setLastFeedback({
+            proposalId: watchedId,
+            requestId: p.feedback?.requestId ?? p.requestId ?? proposalRequestId,
+            blockId: watchedBlockId,
+            blockLabel: watchedBlockLabel,
+            status: p.status,
+            feedback: p.feedback,
+          });
           setStep('intent');
         }
-      }).catch(fault => { if (!cancelled && alive.current) { setError(errorText(fault)); setStep('intent'); } });
-    }, 2000);
+      }).catch(fault => {
+        if (!cancelled && alive.current && activeProposalRef.current === watchedId) {
+          setError(errorText(fault));
+          setStep('intent');
+        }
+      });
+    };
+    const timer = setInterval(poll, 1500);
     return () => { cancelled = true; clearInterval(timer); };
   }, [step, proposalId]);
+  const openDiscussion = async () => {
+    if (!readMainDiscussion) return;
+    if (showDiscussion) { setShowDiscussion(false); return; }
+    setShowDiscussion(true); setDiscussionLoading(true); setDiscussionError('');
+    try {
+      const next = await readMainDiscussion();
+      if (alive.current) setDiscussionDetail(next);
+    } catch (fault) {
+      if (alive.current) setDiscussionError(errorText(fault));
+    } finally {
+      if (alive.current) setDiscussionLoading(false);
+    }
+  };
   const startProposal = async (event: FormEvent) => {
     event.preventDefault();
     if (!request.trim() || !target || busy) return;
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setLastFeedback(null); setShowDiscussion(false);
     try {
-      const id = operationId({ baseSha256, blockId: target.blockId, request: request.trim() });
+      const id = operationId({ baseSha256, blockId: target.blockId, request: request.trim(), attempt: proposalId || 'first' });
       const result = await propose({ operationId: id, blockId: target.blockId, request: request.trim() });
       if (!alive.current) return;
-      setProposalId(result.proposal.proposalId); setStep('waiting');
+      activeProposalRef.current = result.proposal.proposalId;
+      setProposalId(result.proposal.proposalId);
+      setProposalRequestId(result.requestId);
+      setStep('waiting');
     } catch (fault) { if (alive.current) setError(errorText(fault)); }
     finally { if (alive.current) setBusy(false); }
   };
+  const noActualChange = Boolean(target && proposedText === target.text);
   const adopt = async (event: FormEvent) => {
     event.preventDefault();
-    if (busy || !target || !proposedText.trim()) return;
+    if (busy || !target || !proposedText.trim() || noActualChange) return;
     setBusy(true); setError('');
     try {
       const expectedOldSha256 = await sha256Of(target.text);
@@ -636,21 +900,59 @@ export function ReviseDialog<T>({ title, baseLabel, baseSha256, targets, maxText
     } catch (fault) { if (alive.current) setError(errorText(fault)); }
     finally { if (alive.current) setBusy(false); }
   };
-  return <CaseDialog title={title} subtitle={`基于 ${baseLabel}。描述修改意图，由 Agent 拟改；核对差异后采纳另存，其他章节保留原文。`} busy={busy} onClose={onClose} className="si-version-dialog">
+  return <CaseDialog title={title} subtitle={`基于 ${baseLabel}（指纹 ${baseSha256.slice(0, 12)}…）。描述修改意图，由 Agent 严格在所选块内拟改；核对差异后采纳另存，其他章节保留原文。`} busy={busy} onClose={() => { activeProposalRef.current = ''; onClose(); }} className="si-version-dialog">
     {step === 'intent' && <form onSubmit={startProposal}>
-      <div className="case-field"><label htmlFor="si-revise-block">修改位置</label><select id="si-revise-block" value={blockId} onChange={event => setBlockId(event.target.value)}>{targets.map(item => <option key={item.blockId} value={item.blockId}>{item.label}</option>)}</select></div>
-      <div className="case-field"><label htmlFor="si-revise-request">修改意图</label><textarea id="si-revise-request" required rows={3} maxLength={2000} value={request} onChange={event => setRequest(event.target.value)} placeholder="例如：将三店试点调整为两店，先核对导购工时。" /></div>
+      <div className="si-dialog-scroll">
+        <div className="case-field"><label htmlFor="si-revise-block">修改位置（单块限定）</label><select id="si-revise-block" value={blockId} onChange={event => setBlockId(event.target.value)}>{targets.map(item => <option key={item.blockId} value={item.blockId}>{item.label}（{item.blockId}）</option>)}</select></div>
+        {target && <div className="si-revise-baseline" aria-label="当前所选块原文">
+          <strong>当前修改对象：{baseLabel} · 「{target.label}」（{target.blockId}）</strong>
+          <p>{target.text || '（该块当前正文为空）'}</p>
+        </div>}
+        <div className="case-field"><label htmlFor="si-revise-request">修改意图</label><textarea id="si-revise-request" required rows={3} maxLength={2000} value={request} onChange={event => setRequest(event.target.value)} placeholder="例如：将三店试点调整为两店，先核对导购工时。" /></div>
+        {lastFeedback && <div className={`si-proposal-feedback si-notice ${lastFeedback.status === 'failed' ? 'si-notice-warning' : ''}`} role="status" aria-label="本轮拟改反馈">
+          {lastFeedback.status === 'ended' ? (
+            lastFeedback.feedback?.replyText ? <>
+              <p><strong>Agent 本轮回复（针对「{lastFeedback.blockLabel}」· 未提出补丁，原稿未改动）</strong></p>
+              <p className="si-proposal-reply">{lastFeedback.feedback.replyText}</p>
+              <p className="si-muted">请根据 Agent 说明确认或改选上方「修改位置」与「修改意图」后再提交；变更仍限定在获准单个块内。</p>
+            </> : <>
+              <p><strong>Agent 本轮已结束且未提出补丁（针对「{lastFeedback.blockLabel}」· 原稿未改动）</strong></p>
+              <p className="si-muted">本轮未返回文字说明。可查看主会话原讨论核对，或改选修改位置／调整意图后继续拟改。</p>
+            </>
+          ) : <>
+            <p><strong>{lastFeedback.feedback?.outcome === 'cancelled' ? '本轮拟改已取消（原稿未改动）' : lastFeedback.feedback?.outcome === 'unknown' ? '本轮拟改结果未知（原稿未改动）' : '本轮拟改技术失败（原稿未改动）'}</strong></p>
+            <p>{lastFeedback.feedback?.failureDetail || '请核对主会话原讨论，确认状态后再决定是否重新拟改。'}</p>
+            {lastFeedback.feedback?.failureCode && <p className="si-muted">错误分类：<code>{lastFeedback.feedback.failureCode}</code></p>}
+          </>}
+          <details><summary>本次拟改回执</summary><p className="si-muted">proposalId <code>{lastFeedback.proposalId}</code>{lastFeedback.requestId ? <> · requestId <code>{lastFeedback.requestId}</code></> : null}</p></details>
+          {readMainDiscussion && <div className="si-actions"><button type="button" className="secondary-button" onClick={() => { void openDiscussion(); }}>{showDiscussion ? '收起主会话原讨论' : '查看主会话原讨论'}</button></div>}
+        </div>}
+        {showDiscussion && <div className="si-content-block" aria-label="主会话原讨论只读回看">
+          <h4>主会话原讨论</h4>
+          {discussionLoading ? <p className="si-muted" role="status">正在读取主会话原讨论…</p>
+            : discussionError ? <CaseFormError error={discussionError} />
+            : transcriptMessages(discussionDetail?.snapshot).length > 0
+              ? <StrategyDiscussionTranscript messages={transcriptMessages(discussionDetail?.snapshot)} conversationKey={`proposal-readback:${lastFeedback?.proposalId ?? 'current'}`} modelLabel={modelLabel} label="主会话原讨论记录" />
+              : <p className="si-muted">主会话尚无已保存讨论记录。</p>}
+        </div>}
+      </div>
       <CaseFormError error={error} />
-      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button type="submit" className="primary-button" disabled={!request.trim() || busy}>{busy ? '正在提交…' : '请 Agent 拟改'}</button></div>
+      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={() => { activeProposalRef.current = ''; onClose(); }}>取消</button><button type="submit" className="primary-button" disabled={!request.trim() || busy}>{busy ? '正在提交…' : '请 Agent 拟改'}</button></div>
     </form>}
-    {step === 'waiting' && <div className="si-dialog-scroll"><p className="si-muted" role="status">Agent 正在基于准确基线拟改「{target?.label}」；完成后在此核对差异。未采纳前不另存版本。</p><CaseFormError error={error} /><div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button></div></div>}
+    {step === 'waiting' && <div className="si-dialog-scroll">
+      <p className="si-muted" role="status">Agent 正在基于准确基线拟改「{target?.label}」（{target?.blockId}）；完成后在此核对差异或查看 Agent 澄清回复。未采纳前不另存版本。</p>
+      <div className="si-revise-baseline"><strong>本轮修改意图</strong><p>{request}</p></div>
+      <CaseFormError error={error} />
+      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={() => { activeProposalRef.current = ''; onClose(); }}>取消</button></div>
+    </div>}
     {step === 'diff' && <form onSubmit={adopt}>
       <div className="si-dialog-scroll">
-        <p>{baseLabel} · 仅修改「{target?.label}」。其他章节以原字节和顺序复用。</p>
+        <p>{baseLabel} · 仅修改「{target?.label}」（{target?.blockId}）。其他章节以原字节和顺序复用。</p>
+        {noActualChange && <p className="si-notice si-notice-warning" role="status">Agent 拟改内容与当前原文完全一致（无实际变化），无需另存新版本；可返回调整修改意图或改选修改位置。</p>}
         <div className="si-diff"><div className="si-diff-before"><strong>原文</strong><p>{target?.text}</p></div><div className="si-diff-after"><strong>Agent 拟改</strong><p>{proposedText}</p></div></div>
       </div>
       <CaseFormError error={error} />
-      <div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setStep('intent')}>返回修改意图</button><button type="submit" className="primary-button" disabled={busy}>{busy ? '正在另存…' : '采纳并另存新版本'}</button></div>
+      <div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setStep('intent')}>返回修改意图</button><button type="submit" className="primary-button" disabled={busy || noActualChange}>{busy ? '正在另存…' : '采纳并另存新版本'}</button></div>
     </form>}
   </CaseDialog>;
 }
@@ -660,36 +962,52 @@ function CandidateSessionDialog({ initiativeId, candidateRef, onClose, onChanged
   const [detail, setDetail] = useState<CandidateDetail | null>(null);
   const [text, setText] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState(''), [loading, setLoading] = useState(true);
   const alive = useRef(true);
+  const lastUpdatedRef = useRef('');
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const load = async () => {
-    try { const next = await api.readCandidate(initiativeId, candidateRef.candidateId, candidateRef.no); if (alive.current) { setDetail(next); setError(''); } }
+    try {
+      const next = await api.readCandidate(initiativeId, candidateRef.candidateId, candidateRef.no);
+      if (alive.current) {
+        setDetail(next);
+        setError('');
+        if (lastUpdatedRef.current && next.candidate.updatedAt !== lastUpdatedRef.current) void onChanged();
+        lastUpdatedRef.current = next.candidate.updatedAt;
+      }
+    }
     catch (fault) { if (alive.current) setError(errorText(fault)); }
     finally { if (alive.current) setLoading(false); }
   };
-  useEffect(() => { void load(); }, [initiativeId, candidateRef.candidateId, candidateRef.no]);
+  useEffect(() => { lastUpdatedRef.current = ''; void load(); }, [initiativeId, candidateRef.candidateId, candidateRef.no]);
+  const running = Boolean(detail?.busy || detail?.candidate.lastRun?.status === 'accepted');
   useEffect(() => {
-    if (!detail?.busy) return;
-    const timer = setInterval(() => { void load(); }, 3000);
+    if (!running) return;
+    const timer = setInterval(() => { void load(); }, 1500);
     return () => clearInterval(timer);
-  }, [detail?.busy, initiativeId, candidateRef.candidateId, candidateRef.no]);
+  }, [running, initiativeId, candidateRef.candidateId, candidateRef.no]);
   const candidate = detail?.candidate;
   const locked = Boolean(candidate?.lock);
   const act = async (action: () => Promise<unknown>) => { if (busy) return; setBusy(true); setError(''); try { await action(); await load(); await onChanged(); } catch (fault) { setError(errorText(fault)); } finally { if (alive.current) setBusy(false); } };
   return <CaseDialog title={`候选会话 ${candidateRef.candidateId.slice(0, 8)}`} subtitle={candidate ? `${candidateLabel(candidate)} · 开题报告 v${candidate.anchor.reportNo}` : '正在读取候选会话…'} busy={busy} onClose={onClose} className="si-version-dialog">
     <div className="si-dialog-scroll">
       {loading ? <p className="si-muted" role="status">正在读取候选会话…</p> : <>
-        {detail?.busy && <p className="si-muted" role="status">候选会话正在整理获准资料和方案…</p>}
+        {candidate && !locked && <div className="si-content-block">
+          <p className="si-muted">当前草稿：{candidate.blocks.length} 个章节 · 可承接目标 {candidate.goals.length} 个</p>
+          {candidate.goals.length > 0
+            ? <ul>{candidate.goals.map((goal, index) => <li key={index}>G{index + 1} · {goal}</li>)}</ul>
+            : <p className="si-muted">当前可承接目标 0 个；可直接用自然语言说明希望补充的目标方向，Agent 会读回当前正文并保存可承接目标清单。</p>}
+        </div>}
+        {running && <p className="si-muted" role="status">候选会话正在整理获准资料和方案…</p>}
         <StrategyDiscussionTranscript messages={transcriptMessages(detail?.snapshot)} conversationKey={`initiative-candidate:${initiativeId}:${candidateRef.candidateId}:${candidateRef.no}`} modelLabel={modelLabel} label="候选会话记录" />
-        {locked && <p className="si-muted">此版已锁定，正文作为检验基线保留；如需修改请另存新候选版本。</p>}
+        {locked && <p className="si-muted">此版已锁定，正文作为检验基线保留；如需修改或补充目标，请基于此版新建候选版本。</p>}
         {!locked && <form className="si-composer" onSubmit={event => {
           event.preventDefault();
-          if (!text.trim() || !candidate || busy || detail?.busy) return;
+          if (!text.trim() || !candidate || busy || running) return;
           void act(async () => { await api.sendCandidateMessage(initiativeId, candidateRef.candidateId, candidateRef.no, { requestId: crypto.randomUUID(), text: text.trim(), expectedRevision: candidate.revision, ...(candidate.pendingInput && (['failed', 'cancelled'].includes(candidate.lastRun?.status ?? '') || (candidate.lastRun?.status === 'accepted' && !detail?.busy)) ? { replacePendingRequestId: candidate.pendingInput.requestId } : {}) }); setText(''); });
         }}>
           <label className="sr-only" htmlFor="si-candidate-text">候选会话输入</label>
-          <textarea id="si-candidate-text" rows={3} maxLength={20000} value={text} disabled={busy || Boolean(detail?.busy)} placeholder="继续补充该方向的要求或依据…" onChange={event => setText(event.target.value)} />
+          <textarea id="si-candidate-text" rows={3} maxLength={20000} value={text} disabled={busy || running} placeholder="继续补充该方向的要求、依据或可承接战略目标…" onChange={event => setText(event.target.value)} />
           <div className="si-actions">
-            {detail?.busy ? <button type="button" className="secondary-button" disabled={busy} onClick={() => { void act(() => api.stopCandidate(initiativeId, candidateRef.candidateId, candidateRef.no, candidate?.lastRun?.id)); }}>停止本轮生成</button> : <button type="submit" className="primary-button" disabled={!text.trim() || busy}>发送</button>}
+            {running ? <button type="button" className="secondary-button" disabled={busy} onClick={() => { void act(() => api.stopCandidate(initiativeId, candidateRef.candidateId, candidateRef.no, candidate?.lastRun?.id)); }}>停止本轮生成</button> : <button type="submit" className="primary-button" disabled={!text.trim() || busy}>发送</button>}
             <button type="button" className="text-button" disabled={busy} onClick={() => { void act(() => api.closeCandidate(initiativeId, candidateRef.candidateId, candidateRef.no)); }}>关闭会话，保留历史</button>
           </div>
         </form>}

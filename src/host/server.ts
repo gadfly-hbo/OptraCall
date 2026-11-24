@@ -1208,7 +1208,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const strategyInitiatives=new StrategyInitiativeStore(dataRoot);
   const strategyInitiativeFiles=new StrategyInitiativeFiles(strategyInitiatives);
   const strategyKickoffReports=new StrategyInitiativeReports(strategyInitiatives,strategyInitiativeFiles);
-  const strategyInitiativeSessions=createStrategyInitiativeHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no),list:(id,scopeKey)=>strategyCandidates.list(id,scopeKey),proposal:(id,pid)=>strategyCandidates.proposal(id,pid),markProposed:(id,pid,newText,requestId)=>strategyCandidates.markProposed(id,pid,newText,requestId),markTerminal:(id,pid,status)=>strategyCandidates.markTerminal(id,pid,status)},codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
+  const strategyInitiativeSessions=createStrategyInitiativeHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no),list:(id,scopeKey)=>strategyCandidates.list(id,scopeKey),proposal:(id,pid)=>strategyCandidates.proposal(id,pid),markProposed:(id,pid,newText,requestId,beforeCommit)=>strategyCandidates.markProposed(id,pid,newText,requestId,beforeCommit),markTerminal:(id,pid,status,feedback)=>strategyCandidates.markTerminal(id,pid,status,feedback)},codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyCandidates=createStrategyCandidateHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyVerifications=createStrategyVerificationHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no),busy:(id,cid,no)=>strategyCandidates.busy(id,cid,no),markReturned:(id,cid,no,batchId)=>strategyCandidates.markReturned(id,cid,no,batchId)},codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
   const strategyInitiativePublications=createStrategyInitiativePublications({initiatives:strategyInitiatives,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no)},verifications:{passCredentials:(id,cid,no)=>strategyVerifications.passCredentials(id,cid,no)},goals:{create:input=>strategyGoals.create(input),getOperation:id=>strategyGoals.getOperation(id),operationContext:receipt=>strategyGoals.operationContext(receipt as import('./strategy-goals-types.ts').GoalOperationReceipt),read:ref=>strategyGoals.read(ref)},validateGoal:(input,target)=>validateStrategyGoal(input,target),mutate});
@@ -2872,9 +2872,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if(initiativeProposalRoute&&request.method==='GET'){
         const id=initiativeProposalRoute[1]!;
         const pid=url.searchParams.get('proposalId')??'';
+        const scopeKey=url.searchParams.get('scopeKey')??undefined;
         const proposal=strategyKickoffReports.proposal(id,pid)??strategyCandidates.proposal(id,pid);
         if(!proposal)throw new StrategyDiscussionFault('strategy_proposal_unavailable',404);
-        if(proposal.target.kind==='report')strategyKickoffReports.versionForScope(id,proposal.target.no,url.searchParams.get('scopeKey')??undefined);
+        if(proposal.target.kind==='report')strategyKickoffReports.versionForScope(id,proposal.target.no,scopeKey);
+        else if(scopeKey!==undefined){
+          const target=strategyCandidates.version(id,proposal.target.candidateId,proposal.target.no);
+          if(target.scopeKey!==scopeKey)throw new StrategyDiscussionFault('strategy_proposal_unavailable',409);
+        }
         json(response,200,{proposal});return;
       }
       const workbookRoute=/^\/api\/strategy\/workbooks\/(preview|commit|handoff|map-source|goal-source)$/.exec(url.pathname);
@@ -3565,7 +3570,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
-      if(error instanceof StrategyDiscussionFault || error instanceof StrategyDiscussionSourceFault){json(response,error.status,{code:error.code,accepted:false,...(error instanceof StrategyDiscussionFault && ['strategy_kickoff_schema_invalid', 'strategy_kickoff_source_invalid'].includes(error.code) && error.details ? {details:error.details} : {}),message:attachmentErrors[error.code]??(error.status===503?'战略讨论或保存结果尚未核实，原输入、选择和操作编号保留；请先只读核对原结果，不要重复创建或自动重试。':error.code==='strategy_discussion_history_scope_changed'?'已读取的历史资料与当前背景范围或排除项不一致，本次未发送给模型。原输入、选择和历史保留；请集中核对资料范围并明确调整，不能把旧会话视为已忘记资料。':error.code==='strategy_discussion_context_changed'?'当前讨论背景或准确版本已变化，本次未继续派发。原输入与选择保留，请集中核对后明确调整。':'战略讨论未完成，原输入和选择保留；请核对目标准确版本、资料权限、模型配置或原操作状态。')});return;}
+      if(error instanceof StrategyDiscussionFault || error instanceof StrategyDiscussionSourceFault){json(response,error.status,{code:error.code,accepted:false,...(error instanceof StrategyDiscussionFault && ['strategy_kickoff_schema_invalid', 'strategy_kickoff_source_invalid', 'strategy_candidate_schema_invalid', 'strategy_candidate_fields_invalid', 'strategy_candidate_operation_invalid'].includes(error.code) && error.details ? {details:error.details} : {}),message:attachmentErrors[error.code]??(error.status===503?'战略讨论或保存结果尚未核实，原输入、选择和操作编号保留；请先只读核对原结果，不要重复创建或自动重试。':error.code==='strategy_discussion_history_scope_changed'?'已读取的历史资料与当前背景范围或排除项不一致，本次未发送给模型。原输入、选择和历史保留；请集中核对资料范围并明确调整，不能把旧会话视为已忘记资料。':error.code==='strategy_discussion_context_changed'?'当前讨论背景或准确版本已变化，本次未继续派发。原输入与选择保留，请集中核对后明确调整。':'战略讨论未完成，原输入和选择保留；请核对目标准确版本、资料权限、模型配置或原操作状态。')});return;}
       if (error instanceof DecisionBoardFault && ['choice_already_arranged', 'arrangement_operation_conflict'].includes(error.code)) {
         const message = error.code === 'choice_already_arranged' ? '本次取舍已有行动安排，请核对原看板。' : '该操作编号已用于另一份行动安排，请核对原操作。';
         json(response, 409, { code:error.code, message }); return;

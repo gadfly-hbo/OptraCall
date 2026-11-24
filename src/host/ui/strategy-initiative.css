@@ -82,6 +82,9 @@
 .si-file-upload select { padding: .4rem .55rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; }
 .si-file-upload .si-check-row { margin: 0; }
 .si-file-upload p { margin: 0; }
+.si-upload-recovery { display: grid; gap: 6px; font-size: 12px; }
+.si-upload-recovery p { margin: 0; overflow-wrap: anywhere; }
+.si-upload-recovery code { word-break: break-all; }
 .si-folder { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .si-folder summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; flex-wrap: wrap; }
 .si-folder summary small { color: var(--muted); font-size: 11px; }
@@ -108,6 +111,12 @@
 .si-diff-before { background: var(--subtle); }
 .si-diff-after { background: var(--accent-soft); }
 .si-diff p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 0; font-size: 13px; }
+.si-revise-baseline { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--subtle); margin: 10px 0; max-height: 180px; overflow-y: auto; }
+.si-revise-baseline strong { display: block; font-size: 12px; color: var(--muted); }
+.si-revise-baseline p { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.si-proposal-feedback { display: grid; gap: 6px; margin: 10px 0; }
+.si-proposal-feedback p { margin: 0; overflow-wrap: anywhere; }
+.si-proposal-reply { white-space: pre-wrap; border-left: 3px solid var(--accent); padding-left: 10px; }
 .si-scope-row { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 12px 0; }
 .si-scope-row legend { font-size: 12px; color: var(--muted); padding: 0 6px; }
 @media (max-width: 1100px) {

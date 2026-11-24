@@ -84,6 +84,9 @@ export function PublishConfirmDialog({ initiativeId, candidate, batch, prior, te
     <form onSubmit={submit}>
       {prior && <p className="si-notice si-notice-warning" role="status">确认后将替代当前发布「{prior.candidateId.slice(0, 8)} · v{prior.no}」。同一事项同一范围仅一条有效发布；已有目标与回执保留。</p>}
       <ReleaseMap candidate={candidate} template={template} />
+      {candidate.goals.length > 0
+        ? <div className="si-content-block"><h4>可承接目标（{candidate.goals.length} 个）</h4><ul>{candidate.goals.map((goal, index) => <li key={index}>G{index + 1} · {goal}</li>)}</ul></div>
+        : <p className="si-notice si-notice-warning" role="status">当前锁定版可承接目标 0 个：继续发布将作为正式战略记录保存，发布后无法直接「带入目标管理」；如需承接目标，请取消并返回战略共创建立新候选版本补充目标后重新锁定与检验。</p>}
       <div className="si-review-lines">{batch.gates.map((gate, turn) => <p key={turn}><strong>{gateNames[turn]} · 通过</strong><br />{gate.evidence || '证据暂不可读。'}<br /><span className="si-muted">{gate.ref}</span></p>)}</div>
       <label className="si-check-row"><input type="checkbox" required checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} />我已核对准确版方案及两份带依据的检验结论。</label>
       <CaseFormError error={error} />
@@ -167,6 +170,9 @@ export function StrategyReleaseReview({ initiativeId, scope, scopes, candidates,
       {(eligible || publication) && passed ? <>
         <div className="si-template"><label className="si-inline-picker">展示模板<select aria-label="展示模板" value={template} onChange={event => setTemplate(event.target.value)}><option>树形地图</option><option>条目表</option></select></label><span className="si-muted">仅调整呈现，沿用同一锁定版及检验报告。</span></div>
         <ReleaseMap candidate={current} template={template} />
+        {current.goals.length > 0
+          ? <div className="si-content-block"><h4>可承接目标（{current.goals.length} 个 · 发布后可按需带入目标管理）</h4><ul>{current.goals.map((goal, index) => <li key={index}>G{index + 1} · {goal}</li>)}</ul></div>
+          : <p className="si-notice si-notice-warning" role="status">可承接目标：0 个。此锁定版可继续作为战略记录正式发布，但发布后不能「带入目标管理」。如需补充可承接目标，请回到战略共创基于此版新建候选版本补充目标，并重新锁定与检验。</p>}
         <details className="si-review-details"><summary>查看完整方案与取舍</summary><CandidateBody candidate={current} /></details>
         <details className="si-review-details"><summary>查看两道检验结论</summary>{passed.gates.map((gate, turn) => <div className="si-content-block" key={turn}><h4>{gateNames[turn]} · 通过</h4><p>{gate.evidence || '证据暂不可读。'}</p><p className="si-muted">{gate.ref} · 批次 {passed.batchId.slice(0, 8)}</p></div>)}</details>
       </> : !publication && <p className="si-notice si-notice-warning" role="status">此版本尚未取得发布资格。请核对两道检验的结果。</p>}
