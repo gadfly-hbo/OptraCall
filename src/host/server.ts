@@ -43,6 +43,14 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { StrategyGoalsStore, StrategyGoalsError, goalContentSha256, parseGoalRoleSuggestion } from './strategy-goals-store.ts';
 import { strategyWorkbookRoutes,checkWorkbookSource } from './strategy-workbook-routes.ts';
 import { StrategyMapPublicationStore } from './strategy-map-publication-store.ts';
+import { StrategyInitiativeStore } from './strategy-initiative-store.ts';
+import { initiativeScopeKey } from './strategy-initiative-types.ts';
+import { StrategyInitiativeReports } from './strategy-initiative-reports.ts';
+import { StrategyInitiativeFiles } from './strategy-initiative-files.ts';
+import { createStrategyInitiativeHost } from './strategy-initiative-host.ts';
+import { createStrategyCandidateHost } from './strategy-candidate-host.ts';
+import { createStrategyVerificationHost } from './strategy-verification-host.ts';
+import { createStrategyInitiativePublications } from './strategy-initiative-publications.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
@@ -920,6 +928,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       ...(studioSessions ? [studioSessions.closeAll(filter)] : []),
       requirementSessions.closeAll(filter),
       strategyDiscussions.closeAll(filter),
+      strategyInitiativeSessions.closeAll(filter),
+      strategyCandidates.closeAll(filter),
+      strategyVerifications.closeAll(filter),
       businessDiscussions.closeAll(filter),
     ]);
     for (const key of [...streams.keys()]) {
@@ -1194,6 +1205,28 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     },configuration:(id,revision)=>availableConfiguration(id,revision),defaultUsageContext:async()=> (await usageSettings.read()).context,mutate,isClosing:()=>closing,validateGoal:validateStrategyGoal,verifyGoalContext:verifyFrozenGoalContext,verifyArrangement:verifyGoalOperationArrangement,sources:{list:async(owner,projectId,actualConfiguration,context)=>{const cfg=actualConfiguration??availableConfiguration(owner.configurationId,owner.configurationRevision);if(!cfg)throw new StrategyDiscussionFault('configuration_changed');return discussionSourceReader.list(owner,cfg,context??discussionSourceContext(owner),projectId);},read:(source,owner,cfg,ctx,page)=>discussionSourceReader.read(source,owner,cfg,ctx??discussionSourceContext(owner),{...page,limit:page?.limit??4096}),verify:(owner,cfg,ctx)=>discussionSourceReader.verify(owner,cfg,ctx??discussionSourceContext(owner))}};
   const strategyDiscussions=createStrategyDiscussionHost(discussionOptions);
   const strategyMapPublications=new StrategyMapPublicationStore(strategyDiscussions.store);
+  const strategyInitiatives=new StrategyInitiativeStore(dataRoot);
+  const strategyInitiativeFiles=new StrategyInitiativeFiles(strategyInitiatives);
+  const strategyKickoffReports=new StrategyInitiativeReports(strategyInitiatives,strategyInitiativeFiles);
+  const strategyInitiativeSessions=createStrategyInitiativeHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no),list:(id,scopeKey)=>strategyCandidates.list(id,scopeKey),proposal:(id,pid)=>strategyCandidates.proposal(id,pid),markProposed:(id,pid,newText,requestId)=>strategyCandidates.markProposed(id,pid,newText,requestId),markTerminal:(id,pid,status)=>strategyCandidates.markTerminal(id,pid,status)},codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
+  const strategyCandidates=createStrategyCandidateHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
+  const strategyVerifications=createStrategyVerificationHost({initiatives:strategyInitiatives,reports:strategyKickoffReports,files:strategyInitiativeFiles,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no),busy:(id,cid,no)=>strategyCandidates.busy(id,cid,no),markReturned:(id,cid,no,batchId)=>strategyCandidates.markReturned(id,cid,no,batchId)},codeRoot:options.cwd,configuration:(id,revision)=>availableConfiguration(id,revision),mutate,isClosing:()=>closing});
+  const strategyInitiativePublications=createStrategyInitiativePublications({initiatives:strategyInitiatives,candidates:{version:(id,cid,no)=>strategyCandidates.version(id,cid,no)},verifications:{passCredentials:(id,cid,no)=>strategyVerifications.passCredentials(id,cid,no)},goals:{create:input=>strategyGoals.create(input),getOperation:id=>strategyGoals.getOperation(id),operationContext:receipt=>strategyGoals.operationContext(receipt as import('./strategy-goals-types.ts').GoalOperationReceipt),read:ref=>strategyGoals.read(ref)},validateGoal:(input,target)=>validateStrategyGoal(input,target),mutate});
+  const proposalReplacement = async (id: string, scopeKey: string): Promise<string | undefined> => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      let s;
+      try { s = strategyInitiativeSessions.session(id, scopeKey); } catch { return undefined; }
+      if (!s.pendingInput) return undefined;
+      const pid = s.pendingInput.proposalId;
+      if (!pid) throw new StrategyDiscussionFault('strategy_initiative_pending_request');
+      const proposal = strategyKickoffReports.proposal(id, pid) ?? strategyCandidates.proposal(id, pid);
+      if (!proposal || proposal.status === 'pending') throw new StrategyDiscussionFault('strategy_initiative_pending_request');
+      const ref = strategyInitiativeSessions.domain.ref(s);
+      if (!strategyInitiativeSessions.domain.busy(ref) && !strategyInitiativeSessions.domain.live(ref)) return s.pendingInput.requestId;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new StrategyDiscussionFault('strategy_initiative_pending_request');
+  };
   strategyMapImports=createStrategyMapImportService({dataRoot,codeRoot:options.cwd,attachments:strategyAttachments,projects,owner:id=>strategyDiscussions.store.get(id),configuration:(id,revision)=>availableConfiguration(id,revision),mutate,
     writable:owner=>{if(closing||strategyDiscussions.domain.busy(strategyDiscussions.domain.ref(owner)))throw new StrategyDiscussionFault('session_busy');},
   });
@@ -2624,16 +2657,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       const mapPublicationRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/maps\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/publication(\/withdraw)?$/.exec(url.pathname);
       if(mapPublicationRoute && request.method==='POST'){
-        const [,id,mapId,revision,withdraw]=mapPublicationRoute,input=await body(request),version=Number(revision);
-        const publication=await mutate(()=>{
-          if(closing)throw new RequestFault(409,'host_closing');
-          if(withdraw)return strategyMapPublications.withdraw(id!,mapId!,version,input);
-          return strategyMapPublications.publish(id!,mapId!,version,input,async()=>{
-            const map=await strategyDiscussions.readMapVersion(id!,mapId!,version);
-            return {contentSha256:map.contentSha256,goalCount:map.nodes.filter(node=>node.kind==='goal').length,strategyCount:map.nodes.filter(node=>node.kind==='strategy').length};
-          });
-        });
-        json(response,withdraw?200:201,{publication});return;
+        throw new StrategyDiscussionFault('strategy_map_publication_retired');
       }
       const mapDocumentRoute=/^\/api\/strategy\/discussions\/([a-f0-9-]{36})\/maps\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/(export|handoffs)$/.exec(url.pathname);
       if(mapDocumentRoute && request.method==='GET'){
@@ -2716,8 +2740,146 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           return;
         }
       }
+      if(url.pathname==='/api/strategy/initiatives'){
+        if(request.method==='GET'){json(response,200,{initiatives:strategyInitiatives.list()});return;}
+        if(request.method==='POST'){const input=await body(request);json(response,201,{initiative:await mutate(()=>strategyInitiatives.create(input as unknown as import('./strategy-initiative-types.ts').StrategyInitiativeCreate))});return;}
+      }
+      const initiativeRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})$/.exec(url.pathname);
+      if(initiativeRoute){
+        const id=initiativeRoute[1]!;
+        if(request.method==='GET'){json(response,200,{initiative:strategyInitiatives.get(id)});return;}
+        if(request.method==='PATCH'){const input=await body(request);json(response,200,{initiative:await mutate(()=>strategyInitiatives.update(id,input as unknown as import('./strategy-initiative-types.ts').StrategyInitiativeUpdate))});return;}
+      }
+      const initiativeFilesRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/files(?:\/([a-f0-9-]{36}))?$/.exec(url.pathname);
+      if(initiativeFilesRoute){
+        const id=initiativeFilesRoute[1]!,fileId=initiativeFilesRoute[2];
+        if(!fileId&&request.method==='GET'){json(response,200,{files:strategyInitiativeFiles.list(id,url.searchParams.get('scopeKey')??undefined)});return;}
+        if(!fileId&&request.method==='POST'){const input=await body(request,68*1024*1024);json(response,201,{file:await mutate(()=>strategyInitiativeFiles.upload(id,input as Parameters<typeof strategyInitiativeFiles.upload>[1]))});return;}
+        if(fileId&&request.method==='GET'){const result=strategyInitiativeFiles.read(id,fileId);const scopeKey=url.searchParams.get('scopeKey');if(result.file.scopeKey!==undefined&&result.file.scopeKey!==scopeKey)throw new StrategyDiscussionFault('strategy_file_not_found',404);json(response,200,result);return;}
+      }
+      const candidateRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/candidates(?:\/([a-f0-9-]{36})\/versions\/([1-9]\d*)(?:\/(messages|stop|close|lock|revise-proposal|revise|verify|verifications))?)?$/.exec(url.pathname);
+      if(candidateRoute){
+        const id=candidateRoute[1]!,cid=candidateRoute[2],no=Number(candidateRoute[3]),action=candidateRoute[4];
+        if(!cid&&request.method==='GET'){json(response,200,{candidates:strategyCandidates.list(id,url.searchParams.get('scopeKey')??undefined)});return;}
+        if(!cid&&request.method==='POST'){const input=await body(request);json(response,202,await strategyCandidates.create(id,input));return;}
+        if(cid&&!action&&request.method==='GET'){json(response,200,await strategyCandidates.detail(id,cid,no));return;}
+        if(action==='messages'&&request.method==='POST'){const input=await body(request);json(response,202,await strategyCandidates.send(id,cid!,no,input));return;}
+        if(action==='stop'&&request.method==='POST'){const input=await body(request);json(response,200,await strategyCandidates.stop(id,cid!,no,input.expectedRequestId as string|undefined));return;}
+        if(action==='close'&&request.method==='POST'){json(response,200,await strategyCandidates.close(id,cid!,no));return;}
+        if(action==='lock'&&request.method==='POST'){const input=await body(request);json(response,200,{candidate:await strategyCandidates.lock(id,cid!,no,input)});return;}
+        if(action==='revise'&&request.method==='POST'){const input=await body(request);json(response,201,{candidate:await strategyCandidates.revise(id,cid!,no,input)});return;}
+        if(action==='revise-proposal'&&request.method==='POST'){
+          const input=await body(request);
+          const candidate=strategyCandidates.version(id,cid!,no);
+          const initiative=strategyInitiatives.get(id);const scope=initiative.scopes.find(s=>initiativeScopeKey(s)===candidate.scopeKey);
+          if(!scope)throw new StrategyDiscussionFault('strategy_initiative_scope_unknown');
+          const proposal=await strategyCandidates.createProposal(id,cid!,no,input);
+          let session;try{session=strategyInitiativeSessions.session(id,candidate.scopeKey);}catch{session=await strategyInitiativeSessions.create(id,{operationId:randomUUID(),scope});}
+          const replace=await proposalReplacement(id,candidate.scopeKey);
+          const ack=await strategyInitiativeSessions.send(id,candidate.scopeKey,{requestId:randomUUID(),text:`限定修改拟议：${proposal.request}`,expectedRevision:session.revision,proposal:proposal.proposalId,...(replace?{replacePendingRequestId:replace}:{})});
+          json(response,202,{proposal,requestId:ack.requestId});return;
+        }
+        if(action==='verify'&&request.method==='POST'){const input=await body(request);json(response,202,await strategyVerifications.start(id,cid!,no,input));return;}
+        if(action==='verifications'&&request.method==='GET'){json(response,200,{batches:strategyVerifications.list(id,cid!,no)});return;}
+      }
+      const initiativeHistoryRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/history$/.exec(url.pathname);
+      if(initiativeHistoryRoute&&request.method==='GET'){
+        const id=initiativeHistoryRoute[1]!;
+        const scopeKey=url.searchParams.get('scopeKey')??undefined;
+        const candidates=strategyCandidates.list(id,scopeKey);
+        const candidateVersions=new Set(candidates.map(candidate=>`${candidate.candidateId}:${candidate.no}`));
+        json(response,200,{
+          reports:strategyKickoffReports.viewForScope(id,scopeKey),
+          candidates,
+          verifications:strategyVerifications.list(id).filter(batch=>scopeKey===undefined||candidateVersions.has(`${batch.candidateId}:${batch.no}`)),
+          publications:strategyInitiativePublications.list(id,scopeKey),
+          legacy:{discussions:strategyDiscussions.store.list().map(d=>({id:d.id,title:d.title,updatedAt:d.updatedAt,note:'旧讨论记录沿原入口回读；其地图发布不计为当前有效版。'}))},
+        });return;
+      }
+      const initiativePublicationRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/publications(?:\/([a-f0-9-]{36})\/(withdraw|handoff))?$/.exec(url.pathname);
+      if(initiativePublicationRoute){
+        const id=initiativePublicationRoute[1]!,pubId=initiativePublicationRoute[2],action=initiativePublicationRoute[3];
+        if(!pubId&&request.method==='GET'){json(response,200,{publications:strategyInitiativePublications.list(id,url.searchParams.get('scopeKey')??undefined)});return;}
+        if(!pubId&&request.method==='POST'){const input=await body(request);json(response,201,{publication:await strategyInitiativePublications.publish(id,input)});return;}
+        if(action==='withdraw'&&request.method==='POST'){const input=await body(request);json(response,200,{publication:await strategyInitiativePublications.withdraw(id,pubId!,input)});return;}
+        if(action==='handoff'&&request.method==='POST'){const input=await body(request);json(response,200,{handoff:await strategyInitiativePublications.handoff(id,pubId!,input)});return;}
+      }
+      const gateRetryRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/candidates\/([a-f0-9-]{36})\/versions\/([1-9]\d*)\/gates\/([01])\/retry$/.exec(url.pathname);
+      if(gateRetryRoute&&request.method==='POST'){const input=await body(request);json(response,202,await strategyVerifications.retry(gateRetryRoute[1]!,gateRetryRoute[2]!,Number(gateRetryRoute[3]),Number(gateRetryRoute[4]) as 0|1,input));return;}
+      const verificationStopRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/verifications\/([a-f0-9-]{36})\/stop$/.exec(url.pathname);
+      if(verificationStopRoute&&request.method==='POST'){json(response,200,await strategyVerifications.stop(verificationStopRoute[1]!,verificationStopRoute[2]!));return;}
+      const initiativeSessionRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/(session|messages|events|stop|close)$/.exec(url.pathname);
+      if(initiativeSessionRoute){
+        const id=initiativeSessionRoute[1]!,action=initiativeSessionRoute[2]!,scopeKey=url.searchParams.get('scopeKey')??'';
+        if(action==='session'&&request.method==='POST'){const input=await body(request);json(response,201,{session:await strategyInitiativeSessions.create(id,input)});return;}
+        if(action==='session'&&request.method==='GET'){json(response,200,await strategyInitiativeSessions.detail(id,scopeKey));return;}
+        if(action==='messages'&&request.method==='POST'){const input=await body(request);json(response,202,await strategyInitiativeSessions.send(id,scopeKey,input));return;}
+        if(action==='stop'&&request.method==='POST'){const input=await body(request);json(response,200,await strategyInitiativeSessions.stop(id,scopeKey,input.expectedRequestId as string|undefined));return;}
+        if(action==='close'&&request.method==='POST'){json(response,200,await strategyInitiativeSessions.close(id,scopeKey));return;}
+        if(action==='events'&&request.method==='GET'){
+          let ready=false;const queued:unknown[]=[];
+          const writeEvent=(event:unknown)=>{if(!response.destroyed&&!response.writableEnded)response.write(`data: ${JSON.stringify(event)}\n\n`);};
+          const unsubscribe=strategyInitiativeSessions.subscribe(id,scopeKey,event=>{if(!ready)queued.push(event);else writeEvent(event);});
+          let d:Awaited<ReturnType<typeof strategyInitiativeSessions.detail>>;
+          try{d=await strategyInitiativeSessions.detail(id,scopeKey);}catch(e){unsubscribe();throw e;}
+          if(request.destroyed||response.destroyed){unsubscribe();return;}
+          response.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});
+          request.on('close',unsubscribe);
+          writeEvent({type:'snapshot',snapshot:d.snapshot,session:d.session});
+          ready=true;
+          for(const event of queued)writeEvent(event);
+          return;
+        }
+      }
+      const kickoffRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/reports(?:\/([1-9]\d*)\/(lock|apply|revise-proposal|revise))?$/.exec(url.pathname);
+      if(kickoffRoute){
+        const id=kickoffRoute[1]!,no=Number(kickoffRoute[2]),action=kickoffRoute[3];
+        const scopeKey=url.searchParams.get('scopeKey')??undefined;
+        if(!action&&request.method==='GET'){json(response,200,strategyKickoffReports.viewForScope(id,scopeKey));return;}
+        if(!action&&request.method==='POST'){const input=await body(request);json(response,201,{version:await mutate(()=>strategyKickoffReports.save(id,input as Parameters<typeof strategyKickoffReports.save>[1]))});return;}
+        if(action==='lock'&&request.method==='POST'){
+          const input=await body(request);
+          const version=await mutate(()=>{
+            strategyKickoffReports.versionForScope(id,no,scopeKey);
+            return strategyKickoffReports.lock(id,no,input as Parameters<typeof strategyKickoffReports.lock>[2]);
+          });
+          json(response,200,{version});return;
+        }
+        if(action==='apply'&&request.method==='POST'){const input=await body(request);json(response,200,{anchor:await mutate(()=>strategyKickoffReports.apply(id,no,input as Parameters<typeof strategyKickoffReports.apply>[2]))});return;}
+        if(action==='revise'&&request.method==='POST'){
+          const input=await body(request);
+          const version=await mutate(()=>{
+            strategyKickoffReports.versionForScope(id,no,scopeKey);
+            return strategyKickoffReports.revise(id,no,input as Parameters<typeof strategyKickoffReports.revise>[2]);
+          });
+          json(response,201,{version});return;
+        }
+        if(action==='revise-proposal'&&request.method==='POST'){
+          const input=await body(request);
+          const initiative=strategyInitiatives.get(id);const scope=initiative.scopes.find(s=>initiativeScopeKey(s)===scopeKey);
+          if(!scope||scopeKey===undefined)throw new StrategyDiscussionFault('strategy_initiative_scope_unknown');
+          const proposal=await mutate(()=>{
+            strategyKickoffReports.versionForScope(id,no,scopeKey);
+            return strategyKickoffReports.createProposal(id,no,input as Parameters<typeof strategyKickoffReports.createProposal>[2]);
+          });
+          let session;try{session=strategyInitiativeSessions.session(id,scopeKey);}catch{session=await strategyInitiativeSessions.create(id,{operationId:randomUUID(),scope});}
+          const replace=await proposalReplacement(id,scopeKey);
+          const ack=await strategyInitiativeSessions.send(id,scopeKey,{requestId:randomUUID(),text:`限定修改拟议：${proposal.request}`,expectedRevision:session.revision,proposal:proposal.proposalId,...(replace?{replacePendingRequestId:replace}:{})});
+          json(response,202,{proposal,requestId:ack.requestId});return;
+        }
+      }
+      const initiativeProposalRoute=/^\/api\/strategy\/initiatives\/([a-f0-9-]{36})\/proposals$/.exec(url.pathname);
+      if(initiativeProposalRoute&&request.method==='GET'){
+        const id=initiativeProposalRoute[1]!;
+        const pid=url.searchParams.get('proposalId')??'';
+        const proposal=strategyKickoffReports.proposal(id,pid)??strategyCandidates.proposal(id,pid);
+        if(!proposal)throw new StrategyDiscussionFault('strategy_proposal_unavailable',404);
+        if(proposal.target.kind==='report')strategyKickoffReports.versionForScope(id,proposal.target.no,url.searchParams.get('scopeKey')??undefined);
+        json(response,200,{proposal});return;
+      }
       const workbookRoute=/^\/api\/strategy\/workbooks\/(preview|commit|handoff|map-source|goal-source)$/.exec(url.pathname);
       if(workbookRoute && request.method==='POST'){
+        if(workbookRoute[1]==='handoff')throw new StrategyDiscussionFault('strategy_workbook_handoff_retired');
         const data=await workbookRoutes(workbookRoute[1]!,await body(request,12*1024*1024));
         json(response,200,data);return;
       }

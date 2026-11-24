@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {startTestHost} from './fixtures/host-process.ts';
 import {defaultSelection} from '../src/host/strategy-workbook-types.ts';
 
-test('真实 Host：Excel 预览不写业务，精确地图交接多个 G/S，采用后建 Case，原工作簿可按版回读',{timeout:90000},async t=>{
+test('真实 Host：Excel 预览不写业务，地图发布与承接写入退役，直接目标导入与 Case 沿用原入口',{timeout:90000},async t=>{
   const host=await startTestHost();t.after(()=>host.close());
   async function api(route:string,method='GET',input?:unknown,status=200){
     const response=await host.request(route,method,input),result=await response.json();
@@ -31,17 +31,21 @@ test('真实 Host：Excel 预览不写业务，精确地图交接多个 G/S，�
   assert.equal(version.nodes.length,4);assert.equal(version.author,'import');
   assert.deepEqual((await api(endpoint+'commit','POST',input)).version,version);
   const map={discussionId,mapId:version.mapId,version:1,sha256:version.contentSha256};
-  const {publication}=await api(`/api/strategy/discussions/${discussionId}/maps/${version.mapId}/versions/1/publication`,'POST',{operationId:randomUUID(),sha256:version.contentSha256},201);
   assert.equal((await api(endpoint+'map-source','POST',map)).bytes,bytes);
   const dest={scope:{kind:'personal',id:'self',name:'个人工作'},perspective:'personal'};
-  const {goals}=await api(endpoint+'handoff','POST',{map,publicationId:publication.publicationId,selected:['G1','G2'],...dest});
-  assert.equal(goals.length,2);assert.equal(goals[0].structured.map.version,1);
-  assert.deepEqual((await api(endpoint+'handoff','POST',{map,publicationId:publication.publicationId,selected:['G1','G2'],...dest})).goals,goals);
+  // Issue #120：旧地图发布与地图承接退出写入路径，直接请求同样拒绝。
+  assert.equal((await api(`/api/strategy/discussions/${discussionId}/maps/${version.mapId}/versions/1/publication`,'POST',{operationId:randomUUID(),sha256:version.contentSha256},409)).code,'strategy_map_publication_retired');
+  assert.equal((await api(endpoint+'handoff','POST',{map,publicationId:randomUUID(),selected:['G1','G2'],...dest},409)).code,'strategy_workbook_handoff_retired');
+  assert.equal((await api(endpoint+'handoff','POST',{map,selected:['G1','G2'],...dest},409)).code,'strategy_workbook_handoff_retired');
+  assert.equal((await api('/api/strategy/goals')).goals.length,0);
   await api('/api/cases/storage/initialize','POST',{});
-  for(const g of goals){
+  const manualGoals: any[]=[];
+  for(const [title,strategies] of [['留存',['门店回访','预约活动']],['覆盖',['门店回访']]] as const){
+    const g=(await api('/api/strategy/goals','POST',{operationId:randomUUID(),title,outcome:title,perspective:'personal',scope:dest.scope,measurement:{kind:'deliverable',criterion:title},baseline:{state:'pending',description:'待补'},responsible:'本人',strategies},201)).goal;
+    manualGoals.push(g);
     assert.equal(g.status,'candidate');
     await api('/api/strategy/goals/'+g.goalId+'/adopt','POST',{version:1,expectedVersion:1,operationId:randomUUID(),decision:'明确采用此项'});
-    for(const strategy of g.strategies){
+    for(const strategy of strategies){
       const bind={primary:{goalId:g.goalId,version:1},strategy,related:[]};
       const c=(await api('/api/cases','POST',{operationId:randomUUID(),title:g.title+' · '+strategy,goalBinding:bind},201)).case;
       assert.equal((await api('/api/cases/goal-match','POST',{primary:bind.primary,strategy})).caseId,c.id);
@@ -49,8 +53,6 @@ test('真实 Host：Excel 预览不写业务，精确地图交接多个 G/S，�
     }
   }
   assert.equal((await api('/api/cases')).cases.length,3);
-  assert.equal((await api(endpoint+'goal-source','POST',{goalId:goals[0].goalId,version:1})).bytes,bytes);
-  const {html}=await api('/api/strategy/goals/'+goals[0].goalId+'/versions/1/export');assert.match(html,/90日复购率/);assert.match(html,/待定/);
   // The same input workbook may be imported as goals directly with no discussion or intermediate map.
   delete sheet.F2;delete sheet.F3;
   const onlyBytes=XLSX.write(workbook,{bookType:'xlsx',type:'base64'}) as string,second=(await api(endpoint+'preview','POST',{fileName,bytes:onlyBytes})).book;
@@ -58,6 +60,8 @@ test('真实 Host：Excel 预览不写业务，精确地图交接多个 G/S，�
   const batch=(await api(endpoint+'commit','POST',direct)).goals;
   assert.equal(batch.length,2);assert.equal(batch[1].structured.metrics[0].baseline,'0');assert.ok(!batch[0].structured.map);
   assert.deepEqual((await api(endpoint+'commit','POST',direct)).goals,batch);
+  assert.equal((await api(endpoint+'goal-source','POST',{goalId:batch[0].goalId,version:1})).bytes,onlyBytes);
+  const {html}=await api('/api/strategy/goals/'+batch[0].goalId+'/versions/1/export');assert.match(html,/90日复购率/);assert.match(html,/待定/);
   const expected=Object.fromEntries(batch.map((g:any)=>[g.structured.nodeId,{goalId:g.goalId,version:1}]));
   sheet.D3.v=8;
   const revisedBytes=XLSX.write(workbook,{bookType:'xlsx',type:'base64'}) as string;
@@ -79,20 +83,16 @@ test('真实 Host：Excel 预览不写业务，精确地图交接多个 G/S，�
   const manual=(await api('/api/strategy/goals/'+saved[0].goalId+'/revisions','POST',amended,201)).goal;
   assert.deepEqual(manual.structured,saved[0].structured);
   assert.equal((await api(endpoint+'goal-source','POST',{goalId:batch[0].goalId,version:1})).bytes,onlyBytes);
-  // Losing the original file prevents public index/single-version/receipt and export reads from returning the withdrawn source.
+  // Losing the discussion original file blocks its map export; scope-keyed direct goals remain readable.
   const {rename}=await import('node:fs/promises'),{join}=await import('node:path');
   const rawFile=join(host.dataRoot,'strategy-workbooks','discussion-'+discussionId,book.sha256+'.xlsx');
   await rename(rawFile,rawFile+'.unavailable');
-  await api(endpoint+'handoff','POST',{map,publicationId:publication.publicationId,selected:['G2'],...dest},409);
+  assert.equal((await api(endpoint+'handoff','POST',{map,publicationId:randomUUID(),selected:['G2'],...dest},409)).code,'strategy_workbook_handoff_retired');
   const reopened=await host.request('/api/strategy/discussions/'+discussionId+'/maps/'+map.mapId+'/versions/1/export');
   assert.equal(reopened.status,409);
   const filtered=await api('/api/strategy/goals');
-  assert.ok(filtered.unavailableGoalSources.length);
-  assert.ok(!filtered.goals.some((r:any)=>r.id===goals[0].goalId));
   assert.ok(filtered.goals.some((r:any)=>r.id===batch[0].goalId));
-  await api('/api/strategy/goals/'+goals[0].goalId,'GET',undefined,409);
-  await api(endpoint+'goal-source','POST',{goalId:goals[0].goalId,version:1},409);
-
+  assert.ok(filtered.goals.some((r:any)=>r.id===manualGoals[0].goalId));
 });
 
 test('重排无稳定编号的工作簿，目标与地图都不能按原行修订，原 Case 引用保留',{timeout:60000},async t=>{
@@ -128,7 +128,7 @@ test('重排无稳定编号的工作簿，目标与地图都不能按原行修�
   assert.notEqual(fresh[0].goalId,g.goalId);assert.equal(fresh[0].title,'服务');
 });
 
-test('人工清空地图指标字段后，重开 v2 可交接目标并保留两版原值',async t=>{
+test('人工清空地图指标字段后，重开保留两版原值，旧发布与承接写入仍退役',async t=>{
   let host=await startTestHost();
   t.after(()=>host.close());
   async function api(route:string,method='GET',body?:unknown,status=200){
@@ -157,21 +157,8 @@ test('人工清空地图指标字段后，重开 v2 可交接目标并保留两�
   const {versions}=await api(route);
   assert.deepEqual(versions.find((map:any)=>map.version===1),first);
   assert.deepEqual(versions.find((map:any)=>map.version===2),second);
-  const map={discussionId,mapId,version:2,sha256:second.contentSha256};
-  const {publication}=await api(`/api/strategy/discussions/${discussionId}/maps/${mapId}/versions/2/publication`,'POST',{operationId:randomUUID(),sha256:second.contentSha256},201);
-  const {goals}=await api('/api/strategy/workbooks/handoff','POST',{map,publicationId:publication.publicationId,selected:['G1','G2'],scope:{kind:'personal',id:'self',name:'个人工作'},perspective:'personal'});
-  const {goal}=await api('/api/strategy/goals/'+goals[0].goalId);
-  const saved=goal.versions[0];
-  assert.deepEqual(saved.structured.map,map);
-  assert.deepEqual(saved.structured.metrics,[
-    {metric:'复购率',baseline:'0',target:'12%',unit:'%'},
-    {metric:'覆盖率'},
-    {...edited.metrics[1]}
-  ]);
-  assert.equal(saved.baseline.state,'known');
-  assert.match(saved.measurement.criterion,/覆盖率 目标值待定/);
-  const pending=(await api('/api/strategy/goals/'+goals[1].goalId)).goal.versions[0];
-  assert.deepEqual(pending.structured.metrics,[{metric:'咨询量'}]);
-  assert.deepEqual(pending.baseline,{state:'pending',description:'基线待补'});
+  assert.equal((await api(`/api/strategy/discussions/${discussionId}/maps/${mapId}/versions/2/publication`,'POST',{operationId:randomUUID(),sha256:second.contentSha256},409)).code,'strategy_map_publication_retired');
+  assert.equal((await api('/api/strategy/workbooks/handoff','POST',{map:{discussionId,mapId,version:2,sha256:second.contentSha256},publicationId:randomUUID(),selected:['G1','G2'],scope:{kind:'personal',id:'self',name:'个人工作'},perspective:'personal'},409)).code,'strategy_workbook_handoff_retired');
+  assert.equal((await api('/api/strategy/goals')).goals.length,0);
   assert.deepEqual((await api(route)).versions,versions);
 });

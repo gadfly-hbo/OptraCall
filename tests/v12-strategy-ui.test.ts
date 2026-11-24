@@ -9,8 +9,11 @@ test('V12-05 daily Goal view uses GSA while BSC remains a collapsed optional too
   assert.match(html, /aria-current="page"[^>]*>目标与策略/);
   assert.match(html, /年度决策事项/);
   assert.doesNotMatch(html, /BSC 目标与关系/);
-  const compare = renderToStaticMarkup(createElement(StrategyGoalsPage, {active:false,management:{area:'strategy',stage:'compare'},onStage(){},onOpenCase(){},onStartProject(){},onManageMetrics(){}}));
+  const compare = renderToStaticMarkup(createElement(StrategyGoalsPage, {active:false,management:{area:'strategy',stage:'strategy-versions'},onStage(){},onOpenCase(){},onStartProject(){},onManageMetrics(){}}));
   assert.match(compare, /BSC／战略目标关系（按需）/);
+  assert.match(compare, /aria-current="page"[^>]*>版本管理/);
+  assert.match(compare, />战略共创</); assert.match(compare, />战略检验</); assert.match(compare, />战略发布</);
+  assert.doesNotMatch(compare, />战略地图</); assert.doesNotMatch(compare, />战略模拟</); assert.doesNotMatch(compare, />版本与来源</);
 });
 test('V12-01 Task background displays only its recorded personal context and keeps missing history unknown', async () => {
   const { TaskUsageContextReceipt } = await import('../src/host/ui/TaskUsageContext.tsx');
