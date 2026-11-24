@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { semanticPage } from '../extensions/business-plugins/semantic-context/reader.ts';
+import type { SemanticItem, SemanticQueryInput } from '../extensions/business-plugins/semantic-context/types.ts';
 import type { StudioSourceRef, StudioUseAssessment } from '../extensions/business-plugins/studio/contracts.ts';
 import {
   collectNativeEvidence, exactTaskReport, nativeAssessmentEvidence, parseStudioAssessmentEvidence, qualifyAssessmentClaims,
@@ -83,6 +85,73 @@ test('R4 full later source receipt qualifies after a partial read but a selected
   assert.equal(studioPagesComplete(reads(...sourcePage('first', 0, 2, 'ab'), ...sourcePage('next', 2, 4, 'cd'))), true);
   assert.equal(studioPagesComplete(reads(...sourcePage('first', 0, 1, 'a'), ...sourcePage('next', 2, 4, 'cd'))), false);
   assert.equal(studioPagesComplete(reads(...sourcePage('selected', 0, 4, 'abcd', true, { itemId: 'selected' }))), false);
+});
+
+function semanticSourcePages(body: string, recordedBefore?: string) {
+  const target = { kind: 'enterprise' as const, storeId: 'store-1', materialId: 'month-report', revisionId: 'r1' };
+  const row: SemanticItem = {
+    target, title: '月报', state: 'available', sha256: hash(body), body, range: null, recordedAt: null,
+    businessTime: [], governance: null, declaration: null, relations: [], gaps: [],
+  };
+  const binding = { identity: 'monthly-summary', version: row.sha256! };
+  const pages: { details: ReturnType<typeof semanticPage>; reads: ReturnType<typeof readStudioEvidence> }[] = [];
+  let continuation: string | null = null;
+  do {
+    const input: SemanticQueryInput = { action: 'read', target, continuation, recordedBefore };
+    const details = semanticPage(input, [row], binding, null);
+    const id = 'read-month-' + pages.length;
+    const receipt = collectNativeEvidence([user, call(id, 'read_semantic_context', input),
+      results(id, 'read_semantic_context', JSON.stringify(details), details)]).results[0]!;
+    pages.push({ details, reads: readStudioEvidence(receipt) });
+    continuation = details.coverage.continuation;
+  } while (continuation);
+  return pages;
+}
+
+test('Semantic source receipts establish full reads and keep unknown recorded time separate', () => {
+  const body = '九月合计 173。';
+  const [normal] = semanticSourcePages(body);
+  assert.deepEqual(normal.details.items[0].range, { start: 0, end: body.length, total: body.length });
+  assert.equal('complete' in normal.details.items[0], false);
+  assert.equal(normal.reads[0]?.body, body);
+  assert.deepEqual(normal.reads[0]?.ref, { authority: 'enterprise', id: 'month-report', version: 'r1', locator: 'store-1', sha256: hash(body) });
+  assert.equal(normal.reads[0]?.complete, true);
+
+  const [unknown] = semanticSourcePages(body, '2026-10-01T00:00:00Z');
+  assert.deepEqual(unknown.details.items, []);
+  assert.equal(unknown.details.unknownTime[0].recordedAt, null);
+  assert.ok(unknown.details.coverage.gaps.includes('recorded-time-unknown-not-absence'));
+  assert.equal(unknown.reads[0]?.complete, true);
+  assert.deepEqual(unknown.reads[0]?.ref, normal.reads[0]?.ref);
+  assert.equal(unknown.reads[0]?.body, body);
+});
+
+test('Semantic UTF-16 source fragments cover non-BMP text only when all ranges are present', () => {
+  const body = '山🌙'.repeat(9_000);
+  const pages = semanticSourcePages(body);
+  assert.ok(pages.length > 1);
+  const parts = pages.flatMap(page => page.reads);
+  assert.equal(parts.map(part => part.body).join(''), body);
+  assert.equal(parts.length, pages.length);
+  assert.ok(parts.every(part => !part.complete));
+  assert.equal(studioPagesComplete(parts.slice(0, -1)), false);
+  assert.equal(studioPagesComplete(parts.slice(1)), false, 'The final receipt alone covers only the end of the body');
+  assert.equal(studioPagesComplete(parts), true);
+});
+
+test('Studio code-point fragments and semantic UTF-16 fragments retain their own pagination boundaries', () => {
+  // ASCII makes the numeric endpoints identical under both conventions.
+  const body = 'm'.repeat(24_000);
+  const [first] = semanticSourcePages(body);
+  const { ref } = first.reads[0]!;
+  const start = first.details.items[0].range!.end;
+  const fragment = body.slice(start);
+  const result = { ref, text: fragment, complete: false, range: { unit: 'unicode-codepoints', start, end: body.length, total: body.length } };
+  const messages = [user, call('studio-tail', 'studio_assets', { action: 'read-source', payload: { ref, start } }),
+    results('studio-tail', 'studio_assets', JSON.stringify(result), { type: 'optracall.studio', action: 'read-source', result })];
+  const studioTail = collectNativeEvidence(messages).results.flatMap(readStudioEvidence);
+  assert.equal(studioTail.length, 1);
+  assert.equal(studioPagesComplete([...first.reads, ...studioTail]), false);
 });
 
 test('R4 only an exact full file read supplies text and digest for the authorized input', () => {

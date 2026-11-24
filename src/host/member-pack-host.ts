@@ -36,7 +36,7 @@ import { EnterprisePackStore } from './enterprise-pack-store.ts';
 import { listTaskBoundReports, projectTaskResultTime } from './project-task-result-sources.ts';
 import { createNativeSnapshotReadBudget } from './native-session-snapshot.ts';
 import { buildAuthorizedDataView, isPeriodCovered, isSourcePeriodCovered, type AuthorizedDataPurpose } from './member-pack-data-view.ts';
-import { collectNativeEvidence, exactTaskReport, nativeAssessmentEvidence, projectFileLocator, qualifyAssessmentClaims, readCoversSource, readNativeFileEvidence, readStudioEvidence, studioPagesComplete } from './member-pack-verification.ts';
+import { collectNativeEvidence, exactTaskReport, nativeAssessmentEvidence, projectFileLocator, qualifyAssessmentClaims, readCoversSource, readNativeFileEvidence, readStudioEvidence, sourceReadPageKey, studioPagesComplete } from './member-pack-verification.ts';
 import { createProtectedExecutionScope, type ProtectedExecutionScope } from '../agent/protected-tools.ts';
 
 function json(response: ServerResponse, status: number, value: unknown) {
@@ -1866,8 +1866,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const { results } = collectNativeEvidence(snap.messages.slice(turnStartIdx, endIdx + 1));
     for (const result of results) {
       for (const page of readStudioEvidence(result)) {
-        const { title: _title, ...identity } = page.ref;
-        const key = digest(identity);
+        const key = sourceReadPageKey(page);
         const group = groups.get(key) ?? [];
         const evidence = {
           ref: page.ref, sha256: page.ref.sha256, complete: page.complete, range: page.range,
@@ -2001,8 +2000,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
     const groups = new Map<string, typeof sourceReads>();
     for (const read of sourceReads) {
-      const { title: _title, ...identity } = read.ref;
-      const key = digest(identity);
+      const key = sourceReadPageKey(read);
       const group = groups.get(key) ?? [];
       group.push(read);
       groups.set(key, group);
