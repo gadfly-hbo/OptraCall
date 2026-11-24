@@ -128,9 +128,18 @@ PM 独立复核退回两项合并阻断，仍由 Qoder/Mac-mini 在原分支整�
 
 - RED：浏览器脚本新增正常 EOF 场景：合成 Provider 保持运行，events 请求返回 HTTP 200 有限 `text/event-stream` 后结束。修前页面仍显示正常 accepted 运行文案，无断连提示；pending 防重保持。外置日志：`browser-eof-red.log`。
 - 修复：`watchInitiativeEvents` 正常 resolve 且非显式 abort 时，Workbench 同样标记 `observationDisconnected` 并提示可刷新核对；保留请求编号、防重和显式恢复语义。
-- GREEN：重新 build 后浏览器 28 项全部 PASS，包含正常 EOF 提示、EOF 后 pending 防重、拒绝 SSE 对照及原 26 项联合场景；零外部浏览器请求。外置日志：`browser-eof-green.log`。
+- GREEN：重新 build 后浏览器 28 项全部 PASS，包含正常 EOF 提示、EOF 后 pending 防重及原 26 项联合场景。拒绝 SSE 对照由后续 PM 独立浏览器复验覆盖；零外部浏览器请求。外置日志：`browser-eof-green.log`。
 
 ### 返工后完整检查
 
 - 完整 `npm run check`：退出 0；3274 项中 3163 通过、0 失败、111 条件跳过，测试耗时约 371155 ms；边界检查 PASS，build 通过。外置日志：`npm-check-rework.log`。
 - 提交后固定 HEAD 再执行 build 与联合浏览器，最终结果写入 Issue 返工回执。
+
+## 9. Codex PM 接回与独立复验
+
+2026-11-24，Codex PM 接回远端候选 `11f7388ecfe89b500331728ae8442ad38737b627`。源码 tree `7b417e8ec3e2d9f1edcb3499b1e11223362e726f` 已逐文件 blob／mode 核对，基线 main 为 `7ef6ebb81b735ffecdad3753217a96f02cb95c76`。
+
+- 非作者 Host 轴独立验证 24 项通过，覆盖真实 HTTP／Pi／合成 Provider、旧记录实际进程重启、current-only／signal-only 排队取消零写入及提交后取消的原回执保全。
+- 非作者 UI 轴独立浏览器验证 42 项全部通过。正常 EOF 的旧失败已转为实际提示观察受损并保留防重，主动取消订阅和成功／失败／取消终态控制通过，范围承接、准确旧版本与来源失读、键盘及窄屏联合路径通过。
+- 非作者规格／工程规范轴增量通过。历史丢失材料的 LOST／NOT_PROVED 保留，能够逐件核实的证据以实际留存文件为准。
+- PM 接管原任务分支，校正本规格的交付状态及作者浏览器覆盖措辞。后续候选 SHA、完整检查、PR head CI、合并提交及 main push CI 的实际结论统一回填 [Issue #128](https://github.com/gadfly-hbo/OptraCall/issues/128) 与 [PR #130](https://github.com/gadfly-hbo/OptraCall/pull/130)。设备运行采用与用户产品体验由用户安排。
