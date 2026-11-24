@@ -225,3 +225,80 @@ Qoder 最后交回 `5e9b001c52e3cba6d89c9c1263e80032eb8ade9e`。PM 在合入当�
 复查 `ad6f1af` 已确认上述两项补正，同时发现原有语义读取入口的正文回执使用 UTF-16 范围，作者证据收集不能套用 Studio 的码点单位或要求语义回执提供 `item.complete`。最终适配按各工具实际返回的单位和正文核对，跨页只合并同一准确来源及单位；已返回正文可证明实际读过，时间未知继续单列。正常协议用例直接消费原组件输出。
 
 中间集成的本地全量检查曾在 SU02/13 的隔离 Host 启动阶段退出 1，未进入 Case／SAP 关联断言。日志显示 Host 启动失败，具体系统原因未知；同项单独运行通过。原记录保留在 `.local/issue-121/pm-takeover/check-e42722f.log` 及 `su02-control.log`。各轮重新冻结后的工程结论以对应 SHA 和独立运行的结果为准。
+
+---
+
+## Round 2 实施与验证记录（2026-11-24）
+
+### 身份与基线
+
+- 来源工单：[Issue #121 Round 2 正式外发评论](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7126052321)
+- 领取回执：[Issue #121 Round 2 领取回执](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7126196689)
+- 领取方：Antigravity 云端工程 Agent
+- 开工基线：`7ef6ebb81b735ffecdad3753217a96f02cb95c76`（`origin/main`）
+- 任务分支：`work/antigravity/issue-121-round2-fixes`
+- 环境与依赖：Ubuntu 24.04（2 vCPU）、Node v25.9.0、Python 3.12.16 + Playwright 1.65.2 + `/usr/bin/google-chrome`；官方 `@earendil-works/pi-coding-agent` 保持 `1.4.0`、`undici` 保持 `8.12.2`（`package.json` 与 `package-lock.json` 零修改）；Interface v3。
+- 私有原始日志位置：被忽略的 `.local/issue-121-round2/`（不进入公开仓库）。
+
+### 逐项结论总览
+
+| 编号 | 优先级 | 问题 | 结论 | 关键证据与未覆盖项 |
+| --- | --- | --- | --- | --- |
+| 01 | P1 | 默认 Skill 阻断会员包受限项目分析 | PASS（工程范围） | RED→GREEN（`tests/issue-121-round2.test.ts` + `tests/browser-issue-121-round2.py`）；覆盖受限项目默认开启、明确取消、普通项目对照、同名碰撞与通用目录顺序。macOS `sandbox-exec` 实机未在 Linux VM 运行（代码已补齐 `skills/` 快照根与 `resolveProtectedSkillSnapshot`）。 |
+| 02 | P2 | 发起体系建设必填提示与项目选择保留 | PASS（真实 Chromium） | `StudioPage.tsx` `noValidate` + 持续可见行内错误与焦点转移 + `newProjectId` 纳入脏状态与专属离开确认；实测空/纯空格目标 0 请求、仅切项目触发「保留未发起的体系建设？」、继续编辑保项目、单次提交建任务，并单独验证候选编辑仍触发「保留未保存的候选编辑？」。 |
+| 03 | P2 | 接受前发送失败无法回看原文 | PASS（后端 + 真实 Chromium） | `server.ts` 对 `/messages` 接受前 4xx 返回 `accepted: false`；`App.tsx` 仅在 Host 接受后清草稿，拒绝时保留多行原文与按任务隔离的失败状态，切任务/完整刷新均可见且零自动重发、不伪装已发送消息、他任务不可见、修改后单次显式重试 202 成功；保留既有 `uncertainPersonalSend`/`interrupted` 规则。 |
+| 04 | P2 | 用途保存字段定位与误建草案排除 | PASS（后端 + 真实 Pi 工具 + 真实 Chromium） | `enterprise-pack-store.ts` 事前全字段校验并输出安全 `payload.*` 路径与 UTF-8 字节上限，拒绝复数 `evidenceNotes`（容忍存储对象原样展开的空/原样数组）及错写键且零写入（`revision` 不变）；支持 `excludedFromPreview` 持久化与 UI 修正/排除/恢复，排除误建 `U-02` 跨刷新保持、预览与 `v1.0` 仅含 `U-01` 且历史 `v1.0` 可在历史页展开核对。 |
+| 05 | P2 | 首次纯界面可复用维护身份与明细重算授权 | PASS（后端 + 3 浏览器上下文实测） | `StudioMemberPackPanel.tsx` 顶部（建包前可见）与 `StudioPage.tsx` 发起抽屉均暴露 `op:*` 维护身份建立/登录入口；`member-pack-host.ts` 输出脱敏 `grantAuthorityGuidance`（绝不暴露口令/盐/哈希/令牌）；实测空企业纯界面建身份与首包→新浏览器受阻指引→非权责只读→重认证→授权 T05（用途+甲乙店+6–7月+三表）→独立新任务实读三表重算（过滤丙店/8月/未授权表）→撤权阻断→历史临时会话包保持原绑定不静默迁移。 |
+| 06 | P3 | 新建任务弹窗疑似双 Skill 复选框复验 | PASS（无缺陷，未改无关 UI） | 真实 Chromium 展开旧任务「交接与依据」下完成 5 轮开关复验（桌面 `1440×900` ×3 + 窄屏 `390×844` ×2，覆盖鼠标、Tab 与 Escape）：弹窗内仅 1 个默认 Skill 复选框，顶层 `<dialog>.showModal()` 遮罩阻断背景误点（`elementFromPoint` 实证），键盘焦点不逃逸，关闭 Skill 新建后新旧任务跨刷新完全独立。 |
+
+### 关键实现与 RED→GREEN 记录
+
+1. **Item 01（P1）**：
+   - **根因**：`src/host/member-pack-host.ts` 的 `prepareRestrictedTaskWorkspace` 未创建或传入 `skillRoot`；`src/agent/project-session.ts` 的 `protectedTools` 路径只读 `o.protectedExecution?.skillRoot`（而非受限会员包的 `activeProtectedScope?.skillRoot`），且非 macOS 降级路径（`restrictedHostToolsOnly`）完全未装载任务固定的内置 `data-analysis` Skill。
+   - **RED**：`.local/issue-121-round2/item01-red.log`（受限项目开启默认 Skill 时 `capabilities.skills` 为 `false`、`skills` 为空、`protectedScope.skillRoot` 缺失）。
+   - **修复**：在 `prepareRestrictedTaskWorkspace` 为受限隔离工作区建立 `0o700` `skills/` 目录并在策略变更时一并归档、作为 `skillRoot` 传入；在 `src/agent/protected-skills.ts` 抽出 `resolveProtectedSkillSnapshot` 供 `protectedTools` 复用；在 `src/agent/project-session.ts` 补齐 `restrictedMemberPack` 在 `protectedTools` 与降级路径上的固定内置 Skill 装载与精确校验（沿用 `loadFixedBuiltInSkill` / `selectTaskSkills`，不放宽工具/文件隔离或通用目录顺序）。
+   - **GREEN**：`tests/issue-121-round2.test.ts` Item 01 + `tests/project-runtime.test.ts` + `tests/browser-issue-121-round2.py` Item 01 全绿。
+
+2. **Item 02（P2）**：
+   - **修复**：`src/host/ui/StudioPage.tsx` 将 `newProjectId` 纳入 `newFormInitial` 与 `dirty` 判定；为 `#studio-create-form` 添加 `noValidate` 与持续可见行内错误提示（含明确下一步及焦点转移）；`leaveOpen` 弹窗区分「保留未发起的体系建设？」与既有的「保留未保存的回答？」「保留未保存的候选编辑？」。
+   - **验证**：`tests/browser-issue-121-round2.py` Item 02 全绿（含单独验证候选编辑离开保护）。
+
+3. **Item 03（P2）**：
+   - **RED**：`.local/issue-121-round2/item03-05-red.log`（`POST /messages` 接受前 409 未返回 `accepted: false`，前端发前已清草稿且刷新后丢失状态）。
+   - **修复**：`src/host/server.ts` 在 `POST /messages` 的全部接受前 4xx 拒绝分支补充 `accepted: false`；`src/host/ui/App.tsx` 改为仅在 Host 接受（202）或命令完成后清空草稿，接受前 4xx 拒绝时清除 `optimistic` 气泡、持久化完整草稿并在按 `projectId/taskId + lastRunId` 隔离的 `localStorage` 中保存失败状态，支持修改后显式单次重试；保留 `interrupted` 与 `uncertainPersonalSend` 原有保护。
+   - **GREEN**：`tests/issue-121-round2.test.ts` Item 03 + `tests/browser-issue-121-round2.py` Item 03 全绿。
+
+4. **Item 04（P2）**：
+   - **RED**：`.local/issue-121-round2/item04-red.log`（缺 `title` 仅返回裸错且无 `details`，`evidenceNotes` 静默忽略）。
+   - **修复**：`extensions/business-plugins/studio/enterprise-pack.ts` 增加 `excludedFromPreview` / `excludedReason`；`src/host/enterprise-pack-store.ts` 在任意修改前完成全字段校验、UTF-8 字节上限与拼写拦截（含复数 `evidenceNotes`）并新增 `setPurposePreviewExclusion`；`src/host/studio-host.ts` 保留 `StudioError.message`/`details` 并包装 `evidenceNote.sourceRefs` 解析错误；`src/host/member-pack-host.ts` 新增 `POST /api/studio/enterprise-packs/:packId/purposes/:purposeId/preview-exclusion`；`src/host/ui/StudioMemberPackPanel.tsx` 增加草案勾选、行内「修正草案」抽屉、「排除出默认预览 / 恢复纳入默认预览」按钮及历史版本用途清单展开。
+   - **GREEN**：`tests/issue-121-round2.test.ts` Item 04 + `tests/browser-issue-121-round2.py` Item 04 + `tests/member-operations-pack-host.test.ts` 全绿。
+
+5. **Item 05（P2）**：
+   - **RED**：`.local/issue-121-round2/item03-05-red.log`（`GET /api/studio/enterprise-packs` 缺少 `grantAuthorityGuidance`，建包前界面无维护身份入口）。
+   - **修复**：`src/host/member-pack-host.ts` 新增 `buildGrantAuthorityGuidance` 并从 `GET /api/studio/enterprise-packs` 与详情接口返回，同时在 `assertProjectDataPathAllowed` 拒绝提示中补充脱敏的原具名维护人与权责项目指引；`src/host/server.ts` 与 `src/host/studio-host.ts` 传入 `resolveOperatorDisplayName`；`src/host/ui/StudioMemberPackPanel.tsx` 顶部（建包前可见）与 `StudioPage.tsx` 发起抽屉均提供可复用 `op:*` 维护身份建立/登录入口并在 `grants` 展示结构化受阻引导。
+   - **GREEN**：`tests/issue-121-round2.test.ts` Item 05 + `tests/browser-issue-121-round2.py` Item 05（3 个隔离浏览器上下文全流程）全绿。
+
+6. **Item 06（P3 复验）**：
+   - 经 `tests/browser-issue-121-round2.py` 5 轮真实 Chromium 复验无误操作、无双复选框、无焦点逃逸，保持原实现不作无关 UI 改动。
+
+### 独立非作者复核与返修
+
+- 由独立只读复核子代理（全新上下文，无共同编辑历史）对完整 diff（相对 `7ef6ebb`）及新增测试进行复核，初审结论 `PASS WITH MINOR FINDINGS`（0 Blocker / 0 Major / 4 Minor + 2 Info）：
+  1. `server.ts` 将 `rejectedSend` 提升至捕获块顶部，补齐 3 处早退 4xx 分支的 `accepted: false`。
+  2. `App.tsx` 允许更新的接受前拒绝状态在刷新/重开时优先于较旧的 `failed` 运行展示（仍保留 `interrupted` 优先），并在用户手动清空输入框时同步清除对应拒绝横幅。
+  3. `enterprise-pack-store.ts` 允许带显式 `targetPurposeId` 的草案修正替换/清空 `exclusions`（保留跨项目隐式合并的累加去重）。
+  4. `studio-host.ts` 包装 `evidenceNote.sourceRefs` 解析错误为结构化路径；`enterprise-pack-store.ts` 补齐 `decisionChoices`、`*Days` 与 `evidenceReadiness` 事前形态校验。
+  5. `member-pack-host.ts` 调整引导文案为版位中性的「在本页认证区域」，并为 `decodeURIComponent` 补充 400 `invalid_purpose_id` 兜底。
+- 复核方增量复查结论：**PASS（全部 4 项 Minor 与 2 项 Info 关闭，0 遗留项）**。
+
+### 最终验证结果与未覆盖说明
+
+- `npm run check:agent-sessions`：**PASS**（退出 0）。
+- `npm run build`（`tsc --noEmit` + frontend build + stamp）：**PASS**（退出 0）。
+- `python3 tests/browser-member-operations-pack.py`：**PASS**（0 page errors，退出 0，日志 `.local/issue-121-round2/final-existing-browser.log`）。
+- `python3 tests/browser-issue-121-round2.py`：**PASS**（6/6 项全绿，`ALL_ROUND2_BROWSER_TESTS_PASSED`，退出 0，日志 `.local/issue-121-round2/final-round2-browser.log`）。
+- 19 个受影响后端/UI 测试套件（含 `issue-121-round2`、`member-operations-pack-*`、`member-pack-*`、`protected-skills`、`project-runtime`、`project-host`、`studio-host`、`studio-store`、`studio-flow`、`studio-ui-client`、`run-diagnostics`、`metric-sap`、`task-host`、`task-observation`、`project-task-assignments-v13`）：首跑 181/182 通过，检出 `member-operations-pack-host` Round-4 展开存储对象时传入空 `evidenceNotes: []` 被误拦（1 失败）；修正为仅拦截非数组或非原样回传的 `evidenceNotes` 后重跑 `member-operations-pack-host.test.ts` + `issue-121-round2.test.ts` **9/9 PASS**（退出 0，日志 `.local/issue-121-round2/member-host-round2-green.log`），合并 19 套共 184 项测试 **182 pass / 0 fail / 2 skipped**（macOS/graph 环境跳过）。
+- **未覆盖与限制**：
+  1. 本云端 VM 为 2 vCPU，全仓库 464 个测试文件的 `npm run check` 在 600s 命令超时上限处中止（中止前 360 项均通过、0 失败）；完整 464 文件全量 CI 待 PM Agent 创建 PR 后由 GitHub Actions CI 覆盖。
+  2. Linux 环境无 macOS `/usr/bin/sandbox-exec`，Item 01 与 Item 05 的 macOS 沙箱运行路径待 PM Agent / MacBook 侧实机复核；未调用真实付费 LLM，未改动真实业务包/设备/服务。
+  3. 历史绑定临时浏览器会话或未绑定维护人的旧包按规定保持原状，不静默迁移所有权。

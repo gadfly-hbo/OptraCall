@@ -45,3 +45,34 @@
 ## 不做事项
 
 不处理与上述验收无关的旧工具错误或泛化提示，不重建 IR/方法库/权限系统，不新增分析流程或人的普通操作，不做正式数据迁移、真实经营动作、SDK/Semantica 升级、Mac mini/MacBook 运行采用或用户产品验收。
+
+---
+
+## Round 2 追加范围与执行规格（2026-11-24）
+
+- 状态：工程实现与验证完成，准备交回 PM Agent 审核、独立复核、PR/CI 与合并
+- 来源：[Issue #121 Round 2 正式外发评论](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7126052321)
+- 领取评论：[Issue #121 Round 2 领取回执](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7126196689)
+- 领取方：Antigravity 云端工程 Agent
+- 任务分支：`work/antigravity/issue-121-round2-fixes`
+- 开工基线：`7ef6ebb81b735ffecdad3753217a96f02cb95c76`（与 MacBook 试用构建及二次复核基线一致）
+
+### 规范、SDK 与界面边界
+
+- 遵循工程规范 v1.14、四点产品原则（Host 管环境、Agent 自主执行、优先复用 Pi 已有能力、减少人的操作）与统一会话规范 IN01–IN07（Interface v3）。
+- 普通分析与会员包受限任务沿用同一 `projectId + taskId` owner 与 `project-tasks` profile；官方 `@earendil-works/pi-coding-agent` 保持 `1.4.0`，`undici` 保持 `8.12.2`，不修改官方包、不放宽安全边界或文件/工具白名单。
+- **UI Demo 适用性说明**：本轮 6 项均在既有表单、消息提示条、会员包草案表、历史列表与权限提示区内做原地缺陷修复与状态补全，不新增页面、顶层导航或全新交互流程，沿用原批准设计，因此无需单独出可点击 UI Demo 审批。
+- **四原则前置核对**：
+  - **Host 管环境**：受限任务隔离工作区由 Host 补建 `skills/` 快照根并保持只读边界；Host 校验用途字段与拼写并拒绝零写入；Host 显式返回接受前拒绝标记 `accepted: false`；Host 仅输出脱敏维护人/权责项目引导，绝不暴露口令/盐/哈希/凭据。
+  - **Agent 自主执行**：受限任务加载固定内置 `data-analysis` Skill 后，仍由 Agent 自主分析并沿受控 `read_input` 重算，Host 不代算、不改写业务口径。
+  - **优先复用 Pi 已有能力**：复用公开 `loadSkills`、`selectTaskSkills`、`snapshotProtectedSkills` 与原生 `read_input`，不自建第二套 Skill 加载或会话循环。
+  - **减少人的操作**：首建包前直接露出可复用维护身份入口，消除换浏览器后找不到入口与有权人的折返；用途保存直接定位字段与拼写；接受前发送失败自动保底原文与状态，无需重写。
+
+### Round 2 任务目标执行清单
+
+- [x] **01 · P1 默认 Skill 阻断会员包受限项目分析**：补齐 `prepareRestrictedTaskWorkspace` 的 `skills` 快照根与 `project-session.ts` 受限任务固定 Skill 装载路径，保留文件/工具隔离、固定包摘要校验、明确取消、同名碰撞覆盖和通用目录顺序。
+- [x] **02 · P2 发起体系建设表单必填提示与项目选择保留**：`StudioPage` 取消依赖瞬时浏览器原生提示，空白/纯空格目标展示持续可见的行内提示与下一步且零请求；仅切换项目关闭触发专属离开确认（与候选编辑确认分开验证），继续编辑保留项目，单次提交创建并进入对应项目任务。
+- [x] **03 · P2 接受前发送失败保留原文与重试入口**：`server.ts` 对 `/messages` 接受前 4xx 拒绝显式返回 `accepted: false`；`App.tsx` 仅在 Host 接受后清草稿，拒绝时保留多行原文与按任务隔离的失败状态，离开/重开/完整刷新均可见、绝不自动重发、不伪装成已发送原生消息，其他任务不可见，保留既有 accepted-but-unknown 核对/去重规则。
+- [x] **04 · P2 用途保存字段诊断与误建草案排除**：`pack-upsert-purpose` 事前校验全部字段并输出安全字段路径/期望形态/UTF-8 字节上限，显式拒绝复数 `evidenceNotes` 等错写键并保证零写入（`revision` 不变）；新增草案预览排除持久化与 UI 修正/排除/恢复入口，排除误建 `U-02` 后预览与发布版仅含有效项且保留历史版本可查。
+- [x] **05 · P2 首次纯界面建立可复用维护身份与受阻指引**：在 `StudioMemberPackPanel` 顶部（建包前可见）与 `发起体系建设` 抽屉暴露具名维护身份（`op:*`）建立/登录入口；新增安全 `grantAuthorityGuidance` 并接入受阻引导 UI 与明细拒绝提示（不含凭据）；验证纯界面空企业建身份/首包→换浏览器受阻引导→重认证→授权 T05→独立新任务实读三表重算→他者只读→撤权阻断→历史临时会话包不静默迁移。
+- [x] **06 · P3 新建任务弹窗与背景 Skill 复选框实测复验**：在真实 Chromium 展开旧任务「交接与依据」下，覆盖鼠标、键盘（Tab/Escape）与桌面/390×844 窄屏完成 5 轮开关复验，核实弹窗内仅 1 个默认 Skill 复选框、原生顶层 `<dialog>.showModal()` 遮罩阻断背景误点、键盘焦点不逃逸、任务目标明确且新旧任务状态完全独立，无误操作缺陷，不做无关 UI 改动。

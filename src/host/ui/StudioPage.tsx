@@ -21,6 +21,7 @@ import type { StudioFoundationSection } from './StudioFoundationView.tsx';
 import { routeStudioCoverageBuild } from './studio-coverage-view.ts';
 import { StudioRulePublicationView, studioRulePreviewChanged } from './StudioRuleExecutionView.tsx';
 import { StudioMemberPackPanel } from './StudioMemberPackPanel.tsx';
+import { readOperatorSession, switchOperatorSession, type HostOperatorSessionInfo } from './member-pack-client.ts';
 
 export type StudioLeaveGuard = () => Promise<boolean>;
 export type StudioSystemLocation = { status: 'none' | 'loading' | 'unavailable'; systemId?: string } | { status: 'available'; systemId: string; enterpriseId: string };
@@ -160,8 +161,12 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
   const [query, setQuery] = useState(''), [filter, setFilter] = useState('全部'), [tab, setTab] = useState<ResourceTab>('资料'), [domain, setDomain] = useState('全部'), [assetQuery, setAssetQuery] = useState(''), [assetStatus, setAssetStatus] = useState('全部'), [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false), [working, setWorking] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState(''), [pending, setPending] = useState<Pending>(), [graphPending, setGraphPending] = useState<Pending>();
   const [panel, setPanel] = useState<Panel>(), [assetTab, setAssetTab] = useState<AssetTab>('含义与来源'), [editor, setEditor] = useState<Editor>(), [leaveOpen, setLeaveOpen] = useState(false);
-  const newFormInitial = useRef(JSON.stringify(['', '', '']));
+  const newFormInitial = useRef(JSON.stringify(['', '', '', '']));
   const [newProjectId, setNewProjectId] = useState(currentProjectId ?? ''), [name, setName] = useState(''), [goal, setGoal] = useState(''), [topicTitle, setTopicTitle] = useState('');
+  const [newFormErrors, setNewFormErrors] = useState<{ project?: string; goal?: string }>({});
+  const newProjectRef = useRef<HTMLSelectElement>(null), newGoalRef = useRef<HTMLTextAreaElement>(null);
+  const [newOperatorSession, setNewOperatorSession] = useState<HostOperatorSessionInfo | null>(null);
+  const [newOpId, setNewOpId] = useState(''), [newOpName, setNewOpName] = useState(''), [newOpPasscode, setNewOpPasscode] = useState(''), [newOpBusy, setNewOpBusy] = useState(false), [newOpMessage, setNewOpMessage] = useState('');
   const [materialOptions, setMaterialOptions] = useState<StudioMaterial[]>([]), [materialLoading, setMaterialLoading] = useState(false), [chosenMaterials, setChosenMaterials] = useState<string[]>([]), [materialError, setMaterialError] = useState('');
   const [answer, setAnswer] = useState(''), [sourceText, setSourceText] = useState<StudioSourceText>(), [sourceLoading, setSourceLoading] = useState(false), [sourceError, setSourceError] = useState('');
   const [conflictedQuestion, setConflictedQuestion] = useState<StudioWorkItem>();
@@ -180,7 +185,7 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
   useEffect(() => { if (active && system && workspace) void Promise.resolve(selectConstructionRef.current?.(system, workspace)).catch(error => setError(errorText(error))); }, [active, system?.id, executionOwner?.projectId, executionOwner?.taskId]);
   useEffect(() => { onModalChange?.(Boolean(panel || leaveOpen)); return () => onModalChange?.(false); }, [panel, leaveOpen, onModalChange]);
   let questionPanel = panel; while (questionPanel?.kind === 'source') questionPanel = questionPanel.back;
-  const dirty = Boolean(panel?.kind === 'new' && (JSON.stringify([name, goal, topicTitle]) !== newFormInitial.current || chosenMaterials.length > 0) || panel?.kind === 'materials' && chosenMaterials.length || editor && JSON.stringify([editor.title, editor.body, editor.scope, editor.reason]) !== editor.original || questionPanel?.kind === 'question' && answer !== (questionPanel.item.answer ?? ''));
+  const dirty = Boolean(panel?.kind === 'new' && (JSON.stringify([newProjectId, name, goal, topicTitle]) !== newFormInitial.current || chosenMaterials.length > 0) || panel?.kind === 'materials' && chosenMaterials.length || editor && JSON.stringify([editor.title, editor.body, editor.scope, editor.reason]) !== editor.original || questionPanel?.kind === 'question' && answer !== (questionPanel.item.answer ?? ''));
   const blocked = working || Boolean(pending), graphBlocked = blocked || Boolean(graphPending);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; leaveResolver.current?.(false); }; }, []);
   const refreshList = useCallback(async (signal?: AbortSignal) => { const values = await listStudioSystems(signal); if (mounted.current && !signal?.aborted) setSystems(values); }, []);
@@ -208,7 +213,7 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
   useEffect(() => { onNavigationGuard?.(allowLeave); return () => onNavigationGuard?.(null); }, [allowLeave, onNavigationGuard]);
   useEffect(() => { if (!dirty && !pending && !graphPending) return; const protect = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; }; window.addEventListener('beforeunload', protect); return () => window.removeEventListener('beforeunload', protect); }, [dirty, pending, graphPending]);
   const closePanel = async () => { dismissAfterLeave.current = true; if (await allowLeave()) { setPanel(undefined); setEditor(undefined); } };
-  const finishLeave = (discard: boolean) => { const resolve = leaveResolver.current; leaveResolver.current = null; setLeaveOpen(false); if (discard) { setEditor(undefined); if (panel?.kind === 'new') { newFormInitial.current = JSON.stringify(['', '', '']); setName(''); setGoal(''); setTopicTitle(''); setChosenMaterials([]); } if (panel?.kind === 'materials') setChosenMaterials([]); if (dismissAfterLeave.current) setPanel(undefined); } dismissAfterLeave.current = false; resolve?.(discard); };
+  const finishLeave = (discard: boolean) => { const resolve = leaveResolver.current; leaveResolver.current = null; setLeaveOpen(false); if (discard) { setEditor(undefined); if (panel?.kind === 'new') { newFormInitial.current = JSON.stringify(['', '', '', '']); setNewProjectId(''); setName(''); setGoal(''); setTopicTitle(''); setChosenMaterials([]); setNewFormErrors({}); setNewOpMessage(''); } if (panel?.kind === 'materials') setChosenMaterials([]); if (dismissAfterLeave.current) setPanel(undefined); } dismissAfterLeave.current = false; resolve?.(discard); };
   const open = (next: Panel) => {
     trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setError('');
@@ -217,7 +222,14 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
       setPanel({ ...next, item: structuredClone(next.item) });
     } else setPanel(next);
   };
-  const beginNew = () => { const defaultName = `${enterpriseName || '企业'}基础资产`, defaultTopic = '基础资产建设'; newFormInitial.current = JSON.stringify([defaultName, startGoal || '', defaultTopic]); setNewProjectId(projects.find(project => project.id === currentProjectId && !project.archivedAt)?.id || projects.find(project => !project.archivedAt)?.id || ''); setName(defaultName); setGoal(startGoal || ''); setTopicTitle(defaultTopic); setChosenMaterials([]); open({ kind: 'new' }); };
+  const beginNew = () => {
+    const defaultProjectId = projects.find(project => project.id === currentProjectId && !project.archivedAt)?.id || projects.find(project => !project.archivedAt)?.id || '';
+    const defaultName = `${enterpriseName || '企业'}基础资产`, defaultTopic = '基础资产建设';
+    newFormInitial.current = JSON.stringify([defaultProjectId, defaultName, startGoal || '', defaultTopic]);
+    setNewProjectId(defaultProjectId); setName(defaultName); setGoal(startGoal || ''); setTopicTitle(defaultTopic); setChosenMaterials([]); setNewFormErrors({}); setNewOpMessage('');
+    void readOperatorSession().then(res => { if (mounted.current) setNewOperatorSession(res); }).catch(() => {});
+    open({ kind: 'new' });
+  };
   const openSystem = async (id: string) => { if (!await allowLeave()) return; setPanel(undefined); setEditor(undefined); setSystemId(id); requestAnimationFrame(() => heading.current?.focus()); };
   const backToList = async () => { if (!await allowLeave()) return; setSystemId(''); setWorkspace(undefined); setPanel(undefined); requestAnimationFrame(() => heading.current?.focus()); };
   const applySystem = (value: StudioSystem) => { onSystemChanged?.(value); setWorkspace(current => current && current.system.id === value.id ? { ...current, system: value } : current); setSystems(values => [...values.filter(item => item.id !== value.id), value]); };
@@ -247,7 +259,7 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
     } catch (error) { if (mounted.current) setError(errorText(error)); }
     finally { if (mounted.current) setWorking(false); }
   };
-  useEffect(() => { if (panel?.kind === 'new' && !projects.some(project => project.id === newProjectId && !project.archivedAt)) setNewProjectId(projects.find(project => project.id === currentProjectId && !project.archivedAt)?.id || projects.find(project => !project.archivedAt)?.id || ''); }, [panel?.kind, currentProjectId, projects, newProjectId]);
+  useEffect(() => { if (panel?.kind === 'new' && newProjectId && !projects.some(project => project.id === newProjectId && !project.archivedAt)) setNewProjectId(projects.find(project => project.id === currentProjectId && !project.archivedAt)?.id || projects.find(project => !project.archivedAt)?.id || ''); }, [panel?.kind, currentProjectId, projects, newProjectId]);
   const materialProjectId = panel?.kind === 'new' ? newProjectId : panel?.kind === 'materials' ? system?.projectId ?? '' : '';
   useEffect(() => {
     if (!materialProjectId) return; const controller = new AbortController(); setMaterialLoading(true); setMaterialError(''); setMaterialOptions([]); setChosenMaterials([]);
@@ -287,8 +299,39 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
     const requestId = crypto.randomUUID();
     await perform('准备发布预览', requestId, () => prepareStudioPublication(system.id, { requestId, topicId: system.currentTopicId, assetIds: candidates.map(item => item.asset.id), summary: topic?.goal || '本轮已核对成果', scope: topic?.scope || '', refs: system.assetRefs, checks: candidates.flatMap(item => item.revision.checks), limitations: candidates.flatMap(item => item.revision.limitations), excluded: system.assets.filter(asset => asset.candidateRevision && !candidates.some(item => item.asset.id === asset.id)).map(asset => `${selectedRevision(asset)?.title || asset.id}：候选未完成必要核查`), targetProjectIds: targetProjectId ? [targetProjectId] : [] }), value => { applySystem(value.system); open({ kind: 'preview', preview: value.preview }); });
   };
+  const switchNewSystemOperator = async () => {
+    if (newOpBusy || !newOpId.trim() || newOpPasscode.length < 4) return;
+    setNewOpBusy(true); setNewOpMessage(''); setError('');
+    try {
+      const res = await switchOperatorSession({
+        action: 'register',
+        operatorId: newOpId.trim(),
+        ...(newOpName.trim() ? { displayName: newOpName.trim() } : {}),
+        passcode: newOpPasscode,
+        ...(newProjectId ? { activeProjectId: newProjectId } : {}),
+      });
+      if (mounted.current) {
+        setNewOperatorSession(res);
+        setNewOpPasscode('');
+        setNewOpMessage(`已建立/登录可复用维护身份：${res.operator.displayName || res.operator.operatorId}（${res.operator.operatorId}），换浏览器可重新认证授权。`);
+      }
+    } catch (fault) {
+      if (mounted.current) setError(fault instanceof Error ? fault.message : '维护身份验证失败。');
+    } finally {
+      if (mounted.current) setNewOpBusy(false);
+    }
+  };
   const newSystem = async () => {
-    if (!newProjectId || !goal.trim()) { setError('请选择建设归属项目，并说明建设目标与企业范围。'); return; }
+    const fieldErrors: { project?: string; goal?: string } = {};
+    if (!newProjectId) fieldErrors.project = '请选择一个未归档的建设归属项目；如需新建，可点击下方「创建执行项目」。';
+    if (!goal.trim()) fieldErrors.goal = '请填写建设目标与企业范围（不可为空或仅含空格）。下一步：说明本轮要建设的业务主题、适用门店/范围和已有资料后，再点击「发起建设」。';
+    if (fieldErrors.project || fieldErrors.goal) {
+      setNewFormErrors(fieldErrors);
+      setError('请先补全下方标红的必填项后，再点击「发起建设」；已填写或已选择的项目和资料均已保留。');
+      requestAnimationFrame(() => { (fieldErrors.project ? newProjectRef.current : newGoalRef.current)?.focus(); });
+      return;
+    }
+    setNewFormErrors({});
     const requestId = crypto.randomUUID();
     await perform('发起体系建设', requestId, () => createStudioSystem({ requestId, enterpriseId, name: name.trim() || `${enterpriseName || '企业'}基础资产`, projectId: newProjectId, goal: goal.trim(), topicTitle: topicTitle.trim() || '基础资产建设', materials: materialOptions.filter(item => chosenMaterials.includes(sourceKey(item.ref))) }), value => { onSystemChanged?.(value); setPanel(undefined); setSystemId(value.id); setNotice('体系已在原项目创建，建设任务沿用原项目配置。'); if (onStartConstruction) void Promise.resolve(onStartConstruction(value)).catch(error => setError(`体系创建已确定；主 Agent 启动未完成，原任务保留，不自动重发。${errorText(error)}`)); });
   };
@@ -301,11 +344,56 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
   const renderCoverage = () => <><h2>问题、覆盖与缺口</h2><p className="studio-intro">由业务问题看实际产物与影响，不用总完成率、图节点数或专家数量代替进展。</p>{system?.topics.map(item => <section className="studio-coverage" key={item.id}><h3>{item.title}</h3><p>{item.goal}</p><p className="studio-meta">范围：{item.scope || '尚待明确'}</p><StudioAgentRecord topic={item}>{item.coverage.length > 0 && <ul>{item.coverage.map((text, index) => <li key={index}>{text}</li>)}</ul>}{item.gaps.length > 0 && <><strong>上次记录的缺口与影响</strong><ul>{item.gaps.map((text, index) => <li key={index}>{text}</li>)}</ul></>}</StudioAgentRecord></section>)}{system?.workItems.filter(item => item.status !== 'resolved').map(item => <section className="studio-coverage" key={item.id}><div className="studio-row"><h3>{item.title}</h3><Badge tone={item.kind === 'question' ? 'warning' : ''}>{item.kind === 'question' ? '实质业务问题' : item.status === 'waiting' ? '等待依赖' : item.kind === 'gap' ? '缺口' : '工作项'}</Badge></div><p>{item.detail}</p><p className="studio-meta">影响：{item.impact || '尚未说明'}<br />下一步：{item.nextStep || '由主 Agent 核对后继续'}</p>{item.kind === 'question' && <button type="button" className="text-button" disabled={readOnly || blocked} onClick={() => { setAnswer(item.answer || ''); open({ kind: 'question', item }); }}>查看依据并回答</button>}</section>)}<div className="studio-note">支付独立可用而退款或期间比较仍受限，只计部分交付。六类可靠性问题按实际影响关联，不作统一关闭门槛。</div></>;
   const renderRecords = () => <><div className="studio-row"><h2>发布与使用</h2><button type="button" className="secondary-button" disabled={readOnly || blocked} onClick={() => { void openPreview(); }}>发布预览</button></div><p className="studio-intro">业务回答、正式发布、项目采用、图刷新与实际使用分别留事实。</p>{system?.publications.length ? [...system.publications].reverse().map(publication => <section className="studio-record" key={publication.preview.id}><div className="studio-row"><h3>{publication.preview.summary}</h3><Badge tone={publication.results.some(result => result.status === 'unknown') ? 'warning' : ''}>{publication.preview.confirmedAt ? '已作正式发布决定' : '未确认预览'}</Badge></div><p className="studio-meta">范围：{publication.preview.scope}<br />{time(publication.preview.createdAt)}</p>{publication.results.map((result, index) => <div className="studio-result-row" key={`${result.module}:${index}`}><span>{authorityText[result.module]}{!emptyPublicationSuccess(result) && <small>{result.detail}</small>}</span><StudioPublicationResultBadge result={result} /></div>)}<button type="button" className="text-button" onClick={() => open(publication.preview.confirmedAt ? { kind: 'results', systemId: system.id, publication } : { kind: 'preview', preview: publication.preview })}>{publication.preview.confirmedAt ? '查看各项实际结果' : '查看确定版本预览'}</button></section>) : <div className="studio-note">尚无正式发布记录。候选保存不代表正式供给。</div>}<section className="studio-record"><div className="studio-row"><h3>指标包项目采用</h3><button type="button" className="text-button" disabled={readOnly || blocked} onClick={() => { setTargetProjectId(currentProjectId || system?.projectId || ''); setPackageId(''); setPackageVersion(''); open({ kind: 'adopt' }); }}>采用准确包版</button></div>{system?.adoptions.length ? system.adoptions.map((adoption, index) => <div className="studio-result-row" key={index}><span>{projects.find(project => project.id === adoption.projectId)?.name || adoption.projectId}<small>{adoption.detail}</small></span><Badge tone={adoption.status === 'succeeded' ? 'success' : 'warning'}>{resultText[adoption.status]}</Badge></div>) : <p className="studio-meta">暂无本体系记录的项目采用事实，不能由发布推断。方法不新增逐项目启用。</p>}</section><section className="studio-record"><div className="studio-row"><h3>图表示与来源资格</h3><button type="button" className="text-button" disabled={readOnly || graphBlocked} onClick={() => { if (!system) return; const requestId = crypto.randomUUID(); void perform('刷新图表示', requestId, () => writeStudioSystem(system.id, 'graph-refresh', { requestId }), value => { applySystem(value); setNotice('图刷新结果已读取；未改写正在运行任务的固定快照。'); }, 'graph'); }}>刷新相应图表示</button></div>{system?.graphs.length ? [...system.graphs].reverse().map((graph, index) => <div className="studio-result-row" key={`${graph.snapshotId}:${index}`}><span>{graph.snapshotId}{system.selectedGraphSnapshotId === graph.snapshotId && <Badge>当前选择</Badge>}<small>{graph.detail}</small>{graph.status === 'succeeded' && <button type="button" className="text-button" disabled={readOnly || graphBlocked || system.selectedGraphSnapshotId === graph.snapshotId} onClick={() => { const requestId = crypto.randomUUID(); void perform('选择后续任务图快照', requestId, () => writeStudioSystem(system.id, 'graph-selection', { requestId, snapshotId: graph.snapshotId }), value => { applySystem(value); setNotice('后续任务的图选择已记录；正在运行任务保持固定快照，撤回或失效来源仍须按当前资格核查。'); }, 'graph'); }}>后续任务使用此快照</button>}</span><Badge tone={graph.status === 'succeeded' ? 'success' : 'warning'}>{resultText[graph.status]}</Badge></div>) : <p className="studio-meta">尚无图刷新记录。只限制依赖图的用途；仍获准的 SAP/L1 独立成果继续。</p>}<p className="studio-meta">快照选择仅影响后续任务，运行中的固定快照保持。选回旧图不会恢复已撤回或失效来源的资格。</p></section><section className="studio-record"><h3>实际使用记录</h3>{system?.uses.length ? [...system.uses].reverse().map(use => <StudioUseEvidence key={use.id} record={use} onOpenTask={onOpenTask} onReadSource={ref => { void showSource(ref); }} />) : <p className="studio-meta">尚未记录实际使用，发布或图就绪不等于专业正确。</p>}</section><section className="studio-record"><div className="studio-row"><h3>反馈与回源维护</h3><button type="button" className="text-button" disabled={readOnly || blocked} onClick={() => { setFeedbackTitle(''); setFeedbackProblem(''); setFeedbackImpact(''); open({ kind: 'feedback' }); }}>补充问题或新资料</button></div>{system?.feedback.length ? [...system.feedback].reverse().map(feedback => <div className="studio-feedback" key={feedback.id}><button type="button" className="text-button" onClick={() => open({ kind: 'feedback-detail', feedback })}>{feedback.title}</button><p><Badge tone={feedback.status === 'verified' ? 'success' : ''}>{feedbackText[feedback.status]}</Badge></p><p className="studio-meta">{feedback.currentHandling}</p></div>) : <p className="studio-meta">新资料或源问题可关联回原体系，不为每次使用错误制造新资产。</p>}</section></>;
   const materialPicker = <><div className="studio-field"><span>选择已有获准资料</span><p className="studio-meta">只关联本次明确选择的准确来源。保存、Agent读取、整理、业务确认不互相代替。</p></div>{materialLoading ? <p role="status">正在盘点当前可选来源…</p> : materialError ? <p role="alert" className="studio-error-text">{materialError}</p> : materialOptions.length ? <div className="studio-material-picker">{materialOptions.map((item, index) => { const key = sourceKey(item.ref); return <label key={`${key}:${index}`}><input type="checkbox" checked={chosenMaterials.includes(key)} disabled={blocked || !item.readable} onChange={event => setChosenMaterials(values => event.target.checked ? [...values, key] : values.filter(value => value !== key))} /><span>{item.ref.title || item.ref.id}<small>{authorityText[item.ref.authority]} · {item.ref.version} · {item.readable ? '当前可读' : '当前不可读'}{item.note ? ` · ${item.note}` : ''}</small></span></label>; })}</div> : <p className="studio-meta">当前没有可选择的准确资料。可先表明目标，之后由原资料入口补充；不会补造资料或读取事实。</p>}</>;
-  const projectPicker = (value: string, update: (value: string) => void, id: string) => <label className="studio-field" htmlFor={id}><span>{id === 'studio-new-project' ? '建设归属项目' : '分析使用项目'}</span><select id={id} value={value} disabled={blocked} onChange={event => update(event.target.value)}><option value="">请选择项目</option>{projects.map(project => <option key={project.id} value={project.id} disabled={Boolean(project.archivedAt)}>{project.name}{project.archivedAt ? '（已归档，只读）' : ''}</option>)}</select></label>;
+  const projectPicker = (value: string, update: (value: string) => void, id: string, fieldError?: string) => <label className="studio-field" htmlFor={id}><span>{id === 'studio-new-project' ? '建设归属项目（必填）' : '分析使用项目'}</span><select ref={id === 'studio-new-project' ? newProjectRef : undefined} id={id} value={value} disabled={blocked} aria-invalid={fieldError ? true : undefined} aria-describedby={fieldError ? `${id}-error` : undefined} onChange={event => { update(event.target.value); if (id === 'studio-new-project') { setNewFormErrors(prev => prev.project ? { ...prev, project: undefined } : prev); setError(''); } }}><option value="">请选择项目</option>{projects.map(project => <option key={project.id} value={project.id} disabled={Boolean(project.archivedAt)}>{project.name}{project.archivedAt ? '（已归档，只读）' : ''}</option>)}</select>{fieldError && <p id={`${id}-error`} className="studio-error-text" role="alert">{fieldError}</p>}</label>;
   const panelView = (): { title: string; subtitle?: string; body: ReactNode; footer?: ReactNode } | undefined => {
     if (!panel) return;
     const cancel = <button type="button" className="secondary-button" disabled={working} onClick={() => { void closePanel(); }}>返回原位置</button>;
-    if (panel.kind === 'new') return { title: '发起体系建设', subtitle: '默认沿用当前项目，一次表达目标与必要资料；无需预设全部专家或 Skill。', body: <form id="studio-create-form" onSubmit={event => { event.preventDefault(); void newSystem(); }}>{projectPicker(newProjectId, setNewProjectId, 'studio-new-project')}{!projects.some(project => !project.archivedAt) && onCreateProject && <button type="button" className="secondary-button" onClick={onCreateProject}>创建执行项目</button>}<p className="studio-meta">建设任务、资料与主 Agent 会话归原项目，不另建技术项目。</p><details className="studio-advanced"><summary>建设名称与主题（可选调整）</summary><label className="studio-field" htmlFor="studio-new-name"><span>体系名称</span><input id="studio-new-name" maxLength={120} value={name} disabled={blocked} onChange={event => setName(event.target.value)} /></label><label className="studio-field" htmlFor="studio-new-topic"><span>本轮主题</span><input id="studio-new-topic" maxLength={200} value={topicTitle} disabled={blocked} onChange={event => setTopicTitle(event.target.value)} placeholder="例如：企业会员运营基础层" /></label></details><label className="studio-field" htmlFor="studio-new-goal"><span>建设目标与企业范围</span><textarea id="studio-new-goal" required value={goal} rows={4} disabled={blocked} onChange={event => setGoal(event.target.value)} placeholder="例如：为本企业建设会员运营的主数据、数据分析指标体系与本体；说明业务范围、已有资料和重要条件…" /></label>{materialPicker}</form>, footer: <>{cancel}<button type="submit" form="studio-create-form" className="primary-button" disabled={blocked || !newProjectId || materialLoading}>{working ? '正在发起…' : '发起建设'}</button></> };
+    if (panel.kind === 'new') {
+      const isNamedMaintainer = Boolean(newOperatorSession?.operator.verified && newOperatorSession.operator.operatorId.startsWith('op:'));
+      return {
+        title: '发起体系建设',
+        subtitle: '默认沿用当前项目，一次表达目标与必要资料；无需预设全部专家或 Skill。',
+        body: (
+          <>
+            {!newOperatorSession?.customResolver && (
+              <div className={`studio-note ${isNamedMaintainer ? '' : 'is-warning'}`} role="region" aria-label="体系建设维护人身份">
+                <p>
+                  <strong>当前维护人身份：</strong>
+                  {isNamedMaintainer
+                    ? `${newOperatorSession!.operator.displayName || newOperatorSession!.operator.operatorId}（${newOperatorSession!.operator.operatorId} · 可跨浏览器重认证）`
+                    : `${newOperatorSession?.operator.verified ? `临时浏览器会话（${newOperatorSession.operator.operatorId}）` : '未认证会话'} — 若后续需换浏览器进行明细授权或维护，建议先建立可复用的具名维护身份。`}
+                </p>
+                {newOpMessage && <p className="studio-meta" role="status">{newOpMessage}</p>}
+                {!isNamedMaintainer && (
+                  <div className="studio-row" style={{ marginTop: 8, gap: 8, flexWrap: 'wrap' }}>
+                    <input aria-label="建设维护人 ID" placeholder="维护人 ID（如 ops-lead）" value={newOpId} disabled={newOpBusy || blocked} onChange={e => setNewOpId(e.target.value)} />
+                    <input aria-label="建设维护人显示名" placeholder="姓名/岗位（可选）" value={newOpName} disabled={newOpBusy || blocked} onChange={e => setNewOpName(e.target.value)} />
+                    <input type="password" aria-label="建设维护人口令" placeholder="口令（至少4位）" value={newOpPasscode} disabled={newOpBusy || blocked} onChange={e => setNewOpPasscode(e.target.value)} />
+                    <button type="button" className="secondary-button" disabled={newOpBusy || blocked || !newOpId.trim() || newOpPasscode.length < 4} onClick={() => { void switchNewSystemOperator(); }}>
+                      {newOpBusy ? '验证中…' : '建立/登录维护身份'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <form id="studio-create-form" noValidate onSubmit={event => { event.preventDefault(); void newSystem(); }}>
+              {projectPicker(newProjectId, setNewProjectId, 'studio-new-project', newFormErrors.project)}
+              {!projects.some(project => !project.archivedAt) && onCreateProject && <button type="button" className="secondary-button" onClick={onCreateProject}>创建执行项目</button>}
+              <p className="studio-meta">建设任务、资料与主 Agent 会话归原项目，不另建技术项目。</p>
+              <details className="studio-advanced"><summary>建设名称与主题（可选调整）</summary><label className="studio-field" htmlFor="studio-new-name"><span>体系名称</span><input id="studio-new-name" maxLength={120} value={name} disabled={blocked} onChange={event => setName(event.target.value)} /></label><label className="studio-field" htmlFor="studio-new-topic"><span>本轮主题</span><input id="studio-new-topic" maxLength={200} value={topicTitle} disabled={blocked} onChange={event => setTopicTitle(event.target.value)} placeholder="例如：企业会员运营基础层" /></label></details>
+              <label className="studio-field" htmlFor="studio-new-goal">
+                <span>建设目标与企业范围（必填）</span>
+                <textarea ref={newGoalRef} id="studio-new-goal" value={goal} rows={4} disabled={blocked} aria-invalid={newFormErrors.goal ? true : undefined} aria-describedby={newFormErrors.goal ? 'studio-new-goal-error' : 'studio-new-goal-hint'} onChange={event => { setGoal(event.target.value); if (newFormErrors.goal && event.target.value.trim()) { setNewFormErrors(prev => ({ ...prev, goal: undefined })); setError(''); } }} placeholder="例如：为本企业建设会员运营的主数据、数据分析指标体系与本体；说明业务范围、已有资料和重要条件…" />
+                <p id="studio-new-goal-hint" className="studio-meta">必填项：写明本轮建设目标、适用业务范围及关键资料说明；未填写或仅为空格时不会发起建设。</p>
+                {newFormErrors.goal && <p id="studio-new-goal-error" className="studio-error-text" role="alert">{newFormErrors.goal}</p>}
+              </label>
+              {materialPicker}
+            </form>
+          </>
+        ),
+        footer: <>{cancel}<button type="submit" form="studio-create-form" className="primary-button" disabled={blocked || materialLoading}>{working ? '正在发起…' : '发起建设'}</button></>,
+      };
+    }
     if (panel.kind === 'source') return { title: panel.ref.title || '准确来源', subtitle: `${authorityText[panel.ref.authority]} · ${panel.ref.version}`, body: <>{sourceLoading ? <p role="status">正在读取此准确来源并核对当前资格…</p> : sourceError ? <div role="alert" className="studio-note is-error">{sourceError}<p>原引用保持，未以其他版本或来源替代。</p></div> : <><pre className="studio-source-text">{sourceText?.text || '此来源暂无可读取正文。'}</pre>{(!sourceText?.complete || sourceText.limitation) && <div className="studio-note is-warning">{sourceText?.limitation || '返回为部分来源，不能当作完整原文。'}</div>}{sourceText?.governance && <section><h3>当前来源治理</h3><pre>{typeof sourceText.governance === 'string' ? sourceText.governance : JSON.stringify(sourceText.governance, null, 2)}</pre></section>}</>}<details><summary>准确引用</summary><pre>{JSON.stringify(panel.ref, null, 2)}</pre></details></>, footer: <button type="button" className="secondary-button" onClick={() => panel.back ? setPanel(panel.back) : void closePanel()}>{panel.back ? '返回原面板' : '返回原位置'}</button> };
     if (panel.kind === 'results') {
       const { systemId: resultSystemId, publication } = panel;
@@ -399,7 +487,7 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
       <div className={`studio-workcolumns ${collapsed ? 'is-focused' : ''}`}><section className="studio-conversation" aria-label="主 Agent 协作"><div className="studio-section-head"><h2>主 Agent 协作</h2><Badge tone={workspace.running ? 'purple' : ''}>{workspace.running ? '正在运行' : readOnly ? '只读' : '原任务当前未运行'}</Badge></div><div className="studio-conversation-content">{renderConversation ? renderConversation(system, workspace) : <div className="studio-conversation-empty"><p>主建设协作沿同一项目任务与 Pi 会话，保留原上下文、工具、取消及历史。</p><p className="studio-meta">这里不创建第二套会话或消息循环。</p><button type="button" className="primary-button" onClick={() => onOpenTask(executionOwner!.projectId, executionOwner!.taskId)}>进入原建设会话</button></div>}</div><div className="studio-conversation-foot"><span>按需协作与自主核查；不固定专家流水线。</span><button type="button" className="text-button" disabled={readOnly || blocked || workspace.running} onClick={() => { if (onContinueConstruction) void Promise.resolve(onContinueConstruction(system)).catch(error => setError(errorText(error))); else onOpenTask(executionOwner!.projectId, executionOwner!.taskId); }}>继续原建设</button></div></section><section id="studio-resources" className="studio-resources" aria-label="资料、资产与建设记录" hidden={collapsed}><div className="studio-tabs" aria-label="建设内容">{resourceTabs.map(value => <button type="button" key={value} aria-pressed={tab === value} onClick={() => setTab(value)}>{value}</button>)}</div><div className="studio-resource-body">{tab === '资料' ? renderMaterials() : tab === '资产' ? renderAssets() : tab === '覆盖与缺口' ? renderCoverage() : renderRecords()}</div></section></div>
     </> : !loading && <div className="studio-empty"><p>体系记录暂不可读取。原来源与会话未被改写。</p><button type="button" className="secondary-button" onClick={() => { void backToList(); }}>返回体系列表</button></div>}
     {panelContent && <PersonalDialog title={panelContent.title} subtitle={panelContent.subtitle} drawer busy={working} returnFocus={trigger.current} fallbackFocus={heading.current} onClose={() => { void closePanel(); }} footer={<>{error && <p className="studio-error-text" role="alert">{error}</p>}{pending && <div className="studio-note is-warning"><p>{pending.label}结果 UNKNOWN，原输入保持，未自动重放。</p><button type="button" className="secondary-button" disabled={working} onClick={() => { void inspectPending(); }}>核对原请求结果</button></div>}{panelContent.footer}</>}>{panelContent.body}</PersonalDialog>}
-    {leaveOpen && <PersonalDialog title={questionPanel?.kind === 'question' ? '保留未保存的回答？' : '保留未保存的候选编辑？'} returnFocus={null} fallbackFocus={heading.current} onClose={() => finishLeave(false)} footer={<><button type="button" className="primary-button" onClick={() => finishLeave(false)}>继续编辑</button><button type="button" className="secondary-button" onClick={() => finishLeave(true)}>放弃本次未保存修改</button></>}><p>{questionPanel?.kind === 'question' ? '回答草稿和打开时的原问题仍在本页。可以继续核对，或明确放弃本次草稿。' : '尚未保存的修改仍在本页。可以继续编辑，或明确放弃；已保存候选、原正式版及旧引用始终保留。'}</p></PersonalDialog>}
+    {leaveOpen && <PersonalDialog title={questionPanel?.kind === 'question' ? '保留未保存的回答？' : panel?.kind === 'new' ? '保留未发起的体系建设？' : '保留未保存的候选编辑？'} returnFocus={null} fallbackFocus={heading.current} onClose={() => finishLeave(false)} footer={<><button type="button" className="primary-button" onClick={() => finishLeave(false)}>继续编辑</button><button type="button" className="secondary-button" onClick={() => finishLeave(true)}>放弃本次未保存修改</button></>}><p>{questionPanel?.kind === 'question' ? '回答草稿和打开时的原问题仍在本页。可以继续核对，或明确放弃本次草稿。' : panel?.kind === 'new' ? '已调整的建设归属项目或表单内容尚未发起建设。可以继续编辑保留当前选择，或明确放弃本次未发起的调整。' : '尚未保存的修改仍在本页。可以继续编辑，或明确放弃；已保存候选、原正式版及旧引用始终保留。'}</p></PersonalDialog>}
   </section>;
 }
 

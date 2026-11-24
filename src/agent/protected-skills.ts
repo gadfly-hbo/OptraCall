@@ -47,3 +47,22 @@ export function snapshotProtectedSkills(skills: readonly Skill[], destination: s
   }
   return { skills: copied, unavailable };
 }
+
+export function resolveProtectedSkillSnapshot(options: {
+  restrictedMemberPack: boolean;
+  skillRoot?: string;
+  assignmentSkillId?: string;
+  baseSkills: readonly Skill[];
+  selectTaskSkills: (skills: readonly Skill[]) => Skill[];
+}) {
+  const candidates = options.restrictedMemberPack
+    ? (options.assignmentSkillId ? options.selectTaskSkills([]) : [])
+    : options.selectTaskSkills(options.baseSkills);
+  const snapshot = options.skillRoot
+    ? snapshotProtectedSkills(candidates, options.skillRoot)
+    : { skills: [], unavailable: [] };
+  if (options.assignmentSkillId && !snapshot.skills.some(skill => skill.name === options.assignmentSkillId)) {
+    throw new Error('task_skill_unavailable');
+  }
+  return snapshot;
+}

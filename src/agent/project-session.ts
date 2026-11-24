@@ -26,7 +26,7 @@ import { createBrowserUIContext, type BrowserUIResponse } from './browser-ui-con
 import { OUTPUT_EVIDENCE_GUIDANCE } from './output-evidence.ts';
 import { projectSystemPrompt } from './project-system-prompt.ts';
 import { createProtectedTools } from './protected-tools.ts';
-import { snapshotProtectedSkills } from './protected-skills.ts';
+import { resolveProtectedSkillSnapshot, snapshotProtectedSkills } from './protected-skills.ts';
 import { createSimulationTools } from '../../extensions/business-plugins/sim-lab/tools/simulation-tools.ts';
 import { agentCandidateParameters, candidateToolName, candidateCustomType, candidateReceiptType, canonicalCandidateJson, parseAgentCandidateInput, agentCandidateDetailsSha256, type AgentCandidateDetails, type AgentCandidateReceipt } from './agent-candidate.ts';
 import { findPersonalContextParameters, readPersonalContextParameters, type PersonalContextToolResult } from './personal-context.ts';
@@ -149,7 +149,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         writer = SessionManager.open(binding.file, options.sessionDirectory, binding.cwd);
       }
       writer.appendCustomEntry(EXECUTION_ENTRY, { version: 1, phase: 'closed', executionId, sessionId,
-        scopeId: protectedTools.scope.id, profile: options.protectedExecution?.profile ?? 'protected', at: new Date().toISOString() });
+        scopeId: protectedTools.scope.id, profile: (options.protectedExecution ?? options.memberPackExecutionScope)?.profile ?? 'protected', at: new Date().toISOString() });
       syncExecutionJournal(writer); binding.closed = true;
     }
   }
@@ -220,7 +220,16 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => {
     const previous = lastRun();
     const strategySkills = strategyInitiative() ? session!.resourceLoader.getSkills().skills.map(skill => skill.name).sort() : undefined;
-    return { sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(previous ? { lastRun: previous } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { ...(previous?.reportCalculationReview ? { reportCalculationReview: previous.reportCalculationReview } : {}), ...(analysisPython ? { analysisPython } : {}), nativeTools: !fixedInput() && !(Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools), subagent: session!.getActiveToolNames().includes('subagent'), nativeSearch: publicSearch() || !fixedInput() && !options.workspace && (!protectedTools || ordinaryManaged()) && !options.webSearchEnabled ? nativeSearchMode(options.configuration) ?? false : false, python: fixedInput() || (Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools) ? false : 'bash', powershell: fixedInput() || protectedTools || Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, skills: (strategySkills ? strategySkills.length > 0 : !fixedInput()) && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)) && !options.memberPackWorkspaceRoot, ...(strategySkills ? { strategySkills } : {}), mcp: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, codemode: !fixedInput() && !(Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged() || Boolean(options.memberPackExecutionScope)), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: (options.protectedExecution ?? options.memberPackExecutionScope)?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } };
+    const isRestrictedMemberPack = Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution);
+    const activeScope = options.protectedExecution ?? options.memberPackExecutionScope;
+    const skillsEnabled = strategySkills
+      ? strategySkills.length > 0
+      : fixedInput()
+        ? false
+        : isRestrictedMemberPack
+          ? session!.resourceLoader.getSkills().skills.length > 0
+          : (!protectedTools || Boolean(activeScope?.skillRoot));
+    return { sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(previous ? { lastRun: previous } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { ...(previous?.reportCalculationReview ? { reportCalculationReview: previous.reportCalculationReview } : {}), ...(analysisPython ? { analysisPython } : {}), nativeTools: !fixedInput() && !(isRestrictedMemberPack && !protectedTools), subagent: session!.getActiveToolNames().includes('subagent'), nativeSearch: publicSearch() || !fixedInput() && !options.workspace && (!protectedTools || ordinaryManaged()) && !options.webSearchEnabled ? nativeSearchMode(options.configuration) ?? false : false, python: fixedInput() || (isRestrictedMemberPack && !protectedTools) ? false : 'bash', powershell: fixedInput() || protectedTools || isRestrictedMemberPack ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, skills: skillsEnabled, ...(strategySkills ? { strategySkills } : {}), mcp: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, codemode: !fixedInput() && !(isRestrictedMemberPack && !protectedTools), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged() || Boolean(options.memberPackExecutionScope)), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: activeScope?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } };
   };
   const environmentExtension: ExtensionFactory = pi => {
     pi.on('before_provider_request', (event, ctx) => {
@@ -866,13 +875,18 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         ],
         systemPrompt: o.workspace!.systemPrompt.join('\n\n'), appendSystemPrompt: [],
       } : protectedTools ? {
-        noExtensions: true, noSkills: !o.protectedExecution?.skillRoot, noPromptTemplates: true, noContextFiles: true, noThemes: true,
+        noExtensions: true, noSkills: restrictedMemberPack ? true : !activeProtectedScope?.skillRoot, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
         extensionFactories: [createToolSearchExtension(), ...searchExtensions, ...reportReviewExtensions, environmentExtension],
-        additionalSkillPaths: [analysisAssetsDir],
+        additionalSkillPaths: restrictedMemberPack ? (o.assignment?.skill ? [path.join(analysisAssetsDir, o.assignment.skill.id, 'SKILL.md')] : []) : [analysisAssetsDir],
         skillsOverride: (base: { skills: Parameters<typeof snapshotProtectedSkills>[0]; diagnostics: any[] }) => {
-          const snapshot = o.protectedExecution?.skillRoot ? snapshotProtectedSkills(selectedTaskSkills(base.skills), o.protectedExecution.skillRoot) : { skills: [], unavailable: [] };
-          if (o.assignment?.skill && !snapshot.skills.some(skill => skill.name === o.assignment!.skill!.id)) throw new Error('task_skill_unavailable');
+          const snapshot = resolveProtectedSkillSnapshot({
+            restrictedMemberPack,
+            skillRoot: activeProtectedScope?.skillRoot,
+            assignmentSkillId: o.assignment?.skill?.id,
+            baseSkills: base.skills,
+            selectTaskSkills: selectedTaskSkills,
+          });
           unavailableSkills = snapshot.unavailable;
           return { skills: snapshot.skills, diagnostics: [...base.diagnostics, ...snapshot.unavailable.map(name => ({ type: 'warning' as const, message: `Skill unavailable in protected execution: ${name}` }))] };
         },
@@ -883,6 +897,14 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
         extensionFactories: [...searchExtensions, ...reportReviewExtensions, environmentExtension],
+        ...(o.assignment?.skill ? {
+          additionalSkillPaths: [path.join(analysisAssetsDir, o.assignment.skill.id, 'SKILL.md')],
+          skillsOverride: (base: { skills: Parameters<typeof snapshotProtectedSkills>[0]; diagnostics: any[] }) => {
+            const skills = selectedTaskSkills([]);
+            if (!skills.some(skill => skill.name === o.assignment!.skill!.id)) throw new Error('task_skill_unavailable');
+            return { ...base, skills };
+          },
+        } : {}),
         appendSystemPrompt: [
           ...projectInstructions(),
           '当前运行环境缺少操作系统受管隔离边界（sandbox-exec 不可用），已按工程规格禁用原生文件系统、Shell/Codemode/子会话与数据库直连（dbLink）及外部连接器；仅开放受 Host 门店/时段授权视图核验的 read_input、write_report 与 studio_assets 工具。未授权门店或超期资料不可读取，也不可将不可读门店视为 0。',

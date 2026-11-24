@@ -126,6 +126,20 @@ interface TaskReportLedger {
   taskSyncedFiles: Record<string, TaskSyncedReportEntry>;
 }
 
+export interface GrantAuthorityGuidance {
+  authorized: boolean;
+  reason?: 'wrong_project' | 'wrong_operator' | 'not_authenticated' | 'ephemeral_maintainer_binding' | 'unbound_legacy_pack' | 'project_archived';
+  ownerProjectId?: string;
+  ownerProjectName?: string;
+  maintainerType: 'named-operator' | 'ephemeral-session' | 'unbound-legacy';
+  maintainerOperatorId?: string;
+  maintainerDisplayName?: string;
+  currentOperatorId?: string;
+  currentOperatorType: 'named-operator' | 'ephemeral-session' | 'unverified';
+  inOwnerProject: boolean;
+  nextStep: string;
+}
+
 export interface MemberPackHostOptions {
   dataRoot: string;
   codeRoot?: string;
@@ -139,6 +153,7 @@ export interface MemberPackHostOptions {
   mutate<T>(operation: () => T | Promise<T>): Promise<T>;
   closing(): boolean;
   resolveRequestOperator?(request: IncomingMessage): TrustedHostOperator;
+  resolveOperatorDisplayName?(operatorId: string): string | undefined;
   manageOperatorSession?(request: IncomingMessage, response: ServerResponse, input?: Record<string, unknown>): Promise<Record<string, unknown>>;
   onProjectPermissionChanged?(projectId: string): void;
   taskSnapshot?(projectId: string, taskId: string): Promise<ProjectSnapshot>;
@@ -712,6 +727,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const cleanDir = path.join(workspaceRoot, '020_clean');
     const reportsDir = path.join(workspaceRoot, '060_reports');
     const workDir = path.join(workspaceRoot, 'work');
+    const skillsDir = path.join(workspaceRoot, 'skills');
     const committedReportsDir = path.join(workspaceRoot, 'committed-reports');
     const policyFingerprint = projectPermissionFingerprint(projectId);
     ensurePrivateDir(workspaceRoot);
@@ -722,7 +738,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const contextStartAt = samePolicy ? priorContextStart : Date.now();
     if (!samePolicy) {
       const archived = path.join(workspaceRoot, 'retired', randomUUID());
-      for (const dir of [cleanDir, reportsDir, workDir]) {
+      for (const dir of [cleanDir, reportsDir, workDir, skillsDir]) {
         if (!fs.existsSync(dir)) continue;
         ensurePrivateDir(archived);
         fs.renameSync(dir, path.join(archived, path.basename(dir)));
@@ -732,9 +748,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     ensurePrivateDir(cleanDir);
     ensurePrivateDir(reportsDir);
     ensurePrivateDir(workDir);
+    ensurePrivateDir(skillsDir);
     ensurePrivateDir(committedReportsDir);
     syncCleanDir(cleanDir, projectRoot, scope);
-    // Ensure all existing subdirectories inside reportsDir / workDir also satisfy 0o700 for createProtectedExecutionScope
+    // Ensure all existing subdirectories inside reportsDir / workDir / skillsDir also satisfy 0o700 for createProtectedExecutionScope
     const tightenDirs = (dir: string) => {
       try { fs.chmodSync(dir, 0o700); } catch { /* ignore */ }
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -743,6 +760,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     };
     tightenDirs(reportsDir);
     tightenDirs(workDir);
+    tightenDirs(skillsDir);
     const protectedScope = await createProtectedExecutionScope({
       id: `member-pack-${uuid(projectId)}-${uuid(taskId)}`,
       profile: 'ordinary',
@@ -750,6 +768,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       writableRoot: workDir,
       writeRoots: [cleanDir, reportsDir],
       readRoots: [cleanDir, reportsDir],
+      skillRoot: skillsDir,
     });
     const ws: RestrictedTaskWorkspace = {
       workspaceRoot,
@@ -1021,8 +1040,28 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const storeDenied = code.includes('store_detail');
       const reason = pathDenied ? 'data_path_not_authorized' : storeDenied ? 'store_not_authorized' : code.includes('no_active_grant') ? 'missing_detail_recalculate_grant' : 'detail_access_not_authorized';
       const issuePath = pathDenied ? 'resourceGrant.scope.allowedDataPaths' : storeDenied ? 'resourceGrant.scope.stores' : 'resourceGrant.operations';
+      const enterpriseId = options.enterpriseScopes.enterpriseIdForProject(projectId);
+      const pack = enterpriseId ? packs.list(enterpriseId).find(p => p.domain === 'member-operations') : undefined;
+      let ownerProjectId: string | undefined;
+      let boundOperatorId: string | undefined;
+      if (pack?.systemId) {
+        try {
+          const sys = options.studio.get(pack.systemId);
+          ownerProjectId = pack.activeOwnerProjectId ?? studioExecutionOwner(sys).projectId;
+          boundOperatorId = getBoundSystemOperator(sys.id);
+        } catch { /* keep generic hint if system unavailable */ }
+      }
+      const maintainerHint = boundOperatorId
+        ? boundOperatorId.startsWith('op:')
+          ? (() => {
+            const name = options.resolveOperatorDisplayName?.(boundOperatorId);
+            return `原具名维护人「${name ? `${name} (${boundOperatorId})` : boundOperatorId}」`;
+          })()
+          : '原临时浏览器会话维护者（换浏览器无法重认证；历史临时绑定不静默迁移，请联系 PM/用户确认治理方案）'
+        : '该企业包/体系的原权责维护主体';
+      const whereHint = ownerProjectId ? `在原权责项目（${ownerProjectId}）进入企业 Studio →「三层资源授权」` : '到企业 Studio →「三层资源授权」';
       throw new StudioError(code, 403, {
-        message: `当前项目缺少有效的 read-detail-recalculate 明细重算授权，或请求已超出授权用途、门店、期间或文件范围（${code}）。请到企业 Studio「三层资源授权」，由该企业包/体系的原权责维护主体（grantAuthority 持有方）核对并授予准确范围及 allowedDataPaths 后重试；仅定义/汇总授权不能读取明细，不可把不可读记录当作 0。`,
+        message: `当前项目缺少有效的 read-detail-recalculate 明细重算授权，或请求已超出授权用途、门店、期间或文件范围（${code}）。请联系该企业包/体系的原权责维护主体（${maintainerHint}），${whereHint}核对并授予准确用途、门店、期间及 allowedDataPaths 后重试；仅定义/汇总授权不能读取明细，不可把不可读记录当作 0。`,
         details: { issues: [{ reason, path: issuePath }] },
       });
     }
@@ -2320,6 +2359,100 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
   }
 
+  async function buildGrantAuthorityGuidance(
+    enterpriseId: string,
+    currentProjectId: string | undefined,
+    pack: EnterpriseDomainPack,
+    operator: TrustedHostOperator | undefined,
+    authorized: boolean,
+  ): Promise<GrantAuthorityGuidance> {
+    let ownerProjectId = pack.activeOwnerProjectId;
+    if (!ownerProjectId) {
+      try {
+        ownerProjectId = studioExecutionOwner(options.studio.get(pack.systemId)).projectId;
+      } catch { /* ignore */ }
+    }
+    let ownerProjectName: string | undefined;
+    let ownerArchived = false;
+    if (ownerProjectId) {
+      try {
+        const ownerProj = await options.projects.get(ownerProjectId);
+        ownerProjectName = ownerProj.name;
+        ownerArchived = ownerProj.archivedAt !== null;
+      } catch { /* ignore */ }
+    }
+    const boundOp = getBoundSystemOperator(pack.systemId);
+    const maintainerType: GrantAuthorityGuidance['maintainerType'] = !boundOp
+      ? 'unbound-legacy'
+      : /^session:|^anonymous:/i.test(boundOp)
+        ? 'ephemeral-session'
+        : 'named-operator';
+    const maintainerOperatorId = maintainerType === 'named-operator' ? boundOp : undefined;
+    const maintainerDisplayName = maintainerOperatorId ? options.resolveOperatorDisplayName?.(maintainerOperatorId) : undefined;
+    const maintainerLabel = maintainerDisplayName && maintainerOperatorId
+      ? `${maintainerDisplayName}（${maintainerOperatorId}）`
+      : maintainerOperatorId ?? '原权责维护人';
+    const projectLabel = ownerProjectName ? `「${ownerProjectName}」` : '原权责建设项目';
+
+    const currentOperatorType: GrantAuthorityGuidance['currentOperatorType'] = !operator?.verified || !operator.operatorId.trim()
+      ? 'unverified'
+      : /^session:/i.test(operator.operatorId)
+        ? 'ephemeral-session'
+        : 'named-operator';
+    const inOwnerProject = Boolean(currentProjectId && isConstructionOwnerProject(pack, currentProjectId));
+
+    if (authorized) {
+      return {
+        authorized: true,
+        ...(ownerProjectId ? { ownerProjectId } : {}),
+        ...(ownerProjectName ? { ownerProjectName } : {}),
+        maintainerType,
+        ...(maintainerOperatorId ? { maintainerOperatorId } : {}),
+        ...(maintainerDisplayName ? { maintainerDisplayName } : {}),
+        ...(operator?.operatorId ? { currentOperatorId: operator.operatorId } : {}),
+        currentOperatorType,
+        inOwnerProject,
+        nextStep: `当前已在权责项目${projectLabel}完成维护身份认证，可直接签发或撤回本企业会员包三层资源授权。`,
+      };
+    }
+
+    let reason: NonNullable<GrantAuthorityGuidance['reason']>;
+    let nextStep: string;
+    if (ownerArchived) {
+      reason = 'project_archived';
+      nextStep = `原权责项目${projectLabel}已归档。请先恢复该项目，或由同企业活跃项目按既有接续流程承接后再到「体系工作台 → 三层资源授权」签发授权。`;
+    } else if (maintainerType === 'ephemeral-session') {
+      reason = 'ephemeral_maintainer_binding';
+      nextStep = `该历史资产包绑定的是临时浏览器会话身份（无法跨浏览器重新认证），原包权责状态保持不变。如需建立可再登录维护身份或所有权恢复制度，请提交 PM/用户决定（不会静默转移权责）。`;
+    } else if (maintainerType === 'unbound-legacy') {
+      reason = 'unbound_legacy_pack';
+      nextStep = `该历史资产包尚未建立可信的具名维护人映射，原包状态保持不变。如需补齐权责映射或转移维护权，请提交 PM/用户决定。`;
+    } else if (currentOperatorType === 'unverified') {
+      reason = 'not_authenticated';
+      nextStep = `请先在本页认证区域使用原维护人标识 ${maintainerLabel} 与口令完成 Host 认证，再切到权责项目${projectLabel}的「体系工作台 → 三层资源授权」签发授权。`;
+    } else if (boundOp !== operator?.operatorId) {
+      reason = 'wrong_operator';
+      nextStep = `当前操作者不是本包原权责维护人。请联系 ${maintainerLabel}，或由其使用操作者 ID「${maintainerOperatorId}」与口令在本页认证区域重新认证后，在权责项目${projectLabel}的「体系工作台 → 三层资源授权」签发授权。`;
+    } else {
+      reason = 'wrong_project';
+      nextStep = `已认证为原维护人 ${maintainerLabel}，但当前所在项目不是权责项目。请先在左侧切换到权责项目${projectLabel}，再打开「体系工作台 → 三层资源授权」签发授权。`;
+    }
+
+    return {
+      authorized: false,
+      reason,
+      ...(ownerProjectId ? { ownerProjectId } : {}),
+      ...(ownerProjectName ? { ownerProjectName } : {}),
+      maintainerType,
+      ...(maintainerOperatorId ? { maintainerOperatorId } : {}),
+      ...(maintainerDisplayName ? { maintainerDisplayName } : {}),
+      ...(operator?.operatorId ? { currentOperatorId: operator.operatorId } : {}),
+      currentOperatorType,
+      inOwnerProject,
+      nextStep,
+    };
+  }
+
   /**
    * R4: Automatically records an EnterprisePackUseRecord when normal analysis calls
    * `studio_assets declare-use`, strictly scoped to THIS turn's native reads and starting
@@ -3610,10 +3743,15 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const rawList = reader?.enterpriseId ? packs.list(reader.enterpriseId).filter(pack => !domain || pack.domain === domain) : [];
       const owned = reader && rawList.find(pack => canReadConstructionPack(pack, reader.projectId, operator));
       const grantAuthority = owned && reader ? await resolveGrantAuthorityForProject(owned.enterpriseId, reader.projectId, owned, operator) : undefined;
+      const targetPack = owned ?? rawList[0];
+      const grantAuthorityGuidance = targetPack && reader
+        ? await buildGrantAuthorityGuidance(targetPack.enterpriseId, reader.projectId, targetPack, operator, Boolean(grantAuthority))
+        : undefined;
       json(response, 200, {
         packs: reader ? await scopedPacks(rawList, reader.projectId, operator) : [],
         readOnlyRollback: !enabled,
         ...(grantAuthority ? { grantAuthority } : {}),
+        ...(grantAuthorityGuidance ? { grantAuthorityGuidance } : {}),
       });
       return true;
     }
@@ -3666,10 +3804,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const reader = await packReaderProject(operator, url.searchParams.get('projectId'), pack.enterpriseId);
       if (!reader) throw new StudioError('member_pack_operator_context_required', 403);
       const grantAuthority = await resolveGrantAuthorityForProject(pack.enterpriseId, reader.projectId, pack, operator);
+      const grantAuthorityGuidance = await buildGrantAuthorityGuidance(pack.enterpriseId, reader.projectId, pack, operator, Boolean(grantAuthority));
       json(response, 200, {
         pack: await scopedPack(pack, reader.projectId, operator),
         readOnlyRollback: !enabled,
         ...(grantAuthority ? { grantAuthority } : {}),
+        grantAuthorityGuidance,
       });
       return true;
     }
@@ -3738,6 +3878,39 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         bytesLength: bytes.length,
         text: bytes.toString('utf8'),
       });
+      return true;
+    }
+
+    const purposeExclusionMatch = /^\/api\/studio\/enterprise-packs\/([a-f0-9-]+)\/purposes\/([^/]+)\/preview-exclusion$/.exec(url.pathname);
+    if (purposeExclusionMatch && request.method === 'POST') {
+      assertEnabledWritable();
+      const packId = purposeExclusionMatch[1]!;
+      let purposeId: string;
+      try { purposeId = decodeURIComponent(purposeExclusionMatch[2]!); } catch { throw new StudioError('invalid_purpose_id', 400); }
+      const operator = resolveRequestOperator(request);
+      const input = await options.readBody(request);
+      const requestId = input.requestId === undefined ? randomUUID() : uuid(input.requestId);
+      const receipt = await options.mutate(async () => {
+        if (options.closing()) throw new StudioError('host_closing', 503);
+        const currentPack = packs.get(packId);
+        await assertWritablePackProject(currentPack, operator, input.projectId);
+        return options.operations.run(requestId, { path: url.pathname, purposeId, input }, async () => {
+          if (typeof input.excluded !== 'boolean') {
+            throw new StudioError('invalid_purpose_exclusion', 400, {
+              message: 'payload.excluded 必须是布尔值（true 表示排除出默认预览，false 表示恢复纳入）。',
+              details: { issues: [{ reason: 'expected_boolean', path: 'payload.excluded' }] },
+            });
+          }
+          const updated = packs.setPurposePreviewExclusion(
+            packId,
+            purposeId,
+            input.excluded,
+            typeof input.reason === 'string' ? input.reason : undefined,
+          );
+          return { statusCode: 200, result: updated as unknown as Record<string, unknown>, systemId: currentPack.systemId };
+        });
+      });
+      json(response, receipt.statusCode || 200, receipt.result);
       return true;
     }
 

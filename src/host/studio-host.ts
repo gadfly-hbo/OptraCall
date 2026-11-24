@@ -118,6 +118,7 @@ export type StudioHostOptions = {
   reason?(command: StudioRuleCommand, context: SemanticContextCallContext): Promise<StudioRuleResult>;
   memberPackPublishHook?: import('./member-pack-host.ts').MemberPackHostOptions['publishAuthorityDependency'];
   resolveRequestOperator?: import('./member-pack-host.ts').MemberPackHostOptions['resolveRequestOperator'];
+  resolveOperatorDisplayName?: import('./member-pack-host.ts').MemberPackHostOptions['resolveOperatorDisplayName'];
   manageOperatorSession?: import('./member-pack-host.ts').MemberPackHostOptions['manageOperatorSession'];
   onProjectPermissionChanged?: import('./member-pack-host.ts').MemberPackHostOptions['onProjectPermissionChanged'];
 };
@@ -568,6 +569,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     inspectAuthorityDependency,
     verifySummaryAuthority,
     resolveRequestOperator: options.resolveRequestOperator,
+    resolveOperatorDisplayName: options.resolveOperatorDisplayName,
     manageOperatorSession: options.manageOperatorSession,
     onProjectPermissionChanged: options.onProjectPermissionChanged,
   });
@@ -1234,7 +1236,17 @@ export function createStudioFeature(options: StudioHostOptions) {
             }
             // pack-upsert-purpose
             if (object(payload.evidenceNote) && Array.isArray(payload.evidenceNote.sourceRefs)) {
-              await validateSources(parseSources(payload.evidenceNote.sourceRefs), system, projectId, true);
+              let parsedNoteRefs: StudioSourceRef[];
+              try {
+                parsedNoteRefs = parseSources(payload.evidenceNote.sourceRefs);
+              } catch (err) {
+                const reason = err instanceof StudioError ? err.code : 'invalid_studio_source_ref';
+                throw new StudioError('invalid_purpose_evidence_note', 400, {
+                  message: 'payload.evidenceNote.sourceRefs 中存在无效 SourceRef；每项须包含有效的 authority、id 与 version（无引用时传空数组 []）。',
+                  details: { issues: [{ reason, path: 'payload.evidenceNote.sourceRefs' }] },
+                });
+              }
+              await validateSources(parsedNoteRefs, system, projectId, true);
             }
             context.assertCurrent(); context.signal.throwIfAborted();
             const saved = memberPack.packs.upsertPurpose(ensured.id, {
@@ -1528,7 +1540,18 @@ export function createStudioFeature(options: StudioHostOptions) {
           return { result: { system: store.get(id) }, systemId: id };
         }));
         json(response, result.statusCode || 200, result.result); return true;
-      } catch (error) { if (error instanceof StudioError || error instanceof SapMethodStoreError || error instanceof MetricLibraryFault || error instanceof CaseStoreError) { const value = error as { status?: number; statusCode?: number; code: string }; json(response, value.status ?? value.statusCode ?? 409, { code: value.code, message: value.code }); return true; } throw error; }
+      } catch (error) {
+        if (error instanceof StudioError) {
+          json(response, error.status, { code: error.code, message: error.message || error.code, ...(error.details ? { details: error.details } : {}) });
+          return true;
+        }
+        if (error instanceof SapMethodStoreError || error instanceof MetricLibraryFault || error instanceof CaseStoreError) {
+          const value = error as { status?: number; statusCode?: number; code: string };
+          json(response, value.status ?? value.statusCode ?? 409, { code: value.code, message: value.code });
+          return true;
+        }
+        throw error;
+      }
     },
   };
   return api;

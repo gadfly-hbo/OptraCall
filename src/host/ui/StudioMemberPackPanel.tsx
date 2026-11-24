@@ -15,12 +15,14 @@ import {
   reconcilePackReceipt,
   revokeResourceGrant,
   selectPanoramaRecommendation,
+  setPackPurposePreviewExclusion,
   switchOperatorSession,
   upsertPackPurpose,
   type EnterpriseDomainPack,
   type EnterprisePackPreview,
   type EnterprisePackPurpose,
   type GrantAuthorityCredential,
+  type GrantAuthorityGuidance,
   type HostOperatorSessionInfo,
   type ResourceAuthorizationGrant,
 } from './member-pack-client.ts';
@@ -86,6 +88,7 @@ export function StudioMemberPackPanel({
   const [pack, setPack] = useState<EnterpriseDomainPack | null>(null);
   const [grants, setGrants] = useState<ResourceAuthorizationGrant[]>([]);
   const [grantAuthority, setGrantAuthority] = useState<GrantAuthorityCredential | null>(null);
+  const [grantAuthorityGuidance, setGrantAuthorityGuidance] = useState<GrantAuthorityGuidance | null>(null);
   const [operatorSession, setOperatorSession] = useState<HostOperatorSessionInfo | null>(null);
   const [opIdInput, setOpIdInput] = useState('');
   const [opDisplayNameInput, setOpDisplayNameInput] = useState('');
@@ -99,6 +102,18 @@ export function StudioMemberPackPanel({
 
   const [goalInput, setGoalInput] = useState('');
   const [activePreview, setActivePreview] = useState<EnterprisePackPreview | null>(null);
+  const [selectedPurposeIds, setSelectedPurposeIds] = useState<string[]>([]);
+  const [editingPurpose, setEditingPurpose] = useState<{
+    purpose: EnterprisePackPurpose;
+    title: string;
+    limitedCalculationName: string;
+    businessQuestion: string;
+    scopeKey: string;
+    completionCriteria: string;
+    exclusions: string;
+    remainingGaps: string;
+    evidenceNote: string;
+  } | null>(null);
   const [decisionMap, setDecisionMap] = useState<Record<string, string>>({});
   const [decisionOwnerMap, setDecisionOwnerMap] = useState<Record<string, string>>({});
   const [confirmByInput, setConfirmByInput] = useState('');
@@ -133,6 +148,10 @@ export function StudioMemberPackPanel({
 
   const mounted = useRef(true);
 
+  const syncSelectedPurposes = useCallback((nextPack: EnterpriseDomainPack | null) => {
+    setSelectedPurposeIds(nextPack ? nextPack.purposes.filter(p => !p.excludedFromPreview).map(p => p.id) : []);
+  }, []);
+
   const refresh = useCallback(async (signal?: AbortSignal) => {
     if (!operatorProjectReady) return;
     setLoading(true);
@@ -144,8 +163,11 @@ export function StudioMemberPackPanel({
         readOperatorSession(signal).catch(() => null),
       ]);
       if (mounted.current && !signal?.aborted) {
-        setPack(packRes.packs[0] ?? null);
+        const nextPack = packRes.packs[0] ?? null;
+        setPack(nextPack);
+        syncSelectedPurposes(nextPack);
         setGrantAuthority(packRes.grantAuthority ?? null);
+        setGrantAuthorityGuidance(packRes.grantAuthorityGuidance ?? null);
         setReadOnlyRollback(packRes.readOnlyRollback);
         setGrants(grantRes.grants);
         if (opRes) setOperatorSession(opRes);
@@ -157,13 +179,15 @@ export function StudioMemberPackPanel({
     } finally {
       if (mounted.current && !signal?.aborted) setLoading(false);
     }
-  }, [enterpriseId, currentProjectId, operatorProjectReady]);
+  }, [enterpriseId, currentProjectId, operatorProjectReady, syncSelectedPurposes]);
 
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController();
     setPack(null);
+    setSelectedPurposeIds([]);
     setGrantAuthority(null);
+    setGrantAuthorityGuidance(null);
     setGrants([]);
     void refresh(controller.signal);
     return () => { mounted.current = false; controller.abort(); };
@@ -187,9 +211,103 @@ export function StudioMemberPackPanel({
         name: `${enterpriseName || '本企业'} · 会员运营资产包`,
       });
       setPack(res.pack);
+      syncSelectedPurposes(res.pack);
       setNotice(`已定位企业会员运营包 ${res.pack.packCode}（跨项目保持同一身份）。`);
+      await refresh();
     } catch (fault) {
       setError(fault instanceof Error ? fault.message : '未能建立会员运营资产包。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleTogglePreviewExclusion = async (purpose: EnterprisePackPurpose, excluded: boolean) => {
+    if (!pack || busy || readOnlyRollback) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const activePid = currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? currentProjectId : undefined;
+      const res = await setPackPurposePreviewExclusion(pack.id, purpose.id, {
+        requestId: crypto.randomUUID(),
+        ...(activePid ? { projectId: activePid } : {}),
+        excluded,
+        ...(excluded ? { reason: '发布前明确排除此误建/待定草案（原草案与历史保留）' } : {}),
+      });
+      setPack(res.pack);
+      syncSelectedPurposes(res.pack);
+      setNotice(
+        excluded
+          ? `已将用途「${purpose.limitedCalculationName || purpose.title}」（${purpose.id}）排除出默认预览与发布，原草案记录保留。`
+          : `已恢复将用途「${purpose.limitedCalculationName || purpose.title}」（${purpose.id}）纳入默认预览与发布。`,
+      );
+    } catch (fault) {
+      setError(fault instanceof Error ? fault.message : '更新用途预览排除状态失败。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openEditPurpose = (purpose: EnterprisePackPurpose) => {
+    setError('');
+    setEditingPurpose({
+      purpose,
+      title: purpose.title,
+      limitedCalculationName: purpose.limitedCalculationName ?? '',
+      businessQuestion: purpose.businessQuestion,
+      scopeKey: purpose.scope.scopeKey,
+      completionCriteria: purpose.completionCriteria,
+      exclusions: purpose.exclusions.join('\n'),
+      remainingGaps: purpose.remainingGaps.join('\n'),
+      evidenceNote: purpose.evidenceNotes?.at(-1)?.note ?? '',
+    });
+  };
+
+  const handleSavePurposeEdit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!pack || !editingPurpose || busy || readOnlyRollback) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const activePid = currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? currentProjectId : undefined;
+      const p = editingPurpose.purpose;
+      const res = await upsertPackPurpose(pack.id, {
+        requestId: crypto.randomUUID(),
+        ...(activePid ? { projectId: activePid } : {}),
+        targetPurposeId: p.id,
+        purposeKey: p.purposeKey,
+        title: editingPurpose.title.trim(),
+        businessQuestion: editingPurpose.businessQuestion.trim(),
+        subjectUnit: p.subjectUnit,
+        ...(p.windowDays !== undefined ? { windowDays: p.windowDays } : {}),
+        scope: { ...p.scope, scopeKey: editingPurpose.scopeKey.trim() },
+        tier: p.tier,
+        ...(editingPurpose.limitedCalculationName.trim() ? { limitedCalculationName: editingPurpose.limitedCalculationName.trim() } : {}),
+        businessStatus: p.businessStatus,
+        evidenceReadiness: p.evidenceReadiness,
+        originalGoal: p.originalGoal,
+        ...(p.deliveredSubset ? { deliveredSubset: p.deliveredSubset } : {}),
+        remainingGaps: editingPurpose.remainingGaps.split('\n').map(s => s.trim()).filter(Boolean),
+        exclusions: editingPurpose.exclusions.split('\n').map(s => s.trim()).filter(Boolean),
+        completionCriteria: editingPurpose.completionCriteria.trim(),
+        ...(p.dependencies.length ? { dependencies: p.dependencies } : {}),
+        ...(p.decisionChoices.length ? { decisionChoices: p.decisionChoices } : {}),
+        ...(p.policyEffectiveFrom ? { policyEffectiveFrom: p.policyEffectiveFrom } : {}),
+        ...(p.dataCutoffAt ? { dataCutoffAt: p.dataCutoffAt } : {}),
+        ...(p.observationWindowDays !== undefined ? { observationWindowDays: p.observationWindowDays } : {}),
+        ...(p.availableHistoryDays !== undefined ? { availableHistoryDays: p.availableHistoryDays } : {}),
+        ...(p.ownerRole ? { ownerRole: p.ownerRole } : {}),
+        ...(editingPurpose.evidenceNote.trim() && editingPurpose.evidenceNote.trim() !== (p.evidenceNotes?.at(-1)?.note ?? '')
+          ? { evidenceNote: { projectId: activePid ?? currentProjectId ?? projects[0]?.id ?? 'studio', note: editingPurpose.evidenceNote.trim(), sourceRefs: [] } }
+          : {}),
+      });
+      setPack(res.pack);
+      syncSelectedPurposes(res.pack);
+      setEditingPurpose(null);
+      setNotice(`已更新用途草案「${res.purpose.limitedCalculationName || res.purpose.title}」（${res.purpose.id}）。`);
+    } catch (fault) {
+      setError(fault instanceof Error ? fault.message : '保存用途草案修改失败。');
     } finally {
       setBusy(false);
     }
@@ -199,9 +317,14 @@ export function StudioMemberPackPanel({
     if (!pack || busy || !pack.purposes.length) return;
     setError('');
     setNotice('');
-    // Validate explicit user decision choices and explicit deciders — NEVER silently fall back to options[0] or hardcoded decider!
+    const includedPurposes = pack.purposes.filter(p => selectedPurposeIds.includes(p.id));
+    if (!includedPurposes.length) {
+      setError('请至少勾选一个纳入本次发布预览的用途；已排除的误建草案将不会进入预览与发布。');
+      return;
+    }
+    // Validate explicit user decision choices and explicit deciders ONLY for included purposes — NEVER silently fall back to options[0] or hardcoded decider!
     const decisions: { purposeId: string; choiceId: string; selectedKey: string; decidedBy: string }[] = [];
-    for (const p of pack.purposes) {
+    for (const p of includedPurposes) {
       for (const c of p.decisionChoices) {
         const key = (decisionMap[`${p.id}:${c.id}`] ?? c.selectedKey ?? '').trim();
         const owner = (decisionOwnerMap[`${p.id}:${c.id}`] ?? c.decidedBy ?? '').trim();
@@ -226,16 +349,16 @@ export function StudioMemberPackPanel({
         ...(currentProjectId && writableProjects.some(p => p.id === currentProjectId) ? { projectId: currentProjectId } : {}),
         version,
         ...(previousVersion ? { previousVersion } : {}),
-        purposeIds: pack.purposes.map(p => p.id),
+        purposeIds: includedPurposes.map(p => p.id),
         decisions,
-        policyEffectiveFrom: pack.purposes[0]?.policyEffectiveFrom || new Date().toISOString().slice(0, 10),
-        dataCutoffAt: pack.purposes[0]?.dataCutoffAt || new Date().toISOString().slice(0, 10),
-        summary: `会员运营资产包 v${version} 按用途发布预览`,
+        policyEffectiveFrom: includedPurposes[0]?.policyEffectiveFrom || pack.purposes[0]?.policyEffectiveFrom || new Date().toISOString().slice(0, 10),
+        dataCutoffAt: includedPurposes[0]?.dataCutoffAt || pack.purposes[0]?.dataCutoffAt || new Date().toISOString().slice(0, 10),
+        summary: `会员运营资产包 v${version} 按用途发布预览（纳入 ${includedPurposes.length}/${pack.purposes.length} 项）`,
       });
       setPack(res.pack);
       setActivePreview(res.preview);
       setSubTab('publication');
-      setNotice(`已生成一份发布预览 v${version}，确认后将由 Host 直连原 Studio/SAP/资料库权威执行发布并记录真实回执。`);
+      setNotice(`已生成一份发布预览 v${version}（仅纳入选中的 ${includedPurposes.length} 项用途），确认后将由 Host 直连原 Studio/SAP/资料库权威执行发布并记录真实回执。`);
     } catch (fault) {
       setError(fault instanceof Error ? fault.message : '准备发布预览未能完成。');
     } finally {
@@ -610,6 +733,7 @@ export function StudioMemberPackPanel({
 
   if (!operatorProjectReady) return null;
   const latestRevision = pack?.packRevisions.find(r => r.status === 'active') ?? pack?.packRevisions.at(-1);
+  const isNamedOperator = Boolean(operatorSession?.operator.verified && operatorSession.operator.operatorId.startsWith('op:'));
 
   return (
     <section className="studio-record studio-member-pack" aria-label="企业会员运营资产包">
@@ -627,6 +751,43 @@ export function StudioMemberPackPanel({
         )}
       </div>
 
+      {!readOnlyRollback && !operatorSession?.customResolver && (!pack || !isNamedOperator) && (
+        <div className={`studio-note ${isNamedOperator ? '' : 'is-warning'}`} role="region" aria-label="企业包维护人身份设置">
+          <p>
+            <strong>当前 Host 维护身份：</strong>
+            {isNamedOperator
+              ? `${operatorSession!.operator.displayName || operatorSession!.operator.operatorId}（${operatorSession!.operator.operatorId} · 可复用具名维护身份，换浏览器可重新登录并管理授权）`
+              : operatorSession?.operator.verified
+                ? `临时浏览器会话（${operatorSession.operator.operatorId}）· 若用临时会话建包，换浏览器后无法重新认证。建议在首次建包前先建立或登录可复用的具名维护身份。`
+                : '未认证操作者 · 请先建立或登录具名维护身份后再建包或管理资源授权。'}
+          </p>
+          <form onSubmit={e => { void handleSwitchOperator(e); }} className="studio-row" style={{ marginTop: 8, gap: 8, flexWrap: 'wrap' }}>
+            <input
+              aria-label="维护人操作者标识"
+              placeholder="维护人 ID（如 yalan-ops）"
+              value={opIdInput}
+              onChange={e => setOpIdInput(e.target.value)}
+            />
+            <input
+              aria-label="维护人姓名或岗位"
+              placeholder="姓名/岗位（可选）"
+              value={opDisplayNameInput}
+              onChange={e => setOpDisplayNameInput(e.target.value)}
+            />
+            <input
+              type="password"
+              aria-label="维护人口令"
+              placeholder="口令（至少4位）"
+              value={opPasscodeInput}
+              onChange={e => setOpPasscodeInput(e.target.value)}
+            />
+            <button type="submit" className="secondary-button" disabled={busy || !opIdInput.trim() || opPasscodeInput.length < 4}>
+              建立/登录具名维护身份
+            </button>
+          </form>
+        </div>
+      )}
+
       {readOnlyRollback && (
         <div className="studio-note is-warning" role="status">
           当前以回退只读模式运行（<code>--disable-member-pack</code>）：已有包版本、回执与历史依据保留只读，新写入与供给已停止。
@@ -637,7 +798,7 @@ export function StudioMemberPackPanel({
       {loading && <p className="studio-meta" role="status">正在核对本企业会员运营资产包…</p>}
 
       {!loading && !pack && !primarySystem && (
-        <p className="studio-meta">先在本企业建立一个体系，即可承接会员运营资产包；点名用途可直接发起建设，无需先填全景。</p>
+        <p className="studio-meta">先建立或登录上方的可复用具名维护身份，再在本企业建立一个体系，即可承接会员运营资产包；点名用途可直接发起建设，无需先填全景。</p>
       )}
 
       {pack && (
@@ -883,67 +1044,158 @@ export function StudioMemberPackPanel({
                 <p className="studio-meta">尚未沉淀企业内化条目。</p>
               )}
 
-              <h4>本包已建用途（跨项目同范围自动去重）</h4>
+              <h4>本包已建用途（跨项目同范围自动去重；发布前可修正或明确排除误建草案）</h4>
+              {editingPurpose && (
+                <PersonalDialog
+                  drawer
+                  title={`修正用途草案 · ${editingPurpose.purpose.id}`}
+                  subtitle={`${editingPurpose.purpose.purposeKey} · 修正仅更新此草案，不改写已发布历史版本`}
+                  busy={busy}
+                  onClose={() => setEditingPurpose(null)}
+                  footer={
+                    <>
+                      <button type="button" className="secondary-button" disabled={busy} onClick={() => setEditingPurpose(null)}>取消</button>
+                      <button type="submit" form="studio-purpose-edit-form" className="primary-button" disabled={busy}>保存草案修正</button>
+                    </>
+                  }
+                >
+                  <form id="studio-purpose-edit-form" onSubmit={e => { void handleSavePurposeEdit(e); }}>
+                    <label className="studio-field">
+                      <span>用途名称（title）</span>
+                      <input required value={editingPurpose.title} onChange={e => setEditingPurpose(prev => prev ? { ...prev, title: e.target.value } : null)} />
+                    </label>
+                    {editingPurpose.purpose.tier === 'limited-calculation' && (
+                      <label className="studio-field">
+                        <span>受限计算独立名称（limitedCalculationName）</span>
+                        <input value={editingPurpose.limitedCalculationName} onChange={e => setEditingPurpose(prev => prev ? { ...prev, limitedCalculationName: e.target.value } : null)} />
+                      </label>
+                    )}
+                    <label className="studio-field">
+                      <span>业务问题（businessQuestion）</span>
+                      <textarea rows={2} required value={editingPurpose.businessQuestion} onChange={e => setEditingPurpose(prev => prev ? { ...prev, businessQuestion: e.target.value } : null)} />
+                    </label>
+                    <label className="studio-field">
+                      <span>范围标识（scope.scopeKey）</span>
+                      <input required value={editingPurpose.scopeKey} onChange={e => setEditingPurpose(prev => prev ? { ...prev, scopeKey: e.target.value } : null)} />
+                    </label>
+                    <label className="studio-field">
+                      <span>完成条件（completionCriteria）</span>
+                      <textarea rows={2} required value={editingPurpose.completionCriteria} onChange={e => setEditingPurpose(prev => prev ? { ...prev, completionCriteria: e.target.value } : null)} />
+                    </label>
+                    <label className="studio-field">
+                      <span>排除项（每行一项）</span>
+                      <textarea rows={2} value={editingPurpose.exclusions} onChange={e => setEditingPurpose(prev => prev ? { ...prev, exclusions: e.target.value } : null)} />
+                    </label>
+                    <label className="studio-field">
+                      <span>仍存缺口（每行一项）</span>
+                      <textarea rows={2} value={editingPurpose.remainingGaps} onChange={e => setEditingPurpose(prev => prev ? { ...prev, remainingGaps: e.target.value } : null)} />
+                    </label>
+                    <label className="studio-field">
+                      <span>补充依据备注（单数 evidenceNote.note，可选）</span>
+                      <textarea rows={2} value={editingPurpose.evidenceNote} onChange={e => setEditingPurpose(prev => prev ? { ...prev, evidenceNote: e.target.value } : null)} placeholder="填写本次修订依据备注，保存后可回读验证" />
+                    </label>
+                  </form>
+                </PersonalDialog>
+              )}
               {pack.purposes.length > 0 ? (
                 <div className="studio-table-wrap">
                   <table className="studio-foundation-table">
                     <thead>
                       <tr>
+                        <th>纳入预览</th>
                         <th>用途</th>
                         <th>层级与主体</th>
                         <th>范围、窗口与截止</th>
                         <th>缺口与排除</th>
-                        <th>状态</th>
+                        <th>状态与操作</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {pack.purposes.map(purpose => (
-                        <tr key={purpose.id}>
-                          <td>
-                            <strong>{purpose.limitedCalculationName || purpose.title}</strong>
-                            <p className="studio-meta"><code>{purpose.id}</code> · {purpose.purposeKey}</p>
-                            {purpose.decisionChoices.map(c => (
-                              <div key={c.id} className="studio-meta">
-                                <span>取舍：{c.question}</span>
-                                <select
-                                  aria-label={c.question}
-                                  value={decisionMap[`${purpose.id}:${c.id}`] ?? c.selectedKey ?? ''}
-                                  onChange={e => setDecisionMap(prev => ({ ...prev, [`${purpose.id}:${c.id}`]: e.target.value }))}
-                                >
-                                  <option value="">待负责人选定</option>
-                                  {c.options.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
-                                </select>
+                      {pack.purposes.map(purpose => {
+                        const checked = selectedPurposeIds.includes(purpose.id);
+                        return (
+                          <tr key={purpose.id} data-purpose-id={purpose.id}>
+                            <td>
+                              <label className="studio-inline-check">
                                 <input
-                                  aria-label={`${c.question}决定人`}
-                                  placeholder="填写实际决定人"
-                                  value={decisionOwnerMap[`${purpose.id}:${c.id}`] ?? c.decidedBy ?? ''}
-                                  onChange={e => setDecisionOwnerMap(prev => ({ ...prev, [`${purpose.id}:${c.id}`]: e.target.value }))}
+                                  type="checkbox"
+                                  aria-label={`纳入本次发布预览：${purpose.limitedCalculationName || purpose.title}`}
+                                  checked={checked}
+                                  disabled={busy || readOnlyRollback}
+                                  onChange={e => setSelectedPurposeIds(prev => e.target.checked ? [...new Set([...prev, purpose.id])] : prev.filter(id => id !== purpose.id))}
                                 />
-                              </div>
-                            ))}
-                          </td>
-                          <td>
-                            <span>{tierText[purpose.tier]}</span>
-                            <p className="studio-meta">统计单位：{purpose.subjectUnit}{purpose.windowDays ? ` · ${purpose.windowDays}日` : ''}</p>
-                            <p className="studio-meta">核验：定义 {purpose.evidenceReadiness.definition} / 映射 {purpose.evidenceReadiness.mapping} / 样算 {purpose.evidenceReadiness.sampleCalculation}</p>
-                          </td>
-                          <td>
-                            <span>{purpose.scope.scopeKey}</span>
-                            <p className="studio-meta">生效 {purpose.policyEffectiveFrom || '未定'} · 截止 {purpose.dataCutoffAt || '未核'}</p>
-                            {purpose.observationWindowDays !== undefined && purpose.availableHistoryDays === undefined && (
-                              <p className="studio-badge is-warning">缺少首购历史长度（所需 {purpose.observationWindowDays}天，待核）</p>
-                            )}
-                            {purpose.availableHistoryDays !== undefined && purpose.observationWindowDays !== undefined && purpose.availableHistoryDays < purpose.observationWindowDays && (
-                              <p className="studio-badge is-warning">历史 {purpose.availableHistoryDays}天 &lt; 所需 {purpose.observationWindowDays}天（待核）</p>
-                            )}
-                          </td>
-                          <td>
-                            <p className="studio-meta">排除：{purpose.exclusions.join('；') || '无'}</p>
-                            <p className="studio-meta">缺口：{purpose.remainingGaps.join('；') || '无'}</p>
-                          </td>
-                          <td>{purpose.workItemStatus}</td>
-                        </tr>
-                      ))}
+                                <span>{checked ? '纳入' : '不纳入'}</span>
+                              </label>
+                            </td>
+                            <td>
+                              <strong>{purpose.limitedCalculationName || purpose.title}</strong>
+                              <p className="studio-meta"><code>{purpose.id}</code> · {purpose.purposeKey}</p>
+                              {purpose.excludedFromPreview && (
+                                <p className="studio-badge is-warning">已排除出默认预览{purpose.excludedReason ? `（${purpose.excludedReason}）` : ''}</p>
+                              )}
+                              {purpose.evidenceNotes?.length ? (
+                                <p className="studio-meta">依据备注：{purpose.evidenceNotes.at(-1)?.note}</p>
+                              ) : null}
+                              {purpose.decisionChoices.map(c => (
+                                <div key={c.id} className="studio-meta">
+                                  <span>取舍：{c.question}</span>
+                                  <select
+                                    aria-label={c.question}
+                                    value={decisionMap[`${purpose.id}:${c.id}`] ?? c.selectedKey ?? ''}
+                                    onChange={e => setDecisionMap(prev => ({ ...prev, [`${purpose.id}:${c.id}`]: e.target.value }))}
+                                  >
+                                    <option value="">待负责人选定</option>
+                                    {c.options.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
+                                  </select>
+                                  <input
+                                    aria-label={`${c.question}决定人`}
+                                    placeholder="填写实际决定人"
+                                    value={decisionOwnerMap[`${purpose.id}:${c.id}`] ?? c.decidedBy ?? ''}
+                                    onChange={e => setDecisionOwnerMap(prev => ({ ...prev, [`${purpose.id}:${c.id}`]: e.target.value }))}
+                                  />
+                                </div>
+                              ))}
+                            </td>
+                            <td>
+                              <span>{tierText[purpose.tier]}</span>
+                              <p className="studio-meta">统计单位：{purpose.subjectUnit}{purpose.windowDays ? ` · ${purpose.windowDays}日` : ''}</p>
+                              <p className="studio-meta">核验：定义 {purpose.evidenceReadiness.definition} / 映射 {purpose.evidenceReadiness.mapping} / 样算 {purpose.evidenceReadiness.sampleCalculation}</p>
+                            </td>
+                            <td>
+                              <span>{purpose.scope.scopeKey}</span>
+                              <p className="studio-meta">生效 {purpose.policyEffectiveFrom || '未定'} · 截止 {purpose.dataCutoffAt || '未核'}</p>
+                              {purpose.observationWindowDays !== undefined && purpose.availableHistoryDays === undefined && (
+                                <p className="studio-badge is-warning">缺少首购历史长度（所需 {purpose.observationWindowDays}天，待核）</p>
+                              )}
+                              {purpose.availableHistoryDays !== undefined && purpose.observationWindowDays !== undefined && purpose.availableHistoryDays < purpose.observationWindowDays && (
+                                <p className="studio-badge is-warning">历史 {purpose.availableHistoryDays}天 &lt; 所需 {purpose.observationWindowDays}天（待核）</p>
+                              )}
+                            </td>
+                            <td>
+                              <p className="studio-meta">排除：{purpose.exclusions.join('；') || '无'}</p>
+                              <p className="studio-meta">缺口：{purpose.remainingGaps.join('；') || '无'}</p>
+                            </td>
+                            <td>
+                              <p>{purpose.workItemStatus}</p>
+                              {!readOnlyRollback && (
+                                <div className="studio-actions" style={{ marginTop: 4 }}>
+                                  <button type="button" className="text-button" disabled={busy} onClick={() => openEditPurpose(purpose)}>
+                                    修正草案
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="text-button"
+                                    disabled={busy}
+                                    onClick={() => { void handleTogglePreviewExclusion(purpose, !purpose.excludedFromPreview); }}
+                                  >
+                                    {purpose.excludedFromPreview ? '恢复纳入默认预览' : '排除出默认预览'}
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -953,8 +1205,8 @@ export function StudioMemberPackPanel({
 
               {!readOnlyRollback && pack.purposes.length > 0 && (
                 <div className="studio-actions">
-                  <button type="button" className="primary-button" disabled={busy} onClick={() => { void handlePreparePreview(); }}>
-                    生成一份发布预览
+                  <button type="button" className="primary-button" disabled={busy || selectedPurposeIds.length === 0} onClick={() => { void handlePreparePreview(); }}>
+                    生成一份发布预览（已选 {selectedPurposeIds.length}/{pack.purposes.length} 项）
                   </button>
                 </div>
               )}
@@ -1067,8 +1319,18 @@ export function StudioMemberPackPanel({
               {pack.packRevisions.length > 0 ? (
                 <ul>
                   {[...pack.packRevisions].reverse().map(rev => (
-                    <li key={rev.version}>
-                      <strong>v{rev.version}</strong>（{rev.status}）· 截止 {rev.dataCutoffAt || '未核'} · 确认于 {rev.confirmedAt}
+                    <li key={rev.version} className="studio-record">
+                      <strong>v{rev.version}</strong>（{rev.status}）· 纳入用途 {rev.purposeManifests.length} 项 · 截止 {rev.dataCutoffAt || '未核'} · 确认于 {rev.confirmedAt}
+                      <details style={{ marginTop: 4 }}>
+                        <summary>查看 v{rev.version} 收录用途清单（原历史版本保留）</summary>
+                        <ul>
+                          {rev.purposeManifests.map(pm => (
+                            <li key={`${rev.version}:${pm.purposeId}`} className="studio-meta">
+                              <strong>{pm.limitedCalculationName || pm.title}</strong>（<code>{pm.purposeId}</code> · {tierText[pm.tier]} · {pm.status}）
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
                     </li>
                   ))}
                 </ul>
@@ -1258,8 +1520,36 @@ export function StudioMemberPackPanel({
                 )}
               </div>
               {!grantAuthority && !readOnlyRollback && (
-                <div className="studio-note is-warning" role="status">
-                  当前操作者或项目不是该企业包/体系的原权责维护主体，未获 Host 颁发的授权操作凭据，仅可只读查看授权状态，不可授予或撤回资源权限。
+                <div className="studio-note is-warning" role="status" aria-label="授权权限引导">
+                  <p>
+                    <strong>当前操作者或项目不是该企业包/体系的原权责维护主体，仅可只读查看授权状态，不可授予或撤回资源权限。</strong>
+                  </p>
+                  {grantAuthorityGuidance ? (
+                    <>
+                      <p className="studio-meta">
+                        <strong>有权维护方：</strong>
+                        {grantAuthorityGuidance.maintainerType === 'named-operator'
+                          ? `${grantAuthorityGuidance.maintainerDisplayName || grantAuthorityGuidance.maintainerOperatorId}（${grantAuthorityGuidance.maintainerOperatorId} · 可复用具名维护身份）`
+                          : grantAuthorityGuidance.maintainerType === 'ephemeral-session'
+                            ? '原临时浏览器会话维护者（无法换浏览器重认证；原绑定历史保留，不静默迁移）'
+                            : '未绑定具体维护身份（历史遗留包，不静默迁移权责）'}
+                      </p>
+                      {grantAuthorityGuidance.ownerProjectName && (
+                        <p className="studio-meta">
+                          <strong>原权责项目入口：</strong>
+                          原权责项目「{grantAuthorityGuidance.ownerProjectName}」→ 企业 Studio →「三层资源授权」
+                        </p>
+                      )}
+                      <p className="studio-meta">
+                        <strong>下一步指引：</strong>
+                        {grantAuthorityGuidance.nextStep}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="studio-meta">
+                      当前操作者或项目不是该企业包/体系的原权责维护主体，未获 Host 颁发的授权操作凭据，仅可只读查看授权状态，不可授予或撤回资源权限。
+                    </p>
+                  )}
                 </div>
               )}
               {grants.length > 0 ? (
