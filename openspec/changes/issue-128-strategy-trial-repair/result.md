@@ -74,7 +74,9 @@
 - 定向复核：旧地图、Issue 115 导入和开题 Host 共 17 项，17 通过、0 失败，输出 `http-contract-green.log`。
 - HTTP 收窄后的完整 `npm run check`：退出 0；3272 项中 3161 通过、0 失败、111 条件跳过，测试耗时约 394891 ms；`check:agent-sessions` PASS，build 通过，构建标识 `0.1.0-mvp.4 7ef6ebb+local-changes`。输出 `npm-check-fourth.log`。111 跳过为既有条件项，不宣称已执行。
 - 同一最终构建重跑联合浏览器：退出 0，26 项全部 PASS，零外部浏览器请求；输出 `browser-final.log`。
-- 提交后将固定 HEAD 再复跑完整 check 和浏览器，最终同 HEAD 结果写入 Issue 实现回执；本节记录提交前同内容候选的完整结果。
+- 固定提交 `9538106e60239bf19bf824683569953eddacecfc` 后完整 `npm run check`：退出 0；3272 项中 3161 通过、0 失败、111 条件跳过，测试耗时约 375179 ms；边界检查 PASS，build 标识 `0.1.0-mvp.4 9538106`。外置日志：`/Users/bendandebaba/.qoder-cn/evidence/issue-128-strategy-trial-repair/npm-check-head-final.log`。
+- 同一已推送 HEAD 重跑联合浏览器：退出 0，26 项全部 PASS，零外部浏览器请求。外置日志：`/Users/bendandebaba/.qoder-cn/evidence/issue-128-strategy-trial-repair/browser-head-final.log`。
+- 工作树误删事故后，`node_modules` 曾缺失；已按锁文件 `npm ci` 恢复，未升级依赖。重建后源码工作区干净，提交 `9538106` 已包含全部实现与规格／结果；事故时是否存在未提交源码改动无法事后证明，不宣称无损失。
 
 ## 4. 四原则与 IN01–IN07 专项最终检查
 
@@ -103,3 +105,10 @@
 - 公开 URL 无历史快照时只保留不可核对原因，不新增快照存储。
 - `docs/user-manual.md` 与 `src/host/ui/help-content.ts` 仍描述旧「战略地图／战略模拟／版本与来源」入口，与当前四页签存在既有文档漂移。它不直接阻塞本单五项验收，本轮未顺手修改，留后续独立处理。
 - `npm audit` 的 2 个 moderate 属既有锁定依赖，修复建议会升级 Pi 到 1.6.0，超出本单授权；未执行。
+
+## 7. 误删后的证据保全与断链说明
+
+- 本工作树曾被误删后由 `git worktree add` 重建；Git 内源码、测试、规格和结果提交不受影响，候选已推送 origin。
+- 原 `.local/issue-128/` 中部分 RED／GREEN／浏览器日志和截图未及外置归档即丢失；本文早期相对路径可能断链。不能用重建后的空目录或新运行冒充原失败证据。
+- 已外置保全的关键日志位于 `/Users/bendandebaba/.qoder-cn/evidence/issue-128-strategy-trial-repair/`，包括 `npm-check-fourth.log`、`npm-check-head-stopped.log`、`npm-check-head-final.log`、`browser-head-final.log`。最终 Issue 回执以这些可访问证据和已推送候选为准。
+- 其他 worktree 的未跟踪 `.local` 缓存／run 回执损失由用户另行记录；本单不恢复、不重放、不猜测其内容。
