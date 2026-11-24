@@ -8,46 +8,81 @@ import type {GoalScope} from './strategy-goals-types.ts';
 
 const canonical = (x: unknown): unknown => Array.isArray(x) ? x.map(canonical) : x && typeof x === 'object' ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, canonical(v)])) : x;
 const hash = (x: unknown): string => createHash('sha256').update(JSON.stringify(canonical(x))).digest('hex');
-const text = (x: unknown, max: number, allowEmpty = false): string => {
-  if (typeof x !== 'string' || x.length > max || (!allowEmpty && !x.trim())) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
+function invalid(path: string, reason: string, code = 'strategy_kickoff_schema_invalid', status = 400): never {
+  const message = code === 'strategy_kickoff_schema_invalid'
+    ? '开题字段校验失败，请按 details.issues 的 path/reason 修正；本次未写入。'
+    : '开题来源不可用，请按 details.issues 核对文件身份、指纹和范围；本次未写入。';
+  throw new StrategyDiscussionFault(code, status, {message, details: {issues: [{reason, path}]}});
+}
+const safeChildPath = (base: string, key: string) => /^[A-Za-z0-9_.[\]]{1,100}$/.test(key) ? `${base}.${key}` : base;
+const text = (x: unknown, max: number, allowEmpty: boolean, path: string): string => {
+  if (x === undefined) invalid(path, 'required');
+  if (typeof x !== 'string') invalid(path, 'invalid_type');
+  if (x.length > max) invalid(path, 'too_long');
+  if (!allowEmpty && !x.trim()) invalid(path, 'required');
   return x;
 };
 function validateFields(input: unknown): KickoffFields {
-  if (!input || typeof input !== 'object') throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) invalid('fields', 'invalid_type');
   const raw = input as Record<string, unknown>;
-  if (Object.keys(raw).some(key => !['horizon', 'diagnosis', 'propositions', 'assumptions', 'evidenceGaps', 'followUp', 'priorReview'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
+  const allowed = ['horizon', 'diagnosis', 'propositions', 'assumptions', 'evidenceGaps', 'followUp', 'priorReview'];
+  const unknown = Object.keys(raw).find(key => !allowed.includes(key));
+  if (unknown) invalid(safeChildPath('fields', unknown), 'unknown_field');
   const propositions = raw.propositions;
-  if (!Array.isArray(propositions) || propositions.length < 3 || propositions.length > 5) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
+  if (!Array.isArray(propositions)) invalid('fields.propositions', propositions === undefined ? 'required' : 'invalid_type');
+  if (propositions.length < 3 || propositions.length > 5) invalid('fields.propositions', 'proposition_count');
   const ids = new Set<string>();
-  const parsed = propositions.map(entry => {
-    if (!entry || typeof entry !== 'object') throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
+  const parsed = propositions.map((entry, index) => {
+    const base = `fields.propositions[${index}]`;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) invalid(base, 'invalid_type');
     const p = entry as Record<string, unknown>;
-    if (Object.keys(p).some(key => !['id', 'question', 'whyItMatters', 'evidence', 'gaps'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
-    if (typeof p.id !== 'string' || !/^[A-Za-z0-9_-]{1,40}$/.test(p.id) || ids.has(p.id)) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
+    const allowed = ['id', 'question', 'whyItMatters', 'evidence', 'gaps'];
+    const unknown = Object.keys(p).find(key => !allowed.includes(key));
+    if (unknown) invalid(safeChildPath(base, unknown), 'unknown_field');
+    if (p.id === undefined) invalid(`${base}.id`, 'required');
+    if (typeof p.id !== 'string') invalid(`${base}.id`, 'invalid_type');
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(p.id)) invalid(`${base}.id`, 'invalid_id');
+    if (ids.has(p.id)) invalid(`${base}.id`, 'duplicate_id');
     ids.add(p.id);
     return {
-      id: p.id, question: text(p.question, 2000), whyItMatters: text(p.whyItMatters, 2000),
-      ...(p.evidence !== undefined ? {evidence: text(p.evidence, 4000, true)} : {}),
-      ...(p.gaps !== undefined ? {gaps: text(p.gaps, 4000, true)} : {}),
+      id: p.id, question: text(p.question, 2000, false, `${base}.question`), whyItMatters: text(p.whyItMatters, 2000, false, `${base}.whyItMatters`),
+      ...(p.evidence !== undefined ? {evidence: text(p.evidence, 4000, true, `${base}.evidence`)} : {}),
+      ...(p.gaps !== undefined ? {gaps: text(p.gaps, 4000, true, `${base}.gaps`)} : {}),
     };
   });
-  if (raw.priorReview !== undefined && raw.priorReview !== 'applicable' && raw.priorReview !== 'not-applicable') throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
+  if (raw.priorReview !== undefined && raw.priorReview !== 'applicable' && raw.priorReview !== 'not-applicable') invalid('fields.priorReview', 'invalid_value');
   return {
-    horizon: text(raw.horizon, 500), diagnosis: text(raw.diagnosis, 8000), propositions: parsed,
-    assumptions: text(raw.assumptions, 8000, true), evidenceGaps: text(raw.evidenceGaps, 8000, true), followUp: text(raw.followUp, 8000, true),
+    horizon: text(raw.horizon, 500, false, 'fields.horizon'), diagnosis: text(raw.diagnosis, 8000, false, 'fields.diagnosis'), propositions: parsed,
+    assumptions: text(raw.assumptions, 8000, true, 'fields.assumptions'), evidenceGaps: text(raw.evidenceGaps, 8000, true, 'fields.evidenceGaps'), followUp: text(raw.followUp, 8000, true, 'fields.followUp'),
     ...(raw.priorReview !== undefined ? {priorReview: raw.priorReview} : {}),
   };
 }
 function validateSources(input: unknown): KickoffSourceRef[] {
-  if (!Array.isArray(input) || input.length > 100) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
-  return input.map(entry => {
-    if (!entry || typeof entry !== 'object') throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
+  if (!Array.isArray(input)) invalid('sources', 'invalid_type');
+  if (input.length > 100) invalid('sources', 'too_many');
+  return input.map((entry, index) => {
+    const base = `sources[${index}]`;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) invalid(base, 'invalid_type');
     const s = entry as Record<string, unknown>;
-    if (Object.keys(s).some(key => !['kind', 'ref', 'title', 'fileId', 'sha256'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
-    if ((s.kind !== 'file' && s.kind !== 'public') || typeof s.ref !== 'string' || !s.ref.trim() || s.ref.length > 500) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
-    if (s.title !== undefined && (typeof s.title !== 'string' || s.title.length > 300)) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
-    if (s.sha256 !== undefined && (typeof s.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(s.sha256))) throw new StrategyDiscussionFault('strategy_kickoff_schema_invalid', 400);
-    if (s.kind === 'file' && (typeof s.fileId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(s.fileId) || typeof s.sha256 !== 'string')) throw new StrategyDiscussionFault('strategy_kickoff_source_invalid', 400);
+    const allowed = ['kind', 'ref', 'title', 'fileId', 'sha256'];
+    const unknown = Object.keys(s).find(key => !allowed.includes(key));
+    if (unknown) invalid(safeChildPath(base, unknown), 'unknown_field');
+    if (s.kind === undefined) invalid(`${base}.kind`, 'required');
+    if (s.kind !== 'file' && s.kind !== 'public') invalid(`${base}.kind`, 'invalid_source_kind');
+    if (s.ref === undefined) invalid(`${base}.ref`, 'required');
+    if (typeof s.ref !== 'string') invalid(`${base}.ref`, 'invalid_type');
+    if (!s.ref.trim()) invalid(`${base}.ref`, 'required');
+    if (s.ref.length > 500) invalid(`${base}.ref`, 'too_long');
+    if (s.title !== undefined && typeof s.title !== 'string') invalid(`${base}.title`, 'invalid_type');
+    if (typeof s.title === 'string' && s.title.length > 300) invalid(`${base}.title`, 'too_long');
+    if (s.sha256 !== undefined && typeof s.sha256 !== 'string') invalid(`${base}.sha256`, 'invalid_type');
+    if (typeof s.sha256 === 'string' && !/^[a-f0-9]{64}$/.test(s.sha256)) invalid(`${base}.sha256`, 'invalid_sha256');
+    if (s.kind === 'file') {
+      if (s.fileId === undefined) invalid(`${base}.fileId`, 'required', 'strategy_kickoff_source_invalid');
+      if (typeof s.fileId !== 'string') invalid(`${base}.fileId`, 'invalid_type', 'strategy_kickoff_source_invalid');
+      if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(s.fileId)) invalid(`${base}.fileId`, 'invalid_id', 'strategy_kickoff_source_invalid');
+      if (s.sha256 === undefined) invalid(`${base}.sha256`, 'required', 'strategy_kickoff_source_invalid');
+    }
     return {kind: s.kind, ref: s.ref, ...(s.title !== undefined ? {title: s.title} : {}), ...(s.fileId !== undefined ? {fileId: s.fileId as string} : {}), ...(s.sha256 !== undefined ? {sha256: s.sha256} : {})};
   });
 }
@@ -66,12 +101,13 @@ export class StrategyInitiativeReports {
   private readonly files?: { list(id: string, scopeKey?: string): { name: string; directory: string }[]; read(id: string, fileId: string): { file: { sha256: string; scopeKey?: string } } };
   constructor(initiatives: StrategyInitiativeStore, files?: { list(id: string, scopeKey?: string): { name: string; directory: string }[]; read(id: string, fileId: string): { file: { sha256: string; scopeKey?: string } } }) { this.initiatives = initiatives; this.files = files; }
   private assertSources(id: string, sources: KickoffSourceRef[]): void {
-    for (const source of sources) {
+    for (const [index, source] of sources.entries()) {
       if (source.kind !== 'file') continue;
-      if (!this.files || !source.fileId || !source.sha256) throw new StrategyDiscussionFault('strategy_kickoff_source_invalid');
+      if (!this.files || !source.fileId) invalid(`sources[${index}].fileId`, 'source_unavailable', 'strategy_kickoff_source_invalid', 409);
+      if (!source.sha256) invalid(`sources[${index}].sha256`, 'required', 'strategy_kickoff_source_invalid', 409);
       let read;
-      try { read = this.files.read(id, source.fileId); } catch { throw new StrategyDiscussionFault('strategy_kickoff_source_invalid'); }
-      if (read.file.sha256 !== source.sha256) throw new StrategyDiscussionFault('strategy_kickoff_source_invalid');
+      try { read = this.files.read(id, source.fileId); } catch { invalid(`sources[${index}].fileId`, 'source_unavailable', 'strategy_kickoff_source_invalid', 409); }
+      if (read.file.sha256 !== source.sha256) invalid(`sources[${index}].sha256`, 'source_sha256_mismatch', 'strategy_kickoff_source_invalid', 409);
     }
   }
   private file(id: string) { return path.join(this.initiatives.directory(id), 'reports.json'); }
@@ -141,18 +177,19 @@ export class StrategyInitiativeReports {
     if (!canReadReport(version, keys)) throw new StrategyDiscussionFault('strategy_kickoff_scope_unknown');
     return version;
   }
-  save(id: string, input: { operationId: string; fields: KickoffFields; sources: KickoffSourceRef[]; scopeKeys?: string[]; parent?: number; kind?: 'agent' | 'revision' | 'manual'; requestId?: string }, authorScopeKey?: string): KickoffReportVersion {
+  save(id: string, input: { operationId: string; fields: KickoffFields; sources?: KickoffSourceRef[]; scopeKeys?: string[]; parent?: number; kind?: 'agent' | 'revision' | 'manual'; requestId?: string }, authorScopeKey?: string): KickoffReportVersion {
     const initiative = this.initiatives.get(id);
     if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'fields', 'sources', 'scopeKeys', 'parent', 'kind', 'requestId'].includes(key))) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
     if (typeof input.operationId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(input.operationId)) throw new StrategyDiscussionFault('strategy_kickoff_operation_invalid', 400);
-    const fields = validateFields(input.fields), sources = validateSources(input.sources);
+    const fields = validateFields(input.fields), sources = validateSources(input.sources === undefined ? [] : input.sources);
     this.assertSources(id, sources);
     const initiativeKeys = initiative.scopes.map(s => initiativeScopeKey(s));
     let allowed = initiativeKeys;
     if (this.files) {
-      for (const source of sources) {
+      for (const [index, source] of sources.entries()) {
         if (source.kind !== 'file' || !source.fileId) continue;
-        const file = this.files.read(id, source.fileId).file;
+        let file;
+        try { file = this.files.read(id, source.fileId).file; } catch { invalid(`sources[${index}].fileId`, 'source_unavailable', 'strategy_kickoff_source_invalid', 409); }
         if (file.scopeKey !== undefined) allowed = allowed.filter(key => key === file.scopeKey);
       }
     }

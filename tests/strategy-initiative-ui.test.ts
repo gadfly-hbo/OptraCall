@@ -120,13 +120,85 @@ test('SS10 publish confirmation requires the explicit checkbox and warns about r
 
 test('SS08 check panel binds both gates to the locked version and offers revision after return', async () => {
   const { StrategyCheckPanel } = await import('../src/host/ui/StrategyInitiativeGovernance.tsx');
-  const passed = renderToStaticMarkup(createElement(StrategyCheckPanel, { initiativeId: initiative.id, candidates: [candidate], batches: [batch], selected: null, onSelect() {}, onStage() {}, onRevise() {}, onRefresh: async () => {} }));
+  const passed = renderToStaticMarkup(createElement(StrategyCheckPanel, { initiativeId: initiative.id, candidates: [candidate], batches: [batch], selected: null, onSelect() {}, onStage() {}, onRevise() {}, onRefresh: async () => {}, onOpenSource() {} }));
   assert.match(passed, /因果检验 · TOC\/TP/); assert.match(passed, /逻辑检验 · 战略假设/);
   assert.match(passed, /两份结论已绑定同一锁定版/); assert.match(passed, /前往战略发布/);
   const returnedCandidate = { ...candidate, returned: { batchId: batch.batchId, at: '2026-11-21T03:00:00Z' } };
   const returnedBatch: VerificationBatch = { ...batch, state: 'returned', gates: [{ ...gate(0), verdict: 'fail' }, { ...gate(1), status: 'waiting', verdict: undefined }] };
-  const returned = renderToStaticMarkup(createElement(StrategyCheckPanel, { initiativeId: initiative.id, candidates: [returnedCandidate], batches: [returnedBatch], selected: null, onSelect() {}, onStage() {}, onRevise() {}, onRefresh: async () => {} }));
+  const returned = renderToStaticMarkup(createElement(StrategyCheckPanel, { initiativeId: initiative.id, candidates: [returnedCandidate], batches: [returnedBatch], selected: null, onSelect() {}, onStage() {}, onRevise() {}, onRefresh: async () => {}, onOpenSource() {} }));
   assert.match(returned, /按检验意见修订/); assert.match(returned, /不通过/);
+});
+
+test('I128-04 main session presentation separates dispatch, progress, terminals, disconnect and recovery', async () => {
+  const { mainSessionPresentation } = await import('../src/host/ui/strategy-initiative-view.tsx');
+  const pending = { requestId: 'request-1' };
+  const accepted = { id: 'request-1', status: 'accepted' as const };
+  const base = { dispatching: false, pending, lastRun: accepted, busy: true, live: true, snapshotRunning: true, disconnected: false };
+  const running = mainSessionPresentation(base);
+  assert.equal(running.kind, 'running');
+  assert.equal(running.canRecover, false);
+  assert.equal(running.canReplace, false);
+  assert.doesNotMatch(running.label, /待核|未知/);
+  assert.equal(mainSessionPresentation({ ...base, dispatching: true, busy: false, live: false, snapshotRunning: false }).kind, 'sending');
+  assert.equal(mainSessionPresentation({ ...base, pending: null, lastRun: { id: 'request-1', status: 'completed' }, busy: false, live: false, snapshotRunning: false }).kind, 'succeeded');
+  const failed = mainSessionPresentation({ ...base, lastRun: { id: 'request-1', status: 'failed' }, busy: false, live: false, snapshotRunning: false });
+  assert.equal(failed.kind, 'failed'); assert.equal(failed.canRecover, true); assert.equal(failed.canReplace, true);
+  const cancelled = mainSessionPresentation({ ...base, lastRun: { id: 'request-1', status: 'cancelled' }, busy: false, live: false, snapshotRunning: false });
+  assert.equal(cancelled.kind, 'cancelled'); assert.equal(cancelled.canReplace, true);
+  const disconnected = mainSessionPresentation({ ...base, disconnected: true });
+  assert.equal(disconnected.kind, 'running'); assert.equal(disconnected.canRecover, true); assert.match(disconnected.label, /观察连接受损/);
+  const unknown = mainSessionPresentation({ ...base, lastRun: { id: 'request-1', status: 'unknown' }, busy: false, live: false, snapshotRunning: false });
+  assert.equal(unknown.kind, 'unknown'); assert.equal(unknown.canRecover, true); assert.equal(unknown.canReplace, false);
+  const reopened = mainSessionPresentation({ ...base, busy: false, live: false, snapshotRunning: false });
+  assert.equal(reopened.kind, 'interrupted'); assert.equal(reopened.canRecover, true); assert.equal(reopened.canReplace, true);
+  const unmatched = mainSessionPresentation({ ...base, lastRun: { id: 'another-request', status: 'completed' }, busy: true, live: true, snapshotRunning: true });
+  assert.equal(unmatched.kind, 'unknown', 'a terminal or running record for another request must not resolve the pending request'); assert.equal(unmatched.canRecover, true); assert.equal(unmatched.canReplace, false);
+  assert.equal(mainSessionPresentation({ ...base, pending: null, lastRun: undefined, busy: false, live: false, snapshotRunning: false }).kind, 'idle');
+});
+
+test('I128-03 handoff keeps the current department, defaults accurately and distinguishes same-name scopes', async () => {
+  const { HandoffDialog } = await import('../src/host/ui/StrategyInitiativeGovernance.tsx');
+  const current: GoalScope = { kind: 'department', id: 'new-east', name: '青禾便利东区' };
+  const enterprise: GoalScope = { kind: 'enterprise', id: 'ent-existing', name: '既有企业' };
+  const sameNameElsewhere: GoalScope = { kind: 'department', id: 'east-2', name: '青禾便利东区', enterpriseId: 'ent-other' };
+  const personal: GoalScope = { kind: 'personal', id: 'self', name: '个人工作' };
+  const html = renderToStaticMarkup(createElement(HandoffDialog, {
+    initiativeId: initiative.id, publication, candidate, scope: current,
+    scopes: [enterprise, sameNameElsewhere, personal], onDone: async () => {}, onClose() {},
+  }));
+  assert.match(html, /<option value="department::new-east" selected="">/, 'current scope is present and selected even when the catalog is non-empty');
+  const deduplicated = renderToStaticMarkup(createElement(HandoffDialog, {
+    initiativeId: initiative.id, publication, candidate, scope: current,
+    scopes: [current, enterprise, sameNameElsewhere, personal], onDone: async () => {}, onClose() {},
+  }));
+  assert.equal((deduplicated.match(/value="department::new-east"/g) ?? []).length, 1, 'stable identity deduplicates the current option');
+  assert.match(html, /当前战略范围/);
+  assert.match(html, /ent-other/);
+  assert.match(html, /east-2/);
+  assert.match(html, /保存前归属/);
+  assert.match(html, /历史误存个人范围/);
+  assert.match(html, /提出目标修订/);
+});
+
+test('I128-05 verification sources are actionable and retain exact identities and fingerprints', async () => {
+  const { StrategyCheckPanel } = await import('../src/host/ui/StrategyInitiativeGovernance.tsx');
+  const fileId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const sourcedBatch: VerificationBatch = { ...batch, gates: [{ ...gate(0), sources: [
+    { kind: 'kickoff', ref: '1', sha256: 'a'.repeat(64) },
+    { kind: 'candidate', ref: `${candidateId}:1`, sha256: 'b'.repeat(64) },
+    { kind: 'file', ref: '010_draw/上期经营复盘.pdf', fileId, sha256: 'c'.repeat(64) },
+    { kind: 'public', ref: 'https://example.com/synthetic-source', sha256: 'd'.repeat(64) },
+  ] }, { ...gate(1), sources: undefined }] };
+  const html = renderToStaticMarkup(createElement(StrategyCheckPanel, {
+    initiativeId: initiative.id, candidates: [candidate], batches: [sourcedBatch], selected: null,
+    onSelect() {}, onStage() {}, onRevise() {}, onRefresh: async () => {}, onOpenSource() {},
+  }));
+  assert.equal((html.match(/<button[^>]*>核对依据/g) ?? []).length, 4);
+  assert.match(html, /<button[^>]*type="button"/);
+  assert.match(html, new RegExp(`${candidateId}:1`));
+  assert.match(html, new RegExp(fileId));
+  assert.match(html, new RegExp('a'.repeat(64)));
+  assert.match(html, new RegExp('d'.repeat(64)));
 });
 
 test('SS13 exact-version dialog keeps every receipt inside a scrollable body', async () => {

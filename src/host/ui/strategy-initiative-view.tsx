@@ -31,6 +31,45 @@ export function candidateStatus(candidate: CandidateVersion, options: { busy?: b
   if (candidate.lock) return { label: '已锁定 · 待检验', tone: 'accent' };
   return { label: '候选', tone: 'neutral' };
 }
+export type MainSessionPresentationInput = {
+  dispatching: boolean;
+  pending: { requestId: string } | null;
+  lastRun?: { id: string; status: string };
+  busy: boolean;
+  live: boolean;
+  snapshotRunning: boolean;
+  disconnected: boolean;
+};
+export type MainSessionPresentation = {
+  kind: 'idle' | 'sending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'disconnected' | 'interrupted' | 'unknown';
+  label: string; detail: string; tone: BadgeTone; canRecover: boolean; canReplace: boolean;
+};
+export function mainSessionPresentation(input: MainSessionPresentationInput): MainSessionPresentation {
+  const {dispatching, pending, busy, live, snapshotRunning, disconnected} = input;
+  const lastRun = pending ? (input.lastRun?.id === pending.requestId ? input.lastRun : undefined) : input.lastRun;
+  const running = busy || live || snapshotRunning;
+  const base = {canRecover: false, canReplace: false};
+  if (dispatching) return {kind: 'sending', label: '正在发送并等待受理', detail: '原输入和请求编号已保留；尚未收到受理回执，不会重复派发。', tone: 'accent', ...base};
+  if (lastRun?.status === 'accepted' && running) return {
+    kind: 'running', label: disconnected ? '已受理运行中 · 观察连接受损' : '已受理运行中',
+    detail: disconnected ? 'Host 仍在运行，仅观察连接受损；可只读核对，不会自动重发。' : 'Host 已受理本轮请求，Agent 正在执行；原请求保留用于防止重复派发。',
+    tone: 'accent', canRecover: Boolean(pending && disconnected), canReplace: false,
+  };
+  if (lastRun?.status === 'completed') return {kind: 'succeeded', label: '本轮已完成', detail: '已收到完成回执，讨论记录和已保存成果保持可核对。', tone: 'positive', ...base};
+  if (lastRun?.status === 'failed') return {kind: 'failed', label: '本轮失败', detail: '失败回执和原输入保留；可先核对原请求，再明确是否替换后发送。', tone: 'error', canRecover: Boolean(pending), canReplace: Boolean(pending && !busy)};
+  if (lastRun?.status === 'cancelled') return {kind: 'cancelled', label: '本轮已取消', detail: '取消回执和原输入保留；未自动重发，可核对后明确替换。', tone: 'neutral', canRecover: Boolean(pending), canReplace: Boolean(pending && !busy)};
+  if (lastRun?.status === 'unknown') return {kind: 'unknown', label: '原请求结果未知', detail: '技术结果尚未确认，原输入和编号保留；先只读核对，不自动重发。', tone: 'warning', canRecover: Boolean(pending), canReplace: false};
+  if (lastRun?.status === 'accepted') return {
+    kind: 'interrupted', label: '原请求结果未确认',
+    detail: '记录显示已受理，但当前没有存活运行资源；可能是 Host 重开后的中断。先核对原请求，明确后再替换，未自动重发。',
+    tone: 'warning', canRecover: Boolean(pending), canReplace: Boolean(pending && !busy),
+  };
+  if (!pending && (busy || snapshotRunning)) return {kind: 'running', label: disconnected ? '运行中 · 观察连接受损' : '运行中', detail: disconnected ? 'Host 仍在运行，可只读核对；不会自动重发。' : 'Host 正在处理当前请求。', tone: 'accent', ...base};
+  if (disconnected) return {kind: 'disconnected', label: '观察连接受损', detail: '仅实时观察不可用；可刷新讨论记录核对，未重发消息。', tone: 'warning', canRecover: Boolean(pending), canReplace: false};
+  if (pending) return {kind: 'unknown', label: '原请求受理状态待核', detail: '尚未核对到原请求的准确状态，输入与原编号保留；请先只读核对，不要重复发送。', tone: 'warning', canRecover: true, canReplace: false};
+  return {kind: 'idle', label: '', detail: '', tone: 'neutral', ...base};
+}
+
 export function gateStatus(gate?: VerificationGate): { label: string; tone: BadgeTone } {
   if (!gate) return { label: '未开始', tone: 'neutral' };
   if (gate.verdict === 'pass') return { label: '通过', tone: 'positive' };

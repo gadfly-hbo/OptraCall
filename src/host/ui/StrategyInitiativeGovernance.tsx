@@ -5,7 +5,7 @@ import { StrategyDiscussionPanel } from './StrategyDiscussionPanel.tsx';
 import type { LegacyStrategyStage, ManagementStage } from './ManagementTabs.tsx';
 import type { GoalScope, GoalRef, GoalVersion, GoalDiscussionSourceRef } from '../strategy-goals-types.ts';
 import type { ClientProject, PublicModelConfiguration } from './project-types.ts';
-import type { CandidateVersion, KickoffAnchor, KickoffReportVersion, VerificationBatch } from '../strategy-initiative-types.ts';
+import type { CandidateVersion, KickoffAnchor, KickoffReportVersion, VerificationBatch, VerificationSourceRef } from '../strategy-initiative-types.ts';
 import { initiativeScopeKey } from '../strategy-initiative-types.ts';
 import * as api from './strategy-initiative-client.ts';
 import type { InitiativeHistory, InitiativePublication, KickoffReportReadback } from './strategy-initiative-client.ts';
@@ -23,9 +23,11 @@ function CandidatePicker({ candidates, current, onSelect, label }: { candidates:
   </select></label>;
 }
 
-export function StrategyCheckPanel({ initiativeId, candidates, batches, selected, onSelect, onStage, onRevise, onRefresh }: {
+export const verificationSourceLabels = { file: '文件', public: '公开来源', candidate: '候选版本', kickoff: '开题版本' } as const;
+export function StrategyCheckPanel({ initiativeId, candidates, batches, selected, onSelect, onStage, onRevise, onRefresh, onOpenSource }: {
   initiativeId: string; candidates: CandidateVersion[]; batches: VerificationBatch[]; selected: CandidateRef | null;
   onSelect: (ref: CandidateRef) => void; onStage: (stage: ManagementStage) => void; onRevise: (candidate: CandidateVersion) => void; onRefresh: () => Promise<void>;
+  onOpenSource: (source: VerificationSourceRef) => void;
 }) {
   const options = lockedCandidates(candidates);
   const current = options.find(candidate => sameRef(candidate, selected)) ?? options.at(-1);
@@ -48,7 +50,7 @@ export function StrategyCheckPanel({ initiativeId, candidates, batches, selected
             <div className="si-panel-head"><div><h3>{name}</h3><p className="si-muted">{gateMissions[turn]}</p></div><Badge tone={status.tone}>{status.label}</Badge></div>
             {gate?.evidence && <p>{gate.evidence}</p>}
             {gate && <p className="si-muted">{gate.ref} · 绑定 {candidateLabel(current)} · 开题 v{current.anchor.reportNo}{gate.finishedAt ? ` · ${formatTime(gate.finishedAt)}` : ''}</p>}
-            {gate?.sources?.length ? <ul className="si-muted">{gate.sources.map((source, index) => <li key={index}>{source.kind} · {source.ref}{source.sha256 ? ` · ${source.sha256.slice(0, 12)}…` : ''}</li>)}</ul> : null}
+            {gate?.sources?.length ? <ul className="si-source-list">{gate.sources.map((source, index) => <li key={index}><button type="button" className="text-button" onClick={() => onOpenSource(source)}>核对依据 · {verificationSourceLabels[source.kind]} · {source.ref}</button>{source.fileId && <span className="si-muted">fileId {source.fileId}</span>}{source.sha256 && <code className="si-source-sha">{source.sha256}</code>}</li>)}</ul> : null}
             {turn === 1 && batch && batch.gates[0].verdict !== 'pass' && <p className="si-muted">因果检验通过后可以开始。</p>}
             {canRetry && <div className="si-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => { void act(() => api.retryVerificationGate(initiativeId, current.candidateId, current.no, turn as 0 | 1, { operationId: crypto.randomUUID() })); }}>核对或重试原检验</button></div>}
           </div>
@@ -107,9 +109,19 @@ export function WithdrawConfirmDialog({ initiativeId, publication, label, onWith
   </CaseDialog>;
 }
 
+const handoffKindLabels: Record<GoalScope['kind'], string> = { enterprise: '企业', department: '部门', personal: '个人' };
+function handoffScopeLabel(item: GoalScope, options: GoalScope[], currentKey: string): string {
+  const enterprise = item.kind === 'department' && item.enterpriseId
+    ? options.find(candidate => candidate.kind === 'enterprise' && candidate.id === item.enterpriseId)?.name
+    : undefined;
+  const parent = item.kind === 'department' && item.enterpriseId ? ` · 上级 ${enterprise ? `${enterprise} / ` : ''}${item.enterpriseId}` : '';
+  return `${handoffKindLabels[item.kind]} · ${item.name}${parent} · ID ${item.id}${initiativeScopeKey(item) === currentKey ? ' · 当前战略范围' : ''}`;
+}
+
 export function HandoffDialog({ initiativeId, publication, candidate, scope, scopes, onDone, onClose }: { initiativeId: string; publication: InitiativePublication; candidate: CandidateVersion; scope: GoalScope; scopes: GoalScope[]; onDone: () => Promise<void>; onClose: () => void }) {
-  const options = scopes.length ? [...new Map(scopes.map(item => [initiativeScopeKey(item), item])).values()] : [scope];
-  const [scopeKey, setScopeKey] = useState(options.some(item => initiativeScopeKey(item) === initiativeScopeKey(scope)) ? initiativeScopeKey(scope) : initiativeScopeKey(options[0]!));
+  const currentKey = initiativeScopeKey(scope);
+  const options = [...new Map([scope, ...scopes].map(item => [initiativeScopeKey(item), item])).values()];
+  const [scopeKey, setScopeKey] = useState(currentKey);
   const [selected, setSelected] = useState<number[]>(candidate.goals.map((_, index) => index));
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const operationId = useOperationId();
@@ -121,9 +133,11 @@ export function HandoffDialog({ initiativeId, publication, candidate, scope, sco
       setBusy(true); setError('');
       void api.handoffPublication(initiativeId, publication.publicationId, { operationId: id, scope: destination, selected }).then(async () => { await onDone(); onClose(); }).catch(fault => setError(api.errorText(fault))).finally(() => setBusy(false));
     }}>
-      <div className="case-field"><label htmlFor="si-handoff-scope">目标归属范围</label><select id="si-handoff-scope" value={scopeKey} disabled={busy} onChange={event => setScopeKey(event.target.value)}>{options.map(item => <option key={initiativeScopeKey(item)} value={initiativeScopeKey(item)}>{item.name}</option>)}</select></div>
+      <div className="case-field"><label htmlFor="si-handoff-scope">目标归属范围</label><select id="si-handoff-scope" value={scopeKey} disabled={busy} onChange={event => setScopeKey(event.target.value)}>{options.map(item => <option key={initiativeScopeKey(item)} value={initiativeScopeKey(item)}>{handoffScopeLabel(item, options, currentKey)}</option>)}</select></div>
+      <p className="si-muted">保存前归属：{handoffScopeLabel(destination, options, currentKey)}</p>
       {candidate.goals.length ? candidate.goals.map((goal, index) => <label className="si-check-row" key={index}><input type="checkbox" checked={selected.includes(index)} disabled={busy} onChange={event => setSelected(old => event.target.checked ? [...old, index] : old.filter(item => item !== index))} /><span><strong>G{index + 1} · {goal}</strong><br /><span className="si-muted">关联策略 · {candidate.title}</span></span></label>) : <p className="si-muted">此锁定版未列出可承接目标；仍可保留发布记录。</p>}
       <p className="si-muted">保存后进入目标管理成为候选，等待单独采用；发布本身不创建目标，也不启动执行。</p>
+      <p className="si-muted">历史误存个人范围的目标候选，请在目标管理选择准确版本，通过“提出目标修订”更正归属；旧版本和发布来源保留，不自动修改既有记录。</p>
       <CaseFormError error={error} />
       <div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="primary-button" disabled={busy || !selected.length}>{busy ? '正在保存…' : '保存目标候选'}</button></div>
     </form>

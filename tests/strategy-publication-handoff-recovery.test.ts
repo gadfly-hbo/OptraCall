@@ -46,6 +46,12 @@ function fixture(t: TestContext) {
   }
   function open(failReceiptWrite?: 'after-create' | 'after-read') {
     const goals = new StrategyGoalsStore(dataRoot);
+    let gate: Promise<unknown> = Promise.resolve();
+    const mutate = <T,>(operation: () => T | Promise<T>): Promise<T> => {
+      const result = gate.then(operation);
+      gate = result.then(() => {}, () => {});
+      return result;
+    };
     const publications = createStrategyInitiativePublications({
       initiatives, candidates: {version: () => candidate}, verifications: {passCredentials: () => batch},
       goals: {
@@ -62,7 +68,7 @@ function fixture(t: TestContext) {
           return original;
         },
       },
-      mutate: async action => action(),
+      mutate,
     });
     return {goals, publications};
   }
@@ -114,6 +120,29 @@ test('承接回执写入失败后，改范围或选择须冲突，原请求读�
   assert.match(recovered.strategyContext!.summary, new RegExp(publication.publicationId));
   assert.deepEqual(await handoff(), receipt);
   assert.equal(goals.list().goals.length, 1);
+});
+
+test('新部门省略 enterpriseId 时可批量承接，并发重放去重且保留准确发布来源', async t => {
+  const {id, open, publish} = fixture(t);
+  const publication = await publish();
+  const {goals, publications} = open();
+  const request = {operationId: randomUUID(), scope: otherScope, selected: [0, 1]};
+  const [first, concurrent] = await Promise.all([
+    publications.handoff(id, publication.publicationId, request),
+    publications.handoff(id, publication.publicationId, {...request, scope: {...otherScope}}),
+  ]);
+  assert.deepEqual(concurrent, first);
+  assert.equal(first.goals.length, 2);
+  assert.equal(goals.list().goals.length, 2);
+  for (const ref of first.goals) {
+    const goal = goals.read(ref);
+    assert.deepEqual(goal.scope, otherScope);
+    assert.match(goal.strategyContext!.summary, new RegExp(publication.publicationId));
+    assert.match(goal.strategyContext!.summary, new RegExp(publication.contentSha256));
+  }
+  const reopened = open();
+  assert.deepEqual(await reopened.publications.handoff(id, publication.publicationId, request), first);
+  assert.equal(reopened.goals.list().goals.length, 2);
 });
 
 test('账本剩余空间不足以写入承接回执时，预留拒绝且零目标写入', async t => {
