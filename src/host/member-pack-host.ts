@@ -26,6 +26,8 @@ import {
   type PackFeedbackCategory,
   type PackModulePublicationReceipt,
   type ResourceAccessQuery,
+  type ResourceAuthorizationGrant,
+  type EnterprisePurposePublicationState,
   type ResourceGrantOperation,
 } from '../../extensions/business-plugins/studio/enterprise-pack.ts';
 import { DomainReferenceStore, BUILTIN_REPO_TEMPLATES } from './domain-reference-store.ts';
@@ -592,8 +594,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return { projectId, enterpriseId: projectEnterpriseId };
   }
 
-  async function scopedPack(pack: EnterpriseDomainPack, projectId: string, operator: TrustedHostOperator) {
-    return canReadConstructionPack(pack, projectId, operator) ? pack : redactPackForConsumer(pack, projectId);
+  async function scopedPack(pack: EnterpriseDomainPack, projectId: string, operator: TrustedHostOperator, summaries?: QualifiedSummaryGrant[]) {
+    return canReadConstructionPack(pack, projectId, operator) ? pack : redactPackForConsumer(pack, projectId, summaries);
+  }
+
+  async function scopedPacks(list: EnterpriseDomainPack[], projectId: string, operator: TrustedHostOperator) {
+    const enterpriseId = list[0]?.enterpriseId;
+    const summaries = enterpriseId ? await qualifySummaryGrants(enterpriseId, projectGrants(enterpriseId, projectId)) : [];
+    return Promise.all(list.map(pack => scopedPack(pack, projectId, operator, summaries)));
   }
 
   function isConstructionOwnerProject(pack: EnterpriseDomainPack, projectId: string): boolean {
@@ -959,8 +967,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const revision = pack.packRevisions.find(revision => pin ? revision.version === pin.packVersion : revision.status === 'active');
         const manifest = revision?.purposeManifests.find(purpose => purpose.purposeId === requested && purpose.status === 'eligible');
         if (!manifest) continue;
-        const access = evaluatePurposeAccessForSubject(projectGrants(enterpriseId, projectId), manifest);
-        if (isConstructionOwnerProject(pack, projectId) || access?.hasPartialOrFullDetail) {
+        const detail = detailAccessForPurpose(projectGrants(enterpriseId, projectId), manifest);
+        if (isConstructionOwnerProject(pack, projectId) || detail.allowed || detail.grantedStores.length) {
           const { brand, channel, stores } = manifest.scope;
           return { purposeKey: manifest.purposeKey, purposeScope: { brand, channel, stores } };
         }
@@ -1306,8 +1314,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     );
     const denied = () => new StudioError('studio_report_permission_denied', 403);
     if (!qualifications.length) throw denied();
+    const summaryGrants = qualifications.some(({ use }) => use.accessLevel === 'summary')
+      ? await qualifySummaryGrants(enterpriseId, grantsNow) : [];
     for (const { use, purpose } of qualifications) {
-      if (!purpose || !reportUseCovered(use, purpose, grantsNow)) throw denied();
+      if (!purpose || !reportUseCovered(use, purpose, use.accessLevel === 'summary' ? summaryGrants : grantsNow)) throw denied();
       if (use.accessLevel !== 'recalculate') continue;
       const reportIdentity = digest(sourceRef(use.reportRef));
       const explicitReportGrant = grantsNow.some(grant => grant.resourceRef
@@ -1330,111 +1340,94 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (permissionAtRead !== projectPermissionFingerprint(projectId)) throw denied();
   }
 
-  function filterDependenciesForAccess(
-    deps: EnterprisePackDependency[],
-    access: { canDef: boolean; canSummary: boolean; canDetail: boolean },
-  ): EnterprisePackDependency[] {
-    if (access.canDetail) return deps;
-    return deps.filter(d => {
-      if (d.role === 'member-rule' || d.role === 'studio-source') return access.canDef || access.canSummary;
-      if (d.role === 'summary-result') return access.canSummary;
-      if (d.role === 'shared-asset') return access.canDef || access.canSummary;
-      // sap-metric / sap-method calculation specs require detail or explicit definition/summary view
-      if (d.role === 'sap-metric' || d.role === 'sap-method') return access.canDef || access.canSummary;
-      return false;
-    });
+  type QualifiedSummaryGrant = ResourceAuthorizationGrant & { resourceRef: StudioSourceRef };
+
+  function sameSummarySource(bound: StudioSourceRef, requested: StudioSourceRef): boolean {
+    return sameExactSourceRef(bound, requested)
+      && (!bound.locator || !requested.locator || bound.locator === requested.locator)
+      && (!bound.projectId || !requested.projectId || bound.projectId === requested.projectId)
+      && (!bound.taskId || !requested.taskId || bound.taskId === requested.taskId);
   }
 
-  async function summaryGrantEligible(enterpriseId: string, grant?: ReturnType<typeof projectGrants>[number]): Promise<boolean> {
-    if (!grant?.resourceRef || !options.verifySummaryAuthority) return false;
-    try {
-      await options.verifySummaryAuthority(enterpriseId, { resourceRef: grant.resourceRef, grain: grant.scope.grain });
-      return true;
-    } catch { return false; }
-  }
-
-  async function resolveLegacyGrantPeriods(enterpriseId: string, grants: ReturnType<typeof projectGrants>): Promise<Map<string, { sourcePeriodFrom?: string; sourcePeriodTo?: string }>> {
-    const resolved = new Map<string, { sourcePeriodFrom?: string; sourcePeriodTo?: string }>();
-    if (!options.verifySummaryAuthority) return resolved;
-    for (const grant of grants) {
-      if (grant.scope.sourcePeriodVerified || !grant.resourceRef || resolved.has(grant.id)) continue;
-      try {
-        const verified = await options.verifySummaryAuthority(enterpriseId, { resourceRef: grant.resourceRef, grain: grant.scope.grain });
-        resolved.set(grant.id, { sourcePeriodFrom: verified.sourcePeriodFrom, sourcePeriodTo: verified.sourcePeriodTo });
-      } catch { resolved.set(grant.id, {}); }
+  // Resolve each immutable source/grain once per operation. A successful lookup may
+  // legitimately have no business period. A failed lookup never qualifies a grant.
+  async function qualifySummaryGrants(enterpriseId: string, subjectGrants: ResourceAuthorizationGrant[]): Promise<QualifiedSummaryGrant[]> {
+    const verify = options.verifySummaryAuthority;
+    if (!verify) return [];
+    const verifiedSources = new Map<string, VerifiedSummaryAuthority | undefined>();
+    const qualified: QualifiedSummaryGrant[] = [];
+    for (const grant of subjectGrants) {
+      const ref = grant.resourceRef;
+      if (!ref || !grant.operations.includes('cite-summary') || !isGrantActive(grant, Date.now())) continue;
+      const key = JSON.stringify([ref.authority, ref.id, ref.version, ref.sha256, ref.locator, ref.projectId, ref.taskId, grant.scope.grain]);
+      if (!verifiedSources.has(key)) {
+        const source = await verify(enterpriseId, { resourceRef: ref, grain: grant.scope.grain }).catch(() => undefined);
+        verifiedSources.set(key, source);
+      }
+      const source = verifiedSources.get(key);
+      if (!source || !sameSummarySource(ref, source.resourceRef)
+        || grant.scope.summaryAssetId !== source.summaryAssetId || grant.scope.summaryVersion !== source.summaryVersion
+        || (grant.scope.summarySha256 && grant.scope.summarySha256 !== source.summarySha256)
+        || !isSourcePeriodCovered(source.sourcePeriodFrom, source.sourcePeriodTo, grant.scope.periodFrom, grant.scope.periodTo)) continue;
+      qualified.push({ ...grant, resourceRef: source.resourceRef });
     }
-    return resolved;
+    if (!qualified.length) return [];
+    const activeIds = new Set(grants.list(enterpriseId).filter(grant => isGrantActive(grant, Date.now())).map(grant => grant.id));
+    return qualified.filter(grant => activeIds.has(grant.id));
+  }
+
+  function detailAccessForPurpose(subjectGrants: ResourceAuthorizationGrant[], pm: EnterprisePurposePublicationState) {
+    return evaluateResourceAccess(subjectGrants, {
+      operation: 'read-detail-recalculate', purposeKey: pm.purposeKey,
+      brand: pm.scope.brand, channel: pm.scope.channel, stores: pm.scope.stores,
+    });
   }
 
   function evaluatePurposeAccessForSubject(
-    subjectGrants: readonly import('../../extensions/business-plugins/studio/enterprise-pack.ts').ResourceAuthorizationGrant[],
-    pm: EnterpriseDomainPack['packRevisions'][number]['purposeManifests'][number],
-    legacyPeriods?: Map<string, { sourcePeriodFrom?: string; sourcePeriodTo?: string }>,
+    subjectGrants: ResourceAuthorizationGrant[],
+    pm: EnterprisePurposePublicationState,
+    summaryGrants: QualifiedSummaryGrant[],
   ) {
     if (pm.status !== 'eligible') return null;
-    const canDef = evaluateResourceAccess(subjectGrants, {
-      operation: 'read-definition',
-      purposeKey: pm.purposeKey,
-      brand: pm.scope.brand,
-      channel: pm.scope.channel,
+    const purpose = { purposeKey: pm.purposeKey, brand: pm.scope.brand, channel: pm.scope.channel };
+    const canDef = evaluateResourceAccess(subjectGrants, { operation: 'read-definition', ...purpose });
+    const summary = pm.summaryAccess;
+    const candidates = summaryGrants.filter(grant => !summary || sameSummarySource(grant.resourceRef, summary.summaryRef));
+    const canSummary = evaluateResourceAccess(candidates, {
+      operation: 'cite-summary', ...purpose,
+      ...(summary ? { grain: summary.grain, summaryVersion: summary.summaryRef.version, metricRef: summary.metricRef } : {}),
     });
-    const canSummaryRaw = evaluateResourceAccess(subjectGrants, {
-      operation: 'cite-summary',
-      purposeKey: pm.purposeKey,
-      brand: pm.scope.brand,
-      channel: pm.scope.channel,
-    });
-    const canSummary = canSummaryRaw.allowed
-      ? { ...canSummaryRaw, matchedGrantIds: canSummaryRaw.matchedGrantIds.filter(id => {
-          const g = subjectGrants.find(g => g.id === id);
-          if (!g) return false;
-          const legacy = !g.scope.sourcePeriodVerified ? legacyPeriods?.get(g.id) : undefined;
-          const from = g.scope.sourcePeriodVerified ? g.scope.sourcePeriodFrom : legacy?.sourcePeriodFrom;
-          const to = g.scope.sourcePeriodVerified ? g.scope.sourcePeriodTo : legacy?.sourcePeriodTo;
-          return isSourcePeriodCovered(from, to, g.scope.periodFrom, g.scope.periodTo, undefined, true);
-        }) }
-      : canSummaryRaw;
-    if (canSummary.matchedGrantIds.length === 0) canSummary.allowed = false;
-    const canDetail = evaluateResourceAccess(subjectGrants, {
-      operation: 'read-detail-recalculate',
-      purposeKey: pm.purposeKey,
-      brand: pm.scope.brand,
-      channel: pm.scope.channel,
-      stores: pm.scope.stores,
-    });
+    const summaries = candidates.filter(grant => canSummary.matchedGrantIds.includes(grant.id));
+    const canDetail = detailAccessForPurpose(subjectGrants, pm);
     const hasPartialOrFullDetail = canDetail.allowed || canDetail.grantedStores.length > 0;
     if (!canDef.allowed && !canSummary.allowed && !hasPartialOrFullDetail) return null;
-    const visibleDeps = filterDependenciesForAccess(pm.dependencies, {
-      canDef: canDef.allowed,
-      canSummary: canSummary.allowed,
-      canDetail: hasPartialOrFullDetail,
+
+    const visibleDeps = pm.dependencies.filter(dep => {
+      const refersToSummary = dep.role === 'summary-result' || (summary && sameSummarySource(summary.summaryRef, dep.ref))
+        || subjectGrants.some(grant => grant.operations.includes('cite-summary') && grant.resourceRef && sameSummarySource(grant.resourceRef, dep.ref));
+      if (refersToSummary) return summaries.some(grant => sameSummarySource(grant.resourceRef, dep.ref));
+      return hasPartialOrFullDetail || ['member-rule', 'studio-source', 'shared-asset', 'sap-metric', 'sap-method'].includes(dep.role);
     });
-    return {
-      canDef,
-      canSummary,
-      canDetail,
-      hasPartialOrFullDetail,
-      visibleDeps,
-    };
+    return { canDef, canSummary, canDetail, hasPartialOrFullDetail, visibleDeps, summaries };
   }
 
-  async function qualifiedPinPurposes(pack: EnterpriseDomainPack, projectId: string, construction: boolean, revision?: EnterpriseDomainPack['packRevisions'][number]) {
-    const subjectGrants = projectGrants(pack.enterpriseId, projectId);
-    const legacyPeriods = await resolveLegacyGrantPeriods(pack.enterpriseId, subjectGrants);
-    const eligibleSummaryGrantIds = new Set<string>();
-    for (const g of subjectGrants) {
-      if (g.resourceRef && await summaryGrantEligible(pack.enterpriseId, g)) eligibleSummaryGrantIds.add(g.id);
-    }
+  function useAccessLevel(pm: EnterprisePurposePublicationState, construction: boolean, access: ReturnType<typeof evaluatePurposeAccessForSubject>) {
+    if (pm.tier !== 'definition-reference' && (construction || access?.hasPartialOrFullDetail)) return 'recalculate';
+    if (access?.canSummary.allowed && !access.hasPartialOrFullDetail) return 'summary';
+    return 'definition';
+  }
+
+  function qualifiedPinPurposes(
+    revision: EnterpriseDomainPack['packRevisions'][number] | undefined,
+    construction: boolean,
+    subjectGrants: ResourceAuthorizationGrant[],
+    summaryGrants: QualifiedSummaryGrant[],
+  ) {
     return (revision?.purposeManifests ?? []).flatMap(purpose => {
       if (purpose.status !== 'eligible') return [];
       if (construction) return [purpose];
-      const access = evaluatePurposeAccessForSubject(subjectGrants, purpose, legacyPeriods);
-      if (!access) return [];
-      if (access.canSummary.allowed && !access.canSummary.matchedGrantIds.some(id => eligibleSummaryGrantIds.has(id))) {
-        access.canSummary.allowed = false;
-      }
-      if (!access.canDef.allowed && !access.canSummary.allowed && !access.hasPartialOrFullDetail) return [];
-      return [{ purposeId: purpose.purposeId, dependencies: access.visibleDeps }];
+      const access = evaluatePurposeAccessForSubject(subjectGrants, purpose, summaryGrants);
+      return access ? [{ purposeId: purpose.purposeId, dependencies: access.visibleDeps }] : [];
     });
   }
 
@@ -1447,7 +1440,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   async function buildPackCatalogSummary(enterpriseId: string, projectId?: string, taskId?: string) {
     const list = packs.list(enterpriseId);
     const subjectGrants = projectId ? projectGrants(enterpriseId, projectId) : [];
-    const legacyPeriods = projectId ? await resolveLegacyGrantPeriods(enterpriseId, subjectGrants) : new Map<string, { sourcePeriodFrom?: string; sourcePeriodTo?: string }>();
+    const summaryGrants = await qualifySummaryGrants(enterpriseId, subjectGrants);
+    const activeGrants = subjectGrants.filter(grant => isGrantActive(grant, Date.now()));
     const summaries: Record<string, unknown>[] = [];
 
     for (const pack of list) {
@@ -1475,17 +1469,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         continue;
       }
 
-      let pinnedVersion = activeRev?.version;
+      let pinnedVersion = taskId ? existingPin?.packVersion : activeRev?.version;
       let pinnedManifest = activeRev;
-
-      // Determine whether this project holds any active grant on this member pack
-      const activeGrants = subjectGrants.filter(g => {
-        if (g.revokedAt) return false;
-        const nowMs = Date.now();
-        if (g.validFrom && Date.parse(g.validFrom) > nowMs) return false;
-        if (g.validTo && Date.parse(g.validTo) < nowMs) return false;
-        return true;
-      });
 
       if (projectId && taskId && activeRev && (isConstruction || activeGrants.length > 0)) {
         if (existingPin) {
@@ -1493,10 +1478,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           pinnedManifest = pack.packRevisions.find(r => r.version === existingPin.packVersion) ?? activeRev;
         } else if (enabled) {
           try {
-            const scopeDesc = isConstruction
-              ? 'construction-owner'
-              : activeGrants.map(g => `${g.operations.join(',')}:${g.scope.stores?.join('/') || g.scope.grain || g.scope.brand || '*'}`).join(';') || 'restricted';
-            const qualifiedPurposes = await qualifiedPinPurposes(pack, projectId, isConstruction, activeRev);
+            const scopeDesc = isConstruction ? 'construction-owner' : activeGrants.flatMap(grant => {
+              const operations = grant.operations.filter(operation => operation !== 'cite-summary' || summaryGrants.some(summary => summary.id === grant.id));
+              return operations.length ? [`${operations.join(',')}:${grant.scope.stores?.join('/') || grant.scope.grain || grant.scope.brand || '*'}`] : [];
+            }).join(';');
+            const qualifiedPurposes = qualifiedPinPurposes(activeRev, isConstruction, subjectGrants, summaryGrants);
             if (!qualifiedPurposes.length) throw new StudioError('member_pack_purpose_not_authorized', 403);
             const pin = packs.pinTaskVersion(pack.id, { projectId, taskId, authorizedScope: scopeDesc, qualifiedPurposes });
             pinnedVersion = pin.packVersion;
@@ -1526,12 +1512,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         continue;
       }
 
-      const eligibleSummaryGrantIds = new Set<string>();
-      if (options.verifySummaryAuthority) {
-        for (const g of subjectGrants) {
-          if (g.resourceRef && await summaryGrantEligible(enterpriseId, g)) eligibleSummaryGrantIds.add(g.id);
-        }
-      }
       const visiblePurposes = (pinnedManifest?.purposeManifests ?? [])
         .filter(pm => pm.status === 'eligible')
         .map(pm => {
@@ -1552,16 +1532,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               accessLevels: ['read-definition', 'cite-summary', 'read-detail-recalculate'] as ResourceGrantOperation[],
             };
           }
-          const access = evaluatePurposeAccessForSubject(subjectGrants, pm, legacyPeriods);
+          const access = evaluatePurposeAccessForSubject(subjectGrants, pm, summaryGrants);
           if (!access) return null;
-          if (access.canSummary.allowed && !access.canSummary.matchedGrantIds.some(id => eligibleSummaryGrantIds.has(id))) {
-            access.canSummary.allowed = false;
-          }
           const { canDef, canSummary, canDetail, hasPartialOrFullDetail, visibleDeps } = access;
 
           const matchedDetailGrants = subjectGrants.filter(g => canDetail.matchedGrantIds.includes(g.id));
           const allowedDataPaths = [...new Set(matchedDetailGrants.flatMap(g => g.scope.allowedDataPaths ?? []))];
-          const summaryGrant = canSummary.allowed && subjectGrants.some(g => canSummary.matchedGrantIds.includes(g.id) && eligibleSummaryGrantIds.has(g.id)) ? subjectGrants.find(g => canSummary.matchedGrantIds.includes(g.id) && eligibleSummaryGrantIds.has(g.id)) : undefined;
+          const summaryGrant = access.summaries[0];
 
           return {
             purposeId: pm.purposeId,
@@ -1591,7 +1568,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
                 grain: summaryGrant.scope.grain,
                 periodFrom: summaryGrant.scope.periodFrom,
                 periodTo: summaryGrant.scope.periodTo,
-                ...(summaryGrant.resourceRef ? { ref: summaryGrant.resourceRef } : {}),
+                ref: summaryGrant.resourceRef,
               },
             } : {}),
             ...(hasPartialOrFullDetail ? {
@@ -1615,6 +1592,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         pinnedVersion: pinnedVersion ?? null,
         revisionStatus: pinnedManifest?.status ?? 'draft',
         ...(!enabled ? { readOnlyRollback: true } : {}),
+        ...(!isConstruction && !visiblePurposes.length && pinnedManifest?.purposeManifests.some(pm => pm.status === 'eligible') ? {
+          authorizationRequired: true,
+          authorizationNote: '当前授权未覆盖此版本的可用用途。请到企业 Studio「三层资源授权」，由原权责维护主体核对用途、来源版本及期间。',
+        } : {}),
         purposes: visiblePurposes,
       });
     }
@@ -1634,95 +1615,48 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     if (!list.length) return {};
 
     const subjectGrants = projectGrants(enterpriseId, projectId);
+    const summaryGrants = await qualifySummaryGrants(enterpriseId, subjectGrants);
+    const boundSummaryGrants = subjectGrants.filter(grant => grant.operations.includes('cite-summary') && grant.resourceRef
+      && grant.resourceRef.authority === ref.authority && grant.resourceRef.id === ref.id && grant.resourceRef.version === ref.version);
+    let denied = false;
     for (const pack of list) {
       if (isConstructionOwnerProject(pack, projectId)) continue;
       const pin = packs.getTaskPin(pack.id, projectId, taskId);
       const belongsToPack = packContainsSourceRef(pack, ref);
       // In read-only rollback mode, unpinned new tasks receive NO pack-mediated supply!
       if (!enabled && !pin) {
-        if (belongsToPack) throw new StudioError('member_pack_disabled_readonly', 403);
+        if (belongsToPack || boundSummaryGrants.length) throw new StudioError('member_pack_disabled_readonly', 403);
         continue;
       }
       const rev = pin
         ? pack.packRevisions.find(r => r.version === pin.packVersion)
         : pack.packRevisions.find(r => r.status === 'active');
       if (!rev) {
-        if (belongsToPack) throw new StudioError('resource_access_denied', 403);
+        if (belongsToPack || boundSummaryGrants.length) denied = true;
         continue;
       }
 
-      // Check if ref is a Host-authorized summary ref (live active check + purposeKey + full scope)
-      const nowMs = Date.now();
-      const activeSummaryGrants = subjectGrants.filter(g =>
-        isGrantActive(g, nowMs)
-        && g.operations.includes('cite-summary')
-        && g.resourceRef
-        && sameExactSourceRef(g.resourceRef, ref),
-      );
-      if (activeSummaryGrants.length) {
-        const eligiblePurposes = rev.purposeManifests.filter(pm => pm.status === 'eligible');
-        let summaryAllowed = false;
-        for (const grant of activeSummaryGrants) {
-          let sourcePeriodFrom = grant.scope.sourcePeriodFrom;
-          let sourcePeriodTo = grant.scope.sourcePeriodTo;
-          if (!grant.scope.sourcePeriodVerified && options.verifySummaryAuthority && grant.resourceRef) {
-            try {
-              const verified = await options.verifySummaryAuthority(pack.enterpriseId, { resourceRef: grant.resourceRef, grain: grant.scope.grain });
-              sourcePeriodFrom = verified.sourcePeriodFrom;
-              sourcePeriodTo = verified.sourcePeriodTo;
-            } catch {
-              if (grant.scope.periodFrom || grant.scope.periodTo) continue;
-            }
-            if ((grant.scope.periodFrom || grant.scope.periodTo) && (!sourcePeriodFrom || !sourcePeriodTo)) continue;
-          }
-          const applicablePurposes = grant.purposeKeys?.length
-            ? (grant.purposeKeys.includes('*') ? eligiblePurposes : eligiblePurposes.filter(pm => grant.purposeKeys!.includes(pm.purposeKey)))
-            : eligiblePurposes;
-          for (const purpose of applicablePurposes) {
-            const evalSummary = evaluateResourceAccess([grant], {
-              operation: 'cite-summary',
-              purposeKey: purpose.purposeKey,
-              ...(purpose.scope?.brand ? { brand: purpose.scope.brand } : {}),
-              ...(purpose.scope?.channel ? { channel: purpose.scope.channel } : {}),
-              grain: grant.scope.grain,
-              summaryVersion: grant.scope.summaryVersion,
-            });
-            if (!evalSummary.allowed) continue;
-            if (!isSourcePeriodCovered(sourcePeriodFrom, sourcePeriodTo, grant.scope.periodFrom, grant.scope.periodTo, purpose.scope?.period, grant.scope.sourcePeriodVerified || sourcePeriodFrom !== undefined)) continue;
-            summaryAllowed = true;
-            break;
-          }
-          if (summaryAllowed) break;
-        }
-        if (summaryAllowed) return { matchedPack: { packId: pack.id, packVersion: rev.version, purposeIds: pin?.purposeIds ?? [], summaryAuthorized: true } };
-        throw new StudioError('resource_access_denied', 403);
+      const eligible = rev.purposeManifests.map(purpose => ({
+        purpose, access: evaluatePurposeAccessForSubject(subjectGrants, purpose, summaryGrants),
+      }));
+      const summaryPurposes = eligible.filter(({ access }) =>
+        access?.summaries.some(grant => sameSummarySource(grant.resourceRef, ref)));
+      if (summaryPurposes.length) {
+        return { matchedPack: {
+          packId: pack.id, packVersion: rev.version, purposeIds: summaryPurposes.map(({ purpose }) => purpose.purposeId), summaryAuthorized: true,
+        } };
       }
-      if (subjectGrants.some(g => !isGrantActive(g, nowMs) && g.operations.includes('cite-summary') && g.resourceRef && sameExactSourceRef(g.resourceRef, ref))) {
-        throw new StudioError('resource_grant_revoked', 403);
+      if (!boundSummaryGrants.length) {
+        const purposes = eligible.filter(({ access }) => access?.visibleDeps.some(dep => sameExactSourceRef(dep.ref, ref)));
+        if (purposes.length) return { matchedPack: { packId: pack.id, packVersion: rev.version, purposeIds: purposes.map(({ purpose }) => purpose.purposeId) } };
       }
-
-      // Check if ref belongs to any dependency in the pinned revision using the EXACT unified purpose/dependency filter!
-      const matchedPurposes = rev.purposeManifests.filter(pm =>
-        pm.status === 'eligible' && pm.dependencies.some(d => sameExactSourceRef(d.ref, ref)),
-      );
-      if (matchedPurposes.length > 0) {
-        const allowedPurposes = matchedPurposes.filter(pm => {
-          const access = evaluatePurposeAccessForSubject(subjectGrants, pm);
-          return Boolean(access && access.visibleDeps.some(d => sameExactSourceRef(d.ref, ref)));
-        });
-        if (!allowedPurposes.length) {
-          throw new StudioError(subjectGrants.some(g => Boolean(g.revokedAt)) ? 'resource_grant_revoked' : 'resource_access_denied', 403);
-        }
-        return { matchedPack: { packId: pack.id, packVersion: rev.version, purposeIds: allowedPurposes.map(pm => pm.purposeId) } };
-      }
-
-      // If this project has a revoked summary grant for this exact ref, or if ref belongs to another unpinned/suspended purpose in this pack, block immediately!
-      if (subjectGrants.some(g => g.revokedAt && g.resourceRef && sameExactSourceRef(g.resourceRef, ref))) {
-        throw new StudioError('resource_grant_revoked', 403);
-      }
-      if (belongsToPack) {
-        throw new StudioError(subjectGrants.some(g => Boolean(g.revokedAt)) ? 'resource_grant_revoked' : 'resource_access_denied', 403);
-      }
+      if (belongsToPack || boundSummaryGrants.length) denied = true;
+    }
+    if (denied) {
+      const revoked = boundSummaryGrants.length
+        ? boundSummaryGrants.every(grant => !isGrantActive(grant, Date.now()))
+        : subjectGrants.some(grant => grant.revokedAt);
+      throw new StudioError(revoked ? 'resource_grant_revoked' : 'resource_access_denied', 403);
     }
     return {};
   }
@@ -2142,11 +2076,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return { verifierReads, summary, wrongVersion: false, failed: assessment.status === 'fail' };
   }
 
-  async function redactPackForConsumer(pack: EnterpriseDomainPack, projectId: string): Promise<EnterpriseDomainPack> {
+  async function redactPackForConsumer(pack: EnterpriseDomainPack, projectId: string, qualifiedSummaries?: QualifiedSummaryGrant[]): Promise<EnterpriseDomainPack> {
     const { activeOwnerProjectId: _owner, continuationHistory: _continuations, ...visiblePack } = pack;
     const subjectGrants = projectGrants(pack.enterpriseId, projectId);
     const nowMs = Date.now();
     const activeGrants = subjectGrants.filter(g => !g.revokedAt && (!g.validFrom || Date.parse(g.validFrom) <= nowMs) && (!g.validTo || Date.parse(g.validTo) >= nowMs));
+    const summaryGrants = qualifiedSummaries ?? await qualifySummaryGrants(pack.enterpriseId, activeGrants);
     const ownPins = pack.taskPins.filter(p => p.projectId === projectId);
     const ownUses = pack.useRecords.filter(u => u.projectId === projectId);
     const purposeForUse = (use: EnterprisePackUseRecord) => pack.packRevisions.find(revision => revision.version === use.packVersion)
@@ -2154,7 +2089,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const readableUses = new Set<string>();
     const declarations = activeGrants.length ? options.studio.get(pack.systemId).uses : [];
     for (const use of ownUses) {
-      if (!reportUseCovered(use, purposeForUse(use), activeGrants)) continue;
+      if (!reportUseCovered(use, purposeForUse(use), use.accessLevel === 'summary' ? summaryGrants : activeGrants)) continue;
       if (use.accessLevel === 'recalculate') {
         const declaration = declarations.find(record => matchesStudioUse(use, record));
         if (!declaration) continue;
@@ -2182,16 +2117,6 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       .filter(f => f.reports.some(r => r.projectId === projectId))
       .map(f => ({ ...f, reports: f.reports.filter(r => r.projectId === projectId) }));
     const ownPinnedVersions = new Set([...ownPins.map(p => p.packVersion), ...ownUses.map(u => u.packVersion)]);
-
-    // Unified purpose & dependency filter identical to buildPackCatalogSummary & inspectPinnedSourceRead!
-    const filterPurposeManifest = (pm: EnterpriseDomainPack['packRevisions'][number]['purposeManifests'][number]) => {
-      const access = evaluatePurposeAccessForSubject(subjectGrants, pm);
-      if (!access) return null;
-      return {
-        ...pm,
-        dependencies: access.visibleDeps,
-      };
-    };
 
     if (activeGrants.length === 0) {
       // Ungranted or revoked project: strip ALL unauthorized purpose manifests, dependencies, and module receipts!
@@ -2230,85 +2155,79 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       };
     }
 
-    const activeSummaryRefs = activeGrants
-      .filter(g => g.operations.includes('cite-summary') && g.resourceRef)
-      .map(g => g.resourceRef!);
+    const refsByVersion = new Map<string, Map<string, StudioSourceRef[]>>();
+    const filteredRevisions = pack.packRevisions.flatMap(revision => {
+      if (!enabled && !ownPinnedVersions.has(revision.version)) return [];
+      const refsByPurpose = new Map<string, StudioSourceRef[]>();
+      const manifests = revision.purposeManifests.flatMap(pm => {
+        const access = evaluatePurposeAccessForSubject(activeGrants, pm, summaryGrants);
+        if (!access) return [];
+        const { summaryAccess, ...manifest } = pm;
+        refsByPurpose.set(pm.purposeId, [...access.visibleDeps.map(dep => dep.ref), ...access.summaries.map(grant => grant.resourceRef)]);
+        return [{
+          ...manifest, dependencies: access.visibleDeps,
+          ...(summaryAccess && access.canSummary.allowed ? { summaryAccess } : {}),
+        }];
+      });
+      if (!manifests.length && !ownPinnedVersions.has(revision.version)) return [];
+      refsByVersion.set(revision.version, refsByPurpose);
+      const receipts = revision.moduleReceipts.flatMap(receipt => {
+        const purposeIds = receipt.purposeIds.filter(id => refsByPurpose.get(id)?.some(ref => sameExactSourceRef(ref, receipt.targetRef)));
+        return purposeIds.length ? [{ ...receipt, purposeIds }] : [];
+      });
+      return [{ ...revision, decisionsSnapshot: [], purposeManifests: manifests, moduleReceipts: receipts }];
+    });
 
-    // Active consumer project (or rollback mode with existing pins & active grants):
-    // filter revisions, purposeManifests, dependencies, AND moduleReceipts using the exact same permission filter!
-    const filteredRevisions = pack.packRevisions
-      .filter(r => enabled || ownPinnedVersions.has(r.version))
-      .map(r => {
-        const manifests = r.purposeManifests.map(filterPurposeManifest).filter((x): x is NonNullable<typeof x> => Boolean(x));
-        if (!manifests.length && !ownPinnedVersions.has(r.version)) return null;
-        const allowedRevPurposeIds = new Set(manifests.map(m => m.purposeId));
-        const allowedRevRefs = [
-          ...manifests.flatMap(m => m.dependencies.map(d => d.ref)),
-          ...activeSummaryRefs,
-        ];
-        const filteredReceipts = r.moduleReceipts
-          .filter(rec =>
-            allowedRevRefs.some(ar => sameExactSourceRef(ar, rec.targetRef))
-            && rec.purposeIds.some(pid => allowedRevPurposeIds.has(pid)),
-          )
-          .map(rec => ({
-            ...rec,
-            purposeIds: rec.purposeIds.filter(pid => allowedRevPurposeIds.has(pid)),
-          }));
-        return {
-          ...r,
-          decisionsSnapshot: [],
-          purposeManifests: manifests,
-          moduleReceipts: filteredReceipts,
-        };
-      })
-      .filter((x): x is NonNullable<typeof x> => Boolean(x));
-
-    const allowedPurposeIds = new Set(filteredRevisions.flatMap(r => r.purposeManifests.map(pm => pm.purposeId)));
-    const allAllowedRefs = [
-      ...filteredRevisions.flatMap(r => r.purposeManifests.flatMap(pm => pm.dependencies.map(d => d.ref))),
-      ...activeSummaryRefs,
-    ];
-    const isRefAllowed = (ref: StudioSourceRef) => allAllowedRefs.some(ar => sameExactSourceRef(ar, ref));
+    function visibleRefs(version: string, purposeIds: string[]) {
+      const byPurpose = refsByVersion.get(version);
+      const visiblePurposes = purposeIds.filter(id => byPurpose?.has(id));
+      const refs = visiblePurposes.flatMap(id => byPurpose!.get(id)!);
+      return { purposeIds: visiblePurposes, includes: (ref: StudioSourceRef) => refs.some(allowed => sameExactSourceRef(allowed, ref)) };
+    }
 
     return {
       ...visiblePack,
-        upgradeImpacts: [],
+      upgradeImpacts: [],
       panorama: undefined,
       panoramaHistory: [],
       entries: [],
       purposes: [],
       previews: [],
       packRevisions: filteredRevisions,
-      taskPins: ownPins.map(p => ({
-        ...p,
-        purposeIds: p.purposeIds.filter(pid => allowedPurposeIds.has(pid)),
-        pinnedAuthorityRefs: p.pinnedAuthorityRefs.filter(isRefAllowed),
-      })),
-      useRecords: ownUses.map(u => ({
-        ...u,
-        catalogSupplied: {
-          ...u.catalogSupplied,
-          purposeIds: u.catalogSupplied.purposeIds.filter(pid => allowedPurposeIds.has(pid)),
-          assetRefs: u.catalogSupplied.assetRefs.filter(isRefAllowed),
-        },
-        actualReads: mayReadUse(u) ? u.actualReads.filter(r => isRefAllowed(r.ref)) : [],
-        independentVerification: mayReadUse(u) ? {
-          ...u.independentVerification,
-          verifierActualReads: u.independentVerification.verifierActualReads?.filter(read => isRefAllowed(read.ref)),
-        } : unavailableEvidence(u),
-        ...(u.authorDeclaration && mayReadUse(u) ? {
-          authorDeclaration: {
-            ...u.authorDeclaration,
-            declaredRefs: u.authorDeclaration.declaredRefs.filter(isRefAllowed),
+      taskPins: ownPins.map(pin => {
+        const visible = visibleRefs(pin.packVersion, pin.purposeIds);
+        return { ...pin, purposeIds: visible.purposeIds, pinnedAuthorityRefs: pin.pinnedAuthorityRefs.filter(visible.includes) };
+      }),
+      useRecords: ownUses.map(use => {
+        const catalog = visibleRefs(use.catalogSupplied.packVersion, use.catalogSupplied.purposeIds);
+        const purpose = visibleRefs(use.packVersion, [use.purposeId]);
+        const readable = mayReadUse(use);
+        return {
+          ...use,
+          catalogSupplied: {
+            ...use.catalogSupplied, purposeIds: catalog.purposeIds, assetRefs: use.catalogSupplied.assetRefs.filter(catalog.includes),
           },
-        } : { authorDeclaration: undefined }),
-      })),
-      feedbackItems: ownFeedback.map(f => ({
-        ...f,
-        ...(f.targetAssetRef && !isRefAllowed(f.targetAssetRef) ? { targetAssetRef: undefined } : {}),
-        reports: f.reports.map(report => { const visible = publicFeedbackReport(report); return { ...visible, usedAssetRefs: visible.usedAssetRefs.filter(isRefAllowed) }; }),
-      })),
+          actualReads: readable ? use.actualReads.filter(read => purpose.includes(read.ref)) : [],
+          independentVerification: readable ? {
+            ...use.independentVerification,
+            verifierActualReads: use.independentVerification.verifierActualReads?.filter(read => purpose.includes(read.ref)),
+          } : unavailableEvidence(use),
+          authorDeclaration: use.authorDeclaration && readable
+            ? { ...use.authorDeclaration, declaredRefs: use.authorDeclaration.declaredRefs.filter(purpose.includes) }
+            : undefined,
+        };
+      }),
+      feedbackItems: ownFeedback.map(feedback => {
+        const visible = visibleRefs(feedback.packVersion, feedback.purposeIds);
+        return {
+          ...feedback,
+          targetAssetRef: feedback.targetAssetRef && visible.includes(feedback.targetAssetRef) ? feedback.targetAssetRef : undefined,
+          reports: feedback.reports.map(report => {
+            const scoped = publicFeedbackReport(report);
+            return { ...scoped, usedAssetRefs: scoped.usedAssetRefs.filter(visible.includes) };
+          }),
+        };
+      }),
     };
   }
 
@@ -2404,8 +2323,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
     const created: EnterprisePackUseRecord[] = [];
     const subjectGrants = projectGrants(enterpriseId, input.projectId);
-    const nowMs = Date.now();
-    const activeGrants = subjectGrants.filter(g => !g.revokedAt && (!g.validFrom || Date.parse(g.validFrom) <= nowMs) && (!g.validTo || Date.parse(g.validTo) >= nowMs));
+    const summaryGrants = await qualifySummaryGrants(enterpriseId, subjectGrants);
 
     for (const pack of matchingPacks) {
       const existingPin = packs.getTaskPin(pack.id, input.projectId, input.taskId);
@@ -2420,10 +2338,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const candidateRefs = [...declaredRefs, ...readRefs];
 
       const isConstruction = isConstructionOwnerProject(pack, input.projectId);
-      const eligiblePurposes = rev.purposeManifests.filter(pm => {
-        if (pm.status !== 'eligible') return false;
-        if (!isConstruction && !evaluatePurposeAccessForSubject(subjectGrants, pm)) return false;
-        return pm.dependencies.some(dep => candidateRefs.some(ref => sameExactSourceRef(dep.ref, ref)));
+      const eligiblePurposes = rev.purposeManifests.flatMap(pm => {
+        if (pm.status !== 'eligible') return [];
+        const access = evaluatePurposeAccessForSubject(subjectGrants, pm, summaryGrants);
+        const refs = isConstruction ? pm.dependencies.map(dep => dep.ref)
+          : [...(access?.visibleDeps ?? []).map(dep => dep.ref), ...(access?.summaries ?? []).map(grant => grant.resourceRef)];
+        return refs.some(ref => candidateRefs.some(candidate => sameExactSourceRef(ref, candidate))) ? [{ pm, access }] : [];
       });
 
       if (!eligiblePurposes.length) continue;
@@ -2431,24 +2351,16 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       // Prefer calculation-tier purposes when their dependencies match, otherwise record each matched purpose once
       const sortedPurposes = [...eligiblePurposes].sort((a, b) => {
         const score = (tier: string) => (tier === 'formal-calculation' ? 2 : tier === 'limited-calculation' ? 1 : 0);
-        return score(b.tier) - score(a.tier);
+        return score(b.pm.tier) - score(a.pm.tier);
       });
 
-      for (const pm of sortedPurposes) {
+      for (const { pm, access: purposeAccess } of sortedPurposes) {
         const already = pack.useRecords.find(use => use.purposeId === pm.purposeId && matchesStudioUse(use, input.studioUse));
         if (already) {
           created.push(already);
           continue;
         }
-        const purposeAccess = evaluatePurposeAccessForSubject(activeGrants, pm);
-        const hasDetailGrant = isConstruction || Boolean(purposeAccess?.hasPartialOrFullDetail);
-        const hasSummaryGrant = Boolean(purposeAccess?.canSummary.allowed);
-        const accessLevel: 'definition' | 'summary' | 'recalculate' =
-          (pm.tier === 'formal-calculation' || pm.tier === 'limited-calculation') && hasDetailGrant
-            ? 'recalculate'
-            : hasSummaryGrant && !hasDetailGrant
-              ? 'summary'
-              : 'definition';
+        const accessLevel = useAccessLevel(pm, isConstruction, purposeAccess);
 
         const recorded = packs.recordUse(pack.id, {
           projectId: input.projectId,
@@ -3374,30 +3286,29 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         let summaryVerifiedAuthority: string | undefined;
 
         if (ops.includes('cite-summary')) {
-          if (options.verifySummaryAuthority) {
-            const verified = await options.verifySummaryAuthority(enterpriseId, {
-              summaryAssetId: typeof rawScope.summaryAssetId === 'string' ? rawScope.summaryAssetId : undefined,
-              summaryVersion: typeof rawScope.summaryVersion === 'string' ? rawScope.summaryVersion : undefined,
-              resourceRef: verifiedResourceRef,
-              grain: typeof rawScope.grain === 'string' ? rawScope.grain : undefined,
-              periodFrom: typeof rawScope.periodFrom === 'string' ? rawScope.periodFrom : undefined,
-              periodTo: typeof rawScope.periodTo === 'string' ? rawScope.periodTo : undefined,
-            });
-            rawScope.summaryAssetId = verified.summaryAssetId;
-            rawScope.summaryVersion = verified.summaryVersion;
-            rawScope.summaryAuthority = verified.summaryAuthority;
-            rawScope.summarySha256 = verified.summarySha256;
-            rawScope.verifiedScopeSummary = verified.verifiedScopeSummary;
-            delete rawScope.sourcePeriodFrom;
-            delete rawScope.sourcePeriodTo;
-            rawScope.sourcePeriodVerified = true;
-            if (verified.sourcePeriodFrom) rawScope.sourcePeriodFrom = verified.sourcePeriodFrom;
-            if (verified.sourcePeriodTo) rawScope.sourcePeriodTo = verified.sourcePeriodTo;
-            verifiedResourceRef = verified.resourceRef;
-            summaryOwnerProjectId = verified.ownerProjectId;
-            summaryOwnerSystemId = verified.ownerSystemId;
-            summaryVerifiedAuthority = verified.summaryAuthority;
-          }
+          if (!options.verifySummaryAuthority) throw new StudioError('summary_authority_not_found', 404);
+          const verified = await options.verifySummaryAuthority(enterpriseId, {
+            summaryAssetId: typeof rawScope.summaryAssetId === 'string' ? rawScope.summaryAssetId : undefined,
+            summaryVersion: typeof rawScope.summaryVersion === 'string' ? rawScope.summaryVersion : undefined,
+            resourceRef: verifiedResourceRef,
+            grain: typeof rawScope.grain === 'string' ? rawScope.grain : undefined,
+            periodFrom: typeof rawScope.periodFrom === 'string' ? rawScope.periodFrom : undefined,
+            periodTo: typeof rawScope.periodTo === 'string' ? rawScope.periodTo : undefined,
+          });
+          rawScope.summaryAssetId = verified.summaryAssetId;
+          rawScope.summaryVersion = verified.summaryVersion;
+          rawScope.summaryAuthority = verified.summaryAuthority;
+          rawScope.summarySha256 = verified.summarySha256;
+          rawScope.verifiedScopeSummary = verified.verifiedScopeSummary;
+          delete rawScope.sourcePeriodFrom;
+          delete rawScope.sourcePeriodTo;
+          rawScope.sourcePeriodVerified = true;
+          if (verified.sourcePeriodFrom) rawScope.sourcePeriodFrom = verified.sourcePeriodFrom;
+          if (verified.sourcePeriodTo) rawScope.sourcePeriodTo = verified.sourcePeriodTo;
+          verifiedResourceRef = verified.resourceRef;
+          summaryOwnerProjectId = verified.ownerProjectId;
+          summaryOwnerSystemId = verified.ownerSystemId;
+          summaryVerifiedAuthority = verified.summaryAuthority;
         }
 
         // Resolve the EXACT owning Studio system & active owner project for the target member pack / resource!
@@ -3571,7 +3482,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const reader = await packReaderProject(operator, null, enterpriseId);
       if (!reader) throw new StudioError('member_pack_operator_context_required', 403);
       const subjectGrants = visibleGrants(enterpriseId, reader.projectId, operator).filter(grant => grant.subjectId === subjectId);
-      const evaluation = evaluateResourceAccess(subjectGrants, { ...input, at: new Date().toISOString() } as unknown as ResourceAccessQuery);
+      const eligible = input.operation === 'cite-summary' ? await qualifySummaryGrants(enterpriseId, subjectGrants) : subjectGrants;
+      const evaluation = evaluateResourceAccess(eligible, { ...input, at: new Date().toISOString() } as unknown as ResourceAccessQuery);
       json(response, 200, { evaluation });
       return true;
     }
@@ -3588,7 +3500,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const operator = resolveRequestOperator(request);
       if (enterpriseId) assertOperatorProject(operator, projectId);
       const enterprisePacks = enterpriseId
-        ? await Promise.all(packs.list(enterpriseId).map(pack => scopedPack(pack, projectId, operator)))
+        ? await scopedPacks(packs.list(enterpriseId), projectId, operator)
         : [];
       const matchingUses: Array<{
         packId: string;
@@ -3676,7 +3588,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const owned = reader && rawList.find(pack => canReadConstructionPack(pack, reader.projectId, operator));
       const grantAuthority = owned && reader ? await resolveGrantAuthorityForProject(owned.enterpriseId, reader.projectId, owned, operator) : undefined;
       json(response, 200, {
-        packs: reader ? await Promise.all(rawList.map(pack => scopedPack(pack, reader.projectId, operator))) : [],
+        packs: reader ? await scopedPacks(rawList, reader.projectId, operator) : [],
         readOnlyRollback: !enabled,
         ...(grantAuthority ? { grantAuthority } : {}),
       });
@@ -3833,7 +3745,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const existingPin = taskId ? packs.getTaskPin(packId, project.id, taskId) : undefined;
         const version = existingPin?.packVersion ?? (typeof input.version === 'string' ? input.version : undefined);
         const pinRevision = version ? currentPack.packRevisions.find(revision => revision.version === version) : currentPack.packRevisions.find(revision => revision.status === 'active');
-        const permitted = action === 'pin' || action === 'uses' ? await qualifiedPinPurposes(currentPack, project.id, construction, pinRevision) : undefined;
+        const qualifiesPurposes = action === 'pin' || action === 'uses';
+        const subjectGrants = qualifiesPurposes ? projectGrants(currentPack.enterpriseId, project.id) : [];
+        const summaryGrants = await qualifySummaryGrants(currentPack.enterpriseId, subjectGrants);
+        const permitted = qualifiesPurposes ? qualifiedPinPurposes(pinRevision, construction, subjectGrants, summaryGrants) : undefined;
         if (permitted && (permitted.length === 0 || (action === 'uses' && !permitted.some(purpose => purpose.purposeId === input.purposeId)))) {
           throw new StudioError('member_pack_purpose_not_authorized', 403);
         }
@@ -4084,12 +3999,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             purposeId: pm.purposeId,
             purposeKey: pm.purposeKey,
             tier: pm.tier,
-            accessLevel: (() => {
-              const access = evaluatePurposeAccessForSubject(projectGrants(currentPack.enterpriseId, pid), pm);
-              if (pm.tier !== 'definition-reference' && (construction || access?.hasPartialOrFullDetail)) return 'recalculate';
-              if (access?.canSummary.allowed && !access?.hasPartialOrFullDetail) return 'summary';
-              return 'definition';
-            })(),
+            accessLevel: useAccessLevel(pm, construction, evaluatePurposeAccessForSubject(subjectGrants, pm, summaryGrants)),
             ...(pm.policyEffectiveFrom ? { policyEffectiveFrom: pm.policyEffectiveFrom } : {}),
             ...(nativeEv.taskCutoffAt ? { dataCutoffAt: nativeEv.taskCutoffAt } : typeof input.dataCutoffAt === 'string' ? { dataCutoffAt: input.dataCutoffAt } : {}),
             catalogSupplied: {
@@ -4272,7 +4182,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         };
         const result = await options.operations.run(requestId, { path: url.pathname, input }, performAction);
         if (!taskAction || !result.result) return result;
-        const pack = await scopedPack(packs.get(packId), project.id, operator);
+        const pack = await scopedPack(packs.get(packId), project.id, operator, qualifiesPurposes ? summaryGrants : undefined);
         const resultBody = result.result;
         return { ...result, result: {
           ...resultBody, pack,

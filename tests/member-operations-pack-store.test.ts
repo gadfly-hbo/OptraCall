@@ -2050,16 +2050,13 @@ test('purposeKeys wildcard * grants access to any purpose; empty purposeKeys mea
     const pGrant2 = grants.get(periodGrant.id);
     assert.equal(isPeriodCovered('2026-09', pGrant2.scope.periodFrom, pGrant2.scope.periodTo), false, 'half-month grant must not cover full September');
     assert.equal(isPeriodCovered('2026-09-01', pGrant2.scope.periodFrom, pGrant2.scope.periodTo), true, 'single day within grant passes');
-    assert.equal(isSourcePeriodCovered('2026-08', '2026-09', '2026-08-01', '2026-08-31', undefined, true), false, 'cross-month source: grant only covers first month');
-    assert.equal(isSourcePeriodCovered('2026-08', '2026-09', '2026-08-01', '2026-09-30', undefined, true), true, 'cross-month source: grant covers both months');
-    assert.equal(isSourcePeriodCovered(undefined, undefined, '2026-09-01', '2026-09-15', undefined, true), false, 'unknown source period: deny even with finite grant');
-    assert.equal(isSourcePeriodCovered('2026-09-15', '2026-09-15', '2026-09-15', '2026-09-15', undefined, true), true, 'single-day source with single-day grant: allow');
-    assert.equal(isSourcePeriodCovered('2026-09-15', '2026-09-15', '2026-09-01', '2026-09-30', undefined, true), true, 'single-day source with month grant: allow (grant covers source)');
-    assert.equal(isSourcePeriodCovered(undefined, undefined, undefined, undefined, undefined, true), true, 'no period restriction grant + unknown source: allow');
-    assert.equal(isSourcePeriodCovered(undefined, undefined, '2026-09-01', '2026-09-30', undefined, true), false, 'restricted grant + unknown source: deny');
-    assert.equal(isSourcePeriodCovered(undefined, undefined, '2026-09-01', '2026-09-30', '2026-09', undefined), true, 'legacy grant without sourcePeriodVerified: fallback to purpose period');
-    assert.equal(isSourcePeriodCovered(undefined, undefined, '2026-09-01', '2026-09-15', '2026-09', undefined), false, 'legacy grant fallback: purpose period not covered by grant');
-    assert.equal(isSourcePeriodCovered('2026-08', '2026-09', '2026-08-01', '2026-09-30', undefined, true), true, 'new grant with verified cross-month range: full coverage allows');
+    assert.equal(isSourcePeriodCovered('2026-08', '2026-09', '2026-08-01', '2026-08-31'), false, 'A grant for August cannot cover an August–September source');
+    assert.equal(isSourcePeriodCovered('2026-08', '2026-09', '2026-08-01', '2026-09-30'), true);
+    assert.equal(isSourcePeriodCovered('2026-09-15', '2026-09-15', '2026-09-15', '2026-09-15'), true);
+    assert.equal(isSourcePeriodCovered('2026-09-15', '2026-09-15', '2026-09-01', '2026-09-30'), true);
+    assert.equal(isSourcePeriodCovered(undefined, undefined, undefined, undefined), true, 'A qualified source with unknown dates remains available with an unrestricted grant');
+    assert.equal(isSourcePeriodCovered(undefined, undefined, '2026-09-01', '2026-09-30'), false, 'Finite grants require dates from the source itself');
+    assert.equal(isSourcePeriodCovered('2026-10', '2026-09', '2026-09-01', '2026-10-31'), false, 'Reversed source periods cannot qualify');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

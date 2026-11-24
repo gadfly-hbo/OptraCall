@@ -1,6 +1,6 @@
 # Issue #121 实施与验证记录
 
-状态：实施中；以下项目未实际完成前均不为 PASS。
+下文按时间保留试用、原候选和返工记录。最终提交、两轮 CI 及工程结案状态见 [Issue #121](https://github.com/gadfly-hbo/OptraCall/issues/121)。设备采用和用户产品验收分别记录。
 
 ## 身份与证据位置
 
@@ -204,3 +204,18 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 
 1. **目录 accessLevels 不再误报。** `buildPackCatalogSummary` 在 `evaluatePurposeAccessForSubject` 返回后，用 `eligibleSummaryGrantIds` 过滤 `canSummary.allowed`。无资格时 `accessLevels` 不再包含 `cite-summary`。
 2. **较早草稿不能签发授权。** `verifySummaryAuthority` 增加 `revNum > asset.formalRevision` 检查，所有晚于当前正式版的草稿（包括较早的 v3）拒绝签发。合法历史发布版继续可读。
+
+### 第十六次候选的独立复核与 Codex 接手
+
+Qoder 最后交回 `5e9b001c52e3cba6d89c9c1263e80032eb8ade9e`。PM 在合入当时最新 main 的 `a2b512e1ce6be7b3c97f3e1bc232bd28777592fb` 上复核，六项隔离检查五项通过。剩余一项涉及企业可以引用哪个 Studio 版本。v1、v2 已正式发布，v3 只保存过草稿，直接发布后续 v4 时，系统把 v3 也当作可签发汇总授权的版本。期望拒绝，实得 200。前述第十六次修正覆盖了晚于当前正式版的草稿。此处补记被正式版跳过的历史草稿。修前合成记录保存在 `.local/issue-121/pm-takeover/r16-review.log`。
+
+用户授权 Codex 直接接手，继续沿同一 Issue 处理。产品要求是保留准确已发布的历史版，复用原发布记录核对选定版，并让目录、任务固定、实际采用与汇总读取遵守一致的资格。定义、汇总和明细各自沿用原授权。[接手回执](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7122043523)
+
+**修正范围与交验路径**
+
+- Studio 按企业、资产、准确版本与摘要核对原系统的确认发布记录，并读取该版自己的问题标记。显式引用、已有授权和按资产编号选择均使用同一依据。用户选择一个仍有效的历史正式版时，保留原版本和原授权。
+- 会员包 Host 重新核实汇总来源、完整统计期间与授权用途，向目录、任务固定、读取和采用记录提供同一资格。来源停用时，独立有效的定义和明细权限继续使用。有限期间需要可核对的来源期间，无期限授权仍需核对来源当前有效。历史记录按原样保留。
+- 沿用官方 Pi、原 Studio 发布记录与授权存储。Host 核对环境和权限，Agent 按需要选用合格资产，用户无需重新提交原有合法授权。公开结果和远端 CI 见 Issue 结案回执。原首稿、已知限制和跳过项继续留存。
+- 交付后的设备更新及产品验收由用户安排。如设备试用出现回归，记录源码、实际运行版本与操作入口，回到本单跟踪。代码回退需保留期间新增资产、会话和授权，重新核对旧版本的授权行为，勿用旧业务库覆盖现有资料。
+
+正常入口回归使用隔离企业、任务及合成材料，经 Host 重开验证既有授权。覆盖选中用途、目录、准确读取、采用登记、新任务在来源停用后的可见范围及独立定义／明细授权。四项聚焦回归通过。另有 25 项 Host、授权、存储及采用证据检查、66 项会话、交付、SAP 与诊断回归通过。永久用例在 `tests/member-operations-pack-runtime.test.ts`、`tests/member-operations-pack-store.test.ts`、`tests/studio-store.test.ts`。冻结后全量结果与两轴非作者复核随交付 SHA 记录在同一工单。

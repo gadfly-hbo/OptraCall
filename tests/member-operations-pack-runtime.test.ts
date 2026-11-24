@@ -2673,3 +2673,202 @@ test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexist
   assert.equal(fs.existsSync(path.join(projConsumer.rootPath, '060_reports', 'held.md')), false, 'A late staged report is never published after retirement');
   assert.deepEqual(provider.errors, []);
 });
+
+test('Summary citations follow the active source and preserve independent purpose grants across Host upgrades', { timeout: 90_000 }, async t => {
+  const provider = await startToolProvider();
+  t.after(() => provider.close());
+  let host = await startTestHost();
+  t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', {
+    name: '合成汇总核对', provider: 'openai-compatible', baseUrl: provider.baseUrl,
+    model: 'synthetic-summary', apiKey: 'synthetic-only',
+  }));
+  const enterprise = await json(await host.request('/api/studio/enterprises', 'POST', { requestId: randomUUID(), name: '合成月报企业' }), 201);
+  const enterpriseId = enterprise.id;
+  const credentials = { operatorId: 'monthly-owner', passcode: 'monthly-owner-synthetic' };
+  let cookie = '';
+  function bind(response: Response) {
+    const header = response.headers.get('set-cookie');
+    assert.ok(header);
+    cookie = header.split(';')[0]!;
+    return response;
+  }
+  const owner = (route: string, method = 'GET', body?: unknown) => fetch(host.baseUrl + route, {
+    method, headers: { ...host.headers, cookie }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  await json(bind(await host.request('/api/studio/operators/session', 'POST', {
+    action: 'register', displayName: '月报负责人', ...credentials,
+  })));
+  const { project: builder } = await json(bind(await owner('/api/projects', 'POST', { name: '汇总建设' })), 201);
+  async function associate(kind: string, entityId: string) {
+    await json(await host.request('/api/studio/enterprise-associations', 'POST', {
+      requestId: randomUUID(), enterpriseId, kind, entityId, ...(kind === 'asset' ? { authority: 'enterprise' } : {}),
+    }));
+  }
+  await associate('project', builder.id);
+  async function borrower(name: string) {
+    const { project } = await json(await host.request('/api/projects', 'POST', { name }), 201);
+    await associate('project', project.id);
+    return project.id as string;
+  }
+  const monthly = await borrower('月报引用');
+  const legacy = await borrower('升级前已授权');
+  const mixed = await borrower('另有定义与明细授权');
+  const historical = await borrower('历史正式月报引用');
+  async function material(title: string, body: string) {
+    const { material: created } = await json(await host.request('/api/enterprise-materials', 'POST', { title, body }), 201);
+    const { material: enabled, storeId } = await json(await host.request(`/api/enterprise-materials/${created.id}/enable`, 'POST', { expectedVersion: created.version }));
+    await associate('asset', created.id);
+    const revision = enabled.revisions[0];
+    return { enabled, ref: { authority: 'enterprise', id: created.id, version: revision.revisionId, sha256: revision.bodySha256, locator: storeId } };
+  }
+  const definition = await material('月报口径', '按门店与月份归集合成月报');
+  const month = await material('合成门店九月月报', JSON.stringify({ grain: 'store-month', period: '2026-09', total: 173 }));
+  const { system } = await json(await owner('/api/studio/systems', 'POST', {
+    requestId: randomUUID(), enterpriseId, name: '门店月报', projectId: builder.id, goal: '引用门店月报', topicTitle: '月报',
+  }), 201);
+  const sys = `/api/studio/systems/${system.id}`;
+  const { pack } = await json(await owner('/api/studio/enterprise-packs', 'POST', {
+    requestId: randomUUID(), enterpriseId, systemId: system.id, domain: 'member-operations', name: '月报包',
+  }));
+  const packPath = `/api/studio/enterprise-packs/${pack.id}`;
+  const scope = { brand: '合成品牌', stores: ['合成门店'], period: '2026-09', scopeKey: 'store:month' };
+  const { purpose } = await json(await owner(packPath + '/purposes', 'POST', {
+    requestId: randomUUID(), projectId: builder.id, purposeKey: 'monthly-reference', title: '月报引用', businessQuestion: '门店月报口径',
+    subjectUnit: 'brand_account', scope, tier: 'definition-reference', businessStatus: 'active',
+    originalGoal: '读取九月月报', completionCriteria: '核对正式版本', evidenceReadiness: { definition: 'pass' },
+    dependencies: [{ id: 'definition', role: 'member-rule', authority: 'enterprise', ref: definition.ref, requiredFor: ['definition-reference'] }],
+  }));
+  const { preview } = await json(await owner(packPath + '/previews', 'POST', {
+    requestId: randomUUID(), projectId: builder.id, version: '1.0', purposeIds: [purpose.id], dataCutoffAt: '2026-09-30', summary: '九月口径',
+  }));
+  const { revision } = await json(await owner(packPath + '/confirm', 'POST', {
+    requestId: randomUUID(), projectId: builder.id, previewId: preview.id, fingerprint: preview.fingerprint,
+  }));
+  assert.equal(revision.purposeManifests[0].status, 'eligible');
+  const authority = async () => (await json(await owner(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${builder.id}`))).grantAuthority.authorityToken;
+  async function grant(subjectId: string, resourceKind: string, operations: string[], grantScope: object, resourceRef?: object) {
+    const result = await json(await owner('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(), enterpriseId, grantorProjectId: builder.id, authorityToken: await authority(),
+      grantBasis: '门店月报合成用途', subjectType: 'project', subjectId, purposeKeys: [purpose.purposeKey],
+      resourceKind, operations, scope: grantScope, resourceRef,
+    }));
+    return result.grant;
+  }
+  const monthScope = { grain: 'store-month', summaryAssetId: month.ref.id, summaryVersion: month.ref.version };
+  await grant(monthly, 'summary', ['cite-summary'], monthScope, month.ref);
+  const oldGrant = await grant(legacy, 'summary', ['cite-summary'], monthScope, month.ref);
+  await grant(mixed, 'summary', ['cite-summary'], monthScope, month.ref);
+  await grant(mixed, 'definition', ['read-definition'], { brand: scope.brand });
+  await grant(mixed, 'detail', ['read-detail-recalculate'], { stores: scope.stores, allowedDataPaths: ['020_clean/month.csv'] });
+
+  // Restore one pre-source-period grant in the isolated, stopped Host while retaining its original authority and subject.
+  const { dataRoot, projectsRoot } = host;
+  await host.close();
+  const grantFile = path.join(dataRoot, 'member-packs', 'resource-grants.json');
+  const index = JSON.parse(fs.readFileSync(grantFile, 'utf8'));
+  const oldScope = index.grants.find((item: { id: string }) => item.id === oldGrant.id).scope;
+  assert.equal(oldScope.sourcePeriodVerified, true);
+  delete oldScope.sourcePeriodVerified;
+  delete oldScope.sourcePeriodFrom;
+  delete oldScope.sourcePeriodTo;
+  const legacyBytes = JSON.stringify(index);
+  fs.writeFileSync(grantFile, legacyBytes);
+  host = await startTestHost({ dataRoot, projectsRoot });
+  await json(bind(await host.request('/api/studio/operators/session', 'POST', { action: 'login', ...credentials, activeProjectId: builder.id })));
+
+  const taskFor = async (projectId: string) => (await json(await host.request(`/api/projects/${projectId}/tasks`, 'POST', { name: '查看获准月报' }), 201)).task.id as string;
+  async function studio(projectId: string, taskId: string, action: string, payload?: object) {
+    let result = '';
+    provider.setResponder(context => {
+      if (!context.recentToolResults.length) return { calls: [{ name: 'studio_assets', arguments: { action, systemId: system.id, payload } }] };
+      result = providerMessageText(context.recentToolResults.at(-1)!.content);
+      return { text: '月报核对完成。' };
+    });
+    await json(await host.request(`/api/projects/${projectId}/tasks/${taskId}/messages`, 'POST', { requestId: randomUUID(), text: action }), 202);
+    await waitIdle(host, projectId, taskId);
+    assert.ok(result.length, action);
+    return result;
+  }
+  async function catalog(projectId: string, taskId: string) {
+    const result = JSON.parse(await studio(projectId, taskId, 'catalog'));
+    const entry = result.memberPacks.find((item: { packId: string }) => item.packId === pack.id);
+    assert.ok(entry);
+    return entry;
+  }
+
+  async function recordUse(projectId: string, taskId: string, text: string) {
+    const selected = await host.request(`/api/projects/${projectId}`);
+    const subjectCookie = selected.headers.get('set-cookie')!.split(';')[0]!;
+    const post = (route: string, body: unknown) => fetch(host.baseUrl + route, {
+      method: 'POST', headers: { ...host.headers, cookie: subjectCookie }, body: JSON.stringify(body),
+    });
+    const { pin } = await json(await post(packPath + '/pin', { requestId: randomUUID(), projectId, taskId }));
+    assert.equal(pin.packVersion, '1.0');
+    const { file } = await json(await post(`/api/projects/${projectId}/files/save-report`, { name: '月报说明.md', text }), 201);
+    const reportRef = { authority: 'task', id: taskId, projectId, taskId, version: sha(text), sha256: sha(text), locator: file.path };
+    const { use } = await json(await post(packPath + '/uses', { requestId: randomUUID(), projectId, taskId, purposeId: purpose.id, reportRef }));
+    return use.accessLevel;
+  }
+  for (const projectId of [monthly, legacy]) {
+    const taskId = await taskFor(projectId);
+    const entry = await catalog(projectId, taskId);
+    assert.equal(entry.pinnedVersion, '1.0');
+    assert.deepEqual(entry.purposes[0].accessLevels, ['cite-summary']);
+    assert.equal(entry.purposes[0].authorizedSummary.summarySha256, month.ref.sha256);
+    const read = await studio(projectId, taskId, 'read-source', { ref: entry.purposes[0].authorizedSummary.ref });
+    assert.equal(JSON.parse(JSON.parse(read).text).total, 173);
+    if (projectId === legacy) assert.equal(await recordUse(projectId, taskId, '合成九月月报共 173。'), 'summary');
+  }
+  assert.equal(fs.readFileSync(grantFile, 'utf8'), legacyBytes, 'Resolving the existing grant does not rewrite it');
+
+  await json(await host.request(`/api/enterprise-materials/${month.ref.id}/disable`, 'POST', { expectedVersion: month.enabled.version }));
+  for (const projectId of [monthly, legacy]) {
+    const entry = await catalog(projectId, await taskFor(projectId));
+    assert.deepEqual(entry.purposes, [], 'A summary-only borrower sees no available purpose after its source is withdrawn');
+    assert.equal(entry.pinnedVersion, null);
+  }
+  const mixedTask = await taskFor(mixed);
+  const retained = await catalog(mixed, mixedTask);
+  assert.equal(retained.pinnedVersion, '1.0');
+  assert.deepEqual(retained.purposes[0].accessLevels, ['read-definition', 'read-detail-recalculate']);
+  assert.equal(retained.purposes[0].authorizedSummary, undefined);
+  assert.equal(await recordUse(mixed, mixedTask, '继续引用门店月报定义。'), 'definition');
+
+  // Use the normal construction session and publish revisions 1 and 3 of the same Studio asset.
+  async function saveEdition(number: number, assetId?: string) {
+    const result = JSON.parse(await studio(builder.id, system.taskId, 'save-asset', {
+      requestId: randomUUID(), kind: 'concept', title: '门店正式月报', scope: '门店月度',
+      body: JSON.stringify({ period: '2026-09', grain: 'store-month', edition: number }),
+      sources: [definition.ref], readyForPublication: true, checks: [],
+      ...(assetId ? { assetId, expectedRevision: number - 1 } : {}),
+    }));
+    assert.equal(result.asset.candidateRevision, number);
+    return result.asset;
+  }
+  async function publish(assetId: string) {
+    const { preview } = await json(await owner(sys + '/preview', 'POST', {
+      requestId: randomUUID(), assetIds: [assetId], refs: [], summary: '确认本版月报', scope: '门店月度', checks: [],
+    }));
+    return json(await owner(sys + '/publications', 'POST', { requestId: randomUUID(), previewId: preview.id, fingerprint: preview.fingerprint }));
+  }
+  const first = await saveEdition(1);
+  await publish(first.id);
+  await saveEdition(2, first.id);
+  await saveEdition(3, first.id);
+  const published = await publish(first.id);
+  assert.equal(published.system.assets.find((item: { id: string }) => item.id === first.id).formalRevision, 3);
+  const firstRef = { authority: 'studio-source', id: first.id, version: '1', sha256: first.revisions[0].sha256, locator: system.id, projectId: builder.id };
+  const historicalGrant = await grant(historical, 'summary', ['cite-summary'], {
+    summaryAssetId: first.id, summaryVersion: '1', grain: 'store-month', periodFrom: '2026-09-01', periodTo: '2026-09-30',
+  }, firstRef);
+  assert.equal(historicalGrant.resourceRef.sha256, firstRef.sha256);
+  const taskId = await taskFor(historical);
+  const exact = (await catalog(historical, taskId)).purposes[0].authorizedSummary;
+  assert.equal(exact.ref.version, '1');
+  assert.equal(exact.summarySha256, firstRef.sha256);
+  const read = JSON.parse(await studio(historical, taskId, 'read-source', { ref: exact.ref }));
+  assert.equal(typeof read.text, 'string', JSON.stringify(read));
+  assert.equal(JSON.parse(read.text).edition, 1);
+  assert.deepEqual(provider.errors, []);
+});

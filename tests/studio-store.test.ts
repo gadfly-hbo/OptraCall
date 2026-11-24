@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { StudioStore } from '../extensions/business-plugins/studio/store.ts';
+import { getPublishedSummaryRevision, summarySourcePeriod } from '../src/host/studio-host.ts';
 import { studioQuestionContext } from '../extensions/business-plugins/studio/contracts.ts';
 
 function fixture(t: any) { const root = fs.mkdtempSync(path.join(os.tmpdir(), 'optracall-studio-')); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; }
@@ -37,6 +38,58 @@ test('semantic source edits append a candidate under CAS and never create SAP au
 });
 
 const previewInput = { assetIds: [] as string[], summary: '门店金额与期间变化的确定范围', scope: '本期发生口径', checks: [{ name: '联合核对', status: 'pass' as const, detail: '原文、事件、金额与解释分别核' }], limitations: ['合成材料只证明当前范围'] };
+
+test('Summary source periods retain declared granularity across structured and textual formats', () => {
+  const periods: [Record<string, unknown> | undefined, string, string[] | undefined][] = [
+    [{ period: '2026-09' }, '', ['2026-09', '2026-09']],
+    [undefined, '统计期间：2026-09；生成于 2026-09-08', ['2026-09', '2026-09']],
+    [undefined, '统计期间：2026-09-08', ['2026-09-08', '2026-09-08']],
+    [{ periodFrom: '2026-09-01', periodTo: '2026-10-15' }, '', ['2026-09-01', '2026-10-15']],
+    [undefined, '统计期间：2026-09-01 至 2026-10-15', ['2026-09-01', '2026-10-15']],
+    [undefined, '生成日期：2026-09-15', undefined],
+    [undefined, '统计期间：2026-09-30 至', undefined],
+    [undefined, '统计期间：2026-09-30 至 2026-09-01', undefined],
+    [{ periodFrom: '2026-09-30', periodTo: '2026-09-01' }, '', undefined],
+    [{ period: '2026-02-30' }, '', undefined],
+  ];
+  for (const [structured, text, expected] of periods) {
+    const result = summarySourcePeriod(structured, text);
+    assert.deepEqual(result && [result.sourcePeriodFrom, result.sourcePeriodTo], expected, text || JSON.stringify(structured));
+  }
+});
+
+test('Summary grant qualification follows exact confirmed publications and revision governance', t => {
+  const store = new StudioStore(fixture(t));
+  const system = store.create(createInput);
+  const asset = store.saveAsset(system.id, mapping);
+  function publish() {
+    const preview = store.preparePublication(system.id, { ...previewInput, assetIds: [asset.id] });
+    store.confirmPublication(system.id, preview.id, preview.fingerprint);
+  }
+  function qualify(revision: number, sha256?: string) {
+    return getPublishedSummaryRevision(store, system.id, asset.id, String(revision), sha256);
+  }
+  const initialHash = asset.revisions[0]!.sha256;
+  assert.throws(() => qualify(1), /not_published/);
+  publish();
+  assert.equal(qualify(1, initialHash).sha256, initialHash);
+  store.saveAsset(system.id, { ...mapping, assetId: asset.id, expectedRevision: 1, body: '候选修订' });
+  assert.throws(() => qualify(2), /not_published/);
+  store.saveAsset(system.id, { ...mapping, assetId: asset.id, expectedRevision: 2, body: '确认修订' });
+  assert.throws(() => qualify(2), /not_published/);
+  publish();
+  assert.throws(() => qualify(2), /not_published/);
+  assert.equal(qualify(1, initialHash).sha256, initialHash);
+  assert.throws(() => qualify(1, '0'.repeat(64)), /hash_mismatch/);
+  store.markAssetIssue(system.id, asset.id, '第三版待修订');
+  assert.throws(() => qualify(3), /restricted/);
+  assert.equal(qualify(1).sha256, initialHash);
+  store.saveAsset(system.id, { ...mapping, assetId: asset.id, expectedRevision: 3, body: '第四版修订' });
+  publish();
+  store.markAssetIssue(system.id, asset.id, '第四版单独记录的问题');
+  assert.throws(() => qualify(3), /restricted/, 'The earlier issue continues to apply to its own revision');
+  assert.equal(qualify(1).sha256, initialHash);
+});
 
 test('publication confirms only the exact prepared source version and leaves adoption, graph and use untouched', t => {
   const store = new StudioStore(fixture(t)); const system = store.create(createInput); const asset = store.saveAsset(system.id, mapping);
