@@ -99,6 +99,10 @@
 /* SS13: every receipt stays reachable at 1440px and 390px; the dialog body scrolls instead of clipping. */
 .si-dialog-scroll { max-height: min(62dvh, 560px); overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; min-width: 0; }
 .si-file-preview { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.si-source-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.si-source-list li { display: grid; gap: 4px; min-width: 0; }
+.si-source-list .text-button { justify-self: start; text-align: left; overflow-wrap: anywhere; }
+.si-source-sha { display: block; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; word-break: break-all; }
 .si-diff { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 10px 0; }
 .si-diff-before, .si-diff-after { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
 .si-diff-before { background: var(--subtle); }

@@ -81,6 +81,7 @@ export interface RevisionProposal {
   at: string;
   updatedAt: string;
 }
+export interface CandidateSaveReceipt { operationId: string; contentSha256: string; at: string; requestId?: string }
 export interface CandidateVersion {
   initiativeId: string;
   candidateId: string;
@@ -103,12 +104,14 @@ export interface CandidateVersion {
   replacedRequests?: ReplacedStrategyRequest[];
   lock?: { operationId: string; operator: string; at: string; fingerprint: string };
   revisionMeta?: { operationId: string; request: string; base: { candidateId: string; no: number }; patches: { blockId: string; oldSha256: string; newSha256: string }[]; at: string };
-  lastSave?: { operationId: string; contentSha256: string; at: string; requestId?: string };
+  lastSave?: CandidateSaveReceipt;
+  saveReceipts?: CandidateSaveReceipt[];
   returned?: { batchId: string; at: string };
   createdAt: string;
   updatedAt: string;
 }
 
+export interface VerificationSourceRef { kind: 'file' | 'public' | 'candidate' | 'kickoff'; ref: string; fileId?: string; sha256?: string }
 export interface VerificationGate {
   turn: 0 | 1;
   operationId: string;
@@ -117,7 +120,7 @@ export interface VerificationGate {
   verdict?: 'pass' | 'fail' | 'insufficient';
   verdictRequestId?: string;
   evidence?: string;
-  sources?: { kind: 'file' | 'public' | 'candidate' | 'kickoff'; ref: string; fileId?: string; sha256?: string }[];
+  sources?: VerificationSourceRef[];
   sessionFile?: string;
   configurationId: string;
   configurationRevision: number;

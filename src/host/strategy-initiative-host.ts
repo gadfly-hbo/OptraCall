@@ -58,6 +58,7 @@ export function createStrategyInitiativeHost(options: {
   configuration(id?: string, revision?: number): Readonly<RuntimeModelConfiguration> | null | undefined;
   mutate<T>(fn: () => T | Promise<T>): Promise<T>;
   isClosing(): boolean;
+  captureTool?: (tool: any) => void;
 }) {
   const {initiatives, reports, files, candidates} = options;
   const sessionFileOf = (id: string) => path.join(initiatives.directory(id), 'sessions.json');
@@ -165,11 +166,14 @@ export function createStrategyInitiativeHost(options: {
     }
     if (action === 'initiative-save-kickoff') {
       if (Object.keys(input).some(key => !['action', 'operationId', 'kickoffFields', 'kickoffSources', 'parent'].includes(key))) fail('strategy_kickoff_fields_invalid', 400);
-      const version = await options.mutate(() => reports.save(o.initiativeId, {
-        operationId: String(input.operationId ?? ''), fields: input.kickoffFields as any, sources: input.kickoffSources as any,
-        ...(input.parent !== undefined ? {parent: Number(input.parent)} : {}),
-        kind: 'agent', requestId: context.requestId,
-      }, o.scopeKey));
+      const version = await options.mutate(() => {
+        context.assertCurrent(); context.signal.throwIfAborted();
+        return reports.save(o.initiativeId, {
+          operationId: String(input.operationId ?? ''), fields: input.kickoffFields as any, sources: input.kickoffSources as any,
+          ...(input.parent !== undefined ? {parent: Number(input.parent)} : {}),
+          kind: 'agent', requestId: context.requestId,
+        }, o.scopeKey);
+      });
       context.assertCurrent(); context.signal.throwIfAborted();
       return payload({version: {no: version.no, contentSha256: version.contentSha256, generation: version.generation}, claim: 'draft-saved-lock-by-decision-maker'});
     }
@@ -231,6 +235,8 @@ export function createStrategyInitiativeHost(options: {
     await candidates.markTerminal(id, proposalId, status);
   }
 
+  options.captureTool?.(tool);
+
   async function create(id: string, input: Record<string, unknown>): Promise<InitiativeMainSession> {
     const initiative = initiatives.get(id);
     if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'scope', 'configurationId'].includes(key))) fail('strategy_initiative_session_fields_invalid', 400);
@@ -265,7 +271,7 @@ export function createStrategyInitiativeHost(options: {
     const n = owner.sessionFile ? await readNativeSessionSnapshot(owner.sessionFile, nativeDirectory(owner), workspaceDirectory(owner)).catch(() => null) : null;
     const snapshot = live.snapshot ?? (owner.sessionFile ? {sessionId: n?.manager.getSessionId() ?? '', sessionFile: owner.sessionFile, messages: [], tools: [], status: 'idle' as const, sdkVersion: '1.4.0', capabilities: {}} : null);
     const messages = n ? presentContextMessages(n.manager.buildSessionContext().messages, n.manager.getBranch(), n.manager.getSessionId()) : [];
-    return {session: owner, busy: live.busy, reports: reports.viewForScope(id, scopeKey), files: files.list(id, scopeKey), snapshot: snapshot ? {...snapshot, messages} : null};
+    return {session: owner, busy: live.busy, live: live.live, reports: reports.viewForScope(id, scopeKey), files: files.list(id, scopeKey), snapshot: snapshot ? {...snapshot, messages} : null};
   }
 
   async function send(id: string, scopeKey: string, input: Record<string, unknown>) {

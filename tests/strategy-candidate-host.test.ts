@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID, createHash} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {startTestHost} from './fixtures/host-process.ts';
-import {startToolProvider} from './fixtures/tool-provider.ts';
+import {startToolProvider, providerMessageText} from './fixtures/tool-provider.ts';
 
 const stores = {kind: 'department' as const, id: 'east-retail', name: '华东零售事业部', enterpriseId: 'ent-1'};
 const scopeKey = 'department:ent-1:east-retail';
@@ -115,5 +117,85 @@ test('真实 Host+Pi：候选独立持久会话、开题门禁、停止隔离与
   assert.equal(provider.requests.length, requests, 'close/read does not call model');
   assert.ok(reopened.snapshot?.sessionFile, 'native history reads back after close');
   assert.equal((await req(`${base}/candidates?scopeKey=${encodeURIComponent(scopeKey)}`)).candidates.length, 3);
+  assert.deepEqual(provider.errors, []);
+});
+
+test('真实 Host+Pi：候选自读保存回执并从冲突中有限纠正', {timeout: 150_000}, async t => {
+  const provider = await startToolProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  await req('/api/configuration', 'PUT', {name: '候选恢复合成', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-candidate-recovery', apiKey: 'synthetic-candidate-recovery'});
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '候选恢复事项', scopes: [stores]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}`;
+  const report = (await req(`${base}/reports`, 'POST', {operationId: randomUUID(), fields: kickoffFields, sources: []}, 201)).version;
+  await req(`${base}/reports/1/lock`, 'POST', {operationId: randomUUID(), sha256: report.contentSha256});
+  await req(`${base}/reports/1/apply`, 'POST', {operationId: randomUUID(), sha256: report.contentSha256, scope: stores});
+
+  const operationA = randomUUID(), operationB = randomUUID(), operationC = randomUUID();
+  const blocksA = blocksFor('方案 A');
+  const blocksB = blocksFor('方案 B');
+  const blocksC = blocksFor('有限纠正稿 C');
+  const results: string[] = [];
+  const candidateFile = join(host.dataRoot, 'strategy-initiatives', initiativeId, 'candidates.json');
+  let beforeConflict = '', afterConflict = '';
+  provider.setResponder(async (ctx: any) => {
+    const step = ctx.recentToolResults.length;
+    if (step > 0) results[step - 1] = providerMessageText(ctx.recentToolResults.at(-1)?.content);
+    if (step === 0 || step === 1) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: operationA, candidateBlocks: blocksA}}]};
+    if (step === 2) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: operationB, candidateBlocks: blocksB}}]};
+    if (step === 3) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: operationA, candidateBlocks: blocksA}}]};
+    if (step === 4) {
+      beforeConflict = createHash('sha256').update(await readFile(candidateFile)).digest('hex');
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: operationA, candidateBlocks: blocksC}}]};
+    }
+    if (step === 5) {
+      afterConflict = createHash('sha256').update(await readFile(candidateFile)).digest('hex');
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-read-candidate'}}]};
+    }
+    if (step === 6) return {calls: [{name: 'strategy_goals', arguments: {action: 'operation', operationId: operationA}}]};
+    if (step === 7) return {calls: [{name: 'strategy_goals', arguments: {action: 'operation', operationId: randomUUID()}}]};
+    if (step === 8) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-read-candidate', candidateId: randomUUID(), no: 1}}]};
+    if (step === 9) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: operationC, candidateBlocks: blocksC}}]};
+    return {text: '已核对原回执，并以新操作身份保存明确纠正稿。'};
+  });
+  const created = await req(`${base}/candidates`, 'POST', {operationId: randomUUID(), scope: stores, title: '冲突恢复候选', instruction: '保存、核对并修正候选。'}, 202);
+  const cid = created.candidate.candidateId;
+  let detail: any;
+  for (let n = 0; n < 500; n++) { detail = await req(`${base}/candidates/${cid}/versions/1`); if (detail.candidate.lastRun?.status === 'completed') break; await delay(20); }
+  assert.equal(detail.candidate.lastRun.status, 'completed');
+  assert.equal(afterConflict, beforeConflict, 'conflicting operation does not change persisted bytes');
+
+  const first = JSON.parse(results[0]);
+  const savedB = JSON.parse(results[2]);
+  const replayedOld = JSON.parse(results[3]);
+  assert.deepEqual(replayedOld.receipt, first.receipt, 'an older operation still returns its original receipt after a newer save');
+  assert.equal(replayedOld.candidate.contentSha256, first.candidate.contentSha256);
+  assert.match(results[4], /strategy_candidate_operation_conflict/);
+  assert.match(results[4], /initiative-read-candidate/);
+  assert.match(results[4], /operation/);
+
+  const readback = JSON.parse(results[5]);
+  assert.equal(readback.candidate.candidateId, cid);
+  assert.equal(readback.candidate.no, 1);
+  assert.equal(readback.candidate.contentSha256, savedB.candidate.contentSha256, 'self-read returns current B, not replayed A');
+  assert.deepEqual(readback.candidate.blocks, blocksB);
+  assert.equal(readback.saveReceipts.length, 2);
+  const original = JSON.parse(results[6]);
+  assert.deepEqual(original.receipt, first.receipt);
+  assert.match(results[7], /strategy_candidate_operation_not_found/);
+  assert.match(results[8], /strategy_candidate_owner_mismatch/);
+
+  assert.equal(detail.candidate.contentSha256, JSON.parse(results[8 + 1]).candidate.contentSha256);
+  assert.deepEqual(detail.candidate.blocks, blocksC);
+  assert.equal(detail.candidate.saveReceipts.length, 3);
+  await req(`${base}/candidates/${cid}/versions/1/lock`, 'POST', {operationId: randomUUID(), sha256: detail.candidate.contentSha256});
+  await req(`${base}/candidates/${cid}/versions/1/close`, 'POST', {});
+  const reopened = await req(`${base}/candidates/${cid}/versions/1`);
+  assert.equal(reopened.candidate.saveReceipts.length, 3, 'save receipts survive close and native history readback');
   assert.deepEqual(provider.errors, []);
 });

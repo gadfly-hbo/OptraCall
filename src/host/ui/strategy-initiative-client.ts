@@ -2,7 +2,7 @@ import type { GoalScope } from '../strategy-goals-types.ts';
 import type { ProjectEvent, ProjectSnapshot } from '../../agent/project-runtime.ts';
 import type { CandidateVersion, KickoffAnchor, KickoffReportVersion, ReplacedStrategyRequest, StrategySessionPendingRequest, StrategySessionRun, VerificationBatch } from '../strategy-initiative-types.ts';
 import type { KickoffReportReadback, ScopedKickoffReportsView } from '../strategy-initiative-reports.ts';
-export type { CandidateBlock, CandidateVersion, KickoffAnchor, KickoffFields, KickoffProposition, KickoffReportVersion, KickoffSourceRef, VerificationBatch, VerificationGate } from '../strategy-initiative-types.ts';
+export type { CandidateBlock, CandidateVersion, KickoffAnchor, KickoffFields, KickoffProposition, KickoffReportVersion, KickoffSourceRef, VerificationBatch, VerificationGate, VerificationSourceRef } from '../strategy-initiative-types.ts';
 export type { KickoffReportReadback } from '../strategy-initiative-reports.ts';
 export { initiativeScopeKey } from '../strategy-initiative-types.ts';
 
@@ -26,7 +26,7 @@ export interface InitiativeHistory {
   reports: ReportsView; candidates: CandidateVersion[]; verifications: VerificationBatch[]; publications: InitiativePublication[];
   legacy: { discussions: { id: string; title: string; updatedAt: string; note: string }[] };
 }
-export interface InitiativeSessionDetail { session: InitiativeMainSession; busy: boolean; reports: ReportsView; files: InitiativeFile[]; snapshot: ProjectSnapshot | null }
+export interface InitiativeSessionDetail { session: InitiativeMainSession; busy: boolean; live: boolean; reports: ReportsView; files: InitiativeFile[]; snapshot: ProjectSnapshot | null }
 export interface CandidateDetail { candidate: CandidateVersion; busy: boolean; files: InitiativeFile[]; snapshot: ProjectSnapshot | null }
 export interface InitiativeHandoffReceipt { operationId: string; scope: GoalScope; goals: { goalId: string; version: number }[]; at: string }
 

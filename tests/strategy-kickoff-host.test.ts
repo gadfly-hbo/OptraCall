@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID, createHash} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {join} from 'node:path';
 import {startTestHost} from './fixtures/host-process.ts';
 
 const stores = {kind: 'department' as const, id: 'east-retail', name: '华东零售事业部', enterpriseId: 'ent-1'};
@@ -36,8 +38,10 @@ test('真实 Host：开题报告版本链、Schema 门禁、锁定与应用', {t
   assert.deepEqual((await api(base)).versions, []);
   const invalid = await api(base, 'POST', {operationId: randomUUID(), fields: {...fields, propositions: fields.propositions.slice(0, 2)}, sources}, 400);
   assert.equal(invalid.code, 'strategy_kickoff_schema_invalid');
+  assert.deepEqual(invalid.details.issues, [{reason: 'proposition_count', path: 'fields.propositions'}]);
   const badId = await api(base, 'POST', {operationId: randomUUID(), fields: {...fields, propositions: fields.propositions.map((p, i) => ({...p, id: i === 1 ? 'P1' : p.id}))}, sources}, 400);
   assert.equal(badId.code, 'strategy_kickoff_schema_invalid');
+  assert.deepEqual(badId.details.issues, [{reason: 'duplicate_id', path: 'fields.propositions[1].id'}]);
 
   const saveInput = {operationId: randomUUID(), fields, sources};
   const v1 = (await api(base, 'POST', saveInput, 201)).version;
@@ -83,4 +87,52 @@ test('真实 Host：开题报告版本链、Schema 门禁、锁定与应用', {t
   assert.equal(view.anchors['department:ent-1:east-retail'].reportNo, 2);
   assert.equal(view.versions.length, 2);
   assert.equal(view.versions[0].lock.fingerprint, v1.contentSha256);
+});
+
+test('真实 Host：开题来源缺省与空数组同义，校验错误可定位且零写入', {timeout: 90_000}, async t => {
+  const host = await startTestHost();
+  t.after(async () => { await host.close(); });
+  async function api(route: string, method = 'GET', input?: unknown, status = 200) {
+    const response = await host.request(route, method, input), result = await response.json();
+    assert.equal(response.status, status, JSON.stringify({route, result}));
+    return result as Record<string, any>;
+  }
+  const initiativeId = randomUUID();
+  await api('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '无历史资料开题', scopes: [{...stores, enterpriseId: undefined}]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}/reports`;
+  const operationId = randomUUID();
+  const omitted = (await api(base, 'POST', {operationId, fields}, 201)).version;
+  assert.deepEqual(omitted.sources, []);
+  assert.deepEqual((await api(base, 'POST', {operationId, fields, sources: []}, 201)).version, omitted, 'omitted then [] replays the original receipt');
+
+  const reportFile = join(host.dataRoot, 'strategy-initiatives', initiativeId, 'reports.json');
+  const before = createHash('sha256').update(await readFile(reportFile)).digest('hex');
+  const invalidCases = [
+    {input: {operationId: randomUUID(), fields, sources: null}, path: 'sources', reason: 'invalid_type'},
+    {input: {operationId: randomUUID(), fields, sources: {}}, path: 'sources', reason: 'invalid_type'},
+    {input: {operationId: randomUUID(), fields, sources: [{kind: 'other', ref: '合成'}]}, path: 'sources[0].kind', reason: 'invalid_source_kind'},
+    {input: {operationId: randomUUID(), fields: {...fields, diagnosis: undefined}}, path: 'fields.diagnosis', reason: 'required'},
+    {input: {operationId: randomUUID(), fields: {...fields, horizon: 42}}, path: 'fields.horizon', reason: 'invalid_type'},
+    {input: {operationId: randomUUID(), fields: {...fields, '客户秘密字段': 'do-not-echo'}}, path: 'fields', reason: 'unknown_field'},
+  ];
+  for (const item of invalidCases) {
+    const fault = await api(base, 'POST', item.input, 400);
+    assert.equal(fault.code, 'strategy_kickoff_schema_invalid');
+    assert.deepEqual(fault.details.issues, [{reason: item.reason, path: item.path}]);
+    assert.equal(JSON.stringify(fault).includes('合成经营复盘'), false, 'errors do not echo source content');
+    assert.equal(JSON.stringify(fault).includes('客户秘密字段'), false, 'unknown field names are not echoed into safe error paths');
+  }
+  const after = createHash('sha256').update(await readFile(reportFile)).digest('hex');
+  assert.equal(after, before, 'all validation failures leave the persisted bytes unchanged');
+
+  const empty = (await api(base, 'POST', {operationId: randomUUID(), fields, sources: []}, 201)).version;
+  assert.equal(empty.contentSha256, omitted.contentSha256);
+  assert.deepEqual(empty.sources, []);
+
+  const reverseId = randomUUID();
+  await api('/api/strategy/initiatives', 'POST', {operationId: reverseId, title: '空来源反向重放', scopes: [stores]}, 201);
+  const reverseBase = `/api/strategy/initiatives/${reverseId}/reports`;
+  const reverseOperation = randomUUID();
+  const explicit = (await api(reverseBase, 'POST', {operationId: reverseOperation, fields, sources: []}, 201)).version;
+  assert.deepEqual((await api(reverseBase, 'POST', {operationId: reverseOperation, fields}, 201)).version, explicit, '[] then omitted replays the original receipt');
 });
