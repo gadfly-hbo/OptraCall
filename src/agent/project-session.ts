@@ -17,8 +17,9 @@ import { readSemanticContextParameters, legacyReadSemanticContextParameters, sem
 import { candidateDetailsVersion } from './agent-candidate.ts';
 import { presentContextMessages } from './context-presentation.ts';
 import path from 'node:path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, renameSync, unlinkSync, constants, openSync, fstatSync, fsyncSync, closeSync, readSync, lstatSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync, chmodSync, renameSync, unlinkSync, constants, openSync, fstatSync, fsyncSync, closeSync, readSync, lstatSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
+import { Type } from 'typebox';
 import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, SettingsManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, getDocsPath, VERSION, defineTool, loadSkills, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory, type ExtensionToolContext } from './sdk.ts';
 import type { ProjectAgentWireOptions, ProjectSnapshot, ProvidedContextInput } from './project-runtime.ts';
 import { runDiagnostic, readRunDiagnostic, type RunDiagnostic } from './run-diagnostics.ts';
@@ -39,7 +40,7 @@ import { createWebSearchExtension, WEB_SEARCH_TOOL_NAMES, type WebSearchToolName
 import { createModelPackTools } from './model-pack-tools.ts';
 import { createToolContextAdapter } from './tool-context-adapter.ts';
 import { createForegroundChildren } from './foreground-children.ts';
-import { PROJECT_FILE_TOOLS, type ProjectFileToolResult } from './project-files.ts';
+import { PROJECT_FILE_TOOLS, readProjectFileText, type ProjectFileToolResult } from './project-files.ts';
 import { createDbLinkTools, DB_LINK_TOOL_NAMES, type DbLinkToolResult, type DbLinkToolName } from './db-link-tools.ts';
 import { reportCalculationTool, reportCalculationToolName, reportCalculationSystemPrompt, reportCalculationBundleSystemPrompt, reportCalculationBundleToolName, reportCalculationBundleReadParameters, parseReportCalculationBundleRead, reportCalculationGuidance, readReportCalculationRunReceipt, type ReportCalculationSelection, type ReportCalculationRunReceipt } from './report-calculation-review.ts';
 
@@ -907,7 +908,8 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         } : {}),
         appendSystemPrompt: [
           ...projectInstructions(),
-          '当前运行环境缺少操作系统受管隔离边界（sandbox-exec 不可用），已按工程规格禁用原生文件系统、Shell/Codemode/子会话与数据库直连（dbLink）及外部连接器；仅开放受 Host 门店/时段授权视图核验的 read_input、write_report 与 studio_assets 工具。未授权门店或超期资料不可读取，也不可将不可读门店视为 0。',
+          ...(o.assignment?.skill ? [`Pinned Task Skill available: ${o.assignment.skill.id}@${o.assignment.skill.version} (sha256: ${o.assignment.skill.sha256}). When this workflow helps the task, call read_task_skill({}) to read SKILL.md or read_task_skill({ file: "references/..." }) to read its bundled reference files (read-only, strictly scoped to this fixed Skill package).`] : []),
+          '当前运行环境缺少操作系统受管隔离边界（sandbox-exec 不可用），已按工程规格禁用原生文件系统、Shell/Codemode/子会话与数据库直连（dbLink）及外部连接器；仅开放受 Host 门店/时段授权视图核验的 read_input、write_report 与 studio_assets 工具（若任务已开启固定 Skill，另开放只读的 read_task_skill）。未授权门店或超期资料不可读取，也不可将不可读门店视为 0。',
           ...(o.metricIndexText ? [o.metricIndexText] : []),
         ],
       } : {
@@ -925,13 +927,53 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
       const restrictedHostToolsOnly = restrictedMemberPack && !protectedTools;
+      const loadedRestrictedSkill = restrictedHostToolsOnly && o.assignment?.skill
+        ? services.resourceLoader.getSkills().skills.find(skill => skill.name === o.assignment!.skill!.id)
+        : undefined;
+      const restrictedSkillTools = loadedRestrictedSkill && o.assignment?.skill ? [defineTool({
+        name: 'read_task_skill',
+        label: '读取任务固定 Skill',
+        description: `Read the pinned built-in Task Skill (${o.assignment.skill.id}@${o.assignment.skill.version}) SKILL.md or a relative reference file inside its immutable package directory. Strictly read-only; cannot access project or host files.`,
+        parameters: Type.Object({
+          file: Type.Optional(Type.String({ minLength: 1, maxLength: 200, description: 'Relative path inside the pinned Skill directory (default: SKILL.md).' })),
+          offset: Type.Optional(Type.Integer({ minimum: 1 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1 })),
+        }, { additionalProperties: false }),
+        execute: async (toolCallId, params, signal) => {
+          const expected = o.assignment!.skill!;
+          if (packageIdentity(loadedRestrictedSkill.filePath) !== expected.sha256) throw new Error('task_skill_version_changed');
+          const rel = typeof params.file === 'string' && params.file.trim() ? params.file.trim() : 'SKILL.md';
+          if (rel.startsWith('/') || rel.includes('\\') || rel.includes('\0') || rel.split('/').some(seg => !seg || seg === '.' || seg === '..' || seg.startsWith('.'))) {
+            throw new Error('task_skill_path_invalid');
+          }
+          const baseReal = realpathSync(loadedRestrictedSkill.baseDir);
+          const candidate = path.resolve(baseReal, rel);
+          if (!candidate.startsWith(baseReal + path.sep)) throw new Error('task_skill_path_invalid');
+          let stat: ReturnType<typeof lstatSync>;
+          try { stat = lstatSync(candidate); } catch { throw new Error('task_skill_file_unavailable'); }
+          if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1 || stat.size > 4 * 1024 * 1024) throw new Error('task_skill_file_unavailable');
+          if (!realpathSync(candidate).startsWith(baseReal + path.sep)) throw new Error('task_skill_path_invalid');
+          const read = await readProjectFileText({
+            bytes: readFileSync(candidate),
+            signal: signal ?? new AbortController().signal,
+            toolCallId,
+            ...(params.offset === undefined ? {} : { offset: params.offset }),
+            ...(params.limit === undefined ? {} : { limit: params.limit }),
+          });
+          return {
+            content: read.content,
+            details: { ...read.details, skillId: expected.id, version: expected.version, sha256: expected.sha256, file: rel },
+          };
+        },
+      })] : [];
       const sourceToolNames = sourceWorkspace || strategyDiscussion() || strategyInitiative() ? customTools.map(tool => tool.name) : [];
-      services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? sourceToolNames : protectedTools ? [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] : restrictedHostToolsOnly ? customTools.map(tool => tool.name) : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...webTools.map(tool => `+${tool}`), ...(subagent ? ['+subagent'] : [])] });
+      const restrictedToolNames = [...customTools.map(tool => tool.name), ...restrictedSkillTools.map(tool => tool.name)];
+      services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? sourceToolNames : protectedTools ? [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] : restrictedHostToolsOnly ? restrictedToolNames : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...webTools.map(tool => `+${tool}`), ...(subagent ? ['+subagent'] : [])] });
       // SDK modifiers append to either a plain workspace allowlist or inherited defaults.
       if (customTools.length && !restrictedHostToolsOnly) services.settingsManager.applyOverrides({ defaultTools: customTools.filter(tool => tool.name !== reportCalculationToolName).map(tool => `+${tool.name}`) });
-      const productTools = [...customTools, ...(subagent ? [subagent] : [])];
+      const productTools = [...customTools, ...restrictedSkillTools, ...(subagent ? [subagent] : [])];
       const ownedTools = contextAdapter ? productTools.map(tool => contextAdapter.tool(tool)) : productTools;
-      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(sourceToolNames.length ? { tools: sourceToolNames, customTools: ownedTools } : fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: [...protectedTools.tools, ...ownedTools], tools: [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] } : restrictedHostToolsOnly ? { customTools: ownedTools, tools: customTools.map(tool => tool.name), noTools: 'all' as const, excludeTools: ['read', 'write', 'edit', 'bash', 'powershell', 'grep', 'find', 'ls', 'codemode', 'subagent'] } : { customTools: ownedTools }), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
+      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(sourceToolNames.length ? { tools: sourceToolNames, customTools: ownedTools } : fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: [...protectedTools.tools, ...ownedTools], tools: [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] } : restrictedHostToolsOnly ? { customTools: ownedTools, tools: restrictedToolNames, noTools: 'all' as const, excludeTools: ['read', 'write', 'edit', 'bash', 'powershell', 'grep', 'find', 'ls', 'codemode', 'subagent'] } : { customTools: ownedTools }), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
       if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
       parent = created.session;
       return { ...created, services, diagnostics: services.diagnostics };

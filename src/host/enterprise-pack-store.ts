@@ -410,282 +410,365 @@ export class EnterprisePackStore {
     });
   }
 
-  upsertPurpose(packId: string, input: UpsertPurposeInput): { pack: EnterpriseDomainPack; purpose: EnterprisePackPurpose; created: boolean } {
-    return this.mutate(packId, pack => {
-      const raw = input as unknown as Record<string, unknown>;
-      const checkText = (value: unknown, fieldPath: string, limit: number, allowEmpty = false): string => {
-        if (value === undefined || value === null) {
-          fail('invalid_purpose_field', 400, {
-            message: `缺少必填字符串字段 ${fieldPath}（上限 ${limit} UTF-8 字节）；请补充后重试。`,
-            details: { issues: [{ reason: 'required', path: fieldPath }] },
-          });
-        }
-        if (typeof value !== 'string') {
-          fail('invalid_purpose_field', 400, {
-            message: `${fieldPath} 必须是字符串（上限 ${limit} UTF-8 字节）；请修正字段类型后重试。`,
-            details: { issues: [{ reason: 'expected_string', path: fieldPath }] },
-          });
-        }
-        if (value.includes('\0') || Buffer.from(value).toString('utf8') !== value) {
-          fail('invalid_purpose_field', 400, {
-            message: `${fieldPath} 必须是有效 UTF-8 文本且不含空字符；请修正后重试。`,
-            details: { issues: [{ reason: 'invalid_utf8_text', path: fieldPath }] },
-          });
-        }
-        if (!allowEmpty && !value.trim()) {
-          fail('invalid_purpose_field', 400, {
-            message: `${fieldPath} 不能为空或仅含空白字符（上限 ${limit} UTF-8 字节）；请填写具体内容后重试。`,
-            details: { issues: [{ reason: 'required', path: fieldPath }] },
-          });
-        }
-        if (Buffer.byteLength(value, 'utf8') > limit) {
-          fail('invalid_purpose_field', 400, {
-            message: `${fieldPath} 超过长度上限 ${limit} UTF-8 字节；请精简文本后重试。`,
-            details: { issues: [{ reason: 'max_utf8_bytes_exceeded', path: fieldPath }] },
-          });
-        }
-        return value;
-      };
-      const checkEnum = <T extends string>(value: unknown, fieldPath: string, allowed: readonly T[]): T => {
-        if (typeof value !== 'string' || !allowed.includes(value as T)) {
-          fail('invalid_purpose_field', 400, {
-            message: `${fieldPath} 必须是允许的枚举值之一：${allowed.join(' | ')}；请修正后重试。`,
-            details: { issues: [{ reason: 'invalid_enum', path: fieldPath }] },
-          });
-        }
-        return value as T;
-      };
-      const checkStringArray = (value: unknown, fieldPath: string, maxItems: number, itemMaxBytes: number, code: string): string[] => {
-        if (!Array.isArray(value)) {
-          fail(code, 400, {
-            message: `${fieldPath} 必须是字符串数组（最多 ${maxItems} 项，每项上限 ${itemMaxBytes} UTF-8 字节）；请把每条内容作为数组元素重发。`,
-            details: { issues: [{ reason: 'expected_string_array', path: fieldPath }] },
-          });
-        }
-        if (value.length > maxItems) {
-          fail(code, 400, {
-            message: `${fieldPath} 最多允许 ${maxItems} 项；请精简后重试。`,
-            details: { issues: [{ reason: 'too_many_items', path: fieldPath }] },
-          });
-        }
-        return value.map((item, idx) => checkText(item, `${fieldPath}[${idx}]`, itemMaxBytes, false));
-      };
-
-      // Reject key misspellings / stored-shape plurals so notes or gaps are never silently dropped!
-      if (Object.hasOwn(raw, 'evidenceNotes') && raw.evidenceNotes !== undefined && !Array.isArray(raw.evidenceNotes)) {
-        fail('invalid_purpose_evidence_note_key', 400, {
-          message: '输入不支持复数存储字段 payload.evidenceNotes；请改用单数对象字段 payload.evidenceNote（{ projectId, taskId?, note, sourceRefs }）后重试。本次未写入。',
-          details: { issues: [{ reason: 'use_singular_evidence_note', path: 'payload.evidenceNotes' }] },
-        });
-      }
-      const misspelledKeys: ReadonlyArray<{ bad: string; expected: string; hint: string }> = [
-        { bad: 'remainingGap', expected: 'payload.remainingGaps', hint: '字符串数组' },
-        { bad: 'exclusion', expected: 'payload.exclusions', hint: '字符串数组' },
-        { bad: 'dependency', expected: 'payload.dependencies', hint: '依赖对象数组' },
-        { bad: 'decisionChoice', expected: 'payload.decisionChoices', hint: '业务取舍数组' },
-        { bad: 'limitedCalculationTitle', expected: 'payload.limitedCalculationName', hint: '受限计算口径名称字符串' },
-      ];
-      for (const item of misspelledKeys) {
-        if (Object.hasOwn(raw, item.bad) && raw[item.bad] !== undefined) {
-          fail('invalid_purpose_field', 400, {
-            message: `不支持字段 payload.${item.bad}；请改用 ${item.expected}（期望形态：${item.hint}）后重试。本次未写入。`,
-            details: { issues: [{ reason: 'misspelled_field', path: `payload.${item.bad}` }] },
-          });
-        }
-      }
-
-      const purposeKey = checkText(input.purposeKey, 'payload.purposeKey', 200, false).trim();
-      if (!object(input.scope)) {
-        fail('invalid_purpose_scope', 400, {
-          message: '缺少有效的对象字段 payload.scope；请提供包含非空 scopeKey（以及适用品牌、渠道、门店、期间）的对象后重试。',
-          details: { issues: [{ reason: 'required', path: 'payload.scope' }] },
-        });
-      }
-      const title = checkText(input.title, 'payload.title', 300, false);
-      const businessQuestion = checkText(input.businessQuestion, 'payload.businessQuestion', 5000, false);
-      const subjectUnit = checkEnum(input.subjectUnit, 'payload.subjectUnit', ['brand_account', 'group_person', 'store', 'other'] as const);
-      const tier = checkEnum(input.tier, 'payload.tier', ['definition-reference', 'limited-calculation', 'formal-calculation'] as const);
-      const businessStatus = checkEnum(input.businessStatus, 'payload.businessStatus', ['active', 'not_launched', 'unknown'] as const);
-      const scopeKey = checkText(input.scope.scopeKey, 'payload.scope.scopeKey', 500, false).trim();
-      if (input.scope.stores !== undefined) {
-        checkStringArray(input.scope.stores, 'payload.scope.stores', 200, 200, 'invalid_purpose_scope');
-      }
-      if (tier === 'limited-calculation' && (typeof input.limitedCalculationName !== 'string' || !input.limitedCalculationName.trim())) {
-        fail('limited_calculation_requires_distinct_name', 400, {
-          message: '当 payload.tier 为 limited-calculation 时，必须提供非空字符串 payload.limitedCalculationName（上限 300 UTF-8 字节）以区分受限计算口径。',
-          details: { issues: [{ reason: 'required_when_limited_calculation', path: 'payload.limitedCalculationName' }] },
-        });
-      }
-      const limitedCalculationName = input.limitedCalculationName !== undefined && input.limitedCalculationName !== ''
-        ? checkText(input.limitedCalculationName, 'payload.limitedCalculationName', 300, false)
-        : undefined;
-      const deliveredSubset = input.deliveredSubset !== undefined
-        ? checkText(input.deliveredSubset, 'payload.deliveredSubset', 5000, true)
-        : undefined;
-      const remainingGaps = input.remainingGaps !== undefined
-        ? checkStringArray(input.remainingGaps, 'payload.remainingGaps', 100, 2000, 'invalid_purpose_remaining_gaps')
-        : undefined;
-      const exclusions = input.exclusions !== undefined
-        ? checkStringArray(input.exclusions, 'payload.exclusions', 100, 2000, 'invalid_purpose_exclusions')
-        : undefined;
-      const ownerRole = input.ownerRole !== undefined && input.ownerRole !== ''
-        ? checkText(input.ownerRole, 'payload.ownerRole', 200, false)
-        : undefined;
-      if (input.dependencies !== undefined && !Array.isArray(input.dependencies)) {
+  /**
+   * Read-only pre-validation for purpose creation/update.
+   * Performs every structural, type, misspelling, ambiguity, and creation-required check
+   * with ZERO disk mutation so callers can reject invalid payloads before creating empty packs
+   * or recording continuation ownership transitions.
+   */
+  validatePurposeInput(pack: EnterpriseDomainPack | undefined, input: UpsertPurposeInput): {
+    purposeKey: string;
+    title: string;
+    businessQuestion: string;
+    subjectUnit: 'brand_account' | 'group_person' | 'store' | 'other';
+    tier: 'definition-reference' | 'limited-calculation' | 'formal-calculation';
+    businessStatus: 'active' | 'not_launched' | 'unknown';
+    scopeKey: string;
+    limitedCalculationName: string | undefined;
+    deliveredSubset: string | undefined;
+    remainingGaps: string[] | undefined;
+    exclusions: string[] | undefined;
+    ownerRole: string | undefined;
+    validatedDependencies: EnterprisePackPurpose['dependencies'] | undefined;
+    validatedEvidenceNote: { projectId: string; taskId?: string; note: string; sourceRefs: StudioSourceRef[] } | undefined;
+    validatedTaskOwner: { projectId: string; taskId: string } | undefined;
+    dedupKey: string | undefined;
+    explicitTarget: boolean;
+    existing: EnterprisePackPurpose | undefined;
+    originalGoal: string;
+    completionCriteria: string;
+  } {
+    const raw = input as unknown as Record<string, unknown>;
+    const checkText = (value: unknown, fieldPath: string, limit: number, allowEmpty = false): string => {
+      if (value === undefined || value === null) {
         fail('invalid_purpose_field', 400, {
-          message: 'payload.dependencies 必须是数组；每项包含 id、role、authority、ref、requiredFor。',
-          details: { issues: [{ reason: 'expected_array', path: 'payload.dependencies' }] },
+          message: `缺少必填字符串字段 ${fieldPath}（上限 ${limit} UTF-8 字节）；请补充后重试。`,
+          details: { issues: [{ reason: 'required', path: fieldPath }] },
         });
       }
-      const validatedDependencies = input.dependencies?.map((d, idx) => {
-        if (!object(d)) {
-          fail('invalid_purpose_field', 400, {
-            message: `payload.dependencies[${idx}] 必须是对象；请提供 id、role、authority、ref、requiredFor。`,
-            details: { issues: [{ reason: 'expected_object', path: `payload.dependencies[${idx}]` }] },
+      if (typeof value !== 'string') {
+        fail('invalid_purpose_field', 400, {
+          message: `${fieldPath} 必须是字符串（上限 ${limit} UTF-8 字节）；请修正字段类型后重试。`,
+          details: { issues: [{ reason: 'expected_string', path: fieldPath }] },
+        });
+      }
+      if (value.includes('\0') || Buffer.from(value).toString('utf8') !== value) {
+        fail('invalid_purpose_field', 400, {
+          message: `${fieldPath} 必须是有效 UTF-8 文本且不含空字符；请修正后重试。`,
+          details: { issues: [{ reason: 'invalid_utf8_text', path: fieldPath }] },
+        });
+      }
+      if (!allowEmpty && !value.trim()) {
+        fail('invalid_purpose_field', 400, {
+          message: `${fieldPath} 不能为空或仅含空白字符（上限 ${limit} UTF-8 字节）；请填写具体内容后重试。`,
+          details: { issues: [{ reason: 'required', path: fieldPath }] },
+        });
+      }
+      if (Buffer.byteLength(value, 'utf8') > limit) {
+        fail('invalid_purpose_field', 400, {
+          message: `${fieldPath} 超过长度上限 ${limit} UTF-8 字节；请精简文本后重试。`,
+          details: { issues: [{ reason: 'max_utf8_bytes_exceeded', path: fieldPath }] },
+        });
+      }
+      return value;
+    };
+    const checkEnum = <T extends string>(value: unknown, fieldPath: string, allowed: readonly T[]): T => {
+      if (typeof value !== 'string' || !allowed.includes(value as T)) {
+        fail('invalid_purpose_field', 400, {
+          message: `${fieldPath} 必须是允许的枚举值之一：${allowed.join(' | ')}；请修正后重试。`,
+          details: { issues: [{ reason: 'invalid_enum', path: fieldPath }] },
+        });
+      }
+      return value as T;
+    };
+    const checkStringArray = (value: unknown, fieldPath: string, maxItems: number, itemMaxBytes: number, code: string): string[] => {
+      if (!Array.isArray(value)) {
+        fail(code, 400, {
+          message: `${fieldPath} 必须是字符串数组（最多 ${maxItems} 项，每项上限 ${itemMaxBytes} UTF-8 字节）；请把每条内容作为数组元素重发。`,
+          details: { issues: [{ reason: 'expected_string_array', path: fieldPath }] },
+        });
+      }
+      if (value.length > maxItems) {
+        fail(code, 400, {
+          message: `${fieldPath} 最多允许 ${maxItems} 项；请精简后重试。`,
+          details: { issues: [{ reason: 'too_many_items', path: fieldPath }] },
+        });
+      }
+      return value.map((item, idx) => checkText(item, `${fieldPath}[${idx}]`, itemMaxBytes, false));
+    };
+
+    // Reject key misspellings / stored-shape plurals so notes or gaps are never silently dropped!
+    if (Object.hasOwn(raw, 'evidenceNotes') && raw.evidenceNotes !== undefined && !Array.isArray(raw.evidenceNotes)) {
+      fail('invalid_purpose_evidence_note_key', 400, {
+        message: '输入不支持复数存储字段 payload.evidenceNotes；请改用单数对象字段 payload.evidenceNote（{ projectId, taskId?, note, sourceRefs }）后重试。本次未写入。',
+        details: { issues: [{ reason: 'use_singular_evidence_note', path: 'payload.evidenceNotes' }] },
+      });
+    }
+    const misspelledKeys: ReadonlyArray<{ bad: string; expected: string; hint: string }> = [
+      { bad: 'remainingGap', expected: 'payload.remainingGaps', hint: '字符串数组' },
+      { bad: 'exclusion', expected: 'payload.exclusions', hint: '字符串数组' },
+      { bad: 'dependency', expected: 'payload.dependencies', hint: '依赖对象数组' },
+      { bad: 'decisionChoice', expected: 'payload.decisionChoices', hint: '业务取舍数组' },
+      { bad: 'limitedCalculationTitle', expected: 'payload.limitedCalculationName', hint: '受限计算口径名称字符串' },
+    ];
+    for (const item of misspelledKeys) {
+      if (Object.hasOwn(raw, item.bad) && raw[item.bad] !== undefined) {
+        fail('invalid_purpose_field', 400, {
+          message: `不支持字段 payload.${item.bad}；请改用 ${item.expected}（期望形态：${item.hint}）后重试。本次未写入。`,
+          details: { issues: [{ reason: 'misspelled_field', path: `payload.${item.bad}` }] },
+        });
+      }
+    }
+
+    const purposeKey = checkText(input.purposeKey, 'payload.purposeKey', 200, false).trim();
+    if (!object(input.scope)) {
+      fail('invalid_purpose_scope', 400, {
+        message: '缺少有效的对象字段 payload.scope；请提供包含非空 scopeKey（以及适用品牌、渠道、门店、期间）的对象后重试。',
+        details: { issues: [{ reason: 'required', path: 'payload.scope' }] },
+      });
+    }
+    const title = checkText(input.title, 'payload.title', 300, false);
+    const businessQuestion = checkText(input.businessQuestion, 'payload.businessQuestion', 5000, false);
+    const subjectUnit = checkEnum(input.subjectUnit, 'payload.subjectUnit', ['brand_account', 'group_person', 'store', 'other'] as const);
+    const tier = checkEnum(input.tier, 'payload.tier', ['definition-reference', 'limited-calculation', 'formal-calculation'] as const);
+    const businessStatus = checkEnum(input.businessStatus, 'payload.businessStatus', ['active', 'not_launched', 'unknown'] as const);
+    const scopeKey = checkText(input.scope.scopeKey, 'payload.scope.scopeKey', 500, false).trim();
+    if (input.scope.stores !== undefined) {
+      checkStringArray(input.scope.stores, 'payload.scope.stores', 200, 200, 'invalid_purpose_scope');
+    }
+    if (tier === 'limited-calculation' && (typeof input.limitedCalculationName !== 'string' || !input.limitedCalculationName.trim())) {
+      fail('limited_calculation_requires_distinct_name', 400, {
+        message: '当 payload.tier 为 limited-calculation 时，必须提供非空字符串 payload.limitedCalculationName（上限 300 UTF-8 字节）以区分受限计算口径。',
+        details: { issues: [{ reason: 'required_when_limited_calculation', path: 'payload.limitedCalculationName' }] },
+      });
+    }
+    const limitedCalculationName = input.limitedCalculationName !== undefined && input.limitedCalculationName !== ''
+      ? checkText(input.limitedCalculationName, 'payload.limitedCalculationName', 300, false)
+      : undefined;
+    const deliveredSubset = input.deliveredSubset !== undefined
+      ? checkText(input.deliveredSubset, 'payload.deliveredSubset', 5000, true)
+      : undefined;
+    const remainingGaps = input.remainingGaps !== undefined
+      ? checkStringArray(input.remainingGaps, 'payload.remainingGaps', 100, 2000, 'invalid_purpose_remaining_gaps')
+      : undefined;
+    const exclusions = input.exclusions !== undefined
+      ? checkStringArray(input.exclusions, 'payload.exclusions', 100, 2000, 'invalid_purpose_exclusions')
+      : undefined;
+    const ownerRole = input.ownerRole !== undefined && input.ownerRole !== ''
+      ? checkText(input.ownerRole, 'payload.ownerRole', 200, false)
+      : undefined;
+    if (input.dependencies !== undefined && !Array.isArray(input.dependencies)) {
+      fail('invalid_purpose_field', 400, {
+        message: 'payload.dependencies 必须是数组；每项包含 id、role、authority、ref、requiredFor。',
+        details: { issues: [{ reason: 'expected_array', path: 'payload.dependencies' }] },
+      });
+    }
+    const validatedDependencies = input.dependencies?.map((d, idx) => {
+      if (!object(d)) {
+        fail('invalid_purpose_field', 400, {
+          message: `payload.dependencies[${idx}] 必须是对象；请提供 id、role、authority、ref、requiredFor。`,
+          details: { issues: [{ reason: 'expected_object', path: `payload.dependencies[${idx}]` }] },
+        });
+      }
+      try {
+        return { ...d, ref: sourceRef(d.ref) };
+      } catch (err) {
+        if (err instanceof StudioError && !err.details) {
+          fail(err.code, 400, {
+            message: `payload.dependencies[${idx}].ref 不是有效 SourceRef；请提供 authority、id、version。`,
+            details: { issues: [{ reason: err.code, path: `payload.dependencies[${idx}].ref` }] },
           });
         }
-        try {
-          return { ...d, ref: sourceRef(d.ref) };
-        } catch (err) {
+        throw err;
+      }
+    });
+
+    let validatedEvidenceNote: { projectId: string; taskId?: string; note: string; sourceRefs: StudioSourceRef[] } | undefined;
+    if (input.evidenceNote !== undefined) {
+      if (!object(input.evidenceNote)) {
+        fail('invalid_purpose_evidence_note', 400, {
+          message: 'payload.evidenceNote 必须是单数对象 { projectId, taskId?, note, sourceRefs }；不能传字符串或数组。',
+          details: { issues: [{ reason: 'expected_object', path: 'payload.evidenceNote' }] },
+        });
+      }
+      const rawNote = input.evidenceNote as Record<string, unknown>;
+      const noteText = checkText(rawNote.note, 'payload.evidenceNote.note', 5000, false).trim();
+      const rawProjectId = rawNote.projectId ?? input.taskOwner?.projectId;
+      if (typeof rawProjectId !== 'string' || !rawProjectId.trim()) {
+        fail('invalid_purpose_evidence_note', 400, {
+          message: '缺少必填字符串字段 payload.evidenceNote.projectId；请提供合法项目标识后重试。',
+          details: { issues: [{ reason: 'required', path: 'payload.evidenceNote.projectId' }] },
+        });
+      }
+      let noteProjectId: string;
+      try { noteProjectId = identity(rawProjectId); } catch {
+        fail('invalid_purpose_evidence_note', 400, {
+          message: 'payload.evidenceNote.projectId 格式无效；请提供字母/数字开头的合法标识。',
+          details: { issues: [{ reason: 'invalid_identity', path: 'payload.evidenceNote.projectId' }] },
+        });
+      }
+      let noteTaskId: string | undefined;
+      if (rawNote.taskId !== undefined) {
+        try { noteTaskId = identity(rawNote.taskId); } catch {
+          fail('invalid_purpose_evidence_note', 400, {
+            message: 'payload.evidenceNote.taskId 格式无效；请提供合法任务标识或省略该字段。',
+            details: { issues: [{ reason: 'invalid_identity', path: 'payload.evidenceNote.taskId' }] },
+          });
+        }
+      }
+      if (!Array.isArray(rawNote.sourceRefs)) {
+        fail('invalid_purpose_evidence_note', 400, {
+          message: 'payload.evidenceNote.sourceRefs 必须是 SourceRef 数组（无引用时传空数组 []）。',
+          details: { issues: [{ reason: 'expected_array', path: 'payload.evidenceNote.sourceRefs' }] },
+        });
+      }
+      const noteRefs = rawNote.sourceRefs.map((item, idx) => {
+        try { return sourceRef(item); } catch (err) {
           if (err instanceof StudioError && !err.details) {
             fail(err.code, 400, {
-              message: `payload.dependencies[${idx}].ref 不是有效 SourceRef；请提供 authority、id、version。`,
-              details: { issues: [{ reason: err.code, path: `payload.dependencies[${idx}].ref` }] },
+              message: `payload.evidenceNote.sourceRefs[${idx}] 不是有效 SourceRef；请提供 authority、id、version。`,
+              details: { issues: [{ reason: err.code, path: `payload.evidenceNote.sourceRefs[${idx}]` }] },
             });
           }
           throw err;
         }
       });
+      validatedEvidenceNote = {
+        projectId: noteProjectId,
+        ...(noteTaskId ? { taskId: noteTaskId } : {}),
+        note: noteText,
+        sourceRefs: noteRefs,
+      };
+    }
 
-      let validatedEvidenceNote: { projectId: string; taskId?: string; note: string; sourceRefs: StudioSourceRef[] } | undefined;
-      if (input.evidenceNote !== undefined) {
-        if (!object(input.evidenceNote)) {
-          fail('invalid_purpose_evidence_note', 400, {
-            message: 'payload.evidenceNote 必须是单数对象 { projectId, taskId?, note, sourceRefs }；不能传字符串或数组。',
-            details: { issues: [{ reason: 'expected_object', path: 'payload.evidenceNote' }] },
-          });
-        }
-        const rawNote = input.evidenceNote as Record<string, unknown>;
-        const noteText = checkText(rawNote.note, 'payload.evidenceNote.note', 5000, false).trim();
-        const rawProjectId = rawNote.projectId ?? input.taskOwner?.projectId;
-        if (typeof rawProjectId !== 'string' || !rawProjectId.trim()) {
-          fail('invalid_purpose_evidence_note', 400, {
-            message: '缺少必填字符串字段 payload.evidenceNote.projectId；请提供合法项目标识后重试。',
-            details: { issues: [{ reason: 'required', path: 'payload.evidenceNote.projectId' }] },
-          });
-        }
-        let noteProjectId: string;
-        try { noteProjectId = identity(rawProjectId); } catch {
-          fail('invalid_purpose_evidence_note', 400, {
-            message: 'payload.evidenceNote.projectId 格式无效；请提供字母/数字开头的合法标识。',
-            details: { issues: [{ reason: 'invalid_identity', path: 'payload.evidenceNote.projectId' }] },
-          });
-        }
-        let noteTaskId: string | undefined;
-        if (rawNote.taskId !== undefined) {
-          try { noteTaskId = identity(rawNote.taskId); } catch {
-            fail('invalid_purpose_evidence_note', 400, {
-              message: 'payload.evidenceNote.taskId 格式无效；请提供合法任务标识或省略该字段。',
-              details: { issues: [{ reason: 'invalid_identity', path: 'payload.evidenceNote.taskId' }] },
-            });
-          }
-        }
-        if (!Array.isArray(rawNote.sourceRefs)) {
-          fail('invalid_purpose_evidence_note', 400, {
-            message: 'payload.evidenceNote.sourceRefs 必须是 SourceRef 数组（无引用时传空数组 []）。',
-            details: { issues: [{ reason: 'expected_array', path: 'payload.evidenceNote.sourceRefs' }] },
-          });
-        }
-        const noteRefs = rawNote.sourceRefs.map((item, idx) => {
-          try { return sourceRef(item); } catch (err) {
-            if (err instanceof StudioError && !err.details) {
-              fail(err.code, 400, {
-                message: `payload.evidenceNote.sourceRefs[${idx}] 不是有效 SourceRef；请提供 authority、id、version。`,
-                details: { issues: [{ reason: err.code, path: `payload.evidenceNote.sourceRefs[${idx}]` }] },
-              });
-            }
-            throw err;
-          }
-        });
-        validatedEvidenceNote = {
-          projectId: noteProjectId,
-          ...(noteTaskId ? { taskId: noteTaskId } : {}),
-          note: noteText,
-          sourceRefs: noteRefs,
-        };
-      }
-
-      if (input.decisionChoices !== undefined && !Array.isArray(input.decisionChoices)) {
+    if (input.decisionChoices !== undefined && !Array.isArray(input.decisionChoices)) {
+      fail('invalid_purpose_field', 400, {
+        message: 'payload.decisionChoices 必须是数组；每项包含 id、question 与 options。',
+        details: { issues: [{ reason: 'expected_array', path: 'payload.decisionChoices' }] },
+      });
+    }
+    if (input.evidenceReadiness !== undefined && !object(input.evidenceReadiness)) {
+      fail('invalid_purpose_field', 400, {
+        message: 'payload.evidenceReadiness 必须是对象（包含 definition、mapping、sampleCalculation 状态）。',
+        details: { issues: [{ reason: 'expected_object', path: 'payload.evidenceReadiness' }] },
+      });
+    }
+    for (const [daysKey, daysVal] of [
+      ['windowDays', input.windowDays],
+      ['observationWindowDays', input.observationWindowDays],
+      ['availableHistoryDays', input.availableHistoryDays],
+    ] as const) {
+      if (daysVal !== undefined && (typeof daysVal !== 'number' || !Number.isFinite(daysVal) || daysVal < 0)) {
         fail('invalid_purpose_field', 400, {
-          message: 'payload.decisionChoices 必须是数组；每项包含 id、question 与 options。',
-          details: { issues: [{ reason: 'expected_array', path: 'payload.decisionChoices' }] },
+          message: `payload.${daysKey} 必须是非负有限数字；请修正后重试。`,
+          details: { issues: [{ reason: 'expected_non_negative_number', path: `payload.${daysKey}` }] },
         });
       }
-      if (input.evidenceReadiness !== undefined && !object(input.evidenceReadiness)) {
-        fail('invalid_purpose_field', 400, {
-          message: 'payload.evidenceReadiness 必须是对象（包含 definition、mapping、sampleCalculation 状态）。',
-          details: { issues: [{ reason: 'expected_object', path: 'payload.evidenceReadiness' }] },
-        });
-      }
-      for (const [daysKey, daysVal] of [
-        ['windowDays', input.windowDays],
-        ['observationWindowDays', input.observationWindowDays],
-        ['availableHistoryDays', input.availableHistoryDays],
-      ] as const) {
-        if (daysVal !== undefined && (typeof daysVal !== 'number' || !Number.isFinite(daysVal) || daysVal < 0)) {
-          fail('invalid_purpose_field', 400, {
-            message: `payload.${daysKey} 必须是非负有限数字；请修正后重试。`,
-            details: { issues: [{ reason: 'expected_non_negative_number', path: `payload.${daysKey}` }] },
-          });
-        }
-      }
+    }
+    let validatedTaskOwner: { projectId: string; taskId: string } | undefined;
+    if (input.taskOwner) {
+      validatedTaskOwner = {
+        projectId: identity(input.taskOwner.projectId),
+        taskId: identity(input.taskOwner.taskId),
+      };
+    }
 
-      const dedupKey = normalizePurposeDedupKey({
+    const dedupKey = pack
+      ? normalizePurposeDedupKey({
         enterpriseId: pack.enterpriseId,
         packId: pack.id,
         purposeKey,
         subjectUnit,
         scopeKey,
         windowDays: input.windowDays,
-      });
-      const explicitTarget = Boolean(input.targetPurposeId?.trim());
-      let existing: EnterprisePackPurpose | undefined;
-      if (explicitTarget) {
-        existing = pack.purposes.find(p => p.id === input.targetPurposeId!.trim());
-        if (!existing) fail('enterprise_pack_purpose_not_found', 404);
-      } else {
-        existing = pack.purposes.find(p => p.dedupKey === dedupKey);
-        if (!existing && input.windowDays === undefined && !input.scope?.stores?.length) {
-          const sameKeyPurposes = pack.purposes.filter(p => p.purposeKey === purposeKey && p.subjectUnit === subjectUnit);
-          if (sameKeyPurposes.length === 1) {
-            existing = sameKeyPurposes[0];
-          } else if (sameKeyPurposes.length > 1) {
-            fail('enterprise_pack_purpose_ambiguous', 409);
-          }
+      })
+      : undefined;
+    const explicitTarget = Boolean(input.targetPurposeId?.trim());
+    let existing: EnterprisePackPurpose | undefined;
+    if (explicitTarget) {
+      existing = pack?.purposes.find(p => p.id === input.targetPurposeId!.trim());
+      if (!existing) fail('enterprise_pack_purpose_not_found', 404);
+    } else if (pack) {
+      existing = pack.purposes.find(p => p.dedupKey === dedupKey);
+      if (!existing && input.windowDays === undefined && !input.scope?.stores?.length) {
+        const sameKeyPurposes = pack.purposes.filter(p => p.purposeKey === purposeKey && p.subjectUnit === subjectUnit);
+        if (sameKeyPurposes.length === 1) {
+          existing = sameKeyPurposes[0];
+        } else if (sameKeyPurposes.length > 1) {
+          fail('enterprise_pack_purpose_ambiguous', 409);
         }
       }
-      if (Array.isArray(raw.evidenceNotes) && raw.evidenceNotes.length > 0) {
-        const isVerbatimRoundTrip = Boolean(existing)
-          && raw.evidenceNotes.length === existing!.evidenceNotes.length
-          && raw.evidenceNotes.every((item, idx) =>
-            object(item)
-            && item.id === existing!.evidenceNotes[idx]!.id
-            && item.note === existing!.evidenceNotes[idx]!.note,
-          );
-        if (!isVerbatimRoundTrip) {
-          fail('invalid_purpose_evidence_note_key', 400, {
-            message: '输入不支持复数存储字段 payload.evidenceNotes；请改用单数对象字段 payload.evidenceNote（{ projectId, taskId?, note, sourceRefs }）后重试。本次未写入。',
-            details: { issues: [{ reason: 'use_singular_evidence_note', path: 'payload.evidenceNotes' }] },
-          });
-        }
+    }
+    if (Array.isArray(raw.evidenceNotes) && raw.evidenceNotes.length > 0) {
+      const isVerbatimRoundTrip = Boolean(existing)
+        && raw.evidenceNotes.length === existing!.evidenceNotes.length
+        && raw.evidenceNotes.every((item, idx) =>
+          object(item)
+          && item.id === existing!.evidenceNotes[idx]!.id
+          && item.note === existing!.evidenceNotes[idx]!.note,
+        );
+      if (!isVerbatimRoundTrip) {
+        fail('invalid_purpose_evidence_note_key', 400, {
+          message: '输入不支持复数存储字段 payload.evidenceNotes；请改用单数对象字段 payload.evidenceNote（{ projectId, taskId?, note, sourceRefs }）后重试。本次未写入。',
+          details: { issues: [{ reason: 'use_singular_evidence_note', path: 'payload.evidenceNotes' }] },
+        });
       }
-      // Validate creation-required fields BEFORE any mutation!
-      const originalGoal = existing
-        ? (input.originalGoal !== undefined ? checkText(input.originalGoal, 'payload.originalGoal', 5000, false) : existing.originalGoal)
-        : checkText(input.originalGoal, 'payload.originalGoal', 5000, false);
-      const completionCriteria = existing
-        ? (input.completionCriteria !== undefined ? checkText(input.completionCriteria, 'payload.completionCriteria', 5000, false) : existing.completionCriteria)
-        : checkText(input.completionCriteria, 'payload.completionCriteria', 5000, false);
+    }
+    const originalGoal = existing
+      ? (input.originalGoal !== undefined ? checkText(input.originalGoal, 'payload.originalGoal', 5000, false) : existing.originalGoal)
+      : checkText(input.originalGoal, 'payload.originalGoal', 5000, false);
+    const completionCriteria = existing
+      ? (input.completionCriteria !== undefined ? checkText(input.completionCriteria, 'payload.completionCriteria', 5000, false) : existing.completionCriteria)
+      : checkText(input.completionCriteria, 'payload.completionCriteria', 5000, false);
+
+    return {
+      purposeKey,
+      title,
+      businessQuestion,
+      subjectUnit,
+      tier,
+      businessStatus,
+      scopeKey,
+      limitedCalculationName,
+      deliveredSubset,
+      remainingGaps,
+      exclusions,
+      ownerRole,
+      validatedDependencies,
+      validatedEvidenceNote,
+      validatedTaskOwner,
+      dedupKey,
+      explicitTarget,
+      existing,
+      originalGoal,
+      completionCriteria,
+    };
+  }
+
+  upsertPurpose(packId: string, input: UpsertPurposeInput): { pack: EnterpriseDomainPack; purpose: EnterprisePackPurpose; created: boolean } {
+    return this.mutate(packId, pack => {
+      const {
+        purposeKey,
+        title,
+        businessQuestion,
+        subjectUnit,
+        tier,
+        businessStatus,
+        scopeKey,
+        limitedCalculationName,
+        deliveredSubset,
+        remainingGaps,
+        exclusions,
+        ownerRole,
+        validatedDependencies,
+        validatedEvidenceNote,
+        dedupKey,
+        explicitTarget,
+        existing,
+        originalGoal,
+        completionCriteria,
+      } = this.validatePurposeInput(pack, input);
+      const resolvedDedupKey = dedupKey!;
 
       const stamp = now();
       if (existing) {
@@ -752,7 +835,7 @@ export class EnterprisePackStore {
       const nextIndex = pack.purposes.length + 1;
       const purpose: EnterprisePackPurpose = {
         id: `U-${String(nextIndex).padStart(2, '0')}`,
-        dedupKey,
+        dedupKey: resolvedDedupKey,
         purposeKey,
         title,
         businessQuestion,

@@ -147,9 +147,42 @@ export function StudioMemberPackPanel({
   const [grantBasis, setGrantBasis] = useState('项目用途资源授权');
 
   const mounted = useRef(true);
+  const lastPackIdRef = useRef<string | null>(null);
+  const lastPurposeExcludedRef = useRef<Map<string, boolean>>(new Map());
 
   const syncSelectedPurposes = useCallback((nextPack: EnterpriseDomainPack | null) => {
-    setSelectedPurposeIds(nextPack ? nextPack.purposes.filter(p => !p.excludedFromPreview).map(p => p.id) : []);
+    if (!nextPack) {
+      lastPackIdRef.current = null;
+      lastPurposeExcludedRef.current = new Map();
+      setSelectedPurposeIds([]);
+      return;
+    }
+    const samePack = lastPackIdRef.current === nextPack.id;
+    const prevExcluded = lastPurposeExcludedRef.current;
+    const nextExcluded = new Map(nextPack.purposes.map(p => [p.id, Boolean(p.excludedFromPreview)]));
+    lastPackIdRef.current = nextPack.id;
+    lastPurposeExcludedRef.current = nextExcluded;
+
+    if (!samePack) {
+      setSelectedPurposeIds(nextPack.purposes.filter(p => !p.excludedFromPreview).map(p => p.id));
+      return;
+    }
+
+    setSelectedPurposeIds(prev => {
+      const prevSet = new Set(prev);
+      const next: string[] = [];
+      for (const p of nextPack.purposes) {
+        const excluded = Boolean(p.excludedFromPreview);
+        if (!prevExcluded.has(p.id)) {
+          if (!excluded) next.push(p.id);
+        } else if (prevExcluded.get(p.id) !== excluded) {
+          if (!excluded) next.push(p.id);
+        } else if (prevSet.has(p.id)) {
+          next.push(p.id);
+        }
+      }
+      return next;
+    });
   }, []);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
@@ -184,6 +217,8 @@ export function StudioMemberPackPanel({
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController();
+    lastPackIdRef.current = null;
+    lastPurposeExcludedRef.current = new Map();
     setPack(null);
     setSelectedPurposeIds([]);
     setGrantAuthority(null);

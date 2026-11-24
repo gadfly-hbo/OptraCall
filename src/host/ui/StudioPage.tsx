@@ -166,7 +166,7 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
   const [newFormErrors, setNewFormErrors] = useState<{ project?: string; goal?: string }>({});
   const newProjectRef = useRef<HTMLSelectElement>(null), newGoalRef = useRef<HTMLTextAreaElement>(null);
   const [newOperatorSession, setNewOperatorSession] = useState<HostOperatorSessionInfo | null>(null);
-  const [newOpId, setNewOpId] = useState(''), [newOpName, setNewOpName] = useState(''), [newOpPasscode, setNewOpPasscode] = useState(''), [newOpBusy, setNewOpBusy] = useState(false), [newOpMessage, setNewOpMessage] = useState('');
+  const [newOpId, setNewOpId] = useState(''), [newOpName, setNewOpName] = useState(''), [newOpPasscode, setNewOpPasscode] = useState(''), [newOpBusy, setNewOpBusy] = useState(false), [newOpMessage, setNewOpMessage] = useState(''), [newOpError, setNewOpError] = useState('');
   const [materialOptions, setMaterialOptions] = useState<StudioMaterial[]>([]), [materialLoading, setMaterialLoading] = useState(false), [chosenMaterials, setChosenMaterials] = useState<string[]>([]), [materialError, setMaterialError] = useState('');
   const [answer, setAnswer] = useState(''), [sourceText, setSourceText] = useState<StudioSourceText>(), [sourceLoading, setSourceLoading] = useState(false), [sourceError, setSourceError] = useState('');
   const [conflictedQuestion, setConflictedQuestion] = useState<StudioWorkItem>();
@@ -205,15 +205,15 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
   useEffect(() => { if (active && initialSystemId) { setSystemId(initialSystemId); onTargetConsumed?.(); } }, [active, initialSystemId, onTargetConsumed]);
   useEffect(() => { if (!active && !dirty && !pending && !working) { setPanel(undefined); setEditor(undefined); } }, [active, dirty, pending, working]);
   const allowLeave = useCallback(async () => {
-    if (working || pending) { setError('当前操作结果尚未核定，请先核对原请求；编辑内容和原记录保持。'); return false; }
+    if (working || pending || (panel?.kind === 'new' && newOpBusy)) { setError(panel?.kind === 'new' && newOpBusy ? '维护身份正在验证中，请等待验证完成后再关闭或发起建设。' : '当前操作结果尚未核定，请先核对原请求；编辑内容和原记录保持。'); return false; }
     if (!dirty) return true;
     if (leaveResolver.current) return false;
     return new Promise<boolean>(resolve => { leaveResolver.current = resolve; setLeaveOpen(true); });
-  }, [working, pending, dirty]);
+  }, [working, pending, dirty, panel?.kind, newOpBusy]);
   useEffect(() => { onNavigationGuard?.(allowLeave); return () => onNavigationGuard?.(null); }, [allowLeave, onNavigationGuard]);
   useEffect(() => { if (!dirty && !pending && !graphPending) return; const protect = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; }; window.addEventListener('beforeunload', protect); return () => window.removeEventListener('beforeunload', protect); }, [dirty, pending, graphPending]);
   const closePanel = async () => { dismissAfterLeave.current = true; if (await allowLeave()) { setPanel(undefined); setEditor(undefined); } };
-  const finishLeave = (discard: boolean) => { const resolve = leaveResolver.current; leaveResolver.current = null; setLeaveOpen(false); if (discard) { setEditor(undefined); if (panel?.kind === 'new') { newFormInitial.current = JSON.stringify(['', '', '', '']); setNewProjectId(''); setName(''); setGoal(''); setTopicTitle(''); setChosenMaterials([]); setNewFormErrors({}); setNewOpMessage(''); } if (panel?.kind === 'materials') setChosenMaterials([]); if (dismissAfterLeave.current) setPanel(undefined); } dismissAfterLeave.current = false; resolve?.(discard); };
+  const finishLeave = (discard: boolean) => { const resolve = leaveResolver.current; leaveResolver.current = null; setLeaveOpen(false); if (discard) { setEditor(undefined); if (panel?.kind === 'new') { newFormInitial.current = JSON.stringify(['', '', '', '']); setNewProjectId(''); setName(''); setGoal(''); setTopicTitle(''); setChosenMaterials([]); setNewFormErrors({}); setNewOpMessage(''); setNewOpError(''); } if (panel?.kind === 'materials') setChosenMaterials([]); if (dismissAfterLeave.current) setPanel(undefined); } dismissAfterLeave.current = false; resolve?.(discard); };
   const open = (next: Panel) => {
     trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setError('');
@@ -226,7 +226,7 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
     const defaultProjectId = projects.find(project => project.id === currentProjectId && !project.archivedAt)?.id || projects.find(project => !project.archivedAt)?.id || '';
     const defaultName = `${enterpriseName || '企业'}基础资产`, defaultTopic = '基础资产建设';
     newFormInitial.current = JSON.stringify([defaultProjectId, defaultName, startGoal || '', defaultTopic]);
-    setNewProjectId(defaultProjectId); setName(defaultName); setGoal(startGoal || ''); setTopicTitle(defaultTopic); setChosenMaterials([]); setNewFormErrors({}); setNewOpMessage('');
+    setNewProjectId(defaultProjectId); setName(defaultName); setGoal(startGoal || ''); setTopicTitle(defaultTopic); setChosenMaterials([]); setNewFormErrors({}); setNewOpMessage(''); setNewOpError('');
     void readOperatorSession().then(res => { if (mounted.current) setNewOperatorSession(res); }).catch(() => {});
     open({ kind: 'new' });
   };
@@ -301,7 +301,7 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
   };
   const switchNewSystemOperator = async () => {
     if (newOpBusy || !newOpId.trim() || newOpPasscode.length < 4) return;
-    setNewOpBusy(true); setNewOpMessage(''); setError('');
+    setNewOpBusy(true); setNewOpMessage(''); setNewOpError(''); setError('');
     try {
       const res = await switchOperatorSession({
         action: 'register',
@@ -313,15 +313,24 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
       if (mounted.current) {
         setNewOperatorSession(res);
         setNewOpPasscode('');
+        setNewOpError('');
         setNewOpMessage(`已建立/登录可复用维护身份：${res.operator.displayName || res.operator.operatorId}（${res.operator.operatorId}），换浏览器可重新认证授权。`);
       }
     } catch (fault) {
-      if (mounted.current) setError(fault instanceof Error ? fault.message : '维护身份验证失败。');
+      if (mounted.current) {
+        const message = fault instanceof Error ? fault.message : '维护身份验证失败。';
+        setNewOpError(message);
+        setError(message);
+      }
     } finally {
       if (mounted.current) setNewOpBusy(false);
     }
   };
   const newSystem = async () => {
+    if (newOpBusy) {
+      setError('维护身份正在验证中，请等待验证完成后再发起建设。');
+      return;
+    }
     const fieldErrors: { project?: string; goal?: string } = {};
     if (!newProjectId) fieldErrors.project = '请选择一个未归档的建设归属项目；如需新建，可点击下方「创建执行项目」。';
     if (!goal.trim()) fieldErrors.goal = '请填写建设目标与企业范围（不可为空或仅含空格）。下一步：说明本轮要建设的业务主题、适用门店/范围和已有资料后，再点击「发起建设」。';
@@ -347,7 +356,7 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
   const projectPicker = (value: string, update: (value: string) => void, id: string, fieldError?: string) => <label className="studio-field" htmlFor={id}><span>{id === 'studio-new-project' ? '建设归属项目（必填）' : '分析使用项目'}</span><select ref={id === 'studio-new-project' ? newProjectRef : undefined} id={id} value={value} disabled={blocked} aria-invalid={fieldError ? true : undefined} aria-describedby={fieldError ? `${id}-error` : undefined} onChange={event => { update(event.target.value); if (id === 'studio-new-project') { setNewFormErrors(prev => prev.project ? { ...prev, project: undefined } : prev); setError(''); } }}><option value="">请选择项目</option>{projects.map(project => <option key={project.id} value={project.id} disabled={Boolean(project.archivedAt)}>{project.name}{project.archivedAt ? '（已归档，只读）' : ''}</option>)}</select>{fieldError && <p id={`${id}-error`} className="studio-error-text" role="alert">{fieldError}</p>}</label>;
   const panelView = (): { title: string; subtitle?: string; body: ReactNode; footer?: ReactNode } | undefined => {
     if (!panel) return;
-    const cancel = <button type="button" className="secondary-button" disabled={working} onClick={() => { void closePanel(); }}>返回原位置</button>;
+    const cancel = <button type="button" className="secondary-button" disabled={working || (panel.kind === 'new' && newOpBusy)} onClick={() => { void closePanel(); }}>返回原位置</button>;
     if (panel.kind === 'new') {
       const isNamedMaintainer = Boolean(newOperatorSession?.operator.verified && newOperatorSession.operator.operatorId.startsWith('op:'));
       return {
@@ -364,11 +373,12 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
                     : `${newOperatorSession?.operator.verified ? `临时浏览器会话（${newOperatorSession.operator.operatorId}）` : '未认证会话'} — 若后续需换浏览器进行明细授权或维护，建议先建立可复用的具名维护身份。`}
                 </p>
                 {newOpMessage && <p className="studio-meta" role="status">{newOpMessage}</p>}
+                {newOpError && <p className="studio-error-text" role="alert">{newOpError}</p>}
                 {!isNamedMaintainer && (
                   <div className="studio-row" style={{ marginTop: 8, gap: 8, flexWrap: 'wrap' }}>
-                    <input aria-label="建设维护人 ID" placeholder="维护人 ID（如 ops-lead）" value={newOpId} disabled={newOpBusy || blocked} onChange={e => setNewOpId(e.target.value)} />
-                    <input aria-label="建设维护人显示名" placeholder="姓名/岗位（可选）" value={newOpName} disabled={newOpBusy || blocked} onChange={e => setNewOpName(e.target.value)} />
-                    <input type="password" aria-label="建设维护人口令" placeholder="口令（至少4位）" value={newOpPasscode} disabled={newOpBusy || blocked} onChange={e => setNewOpPasscode(e.target.value)} />
+                    <input aria-label="建设维护人 ID" placeholder="维护人 ID（如 ops-lead）" value={newOpId} disabled={newOpBusy || blocked} onChange={e => { setNewOpId(e.target.value); if (newOpError) setNewOpError(''); }} />
+                    <input aria-label="建设维护人显示名" placeholder="姓名/岗位（可选）" value={newOpName} disabled={newOpBusy || blocked} onChange={e => { setNewOpName(e.target.value); if (newOpError) setNewOpError(''); }} />
+                    <input type="password" aria-label="建设维护人口令" placeholder="口令（至少4位）" value={newOpPasscode} disabled={newOpBusy || blocked} onChange={e => { setNewOpPasscode(e.target.value); if (newOpError) setNewOpError(''); }} />
                     <button type="button" className="secondary-button" disabled={newOpBusy || blocked || !newOpId.trim() || newOpPasscode.length < 4} onClick={() => { void switchNewSystemOperator(); }}>
                       {newOpBusy ? '验证中…' : '建立/登录维护身份'}
                     </button>
@@ -391,7 +401,7 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
             </form>
           </>
         ),
-        footer: <>{cancel}<button type="submit" form="studio-create-form" className="primary-button" disabled={blocked || materialLoading}>{working ? '正在发起…' : '发起建设'}</button></>,
+        footer: <>{cancel}<button type="submit" form="studio-create-form" className="primary-button" disabled={blocked || materialLoading || newOpBusy}>{newOpBusy ? '等待维护身份验证…' : working ? '正在发起…' : '发起建设'}</button></>,
       };
     }
     if (panel.kind === 'source') return { title: panel.ref.title || '准确来源', subtitle: `${authorityText[panel.ref.authority]} · ${panel.ref.version}`, body: <>{sourceLoading ? <p role="status">正在读取此准确来源并核对当前资格…</p> : sourceError ? <div role="alert" className="studio-note is-error">{sourceError}<p>原引用保持，未以其他版本或来源替代。</p></div> : <><pre className="studio-source-text">{sourceText?.text || '此来源暂无可读取正文。'}</pre>{(!sourceText?.complete || sourceText.limitation) && <div className="studio-note is-warning">{sourceText?.limitation || '返回为部分来源，不能当作完整原文。'}</div>}{sourceText?.governance && <section><h3>当前来源治理</h3><pre>{typeof sourceText.governance === 'string' ? sourceText.governance : JSON.stringify(sourceText.governance, null, 2)}</pre></section>}</>}<details><summary>准确引用</summary><pre>{JSON.stringify(panel.ref, null, 2)}</pre></details></>, footer: <button type="button" className="secondary-button" onClick={() => panel.back ? setPanel(panel.back) : void closePanel()}>{panel.back ? '返回原面板' : '返回原位置'}</button> };
@@ -486,7 +496,7 @@ function StudioSystemWorkbench({ active = true, currentProjectId, projects, init
       {system.workItems.filter(item => item.kind === 'question' && item.status !== 'resolved').slice(0, 2).map(item => <div className="studio-note is-warning studio-attention" key={item.id}><div><strong>需要你确认 · {item.title}</strong><p>{item.impact || item.detail}</p></div><button type="button" className="secondary-button" disabled={readOnly || blocked} onClick={() => { setAnswer(item.answer || ''); open({ kind: 'question', item }); }}>查看依据并回答</button></div>)}
       <div className={`studio-workcolumns ${collapsed ? 'is-focused' : ''}`}><section className="studio-conversation" aria-label="主 Agent 协作"><div className="studio-section-head"><h2>主 Agent 协作</h2><Badge tone={workspace.running ? 'purple' : ''}>{workspace.running ? '正在运行' : readOnly ? '只读' : '原任务当前未运行'}</Badge></div><div className="studio-conversation-content">{renderConversation ? renderConversation(system, workspace) : <div className="studio-conversation-empty"><p>主建设协作沿同一项目任务与 Pi 会话，保留原上下文、工具、取消及历史。</p><p className="studio-meta">这里不创建第二套会话或消息循环。</p><button type="button" className="primary-button" onClick={() => onOpenTask(executionOwner!.projectId, executionOwner!.taskId)}>进入原建设会话</button></div>}</div><div className="studio-conversation-foot"><span>按需协作与自主核查；不固定专家流水线。</span><button type="button" className="text-button" disabled={readOnly || blocked || workspace.running} onClick={() => { if (onContinueConstruction) void Promise.resolve(onContinueConstruction(system)).catch(error => setError(errorText(error))); else onOpenTask(executionOwner!.projectId, executionOwner!.taskId); }}>继续原建设</button></div></section><section id="studio-resources" className="studio-resources" aria-label="资料、资产与建设记录" hidden={collapsed}><div className="studio-tabs" aria-label="建设内容">{resourceTabs.map(value => <button type="button" key={value} aria-pressed={tab === value} onClick={() => setTab(value)}>{value}</button>)}</div><div className="studio-resource-body">{tab === '资料' ? renderMaterials() : tab === '资产' ? renderAssets() : tab === '覆盖与缺口' ? renderCoverage() : renderRecords()}</div></section></div>
     </> : !loading && <div className="studio-empty"><p>体系记录暂不可读取。原来源与会话未被改写。</p><button type="button" className="secondary-button" onClick={() => { void backToList(); }}>返回体系列表</button></div>}
-    {panelContent && <PersonalDialog title={panelContent.title} subtitle={panelContent.subtitle} drawer busy={working} returnFocus={trigger.current} fallbackFocus={heading.current} onClose={() => { void closePanel(); }} footer={<>{error && <p className="studio-error-text" role="alert">{error}</p>}{pending && <div className="studio-note is-warning"><p>{pending.label}结果 UNKNOWN，原输入保持，未自动重放。</p><button type="button" className="secondary-button" disabled={working} onClick={() => { void inspectPending(); }}>核对原请求结果</button></div>}{panelContent.footer}</>}>{panelContent.body}</PersonalDialog>}
+    {panelContent && <PersonalDialog title={panelContent.title} subtitle={panelContent.subtitle} drawer busy={working || (panel?.kind === 'new' && newOpBusy)} returnFocus={trigger.current} fallbackFocus={heading.current} onClose={() => { void closePanel(); }} footer={<>{error && <p className="studio-error-text" role="alert">{error}</p>}{pending && <div className="studio-note is-warning"><p>{pending.label}结果 UNKNOWN，原输入保持，未自动重放。</p><button type="button" className="secondary-button" disabled={working} onClick={() => { void inspectPending(); }}>核对原请求结果</button></div>}{panelContent.footer}</>}>{panelContent.body}</PersonalDialog>}
     {leaveOpen && <PersonalDialog title={questionPanel?.kind === 'question' ? '保留未保存的回答？' : panel?.kind === 'new' ? '保留未发起的体系建设？' : '保留未保存的候选编辑？'} returnFocus={null} fallbackFocus={heading.current} onClose={() => finishLeave(false)} footer={<><button type="button" className="primary-button" onClick={() => finishLeave(false)}>继续编辑</button><button type="button" className="secondary-button" onClick={() => finishLeave(true)}>放弃本次未保存修改</button></>}><p>{questionPanel?.kind === 'question' ? '回答草稿和打开时的原问题仍在本页。可以继续核对，或明确放弃本次草稿。' : panel?.kind === 'new' ? '已调整的建设归属项目或表单内容尚未发起建设。可以继续编辑保留当前选择，或明确放弃本次未发起的调整。' : '尚未保存的修改仍在本页。可以继续编辑，或明确放弃；已保存候选、原正式版及旧引用始终保留。'}</p></PersonalDialog>}
   </section>;
 }

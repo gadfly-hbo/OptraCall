@@ -288,7 +288,10 @@ export function App() {
     if (!mounted.current) return value;
     if (value.project.id !== projectId || value.task.id !== taskId) throw new HostRequestError('原任务归属未能核对；保留原请求与问题。');
     const uncertain = uiRef.current[key]?.uncertainPersonalSend;
-    if (uncertain && value.task.lastRun?.id === uncertain.args[3]) { changeUI(key, old => ({ ...old, uncertainPersonalSend: undefined, failedPrompt: undefined, notice: '已核对原请求已接受；未重新发送。' })); await persistDraft(projectId, taskId, ''); }
+    if (uncertain && value.task.lastRun?.id === uncertain.args[3]) {
+      writeRejectedSend(projectId, taskId, null);
+      changeUI(key, old => ({ ...old, uncertainPersonalSend: undefined, failedPrompt: undefined, notice: '已核对原请求已接受；未重新发送。' }));
+    }
     const runErr = lastRunError(value.task);
     const interrupted = value.task.lastRun?.status === 'interrupted';
     const rejected = interrupted ? undefined : readRejectedSend(projectId, taskId, value.task);
@@ -617,20 +620,27 @@ export function App() {
     const messageArgs: Parameters<typeof sendMessage> = structuredClone([projectId, taskId, text, requestId, targetCase?.selection, requirementContexts[key], targetEnterprise.length ? targetEnterprise : undefined, targetEnterpriseCase, feedbackContexts[key], targetData.length ? targetData : undefined, personal.map(item => item.selection), context]);
     pending.current.add(key);
     changeUI(key, old => ({ ...old, posting: true, status: 'running', error: undefined, unavailablePersonal: undefined, notice: undefined, commandResult: undefined, streaming: '', finalReceived: false, requestId, failedPrompt: text, optimistic: command ? undefined : text }));
+    const inflightDraft = draftQueues.current.get(key);
+    if (inflightDraft) await inflightDraft.catch(() => {});
+    const draftVersionBeforeSend = draftVersions.current.get(key) ?? 0;
+    const clearLocalDraftIfUnchanged = () => {
+      if ((draftVersions.current.get(key) ?? 0) !== draftVersionBeforeSend || draftQueues.current.has(key)) return;
+      updateTask(projectId, taskId, task => ((command ? task.draft.trim() === text.trim() : task.draft === text) ? { ...task, draft: '' } : task));
+    };
     try {
       if (command) {
         const operation = runCommand(projectId, taskId, text.trim(), requestId);
         changeUI(key, old => ({ ...old, posting: false }));
         const result = await operation;
         writeRejectedSend(projectId, taskId, null);
-        await persistDraft(projectId, taskId, '').catch(() => {});
+        clearLocalDraftIfUnchanged();
         applySnapshot(key, result.snapshot);
-        changeUI(key, old => ({ ...old, commandResult: result.result == null ? undefined : typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2), status: 'idle', requestId: undefined, failedPrompt: undefined }));
+        changeUI(key, old => ({ ...old, commandResult: result.result == null ? undefined : typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2), status: 'idle', requestId: undefined, failedPrompt: old.failedPrompt === text ? undefined : old.failedPrompt }));
       } else {
         await sendMessage(...messageArgs);
         writeRejectedSend(projectId, taskId, null);
-        await persistDraft(projectId, taskId, '').catch(() => {});
-        changeUI(key, old => ({ ...old, failedPrompt: undefined }));
+        clearLocalDraftIfUnchanged();
+        changeUI(key, old => ({ ...old, failedPrompt: old.failedPrompt === text ? undefined : old.failedPrompt }));
       }
     }
     catch (error) {
@@ -647,9 +657,11 @@ export function App() {
       const rejectedMessage = definitelyRejected ? `发送未获 Host 接受：${safeError(error)} 原消息已保留在输入框，未计入已发送对话；可修改后发送或点击重试。` : undefined;
       if (accepted) {
         writeRejectedSend(projectId, taskId, null);
-        await persistDraft(projectId, taskId, '').catch(() => {});
+        clearLocalDraftIfUnchanged();
       } else if (definitelyRejected || personal.length > 0) {
-        await persistDraft(projectId, taskId, text).catch(() => {});
+        if ((draftVersions.current.get(key) ?? 0) === draftVersionBeforeSend && !draftQueues.current.has(key)) {
+          await persistDraft(projectId, taskId, text).catch(() => {});
+        }
         if (definitelyRejected && rejectedMessage) {
           writeRejectedSend(projectId, taskId, { code: error.code ?? 'host_request_failed', message: rejectedMessage, lastRunId: recoveredLastRunId, at: new Date().toISOString() });
         }

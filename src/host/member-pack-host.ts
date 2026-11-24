@@ -1202,21 +1202,39 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       return guardOrdinaryReferencedReport() ?? { allowed: true };
     }
 
-    const projectCleanDir = path.resolve(resolvedProjectRoot, '020_clean');
-    const projectDrawDir = path.resolve(resolvedProjectRoot, '010_draw');
-    const effectiveRoot = workspaceRoot ? path.resolve(workspaceRoot) : resolvedProjectRoot;
-    const effectiveCleanDir = path.resolve(effectiveRoot, '020_clean');
-    const effectiveReportsDir = path.resolve(effectiveRoot, '060_reports');
+    const canonicalPath = (value: string): string => {
+      const resolved = path.resolve(value);
+      if (fs.existsSync(resolved)) {
+        try { return fs.realpathSync(resolved); } catch { return resolved; }
+      }
+      const tail: string[] = [];
+      let cur = resolved;
+      while (!fs.existsSync(cur)) {
+        const parent = path.dirname(cur);
+        if (parent === cur) return resolved;
+        tail.unshift(path.basename(cur));
+        cur = parent;
+      }
+      try { return path.join(fs.realpathSync(cur), ...tail); } catch { return resolved; }
+    };
+    const realProjectRoot = canonicalPath(resolvedProjectRoot);
+    const projectCleanDir = path.join(realProjectRoot, '020_clean');
+    const projectDrawDir = path.join(realProjectRoot, '010_draw');
+    const realProjectReportsDir = path.join(realProjectRoot, '060_reports');
+    const effectiveRoot = workspaceRoot ? canonicalPath(workspaceRoot) : realProjectRoot;
+    const effectiveCleanDir = path.join(effectiveRoot, '020_clean');
+    const effectiveReportsDir = path.join(effectiveRoot, '060_reports');
+    const effectiveSkillsDir = path.join(effectiveRoot, 'skills');
 
     const workspace = workspaceRoot && [...(activeWorkspaces.get(projectId)?.values() ?? [])]
-      .find(candidate => candidate.workspaceRoot === effectiveRoot);
+      .find(candidate => canonicalPath(candidate.workspaceRoot) === effectiveRoot);
     if (workspace && workspace.policyFingerprint !== projectPermissionFingerprint(projectId)) {
       return { allowed: false, reason: 'member_pack_workspace_permission_changed' };
     }
 
     const resolveTarget = (rawTarget: unknown): string | undefined => {
       if (typeof rawTarget !== 'string' || !rawTarget.trim()) return undefined;
-      return path.resolve(effectiveCleanDir, rawTarget.trim());
+      return canonicalPath(path.resolve(effectiveCleanDir, rawTarget.trim()));
     };
 
     // Block subagent escape attempts in restricted member-pack projects
@@ -1228,9 +1246,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const target = resolveTarget(call.input.path ?? call.input.file_path ?? call.input.target);
       if (!target) return { allowed: false, reason: scope.summary };
       // Writing/reading own 060_reports deliverables inside the task workspace remains allowed
-      if (isInside(target, effectiveReportsDir) || (!workspaceRoot && isInside(target, projectReportsDir))) return { allowed: true };
+      if (isInside(target, effectiveReportsDir) || (!workspaceRoot && isInside(target, realProjectReportsDir))) return { allowed: true };
+      // Reading Host-snapshotted pinned built-in Skill resources inside workspaceRoot/skills is strictly read-only
+      if (workspaceRoot && isInside(target, effectiveSkillsDir)) {
+        if (call.toolName === 'read') return { allowed: true };
+        return { allowed: false, reason: 'member_pack_skill_readonly: 受限任务固定 Skill 目录为只读，禁止写入或修改' };
+      }
       // NEVER allow direct access to project's raw 010_draw or original projectRoot when isolated workspace is active
-      if (isInside(target, projectDrawDir) || (workspaceRoot && isInside(target, resolvedProjectRoot))) {
+      if (isInside(target, projectDrawDir) || (workspaceRoot && isInside(target, realProjectRoot))) {
         return { allowed: false, reason: 'member_pack_path_outside_workspace: 受限资源授权项目禁止越过任务隔离目录访问原项目资料' };
       }
       if (!isInside(target, effectiveRoot)) {
@@ -1251,11 +1274,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     }
 
     if (['ls', 'find', 'grep'].includes(call.toolName)) {
+      const target = resolveTarget(call.input.path ?? '.');
+      if (workspaceRoot && target && isInside(target, effectiveSkillsDir)) return { allowed: true };
       if (scope.mode === 'deny-detail') {
         return { allowed: false, reason: scope.summary };
       }
-      const target = resolveTarget(call.input.path ?? '.');
-      if (target && (isInside(target, effectiveReportsDir) || (!workspaceRoot && isInside(target, projectReportsDir)))) return { allowed: true };
+      if (target && (isInside(target, effectiveReportsDir) || (!workspaceRoot && isInside(target, realProjectReportsDir)))) return { allowed: true };
       if (call.toolName === 'grep' && target && isInside(target, effectiveCleanDir)) {
         const rel = normalizeRelativeDataPath(path.relative(effectiveRoot, target));
         if (scope.allowedPaths.includes(rel)) return { allowed: true };
@@ -1270,10 +1294,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const cmd = String(call.input.command ?? call.input.code ?? '');
       // Block any reference to projectRoot, projects parent root, 010_draw, or escaping workspace via ../../ or encoded path construction
       const projectsParentDir = path.dirname(resolvedProjectRoot);
+      const realProjectsParentDir = path.dirname(realProjectRoot);
       if (
         cmd.includes(resolvedProjectRoot)
+        || cmd.includes(realProjectRoot)
         || cmd.includes(projectCleanDir)
         || cmd.includes(projectsParentDir)
+        || cmd.includes(realProjectsParentDir)
         || /\b010_draw\b|\.\.\/\.\.|\.\.\\\.\.|\b(?:atob|b64decode|fromhex|fromCharCode|realpath|readlink)\b|\/proc\//i.test(cmd)
       ) {
         return { allowed: false, reason: 'member_pack_path_outside_workspace: 受限资源授权项目命令禁止越出任务隔离工作区访问原项目目录' };
@@ -1286,7 +1313,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const full = path.join(dir, entry.name);
             if (entry.isDirectory()) walk(full);
             else {
-              const rel = normalizeRelativeDataPath(path.relative(resolvedProjectRoot, full));
+              const rel = normalizeRelativeDataPath(path.relative(realProjectRoot, full));
               if (!scope.allowedPaths.includes(rel)) {
                 unauthorizedNames.push(entry.name, rel);
               }
@@ -3950,6 +3977,16 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         }
         if (action === 'pin' && !existingPin && pinRevision?.status !== 'active') throw new StudioError('enterprise_pack_no_published_revision', 409);
         const performAction = async () => {
+          const purposeInput = action === 'purposes'
+            ? {
+              ...(input as unknown as Parameters<EnterprisePackStore['upsertPurpose']>[1]),
+              ...(input.projectId && input.taskId ? { taskOwner: { projectId: String(input.projectId), taskId: String(input.taskId) } } : {}),
+            }
+            : undefined;
+          if (purposeInput) {
+            // Validate purpose payload BEFORE any continuation-owner mutation so invalid requests cause zero writes!
+            packs.validatePurposeInput(currentPack, purposeInput);
+          }
           if (!taskAction) {
           // Bind continuation owner when the previous owner project has been archived and an active same-enterprise project takes over construction!
           const origSystem = options.studio.get(currentPack.systemId);
@@ -3989,10 +4026,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
           return { result: { pack } as unknown as Record<string, unknown>, systemId: currentPack.systemId };
         }
         if (action === 'purposes') {
-          const result = packs.upsertPurpose(packId, {
-            ...(input as unknown as Parameters<EnterprisePackStore['upsertPurpose']>[1]),
-            ...(input.projectId && input.taskId ? { taskOwner: { projectId: String(input.projectId), taskId: String(input.taskId) } } : {}),
-          });
+          const result = packs.upsertPurpose(packId, purposeInput!);
           return { result: result as unknown as Record<string, unknown>, systemId: currentPack.systemId };
         }
         if (action === 'previews') {

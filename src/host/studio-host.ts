@@ -1205,7 +1205,7 @@ export function createStudioFeature(options: StudioHostOptions) {
             const entId = system.enterpriseId ?? enterpriseScopes.enterpriseIdForProject(projectId);
             if (!entId) throw new StudioError('studio_enterprise_required', 409);
             const domain = typeof payload.domain === 'string' && payload.domain.trim() ? payload.domain.trim() : 'member-operations';
-            const ensured = memberPack.packs.ensurePack({ enterpriseId: entId, systemId: id, domain, name: `${system.name} · 会员运营资产包` });
+            const ensureTargetPack = () => memberPack.packs.ensurePack({ enterpriseId: entId, systemId: id, domain, name: `${system.name} · 会员运营资产包` });
             if (action === 'pack-save-panorama') {
               const srcRefs = parseSources(payload.sourceRefs ?? []);
               await validateSources(srcRefs, system, projectId, true);
@@ -1217,6 +1217,7 @@ export function createStudioFeature(options: StudioHostOptions) {
                 }
               }
               context.assertCurrent(); context.signal.throwIfAborted();
+              const ensured = ensureTargetPack();
               const updated = memberPack.packs.savePanorama(ensured.id, {
                 ...(payload as unknown as Parameters<typeof memberPack.packs.savePanorama>[1]),
                 sourceRefs: srcRefs,
@@ -1228,13 +1229,14 @@ export function createStudioFeature(options: StudioHostOptions) {
               const entRefs = parseSources(payload.enterpriseSourceRefs ?? []);
               await validateSources(entRefs, system, projectId, true);
               context.assertCurrent(); context.signal.throwIfAborted();
+              const ensured = ensureTargetPack();
               const updated = memberPack.packs.upsertEntry(ensured.id, {
                 ...(payload as unknown as Parameters<typeof memberPack.packs.upsertEntry>[1]),
                 enterpriseSourceRefs: entRefs,
               });
               return reply(action, { packId: updated.id, packCode: updated.packCode, entryCount: updated.entries.length });
             }
-            // pack-upsert-purpose
+            // pack-upsert-purpose: validate payload & source refs BEFORE creating any empty pack!
             if (object(payload.evidenceNote) && Array.isArray(payload.evidenceNote.sourceRefs)) {
               let parsedNoteRefs: StudioSourceRef[];
               try {
@@ -1248,11 +1250,15 @@ export function createStudioFeature(options: StudioHostOptions) {
               }
               await validateSources(parsedNoteRefs, system, projectId, true);
             }
-            context.assertCurrent(); context.signal.throwIfAborted();
-            const saved = memberPack.packs.upsertPurpose(ensured.id, {
+            const upsertInput = {
               ...(payload as unknown as Parameters<typeof memberPack.packs.upsertPurpose>[1]),
               taskOwner: { projectId, taskId },
-            });
+            };
+            const existingPack = memberPack.packs.list(entId).find(p => p.domain === domain);
+            memberPack.packs.validatePurposeInput(existingPack, upsertInput);
+            context.assertCurrent(); context.signal.throwIfAborted();
+            const ensured = ensureTargetPack();
+            const saved = memberPack.packs.upsertPurpose(ensured.id, upsertInput);
             return reply(action, { packId: saved.pack.id, packCode: saved.pack.packCode, purposeId: saved.purpose.id, created: saved.created, purposeCount: saved.pack.purposes.length });
           }
           throw new StudioError('studio_action_not_available', 409);

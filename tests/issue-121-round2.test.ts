@@ -1,13 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { startTestHost } from './fixtures/host-process.ts';
 import { startToolProvider, providerMessageText } from './fixtures/tool-provider.ts';
 import { approvedTaskSkills, makeTaskAssignment } from '../src/host/task-assignment.ts';
 import { loadFixedBuiltInSkill, packageIdentity, projectSkillCatalog } from '../src/agent/skill-catalog.ts';
-import { resolveProtectedSkillSnapshot, snapshotProtectedSkills } from '../src/agent/protected-skills.ts';
+import { resolveProtectedSkillSnapshot } from '../src/agent/protected-skills.ts';
+import { createMemberPackFeature } from '../src/host/member-pack-host.ts';
+import { EnterpriseScopeStore } from '../src/host/enterprise-scope-store.ts';
+import { ProjectStore } from '../src/host/project-store.ts';
+import { StudioStore } from '../extensions/business-plugins/studio/store.ts';
 
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 const systemTextOf = (requests: { body: { messages?: { role: string; content?: unknown }[] } }[]) =>
@@ -39,6 +44,64 @@ async function waitTaskSettled(host: Awaited<ReturnType<typeof startTestHost>>, 
     await new Promise(r => setTimeout(r, 40));
   }
   throw new Error('Timed out waiting for task settlement');
+}
+
+function parseCsvRows(csvText: string): Record<string, string>[] {
+  const lines = csvText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const headerIdx = lines.findIndex(line => line.includes(','));
+  if (headerIdx < 0) return [];
+  const header = lines[headerIdx]!.split(',').map(cell => cell.trim());
+  const rows: Record<string, string>[] = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const parts = lines[i]!.split(',').map(cell => cell.trim());
+    if (parts.length !== header.length) continue;
+    const row: Record<string, string> = {};
+    for (let j = 0; j < header.length; j++) row[header[j]!] = parts[j]!;
+    rows.push(row);
+  }
+  return rows;
+}
+
+function computeStore30dRepurchaseFromRows(membersText: string, ordersText: string, refundsText: string) {
+  const members = parseCsvRows(membersText).filter(r => r.cohort_month === '2026-06');
+  const orders = parseCsvRows(ordersText);
+  const fullRefundOrders = new Set(
+    parseCsvRows(refundsText).filter(r => r.full_refund === 'true').map(r => r.order_id),
+  );
+  const validOrdersByMember = new Map<string, { order_id: string; store: string; order_date: string }[]>();
+  for (const order of orders) {
+    if (fullRefundOrders.has(order.order_id)) continue;
+    if (order.order_date < '2026-06-01' || order.order_date > '2026-07-31') continue;
+    const list = validOrdersByMember.get(order.member_id) ?? [];
+    list.push({ order_id: order.order_id, store: order.store, order_date: order.order_date });
+    validOrdersByMember.set(order.member_id, list);
+  }
+  const byStore: Record<string, { denominator: number; numerator: number }> = {};
+  let totalDen = 0;
+  let totalNum = 0;
+  for (const m of members) {
+    const store = m.store;
+    byStore[store] ??= { denominator: 0, numerator: 0 };
+    byStore[store]!.denominator += 1;
+    totalDen += 1;
+    const firstMs = Date.parse(m.order_date + 'T00:00:00Z');
+    const memberOrders = (validOrdersByMember.get(m.member_id) ?? []).sort((a, b) => a.order_date.localeCompare(b.order_date));
+    const hasRepeat = memberOrders.some(o => {
+      const diffDays = (Date.parse(o.order_date + 'T00:00:00Z') - firstMs) / 86_400_000;
+      return diffDays > 0 && diffDays <= 30;
+    });
+    if (hasRepeat) {
+      byStore[store]!.numerator += 1;
+      totalNum += 1;
+    }
+  }
+  return {
+    memberCount: members.length,
+    orderCount: orders.length,
+    refundCount: parseCsvRows(refundsText).length,
+    byStore,
+    total: { denominator: totalDen, numerator: totalNum },
+  };
 }
 
 async function seedRestrictedMemberPackScenario(host: Awaited<ReturnType<typeof startTestHost>>, providerBaseUrl: string) {
@@ -125,7 +188,7 @@ async function seedRestrictedMemberPackScenario(host: Awaited<ReturnType<typeof 
   return { enterpriseId, ownerProject, consumerProject, system, pack, boundOwnerReq, consumerReq, consumerCookie };
 }
 
-test('Item 01 · Restricted member-pack task with default data-analysis Skill starts, delivers exact built-in skill, and preserves cancel/collision/ordinary contrasts', { timeout: 90_000 }, async t => {
+test('Item 01 · Restricted member-pack task with default data-analysis Skill actually reads pinned SKILL.md body (Linux read_task_skill & macOS read/symlink), and preserves cancel/collision/ordinary contrasts', { timeout: 90_000 }, async t => {
   const provider = await startToolProvider();
   t.after(() => provider.close());
   const host = await startTestHost();
@@ -133,8 +196,13 @@ test('Item 01 · Restricted member-pack task with default data-analysis Skill st
 
   const { consumerProject, consumerReq, consumerCookie } = await seedRestrictedMemberPackScenario(host, provider.baseUrl);
   const builtInSkillPath = path.join(process.cwd(), 'extensions', 'analysis-assets', 'data-analysis', 'SKILL.md');
+  const builtInMethodPath = path.join(process.cwd(), 'extensions', 'analysis-assets', 'data-analysis', 'references', 'method.md');
+  const builtInSkillBody = fs.readFileSync(builtInSkillPath, 'utf8');
+  const builtInMethodBody = fs.readFileSync(builtInMethodPath, 'utf8');
   const expectedSha = approvedTaskSkills.analysis!.sha256;
   assert.equal(packageIdentity(builtInSkillPath), expectedSha);
+  const builtInHeading = builtInSkillBody.split('\n').find(line => line.startsWith('# '))?.trim() ?? 'name: data-analysis';
+  const methodSnippet = builtInMethodBody.split('\n').find(line => line.trim().length > 10 && !line.startsWith('---'))?.trim() ?? '';
 
   // Add a colliding same-name skill inside consumer project's .pi/skills and .agents/skills
   const piCollisionDir = path.join(consumerProject.rootPath, '020_clean', '.pi', 'skills', 'data-analysis');
@@ -157,7 +225,45 @@ test('Item 01 · Restricted member-pack task with default data-analysis Skill st
   assert.equal(restrictedOn.assignment.skill.id, 'data-analysis');
   assert.equal(restrictedOn.assignment.skill.sha256, expectedSha);
 
+  // Live open check works identically on BOTH macOS (ordinary executionMode) and Linux (unmanaged)
+  const openedOn = await json(await consumerReq(`/api/projects/${consumerProject.id}/tasks/${restrictedOn.id}/open`, 'POST', {}), 200);
+  assert.equal(openedOn.snapshot.capabilities.skills, true, 'Live opened restricted task with default skill enabled must report capabilities.skills === true');
+
   const reqStartIdx = provider.requests.length;
+  let skillTurn = 0;
+  let observedSkillToolResult = '';
+  let observedTraversalToolResult = '';
+  provider.setResponder(ctx => {
+    skillTurn += 1;
+    if (skillTurn === 1) {
+      const sys = ctx.messages.filter(m => m.role === 'system' || m.role === 'developer').map(m => providerMessageText(m.content)).join('\n');
+      if (ctx.availableTools.includes('read_task_skill')) {
+        // Linux restrictedHostToolsOnly path: model calls read_task_skill for SKILL.md, bundled reference, and invalid traversal
+        return {
+          calls: [
+            { name: 'read_task_skill', arguments: {} },
+            { name: 'read_task_skill', arguments: { file: 'references/method.md' } },
+            { name: 'read_task_skill', arguments: { file: '../package.json' } },
+          ],
+        };
+      }
+      // macOS protectedTools path: model reads exact <location> advertised by Pi SDK <available_skills>
+      const locMatch = /<location>([^<]+SKILL\.md)<\/location>/.exec(sys);
+      assert.ok(locMatch?.[1], 'Protected macOS system prompt must expose <location>...SKILL.md</location>');
+      assert.ok(ctx.availableTools.includes('read'), 'Protected macOS session must expose read tool');
+      return {
+        calls: [
+          { name: 'read', arguments: { path: locMatch[1] } },
+          { name: 'read', arguments: { path: path.join(path.dirname(locMatch[1]), 'references', 'method.md') } },
+        ],
+      };
+    }
+    const toolTexts = ctx.recentToolResults.map(m => providerMessageText(m.content));
+    observedSkillToolResult = toolTexts.slice(0, 2).join('\n---\n');
+    observedTraversalToolResult = toolTexts[2] ?? '';
+    return { text: '已实际读取固定 data-analysis Skill 正文并完成回复。' };
+  });
+
   const sendOn = await consumerReq(`/api/projects/${consumerProject.id}/tasks/${restrictedOn.id}/messages`, 'POST', {
     text: '截至 7 月 31 日，甲乙两店 6 月会员的 30 天复购表现有什么差异？',
     requestId: randomUUID(),
@@ -165,9 +271,19 @@ test('Item 01 · Restricted member-pack task with default data-analysis Skill st
   await json(sendOn, 202);
   const stateOn = await waitTaskSettled(host, consumerProject.id, restrictedOn.id, consumerCookie);
   assert.equal(stateOn.task.lastRun.status, 'completed');
-  assert.equal(stateOn.snapshot.capabilities.skills, true, 'Restricted task with default skill enabled must report skills capability active');
+  assert.ok(skillTurn >= 2, 'Model must execute tool call to read pinned Skill and receive body in next Provider request');
 
-  // Verify the actual system prompt sent to Pi/Provider includes the exact built-in data-analysis skill and NOT colliding copies
+  // Verify the ACTUAL built-in SKILL.md body & bundled reference entered the subsequent Provider request (and NOT colliding copies)
+  assert.ok(observedSkillToolResult.includes(builtInHeading), `Actual built-in SKILL.md heading (${builtInHeading}) must enter Provider tool result`);
+  if (methodSnippet) {
+    assert.ok(observedSkillToolResult.includes(methodSnippet), 'Actual built-in references/method.md content must enter Provider tool result');
+  }
+  assert.equal(observedSkillToolResult.includes('DO NOT USE'), false, 'Colliding project/user skill content must never be read');
+  if (observedTraversalToolResult) {
+    assert.match(observedTraversalToolResult, /task_skill_path_invalid|error|invalid/i, 'Path traversal on read_task_skill must be rejected');
+  }
+
+  // Verify system prompt sent to Provider includes pinned data-analysis@2.0.0-candidate.1 and NOT colliding paths
   const restrictedSystem = systemTextOf(provider.requests.slice(reqStartIdx));
   assert.ok(restrictedSystem.includes('data-analysis'), 'System prompt must advertise data-analysis skill');
   assert.ok(restrictedSystem.includes('2.0.0-candidate.1'), 'System prompt must reference pinned version 2.0.0-candidate.1');
@@ -207,8 +323,7 @@ test('Item 01 · Restricted member-pack task with default data-analysis Skill st
     sourceInfo: { path: path.join(piCollisionDir, 'SKILL.md'), source: 'auto' as const, scope: 'project' as const, origin: 'top-level' as const },
     disableModelInvocation: false,
   };
-  // Exact macOS protectedTools + memberPackExecutionScope path:
-  // 1) Without skillRoot, assignment.skill fails closed with task_skill_unavailable (matches MacBook root cause)
+  // Exact macOS protectedTools + memberPackExecutionScope snapshot path:
   assert.throws(() => resolveProtectedSkillSnapshot({
     restrictedMemberPack: true,
     skillRoot: undefined,
@@ -216,7 +331,6 @@ test('Item 01 · Restricted member-pack task with default data-analysis Skill st
     baseSkills: [collidingUserSkill],
     selectTaskSkills: () => [builtInSkillEntry],
   }), /task_skill_unavailable/);
-  // 2) With workspace skillRoot, built-in data-analysis is snapshotted cleanly & matches exact SHA-256
   const snapped = resolveProtectedSkillSnapshot({
     restrictedMemberPack: true,
     skillRoot: restrictedSkillsDir,
@@ -231,7 +345,6 @@ test('Item 01 · Restricted member-pack task with default data-analysis Skill st
   assert.equal(snapped.skills[0]!.name, 'data-analysis');
   assert.equal(packageIdentity(snapped.skills[0]!.filePath), expectedSha);
   assert.ok(snapped.skills[0]!.filePath.startsWith(restrictedSkillsDir + path.sep));
-  // 3) Explicitly cancelled skill returns [] without error
   const cancelledSnap = resolveProtectedSkillSnapshot({
     restrictedMemberPack: true,
     skillRoot: restrictedSkillsDir,
@@ -242,11 +355,15 @@ test('Item 01 · Restricted member-pack task with default data-analysis Skill st
   assert.equal(cancelledSnap.skills.length, 0);
 
   // 2. Restricted member-pack task WITH default Skill explicitly cancelled
+  provider.setResponder(() => ({ text: '已按无默认 Skill 状态完成最小回复。' }));
   const { task: restrictedOff } = await json(await consumerReq(`/api/projects/${consumerProject.id}/tasks`, 'POST', {
     name: '受限默认 Skill 取消',
     assignment: makeTaskAssignment('analysis', false),
   }), 201);
   assert.equal(restrictedOff.assignment.skill, null);
+  const openedOff = await json(await consumerReq(`/api/projects/${consumerProject.id}/tasks/${restrictedOff.id}/open`, 'POST', {}), 200);
+  assert.equal(openedOff.snapshot.capabilities.skills, false, 'Live opened restricted task with cancelled skill must report capabilities.skills === false');
+
   const offStartIdx = provider.requests.length;
   await json(await consumerReq(`/api/projects/${consumerProject.id}/tasks/${restrictedOff.id}/messages`, 'POST', {
     text: '仅核对取消默认 Skill 时的最小回复。',
@@ -254,13 +371,15 @@ test('Item 01 · Restricted member-pack task with default data-analysis Skill st
   }), 202);
   const stateOff = await waitTaskSettled(host, consumerProject.id, restrictedOff.id, consumerCookie);
   assert.equal(stateOff.task.lastRun.status, 'completed');
-  assert.equal(stateOff.snapshot.capabilities.skills, false, 'Cancelled skill in restricted task must report skills=false');
   const skillsCmdOff = await json(await consumerReq(`/api/projects/${consumerProject.id}/tasks/${restrictedOff.id}/commands`, 'POST', {
     text: '/skills',
     requestId: randomUUID(),
   }), 200);
   assert.equal(skillsCmdOff.result.skills.length, 0, 'Cancelled skill must load zero skills');
-  const offSystem = systemTextOf(provider.requests.slice(offStartIdx));
+  const offRequests = provider.requests.slice(offStartIdx);
+  const offSystem = systemTextOf(offRequests);
+  const offToolNames = offRequests.flatMap(r => (r.body.tools ?? []).map(tool => tool.function?.name ?? ''));
+  assert.equal(offToolNames.includes('read_task_skill'), false, 'Cancelled skill must NOT expose read_task_skill tool');
   assert.equal(offSystem.includes(builtInSkillPath), false, 'Cancelled skill must not deliver built-in SKILL.md');
   assert.equal(offSystem.includes('2.0.0-candidate.1'), false, 'Cancelled skill must not claim 2.0.0-candidate.1 enabled');
 
@@ -273,6 +392,8 @@ test('Item 01 · Restricted member-pack task with default data-analysis Skill st
     name: '普通项目默认 Skill',
     assignment: makeTaskAssignment('analysis', true),
   }), 201);
+  const ordOpen = await json(await host.request(`/api/projects/${ordinaryProj.id}/tasks/${ordinaryTask.id}/open`, 'POST', {}), 200);
+  assert.equal(ordOpen.snapshot.capabilities.skills, true);
   const ordStartIdx = provider.requests.length;
   await json(await host.request(`/api/projects/${ordinaryProj.id}/tasks/${ordinaryTask.id}/messages`, 'POST', {
     text: '普通项目默认 Skill 对照测试。',
@@ -280,7 +401,6 @@ test('Item 01 · Restricted member-pack task with default data-analysis Skill st
   }), 202);
   const ordState = await waitTaskSettled(host, ordinaryProj.id, ordinaryTask.id, ordinaryCookie);
   assert.equal(ordState.task.lastRun.status, 'completed');
-  assert.equal(ordState.snapshot.capabilities.skills, true);
   const ordSystem = systemTextOf(provider.requests.slice(ordStartIdx));
   assert.ok(ordSystem.includes(builtInSkillPath), 'Ordinary project must still deliver built-in data-analysis');
 
@@ -289,6 +409,139 @@ test('Item 01 · Restricted member-pack task with default data-analysis Skill st
   const catalogDeepResearch = genericCatalog.find(s => s.id === 'deep-research');
   assert.ok(catalogDeepResearch);
   assert.equal(path.resolve(catalogDeepResearch.filePath), path.join(customSkillDir, 'SKILL.md'));
+});
+
+test('Item 01 · macOS symlink-alias guard test: evaluateNativeToolCall permits read-only Skill reads across /var -> /private/var while denying write/edit and unauthorized data', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'optracall-symlink-guard-'));
+  let projects: ProjectStore | undefined;
+  t.after(async () => {
+    await projects?.close().catch(() => {});
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  const realVar = path.join(root, 'private', 'var');
+  const aliasVar = path.join(root, 'var');
+  fs.mkdirSync(realVar, { recursive: true });
+  fs.symlinkSync(realVar, aliasVar);
+
+  const dataRoot = path.join(aliasVar, 'data');
+  const projectsRoot = path.join(aliasVar, 'projects');
+  fs.mkdirSync(dataRoot, { recursive: true });
+  fs.mkdirSync(projectsRoot, { recursive: true });
+
+  projects = new ProjectStore({ dataRoot, projectsRoot });
+  await projects.init();
+  const enterpriseScopes = new EnterpriseScopeStore(dataRoot);
+  const studio = new StudioStore(dataRoot);
+  const feature = createMemberPackFeature({
+    dataRoot,
+    codeRoot: process.cwd(),
+    projects,
+    enterpriseScopes,
+    studio,
+    operations: { run: async (_reqId, _fp, op) => op() },
+    readBody: async () => ({}),
+    mutate: async op => op(),
+    closing: () => false,
+    readTaskReply: async () => ({ text: '' }),
+  });
+
+  const ent = enterpriseScopes.create({ name: 'macOS 符号链接对照企业' });
+  const cfg = { id: 'cfg', name: 'cfg', provider: 'openai-compatible', model: 'm', baseUrl: 'http://127.0.0.1:1/v1', revision: 1 };
+  const ownerProj = await projects.create({ name: '权责项目', configuration: cfg });
+  const consumerProj = await projects.create({ name: '受限项目', configuration: cfg });
+  enterpriseScopes.associateProject(ownerProj.id, ent.id);
+  enterpriseScopes.associateProject(consumerProj.id, ent.id);
+  const ownerTask = await projects.createTask(ownerProj.id, { name: '权责任务' });
+  const sys = studio.create({ enterpriseId: ent.id, name: '体系', projectId: ownerProj.id, taskId: ownerTask.id, goal: 'g', topicTitle: 't' });
+  feature.packs.ensurePack({ enterpriseId: ent.id, systemId: sys.id, domain: 'member-operations', name: '测试包' });
+
+  // Confirm consumerProj is in deny-detail mode (0 grants)
+  assert.equal(feature.getProjectToolScope(consumerProj.id)?.mode, 'deny-detail');
+
+  // Provision workspace via symlink alias (/var/data/...) while snapshotted Skill path is canonical (/private/var/data/...)
+  const workspaceAlias = path.join(aliasVar, 'ws-task-1');
+  const realWorkspace = path.join(realVar, 'ws-task-1');
+  const realSkillDir = path.join(realWorkspace, 'skills', 'abc123');
+  fs.mkdirSync(path.join(realWorkspace, '020_clean'), { recursive: true });
+  fs.mkdirSync(path.join(realWorkspace, '060_reports'), { recursive: true });
+  fs.mkdirSync(path.join(realSkillDir, 'references'), { recursive: true });
+  fs.writeFileSync(path.join(realSkillDir, 'SKILL.md'), '# Pinned Skill\n');
+  fs.writeFileSync(path.join(realSkillDir, 'references', 'method.md'), '# Method\n');
+  fs.writeFileSync(path.join(realWorkspace, '020_clean', 'orders.csv'), 'order_id\nO1\n');
+  fs.writeFileSync(path.join(consumerProj.rootPath, '010_draw', 'raw.csv'), 'secret\n');
+
+  // 1. Canonical /private/var/.../skills/.../SKILL.md read -> ALLOWED even in deny-detail!
+  assert.equal(
+    feature.evaluateNativeToolCall(consumerProj.id, consumerProj.rootPath, { toolName: 'read', input: { path: path.join(realSkillDir, 'SKILL.md') } }, workspaceAlias).allowed,
+    true,
+    'Canonical realpath SKILL.md inside workspace skills/ must be readable in deny-detail mode',
+  );
+  // 2. Symlink alias /var/.../skills/.../references/method.md read -> ALLOWED!
+  assert.equal(
+    feature.evaluateNativeToolCall(consumerProj.id, consumerProj.rootPath, { toolName: 'read', input: { path: path.join(workspaceAlias, 'skills', 'abc123', 'references', 'method.md') } }, workspaceAlias).allowed,
+    true,
+    'Alias path references/method.md inside workspace skills/ must be readable in deny-detail mode',
+  );
+  // 3. ls inside skills/ -> ALLOWED!
+  assert.equal(
+    feature.evaluateNativeToolCall(consumerProj.id, consumerProj.rootPath, { toolName: 'ls', input: { path: realSkillDir } }, workspaceAlias).allowed,
+    true,
+  );
+  // 4. write/edit inside skills/ -> DENIED (read-only!)
+  const writeSkill = feature.evaluateNativeToolCall(consumerProj.id, consumerProj.rootPath, { toolName: 'write', input: { path: path.join(realSkillDir, 'SKILL.md'), content: 'tamper' } }, workspaceAlias);
+  assert.equal(writeSkill.allowed, false);
+  assert.match(writeSkill.reason ?? '', /member_pack_skill_readonly/);
+  const editSkill = feature.evaluateNativeToolCall(consumerProj.id, consumerProj.rootPath, { toolName: 'edit', input: { path: path.join(realSkillDir, 'SKILL.md') } }, workspaceAlias);
+  assert.equal(editSkill.allowed, false);
+  assert.match(editSkill.reason ?? '', /member_pack_skill_readonly/);
+  // 5. Unauthorized 020_clean, 010_draw, and outside workspace -> DENIED!
+  assert.equal(
+    feature.evaluateNativeToolCall(consumerProj.id, consumerProj.rootPath, { toolName: 'read', input: { path: path.join(realWorkspace, '020_clean', 'orders.csv') } }, workspaceAlias).allowed,
+    false,
+  );
+  assert.equal(
+    feature.evaluateNativeToolCall(consumerProj.id, consumerProj.rootPath, { toolName: 'read', input: { path: path.join(consumerProj.rootPath, '010_draw', 'raw.csv') } }, workspaceAlias).allowed,
+    false,
+  );
+  assert.equal(
+    feature.evaluateNativeToolCall(consumerProj.id, consumerProj.rootPath, { toolName: 'read', input: { path: '/etc/hosts' } }, workspaceAlias).allowed,
+    false,
+  );
+
+  // 6. allow-detail mode across /var -> /private/var symlink alias: bash/codemode MUST allow authorized CSV and deny unauthorized CSV & realProjectRoot!
+  fs.writeFileSync(path.join(consumerProj.rootPath, '020_clean', 'orders.csv'), 'order_id,store,order_date\nO1,甲店,2026-06-05\n');
+  fs.writeFileSync(path.join(consumerProj.rootPath, '020_clean', 'unlisted_extra.csv'), 'member_id\nM999\n');
+  feature.grants.grant({
+    enterpriseId: ent.id,
+    grantor: '权责项目',
+    grantorProjectId: ownerProj.id,
+    grantorSystemId: sys.id,
+    grantorTaskId: ownerTask.id,
+    grantBasis: 'symlink bash allow-detail check',
+    subjectType: 'project',
+    subjectId: consumerProj.id,
+    resourceKind: 'detail',
+    operations: ['read-detail-recalculate'],
+    purposeKeys: ['store_30d_repurchase'],
+    scope: { stores: ['甲店'], periodFrom: '2026-06-01', periodTo: '2026-07-31', allowedDataPaths: ['020_clean/orders.csv'] },
+  });
+  assert.equal(feature.getProjectToolScope(consumerProj.id)?.mode, 'allowlist');
+  assert.equal(
+    feature.evaluateNativeToolCall(consumerProj.id, consumerProj.rootPath, { toolName: 'bash', input: { command: 'python3 -c "print(open(\'orders.csv\').read())"' } }, workspaceAlias).allowed,
+    true,
+    'bash on authorized orders.csv must be allowed across /var -> /private/var symlink alias',
+  );
+  assert.equal(
+    feature.evaluateNativeToolCall(consumerProj.id, consumerProj.rootPath, { toolName: 'bash', input: { command: 'cat unlisted_extra.csv' } }, workspaceAlias).allowed,
+    false,
+    'bash on unauthorized unlisted_extra.csv must be denied across /var -> /private/var symlink alias',
+  );
+  const realConsumerRoot = fs.realpathSync(consumerProj.rootPath);
+  assert.equal(
+    feature.evaluateNativeToolCall(consumerProj.id, consumerProj.rootPath, { toolName: 'codemode', input: { code: `fs.readFileSync(${JSON.stringify(realConsumerRoot + '/020_clean/orders.csv')})` } }, workspaceAlias).allowed,
+    false,
+    'codemode referencing canonical realProjectRoot must be denied',
+  );
 });
 
 test('Item 04 · pack-upsert-purpose returns safe field diagnostics, rejects plural evidenceNotes, guarantees zero write on invalid input, and supports excluding erroneous draft U-02 from preview/publication', { timeout: 60_000 }, async t => {
@@ -482,9 +735,89 @@ test('Item 04 · pack-upsert-purpose returns safe field diagnostics, rejects plu
   const lastReply = providerMessageText(toolState.snapshot.messages.at(-1)?.content);
   assert.match(lastReply, /payload\.evidenceNotes/);
   assert.match(lastReply, /evidenceNote/);
+
+  // 9. ZERO-WRITE on brand-new enterprise with 0 packs: invalid studio_assets pack-upsert-purpose (empty title) must NOT create an empty pack!
+  const emptyEnt = await json(await boundOwnerReq('/api/studio/enterprises', 'POST', { requestId: randomUUID(), name: '零包企业防空建测试' }), 201);
+  const { project: emptyProj } = await json(await boundOwnerReq('/api/projects', 'POST', { name: '零包建设项目' }), 201);
+  await json(await boundOwnerReq('/api/studio/enterprise-associations', 'POST', {
+    requestId: randomUUID(), kind: 'project', entityId: emptyProj.id, enterpriseId: emptyEnt.id,
+  }), 200);
+  const bindEmpty = await boundOwnerReq(`/api/projects/${emptyProj.id}`);
+  const emptyCookie = bindEmpty.headers.get('set-cookie')!.split(';')[0]!;
+  const emptyReq = (route: string, method = 'GET', body?: unknown) =>
+    fetch(host.baseUrl + route, { method, headers: { ...host.headers, cookie: emptyCookie }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+  const { system: emptySys } = await json(await emptyReq('/api/studio/systems', 'POST', {
+    requestId: randomUUID(), enterpriseId: emptyEnt.id, name: '零包体系', projectId: emptyProj.id, goal: '防空包测试', topicTitle: '防空包',
+  }), 201);
+  const emptyConstructionTask = (await json(await emptyReq(`/api/studio/systems/${emptySys.id}`), 200)).task;
+  let emptyTurn = 0;
+  provider.setResponder(ctx => {
+    emptyTurn += 1;
+    if (emptyTurn === 1) {
+      return {
+        calls: [{
+          name: 'studio_assets',
+          arguments: {
+            action: 'pack-upsert-purpose',
+            systemId: emptySys.id,
+            payload: { ...basePurpose, title: '' },
+          },
+        }],
+      };
+    }
+    return { text: `EMPTY_ERR:${ctx.recentToolResults.map(m => providerMessageText(m.content)).join('\n')}` };
+  });
+  await json(await emptyReq(`/api/projects/${emptyProj.id}/tasks/${emptyConstructionTask.id}/messages`, 'POST', {
+    text: '测试空标题用途提交不应新建空包。',
+    requestId: randomUUID(),
+    studioContext: { systemId: emptySys.id, purpose: 'construction' },
+  }), 202);
+  const emptyToolState = await waitTaskSettled(host, emptyProj.id, emptyConstructionTask.id, emptyCookie);
+  assert.match(providerMessageText(emptyToolState.snapshot.messages.at(-1)?.content), /payload\.title/);
+  const packsAfterEmptyErr = await json(await emptyReq(`/api/studio/enterprise-packs?enterpriseId=${emptyEnt.id}&domain=member-operations&projectId=${emptyProj.id}`), 200);
+  assert.equal(packsAfterEmptyErr.packs.length, 0, 'Invalid pack-upsert-purpose on 0-pack enterprise must create ZERO empty packs');
+
+  // 10. ZERO-WRITE on continuation project after original owner project is archived: invalid POST /purposes must NOT bump revision, record continuation, or change activeOwnerProjectId!
+  const { project: contProj } = await json(await boundOwnerReq('/api/projects', 'POST', { name: '同企业接续建设项目' }), 201);
+  await json(await boundOwnerReq('/api/studio/enterprise-associations', 'POST', {
+    requestId: randomUUID(), kind: 'project', entityId: contProj.id, enterpriseId,
+  }), 200);
+  await json(await boundOwnerReq(`/api/projects/${ownerProject.id}/archive`, 'POST', {}), 200);
+  const bindCont = await boundOwnerReq(`/api/projects/${contProj.id}`);
+  const contCookie = bindCont.headers.get('set-cookie')!.split(';')[0]!;
+  const contReq = (route: string, method = 'GET', body?: unknown) =>
+    fetch(host.baseUrl + route, { method, headers: { ...host.headers, cookie: contCookie }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+  const beforeContPack = (await json(await contReq(`/api/studio/enterprise-packs/${pack.id}?enterpriseId=${enterpriseId}&projectId=${contProj.id}`), 200)).pack;
+  const revBeforeContInvalid = beforeContPack.revision as number;
+  const contCountBefore = (beforeContPack.continuationHistory ?? []).length;
+  const activeOwnerBefore = beforeContPack.activeOwnerProjectId ?? null;
+
+  const invalidContRes = await contReq(`/api/studio/enterprise-packs/${pack.id}/purposes`, 'POST', {
+    requestId: randomUUID(),
+    projectId: contProj.id,
+    ...basePurpose,
+    title: '',
+  });
+  const invalidContBody = await json(invalidContRes, 400);
+  assert.equal(invalidContBody.details?.issues?.[0]?.path, 'payload.title');
+  const afterContInvalid = (await json(await contReq(`/api/studio/enterprise-packs/${pack.id}?enterpriseId=${enterpriseId}&projectId=${contProj.id}`), 200)).pack;
+  assert.equal(afterContInvalid.revision, revBeforeContInvalid, 'Invalid continuation purpose submit must NOT bump pack revision');
+  assert.equal((afterContInvalid.continuationHistory ?? []).length, contCountBefore, 'Invalid continuation purpose submit must NOT record a continuation');
+  assert.equal(afterContInvalid.activeOwnerProjectId ?? null, activeOwnerBefore, 'Invalid continuation purpose submit must NOT change activeOwnerProjectId');
+
+  // Valid continuation retry succeeds and records exactly 1 continuation!
+  const validContRes = await json(await contReq(`/api/studio/enterprise-packs/${pack.id}/purposes`, 'POST', {
+    requestId: randomUUID(),
+    projectId: contProj.id,
+    targetPurposeId: 'U-01',
+    ...basePurpose,
+    title: '甲乙两店 6 月会员 30 日复购率（接续修订）',
+  }), 200);
+  assert.equal(validContRes.pack.activeOwnerProjectId, contProj.id);
+  assert.equal((validContRes.pack.continuationHistory ?? []).length, contCountBefore + 1);
 });
 
-test('Item 03 · Pre-acceptance 409 on /messages returns accepted:false, keeps draft intact, and leaves zero native messages', { timeout: 45_000 }, async t => {
+test('Item 03 · Pre-acceptance 409 returns accepted:false keeping draft intact; acceptance atomically clears matching draft without wiping newer drafts', { timeout: 45_000 }, async t => {
   const provider = await startToolProvider();
   t.after(() => provider.close());
   const host = await startTestHost();
@@ -506,7 +839,7 @@ test('Item 03 · Pre-acceptance 409 on /messages returns accepted:false, keeps d
   const multilinePrompt = '第一行：截至 7 月 31 日，核对甲乙两店 6 月会员 30 天复购。\n第二行：列出分子、分母和全额退款排除项。';
   await json(await host.request(`/api/projects/${project.id}/tasks/${task.id}/draft`, 'PATCH', { text: multilinePrompt }), 200);
 
-  // Trigger a genuine pre-acceptance 409 (archive project -> project_archived 409; or tamper assignment skill -> task_skill_version_changed 409)
+  // 1. Pre-acceptance 409 (project_archived) -> accepted:false, draft intact, 0 native messages
   await json(await host.request(`/api/projects/${project.id}/archive`, 'POST', {}), 200);
   const rejectedRes = await host.request(`/api/projects/${project.id}/tasks/${task.id}/messages`, 'POST', {
     text: multilinePrompt,
@@ -515,20 +848,60 @@ test('Item 03 · Pre-acceptance 409 on /messages returns accepted:false, keeps d
   const rejected = await json(rejectedRes, 409);
   assert.equal(rejected.accepted, false, 'Pre-acceptance 409 on /messages MUST return accepted: false');
 
-  // Also restore project and test task_skill_version_changed 409 via API
   await json(await host.request(`/api/projects/${project.id}/restore`, 'POST', {}), 200);
   const taskRead = await json(await host.request(`/api/projects/${project.id}/tasks/${task.id}`), 200);
   assert.equal(taskRead.task.draft, multilinePrompt, 'Original multiline draft must remain intact on disk');
   assert.equal(taskRead.snapshot.messages.length, 0, 'Failed pre-acceptance prompt must not appear as a native sent message');
+
+  // 2. Acceptance atomically clears task.draft on Host when draft === sent text (even without client PATCH /draft "")
+  const acceptRes = await host.request(`/api/projects/${project.id}/tasks/${task.id}/messages`, 'POST', {
+    text: multilinePrompt,
+    requestId: randomUUID(),
+  });
+  await json(acceptRes, 202);
+  const settled1 = await waitTaskSettled(host, project.id, task.id);
+  assert.equal(settled1.task.draft, '', 'Host must atomically clear matching task.draft upon acceptance so refresh cannot duplicate-send');
+  const userMessages1 = settled1.snapshot.messages.filter((m: any) => m.role === 'user');
+  assert.equal(userMessages1.length, 1, 'Accepted send must create strictly 1 native user message');
+
+  // 3. Acceptance must NOT wipe a different newer draft saved on Host
+  await json(await host.request(`/api/projects/${project.id}/tasks/${task.id}/draft`, 'PATCH', { text: '保留中的较新草稿-2' }), 200);
+  await json(await host.request(`/api/projects/${project.id}/tasks/${task.id}/messages`, 'POST', {
+    text: '另一条显式发送文本',
+    requestId: randomUUID(),
+  }), 202);
+  const settled2 = await waitTaskSettled(host, project.id, task.id);
+  assert.equal(settled2.task.draft, '保留中的较新草稿-2', 'Host must preserve a different newer draft when accepting another message');
 });
 
-test('Item 05 · Named maintainer guidance, cross-browser re-auth, 3-file detail recalculate, non-owner read-only, tier separation, revocation, and ephemeral historical preservation', { timeout: 90_000 }, async t => {
+test('Item 05 · Named maintainer guidance, cross-browser re-auth, summary/wrong-purpose denials, dynamic CSV 3-file recalculate (2/3), revocation, and ephemeral historical preservation', { timeout: 90_000 }, async t => {
   const provider = await startToolProvider();
   t.after(() => provider.close());
   const host = await startTestHost();
   t.after(() => host.close());
 
-  const { enterpriseId, ownerProject, consumerProject, pack, boundOwnerReq, consumerReq, consumerCookie } = await seedRestrictedMemberPackScenario(host, provider.baseUrl);
+  const { enterpriseId, ownerProject, consumerProject, system, pack, boundOwnerReq, consumerReq, consumerCookie } = await seedRestrictedMemberPackScenario(host, provider.baseUrl);
+
+  // Create a verified enterprise-material summary asset for summary-only grant contrast
+  const { material: createdSummary } = await json(await boundOwnerReq('/api/enterprise-materials', 'POST', {
+    title: '6月甲乙两店复购月度汇总',
+    body: JSON.stringify({ grain: 'store-month', period: '2026-06..2026-07', note: '汇总视图，不含逐笔明细' }),
+  }), 201);
+  const { material: enabledSummary, storeId: summaryStoreId } = await json(
+    await boundOwnerReq(`/api/enterprise-materials/${createdSummary.id}/enable`, 'POST', { expectedVersion: createdSummary.version }),
+    200,
+  );
+  await json(await boundOwnerReq('/api/studio/enterprise-associations', 'POST', {
+    requestId: randomUUID(), enterpriseId, kind: 'asset', entityId: createdSummary.id, authority: 'enterprise',
+  }), 200);
+  const summaryRev = enabledSummary.revisions[0];
+  const summaryRef = {
+    authority: 'enterprise',
+    id: createdSummary.id,
+    version: summaryRev.revisionId,
+    sha256: summaryRev.bodySha256,
+    locator: summaryStoreId,
+  };
 
   // Publish v1.0 with purpose store_30d_repurchase
   await json(await boundOwnerReq(`/api/studio/enterprise-packs/${pack.id}/purposes`, 'POST', {
@@ -618,8 +991,8 @@ test('Item 05 · Named maintainer guidance, cross-browser re-auth, 3-file detail
   fs.writeFileSync(path.join(consumerProject.rootPath, '020_clean', 'refunds.csv'), refundsCsv);
   fs.writeFileSync(path.join(consumerProject.rootPath, '020_clean', 'unlisted_extra.csv'), 'member_id,store,order_date\nM999,甲店,2026-06-15\n');
 
-  // 3. Grant ONLY definition first -> detail read must still be denied (tier separation!)
-  const defGrant = await json(await fetch(`${host.baseUrl}/api/studio/resource-grants`, {
+  // 3. Positive/negative contrast A: cite-summary grant ONLY -> all 3 detail CSV reads MUST be denied 403!
+  const summaryGrant = await json(await fetch(`${host.baseUrl}/api/studio/resource-grants`, {
     method: 'POST',
     headers: { ...host.headers, cookie: b2Cookie },
     body: JSON.stringify({
@@ -629,20 +1002,94 @@ test('Item 05 · Named maintainer guidance, cross-browser re-auth, 3-file detail
       grantorSystemId: b2Pack.grantAuthority.systemId,
       grantorTaskId: b2Pack.grantAuthority.ownerTaskId,
       authorityToken: b2Pack.grantAuthority.authorityToken,
-      grantBasis: '仅查阅定义对照',
+      grantBasis: '仅汇总授权对照',
       subjectType: 'project',
       subjectId: consumerProject.id,
-      resourceKind: 'definition',
-      operations: ['read-definition'],
+      resourceKind: 'summary',
+      operations: ['cite-summary'],
       purposeKeys: ['store_30d_repurchase'],
-      scope: {},
+      scope: {
+        stores: ['甲店', '乙店'],
+        periodFrom: '2026-06-01',
+        periodTo: '2026-07-31',
+        grain: 'store-month',
+        summaryAssetId: summaryRef.id,
+        summaryVersion: summaryRef.version,
+      },
+      resourceRef: summaryRef,
     }),
   }), 200);
-  assert.ok(defGrant.grant.id);
-  const deniedBeforeDetail = await consumerReq(`/api/projects/${consumerProject.id}/files/content?path=${encodeURIComponent('020_clean/orders.csv')}`);
-  assert.equal(deniedBeforeDetail.status, 403, 'Definition-only grant must not allow reading detail CSV');
+  assert.ok(summaryGrant.grant.id);
+  for (const csvName of ['members.csv', 'orders.csv', 'refunds.csv']) {
+    const denied = await consumerReq(`/api/projects/${consumerProject.id}/files/content?path=${encodeURIComponent(`020_clean/${csvName}`)}`);
+    assert.equal(denied.status, 403, `Summary-only grant must deny reading detail file ${csvName}`);
+  }
 
-  // 4. Grant T05 read-detail-recalculate for store_30d_repurchase, 甲店/乙店, 2026-06-01..2026-07-31, 3 CSV files
+  // 3b. Positive/negative contrast B: wrong-purpose detail grant (unrelated_purpose) -> detail access for store_30d_repurchase MUST be denied!
+  const wrongPurposeGrant = await json(await fetch(`${host.baseUrl}/api/studio/resource-grants`, {
+    method: 'POST',
+    headers: { ...host.headers, cookie: b2Cookie },
+    body: JSON.stringify({
+      requestId: randomUUID(),
+      enterpriseId,
+      grantorProjectId: b2Pack.grantAuthority.ownerProjectId,
+      grantorSystemId: b2Pack.grantAuthority.systemId,
+      grantorTaskId: b2Pack.grantAuthority.ownerTaskId,
+      authorityToken: b2Pack.grantAuthority.authorityToken,
+      grantBasis: '错误用途对照授权',
+      subjectType: 'project',
+      subjectId: consumerProject.id,
+      resourceKind: 'detail',
+      operations: ['read-detail-recalculate'],
+      purposeKeys: ['unrelated_other_purpose'],
+      scope: {
+        stores: ['甲店', '乙店'],
+        periodFrom: '2026-06-01',
+        periodTo: '2026-07-31',
+        allowedDataPaths: ['020_clean/members.csv', '020_clean/orders.csv', '020_clean/refunds.csv'],
+      },
+    }),
+  }), 200);
+  const { task: wrongPurposeTask } = await json(await consumerReq(`/api/projects/${consumerProject.id}/tasks`, 'POST', {
+    name: 'T05 错误用途否定对照',
+    assignment: makeTaskAssignment('analysis', true),
+  }), 201);
+  // Pin task to pack v1.0, then attempt read_input for purposeId U-01 (store_30d_repurchase) -> MUST be denied under wrong-purpose detail grant!
+  await json(await consumerReq(`/api/studio/enterprise-packs/${pack.id}/pin`, 'POST', {
+    requestId: randomUUID(), projectId: consumerProject.id, taskId: wrongPurposeTask.id,
+  }), 200);
+  let wrongStep = 0;
+  let wrongPurposeReadResult = '';
+  provider.setResponder(ctx => {
+    wrongStep += 1;
+    if (wrongStep === 1) {
+      return { calls: [{ name: 'read_input', arguments: { filename: 'orders.csv', purposeId: 'U-01' } }] };
+    }
+    wrongPurposeReadResult = ctx.recentToolResults.map(m => providerMessageText(m.content)).join('\n');
+    return { text: '已核对错误用途明细读取结果。' };
+  });
+  await json(await consumerReq(`/api/projects/${consumerProject.id}/tasks/${wrongPurposeTask.id}/messages`, 'POST', {
+    text: '尝试以 U-01 用途读取 orders.csv 验证错误用途授权拦截。',
+    requestId: randomUUID(),
+  }), 202);
+  await waitTaskSettled(host, consumerProject.id, wrongPurposeTask.id, consumerCookie);
+  assert.equal(wrongPurposeReadResult.includes('O01,M001'), false, 'Wrong-purpose detail grant must NOT allow reading orders.csv for U-01');
+  assert.match(wrongPurposeReadResult, /not_authorized|denied|无权|缺少|403|error/i, `Wrong-purpose read_input must return denial, got: ${wrongPurposeReadResult}`);
+  // Revoke wrong-purpose grant before granting exact purpose
+  await json(await fetch(`${host.baseUrl}/api/studio/resource-grants/${wrongPurposeGrant.grant.id}/revoke`, {
+    method: 'POST',
+    headers: { ...host.headers, cookie: b2Cookie },
+    body: JSON.stringify({
+      requestId: randomUUID(),
+      reason: '清理错误用途对照授权',
+      revokerProjectId: b2Pack.grantAuthority.ownerProjectId,
+      revokerSystemId: b2Pack.grantAuthority.systemId,
+      revokerTaskId: b2Pack.grantAuthority.ownerTaskId,
+      authorityToken: b2Pack.grantAuthority.authorityToken,
+    }),
+  }), 200);
+
+  // 4. Grant T05 read-detail-recalculate for EXACT purpose store_30d_repurchase, 甲店/乙店, 2026-06-01..2026-07-31, 3 CSV files
   const detailGrant = await json(await fetch(`${host.baseUrl}/api/studio/resource-grants`, {
     method: 'POST',
     headers: { ...host.headers, cookie: b2Cookie },
@@ -669,13 +1116,14 @@ test('Item 05 · Named maintainer guidance, cross-browser re-auth, 3-file detail
   }), 200);
   assert.ok(detailGrant.grant.id);
 
-  // 5. Independent new task in T05 reads all 3 authorized files via real Pi SDK read_input and recalculates
+  // 5. Independent new task in T05 reads all 3 authorized files via real Pi SDK read_input and DYNAMICALLY computes from actual returned rows!
   const { task: t05Task } = await json(await consumerReq(`/api/projects/${consumerProject.id}/tasks`, 'POST', {
     name: 'T05 独立明细重算任务',
     assignment: makeTaskAssignment('analysis', true),
   }), 201);
   let step = 0;
   const readContents: Record<string, string> = {};
+  let computed: ReturnType<typeof computeStore30dRepurchaseFromRows> | undefined;
   provider.setResponder(ctx => {
     step += 1;
     if (step === 1) {
@@ -689,8 +1137,17 @@ test('Item 05 · Named maintainer guidance, cross-browser re-auth, 3-file detail
       };
     }
     const results = ctx.recentToolResults.map(m => providerMessageText(m.content));
+    readContents.members = results[0] ?? '';
+    readContents.orders = results[1] ?? '';
+    readContents.refunds = results[2] ?? '';
+    readContents.unlisted = results[3] ?? '';
     readContents.all = results.join('\n---\n');
-    return { text: '已完成三表明细重算：甲店分母2、分子1（O04全额退款排除）；乙店分母1、分子1；合计分母3、分子2；丙店与8月超期及未授权表均已排除。' };
+    computed = computeStore30dRepurchaseFromRows(readContents.members, readContents.orders, readContents.refunds);
+    const a = computed.byStore['甲店'] ?? { numerator: 0, denominator: 0 };
+    const b = computed.byStore['乙店'] ?? { numerator: 0, denominator: 0 };
+    return {
+      text: `实读行逐笔重算结果：甲店 ${a.numerator}/${a.denominator}，乙店 ${b.numerator}/${b.denominator}，合计 ${computed.total.numerator}/${computed.total.denominator}（实读行数：members=${computed.memberCount}, orders=${computed.orderCount}, refunds=${computed.refundCount}）。`,
+    };
   });
   await json(await consumerReq(`/api/projects/${consumerProject.id}/tasks/${t05Task.id}/messages`, 'POST', {
     text: '请读取获准的三张明细表逐笔重算甲乙两店 6 月会员 30 日复购率并列出分子、分母和排除项。',
@@ -698,9 +1155,13 @@ test('Item 05 · Named maintainer guidance, cross-browser re-auth, 3-file detail
   }), 202);
   const t05State = await waitTaskSettled(host, consumerProject.id, t05Task.id, consumerCookie);
   assert.equal(t05State.task.lastRun.status, 'completed');
-  assert.ok(readContents.all.includes('M001,甲店'), 'Must read authorized 甲店 members');
-  assert.ok(readContents.all.includes('O06,M003,乙店,2026-07-05'), 'Must read July observation window orders for 乙店');
-  assert.ok(readContents.all.includes('R01,O04,甲店'), 'Must read authorized refunds');
+  assert.ok(computed, 'Recalculation must run on actual returned CSV rows');
+  assert.equal(computed.memberCount, 3, 'Filtered members.csv must have strictly 3 rows (丙店 filtered out)');
+  assert.equal(computed.orderCount, 6, 'Filtered orders.csv must have strictly 6 rows (丙店 & 2026-08 filtered out)');
+  assert.equal(computed.refundCount, 1, 'Filtered refunds.csv must have strictly 1 row (丙店 filtered out)');
+  assert.deepEqual(computed.byStore['甲店'], { denominator: 2, numerator: 1 });
+  assert.deepEqual(computed.byStore['乙店'], { denominator: 1, numerator: 1 });
+  assert.deepEqual(computed.total, { denominator: 3, numerator: 2 });
   assert.equal(readContents.all.includes('丙店'), false, 'Unauthorized store 丙店 must be filtered out');
   assert.equal(readContents.all.includes('2026-08-10'), false, 'Out-of-period August row must be filtered out');
   assert.equal(readContents.all.includes('M999'), false, 'Unlisted file unlisted_extra.csv must be denied');
@@ -738,7 +1199,6 @@ test('Item 05 · Named maintainer guidance, cross-browser re-auth, 3-file detail
     method: 'POST', headers: { ...host.headers, cookie: ephemeralCookie },
     body: JSON.stringify({ requestId: randomUUID(), enterpriseId: entHist.id, systemId: histSys.id, projectId: histProj.id, domain: 'member-operations', name: '历史临时包' }),
   }), 200);
-  // Another browser opens histProj -> cannot mutate or silently transfer ownership, sees ephemeral guidance!
   const histBrowser2 = await fetch(`${host.baseUrl}/api/projects/${histProj.id}`, { headers: host.headers });
   const histB2Cookie = histBrowser2.headers.get('set-cookie')!.split(';')[0]!;
   const histPackRes = await json(await fetch(`${host.baseUrl}/api/studio/enterprise-packs?enterpriseId=${entHist.id}&domain=member-operations&projectId=${histProj.id}`, {

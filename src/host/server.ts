@@ -2579,7 +2579,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               const current = await prepareRequirement(input, projectId);
               if (current?.text !== suppliedRap.text) throw new RequestFault(409, 'requirement_unavailable');
             }
-            await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! });
+            await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! }, { clearDraftIf: input.text as string });
           },
         });
         terminalContext = run.context;
@@ -3538,7 +3538,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   text: input.text as string, requestId, kind: 'command',
                   verifyBeforeDispatch: async () => {
                     await assertFrameworkContinuation(projectId, taskId);
-                    await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! });
+                    await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! }, { clearDraftIf: input.text as string, matchTrimmed: true });
                   },
                 });
                 terminalContext = run.context;

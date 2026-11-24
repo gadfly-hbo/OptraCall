@@ -76,3 +76,24 @@
 - [x] **04 · P2 用途保存字段诊断与误建草案排除**：`pack-upsert-purpose` 事前校验全部字段并输出安全字段路径/期望形态/UTF-8 字节上限，显式拒绝复数 `evidenceNotes` 等错写键并保证零写入（`revision` 不变）；新增草案预览排除持久化与 UI 修正/排除/恢复入口，排除误建 `U-02` 后预览与发布版仅含有效项且保留历史版本可查。
 - [x] **05 · P2 首次纯界面建立可复用维护身份与受阻指引**：在 `StudioMemberPackPanel` 顶部（建包前可见）与 `发起体系建设` 抽屉暴露具名维护身份（`op:*`）建立/登录入口；新增安全 `grantAuthorityGuidance` 并接入受阻引导 UI 与明细拒绝提示（不含凭据）；验证纯界面空企业建身份/首包→换浏览器受阻引导→重认证→授权 T05→独立新任务实读三表重算→他者只读→撤权阻断→历史临时会话包不静默迁移。
 - [x] **06 · P3 新建任务弹窗与背景 Skill 复选框实测复验**：在真实 Chromium 展开旧任务「交接与依据」下，覆盖鼠标、键盘（Tab/Escape）与桌面/390×844 窄屏完成 5 轮开关复验，核实弹窗内仅 1 个默认 Skill 复选框、原生顶层 `<dialog>.showModal()` 遮罩阻断背景误点、键盘焦点不逃逸、任务目标明确且新旧任务状态完全独立，无误操作缺陷，不做无关 UI 改动。
+
+### Round 2 PM 返工补充规格（依据 [comment-7128937545](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7128937545)）
+
+- **合并最新 `origin/main`**：合入 `f9994cb7b5ad4f9ab52141f278085d9e21f05d45`（PR `#130`，合并提交 `8edf0e4`），在 `src/host/server.ts` 同时保留 `#130` 的战略开题结构化错误 `details` 与 `#121` 的 `/messages` 接受前 `accepted: false`。
+- **01 · 受限任务固定 Skill 真正可读（Linux + macOS）**：
+  - Linux 无 `sandbox-exec` 降级路径（`restrictedHostToolsOnly`）：仅当任务开启 `assignment.skill` 时，在系统提示词明确宣告固定 Skill（`id@version`、`sha256`）并经官方 `defineTool` 暴露严格只读的 `read_task_skill`（校验 `packageIdentity` 摘要，拒绝绝对路径/`..`/隐藏文件/符号链接/硬链接/超限文件，且缺文件时返回 `task_skill_file_unavailable` 不泄漏宿主机路径）；显式取消 Skill 时完全不暴露提示与工具。
+  - macOS `protectedTools` + `evaluateNativeToolCall`：对工作区与项目路径统一 `canonicalPath`（解决 `/var` → `/private/var` 符号链接别名），允许在 `deny-detail` 模式下只读访问 `workspaceRoot/skills`（`read`/`ls`/`find`/`grep`），同时显式拒绝 `write`/`edit`（`member_pack_skill_readonly`），并在 `bash`/`powershell`/`codemode` 枚举分支同步使用 `realProjectRoot` 与其父目录守卫。
+  - 能力快照验证改在活跃打开会话（`POST /open`）与 `/skills` 上核对，兼容 macOS `ordinary` 结算即停机行为。
+- **03 · 延迟 202 不重复发送且不覆盖较新草稿**：
+  - Host `ProjectStore.markRun` 在 `verifyBeforeDispatch` 通过后于同一原子写入中仅当 `task.draft === input.text`（命令匹配 `trim`）时清空 `task.draft`；接受前 4xx 绝不清空草稿。
+  - 前端 `App.tsx` 发前先排空该任务在途 `draftQueues` 并记录 `draftVersions` 快照，202 返回或 accepted 恢复时仅当草稿版本未变且无在途保存才清理本地未变草稿，不再发起盲目 `PATCH /draft ""` 覆盖用户较新保存草稿。
+- **04 · 临时取消勾选保持与非法用途零写入**：
+  - `StudioMemberPackPanel.tsx` 的 `syncSelectedPurposes` 改为按 `pack.id` 与各用途 `excludedFromPreview` 变化增量合并：同一资产包编辑 `U-01` 时保留用户对 `U-02` 的临时取消勾选，显式切换持久化排除或切换包时仍按服务端状态同步。
+  - `EnterprisePackStore` 抽出只读 `validatePurposeInput`，在 `studio-host.ts` 调 `ensurePack` 之前及 `member-pack-host.ts` 调 `bindContinuationOwner` 之前先完成全量字段校验，保证 0 包企业不创建空包、已归档原项目下非法接续请求不抬高 `revision` / 不新增 `continuationHistory` / 不更改 `activeOwnerProjectId`。
+- **05 · 维护身份验证期间禁用「发起建设」与实读行动态重算**：
+  - `StudioPage.tsx` 在 `newOpBusy` 期间禁用「发起建设」提交与关闭（`allowLeave` + `PersonalDialog.busy`）并在 `newSystem()` 顶部兜底拦截；身份验证失败显示行内 `role="alert"` 且保留已填表单与项目选择；保留原临时会话创建路径不变。
+  - 后端与 Chromium 测试均直接解析 `read_input` 实际返回的 CSV 行计算复购分子/分母（零硬编码 `2/3`），并补齐仅汇总授权、错误用途授权与撤权后的显式负例。
+- **回退与数据兼容性说明**：
+  - 新增持久化字段 `EnterprisePackPurpose.excludedFromPreview` / `excludedReason` 为可选字段，不破坏历史资产包、修订记录、任务固定快照、会话或授权读取。
+  - 若代码回退到不识别 `excludedFromPreview` 的旧版本：已有资产包和历史发布版仍可正常加载且不丢数据，但旧版前端与预览逻辑会忽略 `excludedFromPreview: true`，在下次准备新预览时将曾被排除的草案重新纳入默认勾选列表，需人工手动取消勾选（或升级回含本修复的版本）以避免误发。
+

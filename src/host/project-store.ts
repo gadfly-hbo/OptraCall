@@ -448,9 +448,13 @@ export class ProjectStore {
   setSession(projectId: string, taskId: string, file: string): Promise<TaskRecord> {
     return this.#updateTask(projectId, taskId, async task => { await this.#validateSession(projectId, task, file); return { ...task, sessionFile: file }; });
   }
-  markRun(projectId: string, taskId: string, run: ProjectRun): Promise<TaskRecord> {
+  markRun(projectId: string, taskId: string, run: ProjectRun, options?: { clearDraftIf?: string; matchTrimmed?: boolean }): Promise<TaskRecord> {
     const clean = validRun(run);
-    return this.#updateTask(projectId, taskId, task => ({ ...task, lastRun: clean }));
+    return this.#updateTask(projectId, taskId, task => {
+      const clearDraft = options?.clearDraftIf !== undefined
+        && (options.matchTrimmed ? task.draft.trim() === options.clearDraftIf.trim() : task.draft === options.clearDraftIf);
+      return { ...task, lastRun: clean, ...(clearDraft ? { draft: '' } : {}) };
+    });
   }
   #relative(relative: string): string[] {
     if (typeof relative !== 'string' || relative.length > 2000 || /[\\\u0000-\u001f\u007f]/.test(relative) || path.isAbsolute(relative)) return fail('invalid_file_path');

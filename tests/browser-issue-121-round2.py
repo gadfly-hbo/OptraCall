@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Real headless Chromium Playwright verification for Issue #121 Round-2 (Items 01-06)."""
+import csv
+from datetime import date
 import http.server
+import io
 import json
 import os
 import shutil
@@ -25,6 +28,68 @@ llm_state = {
     'requests': [],
     'tool_results_seen': [],
 }
+
+
+def extract_csv_rows(tool_text: str):
+    lines = [ln.strip() for ln in tool_text.splitlines() if ln.strip()]
+    header_idx = next((i for i, ln in enumerate(lines) if ',' in ln and not ln.startswith('[')), -1)
+    if header_idx < 0:
+        return []
+    csv_lines = [ln for ln in lines[header_idx:] if ',' in ln]
+    reader = csv.DictReader(io.StringIO('\n'.join(csv_lines)))
+    return [dict(row) for row in reader]
+
+
+def compute_repurchase_from_tool_results(tool_results):
+    members_rows = []
+    orders_rows = []
+    refunds_rows = []
+    for text in tool_results:
+        rows = extract_csv_rows(text)
+        if not rows:
+            continue
+        cols = set(rows[0].keys())
+        if 'cohort_month' in cols:
+            members_rows.extend(rows)
+        elif 'order_id' in cols and 'amount' in cols:
+            orders_rows.extend(rows)
+        elif 'refund_id' in cols:
+            refunds_rows.extend(rows)
+
+    cohort_members = [r for r in members_rows if r.get('cohort_month') == '2026-06']
+    full_refund_ids = {r.get('order_id') for r in refunds_rows if str(r.get('full_refund', '')).lower() == 'true'}
+    valid_orders_by_member = {}
+    for o in orders_rows:
+        oid = o.get('order_id')
+        if oid in full_refund_ids:
+            continue
+        odate = o.get('order_date', '')
+        if not ('2026-06-01' <= odate <= '2026-07-31'):
+            continue
+        valid_orders_by_member.setdefault(o.get('member_id'), []).append(o)
+
+    by_store = {}
+    total_den = 0
+    total_num = 0
+    for m in cohort_members:
+        store = m.get('store', '')
+        by_store.setdefault(store, {'den': 0, 'num': 0})
+        by_store[store]['den'] += 1
+        total_den += 1
+        first_dt = date.fromisoformat(m['order_date'])
+        m_orders = sorted(valid_orders_by_member.get(m.get('member_id'), []), key=lambda r: r['order_date'])
+        repeated = any(0 < (date.fromisoformat(o['order_date']) - first_dt).days <= 30 for o in m_orders)
+        if repeated:
+            by_store[store]['num'] += 1
+            total_num += 1
+    return {
+        'member_count': len(cohort_members),
+        'order_count': len(orders_rows),
+        'refund_count': len(refunds_rows),
+        'by_store': by_store,
+        'total_num': total_num,
+        'total_den': total_den,
+    }
 
 
 class SyntheticLLMHandler(http.server.BaseHTTPRequestHandler):
@@ -105,14 +170,15 @@ class SyntheticLLMHandler(http.server.BaseHTTPRequestHandler):
         else:
             if tool_results:
                 combined = '\n'.join(tool_results)
-                has_a = 'M001,甲店' in combined
-                has_b = 'O06,M003,乙店,2026-07-05' in combined
-                has_r = 'R01,O04,甲店' in combined
+                calc = compute_repurchase_from_tool_results(tool_results)
+                a = calc['by_store'].get('甲店', {'num': 0, 'den': 0})
+                b = calc['by_store'].get('乙店', {'num': 0, 'den': 0})
                 has_c = '丙店' in combined
                 has_aug = '2026-08-10' in combined
                 reply_text = (
-                    f'已完成三表明细逐笔重算：甲店分母2、分子1（O04全额退款排除）；乙店分母1、分子1；合计分母3、分子2。'
-                    f'[实读核验: 甲店={has_a}, 乙店7月={has_b}, 退款={has_r}, 丙店泄漏={has_c}, 8月超期泄漏={has_aug}]'
+                    f"实读行逐笔重算：甲店分母{a['den']}、分子{a['num']}；乙店分母{b['den']}、分子{b['num']}；"
+                    f"合计分母{calc['total_den']}、分子{calc['total_num']}（实读行数: members={calc['member_count']}, "
+                    f"orders={calc['order_count']}, refunds={calc['refund_count']}, 丙店泄漏={has_c}, 8月超期泄漏={has_aug}）。"
                 )
             else:
                 reply_text = f'已收到问题并完成分析回复：{last_user[:80]}'
@@ -404,7 +470,95 @@ try:
         assert '已微调后显式重试' in (post_calls['last_body'] or ''), 'Item 03: retry did not send edited text!'
         assert page1.locator('#message-input').input_value() == '', 'Item 03: draft should clear after accepted send'
         page1.unroute(f"**/api/projects/{proj_alt['id']}/tasks/{task_a['id']}/messages")
-        print('PASS [Browser Item 03] Pre-acceptance 409 preserves multiline text & failure status across switch + reload, zero auto-send, single edited retry succeeds')
+
+        # Helper to read task state with browser's own cookies (avoids project-context 403)
+        def ctx1_cookie():
+            return '; '.join(f"{c['name']}={c['value']}" for c in ctx1.cookies())
+
+        # Item 03 Scenario A (PM blocker): Delayed 202 -> Host accepts & finishes -> full page reload BEFORE 202 returns -> composer MUST be empty & strictly 1 native user message!
+        task_c = api(f"/api/projects/{proj_alt['id']}/tasks", 'POST', {'name': 'Item03-Delayed202-Reload'})['task']
+        page1.goto(f"{base}/?project={proj_alt['id']}&task={task_c['id']}", wait_until='domcontentloaded')
+        page1.locator('#message-input').wait_for(state='visible')
+        prompt_c = '延迟202场景A：已受理消息刷新后不可重复发送'
+        page1.locator('#message-input').fill(prompt_c)
+        page1.wait_for_timeout(350)
+        page1.evaluate("""() => {
+          const orig = window.fetch.bind(window);
+          let armed = true;
+          window.fetch = async (...args) => {
+            const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+            const method = (args[1] && args[1].method) || (args[0] && args[0].method) || 'GET';
+            const resp = await orig(...args);
+            if (armed && method.toUpperCase() === 'POST' && url.includes('/messages')) {
+              armed = false;
+              await new Promise(resolve => { window.__release202A = resolve; });
+            }
+            return resp;
+          };
+        }""")
+        page1.get_by_role('button', name='发送消息').click()
+        # Wait for Host run to complete via SSE while 202 is STILL held!
+        page1.locator('.message.assistant').first.wait_for(state='visible', timeout=15000)
+        # Reload page BEFORE delayed 202 is ever delivered to App.tsx!
+        page1.reload(wait_until='domcontentloaded')
+        page1.locator('#message-input').wait_for(state='visible')
+        page1.wait_for_timeout(400)
+        assert page1.locator('#message-input').input_value() == '', f'Item 03 Scenario A: accepted prompt reappeared in composer after reload! val={page1.locator("#message-input").input_value()!r}'
+        assert page1.get_by_role('button', name='发送消息').is_disabled(), 'Item 03 Scenario A: send button must be disabled when composer is empty after reload'
+        task_c_state = api(f"/api/projects/{proj_alt['id']}/tasks/{task_c['id']}", 'GET', cookie=ctx1_cookie())
+        user_msgs_c = [m for m in task_c_state['snapshot']['messages'] if m.get('role') == 'user']
+        assert len(user_msgs_c) == 1, f'Item 03 Scenario A: expected strictly 1 native user message, got {len(user_msgs_c)}'
+        assert task_c_state['task']['draft'] == '', f'Item 03 Scenario A: Host draft must be empty, got {task_c_state["task"]["draft"]!r}'
+
+        # Item 03 Scenario B (PM blocker): Delayed 202 -> SSE settles -> user types & saves newer draft -> delayed 202 finally arrives -> BOTH UI & Host MUST keep newer draft!
+        task_d = api(f"/api/projects/{proj_alt['id']}/tasks", 'POST', {'name': 'Item03-Delayed202-NewDraft'})['task']
+        page1.goto(f"{base}/?project={proj_alt['id']}&task={task_d['id']}", wait_until='domcontentloaded')
+        page1.locator('#message-input').wait_for(state='visible')
+        prompt_d1 = '延迟202场景B：第一条已受理消息'
+        newer_draft = '延迟202场景B：用户后来已保存的新草稿-2'
+        page1.locator('#message-input').fill(prompt_d1)
+        page1.wait_for_timeout(350)
+        page1.evaluate("""() => {
+          const orig = window.fetch.bind(window);
+          let armed = true;
+          window.__held202B = false;
+          window.fetch = async (...args) => {
+            const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+            const method = (args[1] && args[1].method) || (args[0] && args[0].method) || 'GET';
+            const resp = await orig(...args);
+            if (armed && method.toUpperCase() === 'POST' && url.includes('/messages')) {
+              armed = false;
+              window.__held202B = true;
+              await new Promise(resolve => { window.__release202B = resolve; });
+            }
+            return resp;
+          };
+        }""")
+        page1.get_by_role('button', name='发送消息').click()
+        # Wait for SSE assistant reply & composer unlock WHILE 202 is STILL held!
+        page1.locator('.message.assistant').first.wait_for(state='visible', timeout=15000)
+        page1.wait_for_function('() => window.__held202B === true && !document.querySelector("#message-input")?.disabled', timeout=10000)
+        # User types and saves newer draft to Host BEFORE delayed 202 arrives!
+        page1.locator('#message-input').fill(newer_draft)
+        page1.wait_for_timeout(500)
+        task_d_before_202 = api(f"/api/projects/{proj_alt['id']}/tasks/{task_d['id']}", 'GET', cookie=ctx1_cookie())
+        assert task_d_before_202['task']['draft'] == newer_draft, f'Item 03 Scenario B: newer draft was not saved to Host before delayed 202! got={task_d_before_202["task"]["draft"]!r}'
+        # NOW deliver the stale delayed 202 response!
+        page1.evaluate('() => window.__release202B && window.__release202B()')
+        page1.wait_for_timeout(600)
+        assert page1.locator('#message-input').input_value() == newer_draft, f'Item 03 Scenario B: delayed 202 wiped newer UI draft! got={page1.locator("#message-input").input_value()!r}'
+        task_d_mid = api(f"/api/projects/{proj_alt['id']}/tasks/{task_d['id']}", 'GET', cookie=ctx1_cookie())
+        assert task_d_mid['task']['draft'] == newer_draft, f'Item 03 Scenario B: delayed 202 wiped newer Host draft! got={task_d_mid["task"]["draft"]!r}'
+        # Now send the preserved newer draft as turn 2, and deliberately type the same text again for legal turn 3!
+        page1.get_by_role('button', name='发送消息').click()
+        page1.wait_for_function('() => document.querySelectorAll(".message.assistant").length >= 2', timeout=15000)
+        page1.locator('#message-input').fill(newer_draft)
+        page1.wait_for_timeout(350)
+        page1.get_by_role('button', name='发送消息').click()
+        page1.wait_for_function('() => document.querySelectorAll(".message.assistant").length >= 3', timeout=15000)
+        task_d_end = api(f"/api/projects/{proj_alt['id']}/tasks/{task_d['id']}", 'GET', cookie=ctx1_cookie())
+        assert len([m for m in task_d_end['snapshot']['messages'] if m.get('role') == 'user']) == 3, 'Item 03: expected 3 distinct turns after deliberate re-send'
+        print('PASS [Browser Item 03] Pre-acceptance 409 preservation + delayed-202 reload no-duplicate + delayed-202 newer-draft preservation + deliberate resend verified')
 
         # =====================================================================
         # ITEM 02 (P2): Studio construction form required hints & project guard
@@ -500,21 +654,47 @@ try:
             page1.wait_for_timeout(600)
 
         page1.get_by_role('button', name='建设草案').click()
-        # Revise U-01 via inline 修正草案 drawer and add evidenceNote
         u01_row = page1.locator(f'tr[data-purpose-id="{u01["id"]}"]')
+        u02_row = page1.locator(f'tr[data-purpose-id="{u02["id"]}"]')
         u01_row.wait_for(state='visible')
+        u02_row.wait_for(state='visible')
+
+        # 4a (PM blocker): Temporarily uncheck U-02 (WITHOUT clicking permanent exclusion), THEN edit & save U-01!
+        # U-02 MUST stay unchecked after U-01 saves, and preview/v1.0 MUST contain ONLY U-01!
+        u02_row.locator('input[type="checkbox"]').uncheck()
+        assert not u02_row.locator('input[type="checkbox"]').is_checked(), 'Item 04a: U-02 should be temporarily unchecked'
+        assert '已选 1/2 项' in page1.get_by_role('button', name='生成一份发布预览').inner_text()
+
         u01_row.get_by_role('button', name='修正草案').click()
         page1.locator('#studio-purpose-edit-form').wait_for(state='visible')
         page1.locator('#studio-purpose-edit-form textarea').last.fill('本次已核对会员复购定义依据备注')
         page1.get_by_role('button', name='保存草案修正').click()
         page1.locator('#studio-purpose-edit-form').wait_for(state='hidden', timeout=8000)
-        assert '本次已核对会员复购定义依据备注' in u01_row.inner_text(), 'Item 04: evidenceNote not read back in UI!'
+        assert '本次已核对会员复购定义依据备注' in u01_row.inner_text(), 'Item 04a: evidenceNote not read back in UI!'
+        assert not u02_row.locator('input[type="checkbox"]').is_checked(), 'Item 04a: editing U-01 re-checked temporarily unchecked U-02!'
+        assert '已选 1/2 项' in page1.get_by_role('button', name='生成一份发布预览').inner_text(), 'Item 04a: preview count reset after editing U-01!'
 
-        # Exclude erroneous U-02 from default preview
+        # Capture POST /previews request body & confirm v1.0 contains ONLY U-01!
+        preview_post_bodies = []
+        page1.on('request', lambda r: preview_post_bodies.append(r.post_data) if r.url.endswith('/previews') and r.method == 'POST' else None)
+        page1.get_by_role('button', name='生成一份发布预览').click()
+        preview_dialog = page1.locator('dialog[open]')
+        preview_dialog.wait_for(state='visible', timeout=8000)
+        assert len(preview_post_bodies) >= 1, 'Item 04a: expected POST /previews request'
+        assert json.loads(preview_post_bodies[-1]).get('purposeIds') == [u01['id']], f'Item 04a: preview purposeIds leaked U-02! body={preview_post_bodies[-1]}'
+        preview_text = preview_dialog.inner_text()
+        assert '门店 30 日复购率' in preview_text and '误建用途草案 U-02' not in preview_text, f'Item 04a: U-02 leaked into preview! {preview_text}'
+        preview_dialog.get_by_role('button', name='确认并按用途发布').click()
+        preview_dialog.wait_for(state='hidden', timeout=10000)
+        pub_text = page1.locator('.studio-member-pack-section').inner_text()
+        assert '当前发布版 v1.0' in pub_text and '门店 30 日复购率' in pub_text and '误建用途草案 U-02' not in pub_text
+
+        # 4b: Permanently exclude erroneous U-02 from default preview & verify persistence across full reload!
+        page1.get_by_role('button', name='建设草案').click()
         u02_row = page1.locator(f'tr[data-purpose-id="{u02["id"]}"]')
         u02_row.get_by_role('button', name='排除出默认预览').click()
         u02_row.get_by_text('已排除出默认预览').wait_for(state='visible', timeout=8000)
-        assert not u02_row.locator('input[type="checkbox"]').is_checked(), 'Item 04: U-02 checkbox should be unchecked after exclusion'
+        assert not u02_row.locator('input[type="checkbox"]').is_checked(), 'Item 04b: U-02 checkbox should be unchecked after permanent exclusion'
         assert '已选 1/2 项' in page1.get_by_role('button', name='生成一份发布预览').inner_text()
 
         # Full page reload -> U-02 MUST stay excluded!
@@ -527,22 +707,10 @@ try:
         page1.get_by_role('button', name='建设草案').click()
         u02_row = page1.locator(f'tr[data-purpose-id="{u02["id"]}"]')
         u02_row.get_by_text('已排除出默认预览').wait_for(state='visible')
-        assert not u02_row.locator('input[type="checkbox"]').is_checked(), 'Item 04: U-02 exclusion did not persist across reload!'
-
-        # Generate preview & confirm v1.0 -> ONLY U-01 in preview and v1.0!
-        page1.get_by_role('button', name='生成一份发布预览').click()
-        preview_dialog = page1.locator('dialog[open]')
-        preview_dialog.wait_for(state='visible', timeout=8000)
-        preview_text = preview_dialog.inner_text()
-        assert '门店 30 日复购率' in preview_text and '误建用途草案 U-02' not in preview_text, f'Item 04: U-02 leaked into preview! {preview_text}'
-        preview_dialog.get_by_role('button', name='确认并按用途发布').click()
-        preview_dialog.wait_for(state='hidden', timeout=10000)
-        pub_text = page1.locator('.studio-member-pack-section').inner_text()
-        assert '当前发布版 v1.0' in pub_text and '门店 30 日复购率' in pub_text and '误建用途草案 U-02' not in pub_text
+        assert not u02_row.locator('input[type="checkbox"]').is_checked(), 'Item 04b: U-02 exclusion did not persist across reload!'
 
         # Publish v1.1 and verify v1.0 history remains inspectable in 反馈、修订与历史
-        page1.get_by_role('button', name='建设草案').click()
-        assert page1.locator(f'tr[data-purpose-id="{u02["id"]}"]').is_visible(), 'Item 04: excluded draft U-02 history should remain visible in draft table'
+        assert page1.locator(f'tr[data-purpose-id="{u02["id"]}"]').is_visible(), 'Item 04b: excluded draft U-02 history should remain visible in draft table'
         page1.get_by_role('button', name='生成一份发布预览').click()
         page1.locator('dialog[open]').get_by_role('button', name='确认并按用途发布').click()
         page1.locator('dialog[open]').wait_for(state='hidden', timeout=10000)
@@ -551,7 +719,7 @@ try:
         v10_summary.wait_for(state='visible')
         v10_summary.click()
         assert '门店 30 日复购率' in page1.locator('.studio-member-pack-section').inner_text()
-        print('PASS [Browser Item 04] U-01 revision + evidenceNote readback, U-02 persistent exclusion from preview/v1.0, and historical v1.0 inspection verified')
+        print('PASS [Browser Item 04] Temporary U-02 uncheck preserved across U-01 edit + v1.0, permanent U-02 exclusion persisted across reload + v1.1, and v1.0 history inspection verified')
 
         # =====================================================================
         # ITEM 06 (P3): Empirical re-verification of new-task dialog vs background
@@ -645,9 +813,9 @@ try:
         ctx1.close()
 
         # =====================================================================
-        # ITEM 05 (P2): Pure-UI empty enterprise -> named maintainer -> pack ->
-        #               Browser 2 blocked guidance -> re-auth -> grant T05 ->
-        #               independent T05 task reads 3 CSVs & recalculates!
+        # ITEM 05 (P2): Pure-UI empty enterprise -> in-flight auth guard in 发起体系建设 ->
+        #               named maintainer -> pack -> Browser 2 blocked guidance -> re-auth ->
+        #               grant T05 -> independent T05 task reads 3 CSVs & dynamically recalculates 2/3!
         # =====================================================================
         # Browser 1 (fresh context, empty synthetic enterprise B)
         b1_ctx = browser.new_context(viewport={'width': 1440, 'height': 900})
@@ -656,28 +824,68 @@ try:
         b1.get_by_role('button', name='分析资产').click()
         b1.get_by_role('button', name='体系工作台').click()
         b1.get_by_label('当前企业').select_option(eid_b)
-        b1.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
-        b1.get_by_role('heading', name='企业会员运营资产包').wait_for(state='visible', timeout=10000)
-
-        # Pure UI: establish reusable named maintainer BEFORE any system or pack exists!
-        auth_box = b1.locator('[aria-label="企业包维护人身份设置"]')
-        auth_box.wait_for(state='visible')
-        assert '临时浏览器会话' in auth_box.inner_text() or '未认证' in auth_box.inner_text()
-        auth_box.get_by_label('维护人操作者标识').fill('yalan-ui-ops')
-        auth_box.get_by_label('维护人姓名或岗位').fill('雅澜运营负责人')
-        auth_box.get_by_label('维护人口令').fill('yalan-ui-2026')
-        auth_box.get_by_role('button', name='建立/登录具名维护身份').click()
-        auth_box.get_by_text('op:yalan-ui-ops').wait_for(state='visible', timeout=8000)
-
-        # Pure UI: create first Studio system (inherits op:yalan-ui-ops!)
         b1.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='建设与演进').click()
+
+        # Pure UI inside 发起体系建设: test in-flight identity auth race (PM blocker)!
         b1.get_by_role('button', name='＋ 发起体系建设').click()
         b1.locator('#studio-create-form').wait_for(state='visible')
-        assert 'op:yalan-ui-ops' in b1.locator('[aria-label="体系建设维护人身份"]').inner_text()
         b1.locator('#studio-new-project').select_option(proj_b_owner['id'])
-        b1.locator('#studio-new-goal').fill('为雅澜纯界面企业建设会员运营 30 日复购资产体系')
-        b1.get_by_role('button', name='发起建设', exact=True).click()
+        goal_b = '为雅澜纯界面企业建设会员运营 30 日复购资产体系'
+        b1.locator('#studio-new-goal').fill(goal_b)
+
+        id_region = b1.locator('[aria-label="体系建设维护人身份"]')
+        id_region.wait_for(state='visible')
+        assert '临时浏览器会话' in id_region.inner_text() or '未认证' in id_region.inner_text()
+
+        # 5a: Failed auth (wrong passcode for existing operator seed-maintainer) -> inline error, form & project preserved, button re-enabled!
+        id_region.get_by_label('建设维护人 ID').fill('seed-maintainer')
+        id_region.get_by_label('建设维护人口令').fill('wrong-pass')
+        id_region.get_by_role('button', name='建立/登录维护身份').click()
+        id_region.locator('[role="alert"]').wait_for(state='visible', timeout=8000)
+        assert b1.locator('#studio-new-goal').input_value() == goal_b, 'Item 05a: failed identity auth wiped goal!'
+        assert b1.locator('#studio-new-project').input_value() == proj_b_owner['id'], 'Item 05a: failed identity auth wiped project!'
+        assert not b1.get_by_role('button', name='发起建设', exact=True).is_disabled(), 'Item 05a: submit button should re-enable after auth failure'
+
+        # 5b: Slow/in-flight auth for yalan-ui-ops -> while 验证中…, 发起建设 MUST be disabled (等待维护身份验证…), 0 premature system creates!
+        b1_sys_posts = []
+        b1.on('request', lambda r: b1_sys_posts.append(r.post_data) if r.url.endswith('/api/studio/systems') and r.method == 'POST' else None)
+        b1.evaluate("""() => {
+          const orig = window.fetch.bind(window);
+          let armed = true;
+          window.__heldOpAuth = false;
+          window.fetch = async (...args) => {
+            const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+            const method = (args[1] && args[1].method) || (args[0] && args[0].method) || 'GET';
+            const body = (args[1] && typeof args[1].body === 'string') ? args[1].body : '';
+            if (armed && method.toUpperCase() === 'POST' && url.includes('/api/studio/operators/session') && body.includes('yalan-ui-ops')) {
+              armed = false;
+              const resp = await orig(...args);
+              window.__heldOpAuth = true;
+              await new Promise(resolve => { window.__releaseOpAuth = resolve; });
+              return resp;
+            }
+            return orig(...args);
+          };
+        }""")
+        id_region.get_by_label('建设维护人 ID').fill('yalan-ui-ops')
+        id_region.get_by_label('建设维护人显示名').fill('雅澜运营负责人')
+        id_region.get_by_label('建设维护人口令').fill('yalan-ui-2026')
+        id_region.get_by_role('button', name='建立/登录维护身份').click()
+        b1.wait_for_function('() => window.__heldOpAuth === true', timeout=8000)
+        b1.get_by_role('button', name='验证中…').wait_for(state='visible', timeout=5000)
+        waiting_submit = b1.get_by_role('button', name='等待维护身份验证…')
+        waiting_submit.wait_for(state='visible', timeout=5000)
+        assert waiting_submit.is_disabled(), 'Item 05b: 发起建设 MUST be disabled while maintenance identity auth is in flight!'
+        assert len(b1_sys_posts) == 0, 'Item 05b: no system creation allowed during in-flight auth!'
+        # Release delayed auth -> succeeds -> 发起建设 becomes enabled and binds system to op:yalan-ui-ops!
+        b1.evaluate('() => window.__releaseOpAuth && window.__releaseOpAuth()')
+        id_region.get_by_text('op:yalan-ui-ops').first.wait_for(state='visible', timeout=8000)
+        submit_btn = b1.get_by_role('button', name='发起建设', exact=True)
+        submit_btn.wait_for(state='visible', timeout=5000)
+        assert not submit_btn.is_disabled(), 'Item 05b: 发起建设 must re-enable after auth succeeds'
+        submit_btn.click()
         b1.locator('#studio-create-form').wait_for(state='hidden', timeout=10000)
+        assert len(b1_sys_posts) == 1, f'Item 05b: expected strictly 1 system create, got {len(b1_sys_posts)}'
 
         # Return to 覆盖与缺口 and initialize first pack purely via UI!
         b1.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
@@ -685,10 +893,12 @@ try:
         b1.get_by_role('button', name='初始化本企业会员运营包').click()
         b1.get_by_role('button', name='建设草案').wait_for(state='visible', timeout=8000)
 
-        # Retrieve pack_b id via Browser 1 cookie and add 1 purpose (simulating Agent studio_assets tool), then publish v1.0 via UI!
+        # Retrieve pack_b id via Browser 1 cookie and verify persisted owner is op:yalan-ui-ops, add purpose, publish v1.0 via UI!
         b1_cookies = b1_ctx.cookies()
         b1_cookie_hdr = '; '.join(f"{c['name']}={c['value']}" for c in b1_cookies)
-        pack_b = api(f"/api/studio/enterprise-packs?enterpriseId={eid_b}&domain=member-operations&projectId={proj_b_owner['id']}", cookie=b1_cookie_hdr)['packs'][0]
+        pack_b_res = api(f"/api/studio/enterprise-packs?enterpriseId={eid_b}&domain=member-operations&projectId={proj_b_owner['id']}", cookie=b1_cookie_hdr)
+        assert pack_b_res['grantAuthorityGuidance']['maintainerOperatorId'] == 'op:yalan-ui-ops', f'Item 05b: pack owner was not bound to op:yalan-ui-ops! {pack_b_res}'
+        pack_b = pack_b_res['packs'][0]
         api(f"/api/studio/enterprise-packs/{pack_b['id']}/purposes", 'POST', {
             'requestId': str(_uuid.uuid4()),
             'projectId': proj_b_owner['id'],
@@ -770,7 +980,7 @@ try:
         b2.get_by_text('读取明细重算').first.wait_for(state='visible', timeout=8000)
         b2_ctx.close()
 
-        # Browser 3 (Independent consumer T05 context): new task reads 3 authorized CSVs & recalculates!
+        # Browser 3 (Independent consumer T05 context): new task reads 3 authorized CSVs & dynamically recalculates 2/3 from returned rows!
         b3_ctx = browser.new_context(viewport={'width': 1440, 'height': 900})
         b3 = b3_ctx.new_page()
         b3.goto(f"{base}/?project={proj_b_t05['id']}", wait_until='domcontentloaded')
@@ -783,12 +993,33 @@ try:
         b3.get_by_role('button', name='发送消息').click()
         b3.locator('.message.assistant').first.wait_for(state='visible', timeout=20000)
         reply = b3.locator('.message.assistant').first.inner_text()
-        assert '甲店=True' in reply and '乙店7月=True' in reply and '退款=True' in reply, f'Item 05: authorized 3 files were not read! reply={reply}'
+        assert '甲店分母2、分子1' in reply and '乙店分母1、分子1' in reply and '合计分母3、分子2' in reply, f'Item 05: dynamic CSV recalculation mismatch! reply={reply}'
+        assert 'members=3, orders=6, refunds=1' in reply, f'Item 05: filtered CSV row counts mismatch! reply={reply}'
         assert '丙店泄漏=False' in reply and '8月超期泄漏=False' in reply, f'Item 05: unauthorized store/period leaked! reply={reply}'
         joined_tools = '\n'.join(llm_state['tool_results_seen'])
         assert 'M999' not in joined_tools, 'Item 05: unlisted_extra.csv leaked!'
-        print('PASS [Browser Item 05] Empty enterprise pure-UI named maintainer -> first pack -> Browser 2 blocked guidance -> non-owner read-only -> re-auth -> grant T05 -> independent T05 3-file recalculate verified!')
+        print('PASS [Browser Item 05] In-flight auth race guard + wrong-passcode preservation + empty enterprise pure-UI named maintainer -> Browser 2 re-auth -> grant T05 -> dynamic row-derived 2/3 recalculate verified!')
         b3_ctx.close()
+
+        # 5c: Confirm original temporary-session creation path (without clicking named auth) still works cleanly!
+        ent_c = api('/api/studio/enterprises', 'POST', {'name': '临时会话创建对照企业'})
+        proj_c = api('/api/projects', 'POST', {'name': '临时会话建设项目'})['project']
+        api('/api/studio/enterprise-associations', 'POST', {'kind': 'project', 'entityId': proj_c['id'], 'enterpriseId': ent_c['id']})
+        b4_ctx = browser.new_context(viewport={'width': 1440, 'height': 900})
+        b4 = b4_ctx.new_page()
+        b4.goto(f"{base}/?project={proj_c['id']}", wait_until='domcontentloaded')
+        b4.get_by_role('button', name='分析资产').click()
+        b4.get_by_role('button', name='体系工作台').click()
+        b4.get_by_label('当前企业').select_option(ent_c['id'])
+        b4.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='建设与演进').click()
+        b4.get_by_role('button', name='＋ 发起体系建设').click()
+        b4.locator('#studio-create-form').wait_for(state='visible')
+        b4.locator('#studio-new-project').select_option(proj_c['id'])
+        b4.locator('#studio-new-goal').fill('验证未启用具名认证的临时会话创建路径仍保持可用')
+        b4.get_by_role('button', name='发起建设', exact=True).click()
+        b4.locator('#studio-create-form').wait_for(state='hidden', timeout=10000)
+        b4_ctx.close()
+        print('PASS [Browser Item 05c] Original temporary-session system creation path remains intact')
 
         browser.close()
         print('ALL_ROUND2_BROWSER_TESTS_PASSED')
