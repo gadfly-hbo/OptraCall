@@ -1433,7 +1433,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       if (access.canSummary.allowed && !access.canSummary.matchedGrantIds.some(id => eligibleSummaryGrantIds.has(id))) {
         access.canSummary.allowed = false;
       }
-      return access ? [{ purposeId: purpose.purposeId, dependencies: access.visibleDeps }] : [];
+      if (!access.canDef.allowed && !access.canSummary.allowed && !access.hasPartialOrFullDetail) return [];
+      return [{ purposeId: purpose.purposeId, dependencies: access.visibleDeps }];
     });
   }
 
