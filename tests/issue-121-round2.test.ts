@@ -736,6 +736,85 @@ test('Item 04 · pack-upsert-purpose returns safe field diagnostics, rejects plu
   assert.match(lastReply, /payload\.evidenceNotes/);
   assert.match(lastReply, /evidenceNote/);
 
+  // 8b. Equivalent domain case normalization via studio_assets pack-upsert-purpose & pack-read:
+  // default (omitted), 'member-operations', and 'MEMBER-OPERATIONS' MUST all hit the SAME single pack and SAME U-01!
+  const beforeDomainPack = (await json(await boundOwnerReq(`/api/studio/enterprise-packs/${pack.id}?enterpriseId=${enterpriseId}&projectId=${ownerProject.id}`), 200)).pack;
+  const revBeforeDomainVariants = beforeDomainPack.revision as number;
+  const purposeCountBeforeDomainVariants = beforeDomainPack.purposes.length as number;
+  const domainCases: Array<{ label: string; domain?: string; title: string }> = [
+    { label: 'default', title: '甲乙两店 6 月会员 30 日复购率（默认领域修订）' },
+    { label: 'lowercase', domain: 'member-operations', title: '甲乙两店 6 月会员 30 日复购率（小写领域修订）' },
+    { label: 'uppercase', domain: 'MEMBER-OPERATIONS', title: '甲乙两店 6 月会员 30 日复购率（大写领域修订）' },
+  ];
+  for (const variant of domainCases) {
+    let variantTurn = 0;
+    const variantResults: string[] = [];
+    provider.setResponder(ctx => {
+      variantTurn += 1;
+      if (variantTurn === 1) {
+        return {
+          calls: [{
+            name: 'studio_assets',
+            arguments: {
+              action: 'pack-upsert-purpose',
+              systemId: system.id,
+              payload: {
+                ...(variant.domain !== undefined ? { domain: variant.domain } : {}),
+                targetPurposeId: 'U-01',
+                ...basePurpose,
+                title: variant.title,
+              },
+            },
+          }],
+        };
+      }
+      variantResults.push(...ctx.recentToolResults.map(m => providerMessageText(m.content)));
+      return { text: `DOMAIN_OK:${variant.label}` };
+    });
+    await json(await boundOwnerReq(`/api/projects/${ownerProject.id}/tasks/${constructionTask.id}/messages`, 'POST', {
+      text: `测试沿 U-01 使用 ${variant.label} 领域修订。`,
+      requestId: randomUUID(),
+      studioContext: { systemId: system.id, purpose: 'construction' },
+    }), 202);
+    const variantState = await waitTaskSettled(host, ownerProject.id, constructionTask.id, undefined);
+    assert.equal(variantState.task.lastRun.status, 'completed', `domain variant ${variant.label} must complete`);
+    assert.equal(variantResults.some(r => /enterprise_pack_purpose_not_found|404/i.test(r)), false, `domain variant ${variant.label} must not fail with 404: ${variantResults.join(' | ')}`);
+    assert.match(variantResults.join('\n'), new RegExp(`"packId"\\s*:\\s*"${pack.id}"`), `domain variant ${variant.label} must target the same pack`);
+    assert.match(variantResults.join('\n'), /"purposeId"\s*:\s*"U-01"/, `domain variant ${variant.label} must revise U-01`);
+    assert.match(variantResults.join('\n'), /"created"\s*:\s*false/, `domain variant ${variant.label} must update rather than create`);
+  }
+  // Verify pack-read also matches uppercase MEMBER-OPERATIONS
+  let readUpperTurn = 0;
+  let readUpperToolOut = '';
+  provider.setResponder(ctx => {
+    readUpperTurn += 1;
+    if (readUpperTurn === 1) {
+      return {
+        calls: [{
+          name: 'studio_assets',
+          arguments: { action: 'pack-read', payload: { domain: 'MEMBER-OPERATIONS' } },
+        }],
+      };
+    }
+    readUpperToolOut = ctx.recentToolResults.map(m => providerMessageText(m.content)).join('\n');
+    return { text: 'READ_UPPER_OK' };
+  });
+  await json(await boundOwnerReq(`/api/projects/${ownerProject.id}/tasks/${constructionTask.id}/messages`, 'POST', {
+    text: '使用大写领域 MEMBER-OPERATIONS 读取当前资产包。',
+    requestId: randomUUID(),
+    studioContext: { systemId: system.id, purpose: 'construction' },
+  }), 202);
+  await waitTaskSettled(host, ownerProject.id, constructionTask.id, undefined);
+  assert.match(readUpperToolOut, new RegExp(`"id"\\s*:\\s*"${pack.id}"`), `pack-read with MEMBER-OPERATIONS must find existing pack, got: ${readUpperToolOut}`);
+
+  const packsAfterDomainVariants = await json(await boundOwnerReq(`/api/studio/enterprise-packs?enterpriseId=${enterpriseId}&projectId=${ownerProject.id}`), 200);
+  assert.equal(packsAfterDomainVariants.packs.length, 1, 'Equivalent domain variants must keep strictly 1 pack');
+  const packAfterDomainVariants = packsAfterDomainVariants.packs[0];
+  assert.equal(packAfterDomainVariants.id, pack.id);
+  assert.equal(packAfterDomainVariants.purposes.length, purposeCountBeforeDomainVariants, 'Equivalent domain variants must not create extra purposes');
+  assert.equal(packAfterDomainVariants.revision, revBeforeDomainVariants + 3, 'Each of the 3 equivalent domain revisions must bump revision by 1');
+  assert.equal(packAfterDomainVariants.purposes.find((p: any) => p.id === 'U-01')?.title, '甲乙两店 6 月会员 30 日复购率（大写领域修订）');
+
   // 9. ZERO-WRITE on brand-new enterprise with 0 packs: invalid studio_assets pack-upsert-purpose (empty title) must NOT create an empty pack!
   const emptyEnt = await json(await boundOwnerReq('/api/studio/enterprises', 'POST', { requestId: randomUUID(), name: '零包企业防空建测试' }), 201);
   const { project: emptyProj } = await json(await boundOwnerReq('/api/projects', 'POST', { name: '零包建设项目' }), 201);
@@ -872,6 +951,70 @@ test('Item 03 · Pre-acceptance 409 returns accepted:false keeping draft intact;
   }), 202);
   const settled2 = await waitTaskSettled(host, project.id, task.id);
   assert.equal(settled2.task.draft, '保留中的较新草稿-2', 'Host must preserve a different newer draft when accepting another message');
+
+  // 4. Pre-acceptance native Pi JSONL write failure (BEFORE run.accepted) MUST preserve saved draft,
+  // send 0 requests to Provider, write 0 native user messages, and allow manual retry once writable!
+  const { task: writeFailTask } = await json(await host.request(`/api/projects/${project.id}/tasks`, 'POST', {
+    name: '会话写入失败原稿保全任务',
+    assignment: makeTaskAssignment('analysis', true),
+  }), 201);
+  const openRes = await json(await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}/open`, 'POST', {}), 200);
+  const sessionFile = openRes.snapshot.sessionFile as string;
+  assert.ok(sessionFile && fs.existsSync(sessionFile), 'Opened task must materialize native JSONL sessionFile');
+
+  const writeFailPrompt = '会话写入失败前已保存的原问题\n第二行：请核对原稿是否保留。';
+  await json(await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}/draft`, 'PATCH', { text: writeFailPrompt }), 200);
+  const providerCountBefore = provider.requests.length;
+  const failedReqId = randomUUID();
+  fs.chmodSync(sessionFile, 0o400);
+  t.after(() => { try { fs.chmodSync(sessionFile, 0o600); } catch {} });
+  try {
+    const writeFailRes = await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}/messages`, 'POST', {
+      text: writeFailPrompt,
+      requestId: failedReqId,
+    });
+    const writeFailBody = await json(writeFailRes, 500);
+    assert.equal(writeFailBody.code, 'sdk_operation_failed');
+    assert.equal(provider.requests.length, providerCountBefore, 'Model provider must receive ZERO requests when native session write fails before run.accepted');
+
+    const afterFail = await json(await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}`), 200);
+    assert.equal(afterFail.task.draft, writeFailPrompt, 'Original saved draft MUST remain intact when Pi native session write fails before run.accepted');
+    assert.equal(afterFail.task.lastRun?.id, failedReqId);
+    assert.equal(afterFail.task.lastRun?.status, 'interrupted');
+    assert.notEqual(afterFail.snapshot.lastRun?.requestId, failedReqId, 'Unaccepted run must NOT appear in native snapshot.lastRun');
+    assert.equal(afterFail.snapshot.messages.filter((m: any) => m.role === 'user').length, 0, 'Native session must contain ZERO user messages');
+
+    // 5. Same invariant for /commands: pre-acceptance native session write failure preserves command draft!
+    const cmdDraft = '/session';
+    await json(await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}/draft`, 'PATCH', { text: cmdDraft }), 200);
+    const cmdFailRes = await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}/commands`, 'POST', {
+      text: cmdDraft,
+      requestId: randomUUID(),
+    });
+    await json(cmdFailRes, 500);
+    const afterCmdFail = await json(await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}`), 200);
+    assert.equal(afterCmdFail.task.draft, cmdDraft, 'Pre-acceptance /commands native write failure must preserve command draft');
+  } finally {
+    fs.chmodSync(sessionFile, 0o600);
+  }
+
+  // After restoring writability: accepted /commands clears matching command draft, and manual message retry succeeds cleanly!
+  await json(await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}/commands`, 'POST', {
+    text: '/session',
+    requestId: randomUUID(),
+  }), 200);
+  const afterCmdOk = await json(await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}`), 200);
+  assert.equal(afterCmdOk.task.draft, '', 'Accepted /commands must clear matching command draft');
+
+  await json(await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}/draft`, 'PATCH', { text: writeFailPrompt }), 200);
+  await json(await host.request(`/api/projects/${project.id}/tasks/${writeFailTask.id}/messages`, 'POST', {
+    text: writeFailPrompt,
+    requestId: randomUUID(),
+  }), 202);
+  const retrySettled = await waitTaskSettled(host, project.id, writeFailTask.id);
+  assert.equal(retrySettled.task.lastRun.status, 'completed');
+  assert.equal(retrySettled.task.draft, '', 'Manual retry after write recovery must clear matching draft on acceptance');
+  assert.equal(retrySettled.snapshot.messages.filter((m: any) => m.role === 'user').length, 1, 'Manual retry must produce strictly 1 native user message');
 });
 
 test('Item 05 · Named maintainer guidance, cross-browser re-auth, summary/wrong-purpose denials, dynamic CSV 3-file recalculate (2/3), revocation, and ephemeral historical preservation', { timeout: 90_000 }, async t => {
@@ -1209,5 +1352,3 @@ test('Item 05 · Named maintainer guidance, cross-browser re-auth, summary/wrong
   assert.equal(histPackRes.grantAuthorityGuidance?.reason, 'ephemeral_maintainer_binding');
   assert.match(histPackRes.grantAuthorityGuidance?.nextStep ?? '', /临时浏览器会话|PM\/用户/);
 });
-
-

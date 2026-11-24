@@ -947,9 +947,10 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (action === 'pack-read') {
           const enterpriseId = enterpriseScopes.enterpriseIdForProject(projectId);
           if (!enterpriseId) return reply(action, { enterpriseId: null, packs: [] });
-          const domain = typeof payload.domain === 'string' && payload.domain.trim() ? payload.domain.trim() : 'member-operations';
+          const rawDomain = typeof payload.domain === 'string' && payload.domain.trim() ? payload.domain : undefined;
+          const domain = memberPack.packs.normalizeDomain(rawDomain);
           if (construction && construction.enterpriseId === enterpriseId) {
-            const found = memberPack.packs.list(enterpriseId).find(p => p.domain === domain) ?? null;
+            const found = memberPack.packs.findByDomain(enterpriseId, domain) ?? null;
             return reply(action, { enterpriseId, mode: 'construction', pack: found ? { id: found.id, packCode: found.packCode, domain: found.domain, name: found.name, revision: found.revision, panorama: found.panorama ?? null, entries: found.entries, purposes: found.purposes, packRevisions: found.packRevisions.map(r => ({ version: r.version, status: r.status, confirmedAt: r.confirmedAt, dataCutoffAt: r.dataCutoffAt })) } : null });
           }
           const summary = (await memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId)).filter((p: any) => p.domain === domain);
@@ -1204,7 +1205,8 @@ export function createStudioFeature(options: StudioHostOptions) {
           if (action === 'pack-save-panorama' || action === 'pack-upsert-entry' || action === 'pack-upsert-purpose') {
             const entId = system.enterpriseId ?? enterpriseScopes.enterpriseIdForProject(projectId);
             if (!entId) throw new StudioError('studio_enterprise_required', 409);
-            const domain = typeof payload.domain === 'string' && payload.domain.trim() ? payload.domain.trim() : 'member-operations';
+            const rawDomain = typeof payload.domain === 'string' && payload.domain.trim() ? payload.domain : undefined;
+            const domain = memberPack.packs.normalizeDomain(rawDomain);
             const ensureTargetPack = () => memberPack.packs.ensurePack({ enterpriseId: entId, systemId: id, domain, name: `${system.name} · 会员运营资产包` });
             if (action === 'pack-save-panorama') {
               const srcRefs = parseSources(payload.sourceRefs ?? []);
@@ -1254,7 +1256,7 @@ export function createStudioFeature(options: StudioHostOptions) {
               ...(payload as unknown as Parameters<typeof memberPack.packs.upsertPurpose>[1]),
               taskOwner: { projectId, taskId },
             };
-            const existingPack = memberPack.packs.list(entId).find(p => p.domain === domain);
+            const existingPack = memberPack.packs.findByDomain(entId, domain);
             memberPack.packs.validatePurposeInput(existingPack, upsertInput);
             context.assertCurrent(); context.signal.throwIfAborted();
             const ensured = ensureTargetPack();

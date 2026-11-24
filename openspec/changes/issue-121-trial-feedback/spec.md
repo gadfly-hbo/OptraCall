@@ -84,16 +84,15 @@
   - Linux 无 `sandbox-exec` 降级路径（`restrictedHostToolsOnly`）：仅当任务开启 `assignment.skill` 时，在系统提示词明确宣告固定 Skill（`id@version`、`sha256`）并经官方 `defineTool` 暴露严格只读的 `read_task_skill`（校验 `packageIdentity` 摘要，拒绝绝对路径/`..`/隐藏文件/符号链接/硬链接/超限文件，且缺文件时返回 `task_skill_file_unavailable` 不泄漏宿主机路径）；显式取消 Skill 时完全不暴露提示与工具。
   - macOS `protectedTools` + `evaluateNativeToolCall`：对工作区与项目路径统一 `canonicalPath`（解决 `/var` → `/private/var` 符号链接别名），允许在 `deny-detail` 模式下只读访问 `workspaceRoot/skills`（`read`/`ls`/`find`/`grep`），同时显式拒绝 `write`/`edit`（`member_pack_skill_readonly`），并在 `bash`/`powershell`/`codemode` 枚举分支同步使用 `realProjectRoot` 与其父目录守卫。
   - 能力快照验证改在活跃打开会话（`POST /open`）与 `/skills` 上核对，兼容 macOS `ordinary` 结算即停机行为。
-- **03 · 延迟 202 不重复发送且不覆盖较新草稿**：
-  - Host `ProjectStore.markRun` 在 `verifyBeforeDispatch` 通过后于同一原子写入中仅当 `task.draft === input.text`（命令匹配 `trim`）时清空 `task.draft`；接受前 4xx 绝不清空草稿。
-  - 前端 `App.tsx` 发前先排空该任务在途 `draftQueues` 并记录 `draftVersions` 快照，202 返回或 accepted 恢复时仅当草稿版本未变且无在途保存才清理本地未变草稿，不再发起盲目 `PATCH /draft ""` 覆盖用户较新保存草稿。
-- **04 · 临时取消勾选保持与非法用途零写入**：
+- **03 · 延迟 202 不重复发送、不覆盖较新草稿，且 Pi 确认收件前失败保留原稿**：
+  - Host `ProjectStore.markRun` 仅写运行状态而不提前清草稿；`startProjectMessage` 与 `/commands` 严格在 `await run.accepted`（Pi 确认收件并完成原生会话登记）之后、发送 202 / 等待结果之前，调用原子 `ProjectStore.clearDraftIf(projectId, taskId, expectedText)` 仅当 `task.draft` 仍匹配本次发送原文（命令匹配 `trim`）时清空草稿；Pi 确认收件前任何失败（含 4xx 拒绝与原生会话写入失败 500 `sdk_operation_failed`）均绝不清空已保存草稿。
+  - 前端 `App.tsx` 发前先排空该任务在途 `draftQueues` 并记录 `draftVersions` 快照，202 返回或 `requestAcceptedInSnapshot` 确认原生会话已登记该 `requestId` 时仅当草稿版本未变且无在途保存才清理本地未变草稿，不再发起盲目 `PATCH /draft ""` 覆盖用户较新保存草稿；未确认收件的 `interrupted` 失败不会误判为已接受，原草稿在当前页与刷新后保持完整。
+- **04 · 临时取消勾选保持、非法用途零写入与等价领域大小写兼容**：
   - `StudioMemberPackPanel.tsx` 的 `syncSelectedPurposes` 改为按 `pack.id` 与各用途 `excludedFromPreview` 变化增量合并：同一资产包编辑 `U-01` 时保留用户对 `U-02` 的临时取消勾选，显式切换持久化排除或切换包时仍按服务端状态同步。
-  - `EnterprisePackStore` 抽出只读 `validatePurposeInput`，在 `studio-host.ts` 调 `ensurePack` 之前及 `member-pack-host.ts` 调 `bindContinuationOwner` 之前先完成全量字段校验，保证 0 包企业不创建空包、已归档原项目下非法接续请求不抬高 `revision` / 不新增 `continuationHistory` / 不更改 `activeOwnerProjectId`。
+  - `EnterprisePackStore` 抽出只读 `validatePurposeInput` 与唯一领域归一入口 `normalizeDomain` / `findByDomain`（与 `ensurePack` 共享 `.trim().toLowerCase()`）；`studio-host.ts` 的 `pack-read` 与 `pack-upsert-purpose` 预检及 `member-pack-host.ts` 调 `bindContinuationOwner` 之前先完成全量字段校验，保证 0 包企业不创建空包、已归档原项目下非法接续请求不抬高 `revision` / 不新增 `continuationHistory` / 不更改 `activeOwnerProjectId`，且沿 `targetPurposeId` 使用默认/`member-operations`/`MEMBER-OPERATIONS` 等价领域修订时均命中同一资产包与同一用途。
 - **05 · 维护身份验证期间禁用「发起建设」与实读行动态重算**：
   - `StudioPage.tsx` 在 `newOpBusy` 期间禁用「发起建设」提交与关闭（`allowLeave` + `PersonalDialog.busy`）并在 `newSystem()` 顶部兜底拦截；身份验证失败显示行内 `role="alert"` 且保留已填表单与项目选择；保留原临时会话创建路径不变。
   - 后端与 Chromium 测试均直接解析 `read_input` 实际返回的 CSV 行计算复购分子/分母（零硬编码 `2/3`），并补齐仅汇总授权、错误用途授权与撤权后的显式负例。
 - **回退与数据兼容性说明**：
   - 新增持久化字段 `EnterprisePackPurpose.excludedFromPreview` / `excludedReason` 为可选字段，不破坏历史资产包、修订记录、任务固定快照、会话或授权读取。
   - 若代码回退到不识别 `excludedFromPreview` 的旧版本：已有资产包和历史发布版仍可正常加载且不丢数据，但旧版前端与预览逻辑会忽略 `excludedFromPreview: true`，在下次准备新预览时将曾被排除的草案重新纳入默认勾选列表，需人工手动取消勾选（或升级回含本修复的版本）以避免误发。
-

@@ -283,12 +283,15 @@ export function App() {
   });
   const refreshConfigurations = async () => { try { const value = await readConfigurations(); if (!mounted.current) return; setConfigurations(value.configurations); setSelectedId(value.selectedId); setHostStatus('ready'); setGlobalError(''); } catch (error) { if (mounted.current) { setHostStatus('unavailable'); setGlobalError(safeError(error)); } throw error; } };
   const applySnapshot = (key: string, snapshot: SessionSnapshot) => changeUI(key, old => ({ ...old, snapshot, streaming: snapshot.status === 'running' ? old.streaming : '', optimistic: undefined, status: snapshot.status === 'running' ? 'running' : 'idle', requestId: snapshot.status === 'running' ? snapshot.lastRun?.requestId ?? old.requestId : undefined, uiRequests: snapshot.uiRequests ?? [], toolStatus: undefined, finalReceived: false }));
+  const requestAcceptedInSnapshot = (value: { task: ClientTask; snapshot: SessionSnapshot }, requestId: string) =>
+    value.snapshot.lastRun?.requestId === requestId
+    || (value.task.lastRun?.id === requestId && ['completed', 'cancelled', 'failed'].includes(value.task.lastRun.status));
   const refreshTask = async (projectId: string, taskId: string) => {
     const key = taskKey(projectId, taskId), version = draftVersions.current.get(key) ?? 0, hadPending = draftQueues.current.has(key), value = await readTask(projectId, taskId);
     if (!mounted.current) return value;
     if (value.project.id !== projectId || value.task.id !== taskId) throw new HostRequestError('原任务归属未能核对；保留原请求与问题。');
     const uncertain = uiRef.current[key]?.uncertainPersonalSend;
-    if (uncertain && value.task.lastRun?.id === uncertain.args[3]) {
+    if (uncertain && requestAcceptedInSnapshot(value, uncertain.args[3])) {
       writeRejectedSend(projectId, taskId, null);
       changeUI(key, old => ({ ...old, uncertainPersonalSend: undefined, failedPrompt: undefined, notice: '已核对原请求已接受；未重新发送。' }));
     }
@@ -648,7 +651,7 @@ export function App() {
       let accepted = false, recoveredStatus: 'idle' | 'running' | undefined, recoveredLastRunId: string | null = targetTask.lastRun?.id ?? null;
       try {
         const restored = await refreshTask(projectId, taskId);
-        accepted = !definitelyRejected && restored.task.lastRun?.id === requestId;
+        accepted = !definitelyRejected && requestAcceptedInSnapshot(restored, requestId);
         recoveredStatus = restored.snapshot.status;
         recoveredLastRunId = restored.task.lastRun?.id ?? null;
       } catch {}
@@ -658,7 +661,7 @@ export function App() {
       if (accepted) {
         writeRejectedSend(projectId, taskId, null);
         clearLocalDraftIfUnchanged();
-      } else if (definitelyRejected || personal.length > 0) {
+      } else if (definitelyRejected || personal.length > 0 || error instanceof HostRequestError) {
         if ((draftVersions.current.get(key) ?? 0) === draftVersionBeforeSend && !draftQueues.current.has(key)) {
           await persistDraft(projectId, taskId, text).catch(() => {});
         }
@@ -694,8 +697,8 @@ export function App() {
       await sendMessage(...uncertain.args);
       const restored = await refreshTask(projectId, taskId);
       const savedRun = restored.task.lastRun;
-      if (savedRun?.id !== uncertain.args[3]) throw new HostRequestError('原请求尚未在此任务中核对，状态仍为 UNKNOWN；保留原标识与选择。');
-      changeUI(key, old => ({ ...old, uncertainPersonalSend: undefined, error: lastRunError(restored.task), failedPrompt: savedRun.status === 'failed' ? uncertain.args[2] : undefined, optimistic: undefined, notice: '已按原标识回读任务实际状态与保存消息；没有新建运行或重复加入问题。' }));
+      if (!requestAcceptedInSnapshot(restored, uncertain.args[3])) throw new HostRequestError('原请求尚未在此任务中核对，状态仍为 UNKNOWN；保留原标识与选择。');
+      changeUI(key, old => ({ ...old, uncertainPersonalSend: undefined, error: lastRunError(restored.task), failedPrompt: savedRun?.status === 'failed' ? uncertain.args[2] : undefined, optimistic: undefined, notice: '已按原标识回读任务实际状态与保存消息；没有新建运行或重复加入问题。' }));
     }
     catch (error) { changeUI(key, old => ({ ...old, error: safeError(error) })); }
     finally { pending.current.delete(key); changeUI(key, old => ({ ...old, posting: false })); }

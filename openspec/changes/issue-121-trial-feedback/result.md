@@ -354,3 +354,42 @@ Qoder 最后交回 `5e9b001c52e3cba6d89c9c1263e80032eb8ade9e`。PM 在合入当�
 - **回退影响说明**：若代码回退至不识别 `excludedFromPreview` 的旧版本，既有资产包、历史发布版与授权记录保持可读无数据损坏，但旧版本在下次准备新预览时会忽略 `excludedFromPreview: true`，使曾排除的草案重新出现在默认勾选集合中，需人工手动取消勾选后再预览。
 - **未覆盖边界**：本云端环境为 Ubuntu 24.04（2 vCPU），无法直接运行 macOS `/usr/bin/sandbox-exec` 实机验证（macOS 路径已由 `evaluateNativeToolCall` `/var -> /private/var` 符号链接单测覆盖，实机运行与全仓库 465 文件 `npm run check` / CI 待 PM Agent 在 Mac mini / GitHub Actions 复核）；未调用真实付费 LLM，未改动真实业务包/设备/服务。
 
+---
+
+## Round 2 PM 二次复验返工记录（2026-11-24）
+
+### 返工基线与定位
+
+- 触发回执：[返工回执与通过条件](https://github.com/gadfly-hbo/OptraCall/issues/121#issuecomment-7133338502)（原候选 `57147699431518d9a87a19be9453e9746aadb2ca` 保留历史记录，不覆盖；其中 01、02、05、06 及 Mac mini 全量 3168/3168 检查、两套 Chromium 与 `#130` 回归已通过；退回 03、04 两处新回归及 `git diff --check` 末尾空行清理）。
+- 最新 `origin/main` 经 `git fetch` 确认仍为 `f9994cb7b5ad4f9ab52141f278085d9e21f05d45`（已合入，无新提交）；`package.json`、`package-lock.json` 与 `src/host/project-history.ts`（`priorTaskRequest`）零改动。
+
+### 两处回归修复详情
+
+1. **Item 03（P2 · Pi 确认收件前会话写入失败保留原稿）**：
+   - **Host 落盘时序修复（`src/host/project-store.ts`、`src/host/server.ts`）**：将 `ProjectStore.markRun` 恢复为纯运行态写入，新增原子 `ProjectStore.clearDraftIf(projectId, taskId, expectedText, { matchTrimmed })`；`startProjectMessage` 与 `/commands` 均严格改为在 `await run.accepted`（Pi 确认收件并持久化 `optracall.run { phase: 'started' }`）**之后**、发送 HTTP 202 / 等待结果**之前**调用 `clearDraftIf`。当 Pi 在 `run.accepted` 前因原生会话写入失败抛出 500 `sdk_operation_failed` 时，`clearDraftIf` 绝不执行，磁盘 `task.draft` 原稿 100% 完整保留；已接受后的延迟 202 仍先清匹配草稿且不覆盖较新草稿。
+   - **实时会话内存与磁盘对齐（`src/agent/project-session.ts`）**：自测真实 `chmod 0o400` 场景检出官方 Pi SDK `SessionManager.appendCustomEntry` 会在写盘前先压入内存导致实时 `snapshot().lastRun` 泄漏未落盘 `requestId`；在 `execute()` 的 `attachRunManager` 失败分支记录 `unacceptedRunIds`（供 `lastRun()` 过滤，成功后清理）并调用官方公开方法 `manager.setSessionFile(persistedFile); session?.refreshContext()` 回读磁盘真相，避免幽灵 `lastRun` 与重试后的孤立 `parentId`。
+   - **前端接受判定修正（`src/host/ui/App.tsx`）**：新增 `requestAcceptedInSnapshot(value, requestId)`（以原生 `snapshot.lastRun?.requestId === requestId` 或已落定非中断状态为唯一依据），统一接入 `refreshTask`、`send` `catch` 与 `retryPersonalSend`，并在未确认收件的 `HostRequestError` 分支保留草稿；未确认收件的 `interrupted` 500 绝不再被误判为 `accepted = true`，原草稿在当前页与完整刷新后均完整保留且不自动重发。
+
+2. **Item 04（P2 · 沿原用途 ID 使用等价大写领域 `MEMBER-OPERATIONS` 修订）**：
+   - **唯一领域归一入口（`src/host/enterprise-pack-store.ts`、`src/host/studio-host.ts`、`src/host/member-pack-host.ts`）**：在 `EnterprisePackStore` 抽出与 `ensurePack` 同源的 `normalizeDomain` 与 `findByDomain`（统一 `text(domain ?? 'member-operations', 100, false).trim().toLowerCase()`）；`studio-host.ts` 的 `pack-read` 与 `pack-upsert-purpose` 预检及 `member-pack-host.ts` 的 HTTP `GET/POST /api/studio/enterprise-packs` 统一复用同一归一逻辑，保持零写入防线不变且完全兼容默认、`member-operations` 与 `MEMBER-OPERATIONS`。
+
+3. **格式清理**：消除 `git diff --check f9994cb` 报出的 3 处 EOF 末尾空行告警（`spec.md`、`result.md`、`tests/issue-121-round2.test.ts`）。
+
+### 独立非作者复核（二次返工轮）
+
+- 全新只读独立复核子代理审查 `git diff 5714769` 全部源码与测试改动（含并发 `clearDraftIf` vs `PATCH /draft`、500 写入失败与 `setSessionFile` 公开 API、延迟 202、`requestAcceptedInSnapshot` 全场景、`normalizeDomain` 边界及原则/契约合规）：
+  - **结论：`PASS（0 个阻断性缺陷）`**。
+  - 已同步采纳其两处非阻断一致性建议（`unacceptedRunIds.delete(id)` 及 `member-pack-host.ts` HTTP 路由 `normalizeDomain` 对齐）并完成最终复测。
+
+### 二次返工验证结果
+
+- `npm run check:agent-sessions`：**PASS**（退出 0）。
+- `npm run build`（`tsc --noEmit` + frontend build + stamp）：**PASS**（退出 0）。
+- `node --test tests/issue-121-round2.test.ts`：**5/5 PASS（0 fail）** — 新增实测：
+  - Item 03：真实 `chmod 0o400` 触发 Pi 确认收件前原生 JSONL 写入失败（`/messages` 与 `/commands` 均返回 500 `sdk_operation_failed`、模型 0 请求、原生 0 用户消息、`lastRun.status === 'interrupted'`、`snapshot.lastRun?.requestId !== failedReqId`、磁盘 `task.draft` 原稿完整保留；恢复 `0o600` 后 `/commands` 与人工重试消息均成功清草稿并产生严格 1 条用户消息）。
+  - Item 04：真实 `studio_assets` 沿 `targetPurposeId: 'U-01'` 分别以省略默认、`member-operations`、`MEMBER-OPERATIONS` 修订均命中同一单包同一用途（包数=1、用途数不变、`revision` 严格 +3），且 `pack-read` 大写 `MEMBER-OPERATIONS` 正常命中。
+- `python3 tests/browser-issue-121-round2.py`：**ALL_ROUND2_BROWSER_TESTS_PASSED（0 errors）** — 新增真实 Chromium 场景 C（`chmod 0o400` 触发确认收件前 500 失败→当前页与完整刷新后输入框及 Host 原稿保持完整、0 自动重发→恢复可写后人工发送成功清草稿并写 1 条用户消息），原场景 A/B 及 Item 01/02/04/05/06 全绿。
+- `python3 tests/browser-member-operations-pack.py`：**BROWSER_MEMBER_PACK_E2E: PASS（0 page errors）**。
+- 受影响后端回归套件（16 套：`project-store`、`project-tasks`、`project-runtime`、`project-host`、`task-host`、`task-observation`、`personal-context-*`、`member-operations-pack-*`、`studio-host`、`studio-ui-client`、`strategy-discussion-loop-guard`）：**191 pass / 0 fail / 3 skipped**（退出 0）。
+- `git diff --check f9994cb`：**PASS（0 warnings，退出 0）**。
+- **未覆盖边界**：本云端环境为 Ubuntu 24.04（2 vCPU），macOS `/usr/bin/sandbox-exec` 实机与全仓库 465 文件 `npm run check` / GitHub Actions CI 仍待 PM Agent 在 Mac mini / PR CI 复核；未调用真实付费 LLM，未改动真实业务包/设备/服务。

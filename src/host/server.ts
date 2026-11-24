@@ -2579,11 +2579,12 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               const current = await prepareRequirement(input, projectId);
               if (current?.text !== suppliedRap.text) throw new RequestFault(409, 'requirement_unavailable');
             }
-            await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! }, { clearDraftIf: input.text as string });
+            await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! });
           },
         });
         terminalContext = run.context;
         await run.accepted;
+        await projects.clearDraftIf(projectId, taskId, input.text as string).catch(() => {});
         accepted = true; acknowledge({ requestId, status: 'running' });
         await mutate(() => recordFeedbackDelivery(projectId,taskId,requestId,fingerprint)).catch(() => {
           publish(projectId,taskId,{type:'ui.notification',level:'warning',message:'本轮发送已被接受，但独立交付记录待核对；请查看原生提供回执，未自动重发。'});
@@ -3538,11 +3539,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   text: input.text as string, requestId, kind: 'command',
                   verifyBeforeDispatch: async () => {
                     await assertFrameworkContinuation(projectId, taskId);
-                    await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! }, { clearDraftIf: input.text as string, matchTrimmed: true });
+                    await projects.markRun(projectId, taskId, { id: requestId, status: 'running', startedAt: startedAt! });
                   },
                 });
                 terminalContext = run.context;
-                const [value] = await Promise.all([run.completion, run.accepted]);
+                void run.completion.catch(() => {});
+                await run.accepted;
+                await projects.clearDraftIf(projectId, taskId, input.text as string, { matchTrimmed: true }).catch(() => {});
+                const value = await run.completion;
                 await settleProjectRun(owner, run.context, requestId, startedAt!, value);
                 return value;
               } catch (error) {

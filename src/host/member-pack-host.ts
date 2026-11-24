@@ -3766,7 +3766,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
       const enterprise = enterpriseId ? uuid(enterpriseId) : undefined;
       const operator = resolveRequestOperator(request);
       const reader = await packReaderProject(operator, url.searchParams.get('projectId'), enterprise);
-      const domain = url.searchParams.get('domain') || undefined;
+      const rawDomain = url.searchParams.get('domain');
+      const domain = rawDomain && rawDomain.trim() ? packs.normalizeDomain(rawDomain) : undefined;
       const rawList = reader?.enterpriseId ? packs.list(reader.enterpriseId).filter(pack => !domain || pack.domain === domain) : [];
       const owned = reader && rawList.find(pack => canReadConstructionPack(pack, reader.projectId, operator));
       const grantAuthority = owned && reader ? await resolveGrantAuthorityForProject(owned.enterpriseId, reader.projectId, owned, operator) : undefined;
@@ -3795,7 +3796,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const systemId = uuid(input.systemId);
         const system = options.studio.get(systemId);
         if (system.enterpriseId !== enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-        const domain = typeof input.domain === 'string' ? input.domain : 'member-operations';
+        const rawDomain = typeof input.domain === 'string' && input.domain.trim() ? input.domain : undefined;
+        const domain = packs.normalizeDomain(rawDomain);
         const existing = packs.list(enterpriseId).find(pack => pack.systemId === systemId && pack.domain === domain);
         if (existing) {
           await assertWritablePackProject(existing, operator, input.projectId);

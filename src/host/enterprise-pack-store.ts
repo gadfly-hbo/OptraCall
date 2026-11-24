@@ -191,11 +191,22 @@ export class EnterprisePackStore {
     return clone(found);
   }
 
+  normalizeDomain(domain?: string): string {
+    return text(domain ?? 'member-operations', 100, false).trim().toLowerCase();
+  }
+
+  findByDomain(enterpriseId: string, domain?: string): EnterpriseDomainPack | undefined {
+    const cleanEnterpriseId = uuid(enterpriseId);
+    const normalized = this.normalizeDomain(domain);
+    const found = this.load().packs.find(p => p.enterpriseId === cleanEnterpriseId && p.domain === normalized);
+    return found ? clone(found) : undefined;
+  }
+
   ensurePack(input: { enterpriseId: string; systemId: string; domain?: string; name: string; packCode?: string }): EnterpriseDomainPack {
     this.assertWritable();
     const enterpriseId = uuid(input.enterpriseId);
     const systemId = uuid(input.systemId);
-    const domain = text(input.domain ?? 'member-operations', 100, false).trim().toLowerCase();
+    const domain = this.normalizeDomain(input.domain);
     const name = text(input.name, 200, false).trim();
     const index = this.load();
     const existing = index.packs.find(p => p.enterpriseId === enterpriseId && p.domain === domain);

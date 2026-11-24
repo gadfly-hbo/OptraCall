@@ -192,13 +192,17 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     return { requestId, ...observed, sources };
   };
   const publish = (event: unknown) => send({ kind: 'event', event: redact(event) });
+  const unacceptedRunIds = new Set<string>();
   function lastRun(): LastRun | undefined {
     for (const entry of [...manager!.getEntries()].reverse()) {
       if (entry.type !== 'custom' || entry.customType !== RUN_ENTRY) continue;
       const data = entry.data as Record<string, unknown> | undefined;
       // Forks copy native entries. A copied marker belongs to its originating session.
       if (!data || data.sessionId !== manager!.getSessionId() || typeof data.requestId !== 'string') continue;
-      if (data.phase === 'started') return { requestId: data.requestId };
+      if (data.phase === 'started') {
+        if (unacceptedRunIds.has(data.requestId)) continue;
+        return { requestId: data.requestId };
+      }
       if (data.phase === 'settled' && ['completed', 'cancelled', 'failed'].includes(String(data.outcome))) {
         const diagnostic = readRunDiagnostic(data.diagnostic);
         const review = readReportCalculationRunReceipt(data.reportCalculationReview, data.requestId);
@@ -1025,8 +1029,16 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     if (publicSearch()) current.publicSearch = createPublicNativeSearchObservation();
     nativeSearchFailure = undefined;
     run = current;
-    try { attachRunManager(manager!); }
-    catch (error) { run = undefined; throw error; }
+    try { attachRunManager(manager!); unacceptedRunIds.delete(id); }
+    catch (error) {
+      run = undefined;
+      unacceptedRunIds.add(id);
+      const persistedFile = manager!.getSessionFile();
+      if (persistedFile && existsSync(persistedFile)) {
+        try { manager!.setSessionFile(persistedFile); session?.refreshContext(); } catch {}
+      }
+      throw error;
+    }
     publish({ type: 'run.accepted', requestId: id, sessionFile: manager!.getSessionFile() });
     publish({ type: 'snapshot', snapshot: snapshot() });
     pendingOperation = (async () => {

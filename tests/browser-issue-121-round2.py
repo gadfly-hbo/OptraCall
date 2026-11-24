@@ -558,7 +558,49 @@ try:
         page1.wait_for_function('() => document.querySelectorAll(".message.assistant").length >= 3', timeout=15000)
         task_d_end = api(f"/api/projects/{proj_alt['id']}/tasks/{task_d['id']}", 'GET', cookie=ctx1_cookie())
         assert len([m for m in task_d_end['snapshot']['messages'] if m.get('role') == 'user']) == 3, 'Item 03: expected 3 distinct turns after deliberate re-send'
-        print('PASS [Browser Item 03] Pre-acceptance 409 preservation + delayed-202 reload no-duplicate + delayed-202 newer-draft preservation + deliberate resend verified')
+
+        # Item 03 Scenario C (PM re-review blocker): Pre-acceptance native Pi JSONL write failure (500 sdk_operation_failed,
+        # task.lastRun.status='interrupted', snapshot.lastRun absent, 0 native user messages) MUST preserve saved draft in BOTH UI & Host
+        # immediately and across full reload, with zero auto-resend, and allow manual retry once writable!
+        task_e = api(f"/api/projects/{proj_alt['id']}/tasks", 'POST', {'name': 'Item03-PreAccept-SessionWriteFail'})['task']
+        task_e_open = api(f"/api/projects/{proj_alt['id']}/tasks/{task_e['id']}/open", 'POST', {}, cookie=ctx1_cookie())
+        session_file_e = task_e_open['snapshot'].get('sessionFile')
+        assert session_file_e and os.path.exists(session_file_e), f'Item 03 Scenario C: expected materialized sessionFile, got {session_file_e!r}'
+        page1.goto(f"{base}/?project={proj_alt['id']}&task={task_e['id']}", wait_until='domcontentloaded')
+        page1.locator('#message-input').wait_for(state='visible')
+        prompt_e = '场景C：原生会话写入失败前已保存的原问题'
+        page1.locator('#message-input').fill(prompt_e)
+        page1.wait_for_timeout(500)
+        task_e_saved = api(f"/api/projects/{proj_alt['id']}/tasks/{task_e['id']}", 'GET', cookie=ctx1_cookie())
+        assert task_e_saved['task']['draft'] == prompt_e, 'Item 03 Scenario C: draft must be saved before write failure'
+        os.chmod(session_file_e, 0o400)
+        try:
+            with page1.expect_response(lambda r: f"/api/projects/{proj_alt['id']}/tasks/{task_e['id']}/messages" in r.url and r.request.method == 'POST') as fail_resp_info:
+                page1.get_by_role('button', name='发送消息').click()
+            assert fail_resp_info.value.status == 500, f'Item 03 Scenario C: expected 500 sdk_operation_failed, got {fail_resp_info.value.status}'
+            page1.wait_for_timeout(600)
+            assert page1.locator('#message-input').input_value() == prompt_e, f'Item 03 Scenario C: UI cleared draft on pre-acceptance 500! got={page1.locator("#message-input").input_value()!r}'
+            assert page1.locator('.message.user').count() == 0, 'Item 03 Scenario C: failed pre-acceptance prompt must not appear in conversation'
+            task_e_after_fail = api(f"/api/projects/{proj_alt['id']}/tasks/{task_e['id']}", 'GET', cookie=ctx1_cookie())
+            assert task_e_after_fail['task']['draft'] == prompt_e, f'Item 03 Scenario C: Host cleared draft on pre-acceptance 500! got={task_e_after_fail["task"]["draft"]!r}'
+            assert task_e_after_fail['task']['lastRun']['status'] == 'interrupted', f'Item 03 Scenario C: expected interrupted lastRun, got {task_e_after_fail["task"]["lastRun"]}'
+            assert len([m for m in task_e_after_fail['snapshot']['messages'] if m.get('role') == 'user']) == 0, 'Item 03 Scenario C: native session must have 0 user messages'
+        finally:
+            os.chmod(session_file_e, 0o600)
+        # Full page reload after restoring writability: draft MUST remain intact, zero auto-resend!
+        page1.reload(wait_until='domcontentloaded')
+        page1.locator('#message-input').wait_for(state='visible')
+        page1.wait_for_timeout(500)
+        assert page1.locator('#message-input').input_value() == prompt_e, f'Item 03 Scenario C: draft lost after reload! got={page1.locator("#message-input").input_value()!r}'
+        assert page1.locator('.message.user').count() == 0, 'Item 03 Scenario C: reload must not auto-resend!'
+        # Manual retry now succeeds cleanly!
+        page1.get_by_role('button', name='发送消息').click()
+        page1.locator('.message.assistant').first.wait_for(state='visible', timeout=15000)
+        page1.wait_for_timeout(300)
+        assert page1.locator('#message-input').input_value() == '', 'Item 03 Scenario C: draft should clear after manual retry succeeds'
+        task_e_end = api(f"/api/projects/{proj_alt['id']}/tasks/{task_e['id']}", 'GET', cookie=ctx1_cookie())
+        assert len([m for m in task_e_end['snapshot']['messages'] if m.get('role') == 'user']) == 1, 'Item 03 Scenario C: manual retry must produce strictly 1 native user message'
+        print('PASS [Browser Item 03] Pre-acceptance 409 + pre-acceptance 500 session-write-fail preservation + delayed-202 reload no-duplicate + delayed-202 newer-draft preservation verified')
 
         # =====================================================================
         # ITEM 02 (P2): Studio construction form required hints & project guard
@@ -823,6 +865,7 @@ try:
         b1.goto(f"{base}/?project={proj_b_owner['id']}", wait_until='domcontentloaded')
         b1.get_by_role('button', name='分析资产').click()
         b1.get_by_role('button', name='体系工作台').click()
+        b1.locator(f'select[aria-label="当前企业"] option[value="{eid_b}"]').wait_for(state='attached', timeout=15000)
         b1.get_by_label('当前企业').select_option(eid_b)
         b1.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='建设与演进').click()
 
