@@ -1643,8 +1643,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               const verified = await options.verifySummaryAuthority(pack.enterpriseId, { resourceRef: grant.resourceRef, grain: grant.scope.grain });
               sourcePeriodFrom = verified.sourcePeriodFrom;
               sourcePeriodTo = verified.sourcePeriodTo;
-            } catch { continue; }
-            if (!sourcePeriodFrom || !sourcePeriodTo) continue;
+            } catch {
+              if (grant.scope.periodFrom || grant.scope.periodTo) continue;
+            }
+            if ((grant.scope.periodFrom || grant.scope.periodTo) && (!sourcePeriodFrom || !sourcePeriodTo)) continue;
           }
           const applicablePurposes = grant.purposeKeys?.length
             ? (grant.purposeKeys.includes('*') ? eligiblePurposes : eligiblePurposes.filter(pm => grant.purposeKeys!.includes(pm.purposeKey)))

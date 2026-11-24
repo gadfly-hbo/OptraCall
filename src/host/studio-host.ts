@@ -144,20 +144,34 @@ export function createStudioFeature(options: StudioHostOptions) {
     } catch { /* non-JSON body */ }
     if (!sourcePeriodFrom && !sourcePeriodTo) {
       const periodKeyword = '(?:统计期间|数据期间|期间范围|期间|统计范围|数据范围|覆盖期间)';
-      const qualifyingDates: string[] = [];
-      const qualifyingMonths: string[] = [];
-      for (const line of combined.split(/[\n\r]+/)) {
-        const datePattern = new RegExp(`${periodKeyword}[:：]?\\s*(20\\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01]))`, 'g');
-        for (const match of line.matchAll(datePattern)) qualifyingDates.push(match[1]!);
-        const monthPattern = new RegExp(`${periodKeyword}[:：]?\\s*(20\\d{2}-(?:0[1-9]|1[0-2]))(?![/-]\\d{2})`, 'g');
-        for (const match of line.matchAll(monthPattern)) qualifyingMonths.push(match[1]!);
+      const dateToken = '(20\\d{2}-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\\d|3[01]))?)';
+      const rangePattern = new RegExp(`${periodKeyword}[:：]?\\s*${dateToken}\\s*(?:至|到|~|—|–)['"\\s]*${dateToken}`, 'g');
+      const rangeMatches = [...combined.matchAll(rangePattern)];
+      if (rangeMatches.length > 0) {
+        const start = rangeMatches[0]![1]!;
+        const end = rangeMatches[rangeMatches.length - 1]![2]!;
+        const startMs = Date.parse(start), endMs = Date.parse(end);
+        if (Number.isFinite(startMs) && Number.isFinite(endMs) && startMs <= endMs) {
+          sourcePeriodFrom = start;
+          sourcePeriodTo = end;
+        }
       }
-      const sourceDates = [...new Set(qualifyingDates)].sort();
-      const sourceMonths = [...new Set(qualifyingMonths)].sort();
-      const allPeriodTokens = sourceDates.length > 0 ? sourceDates : sourceMonths;
-      if (allPeriodTokens.length > 0) {
-        sourcePeriodFrom = allPeriodTokens[0];
-        sourcePeriodTo = allPeriodTokens[allPeriodTokens.length - 1];
+      if (!sourcePeriodFrom && !sourcePeriodTo) {
+        const qualifyingDates: string[] = [];
+        const qualifyingMonths: string[] = [];
+        for (const line of combined.split(/[\n\r]+/)) {
+          const datePattern = new RegExp(`${periodKeyword}[:：]?\\s*(20\\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01]))`, 'g');
+          for (const match of line.matchAll(datePattern)) qualifyingDates.push(match[1]!);
+          const monthPattern = new RegExp(`${periodKeyword}[:：]?\\s*(20\\d{2}-(?:0[1-9]|1[0-2]))(?![/-]\\d{2})`, 'g');
+          for (const match of line.matchAll(monthPattern)) qualifyingMonths.push(match[1]!);
+        }
+        const sourceDates = [...new Set(qualifyingDates)].sort();
+        const sourceMonths = [...new Set(qualifyingMonths)].sort();
+        const allPeriodTokens = sourceDates.length > 0 ? sourceDates : sourceMonths;
+        if (allPeriodTokens.length > 0) {
+          sourcePeriodFrom = allPeriodTokens[0];
+          sourcePeriodTo = allPeriodTokens[allPeriodTokens.length - 1];
+        }
       }
     }
     return { verifiedScopeSummary: `粒度:${trimmedGrain} · 期间:${periodSummary}`, sourcePeriodFrom, sourcePeriodTo };

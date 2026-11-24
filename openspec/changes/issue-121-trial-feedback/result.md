@@ -174,3 +174,8 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 
 1. **目录与精读统一旧授权证据。** 新增 `resolveLegacyGrantPeriods` 异步辅助，预调用 `verifySummaryAuthority` 获取旧授权来源期间。`buildPackCatalogSummary` 改为 async，`evaluatePurposeAccessForSubject` 增加 `legacyPeriods` 参数。目录和精读共用同一来源期间判定。精读时 `verifySummaryAuthority` 失败或无结果 → `continue`（不再回退用途日期）。
 2. **附注日期不参与替换统计范围。** 文本提取改为只匹配紧邻期间关键词的日期（`期间[:：]?\s*(date)`），同行其他日期（样本核对、生成等）不再被误取。`isSourcePeriodCovered` 增加 `sourceStart > sourceEnd` 校验，倒序范围按待核处理。
+
+### PM 十一次返工（旧无期限兼容与文本范围）
+
+1. **旧无期限授权兼容回归修复。** 精读时仅在有限期间且无法核实来源范围时拒绝（`continue`）。无期限授权即使来源未声明统计期间也继续放行，不再被 `!sourcePeriodFrom || !sourcePeriodTo` 拦截。
+2. **文本跨月范围解析。** 新增范围表达式匹配（`期间[:：]?\s*(date) 至 (date)`），解析首尾日期存入 `sourcePeriodFrom`/`sourcePeriodTo`。倒序范围（`startMs > endMs`）不写入，按待核处理。范围解析优先于单日/单月提取。
