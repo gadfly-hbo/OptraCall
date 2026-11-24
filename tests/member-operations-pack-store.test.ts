@@ -2061,3 +2061,45 @@ test('purposeKeys wildcard * grants access to any purpose; empty purposeKeys mea
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('decision choices validate each nested field before writes and preserve repairable historical drafts', t => {
+  const root = tempRoot('decision-choices');
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const store = new EnterprisePackStore(root);
+  const pack = store.ensurePack({enterpriseId: 'a403eaeb-4a6b-4cd4-90fb-660d411aa58c', systemId: 'b803eaeb-4a6b-4cd4-90fb-660d411aa58c', name: '经营取舍'});
+  const draft = { purposeKey: 'repurchase', title: '复购', businessQuestion: '如何归属', subjectUnit: 'brand_account' as const, scope: {scopeKey: 'stores'}, tier: 'definition-reference' as const, businessStatus: 'active' as const, originalGoal: '复购', completionCriteria: '归属可解释' };
+  const option = {key: 'first', label: '首购店', impact: '计入首购店'};
+  const choice = {id: 'store', question: '跨店归属', options: [option]};
+  const bytes = fs.readFileSync(store.file);
+  for (const [choices, field] of [
+    [[null], '[0]'], [[{...choice, question: {}}], '[0].question'],
+    [[{id: 'store', question: '跨店归属'}], '[0].options'],
+    [[{...choice, options: [null]}], '[0].options[0]'],
+    [[{...choice, options: [{...option, label: {}}]}], '[0].options[0].label'],
+    [[{...choice, options: [{...option, key: ' first '}]}], '[0].options[0].key'],
+    [[{...choice, decidedBy: 42}], '[0].decidedBy'],
+  ] as const) {
+    assert.throws(() => store.upsertPurpose(pack.id, {...draft, decisionChoices: choices as unknown as typeof choice[]}), e => {
+      const fault = e as {details?: {issues: {path: string}[]}};
+      return fault.details?.issues[0]?.path === 'payload.decisionChoices' + field;
+    });
+    assert.deepEqual(fs.readFileSync(store.file), bytes);
+  }
+  const {purpose} = store.upsertPurpose(pack.id, {...draft, decisionChoices: [choice]});
+  const previewInput = {version: '1.0', purposeIds: [purpose.id], summary: '确认实际选择'};
+  assert.throws(() => store.preparePreview(pack.id, previewInput), /enterprise_pack_decision_required/);
+  const preview = store.preparePreview(pack.id, {...previewInput, decisions: [{purposeId: purpose.id, choiceId: 'store', selectedKey: 'first', decidedBy: '经营负责人'}]});
+  const saved = JSON.parse(fs.readFileSync(store.file, 'utf8'));
+  delete saved.packs[0].purposes[0].decisionChoices[0].options;
+  fs.writeFileSync(store.file, JSON.stringify(saved));
+  const damaged = fs.readFileSync(store.file);
+  assert.doesNotThrow(() => store.get(pack.id));
+  assert.throws(() => store.preparePreview(pack.id, previewInput), /decisionChoices\[0\].options/);
+  assert.throws(() => store.validateConfirmPreconditions(pack.id, preview.id, preview.fingerprint), /decisionChoices\[0\].options/);
+  assert.deepEqual(fs.readFileSync(store.file), damaged);
+  store.upsertPurpose(pack.id, {...draft, targetPurposeId: purpose.id, decisionChoices: [choice]});
+  assert.throws(() => store.preparePreview(pack.id, previewInput), /enterprise_pack_decision_required/);
+  fs.writeFileSync(store.file, damaged);
+  store.upsertPurpose(pack.id, {...draft, targetPurposeId: purpose.id, decisionChoices: []});
+  assert.deepEqual(store.get(pack.id).purposes[0]!.decisionChoices, []);
+});

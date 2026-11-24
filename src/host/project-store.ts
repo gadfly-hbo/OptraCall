@@ -449,8 +449,18 @@ export class ProjectStore {
     return this.#updateTask(projectId, taskId, async task => { await this.#validateSession(projectId, task, file); return { ...task, sessionFile: file }; });
   }
   markRun(projectId: string, taskId: string, run: ProjectRun): Promise<TaskRecord> {
-    const clean = validRun(run);
-    return this.#updateTask(projectId, taskId, task => ({ ...task, lastRun: clean }));
+    const clean = validRun(run); return this.#updateTask(projectId, taskId, task => ({ ...task, lastRun: clean }));
+  }
+  clearDraftIf(projectId: string, taskId: string, expectedText: string, options?: { matchTrimmed?: boolean }): Promise<TaskRecord> {
+    return this.#mutation(async () => {
+      const project = await this.#read(projectId); this.#active(project);
+      const previous = this.#task(project, taskId); if (previous.archivedAt) return fail('task_archived');
+      const matches = options?.matchTrimmed ? previous.draft.trim() === expectedText.trim() : previous.draft === expectedText;
+      if (!matches || !previous.draft) return this.#decorateTask(projectId, previous);
+      const now = new Date().toISOString(), task = { ...previous, draft: '', updatedAt: now };
+      await this.#write({ ...project, tasks: project.tasks.map(item => item.id === taskId ? task : item), updatedAt: now });
+      return this.#decorateTask(projectId, task);
+    });
   }
   #relative(relative: string): string[] {
     if (typeof relative !== 'string' || relative.length > 2000 || /[\\\u0000-\u001f\u007f]/.test(relative) || path.isAbsolute(relative)) return fail('invalid_file_path');

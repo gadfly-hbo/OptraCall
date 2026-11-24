@@ -511,7 +511,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   const dbReviewBundles = createDbLinkReviewPort({ privateRoot: path.resolve(dataRoot, 'db-link', 'review-bundles'), projects: guardedProjects, configurationSnapshot: (id, revision) => configuration.snapshot(id, revision) ?? undefined, materialSource: dbLinks.materialSource, isClosing: () => closing });
   const modelPackRoutes = createModelPackRoutes({store:modelPacks,readBody:body,mutate,isClosing:()=>closing});
   const sapMethods = createSapMethodStore(path.join(dataRoot, 'metric-assets'));
-  const studio = createStudioFeature({ dataRoot, codeRoot: options.cwd, memberPackEnabled: options.memberPackEnabled, memberPackPublishHook: options.memberPackPublishHook, resolveRequestOperator, manageOperatorSession, onProjectPermissionChanged: retireProjectPermission, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
+  const studio = createStudioFeature({ dataRoot, codeRoot: options.cwd, memberPackEnabled: options.memberPackEnabled, memberPackPublishHook: options.memberPackPublishHook, resolveRequestOperator, resolveOperatorDisplayName: (operatorId: string) => readOperatorRegistry()[operatorId]?.displayName, manageOperatorSession, onProjectPermissionChanged: retireProjectPermission, projects, enterpriseMaterials, cases, readRequirementRelease: (id, version, projectId) => requirementPlugin.review.assertReleaseReadable(id, version, projectId), readOriginal: (ref, projectId, taskId) => studioOriginalSources.read(ref, projectId, taskId), taskSnapshot: async (projectId, taskId) => (await taskState(projectId, taskId, false, true)).snapshot, readTaskReply: async (projectId, taskId, selection) => { const owner = await pair(projectId, taskId); return readSavedTaskReply(owner.project, owner.task, selection); }, readBody: body, mutate, closing: () => closing, running: (project, task) => projectSessions.busy(projectSessions.ref({ project, task })) || Boolean(studioSessions?.busyForTask(project.id, task.id)),
     reason: options.studioPython ? (command, context) => runStudioRuleInference({ python: options.studioPython!, codeRoot: options.cwd, command, signal: context.signal, assertCurrent: context.assertCurrent, registerCleanup: context.registerCleanup }) : undefined,
     extract: async (system, ref, context) => {
       if (!studioSessions) throw new StudioError('studio_semantica_unavailable', 409);
@@ -1951,7 +1951,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     snapshot.uiRequests = current.pendingUI.map(event => event.request);
     const diagnostic = readRunDiagnostic(task.lastRun?.diagnostic, snapshot.lastRun?.outcome);
     if (diagnostic && snapshot.lastRun && snapshot.lastRun.requestId === task.lastRun?.id) snapshot.lastRun = { ...snapshot.lastRun, diagnostic };
-    snapshot = await presentFrameworkHistory(projectId, taskId, { ...snapshot, status: projectSessions.busy(ref) ? 'running' : 'idle' });
+    const execution = projectSessions.executionState(ref);
+    snapshot = await presentFrameworkHistory(projectId, taskId, { ...snapshot, status: execution.busy ? 'running' : 'idle', ...(execution.cleanupRequestId ? { cleanupRequestId: execution.cleanupRequestId } : {}) });
     return { project: decorateProject(project), task, snapshot };
   }
   async function settleProjectRun(owner: ProjectOwner, context: SessionContext<ProjectOwner>, requestId: string, startedAt: string, result?: Record<string, any>) {
@@ -2459,6 +2460,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
     }
     let accepted = false, terminalContext: SessionContext<ProjectOwner> | undefined, terminalRequestId = requestId;
+    let nativeStartRejection: ProjectRuntimeError | undefined;
     let acknowledge!: (receipt: ProjectMessageReceipt) => void, rejectAcknowledgement!: (error: unknown) => void;
     const acknowledged = new Promise<ProjectMessageReceipt>((resolve, reject) => { acknowledge = resolve; rejectAcknowledgement = reject; });
     const completion = projectSessions.withSession(projectSessions.ref(owner), async lease => {
@@ -2583,7 +2585,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           },
         });
         terminalContext = run.context;
-        await run.accepted;
+        try { await run.accepted; }
+        catch (error) {
+          // The lease may subsequently report a separate cleanup failure. Keep
+          // the worker's definite acknowledgement outcome for this send.
+          if (error instanceof ProjectRuntimeError && error.code === 'native_run_start_rejected') nativeStartRejection = error;
+          throw error;
+        }
+        await projects.clearDraftIf(projectId, taskId, input.text as string).catch(() => {});
         accepted = true; acknowledge({ requestId, status: 'running' });
         await mutate(() => recordFeedbackDelivery(projectId,taskId,requestId,fingerprint)).catch(() => {
           publish(projectId,taskId,{type:'ui.notification',level:'warning',message:'本轮发送已被接受，但独立交付记录待核对；请查看原生提供回执，未自动重发。'});
@@ -2614,7 +2623,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     }).catch(async error => {
       const diagnostic = runtimeDiagnostic(error);
       if (!accepted && (diagnostic.code === 'task_skill_version_changed' || diagnostic.code === 'task_skill_unavailable')) rejectAcknowledgement(new RequestFault(409, diagnostic.code));
-      else rejectAcknowledgement(error);
+      else rejectAcknowledgement(nativeStartRejection ?? error);
       await automatic.operationFinished({ projectId, taskId }, requestId, undefined, error).catch(() => {});
       if (!closing && accepted && terminalContext?.isCurrent()) publish(projectId, taskId, { type: 'run.settled', requestId, outcome: 'failed', error: '运行已中断，远端结果未知。请检查后显式重试。', diagnostic });
       if (!closing) await taskState(projectId, taskId).then(state => publish(projectId, taskId, { type: 'snapshot', snapshot: state.snapshot })).catch(() => {});
@@ -2623,6 +2632,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
 
   const server = createServer((request, response) => { void (async () => {
+    let messageSendRoute = false;
     try {
       await ready;
       const host = new URL(`http://${request.headers.host ?? ''}`), address = server.address();
@@ -3498,12 +3508,23 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             return;
           }
           if (operation === 'messages' && request.method === 'POST') {
+            messageSendRoute = true;
             const result = await startProjectMessage(projectId, taskId, await body(request, 262144));
             json(response, 202, result); return;
           }
           if (operation === 'stop' && request.method === 'POST') {
-            await body(request); const owner = await pair(projectId, taskId, true);
-            await projectSessions.stop(projectSessions.ref(owner));
+            const input = await body(request), owner = await pair(projectId, taskId, true);
+            const ref = projectSessions.ref(owner);
+            const cleanupRequestId = projectSessions.executionState(ref).cleanupRequestId;
+            if (input.cleanupRequestId !== undefined) {
+              assertCurrentProjectBorrower(request, projectId);
+              if (typeof input.cleanupRequestId !== 'string' || !input.cleanupRequestId) throw new RequestFault(400, 'invalid_request_id');
+              // A stale recovery click must never stop a new turn or another task's work.
+              const matches = input.cleanupRequestId === cleanupRequestId;
+              if (matches) await projectSessions.close(ref);
+              json(response, 200, { stopped: matches }); return;
+            }
+            await projectSessions.stop(ref);
             await Promise.all([verification.stopForTask(projectId, taskId), sapMethodFeature.stopForTask(projectId, taskId), studioSessions?.stopForTask(projectId, taskId)]);
             json(response, 200, { stopped: true }); return;
           }
@@ -3545,7 +3566,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                   },
                 });
                 terminalContext = run.context;
-                const [value] = await Promise.all([run.completion, run.accepted]);
+                void run.completion.catch(() => {});
+                await run.accepted;
+                await projects.clearDraftIf(projectId, taskId, input.text as string, { matchTrimmed: true }).catch(() => {});
+                const value = await run.completion;
                 await settleProjectRun(owner, run.context, requestId, startedAt!, value);
                 return value;
               } catch (error) {
@@ -3570,15 +3594,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
+      const rejectedSend = (statusCode: number) => (messageSendRoute && statusCode >= 400 && statusCode < 500 ? { accepted: false as const } : {});
+      if (messageSendRoute && error instanceof ProjectRuntimeError && error.code === 'native_run_start_rejected') {
+        json(response, 500, { code: 'sdk_operation_failed', accepted: false, message: '原会话暂时无法写入，本次消息未被接受。请恢复写入权限后重试。' }); return;
+      }
       if(error instanceof StrategyDiscussionFault || error instanceof StrategyDiscussionSourceFault){json(response,error.status,{code:error.code,accepted:false,...(error instanceof StrategyDiscussionFault && ['strategy_kickoff_schema_invalid', 'strategy_kickoff_source_invalid', 'strategy_candidate_schema_invalid', 'strategy_candidate_fields_invalid', 'strategy_candidate_operation_invalid'].includes(error.code) && error.details ? {details:error.details} : {}),message:attachmentErrors[error.code]??(error.status===503?'战略讨论或保存结果尚未核实，原输入、选择和操作编号保留；请先只读核对原结果，不要重复创建或自动重试。':error.code==='strategy_discussion_history_scope_changed'?'已读取的历史资料与当前背景范围或排除项不一致，本次未发送给模型。原输入、选择和历史保留；请集中核对资料范围并明确调整，不能把旧会话视为已忘记资料。':error.code==='strategy_discussion_context_changed'?'当前讨论背景或准确版本已变化，本次未继续派发。原输入与选择保留，请集中核对后明确调整。':'战略讨论未完成，原输入和选择保留；请核对目标准确版本、资料权限、模型配置或原操作状态。')});return;}
       if (error instanceof DecisionBoardFault && ['choice_already_arranged', 'arrangement_operation_conflict'].includes(error.code)) {
         const message = error.code === 'choice_already_arranged' ? '本次取舍已有行动安排，请核对原看板。' : '该操作编号已用于另一份行动安排，请核对原操作。';
-        json(response, 409, { code:error.code, message }); return;
+        json(response, 409, { code:error.code, ...rejectedSend(409), message }); return;
       }
       if (error instanceof NativeSnapshotError) { json(response, 409, { code:error.code, accepted:false, message:'请重新核对原任务记录。' }); return; }
       if (error instanceof ProjectTaskResultsError) { json(response, error.status, { code: error.code, accepted: false, message: '请核对该成果的原记录和当前权限。' }); return; }
       if ((error instanceof ProjectHistoryError || error instanceof StrategyDiscussionFault) && error.code === 'case_teach_observation_unverified') {
-        json(response,409,{code:error.code,message:'原会话收到的依据与这一条观察不能准确对应。原记录可回看，本次精确交接未发送。'});return;
+        json(response,409,{code:error.code,...rejectedSend(409),message:'原会话收到的依据与这一条观察不能准确对应。原记录可回看，本次精确交接未发送。'});return;
       }
       if (error instanceof StrategyDiscussionFault || error instanceof UsageContextFault || error instanceof StrategyGoalsError || error instanceof AutomaticActionSettingsFault || error instanceof ProjectPlanFault) {
         const goalReadMessages: Record<string, string> = {
@@ -3586,13 +3614,13 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           strategy_goal_version_not_found: '所选目标准确版本无法读取。已保留原选择，未替换为最新版本；请核对原目标和版本。',
           strategy_goals_storage_unavailable: '原目标存储暂时无法读取。已保留原选择，未替换为最新目标；请核对原存储及读取权限。',
         };
-        json(response, error.status, { code: error.code, message: goalReadMessages[error.code] ?? '目标或自动设置未保存，请保留输入并核对原版本和操作结果。' }); return;
+        json(response, error.status, { code: error.code, ...rejectedSend(error.status), message: goalReadMessages[error.code] ?? '目标或自动设置未保存，请保留输入并核对原版本和操作结果。' }); return;
       }
 
       if ((error instanceof CaseStoreError || error instanceof RequestFault) && ['case_do_authorization_unavailable','case_do_round_changed'].includes(error.code)) {
-        json(response,409,{code:error.code,message:error.code==='case_do_round_changed'?'原取舍已换轮。请回该事项查看当前取舍和行动授权。':'本轮的准确行动授权当前不可用。请核对原看板授权和项目关联。'});return;
+        json(response,409,{code:error.code,...rejectedSend(409),message:error.code==='case_do_round_changed'?'原取舍已换轮。请回该事项查看当前取舍和行动授权。':'本轮的准确行动授权当前不可用。请核对原看板授权和项目关联。'});return;
       }
-      if (error instanceof CaseStoreError && error.code === 'project_not_linked') { json(response, error.statusCode, { code: error.code, message: '此项目未关联当前 Case，不能使用该事项背景；原任务和输入保留，请核对项目关联。' }); return; }
+      if (error instanceof CaseStoreError && error.code === 'project_not_linked') { json(response, error.statusCode, { code: error.code, ...rejectedSend(error.statusCode), message: '此项目未关联当前 Case，不能使用该事项背景；原任务和输入保留，请核对项目关联。' }); return; }
       if (error instanceof StudioError) { json(response, error.status, { code: error.code, accepted: false, message: '体系来源或操作未就绪；原请求、资料和历史保持，请核对准确版本。' }); return; }
       if (error instanceof PersonalContextError) {
         const unavailable = error.code === 'personal_context_selection_unavailable' && error.unavailableTargets?.length;
@@ -3601,8 +3629,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           message: '所列个人资料无法按准确版本提供；问题与选择已保留，未发送。可明确移除不可用项后发送。' }
           : { code: error.code, accepted: false, message: '个人资料参数或范围不可用；未替换为其他版本，请保留问题并核对。' }); return;
       }
-      if (error instanceof ProjectDataContextFault) { const result = dataContextErrorResponse(error); json(response, result.status, result.body); return; }
-      if (error instanceof DecisionFeedbackError) { json(response,error.statusCode,{code:error.code,message:'反馈交接未完成，请保留输入并核对原操作或来源；未自动重发或替换材料。'});return; }
+      if (error instanceof ProjectDataContextFault) { const result = dataContextErrorResponse(error); json(response, result.status, { ...result.body, ...rejectedSend(result.status) }); return; }
+      if (error instanceof DecisionFeedbackError) { json(response,error.statusCode,{code:error.code,...rejectedSend(error.statusCode),message:'反馈交接未完成，请保留输入并核对原操作或来源；未自动重发或替换材料。'});return; }
       if (error instanceof EnterpriseContextError || error instanceof EnterpriseMaterialsError) {
         const messages: Record<string, string> = {
           enterprise_materials_too_large: '主动附带正文合计超过20,000字符；请显式调整范围或仅提供来源定位，未截断正文、未发送模型。',
@@ -3613,7 +3641,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           enterprise_case_context_changed: '本案企业资料或补充已经变化，请刷新查看后重新选择。',
           enterprise_case_store_changed: 'Case库或企业资料库身份不同，未自动重新关联。',
         };
-        json(response, error.status, { code: error.code, message: messages[error.code] ?? '企业业务资料未能取得，请刷新核对明确修订和来源；未替换为最新版。' });
+        json(response, error.status, { code: error.code, ...rejectedSend(error.status), message: messages[error.code] ?? '企业业务资料未能取得，请刷新核对明确修订和来源；未替换为最新版。' });
         return;
       }
       const originalCode = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
@@ -3632,10 +3660,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
       const status = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable', 'unmanaged_execution_unknown'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
-      if (code === 'member_pack_connector_restricted') { json(response, status, { code, message: '该项目受企业会员包资源授权约束，数据库直连和外部连接器不可用。请使用当前获准的 read_input/受控工具；如需更多明细，请到企业 Studio「三层资源授权」，由原权责维护主体核对准确用途、门店、期间和 allowedDataPaths。' }); return; }
-      if (code === 'task_skill_version_changed' || code === 'task_skill_unavailable') { json(response, status, { code, message: code === 'task_skill_version_changed' ? taskSkillVersionChangedMessage : '默认 Skill 当前不可用。请在分析资产中核对安装，或编辑任务并明确取消该 Skill 后重试。' }); return; }
-      if (conclusionReviewMessages[code]) { json(response, status, { code, message: conclusionReviewMessages[code] }); return; }
-      json(response, status, { code, message: ['automatic_unmanaged_history', 'unmanaged_execution_unknown'].includes(code) ? '本项目或任务缺少可信的受管执行起点或完整收尾证明，暂不能开启自动核算；原项目和会话保留，关闭自动核算后可继续普通分析。' : code === 'automatic_unsupported_protection' ? '当前系统不支持所需执行保护，未启动自动核算或修订。' : code === 'verification_revision_materials_too_large' ? '修订固定材料全文超过20,000字符，请缩小本次核算所选资料后新建核算；未启动修订模型，不会截断或恢复执行工具。' : code === 'verification_revision_text_required' ? '修订出稿仅接收完整UTF-8文本材料；所选文件不能解码，未启动修订模型。' : code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'configuration_not_found' ? '原模型配置已不可用，请选择可用模型。' : code === 'invalid_search_order' ? '搜索顺序必须包含 MiniMax 和 DeepSeek 各一次。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
+      if (code === 'member_pack_connector_restricted') { json(response, status, { code, ...rejectedSend(status), message: '该项目受企业会员包资源授权约束，数据库直连和外部连接器不可用。请使用当前获准的 read_input/受控工具；如需更多明细，请到企业 Studio「三层资源授权」，由原权责维护主体核对准确用途、门店、期间和 allowedDataPaths。' }); return; }
+      if (code === 'task_skill_version_changed' || code === 'task_skill_unavailable') { json(response, status, { code, ...rejectedSend(status), message: code === 'task_skill_version_changed' ? taskSkillVersionChangedMessage : '默认 Skill 当前不可用。请在分析资产中核对安装，或编辑任务并明确取消该 Skill 后重试。' }); return; }
+      if (conclusionReviewMessages[code]) { json(response, status, { code, ...rejectedSend(status), message: conclusionReviewMessages[code] }); return; }
+      json(response, status, { code, ...rejectedSend(status), message: ['automatic_unmanaged_history', 'unmanaged_execution_unknown'].includes(code) ? '本项目或任务缺少可信的受管执行起点或完整收尾证明，暂不能开启自动核算；原项目和会话保留，关闭自动核算后可继续普通分析。' : code === 'automatic_unsupported_protection' ? '当前系统不支持所需执行保护，未启动自动核算或修订。' : code === 'verification_revision_materials_too_large' ? '修订固定材料全文超过20,000字符，请缩小本次核算所选资料后新建核算；未启动修订模型，不会截断或恢复执行工具。' : code === 'verification_revision_text_required' ? '修订出稿仅接收完整UTF-8文本材料；所选文件不能解码，未启动修订模型。' : code === 'artifact_version_changed' ? '文件内容与所选采用版本不同，已停止下载；请刷新核对后重新选择。' : code === 'configuration_required' ? '请先在模型设置中配置此模型。' : code === 'configuration_not_found' ? '原模型配置已不可用，请选择可用模型。' : code === 'invalid_search_order' ? '搜索顺序必须包含 MiniMax 和 DeepSeek 各一次。' : code === 'session_busy' ? '任务正在运行，请等待完成或停止后操作。' : code === 'project_busy' ? '项目中仍有执行、打开或等待回应的任务，请先停止或等待后归档。' : code === 'project_archived' ? '项目已归档，请先恢复后继续操作。' : error instanceof CaseStoreError && status === 409 ? 'Case背景或项目进度已经变化，请刷新核对后再发送或保存。' : '请求未完成，请检查输入或本地服务后重试。', ...(error instanceof ConfigurationStoreError ? { fields: error.fields } : {}), ...(error instanceof CaseRouteError && error.details ? { details: error.details } : {}) });
     }
   })(); });
   return { server, ready, configuration, projects, cases, activateConclusionReviews: () => mutate(() => reviewTransition.activate()), close: async () => {

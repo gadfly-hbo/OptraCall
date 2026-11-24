@@ -114,7 +114,44 @@ function safeError(error: unknown): string {
 }
 const messagesOf = (snapshot?: SessionSnapshot) => snapshot?.messages.filter(message => ['user', 'assistant', 'toolResult', 'bashExecution'].includes(message.role) || (message.role === 'custom' && message.display === true)) ?? [];
 const diagnosticText = (value: unknown): string | undefined => { const diagnostic = readRunDiagnostic(value); return diagnostic ? `${diagnostic.message}${diagnostic.retryCount ? `（原生重试 ${diagnostic.retryCount} 次）` : ''}` : undefined; };
-const lastRunError = (task: ClientTask) => task.lastRun?.status === 'interrupted' ? `${diagnosticText(task.lastRun.diagnostic) ?? ''} 上次运行已中断，远端结果未知；不会自动重放。`.trim() : task.lastRun?.status === 'failed' ? diagnosticText(task.lastRun.diagnostic) ?? '上次回复未完成，可在检查配置后继续。' : undefined;
+function lastRunError(task: ClientTask): string | undefined {
+  const last = task.lastRun;
+  if (last?.status === 'interrupted') {
+    const diagnostic = diagnosticText(last.diagnostic);
+    if (last.diagnostic?.code === 'native_run_start_rejected') return diagnostic;
+    return `${diagnostic ?? ''} 上次运行已中断，远端结果未知；不会自动重放。`.trim();
+  }
+  if (last?.status === 'failed') return diagnosticText(last.diagnostic) ?? '上次回复未完成，可在检查配置后继续。';
+}
+function rejectedNativeStart(value: { task: ClientTask; snapshot: SessionSnapshot }, requestId: string): boolean {
+  const last = value.task.lastRun;
+  return last?.id === requestId && last.status === 'interrupted' &&
+    last.diagnostic?.code === 'native_run_start_rejected' && value.snapshot.lastRun?.requestId !== requestId;
+}
+
+type RejectedSendRecord = { code: string; message: string; lastRunId: string | null; at: string };
+const rejectedSendStorageKey = (projectId: string, taskId: string) => `optracall:send-rejected:v1:${projectId}/${taskId}`;
+function readRejectedSend(projectId: string, taskId: string, task: Pick<ClientTask, 'draft' | 'lastRun'>): RejectedSendRecord | undefined {
+  try {
+    const raw = window.localStorage.getItem(rejectedSendStorageKey(projectId, taskId));
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as Partial<RejectedSendRecord>;
+    if (!parsed || typeof parsed.message !== 'string' || !parsed.message.trim()) return undefined;
+    const currentRunId = task.lastRun?.id ?? null;
+    if (currentRunId !== (parsed.lastRunId ?? null) || !task.draft.trim()) {
+      window.localStorage.removeItem(rejectedSendStorageKey(projectId, taskId));
+      return undefined;
+    }
+    return { code: typeof parsed.code === 'string' ? parsed.code : 'host_request_failed', message: parsed.message, lastRunId: currentRunId, at: typeof parsed.at === 'string' ? parsed.at : '' };
+  } catch { return undefined; }
+}
+function writeRejectedSend(projectId: string, taskId: string, record: RejectedSendRecord | null) {
+  try {
+    const key = rejectedSendStorageKey(projectId, taskId);
+    if (!record) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, JSON.stringify(record));
+  } catch { /* ignore storage quota/privacy errors */ }
+}
 
 export function App() {
   const [dbConnectionsOpen, setDbConnectionsOpen] = useState(false), [dbConnectionsProjectId, setDbConnectionsProjectId] = useState<string>();
@@ -259,13 +296,24 @@ export function App() {
   });
   const refreshConfigurations = async () => { try { const value = await readConfigurations(); if (!mounted.current) return; setConfigurations(value.configurations); setSelectedId(value.selectedId); setHostStatus('ready'); setGlobalError(''); } catch (error) { if (mounted.current) { setHostStatus('unavailable'); setGlobalError(safeError(error)); } throw error; } };
   const applySnapshot = (key: string, snapshot: SessionSnapshot) => changeUI(key, old => ({ ...old, snapshot, streaming: snapshot.status === 'running' ? old.streaming : '', optimistic: undefined, status: snapshot.status === 'running' ? 'running' : 'idle', requestId: snapshot.status === 'running' ? snapshot.lastRun?.requestId ?? old.requestId : undefined, uiRequests: snapshot.uiRequests ?? [], toolStatus: undefined, finalReceived: false }));
+  const requestAcceptedInSnapshot = (value: { task: ClientTask; snapshot: SessionSnapshot }, requestId: string) =>
+    value.snapshot.lastRun?.requestId === requestId
+    || (value.task.lastRun?.id === requestId && ['completed', 'cancelled', 'failed'].includes(value.task.lastRun.status));
   const refreshTask = async (projectId: string, taskId: string) => {
     const key = taskKey(projectId, taskId), version = draftVersions.current.get(key) ?? 0, hadPending = draftQueues.current.has(key), value = await readTask(projectId, taskId);
     if (!mounted.current) return value;
     if (value.project.id !== projectId || value.task.id !== taskId) throw new HostRequestError('原任务归属未能核对；保留原请求与问题。');
     const uncertain = uiRef.current[key]?.uncertainPersonalSend;
-    if (uncertain && value.task.lastRun?.id === uncertain.args[3]) { changeUI(key, old => ({ ...old, uncertainPersonalSend: undefined, failedPrompt: undefined, notice: '已核对原请求已接受；未重新发送。' })); await persistDraft(projectId, taskId, ''); }
-    mergeProject(value.project, taskId, version, hadPending); applySnapshot(key, value.snapshot); changeUI(key, old => ({ ...old, error: lastRunError(value.task) ?? old.error })); setFilesRevision(previous => previous + 1); return value;
+    if (uncertain && requestAcceptedInSnapshot(value, uncertain.args[3])) {
+      writeRejectedSend(projectId, taskId, null);
+      changeUI(key, old => ({ ...old, uncertainPersonalSend: undefined, failedPrompt: undefined, notice: '已核对原请求已接受；未重新发送。' }));
+    } else if (uncertain && rejectedNativeStart(value, uncertain.args[3])) {
+      changeUI(key, old => ({ ...old, uncertainPersonalSend: undefined, failedPrompt: value.task.draft, notice: '已核对原请求未被接受。原问题和选择保留，可手动发送。' }));
+    }
+    const runErr = lastRunError(value.task);
+    const interrupted = value.task.lastRun?.status === 'interrupted';
+    const rejected = interrupted ? undefined : readRejectedSend(projectId, taskId, value.task);
+    mergeProject(value.project, taskId, version, hadPending); applySnapshot(key, value.snapshot); changeUI(key, old => ({ ...old, error: interrupted ? runErr : rejected?.message ?? runErr ?? old.error, failedPrompt: interrupted ? old.failedPrompt : rejected ? value.task.draft : old.failedPrompt })); setFilesRevision(previous => previous + 1); return value;
   };
   const connect = (projectId: string, taskId: string, statusOnly = false): Promise<void> => {
     const key = taskKey(projectId, taskId), existing = streams.current.get(key);
@@ -338,7 +386,12 @@ export function App() {
     mounted.current = true; const controller = new AbortController();
     void Promise.all([readConfigurations(controller.signal), listProjects(controller.signal)]).then(([models, saved]) => {
       if (controller.signal.aborted) return; setConfigurations(models.configurations); setSelectedId(models.selectedId); setProjects(saved); const selected = resolveProjectLocation(saved, window.location.href); setActiveId(selected.projectId); setActiveTaskId(selected.taskId); if (selected.missing) setGlobalError('原链接指定的' + (selected.missing === 'project' ? '项目' : '任务') + '暂不可读取。保留原定位，未替换为其他对象；请核对来源或当前权限。'); setHostStatus('ready');
-      for (const project of saved) for (const task of project.tasks) changeUI(taskKey(project.id, task.id), old => ({ ...old, error: lastRunError(task) }));
+      for (const project of saved) for (const task of project.tasks) {
+        const runErr = lastRunError(task);
+        const interrupted = task.lastRun?.status === 'interrupted';
+        const rejected = interrupted ? undefined : readRejectedSend(project.id, task.id, task);
+        changeUI(taskKey(project.id, task.id), old => ({ ...old, error: interrupted ? runErr : rejected?.message ?? runErr, failedPrompt: interrupted ? old.failedPrompt : rejected ? task.draft : old.failedPrompt }));
+      }
     }, error => { if (!controller.signal.aborted) { setHostStatus('unavailable'); setGlobalError(safeError(error)); } });
     return () => { mounted.current = false; controller.abort(); projectBinding.current?.controller.abort(); projectBinding.current = undefined; for (const stream of streams.current.values()) stream.controller.abort(); streams.current.clear(); };
   }, []);
@@ -367,7 +420,13 @@ export function App() {
   useEffect(() => { if (view === 'chat' || view === 'studio') end.current?.scrollIntoView({ block: 'end' }); }, [current?.snapshot?.messages, current?.streaming, view]);
   const persistDraft = (projectId: string, taskId: string, text: string): Promise<void> => {
     const key = taskKey(projectId, taskId), epoch = draftEpochs.current.get(key) ?? 0; draftVersions.current.set(key, (draftVersions.current.get(key) ?? 0) + 1);
-    updateTask(projectId, taskId, task => ({ ...task, draft: text })); changeUI(key, old => ({ ...old, draftSaving: true }));
+    updateTask(projectId, taskId, task => ({ ...task, draft: text }));
+    if (!text.trim()) {
+      writeRejectedSend(projectId, taskId, null);
+      changeUI(key, old => ({ ...old, draftSaving: true, failedPrompt: undefined, ...(old.error?.startsWith('发送未获 Host 接受：') ? { error: undefined } : {}) }));
+    } else {
+      changeUI(key, old => ({ ...old, draftSaving: true, ...(old.failedPrompt !== undefined ? { failedPrompt: text } : {}) }));
+    }
     const previous = draftQueues.current.get(key) ?? Promise.resolve(), next = previous.catch(() => {}).then(() => { if ((draftEpochs.current.get(key) ?? 0) === epoch) return saveDraft(projectId, taskId, text); }); draftQueues.current.set(key, next);
     void next.then(() => { if (draftQueues.current.get(key) === next) { draftQueues.current.delete(key); changeUI(key, old => ({ ...old, draftSaving: false })); } }, () => { if (draftQueues.current.get(key) === next) { draftQueues.current.delete(key); changeUI(key, old => ({ ...old, draftSaving: false, error: '草稿尚未保存，请检查本地服务后继续。' })); } }); return next;
   };
@@ -483,17 +542,40 @@ export function App() {
       // Browsing a new task must not execute untrusted startup resources before
       // the user can choose its execution permissions. First send initializes it.
       const value = task.sessionFile || task.lastRun ? await openTask(project.id, task.id) : await readTask(project.id, task.id);
+      const runErr = lastRunError(value.task);
+      const interrupted = value.task.lastRun?.status === 'interrupted';
+      const rejected = interrupted ? undefined : readRejectedSend(project.id, task.id, value.task);
       mergeProject(value.project); applySnapshot(key, value.snapshot);
+      if (runErr || rejected) changeUI(key, old => ({ ...old, error: interrupted ? runErr : rejected?.message ?? runErr ?? old.error, failedPrompt: interrupted ? old.failedPrompt : rejected ? value.task.draft : old.failedPrompt }));
     } } catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) changeUI(key, old => ({ ...old, error: safeError(error) })); } finally { if (activate) changeUI(key, old => ({ ...old, opening: false })); }
     if (destination === 'studio' && visibleTask.current === key) focusComposerOnEntry();
   };
-  const reconnect = async (projectId: string, taskId: string) => { const key = taskKey(projectId, taskId); streams.current.get(key)?.controller.abort(); streams.current.delete(key); changeUI(key, old => ({ ...old, error: undefined })); try { await refreshConfigurations(); if (projects.find(project => project.id === projectId)?.archivedAt) { await refreshTask(projectId, taskId); changeUI(key, old => ({ ...old, connected: true, observation: undefined })); return; } await connect(projectId, taskId); await refreshTask(projectId, taskId); } catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) changeUI(key, old => ({ ...old, error: safeError(error) })); } };
+  const reconnect = async (projectId: string, taskId: string) => {
+    const key = taskKey(projectId, taskId);
+    const cleanupRequestId = uiRef.current[key]?.snapshot?.cleanupRequestId;
+    streams.current.get(key)?.controller.abort();
+    streams.current.delete(key);
+    changeUI(key, old => ({ ...old, error: undefined }));
+    try {
+      await refreshConfigurations();
+      if (projects.find(project => project.id === projectId)?.archivedAt) {
+        await refreshTask(projectId, taskId);
+        changeUI(key, old => ({ ...old, connected: true, observation: undefined }));
+        return;
+      }
+      await connect(projectId, taskId);
+      if (cleanupRequestId) await stopTask(projectId, taskId, cleanupRequestId);
+      await refreshTask(projectId, taskId);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) changeUI(key, old => ({ ...old, error: safeError(error) }));
+    }
+  };
   const taskArchiveAction = async (restore = false) => {
     if (!active || !activeTask || busy) return;
     try { const updated = await (restore ? restoreDiskTask : archiveDiskTask)(active.id, activeTask.id); mergeProject({ ...active, tasks: active.tasks.map(task => task.id === updated.id ? updated : task) }); setGlobalNotice(restore ? '已恢复原任务，未自动执行。' : '任务已归档，原会话、草稿和成果保留。'); }
     catch (fault) { setGlobalError(safeError(fault)); }
   };
-  const stop = async () => { if (!active || !activeTask || !activeKey || !busy || current?.status === 'stopping') return; const projectId = active.id, taskId = activeTask.id, key = activeKey; changeUI(key, old => ({ ...old, status: 'stopping' })); try { if (current?.opening && question) await answerInteraction(projectId, taskId, { id: question.id, cancelled: true }); await stopTask(projectId, taskId); await refreshTask(projectId, taskId); } catch (error) { changeUI(key, old => ({ ...old, error: safeError(error), status: 'running' })); } };
+  const stop = async () => { if (!active || !activeTask || !activeKey || !busy || current?.status === 'stopping') return; const projectId = active.id, taskId = activeTask.id, key = activeKey; changeUI(key, old => ({ ...old, status: 'stopping' })); try { if (current?.opening && question) await answerInteraction(projectId, taskId, { id: question.id, cancelled: true }); await stopTask(projectId, taskId, current?.snapshot?.cleanupRequestId); await refreshTask(projectId, taskId); } catch (error) { changeUI(key, old => ({ ...old, error: safeError(error), status: 'running' })); } };
   useEffect(() => { const keyboard = (event: KeyboardEvent) => { if (event.key === 'Escape' && !helpOpen && (view === 'chat' || view === 'studio') && !modalOpen && !document.querySelector('dialog[open]') && busy && !archived) { event.preventDefault(); void stop(); } }; document.addEventListener('keydown', keyboard); return () => document.removeEventListener('keydown', keyboard); });
   function openProjectCreation(goal?: GoalRef, usageContext?: UsageContext) {
     setGoalForProject(goal);
@@ -562,7 +644,7 @@ export function App() {
       setProjectActionId(undefined);
     }
   };
-  const send = async (text = activeTask?.draft ?? '', retry = false, personalOverride?: { selection: PersonalContextSelection; title: string }[], studioTarget?: { project: ClientProject; task: ClientTask; context: { systemId: string; purpose: 'construction' | 'analysis' } }) => {
+  const send = async (text = activeTask?.draft ?? '', _retry = false, personalOverride?: { selection: PersonalContextSelection; title: string }[], studioTarget?: { project: ClientProject; task: ClientTask; context: { systemId: string; purpose: 'construction' | 'analysis' } }) => {
     const targetProject = studioTarget?.project ?? active, targetTask = studioTarget?.task ?? activeTask;
     if (!targetProject || !targetTask) return;
     const projectId = targetProject.id, taskId = targetTask.id, key = taskKey(projectId, taskId), targetUI = uiRef.current[key];
@@ -575,8 +657,70 @@ export function App() {
     const messageArgs: Parameters<typeof sendMessage> = structuredClone([projectId, taskId, text, requestId, targetCase?.selection, requirementContexts[key], targetEnterprise.length ? targetEnterprise : undefined, targetEnterpriseCase, feedbackContexts[key], targetData.length ? targetData : undefined, personal.map(item => item.selection), context]);
     pending.current.add(key);
     changeUI(key, old => ({ ...old, posting: true, status: 'running', error: undefined, unavailablePersonal: undefined, notice: undefined, commandResult: undefined, streaming: '', finalReceived: false, requestId, failedPrompt: text, optimistic: command ? undefined : text }));
-    try { if (!retry) await persistDraft(projectId, taskId, ''); if (command) { const operation = runCommand(projectId, taskId, text.trim(), requestId); changeUI(key, old => ({ ...old, posting: false })); const result = await operation; applySnapshot(key, result.snapshot); changeUI(key, old => ({ ...old, commandResult: result.result == null ? undefined : typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2), status: 'idle', requestId: undefined })); } else await sendMessage(...messageArgs); }
-    catch (error) { const definitelyRejected = error instanceof HostRequestError && error.accepted === false && Boolean(error.status && error.status >= 400 && error.status < 500); let accepted = false, recoveredStatus: 'idle' | 'running' | undefined; try { const restored = await refreshTask(projectId, taskId); accepted = !definitelyRejected && restored.task.lastRun?.id === requestId; recoveredStatus = restored.snapshot.status; } catch {} const unavailable = !accepted && error instanceof HostRequestError && error.unavailablePersonalContext?.every(index => index < personal.length) ? error.unavailablePersonalContext.map(index => personal[index]!.selection) : undefined; const uncertainPersonalSend = !command && personal.length > 0 && !accepted && !definitelyRejected ? { args: messageArgs } : undefined; if (!accepted && (definitelyRejected || personal.length > 0)) await persistDraft(projectId, taskId, text).catch(() => {}); changeUI(key, old => ({ ...old, uncertainPersonalSend, unavailablePersonal: unavailable, status: recoveredStatus ?? (error instanceof HostRequestError ? 'idle' : 'connecting'), error: accepted ? old.error : error instanceof HostRequestError ? safeError(error) : '发送状态尚未确认，请重新连接任务核对；不会自动重发。', failedPrompt: accepted || !(error instanceof HostRequestError) ? undefined : text, optimistic: accepted ? undefined : old.optimistic })); }
+    const inflightDraft = draftQueues.current.get(key);
+    if (inflightDraft) await inflightDraft.catch(() => {});
+    const draftVersionBeforeSend = draftVersions.current.get(key) ?? 0;
+    const clearLocalDraftIfUnchanged = () => {
+      if ((draftVersions.current.get(key) ?? 0) !== draftVersionBeforeSend || draftQueues.current.has(key)) return;
+      updateTask(projectId, taskId, task => ((command ? task.draft.trim() === text.trim() : task.draft === text) ? { ...task, draft: '' } : task));
+    };
+    try {
+      if (command) {
+        const operation = runCommand(projectId, taskId, text.trim(), requestId);
+        changeUI(key, old => ({ ...old, posting: false }));
+        const result = await operation;
+        writeRejectedSend(projectId, taskId, null);
+        clearLocalDraftIfUnchanged();
+        applySnapshot(key, result.snapshot);
+        changeUI(key, old => ({ ...old, commandResult: result.result == null ? undefined : typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2), status: 'idle', requestId: undefined, failedPrompt: old.failedPrompt === text ? undefined : old.failedPrompt }));
+      } else {
+        await sendMessage(...messageArgs);
+        writeRejectedSend(projectId, taskId, null);
+        clearLocalDraftIfUnchanged();
+        changeUI(key, old => ({ ...old, failedPrompt: old.failedPrompt === text ? undefined : old.failedPrompt }));
+      }
+    }
+    catch (error) {
+      let definitelyRejected = error instanceof HostRequestError && error.accepted === false &&
+        (Boolean(error.status && error.status >= 400 && error.status < 500) ||
+          error.status === 500 && error.code === 'sdk_operation_failed');
+      let verifiedRejectionMessage: string | undefined;
+      let accepted = false, recoveredStatus: 'idle' | 'running' | undefined, recoveredLastRunId: string | null = targetTask.lastRun?.id ?? null;
+      try {
+        const restored = await refreshTask(projectId, taskId);
+        if (rejectedNativeStart(restored, requestId)) {
+          definitelyRejected = true;
+          verifiedRejectionMessage = lastRunError(restored.task);
+        }
+        accepted = !definitelyRejected && requestAcceptedInSnapshot(restored, requestId);
+        recoveredStatus = restored.snapshot.status;
+        recoveredLastRunId = restored.task.lastRun?.id ?? null;
+      } catch {}
+      const unavailable = !accepted && error instanceof HostRequestError && error.unavailablePersonalContext?.every(index => index < personal.length) ? error.unavailablePersonalContext.map(index => personal[index]!.selection) : undefined;
+      const uncertainPersonalSend = !command && personal.length > 0 && !accepted && !definitelyRejected ? { args: messageArgs } : undefined;
+      const rejectedMessage = verifiedRejectionMessage ?? (definitelyRejected ? `发送未获 Host 接受：${safeError(error)} 原消息已保留在输入框，未计入已发送对话；可修改后发送或点击重试。` : undefined);
+      if (accepted) {
+        writeRejectedSend(projectId, taskId, null);
+        clearLocalDraftIfUnchanged();
+      } else if (definitelyRejected || personal.length > 0 || error instanceof HostRequestError) {
+        if ((draftVersions.current.get(key) ?? 0) === draftVersionBeforeSend && !draftQueues.current.has(key)) {
+          await persistDraft(projectId, taskId, text).catch(() => {});
+        }
+        if (definitelyRejected && rejectedMessage) {
+          writeRejectedSend(projectId, taskId, { code: error instanceof HostRequestError ? error.code : 'host_request_failed', message: rejectedMessage, lastRunId: recoveredLastRunId, at: new Date().toISOString() });
+        }
+      }
+      changeUI(key, old => ({
+        ...old,
+        uncertainPersonalSend,
+        unavailablePersonal: unavailable,
+        status: recoveredStatus ?? (error instanceof HostRequestError ? 'idle' : 'connecting'),
+        requestId: accepted ? old.requestId : undefined,
+        error: accepted ? old.error : rejectedMessage ?? (error instanceof HostRequestError ? safeError(error) : '发送状态尚未确认，请重新连接任务核对；不会自动重发。'),
+        failedPrompt: accepted || !(error instanceof HostRequestError) ? undefined : text,
+        optimistic: accepted || definitelyRejected ? undefined : old.optimistic,
+      }));
+    }
     finally { pending.current.delete(key); changeUI(key, old => ({ ...old, posting: false })); }
   };
   const inspectPersonalSend = async (projectId: string, taskId: string) => {
@@ -594,8 +738,8 @@ export function App() {
       await sendMessage(...uncertain.args);
       const restored = await refreshTask(projectId, taskId);
       const savedRun = restored.task.lastRun;
-      if (savedRun?.id !== uncertain.args[3]) throw new HostRequestError('原请求尚未在此任务中核对，状态仍为 UNKNOWN；保留原标识与选择。');
-      changeUI(key, old => ({ ...old, uncertainPersonalSend: undefined, error: lastRunError(restored.task), failedPrompt: savedRun.status === 'failed' ? uncertain.args[2] : undefined, optimistic: undefined, notice: '已按原标识回读任务实际状态与保存消息；没有新建运行或重复加入问题。' }));
+      if (!requestAcceptedInSnapshot(restored, uncertain.args[3])) throw new HostRequestError('原请求尚未在此任务中核对，状态仍为 UNKNOWN；保留原标识与选择。');
+      changeUI(key, old => ({ ...old, uncertainPersonalSend: undefined, error: lastRunError(restored.task), failedPrompt: savedRun?.status === 'failed' ? uncertain.args[2] : undefined, optimistic: undefined, notice: '已按原标识回读任务实际状态与保存消息；没有新建运行或重复加入问题。' }));
     }
     catch (error) { changeUI(key, old => ({ ...old, error: safeError(error) })); }
     finally { pending.current.delete(key); changeUI(key, old => ({ ...old, posting: false })); }
@@ -632,7 +776,7 @@ export function App() {
   const pageTitle = view === 'project-plan' ? '项目需求与任务方案' : view === 'goals' ? managementTitle(management) : view === 'studio' ? studioLibraryTitle(studioLibraryArea) : view === 'cases' ? '决策星图' : view === 'projects' ? '项目地图' : view === 'chat' ? active ? activeTask ? `${active.name} / ${activeTask.name}` : active.name : '项目工作台' : inSettings ? '设置' : view === 'decision' ? '决策工作台' : view === 'requirement' ? '需求梳理' : view === 'refiner' ? 'PPT 逐页精修' : view === 'simlab' ? '经营推演' : view === 'model-pack' ? '模型注册表' : '项目工作台';
   const returnView = settingsReturnView.current, settingsBackLabel = returnView === 'project-plan' ? '返回项目需求方案' : returnView === 'goals' ? '返回' + managementTitle(management) : returnView === 'studio' ? '返回Studio资产体系' : returnView === 'cases' ? '返回决策星图' : returnView === 'projects' ? '返回项目地图' : returnView === 'chat' ? '返回项目空间' : returnView === 'decision' ? '返回决策工作台' : returnView === 'requirement' ? '返回需求梳理' : returnView === 'refiner' ? '返回PPT 逐页精修' : returnView === 'simlab' ? '返回经营推演' : returnView === 'model-pack' ? '返回模型注册表' : '返回当前工作';
   const messages = messagesOf(current?.snapshot), lastAssistant = [...messages].reverse().find(message => message.role === 'assistant' && messageText(message));
-  const currentStatus = current?.observation?.message && current.observation.state !== 'connected' ? current.observation.message : question ? 'Pi 等待你的回应' : current?.opening ? '正在打开任务' : current?.status === 'running' ? current.toolStatus ?? 'Pi 正在回复' : current?.status === 'stopping' ? '正在停止' : !current?.connected ? '任务连接待恢复' : current.draftSaving ? '正在保存草稿…' : '任务和历史已保存在本机';
+  const currentStatus = current?.observation?.message && current.observation.state !== 'connected' ? current.observation.message : current?.snapshot?.cleanupRequestId ? '上次运行的资源清理未完成，可重新连接任务。' : question ? 'Pi 等待你的回应' : current?.opening ? '正在打开任务' : current?.status === 'running' ? current.toolStatus ?? 'Pi 正在回复' : current?.status === 'stopping' ? '正在停止' : !current?.connected ? '任务连接待恢复' : current.draftSaving ? '正在保存草稿…' : '任务和历史已保存在本机';
   const renderAssistantText = (text: string) => view === 'chat' ? <StrategyDiscussionReply text={text} /> : text;
   const conversationItems = groupConversation(messages, { includeToolDetails: true });
   const conversationFoldKey = active && activeTask ? `task:${active.id}/${activeTask.id}` : 'task:unbound';
@@ -744,9 +888,9 @@ export function App() {
           {current?.observation?.message && current.observation.state !== 'connected' && <div className="pi-pending-notice" role="status"><span>{current.observation.message}</span>{current.observation.state === 'disconnected' && <button className="secondary-button" onClick={() => { void reconnect(active.id, activeTask.id); }}>恢复任务观察</button>}</div>}
           {current?.uncertainPersonalSend && <section className="pr-note pr-warning" role="alert"><strong>此次发送状态 UNKNOWN</strong><p>原问题、准确选择与请求标识已保留。先读取原任务状态，核对期间不发新请求、不更改选材。</p><code>{current.uncertainPersonalSend.args[3]}</code><div className="pr-row"><button type="button" className="secondary-button" disabled={current.posting} onClick={() => { void inspectPersonalSend(active.id, activeTask.id); }}>核对此次发送</button>{!archived && <button type="button" className="text-button" disabled={current.posting} onClick={() => { void retryPersonalSend(active.id, activeTask.id); }}>按原请求重试此次发送</button>}</div></section>}
           {current?.unavailablePersonal && current.unavailablePersonal.length > 0 && !archived && <section className="pr-note pr-warning" role="alert"><strong>请求尚未接受，以下指定资料不可用</strong><ul>{current.unavailablePersonal.map(selection => <li key={JSON.stringify(selection)}>{attachedPersonal.find(item => JSON.stringify(item.selection) === JSON.stringify(selection))?.title ?? '原指定资料'}<details><summary>准确目标</summary><pre>{JSON.stringify(selection, null, 2)}</pre></details></li>)}</ul><p>问题与选择已保留。你可核对原资料，或明确移除这些资料后发送。</p><button type="button" className="secondary-button" disabled={busy} onClick={() => { const unavailable = new Set(current.unavailablePersonal!.map(item => JSON.stringify(item))), remaining = attachedPersonal.filter(item => !unavailable.has(JSON.stringify(item.selection))); setPersonalContexts(previous => ({ ...previous, [activeKey!]: remaining })); void send(activeTask.draft, false, remaining); }}>移除不可用资料并发送</button></section>}
-          {current?.error && <div className="error-notice" role="alert"><Icon name="warning" /><div><strong>任务状态提示</strong><p>{current.error}</p></div>{!archived && current.failedPrompt && !current.uncertainPersonalSend && !current.unavailablePersonal?.length && !busy && <button className="secondary-button" onClick={() => { void send(current.failedPrompt, true); }}>重试本次消息</button>}<button className="text-button" disabled={current?.posting} onClick={() => { void reconnect(active.id, activeTask.id); }}>重新连接任务</button>{!archived && <button className="text-button" onClick={event => openSettings(event.currentTarget)}>模型设置</button>}</div>}
+          {current?.error && <div className="error-notice" role="alert"><Icon name="warning" /><div><strong>任务状态提示</strong><p>{current.error}</p></div>{!archived && current.failedPrompt && !current.uncertainPersonalSend && !current.unavailablePersonal?.length && !busy && <button className="secondary-button" onClick={() => { void send(activeTask.draft || current.failedPrompt, true); }}>重试本次消息</button>}<button className="text-button" disabled={current?.posting} onClick={() => { void reconnect(active.id, activeTask.id); }}>重新连接任务</button>{!archived && <button className="text-button" onClick={event => openSettings(event.currentTarget)}>模型设置</button>}</div>}
           {current?.notice && <p className="message-meta" role="status">{current.notice}</p>}{current?.extensionStatus && Object.keys(current.extensionStatus).length > 0 && <div className="pi-extension-status" role="status">{Object.entries(current.extensionStatus).map(([key, text]) => <p key={key}>{text}</p>)}</div>}{current?.commandResult && <details className="command-result" open><summary>Pi 命令结果</summary><pre>{current.commandResult}</pre></details>}
-          {!archived && <><form className="composer" onSubmit={event => { event.preventDefault(); void send(); }} aria-label="发送消息"><label className="sr-only" htmlFor="message-input">消息</label><textarea ref={textarea} id="message-input" value={activeTask.draft} rows={3} readOnly={Boolean(current?.uncertainPersonalSend)} placeholder="今天想讨论什么？" maxLength={20000} disabled={current?.posting || carrying || projectActionId === active.id} onChange={event => { void persistDraft(active.id, activeTask.id, event.target.value).catch(() => {}); }} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (!busy) void send(); } }} aria-describedby="composer-help" /><div className="composer-toolbar"><button type="button" className="model-button" data-return-to-workspace onClick={event => openSettings(event.currentTarget)}><span className="model-dot" />{activeTask.configuration.model}<span className="down-chevron">⌄</span></button><div className="composer-actions"><button className="text-button" type="button" data-return-to-workspace aria-label="打开项目文件上传" onClick={event => openTaskFiles(event.currentTarget)}>＋ 文件</button>{busy ? <button className="stop-button" type="button" aria-label="停止生成" disabled={current?.status === 'stopping'} onClick={() => { void stop(); }}><Icon name="stop" size={15} />{current?.status === 'stopping' ? '正在停止' : '停止'}</button> : <button className="send-button" type="submit" aria-label="发送消息" disabled={Boolean(current?.uncertainPersonalSend) || carrying || capabilityUpdating || !activeTask.draft.trim() || !current?.connected || current?.status === 'connecting' || pending.current.has(activeKey!)} title="发送消息"><Icon name="arrow" size={20} /></button>}</div></div></form><div className="composer-helper"><span id="composer-help">Enter 发送 · Shift + Enter 换行{busy ? ' · 点击停止可中止本次生成' : ''}</span><span role="status" aria-live="polite">{currentStatus}</span></div></>}
+          {!archived && <><form className="composer" onSubmit={event => { event.preventDefault(); void send(); }} aria-label="发送消息"><label className="sr-only" htmlFor="message-input">消息</label><textarea ref={textarea} id="message-input" value={activeTask.draft} rows={3} readOnly={Boolean(current?.uncertainPersonalSend)} placeholder="今天想讨论什么？" maxLength={20000} disabled={current?.posting || carrying || projectActionId === active.id} onChange={event => { void persistDraft(active.id, activeTask.id, event.target.value).catch(() => {}); }} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (!busy) void send(); } }} aria-describedby="composer-help" /><div className="composer-toolbar"><button type="button" className="model-button" data-return-to-workspace onClick={event => openSettings(event.currentTarget)}><span className="model-dot" />{activeTask.configuration.model}<span className="down-chevron">⌄</span></button><div className="composer-actions"><button className="text-button" type="button" data-return-to-workspace aria-label="打开项目文件上传" onClick={event => openTaskFiles(event.currentTarget)}>＋ 文件</button>{busy ? <button className="stop-button" type="button" aria-label={current?.snapshot?.cleanupRequestId ? '重试清理' : '停止生成'} disabled={current?.status === 'stopping'} onClick={() => { void stop(); }}><Icon name="stop" size={15} />{current?.snapshot?.cleanupRequestId ? '重试清理' : current?.status === 'stopping' ? '正在停止' : '停止'}</button> : <button className="send-button" type="submit" aria-label="发送消息" disabled={Boolean(current?.uncertainPersonalSend) || carrying || capabilityUpdating || !activeTask.draft.trim() || !current?.connected || current?.status === 'connecting' || pending.current.has(activeKey!)} title="发送消息"><Icon name="arrow" size={20} /></button>}</div></div></form><div className="composer-helper"><span id="composer-help">Enter 发送 · Shift + Enter 换行{busy && !current?.snapshot?.cleanupRequestId ? ' · 点击停止可中止本次生成' : ''}</span><span role="status" aria-live="polite">{currentStatus}</span></div></>}
         </div>
         </ConversationDrawer>
         <div className="task-workspace-tools">

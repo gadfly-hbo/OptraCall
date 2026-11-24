@@ -118,6 +118,7 @@ export type StudioHostOptions = {
   reason?(command: StudioRuleCommand, context: SemanticContextCallContext): Promise<StudioRuleResult>;
   memberPackPublishHook?: import('./member-pack-host.ts').MemberPackHostOptions['publishAuthorityDependency'];
   resolveRequestOperator?: import('./member-pack-host.ts').MemberPackHostOptions['resolveRequestOperator'];
+  resolveOperatorDisplayName?: import('./member-pack-host.ts').MemberPackHostOptions['resolveOperatorDisplayName'];
   manageOperatorSession?: import('./member-pack-host.ts').MemberPackHostOptions['manageOperatorSession'];
   onProjectPermissionChanged?: import('./member-pack-host.ts').MemberPackHostOptions['onProjectPermissionChanged'];
 };
@@ -568,6 +569,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     inspectAuthorityDependency,
     verifySummaryAuthority,
     resolveRequestOperator: options.resolveRequestOperator,
+    resolveOperatorDisplayName: options.resolveOperatorDisplayName,
     manageOperatorSession: options.manageOperatorSession,
     onProjectPermissionChanged: options.onProjectPermissionChanged,
   });
@@ -945,9 +947,10 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (action === 'pack-read') {
           const enterpriseId = enterpriseScopes.enterpriseIdForProject(projectId);
           if (!enterpriseId) return reply(action, { enterpriseId: null, packs: [] });
-          const domain = typeof payload.domain === 'string' && payload.domain.trim() ? payload.domain.trim() : 'member-operations';
+          const rawDomain = typeof payload.domain === 'string' && payload.domain.trim() ? payload.domain : undefined;
+          const domain = memberPack.packs.normalizeDomain(rawDomain);
           if (construction && construction.enterpriseId === enterpriseId) {
-            const found = memberPack.packs.list(enterpriseId).find(p => p.domain === domain) ?? null;
+            const found = memberPack.packs.findByDomain(enterpriseId, domain) ?? null;
             return reply(action, { enterpriseId, mode: 'construction', pack: found ? { id: found.id, packCode: found.packCode, domain: found.domain, name: found.name, revision: found.revision, panorama: found.panorama ?? null, entries: found.entries, purposes: found.purposes, packRevisions: found.packRevisions.map(r => ({ version: r.version, status: r.status, confirmedAt: r.confirmedAt, dataCutoffAt: r.dataCutoffAt })) } : null });
           }
           const summary = (await memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId)).filter((p: any) => p.domain === domain);
@@ -1202,8 +1205,9 @@ export function createStudioFeature(options: StudioHostOptions) {
           if (action === 'pack-save-panorama' || action === 'pack-upsert-entry' || action === 'pack-upsert-purpose') {
             const entId = system.enterpriseId ?? enterpriseScopes.enterpriseIdForProject(projectId);
             if (!entId) throw new StudioError('studio_enterprise_required', 409);
-            const domain = typeof payload.domain === 'string' && payload.domain.trim() ? payload.domain.trim() : 'member-operations';
-            const ensured = memberPack.packs.ensurePack({ enterpriseId: entId, systemId: id, domain, name: `${system.name} · 会员运营资产包` });
+            const rawDomain = typeof payload.domain === 'string' && payload.domain.trim() ? payload.domain : undefined;
+            const domain = memberPack.packs.normalizeDomain(rawDomain);
+            const ensureTargetPack = () => memberPack.packs.ensurePack({ enterpriseId: entId, systemId: id, domain, name: `${system.name} · 会员运营资产包` });
             if (action === 'pack-save-panorama') {
               const srcRefs = parseSources(payload.sourceRefs ?? []);
               await validateSources(srcRefs, system, projectId, true);
@@ -1215,6 +1219,7 @@ export function createStudioFeature(options: StudioHostOptions) {
                 }
               }
               context.assertCurrent(); context.signal.throwIfAborted();
+              const ensured = ensureTargetPack();
               const updated = memberPack.packs.savePanorama(ensured.id, {
                 ...(payload as unknown as Parameters<typeof memberPack.packs.savePanorama>[1]),
                 sourceRefs: srcRefs,
@@ -1226,21 +1231,36 @@ export function createStudioFeature(options: StudioHostOptions) {
               const entRefs = parseSources(payload.enterpriseSourceRefs ?? []);
               await validateSources(entRefs, system, projectId, true);
               context.assertCurrent(); context.signal.throwIfAborted();
+              const ensured = ensureTargetPack();
               const updated = memberPack.packs.upsertEntry(ensured.id, {
                 ...(payload as unknown as Parameters<typeof memberPack.packs.upsertEntry>[1]),
                 enterpriseSourceRefs: entRefs,
               });
               return reply(action, { packId: updated.id, packCode: updated.packCode, entryCount: updated.entries.length });
             }
-            // pack-upsert-purpose
+            // pack-upsert-purpose: validate payload & source refs BEFORE creating any empty pack!
             if (object(payload.evidenceNote) && Array.isArray(payload.evidenceNote.sourceRefs)) {
-              await validateSources(parseSources(payload.evidenceNote.sourceRefs), system, projectId, true);
+              let parsedNoteRefs: StudioSourceRef[];
+              try {
+                parsedNoteRefs = parseSources(payload.evidenceNote.sourceRefs);
+              } catch (err) {
+                const reason = err instanceof StudioError ? err.code : 'invalid_studio_source_ref';
+                throw new StudioError('invalid_purpose_evidence_note', 400, {
+                  message: 'payload.evidenceNote.sourceRefs 中存在无效 SourceRef；每项须包含有效的 authority、id 与 version（无引用时传空数组 []）。',
+                  details: { issues: [{ reason, path: 'payload.evidenceNote.sourceRefs' }] },
+                });
+              }
+              await validateSources(parsedNoteRefs, system, projectId, true);
             }
-            context.assertCurrent(); context.signal.throwIfAborted();
-            const saved = memberPack.packs.upsertPurpose(ensured.id, {
+            const upsertInput = {
               ...(payload as unknown as Parameters<typeof memberPack.packs.upsertPurpose>[1]),
               taskOwner: { projectId, taskId },
-            });
+            };
+            const existingPack = memberPack.packs.findByDomain(entId, domain);
+            memberPack.packs.validatePurposeInput(existingPack, upsertInput);
+            context.assertCurrent(); context.signal.throwIfAborted();
+            const ensured = ensureTargetPack();
+            const saved = memberPack.packs.upsertPurpose(ensured.id, upsertInput);
             return reply(action, { packId: saved.pack.id, packCode: saved.pack.packCode, purposeId: saved.purpose.id, created: saved.created, purposeCount: saved.pack.purposes.length });
           }
           throw new StudioError('studio_action_not_available', 409);
@@ -1528,7 +1548,18 @@ export function createStudioFeature(options: StudioHostOptions) {
           return { result: { system: store.get(id) }, systemId: id };
         }));
         json(response, result.statusCode || 200, result.result); return true;
-      } catch (error) { if (error instanceof StudioError || error instanceof SapMethodStoreError || error instanceof MetricLibraryFault || error instanceof CaseStoreError) { const value = error as { status?: number; statusCode?: number; code: string }; json(response, value.status ?? value.statusCode ?? 409, { code: value.code, message: value.code }); return true; } throw error; }
+      } catch (error) {
+        if (error instanceof StudioError) {
+          json(response, error.status, { code: error.code, message: error.message || error.code, ...(error.details ? { details: error.details } : {}) });
+          return true;
+        }
+        if (error instanceof SapMethodStoreError || error instanceof MetricLibraryFault || error instanceof CaseStoreError) {
+          const value = error as { status?: number; statusCode?: number; code: string };
+          json(response, value.status ?? value.statusCode ?? 409, { code: value.code, message: value.code });
+          return true;
+        }
+        throw error;
+      }
     },
   };
   return api;

@@ -22,7 +22,7 @@ export type SessionLease<Owner> = {
 };
 export type SessionRead<Owner> = { live: boolean; busy: boolean; opening: boolean; snapshot?: ProjectSnapshot; pendingUI: ProjectAgent['pendingUI']; context?: SessionContext<Owner> };
 export type SessionExecutionMode = 'unmanaged' | 'ordinary' | 'protected';
-export type SessionExecutionState = { mode: SessionExecutionMode | 'none' | 'opening' | 'unknown'; unmanagedSeen: boolean; freshRegistered: boolean; busy: boolean };
+export type SessionExecutionState = { cleanupRequestId?: string; mode: SessionExecutionMode | 'none' | 'opening' | 'unknown'; unmanagedSeen: boolean; freshRegistered: boolean; busy: boolean };
 export type SessionFilter = { provider?: string; projectId?: string };
 export type SessionRuntime = Pick<ProjectAgent, 'alive' | 'busy' | 'pendingUI' | 'open' | 'snapshot' | 'subscribe' | 'start' | 'stop' | 'close' | 'respondUI' | 'setEditorState'> & {
   startCommand(text: string, requestId: string): { requestId: string; accepted: Promise<void>; completion: Promise<any> };
@@ -448,7 +448,9 @@ export function createAgentSessionDomain<Owner>(options: AgentSessionDomainOptio
     executionState(ref) {
       const { key } = identity(ref), slot = slots.get(key), resource = slot?.operation?.resource ?? slot?.resource ?? slot?.opening?.resource;
       const unknown = slot?.operation?.cleanupFailed || blockedByClose(slot ?? { owner: identity(ref).owner });
-      return { mode: unknown ? 'unknown' : resource ? resource.mode : slot?.opening ? 'opening' : 'none', unmanagedSeen: Boolean(slot?.unmanagedSeen), freshRegistered: Boolean(slot?.freshRegistered), busy: busySlot(slot) };
+      const op = slot?.operation;
+      const cleanupRequestId = op?.cleanupFailed && !op.leaseActive && !op.inFlight ? op.requestId : undefined;
+      return { ...(cleanupRequestId ? { cleanupRequestId } : {}), mode: unknown ? 'unknown' : resource ? resource.mode : slot?.opening ? 'opening' : 'none', unmanagedSeen: Boolean(slot?.unmanagedSeen), freshRegistered: Boolean(slot?.freshRegistered), busy: busySlot(slot) };
     },
     async read(ref) {
       const { key } = identity(ref), slot = slots.get(key);

@@ -17,8 +17,9 @@ import { readSemanticContextParameters, legacyReadSemanticContextParameters, sem
 import { candidateDetailsVersion } from './agent-candidate.ts';
 import { presentContextMessages } from './context-presentation.ts';
 import path from 'node:path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, renameSync, unlinkSync, constants, openSync, fstatSync, fsyncSync, closeSync, readSync, lstatSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync, chmodSync, renameSync, unlinkSync, constants, openSync, fstatSync, fsyncSync, closeSync, readSync, lstatSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
+import { Type } from 'typebox';
 import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, SettingsManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, getDocsPath, VERSION, defineTool, loadSkills, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory, type ExtensionToolContext } from './sdk.ts';
 import type { ProjectAgentWireOptions, ProjectSnapshot, ProvidedContextInput } from './project-runtime.ts';
 import { runDiagnostic, readRunDiagnostic, type RunDiagnostic } from './run-diagnostics.ts';
@@ -26,7 +27,7 @@ import { createBrowserUIContext, type BrowserUIResponse } from './browser-ui-con
 import { OUTPUT_EVIDENCE_GUIDANCE } from './output-evidence.ts';
 import { projectSystemPrompt } from './project-system-prompt.ts';
 import { createProtectedTools } from './protected-tools.ts';
-import { snapshotProtectedSkills } from './protected-skills.ts';
+import { resolveProtectedSkillSnapshot, snapshotProtectedSkills } from './protected-skills.ts';
 import { createSimulationTools } from '../../extensions/business-plugins/sim-lab/tools/simulation-tools.ts';
 import { agentCandidateParameters, candidateToolName, candidateCustomType, candidateReceiptType, canonicalCandidateJson, parseAgentCandidateInput, agentCandidateDetailsSha256, type AgentCandidateDetails, type AgentCandidateReceipt } from './agent-candidate.ts';
 import { findPersonalContextParameters, readPersonalContextParameters, type PersonalContextToolResult } from './personal-context.ts';
@@ -39,7 +40,7 @@ import { createWebSearchExtension, WEB_SEARCH_TOOL_NAMES, type WebSearchToolName
 import { createModelPackTools } from './model-pack-tools.ts';
 import { createToolContextAdapter } from './tool-context-adapter.ts';
 import { createForegroundChildren } from './foreground-children.ts';
-import { PROJECT_FILE_TOOLS, type ProjectFileToolResult } from './project-files.ts';
+import { PROJECT_FILE_TOOLS, readProjectFileText, type ProjectFileToolResult } from './project-files.ts';
 import { createDbLinkTools, DB_LINK_TOOL_NAMES, type DbLinkToolResult, type DbLinkToolName } from './db-link-tools.ts';
 import { reportCalculationTool, reportCalculationToolName, reportCalculationSystemPrompt, reportCalculationBundleSystemPrompt, reportCalculationBundleToolName, reportCalculationBundleReadParameters, parseReportCalculationBundleRead, reportCalculationGuidance, readReportCalculationRunReceipt, type ReportCalculationSelection, type ReportCalculationRunReceipt } from './report-calculation-review.ts';
 
@@ -54,6 +55,7 @@ function noteStrategyRead(run: ActiveRun, action: string, fingerprint: string) {
 type RunResult = { outcome: Outcome; text: string; result?: unknown; snapshot: ProjectSnapshot; diagnostic?: RunDiagnostic; publicSearch?: PublicNativeSearchResult & { requestId: string }; reportCalculationReview?: ReportCalculationRunReceipt };
 const RUN_ENTRY = 'optracall.run';
 const EXECUTION_ENTRY = 'optracall.execution';
+class NativeRunStartRejected extends Error {}
 const PI_1_4_0_DEFAULT_ROLE = 'You are an expert coding assistant operating inside pi, a coding agent harness.';
 const PI_1_4_0_DEFAULT_PREAMBLE = `${PI_1_4_0_DEFAULT_ROLE} You help users by reading files, executing commands, editing code, and writing new files.\n\n`;
 const OPTRACALL_ROLE = "You are OptraCall's analysis and decision-support assistant running on Pi.";
@@ -103,7 +105,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   const retireChildren = foreground.retireAll;
   // Resource lifetime state deliberately survives SDK extension reload/fork within this worker.
   const connectorDirectories = new Map<string, { digest?: string; frozen: boolean }>();
-  const executionBindings = new Map<string, { manager: SessionManager; file: string; cwd: string; closed: boolean }>();
+  const executionBindings = new Map<string, { manager: SessionManager; file: string; cwd: string; closed: boolean; reloadJournal?: boolean }>();
   const personalRequests = new Map<string, { resolve: (result: unknown) => void; reject: (error: Error) => void }>();
   function rejectPersonalRequests() { for (const pending of personalRequests.values()) pending.reject(new Error('personal_context_run_unavailable')); personalRequests.clear(); }
   function qualifyToolInvocation(target: AgentSession, ctx: ExtensionToolContext, signal: AbortSignal | undefined) {
@@ -143,14 +145,32 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       // Close only journals actually bound to this execution, through the SDK,
       // rather than writing an old identity into the newly selected branch.
       let writer = binding.manager;
-      if (writer.getSessionId() !== sessionId || writer.getSessionFile() !== binding.file) {
+      if (binding.reloadJournal || writer.getSessionId() !== sessionId || writer.getSessionFile() !== binding.file) {
         const original = readFileSync(binding.file, 'utf8'), header = JSON.parse(original.slice(0, original.indexOf('\n')));
         if (!original.endsWith('\n') || header.type !== 'session' || header.version !== 3 || header.id !== sessionId || header.cwd !== binding.cwd) throw new Error('managed_native_changed');
         writer = SessionManager.open(binding.file, options.sessionDirectory, binding.cwd);
+        if (binding.reloadJournal) {
+          // The SDK updates its in-memory leaf before appending. A failed append
+          // must not leave the next receipt parented to an unpersisted entry.
+          const phases = writer.getEntries().flatMap(entry => {
+            if (entry.type !== 'custom' || entry.customType !== EXECUTION_ENTRY) return [];
+            const data = entry.data as Record<string, unknown> | undefined;
+            return data?.version === 1 && data.executionId === executionId && data.sessionId === sessionId && data.scopeId === protectedTools?.scope.id ? [data.phase] : [];
+          });
+          if (!phases.includes('opened')) throw new Error('managed_native_changed');
+          if (phases.includes('closed')) {
+            syncExecutionJournal(writer); binding.closed = true; continue;
+          }
+        }
       }
-      writer.appendCustomEntry(EXECUTION_ENTRY, { version: 1, phase: 'closed', executionId, sessionId,
-        scopeId: protectedTools.scope.id, profile: options.protectedExecution?.profile ?? 'protected', at: new Date().toISOString() });
-      syncExecutionJournal(writer); binding.closed = true;
+      try {
+        writer.appendCustomEntry(EXECUTION_ENTRY, { version: 1, phase: 'closed', executionId, sessionId,
+          scopeId: protectedTools.scope.id, profile: (options.protectedExecution ?? options.memberPackExecutionScope)?.profile ?? 'protected', at: new Date().toISOString() });
+        syncExecutionJournal(writer); binding.closed = true;
+      } catch (error) {
+        binding.reloadJournal = true;
+        throw error;
+      }
     }
   }
   const send = (value: unknown) => { if (process.connected) process.send?.(value); };
@@ -191,13 +211,17 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     return { requestId, ...observed, sources };
   };
   const publish = (event: unknown) => send({ kind: 'event', event: redact(event) });
+  const unacceptedRunIds = new Set<string>();
   function lastRun(): LastRun | undefined {
     for (const entry of [...manager!.getEntries()].reverse()) {
       if (entry.type !== 'custom' || entry.customType !== RUN_ENTRY) continue;
       const data = entry.data as Record<string, unknown> | undefined;
       // Forks copy native entries. A copied marker belongs to its originating session.
       if (!data || data.sessionId !== manager!.getSessionId() || typeof data.requestId !== 'string') continue;
-      if (data.phase === 'started') return { requestId: data.requestId };
+      if (data.phase === 'started') {
+        if (unacceptedRunIds.has(data.requestId)) continue;
+        return { requestId: data.requestId };
+      }
       if (data.phase === 'settled' && ['completed', 'cancelled', 'failed'].includes(String(data.outcome))) {
         const diagnostic = readRunDiagnostic(data.diagnostic);
         const review = readReportCalculationRunReceipt(data.reportCalculationReview, data.requestId);
@@ -220,7 +244,16 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   const snapshot = (): ProjectSnapshot & { lastRun?: LastRun } => {
     const previous = lastRun();
     const strategySkills = strategyInitiative() ? session!.resourceLoader.getSkills().skills.map(skill => skill.name).sort() : undefined;
-    return { sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(previous ? { lastRun: previous } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { ...(previous?.reportCalculationReview ? { reportCalculationReview: previous.reportCalculationReview } : {}), ...(analysisPython ? { analysisPython } : {}), nativeTools: !fixedInput() && !(Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools), subagent: session!.getActiveToolNames().includes('subagent'), nativeSearch: publicSearch() || !fixedInput() && !options.workspace && (!protectedTools || ordinaryManaged()) && !options.webSearchEnabled ? nativeSearchMode(options.configuration) ?? false : false, python: fixedInput() || (Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools) ? false : 'bash', powershell: fixedInput() || protectedTools || Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, skills: (strategySkills ? strategySkills.length > 0 : !fixedInput()) && (!protectedTools || Boolean(options.protectedExecution?.skillRoot)) && !options.memberPackWorkspaceRoot, ...(strategySkills ? { strategySkills } : {}), mcp: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, codemode: !fixedInput() && !(Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution) && !protectedTools), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged() || Boolean(options.memberPackExecutionScope)), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: (options.protectedExecution ?? options.memberPackExecutionScope)?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } };
+    const isRestrictedMemberPack = Boolean(options.memberPackWorkspaceRoot && !options.workspace && !options.protectedExecution);
+    const activeScope = options.protectedExecution ?? options.memberPackExecutionScope;
+    const skillsEnabled = strategySkills
+      ? strategySkills.length > 0
+      : fixedInput()
+        ? false
+        : isRestrictedMemberPack
+          ? session!.resourceLoader.getSkills().skills.length > 0
+          : (!protectedTools || Boolean(activeScope?.skillRoot));
+    return { sessionId: manager!.getSessionId(), sessionFile: manager!.getSessionFile(), messages: redact(presentContextMessages(session!.messages, manager!.getBranch(), manager!.getSessionId())) as Record<string, any>[], tools: session!.getActiveToolNames(), status: run ? 'running' : 'idle', sdkVersion: VERSION, ...(previous ? { lastRun: previous } : {}), uiRequests: browserUI?.pending() ?? [], capabilities: { ...(previous?.reportCalculationReview ? { reportCalculationReview: previous.reportCalculationReview } : {}), ...(analysisPython ? { analysisPython } : {}), nativeTools: !fixedInput() && !(isRestrictedMemberPack && !protectedTools), subagent: session!.getActiveToolNames().includes('subagent'), nativeSearch: publicSearch() || !fixedInput() && !options.workspace && (!protectedTools || ordinaryManaged()) && !options.webSearchEnabled ? nativeSearchMode(options.configuration) ?? false : false, python: fixedInput() || (isRestrictedMemberPack && !protectedTools) ? false : 'bash', powershell: fixedInput() || protectedTools || isRestrictedMemberPack ? false : 'Windows only (upstream)', compaction: session!.autoCompactionEnabled, retry: session!.settingsManager.getRetrySettings().enabled, httpTransport: transport.settings(), resources: options.resourceRoot, extensions: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, skills: skillsEnabled, ...(strategySkills ? { strategySkills } : {}), mcp: !fixedInput() && !protectedTools && !options.memberPackWorkspaceRoot, codemode: !fixedInput() && !(isRestrictedMemberPack && !protectedTools), sessionTree: !fixedInput() && (!protectedTools || ordinaryManaged() || Boolean(options.memberPackExecutionScope)), ...(protectedTools ? { protectedExecution: { id: protectedTools.scope.id, profile: activeScope?.profile ?? 'protected', cwd: protectedTools.scope.cwd, writeRoots: protectedTools.scope.writeRoots ?? [], journal: 'sdk-only', backgroundLifetime: 'scope', executionId, unsupportedResources: ['existing-or-remote-mcp', 'user-execution-extensions', ...(unavailableSkills.length ? ['unavailable-skills'] : [])], unavailableSkills, unavailableTools: protectedTools.unavailableTools, pythonRuntimes: protectedTools.pythonRuntimes, codemodeStore: 'execution-scope' } } : {}), ...(semanticProvision() ? { semanticContext: semanticProvision() } : {}), extensionUI: { dialogs: fixedInput() || protectedTools ? [] : ['select', 'confirm', 'input', 'editor'], status: !fixedInput() && !protectedTools, terminalComponents: false } } };
   };
   const environmentExtension: ExtensionFactory = pi => {
     pi.on('before_provider_request', (event, ctx) => {
@@ -866,13 +899,18 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         ],
         systemPrompt: o.workspace!.systemPrompt.join('\n\n'), appendSystemPrompt: [],
       } : protectedTools ? {
-        noExtensions: true, noSkills: !o.protectedExecution?.skillRoot, noPromptTemplates: true, noContextFiles: true, noThemes: true,
+        noExtensions: true, noSkills: restrictedMemberPack ? true : !activeProtectedScope?.skillRoot, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
         extensionFactories: [createToolSearchExtension(), ...searchExtensions, ...reportReviewExtensions, environmentExtension],
-        additionalSkillPaths: [analysisAssetsDir],
+        additionalSkillPaths: restrictedMemberPack ? (o.assignment?.skill ? [path.join(analysisAssetsDir, o.assignment.skill.id, 'SKILL.md')] : []) : [analysisAssetsDir],
         skillsOverride: (base: { skills: Parameters<typeof snapshotProtectedSkills>[0]; diagnostics: any[] }) => {
-          const snapshot = o.protectedExecution?.skillRoot ? snapshotProtectedSkills(selectedTaskSkills(base.skills), o.protectedExecution.skillRoot) : { skills: [], unavailable: [] };
-          if (o.assignment?.skill && !snapshot.skills.some(skill => skill.name === o.assignment!.skill!.id)) throw new Error('task_skill_unavailable');
+          const snapshot = resolveProtectedSkillSnapshot({
+            restrictedMemberPack,
+            skillRoot: activeProtectedScope?.skillRoot,
+            assignmentSkillId: o.assignment?.skill?.id,
+            baseSkills: base.skills,
+            selectTaskSkills: selectedTaskSkills,
+          });
           unavailableSkills = snapshot.unavailable;
           return { skills: snapshot.skills, diagnostics: [...base.diagnostics, ...snapshot.unavailable.map(name => ({ type: 'warning' as const, message: `Skill unavailable in protected execution: ${name}` }))] };
         },
@@ -883,9 +921,18 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
         disabledBuiltinExtensions: ['codemode', 'tool_search', 'mcp'],
         extensionFactories: [...searchExtensions, ...reportReviewExtensions, environmentExtension],
+        ...(o.assignment?.skill ? {
+          additionalSkillPaths: [path.join(analysisAssetsDir, o.assignment.skill.id, 'SKILL.md')],
+          skillsOverride: (base: { skills: Parameters<typeof snapshotProtectedSkills>[0]; diagnostics: any[] }) => {
+            const skills = selectedTaskSkills([]);
+            if (!skills.some(skill => skill.name === o.assignment!.skill!.id)) throw new Error('task_skill_unavailable');
+            return { ...base, skills };
+          },
+        } : {}),
         appendSystemPrompt: [
           ...projectInstructions(),
-          '当前运行环境缺少操作系统受管隔离边界（sandbox-exec 不可用），已按工程规格禁用原生文件系统、Shell/Codemode/子会话与数据库直连（dbLink）及外部连接器；仅开放受 Host 门店/时段授权视图核验的 read_input、write_report 与 studio_assets 工具。未授权门店或超期资料不可读取，也不可将不可读门店视为 0。',
+          ...(o.assignment?.skill ? [`Pinned Task Skill available: ${o.assignment.skill.id}@${o.assignment.skill.version} (sha256: ${o.assignment.skill.sha256}). When this workflow helps the task, call read_task_skill({}) to read SKILL.md or read_task_skill({ file: "references/..." }) to read its bundled reference files (read-only, strictly scoped to this fixed Skill package).`] : []),
+          '当前运行环境缺少操作系统受管隔离边界（sandbox-exec 不可用），已按工程规格禁用原生文件系统、Shell/Codemode/子会话与数据库直连（dbLink）及外部连接器；仅开放受 Host 门店/时段授权视图核验的 read_input、write_report 与 studio_assets 工具（若任务已开启固定 Skill，另开放只读的 read_task_skill）。未授权门店或超期资料不可读取，也不可将不可读门店视为 0。',
           ...(o.metricIndexText ? [o.metricIndexText] : []),
         ],
       } : {
@@ -903,13 +950,53 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       // Resource reload reads disk settings; add the workspace's tool selection afterwards.
       // Plain names replace the inherited selection; an empty array means no tools.
       const restrictedHostToolsOnly = restrictedMemberPack && !protectedTools;
+      const loadedRestrictedSkill = restrictedHostToolsOnly && o.assignment?.skill
+        ? services.resourceLoader.getSkills().skills.find(skill => skill.name === o.assignment!.skill!.id)
+        : undefined;
+      const restrictedSkillTools = loadedRestrictedSkill && o.assignment?.skill ? [defineTool({
+        name: 'read_task_skill',
+        label: '读取任务固定 Skill',
+        description: `Read the pinned built-in Task Skill (${o.assignment.skill.id}@${o.assignment.skill.version}) SKILL.md or a relative reference file inside its immutable package directory. Strictly read-only; cannot access project or host files.`,
+        parameters: Type.Object({
+          file: Type.Optional(Type.String({ minLength: 1, maxLength: 200, description: 'Relative path inside the pinned Skill directory (default: SKILL.md).' })),
+          offset: Type.Optional(Type.Integer({ minimum: 1 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1 })),
+        }, { additionalProperties: false }),
+        execute: async (toolCallId, params, signal) => {
+          const expected = o.assignment!.skill!;
+          if (packageIdentity(loadedRestrictedSkill.filePath) !== expected.sha256) throw new Error('task_skill_version_changed');
+          const rel = typeof params.file === 'string' && params.file.trim() ? params.file.trim() : 'SKILL.md';
+          if (rel.startsWith('/') || rel.includes('\\') || rel.includes('\0') || rel.split('/').some(seg => !seg || seg === '.' || seg === '..' || seg.startsWith('.'))) {
+            throw new Error('task_skill_path_invalid');
+          }
+          const baseReal = realpathSync(loadedRestrictedSkill.baseDir);
+          const candidate = path.resolve(baseReal, rel);
+          if (!candidate.startsWith(baseReal + path.sep)) throw new Error('task_skill_path_invalid');
+          let stat: ReturnType<typeof lstatSync>;
+          try { stat = lstatSync(candidate); } catch { throw new Error('task_skill_file_unavailable'); }
+          if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1 || stat.size > 4 * 1024 * 1024) throw new Error('task_skill_file_unavailable');
+          if (!realpathSync(candidate).startsWith(baseReal + path.sep)) throw new Error('task_skill_path_invalid');
+          const read = await readProjectFileText({
+            bytes: readFileSync(candidate),
+            signal: signal ?? new AbortController().signal,
+            toolCallId,
+            ...(params.offset === undefined ? {} : { offset: params.offset }),
+            ...(params.limit === undefined ? {} : { limit: params.limit }),
+          });
+          return {
+            content: read.content,
+            details: { ...read.details, skillId: expected.id, version: expected.version, sha256: expected.sha256, file: rel },
+          };
+        },
+      })] : [];
       const sourceToolNames = sourceWorkspace || strategyDiscussion() || strategyInitiative() ? customTools.map(tool => tool.name) : [];
-      services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? sourceToolNames : protectedTools ? [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] : restrictedHostToolsOnly ? customTools.map(tool => tool.name) : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...webTools.map(tool => `+${tool}`), ...(subagent ? ['+subagent'] : [])] });
+      const restrictedToolNames = [...customTools.map(tool => tool.name), ...restrictedSkillTools.map(tool => tool.name)];
+      services.settingsManager.applyOverrides({ defaultTools: fixedInput() ? sourceToolNames : protectedTools ? [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] : restrictedHostToolsOnly ? restrictedToolNames : [...(o.workspace?.defaultTools ?? ['+grep', '+find', '+ls', '+codemode', '+tool_search']), ...webTools.map(tool => `+${tool}`), ...(subagent ? ['+subagent'] : [])] });
       // SDK modifiers append to either a plain workspace allowlist or inherited defaults.
       if (customTools.length && !restrictedHostToolsOnly) services.settingsManager.applyOverrides({ defaultTools: customTools.filter(tool => tool.name !== reportCalculationToolName).map(tool => `+${tool.name}`) });
-      const productTools = [...customTools, ...(subagent ? [subagent] : [])];
+      const productTools = [...customTools, ...restrictedSkillTools, ...(subagent ? [subagent] : [])];
       const ownedTools = contextAdapter ? productTools.map(tool => contextAdapter.tool(tool)) : productTools;
-      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(sourceToolNames.length ? { tools: sourceToolNames, customTools: ownedTools } : fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: [...protectedTools.tools, ...ownedTools], tools: [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] } : restrictedHostToolsOnly ? { customTools: ownedTools, tools: customTools.map(tool => tool.name), noTools: 'all' as const, excludeTools: ['read', 'write', 'edit', 'bash', 'powershell', 'grep', 'find', 'ls', 'codemode', 'subagent'] } : { customTools: ownedTools }), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
+      const created = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, ...(sourceToolNames.length ? { tools: sourceToolNames, customTools: ownedTools } : fixedInput() ? { tools: [], noTools: 'all' as const, excludeTools: ['*'] } : protectedTools ? { customTools: [...protectedTools.tools, ...ownedTools], tools: [...protectedTools.tools.map(tool => tool.name), ...customTools.map(tool => tool.name), 'tool_search', ...webTools, ...(subagent ? ['subagent'] : [])] } : restrictedHostToolsOnly ? { customTools: ownedTools, tools: restrictedToolNames, noTools: 'all' as const, excludeTools: ['read', 'write', 'edit', 'bash', 'powershell', 'grep', 'find', 'ls', 'codemode', 'subagent'] } : { customTools: ownedTools }), ...(builtin?.reasoning ? { thinkingLevel: o.configuration.thinkingLevel ?? 'high' } : {}) });
       if (created.modelFallbackMessage || created.session.model?.id !== o.configuration.model || created.session.model?.provider !== providerId) { created.session.dispose(); throw new Error('model_changed'); }
       parent = created.session;
       return { ...created, services, diagnostics: services.diagnostics };
@@ -961,8 +1048,33 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     if (publicSearch()) current.publicSearch = createPublicNativeSearchObservation();
     nativeSearchFailure = undefined;
     run = current;
-    try { attachRunManager(manager!); }
-    catch (error) { run = undefined; throw error; }
+    try { attachRunManager(manager!); unacceptedRunIds.delete(id); }
+    catch (error) {
+      run = undefined;
+      unacceptedRunIds.add(id);
+      const persistedFile = manager!.getSessionFile();
+      const sessionId = manager!.getSessionId();
+      const failure = error as NodeJS.ErrnoException;
+      // An open denied on the first started-marker append cannot have written
+      // any bytes. Partial writes, lost replies and later errors remain unknown.
+      const deniedOpen = kind === 'prompt' && !current.managers.size && persistedFile &&
+        failure?.syscall === 'open' && failure.path === persistedFile &&
+        ['EACCES', 'EPERM', 'EROFS'].includes(failure.code ?? '');
+      if (persistedFile && existsSync(persistedFile)) {
+        let restored = false;
+        try {
+          manager!.setSessionFile(persistedFile);
+          session?.refreshContext();
+          restored = manager!.getSessionId() === sessionId;
+        } catch {}
+        if (deniedOpen && restored && !manager!.getEntries().some(entry =>
+          entry.type === 'custom' && entry.customType === RUN_ENTRY &&
+          (entry.data as { requestId?: string } | undefined)?.requestId === id)) {
+          throw new NativeRunStartRejected('native_run_start_rejected');
+        }
+      }
+      throw error;
+    }
     publish({ type: 'run.accepted', requestId: id, sessionFile: manager!.getSessionFile() });
     publish({ type: 'snapshot', snapshot: snapshot() });
     pendingOperation = (async () => {
@@ -1106,7 +1218,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       }
       else throw new Error('unknown_method');
       send({ kind: 'reply', id: message.id, result: result === undefined ? null : redact(result) });
-    } catch (error) { send({ kind: 'reply', id: message.id, error: 'sdk_operation_failed', detail: redact({ message: error instanceof Error ? error.message : String(error), code: (error as NodeJS.ErrnoException | undefined)?.code }) }); }
+    } catch (error) { send({ kind: 'reply', id: message.id, error: error instanceof NativeRunStartRejected ? 'native_run_start_rejected' : 'sdk_operation_failed', detail: redact({ message: error instanceof Error ? error.message : String(error), code: (error as NodeJS.ErrnoException | undefined)?.code }) }); }
   })(); });
   process.on('disconnect', () => { if (closing) return; closing = true; void dispose().finally(() => { process.exit(0); }); });
   send({ kind: 'ready' });
