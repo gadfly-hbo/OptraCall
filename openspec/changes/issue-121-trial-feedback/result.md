@@ -199,3 +199,8 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 
 1. **未发布草稿不能签发授权。** `verifySummaryAuthority` 增加 `asset.candidateRevision === revNum` 检查，当前草稿版本（candidateRevision）拒绝签发。合法历史发布版继续可读。
 2. **停用来源不能固定用途（完整）。** `qualifiedPinPurposes` 在过滤 `canSummary.allowed` 后，检查 `!canDef.allowed && !canSummary.allowed && !hasPartialOrFullDetail` → 排除该用途。无资格的用途不再出现在 pin 结果中。
+
+### PM 十六次返工（目录资格与较早草稿）
+
+1. **目录 accessLevels 不再误报。** `buildPackCatalogSummary` 在 `evaluatePurposeAccessForSubject` 返回后，用 `eligibleSummaryGrantIds` 过滤 `canSummary.allowed`。无资格时 `accessLevels` 不再包含 `cite-summary`。
+2. **较早草稿不能签发授权。** `verifySummaryAuthority` 增加 `revNum > asset.formalRevision` 检查，所有晚于当前正式版的草稿（包括较早的 v3）拒绝签发。合法历史发布版继续可读。
