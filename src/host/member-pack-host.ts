@@ -1410,12 +1410,13 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     };
   }
 
-  function qualifiedPinPurposes(pack: EnterpriseDomainPack, projectId: string, construction: boolean, revision?: EnterpriseDomainPack['packRevisions'][number]) {
+  async function qualifiedPinPurposes(pack: EnterpriseDomainPack, projectId: string, construction: boolean, revision?: EnterpriseDomainPack['packRevisions'][number]) {
     const subjectGrants = projectGrants(pack.enterpriseId, projectId);
+    const legacyPeriods = await resolveLegacyGrantPeriods(pack.enterpriseId, subjectGrants);
     return (revision?.purposeManifests ?? []).flatMap(purpose => {
       if (purpose.status !== 'eligible') return [];
       if (construction) return [purpose];
-      const access = evaluatePurposeAccessForSubject(subjectGrants, purpose);
+      const access = evaluatePurposeAccessForSubject(subjectGrants, purpose, legacyPeriods);
       return access ? [{ purposeId: purpose.purposeId, dependencies: access.visibleDeps }] : [];
     });
   }
@@ -1478,7 +1479,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
             const scopeDesc = isConstruction
               ? 'construction-owner'
               : activeGrants.map(g => `${g.operations.join(',')}:${g.scope.stores?.join('/') || g.scope.grain || g.scope.brand || '*'}`).join(';') || 'restricted';
-            const qualifiedPurposes = qualifiedPinPurposes(pack, projectId, isConstruction, activeRev);
+            const qualifiedPurposes = await qualifiedPinPurposes(pack, projectId, isConstruction, activeRev);
             if (!qualifiedPurposes.length) throw new StudioError('member_pack_purpose_not_authorized', 403);
             const pin = packs.pinTaskVersion(pack.id, { projectId, taskId, authorizedScope: scopeDesc, qualifiedPurposes });
             pinnedVersion = pin.packVersion;
@@ -3806,7 +3807,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         const existingPin = taskId ? packs.getTaskPin(packId, project.id, taskId) : undefined;
         const version = existingPin?.packVersion ?? (typeof input.version === 'string' ? input.version : undefined);
         const pinRevision = version ? currentPack.packRevisions.find(revision => revision.version === version) : currentPack.packRevisions.find(revision => revision.status === 'active');
-        const permitted = action === 'pin' || action === 'uses' ? qualifiedPinPurposes(currentPack, project.id, construction, pinRevision) : undefined;
+        const permitted = action === 'pin' || action === 'uses' ? await qualifiedPinPurposes(currentPack, project.id, construction, pinRevision) : undefined;
         if (permitted && (permitted.length === 0 || (action === 'uses' && !permitted.some(purpose => purpose.purposeId === input.purposeId)))) {
           throw new StudioError('member_pack_purpose_not_authorized', 403);
         }

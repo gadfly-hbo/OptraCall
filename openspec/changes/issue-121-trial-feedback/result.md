@@ -179,3 +179,8 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 
 1. **旧无期限授权兼容回归修复。** 精读时仅在有限期间且无法核实来源范围时拒绝（`continue`）。无期限授权即使来源未声明统计期间也继续放行，不再被 `!sourcePeriodFrom || !sourcePeriodTo` 拦截。
 2. **文本跨月范围解析。** 新增范围表达式匹配（`期间[:：]?\s*(date) 至 (date)`），解析首尾日期存入 `sourcePeriodFrom`/`sourcePeriodTo`。倒序范围（`startMs > endMs`）不写入，按待核处理。范围解析优先于单日/单月提取。
+
+### PM 十二次返工（倒序拒绝与旧授权贯通）
+
+1. **倒序范围按待核拒绝。** 范围表达式检测到 `startMs > endMs` 时直接返回 `undefined`（不回退到单日/单月提取），有限授权不再把倒序首日当完整期间。
+2. **旧授权贯通目录、固定用途和精读。** `qualifiedPinPurposes` 改为 async 并调用 `resolveLegacyGrantPeriods`，与目录和精读共用同一旧授权期间证据。固定用途不再因缺 `legacyPeriods` 而拒绝。`verifySummaryAuthority` 失败时仅有限期间拒绝；核验成功但来源无期间时按无期限兼容放行。
