@@ -194,3 +194,8 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 
 1. **停用来源不能固定用途。** `qualifiedPinPurposes` 增加 `eligibleSummaryGrantIds` 预计算，仅 `summaryGrantEligible` 通过的汇总授权可用于固定用途。无资格时 `canSummary.allowed = false`，pin 返回 403。
 2. **未发布候选不能签发授权。** `verifySummaryAuthority` 增加 `asset.formalRevision === null` 检查，未正式发布（formalRevision 为空）的资产拒绝签发汇总授权。合法历史发布版（formalRevision 非空）继续可读。
+
+### PM 十五次返工（草稿拦截与固定用途资格）
+
+1. **未发布草稿不能签发授权。** `verifySummaryAuthority` 增加 `asset.candidateRevision === revNum` 检查，当前草稿版本（candidateRevision）拒绝签发。合法历史发布版继续可读。
+2. **停用来源不能固定用途（完整）。** `qualifiedPinPurposes` 在过滤 `canSummary.allowed` 后，检查 `!canDef.allowed && !canSummary.allowed && !hasPartialOrFullDetail` → 排除该用途。无资格的用途不再出现在 pin 结果中。
